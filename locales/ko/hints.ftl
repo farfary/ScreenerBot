@@ -211,17 +211,6 @@ hints-wallets-main-content =
     • **잔액 표시** — 헤더와 대시보드에 표시됩니다
     • **토큰 보유 현황** — 이 지갑이 보유한 SPL 토큰
 
-    보조 지갑에서 "메인으로 설정"을 선택하면 메인 지갑을 변경할 수 있습니다.
-hints-wallets-secondary-title = 보조 지갑
-hints-wallets-secondary-content =
-    멀티 지갑 작업을 위한 추가 지갑입니다.
-
-    • **멀티 지갑 거래** — 여러 지갑에서 매수/매도를 조율
-    • **포트폴리오 분리** — 전략이나 목적별로 구성
-    • **독립된 잔액** — 각 지갑이 자체 SOL/토큰을 보유
-
-    보조 지갑은 명시적으로 설정하지 않으면 자동 거래에 사용되지 않습니다.
-
 ## config
 
 hints-config-overview-title = 설정

@@ -33,12 +33,8 @@ wallets-watch-reason-helius-unavailable = { -helius } 확인에 실패했습니�
 wallets-watch-reason-processing-failed = 지갑 활동을 처리하지 못했습니다. 저장된 진행 상태는 유지됩니다.
 
 # Vocabulary shared by the wallet tables and dialogs.
-wallets-field-name = 지갑 이름
-wallets-field-notes = 메모
-wallets-field-private-key = 개인 키
 wallets-modal-close =
     .aria-label = 창 닫기
-wallets-this-wallet = 이 지갑
 wallets-summary-native = { -sol }
 wallets-copied-private-key = 개인 키
 
@@ -50,44 +46,8 @@ wallets-tab-watched = 감시 중
 wallets-refresh-failed = 지갑을 새로 고치지 못했습니다
 wallets-action-failed = 실패
 wallets-toast-failed = 실패: { $reason }
-wallets-create-busy = 생성 중...
-wallets-create-fallback = 생성에 실패했습니다
-wallets-create-done = 지갑 "{ $name }"이 생성되었습니다.
-wallets-import-busy = 가져오는 중...
-wallets-import-failed = 가져오기에 실패했습니다
-wallets-import-done = 지갑 "{ $name }"을 가져왔습니다.
-wallets-archive-busy = 보관 중...
-wallets-archive-confirm-text = 지갑 <strong>{ $name }</strong>을 보관하시겠습니까?
-wallets-archive-done = 지갑이 보관되었습니다
-wallets-restore-done = 지갑이 복원되었습니다
 wallets-export-busy = 복호화 중...
 wallets-export-revealed = 키가 표시되었습니다. 안전하게 다루세요
-wallets-delete-busy = 삭제 중...
-wallets-delete-confirm-text = 지갑 <strong>{ $name }</strong>을 삭제하시겠습니까?
-wallets-delete-done = 지갑이 영구 삭제되었습니다
-
-# wallets.html: Add Wallet dialog.
-wallets-add-title = 지갑 추가
-wallets-add-tab-create = 새로 만들기
-wallets-add-tab-import = 기존 지갑 가져오기
-wallets-create-name-input =
-    .placeholder = 예: 트레이딩 지갑
-wallets-create-name-hint = 이 지갑을 구분할 수 있는 이름
-wallets-create-notes-input =
-    .placeholder = 설명 또는 용도 (선택)...
-wallets-create-submit = 지갑 생성
-wallets-import-warning-title = 보안 경고
-wallets-import-warning-body = 신뢰할 수 있는 출처의 개인 키만 가져오세요. 키는 암호화되어 이 기기에 안전하게 저장됩니다.
-wallets-import-name-input =
-    .placeholder = 예: 내 지갑
-wallets-import-key-input =
-    .placeholder = Base58 문자열 또는 JSON 배열 [1,2,3,...]
-wallets-import-key-toggle =
-    .aria-label = 개인 키 표시 전환
-wallets-import-key-hint = base58 인코딩 키 또는 바이트 배열 형식을 지원합니다
-wallets-import-notes-input =
-    .placeholder = 설명 (선택)...
-wallets-import-submit = 지갑 가져오기
 
 # wallets.html: Watch Wallet dialog.
 wallets-watch-add-title = 지갑 감시
@@ -147,96 +107,6 @@ wallets-export-copy =
     .aria-label = 클립보드에 복사
 wallets-export-reveal = 키 표시
 
-# wallets.html: Archive and Delete dialogs.
-wallets-archive-title = 지갑 보관
-wallets-archive-note = 보관된 지갑은 어떤 작업에도 사용되지 않지만 언제든 복원할 수 있습니다.
-wallets-archive-confirm = 예, 보관
-wallets-delete-title = 지갑 삭제
-wallets-delete-warning-title = 이 작업은 되돌릴 수 없습니다.
-wallets-delete-warning-body = 이 지갑을 삭제하면 지갑과 암호화된 개인 키가 이 기기에서 영구적으로 제거됩니다.
-wallets-delete-confirm = 예, 삭제
-
-# wallets.html and bulk_operations.js: bulk import.
-wallets-bulk-import-title = 지갑 가져오기
-wallets-bulk-import-submit = 지갑 가져오기
-wallets-bulk-step-upload = 파일 업로드
-wallets-bulk-step-map = 열 매핑
-wallets-bulk-step-results = 결과
-wallets-bulk-import-file-warning-body = 신뢰할 수 있는 출처의 파일만 가져오세요. 개인 키는 암호화되어 이 기기에 안전하게 저장됩니다.
-wallets-bulk-drop-title = 파일을 여기에 놓으세요
-wallets-bulk-drop-subtitle = 또는 클릭하여 찾아보기
-wallets-bulk-drop-formats = CSV 및 Excel (.xlsx, .xls) 지원
-wallets-bulk-file-remove =
-    .aria-label = 파일 제거
-wallets-bulk-map-subtitle = 파일의 열을 지갑 필드와 연결하세요
-wallets-bulk-preview-title = 미리보기 (처음 5행)
-wallets-bulk-summary-valid = 유효 <strong>{ $count }</strong>건
-wallets-bulk-summary-invalid = 무효 <strong>{ $count }</strong>건
-wallets-bulk-summary-duplicate =
-    { $count ->
-       *[other] 중복 <strong>{ $count }</strong>건
-    }
-wallets-bulk-done = 완료
-wallets-bulk-file-invalid = 잘못된 파일 형식입니다. CSV 또는 Excel 파일을 사용하세요.
-wallets-bulk-preview-busy = 처리 중...
-wallets-bulk-preview-fallback = 파일을 처리하지 못했습니다
-wallets-bulk-preview-failed = 파일을 처리하지 못했습니다: { $reason }
-wallets-bulk-column-select = -- 열 선택 --
-wallets-bulk-preview-empty = 파일에서 데이터 행을 찾을 수 없습니다
-wallets-bulk-preview-status = 상태
-wallets-bulk-status-valid = 유효
-wallets-bulk-preview-col-row = 행
-wallets-bulk-preview-col-address = 주소
-wallets-bulk-status-invalid = 무효
-wallets-bulk-import-busy = 가져오는 중...
-wallets-bulk-import-toast =
-    { $count ->
-       *[other] 지갑 { $count }개를 가져왔습니다
-    }
-wallets-bulk-import-error = 가져오기 실패: { $reason }
-wallets-bulk-result-success-title = 가져오기 성공
-wallets-bulk-result-success-detail =
-    { $count ->
-       *[other] 지갑 { $count }개를 모두 가져왔습니다
-    }
-wallets-bulk-result-partial-title = 부분 성공
-wallets-bulk-result-partial-detail = 성공 { $imported }건, 실패 { $failed }건
-wallets-bulk-result-failed-title = 가져오기 실패
-wallets-bulk-result-failed-detail =
-    { $count ->
-       *[other] 지갑 { $count }개를 모두 가져오지 못했습니다
-    }
-wallets-bulk-result-imported = 가져옴
-wallets-bulk-result-failed = 실패
-
-# wallets.html and bulk_operations.js: bulk export.
-wallets-bulk-export-title = 지갑 내보내기
-wallets-bulk-export-format = 형식
-wallets-bulk-export-format-csv = CSV (.csv)
-wallets-bulk-export-format-xlsx = Excel (.xlsx)
-wallets-bulk-export-include-archived = 보관된 지갑 포함
-wallets-bulk-export-safe-title = 안전 내보내기
-wallets-bulk-export-safe-body = 지갑 주소와 메타데이터만 내보냅니다. 개인 키는 포함되지 않습니다.
-wallets-bulk-export-safe-submit = 주소 내보내기
-wallets-bulk-export-or = 또는
-wallets-bulk-export-danger-title = 위험한 내보내기
-wallets-bulk-export-danger-body = 내보내기에 개인 키를 포함합니다. 이 파일을 가진 사람은 자금을 훔칠 수 있습니다.
-wallets-bulk-export-danger-submit = 개인 키 포함 내보내기
-wallets-bulk-export-busy = 내보내는 중...
-wallets-bulk-export-done = 지갑을 내보냈습니다: { $filename }
-wallets-bulk-export-fallback = 내보내기에 실패했습니다
-wallets-bulk-export-error = 내보내기 실패: { $reason }
-wallets-bulk-confirm-title = 위험한 내보내기 확인
-wallets-bulk-confirm-warning =
-    { $count ->
-       *[other] 개인 키 <strong>{ $count }</strong>개를 내보내려 합니다. 매우 위험합니다.
-    }
-wallets-bulk-confirm-risk-steal = 이 파일을 가진 사람은 모든 자금을 훔칠 수 있습니다
-wallets-bulk-confirm-risk-share = 이 파일을 절대 다른 사람과 공유하지 마세요
-wallets-bulk-confirm-risk-delete = 사용 후 즉시 파일을 삭제하세요
-wallets-bulk-confirm-prompt = 확인하려면 아래 문구를 입력하세요
-wallets-bulk-confirm-submit = 키 내보내기
-
 # renderers.js: main wallet holdings and wallet lists.
 wallets-holdings-col-token = 토큰
 wallets-holdings-col-balance = 잔액
@@ -263,19 +133,14 @@ wallets-list-col-type = 유형
 wallets-list-col-created = 생성일
 wallets-list-col-actions = 작업
 wallets-list-action-export = 개인 키 내보내기
-wallets-list-action-archive = 지갑 보관
-wallets-list-action-restore = 지갑 복원
-wallets-list-action-delete = 영구 삭제
 wallets-list-count = 지갑
 wallets-list-search =
     .placeholder = 이름 또는 주소로 검색...
 wallets-list-loading-title = 지갑 불러오는 중…
 wallets-list-loading-description = 선택한 지갑 보기를 준비하고 있습니다.
+wallets-list-kept-empty-message = 이전 버전의 지갑이 여기에 표시되어 계속 키를 내보낼 수 있습니다.
 wallets-secondaries-empty-title = 보조 지갑 없음
-wallets-secondaries-empty-message = 지갑을 추가로 만들어 여러 계정에 걸쳐 트레이딩 활동을 관리하세요.
-wallets-secondaries-add = 지갑 추가
 wallets-archive-empty-title = 보관된 지갑 없음
-wallets-archive-empty-message = 보관한 지갑이 나중에 참고할 수 있도록 여기에 안전하게 저장됩니다.
 
 # watched.js: watched wallets table and actions.
 wallets-watched-col-wallet = 지갑

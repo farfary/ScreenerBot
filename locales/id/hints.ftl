@@ -209,17 +209,6 @@ hints-wallets-main-content =
     • **Tampilan Saldo** — ditampilkan di header dan dasbor
     • **Kepemilikan Token** — token SPL yang dipegang dompet ini
 
-    Ganti dompet utama dengan memilih "Jadikan Utama" pada dompet sekunder mana pun.
-hints-wallets-secondary-title = Dompet Sekunder
-hints-wallets-secondary-content =
-    Dompet tambahan untuk operasi multi-dompet.
-
-    • **Trading Multi-Dompet** — koordinasikan beli/jual lintas dompet
-    • **Pemisahan Portofolio** — atur berdasarkan strategi atau tujuan
-    • **Saldo Independen** — setiap dompet memiliki SOL/token sendiri
-
-    Dompet sekunder tidak digunakan oleh auto-trading kecuali dikonfigurasi secara eksplisit.
-
 ## config
 
 hints-config-overview-title = Konfigurasi

@@ -33,9 +33,6 @@ export function createWalletRenderers({
   Utils,
   handleWalletAction,
   onRefresh,
-  onAddWallet,
-  onImportWallets,
-  onExportWallets,
 }) {
   // DataTable instances — created once, updated via setData() on every poll
   let tokenTable = null;
@@ -113,9 +110,9 @@ export function createWalletRenderers({
     },
   ];
 
-  // Shared column shape for Secondaries/Archive — only the trailing Actions
-  // column differs between the two tabs.
-  const WALLET_LIST_COLUMNS_BASE = [
+  // Secondaries and Archive list wallets kept from earlier versions; their one
+  // action is the private-key export.
+  const WALLET_LIST_COLUMNS = [
     {
       id: "wallet",
       label: I18n.t("wallets-list-col-name"),
@@ -148,10 +145,6 @@ export function createWalletRenderers({
       render: (value) =>
         Utils.formatTimestamp(value, { includeYear: false, includeSeconds: false, fallback: "—" }),
     },
-  ];
-
-  const SECONDARY_COLUMNS = [
-    ...WALLET_LIST_COLUMNS_BASE,
     {
       id: "actions",
       label: I18n.t("wallets-list-col-actions"),
@@ -165,50 +158,6 @@ export function createWalletRenderers({
             tooltip: I18n.t("wallets-list-action-export"),
             size: "sm",
             onClick: (row) => handleWalletAction("export", row.id),
-          },
-          {
-            id: "archive",
-            icon: '<i class="icon-archive"></i>',
-            tooltip: I18n.t("wallets-list-action-archive"),
-            size: "sm",
-            onClick: (row) => handleWalletAction("archive", row.id),
-          },
-        ],
-      },
-    },
-  ];
-
-  const ARCHIVE_COLUMNS = [
-    ...WALLET_LIST_COLUMNS_BASE,
-    {
-      id: "actions",
-      label: I18n.t("wallets-list-col-actions"),
-      type: "actions",
-      sortable: false,
-      actions: {
-        buttons: [
-          {
-            id: "restore",
-            icon: '<i class="icon-archive-restore"></i>',
-            tooltip: I18n.t("wallets-list-action-restore"),
-            variant: "success",
-            size: "sm",
-            onClick: (row) => handleWalletAction("restore", row.id),
-          },
-          {
-            id: "export",
-            icon: '<i class="icon-key"></i>',
-            tooltip: I18n.t("wallets-list-action-export"),
-            size: "sm",
-            onClick: (row) => handleWalletAction("export", row.id),
-          },
-          {
-            id: "delete",
-            icon: '<i class="icon-trash-2"></i>',
-            tooltip: I18n.t("wallets-list-action-delete"),
-            variant: "danger",
-            size: "sm",
-            onClick: (row) => handleWalletAction("delete", row.id),
           },
         ],
       },
@@ -429,7 +378,7 @@ export function createWalletRenderers({
     if (!secondariesTable) {
       secondariesTable = new DataTable({
         container: "#secondaries-table-container",
-        columns: SECONDARY_COLUMNS,
+        columns: WALLET_LIST_COLUMNS,
         rowIdField: "id",
         stateKey: "wallets.secondaries-table",
         compact: true,
@@ -438,7 +387,7 @@ export function createWalletRenderers({
         fitToContainer: true,
         sorting: { mode: "client", column: "created_at", direction: "desc" },
         emptyTitle: I18n.t("wallets-secondaries-empty-title"),
-        emptyMessage: I18n.t("wallets-secondaries-empty-message"),
+        emptyMessage: I18n.t("wallets-list-kept-empty-message"),
         toolbar: {
           summary: [
             {
@@ -454,29 +403,6 @@ export function createWalletRenderers({
             placeholder: I18n.attr("wallets-list-search", "placeholder"),
           },
           buttons: [
-            {
-              id: "secondaries-add",
-              label: I18n.t("wallets-secondaries-add"),
-              icon: "icon-plus",
-              variant: "primary",
-              onClick: () => onAddWallet?.(),
-            },
-            // Bulk transfers are secondary to the primary create action, so they
-            // collapse into the overflow menu rather than widening the bar.
-            {
-              id: "secondaries-import",
-              label: I18n.t("common-action-import"),
-              icon: "icon-upload",
-              overflow: true,
-              onClick: () => onImportWallets?.(),
-            },
-            {
-              id: "secondaries-export",
-              label: I18n.t("common-action-export"),
-              icon: "icon-download",
-              overflow: true,
-              onClick: () => onExportWallets?.(),
-            },
             {
               id: "secondaries-refresh",
               icon: "icon-refresh-cw",
@@ -509,7 +435,7 @@ export function createWalletRenderers({
     if (!archiveTable) {
       archiveTable = new DataTable({
         container: "#archive-table-container",
-        columns: ARCHIVE_COLUMNS,
+        columns: WALLET_LIST_COLUMNS,
         rowIdField: "id",
         stateKey: "wallets.archive-table",
         compact: true,
@@ -518,7 +444,7 @@ export function createWalletRenderers({
         fitToContainer: true,
         sorting: { mode: "client", column: "created_at", direction: "desc" },
         emptyTitle: I18n.t("wallets-archive-empty-title"),
-        emptyMessage: I18n.t("wallets-archive-empty-message"),
+        emptyMessage: I18n.t("wallets-list-kept-empty-message"),
         toolbar: {
           summary: [
             {

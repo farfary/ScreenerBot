@@ -237,41 +237,12 @@ errors-llm-analysis-decision-get-failed = تعذّر جلب القرار
 
 # Wallets
 errors-wallets-list-failed = تعذّر عرض المحافظ
-errors-wallets-name-empty = لا يمكن أن يكون اسم المحفظة فارغًا
-errors-wallets-create-failed = تعذّر إنشاء المحفظة
-errors-wallets-key-empty = لا يمكن أن يكون المفتاح الخاص فارغًا
-errors-wallets-already-exists = المحفظة موجودة بالفعل
-errors-wallets-key-invalid = صيغة المفتاح الخاص غير صالحة
-errors-wallets-import-failed = تعذّر استيراد المحفظة
 errors-wallets-summary-failed = تعذّر جلب ملخص المحافظ
 errors-wallets-no-main-wallet = لم يتم ضبط محفظة رئيسية
 errors-wallets-main-get-failed = تعذّر جلب المحفظة الرئيسية
 errors-wallets-not-found = لم يتم العثور على المحفظة
 errors-wallets-get-failed = تعذّر جلب المحفظة
-errors-wallets-update-failed = تعذّر تحديث المحفظة
-errors-wallets-delete-failed = تعذّر حذف المحفظة
 errors-wallets-export-failed = تعذّر تصدير المحفظة
-errors-wallets-set-main-failed = تعذّر تعيين المحفظة الرئيسية
-errors-wallets-archive-failed = تعذّرت أرشفة المحفظة
-errors-wallets-restore-failed = تعذّرت استعادة المحفظة
-errors-wallets-export-format-unsupported = صيغة CSV فقط مدعومة حاليًا
-# The confirmation is the exact phrase the request must carry.
-errors-wallets-export-confirmation-required = يجب التأكيد بتقديم العبارة: "{ $confirmation }"
-errors-wallets-export-no-ids = لم يتم تقديم معرّفات محافظ
-errors-wallets-export-bulk-failed = تعذّر تصدير المحافظ
-errors-wallets-export-no-match = لم يتم العثور على محافظ تطابق المعرّفات المقدمة
-errors-wallets-import-file-too-large = يتجاوز الملف الحد الأقصى للحجم وهو { $megabytes }MB
-errors-wallets-import-read-failed = تعذّرت قراءة الملف المرفوع
-errors-wallets-import-no-file = لم يتم رفع ملف. استخدم الحقل 'file' في النموذج متعدد الأجزاء
-errors-wallets-import-encoding-invalid = يجب أن يكون ملف CSV بترميز UTF-8
-errors-wallets-import-csv-parse-failed = تعذّر تحليل ملف CSV
-errors-wallets-import-excel-parse-failed = تعذّر تحليل ملف Excel
-errors-wallets-import-format-unsupported = صيغة الملف غير مدعومة. استخدم .csv أو .xlsx أو .xls
-errors-wallets-import-file-empty = الملف لا يحتوي على صفوف بيانات
-errors-wallets-import-existing-check-failed = تعذّر فحص المحافظ الموجودة
-errors-wallets-import-mapping-invalid = أعمدة مطلوبة مفقودة: { $columns }
-errors-wallets-import-session-not-found = جلسة الاستيراد غير موجودة أو منتهية. يرجى رفع الملف مرة أخرى
-errors-wallets-import-no-valid-rows = لا توجد صفوف صالحة للاستيراد
 
 # Wallet watching
 errors-wallet-watch-list-failed = تعذّر عرض أهداف المراقبة

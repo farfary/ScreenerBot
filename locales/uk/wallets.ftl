@@ -33,12 +33,8 @@ wallets-watch-reason-helius-unavailable = Перевірки через { -heliu
 wallets-watch-reason-processing-failed = Не вдалося обробити активність гаманця. Збережений прогрес не втрачено.
 
 # Vocabulary shared by the wallet tables and dialogs.
-wallets-field-name = Назва гаманця
-wallets-field-notes = Нотатки
-wallets-field-private-key = Приватний ключ
 wallets-modal-close =
     .aria-label = Закрити вікно
-wallets-this-wallet = цей гаманець
 wallets-summary-native = { -sol }
 wallets-copied-private-key = Приватний ключ
 
@@ -50,44 +46,8 @@ wallets-tab-watched = Відстежувані
 wallets-refresh-failed = Не вдалося оновити гаманці
 wallets-action-failed = Помилка
 wallets-toast-failed = Помилка: { $reason }
-wallets-create-busy = Створення...
-wallets-create-fallback = Не вдалося створити
-wallets-create-done = Гаманець «{ $name }» створено!
-wallets-import-busy = Імпорт...
-wallets-import-failed = Не вдалося імпортувати
-wallets-import-done = Гаманець «{ $name }» імпортовано!
-wallets-archive-busy = Архівування...
-wallets-archive-confirm-text = Ви впевнені, що хочете архівувати <strong>{ $name }</strong>?
-wallets-archive-done = Гаманець архівовано
-wallets-restore-done = Гаманець відновлено
 wallets-export-busy = Розшифровування...
 wallets-export-revealed = Ключ показано — поводьтеся з ним обережно
-wallets-delete-busy = Видалення...
-wallets-delete-confirm-text = Ви впевнені, що хочете видалити <strong>{ $name }</strong>?
-wallets-delete-done = Гаманець остаточно видалено
-
-# wallets.html: Add Wallet dialog.
-wallets-add-title = Додати гаманець
-wallets-add-tab-create = Створити новий
-wallets-add-tab-import = Імпортувати наявний
-wallets-create-name-input =
-    .placeholder = напр., Торговий гаманець
-wallets-create-name-hint = Зрозуміла назва для впізнавання цього гаманця
-wallets-create-notes-input =
-    .placeholder = Необов’язковий опис або призначення...
-wallets-create-submit = Створити гаманець
-wallets-import-warning-title = Попередження щодо безпеки
-wallets-import-warning-body = Імпортуйте приватні ключі лише з надійних джерел. Ваш ключ буде зашифровано й безпечно збережено на цьому пристрої.
-wallets-import-name-input =
-    .placeholder = напр., Мій гаманець
-wallets-import-key-input =
-    .placeholder = Рядок Base58 або масив JSON [1,2,3,...]
-wallets-import-key-toggle =
-    .aria-label = Показати або сховати приватний ключ
-wallets-import-key-hint = Підтримується ключ у форматі base58 або масив байтів
-wallets-import-notes-input =
-    .placeholder = Необов’язковий опис...
-wallets-import-submit = Імпортувати гаманець
 
 # wallets.html: Watch Wallet dialog.
 wallets-watch-add-title = Стежити за гаманцем
@@ -147,111 +107,6 @@ wallets-export-copy =
     .aria-label = Копіювати в буфер обміну
 wallets-export-reveal = Показати ключ
 
-# wallets.html: Archive and Delete dialogs.
-wallets-archive-title = Архівувати гаманець
-wallets-archive-note = Архівовані гаманці не використовуються в жодних операціях, але їх можна відновити будь-коли.
-wallets-archive-confirm = Так, архівувати
-wallets-delete-title = Видалити гаманець
-wallets-delete-warning-title = Цю дію не можна скасувати!
-wallets-delete-warning-body = Видалення цього гаманця остаточно прибере його та його зашифрований приватний ключ з цього пристрою.
-wallets-delete-confirm = Так, видалити
-
-# wallets.html and bulk_operations.js: bulk import.
-wallets-bulk-import-title = Імпорт гаманців
-wallets-bulk-import-submit = Імпортувати гаманці
-wallets-bulk-step-upload = Завантаження файлу
-wallets-bulk-step-map = Зіставлення стовпців
-wallets-bulk-step-results = Результати
-wallets-bulk-import-file-warning-body = Імпортуйте файли лише з надійних джерел. Приватні ключі буде зашифровано й безпечно збережено на цьому пристрої.
-wallets-bulk-drop-title = Перетягніть файл сюди
-wallets-bulk-drop-subtitle = або натисніть, щоб вибрати
-wallets-bulk-drop-formats = Підтримуються CSV та Excel (.xlsx, .xls)
-wallets-bulk-file-remove =
-    .aria-label = Видалити файл
-wallets-bulk-map-subtitle = Зіставте стовпці файлу з полями гаманця
-wallets-bulk-preview-title = Попередній перегляд (перші 5 рядків)
-wallets-bulk-summary-valid = Дійсних: <strong>{ $count }</strong>
-wallets-bulk-summary-invalid = Недійсних: <strong>{ $count }</strong>
-wallets-bulk-summary-duplicate =
-    { $count ->
-        [one] <strong>{ $count }</strong> дублікат
-        [few] <strong>{ $count }</strong> дублікати
-        [many] <strong>{ $count }</strong> дублікатів
-       *[other] <strong>{ $count }</strong> дубліката
-    }
-wallets-bulk-done = Готово
-wallets-bulk-file-invalid = Недійсний тип файлу. Використовуйте файли CSV або Excel.
-wallets-bulk-preview-busy = Обробка...
-wallets-bulk-preview-fallback = Не вдалося обробити файл
-wallets-bulk-preview-failed = Не вдалося обробити файл: { $reason }
-wallets-bulk-column-select = -- Виберіть стовпець --
-wallets-bulk-preview-empty = У файлі не знайдено рядків із даними
-wallets-bulk-preview-status = Статус
-wallets-bulk-status-valid = Дійсний
-wallets-bulk-preview-col-row = Рядок
-wallets-bulk-preview-col-address = Адреса
-wallets-bulk-status-invalid = Недійсний
-wallets-bulk-import-busy = Імпорт...
-wallets-bulk-import-toast =
-    { $count ->
-        [one] Імпортовано { $count } гаманець
-        [few] Імпортовано { $count } гаманці
-        [many] Імпортовано { $count } гаманців
-       *[other] Імпортовано { $count } гаманця
-    }
-wallets-bulk-import-error = Не вдалося імпортувати: { $reason }
-wallets-bulk-result-success-title = Імпорт успішний
-wallets-bulk-result-success-detail =
-    { $count ->
-        [one] Успішно імпортовано { $count } гаманець
-        [few] Успішно імпортовано всі { $count } гаманці
-        [many] Успішно імпортовано всі { $count } гаманців
-       *[other] Успішно імпортовано { $count } гаманця
-    }
-wallets-bulk-result-partial-title = Частковий успіх
-wallets-bulk-result-partial-detail = Імпортовано: { $imported }, невдало: { $failed }
-wallets-bulk-result-failed-title = Імпорт не вдався
-wallets-bulk-result-failed-detail =
-    { $count ->
-        [one] Не вдалося імпортувати { $count } гаманець
-        [few] Не вдалося імпортувати всі { $count } гаманці
-        [many] Не вдалося імпортувати всі { $count } гаманців
-       *[other] Не вдалося імпортувати { $count } гаманця
-    }
-wallets-bulk-result-imported = Імпортовано
-wallets-bulk-result-failed = Невдало
-
-# wallets.html and bulk_operations.js: bulk export.
-wallets-bulk-export-title = Експорт гаманців
-wallets-bulk-export-format = Формат
-wallets-bulk-export-format-csv = CSV (.csv)
-wallets-bulk-export-format-xlsx = Excel (.xlsx)
-wallets-bulk-export-include-archived = Включити архівовані гаманці
-wallets-bulk-export-safe-title = Безпечний експорт
-wallets-bulk-export-safe-body = Експорт лише адрес гаманців і метаданих. Приватні ключі не включаються.
-wallets-bulk-export-safe-submit = Експортувати адреси
-wallets-bulk-export-or = або
-wallets-bulk-export-danger-title = Небезпечний експорт
-wallets-bulk-export-danger-body = Включити приватні ключі в експорт. Будь-хто з цим файлом може викрасти ваші кошти.
-wallets-bulk-export-danger-submit = Експортувати з приватними ключами
-wallets-bulk-export-busy = Експорт...
-wallets-bulk-export-done = Гаманці експортовано до { $filename }
-wallets-bulk-export-fallback = Не вдалося експортувати
-wallets-bulk-export-error = Не вдалося експортувати: { $reason }
-wallets-bulk-confirm-title = Підтвердіть небезпечний експорт
-wallets-bulk-confirm-warning =
-    { $count ->
-        [one] Ви збираєтеся експортувати <strong>{ $count }</strong> приватний ключ. Це надзвичайно небезпечно!
-        [few] Ви збираєтеся експортувати <strong>{ $count }</strong> приватні ключі. Це надзвичайно небезпечно!
-        [many] Ви збираєтеся експортувати <strong>{ $count }</strong> приватних ключів. Це надзвичайно небезпечно!
-       *[other] Ви збираєтеся експортувати <strong>{ $count }</strong> приватного ключа. Це надзвичайно небезпечно!
-    }
-wallets-bulk-confirm-risk-steal = Будь-хто з цим файлом може викрасти всі кошти
-wallets-bulk-confirm-risk-share = Ніколи нікому не передавайте цей файл
-wallets-bulk-confirm-risk-delete = Видаліть файл одразу після використання
-wallets-bulk-confirm-prompt = Введіть фразу нижче для підтвердження
-wallets-bulk-confirm-submit = Експортувати ключі
-
 # renderers.js: main wallet holdings and wallet lists.
 wallets-holdings-col-token = Токен
 wallets-holdings-col-balance = Баланс
@@ -278,19 +133,14 @@ wallets-list-col-type = Тип
 wallets-list-col-created = Створено
 wallets-list-col-actions = Дії
 wallets-list-action-export = Експортувати приватний ключ
-wallets-list-action-archive = Архівувати гаманець
-wallets-list-action-restore = Відновити гаманець
-wallets-list-action-delete = Видалити остаточно
 wallets-list-count = Гаманці
 wallets-list-search =
     .placeholder = Пошук за назвою або адресою...
 wallets-list-loading-title = Завантаження гаманців…
 wallets-list-loading-description = Підготовка вибраного подання гаманців.
+wallets-list-kept-empty-message = Тут відображаються гаманці з попередніх версій, щоб ви й надалі могли експортувати їхні ключі.
 wallets-secondaries-empty-title = Немає додаткових гаманців
-wallets-secondaries-empty-message = Створіть додаткові гаманці, щоб упорядкувати свою торгову діяльність між кількома рахунками.
-wallets-secondaries-add = Додати гаманець
 wallets-archive-empty-title = Немає архівованих гаманців
-wallets-archive-empty-message = Гаманці, які ви архівуєте, безпечно зберігатимуться тут для подальшого використання.
 
 # watched.js: watched wallets table and actions.
 wallets-watched-col-wallet = Гаманець

@@ -10,8 +10,8 @@
 //! encrypted credential via `crate::wallets` (ciphertext + nonce only, never
 //! Solana-typed), decrypt, use, and drop. The one exception is the main
 //! wallet, cached here — not in `crate::wallets` — because it is read on
-//! every trade; the cache is invalidated whenever wallet manager mutates
-//! wallet records (see `invalidate_main_wallet_cache`).
+//! every trade. The main wallet is fixed for the life of the process: it is
+//! chosen once, when the wallet store first imports the configured key.
 
 use std::sync::LazyLock;
 use tokio::sync::RwLock;
@@ -36,16 +36,8 @@ fn clone_keypair(keypair: &Keypair) -> Result<Keypair> {
     })
 }
 
-/// Drop the cached main-wallet keypair. Called by `crate::wallets::manager`
-/// after any mutation that could change which wallet is main or its key
-/// material (create/import/set-main). The next `main_keypair()` call
-/// re-decrypts from the freshly written record.
-pub async fn invalidate_main_wallet_cache() {
-    *MAIN_KEYPAIR_CACHE.write().await = None;
-}
-
-/// The main wallet's keypair, decrypted on first use and cached until the
-/// next mutation. Every caller gets its own clone; nothing outside this
+/// The main wallet's keypair, decrypted on first use and cached for the life
+/// of the process. Every caller gets its own clone; nothing outside this
 /// module ever holds the cached original.
 pub async fn main_keypair() -> Result<Keypair> {
     {

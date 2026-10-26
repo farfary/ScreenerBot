@@ -206,17 +206,6 @@ hints-wallets-main-content =
     • **Guthabenanzeige** — wird in Kopfzeile und Dashboard angezeigt
     • **Token-Bestände** — von dieser Wallet gehaltene SPL-Tokens
 
-    Die Haupt-Wallet ändern Sie, indem Sie bei einer sekundären Wallet „Als Haupt-Wallet festlegen“ wählen.
-hints-wallets-secondary-title = Sekundäre Wallets
-hints-wallets-secondary-content =
-    Zusätzliche Wallets für Multi-Wallet-Vorgänge.
-
-    • **Multi-Wallet-Trading** — Käufe/Verkäufe über mehrere Wallets koordinieren
-    • **Portfolio-Trennung** — nach Strategie oder Zweck organisieren
-    • **Eigene Guthaben** — jede Wallet hat eigenes SOL und eigene Tokens
-
-    Sekundäre Wallets werden vom Auto-Trading nur verwendet, wenn sie ausdrücklich konfiguriert sind.
-
 ## config
 
 hints-config-overview-title = Konfiguration

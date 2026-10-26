@@ -17,13 +17,11 @@ pub use balances::{
     fetch_wallet_sol_balance, fetch_wallet_sol_balances, fetch_wallet_token_balances,
 };
 pub use keypair::{
-    address_from_encrypted_key, address_from_private_key, decrypt_to_keypair, export_private_key,
-    generate_and_encrypt_keypair, generate_keypair,
-    generate_wallet_material, import_and_encrypt, import_wallet_material, keypair_to_address,
-    parse_private_key, parse_pubkey_safe, validate_address,
+    address_from_encrypted_key, decrypt_to_keypair, export_private_key, generate_keypair,
+    keypair_to_address, parse_private_key, parse_pubkey_safe, validate_address,
 };
 pub use signing::{
     cached_main_wallet_id, configured_address, configured_address_async, configured_keypair,
-    configured_keypair_async, configured_pubkey, invalidate_main_wallet_cache, keypair_for_wallet,
-    main_keypair, sign_message_for_active_wallets, sign_message_with_main_wallet,
+    configured_keypair_async, configured_pubkey, keypair_for_wallet, main_keypair,
+    sign_message_for_active_wallets, sign_message_with_main_wallet,
 };

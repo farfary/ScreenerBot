@@ -360,12 +360,6 @@ export const HINTS = localizeRegistry({
       title: "hints-wallets-main-title",
       content: "hints-wallets-main-content",
     },
-
-    secondaryWallets: {
-      id: "wallets.secondary",
-      title: "hints-wallets-secondary-title",
-      content: "hints-wallets-secondary-content",
-    },
   },
 
   // ═══════════════════════════════════════════════════════════════════════════

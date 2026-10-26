@@ -231,40 +231,12 @@ errors-llm-analysis-decision-get-failed = Échec de la récupération de la déc
 
 # Wallets
 errors-wallets-list-failed = Échec de la récupération des portefeuilles
-errors-wallets-name-empty = Le nom du portefeuille ne peut pas être vide
-errors-wallets-create-failed = Échec de la création du portefeuille
-errors-wallets-key-empty = La clé privée ne peut pas être vide
-errors-wallets-already-exists = Le portefeuille existe déjà
-errors-wallets-key-invalid = Format de clé privée invalide
-errors-wallets-import-failed = Échec de l'import du portefeuille
 errors-wallets-summary-failed = Échec de la récupération du résumé des portefeuilles
 errors-wallets-no-main-wallet = Aucun portefeuille principal configuré
 errors-wallets-main-get-failed = Échec de la récupération du portefeuille principal
 errors-wallets-not-found = Portefeuille introuvable
 errors-wallets-get-failed = Échec de la récupération du portefeuille
-errors-wallets-update-failed = Échec de la mise à jour du portefeuille
-errors-wallets-delete-failed = Échec de la suppression du portefeuille
 errors-wallets-export-failed = Échec de l'export du portefeuille
-errors-wallets-set-main-failed = Échec de la définition du portefeuille principal
-errors-wallets-archive-failed = Échec de l'archivage du portefeuille
-errors-wallets-restore-failed = Échec de la restauration du portefeuille
-errors-wallets-export-format-unsupported = Seul le format CSV est actuellement pris en charge
-errors-wallets-export-confirmation-required = Vous devez confirmer en fournissant : « { $confirmation } »
-errors-wallets-export-no-ids = Aucun ID de portefeuille fourni
-errors-wallets-export-bulk-failed = Échec de l'export des portefeuilles
-errors-wallets-export-no-match = Aucun portefeuille ne correspond aux ID fournis
-errors-wallets-import-file-too-large = Le fichier dépasse la taille maximale de { $megabytes } Mo
-errors-wallets-import-read-failed = Échec de la lecture du fichier importé
-errors-wallets-import-no-file = Aucun fichier importé. Utilisez le champ « file » du formulaire multipart
-errors-wallets-import-encoding-invalid = Le fichier CSV doit être encodé en UTF-8
-errors-wallets-import-csv-parse-failed = Échec de l'analyse du fichier CSV
-errors-wallets-import-excel-parse-failed = Échec de l'analyse du fichier Excel
-errors-wallets-import-format-unsupported = Format de fichier non pris en charge. Utilisez .csv, .xlsx ou .xls
-errors-wallets-import-file-empty = Le fichier ne contient aucune ligne de données
-errors-wallets-import-existing-check-failed = Échec de la vérification des portefeuilles existants
-errors-wallets-import-mapping-invalid = Colonnes obligatoires manquantes : { $columns }
-errors-wallets-import-session-not-found = Session d'import introuvable ou expirée. Veuillez importer de nouveau le fichier
-errors-wallets-import-no-valid-rows = Aucune ligne valide à importer
 
 # Wallet watching
 errors-wallet-watch-list-failed = Échec de la récupération des cibles de surveillance

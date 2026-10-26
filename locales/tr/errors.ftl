@@ -231,40 +231,12 @@ errors-llm-analysis-decision-get-failed = Karar alınamadı
 
 # Wallets
 errors-wallets-list-failed = Cüzdanlar listelenemedi
-errors-wallets-name-empty = Cüzdan adı boş olamaz
-errors-wallets-create-failed = Cüzdan oluşturulamadı
-errors-wallets-key-empty = Özel anahtar boş olamaz
-errors-wallets-already-exists = Cüzdan zaten var
-errors-wallets-key-invalid = Özel anahtar biçimi geçersiz
-errors-wallets-import-failed = Cüzdan içe aktarılamadı
 errors-wallets-summary-failed = Cüzdan özeti alınamadı
 errors-wallets-no-main-wallet = Ana cüzdan yapılandırılmamış
 errors-wallets-main-get-failed = Ana cüzdan alınamadı
 errors-wallets-not-found = Cüzdan bulunamadı
 errors-wallets-get-failed = Cüzdan alınamadı
-errors-wallets-update-failed = Cüzdan güncellenemedi
-errors-wallets-delete-failed = Cüzdan silinemedi
 errors-wallets-export-failed = Cüzdan dışa aktarılamadı
-errors-wallets-set-main-failed = Ana cüzdan ayarlanamadı
-errors-wallets-archive-failed = Cüzdan arşivlenemedi
-errors-wallets-restore-failed = Cüzdan geri yüklenemedi
-errors-wallets-export-format-unsupported = Şu anda yalnızca CSV biçimi destekleniyor
-errors-wallets-export-confirmation-required = Şunu girerek onaylamalısınız: "{ $confirmation }"
-errors-wallets-export-no-ids = Cüzdan kimliği verilmedi
-errors-wallets-export-bulk-failed = Cüzdanlar dışa aktarılamadı
-errors-wallets-export-no-match = Verilen kimliklerle eşleşen cüzdan bulunamadı
-errors-wallets-import-file-too-large = Dosya { $megabytes }MB üst sınırını aşıyor
-errors-wallets-import-read-failed = Yüklenen dosya okunamadı
-errors-wallets-import-no-file = Dosya yüklenmedi. Çok parçalı formda 'file' alanını kullanın
-errors-wallets-import-encoding-invalid = CSV dosyası UTF-8 kodlamalı olmalı
-errors-wallets-import-csv-parse-failed = CSV dosyası ayrıştırılamadı
-errors-wallets-import-excel-parse-failed = Excel dosyası ayrıştırılamadı
-errors-wallets-import-format-unsupported = Desteklenmeyen dosya biçimi. .csv, .xlsx veya .xls kullanın
-errors-wallets-import-file-empty = Dosyada veri satırı yok
-errors-wallets-import-existing-check-failed = Mevcut cüzdanlar denetlenemedi
-errors-wallets-import-mapping-invalid = Gerekli sütunlar eksik: { $columns }
-errors-wallets-import-session-not-found = İçe aktarma oturumu bulunamadı veya süresi doldu. Lütfen dosyayı yeniden yükleyin
-errors-wallets-import-no-valid-rows = İçe aktarılacak geçerli satır yok
 
 # Wallet watching
 errors-wallet-watch-list-failed = İzleme hedefleri listelenemedi

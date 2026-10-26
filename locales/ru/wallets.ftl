@@ -22,12 +22,8 @@ wallets-watch-reason-signature-budget = У этого кошелька боль�
 wallets-watch-reason-helius-unavailable = Проверки через { -helius } не удались. Сохранённый прогресс не потерян.
 wallets-watch-reason-processing-failed = Не удалось обработать активность кошелька. Сохранённый прогресс не потерян.
 
-wallets-field-name = Название кошелька
-wallets-field-notes = Заметки
-wallets-field-private-key = Приватный ключ
 wallets-modal-close =
     .aria-label = Закрыть окно
-wallets-this-wallet = этот кошелёк
 wallets-summary-native = { -sol }
 wallets-copied-private-key = Приватный ключ
 
@@ -38,43 +34,8 @@ wallets-tab-watched = Отслеживаемые
 wallets-refresh-failed = Не удалось обновить кошельки
 wallets-action-failed = Ошибка
 wallets-toast-failed = Ошибка: { $reason }
-wallets-create-busy = Создание...
-wallets-create-fallback = Не удалось создать
-wallets-create-done = Кошелёк «{ $name }» создан!
-wallets-import-busy = Импорт...
-wallets-import-failed = Не удалось импортировать
-wallets-import-done = Кошелёк «{ $name }» импортирован!
-wallets-archive-busy = Архивация...
-wallets-archive-confirm-text = Вы уверены, что хотите архивировать <strong>{ $name }</strong>?
-wallets-archive-done = Кошелёк перенесён в архив
-wallets-restore-done = Кошелёк восстановлен
 wallets-export-busy = Расшифровка...
 wallets-export-revealed = Ключ показан — обращайтесь с ним осторожно
-wallets-delete-busy = Удаление...
-wallets-delete-confirm-text = Вы уверены, что хотите удалить <strong>{ $name }</strong>?
-wallets-delete-done = Кошелёк удалён навсегда
-
-wallets-add-title = Добавить кошелёк
-wallets-add-tab-create = Создать новый
-wallets-add-tab-import = Импортировать
-wallets-create-name-input =
-    .placeholder = Например, Торговый кошелёк
-wallets-create-name-hint = Понятное имя, чтобы отличать этот кошелёк
-wallets-create-notes-input =
-    .placeholder = Необязательное описание или назначение...
-wallets-create-submit = Создать кошелёк
-wallets-import-warning-title = Предупреждение о безопасности
-wallets-import-warning-body = Импортируйте приватные ключи только из надёжных источников. Ключ будет зашифрован и надёжно сохранён на этом устройстве.
-wallets-import-name-input =
-    .placeholder = Например, Мой кошелёк
-wallets-import-key-input =
-    .placeholder = Строка Base58 или массив JSON [1,2,3,...]
-wallets-import-key-toggle =
-    .aria-label = Показать или скрыть приватный ключ
-wallets-import-key-hint = Поддерживается ключ в кодировке base58 или в виде массива байтов
-wallets-import-notes-input =
-    .placeholder = Необязательное описание...
-wallets-import-submit = Импортировать кошелёк
 
 wallets-watch-add-title = Отслеживать кошелёк
 wallets-watch-add-address = Адрес кошелька
@@ -131,108 +92,6 @@ wallets-export-copy =
     .aria-label = Скопировать в буфер обмена
 wallets-export-reveal = Показать ключ
 
-wallets-archive-title = Архивировать кошелёк
-wallets-archive-note = Архивные кошельки не участвуют ни в каких операциях, но их можно восстановить в любой момент.
-wallets-archive-confirm = Да, архивировать
-wallets-delete-title = Удалить кошелёк
-wallets-delete-warning-title = Это действие нельзя отменить!
-wallets-delete-warning-body = Кошелёк и его зашифрованный приватный ключ будут навсегда удалены с этого устройства.
-wallets-delete-confirm = Да, удалить
-
-wallets-bulk-import-title = Импорт кошельков
-wallets-bulk-import-submit = Импортировать кошельки
-wallets-bulk-step-upload = Загрузка файла
-wallets-bulk-step-map = Сопоставление столбцов
-wallets-bulk-step-results = Результаты
-wallets-bulk-import-file-warning-body = Импортируйте файлы только из надёжных источников. Приватные ключи будут зашифрованы и надёжно сохранены на этом устройстве.
-wallets-bulk-drop-title = Перетащите файл сюда
-wallets-bulk-drop-subtitle = или нажмите, чтобы выбрать
-wallets-bulk-drop-formats = Поддерживаются CSV и Excel (.xlsx, .xls)
-wallets-bulk-file-remove =
-    .aria-label = Удалить файл
-wallets-bulk-map-subtitle = Сопоставьте столбцы файла с полями кошелька
-wallets-bulk-preview-title = Предпросмотр (первые 5 строк)
-wallets-bulk-summary-valid = Корректных: <strong>{ $count }</strong>
-wallets-bulk-summary-invalid = Некорректных: <strong>{ $count }</strong>
-wallets-bulk-summary-duplicate =
-    { $count ->
-        [one] <strong>{ $count }</strong> дубликат
-        [few] <strong>{ $count }</strong> дубликата
-        [many] <strong>{ $count }</strong> дубликатов
-       *[other] <strong>{ $count }</strong> дубликата
-    }
-wallets-bulk-done = Готово
-wallets-bulk-file-invalid = Недопустимый тип файла. Используйте файлы CSV или Excel.
-wallets-bulk-preview-busy = Обработка...
-wallets-bulk-preview-fallback = Не удалось обработать файл
-wallets-bulk-preview-failed = Не удалось обработать файл: { $reason }
-wallets-bulk-column-select = -- Выберите столбец --
-wallets-bulk-preview-empty = В файле нет строк с данными
-wallets-bulk-preview-status = Статус
-wallets-bulk-status-valid = Корректный
-wallets-bulk-preview-col-row = Строка
-wallets-bulk-preview-col-address = Адрес
-wallets-bulk-status-invalid = Некорректный
-wallets-bulk-import-busy = Импорт...
-wallets-bulk-import-toast =
-    { $count ->
-        [one] Импортирован { $count } кошелёк
-        [few] Импортировано { $count } кошелька
-        [many] Импортировано { $count } кошельков
-       *[other] Импортировано { $count } кошелька
-    }
-wallets-bulk-import-error = Не удалось импортировать: { $reason }
-wallets-bulk-result-success-title = Импорт выполнен
-wallets-bulk-result-success-detail =
-    { $count ->
-        [one] Успешно импортирован { $count } кошелёк
-        [few] Успешно импортированы все { $count } кошелька
-        [many] Успешно импортированы все { $count } кошельков
-       *[other] Успешно импортированы все { $count } кошелька
-    }
-wallets-bulk-result-partial-title = Частичный успех
-wallets-bulk-result-partial-detail = Импортировано: { $imported }, с ошибкой: { $failed }
-wallets-bulk-result-failed-title = Не удалось импортировать
-wallets-bulk-result-failed-detail =
-    { $count ->
-        [one] Не удалось импортировать { $count } кошелёк
-        [few] Не удалось импортировать все { $count } кошелька
-        [many] Не удалось импортировать все { $count } кошельков
-       *[other] Не удалось импортировать все { $count } кошелька
-    }
-wallets-bulk-result-imported = Импортировано
-wallets-bulk-result-failed = Ошибка
-
-wallets-bulk-export-title = Экспорт кошельков
-wallets-bulk-export-format = Формат
-wallets-bulk-export-format-csv = CSV (.csv)
-wallets-bulk-export-format-xlsx = Excel (.xlsx)
-wallets-bulk-export-include-archived = Включить архивные кошельки
-wallets-bulk-export-safe-title = Безопасный экспорт
-wallets-bulk-export-safe-body = Экспортируются только адреса кошельков и метаданные. Приватные ключи не включаются.
-wallets-bulk-export-safe-submit = Экспортировать адреса
-wallets-bulk-export-or = или
-wallets-bulk-export-danger-title = Опасный экспорт
-wallets-bulk-export-danger-body = Приватные ключи будут включены в экспорт. Любой, у кого есть этот файл, может похитить ваши средства.
-wallets-bulk-export-danger-submit = Экспорт с приватными ключами
-wallets-bulk-export-busy = Экспорт...
-wallets-bulk-export-done = Кошельки экспортированы в { $filename }
-wallets-bulk-export-fallback = Не удалось экспортировать
-wallets-bulk-export-error = Не удалось экспортировать: { $reason }
-wallets-bulk-confirm-title = Подтвердите опасный экспорт
-wallets-bulk-confirm-warning =
-    { $count ->
-        [one] Вы собираетесь экспортировать <strong>{ $count }</strong> приватный ключ. Это крайне опасно!
-        [few] Вы собираетесь экспортировать <strong>{ $count }</strong> приватных ключа. Это крайне опасно!
-        [many] Вы собираетесь экспортировать <strong>{ $count }</strong> приватных ключей. Это крайне опасно!
-       *[other] Вы собираетесь экспортировать <strong>{ $count }</strong> приватного ключа. Это крайне опасно!
-    }
-wallets-bulk-confirm-risk-steal = Любой, у кого есть этот файл, может похитить все средства
-wallets-bulk-confirm-risk-share = Никому не передавайте этот файл
-wallets-bulk-confirm-risk-delete = Сразу после использования удалите файл
-wallets-bulk-confirm-prompt = Введите фразу ниже для подтверждения
-wallets-bulk-confirm-submit = Экспортировать ключи
-
 wallets-holdings-col-token = Токен
 wallets-holdings-col-balance = Баланс
 wallets-holdings-col-value = Стоимость ({ -sol })
@@ -258,19 +117,14 @@ wallets-list-col-type = Тип
 wallets-list-col-created = Создан
 wallets-list-col-actions = Действия
 wallets-list-action-export = Экспортировать приватный ключ
-wallets-list-action-archive = Архивировать кошелёк
-wallets-list-action-restore = Восстановить кошелёк
-wallets-list-action-delete = Удалить навсегда
 wallets-list-count = Кошельки
 wallets-list-search =
     .placeholder = Поиск по названию или адресу...
 wallets-list-loading-title = Загрузка кошельков…
 wallets-list-loading-description = Подготовка выбранного списка кошельков.
+wallets-list-kept-empty-message = Здесь отображаются кошельки из предыдущих версий, чтобы вы по-прежнему могли экспортировать их ключи.
 wallets-secondaries-empty-title = Нет дополнительных кошельков
-wallets-secondaries-empty-message = Создайте дополнительные кошельки, чтобы распределить торговую активность по нескольким аккаунтам.
-wallets-secondaries-add = Добавить кошелёк
 wallets-archive-empty-title = Нет архивных кошельков
-wallets-archive-empty-message = Кошельки, которые вы архивируете, будут надёжно храниться здесь.
 
 wallets-watched-col-wallet = Кошелёк
 wallets-watched-col-status = Статус

@@ -63,6 +63,25 @@ pub fn ensure_config() {
     let _ = CONFIG.get_or_init(|| std::sync::RwLock::new(Config::default()));
 }
 
+/// Put a freshly generated trading wallet's encrypted key into the loaded
+/// configuration, as setup stores it, and return the wallet's address. The wallet
+/// store imports it as the main wallet when it initializes on an empty store.
+pub fn configure_trading_wallet() -> String {
+    let keypair = screenerbot::chains::solana::accounts::generate_keypair();
+    let secret = bs58::encode(keypair.to_bytes()).into_string();
+    let encrypted = screenerbot::secure_storage::encrypt_private_key(&secret)
+        .expect("encrypt the trading wallet key");
+    screenerbot::config::update_config_section(
+        |cfg| {
+            cfg.wallet_encrypted = encrypted.ciphertext;
+            cfg.wallet_nonce = encrypted.nonce;
+        },
+        false,
+    )
+    .expect("configure the trading wallet");
+    screenerbot::chains::solana::accounts::keypair_to_address(&keypair)
+}
+
 /// Context for a mainnet test. Carries the signer to use, the mint to trade, and a
 /// hard lamports cap so a money test can never exceed it.
 pub struct MainnetCtx {

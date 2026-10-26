@@ -206,17 +206,6 @@ hints-wallets-main-content =
     • **Affichage du solde** — visible dans l'en-tête et le tableau de bord
     • **Détention de tokens** — tokens SPL détenus par ce portefeuille
 
-    Changez le portefeuille principal en sélectionnant « Définir comme principal » sur n'importe quel portefeuille secondaire.
-hints-wallets-secondary-title = Portefeuilles secondaires
-hints-wallets-secondary-content =
-    Portefeuilles supplémentaires pour les opérations multi-portefeuilles.
-
-    • **Trading multi-portefeuilles** — coordonnez achats/ventes entre portefeuilles
-    • **Séparation du portefeuille** — organisez par stratégie ou par objectif
-    • **Soldes indépendants** — chaque portefeuille a ses propres SOL/tokens
-
-    Les portefeuilles secondaires ne sont pas utilisés par le trading automatique, sauf configuration explicite.
-
 ## config
 
 hints-config-overview-title = Configuration

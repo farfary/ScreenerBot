@@ -18,7 +18,7 @@
 //! Deliberately ONE test function: `crate::wallets::manager` and the main-
 //! keypair cache in `crate::chains::solana::accounts::signing` are both
 //! process-wide statics (same reasoning as
-//! `tests/wallet_main_cache_invalidation.rs`), and `cargo test` runs a
+//! `tests/wallet_main_keypair.rs`), and `cargo test` runs a
 //! file's tests concurrently on threads within one process, so a second
 //! test here would race this one over that shared state. The current-thread
 //! probe builds its OWN throwaway `current_thread` runtime on a plain

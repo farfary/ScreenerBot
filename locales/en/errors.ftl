@@ -239,41 +239,12 @@ errors-llm-analysis-decision-get-failed = Failed to get decision
 
 # Wallets
 errors-wallets-list-failed = Failed to list wallets
-errors-wallets-name-empty = Wallet name cannot be empty
-errors-wallets-create-failed = Failed to create wallet
-errors-wallets-key-empty = Private key cannot be empty
-errors-wallets-already-exists = Wallet already exists
-errors-wallets-key-invalid = Invalid private key format
-errors-wallets-import-failed = Failed to import wallet
 errors-wallets-summary-failed = Failed to get wallets summary
 errors-wallets-no-main-wallet = No main wallet configured
 errors-wallets-main-get-failed = Failed to get main wallet
 errors-wallets-not-found = Wallet not found
 errors-wallets-get-failed = Failed to get wallet
-errors-wallets-update-failed = Failed to update wallet
-errors-wallets-delete-failed = Failed to delete wallet
 errors-wallets-export-failed = Failed to export wallet
-errors-wallets-set-main-failed = Failed to set main wallet
-errors-wallets-archive-failed = Failed to archive wallet
-errors-wallets-restore-failed = Failed to restore wallet
-errors-wallets-export-format-unsupported = Only CSV format is currently supported
-# The confirmation is the exact phrase the request must carry.
-errors-wallets-export-confirmation-required = You must confirm by providing: "{ $confirmation }"
-errors-wallets-export-no-ids = No wallet IDs provided
-errors-wallets-export-bulk-failed = Failed to export wallets
-errors-wallets-export-no-match = No wallets found matching the provided IDs
-errors-wallets-import-file-too-large = File exceeds maximum size of { $megabytes }MB
-errors-wallets-import-read-failed = Failed to read uploaded file
-errors-wallets-import-no-file = No file uploaded. Use 'file' field in multipart form
-errors-wallets-import-encoding-invalid = CSV file must be UTF-8 encoded
-errors-wallets-import-csv-parse-failed = Failed to parse CSV file
-errors-wallets-import-excel-parse-failed = Failed to parse Excel file
-errors-wallets-import-format-unsupported = Unsupported file format. Use .csv, .xlsx, or .xls
-errors-wallets-import-file-empty = File contains no data rows
-errors-wallets-import-existing-check-failed = Failed to check existing wallets
-errors-wallets-import-mapping-invalid = Missing required columns: { $columns }
-errors-wallets-import-session-not-found = Import session not found or expired. Please upload the file again
-errors-wallets-import-no-valid-rows = No valid rows to import
 
 # Wallet watching
 errors-wallet-watch-list-failed = Failed to list watch targets

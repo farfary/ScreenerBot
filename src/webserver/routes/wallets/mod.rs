@@ -1,14 +1,12 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Wallet management API routes
-//!
-//! CRUD endpoints for multi-wallet management.
-//! Includes bulk import/export with CSV and Excel support.
+//! Wallet API routes: the wallet list, summary and main wallet, one wallet's
+//! record and its private-key export, and the watched wallets.
 
 use axum::{
     middleware::from_fn,
-    routing::{delete, get, post, put},
+    routing::{get, post},
     Router,
 };
 use std::sync::Arc;
@@ -16,11 +14,8 @@ use std::sync::Arc;
 use crate::webserver::middleware::full_setup_gate;
 use crate::webserver::state::AppState;
 
-pub mod crud;
-pub mod export;
-pub mod import;
+pub mod handlers;
 pub mod types;
-pub mod utils;
 pub mod watch;
 
 // Re-export types for external consumers
@@ -29,22 +24,11 @@ pub use types::*;
 /// Create wallet routes
 pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
-        .route("/", get(crud::list_wallets))
-        .route("/", post(crud::create_wallet))
-        .route("/import", post(crud::import_wallet))
-        .route("/import/preview", post(import::import_preview))
-        .route("/import/execute", post(import::import_execute))
-        .route("/export", get(export::export_wallets_csv))
-        .route("/export/full", post(export::export_wallets_full))
-        .route("/summary", get(crud::get_summary))
-        .route("/main", get(crud::get_main_wallet))
-        .route("/{id}", get(crud::get_wallet))
-        .route("/{id}", put(crud::update_wallet))
-        .route("/{id}", delete(crud::delete_wallet))
-        .route("/{id}/export", post(crud::export_wallet))
-        .route("/{id}/set-main", post(crud::set_main_wallet))
-        .route("/{id}/archive", post(crud::archive_wallet))
-        .route("/{id}/restore", post(crud::restore_wallet))
+        .route("/", get(handlers::list_wallets))
+        .route("/summary", get(handlers::get_summary))
+        .route("/main", get(handlers::get_main_wallet))
+        .route("/{id}", get(handlers::get_wallet))
+        .route("/{id}/export", post(handlers::export_wallet))
         .nest("/watch", watch::routes())
         .route_layer(from_fn(full_setup_gate))
 }

@@ -33,12 +33,8 @@ wallets-watch-reason-helius-unavailable = Fallaron las revisiones de { -helius }
 wallets-watch-reason-processing-failed = No se pudo procesar la actividad de la billetera. El progreso guardado se conserva.
 
 # Vocabulary shared by the wallet tables and dialogs.
-wallets-field-name = Nombre de la billetera
-wallets-field-notes = Notas
-wallets-field-private-key = Clave privada
 wallets-modal-close =
     .aria-label = Cerrar ventana
-wallets-this-wallet = esta billetera
 wallets-summary-native = { -sol }
 wallets-copied-private-key = Clave privada
 
@@ -50,44 +46,8 @@ wallets-tab-watched = Vigiladas
 wallets-refresh-failed = No se pudieron actualizar las billeteras
 wallets-action-failed = Falló
 wallets-toast-failed = Falló: { $reason }
-wallets-create-busy = Creando...
-wallets-create-fallback = Falló la creación
-wallets-create-done = ¡Billetera "{ $name }" creada!
-wallets-import-busy = Importando...
-wallets-import-failed = Falló la importación
-wallets-import-done = ¡Billetera "{ $name }" importada!
-wallets-archive-busy = Archivando...
-wallets-archive-confirm-text = ¿Seguro que quieres archivar <strong>{ $name }</strong>?
-wallets-archive-done = Billetera archivada
-wallets-restore-done = Billetera restaurada
 wallets-export-busy = Descifrando...
 wallets-export-revealed = Clave revelada: manéjala con cuidado
-wallets-delete-busy = Eliminando...
-wallets-delete-confirm-text = ¿Seguro que quieres eliminar <strong>{ $name }</strong>?
-wallets-delete-done = Billetera eliminada permanentemente
-
-# wallets.html: Add Wallet dialog.
-wallets-add-title = Añadir billetera
-wallets-add-tab-create = Crear nueva
-wallets-add-tab-import = Importar existente
-wallets-create-name-input =
-    .placeholder = p. ej., Billetera de trading
-wallets-create-name-hint = Un nombre descriptivo para identificar esta billetera
-wallets-create-notes-input =
-    .placeholder = Descripción o propósito (opcional)...
-wallets-create-submit = Crear billetera
-wallets-import-warning-title = Advertencia de seguridad
-wallets-import-warning-body = Importa claves privadas solo de fuentes de confianza. Tu clave se cifrará y se guardará de forma segura en este dispositivo.
-wallets-import-name-input =
-    .placeholder = p. ej., Mi billetera
-wallets-import-key-input =
-    .placeholder = Cadena base58 o arreglo JSON [1,2,3,...]
-wallets-import-key-toggle =
-    .aria-label = Mostrar u ocultar la clave privada
-wallets-import-key-hint = Admite clave codificada en base58 o formato de arreglo de bytes
-wallets-import-notes-input =
-    .placeholder = Descripción (opcional)...
-wallets-import-submit = Importar billetera
 
 # wallets.html: Watch Wallet dialog.
 wallets-watch-add-title = Vigilar billetera
@@ -147,106 +107,6 @@ wallets-export-copy =
     .aria-label = Copiar al portapapeles
 wallets-export-reveal = Revelar clave
 
-# wallets.html: Archive and Delete dialogs.
-wallets-archive-title = Archivar billetera
-wallets-archive-note = Las billeteras archivadas no se usan en ninguna operación, pero se pueden restaurar en cualquier momento.
-wallets-archive-confirm = Sí, archivar
-wallets-delete-title = Eliminar billetera
-wallets-delete-warning-title = ¡Esta acción no se puede deshacer!
-wallets-delete-warning-body = Al eliminar esta billetera se borrarán de forma permanente ella y su clave privada cifrada de este dispositivo.
-wallets-delete-confirm = Sí, eliminar
-
-# wallets.html and bulk_operations.js: bulk import.
-wallets-bulk-import-title = Importar billeteras
-wallets-bulk-import-submit = Importar billeteras
-wallets-bulk-step-upload = Subir archivo
-wallets-bulk-step-map = Asignar columnas
-wallets-bulk-step-results = Resultados
-wallets-bulk-import-file-warning-body = Importa archivos solo de fuentes de confianza. Las claves privadas se cifrarán y se guardarán de forma segura en este dispositivo.
-wallets-bulk-drop-title = Suelta tu archivo aquí
-wallets-bulk-drop-subtitle = o haz clic para explorar
-wallets-bulk-drop-formats = Admite CSV y Excel (.xlsx, .xls)
-wallets-bulk-file-remove =
-    .aria-label = Quitar archivo
-wallets-bulk-map-subtitle = Asocia las columnas de tu archivo con los campos de la billetera
-wallets-bulk-preview-title = Vista previa (primeras 5 filas)
-wallets-bulk-summary-valid = <strong>{ $count }</strong> válidas
-wallets-bulk-summary-invalid = <strong>{ $count }</strong> no válidas
-wallets-bulk-summary-duplicate =
-    { $count ->
-        [one] <strong>{ $count }</strong> duplicada
-        [many] <strong>{ $count }</strong> duplicadas
-       *[other] <strong>{ $count }</strong> duplicadas
-    }
-wallets-bulk-done = Listo
-wallets-bulk-file-invalid = Tipo de archivo no válido. Usa archivos CSV o Excel.
-wallets-bulk-preview-busy = Procesando...
-wallets-bulk-preview-fallback = No se pudo procesar el archivo
-wallets-bulk-preview-failed = No se pudo procesar el archivo: { $reason }
-wallets-bulk-column-select = -- Seleccionar columna --
-wallets-bulk-preview-empty = No se encontraron filas de datos en el archivo
-wallets-bulk-preview-status = Estado
-wallets-bulk-status-valid = Válida
-wallets-bulk-preview-col-row = Fila
-wallets-bulk-preview-col-address = Dirección
-wallets-bulk-status-invalid = No válida
-wallets-bulk-import-busy = Importando...
-wallets-bulk-import-toast =
-    { $count ->
-        [one] { $count } billetera importada
-        [many] { $count } billeteras importadas
-       *[other] { $count } billeteras importadas
-    }
-wallets-bulk-import-error = Falló la importación: { $reason }
-wallets-bulk-result-success-title = Importación exitosa
-wallets-bulk-result-success-detail =
-    { $count ->
-        [one] { $count } billetera importada correctamente
-        [many] Las { $count } billeteras se importaron correctamente
-       *[other] Las { $count } billeteras se importaron correctamente
-    }
-wallets-bulk-result-partial-title = Éxito parcial
-wallets-bulk-result-partial-detail = { $imported } importadas, { $failed } fallidas
-wallets-bulk-result-failed-title = Importación fallida
-wallets-bulk-result-failed-detail =
-    { $count ->
-        [one] { $count } billetera no se pudo importar
-        [many] Las { $count } billeteras no se pudieron importar
-       *[other] Las { $count } billeteras no se pudieron importar
-    }
-wallets-bulk-result-imported = Importadas
-wallets-bulk-result-failed = Fallidas
-
-# wallets.html and bulk_operations.js: bulk export.
-wallets-bulk-export-title = Exportar billeteras
-wallets-bulk-export-format = Formato
-wallets-bulk-export-format-csv = CSV (.csv)
-wallets-bulk-export-format-xlsx = Excel (.xlsx)
-wallets-bulk-export-include-archived = Incluir billeteras archivadas
-wallets-bulk-export-safe-title = Exportación segura
-wallets-bulk-export-safe-body = Exporta solo direcciones y metadatos de las billeteras. No incluye claves privadas.
-wallets-bulk-export-safe-submit = Exportar direcciones
-wallets-bulk-export-or = o
-wallets-bulk-export-danger-title = Exportación peligrosa
-wallets-bulk-export-danger-body = Incluye las claves privadas en la exportación. Cualquiera con este archivo puede robar tus fondos.
-wallets-bulk-export-danger-submit = Exportar con claves privadas
-wallets-bulk-export-busy = Exportando...
-wallets-bulk-export-done = Billeteras exportadas a { $filename }
-wallets-bulk-export-fallback = Falló la exportación
-wallets-bulk-export-error = Falló la exportación: { $reason }
-wallets-bulk-confirm-title = Confirmar exportación peligrosa
-wallets-bulk-confirm-warning =
-    { $count ->
-        [one] Vas a exportar <strong>{ $count }</strong> clave privada. ¡Es extremadamente peligroso!
-        [many] Vas a exportar <strong>{ $count }</strong> claves privadas. ¡Es extremadamente peligroso!
-       *[other] Vas a exportar <strong>{ $count }</strong> claves privadas. ¡Es extremadamente peligroso!
-    }
-wallets-bulk-confirm-risk-steal = Cualquiera con este archivo puede robar todos los fondos
-wallets-bulk-confirm-risk-share = Nunca compartas este archivo con nadie
-wallets-bulk-confirm-risk-delete = Elimina el archivo inmediatamente después de usarlo
-wallets-bulk-confirm-prompt = Escribe la frase de abajo para confirmar
-wallets-bulk-confirm-submit = Exportar claves
-
 # renderers.js: main wallet holdings and wallet lists.
 wallets-holdings-col-token = Token
 wallets-holdings-col-balance = Saldo
@@ -273,19 +133,14 @@ wallets-list-col-type = Tipo
 wallets-list-col-created = Creada
 wallets-list-col-actions = Acciones
 wallets-list-action-export = Exportar clave privada
-wallets-list-action-archive = Archivar billetera
-wallets-list-action-restore = Restaurar billetera
-wallets-list-action-delete = Eliminar permanentemente
 wallets-list-count = Billeteras
 wallets-list-search =
     .placeholder = Buscar por nombre o dirección...
 wallets-list-loading-title = Cargando billeteras…
 wallets-list-loading-description = Preparando la vista de billeteras seleccionada.
+wallets-list-kept-empty-message = Las billeteras de versiones anteriores aparecen aquí para que aún puedas exportar sus claves.
 wallets-secondaries-empty-title = Sin billeteras secundarias
-wallets-secondaries-empty-message = Crea billeteras adicionales para organizar tu actividad de trading en varias cuentas.
-wallets-secondaries-add = Añadir billetera
 wallets-archive-empty-title = Sin billeteras archivadas
-wallets-archive-empty-message = Las billeteras que archives se guardarán aquí de forma segura para consultarlas más adelante.
 
 # watched.js: watched wallets table and actions.
 wallets-watched-col-wallet = Billetera

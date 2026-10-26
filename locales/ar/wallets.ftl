@@ -33,12 +33,8 @@ wallets-watch-reason-helius-unavailable = فشلت فحوصات { -helius }. ا�
 wallets-watch-reason-processing-failed = تعذّرت معالجة نشاط المحفظة. التقدم المحفوظ باقٍ.
 
 # Vocabulary shared by the wallet tables and dialogs.
-wallets-field-name = اسم المحفظة
-wallets-field-notes = ملاحظات
-wallets-field-private-key = المفتاح الخاص
 wallets-modal-close =
     .aria-label = إغلاق النافذة
-wallets-this-wallet = هذه المحفظة
 wallets-summary-native = { -sol }
 wallets-copied-private-key = المفتاح الخاص
 
@@ -50,44 +46,8 @@ wallets-tab-watched = المراقبة
 wallets-refresh-failed = تعذّر تحديث المحافظ
 wallets-action-failed = فشل
 wallets-toast-failed = فشل: { $reason }
-wallets-create-busy = جارٍ الإنشاء...
-wallets-create-fallback = فشل الإنشاء
-wallets-create-done = تم إنشاء المحفظة «{ $name }»!
-wallets-import-busy = جارٍ الاستيراد...
-wallets-import-failed = فشل الاستيراد
-wallets-import-done = تم استيراد المحفظة «{ $name }»!
-wallets-archive-busy = جارٍ الأرشفة...
-wallets-archive-confirm-text = هل تريد بالتأكيد أرشفة <strong>{ $name }</strong>؟
-wallets-archive-done = تمت أرشفة المحفظة
-wallets-restore-done = تمت استعادة المحفظة
 wallets-export-busy = جارٍ فك التشفير...
 wallets-export-revealed = تم إظهار المفتاح، تعامل معه بحذر
-wallets-delete-busy = جارٍ الحذف...
-wallets-delete-confirm-text = هل تريد بالتأكيد حذف <strong>{ $name }</strong>؟
-wallets-delete-done = تم حذف المحفظة نهائيًا
-
-# wallets.html: Add Wallet dialog.
-wallets-add-title = إضافة محفظة
-wallets-add-tab-create = إنشاء جديدة
-wallets-add-tab-import = استيراد موجودة
-wallets-create-name-input =
-    .placeholder = مثال: محفظة التداول
-wallets-create-name-hint = اسم مألوف لتمييز هذه المحفظة
-wallets-create-notes-input =
-    .placeholder = وصف أو غرض اختياري...
-wallets-create-submit = إنشاء محفظة
-wallets-import-warning-title = تحذير أمني
-wallets-import-warning-body = لا تستورد المفاتيح الخاصة إلا من مصادر موثوقة. سيتم تشفير مفتاحك وتخزينه بأمان على هذا الجهاز.
-wallets-import-name-input =
-    .placeholder = مثال: محفظتي
-wallets-import-key-input =
-    .placeholder = سلسلة Base58 أو مصفوفة JSON مثل ⁨[1,2,3,...]⁩
-wallets-import-key-toggle =
-    .aria-label = تبديل إظهار المفتاح الخاص
-wallets-import-key-hint = يدعم المفتاح بترميز base58 أو صيغة مصفوفة البايتات
-wallets-import-notes-input =
-    .placeholder = وصف اختياري...
-wallets-import-submit = استيراد المحفظة
 
 # wallets.html: Watch Wallet dialog.
 wallets-watch-add-title = مراقبة محفظة
@@ -147,121 +107,6 @@ wallets-export-copy =
     .aria-label = نسخ إلى الحافظة
 wallets-export-reveal = إظهار المفتاح
 
-# wallets.html: Archive and Delete dialogs.
-wallets-archive-title = أرشفة المحفظة
-wallets-archive-note = لا تُستخدم المحافظ المؤرشفة في أي عملية، ويمكن استعادتها في أي وقت.
-wallets-archive-confirm = نعم، أرشفة
-wallets-delete-title = حذف المحفظة
-wallets-delete-warning-title = لا يمكن التراجع عن هذا الإجراء!
-wallets-delete-warning-body = سيؤدي حذف هذه المحفظة إلى إزالتها ومفتاحها الخاص المشفر نهائيًا من هذا الجهاز.
-wallets-delete-confirm = نعم، حذف
-
-# wallets.html and bulk_operations.js: bulk import.
-wallets-bulk-import-title = استيراد المحافظ
-wallets-bulk-import-submit = استيراد المحافظ
-wallets-bulk-step-upload = رفع الملف
-wallets-bulk-step-map = ربط الأعمدة
-wallets-bulk-step-results = النتائج
-wallets-bulk-import-file-warning-body = لا تستورد الملفات إلا من مصادر موثوقة. سيتم تشفير المفاتيح الخاصة وتخزينها بأمان على هذا الجهاز.
-wallets-bulk-drop-title = أفلت ملفك هنا
-wallets-bulk-drop-subtitle = أو انقر للتصفح
-wallets-bulk-drop-formats = يدعم CSV وExcel (.xlsx، .xls)
-wallets-bulk-file-remove =
-    .aria-label = إزالة الملف
-wallets-bulk-map-subtitle = طابق أعمدة ملفك مع حقول المحفظة
-wallets-bulk-preview-title = معاينة (أول 5 صفوف)
-wallets-bulk-summary-valid = صالحة: <strong>{ $count }</strong>
-wallets-bulk-summary-invalid = غير صالحة: <strong>{ $count }</strong>
-wallets-bulk-summary-duplicate =
-    { $count ->
-        [zero] مكررة: <strong>{ $count }</strong>
-        [one] مكررة: <strong>{ $count }</strong>
-        [two] مكررة: <strong>{ $count }</strong>
-        [few] مكررة: <strong>{ $count }</strong>
-        [many] مكررة: <strong>{ $count }</strong>
-       *[other] مكررة: <strong>{ $count }</strong>
-    }
-wallets-bulk-done = تم
-wallets-bulk-file-invalid = نوع الملف غير صالح. يرجى استخدام ملفات CSV أو Excel.
-wallets-bulk-preview-busy = جارٍ المعالجة...
-wallets-bulk-preview-fallback = فشلت معالجة الملف
-wallets-bulk-preview-failed = فشلت معالجة الملف: { $reason }
-wallets-bulk-column-select = -- اختر عمودًا --
-wallets-bulk-preview-empty = لم يتم العثور على صفوف بيانات في الملف
-wallets-bulk-preview-status = الحالة
-wallets-bulk-status-valid = صالحة
-wallets-bulk-preview-col-row = صف
-wallets-bulk-preview-col-address = العنوان
-wallets-bulk-status-invalid = غير صالحة
-wallets-bulk-import-busy = جارٍ الاستيراد...
-wallets-bulk-import-toast =
-    { $count ->
-        [zero] المحافظ المستوردة: { $count }
-        [one] المحافظ المستوردة: { $count }
-        [two] المحافظ المستوردة: { $count }
-        [few] المحافظ المستوردة: { $count }
-        [many] المحافظ المستوردة: { $count }
-       *[other] المحافظ المستوردة: { $count }
-    }
-wallets-bulk-import-error = فشل الاستيراد: { $reason }
-wallets-bulk-result-success-title = تم الاستيراد بنجاح
-wallets-bulk-result-success-detail =
-    { $count ->
-        [zero] تم استيراد كل المحافظ بنجاح: { $count }
-        [one] تم استيراد كل المحافظ بنجاح: { $count }
-        [two] تم استيراد كل المحافظ بنجاح: { $count }
-        [few] تم استيراد كل المحافظ بنجاح: { $count }
-        [many] تم استيراد كل المحافظ بنجاح: { $count }
-       *[other] تم استيراد كل المحافظ بنجاح: { $count }
-    }
-wallets-bulk-result-partial-title = نجاح جزئي
-wallets-bulk-result-partial-detail = تم استيراد { $imported }، وفشل { $failed }
-wallets-bulk-result-failed-title = فشل الاستيراد
-wallets-bulk-result-failed-detail =
-    { $count ->
-        [zero] فشل استيراد كل المحافظ: { $count }
-        [one] فشل استيراد كل المحافظ: { $count }
-        [two] فشل استيراد كل المحافظ: { $count }
-        [few] فشل استيراد كل المحافظ: { $count }
-        [many] فشل استيراد كل المحافظ: { $count }
-       *[other] فشل استيراد كل المحافظ: { $count }
-    }
-wallets-bulk-result-imported = مستوردة
-wallets-bulk-result-failed = فاشلة
-
-# wallets.html and bulk_operations.js: bulk export.
-wallets-bulk-export-title = تصدير المحافظ
-wallets-bulk-export-format = الصيغة
-wallets-bulk-export-format-csv = CSV (.csv)
-wallets-bulk-export-format-xlsx = Excel (.xlsx)
-wallets-bulk-export-include-archived = تضمين المحافظ المؤرشفة
-wallets-bulk-export-safe-title = تصدير آمن
-wallets-bulk-export-safe-body = تصدير عناوين المحافظ وبياناتها الوصفية فقط، دون المفاتيح الخاصة.
-wallets-bulk-export-safe-submit = تصدير العناوين
-wallets-bulk-export-or = أو
-wallets-bulk-export-danger-title = تصدير خطير
-wallets-bulk-export-danger-body = تضمين المفاتيح الخاصة في التصدير. يستطيع أي شخص يملك هذا الملف سرقة أموالك.
-wallets-bulk-export-danger-submit = التصدير مع المفاتيح الخاصة
-wallets-bulk-export-busy = جارٍ التصدير...
-wallets-bulk-export-done = تم تصدير المحافظ إلى { $filename }
-wallets-bulk-export-fallback = فشل التصدير
-wallets-bulk-export-error = فشل التصدير: { $reason }
-wallets-bulk-confirm-title = تأكيد التصدير الخطير
-wallets-bulk-confirm-warning =
-    { $count ->
-        [zero] أنت على وشك تصدير المفاتيح الخاصة: <strong>{ $count }</strong>. هذا خطير للغاية!
-        [one] أنت على وشك تصدير مفتاح خاص واحد: <strong>{ $count }</strong>. هذا خطير للغاية!
-        [two] أنت على وشك تصدير مفتاحين خاصين: <strong>{ $count }</strong>. هذا خطير للغاية!
-        [few] أنت على وشك تصدير المفاتيح الخاصة: <strong>{ $count }</strong>. هذا خطير للغاية!
-        [many] أنت على وشك تصدير المفاتيح الخاصة: <strong>{ $count }</strong>. هذا خطير للغاية!
-       *[other] أنت على وشك تصدير المفاتيح الخاصة: <strong>{ $count }</strong>. هذا خطير للغاية!
-    }
-wallets-bulk-confirm-risk-steal = يستطيع أي شخص يملك هذا الملف سرقة كل الأموال
-wallets-bulk-confirm-risk-share = لا تشارك هذا الملف مع أي شخص
-wallets-bulk-confirm-risk-delete = احذف الملف فور الانتهاء من استخدامه
-wallets-bulk-confirm-prompt = اكتب العبارة أدناه للتأكيد
-wallets-bulk-confirm-submit = تصدير المفاتيح
-
 # renderers.js: main wallet holdings and wallet lists.
 wallets-holdings-col-token = الرمز
 wallets-holdings-col-balance = الرصيد
@@ -288,19 +133,14 @@ wallets-list-col-type = النوع
 wallets-list-col-created = الإنشاء
 wallets-list-col-actions = الإجراءات
 wallets-list-action-export = تصدير المفتاح الخاص
-wallets-list-action-archive = أرشفة المحفظة
-wallets-list-action-restore = استعادة المحفظة
-wallets-list-action-delete = حذف نهائي
 wallets-list-count = المحافظ
 wallets-list-search =
     .placeholder = البحث بالاسم أو العنوان...
 wallets-list-loading-title = جارٍ تحميل المحافظ…
 wallets-list-loading-description = جارٍ تجهيز عرض المحفظة المحددة.
+wallets-list-kept-empty-message = تظهر هنا المحافظ من الإصدارات السابقة لتتمكن من تصدير مفاتيحها.
 wallets-secondaries-empty-title = لا توجد محافظ ثانوية
-wallets-secondaries-empty-message = أنشئ محافظ إضافية لتنظيم أنشطة التداول عبر حسابات متعددة.
-wallets-secondaries-add = إضافة محفظة
 wallets-archive-empty-title = لا توجد محافظ مؤرشفة
-wallets-archive-empty-message = ستُحفظ هنا بأمان المحافظ التي تؤرشفها للرجوع إليها لاحقًا.
 
 # watched.js: watched wallets table and actions.
 wallets-watched-col-wallet = المحفظة

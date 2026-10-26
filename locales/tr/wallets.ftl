@@ -22,12 +22,8 @@ wallets-watch-reason-signature-budget = Bu cüzdanın etkinliği, mevcut izlemen
 wallets-watch-reason-helius-unavailable = { -helius } kontrolleri başarısız oldu. Kayıtlı ilerleme korunuyor.
 wallets-watch-reason-processing-failed = Cüzdan etkinliği işlenemedi. Kayıtlı ilerleme korunuyor.
 
-wallets-field-name = Cüzdan adı
-wallets-field-notes = Notlar
-wallets-field-private-key = Özel anahtar
 wallets-modal-close =
     .aria-label = Pencereyi kapat
-wallets-this-wallet = bu cüzdan
 wallets-summary-native = { -sol }
 wallets-copied-private-key = Özel anahtar
 
@@ -38,43 +34,8 @@ wallets-tab-watched = İzlenenler
 wallets-refresh-failed = Cüzdanlar yenilenemedi
 wallets-action-failed = Başarısız
 wallets-toast-failed = Başarısız: { $reason }
-wallets-create-busy = Oluşturuluyor...
-wallets-create-fallback = Oluşturma başarısız
-wallets-create-done = "{ $name }" cüzdanı oluşturuldu!
-wallets-import-busy = İçe aktarılıyor...
-wallets-import-failed = İçe aktarma başarısız
-wallets-import-done = "{ $name }" cüzdanı içe aktarıldı!
-wallets-archive-busy = Arşivleniyor...
-wallets-archive-confirm-text = <strong>{ $name }</strong> arşivlensin mi?
-wallets-archive-done = Cüzdan arşivlendi
-wallets-restore-done = Cüzdan geri yüklendi
 wallets-export-busy = Şifre çözülüyor...
 wallets-export-revealed = Anahtar gösterildi - dikkatli olun
-wallets-delete-busy = Siliniyor...
-wallets-delete-confirm-text = <strong>{ $name }</strong> silinsin mi?
-wallets-delete-done = Cüzdan kalıcı olarak silindi
-
-wallets-add-title = Cüzdan ekle
-wallets-add-tab-create = Yeni oluştur
-wallets-add-tab-import = Mevcut olanı içe aktar
-wallets-create-name-input =
-    .placeholder = örn. İşlem cüzdanı
-wallets-create-name-hint = Bu cüzdanı tanımlamak için kolay bir ad
-wallets-create-notes-input =
-    .placeholder = İsteğe bağlı açıklama veya amaç...
-wallets-create-submit = Cüzdan oluştur
-wallets-import-warning-title = Güvenlik uyarısı
-wallets-import-warning-body = Özel anahtarları yalnızca güvenilir kaynaklardan içe aktarın. Anahtarınız şifrelenir ve bu cihazda güvenle saklanır.
-wallets-import-name-input =
-    .placeholder = örn. Cüzdanım
-wallets-import-key-input =
-    .placeholder = Base58 dizesi veya JSON dizisi [1,2,3,...]
-wallets-import-key-toggle =
-    .aria-label = Özel anahtar görünürlüğünü değiştir
-wallets-import-key-hint = Base58 kodlu anahtar veya bayt dizisi biçimini destekler
-wallets-import-notes-input =
-    .placeholder = İsteğe bağlı açıklama...
-wallets-import-submit = Cüzdanı içe aktar
 
 wallets-watch-add-title = Cüzdan izle
 wallets-watch-add-address = Cüzdan adresi
@@ -131,98 +92,6 @@ wallets-export-copy =
     .aria-label = Panoya kopyala
 wallets-export-reveal = Anahtarı göster
 
-wallets-archive-title = Cüzdanı arşivle
-wallets-archive-note = Arşivlenen cüzdanlar hiçbir işlemde kullanılmaz ancak istediğiniz zaman geri yüklenebilir.
-wallets-archive-confirm = Evet, arşivle
-wallets-delete-title = Cüzdanı sil
-wallets-delete-warning-title = Bu işlem geri alınamaz!
-wallets-delete-warning-body = Bu cüzdanı silmek, cüzdanı ve şifreli özel anahtarını bu cihazdan kalıcı olarak kaldırır.
-wallets-delete-confirm = Evet, sil
-
-wallets-bulk-import-title = Cüzdanları içe aktar
-wallets-bulk-import-submit = Cüzdanları içe aktar
-wallets-bulk-step-upload = Dosya yükle
-wallets-bulk-step-map = Sütunları eşle
-wallets-bulk-step-results = Sonuçlar
-wallets-bulk-import-file-warning-body = Dosyaları yalnızca güvenilir kaynaklardan içe aktarın. Özel anahtarlar şifrelenir ve bu cihazda güvenle saklanır.
-wallets-bulk-drop-title = Dosyanızı buraya bırakın
-wallets-bulk-drop-subtitle = veya göz atmak için tıklayın
-wallets-bulk-drop-formats = CSV ve Excel desteklenir (.xlsx, .xls)
-wallets-bulk-file-remove =
-    .aria-label = Dosyayı kaldır
-wallets-bulk-map-subtitle = Dosya sütunlarınızı cüzdan alanlarıyla eşleştirin
-wallets-bulk-preview-title = Önizleme (ilk 5 satır)
-wallets-bulk-summary-valid = <strong>{ $count }</strong> geçerli
-wallets-bulk-summary-invalid = <strong>{ $count }</strong> geçersiz
-wallets-bulk-summary-duplicate =
-    { $count ->
-        [one] <strong>{ $count }</strong> yinelenen
-       *[other] <strong>{ $count }</strong> yinelenen
-    }
-wallets-bulk-done = Bitti
-wallets-bulk-file-invalid = Geçersiz dosya türü. Lütfen CSV veya Excel dosyaları kullanın.
-wallets-bulk-preview-busy = İşleniyor...
-wallets-bulk-preview-fallback = Dosya işlenemedi
-wallets-bulk-preview-failed = Dosya işlenemedi: { $reason }
-wallets-bulk-column-select = -- Sütun seçin --
-wallets-bulk-preview-empty = Dosyada veri satırı bulunamadı
-wallets-bulk-preview-status = Durum
-wallets-bulk-status-valid = Geçerli
-wallets-bulk-preview-col-row = Satır
-wallets-bulk-preview-col-address = Adres
-wallets-bulk-status-invalid = Geçersiz
-wallets-bulk-import-busy = İçe aktarılıyor...
-wallets-bulk-import-toast =
-    { $count ->
-        [one] İçe aktarılan cüzdan: { $count }
-       *[other] İçe aktarılan cüzdan: { $count }
-    }
-wallets-bulk-import-error = İçe aktarma başarısız: { $reason }
-wallets-bulk-result-success-title = İçe aktarma başarılı
-wallets-bulk-result-success-detail =
-    { $count ->
-        [one] Tüm cüzdanlar ({ $count }) başarıyla içe aktarıldı
-       *[other] Tüm cüzdanlar ({ $count }) başarıyla içe aktarıldı
-    }
-wallets-bulk-result-partial-title = Kısmen başarılı
-wallets-bulk-result-partial-detail = İçe aktarılan: { $imported }, başarısız: { $failed }
-wallets-bulk-result-failed-title = İçe aktarma başarısız
-wallets-bulk-result-failed-detail =
-    { $count ->
-        [one] Tüm cüzdanlar ({ $count }) içe aktarılamadı
-       *[other] Tüm cüzdanlar ({ $count }) içe aktarılamadı
-    }
-wallets-bulk-result-imported = İçe aktarılan
-wallets-bulk-result-failed = Başarısız
-
-wallets-bulk-export-title = Cüzdanları dışa aktar
-wallets-bulk-export-format = Biçim
-wallets-bulk-export-format-csv = CSV (.csv)
-wallets-bulk-export-format-xlsx = Excel (.xlsx)
-wallets-bulk-export-include-archived = Arşivlenmiş cüzdanları dahil et
-wallets-bulk-export-safe-title = Güvenli dışa aktarma
-wallets-bulk-export-safe-body = Yalnızca cüzdan adreslerini ve meta verileri dışa aktarır. Özel anahtar içermez.
-wallets-bulk-export-safe-submit = Adresleri dışa aktar
-wallets-bulk-export-or = veya
-wallets-bulk-export-danger-title = Tehlikeli dışa aktarma
-wallets-bulk-export-danger-body = Özel anahtarları dışa aktarmaya dahil eder. Bu dosyaya sahip olan herkes fonlarınızı çalabilir.
-wallets-bulk-export-danger-submit = Özel anahtarlarla dışa aktar
-wallets-bulk-export-busy = Dışa aktarılıyor...
-wallets-bulk-export-done = Cüzdanlar şuraya aktarıldı: { $filename }
-wallets-bulk-export-fallback = Dışa aktarma başarısız
-wallets-bulk-export-error = Dışa aktarma başarısız: { $reason }
-wallets-bulk-confirm-title = Tehlikeli dışa aktarmayı onayla
-wallets-bulk-confirm-warning =
-    { $count ->
-        [one] Dışa aktarmak üzere olduğunuz özel anahtar sayısı: <strong>{ $count }</strong>. Bu son derece tehlikelidir!
-       *[other] Dışa aktarmak üzere olduğunuz özel anahtar sayısı: <strong>{ $count }</strong>. Bu son derece tehlikelidir!
-    }
-wallets-bulk-confirm-risk-steal = Bu dosyaya sahip olan herkes tüm fonları çalabilir
-wallets-bulk-confirm-risk-share = Bu dosyayı asla kimseyle paylaşmayın
-wallets-bulk-confirm-risk-delete = Kullandıktan hemen sonra dosyayı silin
-wallets-bulk-confirm-prompt = Onaylamak için aşağıdaki ifadeyi yazın
-wallets-bulk-confirm-submit = Anahtarları dışa aktar
-
 wallets-holdings-col-token = Token
 wallets-holdings-col-balance = Bakiye
 wallets-holdings-col-value = Değer ({ -sol })
@@ -248,19 +117,14 @@ wallets-list-col-type = Tür
 wallets-list-col-created = Oluşturulma
 wallets-list-col-actions = İşlemler
 wallets-list-action-export = Özel anahtarı dışa aktar
-wallets-list-action-archive = Cüzdanı arşivle
-wallets-list-action-restore = Cüzdanı geri yükle
-wallets-list-action-delete = Kalıcı olarak sil
 wallets-list-count = Cüzdanlar
 wallets-list-search =
     .placeholder = Ad veya adres ile ara...
 wallets-list-loading-title = Cüzdanlar yükleniyor…
 wallets-list-loading-description = Seçilen cüzdan görünümü hazırlanıyor.
+wallets-list-kept-empty-message = Önceki sürümlerdeki cüzdanlar, anahtarlarını dışa aktarmaya devam edebilmeniz için burada görünür.
 wallets-secondaries-empty-title = İkincil cüzdan yok
-wallets-secondaries-empty-message = İşlem faaliyetlerinizi birden çok hesap arasında düzenlemek için ek cüzdanlar oluşturun.
-wallets-secondaries-add = Cüzdan ekle
 wallets-archive-empty-title = Arşivlenmiş cüzdan yok
-wallets-archive-empty-message = Arşivlediğiniz cüzdanlar ileride başvurmanız için burada güvenle saklanır.
 
 wallets-watched-col-wallet = Cüzdan
 wallets-watched-col-status = Durum

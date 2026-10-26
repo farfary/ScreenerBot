@@ -63,7 +63,6 @@ pub fn page_styles(page: &str) -> Option<String> {
             WALLETS_PAGE_STYLES,
             WALLETS_MAIN_WALLET_STYLES,
             WALLETS_MODALS_STYLES,
-            WALLETS_IMPORT_EXPORT_STYLES,
             WALLETS_WATCHED_STYLES,
         ]
         .join("\n"),

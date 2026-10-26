@@ -206,17 +206,6 @@ hints-wallets-main-content =
     • **Bakiye Gösterimi** — üst bilgide ve panelde gösterilir
     • **Token Varlıkları** — bu cüzdanda tutulan SPL tokenları
 
-    Ana cüzdanı değiştirmek için herhangi bir ikincil cüzdanda "Ana Yap" seçeneğini kullanın.
-hints-wallets-secondary-title = İkincil Cüzdanlar
-hints-wallets-secondary-content =
-    Çoklu cüzdan operasyonları için ek cüzdanlar.
-
-    • **Çoklu Cüzdan İşlemi** — cüzdanlar arasında alım/satımları koordine edin
-    • **Portföy Ayrımı** — strateji veya amaca göre düzenleyin
-    • **Bağımsız Bakiyeler** — her cüzdanın kendi SOL/tokenları vardır
-
-    İkincil cüzdanlar, açıkça yapılandırılmadıkça otomatik işlem tarafından kullanılmaz.
-
 ## config
 
 hints-config-overview-title = Yapılandırma

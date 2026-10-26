@@ -192,17 +192,6 @@ hints-wallets-main-content =
     • **Saldo visible** — se muestra en el encabezado y en el panel
     • **Tenencias de tokens** — tokens SPL que posee esta billetera
 
-    Cambia la billetera principal seleccionando "Establecer como principal" en cualquier billetera secundaria.
-hints-wallets-secondary-title = Billeteras secundarias
-hints-wallets-secondary-content =
-    Billeteras adicionales para operaciones con varias billeteras.
-
-    • **Trading con varias billeteras** — coordina compras y ventas entre billeteras
-    • **Separación de la cartera** — organiza por estrategia o propósito
-    • **Saldos independientes** — cada billetera tiene su propio SOL y sus tokens
-
-    El trading automático no usa las billeteras secundarias a menos que se configure explícitamente.
-
 hints-config-overview-title = Configuración
 hints-config-overview-content =
     Ajustes globales de { -brand }.

@@ -33,12 +33,8 @@ wallets-watch-reason-helius-unavailable = As verificações do { -helius } falha
 wallets-watch-reason-processing-failed = Não foi possível processar a atividade da carteira. O progresso salvo foi preservado.
 
 # Vocabulary shared by the wallet tables and dialogs.
-wallets-field-name = Nome da carteira
-wallets-field-notes = Notas
-wallets-field-private-key = Chave privada
 wallets-modal-close =
     .aria-label = Fechar janela
-wallets-this-wallet = esta carteira
 wallets-summary-native = { -sol }
 wallets-copied-private-key = Chave privada
 
@@ -50,44 +46,8 @@ wallets-tab-watched = Monitoradas
 wallets-refresh-failed = Não foi possível atualizar as carteiras
 wallets-action-failed = Falhou
 wallets-toast-failed = Falhou: { $reason }
-wallets-create-busy = Criando...
-wallets-create-fallback = Falha na criação
-wallets-create-done = Carteira "{ $name }" criada!
-wallets-import-busy = Importando...
-wallets-import-failed = Falha na importação
-wallets-import-done = Carteira "{ $name }" importada!
-wallets-archive-busy = Arquivando...
-wallets-archive-confirm-text = Tem certeza de que deseja arquivar <strong>{ $name }</strong>?
-wallets-archive-done = Carteira arquivada
-wallets-restore-done = Carteira restaurada
 wallets-export-busy = Descriptografando...
 wallets-export-revealed = Chave revelada: manuseie com cuidado
-wallets-delete-busy = Excluindo...
-wallets-delete-confirm-text = Tem certeza de que deseja excluir <strong>{ $name }</strong>?
-wallets-delete-done = Carteira excluída permanentemente
-
-# wallets.html: Add Wallet dialog.
-wallets-add-title = Adicionar carteira
-wallets-add-tab-create = Criar nova
-wallets-add-tab-import = Importar existente
-wallets-create-name-input =
-    .placeholder = Ex.: Carteira de trading
-wallets-create-name-hint = Um nome simples para identificar esta carteira
-wallets-create-notes-input =
-    .placeholder = Descrição ou finalidade (opcional)...
-wallets-create-submit = Criar carteira
-wallets-import-warning-title = Aviso de segurança
-wallets-import-warning-body = Importe chaves privadas apenas de fontes confiáveis. Sua chave será criptografada e armazenada com segurança neste dispositivo.
-wallets-import-name-input =
-    .placeholder = Ex.: Minha carteira
-wallets-import-key-input =
-    .placeholder = Texto em base58 ou array JSON [1,2,3,...]
-wallets-import-key-toggle =
-    .aria-label = Alternar visibilidade da chave privada
-wallets-import-key-hint = Aceita chave codificada em base58 ou formato de array de bytes
-wallets-import-notes-input =
-    .placeholder = Descrição (opcional)...
-wallets-import-submit = Importar carteira
 
 # wallets.html: Watch Wallet dialog.
 wallets-watch-add-title = Monitorar carteira
@@ -147,106 +107,6 @@ wallets-export-copy =
     .aria-label = Copiar para a área de transferência
 wallets-export-reveal = Revelar chave
 
-# wallets.html: Archive and Delete dialogs.
-wallets-archive-title = Arquivar carteira
-wallets-archive-note = Carteiras arquivadas não são usadas em nenhuma operação, mas podem ser restauradas a qualquer momento.
-wallets-archive-confirm = Sim, arquivar
-wallets-delete-title = Excluir carteira
-wallets-delete-warning-title = Esta ação não pode ser desfeita!
-wallets-delete-warning-body = Excluir esta carteira remove permanentemente ela e a chave privada criptografada deste dispositivo.
-wallets-delete-confirm = Sim, excluir
-
-# wallets.html and bulk_operations.js: bulk import.
-wallets-bulk-import-title = Importar carteiras
-wallets-bulk-import-submit = Importar carteiras
-wallets-bulk-step-upload = Enviar arquivo
-wallets-bulk-step-map = Mapear colunas
-wallets-bulk-step-results = Resultados
-wallets-bulk-import-file-warning-body = Importe arquivos apenas de fontes confiáveis. As chaves privadas serão criptografadas e armazenadas com segurança neste dispositivo.
-wallets-bulk-drop-title = Solte seu arquivo aqui
-wallets-bulk-drop-subtitle = ou clique para procurar
-wallets-bulk-drop-formats = Aceita CSV e Excel (.xlsx, .xls)
-wallets-bulk-file-remove =
-    .aria-label = Remover arquivo
-wallets-bulk-map-subtitle = Associe as colunas do arquivo aos campos da carteira
-wallets-bulk-preview-title = Prévia (primeiras 5 linhas)
-wallets-bulk-summary-valid = <strong>{ $count }</strong> válidas
-wallets-bulk-summary-invalid = <strong>{ $count }</strong> inválidas
-wallets-bulk-summary-duplicate =
-    { $count ->
-        [one] <strong>{ $count }</strong> duplicada
-        [many] <strong>{ $count }</strong> duplicadas
-       *[other] <strong>{ $count }</strong> duplicadas
-    }
-wallets-bulk-done = Concluído
-wallets-bulk-file-invalid = Tipo de arquivo inválido. Use arquivos CSV ou Excel.
-wallets-bulk-preview-busy = Processando...
-wallets-bulk-preview-fallback = Falha ao processar o arquivo
-wallets-bulk-preview-failed = Falha ao processar o arquivo: { $reason }
-wallets-bulk-column-select = -- Selecionar coluna --
-wallets-bulk-preview-empty = Nenhuma linha de dados encontrada no arquivo
-wallets-bulk-preview-status = Status
-wallets-bulk-status-valid = Válida
-wallets-bulk-preview-col-row = Linha
-wallets-bulk-preview-col-address = Endereço
-wallets-bulk-status-invalid = Inválida
-wallets-bulk-import-busy = Importando...
-wallets-bulk-import-toast =
-    { $count ->
-        [one] { $count } carteira importada
-        [many] { $count } carteiras importadas
-       *[other] { $count } carteiras importadas
-    }
-wallets-bulk-import-error = Falha na importação: { $reason }
-wallets-bulk-result-success-title = Importação concluída
-wallets-bulk-result-success-detail =
-    { $count ->
-        [one] { $count } carteira importada com sucesso
-        [many] Todas as { $count } carteiras foram importadas com sucesso
-       *[other] Todas as { $count } carteiras foram importadas com sucesso
-    }
-wallets-bulk-result-partial-title = Sucesso parcial
-wallets-bulk-result-partial-detail = { $imported } importadas, { $failed } com falha
-wallets-bulk-result-failed-title = Falha na importação
-wallets-bulk-result-failed-detail =
-    { $count ->
-        [one] Falha ao importar { $count } carteira
-        [many] Falha ao importar todas as { $count } carteiras
-       *[other] Falha ao importar todas as { $count } carteiras
-    }
-wallets-bulk-result-imported = Importadas
-wallets-bulk-result-failed = Falharam
-
-# wallets.html and bulk_operations.js: bulk export.
-wallets-bulk-export-title = Exportar carteiras
-wallets-bulk-export-format = Formato
-wallets-bulk-export-format-csv = CSV (.csv)
-wallets-bulk-export-format-xlsx = Excel (.xlsx)
-wallets-bulk-export-include-archived = Incluir carteiras arquivadas
-wallets-bulk-export-safe-title = Exportação segura
-wallets-bulk-export-safe-body = Exporta apenas endereços e metadados das carteiras. Não inclui chaves privadas.
-wallets-bulk-export-safe-submit = Exportar endereços
-wallets-bulk-export-or = ou
-wallets-bulk-export-danger-title = Exportação perigosa
-wallets-bulk-export-danger-body = Inclui as chaves privadas na exportação. Qualquer pessoa com este arquivo pode roubar seus fundos.
-wallets-bulk-export-danger-submit = Exportar com chaves privadas
-wallets-bulk-export-busy = Exportando...
-wallets-bulk-export-done = Carteiras exportadas para { $filename }
-wallets-bulk-export-fallback = Falha na exportação
-wallets-bulk-export-error = Falha na exportação: { $reason }
-wallets-bulk-confirm-title = Confirmar exportação perigosa
-wallets-bulk-confirm-warning =
-    { $count ->
-        [one] Você está prestes a exportar <strong>{ $count }</strong> chave privada. Isso é extremamente perigoso!
-        [many] Você está prestes a exportar <strong>{ $count }</strong> chaves privadas. Isso é extremamente perigoso!
-       *[other] Você está prestes a exportar <strong>{ $count }</strong> chaves privadas. Isso é extremamente perigoso!
-    }
-wallets-bulk-confirm-risk-steal = Qualquer pessoa com este arquivo pode roubar todos os fundos
-wallets-bulk-confirm-risk-share = Nunca compartilhe este arquivo com ninguém
-wallets-bulk-confirm-risk-delete = Exclua o arquivo imediatamente após o uso
-wallets-bulk-confirm-prompt = Digite a frase abaixo para confirmar
-wallets-bulk-confirm-submit = Exportar chaves
-
 # renderers.js: main wallet holdings and wallet lists.
 wallets-holdings-col-token = Token
 wallets-holdings-col-balance = Saldo
@@ -273,19 +133,14 @@ wallets-list-col-type = Tipo
 wallets-list-col-created = Criada
 wallets-list-col-actions = Ações
 wallets-list-action-export = Exportar chave privada
-wallets-list-action-archive = Arquivar carteira
-wallets-list-action-restore = Restaurar carteira
-wallets-list-action-delete = Excluir permanentemente
 wallets-list-count = Carteiras
 wallets-list-search =
     .placeholder = Buscar por nome ou endereço...
 wallets-list-loading-title = Carregando carteiras…
 wallets-list-loading-description = Preparando a visualização da carteira selecionada.
+wallets-list-kept-empty-message = As carteiras de versões anteriores aparecem aqui para que você ainda possa exportar as chaves delas.
 wallets-secondaries-empty-title = Nenhuma carteira secundária
-wallets-secondaries-empty-message = Crie carteiras adicionais para organizar suas atividades de trading em várias contas.
-wallets-secondaries-add = Adicionar carteira
 wallets-archive-empty-title = Nenhuma carteira arquivada
-wallets-archive-empty-message = As carteiras que você arquivar ficarão guardadas aqui com segurança para consulta futura.
 
 # watched.js: watched wallets table and actions.
 wallets-watched-col-wallet = Carteira

@@ -26,17 +26,6 @@ pub enum Error {
     NotInitialized { database: &'static str },
     #[error("wallet {address} is not known")]
     WalletNotFound { address: String },
-    /// The imported private key resolves to a wallet that is already stored
-    /// (no fitting variant above: a duplicate import is a conflict on an
-    /// existing row, not a database failure and not an unusable key).
-    #[error("wallet {address} already exists")]
-    WalletAlreadyExists { address: String },
-    /// The wallet exists but its current role/state forbids the requested
-    /// operation (no fitting variant above: this is a business-rule
-    /// rejection, not a not-found or a plain database failure — archiving/
-    /// deleting the main wallet, restoring a wallet that is not archived).
-    #[error("wallet {id} is in an invalid state for this operation: {detail}")]
-    InvalidWalletState { id: i64, detail: &'static str },
     #[error("watch target {address} is not being watched")]
     WatchTargetNotFound { address: String },
     /// Wallet watching is switched off in config, so no target may be added
@@ -79,11 +68,6 @@ pub enum Error {
     WatchResumeNotBudgetPaused { id: i64 },
     #[error("'{value}' is not a valid watch address")]
     InvalidWatchAddress { value: String },
-    /// A batch wallet-creation request is malformed or produced nothing (no
-    /// fitting variant above: this is a request-shape rejection on the batch
-    /// as a whole, not a single wallet's not-found/invalid-key cause).
-    #[error("invalid wallet batch request: {detail}")]
-    InvalidBatchRequest { detail: &'static str },
     /// A dashboard window does not map to one of the canonical cache windows
     /// (24h/7d/30d/all_time) (no fitting variant above: this is a caller-input
     /// rejection specific to dashboard windowing, not a batch-wallet request).
@@ -164,8 +148,6 @@ impl ErrorClass for Error {
             Error::Transactions(e) => e.is_retryable(),
             Error::NotInitialized { .. } => false,
             Error::WalletNotFound { .. } => false,
-            Error::WalletAlreadyExists { .. } => false,
-            Error::InvalidWalletState { .. } => false,
             Error::WatchTargetNotFound { .. } => false,
             Error::WatchDisabled => false,
             Error::WatchTargetAlreadyWatched { .. } => false,
@@ -178,7 +160,6 @@ impl ErrorClass for Error {
             Error::WatchHeliusApprovalAcknowledgementRequired => false,
             Error::WatchResumeNotBudgetPaused { .. } => false,
             Error::InvalidWatchAddress { .. } => false,
-            Error::InvalidBatchRequest { .. } => false,
             Error::InvalidWindow { .. } => false,
             Error::InvalidPrivateKey { .. } => false,
             Error::WatchSourcesDecode { .. } => false,
@@ -217,8 +198,6 @@ impl ErrorClass for Error {
             Error::Transactions(e) => e.severity(),
             Error::NotInitialized { .. } => Severity::Critical,
             Error::WalletNotFound { .. } => Severity::Warning,
-            Error::WalletAlreadyExists { .. } => Severity::Warning,
-            Error::InvalidWalletState { .. } => Severity::Warning,
             Error::WatchTargetNotFound { .. } => Severity::Warning,
             Error::WatchDisabled => Severity::Warning,
             Error::WatchTargetAlreadyWatched { .. } => Severity::Warning,
@@ -234,7 +213,6 @@ impl ErrorClass for Error {
             Error::WatchHeliusApprovalAcknowledgementRequired => Severity::Warning,
             Error::WatchResumeNotBudgetPaused { .. } => Severity::Warning,
             Error::InvalidWatchAddress { .. } => Severity::Warning,
-            Error::InvalidBatchRequest { .. } => Severity::Warning,
             Error::InvalidWindow { .. } => Severity::Warning,
             Error::InvalidPrivateKey { .. } => Severity::Critical,
             Error::WatchSourcesDecode { .. } => Severity::Critical,
@@ -257,8 +235,6 @@ impl ErrorClass for Error {
             Error::Transactions(e) => e.http_status(),
             Error::NotInitialized { .. } => 500,
             Error::WalletNotFound { .. } => 404,
-            Error::WalletAlreadyExists { .. } => 409,
-            Error::InvalidWalletState { .. } => 409,
             Error::WatchTargetNotFound { .. } => 404,
             Error::WatchDisabled => 400,
             Error::WatchTargetAlreadyWatched { .. } | Error::WatchTargetIsOwnWallet { .. } => 409,
@@ -270,7 +246,6 @@ impl ErrorClass for Error {
             Error::WatchHeliusApprovalAcknowledgementRequired => 400,
             Error::WatchResumeNotBudgetPaused { .. } => 409,
             Error::InvalidWatchAddress { .. } => 400,
-            Error::InvalidBatchRequest { .. } => 400,
             Error::InvalidWindow { .. } => 400,
             Error::InvalidPrivateKey { .. } => 400,
             Error::WatchSourcesDecode { .. } => 500,

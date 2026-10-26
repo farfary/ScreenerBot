@@ -234,40 +234,12 @@ errors-llm-analysis-decision-get-failed = 获取决策失败
 
 # Wallets
 errors-wallets-list-failed = 获取钱包列表失败
-errors-wallets-name-empty = 钱包名称不能为空
-errors-wallets-create-failed = 创建钱包失败
-errors-wallets-key-empty = 私钥不能为空
-errors-wallets-already-exists = 钱包已存在
-errors-wallets-key-invalid = 私钥格式无效
-errors-wallets-import-failed = 导入钱包失败
 errors-wallets-summary-failed = 获取钱包摘要失败
 errors-wallets-no-main-wallet = 未配置主钱包
 errors-wallets-main-get-failed = 获取主钱包失败
 errors-wallets-not-found = 未找到钱包
 errors-wallets-get-failed = 获取钱包失败
-errors-wallets-update-failed = 更新钱包失败
-errors-wallets-delete-failed = 删除钱包失败
 errors-wallets-export-failed = 导出钱包失败
-errors-wallets-set-main-failed = 设置主钱包失败
-errors-wallets-archive-failed = 归档钱包失败
-errors-wallets-restore-failed = 恢复钱包失败
-errors-wallets-export-format-unsupported = 目前仅支持 CSV 格式
-errors-wallets-export-confirmation-required = 您必须通过输入以下内容进行确认：“{ $confirmation }”
-errors-wallets-export-no-ids = 未提供钱包 ID
-errors-wallets-export-bulk-failed = 导出钱包失败
-errors-wallets-export-no-match = 未找到与所提供 ID 匹配的钱包
-errors-wallets-import-file-too-large = 文件超过 { $megabytes }MB 的最大限制
-errors-wallets-import-read-failed = 读取上传的文件失败
-errors-wallets-import-no-file = 未上传文件。请使用 multipart 表单中的 'file' 字段
-errors-wallets-import-encoding-invalid = CSV 文件必须为 UTF-8 编码
-errors-wallets-import-csv-parse-failed = 解析 CSV 文件失败
-errors-wallets-import-excel-parse-failed = 解析 Excel 文件失败
-errors-wallets-import-format-unsupported = 不支持的文件格式。请使用 .csv、.xlsx 或 .xls
-errors-wallets-import-file-empty = 文件不包含数据行
-errors-wallets-import-existing-check-failed = 检查现有钱包失败
-errors-wallets-import-mapping-invalid = 缺少必需的列：{ $columns }
-errors-wallets-import-session-not-found = 未找到导入会话或会话已过期。请重新上传文件
-errors-wallets-import-no-valid-rows = 没有可导入的有效行
 
 # Wallet watching
 errors-wallet-watch-list-failed = 获取监控目标列表失败

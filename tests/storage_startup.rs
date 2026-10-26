@@ -451,18 +451,16 @@ fn initialize_startup_stores() {
         .build()
         .expect("create multi-thread runtime");
     runtime.block_on(async {
+        // The first launch imports the configured trading wallet; a later launch finds
+        // it already stored.
+        common::configure_trading_wallet();
         screenerbot::wallets::initialize()
             .await
             .expect("initialize wallets database");
-        if !screenerbot::wallets::has_main_wallet().await {
-            screenerbot::wallets::create_wallet(screenerbot::wallets::CreateWalletRequest {
-                name: "startup-storage".to_owned(),
-                notes: None,
-                set_as_main: true,
-            })
-            .await
-            .expect("create isolated main wallet");
-        }
+        assert!(
+            screenerbot::wallets::has_main_wallet().await,
+            "the trading wallet is the main wallet"
+        );
 
         screenerbot::actions::init_database()
             .await

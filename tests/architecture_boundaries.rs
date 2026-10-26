@@ -376,8 +376,7 @@ fn wallet_ownership_never_names_a_solana_key_type() {
         "wallets/manager/cache.rs",
         "wallets/manager/main_wallet.rs",
         "wallets/manager/tools.rs",
-        "wallets/manager/crud.rs",
-        "wallets/manager/bulk_ops.rs",
+        "wallets/manager/export.rs",
         "wallets/manager/migration.rs",
         "wallets/manager/balance_ops.rs",
         "wallets/manager/balance_queries.rs",
@@ -1111,11 +1110,9 @@ const NEUTRAL_FILES_NAMING_CHAINS_SOLANA: &[&str] = &[
     "wallets/ata_cleanup/types.rs",
     "wallets/balance_monitor/database.rs",
     "wallets/balance_monitor/service.rs",
-    "wallets/bulk/validator.rs",
     "wallets/manager/balance_ops.rs",
     "wallets/manager/balance_queries.rs",
-    "wallets/manager/bulk_ops.rs",
-    "wallets/manager/crud.rs",
+    "wallets/manager/export.rs",
     "wallets/manager/migration.rs",
     "webserver/routes/initialization/handlers.rs",
     "webserver/routes/initialization/types.rs",
@@ -2278,7 +2275,6 @@ const UNMANAGED_TRANSACTION_SITES: &[(&str, usize)] = &[
     ("llm_analysis/database.rs", 1),
     ("pools/database/writer.rs", 1),
     ("transactions/database/operations_queries.rs", 1),
-    ("wallets/database/wallet_queries.rs", 2),
 ];
 
 /// Production sites that open a transaction by hand: `unchecked_transaction()` is as

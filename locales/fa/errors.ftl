@@ -237,41 +237,12 @@ errors-llm-analysis-decision-get-failed = دریافت تصمیم ناموفق �
 
 # Wallets
 errors-wallets-list-failed = دریافت فهرست کیف پول‌ها ناموفق بود
-errors-wallets-name-empty = نام کیف پول نمی‌تواند خالی باشد
-errors-wallets-create-failed = ساخت کیف پول ناموفق بود
-errors-wallets-key-empty = کلید خصوصی نمی‌تواند خالی باشد
-errors-wallets-already-exists = کیف پول از قبل وجود دارد
-errors-wallets-key-invalid = قالب کلید خصوصی نامعتبر است
-errors-wallets-import-failed = درون‌ریزی کیف پول ناموفق بود
 errors-wallets-summary-failed = دریافت خلاصه کیف پول‌ها ناموفق بود
 errors-wallets-no-main-wallet = کیف پول اصلی پیکربندی نشده است
 errors-wallets-main-get-failed = دریافت کیف پول اصلی ناموفق بود
 errors-wallets-not-found = کیف پول پیدا نشد
 errors-wallets-get-failed = دریافت کیف پول ناموفق بود
-errors-wallets-update-failed = به‌روزرسانی کیف پول ناموفق بود
-errors-wallets-delete-failed = حذف کیف پول ناموفق بود
 errors-wallets-export-failed = خروجی گرفتن از کیف پول ناموفق بود
-errors-wallets-set-main-failed = تنظیم کیف پول اصلی ناموفق بود
-errors-wallets-archive-failed = بایگانی کیف پول ناموفق بود
-errors-wallets-restore-failed = بازیابی کیف پول ناموفق بود
-errors-wallets-export-format-unsupported = در حال حاضر فقط قالب CSV پشتیبانی می‌شود
-# The confirmation is the exact phrase the request must carry.
-errors-wallets-export-confirmation-required = باید با ارائه این عبارت تأیید کنید: «{ $confirmation }»
-errors-wallets-export-no-ids = شناسه کیف پولی ارائه نشده است
-errors-wallets-export-bulk-failed = خروجی گرفتن از کیف پول‌ها ناموفق بود
-errors-wallets-export-no-match = کیف پولی مطابق شناسه‌های ارائه‌شده پیدا نشد
-errors-wallets-import-file-too-large = حجم فایل از حداکثر { $megabytes } MB بیشتر است
-errors-wallets-import-read-failed = خواندن فایل بارگذاری‌شده ناموفق بود
-errors-wallets-import-no-file = فایلی بارگذاری نشده است. از فیلد 'file' در فرم چندبخشی استفاده کنید
-errors-wallets-import-encoding-invalid = فایل CSV باید با کدگذاری UTF-8 باشد
-errors-wallets-import-csv-parse-failed = تجزیه فایل CSV ناموفق بود
-errors-wallets-import-excel-parse-failed = تجزیه فایل Excel ناموفق بود
-errors-wallets-import-format-unsupported = قالب فایل پشتیبانی نمی‌شود. از .csv، .xlsx یا .xls استفاده کنید
-errors-wallets-import-file-empty = فایل هیچ ردیف داده‌ای ندارد
-errors-wallets-import-existing-check-failed = بررسی کیف پول‌های موجود ناموفق بود
-errors-wallets-import-mapping-invalid = ستون‌های الزامی وجود ندارند: { $columns }
-errors-wallets-import-session-not-found = نشست درون‌ریزی پیدا نشد یا منقضی شده است. فایل را دوباره بارگذاری کنید
-errors-wallets-import-no-valid-rows = ردیف معتبری برای درون‌ریزی وجود ندارد
 
 # Wallet watching
 errors-wallet-watch-list-failed = دریافت فهرست اهداف پایش ناموفق بود

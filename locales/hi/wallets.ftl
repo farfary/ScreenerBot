@@ -22,12 +22,8 @@ wallets-watch-reason-signature-budget = इस वॉलेट की गति�
 wallets-watch-reason-helius-unavailable = { -helius } जांच विफल रही। सहेजी गई प्रगति सुरक्षित है।
 wallets-watch-reason-processing-failed = वॉलेट गतिविधि प्रोसेस नहीं हो सकी। सहेजी गई प्रगति सुरक्षित है।
 
-wallets-field-name = वॉलेट का नाम
-wallets-field-notes = नोट्स
-wallets-field-private-key = प्राइवेट की
 wallets-modal-close =
     .aria-label = मोडल बंद करें
-wallets-this-wallet = यह वॉलेट
 wallets-summary-native = { -sol }
 wallets-copied-private-key = प्राइवेट की
 
@@ -38,43 +34,8 @@ wallets-tab-watched = वॉच किए गए
 wallets-refresh-failed = वॉलेट रीफ़्रेश नहीं हो सके
 wallets-action-failed = विफल
 wallets-toast-failed = विफल: { $reason }
-wallets-create-busy = बना रहे हैं...
-wallets-create-fallback = बनाना विफल रहा
-wallets-create-done = वॉलेट "{ $name }" बन गया!
-wallets-import-busy = इम्पोर्ट हो रहा है...
-wallets-import-failed = इम्पोर्ट विफल रहा
-wallets-import-done = वॉलेट "{ $name }" इम्पोर्ट हो गया!
-wallets-archive-busy = आर्काइव हो रहा है...
-wallets-archive-confirm-text = क्या आप <strong>{ $name }</strong> को आर्काइव करना चाहते हैं?
-wallets-archive-done = वॉलेट आर्काइव किया गया
-wallets-restore-done = वॉलेट वापस लाया गया
 wallets-export-busy = डिक्रिप्ट हो रहा है...
 wallets-export-revealed = की दिखाई गई - सावधानी से संभालें
-wallets-delete-busy = हटाया जा रहा है...
-wallets-delete-confirm-text = क्या आप <strong>{ $name }</strong> को हटाना चाहते हैं?
-wallets-delete-done = वॉलेट हमेशा के लिए हटा दिया गया
-
-wallets-add-title = वॉलेट जोड़ें
-wallets-add-tab-create = नया बनाएं
-wallets-add-tab-import = मौजूदा इम्पोर्ट करें
-wallets-create-name-input =
-    .placeholder = जैसे, ट्रेडिंग वॉलेट
-wallets-create-name-hint = इस वॉलेट की पहचान के लिए एक आसान नाम
-wallets-create-notes-input =
-    .placeholder = वैकल्पिक विवरण या उद्देश्य...
-wallets-create-submit = वॉलेट बनाएं
-wallets-import-warning-title = सुरक्षा चेतावनी
-wallets-import-warning-body = प्राइवेट की केवल भरोसेमंद स्रोतों से इम्पोर्ट करें। आपकी की एन्क्रिप्ट होकर इस डिवाइस पर सुरक्षित रखी जाएगी।
-wallets-import-name-input =
-    .placeholder = जैसे, मेरा वॉलेट
-wallets-import-key-input =
-    .placeholder = Base58 स्ट्रिंग या JSON ऐरे [1,2,3,...]
-wallets-import-key-toggle =
-    .aria-label = प्राइवेट की दिखाना टॉगल करें
-wallets-import-key-hint = base58 एन्कोडेड की या बाइट ऐरे फ़ॉर्मैट समर्थित है
-wallets-import-notes-input =
-    .placeholder = वैकल्पिक विवरण...
-wallets-import-submit = वॉलेट इम्पोर्ट करें
 
 wallets-watch-add-title = वॉलेट वॉच करें
 wallets-watch-add-address = वॉलेट एड्रेस
@@ -131,98 +92,6 @@ wallets-export-copy =
     .aria-label = क्लिपबोर्ड पर कॉपी करें
 wallets-export-reveal = की दिखाएं
 
-wallets-archive-title = वॉलेट आर्काइव करें
-wallets-archive-note = आर्काइव किए गए वॉलेट किसी भी ऑपरेशन में इस्तेमाल नहीं होते, लेकिन कभी भी वापस लाए जा सकते हैं।
-wallets-archive-confirm = हां, आर्काइव करें
-wallets-delete-title = वॉलेट हटाएं
-wallets-delete-warning-title = यह कार्रवाई वापस नहीं की जा सकती!
-wallets-delete-warning-body = इस वॉलेट को हटाने से यह और इसकी एन्क्रिप्टेड प्राइवेट की इस डिवाइस से हमेशा के लिए हट जाएगी।
-wallets-delete-confirm = हां, हटाएं
-
-wallets-bulk-import-title = वॉलेट इम्पोर्ट करें
-wallets-bulk-import-submit = वॉलेट इम्पोर्ट करें
-wallets-bulk-step-upload = फ़ाइल अपलोड करें
-wallets-bulk-step-map = कॉलम मैप करें
-wallets-bulk-step-results = नतीजे
-wallets-bulk-import-file-warning-body = फ़ाइलें केवल भरोसेमंद स्रोतों से इम्पोर्ट करें। प्राइवेट की एन्क्रिप्ट होकर इस डिवाइस पर सुरक्षित रखी जाएंगी।
-wallets-bulk-drop-title = अपनी फ़ाइल यहां छोड़ें
-wallets-bulk-drop-subtitle = या ब्राउज़ करने के लिए क्लिक करें
-wallets-bulk-drop-formats = CSV और Excel (.xlsx, .xls) समर्थित हैं
-wallets-bulk-file-remove =
-    .aria-label = फ़ाइल हटाएं
-wallets-bulk-map-subtitle = अपनी फ़ाइल के कॉलम वॉलेट फ़ील्ड से मिलाएं
-wallets-bulk-preview-title = प्रीव्यू (पहली 5 पंक्तियां)
-wallets-bulk-summary-valid = <strong>{ $count }</strong> मान्य
-wallets-bulk-summary-invalid = <strong>{ $count }</strong> अमान्य
-wallets-bulk-summary-duplicate =
-    { $count ->
-        [one] <strong>{ $count }</strong> डुप्लिकेट
-       *[other] <strong>{ $count }</strong> डुप्लिकेट
-    }
-wallets-bulk-done = हो गया
-wallets-bulk-file-invalid = अमान्य फ़ाइल प्रकार। कृपया CSV या Excel फ़ाइलें इस्तेमाल करें।
-wallets-bulk-preview-busy = प्रोसेस हो रहा है...
-wallets-bulk-preview-fallback = फ़ाइल प्रोसेस करने में विफल
-wallets-bulk-preview-failed = फ़ाइल प्रोसेस करने में विफल: { $reason }
-wallets-bulk-column-select = -- कॉलम चुनें --
-wallets-bulk-preview-empty = फ़ाइल में कोई डेटा पंक्ति नहीं मिली
-wallets-bulk-preview-status = स्टेटस
-wallets-bulk-status-valid = मान्य
-wallets-bulk-preview-col-row = पंक्ति
-wallets-bulk-preview-col-address = पता
-wallets-bulk-status-invalid = अमान्य
-wallets-bulk-import-busy = इम्पोर्ट हो रहा है...
-wallets-bulk-import-toast =
-    { $count ->
-        [one] { $count } वॉलेट इम्पोर्ट हुआ
-       *[other] { $count } वॉलेट इम्पोर्ट हुए
-    }
-wallets-bulk-import-error = इम्पोर्ट विफल: { $reason }
-wallets-bulk-result-success-title = इम्पोर्ट सफल
-wallets-bulk-result-success-detail =
-    { $count ->
-        [one] सभी { $count } वॉलेट सफलतापूर्वक इम्पोर्ट हुए
-       *[other] सभी { $count } वॉलेट सफलतापूर्वक इम्पोर्ट हुए
-    }
-wallets-bulk-result-partial-title = आंशिक सफलता
-wallets-bulk-result-partial-detail = { $imported } इम्पोर्ट हुए, { $failed } विफल
-wallets-bulk-result-failed-title = इम्पोर्ट विफल
-wallets-bulk-result-failed-detail =
-    { $count ->
-        [one] सभी { $count } वॉलेट इम्पोर्ट होने में विफल रहे
-       *[other] सभी { $count } वॉलेट इम्पोर्ट होने में विफल रहे
-    }
-wallets-bulk-result-imported = इम्पोर्ट हुए
-wallets-bulk-result-failed = विफल
-
-wallets-bulk-export-title = वॉलेट एक्सपोर्ट करें
-wallets-bulk-export-format = फ़ॉर्मैट
-wallets-bulk-export-format-csv = CSV (.csv)
-wallets-bulk-export-format-xlsx = Excel (.xlsx)
-wallets-bulk-export-include-archived = आर्काइव किए गए वॉलेट शामिल करें
-wallets-bulk-export-safe-title = सुरक्षित एक्सपोर्ट
-wallets-bulk-export-safe-body = केवल वॉलेट एड्रेस और मेटाडेटा एक्सपोर्ट करें। प्राइवेट की शामिल नहीं होती।
-wallets-bulk-export-safe-submit = एड्रेस एक्सपोर्ट करें
-wallets-bulk-export-or = या
-wallets-bulk-export-danger-title = जोखिम भरा एक्सपोर्ट
-wallets-bulk-export-danger-body = एक्सपोर्ट में प्राइवेट की शामिल करें। इस फ़ाइल वाला कोई भी व्यक्ति आपका फ़ंड चुरा सकता है।
-wallets-bulk-export-danger-submit = प्राइवेट की के साथ एक्सपोर्ट करें
-wallets-bulk-export-busy = एक्सपोर्ट हो रहा है...
-wallets-bulk-export-done = वॉलेट { $filename } में एक्सपोर्ट किए गए
-wallets-bulk-export-fallback = एक्सपोर्ट विफल रहा
-wallets-bulk-export-error = एक्सपोर्ट विफल: { $reason }
-wallets-bulk-confirm-title = जोखिम भरे एक्सपोर्ट की पुष्टि करें
-wallets-bulk-confirm-warning =
-    { $count ->
-        [one] आप <strong>{ $count }</strong> प्राइवेट की एक्सपोर्ट करने वाले हैं। यह बेहद खतरनाक है!
-       *[other] आप <strong>{ $count }</strong> प्राइवेट की एक्सपोर्ट करने वाले हैं। यह बेहद खतरनाक है!
-    }
-wallets-bulk-confirm-risk-steal = इस फ़ाइल वाला कोई भी व्यक्ति सारा फ़ंड चुरा सकता है
-wallets-bulk-confirm-risk-share = इस फ़ाइल को किसी के साथ साझा न करें
-wallets-bulk-confirm-risk-delete = इस्तेमाल के तुरंत बाद फ़ाइल हटा दें
-wallets-bulk-confirm-prompt = पुष्टि के लिए नीचे दिया वाक्यांश टाइप करें
-wallets-bulk-confirm-submit = की एक्सपोर्ट करें
-
 wallets-holdings-col-token = टोकन
 wallets-holdings-col-balance = बैलेंस
 wallets-holdings-col-value = वैल्यू ({ -sol })
@@ -248,19 +117,14 @@ wallets-list-col-type = प्रकार
 wallets-list-col-created = बनाया गया
 wallets-list-col-actions = कार्रवाइयां
 wallets-list-action-export = प्राइवेट की एक्सपोर्ट करें
-wallets-list-action-archive = वॉलेट आर्काइव करें
-wallets-list-action-restore = वॉलेट वापस लाएं
-wallets-list-action-delete = हमेशा के लिए हटाएं
 wallets-list-count = वॉलेट
 wallets-list-search =
     .placeholder = नाम या एड्रेस से खोजें...
 wallets-list-loading-title = वॉलेट लोड हो रहे हैं…
 wallets-list-loading-description = चुना गया वॉलेट व्यू तैयार हो रहा है।
+wallets-list-kept-empty-message = पिछले संस्करणों के वॉलेट यहां दिखते हैं ताकि आप अब भी उनकी कुंजियां एक्सपोर्ट कर सकें।
 wallets-secondaries-empty-title = कोई सेकेंडरी वॉलेट नहीं
-wallets-secondaries-empty-message = कई अकाउंट में अपनी ट्रेडिंग गतिविधियां व्यवस्थित करने के लिए अतिरिक्त वॉलेट बनाएं।
-wallets-secondaries-add = वॉलेट जोड़ें
 wallets-archive-empty-title = कोई आर्काइव वॉलेट नहीं
-wallets-archive-empty-message = आप जो वॉलेट आर्काइव करेंगे, वे भविष्य के संदर्भ के लिए यहां सुरक्षित रहेंगे।
 
 wallets-watched-col-wallet = वॉलेट
 wallets-watched-col-status = स्टेटस

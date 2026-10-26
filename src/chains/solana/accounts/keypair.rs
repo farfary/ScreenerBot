@@ -10,7 +10,7 @@ use crate::chains::solana::solana_sdk::signature::Keypair;
 use crate::chains::solana::solana_sdk::signer::Signer;
 use crate::chains::solana::{Error, Result};
 
-use crate::secure_storage::{decrypt_private_key, encrypt_private_key, EncryptedData};
+use crate::secure_storage::{decrypt_private_key, EncryptedData};
 
 // =============================================================================
 // WALLET GENERATION
@@ -21,14 +21,6 @@ use crate::secure_storage::{decrypt_private_key, encrypt_private_key, EncryptedD
 /// Uses Solana SDK's Keypair::new() which internally uses a CSPRNG
 pub fn generate_keypair() -> Keypair {
     Keypair::new()
-}
-
-/// Generate a new keypair and return with its encrypted private key
-pub fn generate_and_encrypt_keypair() -> Result<(Keypair, EncryptedData)> {
-    let keypair = generate_keypair();
-    let private_key_b58 = bs58::encode(keypair.to_bytes()).into_string();
-    let encrypted = encrypt_private_key(&private_key_b58)?;
-    Ok((keypair, encrypted))
 }
 
 // =============================================================================
@@ -95,17 +87,6 @@ fn parse_base58_format(private_key: &str) -> Result<Keypair> {
     })
 }
 
-/// Import a private key and return encrypted data
-pub fn import_and_encrypt(private_key: &str) -> Result<(Keypair, EncryptedData)> {
-    let keypair = parse_private_key(private_key)?;
-
-    // Re-encode to base58 for storage (normalized format)
-    let private_key_b58 = bs58::encode(keypair.to_bytes()).into_string();
-    let encrypted = encrypt_private_key(&private_key_b58)?;
-
-    Ok((keypair, encrypted))
-}
-
 /// Export a wallet's private key in base58 format
 pub fn export_private_key(encrypted_key: &str, nonce: &str) -> Result<String> {
     let encrypted = EncryptedData {
@@ -151,32 +132,12 @@ pub fn keypair_to_address(keypair: &Keypair) -> String {
 }
 
 // =============================================================================
-// ADDRESS-ONLY / MATERIAL HELPERS
+// ADDRESS-ONLY HELPERS
 // =============================================================================
 //
-// These exist so callers outside `crate::chains::solana` (wallet CRUD, bulk
-// import, the legacy config migration) never need to hold a `Keypair` value
-// even transiently — they get back the address string and/or the
-// chain-neutral `EncryptedData` they actually need to persist or compare.
-
-/// Generate a new wallet's address plus its encrypted key material.
-pub fn generate_wallet_material() -> Result<(String, EncryptedData)> {
-    let (keypair, encrypted) = generate_and_encrypt_keypair()?;
-    Ok((keypair_to_address(&keypair), encrypted))
-}
-
-/// Parse and encrypt a user-submitted private key, returning its address
-/// plus encrypted key material.
-pub fn import_wallet_material(private_key: &str) -> Result<(String, EncryptedData)> {
-    let (keypair, encrypted) = import_and_encrypt(private_key)?;
-    Ok((keypair_to_address(&keypair), encrypted))
-}
-
-/// Derive just the address from a private key string (duplicate checks that
-/// don't need to store the key).
-pub fn address_from_private_key(private_key: &str) -> Result<String> {
-    parse_private_key(private_key).map(|kp| keypair_to_address(&kp))
-}
+// These exist so callers outside `crate::chains::solana` (the legacy config
+// migration) never need to hold a `Keypair` value even transiently — they get
+// back the address string they actually need to persist or compare.
 
 /// Derive just the address from an already-encrypted key (one-time
 /// migration paths that don't need the decrypted key afterward).
@@ -195,21 +156,6 @@ mod tests {
 
         // Each generated keypair should be unique
         assert_ne!(kp1.pubkey(), kp2.pubkey());
-    }
-
-    #[test]
-    fn test_generate_and_encrypt() {
-        let result = generate_and_encrypt_keypair();
-        assert!(result.is_ok());
-
-        let (keypair, encrypted) = result.unwrap();
-        assert!(!encrypted.ciphertext.is_empty());
-        assert!(!encrypted.nonce.is_empty());
-
-        // Verify we can decrypt back
-        let decrypted = decrypt_to_keypair(&encrypted.ciphertext, &encrypted.nonce);
-        assert!(decrypted.is_ok());
-        assert_eq!(decrypted.unwrap().pubkey(), keypair.pubkey());
     }
 
     #[test]

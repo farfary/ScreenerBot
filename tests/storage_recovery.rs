@@ -80,16 +80,14 @@ fn seed_every_store() {
         .build()
         .expect("create runtime")
         .block_on(async {
+            common::configure_trading_wallet();
             screenerbot::wallets::initialize()
                 .await
                 .expect("initialize wallets");
-            screenerbot::wallets::create_wallet(screenerbot::wallets::CreateWalletRequest {
-                name: "storage-recovery".to_owned(),
-                notes: None,
-                set_as_main: true,
-            })
-            .await
-            .expect("create main wallet");
+            assert!(
+                screenerbot::wallets::has_main_wallet().await,
+                "the configured trading wallet becomes the main wallet"
+            );
         });
     for store in STORES {
         let path = store.path(ChainId::Solana);

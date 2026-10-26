@@ -69,27 +69,15 @@ pub async fn is_initialized() -> bool {
 }
 
 // =============================================================================
-// WALLET CRUD OPERATIONS
+// WALLET ACCESS AND KEY EXPORT
 // =============================================================================
 
-mod crud;
-pub use crud::{
-    archive_wallet, create_wallet, delete_wallet, export_wallet, import_wallet, restore_wallet,
-    set_main_wallet, update_wallet,
-};
+mod export;
+pub use export::export_wallet;
 
 mod access;
 pub(crate) use access::get_wallet_encrypted_key;
 pub use access::{get_wallet, get_wallet_by_address, list_active_wallets, list_wallets};
-
-// =============================================================================
-// BULK IMPORT/EXPORT
-// =============================================================================
-
-mod bulk_ops;
-pub use bulk_ops::{
-    bulk_import_wallets, create_wallets_batch, export_wallets, get_existing_wallet_addresses,
-};
 
 // =============================================================================
 // TOKEN BALANCE OPERATIONS

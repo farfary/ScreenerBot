@@ -33,12 +33,8 @@ wallets-watch-reason-helius-unavailable = { -helius } 检查失败。已保存�
 wallets-watch-reason-processing-failed = 无法处理钱包活动。已保存的进度已保留。
 
 # Vocabulary shared by the wallet tables and dialogs.
-wallets-field-name = 钱包名称
-wallets-field-notes = 备注
-wallets-field-private-key = 私钥
 wallets-modal-close =
     .aria-label = 关闭弹窗
-wallets-this-wallet = 此钱包
 wallets-summary-native = { -sol }
 wallets-copied-private-key = 私钥
 
@@ -50,44 +46,8 @@ wallets-tab-watched = 监控中
 wallets-refresh-failed = 无法刷新钱包
 wallets-action-failed = 失败
 wallets-toast-failed = 失败：{ $reason }
-wallets-create-busy = 正在创建...
-wallets-create-fallback = 创建失败
-wallets-create-done = 钱包“{ $name }”已创建！
-wallets-import-busy = 正在导入...
-wallets-import-failed = 导入失败
-wallets-import-done = 钱包“{ $name }”已导入！
-wallets-archive-busy = 正在归档...
-wallets-archive-confirm-text = 确定要归档 <strong>{ $name }</strong> 吗？
-wallets-archive-done = 钱包已归档
-wallets-restore-done = 钱包已恢复
 wallets-export-busy = 正在解密...
 wallets-export-revealed = 密钥已显示，请妥善保管
-wallets-delete-busy = 正在删除...
-wallets-delete-confirm-text = 确定要删除 <strong>{ $name }</strong> 吗？
-wallets-delete-done = 钱包已永久删除
-
-# wallets.html: Add Wallet dialog.
-wallets-add-title = 添加钱包
-wallets-add-tab-create = 新建
-wallets-add-tab-import = 导入已有
-wallets-create-name-input =
-    .placeholder = 例如：交易钱包
-wallets-create-name-hint = 用于识别此钱包的易记名称
-wallets-create-notes-input =
-    .placeholder = 可选的描述或用途...
-wallets-create-submit = 创建钱包
-wallets-import-warning-title = 安全警告
-wallets-import-warning-body = 仅从可信来源导入私钥。您的密钥将被加密并安全存储在此设备上。
-wallets-import-name-input =
-    .placeholder = 例如：我的钱包
-wallets-import-key-input =
-    .placeholder = Base58 字符串或 JSON 数组 [1,2,3,...]
-wallets-import-key-toggle =
-    .aria-label = 切换私钥可见性
-wallets-import-key-hint = 支持 base58 编码密钥或字节数组格式
-wallets-import-notes-input =
-    .placeholder = 可选的描述...
-wallets-import-submit = 导入钱包
 
 # wallets.html: Watch Wallet dialog.
 wallets-watch-add-title = 监控钱包
@@ -147,96 +107,6 @@ wallets-export-copy =
     .aria-label = 复制到剪贴板
 wallets-export-reveal = 显示密钥
 
-# wallets.html: Archive and Delete dialogs.
-wallets-archive-title = 归档钱包
-wallets-archive-note = 已归档的钱包不会参与任何操作，但可随时恢复。
-wallets-archive-confirm = 是，归档
-wallets-delete-title = 删除钱包
-wallets-delete-warning-title = 此操作无法撤销！
-wallets-delete-warning-body = 删除此钱包将从此设备上永久移除该钱包及其加密私钥。
-wallets-delete-confirm = 是，删除
-
-# wallets.html and bulk_operations.js: bulk import.
-wallets-bulk-import-title = 导入钱包
-wallets-bulk-import-submit = 导入钱包
-wallets-bulk-step-upload = 上传文件
-wallets-bulk-step-map = 映射列
-wallets-bulk-step-results = 结果
-wallets-bulk-import-file-warning-body = 仅从可信来源导入文件。私钥将被加密并安全存储在此设备上。
-wallets-bulk-drop-title = 将文件拖放到此处
-wallets-bulk-drop-subtitle = 或点击浏览
-wallets-bulk-drop-formats = 支持 CSV 和 Excel（.xlsx、.xls）
-wallets-bulk-file-remove =
-    .aria-label = 移除文件
-wallets-bulk-map-subtitle = 将文件中的列与钱包字段对应
-wallets-bulk-preview-title = 预览（前 5 行）
-wallets-bulk-summary-valid = <strong>{ $count }</strong> 个有效
-wallets-bulk-summary-invalid = <strong>{ $count }</strong> 个无效
-wallets-bulk-summary-duplicate =
-    { $count ->
-       *[other] <strong>{ $count }</strong> 个重复
-    }
-wallets-bulk-done = 完成
-wallets-bulk-file-invalid = 文件类型无效。请使用 CSV 或 Excel 文件。
-wallets-bulk-preview-busy = 正在处理...
-wallets-bulk-preview-fallback = 处理文件失败
-wallets-bulk-preview-failed = 处理文件失败：{ $reason }
-wallets-bulk-column-select = -- 选择列 --
-wallets-bulk-preview-empty = 文件中没有数据行
-wallets-bulk-preview-status = 状态
-wallets-bulk-status-valid = 有效
-wallets-bulk-preview-col-row = 行
-wallets-bulk-preview-col-address = 地址
-wallets-bulk-status-invalid = 无效
-wallets-bulk-import-busy = 正在导入...
-wallets-bulk-import-toast =
-    { $count ->
-       *[other] 已导入 { $count } 个钱包
-    }
-wallets-bulk-import-error = 导入失败：{ $reason }
-wallets-bulk-result-success-title = 导入成功
-wallets-bulk-result-success-detail =
-    { $count ->
-       *[other] 全部 { $count } 个钱包均已成功导入
-    }
-wallets-bulk-result-partial-title = 部分成功
-wallets-bulk-result-partial-detail = 已导入 { $imported } 个，失败 { $failed } 个
-wallets-bulk-result-failed-title = 导入失败
-wallets-bulk-result-failed-detail =
-    { $count ->
-       *[other] 全部 { $count } 个钱包均导入失败
-    }
-wallets-bulk-result-imported = 已导入
-wallets-bulk-result-failed = 失败
-
-# wallets.html and bulk_operations.js: bulk export.
-wallets-bulk-export-title = 导出钱包
-wallets-bulk-export-format = 格式
-wallets-bulk-export-format-csv = CSV (.csv)
-wallets-bulk-export-format-xlsx = Excel (.xlsx)
-wallets-bulk-export-include-archived = 包含已归档的钱包
-wallets-bulk-export-safe-title = 安全导出
-wallets-bulk-export-safe-body = 仅导出钱包地址和元数据，不含私钥。
-wallets-bulk-export-safe-submit = 导出地址
-wallets-bulk-export-or = 或
-wallets-bulk-export-danger-title = 危险导出
-wallets-bulk-export-danger-body = 导出内容包含私钥。任何获得此文件的人都可以盗走您的资金。
-wallets-bulk-export-danger-submit = 连同私钥一起导出
-wallets-bulk-export-busy = 正在导出...
-wallets-bulk-export-done = 已将钱包导出到 { $filename }
-wallets-bulk-export-fallback = 导出失败
-wallets-bulk-export-error = 导出失败：{ $reason }
-wallets-bulk-confirm-title = 确认危险导出
-wallets-bulk-confirm-warning =
-    { $count ->
-       *[other] 您即将导出 <strong>{ $count }</strong> 个私钥。这极其危险！
-    }
-wallets-bulk-confirm-risk-steal = 任何获得此文件的人都可以盗走全部资金
-wallets-bulk-confirm-risk-share = 切勿与任何人分享此文件
-wallets-bulk-confirm-risk-delete = 使用后请立即删除该文件
-wallets-bulk-confirm-prompt = 请输入下方短语以确认
-wallets-bulk-confirm-submit = 导出密钥
-
 # renderers.js: main wallet holdings and wallet lists.
 wallets-holdings-col-token = 代币
 wallets-holdings-col-balance = 余额
@@ -263,19 +133,14 @@ wallets-list-col-type = 类型
 wallets-list-col-created = 创建时间
 wallets-list-col-actions = 操作
 wallets-list-action-export = 导出私钥
-wallets-list-action-archive = 归档钱包
-wallets-list-action-restore = 恢复钱包
-wallets-list-action-delete = 永久删除
 wallets-list-count = 钱包
 wallets-list-search =
     .placeholder = 按名称或地址搜索...
 wallets-list-loading-title = 正在加载钱包…
 wallets-list-loading-description = 正在准备所选钱包视图。
+wallets-list-kept-empty-message = 早期版本的钱包会显示在这里，方便您继续导出其密钥。
 wallets-secondaries-empty-title = 没有副钱包
-wallets-secondaries-empty-message = 创建更多钱包，以便在多个账户之间分开管理您的交易活动。
-wallets-secondaries-add = 添加钱包
 wallets-archive-empty-title = 没有已归档的钱包
-wallets-archive-empty-message = 您归档的钱包将安全保存在这里，以备日后查看。
 
 # watched.js: watched wallets table and actions.
 wallets-watched-col-wallet = 钱包

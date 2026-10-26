@@ -5,9 +5,7 @@
 //! mutation to its stable `subject` (`WalletDatabase::subject` in
 //! `src/wallets/balance_monitor/database.rs`), never merely to
 //! `ChainId::Solana` -- two wallet addresses sharing a chain must never mix
-//! in a snapshot list, a monitor-stats row, or a worth-at-time lookup. And
-//! switching the main wallet must rebind that subject in place, without
-//! reopening a separate wallet-monitor database.
+//! in a snapshot list, a monitor-stats row, or a worth-at-time lookup.
 //!
 //! It runs in a process of its own (nextest isolates every test): the wallets manager, the main-keypair cache
 //! and the wallet-monitor database are all process-wide statics, same
@@ -22,7 +20,6 @@ use screenerbot::wallet::{
     get_recent_wallet_snapshots, get_wallet_monitor_stats, get_worth_at_time,
     initialize_wallet_database,
 };
-use screenerbot::wallets::{create_wallet, CreateWalletRequest};
 
 /// Insert a synthetic `wallet_snapshots` row directly against the real
 /// wallet-monitor database file, bypassing the (RPC-backed) public
@@ -48,22 +45,16 @@ fn seed_snapshot(wallet_address: &str, sol_balance: f64) {
 }
 
 #[tokio::test]
-async fn wallet_monitor_reads_stay_scoped_to_the_active_subject_and_rebind_on_main_wallet_switch() {
+async fn wallet_monitor_reads_stay_scoped_to_the_active_subject() {
     let dir = tempfile::tempdir().expect("temp dir");
     std::env::set_var("SCREENERBOT_DATA_DIR", dir.path());
     std::fs::create_dir_all(dir.path().join("data")).expect("create data dir");
     common::ensure_config();
+    let wallet_a = common::configure_trading_wallet();
 
     screenerbot::wallets::initialize()
         .await
-        .expect("wallet manager initializes");
-    let wallet_a = create_wallet(CreateWalletRequest {
-        name: "A".to_owned(),
-        set_as_main: true,
-        notes: None,
-    })
-    .await
-    .expect("create wallet A as main");
+        .expect("wallet manager initializes with the configured wallet A as main");
 
     initialize_wallet_database()
         .await
@@ -74,7 +65,7 @@ async fn wallet_monitor_reads_stay_scoped_to_the_active_subject_and_rebind_on_ma
     // Two subjects on the same chain: A (the active one) and an unrelated
     // address that was never set main. Only A's row may ever surface.
     let other_subject = "Other1111111111111111111111111111111111111";
-    seed_snapshot(&wallet_a.address, 1.0);
+    seed_snapshot(&wallet_a, 1.0);
     seed_snapshot(other_subject, 99.0);
 
     let recent = get_recent_wallet_snapshots(10)
@@ -85,7 +76,7 @@ async fn wallet_monitor_reads_stay_scoped_to_the_active_subject_and_rebind_on_ma
         1,
         "must see only the active subject's snapshot, not OTHER's"
     );
-    assert_eq!(recent[0].wallet_address, wallet_a.address);
+    assert_eq!(recent[0].wallet_address, wallet_a);
     assert_eq!(recent[0].native_balance, 1.0);
 
     let stats = get_wallet_monitor_stats()
@@ -95,7 +86,7 @@ async fn wallet_monitor_reads_stay_scoped_to_the_active_subject_and_rebind_on_ma
         stats.total_snapshots, 1,
         "monitor stats must count only the active subject's rows"
     );
-    assert_eq!(stats.wallet_address, wallet_a.address);
+    assert_eq!(stats.wallet_address, wallet_a);
 
     let balance = get_worth_at_time(Utc::now())
         .await
@@ -106,38 +97,4 @@ async fn wallet_monitor_reads_stay_scoped_to_the_active_subject_and_rebind_on_ma
         Some(1.0),
         "worth-at-time must read A's row, never OTHER's 99.0"
     );
-
-    // Switching the main wallet must rebind the monitor's subject to B --
-    // still the SAME database file, never a second one.
-    let wallet_b = create_wallet(CreateWalletRequest {
-        name: "B".to_owned(),
-        set_as_main: true,
-        notes: None,
-    })
-    .await
-    .expect("create wallet B as main");
-    assert_eq!(
-        screenerbot::paths::get_wallet_db_path(),
-        db_path,
-        "the wallet-monitor database path must never change on a main-wallet switch"
-    );
-
-    seed_snapshot(&wallet_b.address, 2.0);
-
-    let recent_after_switch = get_recent_wallet_snapshots(10)
-        .await
-        .expect("recent snapshots query succeeds after switch");
-    assert_eq!(
-        recent_after_switch.len(),
-        1,
-        "after the subject rebinds, only B's snapshot may surface -- not A's or OTHER's"
-    );
-    assert_eq!(recent_after_switch[0].wallet_address, wallet_b.address);
-    assert_eq!(recent_after_switch[0].native_balance, 2.0);
-
-    let stats_after_switch = get_wallet_monitor_stats()
-        .await
-        .expect("monitor stats query succeeds after switch");
-    assert_eq!(stats_after_switch.wallet_address, wallet_b.address);
-    assert_eq!(stats_after_switch.total_snapshots, 1);
 }

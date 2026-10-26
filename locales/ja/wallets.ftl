@@ -33,12 +33,8 @@ wallets-watch-reason-helius-unavailable = { -helius } のチェックに失敗�
 wallets-watch-reason-processing-failed = ウォレットのアクティビティを処理できませんでした。保存済みの進捗は保持されています。
 
 # Vocabulary shared by the wallet tables and dialogs.
-wallets-field-name = ウォレット名
-wallets-field-notes = メモ
-wallets-field-private-key = 秘密鍵
 wallets-modal-close =
     .aria-label = モーダルを閉じる
-wallets-this-wallet = このウォレット
 wallets-summary-native = { -sol }
 wallets-copied-private-key = 秘密鍵
 
@@ -50,44 +46,8 @@ wallets-tab-watched = ウォッチ中
 wallets-refresh-failed = ウォレットを更新できませんでした
 wallets-action-failed = 失敗
 wallets-toast-failed = 失敗: { $reason }
-wallets-create-busy = 作成中...
-wallets-create-fallback = 作成に失敗しました
-wallets-create-done = ウォレット「{ $name }」を作成しました
-wallets-import-busy = インポート中...
-wallets-import-failed = インポートに失敗しました
-wallets-import-done = ウォレット「{ $name }」をインポートしました
-wallets-archive-busy = アーカイブ中...
-wallets-archive-confirm-text = <strong>{ $name }</strong> をアーカイブしますか？
-wallets-archive-done = ウォレットをアーカイブしました
-wallets-restore-done = ウォレットを復元しました
 wallets-export-busy = 復号中...
 wallets-export-revealed = 鍵を表示しました。取り扱いに注意してください
-wallets-delete-busy = 削除中...
-wallets-delete-confirm-text = <strong>{ $name }</strong> を削除しますか？
-wallets-delete-done = ウォレットを完全に削除しました
-
-# wallets.html: Add Wallet dialog.
-wallets-add-title = ウォレットを追加
-wallets-add-tab-create = 新規作成
-wallets-add-tab-import = 既存をインポート
-wallets-create-name-input =
-    .placeholder = 例: トレード用ウォレット
-wallets-create-name-hint = このウォレットを識別するための分かりやすい名前
-wallets-create-notes-input =
-    .placeholder = 説明や用途（任意）...
-wallets-create-submit = ウォレットを作成
-wallets-import-warning-title = セキュリティ警告
-wallets-import-warning-body = 秘密鍵は信頼できる提供元のものだけをインポートしてください。鍵は暗号化され、このデバイス上に安全に保存されます。
-wallets-import-name-input =
-    .placeholder = 例: マイウォレット
-wallets-import-key-input =
-    .placeholder = Base58 文字列または JSON 配列 [1,2,3,...]
-wallets-import-key-toggle =
-    .aria-label = 秘密鍵の表示を切り替え
-wallets-import-key-hint = Base58 エンコードの鍵またはバイト配列形式に対応しています
-wallets-import-notes-input =
-    .placeholder = 説明（任意）...
-wallets-import-submit = ウォレットをインポート
 
 # wallets.html: Watch Wallet dialog.
 wallets-watch-add-title = ウォレットをウォッチ
@@ -147,96 +107,6 @@ wallets-export-copy =
     .aria-label = クリップボードにコピー
 wallets-export-reveal = 鍵を表示
 
-# wallets.html: Archive and Delete dialogs.
-wallets-archive-title = ウォレットをアーカイブ
-wallets-archive-note = アーカイブしたウォレットはどの処理でも使用されませんが、いつでも復元できます。
-wallets-archive-confirm = はい、アーカイブする
-wallets-delete-title = ウォレットを削除
-wallets-delete-warning-title = この操作は元に戻せません
-wallets-delete-warning-body = このウォレットを削除すると、ウォレットと暗号化された秘密鍵がこのデバイスから完全に削除されます。
-wallets-delete-confirm = はい、削除する
-
-# wallets.html and bulk_operations.js: bulk import.
-wallets-bulk-import-title = ウォレットをインポート
-wallets-bulk-import-submit = ウォレットをインポート
-wallets-bulk-step-upload = ファイルをアップロード
-wallets-bulk-step-map = 列のマッピング
-wallets-bulk-step-results = 結果
-wallets-bulk-import-file-warning-body = ファイルは信頼できる提供元のものだけをインポートしてください。秘密鍵は暗号化され、このデバイス上に安全に保存されます。
-wallets-bulk-drop-title = ここにファイルをドロップ
-wallets-bulk-drop-subtitle = またはクリックして参照
-wallets-bulk-drop-formats = CSV と Excel（.xlsx、.xls）に対応
-wallets-bulk-file-remove =
-    .aria-label = ファイルを削除
-wallets-bulk-map-subtitle = ファイルの列をウォレットのフィールドに対応付けてください
-wallets-bulk-preview-title = プレビュー（先頭5行）
-wallets-bulk-summary-valid = 有効 <strong>{ $count }</strong>件
-wallets-bulk-summary-invalid = 無効 <strong>{ $count }</strong>件
-wallets-bulk-summary-duplicate =
-    { $count ->
-       *[other] 重複 <strong>{ $count }</strong>件
-    }
-wallets-bulk-done = 完了
-wallets-bulk-file-invalid = ファイル形式が無効です。CSV または Excel ファイルを使用してください。
-wallets-bulk-preview-busy = 処理中...
-wallets-bulk-preview-fallback = ファイルの処理に失敗しました
-wallets-bulk-preview-failed = ファイルの処理に失敗しました: { $reason }
-wallets-bulk-column-select = -- 列を選択 --
-wallets-bulk-preview-empty = ファイルにデータ行がありません
-wallets-bulk-preview-status = ステータス
-wallets-bulk-status-valid = 有効
-wallets-bulk-preview-col-row = 行
-wallets-bulk-preview-col-address = アドレス
-wallets-bulk-status-invalid = 無効
-wallets-bulk-import-busy = インポート中...
-wallets-bulk-import-toast =
-    { $count ->
-       *[other] ウォレットを { $count }件インポートしました
-    }
-wallets-bulk-import-error = インポートに失敗しました: { $reason }
-wallets-bulk-result-success-title = インポート成功
-wallets-bulk-result-success-detail =
-    { $count ->
-       *[other] { $count }件のウォレットをすべてインポートしました
-    }
-wallets-bulk-result-partial-title = 一部成功
-wallets-bulk-result-partial-detail = インポート { $imported }件、失敗 { $failed }件
-wallets-bulk-result-failed-title = インポート失敗
-wallets-bulk-result-failed-detail =
-    { $count ->
-       *[other] { $count }件のウォレットすべてのインポートに失敗しました
-    }
-wallets-bulk-result-imported = インポート済み
-wallets-bulk-result-failed = 失敗
-
-# wallets.html and bulk_operations.js: bulk export.
-wallets-bulk-export-title = ウォレットをエクスポート
-wallets-bulk-export-format = 形式
-wallets-bulk-export-format-csv = CSV (.csv)
-wallets-bulk-export-format-xlsx = Excel (.xlsx)
-wallets-bulk-export-include-archived = アーカイブ済みウォレットを含める
-wallets-bulk-export-safe-title = 安全なエクスポート
-wallets-bulk-export-safe-body = ウォレットのアドレスとメタデータのみをエクスポートします。秘密鍵は含まれません。
-wallets-bulk-export-safe-submit = アドレスをエクスポート
-wallets-bulk-export-or = または
-wallets-bulk-export-danger-title = 危険なエクスポート
-wallets-bulk-export-danger-body = エクスポートに秘密鍵を含めます。このファイルを入手した人は資金を盗むことができます。
-wallets-bulk-export-danger-submit = 秘密鍵付きでエクスポート
-wallets-bulk-export-busy = エクスポート中...
-wallets-bulk-export-done = ウォレットを { $filename } にエクスポートしました
-wallets-bulk-export-fallback = エクスポートに失敗しました
-wallets-bulk-export-error = エクスポートに失敗しました: { $reason }
-wallets-bulk-confirm-title = 危険なエクスポートの確認
-wallets-bulk-confirm-warning =
-    { $count ->
-       *[other] 秘密鍵 <strong>{ $count }</strong>件をエクスポートしようとしています。極めて危険です。
-    }
-wallets-bulk-confirm-risk-steal = このファイルを入手した人は資金をすべて盗むことができます
-wallets-bulk-confirm-risk-share = このファイルは絶対に誰にも共有しないでください
-wallets-bulk-confirm-risk-delete = 使用後はすぐにファイルを削除してください
-wallets-bulk-confirm-prompt = 確認のため、下のフレーズを入力してください
-wallets-bulk-confirm-submit = 鍵をエクスポート
-
 # renderers.js: main wallet holdings and wallet lists.
 wallets-holdings-col-token = トークン
 wallets-holdings-col-balance = 残高
@@ -263,19 +133,14 @@ wallets-list-col-type = 種類
 wallets-list-col-created = 作成日時
 wallets-list-col-actions = 操作
 wallets-list-action-export = 秘密鍵をエクスポート
-wallets-list-action-archive = ウォレットをアーカイブ
-wallets-list-action-restore = ウォレットを復元
-wallets-list-action-delete = 完全に削除
 wallets-list-count = ウォレット
 wallets-list-search =
     .placeholder = 名前またはアドレスで検索...
 wallets-list-loading-title = ウォレットを読み込み中…
 wallets-list-loading-description = 選択したウォレットビューを準備しています。
+wallets-list-kept-empty-message = 以前のバージョンのウォレットはここに表示され、引き続きキーをエクスポートできます。
 wallets-secondaries-empty-title = セカンダリウォレットはありません
-wallets-secondaries-empty-message = ウォレットを追加して、複数のアカウントでトレード活動を整理できます。
-wallets-secondaries-add = ウォレットを追加
 wallets-archive-empty-title = アーカイブ済みのウォレットはありません
-wallets-archive-empty-message = アーカイブしたウォレットは、今後の参照用にここに安全に保管されます。
 
 # watched.js: watched wallets table and actions.
 wallets-watched-col-wallet = ウォレット

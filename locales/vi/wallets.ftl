@@ -22,12 +22,8 @@ wallets-watch-reason-signature-budget = Ví này có nhiều hoạt động hơn
 wallets-watch-reason-helius-unavailable = Kiểm tra qua { -helius } thất bại. Tiến độ đã lưu được giữ nguyên.
 wallets-watch-reason-processing-failed = Không thể xử lý hoạt động của ví. Tiến độ đã lưu được giữ nguyên.
 
-wallets-field-name = Tên ví
-wallets-field-notes = Ghi chú
-wallets-field-private-key = Khóa riêng tư
 wallets-modal-close =
     .aria-label = Đóng hộp thoại
-wallets-this-wallet = ví này
 wallets-summary-native = { -sol }
 wallets-copied-private-key = Khóa riêng tư
 
@@ -38,43 +34,8 @@ wallets-tab-watched = Đang theo dõi
 wallets-refresh-failed = Không thể làm mới danh sách ví
 wallets-action-failed = Thất bại
 wallets-toast-failed = Thất bại: { $reason }
-wallets-create-busy = Đang tạo...
-wallets-create-fallback = Tạo thất bại
-wallets-create-done = Đã tạo ví “{ $name }”!
-wallets-import-busy = Đang nhập...
-wallets-import-failed = Nhập thất bại
-wallets-import-done = Đã nhập ví “{ $name }”!
-wallets-archive-busy = Đang lưu trữ...
-wallets-archive-confirm-text = Bạn có chắc muốn lưu trữ <strong>{ $name }</strong>?
-wallets-archive-done = Đã lưu trữ ví
-wallets-restore-done = Đã khôi phục ví
 wallets-export-busy = Đang giải mã...
 wallets-export-revealed = Đã hiện khóa - hãy bảo quản cẩn thận
-wallets-delete-busy = Đang xóa...
-wallets-delete-confirm-text = Bạn có chắc muốn xóa <strong>{ $name }</strong>?
-wallets-delete-done = Đã xóa vĩnh viễn ví
-
-wallets-add-title = Thêm ví
-wallets-add-tab-create = Tạo mới
-wallets-add-tab-import = Nhập ví có sẵn
-wallets-create-name-input =
-    .placeholder = ví dụ: Ví giao dịch
-wallets-create-name-hint = Tên gợi nhớ để nhận biết ví này
-wallets-create-notes-input =
-    .placeholder = Mô tả hoặc mục đích (không bắt buộc)...
-wallets-create-submit = Tạo ví
-wallets-import-warning-title = Cảnh báo bảo mật
-wallets-import-warning-body = Chỉ nhập khóa riêng tư từ nguồn đáng tin cậy. Khóa của bạn sẽ được mã hóa và lưu an toàn trên thiết bị này.
-wallets-import-name-input =
-    .placeholder = ví dụ: Ví của tôi
-wallets-import-key-input =
-    .placeholder = Chuỗi base58 hoặc mảng JSON [1,2,3,...]
-wallets-import-key-toggle =
-    .aria-label = Bật/tắt hiển thị khóa riêng tư
-wallets-import-key-hint = Hỗ trợ khóa mã hóa base58 hoặc định dạng mảng byte
-wallets-import-notes-input =
-    .placeholder = Mô tả (không bắt buộc)...
-wallets-import-submit = Nhập ví
 
 wallets-watch-add-title = Theo dõi ví
 wallets-watch-add-address = Địa chỉ ví
@@ -131,93 +92,6 @@ wallets-export-copy =
     .aria-label = Sao chép vào bộ nhớ tạm
 wallets-export-reveal = Hiện khóa
 
-wallets-archive-title = Lưu trữ ví
-wallets-archive-note = Ví đã lưu trữ không được dùng trong bất kỳ thao tác nào nhưng có thể khôi phục bất cứ lúc nào.
-wallets-archive-confirm = Có, lưu trữ
-wallets-delete-title = Xóa ví
-wallets-delete-warning-title = Không thể hoàn tác thao tác này!
-wallets-delete-warning-body = Xóa ví này sẽ xóa vĩnh viễn ví và khóa riêng tư đã mã hóa của nó khỏi thiết bị này.
-wallets-delete-confirm = Có, xóa
-
-wallets-bulk-import-title = Nhập ví
-wallets-bulk-import-submit = Nhập ví
-wallets-bulk-step-upload = Tải tệp lên
-wallets-bulk-step-map = Ghép cột
-wallets-bulk-step-results = Kết quả
-wallets-bulk-import-file-warning-body = Chỉ nhập tệp từ nguồn đáng tin cậy. Khóa riêng tư sẽ được mã hóa và lưu an toàn trên thiết bị này.
-wallets-bulk-drop-title = Thả tệp của bạn vào đây
-wallets-bulk-drop-subtitle = hoặc nhấp để chọn
-wallets-bulk-drop-formats = Hỗ trợ CSV và Excel (.xlsx, .xls)
-wallets-bulk-file-remove =
-    .aria-label = Xóa tệp
-wallets-bulk-map-subtitle = Ghép các cột trong tệp với các trường của ví
-wallets-bulk-preview-title = Xem trước (5 dòng đầu)
-wallets-bulk-summary-valid = <strong>{ $count }</strong> hợp lệ
-wallets-bulk-summary-invalid = <strong>{ $count }</strong> không hợp lệ
-wallets-bulk-summary-duplicate =
-    { $count ->
-       *[other] <strong>{ $count }</strong> trùng lặp
-    }
-wallets-bulk-done = Xong
-wallets-bulk-file-invalid = Loại tệp không hợp lệ. Vui lòng dùng tệp CSV hoặc Excel.
-wallets-bulk-preview-busy = Đang xử lý...
-wallets-bulk-preview-fallback = Không thể xử lý tệp
-wallets-bulk-preview-failed = Không thể xử lý tệp: { $reason }
-wallets-bulk-column-select = -- Chọn cột --
-wallets-bulk-preview-empty = Không tìm thấy dòng dữ liệu nào trong tệp
-wallets-bulk-preview-status = Trạng thái
-wallets-bulk-status-valid = Hợp lệ
-wallets-bulk-preview-col-row = Hàng
-wallets-bulk-preview-col-address = Địa chỉ
-wallets-bulk-status-invalid = Không hợp lệ
-wallets-bulk-import-busy = Đang nhập...
-wallets-bulk-import-toast =
-    { $count ->
-       *[other] Đã nhập { $count } ví
-    }
-wallets-bulk-import-error = Nhập thất bại: { $reason }
-wallets-bulk-result-success-title = Nhập thành công
-wallets-bulk-result-success-detail =
-    { $count ->
-       *[other] Đã nhập thành công cả { $count } ví
-    }
-wallets-bulk-result-partial-title = Thành công một phần
-wallets-bulk-result-partial-detail = Đã nhập { $imported }, thất bại { $failed }
-wallets-bulk-result-failed-title = Nhập thất bại
-wallets-bulk-result-failed-detail =
-    { $count ->
-       *[other] Cả { $count } ví đều nhập thất bại
-    }
-wallets-bulk-result-imported = Đã nhập
-wallets-bulk-result-failed = Thất bại
-
-wallets-bulk-export-title = Xuất ví
-wallets-bulk-export-format = Định dạng
-wallets-bulk-export-format-csv = CSV (.csv)
-wallets-bulk-export-format-xlsx = Excel (.xlsx)
-wallets-bulk-export-include-archived = Bao gồm ví đã lưu trữ
-wallets-bulk-export-safe-title = Xuất an toàn
-wallets-bulk-export-safe-body = Chỉ xuất địa chỉ ví và siêu dữ liệu. Không bao gồm khóa riêng tư.
-wallets-bulk-export-safe-submit = Xuất địa chỉ
-wallets-bulk-export-or = hoặc
-wallets-bulk-export-danger-title = Xuất nguy hiểm
-wallets-bulk-export-danger-body = Bao gồm khóa riêng tư trong tệp xuất. Ai có tệp này đều có thể lấy tiền của bạn.
-wallets-bulk-export-danger-submit = Xuất kèm khóa riêng tư
-wallets-bulk-export-busy = Đang xuất...
-wallets-bulk-export-done = Đã xuất ví ra { $filename }
-wallets-bulk-export-fallback = Xuất thất bại
-wallets-bulk-export-error = Xuất thất bại: { $reason }
-wallets-bulk-confirm-title = Xác nhận xuất nguy hiểm
-wallets-bulk-confirm-warning =
-    { $count ->
-       *[other] Bạn sắp xuất <strong>{ $count }</strong> khóa riêng tư. Việc này cực kỳ nguy hiểm!
-    }
-wallets-bulk-confirm-risk-steal = Ai có tệp này đều có thể lấy toàn bộ tiền
-wallets-bulk-confirm-risk-share = Tuyệt đối không chia sẻ tệp này với bất kỳ ai
-wallets-bulk-confirm-risk-delete = Xóa tệp ngay sau khi dùng
-wallets-bulk-confirm-prompt = Nhập cụm từ bên dưới để xác nhận
-wallets-bulk-confirm-submit = Xuất khóa
-
 wallets-holdings-col-token = Token
 wallets-holdings-col-balance = Số dư
 wallets-holdings-col-value = Giá trị ({ -sol })
@@ -243,19 +117,14 @@ wallets-list-col-type = Loại
 wallets-list-col-created = Ngày tạo
 wallets-list-col-actions = Thao tác
 wallets-list-action-export = Xuất khóa riêng tư
-wallets-list-action-archive = Lưu trữ ví
-wallets-list-action-restore = Khôi phục ví
-wallets-list-action-delete = Xóa vĩnh viễn
 wallets-list-count = Ví
 wallets-list-search =
     .placeholder = Tìm theo tên hoặc địa chỉ...
 wallets-list-loading-title = Đang tải danh sách ví…
 wallets-list-loading-description = Đang chuẩn bị chế độ xem ví đã chọn.
+wallets-list-kept-empty-message = Các ví từ phiên bản trước hiển thị ở đây để bạn vẫn có thể xuất khóa của chúng.
 wallets-secondaries-empty-title = Chưa có ví thứ cấp
-wallets-secondaries-empty-message = Tạo thêm ví để sắp xếp hoạt động giao dịch trên nhiều tài khoản.
-wallets-secondaries-add = Thêm ví
 wallets-archive-empty-title = Chưa có ví lưu trữ
-wallets-archive-empty-message = Các ví bạn lưu trữ sẽ được cất giữ an toàn ở đây để tham khảo sau.
 
 wallets-watched-col-wallet = Ví
 wallets-watched-col-status = Trạng thái

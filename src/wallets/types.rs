@@ -137,43 +137,6 @@ pub struct WalletsSummary {
     pub total_native: f64,
 }
 
-/// Request to create a new wallet
-#[derive(Debug, Clone, Deserialize)]
-pub struct CreateWalletRequest {
-    /// Name for the new wallet
-    pub name: String,
-    /// Optional notes
-    pub notes: Option<String>,
-    /// Set as main wallet immediately
-    #[serde(default)]
-    pub set_as_main: bool,
-}
-
-/// Request to import an existing wallet
-#[derive(Debug, Clone, Deserialize)]
-pub struct ImportWalletRequest {
-    /// Name for the wallet
-    pub name: String,
-    /// Private key (base58 or array format)
-    pub private_key: String,
-    /// Optional notes
-    pub notes: Option<String>,
-    /// Set as main wallet immediately
-    #[serde(default)]
-    pub set_as_main: bool,
-}
-
-/// Request to update wallet metadata
-#[derive(Debug, Clone, Deserialize)]
-pub struct UpdateWalletRequest {
-    /// New name (optional)
-    pub name: Option<String>,
-    /// New notes (optional)
-    pub notes: Option<String>,
-    /// New role (optional)
-    pub role: Option<WalletRole>,
-}
-
 /// Response after exporting a wallet
 #[derive(Debug, Clone, Serialize)]
 pub struct ExportWalletResponse {

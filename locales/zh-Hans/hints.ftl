@@ -211,17 +211,6 @@ hints-wallets-main-content =
     • **余额显示**——显示在页眉和仪表盘中
     • **代币持仓**——此钱包持有的 SPL 代币
 
-    在任意副钱包上选择“设为主钱包”即可更换主钱包。
-hints-wallets-secondary-title = 副钱包
-hints-wallets-secondary-content =
-    用于多钱包操作的额外钱包。
-
-    • **多钱包交易**——跨钱包协同买入/卖出
-    • **资产分离**——按策略或用途分类管理
-    • **独立余额**——每个钱包都有自己的 SOL/代币
-
-    除非明确配置，否则自动交易不会使用副钱包。
-
 ## config
 
 hints-config-overview-title = 配置

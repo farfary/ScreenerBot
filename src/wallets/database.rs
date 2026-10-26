@@ -78,8 +78,8 @@ impl WalletsDatabase {
         Ok(Self { pool, chain })
     }
 
-    /// Snapshot the vault after its keys or its main wallet changed. The change stands
-    /// whatever happens to the snapshot; a failed one is logged.
+    /// Snapshot the vault after a key was added. The change stands whatever happens to
+    /// the snapshot; a failed one is logged.
     fn snapshot_after_key_change(conn: &Connection) {
         let Some(path) = conn.path().filter(|path| !path.is_empty()) else {
             return;
@@ -384,8 +384,7 @@ mod tests {
             .is_none());
     }
 
-    /// Every change to the vault's keys or its main wallet leaves a snapshot to restore
-    /// the vault from.
+    /// Every key added to the vault leaves a snapshot to restore the vault from.
     #[test]
     fn every_key_change_snapshots_the_vault() {
         use crate::database::backup::snapshot::{self, SnapshotKind};
@@ -414,13 +413,11 @@ mod tests {
             )
             .expect("insert wallet")
         };
-        let first = insert("AAAA");
-        let second = insert("BBBB");
-        db.set_main_wallet(first).expect("set main wallet");
-        db.delete_wallet(second).expect("delete wallet");
+        insert("AAAA");
+        insert("BBBB");
 
         let snapshots = snapshot::list(&path);
-        assert_eq!(snapshots.len(), 4);
+        assert_eq!(snapshots.len(), 2);
         assert!(snapshots
             .iter()
             .all(|snapshot| snapshot.kind == SnapshotKind::KeyChange));
@@ -429,8 +426,8 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM wallets", [], |row| row.get(0))
             .expect("count wallets");
         assert_eq!(
-            addresses, 1,
-            "the newest snapshot holds the vault after the delete"
+            addresses, 2,
+            "the newest snapshot holds the vault after the second key"
         );
     }
 }

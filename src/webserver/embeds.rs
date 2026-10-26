@@ -84,8 +84,6 @@ pub(super) const WALLETS_MAIN_WALLET_STYLES: &str =
     include_str!("templates/styles/pages/wallets/main_wallet.css");
 pub(super) const WALLETS_MODALS_STYLES: &str =
     include_str!("templates/styles/pages/wallets/modals.css");
-pub(super) const WALLETS_IMPORT_EXPORT_STYLES: &str =
-    include_str!("templates/styles/pages/wallets/import_export.css");
 pub(super) const WALLETS_WATCHED_STYLES: &str =
     include_str!("templates/styles/pages/wallets/watched.css");
 pub(super) const ASSISTANT_BASE_STYLES: &str =
@@ -551,8 +549,6 @@ pub const COPY_ARM_GATE_JS: &str = include_str!("templates/scripts/pages/copy/ar
 pub const COPY_SETTINGS_JS: &str = include_str!("templates/scripts/pages/copy/settings.js");
 pub const COPY_PROFILE_JS: &str = include_str!("templates/scripts/pages/copy/profile.js");
 pub const WALLETS_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/wallets.js");
-pub const WALLETS_BULK_OPERATIONS_JS: &str =
-    include_str!("templates/scripts/pages/wallets/bulk_operations.js");
 pub const WALLETS_RENDERERS_JS: &str = include_str!("templates/scripts/pages/wallets/renderers.js");
 pub const WALLETS_WATCHED_JS: &str = include_str!("templates/scripts/pages/wallets/watched.js");
 pub const ASSISTANT_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/assistant.js");

@@ -234,40 +234,12 @@ errors-llm-analysis-decision-get-failed = 결정을 가져오지 못했습니다
 
 # Wallets
 errors-wallets-list-failed = 지갑 목록을 가져오지 못했습니다
-errors-wallets-name-empty = 지갑 이름은 비워 둘 수 없습니다
-errors-wallets-create-failed = 지갑을 생성하지 못했습니다
-errors-wallets-key-empty = 프라이빗 키는 비워 둘 수 없습니다
-errors-wallets-already-exists = 지갑이 이미 있습니다
-errors-wallets-key-invalid = 프라이빗 키 형식이 올바르지 않습니다
-errors-wallets-import-failed = 지갑을 가져오지 못했습니다
 errors-wallets-summary-failed = 지갑 요약을 가져오지 못했습니다
 errors-wallets-no-main-wallet = 설정된 메인 지갑이 없습니다
 errors-wallets-main-get-failed = 메인 지갑을 가져오지 못했습니다
 errors-wallets-not-found = 지갑을 찾을 수 없습니다
 errors-wallets-get-failed = 지갑을 가져오지 못했습니다
-errors-wallets-update-failed = 지갑을 업데이트하지 못했습니다
-errors-wallets-delete-failed = 지갑을 삭제하지 못했습니다
 errors-wallets-export-failed = 지갑을 내보내지 못했습니다
-errors-wallets-set-main-failed = 메인 지갑을 설정하지 못했습니다
-errors-wallets-archive-failed = 지갑을 보관하지 못했습니다
-errors-wallets-restore-failed = 지갑을 복원하지 못했습니다
-errors-wallets-export-format-unsupported = 현재 CSV 형식만 지원됩니다
-errors-wallets-export-confirmation-required = 다음 문구를 입력하여 확인해야 합니다: "{ $confirmation }"
-errors-wallets-export-no-ids = 지갑 ID가 제공되지 않았습니다
-errors-wallets-export-bulk-failed = 지갑을 내보내지 못했습니다
-errors-wallets-export-no-match = 제공된 ID와 일치하는 지갑이 없습니다
-errors-wallets-import-file-too-large = 파일이 최대 크기 { $megabytes }MB를 초과했습니다
-errors-wallets-import-read-failed = 업로드한 파일을 읽지 못했습니다
-errors-wallets-import-no-file = 업로드된 파일이 없습니다. 멀티파트 폼의 'file' 필드를 사용하세요
-errors-wallets-import-encoding-invalid = CSV 파일은 UTF-8로 인코딩되어야 합니다
-errors-wallets-import-csv-parse-failed = CSV 파일을 파싱하지 못했습니다
-errors-wallets-import-excel-parse-failed = Excel 파일을 파싱하지 못했습니다
-errors-wallets-import-format-unsupported = 지원하지 않는 파일 형식입니다. .csv, .xlsx 또는 .xls를 사용하세요
-errors-wallets-import-file-empty = 파일에 데이터 행이 없습니다
-errors-wallets-import-existing-check-failed = 기존 지갑을 확인하지 못했습니다
-errors-wallets-import-mapping-invalid = 필수 열이 없습니다: { $columns }
-errors-wallets-import-session-not-found = 가져오기 세션을 찾을 수 없거나 만료되었습니다. 파일을 다시 업로드하세요
-errors-wallets-import-no-valid-rows = 가져올 유효한 행이 없습니다
 
 # Wallet watching
 errors-wallet-watch-list-failed = 감시 대상 목록을 가져오지 못했습니다

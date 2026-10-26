@@ -33,12 +33,8 @@ wallets-watch-reason-helius-unavailable = { -helius } checks failed. Saved progr
 wallets-watch-reason-processing-failed = Wallet activity could not be processed. Saved progress is preserved.
 
 # Vocabulary shared by the wallet tables and dialogs.
-wallets-field-name = Wallet Name
-wallets-field-notes = Notes
-wallets-field-private-key = Private Key
 wallets-modal-close =
     .aria-label = Close modal
-wallets-this-wallet = this wallet
 wallets-summary-native = { -sol }
 wallets-copied-private-key = Private key
 
@@ -50,44 +46,8 @@ wallets-tab-watched = Watched
 wallets-refresh-failed = Could not refresh wallets
 wallets-action-failed = Failed
 wallets-toast-failed = Failed: { $reason }
-wallets-create-busy = Creating...
-wallets-create-fallback = Creation failed
-wallets-create-done = Wallet "{ $name }" created!
-wallets-import-busy = Importing...
-wallets-import-failed = Import failed
-wallets-import-done = Wallet "{ $name }" imported!
-wallets-archive-busy = Archiving...
-wallets-archive-confirm-text = Are you sure you want to archive <strong>{ $name }</strong>?
-wallets-archive-done = Wallet archived
-wallets-restore-done = Wallet restored
 wallets-export-busy = Decrypting...
 wallets-export-revealed = Key revealed - handle with care
-wallets-delete-busy = Deleting...
-wallets-delete-confirm-text = Are you sure you want to delete <strong>{ $name }</strong>?
-wallets-delete-done = Wallet deleted permanently
-
-# wallets.html: Add Wallet dialog.
-wallets-add-title = Add Wallet
-wallets-add-tab-create = Create New
-wallets-add-tab-import = Import Existing
-wallets-create-name-input =
-    .placeholder = e.g., Trading Wallet
-wallets-create-name-hint = A friendly name to identify this wallet
-wallets-create-notes-input =
-    .placeholder = Optional description or purpose...
-wallets-create-submit = Create Wallet
-wallets-import-warning-title = Security Warning
-wallets-import-warning-body = Only import private keys from trusted sources. Your key will be encrypted and stored securely on this device.
-wallets-import-name-input =
-    .placeholder = e.g., My Wallet
-wallets-import-key-input =
-    .placeholder = Base58 string or JSON array [1,2,3,...]
-wallets-import-key-toggle =
-    .aria-label = Toggle private key visibility
-wallets-import-key-hint = Supports base58 encoded key or byte array format
-wallets-import-notes-input =
-    .placeholder = Optional description...
-wallets-import-submit = Import Wallet
 
 # wallets.html: Watch Wallet dialog.
 wallets-watch-add-title = Watch Wallet
@@ -147,101 +107,6 @@ wallets-export-copy =
     .aria-label = Copy to clipboard
 wallets-export-reveal = Reveal Key
 
-# wallets.html: Archive and Delete dialogs.
-wallets-archive-title = Archive Wallet
-wallets-archive-note = Archived wallets are not used in any operations but can be restored anytime.
-wallets-archive-confirm = Yes, Archive
-wallets-delete-title = Delete Wallet
-wallets-delete-warning-title = This action cannot be undone!
-wallets-delete-warning-body = Deleting this wallet will permanently remove it and its encrypted private key from this device.
-wallets-delete-confirm = Yes, Delete
-
-# wallets.html and bulk_operations.js: bulk import.
-wallets-bulk-import-title = Import Wallets
-wallets-bulk-import-submit = Import Wallets
-wallets-bulk-step-upload = Upload File
-wallets-bulk-step-map = Map Columns
-wallets-bulk-step-results = Results
-wallets-bulk-import-file-warning-body = Only import files from trusted sources. Private keys will be encrypted and stored securely on this device.
-wallets-bulk-drop-title = Drop your file here
-wallets-bulk-drop-subtitle = or click to browse
-wallets-bulk-drop-formats = Supports CSV and Excel (.xlsx, .xls)
-wallets-bulk-file-remove =
-    .aria-label = Remove file
-wallets-bulk-map-subtitle = Match your file columns to wallet fields
-wallets-bulk-preview-title = Preview (First 5 Rows)
-wallets-bulk-summary-valid = <strong>{ $count }</strong> valid
-wallets-bulk-summary-invalid = <strong>{ $count }</strong> invalid
-wallets-bulk-summary-duplicate =
-    { $count ->
-        [one] <strong>{ $count }</strong> duplicate
-       *[other] <strong>{ $count }</strong> duplicates
-    }
-wallets-bulk-done = Done
-wallets-bulk-file-invalid = Invalid file type. Please use CSV or Excel files.
-wallets-bulk-preview-busy = Processing...
-wallets-bulk-preview-fallback = Failed to process file
-wallets-bulk-preview-failed = Failed to process file: { $reason }
-wallets-bulk-column-select = -- Select column --
-wallets-bulk-preview-empty = No data rows found in file
-wallets-bulk-preview-status = Status
-wallets-bulk-status-valid = Valid
-wallets-bulk-preview-col-row = Row
-wallets-bulk-preview-col-address = Address
-wallets-bulk-status-invalid = Invalid
-wallets-bulk-import-busy = Importing...
-wallets-bulk-import-toast =
-    { $count ->
-        [one] Imported { $count } wallet
-       *[other] Imported { $count } wallets
-    }
-wallets-bulk-import-error = Import failed: { $reason }
-wallets-bulk-result-success-title = Import Successful
-wallets-bulk-result-success-detail =
-    { $count ->
-        [one] All { $count } wallet imported successfully
-       *[other] All { $count } wallets imported successfully
-    }
-wallets-bulk-result-partial-title = Partial Success
-wallets-bulk-result-partial-detail = { $imported } imported, { $failed } failed
-wallets-bulk-result-failed-title = Import Failed
-wallets-bulk-result-failed-detail =
-    { $count ->
-        [one] All { $count } wallet failed to import
-       *[other] All { $count } wallets failed to import
-    }
-wallets-bulk-result-imported = Imported
-wallets-bulk-result-failed = Failed
-
-# wallets.html and bulk_operations.js: bulk export.
-wallets-bulk-export-title = Export Wallets
-wallets-bulk-export-format = Format
-wallets-bulk-export-format-csv = CSV (.csv)
-wallets-bulk-export-format-xlsx = Excel (.xlsx)
-wallets-bulk-export-include-archived = Include archived wallets
-wallets-bulk-export-safe-title = Safe Export
-wallets-bulk-export-safe-body = Export wallet addresses and metadata only. No private keys included.
-wallets-bulk-export-safe-submit = Export Addresses
-wallets-bulk-export-or = or
-wallets-bulk-export-danger-title = Dangerous Export
-wallets-bulk-export-danger-body = Include private keys in the export. Anyone with this file can steal your funds.
-wallets-bulk-export-danger-submit = Export with Private Keys
-wallets-bulk-export-busy = Exporting...
-wallets-bulk-export-done = Exported wallets to { $filename }
-wallets-bulk-export-fallback = Export failed
-wallets-bulk-export-error = Export failed: { $reason }
-wallets-bulk-confirm-title = Confirm Dangerous Export
-wallets-bulk-confirm-warning =
-    { $count ->
-        [one] You are about to export <strong>{ $count }</strong> private key. This is extremely dangerous!
-       *[other] You are about to export <strong>{ $count }</strong> private keys. This is extremely dangerous!
-    }
-wallets-bulk-confirm-risk-steal = Anyone with this file can steal all funds
-wallets-bulk-confirm-risk-share = Never share this file with anyone
-wallets-bulk-confirm-risk-delete = Delete the file immediately after use
-wallets-bulk-confirm-prompt = Type the Phrase Below to Confirm
-wallets-bulk-confirm-submit = Export Keys
-
 # renderers.js: main wallet holdings and wallet lists.
 wallets-holdings-col-token = Token
 wallets-holdings-col-balance = Balance
@@ -268,19 +133,14 @@ wallets-list-col-type = Type
 wallets-list-col-created = Created
 wallets-list-col-actions = Actions
 wallets-list-action-export = Export private key
-wallets-list-action-archive = Archive wallet
-wallets-list-action-restore = Restore wallet
-wallets-list-action-delete = Delete permanently
 wallets-list-count = Wallets
 wallets-list-search =
     .placeholder = Search by name or address...
 wallets-list-loading-title = Loading wallets…
 wallets-list-loading-description = Preparing the selected wallet view.
+wallets-list-kept-empty-message = Wallets from earlier versions appear here so you can still export their keys.
 wallets-secondaries-empty-title = No secondary wallets
-wallets-secondaries-empty-message = Create additional wallets to organize your trading activities across multiple accounts.
-wallets-secondaries-add = Add Wallet
 wallets-archive-empty-title = No archived wallets
-wallets-archive-empty-message = Wallets you archive will be safely stored here for future reference.
 
 # watched.js: watched wallets table and actions.
 wallets-watched-col-wallet = Wallet

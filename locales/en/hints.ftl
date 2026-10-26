@@ -211,17 +211,6 @@ hints-wallets-main-content =
     • **Balance Display** — shown in header and dashboard
     • **Token Holdings** — SPL tokens held by this wallet
 
-    Change the main wallet by selecting "Set as Main" on any secondary wallet.
-hints-wallets-secondary-title = Secondary Wallets
-hints-wallets-secondary-content =
-    Additional wallets for multi-wallet operations.
-
-    • **Multi-Wallet Trading** — coordinate buys/sells across wallets
-    • **Portfolio Separation** — organize by strategy or purpose
-    • **Independent Balances** — each wallet has its own SOL/tokens
-
-    Secondary wallets are not used by auto-trading unless explicitly configured.
-
 ## config
 
 hints-config-overview-title = Configuration

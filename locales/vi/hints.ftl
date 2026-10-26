@@ -206,17 +206,6 @@ hints-wallets-main-content =
     • **Hiển thị số dư** — hiển thị ở thanh tiêu đề và bảng điều khiển
     • **Token đang nắm giữ** — token SPL do ví này nắm giữ
 
-    Đổi ví chính bằng cách chọn "Đặt làm ví chính" trên bất kỳ ví thứ cấp nào.
-hints-wallets-secondary-title = Ví thứ cấp
-hints-wallets-secondary-content =
-    Các ví bổ sung cho các thao tác đa ví.
-
-    • **Giao dịch đa ví** — phối hợp mua/bán trên nhiều ví
-    • **Tách biệt danh mục** — sắp xếp theo chiến lược hoặc mục đích
-    • **Số dư độc lập** — mỗi ví có SOL/token riêng
-
-    Giao dịch tự động không dùng ví thứ cấp trừ khi được cấu hình rõ ràng.
-
 ## config
 
 hints-config-overview-title = Cấu hình

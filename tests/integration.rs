@@ -84,7 +84,7 @@ mod trading;
 mod trading_data_readiness;
 mod transactions_subject;
 mod wallet_ata_cleanup;
-mod wallet_main_cache_invalidation;
+mod wallet_main_keypair;
 mod wallet_monitor_locking;
 mod wallet_readiness;
 mod wallet_snapshot_subject_scope;

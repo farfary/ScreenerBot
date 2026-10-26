@@ -1,28 +1,13 @@
 /* Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
  * SPDX-License-Identifier: BUSL-1.1 */
 
-/* Warning/Danger Banners */
-.warning-banner,
+/* Danger Banner */
 .danger-banner {
   display: flex;
   align-items: flex-start;
   gap: var(--spacing-sm);
   padding: var(--spacing-md);
   border-radius: var(--radius-md);
-}
-
-.warning-banner {
-  background: var(--warning-alpha-10);
-  border: 1px solid var(--warning-alpha-30);
-}
-
-.warning-banner i {
-  color: var(--warning-color);
-  font-size: 1rem;
-  margin-top: 2px;
-}
-
-.danger-banner {
   background: var(--danger-alpha-10);
   border: 1px solid var(--danger-alpha-30);
 }
@@ -33,7 +18,6 @@
   margin-top: 2px;
 }
 
-.warning-banner strong,
 .danger-banner strong {
   display: block;
   font-size: 0.85rem;
@@ -42,7 +26,6 @@
   margin-bottom: 4px;
 }
 
-.warning-banner p,
 .danger-banner p {
   margin: 0;
   font-size: 0.8rem;
@@ -64,49 +47,6 @@
 .wallets-page .form-group small {
   font-size: 0.75rem;
   color: var(--text-secondary);
-}
-
-/* Password/Secure Input */
-.password-input-wrapper {
-  position: relative;
-}
-
-.password-input-wrapper textarea.secure-input {
-  /* rtl-ok: the wrapper is an LTR island; the toggle sits on its physical right */
-  padding-right: 40px;
-}
-
-/* The wrapper is an LTR island so the key, its reserved padding and the
-   visibility toggle all sit on the physical right. An empty field shows its
-   localized placeholder in the page direction; the physical padding above keeps
-   the toggle clear of the text. */
-[dir="rtl"] .password-input-wrapper textarea.secure-input:placeholder-shown {
-  /* rtl-ok: placeholder follows the RTL page inside an LTR island */
-  direction: rtl;
-  /* rtl-ok: placeholder follows the RTL page inside an LTR island */
-  text-align: right;
-}
-
-.password-input-wrapper .toggle-visibility {
-  position: absolute;
-  top: 8px;
-  inset-inline-end: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border: none;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.password-input-wrapper .toggle-visibility:hover {
-  background: var(--hover-bg);
-  color: var(--text-primary);
 }
 
 /* Form Actions */
@@ -148,20 +88,4 @@
   line-height: 1.5;
   word-break: break-all;
   color: var(--text-primary);
-}
-
-.confirm-text {
-  margin: 0;
-  font-size: 0.9rem;
-  color: var(--text-secondary);
-}
-
-.confirm-text strong {
-  color: var(--text-primary);
-}
-
-.info-text {
-  margin: 0;
-  font-size: 0.8rem;
-  color: var(--text-secondary);
 }

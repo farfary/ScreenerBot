@@ -24,12 +24,8 @@ wallets-watch-reason-signature-budget = Diese Wallet hat mehr Aktivität, als di
 wallets-watch-reason-helius-unavailable = { -helius }-Prüfungen sind fehlgeschlagen. Der gespeicherte Fortschritt bleibt erhalten.
 wallets-watch-reason-processing-failed = Wallet-Aktivität konnte nicht verarbeitet werden. Der gespeicherte Fortschritt bleibt erhalten.
 
-wallets-field-name = Wallet-Name
-wallets-field-notes = Notizen
-wallets-field-private-key = Privater Schlüssel
 wallets-modal-close =
     .aria-label = Dialog schließen
-wallets-this-wallet = diese Wallet
 wallets-summary-native = { -sol }
 wallets-copied-private-key = Privater Schlüssel
 
@@ -40,43 +36,8 @@ wallets-tab-watched = Überwacht
 wallets-refresh-failed = Wallets konnten nicht aktualisiert werden
 wallets-action-failed = Fehlgeschlagen
 wallets-toast-failed = Fehlgeschlagen: { $reason }
-wallets-create-busy = Wird erstellt...
-wallets-create-fallback = Erstellung fehlgeschlagen
-wallets-create-done = Wallet „{ $name }“ erstellt!
-wallets-import-busy = Wird importiert...
-wallets-import-failed = Import fehlgeschlagen
-wallets-import-done = Wallet „{ $name }“ importiert!
-wallets-archive-busy = Wird archiviert...
-wallets-archive-confirm-text = Möchten Sie <strong>{ $name }</strong> wirklich archivieren?
-wallets-archive-done = Wallet archiviert
-wallets-restore-done = Wallet wiederhergestellt
 wallets-export-busy = Wird entschlüsselt...
 wallets-export-revealed = Schlüssel angezeigt – bitte sorgfältig behandeln
-wallets-delete-busy = Wird gelöscht...
-wallets-delete-confirm-text = Möchten Sie <strong>{ $name }</strong> wirklich löschen?
-wallets-delete-done = Wallet endgültig gelöscht
-
-wallets-add-title = Wallet hinzufügen
-wallets-add-tab-create = Neu erstellen
-wallets-add-tab-import = Vorhandene importieren
-wallets-create-name-input =
-    .placeholder = z. B. Trading-Wallet
-wallets-create-name-hint = Ein einprägsamer Name zur Identifizierung dieser Wallet
-wallets-create-notes-input =
-    .placeholder = Optionale Beschreibung oder Zweck...
-wallets-create-submit = Wallet erstellen
-wallets-import-warning-title = Sicherheitswarnung
-wallets-import-warning-body = Importieren Sie private Schlüssel nur aus vertrauenswürdigen Quellen. Ihr Schlüssel wird verschlüsselt und sicher auf diesem Gerät gespeichert.
-wallets-import-name-input =
-    .placeholder = z. B. Meine Wallet
-wallets-import-key-input =
-    .placeholder = Base58-String oder JSON-Array [1,2,3,...]
-wallets-import-key-toggle =
-    .aria-label = Sichtbarkeit des privaten Schlüssels umschalten
-wallets-import-key-hint = Unterstützt Base58-kodierte Schlüssel oder das Byte-Array-Format
-wallets-import-notes-input =
-    .placeholder = Optionale Beschreibung...
-wallets-import-submit = Wallet importieren
 
 wallets-watch-add-title = Wallet überwachen
 wallets-watch-add-address = Wallet-Adresse
@@ -133,98 +94,6 @@ wallets-export-copy =
     .aria-label = In die Zwischenablage kopieren
 wallets-export-reveal = Schlüssel anzeigen
 
-wallets-archive-title = Wallet archivieren
-wallets-archive-note = Archivierte Wallets werden in keinem Vorgang verwendet, können aber jederzeit wiederhergestellt werden.
-wallets-archive-confirm = Ja, archivieren
-wallets-delete-title = Wallet löschen
-wallets-delete-warning-title = Diese Aktion kann nicht rückgängig gemacht werden!
-wallets-delete-warning-body = Beim Löschen werden diese Wallet und ihr verschlüsselter privater Schlüssel endgültig von diesem Gerät entfernt.
-wallets-delete-confirm = Ja, löschen
-
-wallets-bulk-import-title = Wallets importieren
-wallets-bulk-import-submit = Wallets importieren
-wallets-bulk-step-upload = Datei hochladen
-wallets-bulk-step-map = Spalten zuordnen
-wallets-bulk-step-results = Ergebnisse
-wallets-bulk-import-file-warning-body = Importieren Sie Dateien nur aus vertrauenswürdigen Quellen. Private Schlüssel werden verschlüsselt und sicher auf diesem Gerät gespeichert.
-wallets-bulk-drop-title = Datei hier ablegen
-wallets-bulk-drop-subtitle = oder zum Durchsuchen klicken
-wallets-bulk-drop-formats = Unterstützt CSV und Excel (.xlsx, .xls)
-wallets-bulk-file-remove =
-    .aria-label = Datei entfernen
-wallets-bulk-map-subtitle = Ordnen Sie die Spalten Ihrer Datei den Wallet-Feldern zu
-wallets-bulk-preview-title = Vorschau (erste 5 Zeilen)
-wallets-bulk-summary-valid = <strong>{ $count }</strong> gültig
-wallets-bulk-summary-invalid = <strong>{ $count }</strong> ungültig
-wallets-bulk-summary-duplicate =
-    { $count ->
-        [one] <strong>{ $count }</strong> Duplikat
-       *[other] <strong>{ $count }</strong> Duplikate
-    }
-wallets-bulk-done = Fertig
-wallets-bulk-file-invalid = Ungültiger Dateityp. Bitte verwenden Sie CSV- oder Excel-Dateien.
-wallets-bulk-preview-busy = Wird verarbeitet...
-wallets-bulk-preview-fallback = Datei konnte nicht verarbeitet werden
-wallets-bulk-preview-failed = Datei konnte nicht verarbeitet werden: { $reason }
-wallets-bulk-column-select = -- Spalte auswählen --
-wallets-bulk-preview-empty = Keine Datenzeilen in der Datei gefunden
-wallets-bulk-preview-status = Status
-wallets-bulk-status-valid = Gültig
-wallets-bulk-preview-col-row = Zeile
-wallets-bulk-preview-col-address = Adresse
-wallets-bulk-status-invalid = Ungültig
-wallets-bulk-import-busy = Wird importiert...
-wallets-bulk-import-toast =
-    { $count ->
-        [one] { $count } Wallet importiert
-       *[other] { $count } Wallets importiert
-    }
-wallets-bulk-import-error = Import fehlgeschlagen: { $reason }
-wallets-bulk-result-success-title = Import erfolgreich
-wallets-bulk-result-success-detail =
-    { $count ->
-        [one] Die { $count } Wallet wurde erfolgreich importiert
-       *[other] Alle { $count } Wallets wurden erfolgreich importiert
-    }
-wallets-bulk-result-partial-title = Teilweise erfolgreich
-wallets-bulk-result-partial-detail = { $imported } importiert, { $failed } fehlgeschlagen
-wallets-bulk-result-failed-title = Import fehlgeschlagen
-wallets-bulk-result-failed-detail =
-    { $count ->
-        [one] Der Import der { $count } Wallet ist fehlgeschlagen
-       *[other] Der Import aller { $count } Wallets ist fehlgeschlagen
-    }
-wallets-bulk-result-imported = Importiert
-wallets-bulk-result-failed = Fehlgeschlagen
-
-wallets-bulk-export-title = Wallets exportieren
-wallets-bulk-export-format = Format
-wallets-bulk-export-format-csv = CSV (.csv)
-wallets-bulk-export-format-xlsx = Excel (.xlsx)
-wallets-bulk-export-include-archived = Archivierte Wallets einschließen
-wallets-bulk-export-safe-title = Sicherer Export
-wallets-bulk-export-safe-body = Exportiert nur Wallet-Adressen und Metadaten. Keine privaten Schlüssel enthalten.
-wallets-bulk-export-safe-submit = Adressen exportieren
-wallets-bulk-export-or = oder
-wallets-bulk-export-danger-title = Gefährlicher Export
-wallets-bulk-export-danger-body = Private Schlüssel in den Export aufnehmen. Jeder mit dieser Datei kann Ihre Gelder stehlen.
-wallets-bulk-export-danger-submit = Mit privaten Schlüsseln exportieren
-wallets-bulk-export-busy = Wird exportiert...
-wallets-bulk-export-done = Wallets nach { $filename } exportiert
-wallets-bulk-export-fallback = Export fehlgeschlagen
-wallets-bulk-export-error = Export fehlgeschlagen: { $reason }
-wallets-bulk-confirm-title = Gefährlichen Export bestätigen
-wallets-bulk-confirm-warning =
-    { $count ->
-        [one] Sie sind dabei, <strong>{ $count }</strong> privaten Schlüssel zu exportieren. Das ist äußerst gefährlich!
-       *[other] Sie sind dabei, <strong>{ $count }</strong> private Schlüssel zu exportieren. Das ist äußerst gefährlich!
-    }
-wallets-bulk-confirm-risk-steal = Jeder mit dieser Datei kann alle Gelder stehlen
-wallets-bulk-confirm-risk-share = Geben Sie diese Datei niemals an Dritte weiter
-wallets-bulk-confirm-risk-delete = Löschen Sie die Datei sofort nach der Verwendung
-wallets-bulk-confirm-prompt = Geben Sie zur Bestätigung die untenstehende Phrase ein
-wallets-bulk-confirm-submit = Schlüssel exportieren
-
 wallets-holdings-col-token = Token
 wallets-holdings-col-balance = Guthaben
 wallets-holdings-col-value = Wert ({ -sol })
@@ -250,19 +119,14 @@ wallets-list-col-type = Typ
 wallets-list-col-created = Erstellt
 wallets-list-col-actions = Aktionen
 wallets-list-action-export = Privaten Schlüssel exportieren
-wallets-list-action-archive = Wallet archivieren
-wallets-list-action-restore = Wallet wiederherstellen
-wallets-list-action-delete = Endgültig löschen
 wallets-list-count = Wallets
 wallets-list-search =
     .placeholder = Nach Name oder Adresse suchen...
 wallets-list-loading-title = Wallets werden geladen…
 wallets-list-loading-description = Die ausgewählte Wallet-Ansicht wird vorbereitet.
+wallets-list-kept-empty-message = Wallets aus früheren Versionen erscheinen hier, damit Sie ihre Schlüssel weiterhin exportieren können.
 wallets-secondaries-empty-title = Keine sekundären Wallets
-wallets-secondaries-empty-message = Erstellen Sie weitere Wallets, um Ihre Trading-Aktivitäten auf mehrere Konten zu verteilen.
-wallets-secondaries-add = Wallet hinzufügen
 wallets-archive-empty-title = Keine archivierten Wallets
-wallets-archive-empty-message = Von Ihnen archivierte Wallets werden hier sicher zur späteren Verwendung aufbewahrt.
 
 wallets-watched-col-wallet = Wallet
 wallets-watched-col-status = Status

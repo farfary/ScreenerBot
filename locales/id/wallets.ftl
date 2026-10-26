@@ -24,12 +24,8 @@ wallets-watch-reason-signature-budget = Dompet ini memiliki aktivitas lebih bany
 wallets-watch-reason-helius-unavailable = Pemeriksaan { -helius } gagal. Progres tersimpan dipertahankan.
 wallets-watch-reason-processing-failed = Aktivitas dompet tidak dapat diproses. Progres tersimpan dipertahankan.
 
-wallets-field-name = Nama Dompet
-wallets-field-notes = Catatan
-wallets-field-private-key = Private Key
 wallets-modal-close =
     .aria-label = Tutup modal
-wallets-this-wallet = dompet ini
 wallets-summary-native = { -sol }
 wallets-copied-private-key = Private key
 
@@ -40,43 +36,8 @@ wallets-tab-watched = Dipantau
 wallets-refresh-failed = Tidak dapat menyegarkan dompet
 wallets-action-failed = Gagal
 wallets-toast-failed = Gagal: { $reason }
-wallets-create-busy = Membuat...
-wallets-create-fallback = Pembuatan gagal
-wallets-create-done = Dompet "{ $name }" berhasil dibuat!
-wallets-import-busy = Mengimpor...
-wallets-import-failed = Impor gagal
-wallets-import-done = Dompet "{ $name }" berhasil diimpor!
-wallets-archive-busy = Mengarsipkan...
-wallets-archive-confirm-text = Yakin ingin mengarsipkan <strong>{ $name }</strong>?
-wallets-archive-done = Dompet diarsipkan
-wallets-restore-done = Dompet dipulihkan
 wallets-export-busy = Mendekripsi...
 wallets-export-revealed = Key ditampilkan - tangani dengan hati-hati
-wallets-delete-busy = Menghapus...
-wallets-delete-confirm-text = Yakin ingin menghapus <strong>{ $name }</strong>?
-wallets-delete-done = Dompet dihapus permanen
-
-wallets-add-title = Tambah Dompet
-wallets-add-tab-create = Buat Baru
-wallets-add-tab-import = Impor yang Ada
-wallets-create-name-input =
-    .placeholder = mis., Dompet Trading
-wallets-create-name-hint = Nama yang mudah diingat untuk mengenali dompet ini
-wallets-create-notes-input =
-    .placeholder = Deskripsi atau tujuan (opsional)...
-wallets-create-submit = Buat Dompet
-wallets-import-warning-title = Peringatan Keamanan
-wallets-import-warning-body = Impor private key hanya dari sumber tepercaya. Key Anda akan dienkripsi dan disimpan dengan aman di perangkat ini.
-wallets-import-name-input =
-    .placeholder = mis., Dompet Saya
-wallets-import-key-input =
-    .placeholder = String Base58 atau array JSON [1,2,3,...]
-wallets-import-key-toggle =
-    .aria-label = Tampilkan/sembunyikan private key
-wallets-import-key-hint = Mendukung key berenkode base58 atau format array byte
-wallets-import-notes-input =
-    .placeholder = Deskripsi (opsional)...
-wallets-import-submit = Impor Dompet
 
 wallets-watch-add-title = Pantau Dompet
 wallets-watch-add-address = Alamat Dompet
@@ -133,93 +94,6 @@ wallets-export-copy =
     .aria-label = Salin ke clipboard
 wallets-export-reveal = Tampilkan Key
 
-wallets-archive-title = Arsipkan Dompet
-wallets-archive-note = Dompet yang diarsipkan tidak digunakan dalam operasi apa pun tetapi dapat dipulihkan kapan saja.
-wallets-archive-confirm = Ya, Arsipkan
-wallets-delete-title = Hapus Dompet
-wallets-delete-warning-title = Tindakan ini tidak dapat dibatalkan!
-wallets-delete-warning-body = Menghapus dompet ini akan menghapusnya secara permanen beserta private key terenkripsinya dari perangkat ini.
-wallets-delete-confirm = Ya, Hapus
-
-wallets-bulk-import-title = Impor Dompet
-wallets-bulk-import-submit = Impor Dompet
-wallets-bulk-step-upload = Unggah File
-wallets-bulk-step-map = Petakan Kolom
-wallets-bulk-step-results = Hasil
-wallets-bulk-import-file-warning-body = Impor file hanya dari sumber tepercaya. Private key akan dienkripsi dan disimpan dengan aman di perangkat ini.
-wallets-bulk-drop-title = Letakkan file Anda di sini
-wallets-bulk-drop-subtitle = atau klik untuk menelusuri
-wallets-bulk-drop-formats = Mendukung CSV dan Excel (.xlsx, .xls)
-wallets-bulk-file-remove =
-    .aria-label = Hapus file
-wallets-bulk-map-subtitle = Cocokkan kolom file Anda dengan kolom dompet
-wallets-bulk-preview-title = Pratinjau (5 Baris Pertama)
-wallets-bulk-summary-valid = <strong>{ $count }</strong> valid
-wallets-bulk-summary-invalid = <strong>{ $count }</strong> tidak valid
-wallets-bulk-summary-duplicate =
-    { $count ->
-       *[other] <strong>{ $count }</strong> duplikat
-    }
-wallets-bulk-done = Selesai
-wallets-bulk-file-invalid = Jenis file tidak valid. Gunakan file CSV atau Excel.
-wallets-bulk-preview-busy = Memproses...
-wallets-bulk-preview-fallback = Gagal memproses file
-wallets-bulk-preview-failed = Gagal memproses file: { $reason }
-wallets-bulk-column-select = -- Pilih kolom --
-wallets-bulk-preview-empty = Tidak ada baris data di file
-wallets-bulk-preview-status = Status
-wallets-bulk-status-valid = Valid
-wallets-bulk-preview-col-row = Baris
-wallets-bulk-preview-col-address = Alamat
-wallets-bulk-status-invalid = Tidak valid
-wallets-bulk-import-busy = Mengimpor...
-wallets-bulk-import-toast =
-    { $count ->
-       *[other] { $count } dompet diimpor
-    }
-wallets-bulk-import-error = Impor gagal: { $reason }
-wallets-bulk-result-success-title = Impor Berhasil
-wallets-bulk-result-success-detail =
-    { $count ->
-       *[other] Semua { $count } dompet berhasil diimpor
-    }
-wallets-bulk-result-partial-title = Sebagian Berhasil
-wallets-bulk-result-partial-detail = { $imported } diimpor, { $failed } gagal
-wallets-bulk-result-failed-title = Impor Gagal
-wallets-bulk-result-failed-detail =
-    { $count ->
-       *[other] Semua { $count } dompet gagal diimpor
-    }
-wallets-bulk-result-imported = Diimpor
-wallets-bulk-result-failed = Gagal
-
-wallets-bulk-export-title = Ekspor Dompet
-wallets-bulk-export-format = Format
-wallets-bulk-export-format-csv = CSV (.csv)
-wallets-bulk-export-format-xlsx = Excel (.xlsx)
-wallets-bulk-export-include-archived = Sertakan dompet yang diarsipkan
-wallets-bulk-export-safe-title = Ekspor Aman
-wallets-bulk-export-safe-body = Ekspor hanya alamat dompet dan metadata. Tanpa private key.
-wallets-bulk-export-safe-submit = Ekspor Alamat
-wallets-bulk-export-or = atau
-wallets-bulk-export-danger-title = Ekspor Berbahaya
-wallets-bulk-export-danger-body = Sertakan private key dalam ekspor. Siapa pun yang memiliki file ini dapat mencuri dana Anda.
-wallets-bulk-export-danger-submit = Ekspor dengan Private Key
-wallets-bulk-export-busy = Mengekspor...
-wallets-bulk-export-done = Dompet diekspor ke { $filename }
-wallets-bulk-export-fallback = Ekspor gagal
-wallets-bulk-export-error = Ekspor gagal: { $reason }
-wallets-bulk-confirm-title = Konfirmasi Ekspor Berbahaya
-wallets-bulk-confirm-warning =
-    { $count ->
-       *[other] Anda akan mengekspor <strong>{ $count }</strong> private key. Ini sangat berbahaya!
-    }
-wallets-bulk-confirm-risk-steal = Siapa pun yang memiliki file ini dapat mencuri semua dana
-wallets-bulk-confirm-risk-share = Jangan pernah membagikan file ini kepada siapa pun
-wallets-bulk-confirm-risk-delete = Hapus file segera setelah digunakan
-wallets-bulk-confirm-prompt = Ketik frasa di bawah untuk mengonfirmasi
-wallets-bulk-confirm-submit = Ekspor Key
-
 wallets-holdings-col-token = Token
 wallets-holdings-col-balance = Saldo
 wallets-holdings-col-value = Nilai ({ -sol })
@@ -245,19 +119,14 @@ wallets-list-col-type = Jenis
 wallets-list-col-created = Dibuat
 wallets-list-col-actions = Aksi
 wallets-list-action-export = Ekspor private key
-wallets-list-action-archive = Arsipkan dompet
-wallets-list-action-restore = Pulihkan dompet
-wallets-list-action-delete = Hapus permanen
 wallets-list-count = Dompet
 wallets-list-search =
     .placeholder = Cari berdasarkan nama atau alamat...
 wallets-list-loading-title = Memuat dompet…
 wallets-list-loading-description = Menyiapkan tampilan dompet yang dipilih.
+wallets-list-kept-empty-message = Dompet dari versi sebelumnya muncul di sini agar Anda tetap dapat mengekspor kuncinya.
 wallets-secondaries-empty-title = Tidak ada dompet sekunder
-wallets-secondaries-empty-message = Buat dompet tambahan untuk mengatur aktivitas trading Anda di beberapa akun.
-wallets-secondaries-add = Tambah Dompet
 wallets-archive-empty-title = Tidak ada dompet yang diarsipkan
-wallets-archive-empty-message = Dompet yang Anda arsipkan akan tersimpan dengan aman di sini untuk referensi nanti.
 
 wallets-watched-col-wallet = Dompet
 wallets-watched-col-status = Status

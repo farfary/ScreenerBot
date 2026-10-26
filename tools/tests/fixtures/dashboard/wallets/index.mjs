@@ -8,8 +8,6 @@
 const tab = (id) => `#subTabsContainer [data-tab-id="${id}"]`;
 const MAIN_ROWS = "#tokens-datatable-root tr[data-row-id]";
 const SECONDARY_ROWS = "#secondaries-table-container tr[data-row-id]";
-// Import and export sit in the table toolbar's overflow menu.
-const SECONDARY_MENU = "#secondaries-table-container .table-toolbar-overflow__trigger";
 const ARCHIVE_ROWS = "#archive-table-container tr[data-row-id]";
 const WATCHED_ROWS = "#watched-wallets-root tr[data-row-id]";
 const dialog = (trigger, id, close) => ({ trigger, dialog: `#${id}`, close: `#${close}` });
@@ -70,23 +68,6 @@ export const views = [
         text: "No secondary wallets",
       },
     ],
-    dialogs: [dialog('[data-btn-id="secondaries-add"]', "add-wallet-modal", "modal-close-btn")],
-  },
-  {
-    name: "secondary wallets bulk import",
-    click: [tab("secondaries"), SECONDARY_MENU],
-    populated: [{ selector: SECONDARY_ROWS, min: 2 }],
-    dialogs: [
-      dialog('[data-btn-id="secondaries-import"]', "bulk-import-modal", "bulk-import-modal-close"),
-    ],
-  },
-  {
-    name: "secondary wallets bulk export",
-    click: [tab("secondaries"), SECONDARY_MENU],
-    populated: [{ selector: SECONDARY_ROWS, min: 2 }],
-    dialogs: [
-      dialog('[data-btn-id="secondaries-export"]', "bulk-export-modal", "bulk-export-modal-close"),
-    ],
   },
   {
     name: "archived wallets",
@@ -121,34 +102,24 @@ export const views = [
   {
     name: "secondary wallet row actions",
     click: [tab("secondaries")],
-    populated: [{ selector: `${SECONDARY_ROWS} .dt-action-btn`, min: 4 }],
+    populated: [{ selector: `${SECONDARY_ROWS} .dt-action-btn`, min: 2 }],
     dialogs: [
       dialog(
         `${SECONDARY_ROWS} .dt-action-btn[data-action-id="export"]`,
         "export-modal",
         "export-modal-close"
       ),
-      dialog(
-        `${SECONDARY_ROWS} .dt-action-btn[data-action-id="archive"]`,
-        "archive-modal",
-        "archive-modal-close"
-      ),
     ],
   },
   {
     name: "archived wallet row actions",
     click: [tab("archive")],
-    populated: [{ selector: `${ARCHIVE_ROWS} .dt-action-btn`, min: 6 }],
+    populated: [{ selector: `${ARCHIVE_ROWS} .dt-action-btn`, min: 2 }],
     dialogs: [
       dialog(
         `${ARCHIVE_ROWS} .dt-action-btn[data-action-id="export"]`,
         "export-modal",
         "export-modal-close"
-      ),
-      dialog(
-        `${ARCHIVE_ROWS} .dt-action-btn[data-action-id="delete"]`,
-        "delete-modal",
-        "delete-modal-close"
       ),
     ],
   },

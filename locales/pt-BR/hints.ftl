@@ -211,17 +211,6 @@ hints-wallets-main-content =
     • **Exibição do saldo** — mostrado no cabeçalho e no painel
     • **Posses de tokens** — tokens SPL mantidos por esta carteira
 
-    Para trocar a carteira principal, selecione "Definir como principal" em qualquer carteira secundária.
-hints-wallets-secondary-title = Carteiras secundárias
-hints-wallets-secondary-content =
-    Carteiras adicionais para operações com várias carteiras.
-
-    • **Trading com várias carteiras** — coordene compras/vendas entre carteiras
-    • **Separação de portfólio** — organize por estratégia ou finalidade
-    • **Saldos independentes** — cada carteira tem seu próprio SOL/tokens
-
-    Carteiras secundárias não são usadas pelo trading automático, a menos que sejam configuradas explicitamente.
-
 ## config
 
 hints-config-overview-title = Configurações

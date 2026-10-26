@@ -33,12 +33,8 @@ wallets-watch-reason-helius-unavailable = بررسی‌های { -helius } نام
 wallets-watch-reason-processing-failed = پردازش فعالیت کیف پول ممکن نشد. پیشرفت ذخیره‌شده حفظ شده است.
 
 # Vocabulary shared by the wallet tables and dialogs.
-wallets-field-name = نام کیف پول
-wallets-field-notes = یادداشت
-wallets-field-private-key = کلید خصوصی
 wallets-modal-close =
     .aria-label = بستن پنجره
-wallets-this-wallet = این کیف پول
 wallets-summary-native = { -sol }
 wallets-copied-private-key = کلید خصوصی
 
@@ -50,44 +46,8 @@ wallets-tab-watched = پایش‌شده
 wallets-refresh-failed = به‌روزرسانی کیف پول‌ها ممکن نشد
 wallets-action-failed = ناموفق
 wallets-toast-failed = ناموفق: { $reason }
-wallets-create-busy = در حال ساخت...
-wallets-create-fallback = ساخت ناموفق بود
-wallets-create-done = کیف پول «{ $name }» ساخته شد!
-wallets-import-busy = در حال وارد کردن...
-wallets-import-failed = وارد کردن ناموفق بود
-wallets-import-done = کیف پول «{ $name }» وارد شد!
-wallets-archive-busy = در حال بایگانی...
-wallets-archive-confirm-text = آیا از بایگانی <strong>{ $name }</strong> مطمئن هستید؟
-wallets-archive-done = کیف پول بایگانی شد
-wallets-restore-done = کیف پول بازگردانده شد
 wallets-export-busy = در حال رمزگشایی...
 wallets-export-revealed = کلید نمایش داده شد - با احتیاط نگهداری کنید
-wallets-delete-busy = در حال حذف...
-wallets-delete-confirm-text = آیا از حذف <strong>{ $name }</strong> مطمئن هستید؟
-wallets-delete-done = کیف پول برای همیشه حذف شد
-
-# wallets.html: Add Wallet dialog.
-wallets-add-title = افزودن کیف پول
-wallets-add-tab-create = ساخت جدید
-wallets-add-tab-import = وارد کردن موجود
-wallets-create-name-input =
-    .placeholder = مثلاً کیف پول معاملات
-wallets-create-name-hint = نامی ساده برای شناسایی این کیف پول
-wallets-create-notes-input =
-    .placeholder = توضیح یا هدف (اختیاری)...
-wallets-create-submit = ساخت کیف پول
-wallets-import-warning-title = هشدار امنیتی
-wallets-import-warning-body = کلید خصوصی را فقط از منابع معتبر وارد کنید. کلید شما رمزگذاری می‌شود و به‌صورت امن روی همین دستگاه ذخیره خواهد شد.
-wallets-import-name-input =
-    .placeholder = مثلاً کیف پول من
-wallets-import-key-input =
-    .placeholder = رشته Base58 یا آرایه JSON مانند ⁨[1,2,3,...]⁩
-wallets-import-key-toggle =
-    .aria-label = نمایش یا پنهان کردن کلید خصوصی
-wallets-import-key-hint = کلید رمزگذاری‌شده با Base58 یا قالب آرایه بایت پشتیبانی می‌شود
-wallets-import-notes-input =
-    .placeholder = توضیح (اختیاری)...
-wallets-import-submit = وارد کردن کیف پول
 
 # wallets.html: Watch Wallet dialog.
 wallets-watch-add-title = پایش کیف پول
@@ -147,101 +107,6 @@ wallets-export-copy =
     .aria-label = کپی در کلیپ‌بورد
 wallets-export-reveal = نمایش کلید
 
-# wallets.html: Archive and Delete dialogs.
-wallets-archive-title = بایگانی کیف پول
-wallets-archive-note = کیف پول‌های بایگانی‌شده در هیچ عملیاتی استفاده نمی‌شوند اما هر زمان قابل بازگردانی هستند.
-wallets-archive-confirm = بله، بایگانی شود
-wallets-delete-title = حذف کیف پول
-wallets-delete-warning-title = این کار قابل بازگشت نیست!
-wallets-delete-warning-body = با حذف این کیف پول، خود کیف پول و کلید خصوصی رمزگذاری‌شده آن برای همیشه از این دستگاه پاک می‌شود.
-wallets-delete-confirm = بله، حذف شود
-
-# wallets.html and bulk_operations.js: bulk import.
-wallets-bulk-import-title = وارد کردن کیف پول‌ها
-wallets-bulk-import-submit = وارد کردن کیف پول‌ها
-wallets-bulk-step-upload = بارگذاری فایل
-wallets-bulk-step-map = نگاشت ستون‌ها
-wallets-bulk-step-results = نتایج
-wallets-bulk-import-file-warning-body = فقط فایل‌های منابع معتبر را وارد کنید. کلیدهای خصوصی رمزگذاری می‌شوند و به‌صورت امن روی همین دستگاه ذخیره خواهند شد.
-wallets-bulk-drop-title = فایل خود را اینجا رها کنید
-wallets-bulk-drop-subtitle = یا برای انتخاب کلیک کنید
-wallets-bulk-drop-formats = CSV و Excel (‎.xlsx، ‎.xls) پشتیبانی می‌شود
-wallets-bulk-file-remove =
-    .aria-label = حذف فایل
-wallets-bulk-map-subtitle = ستون‌های فایل را با فیلدهای کیف پول تطبیق دهید
-wallets-bulk-preview-title = پیش‌نمایش (5 ردیف اول)
-wallets-bulk-summary-valid = <strong>{ $count }</strong> معتبر
-wallets-bulk-summary-invalid = <strong>{ $count }</strong> نامعتبر
-wallets-bulk-summary-duplicate =
-    { $count ->
-        [one] <strong>{ $count }</strong> تکراری
-       *[other] <strong>{ $count }</strong> تکراری
-    }
-wallets-bulk-done = انجام شد
-wallets-bulk-file-invalid = نوع فایل نامعتبر است. لطفاً از فایل CSV یا Excel استفاده کنید.
-wallets-bulk-preview-busy = در حال پردازش...
-wallets-bulk-preview-fallback = پردازش فایل ناموفق بود
-wallets-bulk-preview-failed = پردازش فایل ناموفق بود: { $reason }
-wallets-bulk-column-select = -- انتخاب ستون --
-wallets-bulk-preview-empty = هیچ ردیف داده‌ای در فایل پیدا نشد
-wallets-bulk-preview-status = وضعیت
-wallets-bulk-status-valid = معتبر
-wallets-bulk-preview-col-row = ردیف
-wallets-bulk-preview-col-address = آدرس
-wallets-bulk-status-invalid = نامعتبر
-wallets-bulk-import-busy = در حال وارد کردن...
-wallets-bulk-import-toast =
-    { $count ->
-        [one] { $count } کیف پول وارد شد
-       *[other] { $count } کیف پول وارد شد
-    }
-wallets-bulk-import-error = وارد کردن ناموفق بود: { $reason }
-wallets-bulk-result-success-title = وارد کردن موفق بود
-wallets-bulk-result-success-detail =
-    { $count ->
-        [one] همه { $count } کیف پول با موفقیت وارد شد
-       *[other] همه { $count } کیف پول با موفقیت وارد شد
-    }
-wallets-bulk-result-partial-title = موفقیت جزئی
-wallets-bulk-result-partial-detail = وارد شده: { $imported }، ناموفق: { $failed }
-wallets-bulk-result-failed-title = وارد کردن ناموفق بود
-wallets-bulk-result-failed-detail =
-    { $count ->
-        [one] وارد کردن همه { $count } کیف پول ناموفق بود
-       *[other] وارد کردن همه { $count } کیف پول ناموفق بود
-    }
-wallets-bulk-result-imported = وارد شده
-wallets-bulk-result-failed = ناموفق
-
-# wallets.html and bulk_operations.js: bulk export.
-wallets-bulk-export-title = خروجی گرفتن از کیف پول‌ها
-wallets-bulk-export-format = قالب
-wallets-bulk-export-format-csv = CSV (‎.csv)
-wallets-bulk-export-format-xlsx = Excel (‎.xlsx)
-wallets-bulk-export-include-archived = شامل کیف پول‌های بایگانی‌شده
-wallets-bulk-export-safe-title = خروجی امن
-wallets-bulk-export-safe-body = فقط آدرس کیف پول‌ها و فراداده صادر می‌شود. کلید خصوصی شامل نمی‌شود.
-wallets-bulk-export-safe-submit = خروجی آدرس‌ها
-wallets-bulk-export-or = یا
-wallets-bulk-export-danger-title = خروجی پرخطر
-wallets-bulk-export-danger-body = کلیدهای خصوصی هم در خروجی گنجانده می‌شوند. هر کسی که این فایل را داشته باشد می‌تواند دارایی‌های شما را بردارد.
-wallets-bulk-export-danger-submit = خروجی همراه با کلیدهای خصوصی
-wallets-bulk-export-busy = در حال خروجی گرفتن...
-wallets-bulk-export-done = کیف پول‌ها در { $filename } ذخیره شدند
-wallets-bulk-export-fallback = خروجی گرفتن ناموفق بود
-wallets-bulk-export-error = خروجی گرفتن ناموفق بود: { $reason }
-wallets-bulk-confirm-title = تأیید خروجی پرخطر
-wallets-bulk-confirm-warning =
-    { $count ->
-        [one] در آستانه صدور <strong>{ $count }</strong> کلید خصوصی هستید. این کار بسیار خطرناک است!
-       *[other] در آستانه صدور <strong>{ $count }</strong> کلید خصوصی هستید. این کار بسیار خطرناک است!
-    }
-wallets-bulk-confirm-risk-steal = هر کسی که این فایل را داشته باشد می‌تواند همه دارایی‌ها را بردارد
-wallets-bulk-confirm-risk-share = این فایل را هرگز با کسی به اشتراک نگذارید
-wallets-bulk-confirm-risk-delete = فایل را بلافاصله پس از استفاده حذف کنید
-wallets-bulk-confirm-prompt = برای تأیید، عبارت زیر را تایپ کنید
-wallets-bulk-confirm-submit = خروجی کلیدها
-
 # renderers.js: main wallet holdings and wallet lists.
 wallets-holdings-col-token = توکن
 wallets-holdings-col-balance = موجودی
@@ -268,19 +133,14 @@ wallets-list-col-type = نوع
 wallets-list-col-created = تاریخ ساخت
 wallets-list-col-actions = عملیات
 wallets-list-action-export = خروجی کلید خصوصی
-wallets-list-action-archive = بایگانی کیف پول
-wallets-list-action-restore = بازگرداندن کیف پول
-wallets-list-action-delete = حذف دائمی
 wallets-list-count = کیف پول‌ها
 wallets-list-search =
     .placeholder = جستجو بر اساس نام یا آدرس...
 wallets-list-loading-title = در حال بارگذاری کیف پول‌ها…
 wallets-list-loading-description = در حال آماده‌سازی نمای کیف پول انتخاب‌شده.
+wallets-list-kept-empty-message = کیف پول‌های نسخه‌های قبلی اینجا نمایش داده می‌شوند تا همچنان بتوانید کلیدهای آن‌ها را صادر کنید.
 wallets-secondaries-empty-title = کیف پول ثانویه‌ای وجود ندارد
-wallets-secondaries-empty-message = برای سازمان‌دهی فعالیت‌های معاملاتی میان چند حساب، کیف پول‌های بیشتری بسازید.
-wallets-secondaries-add = افزودن کیف پول
 wallets-archive-empty-title = کیف پول بایگانی‌شده‌ای وجود ندارد
-wallets-archive-empty-message = کیف پول‌هایی که بایگانی کنید برای مراجعه بعدی در اینجا به‌صورت امن نگهداری می‌شوند.
 
 # watched.js: watched wallets table and actions.
 wallets-watched-col-wallet = کیف پول

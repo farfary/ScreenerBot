@@ -81,7 +81,7 @@ test("the page and toolbar primary buttons share one fill and one height", async
   const pageButton = await skin(copy.locator("#copy-add"));
 
   const wallets = await openPage(t, "wallets");
-  await wallets.click(tab("secondaries"));
+  await wallets.click(tab("watched"));
   const toolbarButton = wallets.locator(".table-toolbar-btn--primary:visible").first();
   await toolbarButton.waitFor();
   assert.deepEqual(await skin(toolbarButton), pageButton);
