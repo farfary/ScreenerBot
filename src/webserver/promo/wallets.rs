@@ -5,17 +5,16 @@
 //! its watch targets (`/api/wallets/watch/*`).
 //!
 //! Distinct from `wallet.rs`, which fixtures the single *trading* wallet the header
-//! and Main Wallet tab report (`/api/wallet/*`). This module owns the multi-wallet
-//! table behind the Secondaries and Archive tabs and the observation list behind the
-//! Watched tab.
+//! and Main Wallet tab report (`/api/wallet/*`). This module owns the wallet records
+//! behind the Other Wallets tab and the observation list behind the Watched tab.
 //!
-//! Without fixtures those three tabs are the only place in the app that puts the
+//! Without fixtures those tabs are the only place in the app that puts the
 //! operator's own key material on screen: they list the real local wallet records,
 //! addresses included, and the Watched tab renders "Watched addresses could not be
 //! loaded" whenever the watch database has not been opened. Neither is publishable,
-//! so the promo session substitutes a plausible desk: one main wallet, two
-//! secondaries with distinct jobs, two retired wallets, and four watched addresses
-//! whose subscriptions report cleanly.
+//! so the promo session substitutes a plausible desk: the trading wallet, four other
+//! wallets kept from earlier setups (two of them archived), and four watched
+//! addresses whose subscriptions report cleanly.
 
 use chrono::{Duration, Utc};
 
@@ -55,24 +54,24 @@ fn promo_wallets() -> Vec<PromoWallet> {
         ),
         (
             2,
-            "Launch Sniper",
+            "Previous Trading",
             "7Np41oeYqPefeNQEHSv1UDhYrehxin3NStELsSKCT4K2",
             WalletRole::Secondary,
             WalletType::Generated,
             96,
             Some(3),
-            Some("Small size, new-pair entries only."),
+            Some("Previous trading wallet. Kept for its key export."),
             1.284,
         ),
         (
             3,
-            "Manual Desk",
+            "Hardware Backup",
             "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM",
             WalletRole::Secondary,
             WalletType::Imported,
             72,
             Some(19),
-            Some("Manual swaps and position tests."),
+            Some("Imported from a hardware backup."),
             3.517,
         ),
         (
@@ -103,9 +102,9 @@ fn promo_wallets() -> Vec<PromoWallet> {
 /// Generate the wallet records behind the Wallets page.
 ///
 /// `include_inactive` mirrors the real handler's query: archived wallets are
-/// inactive, so the Secondaries tab asks without it and the Archive tab asks with
-/// it. Returning the archive rows unconditionally would leave the Secondaries table
-/// listing wallets it is meant to exclude.
+/// inactive and are returned only when it is set, as the Other Wallets tab does.
+/// Returning the archive rows unconditionally would let a caller that asks for the
+/// active wallets only list wallets it is meant to exclude.
 pub fn get_promo_wallets(include_inactive: bool) -> Vec<WalletListEntry> {
     let now = Utc::now();
 
