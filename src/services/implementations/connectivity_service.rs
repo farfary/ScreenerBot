@@ -15,6 +15,9 @@ use std::sync::Arc;
 use tokio::sync::Notify;
 use tokio::task::JoinHandle;
 
+/// The service's registered name, which the header uses to recognise its health entry.
+pub const SERVICE_NAME: &str = "connectivity";
+
 pub struct ConnectivityService {
     checker: Option<ConnectivityChecker>,
 }
@@ -30,7 +33,7 @@ impl ConnectivityService {
 #[async_trait]
 impl Service for ConnectivityService {
     fn name(&self) -> &'static str {
-        "connectivity"
+        SERVICE_NAME
     }
 
     fn priority(&self) -> i32 {
@@ -134,7 +137,7 @@ impl Service for ConnectivityService {
         // Move monitors out for the background task
         let checker = self.checker.take().ok_or_else(|| {
             crate::errors::Error::Service(crate::errors::ServiceError::Start {
-                service: "connectivity".to_owned(),
+                service: SERVICE_NAME.to_owned(),
                 message: "Checker already taken".to_owned(),
             })
         })?;

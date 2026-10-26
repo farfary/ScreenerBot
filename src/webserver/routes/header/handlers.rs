@@ -13,6 +13,7 @@ use crate::connectivity::state::{
 use crate::filtering::{try_fetch_stats, SnapshotState};
 use crate::global::are_core_services_ready;
 use crate::rpc::{get_global_rpc_stats, RpcStats};
+use crate::services::implementations::connectivity_service;
 use crate::services::{get_service_manager, ServiceHealth};
 use crate::wallet::{
     get_wallet_worth, get_worth_at_time, worth_change, WalletWorth, WorthChange, WorthSample,
@@ -221,6 +222,9 @@ struct SystemHealthFacts {
 /// The header's system status. Only confirmed faults are issues: a confirmed-down
 /// critical endpoint, or an unhealthy or degraded service. Anything that has not
 /// reported yet is `starting`, a neutral state; a disabled service is intentionally off.
+///
+/// A critical endpoint fault is one issue. The connectivity service derives its own health
+/// from the same endpoints, so its entry is not counted beside "Critical Endpoints".
 fn system_health(facts: SystemHealthFacts) -> SystemHeaderInfo {
     let mut unhealthy_services = Vec::new();
     let mut critical_degraded = false;
@@ -230,6 +234,9 @@ fn system_health(facts: SystemHealthFacts) -> SystemHeaderInfo {
     }
     let mut service_starting = false;
     for (name, health) in facts.services {
+        if facts.critical_endpoints_down && name == connectivity_service::SERVICE_NAME {
+            continue;
+        }
         if health.is_unhealthy() || health.is_degraded() {
             unhealthy_services.push(name);
         } else if matches!(health, ServiceHealth::Starting) {
@@ -437,5 +444,31 @@ mod tests {
         let degraded_only = system_health(facts(vec![("ohlcv", ServiceHealth::Degraded(fault()))]));
         assert_eq!(degraded_only.unhealthy_services, ["ohlcv"]);
         assert!(!degraded_only.critical_degraded && !degraded_only.starting);
+    }
+
+    #[test]
+    fn one_down_critical_endpoint_is_one_issue() {
+        let mut down = facts(vec![
+            (
+                connectivity_service::SERVICE_NAME,
+                ServiceHealth::Unhealthy(fault()),
+            ),
+            ("pools", ServiceHealth::Healthy),
+        ]);
+        down.critical_endpoints_down = true;
+        let status = system_health(down);
+        assert_eq!(status.unhealthy_services, ["Critical Endpoints"]);
+        assert!(status.critical_degraded);
+        assert!(!status.all_services_healthy);
+
+        // Without an endpoint fault, an unhealthy connectivity service is its own issue.
+        let alone = system_health(facts(vec![(
+            connectivity_service::SERVICE_NAME,
+            ServiceHealth::Unhealthy(fault()),
+        )]));
+        assert_eq!(
+            alone.unhealthy_services,
+            [connectivity_service::SERVICE_NAME]
+        );
     }
 }
