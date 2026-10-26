@@ -183,6 +183,17 @@ pub fn get_native_price() -> f64 {
     }
 }
 
+/// The current SOL/USD price, or `None` while no fresh price is known. Every
+/// display of the SOL/USD figure reads it here, so they all show the same price.
+pub fn known_native_price() -> Option<f64> {
+    known_price(get_native_price())
+}
+
+/// `price`, or `None` for the "no fresh price" sentinel (0.0) and non-finite values.
+fn known_price(price: f64) -> Option<f64> {
+    Some(price).filter(|price| price.is_finite() && *price > 0.0)
+}
+
 /// Get detailed SOL price information including metadata
 pub fn get_native_price_info() -> Option<NativePriceData> {
     match NATIVE_PRICE_CACHE.read() {
@@ -645,10 +656,18 @@ pub async fn force_refresh_native_price() -> Result<f64, Error> {
 
 #[cfg(test)]
 mod tests {
-    use super::NativePriceData;
+    use super::{known_price, NativePriceData};
 
     #[test]
     fn a_default_price_names_no_chain() {
         assert_eq!(NativePriceData::default().chain, None);
+    }
+
+    #[test]
+    fn only_a_positive_finite_price_is_known() {
+        assert_eq!(known_price(0.0), None);
+        assert_eq!(known_price(f64::NAN), None);
+        assert_eq!(known_price(f64::INFINITY), None);
+        assert_eq!(known_price(150.25), Some(150.25));
     }
 }

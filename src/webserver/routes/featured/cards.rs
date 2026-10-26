@@ -13,7 +13,8 @@
 
 use super::identity::fill_identity;
 use super::types::FeaturedCard;
-use crate::tokens;
+use crate::chains::solana::constants::SOL_MINT;
+use crate::{native_price, tokens};
 
 /// Build enriched cards from any featured source.
 pub(super) async fn build_cards<T: Into<FeaturedCard>>(source: Vec<T>) -> Vec<FeaturedCard> {
@@ -30,6 +31,7 @@ pub(super) async fn build_cards<T: Into<FeaturedCard>>(source: Vec<T>) -> Vec<Fe
             apply_stats(card, stats);
         }
     }
+    apply_native_price(&mut cards, native_price::known_native_price());
 
     // Identity fallbacks (name/symbol/logo/banner from the DB, then a live
     // DexScreener batch for tokens we hold no market data for) and URL
@@ -133,6 +135,15 @@ fn apply_stats(card: &mut FeaturedCard, stats: DbStats) {
     card.txns_24h_sells = stats.txns_24h_sells.or(card.txns_24h_sells);
 }
 
+/// The wrapped native coin's card shows the SOL/USD price the header shows, absent
+/// while that price is unknown. Its token row carries the last stored market price,
+/// which drifts from the live figure, so the two surfaces disagreed side by side.
+fn apply_native_price(cards: &mut [FeaturedCard], price_usd: Option<f64>) {
+    for card in cards.iter_mut().filter(|card| card.mint == SOL_MINT) {
+        card.price_usd = price_usd;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -215,5 +226,30 @@ mod tests {
         );
         assert_eq!(card.price_usd, Some(9.0));
         assert_eq!(card.price_sol, None);
+    }
+
+    #[test]
+    fn the_native_coin_card_shows_the_header_sol_price() {
+        let mut sol = boosted_card();
+        sol.mint = SOL_MINT.to_owned();
+        apply_stats(&mut sol, stats());
+        let mut other = boosted_card();
+        apply_stats(&mut other, stats());
+        let mut cards = vec![sol, other];
+
+        apply_native_price(&mut cards, Some(102.14));
+        assert_eq!(cards[0].price_usd, Some(102.14));
+        assert_eq!(
+            cards[1].price_usd,
+            Some(2.0),
+            "other cards keep their own price"
+        );
+
+        apply_native_price(&mut cards, None);
+        assert_eq!(
+            cards[0].price_usd, None,
+            "an unknown SOL/USD price is absent"
+        );
+        assert_eq!(cards[1].price_usd, Some(2.0));
     }
 }

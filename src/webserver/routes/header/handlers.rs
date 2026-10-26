@@ -117,7 +117,7 @@ pub(super) async fn get_header_metrics() -> Json<HeaderMetricsResponse> {
 
     // SOL/USD price for the header price card.
     let sol = SolHeaderInfo {
-        price_usd: known_price(crate::native_price::get_native_price()),
+        price_usd: crate::native_price::known_native_price(),
         change_24h_percent: crate::native_price::get_native_price_info()
             .and_then(|info| info.chain)
             .and_then(crate::ohlcvs::native_usd_chart::change_24h_percent),
@@ -176,11 +176,6 @@ fn today_pnl(net_pnl: Option<f64>, start_equity: Option<f64>) -> (Option<f64>, O
             .map(|equity| pnl / equity * 100.0)
     });
     (net_pnl, percent)
-}
-
-/// The SOL/USD price, or `None` for the price service's "no fresh price" sentinel (0.0).
-fn known_price(price: f64) -> Option<f64> {
-    Some(price).filter(|price| price.is_finite() && *price > 0.0)
 }
 
 async fn calculate_system_health() -> SystemHeaderInfo {
@@ -368,9 +363,6 @@ mod tests {
         assert_eq!(today_pnl(Some(0.5), Some(0.0)), (Some(0.5), None));
         assert_eq!(today_pnl(Some(0.5), Some(10.0)), (Some(0.5), Some(5.0)));
         assert_eq!(today_pnl(Some(0.0), Some(10.0)), (Some(0.0), Some(0.0)));
-        assert_eq!(known_price(0.0), None);
-        assert_eq!(known_price(f64::NAN), None);
-        assert_eq!(known_price(150.25), Some(150.25));
 
         let (today_pnl_native, today_pnl_percent) = today_pnl(None, None);
         let trader = serde_json::to_value(TraderHeaderInfo {
@@ -383,7 +375,7 @@ mod tests {
         assert!(trader["today_pnl_native"].is_null());
         assert!(trader["today_pnl_percent"].is_null());
         let sol = serde_json::to_value(SolHeaderInfo {
-            price_usd: known_price(0.0),
+            price_usd: None,
             change_24h_percent: None,
         })
         .unwrap();
