@@ -134,6 +134,8 @@ errors-telegram-notifier-failed = Gagal membuat notifier
 errors-telegram-token-required = Token bot harus dikonfigurasi terlebih dahulu
 errors-telegram-discovery-failed = Gagal memulai penemuan
 errors-telegram-chat-select-failed = Gagal memilih chat
+errors-telegram-bot-token-invalid = { -telegram } tidak menerima token bot ini. Salin lagi dari @BotFather
+errors-telegram-bot-token-check-failed = Tidak dapat menghubungi { -telegram } untuk memeriksa token bot. Token tidak disimpan
 
 errors-chat-message-empty = Pesan tidak boleh kosong
 errors-chat-message-too-long = Pesan melebihi panjang maksimum 10.000 karakter

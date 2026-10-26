@@ -26,6 +26,9 @@ pub enum Error {
     /// The configured bot token was rejected by the Telegram API.
     #[error("the configured bot token is not usable: {detail}")]
     InvalidBotToken { detail: String },
+    /// Telegram could not be reached to check a bot token; the token itself is unjudged.
+    #[error("could not reach Telegram to check the bot token: {detail}")]
+    TokenCheckUnavailable { detail: String },
     /// The configured chat ID string does not parse as a Telegram chat ID.
     #[error("chat id '{chat_id}' is invalid: {detail}")]
     InvalidChatId { chat_id: String, detail: String },
@@ -66,7 +69,7 @@ impl ErrorClass for Error {
         match self {
             Error::Internal(e) => e.is_retryable(),
             Error::Config(e) => e.is_retryable(),
-            Error::SendFailed { .. } => true,
+            Error::SendFailed { .. } | Error::TokenCheckUnavailable { .. } => true,
             Error::NotConfigured
             | Error::InvalidBotToken { .. }
             | Error::InvalidChatId { .. }
@@ -97,6 +100,7 @@ impl ErrorClass for Error {
             Error::Config(e) => e.severity(),
             Error::NotConfigured => Severity::Warning,
             Error::InvalidBotToken { .. } => Severity::Critical,
+            Error::TokenCheckUnavailable { .. } => Severity::Warning,
             Error::InvalidChatId { .. } => Severity::Error,
             Error::SendFailed { .. } => Severity::Warning,
             Error::SessionNotFound { .. } => Severity::Warning,
@@ -115,6 +119,7 @@ impl ErrorClass for Error {
             Error::Config(e) => e.http_status(),
             Error::NotConfigured => 503,
             Error::InvalidBotToken { .. } => 401,
+            Error::TokenCheckUnavailable { .. } => 502,
             Error::InvalidChatId { .. } => 400,
             Error::SendFailed { .. } => 502,
             Error::SessionNotFound { .. } => 404,

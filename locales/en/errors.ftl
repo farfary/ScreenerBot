@@ -155,6 +155,8 @@ errors-telegram-notifier-failed = Failed to create notifier
 errors-telegram-token-required = Bot token must be configured first
 errors-telegram-discovery-failed = Failed to start discovery
 errors-telegram-chat-select-failed = Failed to select chat
+errors-telegram-bot-token-invalid = { -telegram } does not accept this bot token. Copy it again from @BotFather
+errors-telegram-bot-token-check-failed = Could not reach { -telegram } to check the bot token. The token was not saved
 
 # Assistant chat
 errors-chat-message-empty = Message cannot be empty

@@ -134,6 +134,8 @@ errors-telegram-notifier-failed = Falha ao criar o notificador
 errors-telegram-token-required = O token do bot precisa ser configurado primeiro
 errors-telegram-discovery-failed = Falha ao iniciar a descoberta
 errors-telegram-chat-select-failed = Falha ao selecionar o chat
+errors-telegram-bot-token-invalid = O { -telegram } não aceita este token de bot. Copie-o novamente do @BotFather
+errors-telegram-bot-token-check-failed = Não foi possível acessar o { -telegram } para verificar o token do bot. O token não foi salvo
 
 errors-chat-message-empty = A mensagem não pode estar vazia
 errors-chat-message-too-long = A mensagem excede o tamanho máximo de 10.000 caracteres

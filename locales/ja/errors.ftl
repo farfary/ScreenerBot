@@ -134,6 +134,8 @@ errors-telegram-notifier-failed = 通知機能を作成できませんでした
 errors-telegram-token-required = 先にボットトークンを設定してください
 errors-telegram-discovery-failed = 検出を開始できませんでした
 errors-telegram-chat-select-failed = チャットを選択できませんでした
+errors-telegram-bot-token-invalid = { -telegram } はこのボットトークンを受け付けません。@BotFather からもう一度コピーしてください
+errors-telegram-bot-token-check-failed = ボットトークンを確認するために { -telegram } に接続できませんでした。トークンは保存されていません
 
 errors-chat-message-empty = メッセージを空にすることはできません
 errors-chat-message-too-long = メッセージが最大文字数の10,000文字を超えています

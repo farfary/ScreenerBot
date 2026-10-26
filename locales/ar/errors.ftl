@@ -153,6 +153,8 @@ errors-telegram-notifier-failed = تعذّر إنشاء المُخطِر
 errors-telegram-token-required = يجب ضبط رمز البوت أولًا
 errors-telegram-discovery-failed = تعذّر بدء الاكتشاف
 errors-telegram-chat-select-failed = تعذّر اختيار الدردشة
+errors-telegram-bot-token-invalid = لا يقبل { -telegram } رمز البوت هذا. انسخه مرة أخرى من @BotFather
+errors-telegram-bot-token-check-failed = تعذر الوصول إلى { -telegram } للتحقق من رمز البوت. لم يُحفظ الرمز
 
 # Assistant chat
 errors-chat-message-empty = لا يمكن أن تكون الرسالة فارغة

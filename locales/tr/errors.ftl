@@ -148,6 +148,8 @@ errors-telegram-notifier-failed = Bildirici oluşturulamadı
 errors-telegram-token-required = Önce bot belirteci yapılandırılmalı
 errors-telegram-discovery-failed = Keşif başlatılamadı
 errors-telegram-chat-select-failed = Sohbet seçilemedi
+errors-telegram-bot-token-invalid = { -telegram } bu bot belirtecini kabul etmiyor. @BotFather'dan yeniden kopyalayın
+errors-telegram-bot-token-check-failed = Bot belirtecini denetlemek için { -telegram } hizmetine ulaşılamadı. Belirteç kaydedilmedi
 
 # Assistant chat
 errors-chat-message-empty = Mesaj boş olamaz

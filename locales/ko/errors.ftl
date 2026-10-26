@@ -151,6 +151,8 @@ errors-telegram-notifier-failed = 알림 발송기를 생성하지 못했습니�
 errors-telegram-token-required = 봇 토큰을 먼저 설정해야 합니다
 errors-telegram-discovery-failed = 탐색을 시작하지 못했습니다
 errors-telegram-chat-select-failed = 채팅을 선택하지 못했습니다
+errors-telegram-bot-token-invalid = { -telegram }이 이 봇 토큰을 받아들이지 않습니다. @BotFather에서 다시 복사하세요
+errors-telegram-bot-token-check-failed = 봇 토큰을 확인하려고 { -telegram }에 연결하지 못했습니다. 토큰은 저장되지 않았습니다
 
 # Assistant chat
 errors-chat-message-empty = 메시지는 비워 둘 수 없습니다

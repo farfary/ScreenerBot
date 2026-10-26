@@ -115,6 +115,50 @@ pub(super) async fn get_settings(State(_state): State<Arc<AppState>>) -> Respons
     success_response(response)
 }
 
+/// The bot token a settings request would store: a non-empty value that is not the
+/// masked form the status route returns and differs from the stored token.
+pub(super) fn requested_new_token<'a>(
+    requested: Option<&'a str>,
+    current: &str,
+) -> Option<&'a str> {
+    requested.filter(|token| !token.is_empty() && !token.ends_with("...") && *token != current)
+}
+
+/// Check a bot token with `verify` before it is stored. A token Telegram refuses and a
+/// check that could not reach Telegram are distinct errors, so the dashboard can say
+/// whether the token or the connection is at fault.
+pub(super) async fn check_new_bot_token<F, Fut>(token: &str, verify: F) -> Result<(), ApiError>
+where
+    F: FnOnce(String) -> Fut,
+    Fut: std::future::Future<Output = crate::telegram::Result<()>>,
+{
+    match verify(token.to_string()).await {
+        Ok(()) => Ok(()),
+        Err(error @ crate::telegram::Error::InvalidBotToken { .. }) => {
+            logger::warning(
+                LogTag::Telegram,
+                &format!("Refused a bot token Telegram does not accept: {error}"),
+            );
+            Err(ApiError::new(
+                ApiErrorCode::InvalidInput,
+                ids::ERRORS_TELEGRAM_BOT_TOKEN_INVALID,
+            )
+            .details(error.to_string()))
+        }
+        Err(error) => {
+            logger::warning(
+                LogTag::Telegram,
+                &format!("Could not check a new bot token: {error}"),
+            );
+            Err(ApiError::new(
+                ApiErrorCode::UpstreamError,
+                ids::ERRORS_TELEGRAM_BOT_TOKEN_CHECK_FAILED,
+            )
+            .details(error.to_string()))
+        }
+    }
+}
+
 /// Update Telegram settings
 pub(super) async fn update_settings(
     State(_state): State<Arc<AppState>>,
@@ -134,16 +178,25 @@ pub(super) async fn update_settings(
     }
     let (previous_token, previous_chat_id) =
         with_config(|c| (c.telegram.bot_token.clone(), c.telegram.chat_id.clone()));
+    let new_token = requested_new_token(req.bot_token.as_deref(), &previous_token);
+    if let Some(token) = new_token {
+        if let Err(error) = check_new_bot_token(token, |token| async move {
+            crate::telegram::bot::verify_bot_token(&token)
+                .await
+                .map(|_| ())
+        })
+        .await
+        {
+            return error.into_response();
+        }
+    }
     match update_config_section(
         |cfg| {
             if let Some(enabled) = req.enabled {
                 cfg.telegram.enabled = enabled;
             }
-            if let Some(ref token) = req.bot_token {
-                // Only update if not masked value
-                if !token.ends_with("...") && !token.is_empty() {
-                    cfg.telegram.bot_token = token.clone();
-                }
+            if let Some(token) = new_token {
+                cfg.telegram.bot_token = token.to_string();
             }
             if let Some(ref chat_id) = req.chat_id {
                 cfg.telegram.chat_id = chat_id.clone();

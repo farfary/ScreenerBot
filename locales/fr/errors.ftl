@@ -148,6 +148,8 @@ errors-telegram-notifier-failed = Échec de la création du notificateur
 errors-telegram-token-required = Le token du bot doit d'abord être configuré
 errors-telegram-discovery-failed = Échec du démarrage de la découverte
 errors-telegram-chat-select-failed = Échec de la sélection de la conversation
+errors-telegram-bot-token-invalid = { -telegram } n'accepte pas ce jeton de bot. Copiez-le à nouveau depuis @BotFather
+errors-telegram-bot-token-check-failed = Impossible de joindre { -telegram } pour vérifier le jeton du bot. Le jeton n'a pas été enregistré
 
 # Assistant chat
 errors-chat-message-empty = Le message ne peut pas être vide

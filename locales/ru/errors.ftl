@@ -131,6 +131,8 @@ errors-telegram-notifier-failed = Не удалось создать служб�
 errors-telegram-token-required = Сначала необходимо настроить токен бота
 errors-telegram-discovery-failed = Не удалось запустить обнаружение
 errors-telegram-chat-select-failed = Не удалось выбрать чат
+errors-telegram-bot-token-invalid = { -telegram } не принимает этот токен бота. Скопируйте его заново из @BotFather
+errors-telegram-bot-token-check-failed = Не удалось связаться с { -telegram } для проверки токена бота. Токен не сохранён
 
 errors-chat-message-empty = Сообщение не может быть пустым
 errors-chat-message-too-long = Сообщение превышает максимальную длину в 10 000 символов

@@ -15,6 +15,20 @@ use teloxide::prelude::*;
 use teloxide::types::{ChatId, ParseMode};
 use tokio::sync::{Notify, RwLock};
 
+/// Check a bot token with Telegram's `getMe`. A token Telegram refuses is
+/// [`Error::InvalidBotToken`]; a check that could not reach Telegram is
+/// [`Error::TokenCheckUnavailable`], which says nothing about the token.
+pub async fn verify_bot_token(token: &str) -> Result<teloxide::types::Me> {
+    Bot::new(token).get_me().await.map_err(|e| match e {
+        teloxide::RequestError::Api(api) => Error::InvalidBotToken {
+            detail: api.to_string(),
+        },
+        other => Error::TokenCheckUnavailable {
+            detail: other.to_string(),
+        },
+    })
+}
+
 /// Telegram bot wrapper with state management
 pub struct TelegramBot {
     /// The underlying teloxide Bot instance
@@ -47,9 +61,7 @@ impl TelegramBot {
             return Ok(());
         }
 
-        // Validate token by calling getMe
-        let bot = Bot::new(&token);
-        match bot.get_me().await {
+        match verify_bot_token(&token).await {
             Ok(me) => {
                 logger::info(
                     LogTag::Telegram,
@@ -59,7 +71,7 @@ impl TelegramBot {
                         me.id
                     ),
                 );
-                self.bot = Some(bot);
+                self.bot = Some(Bot::new(&token));
 
                 // Determine initial state based on chat_id config
                 let chat_id = with_config(|c| c.telegram.chat_id.clone());
@@ -77,9 +89,7 @@ impl TelegramBot {
                     LogTag::Telegram,
                     &format!("Failed to validate bot token: {e}"),
                 );
-                Err(Error::InvalidBotToken {
-                    detail: e.to_string(),
-                })
+                Err(e)
             }
         }
     }

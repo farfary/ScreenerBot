@@ -131,6 +131,8 @@ errors-telegram-notifier-failed = Не вдалося створити спов�
 errors-telegram-token-required = Спершу потрібно налаштувати токен бота
 errors-telegram-discovery-failed = Не вдалося запустити пошук
 errors-telegram-chat-select-failed = Не вдалося вибрати чат
+errors-telegram-bot-token-invalid = { -telegram } не приймає цей токен бота. Скопіюйте його ще раз із @BotFather
+errors-telegram-bot-token-check-failed = Не вдалося зв'язатися з { -telegram } для перевірки токена бота. Токен не збережено
 
 errors-chat-message-empty = Повідомлення не може бути порожнім
 errors-chat-message-too-long = Повідомлення перевищує максимальну довжину в 10 000 символів

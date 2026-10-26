@@ -131,6 +131,8 @@ errors-telegram-notifier-failed = नोटिफ़ायर बनाने �
 errors-telegram-token-required = पहले बॉट टोकन कॉन्फ़िगर करना ज़रूरी है
 errors-telegram-discovery-failed = डिस्कवरी शुरू करने में विफल
 errors-telegram-chat-select-failed = चैट चुनने में विफल
+errors-telegram-bot-token-invalid = { -telegram } यह बॉट टोकन स्वीकार नहीं करता। इसे @BotFather से फिर से कॉपी करें
+errors-telegram-bot-token-check-failed = बॉट टोकन जाँचने के लिए { -telegram } से संपर्क नहीं हो सका। टोकन सहेजा नहीं गया
 
 errors-chat-message-empty = संदेश खाली नहीं हो सकता
 errors-chat-message-too-long = संदेश 10,000 अक्षरों की अधिकतम सीमा से अधिक है

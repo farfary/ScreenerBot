@@ -153,6 +153,8 @@ errors-telegram-notifier-failed = ساخت اعلان‌رسان ناموفق ب
 errors-telegram-token-required = ابتدا باید توکن ربات پیکربندی شود
 errors-telegram-discovery-failed = شروع کشف ناموفق بود
 errors-telegram-chat-select-failed = انتخاب چت ناموفق بود
+errors-telegram-bot-token-invalid = { -telegram } این توکن ربات را نمی‌پذیرد. آن را دوباره از @BotFather کپی کنید
+errors-telegram-bot-token-check-failed = برای بررسی توکن ربات به { -telegram } دسترسی نشد. توکن ذخیره نشد
 
 # Assistant chat
 errors-chat-message-empty = پیام نمی‌تواند خالی باشد

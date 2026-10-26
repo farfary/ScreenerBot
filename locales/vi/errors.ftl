@@ -131,6 +131,8 @@ errors-telegram-notifier-failed = Không tạo được bộ thông báo
 errors-telegram-token-required = Phải cấu hình token bot trước
 errors-telegram-discovery-failed = Không bắt đầu được việc khám phá
 errors-telegram-chat-select-failed = Không chọn được cuộc trò chuyện
+errors-telegram-bot-token-invalid = { -telegram } không chấp nhận mã bot này. Hãy sao chép lại từ @BotFather
+errors-telegram-bot-token-check-failed = Không thể kết nối { -telegram } để kiểm tra mã bot. Mã chưa được lưu
 
 errors-chat-message-empty = Tin nhắn không được để trống
 errors-chat-message-too-long = Tin nhắn vượt quá độ dài tối đa 10.000 ký tự

@@ -60,25 +60,16 @@ impl DiscoveryService {
             return Err(Error::NotConfigured);
         }
 
-        // Validate the token
+        let me = crate::telegram::bot::verify_bot_token(&bot_token).await?;
+        logger::info(
+            LogTag::Telegram,
+            &format!(
+                "Discovery: Bot validated - @{} (ID: {})",
+                me.username.as_deref().unwrap_or("unknown"),
+                me.id
+            ),
+        );
         let bot = Bot::new(&bot_token);
-        match bot.get_me().await {
-            Ok(me) => {
-                logger::info(
-                    LogTag::Telegram,
-                    &format!(
-                        "Discovery: Bot validated - @{} (ID: {})",
-                        me.username.as_deref().unwrap_or("unknown"),
-                        me.id
-                    ),
-                );
-            }
-            Err(e) => {
-                return Err(Error::InvalidBotToken {
-                    detail: e.to_string(),
-                });
-            }
-        }
 
         // Set discovery active in session manager
         let manager = get_session_manager();

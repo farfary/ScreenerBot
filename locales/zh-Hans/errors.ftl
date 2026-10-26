@@ -151,6 +151,8 @@ errors-telegram-notifier-failed = 创建通知器失败
 errors-telegram-token-required = 必须先配置机器人令牌
 errors-telegram-discovery-failed = 启动发现失败
 errors-telegram-chat-select-failed = 选择聊天失败
+errors-telegram-bot-token-invalid = { -telegram } 不接受此机器人令牌。请从 @BotFather 重新复制
+errors-telegram-bot-token-check-failed = 无法连接 { -telegram } 来检查机器人令牌。令牌未保存
 
 # Assistant chat
 errors-chat-message-empty = 消息不能为空
