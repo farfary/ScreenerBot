@@ -66,6 +66,18 @@ pub fn mark_service_ready(name: &'static str) {
     }
 }
 
+/// A service that stopped while the others keep running is no longer ready; its next
+/// start records a fresh start.
+pub fn mark_service_stopped(name: &'static str) {
+    let mut tracker = tracker();
+    if let Some(entry) = tracker.get_mut(name) {
+        entry.ready = false;
+        entry.ready_at = None;
+        entry.duration_ms = None;
+        entry.start_instant = None;
+    }
+}
+
 pub fn get_status(name: &'static str) -> Option<StartupServiceStatus> {
     let tracker = tracker();
     tracker.get(name).map(|status| StartupServiceStatus {

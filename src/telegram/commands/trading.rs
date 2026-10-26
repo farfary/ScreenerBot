@@ -5,19 +5,14 @@
 //!
 //! Commands for enabling/disabling trading, force stop, pause/resume.
 
-use crate::config::update_config_section;
 use crate::i18n::{ids, MessageId, UiArg, UiText};
 use crate::logger::{self, LogTag};
 use crate::telegram::keyboards;
 use crate::telegram::text::{tg, tg_escape, tg_id, with_icon};
 use crate::telegram::{Error, Result};
+use crate::trader;
 use teloxide::prelude::*;
 use teloxide::types::{ChatId, ParseMode};
-
-/// Check if trader is enabled from config
-fn is_trader_enabled() -> bool {
-    crate::config::with_config(|cfg| cfg.trader.enabled)
-}
 
 /// Message with a technical error detail.
 fn failure_message(icon: &str, id: MessageId, error: &impl std::fmt::Display) -> String {
@@ -29,48 +24,34 @@ fn failure_message(icon: &str, id: MessageId, error: &impl std::fmt::Display) ->
 
 /// Handle /start command - Welcome message and enable trading
 pub async fn handle_start_command() -> String {
-    // Ideally we'd check for errors, but for the start command we want to be seamless
-    let _ = update_config_section(
-        |cfg| {
-            cfg.trader.enabled = true;
-        },
-        true,
-    );
+    // The welcome is shown whether or not the trader was already running.
+    if let Err(e) = trader::start_trader().await {
+        if !matches!(e, trader::Error::AlreadyRunning) {
+            logger::warning(
+                LogTag::Telegram,
+                &format!("Trading not enabled by the start command: {e}"),
+            );
+        }
+    }
 
     with_icon("🚀", &tg_id(ids::TELEGRAM_START_READY))
 }
 
 /// Handle /stop command - Disable trading
 pub async fn handle_stop_command() -> String {
-    let currently_enabled = is_trader_enabled();
-
-    if !currently_enabled {
-        return with_icon("✅", &tg_id(ids::TELEGRAM_STOP_ALREADY));
-    }
-
-    // Disable trading via config
-    match update_config_section(
-        |cfg| {
-            cfg.trader.enabled = false;
-        },
-        true,
-    ) {
+    match trader::stop_trader_gracefully().await {
         Ok(()) => {
             logger::info(LogTag::Telegram, "Trading disabled via Telegram command");
             with_icon("🛑", &tg_id(ids::TELEGRAM_STOP_DONE))
         }
+        Err(trader::Error::AlreadyStopped) => with_icon("✅", &tg_id(ids::TELEGRAM_STOP_ALREADY)),
         Err(e) => failure_message("❌", ids::TELEGRAM_STOP_FAILED, &e),
     }
 }
 
 /// Handle /pause or /pause_entries command
 pub async fn handle_pause_entries_command() -> String {
-    match update_config_section(
-        |cfg| {
-            cfg.trader.entry_monitor_enabled = false;
-        },
-        true,
-    ) {
+    match trader::set_monitor_enabled(trader::Monitor::Entry, false) {
         Ok(()) => {
             logger::info(LogTag::Telegram, "Entry monitor paused via Telegram");
             with_icon("⏸️", &tg_id(ids::TELEGRAM_PAUSE_DONE))
@@ -81,17 +62,12 @@ pub async fn handle_pause_entries_command() -> String {
 
 /// Handle /resume or /resume_entries command
 pub async fn handle_resume_entries_command() -> String {
-    match update_config_section(
-        |cfg| {
-            cfg.trader.entry_monitor_enabled = true;
-            // Ensure master switch is on so resume actually works if previously stopped
-            if !cfg.trader.enabled {
-                cfg.trader.enabled = true;
-            }
-        },
-        true,
-    ) {
-        Ok(()) => {
+    if let Err(e) = trader::set_monitor_enabled(trader::Monitor::Entry, true) {
+        return failure_message("❌", ids::TELEGRAM_RESUME_FAILED, &e);
+    }
+    // Resuming entries also turns the trader on, so a stopped trader starts entering.
+    match trader::start_trader().await {
+        Ok(()) | Err(trader::Error::AlreadyRunning) => {
             logger::info(LogTag::Telegram, "Entry monitor resumed via Telegram");
             with_icon("▶️", &tg_id(ids::TELEGRAM_RESUME_DONE))
         }

@@ -7,14 +7,21 @@ use crate::config::with_config;
 use crate::i18n::{ids, UiText};
 use crate::logger::{self, LogTag};
 use crate::services::{Service, ServiceHealth, ServiceMetrics};
-use crate::telegram::notifier::{self, send_notification};
+use crate::telegram::notifier::{
+    self, send_notification, send_notification_with, TelegramNotifier,
+};
 use crate::telegram::polling;
 use crate::telegram::types::{BotState, Notification};
 use async_trait::async_trait;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::{mpsc, watch, Notify, RwLock};
 use tokio::task::JoinHandle;
+
+/// The longest the sender worker waits to announce the service's start or stop, so a
+/// slow Telegram never holds a stop past the service manager's stop grace.
+const ANNOUNCEMENT_TIMEOUT: Duration = Duration::from_secs(3);
 
 /// Telegram service state
 pub struct TelegramService {
@@ -147,9 +154,23 @@ impl Service for TelegramService {
 
         // Start notification sender worker (only if we have a chat_id)
         if !config.chat_id.is_empty() {
+            // The worker announces this start and, once stopped, the stop through the bot
+            // and chat it started with; both sends run outside the service manager's lock.
+            let announcer = TelegramNotifier::new(&config.bot_token, &config.chat_id).ok();
             let mut stop = self.stop_signal.subscribe();
             let sender_handle = tokio::spawn(monitor.instrument(async move {
                 logger::info(LogTag::Telegram, "Notification sender worker started");
+                if let Some(announcer) = &announcer {
+                    let started = Notification::bot_started(
+                        crate::version::VERSION.to_string(),
+                        crate::telegram::types::StartMode::Normal,
+                    );
+                    let _ = tokio::time::timeout(
+                        ANNOUNCEMENT_TIMEOUT,
+                        send_notification_with(announcer, started),
+                    )
+                    .await;
+                }
 
                 loop {
                     tokio::select! {
@@ -163,6 +184,16 @@ impl Service for TelegramService {
                             break;
                         }
                     }
+                }
+
+                if let Some(announcer) = &announcer {
+                    let stopped =
+                        Notification::bot_stopped(crate::telegram::types::StopReason::Graceful);
+                    let _ = tokio::time::timeout(
+                        ANNOUNCEMENT_TIMEOUT,
+                        send_notification_with(announcer, stopped),
+                    )
+                    .await;
                 }
             }));
             handles.push(sender_handle);
@@ -190,13 +221,6 @@ impl Service for TelegramService {
                     }
                 }
             }
-
-            // Send startup notification
-            let startup_notification = Notification::bot_started(
-                crate::version::VERSION.to_string(),
-                crate::telegram::types::StartMode::Normal,
-            );
-            send_notification(startup_notification).await;
         }
 
         Ok(handles)
@@ -205,15 +229,9 @@ impl Service for TelegramService {
     async fn stop(&mut self) -> crate::Result<()> {
         logger::info(LogTag::Telegram, "Telegram service shutting down");
 
-        // Send shutdown notification if possible
-        if notifier::is_enabled() {
-            let shutdown_notification =
-                Notification::bot_stopped(crate::telegram::types::StopReason::Graceful);
-            send_notification(shutdown_notification).await;
-        }
-
-        // End this service's tasks; the ServiceManager awaits them. The notifier goes with
-        // them, so nothing is sent while the service is stopped.
+        // End this service's tasks; the ServiceManager awaits them, and the sender worker
+        // announces the stop on its way out. The shared notifier goes with them, so
+        // nothing else is sent while the service is stopped.
         self.stop_signal.send_replace(true);
         notifier::clear_notifier();
         self.notification_sender = None;

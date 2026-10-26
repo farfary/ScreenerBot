@@ -151,9 +151,45 @@ pub struct ServiceStartupReport {
     pub duration_ms: u128,
 }
 
-/// How long [`ServiceManager::stop_service`] waits for each task of the stopped service
-/// before aborting it.
+/// How long [`StoppingService::finish`] waits for each task of the stopped service before
+/// aborting it.
 const STOP_ALONE_GRACE: Duration = Duration::from_secs(5);
+
+/// The tasks of a service [`ServiceManager::stop_service`] has signalled to stop.
+#[derive(Debug)]
+#[must_use = "await `finish` so the stopped service's tasks end or are aborted"]
+pub struct StoppingService {
+    name: &'static str,
+    handles: Vec<JoinHandle<()>>,
+}
+
+impl StoppingService {
+    /// Wait up to the stop grace for each task to end on the service's own signal, abort
+    /// any task still running after it, and return how many were aborted.
+    pub async fn finish(self) -> usize {
+        let name = self.name;
+        let mut aborted = 0;
+        for handle in self.handles {
+            let abort = handle.abort_handle();
+            if tokio::time::timeout(STOP_ALONE_GRACE, handle)
+                .await
+                .is_err()
+            {
+                abort.abort();
+                aborted += 1;
+                logger::warning(
+                    LogTag::System,
+                    &format!(
+                        "Service {name} task still running {}s after its stop; aborted",
+                        STOP_ALONE_GRACE.as_secs()
+                    ),
+                );
+            }
+        }
+        log_service_event(name, ServiceLogEvent::StopSuccess, None, true);
+        aborted
+    }
+}
 
 pub struct ServiceManager {
     services: HashMap<&'static str, Box<dyn Service>>,
@@ -690,15 +726,23 @@ impl ServiceManager {
         Ok(())
     }
 
-    /// Stop one running service while every other service keeps running. Returns `false`
+    /// Stop one running service while every other service keeps running. Returns `None`
     /// when the service is not running. Refused for a service that cannot stop alone
     /// ([`Service::stops_alone`]) and for one a running service depends on.
-    pub async fn stop_service(&mut self, name: &'static str) -> crate::Result<bool> {
+    ///
+    /// The service is signalled and leaves the running set, its metrics sampler ends and
+    /// it is no longer reported ready. Its tasks may still be finishing: the caller awaits
+    /// [`StoppingService::finish`] after releasing the service-manager lock, so the stop
+    /// grace never holds up the manager's other users.
+    pub async fn stop_service(
+        &mut self,
+        name: &'static str,
+    ) -> crate::Result<Option<StoppingService>> {
         if !self.handles.contains_key(name) {
-            return Ok(false);
+            return Ok(None);
         }
         let Some(service) = self.services.get(name) else {
-            return Ok(false);
+            return Ok(None);
         };
         if !service.stops_alone() {
             return Err(crate::Error::Service(crate::errors::ServiceError::Stop {
@@ -729,24 +773,10 @@ impl ServiceManager {
                 );
             }
         }
-        for handle in self.handles.remove(name).unwrap_or_default() {
-            let abort = handle.abort_handle();
-            if tokio::time::timeout(STOP_ALONE_GRACE, handle)
-                .await
-                .is_err()
-            {
-                abort.abort();
-                logger::warning(
-                    LogTag::System,
-                    &format!(
-                        "Service {name} task still running {}s after its stop; aborted",
-                        STOP_ALONE_GRACE.as_secs()
-                    ),
-                );
-            }
-        }
-        log_service_event(name, ServiceLogEvent::StopSuccess, None, true);
-        Ok(true)
+        let handles = self.handles.remove(name).unwrap_or_default();
+        self.metrics_collector.stop_monitoring(name).await;
+        startup::mark_service_stopped(name);
+        Ok(Some(StoppingService { name, handles }))
     }
 
     /// Resolve the startup order of `services` and every registered service they

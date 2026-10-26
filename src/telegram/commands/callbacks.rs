@@ -26,6 +26,7 @@ use crate::logger::{self, LogTag};
 use crate::telegram::text::{tg_id, with_icon};
 use crate::telegram::{formatters, keyboards, pagination::PAGINATION_MANAGER};
 use crate::telegram::{Error, Result};
+use crate::trader;
 use teloxide::prelude::*;
 use teloxide::types::{ChatId, InlineKeyboardMarkup, ParseMode};
 
@@ -264,48 +265,51 @@ pub(super) async fn send_with_keyboard(
 
 async fn handle_toggle(bot: &Bot, chat_id: ChatId, setting: &str) -> Result<()> {
     let result = match setting {
-        "entry_monitor" => update_config_section(
-            |cfg| {
-                cfg.trader.entry_monitor_enabled = !cfg.trader.entry_monitor_enabled;
-            },
-            true,
-        ),
-        "exit_monitor" => update_config_section(
-            |cfg| {
-                cfg.trader.exit_monitor_enabled = !cfg.trader.exit_monitor_enabled;
-            },
-            true,
-        ),
+        "entry_monitor" => trader::set_monitor_enabled(
+            trader::Monitor::Entry,
+            !with_config(|c| c.trader.entry_monitor_enabled),
+        )
+        .map_err(|e| e.to_string()),
+        "exit_monitor" => trader::set_monitor_enabled(
+            trader::Monitor::Exit,
+            !with_config(|c| c.trader.exit_monitor_enabled),
+        )
+        .map_err(|e| e.to_string()),
         "notify_opened" => update_config_section(
             |cfg| {
                 cfg.telegram.notify_position_opened = !cfg.telegram.notify_position_opened;
             },
             true,
-        ),
+        )
+        .map_err(|e| e.to_string()),
         "notify_closed" => update_config_section(
             |cfg| {
                 cfg.telegram.notify_position_closed = !cfg.telegram.notify_position_closed;
             },
             true,
-        ),
+        )
+        .map_err(|e| e.to_string()),
         "notify_partial" => update_config_section(
             |cfg| {
                 cfg.telegram.notify_partial_exit = !cfg.telegram.notify_partial_exit;
             },
             true,
-        ),
+        )
+        .map_err(|e| e.to_string()),
         "notify_dca" => update_config_section(
             |cfg| {
                 cfg.telegram.notify_dca_executed = !cfg.telegram.notify_dca_executed;
             },
             true,
-        ),
+        )
+        .map_err(|e| e.to_string()),
         "notify_errors" => update_config_section(
             |cfg| {
                 cfg.telegram.notify_system_errors = !cfg.telegram.notify_system_errors;
             },
             true,
-        ),
+        )
+        .map_err(|e| e.to_string()),
         _ => return Ok(()),
     };
 

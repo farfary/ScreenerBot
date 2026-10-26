@@ -14,15 +14,32 @@ use crate::telegram::session::get_session_manager;
 use crate::telegram::text::{tg, tg_id, tg_plain_id, with_icon};
 use crate::telegram::types::SessionState;
 use crate::telegram::{Error, Result};
-use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use teloxide::prelude::*;
 use teloxide::types::ParseMode;
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
 
-/// Track last processed update ID for proper offset handling
-static LAST_UPDATE_ID: AtomicI32 = AtomicI32::new(0);
+/// Where the next `getUpdates` call resumes. Update ids are per bot, so each polling
+/// task owns one that starts empty: a restart with a new bot token never confirms (and
+/// so discards) the new bot's updates with the old bot's offset.
+#[derive(Debug, Default)]
+struct UpdateCursor {
+    next: Option<i32>,
+}
+
+impl UpdateCursor {
+    /// The offset to request, if any update has been handled yet.
+    fn offset(&self) -> Option<i32> {
+        self.next
+    }
+
+    /// Record that `update_id` was received; later requests start after it.
+    fn advance(&mut self, update_id: i32) {
+        self.next = Some(update_id.saturating_add(1));
+    }
+}
 
 /// Start the main polling loop
 ///
@@ -54,13 +71,14 @@ pub async fn start_polling(
             "Telegram command handler started (accepting all users)",
         );
 
+        let mut cursor = UpdateCursor::default();
         loop {
             tokio::select! {
                 _ = stop.wait_for(|stopped| *stopped) => {
                     logger::info(LogTag::Telegram, "Telegram command handler received its stop signal");
                     break;
                 }
-                _ = poll_updates(&bot) => {
+                _ = poll_updates(&bot, &mut cursor) => {
                     // Continue polling
                 }
             }
@@ -74,14 +92,10 @@ pub async fn start_polling(
 }
 
 /// Poll and process Telegram updates
-async fn poll_updates(bot: &Bot) {
-    // Get offset - start from last processed + 1 to get new updates only
-    let offset = LAST_UPDATE_ID.load(Ordering::SeqCst);
-    let offset_param = (offset > 0).then_some(offset);
-
+async fn poll_updates(bot: &Bot, cursor: &mut UpdateCursor) {
     // Use getUpdates with offset and timeout for proper long polling
     let mut request = bot.get_updates().timeout(30);
-    if let Some(off) = offset_param {
+    if let Some(off) = cursor.offset() {
         request = request.offset(off);
     }
 
@@ -94,9 +108,7 @@ async fn poll_updates(bot: &Bot) {
                 );
             }
             for update in updates {
-                // Track the update ID for offset
-                let update_id = update.id.0 as i32;
-                LAST_UPDATE_ID.store(update_id + 1, Ordering::SeqCst);
+                cursor.advance(update.id.0 as i32);
 
                 match update.kind {
                     teloxide::types::UpdateKind::Message(message) => {
@@ -278,5 +290,32 @@ async fn handle_discovery_message(
                 chat_name, chat_id.0, chat_type
             ),
         );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::UpdateCursor;
+
+    #[test]
+    fn a_new_cursor_requests_no_offset() {
+        assert_eq!(UpdateCursor::default().offset(), None);
+    }
+
+    #[test]
+    fn the_cursor_resumes_after_the_last_update() {
+        let mut cursor = UpdateCursor::default();
+        cursor.advance(41);
+        assert_eq!(cursor.offset(), Some(42));
+        cursor.advance(57);
+        assert_eq!(cursor.offset(), Some(58));
+    }
+
+    #[test]
+    fn a_restarted_poller_does_not_inherit_the_previous_offset() {
+        let mut previous = UpdateCursor::default();
+        previous.advance(900_000_000);
+        let restarted = UpdateCursor::default();
+        assert_eq!(restarted.offset(), None);
     }
 }

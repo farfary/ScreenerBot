@@ -491,7 +491,23 @@ pub async fn send_notification(notification: Notification) {
         Err(_) => return,
     };
 
-    if let Err(e) = notifier.send(&notification).await {
+    deliver(&notifier, &notification).await;
+}
+
+/// Send a notification through `notifier`, a bot and chat fixed by its caller, when the
+/// notification preferences allow it. The Telegram service announces its own start and
+/// stop this way, so a stop after a credential change still reaches the chat it started
+/// with.
+pub async fn send_notification_with(notifier: &TelegramNotifier, notification: Notification) {
+    if !should_send_notification(&notification) {
+        logger::debug(LogTag::Telegram, "Notification filtered by preferences");
+        return;
+    }
+    deliver(notifier, &notification).await;
+}
+
+async fn deliver(notifier: &TelegramNotifier, notification: &Notification) {
+    if let Err(e) = notifier.send(notification).await {
         logger::error(
             LogTag::Telegram,
             &format!("Failed to send notification: {e}"),

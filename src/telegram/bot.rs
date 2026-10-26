@@ -15,10 +15,17 @@ use teloxide::prelude::*;
 use teloxide::types::{ChatId, ParseMode};
 use tokio::sync::{Notify, RwLock};
 
-/// Check a bot token with Telegram's `getMe`. A token Telegram refuses is
-/// [`Error::InvalidBotToken`]; a check that could not reach Telegram is
-/// [`Error::TokenCheckUnavailable`], which says nothing about the token.
+/// Check a bot token with Telegram's `getMe`. A token that is not shaped like a bot
+/// token, or that Telegram refuses, is [`Error::InvalidBotToken`]; a check that could not
+/// reach Telegram is [`Error::TokenCheckUnavailable`], which says nothing about the token.
 pub async fn verify_bot_token(token: &str) -> Result<teloxide::types::Me> {
+    if !has_bot_token_shape(token) {
+        // A malformed token fails inside the HTTP client before any request, which
+        // would otherwise read as Telegram being unreachable.
+        return Err(Error::InvalidBotToken {
+            detail: "expected the bot id, a colon and the token secret".to_owned(),
+        });
+    }
     Bot::new(token).get_me().await.map_err(|e| match e {
         teloxide::RequestError::Api(api) => Error::InvalidBotToken {
             detail: api.to_string(),
@@ -27,6 +34,20 @@ pub async fn verify_bot_token(token: &str) -> Result<teloxide::types::Me> {
             detail: other.to_string(),
         },
     })
+}
+
+/// Whether `token` has the shape Telegram issues: the bot's numeric id, a colon, and a
+/// secret of ASCII letters, digits, `_` and `-`.
+fn has_bot_token_shape(token: &str) -> bool {
+    let Some((id, secret)) = token.split_once(':') else {
+        return false;
+    };
+    !id.is_empty()
+        && id.bytes().all(|b| b.is_ascii_digit())
+        && !secret.is_empty()
+        && secret
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
 }
 
 /// Telegram bot wrapper with state management
@@ -232,4 +253,37 @@ pub async fn send_message(chat_id: i64, message: &str) -> Result<()> {
         })?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{has_bot_token_shape, verify_bot_token};
+    use crate::telegram::Error;
+
+    #[test]
+    fn only_the_issued_token_shape_is_accepted() {
+        assert!(has_bot_token_shape("123456:AAH-x_9z"));
+        for malformed in [
+            "",
+            "123456",
+            ":secret",
+            "123456:",
+            "12a456:secret",
+            "123456:sec ret",
+            " 123456:secret",
+            "123456:secret\n",
+            "123456:sec:ret",
+            "123456:sécret",
+        ] {
+            assert!(!has_bot_token_shape(malformed), "{malformed:?}");
+        }
+    }
+
+    #[tokio::test]
+    async fn a_malformed_token_is_invalid_without_a_network_call() {
+        match verify_bot_token("123456:sec ret").await {
+            Err(Error::InvalidBotToken { .. }) => {}
+            other => panic!("expected an invalid token, got {other:?}"),
+        }
+    }
 }

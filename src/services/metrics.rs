@@ -9,6 +9,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use sysinfo::{Pid, ProcessesToUpdate, System};
 use tokio::sync::{Mutex, Notify};
+use tokio::task::AbortHandle;
 use tokio_metrics::TaskMonitor;
 
 /// Service resource metrics with accurate per-service tracking
@@ -134,6 +135,12 @@ pub struct MetricsCollector {
     system: Arc<Mutex<System>>,
     accumulated_metrics: Arc<Mutex<HashMap<&'static str, AccumulatedTaskMetrics>>>,
     service_start_times: Arc<Mutex<HashMap<&'static str, Instant>>>,
+    /// The running sampler of each monitored service. A service has at most one, so a
+    /// restart never leaves a second sampler updating the same figures.
+    samplers: Arc<Mutex<HashMap<&'static str, AbortHandle>>>,
+    /// Held by every running sampler task; its extra strong count is the number of live
+    /// samplers.
+    sampler_token: Arc<()>,
 }
 
 impl MetricsCollector {
@@ -142,17 +149,26 @@ impl MetricsCollector {
             system: Arc::new(Mutex::new(System::new_all())),
             accumulated_metrics: Arc::new(Mutex::new(HashMap::new())),
             service_start_times: Arc::new(Mutex::new(HashMap::new())),
+            samplers: Arc::new(Mutex::new(HashMap::new())),
+            sampler_token: Arc::new(()),
         }
     }
 
-    /// Start monitoring a service with provided TaskMonitor
-    /// Spawns a background task that polls intervals() stream and accumulates metrics
+    /// Start monitoring a service with provided TaskMonitor.
+    ///
+    /// Spawns a 1 Hz sampler that accumulates the monitor's metrics until the shared
+    /// shutdown or [`stop_monitoring`](Self::stop_monitoring). A sampler already running
+    /// for the service is cancelled first, and uptime counts from this start.
     pub async fn start_monitoring(
         &self,
         service_name: &'static str,
         monitor: TaskMonitor,
         shutdown: Arc<Notify>,
     ) {
+        if let Some(previous) = self.samplers.lock().await.remove(service_name) {
+            previous.abort();
+        }
+
         // Initialize storage
         let mut start_times = self.service_start_times.lock().await;
         start_times.insert(service_name, Instant::now());
@@ -165,7 +181,9 @@ impl MetricsCollector {
         // Spawn background collector task that periodically samples cumulative() metrics
         // Note: tokio_metrics intervals() API is complex - using simple polling instead
         let accumulated_metrics = self.accumulated_metrics.clone();
-        tokio::spawn(async move {
+        let sampler_token = self.sampler_token.clone();
+        let sampler = tokio::spawn(async move {
+            let _sampler_token = sampler_token;
             let mut interval_timer = tokio::time::interval(Duration::from_secs(1));
 
             loop {
@@ -234,6 +252,27 @@ impl MetricsCollector {
                 }
             }
         });
+        self.samplers
+            .lock()
+            .await
+            .insert(service_name, sampler.abort_handle());
+    }
+
+    /// Stop monitoring a service that stopped while the others keep running: its sampler
+    /// ends and its figures and uptime are dropped until it starts again.
+    pub async fn stop_monitoring(&self, service_name: &'static str) {
+        if let Some(sampler) = self.samplers.lock().await.remove(service_name) {
+            sampler.abort();
+        }
+        self.accumulated_metrics.lock().await.remove(service_name);
+        self.service_start_times.lock().await.remove(service_name);
+    }
+
+    /// Number of sampler tasks still alive. An aborted sampler counts until the runtime
+    /// drops it.
+    #[cfg(test)]
+    pub(crate) fn live_samplers(&self) -> usize {
+        Arc::strong_count(&self.sampler_token) - 1
     }
 
     /// Collect metrics for a specific service (async-safe, no &mut needed)

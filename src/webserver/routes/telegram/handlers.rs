@@ -324,38 +324,60 @@ pub(super) enum RequiredServiceAction {
 /// Brings the running Telegram service in line with a save: starts, stops or restarts it
 /// at once, and reports a restart only when the service could not take the change now.
 /// Before setup completes no service runs, so the saved settings apply at startup.
+///
+/// Changes run one at a time, and the service-manager lock is held only to signal the
+/// stop and to start: waiting for the old tasks to end happens without it, so the header,
+/// the services page and shutdown are never held up by a Telegram stop.
 async fn apply_service_change(change: TelegramSettingsChange) -> TelegramServiceOutcome {
     if !crate::global::is_initialization_complete() && !crate::global::is_explore_mode() {
         return TelegramServiceOutcome::Unchanged;
     }
+    let _serialized = SERVICE_CHANGE.lock().await;
     let Some(manager_ref) = crate::services::get_service_manager().await else {
         return TelegramServiceOutcome::RestartRequired;
     };
-    let mut guard = manager_ref.write().await;
-    let Some(manager) = guard.as_mut() else {
-        return TelegramServiceOutcome::RestartRequired;
-    };
-    let action = required_service_action(change, manager.is_service_running(TELEGRAM_SERVICE));
-    if matches!(
-        action,
-        RequiredServiceAction::Stop | RequiredServiceAction::Restart
-    ) {
-        if let Err(e) = manager.stop_service(TELEGRAM_SERVICE).await {
-            logger::warning(
-                LogTag::Telegram,
-                &format!("Telegram service did not stop after settings change: {e}"),
-            );
+
+    let (action, stopping) = {
+        let mut guard = manager_ref.write().await;
+        let Some(manager) = guard.as_mut() else {
             return TelegramServiceOutcome::RestartRequired;
-        }
+        };
+        let action = required_service_action(change, manager.is_service_running(TELEGRAM_SERVICE));
+        let stopping = if matches!(
+            action,
+            RequiredServiceAction::Stop | RequiredServiceAction::Restart
+        ) {
+            match manager.stop_service(TELEGRAM_SERVICE).await {
+                Ok(stopping) => stopping,
+                Err(e) => {
+                    logger::warning(
+                        LogTag::Telegram,
+                        &format!("Telegram service did not stop after settings change: {e}"),
+                    );
+                    return TelegramServiceOutcome::RestartRequired;
+                }
+            }
+        } else {
+            None
+        };
+        (action, stopping)
+    };
+    if let Some(stopping) = stopping {
+        stopping.finish().await;
         logger::info(
             LogTag::Telegram,
             "Telegram service stopped after settings change",
         );
     }
+
     match action {
         RequiredServiceAction::None => TelegramServiceOutcome::Unchanged,
         RequiredServiceAction::Stop => TelegramServiceOutcome::Stopped,
         RequiredServiceAction::Start | RequiredServiceAction::Restart => {
+            let mut guard = manager_ref.write().await;
+            let Some(manager) = guard.as_mut() else {
+                return TelegramServiceOutcome::RestartRequired;
+            };
             match manager.start_enabled_service(TELEGRAM_SERVICE).await {
                 Ok(report) if report.started.contains(&TELEGRAM_SERVICE) => {
                     logger::info(
@@ -385,6 +407,10 @@ async fn apply_service_change(change: TelegramSettingsChange) -> TelegramService
         }
     }
 }
+
+/// Serializes Telegram service changes, so a second save never starts the service while
+/// the first is still waiting for the old tasks to end.
+static SERVICE_CHANGE: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 /// The service manager's name of the Telegram service.
 const TELEGRAM_SERVICE: &str = "telegram";
