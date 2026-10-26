@@ -121,6 +121,16 @@ setup-dialog-error-validation = 検証に失敗しました。
 setup-dialog-error-incomplete = セットアップを完了できませんでした。
 setup-dialog-error-restart-helper = 自動再起動ヘルパーを利用できません。しばらくしてからダッシュボードを再読み込みしてください。
 setup-dialog-error-unexpected = 予期しないエラーです。
+setup-dialog-replace-title = 取引ウォレットを置き換える
+setup-dialog-replace-subtitle = 別のウォレットで取引します。その秘密鍵はこのデバイス上で暗号化され、外部に送信されることはありません。
+setup-dialog-replace-submit = 検証して置き換え
+setup-dialog-replace-saved = 置き換えを準備しました。新しいウォレットで { -brand } を再起動しています…
+setup-dialog-replace-confirm-intro = 取引ウォレットを置き換えると:
+setup-dialog-replace-confirm-stop = トレーダーとコピートレードが停止します。再起動後に再度オンにしてください。
+setup-dialog-replace-confirm-backup = 現在のウォレットのポジション、トランザクション、履歴がバックアップフォルダーに移動します。
+setup-dialog-replace-confirm-keep = 現在のウォレットの鍵は「その他のウォレット」に残り、引き続きエクスポートできます。
+setup-dialog-replace-confirm-funds = 資金は移動しません。トークンと { -sol } は現在のウォレットに残ります。
+setup-dialog-replace-confirm-restart = 新しいウォレットで { -brand } が再起動します。
 
 # Source: templates/pages/setup.html
 

@@ -26,6 +26,7 @@ const WALLET_TYPE_LABELS = Object.freeze({
 
 export function createWalletRenderers({
   walletsData,
+  walletBackups,
   tokenHoldings,
   holdingsReadError,
   currentTab,
@@ -55,8 +56,36 @@ export function createWalletRenderers({
     return wallet?.address ? renderAddress(wallet.address, { explorer: "account" }) : "";
   }
 
+  // The newest backup a replacement of `address` as trading wallet moved its stores to.
+  function replacementBackup(address) {
+    return (
+      walletBackups().find(
+        (backup) => backup.reason === "wallet_replaced" && backup.previous_wallet === address
+      ) || null
+    );
+  }
+
   function walletRows(wallets) {
-    return wallets.map((w) => ({ ...w, wallet: `${w.name || ""} ${w.address || ""}` }));
+    return wallets.map((w) => ({
+      ...w,
+      wallet: `${w.name || ""} ${w.address || ""}`,
+      replaced_at: replacementBackup(w.address)?.created_at_ms ?? null,
+    }));
+  }
+
+  function renderReplacedCell(row) {
+    const backup = replacementBackup(row.address);
+    if (!backup) return "—";
+    const date = Utils.formatTimestamp(new Date(backup.created_at_ms).toISOString(), {
+      includeYear: true,
+      includeSeconds: false,
+      fallback: "—",
+    });
+    const path = Utils.escapeHtml(backup.directory);
+    return `<div class="wallet-replaced">
+        <span>${Utils.escapeHtml(I18n.t("wallets-list-replaced-on", { date }))}</span>
+        <span class="wallet-replaced-path" title="${path}">${path}</span>
+      </div>`;
   }
 
   // Column definitions are stable across renders — define once at closure level
@@ -143,6 +172,12 @@ export function createWalletRenderers({
       sortable: true,
       render: (value) =>
         Utils.formatTimestamp(value, { includeYear: false, includeSeconds: false, fallback: "—" }),
+    },
+    {
+      id: "replaced_at",
+      label: I18n.t("wallets-list-col-replaced"),
+      sortable: true,
+      render: (value, row) => renderReplacedCell(row),
     },
     {
       id: "actions",
@@ -245,6 +280,7 @@ export function createWalletRenderers({
     ]);
 
     tokenTable.setToolbarItem("wt-export-key", { hidden: !wallet });
+    tokenTable.setToolbarItem("wt-replace", { hidden: !wallet });
   }
 
   function renderTokenHoldingsTable({ loading = false } = {}) {
@@ -324,6 +360,13 @@ export function createWalletRenderers({
               const current = mainWallet();
               if (current) handleWalletAction("export", current.id);
             },
+          },
+          {
+            id: "wt-replace",
+            label: I18n.t("wallets-holdings-replace"),
+            icon: "icon-replace",
+            tooltip: I18n.t("wallets-holdings-replace-tooltip"),
+            onClick: () => handleWalletAction("replace"),
           },
           {
             id: "wt-refresh",

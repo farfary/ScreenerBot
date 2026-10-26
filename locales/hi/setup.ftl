@@ -100,6 +100,16 @@ setup-dialog-error-validation = सत्यापन विफल रहा।
 setup-dialog-error-incomplete = सेटअप पूरा नहीं हो सका।
 setup-dialog-error-restart-helper = ऑटोमैटिक रीस्टार्ट हेल्पर उपलब्ध नहीं है। थोड़ी देर में डैशबोर्ड रीलोड करें।
 setup-dialog-error-unexpected = अप्रत्याशित एरर।
+setup-dialog-replace-title = ट्रेडिंग वॉलेट बदलें
+setup-dialog-replace-subtitle = किसी दूसरे वॉलेट से ट्रेड करें। उसकी प्राइवेट की इसी डिवाइस पर एन्क्रिप्ट होती है और कभी बाहर नहीं जाती।
+setup-dialog-replace-submit = सत्यापित करें और बदलें
+setup-dialog-replace-saved = बदलाव तैयार — { -brand } नए वॉलेट के साथ रीस्टार्ट हो रहा है…
+setup-dialog-replace-confirm-intro = ट्रेडिंग वॉलेट बदलने पर:
+setup-dialog-replace-confirm-stop = ट्रेडर और कॉपी ट्रेडिंग रुक जाते हैं। रीस्टार्ट के बाद उन्हें फिर से चालू करें।
+setup-dialog-replace-confirm-backup = मौजूदा वॉलेट की पोज़िशन, ट्रांज़ैक्शन और हिस्ट्री एक बैकअप फ़ोल्डर में चली जाती हैं।
+setup-dialog-replace-confirm-keep = मौजूदा वॉलेट की की अन्य वॉलेट में रहती है, जहाँ से आप उसे अब भी एक्सपोर्ट कर सकते हैं।
+setup-dialog-replace-confirm-funds = कोई फ़ंड नहीं हिलता: टोकन और { -sol } मौजूदा वॉलेट में ही रहते हैं।
+setup-dialog-replace-confirm-restart = { -brand } नए वॉलेट के साथ रीस्टार्ट होता है।
 
 setup-wizard-progress =
     .aria-label = सेटअप प्रगति

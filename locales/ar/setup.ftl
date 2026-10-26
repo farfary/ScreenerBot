@@ -136,6 +136,16 @@ setup-dialog-error-validation = فشل التحقق.
 setup-dialog-error-incomplete = تعذّر إكمال الإعداد.
 setup-dialog-error-restart-helper = مساعد إعادة التشغيل التلقائي غير متاح. أعد تحميل لوحة التحكم بعد قليل.
 setup-dialog-error-unexpected = خطأ غير متوقع.
+setup-dialog-replace-title = استبدال محفظة التداول
+setup-dialog-replace-subtitle = تداول بمحفظة أخرى. يُشفَّر مفتاحها الخاص على هذا الجهاز ولا يغادره أبدًا.
+setup-dialog-replace-submit = تحقق واستبدل
+setup-dialog-replace-saved = تم تجهيز الاستبدال، وجارٍ إعادة تشغيل { -brand } بالمحفظة الجديدة…
+setup-dialog-replace-confirm-intro = استبدال محفظة التداول:
+setup-dialog-replace-confirm-stop = يوقف المتداول والتداول بالنسخ. أعد تشغيلهما بعد إعادة التشغيل.
+setup-dialog-replace-confirm-backup = ينقل مراكز المحفظة الحالية ومعاملاتها وسجلها إلى مجلد نسخ احتياطي.
+setup-dialog-replace-confirm-keep = يحتفظ بمفتاح المحفظة الحالية ضمن محافظ أخرى، حيث يمكنك تصديره دائمًا.
+setup-dialog-replace-confirm-funds = لا ينقل أي أموال: تبقى الرموز و{ -sol } في المحفظة الحالية.
+setup-dialog-replace-confirm-restart = يعيد تشغيل { -brand } بالمحفظة الجديدة.
 
 # Source: templates/pages/setup.html
 

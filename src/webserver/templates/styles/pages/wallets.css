@@ -114,6 +114,29 @@
 }
 
 /* =============================================================================
+   Replaced Wallet
+   ============================================================================= */
+
+/* A replaced trading wallet's row: when it was replaced and the backup folder that
+   holds its positions, transactions and wallet history. */
+.wallet-replaced {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  font-size: 0.75rem;
+}
+
+.wallet-replaced-path {
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  color: var(--text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* =============================================================================
    Copy Buttons
    ============================================================================= */
 

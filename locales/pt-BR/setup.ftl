@@ -127,6 +127,16 @@ setup-dialog-error-validation = Falha na validação.
 setup-dialog-error-incomplete = Não foi possível concluir a configuração.
 setup-dialog-error-restart-helper = O auxiliar de reinicialização automática está indisponível. Recarregue o painel em instantes.
 setup-dialog-error-unexpected = Erro inesperado.
+setup-dialog-replace-title = Substituir carteira de trading
+setup-dialog-replace-subtitle = Opere com outra carteira. A chave privada dela é criptografada neste dispositivo e nunca sai dele.
+setup-dialog-replace-submit = Validar e substituir
+setup-dialog-replace-saved = Substituição preparada: reiniciando o { -brand } com a nova carteira…
+setup-dialog-replace-confirm-intro = Ao substituir a carteira de trading:
+setup-dialog-replace-confirm-stop = O trader e o copy trading são parados. Ative-os novamente após a reinicialização.
+setup-dialog-replace-confirm-backup = As posições, transações e o histórico da carteira atual são movidos para uma pasta de backup.
+setup-dialog-replace-confirm-keep = A chave da carteira atual fica em Outras carteiras, onde você ainda pode exportá-la.
+setup-dialog-replace-confirm-funds = Nenhum fundo é movido: os tokens e o { -sol } permanecem na carteira atual.
+setup-dialog-replace-confirm-restart = O { -brand } reinicia com a nova carteira.
 
 # Source: templates/pages/setup.html
 

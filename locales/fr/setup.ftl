@@ -103,6 +103,16 @@ setup-dialog-error-validation = Échec de la validation.
 setup-dialog-error-incomplete = La configuration n'a pas pu être terminée.
 setup-dialog-error-restart-helper = L'assistant de redémarrage automatique est indisponible. Rechargez le tableau de bord dans un instant.
 setup-dialog-error-unexpected = Erreur inattendue.
+setup-dialog-replace-title = Remplacer le portefeuille de trading
+setup-dialog-replace-subtitle = Tradez avec un autre portefeuille. Sa clé privée est chiffrée sur cet appareil et ne le quitte jamais.
+setup-dialog-replace-submit = Valider et remplacer
+setup-dialog-replace-saved = Remplacement préparé — redémarrage de { -brand } avec le nouveau portefeuille…
+setup-dialog-replace-confirm-intro = Remplacer le portefeuille de trading :
+setup-dialog-replace-confirm-stop = Arrête le trader et le copy trading. Réactivez-les après le redémarrage.
+setup-dialog-replace-confirm-backup = Déplace les positions, transactions et l'historique du portefeuille actuel dans un dossier de sauvegarde.
+setup-dialog-replace-confirm-keep = Conserve la clé du portefeuille actuel dans Autres portefeuilles, où vous pouvez toujours l'exporter.
+setup-dialog-replace-confirm-funds = Ne déplace aucun fonds : les tokens et les { -sol } restent dans le portefeuille actuel.
+setup-dialog-replace-confirm-restart = Redémarre { -brand } avec le nouveau portefeuille.
 
 setup-wizard-progress =
     .aria-label = Progression de la configuration

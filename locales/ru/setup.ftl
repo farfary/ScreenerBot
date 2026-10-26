@@ -106,6 +106,16 @@ setup-dialog-error-validation = Проверка не удалась.
 setup-dialog-error-incomplete = Не удалось завершить настройку.
 setup-dialog-error-restart-helper = Помощник автоматического перезапуска недоступен. Скоро перезагрузите дашборд.
 setup-dialog-error-unexpected = Непредвиденная ошибка.
+setup-dialog-replace-title = Заменить торговый кошелёк
+setup-dialog-replace-subtitle = Торгуйте с другим кошельком. Его приватный ключ шифруется на этом устройстве и никогда его не покидает.
+setup-dialog-replace-submit = Проверить и заменить
+setup-dialog-replace-saved = Замена подготовлена — перезапуск { -brand } с новым кошельком…
+setup-dialog-replace-confirm-intro = Замена торгового кошелька:
+setup-dialog-replace-confirm-stop = Останавливает трейдер и копи-трейдинг. Включите их снова после перезапуска.
+setup-dialog-replace-confirm-backup = Переносит позиции, транзакции и историю текущего кошелька в папку резервных копий.
+setup-dialog-replace-confirm-keep = Сохраняет ключ текущего кошелька в разделе «Другие кошельки», где его по-прежнему можно экспортировать.
+setup-dialog-replace-confirm-funds = Средства не переводятся: токены и { -sol } остаются в текущем кошельке.
+setup-dialog-replace-confirm-restart = Перезапускает { -brand } с новым кошельком.
 
 setup-wizard-progress =
     .aria-label = Ход настройки

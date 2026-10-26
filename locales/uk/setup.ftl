@@ -130,6 +130,16 @@ setup-dialog-error-validation = Перевірка не вдалася.
 setup-dialog-error-incomplete = Не вдалося завершити налаштування.
 setup-dialog-error-restart-helper = Помічник автоматичного перезапуску недоступний. Незабаром перезавантажте панель керування.
 setup-dialog-error-unexpected = Неочікувана помилка.
+setup-dialog-replace-title = Замінити торговий гаманець
+setup-dialog-replace-subtitle = Торгуйте з іншим гаманцем. Його приватний ключ шифрується на цьому пристрої й ніколи його не залишає.
+setup-dialog-replace-submit = Перевірити й замінити
+setup-dialog-replace-saved = Заміну підготовлено — перезапуск { -brand } з новим гаманцем…
+setup-dialog-replace-confirm-intro = Заміна торгового гаманця:
+setup-dialog-replace-confirm-stop = Зупиняє трейдер і копітрейдинг. Увімкніть їх знову після перезапуску.
+setup-dialog-replace-confirm-backup = Переносить позиції, транзакції та історію поточного гаманця до папки резервних копій.
+setup-dialog-replace-confirm-keep = Зберігає ключ поточного гаманця в розділі «Інші гаманці», де його й далі можна експортувати.
+setup-dialog-replace-confirm-funds = Кошти не переказуються: токени та { -sol } залишаються в поточному гаманці.
+setup-dialog-replace-confirm-restart = Перезапускає { -brand } з новим гаманцем.
 
 # Source: templates/pages/setup.html
 

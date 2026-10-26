@@ -97,6 +97,16 @@ setup-dialog-error-validation = Xác thực thất bại.
 setup-dialog-error-incomplete = Không thể hoàn tất thiết lập.
 setup-dialog-error-restart-helper = Trình hỗ trợ khởi động lại tự động không khả dụng. Hãy tải lại bảng điều khiển sau ít phút.
 setup-dialog-error-unexpected = Lỗi không mong đợi.
+setup-dialog-replace-title = Thay ví giao dịch
+setup-dialog-replace-subtitle = Giao dịch bằng một ví khác. Khóa riêng của ví được mã hóa trên thiết bị này và không bao giờ rời khỏi nó.
+setup-dialog-replace-submit = Xác thực & thay
+setup-dialog-replace-saved = Đã chuẩn bị thay ví - đang khởi động lại { -brand } với ví mới…
+setup-dialog-replace-confirm-intro = Khi thay ví giao dịch:
+setup-dialog-replace-confirm-stop = Trader và copy trading sẽ dừng. Hãy bật lại chúng sau khi khởi động lại.
+setup-dialog-replace-confirm-backup = Vị thế, giao dịch và lịch sử của ví hiện tại được chuyển vào một thư mục sao lưu.
+setup-dialog-replace-confirm-keep = Khóa của ví hiện tại được giữ trong Ví khác, nơi bạn vẫn có thể xuất nó.
+setup-dialog-replace-confirm-funds = Không chuyển tiền: token và { -sol } vẫn ở trong ví hiện tại.
+setup-dialog-replace-confirm-restart = { -brand } khởi động lại với ví mới.
 
 setup-wizard-progress =
     .aria-label = Tiến độ thiết lập

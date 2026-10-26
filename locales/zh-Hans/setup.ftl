@@ -121,6 +121,16 @@ setup-dialog-error-validation = 验证失败。
 setup-dialog-error-incomplete = 无法完成设置。
 setup-dialog-error-restart-helper = 自动重启助手不可用。请稍后重新加载仪表盘。
 setup-dialog-error-unexpected = 意外错误。
+setup-dialog-replace-title = 更换交易钱包
+setup-dialog-replace-subtitle = 使用另一个钱包交易。其私钥在本设备上加密，绝不会离开本设备。
+setup-dialog-replace-submit = 验证并更换
+setup-dialog-replace-saved = 已准备更换，正在使用新钱包重启 { -brand }…
+setup-dialog-replace-confirm-intro = 更换交易钱包将：
+setup-dialog-replace-confirm-stop = 停止交易器和跟单交易。重启后请重新开启。
+setup-dialog-replace-confirm-backup = 将当前钱包的持仓、交易记录和历史移入备份文件夹。
+setup-dialog-replace-confirm-keep = 将当前钱包的密钥保留在“其他钱包”中，你仍可在那里导出它。
+setup-dialog-replace-confirm-funds = 不转移任何资金：代币和 { -sol } 仍留在当前钱包中。
+setup-dialog-replace-confirm-restart = 使用新钱包重启 { -brand }。
 
 # Source: templates/pages/setup.html
 

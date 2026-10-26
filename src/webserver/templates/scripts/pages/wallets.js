@@ -4,8 +4,9 @@
 
 /**
  * Wallets Page Module
- * The trading wallet and its holdings, wallets kept from earlier versions (each
- * with its private-key export), and watched wallets
+ * The trading wallet with its holdings and its replacement, the other wallets
+ * (each with its private-key export and, for a replaced wallet, its backup), and
+ * watched wallets
  */
 
 import { registerPage } from "../core/lifecycle.js";
@@ -18,6 +19,7 @@ import * as Hints from "../core/hints.js";
 import { createWalletRenderers } from "./wallets/renderers.js";
 import { createWatchedWallets } from "./wallets/watched.js";
 import { renderSetupGate, setupRequired } from "../ui/setup_gate.js";
+import { SetupDialog } from "../ui/setup_dialog.js";
 
 // =============================================================================
 // Constants
@@ -47,6 +49,8 @@ function setButtonContent(button, iconClass, label) {
 let poller = null;
 let tabBar = null;
 let walletsData = [];
+// The wallet-reset backups, newest first: a replaced wallet's row names its backup.
+let walletBackups = [];
 let tokenHoldings = [];
 // Why the holdings are unknown: the cause of a failed wallet read, else null.
 let holdingsReadError = null;
@@ -84,6 +88,7 @@ function createLifecycle() {
       // Initialize sub-modules
       renderers = createWalletRenderers({
         walletsData: () => walletsData,
+        walletBackups: () => walletBackups,
         tokenHoldings: () => tokenHoldings,
         holdingsReadError: () => holdingsReadError,
         currentTab: () => currentTab,
@@ -261,7 +266,7 @@ function setupExportModal() {
 // =============================================================================
 
 async function loadAllData({ force = false } = {}) {
-  await Promise.all([loadWallets(), loadTokenHoldings({ force })]);
+  await Promise.all([loadWallets(), loadWalletBackups(), loadTokenHoldings({ force })]);
   hasLoadedWalletData = true;
   renderers.renderCurrentPanel();
 }
@@ -285,6 +290,18 @@ async function loadWallets() {
   } catch (error) {
     console.error("[Wallets] Failed to load wallets:", error);
     walletsData = [];
+  }
+}
+
+async function loadWalletBackups() {
+  try {
+    const response = await fetch("/api/wallets/backups");
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const data = await response.json();
+    walletBackups = data.backups || [];
+  } catch (error) {
+    console.debug("[Wallets] Failed to load wallet backups:", error);
+    walletBackups = [];
   }
 }
 
@@ -341,6 +358,8 @@ async function handleRefresh(btn) {
 
 function handleWalletAction(action, id) {
   if (action === "export") showExportModal(id);
+  // Replacing the trading wallet restarts the app once it is staged.
+  else if (action === "replace") void SetupDialog.show({ mode: "replace" });
 }
 
 function showExportModal(id) {
@@ -433,6 +452,7 @@ function cleanup() {
   }
   watched?.reset();
   walletsData = [];
+  walletBackups = [];
   tokenHoldings = [];
   holdingsReadError = null;
   hasLoadedWalletData = false;

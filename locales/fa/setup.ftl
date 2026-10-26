@@ -124,6 +124,16 @@ setup-dialog-error-validation = اعتبارسنجی ناموفق بود.
 setup-dialog-error-incomplete = تکمیل راه‌اندازی ممکن نشد.
 setup-dialog-error-restart-helper = ابزار راه‌اندازی مجدد خودکار در دسترس نیست. کمی بعد داشبورد را دوباره بارگذاری کنید.
 setup-dialog-error-unexpected = خطای غیرمنتظره.
+setup-dialog-replace-title = جایگزینی کیف پول معاملاتی
+setup-dialog-replace-subtitle = با کیف پول دیگری معامله کنید. کلید خصوصی آن روی همین دستگاه رمزگذاری می‌شود و هرگز از آن خارج نمی‌شود.
+setup-dialog-replace-submit = اعتبارسنجی و جایگزینی
+setup-dialog-replace-saved = جایگزینی آماده شد — در حال راه‌اندازی مجدد { -brand } با کیف پول جدید…
+setup-dialog-replace-confirm-intro = جایگزینی کیف پول معاملاتی:
+setup-dialog-replace-confirm-stop = معامله‌گر و کپی‌ترید را متوقف می‌کند. پس از راه‌اندازی مجدد دوباره روشنشان کنید.
+setup-dialog-replace-confirm-backup = پوزیشن‌ها، تراکنش‌ها و تاریخچهٔ کیف پول فعلی را به یک پوشهٔ پشتیبان منتقل می‌کند.
+setup-dialog-replace-confirm-keep = کلید کیف پول فعلی در کیف پول‌های دیگر می‌ماند و همچنان می‌توانید از آن خروجی بگیرید.
+setup-dialog-replace-confirm-funds = هیچ دارایی جابه‌جا نمی‌شود: توکن‌ها و { -sol } در کیف پول فعلی می‌مانند.
+setup-dialog-replace-confirm-restart = { -brand } با کیف پول جدید دوباره راه‌اندازی می‌شود.
 
 # Source: templates/pages/setup.html
 

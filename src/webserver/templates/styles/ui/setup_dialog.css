@@ -61,6 +61,33 @@
   gap: 0.75rem;
 }
 
+/* Replace mode shows its confirmation first and the fields after it; `display:grid`
+   would otherwise outrank the bare [hidden] attribute. */
+.setup-dialog-fields[hidden],
+.setup-dialog-confirm[hidden] {
+  display: none;
+}
+
+.setup-dialog-confirm {
+  display: grid;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--text-primary, #e6edf3);
+}
+
+.setup-dialog-confirm p {
+  margin: 0;
+}
+
+.setup-dialog-confirm-list {
+  display: grid;
+  gap: 0.375rem;
+  margin: 0;
+  padding-inline-start: 1.25rem;
+  color: var(--text-secondary, #8b949e);
+}
+
 .setup-dialog-subtitle {
   margin: 0.25rem 0 0;
   font-size: 0.8125rem;

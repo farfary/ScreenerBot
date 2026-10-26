@@ -124,6 +124,16 @@ setup-dialog-error-validation = Validation failed.
 setup-dialog-error-incomplete = Setup could not be completed.
 setup-dialog-error-restart-helper = Automatic restart helper is unavailable. Reload the dashboard shortly.
 setup-dialog-error-unexpected = Unexpected error.
+setup-dialog-replace-title = Replace trading wallet
+setup-dialog-replace-subtitle = Trade with another wallet. Its private key is encrypted on this device and never leaves it.
+setup-dialog-replace-submit = Validate & replace
+setup-dialog-replace-saved = Replacement staged — restarting { -brand } with the new wallet…
+setup-dialog-replace-confirm-intro = Replacing the trading wallet:
+setup-dialog-replace-confirm-stop = Stops the trader and copy trading. Turn them on again after the restart.
+setup-dialog-replace-confirm-backup = Moves the current wallet's positions, transactions and history into a backup folder.
+setup-dialog-replace-confirm-keep = Keeps the current wallet's key under Other Wallets, where you can still export it.
+setup-dialog-replace-confirm-funds = Moves no funds: tokens and { -sol } stay in the current wallet.
+setup-dialog-replace-confirm-restart = Restarts { -brand } with the new wallet.
 
 # Source: templates/pages/setup.html
 

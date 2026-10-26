@@ -1,0 +1,20 @@
+{
+  "backups": [
+    {
+      "directory": "/data/backups/wallet-reset-20261020T091500Z-SecondWa",
+      "reason": "wallet_replaced",
+      "previous_wallet": "SecondWa11etBBB11111111111111111111111111111",
+      "new_wallet": "MainWa11etAAA1111111111111111111111111111111",
+      "created_at_ms": 1792487700000,
+      "files": ["positions.db", "transactions.db", "wallet.db"]
+    },
+    {
+      "directory": "/data/backups/wallet-reset-20261001T080000Z-reset",
+      "reason": "wallet_reset",
+      "previous_wallet": null,
+      "new_wallet": null,
+      "created_at_ms": 1790841600000,
+      "files": ["positions.db"]
+    }
+  ]
+}

@@ -127,6 +127,16 @@ setup-dialog-error-validation = La validación falló.
 setup-dialog-error-incomplete = No se pudo completar la configuración.
 setup-dialog-error-restart-helper = El asistente de reinicio automático no está disponible. Recarga el panel en unos momentos.
 setup-dialog-error-unexpected = Error inesperado.
+setup-dialog-replace-title = Reemplazar billetera de trading
+setup-dialog-replace-subtitle = Opera con otra billetera. Su clave privada se cifra en este dispositivo y nunca sale de él.
+setup-dialog-replace-submit = Validar y reemplazar
+setup-dialog-replace-saved = Reemplazo preparado: reiniciando { -brand } con la nueva billetera…
+setup-dialog-replace-confirm-intro = Al reemplazar la billetera de trading:
+setup-dialog-replace-confirm-stop = Se detienen el trader y el copy trading. Vuelve a activarlos después del reinicio.
+setup-dialog-replace-confirm-backup = Las posiciones, transacciones e historial de la billetera actual se mueven a una carpeta de copia de seguridad.
+setup-dialog-replace-confirm-keep = La clave de la billetera actual se conserva en Otras billeteras, donde aún puedes exportarla.
+setup-dialog-replace-confirm-funds = No se mueven fondos: los tokens y el { -sol } permanecen en la billetera actual.
+setup-dialog-replace-confirm-restart = { -brand } se reinicia con la nueva billetera.
 
 # Source: templates/pages/setup.html
 

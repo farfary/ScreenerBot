@@ -118,6 +118,16 @@ setup-dialog-error-validation = Validierung fehlgeschlagen.
 setup-dialog-error-incomplete = Die Einrichtung konnte nicht abgeschlossen werden.
 setup-dialog-error-restart-helper = Der automatische Neustart-Helfer ist nicht verfügbar. Laden Sie das Dashboard in Kürze neu.
 setup-dialog-error-unexpected = Unerwarteter Fehler.
+setup-dialog-replace-title = Trading-Wallet ersetzen
+setup-dialog-replace-subtitle = Handeln Sie mit einer anderen Wallet. Ihr privater Schlüssel wird auf diesem Gerät verschlüsselt und verlässt es nie.
+setup-dialog-replace-submit = Validieren und ersetzen
+setup-dialog-replace-saved = Ersetzung vorgemerkt — { -brand } wird mit der neuen Wallet neu gestartet…
+setup-dialog-replace-confirm-intro = Beim Ersetzen der Trading-Wallet:
+setup-dialog-replace-confirm-stop = Trader und Copy-Trading werden gestoppt. Schalten Sie sie nach dem Neustart wieder ein.
+setup-dialog-replace-confirm-backup = Positionen, Transaktionen und Verlauf der aktuellen Wallet werden in einen Sicherungsordner verschoben.
+setup-dialog-replace-confirm-keep = Der Schlüssel der aktuellen Wallet bleibt unter Weitere Wallets erhalten, wo Sie ihn weiterhin exportieren können.
+setup-dialog-replace-confirm-funds = Es werden keine Guthaben bewegt: Token und { -sol } bleiben in der aktuellen Wallet.
+setup-dialog-replace-confirm-restart = { -brand } wird mit der neuen Wallet neu gestartet.
 
 ## Setup wizard
 

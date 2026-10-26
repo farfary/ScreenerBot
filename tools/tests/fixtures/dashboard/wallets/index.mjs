@@ -37,6 +37,13 @@ export const endpoints = [
   },
   {
     method: "GET",
+    path: "/api/wallets/backups",
+    fixture: "wallets_backups.json",
+    empty: "wallets_backups.empty.json",
+    rust: "src/webserver/routes/wallets/types.rs::WalletBackupsResponse",
+  },
+  {
+    method: "GET",
     path: "/api/wallets/watch/{id}/status",
     fixture: "wallets_watch_status.json",
     rust: "src/wallets/watch/types.rs::WatchStatus",

@@ -99,6 +99,16 @@ setup-dialog-error-validation = Validasi gagal.
 setup-dialog-error-incomplete = Penyiapan tidak dapat diselesaikan.
 setup-dialog-error-restart-helper = Helper mulai ulang otomatis tidak tersedia. Muat ulang dasbor sebentar lagi.
 setup-dialog-error-unexpected = Error tak terduga.
+setup-dialog-replace-title = Ganti dompet trading
+setup-dialog-replace-subtitle = Trading dengan dompet lain. Private key-nya dienkripsi di perangkat ini dan tidak pernah meninggalkannya.
+setup-dialog-replace-submit = Validasi & ganti
+setup-dialog-replace-saved = Penggantian disiapkan — memulai ulang { -brand } dengan dompet baru…
+setup-dialog-replace-confirm-intro = Mengganti dompet trading:
+setup-dialog-replace-confirm-stop = Menghentikan trader dan copy trading. Aktifkan kembali setelah dimulai ulang.
+setup-dialog-replace-confirm-backup = Memindahkan posisi, transaksi, dan riwayat dompet saat ini ke folder cadangan.
+setup-dialog-replace-confirm-keep = Menyimpan key dompet saat ini di Dompet Lain, tempat Anda tetap dapat mengekspornya.
+setup-dialog-replace-confirm-funds = Tidak memindahkan dana: token dan { -sol } tetap di dompet saat ini.
+setup-dialog-replace-confirm-restart = Memulai ulang { -brand } dengan dompet baru.
 
 setup-wizard-progress =
     .aria-label = Progres penyiapan

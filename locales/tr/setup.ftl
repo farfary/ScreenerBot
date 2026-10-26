@@ -100,6 +100,16 @@ setup-dialog-error-validation = Doğrulama başarısız oldu.
 setup-dialog-error-incomplete = Kurulum tamamlanamadı.
 setup-dialog-error-restart-helper = Otomatik yeniden başlatma yardımcısı kullanılamıyor. Paneli birazdan yeniden yükleyin.
 setup-dialog-error-unexpected = Beklenmeyen hata.
+setup-dialog-replace-title = İşlem cüzdanını değiştir
+setup-dialog-replace-subtitle = Başka bir cüzdanla işlem yapın. Özel anahtarı bu cihazda şifrelenir ve cihazdan asla çıkmaz.
+setup-dialog-replace-submit = Doğrula ve değiştir
+setup-dialog-replace-saved = Değişiklik hazırlandı — { -brand } yeni cüzdanla yeniden başlatılıyor…
+setup-dialog-replace-confirm-intro = İşlem cüzdanını değiştirmek:
+setup-dialog-replace-confirm-stop = Trader'ı ve kopya işlemi durdurur. Yeniden başlatmadan sonra bunları tekrar açın.
+setup-dialog-replace-confirm-backup = Mevcut cüzdanın pozisyonlarını, işlemlerini ve geçmişini bir yedek klasörüne taşır.
+setup-dialog-replace-confirm-keep = Mevcut cüzdanın anahtarını Diğer cüzdanlar altında tutar; anahtarı orada dışa aktarmaya devam edebilirsiniz.
+setup-dialog-replace-confirm-funds = Hiçbir varlık taşınmaz: tokenlar ve { -sol } mevcut cüzdanda kalır.
+setup-dialog-replace-confirm-restart = { -brand } yeni cüzdanla yeniden başlatılır.
 
 setup-wizard-progress =
     .aria-label = Kurulum ilerlemesi

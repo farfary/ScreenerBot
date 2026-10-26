@@ -121,6 +121,16 @@ setup-dialog-error-validation = 검증에 실패했습니다.
 setup-dialog-error-incomplete = 설정을 완료하지 못했습니다.
 setup-dialog-error-restart-helper = 자동 재시작 도우미를 사용할 수 없습니다. 잠시 후 대시보드를 새로 고치세요.
 setup-dialog-error-unexpected = 예기치 않은 오류가 발생했습니다.
+setup-dialog-replace-title = 트레이딩 지갑 교체
+setup-dialog-replace-subtitle = 다른 지갑으로 거래합니다. 해당 개인 키는 이 기기에서 암호화되며 기기 밖으로 나가지 않습니다.
+setup-dialog-replace-submit = 검증 및 교체
+setup-dialog-replace-saved = 교체가 준비되었습니다. 새 지갑으로 { -brand }을 재시작하는 중…
+setup-dialog-replace-confirm-intro = 트레이딩 지갑을 교체하면:
+setup-dialog-replace-confirm-stop = 트레이더와 카피 트레이딩이 중지됩니다. 재시작 후 다시 켜세요.
+setup-dialog-replace-confirm-backup = 현재 지갑의 포지션, 트랜잭션, 기록이 백업 폴더로 이동됩니다.
+setup-dialog-replace-confirm-keep = 현재 지갑의 키는 기타 지갑에 보관되며, 계속 내보낼 수 있습니다.
+setup-dialog-replace-confirm-funds = 자금은 이동되지 않습니다. 토큰과 { -sol }은 현재 지갑에 남습니다.
+setup-dialog-replace-confirm-restart = 새 지갑으로 { -brand }이 재시작됩니다.
 
 # Source: templates/pages/setup.html
 
