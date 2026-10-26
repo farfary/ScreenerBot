@@ -817,7 +817,8 @@ input[type="radio"]:disabled {
    The shell holds two things inside the field's own box, at its inline end: the
    unit suffix and our stepper. The room they need is reserved by
    the shell's gutter, which the enhancer applies as an INLINE declaration
-   pointing back at `--number-field-gutter`. It has to be inline: any page rule
+   pointing back at `--number-field-gutter`, on the physical side the suffix sits
+   on in the shell's direction (the input's own text is always left to right). It has to be inline: any page rule
    that sets the `padding` shorthand on its own inputs (`.trade-action-input`,
    `.config-field-control input[type="number"]`, …)
    outranks a stylesheet reserve and erases it — which is how a right-aligned
@@ -849,6 +850,12 @@ input[type="radio"]:disabled {
 .number-field > input[type="number"] {
   flex: 1 1 auto;
   min-width: 0;
+}
+
+/* Mirrored in a right-to-left page: the suffix at the left, the value against the
+   right edge, its characters still in left-to-right order. */
+.number-field:dir(rtl) > input[type="number"] {
+  text-align: right;
 }
 
 /* One character of the input's own data font per unit column (two for an East

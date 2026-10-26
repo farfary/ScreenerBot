@@ -17,7 +17,10 @@
  * A fixed sign the value is read with (a loss entered as its magnitude, shown
  * after a "−") is an `.input-prefix` written right before the input, adopted into
  * the box at its start. A signed quantity reads left to right in every locale, so
- * a field with a prefix is laid out left to right as a whole.
+ * a field with a prefix is laid out left to right as a whole. Any other field
+ * follows the page direction: in a right-to-left page the unit and stepper sit at
+ * its left, over a gutter reserved there, while the value itself keeps
+ * left-to-right order so a sign and its digits never swap.
  *
  * It is installed once, document-wide (see `installGlobalNumberFieldEnhancer`),
  * for the same reason the select enhancer is: pages render their markup as HTML
@@ -45,6 +48,9 @@ const UNIT_SELECTOR = ".number-field-suffix > .input-unit";
  * slider there, and stepping a buy size by one means nothing.
  */
 const PENDING_SELECTOR = 'input[type="number"]:not([data-number-field], [data-stepper="off"])';
+
+/** An enhanced field's shell. */
+const SHELL_SELECTOR = ".number-field";
 
 /**
  * The next value of a stepped field, clamped to its own constraints.
@@ -142,6 +148,33 @@ function syncUnitSpace(unit) {
   shell.style.setProperty("--number-field-unit-len", String(unitElementColumns(unit)));
 }
 
+/**
+ * Reserve the suffix gutter on the input's physical side under the suffix: the
+ * right in a left-to-right shell, the left in a right-to-left one. The input's own
+ * text is always left to right (`styles/base/direction.css`), so a logical side
+ * of the input would put the gutter on the right in both. Inline, so no page rule
+ * setting the `padding` shorthand can drop the gutter and let the value run under
+ * the suffix; the width itself stays in CSS.
+ * @param {Element} shell
+ */
+function reserveGutter(shell) {
+  const input = shell.querySelector(':scope > input[type="number"]');
+  if (!input) return;
+  const mirrored = shell.matches(":dir(rtl)");
+  input.style.removeProperty(mirrored ? "padding-right" : "padding-left");
+  input.style.setProperty(mirrored ? "padding-left" : "padding-right", "var(--number-field-gutter)");
+}
+
+/**
+ * Re-reserve the gutter of every shell in `root`: a subtree attached under another
+ * direction than the one it was built in, or a page whose direction changed.
+ * @param {Element} root
+ */
+function reserveGuttersWithin(root) {
+  if (root.matches(SHELL_SELECTOR)) reserveGutter(root);
+  root.querySelectorAll(SHELL_SELECTOR).forEach(reserveGutter);
+}
+
 function buildSuffix(document_, unit) {
   const suffix = document_.createElement("span");
   suffix.className = "number-field-suffix";
@@ -195,10 +228,7 @@ export function enhanceNumberField(input) {
 
   shell.appendChild(buildSuffix(document_, unit));
   if (unit) syncUnitSpace(unit);
-
-  // Inline, so no page rule setting the `padding` shorthand can drop the gutter
-  // and let the value run under the suffix. The width itself stays in CSS.
-  input.style.setProperty("padding-inline-end", "var(--number-field-gutter)");
+  reserveGutter(shell);
   return shell;
 }
 
@@ -244,16 +274,30 @@ export function installGlobalNumberFieldEnhancer() {
   }
 
   // Scoped to the added subtrees, so it stays cheap while live tables repaint.
-  // A unit whose text changes in place re-reserves its gutter.
+  // A unit whose text changes in place re-reserves its unit space; a field built
+  // detached is placed by the direction it lands in, and a `dir` change (a locale
+  // switched in place) moves every gutter under it to the suffix's new side.
   const observer = new MutationObserver((mutations) => {
     for (const mutation of mutations) {
+      if (mutation.type === "attributes") {
+        reserveGuttersWithin(/** @type {Element} */ (mutation.target));
+        continue;
+      }
       if (!mutation.addedNodes || mutation.addedNodes.length === 0) continue;
       const unit = mutation.target.closest?.(UNIT_SELECTOR);
       if (unit) syncUnitSpace(unit);
-      mutation.addedNodes.forEach(enhanceWithin);
+      mutation.addedNodes.forEach((node) => {
+        enhanceWithin(node);
+        if (node.nodeType === 1) reserveGuttersWithin(/** @type {Element} */ (node));
+      });
     }
   });
-  observer.observe(document.documentElement, { childList: true, subtree: true });
+  observer.observe(document.documentElement, {
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeFilter: ["dir"],
+  });
 
   let repeatDelay = null;
   let repeatInterval = null;
