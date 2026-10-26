@@ -253,7 +253,7 @@ pub(super) async fn validate_credentials(
     // Test RPC endpoints concurrently only after the request itself is valid.
     let rpc_test_results = if !request.rpc_urls.is_empty() && errors.is_empty() {
         logger::info(LogTag::Webserver, "Testing RPC endpoints...");
-        rpc::test_rpc_endpoints(&request.rpc_urls).await
+        rpc::test_rpc_endpoints(&request.rpc_urls, wallet_address.as_deref()).await
     } else {
         vec![]
     };

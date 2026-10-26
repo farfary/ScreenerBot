@@ -25,6 +25,8 @@ pub mod global;
 pub mod helpers;
 pub mod subscriptions;
 pub mod testing;
+#[cfg(test)]
+mod testing_tests;
 pub mod types;
 pub mod utils;
 

@@ -30,8 +30,11 @@ pub struct RpcEndpointTestResult {
 /// Test a single HTTPS endpoint without using the global RPC client.
 ///
 /// Health, genesis hash, and node version are independent and run concurrently.
-/// An endpoint is usable only when it is healthy and proves it is mainnet-beta.
-pub async fn test_rpc_endpoint(url: &str) -> RpcEndpointTestResult {
+/// An endpoint is usable only when it is healthy and proves it is mainnet-beta. With a
+/// `wallet_address` it must also answer the wallet reads the balance monitor makes
+/// (`getBalance` and `getTokenAccountsByOwner` for both token programs): an endpoint
+/// that passes the node checks but blocks those reads leaves the wallet unreadable.
+pub async fn test_rpc_endpoint(url: &str, wallet_address: Option<&str>) -> RpcEndpointTestResult {
     let parsed = match url::Url::parse(url) {
         Ok(parsed) if parsed.scheme() == "https" && parsed.host_str().is_some() => parsed,
         _ => {
@@ -75,11 +78,23 @@ pub async fn test_rpc_endpoint(url: &str) -> RpcEndpointTestResult {
         }
     };
 
+    probe_endpoint(&client, url, &display_url, is_premium, wallet_address).await
+}
+
+/// The checks of `test_rpc_endpoint` against `url` with `client`.
+pub(super) async fn probe_endpoint(
+    client: &reqwest::Client,
+    url: &str,
+    display_url: &str,
+    is_premium: bool,
+    wallet_address: Option<&str>,
+) -> RpcEndpointTestResult {
+    let display_url = display_url.to_owned();
     let started_at = Instant::now();
     let (health, genesis, version) = tokio::join!(
-        rpc_request(&client, url, "getHealth"),
-        rpc_request(&client, url, "getGenesisHash"),
-        rpc_request(&client, url, "getVersion")
+        rpc_request(client, url, "getHealth", None),
+        rpc_request(client, url, "getGenesisHash", None),
+        rpc_request(client, url, "getVersion", None)
     );
     let latency_ms = started_at.elapsed().as_millis() as u64;
 
@@ -136,6 +151,19 @@ pub async fn test_rpc_endpoint(url: &str) -> RpcEndpointTestResult {
         );
     }
 
+    if let Some(wallet) = wallet_address {
+        if let Err(error) = probe_wallet_reads(client, url, wallet).await {
+            return failed_result(
+                url,
+                &display_url,
+                started_at.elapsed().as_millis() as u64,
+                &format!("The endpoint refuses the wallet reads ScreenerBot needs: {error}"),
+                Some(true),
+                is_premium,
+            );
+        }
+    }
+
     let version = version.ok().and_then(|body| {
         body.get("result")
             .and_then(|result| result.get("solana-core"))
@@ -155,21 +183,71 @@ pub async fn test_rpc_endpoint(url: &str) -> RpcEndpointTestResult {
     }
 }
 
+/// The wallet reads of the balance monitor, each named in the error of the first that
+/// fails.
+async fn probe_wallet_reads(
+    client: &reqwest::Client,
+    url: &str,
+    wallet: &str,
+) -> crate::chains::solana::Result<()> {
+    use crate::chains::solana::constants::{SPL_TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID};
+    use crate::chains::solana::Error;
+
+    let token_accounts = |program_id: &str| serde_json::json!([wallet, { "programId": program_id }, { "encoding": "jsonParsed" }]);
+    let (balance, spl, token_2022) = tokio::join!(
+        rpc_request(client, url, "getBalance", Some(serde_json::json!([wallet]))),
+        rpc_request(
+            client,
+            url,
+            "getTokenAccountsByOwner",
+            Some(token_accounts(SPL_TOKEN_PROGRAM_ID))
+        ),
+        rpc_request(
+            client,
+            url,
+            "getTokenAccountsByOwner",
+            Some(token_accounts(TOKEN_2022_PROGRAM_ID))
+        )
+    );
+    for (method, result) in [
+        ("getBalance", balance),
+        ("getTokenAccountsByOwner", spl),
+        ("getTokenAccountsByOwner", token_2022),
+    ] {
+        if let Err(error) = result {
+            let detail = match error {
+                Error::Rpc { detail, .. } => detail,
+                other => other.to_string(),
+            };
+            return Err(Error::Rpc {
+                operation: "test_wallet_read",
+                detail: format!("{method}: {detail}"),
+            });
+        }
+    }
+    Ok(())
+}
+
 async fn rpc_request(
     client: &reqwest::Client,
     url: &str,
     method: &str,
+    params: Option<serde_json::Value>,
 ) -> crate::chains::solana::Result<serde_json::Value> {
     use crate::chains::solana::Error;
 
+    let mut request = serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": method,
+    });
+    if let Some(params) = params {
+        request["params"] = params;
+    }
     let response = client
         .post(url)
         .header("Content-Type", "application/json")
-        .json(&serde_json::json!({
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": method,
-        }))
+        .json(&request)
         .send()
         .await
         .map_err(|error| {
@@ -186,10 +264,18 @@ async fn rpc_request(
             }
         })?;
 
-    if !response.status().is_success() {
+    let status = response.status();
+    if !status.is_success() {
+        let body = response.text().await.unwrap_or_default();
+        let summary = crate::errors::summarize_http_body(&body);
+        let detail = if summary.is_empty() {
+            format!("HTTP status: {status}")
+        } else {
+            format!("HTTP status: {status} ({summary})")
+        };
         return Err(Error::Rpc {
             operation: "test_request",
-            detail: format!("HTTP status: {}", response.status()),
+            detail,
         });
     }
 
@@ -232,10 +318,17 @@ fn failed_result(
 }
 
 /// Test multiple endpoints concurrently.
-pub async fn test_rpc_endpoints(urls: &[String]) -> Vec<RpcEndpointTestResult> {
+pub async fn test_rpc_endpoints(
+    urls: &[String],
+    wallet_address: Option<&str>,
+) -> Vec<RpcEndpointTestResult> {
     use futures::future::join_all;
 
-    join_all(urls.iter().map(|url| test_rpc_endpoint(url))).await
+    join_all(
+        urls.iter()
+            .map(|url| test_rpc_endpoint(url, wallet_address)),
+    )
+    .await
 }
 
 /// Validate that an endpoint is on Solana mainnet.
@@ -249,7 +342,7 @@ pub async fn validate_mainnet(url: &str) -> crate::chains::solana::Result<bool> 
             operation: "create_client",
             detail: error.to_string(),
         })?;
-    let body = rpc_request(&client, url, "getGenesisHash").await?;
+    let body = rpc_request(&client, url, "getGenesisHash", None).await?;
     let genesis_hash = body
         .get("result")
         .and_then(|result| result.as_str())
@@ -272,7 +365,7 @@ pub async fn get_rpc_version(url: &str) -> crate::chains::solana::Result<String>
             operation: "create_client",
             detail: error.to_string(),
         })?;
-    let body = rpc_request(&client, url, "getVersion").await?;
+    let body = rpc_request(&client, url, "getVersion", None).await?;
 
     Ok(body
         .get("result")
