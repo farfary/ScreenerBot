@@ -8,7 +8,9 @@
  *
  * Both mount the shared credential fields, so their titles, placeholders, hints,
  * reveal toggle and provider links read the same, the RPC hint says public endpoints
- * are not supported, and the dialog's key icon is a bare glyph without a tile.
+ * are not supported, and the dialog's key icon is a bare glyph without a tile. The
+ * dialog sizes to its content: with no status to show, the RPC card is followed by
+ * the body's own padding and then the buttons, with no empty band between them.
  *
  * Run with `npm run test:js`.
  */
@@ -108,6 +110,19 @@ test("onboarding and the Explore Mode dialog render the same credential form", a
     assert.equal(icon.background, "rgba(0, 0, 0, 0)");
     assert.equal(icon.border, "none");
     assert.equal(icon.parentBackground, "rgba(0, 0, 0, 0)");
+
+    const band = await page.evaluate(() => {
+      const body = document.querySelector(".setup-dialog-body");
+      const fields = document.querySelector(".setup-dialog-fields").getBoundingClientRect();
+      const footer = document.querySelector(".setup-dialog-footer").getBoundingClientRect();
+      return {
+        statusBoxes: document.querySelector("#setup-dialog-status").getClientRects().length,
+        gap: Math.round(footer.top - fields.bottom),
+        padding: Math.round(parseFloat(getComputedStyle(body).paddingBottom)),
+      };
+    });
+    assert.equal(band.statusBoxes, 0, "an idle status line takes no space");
+    assert.equal(band.gap, band.padding, "the buttons follow the RPC card after the body padding");
   } finally {
     await context.close();
     await host.close();

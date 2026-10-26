@@ -100,6 +100,12 @@
   font-weight: 500;
 }
 
+/* `display:flex` above outranks the bare [hidden] attribute; an idle status line
+   would otherwise leave an empty band above the footer. */
+.setup-dialog-status[hidden] {
+  display: none;
+}
+
 .setup-dialog-status.error {
   background: var(--danger-alpha-10);
   border: 1px solid var(--danger-alpha-20);
