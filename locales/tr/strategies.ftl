@@ -133,6 +133,7 @@ strategies-catalog-categories =
 strategies-catalog-empty = Aramanızla eşleşen koşul yok
 strategies-catalog-exit-only = Yalnızca çıkış stratejileri
 strategies-catalog-entry-only = Yalnızca giriş stratejileri
+strategies-catalog-candles-note = { $description } Yalnızca mumları okur.
 strategies-data-candles = Mumlar
 strategies-data-pool = Havuz
 strategies-data-position = Pozisyon
@@ -203,7 +204,7 @@ strategies-toast-create-first = Önce strateji oluşturun
     .message = Koşul eklemeden önce bir strateji oluşturmak için "Yeni strateji"ye tıklayın
 
 strategies-condition-candle-size = Mum boyutu deseni
-    .description = Belirli mum desenlerini algılar: büyük gövde, küçük gövde (doji), uzun fitiller
+    .description = Belirli mum desenlerini algılar: büyük gövde, küçük gövde (doji), uzun fitiller.
 strategies-condition-candle-size-param-pattern = Desen türü
     .description = Algılanacak mum deseni
 strategies-condition-candle-size-param-pattern-option-large-body = Büyük gövde (güçlü hareket)
@@ -214,7 +215,7 @@ strategies-condition-candle-size-param-threshold = Boyut eşiği %
     .description = Desen algılama için yüzde eşiği
 
 strategies-condition-consecutive-candles = Ardışık mumlar
-    .description = Minimum boyut filtresiyle ardışık yeşil (yükseliş) veya kırmızı (düşüş) mumları algılar
+    .description = Minimum boyut filtresiyle ardışık yeşil (yükseliş) veya kırmızı (düşüş) mumları algılar.
 strategies-condition-consecutive-candles-param-count = Mum sayısı
     .description = Gereken ardışık mum sayısı
 strategies-condition-consecutive-candles-param-direction = Mum yönü
@@ -247,7 +248,7 @@ strategies-condition-position-holding-time-param-comparison-option-less-than = D
 strategies-condition-position-holding-time-param-comparison-option-less-equal = En fazla (≤)
 
 strategies-condition-price-breakout = Fiyat kırılımı
-    .description = Fiyatın direncin (dönem zirvesi) üstüne veya desteğin (dönem dibi) altına kırılmasını algılar
+    .description = Fiyatın direncin (dönem zirvesi) üstüne veya desteğin (dönem dibi) altına kırılmasını algılar.
 strategies-condition-price-breakout-param-lookback = Geriye bakış dönemi
     .description = Destek/direnç seviyesini bulmak için mum sayısı
 strategies-condition-price-breakout-param-direction = Kırılım yönü
@@ -258,7 +259,7 @@ strategies-condition-price-breakout-param-confirmation = Onay %
     .description = Kırılımı onaylamak için seviyenin ne kadar ötesine geçileceği (yanlış sinyalleri önler)
 
 strategies-condition-price-change-percent = Fiyat değişimi %
-    .description = Fiyatın bir zaman diliminde yüzde eşiği kadar değişip değişmediğini kontrol eder
+    .description = Fiyatın bir zaman diliminde yüzde eşiği kadar değişip değişmediğini kontrol eder.
 strategies-condition-price-change-percent-param-percentage = Değişim eşiği %
     .description = Tetiklenecek yüzde fiyat değişimi (0,1-1000%)
 strategies-condition-price-change-percent-param-direction = Yön
@@ -275,7 +276,7 @@ strategies-condition-price-change-percent-param-time-unit-option-minutes = dk
 strategies-condition-price-change-percent-param-time-unit-option-hours = sa
 
 strategies-condition-price-to-ma = Fiyat ve hareketli ortalama
-    .description = Fiyatın Basit Hareketli Ortalamasının üstünde, altında veya aralığında olup olmadığını kontrol eder
+    .description = Fiyatın Basit Hareketli Ortalamasının üstünde, altında veya aralığında olup olmadığını kontrol eder.
 strategies-condition-price-to-ma-param-period = HO dönemi
     .description = Hareketli ortalama hesabı için mum sayısı
 strategies-condition-price-to-ma-param-position = Konum
@@ -287,7 +288,7 @@ strategies-condition-price-to-ma-param-distance = Uzaklık %
     .description = HO'dan minimum uzaklık (ÜSTÜNDE/ALTINDA için) veya maksimum aralık (ARALIK İÇİNDE için)
 
 strategies-condition-volume-spike = Hacim sıçraması
-    .description = Ortalama hacme kıyasla hacim sıçramalarını algılar (artan ilgiyi gösterir)
+    .description = Ortalama hacme kıyasla hacim sıçramalarını algılar (artan ilgiyi gösterir).
 strategies-condition-volume-spike-param-lookback = Geriye bakış dönemi
     .description = Ortalama hacmi hesaplamak için mum sayısı
 strategies-condition-volume-spike-param-multiplier = Hacim çarpanı
@@ -305,7 +306,7 @@ strategies-condition-rsi-param-threshold = RSI eşiği
     .description = 1 ile 99 arasında RSI seviyesi (aşırı satım için 30, aşırı alım için 70 yaygındır)
 
 strategies-condition-ma-cross = Hareketli ortalama kesişimi
-    .description = Hızlı bir hareketli ortalama son birkaç mum içinde yavaş olanı kestiğinde tetiklenir. Yalnızca mumları okur.
+    .description = Hızlı bir hareketli ortalama son birkaç mum içinde yavaş olanı kestiğinde tetiklenir.
 strategies-condition-ma-cross-param-ma-type = Ortalama türü
     .description = Üstel ortalamalar yakın tarihli mumlara daha çok ağırlık verir; basit ortalamalar tüm mumlara eşit ağırlık verir
 strategies-condition-ma-cross-param-ma-type-option-ema = Üstel (EMA)

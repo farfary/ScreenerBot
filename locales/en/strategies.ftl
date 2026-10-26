@@ -151,6 +151,7 @@ strategies-catalog-categories =
 strategies-catalog-empty = No condition matches your search
 strategies-catalog-exit-only = Exit strategies only
 strategies-catalog-entry-only = Entry strategies only
+strategies-catalog-candles-note = { $description } Reads candles only.
 strategies-data-candles = Candles
 strategies-data-pool = Pool
 strategies-data-position = Position
@@ -230,7 +231,7 @@ strategies-toast-create-first = Create Strategy First
 ## Conditions
 
 strategies-condition-candle-size = Candle Size Pattern
-    .description = Detect specific candle patterns: large body, small body (doji), long wicks
+    .description = Detect specific candle patterns: large body, small body (doji), long wicks.
 strategies-condition-candle-size-param-pattern = Pattern Type
     .description = Candle pattern to detect
 strategies-condition-candle-size-param-pattern-option-large-body = Large Body (Strong Move)
@@ -241,7 +242,7 @@ strategies-condition-candle-size-param-threshold = Size Threshold %
     .description = Percentage threshold for pattern detection
 
 strategies-condition-consecutive-candles = Consecutive Candles
-    .description = Detect consecutive green (bullish) or red (bearish) candles with minimum size filter
+    .description = Detect consecutive green (bullish) or red (bearish) candles with minimum size filter.
 strategies-condition-consecutive-candles-param-count = Candle Count
     .description = Number of consecutive candles required
 strategies-condition-consecutive-candles-param-direction = Candle Direction
@@ -274,7 +275,7 @@ strategies-condition-position-holding-time-param-comparison-option-less-than = Y
 strategies-condition-position-holding-time-param-comparison-option-less-equal = At Most (≤)
 
 strategies-condition-price-breakout = Price Breakout
-    .description = Detect price breaking above resistance (period high) or below support (period low)
+    .description = Detect price breaking above resistance (period high) or below support (period low).
 strategies-condition-price-breakout-param-lookback = Lookback Period
     .description = Number of candles to find support/resistance level
 strategies-condition-price-breakout-param-direction = Breakout Direction
@@ -285,7 +286,7 @@ strategies-condition-price-breakout-param-confirmation = Confirmation %
     .description = How far past the level to confirm breakout (avoids false signals)
 
 strategies-condition-price-change-percent = Price Change %
-    .description = Check if price changed by a percentage threshold within a time period
+    .description = Check if price changed by a percentage threshold within a time period.
 strategies-condition-price-change-percent-param-percentage = Change Threshold %
     .description = Percentage price change to trigger (0.1-1000%)
 strategies-condition-price-change-percent-param-direction = Direction
@@ -302,7 +303,7 @@ strategies-condition-price-change-percent-param-time-unit-option-minutes = min
 strategies-condition-price-change-percent-param-time-unit-option-hours = h
 
 strategies-condition-price-to-ma = Price vs Moving Average
-    .description = Check if price is above, below, or within range of its Simple Moving Average
+    .description = Check if price is above, below, or within range of its Simple Moving Average.
 strategies-condition-price-to-ma-param-period = MA Period
     .description = Number of candles for moving average calculation
 strategies-condition-price-to-ma-param-position = Position
@@ -314,7 +315,7 @@ strategies-condition-price-to-ma-param-distance = Distance %
     .description = Minimum distance from MA (for ABOVE/BELOW) or maximum range (for WITHIN)
 
 strategies-condition-volume-spike = Volume Spike
-    .description = Detect volume spikes compared to average volume (indicates increased interest)
+    .description = Detect volume spikes compared to average volume (indicates increased interest).
 strategies-condition-volume-spike-param-lookback = Lookback Period
     .description = Number of candles to calculate average volume
 strategies-condition-volume-spike-param-multiplier = Volume Multiplier
@@ -332,7 +333,7 @@ strategies-condition-rsi-param-threshold = RSI Threshold
     .description = RSI level from 1 to 99 (30 and 70 are the usual oversold and overbought levels)
 
 strategies-condition-ma-cross = Moving Average Cross
-    .description = Fires when a fast moving average crosses a slow one within the last few candles. Reads candles only.
+    .description = Fires when a fast moving average crosses a slow one within the last few candles.
 strategies-condition-ma-cross-param-ma-type = Average Type
     .description = Exponential averages weight recent candles more; simple averages weight all candles equally
 strategies-condition-ma-cross-param-ma-type-option-ema = Exponential (EMA)

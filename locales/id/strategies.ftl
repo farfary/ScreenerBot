@@ -125,6 +125,7 @@ strategies-catalog-categories =
 strategies-catalog-empty = Tidak ada kondisi yang cocok dengan pencarian
 strategies-catalog-exit-only = Hanya strategi exit
 strategies-catalog-entry-only = Hanya strategi entry
+strategies-catalog-candles-note = { $description } Hanya membaca candle.
 strategies-data-candles = Candle
 strategies-data-pool = Pool
 strategies-data-position = Posisi
@@ -191,7 +192,7 @@ strategies-toast-create-first = Buat Strategi Terlebih Dahulu
     .message = Klik 'Strategi Baru' untuk membuat strategi sebelum menambahkan kondisi
 
 strategies-condition-candle-size = Pola Ukuran Candle
-    .description = Deteksi pola candle tertentu: body besar, body kecil (doji), sumbu panjang
+    .description = Deteksi pola candle tertentu: body besar, body kecil (doji), sumbu panjang.
 strategies-condition-candle-size-param-pattern = Jenis Pola
     .description = Pola candle yang dideteksi
 strategies-condition-candle-size-param-pattern-option-large-body = Body Besar (Pergerakan Kuat)
@@ -202,7 +203,7 @@ strategies-condition-candle-size-param-threshold = Ambang Ukuran %
     .description = Ambang persentase untuk deteksi pola
 
 strategies-condition-consecutive-candles = Candle Berurutan
-    .description = Deteksi candle hijau (bullish) atau merah (bearish) berurutan dengan filter ukuran minimum
+    .description = Deteksi candle hijau (bullish) atau merah (bearish) berurutan dengan filter ukuran minimum.
 strategies-condition-consecutive-candles-param-count = Jumlah Candle
     .description = Jumlah candle berurutan yang diperlukan
 strategies-condition-consecutive-candles-param-direction = Arah Candle
@@ -235,7 +236,7 @@ strategies-condition-position-holding-time-param-comparison-option-less-than = L
 strategies-condition-position-holding-time-param-comparison-option-less-equal = Maksimal (≤)
 
 strategies-condition-price-breakout = Breakout Harga
-    .description = Deteksi harga menembus di atas resistance (tertinggi periode) atau di bawah support (terendah periode)
+    .description = Deteksi harga menembus di atas resistance (tertinggi periode) atau di bawah support (terendah periode).
 strategies-condition-price-breakout-param-lookback = Periode Lookback
     .description = Jumlah candle untuk menentukan level support/resistance
 strategies-condition-price-breakout-param-direction = Arah Breakout
@@ -246,7 +247,7 @@ strategies-condition-price-breakout-param-confirmation = Konfirmasi %
     .description = Seberapa jauh melewati level untuk mengonfirmasi breakout (menghindari sinyal palsu)
 
 strategies-condition-price-change-percent = Perubahan Harga %
-    .description = Periksa apakah harga berubah melampaui ambang persentase dalam suatu periode waktu
+    .description = Periksa apakah harga berubah melampaui ambang persentase dalam suatu periode waktu.
 strategies-condition-price-change-percent-param-percentage = Ambang Perubahan %
     .description = Persentase perubahan harga yang memicu (0.1-1000%)
 strategies-condition-price-change-percent-param-direction = Arah
@@ -263,7 +264,7 @@ strategies-condition-price-change-percent-param-time-unit-option-minutes = mnt
 strategies-condition-price-change-percent-param-time-unit-option-hours = jam
 
 strategies-condition-price-to-ma = Harga vs Moving Average
-    .description = Periksa apakah harga di atas, di bawah, atau dalam rentang Simple Moving Average-nya
+    .description = Periksa apakah harga di atas, di bawah, atau dalam rentang Simple Moving Average-nya.
 strategies-condition-price-to-ma-param-period = Periode MA
     .description = Jumlah candle untuk perhitungan moving average
 strategies-condition-price-to-ma-param-position = Posisi
@@ -275,7 +276,7 @@ strategies-condition-price-to-ma-param-distance = Jarak %
     .description = Jarak minimum dari MA (untuk DI ATAS/DI BAWAH) atau rentang maksimum (untuk DALAM RENTANG)
 
 strategies-condition-volume-spike = Lonjakan Volume
-    .description = Deteksi lonjakan volume dibandingkan volume rata-rata (menandakan minat meningkat)
+    .description = Deteksi lonjakan volume dibandingkan volume rata-rata (menandakan minat meningkat).
 strategies-condition-volume-spike-param-lookback = Periode Lookback
     .description = Jumlah candle untuk menghitung volume rata-rata
 strategies-condition-volume-spike-param-multiplier = Pengali Volume
@@ -293,7 +294,7 @@ strategies-condition-rsi-param-threshold = Ambang RSI
     .description = Level RSI dari 1 sampai 99 (30 dan 70 adalah level oversold dan overbought yang lazim)
 
 strategies-condition-ma-cross = Persilangan Moving Average
-    .description = Terpicu saat moving average cepat memotong yang lambat dalam beberapa candle terakhir. Hanya membaca candle.
+    .description = Terpicu saat moving average cepat memotong yang lambat dalam beberapa candle terakhir.
 strategies-condition-ma-cross-param-ma-type = Jenis Average
     .description = Average eksponensial memberi bobot lebih pada candle terbaru; average sederhana membobot semua candle sama
 strategies-condition-ma-cross-param-ma-type-option-ema = Eksponensial (EMA)

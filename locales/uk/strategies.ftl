@@ -159,6 +159,7 @@ strategies-catalog-categories =
 strategies-catalog-empty = Жодна умова не відповідає запиту
 strategies-catalog-exit-only = Лише для стратегій виходу
 strategies-catalog-entry-only = Лише для стратегій входу
+strategies-catalog-candles-note = { $description } Читає лише свічки.
 strategies-data-candles = Свічки
 strategies-data-pool = Пул
 strategies-data-position = Позиція
@@ -240,7 +241,7 @@ strategies-toast-create-first = Спершу створіть стратегію
 ## Conditions
 
 strategies-condition-candle-size = Шаблон розміру свічки
-    .description = Виявлення певних свічкових шаблонів: велике тіло, мале тіло (доджі), довгі тіні
+    .description = Виявлення певних свічкових шаблонів: велике тіло, мале тіло (доджі), довгі тіні.
 strategies-condition-candle-size-param-pattern = Тип шаблону
     .description = Свічковий шаблон для виявлення
 strategies-condition-candle-size-param-pattern-option-large-body = Велике тіло (сильний рух)
@@ -251,7 +252,7 @@ strategies-condition-candle-size-param-threshold = Поріг розміру %
     .description = Відсотковий поріг для виявлення шаблону
 
 strategies-condition-consecutive-candles = Послідовні свічки
-    .description = Виявлення послідовних зелених (бичачих) або червоних (ведмежих) свічок із фільтром мінімального розміру
+    .description = Виявлення послідовних зелених (бичачих) або червоних (ведмежих) свічок із фільтром мінімального розміру.
 strategies-condition-consecutive-candles-param-count = Кількість свічок
     .description = Потрібна кількість послідовних свічок
 strategies-condition-consecutive-candles-param-direction = Напрямок свічок
@@ -284,7 +285,7 @@ strategies-condition-position-holding-time-param-comparison-option-less-than = �
 strategies-condition-position-holding-time-param-comparison-option-less-equal = Щонайбільше (≤)
 
 strategies-condition-price-breakout = Пробій ціни
-    .description = Виявлення пробою ціни вище опору (максимум періоду) або нижче підтримки (мінімум періоду)
+    .description = Виявлення пробою ціни вище опору (максимум періоду) або нижче підтримки (мінімум періоду).
 strategies-condition-price-breakout-param-lookback = Період огляду
     .description = Кількість свічок для визначення рівня підтримки/опору
 strategies-condition-price-breakout-param-direction = Напрямок пробою
@@ -295,7 +296,7 @@ strategies-condition-price-breakout-param-confirmation = Підтверджен�
     .description = Наскільки далеко за рівень має вийти ціна для підтвердження пробою (уникає хибних сигналів)
 
 strategies-condition-price-change-percent = Зміна ціни %
-    .description = Перевірка, чи змінилася ціна на відсотковий поріг за певний період
+    .description = Перевірка, чи змінилася ціна на відсотковий поріг за певний період.
 strategies-condition-price-change-percent-param-percentage = Поріг зміни %
     .description = Відсоткова зміна ціни для спрацювання (0,1–1000%)
 strategies-condition-price-change-percent-param-direction = Напрямок
@@ -312,7 +313,7 @@ strategies-condition-price-change-percent-param-time-unit-option-minutes = хв
 strategies-condition-price-change-percent-param-time-unit-option-hours = год
 
 strategies-condition-price-to-ma = Ціна відносно ковзної середньої
-    .description = Перевірка, чи ціна вище, нижче або в межах діапазону від її простої ковзної середньої
+    .description = Перевірка, чи ціна вище, нижче або в межах діапазону від її простої ковзної середньої.
 strategies-condition-price-to-ma-param-period = Період MA
     .description = Кількість свічок для обчислення ковзної середньої
 strategies-condition-price-to-ma-param-position = Положення
@@ -324,7 +325,7 @@ strategies-condition-price-to-ma-param-distance = Відстань %
     .description = Мінімальна відстань від MA (для ВИЩЕ/НИЖЧЕ) або максимальний діапазон (для У МЕЖАХ)
 
 strategies-condition-volume-spike = Сплеск обсягу
-    .description = Виявлення сплесків обсягу порівняно із середнім обсягом (вказує на зростання інтересу)
+    .description = Виявлення сплесків обсягу порівняно із середнім обсягом (вказує на зростання інтересу).
 strategies-condition-volume-spike-param-lookback = Період огляду
     .description = Кількість свічок для обчислення середнього обсягу
 strategies-condition-volume-spike-param-multiplier = Множник обсягу
@@ -342,7 +343,7 @@ strategies-condition-rsi-param-threshold = Поріг RSI
     .description = Рівень RSI від 1 до 99 (звично 30 для перепроданості та 70 для перекупленості)
 
 strategies-condition-ma-cross = Перетин ковзних середніх
-    .description = Спрацьовує, коли швидка ковзна середня перетнула повільну в останніх свічках. Читає лише свічки.
+    .description = Спрацьовує, коли швидка ковзна середня перетнула повільну в останніх свічках.
 strategies-condition-ma-cross-param-ma-type = Тип середньої
     .description = Експоненційні середні сильніше враховують нещодавні свічки, прості враховують усі свічки однаково
 strategies-condition-ma-cross-param-ma-type-option-ema = Експоненційна (EMA)

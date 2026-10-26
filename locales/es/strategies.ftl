@@ -149,6 +149,7 @@ strategies-catalog-categories =
 strategies-catalog-empty = Ninguna condición coincide con la búsqueda
 strategies-catalog-exit-only = Solo estrategias de salida
 strategies-catalog-entry-only = Solo estrategias de entrada
+strategies-catalog-candles-note = { $description } Solo lee velas.
 strategies-data-candles = Velas
 strategies-data-pool = Pool
 strategies-data-position = Posición
@@ -229,7 +230,7 @@ strategies-toast-create-first = Crea una estrategia primero
 ## Conditions
 
 strategies-condition-candle-size = Patrón de tamaño de vela
-    .description = Detecta patrones de vela específicos: cuerpo grande, cuerpo pequeño (doji), mechas largas
+    .description = Detecta patrones de vela específicos: cuerpo grande, cuerpo pequeño (doji), mechas largas.
 strategies-condition-candle-size-param-pattern = Tipo de patrón
     .description = Patrón de vela a detectar
 strategies-condition-candle-size-param-pattern-option-large-body = Cuerpo grande (movimiento fuerte)
@@ -240,7 +241,7 @@ strategies-condition-candle-size-param-threshold = Umbral de tamaño %
     .description = Umbral porcentual para la detección del patrón
 
 strategies-condition-consecutive-candles = Velas consecutivas
-    .description = Detecta velas verdes (alcistas) o rojas (bajistas) consecutivas con un filtro de tamaño mínimo
+    .description = Detecta velas verdes (alcistas) o rojas (bajistas) consecutivas con un filtro de tamaño mínimo.
 strategies-condition-consecutive-candles-param-count = Número de velas
     .description = Cantidad de velas consecutivas requeridas
 strategies-condition-consecutive-candles-param-direction = Dirección de las velas
@@ -273,7 +274,7 @@ strategies-condition-position-holding-time-param-comparison-option-less-than = M
 strategies-condition-position-holding-time-param-comparison-option-less-equal = Como máximo (≤)
 
 strategies-condition-price-breakout = Ruptura de precio
-    .description = Detecta cuando el precio rompe por encima de la resistencia (máximo del período) o por debajo del soporte (mínimo del período)
+    .description = Detecta cuando el precio rompe por encima de la resistencia (máximo del período) o por debajo del soporte (mínimo del período).
 strategies-condition-price-breakout-param-lookback = Período de revisión
     .description = Número de velas para hallar el nivel de soporte/resistencia
 strategies-condition-price-breakout-param-direction = Dirección de la ruptura
@@ -284,7 +285,7 @@ strategies-condition-price-breakout-param-confirmation = Confirmación %
     .description = Cuánto debe superar el nivel para confirmar la ruptura (evita señales falsas)
 
 strategies-condition-price-change-percent = Variación de precio %
-    .description = Comprueba si el precio varió según un umbral porcentual dentro de un período de tiempo
+    .description = Comprueba si el precio varió según un umbral porcentual dentro de un período de tiempo.
 strategies-condition-price-change-percent-param-percentage = Umbral de variación %
     .description = Variación porcentual de precio que activa la condición (0.1-1000%)
 strategies-condition-price-change-percent-param-direction = Dirección
@@ -301,7 +302,7 @@ strategies-condition-price-change-percent-param-time-unit-option-minutes = min
 strategies-condition-price-change-percent-param-time-unit-option-hours = h
 
 strategies-condition-price-to-ma = Precio vs. media móvil
-    .description = Comprueba si el precio está por encima, por debajo o dentro del rango de su media móvil simple
+    .description = Comprueba si el precio está por encima, por debajo o dentro del rango de su media móvil simple.
 strategies-condition-price-to-ma-param-period = Período de la MA
     .description = Número de velas para calcular la media móvil
 strategies-condition-price-to-ma-param-position = Posición
@@ -313,7 +314,7 @@ strategies-condition-price-to-ma-param-distance = Distancia %
     .description = Distancia mínima a la MA (para ENCIMA/DEBAJO) o rango máximo (para DENTRO)
 
 strategies-condition-volume-spike = Pico de volumen
-    .description = Detecta picos de volumen frente al volumen promedio (indica mayor interés)
+    .description = Detecta picos de volumen frente al volumen promedio (indica mayor interés).
 strategies-condition-volume-spike-param-lookback = Período de revisión
     .description = Número de velas para calcular el volumen promedio
 strategies-condition-volume-spike-param-multiplier = Multiplicador de volumen
@@ -331,7 +332,7 @@ strategies-condition-rsi-param-threshold = Umbral del RSI
     .description = Nivel de RSI de 1 a 99 (30 y 70 son los niveles habituales de sobreventa y sobrecompra)
 
 strategies-condition-ma-cross = Cruce de medias móviles
-    .description = Se activa cuando una media móvil rápida cruza una lenta dentro de las últimas velas. Solo lee velas.
+    .description = Se activa cuando una media móvil rápida cruza una lenta dentro de las últimas velas.
 strategies-condition-ma-cross-param-ma-type = Tipo de media
     .description = Las medias exponenciales dan más peso a las velas recientes; las simples pesan todas las velas por igual
 strategies-condition-ma-cross-param-ma-type-option-ema = Exponencial (EMA)

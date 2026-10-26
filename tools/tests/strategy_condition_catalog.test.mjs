@@ -120,6 +120,33 @@ test("every schema has a data tag derived from its category and parameters", () 
   });
 });
 
+test("every candle condition closes its description with the one candles-only note", () => {
+  const note = "Reads candles only.";
+  const entries = catalogEntries(schemas, "ENTRY").concat(catalogEntries(schemas, "EXIT"));
+  for (const entry of entries) {
+    const stripped = entry.description.replace(/[\u2068\u2069]/g, "");
+    if (entry.tag === "candles") {
+      assert.ok(stripped.endsWith(note), `${entry.type}: "${stripped}"`);
+      assert.equal(stripped.indexOf(note), stripped.lastIndexOf(note), `${entry.type}: one note`);
+    } else {
+      assert.ok(!stripped.includes(note), `${entry.type} reads no candles`);
+    }
+  }
+  // The note is composed by the catalog, so no condition message repeats it.
+  const locales = readdirSync(`${REPO_ROOT}/locales`, { withFileTypes: true }).filter((entry) =>
+    entry.isDirectory()
+  );
+  for (const { name: locale } of locales) {
+    const source = read(`${REPO_ROOT}/locales/${locale}/strategies.ftl`);
+    const localNote = source.match(/^strategies-catalog-candles-note = \{ \$description \}\s*(.+)$/m)?.[1];
+    assert.ok(localNote, `${locale}: strategies-catalog-candles-note`);
+    const conditionLines = source
+      .split("\n")
+      .filter((line) => line.includes(localNote) && !line.startsWith("strategies-catalog-candles-note"));
+    assert.deepEqual(conditionLines, [], `${locale}: a condition message repeats the note`);
+  }
+});
+
 test("search matches the localized name or description and a category narrows the list", () => {
   const entries = catalogEntries(schemas, "ENTRY");
   const types = (list) => list.map((entry) => entry.type).sort();

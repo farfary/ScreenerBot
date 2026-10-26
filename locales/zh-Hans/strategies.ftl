@@ -141,6 +141,7 @@ strategies-catalog-categories =
 strategies-catalog-empty = 没有符合搜索的条件
 strategies-catalog-exit-only = 仅限出场策略
 strategies-catalog-entry-only = 仅限入场策略
+strategies-catalog-candles-note = { $description }只读取 K 线。
 strategies-data-candles = K 线
 strategies-data-pool = 池
 strategies-data-position = 仓位
@@ -216,7 +217,7 @@ strategies-toast-create-first = 请先创建策略
 ## Conditions
 
 strategies-condition-candle-size = K 线大小形态
-    .description = 检测特定的 K 线形态：大实体、小实体（十字星）、长影线
+    .description = 检测特定的 K 线形态：大实体、小实体（十字星）、长影线。
 strategies-condition-candle-size-param-pattern = 形态类型
     .description = 要检测的 K 线形态
 strategies-condition-candle-size-param-pattern-option-large-body = 大实体（强势行情）
@@ -227,7 +228,7 @@ strategies-condition-candle-size-param-threshold = 大小阈值 %
     .description = 形态检测的百分比阈值
 
 strategies-condition-consecutive-candles = 连续 K 线
-    .description = 检测连续的绿色（看涨）或红色（看跌）K 线，并带有最小幅度过滤
+    .description = 检测连续的绿色（看涨）或红色（看跌）K 线，并带有最小幅度过滤。
 strategies-condition-consecutive-candles-param-count = K 线数量
     .description = 所需的连续 K 线数量
 strategies-condition-consecutive-candles-param-direction = K 线方向
@@ -260,7 +261,7 @@ strategies-condition-position-holding-time-param-comparison-option-less-than = �
 strategies-condition-position-holding-time-param-comparison-option-less-equal = 至多（≤）
 
 strategies-condition-price-breakout = 价格突破
-    .description = 检测价格向上突破阻力位（周期高点）或向下跌破支撑位（周期低点）
+    .description = 检测价格向上突破阻力位（周期高点）或向下跌破支撑位（周期低点）。
 strategies-condition-price-breakout-param-lookback = 回溯期
     .description = 用于确定支撑/阻力位的 K 线数量
 strategies-condition-price-breakout-param-direction = 突破方向
@@ -271,7 +272,7 @@ strategies-condition-price-breakout-param-confirmation = 确认幅度 %
     .description = 超过该价位多远才确认突破（避免假信号）
 
 strategies-condition-price-change-percent = 价格变化 %
-    .description = 检查价格在一段时间内的变化是否达到百分比阈值
+    .description = 检查价格在一段时间内的变化是否达到百分比阈值。
 strategies-condition-price-change-percent-param-percentage = 变化阈值 %
     .description = 触发条件的价格变化百分比（0.1-1000%）
 strategies-condition-price-change-percent-param-direction = 方向
@@ -288,7 +289,7 @@ strategies-condition-price-change-percent-param-time-unit-option-minutes = 分�
 strategies-condition-price-change-percent-param-time-unit-option-hours = 小时
 
 strategies-condition-price-to-ma = 价格与移动平均线
-    .description = 检查价格在其简单移动平均线的上方、下方还是区间内
+    .description = 检查价格在其简单移动平均线的上方、下方还是区间内。
 strategies-condition-price-to-ma-param-period = MA 周期
     .description = 计算移动平均线所用的 K 线数量
 strategies-condition-price-to-ma-param-position = 位置
@@ -300,7 +301,7 @@ strategies-condition-price-to-ma-param-distance = 距离 %
     .description = 与 MA 的最小距离（高于/低于时）或最大区间（区间内时）
 
 strategies-condition-volume-spike = 成交量激增
-    .description = 检测相对平均成交量的成交量激增（表明关注度上升）
+    .description = 检测相对平均成交量的成交量激增（表明关注度上升）。
 strategies-condition-volume-spike-param-lookback = 回溯期
     .description = 用于计算平均成交量的 K 线数量
 strategies-condition-volume-spike-param-multiplier = 成交量倍数
@@ -318,7 +319,7 @@ strategies-condition-rsi-param-threshold = RSI 阈值
     .description = 1 到 99 之间的 RSI 水平（常用 30 表示超卖、70 表示超买）
 
 strategies-condition-ma-cross = 移动平均线交叉
-    .description = 当快速移动平均线在最近几根 K 线内穿过慢速移动平均线时触发。只读取 K 线。
+    .description = 当快速移动平均线在最近几根 K 线内穿过慢速移动平均线时触发。
 strategies-condition-ma-cross-param-ma-type = 均线类型
     .description = 指数均线给近期 K 线更高权重，简单均线对所有 K 线权重相同
 strategies-condition-ma-cross-param-ma-type-option-ema = 指数（EMA）

@@ -123,6 +123,7 @@ strategies-catalog-categories =
 strategies-catalog-empty = Không có điều kiện nào khớp với tìm kiếm
 strategies-catalog-exit-only = Chỉ dành cho chiến lược thoát lệnh
 strategies-catalog-entry-only = Chỉ dành cho chiến lược vào lệnh
+strategies-catalog-candles-note = { $description } Chỉ đọc nến.
 strategies-data-candles = Nến
 strategies-data-pool = Pool
 strategies-data-position = Vị thế
@@ -189,7 +190,7 @@ strategies-toast-create-first = Hãy tạo chiến lược trước
     .message = Nhấp 'Chiến lược mới' để tạo chiến lược trước khi thêm điều kiện
 
 strategies-condition-candle-size = Mẫu kích thước nến
-    .description = Phát hiện các mẫu nến cụ thể: thân lớn, thân nhỏ (doji), bóng nến dài
+    .description = Phát hiện các mẫu nến cụ thể: thân lớn, thân nhỏ (doji), bóng nến dài.
 strategies-condition-candle-size-param-pattern = Loại mẫu
     .description = Mẫu nến cần phát hiện
 strategies-condition-candle-size-param-pattern-option-large-body = Thân lớn (biến động mạnh)
@@ -200,7 +201,7 @@ strategies-condition-candle-size-param-threshold = Ngưỡng kích thước %
     .description = Ngưỡng phần trăm để phát hiện mẫu
 
 strategies-condition-consecutive-candles = Nến liên tiếp
-    .description = Phát hiện các nến xanh (tăng) hoặc đỏ (giảm) liên tiếp với bộ lọc kích thước tối thiểu
+    .description = Phát hiện các nến xanh (tăng) hoặc đỏ (giảm) liên tiếp với bộ lọc kích thước tối thiểu.
 strategies-condition-consecutive-candles-param-count = Số nến
     .description = Số nến liên tiếp cần có
 strategies-condition-consecutive-candles-param-direction = Hướng nến
@@ -233,7 +234,7 @@ strategies-condition-position-holding-time-param-comparison-option-less-than = M
 strategies-condition-position-holding-time-param-comparison-option-less-equal = Nhiều nhất (≤)
 
 strategies-condition-price-breakout = Breakout giá
-    .description = Phát hiện giá vượt lên trên kháng cự (đỉnh của kỳ) hoặc xuống dưới hỗ trợ (đáy của kỳ)
+    .description = Phát hiện giá vượt lên trên kháng cự (đỉnh của kỳ) hoặc xuống dưới hỗ trợ (đáy của kỳ).
 strategies-condition-price-breakout-param-lookback = Khoảng nhìn lại
     .description = Số nến để xác định mức hỗ trợ/kháng cự
 strategies-condition-price-breakout-param-direction = Hướng breakout
@@ -244,7 +245,7 @@ strategies-condition-price-breakout-param-confirmation = Xác nhận %
     .description = Giá phải vượt qua mức đó bao xa để xác nhận breakout (tránh tín hiệu giả)
 
 strategies-condition-price-change-percent = Biến động giá %
-    .description = Kiểm tra giá có thay đổi theo ngưỡng phần trăm trong một khoảng thời gian hay không
+    .description = Kiểm tra giá có thay đổi theo ngưỡng phần trăm trong một khoảng thời gian hay không.
 strategies-condition-price-change-percent-param-percentage = Ngưỡng biến động %
     .description = Phần trăm biến động giá để kích hoạt (0.1-1000%)
 strategies-condition-price-change-percent-param-direction = Hướng
@@ -261,7 +262,7 @@ strategies-condition-price-change-percent-param-time-unit-option-minutes = phút
 strategies-condition-price-change-percent-param-time-unit-option-hours = giờ
 
 strategies-condition-price-to-ma = Giá so với đường trung bình động
-    .description = Kiểm tra giá ở trên, dưới hoặc trong khoảng của đường trung bình động đơn giản (SMA)
+    .description = Kiểm tra giá ở trên, dưới hoặc trong khoảng của đường trung bình động đơn giản (SMA).
 strategies-condition-price-to-ma-param-period = Chu kỳ MA
     .description = Số nến để tính đường trung bình động
 strategies-condition-price-to-ma-param-position = Vị trí
@@ -273,7 +274,7 @@ strategies-condition-price-to-ma-param-distance = Khoảng cách %
     .description = Khoảng cách tối thiểu so với MA (với TRÊN/DƯỚI) hoặc khoảng tối đa (với TRONG KHOẢNG)
 
 strategies-condition-volume-spike = Khối lượng tăng vọt
-    .description = Phát hiện khối lượng tăng vọt so với khối lượng trung bình (cho thấy sự quan tâm tăng)
+    .description = Phát hiện khối lượng tăng vọt so với khối lượng trung bình (cho thấy sự quan tâm tăng).
 strategies-condition-volume-spike-param-lookback = Khoảng nhìn lại
     .description = Số nến để tính khối lượng trung bình
 strategies-condition-volume-spike-param-multiplier = Hệ số khối lượng
@@ -291,7 +292,7 @@ strategies-condition-rsi-param-threshold = Ngưỡng RSI
     .description = Mức RSI từ 1 đến 99 (30 và 70 là các mức quá bán và quá mua thường dùng)
 
 strategies-condition-ma-cross = Giao cắt đường trung bình động
-    .description = Kích hoạt khi đường trung bình động nhanh cắt đường chậm trong vài nến gần nhất. Chỉ đọc nến.
+    .description = Kích hoạt khi đường trung bình động nhanh cắt đường chậm trong vài nến gần nhất.
 strategies-condition-ma-cross-param-ma-type = Loại đường trung bình
     .description = Đường trung bình hàm mũ cho các nến gần đây trọng số lớn hơn; đường trung bình đơn giản coi mọi nến như nhau
 strategies-condition-ma-cross-param-ma-type-option-ema = Hàm mũ (EMA)

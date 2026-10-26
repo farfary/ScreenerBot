@@ -167,6 +167,7 @@ strategies-catalog-categories =
 strategies-catalog-empty = لا يوجد شرط يطابق بحثك
 strategies-catalog-exit-only = لاستراتيجيات الخروج فقط
 strategies-catalog-entry-only = لاستراتيجيات الدخول فقط
+strategies-catalog-candles-note = { $description } يقرأ الشموع فقط.
 strategies-data-candles = الشموع
 strategies-data-pool = المجمّع
 strategies-data-position = المركز
@@ -250,7 +251,7 @@ strategies-toast-create-first = أنشئ استراتيجية أولًا
 ## Conditions
 
 strategies-condition-candle-size = نمط حجم الشمعة
-    .description = اكتشاف أنماط شموع محددة: جسم كبير، جسم صغير (دوجي)، ظلال طويلة
+    .description = اكتشاف أنماط شموع محددة: جسم كبير، جسم صغير (دوجي)، ظلال طويلة.
 strategies-condition-candle-size-param-pattern = نوع النمط
     .description = نمط الشمعة المراد اكتشافه
 strategies-condition-candle-size-param-pattern-option-large-body = جسم كبير (حركة قوية)
@@ -261,7 +262,7 @@ strategies-condition-candle-size-param-threshold = حد الحجم %
     .description = النسبة المئوية للحد المستخدم في اكتشاف النمط
 
 strategies-condition-consecutive-candles = شموع متتالية
-    .description = اكتشاف شموع خضراء (صاعدة) أو حمراء (هابطة) متتالية مع مرشح حد أدنى للحجم
+    .description = اكتشاف شموع خضراء (صاعدة) أو حمراء (هابطة) متتالية مع مرشح حد أدنى للحجم.
 strategies-condition-consecutive-candles-param-count = عدد الشموع
     .description = عدد الشموع المتتالية المطلوب
 strategies-condition-consecutive-candles-param-direction = اتجاه الشمعة
@@ -294,7 +295,7 @@ strategies-condition-position-holding-time-param-comparison-option-less-than = �
 strategies-condition-position-holding-time-param-comparison-option-less-equal = على الأكثر (≤)
 
 strategies-condition-price-breakout = اختراق السعر
-    .description = اكتشاف اختراق السعر لأعلى المقاومة (أعلى سعر في الفترة) أو لأسفل الدعم (أدنى سعر في الفترة)
+    .description = اكتشاف اختراق السعر لأعلى المقاومة (أعلى سعر في الفترة) أو لأسفل الدعم (أدنى سعر في الفترة).
 strategies-condition-price-breakout-param-lookback = فترة الرجوع
     .description = عدد الشموع لتحديد مستوى الدعم/المقاومة
 strategies-condition-price-breakout-param-direction = اتجاه الاختراق
@@ -305,7 +306,7 @@ strategies-condition-price-breakout-param-confirmation = التأكيد %
     .description = مدى تجاوز المستوى لتأكيد الاختراق (لتجنب الإشارات الخاطئة)
 
 strategies-condition-price-change-percent = تغير السعر %
-    .description = فحص ما إذا تغير السعر بنسبة محددة خلال فترة زمنية
+    .description = فحص ما إذا تغير السعر بنسبة محددة خلال فترة زمنية.
 strategies-condition-price-change-percent-param-percentage = حد التغير %
     .description = نسبة تغير السعر المطلوبة للتشغيل (0.1-1000%)
 strategies-condition-price-change-percent-param-direction = الاتجاه
@@ -322,7 +323,7 @@ strategies-condition-price-change-percent-param-time-unit-option-minutes = دق�
 strategies-condition-price-change-percent-param-time-unit-option-hours = ساعة
 
 strategies-condition-price-to-ma = السعر مقابل المتوسط المتحرك
-    .description = فحص ما إذا كان السعر أعلى من المتوسط المتحرك البسيط أو أدنى منه أو ضمن نطاقه
+    .description = فحص ما إذا كان السعر أعلى من المتوسط المتحرك البسيط أو أدنى منه أو ضمن نطاقه.
 strategies-condition-price-to-ma-param-period = فترة المتوسط المتحرك
     .description = عدد الشموع المستخدمة في حساب المتوسط المتحرك
 strategies-condition-price-to-ma-param-position = الموضع
@@ -334,7 +335,7 @@ strategies-condition-price-to-ma-param-distance = المسافة %
     .description = الحد الأدنى للمسافة عن المتوسط المتحرك (لحالتي فوق/تحت) أو أقصى نطاق (لحالة ضمن)
 
 strategies-condition-volume-spike = طفرة حجم التداول
-    .description = اكتشاف طفرات حجم التداول مقارنة بالمتوسط (تدل على زيادة الاهتمام)
+    .description = اكتشاف طفرات حجم التداول مقارنة بالمتوسط (تدل على زيادة الاهتمام).
 strategies-condition-volume-spike-param-lookback = فترة الرجوع
     .description = عدد الشموع لحساب متوسط حجم التداول
 strategies-condition-volume-spike-param-multiplier = مضاعف حجم التداول
@@ -352,7 +353,7 @@ strategies-condition-rsi-param-threshold = حد RSI
     .description = مستوى المؤشر من 1 إلى 99 (القيمتان 30 و70 هما المستويان المعتادان للتشبع البيعي والشرائي)
 
 strategies-condition-ma-cross = تقاطع المتوسطات المتحركة
-    .description = يعمل عندما يقطع متوسط متحرك سريع متوسطًا بطيئًا خلال آخر عدة شموع. يقرأ الشموع فقط.
+    .description = يعمل عندما يقطع متوسط متحرك سريع متوسطًا بطيئًا خلال آخر عدة شموع.
 strategies-condition-ma-cross-param-ma-type = نوع المتوسط
     .description = المتوسطات الأسية تعطي الشموع الحديثة وزنًا أكبر، والبسيطة تعطي كل الشموع وزنًا متساويًا
 strategies-condition-ma-cross-param-ma-type-option-ema = أسّي (EMA)

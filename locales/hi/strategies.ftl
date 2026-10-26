@@ -133,6 +133,7 @@ strategies-catalog-categories =
 strategies-catalog-empty = आपकी खोज से कोई शर्त मेल नहीं खाती
 strategies-catalog-exit-only = केवल एग्ज़िट स्ट्रैटेजी के लिए
 strategies-catalog-entry-only = केवल एंट्री स्ट्रैटेजी के लिए
+strategies-catalog-candles-note = { $description } केवल कैंडल पढ़ता है।
 strategies-data-candles = कैंडल
 strategies-data-pool = पूल
 strategies-data-position = पोज़िशन
@@ -203,7 +204,7 @@ strategies-toast-create-first = पहले स्ट्रैटेजी ब�
     .message = शर्तें जोड़ने से पहले स्ट्रैटेजी बनाने के लिए 'नई स्ट्रैटेजी' पर क्लिक करें
 
 strategies-condition-candle-size = कैंडल साइज़ पैटर्न
-    .description = खास कैंडल पैटर्न पहचानें: बड़ी बॉडी, छोटी बॉडी (डोजी), लंबी विक
+    .description = खास कैंडल पैटर्न पहचानें: बड़ी बॉडी, छोटी बॉडी (डोजी), लंबी विक।
 strategies-condition-candle-size-param-pattern = पैटर्न प्रकार
     .description = पहचाना जाने वाला कैंडल पैटर्न
 strategies-condition-candle-size-param-pattern-option-large-body = बड़ी बॉडी (तेज़ चाल)
@@ -214,7 +215,7 @@ strategies-condition-candle-size-param-threshold = साइज़ सीमा 
     .description = पैटर्न पहचान के लिए प्रतिशत सीमा
 
 strategies-condition-consecutive-candles = लगातार कैंडल
-    .description = न्यूनतम साइज़ फ़िल्टर के साथ लगातार हरी (तेज़ी) या लाल (मंदी) कैंडल पहचानें
+    .description = न्यूनतम साइज़ फ़िल्टर के साथ लगातार हरी (तेज़ी) या लाल (मंदी) कैंडल पहचानें।
 strategies-condition-consecutive-candles-param-count = कैंडल संख्या
     .description = ज़रूरी लगातार कैंडल की संख्या
 strategies-condition-consecutive-candles-param-direction = कैंडल दिशा
@@ -247,7 +248,7 @@ strategies-condition-position-holding-time-param-comparison-option-less-than = �
 strategies-condition-position-holding-time-param-comparison-option-less-equal = अधिकतम (≤)
 
 strategies-condition-price-breakout = प्राइस ब्रेकआउट
-    .description = प्राइस का रेज़िस्टेंस (अवधि का उच्च) से ऊपर या सपोर्ट (अवधि का निम्न) से नीचे टूटना पहचानें
+    .description = प्राइस का रेज़िस्टेंस (अवधि का उच्च) से ऊपर या सपोर्ट (अवधि का निम्न) से नीचे टूटना पहचानें।
 strategies-condition-price-breakout-param-lookback = लुकबैक अवधि
     .description = सपोर्ट/रेज़िस्टेंस स्तर खोजने के लिए कैंडल की संख्या
 strategies-condition-price-breakout-param-direction = ब्रेकआउट दिशा
@@ -258,7 +259,7 @@ strategies-condition-price-breakout-param-confirmation = पुष्टि %
     .description = ब्रेकआउट की पुष्टि के लिए स्तर से कितना आगे निकलना है (झूठे सिग्नल से बचाता है)
 
 strategies-condition-price-change-percent = प्राइस बदलाव %
-    .description = जांचें कि किसी समय अवधि में प्राइस प्रतिशत सीमा से बदला या नहीं
+    .description = जांचें कि किसी समय अवधि में प्राइस प्रतिशत सीमा से बदला या नहीं।
 strategies-condition-price-change-percent-param-percentage = बदलाव सीमा %
     .description = ट्रिगर के लिए प्राइस का प्रतिशत बदलाव (0.1-1000%)
 strategies-condition-price-change-percent-param-direction = दिशा
@@ -275,7 +276,7 @@ strategies-condition-price-change-percent-param-time-unit-option-minutes = म�
 strategies-condition-price-change-percent-param-time-unit-option-hours = घं
 
 strategies-condition-price-to-ma = प्राइस बनाम मूविंग एवरेज
-    .description = जांचें कि प्राइस अपने सिंपल मूविंग एवरेज से ऊपर, नीचे या रेंज के भीतर है
+    .description = जांचें कि प्राइस अपने सिंपल मूविंग एवरेज से ऊपर, नीचे या रेंज के भीतर है।
 strategies-condition-price-to-ma-param-period = MA अवधि
     .description = मूविंग एवरेज की गणना के लिए कैंडल की संख्या
 strategies-condition-price-to-ma-param-position = स्थिति
@@ -287,7 +288,7 @@ strategies-condition-price-to-ma-param-distance = दूरी %
     .description = MA से न्यूनतम दूरी (ऊपर/नीचे के लिए) या अधिकतम रेंज (रेंज के भीतर के लिए)
 
 strategies-condition-volume-spike = वॉल्यूम स्पाइक
-    .description = औसत वॉल्यूम की तुलना में वॉल्यूम स्पाइक पहचानें (बढ़ती दिलचस्पी का संकेत)
+    .description = औसत वॉल्यूम की तुलना में वॉल्यूम स्पाइक पहचानें (बढ़ती दिलचस्पी का संकेत)।
 strategies-condition-volume-spike-param-lookback = लुकबैक अवधि
     .description = औसत वॉल्यूम निकालने के लिए कैंडल की संख्या
 strategies-condition-volume-spike-param-multiplier = वॉल्यूम गुणक
@@ -305,7 +306,7 @@ strategies-condition-rsi-param-threshold = RSI सीमा
     .description = 1 से 99 के बीच RSI स्तर (ओवरसोल्ड के लिए 30 और ओवरबॉट के लिए 70 आम हैं)
 
 strategies-condition-ma-cross = मूविंग एवरेज क्रॉस
-    .description = तब ट्रिगर होता है जब तेज़ मूविंग एवरेज पिछली कुछ कैंडल में धीमे एवरेज को काट दे। केवल कैंडल पढ़ता है।
+    .description = तब ट्रिगर होता है जब तेज़ मूविंग एवरेज पिछली कुछ कैंडल में धीमे एवरेज को काट दे।
 strategies-condition-ma-cross-param-ma-type = एवरेज का प्रकार
     .description = एक्सपोनेंशियल एवरेज हाल की कैंडल को अधिक वज़न देते हैं; सिंपल एवरेज सभी कैंडल को बराबर वज़न देते हैं
 strategies-condition-ma-cross-param-ma-type-option-ema = एक्सपोनेंशियल (EMA)

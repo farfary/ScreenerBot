@@ -141,6 +141,7 @@ strategies-catalog-categories =
 strategies-catalog-empty = 검색과 일치하는 조건이 없습니다
 strategies-catalog-exit-only = 청산 전략 전용
 strategies-catalog-entry-only = 진입 전략 전용
+strategies-catalog-candles-note = { $description } 캔들만 읽습니다.
 strategies-data-candles = 캔들
 strategies-data-pool = 풀
 strategies-data-position = 포지션
@@ -216,7 +217,7 @@ strategies-toast-create-first = 먼저 전략 만들기
 ## Conditions
 
 strategies-condition-candle-size = 캔들 크기 패턴
-    .description = 특정 캔들 패턴을 감지합니다: 큰 몸통, 작은 몸통(도지), 긴 꼬리
+    .description = 특정 캔들 패턴을 감지합니다: 큰 몸통, 작은 몸통(도지), 긴 꼬리.
 strategies-condition-candle-size-param-pattern = 패턴 유형
     .description = 감지할 캔들 패턴
 strategies-condition-candle-size-param-pattern-option-large-body = 큰 몸통 (강한 움직임)
@@ -227,7 +228,7 @@ strategies-condition-candle-size-param-threshold = 크기 임계값 %
     .description = 패턴 감지 기준 비율
 
 strategies-condition-consecutive-candles = 연속 캔들
-    .description = 최소 크기 필터와 함께 연속된 녹색(상승) 또는 적색(하락) 캔들을 감지합니다
+    .description = 최소 크기 필터와 함께 연속된 녹색(상승) 또는 적색(하락) 캔들을 감지합니다.
 strategies-condition-consecutive-candles-param-count = 캔들 수
     .description = 필요한 연속 캔들 수
 strategies-condition-consecutive-candles-param-direction = 캔들 방향
@@ -260,7 +261,7 @@ strategies-condition-position-holding-time-param-comparison-option-less-than = �
 strategies-condition-position-holding-time-param-comparison-option-less-equal = 이하 (≤)
 
 strategies-condition-price-breakout = 가격 돌파
-    .description = 가격이 저항선(기간 고점)을 위로, 또는 지지선(기간 저점)을 아래로 돌파하는 것을 감지합니다
+    .description = 가격이 저항선(기간 고점)을 위로, 또는 지지선(기간 저점)을 아래로 돌파하는 것을 감지합니다.
 strategies-condition-price-breakout-param-lookback = 조회 기간
     .description = 지지/저항 수준을 찾는 데 사용할 캔들 수
 strategies-condition-price-breakout-param-direction = 돌파 방향
@@ -271,7 +272,7 @@ strategies-condition-price-breakout-param-confirmation = 확인 %
     .description = 돌파를 확인하기 위해 해당 수준을 얼마나 넘어야 하는지 (거짓 시그널 방지)
 
 strategies-condition-price-change-percent = 가격 변동 %
-    .description = 일정 기간 내 가격이 임계 비율만큼 변동했는지 확인합니다
+    .description = 일정 기간 내 가격이 임계 비율만큼 변동했는지 확인합니다.
 strategies-condition-price-change-percent-param-percentage = 변동 임계값 %
     .description = 발동할 가격 변동률 (0.1-1000%)
 strategies-condition-price-change-percent-param-direction = 방향
@@ -288,7 +289,7 @@ strategies-condition-price-change-percent-param-time-unit-option-minutes = 분
 strategies-condition-price-change-percent-param-time-unit-option-hours = 시간
 
 strategies-condition-price-to-ma = 가격 대 이동평균
-    .description = 가격이 단순 이동평균 위, 아래 또는 범위 내에 있는지 확인합니다
+    .description = 가격이 단순 이동평균 위, 아래 또는 범위 내에 있는지 확인합니다.
 strategies-condition-price-to-ma-param-period = MA 기간
     .description = 이동평균 계산에 사용할 캔들 수
 strategies-condition-price-to-ma-param-position = 위치
@@ -300,7 +301,7 @@ strategies-condition-price-to-ma-param-distance = 거리 %
     .description = MA와의 최소 거리 (위/아래) 또는 최대 범위 (범위 내)
 
 strategies-condition-volume-spike = 거래량 급증
-    .description = 평균 거래량 대비 거래량 급증을 감지합니다 (관심 증가를 의미)
+    .description = 평균 거래량 대비 거래량 급증을 감지합니다 (관심 증가를 의미).
 strategies-condition-volume-spike-param-lookback = 조회 기간
     .description = 평균 거래량을 계산할 캔들 수
 strategies-condition-volume-spike-param-multiplier = 거래량 배수
@@ -318,7 +319,7 @@ strategies-condition-rsi-param-threshold = RSI 임계값
     .description = 1~99 사이의 RSI 수준 (과매도 30, 과매수 70이 일반적입니다)
 
 strategies-condition-ma-cross = 이동평균 교차
-    .description = 빠른 이동평균이 최근 몇 개의 캔들 안에 느린 이동평균을 교차하면 발동합니다. 캔들만 읽습니다.
+    .description = 빠른 이동평균이 최근 몇 개의 캔들 안에 느린 이동평균을 교차하면 발동합니다.
 strategies-condition-ma-cross-param-ma-type = 평균 종류
     .description = 지수 평균은 최근 캔들에 더 큰 가중치를 주고, 단순 평균은 모든 캔들에 같은 가중치를 줍니다
 strategies-condition-ma-cross-param-ma-type-option-ema = 지수 (EMA)

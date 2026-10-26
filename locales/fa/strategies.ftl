@@ -151,6 +151,7 @@ strategies-catalog-categories =
 strategies-catalog-empty = هیچ شرطی با جست‌وجوی شما مطابقت ندارد
 strategies-catalog-exit-only = فقط برای استراتژی‌های خروج
 strategies-catalog-entry-only = فقط برای استراتژی‌های ورود
+strategies-catalog-candles-note = { $description } فقط کندل‌ها را می‌خواند.
 strategies-data-candles = کندل‌ها
 strategies-data-pool = استخر
 strategies-data-position = موقعیت
@@ -230,7 +231,7 @@ strategies-toast-create-first = ابتدا استراتژی بسازید
 ## Conditions
 
 strategies-condition-candle-size = الگوی اندازه کندل
-    .description = تشخیص الگوهای مشخص کندل: بدنه بزرگ، بدنه کوچک (دوجی)، سایه‌های بلند
+    .description = تشخیص الگوهای مشخص کندل: بدنه بزرگ، بدنه کوچک (دوجی)، سایه‌های بلند.
 strategies-condition-candle-size-param-pattern = نوع الگو
     .description = الگوی کندلی که باید تشخیص داده شود
 strategies-condition-candle-size-param-pattern-option-large-body = بدنه بزرگ (حرکت قوی)
@@ -241,7 +242,7 @@ strategies-condition-candle-size-param-threshold = آستانه اندازه %
     .description = آستانه درصدی برای تشخیص الگو
 
 strategies-condition-consecutive-candles = کندل‌های متوالی
-    .description = تشخیص کندل‌های سبز (صعودی) یا قرمز (نزولی) متوالی با فیلتر حداقل اندازه
+    .description = تشخیص کندل‌های سبز (صعودی) یا قرمز (نزولی) متوالی با فیلتر حداقل اندازه.
 strategies-condition-consecutive-candles-param-count = تعداد کندل
     .description = تعداد کندل‌های متوالی موردنیاز
 strategies-condition-consecutive-candles-param-direction = جهت کندل
@@ -274,7 +275,7 @@ strategies-condition-position-holding-time-param-comparison-option-less-than = �
 strategies-condition-position-holding-time-param-comparison-option-less-equal = حداکثر (≤)
 
 strategies-condition-price-breakout = شکست قیمت
-    .description = تشخیص شکسته شدن مقاومت (سقف دوره) به بالا یا حمایت (کف دوره) به پایین
+    .description = تشخیص شکسته شدن مقاومت (سقف دوره) به بالا یا حمایت (کف دوره) به پایین.
 strategies-condition-price-breakout-param-lookback = بازه بازبینی
     .description = تعداد کندل‌ها برای یافتن سطح حمایت/مقاومت
 strategies-condition-price-breakout-param-direction = جهت شکست
@@ -285,7 +286,7 @@ strategies-condition-price-breakout-param-confirmation = تأیید %
     .description = میزان عبور از سطح برای تأیید شکست (جلوگیری از سیگنال کاذب)
 
 strategies-condition-price-change-percent = تغییر قیمت %
-    .description = بررسی اینکه قیمت در یک بازه زمانی به اندازه آستانه درصدی تغییر کرده است یا نه
+    .description = بررسی اینکه قیمت در یک بازه زمانی به اندازه آستانه درصدی تغییر کرده است یا نه.
 strategies-condition-price-change-percent-param-percentage = آستانه تغییر %
     .description = درصد تغییر قیمت برای فعال شدن (0.1 تا 1000%)
 strategies-condition-price-change-percent-param-direction = جهت
@@ -302,7 +303,7 @@ strategies-condition-price-change-percent-param-time-unit-option-minutes = دق�
 strategies-condition-price-change-percent-param-time-unit-option-hours = ساعت
 
 strategies-condition-price-to-ma = قیمت در برابر میانگین متحرک
-    .description = بررسی اینکه قیمت بالاتر، پایین‌تر یا در بازه‌ای از میانگین متحرک ساده خود است
+    .description = بررسی اینکه قیمت بالاتر، پایین‌تر یا در بازه‌ای از میانگین متحرک ساده خود است.
 strategies-condition-price-to-ma-param-period = دوره MA
     .description = تعداد کندل‌ها برای محاسبه میانگین متحرک
 strategies-condition-price-to-ma-param-position = موقعیت
@@ -314,7 +315,7 @@ strategies-condition-price-to-ma-param-distance = فاصله %
     .description = حداقل فاصله از MA (برای بالا/پایین) یا حداکثر بازه (برای درون بازه)
 
 strategies-condition-volume-spike = جهش حجم
-    .description = تشخیص جهش حجم نسبت به میانگین حجم (نشانه افزایش توجه بازار)
+    .description = تشخیص جهش حجم نسبت به میانگین حجم (نشانه افزایش توجه بازار).
 strategies-condition-volume-spike-param-lookback = بازه بازبینی
     .description = تعداد کندل‌ها برای محاسبه میانگین حجم
 strategies-condition-volume-spike-param-multiplier = ضریب حجم
@@ -332,7 +333,7 @@ strategies-condition-rsi-param-threshold = آستانه RSI
     .description = سطح RSI از 1 تا 99 (مقادیر رایج 30 برای اشباع فروش و 70 برای اشباع خرید است)
 
 strategies-condition-ma-cross = تقاطع میانگین‌های متحرک
-    .description = وقتی فعال می‌شود که یک میانگین متحرک سریع در چند کندل اخیر میانگین کند را قطع کند. فقط کندل‌ها را می‌خواند.
+    .description = وقتی فعال می‌شود که یک میانگین متحرک سریع در چند کندل اخیر میانگین کند را قطع کند.
 strategies-condition-ma-cross-param-ma-type = نوع میانگین
     .description = میانگین‌های نمایی به کندل‌های اخیر وزن بیشتری می‌دهند؛ میانگین‌های ساده همه کندل‌ها را یکسان وزن می‌کنند
 strategies-condition-ma-cross-param-ma-type-option-ema = نمایی (EMA)

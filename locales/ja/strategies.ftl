@@ -141,6 +141,7 @@ strategies-catalog-categories =
 strategies-catalog-empty = 検索に一致する条件はありません
 strategies-catalog-exit-only = エグジットストラテジー専用
 strategies-catalog-entry-only = エントリーストラテジー専用
+strategies-catalog-candles-note = { $description }ローソク足のみを読み取ります。
 strategies-data-candles = ローソク足
 strategies-data-pool = プール
 strategies-data-position = ポジション
@@ -216,7 +217,7 @@ strategies-toast-create-first = 先にストラテジーを作成してくださ
 ## Conditions
 
 strategies-condition-candle-size = ローソク足サイズパターン
-    .description = 特定のローソク足パターン（大きな実体、小さな実体（十字線）、長いヒゲ）を検出します
+    .description = 特定のローソク足パターン（大きな実体、小さな実体（十字線）、長いヒゲ）を検出します。
 strategies-condition-candle-size-param-pattern = パターンの種類
     .description = 検出するローソク足パターン
 strategies-condition-candle-size-param-pattern-option-large-body = 大きな実体（強い値動き）
@@ -227,7 +228,7 @@ strategies-condition-candle-size-param-threshold = サイズしきい値 %
     .description = パターン検出のしきい値（パーセント）
 
 strategies-condition-consecutive-candles = 連続ローソク足
-    .description = 最小サイズフィルター付きで、連続する陽線（強気）または陰線（弱気）を検出します
+    .description = 最小サイズフィルター付きで、連続する陽線（強気）または陰線（弱気）を検出します。
 strategies-condition-consecutive-candles-param-count = ローソク足の本数
     .description = 必要な連続ローソク足の本数
 strategies-condition-consecutive-candles-param-direction = ローソク足の方向
@@ -260,7 +261,7 @@ strategies-condition-position-holding-time-param-comparison-option-less-than = �
 strategies-condition-position-holding-time-param-comparison-option-less-equal = 以下（≤）
 
 strategies-condition-price-breakout = 価格ブレイクアウト
-    .description = 価格がレジスタンス（期間高値）を上抜け、またはサポート（期間安値）を下抜けたことを検出します
+    .description = 価格がレジスタンス（期間高値）を上抜け、またはサポート（期間安値）を下抜けたことを検出します。
 strategies-condition-price-breakout-param-lookback = 参照期間
     .description = サポート/レジスタンスを求めるためのローソク足の本数
 strategies-condition-price-breakout-param-direction = ブレイクアウトの方向
@@ -271,7 +272,7 @@ strategies-condition-price-breakout-param-confirmation = 確認 %
     .description = ブレイクアウトを確認するために水準をどれだけ超える必要があるか（だましを回避）
 
 strategies-condition-price-change-percent = 価格変動率 %
-    .description = 一定期間内に価格がしきい値の割合だけ変動したかをチェックします
+    .description = 一定期間内に価格がしきい値の割合だけ変動したかをチェックします。
 strategies-condition-price-change-percent-param-percentage = 変動しきい値 %
     .description = トリガーとなる価格変動率（0.1～1000%）
 strategies-condition-price-change-percent-param-direction = 方向
@@ -288,7 +289,7 @@ strategies-condition-price-change-percent-param-time-unit-option-minutes = 分
 strategies-condition-price-change-percent-param-time-unit-option-hours = 時間
 
 strategies-condition-price-to-ma = 価格と移動平均の比較
-    .description = 価格が単純移動平均の上、下、または範囲内にあるかをチェックします
+    .description = 価格が単純移動平均の上、下、または範囲内にあるかをチェックします。
 strategies-condition-price-to-ma-param-period = MA 期間
     .description = 移動平均の計算に使うローソク足の本数
 strategies-condition-price-to-ma-param-position = 位置
@@ -300,7 +301,7 @@ strategies-condition-price-to-ma-param-distance = 乖離 %
     .description = MA からの最小乖離（上/下の場合）または最大範囲（範囲内の場合）
 
 strategies-condition-volume-spike = 出来高急増
-    .description = 平均出来高と比べた出来高の急増を検出します（関心の高まりを示します）
+    .description = 平均出来高と比べた出来高の急増を検出します（関心の高まりを示します）。
 strategies-condition-volume-spike-param-lookback = 参照期間
     .description = 平均出来高を計算するローソク足の本数
 strategies-condition-volume-spike-param-multiplier = 出来高倍率
@@ -318,7 +319,7 @@ strategies-condition-rsi-param-threshold = RSI しきい値
     .description = 1〜99 の RSI 水準（売られすぎは 30、買われすぎは 70 が一般的）
 
 strategies-condition-ma-cross = 移動平均のクロス
-    .description = 短期の移動平均が直近の数本以内に長期の移動平均を交差すると発動します。ローソク足のみを読み取ります。
+    .description = 短期の移動平均が直近の数本以内に長期の移動平均を交差すると発動します。
 strategies-condition-ma-cross-param-ma-type = 平均の種類
     .description = 指数移動平均は新しいローソク足を重く、単純移動平均はすべてのローソク足を同じ重みで扱います
 strategies-condition-ma-cross-param-ma-type-option-ema = 指数（EMA）

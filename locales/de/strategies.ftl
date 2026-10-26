@@ -141,6 +141,7 @@ strategies-catalog-categories =
 strategies-catalog-empty = Keine Bedingung passt zu Ihrer Suche
 strategies-catalog-exit-only = Nur für Ausstiegsstrategien
 strategies-catalog-entry-only = Nur für Einstiegsstrategien
+strategies-catalog-candles-note = { $description } Liest nur Kerzen.
 strategies-data-candles = Kerzen
 strategies-data-pool = Pool
 strategies-data-position = Position
@@ -219,7 +220,7 @@ strategies-toast-create-first = Zuerst Strategie erstellen
 ## Conditions
 
 strategies-condition-candle-size = Kerzengrößenmuster
-    .description = Bestimmte Kerzenmuster erkennen: großer Körper, kleiner Körper (Doji), lange Dochte
+    .description = Bestimmte Kerzenmuster erkennen: großer Körper, kleiner Körper (Doji), lange Dochte.
 strategies-condition-candle-size-param-pattern = Mustertyp
     .description = Zu erkennendes Kerzenmuster
 strategies-condition-candle-size-param-pattern-option-large-body = Großer Körper (starke Bewegung)
@@ -230,7 +231,7 @@ strategies-condition-candle-size-param-threshold = Größenschwelle %
     .description = Prozentuale Schwelle für die Mustererkennung
 
 strategies-condition-consecutive-candles = Aufeinanderfolgende Kerzen
-    .description = Aufeinanderfolgende grüne (bullische) oder rote (bärische) Kerzen mit Mindestgrößenfilter erkennen
+    .description = Aufeinanderfolgende grüne (bullische) oder rote (bärische) Kerzen mit Mindestgrößenfilter erkennen.
 strategies-condition-consecutive-candles-param-count = Kerzenanzahl
     .description = Anzahl der erforderlichen aufeinanderfolgenden Kerzen
 strategies-condition-consecutive-candles-param-direction = Kerzenrichtung
@@ -263,7 +264,7 @@ strategies-condition-position-holding-time-param-comparison-option-less-than = J
 strategies-condition-position-holding-time-param-comparison-option-less-equal = Höchstens (≤)
 
 strategies-condition-price-breakout = Preisausbruch
-    .description = Erkennen, wenn der Preis über den Widerstand (Periodenhoch) oder unter die Unterstützung (Periodentief) ausbricht
+    .description = Erkennen, wenn der Preis über den Widerstand (Periodenhoch) oder unter die Unterstützung (Periodentief) ausbricht.
 strategies-condition-price-breakout-param-lookback = Rückblickzeitraum
     .description = Anzahl der Kerzen zur Bestimmung des Unterstützungs-/Widerstandsniveaus
 strategies-condition-price-breakout-param-direction = Ausbruchsrichtung
@@ -274,7 +275,7 @@ strategies-condition-price-breakout-param-confirmation = Bestätigung %
     .description = Wie weit über das Niveau hinaus der Ausbruch bestätigt wird (vermeidet Fehlsignale)
 
 strategies-condition-price-change-percent = Preisänderung %
-    .description = Prüfen, ob sich der Preis innerhalb eines Zeitraums um eine prozentuale Schwelle geändert hat
+    .description = Prüfen, ob sich der Preis innerhalb eines Zeitraums um eine prozentuale Schwelle geändert hat.
 strategies-condition-price-change-percent-param-percentage = Änderungsschwelle %
     .description = Prozentuale Preisänderung, die auslöst (0,1–1000 %)
 strategies-condition-price-change-percent-param-direction = Richtung
@@ -291,7 +292,7 @@ strategies-condition-price-change-percent-param-time-unit-option-minutes = Min.
 strategies-condition-price-change-percent-param-time-unit-option-hours = Std.
 
 strategies-condition-price-to-ma = Preis vs. gleitender Durchschnitt
-    .description = Prüfen, ob der Preis über, unter oder innerhalb der Spanne seines einfachen gleitenden Durchschnitts liegt
+    .description = Prüfen, ob der Preis über, unter oder innerhalb der Spanne seines einfachen gleitenden Durchschnitts liegt.
 strategies-condition-price-to-ma-param-period = MA-Periode
     .description = Anzahl der Kerzen für die Berechnung des gleitenden Durchschnitts
 strategies-condition-price-to-ma-param-position = Position
@@ -303,7 +304,7 @@ strategies-condition-price-to-ma-param-distance = Abstand %
     .description = Mindestabstand zum MA (für ÜBER/UNTER) oder maximale Spanne (für INNERHALB)
 
 strategies-condition-volume-spike = Volumenspitze
-    .description = Volumenspitzen im Vergleich zum Durchschnittsvolumen erkennen (zeigt gestiegenes Interesse an)
+    .description = Volumenspitzen im Vergleich zum Durchschnittsvolumen erkennen (zeigt gestiegenes Interesse an).
 strategies-condition-volume-spike-param-lookback = Rückblickzeitraum
     .description = Anzahl der Kerzen zur Berechnung des Durchschnittsvolumens
 strategies-condition-volume-spike-param-multiplier = Volumenmultiplikator
@@ -321,7 +322,7 @@ strategies-condition-rsi-param-threshold = RSI-Schwelle
     .description = RSI-Wert von 1 bis 99 (üblich sind 30 für überverkauft und 70 für überkauft)
 
 strategies-condition-ma-cross = Kreuzung gleitender Durchschnitte
-    .description = Wird ausgelöst, wenn ein schneller gleitender Durchschnitt einen langsamen innerhalb der letzten Kerzen kreuzt. Liest nur Kerzen.
+    .description = Wird ausgelöst, wenn ein schneller gleitender Durchschnitt einen langsamen innerhalb der letzten Kerzen kreuzt.
 strategies-condition-ma-cross-param-ma-type = Durchschnittstyp
     .description = Exponentielle Durchschnitte gewichten neuere Kerzen stärker, einfache gewichten alle Kerzen gleich
 strategies-condition-ma-cross-param-ma-type-option-ema = Exponentiell (EMA)

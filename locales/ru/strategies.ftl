@@ -141,6 +141,7 @@ strategies-catalog-categories =
 strategies-catalog-empty = Ни одно условие не соответствует запросу
 strategies-catalog-exit-only = Только для стратегий выхода
 strategies-catalog-entry-only = Только для стратегий входа
+strategies-catalog-candles-note = { $description } Читает только свечи.
 strategies-data-candles = Свечи
 strategies-data-pool = Пул
 strategies-data-position = Позиция
@@ -213,7 +214,7 @@ strategies-toast-create-first = Сначала создайте стратеги
     .message = Нажмите «Новая стратегия», чтобы создать стратегию перед добавлением условий
 
 strategies-condition-candle-size = Паттерн размера свечи
-    .description = Обнаруживает определённые паттерны свечей: большое тело, маленькое тело (доджи), длинные тени
+    .description = Обнаруживает определённые паттерны свечей: большое тело, маленькое тело (доджи), длинные тени.
 strategies-condition-candle-size-param-pattern = Тип паттерна
     .description = Паттерн свечи, который нужно обнаружить
 strategies-condition-candle-size-param-pattern-option-large-body = Большое тело (сильное движение)
@@ -224,7 +225,7 @@ strategies-condition-candle-size-param-threshold = Порог размера, %
     .description = Процентный порог для обнаружения паттерна
 
 strategies-condition-consecutive-candles = Свечи подряд
-    .description = Обнаруживает подряд идущие зелёные (бычьи) или красные (медвежьи) свечи с фильтром по минимальному размеру
+    .description = Обнаруживает подряд идущие зелёные (бычьи) или красные (медвежьи) свечи с фильтром по минимальному размеру.
 strategies-condition-consecutive-candles-param-count = Количество свечей
     .description = Сколько свечей подряд требуется
 strategies-condition-consecutive-candles-param-direction = Направление свечей
@@ -257,7 +258,7 @@ strategies-condition-position-holding-time-param-comparison-option-less-than = �
 strategies-condition-position-holding-time-param-comparison-option-less-equal = Не старше (≤)
 
 strategies-condition-price-breakout = Пробой цены
-    .description = Обнаруживает пробой цены выше сопротивления (максимум периода) или ниже поддержки (минимум периода)
+    .description = Обнаруживает пробой цены выше сопротивления (максимум периода) или ниже поддержки (минимум периода).
 strategies-condition-price-breakout-param-lookback = Период просмотра
     .description = Количество свечей для определения уровня поддержки/сопротивления
 strategies-condition-price-breakout-param-direction = Направление пробоя
@@ -268,7 +269,7 @@ strategies-condition-price-breakout-param-confirmation = Подтвержден�
     .description = На сколько цена должна выйти за уровень, чтобы подтвердить пробой (защита от ложных сигналов)
 
 strategies-condition-price-change-percent = Изменение цены, %
-    .description = Проверяет, изменилась ли цена на заданный процент за период времени
+    .description = Проверяет, изменилась ли цена на заданный процент за период времени.
 strategies-condition-price-change-percent-param-percentage = Порог изменения, %
     .description = Процентное изменение цены для срабатывания (0.1–1000%)
 strategies-condition-price-change-percent-param-direction = Направление
@@ -285,7 +286,7 @@ strategies-condition-price-change-percent-param-time-unit-option-minutes = ми�
 strategies-condition-price-change-percent-param-time-unit-option-hours = ч
 
 strategies-condition-price-to-ma = Цена и скользящая средняя
-    .description = Проверяет, находится ли цена выше, ниже или в диапазоне простой скользящей средней (SMA)
+    .description = Проверяет, находится ли цена выше, ниже или в диапазоне простой скользящей средней (SMA).
 strategies-condition-price-to-ma-param-period = Период MA
     .description = Количество свечей для расчёта скользящей средней
 strategies-condition-price-to-ma-param-position = Положение
@@ -297,7 +298,7 @@ strategies-condition-price-to-ma-param-distance = Расстояние, %
     .description = Минимальное расстояние от MA (для ВЫШЕ/НИЖЕ) или максимальный диапазон (для В ДИАПАЗОНЕ)
 
 strategies-condition-volume-spike = Всплеск объёма
-    .description = Обнаруживает всплески объёма относительно среднего (признак растущего интереса)
+    .description = Обнаруживает всплески объёма относительно среднего (признак растущего интереса).
 strategies-condition-volume-spike-param-lookback = Период просмотра
     .description = Количество свечей для расчёта среднего объёма
 strategies-condition-volume-spike-param-multiplier = Множитель объёма
@@ -315,7 +316,7 @@ strategies-condition-rsi-param-threshold = Порог RSI
     .description = Уровень RSI от 1 до 99 (обычно 30 для перепроданности и 70 для перекупленности)
 
 strategies-condition-ma-cross = Пересечение скользящих средних
-    .description = Срабатывает, когда быстрая скользящая средняя пересекла медленную в последних свечах. Читает только свечи.
+    .description = Срабатывает, когда быстрая скользящая средняя пересекла медленную в последних свечах.
 strategies-condition-ma-cross-param-ma-type = Тип средней
     .description = Экспоненциальные средние сильнее учитывают недавние свечи, простые учитывают все свечи одинаково
 strategies-condition-ma-cross-param-ma-type-option-ema = Экспоненциальная (EMA)

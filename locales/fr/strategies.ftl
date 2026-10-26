@@ -137,6 +137,7 @@ strategies-catalog-categories =
 strategies-catalog-empty = Aucune condition ne correspond à la recherche
 strategies-catalog-exit-only = Stratégies de sortie uniquement
 strategies-catalog-entry-only = Stratégies d'entrée uniquement
+strategies-catalog-candles-note = { $description } Lit uniquement les bougies.
 strategies-data-candles = Bougies
 strategies-data-pool = Pool
 strategies-data-position = Position
@@ -208,7 +209,7 @@ strategies-toast-create-first = Créez d'abord une stratégie
     .message = Cliquez sur « Nouvelle stratégie » pour créer une stratégie avant d'ajouter des conditions
 
 strategies-condition-candle-size = Motif de taille de bougie
-    .description = Détecte des motifs de bougies précis : grand corps, petit corps (doji), longues mèches
+    .description = Détecte des motifs de bougies précis : grand corps, petit corps (doji), longues mèches.
 strategies-condition-candle-size-param-pattern = Type de motif
     .description = Motif de bougie à détecter
 strategies-condition-candle-size-param-pattern-option-large-body = Grand corps (mouvement fort)
@@ -219,7 +220,7 @@ strategies-condition-candle-size-param-threshold = Seuil de taille %
     .description = Seuil en pourcentage pour la détection du motif
 
 strategies-condition-consecutive-candles = Bougies consécutives
-    .description = Détecte des bougies vertes (haussières) ou rouges (baissières) consécutives avec un filtre de taille minimale
+    .description = Détecte des bougies vertes (haussières) ou rouges (baissières) consécutives avec un filtre de taille minimale.
 strategies-condition-consecutive-candles-param-count = Nombre de bougies
     .description = Nombre de bougies consécutives requis
 strategies-condition-consecutive-candles-param-direction = Sens des bougies
@@ -252,7 +253,7 @@ strategies-condition-position-holding-time-param-comparison-option-less-than = P
 strategies-condition-position-holding-time-param-comparison-option-less-equal = Au plus (≤)
 
 strategies-condition-price-breakout = Cassure de prix
-    .description = Détecte une cassure du prix au-dessus de la résistance (plus haut de la période) ou sous le support (plus bas de la période)
+    .description = Détecte une cassure du prix au-dessus de la résistance (plus haut de la période) ou sous le support (plus bas de la période).
 strategies-condition-price-breakout-param-lookback = Période de référence
     .description = Nombre de bougies pour trouver le niveau de support/résistance
 strategies-condition-price-breakout-param-direction = Sens de la cassure
@@ -263,7 +264,7 @@ strategies-condition-price-breakout-param-confirmation = Confirmation %
     .description = Distance à dépasser au-delà du niveau pour confirmer la cassure (évite les faux signaux)
 
 strategies-condition-price-change-percent = Variation du prix %
-    .description = Vérifie si le prix a varié d'un seuil en pourcentage sur une période donnée
+    .description = Vérifie si le prix a varié d'un seuil en pourcentage sur une période donnée.
 strategies-condition-price-change-percent-param-percentage = Seuil de variation %
     .description = Variation de prix en pourcentage déclenchant la condition (0.1-1000 %)
 strategies-condition-price-change-percent-param-direction = Sens
@@ -280,7 +281,7 @@ strategies-condition-price-change-percent-param-time-unit-option-minutes = min
 strategies-condition-price-change-percent-param-time-unit-option-hours = h
 
 strategies-condition-price-to-ma = Prix vs moyenne mobile
-    .description = Vérifie si le prix est au-dessus, en dessous ou dans la fourchette de sa moyenne mobile simple
+    .description = Vérifie si le prix est au-dessus, en dessous ou dans la fourchette de sa moyenne mobile simple.
 strategies-condition-price-to-ma-param-period = Période de la MM
     .description = Nombre de bougies pour le calcul de la moyenne mobile
 strategies-condition-price-to-ma-param-position = Position
@@ -292,7 +293,7 @@ strategies-condition-price-to-ma-param-distance = Distance %
     .description = Distance minimale à la MM (pour AU-DESSUS/EN DESSOUS) ou fourchette maximale (pour DANS LA FOURCHETTE)
 
 strategies-condition-volume-spike = Pic de volume
-    .description = Détecte les pics de volume par rapport au volume moyen (signale un intérêt accru)
+    .description = Détecte les pics de volume par rapport au volume moyen (signale un intérêt accru).
 strategies-condition-volume-spike-param-lookback = Période de référence
     .description = Nombre de bougies pour calculer le volume moyen
 strategies-condition-volume-spike-param-multiplier = Multiplicateur de volume
@@ -310,7 +311,7 @@ strategies-condition-rsi-param-threshold = Seuil du RSI
     .description = Niveau de RSI de 1 à 99 (30 et 70 sont les niveaux habituels de survente et de surachat)
 
 strategies-condition-ma-cross = Croisement de moyennes mobiles
-    .description = Se déclenche lorsqu'une moyenne mobile rapide croise une moyenne lente au cours des dernières bougies. Lit uniquement les bougies.
+    .description = Se déclenche lorsqu'une moyenne mobile rapide croise une moyenne lente au cours des dernières bougies.
 strategies-condition-ma-cross-param-ma-type = Type de moyenne
     .description = Les moyennes exponentielles donnent plus de poids aux bougies récentes ; les moyennes simples pèsent toutes les bougies de la même façon
 strategies-condition-ma-cross-param-ma-type-option-ema = Exponentielle (EMA)

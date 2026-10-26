@@ -40,21 +40,36 @@ export function appliesTo(schema, strategyType) {
   return !Array.isArray(schema.applies_to) || schema.applies_to.includes(strategyType);
 }
 
+/**
+ * The catalog description of a condition. A candle condition's description is closed
+ * by the note that it reads candles only, written here once for every condition the
+ * data tag marks as candle-based rather than in each condition's message.
+ */
+export function catalogDescription(schema, tag = dataTagOf(schema)) {
+  const description = conditionDescription(schema);
+  return tag === "candles"
+    ? I18n.t("strategies-catalog-candles-note", { description }).trim()
+    : description;
+}
+
 /** Catalog entries of the strategy-origin schemas, by name. */
 export function catalogEntries(schemas, strategyType) {
   return Object.entries(schemas ?? {})
     .filter(([, schema]) => !schema.origin || String(schema.origin).toLowerCase() === "strategy")
-    .map(([type, schema]) => ({
-      type,
-      icon: schema.icon || "icon-puzzle",
-      category: schema.category || "General",
-      categoryName: categoryLabel(schema),
-      name: conditionName(schema, type),
-      description: conditionDescription(schema),
-      tag: dataTagOf(schema),
-      applicable: appliesTo(schema, strategyType),
-      only: schema.applies_to?.length === 1 ? schema.applies_to[0] : null,
-    }))
+    .map(([type, schema]) => {
+      const tag = dataTagOf(schema);
+      return {
+        type,
+        icon: schema.icon || "icon-puzzle",
+        category: schema.category || "General",
+        categoryName: categoryLabel(schema),
+        name: conditionName(schema, type),
+        description: catalogDescription(schema, tag),
+        tag,
+        applicable: appliesTo(schema, strategyType),
+        only: schema.applies_to?.length === 1 ? schema.applies_to[0] : null,
+      };
+    })
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 

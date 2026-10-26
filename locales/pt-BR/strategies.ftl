@@ -155,6 +155,7 @@ strategies-catalog-categories =
 strategies-catalog-empty = Nenhuma condição corresponde à busca
 strategies-catalog-exit-only = Somente estratégias de saída
 strategies-catalog-entry-only = Somente estratégias de entrada
+strategies-catalog-candles-note = { $description } Lê apenas candles.
 strategies-data-candles = Candles
 strategies-data-pool = Pool
 strategies-data-position = Posição
@@ -235,7 +236,7 @@ strategies-toast-create-first = Crie uma estratégia primeiro
 ## Conditions
 
 strategies-condition-candle-size = Padrão de tamanho do candle
-    .description = Detecta padrões específicos de candle: corpo grande, corpo pequeno (doji), pavios longos
+    .description = Detecta padrões específicos de candle: corpo grande, corpo pequeno (doji), pavios longos.
 strategies-condition-candle-size-param-pattern = Tipo de padrão
     .description = Padrão de candle a detectar
 strategies-condition-candle-size-param-pattern-option-large-body = Corpo grande (movimento forte)
@@ -246,7 +247,7 @@ strategies-condition-candle-size-param-threshold = Limite de tamanho %
     .description = Limite percentual para detecção do padrão
 
 strategies-condition-consecutive-candles = Candles consecutivos
-    .description = Detecta candles verdes (de alta) ou vermelhos (de baixa) consecutivos, com filtro de tamanho mínimo
+    .description = Detecta candles verdes (de alta) ou vermelhos (de baixa) consecutivos, com filtro de tamanho mínimo.
 strategies-condition-consecutive-candles-param-count = Quantidade de candles
     .description = Número de candles consecutivos exigido
 strategies-condition-consecutive-candles-param-direction = Direção do candle
@@ -279,7 +280,7 @@ strategies-condition-position-holding-time-param-comparison-option-less-than = M
 strategies-condition-position-holding-time-param-comparison-option-less-equal = No máximo (≤)
 
 strategies-condition-price-breakout = Rompimento de preço
-    .description = Detecta o preço rompendo acima da resistência (máxima do período) ou abaixo do suporte (mínima do período)
+    .description = Detecta o preço rompendo acima da resistência (máxima do período) ou abaixo do suporte (mínima do período).
 strategies-condition-price-breakout-param-lookback = Janela de análise
     .description = Número de candles para encontrar o nível de suporte/resistência
 strategies-condition-price-breakout-param-direction = Direção do rompimento
@@ -290,7 +291,7 @@ strategies-condition-price-breakout-param-confirmation = Confirmação %
     .description = Quanto além do nível para confirmar o rompimento (evita sinais falsos)
 
 strategies-condition-price-change-percent = Variação de preço %
-    .description = Verifica se o preço variou por um limite percentual dentro de um período
+    .description = Verifica se o preço variou por um limite percentual dentro de um período.
 strategies-condition-price-change-percent-param-percentage = Limite de variação %
     .description = Variação percentual de preço que aciona a condição (0.1-1000%)
 strategies-condition-price-change-percent-param-direction = Direção
@@ -307,7 +308,7 @@ strategies-condition-price-change-percent-param-time-unit-option-minutes = min
 strategies-condition-price-change-percent-param-time-unit-option-hours = h
 
 strategies-condition-price-to-ma = Preço vs média móvel
-    .description = Verifica se o preço está acima, abaixo ou dentro da faixa da sua média móvel simples
+    .description = Verifica se o preço está acima, abaixo ou dentro da faixa da sua média móvel simples.
 strategies-condition-price-to-ma-param-period = Período da MM
     .description = Número de candles para o cálculo da média móvel
 strategies-condition-price-to-ma-param-position = Posição
@@ -319,7 +320,7 @@ strategies-condition-price-to-ma-param-distance = Distância %
     .description = Distância mínima da MM (para ACIMA/ABAIXO) ou faixa máxima (para DENTRO)
 
 strategies-condition-volume-spike = Pico de volume
-    .description = Detecta picos de volume em relação ao volume médio (indica maior interesse)
+    .description = Detecta picos de volume em relação ao volume médio (indica maior interesse).
 strategies-condition-volume-spike-param-lookback = Janela de análise
     .description = Número de candles para calcular o volume médio
 strategies-condition-volume-spike-param-multiplier = Multiplicador de volume
@@ -337,7 +338,7 @@ strategies-condition-rsi-param-threshold = Limite do RSI
     .description = Nível de RSI de 1 a 99 (30 e 70 são os níveis usuais de sobrevenda e sobrecompra)
 
 strategies-condition-ma-cross = Cruzamento de médias móveis
-    .description = Dispara quando uma média móvel rápida cruza uma lenta dentro dos últimos candles. Lê apenas candles.
+    .description = Dispara quando uma média móvel rápida cruza uma lenta dentro dos últimos candles.
 strategies-condition-ma-cross-param-ma-type = Tipo de média
     .description = Médias exponenciais dão mais peso aos candles recentes; médias simples pesam todos os candles igualmente
 strategies-condition-ma-cross-param-ma-type-option-ema = Exponencial (EMA)
