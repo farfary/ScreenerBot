@@ -31,6 +31,7 @@ use crate::i18n::{
     ids, locale_info, resolve_locale, text_direction, LanguageIdentifier, MessageId, UiArg, UiText,
 };
 use crate::logger::{self, LogTag};
+use crate::version::RestartBlocker;
 
 /// Environment variable through which the launching shell passes its interface
 /// language, so the error screen matches the language the user already sees.
@@ -69,6 +70,9 @@ pub enum StartupErrorCode {
     /// A store could not be upgraded to this version; its open refused before
     /// committing anything.
     StorageUpgrade,
+    /// The wallet data reset was refused because it would hide open positions or cut
+    /// work short.
+    WalletResetRefused,
     /// Any other fatal startup failure without a dedicated remedy.
     Generic,
 }
@@ -82,6 +86,7 @@ impl StartupErrorCode {
             StartupErrorCode::LockHeld => "lock_held",
             StartupErrorCode::ConfigInvalid => "config_invalid",
             StartupErrorCode::StorageUpgrade => "storage_upgrade",
+            StartupErrorCode::WalletResetRefused => "wallet_reset_refused",
             StartupErrorCode::Generic => "generic",
         }
     }
@@ -220,6 +225,36 @@ impl StartupError {
                 .arg("database", UiArg::Text(database.to_owned()))
                 .arg("error", UiArg::Text(causes.join("\n"))),
             UiText::new(ids::STARTUP_STORAGE_UPGRADE_REMEDY),
+        )
+    }
+
+    /// The wallet data reset was refused for `blocker`.
+    pub fn wallet_reset_refused(blocker: RestartBlocker) -> Self {
+        let detail = match blocker {
+            RestartBlocker::OpenPositions { count } => {
+                UiText::new(ids::STARTUP_WALLET_RESET_REFUSED_OPEN_POSITIONS).arg(
+                    "count",
+                    UiArg::Count(i64::try_from(count).unwrap_or(i64::MAX)),
+                )
+            }
+            RestartBlocker::TradeInFlight => {
+                UiText::new(ids::STARTUP_WALLET_RESET_REFUSED_TRADE_IN_FLIGHT)
+            }
+            RestartBlocker::ToolInFlight => {
+                UiText::new(ids::STARTUP_WALLET_RESET_REFUSED_TOOL_IN_FLIGHT)
+            }
+            RestartBlocker::PositionsLoading => {
+                UiText::new(ids::STARTUP_WALLET_RESET_REFUSED_POSITIONS_LOADING)
+            }
+            RestartBlocker::PositionsUnreadable => {
+                UiText::new(ids::STARTUP_WALLET_RESET_REFUSED_POSITIONS_UNREADABLE)
+            }
+        };
+        Self::new(
+            StartupErrorCode::WalletResetRefused,
+            UiText::new(ids::STARTUP_WALLET_RESET_REFUSED_TITLE),
+            detail,
+            UiText::new(ids::STARTUP_WALLET_RESET_REFUSED_REMEDY),
         )
     }
 
@@ -418,6 +453,11 @@ mod tests {
                 UiText::new(ids::STARTUP_CONFIG_LOAD_PARSE_REMEDY),
             ),
             StartupError::invalid_option("bad port"),
+            StartupError::wallet_reset_refused(RestartBlocker::OpenPositions { count: 2 }),
+            StartupError::wallet_reset_refused(RestartBlocker::TradeInFlight),
+            StartupError::wallet_reset_refused(RestartBlocker::ToolInFlight),
+            StartupError::wallet_reset_refused(RestartBlocker::PositionsLoading),
+            StartupError::wallet_reset_refused(RestartBlocker::PositionsUnreadable),
             StartupError::storage_upgrade(
                 "positions.db",
                 &["service lifecycle failed".to_owned(), "refused".to_owned()],

@@ -53,6 +53,16 @@ startup-storage-upgrade-detail =
     { $error }
 startup-storage-upgrade-remedy = Sao chép chi tiết và gửi kèm tệp nhật ký đến bộ phận hỗ trợ tại t.me/screenerbotio_support. Đừng chỉnh sửa, di chuyển hoặc xóa cơ sở dữ liệu: { -brand } sẽ mở lại sau khi bản sửa lỗi được cài đặt.
 
+## Wallet replacement and wallet data reset.
+
+startup-wallet-reset-refused-title = Dữ liệu ví chưa được đặt lại
+startup-wallet-reset-refused-open-positions = Ví trước vẫn còn vị thế đang mở ({ $count }), nên lịch sử cục bộ của nó được giữ lại.
+startup-wallet-reset-refused-trade-in-flight = Một giao dịch vẫn đang diễn ra, nên lịch sử cục bộ của ví được giữ lại.
+startup-wallet-reset-refused-tool-in-flight = Một công cụ ví vẫn đang chạy, nên lịch sử cục bộ của ví được giữ lại.
+startup-wallet-reset-refused-positions-loading = Các vị thế đang mở vẫn đang được tải, nên lịch sử cục bộ của ví được giữ lại.
+startup-wallet-reset-refused-positions-unreadable = Không đọc được kho vị thế nên không thể loại trừ vị thế đang mở, và lịch sử cục bộ của ví được giữ lại.
+startup-wallet-reset-refused-remedy = Không có gì được di chuyển. Hãy khởi động { -brand } với ví trước, đóng các vị thế đang mở của nó, rồi đặt lại dữ liệu ví lần nữa.
+
 ## Generic failures.
 
 startup-generic-title = { -brand } không thể khởi động

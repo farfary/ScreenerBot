@@ -60,6 +60,16 @@ startup-storage-upgrade-detail =
     { $error }
 startup-storage-upgrade-remedy = جزئیات را کپی کنید و همراه فایل گزارش برای پشتیبانی در t.me/screenerbotio_support بفرستید. پایگاه داده را ویرایش، جابه‌جا یا حذف نکنید: { -brand } پس از نصب اصلاحیه دوباره آن را باز می‌کند.
 
+## Wallet replacement and wallet data reset.
+
+startup-wallet-reset-refused-title = داده‌های کیف پول بازنشانی نشد
+startup-wallet-reset-refused-open-positions = کیف پول قبلی هنوز پوزیشن باز دارد ({ $count })، پس تاریخچهٔ محلی آن نگه داشته شد.
+startup-wallet-reset-refused-trade-in-flight = یک معامله هنوز در جریان بود، پس تاریخچهٔ محلی کیف پول نگه داشته شد.
+startup-wallet-reset-refused-tool-in-flight = یک ابزار کیف پول هنوز در حال اجرا بود، پس تاریخچهٔ محلی کیف پول نگه داشته شد.
+startup-wallet-reset-refused-positions-loading = پوزیشن‌های باز هنوز در حال بارگذاری بودند، پس تاریخچهٔ محلی کیف پول نگه داشته شد.
+startup-wallet-reset-refused-positions-unreadable = مخزن پوزیشن‌ها خوانده نشد، پس نمی‌توان باز نبودن پوزیشنی را تأیید کرد و تاریخچهٔ محلی کیف پول نگه داشته شد.
+startup-wallet-reset-refused-remedy = چیزی جابه‌جا نشد. { -brand } را با کیف پول قبلی اجرا کنید، پوزیشن‌های باز آن را ببندید و سپس داده‌های کیف پول را دوباره بازنشانی کنید.
+
 ## Generic failures.
 
 startup-generic-title = { -brand } شروع نشد

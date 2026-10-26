@@ -107,6 +107,39 @@ fn quarantine_moves_the_store_and_sidecars_and_writes_a_manifest() {
 }
 
 #[test]
+fn moving_store_files_skips_missing_files_and_resumes_an_interrupted_move() {
+    let directory = tempfile::tempdir().expect("temp dir");
+    let path = directory.path().join("positions.db");
+    let wal = directory.path().join("positions.db-wal");
+    fs::write(&path, b"store").expect("write store");
+    fs::write(&wal, b"wal").expect("write wal");
+    let target = directory.path().join("backup");
+
+    // An interrupted move left the sidecar in the target and the store in place.
+    fs::create_dir(&target).expect("create target");
+    fs::rename(&wal, target.join("positions.db-wal")).expect("pre-move wal");
+
+    let moved = move_store_files(&path, &target).expect("move store files");
+
+    assert_eq!(moved, vec![path.display().to_string()]);
+    assert!(!path.exists());
+    assert_eq!(
+        fs::read(target.join("positions.db")).expect("read moved"),
+        b"store"
+    );
+    assert_eq!(
+        fs::read(target.join("positions.db-wal")).expect("read wal"),
+        b"wal"
+    );
+    assert!(
+        move_store_files(&path, &target)
+            .expect("repeat move")
+            .is_empty(),
+        "a finished move has nothing left to move"
+    );
+}
+
+#[test]
 fn salvage_copies_only_the_listed_rows_and_columns_and_never_writes_the_source() {
     let directory = tempfile::tempdir().expect("temp dir with a space");
     let quarantined_dir = directory.path().join("quarantine dir");

@@ -56,6 +56,16 @@ startup-storage-upgrade-detail =
     { $error }
 startup-storage-upgrade-remedy = 세부 정보를 복사해 로그 파일과 함께 t.me/screenerbotio_support 지원팀에 보내 주세요. 데이터베이스를 편집, 이동, 삭제하지 마세요. 수정 사항이 설치되면 { -brand }이(가) 다시 엽니다.
 
+## Wallet replacement and wallet data reset.
+
+startup-wallet-reset-refused-title = 지갑 데이터가 초기화되지 않았습니다
+startup-wallet-reset-refused-open-positions = 이전 지갑에 아직 열린 포지션이 있어 ({ $count }) 로컬 기록이 보관되었습니다.
+startup-wallet-reset-refused-trade-in-flight = 거래가 아직 진행 중이어서 지갑의 로컬 기록이 보관되었습니다.
+startup-wallet-reset-refused-tool-in-flight = 지갑 도구가 아직 실행 중이어서 지갑의 로컬 기록이 보관되었습니다.
+startup-wallet-reset-refused-positions-loading = 열린 포지션을 아직 불러오는 중이어서 지갑의 로컬 기록이 보관되었습니다.
+startup-wallet-reset-refused-positions-unreadable = 포지션 저장소를 읽을 수 없어 열린 포지션이 없다고 확인할 수 없으므로 지갑의 로컬 기록이 보관되었습니다.
+startup-wallet-reset-refused-remedy = 이동된 것은 없습니다. 이전 지갑으로 { -brand }을 시작해 열린 포지션을 종료한 후 지갑 데이터를 다시 초기화하세요.
+
 ## Generic failures.
 
 startup-generic-title = { -brand }을 시작할 수 없습니다

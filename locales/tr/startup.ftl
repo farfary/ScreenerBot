@@ -53,6 +53,16 @@ startup-storage-upgrade-detail =
     { $error }
 startup-storage-upgrade-remedy = Ayrıntıları kopyalayın ve günlük dosyasıyla birlikte t.me/screenerbotio_support adresindeki desteğe gönderin. Veritabanını düzenlemeyin, taşımayın veya silmeyin: bir düzeltme yüklendiğinde { -brand } onu yeniden açar.
 
+## Wallet replacement and wallet data reset.
+
+startup-wallet-reset-refused-title = Cüzdan verileri sıfırlanmadı
+startup-wallet-reset-refused-open-positions = Önceki cüzdanda hâlâ açık pozisyonlar var ({ $count }), bu yüzden yerel geçmişi saklandı.
+startup-wallet-reset-refused-trade-in-flight = Bir işlem hâlâ sürüyordu, bu yüzden cüzdanın yerel geçmişi saklandı.
+startup-wallet-reset-refused-tool-in-flight = Bir cüzdan aracı hâlâ çalışıyordu, bu yüzden cüzdanın yerel geçmişi saklandı.
+startup-wallet-reset-refused-positions-loading = Açık pozisyonlar hâlâ yükleniyordu, bu yüzden cüzdanın yerel geçmişi saklandı.
+startup-wallet-reset-refused-positions-unreadable = Pozisyon deposu okunamadı, bu yüzden açık pozisyon olmadığı doğrulanamıyor ve cüzdanın yerel geçmişi saklandı.
+startup-wallet-reset-refused-remedy = Hiçbir şey taşınmadı. { -brand } uygulamasını önceki cüzdanla başlatın, açık pozisyonlarını kapatın ve ardından cüzdan verilerini yeniden sıfırlayın.
+
 ## Generic failures.
 
 startup-generic-title = { -brand } başlatılamadı

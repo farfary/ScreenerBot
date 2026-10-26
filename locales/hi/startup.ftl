@@ -43,6 +43,14 @@ startup-storage-upgrade-detail =
     { $error }
 startup-storage-upgrade-remedy = विवरण कॉपी करें और लॉग फ़ाइल के साथ t.me/screenerbotio_support पर सपोर्ट को भेजें। डेटाबेस को एडिट, मूव या डिलीट न करें: फ़िक्स इंस्टॉल होते ही { -brand } उसे फिर से खोलेगा।
 
+startup-wallet-reset-refused-title = वॉलेट डेटा रीसेट नहीं हुआ
+startup-wallet-reset-refused-open-positions = पिछले वॉलेट में अभी भी खुली पोज़िशन हैं ({ $count }), इसलिए उसकी लोकल हिस्ट्री रखी गई।
+startup-wallet-reset-refused-trade-in-flight = एक ट्रेड अभी चल रहा था, इसलिए वॉलेट की लोकल हिस्ट्री रखी गई।
+startup-wallet-reset-refused-tool-in-flight = एक वॉलेट टूल अभी चल रहा था, इसलिए वॉलेट की लोकल हिस्ट्री रखी गई।
+startup-wallet-reset-refused-positions-loading = खुली पोज़िशन अभी लोड हो रही थीं, इसलिए वॉलेट की लोकल हिस्ट्री रखी गई।
+startup-wallet-reset-refused-positions-unreadable = पोज़िशन स्टोर पढ़ा नहीं जा सका, इसलिए खुली पोज़िशन होने से इनकार नहीं किया जा सकता और वॉलेट की लोकल हिस्ट्री रखी गई।
+startup-wallet-reset-refused-remedy = कुछ भी मूव नहीं हुआ। पिछले वॉलेट के साथ { -brand } शुरू करें, उसकी खुली पोज़िशन बंद करें, फिर वॉलेट डेटा दोबारा रीसेट करें।
+
 startup-generic-title = { -brand } शुरू नहीं हो सका
 startup-generic-remedy = विवरण के लिए लॉग फ़ाइल देखें, फिर ऐप रीस्टार्ट करें। समस्या बनी रहे तो t.me/screenerbotio_support पर सपोर्ट से संपर्क करें।
 startup-generic-detail = { $error }

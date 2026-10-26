@@ -17,8 +17,10 @@ use rusqlite::Connection;
 use crate::chains::{ChainId, ChainScope};
 use crate::errors::DatabaseError;
 use crate::logger::{self, LogTag};
+use crate::version::RestartBlocker;
 
 use super::backup::snapshot::{self, Snapshot};
+use super::backup::{WalletResetManifest, WalletResetReason};
 use super::catalog::{self, PoolShape, StoreClass, StoreLocation, StoreSpec};
 use super::configure::{configure_connection, DbConfig};
 use super::health::{self, StoreHealth};
@@ -405,50 +407,78 @@ pub fn open_all() -> Duration {
     elapsed
 }
 
-/// Move every file of the wallet-scoped stores to quarantine, so the stores open empty
-/// for the current wallet. Runs under the process lock before the storage phase; a store
-/// already opened in this process is left in place.
-pub fn reset_wallet_stores() -> Vec<recovery::Quarantined> {
-    let mut moved = Vec::new();
-    for (spec, _) in catalog::wallet_scoped_stores() {
-        for path in spec.paths() {
-            if !path.exists() {
-                continue;
-            }
-            if POOLS
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner)
-                .contains_key(&path)
-            {
-                logger::warning(
-                    LogTag::System,
-                    &format!("{} is open and was not reset", path.display()),
-                );
-                continue;
-            }
-            match recovery::quarantine(spec, &path, "wallet data reset") {
-                Ok(quarantined) => {
-                    logger::info(
-                        LogTag::System,
-                        &format!(
-                            "{} moved to {} by the wallet data reset",
-                            path.display(),
-                            quarantined.directory.display()
-                        ),
-                    );
-                    moved.push(quarantined);
-                }
-                Err(error) => logger::error(
-                    LogTag::System,
-                    &format!(
-                        "Wallet data reset left {} in place: {error}",
-                        path.display()
-                    ),
-                ),
-            }
-        }
+/// Whether the store file at `path` has a pool in this process.
+pub(super) fn is_pooled(path: &Path) -> bool {
+    POOLS
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .contains_key(path)
+}
+
+/// Why the wallet data reset did not move the wallet-scoped stores.
+#[derive(Debug, thiserror::Error)]
+pub enum WalletResetRefusal {
+    /// A restart would interrupt something, or positions are open in the store.
+    #[error("{0}")]
+    Blocked(RestartBlocker),
+    /// The stores could not be moved.
+    #[error(transparent)]
+    Database(#[from] DatabaseError),
+}
+
+/// Move every file of the wallet-scoped stores into a new wallet-reset backup directory,
+/// `backups/wallet-reset-<stamp>-reset/`, with a manifest, so the stores open empty for
+/// the current wallet. Runs under the process lock before the storage phase. Refuses with
+/// `blocker` when one is given, and while the positions store holds an open position of
+/// any wallet or cannot be read. Returns the backup directory, or `None` when there was
+/// nothing to move.
+pub fn reset_wallet_stores(
+    blocker: Option<RestartBlocker>,
+) -> Result<Option<PathBuf>, WalletResetRefusal> {
+    if let Some(blocker) = blocker {
+        return Err(WalletResetRefusal::Blocked(blocker));
     }
-    moved
+    let positions = catalog::POSITIONS.path(crate::chains::legacy_row_chain());
+    let mut open_positions = 0;
+    for chain in ChainId::ALL {
+        open_positions +=
+            crate::positions::database::count_open_positions_in_file(&positions, *chain)
+                .map_err(|_| WalletResetRefusal::Blocked(RestartBlocker::PositionsUnreadable))?;
+    }
+    if open_positions > 0 {
+        return Err(WalletResetRefusal::Blocked(RestartBlocker::OpenPositions {
+            count: open_positions,
+        }));
+    }
+    let present = catalog::wallet_scoped_stores()
+        .flat_map(|(spec, _)| spec.paths())
+        .any(|path| path.exists());
+    if !present {
+        return Ok(None);
+    }
+
+    let directory = super::backup::wallet_reset_directory("reset");
+    let manifest = super::backup::move_wallet_stores(
+        &directory,
+        WalletResetManifest {
+            reason: WalletResetReason::WalletReset,
+            chain: crate::chains::legacy_row_chain().as_str().to_owned(),
+            previous_wallet: None,
+            new_wallet: None,
+            core_version: env!("CARGO_PKG_VERSION").to_owned(),
+            created_at_ms: Utc::now().timestamp_millis(),
+            files: Vec::new(),
+        },
+    )?;
+    logger::info(
+        LogTag::System,
+        &format!(
+            "Wallet data reset moved {} to {}",
+            manifest.files.join(", "),
+            directory.display()
+        ),
+    );
+    Ok(Some(directory))
 }
 
 /// Run the whole upgrade of `spec` on `connection` in one IMMEDIATE transaction, as an

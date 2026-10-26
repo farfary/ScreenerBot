@@ -576,3 +576,110 @@ fn open_cache_stores_through_recovery() {
     screenerbot::config::load_config().expect("load isolated configuration");
     screenerbot::database::open::open_all();
 }
+
+fn seed_wallet_scoped_stores() -> Vec<std::path::PathBuf> {
+    let paths: Vec<std::path::PathBuf> = screenerbot::database::catalog::wallet_scoped_stores()
+        .flat_map(|(spec, _)| spec.paths())
+        .collect();
+    for path in &paths {
+        Connection::open(path)
+            .and_then(|connection| connection.execute_batch("CREATE TABLE seed (v INTEGER);"))
+            .expect("create a wallet-scoped store");
+    }
+    paths
+}
+
+#[test]
+fn the_wallet_data_reset_moves_the_stores_into_a_wallet_reset_backup() {
+    common::run_isolated(
+        module_path!(),
+        "the_wallet_data_reset_moves_the_stores_into_a_wallet_reset_backup",
+        || async {
+            let _dir = common::isolated_env();
+            screenerbot::paths::ensure_all_directories().expect("create data directories");
+            let paths = seed_wallet_scoped_stores();
+
+            let directory = screenerbot::database::open::reset_wallet_stores(None)
+                .expect("reset the wallet data")
+                .expect("the stores were moved");
+
+            assert_eq!(
+                directory.parent(),
+                Some(screenerbot::paths::get_backups_directory().as_path())
+            );
+            let name = directory
+                .file_name()
+                .and_then(|name| name.to_str())
+                .expect("directory name");
+            assert!(
+                name.starts_with(screenerbot::paths::WALLET_RESET_DIRECTORY_PREFIX)
+                    && name.ends_with("-reset"),
+                "{name}"
+            );
+            let manifest: serde_json::Value = serde_json::from_slice(
+                &std::fs::read(directory.join("manifest.json")).expect("read the manifest"),
+            )
+            .expect("decode the manifest");
+            assert_eq!(manifest["reason"], "wallet_reset");
+            let mut expected: Vec<String> = paths
+                .iter()
+                .filter_map(|path| path.file_name())
+                .map(|name| name.to_string_lossy().into_owned())
+                .collect();
+            expected.sort();
+            assert_eq!(manifest["files"], serde_json::json!(expected));
+            for path in &paths {
+                assert!(!path.exists(), "{} was moved", path.display());
+                assert!(directory.join(path.file_name().unwrap()).exists());
+            }
+            assert!(
+                !screenerbot::paths::get_quarantine_directory().exists(),
+                "the reset no longer writes to quarantine"
+            );
+        },
+    );
+}
+
+#[test]
+fn the_wallet_data_reset_refuses_while_positions_are_open_or_work_is_in_flight() {
+    common::run_isolated(
+        module_path!(),
+        "the_wallet_data_reset_refuses_while_positions_are_open_or_work_is_in_flight",
+        || async {
+            use screenerbot::database::open::{reset_wallet_stores, WalletResetRefusal};
+            use screenerbot::version::RestartBlocker;
+
+            let _dir = common::isolated_env();
+            screenerbot::paths::ensure_all_directories().expect("create data directories");
+            let paths = seed_wallet_scoped_stores();
+            Connection::open(screenerbot::paths::get_positions_db_path())
+                .and_then(|connection| {
+                    connection.execute_batch(
+                        "CREATE TABLE positions (
+                            wallet_address TEXT NOT NULL,
+                            chain_id TEXT NOT NULL,
+                            archived INTEGER NOT NULL DEFAULT 0,
+                            exit_time TEXT,
+                            transaction_exit_verified INTEGER NOT NULL DEFAULT 0
+                         );
+                         INSERT INTO positions (wallet_address, chain_id) VALUES ('wallet', 'solana');",
+                    )
+                })
+                .expect("record an open position");
+
+            assert!(matches!(
+                reset_wallet_stores(None),
+                Err(WalletResetRefusal::Blocked(RestartBlocker::OpenPositions {
+                    count: 1
+                }))
+            ));
+            assert!(matches!(
+                reset_wallet_stores(Some(RestartBlocker::TradeInFlight)),
+                Err(WalletResetRefusal::Blocked(RestartBlocker::TradeInFlight))
+            ));
+            for path in &paths {
+                assert!(path.exists(), "{} stays in place", path.display());
+            }
+        },
+    );
+}

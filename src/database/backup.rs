@@ -1,7 +1,7 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Every backup-API copy of a store: the copy taken before an upgrade rebuilds it, with a manifest naming the core version that took it so the desktop shell can restore it when it rolls that core back, and the periodic snapshots of ledger and vault stores.
+//! Every backup of a store: the backup-API copy taken before an upgrade rebuilds it, with a manifest naming the core version that took it so the desktop shell can restore it when it rolls that core back, the periodic snapshots of ledger and vault stores, and the wallet-reset backups that receive the wallet-scoped stores when they are reset or the trading wallet is replaced.
 
 pub mod snapshot;
 
@@ -13,7 +13,10 @@ use rusqlite::{Connection, OpenFlags};
 use serde::{Deserialize, Serialize};
 
 use crate::errors::DatabaseError;
-use crate::paths::BACKUPS_DIRECTORY_NAME;
+use crate::logger::{self, LogTag};
+use crate::paths::{BACKUPS_DIRECTORY_NAME, WALLET_RESET_DIRECTORY_PREFIX};
+
+use super::catalog;
 
 /// What the shell needs to decide whether a backup belongs to the core it rolls back.
 /// The field names are read by `electron/src/upgrade_backups.js`.
@@ -91,6 +94,143 @@ pub fn back_up_before_upgrade(
         .and_then(|()| fs::rename(&manifest_partial, &manifest_path))
         .map_err(|e| failed(format!("write {}: {e}", manifest_path.display())))?;
     Ok(backup_path)
+}
+
+/// Why the wallet-scoped stores were moved into a wallet-reset backup.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WalletResetReason {
+    /// The wallet data reset requested at launch.
+    WalletReset,
+    /// The trading wallet was replaced by another key.
+    WalletReplaced,
+}
+
+/// What a wallet-reset backup directory records about the stores it holds.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WalletResetManifest {
+    pub reason: WalletResetReason,
+    /// The chain whose trading wallet the stores belonged to.
+    pub chain: String,
+    /// The trading wallet the stores belonged to, when known.
+    pub previous_wallet: Option<String>,
+    /// The trading wallet that replaced it, for a replacement.
+    pub new_wallet: Option<String>,
+    /// Version of the core that moved the stores.
+    pub core_version: String,
+    /// When the stores were moved, in Unix milliseconds.
+    pub created_at_ms: i64,
+    /// The store files the directory holds.
+    pub files: Vec<String>,
+}
+
+/// Name of the manifest inside a wallet-reset backup directory.
+const WALLET_RESET_MANIFEST_NAME: &str = "manifest.json";
+
+/// A new wallet-reset backup directory in `backups`:
+/// `wallet-reset-<YYYYMMDDTHHMMSSZ>-<label>`.
+pub fn wallet_reset_directory(label: &str) -> PathBuf {
+    let stamp = chrono::Utc::now().format("%Y%m%dT%H%M%SZ");
+    crate::paths::get_backups_directory()
+        .join(format!("{WALLET_RESET_DIRECTORY_PREFIX}{stamp}-{label}"))
+}
+
+/// Move every file of the wallet-scoped stores into `directory` and write `manifest`
+/// there atomically, listing every store file the directory holds. Refuses before moving
+/// anything while a wallet-scoped store is open in this process: its pool would keep
+/// writing to the moved file. Files already moved are skipped, so an interrupted move
+/// resumes; nothing is deleted.
+pub fn move_wallet_stores(
+    directory: &Path,
+    mut manifest: WalletResetManifest,
+) -> Result<WalletResetManifest, DatabaseError> {
+    let paths: Vec<PathBuf> = catalog::wallet_scoped_stores()
+        .flat_map(|(spec, _)| spec.paths())
+        .collect();
+    if let Some(open) = paths.iter().find(|path| super::open::is_pooled(path)) {
+        return Err(DatabaseError::Busy {
+            operation: "move wallet stores".to_owned(),
+            message: format!("{} is open in this process", open.display()),
+        });
+    }
+    for path in &paths {
+        super::recovery::move_store_files(path, directory)?;
+    }
+    fs::create_dir_all(directory).map_err(|error| DatabaseError::Io {
+        operation: format!("create {}", directory.display()),
+        message: error.to_string(),
+    })?;
+    manifest.files = backup_store_files(directory)?;
+
+    let manifest_path = directory.join(WALLET_RESET_MANIFEST_NAME);
+    let encoded = serde_json::to_vec_pretty(&manifest).map_err(|error| DatabaseError::Io {
+        operation: format!("encode {}", manifest_path.display()),
+        message: error.to_string(),
+    })?;
+    crate::utils::atomic_file::replace(&manifest_path, &encoded, 0o600).map_err(|error| {
+        DatabaseError::Io {
+            operation: format!("write {}", manifest_path.display()),
+            message: error.to_string(),
+        }
+    })?;
+    Ok(manifest)
+}
+
+/// The names of the files in a wallet-reset backup directory other than its manifest,
+/// sorted.
+fn backup_store_files(directory: &Path) -> Result<Vec<String>, DatabaseError> {
+    let entries = fs::read_dir(directory).map_err(|error| DatabaseError::Io {
+        operation: format!("list {}", directory.display()),
+        message: error.to_string(),
+    })?;
+    let mut files: Vec<String> = entries
+        .flatten()
+        .map(|entry| entry.file_name().to_string_lossy().into_owned())
+        .filter(|name| name != WALLET_RESET_MANIFEST_NAME && !name.starts_with('.'))
+        .collect();
+    files.sort();
+    Ok(files)
+}
+
+/// Every wallet-reset backup directory in `backups` with its manifest, newest first. A
+/// directory without a readable manifest (a release that wrote none, or a move that
+/// stopped before its manifest) is logged and left out.
+pub fn wallet_reset_backups() -> Vec<(PathBuf, WalletResetManifest)> {
+    let Ok(entries) = fs::read_dir(crate::paths::get_backups_directory()) else {
+        return Vec::new();
+    };
+    let mut backups: Vec<(PathBuf, WalletResetManifest)> = entries
+        .flatten()
+        .filter(|entry| {
+            entry
+                .file_name()
+                .to_string_lossy()
+                .starts_with(WALLET_RESET_DIRECTORY_PREFIX)
+        })
+        .filter_map(|entry| {
+            let directory = entry.path();
+            let manifest_path = directory.join(WALLET_RESET_MANIFEST_NAME);
+            let decoded = fs::read(&manifest_path)
+                .map_err(|error| error.to_string())
+                .and_then(|bytes| {
+                    serde_json::from_slice::<WalletResetManifest>(&bytes)
+                        .map_err(|error| error.to_string())
+                });
+            match decoded {
+                Ok(manifest) => Some((directory, manifest)),
+                Err(error) => {
+                    logger::debug(
+                        LogTag::System,
+                        &format!("{} has no readable manifest: {error}", directory.display()),
+                    );
+                    None
+                }
+            }
+        })
+        .collect();
+    backups.sort_by(|a, b| b.1.created_at_ms.cmp(&a.1.created_at_ms));
+    backups
 }
 
 /// Copy the committed state of the store at `source` into `destination` through the

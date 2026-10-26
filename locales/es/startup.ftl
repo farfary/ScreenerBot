@@ -43,6 +43,14 @@ startup-storage-upgrade-detail =
     { $error }
 startup-storage-upgrade-remedy = Copia los detalles y envíalos junto con el archivo de registro al soporte en t.me/screenerbotio_support. No edites, muevas ni elimines la base de datos: { -brand } la abrirá de nuevo cuando se instale una corrección.
 
+startup-wallet-reset-refused-title = Los datos de la billetera no se restablecieron
+startup-wallet-reset-refused-open-positions = La billetera anterior aún tiene posiciones abiertas ({ $count }), así que se conservó su historial local.
+startup-wallet-reset-refused-trade-in-flight = Había una operación en curso, así que se conservó el historial local de la billetera.
+startup-wallet-reset-refused-tool-in-flight = Había una herramienta de billetera en ejecución, así que se conservó el historial local de la billetera.
+startup-wallet-reset-refused-positions-loading = Las posiciones abiertas aún se estaban cargando, así que se conservó el historial local de la billetera.
+startup-wallet-reset-refused-positions-unreadable = No se pudo leer el almacén de posiciones, así que no se pueden descartar posiciones abiertas y se conservó el historial local de la billetera.
+startup-wallet-reset-refused-remedy = No se movió nada. Inicia { -brand } con la billetera anterior, cierra sus posiciones abiertas y luego restablece de nuevo los datos de la billetera.
+
 startup-generic-title = No se pudo iniciar { -brand }
 startup-generic-remedy = Revisa el archivo de registro para ver los detalles y reinicia la app. Si el problema persiste, contacta con soporte en t.me/screenerbotio_support.
 startup-generic-detail = { $error }

@@ -53,6 +53,16 @@ startup-storage-upgrade-detail =
     { $error }
 startup-storage-upgrade-remedy = Скопируйте подробности и отправьте их вместе с файлом журнала в поддержку: t.me/screenerbotio_support. Не редактируйте, не перемещайте и не удаляйте базу данных: { -brand } снова откроет её после установки исправления.
 
+## Wallet replacement and wallet data reset.
+
+startup-wallet-reset-refused-title = Данные кошелька не сброшены
+startup-wallet-reset-refused-open-positions = У прежнего кошелька ещё есть открытые позиции ({ $count }), поэтому его локальная история сохранена.
+startup-wallet-reset-refused-trade-in-flight = Ещё выполнялась сделка, поэтому локальная история кошелька сохранена.
+startup-wallet-reset-refused-tool-in-flight = Ещё работал инструмент кошелька, поэтому локальная история кошелька сохранена.
+startup-wallet-reset-refused-positions-loading = Открытые позиции ещё загружались, поэтому локальная история кошелька сохранена.
+startup-wallet-reset-refused-positions-unreadable = Не удалось прочитать хранилище позиций, поэтому открытые позиции нельзя исключить; локальная история кошелька сохранена.
+startup-wallet-reset-refused-remedy = Ничего не перемещено. Запустите { -brand } с прежним кошельком, закройте его открытые позиции, затем снова сбросьте данные кошелька.
+
 ## Generic failures.
 
 startup-generic-title = Не удалось запустить { -brand }

@@ -60,6 +60,16 @@ startup-storage-upgrade-detail =
     { $error }
 startup-storage-upgrade-remedy = 复制详细信息，并连同日志文件发送给 t.me/screenerbotio_support 的支持团队。请勿编辑、移动或删除数据库：安装修复后，{ -brand } 会再次打开它。
 
+## Wallet replacement and wallet data reset.
+
+startup-wallet-reset-refused-title = 钱包数据未重置
+startup-wallet-reset-refused-open-positions = 原钱包仍有未平仓持仓（{ $count }），因此保留了其本地历史。
+startup-wallet-reset-refused-trade-in-flight = 仍有交易在进行，因此保留了钱包的本地历史。
+startup-wallet-reset-refused-tool-in-flight = 仍有钱包工具在运行，因此保留了钱包的本地历史。
+startup-wallet-reset-refused-positions-loading = 未平仓持仓仍在加载，因此保留了钱包的本地历史。
+startup-wallet-reset-refused-positions-unreadable = 无法读取持仓存储，无法排除未平仓持仓，因此保留了钱包的本地历史。
+startup-wallet-reset-refused-remedy = 没有移动任何内容。请使用原钱包启动 { -brand }，平掉其未平仓持仓，然后再次重置钱包数据。
+
 ## Generic failures.
 
 startup-generic-title = { -brand } 无法启动

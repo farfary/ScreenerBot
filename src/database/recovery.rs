@@ -168,25 +168,7 @@ fn quarantine_into(
     let directory = root.join(format!("{stem}-{stamp}"));
     fs::create_dir(&directory).map_err(io(format!("create {}", directory.display())))?;
 
-    // Sidecars move before the store file. A crash between moves must never
-    // leave an old write-ahead log beside the path the store is recreated at,
-    // where SQLite would replay its frames into the new file.
-    let mut moved = Vec::new();
-    for file in get_db_with_wal_files(path.to_path_buf()).into_iter().rev() {
-        if !file.exists() {
-            continue;
-        }
-        let Some(name) = file.file_name() else {
-            continue;
-        };
-        let target = directory.join(name);
-        fs::rename(&file, &target).map_err(io(format!(
-            "move {} to {}",
-            file.display(),
-            target.display()
-        )))?;
-        moved.push(file.display().to_string());
-    }
+    let moved = move_store_files(path, &directory)?;
 
     let manifest = QuarantineManifest {
         store: spec.id,
@@ -208,6 +190,38 @@ fn quarantine_into(
         directory,
         store_file,
     })
+}
+
+/// Move the store at `path` and its `-wal` and `-shm` into `directory`, created when
+/// missing, and return the original paths of the files moved. Sidecars move before the
+/// store file: a crash between moves must never leave an old write-ahead log beside the
+/// path the store is recreated at, where SQLite would replay its frames into the new
+/// file. A file that is not there is skipped, so a move interrupted by a crash resumes.
+pub fn move_store_files(path: &Path, directory: &Path) -> Result<Vec<String>, DatabaseError> {
+    let io = |operation: String| {
+        move |error: std::io::Error| DatabaseError::Io {
+            operation,
+            message: error.to_string(),
+        }
+    };
+    fs::create_dir_all(directory).map_err(io(format!("create {}", directory.display())))?;
+    let mut moved = Vec::new();
+    for file in get_db_with_wal_files(path.to_path_buf()).into_iter().rev() {
+        if !file.exists() {
+            continue;
+        }
+        let Some(name) = file.file_name() else {
+            continue;
+        };
+        let target = directory.join(name);
+        fs::rename(&file, &target).map_err(io(format!(
+            "move {} to {}",
+            file.display(),
+            target.display()
+        )))?;
+        moved.push(file.display().to_string());
+    }
+    Ok(moved)
 }
 
 const fn class_name(class: StoreClass) -> &'static str {

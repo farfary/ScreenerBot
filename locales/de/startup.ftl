@@ -53,6 +53,16 @@ startup-storage-upgrade-detail =
     { $error }
 startup-storage-upgrade-remedy = Kopieren Sie die Details und senden Sie sie zusammen mit der Logdatei an den Support unter t.me/screenerbotio_support. Bearbeiten, verschieben oder löschen Sie die Datenbank nicht: { -brand } öffnet sie wieder, sobald eine Korrektur installiert ist.
 
+## Wallet replacement and wallet data reset.
+
+startup-wallet-reset-refused-title = Wallet-Daten wurden nicht zurückgesetzt
+startup-wallet-reset-refused-open-positions = Die bisherige Wallet hat noch offene Positionen ({ $count }), daher wurde ihr lokaler Verlauf behalten.
+startup-wallet-reset-refused-trade-in-flight = Ein Trade lief noch, daher wurde der lokale Verlauf der Wallet behalten.
+startup-wallet-reset-refused-tool-in-flight = Ein Wallet-Werkzeug lief noch, daher wurde der lokale Verlauf der Wallet behalten.
+startup-wallet-reset-refused-positions-loading = Offene Positionen wurden noch geladen, daher wurde der lokale Verlauf der Wallet behalten.
+startup-wallet-reset-refused-positions-unreadable = Der Positionsspeicher konnte nicht gelesen werden, daher lassen sich offene Positionen nicht ausschließen und der lokale Verlauf der Wallet wurde behalten.
+startup-wallet-reset-refused-remedy = Es wurde nichts verschoben. Starten Sie { -brand } mit der bisherigen Wallet, schließen Sie deren offene Positionen und setzen Sie die Wallet-Daten dann erneut zurück.
+
 ## Generic failures.
 
 startup-generic-title = { -brand } konnte nicht gestartet werden

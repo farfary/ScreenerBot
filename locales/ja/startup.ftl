@@ -60,6 +60,16 @@ startup-storage-upgrade-detail =
     { $error }
 startup-storage-upgrade-remedy = 詳細をコピーし、ログファイルと一緒に t.me/screenerbotio_support のサポートへ送ってください。データベースを編集、移動、削除しないでください。修正がインストールされると { -brand } が再び開きます。
 
+## Wallet replacement and wallet data reset.
+
+startup-wallet-reset-refused-title = ウォレットデータはリセットされませんでした
+startup-wallet-reset-refused-open-positions = 以前のウォレットにまだオープンポジションがあるため ({ $count })、ローカル履歴は保持されました。
+startup-wallet-reset-refused-trade-in-flight = 取引がまだ進行中だったため、ウォレットのローカル履歴は保持されました。
+startup-wallet-reset-refused-tool-in-flight = ウォレットツールがまだ実行中だったため、ウォレットのローカル履歴は保持されました。
+startup-wallet-reset-refused-positions-loading = オープンポジションをまだ読み込み中だったため、ウォレットのローカル履歴は保持されました。
+startup-wallet-reset-refused-positions-unreadable = ポジションストアを読み取れず、オープンポジションがないことを確認できないため、ウォレットのローカル履歴は保持されました。
+startup-wallet-reset-refused-remedy = 何も移動されていません。以前のウォレットで { -brand } を起動し、そのオープンポジションをクローズしてから、ウォレットデータをもう一度リセットしてください。
+
 ## Generic failures.
 
 startup-generic-title = { -brand } を起動できませんでした

@@ -103,7 +103,7 @@ pub const BACKUPS_DIRECTORY_NAME: &str = "backups";
 /// Returns the backups directory path.
 ///
 /// Contains the copy of each store taken before an upgrade rebuilt it and the
-/// backups of a wallet data reset.
+/// wallet-scoped stores moved by a wallet data reset or a trading-wallet replacement.
 pub fn get_backups_directory() -> PathBuf {
     get_data_directory().join(BACKUPS_DIRECTORY_NAME)
 }
@@ -120,8 +120,9 @@ pub fn get_quarantine_directory() -> PathBuf {
     get_data_directory().join(QUARANTINE_DIRECTORY_NAME)
 }
 
-/// Name prefix of the backup directories earlier releases' wallet data reset wrote
-/// into the backups directory.
+/// Name prefix of the backup directories in the backups directory that receive the
+/// wallet-scoped stores when the wallet data reset runs or the trading wallet is
+/// replaced, each with a `manifest.json`.
 pub const WALLET_RESET_DIRECTORY_PREFIX: &str = "wallet-reset-";
 
 /// Returns the logs directory path.

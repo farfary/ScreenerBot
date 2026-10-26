@@ -94,7 +94,9 @@ impl ErrorClass for Error {
     fn severity(&self) -> Severity {
         match self {
             Error::Startup(startup) => match startup.code {
-                StartupErrorCode::WalletMismatch => Severity::Warning,
+                StartupErrorCode::WalletMismatch | StartupErrorCode::WalletResetRefused => {
+                    Severity::Warning
+                }
                 StartupErrorCode::PortInUse
                 | StartupErrorCode::LockHeld
                 | StartupErrorCode::ConfigInvalid
@@ -114,7 +116,9 @@ impl ErrorClass for Error {
         match self {
             Error::Startup(startup) => match startup.code {
                 StartupErrorCode::WalletMismatch | StartupErrorCode::ConfigInvalid => 400,
-                StartupErrorCode::PortInUse | StartupErrorCode::LockHeld => 409,
+                StartupErrorCode::PortInUse
+                | StartupErrorCode::LockHeld
+                | StartupErrorCode::WalletResetRefused => 409,
                 StartupErrorCode::StorageUpgrade | StartupErrorCode::Generic => 500,
             },
             Error::Service(error) => error.http_status(),

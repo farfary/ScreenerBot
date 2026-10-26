@@ -60,6 +60,16 @@ startup-storage-upgrade-detail =
     { $error }
 startup-storage-upgrade-remedy = Salin detailnya dan kirimkan bersama file log ke dukungan di t.me/screenerbotio_support. Jangan mengedit, memindahkan, atau menghapus database: { -brand } akan membukanya lagi setelah perbaikan dipasang.
 
+## Wallet replacement and wallet data reset.
+
+startup-wallet-reset-refused-title = Data dompet tidak diatur ulang
+startup-wallet-reset-refused-open-positions = Dompet sebelumnya masih memiliki posisi terbuka ({ $count }), sehingga riwayat lokalnya tetap disimpan.
+startup-wallet-reset-refused-trade-in-flight = Sebuah trade masih berjalan, sehingga riwayat lokal dompet tetap disimpan.
+startup-wallet-reset-refused-tool-in-flight = Sebuah alat dompet masih berjalan, sehingga riwayat lokal dompet tetap disimpan.
+startup-wallet-reset-refused-positions-loading = Posisi terbuka masih dimuat, sehingga riwayat lokal dompet tetap disimpan.
+startup-wallet-reset-refused-positions-unreadable = Penyimpanan posisi tidak dapat dibaca, sehingga posisi terbuka tidak dapat dipastikan tidak ada dan riwayat lokal dompet tetap disimpan.
+startup-wallet-reset-refused-remedy = Tidak ada yang dipindahkan. Mulai { -brand } dengan dompet sebelumnya, tutup posisi terbukanya, lalu atur ulang data dompet lagi.
+
 ## Generic failures.
 
 startup-generic-title = { -brand } tidak dapat dimulai

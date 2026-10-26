@@ -60,6 +60,16 @@ startup-storage-upgrade-detail =
     { $error }
 startup-storage-upgrade-remedy = انسخ التفاصيل وأرسلها مع ملف السجل إلى الدعم على t.me/screenerbotio_support. لا تعدّل قاعدة البيانات ولا تنقلها ولا تحذفها: سيفتحها { -brand } مجددًا بعد تثبيت الإصلاح.
 
+## Wallet replacement and wallet data reset.
+
+startup-wallet-reset-refused-title = لم تُعَد تهيئة بيانات المحفظة
+startup-wallet-reset-refused-open-positions = لا تزال لدى المحفظة السابقة مراكز مفتوحة ({ $count })، لذا احتُفظ بسجلها المحلي.
+startup-wallet-reset-refused-trade-in-flight = كانت هناك صفقة لا تزال قيد التنفيذ، لذا احتُفظ بالسجل المحلي للمحفظة.
+startup-wallet-reset-refused-tool-in-flight = كانت هناك أداة محفظة لا تزال قيد التشغيل، لذا احتُفظ بالسجل المحلي للمحفظة.
+startup-wallet-reset-refused-positions-loading = كانت المراكز المفتوحة لا تزال قيد التحميل، لذا احتُفظ بالسجل المحلي للمحفظة.
+startup-wallet-reset-refused-positions-unreadable = تعذّرت قراءة مخزن المراكز، لذا لا يمكن استبعاد وجود مراكز مفتوحة واحتُفظ بالسجل المحلي للمحفظة.
+startup-wallet-reset-refused-remedy = لم يُنقل شيء. شغّل { -brand } بالمحفظة السابقة، وأغلق مراكزها المفتوحة، ثم أعد تهيئة بيانات المحفظة مرة أخرى.
+
 ## Generic failures.
 
 startup-generic-title = تعذّر تشغيل { -brand }
