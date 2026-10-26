@@ -131,5 +131,6 @@ pub use utils::{
 pub use wallet::get_wallet_pubkey_string;
 
 pub use updates::{
-    reset_config_to_defaults_preserving_credentials, update_config_section, update_with_diff,
+    reset_config_to_defaults_preserving_credentials, set_config_keys, update_config_section,
+    update_with_diff,
 };

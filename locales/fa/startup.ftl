@@ -64,18 +64,23 @@ startup-storage-upgrade-remedy = جزئیات را کپی کنید و همراه
 
 startup-wallet-replacement-incomplete-title = جایگزینی کیف پول کامل نشد
 startup-wallet-replacement-incomplete-detail =
-    { -brand } هنگام رفتن به کیف پول معاملاتی جدید متوقف شد. چیزی حذف نشد: کلید کیف پول قبلی در گاوصندوق کیف پول‌ها و تاریخچهٔ محلی آن در پوشهٔ پشتیبان باقی است.
+    { -brand } هنگام رفتن به کیف پول معاملاتی جدید متوقف شد. چیزی حذف نشد: کلید کیف پول قبلی در گاوصندوق کیف پول‌ها باقی است و تاریخچهٔ محلی آن یا هنوز سر جای خود است یا در پوشهٔ پشتیبانی که در فایل لاگ آمده است.
 
     علت:
     { $error }
 startup-wallet-replacement-incomplete-remedy = برای ادامهٔ جایگزینی، { -brand } را دوباره اجرا کنید. اگر این پیام دوباره ظاهر شد، جزئیات را کپی کنید و همراه فایل لاگ به پشتیبانی در t.me/screenerbotio_support بفرستید. wallet_replacement.json یا پوشهٔ پشتیبان را ویرایش، جابه‌جا یا حذف نکنید.
 startup-wallet-reset-refused-title = داده‌های کیف پول بازنشانی نشد
-startup-wallet-reset-refused-open-positions = کیف پول قبلی هنوز پوزیشن باز دارد ({ $count })، پس تاریخچهٔ محلی آن نگه داشته شد.
-startup-wallet-reset-refused-trade-in-flight = یک معامله هنوز در جریان بود، پس تاریخچهٔ محلی کیف پول نگه داشته شد.
-startup-wallet-reset-refused-tool-in-flight = یک ابزار کیف پول هنوز در حال اجرا بود، پس تاریخچهٔ محلی کیف پول نگه داشته شد.
-startup-wallet-reset-refused-positions-loading = پوزیشن‌های باز هنوز در حال بارگذاری بودند، پس تاریخچهٔ محلی کیف پول نگه داشته شد.
+startup-wallet-reset-refused-open-positions = کیف پول معاملاتی پوزیشن باز دارد ({ $count })، پس داده‌های کیف پول بازنشانی نشد.
 startup-wallet-reset-refused-positions-unreadable = مخزن پوزیشن‌ها خوانده نشد، پس نمی‌توان باز نبودن پوزیشنی را تأیید کرد و تاریخچهٔ محلی کیف پول نگه داشته شد.
-startup-wallet-reset-refused-remedy = چیزی جابه‌جا نشد. { -brand } را با کیف پول قبلی اجرا کنید، پوزیشن‌های باز آن را ببندید و سپس داده‌های کیف پول را دوباره بازنشانی کنید.
+startup-wallet-reset-refused-remedy = چیزی جابه‌جا نشد. { -brand } را بدون بازنشانی اجرا کنید، پوزیشن‌های باز کیف پول معاملاتی را ببندید یا بایگانی کنید و سپس داده‌های کیف پول را دوباره بازنشانی کنید.
+startup-wallet-reset-refused-unreadable-remedy = چیزی جابه‌جا نشد. { -brand } را بدون بازنشانی اجرا کنید تا مخزن پوزیشن‌ها را بررسی کند و سپس داده‌های کیف پول را دوباره بازنشانی کنید. اگر این پیام دوباره ظاهر شد، فایل لاگ را به پشتیبانی در t.me/screenerbotio_support بفرستید.
+startup-wallet-reset-incomplete-title = بازنشانی داده‌های کیف پول کامل نشد
+startup-wallet-reset-incomplete-detail =
+    { -brand } هنگام انتقال داده‌های کیف پول به { $directory } متوقف شد و نتوانست همهٔ فایل‌ها را برگرداند. بخشی از تاریخچهٔ محلی کیف پول در آن پوشه است و بخشی هنوز سر جای خود است.
+
+    علت:
+    { $error }
+startup-wallet-reset-incomplete-remedy = { -brand } را دوباره اجرا نکنید و هیچ فایلی را در { $directory } جابه‌جا، ویرایش یا حذف نکنید. جزئیات را کپی کنید و همراه فایل لاگ به پشتیبانی در t.me/screenerbotio_support بفرستید.
 
 ## Generic failures.
 
@@ -89,3 +94,4 @@ startup-failure-analysis-init = راه‌اندازی موتور تحلیل نا
 startup-failure-assistant-init = راه‌اندازی موتور گفتگوی دستیار ناموفق بود: { $error }
 startup-failure-wallets-init = راه‌اندازی کیف پول‌ها ناموفق بود: { $error }
 startup-failure-wallet-validation = اعتبارسنجی سازگاری کیف پول ناموفق بود: { $error }
+startup-failure-storage-phase = مرحلهٔ ذخیره‌سازی به‌طور غیرمنتظره متوقف شد: { $error }

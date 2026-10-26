@@ -5,6 +5,7 @@ setup-wallet-format-invalid = Hãy dùng khóa riêng tư base58 hoặc mảng J
 setup-wallet-base58-recognized = Đã nhận dạng định dạng khóa base58.
 
 setup-rpc-required = Nhập ít nhất một endpoint RPC.
+setup-dialog-rpc-optional-note = Không bắt buộc: để trống ô này để giữ các endpoint RPC đã cấu hình.
 setup-rpc-too-many = Chỉ dùng tối đa 10 endpoint RPC.
 setup-rpc-url-invalid = Mỗi endpoint phải là một URL HTTPS hợp lệ.
 setup-rpc-url-credentials = URL RPC không được chứa tên người dùng hoặc mật khẩu.
@@ -106,6 +107,7 @@ setup-dialog-replace-confirm-stop = Trader và copy trading sẽ dừng. Hãy b�
 setup-dialog-replace-confirm-backup = Vị thế, giao dịch và lịch sử của ví hiện tại được chuyển vào một thư mục sao lưu.
 setup-dialog-replace-confirm-keep = Khóa của ví hiện tại được giữ trong Ví khác, nơi bạn vẫn có thể xuất nó.
 setup-dialog-replace-confirm-funds = Không chuyển tiền: token và { -sol } vẫn ở trong ví hiện tại.
+setup-dialog-replace-confirm-rpc = Thay các endpoint RPC đã cấu hình bằng những endpoint bạn nhập; nếu để trống, các endpoint hiện tại được giữ nguyên.
 setup-dialog-replace-confirm-restart = { -brand } khởi động lại với ví mới.
 
 setup-wizard-progress =

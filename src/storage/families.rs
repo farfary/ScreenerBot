@@ -78,13 +78,20 @@ pub const FAMILIES: &[FamilySpec] = &[
     FamilySpec {
         id: FamilyId::AppState,
         category: Category::Settings,
-        roots: &[],
-        matcher: Matcher::Paths(&[
-            paths::get_ui_state_path,
-            paths::get_update_state_path,
-            paths::get_agent_runtime_path,
-            paths::get_process_lock_path,
-            paths::get_wallet_replacement_marker_path,
+        roots: &[paths::get_data_directory],
+        matcher: Matcher::Any(&[
+            Matcher::Paths(&[
+                paths::get_ui_state_path,
+                paths::get_update_state_path,
+                paths::get_agent_runtime_path,
+                paths::get_process_lock_path,
+                paths::get_wallet_replacement_marker_path,
+                paths::get_wallet_replacement_outcome_path,
+            ]),
+            Matcher::PrefixSuffix(
+                paths::WALLET_REPLACEMENT_SET_ASIDE_PREFIX,
+                paths::WALLET_REPLACEMENT_SET_ASIDE_SUFFIX,
+            ),
         ]),
         ladder: KEEP_FOREVER,
     },

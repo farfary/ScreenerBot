@@ -43,6 +43,8 @@ pub struct WalletReplaceResponse {
 #[derive(Serialize)]
 pub struct WalletBackupsResponse {
     pub backups: Vec<crate::wallets::replacement::WalletBackup>,
+    /// A staged replacement a start abandoned, until the Wallets page dismisses it.
+    pub abandoned: Option<crate::wallets::replacement::AbandonedReplacement>,
 }
 
 // =============================================================================

@@ -5,9 +5,10 @@
 /**
  * Tests for the desktop boot-error screen (`electron/src/boot.js`), the screen a
  * fatal startup failure ends on. Covered here:
- *   - every startup error code the core can send has its own subtitle, and that
- *     subtitle exists in every shell catalog, so no failure falls back to a generic
- *     heading or shows a raw message id;
+ *   - the subtitle map holds exactly the startup error codes the core can send: each
+ *     code has its own subtitle, which exists in every shell catalog, so no failure
+ *     falls back to a generic heading or shows a raw message id, and no entry names a
+ *     code the core no longer reports;
  *   - Copy details puts the title, detail, remedy and log path on the clipboard.
  *
  * Run with `npm run test:js`.
@@ -43,6 +44,11 @@ test("every startup error code has a subtitle in every shell catalog", () => {
     .readdirSync(path.join(ROOT, "locales"), { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
     .map((entry) => entry.name);
+  assert.deepEqual(
+    Object.keys(ids).sort(),
+    [...codes].sort(),
+    "the subtitle map names exactly the codes StartupErrorCode::as_str reports"
+  );
   for (const code of codes) {
     assert.ok(ids[code], `no subtitle for startup code ${code}`);
     for (const locale of locales) {

@@ -8,6 +8,12 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
+/// The name the vault stores the trading wallet under. The dashboard labels a wallet by
+/// its role, and a wallet that is no longer the trading wallet but still carries this
+/// name as the previous trading wallet; its label mirror is `TRADING_WALLET_NAME` in
+/// `webserver/templates/scripts/pages/wallets/renderers.js`.
+pub const TRADING_WALLET_NAME: &str = "Main Wallet";
+
 // =============================================================================
 // ENUMS
 // =============================================================================

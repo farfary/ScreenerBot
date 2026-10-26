@@ -56,6 +56,8 @@ errors-initialization-onboarding-update-failed = Onboarding-Status konnte nicht 
 errors-initialization-validation-required = Vor dem Speichern der Einrichtung ist eine Verifizierung der Zugangsdaten erforderlich
 errors-initialization-encrypt-failed = Privater Schlüssel konnte nicht verschlüsselt werden
 errors-initialization-already-complete = Die Einrichtung ist bereits abgeschlossen. Um mit einer anderen Wallet zu handeln, verwenden Sie „Wallet ersetzen“ auf der Seite Wallets.
+errors-initialization-replace-open-positions = Die aktuelle Trading-Wallet hat offene Positionen ({ $count }), daher kann die Einrichtung sie nicht ersetzen. Schließen Sie die Einrichtung zuerst mit dem Schlüssel der aktuellen Trading-Wallet ab und ersetzen Sie die Wallet dann auf der Seite Wallets.
+errors-initialization-save-failed-replacement-staged = Die neue Trading-Wallet ist vorgemerkt und wird beim Neustart von { -brand } übernommen, aber die Einrichtungseinstellungen konnten nicht gespeichert werden. Prüfen Sie sie nach dem Neustart.
 
 errors-ui-state-save-failed = Status konnte nicht gespeichert werden
 errors-ui-state-clear-failed = Status konnte nicht zurückgesetzt werden
@@ -228,7 +230,8 @@ errors-wallets-replace-no-trading-wallet = Es gibt keine Trading-Wallet, die ers
 errors-wallets-replace-same-wallet = Dieser Schlüssel gehört zur aktuellen Trading-Wallet.
 errors-wallets-replace-watched = Diese Wallet steht auf der Liste Überwacht. Entfernen Sie sie dort, bevor Sie mit ihr handeln.
 errors-wallets-replace-address-mismatch = Der Schlüssel passt nicht zur validierten Wallet-Adresse. Validieren Sie den Schlüssel erneut.
-errors-wallets-replace-interrupted = Die Wallet-Ersetzung wurde unterbrochen, die aktuelle Wallet bleibt die Trading-Wallet. Prüfen Sie die Einstellungen von Trader und Copy-Trading und versuchen Sie es erneut.
+errors-wallets-replace-interrupted = Die Wallet-Ersetzung wurde unterbrochen, die aktuelle Wallet bleibt die Trading-Wallet. Trader und Copy-Trading sind ausgeschaltet; schalten Sie sie wieder ein, sobald Sie bereit sind, oder versuchen Sie die Ersetzung erneut.
+errors-wallets-replace-interrupted-copy-trading-on = Die Wallet-Ersetzung wurde unterbrochen, die aktuelle Wallet bleibt die Trading-Wallet. Der Trader ist ausgeschaltet, Copy-Trading konnte jedoch nicht ausgeschaltet werden. Prüfen Sie die Copy-Trading-Einstellungen und versuchen Sie es erneut.
 errors-wallets-replace-failed = Die Trading-Wallet konnte nicht ersetzt werden
 
 errors-wallet-watch-list-failed = Überwachungsziele konnten nicht aufgelistet werden

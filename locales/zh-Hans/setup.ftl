@@ -13,6 +13,7 @@ setup-wallet-base58-recognized = 已识别 Base58 密钥格式。
 ## RPC endpoint validation
 
 setup-rpc-required = 请至少输入一个 RPC 端点。
+setup-dialog-rpc-optional-note = 可选：留空以保留已配置的 RPC 端点。
 setup-rpc-too-many = RPC 端点不能超过 10 个。
 setup-rpc-url-invalid = 每个端点都必须是有效的 HTTPS URL。
 setup-rpc-url-credentials = RPC URL 不能包含用户名或密码。
@@ -130,6 +131,7 @@ setup-dialog-replace-confirm-stop = 停止交易器和跟单交易。重启后�
 setup-dialog-replace-confirm-backup = 将当前钱包的持仓、交易记录和历史移入备份文件夹。
 setup-dialog-replace-confirm-keep = 将当前钱包的密钥保留在“其他钱包”中，你仍可在那里导出它。
 setup-dialog-replace-confirm-funds = 不转移任何资金：代币和 { -sol } 仍留在当前钱包中。
+setup-dialog-replace-confirm-rpc = 用你输入的 RPC 端点替换已配置的端点；字段留空则保留当前端点。
 setup-dialog-replace-confirm-restart = 使用新钱包重启 { -brand }。
 
 # Source: templates/pages/setup.html

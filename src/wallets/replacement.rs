@@ -6,19 +6,22 @@
 //! The old key lives in process-wide caches (the signer, the main-wallet cache, the
 //! position and balance state, the store pools) that cannot be reset safely while
 //! services run, so a replacement never changes the running process. [`stage`] refuses
-//! while a restart would interrupt something or positions are open, switches the Auto
-//! Trader and Copy Trading off, adds the new key to the vault as an other wallet and
-//! writes the marker `data/wallet_replacement.json`; the caller then restarts the
-//! process. At the next start, under the process lock and before the storage phase,
-//! [`apply_pending`] moves the wallet-scoped stores into a wallet-reset backup, makes the
-//! new key the vault's main wallet, writes it to the config with both trading switches
-//! off and removes the marker. Every apply step is idempotent, so an apply interrupted
-//! at any point resumes at the next start; while the marker exists no start skips it.
+//! while a restart would interrupt something or the trading wallet has open positions,
+//! switches the Auto Trader and Copy Trading off, adds the new key to the vault as an
+//! other wallet and writes the marker `data/wallet_replacement.json`; the caller then
+//! restarts the process. At the next start, under the process lock and before the storage
+//! phase, [`apply_pending`] moves the wallet-scoped stores into a wallet-reset backup,
+//! makes the new key the vault's main wallet, writes it to the config with both trading
+//! switches off and removes the marker. Every apply step is idempotent, so an apply
+//! interrupted at any point resumes at the next start; while the marker exists no start
+//! skips it. A replacement is abandoned only before its store move begins; the outcome is
+//! recorded for the Wallets page.
 //!
 //! The stores move before the vault changes its main wallet, so at every start the
 //! trading key and the wallet-scoped stores belong to the same wallet and the wallet
 //! consistency check sees a first run. Nothing is deleted: the old key stays in the
-//! vault, active and exportable, and the stores are renamed into the backup.
+//! vault, active and exportable, and the stores are renamed into the backup without ever
+//! replacing a file there.
 //!
 //! This module receives the new key only as ciphertext, nonce and address; it never
 //! holds a decrypted key.
@@ -28,32 +31,46 @@ use std::path::{Path, PathBuf};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use crate::chains::{active_chain, ChainId};
+use crate::chains::ChainId;
 use crate::database::backup::{self, WalletResetManifest, WalletResetReason};
 use crate::logger::{self, LogTag};
-use crate::paths::WALLET_RESET_DIRECTORY_PREFIX;
-use crate::version::RestartBlocker;
+use crate::paths::{
+    WALLET_REPLACEMENT_SET_ASIDE_PREFIX, WALLET_REPLACEMENT_SET_ASIDE_SUFFIX,
+    WALLET_RESET_DIRECTORY_PREFIX,
+};
+use crate::process::restart_safety::RestartBlocker;
 
 use super::database::WalletsDatabase;
 use super::error::Error;
 use super::manager::encrypted_key_address;
 use super::types::{WalletRole, WalletType};
 
-/// Name the new key carries in the vault.
-const MAIN_WALLET_NAME: &str = "Main Wallet";
-
 /// Characters of the previous address that label its backup directory.
 const BACKUP_LABEL_LENGTH: usize = 8;
 
 /// The new trading key, encrypted at the route that parsed it.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct StagedKey {
+    /// The chain whose key format the route parsed the key in.
+    pub chain: ChainId,
     /// The address the route derived from the key.
     pub address: String,
     pub ciphertext: String,
     pub nonce: String,
-    /// The RPC endpoints validated with the key; kept when not empty.
+    /// The RPC endpoints validated with the key; empty keeps the configured ones.
     pub rpc_urls: Vec<String>,
+}
+
+impl std::fmt::Debug for StagedKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("StagedKey")
+            .field("chain", &self.chain)
+            .field("address", &self.address)
+            .field("ciphertext", &"<redacted>")
+            .field("nonce", &"<redacted>")
+            .field("rpc_urls", &self.rpc_urls.len())
+            .finish()
+    }
 }
 
 /// A replacement written to the marker, applied at the next start.
@@ -82,6 +99,44 @@ pub struct WalletBackup {
     pub new_wallet: Option<String>,
     pub created_at_ms: i64,
     pub files: Vec<String>,
+}
+
+/// Why a start abandoned a staged replacement before moving anything.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "reason", rename_all = "snake_case")]
+pub enum AbandonReason {
+    /// The previous trading wallet had open positions.
+    OpenPositions { count: usize },
+    /// The positions store could not be read, so open positions could not be ruled out.
+    PositionsUnreadable,
+    /// The vault no longer held exactly one trading wallet equal to the previous one, or
+    /// the new key no longer decrypted to the new wallet.
+    VaultChanged,
+}
+
+impl std::fmt::Display for AbandonReason {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::OpenPositions { count } => {
+                write!(
+                    f,
+                    "the previous trading wallet has {count} open position(s)"
+                )
+            }
+            Self::PositionsUnreadable => write!(f, "the positions store could not be read"),
+            Self::VaultChanged => write!(f, "the vault no longer matches the replacement"),
+        }
+    }
+}
+
+/// A staged replacement a start abandoned, kept for the Wallets page until it is shown.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AbandonedReplacement {
+    pub previous_wallet: String,
+    pub new_wallet: String,
+    #[serde(flatten)]
+    pub reason: AbandonReason,
+    pub abandoned_at: DateTime<Utc>,
 }
 
 /// The pending replacement, as `data/wallet_replacement.json` records it.
@@ -120,7 +175,8 @@ pub(crate) fn is_backup_directory_name(name: &str) -> bool {
 pub(crate) struct StageChecks {
     /// Why a restart would interrupt something now, if anything.
     pub blocker: Option<RestartBlocker>,
-    /// Open positions of any wallet in the positions store; `None` when it cannot be read.
+    /// Open positions of the trading wallet on every chain in the positions store;
+    /// `None` when it cannot be read.
     pub stored_open_positions: Option<usize>,
     /// The vault's main wallet.
     pub trading_wallet: Option<String>,
@@ -168,19 +224,30 @@ pub(crate) fn check_stage(checks: &StageChecks) -> Result<String, Error> {
     Ok(trading_wallet)
 }
 
-/// The main wallet address of the vault of this process's chain, if it holds one.
-pub async fn trading_wallet_address() -> Result<Option<String>, Error> {
-    let vault = WalletsDatabase::new(active_chain())?;
+/// The main wallet address of the vault of `chain`, if it holds one. Reads the vault
+/// synchronously; async callers run it on a blocking thread.
+pub fn trading_wallet_address(chain: ChainId) -> Result<Option<String>, Error> {
+    let vault = WalletsDatabase::new(chain)?;
     Ok(vault.get_main_wallet()?.map(|wallet| wallet.address))
+}
+
+/// Run blocking vault, store or file work off the async threads.
+async fn blocking<T: Send + 'static>(
+    work: impl FnOnce() -> Result<T, Error> + Send + 'static,
+) -> Result<T, Error> {
+    tokio::task::spawn_blocking(work)
+        .await
+        .map_err(|error| Error::Internal(crate::errors::InternalError::from(error)))?
 }
 
 /// Stage the replacement of the trading wallet by `key`. The process must restart
 /// afterwards; the restart hold taken here is committed, so no trade or tool starts
-/// before it. Every refusal leaves everything unchanged. A failure after the trading
-/// switches were turned off leaves them off and says so.
+/// before it. Every refusal leaves everything unchanged. A failure after a trading
+/// switch was turned off leaves it off and says which switches are off.
 pub async fn stage(key: StagedKey) -> Result<StagedReplacement, Error> {
-    let chain = active_chain();
-    let address = encrypted_key_address(&key.ciphertext, &key.nonce)?;
+    let chain = key.chain;
+    let (ciphertext, nonce) = (key.ciphertext.clone(), key.nonce.clone());
+    let address = blocking(move || encrypted_key_address(chain, &ciphertext, &nonce)).await?;
     if address != key.address {
         return Err(Error::ReplacementAddressMismatch {
             expected: key.address,
@@ -198,15 +265,6 @@ pub async fn stage(key: StagedKey) -> Result<StagedReplacement, Error> {
         stop_trading(chain, &key.rpc_urls).await?;
     }
 
-    let interrupted = |step: &'static str| {
-        move |error: Error| Error::ReplacementInterrupted {
-            step,
-            detail: error.to_string(),
-        }
-    };
-    let vault = WalletsDatabase::new(chain).map_err(interrupted("open the vault"))?;
-    add_new_key(&vault, &key).map_err(interrupted("add the new key to the vault"))?;
-
     let backup_directory = backup::wallet_reset_directory(&backup_label(&previous_address));
     let marker = Marker {
         chain: chain.as_str().to_owned(),
@@ -218,35 +276,57 @@ pub async fn stage(key: StagedKey) -> Result<StagedReplacement, Error> {
             .unwrap_or_default(),
         requested_at: Utc::now(),
     };
-    write_marker(&crate::paths::get_wallet_replacement_marker_path(), &marker)?;
+    let new_address = key.address.clone();
+    blocking(move || {
+        let interrupted = |step: &'static str| {
+            move |error: Error| Error::ReplacementInterrupted {
+                step,
+                copy_trading_off: true,
+                detail: error.to_string(),
+            }
+        };
+        let vault = WalletsDatabase::new(chain).map_err(interrupted("open the vault"))?;
+        add_new_key(&vault, &key).map_err(interrupted("add the new key to the vault"))?;
+        write_marker(&crate::paths::get_wallet_replacement_marker_path(), &marker).map_err(
+            |error| match error {
+                Error::ReplacementPending => error,
+                other => interrupted("write the replacement marker")(other),
+            },
+        )
+    })
+    .await?;
     hold.commit();
 
     logger::info(
         LogTag::Wallet,
         &format!(
-            "Trading wallet replacement staged: {previous_address} -> {}; it applies at the restart",
-            key.address
+            "Trading wallet replacement staged: {previous_address} -> {new_address}; it applies at the restart"
         ),
     );
     Ok(StagedReplacement {
         previous_wallet: previous_address,
-        new_wallet: key.address,
+        new_wallet: new_address,
         backup_directory: backup_directory.display().to_string(),
     })
 }
 
 /// Read every input of the refusal checks.
 async fn read_stage_checks(chain: ChainId, new_address: &str) -> Result<StageChecks, Error> {
-    let blocker = crate::version::restart_blocker().await;
-    let positions = crate::paths::get_positions_db_path();
-    let stored_open_positions = tokio::task::spawn_blocking(move || {
-        crate::positions::database::count_open_positions_in_file(&positions, chain).ok()
+    let blocker = crate::process::restart_safety::restart_blocker().await;
+    let (trading_wallet, stored_open_positions, pending) = blocking(move || {
+        let trading_wallet = trading_wallet_address(chain)?;
+        let stored_open_positions = match &trading_wallet {
+            Some(wallet) => crate::positions::database::count_open_positions_in_file(
+                &crate::paths::get_positions_db_path(),
+                wallet,
+            )
+            .ok(),
+            None => Some(0),
+        };
+        let pending = crate::paths::get_wallet_replacement_marker_path().exists();
+        Ok((trading_wallet, stored_open_positions, pending))
     })
-    .await
-    .map_err(|error| Error::Internal(crate::errors::InternalError::from(error)))?;
-    let trading_wallet = WalletsDatabase::new(chain)?
-        .get_main_wallet()?
-        .map(|wallet| wallet.address);
+    .await?;
     let watched = super::watch::WatchDatabase::new(chain)?
         .get_target_by_address(new_address)
         .await?
@@ -257,11 +337,12 @@ async fn read_stage_checks(chain: ChainId, new_address: &str) -> Result<StageChe
         trading_wallet,
         new_address: new_address.to_owned(),
         watched,
-        pending: crate::paths::get_wallet_replacement_marker_path().exists(),
+        pending,
     })
 }
 
-/// Switch the Auto Trader and Copy Trading off and keep the validated RPC endpoints.
+/// Switch the Auto Trader and Copy Trading off and keep the validated RPC endpoints,
+/// when any were given.
 async fn stop_trading(chain: ChainId, rpc_urls: &[String]) -> Result<(), Error> {
     match crate::trader::stop_trader_gracefully().await {
         Ok(()) | Err(crate::trader::Error::AlreadyStopped) => {}
@@ -275,31 +356,50 @@ async fn stop_trading(chain: ChainId, rpc_urls: &[String]) -> Result<(), Error> 
     crate::trader::copy::control::stop_copy_trading().map_err(|error| {
         Error::ReplacementInterrupted {
             step: "switch Copy Trading off",
+            copy_trading_off: false,
             detail: error.to_string(),
         }
     })?;
     if !rpc_urls.is_empty() {
         let urls = rpc_urls.to_vec();
-        crate::config::update_config_section(
-            move |config| config.chains.rpc_mut(chain).urls = urls,
-            true,
-        )
-        .map_err(|error| Error::ReplacementInterrupted {
-            step: "save the RPC endpoints",
-            detail: error.to_string(),
-        })?;
+        blocking(move || {
+            crate::config::update_config_section(
+                move |config| config.chains.rpc_mut(chain).urls = urls,
+                true,
+            )
+            .map_err(|error| Error::ReplacementInterrupted {
+                step: "save the RPC endpoints",
+                copy_trading_off: true,
+                detail: error.to_string(),
+            })
+        })
+        .await?;
     }
     Ok(())
 }
 
-/// Add the new key to the vault as an other wallet, or keep the row it already has (a
-/// wallet replaced earlier, or a retried request). Adding a key snapshots the vault.
+/// Add the new key to the vault as an other wallet with no name of its own, or keep the
+/// row the address already has (a wallet replaced earlier, or a retried request). A kept
+/// row whose key no longer decrypts to its address takes the validated key instead. Every
+/// key change snapshots the vault.
 fn add_new_key(vault: &WalletsDatabase, key: &StagedKey) -> Result<(), Error> {
-    if vault.get_wallet_by_address(&key.address)?.is_some() {
+    if let Some((ciphertext, nonce)) = vault.get_wallet_key_by_address(&key.address)? {
+        let usable = encrypted_key_address(vault.chain(), &ciphertext, &nonce)
+            .is_ok_and(|address| address == key.address);
+        if !usable {
+            vault.replace_wallet_key(&key.address, &key.ciphertext, &key.nonce)?;
+            logger::warning(
+                LogTag::Wallet,
+                &format!(
+                    "The vault's key of {} did not decrypt to it and was replaced by the validated key",
+                    key.address
+                ),
+            );
+        }
         return Ok(());
     }
     vault.insert_wallet(
-        MAIN_WALLET_NAME,
+        "",
         &key.address,
         &key.ciphertext,
         &key.nonce,
@@ -349,6 +449,42 @@ pub fn list_backups() -> Vec<WalletBackup> {
         .collect()
 }
 
+/// The replacement a start abandoned and the Wallets page has not shown yet. A record
+/// that cannot be read is logged and reads as none.
+pub fn abandoned_replacement() -> Option<AbandonedReplacement> {
+    let path = crate::paths::get_wallet_replacement_outcome_path();
+    let bytes = match std::fs::read(&path) {
+        Ok(bytes) => bytes,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return None,
+        Err(error) => {
+            logger::warning(
+                LogTag::Wallet,
+                &format!("Could not read {}: {error}", path.display()),
+            );
+            return None;
+        }
+    };
+    match serde_json::from_slice(&bytes) {
+        Ok(outcome) => Some(outcome),
+        Err(error) => {
+            logger::warning(
+                LogTag::Wallet,
+                &format!("Could not decode {}: {error}", path.display()),
+            );
+            None
+        }
+    }
+}
+
+/// Remove the record of an abandoned replacement once the Wallets page showed it.
+pub fn dismiss_abandoned_replacement() -> Result<(), Error> {
+    crate::utils::atomic_file::remove(&crate::paths::get_wallet_replacement_outcome_path()).map_err(
+        |error| Error::ReplacementOutcome {
+            message: error.to_string(),
+        },
+    )
+}
+
 // =============================================================================
 // BOOT TIME
 // =============================================================================
@@ -380,9 +516,10 @@ pub(crate) fn classify(
 
 /// Apply a staged replacement, if one is pending. Runs once per start under the process
 /// lock, before any wallet-scoped store opens. `Ok(None)` when nothing was applied: no
-/// marker, an unreadable marker (set aside), a stale marker or an abandoned replacement
-/// (each removed, with the reason logged). An error leaves the marker in place, so the
-/// next start resumes.
+/// marker, an unreadable marker (set aside), a stale marker (removed, with the reason
+/// logged) or a replacement abandoned before its store move began (removed, logged and
+/// recorded for the Wallets page). An error leaves the marker in place, so the next start
+/// resumes.
 pub fn apply_pending() -> Result<Option<AppliedReplacement>, Error> {
     let path = crate::paths::get_wallet_replacement_marker_path();
     let Some(marker) = read_marker(&path)? else {
@@ -416,16 +553,26 @@ pub fn apply_pending() -> Result<Option<AppliedReplacement>, Error> {
             return Ok(None);
         }
         ApplyState::NotFlipped => {
-            if let Some(reason) = open_positions_blocker(chain) {
-                remove_marker(&path)?;
-                logger::warning(
-                    LogTag::Wallet,
-                    &format!(
-                        "Wallet replacement {} -> {} abandoned because {reason}; the trading wallet is unchanged and {} stays under Other Wallets",
-                        marker.previous_address, marker.new_address, marker.new_address
-                    ),
-                );
-                return Ok(None);
+            // The backup directory is created right before the first file moves. Once
+            // it exists the replacement only resumes: an abandonment would open stores
+            // missing what already moved, and the stage counted no open position for the
+            // hold it committed.
+            let move_begun = backup_directory.exists();
+            if !move_begun {
+                if let Some(reason) = abandon_reason(&vault, &marker) {
+                    remove_marker(&path)?;
+                    record_abandoned(&marker, reason.clone());
+                    logger::warning(
+                        LogTag::Wallet,
+                        &format!(
+                            "Wallet replacement {} -> {} abandoned because {reason}; the trading wallet is unchanged and {} stays under Other Wallets",
+                            marker.previous_address, marker.new_address, marker.new_address
+                        ),
+                    );
+                    return Ok(None);
+                }
+            } else if let Some(detail) = vault_mismatch(&vault, &marker) {
+                return Err(Error::ReplacementVaultChanged { detail });
             }
             move_stores(&marker, &backup_directory)?;
             vault.promote_to_main(&marker.previous_address, &marker.new_address)?;
@@ -476,7 +623,9 @@ fn read_marker(path: &Path) -> Result<Option<Marker>, Error> {
 /// Move an unusable marker to `wallet_replacement.invalid-<stamp>.json` beside it.
 fn set_aside(path: &Path, reason: &str) {
     let stamp = Utc::now().format("%Y%m%dT%H%M%SZ");
-    let target = path.with_file_name(format!("wallet_replacement.invalid-{stamp}.json"));
+    let target = path.with_file_name(format!(
+        "{WALLET_REPLACEMENT_SET_ASIDE_PREFIX}{stamp}{WALLET_REPLACEMENT_SET_ASIDE_SUFFIX}"
+    ));
     match std::fs::rename(path, &target) {
         Ok(()) => logger::error(
             LogTag::Wallet,
@@ -494,22 +643,88 @@ fn set_aside(path: &Path, reason: &str) {
     }
 }
 
-/// Why the positions store forbids moving the stores, if it does: an open position of
-/// any wallet on `chain`, or a store that cannot be read.
-fn open_positions_blocker(chain: ChainId) -> Option<RestartBlocker> {
+/// Why the replacement must be abandoned before its store move begins, if it must: the
+/// vault no longer matches it, or the previous trading wallet has open positions on any
+/// chain, or they cannot be ruled out.
+fn abandon_reason(vault: &WalletsDatabase, marker: &Marker) -> Option<AbandonReason> {
+    if let Some(detail) = vault_mismatch(vault, marker) {
+        logger::warning(
+            LogTag::Wallet,
+            &format!("The vault does not match the staged wallet replacement: {detail}"),
+        );
+        return Some(AbandonReason::VaultChanged);
+    }
     match crate::positions::database::count_open_positions_in_file(
         &crate::paths::get_positions_db_path(),
-        chain,
+        &marker.previous_address,
     ) {
         Ok(0) => None,
-        Ok(count) => Some(RestartBlocker::OpenPositions { count }),
-        Err(_) => Some(RestartBlocker::PositionsUnreadable),
+        Ok(count) => Some(AbandonReason::OpenPositions { count }),
+        Err(_) => Some(AbandonReason::PositionsUnreadable),
+    }
+}
+
+/// What keeps the vault from taking the replacement, if anything: it must hold exactly
+/// one active main wallet, the previous one, and the new wallet's key must decrypt to
+/// the new address, so the promotion after the store move cannot fail.
+fn vault_mismatch(vault: &WalletsDatabase, marker: &Marker) -> Option<String> {
+    match vault.active_main_addresses() {
+        Ok(mains) if mains == [marker.previous_address.as_str()] => {}
+        Ok(mains) => return Some(format!("the active main wallets are {mains:?}")),
+        Err(error) => return Some(format!("the main wallets could not be read: {error}")),
+    }
+    match vault.get_wallet_key_by_address(&marker.new_address) {
+        Ok(Some((ciphertext, nonce))) => {
+            match encrypted_key_address(vault.chain(), &ciphertext, &nonce) {
+                Ok(address) if address == marker.new_address => None,
+                Ok(address) => Some(format!(
+                    "the key of {} decrypts to {address}",
+                    marker.new_address
+                )),
+                Err(error) => Some(format!(
+                    "the key of {} cannot be read: {error}",
+                    marker.new_address
+                )),
+            }
+        }
+        Ok(None) => Some(format!("{} is not in the vault", marker.new_address)),
+        Err(error) => Some(format!(
+            "the key of {} could not be read: {error}",
+            marker.new_address
+        )),
+    }
+}
+
+/// Record the abandoned replacement for the Wallets page. A failed write is logged; the
+/// log line of the abandonment stays the record.
+fn record_abandoned(marker: &Marker, reason: AbandonReason) {
+    let outcome = AbandonedReplacement {
+        previous_wallet: marker.previous_address.clone(),
+        new_wallet: marker.new_address.clone(),
+        reason,
+        abandoned_at: Utc::now(),
+    };
+    let path = crate::paths::get_wallet_replacement_outcome_path();
+    let written = serde_json::to_vec_pretty(&outcome)
+        .map_err(|error| error.to_string())
+        .and_then(|encoded| {
+            crate::utils::atomic_file::replace(&path, &encoded, 0o600)
+                .map_err(|error| error.to_string())
+        });
+    if let Err(error) = written {
+        logger::warning(
+            LogTag::Wallet,
+            &format!(
+                "Could not record the abandoned wallet replacement in {}: {error}",
+                path.display()
+            ),
+        );
     }
 }
 
 /// Move every wallet-scoped store into the marker's backup directory with its manifest.
 fn move_stores(marker: &Marker, directory: &Path) -> Result<(), Error> {
-    backup::move_wallet_stores(
+    let manifest = backup::move_wallet_stores(
         directory,
         WalletResetManifest {
             reason: WalletResetReason::WalletReplaced,
@@ -519,40 +734,41 @@ fn move_stores(marker: &Marker, directory: &Path) -> Result<(), Error> {
             core_version: env!("CARGO_PKG_VERSION").to_owned(),
             created_at_ms: Utc::now().timestamp_millis(),
             files: Vec::new(),
+            moved_open_positions: Default::default(),
         },
     )?;
+    if !manifest.moved_open_positions.is_empty() {
+        logger::info(
+            LogTag::Wallet,
+            &format!(
+                "The moved positions store holds open positions by wallet: {:?}",
+                manifest.moved_open_positions
+            ),
+        );
+    }
     Ok(())
 }
 
 /// Write the new main wallet's vault key to the config with the Auto Trader and Copy
 /// Trading off, when a config file exists. The key is the vault's own ciphertext, so the
 /// config and the vault name the same wallet; it is never cleared, because an empty key
-/// starts Explore Mode and the config key is what rebuilds a lost vault.
+/// starts Explore Mode and the config key is what rebuilds a lost vault. Only these four
+/// keys are written, so a load-time config migration still waits for startup to complete.
 fn write_trading_key(vault: &WalletsDatabase, new_address: &str) -> Result<(), Error> {
     if !crate::paths::get_config_path().exists() {
         return Ok(());
     }
-    let wallet =
-        vault
-            .get_wallet_by_address(new_address)?
-            .ok_or_else(|| Error::WalletNotFound {
-                address: new_address.to_owned(),
-            })?;
-    let (ciphertext, nonce) =
-        vault
-            .get_wallet_encrypted_key(wallet.id)?
-            .ok_or_else(|| Error::WalletNotFound {
-                address: new_address.to_owned(),
-            })?;
-    crate::config::update_config_section(
-        move |config| {
-            config.wallet_encrypted = ciphertext;
-            config.wallet_nonce = nonce;
-            config.trader.enabled = false;
-            config.copy_trading.enabled = false;
-        },
-        true,
-    )
+    let (ciphertext, nonce) = vault
+        .get_wallet_key_by_address(new_address)?
+        .ok_or_else(|| Error::WalletNotFound {
+            address: new_address.to_owned(),
+        })?;
+    crate::config::set_config_keys(&[
+        ("wallet_encrypted", toml::Value::String(ciphertext)),
+        ("wallet_nonce", toml::Value::String(nonce)),
+        ("trader.enabled", toml::Value::Boolean(false)),
+        ("copy_trading.enabled", toml::Value::Boolean(false)),
+    ])
     .map_err(|error| Error::Dependency {
         dependency: "config",
         detail: error.to_string(),

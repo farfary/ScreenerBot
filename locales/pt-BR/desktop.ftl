@@ -42,10 +42,10 @@ desktop-boot-subtitle-wallet-mismatch = Uma carteira diferente foi detectada
 desktop-boot-subtitle-port-in-use = Uma porta de rede necessária está ocupada
 desktop-boot-subtitle-lock-held = O { -brand } já está em execução
 desktop-boot-subtitle-config-invalid = Problema de configuração
-desktop-boot-subtitle-directory-setup = Problema de armazenamento
 desktop-boot-subtitle-storage-upgrade = Problema na atualização do banco de dados
 desktop-boot-subtitle-wallet-replacement-incomplete = A substituição da carteira não foi concluída
 desktop-boot-subtitle-wallet-reset-refused = Redefinição dos dados da carteira recusada
+desktop-boot-subtitle-wallet-reset-incomplete = A redefinição dos dados da carteira não terminou
 desktop-boot-subtitle-generic = Erro de inicialização
 
 ## Boot errors raised by the shell itself (the backend never reported one).

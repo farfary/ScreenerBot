@@ -5,6 +5,7 @@ setup-wallet-format-invalid = Utilisez une clé privée base58 ou un tableau JSO
 setup-wallet-base58-recognized = Format de clé base58 reconnu.
 
 setup-rpc-required = Saisissez au moins un endpoint RPC.
+setup-dialog-rpc-optional-note = Facultatif : laissez le champ vide pour conserver les endpoints RPC déjà configurés.
 setup-rpc-too-many = Utilisez au maximum 10 endpoints RPC.
 setup-rpc-url-invalid = Chaque endpoint doit être une URL HTTPS valide.
 setup-rpc-url-credentials = Les URL RPC ne peuvent pas contenir de nom d'utilisateur ni de mot de passe.
@@ -112,6 +113,7 @@ setup-dialog-replace-confirm-stop = Arrête le trader et le copy trading. Réact
 setup-dialog-replace-confirm-backup = Déplace les positions, transactions et l'historique du portefeuille actuel dans un dossier de sauvegarde.
 setup-dialog-replace-confirm-keep = Conserve la clé du portefeuille actuel dans Autres portefeuilles, où vous pouvez toujours l'exporter.
 setup-dialog-replace-confirm-funds = Ne déplace aucun fonds : les tokens et les { -sol } restent dans le portefeuille actuel.
+setup-dialog-replace-confirm-rpc = Remplace les endpoints RPC configurés par ceux que vous saisissez ; si le champ reste vide, les endpoints actuels sont conservés.
 setup-dialog-replace-confirm-restart = Redémarre { -brand } avec le nouveau portefeuille.
 
 setup-wizard-progress =

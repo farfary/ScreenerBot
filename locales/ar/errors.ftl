@@ -69,6 +69,8 @@ errors-initialization-onboarding-update-failed = تعذّر تحديث حالة 
 errors-initialization-validation-required = التحقق من بيانات الاعتماد مطلوب قبل حفظ الإعداد
 errors-initialization-encrypt-failed = تعذّر تشفير المفتاح الخاص
 errors-initialization-already-complete = اكتمل الإعداد بالفعل. للتداول بمحفظة أخرى، استخدم استبدال المحفظة في صفحة المحافظ.
+errors-initialization-replace-open-positions = لدى محفظة التداول الحالية مراكز مفتوحة ({ $count })، لذا لا يمكن للإعداد استبدالها. أكمل الإعداد أولًا بمفتاح محفظة التداول الحالية، ثم استبدل المحفظة من صفحة المحافظ.
+errors-initialization-save-failed-replacement-staged = تم تجهيز محفظة التداول الجديدة وستُطبَّق عند إعادة تشغيل { -brand }، لكن تعذّر حفظ إعدادات الإعداد. راجعها بعد إعادة التشغيل.
 
 # Dashboard state
 errors-ui-state-save-failed = تعذّر حفظ الحالة
@@ -256,7 +258,8 @@ errors-wallets-replace-no-trading-wallet = لا توجد محفظة تداول �
 errors-wallets-replace-same-wallet = هذا المفتاح يخص محفظة التداول الحالية.
 errors-wallets-replace-watched = هذه المحفظة موجودة في قائمة المراقبة. أزلها من هناك قبل التداول بها.
 errors-wallets-replace-address-mismatch = المفتاح لا يطابق عنوان المحفظة الذي تم التحقق منه. تحقق من المفتاح مرة أخرى.
-errors-wallets-replace-interrupted = توقف استبدال المحفظة في منتصفه وتبقى المحفظة الحالية محفظة التداول. راجع إعدادات المتداول والتداول بالنسخ، ثم حاول مرة أخرى.
+errors-wallets-replace-interrupted = توقف استبدال المحفظة في منتصفه وتبقى المحفظة الحالية محفظة التداول. المتداول والتداول بالنسخ متوقفان؛ شغّلهما مجددًا عندما تكون مستعدًا، أو حاول الاستبدال مرة أخرى.
+errors-wallets-replace-interrupted-copy-trading-on = توقف استبدال المحفظة في منتصفه وتبقى المحفظة الحالية محفظة التداول. المتداول متوقف، لكن تعذّر إيقاف التداول بالنسخ. راجع إعدادات التداول بالنسخ، ثم حاول مرة أخرى.
 errors-wallets-replace-failed = تعذّر استبدال محفظة التداول
 
 # Wallet watching

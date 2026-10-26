@@ -10,11 +10,10 @@ use axum::{
 
 use crate::i18n::ids;
 use crate::logger::{self, LogTag};
-use crate::version::RestartBlocker;
+use crate::process::restart_safety::RestartBlocker;
 use crate::wallets;
-use crate::wallets::replacement::StagedKey;
 use crate::webserver::api_error::{ApiError, ApiErrorCode};
-use crate::webserver::routes::initialization::validation::consume_setup_validation;
+use crate::webserver::routes::initialization::validation::consume_validated_key;
 use crate::webserver::routes::initialization::CompleteInitializationRequest;
 use crate::webserver::utils::success_response;
 use axum::response::IntoResponse as _;
@@ -121,42 +120,12 @@ pub async fn export_wallet(Path(id): Path<i64>) -> Response {
 /// Replace the trading wallet with a key that passed setup validation: stage the
 /// replacement, then restart so the next start applies it.
 pub async fn replace_wallet(Json(request): Json<CompleteInitializationRequest>) -> Response {
-    let validated = match consume_setup_validation(&request) {
-        Ok(validated) => validated,
-        Err(message) => {
-            return ApiError::new(
-                ApiErrorCode::SetupValidationRequired,
-                ids::ERRORS_INITIALIZATION_VALIDATION_REQUIRED,
-            )
-            .details(message.to_string())
-            .into_response();
-        }
+    let key = match consume_validated_key(&request) {
+        Ok(key) => key,
+        Err(error) => return error.into_response(),
     };
-    let encrypted = match crate::secure_storage::encrypt_private_key(&request.wallet_private_key) {
-        Ok(encrypted) => encrypted,
-        Err(e) => {
-            return ApiError::new(
-                ApiErrorCode::Internal,
-                ids::ERRORS_INITIALIZATION_ENCRYPT_FAILED,
-            )
-            .details(e.to_string())
-            .into_response();
-        }
-    };
-    let rpc_urls: Vec<String> = validated
-        .working_rpc_indices
-        .into_iter()
-        .filter_map(|index| request.rpc_urls.get(index).cloned())
-        .collect();
 
-    let staged = match wallets::replacement::stage(StagedKey {
-        address: validated.wallet_address,
-        ciphertext: encrypted.ciphertext,
-        nonce: encrypted.nonce,
-        rpc_urls,
-    })
-    .await
-    {
+    let staged = match wallets::replacement::stage(key).await {
         Ok(staged) => staged,
         Err(e) => {
             logger::warning(
@@ -177,10 +146,33 @@ pub async fn replace_wallet(Json(request): Json<CompleteInitializationRequest>) 
     })
 }
 
-/// List the wallet-reset backups, newest first.
+/// List the wallet-reset backups, newest first, with the replacement a start abandoned
+/// when one has not been dismissed yet.
 pub async fn list_wallet_backups() -> Response {
-    match tokio::task::spawn_blocking(wallets::replacement::list_backups).await {
-        Ok(backups) => success_response(WalletBackupsResponse { backups }),
+    let listed = tokio::task::spawn_blocking(|| {
+        (
+            wallets::replacement::list_backups(),
+            wallets::replacement::abandoned_replacement(),
+        )
+    })
+    .await;
+    match listed {
+        Ok((backups, abandoned)) => success_response(WalletBackupsResponse { backups, abandoned }),
+        Err(e) => ApiError::new(ApiErrorCode::Internal, ids::ERRORS_WALLETS_BACKUPS_FAILED)
+            .details(e.to_string())
+            .into_response(),
+    }
+}
+
+/// Forget the abandoned replacement once the Wallets page has shown it.
+pub async fn dismiss_abandoned_replacement() -> Response {
+    let dismissed =
+        tokio::task::spawn_blocking(wallets::replacement::dismiss_abandoned_replacement).await;
+    match dismissed {
+        Ok(Ok(())) => success_response(serde_json::json!({ "dismissed": true })),
+        Ok(Err(e)) => ApiError::new(ApiErrorCode::Internal, ids::ERRORS_WALLETS_BACKUPS_FAILED)
+            .details(e.to_string())
+            .into_response(),
         Err(e) => ApiError::new(ApiErrorCode::Internal, ids::ERRORS_WALLETS_BACKUPS_FAILED)
             .details(e.to_string())
             .into_response(),
@@ -237,9 +229,19 @@ pub(in crate::webserver::routes) fn replacement_error(error: &wallets::Error) ->
             ApiErrorCode::InvalidInput,
             ids::ERRORS_WALLETS_REPLACE_ADDRESS_MISMATCH,
         ),
-        wallets::Error::ReplacementInterrupted { .. } => ApiError::new(
+        wallets::Error::ReplacementInterrupted {
+            copy_trading_off: true,
+            ..
+        } => ApiError::new(
             ApiErrorCode::Internal,
             ids::ERRORS_WALLETS_REPLACE_INTERRUPTED,
+        ),
+        wallets::Error::ReplacementInterrupted {
+            copy_trading_off: false,
+            ..
+        } => ApiError::new(
+            ApiErrorCode::Internal,
+            ids::ERRORS_WALLETS_REPLACE_INTERRUPTED_COPY_TRADING_ON,
         ),
         _ => ApiError::new(ApiErrorCode::Internal, ids::ERRORS_WALLETS_REPLACE_FAILED),
     };

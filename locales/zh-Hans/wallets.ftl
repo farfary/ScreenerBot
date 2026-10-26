@@ -134,6 +134,10 @@ wallets-list-col-type = 类型
 wallets-list-col-created = 创建时间
 wallets-list-col-replaced = 更换时间
 wallets-list-replaced-on = { $date }
+wallets-replace-abandoned-title = 钱包更换已取消
+wallets-replace-abandoned-open-positions = 重启时交易钱包有未平仓持仓（{ $count }），因此已取消更换。交易钱包未更改；新密钥保留在“其他钱包”中。
+wallets-replace-abandoned-positions-unreadable = 重启时无法读取持仓存储，因此已取消更换。交易钱包未更改；新密钥保留在“其他钱包”中。
+wallets-replace-abandoned-vault-changed = 重启时钱包库已与准备好的更换不一致，因此已取消更换。交易钱包未更改；新密钥保留在“其他钱包”中。
 wallets-list-col-actions = 操作
 wallets-list-action-export = 导出私钥
 wallets-list-count = 钱包
@@ -141,7 +145,8 @@ wallets-list-search =
     .placeholder = 按名称或地址搜索...
 wallets-list-loading-title = 正在加载钱包…
 wallets-list-loading-description = 正在准备所选钱包视图。
-wallets-list-kept-empty-message = 早期版本的钱包会显示在这里，方便您继续导出其密钥。
+wallets-list-kept-empty-message = 已更换的交易钱包和早期版本的钱包会显示在这里，方便您继续导出其密钥。
+wallets-list-previous-trading-wallet = 原交易钱包
 wallets-other-empty-title = 没有其他钱包
 
 # watched.js: watched wallets table and actions.

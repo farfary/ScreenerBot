@@ -134,6 +134,10 @@ wallets-list-col-type = 유형
 wallets-list-col-created = 생성일
 wallets-list-col-replaced = 교체일
 wallets-list-replaced-on = { $date }
+wallets-replace-abandoned-title = 지갑 교체가 취소되었습니다
+wallets-replace-abandoned-open-positions = 재시작 시 트레이딩 지갑에 열린 포지션이 있어 ({ $count }) 교체가 취소되었습니다. 트레이딩 지갑은 바뀌지 않았으며, 새 키는 기타 지갑에 보관되어 있습니다.
+wallets-replace-abandoned-positions-unreadable = 재시작 시 포지션 저장소를 읽을 수 없어 교체가 취소되었습니다. 트레이딩 지갑은 바뀌지 않았으며, 새 키는 기타 지갑에 보관되어 있습니다.
+wallets-replace-abandoned-vault-changed = 재시작 시 지갑 보관소가 준비된 교체와 더 이상 일치하지 않아 교체가 취소되었습니다. 트레이딩 지갑은 바뀌지 않았으며, 새 키는 기타 지갑에 보관되어 있습니다.
 wallets-list-col-actions = 작업
 wallets-list-action-export = 개인 키 내보내기
 wallets-list-count = 지갑
@@ -141,7 +145,8 @@ wallets-list-search =
     .placeholder = 이름 또는 주소로 검색...
 wallets-list-loading-title = 지갑 불러오는 중…
 wallets-list-loading-description = 선택한 지갑 보기를 준비하고 있습니다.
-wallets-list-kept-empty-message = 이전 버전의 지갑이 여기에 표시되어 계속 키를 내보낼 수 있습니다.
+wallets-list-kept-empty-message = 교체된 트레이딩 지갑과 이전 버전의 지갑이 여기에 표시되어 계속 키를 내보낼 수 있습니다.
+wallets-list-previous-trading-wallet = 이전 트레이딩 지갑
 wallets-other-empty-title = 다른 지갑이 없습니다
 
 # watched.js: watched wallets table and actions.

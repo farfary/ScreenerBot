@@ -64,18 +64,23 @@ startup-storage-upgrade-remedy = 詳細をコピーし、ログファイルと�
 
 startup-wallet-replacement-incomplete-title = ウォレットの置き換えを完了できませんでした
 startup-wallet-replacement-incomplete-detail =
-    { -brand } は新しい取引ウォレットへの切り替え中に停止しました。何も削除されていません。以前のウォレットの鍵はウォレット保管庫に、ローカル履歴はバックアップフォルダーに残っています。
+    { -brand } は新しい取引ウォレットへの切り替え中に停止しました。何も削除されていません。以前のウォレットの鍵はウォレット保管庫に残り、ローカル履歴は元の場所か、ログファイルに記載されたバックアップフォルダーにあります。
 
     原因:
     { $error }
 startup-wallet-replacement-incomplete-remedy = { -brand } を再度起動すると置き換えが再開されます。このメッセージが再び表示される場合は、詳細をコピーしてログファイルと一緒に t.me/screenerbotio_support のサポートに送ってください。wallet_replacement.json とバックアップフォルダーは編集、移動、削除しないでください。
 startup-wallet-reset-refused-title = ウォレットデータはリセットされませんでした
-startup-wallet-reset-refused-open-positions = 以前のウォレットにまだオープンポジションがあるため ({ $count })、ローカル履歴は保持されました。
-startup-wallet-reset-refused-trade-in-flight = 取引がまだ進行中だったため、ウォレットのローカル履歴は保持されました。
-startup-wallet-reset-refused-tool-in-flight = ウォレットツールがまだ実行中だったため、ウォレットのローカル履歴は保持されました。
-startup-wallet-reset-refused-positions-loading = オープンポジションをまだ読み込み中だったため、ウォレットのローカル履歴は保持されました。
+startup-wallet-reset-refused-open-positions = 取引ウォレットにオープンポジションがあるため ({ $count })、ウォレットデータはリセットされませんでした。
 startup-wallet-reset-refused-positions-unreadable = ポジションストアを読み取れず、オープンポジションがないことを確認できないため、ウォレットのローカル履歴は保持されました。
-startup-wallet-reset-refused-remedy = 何も移動されていません。以前のウォレットで { -brand } を起動し、そのオープンポジションをクローズしてから、ウォレットデータをもう一度リセットしてください。
+startup-wallet-reset-refused-remedy = 何も移動されていません。リセットなしで { -brand } を起動し、取引ウォレットのオープンポジションをクローズまたはアーカイブしてから、ウォレットデータをもう一度リセットしてください。
+startup-wallet-reset-refused-unreadable-remedy = 何も移動されていません。リセットなしで { -brand } を起動してポジションストアを確認させてから、ウォレットデータをもう一度リセットしてください。このメッセージが再び表示される場合は、ログファイルを t.me/screenerbotio_support のサポートに送ってください。
+startup-wallet-reset-incomplete-title = ウォレットデータのリセットを完了できませんでした
+startup-wallet-reset-incomplete-detail =
+    { -brand } はウォレットデータを { $directory } に移動している途中で停止し、すべてのファイルを元に戻せませんでした。ウォレットのローカル履歴の一部はそのフォルダーに、一部は元の場所にあります。
+
+    原因:
+    { $error }
+startup-wallet-reset-incomplete-remedy = { -brand } を再度起動せず、{ $directory } 内のファイルを移動、編集、削除しないでください。詳細をコピーしてログファイルと一緒に t.me/screenerbotio_support のサポートに送ってください。
 
 ## Generic failures.
 
@@ -89,3 +94,4 @@ startup-failure-analysis-init = 分析エンジンを初期化できませんで
 startup-failure-assistant-init = アシスタントのチャットエンジンを初期化できませんでした: { $error }
 startup-failure-wallets-init = ウォレットを初期化できませんでした: { $error }
 startup-failure-wallet-validation = ウォレットの整合性を検証できませんでした: { $error }
+startup-failure-storage-phase = ストレージフェーズが予期せず停止しました: { $error }

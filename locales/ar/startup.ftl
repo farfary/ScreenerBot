@@ -64,18 +64,23 @@ startup-storage-upgrade-remedy = انسخ التفاصيل وأرسلها مع �
 
 startup-wallet-replacement-incomplete-title = تعذّر إكمال استبدال المحفظة
 startup-wallet-replacement-incomplete-detail =
-    توقف { -brand } أثناء التبديل إلى محفظة التداول الجديدة. لم يُحذف شيء: يبقى مفتاح المحفظة السابقة في خزنة المحافظ ويبقى سجلها المحلي في مجلد النسخ الاحتياطية.
+    توقف { -brand } أثناء التبديل إلى محفظة التداول الجديدة. لم يُحذف شيء: يبقى مفتاح المحفظة السابقة في خزنة المحافظ، وسجلها المحلي إما لا يزال في مكانه أو في مجلد النسخ الاحتياطي المذكور في ملف السجل.
 
     السبب:
     { $error }
 startup-wallet-replacement-incomplete-remedy = شغّل { -brand } مرة أخرى لاستئناف الاستبدال. إذا ظهرت هذه الرسالة مجددًا، فانسخ التفاصيل وأرسلها مع ملف السجل إلى الدعم على t.me/screenerbotio_support. لا تعدّل wallet_replacement.json أو مجلد النسخ الاحتياطية ولا تنقلهما ولا تحذفهما.
 startup-wallet-reset-refused-title = لم تُعَد تهيئة بيانات المحفظة
-startup-wallet-reset-refused-open-positions = لا تزال لدى المحفظة السابقة مراكز مفتوحة ({ $count })، لذا احتُفظ بسجلها المحلي.
-startup-wallet-reset-refused-trade-in-flight = كانت هناك صفقة لا تزال قيد التنفيذ، لذا احتُفظ بالسجل المحلي للمحفظة.
-startup-wallet-reset-refused-tool-in-flight = كانت هناك أداة محفظة لا تزال قيد التشغيل، لذا احتُفظ بالسجل المحلي للمحفظة.
-startup-wallet-reset-refused-positions-loading = كانت المراكز المفتوحة لا تزال قيد التحميل، لذا احتُفظ بالسجل المحلي للمحفظة.
+startup-wallet-reset-refused-open-positions = لدى محفظة التداول مراكز مفتوحة ({ $count })، لذا لم تُعَد تهيئة بيانات المحفظة.
 startup-wallet-reset-refused-positions-unreadable = تعذّرت قراءة مخزن المراكز، لذا لا يمكن استبعاد وجود مراكز مفتوحة واحتُفظ بالسجل المحلي للمحفظة.
-startup-wallet-reset-refused-remedy = لم يُنقل شيء. شغّل { -brand } بالمحفظة السابقة، وأغلق مراكزها المفتوحة، ثم أعد تهيئة بيانات المحفظة مرة أخرى.
+startup-wallet-reset-refused-remedy = لم يُنقل شيء. شغّل { -brand } دون إعادة التهيئة، وأغلق مراكز محفظة التداول المفتوحة أو أرشفها، ثم أعد تهيئة بيانات المحفظة مرة أخرى.
+startup-wallet-reset-refused-unreadable-remedy = لم يُنقل شيء. شغّل { -brand } دون إعادة التهيئة ليتحقق من مخزن المراكز، ثم أعد تهيئة بيانات المحفظة مرة أخرى. إذا ظهرت هذه الرسالة مجددًا، فأرسل ملف السجل إلى الدعم على t.me/screenerbotio_support.
+startup-wallet-reset-incomplete-title = تعذّر إكمال إعادة تهيئة بيانات المحفظة
+startup-wallet-reset-incomplete-detail =
+    توقف { -brand } أثناء نقل بيانات المحفظة إلى { $directory } وتعذّر عليه إعادة كل الملفات. جزء من السجل المحلي للمحفظة في ذلك المجلد وجزء لا يزال في مكانه.
+
+    السبب:
+    { $error }
+startup-wallet-reset-incomplete-remedy = لا تشغّل { -brand } مرة أخرى ولا تنقل أي ملف في { $directory } أو تعدّله أو تحذفه. انسخ التفاصيل وأرسلها مع ملف السجل إلى الدعم على t.me/screenerbotio_support.
 
 ## Generic failures.
 
@@ -89,3 +94,4 @@ startup-failure-analysis-init = تعذّرت تهيئة محرك التحليل:
 startup-failure-assistant-init = تعذّرت تهيئة محرك محادثة المساعد: { $error }
 startup-failure-wallets-init = تعذّرت تهيئة المحافظ: { $error }
 startup-failure-wallet-validation = تعذّر التحقق من اتساق المحفظة: { $error }
+startup-failure-storage-phase = توقفت مرحلة التخزين بشكل غير متوقع: { $error }

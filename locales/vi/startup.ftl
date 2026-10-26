@@ -57,18 +57,23 @@ startup-storage-upgrade-remedy = Sao chép chi tiết và gửi kèm tệp nhậ
 
 startup-wallet-replacement-incomplete-title = Không thể hoàn tất việc thay ví
 startup-wallet-replacement-incomplete-detail =
-    { -brand } đã dừng khi đang chuyển sang ví giao dịch mới. Không có gì bị xóa: khóa của ví trước vẫn ở trong kho ví và lịch sử cục bộ của nó vẫn ở trong thư mục sao lưu.
+    { -brand } đã dừng khi đang chuyển sang ví giao dịch mới. Không có gì bị xóa: khóa của ví trước vẫn ở trong kho ví, còn lịch sử cục bộ của nó hoặc vẫn ở chỗ cũ, hoặc nằm trong thư mục sao lưu được ghi trong tệp nhật ký.
 
     Nguyên nhân:
     { $error }
 startup-wallet-replacement-incomplete-remedy = Khởi động lại { -brand } để tiếp tục việc thay ví. Nếu thông báo này xuất hiện lại, hãy sao chép chi tiết và gửi kèm tệp nhật ký cho bộ phận hỗ trợ tại t.me/screenerbotio_support. Không chỉnh sửa, di chuyển hay xóa wallet_replacement.json hoặc thư mục sao lưu.
 startup-wallet-reset-refused-title = Dữ liệu ví chưa được đặt lại
-startup-wallet-reset-refused-open-positions = Ví trước vẫn còn vị thế đang mở ({ $count }), nên lịch sử cục bộ của nó được giữ lại.
-startup-wallet-reset-refused-trade-in-flight = Một giao dịch vẫn đang diễn ra, nên lịch sử cục bộ của ví được giữ lại.
-startup-wallet-reset-refused-tool-in-flight = Một công cụ ví vẫn đang chạy, nên lịch sử cục bộ của ví được giữ lại.
-startup-wallet-reset-refused-positions-loading = Các vị thế đang mở vẫn đang được tải, nên lịch sử cục bộ của ví được giữ lại.
+startup-wallet-reset-refused-open-positions = Ví giao dịch đang có vị thế mở ({ $count }), nên dữ liệu ví không được đặt lại.
 startup-wallet-reset-refused-positions-unreadable = Không đọc được kho vị thế nên không thể loại trừ vị thế đang mở, và lịch sử cục bộ của ví được giữ lại.
-startup-wallet-reset-refused-remedy = Không có gì được di chuyển. Hãy khởi động { -brand } với ví trước, đóng các vị thế đang mở của nó, rồi đặt lại dữ liệu ví lần nữa.
+startup-wallet-reset-refused-remedy = Không có gì được di chuyển. Hãy khởi động { -brand } mà không đặt lại, đóng hoặc lưu trữ các vị thế mở của ví giao dịch, rồi đặt lại dữ liệu ví lần nữa.
+startup-wallet-reset-refused-unreadable-remedy = Không có gì được di chuyển. Hãy khởi động { -brand } mà không đặt lại để nó kiểm tra kho vị thế, rồi đặt lại dữ liệu ví lần nữa. Nếu thông báo này xuất hiện lại, hãy gửi tệp nhật ký cho bộ phận hỗ trợ tại t.me/screenerbotio_support.
+startup-wallet-reset-incomplete-title = Không thể hoàn tất việc đặt lại dữ liệu ví
+startup-wallet-reset-incomplete-detail =
+    { -brand } đã dừng khi đang chuyển dữ liệu ví vào { $directory } và không thể đưa mọi tệp trở lại. Một phần lịch sử cục bộ của ví nằm trong thư mục đó và một phần vẫn ở chỗ cũ.
+
+    Nguyên nhân:
+    { $error }
+startup-wallet-reset-incomplete-remedy = Không khởi động lại { -brand } và không di chuyển, chỉnh sửa hay xóa bất kỳ tệp nào trong { $directory }. Hãy sao chép chi tiết và gửi kèm tệp nhật ký cho bộ phận hỗ trợ tại t.me/screenerbotio_support.
 
 ## Generic failures.
 
@@ -82,3 +87,4 @@ startup-failure-analysis-init = Không khởi tạo được công cụ phân t�
 startup-failure-assistant-init = Không khởi tạo được công cụ trò chuyện của Trợ lý: { $error }
 startup-failure-wallets-init = Không khởi tạo được các ví: { $error }
 startup-failure-wallet-validation = Không xác thực được tính nhất quán của ví: { $error }
+startup-failure-storage-phase = Giai đoạn lưu trữ dừng đột ngột: { $error }

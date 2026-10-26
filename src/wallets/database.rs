@@ -81,6 +81,11 @@ impl WalletsDatabase {
         Ok(Self { pool, chain })
     }
 
+    /// The chain whose wallets this database holds.
+    pub fn chain(&self) -> ChainId {
+        self.chain
+    }
+
     /// Snapshot the vault after a key was added. The change stands whatever happens to
     /// the snapshot; a failed one is logged.
     fn snapshot_after_key_change(conn: &Connection) {

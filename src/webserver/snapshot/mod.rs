@@ -42,7 +42,7 @@ static SYSTEM_METRICS_CACHE: LazyLock<RwLock<Option<CachedSystemMetrics>>> =
 /// read: an unknown count is never reported as zero, because a reader such as the
 /// installer's update check would take zero as safe to restart. A store not opened yet
 /// is empty only while setup has not completed (no wallet, so nothing can be open), the
-/// rule `version::is_restart_safe` applies.
+/// rule `process::restart_safety::is_restart_safe` applies.
 fn open_positions_count(
     count: Result<usize, crate::positions::Error>,
     initialization_complete: bool,

@@ -5,6 +5,7 @@ setup-wallet-format-invalid = base58 प्राइवेट की या 64-�
 setup-wallet-base58-recognized = Base58 की फ़ॉर्मैट पहचाना गया।
 
 setup-rpc-required = कम से कम एक RPC एंडपॉइंट दर्ज करें।
+setup-dialog-rpc-optional-note = वैकल्पिक: पहले से कॉन्फ़िगर किए गए RPC एंडपॉइंट रखने के लिए फ़ील्ड खाली छोड़ें।
 setup-rpc-too-many = 10 से ज़्यादा RPC एंडपॉइंट इस्तेमाल न करें।
 setup-rpc-url-invalid = हर एंडपॉइंट एक मान्य HTTPS URL होना चाहिए।
 setup-rpc-url-credentials = RPC URL में यूज़रनेम या पासवर्ड शामिल नहीं हो सकते।
@@ -109,6 +110,7 @@ setup-dialog-replace-confirm-stop = ट्रेडर और कॉपी ट�
 setup-dialog-replace-confirm-backup = मौजूदा वॉलेट की पोज़िशन, ट्रांज़ैक्शन और हिस्ट्री एक बैकअप फ़ोल्डर में चली जाती हैं।
 setup-dialog-replace-confirm-keep = मौजूदा वॉलेट की की अन्य वॉलेट में रहती है, जहाँ से आप उसे अब भी एक्सपोर्ट कर सकते हैं।
 setup-dialog-replace-confirm-funds = कोई फ़ंड नहीं हिलता: टोकन और { -sol } मौजूदा वॉलेट में ही रहते हैं।
+setup-dialog-replace-confirm-rpc = कॉन्फ़िगर किए गए RPC एंडपॉइंट को आपके दर्ज किए गए एंडपॉइंट से बदलता है; फ़ील्ड खाली रहने पर मौजूदा एंडपॉइंट बने रहते हैं।
 setup-dialog-replace-confirm-restart = { -brand } नए वॉलेट के साथ रीस्टार्ट होता है।
 
 setup-wizard-progress =

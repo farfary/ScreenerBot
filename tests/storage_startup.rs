@@ -599,7 +599,8 @@ fn the_wallet_data_reset_moves_the_stores_into_a_wallet_reset_backup() {
             screenerbot::paths::ensure_all_directories().expect("create data directories");
             let paths = seed_wallet_scoped_stores();
 
-            let directory = screenerbot::database::open::reset_wallet_stores(None)
+            let target = screenerbot::database::backup::wallet_reset_directory("reset");
+            let directory = screenerbot::database::open::reset_wallet_stores(&target, &[])
                 .expect("reset the wallet data")
                 .expect("the stores were moved");
 
@@ -640,46 +641,161 @@ fn the_wallet_data_reset_moves_the_stores_into_a_wallet_reset_backup() {
     );
 }
 
+/// Record `count` open positions of `wallet` in the positions store.
+fn record_open_positions(wallet: &str, count: usize) {
+    let connection = Connection::open(screenerbot::paths::get_positions_db_path())
+        .expect("open the positions store");
+    connection
+        .execute_batch(
+            "CREATE TABLE IF NOT EXISTS positions (
+                wallet_address TEXT NOT NULL,
+                chain_id TEXT NOT NULL,
+                archived INTEGER NOT NULL DEFAULT 0,
+                exit_time TEXT,
+                transaction_exit_verified INTEGER NOT NULL DEFAULT 0
+             );",
+        )
+        .expect("create the positions table");
+    for _ in 0..count {
+        connection
+            .execute(
+                "INSERT INTO positions (wallet_address, chain_id) VALUES (?1, 'solana')",
+                [wallet],
+            )
+            .expect("record an open position");
+    }
+}
+
 #[test]
-fn the_wallet_data_reset_refuses_while_positions_are_open_or_work_is_in_flight() {
+fn the_wallet_data_reset_refuses_only_for_the_trading_wallets_open_positions() {
     common::run_isolated(
         module_path!(),
-        "the_wallet_data_reset_refuses_while_positions_are_open_or_work_is_in_flight",
+        "the_wallet_data_reset_refuses_only_for_the_trading_wallets_open_positions",
         || async {
-            use screenerbot::database::open::{reset_wallet_stores, WalletResetRefusal};
-            use screenerbot::version::RestartBlocker;
+            use screenerbot::database::open::{
+                reset_wallet_stores, WalletResetFailure, WalletResetRefusal,
+            };
 
             let _dir = common::isolated_env();
             screenerbot::paths::ensure_all_directories().expect("create data directories");
             let paths = seed_wallet_scoped_stores();
-            Connection::open(screenerbot::paths::get_positions_db_path())
-                .and_then(|connection| {
-                    connection.execute_batch(
-                        "CREATE TABLE positions (
-                            wallet_address TEXT NOT NULL,
-                            chain_id TEXT NOT NULL,
-                            archived INTEGER NOT NULL DEFAULT 0,
-                            exit_time TEXT,
-                            transaction_exit_verified INTEGER NOT NULL DEFAULT 0
-                         );
-                         INSERT INTO positions (wallet_address, chain_id) VALUES ('wallet', 'solana');",
-                    )
-                })
-                .expect("record an open position");
+            record_open_positions("EarlierWallet11111111111111111111111111111", 2);
+            let target = screenerbot::database::backup::wallet_reset_directory("reset");
 
-            assert!(matches!(
-                reset_wallet_stores(None),
-                Err(WalletResetRefusal::Blocked(RestartBlocker::OpenPositions {
-                    count: 1
-                }))
-            ));
-            assert!(matches!(
-                reset_wallet_stores(Some(RestartBlocker::TradeInFlight)),
-                Err(WalletResetRefusal::Blocked(RestartBlocker::TradeInFlight))
-            ));
+            // The trading wallet's own open positions refuse the reset.
+            let refused = reset_wallet_stores(
+                &target,
+                &["EarlierWallet11111111111111111111111111111".to_owned()],
+            );
+            assert!(
+                matches!(
+                    refused,
+                    Err(WalletResetFailure::Refused(
+                        WalletResetRefusal::OpenPositions { count: 2 }
+                    ))
+                ),
+                "{refused:?}"
+            );
             for path in &paths {
                 assert!(path.exists(), "{} stays in place", path.display());
             }
+            assert!(!target.exists(), "nothing was moved");
+
+            // Open positions of a wallet that is not the trading wallet move with the
+            // stores, and the manifest counts them.
+            let directory = reset_wallet_stores(
+                &target,
+                &["CurrentWallet111111111111111111111111111111".to_owned()],
+            )
+            .expect("reset the wallet data")
+            .expect("the stores were moved");
+            for path in &paths {
+                assert!(!path.exists(), "{} was moved", path.display());
+            }
+            let manifest: serde_json::Value = serde_json::from_slice(
+                &std::fs::read(directory.join("manifest.json")).expect("read the manifest"),
+            )
+            .expect("decode the manifest");
+            assert_eq!(
+                manifest["movedOpenPositions"],
+                serde_json::json!({ "EarlierWallet11111111111111111111111111111": 2 })
+            );
         },
     );
+}
+
+#[test]
+fn a_wallet_data_reset_that_fails_part_way_moves_every_file_back() {
+    common::run_isolated(
+        module_path!(),
+        "a_wallet_data_reset_that_fails_part_way_moves_every_file_back",
+        || async {
+            use screenerbot::database::open::{reset_wallet_stores, WalletResetFailure};
+
+            let _dir = common::isolated_env();
+            screenerbot::paths::ensure_all_directories().expect("create data directories");
+            let paths = seed_wallet_scoped_stores();
+            let positions = screenerbot::paths::get_positions_db_path();
+            let sidecars: Vec<std::path::PathBuf> = ["-wal", "-shm"]
+                .iter()
+                .map(|suffix| std::path::PathBuf::from(format!("{}{suffix}", positions.display())))
+                .collect();
+            for sidecar in &sidecars {
+                std::fs::write(sidecar, sidecar.display().to_string()).expect("write a sidecar");
+            }
+            let mut originals: Vec<(std::path::PathBuf, Vec<u8>)> = paths
+                .iter()
+                .chain(sidecars.iter())
+                .map(|path| {
+                    (
+                        path.clone(),
+                        std::fs::read(path).expect("read a store file"),
+                    )
+                })
+                .collect();
+            originals.sort();
+            // The positions store file cannot move: its target already exists, so the
+            // move fails after its sidecars moved.
+            let target = screenerbot::database::backup::wallet_reset_directory("reset");
+            std::fs::create_dir_all(&target).expect("create the target");
+            let blocker = target.join(positions.file_name().expect("file name"));
+            std::fs::write(&blocker, b"in the way").expect("block the store file");
+
+            let failed = reset_wallet_stores(&target, &[]);
+
+            assert!(
+                matches!(failed, Err(WalletResetFailure::Restored(_))),
+                "{failed:?}"
+            );
+            for (path, bytes) in &originals {
+                assert_eq!(
+                    std::fs::read(path).ok().as_ref(),
+                    Some(bytes),
+                    "{} is back in place",
+                    path.display()
+                );
+            }
+            assert_eq!(
+                std::fs::read(&blocker).expect("read the blocking file"),
+                b"in the way"
+            );
+            let left: Vec<String> = std::fs::read_dir(&target)
+                .expect("list the target")
+                .flatten()
+                .map(|entry| entry.file_name().to_string_lossy().into_owned())
+                .collect();
+            assert_eq!(
+                left,
+                vec![store_name(&positions)],
+                "only the blocking file stays in the target"
+            );
+        },
+    );
+}
+
+fn store_name(path: &std::path::Path) -> String {
+    path.file_name()
+        .expect("file name")
+        .to_string_lossy()
+        .into_owned()
 }

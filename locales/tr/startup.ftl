@@ -57,18 +57,23 @@ startup-storage-upgrade-remedy = Ayrıntıları kopyalayın ve günlük dosyası
 
 startup-wallet-replacement-incomplete-title = Cüzdan değişikliği tamamlanamadı
 startup-wallet-replacement-incomplete-detail =
-    { -brand } yeni işlem cüzdanına geçerken durdu. Hiçbir şey silinmedi: önceki cüzdanın anahtarı cüzdan kasasında, yerel geçmişi ise yedek klasöründe duruyor.
+    { -brand } yeni işlem cüzdanına geçerken durdu. Hiçbir şey silinmedi: önceki cüzdanın anahtarı cüzdan kasasında duruyor; yerel geçmişi ise ya hâlâ yerinde ya da günlük dosyasında belirtilen yedek klasöründe.
 
     Neden:
     { $error }
 startup-wallet-replacement-incomplete-remedy = Değişikliğe devam etmek için { -brand } uygulamasını yeniden başlatın. Bu mesaj tekrar görünürse ayrıntıları kopyalayıp günlük dosyasıyla birlikte t.me/screenerbotio_support adresindeki desteğe gönderin. wallet_replacement.json dosyasını veya yedek klasörünü düzenlemeyin, taşımayın ya da silmeyin.
 startup-wallet-reset-refused-title = Cüzdan verileri sıfırlanmadı
-startup-wallet-reset-refused-open-positions = Önceki cüzdanda hâlâ açık pozisyonlar var ({ $count }), bu yüzden yerel geçmişi saklandı.
-startup-wallet-reset-refused-trade-in-flight = Bir işlem hâlâ sürüyordu, bu yüzden cüzdanın yerel geçmişi saklandı.
-startup-wallet-reset-refused-tool-in-flight = Bir cüzdan aracı hâlâ çalışıyordu, bu yüzden cüzdanın yerel geçmişi saklandı.
-startup-wallet-reset-refused-positions-loading = Açık pozisyonlar hâlâ yükleniyordu, bu yüzden cüzdanın yerel geçmişi saklandı.
+startup-wallet-reset-refused-open-positions = İşlem cüzdanında açık pozisyonlar var ({ $count }), bu yüzden cüzdan verileri sıfırlanmadı.
 startup-wallet-reset-refused-positions-unreadable = Pozisyon deposu okunamadı, bu yüzden açık pozisyon olmadığı doğrulanamıyor ve cüzdanın yerel geçmişi saklandı.
-startup-wallet-reset-refused-remedy = Hiçbir şey taşınmadı. { -brand } uygulamasını önceki cüzdanla başlatın, açık pozisyonlarını kapatın ve ardından cüzdan verilerini yeniden sıfırlayın.
+startup-wallet-reset-refused-remedy = Hiçbir şey taşınmadı. { -brand } uygulamasını sıfırlama olmadan başlatın, işlem cüzdanının açık pozisyonlarını kapatın veya arşivleyin, ardından cüzdan verilerini yeniden sıfırlayın.
+startup-wallet-reset-refused-unreadable-remedy = Hiçbir şey taşınmadı. Pozisyon deposunu denetleyebilmesi için { -brand } uygulamasını sıfırlama olmadan başlatın, ardından cüzdan verilerini yeniden sıfırlayın. Bu mesaj tekrar görünürse günlük dosyasını t.me/screenerbotio_support adresindeki desteğe gönderin.
+startup-wallet-reset-incomplete-title = Cüzdan verilerinin sıfırlanması tamamlanamadı
+startup-wallet-reset-incomplete-detail =
+    { -brand } cüzdan verilerini { $directory } konumuna taşırken durdu ve tüm dosyaları geri taşıyamadı. Cüzdanın yerel geçmişinin bir kısmı o klasörde, bir kısmı hâlâ yerinde.
+
+    Neden:
+    { $error }
+startup-wallet-reset-incomplete-remedy = { -brand } uygulamasını yeniden başlatmayın ve { $directory } içindeki hiçbir dosyayı taşımayın, düzenlemeyin ya da silmeyin. Ayrıntıları kopyalayıp günlük dosyasıyla birlikte t.me/screenerbotio_support adresindeki desteğe gönderin.
 
 ## Generic failures.
 
@@ -82,3 +87,4 @@ startup-failure-analysis-init = Analiz motoru başlatılamadı: { $error }
 startup-failure-assistant-init = Asistan sohbet motoru başlatılamadı: { $error }
 startup-failure-wallets-init = Cüzdanlar başlatılamadı: { $error }
 startup-failure-wallet-validation = Cüzdan tutarlılığı doğrulanamadı: { $error }
+startup-failure-storage-phase = Depolama aşaması beklenmedik şekilde durdu: { $error }

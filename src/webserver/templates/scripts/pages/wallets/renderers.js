@@ -24,6 +24,21 @@ const WALLET_TYPE_LABELS = Object.freeze({
   migrated: "wallets-type-migrated",
 });
 
+// The name the vault stores on its trading wallet: `TRADING_WALLET_NAME` in
+// src/wallets/types.rs. A row that keeps it after another wallet took the role is a
+// replaced trading wallet.
+export const TRADING_WALLET_NAME = "Main Wallet";
+
+// The label of a wallet row: the trading wallet by its role, a replaced trading wallet
+// as one, a wallet without a name of its own by its type, any other by its name.
+export function walletName(wallet) {
+  if (!wallet) return "";
+  if (wallet.role === "main") return I18n.t("wallets-holdings-main-title");
+  if (wallet.name === TRADING_WALLET_NAME) return I18n.t("wallets-list-previous-trading-wallet");
+  if (!wallet.name) return I18n.label(WALLET_TYPE_LABELS, wallet.wallet_type);
+  return wallet.name;
+}
+
 export function createWalletRenderers({
   walletsData,
   walletBackups,
@@ -68,7 +83,7 @@ export function createWalletRenderers({
   function walletRows(wallets) {
     return wallets.map((w) => ({
       ...w,
-      wallet: `${w.name || ""} ${w.address || ""}`,
+      wallet: `${walletName(w)} ${w.address || ""}`,
       replaced_at: replacementBackup(w.address)?.created_at_ms ?? null,
     }));
   }
@@ -138,8 +153,9 @@ export function createWalletRenderers({
     },
   ];
 
-  // Other Wallets lists every wallet besides the trading wallet, kept from earlier
-  // versions; its one action is the private-key export.
+  // Other Wallets lists every wallet besides the trading wallet: replaced trading
+  // wallets, keys a replacement added and wallets from earlier versions. Its one action
+  // is the private-key export.
   const WALLET_LIST_COLUMNS = [
     {
       id: "wallet",
@@ -147,7 +163,7 @@ export function createWalletRenderers({
       grow: true,
       sortable: true,
       minWidth: addressFloorWidth() + 24,
-      render: (value, row) => renderNamedAddress(row.name, row.address),
+      render: (value, row) => renderNamedAddress(walletName(row), row.address),
     },
     {
       id: "balance",
@@ -257,7 +273,7 @@ export function createWalletRenderers({
     const wallet = mainWallet();
 
     tokenTable.setToolbarIdentity({
-      title: wallet?.name || I18n.t("wallets-holdings-no-main"),
+      title: wallet ? walletName(wallet) : I18n.t("wallets-holdings-no-main"),
       address: { html: walletAddressHtml(wallet) },
     });
 
@@ -327,7 +343,7 @@ export function createWalletRenderers({
         // `setToolbarIdentity` can fill them in place on the first poll.
         identity: {
           icon: "icon-wallet",
-          title: wallet?.name || I18n.t("wallets-holdings-main-title"),
+          title: I18n.t("wallets-holdings-main-title"),
           address: { html: walletAddressHtml(wallet) },
         },
         summary: [

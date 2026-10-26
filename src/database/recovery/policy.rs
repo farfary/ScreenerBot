@@ -69,7 +69,9 @@ impl FailureKind {
                 FailureKind::CannotOpen
             }
             DatabaseError::DiskFull { .. } => FailureKind::DiskFull,
-            DatabaseError::Io { .. } | DatabaseError::Backup { .. } => FailureKind::Io,
+            DatabaseError::Io { .. }
+            | DatabaseError::Backup { .. }
+            | DatabaseError::MoveTargetExists { .. } => FailureKind::Io,
         }
     }
 

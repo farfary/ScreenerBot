@@ -70,10 +70,10 @@
     port_in_use: 'desktop-boot-subtitle-port-in-use',
     lock_held: 'desktop-boot-subtitle-lock-held',
     config_invalid: 'desktop-boot-subtitle-config-invalid',
-    directory_setup: 'desktop-boot-subtitle-directory-setup',
     storage_upgrade: 'desktop-boot-subtitle-storage-upgrade',
     wallet_replacement_incomplete: 'desktop-boot-subtitle-wallet-replacement-incomplete',
     wallet_reset_refused: 'desktop-boot-subtitle-wallet-reset-refused',
+    wallet_reset_incomplete: 'desktop-boot-subtitle-wallet-reset-incomplete',
     generic: 'desktop-boot-subtitle-generic'
   };
 

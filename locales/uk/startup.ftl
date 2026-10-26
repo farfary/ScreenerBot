@@ -57,18 +57,23 @@ startup-storage-upgrade-remedy = Скопіюйте подробиці й над
 
 startup-wallet-replacement-incomplete-title = Не вдалося завершити заміну гаманця
 startup-wallet-replacement-incomplete-detail =
-    { -brand } зупинився під час переходу на новий торговий гаманець. Нічого не видалено: ключ попереднього гаманця залишається у сховищі гаманців, а його локальна історія — у папці резервних копій.
+    { -brand } зупинився під час переходу на новий торговий гаманець. Нічого не видалено: ключ попереднього гаманця залишається у сховищі гаманців, а його локальна історія або на своєму місці, або в папці резервної копії, вказаній у файлі журналу.
 
     Причина:
     { $error }
 startup-wallet-replacement-incomplete-remedy = Запустіть { -brand } знову, щоб продовжити заміну. Якщо повідомлення з'явиться знову, скопіюйте подробиці та надішліть їх разом із файлом журналу до підтримки: t.me/screenerbotio_support. Не редагуйте, не переміщуйте й не видаляйте wallet_replacement.json і папку резервних копій.
 startup-wallet-reset-refused-title = Дані гаманця не скинуто
-startup-wallet-reset-refused-open-positions = Попередній гаманець ще має відкриті позиції ({ $count }), тому його локальну історію збережено.
-startup-wallet-reset-refused-trade-in-flight = Ще тривала угода, тому локальну історію гаманця збережено.
-startup-wallet-reset-refused-tool-in-flight = Ще працював інструмент гаманця, тому локальну історію гаманця збережено.
-startup-wallet-reset-refused-positions-loading = Відкриті позиції ще завантажувалися, тому локальну історію гаманця збережено.
+startup-wallet-reset-refused-open-positions = Торговий гаманець має відкриті позиції ({ $count }), тому дані гаманця не скинуто.
 startup-wallet-reset-refused-positions-unreadable = Не вдалося прочитати сховище позицій, тож відкриті позиції не можна виключити; локальну історію гаманця збережено.
-startup-wallet-reset-refused-remedy = Нічого не переміщено. Запустіть { -brand } з попереднім гаманцем, закрийте його відкриті позиції, а потім знову скиньте дані гаманця.
+startup-wallet-reset-refused-remedy = Нічого не переміщено. Запустіть { -brand } без скидання, закрийте або архівуйте відкриті позиції торгового гаманця, а потім знову скиньте дані гаманця.
+startup-wallet-reset-refused-unreadable-remedy = Нічого не переміщено. Запустіть { -brand } без скидання, щоб він перевірив сховище позицій, а потім знову скиньте дані гаманця. Якщо повідомлення з'явиться знову, надішліть файл журналу до підтримки: t.me/screenerbotio_support.
+startup-wallet-reset-incomplete-title = Не вдалося завершити скидання даних гаманця
+startup-wallet-reset-incomplete-detail =
+    { -brand } зупинився під час перенесення даних гаманця до { $directory } і не зміг повернути всі файли. Частина локальної історії гаманця в цій папці, а частина залишилася на своєму місці.
+
+    Причина:
+    { $error }
+startup-wallet-reset-incomplete-remedy = Не запускайте { -brand } знову й не переміщуйте, не редагуйте та не видаляйте жодних файлів у { $directory }. Скопіюйте подробиці та надішліть їх разом із файлом журналу до підтримки: t.me/screenerbotio_support.
 
 ## Generic failures.
 
@@ -82,3 +87,4 @@ startup-failure-analysis-init = Не вдалося ініціалізувати
 startup-failure-assistant-init = Не вдалося ініціалізувати рушій чату асистента: { $error }
 startup-failure-wallets-init = Не вдалося ініціалізувати гаманці: { $error }
 startup-failure-wallet-validation = Не вдалося перевірити узгодженість гаманця: { $error }
+startup-failure-storage-phase = Етап сховища несподівано зупинився: { $error }

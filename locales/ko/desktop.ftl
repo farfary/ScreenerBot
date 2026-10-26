@@ -42,10 +42,10 @@ desktop-boot-subtitle-wallet-mismatch = 다른 지갑이 감지되었습니다
 desktop-boot-subtitle-port-in-use = 필요한 네트워크 포트가 사용 중입니다
 desktop-boot-subtitle-lock-held = { -brand }이 이미 실행 중입니다
 desktop-boot-subtitle-config-invalid = 설정 문제
-desktop-boot-subtitle-directory-setup = 저장소 문제
 desktop-boot-subtitle-storage-upgrade = 데이터베이스 업그레이드 문제
 desktop-boot-subtitle-wallet-replacement-incomplete = 지갑 교체가 완료되지 않았습니다
 desktop-boot-subtitle-wallet-reset-refused = 지갑 데이터 초기화가 거부되었습니다
+desktop-boot-subtitle-wallet-reset-incomplete = 지갑 데이터 초기화가 완료되지 않았습니다
 desktop-boot-subtitle-generic = 시작 오류
 
 ## Boot errors raised by the shell itself (the backend never reported one).

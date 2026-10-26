@@ -5,7 +5,8 @@
 //! `[rpc]`/`[swaps]`/`[sol_price]` sections) loads with its values relocated,
 //! stays untouched on disk until startup completes, and is then written in the
 //! canonical `[chains.solana]` layout. A hot reload of a legacy file applies and
-//! rewrites it at once.
+//! rewrites it at once. Keys set while that migration is pending change only themselves
+//! in the file, which keeps the loaded layout until startup completes.
 //!
 //! It runs in a process of its own (nextest isolates every test) because `load_config_from_path`
 //! initialises the global CONFIG (`OnceLock::set`). The steps share that global,
@@ -99,4 +100,61 @@ fn legacy_layout_is_migrated_in_memory_then_persisted_after_startup() {
     assert!(!tables.contains_key("rpc"));
     assert!(!tables.contains_key("swaps"));
     assert!(!parse_config_document(&rewritten).expect("parses").migrated);
+}
+
+#[test]
+fn keys_set_while_a_migration_is_pending_leave_the_loaded_layout_on_disk() {
+    crate::common::run_isolated(
+        module_path!(),
+        "keys_set_while_a_migration_is_pending_leave_the_loaded_layout_on_disk",
+        || async {
+            let dir = tempfile::tempdir().expect("temp dir");
+            std::env::set_var("SCREENERBOT_DATA_DIR", dir.path());
+            screenerbot::paths::ensure_all_directories().expect("create data directories");
+            let path = screenerbot::paths::get_config_path();
+            std::fs::write(&path, V0_2_13_CONFIG).expect("write fixture");
+            load_config_from_path(path.to_str().expect("utf-8 temp path"))
+                .expect("legacy layout loads");
+
+            screenerbot::config::set_config_keys(&[
+                (
+                    "wallet_encrypted",
+                    toml::Value::String("ciphertext".to_owned()),
+                ),
+                ("wallet_nonce", toml::Value::String("nonce".to_owned())),
+                ("trader.enabled", toml::Value::Boolean(false)),
+                ("copy_trading.enabled", toml::Value::Boolean(false)),
+            ])
+            .expect("set the keys");
+
+            let written = std::fs::read_to_string(&path).expect("read config");
+            let tables = top_level_tables(&written);
+            for section in ["rpc", "swaps", "sol_price"] {
+                assert!(
+                    tables.contains_key(section),
+                    "[{section}] was migrated early"
+                );
+            }
+            assert!(
+                !tables.contains_key("chains"),
+                "the migrated layout reached disk"
+            );
+            assert_eq!(tables["wallet_encrypted"].as_str(), Some("ciphertext"));
+            assert_eq!(tables["wallet_nonce"].as_str(), Some("nonce"));
+            assert_eq!(tables["trader"]["enabled"].as_bool(), Some(false));
+            assert_eq!(tables["trader"]["max_open_positions"].as_integer(), Some(4));
+            assert_eq!(tables["copy_trading"]["enabled"].as_bool(), Some(false));
+            with_config(|cfg| {
+                assert_eq!(cfg.wallet_encrypted, "ciphertext");
+                assert_eq!(cfg.chains.solana.rpc.max_retries, 5);
+            });
+
+            // The migration still waits for startup, then writes the keys with it.
+            persist_pending_config_migration();
+            let migrated = std::fs::read_to_string(&path).expect("read migrated config");
+            let tables = top_level_tables(&migrated);
+            assert!(!tables.contains_key("rpc"), "[rpc] still on disk");
+            assert_eq!(tables["wallet_encrypted"].as_str(), Some("ciphertext"));
+        },
+    );
 }

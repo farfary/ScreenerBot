@@ -57,18 +57,23 @@ startup-storage-upgrade-remedy = Copiez les détails et envoyez-les avec le fich
 
 startup-wallet-replacement-incomplete-title = Le remplacement du portefeuille n'a pas pu aboutir
 startup-wallet-replacement-incomplete-detail =
-    { -brand } s'est arrêté pendant le passage au nouveau portefeuille de trading. Rien n'a été supprimé : la clé de l'ancien portefeuille reste dans le coffre des portefeuilles et son historique local reste dans le dossier de sauvegarde.
+    { -brand } s'est arrêté pendant le passage au nouveau portefeuille de trading. Rien n'a été supprimé : la clé de l'ancien portefeuille reste dans le coffre des portefeuilles, et son historique local est soit toujours en place, soit dans le dossier de sauvegarde indiqué dans le fichier journal.
 
     Cause :
     { $error }
 startup-wallet-replacement-incomplete-remedy = Relancez { -brand } pour reprendre le remplacement. Si ce message réapparaît, copiez les détails et envoyez-les avec le fichier journal au support sur t.me/screenerbotio_support. Ne modifiez, ne déplacez et ne supprimez ni wallet_replacement.json ni le dossier de sauvegarde.
 startup-wallet-reset-refused-title = Les données du portefeuille n'ont pas été réinitialisées
-startup-wallet-reset-refused-open-positions = L'ancien portefeuille a encore des positions ouvertes ({ $count }) : son historique local a donc été conservé.
-startup-wallet-reset-refused-trade-in-flight = Un trade était encore en cours : l'historique local du portefeuille a donc été conservé.
-startup-wallet-reset-refused-tool-in-flight = Un outil de portefeuille était encore en cours d'exécution : l'historique local du portefeuille a donc été conservé.
-startup-wallet-reset-refused-positions-loading = Les positions ouvertes étaient encore en cours de chargement : l'historique local du portefeuille a donc été conservé.
+startup-wallet-reset-refused-open-positions = Le portefeuille de trading a des positions ouvertes ({ $count }) : les données du portefeuille n'ont donc pas été réinitialisées.
 startup-wallet-reset-refused-positions-unreadable = Le stockage des positions n'a pas pu être lu : des positions ouvertes ne peuvent pas être exclues et l'historique local du portefeuille a été conservé.
-startup-wallet-reset-refused-remedy = Rien n'a été déplacé. Démarrez { -brand } avec l'ancien portefeuille, clôturez ses positions ouvertes, puis réinitialisez à nouveau les données du portefeuille.
+startup-wallet-reset-refused-remedy = Rien n'a été déplacé. Démarrez { -brand } sans la réinitialisation, clôturez ou archivez les positions ouvertes du portefeuille de trading, puis réinitialisez à nouveau les données du portefeuille.
+startup-wallet-reset-refused-unreadable-remedy = Rien n'a été déplacé. Démarrez { -brand } sans la réinitialisation pour qu'il vérifie le stockage des positions, puis réinitialisez à nouveau les données du portefeuille. Si ce message réapparaît, envoyez le fichier journal au support sur t.me/screenerbotio_support.
+startup-wallet-reset-incomplete-title = La réinitialisation des données du portefeuille n'a pas pu se terminer
+startup-wallet-reset-incomplete-detail =
+    { -brand } s'est arrêté pendant le déplacement des données du portefeuille vers { $directory } et n'a pas pu remettre tous les fichiers en place. Une partie de l'historique local du portefeuille se trouve dans ce dossier et une partie est toujours en place.
+
+    Cause :
+    { $error }
+startup-wallet-reset-incomplete-remedy = Ne redémarrez pas { -brand } et ne déplacez, ne modifiez ni ne supprimez aucun fichier de { $directory }. Copiez les détails et envoyez-les avec le fichier journal au support sur t.me/screenerbotio_support.
 
 ## Generic failures.
 
@@ -82,3 +87,4 @@ startup-failure-analysis-init = Échec de l'initialisation du moteur d'analyse :
 startup-failure-assistant-init = Échec de l'initialisation du moteur de chat de l'Assistant : { $error }
 startup-failure-wallets-init = Échec de l'initialisation des portefeuilles : { $error }
 startup-failure-wallet-validation = Échec de la validation de la cohérence des portefeuilles : { $error }
+startup-failure-storage-phase = La phase de stockage s'est arrêtée de manière inattendue : { $error }

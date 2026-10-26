@@ -13,6 +13,7 @@ setup-wallet-base58-recognized = Розпізнано формат ключа ba
 ## RPC endpoint validation
 
 setup-rpc-required = Введіть принаймні один RPC-ендпоінт.
+setup-dialog-rpc-optional-note = Необов'язково: залиште поле порожнім, щоб зберегти вже налаштовані RPC-ендпоінти.
 setup-rpc-too-many = Використовуйте не більше 10 RPC-ендпоінтів.
 setup-rpc-url-invalid = Кожен ендпоінт має бути дійсним URL-адресою HTTPS.
 setup-rpc-url-credentials = RPC-адреси не можуть містити імені користувача чи пароля.
@@ -139,6 +140,7 @@ setup-dialog-replace-confirm-stop = Зупиняє трейдер і копіт�
 setup-dialog-replace-confirm-backup = Переносить позиції, транзакції та історію поточного гаманця до папки резервних копій.
 setup-dialog-replace-confirm-keep = Зберігає ключ поточного гаманця в розділі «Інші гаманці», де його й далі можна експортувати.
 setup-dialog-replace-confirm-funds = Кошти не переказуються: токени та { -sol } залишаються в поточному гаманці.
+setup-dialog-replace-confirm-rpc = Замінює налаштовані RPC-ендпоінти введеними; якщо поле порожнє, поточні ендпоінти залишаються.
 setup-dialog-replace-confirm-restart = Перезапускає { -brand } з новим гаманцем.
 
 # Source: templates/pages/setup.html

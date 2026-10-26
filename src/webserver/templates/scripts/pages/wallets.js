@@ -296,10 +296,33 @@ async function loadWalletBackups() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     walletBackups = data.backups || [];
+    showAbandonedReplacement(data.abandoned);
   } catch (error) {
     console.debug("[Wallets] Failed to load wallet backups:", error);
     walletBackups = [];
   }
+}
+
+// The message of each reason a restart abandons a staged replacement for.
+const ABANDONED_REPLACEMENT_IDS = Object.freeze({
+  open_positions: "wallets-replace-abandoned-open-positions",
+  positions_unreadable: "wallets-replace-abandoned-positions-unreadable",
+  vault_changed: "wallets-replace-abandoned-vault-changed",
+});
+
+// A replacement a restart abandoned is shown once; the server then forgets it.
+function showAbandonedReplacement(abandoned) {
+  if (!abandoned) return;
+  const id = ABANDONED_REPLACEMENT_IDS[abandoned.reason] || ABANDONED_REPLACEMENT_IDS.vault_changed;
+  Utils.showToast({
+    key: "wallets-replace-abandoned",
+    type: "warning",
+    title: I18n.t("wallets-replace-abandoned-title"),
+    message: I18n.t(id, { count: abandoned.count ?? 0 }),
+  });
+  fetch("/api/wallets/replacement/dismiss", { method: "POST" }).catch((error) => {
+    console.debug("[Wallets] Failed to dismiss the abandoned replacement:", error);
+  });
 }
 
 async function loadTokenHoldings({ force = false } = {}) {

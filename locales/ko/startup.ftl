@@ -60,18 +60,23 @@ startup-storage-upgrade-remedy = 세부 정보를 복사해 로그 파일과 함
 
 startup-wallet-replacement-incomplete-title = 지갑 교체를 완료할 수 없습니다
 startup-wallet-replacement-incomplete-detail =
-    { -brand }이 새 트레이딩 지갑으로 전환하는 중에 중지되었습니다. 삭제된 것은 없습니다. 이전 지갑의 키는 지갑 보관소에, 로컬 기록은 백업 폴더에 남아 있습니다.
+    { -brand }이 새 트레이딩 지갑으로 전환하는 중에 중지되었습니다. 삭제된 것은 없습니다. 이전 지갑의 키는 지갑 보관소에 남아 있고, 로컬 기록은 원래 위치나 로그 파일에 적힌 백업 폴더에 있습니다.
 
     원인:
     { $error }
 startup-wallet-replacement-incomplete-remedy = { -brand }을 다시 시작하면 교체가 이어서 진행됩니다. 이 메시지가 다시 나타나면 세부 정보를 복사해 로그 파일과 함께 t.me/screenerbotio_support의 지원팀에 보내세요. wallet_replacement.json과 백업 폴더를 편집, 이동, 삭제하지 마세요.
 startup-wallet-reset-refused-title = 지갑 데이터가 초기화되지 않았습니다
-startup-wallet-reset-refused-open-positions = 이전 지갑에 아직 열린 포지션이 있어 ({ $count }) 로컬 기록이 보관되었습니다.
-startup-wallet-reset-refused-trade-in-flight = 거래가 아직 진행 중이어서 지갑의 로컬 기록이 보관되었습니다.
-startup-wallet-reset-refused-tool-in-flight = 지갑 도구가 아직 실행 중이어서 지갑의 로컬 기록이 보관되었습니다.
-startup-wallet-reset-refused-positions-loading = 열린 포지션을 아직 불러오는 중이어서 지갑의 로컬 기록이 보관되었습니다.
+startup-wallet-reset-refused-open-positions = 트레이딩 지갑에 열린 포지션이 있어 ({ $count }) 지갑 데이터를 초기화하지 않았습니다.
 startup-wallet-reset-refused-positions-unreadable = 포지션 저장소를 읽을 수 없어 열린 포지션이 없다고 확인할 수 없으므로 지갑의 로컬 기록이 보관되었습니다.
-startup-wallet-reset-refused-remedy = 이동된 것은 없습니다. 이전 지갑으로 { -brand }을 시작해 열린 포지션을 종료한 후 지갑 데이터를 다시 초기화하세요.
+startup-wallet-reset-refused-remedy = 이동된 것은 없습니다. 초기화 없이 { -brand }을 시작해 트레이딩 지갑의 열린 포지션을 종료하거나 보관한 후 지갑 데이터를 다시 초기화하세요.
+startup-wallet-reset-refused-unreadable-remedy = 이동된 것은 없습니다. 초기화 없이 { -brand }을 시작해 포지션 저장소를 확인하게 한 후 지갑 데이터를 다시 초기화하세요. 이 메시지가 다시 나타나면 로그 파일을 t.me/screenerbotio_support의 지원팀에 보내세요.
+startup-wallet-reset-incomplete-title = 지갑 데이터 초기화를 완료할 수 없습니다
+startup-wallet-reset-incomplete-detail =
+    { -brand }이 지갑 데이터를 { $directory }(으)로 옮기는 중에 중지되었고 모든 파일을 되돌리지 못했습니다. 지갑의 로컬 기록 일부는 그 폴더에, 일부는 원래 위치에 있습니다.
+
+    원인:
+    { $error }
+startup-wallet-reset-incomplete-remedy = { -brand }을 다시 시작하지 말고 { $directory }의 파일을 이동, 편집, 삭제하지 마세요. 세부 정보를 복사해 로그 파일과 함께 t.me/screenerbotio_support의 지원팀에 보내세요.
 
 ## Generic failures.
 
@@ -85,3 +90,4 @@ startup-failure-analysis-init = 분석 엔진을 초기화하지 못했습니다
 startup-failure-assistant-init = 어시스턴트 채팅 엔진을 초기화하지 못했습니다: { $error }
 startup-failure-wallets-init = 지갑을 초기화하지 못했습니다: { $error }
 startup-failure-wallet-validation = 지갑 일관성을 검증하지 못했습니다: { $error }
+startup-failure-storage-phase = 스토리지 단계가 예기치 않게 중지되었습니다: { $error }

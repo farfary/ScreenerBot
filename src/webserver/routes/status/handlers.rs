@@ -65,7 +65,7 @@ pub(super) async fn restart_safety(request: Request) -> Response {
         .into_response();
     }
     success_response(RestartSafetyResponse {
-        safe_to_restart: crate::version::is_restart_safe().await,
+        safe_to_restart: crate::process::restart_safety::is_restart_safe().await,
     })
 }
 

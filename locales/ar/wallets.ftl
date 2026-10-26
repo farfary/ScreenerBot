@@ -134,6 +134,10 @@ wallets-list-col-type = النوع
 wallets-list-col-created = الإنشاء
 wallets-list-col-replaced = الاستبدال
 wallets-list-replaced-on = في { $date }
+wallets-replace-abandoned-title = أُلغي استبدال المحفظة
+wallets-replace-abandoned-open-positions = كانت لدى محفظة التداول مراكز مفتوحة ({ $count }) عند إعادة التشغيل، لذا أُلغي الاستبدال. لم تتغير محفظة التداول؛ ويُحتفظ بالمفتاح الجديد ضمن محافظ أخرى.
+wallets-replace-abandoned-positions-unreadable = تعذّرت قراءة مخزن المراكز عند إعادة التشغيل، لذا أُلغي الاستبدال. لم تتغير محفظة التداول؛ ويُحتفظ بالمفتاح الجديد ضمن محافظ أخرى.
+wallets-replace-abandoned-vault-changed = لم تعد خزنة المحافظ مطابقة للاستبدال المُجهَّز عند إعادة التشغيل، لذا أُلغي الاستبدال. لم تتغير محفظة التداول؛ ويُحتفظ بالمفتاح الجديد ضمن محافظ أخرى.
 wallets-list-col-actions = الإجراءات
 wallets-list-action-export = تصدير المفتاح الخاص
 wallets-list-count = المحافظ
@@ -141,7 +145,8 @@ wallets-list-search =
     .placeholder = البحث بالاسم أو العنوان...
 wallets-list-loading-title = جارٍ تحميل المحافظ…
 wallets-list-loading-description = جارٍ تجهيز عرض المحفظة المحددة.
-wallets-list-kept-empty-message = تظهر هنا المحافظ من الإصدارات السابقة لتتمكن من تصدير مفاتيحها.
+wallets-list-kept-empty-message = تظهر هنا محافظ التداول المستبدلة والمحافظ من الإصدارات السابقة لتتمكن من تصدير مفاتيحها.
+wallets-list-previous-trading-wallet = محفظة التداول السابقة
 wallets-other-empty-title = لا توجد محافظ أخرى
 
 # watched.js: watched wallets table and actions.

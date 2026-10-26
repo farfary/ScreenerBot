@@ -144,6 +144,58 @@ pub fn persist_pending_config_migration() {
     }
 }
 
+/// The config file whose load-time migration is still waiting for
+/// [`persist_pending_config_migration`], if any.
+pub(super) fn pending_migration_path() -> Option<String> {
+    PENDING_MIGRATION_WRITE
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .clone()
+}
+
+/// Set each dotted key of `keys` (`"trader.enabled"`) to its value in the config file at
+/// `path`, read as it is on disk, and leave every other key and section as it is: the
+/// layout a load-time migration has not written yet stays the one the file was loaded
+/// from. Missing tables on a key's path are created.
+pub(super) fn write_config_keys_to_file(path: &str, keys: &[(&str, toml::Value)]) -> Result<()> {
+    let raw = std::fs::read_to_string(path).map_err(|e| IoError::Generic {
+        message: format!("Failed to read config file '{path}': {e}"),
+    })?;
+    let mut document: toml::Table = toml::from_str(&raw).map_err(|e| Error::ParseFailed {
+        detail: format!("Failed to parse config file '{path}': {e}"),
+    })?;
+    for (key, value) in keys {
+        set_dotted_key(&mut document, key, value.clone())?;
+    }
+    let body = toml::to_string_pretty(&document).map_err(|e| Error::WriteFailed {
+        detail: format!("Failed to serialize config: {e}"),
+    })?;
+    write_config_body(&body, path)
+}
+
+/// Set the dotted `key` of `table` to `value`, creating the tables on its path.
+pub(super) fn set_dotted_key(table: &mut toml::Table, key: &str, value: toml::Value) -> Result<()> {
+    let mut segments: Vec<&str> = key.split('.').collect();
+    let Some(last) = segments.pop().filter(|last| !last.is_empty()) else {
+        return Err(ConfigurationError::Generic {
+            message: format!("config key '{key}' is empty"),
+        }
+        .into());
+    };
+    let mut current = table;
+    for segment in segments {
+        current = current
+            .entry(segment)
+            .or_insert_with(|| toml::Value::Table(toml::Table::new()))
+            .as_table_mut()
+            .ok_or_else(|| ConfigurationError::Generic {
+                message: format!("config key '{key}': '{segment}' is not a table"),
+            })?;
+    }
+    current.insert(last.to_owned(), value);
+    Ok(())
+}
+
 /// A config document parsed into the canonical shape.
 pub struct ParsedConfig {
     pub config: Config,
@@ -206,7 +258,11 @@ pub(crate) fn write_config_atomic(config: &Config, path: &str) -> Result<()> {
     let body = toml::to_string_pretty(config).map_err(|e| Error::WriteFailed {
         detail: format!("Failed to serialize config: {e}"),
     })?;
+    write_config_body(&body, path)
+}
 
+/// Replace `path` with `body` under the permissions [`write_config_atomic`] describes.
+fn write_config_body(body: &str, path: &str) -> Result<()> {
     let dest = std::path::Path::new(path);
 
     // Owner read/write only, and never wider — even if `path` is currently

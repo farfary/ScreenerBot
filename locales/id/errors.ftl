@@ -59,6 +59,8 @@ errors-initialization-onboarding-update-failed = Gagal memperbarui status onboar
 errors-initialization-validation-required = Verifikasi kredensial diperlukan sebelum menyimpan pengaturan awal
 errors-initialization-encrypt-failed = Gagal mengenkripsi private key
 errors-initialization-already-complete = Penyiapan sudah selesai. Untuk trading dengan dompet lain, gunakan Ganti Dompet di halaman Dompet.
+errors-initialization-replace-open-positions = Dompet trading saat ini memiliki posisi terbuka ({ $count }), sehingga penyiapan tidak dapat menggantinya. Selesaikan penyiapan dengan key dompet trading saat ini terlebih dahulu, lalu ganti dompet dari halaman Dompet.
+errors-initialization-save-failed-replacement-staged = Dompet trading baru sudah disiapkan dan berlaku saat { -brand } dimulai ulang, tetapi pengaturan penyiapan tidak dapat disimpan. Periksa setelah dimulai ulang.
 
 errors-ui-state-save-failed = Gagal menyimpan status
 errors-ui-state-clear-failed = Gagal menghapus status
@@ -231,7 +233,8 @@ errors-wallets-replace-no-trading-wallet = Tidak ada dompet trading yang dapat d
 errors-wallets-replace-same-wallet = Key ini milik dompet trading saat ini.
 errors-wallets-replace-watched = Dompet ini ada di daftar Dipantau. Hapus dari sana sebelum trading dengannya.
 errors-wallets-replace-address-mismatch = Key tidak cocok dengan alamat dompet yang divalidasi. Validasi key lagi.
-errors-wallets-replace-interrupted = Penggantian dompet berhenti di tengah jalan dan dompet saat ini tetap menjadi dompet trading. Periksa pengaturan trader dan copy trading, lalu coba lagi.
+errors-wallets-replace-interrupted = Penggantian dompet berhenti di tengah jalan dan dompet saat ini tetap menjadi dompet trading. Trader dan copy trading nonaktif; aktifkan kembali saat Anda siap, atau coba penggantian lagi.
+errors-wallets-replace-interrupted-copy-trading-on = Penggantian dompet berhenti di tengah jalan dan dompet saat ini tetap menjadi dompet trading. Trader nonaktif, tetapi copy trading tidak dapat dinonaktifkan. Periksa pengaturan copy trading, lalu coba lagi.
 errors-wallets-replace-failed = Gagal mengganti dompet trading
 
 errors-wallet-watch-list-failed = Gagal mengambil daftar target pantau

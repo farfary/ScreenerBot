@@ -7,6 +7,7 @@ setup-wallet-format-invalid = Gunakan private key base58 atau array JSON 64-byte
 setup-wallet-base58-recognized = Format key Base58 dikenali.
 
 setup-rpc-required = Masukkan setidaknya satu endpoint RPC.
+setup-dialog-rpc-optional-note = Opsional: biarkan kolom kosong untuk mempertahankan endpoint RPC yang sudah dikonfigurasi.
 setup-rpc-too-many = Gunakan tidak lebih dari 10 endpoint RPC.
 setup-rpc-url-invalid = Setiap endpoint harus berupa URL HTTPS yang valid.
 setup-rpc-url-credentials = URL RPC tidak boleh memuat nama pengguna atau kata sandi.
@@ -108,6 +109,7 @@ setup-dialog-replace-confirm-stop = Menghentikan trader dan copy trading. Aktifk
 setup-dialog-replace-confirm-backup = Memindahkan posisi, transaksi, dan riwayat dompet saat ini ke folder cadangan.
 setup-dialog-replace-confirm-keep = Menyimpan key dompet saat ini di Dompet Lain, tempat Anda tetap dapat mengekspornya.
 setup-dialog-replace-confirm-funds = Tidak memindahkan dana: token dan { -sol } tetap di dompet saat ini.
+setup-dialog-replace-confirm-rpc = Mengganti endpoint RPC yang dikonfigurasi dengan yang Anda masukkan; jika kolom dibiarkan kosong, endpoint saat ini tetap dipakai.
 setup-dialog-replace-confirm-restart = Memulai ulang { -brand } dengan dompet baru.
 
 setup-wizard-progress =

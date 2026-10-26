@@ -64,6 +64,8 @@ errors-initialization-onboarding-update-failed = Karşılama durumu güncellenem
 errors-initialization-validation-required = Kurulumu kaydetmeden önce kimlik bilgilerinin doğrulanması gerekli
 errors-initialization-encrypt-failed = Özel anahtar şifrelenemedi
 errors-initialization-already-complete = Kurulum zaten tamamlandı. Başka bir cüzdanla işlem yapmak için Cüzdanlar sayfasındaki Cüzdanı değiştir seçeneğini kullanın.
+errors-initialization-replace-open-positions = Mevcut işlem cüzdanında açık pozisyonlar var ({ $count }), bu yüzden kurulum onu değiştiremez. Önce kurulumu mevcut işlem cüzdanının anahtarıyla tamamlayın, ardından cüzdanı Cüzdanlar sayfasından değiştirin.
+errors-initialization-save-failed-replacement-staged = Yeni işlem cüzdanı hazırlandı ve { -brand } yeniden başladığında uygulanacak, ancak kurulum ayarları kaydedilemedi. Yeniden başlatmadan sonra bunları kontrol edin.
 
 # Dashboard state
 errors-ui-state-save-failed = Durum kaydedilemedi
@@ -250,7 +252,8 @@ errors-wallets-replace-no-trading-wallet = Değiştirilecek bir işlem cüzdanı
 errors-wallets-replace-same-wallet = Bu anahtar mevcut işlem cüzdanına ait.
 errors-wallets-replace-watched = Bu cüzdan İzlenenler listesinde. Onunla işlem yapmadan önce oradan kaldırın.
 errors-wallets-replace-address-mismatch = Anahtar, doğrulanan cüzdan adresiyle eşleşmiyor. Anahtarı yeniden doğrulayın.
-errors-wallets-replace-interrupted = Cüzdan değişikliği yarıda durdu ve mevcut cüzdan işlem cüzdanı olarak kalıyor. Trader ve kopya işlem ayarlarını kontrol edip tekrar deneyin.
+errors-wallets-replace-interrupted = Cüzdan değişikliği yarıda durdu ve mevcut cüzdan işlem cüzdanı olarak kalıyor. Trader ve kopya işlem kapalı; hazır olduğunuzda bunları yeniden açın veya değişikliği tekrar deneyin.
+errors-wallets-replace-interrupted-copy-trading-on = Cüzdan değişikliği yarıda durdu ve mevcut cüzdan işlem cüzdanı olarak kalıyor. Trader kapalı, ancak kopya işlem kapatılamadı. Kopya işlem ayarlarını kontrol edip tekrar deneyin.
 errors-wallets-replace-failed = İşlem cüzdanı değiştirilemedi
 
 # Wallet watching

@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: BUSL-1.1
 
 //! Wallet API routes: the wallet list, summary and main wallet, one wallet's
-//! record and its private-key export, the trading-wallet replacement and its
-//! backups, and the watched wallets.
+//! record and its private-key export, the trading-wallet replacement, its backups
+//! and the dismissal of an abandoned one, and the watched wallets.
 
 use axum::{
     middleware::from_fn,
@@ -32,6 +32,10 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/main", get(handlers::get_main_wallet))
         .route("/replace", post(handlers::replace_wallet))
         .route("/backups", get(handlers::list_wallet_backups))
+        .route(
+            "/replacement/dismiss",
+            post(handlers::dismiss_abandoned_replacement),
+        )
         .route("/{id}", get(handlers::get_wallet))
         .route("/{id}/export", post(handlers::export_wallet))
         .nest("/watch", watch::routes())

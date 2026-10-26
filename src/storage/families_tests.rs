@@ -208,6 +208,14 @@ fn names_are_classified_into_their_family() {
         (data.join("config.toml"), FamilyId::Config),
         (data.join("account.dat"), FamilyId::Account),
         (data.join("wallet_replacement.json"), FamilyId::AppState),
+        (
+            data.join("wallet_replacement.invalid-20261027T101500Z.json"),
+            FamilyId::AppState,
+        ),
+        (
+            data.join("wallet_replacement_outcome.json"),
+            FamilyId::AppState,
+        ),
         (data.join("mcp.json"), FamilyId::LegacyFiles),
         (data.join("cache_pool"), FamilyId::LegacyEmpty),
         (

@@ -1522,7 +1522,6 @@ const PROCESS_CHAIN_SEAM_CALLER_FILES: &[&str] = &[
     "wallets/balance_monitor/worth.rs",
     "wallets/manager.rs",
     "wallets/manager/balance_queries.rs",
-    "wallets/replacement.rs",
     "wallets/watch/mod.rs",
     "webserver/promo/copy_trading.rs",
     "webserver/promo/copy_trading/desk.rs",

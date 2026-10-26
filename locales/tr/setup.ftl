@@ -5,6 +5,7 @@ setup-wallet-format-invalid = Base58 özel anahtar veya 64 baytlık bir JSON diz
 setup-wallet-base58-recognized = Base58 anahtar biçimi tanındı.
 
 setup-rpc-required = En az bir RPC uç noktası girin.
+setup-dialog-rpc-optional-note = İsteğe bağlı: Zaten yapılandırılmış RPC uç noktalarını korumak için alanı boş bırakın.
 setup-rpc-too-many = En fazla 10 RPC uç noktası kullanın.
 setup-rpc-url-invalid = Her uç nokta geçerli bir HTTPS URL'si olmalıdır.
 setup-rpc-url-credentials = RPC URL'leri kullanıcı adı veya parola içeremez.
@@ -109,6 +110,7 @@ setup-dialog-replace-confirm-stop = Trader'ı ve kopya işlemi durdurur. Yeniden
 setup-dialog-replace-confirm-backup = Mevcut cüzdanın pozisyonlarını, işlemlerini ve geçmişini bir yedek klasörüne taşır.
 setup-dialog-replace-confirm-keep = Mevcut cüzdanın anahtarını Diğer cüzdanlar altında tutar; anahtarı orada dışa aktarmaya devam edebilirsiniz.
 setup-dialog-replace-confirm-funds = Hiçbir varlık taşınmaz: tokenlar ve { -sol } mevcut cüzdanda kalır.
+setup-dialog-replace-confirm-rpc = Yapılandırılmış RPC uç noktalarını girdiklerinizle değiştirir; alan boş kalırsa mevcut uç noktalar korunur.
 setup-dialog-replace-confirm-restart = { -brand } yeni cüzdanla yeniden başlatılır.
 
 setup-wizard-progress =

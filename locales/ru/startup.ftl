@@ -57,18 +57,23 @@ startup-storage-upgrade-remedy = Скопируйте подробности и 
 
 startup-wallet-replacement-incomplete-title = Не удалось завершить замену кошелька
 startup-wallet-replacement-incomplete-detail =
-    { -brand } остановился во время перехода на новый торговый кошелёк. Ничего не удалено: ключ прежнего кошелька остаётся в хранилище кошельков, а его локальная история — в папке резервных копий.
+    { -brand } остановился во время перехода на новый торговый кошелёк. Ничего не удалено: ключ прежнего кошелька остаётся в хранилище кошельков, а его локальная история либо на прежнем месте, либо в папке резервной копии, указанной в файле журнала.
 
     Причина:
     { $error }
 startup-wallet-replacement-incomplete-remedy = Запустите { -brand } снова, чтобы продолжить замену. Если сообщение появится снова, скопируйте подробности и отправьте их вместе с файлом журнала в поддержку: t.me/screenerbotio_support. Не изменяйте, не перемещайте и не удаляйте wallet_replacement.json и папку резервных копий.
 startup-wallet-reset-refused-title = Данные кошелька не сброшены
-startup-wallet-reset-refused-open-positions = У прежнего кошелька ещё есть открытые позиции ({ $count }), поэтому его локальная история сохранена.
-startup-wallet-reset-refused-trade-in-flight = Ещё выполнялась сделка, поэтому локальная история кошелька сохранена.
-startup-wallet-reset-refused-tool-in-flight = Ещё работал инструмент кошелька, поэтому локальная история кошелька сохранена.
-startup-wallet-reset-refused-positions-loading = Открытые позиции ещё загружались, поэтому локальная история кошелька сохранена.
+startup-wallet-reset-refused-open-positions = У торгового кошелька есть открытые позиции ({ $count }), поэтому данные кошелька не сброшены.
 startup-wallet-reset-refused-positions-unreadable = Не удалось прочитать хранилище позиций, поэтому открытые позиции нельзя исключить; локальная история кошелька сохранена.
-startup-wallet-reset-refused-remedy = Ничего не перемещено. Запустите { -brand } с прежним кошельком, закройте его открытые позиции, затем снова сбросьте данные кошелька.
+startup-wallet-reset-refused-remedy = Ничего не перемещено. Запустите { -brand } без сброса, закройте или архивируйте открытые позиции торгового кошелька, затем снова сбросьте данные кошелька.
+startup-wallet-reset-refused-unreadable-remedy = Ничего не перемещено. Запустите { -brand } без сброса, чтобы он проверил хранилище позиций, затем снова сбросьте данные кошелька. Если сообщение появится снова, отправьте файл журнала в поддержку: t.me/screenerbotio_support.
+startup-wallet-reset-incomplete-title = Не удалось завершить сброс данных кошелька
+startup-wallet-reset-incomplete-detail =
+    { -brand } остановился во время переноса данных кошелька в { $directory } и не смог вернуть все файлы. Часть локальной истории кошелька находится в этой папке, а часть осталась на прежнем месте.
+
+    Причина:
+    { $error }
+startup-wallet-reset-incomplete-remedy = Не запускайте { -brand } снова и не перемещайте, не изменяйте и не удаляйте файлы в { $directory }. Скопируйте подробности и отправьте их вместе с файлом журнала в поддержку: t.me/screenerbotio_support.
 
 ## Generic failures.
 
@@ -82,3 +87,4 @@ startup-failure-analysis-init = Не удалось инициализирова
 startup-failure-assistant-init = Не удалось инициализировать чат-движок ассистента: { $error }
 startup-failure-wallets-init = Не удалось инициализировать кошельки: { $error }
 startup-failure-wallet-validation = Не удалось проверить согласованность кошелька: { $error }
+startup-failure-storage-phase = Этап хранилища неожиданно остановился: { $error }

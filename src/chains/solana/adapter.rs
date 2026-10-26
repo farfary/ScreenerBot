@@ -55,6 +55,19 @@ impl ChainAdapter for SolanaAdapter {
         (86..=88).contains(&trimmed.len()) && trimmed.chars().all(|c| BASE58_ALPHABET.contains(c))
     }
 
+    fn address_from_encrypted_key(
+        &self,
+        ciphertext: &str,
+        nonce: &str,
+    ) -> Result<String, ChainError> {
+        super::accounts::address_from_encrypted_key(ciphertext, nonce).map_err(|error| {
+            ChainError::InvalidKey {
+                chain: ChainId::Solana,
+                detail: error.to_string(),
+            }
+        })
+    }
+
     fn native_asset_address(&self) -> &'static str {
         SOL_MINT
     }

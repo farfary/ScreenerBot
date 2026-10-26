@@ -140,6 +140,44 @@ fn moving_store_files_skips_missing_files_and_resumes_an_interrupted_move() {
 }
 
 #[test]
+fn moving_store_files_refuses_an_existing_target_and_keeps_both_files() {
+    let directory = tempfile::tempdir().expect("temp dir");
+    let path = directory.path().join("positions.db");
+    let wal = directory.path().join("positions.db-wal");
+    let target = directory.path().join("backup");
+    fs::create_dir(&target).expect("create target");
+    fs::write(target.join("positions.db-wal"), b"original wal").expect("write moved wal");
+    fs::write(&path, b"re-created store").expect("write store");
+    fs::write(&wal, b"re-created wal").expect("write wal");
+
+    let refused = move_store_files(&path, &target).expect_err("an existing target refuses");
+
+    match refused {
+        DatabaseError::MoveTargetExists {
+            source_path,
+            target_path,
+        } => {
+            assert_eq!(source_path, wal.display().to_string());
+            assert_eq!(
+                target_path,
+                target.join("positions.db-wal").display().to_string()
+            );
+        }
+        other => panic!("expected a refused move, got {other}"),
+    }
+    assert_eq!(
+        fs::read(target.join("positions.db-wal")).expect("read original"),
+        b"original wal"
+    );
+    assert_eq!(fs::read(&wal).expect("read wal"), b"re-created wal");
+    assert_eq!(fs::read(&path).expect("read store"), b"re-created store");
+    assert!(
+        !target.join("positions.db").exists(),
+        "nothing after the refused file moves"
+    );
+}
+
+#[test]
 fn salvage_copies_only_the_listed_rows_and_columns_and_never_writes_the_source() {
     let directory = tempfile::tempdir().expect("temp dir with a space");
     let quarantined_dir = directory.path().join("quarantine dir");

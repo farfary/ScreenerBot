@@ -9,15 +9,16 @@
  * the full-screen wizard: it validates via /api/initialization/validate and persists
  * via /api/initialization/complete. Replace mode replaces the trading wallet from the
  * Wallets page: it first states what the replacement stops, moves and keeps, then
- * validates the same way and stages the replacement via /api/wallets/replace. Both
- * restart the app and reload into it.
+ * validates the same way and stages the replacement via /api/wallets/replace; its RPC
+ * field may stay empty to keep the configured endpoints. Both restart the app and
+ * reload into it.
  *
  * Usage: SetupDialog.show({ mode }) -> Promise<boolean> (true if the dialog finished).
  */
 import { apiErrorMessage } from "../core/request_manager.js";
 
 // The confirmation a replacement shows before its credential fields: what stops, what
-// moves, what stays and that the app restarts.
+// moves, what stays, what entered RPC endpoints replace and that the app restarts.
 const CONFIRM_STEP = `
   <div class="setup-dialog-confirm">
     <p data-l10n-id="setup-dialog-replace-confirm-intro"></p>
@@ -26,6 +27,7 @@ const CONFIRM_STEP = `
       <li data-l10n-id="setup-dialog-replace-confirm-backup"></li>
       <li data-l10n-id="setup-dialog-replace-confirm-keep"></li>
       <li data-l10n-id="setup-dialog-replace-confirm-funds"></li>
+      <li data-l10n-id="setup-dialog-replace-confirm-rpc"></li>
       <li data-l10n-id="setup-dialog-replace-confirm-restart"></li>
     </ul>
   </div>
@@ -41,6 +43,7 @@ const MODES = Object.freeze({
     saved: "setup-dialog-saved",
     endpoint: "/api/initialization/complete",
     confirm: false,
+    rpcOptional: false,
   }),
   replace: Object.freeze({
     icon: "icon-replace",
@@ -50,6 +53,8 @@ const MODES = Object.freeze({
     saved: "setup-dialog-replace-saved",
     endpoint: "/api/wallets/replace",
     confirm: true,
+    // An empty RPC field keeps the configured endpoints.
+    rpcOptional: true,
   }),
 });
 
@@ -128,7 +133,8 @@ class SetupDialog {
     // The same credential fields as the onboarding step, under ids of their own.
     this.fields = window.SetupRuntime.mountCredentialFields(
       this.element.querySelector(".setup-dialog-fields"),
-      "setup-dialog-"
+      "setup-dialog-",
+      { rpcOptional: this.mode.rpcOptional }
     );
     this.statusEl = this.element.querySelector("#setup-dialog-status");
     this.submitBtn = this.element.querySelector('[data-action="submit"]');

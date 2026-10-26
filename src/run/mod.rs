@@ -11,6 +11,7 @@ mod bootstrap;
 mod error;
 pub mod services;
 mod shutdown;
+mod storage;
 
 pub use boot::boot;
 pub use error::{Error, Result};
@@ -18,7 +19,6 @@ pub use error::{Error, Result};
 use bootstrap::{initialize_full_runtime, initialize_model_features_if_enabled};
 
 use crate::{
-    database::open::WalletResetRefusal,
     errors::StartupError,
     global,
     i18n::{ids, UiArg, UiText},
@@ -113,45 +113,10 @@ async fn run_bot_internal(_process_lock: ProcessLock) -> Result<()> {
     let config_path = crate::paths::get_config_path();
     let config_exists = config_path.exists();
 
-    // 5. The storage phase, under the process lock and before any service reads a
-    // store. A staged trading-wallet replacement is applied first, before any
-    // wallet-scoped store has a pool; an apply that cannot finish stops the start, so a
-    // half-moved state never boots. Then the one-shot wallet data reset (the GUI's
-    // "Reset wallet data & restart" and `--clean-wallet-data`) moves the wallet-scoped
-    // stores into a wallet-reset backup, refusing while positions are open. Then every
-    // store opens, recovering as its class allows; a store left unavailable is in the
-    // health registry and its owner gets the error.
-    let reset_wallet_data = crate::arguments::is_clean_wallet_data_enabled();
-    let reset_blocker = if reset_wallet_data {
-        crate::version::restart_blocker().await
-    } else {
-        None
-    };
-    let storage_phase =
-        tokio::task::spawn_blocking(move || -> std::result::Result<(), StartupError> {
-            crate::wallets::replacement::apply_pending()
-                .map_err(StartupError::wallet_replacement_incomplete)?;
-            if reset_wallet_data {
-                match crate::database::open::reset_wallet_stores(reset_blocker) {
-                    Ok(_) => {}
-                    Err(WalletResetRefusal::Blocked(blocker)) => {
-                        return Err(StartupError::wallet_reset_refused(blocker));
-                    }
-                    Err(WalletResetRefusal::Database(error)) => logger::error(
-                        LogTag::System,
-                        &format!("Wallet data reset left the stores in place: {error}"),
-                    ),
-                }
-            }
-            crate::database::open::open_all();
-            Ok(())
-        })
-        .await;
-    match storage_phase {
-        Ok(Ok(())) => {}
-        Ok(Err(error)) => return Err(Error::Startup(error)),
-        Err(error) => logger::error(LogTag::System, &format!("Storage phase stopped: {error}")),
-    }
+    // 5. The storage phase, under the process lock and before any service reads a store.
+    storage::run_storage_phase(crate::arguments::is_clean_wallet_data_enabled())
+        .await
+        .map_err(Error::Startup)?;
 
     // Dashboard-owned persistence is independent of wallet/RPC setup. Routes
     // for actions, analysis instructions, and Assistant chat exist in every dashboard mode.

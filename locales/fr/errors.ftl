@@ -64,6 +64,8 @@ errors-initialization-onboarding-update-failed = Échec de la mise à jour de l'
 errors-initialization-validation-required = La vérification des identifiants est requise avant d'enregistrer la configuration
 errors-initialization-encrypt-failed = Échec du chiffrement de la clé privée
 errors-initialization-already-complete = La configuration est déjà terminée. Pour trader avec un autre portefeuille, utilisez Remplacer le portefeuille sur la page Portefeuilles.
+errors-initialization-replace-open-positions = Le portefeuille de trading actuel a des positions ouvertes ({ $count }) : la configuration ne peut donc pas le remplacer. Terminez d'abord la configuration avec la clé du portefeuille de trading actuel, puis remplacez le portefeuille depuis la page Portefeuilles.
+errors-initialization-save-failed-replacement-staged = Le nouveau portefeuille de trading est préparé et s'applique au redémarrage de { -brand }, mais les réglages de la configuration n'ont pas pu être enregistrés. Vérifiez-les après le redémarrage.
 
 # Dashboard state
 errors-ui-state-save-failed = Échec de l'enregistrement de l'état
@@ -250,7 +252,8 @@ errors-wallets-replace-no-trading-wallet = Il n'y a aucun portefeuille de tradin
 errors-wallets-replace-same-wallet = Cette clé appartient au portefeuille de trading actuel.
 errors-wallets-replace-watched = Ce portefeuille figure dans la liste Suivis. Retirez-le de cette liste avant de trader avec.
 errors-wallets-replace-address-mismatch = La clé ne correspond pas à l'adresse de portefeuille validée. Validez à nouveau la clé.
-errors-wallets-replace-interrupted = Le remplacement du portefeuille s'est arrêté en cours de route et le portefeuille actuel reste le portefeuille de trading. Vérifiez les réglages du trader et du copy trading, puis réessayez.
+errors-wallets-replace-interrupted = Le remplacement du portefeuille s'est arrêté en cours de route et le portefeuille actuel reste le portefeuille de trading. Le trader et le copy trading sont désactivés ; réactivez-les quand vous le souhaitez ou relancez le remplacement.
+errors-wallets-replace-interrupted-copy-trading-on = Le remplacement du portefeuille s'est arrêté en cours de route et le portefeuille actuel reste le portefeuille de trading. Le trader est désactivé, mais le copy trading n'a pas pu l'être. Vérifiez les réglages du copy trading, puis réessayez.
 errors-wallets-replace-failed = Échec du remplacement du portefeuille de trading
 
 # Wallet watching

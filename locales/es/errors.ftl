@@ -56,6 +56,8 @@ errors-initialization-onboarding-update-failed = Error al actualizar el estado d
 errors-initialization-validation-required = Se requiere verificar las credenciales antes de guardar la configuración
 errors-initialization-encrypt-failed = Error al cifrar la clave privada
 errors-initialization-already-complete = La configuración ya está completa. Para operar con otra billetera, usa Reemplazar billetera en la página Billeteras.
+errors-initialization-replace-open-positions = La billetera de trading actual tiene posiciones abiertas ({ $count }), así que la configuración no puede reemplazarla. Completa primero la configuración con la clave de la billetera de trading actual y luego reemplaza la billetera desde la página Billeteras.
+errors-initialization-save-failed-replacement-staged = La nueva billetera de trading está preparada y se aplicará cuando { -brand } se reinicie, pero no se pudieron guardar los ajustes de la configuración. Revísalos después del reinicio.
 
 errors-ui-state-save-failed = Error al guardar el estado
 errors-ui-state-clear-failed = Error al borrar el estado
@@ -228,7 +230,8 @@ errors-wallets-replace-no-trading-wallet = No hay una billetera de trading que r
 errors-wallets-replace-same-wallet = Esta clave pertenece a la billetera de trading actual.
 errors-wallets-replace-watched = Esta billetera está en la lista Vigiladas. Quítala de allí antes de operar con ella.
 errors-wallets-replace-address-mismatch = La clave no coincide con la dirección de billetera validada. Valida la clave de nuevo.
-errors-wallets-replace-interrupted = El reemplazo de la billetera se detuvo a mitad y la billetera actual sigue siendo la de trading. Revisa los ajustes del trader y del copy trading y vuelve a intentarlo.
+errors-wallets-replace-interrupted = El reemplazo de la billetera se detuvo a mitad y la billetera actual sigue siendo la de trading. El trader y el copy trading están desactivados; vuelve a activarlos cuando quieras o intenta el reemplazo de nuevo.
+errors-wallets-replace-interrupted-copy-trading-on = El reemplazo de la billetera se detuvo a mitad y la billetera actual sigue siendo la de trading. El trader está desactivado, pero no se pudo desactivar el copy trading. Revisa los ajustes del copy trading y vuelve a intentarlo.
 errors-wallets-replace-failed = Error al reemplazar la billetera de trading
 
 errors-wallet-watch-list-failed = Error al listar los objetivos de seguimiento

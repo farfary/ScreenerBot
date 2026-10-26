@@ -17,7 +17,6 @@ use rusqlite::Connection;
 use crate::chains::{ChainId, ChainScope};
 use crate::errors::DatabaseError;
 use crate::logger::{self, LogTag};
-use crate::version::RestartBlocker;
 
 use super::backup::snapshot::{self, Snapshot};
 use super::backup::{WalletResetManifest, WalletResetReason};
@@ -415,40 +414,56 @@ pub(super) fn is_pooled(path: &Path) -> bool {
         .contains_key(path)
 }
 
-/// Why the wallet data reset did not move the wallet-scoped stores.
-#[derive(Debug, thiserror::Error)]
+/// Why the wallet data reset refused to move the wallet-scoped stores.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum WalletResetRefusal {
-    /// A restart would interrupt something, or positions are open in the store.
-    #[error("{0}")]
-    Blocked(RestartBlocker),
-    /// The stores could not be moved.
-    #[error(transparent)]
-    Database(#[from] DatabaseError),
+    /// The trading wallet has open positions in the positions store.
+    #[error("the trading wallet has {count} open position(s)")]
+    OpenPositions { count: usize },
+    /// The positions store could not be read, so open positions cannot be ruled out.
+    #[error("the positions store could not be read")]
+    PositionsUnreadable,
 }
 
-/// Move every file of the wallet-scoped stores into a new wallet-reset backup directory,
-/// `backups/wallet-reset-<stamp>-reset/`, with a manifest, so the stores open empty for
-/// the current wallet. Runs under the process lock before the storage phase. Refuses with
-/// `blocker` when one is given, and while the positions store holds an open position of
-/// any wallet or cannot be read. Returns the backup directory, or `None` when there was
-/// nothing to move.
+/// Why the wallet data reset did not complete.
+#[derive(Debug, thiserror::Error)]
+pub enum WalletResetFailure {
+    /// The reset refused before moving anything.
+    #[error(transparent)]
+    Refused(#[from] WalletResetRefusal),
+    /// The move failed, and every file it had moved is back at its original path.
+    #[error("the wallet data reset failed and every file is back in place: {0}")]
+    Restored(DatabaseError),
+    /// The move failed, and the files it had moved could not all be moved back: some
+    /// wallet-scoped files are in `directory`, the rest at their original paths.
+    #[error("the wallet data reset failed ({error}) and moving its files back from {} failed: {restore_error}", directory.display())]
+    Split {
+        directory: PathBuf,
+        error: DatabaseError,
+        restore_error: DatabaseError,
+    },
+}
+
+/// Move every file of the wallet-scoped stores into the new wallet-reset backup
+/// `directory` (see [`super::backup::wallet_reset_directory`]) with a manifest, so the
+/// stores open empty for the current wallet. Runs under the process lock before the
+/// storage phase. Refuses while the positions store holds an open position of one of
+/// `trading_wallets`, the vault's trading wallets, or cannot be read; open positions of
+/// other wallets move with the stores and the manifest counts them. A move that fails
+/// part-way moves its files back, so the stores are never left split unless that fails
+/// too. Returns the backup directory, or `None` when there was nothing to move.
 pub fn reset_wallet_stores(
-    blocker: Option<RestartBlocker>,
-) -> Result<Option<PathBuf>, WalletResetRefusal> {
-    if let Some(blocker) = blocker {
-        return Err(WalletResetRefusal::Blocked(blocker));
-    }
+    directory: &Path,
+    trading_wallets: &[String],
+) -> Result<Option<PathBuf>, WalletResetFailure> {
     let positions = catalog::POSITIONS.path(crate::chains::legacy_row_chain());
-    let mut open_positions = 0;
-    for chain in ChainId::ALL {
-        open_positions +=
-            crate::positions::database::count_open_positions_in_file(&positions, *chain)
-                .map_err(|_| WalletResetRefusal::Blocked(RestartBlocker::PositionsUnreadable))?;
+    let mut count = 0;
+    for wallet in trading_wallets {
+        count += crate::positions::database::count_open_positions_in_file(&positions, wallet)
+            .map_err(|_| WalletResetRefusal::PositionsUnreadable)?;
     }
-    if open_positions > 0 {
-        return Err(WalletResetRefusal::Blocked(RestartBlocker::OpenPositions {
-            count: open_positions,
-        }));
+    if count > 0 {
+        return Err(WalletResetRefusal::OpenPositions { count }.into());
     }
     let present = catalog::wallet_scoped_stores()
         .flat_map(|(spec, _)| spec.paths())
@@ -457,9 +472,8 @@ pub fn reset_wallet_stores(
         return Ok(None);
     }
 
-    let directory = super::backup::wallet_reset_directory("reset");
-    let manifest = super::backup::move_wallet_stores(
-        &directory,
+    let moved = super::backup::move_wallet_stores(
+        directory,
         WalletResetManifest {
             reason: WalletResetReason::WalletReset,
             chain: crate::chains::legacy_row_chain().as_str().to_owned(),
@@ -468,17 +482,51 @@ pub fn reset_wallet_stores(
             core_version: env!("CARGO_PKG_VERSION").to_owned(),
             created_at_ms: Utc::now().timestamp_millis(),
             files: Vec::new(),
+            moved_open_positions: Default::default(),
         },
-    )?;
+    );
+    let manifest = match moved {
+        Ok(manifest) => manifest,
+        Err(error) => return Err(restore_after_failed_reset(directory, error)),
+    };
     logger::info(
         LogTag::System,
         &format!(
-            "Wallet data reset moved {} to {}",
+            "Wallet data reset moved {} to {}; open positions moved by wallet: {:?}",
             manifest.files.join(", "),
-            directory.display()
+            directory.display(),
+            manifest.moved_open_positions
         ),
     );
-    Ok(Some(directory))
+    Ok(Some(directory.to_path_buf()))
+}
+
+/// Move back what a failed wallet data reset moved into `directory`, and remove the
+/// directory when that leaves it empty.
+fn restore_after_failed_reset(directory: &Path, error: DatabaseError) -> WalletResetFailure {
+    match super::backup::restore_wallet_stores(directory) {
+        Ok(restored) => {
+            logger::error(
+                LogTag::System,
+                &format!(
+                    "Wallet data reset failed and moved {} back: {error}",
+                    if restored.is_empty() {
+                        "nothing".to_owned()
+                    } else {
+                        restored.join(", ")
+                    }
+                ),
+            );
+            // Removes only an empty directory; a file left in it keeps it.
+            let _ = fs::remove_dir(directory);
+            WalletResetFailure::Restored(error)
+        }
+        Err(restore_error) => WalletResetFailure::Split {
+            directory: directory.to_path_buf(),
+            error,
+            restore_error,
+        },
+    }
 }
 
 /// Run the whole upgrade of `spec` on `connection` in one IMMEDIATE transaction, as an

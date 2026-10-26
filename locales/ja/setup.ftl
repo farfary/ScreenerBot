@@ -13,6 +13,7 @@ setup-wallet-base58-recognized = Base58 鍵形式を認識しました。
 ## RPC endpoint validation
 
 setup-rpc-required = RPC エンドポイントを1つ以上入力してください。
+setup-dialog-rpc-optional-note = 任意: 設定済みの RPC エンドポイントを使い続ける場合は、空欄のままにしてください。
 setup-rpc-too-many = RPC エンドポイントは 10 個までにしてください。
 setup-rpc-url-invalid = すべてのエンドポイントは有効な HTTPS URL である必要があります。
 setup-rpc-url-credentials = RPC URL にユーザー名やパスワードを含めることはできません。
@@ -130,6 +131,7 @@ setup-dialog-replace-confirm-stop = トレーダーとコピートレードが�
 setup-dialog-replace-confirm-backup = 現在のウォレットのポジション、トランザクション、履歴がバックアップフォルダーに移動します。
 setup-dialog-replace-confirm-keep = 現在のウォレットの鍵は「その他のウォレット」に残り、引き続きエクスポートできます。
 setup-dialog-replace-confirm-funds = 資金は移動しません。トークンと { -sol } は現在のウォレットに残ります。
+setup-dialog-replace-confirm-rpc = 設定済みの RPC エンドポイントを入力したものに置き換えます。フィールドが空の場合は現在のエンドポイントが残ります。
 setup-dialog-replace-confirm-restart = 新しいウォレットで { -brand } が再起動します。
 
 # Source: templates/pages/setup.html

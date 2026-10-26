@@ -36,10 +36,10 @@ desktop-boot-subtitle-wallet-mismatch = Dompet yang berbeda terdeteksi
 desktop-boot-subtitle-port-in-use = Port jaringan yang diperlukan sedang dipakai
 desktop-boot-subtitle-lock-held = { -brand } sudah berjalan
 desktop-boot-subtitle-config-invalid = Masalah konfigurasi
-desktop-boot-subtitle-directory-setup = Masalah penyimpanan
 desktop-boot-subtitle-storage-upgrade = Masalah peningkatan database
 desktop-boot-subtitle-wallet-replacement-incomplete = Penggantian dompet belum selesai
 desktop-boot-subtitle-wallet-reset-refused = Reset data dompet ditolak
+desktop-boot-subtitle-wallet-reset-incomplete = Pengaturan ulang data dompet tidak selesai
 desktop-boot-subtitle-generic = Error saat memulai
 
 desktop-boot-error-title = { -brand } tidak dapat dimulai

@@ -34,6 +34,9 @@ pub enum Error {
         address: String,
         detail: String,
     },
+    /// An encrypted key could not be decrypted into a key of the chain.
+    #[error("the encrypted {chain} key could not be read: {detail}")]
+    InvalidKey { chain: ChainId, detail: String },
     /// No enabled chain accepts the value as an address.
     #[error("'{value}' is not an address on any enabled chain")]
     UnrecognizedAddress { value: String },
@@ -63,6 +66,7 @@ impl ErrorClass for Error {
             | Error::EmptyIdentifier { .. }
             | Error::WrongChain { .. }
             | Error::InvalidAccount { .. }
+            | Error::InvalidKey { .. }
             | Error::AccountNotFound { .. }
             | Error::UnrecognizedAddress { .. }
             | Error::AmbiguousChain { .. }
@@ -84,6 +88,7 @@ impl ErrorClass for Error {
             | Error::EmptyIdentifier { .. }
             | Error::WrongChain { .. }
             | Error::InvalidAccount { .. }
+            | Error::InvalidKey { .. }
             | Error::AccountNotFound { .. }
             | Error::AccountRead { .. }
             | Error::SettlementRead { .. }
@@ -103,6 +108,7 @@ impl ErrorClass for Error {
             | Error::EmptyIdentifier { .. }
             | Error::WrongChain { .. }
             | Error::InvalidAccount { .. }
+            | Error::InvalidKey { .. }
             | Error::UnrecognizedAddress { .. }
             | Error::AmbiguousChain { .. }
             | Error::ChainNotEnabled { .. } => 400,

@@ -171,7 +171,8 @@ impl ErrorClass for DatabaseError {
             | DatabaseError::Io { .. }
             | DatabaseError::SchemaConflict { .. }
             | DatabaseError::StoreTooNew { .. }
-            | DatabaseError::Migration { .. } => Severity::Error,
+            | DatabaseError::Migration { .. }
+            | DatabaseError::MoveTargetExists { .. } => Severity::Error,
         }
     }
 
@@ -190,7 +191,8 @@ impl ErrorClass for DatabaseError {
             | DatabaseError::NotADatabase { .. }
             | DatabaseError::SchemaConflict { .. }
             | DatabaseError::StoreTooNew { .. }
-            | DatabaseError::Migration { .. } => 500,
+            | DatabaseError::Migration { .. }
+            | DatabaseError::MoveTargetExists { .. } => 500,
         }
     }
 }

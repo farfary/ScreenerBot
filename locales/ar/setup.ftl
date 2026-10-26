@@ -13,6 +13,7 @@ setup-wallet-base58-recognized = تم التعرف على صيغة مفتاح Ba
 ## RPC endpoint validation
 
 setup-rpc-required = أدخل نقطة اتصال RPC واحدة على الأقل.
+setup-dialog-rpc-optional-note = اختياري: اترك الحقل فارغًا للإبقاء على نقاط اتصال RPC المضبوطة حاليًا.
 setup-rpc-too-many = لا تستخدم أكثر من 10 نقاط اتصال RPC.
 setup-rpc-url-invalid = يجب أن تكون كل نقطة اتصال رابط HTTPS صالحًا.
 setup-rpc-url-credentials = لا يمكن أن تتضمن روابط RPC أسماء مستخدمين أو كلمات مرور.
@@ -145,6 +146,7 @@ setup-dialog-replace-confirm-stop = يوقف المتداول والتداول �
 setup-dialog-replace-confirm-backup = ينقل مراكز المحفظة الحالية ومعاملاتها وسجلها إلى مجلد نسخ احتياطي.
 setup-dialog-replace-confirm-keep = يحتفظ بمفتاح المحفظة الحالية ضمن محافظ أخرى، حيث يمكنك تصديره دائمًا.
 setup-dialog-replace-confirm-funds = لا ينقل أي أموال: تبقى الرموز و{ -sol } في المحفظة الحالية.
+setup-dialog-replace-confirm-rpc = يستبدل نقاط اتصال RPC المضبوطة بالتي تُدخلها؛ وإذا تركت الحقل فارغًا تبقى نقاط الاتصال الحالية.
 setup-dialog-replace-confirm-restart = يعيد تشغيل { -brand } بالمحفظة الجديدة.
 
 # Source: templates/pages/setup.html

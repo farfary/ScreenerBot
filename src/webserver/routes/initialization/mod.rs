@@ -4,6 +4,8 @@
 //! Initialization route — reports bot startup progress and initialization status.
 
 mod handlers;
+#[cfg(test)]
+mod handlers_tests;
 pub mod types;
 pub(in crate::webserver::routes) mod validation;
 

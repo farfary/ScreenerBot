@@ -5,6 +5,7 @@
 
 pub mod snapshot;
 
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -121,6 +122,10 @@ pub struct WalletResetManifest {
     pub created_at_ms: i64,
     /// The store files the directory holds.
     pub files: Vec<String>,
+    /// Open positions the moved positions store holds, by wallet address. Empty when
+    /// it holds none or could not be read.
+    #[serde(default)]
+    pub moved_open_positions: BTreeMap<String, usize>,
 }
 
 /// Name of the manifest inside a wallet-reset backup directory.
@@ -135,10 +140,11 @@ pub fn wallet_reset_directory(label: &str) -> PathBuf {
 }
 
 /// Move every file of the wallet-scoped stores into `directory` and write `manifest`
-/// there atomically, listing every store file the directory holds. Refuses before moving
+/// there atomically, listing every store file the directory holds and the open
+/// positions of each wallet the moved positions store holds. Refuses before moving
 /// anything while a wallet-scoped store is open in this process: its pool would keep
 /// writing to the moved file. Files already moved are skipped, so an interrupted move
-/// resumes; nothing is deleted.
+/// resumes; a file is never moved onto an existing one, so nothing is deleted.
 pub fn move_wallet_stores(
     directory: &Path,
     mut manifest: WalletResetManifest,
@@ -160,6 +166,7 @@ pub fn move_wallet_stores(
         message: error.to_string(),
     })?;
     manifest.files = backup_store_files(directory)?;
+    manifest.moved_open_positions = moved_open_positions(directory);
 
     let manifest_path = directory.join(WALLET_RESET_MANIFEST_NAME);
     let encoded = serde_json::to_vec_pretty(&manifest).map_err(|error| DatabaseError::Io {
@@ -173,6 +180,55 @@ pub fn move_wallet_stores(
         }
     })?;
     Ok(manifest)
+}
+
+/// Move back every wallet-scoped store file a failed [`move_wallet_stores`] left in
+/// `directory`: each file whose original path is free and whose name `directory` holds,
+/// the store file before its sidecars. A file is never moved onto an existing one, so a
+/// file re-created at the original path stays and its moved copy stays in `directory`.
+/// Returns the original paths of the files moved back.
+pub fn restore_wallet_stores(directory: &Path) -> Result<Vec<String>, DatabaseError> {
+    let mut restored = Vec::new();
+    for (spec, _) in catalog::wallet_scoped_stores() {
+        for path in spec.paths() {
+            for original in crate::paths::get_db_with_wal_files(path) {
+                let Some(name) = original.file_name() else {
+                    continue;
+                };
+                let moved = directory.join(name);
+                if original.symlink_metadata().is_ok() || moved.symlink_metadata().is_err() {
+                    continue;
+                }
+                super::recovery::move_file_without_replacing(&moved, &original)?;
+                restored.push(original.display().to_string());
+            }
+        }
+    }
+    Ok(restored)
+}
+
+/// The open positions of each wallet in the positions store moved into `directory`,
+/// read from the moved copy. A copy that cannot be read is logged and counts nothing.
+fn moved_open_positions(directory: &Path) -> BTreeMap<String, usize> {
+    let Some(name) = crate::paths::get_positions_db_path()
+        .file_name()
+        .map(ToOwned::to_owned)
+    else {
+        return BTreeMap::new();
+    };
+    match crate::positions::database::open_positions_by_wallet_in_file(&directory.join(name)) {
+        Ok(counts) => counts,
+        Err(error) => {
+            logger::warning(
+                LogTag::System,
+                &format!(
+                    "Could not count the open positions moved into {}: {error}",
+                    directory.display()
+                ),
+            );
+            BTreeMap::new()
+        }
+    }
 }
 
 /// The names of the files in a wallet-reset backup directory other than its manifest,

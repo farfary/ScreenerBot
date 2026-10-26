@@ -33,6 +33,19 @@ pub fn get_wallet_replacement_marker_path() -> PathBuf {
     get_data_directory().join("wallet_replacement.json")
 }
 
+/// Name prefix of an unusable replacement marker set aside beside the marker as
+/// `wallet_replacement.invalid-<stamp>.json`.
+pub const WALLET_REPLACEMENT_SET_ASIDE_PREFIX: &str = "wallet_replacement.invalid-";
+
+/// Name suffix of an unusable replacement marker set aside beside the marker.
+pub const WALLET_REPLACEMENT_SET_ASIDE_SUFFIX: &str = ".json";
+
+/// Returns the path of the record of a staged trading-wallet replacement that a start
+/// abandoned. The Wallets page shows it once and then removes it.
+pub fn get_wallet_replacement_outcome_path() -> PathBuf {
+    get_data_directory().join("wallet_replacement_outcome.json")
+}
+
 /// Returns the agent runtime file path, which advertises the local webserver origin
 /// to co-located tooling.
 pub fn get_agent_runtime_path() -> PathBuf {

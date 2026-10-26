@@ -141,6 +141,8 @@ pub enum Matcher {
     Prefix(&'static str),
     PrefixSuffix(&'static str, &'static str),
     Suffix(&'static str),
+    /// Every entry one of the matchers recognises.
+    Any(&'static [Matcher]),
 }
 
 impl Matcher {
@@ -157,6 +159,37 @@ impl Matcher {
                     && name.ends_with(suffix)
             }
             Matcher::Suffix(suffix) => name.ends_with(suffix) && name.len() > suffix.len(),
+            Matcher::Any(matchers) => matchers.iter().any(|matcher| matcher.matches(name)),
+        }
+    }
+
+    /// Whether `path` is an entry of a family with this matcher and `roots`.
+    fn contains(&self, roots: &[fn() -> PathBuf], path: &Path) -> bool {
+        match *self {
+            Matcher::Paths(paths) => paths.iter().any(|entry| entry() == path),
+            Matcher::Any(matchers) => matchers.iter().any(|matcher| matcher.contains(roots, path)),
+            _ => {
+                let (Some(parent), Some(name)) = (path.parent(), path.file_name()) else {
+                    return false;
+                };
+                roots.iter().any(|root| root() == parent)
+                    && name.to_str().is_some_and(|name| self.matches(name))
+            }
+        }
+    }
+
+    /// The directories the entries of a family with this matcher and `roots` sit in.
+    fn directories(&self, roots: &[fn() -> PathBuf]) -> Vec<PathBuf> {
+        match *self {
+            Matcher::Paths(paths) => paths
+                .iter()
+                .filter_map(|entry| entry().parent().map(Path::to_path_buf))
+                .collect(),
+            Matcher::Any(matchers) => matchers
+                .iter()
+                .flat_map(|matcher| matcher.directories(roots))
+                .collect(),
+            _ => roots.iter().map(|root| root()).collect(),
         }
     }
 }
@@ -167,8 +200,8 @@ impl Matcher {
 pub struct FamilySpec {
     pub id: FamilyId,
     pub category: Category,
-    /// The directories whose direct entries the family covers; empty for a family
-    /// matched by exact path.
+    /// The directories whose direct entries the family's name matchers cover; empty
+    /// for a family matched by exact path only.
     pub roots: &'static [fn() -> PathBuf],
     pub matcher: Matcher,
     pub ladder: Ladder,
@@ -177,25 +210,15 @@ pub struct FamilySpec {
 impl FamilySpec {
     /// Whether `path` is one of the family's entries.
     pub fn contains(&self, path: &Path) -> bool {
-        if let Matcher::Paths(paths) = self.matcher {
-            return paths.iter().any(|entry| entry() == path);
-        }
-        let (Some(parent), Some(name)) = (path.parent(), path.file_name()) else {
-            return false;
-        };
-        self.roots.iter().any(|root| root() == parent)
-            && name.to_str().is_some_and(|name| self.matcher.matches(name))
+        self.matcher.contains(self.roots, path)
     }
 
-    /// The directories the family's entries sit directly inside.
+    /// The directories the family's entries sit directly inside, each once.
     pub fn directories(&self) -> Vec<PathBuf> {
-        match self.matcher {
-            Matcher::Paths(paths) => paths
-                .iter()
-                .filter_map(|entry| entry().parent().map(Path::to_path_buf))
-                .collect(),
-            _ => self.roots.iter().map(|root| root()).collect(),
-        }
+        let mut directories = self.matcher.directories(self.roots);
+        directories.sort();
+        directories.dedup();
+        directories
     }
 }
 

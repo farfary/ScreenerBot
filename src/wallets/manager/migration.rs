@@ -7,9 +7,9 @@
 use crate::logger::{self, LogTag};
 
 use super::super::error::Error;
-use super::super::types::{WalletRole, WalletType};
+use super::super::types::{WalletRole, WalletType, TRADING_WALLET_NAME};
 use super::WALLETS_DB;
-use crate::chains::solana::accounts::address_from_encrypted_key;
+use crate::chains::{adapter_for, ChainId};
 
 /// Migrate existing wallet from config.toml to wallets database
 pub(super) async fn migrate_from_config() -> Result<(), Error> {
@@ -38,11 +38,11 @@ pub(super) async fn migrate_from_config() -> Result<(), Error> {
     }
 
     // Decrypt to get address (the key material itself is re-stored encrypted, unchanged)
-    let address = encrypted_key_address(&encrypted, &nonce)?;
+    let address = encrypted_key_address(db.chain(), &encrypted, &nonce)?;
 
     // Insert as main wallet
     db.insert_wallet(
-        "Main Wallet",
+        TRADING_WALLET_NAME,
         &address,
         &encrypted,
         &nonce,
@@ -59,15 +59,18 @@ pub(super) async fn migrate_from_config() -> Result<(), Error> {
     Ok(())
 }
 
-/// The address the encrypted key `ciphertext`/`nonce` belongs to. The key is
-/// decrypted inside the chain accounts module and only the address comes back.
+/// The address the encrypted `chain` key `ciphertext`/`nonce` belongs to. The key is
+/// decrypted inside the chain's accounts module and only the address comes back.
 pub(in crate::wallets) fn encrypted_key_address(
+    chain: ChainId,
     ciphertext: &str,
     nonce: &str,
 ) -> Result<String, Error> {
-    address_from_encrypted_key(ciphertext, nonce).map_err(|reason| Error::InvalidPrivateKey {
-        reason: reason.to_string(),
-    })
+    adapter_for(chain)
+        .address_from_encrypted_key(ciphertext, nonce)
+        .map_err(|reason| Error::InvalidPrivateKey {
+            reason: reason.to_string(),
+        })
 }
 
 /// Log a warning when the config key belongs to another wallet than the vault's main
@@ -86,7 +89,7 @@ pub(super) async fn warn_if_config_key_is_inert() -> Result<(), Error> {
     if encrypted.is_empty() || nonce.is_empty() {
         return Ok(());
     }
-    match encrypted_key_address(&encrypted, &nonce) {
+    match encrypted_key_address(db.chain(), &encrypted, &nonce) {
         Ok(address) if address != main.address => logger::warning(
             LogTag::Wallet,
             &format!(

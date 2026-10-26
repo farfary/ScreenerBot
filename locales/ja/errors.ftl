@@ -59,6 +59,8 @@ errors-initialization-onboarding-update-failed = オンボーディングの状�
 errors-initialization-validation-required = セットアップを保存する前に、認証情報の検証が必要です
 errors-initialization-encrypt-failed = 秘密鍵を暗号化できませんでした
 errors-initialization-already-complete = セットアップはすでに完了しています。別のウォレットで取引するには、ウォレットページの「ウォレットを置き換え」を使用してください。
+errors-initialization-replace-open-positions = 現在の取引ウォレットにオープンポジションがあるため ({ $count })、セットアップでは置き換えられません。まず現在の取引ウォレットの鍵でセットアップを完了してから、ウォレットページでウォレットを置き換えてください。
+errors-initialization-save-failed-replacement-staged = 新しい取引ウォレットは準備済みで、{ -brand } の再起動時に適用されますが、セットアップの設定を保存できませんでした。再起動後に確認してください。
 
 errors-ui-state-save-failed = 状態を保存できませんでした
 errors-ui-state-clear-failed = 状態をクリアできませんでした
@@ -231,7 +233,8 @@ errors-wallets-replace-no-trading-wallet = 置き換える取引ウォレット�
 errors-wallets-replace-same-wallet = この鍵は現在の取引ウォレットのものです。
 errors-wallets-replace-watched = このウォレットは「ウォッチ中」リストにあります。取引する前にそこから削除してください。
 errors-wallets-replace-address-mismatch = 鍵が検証済みのウォレットアドレスと一致しません。鍵をもう一度検証してください。
-errors-wallets-replace-interrupted = ウォレットの置き換えが途中で停止したため、現在のウォレットが取引ウォレットのままです。トレーダーとコピートレードの設定を確認してから再試行してください。
+errors-wallets-replace-interrupted = ウォレットの置き換えが途中で停止したため、現在のウォレットが取引ウォレットのままです。トレーダーとコピートレードはオフです。準備ができたら再度オンにするか、置き換えをもう一度お試しください。
+errors-wallets-replace-interrupted-copy-trading-on = ウォレットの置き換えが途中で停止したため、現在のウォレットが取引ウォレットのままです。トレーダーはオフですが、コピートレードをオフにできませんでした。コピートレードの設定を確認してから再試行してください。
 errors-wallets-replace-failed = 取引ウォレットを置き換えられませんでした
 
 errors-wallet-watch-list-failed = ウォッチ対象の一覧を取得できませんでした

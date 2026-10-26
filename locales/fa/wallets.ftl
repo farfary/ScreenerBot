@@ -134,6 +134,10 @@ wallets-list-col-type = نوع
 wallets-list-col-created = تاریخ ساخت
 wallets-list-col-replaced = جایگزینی
 wallets-list-replaced-on = در { $date }
+wallets-replace-abandoned-title = جایگزینی کیف پول لغو شد
+wallets-replace-abandoned-open-positions = کیف پول معاملاتی هنگام راه‌اندازی مجدد پوزیشن باز داشت ({ $count })، پس جایگزینی لغو شد. کیف پول معاملاتی تغییری نکرد؛ کلید جدید در کیف پول‌های دیگر نگه داشته شد.
+wallets-replace-abandoned-positions-unreadable = مخزن پوزیشن‌ها هنگام راه‌اندازی مجدد خوانده نشد، پس جایگزینی لغو شد. کیف پول معاملاتی تغییری نکرد؛ کلید جدید در کیف پول‌های دیگر نگه داشته شد.
+wallets-replace-abandoned-vault-changed = گاوصندوق کیف پول‌ها هنگام راه‌اندازی مجدد دیگر با جایگزینی آماده‌شده مطابقت نداشت، پس جایگزینی لغو شد. کیف پول معاملاتی تغییری نکرد؛ کلید جدید در کیف پول‌های دیگر نگه داشته شد.
 wallets-list-col-actions = عملیات
 wallets-list-action-export = خروجی کلید خصوصی
 wallets-list-count = کیف پول‌ها
@@ -141,7 +145,8 @@ wallets-list-search =
     .placeholder = جستجو بر اساس نام یا آدرس...
 wallets-list-loading-title = در حال بارگذاری کیف پول‌ها…
 wallets-list-loading-description = در حال آماده‌سازی نمای کیف پول انتخاب‌شده.
-wallets-list-kept-empty-message = کیف پول‌های نسخه‌های قبلی اینجا نمایش داده می‌شوند تا همچنان بتوانید کلیدهای آن‌ها را صادر کنید.
+wallets-list-kept-empty-message = کیف پول‌های معاملاتی جایگزین‌شده و کیف پول‌های نسخه‌های قبلی اینجا نمایش داده می‌شوند تا همچنان بتوانید کلیدهای آن‌ها را صادر کنید.
+wallets-list-previous-trading-wallet = کیف پول معاملاتی قبلی
 wallets-other-empty-title = کیف پول دیگری وجود ندارد
 
 # watched.js: watched wallets table and actions.

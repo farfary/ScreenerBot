@@ -119,7 +119,7 @@ pub enum Error {
     /// open positions.
     #[error("the trading wallet cannot be replaced while {reason}")]
     ReplacementBlocked {
-        reason: crate::version::RestartBlocker,
+        reason: crate::process::restart_safety::RestartBlocker,
     },
     /// Another restart (an update apply or a replacement) already holds the process.
     #[error("a restart is already in progress")]
@@ -145,10 +145,21 @@ pub enum Error {
         operation: &'static str,
         message: String,
     },
-    /// The replacement stopped after the Auto Trader and Copy Trading were switched
-    /// off; both stay off and the trading wallet is unchanged.
-    #[error("the wallet replacement stopped at '{step}' after the Auto Trader and Copy Trading were switched off: {detail}")]
-    ReplacementInterrupted { step: &'static str, detail: String },
+    /// The replacement stopped at `step` after the Auto Trader was switched off; Copy
+    /// Trading is off too when `copy_trading_off`. The switches stay as they are and the
+    /// trading wallet is unchanged.
+    #[error("the wallet replacement stopped at '{step}': {detail}; {}", switches_left_off(*copy_trading_off))]
+    ReplacementInterrupted {
+        step: &'static str,
+        copy_trading_off: bool,
+        detail: String,
+    },
+    /// The record of an abandoned replacement could not be removed.
+    #[error("the record of an abandoned wallet replacement could not be removed: {message}")]
+    ReplacementOutcome { message: String },
+    /// The vault no longer matches the staged replacement after its store move began.
+    #[error("the vault no longer matches the staged wallet replacement: {detail}")]
+    ReplacementVaultChanged { detail: String },
     /// A cross-cutting dependency this module reads from (config, chain
     /// accounts, ...) failed (no fitting variant above: this names WHICH
     /// dependency failed, distinguishable from wallets' own database or
@@ -158,6 +169,15 @@ pub enum Error {
         dependency: &'static str,
         detail: String,
     },
+}
+
+/// Which trading switches a stopped replacement left off.
+fn switches_left_off(copy_trading_off: bool) -> &'static str {
+    if copy_trading_off {
+        "the Auto Trader and Copy Trading are off"
+    } else {
+        "the Auto Trader is off and Copy Trading could not be switched off"
+    }
 }
 
 /// Result alias for the wallets module.
@@ -214,6 +234,8 @@ impl ErrorClass for Error {
             Error::ReplacementAddressMismatch { .. } => false,
             Error::ReplacementMarker { .. } => false,
             Error::ReplacementInterrupted { .. } => false,
+            Error::ReplacementVaultChanged { .. } => false,
+            Error::ReplacementOutcome { .. } => true,
         }
     }
 
@@ -276,6 +298,8 @@ impl ErrorClass for Error {
             Error::ReplacementAddressMismatch { .. } => Severity::Critical,
             Error::ReplacementMarker { .. } => Severity::Critical,
             Error::ReplacementInterrupted { .. } => Severity::Error,
+            Error::ReplacementVaultChanged { .. } => Severity::Critical,
+            Error::ReplacementOutcome { .. } => Severity::Warning,
         }
     }
 
@@ -318,6 +342,8 @@ impl ErrorClass for Error {
             Error::ReplacementAddressMismatch { .. } => 400,
             Error::ReplacementMarker { .. } => 500,
             Error::ReplacementInterrupted { .. } => 500,
+            Error::ReplacementVaultChanged { .. } => 500,
+            Error::ReplacementOutcome { .. } => 500,
         }
     }
 }

@@ -13,6 +13,7 @@ setup-wallet-base58-recognized = Base58 키 형식이 확인되었습니다.
 ## RPC endpoint validation
 
 setup-rpc-required = RPC 엔드포인트를 하나 이상 입력하세요.
+setup-dialog-rpc-optional-note = 선택 사항: 이미 설정된 RPC 엔드포인트를 유지하려면 필드를 비워 두세요.
 setup-rpc-too-many = RPC 엔드포인트는 10개 이하로 사용하세요.
 setup-rpc-url-invalid = 모든 엔드포인트는 올바른 HTTPS URL이어야 합니다.
 setup-rpc-url-credentials = RPC URL에는 사용자 이름이나 비밀번호를 포함할 수 없습니다.
@@ -130,6 +131,7 @@ setup-dialog-replace-confirm-stop = 트레이더와 카피 트레이딩이 중�
 setup-dialog-replace-confirm-backup = 현재 지갑의 포지션, 트랜잭션, 기록이 백업 폴더로 이동됩니다.
 setup-dialog-replace-confirm-keep = 현재 지갑의 키는 기타 지갑에 보관되며, 계속 내보낼 수 있습니다.
 setup-dialog-replace-confirm-funds = 자금은 이동되지 않습니다. 토큰과 { -sol }은 현재 지갑에 남습니다.
+setup-dialog-replace-confirm-rpc = 설정된 RPC 엔드포인트를 입력한 것으로 바꿉니다. 필드를 비워 두면 현재 엔드포인트가 유지됩니다.
 setup-dialog-replace-confirm-restart = 새 지갑으로 { -brand }이 재시작됩니다.
 
 # Source: templates/pages/setup.html

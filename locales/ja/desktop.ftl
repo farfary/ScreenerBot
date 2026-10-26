@@ -42,10 +42,10 @@ desktop-boot-subtitle-wallet-mismatch = 別のウォレットが検出されま�
 desktop-boot-subtitle-port-in-use = 必要なネットワークポートが使用中です
 desktop-boot-subtitle-lock-held = { -brand } はすでに実行中です
 desktop-boot-subtitle-config-invalid = 設定の問題
-desktop-boot-subtitle-directory-setup = ストレージの問題
 desktop-boot-subtitle-storage-upgrade = データベースのアップグレードの問題
 desktop-boot-subtitle-wallet-replacement-incomplete = ウォレットの置き換えが完了していません
 desktop-boot-subtitle-wallet-reset-refused = ウォレットデータのリセットが拒否されました
+desktop-boot-subtitle-wallet-reset-incomplete = ウォレットデータのリセットが完了しませんでした
 desktop-boot-subtitle-generic = 起動エラー
 
 ## Boot errors raised by the shell itself (the backend never reported one).

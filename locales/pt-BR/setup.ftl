@@ -13,6 +13,7 @@ setup-wallet-base58-recognized = Formato de chave base58 reconhecido.
 ## RPC endpoint validation
 
 setup-rpc-required = Informe pelo menos um endpoint RPC.
+setup-dialog-rpc-optional-note = Opcional: deixe o campo vazio para manter os endpoints RPC já configurados.
 setup-rpc-too-many = Use no máximo 10 endpoints RPC.
 setup-rpc-url-invalid = Todo endpoint deve ser uma URL HTTPS válida.
 setup-rpc-url-credentials = As URLs de RPC não podem conter usuário ou senha.
@@ -136,6 +137,7 @@ setup-dialog-replace-confirm-stop = O trader e o copy trading são parados. Ativ
 setup-dialog-replace-confirm-backup = As posições, transações e o histórico da carteira atual são movidos para uma pasta de backup.
 setup-dialog-replace-confirm-keep = A chave da carteira atual fica em Outras carteiras, onde você ainda pode exportá-la.
 setup-dialog-replace-confirm-funds = Nenhum fundo é movido: os tokens e o { -sol } permanecem na carteira atual.
+setup-dialog-replace-confirm-rpc = Substitui os endpoints RPC configurados pelos que você informar; com o campo vazio, os endpoints atuais permanecem.
 setup-dialog-replace-confirm-restart = O { -brand } reinicia com a nova carteira.
 
 # Source: templates/pages/setup.html

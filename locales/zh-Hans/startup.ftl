@@ -64,18 +64,23 @@ startup-storage-upgrade-remedy = 复制详细信息，并连同日志文件发�
 
 startup-wallet-replacement-incomplete-title = 钱包更换未能完成
 startup-wallet-replacement-incomplete-detail =
-    { -brand } 在切换到新交易钱包时停止。没有删除任何内容：原钱包的密钥仍在钱包库中，其本地历史仍在备份文件夹中。
+    { -brand } 在切换到新交易钱包时停止。没有删除任何内容：原钱包的密钥仍在钱包库中，其本地历史要么仍在原处，要么在日志文件所列的备份文件夹中。
 
     原因：
     { $error }
 startup-wallet-replacement-incomplete-remedy = 再次启动 { -brand } 以继续更换。如果此消息再次出现，请复制详细信息，并连同日志文件发送给 t.me/screenerbotio_support 的支持团队。请勿编辑、移动或删除 wallet_replacement.json 或备份文件夹。
 startup-wallet-reset-refused-title = 钱包数据未重置
-startup-wallet-reset-refused-open-positions = 原钱包仍有未平仓持仓（{ $count }），因此保留了其本地历史。
-startup-wallet-reset-refused-trade-in-flight = 仍有交易在进行，因此保留了钱包的本地历史。
-startup-wallet-reset-refused-tool-in-flight = 仍有钱包工具在运行，因此保留了钱包的本地历史。
-startup-wallet-reset-refused-positions-loading = 未平仓持仓仍在加载，因此保留了钱包的本地历史。
+startup-wallet-reset-refused-open-positions = 交易钱包有未平仓持仓（{ $count }），因此未重置钱包数据。
 startup-wallet-reset-refused-positions-unreadable = 无法读取持仓存储，无法排除未平仓持仓，因此保留了钱包的本地历史。
-startup-wallet-reset-refused-remedy = 没有移动任何内容。请使用原钱包启动 { -brand }，平掉其未平仓持仓，然后再次重置钱包数据。
+startup-wallet-reset-refused-remedy = 没有移动任何内容。请在不重置的情况下启动 { -brand }，平掉或归档交易钱包的未平仓持仓，然后再次重置钱包数据。
+startup-wallet-reset-refused-unreadable-remedy = 没有移动任何内容。请在不重置的情况下启动 { -brand }，让它检查持仓存储，然后再次重置钱包数据。如果此消息再次出现，请将日志文件发送给 t.me/screenerbotio_support 的支持团队。
+startup-wallet-reset-incomplete-title = 钱包数据重置未能完成
+startup-wallet-reset-incomplete-detail =
+    { -brand } 在将钱包数据移入 { $directory } 时停止，且未能将所有文件移回。钱包的部分本地历史在该文件夹中，部分仍在原处。
+
+    原因：
+    { $error }
+startup-wallet-reset-incomplete-remedy = 请勿再次启动 { -brand }，也不要移动、编辑或删除 { $directory } 中的任何文件。请复制详细信息，并连同日志文件发送给 t.me/screenerbotio_support 的支持团队。
 
 ## Generic failures.
 
@@ -89,3 +94,4 @@ startup-failure-analysis-init = 初始化分析引擎失败：{ $error }
 startup-failure-assistant-init = 初始化助手对话引擎失败：{ $error }
 startup-failure-wallets-init = 初始化钱包失败：{ $error }
 startup-failure-wallet-validation = 验证钱包一致性失败：{ $error }
+startup-failure-storage-phase = 存储阶段意外停止：{ $error }

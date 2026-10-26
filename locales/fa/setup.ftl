@@ -13,6 +13,7 @@ setup-wallet-base58-recognized = قالب کلید Base58 شناسایی شد.
 ## RPC endpoint validation
 
 setup-rpc-required = دست‌کم یک اندپوینت RPC وارد کنید.
+setup-dialog-rpc-optional-note = اختیاری: برای نگه‌داشتن اندپوینت‌های RPC تنظیم‌شده، فیلد را خالی بگذارید.
 setup-rpc-too-many = بیش از 10 اندپوینت RPC استفاده نکنید.
 setup-rpc-url-invalid = هر اندپوینت باید یک نشانی HTTPS معتبر باشد.
 setup-rpc-url-credentials = نشانی RPC نمی‌تواند نام کاربری یا رمز عبور داشته باشد.
@@ -133,6 +134,7 @@ setup-dialog-replace-confirm-stop = معامله‌گر و کپی‌ترید ر�
 setup-dialog-replace-confirm-backup = پوزیشن‌ها، تراکنش‌ها و تاریخچهٔ کیف پول فعلی را به یک پوشهٔ پشتیبان منتقل می‌کند.
 setup-dialog-replace-confirm-keep = کلید کیف پول فعلی در کیف پول‌های دیگر می‌ماند و همچنان می‌توانید از آن خروجی بگیرید.
 setup-dialog-replace-confirm-funds = هیچ دارایی جابه‌جا نمی‌شود: توکن‌ها و { -sol } در کیف پول فعلی می‌مانند.
+setup-dialog-replace-confirm-rpc = اندپوینت‌های RPC تنظیم‌شده را با مواردی که وارد می‌کنید جایگزین می‌کند؛ اگر فیلد خالی بماند، اندپوینت‌های فعلی می‌مانند.
 setup-dialog-replace-confirm-restart = { -brand } با کیف پول جدید دوباره راه‌اندازی می‌شود.
 
 # Source: templates/pages/setup.html

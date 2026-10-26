@@ -69,6 +69,8 @@ errors-initialization-onboarding-update-failed = به‌روزرسانی وضع�
 errors-initialization-validation-required = پیش از ذخیره تنظیمات، تأیید اعتبارنامه‌ها لازم است
 errors-initialization-encrypt-failed = رمزگذاری کلید خصوصی ناموفق بود
 errors-initialization-already-complete = راه‌اندازی قبلاً کامل شده است. برای معامله با کیف پول دیگر، از جایگزینی کیف پول در صفحهٔ کیف پول‌ها استفاده کنید.
+errors-initialization-replace-open-positions = کیف پول معاملاتی فعلی پوزیشن باز دارد ({ $count })، پس راه‌اندازی نمی‌تواند آن را جایگزین کند. ابتدا راه‌اندازی را با کلید کیف پول معاملاتی فعلی کامل کنید و سپس کیف پول را از صفحهٔ کیف پول‌ها جایگزین کنید.
+errors-initialization-save-failed-replacement-staged = کیف پول معاملاتی جدید آماده شده و با راه‌اندازی مجدد { -brand } اعمال می‌شود، اما تنظیمات راه‌اندازی ذخیره نشد. پس از راه‌اندازی مجدد آن‌ها را بررسی کنید.
 
 # Dashboard state
 errors-ui-state-save-failed = ذخیره وضعیت ناموفق بود
@@ -256,7 +258,8 @@ errors-wallets-replace-no-trading-wallet = کیف پول معاملاتی‌ای
 errors-wallets-replace-same-wallet = این کلید متعلق به کیف پول معاملاتی فعلی است.
 errors-wallets-replace-watched = این کیف پول در فهرست پایش‌شده است. پیش از معامله با آن، از آنجا حذفش کنید.
 errors-wallets-replace-address-mismatch = کلید با نشانی کیف پول اعتبارسنجی‌شده مطابقت ندارد. کلید را دوباره اعتبارسنجی کنید.
-errors-wallets-replace-interrupted = جایگزینی کیف پول در میانه متوقف شد و کیف پول فعلی همچنان کیف پول معاملاتی است. تنظیمات معامله‌گر و کپی‌ترید را بررسی و دوباره تلاش کنید.
+errors-wallets-replace-interrupted = جایگزینی کیف پول در میانه متوقف شد و کیف پول فعلی همچنان کیف پول معاملاتی است. معامله‌گر و کپی‌ترید خاموش هستند؛ هر وقت آماده بودید دوباره روشنشان کنید یا جایگزینی را دوباره امتحان کنید.
+errors-wallets-replace-interrupted-copy-trading-on = جایگزینی کیف پول در میانه متوقف شد و کیف پول فعلی همچنان کیف پول معاملاتی است. معامله‌گر خاموش است، اما کپی‌ترید خاموش نشد. تنظیمات کپی‌ترید را بررسی و دوباره تلاش کنید.
 errors-wallets-replace-failed = جایگزینی کیف پول معاملاتی ناموفق بود
 
 # Wallet watching

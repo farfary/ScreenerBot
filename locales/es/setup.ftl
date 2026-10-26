@@ -13,6 +13,7 @@ setup-wallet-base58-recognized = Formato de clave base58 reconocido.
 ## RPC endpoint validation
 
 setup-rpc-required = Introduce al menos un endpoint RPC.
+setup-dialog-rpc-optional-note = Opcional: deja el campo vacío para mantener los endpoints RPC ya configurados.
 setup-rpc-too-many = Usa como máximo 10 endpoints RPC.
 setup-rpc-url-invalid = Todos los endpoints deben ser URL HTTPS válidas.
 setup-rpc-url-credentials = Las URL de RPC no pueden incluir nombres de usuario ni contraseñas.
@@ -136,6 +137,7 @@ setup-dialog-replace-confirm-stop = Se detienen el trader y el copy trading. Vue
 setup-dialog-replace-confirm-backup = Las posiciones, transacciones e historial de la billetera actual se mueven a una carpeta de copia de seguridad.
 setup-dialog-replace-confirm-keep = La clave de la billetera actual se conserva en Otras billeteras, donde aún puedes exportarla.
 setup-dialog-replace-confirm-funds = No se mueven fondos: los tokens y el { -sol } permanecen en la billetera actual.
+setup-dialog-replace-confirm-rpc = Sustituye los endpoints RPC configurados por los que introduzcas; con el campo vacío, se mantienen los actuales.
 setup-dialog-replace-confirm-restart = { -brand } se reinicia con la nueva billetera.
 
 # Source: templates/pages/setup.html

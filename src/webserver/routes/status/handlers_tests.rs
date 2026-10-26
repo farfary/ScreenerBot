@@ -73,6 +73,7 @@ async fn a_loopback_peer_naming_another_host_is_refused() {
 
 #[tokio::test]
 async fn a_loopback_peer_gets_only_the_restart_answer() {
+    crate::global::set_webserver_port(8080);
     let response =
         restart_safety(request_from(Some("127.0.0.1:50000"), "127.0.0.1:8080", &[])).await;
     assert_eq!(response.status(), StatusCode::OK);

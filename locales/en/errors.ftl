@@ -70,6 +70,8 @@ errors-initialization-onboarding-update-failed = Failed to update onboarding sta
 errors-initialization-validation-required = Credential verification is required before saving setup
 errors-initialization-encrypt-failed = Failed to encrypt private key
 errors-initialization-already-complete = Setup is already complete. To trade with another wallet, use Replace Wallet on the Wallets page.
+errors-initialization-replace-open-positions = The current trading wallet has open positions ({ $count }), so setup cannot replace it. Complete setup with the current trading wallet's key first, then replace the wallet from the Wallets page.
+errors-initialization-save-failed-replacement-staged = The new trading wallet is staged and applies when { -brand } restarts, but the setup settings could not be saved. Check them after the restart.
 
 # Dashboard state
 errors-ui-state-save-failed = Failed to save state
@@ -258,7 +260,8 @@ errors-wallets-replace-no-trading-wallet = There is no trading wallet to replace
 errors-wallets-replace-same-wallet = This key belongs to the current trading wallet.
 errors-wallets-replace-watched = This wallet is on the Watched list. Remove it there before trading with it.
 errors-wallets-replace-address-mismatch = The key does not match the validated wallet address. Validate the key again.
-errors-wallets-replace-interrupted = The wallet replacement stopped part way and the current wallet stays the trading wallet. Check the trader and copy trading settings, then try again.
+errors-wallets-replace-interrupted = The wallet replacement stopped part way and the current wallet stays the trading wallet. The trader and copy trading are off; turn them on again when you are ready, or try the replacement again.
+errors-wallets-replace-interrupted-copy-trading-on = The wallet replacement stopped part way and the current wallet stays the trading wallet. The trader is off, but copy trading could not be switched off. Check the copy trading settings, then try again.
 errors-wallets-replace-failed = Failed to replace the trading wallet
 
 # Wallet watching

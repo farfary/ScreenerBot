@@ -11,6 +11,7 @@ setup-wallet-base58-recognized = Das Base58-Schlüsselformat wurde erkannt.
 ## RPC endpoint validation
 
 setup-rpc-required = Geben Sie mindestens einen RPC-Endpunkt ein.
+setup-dialog-rpc-optional-note = Optional: Lassen Sie das Feld leer, um die bereits konfigurierten RPC-Endpunkte zu behalten.
 setup-rpc-too-many = Verwenden Sie höchstens 10 RPC-Endpunkte.
 setup-rpc-url-invalid = Jeder Endpunkt muss eine gültige HTTPS-URL sein.
 setup-rpc-url-credentials = RPC-URLs dürfen keine Benutzernamen oder Passwörter enthalten.
@@ -127,6 +128,7 @@ setup-dialog-replace-confirm-stop = Trader und Copy-Trading werden gestoppt. Sch
 setup-dialog-replace-confirm-backup = Positionen, Transaktionen und Verlauf der aktuellen Wallet werden in einen Sicherungsordner verschoben.
 setup-dialog-replace-confirm-keep = Der Schlüssel der aktuellen Wallet bleibt unter Weitere Wallets erhalten, wo Sie ihn weiterhin exportieren können.
 setup-dialog-replace-confirm-funds = Es werden keine Guthaben bewegt: Token und { -sol } bleiben in der aktuellen Wallet.
+setup-dialog-replace-confirm-rpc = Ersetzt die konfigurierten RPC-Endpunkte durch die eingegebenen; bleibt das Feld leer, bleiben die aktuellen Endpunkte erhalten.
 setup-dialog-replace-confirm-restart = { -brand } wird mit der neuen Wallet neu gestartet.
 
 ## Setup wizard

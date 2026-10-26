@@ -67,6 +67,8 @@ errors-initialization-onboarding-update-failed = 온보딩 상태를 업데이�
 errors-initialization-validation-required = 설정을 저장하기 전에 자격 증명 확인이 필요합니다
 errors-initialization-encrypt-failed = 프라이빗 키를 암호화하지 못했습니다
 errors-initialization-already-complete = 설정이 이미 완료되었습니다. 다른 지갑으로 거래하려면 지갑 페이지의 지갑 교체를 사용하세요.
+errors-initialization-replace-open-positions = 현재 트레이딩 지갑에 열린 포지션이 있어 ({ $count }) 설정에서 교체할 수 없습니다. 먼저 현재 트레이딩 지갑의 키로 설정을 완료한 후 지갑 페이지에서 지갑을 교체하세요.
+errors-initialization-save-failed-replacement-staged = 새 트레이딩 지갑이 준비되어 { -brand }이 재시작될 때 적용되지만, 설정 값을 저장하지 못했습니다. 재시작 후 확인하세요.
 
 # Dashboard state
 errors-ui-state-save-failed = 상태를 저장하지 못했습니다
@@ -253,7 +255,8 @@ errors-wallets-replace-no-trading-wallet = 교체할 트레이딩 지갑이 없�
 errors-wallets-replace-same-wallet = 이 키는 현재 트레이딩 지갑의 키입니다.
 errors-wallets-replace-watched = 이 지갑은 감시 중 목록에 있습니다. 이 지갑으로 거래하기 전에 목록에서 제거하세요.
 errors-wallets-replace-address-mismatch = 키가 검증된 지갑 주소와 일치하지 않습니다. 키를 다시 검증하세요.
-errors-wallets-replace-interrupted = 지갑 교체가 도중에 중단되어 현재 지갑이 계속 트레이딩 지갑으로 유지됩니다. 트레이더와 카피 트레이딩 설정을 확인한 후 다시 시도하세요.
+errors-wallets-replace-interrupted = 지갑 교체가 도중에 중단되어 현재 지갑이 계속 트레이딩 지갑으로 유지됩니다. 트레이더와 카피 트레이딩은 꺼져 있습니다. 준비되면 다시 켜거나 교체를 다시 시도하세요.
+errors-wallets-replace-interrupted-copy-trading-on = 지갑 교체가 도중에 중단되어 현재 지갑이 계속 트레이딩 지갑으로 유지됩니다. 트레이더는 꺼졌지만 카피 트레이딩을 끄지 못했습니다. 카피 트레이딩 설정을 확인한 후 다시 시도하세요.
 errors-wallets-replace-failed = 트레이딩 지갑을 교체하지 못했습니다
 
 # Wallet watching

@@ -5,17 +5,18 @@
 
 use super::types::*;
 use super::validation::{
-    clear_setup_validation, consume_setup_validation, store_setup_validation, validate_rpc_url_list,
+    clear_setup_validation, consume_validated_key, store_setup_validation, validate_rpc_url_list,
+    RpcSource,
 };
 use crate::i18n::ids;
-use crate::wallets::replacement::StagedKey;
+use crate::process::restart_safety::RestartBlocker;
 use crate::webserver::api_error::{ApiError, ApiErrorCode};
 use crate::webserver::routes::wallets::handlers::replacement_error;
 use crate::{
     arguments,
     chains::solana::{
         accounts::{keypair_to_address, parse_private_key},
-        rpc,
+        chain_metadata, rpc,
     },
     config::{self, schemas::Config},
     global,
@@ -141,8 +142,9 @@ pub(super) async fn enter_explore_mode() -> Response {
 
     config.wallet_encrypted = String::new();
     config.wallet_nonce = String::new();
-    if config.chains.solana.rpc.urls.is_empty() {
-        config.chains.solana.rpc = crate::config::schemas::RpcConfig::default();
+    let rpc = config.chains.rpc_mut(chain_metadata().id);
+    if rpc.urls.is_empty() {
+        *rpc = crate::config::schemas::RpcConfig::default();
     }
     config.gui.dashboard.startup.explore_mode_enabled = true;
     config.gui.dashboard.startup.onboarding_complete = true;
@@ -221,21 +223,40 @@ pub(super) async fn enter_explore_mode() -> Response {
 }
 
 /// POST /api/initialization/validate
-/// Validate credentials without persisting
+/// Validate credentials without persisting. After a full setup a request without RPC
+/// endpoints tests the configured ones, which a replacement then keeps; their URLs never
+/// reach the response, which names each endpoint by its host only.
 pub(super) async fn validate_credentials(
     Json(request): Json<ValidateCredentialsRequest>,
 ) -> Response {
+    // The key is parsed in Solana's format below.
+    let chain = chain_metadata().id;
+    let rpc_source = if request.rpc_urls.is_empty() && global::is_initialization_complete() {
+        RpcSource::Configured
+    } else {
+        RpcSource::Request
+    };
+    let rpc_urls = match rpc_source {
+        RpcSource::Request => request.rpc_urls.clone(),
+        RpcSource::Configured => config::with_config(|cfg| cfg.chains.rpc(chain).urls.clone()),
+    };
     logger::info(
         LogTag::Webserver,
         &format!(
-            "Validating credentials: {} RPC endpoint(s)",
-            request.rpc_urls.len()
+            "Validating credentials: {} RPC endpoint(s), source {rpc_source:?}",
+            rpc_urls.len()
         ),
     );
 
     clear_setup_validation();
 
-    let mut errors = validate_rpc_url_list(&request.rpc_urls);
+    let mut errors = match rpc_source {
+        RpcSource::Request => validate_rpc_url_list(&rpc_urls),
+        RpcSource::Configured if rpc_urls.is_empty() => {
+            vec!["No RPC endpoints are configured".to_owned()]
+        }
+        RpcSource::Configured => Vec::new(),
+    };
     let mut warnings = Vec::new();
     let mut wallet_address: Option<String> = None;
 
@@ -253,9 +274,9 @@ pub(super) async fn validate_credentials(
     }
 
     // Test RPC endpoints concurrently only after the request itself is valid.
-    let rpc_test_results = if !request.rpc_urls.is_empty() && errors.is_empty() {
+    let rpc_test_results = if !rpc_urls.is_empty() && errors.is_empty() {
         logger::info(LogTag::Webserver, "Testing RPC endpoints...");
-        rpc::test_rpc_endpoints(&request.rpc_urls, wallet_address.as_deref()).await
+        rpc::test_rpc_endpoints(&rpc_urls, wallet_address.as_deref()).await
     } else {
         vec![]
     };
@@ -314,7 +335,9 @@ pub(super) async fn validate_credentials(
         Some(store_setup_validation(
             &request.wallet_private_key,
             &request.rpc_urls,
+            chain,
             wallet_address.clone().unwrap_or_default(),
+            rpc_source,
             working_rpc_indices,
         ))
     } else {
@@ -347,77 +370,53 @@ pub(super) async fn complete_initialization(
 
     // Validation already performed the expensive network checks. Consume the
     // one-time receipt only when it belongs to this exact immutable snapshot.
-    let validated = match consume_setup_validation(&request) {
-        Ok(validated) => validated,
-        Err(message) => {
-            return ApiError::new(
-                ApiErrorCode::SetupValidationRequired,
-                ids::ERRORS_INITIALIZATION_VALIDATION_REQUIRED,
-            )
-            .details(message.to_string())
-            .into_response();
-        }
+    let key = match consume_validated_key(&request) {
+        Ok(key) => key,
+        Err(error) => return error.into_response(),
     };
-
-    let wallet_address = validated.wallet_address;
-    let working_rpc_urls: Vec<String> = validated
-        .working_rpc_indices
-        .into_iter()
-        .filter_map(|index| request.rpc_urls.get(index).cloned())
-        .collect();
-
-    logger::info(
-        LogTag::Webserver,
-        &format!(
-            "Using validated setup snapshot: {} of {} endpoints working",
-            working_rpc_urls.len(),
-            request.rpc_urls.len()
-        ),
-    );
-
-    // Encrypt the private key and create config.
-    logger::info(LogTag::Webserver, "Encrypting wallet private key...");
-
-    let encrypted = match crate::secure_storage::encrypt_private_key(&request.wallet_private_key) {
-        Ok(enc) => enc,
-        Err(e) => {
-            return ApiError::new(
-                ApiErrorCode::Internal,
-                ids::ERRORS_INITIALIZATION_ENCRYPT_FAILED,
-            )
-            .details(e.to_string())
-            .into_response();
-        }
-    };
+    // Setup saves the endpoints it validated; only a fully set-up app keeps its own.
+    if key.rpc_urls.is_empty() {
+        return ApiError::new(
+            ApiErrorCode::SetupValidationRequired,
+            ids::ERRORS_INITIALIZATION_VALIDATION_REQUIRED,
+        )
+        .details("No validated RPC endpoints are available to save")
+        .into_response();
+    }
+    let chain = key.chain;
+    let wallet_address = key.address.clone();
 
     // Setup is reachable only before a full setup (`setup_only_gate`). A vault that
     // already holds another trading wallet (setup completed from Explore Mode, or a
     // config that lost its key) keeps it until a staged replacement moves that wallet's
     // stores at the next start; the same wallet, or an empty vault, needs nothing.
-    match crate::wallets::replacement::trading_wallet_address().await {
-        Ok(Some(current)) if current != wallet_address => {
-            let staged = crate::wallets::replacement::stage(StagedKey {
-                address: wallet_address.clone(),
-                ciphertext: encrypted.ciphertext.clone(),
-                nonce: encrypted.nonce.clone(),
-                rpc_urls: working_rpc_urls.clone(),
-            })
-            .await;
-            if let Err(e) = staged {
+    let current = tokio::task::spawn_blocking(move || {
+        crate::wallets::replacement::trading_wallet_address(chain)
+    })
+    .await;
+    let replacement_staged = match current {
+        Ok(Ok(Some(current))) if current != wallet_address => {
+            if let Err(e) = crate::wallets::replacement::stage(key.clone()).await {
                 logger::warning(
                     LogTag::Webserver,
                     &format!("Setup refused to replace the trading wallet: {e}"),
                 );
-                return replacement_error(&e).into_response();
+                return setup_replacement_error(&e).into_response();
             }
+            true
         }
-        Ok(_) => {}
+        Ok(Ok(_)) => false,
+        Ok(Err(e)) => {
+            return ApiError::new(ApiErrorCode::Internal, ids::ERRORS_WALLETS_REPLACE_FAILED)
+                .details(e.to_string())
+                .into_response();
+        }
         Err(e) => {
             return ApiError::new(ApiErrorCode::Internal, ids::ERRORS_WALLETS_REPLACE_FAILED)
                 .details(e.to_string())
                 .into_response();
         }
-    }
+    };
 
     logger::info(
         LogTag::Webserver,
@@ -433,9 +432,9 @@ pub(super) async fn complete_initialization(
         Config::default()
     };
 
-    config.wallet_encrypted = encrypted.ciphertext;
-    config.wallet_nonce = encrypted.nonce;
-    config.chains.solana.rpc.urls = working_rpc_urls;
+    config.wallet_encrypted = key.ciphertext;
+    config.wallet_nonce = key.nonce;
+    config.chains.rpc_mut(chain).urls = key.rpc_urls;
 
     // Setup is now complete: clear the Explore Mode marker and mark onboarding done.
     config.gui.dashboard.startup.explore_mode_enabled = false;
@@ -445,6 +444,25 @@ pub(super) async fn complete_initialization(
     if let Err(e) =
         config::utils::save_config_to_file(&config, &config_path.to_string_lossy(), true)
     {
+        // A staged replacement holds every trade and tool until the restart applies it,
+        // so the restart is scheduled even though these settings were not saved.
+        if replacement_staged {
+            logger::error(
+                LogTag::Webserver,
+                &format!(
+                    "Setup settings were not saved ({e}); the staged wallet replacement applies at the restart"
+                ),
+            );
+            crate::webserver::routes::system::schedule_graceful_restart(
+                "wallet replacement staged",
+            );
+            return ApiError::new(
+                ApiErrorCode::ConfigError,
+                ids::ERRORS_INITIALIZATION_SAVE_FAILED_REPLACEMENT_STAGED,
+            )
+            .details(e.to_string())
+            .into_response();
+        }
         return ApiError::new(ApiErrorCode::ConfigError, ids::ERRORS_CONFIG_SAVE_FAILED)
             .details(e.to_string())
             .into_response();
@@ -468,6 +486,23 @@ pub(super) async fn complete_initialization(
     };
 
     success_response(response)
+}
+
+/// The API error of a replacement setup refused. Open positions cannot be closed from
+/// setup, so that refusal says to finish setup with the current trading wallet's key and
+/// replace the wallet from the Wallets page afterwards.
+fn setup_replacement_error(error: &crate::wallets::Error) -> ApiError {
+    match error {
+        crate::wallets::Error::ReplacementBlocked {
+            reason: RestartBlocker::OpenPositions { count },
+        } => ApiError::new(
+            ApiErrorCode::OpenPositions,
+            ids::ERRORS_INITIALIZATION_REPLACE_OPEN_POSITIONS,
+        )
+        .count_arg("count", i64::try_from(*count).unwrap_or(i64::MAX))
+        .details(error.to_string()),
+        other => replacement_error(other),
+    }
 }
 
 /// GET /api/initialization/progress

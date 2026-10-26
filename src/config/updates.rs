@@ -4,7 +4,10 @@
 //! Config update helpers — in-memory updates, diffing, and reset-to-defaults.
 
 use super::schemas::Config;
-use super::utils::{save_config, validate_config, with_config, CONFIG};
+use super::utils::{
+    pending_migration_path, save_config, set_dotted_key, validate_config, with_config,
+    write_config_keys_to_file, CONFIG,
+};
 use super::{Error, Result};
 use crate::errors::ConfigurationError;
 use crate::logger::{self, LogTag};
@@ -62,6 +65,52 @@ where
     }
 
     Ok(())
+}
+
+/// Set each dotted key of `keys` (`"trader.enabled"`) to its value, in memory and on
+/// disk. The candidate config must still validate. While a load-time migration is
+/// pending, only these keys change in the file, which keeps the layout it was loaded
+/// from until startup completes and the migration is written, so a core rolled back
+/// before then still reads it; otherwise the whole config is saved.
+pub fn set_config_keys(keys: &[(&str, toml::Value)]) -> Result<()> {
+    let config_lock = CONFIG.get().ok_or(Error::NotLoaded)?;
+    {
+        let mut config = config_lock
+            .write()
+            .map_err(|e| ConfigurationError::Generic {
+                message: format!("Failed to acquire config write lock: {e}"),
+            })?;
+        let mut document = match toml::Value::try_from(&*config) {
+            Ok(toml::Value::Table(table)) => table,
+            Ok(_) => {
+                return Err(ConfigurationError::Generic {
+                    message: "the config does not serialize to a table".to_owned(),
+                }
+                .into())
+            }
+            Err(e) => {
+                return Err(Error::WriteFailed {
+                    detail: format!("Failed to serialize config: {e}"),
+                })
+            }
+        };
+        for (key, value) in keys {
+            set_dotted_key(&mut document, key, value.clone())?;
+        }
+        let candidate: Config =
+            toml::Value::Table(document)
+                .try_into()
+                .map_err(|e: toml::de::Error| Error::ParseFailed {
+                    detail: e.to_string(),
+                })?;
+        validate_config(&candidate)?;
+        *config = candidate;
+    }
+
+    match pending_migration_path() {
+        Some(path) => write_config_keys_to_file(&path, keys),
+        None => save_config(None),
+    }
 }
 
 /// Get a snapshot of config state before and after an update

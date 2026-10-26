@@ -417,7 +417,7 @@ pub(crate) fn announce_gui_ready() {
 }
 
 /// Build the Axum application with all routes and middleware
-fn build_app(state: Arc<AppState>) -> Router {
+pub(in crate::webserver) fn build_app(state: Arc<AppState>) -> Router {
     // Create main router
     let app = routes::create_router(state);
 

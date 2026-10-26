@@ -134,6 +134,10 @@ wallets-list-col-type = Tipo
 wallets-list-col-created = Creada
 wallets-list-col-replaced = Reemplazada
 wallets-list-replaced-on = El { $date }
+wallets-replace-abandoned-title = Reemplazo de billetera cancelado
+wallets-replace-abandoned-open-positions = La billetera de trading tenía posiciones abiertas ({ $count }) al reiniciar, así que se canceló el reemplazo. La billetera de trading no cambió; la nueva clave se conserva en Otras billeteras.
+wallets-replace-abandoned-positions-unreadable = No se pudo leer el almacén de posiciones al reiniciar, así que se canceló el reemplazo. La billetera de trading no cambió; la nueva clave se conserva en Otras billeteras.
+wallets-replace-abandoned-vault-changed = La bóveda de billeteras ya no coincidía con el reemplazo preparado al reiniciar, así que se canceló el reemplazo. La billetera de trading no cambió; la nueva clave se conserva en Otras billeteras.
 wallets-list-col-actions = Acciones
 wallets-list-action-export = Exportar clave privada
 wallets-list-count = Billeteras
@@ -141,7 +145,8 @@ wallets-list-search =
     .placeholder = Buscar por nombre o dirección...
 wallets-list-loading-title = Cargando billeteras…
 wallets-list-loading-description = Preparando la vista de billeteras seleccionada.
-wallets-list-kept-empty-message = Las billeteras de versiones anteriores aparecen aquí para que aún puedas exportar sus claves.
+wallets-list-kept-empty-message = Las billeteras de trading reemplazadas y las billeteras de versiones anteriores aparecen aquí para que aún puedas exportar sus claves.
+wallets-list-previous-trading-wallet = Billetera de trading anterior
 wallets-other-empty-title = No hay otras billeteras
 
 # watched.js: watched wallets table and actions.

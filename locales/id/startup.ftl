@@ -64,18 +64,23 @@ startup-storage-upgrade-remedy = Salin detailnya dan kirimkan bersama file log k
 
 startup-wallet-replacement-incomplete-title = Penggantian dompet tidak dapat diselesaikan
 startup-wallet-replacement-incomplete-detail =
-    { -brand } berhenti saat beralih ke dompet trading baru. Tidak ada yang dihapus: key dompet sebelumnya tetap ada di brankas dompet dan riwayat lokalnya tetap ada di folder cadangan.
+    { -brand } berhenti saat beralih ke dompet trading baru. Tidak ada yang dihapus: key dompet sebelumnya tetap ada di brankas dompet, dan riwayat lokalnya masih di tempatnya atau ada di folder cadangan yang disebutkan dalam file log.
 
     Penyebab:
     { $error }
 startup-wallet-replacement-incomplete-remedy = Mulai { -brand } lagi untuk melanjutkan penggantian. Jika pesan ini muncul lagi, salin detailnya dan kirimkan bersama file log ke dukungan di t.me/screenerbotio_support. Jangan mengedit, memindahkan, atau menghapus wallet_replacement.json maupun folder cadangan.
 startup-wallet-reset-refused-title = Data dompet tidak diatur ulang
-startup-wallet-reset-refused-open-positions = Dompet sebelumnya masih memiliki posisi terbuka ({ $count }), sehingga riwayat lokalnya tetap disimpan.
-startup-wallet-reset-refused-trade-in-flight = Sebuah trade masih berjalan, sehingga riwayat lokal dompet tetap disimpan.
-startup-wallet-reset-refused-tool-in-flight = Sebuah alat dompet masih berjalan, sehingga riwayat lokal dompet tetap disimpan.
-startup-wallet-reset-refused-positions-loading = Posisi terbuka masih dimuat, sehingga riwayat lokal dompet tetap disimpan.
+startup-wallet-reset-refused-open-positions = Dompet trading memiliki posisi terbuka ({ $count }), sehingga data dompet tidak diatur ulang.
 startup-wallet-reset-refused-positions-unreadable = Penyimpanan posisi tidak dapat dibaca, sehingga posisi terbuka tidak dapat dipastikan tidak ada dan riwayat lokal dompet tetap disimpan.
-startup-wallet-reset-refused-remedy = Tidak ada yang dipindahkan. Mulai { -brand } dengan dompet sebelumnya, tutup posisi terbukanya, lalu atur ulang data dompet lagi.
+startup-wallet-reset-refused-remedy = Tidak ada yang dipindahkan. Mulai { -brand } tanpa pengaturan ulang, tutup atau arsipkan posisi terbuka dompet trading, lalu atur ulang data dompet lagi.
+startup-wallet-reset-refused-unreadable-remedy = Tidak ada yang dipindahkan. Mulai { -brand } tanpa pengaturan ulang agar penyimpanan posisi dapat diperiksa, lalu atur ulang data dompet lagi. Jika pesan ini muncul lagi, kirim file log ke dukungan di t.me/screenerbotio_support.
+startup-wallet-reset-incomplete-title = Pengaturan ulang data dompet tidak dapat diselesaikan
+startup-wallet-reset-incomplete-detail =
+    { -brand } berhenti saat memindahkan data dompet ke { $directory } dan tidak dapat mengembalikan semua file. Sebagian riwayat lokal dompet ada di folder itu dan sebagian masih di tempatnya.
+
+    Penyebab:
+    { $error }
+startup-wallet-reset-incomplete-remedy = Jangan memulai { -brand } lagi dan jangan memindahkan, mengedit, atau menghapus file apa pun di { $directory }. Salin detailnya dan kirimkan bersama file log ke dukungan di t.me/screenerbotio_support.
 
 ## Generic failures.
 
@@ -89,3 +94,4 @@ startup-failure-analysis-init = Gagal menginisialisasi mesin analisis: { $error 
 startup-failure-assistant-init = Gagal menginisialisasi mesin chat Asisten: { $error }
 startup-failure-wallets-init = Gagal menginisialisasi dompet: { $error }
 startup-failure-wallet-validation = Gagal memvalidasi konsistensi dompet: { $error }
+startup-failure-storage-phase = Tahap penyimpanan berhenti secara tak terduga: { $error }

@@ -3,12 +3,13 @@
 
 //! Position database queries — read-only methods for fetching positions.
 
+use std::collections::BTreeMap;
 use std::path::Path;
 
 use chrono::{DateTime, Utc};
 use rusqlite::{params, params_from_iter, Connection, OpenFlags, OptionalExtension};
 
-use crate::chains::{ChainId, RawAmount};
+use crate::chains::RawAmount;
 use crate::database::schema::ddl;
 use crate::errors::DatabaseError;
 use crate::positions::types::{EntryRecord, ExitRecord, Position};
@@ -40,27 +41,58 @@ const COUNTED_CLOSED_POSITIONS: &str = r#"
 const OPEN_POSITION_FILTER: &str =
     "archived = 0 AND exit_time IS NULL AND transaction_exit_verified = 0";
 
-/// Count the open positions of every wallet on `chain` in the positions store at `path`,
+/// Count the open positions of `wallet` on every chain in the positions store at `path`,
 /// opened read-only so the count never creates, migrates or pools the file. A missing file
 /// or a store without the `positions` table holds no position and counts 0.
 pub(crate) fn count_open_positions_in_file(
     path: &Path,
-    chain: ChainId,
+    wallet: &str,
 ) -> std::result::Result<usize, DatabaseError> {
-    if !path.exists() {
+    let Some(conn) = open_positions_file_read_only(path)? else {
         return Ok(0);
+    };
+    let query = format!(
+        "SELECT COUNT(*) FROM positions WHERE wallet_address = ?1 AND {OPEN_POSITION_FILTER}"
+    );
+    conn.query_row(&query, params![wallet], |row| row.get::<_, usize>(0))
+        .map_err(DatabaseError::from)
+}
+
+/// The open positions of every wallet holding one, on every chain, in the positions store
+/// at `path`, opened read-only as [`count_open_positions_in_file`] opens it.
+pub(crate) fn open_positions_by_wallet_in_file(
+    path: &Path,
+) -> std::result::Result<BTreeMap<String, usize>, DatabaseError> {
+    let Some(conn) = open_positions_file_read_only(path)? else {
+        return Ok(BTreeMap::new());
+    };
+    let query = format!(
+        "SELECT wallet_address, COUNT(*) FROM positions WHERE {OPEN_POSITION_FILTER} GROUP BY wallet_address"
+    );
+    let mut statement = conn.prepare(&query).map_err(DatabaseError::from)?;
+    let rows = statement
+        .query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, usize>(1)?))
+        })
+        .map_err(DatabaseError::from)?;
+    rows.collect::<rusqlite::Result<BTreeMap<_, _>>>()
+        .map_err(DatabaseError::from)
+}
+
+/// The positions store at `path` opened read-only, `None` when the file or its
+/// `positions` table does not exist.
+fn open_positions_file_read_only(
+    path: &Path,
+) -> std::result::Result<Option<Connection>, DatabaseError> {
+    if !path.exists() {
+        return Ok(None);
     }
     let conn = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
         .map_err(DatabaseError::from)?;
     if !ddl::has_table(&conn, "positions")? {
-        return Ok(0);
+        return Ok(None);
     }
-    let query =
-        format!("SELECT COUNT(*) FROM positions WHERE chain_id = ?1 AND {OPEN_POSITION_FILTER}");
-    conn.query_row(&query, params![chain.as_str()], |row| {
-        row.get::<_, usize>(0)
-    })
-    .map_err(DatabaseError::from)
+    Ok(Some(conn))
 }
 
 impl PositionsDatabase {
@@ -940,27 +972,22 @@ pub(super) fn query_records_by_signatures(
 mod tests {
     use rusqlite::Connection;
 
-    use super::count_open_positions_in_file;
-    use crate::chains::ChainId;
+    use super::{count_open_positions_in_file, open_positions_by_wallet_in_file};
 
     #[test]
     fn a_missing_store_or_table_counts_no_open_position() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("positions.db");
-        assert_eq!(
-            count_open_positions_in_file(&path, ChainId::Solana).unwrap(),
-            0
-        );
+        assert_eq!(count_open_positions_in_file(&path, "wallet-a").unwrap(), 0);
+        assert!(open_positions_by_wallet_in_file(&path).unwrap().is_empty());
 
         Connection::open(&path).unwrap();
-        assert_eq!(
-            count_open_positions_in_file(&path, ChainId::Solana).unwrap(),
-            0
-        );
+        assert_eq!(count_open_positions_in_file(&path, "wallet-a").unwrap(), 0);
+        assert!(open_positions_by_wallet_in_file(&path).unwrap().is_empty());
     }
 
     #[test]
-    fn open_positions_of_every_wallet_on_the_chain_are_counted() {
+    fn open_positions_are_counted_for_the_wallet_on_every_chain() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("positions.db");
         let connection = Connection::open(&path).unwrap();
@@ -978,14 +1005,20 @@ mod tests {
                  INSERT INTO positions VALUES ('wallet-a', 'solana', 1, NULL, 0);
                  INSERT INTO positions VALUES ('wallet-a', 'solana', 0, '2026-01-01T00:00:00Z', 0);
                  INSERT INTO positions VALUES ('wallet-a', 'solana', 0, NULL, 1);
-                 INSERT INTO positions VALUES ('wallet-a', 'other-chain', 0, NULL, 0);",
+                 INSERT INTO positions VALUES ('wallet-a', 'other-chain', 0, NULL, 0);
+                 INSERT INTO positions VALUES ('wallet-c', 'solana', 1, NULL, 0);",
             )
             .unwrap();
         drop(connection);
 
+        assert_eq!(count_open_positions_in_file(&path, "wallet-a").unwrap(), 2);
+        assert_eq!(count_open_positions_in_file(&path, "wallet-b").unwrap(), 1);
+        assert_eq!(count_open_positions_in_file(&path, "wallet-c").unwrap(), 0);
         assert_eq!(
-            count_open_positions_in_file(&path, ChainId::Solana).unwrap(),
-            2
+            open_positions_by_wallet_in_file(&path).unwrap(),
+            [("wallet-a".to_owned(), 2), ("wallet-b".to_owned(), 1)]
+                .into_iter()
+                .collect()
         );
     }
 }

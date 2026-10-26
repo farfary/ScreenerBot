@@ -26,12 +26,12 @@ use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use serde::Serialize;
 use serde_json::json;
 
+use crate::database::open::WalletResetRefusal;
 use crate::i18n::{app_locale_nonblocking, resolve_known_setting};
 use crate::i18n::{
     ids, locale_info, resolve_locale, text_direction, LanguageIdentifier, MessageId, UiArg, UiText,
 };
 use crate::logger::{self, LogTag};
-use crate::version::RestartBlocker;
 
 /// Environment variable through which the launching shell passes its interface
 /// language, so the error screen matches the language the user already sees.
@@ -72,9 +72,11 @@ pub enum StartupErrorCode {
     StorageUpgrade,
     /// A staged trading-wallet replacement could not finish applying.
     WalletReplacementIncomplete,
-    /// The wallet data reset was refused because it would hide open positions or cut
-    /// work short.
+    /// The wallet data reset was refused because the trading wallet has open positions
+    /// or they cannot be ruled out.
     WalletResetRefused,
+    /// The wallet data reset failed part-way and could not move its files back.
+    WalletResetIncomplete,
     /// Any other fatal startup failure without a dedicated remedy.
     Generic,
 }
@@ -90,6 +92,7 @@ impl StartupErrorCode {
             StartupErrorCode::StorageUpgrade => "storage_upgrade",
             StartupErrorCode::WalletReplacementIncomplete => "wallet_replacement_incomplete",
             StartupErrorCode::WalletResetRefused => "wallet_reset_refused",
+            StartupErrorCode::WalletResetIncomplete => "wallet_reset_incomplete",
             StartupErrorCode::Generic => "generic",
         }
     }
@@ -243,33 +246,41 @@ impl StartupError {
         )
     }
 
-    /// The wallet data reset was refused for `blocker`.
-    pub fn wallet_reset_refused(blocker: RestartBlocker) -> Self {
-        let detail = match blocker {
-            RestartBlocker::OpenPositions { count } => {
+    /// The wallet data reset was refused for `refusal`; nothing was moved.
+    pub fn wallet_reset_refused(refusal: WalletResetRefusal) -> Self {
+        let (detail, remedy) = match refusal {
+            WalletResetRefusal::OpenPositions { count } => (
                 UiText::new(ids::STARTUP_WALLET_RESET_REFUSED_OPEN_POSITIONS).arg(
                     "count",
                     UiArg::Count(i64::try_from(count).unwrap_or(i64::MAX)),
-                )
-            }
-            RestartBlocker::TradeInFlight => {
-                UiText::new(ids::STARTUP_WALLET_RESET_REFUSED_TRADE_IN_FLIGHT)
-            }
-            RestartBlocker::ToolInFlight => {
-                UiText::new(ids::STARTUP_WALLET_RESET_REFUSED_TOOL_IN_FLIGHT)
-            }
-            RestartBlocker::PositionsLoading => {
-                UiText::new(ids::STARTUP_WALLET_RESET_REFUSED_POSITIONS_LOADING)
-            }
-            RestartBlocker::PositionsUnreadable => {
-                UiText::new(ids::STARTUP_WALLET_RESET_REFUSED_POSITIONS_UNREADABLE)
-            }
+                ),
+                ids::STARTUP_WALLET_RESET_REFUSED_REMEDY,
+            ),
+            WalletResetRefusal::PositionsUnreadable => (
+                UiText::new(ids::STARTUP_WALLET_RESET_REFUSED_POSITIONS_UNREADABLE),
+                ids::STARTUP_WALLET_RESET_REFUSED_UNREADABLE_REMEDY,
+            ),
         };
         Self::new(
             StartupErrorCode::WalletResetRefused,
             UiText::new(ids::STARTUP_WALLET_RESET_REFUSED_TITLE),
             detail,
-            UiText::new(ids::STARTUP_WALLET_RESET_REFUSED_REMEDY),
+            UiText::new(remedy),
+        )
+    }
+
+    /// The wallet data reset failed part-way and could not move every file back from
+    /// `directory`; `error` is the technical detail. Starting again would open split
+    /// stores, so the remedy says not to.
+    pub fn wallet_reset_incomplete(directory: &str, error: impl std::fmt::Display) -> Self {
+        Self::new(
+            StartupErrorCode::WalletResetIncomplete,
+            UiText::new(ids::STARTUP_WALLET_RESET_INCOMPLETE_TITLE),
+            UiText::new(ids::STARTUP_WALLET_RESET_INCOMPLETE_DETAIL)
+                .arg("directory", UiArg::Text(directory.to_owned()))
+                .arg("error", UiArg::Text(error.to_string())),
+            UiText::new(ids::STARTUP_WALLET_RESET_INCOMPLETE_REMEDY)
+                .arg("directory", UiArg::Text(directory.to_owned())),
         )
     }
 
@@ -469,11 +480,9 @@ mod tests {
             ),
             StartupError::invalid_option("bad port"),
             StartupError::wallet_replacement_incomplete("disk is full"),
-            StartupError::wallet_reset_refused(RestartBlocker::OpenPositions { count: 2 }),
-            StartupError::wallet_reset_refused(RestartBlocker::TradeInFlight),
-            StartupError::wallet_reset_refused(RestartBlocker::ToolInFlight),
-            StartupError::wallet_reset_refused(RestartBlocker::PositionsLoading),
-            StartupError::wallet_reset_refused(RestartBlocker::PositionsUnreadable),
+            StartupError::wallet_reset_refused(WalletResetRefusal::OpenPositions { count: 2 }),
+            StartupError::wallet_reset_refused(WalletResetRefusal::PositionsUnreadable),
+            StartupError::wallet_reset_incomplete("/backups/wallet-reset-x-reset", "denied"),
             StartupError::storage_upgrade(
                 "positions.db",
                 &["service lifecycle failed".to_owned(), "refused".to_owned()],
@@ -486,6 +495,7 @@ mod tests {
             StartupError::failed(ids::STARTUP_FAILURE_ASSISTANT_INIT, "denied"),
             StartupError::failed(ids::STARTUP_FAILURE_WALLETS_INIT, "denied"),
             StartupError::failed(ids::STARTUP_FAILURE_WALLET_VALIDATION, "denied"),
+            StartupError::failed(ids::STARTUP_FAILURE_STORAGE_PHASE, "panicked"),
         ]
     }
 

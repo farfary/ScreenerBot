@@ -29,6 +29,13 @@ impl ChainsConfig {
         }
     }
 
+    /// RPC endpoint settings of `chain`.
+    pub fn rpc(&self, chain: ChainId) -> &RpcConfig {
+        match chain {
+            ChainId::Solana => &self.solana.rpc,
+        }
+    }
+
     /// RPC endpoint settings of `chain`, for writing the endpoints setup validated.
     pub fn rpc_mut(&mut self, chain: ChainId) -> &mut RpcConfig {
         match chain {

@@ -45,18 +45,23 @@ startup-storage-upgrade-remedy = Copia los detalles y envíalos junto con el arc
 
 startup-wallet-replacement-incomplete-title = No se pudo completar el reemplazo de la billetera
 startup-wallet-replacement-incomplete-detail =
-    { -brand } se detuvo mientras cambiaba a la nueva billetera de trading. No se eliminó nada: la clave de la billetera anterior sigue en la bóveda de billeteras y su historial local sigue en la carpeta de copias de seguridad.
+    { -brand } se detuvo mientras cambiaba a la nueva billetera de trading. No se eliminó nada: la clave de la billetera anterior sigue en la bóveda de billeteras y su historial local sigue en su lugar o está en la carpeta de copia de seguridad que indica el archivo de registro.
 
     Causa:
     { $error }
 startup-wallet-replacement-incomplete-remedy = Inicia { -brand } de nuevo para reanudar el reemplazo. Si este mensaje vuelve a aparecer, copia los detalles y envíalos junto con el archivo de registro al soporte en t.me/screenerbotio_support. No edites, muevas ni elimines wallet_replacement.json ni la carpeta de copias de seguridad.
 startup-wallet-reset-refused-title = Los datos de la billetera no se restablecieron
-startup-wallet-reset-refused-open-positions = La billetera anterior aún tiene posiciones abiertas ({ $count }), así que se conservó su historial local.
-startup-wallet-reset-refused-trade-in-flight = Había una operación en curso, así que se conservó el historial local de la billetera.
-startup-wallet-reset-refused-tool-in-flight = Había una herramienta de billetera en ejecución, así que se conservó el historial local de la billetera.
-startup-wallet-reset-refused-positions-loading = Las posiciones abiertas aún se estaban cargando, así que se conservó el historial local de la billetera.
+startup-wallet-reset-refused-open-positions = La billetera de trading tiene posiciones abiertas ({ $count }), así que no se restablecieron los datos de la billetera.
 startup-wallet-reset-refused-positions-unreadable = No se pudo leer el almacén de posiciones, así que no se pueden descartar posiciones abiertas y se conservó el historial local de la billetera.
-startup-wallet-reset-refused-remedy = No se movió nada. Inicia { -brand } con la billetera anterior, cierra sus posiciones abiertas y luego restablece de nuevo los datos de la billetera.
+startup-wallet-reset-refused-remedy = No se movió nada. Inicia { -brand } sin el restablecimiento, cierra o archiva las posiciones abiertas de la billetera de trading y luego restablece de nuevo los datos de la billetera.
+startup-wallet-reset-refused-unreadable-remedy = No se movió nada. Inicia { -brand } sin el restablecimiento para que revise el almacén de posiciones y luego restablece de nuevo los datos de la billetera. Si este mensaje vuelve a aparecer, envía el archivo de registro al soporte en t.me/screenerbotio_support.
+startup-wallet-reset-incomplete-title = No se pudo completar el restablecimiento de los datos de la billetera
+startup-wallet-reset-incomplete-detail =
+    { -brand } se detuvo mientras movía los datos de la billetera a { $directory } y no pudo devolver todos los archivos. Parte del historial local de la billetera está en esa carpeta y parte sigue en su lugar.
+
+    Causa:
+    { $error }
+startup-wallet-reset-incomplete-remedy = No vuelvas a iniciar { -brand } ni muevas, edites o elimines ningún archivo de { $directory }. Copia los detalles y envíalos junto con el archivo de registro al soporte en t.me/screenerbotio_support.
 
 startup-generic-title = No se pudo iniciar { -brand }
 startup-generic-remedy = Revisa el archivo de registro para ver los detalles y reinicia la app. Si el problema persiste, contacta con soporte en t.me/screenerbotio_support.
@@ -68,3 +73,4 @@ startup-failure-analysis-init = Error al inicializar el motor de análisis: { $e
 startup-failure-assistant-init = Error al inicializar el motor de chat del Asistente: { $error }
 startup-failure-wallets-init = Error al inicializar las billeteras: { $error }
 startup-failure-wallet-validation = Error al validar la coherencia de la billetera: { $error }
+startup-failure-storage-phase = La fase de almacenamiento se detuvo inesperadamente: { $error }

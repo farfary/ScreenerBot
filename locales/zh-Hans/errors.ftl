@@ -67,6 +67,8 @@ errors-initialization-onboarding-update-failed = 更新引导状态失败
 errors-initialization-validation-required = 保存设置前需要先验证凭据
 errors-initialization-encrypt-failed = 加密私钥失败
 errors-initialization-already-complete = 设置已完成。如需使用另一个钱包交易，请在钱包页面使用“更换钱包”。
+errors-initialization-replace-open-positions = 当前交易钱包有未平仓持仓（{ $count }），因此设置无法更换它。请先使用当前交易钱包的密钥完成设置，然后在钱包页面更换钱包。
+errors-initialization-save-failed-replacement-staged = 新交易钱包已准备好，将在 { -brand } 重启时生效，但设置未能保存。请在重启后检查。
 
 # Dashboard state
 errors-ui-state-save-failed = 保存状态失败
@@ -253,7 +255,8 @@ errors-wallets-replace-no-trading-wallet = 没有可更换的交易钱包。请�
 errors-wallets-replace-same-wallet = 此密钥属于当前交易钱包。
 errors-wallets-replace-watched = 此钱包在“监控中”列表里。请先将其移除，再用它交易。
 errors-wallets-replace-address-mismatch = 密钥与已验证的钱包地址不匹配。请重新验证密钥。
-errors-wallets-replace-interrupted = 钱包更换中途停止，当前钱包仍是交易钱包。请检查交易器和跟单交易设置，然后重试。
+errors-wallets-replace-interrupted = 钱包更换中途停止，当前钱包仍是交易钱包。交易器和跟单交易均已关闭；准备好后可重新开启，或再次尝试更换。
+errors-wallets-replace-interrupted-copy-trading-on = 钱包更换中途停止，当前钱包仍是交易钱包。交易器已关闭，但跟单交易未能关闭。请检查跟单交易设置，然后重试。
 errors-wallets-replace-failed = 更换交易钱包失败
 
 # Wallet watching

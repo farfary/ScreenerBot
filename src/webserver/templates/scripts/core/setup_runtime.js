@@ -92,7 +92,7 @@
 
     if (!urls.length) {
       return {
-        valid: false,
+        valid: !required,
         state: required ? "error" : "",
         message: required ? I18n.t("setup-rpc-required") : "",
         urls,
@@ -187,7 +187,7 @@
    * and controls. `prefix` keeps the element ids unique, since the onboarding screen
    * stays in every page's document while the dialog is open.
    */
-  function credentialFieldsHtml(prefix) {
+  function credentialFieldsHtml(prefix, rpcOptional) {
     return `
       <section class="setup-card setup-card-wallet">
         <label class="setup-card-header" for="${prefix}wallet-private-key">
@@ -228,10 +228,16 @@
           <div class="setup-input-wrapper" dir="ltr">
             <textarea dir="ltr" class="setup-input" id="${prefix}rpc-urls"
               data-l10n-id="setup-wizard-rpc-input" spellcheck="false" autocomplete="off"
-              autocapitalize="none" rows="4" aria-required="true"
+              autocapitalize="none" rows="4" aria-required="${!rpcOptional}"
               aria-describedby="${prefix}rpc-guidance ${prefix}rpc-validation"
-              required></textarea>
+              ${rpcOptional ? "" : "required"}></textarea>
           </div>
+          ${
+            rpcOptional
+              ? `<p class="setup-security-note" id="${prefix}rpc-optional-note"
+            data-l10n-id="setup-dialog-rpc-optional-note"></p>`
+              : ""
+          }
           <div class="setup-rpc-guidance" id="${prefix}rpc-guidance">
             <span data-l10n-id="setup-wizard-rpc-guidance"></span>
             <span class="setup-provider-links">
@@ -253,10 +259,12 @@
   /**
    * Renders the credential fields into `container` and binds them: the key mask and
    * its toggle, inline validation while typing, the derived address preview and its
-   * copy action. The returned controller is what a surface reads and validates.
+   * copy action. The returned controller is what a surface reads and validates. With
+   * `rpcOptional` an empty RPC field passes: the server then tests and keeps the
+   * configured endpoints.
    */
-  function mountCredentialFields(container, prefix = "") {
-    container.innerHTML = credentialFieldsHtml(prefix);
+  function mountCredentialFields(container, prefix = "", { rpcOptional = false } = {}) {
+    container.innerHTML = credentialFieldsHtml(prefix, rpcOptional);
     I18n.localizeTree(container);
 
     const walletInput = container.querySelector(`#${prefix}wallet-private-key`);
@@ -364,12 +372,12 @@
       validateWallet,
       validateRpc,
       rpcUrls: () => parseRpcUrls(rpcInput.value),
-      /** Both fields checked as required; focuses the first one that fails. */
+      /** Both fields checked, the RPC field as required unless it is optional; focuses the first one that fails. */
       validateAll() {
         window.clearTimeout(timers.wallet);
         window.clearTimeout(timers.rpc);
         const walletValid = validateWallet(true);
-        const rpcValid = validateRpc(true);
+        const rpcValid = validateRpc(!rpcOptional);
         if (!walletValid || !rpcValid) {
           (walletValid ? rpcInput : walletInput).focus({ preventScroll: true });
         }

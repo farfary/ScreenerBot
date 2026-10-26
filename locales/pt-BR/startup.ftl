@@ -64,18 +64,23 @@ startup-storage-upgrade-remedy = Copie os detalhes e envie-os com o arquivo de l
 
 startup-wallet-replacement-incomplete-title = Não foi possível concluir a substituição da carteira
 startup-wallet-replacement-incomplete-detail =
-    O { -brand } parou durante a troca para a nova carteira de trading. Nada foi excluído: a chave da carteira anterior continua no cofre de carteiras e o histórico local dela continua na pasta de backups.
+    O { -brand } parou durante a troca para a nova carteira de trading. Nada foi excluído: a chave da carteira anterior continua no cofre de carteiras, e o histórico local dela continua no lugar ou está na pasta de backup indicada no arquivo de log.
 
     Causa:
     { $error }
 startup-wallet-replacement-incomplete-remedy = Inicie o { -brand } novamente para retomar a substituição. Se esta mensagem voltar, copie os detalhes e envie-os com o arquivo de log ao suporte em t.me/screenerbotio_support. Não edite, mova nem exclua wallet_replacement.json nem a pasta de backups.
 startup-wallet-reset-refused-title = Os dados da carteira não foram redefinidos
-startup-wallet-reset-refused-open-positions = A carteira anterior ainda tem posições abertas ({ $count }), então o histórico local dela foi mantido.
-startup-wallet-reset-refused-trade-in-flight = Uma operação ainda estava em andamento, então o histórico local da carteira foi mantido.
-startup-wallet-reset-refused-tool-in-flight = Uma ferramenta de carteira ainda estava em execução, então o histórico local da carteira foi mantido.
-startup-wallet-reset-refused-positions-loading = As posições abertas ainda estavam carregando, então o histórico local da carteira foi mantido.
+startup-wallet-reset-refused-open-positions = A carteira de trading tem posições abertas ({ $count }), então os dados da carteira não foram redefinidos.
 startup-wallet-reset-refused-positions-unreadable = Não foi possível ler o armazenamento de posições, então posições abertas não podem ser descartadas e o histórico local da carteira foi mantido.
-startup-wallet-reset-refused-remedy = Nada foi movido. Inicie o { -brand } com a carteira anterior, feche as posições abertas dela e depois redefina os dados da carteira novamente.
+startup-wallet-reset-refused-remedy = Nada foi movido. Inicie o { -brand } sem a redefinição, feche ou arquive as posições abertas da carteira de trading e depois redefina os dados da carteira novamente.
+startup-wallet-reset-refused-unreadable-remedy = Nada foi movido. Inicie o { -brand } sem a redefinição para que ele verifique o armazenamento de posições e depois redefina os dados da carteira novamente. Se esta mensagem voltar, envie o arquivo de log ao suporte em t.me/screenerbotio_support.
+startup-wallet-reset-incomplete-title = Não foi possível concluir a redefinição dos dados da carteira
+startup-wallet-reset-incomplete-detail =
+    O { -brand } parou enquanto movia os dados da carteira para { $directory } e não conseguiu devolver todos os arquivos. Parte do histórico local da carteira está nessa pasta e parte continua no lugar.
+
+    Causa:
+    { $error }
+startup-wallet-reset-incomplete-remedy = Não inicie o { -brand } novamente e não mova, edite nem exclua nenhum arquivo em { $directory }. Copie os detalhes e envie-os com o arquivo de log ao suporte em t.me/screenerbotio_support.
 
 ## Generic failures.
 
@@ -89,3 +94,4 @@ startup-failure-analysis-init = Falha ao inicializar o motor de análise: { $err
 startup-failure-assistant-init = Falha ao inicializar o motor de chat do Assistente: { $error }
 startup-failure-wallets-init = Falha ao inicializar as carteiras: { $error }
 startup-failure-wallet-validation = Falha ao validar a consistência da carteira: { $error }
+startup-failure-storage-phase = A fase de armazenamento parou inesperadamente: { $error }

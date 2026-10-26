@@ -43,6 +43,15 @@ pub trait ChainAdapter: Send + Sync + 'static {
     /// Shape check for a transaction hash/signature of this chain.
     fn looks_like_transaction_hash(&self, candidate: &str) -> bool;
 
+    // --- keys ---
+    /// The address of the key encrypted as `ciphertext`/`nonce`. The key is
+    /// decrypted inside the chain's accounts module and only the address leaves it.
+    fn address_from_encrypted_key(
+        &self,
+        ciphertext: &str,
+        nonce: &str,
+    ) -> Result<String, ChainError>;
+
     // --- asset policy ---
     /// Returns the canonical address of this chain's native asset.
     fn native_asset_address(&self) -> &'static str;

@@ -7,9 +7,11 @@
  * credential form in replace mode. The "Replace wallet" action sits in the trading
  * wallet toolbar beside the key export and on no other tab. The dialog first states
  * what the replacement stops, moves and keeps, and shows the credential fields only
- * after that step is acknowledged. A refused replacement shows the server's own reason,
+ * after that step is acknowledged. The RPC field may stay empty: the request then carries
+ * no endpoints and the server keeps the configured ones. A refused replacement shows the server's own reason,
  * with its arguments, and a staged one waits for the restart. Other Wallets marks a
- * replaced wallet with the date and backup directory its stores were moved to.
+ * replaced wallet with the date and backup directory its stores were moved to. A
+ * replacement a restart abandoned is shown once with its reason and then dismissed.
  *
  * Run with `npm run test:js`.
  */
@@ -20,7 +22,9 @@ import assert from "node:assert/strict";
 import { chromium } from "playwright";
 
 import { serveDashboard, PAGE_READY } from "../lib/dashboard_host.mjs";
-import { createApiHandler, loadIndex } from "../lib/dashboard_fixtures.mjs";
+import { readFileSync } from "node:fs";
+
+import { createApiHandler, FIXTURES_ROOT, loadIndex } from "../lib/dashboard_fixtures.mjs";
 
 const REPLACE = '[data-btn-id="wt-replace"]';
 const tab = (id) => `#subTabsContainer [data-tab-id="${id}"]`;
@@ -32,13 +36,17 @@ const browser = await chromium.launch({ headless: true });
 after(() => browser.close());
 const [wallets, shell] = await Promise.all([loadIndex("wallets"), loadIndex("shell")]);
 
-/** Opens the Wallets page; `answers` maps "METHOD /path" to a `{ status, body }` reply. */
-async function openWallets(t, answers = {}) {
+/**
+ * Opens the Wallets page; `answers` maps "METHOD /path" to a `{ status, body }` reply, and
+ * every API request is appended to `seen` as "METHOD /path".
+ */
+async function openWallets(t, answers = {}, seen = []) {
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   const api = createApiHandler([wallets, shell], "populated");
   const host = await serveDashboard(context, {
     locale: "en",
     onApi: (request) => {
+      seen.push(`${request.method} ${request.url.pathname}`);
       const answer = answers[`${request.method} ${request.url.pathname}`];
       return answer
         ? { status: answer.status ?? 200, body: JSON.stringify(answer.body) }
@@ -97,7 +105,7 @@ test("replace mode states the consequences before it asks for the new key", asyn
       submit: window.I18n.t("common-action-continue"),
     },
   }));
-  assert.equal(before.items, 5);
+  assert.equal(before.items, 6);
   assert.equal(before.fields, 0, "the credential fields show before the confirmation");
   assert.equal(before.title, before.expected.title);
   assert.equal(before.submit, before.expected.submit);
@@ -109,8 +117,47 @@ test("replace mode states the consequences before it asks for the new key", asyn
     submit: document.querySelector('.setup-dialog [data-action="submit"]').textContent.trim(),
     expected: window.I18n.t("setup-dialog-replace-submit"),
   }));
-  assert.equal(after.confirm, 0, "the confirmation stays visible beside the credential fields");
+  assert.equal(after.confirm, 0, "the confirmation is hidden once the credential fields show");
   assert.equal(after.submit, after.expected);
+});
+
+test("replace mode submits without an RPC value so the configured endpoints are kept", async (t) => {
+  const page = await openWallets(t, {
+    "POST /api/initialization/validate": { body: VALIDATION },
+    "POST /api/wallets/replace": {
+      body: {
+        restart_required: true,
+        instance_id: "instance-1",
+        previous_wallet: "MainWa11etAAA1111111111111111111111111111111",
+        new_wallet: VALIDATION.wallet_address,
+        backup_directory: "/data/backups/wallet-reset-20261027T100000Z-MainWa11",
+      },
+    },
+  });
+  const sent = {};
+  page.on("request", (request) => {
+    const path = new URL(request.url()).pathname;
+    if (request.method() === "POST" && path.startsWith("/api/")) {
+      sent[path] = request.postDataJSON();
+    }
+  });
+  await page.evaluate(() => {
+    window.waitForScreenerBotRestart = () => new Promise(() => {});
+  });
+  await page.click(tab("main"));
+  await page.click(REPLACE);
+  await page.click('.setup-dialog [data-action="submit"]');
+  await page.fill("#setup-dialog-wallet-private-key", KEY);
+  await page.click('.setup-dialog [data-action="submit"]');
+  await page.waitForSelector("#setup-dialog-status.success", { state: "visible" });
+
+  assert.equal(
+    await page.getAttribute("#setup-dialog-rpc-urls", "aria-invalid"),
+    null,
+    "an empty RPC field is not an error in replace mode"
+  );
+  assert.deepEqual(sent["/api/initialization/validate"]?.rpc_urls, []);
+  assert.deepEqual(sent["/api/wallets/replace"]?.rpc_urls, []);
 });
 
 test("a refused replacement shows the server's reason with its arguments", async (t) => {
@@ -183,4 +230,44 @@ test("other wallets mark a replaced wallet with its backup", async (t) => {
     found.map((node) => node.textContent.trim())
   );
   assert.deepEqual(paths, ["/data/backups/wallet-reset-20261020T091500Z-SecondWa"]);
+});
+
+test("a replacement a restart abandoned is shown once with its reason, then dismissed", async (t) => {
+  const backups = JSON.parse(
+    readFileSync(`${FIXTURES_ROOT}/wallets/wallets_backups.json`, "utf8")
+  );
+  backups.abandoned = {
+    previous_wallet: "MainWa11etAAA1111111111111111111111111111111",
+    new_wallet: VALIDATION.wallet_address,
+    reason: "open_positions",
+    count: 2,
+    abandoned_at: "2026-10-27T10:00:00Z",
+  };
+  const seen = [];
+  const page = await openWallets(
+    t,
+    {
+      "GET /api/wallets/backups": { body: backups },
+      "POST /api/wallets/replacement/dismiss": { body: { dismissed: true } },
+    },
+    seen
+  );
+  const toast = page.locator(".toast", { hasText: "2" }).first();
+  await toast.waitFor({ state: "visible" });
+
+  const shown = await page.evaluate(() => ({
+    title: window.I18n.t("wallets-replace-abandoned-title"),
+    message: window.I18n.t("wallets-replace-abandoned-open-positions", { count: 2 }),
+  }));
+  assert.equal((await toast.locator(".toast__title").textContent()).trim(), shown.title);
+  assert.equal((await toast.locator(".toast__message").textContent()).trim(), shown.message);
+  const DISMISS = "POST /api/wallets/replacement/dismiss";
+  for (let attempt = 0; attempt < 50 && !seen.includes(DISMISS); attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  assert.deepEqual(
+    seen.filter((request) => request === DISMISS),
+    [DISMISS],
+    "the page asks the server once to forget the shown outcome"
+  );
 });

@@ -47,9 +47,7 @@ pub use download::{self_install_supported, start_download};
 pub use error::{Error, Result};
 pub use history::release_history;
 pub use installer::prepare_install;
-pub use policy::{
-    apply_readiness, is_restart_safe, restart_blocker, ApplyReadiness, RestartBlocker,
-};
+pub use policy::{apply_readiness, ApplyReadiness};
 pub use service::{apply_now, start_update_check_service};
 pub use types::*;
 

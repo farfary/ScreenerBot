@@ -57,18 +57,23 @@ startup-storage-upgrade-remedy = Kopieren Sie die Details und senden Sie sie zus
 
 startup-wallet-replacement-incomplete-title = Wallet-Ersetzung konnte nicht abgeschlossen werden
 startup-wallet-replacement-incomplete-detail =
-    { -brand } wurde beim Wechsel zur neuen Trading-Wallet angehalten. Es wurde nichts gelöscht: Der Schlüssel der bisherigen Wallet bleibt im Wallet-Tresor und ihr lokaler Verlauf im Sicherungsordner.
+    { -brand } wurde beim Wechsel zur neuen Trading-Wallet angehalten. Es wurde nichts gelöscht: Der Schlüssel der bisherigen Wallet bleibt im Wallet-Tresor, und ihr lokaler Verlauf liegt entweder noch an seinem Platz oder im Sicherungsordner, den die Logdatei nennt.
 
     Ursache:
     { $error }
 startup-wallet-replacement-incomplete-remedy = Starten Sie { -brand } erneut, um die Ersetzung fortzusetzen. Erscheint diese Meldung wieder, kopieren Sie die Details und senden Sie sie zusammen mit der Logdatei an den Support unter t.me/screenerbotio_support. Bearbeiten, verschieben oder löschen Sie weder wallet_replacement.json noch den Sicherungsordner.
 startup-wallet-reset-refused-title = Wallet-Daten wurden nicht zurückgesetzt
-startup-wallet-reset-refused-open-positions = Die bisherige Wallet hat noch offene Positionen ({ $count }), daher wurde ihr lokaler Verlauf behalten.
-startup-wallet-reset-refused-trade-in-flight = Ein Trade lief noch, daher wurde der lokale Verlauf der Wallet behalten.
-startup-wallet-reset-refused-tool-in-flight = Ein Wallet-Werkzeug lief noch, daher wurde der lokale Verlauf der Wallet behalten.
-startup-wallet-reset-refused-positions-loading = Offene Positionen wurden noch geladen, daher wurde der lokale Verlauf der Wallet behalten.
+startup-wallet-reset-refused-open-positions = Die Trading-Wallet hat offene Positionen ({ $count }), daher wurden die Wallet-Daten nicht zurückgesetzt.
 startup-wallet-reset-refused-positions-unreadable = Der Positionsspeicher konnte nicht gelesen werden, daher lassen sich offene Positionen nicht ausschließen und der lokale Verlauf der Wallet wurde behalten.
-startup-wallet-reset-refused-remedy = Es wurde nichts verschoben. Starten Sie { -brand } mit der bisherigen Wallet, schließen Sie deren offene Positionen und setzen Sie die Wallet-Daten dann erneut zurück.
+startup-wallet-reset-refused-remedy = Es wurde nichts verschoben. Starten Sie { -brand } ohne Zurücksetzen, schließen oder archivieren Sie die offenen Positionen der Trading-Wallet und setzen Sie die Wallet-Daten dann erneut zurück.
+startup-wallet-reset-refused-unreadable-remedy = Es wurde nichts verschoben. Starten Sie { -brand } ohne Zurücksetzen, damit der Positionsspeicher geprüft wird, und setzen Sie die Wallet-Daten dann erneut zurück. Erscheint diese Meldung wieder, senden Sie die Logdatei an den Support unter t.me/screenerbotio_support.
+startup-wallet-reset-incomplete-title = Zurücksetzen der Wallet-Daten konnte nicht abgeschlossen werden
+startup-wallet-reset-incomplete-detail =
+    { -brand } wurde beim Verschieben der Wallet-Daten nach { $directory } angehalten und konnte nicht alle Dateien zurückverschieben. Ein Teil des lokalen Verlaufs der Wallet liegt in diesem Ordner, ein Teil noch an seinem Platz.
+
+    Ursache:
+    { $error }
+startup-wallet-reset-incomplete-remedy = Starten Sie { -brand } nicht erneut und verschieben, bearbeiten oder löschen Sie keine Datei in { $directory }. Kopieren Sie die Details und senden Sie sie zusammen mit der Logdatei an den Support unter t.me/screenerbotio_support.
 
 ## Generic failures.
 
@@ -82,3 +87,4 @@ startup-failure-analysis-init = Analyse-Engine konnte nicht initialisiert werden
 startup-failure-assistant-init = Chat-Engine des Assistenten konnte nicht initialisiert werden: { $error }
 startup-failure-wallets-init = Wallets konnten nicht initialisiert werden: { $error }
 startup-failure-wallet-validation = Wallet-Konsistenz konnte nicht geprüft werden: { $error }
+startup-failure-storage-phase = Die Speicherphase wurde unerwartet beendet: { $error }

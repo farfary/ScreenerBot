@@ -5,6 +5,7 @@ setup-wallet-format-invalid = Используйте приватный ключ
 setup-wallet-base58-recognized = Формат ключа base58 распознан.
 
 setup-rpc-required = Введите хотя бы один RPC-эндпоинт.
+setup-dialog-rpc-optional-note = Необязательно: оставьте поле пустым, чтобы сохранить уже настроенные RPC-эндпоинты.
 setup-rpc-too-many = Используйте не более 10 RPC-эндпоинтов.
 setup-rpc-url-invalid = Каждый эндпоинт должен быть корректным HTTPS-адресом.
 setup-rpc-url-credentials = RPC-адреса не могут содержать имя пользователя или пароль.
@@ -115,6 +116,7 @@ setup-dialog-replace-confirm-stop = Останавливает трейдер и
 setup-dialog-replace-confirm-backup = Переносит позиции, транзакции и историю текущего кошелька в папку резервных копий.
 setup-dialog-replace-confirm-keep = Сохраняет ключ текущего кошелька в разделе «Другие кошельки», где его по-прежнему можно экспортировать.
 setup-dialog-replace-confirm-funds = Средства не переводятся: токены и { -sol } остаются в текущем кошельке.
+setup-dialog-replace-confirm-rpc = Заменяет настроенные RPC-эндпоинты введёнными; если поле пустое, текущие эндпоинты сохраняются.
 setup-dialog-replace-confirm-restart = Перезапускает { -brand } с новым кошельком.
 
 setup-wizard-progress =

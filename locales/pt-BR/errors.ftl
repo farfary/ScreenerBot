@@ -59,6 +59,8 @@ errors-initialization-onboarding-update-failed = Falha ao atualizar o estado da 
 errors-initialization-validation-required = É necessário verificar as credenciais antes de salvar a configuração
 errors-initialization-encrypt-failed = Falha ao criptografar a chave privada
 errors-initialization-already-complete = A configuração já foi concluída. Para operar com outra carteira, use Substituir carteira na página Carteiras.
+errors-initialization-replace-open-positions = A carteira de trading atual tem posições abertas ({ $count }), então a configuração não pode substituí-la. Conclua primeiro a configuração com a chave da carteira de trading atual e depois substitua a carteira na página Carteiras.
+errors-initialization-save-failed-replacement-staged = A nova carteira de trading está preparada e será aplicada quando o { -brand } reiniciar, mas as configurações da configuração inicial não puderam ser salvas. Verifique-as após a reinicialização.
 
 errors-ui-state-save-failed = Falha ao salvar o estado
 errors-ui-state-clear-failed = Falha ao limpar o estado
@@ -231,7 +233,8 @@ errors-wallets-replace-no-trading-wallet = Não há carteira de trading para sub
 errors-wallets-replace-same-wallet = Esta chave pertence à carteira de trading atual.
 errors-wallets-replace-watched = Esta carteira está na lista Monitoradas. Remova-a de lá antes de operar com ela.
 errors-wallets-replace-address-mismatch = A chave não corresponde ao endereço de carteira validado. Valide a chave novamente.
-errors-wallets-replace-interrupted = A substituição da carteira parou no meio e a carteira atual continua sendo a de trading. Verifique as configurações do trader e do copy trading e tente novamente.
+errors-wallets-replace-interrupted = A substituição da carteira parou no meio e a carteira atual continua sendo a de trading. O trader e o copy trading estão desligados; ative-os novamente quando quiser ou tente a substituição de novo.
+errors-wallets-replace-interrupted-copy-trading-on = A substituição da carteira parou no meio e a carteira atual continua sendo a de trading. O trader está desligado, mas não foi possível desligar o copy trading. Verifique as configurações do copy trading e tente novamente.
 errors-wallets-replace-failed = Falha ao substituir a carteira de trading
 
 errors-wallet-watch-list-failed = Falha ao listar os alvos de monitoramento

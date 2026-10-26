@@ -1,7 +1,7 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Tests of the replacement refusals, the apply classification and the create-only marker.
+//! Tests of the replacement refusals, the apply classification, the create-only marker, the interrupted-stage text and the abandoned-replacement record.
 
 use super::*;
 
@@ -161,4 +161,63 @@ fn the_marker_write_is_create_only() {
     ));
     let kept: Marker = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
     assert_eq!(kept, marker(), "an existing marker is never replaced");
+}
+
+#[test]
+fn an_interrupted_stage_names_the_switches_it_left_off() {
+    let both_off = Error::ReplacementInterrupted {
+        step: "write the replacement marker",
+        copy_trading_off: true,
+        detail: "disk is full".to_owned(),
+    }
+    .to_string();
+    assert!(
+        both_off.contains("the Auto Trader and Copy Trading are off"),
+        "{both_off}"
+    );
+
+    let copy_on = Error::ReplacementInterrupted {
+        step: "switch Copy Trading off",
+        copy_trading_off: false,
+        detail: "config is read-only".to_owned(),
+    }
+    .to_string();
+    assert!(
+        copy_on.contains("Copy Trading could not be switched off"),
+        "{copy_on}"
+    );
+    assert!(!copy_on.contains("Copy Trading are off"), "{copy_on}");
+}
+
+#[test]
+fn an_abandoned_replacement_records_its_reason_beside_both_wallets() {
+    let abandoned_at = Utc::now();
+    let open = AbandonedReplacement {
+        previous_wallet: OLD.to_owned(),
+        new_wallet: NEW.to_owned(),
+        reason: AbandonReason::OpenPositions { count: 2 },
+        abandoned_at,
+    };
+    let encoded = serde_json::to_value(&open).expect("encode the record");
+    assert_eq!(encoded["previous_wallet"], OLD);
+    assert_eq!(encoded["new_wallet"], NEW);
+    assert_eq!(encoded["reason"], "open_positions");
+    assert_eq!(encoded["count"], 2);
+    assert_eq!(
+        serde_json::from_value::<AbandonedReplacement>(encoded).expect("decode the record"),
+        open
+    );
+
+    for (reason, tag) in [
+        (AbandonReason::PositionsUnreadable, "positions_unreadable"),
+        (AbandonReason::VaultChanged, "vault_changed"),
+    ] {
+        let encoded = serde_json::to_value(AbandonedReplacement {
+            reason,
+            ..open.clone()
+        })
+        .expect("encode the record");
+        assert_eq!(encoded["reason"], tag);
+        assert!(encoded.get("count").is_none(), "{tag} carries no count");
+    }
 }

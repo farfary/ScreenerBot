@@ -64,18 +64,23 @@ startup-storage-upgrade-remedy = Copy the details and send them with the log fil
 
 startup-wallet-replacement-incomplete-title = Wallet replacement could not finish
 startup-wallet-replacement-incomplete-detail =
-    { -brand } stopped while switching to the new trading wallet. Nothing was deleted: the previous wallet's key stays in the wallet vault and its local history stays in the backups folder.
+    { -brand } stopped while switching to the new trading wallet. Nothing was deleted: the previous wallet's key stays in the wallet vault, and its local history is either still in place or in the backup folder named in the log file.
 
     Cause:
     { $error }
 startup-wallet-replacement-incomplete-remedy = Start { -brand } again to resume the replacement. If this message returns, copy the details and send them with the log file to support at t.me/screenerbotio_support. Do not edit, move or delete wallet_replacement.json or the backups folder.
 startup-wallet-reset-refused-title = Wallet data was not reset
-startup-wallet-reset-refused-open-positions = The previous wallet still has open positions ({ $count }), so its local history was kept.
-startup-wallet-reset-refused-trade-in-flight = A trade was still in progress, so the wallet's local history was kept.
-startup-wallet-reset-refused-tool-in-flight = A wallet tool was still running, so the wallet's local history was kept.
-startup-wallet-reset-refused-positions-loading = Open positions were still loading, so the wallet's local history was kept.
+startup-wallet-reset-refused-open-positions = The trading wallet has open positions ({ $count }), so the wallet data was not reset.
 startup-wallet-reset-refused-positions-unreadable = The positions store could not be read, so open positions cannot be ruled out and the wallet's local history was kept.
-startup-wallet-reset-refused-remedy = Nothing was moved. Start { -brand } with the previous wallet, close its open positions, then reset the wallet data again.
+startup-wallet-reset-refused-remedy = Nothing was moved. Start { -brand } without the reset, close or archive the trading wallet's open positions, then reset the wallet data again.
+startup-wallet-reset-refused-unreadable-remedy = Nothing was moved. Start { -brand } without the reset so it can check the positions store, then reset the wallet data again. If this message returns, send the log file to support at t.me/screenerbotio_support.
+startup-wallet-reset-incomplete-title = Wallet data reset could not finish
+startup-wallet-reset-incomplete-detail =
+    { -brand } stopped while moving the wallet data into { $directory } and could not move every file back. Part of the wallet's local history is in that folder and part is still in place.
+
+    Cause:
+    { $error }
+startup-wallet-reset-incomplete-remedy = Do not start { -brand } again and do not move, edit or delete any file in { $directory }. Copy the details and send them with the log file to support at t.me/screenerbotio_support.
 
 ## Generic failures.
 
@@ -89,3 +94,4 @@ startup-failure-analysis-init = Failed to initialize analysis engine: { $error }
 startup-failure-assistant-init = Failed to initialize Assistant chat engine: { $error }
 startup-failure-wallets-init = Failed to initialize wallets: { $error }
 startup-failure-wallet-validation = Failed to validate wallet consistency: { $error }
+startup-failure-storage-phase = The storage phase stopped unexpectedly: { $error }

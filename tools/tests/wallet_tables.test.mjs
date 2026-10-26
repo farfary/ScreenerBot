@@ -12,7 +12,9 @@
  * Wallets Balance column; only a balance the server could not read is "—". The Main
  * Wallet tab's identity carries no "Main" chip beside a name the tab already states. Other
  * Wallets lists every wallet but the trading wallet, active or retired, each with the key
- * export as its one action.
+ * export as its one action. The trading wallet is labelled by its role, a wallet that still
+ * carries the trading wallet's stored name as the previous trading wallet and a key without
+ * a name by its type; the dashboard's copy of that stored name matches the core's.
  *
  * Run with `npm run test:js`.
  */
@@ -28,6 +30,12 @@ import { serveDashboard, PAGE_READY } from "../lib/dashboard_host.mjs";
 import { createApiHandler, FIXTURES_ROOT, loadIndex } from "../lib/dashboard_fixtures.mjs";
 
 const LIST_TABS = ["other", "watched"];
+
+// The name the core stores on the trading wallet (`TRADING_WALLET_NAME`, src/wallets/types.rs).
+const TRADING_WALLET_NAME_IN_CORE = readFileSync(
+  new URL("../../src/wallets/types.rs", import.meta.url),
+  "utf8"
+).match(/pub const TRADING_WALLET_NAME: &str = "([^"]*)";/)?.[1];
 
 const browser = await chromium.launch({ headless: true });
 after(() => browser.close());
@@ -170,4 +178,42 @@ test("Other Wallets lists every wallet but the trading wallet, with the key expo
     found.map((tab) => tab.dataset.tabId)
   );
   assert.deepEqual(tabs, ["main", "other", "watched"]);
+});
+
+test("a wallet is named by its role, a replaced trading wallet as the previous one and an unnamed key by its type", async (t) => {
+  const list = JSON.parse(readFileSync(`${FIXTURES_ROOT}/wallets/wallets_list.json`, "utf8"));
+  const [main, replaced, unnamed] = list.wallets;
+  main.name = "Trading";
+  replaced.name = TRADING_WALLET_NAME_IN_CORE;
+  unnamed.name = "";
+  const page = await openWallets(t, { "/api/wallets": JSON.stringify(list) });
+
+  const title = "#tokens-datatable-root .table-toolbar-identity__title";
+  await page.waitForFunction(
+    (selector) => document.querySelector(selector)?.textContent.trim() === "Main Wallet",
+    title
+  );
+
+  await page.click('[data-tab-id="other"]');
+  const rows = "#other-wallets-table-container tr[data-row-id]";
+  await page.waitForSelector(`${rows} >> visible=true`);
+  const names = await page.$$eval(rows, (found) =>
+    Object.fromEntries(
+      found.map((row) => [
+        row.dataset.rowId,
+        row.querySelector(".ti-named-address-name")?.textContent.trim(),
+      ])
+    )
+  );
+  assert.equal(names[String(replaced.id)], "Previous trading wallet");
+  assert.equal(names[String(unnamed.id)], "Imported");
+});
+
+test("the dashboard's trading wallet name is the one the core stores", () => {
+  const renderers = readFileSync(
+    new URL("../../src/webserver/templates/scripts/pages/wallets/renderers.js", import.meta.url),
+    "utf8"
+  );
+  const mirrored = renderers.match(/export const TRADING_WALLET_NAME = "([^"]*)";/)?.[1];
+  assert.equal(mirrored, TRADING_WALLET_NAME_IN_CORE);
 });

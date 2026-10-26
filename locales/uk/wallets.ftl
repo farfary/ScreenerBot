@@ -134,6 +134,10 @@ wallets-list-col-type = Тип
 wallets-list-col-created = Створено
 wallets-list-col-replaced = Замінено
 wallets-list-replaced-on = { $date }
+wallets-replace-abandoned-title = Заміну гаманця скасовано
+wallets-replace-abandoned-open-positions = Під час перезапуску торговий гаманець мав відкриті позиції ({ $count }), тому заміну скасовано. Торговий гаманець не змінився; новий ключ збережено в розділі «Інші гаманці».
+wallets-replace-abandoned-positions-unreadable = Під час перезапуску не вдалося прочитати сховище позицій, тому заміну скасовано. Торговий гаманець не змінився; новий ключ збережено в розділі «Інші гаманці».
+wallets-replace-abandoned-vault-changed = Під час перезапуску сховище гаманців уже не відповідало підготовленій заміні, тому заміну скасовано. Торговий гаманець не змінився; новий ключ збережено в розділі «Інші гаманці».
 wallets-list-col-actions = Дії
 wallets-list-action-export = Експортувати приватний ключ
 wallets-list-count = Гаманці
@@ -141,7 +145,8 @@ wallets-list-search =
     .placeholder = Пошук за назвою або адресою...
 wallets-list-loading-title = Завантаження гаманців…
 wallets-list-loading-description = Підготовка вибраного подання гаманців.
-wallets-list-kept-empty-message = Тут відображаються гаманці з попередніх версій, щоб ви й надалі могли експортувати їхні ключі.
+wallets-list-kept-empty-message = Тут відображаються замінені торгові гаманці та гаманці з попередніх версій, щоб ви й надалі могли експортувати їхні ключі.
+wallets-list-previous-trading-wallet = Попередній торговий гаманець
 wallets-other-empty-title = Інших гаманців немає
 
 # watched.js: watched wallets table and actions.

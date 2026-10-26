@@ -56,6 +56,8 @@ errors-initialization-onboarding-update-failed = Không cập nhật được tr
 errors-initialization-validation-required = Cần xác minh thông tin xác thực trước khi lưu thiết lập
 errors-initialization-encrypt-failed = Không mã hóa được khóa riêng tư
 errors-initialization-already-complete = Thiết lập đã hoàn tất. Để giao dịch bằng ví khác, hãy dùng Thay ví trên trang Ví.
+errors-initialization-replace-open-positions = Ví giao dịch hiện tại đang có vị thế mở ({ $count }), nên thiết lập không thể thay nó. Hãy hoàn tất thiết lập bằng khóa của ví giao dịch hiện tại trước, rồi thay ví từ trang Ví.
+errors-initialization-save-failed-replacement-staged = Ví giao dịch mới đã được chuẩn bị và sẽ áp dụng khi { -brand } khởi động lại, nhưng không lưu được cài đặt thiết lập. Hãy kiểm tra lại sau khi khởi động lại.
 
 errors-ui-state-save-failed = Không lưu được trạng thái
 errors-ui-state-clear-failed = Không xóa được trạng thái
@@ -228,7 +230,8 @@ errors-wallets-replace-no-trading-wallet = Không có ví giao dịch nào để
 errors-wallets-replace-same-wallet = Khóa này thuộc về ví giao dịch hiện tại.
 errors-wallets-replace-watched = Ví này nằm trong danh sách Đang theo dõi. Hãy gỡ nó khỏi đó trước khi giao dịch bằng nó.
 errors-wallets-replace-address-mismatch = Khóa không khớp với địa chỉ ví đã xác thực. Hãy xác thực lại khóa.
-errors-wallets-replace-interrupted = Việc thay ví đã dừng giữa chừng và ví hiện tại vẫn là ví giao dịch. Hãy kiểm tra cài đặt trader và copy trading rồi thử lại.
+errors-wallets-replace-interrupted = Việc thay ví đã dừng giữa chừng và ví hiện tại vẫn là ví giao dịch. Trader và copy trading đang tắt; hãy bật lại khi bạn sẵn sàng hoặc thử thay ví lần nữa.
+errors-wallets-replace-interrupted-copy-trading-on = Việc thay ví đã dừng giữa chừng và ví hiện tại vẫn là ví giao dịch. Trader đã tắt nhưng không thể tắt copy trading. Hãy kiểm tra cài đặt copy trading rồi thử lại.
 errors-wallets-replace-failed = Không thay được ví giao dịch
 
 errors-wallet-watch-list-failed = Không lấy được danh sách mục tiêu theo dõi

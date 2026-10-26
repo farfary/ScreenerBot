@@ -56,6 +56,8 @@ errors-initialization-onboarding-update-failed = ऑनबोर्डिंग 
 errors-initialization-validation-required = सेटअप सहेजने से पहले क्रेडेंशियल सत्यापन आवश्यक है
 errors-initialization-encrypt-failed = प्राइवेट की एन्क्रिप्ट करने में विफल
 errors-initialization-already-complete = सेटअप पहले ही पूरा हो चुका है। किसी दूसरे वॉलेट से ट्रेड करने के लिए वॉलेट पेज पर वॉलेट बदलें का उपयोग करें।
+errors-initialization-replace-open-positions = मौजूदा ट्रेडिंग वॉलेट में खुली पोज़िशन हैं ({ $count }), इसलिए सेटअप उसे नहीं बदल सकता। पहले मौजूदा ट्रेडिंग वॉलेट की की से सेटअप पूरा करें, फिर वॉलेट पेज से वॉलेट बदलें।
+errors-initialization-save-failed-replacement-staged = नया ट्रेडिंग वॉलेट तैयार है और { -brand } के रीस्टार्ट होने पर लागू होगा, लेकिन सेटअप सेटिंग सेव नहीं हो सकीं। रीस्टार्ट के बाद उन्हें जाँचें।
 
 errors-ui-state-save-failed = स्थिति सहेजने में विफल
 errors-ui-state-clear-failed = स्थिति साफ़ करने में विफल
@@ -228,7 +230,8 @@ errors-wallets-replace-no-trading-wallet = बदलने के लिए क�
 errors-wallets-replace-same-wallet = यह की मौजूदा ट्रेडिंग वॉलेट की है।
 errors-wallets-replace-watched = यह वॉलेट वॉच किए गए सूची में है। इससे ट्रेड करने से पहले इसे वहाँ से हटाएँ।
 errors-wallets-replace-address-mismatch = की, सत्यापित वॉलेट पते से मेल नहीं खाती। की को फिर से सत्यापित करें।
-errors-wallets-replace-interrupted = वॉलेट बदलाव बीच में रुक गया और मौजूदा वॉलेट ही ट्रेडिंग वॉलेट बना हुआ है। ट्रेडर और कॉपी ट्रेडिंग सेटिंग जाँचें, फिर कोशिश करें।
+errors-wallets-replace-interrupted = वॉलेट बदलाव बीच में रुक गया और मौजूदा वॉलेट ही ट्रेडिंग वॉलेट बना हुआ है। ट्रेडर और कॉपी ट्रेडिंग बंद हैं; तैयार होने पर उन्हें फिर चालू करें, या बदलाव दोबारा आज़माएँ।
+errors-wallets-replace-interrupted-copy-trading-on = वॉलेट बदलाव बीच में रुक गया और मौजूदा वॉलेट ही ट्रेडिंग वॉलेट बना हुआ है। ट्रेडर बंद है, लेकिन कॉपी ट्रेडिंग बंद नहीं हो सकी। कॉपी ट्रेडिंग सेटिंग जाँचें, फिर कोशिश करें।
 errors-wallets-replace-failed = ट्रेडिंग वॉलेट बदलने में विफल
 
 errors-wallet-watch-list-failed = वॉच टारगेट की सूची प्राप्त करने में विफल

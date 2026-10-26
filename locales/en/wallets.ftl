@@ -134,6 +134,10 @@ wallets-list-col-type = Type
 wallets-list-col-created = Created
 wallets-list-col-replaced = Replaced
 wallets-list-replaced-on = On { $date }
+wallets-replace-abandoned-title = Wallet replacement cancelled
+wallets-replace-abandoned-open-positions = The trading wallet had open positions ({ $count }) at the restart, so the replacement was cancelled. The trading wallet is unchanged; the new key is kept under Other Wallets.
+wallets-replace-abandoned-positions-unreadable = The positions store could not be read at the restart, so the replacement was cancelled. The trading wallet is unchanged; the new key is kept under Other Wallets.
+wallets-replace-abandoned-vault-changed = The wallet vault no longer matched the staged replacement at the restart, so the replacement was cancelled. The trading wallet is unchanged; the new key is kept under Other Wallets.
 wallets-list-col-actions = Actions
 wallets-list-action-export = Export private key
 wallets-list-count = Wallets
@@ -141,7 +145,8 @@ wallets-list-search =
     .placeholder = Search by name or address...
 wallets-list-loading-title = Loading wallets…
 wallets-list-loading-description = Preparing the selected wallet view.
-wallets-list-kept-empty-message = Wallets from earlier versions appear here so you can still export their keys.
+wallets-list-kept-empty-message = Replaced trading wallets and wallets from earlier versions appear here so you can still export their keys.
+wallets-list-previous-trading-wallet = Previous trading wallet
 wallets-other-empty-title = No other wallets
 
 # watched.js: watched wallets table and actions.

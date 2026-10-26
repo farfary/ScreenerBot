@@ -58,6 +58,13 @@ pub enum DatabaseError {
     /// The open's transaction rolled back, so the store is unchanged.
     #[error("{store} schema step failed: {detail}")]
     Migration { store: String, detail: String },
+    /// A store file was to be moved onto a path that already holds a file. Nothing was
+    /// moved, so neither file is lost.
+    #[error("cannot move {source_path} to {target_path}: the target already exists")]
+    MoveTargetExists {
+        source_path: String,
+        target_path: String,
+    },
 }
 
 impl DatabaseError {

@@ -45,18 +45,23 @@ startup-storage-upgrade-remedy = विवरण कॉपी करें औ�
 
 startup-wallet-replacement-incomplete-title = वॉलेट बदलाव पूरा नहीं हो सका
 startup-wallet-replacement-incomplete-detail =
-    नए ट्रेडिंग वॉलेट पर जाते समय { -brand } रुक गया। कुछ भी डिलीट नहीं हुआ: पिछले वॉलेट की की वॉलेट वॉल्ट में है और उसकी लोकल हिस्ट्री बैकअप फ़ोल्डर में है।
+    नए ट्रेडिंग वॉलेट पर जाते समय { -brand } रुक गया। कुछ भी डिलीट नहीं हुआ: पिछले वॉलेट की की वॉलेट वॉल्ट में है, और उसकी लोकल हिस्ट्री या तो अपनी जगह पर है या लॉग फ़ाइल में बताए गए बैकअप फ़ोल्डर में।
 
     कारण:
     { $error }
 startup-wallet-replacement-incomplete-remedy = बदलाव जारी रखने के लिए { -brand } फिर से शुरू करें। अगर यह संदेश फिर दिखे, तो विवरण कॉपी करें और लॉग फ़ाइल के साथ t.me/screenerbotio_support पर सपोर्ट को भेजें। wallet_replacement.json या बैकअप फ़ोल्डर को एडिट, मूव या डिलीट न करें।
 startup-wallet-reset-refused-title = वॉलेट डेटा रीसेट नहीं हुआ
-startup-wallet-reset-refused-open-positions = पिछले वॉलेट में अभी भी खुली पोज़िशन हैं ({ $count }), इसलिए उसकी लोकल हिस्ट्री रखी गई।
-startup-wallet-reset-refused-trade-in-flight = एक ट्रेड अभी चल रहा था, इसलिए वॉलेट की लोकल हिस्ट्री रखी गई।
-startup-wallet-reset-refused-tool-in-flight = एक वॉलेट टूल अभी चल रहा था, इसलिए वॉलेट की लोकल हिस्ट्री रखी गई।
-startup-wallet-reset-refused-positions-loading = खुली पोज़िशन अभी लोड हो रही थीं, इसलिए वॉलेट की लोकल हिस्ट्री रखी गई।
+startup-wallet-reset-refused-open-positions = ट्रेडिंग वॉलेट में खुली पोज़िशन हैं ({ $count }), इसलिए वॉलेट डेटा रीसेट नहीं किया गया।
 startup-wallet-reset-refused-positions-unreadable = पोज़िशन स्टोर पढ़ा नहीं जा सका, इसलिए खुली पोज़िशन होने से इनकार नहीं किया जा सकता और वॉलेट की लोकल हिस्ट्री रखी गई।
-startup-wallet-reset-refused-remedy = कुछ भी मूव नहीं हुआ। पिछले वॉलेट के साथ { -brand } शुरू करें, उसकी खुली पोज़िशन बंद करें, फिर वॉलेट डेटा दोबारा रीसेट करें।
+startup-wallet-reset-refused-remedy = कुछ भी मूव नहीं हुआ। रीसेट के बिना { -brand } शुरू करें, ट्रेडिंग वॉलेट की खुली पोज़िशन बंद या आर्काइव करें, फिर वॉलेट डेटा दोबारा रीसेट करें।
+startup-wallet-reset-refused-unreadable-remedy = कुछ भी मूव नहीं हुआ। रीसेट के बिना { -brand } शुरू करें ताकि वह पोज़िशन स्टोर जाँच सके, फिर वॉलेट डेटा दोबारा रीसेट करें। अगर यह संदेश फिर दिखे, तो लॉग फ़ाइल t.me/screenerbotio_support पर सपोर्ट को भेजें।
+startup-wallet-reset-incomplete-title = वॉलेट डेटा रीसेट पूरा नहीं हो सका
+startup-wallet-reset-incomplete-detail =
+    वॉलेट डेटा को { $directory } में ले जाते समय { -brand } रुक गया और सभी फ़ाइलें वापस नहीं ला सका। वॉलेट की लोकल हिस्ट्री का कुछ हिस्सा उस फ़ोल्डर में है और कुछ अब भी अपनी जगह पर है।
+
+    कारण:
+    { $error }
+startup-wallet-reset-incomplete-remedy = { -brand } दोबारा शुरू न करें और { $directory } की किसी भी फ़ाइल को मूव, एडिट या डिलीट न करें। विवरण कॉपी करें और लॉग फ़ाइल के साथ t.me/screenerbotio_support पर सपोर्ट को भेजें।
 
 startup-generic-title = { -brand } शुरू नहीं हो सका
 startup-generic-remedy = विवरण के लिए लॉग फ़ाइल देखें, फिर ऐप रीस्टार्ट करें। समस्या बनी रहे तो t.me/screenerbotio_support पर सपोर्ट से संपर्क करें।
@@ -68,3 +73,4 @@ startup-failure-analysis-init = विश्लेषण इंजन इनि�
 startup-failure-assistant-init = असिस्टेंट चैट इंजन इनिशियलाइज़ करने में विफल: { $error }
 startup-failure-wallets-init = वॉलेट इनिशियलाइज़ करने में विफल: { $error }
 startup-failure-wallet-validation = वॉलेट की संगति सत्यापित करने में विफल: { $error }
+startup-failure-storage-phase = स्टोरेज चरण अचानक रुक गया: { $error }

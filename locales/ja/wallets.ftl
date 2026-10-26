@@ -134,6 +134,10 @@ wallets-list-col-type = 種類
 wallets-list-col-created = 作成日時
 wallets-list-col-replaced = 置き換え日
 wallets-list-replaced-on = { $date }
+wallets-replace-abandoned-title = ウォレットの置き換えを中止しました
+wallets-replace-abandoned-open-positions = 再起動時に取引ウォレットにオープンポジションがあったため ({ $count })、置き換えを中止しました。取引ウォレットは変わっていません。新しい鍵は「その他のウォレット」に保管されています。
+wallets-replace-abandoned-positions-unreadable = 再起動時にポジションストアを読み取れなかったため、置き換えを中止しました。取引ウォレットは変わっていません。新しい鍵は「その他のウォレット」に保管されています。
+wallets-replace-abandoned-vault-changed = 再起動時にウォレット保管庫が準備済みの置き換えと一致しなくなっていたため、置き換えを中止しました。取引ウォレットは変わっていません。新しい鍵は「その他のウォレット」に保管されています。
 wallets-list-col-actions = 操作
 wallets-list-action-export = 秘密鍵をエクスポート
 wallets-list-count = ウォレット
@@ -141,7 +145,8 @@ wallets-list-search =
     .placeholder = 名前またはアドレスで検索...
 wallets-list-loading-title = ウォレットを読み込み中…
 wallets-list-loading-description = 選択したウォレットビューを準備しています。
-wallets-list-kept-empty-message = 以前のバージョンのウォレットはここに表示され、引き続きキーをエクスポートできます。
+wallets-list-kept-empty-message = 置き換えた取引ウォレットと以前のバージョンのウォレットはここに表示され、引き続きキーをエクスポートできます。
+wallets-list-previous-trading-wallet = 以前の取引ウォレット
 wallets-other-empty-title = その他のウォレットはありません
 
 # watched.js: watched wallets table and actions.

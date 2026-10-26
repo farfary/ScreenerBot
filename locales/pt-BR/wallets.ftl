@@ -134,6 +134,10 @@ wallets-list-col-type = Tipo
 wallets-list-col-created = Criada
 wallets-list-col-replaced = Substituída
 wallets-list-replaced-on = Em { $date }
+wallets-replace-abandoned-title = Substituição da carteira cancelada
+wallets-replace-abandoned-open-positions = A carteira de trading tinha posições abertas ({ $count }) na reinicialização, então a substituição foi cancelada. A carteira de trading não mudou; a nova chave fica em Outras carteiras.
+wallets-replace-abandoned-positions-unreadable = Não foi possível ler o armazenamento de posições na reinicialização, então a substituição foi cancelada. A carteira de trading não mudou; a nova chave fica em Outras carteiras.
+wallets-replace-abandoned-vault-changed = O cofre de carteiras não correspondia mais à substituição preparada na reinicialização, então a substituição foi cancelada. A carteira de trading não mudou; a nova chave fica em Outras carteiras.
 wallets-list-col-actions = Ações
 wallets-list-action-export = Exportar chave privada
 wallets-list-count = Carteiras
@@ -141,7 +145,8 @@ wallets-list-search =
     .placeholder = Buscar por nome ou endereço...
 wallets-list-loading-title = Carregando carteiras…
 wallets-list-loading-description = Preparando a visualização da carteira selecionada.
-wallets-list-kept-empty-message = As carteiras de versões anteriores aparecem aqui para que você ainda possa exportar as chaves delas.
+wallets-list-kept-empty-message = As carteiras de trading substituídas e as carteiras de versões anteriores aparecem aqui para que você ainda possa exportar as chaves delas.
+wallets-list-previous-trading-wallet = Carteira de trading anterior
 wallets-other-empty-title = Nenhuma outra carteira
 
 # watched.js: watched wallets table and actions.

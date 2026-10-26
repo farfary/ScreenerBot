@@ -198,6 +198,10 @@ fn quarantine_into(
 /// store file: a crash between moves must never leave an old write-ahead log beside the
 /// path the store is recreated at, where SQLite would replay its frames into the new
 /// file. A file that is not there is skipped, so a move interrupted by a crash resumes.
+/// A file is never moved onto an existing one: the target directory may already hold
+/// the original a resumed move put there, and a file re-created at the store path since
+/// must not replace it. The process lock makes the existence check before each rename
+/// sufficient.
 pub fn move_store_files(path: &Path, directory: &Path) -> Result<Vec<String>, DatabaseError> {
     let io = |operation: String| {
         move |error: std::io::Error| DatabaseError::Io {
@@ -215,14 +219,24 @@ pub fn move_store_files(path: &Path, directory: &Path) -> Result<Vec<String>, Da
             continue;
         };
         let target = directory.join(name);
-        fs::rename(&file, &target).map_err(io(format!(
-            "move {} to {}",
-            file.display(),
-            target.display()
-        )))?;
+        move_file_without_replacing(&file, &target)?;
         moved.push(file.display().to_string());
     }
     Ok(moved)
+}
+
+/// Rename `file` to `target`, refusing when `target` already exists.
+pub fn move_file_without_replacing(file: &Path, target: &Path) -> Result<(), DatabaseError> {
+    if target.symlink_metadata().is_ok() {
+        return Err(DatabaseError::MoveTargetExists {
+            source_path: file.display().to_string(),
+            target_path: target.display().to_string(),
+        });
+    }
+    fs::rename(file, target).map_err(|error| DatabaseError::Io {
+        operation: format!("move {} to {}", file.display(), target.display()),
+        message: error.to_string(),
+    })
 }
 
 const fn class_name(class: StoreClass) -> &'static str {

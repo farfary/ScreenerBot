@@ -28,10 +28,10 @@ desktop-boot-subtitle-wallet-mismatch = एक अलग वॉलेट मि�
 desktop-boot-subtitle-port-in-use = ज़रूरी नेटवर्क पोर्ट व्यस्त है
 desktop-boot-subtitle-lock-held = { -brand } पहले से चल रहा है
 desktop-boot-subtitle-config-invalid = कॉन्फ़िगरेशन समस्या
-desktop-boot-subtitle-directory-setup = स्टोरेज समस्या
 desktop-boot-subtitle-storage-upgrade = डेटाबेस अपग्रेड समस्या
 desktop-boot-subtitle-wallet-replacement-incomplete = वॉलेट बदलना पूरा नहीं हुआ
 desktop-boot-subtitle-wallet-reset-refused = वॉलेट डेटा रीसेट अस्वीकार किया गया
+desktop-boot-subtitle-wallet-reset-incomplete = वॉलेट डेटा रीसेट पूरा नहीं हुआ
 desktop-boot-subtitle-generic = स्टार्टअप एरर
 
 desktop-boot-error-title = { -brand } शुरू नहीं हो सका
