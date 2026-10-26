@@ -832,11 +832,13 @@ input[type="radio"]:disabled {
   font-size: 16px;
   line-height: 1;
   pointer-events: none;
+  z-index: 1;
   transition: color var(--transition-fast);
 }
 
-.search-wrapper input {
-  padding-inline: 38px;
+.search-wrapper input:not([type="checkbox"], [type="radio"]) {
+  width: 100%;
+  padding-inline: 36px 38px;
 }
 
 .search-wrapper input:focus + .search-icon,
