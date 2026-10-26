@@ -51,7 +51,7 @@ services-name-webserver = Webserver
 
 services-loading = Dienste werden geladen...
 services-load-failed = Dienste konnten nicht geladen werden
-services-load-failed-description = Warte auf Antwort des Backends. Es wird automatisch erneut versucht.
+services-load-failed-description = Warten auf Antwort des Backends. Es wird automatisch erneut versucht.
 services-refresh-failed = Dienste konnten nicht aktualisiert werden
 services-search-placeholder = Dienste suchen...
 services-summary-total = Gesamt

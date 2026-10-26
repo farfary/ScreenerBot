@@ -144,7 +144,7 @@ telegram-menu-title =
 telegram-menu-positions-empty =
     <b>Keine offenen Positionen</b>
 
-    Warte auf neue Gelegenheiten...
+    Warten auf neue Gelegenheiten...
 telegram-menu-positions-title = <b>Positionen ({ $count })</b>
 telegram-menu-positions-hint = <i>Tippen Sie auf eine Position, um sie zu verwalten.</i>
 telegram-menu-settings =
@@ -183,7 +183,7 @@ telegram-status-body =
 telegram-positions-empty =
     <b>Keine offenen Positionen</b>
 
-    Warte auf Gelegenheiten...
+    Warten auf Gelegenheiten...
 telegram-positions-title = <b>Offene Positionen ({ $count })</b>
 telegram-positions-row =
     <b>{ $symbol }</b>

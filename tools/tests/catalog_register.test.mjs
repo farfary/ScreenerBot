@@ -11,6 +11,8 @@
  *
  * - No message in any locale repeats a list of numbers in square brackets.
  * - No English message suggests testing values or refers to the code or "the UI".
+ * - German addresses the user formally: no "du" pronoun and no "du" imperative of the
+ *   verbs the catalogs use for instructions.
  *
  * Run with `npm run test:js`.
  */
@@ -54,5 +56,23 @@ test("no message repeats a bracketed list of numbers", async () => {
 
 test("no English message speaks to the developer", async () => {
   const found = (await lines("en")).filter((line) => DEVELOPER_NOTE.test(line.split("=")[1]));
+  assert.deepEqual(found, []);
+});
+
+// The informal pronouns, and the informal imperatives that instructions once used.
+const GERMAN_INFORMAL =
+  /\b(?:du|dich|dir|dein(?:e|en|em|er|es)?|sieh|lege|aktiviere|prüfe|markiere|füge|kopiere|bearbeite|installiere|warte|führe|versuche es|erhöhe)\b/iu;
+
+test("German messages address the user formally", async () => {
+  const found = [];
+  const dir = resolve(LOCALES_ROOT, "de");
+  for (const file of (await readdir(dir)).filter((name) => name.endsWith(".ftl"))) {
+    const text = await readFile(resolve(dir, file), "utf8");
+    text.split("\n").forEach((line, index) => {
+      if (line.trimStart().startsWith("#")) return;
+      const value = /^[a-z0-9-]+\s*=/.test(line) ? line.slice(line.indexOf("=") + 1) : line;
+      if (GERMAN_INFORMAL.test(value)) found.push(`${file}:${index + 1} ${line.trim()}`);
+    });
+  }
   assert.deepEqual(found, []);
 });

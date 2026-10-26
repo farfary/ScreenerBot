@@ -73,4 +73,4 @@ notifications-view-token = Token anzeigen
 notifications-view-position = Position anzeigen
 notifications-view-transaction = Transaktion anzeigen
 notifications-unrecorded = Nicht in der Position erfasst
-notifications-unrecorded-detail = Dieser Swap wurde nicht in der Position verbucht und ist möglicherweise nicht ausgeführt worden. Prüfe seine Transaktion.
+notifications-unrecorded-detail = Dieser Swap wurde nicht in der Position verbucht und ist möglicherweise nicht ausgeführt worden. Prüfen Sie seine Transaktion.

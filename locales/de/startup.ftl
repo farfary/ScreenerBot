@@ -45,13 +45,13 @@ startup-option-invalid-remedy = Eine Kommandozeilenoption ist ungültig. Starten
 
 ## Storage upgrade.
 
-startup-storage-upgrade-title = Deine Daten konnten nicht aktualisiert werden
+startup-storage-upgrade-title = Ihre Daten konnten nicht aktualisiert werden
 startup-storage-upgrade-detail =
-    { -brand } konnte { $database } nicht auf diese Version aktualisieren und hat vor jeder Änderung angehalten. Deine Daten wurden nicht verändert.
+    { -brand } konnte { $database } nicht auf diese Version aktualisieren und hat vor jeder Änderung angehalten. Ihre Daten wurden nicht verändert.
 
     Ursache:
     { $error }
-startup-storage-upgrade-remedy = Kopiere die Details und sende sie zusammen mit der Logdatei an den Support unter t.me/screenerbotio_support. Bearbeite, verschiebe oder lösche die Datenbank nicht: { -brand } öffnet sie wieder, sobald eine Korrektur installiert ist.
+startup-storage-upgrade-remedy = Kopieren Sie die Details und senden Sie sie zusammen mit der Logdatei an den Support unter t.me/screenerbotio_support. Bearbeiten, verschieben oder löschen Sie die Datenbank nicht: { -brand } öffnet sie wieder, sobald eine Korrektur installiert ist.
 
 ## Generic failures.
 

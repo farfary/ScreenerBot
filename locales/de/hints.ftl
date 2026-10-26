@@ -310,12 +310,12 @@ hints-token-details-chart-content =
 
     { "*" }Rechnen Sie mit kleinen Abweichungen zwischen diesem Chart und Ihrem endgültigen Ausführungspreis.*
 
-    { "*" }*Status:** „Warte auf Daten“ bedeutet, dass Hintergrundprozesse neue Kerzen abrufen.
+    { "*" }*Status:** „Warten auf Daten“ bedeutet, dass Hintergrundprozesse neue Kerzen abrufen.
 hints-token-details-token-info-title = Token-Informationen
 hints-token-details-token-info-content =
     Grundlegende Token-Metadaten aus On-Chain- und Marktquellen.
 
-        • **Mint** — eindeutige Token-Adresse auf Solana (Klick zum Kopieren)
+        • **Mint** — eindeutige Token-Adresse auf Solana (zum Kopieren klicken)
         • **Dezimalstellen** — Token-Genauigkeit (meist 6–9)
         • **Alter** — Zeit seit der Erstellung des primären Pools/Tokens
         • **DEX** — primärer Handelsplatz dieses Tokens
