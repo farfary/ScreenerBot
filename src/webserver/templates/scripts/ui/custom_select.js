@@ -886,16 +886,20 @@ export class CustomSelect {
   }
 
   /**
-   * Width the menu needs to show its widest option in full: the label's own
-   * scroll width (unaffected by the menu clamp) plus the option padding, the menu
-   * border and any vertical scrollbar. Measured once per open, while no search
-   * filter hides rows.
+   * Width the menu needs to show its widest option in full: the label text's own
+   * width (unaffected by the menu clamp) plus the option padding, the menu border and
+   * any vertical scrollbar. Measured once per open, while no search filter hides rows.
+   * The text is measured at its fractional width: `scrollWidth` rounds, and a label
+   * 70.1px wide in a 70px box is cut with an ellipsis although it reports no overflow.
    */
   _measureMenuContentWidth() {
     let widestLabel = 0;
+    const range = document.createRange();
     this.optionsContainerEl.querySelectorAll(".cs-option-label").forEach((label) => {
-      widestLabel = Math.max(widestLabel, label.scrollWidth);
+      range.selectNodeContents(label);
+      widestLabel = Math.max(widestLabel, label.scrollWidth, range.getBoundingClientRect().width);
     });
+    range.detach();
     if (!widestLabel) return 0;
     const menuStyle = window.getComputedStyle(this.dropdownEl);
     const border =
@@ -905,7 +909,7 @@ export class CustomSelect {
       0,
       this.dropdownEl.offsetWidth - this.dropdownEl.clientWidth - border
     );
-    return Math.ceil(widestLabel + (this._menuPaddingInline || 0) + border + scrollbar);
+    return widestLabel + (this._menuPaddingInline || 0) + border + scrollbar;
   }
 
   _positionDropdown(triggerRect = this.triggerEl?.getBoundingClientRect()) {
@@ -927,10 +931,15 @@ export class CustomSelect {
       this._applyDropdownWidth(triggerRect.width);
       this._menuContentWidth = this._measureMenuContentWidth();
     }
-    // `scrollWidth` rounds to whole pixels, so a label the trigger already fits can
-    // read up to ~2px wider; that is not a reason to break the joined control.
+    // An option at most a sub-pixel or two wider than the trigger keeps the joined
+    // control and widens it by that much; a wider one detaches. Either way the menu is
+    // at least the trigger's width and never narrower than its widest option, up to
+    // the viewport.
     const detached = this._menuContentWidth > triggerRect.width + DETACH_TOLERANCE_PX;
-    const dropdownWidth = Math.min(detached ? this._menuContentWidth : triggerRect.width, maxWidth);
+    const neededWidth = detached
+      ? Math.ceil(this._menuContentWidth)
+      : Math.max(triggerRect.width, this._menuContentWidth);
+    const dropdownWidth = Math.min(neededWidth, maxWidth);
     this._applyDropdownWidth(dropdownWidth);
     this.el.classList.toggle("dropdown-detached", detached);
     this.dropdownEl.classList.toggle("cs-dropdown--detached", detached);
