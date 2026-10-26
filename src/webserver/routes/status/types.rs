@@ -13,3 +13,9 @@ pub struct HealthResponse {
     pub version: String,
     pub instance_id: String,
 }
+
+/// Whether the process may be restarted now without interrupting trading.
+#[derive(Debug, Clone, Serialize)]
+pub struct RestartSafetyResponse {
+    pub safe_to_restart: bool,
+}

@@ -306,13 +306,17 @@ pub async fn start_server(port_override: Option<u16>, host_override: Option<Stri
         );
     };
 
-    axum::serve(listener, app)
-        .with_graceful_shutdown(shutdown_signal)
-        .await
-        .map_err(|e| Error::Bind {
-            address: addr.to_string(),
-            detail: format!("server error: {e}"),
-        })?;
+    // The peer address reaches handlers that answer only this machine.
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .with_graceful_shutdown(shutdown_signal)
+    .await
+    .map_err(|e| Error::Bind {
+        address: addr.to_string(),
+        detail: format!("server error: {e}"),
+    })?;
 
     logger::debug(LogTag::Webserver, "Webserver stopped gracefully");
 

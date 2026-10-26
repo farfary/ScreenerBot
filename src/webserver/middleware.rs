@@ -202,9 +202,16 @@ fn has_valid_local_request_headers(headers: &HeaderMap) -> bool {
         .is_some_and(|origin| origin == host)
 }
 
+/// The loopback-only restart check. Its handler refuses any non-loopback peer, so the
+/// gates that protect private data let it through.
+fn is_restart_safety_path(path: &str) -> bool {
+    path.strip_prefix("/api") == Some(crate::webserver::routes::status::RESTART_SAFETY_PATH)
+}
+
 fn is_security_token_exempt_path(path: &str) -> bool {
     path == "/"
         || path == "/api/health"
+        || is_restart_safety_path(path)
         || path.starts_with("/assets/")
         || path.starts_with("/scripts/")
         || path.starts_with("/styles/")
@@ -252,6 +259,7 @@ pub async fn initialization_gate(request: Request, next: Next) -> Response {
     if path.starts_with("/api/initialization")
         || path.starts_with("/api/system/bootstrap")
         || path == "/api/health"
+        || is_restart_safety_path(path)
         || path == "/api/version"
     {
         return next.run(request).await;
@@ -429,11 +437,12 @@ pub async fn cache_control(request: Request, next: Next) -> Response {
 }
 
 /// Paths the dashboard password does not guard: the login page and its API, static
-/// files, the health check (status, version and instance id only), and the
-/// external-agent bridge.
+/// files, the health check (status, version and instance id only), the loopback-only
+/// restart check, and the external-agent bridge.
 fn is_auth_exempt_path(path: &str) -> bool {
     path == "/login"
         || path == "/api/health"
+        || is_restart_safety_path(path)
         || path.starts_with("/api/auth/")
         || path.starts_with("/scripts/")
         || path.starts_with("/styles/")
@@ -588,10 +597,11 @@ mod tests {
     }
 
     #[test]
-    fn the_password_gate_spares_only_public_routes() {
+    fn the_password_gate_spares_only_public_and_loopback_checked_routes() {
         for path in [
             "/login",
             "/api/health",
+            "/api/health/restart-safety",
             "/api/auth/login",
             "/scripts/app.js",
             "/i18n/en/catalog.js",
@@ -603,6 +613,7 @@ mod tests {
             "/api/health/other",
             "/api/positions",
             "/api/wallet/export",
+            "/health/restart-safety",
             "/",
         ] {
             assert!(!is_auth_exempt_path(path), "{path}");
@@ -614,6 +625,7 @@ mod tests {
         for path in [
             "/",
             "/api/health",
+            "/api/health/restart-safety",
             "/assets/logo.png",
             "/scripts/app.js",
             "/styles/app.css",

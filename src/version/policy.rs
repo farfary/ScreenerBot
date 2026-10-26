@@ -86,8 +86,31 @@ pub async fn apply_readiness(kind: UpdateKind) -> ApplyReadiness {
         policy.auto_install,
         policy.defer_while_trading,
         open_positions,
-        crate::global::are_tools_active() || crate::global::are_trades_active(),
+        trade_in_flight(),
     )
+}
+
+/// A trade submission or a running tool that a restart would cut short.
+fn trade_in_flight() -> bool {
+    crate::global::are_tools_active() || crate::global::are_trades_active()
+}
+
+/// Whether restarting the process now would interrupt nothing: no trade in flight and
+/// no open position, counted both in memory and in the positions store, whatever the
+/// update settings say. A store that is not open yet is safe only while setup has not
+/// completed (no wallet, so nothing can be open); after setup it means the process is
+/// still loading its positions, and the answer is no.
+pub async fn is_restart_safe() -> bool {
+    if trade_in_flight() || crate::positions::state::get_open_positions_count().await > 0 {
+        return false;
+    }
+    match crate::positions::db::get_open_positions().await {
+        Ok(open) => open.is_empty(),
+        Err(crate::positions::Error::NotInitialised) => {
+            !crate::global::is_initialization_complete()
+        }
+        Err(_) => false,
+    }
 }
 
 /// The decision itself, with every input explicit so it is testable.

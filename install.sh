@@ -784,6 +784,18 @@ open_positions_count() {
     printf '0'
 }
 
+# Whether the running app says a restart is safe now (no open position, no trade in
+# flight), from its loopback-only check that needs no dashboard login. Prints true or
+# false. Fails when the app predates the check or gives no clear answer; callers then
+# fall back to open_positions_count.
+restart_safe_now() {
+    local safe
+    local_api GET /api/health/restart-safety || return 1
+    safe=$(jq -r 'if (.safe_to_restart | type) == "boolean" then .safe_to_restart else empty end' <<<"$API_BODY" 2>/dev/null)
+    [ "$safe" = true ] || [ "$safe" = false ] || return 1
+    printf '%s' "$safe"
+}
+
 # The listening addresses of the service process, one per line.
 service_listen_addresses() {
     local pid
@@ -1996,7 +2008,7 @@ write_backup_archive() {
 }
 
 cmd_backup() {
-    local user data_dir dest owner stopped=0 positions size_kb
+    local user data_dir dest owner stopped=0 positions safe size_kb
     require_installed
     user=$(service_user)
     data_dir=$(service_data_dir)
@@ -2006,8 +2018,12 @@ cmd_backup() {
 
     step "Backing up ${data_dir}"
     if service_active; then
-        positions=$(open_positions_count 2>/dev/null || true)
-        [ -n "$positions" ] && [ "$positions" != 0 ] && warn "${positions} position(s) are open; they are not managed while the service is stopped."
+        if safe=$(restart_safe_now 2>/dev/null); then
+            [ "$safe" = true ] || warn "A position is open or a trade is in flight; nothing is managed while the service is stopped."
+        else
+            positions=$(open_positions_count 2>/dev/null || true)
+            [ -n "$positions" ] && [ "$positions" != 0 ] && warn "${positions} position(s) are open; they are not managed while the service is stopped."
+        fi
         if confirm "Stop ScreenerBot for the few seconds the backup takes, so the databases are consistent?" y; then
             systemctl stop "$SERVICE_NAME" </dev/null && stopped=1
         else
@@ -2401,7 +2417,7 @@ cmd_auto_update() {
 # One automatic update attempt, as the timer runs it. It follows the app's own
 # update settings: "install automatically" and "wait while trading".
 auto_update_run() {
-    local current arch latest status auto_install defer positions
+    local current arch latest status auto_install defer positions safe
     current=$(installed_version 2>/dev/null) || {
         say "ScreenerBot is not installed; nothing to update."
         return 0
@@ -2423,7 +2439,12 @@ auto_update_run() {
         say "v${latest} is available, but automatic installation is off in ScreenerBot (Settings > Updates)."
         return 0
     fi
-    if [ "${defer:-true}" = true ] && service_active; then
+    if [ "${defer:-true}" = true ] && service_active && safe=$(restart_safe_now 2>/dev/null); then
+        if [ "$safe" != true ]; then
+            say "v${latest} is available; postponed while a position is open or a trade is in flight."
+            return 0
+        fi
+    elif [ "${defer:-true}" = true ] && service_active; then
         positions=$(open_positions_count 2>/dev/null) || {
             if local_api GET /api/auth/status && [ "$(jq -r '.has_password // false' <<<"$API_BODY")" = true ]; then
                 say "v${latest} is available; postponed because the dashboard password keeps this check from reading the open positions. Install it with: sudo screenerbot-manager update"

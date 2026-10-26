@@ -3,12 +3,18 @@
 
 //! Status API handlers - health check, system and service status snapshots, and cached system metrics.
 
-use axum::response::Response;
+use axum::{
+    extract::{ConnectInfo, Request},
+    response::{IntoResponse as _, Response},
+};
 use chrono::Utc;
+use std::net::SocketAddr;
 
 use crate::{
+    i18n::ids,
     logger::{self, LogTag},
     webserver::{
+        api_error::{ApiError, ApiErrorCode},
         promo,
         snapshot::{
             collect_service_status_snapshot, gather_status_snapshot, get_cached_system_metrics,
@@ -31,6 +37,40 @@ pub(super) async fn health_check() -> Response {
     };
 
     success_response(response)
+}
+
+/// Whether the connection's peer is this machine. A request without a recorded peer
+/// address is not.
+pub(super) fn is_loopback_peer(peer: Option<&ConnectInfo<SocketAddr>>) -> bool {
+    peer.is_some_and(|ConnectInfo(addr)| addr.ip().to_canonical().is_loopback())
+}
+
+/// GET /api/health/restart-safety
+///
+/// Answers only `safe_to_restart`, and only to a loopback peer: the service manager on
+/// the same machine reads it to time an automatic update without a dashboard login.
+pub(super) async fn restart_safety(request: Request) -> Response {
+    let peer = request.extensions().get::<ConnectInfo<SocketAddr>>();
+    if !is_loopback_peer(peer) {
+        logger::warning(
+            LogTag::Webserver,
+            &format!(
+                "Refused the restart check from a non-loopback peer: {}",
+                peer.map_or_else(
+                    || "unknown".to_string(),
+                    |ConnectInfo(addr)| addr.to_string()
+                )
+            ),
+        );
+        return ApiError::new(
+            ApiErrorCode::InvalidLocalRequest,
+            ids::ERRORS_SECURITY_INVALID_LOCAL_REQUEST,
+        )
+        .into_response();
+    }
+    success_response(RestartSafetyResponse {
+        safe_to_restart: crate::version::is_restart_safe().await,
+    })
 }
 
 /// GET /api/status
