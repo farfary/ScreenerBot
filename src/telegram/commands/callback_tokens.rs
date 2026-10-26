@@ -13,6 +13,7 @@ use crate::telegram::formatters::{self, nested_arg, row, text_arg};
 use crate::telegram::keyboards;
 use crate::telegram::text::{tg, tg_escape, tg_id, with_icon};
 use crate::telegram::{Error, Result};
+use crate::tokens::security::SecurityRiskBand;
 use crate::trader::manual::{guard, manual_buy};
 use teloxide::prelude::*;
 use teloxide::types::{ChatId, ParseMode};
@@ -301,19 +302,10 @@ pub async fn send_token_detail(bot: &Bot, chat_id: ChatId, mint_short: &str) -> 
     };
 
     let risk_text = match token.security_score_normalised {
-        Some(s) => {
-            let emoji = if s <= 30 {
-                "🟢"
-            } else if s <= 60 {
-                "🟡"
-            } else {
-                "🔴"
-            };
-            row(
-                emoji,
-                UiText::new(ids::TELEGRAM_TOKEN_DETAIL_RISK).arg("score", text_arg(s.to_string())),
-            )
-        }
+        Some(s) => row(
+            risk_band_icon(SecurityRiskBand::of_normalised(s)),
+            UiText::new(ids::TELEGRAM_TOKEN_DETAIL_RISK).arg("score", text_arg(s.to_string())),
+        ),
         None => row("⚪", UiText::new(ids::TELEGRAM_TOKEN_DETAIL_RISK_UNKNOWN)),
     };
 
@@ -602,4 +594,27 @@ fn failure_screen(title: MessageId, detail: &str) -> String {
         with_icon("❌", &tg_id(title)),
         tg(&UiText::new(ids::TELEGRAM_ERROR_LINE).arg("detail", text_arg(detail)))
     )
+}
+
+/// The marker of a security risk band in a token detail message.
+fn risk_band_icon(band: SecurityRiskBand) -> &'static str {
+    match band {
+        SecurityRiskBand::Low => "🟢",
+        SecurityRiskBand::Medium => "🟡",
+        SecurityRiskBand::High => "🔴",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_risk_marker_follows_the_shared_band_edges() {
+        let icon = |score| risk_band_icon(SecurityRiskBand::of_normalised(score));
+        assert_eq!(icon(SecurityRiskBand::LOW_MAX), "🟢");
+        assert_eq!(icon(SecurityRiskBand::LOW_MAX + 1), "🟡");
+        assert_eq!(icon(SecurityRiskBand::MEDIUM_MAX), "🟡");
+        assert_eq!(icon(SecurityRiskBand::MEDIUM_MAX + 1), "🔴");
+    }
 }
