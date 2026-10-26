@@ -182,7 +182,7 @@ hints-wallet-tokens-content =
     • Valor actual en SOL/USD
     • Precio del pool o de los datos de mercado
 
-    Las cuentas de token vacías se pueden limpiar en Configuración.
+    Las cuentas de token vacías se cierran automáticamente y su renta vuelve a la billetera.
 
 hints-wallets-main-title = Billetera principal
 hints-wallets-main-content =

@@ -194,7 +194,7 @@ hints-wallet-tokens-content =
     • Giá trị hiện tại theo SOL/USD
     • Giá từ pool hoặc dữ liệu thị trường
 
-    Có thể dọn dẹp các tài khoản token trống trong Cài đặt.
+    Các tài khoản token trống được tự động đóng, và phí rent của chúng được trả về ví.
 
 ## wallets
 

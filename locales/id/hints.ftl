@@ -197,7 +197,7 @@ hints-wallet-tokens-content =
     • Nilai saat ini dalam SOL/USD
     • Harga dari pool atau data pasar
 
-    Akun token kosong dapat dibersihkan di Pengaturan.
+    Akun token kosong ditutup secara otomatis, dan rent-nya kembali ke dompet.
 
 ## wallets
 

@@ -199,7 +199,7 @@ hints-wallet-tokens-content =
     • 以 SOL/USD 计的当前价值
     • 来自流动性池或市场数据的价格
 
-    空的代币账户可在设置中清理。
+    空的代币账户会自动关闭，其租金退回钱包。
 
 ## wallets
 

@@ -194,7 +194,7 @@ hints-wallet-tokens-content =
     • Aktueller Wert in SOL/USD
     • Preis aus Pool- oder Marktdaten
 
-    Leere Token-Konten können in den Einstellungen bereinigt werden.
+    Leere Token-Konten werden automatisch geschlossen, und ihre Miete fließt an die Wallet zurück.
 
 ## wallets
 

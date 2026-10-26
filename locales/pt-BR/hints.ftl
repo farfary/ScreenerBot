@@ -199,7 +199,7 @@ hints-wallet-tokens-content =
     • Valor atual em SOL/USD
     • Preço do pool ou dos dados de mercado
 
-    Contas de token vazias podem ser limpas em Configurações.
+    Contas de token vazias são fechadas automaticamente, e o rent delas volta para a carteira.
 
 ## wallets
 

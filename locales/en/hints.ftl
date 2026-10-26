@@ -199,7 +199,7 @@ hints-wallet-tokens-content =
     • Current value in SOL/USD
     • Price from pool or market data
 
-    Empty token accounts can be cleaned up in Settings.
+    Empty token accounts are closed automatically, and their rent returns to the wallet.
 
 ## wallets
 

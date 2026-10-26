@@ -194,7 +194,7 @@ hints-wallet-tokens-content =
     • SOL/USD cinsinden güncel değer
     • Havuzdan veya piyasa verisinden alınan fiyat
 
-    Boş token hesapları Ayarlar'dan temizlenebilir.
+    Boş token hesapları otomatik olarak kapatılır ve kiraları cüzdana geri döner.
 
 ## wallets
 

@@ -194,7 +194,7 @@ hints-wallet-tokens-content =
     • Valeur actuelle en SOL/USD
     • Prix issu du pool ou des données de marché
 
-    Les comptes de token vides peuvent être nettoyés dans les Paramètres.
+    Les comptes de token vides sont fermés automatiquement, et leur rent revient au portefeuille.
 
 ## wallets
 
