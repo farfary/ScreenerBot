@@ -357,7 +357,31 @@ export class ChatWidget {
     if (providerState) providerState.hidden = ready;
     const input = this.$(".cw-chat-input");
     if (input) input.disabled = !ready;
+    this._syncProviderNotice();
     this._updateSendButton();
+  }
+
+  /**
+   * Without a ready provider the notice shows exactly once: in the welcome hero while
+   * it is visible, otherwise as the composer status.
+   */
+  _providerNoticeInComposer() {
+    if (this._providerReady !== false) return false;
+    const welcome = this.$(".cw-welcome");
+    return !welcome || welcome.style.display === "none";
+  }
+
+  /** Re-places the provider notice unless the composer shows another status. */
+  _syncProviderNotice() {
+    const el = this.$(".cw-input-status");
+    if (el && (el.dataset.providerNotice === "true" || !el.innerHTML)) {
+      this._updateInputStatus("");
+    }
+  }
+
+  _setWelcomeVisible(welcome, visible) {
+    if (welcome) welcome.style.display = visible ? "flex" : "none";
+    this._syncProviderNotice();
   }
 
   /** Opens the Assistant's Providers tab, from the page or from the chat dialog. */
@@ -905,12 +929,12 @@ export class ChatWidget {
     const welcome = container.querySelector(".chat-welcome");
 
     if (this.state.messages.length === 0) {
-      if (welcome) welcome.style.display = "flex";
+      this._setWelcomeVisible(welcome, true);
       container.querySelectorAll(".message").forEach((el) => el.remove());
       return;
     }
 
-    if (welcome) welcome.style.display = "none";
+    this._setWelcomeVisible(welcome, false);
 
     const existing = container.querySelectorAll(".message");
     const existingCount = existing.length;
@@ -946,11 +970,11 @@ export class ChatWidget {
 
     if (this.state.messages.length === 0) {
       container.querySelectorAll(".message").forEach((el) => el.remove());
-      if (welcome) welcome.style.display = "flex";
+      this._setWelcomeVisible(welcome, true);
       return;
     }
 
-    if (welcome) welcome.style.display = "none";
+    this._setWelcomeVisible(welcome, false);
 
     container.querySelectorAll(".message").forEach((el) => el.remove());
     container.insertAdjacentHTML(
@@ -1327,7 +1351,7 @@ export class ChatWidget {
   _showChatInterface() {
     const welcome = this.$(".cw-welcome");
     if (welcome && this.state.messages.length === 0 && !this.state.currentSession) {
-      welcome.style.display = "flex";
+      this._setWelcomeVisible(welcome, true);
     }
   }
 
@@ -1364,11 +1388,16 @@ export class ChatWidget {
     }
   }
 
+  /** Sets the composer status; an empty status leaves room for the provider notice. */
   _updateInputStatus(status, type = "") {
     const el = this.$(".cw-input-status");
     if (!el) return;
+    const providerNotice = !status && this._providerNoticeInComposer();
     el.className = `input-status cw-input-status${type ? ` status-${type}` : ""}`;
-    el.innerHTML = status;
+    el.dataset.providerNotice = String(providerNotice);
+    el.innerHTML = providerNotice
+      ? Utils.escapeHtml(I18n.t("assistant-chat-provider-missing-text"))
+      : status;
   }
 
   _updateSendButton() {

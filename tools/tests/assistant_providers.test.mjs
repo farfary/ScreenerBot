@@ -7,7 +7,8 @@
  *
  * A provider is set up when it is enabled with an API key and a model. The chat answers
  * through the default provider, so without a set-up default it shows a call to connect
- * one that opens Providers, and keeps the input closed. The Providers list shows the
+ * one that opens Providers, and keeps the input closed. The notice shows exactly once:
+ * in the welcome hero while it is visible, otherwise under the composer. The Providers list shows the
  * default only on a set-up provider, offers the default choice only there, and keeps
  * every Configure action secondary.
  *
@@ -74,6 +75,33 @@ test("without a set-up default provider the chat points to Providers", async () 
     await page.click("#chat-panel .cw-open-providers");
     await page.waitForSelector('#subTabsContainer [data-tab-id="providers"].active');
     await page.waitForSelector("#providers-list .provider-item");
+  } finally {
+    await close();
+  }
+});
+
+test("without a provider an open chat session states the notice under the composer", async () => {
+  const { page, close } = await openAssistant("chat", "anthropic");
+  try {
+    await page.waitForSelector('#chat-panel .session-item[data-session-id="3"]', {
+      state: "attached",
+    });
+    await page.locator('#chat-panel .session-item[data-session-id="3"]').dispatchEvent("click");
+    await page.waitForSelector("#chat-panel .cw-chat-messages .message");
+    assert.equal(await page.isHidden("#chat-panel .cw-welcome"), true);
+    await page.waitForFunction(() =>
+      /Set one up in Providers/.test(
+        document.querySelector("#chat-panel .cw-input-status")?.textContent ?? ""
+      )
+    );
+    assert.equal(await page.isDisabled("#chat-panel .cw-chat-input"), true);
+
+    // Back on an empty chat the hero carries the notice again, and only the hero.
+    await page.click("#chat-panel .cw-new-session-btn");
+    await page.waitForSelector("#chat-panel .cw-welcome-provider:not([hidden])");
+    await page.waitForFunction(
+      () => document.querySelector("#chat-panel .cw-input-status")?.textContent.trim() === ""
+    );
   } finally {
     await close();
   }
