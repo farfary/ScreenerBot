@@ -179,14 +179,53 @@ impl Service for ConnectivityService {
             return ServiceHealth::Healthy;
         }
 
-        if state::are_critical_endpoints_healthy().await {
+        endpoints_health(
+            &state::get_confirmed_unhealthy_critical_endpoints().await,
+            state::are_critical_endpoints_healthy().await,
+        )
+    }
+}
+
+/// Health from the critical endpoints. Only an endpoint confirmed down is a fault; one
+/// that has not been probed yet leaves the service starting, as the header reads it,
+/// instead of reporting every freshly started endpoint as unhealthy.
+fn endpoints_health(confirmed_down: &[&str], all_usable: bool) -> ServiceHealth {
+    if !confirmed_down.is_empty() {
+        ServiceHealth::Unhealthy(
+            UiText::new(ids::SERVICES_HEALTH_CONNECTIVITY_CRITICAL_UNHEALTHY)
+                .arg("endpoints", UiArg::Text(format!("{:?}", confirmed_down))),
+        )
+    } else if all_usable {
+        ServiceHealth::Healthy
+    } else {
+        ServiceHealth::Starting
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn unprobed_endpoints_are_starting() {
+        assert!(matches!(
+            endpoints_health(&[], false),
+            ServiceHealth::Starting
+        ));
+        assert!(matches!(
+            endpoints_health(&[], true),
             ServiceHealth::Healthy
-        } else {
-            let unhealthy = state::get_unhealthy_critical_endpoints().await;
-            ServiceHealth::Unhealthy(
-                UiText::new(ids::SERVICES_HEALTH_CONNECTIVITY_CRITICAL_UNHEALTHY)
-                    .arg("endpoints", UiArg::Text(format!("{:?}", unhealthy))),
-            )
-        }
+        ));
+    }
+
+    #[test]
+    fn a_confirmed_down_endpoint_is_unhealthy() {
+        let ServiceHealth::Unhealthy(text) = endpoints_health(&["rpc"], false) else {
+            panic!("a confirmed-down endpoint is unhealthy");
+        };
+        assert_eq!(
+            text.id,
+            ids::SERVICES_HEALTH_CONNECTIVITY_CRITICAL_UNHEALTHY.as_str()
+        );
     }
 }
