@@ -48,7 +48,13 @@ use rusqlite::{params, Connection, OptionalExtension};
 ///       natively with catch-up sizing, and backfill completion requires
 ///       coverage. Wipe so buckets frozen at their first partial write and
 ///       holes left by stale backfill pages are re-pulled.
-pub(super) const OHLCV_DATA_VERSION: i64 = 5;
+///   6 — 2026-10: the GeckoTerminal fallback names the charted token on every
+///       pool OHLCV request. Without `token` it priced the pool's base side, and
+///       GeckoTerminal's base side differs from other providers' (a SOL/USDC pool
+///       is SOL-based there), so a quote-side token was stored as the other
+///       token's price (USDC charted as SOL in USDC). Wipe so those series are
+///       re-pulled on the token's own side.
+pub(super) const OHLCV_DATA_VERSION: i64 = 6;
 
 const CREATE_CHAIN_VERSIONS: &str = "CREATE TABLE IF NOT EXISTS ohlcv_data_versions (
     chain_id TEXT PRIMARY KEY,
@@ -313,6 +319,44 @@ mod tests {
                 vec![("solana".to_owned(), OHLCV_DATA_VERSION)]
             );
             assert!(foreign_key_check_is_clean(&conn));
+        }
+        drop(db);
+        let _ = std::fs::remove_file(path);
+    }
+
+    /// Version 5 stores may hold GeckoTerminal fallback candles priced on the
+    /// pool's base side; opening one drops its candles and backfill progress.
+    #[test]
+    fn a_version_5_store_drops_its_base_side_candles() {
+        let path = test_path("version-5");
+        let _ = std::fs::remove_file(&path);
+        let db = OhlcvDatabase::new(&path, ChainId::Solana).unwrap();
+        db.insert_candles_batch(
+            "mint",
+            "pool",
+            Timeframe::Minute1,
+            &[Candle::new(60, 1.0, 1.0, 1.0, 1.0, 1.0)],
+            "test",
+        )
+        .unwrap();
+        {
+            let conn = db.conn().unwrap();
+            conn.execute(
+                "UPDATE ohlcv_data_versions SET version = 5 WHERE chain_id = 'solana'",
+                [],
+            )
+            .unwrap();
+        }
+        drop(db);
+
+        let db = OhlcvDatabase::new(&path, ChainId::Solana).unwrap();
+        {
+            let conn = db.conn().unwrap();
+            assert_eq!(candle_count(&conn, "solana"), 0);
+            assert_eq!(
+                version_rows(&conn),
+                vec![("solana".to_owned(), OHLCV_DATA_VERSION)]
+            );
         }
         drop(db);
         let _ = std::fs::remove_file(path);

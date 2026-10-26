@@ -177,10 +177,11 @@ impl OhlcvFetcher {
         self.process_queue().await
     }
 
-    /// Fetch with explicit aggregate parameter (NEW - native timeframe support)
-    /// Uses GeckoTerminal's native aggregate feature instead of client-side aggregation
+    /// Fetch `mint`'s candles in `pool_address` from GeckoTerminal with its native
+    /// `aggregate` parameter instead of client-side aggregation.
     pub async fn fetch_with_aggregate(
         &self,
+        mint: &str,
         pool_address: &str,
         api_endpoint: &str,
         aggregate: u32,
@@ -195,7 +196,7 @@ impl OhlcvFetcher {
         record_ohlcv_event(
             "fetch_aggregate_attempt",
             Severity::Debug,
-            None,
+            Some(mint),
             Some(pool_address),
             json!({
                 "pool_address": pool_address,
@@ -213,12 +214,12 @@ impl OhlcvFetcher {
             .fetch_ohlcv(
                 crate::chains::adapter_for(self.chain).market_data_network(),
                 pool_address,
+                mint,
                 api_endpoint,
                 Some(aggregate),
                 Some(limit_clamped),
                 Some("token"),
                 before_timestamp,
-                None,
             )
             .await;
 
@@ -244,7 +245,7 @@ impl OhlcvFetcher {
                 record_ohlcv_event(
                     "fetch_aggregate_complete",
                     Severity::Debug,
-                    None,
+                    Some(mint),
                     Some(pool_address),
                     json!({
                         "pool_address": pool_address,
@@ -275,7 +276,7 @@ impl OhlcvFetcher {
                 record_ohlcv_event(
                     "fetch_aggregate_error",
                     Severity::Error,
-                    None,
+                    Some(mint),
                     Some(pool_address),
                     json!({
                         "pool_address": pool_address,
@@ -472,7 +473,14 @@ impl OhlcvFetcher {
         // at the bound; one second earlier keeps the bound exclusive.
         let gecko_before = before.map(|ts| ts.saturating_sub(1));
         let candles = self
-            .fetch_with_aggregate(pool_address, api_endpoint, aggregate, gecko_before, limit)
+            .fetch_with_aggregate(
+                mint,
+                pool_address,
+                api_endpoint,
+                aggregate,
+                gecko_before,
+                limit,
+            )
             .await?;
         Ok(FetchResponse {
             candles,
@@ -529,6 +537,7 @@ impl OhlcvFetcher {
     /// Fetch OHLCV data immediately (bypasses queue, use for critical requests only)
     pub async fn fetch_immediate(
         &self,
+        mint: &str,
         pool_address: &str,
         timeframe: Timeframe,
         before_timestamp: Option<i64>,
@@ -544,7 +553,7 @@ impl OhlcvFetcher {
         record_ohlcv_event(
             "fetch_attempt",
             Severity::Debug,
-            None,
+            Some(mint),
             Some(pool_address),
             json!({
                 "pool_address": pool_address,
@@ -561,12 +570,12 @@ impl OhlcvFetcher {
             .fetch_ohlcv(
                 crate::chains::adapter_for(self.chain).market_data_network(),
                 pool_address,
+                mint,
                 timeframe.to_api_param(),
                 None,
                 Some(limit_clamped),
                 Some("token"),
                 before_timestamp,
-                None,
             )
             .await;
 
@@ -592,7 +601,7 @@ impl OhlcvFetcher {
                 record_ohlcv_event(
                     "fetch_immediate_complete",
                     Severity::Debug,
-                    None,
+                    Some(mint),
                     Some(pool_address),
                     json!({
                         "pool_address": pool_address,
@@ -624,7 +633,7 @@ impl OhlcvFetcher {
                 record_ohlcv_event(
                     "fetch_error",
                     Severity::Error,
-                    None,
+                    Some(mint),
                     Some(pool_address),
                     json!({
                         "pool_address": pool_address,
@@ -746,6 +755,7 @@ impl OhlcvFetcher {
 
         if let Some(req) = request {
             self.fetch_immediate(
+                &req.mint,
                 &req.pool_address,
                 req.timeframe,
                 req.before_timestamp,
@@ -778,7 +788,7 @@ impl OhlcvFetcher {
 
 /// The candle feeds a fetch may fall back to after the Data Server, or `None` when every
 /// fallback is skipped. Only the data server converts a non-native pool's candles to SOL.
-/// GeckoTerminal answers in the pool's quote token (`currency=token`) and a candle feed
+/// GeckoTerminal answers in the pool's other token (`currency=token`) and a candle feed
 /// answers by token address for whatever pool it picks, so on a USD-quoted or unknown-quote
 /// series pool either would write foreign-unit candles into the SOL series. `feeds` is
 /// consulted only for a native pool.
