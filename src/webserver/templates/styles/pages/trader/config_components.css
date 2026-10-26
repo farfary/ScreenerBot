@@ -5,9 +5,10 @@
    Shared Configuration Components (Reusable across all configuration tabs)
    ============================================================================ */
 
-/* Unified Section Base Class - replaces stats-section, config-section, form-section */
+/* Unified Section Base Class - replaces stats-section, config-section, form-section.
+   No side padding: #trader-content's gutter is the page gutter on every sub-tab. */
 .config-section {
-  padding: 0 1rem 1rem;
+  padding: 0 0 1rem;
 }
 
 /* Unified Card Container — responsive grid so config items use the available
@@ -93,10 +94,20 @@
   align-self: stretch;
 }
 
-/* A switch field puts its switch in the control row under the hint, where a
-   number field puts its input, so the column has no empty control track. */
-.config-card > .config-group:not(.config-group-full) > .toggle {
-  justify-self: start;
+/* A switch field puts its switch in the control row under the hint, inside the
+   same frame a number field draws (the shared input tokens, height, width cap), so
+   the column has no empty control track and the fields read as one row. */
+.toggle-field {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  box-sizing: border-box;
+  max-width: 120px;
+  min-height: var(--input-height);
+  padding: 0 0.75rem;
+  border: var(--input-border-width) solid var(--input-border-default);
+  border-radius: var(--input-border-radius);
+  background: var(--input-bg);
 }
 
 .config-card > .config-group-full {

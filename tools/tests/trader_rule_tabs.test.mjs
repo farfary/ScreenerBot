@@ -26,6 +26,11 @@
  * - Every rule card's worked example carries the one section title, "How It Works".
  * - The time exit is named once: its tab and its card carry the same name in every
  *   locale, and its duration field says what the duration does.
+ * - Every sub-tab but the full-bleed strategy editor keeps the Stats tab's side gutter,
+ *   and a newly chosen sub-tab opens at its top.
+ * - A switch field (Allow Partial Exit) sits in the same frame as the number fields
+ *   beside it.
+ * - A best or worst trade that is not known reads as one dash, never "— —".
  *
  * Run with `npm run test:js`.
  */
@@ -37,7 +42,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { chromium } from "playwright";
 
 import { serveDashboard, PAGE_READY } from "../lib/dashboard_host.mjs";
-import { createApiHandler, loadIndex } from "../lib/dashboard_fixtures.mjs";
+import { FIXTURES_ROOT, createApiHandler, loadIndex } from "../lib/dashboard_fixtures.mjs";
 
 const TABS = ["stop-loss", "trailing-stop", "roi", "time-rules", "dca", "general-settings"];
 
@@ -265,4 +270,86 @@ test("the time exit's tab and card carry one name", async () => {
   }));
   assert.deepEqual([names.tab, names.card], ["Time Exit", "Time Exit"]);
   assert.match(names.hint, /^How long a position is held before the time exit checks its loss/);
+});
+
+test("every sub-tab keeps the Stats tab's side gutter", async () => {
+  const gutters = {};
+  for (const id of ["stats", "strategy-control", ...TABS]) {
+    await page.click(`#subTabsContainer [data-tab-id="${id}"]`);
+    await page.locator(`#${id}-tab`).waitFor();
+    gutters[id] = await page.evaluate((tab) => {
+      const content = document.getElementById("trader-content").getBoundingClientRect();
+      const first = document
+        .querySelector(`#${tab}-tab :is(.trader-status-bar, .config-card)`)
+        .getBoundingClientRect();
+      return Math.round(first.left - content.left);
+    }, id);
+  }
+  const expected = Object.fromEntries(Object.keys(gutters).map((id) => [id, gutters.stats]));
+  assert.deepEqual(gutters, expected);
+  assert.equal(gutters.stats, 24);
+});
+
+test("a newly chosen sub-tab opens at its top", async () => {
+  await page.click('#subTabsContainer [data-tab-id="dca"]');
+  await page.locator("#dca-tab").waitFor();
+  const scrolled = await page.evaluate(() => {
+    const content = document.getElementById("trader-content");
+    content.scrollTop = content.scrollHeight;
+    return content.scrollTop;
+  });
+  assert.ok(scrolled > 0, "the DCA tab is long enough to scroll");
+  await page.click('#subTabsContainer [data-tab-id="stop-loss"]');
+  await page.locator("#stop-loss-tab").waitFor();
+  assert.equal(await page.$eval("#trader-content", (el) => el.scrollTop), 0);
+});
+
+test("Allow Partial Exit sits in the frame of the number fields beside it", async () => {
+  await page.click('#subTabsContainer [data-tab-id="stop-loss"]');
+  await page.locator("#stop-loss-tab").waitFor();
+  const frame = (selector) =>
+    page.$eval(selector, (el) => {
+      const style = getComputedStyle(el);
+      return {
+        border: `${style.borderTopWidth} ${style.borderTopStyle} ${style.borderTopColor}`,
+        radius: style.borderTopLeftRadius,
+        background: style.backgroundColor,
+        height: Math.round(el.getBoundingClientRect().height),
+      };
+    });
+  assert.deepEqual(
+    await frame("#stop-loss-allow-partial-frame"),
+    await frame("#stop-loss-threshold")
+  );
+});
+
+test("an unknown best or worst trade reads as one dash", async () => {
+  const stats = JSON.parse(readFileSync(`${FIXTURES_ROOT}/trader/trader_stats.json`, "utf8"));
+  const statsContext = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const statsApi = createApiHandler(
+    [await loadIndex("trader"), await loadIndex("shell")],
+    "populated"
+  );
+  const statsHost = await serveDashboard(statsContext, {
+    locale: "en",
+    onApi: (request) =>
+      request.url.pathname === "/api/trader/stats"
+        ? { body: JSON.stringify({ ...stats, worst_trade_pct: null, worst_trade_token: null }) }
+        : statsApi.onApi(request),
+  });
+  try {
+    const statsPage = await statsContext.newPage();
+    await statsPage.goto(`${statsHost.origin}/trader`);
+    await statsPage.waitForSelector(PAGE_READY);
+    await statsPage.click('#subTabsContainer [data-tab-id="stats"]');
+    await statsPage.waitForSelector("#stats-extremes:not([hidden]) #best-trade.positive");
+    const worst = await statsPage.$eval(
+      "#worst-trade",
+      (el) => el.closest(".stats-extreme").innerText
+    );
+    assert.equal(worst.match(/—/g)?.length, 1, `"${worst}" shows one dash`);
+  } finally {
+    await statsContext.close();
+    await statsHost.close();
+  }
 });

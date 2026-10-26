@@ -199,6 +199,7 @@ function createLifecycle() {
    * Switch to a different tab
    */
   function switchTab(tabId, { load = true } = {}) {
+    const changed = state.currentTab !== tabId;
     state.currentTab = tabId;
 
     // Hide all tab contents
@@ -238,6 +239,13 @@ function createLifecycle() {
       else deactivateStrategiesSubtab();
     }
     traderContent?.classList.toggle("trader-content--split-scroll", tabId === "stats");
+    // A newly chosen sub-tab opens at its top, whatever the previous one was scrolled to.
+    if (changed && traderContent) {
+      traderContent.scrollTop = 0;
+      content?.querySelectorAll(".stats-col").forEach((column) => {
+        column.scrollTop = 0;
+      });
+    }
 
     // init() paints only. Remote loaders and embedded lifecycles start once the
     // page is active, after the selected panel is already on screen.
@@ -723,7 +731,11 @@ function createLifecycle() {
         valueEl.textContent = Utils.formatPercentValue(value, { decimals: 1, fallback: "—" });
         valueEl.className = `stats-extreme-value ${Utils.signedTone(value, 1)}`;
       }
-      if (tokenEl) tokenEl.textContent = token || "—";
+      // A side with no known trade reads as one dash: its value's, with no token beside it.
+      if (tokenEl) {
+        tokenEl.textContent = token || "";
+        tokenEl.hidden = !(Number.isFinite(value) && token);
+      }
     };
 
     paint("best-trade", "best-trade-token", data.best_trade_pct, data.best_trade_token);
