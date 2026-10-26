@@ -12,7 +12,7 @@
  * - No message in any locale repeats a list of numbers in square brackets.
  * - No English message suggests testing values or refers to the code or "the UI".
  * - German addresses the user formally: no "du" pronoun and no "du" imperative of the
- *   verbs the catalogs use for instructions.
+ *   verbs the catalogs use for instructions or for the Assistant's suggested prompts.
  *
  * Run with `npm run test:js`.
  */
@@ -59,9 +59,10 @@ test("no English message speaks to the developer", async () => {
   assert.deepEqual(found, []);
 });
 
-// The informal pronouns, and the informal imperatives that instructions once used.
+// The informal pronouns, and the informal imperatives that instructions and the
+// Assistant's suggested prompts once used.
 const GERMAN_INFORMAL =
-  /\b(?:du|dich|dir|dein(?:e|en|em|er|es)?|sieh|lege|aktiviere|prüfe|markiere|füge|kopiere|bearbeite|installiere|warte|führe|versuche es|erhöhe)\b/iu;
+  /\b(?:du|dich|dir|dein(?:e|en|em|er|es)?|sieh|lege|aktiviere|prüfe|markiere|füge|kopiere|bearbeite|installiere|warte|führe|versuche es|erhöhe|analysiere|erkläre)\b/iu;
 
 test("German messages address the user formally", async () => {
   const found = [];

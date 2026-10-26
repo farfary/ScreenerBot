@@ -207,9 +207,9 @@ assistant-chat-provider-missing-action = Anbieter öffnen
 assistant-chat-prompt-positions-label = Offene Positionen prüfen
 assistant-chat-prompt-positions-text = Wie hoch ist mein aktuelles Wallet-Guthaben und welche Positionen habe ich offen?
 assistant-chat-prompt-token-label = Token analysieren
-assistant-chat-prompt-token-text = Analysiere die Sicherheit und die Risiken dieses Tokens:
+assistant-chat-prompt-token-text = Analysieren Sie die Sicherheit und die Risiken dieses Tokens:
 assistant-chat-prompt-activity-label = Letzte Aktivität erklären
-assistant-chat-prompt-activity-text = Erkläre meine letzten Trading-Aktivitäten und alle wichtigen Ergebnisse
+assistant-chat-prompt-activity-text = Erklären Sie meine letzten Trading-Aktivitäten und alle wichtigen Ergebnisse
 
 assistant-chat-input =
     .placeholder = Nachricht an Assistent...
