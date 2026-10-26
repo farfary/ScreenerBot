@@ -18,6 +18,8 @@ import { AGENT_TOOL_LABELS } from "../ui/agent_tool.js";
 import { TOOL_CALL_STATUS_LABELS } from "../ui/tool_call_status.js";
 import { playSuccess, playError } from "./sounds.js";
 import { apiErrorMessage } from "./request_manager.js";
+import { getCurrentPage, loadPage } from "./router.js";
+import { TabBarManager } from "../ui/tab_bar.js";
 
 // Longest message the composer accepts.
 const MESSAGE_LIMIT = 4000;
@@ -87,6 +89,7 @@ export class ChatWidget {
     this._sessionLoadGeneration = 0;
     this._messageLoadGeneration = 0;
     this._isDraft = false;
+    this._providerReady = null;
     this._prevSessionsJson = "";
     this._cleanups = [];
     this._pollTimer = null;
@@ -161,9 +164,16 @@ export class ChatWidget {
           <div class="chat-messages cw-chat-messages" aria-live="polite" aria-atomic="false">
             <div class="chat-welcome cw-welcome">
               <div class="chat-welcome-kicker"><i class="icon-bot-message-square"></i><span data-l10n-id="assistant-chat-welcome-kicker"></span></div>
-              <h3 data-l10n-id="assistant-chat-welcome-title"></h3>
-              <p class="chat-welcome-subtitle" data-l10n-id="assistant-chat-welcome-subtitle"></p>
-              <div class="quick-prompts">${quickPromptsHtml}</div>
+              <div class="chat-welcome-state cw-welcome-ready">
+                <h3 data-l10n-id="assistant-chat-welcome-title"></h3>
+                <p class="chat-welcome-subtitle" data-l10n-id="assistant-chat-welcome-subtitle"></p>
+                <div class="quick-prompts">${quickPromptsHtml}</div>
+              </div>
+              <div class="chat-welcome-state cw-welcome-provider" hidden>
+                <h3 data-l10n-id="assistant-chat-provider-missing-title"></h3>
+                <p class="chat-welcome-subtitle" data-l10n-id="assistant-chat-provider-missing-text"></p>
+                <button class="btn btn-primary chat-welcome-action cw-open-providers" type="button" data-l10n-id="assistant-chat-provider-missing-action"></button>
+              </div>
             </div>
           </div>
 
@@ -223,6 +233,7 @@ export class ChatWidget {
     });
     this._on(this.$(".chat-sessions-scrim"), "click", () => this._setSessionsOpen(false));
     this._on(this.$(".cw-close-btn"), "click", () => this.opts.onClose?.());
+    this._on(this.$(".cw-open-providers"), "click", () => this._openProviders());
 
     // Sessions search
     this._on(this.$(".cw-sessions-search"), "input", () => this._renderSessions());
@@ -321,7 +332,46 @@ export class ChatWidget {
     }
   }
 
+  /**
+   * Reads whether the default provider can answer. The chat answers through it, so
+   * without one the welcome points to Providers and the input stays closed.
+   */
+  async loadProviderReadiness() {
+    try {
+      const response = await fetch("/api/llm/providers");
+      if (!response.ok) return;
+      const data = await response.json();
+      const provider = (data.providers || []).find((p) => p.id === data.default_provider);
+      this._setProviderReady(Boolean(provider?.enabled && provider.has_api_key && provider.model));
+    } catch (error) {
+      console.warn("[ChatWidget] Error loading provider readiness:", error);
+    }
+  }
+
+  _setProviderReady(ready) {
+    if (this._providerReady === ready) return;
+    this._providerReady = ready;
+    const readyState = this.$(".cw-welcome-ready");
+    const providerState = this.$(".cw-welcome-provider");
+    if (readyState) readyState.hidden = !ready;
+    if (providerState) providerState.hidden = ready;
+    const input = this.$(".cw-chat-input");
+    if (input) input.disabled = !ready;
+    this._updateInputStatus(
+      ready ? "" : Utils.escapeHtml(I18n.t("assistant-chat-provider-missing-text"))
+    );
+    this._updateSendButton();
+  }
+
+  /** Opens the Assistant's Providers tab, from the page or from the chat dialog. */
+  async _openProviders() {
+    this.opts.onClose?.();
+    if (getCurrentPage() !== "assistant") await loadPage("assistant");
+    await TabBarManager.instances.get("assistant")?.setActive("providers");
+  }
+
   async loadSessions() {
+    void this.loadProviderReadiness();
     const generation = ++this._sessionLoadGeneration;
     try {
       const response = await fetch("/api/assistant/chat/sessions");
@@ -1327,7 +1377,8 @@ export class ChatWidget {
 
     const hasText = input.value.trim().length > 0;
     const isOverLimit = input.value.length > MESSAGE_LIMIT;
-    const canSend = hasText && !this.state.isLoading && !isOverLimit;
+    const canSend =
+      hasText && !this.state.isLoading && !isOverLimit && this._providerReady !== false;
 
     sendBtn.disabled = this.state.isLoading ? false : !canSend;
     if (this.state.isLoading) {

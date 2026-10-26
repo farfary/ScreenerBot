@@ -69,21 +69,22 @@ export function createProvidersTab({ state, _eventCleanups, loadConfig }) {
         const provider = providers.find((p) => p.id === providerId) || {
           id: providerId,
           enabled: false,
-          api_key: "",
+          has_api_key: false,
           model: "",
         };
 
-        const isDefault = providerId === defaultProvider;
         const name = Utils.escapeHtml(providerName(providerId));
 
         // Regular providers (API key-based)
-        const isConfigured = provider.enabled && provider.api_key && provider.model;
+        const isConfigured = Boolean(provider.enabled && provider.has_api_key && provider.model);
+        // Only a provider that can answer is offered or shown as the default.
+        const isDefault = isConfigured && providerId === defaultProvider;
 
         return `
           <div class="provider-item ${isDefault ? "is-default" : ""}" data-provider="${providerId}">
-            <label class="provider-select" data-l10n-id="assistant-providers-select-default">
+            ${isConfigured ? '<label class="provider-select" data-l10n-id="assistant-providers-select-default">' : '<label class="provider-select" data-l10n-id="assistant-providers-select-default-unavailable">'}
               <input type="radio" name="default-provider" value="${providerId}"
-                     ${isDefault ? "checked" : ""}
+                     ${isDefault ? "checked" : ""} ${isConfigured ? "" : "disabled"}
                      onchange="window.assistantPage.setDefaultProvider('${providerId}')">
             </label>
             
@@ -94,7 +95,7 @@ export function createProvidersTab({ state, _eventCleanups, loadConfig }) {
             
             <div class="provider-info">
               <div class="provider-name">${name}</div>
-              <div class="provider-model">${provider.model ? Utils.escapeHtml(provider.model) : '<span data-l10n-id="assistant-providers-model-none"></span>'}</div>
+              <div class="provider-model">${provider.model ? Utils.escapeHtml(provider.model) : "—"}</div>
             </div>
             
             <div class="provider-status">
@@ -104,7 +105,7 @@ export function createProvidersTab({ state, _eventCleanups, loadConfig }) {
             
             <div class="provider-actions">
               ${isConfigured ? `<button class="provider-btn test-btn" onclick="window.assistantPage.testProviderFromList('${providerId}')"><i class="icon-zap"></i> <span data-l10n-id="assistant-providers-test"></span></button>` : ""}
-              <button class="provider-btn ${isConfigured ? "" : "primary"}" onclick="window.assistantPage.configureProvider('${providerId}')">
+              <button class="provider-btn" onclick="window.assistantPage.configureProvider('${providerId}')">
                 <i class="icon-${isConfigured ? "settings" : "plus"}"></i> ${isConfigured ? '<span data-l10n-id="common-action-edit"></span>' : '<span data-l10n-id="assistant-providers-configure"></span>'}
               </button>
             </div>
@@ -117,7 +118,10 @@ export function createProvidersTab({ state, _eventCleanups, loadConfig }) {
       const id = row.dataset.provider;
       row
         .querySelector(".provider-select input")
-        ?.setAttribute("aria-label", I18n.t("assistant-providers-use-default", { name: providerName(id) }));
+        ?.setAttribute(
+          "aria-label",
+          I18n.t("assistant-providers-use-default", { name: providerName(id) })
+        );
       row.querySelector(".provider-logo img")?.setAttribute("alt", providerName(id));
     });
   }
@@ -358,7 +362,9 @@ export function createProvidersTab({ state, _eventCleanups, loadConfig }) {
 
           if (!saveRes.ok) {
             const saveError = await saveRes.json().catch(() => ({}));
-            throw new Error(apiErrorMessage(saveError, I18n.t("assistant-providers-test-save-failed")));
+            throw new Error(
+              apiErrorMessage(saveError, I18n.t("assistant-providers-test-save-failed"))
+            );
           }
         }
 

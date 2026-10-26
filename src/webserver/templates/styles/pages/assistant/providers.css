@@ -172,16 +172,6 @@
   border-color: var(--primary-alpha-30);
 }
 
-.provider-btn.primary {
-  background: var(--button-primary-bg);
-  border-color: var(--button-primary-bg);
-  color: white;
-}
-
-.provider-btn.primary:hover {
-  background: var(--button-primary-hover);
-}
-
 .provider-btn.test-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;

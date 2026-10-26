@@ -371,6 +371,15 @@
     animation: fadeIn 0.2s ease-out;
   }
 
+  /* The welcome holds one state at a time: the prompts, or the call to connect a provider. */
+  .chat-welcome-state:not([hidden]) {
+    display: contents;
+  }
+
+  .chat-welcome-action {
+    margin-top: var(--spacing-md);
+  }
+
   .chat-welcome-kicker {
     display: flex;
     align-items: center;
