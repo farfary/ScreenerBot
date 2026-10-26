@@ -4,34 +4,20 @@
 //! Tools Database Module
 //!
 //! SQLite database for persistent storage of tool operations:
-//! - ATA cleanup sessions and closures
-//! - Failed ATA cache
 //! - Tool favorites
 //! - Multi-wallet sessions
 //! - Watched tokens
 
 // Sub-modules
-mod ata_cache;
 mod favorites;
 mod multi_wallet;
-mod schema;
 mod types;
 mod watched_tokens;
 
 // Re-export types
 pub use types::{
-    FailedAtaRow, MwSessionConfig, MwSessionRow, MwWalletOpRow, ToolFavoriteRow, WatchedToken,
+    MwSessionConfig, MwSessionRow, MwWalletOpRow, ToolFavoriteRow, WatchedToken,
     WatchedTokenConfig,
-};
-
-// Re-export initialization
-pub use schema::init_tools_db;
-pub(crate) use schema::SCHEMA;
-
-// Re-export ATA cache operations
-pub use ata_cache::{
-    get_excluded_atas_for_wallet, get_failed_atas_for_wallet, is_ata_failed, remove_failed_ata,
-    upsert_failed_ata,
 };
 
 // Re-export favorites operations

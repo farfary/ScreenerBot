@@ -16,7 +16,7 @@
 //!
 //! ## Usage
 //! ```rust,ignore
-//! use crate::tools::ata_cleanup::{scan_wallet_atas, cleanup_empty_atas, start_ata_cleanup_service};
+//! use crate::wallets::ata_cleanup::{scan_wallet_atas, cleanup_empty_atas, start_ata_cleanup_service};
 //!
 //! // Scan for empty ATAs
 //! let atas = scan_wallet_atas(&wallet_address).await?;
@@ -26,6 +26,7 @@
 //! println!("Closed {} ATAs, reclaimed {} SOL", result.closed_count, result.rent_reclaimed);
 //! ```
 
+pub mod database;
 mod operations;
 mod service;
 mod types;

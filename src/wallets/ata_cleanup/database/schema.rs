@@ -11,7 +11,7 @@ use rusqlite::{params, OptionalExtension, Transaction};
 use crate::database;
 use crate::database::schema::{ddl, SchemaContext, StoreSchema};
 use crate::errors::DatabaseError;
-use crate::tools::Error;
+use crate::wallets::Error;
 
 // =============================================================================
 // CONSTANTS
@@ -266,7 +266,7 @@ CREATE INDEX IF NOT EXISTS idx_watched_tokens_active ON watched_tokens(is_active
 // STORE
 // =============================================================================
 
-/// The tools store's schema.
+/// The ATA cleanup store's schema.
 pub(crate) const SCHEMA: StoreSchema = StoreSchema {
     version: 1,
     min_reader_version: 1,
@@ -319,15 +319,15 @@ fn create_schema(tx: &Transaction<'_>, _: &SchemaContext) -> Result<(), Database
     Ok(())
 }
 
-/// Get a connection from the tools store's pool.
+/// Get a connection from the ATA cleanup store's pool.
 pub(crate) fn get_connection() -> Result<PooledConnection<SqliteConnectionManager>, Error> {
-    database::open::store(&database::catalog::TOOLS)?
+    database::open::store(&database::catalog::ATA_CLEANUP)?
         .get()
         .map_err(|e| DatabaseError::from(e).into())
 }
 
-/// Open the tools store.
-pub fn init_tools_db() -> Result<(), Error> {
-    database::open::store(&database::catalog::TOOLS)?;
+/// Open the ATA cleanup store.
+pub fn init_ata_cleanup_db() -> Result<(), Error> {
+    database::open::store(&database::catalog::ATA_CLEANUP)?;
     Ok(())
 }

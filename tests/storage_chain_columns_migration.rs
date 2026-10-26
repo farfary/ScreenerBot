@@ -147,7 +147,7 @@ fn v0_2_13_fixtures_gain_chain_scope_and_survive_a_second_boot() {
     seed_fixture(
         fixture_dir.path(),
         "tools.db",
-        database::TOOLS_DB,
+        database::ATA_CLEANUP_DB,
         include_str!("fixtures/v0.2.13-tools.sql"),
     );
     seed_fixture(
@@ -297,7 +297,8 @@ fn initialize_shared_stores() {
         .expect("initialize strategies database");
     });
 
-    screenerbot::tools::init_tools_db().expect("initialize tools database");
+    screenerbot::wallets::ata_cleanup::database::init_ata_cleanup_db()
+        .expect("initialize ATA cleanup database");
     screenerbot::llm_analysis::init_analysis_database().expect("initialize analysis database");
     screenerbot::rpc::RpcStatsDatabase::new().expect("initialize RPC statistics database");
 }

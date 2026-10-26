@@ -11,13 +11,13 @@ use chrono::Utc;
 
 use crate::chains::adapter;
 use crate::logger::{self, LogTag};
-use crate::tools::database::{
+use crate::utils::get_wallet_address;
+use crate::wallets::Error;
+
+use super::database::{
     get_excluded_atas_for_wallet, get_failed_atas_for_wallet, is_ata_failed, remove_failed_ata,
     upsert_failed_ata,
 };
-use crate::tools::Error;
-use crate::utils::get_wallet_address;
-
 use super::types::{AtaCleanupResult, AtaCleanupStats, AtaInfo};
 
 // =============================================================================

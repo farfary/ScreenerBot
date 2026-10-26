@@ -144,7 +144,10 @@ fn salvage_rules_name_tables_their_store_creates() {
         (&AI_CHAT, include_str!("../assistant/scheduled/database.rs")),
         (&TOKENS, include_str!("../tokens/schema.rs")),
         (&OHLCVS, include_str!("../ohlcvs/database/mod.rs")),
-        (&TOOLS, include_str!("../tools/database/schema.rs")),
+        (
+            &ATA_CLEANUP,
+            include_str!("../wallets/ata_cleanup/database/schema.rs"),
+        ),
     ];
     let salvaging: HashSet<&str> = STORES
         .iter()

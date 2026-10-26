@@ -389,7 +389,7 @@ const FIXTURES: &[(&str, &StoreSpec)] = &[
     ("v0.2.13-rpc_stats.sql", &catalog::RPC_STATS),
     ("v0.2.13-strategies.sql", &catalog::STRATEGIES),
     ("v0.2.13-tokens.sql", &catalog::TOKENS),
-    ("v0.2.13-tools.sql", &catalog::TOOLS),
+    ("v0.2.13-tools.sql", &catalog::ATA_CLEANUP),
     ("v0.2.13-transactions.sql", &catalog::TRANSACTIONS),
     ("v0.2.13-wallet-monitor.sql", &catalog::WALLET),
     ("v0.2.13-wallets.sql", &catalog::WALLETS),

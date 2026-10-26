@@ -7,41 +7,6 @@ use crate::errors::DatabaseError;
 use crate::tools::Error;
 
 // =============================================================================
-// ATA CACHE TYPES
-// =============================================================================
-
-/// Failed ATA database row
-#[derive(Debug, Clone)]
-pub struct FailedAtaRow {
-    pub ata_address: String,
-    pub token_mint: Option<String>,
-    pub wallet_address: String,
-    pub failure_count: i32,
-    pub last_error: Option<String>,
-    pub first_failed_at: String,
-    pub last_failed_at: String,
-    pub next_retry_at: Option<String>,
-    pub is_permanent_failure: bool,
-}
-
-impl FailedAtaRow {
-    pub(crate) fn from_row(row: &rusqlite::Row<'_>) -> Result<Self, Error> {
-        let is_permanent_int: i32 = row.get(8).map_err(DatabaseError::from)?;
-        Ok(Self {
-            ata_address: row.get(0).map_err(DatabaseError::from)?,
-            token_mint: row.get(1).map_err(DatabaseError::from)?,
-            wallet_address: row.get(2).map_err(DatabaseError::from)?,
-            failure_count: row.get(3).map_err(DatabaseError::from)?,
-            last_error: row.get(4).map_err(DatabaseError::from)?,
-            first_failed_at: row.get(5).map_err(DatabaseError::from)?,
-            last_failed_at: row.get(6).map_err(DatabaseError::from)?,
-            next_retry_at: row.get(7).map_err(DatabaseError::from)?,
-            is_permanent_failure: is_permanent_int != 0,
-        })
-    }
-}
-
-// =============================================================================
 // TOOL FAVORITES TYPES
 // =============================================================================
 

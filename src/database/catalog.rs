@@ -571,12 +571,12 @@ pub const ACTIONS: StoreSpec = shared(
 )
 .pooled(2, Some(1))
 .with_reader(configure::ACTIONS_READ_DB, 4, Some(1));
-pub const TOOLS: StoreSpec = shared(
+pub const ATA_CLEANUP: StoreSpec = shared(
     "tools",
-    paths::get_tools_db_path,
-    configure::TOOLS_DB,
+    paths::get_ata_cleanup_db_path,
+    configure::ATA_CLEANUP_DB,
     StoreClass::Cache,
-    crate::tools::database::SCHEMA,
+    crate::wallets::ata_cleanup::database::SCHEMA,
     &[rule("tool_favorites"), rule("watched_tokens")],
     &[
         keep("tool_favorites", UserDecision),
@@ -607,7 +607,7 @@ pub const STORES: [&StoreSpec; 16] = [
     &RPC_STATS,
     &EVENTS,
     &ACTIONS,
-    &TOOLS,
+    &ATA_CLEANUP,
 ];
 
 #[cfg(test)]

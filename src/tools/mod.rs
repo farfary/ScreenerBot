@@ -6,7 +6,6 @@
 //! Contains utility tools for token operations.
 //!
 //! ## Available Tools
-//! - `ata_cleanup` - Scan and close empty ATAs to reclaim rent
 //! - `swap_executor` - Execute swaps with custom keypairs (no position tracking)
 //! - `multi_wallet` - Multi-wallet trading tools (buy/sell/consolidate)
 //! - `trade_watcher` - Monitor external wallet trades and trigger actions
@@ -14,7 +13,6 @@
 //! ## Database
 //! - `database` - Persistent storage for tool sessions and operations
 
-pub mod ata_cleanup;
 pub mod database;
 mod error;
 pub mod multi_wallet;
@@ -31,36 +29,12 @@ pub use types::{
 
 // Re-export database types
 pub use database::{
-    get_tool_favorites, increment_tool_favorite_use, init_tools_db, remove_tool_favorite,
-    update_tool_favorite, upsert_tool_favorite, FailedAtaRow, ToolFavoriteRow,
+    get_tool_favorites, increment_tool_favorite_use, remove_tool_favorite, update_tool_favorite,
+    upsert_tool_favorite, ToolFavoriteRow,
 };
 
 // Re-export swap executor
 pub use swap_executor::{execute_tool_swap, tool_buy, tool_sell, ToolSwapResult};
-
-// Re-export ATA cleanup types and functions
-pub use ata_cleanup::{
-    cleanup_empty_atas,
-    clear_failed_ata_cache,
-    close_ata,
-    // Backward compatibility aliases
-    get_ata_cleanup_statistics,
-    get_ata_status,
-    get_cleanup_stats,
-    get_failed_ata_count,
-    scan_closeable_atas,
-    scan_empty_atas,
-    scan_wallet_atas,
-    start_ata_cleanup_service,
-    trigger_immediate_ata_cleanup,
-    trigger_immediate_cleanup,
-    AtaCleanupResult,
-    AtaCleanupStats,
-    AtaClosure,
-    AtaInfo,
-    AtaSession,
-    FailedAta,
-};
 
 // Re-export multi-wallet types and operations. Single-transfer/ATA-close
 // mechanics live at crate::chains::solana::assets::transfer, not here.

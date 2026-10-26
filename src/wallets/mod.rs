@@ -40,6 +40,7 @@
 //! job; this module hands it a `wallet_id` or ciphertext/nonce pair and
 //! gets back a String, never the reverse. See `tests/architecture_boundaries.rs`.
 
+pub mod ata_cleanup;
 pub mod balance_monitor;
 pub mod bulk;
 pub(crate) mod database;

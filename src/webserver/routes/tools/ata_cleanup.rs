@@ -9,11 +9,11 @@ use crate::chains::adapter;
 use crate::chains::solana::assets::ata::get_all_token_accounts;
 use crate::i18n::ids;
 use crate::logger::{self, LogTag};
-use crate::tools::ata_cleanup::{
+use crate::utils::get_wallet_address;
+use crate::wallets::ata_cleanup::{
     clear_failed_ata_cache, get_ata_cleanup_statistics, get_failed_ata_count,
     trigger_immediate_ata_cleanup,
 };
-use crate::utils::get_wallet_address;
 use crate::webserver::api_error::{ApiError, ApiErrorCode};
 use crate::webserver::utils::success_response;
 use axum::response::IntoResponse as _;

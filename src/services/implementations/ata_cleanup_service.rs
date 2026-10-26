@@ -39,7 +39,7 @@ impl Service for AtaCleanupService {
         monitor: tokio_metrics::TaskMonitor,
     ) -> crate::Result<Vec<JoinHandle<()>>> {
         let handle = tokio::spawn(monitor.instrument(async move {
-            crate::tools::ata_cleanup::start_ata_cleanup_service(shutdown).await;
+            crate::wallets::ata_cleanup::start_ata_cleanup_service(shutdown).await;
         }));
 
         Ok(vec![handle])

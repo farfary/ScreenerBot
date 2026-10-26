@@ -6,10 +6,10 @@
 use chrono::Utc;
 use rusqlite::params;
 
-use super::schema::get_connection;
 use super::types::{MwSessionConfig, MwSessionRow, MwWalletOpRow};
 use crate::errors::DatabaseError;
 use crate::tools::Error;
+use crate::wallets::ata_cleanup::database::get_connection;
 
 // =============================================================================
 // MULTI-WALLET SESSION OPERATIONS

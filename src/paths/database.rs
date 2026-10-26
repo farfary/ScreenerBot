@@ -49,8 +49,9 @@ pub fn get_actions_db_path() -> PathBuf {
     get_data_directory().join("actions.db")
 }
 
-/// Returns the tools database path.
-pub fn get_tools_db_path() -> PathBuf {
+/// Returns the legacy-named ATA cleanup database path. The file keeps the name
+/// installed profiles already hold, so an install never moves it.
+pub fn get_ata_cleanup_db_path() -> PathBuf {
     get_data_directory().join("tools.db")
 }
 

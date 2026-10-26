@@ -504,7 +504,8 @@ fn initialize_startup_stores() {
         .expect("initialize copy-trading database");
     screenerbot::wallets::watch::WatchDatabase::new(ChainId::Solana)
         .expect("initialize wallet-watch tables");
-    screenerbot::tools::init_tools_db().expect("initialize tools database");
+    screenerbot::wallets::ata_cleanup::database::init_ata_cleanup_db()
+        .expect("initialize ATA cleanup database");
     screenerbot::llm_analysis::init_analysis_database().expect("initialize analysis database");
     screenerbot::assistant::init_chat_db().expect("initialize chat database");
     screenerbot::agent_control::init_store().expect("initialize agent-control database");

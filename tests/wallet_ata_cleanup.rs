@@ -12,8 +12,9 @@
 use crate::common;
 
 use chrono::{Duration, Utc};
-use screenerbot::tools::database::{
-    get_excluded_atas_for_wallet, get_failed_atas_for_wallet, upsert_failed_ata,
+use screenerbot::wallets::ata_cleanup::database::{
+    get_excluded_atas_for_wallet, get_failed_atas_for_wallet, init_ata_cleanup_db,
+    upsert_failed_ata,
 };
 
 const WALLET: &str = "Wallet1111111111111111111111111111111111111";
@@ -29,7 +30,7 @@ fn a_transient_close_failure_is_cached_with_a_retry_time() {
         || async {
             let _dir = common::isolated_env();
             screenerbot::paths::ensure_all_directories().expect("create data directories");
-            screenerbot::tools::init_tools_db().expect("open the tools store");
+            init_ata_cleanup_db().expect("open the ATA cleanup store");
 
             upsert_failed_ata(
                 ATA,
@@ -64,7 +65,7 @@ fn a_cached_failure_is_excluded_only_until_its_retry_time() {
         || async {
             let _dir = common::isolated_env();
             screenerbot::paths::ensure_all_directories().expect("create data directories");
-            screenerbot::tools::init_tools_db().expect("open the tools store");
+            init_ata_cleanup_db().expect("open the ATA cleanup store");
 
             upsert_failed_ata(ATA, Some(MINT), WALLET, "rpc request timed out", false)
                 .expect("record the transient failure");

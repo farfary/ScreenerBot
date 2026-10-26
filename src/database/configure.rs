@@ -22,7 +22,7 @@ pub enum DbPreset {
     Hot,
     /// Moderate traffic: events, actions, positions, wallet, ohlcvs
     Standard,
-    /// Infrequent access: tools, strategies, wallets list, rpc_stats, ai
+    /// Infrequent access: ATA cleanup, strategies, wallets list, rpc_stats, ai
     Cold,
 }
 
@@ -133,8 +133,8 @@ pub const WALLET_MONITOR_DB: DbConfig = DbConfig::new(DbPreset::Standard)
 /// ohlcvs.db — Standard: candle data
 pub const OHLCVS_DB: DbConfig = DbConfig::new(DbPreset::Standard);
 
-/// tools.db — Cold: infrequent access
-pub const TOOLS_DB: DbConfig = DbConfig::new(DbPreset::Cold);
+/// tools.db (ATA cleanup) — Cold: infrequent access
+pub const ATA_CLEANUP_DB: DbConfig = DbConfig::new(DbPreset::Cold);
 
 /// strategies.db — Cold: infrequent access
 pub const STRATEGIES_DB: DbConfig = DbConfig::new(DbPreset::Cold);

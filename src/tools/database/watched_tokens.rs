@@ -6,10 +6,10 @@
 use chrono::Utc;
 use rusqlite::params;
 
-use super::schema::get_connection;
 use super::types::{WatchedToken, WatchedTokenConfig};
 use crate::errors::DatabaseError;
 use crate::tools::Error;
+use crate::wallets::ata_cleanup::database::get_connection;
 
 // =============================================================================
 // WATCHED TOKENS OPERATIONS

@@ -11,8 +11,8 @@ use tokio::sync::Notify;
 use tokio::time::{interval, Duration, MissedTickBehavior};
 
 use crate::logger::{self, LogTag};
-use crate::tools::Error;
 use crate::utils::{check_shutdown_or_delay, get_wallet_address, run_or_shutdown};
+use crate::wallets::Error;
 
 use super::operations::{cleanup_empty_atas, update_stats};
 
