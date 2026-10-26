@@ -74,7 +74,7 @@ pub fn get_promo_header_metrics() -> HeaderMetricsResponse {
         snapshot_state: SnapshotState::Ready,
         monitoring_count: Some(snapshot.total_tokens),
         passed_count: Some(snapshot.passed_filtering),
-        rejected_count: Some(snapshot.total_tokens - snapshot.passed_filtering),
+        rejected_count: Some(snapshot.rejected()),
         last_refresh: Some(snapshot.updated_at.to_rfc3339()),
     };
 

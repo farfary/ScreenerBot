@@ -175,6 +175,7 @@ fn snapshot_of(entries: Vec<(String, TokenEntry)>) -> FilteringSnapshot {
         filtered_mints: Vec::new(),
         passed_tokens: Vec::new(),
         rejected_mints: Vec::new(),
+        awaiting_rugcheck_report: Vec::new(),
         rejected_tokens: Vec::new(),
         tokens,
         blacklist_reasons: HashMap::new(),

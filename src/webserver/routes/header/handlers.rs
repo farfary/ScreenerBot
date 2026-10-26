@@ -106,9 +106,7 @@ pub(super) async fn get_header_metrics() -> Json<HeaderMetricsResponse> {
         snapshot_state: SnapshotState::of(&filtering_stats),
         monitoring_count: filtering_stats.as_ref().map(|stats| stats.total_tokens),
         passed_count: filtering_stats.as_ref().map(|stats| stats.passed_filtering),
-        rejected_count: filtering_stats
-            .as_ref()
-            .map(|stats| stats.total_tokens.saturating_sub(stats.passed_filtering)),
+        rejected_count: filtering_stats.as_ref().map(|stats| stats.rejected()),
         last_refresh: filtering_stats
             .as_ref()
             .map(|stats| stats.updated_at.to_rfc3339()),

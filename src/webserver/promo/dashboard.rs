@@ -117,7 +117,7 @@ pub fn get_promo_home_dashboard() -> HomeDashboardResponse {
         monitored: Some(snapshot.total_tokens),
         with_prices: Some(snapshot.with_pool_price),
         passed_filters: Some(snapshot.passed_filtering),
-        rejected_filters: Some(snapshot.total_tokens - snapshot.passed_filtering),
+        rejected_filters: Some(snapshot.rejected()),
         blacklisted: Some(snapshot.blacklisted),
         with_ohlcv: Some(snapshot.with_ohlcv),
         found_today: 234,

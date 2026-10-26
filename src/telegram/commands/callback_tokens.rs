@@ -39,15 +39,7 @@ pub async fn send_tokens_menu(bot: &Bot, chat_id: ChatId) -> Result<()> {
         "🔍",
         UiText::new(ids::TELEGRAM_TOKEN_EXPLORER)
             .arg("passed", text_arg(stats.passed_filtering.to_string()))
-            .arg(
-                "rejected",
-                text_arg(
-                    stats
-                        .total_tokens
-                        .saturating_sub(stats.passed_filtering)
-                        .to_string(),
-                ),
-            )
+            .arg("rejected", text_arg(stats.rejected().to_string()))
             .arg("priced", text_arg(stats.with_pool_price.to_string()))
             .arg("total", text_arg(stats.total_tokens.to_string())),
     );
@@ -197,7 +189,7 @@ pub(super) async fn send_filter_stats(bot: &Bot, chat_id: ChatId) -> Result<()> 
         }
     };
 
-    let rejected_count = stats.total_tokens.saturating_sub(stats.passed_filtering);
+    let rejected_count = stats.rejected();
     let passed_pct = if stats.total_tokens > 0 {
         (stats.passed_filtering as f64 / stats.total_tokens as f64) * 100.0
     } else {

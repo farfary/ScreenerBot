@@ -6,6 +6,7 @@
 use crate::errors::DatabaseError;
 use chrono::{DateTime, Utc};
 use rusqlite::params;
+use std::collections::HashSet;
 
 use crate::tokens::store;
 use crate::tokens::types::{RugcheckData, SecurityRisk, TokenHolder, TokenResult};
@@ -282,28 +283,49 @@ impl TokenDatabase {
         }
     }
 
-    /// Fetch token mints that have no security assessment.
+    /// Fetch token mints that have no security assessment, `priority` first.
     ///
     /// Eligible: no `security_rugcheck` row, not blacklisted, and the security error state
     /// allows a retry — never tried, a temporary error past its exponential backoff
-    /// (`120 * 2^min(error_count - 1, 10)` seconds), or a permanent error older than 7 days. Ordered by retry class, then `first_discovered_at ASC`; ties come back in
-    /// no defined order:
-    /// 1. never tried, discovered in the last 24h
-    /// 2. never tried, older
-    /// 3. temporary errors
-    /// 4. permanent errors
+    /// (`120 * 2^min(error_count - 1, 10)` seconds), or a permanent error older than 7 days.
+    /// Order:
+    /// 0. the eligible mints of `priority`, in its order (the tokens that pass every other
+    ///    filtering stage and wait only for this report)
+    /// 1. never tried, newest `first_discovered_at` first
+    /// 2. temporary errors, newest first
+    /// 3. permanent errors, newest first
+    ///
+    /// Ties come back in no defined order, and no mint appears twice.
     ///
     /// A single `tokens` join ordered on the class expression read every token and sorted
     /// it in a temp b-tree (3.4s at 555k tokens), so each class is read in order and the
     /// read stops at the remaining limit:
-    /// - Classes 1 and 2 walk `idx_tokens_discovery_mint` from the 24h cutoff and from
-    ///   the start respectively. "Never tried" means no `update_tracking` row or one with
-    ///   a NULL `security_error_type`.
-    /// - Classes 3 and 4 enter through `idx_tracking_security_error`, which holds only
+    /// - Class 0 is one primary-key lookup per priority mint.
+    /// - Class 1 walks `idx_tokens_discovery_mint` (`first_discovered_at DESC`). "Never
+    ///   tried" means no `update_tracking` row or one with a NULL `security_error_type`.
+    /// - Classes 2 and 3 enter through `idx_tracking_security_error`, which holds only
     ///   the rows that carry a security error.
-    pub fn get_tokens_without_security_data(&self, limit: usize) -> TokenResult<Vec<String>> {
-        const UNTRIED_RECENT: &str = "SELECT t.mint FROM tokens t
-             WHERE t.chain_id = ?1 AND t.first_discovered_at > ?2 - 86400
+    pub fn get_tokens_without_security_data(
+        &self,
+        limit: usize,
+        priority: &[String],
+    ) -> TokenResult<Vec<String>> {
+        const ELIGIBLE: &str = "SELECT 1 FROM tokens t
+             LEFT JOIN update_tracking ut ON ut.chain_id = t.chain_id AND ut.mint = t.mint
+             WHERE t.chain_id = ?1 AND t.mint = ?3
+             AND NOT EXISTS (SELECT 1 FROM security_rugcheck sr
+                             WHERE sr.chain_id = t.chain_id AND sr.mint = t.mint)
+             AND NOT EXISTS (SELECT 1 FROM blacklist b
+                             WHERE b.chain_id = t.chain_id AND b.mint = t.mint)
+             AND (
+                 ut.security_error_type IS NULL
+                 OR (ut.security_error_type = 'temporary'
+                     AND ut.last_security_error_at < ?2 - (120 * (1 << MIN(ut.security_error_count - 1, 10))))
+                 OR (ut.security_error_type = 'permanent'
+                     AND ut.last_security_error_at < ?2 - 604800)
+             )";
+        const UNTRIED: &str = "SELECT t.mint FROM tokens t
+             WHERE t.chain_id = ?1
              AND NOT EXISTS (SELECT 1 FROM security_rugcheck sr
                              WHERE sr.chain_id = t.chain_id AND sr.mint = t.mint)
              AND NOT EXISTS (SELECT 1 FROM blacklist b
@@ -311,18 +333,7 @@ impl TokenDatabase {
              AND NOT EXISTS (SELECT 1 FROM update_tracking ut
                              WHERE ut.chain_id = t.chain_id AND ut.mint = t.mint
                              AND ut.security_error_type IS NOT NULL)
-             ORDER BY t.first_discovered_at ASC
-             LIMIT ?3";
-        const UNTRIED_OLDER: &str = "SELECT t.mint FROM tokens t
-             WHERE t.chain_id = ?1 AND t.first_discovered_at <= ?2 - 86400
-             AND NOT EXISTS (SELECT 1 FROM security_rugcheck sr
-                             WHERE sr.chain_id = t.chain_id AND sr.mint = t.mint)
-             AND NOT EXISTS (SELECT 1 FROM blacklist b
-                             WHERE b.chain_id = t.chain_id AND b.mint = t.mint)
-             AND NOT EXISTS (SELECT 1 FROM update_tracking ut
-                             WHERE ut.chain_id = t.chain_id AND ut.mint = t.mint
-                             AND ut.security_error_type IS NOT NULL)
-             ORDER BY t.first_discovered_at ASC
+             ORDER BY t.first_discovered_at DESC
              LIMIT ?3";
         const RETRY_DUE: &str = "SELECT t.mint FROM update_tracking ut
              JOIN tokens t ON t.chain_id = ut.chain_id AND t.mint = ut.mint
@@ -337,8 +348,8 @@ impl TokenDatabase {
                              WHERE sr.chain_id = ut.chain_id AND sr.mint = ut.mint)
              AND NOT EXISTS (SELECT 1 FROM blacklist b
                              WHERE b.chain_id = ut.chain_id AND b.mint = ut.mint)
-             ORDER BY CASE WHEN ut.security_error_type = 'temporary' THEN 3 ELSE 4 END,
-                      t.first_discovered_at ASC
+             ORDER BY CASE WHEN ut.security_error_type = 'temporary' THEN 2 ELSE 3 END,
+                      t.first_discovered_at DESC
              LIMIT ?3";
 
         if limit == 0 {
@@ -355,23 +366,53 @@ impl TokenDatabase {
         };
 
         let mut mints: Vec<String> = Vec::with_capacity(limit);
-        for (sql, class) in [
-            (UNTRIED_RECENT, "recent untried tokens"),
-            (UNTRIED_OLDER, "older untried tokens"),
-            (RETRY_DUE, "security retries"),
-        ] {
+        let mut chosen: HashSet<String> = HashSet::with_capacity(limit);
+
+        if !priority.is_empty() {
+            let mut stmt = conn
+                .prepare(ELIGIBLE)
+                .map_err(|e| query_error("Failed to prepare priority eligibility", e))?;
+            for mint in priority {
+                if mints.len() == limit {
+                    return Ok(mints);
+                }
+                if chosen.contains(mint) {
+                    continue;
+                }
+                let eligible = stmt
+                    .exists(params![self.chain_id(), now, mint])
+                    .map_err(|e| query_error("Priority eligibility query failed", e))?;
+                if eligible {
+                    chosen.insert(mint.clone());
+                    mints.push(mint.clone());
+                }
+            }
+        }
+
+        for (sql, class) in [(UNTRIED, "untried tokens"), (RETRY_DUE, "security retries")] {
             let remaining = limit - mints.len();
             if remaining == 0 {
                 break;
             }
+            // Over-read by the priority mints already taken, which this class may return.
+            let read = remaining + chosen.len();
             let mut stmt = conn
                 .prepare(sql)
                 .map_err(|e| query_error(&format!("Failed to prepare {class}"), e))?;
             let rows = stmt
-                .query_map(params![self.chain_id(), now, remaining], |row| row.get(0))
+                .query_map(params![self.chain_id(), now, read], |row| {
+                    row.get::<_, String>(0)
+                })
                 .map_err(|e| query_error(&format!("{class} query failed"), e))?;
             for row in rows {
-                mints.push(row.map_err(|e| query_error(&format!("Failed to collect {class}"), e))?);
+                let mint =
+                    row.map_err(|e| query_error(&format!("Failed to collect {class}"), e))?;
+                if mints.len() == limit {
+                    break;
+                }
+                if chosen.insert(mint.clone()) {
+                    mints.push(mint);
+                }
             }
         }
 
@@ -442,7 +483,6 @@ impl TokenDatabase {
 mod tests {
     use super::*;
     use crate::chains::ChainId;
-    use std::collections::HashSet;
 
     /// The single-join selection `get_tokens_without_security_data` replaced, kept as the
     /// oracle.
@@ -461,12 +501,11 @@ mod tests {
              )
              ORDER BY
                  CASE
-                     WHEN ut.security_error_type IS NULL AND t.first_discovered_at > ?2 - 86400 THEN 1
-                     WHEN ut.security_error_type IS NULL THEN 2
-                     WHEN ut.security_error_type = 'temporary' THEN 3
-                     ELSE 4
+                     WHEN ut.security_error_type IS NULL THEN 1
+                     WHEN ut.security_error_type = 'temporary' THEN 2
+                     ELSE 3
                  END,
-                 t.first_discovered_at ASC
+                 t.first_discovered_at DESC
              LIMIT ?3";
 
     const HOUR: i64 = 3_600;
@@ -517,19 +556,18 @@ mod tests {
     }
 
     /// (retry class, first_discovered_at) as the oracle orders it.
-    fn sort_key(conn: &rusqlite::Connection, mint: &str, now: i64) -> (i64, i64) {
+    fn sort_key(conn: &rusqlite::Connection, mint: &str) -> (i64, i64) {
         conn.query_row(
             "SELECT CASE
-                        WHEN ut.security_error_type IS NULL AND t.first_discovered_at > ?2 - 86400 THEN 1
-                        WHEN ut.security_error_type IS NULL THEN 2
-                        WHEN ut.security_error_type = 'temporary' THEN 3
-                        ELSE 4
+                        WHEN ut.security_error_type IS NULL THEN 1
+                        WHEN ut.security_error_type = 'temporary' THEN 2
+                        ELSE 3
                     END,
                     t.first_discovered_at
              FROM tokens t
              LEFT JOIN update_tracking ut ON t.chain_id = ut.chain_id AND t.mint = ut.mint
              WHERE t.chain_id = 'solana' AND t.mint = ?1",
-            params![mint, now],
+            params![mint],
             |row| Ok((row.get(0)?, row.get(1)?)),
         )
         .expect("read sort key")
@@ -552,13 +590,12 @@ mod tests {
         for limit in 0..=eligible.len() + 2 {
             let expected = oracle(conn, now, limit);
             let actual = db
-                .get_tokens_without_security_data(limit)
+                .get_tokens_without_security_data(limit, &[])
                 .expect("get_tokens_without_security_data");
 
             let expected_keys: Vec<(i64, i64)> =
-                expected.iter().map(|m| sort_key(conn, m, now)).collect();
-            let actual_keys: Vec<(i64, i64)> =
-                actual.iter().map(|m| sort_key(conn, m, now)).collect();
+                expected.iter().map(|m| sort_key(conn, m)).collect();
+            let actual_keys: Vec<(i64, i64)> = actual.iter().map(|m| sort_key(conn, m)).collect();
             assert_eq!(
                 actual_keys, expected_keys,
                 "sort keys differ at limit {limit}"
@@ -593,8 +630,8 @@ mod tests {
         // `now` and the method's own cannot move a row across one.
         let now = Utc::now().timestamp();
 
-        // Class 1: never tried, discovered in the last 24h; untracked or tracked without
-        // an error, including a tie.
+        // Class 1, recent: never tried, untracked or tracked without an error, including a
+        // tie.
         for (mint, discovered, tracked) in [
             ("recent-untracked", now - 2 * HOUR, false),
             ("recent-tracked", now - 5 * HOUR, true),
@@ -606,7 +643,7 @@ mod tests {
                 insert_tracking(&conn, "solana", mint, None);
             }
         }
-        // Class 2: never tried, older than 24h.
+        // Class 1, older: never tried.
         for (mint, discovered, tracked) in [
             ("older-untracked", now - 3 * DAY, false),
             ("older-tracked", now - 10 * DAY, true),
@@ -618,7 +655,7 @@ mod tests {
                 insert_tracking(&conn, "solana", mint, None);
             }
         }
-        // Classes 3 and 4: errors past and within their retry delay. Backoff is
+        // Classes 2 and 3: errors past and within their retry delay. Backoff is
         // 120 * 2^min(count - 1, 10) seconds; 7 days for permanent errors.
         for (mint, discovered, error) in [
             ("temp-due", now - 2 * HOUR, ("temporary", 1, now - HOUR)),
@@ -711,5 +748,74 @@ mod tests {
             insert_rugcheck(&conn, mint);
         }
         assert_matches_oracle(&db, &conn, now);
+    }
+
+    /// The priority mints come first, in their order, but only the eligible ones; the
+    /// remaining slots follow the regular order without repeating a priority mint.
+    #[test]
+    fn priority_mints_come_first_when_eligible() {
+        let dir = tempfile::tempdir().expect("create temp dir");
+        let path = dir.path().join("tokens.db");
+        let db = TokenDatabase::new(&path.to_string_lossy(), ChainId::Solana)
+            .expect("open tokens database");
+        let conn = db.conn().expect("pooled connection");
+        let now = Utc::now().timestamp();
+
+        for (mint, discovered) in [
+            ("newest", now - HOUR),
+            ("middle", now - DAY),
+            ("awaiting-old", now - 30 * DAY),
+            ("awaiting-retry-due", now - 20 * DAY),
+            ("awaiting-waiting", now - 2 * HOUR),
+            ("awaiting-assessed", now - 2 * HOUR),
+            ("awaiting-blacklisted", now - 2 * HOUR),
+        ] {
+            insert_token(&conn, "solana", mint, discovered);
+        }
+        insert_tracking(
+            &conn,
+            "solana",
+            "awaiting-retry-due",
+            Some(("temporary", 1, now - HOUR)),
+        );
+        insert_tracking(
+            &conn,
+            "solana",
+            "awaiting-waiting",
+            Some(("temporary", 8, now - HOUR)),
+        );
+        insert_rugcheck(&conn, "awaiting-assessed");
+        insert_blacklist(&conn, "awaiting-blacklisted");
+
+        let priority: Vec<String> = [
+            "awaiting-old",
+            "awaiting-waiting",
+            "awaiting-assessed",
+            "awaiting-blacklisted",
+            "not-a-token",
+            "awaiting-retry-due",
+            "awaiting-old",
+        ]
+        .iter()
+        .map(|m| (*m).to_owned())
+        .collect();
+
+        let all = db
+            .get_tokens_without_security_data(10, &priority)
+            .expect("selection");
+        assert_eq!(
+            all,
+            vec!["awaiting-old", "awaiting-retry-due", "newest", "middle"]
+        );
+
+        let two = db
+            .get_tokens_without_security_data(2, &priority)
+            .expect("selection");
+        assert_eq!(two, vec!["awaiting-old", "awaiting-retry-due"]);
+
+        let three = db
+            .get_tokens_without_security_data(3, &priority)
+            .expect("selection");
+        assert_eq!(three, vec!["awaiting-old", "awaiting-retry-due", "newest"]);
     }
 }

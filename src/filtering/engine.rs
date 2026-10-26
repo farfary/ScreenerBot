@@ -263,6 +263,7 @@ pub async fn compute_snapshot(
     let mut rejected_mints: Vec<String> = Vec::new();
     let mut passed_tokens: Vec<PassedToken> = Vec::new();
     let mut rejected_tokens: Vec<RejectedToken> = Vec::new();
+    let mut awaiting_rugcheck_report: Vec<(DateTime<Utc>, String)> = Vec::new();
     let mut token_entries: HashMap<String, TokenEntry> = HashMap::with_capacity(tokens.len());
     let mut stats = FilteringStats::default();
 
@@ -326,6 +327,19 @@ pub async fn compute_snapshot(
                         .await
                     });
                 }
+            }
+            // Every earlier stage passed and only the report is missing: the token
+            // waits for it, neither passed nor rejected, and carries no rejection row.
+            Err(FilterRejectionReason::RugcheckDataMissing) => {
+                stats.awaiting_rugcheck_report += 1;
+                token.last_rejection_reason = None;
+                token.last_rejection_source = None;
+                token.last_rejection_at = None;
+                outcomes.push(FilterOutcome {
+                    mint: token.mint.clone(),
+                    rejection: None,
+                });
+                awaiting_rugcheck_report.push((token.first_discovered_at, token.mint.clone()));
             }
             Err(reason) => {
                 let reason_label = reason.label();
@@ -438,8 +452,13 @@ pub async fn compute_snapshot(
     logger::info(
         LogTag::Filtering,
         &format!(
-            "processed={} passed={} rejected={} duration_ms={} rejection_summary={}",
-            stats.total_processed, stats.passed, stats.rejected, elapsed_ms, rejection_summary
+            "processed={} passed={} rejected={} awaiting_rugcheck_report={} duration_ms={} rejection_summary={}",
+            stats.total_processed,
+            stats.passed,
+            stats.rejected,
+            stats.awaiting_rugcheck_report,
+            elapsed_ms,
+            rejection_summary
         ),
     );
 
@@ -460,6 +479,7 @@ pub async fn compute_snapshot(
             "total_processed": stats.total_processed,
             "passed": stats.passed,
             "rejected": stats.rejected,
+            "awaiting_rugcheck_report": stats.awaiting_rugcheck_report,
             "duration_ms": elapsed_ms as u64,
             "top_rejection_reasons": top_rejections,
         }),
@@ -480,6 +500,14 @@ pub async fn compute_snapshot(
             passed_tokens
         },
         rejected_mints,
+        awaiting_rugcheck_report: {
+            // Newest first: the report backlog fetches them in this order.
+            awaiting_rugcheck_report.sort_unstable_by(|a, b| b.cmp(a));
+            awaiting_rugcheck_report
+                .into_iter()
+                .map(|(_, mint)| mint)
+                .collect()
+        },
         rejected_tokens: {
             rejected_tokens.sort_unstable_by(|a, b| {
                 b.rejection_time
@@ -536,6 +564,7 @@ struct FilteringStats {
     total_processed: usize,
     passed: usize,
     rejected: usize,
+    awaiting_rugcheck_report: usize,
     rejection_counts: HashMap<FilterRejectionReason, usize>,
 }
 

@@ -58,6 +58,12 @@ pub async fn get_passed_tokens(scope: ChainScope) -> Result<Vec<PassedToken>> {
     Ok(passed)
 }
 
+/// One chain's tokens that pass every other stage and wait only for their RugCheck
+/// report, newest first, from the latest snapshot; empty while none has been built.
+pub async fn get_awaiting_rugcheck_report(chain: ChainId) -> Vec<String> {
+    store(chain).awaiting_rugcheck_report_if_ready().await
+}
+
 /// Rebuild the cached filtering snapshot of every chain in `scope` (used by services)
 pub async fn refresh(scope: ChainScope) -> Result<()> {
     for chain in scope.chains() {
@@ -120,6 +126,7 @@ fn combine_stats(
         blacklisted: total.blacklisted + stats.blacklisted,
         with_ohlcv: total.with_ohlcv + stats.with_ohlcv,
         passed_filtering: total.passed_filtering + stats.passed_filtering,
+        awaiting_rugcheck_report: total.awaiting_rugcheck_report + stats.awaiting_rugcheck_report,
         updated_at: total.updated_at.min(stats.updated_at),
     }
 }

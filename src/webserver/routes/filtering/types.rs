@@ -30,6 +30,13 @@ pub struct FilteringStatsResponse {
     pub blacklisted: Option<usize>,
     pub with_ohlcv: Option<usize>,
     pub passed_filtering: Option<usize>,
+    /// Tokens held back only by a missing RugCheck report; not rejections.
+    pub awaiting_rugcheck_report: Option<usize>,
+    /// Whether this install is signed in, which lets the data server supply reports in
+    /// batches on top of the direct fetches.
+    pub signed_in: bool,
+    /// RugCheck reports fetched directly per minute, the only source when signed out.
+    pub direct_reports_per_minute: f64,
     pub updated_at: Option<String>,
     pub timestamp: String,
 }

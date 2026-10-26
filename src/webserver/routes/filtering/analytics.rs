@@ -62,17 +62,20 @@ impl Headline {
         };
         let total = stats.total_tokens;
         let passed = stats.passed_filtering;
-        let pass_rate = if total > 0 {
-            ((passed as f64 / total as f64) * 1000.0).round() / 10.0
-        } else {
-            0.0
+        let rejected = stats.rejected();
+        let rate = |count: usize| {
+            if total > 0 {
+                ((count as f64 / total as f64) * 1000.0).round() / 10.0
+            } else {
+                0.0
+            }
         };
         Self {
             total_tokens: Some(total),
             total_passed: Some(passed),
-            total_rejected: Some(total.saturating_sub(passed)),
-            pass_rate: Some(pass_rate),
-            rejection_rate: Some(((100.0 - pass_rate) * 10.0).round() / 10.0),
+            total_rejected: Some(rejected),
+            pass_rate: Some(rate(passed)),
+            rejection_rate: Some(rate(rejected)),
         }
     }
 }
@@ -402,12 +405,13 @@ mod tests {
             blacklisted: 0,
             with_ohlcv: 0,
             passed_filtering,
+            awaiting_rugcheck_report: 0,
             updated_at: Utc::now(),
         }
     }
 
     /// Scanned, passed and rejected come from the one snapshot, so they add up and the two
-    /// rates are complements. The history table counts every re-evaluation, so a figure
+    /// rates are complements while no token awaits its report. The history table counts every re-evaluation, so a figure
     /// taken from it next to the snapshot's corpus size read 720,000 rejected of 30,000
     /// scanned; the headline takes no range input at all.
     #[test]
@@ -429,7 +433,20 @@ mod tests {
         assert_eq!(headline.total_tokens, Some(0));
         assert_eq!(headline.total_rejected, Some(0));
         assert_eq!(headline.pass_rate, Some(0.0));
-        assert_eq!(headline.rejection_rate, Some(100.0));
+        assert_eq!(headline.rejection_rate, Some(0.0));
+    }
+
+    /// A token waiting for its RugCheck report is neither passed nor rejected, so it is
+    /// left out of both the rejected count and the rejection rate.
+    #[test]
+    fn tokens_awaiting_their_report_are_not_counted_as_rejected() {
+        let mut stats = snapshot(1_000, 100);
+        stats.awaiting_rugcheck_report = 400;
+        let headline = Headline::of(Some(&stats));
+
+        assert_eq!(headline.total_rejected, Some(500));
+        assert_eq!(headline.pass_rate, Some(10.0));
+        assert_eq!(headline.rejection_rate, Some(50.0));
     }
 
     /// The promotional payload is one corpus: the breakdowns add up to the headline's

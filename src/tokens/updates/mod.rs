@@ -23,7 +23,9 @@ mod loops;
 mod rate_limiter;
 
 // Re-export public API
-pub use core::{force_update_token, update_token, update_tokens_batch, UpdateResult};
+pub use core::{
+    force_update_token, update_token, update_tokens_batch, UpdateResult, MAX_DIRECT_PER_CYCLE,
+};
 pub use helpers::MarketFetchFailure;
 pub use loops::start_update_loop;
 pub use rate_limiter::RateLimitCoordinator;

@@ -415,9 +415,7 @@ pub async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<Home
             .await
             .unwrap_or_default(),
     };
-    let rejected_filters = filtering_stats
-        .as_ref()
-        .map(|s| s.total_tokens.saturating_sub(s.passed_filtering));
+    let rejected_filters = filtering_stats.as_ref().map(|s| s.rejected());
 
     let tokens = TokenStatistics {
         snapshot_state: SnapshotState::of(&filtering_stats),

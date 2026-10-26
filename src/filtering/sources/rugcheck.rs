@@ -11,7 +11,8 @@ use crate::filtering::stage::{FilterStage, StageEval};
 use crate::tokens::types::{SecurityRisk, Token};
 
 /// The Rugcheck stage, applicable only on a chain Rugcheck publishes reports for. It owns
-/// the data-presence check, so a missing report can only reject where Rugcheck applies.
+/// the report-presence check, so a missing report can only hold a token back where
+/// Rugcheck applies.
 pub struct RugcheckStage;
 
 impl FilterStage for RugcheckStage {
@@ -33,29 +34,32 @@ impl FilterStage for RugcheckStage {
     }
 }
 
+/// Whether the token carries a RugCheck report: any one of the fields a report fills.
+pub fn has_rugcheck_report(token: &Token) -> bool {
+    token.security_score.is_some()
+        || token.token_type.is_some()
+        || token.mint_authority.is_some()
+        || token.freeze_authority.is_some()
+        || token.graph_insiders_detected.is_some()
+        || token.lp_provider_count.is_some()
+        || token.total_holders.is_some()
+        || !token.security_risks.is_empty()
+        || !token.top_holders.is_empty()
+        || token.creator_balance_pct.is_some()
+        || token.transfer_fee_pct.is_some()
+        || token.transfer_fee_max_amount.is_some()
+        || token.transfer_fee_authority.is_some()
+}
+
+/// A token without a report never passes, whatever the RugCheck rules are set to: the
+/// engine counts it as awaiting its report. The rules themselves run only when enabled.
 fn evaluate_stage(token: &Token, config: &FilteringConfig) -> Result<(), FilterRejectionReason> {
+    if !has_rugcheck_report(token) {
+        return Err(FilterRejectionReason::RugcheckDataMissing);
+    }
     if config.rugcheck.enabled {
-        let has_rug_data = token.security_score.is_some()
-            || token.token_type.is_some()
-            || token.mint_authority.is_some()
-            || token.freeze_authority.is_some()
-            || token.graph_insiders_detected.is_some()
-            || token.lp_provider_count.is_some()
-            || token.total_holders.is_some()
-            || !token.security_risks.is_empty()
-            || !token.top_holders.is_empty()
-            || token.creator_balance_pct.is_some()
-            || token.transfer_fee_pct.is_some()
-            || token.transfer_fee_max_amount.is_some()
-            || token.transfer_fee_authority.is_some();
-
-        if !has_rug_data {
-            return Err(FilterRejectionReason::RugcheckDataMissing);
-        }
-
         evaluate(token, &config.rugcheck)?;
     }
-
     Ok(())
 }
 

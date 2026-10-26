@@ -9,10 +9,11 @@ use std::collections::HashMap;
 
 use crate::{
     chains::ChainScope,
+    config::with_config,
     filtering::{self, sources::rejection_text, SnapshotState},
     i18n::ids,
     logger::{self, LogTag},
-    tokens::get_rejection_stats_async,
+    tokens::{get_rejection_stats_async, updates::MAX_DIRECT_PER_CYCLE},
     webserver::{
         api_error::{ApiError, ApiErrorCode},
         promo,
@@ -51,9 +52,22 @@ pub async fn get_stats() -> Response {
         blacklisted: stats.as_ref().map(|s| s.blacklisted),
         with_ohlcv: stats.as_ref().map(|s| s.with_ohlcv),
         passed_filtering: stats.as_ref().map(|s| s.passed_filtering),
+        awaiting_rugcheck_report: stats.as_ref().map(|s| s.awaiting_rugcheck_report),
+        signed_in: crate::account::is_signed_in(),
+        direct_reports_per_minute: direct_reports_per_minute(with_config(|cfg| {
+            cfg.tokens.update_intervals.security_seconds
+        })),
         updated_at: stats.as_ref().map(|s| s.updated_at.to_rfc3339()),
         timestamp: Utc::now().to_rfc3339(),
     })
+}
+
+/// RugCheck reports the security cycle fetches directly per minute, to one decimal: at
+/// most [`MAX_DIRECT_PER_CYCLE`] every `security_seconds` (a zero interval counts as one
+/// second, the shortest cycle the loop can run).
+fn direct_reports_per_minute(security_seconds: u64) -> f64 {
+    let per_minute = MAX_DIRECT_PER_CYCLE as f64 * 60.0 / security_seconds.max(1) as f64;
+    (per_minute * 10.0).round() / 10.0
 }
 
 /// POST /api/filtering/refresh
@@ -164,6 +178,8 @@ mod tests {
     /// snapshot: state and values must agree, in both directions.
     #[tokio::test]
     async fn absent_counts_are_null_and_declared_building() {
+        let _ = crate::config::utils::CONFIG
+            .get_or_init(|| std::sync::RwLock::new(crate::config::schemas::Config::default()));
         let response = get_stats().await;
         let body = axum::body::to_bytes(response.into_body(), usize::MAX)
             .await
@@ -181,6 +197,7 @@ mod tests {
             "blacklisted",
             "with_ohlcv",
             "passed_filtering",
+            "awaiting_rugcheck_report",
         ];
 
         match state {
@@ -214,5 +231,13 @@ mod tests {
             }
             other => panic!("unknown snapshot state {other:?}"),
         }
+    }
+
+    /// The direct RugCheck rate follows the security interval and never divides by zero.
+    #[test]
+    fn the_direct_report_rate_follows_the_security_interval() {
+        assert_eq!(direct_reports_per_minute(60), 3.0);
+        assert_eq!(direct_reports_per_minute(120), 1.5);
+        assert_eq!(direct_reports_per_minute(0), 180.0);
     }
 }

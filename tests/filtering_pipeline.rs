@@ -188,7 +188,7 @@ async fn pipeline_with_no_filters_enabled_accepts_a_hostile_token() {
         evaluate_token(&solana_filter_profile(), &token, &config)
             .await
             .is_ok(),
-        "with every switch off the pipeline must be a pass-through — no hidden mandatory rule"
+        "with every switch off the pipeline passes any token that carries a RugCheck report"
     );
 }
 
@@ -550,26 +550,41 @@ async fn pipeline_rugcheck_gate_needs_at_least_one_security_field() {
     );
 }
 
+/// A token without a RugCheck report never passes, whatever the filter switches say:
+/// with the default rules, with the RugCheck rules off and with every filter off, the
+/// missing report is the decision.
 #[tokio::test]
-async fn pipeline_disabling_rugcheck_also_disables_its_data_requirement() {
+async fn pipeline_never_passes_a_token_without_a_rugcheck_report() {
     let _cfg = config_guard();
-    let mut config = filters_default_dex_only();
-    config.rugcheck.enabled = false;
+    let mut rugcheck_off = filters_default_dex_only();
+    rugcheck_off.rugcheck.enabled = false;
 
     let mut token = seeded_token();
     token.security_score = None;
     token.token_type = None;
+    token.mint_authority = None;
+    token.freeze_authority = None;
+    token.graph_insiders_detected = None;
     token.lp_provider_count = None;
     token.total_holders = None;
-    token.transfer_fee_pct = None;
     token.security_risks.clear();
     token.top_holders.clear();
     token.creator_balance_pct = None;
+    token.transfer_fee_pct = None;
     token.transfer_fee_max_amount = None;
+    token.transfer_fee_authority = None;
 
-    assert!(evaluate_token(&solana_filter_profile(), &token, &config)
-        .await
-        .is_ok());
+    for (label, config) in [
+        ("default rules", filters_default_dex_only()),
+        ("rugcheck rules off", rugcheck_off),
+        ("every filter off", filters_all_disabled()),
+    ] {
+        assert_eq!(
+            evaluate_token(&solana_filter_profile(), &token, &config).await,
+            Err(FilterRejectionReason::RugcheckDataMissing),
+            "{label}: a token without a report must wait for it"
+        );
+    }
 }
 
 // ============================================================================

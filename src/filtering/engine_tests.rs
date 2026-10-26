@@ -1,7 +1,7 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Tests for the snapshot build: the stamp, the rejection start, the pass time, and that the snapshot carries exactly the rejection state the token store holds after the build.
+//! Tests for the snapshot build: the stamp, the rejection start, the pass time, the tokens held back only by a missing RugCheck report, and that the snapshot carries exactly the rejection state the token store holds after the build.
 
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -44,8 +44,22 @@ fn raw(directory: &tempfile::TempDir) -> Connection {
     Connection::open(directory.path().join("tokens.db")).expect("open tokens store")
 }
 
-/// A token with a priced, fresh DexScreener row, discovered `age_seconds` ago.
+/// A token with a priced, fresh DexScreener row and a RugCheck report, discovered
+/// `age_seconds` ago.
 fn seed_token(directory: &tempfile::TempDir, mint: &str, age_seconds: i64) {
+    seed_listing(directory, mint, age_seconds);
+    let now = chrono::Utc::now().timestamp();
+    raw(directory)
+        .execute(
+            "INSERT INTO security_rugcheck (chain_id, mint, score, security_data_last_fetched_at, security_data_first_fetched_at)
+             VALUES ('solana', ?1, 1, ?2, ?2)",
+            params![mint, now],
+        )
+        .expect("insert report row");
+}
+
+/// A token with a priced, fresh DexScreener row and no RugCheck report yet.
+fn seed_listing(directory: &tempfile::TempDir, mint: &str, age_seconds: i64) {
     let now = chrono::Utc::now().timestamp();
     let conn = raw(directory);
     conn.execute(
@@ -222,4 +236,38 @@ async fn stamps_strictly_increase() {
     ahead.evaluated_at += 1_000;
     let after = build(too_new_config(), Some(&ahead)).await;
     assert_eq!(after.evaluated_at, ahead.evaluated_at + 1);
+}
+
+#[tokio::test]
+async fn a_token_without_a_report_awaits_it_and_is_neither_passed_nor_rejected() {
+    let directory = setup();
+    seed_listing(&directory, NEW_TOKEN, TEN_DAYS);
+    seed_listing(&directory, OLD_TOKEN, 2 * TEN_DAYS);
+
+    let snapshot = build(open_config(), None).await;
+
+    assert!(snapshot.filtered_mints.is_empty());
+    assert!(snapshot.passed_tokens.is_empty());
+    assert!(snapshot.rejected_mints.is_empty());
+    assert!(snapshot.rejected_tokens.is_empty());
+    assert_eq!(
+        snapshot.awaiting_rugcheck_report,
+        vec![NEW_TOKEN.to_owned(), OLD_TOKEN.to_owned()],
+        "awaiting tokens are listed newest first"
+    );
+    assert_eq!(stored(&directory, NEW_TOKEN).0, None, "no rejection row");
+}
+
+#[tokio::test]
+async fn an_earlier_stage_rejection_shows_its_own_reason_before_the_missing_report() {
+    let directory = setup();
+    seed_listing(&directory, NEW_TOKEN, 0);
+
+    let snapshot = build(too_new_config(), None).await;
+
+    assert!(snapshot.awaiting_rugcheck_report.is_empty());
+    assert_eq!(
+        snapshot.rejected_tokens[0].reason,
+        FilterRejectionReason::TokenTooNew.label()
+    );
 }

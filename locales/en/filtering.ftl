@@ -157,6 +157,7 @@ filtering-footer-in-sync = Configuration in sync
 filtering-info-total = Total
 filtering-info-priced = Priced
 filtering-info-passed = Passed
+filtering-info-awaiting = Awaiting report
 filtering-info-positions = Positions
 filtering-info-blacklisted = Blacklisted
 filtering-info-cache = Cache
@@ -173,6 +174,12 @@ filtering-status-pool-priced = Live Pool Price
 filtering-status-pool-priced-detail = { $share } priced on-chain · API prices cover all tokens
 filtering-status-passed = Passed Filters
 filtering-status-passed-detail = { $share } passed
+# A token that passed every other filter and waits only for its RugCheck report: neither passed nor rejected.
+filtering-status-awaiting = Awaiting { -rugcheck } Report
+filtering-status-awaiting-detail = Passed every other filter
+# $rate is the formatted number of reports fetched directly per minute, e.g. "3".
+filtering-status-report-rate = { -rugcheck } reports arrive at about { $rate } a minute. Signed-in installs get them faster.
+filtering-status-report-sign-in = Sign in
 filtering-status-positions = Open Positions
 filtering-status-positions-detail = Active trades
 filtering-status-blacklisted = Blacklisted

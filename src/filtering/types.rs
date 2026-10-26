@@ -291,6 +291,9 @@ pub struct FilteringSnapshot {
     pub filtered_mints: Vec<String>,
     pub passed_tokens: Vec<PassedToken>,
     pub rejected_mints: Vec<String>,
+    /// Tokens that passed every other stage and wait only for their RugCheck report,
+    /// newest first. Neither passed nor rejected.
+    pub awaiting_rugcheck_report: Vec<String>,
     pub rejected_tokens: Vec<RejectedToken>,
     pub tokens: HashMap<String, TokenEntry>,
     pub blacklist_reasons: HashMap<String, Vec<BlacklistReasonInfo>>,
@@ -304,6 +307,7 @@ impl FilteringSnapshot {
             filtered_mints: Vec::new(),
             passed_tokens: Vec::new(),
             rejected_mints: Vec::new(),
+            awaiting_rugcheck_report: Vec::new(),
             rejected_tokens: Vec::new(),
             tokens: HashMap::new(),
             blacklist_reasons: HashMap::new(),
@@ -332,5 +336,16 @@ pub struct FilteringStatsSnapshot {
     pub blacklisted: usize,
     pub with_ohlcv: usize,
     pub passed_filtering: usize,
+    /// Tokens held back only by a missing RugCheck report; not rejections.
+    pub awaiting_rugcheck_report: usize,
     pub updated_at: DateTime<Utc>,
+}
+
+impl FilteringStatsSnapshot {
+    /// Tokens a filter rejected: neither passed nor awaiting their report.
+    pub fn rejected(&self) -> usize {
+        self.total_tokens
+            .saturating_sub(self.passed_filtering)
+            .saturating_sub(self.awaiting_rugcheck_report)
+    }
 }

@@ -330,6 +330,7 @@ pub(super) async fn build_stats(
         blacklisted,
         with_ohlcv,
         passed_filtering: snapshot.passed_tokens.len(),
+        awaiting_rugcheck_report: snapshot.awaiting_rugcheck_report.len(),
         updated_at: snapshot.updated_at,
     }
 }

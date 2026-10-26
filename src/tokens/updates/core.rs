@@ -515,10 +515,14 @@ pub async fn update_tokens_batch(
 // SECURITY DATA UPDATES (ONE-TIME FETCH)
 // ============================================================================
 
+/// Cap on direct Rugcheck API fetches per security cycle (for tokens the data server did
+/// not have), so the direct per-IP budget is never bursted.
+pub const MAX_DIRECT_PER_CYCLE: usize = 3;
+
 /// Update Rugcheck security data for tokens that don't have it yet
 ///
-/// Security data is static/rarely changing - fetch once and cache.
-/// Processes ONE token per cycle for better performance with large backlogs.
+/// Security data is static/rarely changing - fetch once and cache. Each cycle warms a
+/// batch from the data server, then fetches at most [`MAX_DIRECT_PER_CYCLE`] directly.
 pub(super) async fn update_security_data(
     db: &Arc<TokenDatabase>,
     coordinator: &RateLimitCoordinator,
@@ -538,21 +542,24 @@ pub(super) async fn update_security_data(
     // shared data server can return up to 30 tokens' reports in a single
     // un-throttled call, so we warm the backlog far faster.
     const SECURITY_BATCH: usize = 30;
-    /// Cap on direct Rugcheck API fetches per cycle (for tokens the server didn't
-    /// have) so the direct per-IP budget is never bursted.
-    const MAX_DIRECT_PER_CYCLE: usize = 3;
 
-    let tokens =
-        match blocking_db(db, |db| db.get_tokens_without_security_data(SECURITY_BATCH)).await {
-            Ok(tokens) => tokens,
-            Err(e) => {
-                logger::error(
-                    LogTag::Tokens,
-                    &format!("Failed to load tokens without security data: {e}"),
-                );
-                return;
-            }
-        };
+    // Tokens that pass every other filtering stage and wait only for this report come
+    // first, so the bounded direct fetches go where they let a token pass.
+    let awaiting = crate::filtering::get_awaiting_rugcheck_report(db.chain()).await;
+    let tokens = match blocking_db(db, move |db| {
+        db.get_tokens_without_security_data(SECURITY_BATCH, &awaiting)
+    })
+    .await
+    {
+        Ok(tokens) => tokens,
+        Err(e) => {
+            logger::error(
+                LogTag::Tokens,
+                &format!("Failed to load tokens without security data: {e}"),
+            );
+            return;
+        }
+    };
 
     if tokens.is_empty() {
         return;

@@ -152,6 +152,27 @@
   margin-top: auto;
 }
 
+/* Signed-out RugCheck report rate, above the metric cards */
+.status-report-notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm) var(--spacing-md);
+  margin-bottom: var(--spacing-md);
+  padding: var(--spacing-sm) var(--spacing-md);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  background: var(--bg-card);
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.status-report-notice__text {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+
 /* =============================================================================
    Rejection Breakdown (right column of status tab)
    ============================================================================= */

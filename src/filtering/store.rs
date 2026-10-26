@@ -219,6 +219,15 @@ impl FilteringStore {
         Ok(snapshot.rejected_tokens.clone())
     }
 
+    /// Tokens of the latest snapshot that wait only for their RugCheck report, newest
+    /// first; empty while the first snapshot is still building.
+    pub async fn awaiting_rugcheck_report_if_ready(self: &Arc<Self>) -> Vec<String> {
+        self.snapshot_if_ready()
+            .await
+            .map(|snapshot| snapshot.awaiting_rugcheck_report.clone())
+            .unwrap_or_default()
+    }
+
     pub async fn execute_query(
         self: &Arc<Self>,
         mut query: FilteringQuery,

@@ -72,6 +72,7 @@ pub fn get_promo_filtering_snapshot() -> FilteringStatsSnapshot {
         blacklisted,
         with_ohlcv,
         passed_filtering: total - rejected().count(),
+        awaiting_rugcheck_report: 0,
         updated_at: DateTime::from_timestamp(refreshed, 0).unwrap_or_else(Utc::now),
     }
 }
@@ -190,10 +191,7 @@ mod tests {
         let counts = get_promo_rejection_counts(None, None);
         let rejected: i64 = counts.iter().map(|(_, _, count)| count).sum();
 
-        assert_eq!(
-            rejected as usize,
-            snapshot.total_tokens - snapshot.passed_filtering
-        );
+        assert_eq!(rejected as usize, snapshot.rejected());
         assert!(snapshot.passed_filtering > 0);
         assert!(counts.windows(2).all(|pair| pair[0].2 >= pair[1].2));
 

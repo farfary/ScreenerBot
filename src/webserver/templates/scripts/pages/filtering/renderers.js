@@ -30,6 +30,7 @@ import {
 } from "./config_metadata.js";
 
 let reasonClickBound = false;
+let signInClickBound = false;
 
 /**
  * Create filtering renderers with access to state and dependencies
@@ -47,6 +48,20 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
     document.addEventListener("click", (event) => {
       const row = event.target instanceof Element ? event.target.closest("[data-reason]") : null;
       if (row?.dataset.reason) window.filteringPage.selectReason(row.dataset.reason);
+    });
+  }
+
+  // The report notice's sign-in button opens the account tab of Settings, the one
+  // sign-in entry point. Bound once per document, like the reason rows.
+  if (!signInClickBound) {
+    signInClickBound = true;
+    document.addEventListener("click", (event) => {
+      const button =
+        event.target instanceof Element ? event.target.closest("[data-filtering-sign-in]") : null;
+      if (!button) return;
+      void import("../../ui/settings_dialog.js").then(({ showSettingsDialog }) =>
+        showSettingsDialog({ tab: "account" })
+      );
     });
   }
 
@@ -108,6 +123,7 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
       total_tokens,
       with_pool_price,
       passed_filtering,
+      awaiting_rugcheck_report,
       open_positions,
       blacklisted,
       updated_at,
@@ -115,6 +131,7 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
 
     const priceRate = percentOf(with_pool_price, total_tokens);
     const passedRate = percentOf(passed_filtering, total_tokens);
+    const awaitingRate = percentOf(awaiting_rugcheck_report, total_tokens);
     const cacheAge = refreshedLabel(updated_at);
 
     return [
@@ -124,6 +141,10 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
         I18n.t("filtering-info-passed"),
         countWithShare(passed_filtering, passedRate),
         Utils.countTone(passed_filtering, "success")
+      ),
+      summaryChip(
+        I18n.t("filtering-info-awaiting"),
+        countWithShare(awaiting_rugcheck_report, awaitingRate)
       ),
       summaryChip(I18n.t("filtering-info-positions"), Utils.formatNumber(open_positions, 0)),
       summaryChip(
@@ -147,12 +168,34 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
       blacklisted,
       with_ohlcv,
       passed_filtering,
+      awaiting_rugcheck_report,
+      signed_in,
+      direct_reports_per_minute,
       updated_at,
     } = state.stats;
 
     const priceRate = percentOf(with_pool_price, total_tokens);
     const passedRate = percentOf(passed_filtering, total_tokens);
     const building = state.stats.snapshot_state === "building";
+
+    // Signed out, reports come only from the bounded direct fetches; the notice states
+    // that rate and offers the sign-in that adds the data server's batches.
+    const reportNoticeHtml = signed_in
+      ? ""
+      : `
+        <div class="status-report-notice">
+          <span class="status-report-notice__text">${Utils.escapeHtml(
+            I18n.t("filtering-status-report-rate", {
+              rate: Utils.formatNumber(
+                direct_reports_per_minute,
+                Number.isInteger(direct_reports_per_minute) ? 0 : 1
+              ),
+            })
+          )}</span>
+          <button type="button" class="btn btn-sm btn-secondary" data-filtering-sign-in>${Utils.escapeHtml(
+            I18n.t("filtering-status-report-sign-in")
+          )}</button>
+        </div>`;
 
     // While the snapshot builds, every metric card below shows "—" (its value is null) and
     // this line says why, instead of the cards asserting a corpus of zero tokens.
@@ -181,6 +224,11 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
           <span class="metric-label">${Utils.escapeHtml(I18n.t("filtering-status-passed"))}</span>
           <span class="metric-value">${Utils.formatNumber(passed_filtering, 0)}</span>
           <span class="metric-detail">${Utils.escapeHtml(I18n.t("filtering-status-passed-detail", { share: shareText(passedRate) }))}</span>
+        </div>
+        <div class="metric-card">
+          <span class="metric-label">${Utils.escapeHtml(I18n.t("filtering-status-awaiting"))}</span>
+          <span class="metric-value">${Utils.formatNumber(awaiting_rugcheck_report, 0)}</span>
+          <span class="metric-detail">${Utils.escapeHtml(I18n.t("filtering-status-awaiting-detail"))}</span>
         </div>
         <div class="metric-card">
           <span class="metric-label">${Utils.escapeHtml(I18n.t("filtering-status-positions"))}</span>
@@ -244,7 +292,7 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
 
     return `
     <div class="filtering-status-layout">
-      <div class="status-metrics-section">${metricsHtml}</div>
+      <div class="status-metrics-section">${reportNoticeHtml}${metricsHtml}</div>
       <div class="status-rejection-section">${rejectionHtml}</div>
     </div>
   `;
