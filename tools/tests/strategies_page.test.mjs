@@ -109,8 +109,12 @@ async function importFile(file) {
 
 test("the list toggle changes only enabled, through the enabled route", async () => {
   const writes = [];
+  // Only the strategy resource counts: the shell also POSTs reads such as
+  // `/api/ui-state/load`, which a slow page start can issue inside this window.
   const record = (request) => {
-    if (request.method() !== "GET") writes.push(request);
+    if (request.method() !== "GET" && new URL(request.url()).pathname.startsWith("/api/strategies")) {
+      writes.push(request);
+    }
   };
   page.on("request", record);
   const [request] = await Promise.all([
