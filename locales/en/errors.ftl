@@ -45,8 +45,6 @@ errors-account-signin-failed = Sign-in failed
 # The reason is the account server's own wording, shown exactly as sent.
 errors-account-signin-refused = { $reason }
 errors-account-signin-unavailable = Sign-in is unavailable
-errors-account-browser-open-failed = Could not open your browser. Open your default browser and try again.
-errors-account-signup-open-failed = Could not open the sign-up page. Open screenerbot.io/signup in your browser.
 errors-account-credentials-required = Enter your email address and password.
 errors-account-signout-failed = Sign-out failed
 errors-account-gateway-update-failed = Could not update the gateway setting

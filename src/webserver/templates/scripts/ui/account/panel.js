@@ -38,6 +38,22 @@
     return body?.data ?? body;
   }
 
+  // Browser sign-in returns through the loopback callback on the server's own port,
+  // which reaches this server only when the page is served on that port: the desktop
+  // app, a browser on the same machine, or a tunnel that keeps the port. Behind any
+  // other port the code flow is the way to sign in.
+  function browserCallbackReachable() {
+    return window.location.port === String(window.__SCREENERBOT_PORT ?? "");
+  }
+
+  // The server hands a page back when it has no browser of its own (a headless
+  // install); the viewer's browser opens it instead.
+  function openHandedOver(started) {
+    if (started?.opened === false && started.url) {
+      window.open(started.url, "_blank", "noopener,noreferrer");
+    }
+  }
+
   function escapeHtml(value) {
     return String(value ?? "")
       .replace(/&/g, "&amp;")
@@ -141,7 +157,7 @@
       this.setBusy("browser");
 
       try {
-        await request("/api/account/signin/browser", { method: "POST" });
+        openHandedOver(await request("/api/account/signin/browser", { method: "POST" }));
         this.notice = I18n.t("account-panel-browser-notice");
         this.busyAction = null;
         this.render();
@@ -324,7 +340,7 @@
     async openSignup() {
       this.error = null;
       try {
-        await request("/api/account/signup", { method: "POST" });
+        openHandedOver(await request("/api/account/signup", { method: "POST" }));
       } catch (error) {
         this.fail(error, '[data-action="signup"]');
       }
@@ -395,16 +411,19 @@
              <span class="account-option-title">${escapeHtml(this.busyAction === "wallet" ? I18n.t("account-panel-signing-in") : I18n.t("account-panel-sign-in-wallet"))}</span>
            </button>`
         : "";
+      const browserOption = browserCallbackReachable()
+        ? `<button type="button" class="account-option" data-action="browser" ${disabled}>
+             <i class="icon-external-link account-option-icon" aria-hidden="true"></i>
+             <span class="account-option-title">${escapeHtml(this.busyAction === "browser" ? I18n.t("account-panel-opening-browser") : I18n.t("account-panel-continue-browser"))}</span>
+           </button>`
+        : "";
 
       return `
         <div class="account-panel-signed-out">
           ${this.renderDataAccess()}
           ${this.renderUnlocks()}
           <div class="account-options">
-            <button type="button" class="account-option" data-action="browser" ${disabled}>
-              <i class="icon-external-link account-option-icon" aria-hidden="true"></i>
-              <span class="account-option-title">${escapeHtml(this.busyAction === "browser" ? I18n.t("account-panel-opening-browser") : I18n.t("account-panel-continue-browser"))}</span>
-            </button>
+            ${browserOption}
             <button type="button" class="account-option" data-action="email" ${disabled}>
               <span class="account-option-title" data-l10n-id="account-panel-sign-in-email"></span>
             </button>

@@ -8,6 +8,7 @@ use crate::webserver::api_error::{ApiError, ApiErrorCode};
 use axum::{extract::Query, response::Response, Json};
 use serde::{Deserialize, Serialize};
 
+use crate::logger::{self, LogTag};
 use crate::webserver::utils::success_response;
 use crate::{account, paths};
 
@@ -62,7 +63,36 @@ pub async fn account_status() -> Response {
 
 #[derive(Serialize)]
 pub struct BrowserSignInStarted {
+    /// True when the server opened the page in its own default browser.
     opened: bool,
+    /// The page for the dashboard to open in the viewer's browser, present only when
+    /// the server could not open one (a headless install reached through a tunnel).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    url: Option<String>,
+}
+
+/// Opens `url` with `open`, or hands it to the dashboard when no browser can be opened
+/// here. A headless server has no default browser; the viewer's browser opens the page.
+fn open_or_hand_over(
+    url: String,
+    open: impl FnOnce(&str) -> crate::Result<()>,
+) -> BrowserSignInStarted {
+    match open(&url) {
+        Ok(()) => BrowserSignInStarted {
+            opened: true,
+            url: None,
+        },
+        Err(error) => {
+            logger::info(
+                LogTag::System,
+                &format!("No browser could be opened on this machine ({error}); the dashboard opens {url}"),
+            );
+            BrowserSignInStarted {
+                opened: false,
+                url: Some(url),
+            }
+        }
+    }
 }
 
 /// POST /api/account/signin/browser
@@ -71,20 +101,14 @@ pub struct BrowserSignInStarted {
 /// operation. The account panel is available before initialization, while the
 /// generic system API is not; splitting this across those two API domains made
 /// a valid sign-in depend on a route the initialization gate rejected.
+///
+/// Without a browser on this machine the authorization stays pending and its URL
+/// goes to the dashboard. The loopback callback then reaches this process only
+/// through a tunnel on the same port, which the dashboard checks before offering
+/// browser sign-in at all.
 pub async fn start_browser_signin() -> Response {
     match account::begin_browser_signin() {
-        Ok(url) => match paths::open_url_in_browser(&url) {
-            Ok(()) => ok(BrowserSignInStarted { opened: true }),
-            Err(error) => {
-                account::cancel_browser_signin();
-                ApiError::new(
-                    ApiErrorCode::BrowserOpenFailed,
-                    ids::ERRORS_ACCOUNT_BROWSER_OPEN_FAILED,
-                )
-                .details(error.to_string())
-                .into_response()
-            }
-        },
+        Ok(url) => ok(open_or_hand_over(url, paths::open_url_in_browser)),
         Err(error) => ApiError::new(
             ApiErrorCode::ServiceUnavailable,
             ids::ERRORS_ACCOUNT_SIGNIN_UNAVAILABLE,
@@ -102,15 +126,10 @@ pub async fn start_browser_signin() -> Response {
 pub async fn open_signup() -> Response {
     const SIGN_UP_URL: &str = "https://screenerbot.io/signup";
 
-    match paths::open_url_in_browser(SIGN_UP_URL) {
-        Ok(()) => ok(BrowserSignInStarted { opened: true }),
-        Err(error) => ApiError::new(
-            ApiErrorCode::BrowserOpenFailed,
-            ids::ERRORS_ACCOUNT_SIGNUP_OPEN_FAILED,
-        )
-        .details(error.to_string())
-        .into_response(),
-    }
+    ok(open_or_hand_over(
+        SIGN_UP_URL.to_owned(),
+        paths::open_url_in_browser,
+    ))
 }
 
 #[derive(Deserialize)]
@@ -348,3 +367,33 @@ fn escape_html(value: &str) -> String {
 }
 
 use axum::response::IntoResponse;
+
+#[cfg(test)]
+mod tests {
+    use super::open_or_hand_over;
+    use crate::errors::{Error, IoError};
+
+    const URL: &str = "https://screenerbot.io/signup";
+
+    #[test]
+    fn an_opened_page_is_not_handed_over() {
+        let started = open_or_hand_over(URL.to_owned(), |_| Ok(()));
+        assert_eq!(
+            serde_json::to_value(started).unwrap(),
+            serde_json::json!({ "opened": true })
+        );
+    }
+
+    #[test]
+    fn without_a_browser_the_page_goes_to_the_dashboard() {
+        let started = open_or_hand_over(URL.to_owned(), |_| {
+            Err(Error::Io(IoError::from(std::io::Error::from(
+                std::io::ErrorKind::NotFound,
+            ))))
+        });
+        assert_eq!(
+            serde_json::to_value(started).unwrap(),
+            serde_json::json!({ "opened": false, "url": URL })
+        );
+    }
+}

@@ -590,13 +590,6 @@ pub fn begin_browser_signin() -> Result<String> {
     Ok(url)
 }
 
-/// Discard an authorization attempt that could not be presented to the user.
-/// A later attempt would replace it anyway, but clearing it here means a stale
-/// callback can never complete a flow whose browser failed to open.
-pub fn cancel_browser_signin() {
-    *write_slot(&PENDING) = None;
-}
-
 /// The browser came back to our loopback route.
 ///
 /// `state` is checked in constant time against the value THIS process

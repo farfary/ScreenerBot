@@ -45,8 +45,6 @@ errors-account-signin-failed = ورود ناموفق بود
 # The reason is the account server's own wording, shown exactly as sent.
 errors-account-signin-refused = { $reason }
 errors-account-signin-unavailable = ورود در دسترس نیست
-errors-account-browser-open-failed = باز کردن مرورگر ممکن نشد. مرورگر پیش‌فرض خود را باز کنید و دوباره تلاش کنید.
-errors-account-signup-open-failed = باز کردن صفحه ثبت‌نام ممکن نشد. screenerbot.io/signup را در مرورگر خود باز کنید.
 errors-account-credentials-required = ایمیل و رمز عبور خود را وارد کنید.
 errors-account-signout-failed = خروج ناموفق بود
 errors-account-gateway-update-failed = به‌روزرسانی تنظیم گیت‌وی ممکن نشد

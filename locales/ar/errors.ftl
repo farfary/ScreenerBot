@@ -45,8 +45,6 @@ errors-account-signin-failed = فشل تسجيل الدخول
 # The reason is the account server's own wording, shown exactly as sent.
 errors-account-signin-refused = { $reason }
 errors-account-signin-unavailable = تسجيل الدخول غير متاح
-errors-account-browser-open-failed = تعذّر فتح المتصفح. افتح متصفحك الافتراضي وحاول مرة أخرى.
-errors-account-signup-open-failed = تعذّر فتح صفحة التسجيل. افتح screenerbot.io/signup في متصفحك.
 errors-account-credentials-required = أدخل عنوان بريدك الإلكتروني وكلمة المرور.
 errors-account-signout-failed = فشل تسجيل الخروج
 errors-account-gateway-update-failed = تعذّر تحديث إعداد البوابة
