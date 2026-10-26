@@ -13,6 +13,7 @@ services-health-connectivity-critical-unhealthy = Kritik uç noktalar sağlıks�
 services-health-filtering-snapshot-stale = Filtreleme anlık görüntüsü { $seconds }sn eski
 services-health-start-failed = Başlatılamadı: { $reason }
 services-health-dependency-failed = Başlatılmadı: { $dependency } başlatılamadı
+services-health-wallet-read-failed = Cüzdan okunamıyor: { $reason }
 
 ## Services page (pages/services.js)
 

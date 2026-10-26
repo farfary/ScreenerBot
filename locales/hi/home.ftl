@@ -2,6 +2,7 @@
 
 home-portfolio-title = पोर्टफ़ोलियो मूल्य
 home-portfolio-change-label = आज
+home-wallet-unread = बैलेंस उपलब्ध नहीं
 home-trend-range = 00:00 UTC से
 home-portfolio-change-incomparable =
     .title = दिन की शुरुआत में या अभी कुछ टोकन की कीमतें उपलब्ध नहीं हैं, इसलिए आज का बदलाव नहीं दिखाया गया है।

@@ -13,6 +13,7 @@ services-health-connectivity-critical-unhealthy = Критичные эндпо�
 services-health-filtering-snapshot-stale = Снимок фильтрации устарел на { $seconds } с
 services-health-start-failed = Не удалось запустить: { $reason }
 services-health-dependency-failed = Не запущен: не удалось запустить { $dependency }
+services-health-wallet-read-failed = Не удаётся прочитать кошелёк: { $reason }
 
 ## Services page (pages/services.js)
 

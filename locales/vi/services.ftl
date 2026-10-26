@@ -13,6 +13,7 @@ services-health-connectivity-critical-unhealthy = Các endpoint quan trọng kh�
 services-health-filtering-snapshot-stale = Ảnh chụp nhanh của bộ lọc đã cũ { $seconds } giây
 services-health-start-failed = Không khởi động được: { $reason }
 services-health-dependency-failed = Chưa khởi động: { $dependency } không khởi động được
+services-health-wallet-read-failed = Không thể đọc ví: { $reason }
 
 ## Services page (pages/services.js)
 

@@ -2,6 +2,7 @@
 
 home-portfolio-title = Valor de la cartera
 home-portfolio-change-label = Hoy
+home-wallet-unread = Saldo no disponible
 home-trend-range = Desde las 00:00 UTC
 home-portfolio-change-incomparable =
     .title = Faltaban precios de algunos tokens al inicio del día o faltan ahora, por eso no se muestra el cambio de hoy.

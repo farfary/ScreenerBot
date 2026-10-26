@@ -269,6 +269,7 @@ wallets-holdings-col-value = القيمة ({ -sol })
 wallets-holdings-col-type = النوع
 wallets-holdings-col-decimals = الخانات العشرية
 wallets-holdings-empty-title = لا توجد حيازات رموز
+wallets-holdings-unreadable-title = الحيازات غير معروفة
 wallets-holdings-empty-message = ستظهر هنا الرموز التي تحتفظ بها هذه المحفظة.
 wallets-holdings-no-main = لا توجد محفظة رئيسية
 wallets-holdings-main-title = المحفظة الرئيسية

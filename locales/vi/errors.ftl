@@ -115,6 +115,7 @@ errors-transactions-watch-store-unavailable = Không có danh sách ví theo dõ
 errors-wallet-unavailable = Ví chính không khả dụng
 errors-wallet-changed = Ví chính đã thay đổi; hãy làm mới và thử lại
 errors-wallet-qr-failed = Không tạo được mã QR của ví
+errors-wallet-read-failed = Không thể đọc ví: { $reason }
 
 errors-updates-none-available = Không có bản cập nhật nào để tải xuống
 errors-updates-version-changed = Bản cập nhật khả dụng đã thay đổi; hãy kiểm tra cập nhật lại

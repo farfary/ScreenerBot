@@ -16,6 +16,7 @@ services-health-connectivity-critical-unhealthy = 重要なエンドポイント
 services-health-filtering-snapshot-stale = フィルタリングのスナップショットは{ $seconds }秒前のものです
 services-health-start-failed = 起動に失敗しました: { $reason }
 services-health-dependency-failed = 未起動: { $dependency } の起動に失敗しました
+services-health-wallet-read-failed = ウォレットを読み取れません: { $reason }
 
 ## Services page (pages/services.js)
 

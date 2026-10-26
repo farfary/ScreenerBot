@@ -21,6 +21,8 @@ services-health-filtering-snapshot-stale = Filtering snapshot is { $seconds }s o
 services-health-start-failed = Failed to start: { $reason }
 # $dependency is a service identifier and is not translated.
 services-health-dependency-failed = Not started: { $dependency } failed to start
+# $reason is the technical cause of the failed read and is not translated.
+services-health-wallet-read-failed = Wallet cannot be read: { $reason }
 
 ## Services page (pages/services.js)
 

@@ -13,6 +13,7 @@ services-health-connectivity-critical-unhealthy = Endpoints críticos con proble
 services-health-filtering-snapshot-stale = La instantánea de filtrado tiene { $seconds } s de antigüedad
 services-health-start-failed = No se pudo iniciar: { $reason }
 services-health-dependency-failed = No iniciado: { $dependency } no pudo iniciarse
+services-health-wallet-read-failed = No se puede leer la billetera: { $reason }
 
 services-status-healthy = Saludable
 services-status-starting = Iniciando

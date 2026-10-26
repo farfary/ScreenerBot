@@ -229,6 +229,7 @@ wallets-holdings-col-value = Değer ({ -sol })
 wallets-holdings-col-type = Tür
 wallets-holdings-col-decimals = Ondalık
 wallets-holdings-empty-title = Token varlığı yok
+wallets-holdings-unreadable-title = Varlıklar bilinmiyor
 wallets-holdings-empty-message = Bu cüzdanın sahip olduğu tokenlar burada görünecek.
 wallets-holdings-no-main = Ana cüzdan yok
 wallets-holdings-main-title = Ana cüzdan

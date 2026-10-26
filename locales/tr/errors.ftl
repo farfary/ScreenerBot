@@ -130,6 +130,7 @@ errors-transactions-watch-store-unavailable = İzlenen cüzdanlar kullanılamıy
 errors-wallet-unavailable = Ana cüzdan kullanılamıyor
 errors-wallet-changed = Ana cüzdan değişti; sayfayı yenileyip tekrar deneyin
 errors-wallet-qr-failed = Cüzdan QR kodu oluşturulamadı
+errors-wallet-read-failed = Cüzdan okunamıyor: { $reason }
 
 # Updates
 errors-updates-none-available = İndirilecek güncelleme yok

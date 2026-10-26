@@ -115,6 +115,7 @@ errors-transactions-watch-store-unavailable = Відстежувані гама�
 errors-wallet-unavailable = Основний гаманець недоступний
 errors-wallet-changed = Основний гаманець змінився; оновіть сторінку й повторіть спробу
 errors-wallet-qr-failed = Не вдалося згенерувати QR-код гаманця
+errors-wallet-read-failed = Не вдається прочитати гаманець: { $reason }
 
 errors-updates-none-available = Немає оновлення для завантаження
 errors-updates-version-changed = Доступне оновлення змінилося; перевірте оновлення ще раз

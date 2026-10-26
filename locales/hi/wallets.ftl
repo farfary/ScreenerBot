@@ -229,6 +229,7 @@ wallets-holdings-col-value = वैल्यू ({ -sol })
 wallets-holdings-col-type = प्रकार
 wallets-holdings-col-decimals = डेसिमल
 wallets-holdings-empty-title = कोई टोकन होल्डिंग नहीं
+wallets-holdings-unreadable-title = होल्डिंग्स अज्ञात
 wallets-holdings-empty-message = इस वॉलेट में रखे टोकन यहां दिखेंगे।
 wallets-holdings-no-main = कोई मुख्य वॉलेट नहीं
 wallets-holdings-main-title = मुख्य वॉलेट

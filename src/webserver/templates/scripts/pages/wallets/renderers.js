@@ -26,6 +26,7 @@ const WALLET_TYPE_LABELS = Object.freeze({
 export function createWalletRenderers({
   walletsData,
   tokenHoldings,
+  holdingsReadError,
   currentTab,
   $,
   Utils,
@@ -39,6 +40,8 @@ export function createWalletRenderers({
   let tokenTable = null;
   let secondariesTable = null;
   let archiveTable = null;
+  // The read failure the holdings empty state last showed.
+  let renderedReadError = null;
 
   function mainWallet() {
     return walletsData().find((w) => w.role === "main") || null;
@@ -270,7 +273,7 @@ export function createWalletRenderers({
             ? Utils.formatSol(wallet.balance, { decimals: 4, suffix: "" })
             : "—",
       },
-      { id: "wt-tokens-count", value: String(tokens.length) },
+      { id: "wt-tokens-count", value: holdingsReadError() ? "—" : String(tokens.length) },
       {
         id: "wt-last-used",
         value: wallet?.last_used_at
@@ -290,8 +293,11 @@ export function createWalletRenderers({
     const wallet = mainWallet();
 
     if (tokenTable) {
-      // Silent data refresh — no DOM teardown, no visual flash, settings dialog stays open
-      tokenTable.setData(tokenRows(tokens));
+      // Silent data refresh — no DOM teardown, no visual flash, settings dialog stays open.
+      // A changed read failure repaints the empty state even when the rows are unchanged.
+      const readError = holdingsReadError();
+      tokenTable.setData(tokenRows(tokens), { forceRender: readError !== renderedReadError });
+      renderedReadError = readError;
       syncMainWalletToolbar(tokens);
       syncLoadingState(tokenTable, loading);
       return;
@@ -312,8 +318,12 @@ export function createWalletRenderers({
         column: "ui_amount",
         direction: "desc",
       },
-      emptyTitle: I18n.t("wallets-holdings-empty-title"),
-      emptyMessage: I18n.t("wallets-holdings-empty-message"),
+      // Unknown holdings name the failed read instead of reading as an empty wallet.
+      emptyTitle: () =>
+        holdingsReadError()
+          ? I18n.t("wallets-holdings-unreadable-title")
+          : I18n.t("wallets-holdings-empty-title"),
+      emptyMessage: () => holdingsReadError() || I18n.t("wallets-holdings-empty-message"),
       toolbar: {
         // Identity nodes are always rendered (even before the wallet loads) so
         // `setToolbarIdentity` can fill them in place on the first poll.
@@ -363,6 +373,7 @@ export function createWalletRenderers({
       },
     });
 
+    renderedReadError = holdingsReadError();
     tokenTable.setData(tokenRows(tokens));
     syncMainWalletToolbar(tokens);
     syncLoadingState(tokenTable, loading);

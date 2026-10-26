@@ -2,6 +2,7 @@
 
 home-portfolio-title = 포트폴리오 가치
 home-portfolio-change-label = 오늘
+home-wallet-unread = 잔액을 확인할 수 없음
 home-trend-range = 00:00 UTC 이후
 home-portfolio-change-incomparable =
     .title = 오늘 시작 시점 또는 현재 일부 토큰 가격이 없어 오늘의 변동을 표시하지 않습니다.

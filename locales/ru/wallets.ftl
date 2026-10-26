@@ -239,6 +239,7 @@ wallets-holdings-col-value = Стоимость ({ -sol })
 wallets-holdings-col-type = Тип
 wallets-holdings-col-decimals = Знаков после запятой
 wallets-holdings-empty-title = Нет токенов
+wallets-holdings-unreadable-title = Активы неизвестны
 wallets-holdings-empty-message = Здесь появятся токены, которые хранятся в этом кошельке.
 wallets-holdings-no-main = Нет основного кошелька
 wallets-holdings-main-title = Основной кошелёк

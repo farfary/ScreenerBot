@@ -16,6 +16,7 @@ services-health-connectivity-critical-unhealthy = Endpoint kritis tidak sehat: {
 services-health-filtering-snapshot-stale = Snapshot pemfilteran berumur { $seconds } dtk
 services-health-start-failed = Gagal dimulai: { $reason }
 services-health-dependency-failed = Tidak dimulai: { $dependency } gagal dimulai
+services-health-wallet-read-failed = Dompet tidak dapat dibaca: { $reason }
 
 ## Services page (pages/services.js)
 

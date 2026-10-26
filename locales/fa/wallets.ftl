@@ -249,6 +249,7 @@ wallets-holdings-col-value = ارزش ({ -sol })
 wallets-holdings-col-type = نوع
 wallets-holdings-col-decimals = اعشار
 wallets-holdings-empty-title = هیچ توکنی نگهداری نمی‌شود
+wallets-holdings-unreadable-title = دارایی‌ها نامشخص
 wallets-holdings-empty-message = توکن‌هایی که این کیف پول نگه می‌دارد اینجا نمایش داده می‌شوند.
 wallets-holdings-no-main = کیف پول اصلی وجود ندارد
 wallets-holdings-main-title = کیف پول اصلی

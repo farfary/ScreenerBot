@@ -244,6 +244,7 @@ wallets-holdings-col-value = 評価額（{ -sol }）
 wallets-holdings-col-type = 種類
 wallets-holdings-col-decimals = 小数桁数
 wallets-holdings-empty-title = トークンの保有はありません
+wallets-holdings-unreadable-title = 保有資産は不明
 wallets-holdings-empty-message = このウォレットが保有するトークンがここに表示されます。
 wallets-holdings-no-main = メインウォレットがありません
 wallets-holdings-main-title = メインウォレット

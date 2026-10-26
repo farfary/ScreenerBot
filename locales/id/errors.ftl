@@ -118,6 +118,7 @@ errors-transactions-watch-store-unavailable = Dompet yang dipantau tidak tersedi
 errors-wallet-unavailable = Dompet utama tidak tersedia
 errors-wallet-changed = Dompet utama berubah; muat ulang lalu coba lagi
 errors-wallet-qr-failed = Tidak dapat membuat kode QR dompet
+errors-wallet-read-failed = Dompet tidak dapat dibaca: { $reason }
 
 errors-updates-none-available = Tidak ada pembaruan untuk diunduh
 errors-updates-version-changed = Pembaruan yang tersedia berubah; periksa pembaruan lagi

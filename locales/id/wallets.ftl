@@ -226,6 +226,7 @@ wallets-holdings-col-value = Nilai ({ -sol })
 wallets-holdings-col-type = Jenis
 wallets-holdings-col-decimals = Desimal
 wallets-holdings-empty-title = Tidak ada kepemilikan token
+wallets-holdings-unreadable-title = Kepemilikan tidak diketahui
 wallets-holdings-empty-message = Token yang dimiliki dompet ini akan muncul di sini.
 wallets-holdings-no-main = Tidak ada dompet utama
 wallets-holdings-main-title = Dompet Utama

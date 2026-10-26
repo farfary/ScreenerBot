@@ -119,7 +119,10 @@ pub(super) async fn get_wallet_current() -> Result<Json<Option<WalletCurrentResp
                 snapshot_time: snapshot.snapshot_time.to_rfc3339(),
             })))
         }
-        _ => Ok(Json(None)),
+        _ => match wallet_read_refusal() {
+            Some(refusal) => Err(refusal),
+            None => Ok(Json(None)),
+        },
     }
 }
 
@@ -143,7 +146,7 @@ pub(super) async fn get_wallet_tokens() -> Result<Json<WalletTokensResponse>, Ap
         Some(live) => (*live).clone(),
         None => match get_current_wallet_status().await {
             Ok(Some(s)) => s,
-            Ok(None) => return Ok(Json(WalletTokensResponse { tokens: vec![] })),
+            Ok(None) => return unread_holdings(),
             Err(err) => {
                 logger::warning(
                     LogTag::Webserver,
@@ -181,7 +184,7 @@ pub(super) async fn refresh_wallet_tokens() -> Result<Json<WalletTokensResponse>
             );
             match get_current_wallet_status().await {
                 Ok(Some(s)) => s,
-                _ => return Ok(Json(WalletTokensResponse { tokens: vec![] })),
+                _ => return unread_holdings(),
             }
         }
     };
@@ -192,6 +195,27 @@ pub(super) async fn refresh_wallet_tokens() -> Result<Json<WalletTokensResponse>
                 .details(err.to_string())
         })?,
     }))
+}
+
+/// The refusal while no wallet snapshot exists because the last read of the wallet
+/// failed, carrying its cause. The balance and holdings are then unknown: an empty
+/// answer would read as a wallet that holds nothing.
+fn wallet_read_refusal() -> Option<ApiError> {
+    crate::wallet::wallet_read_failure().map(|reason| {
+        ApiError::new(
+            ApiErrorCode::ServiceUnavailable,
+            ids::ERRORS_WALLET_READ_FAILED,
+        )
+        .text_arg("reason", reason)
+    })
+}
+
+/// The holdings while no wallet snapshot exists: none yet, or the read failure.
+fn unread_holdings() -> Result<Json<WalletTokensResponse>, ApiError> {
+    match wallet_read_refusal() {
+        Some(refusal) => Err(refusal),
+        None => Ok(Json(WalletTokensResponse { tokens: vec![] })),
+    }
 }
 
 fn token_balance_info(

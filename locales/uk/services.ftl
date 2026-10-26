@@ -13,6 +13,7 @@ services-health-connectivity-critical-unhealthy = Критичні ендпоі�
 services-health-filtering-snapshot-stale = Знімок фільтрації застарів на { $seconds } с
 services-health-start-failed = Не вдалося запустити: { $reason }
 services-health-dependency-failed = Не запущено: не вдалося запустити { $dependency }
+services-health-wallet-read-failed = Не вдається прочитати гаманець: { $reason }
 
 services-status-healthy = Справний
 services-status-starting = Запускається

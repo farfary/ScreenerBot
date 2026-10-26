@@ -92,6 +92,24 @@ pub fn get_cached_wallet_snapshot_status() -> WalletSnapshotStatus {
     WALLET_SNAPSHOT_STATUS.snapshot()
 }
 
+/// Why the last attempt to read the wallet failed; `None` once a read succeeds.
+static WALLET_READ_FAILURE: LazyLock<StdMutex<Option<String>>> =
+    LazyLock::new(|| StdMutex::new(None));
+
+pub(super) fn record_wallet_read(outcome: Result<(), String>) {
+    if let Ok(mut guard) = WALLET_READ_FAILURE.lock() {
+        *guard = outcome.err();
+    }
+}
+
+/// The cause of the last failed wallet read, while no read has succeeded since.
+pub fn wallet_read_failure() -> Option<String> {
+    WALLET_READ_FAILURE
+        .lock()
+        .ok()
+        .and_then(|guard| guard.clone())
+}
+
 // =============================================================================
 // DASHBOARD METRICS CACHE
 // =============================================================================

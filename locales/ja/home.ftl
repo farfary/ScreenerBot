@@ -2,6 +2,7 @@
 
 home-portfolio-title = ポートフォリオ評価額
 home-portfolio-change-label = 本日
+home-wallet-unread = 残高を取得できません
 home-trend-range = 00:00 UTC 以降
 home-portfolio-change-incomparable =
     .title = 本日の開始時点または現在、一部のトークン価格が取得できていないため、本日の変動は表示されません。

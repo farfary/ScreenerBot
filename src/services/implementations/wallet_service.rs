@@ -4,6 +4,7 @@
 //! Wallet service — monitors wallet balances, token holdings, and flow tracking.
 
 use crate::errors::ServiceError;
+use crate::i18n::{ids, UiArg, UiText};
 use crate::services::{Service, ServiceHealth, ServiceMetrics};
 use async_trait::async_trait;
 use std::sync::Arc;
@@ -60,11 +61,18 @@ impl Service for WalletService {
         Ok(vec![handle])
     }
 
+    /// Degraded while the wallet cannot be read: the balance and holdings shown are then
+    /// unknown, and the reason says why (a blocked or failing RPC method, most often).
     async fn health(&self) -> ServiceHealth {
-        if crate::wallet::is_wallet_database_ready() {
-            ServiceHealth::Healthy
-        } else {
-            ServiceHealth::Starting
+        if !crate::wallet::is_wallet_database_ready() {
+            return ServiceHealth::Starting;
+        }
+        match crate::wallet::wallet_read_failure() {
+            Some(reason) => ServiceHealth::Degraded(
+                UiText::new(ids::SERVICES_HEALTH_WALLET_READ_FAILED)
+                    .arg("reason", UiArg::Text(reason)),
+            ),
+            None => ServiceHealth::Healthy,
         }
     }
 

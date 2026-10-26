@@ -115,6 +115,7 @@ errors-transactions-watch-store-unavailable = Las billeteras en seguimiento no e
 errors-wallet-unavailable = La billetera principal no está disponible
 errors-wallet-changed = La billetera principal cambió; actualiza e inténtalo de nuevo
 errors-wallet-qr-failed = No se pudo generar el código QR de la billetera
+errors-wallet-read-failed = No se puede leer la billetera: { $reason }
 
 errors-updates-none-available = No hay ninguna actualización disponible para descargar
 errors-updates-version-changed = La actualización disponible cambió; busca actualizaciones de nuevo

@@ -7,6 +7,7 @@
 home-portfolio-title = Portfolio value
 # Label before the day's worth change.
 home-portfolio-change-label = Today
+home-wallet-unread = Balance unavailable
 # Range label under the worth trend; the day starts at 00:00 UTC.
 home-trend-range = Since 00:00 UTC
 # Tooltip of the day change when the start of the day and now priced different holdings, so the two worths do not compare.

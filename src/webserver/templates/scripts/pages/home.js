@@ -7,7 +7,7 @@ import { registerPage } from "../core/lifecycle.js";
 import { Poller } from "../core/poller.js";
 import { withApprox, withUsdSymbol } from "../core/format.js";
 import * as Utils from "../core/utils.js";
-import { requestManager, createScopedFetcher } from "../core/request_manager.js";
+import { requestManager, createScopedFetcher, errorMessageOf } from "../core/request_manager.js";
 import { showFeaturedRow, hideFeaturedRow } from "../ui/featured_row.js";
 import { renderAddress } from "../ui/token_identity.js";
 import { PositionDetailsDialog } from "../ui/position_details_dialog.js";
@@ -321,6 +321,37 @@ function createLifecycle() {
     for (const cls of Object.values(PNL_CLASSES)) svg.classList.toggle(cls, cls === tone);
   }
 
+  // The failed-read reason on the hero's sub line, through the shared tooltip.
+  function setUnreadReason(el, reason) {
+    if (reason) {
+      el.hidden = false;
+      paintText(el, I18n.t("home-wallet-unread"));
+      el.dataset.tooltip = reason;
+      el.setAttribute("aria-description", reason);
+      el.tabIndex = 0;
+    } else {
+      delete el.dataset.tooltip;
+      el.removeAttribute("aria-description");
+      el.removeAttribute("tabindex");
+    }
+  }
+
+  // The balance endpoint refuses with the cause while the last wallet read failed and
+  // no snapshot exists; any other answer leaves the dash as it is.
+  async function explainUnreadWallet(el) {
+    const fetcher =
+      typeof scopedFetch === "function"
+        ? scopedFetch
+        : (url, options) => requestManager.fetch(url, options);
+    try {
+      await fetcher("/api/wallet/balance", { priority: "low", cache: "no-store" });
+    } catch (error) {
+      if (error?.status !== 503) return;
+      const reason = await errorMessageOf(error, null);
+      if (reason) setUnreadReason(el, reason);
+    }
+  }
+
   // Populate the portfolio overview from the full dashboard payload.
   function updateHeroCard(data) {
     const wallet = data.wallet;
@@ -334,13 +365,18 @@ function createLifecycle() {
       paintHtml(balanceEl, solHtml(wallet.total_equity_native));
     }
 
-    // Approximate USD value of total equity.
+    // Approximate USD value of total equity. While the worth of a configured wallet is
+    // unknown, the same line says the balance is unavailable when its read failed.
     const usdEl = document.getElementById("walletUsd");
     if (usdEl) {
       const usd = wallet.total_equity_native * wallet.native_price_usd;
       const shown = Number.isFinite(usd) && usd > 0;
       usdEl.hidden = !shown;
+      setUnreadReason(usdEl, null);
       if (shown) paintText(usdEl, withApprox(withUsdSymbol(Utils.formatNumber(usd, 2))));
+      if (wallet.wallet_address && !Number.isFinite(wallet.total_equity_native)) {
+        void explainUnreadWallet(usdEl);
+      }
     }
 
     // Day change: equity against the start-of-day worth, measured only like for like.

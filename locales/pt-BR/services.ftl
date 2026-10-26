@@ -16,6 +16,7 @@ services-health-connectivity-critical-unhealthy = Endpoints críticos com proble
 services-health-filtering-snapshot-stale = O snapshot de filtragem tem { $seconds }s de idade
 services-health-start-failed = Falha ao iniciar: { $reason }
 services-health-dependency-failed = Não iniciado: { $dependency } falhou ao iniciar
+services-health-wallet-read-failed = Não é possível ler a carteira: { $reason }
 
 ## Services page (pages/services.js)
 

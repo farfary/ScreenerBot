@@ -17,6 +17,7 @@ services-health-connectivity-critical-unhealthy = 关键端点异常：{ $endpoi
 services-health-filtering-snapshot-stale = 过滤快照已过 { $seconds } 秒
 services-health-start-failed = 启动失败：{ $reason }
 services-health-dependency-failed = 未启动：{ $dependency } 启动失败
+services-health-wallet-read-failed = 无法读取钱包：{ $reason }
 
 ## Services page (pages/services.js)
 

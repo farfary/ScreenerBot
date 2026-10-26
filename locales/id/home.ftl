@@ -2,6 +2,7 @@
 
 home-portfolio-title = Nilai portofolio
 home-portfolio-change-label = Hari ini
+home-wallet-unread = Saldo tidak tersedia
 home-trend-range = Sejak 00:00 UTC
 home-portfolio-change-incomparable =
     .title = Beberapa harga token tidak tersedia di awal hari atau tidak tersedia sekarang, jadi perubahan hari ini tidak ditampilkan.

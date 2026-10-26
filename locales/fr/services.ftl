@@ -13,6 +13,7 @@ services-health-connectivity-critical-unhealthy = Endpoints critiques défaillan
 services-health-filtering-snapshot-stale = L'instantané du filtrage date de { $seconds } s
 services-health-start-failed = Échec du démarrage : { $reason }
 services-health-dependency-failed = Non démarré : { $dependency } n'a pas pu démarrer
+services-health-wallet-read-failed = Impossible de lire le portefeuille : { $reason }
 
 ## Services page (pages/services.js)
 

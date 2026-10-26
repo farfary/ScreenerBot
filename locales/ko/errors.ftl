@@ -133,6 +133,7 @@ errors-transactions-watch-store-unavailable = 감시 중인 지갑을 사용할 
 errors-wallet-unavailable = 메인 지갑을 사용할 수 없습니다
 errors-wallet-changed = 메인 지갑이 변경되었습니다. 새로 고친 후 다시 시도하세요
 errors-wallet-qr-failed = 지갑 QR 코드를 생성할 수 없습니다
+errors-wallet-read-failed = 지갑을 읽을 수 없습니다: { $reason }
 
 # Updates
 errors-updates-none-available = 다운로드할 수 있는 업데이트가 없습니다

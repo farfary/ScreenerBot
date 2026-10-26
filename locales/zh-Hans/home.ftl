@@ -2,6 +2,7 @@
 
 home-portfolio-title = 投资组合价值
 home-portfolio-change-label = 今日
+home-wallet-unread = 余额不可用
 home-trend-range = 自 00:00 UTC 起
 home-portfolio-change-incomparable =
     .title = 部分代币在今日开始时或当前缺少价格，因此不显示今日变动。

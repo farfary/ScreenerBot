@@ -135,6 +135,7 @@ errors-transactions-watch-store-unavailable = کیف پول‌های تحت پا
 errors-wallet-unavailable = کیف پول اصلی در دسترس نیست
 errors-wallet-changed = کیف پول اصلی تغییر کرد؛ صفحه را تازه‌سازی کنید و دوباره تلاش کنید
 errors-wallet-qr-failed = تولید کد QR کیف پول ممکن نشد
+errors-wallet-read-failed = خواندن کیف پول ممکن نیست: { $reason }
 
 # Updates
 errors-updates-none-available = به‌روزرسانی‌ای برای دانلود وجود ندارد

@@ -266,7 +266,14 @@ async fn collect_wallet_snapshot() -> Result<(WalletSnapshot, MarketPrices), Err
 /// write so the UI reflects a new balance immediately even if the write is slow, and
 /// still would if it failed.
 async fn collect_publish_and_store() -> Result<Arc<WalletSnapshot>, Error> {
-    let (snapshot, market_prices) = collect_wallet_snapshot().await?;
+    let collected = collect_wallet_snapshot().await;
+    super::cache::record_wallet_read(
+        collected
+            .as_ref()
+            .map(|_| ())
+            .map_err(|error| error.to_string()),
+    );
+    let (snapshot, market_prices) = collected?;
     let snapshot = Arc::new(snapshot);
 
     increment_operations();

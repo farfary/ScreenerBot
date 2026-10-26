@@ -118,6 +118,13 @@ mod tests {
                 "Detection running on polling alone",
             ),
             (
+                with(
+                    ids::SERVICES_HEALTH_WALLET_READ_FAILED,
+                    vec![arg("reason", "getBalance: HTTP status: 403 Forbidden")],
+                ),
+                "Wallet cannot be read: getBalance: HTTP status: 403 Forbidden",
+            ),
+            (
                 with(ids::SERVICES_HEALTH_ASSISTANT_TASKS_DISABLED, vec![]),
                 "Disabled in config",
             ),

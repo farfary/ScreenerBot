@@ -118,6 +118,7 @@ errors-transactions-watch-store-unavailable = ウォッチ中のウォレット�
 errors-wallet-unavailable = メインウォレットを利用できません
 errors-wallet-changed = メインウォレットが変更されました。更新してもう一度お試しください
 errors-wallet-qr-failed = ウォレットの QR コードを生成できませんでした
+errors-wallet-read-failed = ウォレットを読み取れません: { $reason }
 
 errors-updates-none-available = ダウンロードできるアップデートはありません
 errors-updates-version-changed = 利用可能なアップデートが変更されました。もう一度アップデートを確認してください

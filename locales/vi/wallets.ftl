@@ -224,6 +224,7 @@ wallets-holdings-col-value = Giá trị ({ -sol })
 wallets-holdings-col-type = Loại
 wallets-holdings-col-decimals = Số thập phân
 wallets-holdings-empty-title = Không có token nào
+wallets-holdings-unreadable-title = Không rõ tài sản nắm giữ
 wallets-holdings-empty-message = Các token ví này đang nắm giữ sẽ hiện ở đây.
 wallets-holdings-no-main = Chưa có ví chính
 wallets-holdings-main-title = Ví chính

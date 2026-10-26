@@ -115,6 +115,7 @@ errors-transactions-watch-store-unavailable = Отслеживаемые кош�
 errors-wallet-unavailable = Основной кошелёк недоступен
 errors-wallet-changed = Основной кошелёк изменился; обновите страницу и повторите попытку
 errors-wallet-qr-failed = Не удалось создать QR-код кошелька
+errors-wallet-read-failed = Не удаётся прочитать кошелёк: { $reason }
 
 errors-updates-none-available = Нет обновлений для загрузки
 errors-updates-version-changed = Доступное обновление изменилось; проверьте обновления ещё раз

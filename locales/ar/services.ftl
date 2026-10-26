@@ -19,6 +19,7 @@ services-health-connectivity-critical-unhealthy = نقاط الاتصال الح
 services-health-filtering-snapshot-stale = عمر لقطة الترشيح { $seconds }ث
 services-health-start-failed = تعذّر التشغيل: { $reason }
 services-health-dependency-failed = لم يُشغَّل: تعذّر تشغيل { $dependency }
+services-health-wallet-read-failed = تعذّرت قراءة المحفظة: { $reason }
 
 ## Services page (pages/services.js)
 

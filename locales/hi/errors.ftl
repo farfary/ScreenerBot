@@ -115,6 +115,7 @@ errors-transactions-watch-store-unavailable = वॉच किए गए वॉ�
 errors-wallet-unavailable = मुख्य वॉलेट उपलब्ध नहीं है
 errors-wallet-changed = मुख्य वॉलेट बदल गया है; रिफ़्रेश करके दोबारा प्रयास करें
 errors-wallet-qr-failed = वॉलेट QR कोड नहीं बन सका
+errors-wallet-read-failed = वॉलेट पढ़ा नहीं जा सकता: { $reason }
 
 errors-updates-none-available = डाउनलोड के लिए कोई अपडेट उपलब्ध नहीं है
 errors-updates-version-changed = उपलब्ध अपडेट बदल गया है; अपडेट दोबारा जाँचें

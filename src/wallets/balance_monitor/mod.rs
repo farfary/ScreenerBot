@@ -48,7 +48,7 @@ pub use service::{
     start_wallet_monitoring_service,
 };
 
-pub use cache::get_cached_wallet_snapshot_status;
+pub use cache::{get_cached_wallet_snapshot_status, wallet_read_failure};
 pub use dashboard::get_wallet_dashboard_data;
 /// Rename declarations, reached by the schema owner's cross-store guard.
 #[cfg(test)]

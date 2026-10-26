@@ -2,6 +2,7 @@
 
 home-portfolio-title = ارزش پورتفوی
 home-portfolio-change-label = امروز
+home-wallet-unread = موجودی در دسترس نیست
 home-trend-range = از ساعت ⁨00:00 UTC⁩
 home-portfolio-change-incomparable =
     .title = قیمت برخی توکن‌ها در ابتدای روز در دسترس نبود یا اکنون در دسترس نیست، به همین دلیل تغییر امروز نمایش داده نمی‌شود.

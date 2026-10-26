@@ -2,6 +2,7 @@
 
 home-portfolio-title = قيمة المحفظة الاستثمارية
 home-portfolio-change-label = اليوم
+home-wallet-unread = الرصيد غير متاح
 home-trend-range = منذ ⁨00:00 UTC⁩
 home-portfolio-change-incomparable =
     .title = بعض أسعار التوكنات كانت غير متاحة في بداية اليوم أو غير متاحة الآن، لذلك لا يُعرض تغيّر اليوم.

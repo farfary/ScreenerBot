@@ -16,6 +16,7 @@ services-health-connectivity-critical-unhealthy = 핵심 엔드포인트 비정�
 services-health-filtering-snapshot-stale = 필터링 스냅샷이 { $seconds }초 지났습니다
 services-health-start-failed = 시작 실패: { $reason }
 services-health-dependency-failed = 시작되지 않음: { $dependency } 시작에 실패했습니다
+services-health-wallet-read-failed = 지갑을 읽을 수 없습니다: { $reason }
 
 ## Services page (pages/services.js)
 

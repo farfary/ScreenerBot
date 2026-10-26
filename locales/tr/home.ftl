@@ -2,6 +2,7 @@
 
 home-portfolio-title = Portföy değeri
 home-portfolio-change-label = Bugün
+home-wallet-unread = Bakiye kullanılamıyor
 home-trend-range = 00:00 UTC'den beri
 home-portfolio-change-incomparable =
     .title = Bazı token fiyatları gün başında yoktu ya da şu anda yok, bu yüzden bugünkü değişim gösterilmiyor.

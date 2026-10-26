@@ -130,6 +130,7 @@ errors-transactions-watch-store-unavailable = Les portefeuilles surveillés ne s
 errors-wallet-unavailable = Le portefeuille principal n'est pas disponible
 errors-wallet-changed = Le portefeuille principal a changé ; actualisez et réessayez
 errors-wallet-qr-failed = Impossible de générer le QR code du portefeuille
+errors-wallet-read-failed = Impossible de lire le portefeuille : { $reason }
 
 # Updates
 errors-updates-none-available = Aucune mise à jour à télécharger

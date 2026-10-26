@@ -115,6 +115,7 @@ errors-transactions-watch-store-unavailable = Überwachte Wallets sind nicht ver
 errors-wallet-unavailable = Haupt-Wallet ist nicht verfügbar
 errors-wallet-changed = Die Haupt-Wallet hat sich geändert; aktualisieren Sie und versuchen Sie es erneut
 errors-wallet-qr-failed = Der Wallet-QR-Code konnte nicht erzeugt werden
+errors-wallet-read-failed = Die Wallet kann nicht gelesen werden: { $reason }
 
 errors-updates-none-available = Kein Update zum Herunterladen verfügbar
 errors-updates-version-changed = Das verfügbare Update hat sich geändert; prüfen Sie erneut auf Updates

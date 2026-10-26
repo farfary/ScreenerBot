@@ -135,6 +135,7 @@ errors-transactions-watch-store-unavailable = المحافظ المراقبة غ
 errors-wallet-unavailable = المحفظة الرئيسية غير متاحة
 errors-wallet-changed = تغيّرت المحفظة الرئيسية؛ حدّث الصفحة وحاول مرة أخرى
 errors-wallet-qr-failed = تعذّر إنشاء رمز QR للمحفظة
+errors-wallet-read-failed = تعذّرت قراءة المحفظة: { $reason }
 
 # Updates
 errors-updates-none-available = لا يوجد تحديث متاح للتنزيل

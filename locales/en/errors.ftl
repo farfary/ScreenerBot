@@ -136,6 +136,8 @@ errors-transactions-watch-store-unavailable = Watched wallets are not available
 errors-wallet-unavailable = Main wallet is not available
 errors-wallet-changed = The main wallet changed; refresh and try again
 errors-wallet-qr-failed = Could not generate the wallet QR code
+# $reason is the technical cause of the failed read and is not translated.
+errors-wallet-read-failed = The wallet cannot be read: { $reason }
 
 # Updates
 errors-updates-none-available = No update available to download

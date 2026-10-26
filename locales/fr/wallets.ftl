@@ -234,6 +234,7 @@ wallets-holdings-col-value = Valeur ({ -sol })
 wallets-holdings-col-type = Type
 wallets-holdings-col-decimals = Décimales
 wallets-holdings-empty-title = Aucun token détenu
+wallets-holdings-unreadable-title = Avoirs inconnus
 wallets-holdings-empty-message = Les tokens détenus par ce portefeuille apparaîtront ici.
 wallets-holdings-no-main = Aucun portefeuille principal
 wallets-holdings-main-title = Portefeuille principal

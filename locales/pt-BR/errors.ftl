@@ -118,6 +118,7 @@ errors-transactions-watch-store-unavailable = As carteiras monitoradas não est�
 errors-wallet-unavailable = A carteira principal não está disponível
 errors-wallet-changed = A carteira principal mudou; atualize e tente novamente
 errors-wallet-qr-failed = Não foi possível gerar o QR code da carteira
+errors-wallet-read-failed = Não é possível ler a carteira: { $reason }
 
 errors-updates-none-available = Nenhuma atualização disponível para baixar
 errors-updates-version-changed = A atualização disponível mudou; verifique as atualizações novamente

@@ -244,6 +244,7 @@ wallets-holdings-col-value = 价值（{ -sol }）
 wallets-holdings-col-type = 类型
 wallets-holdings-col-decimals = 小数位数
 wallets-holdings-empty-title = 暂无代币持仓
+wallets-holdings-unreadable-title = 持仓未知
 wallets-holdings-empty-message = 此钱包持有的代币将显示在这里。
 wallets-holdings-no-main = 没有主钱包
 wallets-holdings-main-title = 主钱包

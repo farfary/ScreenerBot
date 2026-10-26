@@ -13,6 +13,7 @@ services-health-connectivity-critical-unhealthy = महत्वपूर्ण
 services-health-filtering-snapshot-stale = फ़िल्टरिंग स्नैपशॉट { $seconds } सेकंड पुराना है
 services-health-start-failed = शुरू नहीं हो सका: { $reason }
 services-health-dependency-failed = शुरू नहीं किया गया: { $dependency } शुरू नहीं हो सका
+services-health-wallet-read-failed = वॉलेट पढ़ा नहीं जा सकता: { $reason }
 
 services-status-healthy = स्वस्थ
 services-status-starting = शुरू हो रहा है

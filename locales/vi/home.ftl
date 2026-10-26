@@ -1,5 +1,6 @@
 home-portfolio-title = Giá trị danh mục
 home-portfolio-change-label = Hôm nay
+home-wallet-unread = Không có số dư
 home-trend-range = Từ 00:00 UTC
 home-portfolio-change-incomparable =
     .title = Một số giá token bị thiếu vào đầu ngày hoặc đang thiếu, nên thay đổi hôm nay không được hiển thị.

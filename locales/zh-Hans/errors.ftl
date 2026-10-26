@@ -133,6 +133,7 @@ errors-transactions-watch-store-unavailable = 受监控钱包不可用
 errors-wallet-unavailable = 主钱包不可用
 errors-wallet-changed = 主钱包已更改，请刷新后重试
 errors-wallet-qr-failed = 无法生成钱包二维码
+errors-wallet-read-failed = 无法读取钱包：{ $reason }
 
 # Updates
 errors-updates-none-available = 没有可下载的更新

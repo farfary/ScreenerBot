@@ -51,6 +51,8 @@ let poller = null;
 let tabBar = null;
 let walletsData = [];
 let tokenHoldings = [];
+// Why the holdings are unknown: the cause of a failed wallet read, else null.
+let holdingsReadError = null;
 let currentTab = "main";
 let hasLoadedWalletData = false;
 let currentExportWalletId = null;
@@ -102,6 +104,7 @@ function createLifecycle() {
       renderers = createWalletRenderers({
         walletsData: () => walletsData,
         tokenHoldings: () => tokenHoldings,
+        holdingsReadError: () => holdingsReadError,
         currentTab: () => currentTab,
         $,
         Utils,
@@ -451,10 +454,15 @@ async function loadTokenHoldings({ force = false } = {}) {
     const response = force
       ? await fetch("/api/wallet/tokens/refresh", { method: "POST" })
       : await fetch("/api/wallet/tokens");
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-
-    const data = await response.json();
-    tokenHoldings = data.tokens || [];
+    const data = await response.json().catch(() => null);
+    if (!response.ok) {
+      // A failed wallet read leaves the holdings unknown, not empty.
+      holdingsReadError = apiErrorMessage(data, null);
+      tokenHoldings = [];
+      return;
+    }
+    holdingsReadError = null;
+    tokenHoldings = data?.tokens || [];
   } catch (error) {
     console.debug("[Wallets] Failed to load token holdings:", error);
     tokenHoldings = [];
@@ -800,6 +808,7 @@ function cleanup() {
   watched?.reset();
   walletsData = [];
   tokenHoldings = [];
+  holdingsReadError = null;
   hasLoadedWalletData = false;
   currentTab = "main";
   currentExportWalletId = null;

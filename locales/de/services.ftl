@@ -13,6 +13,7 @@ services-health-connectivity-critical-unhealthy = Kritische Endpunkte fehlerhaft
 services-health-filtering-snapshot-stale = Filter-Snapshot ist { $seconds } s alt
 services-health-start-failed = Start fehlgeschlagen: { $reason }
 services-health-dependency-failed = Nicht gestartet: { $dependency } konnte nicht starten
+services-health-wallet-read-failed = Wallet kann nicht gelesen werden: { $reason }
 
 ## Services page (pages/services.js)
 

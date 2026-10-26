@@ -19,6 +19,7 @@ services-health-connectivity-critical-unhealthy = اندپوینت‌های حی
 services-health-filtering-snapshot-stale = اسنپ‌شات فیلترینگ { $seconds } ثانیه قدمت دارد
 services-health-start-failed = راه‌اندازی ناموفق بود: { $reason }
 services-health-dependency-failed = راه‌اندازی نشد: { $dependency } راه‌اندازی نشد
+services-health-wallet-read-failed = خواندن کیف پول ممکن نیست: { $reason }
 
 ## Services page (pages/services.js)
 
