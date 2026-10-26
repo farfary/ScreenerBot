@@ -27,6 +27,10 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/wallet/balance", get(handlers::get_wallet_balance)) // Alias for /wallet/current
         .route("/wallet/tokens", get(handlers::get_wallet_tokens))
         .route(
+            "/wallet/buy-account-rent/{mint}",
+            get(handlers::get_buy_account_rent),
+        )
+        .route(
             "/wallet/tokens/refresh",
             post(handlers::refresh_wallet_tokens),
         )

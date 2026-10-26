@@ -131,6 +131,26 @@ pub(super) async fn get_wallet_balance() -> Result<Json<Option<WalletCurrentResp
     get_wallet_current().await
 }
 
+/// The rent a buy of `mint` locks in a new token account of the trading wallet, so the
+/// trade dialog's funding figure matches the swap's own funds check.
+pub(super) async fn get_buy_account_rent(
+    Path(mint): Path<String>,
+) -> Result<Json<BuyAccountRentResponse>, ApiError> {
+    let wallet = crate::utils::get_wallet_address().map_err(|err| {
+        ApiError::new(ApiErrorCode::NotConfigured, ids::ERRORS_WALLET_UNAVAILABLE)
+            .details(err.to_string())
+    })?;
+    let rent_raw = crate::chains::solana::swaps::funds::buy_account_rent(&wallet, &mint)
+        .await
+        .map_err(|err| {
+            ApiError::new(ApiErrorCode::UpstreamError, ids::ERRORS_WALLET_UNAVAILABLE)
+                .details(err.to_string())
+        })?;
+    Ok(Json(BuyAccountRentResponse {
+        rent_sol: crate::chains::adapter().raw_to_native(rent_raw),
+    }))
+}
+
 /// Get wallet token holdings with enriched metadata.
 ///
 /// Reads the live snapshot for the same reason `get_wallet_current` does: the holdings

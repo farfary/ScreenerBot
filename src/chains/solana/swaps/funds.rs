@@ -5,7 +5,7 @@
 
 use crate::chains::solana::assets::ata::get_all_token_accounts;
 use crate::chains::solana::rent;
-use crate::chains::solana::rpc::{try_get_rpc_client, RpcClientMethods};
+use crate::chains::solana::rpc::{try_get_rpc_client, RpcClientMethods, TokenAccountInfo};
 use crate::logger::{self, LogTag};
 use crate::swaps::funds::native_needed;
 use crate::swaps::{NotSubmittedReason, Quote, SwapExecutionError, SwapMode};
@@ -14,6 +14,39 @@ use crate::Error;
 /// Accounts a native-input swap may open whatever the wallet already holds: the
 /// wrapped-native account the route opens and closes, and the output token account.
 const MOST_ACCOUNTS_OPENED: u64 = 2;
+
+/// Whether one of the wallet's token accounts is for `mint`.
+fn holds_account(accounts: &[TokenAccountInfo], mint: &str) -> bool {
+    accounts.iter().any(|account| account.mint == mint)
+}
+
+/// Rent a buy of `mint` locks in the token account it opens: the token-account
+/// minimum (`minimum`, read only when needed) when `accounts` (the wallet's) hold
+/// none for the mint, zero when the wallet already keeps one.
+async fn rent_to_open<F, Fut>(
+    accounts: &[TokenAccountInfo],
+    mint: &str,
+    minimum: F,
+) -> Result<u64, Error>
+where
+    F: FnOnce() -> Fut,
+    Fut: std::future::Future<Output = crate::chains::solana::Result<u64>>,
+{
+    if holds_account(accounts, mint) {
+        return Ok(0);
+    }
+    Ok(minimum().await?)
+}
+
+/// Rent, in lamports, that a buy of `mint` locks in a new token account of `wallet`;
+/// zero when the wallet already holds an account for the mint.
+pub(crate) async fn buy_account_rent(wallet: &str, mint: &str) -> Result<u64, Error> {
+    let accounts = get_all_token_accounts(wallet).await?;
+    rent_to_open(&accounts, mint, || {
+        rent::minimum_balance(rent::TOKEN_ACCOUNT_LEN)
+    })
+    .await
+}
 
 /// Fails with a not-submitted [`NotSubmittedReason::InsufficientFunds`] when the
 /// quote spends the chain's native coin and the signing wallet holds less than the
@@ -64,7 +97,7 @@ pub(crate) async fn check_native_funds(quote: &Quote) -> Result<(), Error> {
     // wrapped-native account nor an output token account costs rent.
     let accounts_to_open = match get_all_token_accounts(&quote.wallet_address).await {
         Ok(accounts) => {
-            let held = |mint: &str| accounts.iter().any(|account| account.mint == mint);
+            let held = |mint: &str| holds_account(&accounts, mint);
             u64::from(!held(&quote.input_mint)) + u64::from(!held(&quote.output_mint))
         }
         Err(e) => {
@@ -101,4 +134,52 @@ pub(crate) async fn check_native_funds(quote: &Quote) -> Result<(), Error> {
             available_raw,
         },
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{holds_account, rent_to_open};
+    use crate::chains::solana::rpc::TokenAccountInfo;
+
+    const MINT: &str = "So11111111111111111111111111111111111111112";
+
+    fn account(mint: &str) -> TokenAccountInfo {
+        TokenAccountInfo {
+            account: "account".to_string(),
+            mint: mint.to_string(),
+            balance: 0,
+            decimals: 6,
+            is_token_2022: false,
+            is_nft: false,
+            is_frozen: false,
+            lamports: 1_461_600,
+        }
+    }
+
+    #[test]
+    fn only_an_account_for_the_same_mint_is_held() {
+        assert!(holds_account(&[account("other"), account(MINT)], MINT));
+        assert!(!holds_account(&[account("other")], MINT));
+        assert!(!holds_account(&[], MINT));
+    }
+
+    const RENT: u64 = 1_488_440;
+
+    #[tokio::test]
+    async fn a_buy_without_a_token_account_pays_its_rent() {
+        let rent = rent_to_open(&[account("other")], MINT, || async { Ok(RENT) })
+            .await
+            .expect("rent");
+        assert_eq!(rent, RENT);
+    }
+
+    #[tokio::test]
+    async fn a_held_token_account_costs_no_rent_and_no_rent_read() {
+        let rent = rent_to_open(&[account(MINT)], MINT, || async {
+            panic!("the rent is read only for an account the buy opens")
+        })
+        .await
+        .expect("rent");
+        assert_eq!(rent, 0);
+    }
 }

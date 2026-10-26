@@ -21,8 +21,9 @@ import { renderSetupGate } from "./setup_gate.js";
 const MIN_SLIPPAGE_PCT = 0.01;
 const MAX_SLIPPAGE_PCT = 50;
 
-// SOL held back from a buy so the transaction can still pay its network fee and, for a
-// first-time mint, the associated-token-account rent. Spending the LAST lamport always
+// SOL held back from a buy so the transaction can still pay its network fee. A buy of a
+// mint the wallet holds no token account for also locks that account's rent, read from
+// the server (`context.accountRent`) and added on top. Spending the LAST lamport always
 // fails on chain, so the slider ceiling, the MAX button and the validator must all stop
 // here — they used to disagree, and typing the exact balance produced a buy that
 // validated in the dialog and then failed.
@@ -1162,10 +1163,15 @@ export class TradeActionDialog {
       // and polling would 404 every tick.
       const tracksPosition = action !== "buy" || context.hasPosition === true;
 
-      // Settled, not all: one lookup failing must not discard the other's result.
-      const [balanceResult, positionResult] = await Promise.allSettled([
+      // The token-account rent is read once per dialog: it changes only when the
+      // account is opened or closed, and each read lists the wallet's token accounts.
+      const readsRent = action !== "sell" && context.accountRent == null;
+
+      // Settled, not all: one lookup failing must not discard the others' results.
+      const [balanceResult, positionResult, rentResult] = await Promise.allSettled([
         action === "sell" ? Promise.resolve(null) : this._fetchLiveBalance(),
         tracksPosition ? this._fetchLivePosition(mint) : Promise.resolve(null),
+        readsRent ? this._fetchAccountRent(mint) : Promise.resolve(null),
       ]);
 
       // Anything could have closed or reopened the dialog while these were in flight.
@@ -1178,6 +1184,12 @@ export class TradeActionDialog {
       const balance = balanceResult.status === "fulfilled" ? balanceResult.value : null;
       if (balance != null && balance !== context.balance) {
         context.balance = balance;
+        changed = true;
+      }
+
+      const accountRent = rentResult.status === "fulfilled" ? rentResult.value : null;
+      if (accountRent != null && accountRent !== context.accountRent) {
+        context.accountRent = accountRent;
         changed = true;
       }
 
@@ -1229,6 +1241,20 @@ export class TradeActionDialog {
     const data = await res.json();
     const balance = Number(data?.sol_balance);
     return Number.isFinite(balance) ? balance : null;
+  }
+
+  /**
+   * SOL a buy of `mint` locks in the token account it opens, 0 when the wallet already
+   * holds one, or null when the server cannot tell; the reserve then stands alone.
+   */
+  async _fetchAccountRent(mint) {
+    const res = await fetch(`/api/wallet/buy-account-rent/${encodeURIComponent(mint)}`, {
+      cache: "no-store",
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const rent = Number(data?.rent_sol);
+    return Number.isFinite(rent) ? rent : null;
   }
 
   /**
@@ -1505,7 +1531,12 @@ export class TradeActionDialog {
    */
   _maxSpendableSol(context) {
     if (typeof context?.balance !== "number" || !Number.isFinite(context.balance)) return null;
-    return Math.max(context.balance - SOL_FEE_RESERVE, 0);
+    return Math.max(context.balance - this._buyReserveSol(context), 0);
+  }
+
+  /** SOL a buy needs beyond its amount: the fee reserve and any new token account's rent. */
+  _buyReserveSol(context) {
+    return SOL_FEE_RESERVE + (context?.accountRent ?? 0);
   }
 
   /**
@@ -1746,12 +1777,13 @@ export class TradeActionDialog {
 
   /**
    * The refusal the trade API gives a wallet that cannot fund a buy of `amount`, with
-   * the same figures: what the wallet holds and what the trade needs with its fees.
+   * the same figures: what the wallet holds and what the trade needs with its fees and
+   * the rent of a token account the buy opens.
    */
   _insufficientFundsText(amount, context) {
     return I18n.t("errors-trade-insufficient-funds", {
       available: context.balance,
-      required: amount + SOL_FEE_RESERVE,
+      required: amount + this._buyReserveSol(context),
     });
   }
 

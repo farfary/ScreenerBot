@@ -29,6 +29,13 @@ pub struct TokenBalanceInfo {
     pub is_token_2022: bool,
 }
 
+/// Native coin a buy of one mint locks in the token account it opens for the trading
+/// wallet; zero when the wallet already holds that account.
+#[derive(Debug, Serialize)]
+pub struct BuyAccountRentResponse {
+    pub rent_sol: f64,
+}
+
 #[derive(Debug, Serialize)]
 pub struct WalletTokensResponse {
     pub tokens: Vec<WalletTokenHolding>,
