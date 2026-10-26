@@ -43,6 +43,7 @@ trader-status-running = En ejecución
 trader-status-stopped = Detenido
 trader-status-setup-required = Configuración requerida
 trader-status-unavailable = Completa la configuración de billetera y RPC para usar Auto Trader
+trader-setup-action = Completar configuración
 trader-toggle-on = ACTIVADO
 trader-toggle-off = DESACTIVADO
 trader-toggle-unavailable = NO DISPONIBLE

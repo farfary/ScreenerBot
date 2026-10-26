@@ -43,6 +43,7 @@ trader-status-running = در حال اجرا
 trader-status-stopped = متوقف
 trader-status-setup-required = نیازمند راه‌اندازی
 trader-status-unavailable = برای استفاده از معامله‌گر خودکار، راه‌اندازی کیف پول و RPC را کامل کنید
+trader-setup-action = تکمیل راه‌اندازی
 trader-toggle-on = فعال
 trader-toggle-off = غیرفعال
 trader-toggle-unavailable = در دسترس نیست

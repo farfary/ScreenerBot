@@ -43,6 +43,7 @@ trader-status-running = قيد التشغيل
 trader-status-stopped = متوقف
 trader-status-setup-required = الإعداد مطلوب
 trader-status-unavailable = أكمل إعداد المحفظة وRPC لاستخدام المتداول الآلي
+trader-setup-action = إكمال الإعداد
 trader-toggle-on = مفعّل
 trader-toggle-off = معطّل
 trader-toggle-unavailable = غير متاح

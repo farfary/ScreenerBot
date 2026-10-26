@@ -43,6 +43,7 @@ trader-status-running = 実行中
 trader-status-stopped = 停止中
 trader-status-setup-required = セットアップが必要です
 trader-status-unavailable = 自動トレーダーを使うには、ウォレットと RPC のセットアップを完了してください
+trader-setup-action = セットアップを完了
 trader-toggle-on = 有効
 trader-toggle-off = 無効
 trader-toggle-unavailable = 利用不可

@@ -32,6 +32,7 @@ trader-status-running = Đang chạy
 trader-status-stopped = Đã dừng
 trader-status-setup-required = Cần thiết lập
 trader-status-unavailable = Hoàn tất thiết lập ví và RPC để dùng Auto Trader
+trader-setup-action = Hoàn tất thiết lập
 trader-toggle-on = BẬT
 trader-toggle-off = TẮT
 trader-toggle-unavailable = KHÔNG KHẢ DỤNG

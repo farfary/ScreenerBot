@@ -258,6 +258,12 @@
   margin-top: 0.625rem;
 }
 
+/* The display above would otherwise override the `hidden` attribute and show the
+   recovery buttons with no limit tripped. */
+.loss-limit-actions[hidden] {
+  display: none;
+}
+
 .loss-limit-actions .btn {
   flex: 1 1 auto;
 }

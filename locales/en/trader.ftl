@@ -43,6 +43,7 @@ trader-status-running = Running
 trader-status-stopped = Stopped
 trader-status-setup-required = Setup required
 trader-status-unavailable = Complete wallet and RPC setup to use Auto Trader
+trader-setup-action = Complete setup
 trader-toggle-on = ON
 trader-toggle-off = OFF
 trader-toggle-unavailable = UNAVAILABLE

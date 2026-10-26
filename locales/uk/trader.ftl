@@ -43,6 +43,7 @@ trader-status-running = Працює
 trader-status-stopped = Зупинено
 trader-status-setup-required = Потрібне налаштування
 trader-status-unavailable = Завершіть налаштування гаманця та RPC, щоб користуватися автотрейдером
+trader-setup-action = Завершити налаштування
 trader-toggle-on = УВІМКНЕНО
 trader-toggle-off = ВИМКНЕНО
 trader-toggle-unavailable = НЕДОСТУПНО

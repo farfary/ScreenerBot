@@ -43,6 +43,7 @@ trader-status-running = 运行中
 trader-status-stopped = 已停止
 trader-status-setup-required = 需要设置
 trader-status-unavailable = 请先完成钱包和 RPC 设置以使用自动交易
+trader-setup-action = 完成设置
 trader-toggle-on = 已启用
 trader-toggle-off = 已停用
 trader-toggle-unavailable = 不可用

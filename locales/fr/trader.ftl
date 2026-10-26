@@ -32,6 +32,7 @@ trader-status-running = En marche
 trader-status-stopped = Arrêté
 trader-status-setup-required = Configuration requise
 trader-status-unavailable = Terminez la configuration du portefeuille et du RPC pour utiliser Auto Trader
+trader-setup-action = Terminer la configuration
 trader-toggle-on = ON
 trader-toggle-off = OFF
 trader-toggle-unavailable = INDISPONIBLE

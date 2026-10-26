@@ -40,6 +40,7 @@ trader-status-running = Läuft
 trader-status-stopped = Gestoppt
 trader-status-setup-required = Einrichtung erforderlich
 trader-status-unavailable = Schließen Sie die Wallet- und RPC-Einrichtung ab, um den Auto-Trader zu nutzen
+trader-setup-action = Einrichtung abschließen
 trader-toggle-on = AN
 trader-toggle-off = AUS
 trader-toggle-unavailable = NICHT VERFÜGBAR

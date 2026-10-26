@@ -161,6 +161,22 @@
   color: var(--error-color);
 }
 
+/* Setup required is a notice, not a state label: sentence case, muted. */
+.trader-status-bar[data-status="unavailable"] .status-bar-status {
+  color: var(--text-muted);
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.trader-setup-action {
+  align-self: flex-start;
+  margin-block-start: var(--spacing-xs);
+}
+
+.trader-setup-action[hidden] {
+  display: none;
+}
+
 /* ============================================================================
    Stats Tab - Overview Metrics & Breakdown
    ============================================================================ */

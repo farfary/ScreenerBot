@@ -32,6 +32,7 @@ trader-status-running = Çalışıyor
 trader-status-stopped = Durduruldu
 trader-status-setup-required = Kurulum gerekli
 trader-status-unavailable = Auto Trader'ı kullanmak için cüzdan ve RPC kurulumunu tamamlayın
+trader-setup-action = Kurulumu tamamla
 trader-toggle-on = AÇIK
 trader-toggle-off = KAPALI
 trader-toggle-unavailable = KULLANILAMIYOR

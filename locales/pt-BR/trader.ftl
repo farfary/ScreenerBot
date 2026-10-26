@@ -43,6 +43,7 @@ trader-status-running = Em execução
 trader-status-stopped = Parado
 trader-status-setup-required = Configuração necessária
 trader-status-unavailable = Conclua a configuração de carteira e RPC para usar o Trader automático
+trader-setup-action = Concluir configuração
 trader-toggle-on = ATIVADO
 trader-toggle-off = DESATIVADO
 trader-toggle-unavailable = INDISPONÍVEL

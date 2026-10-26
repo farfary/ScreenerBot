@@ -43,6 +43,7 @@ trader-status-running = 실행 중
 trader-status-stopped = 중지됨
 trader-status-setup-required = 설정 필요
 trader-status-unavailable = 자동 트레이더를 사용하려면 지갑과 RPC 설정을 완료하세요
+trader-setup-action = 설정 완료
 trader-toggle-on = 사용
 trader-toggle-off = 사용 안 함
 trader-toggle-unavailable = 사용 불가

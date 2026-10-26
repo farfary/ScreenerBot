@@ -34,6 +34,7 @@ trader-status-running = Berjalan
 trader-status-stopped = Berhenti
 trader-status-setup-required = Perlu penyiapan
 trader-status-unavailable = Selesaikan penyiapan dompet dan RPC untuk menggunakan Auto Trader
+trader-setup-action = Selesaikan penyiapan
 trader-toggle-on = AKTIF
 trader-toggle-off = NONAKTIF
 trader-toggle-unavailable = TIDAK TERSEDIA

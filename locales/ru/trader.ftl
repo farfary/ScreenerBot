@@ -32,6 +32,7 @@ trader-status-running = Работает
 trader-status-stopped = Остановлен
 trader-status-setup-required = Требуется настройка
 trader-status-unavailable = Завершите настройку кошелька и RPC, чтобы использовать автотрейдер
+trader-setup-action = Завершить настройку
 trader-toggle-on = ВКЛ.
 trader-toggle-off = ВЫКЛ.
 trader-toggle-unavailable = НЕДОСТУПНО

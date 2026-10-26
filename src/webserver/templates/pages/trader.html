@@ -19,6 +19,13 @@
               <div class="status-bar-info">
                 <span class="status-bar-title" data-l10n-id="trader-status-title"></span>
                 <span class="status-bar-status" id="trader-status-text" data-l10n-id="trader-status-loading"></span>
+                <button
+                  type="button"
+                  class="btn btn-sm btn-primary trader-setup-action"
+                  id="trader-setup-action"
+                  data-l10n-id="trader-setup-action"
+                  hidden
+                ></button>
               </div>
             </div>
             <label class="toggle" data-level="root">
@@ -183,7 +190,7 @@
                     <div class="metric-detail" id="profit-factor-detail">—</div>
                   </div>
                 </div>
-                <div class="metric-card metric-card--with-icon metric-highlight-danger">
+                <div class="metric-card metric-card--with-icon">
                   <div class="metric-icon">
                     <i class="icon-trending-down"></i>
                   </div>

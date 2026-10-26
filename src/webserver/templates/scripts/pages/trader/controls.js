@@ -6,6 +6,7 @@
 import { formatTimeSpan } from "../../core/format.js";
 import { apiErrorMessage } from "../../core/request_manager.js";
 import { setAutoTraderEnabled } from "../../ui/auto_trader_control.js";
+import { SetupDialog } from "../../ui/setup_dialog.js";
 
 /**
  * Trader Controls Module
@@ -70,7 +71,9 @@ export function createTraderControls({
       : isRunning
         ? I18n.t("trader-status-running")
         : I18n.t("trader-status-stopped");
-    const statusAttr = isRunning ? "running" : "stopped";
+    // Unavailable is neither running nor stopped: the bar reads as a notice with the
+    // setup action, not as an error.
+    const statusAttr = !isAvailable ? "unavailable" : isRunning ? "running" : "stopped";
     const toggleLabel = !isAvailable
       ? I18n.t("trader-toggle-unavailable")
       : isRunning
@@ -90,6 +93,8 @@ export function createTraderControls({
       }
       const statsToggleLabel = $("#stats-toggle-label");
       if (statsToggleLabel) statsToggleLabel.textContent = toggleLabel;
+      const setupAction = $("#trader-setup-action");
+      if (setupAction) setupAction.hidden = isAvailable;
     }
   }
 
@@ -154,6 +159,9 @@ export function createTraderControls({
    */
   function setupAutoTraderToggles() {
     const statsToggle = $("#stats-trader-toggle");
+
+    // The same wallet and RPC setup dialog the header's Explore Mode action opens.
+    addTrackedListener($("#trader-setup-action"), "click", () => SetupDialog.show());
 
     if (statsToggle) {
       addTrackedListener(statsToggle, "click", (e) => {
@@ -248,12 +256,14 @@ export function createTraderControls({
 
     const available = data.available !== false;
 
+    // Without a set-up trader no monitor can run, so a switch reads off and locked
+    // whatever the saved monitor setting is.
     if (entryToggle) {
-      entryToggle.checked = data.entry_monitor?.enabled ?? false;
+      entryToggle.checked = available && (data.entry_monitor?.enabled ?? false);
       entryToggle.disabled = !available || (data.force_stopped ?? false);
     }
     if (exitToggle) {
-      exitToggle.checked = data.exit_monitor?.enabled ?? false;
+      exitToggle.checked = available && (data.exit_monitor?.enabled ?? false);
       exitToggle.disabled = !available || (data.force_stopped ?? false);
     }
 

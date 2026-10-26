@@ -505,11 +505,14 @@ function createLifecycle() {
           : I18n.t("trader-stats-profit-factor-basis")
       );
 
+      const hasDrawdown =
+        data.total_trades > 0 && Utils.signedTone(data.max_drawdown_native, 4) === "positive";
       setValue(
         "max-drawdown",
         data.total_trades > 0 ? sol(data.max_drawdown_native) : "—",
-        Utils.signedTone(data.max_drawdown_native, 4) === "positive" ? "negative" : null
+        hasDrawdown ? "negative" : null
       );
+      setDrawdownAccent(hasDrawdown);
       setDetail("max-drawdown-detail", I18n.t("trader-stats-drawdown-basis"));
 
       setValue("capital-at-work", sol(data.locked_native));
@@ -584,7 +587,15 @@ function createLifecycle() {
           el.style.removeProperty("--metric-value-chars");
         }
       }
+      setDrawdownAccent(false);
     }
+  }
+
+  /** The danger accent is a state: it marks a drawdown that happened, never an empty card. */
+  function setDrawdownAccent(hasDrawdown) {
+    $("#max-drawdown")
+      ?.closest(".metric-card")
+      ?.classList.toggle("metric-highlight-danger", hasDrawdown);
   }
 
   /**

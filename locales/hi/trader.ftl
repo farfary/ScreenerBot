@@ -32,6 +32,7 @@ trader-status-running = चालू
 trader-status-stopped = रुका हुआ
 trader-status-setup-required = सेटअप ज़रूरी
 trader-status-unavailable = ऑटो ट्रेडर इस्तेमाल करने के लिए वॉलेट और RPC सेटअप पूरा करें
+trader-setup-action = सेटअप पूरा करें
 trader-toggle-on = चालू
 trader-toggle-off = बंद
 trader-toggle-unavailable = अनुपलब्ध
