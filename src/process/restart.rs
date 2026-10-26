@@ -4,6 +4,7 @@
 //! Restart-after-graceful-shutdown logic.
 
 use crate::logger::{error, info, LogTag};
+use std::ffi::OsString;
 use std::process::Command;
 
 /// Electron owns its backend child and must be the component that relaunches it.
@@ -31,7 +32,7 @@ pub fn restart_after_graceful_shutdown() -> ! {
         );
         std::process::exit(1);
     });
-    let args = std::env::args_os().skip(1).collect::<Vec<_>>();
+    let args = restart_args(std::env::args_os().skip(1));
 
     info(
         LogTag::System,
@@ -61,5 +62,37 @@ pub fn restart_after_graceful_shutdown() -> ! {
                 std::process::exit(1);
             }
         }
+    }
+}
+
+/// The arguments a relaunched process receives: this launch's arguments without the
+/// one-shot wallet data reset, which acts once per launch and must not repeat on every
+/// in-process restart.
+fn restart_args(args: impl IntoIterator<Item = OsString>) -> Vec<OsString> {
+    args.into_iter()
+        .filter(|arg| arg.as_os_str() != crate::arguments::CLEAN_WALLET_DATA_FLAG)
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_restart_drops_the_wallet_data_reset_and_keeps_every_other_argument_in_order() {
+        let args = [
+            "--port",
+            "9000",
+            "--clean-wallet-data",
+            "--debug-api",
+            "--clean-wallet-data",
+        ]
+        .map(OsString::from);
+        assert_eq!(
+            restart_args(args),
+            ["--port", "9000", "--debug-api"]
+                .map(OsString::from)
+                .to_vec()
+        );
     }
 }

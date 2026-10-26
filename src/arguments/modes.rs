@@ -52,9 +52,13 @@ pub fn is_force_refresh_enabled() -> bool {
     has_arg("--force-refresh")
 }
 
-/// Clean wallet data — delete all wallet-specific databases.
+/// The one-shot wallet data reset flag. It acts once per launch, so an in-process
+/// restart never passes it on.
+pub const CLEAN_WALLET_DATA_FLAG: &str = "--clean-wallet-data";
+
+/// Wallet data reset — move the wallet-scoped stores into a wallet-reset backup.
 pub fn is_clean_wallet_data_enabled() -> bool {
-    has_arg("--clean-wallet-data")
+    has_arg(CLEAN_WALLET_DATA_FLAG)
 }
 
 /// Reset configuration to defaults while preserving wallet and RPC URLs.
