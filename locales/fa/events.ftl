@@ -293,6 +293,6 @@ events-dialog-export-line = { $label }: { $value }
 # Empty table (scripts/pages/events.js)
 events-empty = هنوز رویدادی نیست
     .message = شروع سرویس‌ها، معاملات و هشدارها همزمان با رخ دادن در اینجا ثبت می‌شوند.
-events-recording-off = ثبت رویدادها خاموش است
+events-recording-off-diagnostic = ثبت رویدادها خاموش است
     .message = ثبت رویدادها ابزاری برای عیب‌یابی است. حجم زیادی داده روی دیسک می‌نویسد، به همین دلیل در استفادهٔ عادی خاموش می‌ماند.
 events-recording-off-action = باز کردن تنظیمات رویدادها

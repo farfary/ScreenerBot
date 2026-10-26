@@ -293,6 +293,6 @@ events-dialog-export-line = { $label }: { $value }
 # Empty table (scripts/pages/events.js)
 events-empty = Aún no hay eventos
     .message = Los inicios de servicios, las operaciones y las advertencias se registran aquí a medida que ocurren.
-events-recording-off = El registro de eventos está desactivado
+events-recording-off-diagnostic = El registro de eventos está desactivado
     .message = El registro de eventos es una herramienta de diagnóstico. Escribe una gran cantidad de datos en el disco, por eso permanece desactivado en el uso normal.
 events-recording-off-action = Abrir ajustes de eventos

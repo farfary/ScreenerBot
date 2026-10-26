@@ -276,6 +276,6 @@ events-dialog-export-line = { $label }: { $value }
 # Empty table (scripts/pages/events.js)
 events-empty = Событий пока нет
     .message = Запуски сервисов, сделки и предупреждения записываются здесь по мере их появления.
-events-recording-off = Запись событий выключена
+events-recording-off-diagnostic = Запись событий выключена
     .message = Запись событий — диагностический инструмент. Она записывает на диск большой объём данных, поэтому при обычной работе выключена.
 events-recording-off-action = Открыть настройки событий

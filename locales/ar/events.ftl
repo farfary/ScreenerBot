@@ -293,6 +293,6 @@ events-dialog-export-line = { $label }: { $value }
 # Empty table (scripts/pages/events.js)
 events-empty = لا توجد أحداث بعد
     .message = تُسجَّل هنا عمليات تشغيل الخدمات والصفقات والتحذيرات فور حدوثها.
-events-recording-off = تسجيل الأحداث متوقف
+events-recording-off-diagnostic = تسجيل الأحداث متوقف
     .message = تسجيل الأحداث أداة تشخيص. يكتب كمية كبيرة من البيانات على القرص، لذلك يبقى متوقفًا في الاستخدام العادي.
 events-recording-off-action = فتح إعدادات الأحداث

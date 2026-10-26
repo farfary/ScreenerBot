@@ -212,13 +212,6 @@
   transform: translateX(calc(var(--dir-sign) * 4px));
 }
 
-.exit-dialog__option:focus {
-  outline: none;
-  background: rgb(255, 255, 255, 0.08);
-  border-color: var(--primary-color, #58a6ff);
-  box-shadow: 0 0 0 3px rgb(88, 166, 255, 0.15);
-}
-
 .exit-dialog__option:active {
   transform: translateX(calc(var(--dir-sign) * 2px));
 }
@@ -335,12 +328,6 @@
   color: var(--text-primary, #e6edf3);
   background: rgb(255, 255, 255, 0.05);
   border-color: rgb(255, 255, 255, 0.2);
-}
-
-.exit-dialog__cancel:focus {
-  outline: none;
-  border-color: var(--primary-color, #58a6ff);
-  box-shadow: 0 0 0 3px rgb(88, 166, 255, 0.15);
 }
 
 .exit-dialog__cancel:active {

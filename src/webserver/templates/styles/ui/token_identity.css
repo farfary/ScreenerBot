@@ -459,45 +459,25 @@ a.ti-address-value:hover {
   }
 }
 
-/* Row controls are bare icon buttons: the glyph colour names the action, and no
-   state paints a tile, border or shadow behind it. */
-.ti-row-cell__actions .btn,
-.ti-row-cell__actions .btn:hover,
-.ti-row-cell__actions .btn:active,
-.ti-row-cell__actions .btn.active {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+/* Row controls are the shared bare icon button (`.btn-icon`) at the row's 28px hit
+   area; the glyph colour names the action. */
+.ti-row-cell__actions .btn-icon {
   width: 28px;
   height: 28px;
-  min-width: 28px;
-  min-height: 28px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  box-shadow: none;
-  color: var(--text-secondary);
-  transform: none;
-  cursor: pointer;
-  transition: color var(--transition-fast);
 }
 
-.ti-row-cell__actions .btn i {
+.ti-row-cell__actions .btn-icon i {
   font-size: 0.95rem;
 }
 
-.ti-row-cell__actions .btn:hover:not(:disabled) {
-  color: var(--text-primary);
-}
-
-.ti-row-cell__actions .btn[data-action="buy"]:not(:disabled) {
+.ti-row-cell__actions .btn-icon[data-action="buy"]:not(:disabled) {
   color: var(--success-color);
 }
 
-.ti-row-cell__actions .btn[data-action="add"]:not(:disabled) {
+.ti-row-cell__actions .btn-icon[data-action="add"]:not(:disabled) {
   color: var(--info-color);
 }
 
-.ti-row-cell__actions .btn:is([data-action="sell"], .row-action--danger):not(:disabled) {
+.ti-row-cell__actions .btn-icon:is([data-action="sell"], .danger):not(:disabled) {
   color: var(--error-color);
 }

@@ -276,6 +276,6 @@ events-dialog-export-line = { $label }: { $value }
 # Empty table (scripts/pages/events.js)
 events-empty = Chưa có sự kiện
     .message = Các lần khởi động dịch vụ, giao dịch và cảnh báo được ghi lại tại đây khi chúng xảy ra.
-events-recording-off = Ghi sự kiện đang tắt
+events-recording-off-diagnostic = Ghi sự kiện đang tắt
     .message = Ghi sự kiện là công cụ chẩn đoán. Tính năng này ghi rất nhiều dữ liệu xuống ổ đĩa nên được tắt khi sử dụng thông thường.
 events-recording-off-action = Mở cài đặt sự kiện

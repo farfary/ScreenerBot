@@ -279,6 +279,6 @@ events-dialog-export-line = { $label }: { $value }
 # Empty table (scripts/pages/events.js)
 events-empty = Belum ada peristiwa
     .message = Layanan yang dimulai, trade, dan peringatan dicatat di sini saat terjadi.
-events-recording-off = Pencatatan peristiwa nonaktif
+events-recording-off-diagnostic = Pencatatan peristiwa nonaktif
     .message = Perekaman peristiwa adalah alat diagnostik. Fitur ini menulis banyak data ke disk, jadi tetap nonaktif dalam penggunaan normal.
 events-recording-off-action = Buka pengaturan peristiwa

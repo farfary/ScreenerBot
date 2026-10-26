@@ -64,6 +64,12 @@
   gap: var(--spacing-xs);
 }
 
+/* The dialogs toggle these with the `hidden` attribute, which their `display` rules
+   would otherwise outrank. */
+.wallets-page :is(.export-key-display, .form-group, .form-error, .btn)[hidden] {
+  display: none;
+}
+
 .export-key-display
   label:not(.checkbox-label, :has(> input[type="checkbox"]), :has(> input[type="radio"])) {
   font-size: 0.8rem;

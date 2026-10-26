@@ -237,7 +237,7 @@ export function createWatchedWallets({
     const heliusDescription = $("#watch-helius-description");
     const heliusAction = $("#watch-helius-action");
     if (heliusDescription && heliusAction) {
-      heliusAction.classList.toggle("hidden", !target.high_activity_approved && !helius?.available);
+      heliusAction.hidden = !target.high_activity_approved && !helius?.available;
       heliusAction.textContent = target.high_activity_approved
         ? I18n.t("wallets-watch-helius-stop")
         : pausedForBudget
@@ -251,7 +251,8 @@ export function createWatchedWallets({
             ? I18n.t("wallets-watch-helius-description-unavailable")
             : I18n.t("wallets-watch-helius-description-unsupported");
     }
-    $("#watch-budget-resume-notice")?.classList.toggle("hidden", !pausedForBudget);
+    const resumeNotice = $("#watch-budget-resume-notice");
+    if (resumeNotice) resumeNotice.hidden = !pausedForBudget;
     const ack = $("#watch-budget-ack");
     if (ack) ack.checked = false;
     const button = $("#watch-budget-save");
@@ -263,7 +264,7 @@ export function createWatchedWallets({
     const error = $("#watch-budget-error");
     if (error) {
       error.textContent = "";
-      error.classList.add("hidden");
+      error.hidden = true;
     }
     syncBudgetSubmit();
     showModal("watch-budget-modal");
@@ -303,14 +304,14 @@ export function createWatchedWallets({
     if (!Number.isInteger(pageBudget) || pageBudget < 5 || pageBudget > 50) {
       if (error) {
         error.textContent = I18n.t("wallets-watch-budget-error-range");
-        error.classList.remove("hidden");
+        error.hidden = false;
       }
       return;
     }
     if (pausedForBudget && !ack?.checked) {
       if (error) {
         error.textContent = I18n.t("wallets-watch-budget-error-ack");
-        error.classList.remove("hidden");
+        error.hidden = false;
       }
       return;
     }
@@ -343,7 +344,7 @@ export function createWatchedWallets({
       if (error) {
         error.textContent =
           requestError.detail || requestError.message || I18n.t("wallets-watch-budget-save-failed");
-        error.classList.remove("hidden");
+        error.hidden = false;
       }
     } finally {
       savingBudget = false;
@@ -355,7 +356,7 @@ export function createWatchedWallets({
     const errorEl = $("#watched-wallet-address-error");
     if (errorEl) {
       errorEl.textContent = message;
-      errorEl.classList.toggle("hidden", !message);
+      errorEl.hidden = !message;
     }
     const addressInput = $("#watched-wallet-address");
     if (message) addressInput?.setAttribute("aria-invalid", "true");

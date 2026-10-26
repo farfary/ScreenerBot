@@ -9,7 +9,7 @@
 
   <!-- Main Content -->
   <main class="wallets-main">
-    <div class="wallets-setup-gate hidden" id="wallets-setup-gate"></div>
+    <div class="wallets-setup-gate" hidden id="wallets-setup-gate"></div>
     <div class="wallets-tab-panels">
       <!-- Main Wallet Tab Panel -->
       <div class="wallet-tab-panel" id="panel-main" data-panel="main">
@@ -18,19 +18,19 @@
       </div>
 
       <!-- Other Wallets Tab Panel -->
-      <div class="wallet-tab-panel hidden" id="panel-other" data-panel="other">
+      <div class="wallet-tab-panel" hidden id="panel-other" data-panel="other">
         <div id="other-wallets-table-container"></div>
       </div>
 
       <!-- Watched Tab Panel -->
-      <div class="wallet-tab-panel hidden" id="panel-watched" data-panel="watched">
+      <div class="wallet-tab-panel" hidden id="panel-watched" data-panel="watched">
         <div id="watched-wallets-root" aria-live="polite"></div>
       </div>
     </div>
   </main>
 
   <!-- Watch Wallet Modal -->
-  <div class="modal-overlay hidden" id="watch-wallet-modal">
+  <div class="modal-overlay" hidden id="watch-wallet-modal">
     <div class="modal-dialog modal-sm">
       <div class="modal-header">
         <h2><i class="icon-eye"></i> <span data-l10n-id="wallets-watch-add-title"></span></h2>
@@ -60,7 +60,7 @@
               required
             />
             <small data-l10n-id="wallets-watch-add-address-hint"></small>
-            <small class="form-error hidden" id="watched-wallet-address-error" aria-live="polite">
+            <small class="form-error" hidden id="watched-wallet-address-error" aria-live="polite">
             </small>
           </div>
           <div class="form-group">
@@ -89,7 +89,7 @@
     </div>
   </div>
 
-  <div class="modal-overlay hidden" id="watch-budget-modal">
+  <div class="modal-overlay" hidden id="watch-budget-modal">
     <div
       class="modal-dialog modal-sm"
       role="dialog"
@@ -135,7 +135,7 @@
             />
             <small id="watch-budget-hint"></small>
           </div>
-          <div class="form-group hidden" id="watch-budget-resume-notice">
+          <div class="form-group" hidden id="watch-budget-resume-notice">
             <p data-l10n-id="wallets-watch-budget-resume-notice"></p>
             <p data-l10n-id="wallets-watch-budget-resume-tasks"></p>
             <label class="checkbox-label"
@@ -144,7 +144,7 @@
               ></span
             ></label>
           </div>
-          <small class="form-error hidden" id="watch-budget-error" aria-live="polite"></small>
+          <small class="form-error" hidden id="watch-budget-error" aria-live="polite"></small>
           <div class="form-actions">
             <button
               type="button"
@@ -166,7 +166,7 @@
   </div>
 
   <!-- Export Key Modal -->
-  <div class="modal-overlay hidden" id="export-modal">
+  <div class="modal-overlay" hidden id="export-modal">
     <div class="modal-dialog modal-sm">
       <div class="modal-header">
         <h2><i class="icon-key"></i> <span data-l10n-id="wallets-export-title"></span></h2>
@@ -187,7 +187,7 @@
             <p data-l10n-id="wallets-export-warning-body"></p>
           </div>
         </div>
-        <div class="export-key-display hidden" id="export-key-display">
+        <div class="export-key-display" hidden id="export-key-display">
           <label data-l10n-id="wallets-export-key-label"></label>
           <div class="key-display">
             <code id="exported-key" dir="ltr">...</code>

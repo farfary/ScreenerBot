@@ -16,7 +16,7 @@
 import { on, create, show, hide, setIconLabel } from "../core/dom.js";
 import * as Utils from "../core/utils.js";
 import { playClick, playSuccess, playError } from "../core/sounds.js";
-import { requestManager } from "../core/request_manager.js";
+import { requestManager, apiErrorTitle, apiErrorDetails } from "../core/request_manager.js";
 import { downloadJson } from "../core/download.js";
 import { hasSectionLabel, sectionLabel } from "../pages/config/field_text.js";
 
@@ -88,6 +88,29 @@ const SECTION_ORDER = [
   "gui",
   "telegram",
 ];
+
+/**
+ * Title and message of a failed import step. A server refusal shows its own reason as
+ * the title and its technical cause (a validation failure names the field) as the
+ * message; a local failure (an unreadable file) keeps `title` and its own message.
+ * @param {any} error The thrown error; `requestManager` attaches the Response.
+ * @param {string} title
+ * @param {string} fallback
+ * @returns {Promise<{title: string, message: string}>}
+ */
+async function failureNotice(error, title, fallback) {
+  if (!error?.response) return { title, message: error?.message || fallback };
+  let body = null;
+  try {
+    body = await error.response.json();
+  } catch {
+    // The body was not JSON or was already read.
+  }
+  const reason = apiErrorTitle(body, null);
+  const details = apiErrorDetails(body);
+  if (reason && details) return { title: reason, message: details };
+  return { title, message: reason || fallback };
+}
 
 // ============================================================================
 // EXPORT DIALOG
@@ -868,8 +891,7 @@ export class ConfigImportDialog {
       playError();
       Utils.showToast({
         type: "error",
-        title: I18n.t("system-config-import-invalid-file-title"),
-        message: error.message || I18n.t("system-config-import-invalid-file"),
+        ...(await failureNotice(error, I18n.t("system-config-import-invalid-file-title"), I18n.t("system-config-import-invalid-file"))),
       });
     }
   }
@@ -914,8 +936,7 @@ export class ConfigImportDialog {
       playError();
       Utils.showToast({
         type: "error",
-        title: I18n.t("system-config-import-failed-title"),
-        message: error.message || I18n.t("system-config-import-failed-message"),
+        ...(await failureNotice(error, I18n.t("system-config-import-failed-title"), I18n.t("system-config-import-failed-message"))),
       });
       this.isImporting = false;
       importBtn.disabled = false;

@@ -271,7 +271,7 @@ function createLifecycle() {
   const removeActionCell = (row) => {
     const id = row?.id;
     if (id == null) return "";
-    return `<button class="btn row-action" data-action="remove" data-id="${Utils.escapeHtml(
+    return `<button class="btn-icon row-action" data-action="remove" data-id="${Utils.escapeHtml(
       String(id)
     )}" data-mint="${Utils.escapeHtml(row?.mint || "")}" ${removeAttrs()}><i class="icon-trash-2"></i></button>`;
   };
@@ -282,8 +282,8 @@ function createLifecycle() {
     if (id == null) return "";
     const idAttr = Utils.escapeHtml(String(id));
     const mintAttr = Utils.escapeHtml(row?.mint || "");
-    return `<button class="btn row-action" data-action="restore" data-id="${idAttr}" data-mint="${mintAttr}" ${restoreAttrs()}><i class="icon-rotate-ccw"></i></button>
-      <button class="btn row-action row-action--danger" data-action="delete" data-id="${idAttr}" data-mint="${mintAttr}" ${deleteAttrs()}><i class="icon-trash-2"></i></button>`;
+    return `<button class="btn-icon row-action" data-action="restore" data-id="${idAttr}" data-mint="${mintAttr}" ${restoreAttrs()}><i class="icon-rotate-ccw"></i></button>
+      <button class="btn-icon row-action danger" data-action="delete" data-id="${idAttr}" data-mint="${mintAttr}" ${deleteAttrs()}><i class="icon-trash-2"></i></button>`;
   };
 
   const openActionCell = (row) => {
@@ -308,11 +308,11 @@ function createLifecycle() {
     const mintAttr = Utils.escapeHtml(mint);
     const idAttr = Utils.escapeHtml(String(row?.id ?? ""));
     return `
-      <button class="btn row-action" data-action="add" data-mint="${mintAttr}" ${addAttrs()}${dis}><i class="icon-circle-plus"></i></button>
-      <button class="btn row-action" data-action="sell" data-mint="${mintAttr}" title="${Utils.escapeHtml(
+      <button class="btn-icon row-action" data-action="add" data-mint="${mintAttr}" ${addAttrs()}${dis}><i class="icon-circle-plus"></i></button>
+      <button class="btn-icon row-action" data-action="sell" data-mint="${mintAttr}" title="${Utils.escapeHtml(
         sellTitle
       )}" aria-label="${esc(I18n.attr("positions-action-sell", "aria-label"))}"${sellDis}><i class="icon-trending-down"></i></button>
-      <button class="btn row-action" data-action="remove" data-id="${idAttr}" data-mint="${mintAttr}" ${removeAttrs()}><i class="icon-trash-2"></i></button>
+      <button class="btn-icon row-action" data-action="remove" data-id="${idAttr}" data-mint="${mintAttr}" ${removeAttrs()}><i class="icon-trash-2"></i></button>
     `;
   };
 

@@ -57,7 +57,8 @@
   flex-direction: column;
 }
 
-.wallet-tab-panel.hidden {
+.wallets-tab-panels[hidden],
+.wallet-tab-panel[hidden] {
   display: none;
 }
 
@@ -157,20 +158,6 @@
 .copy-btn:hover {
   background: var(--primary-alpha-10);
   color: var(--primary-color);
-}
-
-/* =============================================================================
-   Modal Styles
-   ============================================================================= */
-
-/* Extracted to wallets/modals.css */
-
-/* =============================================================================
-   Utility Classes
-   ============================================================================= */
-
-.hidden {
-  display: none !important;
 }
 
 /* =============================================================================

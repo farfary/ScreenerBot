@@ -78,9 +78,10 @@ function createLifecycle() {
       // Explore Mode has no wallet store: the page is the setup notice alone, with
       // no sub-tabs, no wallet reads and no poller.
       if (setupRequired()) {
-        $(".wallets-tab-panels")?.classList.add("hidden");
+        const panels = $(".wallets-tab-panels");
+        if (panels) panels.hidden = true;
         const gate = $("#wallets-setup-gate");
-        gate?.classList.remove("hidden");
+        if (gate) gate.hidden = false;
         renderSetupGate(gate, I18n.t("wallets-setup-gate-title"));
         return;
       }
@@ -202,11 +203,7 @@ function updatePanelVisibility() {
   const panels = document.querySelectorAll(".wallet-tab-panel");
   panels.forEach((panel) => {
     const panelId = panel.dataset.panel;
-    if (panelId === currentTab) {
-      panel.classList.remove("hidden");
-    } else {
-      panel.classList.add("hidden");
-    }
+    panel.hidden = panelId !== currentTab;
   });
 }
 
@@ -367,9 +364,9 @@ function showExportModal(id) {
   const keyDisplay = $("#export-key-display");
   const confirmBtn = $("#confirm-export-btn");
 
-  if (keyDisplay) keyDisplay.classList.add("hidden");
+  if (keyDisplay) keyDisplay.hidden = true;
   if (confirmBtn) {
-    confirmBtn.classList.remove("hidden");
+    confirmBtn.hidden = false;
     confirmBtn.disabled = false;
   }
 
@@ -399,8 +396,8 @@ async function handleExportKey() {
     const keyEl = $("#exported-key");
 
     if (keyEl) keyEl.textContent = data.private_key;
-    if (keyDisplay) keyDisplay.classList.remove("hidden");
-    if (confirmBtn) confirmBtn.classList.add("hidden");
+    if (keyDisplay) keyDisplay.hidden = false;
+    if (confirmBtn) confirmBtn.hidden = true;
 
     Utils.showToast(I18n.t("wallets-export-revealed"), "warning");
   } catch (error) {
@@ -424,7 +421,7 @@ function closeExportModal() {
 function showModal(id) {
   const modal = $(`#${id}`);
   if (modal) {
-    modal.classList.remove("hidden");
+    modal.hidden = false;
     document.body.style.overflow = "hidden";
   }
 }
@@ -432,7 +429,7 @@ function showModal(id) {
 function hideModal(id) {
   const modal = $(`#${id}`);
   if (modal) {
-    modal.classList.add("hidden");
+    modal.hidden = true;
     document.body.style.overflow = "";
   }
 }

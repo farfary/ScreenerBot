@@ -276,6 +276,6 @@ events-dialog-export-line = { $label }: { $value }
 # Empty table (scripts/pages/events.js)
 events-empty = Henüz olay yok
     .message = Servis başlatmaları, işlemler ve uyarılar gerçekleştikçe burada kaydedilir.
-events-recording-off = Olay kaydı kapalı
+events-recording-off-diagnostic = Olay kaydı kapalı
     .message = Olay kaydı bir tanılama aracıdır. Diske büyük miktarda veri yazdığı için normal kullanımda kapalı kalır.
 events-recording-off-action = Olay ayarlarını aç

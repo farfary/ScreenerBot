@@ -276,6 +276,6 @@ events-dialog-export-line = { $label }: { $value }
 # Empty table (scripts/pages/events.js)
 events-empty = अभी कोई इवेंट नहीं
     .message = सर्विस शुरू होना, ट्रेड और चेतावनियाँ होते ही यहाँ दर्ज होती हैं।
-events-recording-off = इवेंट रिकॉर्डिंग बंद है
+events-recording-off-diagnostic = इवेंट रिकॉर्डिंग बंद है
     .message = इवेंट रिकॉर्डिंग एक डायग्नोस्टिक टूल है। यह डिस्क पर बहुत अधिक डेटा लिखती है, इसलिए सामान्य उपयोग में बंद रहती है।
 events-recording-off-action = इवेंट सेटिंग्स खोलें

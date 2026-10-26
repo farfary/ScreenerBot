@@ -119,9 +119,9 @@ export function tokenCell(row) {
     `title="${Utils.escapeHtml(title)}" aria-label="${Utils.escapeHtml(label)}"`;
   const tradeActions = row.has_open_position
     ? `
-      <button class="btn row-action" data-action="add" data-mint="${mint}" ${actionAttrs(I18n.attr("tokens-cell-action-add", "title"), I18n.attr("tokens-cell-action-add", "aria-label"))}${disabledAttr}><i class="icon-circle-plus"></i></button>
-      <button class="btn row-action" data-action="sell" data-mint="${mint}" ${actionAttrs(I18n.attr("tokens-cell-action-sell", "title"), I18n.attr("tokens-cell-action-sell", "aria-label"))}${disabledAttr}><i class="icon-trending-down"></i></button>`
-    : `<button class="btn row-action" data-action="buy" data-mint="${mint}" ${actionAttrs(I18n.attr("tokens-cell-action-buy", "title"), I18n.attr("tokens-cell-action-buy", "aria-label"))}${disabledAttr}><i class="icon-shopping-cart"></i></button>`;
+      <button class="btn-icon row-action" data-action="add" data-mint="${mint}" ${actionAttrs(I18n.attr("tokens-cell-action-add", "title"), I18n.attr("tokens-cell-action-add", "aria-label"))}${disabledAttr}><i class="icon-circle-plus"></i></button>
+      <button class="btn-icon row-action" data-action="sell" data-mint="${mint}" ${actionAttrs(I18n.attr("tokens-cell-action-sell", "title"), I18n.attr("tokens-cell-action-sell", "aria-label"))}${disabledAttr}><i class="icon-trending-down"></i></button>`
+    : `<button class="btn-icon row-action" data-action="buy" data-mint="${mint}" ${actionAttrs(I18n.attr("tokens-cell-action-buy", "title"), I18n.attr("tokens-cell-action-buy", "aria-label"))}${disabledAttr}><i class="icon-shopping-cart"></i></button>`;
 
   return renderTokenRowCell(row.mint, {
     symbol: row.symbol,

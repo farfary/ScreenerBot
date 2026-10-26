@@ -412,12 +412,14 @@ function createLifecycle() {
         columns,
         rowIdField: "id",
         stateKey: "events-table",
-        // With recording off nothing will arrive, so the empty log says how to start it.
+        // With recording off nothing will arrive, so the empty log says why it stays off.
         emptyTitle: () =>
-          state.recording === false ? I18n.t("events-recording-off") : I18n.t("events-empty"),
+          state.recording === false
+            ? I18n.t("events-recording-off-diagnostic")
+            : I18n.t("events-empty"),
         emptyMessage: () =>
           state.recording === false
-            ? I18n.attr("events-recording-off", "message")
+            ? I18n.attr("events-recording-off-diagnostic", "message")
             : I18n.attr("events-empty", "message"),
         emptyAction: () =>
           state.recording === false

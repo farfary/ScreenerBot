@@ -15,6 +15,8 @@
  *   or `renderTokenCell`.
  * - The row cell's hidden actions sit inside the cell, so the token column never
  *   reports a scroll width wider than itself.
+ * - The row cell's action buttons are the shared bare icon button (`.btn-icon`), not a
+ *   `.btn` reskinned inside the cell.
  * - A token without a symbol is labelled by its short mint (`tokenLabel`), never by a
  *   question-mark placeholder.
  *
@@ -106,6 +108,21 @@ test("hidden row-cell actions stay inside the cell's box", () => {
     /^(?:none|translateY\([^)]*\))$/,
     "an inline offset at rest widens the cell's scroll width"
   );
+});
+
+test("row-cell actions are the shared icon button", () => {
+  const found = [];
+  for (const file of scripts) {
+    readFileSync(file, "utf8")
+      .split("\n")
+      .forEach((line, index) => {
+        const classes = /class="([^"]*\brow-action\b[^"]*)"/.exec(line)?.[1];
+        if (classes && !/\bbtn-icon\b/.test(classes)) found.push(`${repoPath(file)}:${index + 1}`);
+      });
+  }
+  assert.deepEqual(found, []);
+  const css = readFileSync(`${STYLES_ROOT}/ui/token_identity.css`, "utf8");
+  assert.doesNotMatch(css, /\.ti-row-cell__actions\s+\.btn\b(?!-)/, "a reskinned .btn in the row cell");
 });
 
 test("a token without a symbol is never labelled with a placeholder", () => {

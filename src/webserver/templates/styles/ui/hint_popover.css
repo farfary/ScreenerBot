@@ -203,11 +203,6 @@
   background: var(--hover-bg);
 }
 
-.hint-popover__close:focus {
-  outline: none;
-  box-shadow: 0 0 0 2px var(--primary-alpha-30);
-}
-
 /* =============================================================================
    Popover Content
    ============================================================================= */
