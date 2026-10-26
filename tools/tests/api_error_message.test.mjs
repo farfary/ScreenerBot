@@ -9,6 +9,10 @@
  * `i18n_runtime.test.mjs`; the request manager module is imported with a stub
  * `window` that carries that runtime.
  *
+ * A message that is already a complete statement (more than one sentence, or closed by
+ * sentence-final punctuation) stands alone: appending the raw cause after it read as
+ * "… Copy it again from @BotFather: the configured bot token is not usable".
+ *
  * Run with `npm run test:js`.
  */
 
@@ -22,9 +26,13 @@ const read = (rel) =>
 
 const EN =
   "errors-strategies-already-exists = Strategy with ID '{ $id }' already exists\n" +
+  "errors-telegram-bot-token-invalid = Telegram does not accept this bot token. Copy it again from @BotFather\n" +
+  "errors-chat-session-not-found = Chat session { $id } not found.\n" +
   "errors-with-details = { $message }: { $details }\n";
 const FA =
   "errors-strategies-already-exists = Strategy { $id } exists (fa)\n" +
+  "errors-telegram-bot-token-invalid = Telegram refuses this token (fa). Copy it again (fa)\n" +
+  "errors-chat-session-not-found = Chat session { $id } not found (fa).\n" +
   "errors-with-details = { $message } | { $details } (fa)\n";
 
 function loadI18n() {
@@ -72,6 +80,37 @@ test("renders the catalog text in the active locale", () => {
 test("frames the message with its technical cause when details are present", () => {
   const message = apiErrorMessage(envelope, "fallback");
   assert.match(message, /Strategy .*a.* exists \(fa\).* \| .*raw cause.* \(fa\)$/);
+});
+
+test("a complete localized statement stands alone without its technical cause", () => {
+  const refused = {
+    error: {
+      code: "INVALID_INPUT",
+      message: "Telegram does not accept this bot token. Copy it again from @BotFather",
+      text: { id: "errors-telegram-bot-token-invalid", args: {} },
+      details: "the configured bot token is not usable: Invalid bot token",
+    },
+  };
+  assert.equal(
+    apiErrorMessage(refused, "fallback"),
+    "Telegram refuses this token (fa). Copy it again (fa)"
+  );
+  const closed = {
+    error: {
+      code: "NOT_FOUND",
+      message: "Chat session 5 not found.",
+      text: { id: "errors-chat-session-not-found", args: { id: { type: "text", value: "5" } } },
+      details: "no row",
+    },
+  };
+  assert.doesNotMatch(apiErrorMessage(closed, "fallback"), /no row/);
+  assert.equal(apiErrorDetails(refused), refused.error.details, "the cause stays readable");
+});
+
+test("splits text into the locale's sentences", () => {
+  assert.deepEqual(I18n.sentences("One thing. Another thing"), ["One thing.", "Another thing"]);
+  assert.deepEqual(I18n.sentences("Failed to save settings"), ["Failed to save settings"]);
+  assert.deepEqual(I18n.sentences("  "), []);
 });
 
 test("empty or non-string details leave the message unframed", () => {

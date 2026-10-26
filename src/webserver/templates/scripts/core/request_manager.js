@@ -50,9 +50,25 @@ export function apiErrorTitle(body, fallback) {
   return body?.error?.message || body?.message || fallback;
 }
 
+/** Sentence-final punctuation of the shipped scripts: Latin, CJK, Arabic, Devanagari. */
+const SENTENCE_END = /[.!?。！？؟।]$/u;
+
+/**
+ * Whether a localized message is a complete statement on its own: more than one
+ * sentence, or one closed by sentence-final punctuation. Such a message already says
+ * what happened and what to do, and a technical cause appended after it reads as a
+ * raw second sentence. An operation title ("Failed to save settings") is not one.
+ */
+function isCompleteStatement(message, i18n) {
+  const trimmed = message.trim();
+  if (SENTENCE_END.test(trimmed)) return true;
+  return (i18n.sentences?.(trimmed).length ?? 1) > 1;
+}
+
 /**
  * User-facing message of an API error envelope: the localized operation message,
- * followed by the technical cause when the response carries one.
+ * followed by the technical cause when the response carries one. A message that is
+ * already a complete statement stands alone; its cause stays in `apiErrorDetails`.
  * @param {any} body Parsed response body.
  * @param {string|null} [fallback]
  * @returns {string|null|undefined}
@@ -64,6 +80,7 @@ export function apiErrorMessage(body, fallback) {
   if (text?.id && i18n && typeof details === "string" && details !== "") {
     const rendered = i18n.text(text);
     if (rendered) {
+      if (isCompleteStatement(rendered, i18n)) return rendered;
       return i18n.t("errors-with-details", { message: rendered, details });
     }
   }

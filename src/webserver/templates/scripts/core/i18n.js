@@ -312,6 +312,7 @@
   }
 
   let graphemeSegmenter;
+  let sentenceSegmenter;
 
   const I18n = {
     locale,
@@ -332,6 +333,22 @@
         graphemeSegmenter = new Intl.Segmenter(intlLocale, { granularity: "grapheme" });
       }
       return Array.from(graphemeSegmenter.segment(value), (part) => part.segment);
+    },
+
+    /**
+     * Sentences of a string by the locale's sentence rules, each trimmed, empty ones
+     * dropped. Runtimes without `Intl.Segmenter` treat the whole string as one sentence.
+     */
+    sentences(text) {
+      const value = String(text == null ? "" : text).trim();
+      if (!value) return [];
+      if (typeof Intl.Segmenter !== "function") return [value];
+      if (!sentenceSegmenter) {
+        sentenceSegmenter = new Intl.Segmenter(intlLocale, { granularity: "sentence" });
+      }
+      return Array.from(sentenceSegmenter.segment(value), (part) => part.segment.trim()).filter(
+        Boolean
+      );
     },
 
     /** Formatted message value, or the id when the catalog has no value for it. */
