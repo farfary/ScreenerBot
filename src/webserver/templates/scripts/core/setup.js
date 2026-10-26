@@ -10,14 +10,8 @@
 (function () {
   "use strict";
 
-  const {
-    parseRpcUrls,
-    requestJson,
-    summarizeValidation,
-    validateRpcValue,
-    validateWalletValue,
-    waitForScreenerBotRestart,
-  } = window.SetupRuntime;
+  const { mountCredentialFields, requestJson, summarizeValidation, waitForScreenerBotRestart } =
+    window.SetupRuntime;
 
   class SetupControllerClass {
     constructor() {
@@ -29,8 +23,7 @@
       this.restartAbort = null;
       this.snapshot = null;
       this.previousInstanceId = null;
-      this.walletValidationTimeout = null;
-      this.rpcValidationTimeout = null;
+      this.fields = null;
       this.accountPanel = null;
       this.gatewayBusy = false;
     }
@@ -53,8 +46,7 @@
       this.accountPanelEl = document.getElementById("setupAccountPanel");
       this.gatewayOptionEl = document.getElementById("setup-gateway-option");
       this.gatewayCheckboxEl = document.getElementById("setup-use-gateway");
-      this.walletInput = document.getElementById("wallet-private-key");
-      this.rpcInput = document.getElementById("rpc-urls");
+      const fieldsRoot = document.getElementById("setup-credential-fields");
       this.verificationSummary = document.getElementById("verification-summary");
       this.completeState = document.getElementById("setup-complete-state");
       this.completeIcon = this.completeState?.querySelector(".setup-complete-icon");
@@ -63,13 +55,14 @@
       this.servicesStatus = document.getElementById("services-status");
       this.completeActions = document.getElementById("setup-complete-actions");
 
-      if (!this.screen || !this.stepContents.length || !this.walletInput || !this.rpcInput) {
+      if (!this.screen || !this.stepContents.length || !fieldsRoot) {
         console.warn("[Setup] Required setup elements were not found");
         return;
       }
 
+      this.fields = mountCredentialFields(fieldsRoot);
+      if (this.gatewayOptionEl) this.fields.rpcField.append(this.gatewayOptionEl);
       this.bindEvents();
-      this.maskWallet(true);
       this.loadVersion();
       this.mountAccountPanel();
       this.attachGatewayHandler();
@@ -85,14 +78,6 @@
       this.retryBtn?.addEventListener("click", () => this.reviewCredentials());
       this.reconnectBtn?.addEventListener("click", () => this.startRestartWait());
       this.reloadBtn?.addEventListener("click", () => window.location.reload());
-
-      this.walletInput.addEventListener("input", () => this.debouncedValidateWallet());
-      this.rpcInput.addEventListener("input", () => this.debouncedValidateRpc());
-
-      this.toggleBtn = document.querySelector('[data-toggle="wallet-private-key"]');
-      this.toggleBtn?.addEventListener("click", () => this.toggleVisibility());
-      this.copyBtn = document.querySelector(".wallet-copy-btn");
-      this.copyBtn?.addEventListener("click", () => this.copyWalletAddress());
     }
 
     async loadVersion() {
@@ -191,59 +176,13 @@
       this.updateButtons();
     }
 
-    debouncedValidateWallet() {
-      window.clearTimeout(this.walletValidationTimeout);
-      this.walletValidationTimeout = window.setTimeout(() => this.validateWallet(false), 250);
-    }
-
-    debouncedValidateRpc() {
-      window.clearTimeout(this.rpcValidationTimeout);
-      this.rpcValidationTimeout = window.setTimeout(() => this.validateRpc(false), 250);
-    }
-
-    setInlineValidation(id, input, state, message) {
-      const element = document.getElementById(id);
-      if (!element) return;
-
-      element.className = `setup-validation${state ? ` ${state}` : ""}`;
-      element.textContent = message || "";
-      element.hidden = !message;
-      if (state === "error") input.setAttribute("aria-invalid", "true");
-      else input.removeAttribute("aria-invalid");
-    }
-
-    validateWallet(required) {
-      const result = validateWalletValue(this.walletInput.value, required);
-      this.setInlineValidation("wallet-validation", this.walletInput, result.state, result.message); // api-body-ok: local validator result, not a server body
-      if (!result.valid) this.hideWalletPreview();
-      return result.valid;
-    }
-
-    rpcUrls() {
-      return parseRpcUrls(this.rpcInput.value);
-    }
-
-    validateRpc(required) {
-      const result = validateRpcValue(this.rpcInput.value, required);
-      this.setInlineValidation("rpc-validation", this.rpcInput, result.state, result.message); // api-body-ok: local validator result, not a server body
-      return result.valid;
-    }
-
     async validateAndProceed() {
-      window.clearTimeout(this.walletValidationTimeout);
-      window.clearTimeout(this.rpcValidationTimeout);
       this.hideError();
-
-      const walletValid = this.validateWallet(true);
-      const rpcValid = this.validateRpc(true);
-      if (!walletValid || !rpcValid) {
-        (walletValid ? this.rpcInput : this.walletInput).focus({ preventScroll: true });
-        return;
-      }
+      if (!this.fields.validateAll()) return;
 
       this.snapshot = Object.freeze({
-        walletPrivateKey: this.walletInput.value.trim(),
-        rpcUrls: Object.freeze([...this.rpcUrls()]),
+        walletPrivateKey: this.fields.walletInput.value.trim(),
+        rpcUrls: Object.freeze([...this.fields.rpcUrls()]),
       });
       this.verificationBusy = true;
       this.verificationRun += 1;
@@ -329,8 +268,8 @@
           I18n.t("setup-verify-save-done"),
           I18n.t("setup-verify-save-done-detail")
         );
-        this.walletInput.value = "";
-        this.hideWalletPreview();
+        this.fields.walletInput.value = "";
+        this.fields.hideWalletPreview();
         this.snapshot = null;
         this.verificationBusy = false;
         this.previousInstanceId = completed.instance_id;
@@ -371,7 +310,7 @@
         summary.wallet.details
       );
       this.setVerificationState("rpc", summary.rpc.state, summary.rpc.label, summary.rpc.details);
-      if (summary.wallet.address) this.showWalletPreview(summary.wallet.address);
+      if (summary.wallet.address) this.fields.showWalletPreview(summary.wallet.address);
     }
 
     setVerificationState(name, state, label, details) {
@@ -499,62 +438,6 @@
       });
     }
 
-    maskWallet(masked) {
-      this.walletInput.style.webkitTextSecurity = masked ? "disc" : "none";
-      this.walletInput.style.textSecurity = masked ? "disc" : "none";
-      if (!this.toggleBtn) return;
-
-      this.toggleBtn.setAttribute("aria-pressed", String(!masked));
-      const action = masked ? I18n.t("setup-wallet-show-key") : I18n.t("setup-wallet-hide-key");
-      this.toggleBtn.setAttribute("aria-label", action);
-      this.toggleBtn.title = action;
-      const icon = this.toggleBtn.querySelector(".toggle-icon");
-      if (icon) icon.className = `toggle-icon ${masked ? "icon-eye" : "icon-eye-off"}`;
-    }
-
-    toggleVisibility() {
-      const isMasked = this.walletInput.style.webkitTextSecurity !== "none";
-      this.maskWallet(!isMasked);
-    }
-
-    showWalletPreview(address) {
-      const preview = document.getElementById("wallet-address-preview");
-      const text = preview?.querySelector(".wallet-address-text");
-      if (!preview || !text) return;
-      // `.ti-address` (token_identity.css) fits the full address to this line.
-      text.style.setProperty("--ti-address-chars", String(address.length));
-      text.querySelector(".ti-address-value").textContent = address;
-      preview.hidden = false;
-    }
-
-    hideWalletPreview() {
-      const preview = document.getElementById("wallet-address-preview");
-      const value = preview?.querySelector(".wallet-address-text .ti-address-value");
-      if (value) value.textContent = "";
-      if (preview) preview.hidden = true;
-    }
-
-    async copyWalletAddress() {
-      const address = document.querySelector(".wallet-address-text")?.textContent?.trim();
-      if (!address || !this.copyBtn) return;
-
-      try {
-        await navigator.clipboard.writeText(address);
-        this.copyBtn.setAttribute("aria-label", I18n.attr("setup-wallet-copy-done", "aria-label"));
-        this.copyBtn.title = I18n.attr("setup-wallet-copy-done", "title");
-        window.setTimeout(() => {
-          this.copyBtn?.setAttribute("aria-label", I18n.attr("setup-wallet-copy", "aria-label"));
-          if (this.copyBtn) this.copyBtn.title = I18n.attr("setup-wallet-copy", "title");
-        }, 1500);
-      } catch {
-        this.copyBtn.setAttribute(
-          "aria-label",
-          I18n.attr("setup-wallet-copy-failed", "aria-label")
-        );
-        this.copyBtn.title = I18n.attr("setup-wallet-copy-failed", "title");
-      }
-    }
-
     showError(message, focus) {
       if (!this.errorEl || !this.errorMessages) return;
       this.errorMessages.textContent = message;
@@ -574,8 +457,7 @@
     }
 
     dispose() {
-      window.clearTimeout(this.walletValidationTimeout);
-      window.clearTimeout(this.rpcValidationTimeout);
+      this.fields?.dispose();
       this.cancelVerification();
       this.restartAbort?.abort();
       this.restartAbort = null;

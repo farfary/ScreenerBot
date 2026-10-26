@@ -458,6 +458,11 @@
   border-radius: var(--radius-sm);
 }
 
+/* Outside the setup screen's own [hidden] rule (the setup dialog), the preview still hides. */
+.setup-wallet-preview[hidden] {
+  display: none;
+}
+
 .wallet-address-text {
   --ti-address-size: 0.68rem;
 }

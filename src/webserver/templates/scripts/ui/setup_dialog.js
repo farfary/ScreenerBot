@@ -52,13 +52,11 @@ class SetupDialog {
 
     this.element.innerHTML = `
       <div class="setup-dialog-header">
-        <div class="setup-dialog-icon"><i class="icon-key-round"></i></div>
         <div>
-          <h2
-            class="setup-dialog-title"
-            id="setup-dialog-title"
-            data-l10n-id="setup-dialog-title"
-          ></h2>
+          <h2 class="setup-dialog-title" id="setup-dialog-title">
+            <i class="icon-key-round" aria-hidden="true"></i>
+            <span data-l10n-id="setup-dialog-title"></span>
+          </h2>
           <p class="setup-dialog-subtitle" data-l10n-id="setup-dialog-subtitle"></p>
         </div>
         <button type="button" class="setup-dialog-close" data-action="cancel"
@@ -68,38 +66,15 @@ class SetupDialog {
       </div>
 
       <div class="setup-dialog-body">
-        <label class="setup-dialog-field">
-          <span class="setup-dialog-label">
-            <span data-l10n-id="setup-dialog-wallet-label"></span> <span class="req">*</span>
-          </span>
-          <div class="setup-dialog-input-wrap">
-            <textarea dir="ltr" id="setup-dialog-wallet" class="setup-dialog-input" rows="2"
-              data-l10n-id="setup-dialog-wallet-input" spellcheck="false"
-              autocomplete="off"></textarea>
-            <button type="button" class="setup-dialog-reveal" data-action="reveal"
-              aria-pressed="false">
-              <i class="icon-eye" aria-hidden="true"></i>
-            </button>
-          </div>
-          <span class="setup-dialog-hint" id="setup-dialog-wallet-hint"></span>
-        </label>
-
-        <label class="setup-dialog-field">
-          <span class="setup-dialog-label">
-            <span data-l10n-id="setup-dialog-rpc-label"></span> <span class="req">*</span>
-          </span>
-          <textarea dir="ltr" id="setup-dialog-rpc" class="setup-dialog-input" rows="2"
-            data-l10n-id="setup-dialog-rpc-input" spellcheck="false"></textarea>
-          <span class="setup-dialog-hint" data-l10n-id="setup-dialog-rpc-hint"></span>
-        </label>
+        <div class="setup-dialog-fields"></div>
 
         <div class="setup-dialog-status" id="setup-dialog-status" hidden></div>
       </div>
 
       <div class="setup-dialog-footer">
-        <button type="button" class="setup-dialog-btn secondary" data-action="cancel"
+        <button type="button" class="btn btn-secondary" data-action="cancel"
           data-l10n-id="common-action-cancel"></button>
-        <button type="button" class="setup-dialog-btn primary" data-action="submit"
+        <button type="button" class="btn btn-primary" data-action="submit"
           data-l10n-id="setup-dialog-submit"></button>
       </div>
     `;
@@ -108,8 +83,11 @@ class SetupDialog {
     I18n.localizeTree(this.element);
     document.body.appendChild(this.backdrop);
 
-    this.walletInput = this.element.querySelector("#setup-dialog-wallet");
-    this.rpcInput = this.element.querySelector("#setup-dialog-rpc");
+    // The same credential fields as the onboarding step, under ids of their own.
+    this.fields = window.SetupRuntime.mountCredentialFields(
+      this.element.querySelector(".setup-dialog-fields"),
+      "setup-dialog-"
+    );
     this.statusEl = this.element.querySelector("#setup-dialog-status");
     this.submitBtn = this.element.querySelector('[data-action="submit"]');
 
@@ -121,38 +99,15 @@ class SetupDialog {
     this.element
       .querySelector('[data-action="submit"]')
       .addEventListener("click", () => this.submit());
-    const revealBtn = this.element.querySelector('[data-action="reveal"]');
-    this.setRevealed(revealBtn, false);
-    revealBtn.addEventListener("click", (e) => {
-      const masked = this.walletInput.style.webkitTextSecurity !== "none";
-      this.walletInput.style.webkitTextSecurity = masked ? "none" : "disc";
-      this.setRevealed(e.currentTarget, masked);
-    });
-    this.walletInput.style.webkitTextSecurity = "disc";
 
     document.addEventListener("keydown", this.onKeyDown);
-    setTimeout(() => this.walletInput.focus(), 50);
-  }
-
-  setRevealed(button, revealed) {
-    const label = revealed ? I18n.t("setup-wallet-hide-key") : I18n.t("setup-wallet-show-key");
-    button.querySelector("i").className = revealed ? "icon-eye-off" : "icon-eye";
-    button.setAttribute("aria-pressed", String(revealed));
-    button.setAttribute("aria-label", label);
-    button.title = label;
+    setTimeout(() => this.fields.walletInput.focus(), 50);
   }
 
   onKeyDown(e) {
     if (e.key === "Escape" && !this.busy) {
       this.close(false);
     }
-  }
-
-  parseRpcUrls() {
-    return (this.rpcInput.value || "")
-      .split("\n")
-      .map((u) => u.trim())
-      .filter(Boolean);
   }
 
   setStatus(kind, message) {
@@ -173,13 +128,9 @@ class SetupDialog {
   }
 
   async submit() {
-    const walletPrivateKey = (this.walletInput.value || "").trim();
-    const rpcUrls = this.parseRpcUrls();
-
-    if (!walletPrivateKey || rpcUrls.length === 0) {
-      this.setStatus("error", I18n.t("setup-dialog-error-missing-fields"));
-      return;
-    }
+    if (!this.fields.validateAll()) return;
+    const walletPrivateKey = this.fields.walletInput.value.trim();
+    const rpcUrls = this.fields.rpcUrls();
 
     const snapshot = Object.freeze({
       walletPrivateKey,
@@ -208,6 +159,7 @@ class SetupDialog {
         this.setBusy(false);
         return;
       }
+      if (validation.wallet_address) this.fields.showWalletPreview(validation.wallet_address);
       if (validation.warnings?.length) {
         this.setStatus("warning", validation.warnings.join(" "));
       }
@@ -233,7 +185,7 @@ class SetupDialog {
         return;
       }
 
-      this.walletInput.value = "";
+      this.fields.walletInput.value = "";
       this.setStatus("success", I18n.t("setup-dialog-saved"));
       this.submitBtn.textContent = I18n.t("setup-dialog-restarting");
 
@@ -259,6 +211,7 @@ class SetupDialog {
   }
 
   destroy() {
+    this.fields?.dispose();
     this.requestAbort?.abort();
     this.requestAbort = null;
     document.removeEventListener("keydown", this.onKeyDown);
