@@ -235,7 +235,7 @@ pub fn tool_started() {
     let prev = TOOLS_ACTIVE_COUNT.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
     if prev == 0 {
         crate::logger::info(
-            crate::logger::LogTag::Tools,
+            crate::logger::LogTag::System,
             "Tool started - pausing token discovery and market updates",
         );
     }
@@ -270,12 +270,12 @@ pub fn tool_finished() {
     let prev = TOOLS_ACTIVE_COUNT.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
     if prev == 1 {
         crate::logger::info(
-            crate::logger::LogTag::Tools,
+            crate::logger::LogTag::System,
             "All tools finished - resuming token discovery and market updates",
         );
     } else if prev == 0 {
         crate::logger::warning(
-            crate::logger::LogTag::Tools,
+            crate::logger::LogTag::System,
             "tool_finished called when no tools were active",
         );
         TOOLS_ACTIVE_COUNT.store(0, std::sync::atomic::Ordering::SeqCst);

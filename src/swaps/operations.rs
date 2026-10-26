@@ -4,7 +4,7 @@
 //! Core Swap Operations - High-level swap functions
 //! Provides get_best_quote() and execute_swap_with_fallback()
 
-use crate::chains::solana::assets::ata::{schedule_wsol_sweep, SweepSigner};
+use crate::chains::solana::assets::ata::schedule_wsol_sweep;
 use crate::chains::RawAmount;
 use crate::logger::{self, LogTag};
 use crate::swaps::error::{QuoteError, QuoteResult};
@@ -462,37 +462,6 @@ fn validate_quote_with_net(
 // SWAP EXECUTION WITH FALLBACK
 // ============================================================================
 
-/// Who signs a swap.
-#[derive(Clone, Copy)]
-pub(crate) enum SwapSigner<'a> {
-    /// The main trading wallet, trading this token.
-    MainWallet(&'a Token),
-    /// One wallet of the wallet tools, by id.
-    Wallet(i64),
-}
-
-/// Which routers a swap that failed before submission may be re-quoted on.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Fallback {
-    /// Every other enabled router of the chain, by priority.
-    AnyRouter,
-    /// Only the router that produced the quote: a caller who named a router
-    /// wants that router or an error.
-    SameRouter,
-}
-
-/// Execute `quote` on its own router, signing as `signer`.
-async fn execute_on(
-    router: &dyn SwapRouter,
-    signer: SwapSigner<'_>,
-    quote: &Quote,
-) -> Result<SwapResult> {
-    match signer {
-        SwapSigner::MainWallet(token) => router.execute_swap(token, quote).await,
-        SwapSigner::Wallet(wallet_id) => router.execute_swap_for_wallet(quote, wallet_id).await,
-    }
-}
-
 /// Execute a main-wallet swap, falling back to the other enabled routers when
 /// the primary provably sent nothing.
 pub async fn execute_swap_with_fallback(
@@ -507,28 +476,20 @@ pub async fn execute_swap_with_fallback(
         ));
     }
     let registry = get_registry()?;
-    execute_with_fallback_on(
-        registry,
-        SwapSigner::MainWallet(token),
-        quote,
-        amount_limit,
-        Fallback::AnyRouter,
-    )
-    .await
-    .map(|(_, result)| result)
+    execute_with_fallback_on(registry, token, quote, amount_limit)
+        .await
+        .map(|(_, result)| result)
 }
 
-/// The one execution chain for every signer: the quote's own router first, a
-/// re-quote on that router without a venue that cost too much, then — when
-/// `fallback` allows and the failure provably sent nothing — every other
-/// enabled router by priority. Returns the quote that actually executed with
-/// its result.
-pub(crate) async fn execute_with_fallback_on(
+/// The main wallet's execution chain: the quote's own router first, a re-quote on
+/// that router without a venue that cost too much, then — when the failure provably
+/// sent nothing — every other enabled router by priority. Returns the quote that
+/// actually executed with its result.
+async fn execute_with_fallback_on(
     registry: &RouterRegistry,
-    signer: SwapSigner<'_>,
+    token: &Token,
     quote: Quote,
     amount_limit: SwapAmountLimit,
-    fallback: Fallback,
 ) -> Result<(Quote, SwapResult)> {
     // Get primary router
     let primary = registry
@@ -562,8 +523,8 @@ pub(crate) async fn execute_with_fallback_on(
         router: primary.name().to_owned(),
     })
     .await;
-    let primary_error = match execute_on(primary.as_ref(), signer, &quote).await {
-        Ok(result) => return finish(signer, quote, result, start, amount_limit),
+    let primary_error = match primary.execute_swap(token, &quote).await {
+        Ok(result) => return finish(quote, result, start, amount_limit),
         Err(error) => error,
     };
 
@@ -589,7 +550,7 @@ pub(crate) async fn execute_with_fallback_on(
     // venue in `exclude_dexes`, so a second refusal for the same venue cannot
     // recur.
     if let Some(outcome) = retry_excluding_venue(
-        signer,
+        token,
         &quote,
         &primary_error,
         primary.as_ref(),
@@ -608,16 +569,6 @@ pub(crate) async fn execute_with_fallback_on(
                 "{} swap failed, and nothing proves it was not sent - not falling back: {}",
                 primary.name(),
                 primary_error
-            ),
-        );
-        return Err(primary_error);
-    }
-    if fallback == Fallback::SameRouter {
-        logger::warning(
-            LogTag::Swap,
-            &format!(
-                "{} swap was not sent and only that router was asked for: {primary_error}",
-                primary.name()
             ),
         );
         return Err(primary_error);
@@ -696,8 +647,8 @@ pub(crate) async fn execute_with_fallback_on(
             router: fallback_router.name().to_owned(),
         })
         .await;
-        match execute_on(fallback_router.as_ref(), signer, &fallback_quote).await {
-            Ok(result) => return finish(signer, fallback_quote, result, start, amount_limit),
+        match fallback_router.execute_swap(token, &fallback_quote).await {
+            Ok(result) => return finish(fallback_quote, result, start, amount_limit),
             Err(e) => {
                 // Same rule as the primary: a submitted-but-unconfirmed swap must
                 // not be re-sent through yet another router, and neither may a
@@ -740,16 +691,15 @@ pub(crate) async fn execute_with_fallback_on(
     Err(primary_error)
 }
 
-/// Record a completed swap: post-swap cleanup for the signing wallet, the total
+/// Record a completed swap: post-swap cleanup for the main wallet, the total
 /// execution time, and the caller's amount range.
 fn finish(
-    signer: SwapSigner<'_>,
     quote: Quote,
     mut result: SwapResult,
     start: Instant,
     amount_limit: SwapAmountLimit,
 ) -> Result<(Quote, SwapResult)> {
-    schedule_post_swap_cleanup(signer, &quote);
+    schedule_post_swap_cleanup(&quote);
     result.execution_time_ms = start.elapsed().as_millis() as u64;
     logger::info(
         LogTag::Swap,
@@ -800,7 +750,7 @@ fn holds_accepted_floor(accepted: &Quote, fresh: &Quote) -> bool {
 /// `Some(Err)` only for a retry whose transaction may have reached the
 /// network, which must never be re-sent by anyone else.
 async fn retry_excluding_venue(
-    signer: SwapSigner<'_>,
+    token: &Token,
     quote: &Quote,
     error: &Error,
     router: &dyn crate::swaps::router::SwapRouter,
@@ -882,8 +832,8 @@ async fn retry_excluding_venue(
         router: router.name().to_owned(),
     })
     .await;
-    match execute_on(router, signer, &retry_quote).await {
-        Ok(result) => Some(finish(signer, retry_quote, result, start, amount_limit)),
+    match router.execute_swap(token, &retry_quote).await {
+        Ok(result) => Some(finish(retry_quote, result, start, amount_limit)),
         Err(e) => {
             if failed_swap(&e) != FailedSwap::Resendable {
                 logger::warning(
@@ -907,27 +857,18 @@ async fn retry_excluding_venue(
     }
 }
 
-/// The wrapped-SOL sweep a confirmed swap owes, as the signer that must close the
-/// account: a swap with a native-asset leg may leave the signing wallet's WSOL
-/// account open and empty, whichever wallet signed it. `tool_wallet_id` is the wallet
-/// tools' id of the signer, or `None` for the main wallet.
-fn wsol_sweep_signer(tool_wallet_id: Option<i64>, quote: &Quote) -> Option<SweepSigner> {
+/// Whether a confirmed swap owes the wrapped-SOL sweep: a swap with a native-asset
+/// leg may leave the main wallet's WSOL account open and empty.
+fn owes_wsol_sweep(quote: &Quote) -> bool {
     let adapter = crate::chains::adapter();
-    if !adapter.is_native_asset(&quote.input_mint) && !adapter.is_native_asset(&quote.output_mint) {
-        return None;
-    }
-    Some(tool_wallet_id.map_or(SweepSigner::MainWallet, SweepSigner::Wallet))
+    adapter.is_native_asset(&quote.input_mint) || adapter.is_native_asset(&quote.output_mint)
 }
 
 /// Hand a confirmed swap with a native-asset leg to the post-swap cleanup,
 /// which reclaims the wrapped-SOL account a router may have left open.
-fn schedule_post_swap_cleanup(signer: SwapSigner<'_>, quote: &Quote) {
-    let tool_wallet_id = match signer {
-        SwapSigner::MainWallet(_) => None,
-        SwapSigner::Wallet(wallet_id) => Some(wallet_id),
-    };
-    if let Some(sweep_signer) = wsol_sweep_signer(tool_wallet_id, quote) {
-        schedule_wsol_sweep(quote.wallet_address.clone(), sweep_signer);
+fn schedule_post_swap_cleanup(quote: &Quote) {
+    if owes_wsol_sweep(quote) {
+        schedule_wsol_sweep(quote.wallet_address.clone());
     }
 }
 
@@ -2709,14 +2650,7 @@ mod tests {
             quote.router_name = self.id.to_owned();
             Ok(quote)
         }
-        async fn execute_swap(&self, _token: &Token, _quote: &Quote) -> crate::Result<SwapResult> {
-            Err(crate::Error::internal_error("the wallet signer is used"))
-        }
-        async fn execute_swap_for_wallet(
-            &self,
-            quote: &Quote,
-            _wallet_id: i64,
-        ) -> crate::Result<SwapResult> {
+        async fn execute_swap(&self, _token: &Token, quote: &Quote) -> crate::Result<SwapResult> {
             self.executed.lock().unwrap().push(self.id);
             match self.execution {
                 Execution::Lands => Ok(SwapResult {
@@ -2758,6 +2692,32 @@ mod tests {
         (registry, executed)
     }
 
+    /// The token the main wallet trades in these chains.
+    fn traded_token() -> Token {
+        serde_json::from_value(serde_json::json!({
+            "mint": "TokenMintIn11111111111111111111111111111111",
+            "symbol": "IN",
+            "name": "Input Token",
+            "data_source": "DexScreener",
+            "first_discovered_at": "2026-01-01T00:00:00Z",
+            "metadata_last_fetched_at": "2026-01-01T00:00:00Z",
+            "decimals_last_fetched_at": "2026-01-01T00:00:00Z",
+            "market_data_last_fetched_at": "2026-01-01T00:00:00Z",
+            "pool_price_last_calculated_at": "2026-01-01T00:00:00Z",
+            "price_usd": 0.0,
+            "price_sol": 0.0,
+            "price_native": "0",
+            "websites": [],
+            "socials": [],
+            "is_rugged": false,
+            "security_risks": [],
+            "top_holders": [],
+            "is_blacklisted": false,
+            "priority": "PoolTracked",
+        }))
+        .expect("token fixture")
+    }
+
     fn primary_quote() -> Quote {
         let mut quote = quote_for(&request());
         quote.input_mint = "TokenMintIn11111111111111111111111111111111".to_owned();
@@ -2774,10 +2734,9 @@ mod tests {
         let (registry, executed) = chain(Execution::TooLarge);
         let (quote, result) = execute_with_fallback_on(
             &registry,
-            SwapSigner::Wallet(7),
+            &traded_token(),
             primary_quote(),
             SwapAmountLimit::Unrestricted,
-            Fallback::AnyRouter,
         )
         .await
         .expect("the fallback router executes");
@@ -2794,10 +2753,9 @@ mod tests {
         let (registry, executed) = chain(Execution::Unproven);
         let error = execute_with_fallback_on(
             &registry,
-            SwapSigner::Wallet(7),
+            &traded_token(),
             primary_quote(),
             SwapAmountLimit::Unrestricted,
-            Fallback::AnyRouter,
         )
         .await
         .expect_err("nothing else may execute");
@@ -2805,44 +2763,17 @@ mod tests {
         assert_eq!(*executed.lock().unwrap(), vec!["jupiter"]);
     }
 
-    /// A caller who named a router gets that router or its refusal.
-    #[tokio::test]
-    async fn a_named_router_is_never_re_routed() {
-        let (registry, executed) = chain(Execution::TooLarge);
-        let error = execute_with_fallback_on(
-            &registry,
-            SwapSigner::Wallet(7),
-            primary_quote(),
-            SwapAmountLimit::Unrestricted,
-            Fallback::SameRouter,
-        )
-        .await
-        .expect_err("only the named router was asked");
-        assert!(is_fallback_safe(&error));
-        assert_eq!(*executed.lock().unwrap(), vec!["jupiter"]);
-    }
-
-    /// A swap with a native-asset leg owes the wrapped-SOL sweep to whichever wallet
-    /// signed it, and a swap between two non-native assets owes none.
+    /// A swap with a native-asset leg owes the wrapped-SOL sweep, and a swap
+    /// between two non-native assets owes none.
     #[test]
-    fn a_native_leg_owes_the_wrapped_sol_sweep_to_the_signing_wallet() {
+    fn a_native_leg_owes_the_wrapped_sol_sweep() {
         let mut native_in = primary_quote();
         native_in.input_mint = "So11111111111111111111111111111111111111112".to_owned();
         let mut native_out = primary_quote();
         native_out.output_mint = "So11111111111111111111111111111111111111112".to_owned();
 
-        assert_eq!(
-            wsol_sweep_signer(None, &native_in),
-            Some(SweepSigner::MainWallet)
-        );
-        assert_eq!(
-            wsol_sweep_signer(Some(7), &native_in),
-            Some(SweepSigner::Wallet(7))
-        );
-        assert_eq!(
-            wsol_sweep_signer(Some(7), &native_out),
-            Some(SweepSigner::Wallet(7))
-        );
-        assert_eq!(wsol_sweep_signer(Some(7), &primary_quote()), None);
+        assert!(owes_wsol_sweep(&native_in));
+        assert!(owes_wsol_sweep(&native_out));
+        assert!(!owes_wsol_sweep(&primary_quote()));
     }
 }

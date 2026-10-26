@@ -87,31 +87,6 @@ impl Quote {
     }
 }
 
-/// Which router a caller intends to use.
-///
-/// `Auto` compares every enabled router and takes the best net output;
-/// `Specific` asks exactly one registered router and fails if it cannot serve
-/// the trade. This is a routing decision, not a wire type: an API surface
-/// carries the router id as a plain string and parses it here, so an unknown
-/// id is refused by the registry rather than by a deserializer.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum RouterChoice {
-    Auto,
-    Specific(String),
-}
-
-impl RouterChoice {
-    /// Read a caller's selection. Absent, blank and `"auto"` all mean `Auto`;
-    /// anything else names a router id the registry must resolve.
-    pub fn parse(value: Option<&str>) -> Self {
-        match value.map(str::trim).filter(|value| !value.is_empty()) {
-            None => Self::Auto,
-            Some(id) if id.eq_ignore_ascii_case("auto") => Self::Auto,
-            Some(id) => Self::Specific(id.to_owned()),
-        }
-    }
-}
-
 /// Amount range supported by the caller consuming a swap result.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SwapAmountLimit {

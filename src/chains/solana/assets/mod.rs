@@ -1,12 +1,11 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Solana asset mechanics: SPL/Token-2022 mint reads, ATA lifecycle, transfers.
+//! Solana asset mechanics: SPL/Token-2022 mint reads and the ATA lifecycle.
 //!
-//! Owns everything that reads or moves a token on Solana: mint account
+//! Owns everything that reads a token account or mint on Solana: mint account
 //! decoding (decimals, token-program detection, mint/freeze authority),
-//! Associated Token Account balance reads and close instructions, and native
-//! SOL / SPL transfer construction and submission. Built on
+//! Associated Token Account balance reads and close instructions. Built on
 //! `crate::chains::solana::rpc`; shared cache/persistence policy for these
 //! reads (memory cache, DB, server fallback) stays in `crate::tokens`, which
 //! calls into `mint` as its on-chain adapter.
@@ -14,7 +13,6 @@
 pub mod ata;
 pub mod metaplex;
 pub mod mint;
-pub mod transfer;
 
 pub use ata::{
     cleanup_all_empty_atas, close_all_empty_atas, close_single_ata, close_token_account,
@@ -23,4 +21,3 @@ pub use ata::{
 };
 pub use metaplex::{fetch_nft_metadata, fetch_nft_metadata_batch, NftMetadata, NftMetadataError};
 pub use mint::{fetch_mint_account, MintAccountData};
-pub use transfer::{close_ata as transfer_close_ata, transfer_sol, transfer_token};

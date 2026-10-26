@@ -362,10 +362,9 @@ fn shared_pools_domain_never_names_a_solana_address_type() {
 /// Scoped to the exact files audited when this boundary was introduced, not
 /// a whole-directory ban: `src/wallets/watch/**` still parses a `Pubkey`
 /// inline for the observation pipeline's own use (RPC subscriptions,
-/// Solana subject conversion) and is out of scope. `balance_ops.rs`/
-/// `balance_queries.rs` are IN scope — their RPC balance reads were moved
-/// behind `crate::chains::solana::accounts::{fetch_wallet_sol_balance,
-/// fetch_wallet_token_balances}`.
+/// Solana subject conversion) and is out of scope. `balance_queries.rs` is IN
+/// scope — its RPC balance read lives behind
+/// `crate::chains::solana::accounts::fetch_wallet_sol_balances`.
 #[test]
 fn wallet_ownership_never_names_a_solana_key_type() {
     const SCOPED_FILES: &[&str] = &[
@@ -378,7 +377,6 @@ fn wallet_ownership_never_names_a_solana_key_type() {
         "wallets/manager/tools.rs",
         "wallets/manager/export.rs",
         "wallets/manager/migration.rs",
-        "wallets/manager/balance_ops.rs",
         "wallets/manager/balance_queries.rs",
         "config/wallet.rs",
     ];
@@ -1110,7 +1108,6 @@ const NEUTRAL_FILES_NAMING_CHAINS_SOLANA: &[&str] = &[
     "wallets/ata_cleanup/types.rs",
     "wallets/balance_monitor/database.rs",
     "wallets/balance_monitor/service.rs",
-    "wallets/manager/balance_ops.rs",
     "wallets/manager/balance_queries.rs",
     "wallets/manager/export.rs",
     "wallets/manager/migration.rs",
@@ -3510,9 +3507,7 @@ fn matching_span(code: &str, open: usize) -> Option<(usize, usize)> {
 const SWAP_SENDS: &[&str] = &[
     "execute_swap_with_fallback(",
     "execute_with_fallback_on(",
-    "execute_on(",
     ".execute_swap(",
-    ".execute_swap_for_wallet(",
     "execute_quote(",
 ];
 
@@ -3594,7 +3589,6 @@ const TRADE_RUNNERS: &[&str] = &[
     "add_to_position",
     "submit_entry",
     "submit_entry_with_context",
-    "quote_and_execute_for_wallet",
 ];
 
 /// Functions that share a runner's name but are a caller's own helper, as

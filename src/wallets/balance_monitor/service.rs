@@ -81,21 +81,6 @@ pub async fn initialize_wallet_database() -> Result<(), Error> {
     Ok(())
 }
 
-/// Rebind the wallet-monitor database's subject to whichever wallet is now
-/// main, without decrypting anything. Called by `crate::wallets::manager::crud`
-/// after create/import/update/set-main so every subsequent snapshot,
-/// dashboard-metrics and flow-cache query scopes to the new wallet instead of
-/// a stale cached address. A no-op (not an error) before the wallet-monitor
-/// database has initialized — its own `new()` resolves the then-current main
-/// wallet directly.
-pub async fn refresh_wallet_monitor_subject() -> Result<(), Error> {
-    let mut db_guard = GLOBAL_WALLET_DB.lock().await;
-    match db_guard.as_mut() {
-        Some(db) => db.rebind_subject().await,
-        None => Ok(()),
-    }
-}
-
 // =============================================================================
 // WALLET MONITORING SERVICE
 // =============================================================================

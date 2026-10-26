@@ -10,9 +10,10 @@
 //! becomes eligible again, or the rent of that account is never reclaimed by the
 //! periodic cleanup.
 //!
-//! The store once also held the tables of the removed tools area. A store written by
-//! the last release that had them must open, drop exactly those tables, keep every
-//! cleanup row and stay consistent across the next launch.
+//! The store once also held the tables of the removed tools area and of the manual
+//! cleanup sessions. A store written by the last release that had them must open, drop
+//! exactly those tables, keep every failed-close row and stay consistent across the
+//! next launch.
 
 use crate::common;
 
@@ -31,8 +32,11 @@ const MINT: &str = "TokenMint111111111111111111111111111111111";
 
 const UPGRADE_CHILD_ENV: &str = "SCREENERBOT_ATA_CLEANUP_UPGRADE_CHILD";
 
-/// The tables of the removed tools area that the store's upgrade drops.
-const RETIRED_TABLES: [&str; 5] = [
+/// The tables of the removed tools area and of the manual cleanup sessions that the
+/// store's upgrade drops.
+const RETIRED_TABLES: [&str; 7] = [
+    "ata_closures",
+    "ata_sessions",
     "mw_sessions",
     "mw_wallet_ops",
     "schema_version",
@@ -178,22 +182,15 @@ fn a_store_from_the_tools_release_drops_only_the_retired_tables() {
     }
     assert_eq!(
         remaining,
-        [
-            "ata_closures",
-            "ata_failed_cache",
-            "ata_sessions",
-            "store_schema"
-        ],
-        "the store keeps exactly the cleanup tables and its ledger"
+        ["ata_failed_cache", "store_schema"],
+        "the store keeps exactly the failed-close cache and its ledger"
     );
-    for table in ["ata_closures", "ata_failed_cache", "ata_sessions"] {
-        let rows: i64 = connection
-            .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
-                row.get(0)
-            })
-            .unwrap_or_else(|e| panic!("count {table}: {e}"));
-        assert_eq!(rows, 1, "{table} keeps its sentinel row");
-    }
+    let rows: i64 = connection
+        .query_row("SELECT COUNT(*) FROM ata_failed_cache", [], |row| {
+            row.get(0)
+        })
+        .expect("count ata_failed_cache");
+    assert_eq!(rows, 1, "ata_failed_cache keeps its sentinel row");
     let (version, min_reader_version): (i64, i64) = connection
         .query_row(
             "SELECT version, min_reader_version FROM store_schema WHERE id = 1",
@@ -201,7 +198,7 @@ fn a_store_from_the_tools_release_drops_only_the_retired_tables() {
             |row| Ok((row.get(0)?, row.get(1)?)),
         )
         .expect("read the store ledger");
-    assert_eq!((version, min_reader_version), (2, 2));
+    assert_eq!((version, min_reader_version), (3, 3));
     let integrity: String = connection
         .query_row("PRAGMA integrity_check", [], |row| row.get(0))
         .expect("run the integrity check");

@@ -566,20 +566,12 @@ impl SwapRouter for JupiterRouter {
         let keypair = crate::chains::solana::accounts::configured_keypair()?;
         self.build_and_submit(quote, &keypair).await
     }
-
-    async fn execute_swap_for_wallet(&self, quote: &Quote, wallet_id: i64) -> Result<SwapResult> {
-        self.accept_own_quote(quote)?;
-        super::checked_quote_amounts(quote)?;
-        let keypair = crate::chains::solana::accounts::keypair_for_wallet(wallet_id).await?;
-        self.build_and_submit(quote, &keypair).await
-    }
 }
 
 impl JupiterRouter {
     /// Ask Jupiter to build the transaction for `quote`, addressed to `signer`,
     /// and hand it to the pre-send gate, which measures, simulates, signs,
-    /// sends and confirms it. One path for the main wallet and the wallet
-    /// tools, both collecting the referral fee.
+    /// sends and confirms it with the platform fee collected.
     async fn build_and_submit(&self, quote: &Quote, signer: &Keypair) -> Result<SwapResult> {
         let start = Instant::now();
         let not_submitted = |reason| {

@@ -9,7 +9,6 @@
 pub mod error;
 pub(crate) mod funds;
 pub mod operations;
-mod operations_wallet;
 pub mod progress;
 pub mod registry;
 pub mod router;
@@ -24,13 +23,10 @@ pub use operations::{
     is_fallback_safe, not_submitted_reason, program_error, try_get_best_quote,
     unconfirmed_swap_signature, FailedSwap,
 };
-pub use operations_wallet::quote_and_execute_for_wallet;
 pub use progress::{with_swap_stage_listener, SwapStage, SwapStageListener};
 pub use registry::{get_registry, try_get_registry, RouterRegistry};
 pub use router::SwapRouter;
-pub use types::{
-    ExitType, Quote, QuoteRequest, RouterChoice, SwapAmountLimit, SwapMode, SwapResult,
-};
+pub use types::{ExitType, Quote, QuoteRequest, SwapAmountLimit, SwapMode, SwapResult};
 
 use crate::chains::RawAmount;
 

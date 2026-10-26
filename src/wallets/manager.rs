@@ -24,9 +24,7 @@ pub(crate) use main_wallet::get_main_wallet_encrypted_key;
 pub use main_wallet::{get_main_address, get_main_wallet, has_main_wallet};
 
 mod balance_queries;
-pub use balance_queries::{
-    get_all_wallet_balances, get_wallet_sol_balances, get_wallets_with_token,
-};
+pub use balance_queries::get_wallet_sol_balances;
 
 mod migration;
 
@@ -77,17 +75,7 @@ pub use export::export_wallet;
 
 mod access;
 pub(crate) use access::get_wallet_encrypted_key;
-pub use access::{get_wallet, get_wallet_by_address, list_active_wallets, list_wallets};
-
-// =============================================================================
-// TOKEN BALANCE OPERATIONS
-// =============================================================================
-
-mod balance_ops;
-pub use balance_ops::{
-    clear_token_balances, get_all_token_balances, get_token_balances, update_all_wallet_balances,
-    update_wallet_balances, upsert_token_balance,
-};
+pub use access::{get_wallet, list_active_wallets, list_wallets};
 
 // =============================================================================
 // TOOLS & SUMMARY

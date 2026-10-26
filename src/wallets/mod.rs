@@ -28,39 +28,25 @@ pub(crate) use error::balance_for_numeric_wire;
 pub use error::{Error, Result};
 
 // Re-export types
-pub use types::{
-    ExportWalletResponse, SimpleTokenBalance, TokenBalance, Wallet, WalletBalanceSummary,
-    WalletRole, WalletType, WalletWithTokenBalance, WalletsSummary,
-};
+pub use types::{ExportWalletResponse, Wallet, WalletRole, WalletType, WalletsSummary};
 
 // Re-export manager functions
 pub use manager::{
-    // Token balance operations
-    clear_token_balances,
     export_wallet,
-    get_all_token_balances,
-    // Token balance queries (RPC)
-    get_all_wallet_balances,
     // Main wallet (fast path)
     get_main_address,
     get_main_wallet,
-    get_token_balances,
     // Access
     get_wallet,
-    get_wallet_by_address,
     get_wallet_sol_balances,
-    // Tools & summary
+    // Summary
     get_wallets_summary,
-    get_wallets_with_token,
     has_main_wallet,
     // Initialization
     initialize,
     is_initialized,
     list_active_wallets,
     list_wallets,
-    update_all_wallet_balances,
-    update_wallet_balances,
-    upsert_token_balance,
 };
 
 // Chain-neutral encrypted-credential accessors. Crate-internal only — the

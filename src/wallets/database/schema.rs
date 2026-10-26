@@ -23,42 +23,12 @@ CREATE TABLE IF NOT EXISTS wallets (
 );
 "#;
 
-pub(super) const TOKEN_BALANCES_SCHEMA: &str = r#"
-CREATE TABLE IF NOT EXISTS wallet_token_balances (
-    wallet_id INTEGER NOT NULL,
-    mint TEXT NOT NULL,
-    balance TEXT NOT NULL,
-    ui_amount REAL NOT NULL,
-    decimals INTEGER NOT NULL,
-    symbol TEXT,
-    name TEXT,
-    is_token_2022 INTEGER NOT NULL DEFAULT 0,
-    updated_at TEXT NOT NULL,
-    PRIMARY KEY (wallet_id, mint),
-    FOREIGN KEY (wallet_id) REFERENCES wallets(id) ON DELETE CASCADE
-);
-"#;
-
-pub(super) const LEGACY_TOKEN_BALANCES_SCHEMA: &str = r#"
-CREATE TABLE IF NOT EXISTS wallet_token_balances (
-    wallet_id INTEGER NOT NULL,
-    mint TEXT NOT NULL,
-    balance INTEGER NOT NULL,
-    ui_amount REAL NOT NULL,
-    decimals INTEGER NOT NULL,
-    symbol TEXT,
-    name TEXT,
-    is_token_2022 INTEGER NOT NULL DEFAULT 0,
-    updated_at TEXT NOT NULL,
-    PRIMARY KEY (wallet_id, mint),
-    FOREIGN KEY (wallet_id) REFERENCES wallets(id) ON DELETE CASCADE
-);
-"#;
+/// Drops the per-wallet token balance cache, which nothing reads. Its indexes go
+/// with the table.
+pub(super) const DROP_RETIRED_TABLES: &str = "DROP TABLE IF EXISTS wallet_token_balances;";
 
 pub(super) const WALLETS_INDEXES: &[&str] = &[
     "CREATE INDEX IF NOT EXISTS idx_wallets_chain_address ON wallets(chain_id, address);",
     "CREATE INDEX IF NOT EXISTS idx_wallets_role ON wallets(role);",
     "CREATE INDEX IF NOT EXISTS idx_wallets_active ON wallets(is_active, role);",
-    "CREATE INDEX IF NOT EXISTS idx_token_balances_wallet ON wallet_token_balances(wallet_id);",
-    "CREATE INDEX IF NOT EXISTS idx_token_balances_mint ON wallet_token_balances(mint);",
 ];

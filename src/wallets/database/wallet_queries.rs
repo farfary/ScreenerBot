@@ -78,23 +78,6 @@ impl WalletsDatabase {
         .map_err(Error::from)
     }
 
-    /// Get a wallet by address
-    pub fn get_wallet_by_address(&self, address: &str) -> Result<Option<Wallet>, Error> {
-        let conn = self.conn()?;
-
-        conn.query_row(
-            r#"
-            SELECT id, name, address, role, wallet_type, created_at, last_used_at, notes, is_active
-            FROM wallets WHERE chain_id = ?1 AND address = ?2
-            "#,
-            params![self.chain.as_str(), address],
-            |row| Self::row_to_wallet(row),
-        )
-        .optional()
-        .map_err(DatabaseError::from)
-        .map_err(Error::from)
-    }
-
     /// Get the main wallet
     pub fn get_main_wallet(&self) -> Result<Option<Wallet>, Error> {
         let conn = self.conn()?;

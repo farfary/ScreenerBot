@@ -11,7 +11,7 @@ mod close;
 mod helpers;
 mod wsol_sweep;
 
-pub use wsol_sweep::{schedule_wsol_sweep, SweepSigner};
+pub use wsol_sweep::schedule_wsol_sweep;
 
 pub use balance::{
     cleanup_all_empty_atas, get_all_token_accounts, get_sol_balance, get_token_accounts_snapshot,

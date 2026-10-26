@@ -5,8 +5,8 @@
 //! decrypted Solana keypair in memory.
 //!
 //! Shared code (`crate::wallets`, `crate::config::wallet`, the webserver)
-//! never sees a `Keypair`: it passes a `wallet_id` (or relies on "the main
-//! wallet") to the functions here, which resolve the wallet's
+//! never sees a `Keypair`: it relies on "the main wallet" through the
+//! functions here, which resolve the wallet's
 //! encrypted credential via `crate::wallets` (ciphertext + nonce only, never
 //! Solana-typed), decrypt, use, and drop. The one exception is the main
 //! wallet, cached here — not in `crate::wallets` — because it is read on
@@ -73,9 +73,10 @@ pub async fn cached_main_wallet_id() -> Option<i64> {
         .map(|c| c.wallet_id)
 }
 
-/// Decrypt a specific wallet's keypair by its database ID. Not cached — used
-/// by one-shot multi-wallet tooling, never on the per-trade hot path.
-pub async fn keypair_for_wallet(wallet_id: i64) -> Result<Keypair> {
+/// Decrypt a listed wallet's keypair by its database ID for one message
+/// signature. Not cached and never used to sign a transaction: only the main
+/// wallet signs swaps and transfers.
+async fn keypair_for_wallet(wallet_id: i64) -> Result<Keypair> {
     let (ciphertext, nonce) = crate::wallets::get_wallet_encrypted_key(wallet_id)
         .await
         .map_err(|e| Error::KeypairUnavailable {

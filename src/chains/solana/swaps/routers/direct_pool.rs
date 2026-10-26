@@ -501,40 +501,6 @@ impl SwapRouter for DirectPoolRouter {
             effective_price_sol: None,
         })
     }
-
-    async fn execute_swap_for_wallet(&self, quote: &Quote, wallet_id: i64) -> Result<SwapResult> {
-        self.accept_own_quote(quote)?;
-        super::checked_quote_amounts(quote)?;
-        let start = Instant::now();
-        let keypair = crate::chains::solana::accounts::keypair_for_wallet(wallet_id).await?;
-        let outcome = self.execute_with_keypair(quote, &keypair).await?;
-
-        logger::info(
-            LogTag::Swap,
-            &format!(
-                "Direct pool swap executed for wallet {wallet_id} on {}: sig={}, in={}, received={}, fee={}, {}ms",
-                quote.route_plan,
-                outcome.signature,
-                outcome.amount_in,
-                outcome.receipt.received,
-                outcome.platform_fee,
-                outcome.duration_ms
-            ),
-        );
-
-        Ok(SwapResult {
-            success: true,
-            router_id: self.id().to_string(),
-            router_name: self.name().to_string(),
-            fee_lamports: outcome.platform_fee_lamports(),
-            transaction_signature: outcome.signature,
-            input_amount: outcome.amount_in.into(),
-            output_amount: outcome.receipt.received.into(),
-            price_impact_pct: quote.price_impact_pct,
-            execution_time_ms: start.elapsed().as_millis() as u64,
-            effective_price_sol: None,
-        })
-    }
 }
 
 fn is_reference_mint(mint: &str) -> bool {

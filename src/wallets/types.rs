@@ -3,9 +3,8 @@
 
 //! Wallet types and data structures
 //!
-//! Core types for multi-wallet management system.
+//! Wallet records, roles and the export response.
 
-use crate::chains::RawAmount;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
@@ -146,88 +145,6 @@ pub struct ExportWalletResponse {
     pub private_key: String,
     /// Warning message
     pub warning: String,
-}
-
-// =============================================================================
-// TOKEN BALANCE TYPES
-// =============================================================================
-
-/// Cached token balance for a wallet
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TokenBalance {
-    /// Wallet database ID
-    pub wallet_id: i64,
-    /// Token mint address
-    pub mint: String,
-    /// Raw balance (in smallest units)
-    pub balance: RawAmount,
-    /// UI-friendly balance (with decimals applied)
-    pub ui_amount: f64,
-    /// Token decimals
-    pub decimals: u8,
-    /// Token symbol (if known)
-    pub symbol: Option<String>,
-    /// Token name (if known)
-    pub name: Option<String>,
-    /// Whether this is a Token-2022 token
-    pub is_token_2022: bool,
-    /// When this balance was last updated
-    pub updated_at: DateTime<Utc>,
-}
-
-// =============================================================================
-// WALLET WITH TOKEN BALANCE TYPES
-// =============================================================================
-
-/// Wallet with specific token balance information
-#[derive(Clone, Debug, Serialize)]
-pub struct WalletWithTokenBalance {
-    /// The wallet
-    pub wallet: Wallet,
-    /// SOL balance in SOL (not lamports)
-    pub native_balance: f64,
-    /// Token balance (UI amount with decimals applied)
-    pub token_balance: f64,
-    /// Token decimals
-    pub token_decimals: u8,
-    /// Whether this wallet needs SOL top-up for transaction fees
-    pub needs_native_topup: bool,
-    /// Amount of SOL needed for top-up (if any)
-    pub topup_amount: f64,
-}
-
-/// Simple token balance for summary
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct SimpleTokenBalance {
-    /// Token mint address
-    pub mint: String,
-    /// Token symbol (if known)
-    pub symbol: Option<String>,
-    /// UI-friendly balance (with decimals applied)
-    pub balance: f64,
-    /// Token decimals
-    pub decimals: u8,
-}
-
-/// Wallet balance summary for consolidation UI
-#[derive(Clone, Debug, Serialize)]
-pub struct WalletBalanceSummary {
-    /// Wallet database ID
-    pub wallet_id: i64,
-    /// Wallet name
-    pub wallet_name: String,
-    /// Wallet address (base58)
-    pub address: String,
-    /// SOL balance in SOL (not lamports)
-    pub native_balance: f64,
-    /// Number of tokens held (excluding empty ATAs)
-    pub token_count: u32,
-    /// Token balances
-    pub tokens: Vec<SimpleTokenBalance>,
-    /// Number of empty ATAs (token accounts with 0 balance)
-    pub empty_ata_count: u32,
-    /// SOL returned by closing the empty ATAs: the sum of the lamports they hold
-    pub reclaimable_native: f64,
 }
 
 #[cfg(test)]

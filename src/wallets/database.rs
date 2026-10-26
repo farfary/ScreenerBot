@@ -17,12 +17,9 @@ use crate::wallets::Error;
 use crate::{chains::ChainId, database};
 
 mod schema;
-mod token_balances;
 mod wallet_queries;
 
-use schema::{
-    LEGACY_TOKEN_BALANCES_SCHEMA, TOKEN_BALANCES_SCHEMA, WALLETS_INDEXES, WALLETS_SCHEMA,
-};
+use schema::{DROP_RETIRED_TABLES, WALLETS_INDEXES, WALLETS_SCHEMA};
 
 /// Wallets database with connection pooling
 pub struct WalletsDatabase {
@@ -30,10 +27,15 @@ pub struct WalletsDatabase {
     chain: ChainId,
 }
 
-/// The schema of `wallets.db`: the wallets with their encrypted keys, their token
-/// balances and the watched wallets.
+/// The schema of `wallets.db`: the wallets with their encrypted keys and the
+/// watched wallets.
+///
+/// Version 2 drops the per-wallet token balance cache. The oldest reader stays
+/// version 1: a version 1 core re-creates that cache empty on open and loses
+/// nothing, and the store is the vault, whose readers must not be fenced out over
+/// a cache.
 pub(crate) const SCHEMA: StoreSchema = StoreSchema {
-    version: 1,
+    version: 2,
     min_reader_version: 1,
     baseline: 1,
     renames: None,
@@ -103,145 +105,15 @@ impl WalletsDatabase {
 
     /// Creates and migrates every table of the store, the watched wallets' included.
     fn create_schema(tx: &Transaction<'_>) -> Result<(), Error> {
+        // An older core re-creates the retired cache whenever it opens the store, so
+        // every open drops it rather than only the upgrade to version 2.
+        ddl::run_batch(tx, "drop retired wallet tables", DROP_RETIRED_TABLES)?;
         ddl::run(tx, "create wallets table", WALLETS_SCHEMA)?;
-        ddl::run(
-            tx,
-            "create wallet_token_balances table",
-            TOKEN_BALANCES_SCHEMA,
-        )?;
-        Self::migrate_token_balances(tx)?;
         Self::migrate_chain_identity(tx)?;
         for index_sql in WALLETS_INDEXES {
             ddl::run(tx, "create wallets index", index_sql)?;
         }
         crate::wallets::watch::database::create_schema(tx)
-    }
-
-    fn migrate_token_balances(tx: &Transaction<'_>) -> Result<(), Error> {
-        let conn: &Connection = tx;
-        let stored: String = conn.query_row(
-            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'wallet_token_balances'",
-            [],
-            |row| row.get(0),
-        ).map_err(DatabaseError::from)?;
-        fn body(ddl: &str) -> Option<&str> {
-            ddl.split_once('(')
-                .map(|(_, rest)| rest.trim().trim_end_matches(';').trim())
-        }
-        let legacy = body(&stored) == body(LEGACY_TOKEN_BALANCES_SCHEMA);
-        if !legacy && body(&stored) != body(TOKEN_BALANCES_SCHEMA) {
-            return Err(Error::Migration {
-                step: "inspect wallet token balances".to_owned(),
-                detail: "unrecognized table definition".to_owned(),
-            });
-        }
-        if !legacy {
-            return Ok(());
-        }
-
-        let objects = conn.prepare("SELECT type, name, sql FROM sqlite_master WHERE tbl_name = 'wallet_token_balances' AND type IN ('index', 'trigger') AND sql IS NOT NULL")
-            .and_then(|mut stmt| stmt.query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, String>(2)?)))?.collect::<rusqlite::Result<Vec<_>>>())
-            .map_err(DatabaseError::from)?;
-        let expected: Vec<String> = WALLETS_INDEXES
-            .iter()
-            .filter(|sql| sql.contains(" ON wallet_token_balances("))
-            .map(|sql| {
-                sql.replace(" IF NOT EXISTS", "")
-                    .trim_end_matches(';')
-                    .to_owned()
-            })
-            .collect();
-        if objects.len() != expected.len()
-            || objects
-                .iter()
-                .any(|(kind, _, sql)| kind != "index" || !expected.contains(sql))
-        {
-            return Err(Error::Migration {
-                step: "inspect wallet token balance indexes".to_owned(),
-                detail: "unrecognized index or trigger".to_owned(),
-            });
-        }
-        let indexes: Vec<(String, String)> = conn
-            .prepare("SELECT name, origin FROM pragma_index_list('wallet_token_balances')")
-            .and_then(|mut stmt| {
-                stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
-                    .collect::<rusqlite::Result<Vec<_>>>()
-            })
-            .map_err(DatabaseError::from)?;
-        if indexes.len() != expected.len() + 1
-            || indexes.iter().any(|(name, origin)| {
-                !(origin == "pk" && name.starts_with("sqlite_autoindex_wallet_token_balances_")
-                    || origin == "c" && objects.iter().any(|(_, known_name, _)| known_name == name))
-            })
-        {
-            return Err(Error::Migration {
-                step: "inspect wallet token balance keys".to_owned(),
-                detail: "unrecognized primary key or index".to_owned(),
-            });
-        }
-
-        tx.execute_batch(
-            &TOKEN_BALANCES_SCHEMA
-                .replace("CREATE TABLE IF NOT EXISTS", "CREATE TABLE")
-                .replace("wallet_token_balances", "wallet_token_balances__raw_amount"),
-        )
-        .map_err(DatabaseError::from)?;
-        {
-            let mut stmt = tx.prepare("SELECT wallet_id, mint, balance, ui_amount, decimals, symbol, name, is_token_2022, updated_at FROM wallet_token_balances")
-                .map_err(DatabaseError::from)?;
-            let rows = stmt
-                .query_map([], |row| {
-                    Ok((
-                        row.get::<_, i64>(0)?,
-                        row.get::<_, String>(1)?,
-                        row.get::<_, i64>(2)?,
-                        row.get::<_, f64>(3)?,
-                        row.get::<_, i64>(4)?,
-                        row.get::<_, Option<String>>(5)?,
-                        row.get::<_, Option<String>>(6)?,
-                        row.get::<_, i64>(7)?,
-                        row.get::<_, String>(8)?,
-                    ))
-                })
-                .map_err(DatabaseError::from)?;
-            for row in rows {
-                let (
-                    wallet_id,
-                    mint,
-                    bits,
-                    ui_amount,
-                    decimals,
-                    symbol,
-                    name,
-                    is_token_2022,
-                    updated_at,
-                ) = row.map_err(DatabaseError::from)?;
-                let amount = crate::chains::RawAmount::from(u64::from_ne_bytes(bits.to_ne_bytes()));
-                tx.execute("INSERT INTO wallet_token_balances__raw_amount (wallet_id, mint, balance, ui_amount, decimals, symbol, name, is_token_2022, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
-                    rusqlite::params![wallet_id, mint, amount, ui_amount, decimals, symbol, name, is_token_2022, updated_at])
-                    .map_err(DatabaseError::from)?;
-            }
-        }
-        tx.execute_batch("DROP TABLE wallet_token_balances; ALTER TABLE wallet_token_balances__raw_amount RENAME TO wallet_token_balances;")
-            .map_err(DatabaseError::from)?;
-        for index in WALLETS_INDEXES
-            .iter()
-            .filter(|sql| sql.contains(" ON wallet_token_balances("))
-        {
-            tx.execute(index, []).map_err(DatabaseError::from)?;
-        }
-        let violations: i64 = tx
-            .query_row("SELECT COUNT(*) FROM pragma_foreign_key_check", [], |row| {
-                row.get(0)
-            })
-            .map_err(DatabaseError::from)?;
-        if violations != 0 {
-            return Err(Error::Migration {
-                step: "verify wallet token balance foreign keys".to_owned(),
-                detail: format!("{violations} violations"),
-            });
-        }
-        Ok(())
     }
 
     /// Rebuilds the pre-chain-identity `wallets` table onto `UNIQUE(chain_id, address)`.
@@ -382,6 +254,69 @@ mod tests {
             .optional()
             .unwrap()
             .is_none());
+    }
+
+    /// The retired token balance cache, with its indexes and rows, leaves the store
+    /// on upgrade and on every later open, and every wallet row stays.
+    #[test]
+    fn the_retired_token_balance_cache_is_dropped_and_wallets_stay() {
+        let mut conn = legacy_connection();
+        conn.execute_batch(
+            "CREATE TABLE wallet_token_balances (
+                wallet_id INTEGER NOT NULL,
+                mint TEXT NOT NULL,
+                balance INTEGER NOT NULL,
+                ui_amount REAL NOT NULL,
+                decimals INTEGER NOT NULL,
+                symbol TEXT,
+                name TEXT,
+                is_token_2022 INTEGER NOT NULL DEFAULT 0,
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY (wallet_id, mint),
+                FOREIGN KEY (wallet_id) REFERENCES wallets(id) ON DELETE CASCADE
+            );
+            CREATE INDEX idx_token_balances_wallet ON wallet_token_balances(wallet_id);
+            CREATE INDEX idx_token_balances_mint ON wallet_token_balances(mint);
+            INSERT INTO wallet_token_balances (wallet_id, mint, balance, ui_amount, decimals, updated_at)
+            VALUES (1, 'mint', 5, 0.000000005, 9, '2025-01-02');",
+        )
+        .expect("seed the retired cache");
+        let upgrade = |conn: &mut Connection| {
+            database::open::upgrade_connection(
+                conn,
+                &database::catalog::WALLETS,
+                vec![ChainId::Solana],
+            )
+        };
+
+        upgrade(&mut conn).expect("upgrade the wallets store");
+        // A core without the drop re-creates the cache; the next open drops it again.
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS wallet_token_balances (wallet_id INTEGER NOT NULL, mint TEXT NOT NULL, PRIMARY KEY (wallet_id, mint));",
+        )
+        .expect("re-create the cache as an older core does");
+        upgrade(&mut conn).expect("reopen the wallets store");
+
+        let retired: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE name IN ('wallet_token_balances', 'idx_token_balances_wallet', 'idx_token_balances_mint')",
+                [],
+                |row| row.get(0),
+            )
+            .expect("look for the retired objects");
+        assert_eq!(retired, 0, "the cache and its indexes are gone");
+        let wallets: i64 = conn
+            .query_row("SELECT COUNT(*) FROM wallets", [], |row| row.get(0))
+            .expect("count wallets");
+        assert_eq!(wallets, 2, "every wallet row stays");
+        let ledger: (i64, i64) = conn
+            .query_row(
+                "SELECT version, min_reader_version FROM store_schema WHERE id = 1",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("read the store ledger");
+        assert_eq!(ledger, (2, 1));
     }
 
     /// Every key added to the vault leaves a snapshot to restore the vault from.

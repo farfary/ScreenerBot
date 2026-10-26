@@ -250,9 +250,7 @@ async fn uninitialized_quote_returns_a_domain_error() {
 
 #[tokio::test]
 async fn uninitialized_execution_returns_a_domain_error() {
-    use screenerbot::swaps::{
-        execute_swap_with_fallback, quote_and_execute_for_wallet, Quote, RouterChoice, SwapMode,
-    };
+    use screenerbot::swaps::{execute_swap_with_fallback, Quote, SwapMode};
 
     let quote = Quote {
         chain: screenerbot::chains::active_chain(),
@@ -281,16 +279,6 @@ async fn uninitialized_execution_returns_a_domain_error() {
     )
     .await
     .expect_err("execute without a factory");
-    assert_registry_uninitialized(err);
-
-    let err = quote_and_execute_for_wallet(
-        uninitialized_quote_request(),
-        1,
-        RouterChoice::Auto,
-        screenerbot::swaps::SwapAmountLimit::Unrestricted,
-    )
-    .await
-    .expect_err("wallet execute without a factory");
     assert_registry_uninitialized(err);
 }
 

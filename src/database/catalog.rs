@@ -350,7 +350,6 @@ pub const WALLETS: StoreSpec = shared(
     &[],
     &[
         keep("wallets", Vault),
-        bounded("wallet_token_balances"),
         keep("watch_targets", UserDecision),
         keep("watch_cursors", Dedupe),
     ],
@@ -578,7 +577,7 @@ pub const ATA_CLEANUP: StoreSpec = shared(
     StoreClass::Cache,
     crate::wallets::ata_cleanup::database::SCHEMA,
     &[],
-    &[keep("ata_sessions", Ledger), keep("ata_closures", Ledger)],
+    &[],
 )
 .pooled(3, Some(1));
 

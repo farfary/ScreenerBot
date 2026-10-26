@@ -63,15 +63,7 @@ const TABLES_WITHOUT_CHAIN_SCOPE: &[(&str, &[&str])] = &[
             "strategy_templates",
         ],
     ),
-    (
-        "tools.db",
-        &[
-            "ata_closures",
-            "ata_failed_cache",
-            "ata_sessions",
-            "store_schema",
-        ],
-    ),
+    ("tools.db", &["ata_failed_cache", "store_schema"]),
     ("actions.db", &["action_steps", "store_schema"]),
     ("ai.db", &["ai_instructions", "store_schema"]),
 ];

@@ -75,18 +75,4 @@ pub trait SwapRouter: Send + Sync {
             Ok(())
         }
     }
-
-    /// Execute this router's own quote, signing for a specific wallet id.
-    ///
-    /// Chain adapters resolve and sign inside `src/chains/solana`. Routers
-    /// that cannot do wallet-scoped execution must return
-    /// [`Error::unsupported_capability`] and must not submit anything, and
-    /// must never fall back to another router.
-    async fn execute_swap_for_wallet(&self, quote: &Quote, _wallet_id: i64) -> Result<SwapResult> {
-        self.accept_own_quote(quote)?;
-        Err(Error::unsupported_capability(
-            "wallet_scoped_execution",
-            self.id(),
-        ))
-    }
 }

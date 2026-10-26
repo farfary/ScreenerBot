@@ -67,7 +67,7 @@ pub fn ensure_config() {
 /// configuration, as setup stores it, and return the wallet's address. The wallet
 /// store imports it as the main wallet when it initializes on an empty store.
 pub fn configure_trading_wallet() -> String {
-    let keypair = screenerbot::chains::solana::accounts::generate_keypair();
+    let keypair = screenerbot::chains::solana::solana_sdk::signature::Keypair::new();
     let secret = bs58::encode(keypair.to_bytes()).into_string();
     let encrypted = screenerbot::secure_storage::encrypt_private_key(&secret)
         .expect("encrypt the trading wallet key");

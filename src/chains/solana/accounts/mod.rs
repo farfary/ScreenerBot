@@ -1,11 +1,10 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Solana account primitives: keypair generation, parsing and signing.
+//! Solana account primitives: keypair parsing, signing and balance reads.
 //!
 //! Owns every place that touches a raw `Keypair`/`Pubkey` outside of
-//! transaction construction: generating one, parsing one from base58 or JSON
-//! array formats, validating an address string, and deriving an address from
+//! transaction construction: parsing one from base58 or JSON array formats, validating an address string, and deriving an address from
 //! a keypair. Encryption of the resulting secret is chain-neutral
 //! (`crate::secure_storage`) and stays outside this module.
 
@@ -13,15 +12,13 @@ pub mod balances;
 pub mod keypair;
 pub mod signing;
 
-pub use balances::{
-    fetch_wallet_sol_balance, fetch_wallet_sol_balances, fetch_wallet_token_balances,
-};
+pub use balances::fetch_wallet_sol_balances;
 pub use keypair::{
-    address_from_encrypted_key, decrypt_to_keypair, export_private_key, generate_keypair,
-    keypair_to_address, parse_private_key, parse_pubkey_safe, validate_address,
+    address_from_encrypted_key, decrypt_to_keypair, export_private_key, keypair_to_address,
+    parse_private_key, parse_pubkey_safe, validate_address,
 };
 pub use signing::{
     cached_main_wallet_id, configured_address, configured_address_async, configured_keypair,
-    configured_keypair_async, configured_pubkey, keypair_for_wallet, main_keypair,
-    sign_message_for_active_wallets, sign_message_with_main_wallet,
+    configured_keypair_async, configured_pubkey, main_keypair, sign_message_for_active_wallets,
+    sign_message_with_main_wallet,
 };

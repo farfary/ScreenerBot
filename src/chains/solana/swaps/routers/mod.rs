@@ -46,8 +46,34 @@ mod tests {
     use crate::chains::{ChainId, RawAmount};
     use crate::swaps::{Quote, SwapMode};
 
+    fn traded_token() -> crate::tokens::Token {
+        serde_json::from_value(serde_json::json!({
+            "mint": crate::chains::solana::constants::USDC_MINT,
+            "symbol": "USDC",
+            "name": "USD Coin",
+            "data_source": "DexScreener",
+            "first_discovered_at": "2026-01-01T00:00:00Z",
+            "metadata_last_fetched_at": "2026-01-01T00:00:00Z",
+            "decimals_last_fetched_at": "2026-01-01T00:00:00Z",
+            "market_data_last_fetched_at": "2026-01-01T00:00:00Z",
+            "pool_price_last_calculated_at": "2026-01-01T00:00:00Z",
+            "price_usd": 0.0,
+            "price_sol": 0.0,
+            "price_native": "0",
+            "websites": [],
+            "socials": [],
+            "is_rugged": false,
+            "security_risks": [],
+            "top_holders": [],
+            "is_blacklisted": false,
+            "priority": "PoolTracked",
+        }))
+        .expect("token fixture")
+    }
+
     #[tokio::test]
     async fn wide_execution_quote_is_refused_before_wallet_or_provider_io() {
+        let token = traded_token();
         for router in build_routers() {
             for field in ["input", "output", "minimum"] {
                 let mut quote = Quote {
@@ -75,10 +101,7 @@ mod tests {
                     "output" => quote.output_amount = wide,
                     _ => quote.minimum_output_amount = wide,
                 }
-                let error = router
-                    .execute_swap_for_wallet(&quote, -1)
-                    .await
-                    .unwrap_err();
+                let error = router.execute_swap(&token, &quote).await.unwrap_err();
                 assert!(
                     error.to_string().contains("Solana u64 limit"),
                     "{field}: {error}"

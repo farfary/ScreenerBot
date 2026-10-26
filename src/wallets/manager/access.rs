@@ -19,16 +19,6 @@ pub async fn get_wallet(wallet_id: i64) -> Result<Option<Wallet>, Error> {
     db.get_wallet(wallet_id)
 }
 
-/// Get a wallet by address
-pub async fn get_wallet_by_address(address: &str) -> Result<Option<Wallet>, Error> {
-    let db_guard = super::WALLETS_DB.read().await;
-    let db = db_guard
-        .as_ref()
-        .ok_or_else(|| Error::NotInitialized { database: "wallet" })?;
-
-    db.get_wallet_by_address(address)
-}
-
 /// Get a wallet's encrypted key material (ciphertext, nonce) by ID.
 /// Chain-neutral — only `crate::chains::solana::accounts` decrypts this.
 pub(crate) async fn get_wallet_encrypted_key(wallet_id: i64) -> Result<(String, String), Error> {

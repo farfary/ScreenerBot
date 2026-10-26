@@ -2,6 +2,10 @@
 // SPDX-License-Identifier: BUSL-1.1
 
 //! Complete v0.2.13 wallet schemas through the production initializers.
+//!
+//! `wallets.db` once cached per-wallet token balances in `wallet_token_balances`;
+//! nothing reads that cache any more, so the upgrade drops it with its indexes and
+//! keeps every wallet row.
 
 use crate::common;
 
@@ -96,24 +100,34 @@ fn v0_2_13_wallet_amount_storage_survives_two_initializers() {
             0
         );
     }
+    for retired in [
+        "wallet_token_balances",
+        "idx_token_balances_wallet",
+        "idx_token_balances_mint",
+    ] {
+        assert_eq!(
+            wallets
+                .query_row(
+                    "SELECT COUNT(*) FROM sqlite_master WHERE name = ?1",
+                    [retired],
+                    |r| r.get::<_, i64>(0)
+                )
+                .unwrap(),
+            0,
+            "{retired} must be dropped from wallets.db"
+        );
+    }
     for (i, amount) in CASES.iter().enumerate() {
-        for (conn, table, id) in [
-            (&wallets, "wallet_token_balances", "wallet_id"),
-            (&monitor, "token_balances", "snapshot_id"),
-        ] {
-            let (stored, kind, ui, decimals, symbol): (String, String, f64, i64, String) = conn.query_row(&format!("SELECT CAST(balance AS TEXT), typeof(balance), {}, decimals, {} FROM {table} WHERE mint = ?1", if id == "wallet_id" {"ui_amount"} else {"balance_ui"}, if id == "wallet_id" {"symbol"} else {"mint"}), [format!("mint-{i}")], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?))).unwrap();
-            assert_eq!(stored, amount.to_string());
-            assert_eq!(kind, "text");
-            assert_eq!((ui, decimals), (12.5, 9));
-            assert_eq!(
-                symbol,
-                if id == "wallet_id" {
-                    "SYM".to_owned()
-                } else {
-                    format!("mint-{i}")
-                }
-            );
-        }
+        let (stored, kind, ui, decimals): (String, String, f64, i64) = monitor
+            .query_row(
+                "SELECT CAST(balance AS TEXT), typeof(balance), balance_ui, decimals FROM token_balances WHERE mint = ?1",
+                [format!("mint-{i}")],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+            )
+            .unwrap();
+        assert_eq!(stored, amount.to_string());
+        assert_eq!(kind, "text");
+        assert_eq!((ui, decimals), (12.5, 9));
     }
     assert_eq!(wallets.query_row("SELECT name, address, encrypted_key, nonce, role, notes, created_at FROM wallets WHERE id = 17", [], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?, r.get::<_, String>(3)?, r.get::<_, String>(4)?, r.get::<_, String>(5)?, r.get::<_, String>(6)?))).unwrap(), ("main".into(), "address".into(), "ciphertext".into(), "nonce".into(), "main".into(), "kept".into(), "2025-01-01".into()));
     assert_eq!(monitor.query_row("SELECT wallet_address, native_balance, total_equity_native, total_tokens_count, total_nfts_count FROM wallet_snapshots WHERE id = 23", [], |r| Ok((r.get::<_, String>(0)?, r.get::<_, f64>(1)?, r.get::<_, f64>(2)?, r.get::<_, i64>(3)?, r.get::<_, i64>(4)?))).unwrap(), ("address".into(), 1.5, 4.5, 4, 1));
@@ -170,8 +184,6 @@ fn v0_2_13_wallet_amount_storage_survives_two_initializers() {
                 "idx_wallets_chain_address",
                 "idx_wallets_role",
                 "idx_wallets_active",
-                "idx_token_balances_wallet",
-                "idx_token_balances_mint",
             ][..],
         ),
         (
@@ -203,58 +215,69 @@ fn v0_2_13_wallet_amount_storage_survives_two_initializers() {
         }
     }
     let wide = screenerbot::chains::RawAmount::from(u128::MAX);
-    wallets.execute("INSERT INTO wallet_token_balances (wallet_id, mint, balance, ui_amount, decimals, updated_at) VALUES (17, 'wide', ?1, 0, 0, '2025-01-03')", [wide]).unwrap();
     monitor.execute("INSERT INTO token_balances (snapshot_id, mint, balance, balance_ui) VALUES (23, 'wide', ?1, 0)", [wide]).unwrap();
-    for (conn, table) in [
-        (&wallets, "wallet_token_balances"),
-        (&monitor, "token_balances"),
-    ] {
-        let amount: screenerbot::chains::RawAmount = conn
-            .query_row(
-                &format!("SELECT balance FROM {table} WHERE mint = 'wide'"),
-                [],
-                |r| r.get(0),
-            )
-            .unwrap();
-        assert_eq!(amount, wide);
-    }
+    let amount: screenerbot::chains::RawAmount = monitor
+        .query_row(
+            "SELECT balance FROM token_balances WHERE mint = 'wide'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(amount, wide);
 }
 
 #[test]
 fn unknown_wallet_amount_schema_leaves_original_data_and_ddl() {
-    for (file, config, fixture, table, row) in [
-        ("wallets.db", screenerbot::database::WALLETS_DB, include_str!("fixtures/v0.2.13-wallets.sql"), "wallet_token_balances", "INSERT INTO wallets (id, name, address, encrypted_key, nonce, role) VALUES (17, 'main', 'address', 'ciphertext', 'nonce', 'main'); INSERT INTO wallet_token_balances (wallet_id, mint, balance, ui_amount, decimals, updated_at) VALUES (17, 'mint', -1, 1, 9, '2025-01-02');"),
-        ("wallet.db", screenerbot::database::WALLET_MONITOR_DB, include_str!("fixtures/v0.2.13-wallet-monitor.sql"), "token_balances", "INSERT INTO wallet_snapshots (id, wallet_address, snapshot_time, sol_balance, sol_balance_lamports) VALUES (23, 'address', '2025-01-02T00:00:00+00:00', 1, 1000000000); INSERT INTO token_balances (snapshot_id, mint, balance, balance_ui) VALUES (23, 'mint', -1, 1);"),
-    ] {
-        let dir = tempfile::tempdir().unwrap();
-        std::fs::create_dir_all(dir.path().join("data")).unwrap();
-        let conn = common::seed_store(&dir.path().join("data").join(file), config, fixture);
-        conn.execute_batch(row).unwrap();
-        conn.execute(&format!("ALTER TABLE {table} ADD COLUMN unfamiliar TEXT"), []).unwrap();
-        let before: (String, i64) = conn.query_row(&format!("SELECT sql, (SELECT balance FROM {table} WHERE mint = 'mint') FROM sqlite_master WHERE type = 'table' AND name = ?1"), [table], |r| Ok((r.get(0)?, r.get(1)?))).unwrap();
-        drop(conn);
-        if file == "wallet.db" {
-            let wallets = common::seed_store(&dir.path().join("data/wallets.db"), screenerbot::database::WALLETS_DB, include_str!("fixtures/v0.2.13-wallets.sql"));
-            wallets.execute("INSERT INTO wallets (id, name, address, encrypted_key, nonce, role) VALUES (17, 'main', 'address', 'ciphertext', 'nonce', 'main')", []).unwrap();
-        }
-        let status = Command::new(std::env::current_exe().unwrap())
-            .arg("--exact")
-            .arg(common::test_name(module_path!(), "v0_2_13_wallet_amount_storage_survives_two_initializers"))
-            .env(CHILD, "1")
-            .env("SCREENERBOT_DATA_DIR", dir.path())
-            .output().unwrap();
-        let output = format!("{}{}", String::from_utf8_lossy(&status.stdout), String::from_utf8_lossy(&status.stderr));
-        let preserved = if file == "wallet.db" {
-            assert!(status.status.success(), "derived {table} store was not rebuilt: {output}");
-            let (moved, reason) = common::quarantined_store(&dir.path().join("data"), file);
-            assert!(reason.contains("unrecognized table definition"), "unexpected quarantine reason: {reason}");
-            Connection::open(moved).unwrap()
-        } else {
-            assert!(!status.status.success(), "unfamiliar {table} shape was accepted");
-            assert!(output.contains("unrecognized table definition"), "unexpected failure for {table}: {output}");
-            open(dir.path(), file)
-        };
-        let after: (String, i64) = preserved.query_row(&format!("SELECT sql, (SELECT balance FROM {table} WHERE mint = 'mint') FROM sqlite_master WHERE type = 'table' AND name = ?1"), [table], |r| Ok((r.get(0)?, r.get(1)?))).unwrap();
-        assert_eq!(after, before, "rejected {table} migration changed data or DDL");
-    }
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(dir.path().join("data")).unwrap();
+    let conn = common::seed_store(
+        &dir.path().join("data/wallet.db"),
+        screenerbot::database::WALLET_MONITOR_DB,
+        include_str!("fixtures/v0.2.13-wallet-monitor.sql"),
+    );
+    conn.execute_batch("INSERT INTO wallet_snapshots (id, wallet_address, snapshot_time, sol_balance, sol_balance_lamports) VALUES (23, 'address', '2025-01-02T00:00:00+00:00', 1, 1000000000); INSERT INTO token_balances (snapshot_id, mint, balance, balance_ui) VALUES (23, 'mint', -1, 1);").unwrap();
+    conn.execute("ALTER TABLE token_balances ADD COLUMN unfamiliar TEXT", [])
+        .unwrap();
+    let read_shape = |conn: &Connection| -> (String, i64) {
+        conn.query_row("SELECT sql, (SELECT balance FROM token_balances WHERE mint = 'mint') FROM sqlite_master WHERE type = 'table' AND name = 'token_balances'", [], |r| Ok((r.get(0)?, r.get(1)?))).unwrap()
+    };
+    let before = read_shape(&conn);
+    drop(conn);
+    let wallets = common::seed_store(
+        &dir.path().join("data/wallets.db"),
+        screenerbot::database::WALLETS_DB,
+        include_str!("fixtures/v0.2.13-wallets.sql"),
+    );
+    wallets.execute("INSERT INTO wallets (id, name, address, encrypted_key, nonce, role) VALUES (17, 'main', 'address', 'ciphertext', 'nonce', 'main')", []).unwrap();
+    drop(wallets);
+
+    let status = Command::new(std::env::current_exe().unwrap())
+        .arg("--exact")
+        .arg(common::test_name(
+            module_path!(),
+            "v0_2_13_wallet_amount_storage_survives_two_initializers",
+        ))
+        .env(CHILD, "1")
+        .env("SCREENERBOT_DATA_DIR", dir.path())
+        .output()
+        .unwrap();
+    let output = format!(
+        "{}{}",
+        String::from_utf8_lossy(&status.stdout),
+        String::from_utf8_lossy(&status.stderr)
+    );
+    assert!(
+        status.status.success(),
+        "derived token_balances store was not rebuilt: {output}"
+    );
+    let (moved, reason) = common::quarantined_store(&dir.path().join("data"), "wallet.db");
+    assert!(
+        reason.contains("unrecognized table definition"),
+        "unexpected quarantine reason: {reason}"
+    );
+    let after = read_shape(&Connection::open(moved).unwrap());
+    assert_eq!(
+        after, before,
+        "rejected token_balances migration changed data or DDL"
+    );
 }

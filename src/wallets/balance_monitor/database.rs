@@ -146,22 +146,6 @@ impl WalletDatabase {
         Ok(db)
     }
 
-    /// Rebind the wallet-monitor's subject to whichever wallet is now main,
-    /// without decrypting anything (`configured_address_async()` is
-    /// key-free once the multi-wallet database is initialized). Called by
-    /// `crate::wallets::manager::crud` after any mutation that can change
-    /// the main wallet, so every subsequent snapshot/dashboard/flow query
-    /// scopes to the new wallet instead of a stale cached address.
-    pub async fn rebind_subject(&mut self) -> Result<(), Error> {
-        self.subject = crate::chains::solana::accounts::configured_address_async()
-            .await
-            .map_err(|e| Error::Dependency {
-                dependency: "accounts",
-                detail: e.to_string(),
-            })?;
-        Ok(())
-    }
-
     /// Records the subject as the wallet this chain's rows describe.
     fn record_current_wallet(&self) -> Result<(), Error> {
         self.get_connection()?

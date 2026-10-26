@@ -1,7 +1,7 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Solana keypair generation, parsing, validation and signing primitives.
+//! Solana keypair parsing, validation and signing primitives.
 //!
 //! Encryption of the resulting secret is chain-neutral and lives in
 //! `crate::secure_storage`; this module owns only the Solana-typed half.
@@ -11,17 +11,6 @@ use crate::chains::solana::solana_sdk::signer::Signer;
 use crate::chains::solana::{Error, Result};
 
 use crate::secure_storage::{decrypt_private_key, EncryptedData};
-
-// =============================================================================
-// WALLET GENERATION
-// =============================================================================
-
-/// Generate a new Solana keypair using secure random generation
-///
-/// Uses Solana SDK's Keypair::new() which internally uses a CSPRNG
-pub fn generate_keypair() -> Keypair {
-    Keypair::new()
-}
 
 // =============================================================================
 // IMPORT / EXPORT
@@ -150,18 +139,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_generate_keypair() {
-        let kp1 = generate_keypair();
-        let kp2 = generate_keypair();
-
-        // Each generated keypair should be unique
-        assert_ne!(kp1.pubkey(), kp2.pubkey());
-    }
-
-    #[test]
     fn test_parse_base58() {
         // This is a test keypair - do not use in production
-        let keypair = generate_keypair();
+        let keypair = Keypair::new();
         let b58 = bs58::encode(keypair.to_bytes()).into_string();
 
         let parsed = parse_private_key(&b58);
@@ -171,7 +151,7 @@ mod tests {
 
     #[test]
     fn parsed_keypair_produces_a_verifiable_signature() {
-        let keypair = generate_keypair();
+        let keypair = Keypair::new();
         let b58 = bs58::encode(keypair.to_bytes()).into_string();
         let parsed = parse_private_key(&b58).unwrap();
 
@@ -213,7 +193,7 @@ mod tests {
 
     #[test]
     fn test_parse_array_format() {
-        let keypair = generate_keypair();
+        let keypair = Keypair::new();
         let bytes = keypair.to_bytes();
         let array_str = format!(
             "[{}]",

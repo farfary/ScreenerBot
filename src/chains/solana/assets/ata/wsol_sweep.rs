@@ -23,7 +23,6 @@
 
 use super::balance::get_all_token_accounts;
 use super::helpers::close_ata;
-use crate::chains::solana::assets::transfer::close_ata_for_wallet;
 use crate::chains::solana::constants::SOL_MINT;
 use crate::chains::solana::solana_sdk::pubkey::Pubkey;
 use crate::chains::solana::spl_associated_token_account::get_associated_token_address_with_program_id;
@@ -42,21 +41,13 @@ const BUSY_RETRY_DELAY: Duration = Duration::from_secs(15);
 /// Give up after this many busy checks; the next swap schedules a fresh sweep.
 const MAX_BUSY_RETRIES: u32 = 20;
 
-/// Which key signs the sweep's close transaction.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SweepSigner {
-    /// The configured main wallet.
-    MainWallet,
-    /// One wallet of the wallet tools, by id.
-    Wallet(i64),
-}
-
 /// Addresses of the wallets with a sweep pending or running.
 static SWEEPS_SCHEDULED: LazyLock<Mutex<HashSet<String>>> =
     LazyLock::new(|| Mutex::new(HashSet::new()));
 
-/// Schedule a sweep of `wallet_address`'s WSOL account. Cheap to call after every swap.
-pub fn schedule_wsol_sweep(wallet_address: String, signer: SweepSigner) {
+/// Schedule a sweep of the main wallet's WSOL account at `wallet_address`. Cheap to
+/// call after every swap.
+pub fn schedule_wsol_sweep(wallet_address: String) {
     let newly_scheduled = SWEEPS_SCHEDULED
         .lock()
         .map(|mut scheduled| scheduled.insert(wallet_address.clone()))
@@ -65,14 +56,14 @@ pub fn schedule_wsol_sweep(wallet_address: String, signer: SweepSigner) {
         return;
     }
     tokio::spawn(async move {
-        sweep_when_idle(&wallet_address, signer).await;
+        sweep_when_idle(&wallet_address).await;
         if let Ok(mut scheduled) = SWEEPS_SCHEDULED.lock() {
             scheduled.remove(&wallet_address);
         }
     });
 }
 
-async fn sweep_when_idle(wallet: &str, signer: SweepSigner) {
+async fn sweep_when_idle(wallet: &str) {
     tokio::time::sleep(SETTLE_DELAY).await;
     if !wait_for_idle().await {
         logger::debug(
@@ -121,17 +112,7 @@ async fn sweep_when_idle(wallet: &str, signer: SweepSigner) {
         return;
     }
 
-    let closed = match signer {
-        SweepSigner::MainWallet => close_ata(wallet, &wsol.account, SOL_MINT, wsol.is_token_2022)
-            .await
-            .map_err(|e| e.to_string()),
-        SweepSigner::Wallet(wallet_id) => {
-            close_ata_for_wallet(wallet_id, SOL_MINT, wsol.is_token_2022)
-                .await
-                .map_err(|e| e.to_string())
-        }
-    };
-    match closed {
+    match close_ata(wallet, &wsol.account, SOL_MINT, wsol.is_token_2022).await {
         Ok(signature) => logger::info(
             LogTag::Wallet,
             &format!(

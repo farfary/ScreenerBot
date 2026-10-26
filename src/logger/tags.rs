@@ -49,7 +49,6 @@ pub enum LogTag {
     Notifications,
     Telegram,
     Test,
-    Tools,
     Other(String),
 }
 
@@ -96,7 +95,6 @@ impl LogTag {
             LogTag::Notifications => "notifications".to_owned(),
             LogTag::Telegram => "telegram".to_owned(),
             LogTag::Test => "test".to_owned(),
-            LogTag::Tools => "tools".to_owned(),
             LogTag::Other(ref s) => s.to_lowercase(),
         }
     }
@@ -143,7 +141,6 @@ impl LogTag {
             LogTag::Notifications => "NOTIFY",
             LogTag::Telegram => "TELEGRAM",
             LogTag::Test => "TEST",
-            LogTag::Tools => "TOOLS",
             LogTag::Other(_) => "OTHER",
         }
     }
@@ -191,7 +188,6 @@ impl std::fmt::Display for LogTag {
             LogTag::Notifications => format!("{:<8}", "NOTIFY").bright_purple().bold(),
             LogTag::Telegram => format!("{:<8}", "TELEGRAM").bright_cyan().bold(),
             LogTag::Test => format!("{:<8}", "TEST").bright_blue().bold(),
-            LogTag::Tools => format!("{:<8}", "TOOLS").bright_purple().bold(),
             LogTag::Other(s) => format!("{:<8}", s).white().bold(),
         };
         write!(f, "{tag_str}")
