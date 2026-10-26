@@ -7,8 +7,9 @@
  *
  * The Auto Trader tab is titled Time Exit, and the Configuration page groups the same
  * fields under their config category and labels them from the config metadata. In
- * every locale that category reads as the tab title, and in the source locale each
- * field label names the Time Exit, so neither page calls the rule something else.
+ * every locale that category reads as the tab title, as do the close reason and the
+ * exit-type label of a position it closed, and in the source locale each field label
+ * names the Time Exit, so no surface calls the rule something else.
  *
  * Run with `npm run test:js`.
  */
@@ -61,6 +62,19 @@ test("every locale names the Configuration group after the Time Exit tab", () =>
       title.toLocaleLowerCase(locale),
       `${locale}: the config group reads as the Auto Trader tab`
     );
+  }
+});
+
+test("every locale names a time-based close after the Time Exit tab", () => {
+  for (const locale of LOCALES) {
+    const title = values(locale, "trader.ftl").get("trader-time-title");
+    const labels = [
+      values(locale, "trade.ftl").get("trade-reason-time-override"),
+      values(locale, "trader.ftl").get("trader-exit-type-time-override"),
+    ];
+    for (const label of labels) {
+      assert.equal(label, title, `${locale}: a time exit reads as the Auto Trader tab`);
+    }
   }
 });
 
