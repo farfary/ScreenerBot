@@ -63,6 +63,7 @@ trade-context-position-size = Размер позиции
 trade-context-holdings = В кошельке
 trade-held-badge = В позиции
     .title = У вас есть открытая позиция по этому токену
+trade-setup-required-title = Для торговли нужны кошелёк и RPC
 trade-manage-title = Ручное управление
 trade-manage-description = Автотрейдер не будет продавать эту позицию или докупать её. Снимите отметку, чтобы он управлял выходами.
 

@@ -24,6 +24,7 @@ import * as Utils from "../core/utils.js";
 import { tradeToastKey } from "../core/action_toasts.js";
 import { requestManager, errorMessageOf } from "../core/request_manager.js";
 import { TradeActionDialog } from "./trade_action_dialog.js";
+import { setupRequired } from "./setup_gate.js";
 
 // One dialog instance shared by every caller — it is modal, so there is never a
 // reason for two of them to exist.
@@ -259,9 +260,12 @@ export async function manualTrade({ action, mint, symbol, name, logo, context = 
   try {
     // The position is authoritative for holdings/decimals/size AND already carries
     // the token's identity, so it doubles as the identity lookup when one exists.
+    // Explore Mode has no wallet to read: the dialog opens as a notice that trading
+    // needs setup, with every amount control and the confirm disabled.
+    const gated = setupRequired();
     const [position, walletBalance] = await Promise.all([
       fetchPosition(mint),
-      action === "sell" ? Promise.resolve(null) : fetchWalletBalance(),
+      action === "sell" || gated ? Promise.resolve(null) : fetchWalletBalance(),
     ]);
 
     // Only pay for a second lookup when the position did not supply identity.
@@ -290,6 +294,7 @@ export async function manualTrade({ action, mint, symbol, name, logo, context = 
       decimals: position?.decimals ?? identity?.decimals ?? null,
       currentSize: position?.currentSize ?? null,
       positionManagement: position?.positionManagement ?? null,
+      setupRequired: gated,
     };
 
     if (action !== "sell") {

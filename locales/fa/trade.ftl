@@ -80,6 +80,7 @@ trade-context-position-size = حجم پوزیشن
 trade-context-holdings = دارایی
 trade-held-badge = در دست
     .title = شما در این توکن پوزیشن باز دارید
+trade-setup-required-title = معامله به کیف پول و RPC نیاز دارد
 trade-manage-title = مدیریت دستی
 trade-manage-description = معامله‌گر خودکار این پوزیشن را نمی‌فروشد و DCA نمی‌کند. برای اینکه خروج‌ها را مدیریت کند، تیک را بردارید.
 

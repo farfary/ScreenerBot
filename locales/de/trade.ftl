@@ -75,6 +75,7 @@ trade-context-position-size = Positionsgröße
 trade-context-holdings = Bestand
 trade-held-badge = Gehalten
     .title = Sie halten eine offene Position in diesem Token
+trade-setup-required-title = Der Handel benötigt eine Wallet und RPC
 trade-manage-title = Manuelle Verwaltung
 trade-manage-description = Der Auto-Trader verkauft oder stockt diese Position nicht auf. Deaktivieren, damit er die Ausstiege verwaltet.
 

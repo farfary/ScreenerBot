@@ -63,6 +63,7 @@ trade-context-position-size = Taille de la position
 trade-context-holdings = Détentions
 trade-held-badge = Détenu
     .title = Vous détenez une position ouverte sur ce token
+trade-setup-required-title = Le trading nécessite un portefeuille et un RPC
 trade-manage-title = Gestion manuelle
 trade-manage-description = Auto Trader ne vendra pas cette position et n'y fera pas de DCA. Décochez pour lui laisser gérer les sorties.
 

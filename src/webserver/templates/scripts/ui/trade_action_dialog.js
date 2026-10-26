@@ -13,6 +13,7 @@ import { HintTrigger } from "./hint_popover.js";
 import { applyQuickTradeMixin } from "./trade_action/quick_trade.js";
 import { applyQuoteManagerMixin } from "./trade_action/quote_manager.js";
 import { fetchMainWalletAddress, needsFunding, renderFundingNotice } from "./funding_notice.js";
+import { renderSetupGate } from "./setup_gate.js";
 
 // Bounds of a manual slippage override. MUST match the backend's
 // trader::constants::{MIN,MAX}_MANUAL_SLIPPAGE_PCT — the route rejects anything outside them.
@@ -802,6 +803,7 @@ export class TradeActionDialog {
 
     // Configure the amount slider + MAX for this action/context
     this._configureAmountControls(action, context);
+    this._syncSetupGate(context);
 
     // Set input labels and state
     this.inputLabelEl.textContent = text.inputLabel;
@@ -831,6 +833,17 @@ export class TradeActionDialog {
     if ((action === "buy" || action === "add") && spendable != null && spendable <= 0) {
       this._updateConfirmButton();
     }
+  }
+
+  /**
+   * Explore Mode: no amount can be chosen and the confirm names why it is disabled.
+   * Every other opening clears both, since the dialog instance is shared.
+   */
+  _syncSetupGate(context) {
+    const gated = Boolean(context.setupRequired);
+    this._presetButtons.forEach((btn) => (btn.disabled = gated));
+    this.maxBtn.disabled = gated;
+    this.confirmBtn.title = gated ? I18n.t("trade-setup-required-title") : "";
   }
 
   /**
@@ -1051,16 +1064,31 @@ export class TradeActionDialog {
     }
 
     // A wallet without SOL cannot buy: say what it needs and where to send SOL.
+    // Explore Mode has no wallet at all, so it states that setup comes first instead.
     const funding =
-      (action === "buy" || action === "add") && needsFunding(context.balance)
+      !context.setupRequired &&
+      (action === "buy" || action === "add") &&
+      needsFunding(context.balance)
         ? `<div class="trade-action-funding">${renderFundingNotice(this._fundingAddress)}</div>`
         : "";
+    const setup = context.setupRequired ? `<div class="trade-action-setup"></div>` : "";
 
     this.contextEl.innerHTML = `
       ${this._renderIdentity(symbol, context)}
       <div class="trade-action-context-grid">${rows.join("")}</div>
       ${funding}
+      ${setup}
     `;
+    if (setup) {
+      const gate = this.contextEl.querySelector(".trade-action-setup");
+      renderSetupGate(gate, I18n.t("trade-setup-required-title"));
+      // The setup dialog replaces this one rather than stacking over it.
+      on(gate.querySelector(".state-view-action"), "click", () => {
+        this._resolveOpen?.(null);
+        this._resolveOpen = null;
+        this.close({ restoreFocus: false });
+      });
+    }
     if (funding && this._fundingAddress === undefined) this._loadFundingAddress();
   }
 
@@ -1096,6 +1124,8 @@ export class TradeActionDialog {
 
   _startLiveSync() {
     this._stopLiveSync();
+    // Explore Mode has no wallet or position to follow.
+    if (this.currentContext?.setupRequired) return;
     // Sync once immediately: the caller's values are already a beat old by the time
     // the dialog paints, and a buy on a wallet that was funded seconds ago must not
     // wait out a full interval before its amount validates.
@@ -1665,6 +1695,12 @@ export class TradeActionDialog {
     const action = this.currentAction;
     const context = this.currentContext || {};
 
+    // Explore Mode: nothing can be traded until setup connects a wallet and RPC.
+    if (context.setupRequired) {
+      this.confirmBtn.disabled = true;
+      return;
+    }
+
     // A sell needs something to sell. Once live sync sees the position close (sold
     // here, sold elsewhere, force-closed) the button must go dead rather than submit
     // an exit against holdings that no longer exist.
@@ -1790,7 +1826,7 @@ export class TradeActionDialog {
       this.confirmBtn.classList.remove("loading");
       this.cancelBtn.disabled = false;
       this.inputField.disabled = false;
-      this._presetButtons.forEach((btn) => (btn.disabled = false));
+      this._syncSetupGate(this.currentContext || {});
       this._updateConfirmButton();
     }
   }

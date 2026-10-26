@@ -80,6 +80,7 @@ trade-context-position-size = حجم المركز
 trade-context-holdings = الحيازات
 trade-held-badge = محتفظ به
     .title = لديك مركز مفتوح في هذا الرمز
+trade-setup-required-title = التداول يتطلب محفظة وRPC
 trade-manage-title = إدارة يدوية
 trade-manage-description = لن يبيع المتداول الآلي هذا المركز ولن ينفّذ DCA عليه. ألغِ التحديد ليتولى إدارة الخروج.
 

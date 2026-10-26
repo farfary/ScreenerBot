@@ -80,6 +80,7 @@ trade-context-position-size = Tamaño de la posición
 trade-context-holdings = Tenencia
 trade-held-badge = En tenencia
     .title = Tienes una posición abierta en este token
+trade-setup-required-title = Operar necesita una billetera y RPC
 trade-manage-title = Gestión manual
 trade-manage-description = El Auto Trader no venderá ni hará DCA en esta posición. Desmarca para que gestione las salidas.
 

@@ -80,6 +80,7 @@ trade-context-position-size = ポジションサイズ
 trade-context-holdings = 保有
 trade-held-badge = 保有中
     .title = このトークンのオープンポジションを保有しています
+trade-setup-required-title = 取引にはウォレットと RPC が必要です
 trade-manage-title = 手動管理
 trade-manage-description = 自動トレーダーはこのポジションの売却や DCA を行いません。チェックを外すと、エグジットを自動トレーダーに任せます。
 

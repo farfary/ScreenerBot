@@ -65,6 +65,7 @@ trade-context-position-size = Ukuran Posisi
 trade-context-holdings = Kepemilikan
 trade-held-badge = Di-hold
     .title = Anda memiliki posisi terbuka pada token ini
+trade-setup-required-title = Trading memerlukan dompet dan RPC
 trade-manage-title = Pengelolaan manual
 trade-manage-description = Auto-trader tidak akan menjual atau DCA posisi ini. Hapus centang agar auto-trader mengelola exit.
 

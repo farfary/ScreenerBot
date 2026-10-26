@@ -80,6 +80,7 @@ trade-context-position-size = 포지션 규모
 trade-context-holdings = 보유 수량
 trade-held-badge = 보유 중
     .title = 이 토큰의 보유 포지션이 있습니다
+trade-setup-required-title = 거래에는 지갑과 RPC가 필요합니다
 trade-manage-title = 수동 관리
 trade-manage-description = 자동 트레이더는 이 포지션을 매도하거나 DCA하지 않습니다. 체크를 해제하면 청산을 자동으로 관리합니다.
 

@@ -80,6 +80,7 @@ trade-context-position-size = Розмір позиції
 trade-context-holdings = Утримувані токени
 trade-held-badge = Утримується
     .title = У вас є відкрита позиція за цим токеном
+trade-setup-required-title = Для торгівлі потрібні гаманець і RPC
 trade-manage-title = Ручне керування
 trade-manage-description = Автотрейдер не продаватиме цю позицію й не докупатиме до неї. Зніміть позначку, щоб він керував виходами.
 

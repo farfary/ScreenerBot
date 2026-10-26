@@ -20,6 +20,9 @@
  *   transaction or wallet route, so no refresh failure is raised.
  * - Home shows no wallet figure: the worth the API cannot know arrives as null and
  *   every portfolio, P&L and exposure value reads "—", never a measured zero.
+ * - The Buy and Sell dialogs open as the setup notice: no quick amount or MAX can be
+ *   chosen, the confirm is disabled with the reason as its tooltip, the setup action
+ *   replaces the dialog with the setup dialog, and the dialogs read no wallet balance.
  *
  * Run with `npm run test:js`.
  */
@@ -173,4 +176,55 @@ test("Home shows no wallet figure without a wallet", async (t) => {
   const values = {};
   for (const id of ids) values[id] = (await page.locator(`#${id}`).textContent()).trim();
   assert.deepEqual(values, Object.fromEntries(ids.map((id) => [id, "—"])));
+});
+
+test("the Buy and Sell dialogs state that trading needs setup", async (t) => {
+  const { page, requests, close } = await openExplore("home");
+  t.after(close);
+  const dialog = page.locator(".trade-action-dialog-overlay.is-visible");
+  await page.waitForSelector(".home-dashboard:not(.loading)");
+  const before = requests.length;
+
+  for (const action of ["buy", "sell"]) {
+    await page.evaluate(async (tradeAction) => {
+      const { manualTrade } = await import("/scripts/ui/manual_trade.js");
+      void manualTrade({
+        action: tradeAction,
+        mint: "So11111111111111111111111111111111111111112",
+        symbol: "SOL",
+      });
+    }, action);
+    const gate = dialog.locator(".trade-action-setup .setup-gate");
+    await gate.waitFor();
+    assert.equal(
+      await gate.locator(".state-view-title").textContent(),
+      "Trading needs a wallet and RPC"
+    );
+    assert.equal(await gate.locator("button").textContent(), "Complete setup");
+
+    const presets = dialog.locator(".trade-action-preset-btn");
+    assert.ok((await presets.count()) > 0, `${action} offers quick amounts`);
+    for (const preset of await presets.all()) {
+      assert.equal(await preset.isDisabled(), true, `${action} quick amounts are disabled`);
+    }
+    assert.equal(await dialog.locator(".trade-action-input-max").isDisabled(), true);
+    const confirm = dialog.locator(".trade-action-footer .trade-action-btn-confirm");
+    assert.equal(await confirm.isDisabled(), true);
+    assert.equal(await confirm.getAttribute("title"), "Trading needs a wallet and RPC");
+
+    if (action === "buy") {
+      await dialog.locator(".trade-action-footer .trade-action-btn-cancel").click();
+      await page.waitForFunction(
+        () => !document.querySelector(".trade-action-dialog-overlay.is-visible")
+      );
+    }
+  }
+
+  await dialog.locator(".trade-action-setup .state-view-action").click();
+  await page.locator(".setup-dialog").waitFor();
+  assert.equal(await dialog.count(), 0, "the setup dialog replaces the trade dialog");
+  assert.deepEqual(
+    requests.slice(before).filter((request) => / \/api\/wallet\/balance\b/.test(request)),
+    []
+  );
 });

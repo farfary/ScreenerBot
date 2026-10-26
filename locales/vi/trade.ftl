@@ -63,6 +63,7 @@ trade-context-position-size = Quy mô vị thế
 trade-context-holdings = Số token đang nắm giữ
 trade-held-badge = Đang giữ
     .title = Bạn đang có vị thế mở với token này
+trade-setup-required-title = Giao dịch cần ví và RPC
 trade-manage-title = Quản lý thủ công
 trade-manage-description = Auto Trader sẽ không bán hoặc DCA vị thế này. Bỏ chọn để cho phép nó quản lý việc thoát lệnh.
 

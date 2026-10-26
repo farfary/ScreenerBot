@@ -63,6 +63,7 @@ trade-context-position-size = पोज़िशन साइज़
 trade-context-holdings = होल्डिंग
 trade-held-badge = होल्ड में
     .title = इस टोकन में आपकी एक खुली पोज़िशन है
+trade-setup-required-title = ट्रेडिंग के लिए वॉलेट और RPC ज़रूरी हैं
 trade-manage-title = मैन्युअल मैनेजमेंट
 trade-manage-description = ऑटो ट्रेडर इस पोज़िशन को न बेचेगा और न इसमें DCA करेगा। एग्ज़िट उसके हवाले करने के लिए अनचेक करें।
 

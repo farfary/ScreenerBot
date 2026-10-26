@@ -80,6 +80,7 @@ trade-context-position-size = 仓位规模
 trade-context-holdings = 持仓
 trade-held-badge = 持有中
     .title = 您在此代币上有持仓中的仓位
+trade-setup-required-title = 交易需要钱包和 RPC
 trade-manage-title = 手动管理
 trade-manage-description = 自动交易不会卖出或 DCA 此仓位。取消勾选可让其管理出场。
 

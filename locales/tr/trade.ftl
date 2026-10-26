@@ -63,6 +63,7 @@ trade-context-position-size = Pozisyon boyutu
 trade-context-holdings = Varlıklar
 trade-held-badge = Elde
     .title = Bu tokenda açık bir pozisyonunuz var
+trade-setup-required-title = İşlem yapmak için cüzdan ve RPC gerekir
 trade-manage-title = Manuel yönetim
 trade-manage-description = Auto Trader bu pozisyonu satmaz veya DCA yapmaz. Çıkışları yönetmesine izin vermek için işareti kaldırın.
 

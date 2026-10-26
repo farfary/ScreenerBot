@@ -80,6 +80,7 @@ trade-context-position-size = Tamanho da posição
 trade-context-holdings = Posse
 trade-held-badge = Em posse
     .title = Você tem uma posição aberta neste token
+trade-setup-required-title = Negociar precisa de uma carteira e RPC
 trade-manage-title = Gestão manual
 trade-manage-description = O Trader automático não vai vender nem fazer DCA nesta posição. Desmarque para deixá-lo gerenciar as saídas.
 

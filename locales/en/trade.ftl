@@ -80,6 +80,7 @@ trade-context-position-size = Position Size
 trade-context-holdings = Holdings
 trade-held-badge = Held
     .title = You hold an open position in this token
+trade-setup-required-title = Trading needs a wallet and RPC
 trade-manage-title = Manual management
 trade-manage-description = Auto-trader won't sell or DCA this position. Uncheck to let it manage exits.
 
