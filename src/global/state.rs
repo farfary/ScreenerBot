@@ -32,7 +32,7 @@ pub static EXPLORE_MODE: AtomicBool = AtomicBool::new(false);
 /// Restart is coordinated by the main run loop so services shut down and the
 /// process lock is released before the executable is replaced or relaunched.
 static RESTART_REQUESTED: AtomicBool = AtomicBool::new(false);
-static UPDATE_RESTART_PENDING: AtomicBool = AtomicBool::new(false);
+static RESTART_HOLD_PENDING: AtomicBool = AtomicBool::new(false);
 static RESTART_NOTIFY: LazyLock<Notify> = LazyLock::new(Notify::new);
 
 /// Check if initialization is complete and services can start.
@@ -70,33 +70,34 @@ pub fn is_restart_requested() -> bool {
     RESTART_REQUESTED.load(std::sync::atomic::Ordering::SeqCst)
 }
 
-/// Reserve the process for an update restart before the shutdown signal is
-/// emitted. New trades and tools refuse to start while this is set, closing the
-/// gap between the updater's idle check and the actual restart request.
+/// Reserve the process for a restart before the shutdown signal is emitted: an
+/// update apply or a staged wallet replacement. New trades and tools refuse to
+/// start while this is set, closing the gap between the caller's idle check and
+/// the actual restart request.
 ///
-/// Exclusive, cancellation-safe ownership of the update restart reservation.
+/// Exclusive, cancellation-safe ownership of the restart reservation.
 /// Dropping before `commit` reopens admission; a committed hold remains until
 /// the process exits through the restart it protects.
-pub struct UpdateRestartHold {
+pub struct RestartHold {
     committed: bool,
 }
 
-impl UpdateRestartHold {
+impl RestartHold {
     pub fn commit(mut self) {
         self.committed = true;
     }
 }
 
-impl Drop for UpdateRestartHold {
+impl Drop for RestartHold {
     fn drop(&mut self) {
         if !self.committed {
-            UPDATE_RESTART_PENDING.store(false, std::sync::atomic::Ordering::SeqCst);
+            RESTART_HOLD_PENDING.store(false, std::sync::atomic::Ordering::SeqCst);
         }
     }
 }
 
-pub fn try_hold_activity_for_update_restart() -> Option<UpdateRestartHold> {
-    UPDATE_RESTART_PENDING
+pub fn try_hold_activity_for_restart() -> Option<RestartHold> {
+    RESTART_HOLD_PENDING
         .compare_exchange(
             false,
             true,
@@ -107,11 +108,11 @@ pub fn try_hold_activity_for_update_restart() -> Option<UpdateRestartHold> {
         // `then_some` evaluates eagerly: on a failed claim it would construct
         // and immediately drop a guard, whose Drop would clear the real
         // owner's reservation. Construct the guard only for the winning CAS.
-        .then(|| UpdateRestartHold { committed: false })
+        .then(|| RestartHold { committed: false })
 }
 
-pub fn is_update_restart_pending() -> bool {
-    UPDATE_RESTART_PENDING.load(std::sync::atomic::Ordering::SeqCst)
+pub fn is_restart_hold_pending() -> bool {
+    RESTART_HOLD_PENDING.load(std::sync::atomic::Ordering::SeqCst)
 }
 
 /// Wait for a dashboard-requested process restart.
@@ -253,11 +254,11 @@ impl Drop for ActiveToolGuard {
 }
 
 pub fn begin_tool() -> Option<ActiveToolGuard> {
-    if is_update_restart_pending() {
+    if is_restart_hold_pending() {
         return None;
     }
     tool_started();
-    if is_update_restart_pending() {
+    if is_restart_hold_pending() {
         tool_finished();
         None
     } else {
@@ -298,11 +299,11 @@ impl Drop for ActiveTradeGuard {
 }
 
 pub fn begin_trade() -> Option<ActiveTradeGuard> {
-    if is_update_restart_pending() {
+    if is_restart_hold_pending() {
         return None;
     }
     TRADES_ACTIVE_COUNT.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-    if is_update_restart_pending() {
+    if is_restart_hold_pending() {
         TRADES_ACTIVE_COUNT.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
         None
     } else {
@@ -320,17 +321,17 @@ pub fn active_tools_count() -> u32 {
 }
 
 #[cfg(test)]
-mod update_restart_tests {
+mod restart_hold_tests {
     use super::*;
 
     #[test]
     fn restart_hold_is_exclusive_and_blocks_new_activity_until_released() {
-        assert!(!is_update_restart_pending());
+        assert!(!is_restart_hold_pending());
         assert!(!are_tools_active());
         assert!(!are_trades_active());
 
-        let hold = try_hold_activity_for_update_restart().expect("first hold");
-        assert!(try_hold_activity_for_update_restart().is_none());
+        let hold = try_hold_activity_for_restart().expect("first hold");
+        assert!(try_hold_activity_for_restart().is_none());
         assert!(begin_tool().is_none());
         assert!(begin_trade().is_none());
         assert!(!are_tools_active());

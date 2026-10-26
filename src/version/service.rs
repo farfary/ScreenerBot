@@ -126,8 +126,7 @@ async fn run_cycle(announced: &mut Option<(String, UpdateStage)>, launch_check_p
                 // activity verdict. begin_trade() and begin_tool() refuse new
                 // work under the hold; work that started just before it remains
                 // counted and makes this final verdict defer the restart.
-                let Some(restart_hold) = crate::global::try_hold_activity_for_update_restart()
-                else {
+                let Some(restart_hold) = crate::global::try_hold_activity_for_restart() else {
                     return;
                 };
                 if let ApplyReadiness::Deferred(reason) = super::apply_readiness(update.kind).await
@@ -223,7 +222,7 @@ async fn record_deferred(
 /// activates it, and the desktop shell re-verifies the recorded digest before it
 /// launches. A failure here therefore leaves the current version in charge.
 pub async fn apply_now() -> Result<()> {
-    let Some(restart_hold) = crate::global::try_hold_activity_for_update_restart() else {
+    let Some(restart_hold) = crate::global::try_hold_activity_for_restart() else {
         return Err(Error::RestartInProgress);
     };
     apply_now_while_held().await?;
