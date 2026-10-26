@@ -428,17 +428,34 @@ pub async fn cache_control(request: Request, next: Next) -> Response {
     response
 }
 
+/// Paths the dashboard password does not guard: the login page and its API, static
+/// files, the health check (status, version and instance id only), and the
+/// external-agent bridge.
+fn is_auth_exempt_path(path: &str) -> bool {
+    path == "/login"
+        || path == "/api/health"
+        || path.starts_with("/api/auth/")
+        || path.starts_with("/scripts/")
+        || path.starts_with("/styles/")
+        || path.starts_with("/i18n/")
+        || path.starts_with("/assets/")
+        // The external-agent bridge does not carry a dashboard session; every
+        // handler authenticates a mandatory pairing bearer credential instead,
+        // in every mode. That credential — not a loopback guarantee — is what
+        // protects the surface: with password auth enabled a headless server
+        // can be bound to a non-loopback address, and `security_gate` skips
+        // its Host/Origin check for a headless server with authentication
+        // enabled. Without authentication, and in GUI mode, that local
+        // Host/Origin check applies to this path like any other.
+        || path.starts_with(crate::webserver::routes::agent_bridge::BRIDGE_PREFIX)
+}
+
 /// Authentication gate middleware (headless mode only)
 ///
 /// In headless/CLI mode with auth enabled, validates that all requests
 /// include a valid session cookie. Redirects to /login if not authenticated.
 ///
-/// Allowed without authentication:
-/// - /login - login page
-/// - /api/auth/* - authentication endpoints
-/// - /scripts/* - static JavaScript files
-/// - /styles/* - static CSS files  
-/// - /assets/* - static assets (images, fonts)
+/// Allowed without authentication: [`is_auth_exempt_path`].
 ///
 /// In GUI mode, this middleware does nothing (GUI uses security token instead).
 pub async fn auth_gate(request: Request, next: Next) -> Response {
@@ -458,23 +475,7 @@ pub async fn auth_gate(request: Request, next: Next) -> Response {
 
     let path = request.uri().path();
 
-    // Allow login page and auth API endpoints without authentication
-    if path == "/login"
-        || path.starts_with("/api/auth/")
-        || path.starts_with("/scripts/")
-        || path.starts_with("/styles/")
-        || path.starts_with("/i18n/")
-        || path.starts_with("/assets/")
-        // The external-agent bridge does not carry a dashboard session; every
-        // handler authenticates a mandatory pairing bearer credential instead,
-        // in every mode. That credential — not a loopback guarantee — is what
-        // protects the surface: with password auth enabled a headless server
-        // can be bound to a non-loopback address, and `security_gate` skips
-        // its Host/Origin check for a headless server with authentication
-        // enabled. Without authentication, and in GUI mode, that local
-        // Host/Origin check applies to this path like any other.
-        || path.starts_with(crate::webserver::routes::agent_bridge::BRIDGE_PREFIX)
-    {
+    if is_auth_exempt_path(path) {
         return next.run(request).await;
     }
 
@@ -584,6 +585,28 @@ mod tests {
         assert!(!requires_full_setup(true, false));
         assert!(!requires_full_setup(false, true));
         assert!(!requires_full_setup(true, true));
+    }
+
+    #[test]
+    fn the_password_gate_spares_only_public_routes() {
+        for path in [
+            "/login",
+            "/api/health",
+            "/api/auth/login",
+            "/scripts/app.js",
+            "/i18n/en/catalog.js",
+        ] {
+            assert!(is_auth_exempt_path(path), "{path}");
+        }
+        for path in [
+            "/api/status",
+            "/api/health/other",
+            "/api/positions",
+            "/api/wallet/export",
+            "/",
+        ] {
+            assert!(!is_auth_exempt_path(path), "{path}");
+        }
     }
 
     #[test]
