@@ -145,8 +145,10 @@ async fn find_available_port() -> Result<u16> {
 pub async fn start_server(port_override: Option<u16>, host_override: Option<String>) -> Result<()> {
     let is_gui = global::is_gui_mode();
 
-    // Get config values for headless mode (use defaults if config not loaded yet)
-    let (config_port, config_host, auth_enabled) = if crate::global::is_initialization_complete() {
+    // The config is loaded at boot whether or not setup has completed, so its webserver
+    // section applies to Explore Mode and the setup screen too. Only a missing config
+    // file falls back to the defaults.
+    let config_bind = crate::paths::get_config_path().exists().then(|| {
         with_config(|cfg| {
             (
                 cfg.webserver.port,
@@ -154,10 +156,10 @@ pub async fn start_server(port_override: Option<u16>, host_override: Option<Stri
                 cfg.webserver.auth_enabled,
             )
         })
-    } else {
-        // Use defaults during initialization (will fall back to defaults below anyway)
-        (0, String::new(), false)
-    };
+    });
+    let auth_enabled = config_bind
+        .as_ref()
+        .is_some_and(|(_, _, auth_enabled)| *auth_enabled);
 
     // Determine port and host to use
     let (port, host) = if is_gui {
@@ -184,22 +186,16 @@ pub async fn start_server(port_override: Option<u16>, host_override: Option<Stri
 
         (dynamic_port, DEFAULT_HOST.to_string())
     } else {
-        // CLI/Headless mode: implement precedence logic (CLI > config > default)
-        let (port, port_source) = if let Some(cli_port) = port_override {
-            (cli_port, "CLI")
-        } else if config_port > 0 {
-            (config_port, "config")
-        } else {
-            (DEFAULT_PORT, "default")
-        };
-
-        let (host, host_source) = if let Some(cli_host) = host_override {
-            (cli_host, "CLI")
-        } else if !config_host.is_empty() {
-            (config_host, "config")
-        } else {
-            (DEFAULT_HOST.to_string(), "default")
-        };
+        let HeadlessBind {
+            port,
+            port_source,
+            host,
+            host_source,
+        } = resolve_headless_bind(
+            port_override,
+            host_override,
+            config_bind.map(|(port, host, _)| (port, host)),
+        );
 
         validate_headless_bind(&host, auth_enabled)?;
 
@@ -324,6 +320,46 @@ pub async fn start_server(port_override: Option<u16>, host_override: Option<Stri
     cleanup_agent_runtime_file();
 
     Ok(())
+}
+
+/// The headless bind address and the source of each half.
+#[derive(Debug, PartialEq, Eq)]
+struct HeadlessBind {
+    port: u16,
+    port_source: &'static str,
+    host: String,
+    host_source: &'static str,
+}
+
+/// Headless bind precedence: the command line, then the config file's webserver
+/// section when a config file exists (`config`), then the defaults. A zero port or
+/// an empty host in the config counts as unset.
+fn resolve_headless_bind(
+    port_override: Option<u16>,
+    host_override: Option<String>,
+    config: Option<(u16, String)>,
+) -> HeadlessBind {
+    let (config_port, config_host) = config.unwrap_or_default();
+    let (port, port_source) = if let Some(cli_port) = port_override {
+        (cli_port, "CLI")
+    } else if config_port > 0 {
+        (config_port, "config")
+    } else {
+        (DEFAULT_PORT, "default")
+    };
+    let (host, host_source) = if let Some(cli_host) = host_override {
+        (cli_host, "CLI")
+    } else if !config_host.is_empty() {
+        (config_host, "config")
+    } else {
+        (DEFAULT_HOST.to_string(), "default")
+    };
+    HeadlessBind {
+        port,
+        port_source,
+        host,
+        host_source,
+    }
 }
 
 fn validate_headless_bind(host: &str, auth_enabled: bool) -> Result<()> {
@@ -650,7 +686,38 @@ fn cleanup_agent_runtime_file() {
 
 #[cfg(test)]
 mod tests {
-    use super::validate_headless_bind;
+    use super::{resolve_headless_bind, validate_headless_bind, DEFAULT_HOST, DEFAULT_PORT};
+
+    #[test]
+    fn an_existing_config_file_sets_the_headless_bind() {
+        let bind = resolve_headless_bind(None, None, Some((9090, "0.0.0.0".to_string())));
+        assert_eq!((bind.port, bind.port_source), (9090, "config"));
+        assert_eq!(
+            (bind.host.as_str(), bind.host_source),
+            ("0.0.0.0", "config")
+        );
+    }
+
+    #[test]
+    fn without_a_config_file_the_headless_bind_uses_the_defaults() {
+        let bind = resolve_headless_bind(None, None, None);
+        assert_eq!((bind.port, bind.port_source), (DEFAULT_PORT, "default"));
+        assert_eq!(
+            (bind.host.as_str(), bind.host_source),
+            (DEFAULT_HOST, "default")
+        );
+    }
+
+    #[test]
+    fn the_command_line_overrides_the_config_file() {
+        let bind = resolve_headless_bind(
+            Some(7070),
+            Some("127.0.0.1".to_string()),
+            Some((9090, "0.0.0.0".to_string())),
+        );
+        assert_eq!((bind.port, bind.port_source), (7070, "CLI"));
+        assert_eq!((bind.host.as_str(), bind.host_source), ("127.0.0.1", "CLI"));
+    }
 
     #[test]
     fn loopback_headless_bind_does_not_require_password_auth() {
