@@ -9,12 +9,17 @@ services-health-events-db-uninitialized = Events database not initialized
 services-health-sol-price-not-running = SOL price service is not running
 services-health-sol-price-stale = SOL price data is stale ({ $seconds }s old)
 services-health-sol-price-no-data = No SOL price data available yet
+# $seconds is the first-fetch window after the service starts.
+services-health-sol-price-first-fetch-overdue = No SOL price fetch completed within { $seconds }s of start
 services-health-telegram-discovery = Discovery mode
 services-health-telegram-disconnected = Disconnected
 services-health-wallet-watch-polling-only = Detection running on polling alone
 services-health-assistant-tasks-disabled = Disabled in config
 # $endpoints is the debug-formatted list of unhealthy critical endpoints.
 services-health-connectivity-critical-unhealthy = Critical endpoints unhealthy: { $endpoints }
+# $endpoints is the debug-formatted list of critical endpoints never checked; $seconds is the
+# first-probe window after registration.
+services-health-connectivity-critical-unchecked = Critical endpoints not checked within { $seconds }s of start: { $endpoints }
 # $seconds is the age of the filtering snapshot.
 services-health-filtering-snapshot-stale = Filtering snapshot is { $seconds }s old
 # $reason is the technical cause chain of the failure and is not translated.

@@ -7,9 +7,7 @@ use axum::response::Json;
 
 use crate::chains::ChainScope;
 use crate::config::with_config;
-use crate::connectivity::state::{
-    get_confirmed_unhealthy_critical_endpoints, get_unhealthy_critical_endpoints,
-};
+use crate::connectivity::state::get_critical_endpoint_status;
 use crate::filtering::{try_fetch_stats, SnapshotState};
 use crate::global::are_core_services_ready;
 use crate::rpc::{get_global_rpc_stats, RpcStats};
@@ -183,8 +181,7 @@ async fn calculate_system_health() -> SystemHeaderInfo {
     // In Explore Mode the wallet/RPC services are intentionally not running, so
     // "core services" being incomplete is expected and is neither an issue nor pending.
     let explore = crate::global::is_explore_mode();
-    let unprobed_or_down = get_unhealthy_critical_endpoints().await;
-    let confirmed_down = get_confirmed_unhealthy_critical_endpoints().await;
+    let endpoints = get_critical_endpoint_status().await;
 
     let mut services = Vec::new();
     if let Some(manager_arc) = get_service_manager().await {
@@ -202,8 +199,8 @@ async fn calculate_system_health() -> SystemHeaderInfo {
 
     system_health(SystemHealthFacts {
         core_services_pending: !explore && !are_core_services_ready(),
-        critical_endpoints_unprobed: unprobed_or_down.len() > confirmed_down.len(),
-        critical_endpoints_down: !confirmed_down.is_empty(),
+        critical_endpoints_unprobed: endpoints.awaiting_first_probe,
+        critical_endpoints_down: endpoints.is_faulted(),
         services,
     })
 }
@@ -212,16 +209,17 @@ async fn calculate_system_health() -> SystemHeaderInfo {
 struct SystemHealthFacts {
     /// Core services have not all reported ready (never set in Explore Mode).
     core_services_pending: bool,
-    /// A critical endpoint has not been probed yet.
+    /// A critical endpoint is still inside its first-probe window.
     critical_endpoints_unprobed: bool,
-    /// A critical endpoint is confirmed down.
+    /// A critical endpoint is confirmed down, or was never checked within its first-probe
+    /// window.
     critical_endpoints_down: bool,
     services: Vec<(String, ServiceHealth)>,
 }
 
-/// The header's system status. Only confirmed faults are issues: a confirmed-down
-/// critical endpoint, or an unhealthy or degraded service. Anything that has not
-/// reported yet is `starting`, a neutral state; a disabled service is intentionally off.
+/// The header's system status. Only confirmed faults are issues: a faulted critical
+/// endpoint, or an unhealthy or degraded service. Anything that has not reported yet is
+/// `starting`, a neutral state; a disabled service is intentionally off.
 ///
 /// A critical endpoint fault is one issue. The connectivity service derives its own health
 /// from the same endpoints, so its entry is not counted beside "Critical Endpoints".

@@ -8,6 +8,7 @@ use chrono::Utc;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, LazyLock};
+use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
 
 /// Lock-free mirror of "is the `internet` endpoint confirmed offline?", updated
@@ -27,6 +28,27 @@ pub struct ConnectivityState {
     failures: HashMap<&'static str, u32>,
     /// Map of endpoint name -> consecutive success count
     successes: HashMap<&'static str, u32>,
+    /// Map of endpoint name -> when it was registered, the start of its first-probe window
+    registered_at: HashMap<&'static str, Instant>,
+}
+
+/// The critical endpoints, sorted by name within each group.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct CriticalEndpointStatus {
+    /// Confirmed down: consecutive failures crossed the threshold.
+    pub down: Vec<&'static str>,
+    /// Still unknown after the first-probe window: no probe has settled their state since
+    /// registration, which is a fault of its own and never a startup state.
+    pub unchecked: Vec<&'static str>,
+    /// Some critical endpoint is still unknown inside its first-probe window.
+    pub awaiting_first_probe: bool,
+}
+
+impl CriticalEndpointStatus {
+    /// Whether any critical endpoint is a fault: confirmed down or never checked.
+    pub fn is_faulted(&self) -> bool {
+        !self.down.is_empty() || !self.unchecked.is_empty()
+    }
 }
 
 impl ConnectivityState {
@@ -37,6 +59,7 @@ impl ConnectivityState {
             fallback: HashMap::new(),
             failures: HashMap::new(),
             successes: HashMap::new(),
+            registered_at: HashMap::new(),
         }
     }
 
@@ -53,6 +76,7 @@ impl ConnectivityState {
         self.fallback.clear();
         self.failures.clear();
         self.successes.clear();
+        self.registered_at.clear();
         INTERNET_OFFLINE.store(false, Ordering::Relaxed);
     }
 
@@ -68,6 +92,7 @@ impl ConnectivityState {
         self.fallback.insert(name, fallback);
         self.failures.insert(name, 0);
         self.successes.insert(name, 0);
+        self.registered_at.insert(name, Instant::now());
     }
 
     /// Ensure endpoint metadata exists without resetting current health
@@ -78,6 +103,7 @@ impl ConnectivityState {
         fallback: Option<FallbackStrategy>,
     ) {
         self.health.entry(name).or_insert(EndpointHealth::Unknown);
+        self.registered_at.entry(name).or_insert_with(Instant::now);
         self.failures.entry(name).or_default();
         self.successes.entry(name).or_default();
 
@@ -270,6 +296,50 @@ impl ConnectivityState {
         }
         unhealthy
     }
+
+    /// The critical endpoints as faults and pending probes at `now`. An endpoint still
+    /// `Unknown` is pending only within `first_probe_window` of its registration; after
+    /// that the absence of any settled probe is reported as `unchecked`, so a probe loop
+    /// that never ran or never finishes cannot read as "starting" forever.
+    pub fn critical_endpoint_status(
+        &self,
+        first_probe_window: Duration,
+        now: Instant,
+    ) -> CriticalEndpointStatus {
+        let mut status = CriticalEndpointStatus::default();
+        for (name, criticality) in &self.criticality {
+            if *criticality != EndpointCriticality::Critical {
+                continue;
+            }
+            match self.health.get(name) {
+                Some(EndpointHealth::Unhealthy { .. }) => status.down.push(*name),
+                Some(EndpointHealth::Unknown) | None => {
+                    let in_window = self.registered_at.get(name).is_some_and(|registered| {
+                        now.saturating_duration_since(*registered) < first_probe_window
+                    });
+                    if in_window {
+                        status.awaiting_first_probe = true;
+                    } else {
+                        status.unchecked.push(*name);
+                    }
+                }
+                Some(_) => {}
+            }
+        }
+        status.down.sort_unstable();
+        status.unchecked.sort_unstable();
+        status
+    }
+}
+
+/// How long a registered endpoint may stay unprobed before that is a fault: one steady-state
+/// check interval. Every endpoint's first probe is due at once, and the checker runs at the
+/// shorter degraded cadence while any critical endpoint is unknown, so a whole interval
+/// without a settled probe means the probes are not landing.
+pub fn first_probe_window() -> Duration {
+    crate::config::with_config(|cfg| {
+        Duration::from_secs(cfg.connectivity.check_interval_secs.max(1))
+    })
 }
 
 /// Global connectivity state instance
@@ -394,9 +464,70 @@ pub async fn get_confirmed_unhealthy_critical_endpoints() -> Vec<&'static str> {
     state.get_confirmed_unhealthy_critical_endpoints()
 }
 
+/// The critical endpoints as faults and pending probes, under [`first_probe_window`] — see
+/// [`ConnectivityState::critical_endpoint_status`].
+pub async fn get_critical_endpoint_status() -> CriticalEndpointStatus {
+    let window = first_probe_window();
+    let state_arc = get_state();
+    let state = state_arc.read().await;
+    state.critical_endpoint_status(window, Instant::now())
+}
+
 /// Get all endpoint health statuses
 pub async fn get_all_health() -> HashMap<&'static str, EndpointHealth> {
     let state_arc = get_state();
     let state = state_arc.read().await;
     state.get_all_health()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const WINDOW: Duration = Duration::from_secs(30);
+
+    fn state_with(names: &[(&'static str, EndpointCriticality)]) -> ConnectivityState {
+        let mut state = ConnectivityState::new();
+        for (name, criticality) in names {
+            state.register_endpoint(name, *criticality, None);
+        }
+        state
+    }
+
+    #[test]
+    fn an_unprobed_critical_endpoint_is_pending_only_inside_its_window() {
+        let state = state_with(&[
+            ("rpc", EndpointCriticality::Critical),
+            ("dexscreener", EndpointCriticality::Important),
+        ]);
+        let registered = state.registered_at["rpc"];
+
+        let inside = state.critical_endpoint_status(WINDOW, registered + WINDOW / 2);
+        assert!(inside.awaiting_first_probe);
+        assert!(!inside.is_faulted());
+
+        let at_bound = state.critical_endpoint_status(WINDOW, registered + WINDOW);
+        assert!(!at_bound.awaiting_first_probe);
+        assert_eq!(at_bound.unchecked, ["rpc"], "only critical endpoints count");
+        assert!(at_bound.down.is_empty());
+        assert!(at_bound.is_faulted());
+    }
+
+    #[test]
+    fn a_settled_probe_ends_the_window_either_way() {
+        let mut state = state_with(&[
+            ("rpc", EndpointCriticality::Critical),
+            ("internet", EndpointCriticality::Critical),
+        ]);
+        let late = state.registered_at["rpc"] + WINDOW * 2;
+        state.update_health("rpc", true, 10, None, 3, 1);
+        for _ in 0..3 {
+            state.update_health("internet", false, 0, None, 3, 1);
+        }
+
+        let status = state.critical_endpoint_status(WINDOW, late);
+        assert_eq!(status.down, ["internet"]);
+        assert!(status.unchecked.is_empty());
+        assert!(!status.awaiting_first_probe);
+    }
 }

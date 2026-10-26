@@ -106,6 +106,13 @@ mod tests {
                 "No SOL price data available yet",
             ),
             (
+                with(
+                    ids::SERVICES_HEALTH_SOL_PRICE_FIRST_FETCH_OVERDUE,
+                    vec![arg("seconds", "30")],
+                ),
+                "No SOL price fetch completed within 30s of start",
+            ),
+            (
                 with(ids::SERVICES_HEALTH_TELEGRAM_DISCOVERY, vec![]),
                 "Discovery mode",
             ),
@@ -134,6 +141,13 @@ mod tests {
                     vec![arg("endpoints", "[\"internet\", \"rpc\"]")],
                 ),
                 "Critical endpoints unhealthy: [\"internet\", \"rpc\"]",
+            ),
+            (
+                with(
+                    ids::SERVICES_HEALTH_CONNECTIVITY_CRITICAL_UNCHECKED,
+                    vec![arg("endpoints", "[\"rpc\"]"), arg("seconds", "30")],
+                ),
+                "Critical endpoints not checked within 30s of start: [\"rpc\"]",
             ),
             (
                 with(

@@ -9,12 +9,14 @@ services-health-events-db-uninitialized = قاعدة بيانات الأحداث
 services-health-sol-price-not-running = خدمة سعر SOL لا تعمل
 services-health-sol-price-stale = بيانات سعر SOL قديمة (عمرها { $seconds }ث)
 services-health-sol-price-no-data = لا تتوفر بيانات سعر SOL بعد
+services-health-sol-price-first-fetch-overdue = لم يكتمل أي جلب لسعر SOL خلال { $seconds } ث من البدء
 services-health-telegram-discovery = وضع الاكتشاف
 services-health-telegram-disconnected = غير متصل
 services-health-wallet-watch-polling-only = الرصد يعمل بالاستعلام الدوري فقط
 services-health-assistant-tasks-disabled = معطّلة في الإعدادات
 # $endpoints is the debug-formatted list of unhealthy critical endpoints.
 services-health-connectivity-critical-unhealthy = نقاط الاتصال الحرجة غير سليمة: { $endpoints }
+services-health-connectivity-critical-unchecked = نقاط اتصال حرجة لم يتم فحصها خلال { $seconds } ث من البدء: { $endpoints }
 # $seconds is the age of the filtering snapshot.
 services-health-filtering-snapshot-stale = عمر لقطة الترشيح { $seconds }ث
 services-health-start-failed = تعذّر التشغيل: { $reason }

@@ -8,6 +8,7 @@ use crate::native_price::NativePriceData;
 use crate::services::{Service, ServiceHealth};
 use async_trait::async_trait;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::Notify;
 use tokio::task::JoinHandle;
 
@@ -71,17 +72,35 @@ impl Service for SolPriceService {
             ));
         }
 
-        price_health(crate::native_price::get_native_price_info())
+        price_health(
+            crate::native_price::get_native_price_info(),
+            crate::native_price::native_price_service_uptime(),
+            crate::native_price::first_fetch_window(),
+        )
     }
 }
 
 /// Health of the price cache. Until the first fetch has either stored a price or failed
-/// the service is starting: the empty cache it begins with is not a stale price, and
-/// counting it as a fault showed a services issue on every start.
-fn price_health(info: Option<NativePriceData>) -> ServiceHealth {
+/// the service is starting, for at most `window` after start: the empty cache it begins
+/// with is not a stale price, and counting it as a fault showed a services issue on every
+/// start. Past the window, a fetch that never settled is a fault with that cause.
+fn price_health(
+    info: Option<NativePriceData>,
+    uptime: Option<Duration>,
+    window: Duration,
+) -> ServiceHealth {
     match info {
         Some(info) if info.is_fresh() => ServiceHealth::Healthy,
-        Some(info) if info.fetch_count == 0 && info.error_count == 0 => ServiceHealth::Starting,
+        Some(info) if info.fetch_count == 0 && info.error_count == 0 => {
+            if uptime.is_some_and(|uptime| uptime < window) {
+                ServiceHealth::Starting
+            } else {
+                ServiceHealth::Degraded(
+                    UiText::new(ids::SERVICES_HEALTH_SOL_PRICE_FIRST_FETCH_OVERDUE)
+                        .arg("seconds", UiArg::Text(window.as_secs().to_string())),
+                )
+            }
+        }
         Some(info) if info.fetch_count > 0 => ServiceHealth::Degraded(
             UiText::new(ids::SERVICES_HEALTH_SOL_PRICE_STALE)
                 .arg("seconds", UiArg::Text(info.age_seconds().to_string())),
@@ -104,32 +123,54 @@ mod tests {
         }
     }
 
+    const WINDOW: Duration = Duration::from_secs(30);
+    const INSIDE: Option<Duration> = Some(Duration::from_secs(29));
+
     #[test]
-    fn an_unfetched_cache_is_starting_not_stale() {
+    fn an_unfetched_cache_is_starting_only_inside_the_first_fetch_window() {
         assert!(matches!(
-            price_health(Some(cache(0, 0, false))),
+            price_health(Some(cache(0, 0, false)), INSIDE, WINDOW),
             ServiceHealth::Starting
         ));
+        for uptime in [Some(WINDOW), Some(WINDOW * 4), None] {
+            let ServiceHealth::Degraded(overdue) =
+                price_health(Some(cache(0, 0, false)), uptime, WINDOW)
+            else {
+                panic!("a first fetch still unsettled after {uptime:?} is a fault");
+            };
+            assert_eq!(
+                overdue.id,
+                ids::SERVICES_HEALTH_SOL_PRICE_FIRST_FETCH_OVERDUE.as_str()
+            );
+            assert!(overdue.render_source_plain().contains("30"));
+        }
     }
 
     #[test]
     fn a_fresh_price_is_healthy() {
         assert!(matches!(
-            price_health(Some(cache(1, 0, true))),
+            price_health(Some(cache(1, 0, true)), INSIDE, WINDOW),
             ServiceHealth::Healthy
         ));
     }
 
     #[test]
     fn a_failed_first_fetch_has_no_data_and_a_lost_price_is_stale() {
-        let ServiceHealth::Degraded(no_data) = price_health(Some(cache(0, 1, false))) else {
+        let ServiceHealth::Degraded(no_data) =
+            price_health(Some(cache(0, 1, false)), INSIDE, WINDOW)
+        else {
             panic!("a first fetch that failed is degraded");
         };
         assert_eq!(no_data.id, ids::SERVICES_HEALTH_SOL_PRICE_NO_DATA.as_str());
-        let ServiceHealth::Degraded(stale) = price_health(Some(cache(3, 10, false))) else {
+        let ServiceHealth::Degraded(stale) =
+            price_health(Some(cache(3, 10, false)), INSIDE, WINDOW)
+        else {
             panic!("an invalidated price is degraded");
         };
         assert_eq!(stale.id, ids::SERVICES_HEALTH_SOL_PRICE_STALE.as_str());
-        assert!(matches!(price_health(None), ServiceHealth::Degraded(_)));
+        assert!(matches!(
+            price_health(None, INSIDE, WINDOW),
+            ServiceHealth::Degraded(_)
+        ));
     }
 }

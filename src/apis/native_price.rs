@@ -126,6 +126,9 @@ static NATIVE_PRICE_CACHE: LazyLock<Arc<StdRwLock<NativePriceData>>> =
 static SERVICE_RUNNING: LazyLock<Arc<std::sync::atomic::AtomicBool>> =
     LazyLock::new(|| Arc::new(std::sync::atomic::AtomicBool::new(false)));
 
+/// When the service last started; the start of its first-fetch window.
+static SERVICE_STARTED_AT: StdRwLock<Option<Instant>> = StdRwLock::new(None);
+
 /// The Jupiter last-resort fallback, registered by the composition root.
 /// Unset (pre-boot / library callers) reads as a disabled provider — the
 /// same typed error the disabled client path produces today.
@@ -213,6 +216,22 @@ pub fn is_native_price_service_running() -> bool {
     SERVICE_RUNNING.load(std::sync::atomic::Ordering::SeqCst)
 }
 
+/// Time since the service last started, or `None` if it never started in this process.
+pub fn native_price_service_uptime() -> Option<Duration> {
+    SERVICE_STARTED_AT
+        .read()
+        .ok()
+        .and_then(|started| started.map(|at| at.elapsed()))
+}
+
+/// How long after start the first fetch may stay unsettled: one refresh interval. The first
+/// fetch runs at once and each source request is bounded by `REQUEST_TIMEOUT_SECS`, so a
+/// whole interval without a stored price or a recorded failure means fetching is not
+/// happening.
+pub fn first_fetch_window() -> Duration {
+    Duration::from_secs(PRICE_REFRESH_INTERVAL_SECS)
+}
+
 /// Manually fetch and cache SOL price (useful for debug tools)
 /// Returns the fetched price on success
 pub async fn fetch_and_cache_native_price() -> Result<f64, Error> {
@@ -254,6 +273,9 @@ pub async fn start_native_price_service(
 
     // Mark service as running
     SERVICE_RUNNING.store(true, std::sync::atomic::Ordering::SeqCst);
+    if let Ok(mut started) = SERVICE_STARTED_AT.write() {
+        *started = Some(Instant::now());
+    }
 
     // Spawn the background task and return handle
     let handle = tokio::spawn(monitor.instrument(async move {

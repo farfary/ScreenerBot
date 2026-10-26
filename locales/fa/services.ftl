@@ -9,12 +9,14 @@ services-health-events-db-uninitialized = پایگاه‌داده رویداده
 services-health-sol-price-not-running = سرویس قیمت SOL در حال اجرا نیست
 services-health-sol-price-stale = داده قیمت SOL کهنه است ({ $seconds } ثانیه قدمت)
 services-health-sol-price-no-data = هنوز داده قیمت SOL موجود نیست
+services-health-sol-price-first-fetch-overdue = هیچ دریافت قیمت SOL تا { $seconds } ثانیه پس از شروع کامل نشد
 services-health-telegram-discovery = حالت کشف
 services-health-telegram-disconnected = قطع‌شده
 services-health-wallet-watch-polling-only = تشخیص فقط با بررسی دوره‌ای در حال اجراست
 services-health-assistant-tasks-disabled = در پیکربندی غیرفعال شده است
 # $endpoints is the debug-formatted list of unhealthy critical endpoints.
 services-health-connectivity-critical-unhealthy = اندپوینت‌های حیاتی ناسالم هستند: { $endpoints }
+services-health-connectivity-critical-unchecked = اندپوینت‌های حیاتی که تا { $seconds } ثانیه پس از شروع بررسی نشدند: { $endpoints }
 # $seconds is the age of the filtering snapshot.
 services-health-filtering-snapshot-stale = اسنپ‌شات فیلترینگ { $seconds } ثانیه قدمت دارد
 services-health-start-failed = راه‌اندازی ناموفق بود: { $reason }
