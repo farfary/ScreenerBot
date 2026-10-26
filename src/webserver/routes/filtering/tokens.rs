@@ -9,6 +9,7 @@ use axum::{
     response::{IntoResponse as _, Response},
 };
 use chrono::{DateTime, Utc};
+use std::collections::HashMap;
 
 use crate::{
     chains::ChainScope,
@@ -18,6 +19,7 @@ use crate::{
     tokens::{get_rejected_tokens_async, get_token_info_batch_async},
     webserver::{
         api_error::{ApiError, ApiErrorCode},
+        promo,
         utils::success_response,
     },
 };
@@ -29,6 +31,19 @@ use super::types::{RejectedTokenEntry, RejectedTokensQuery};
 pub async fn get_rejected_tokens_handler(Query(params): Query<RejectedTokensQuery>) -> Response {
     let limit = params.limit.unwrap_or(50).min(100); // Max 100 per page
     let offset = params.offset.unwrap_or_default();
+
+    if promo::are_promo_fixtures_enabled() {
+        let tokens = promo::get_promo_rejected_tokens(
+            params.reason.as_deref(),
+            params.source.as_deref(),
+            params.search.as_deref(),
+            limit,
+            offset,
+        );
+        let mints: Vec<String> = tokens.iter().map(|(mint, _, _, _)| mint.clone()).collect();
+        let token_info = promo::get_promo_token_info(&mints);
+        return success_response(rejected_entries(tokens, &token_info));
+    }
 
     // The rejection tables are per chain; a route without a chain reads the only one.
     let rejected = match ChainScope::All.sole_chain() {
@@ -54,28 +69,7 @@ pub async fn get_rejected_tokens_handler(Query(params): Query<RejectedTokensQuer
                 .await
                 .unwrap_or_default();
 
-            let entries: Vec<RejectedTokenEntry> = tokens
-                .into_iter()
-                .map(|(mint, reason, source, ts)| {
-                    let (symbol, name, image_url) =
-                        token_info.get(&mint).cloned().unwrap_or((None, None, None));
-
-                    RejectedTokenEntry {
-                        mint,
-                        symbol,
-                        name,
-                        image_url,
-                        reason_text: rejection_text(&reason),
-                        reason,
-                        source,
-                        rejected_at: DateTime::from_timestamp(ts, 0)
-                            .unwrap_or_else(|| Utc::now())
-                            .to_rfc3339(),
-                    }
-                })
-                .collect();
-
-            success_response(entries)
+            success_response(rejected_entries(tokens, &token_info))
         }
         Err(err) => {
             logger::warning(
@@ -92,6 +86,34 @@ pub async fn get_rejected_tokens_handler(Query(params): Query<RejectedTokensQuer
     }
 }
 
+/// The (mint, reason, source, Unix time) rejection rows with each token's symbol, name and
+/// logo from `token_info`.
+fn rejected_entries(
+    tokens: Vec<(String, String, String, i64)>,
+    token_info: &HashMap<String, (Option<String>, Option<String>, Option<String>)>,
+) -> Vec<RejectedTokenEntry> {
+    tokens
+        .into_iter()
+        .map(|(mint, reason, source, ts)| {
+            let (symbol, name, image_url) =
+                token_info.get(&mint).cloned().unwrap_or((None, None, None));
+
+            RejectedTokenEntry {
+                mint,
+                symbol,
+                name,
+                image_url,
+                reason_text: rejection_text(&reason),
+                reason,
+                source,
+                rejected_at: DateTime::from_timestamp(ts, 0)
+                    .unwrap_or_else(|| Utc::now())
+                    .to_rfc3339(),
+            }
+        })
+        .collect()
+}
+
 /// GET /api/filtering/export-rejected-tokens
 /// Export rejected tokens to CSV
 pub async fn export_rejected_tokens(Query(params): Query<RejectedTokensQuery>) -> Response {
@@ -99,19 +121,29 @@ pub async fn export_rejected_tokens(Query(params): Query<RejectedTokensQuery>) -
     let limit = 100000;
     let offset = 0;
 
-    let rejected = match ChainScope::All.sole_chain() {
-        Ok(chain) => {
-            get_rejected_tokens_async(
-                chain,
-                params.reason,
-                params.source,
-                params.search,
-                limit,
-                offset,
-            )
-            .await
+    let rejected = if promo::are_promo_fixtures_enabled() {
+        Ok(promo::get_promo_rejected_tokens(
+            params.reason.as_deref(),
+            params.source.as_deref(),
+            params.search.as_deref(),
+            limit,
+            offset,
+        ))
+    } else {
+        match ChainScope::All.sole_chain() {
+            Ok(chain) => {
+                get_rejected_tokens_async(
+                    chain,
+                    params.reason,
+                    params.source,
+                    params.search,
+                    limit,
+                    offset,
+                )
+                .await
+            }
+            Err(err) => Err(err.into()),
         }
-        Err(err) => Err(err.into()),
     };
     match rejected {
         Ok(tokens) => {

@@ -9,6 +9,7 @@
 //! serves both directions: a variant produces its code, and a stored code is
 //! parsed back to its variant for display.
 
+use super::FilterSource;
 use crate::i18n::{ids, MessageId, UiArg, UiText};
 
 macro_rules! rejection_table {
@@ -215,6 +216,15 @@ pub fn rejection_text(code: &str) -> UiText {
             }
         },
     }
+}
+
+/// Source of a stored rejection code: the source its variant reports, the LLM stage for the LLM code, none for a
+/// legacy or unknown code.
+pub fn rejection_source(code: &str) -> Option<FilterSource> {
+    if code == LLM_CODE {
+        return Some(FilterSource::LlmAnalysis);
+    }
+    FilterRejectionReason::from_code(code).map(|reason| reason.source())
 }
 
 #[cfg(test)]

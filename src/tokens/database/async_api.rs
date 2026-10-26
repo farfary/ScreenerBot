@@ -12,7 +12,9 @@ use crate::tokens::Error;
 
 use crate::chains::{ChainId, ChainScope};
 
-use super::{require_database, FilterBuildWrite, FilterOutcome, TokenBlacklistRecord};
+use super::{
+    require_database, FilterBuildWrite, FilterOutcome, RecentRejectionRow, TokenBlacklistRecord,
+};
 
 /// Fetch token metadata asynchronously via spawn_blocking
 pub async fn get_token_async(chain: ChainId, mint: &str) -> TokenResult<Option<TokenMetadata>> {
@@ -294,17 +296,7 @@ pub async fn get_rejection_stats_with_time_filter_async(
 pub async fn get_recent_rejections_async(
     chain: ChainId,
     limit: usize,
-) -> TokenResult<
-    Vec<(
-        String,
-        String,
-        String,
-        i64,
-        Option<String>,
-        Option<String>,
-        Option<String>,
-    )>,
-> {
+) -> TokenResult<Vec<RecentRejectionRow>> {
     let db = require_database(chain)?;
 
     tokio::task::spawn_blocking(move || db.get_recent_rejections(limit))

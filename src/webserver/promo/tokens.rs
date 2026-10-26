@@ -26,8 +26,10 @@
 use std::collections::HashMap;
 use std::sync::LazyLock;
 
-use chrono::{DateTime, Duration, Utc};
+use chrono::{Duration, Utc};
 
+use crate::config::{try_with_config, FilteringConfig};
+use crate::filtering::sources::{rejection_source, FilterSource};
 use crate::filtering::{
     BlacklistReasonInfo, FilteringQuery, FilteringView, SortDirection, TokenSortKey,
 };
@@ -61,24 +63,127 @@ const PROMO_FAVORITE_SYMBOLS: &[&str] = &["WIF", "Fartcoin", "GOAT", "MOODENG", 
 /// columns render. The same constant the rest of the promo prices against.
 const PROMO_SOL_USD: f64 = super::PROMO_SOL_PRICE_FALLBACK;
 
-/// Rejection reasons, as the filtering pipeline codes them.
+/// Rejection reasons of priced tokens, as the filtering pipeline codes them, each
+/// with the weight it is drawn by.
 ///
 /// These are the real codes — a promo screenshot of the Rejected view is showing
 /// the product's own vocabulary, and inventing reason strings for it would teach a
-/// reader something untrue about how filtering explains itself.
-const PROMO_REJECTIONS: &[&str] = &[
-    "dex_liq_low",
-    "dex_mcap_low",
-    "dex_vol_low",
-    "token_too_new",
-    "rug_score",
-    "rug_min_holders",
-    "rug_top_holder",
-    "rug_lp_lock_low",
-    "rug_mint_authority",
-    "rug_transfer_fee_present",
-    "dex_data_missing",
+/// reader something untrue about how filtering explains itself. The weights give
+/// the breakdowns the shape a live corpus has: market activity and liquidity reject
+/// most priced tokens, safety checks a smaller share, and every source the
+/// Filtering page has a settings tab for raises at least one reason. Each token's
+/// source is the one the pipeline assigns its code (`rejection_source`). A code is
+/// drawn only while the session's filtering config runs its rule (`rule_enabled`),
+/// so no tab counts rejections from a rule its settings show switched off.
+const PROMO_REJECTIONS: &[(&str, usize)] = &[
+    ("dex_txn_5m", 420),
+    ("dex_liq_low", 300),
+    ("dex_empty_logo", 170),
+    ("dex_mcap_low", 150),
+    ("token_too_new", 120),
+    ("dex_vol_low", 110),
+    ("dex_txn_1h", 90),
+    ("gecko_vol5m_low", 70),
+    ("rug_score", 70),
+    ("rug_top_holder", 60),
+    ("onchain_numeric_symbol", 55),
+    ("gecko_liq_low", 50),
+    ("rug_lp_lock_low", 50),
+    ("rug_mint_authority", 45),
+    ("onchain_suspicious_symbol", 40),
+    ("rug_data_missing", 40),
+    ("rug_min_holders", 40),
+    ("gecko_pool_count_low", 35),
+    ("onchain_high_risk_score", 35),
+    ("rug_freeze_authority", 30),
+    ("onchain_immutable_with_freeze", 25),
+    ("rug_insider_pct", 25),
+    ("rug_transfer_fee_high", 15),
+    ("rug_transfer_fee_present", 15),
 ];
+
+/// The reasons of a token no venue has priced yet, in the order the pipeline
+/// attributes it (`filtering::sources::market`): DexScreener while that source is
+/// on, otherwise GeckoTerminal. An unpriced token is rejected for exactly that,
+/// whatever else is true of it — the pipeline never reaches a market rule it has no
+/// data for.
+const PROMO_NO_MARKET_REJECTIONS: [&str; 2] = ["dex_data_missing", "gecko_data_missing"];
+
+/// The filtering config the sample corpus is rejected under, read once when the
+/// universe is built; the shipped defaults when no config is loaded.
+static FILTERING_CONFIG: LazyLock<FilteringConfig> =
+    LazyLock::new(|| try_with_config(|cfg| cfg.filtering.clone()).unwrap_or_default());
+
+/// Whether `config` runs the rule behind a sample rejection code, by the same switches
+/// the pipeline checks before it can produce that code; `None` for a code this table
+/// does not know.
+fn rule_enabled(code: &str, config: &FilteringConfig) -> Option<bool> {
+    let dex = &config.dexscreener;
+    let gecko = &config.geckoterminal;
+    let rug = &config.rugcheck;
+    let onchain = &config.onchain;
+    let rug_authorities =
+        rug.enabled && rug.authority_checks_enabled && rug.require_authorities_safe;
+    Some(match code {
+        "token_too_new" => config.age_enabled,
+        "dex_data_missing" => dex.enabled,
+        "gecko_data_missing" => gecko.enabled && !dex.enabled,
+        "dex_txn_5m" | "dex_txn_1h" => dex.enabled && dex.transactions_enabled,
+        "dex_liq_low" => dex.enabled && dex.liquidity_enabled,
+        "dex_mcap_low" => dex.enabled && dex.market_cap_enabled,
+        "dex_vol_low" => dex.enabled && dex.volume_enabled,
+        "dex_empty_logo" => dex.enabled && dex.token_info_enabled && dex.require_logo_url,
+        "gecko_liq_low" => gecko.enabled && gecko.liquidity_enabled,
+        "gecko_vol5m_low" => gecko.enabled && gecko.volume_enabled,
+        "gecko_pool_count_low" => {
+            gecko.enabled && gecko.pool_metrics_enabled && gecko.min_pool_count > 0
+        }
+        "rug_data_missing" => rug.enabled,
+        "rug_score" => rug.enabled && rug.risk_score_enabled,
+        "rug_mint_authority" => rug_authorities && !rug.allow_mint_authority,
+        "rug_freeze_authority" => rug_authorities && !rug.allow_freeze_authority,
+        "rug_top_holder" | "rug_min_holders" => rug.enabled && rug.holder_distribution_enabled,
+        "rug_lp_lock_low" => rug.enabled && rug.lp_lock_enabled,
+        "rug_insider_pct" => rug.enabled && rug.insider_holder_checks_enabled,
+        "rug_transfer_fee_high" => rug.enabled && rug.transfer_fee_enabled,
+        "rug_transfer_fee_present" => {
+            rug.enabled && rug.transfer_fee_enabled && rug.block_transfer_fee_tokens
+        }
+        "onchain_numeric_symbol" => onchain.enabled && onchain.reject_numeric_symbols,
+        "onchain_suspicious_symbol" => onchain.enabled && onchain.reject_single_char_symbols,
+        "onchain_immutable_with_freeze" => onchain.enabled && onchain.reject_immutable_with_freeze,
+        "onchain_high_risk_score" => onchain.enabled && onchain.combined_risk_enabled,
+        _ => return None,
+    })
+}
+
+/// The weighted priced-token reasons `config` can produce; the whole table when it
+/// switches every one of them off, since the corpus still has its rejected count.
+fn active_rejections(config: &FilteringConfig) -> Vec<(&'static str, usize)> {
+    let active: Vec<(&'static str, usize)> = PROMO_REJECTIONS
+        .iter()
+        .copied()
+        .filter(|(code, _)| rule_enabled(code, config) == Some(true))
+        .collect();
+    if active.is_empty() {
+        PROMO_REJECTIONS.to_vec()
+    } else {
+        active
+    }
+}
+
+/// Youngest generated token, in minutes: past its first filter check, which runs at
+/// most `PROMO_FIRST_CHECK_MAX_SECS` after discovery, so no rejection time lies ahead
+/// of the session clock.
+const PROMO_MIN_TOKEN_AGE_MINUTES: i64 = 4;
+
+/// Latest first filter check after a token's discovery, in seconds.
+const PROMO_FIRST_CHECK_MAX_SECS: usize = 200;
+
+/// How far back a market rejection may date. Market thresholds are re-evaluated on
+/// every build, so a token rejected for its activity or depth is rejected "since" a
+/// recent build, not since its discovery.
+const PROMO_MARKET_REJECTION_WINDOW_MINUTES: usize = 360;
 
 /// Blacklist categories, as the blacklist records them: (category, reason).
 const PROMO_BLACKLIST_REASONS: &[(&str, &str)] = &[
@@ -354,17 +459,54 @@ fn with_security(token: &mut Token, seed: usize, passed: bool) {
     }];
 }
 
-/// Record why a token was rejected, and when.
-fn with_rejection(token: &mut Token, seed: usize, discovered: DateTime<Utc>) {
-    let mut rng = Lcg::seeded(seed ^ 0xDEAD);
-    let code = PROMO_REJECTIONS[rng.below(PROMO_REJECTIONS.len())];
-    token.last_rejection_reason = Some(code.to_owned());
-    token.last_rejection_source = Some(if code.starts_with("rug_") {
-        "rugcheck".to_owned()
+/// The reason a priced token was rejected, drawn by the weights of the reasons
+/// `config` can produce.
+fn rejection_code(seed: usize, config: &FilteringConfig) -> &'static str {
+    let active = active_rejections(config);
+    let total: usize = active.iter().map(|(_, weight)| weight).sum();
+    let mut pick = Lcg::seeded(seed ^ 0xDEAD).below(total);
+    for (code, weight) in &active {
+        if pick < *weight {
+            return code;
+        }
+        pick -= weight;
+    }
+    active[0].0
+}
+
+/// The reason an unpriced token was rejected: the missing-data reason the pipeline
+/// attributes under `config`, or a drawn reason when neither market source is on.
+fn no_market_code(seed: usize, config: &FilteringConfig) -> &'static str {
+    PROMO_NO_MARKET_REJECTIONS
+        .into_iter()
+        .find(|code| rule_enabled(code, config) == Some(true))
+        .unwrap_or_else(|| rejection_code(seed, config))
+}
+
+/// Record why a token was rejected, by which source, and since when: a market
+/// threshold since a recent build, anything else since the check that followed the
+/// token's discovery.
+fn with_rejection(token: &mut Token, seed: usize, code: &str) {
+    let mut rng = Lcg::seeded(seed ^ 0xD1CE);
+    let source = rejection_source(code);
+    let market = matches!(
+        source,
+        Some(FilterSource::DexScreener | FilterSource::GeckoTerminal)
+    );
+    let discovered = token.first_discovered_at;
+    let age_minutes = (Utc::now() - discovered).num_minutes().max(1) as usize;
+    let since = if market {
+        Utc::now()
+            - Duration::minutes(
+                rng.below(age_minutes.min(PROMO_MARKET_REJECTION_WINDOW_MINUTES)) as i64,
+            )
+            - Duration::seconds(rng.below(60) as i64)
     } else {
-        "dexscreener".to_owned()
-    });
-    token.last_rejection_at = Some(discovered + Duration::seconds(rng.below(180) as i64 + 20));
+        discovered + Duration::seconds(rng.below(PROMO_FIRST_CHECK_MAX_SECS - 20) as i64 + 20)
+    };
+    token.last_rejection_reason = Some(code.to_owned());
+    token.last_rejection_source = source.map(|source| source.as_str().to_owned());
+    token.last_rejection_at = Some(since);
 }
 
 // =============================================================================
@@ -476,8 +618,18 @@ fn build_universe() -> Vec<PromoToken> {
         // The unpriced ones are the newest: a token with no market data is usually
         // one no venue has listed yet, not an old one that lost its listing.
         let unpriced = offset < PROMO_NO_MARKET;
+        let config = &*FILTERING_CONFIG;
+        let code = if unpriced {
+            no_market_code(index, config)
+        } else {
+            rejection_code(index, config)
+        };
+        // A token rejected as too new is younger than the configured minimum age.
+        let too_new_span = (config.min_token_age_minutes - PROMO_MIN_TOKEN_AGE_MINUTES).max(1);
         let discovered_minutes = if unpriced {
-            rng.below(180) as i64 + 1
+            rng.below(180) as i64 + PROMO_MIN_TOKEN_AGE_MINUTES
+        } else if code == "token_too_new" {
+            rng.below(too_new_span as usize) as i64 + PROMO_MIN_TOKEN_AGE_MINUTES
         } else {
             rng.below(60 * 24 * 30) as i64 + 60
         };
@@ -488,8 +640,6 @@ fn build_universe() -> Vec<PromoToken> {
             &symbol,
             discovered_minutes,
         );
-        let discovered = token.first_discovered_at;
-
         if !unpriced {
             with_market(
                 &mut token,
@@ -499,7 +649,7 @@ fn build_universe() -> Vec<PromoToken> {
             );
         }
         with_security(&mut token, index, false);
-        with_rejection(&mut token, index, discovered);
+        with_rejection(&mut token, index, code);
         // A token with no market data is still being seeded, not parked in the
         // background refresh queue — the priority has to say which of the two.
         token.priority = if unpriced {
@@ -507,12 +657,6 @@ fn build_universe() -> Vec<PromoToken> {
         } else {
             Priority::Background
         };
-        if unpriced {
-            // An unpriced token is rejected for exactly that, whatever else is true
-            // of it — the pipeline never reaches a market rule it has no data for.
-            token.last_rejection_reason = Some("dex_data_missing".to_owned());
-            token.last_rejection_source = Some("dexscreener".to_owned());
-        }
         // Blacklisting starts past the unpriced block. A token nobody has priced yet
         // has shown no behaviour to blacklist it for, and marking the whole No
         // Market Data view blacklisted says the bot condemns tokens for being new.
@@ -542,6 +686,20 @@ fn build_universe() -> Vec<PromoToken> {
 // =============================================================================
 // QUERYING
 // =============================================================================
+
+/// Every code a promo token can be rejected for under the session's filtering config.
+fn promo_rejection_codes() -> impl Iterator<Item = &'static str> {
+    PROMO_REJECTIONS
+        .iter()
+        .map(|(code, _)| *code)
+        .chain(PROMO_NO_MARKET_REJECTIONS)
+        .filter(|code| rule_enabled(code, &FILTERING_CONFIG) == Some(true))
+}
+
+/// Every token of the universe, and whether it passed filtering.
+pub(super) fn promo_universe() -> impl Iterator<Item = (&'static Token, bool)> {
+    UNIVERSE.iter().map(|entry| (&entry.token, entry.passed))
+}
 
 fn matches_view(entry: &PromoToken, view: FilteringView) -> bool {
     match view {
@@ -693,10 +851,7 @@ pub fn get_promo_tokens_list(query: &FilteringQuery) -> TokenListResponse {
                         .map(|code| (token.mint.clone(), code.clone()))
                 })
                 .collect::<HashMap<String, String>>(),
-            PROMO_REJECTIONS
-                .iter()
-                .map(|code| (*code).to_owned())
-                .collect(),
+            promo_rejection_codes().map(str::to_owned).collect(),
         )
     } else {
         (HashMap::new(), Vec::new())
@@ -796,9 +951,84 @@ mod tests {
 
     #[test]
     fn promo_rejection_codes_are_production_codes() {
-        for code in PROMO_REJECTIONS {
+        let table = PROMO_REJECTIONS.iter().map(|(code, _)| *code);
+        for code in table.chain(PROMO_NO_MARKET_REJECTIONS) {
             let text = rejection_text(code);
             assert_ne!(text.id, ids::FILTERING_REJECT_UNKNOWN.as_str(), "{code}");
+            assert!(rejection_source(code).is_some(), "{code}");
+            assert!(
+                rule_enabled(code, &FilteringConfig::default()).is_some(),
+                "{code}"
+            );
+        }
+    }
+
+    /// A rule switched off draws no rejections, its weight goes to the rules still on,
+    /// and an unpriced token is attributed like the pipeline does: to DexScreener while
+    /// it is on, to GeckoTerminal when only that source is.
+    #[test]
+    fn sample_reasons_follow_the_rules_the_config_enables() {
+        let defaults = FilteringConfig::default();
+        let sources: std::collections::HashSet<FilterSource> = active_rejections(&defaults)
+            .iter()
+            .filter_map(|(code, _)| rejection_source(code))
+            .collect();
+        assert_eq!(
+            sources.len(),
+            5,
+            "the shipped rules leave a source silent: {sources:?}"
+        );
+
+        let mut config = FilteringConfig::default();
+        config.geckoterminal.enabled = false;
+        config.dexscreener.market_cap_enabled = false;
+        let drawn: std::collections::HashSet<&str> = (0..5_000)
+            .map(|seed| rejection_code(seed, &config))
+            .collect();
+        assert!(drawn
+            .iter()
+            .all(|code| rule_enabled(code, &config) == Some(true)));
+        assert!(!drawn.contains("dex_mcap_low"));
+        assert!(drawn.iter().all(|code| !code.starts_with("gecko_")));
+        assert_eq!(no_market_code(0, &config), "dex_data_missing");
+
+        config.geckoterminal.enabled = true;
+        config.dexscreener.enabled = false;
+        assert_eq!(no_market_code(0, &config), "gecko_data_missing");
+    }
+
+    /// A rejected token carries the source the pipeline assigns its code, and a
+    /// token rejected as too new is younger than the shipped minimum age.
+    #[test]
+    fn rejected_tokens_carry_their_code_source_and_a_consistent_age() {
+        for (token, passed) in promo_universe() {
+            let Some(code) = token.last_rejection_reason.as_deref() else {
+                assert!(passed, "{} is rejected without a reason", token.mint);
+                continue;
+            };
+            assert!(!passed, "{} passed with a rejection", token.mint);
+            assert_eq!(
+                token.last_rejection_source.as_deref(),
+                rejection_source(code).map(|source| source.as_str()),
+                "{code}"
+            );
+            let since = token.last_rejection_at.expect("a rejection has a time");
+            assert!(
+                since >= token.first_discovered_at,
+                "{code} predates discovery"
+            );
+            assert!(since <= Utc::now(), "{code} rejected in the future");
+            assert_eq!(
+                rule_enabled(code, &FILTERING_CONFIG),
+                Some(true),
+                "{code} rejects under a rule the config switches off"
+            );
+            if code == "token_too_new" {
+                assert!(
+                    (Utc::now() - token.first_discovered_at).num_minutes()
+                        < FILTERING_CONFIG.min_token_age_minutes
+                );
+            }
         }
     }
 
@@ -827,7 +1057,7 @@ mod tests {
                 UNIVERSE.iter().any(|entry| &entry.token.mint == mint),
                 "{mint}"
             );
-            assert!(PROMO_REJECTIONS.contains(&code.as_str()), "{code}");
+            assert!(promo_rejection_codes().any(|known| known == code), "{code}");
             assert!(response.rejection_texts.contains_key(code), "{code}");
         }
     }

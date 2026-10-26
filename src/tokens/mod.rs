@@ -75,6 +75,7 @@ pub use database::{
     FilterBuildWrite,
     FilterOutcome,
     FilterRejectionRecord,
+    RecentRejectionRow,
     TokenBlacklistRecord,
     TokenDatabase,
 };

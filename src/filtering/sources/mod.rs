@@ -14,7 +14,7 @@ pub mod rejection;
 pub mod rugcheck;
 pub mod symbols;
 
-pub use rejection::{rejection_text, FilterRejectionReason};
+pub use rejection::{rejection_source, rejection_text, FilterRejectionReason};
 
 /// High level origin for a filtering rejection.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

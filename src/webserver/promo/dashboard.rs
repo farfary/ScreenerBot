@@ -108,15 +108,18 @@ pub fn get_promo_home_dashboard() -> HomeDashboardResponse {
         services_total: 12,
     };
 
+    // The filtering counts are the promo snapshot's, the ones the header and the
+    // Filtering page show; the database holds more tokens than filtering monitors.
+    let snapshot = super::get_promo_filtering_snapshot();
     let tokens = TokenStatistics {
         snapshot_state: SnapshotState::Ready,
         total_in_database: 12847,
-        monitored: Some(8923),
-        with_prices: Some(8923),
-        passed_filters: Some(347),
-        rejected_filters: Some(8576),
-        blacklisted: Some(PROMO_BLACKLISTED),
-        with_ohlcv: Some(2847),
+        monitored: Some(snapshot.total_tokens),
+        with_prices: Some(snapshot.with_pool_price),
+        passed_filters: Some(snapshot.passed_filtering),
+        rejected_filters: Some(snapshot.total_tokens - snapshot.passed_filtering),
+        blacklisted: Some(snapshot.blacklisted),
+        with_ohlcv: Some(snapshot.with_ohlcv),
         found_today: 234,
         found_this_week: 1523,
         found_this_month: 4892,

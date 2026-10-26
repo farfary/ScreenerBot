@@ -17,10 +17,11 @@ use crate::{
     logger::{self, LogTag},
     tokens::{
         get_recent_rejections_async, get_rejection_stats_aggregated_async,
-        get_rejection_stats_with_time_filter_async,
+        get_rejection_stats_with_time_filter_async, RecentRejectionRow, TokenResult,
     },
     webserver::{
         api_error::{ApiError, ApiErrorCode},
+        promo,
         utils::success_response,
     },
 };
@@ -30,6 +31,9 @@ use super::types::{
     AnalyticsQuery, AnalyticsResponse, CategoryBreakdown, CategoryReasonEntry, DataQualityMetric,
     RecentRejectionEntry, RejectionStatEntry, SourceBreakdown, TimeRangeInfo,
 };
+
+/// Rejections the analytics panel lists as the most recent.
+const RECENT_REJECTIONS: usize = 20;
 
 /// The headline cards. They always describe the current snapshot, in every time range, so
 /// scanned, passed, rejected and both rates agree with each other. The selected range
@@ -78,6 +82,18 @@ impl Headline {
 /// Supports optional time range filtering via start_time and end_time query params; the
 /// range changes the breakdowns only, never the headline figures ([`Headline`])
 pub async fn get_analytics(Query(query): Query<AnalyticsQuery>) -> Response {
+    if promo::are_promo_fixtures_enabled() {
+        return analytics_response(
+            &query,
+            Some(promo::get_promo_filtering_snapshot()),
+            Ok(promo::get_promo_rejection_counts(
+                query.start_time,
+                query.end_time,
+            )),
+            Ok(promo::get_promo_recent_rejections(RECENT_REJECTIONS)),
+        );
+    }
+
     // Fetch stats and rejection data. Non-blocking: the analytics panel must not hold the
     // request for up to 30 seconds waiting on the first snapshot build (the rejection
     // breakdowns below come from the database and are useful on their own meanwhile).
@@ -101,10 +117,21 @@ pub async fn get_analytics(Query(query): Query<AnalyticsQuery>) -> Response {
     };
 
     let recent_result = match chain {
-        Ok(chain) => get_recent_rejections_async(chain, 20).await,
+        Ok(chain) => get_recent_rejections_async(chain, RECENT_REJECTIONS).await,
         Err(error) => Err(error.into()),
     };
 
+    analytics_response(&query, stats_result, rejection_result, recent_result)
+}
+
+/// The analytics payload from the snapshot, the (reason, source, count) rejection rows
+/// and the newest rejections.
+fn analytics_response(
+    query: &AnalyticsQuery,
+    stats_result: Option<FilteringStatsSnapshot>,
+    rejection_result: TokenResult<Vec<(String, String, i64)>>,
+    recent_result: TokenResult<Vec<RecentRejectionRow>>,
+) -> Response {
     match (stats_result, rejection_result, recent_result) {
         (stats, Ok(raw_stats), Ok(recent_raw)) => {
             // Absent while the first snapshot is still building; the rejection breakdowns
@@ -403,6 +430,51 @@ mod tests {
         assert_eq!(headline.total_rejected, Some(0));
         assert_eq!(headline.pass_rate, Some(0.0));
         assert_eq!(headline.rejection_rate, Some(100.0));
+    }
+
+    /// The promotional payload is one corpus: the breakdowns add up to the headline's
+    /// rejected count, every source has a share and the recent list is full.
+    #[tokio::test]
+    async fn promo_analytics_breakdowns_add_up_to_the_headline() {
+        let query = AnalyticsQuery {
+            start_time: None,
+            end_time: None,
+            preset: None,
+        };
+        let response = analytics_response(
+            &query,
+            Some(promo::get_promo_filtering_snapshot()),
+            Ok(promo::get_promo_rejection_counts(None, None)),
+            Ok(promo::get_promo_recent_rejections(RECENT_REJECTIONS)),
+        );
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("read analytics body");
+        let json: serde_json::Value = serde_json::from_slice(&body).expect("analytics json");
+
+        assert_eq!(json["breakdown_total"], json["total_rejected"]);
+        let sources: Vec<&str> = json["by_source"]
+            .as_array()
+            .expect("source breakdown")
+            .iter()
+            .filter_map(|entry| entry["source"].as_str())
+            .collect();
+        for expected in [
+            "core",
+            "onchain",
+            "dexscreener",
+            "geckoterminal",
+            "rugcheck",
+        ] {
+            assert!(
+                sources.contains(&expected),
+                "no {expected} share in {sources:?}"
+            );
+        }
+        assert_eq!(
+            json["recent_rejections"].as_array().map(Vec::len),
+            Some(RECENT_REJECTIONS)
+        );
     }
 
     /// Before the first snapshot exists every figure is absent, never 0.

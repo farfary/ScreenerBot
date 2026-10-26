@@ -21,6 +21,9 @@
 //! - /api/copy-trading reads: overview, status, tasks, task, stats, workspace,
 //!   activity, insights, comparison, wallet profile
 //! - /api/events/head
+//! - /api/filtering/stats, /api/filtering/rejection-stats, /api/filtering/analytics,
+//!   /api/filtering/rejected-tokens, /api/filtering/export-rejected-tokens,
+//!   /api/filtering/refresh (moves the snapshot time; the fixture corpus is fixed)
 //! - /api/wallet/current, /api/wallet/tokens
 //! - /api/trader/stats, /api/trader/status, /api/trader/monitors/status,
 //!   /api/trader/loss-limit/status
@@ -35,6 +38,7 @@ mod copy_trading;
 mod dashboard;
 mod data;
 mod events;
+mod filtering;
 mod header;
 mod llm_analysis;
 mod positions;
@@ -60,6 +64,10 @@ pub use dashboard::{
     get_promo_dashboard_overview, get_promo_home_dashboard, get_promo_portfolio_calendar,
 };
 pub use events::get_promo_events;
+pub use filtering::{
+    get_promo_filtering_snapshot, get_promo_recent_rejections, get_promo_rejected_tokens,
+    get_promo_rejection_counts, get_promo_token_info, record_promo_filtering_refresh,
+};
 pub use header::get_promo_header_metrics;
 pub use llm_analysis::get_promo_analysis_status;
 pub use positions::{get_promo_positions, get_promo_positions_stats};

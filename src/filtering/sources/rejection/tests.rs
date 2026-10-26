@@ -99,3 +99,19 @@ fn legacy_codes_resolve_and_do_not_shadow_live_codes() {
         );
     }
 }
+
+#[test]
+fn stored_codes_resolve_to_their_variant_source() {
+    for reason in FilterRejectionReason::UNIT_VARIANTS {
+        assert_eq!(
+            rejection_source(&reason.label()),
+            Some(reason.source()),
+            "{}",
+            reason.label()
+        );
+    }
+    assert_eq!(rejection_source(LLM_CODE), Some(FilterSource::LlmAnalysis));
+    for (code, _) in LEGACY_REJECTION_CODES {
+        assert_eq!(rejection_source(code), None, "{code}");
+    }
+}

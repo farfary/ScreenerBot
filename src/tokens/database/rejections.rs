@@ -41,6 +41,18 @@ pub struct FilterBuildWrite {
     pub cleared: u64,
 }
 
+/// One row of the recent rejections list: mint, reason, source, Unix time, symbol, name
+/// and logo.
+pub type RecentRejectionRow = (
+    String,
+    String,
+    String,
+    i64,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+);
+
 impl TokenDatabase {
     /// Record one complete filtering build as the chain's rejection state.
     ///
@@ -262,20 +274,7 @@ impl TokenDatabase {
 
     /// Get list of rejected tokens with pagination and optional filtering
 
-    pub fn get_recent_rejections(
-        &self,
-        limit: usize,
-    ) -> TokenResult<
-        Vec<(
-            String,
-            String,
-            String,
-            i64,
-            Option<String>,
-            Option<String>,
-            Option<String>,
-        )>,
-    > {
+    pub fn get_recent_rejections(&self, limit: usize) -> TokenResult<Vec<RecentRejectionRow>> {
         let conn = self.conn()?;
 
         let query = "SELECT ut.mint, ut.last_rejection_reason, ut.last_rejection_source, ut.last_rejection_at,

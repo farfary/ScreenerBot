@@ -15,6 +15,7 @@ use crate::{
     tokens::get_rejection_stats_async,
     webserver::{
         api_error::{ApiError, ApiErrorCode},
+        promo,
         utils::success_response,
     },
 };
@@ -36,7 +37,11 @@ use super::types::{
 /// NULL values, never as zeros: the tab must show that it is waiting, not claim an empty
 /// corpus and a refresh that just happened.
 pub async fn get_stats() -> Response {
-    let stats = filtering::try_fetch_stats(ChainScope::All).await;
+    let stats = if promo::are_promo_fixtures_enabled() {
+        Some(promo::get_promo_filtering_snapshot())
+    } else {
+        filtering::try_fetch_stats(ChainScope::All).await
+    };
 
     success_response(FilteringStatsResponse {
         snapshot_state: SnapshotState::of(&stats),
@@ -55,6 +60,12 @@ pub async fn get_stats() -> Response {
 /// Force a synchronous rebuild of the filtering snapshot so downstream
 /// consumers see the newly-saved configuration immediately.
 pub async fn trigger_refresh() -> Response {
+    if promo::are_promo_fixtures_enabled() {
+        promo::record_promo_filtering_refresh();
+        return success_response(RefreshResponse {
+            timestamp: Utc::now().to_rfc3339(),
+        });
+    }
     match filtering::refresh(ChainScope::All).await {
         Ok(()) => {
             logger::info(
@@ -82,9 +93,13 @@ pub async fn trigger_refresh() -> Response {
 /// GET /api/filtering/rejection-stats
 /// Get counts of rejected tokens grouped by rejection reason
 pub async fn get_rejection_stats() -> Response {
-    let rejection_stats = match ChainScope::All.sole_chain() {
-        Ok(chain) => get_rejection_stats_async(chain).await,
-        Err(error) => Err(error.into()),
+    let rejection_stats = if promo::are_promo_fixtures_enabled() {
+        Ok(promo::get_promo_rejection_counts(None, None))
+    } else {
+        match ChainScope::All.sole_chain() {
+            Ok(chain) => get_rejection_stats_async(chain).await,
+            Err(error) => Err(error.into()),
+        }
     };
     match rejection_stats {
         Ok(raw_stats) => {

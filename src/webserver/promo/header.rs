@@ -69,12 +69,13 @@ pub fn get_promo_header_metrics() -> HeaderMetricsResponse {
         healthy: true,
     };
 
+    let snapshot = super::get_promo_filtering_snapshot();
     let filtering = FilteringHeaderInfo {
         snapshot_state: SnapshotState::Ready,
-        monitoring_count: Some(PROMO_TOKENS_TRACKED),
-        passed_count: Some(347),
-        rejected_count: Some(2500),
-        last_refresh: Some(now.to_rfc3339()),
+        monitoring_count: Some(snapshot.total_tokens),
+        passed_count: Some(snapshot.passed_filtering),
+        rejected_count: Some(snapshot.total_tokens - snapshot.passed_filtering),
+        last_refresh: Some(snapshot.updated_at.to_rfc3339()),
     };
 
     let system = SystemHeaderInfo {
