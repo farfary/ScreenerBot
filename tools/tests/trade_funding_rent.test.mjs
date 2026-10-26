@@ -6,9 +6,10 @@
  * Guard: the trade dialog's funding figure counts the rent of the accounts a buy opens.
  *
  * The server reports the rent of every account the buy opens (the wrapped-SOL account
- * and a token account the trading wallet does not keep yet), counted as the swap's own
- * funds check counts them; "this trade needs X SOL" adds it to the fee reserve. A wallet
- * that already keeps both pays no rent, and the figure is the amount plus the reserve.
+ * and a token account the trading wallet does not keep yet) and the network fee reserve,
+ * both taken from the swap's own funds check; "this trade needs X SOL" adds both to the
+ * amount. A wallet that already keeps both accounts pays no rent, and the figure is the
+ * amount plus the reserve the server serves, never one of the dialog's own.
  *
  * Run with `npm run test:js`.
  */
@@ -30,10 +31,10 @@ const [shell, home] = await Promise.all([loadIndex("shell"), loadIndex("home")])
 
 /**
  * Opens a buy dialog for MINT on a wallet holding BALANCE, with the server reporting
- * `rentSol` for the token account the buy opens, types `amount` and returns the
- * refusal the dialog shows.
+ * `rentSol` for the token account the buy opens and `feeReserveSol` as the network fee
+ * reserve, types `amount` and returns the refusal the dialog shows.
  */
-async function buyRefusal(rentSol, amount) {
+async function buyRefusal(rentSol, amount, feeReserveSol = 0.002) {
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   const fixtures = createApiHandler([home, shell], "populated");
   const host = await serveDashboard(context, {
@@ -44,7 +45,7 @@ async function buyRefusal(rentSol, amount) {
         return { body: JSON.stringify({ sol_balance: BALANCE }) };
       }
       if (path === `/api/wallet/buy-account-rent/${MINT}`) {
-        return { body: JSON.stringify({ rent_sol: rentSol }) };
+        return { body: JSON.stringify({ rent_sol: rentSol, fee_reserve_sol: feeReserveSol }) };
       }
       // The quote stays pending, so the amount check alone decides the refusal.
       if (path === "/api/trader/quote") return new Promise(() => {});
@@ -71,7 +72,7 @@ async function buyRefusal(rentSol, amount) {
         { mint: MINT, balance: BALANCE }
       ),
     ]);
-    await page.waitForFunction(() => window.__dialog.currentContext.accountRent != null);
+    await page.waitForFunction(() => window.__dialog.currentContext.feeReserve != null);
     await page.fill(".trade-action-input", String(amount));
     const error = page.locator('.trade-action-error-msg[data-visible="true"]');
     await error.waitFor();
@@ -92,6 +93,13 @@ test("a buy that opens accounts needs their rent too", async () => {
 test("a buy into kept accounts needs the amount and the reserve only", async () => {
   assert.equal(
     await buyRefusal(0, 0.01),
+    `The wallet holds ${BALANCE} SOL; this trade needs 0.012 SOL`
+  );
+});
+
+test("the fee reserve is the one the server serves", async () => {
+  assert.equal(
+    await buyRefusal(0, 0.009, 0.003),
     `The wallet holds ${BALANCE} SOL; this trade needs 0.012 SOL`
   );
 });

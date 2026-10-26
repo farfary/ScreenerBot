@@ -21,13 +21,12 @@ import { renderSetupGate } from "./setup_gate.js";
 const MIN_SLIPPAGE_PCT = 0.01;
 const MAX_SLIPPAGE_PCT = 50;
 
-// SOL held back from a buy so the transaction can still pay its network fee. A buy also
-// needs the rent of the accounts it opens (the wrapped-SOL account and a token account the
-// wallet does not keep yet), read from the server (`context.accountRent`) and added on
-// top. Spending the LAST lamport always fails on chain, so the slider ceiling, the MAX
-// button and the validator must all stop here; when they disagreed, typing the exact
-// balance produced a buy that validated in the dialog and then failed.
-const SOL_FEE_RESERVE = 0.002;
+// A buy holds back the network fee reserve and the rent of the accounts it opens (the
+// wrapped-SOL account and a token account the wallet does not keep yet). Both are read
+// from the server (`context.feeReserve`, `context.accountRent`), which takes them from the
+// swap's own funds check. Spending the LAST lamport always fails on chain, so the slider
+// ceiling, the MAX button and the validator must all stop there; when they disagreed,
+// typing the exact balance produced a buy that validated in the dialog and then failed.
 
 // How often an open dialog re-reads the wallet balance and the position it is trading.
 // Without this the dialog was a snapshot of the moment it opened: SOL arriving while it
@@ -1163,15 +1162,15 @@ export class TradeActionDialog {
       // and polling would 404 every tick.
       const tracksPosition = action !== "buy" || context.hasPosition === true;
 
-      // The token-account rent is read once per dialog: it changes only when the
-      // account is opened or closed, and each read lists the wallet's token accounts.
+      // The buy funding is read once per dialog: the rent changes only when an account
+      // is opened or closed, and each read lists the wallet's token accounts.
       const readsRent = action !== "sell" && context.accountRent == null;
 
       // Settled, not all: one lookup failing must not discard the others' results.
       const [balanceResult, positionResult, rentResult] = await Promise.allSettled([
         action === "sell" ? Promise.resolve(null) : this._fetchLiveBalance(),
         tracksPosition ? this._fetchLivePosition(mint) : Promise.resolve(null),
-        readsRent ? this._fetchAccountRent(mint) : Promise.resolve(null),
+        readsRent ? this._fetchBuyFunding(mint) : Promise.resolve(null),
       ]);
 
       // Anything could have closed or reopened the dialog while these were in flight.
@@ -1187,10 +1186,12 @@ export class TradeActionDialog {
         changed = true;
       }
 
-      const accountRent = rentResult.status === "fulfilled" ? rentResult.value : null;
-      if (accountRent != null && accountRent !== context.accountRent) {
-        context.accountRent = accountRent;
-        changed = true;
+      const funding = rentResult.status === "fulfilled" ? rentResult.value : null;
+      if (funding != null) {
+        changed ||=
+          funding.rent !== context.accountRent || funding.feeReserve !== context.feeReserve;
+        context.accountRent = funding.rent;
+        context.feeReserve = funding.feeReserve;
       }
 
       // A failed position lookup is NOT evidence the position closed — only a
@@ -1244,17 +1245,19 @@ export class TradeActionDialog {
   }
 
   /**
-   * SOL a buy of `mint` needs for the accounts it opens, 0 when the wallet already keeps
-   * them, or null when the server cannot tell; the reserve then stands alone.
+   * SOL a buy of `mint` needs beside its amount: `rent` for the accounts it opens (0 when
+   * the wallet already keeps them) and the network `feeReserve`, or null when the server
+   * cannot tell; the swap's own funds check then stands alone.
    */
-  async _fetchAccountRent(mint) {
+  async _fetchBuyFunding(mint) {
     const res = await fetch(`/api/wallet/buy-account-rent/${encodeURIComponent(mint)}`, {
       cache: "no-store",
     });
     if (!res.ok) return null;
     const data = await res.json();
     const rent = Number(data?.rent_sol);
-    return Number.isFinite(rent) ? rent : null;
+    const feeReserve = Number(data?.fee_reserve_sol);
+    return Number.isFinite(rent) && Number.isFinite(feeReserve) ? { rent, feeReserve } : null;
   }
 
   /**
@@ -1534,9 +1537,12 @@ export class TradeActionDialog {
     return Math.max(context.balance - this._buyReserveSol(context), 0);
   }
 
-  /** SOL a buy needs beyond its amount: the fee reserve and the rent of the accounts it opens. */
+  /**
+   * SOL a buy needs beyond its amount: the fee reserve and the rent of the accounts it
+   * opens, as the server reported them; nothing before the server answered.
+   */
   _buyReserveSol(context) {
-    return SOL_FEE_RESERVE + (context?.accountRent ?? 0);
+    return (context?.feeReserve ?? 0) + (context?.accountRent ?? 0);
   }
 
   /**

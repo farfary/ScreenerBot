@@ -15,6 +15,8 @@ use crate::webserver::middleware::store_gate;
 use crate::webserver::state::AppState;
 
 mod handlers;
+#[cfg(test)]
+mod handlers_tests;
 mod types;
 
 pub use types::*;

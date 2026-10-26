@@ -16,6 +16,16 @@ use crate::Error;
 /// wrapped-native account the route opens and closes, and the output token account.
 const MOST_ACCOUNTS_OPENED: u64 = 2;
 
+/// The network fee, in lamports, a native-coin buy reserves when its quote carries no fee
+/// estimate. The trade dialog adds the same reserve, served beside the buy's account rent,
+/// to what a buy needs.
+pub(crate) const NETWORK_FEE_RESERVE_LAMPORTS: u64 = 2_000_000;
+
+/// The network fee a buy must be able to pay: the quote's estimate, or the reserve.
+fn network_fee(estimated_lamports: Option<u64>) -> u64 {
+    estimated_lamports.unwrap_or(NETWORK_FEE_RESERVE_LAMPORTS)
+}
+
 /// Whether one of the wallet's token accounts is for `mint`.
 fn holds_account(accounts: &[TokenAccountInfo], mint: &str) -> bool {
     accounts.iter().any(|account| account.mint == mint)
@@ -63,7 +73,8 @@ pub(crate) async fn buy_account_rent(wallet: &str, mint: &str) -> Result<u64, Er
 
 /// Fails with a not-submitted [`NotSubmittedReason::InsufficientFunds`] when the
 /// quote spends the chain's native coin and the signing wallet holds less than the
-/// trade, the network fee and the accounts the swap may open need. Any other quote
+/// trade, the network fee (the quote's estimate, or the reserve) and the accounts the
+/// swap may open need. Any other quote
 /// passes, and so does one whose balance cannot be read: the simulation remains the
 /// backstop, and a balance outage (or an RPC client not yet started) must not stop trading.
 pub(crate) async fn check_native_funds(quote: &Quote) -> Result<(), Error> {
@@ -90,7 +101,7 @@ pub(crate) async fn check_native_funds(quote: &Quote) -> Result<(), Error> {
     };
 
     let input_raw = quote.input_amount.raw().try_into().unwrap_or(u64::MAX);
-    let fee_raw = quote.estimated_network_fee_lamports.unwrap_or(0);
+    let fee_raw = network_fee(quote.estimated_network_fee_lamports);
     let rent_raw = match rent::minimum_balance(rent::TOKEN_ACCOUNT_LEN).await {
         Ok(rent_raw) => rent_raw,
         Err(e) => {
@@ -148,7 +159,9 @@ pub(crate) async fn check_native_funds(quote: &Quote) -> Result<(), Error> {
 
 #[cfg(test)]
 mod tests {
-    use super::{accounts_to_open, holds_account, rent_to_open};
+    use super::{
+        accounts_to_open, holds_account, network_fee, rent_to_open, NETWORK_FEE_RESERVE_LAMPORTS,
+    };
     use crate::chains::solana::rpc::TokenAccountInfo;
 
     const NATIVE: &str = "So11111111111111111111111111111111111111112";
@@ -183,6 +196,12 @@ mod tests {
             accounts_to_open(&[account(MINT), account(NATIVE)], NATIVE, MINT),
             0
         );
+    }
+
+    #[test]
+    fn a_quote_without_a_fee_estimate_reserves_the_network_fee() {
+        assert_eq!(network_fee(None), NETWORK_FEE_RESERVE_LAMPORTS);
+        assert_eq!(network_fee(Some(5_000)), 5_000);
     }
 
     const RENT: u64 = 1_488_440;

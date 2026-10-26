@@ -34,6 +34,8 @@ pub struct TokenBalanceInfo {
 #[derive(Debug, Serialize)]
 pub struct BuyAccountRentResponse {
     pub rent_sol: f64,
+    /// The network fee a buy reserves when its quote carries no estimate.
+    pub fee_reserve_sol: f64,
 }
 
 #[derive(Debug, Serialize)]

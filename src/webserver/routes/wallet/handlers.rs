@@ -132,8 +132,9 @@ pub(super) async fn get_wallet_balance() -> Result<Json<Option<WalletCurrentResp
 }
 
 /// The rent a buy of `mint` needs for the accounts it opens in the trading wallet (the
-/// wrapped-native account the swap opens and closes included), counted as the swap's own
-/// funds check counts them, so the trade dialog's funding figure matches it.
+/// wrapped-native account the swap opens and closes included) and the network fee it
+/// reserves, counted as the swap's own funds check counts them, so the trade dialog's
+/// funding figure matches it.
 pub(super) async fn get_buy_account_rent(
     Path(mint): Path<String>,
 ) -> Result<Json<BuyAccountRentResponse>, ApiError> {
@@ -147,9 +148,20 @@ pub(super) async fn get_buy_account_rent(
             ApiError::new(ApiErrorCode::UpstreamError, ids::ERRORS_WALLET_UNAVAILABLE)
                 .details(err.to_string())
         })?;
-    Ok(Json(BuyAccountRentResponse {
-        rent_sol: crate::chains::adapter().raw_to_native(rent_raw),
-    }))
+    Ok(Json(buy_funding(crate::chains::adapter(), rent_raw)))
+}
+
+/// What a buy needs beside its amount: `rent_raw` for the accounts it opens and the swap
+/// funds check's network fee reserve, in the chain's native coin.
+pub(super) fn buy_funding(
+    adapter: &dyn crate::chains::ChainAdapter,
+    rent_raw: u64,
+) -> BuyAccountRentResponse {
+    BuyAccountRentResponse {
+        rent_sol: adapter.raw_to_native(rent_raw),
+        fee_reserve_sol: adapter
+            .raw_to_native(crate::chains::solana::swaps::funds::NETWORK_FEE_RESERVE_LAMPORTS),
+    }
 }
 
 /// Get wallet token holdings with enriched metadata.
