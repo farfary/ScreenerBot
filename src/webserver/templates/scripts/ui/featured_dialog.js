@@ -34,6 +34,7 @@ import {
   resolvedTokenName,
   resolvedTokenSymbol,
   tokenLabel,
+  SOL_MINT,
 } from "./token_identity.js";
 // Side-effect import: registers the global "screenerbot:open-token-details"
 // window listener so cards open the token details dialog even when the featured
@@ -460,10 +461,15 @@ class FeaturedDialog {
             ${this._buildSocialIcons(token)}
             ${this._buildShortcuts(mint)}
           </div>
-          <button class="feat-card-buy" data-action="buy" title="${this._escapeHtml(I18n.attr("tokens-featured-buy", "title", { symbol: label }))}">
+          ${
+            // Wrapped SOL is the native coin every buy spends, so it has nothing to buy.
+            mint === SOL_MINT
+              ? ""
+              : `<button class="feat-card-buy" data-action="buy" title="${this._escapeHtml(I18n.attr("tokens-featured-buy", "title", { symbol: label }))}">
             <i class="icon-zap"></i>
             <span>${this._escapeHtml(I18n.t("tokens-featured-buy"))}</span>
-          </button>
+          </button>`
+          }
         </div>
       </article>
     `;
