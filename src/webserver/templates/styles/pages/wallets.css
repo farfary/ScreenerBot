@@ -61,6 +61,16 @@
   display: none;
 }
 
+/* A main wallet without SOL: the funding notice above its holdings, inset like the setup notice. */
+.wallets-funding {
+  flex-shrink: 0;
+  margin: var(--spacing-lg) var(--spacing-lg) 0;
+}
+
+.wallets-funding[hidden] {
+  display: none;
+}
+
 /* Explore Mode: the setup notice replaces the tab panels, inset from the page edge. */
 .wallets-setup-gate {
   margin: var(--spacing-lg);

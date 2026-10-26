@@ -244,6 +244,11 @@ body.trade-action-dialog-open {
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
 }
 
+/* The funding notice (ui/funding_notice.js) under the balance of a wallet without SOL. */
+.trade-action-funding {
+  padding: 0 var(--spacing-md) var(--spacing-md);
+}
+
 .trade-action-context-item {
   display: flex;
   flex-direction: column;

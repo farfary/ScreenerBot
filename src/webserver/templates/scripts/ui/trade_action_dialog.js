@@ -12,6 +12,7 @@ import * as Hints from "../core/hints.js";
 import { HintTrigger } from "./hint_popover.js";
 import { applyQuickTradeMixin } from "./trade_action/quick_trade.js";
 import { applyQuoteManagerMixin } from "./trade_action/quote_manager.js";
+import { fetchMainWalletAddress, needsFunding, renderFundingNotice } from "./funding_notice.js";
 
 // Bounds of a manual slippage override. MUST match the backend's
 // trader::constants::{MIN,MAX}_MANUAL_SLIPPAGE_PCT — the route rejects anything outside them.
@@ -791,7 +792,8 @@ export class TradeActionDialog {
     this.titleEl.textContent = text.title;
     this.subtitleEl.textContent = text.subtitle;
 
-    // Render context info
+    // Render context info; the funding address is read again for every opening.
+    this._fundingAddress = undefined;
     this._renderContext(action, symbol, context);
 
     // Build and render presets
@@ -823,8 +825,12 @@ export class TradeActionDialog {
     this.confirmBtn.disabled = true;
     this.confirmBtn.classList.remove("loading");
 
-    // Clear error
+    // Clear error; a wallet that cannot fund any buy says so from the start.
     this._clearError();
+    const spendable = this._maxSpendableSol(context);
+    if ((action === "buy" || action === "add") && spendable != null && spendable <= 0) {
+      this._updateConfirmButton();
+    }
   }
 
   /**
@@ -1044,10 +1050,27 @@ export class TradeActionDialog {
       `);
     }
 
+    // A wallet without SOL cannot buy: say what it needs and where to send SOL.
+    const funding =
+      (action === "buy" || action === "add") && needsFunding(context.balance)
+        ? `<div class="trade-action-funding">${renderFundingNotice(this._fundingAddress)}</div>`
+        : "";
+
     this.contextEl.innerHTML = `
       ${this._renderIdentity(symbol, context)}
       <div class="trade-action-context-grid">${rows.join("")}</div>
+      ${funding}
     `;
+    if (funding && this._fundingAddress === undefined) this._loadFundingAddress();
+  }
+
+  /** Reads the trading wallet's address once per opening, then repaints the notice. */
+  async _loadFundingAddress() {
+    this._fundingAddress = null;
+    const address = await fetchMainWalletAddress();
+    if (!address || !this._isOpen) return;
+    this._fundingAddress = address;
+    this._renderContext(this.currentAction, this._currentSymbol, this.currentContext);
   }
 
   /**
@@ -1658,20 +1681,42 @@ export class TradeActionDialog {
 
     const value = this._getInputValue();
 
-    if (value === null || value === "") {
+    if (value === "") {
       // Empty input means "use the configured default size", which is only spendable
-      // when the wallet actually has room for it.
+      // when the wallet actually has room for it; when it has none, the reason shows.
       if (action === "buy" || action === "add") {
         const spendable = this._maxSpendableSol(context);
-        this.confirmBtn.disabled = spendable != null && spendable <= 0;
+        if (spendable != null && spendable <= 0) {
+          this._showError(this._insufficientFundsText(context.entrySize ?? 0, context));
+        } else {
+          this._clearError();
+          this.confirmBtn.disabled = false;
+        }
       } else {
         this.confirmBtn.disabled = true;
       }
       return;
     }
 
+    // A disabled confirm always carries its reason inline.
     const error = this._validateInput(action, value, context);
-    this.confirmBtn.disabled = error !== null;
+    if (error) {
+      this._showError(error);
+    } else {
+      this._clearError();
+      this.confirmBtn.disabled = false;
+    }
+  }
+
+  /**
+   * The refusal the trade API gives a wallet that cannot fund a buy of `amount`, with
+   * the same figures: what the wallet holds and what the trade needs with its fees.
+   */
+  _insufficientFundsText(amount, context) {
+    return I18n.t("errors-trade-insufficient-funds", {
+      available: context.balance,
+      required: amount + SOL_FEE_RESERVE,
+    });
   }
 
   _getInputValue() {
@@ -1712,11 +1757,7 @@ export class TradeActionDialog {
       // on chain. Same ceiling the slider and MAX use.
       const spendable = this._maxSpendableSol(context);
       if (spendable != null && value > spendable) {
-        return I18n.t("trade-error-insufficient", {
-          needed: formatSol(value, { decimals: 4 }),
-          reserve: String(SOL_FEE_RESERVE),
-          balance: formatFixed(context.balance, { decimals: 4 }),
-        });
+        return this._insufficientFundsText(value, context);
       }
     }
 

@@ -110,8 +110,6 @@ trade-error-invalid-number = 数字无效
 trade-error-percentage-range = 比例必须在 1 到 100 之间
 trade-error-amount-positive = 数量必须大于 0
 trade-error-amount-minimum = 最小值：0.001 { -sol }
-# $needed is a formatted SOL amount, $reserve the fee headroom in SOL and $balance the formatted balance.
-trade-error-insufficient = 余额不足（需要 { $needed }，另加 { $reserve } 作为费用，当前有 { $balance }）
 trade-error-position-closed = 此仓位已不再持仓中。
 trade-error-verify-failed = 无法验证代币余额
 trade-error-position-missing = 未找到仓位，它可能已被平仓

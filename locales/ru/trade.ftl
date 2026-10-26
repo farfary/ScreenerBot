@@ -85,7 +85,6 @@ trade-error-invalid-number = Недопустимое число
 trade-error-percentage-range = Процент должен быть от 1 до 100
 trade-error-amount-positive = Сумма должна быть больше 0
 trade-error-amount-minimum = Минимум: 0.001 { -sol }
-trade-error-insufficient = Недостаточно средств (нужно { $needed } плюс { $reserve } на комиссии, доступно { $balance })
 trade-error-position-closed = Эта позиция больше не открыта.
 trade-error-verify-failed = Не удалось проверить баланс токена
 trade-error-position-missing = Позиция не найдена — возможно, она была закрыта

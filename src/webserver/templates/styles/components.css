@@ -435,6 +435,43 @@
   background: var(--bg-card);
 }
 
+/* Funding guidance for a trading wallet without SOL (ui/funding_notice.js): the
+   title, what a trade needs, and the address on a line of its own. */
+.funding-notice {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-md);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  background: var(--bg-card);
+}
+
+.funding-notice-title {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  margin: 0;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.funding-notice-title i {
+  color: var(--primary-color);
+}
+
+.funding-notice-message {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.funding-notice-address {
+  min-width: 0;
+  margin-top: var(--spacing-xs);
+}
+
 /* Modal Styles */
 .modal-overlay {
   position: fixed;

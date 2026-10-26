@@ -87,7 +87,6 @@ trade-error-invalid-number = Angka tidak valid
 trade-error-percentage-range = Persentase harus antara 1 dan 100
 trade-error-amount-positive = Jumlah harus lebih besar dari 0
 trade-error-amount-minimum = Minimum: 0.001 { -sol }
-trade-error-insufficient = Saldo tidak cukup (butuh { $needed } ditambah { $reserve } untuk biaya, tersedia { $balance })
 trade-error-position-closed = Posisi ini sudah tidak terbuka.
 trade-error-verify-failed = Tidak dapat memverifikasi saldo token
 trade-error-position-missing = Posisi tidak ditemukan - mungkin sudah ditutup

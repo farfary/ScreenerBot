@@ -110,8 +110,6 @@ trade-error-invalid-number = رقم غير صالح
 trade-error-percentage-range = يجب أن تكون النسبة بين 1 و100
 trade-error-amount-positive = يجب أن يكون المبلغ أكبر من 0
 trade-error-amount-minimum = الحد الأدنى: 0.001 { -sol }
-# $needed is a formatted SOL amount, $reserve the fee headroom in SOL and $balance the formatted balance.
-trade-error-insufficient = الرصيد غير كافٍ (المطلوب { $needed } إضافة إلى { $reserve } للرسوم، والمتوفر { $balance })
 trade-error-position-closed = هذا المركز لم يعد مفتوحًا.
 trade-error-verify-failed = تعذّر التحقق من رصيد الرمز
 trade-error-position-missing = لم يتم العثور على المركز، وربما أُغلق

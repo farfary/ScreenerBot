@@ -85,7 +85,6 @@ trade-error-invalid-number = अमान्य संख्या
 trade-error-percentage-range = प्रतिशत 1 से 100 के बीच होना चाहिए
 trade-error-amount-positive = राशि 0 से ज़्यादा होनी चाहिए
 trade-error-amount-minimum = न्यूनतम: 0.001 { -sol }
-trade-error-insufficient = बैलेंस अपर्याप्त (ज़रूरत { $needed } और फ़ीस के लिए { $reserve }, उपलब्ध { $balance })
 trade-error-position-closed = यह पोज़िशन अब खुली नहीं है।
 trade-error-verify-failed = टोकन बैलेंस सत्यापित नहीं हो सका
 trade-error-position-missing = पोज़िशन नहीं मिली - हो सकता है बंद हो चुकी हो

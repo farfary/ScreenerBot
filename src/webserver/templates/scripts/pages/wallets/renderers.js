@@ -15,6 +15,7 @@ import {
   renderTokenCell,
   TOKEN_CELL_MIN_WIDTH,
 } from "../../ui/token_identity.js";
+import { needsFunding, renderFundingNotice } from "../../ui/funding_notice.js";
 
 // wallet_type ids serialized by `WalletType` (src/wallets/types.rs).
 const WALLET_TYPE_LABELS = Object.freeze({
@@ -246,7 +247,21 @@ export function createWalletRenderers({
   // address, balances and actions live in that table's toolbar identity/stats —
   // there is no separate wallet info bar above the table.
   function renderMainWalletPanel(options = {}) {
+    renderFundingGuidance();
     renderTokenHoldingsTable(options);
+  }
+
+  // A main wallet known to hold no SOL cannot trade: say what it needs and where to send it.
+  function renderFundingGuidance() {
+    const node = $("#wallets-funding");
+    if (!node) return;
+    const wallet = mainWallet();
+    const show = Boolean(wallet?.address) && needsFunding(wallet.balance);
+    if (show && node.dataset.address !== wallet.address) {
+      node.innerHTML = renderFundingNotice(wallet.address);
+      node.dataset.address = wallet.address;
+    }
+    node.hidden = !show;
   }
 
   // =============================================================================

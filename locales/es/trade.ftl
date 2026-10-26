@@ -110,8 +110,6 @@ trade-error-invalid-number = Número no válido
 trade-error-percentage-range = El porcentaje debe estar entre 1 y 100
 trade-error-amount-positive = El monto debe ser mayor que 0
 trade-error-amount-minimum = Mínimo: 0.001 { -sol }
-# $needed is a formatted SOL amount, $reserve the fee headroom in SOL and $balance the formatted balance.
-trade-error-insufficient = Saldo insuficiente (se necesitan { $needed } más { $reserve } para comisiones; tienes { $balance })
 trade-error-position-closed = Esta posición ya no está abierta.
 trade-error-verify-failed = No se pudo verificar el saldo del token
 trade-error-position-missing = Posición no encontrada: puede que se haya cerrado

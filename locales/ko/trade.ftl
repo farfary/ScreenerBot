@@ -110,8 +110,6 @@ trade-error-invalid-number = 올바르지 않은 숫자입니다
 trade-error-percentage-range = 비율은 1에서 100 사이여야 합니다
 trade-error-amount-positive = 수량은 0보다 커야 합니다
 trade-error-amount-minimum = 최소: 0.001 { -sol }
-# $needed is a formatted SOL amount, $reserve the fee headroom in SOL and $balance the formatted balance.
-trade-error-insufficient = 잔액이 부족합니다 (필요 { $needed } + 수수료 여유분 { $reserve }, 보유 { $balance })
 trade-error-position-closed = 이 포지션은 더 이상 보유 중이 아닙니다.
 trade-error-verify-failed = 토큰 잔액을 확인하지 못했습니다
 trade-error-position-missing = 포지션을 찾을 수 없습니다. 이미 종료되었을 수 있습니다

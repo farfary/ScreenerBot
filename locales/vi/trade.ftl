@@ -85,7 +85,6 @@ trade-error-invalid-number = Số không hợp lệ
 trade-error-percentage-range = Phần trăm phải nằm trong khoảng 1 đến 100
 trade-error-amount-positive = Số lượng phải lớn hơn 0
 trade-error-amount-minimum = Tối thiểu: 0.001 { -sol }
-trade-error-insufficient = Số dư không đủ (cần { $needed } cộng { $reserve } phí, hiện có { $balance })
 trade-error-position-closed = Vị thế này không còn mở nữa.
 trade-error-verify-failed = Không thể xác minh số dư token
 trade-error-position-missing = Không tìm thấy vị thế - có thể đã được đóng

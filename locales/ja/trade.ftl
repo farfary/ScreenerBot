@@ -110,8 +110,6 @@ trade-error-invalid-number = 数値が無効です
 trade-error-percentage-range = 割合は 1 から 100 の間で指定してください
 trade-error-amount-positive = 数量は 0 より大きい値にしてください
 trade-error-amount-minimum = 最小: 0.001 { -sol }
-# $needed is a formatted SOL amount, $reserve the fee headroom in SOL and $balance the formatted balance.
-trade-error-insufficient = 残高が不足しています（必要額 { $needed } + 手数料の余裕分 { $reserve }、現在の残高 { $balance }）
 trade-error-position-closed = このポジションはすでにオープンではありません。
 trade-error-verify-failed = トークン残高を検証できませんでした
 trade-error-position-missing = ポジションが見つかりません。クローズされた可能性があります

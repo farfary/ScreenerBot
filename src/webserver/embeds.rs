@@ -502,6 +502,7 @@ pub const CONFIG_IMPORT_EXPORT_DIALOG_UI: &str =
 pub const INPUT_DIALOG_UI: &str = include_str!("templates/scripts/ui/input_dialog.js");
 pub const SETUP_DIALOG_UI: &str = include_str!("templates/scripts/ui/setup_dialog.js");
 pub const SETUP_GATE_UI: &str = include_str!("templates/scripts/ui/setup_gate.js");
+pub const FUNDING_NOTICE_UI: &str = include_str!("templates/scripts/ui/funding_notice.js");
 
 // Page-specific JavaScript - Public for asset_serving.rs
 pub const SERVICES_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/services.js");

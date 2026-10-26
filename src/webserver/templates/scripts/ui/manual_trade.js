@@ -43,17 +43,20 @@ function getDialog() {
  * at 0 — with every buy amount rejected as "insufficient balance" while the header
  * showed the real figure. The endpoint serves the same live snapshot the header does.
  *
- * @returns {Promise<number>}
+ * An unread balance is null, never 0: a wallet that could not be read is not an empty
+ * one, and 0 would tell the user to fund it.
+ *
+ * @returns {Promise<number|null>}
  */
 export async function fetchWalletBalance() {
   try {
     const data = await requestManager.fetch("/api/wallet/balance", { priority: "high" });
     const balance = Number(data?.sol_balance);
-    if (Number.isFinite(balance)) return balance;
+    if (data && Number.isFinite(balance)) return balance;
   } catch {
-    // fall through
+    // An unread balance stays unknown.
   }
-  return 0;
+  return null;
 }
 
 /**
@@ -290,7 +293,7 @@ export async function manualTrade({ action, mint, symbol, name, logo, context = 
     };
 
     if (action !== "sell") {
-      dialogContext.balance = walletBalance ?? 0;
+      dialogContext.balance = walletBalance;
     }
 
     // "Add to Position" presets. Only the tokens page ever passed its own, so every

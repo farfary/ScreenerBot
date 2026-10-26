@@ -85,7 +85,6 @@ trade-error-invalid-number = Nombre invalide
 trade-error-percentage-range = Le pourcentage doit être compris entre 1 et 100
 trade-error-amount-positive = Le montant doit être supérieur à 0
 trade-error-amount-minimum = Minimum : 0.001 { -sol }
-trade-error-insufficient = Solde insuffisant (il faut { $needed } plus { $reserve } de frais, solde de { $balance })
 trade-error-position-closed = Cette position n'est plus ouverte.
 trade-error-verify-failed = Impossible de vérifier le solde du token
 trade-error-position-missing = Position introuvable : elle a peut-être été clôturée

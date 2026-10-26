@@ -1,0 +1,174 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
+
+/**
+ * Guard: a trading wallet without SOL is told how to start, and a buy it cannot fund
+ * says why its confirm is disabled.
+ *
+ * - Wallets shows the funding notice, with the main wallet's address and its copy
+ *   action, only while the main wallet is known to hold no SOL.
+ * - The Buy dialog shows the same notice at 0 SOL and names the refusal inline in the
+ *   trade API's own words and figures: what the wallet holds and what the trade needs.
+ * - A wallet with SOL but not enough for the typed amount gets the same refusal; an
+ *   unread balance is unknown, never 0, and shows no notice.
+ *
+ * Run with `npm run test:js`.
+ */
+
+import test, { after } from "node:test";
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+
+import { chromium } from "playwright";
+
+import { serveDashboard, PAGE_READY } from "../lib/dashboard_host.mjs";
+import { createApiHandler, loadIndex, FIXTURES_ROOT } from "../lib/dashboard_fixtures.mjs";
+
+const MINT = "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN";
+const NOTICE_TITLE = "Fund the trading wallet to start";
+const ERROR = ".trade-action-error-msg[data-visible='true'] .trade-action-error-text";
+
+const browser = await chromium.launch({ headless: true });
+after(() => browser.close());
+const strip = (text) => text.replace(/[⁨⁩]/g, "").trim();
+
+const wallets = JSON.parse(
+  await readFile(join(FIXTURES_ROOT, "wallets/wallets_list.json"), "utf8")
+);
+const main = wallets.wallets.find((wallet) => wallet.role === "main");
+
+/** Opens Wallets with the main wallet at `balance` and the balance route answering `current`. */
+async function open(balance, current) {
+  const list = {
+    ...wallets,
+    wallets: wallets.wallets.map((wallet) =>
+      wallet.role === "main" ? { ...wallet, balance } : wallet
+    ),
+  };
+  const context = await browser.newContext({ viewport: { width: 1400, height: 900 } });
+  const api = createApiHandler([await loadIndex("wallets"), await loadIndex("shell")], "populated");
+  const onApi = async (request) => {
+    const path = request.url.pathname;
+    if (path === "/api/wallets") return { body: JSON.stringify(list) };
+    if (path === "/api/wallet/balance") return current;
+    return api.onApi(request);
+  };
+  const host = await serveDashboard(context, { locale: "en", onApi });
+  const page = await context.newPage();
+  page.setDefaultTimeout(15000);
+  await page.goto(`${host.origin}/wallets`);
+  await page.waitForSelector(PAGE_READY);
+  const close = async () => {
+    await context.close();
+    await host.close();
+  };
+  return { page, close };
+}
+
+const balanceBody = (sol) => ({
+  body: JSON.stringify({
+    sol_balance: sol,
+    native_balance_raw: Math.round(sol * 1e9),
+    total_tokens_count: 0,
+    token_balances: [],
+    snapshot_time: "2026-10-26T12:00:00Z",
+  }),
+});
+
+async function openBuy(page) {
+  await page.evaluate(async (mint) => {
+    const { manualTrade } = await import("/scripts/ui/manual_trade.js");
+    void manualTrade({ action: "buy", mint, symbol: "JUP" });
+  }, MINT);
+  await page.waitForSelector(".trade-action-dialog-overlay.is-visible .trade-action-context-grid");
+}
+
+test("Wallets shows funding guidance only while the main wallet holds no SOL", async () => {
+  const empty = await open(0, balanceBody(0));
+  try {
+    const notice = empty.page.locator("#wallets-funding .funding-notice");
+    await notice.waitFor();
+    assert.match(strip(await notice.textContent()), new RegExp(NOTICE_TITLE));
+    assert.ok(strip(await notice.textContent()).includes(main.address));
+    assert.equal(await notice.locator(`[data-copy="${main.address}"]`).count(), 1);
+  } finally {
+    await empty.close();
+  }
+
+  const funded = await open(4.2, balanceBody(4.2));
+  try {
+    await funded.page.waitForSelector(
+      "#tokens-datatable-root .data-table, #tokens-datatable-root table"
+    );
+    assert.equal(await funded.page.locator("#wallets-funding").isVisible(), false);
+  } finally {
+    await funded.close();
+  }
+});
+
+test("the Buy dialog at 0 SOL shows the notice and says why it cannot buy", async () => {
+  const { page, close } = await open(0, balanceBody(0));
+  try {
+    await openBuy(page);
+    const notice = page.locator(".trade-action-funding .funding-notice");
+    await notice.waitFor();
+    await page.waitForFunction(
+      (address) =>
+        document
+          .querySelector(".trade-action-funding .funding-notice")
+          ?.textContent.includes(address),
+      main.address
+    );
+    const error = strip(await page.locator(ERROR).textContent());
+    assert.match(error, /^The wallet holds 0 SOL; this trade needs [\d.,]+ SOL$/);
+    assert.equal(
+      await page.locator(".trade-action-footer .trade-action-btn-confirm").isDisabled(),
+      true
+    );
+  } finally {
+    await close();
+  }
+});
+
+test("a buy larger than the balance is refused inline with both figures", async () => {
+  const { page, close } = await open(1, balanceBody(1));
+  try {
+    await openBuy(page);
+    assert.equal(await page.locator(".trade-action-funding").count(), 0);
+    await page.locator(".trade-action-input").fill("5");
+    await page.waitForSelector(ERROR);
+    assert.equal(
+      strip(await page.locator(ERROR).textContent()),
+      "The wallet holds 1 SOL; this trade needs 5.002 SOL"
+    );
+    assert.equal(
+      await page.locator(".trade-action-footer .trade-action-btn-confirm").isDisabled(),
+      true
+    );
+  } finally {
+    await close();
+  }
+});
+
+test("an unread balance shows no funding notice", async () => {
+  const { page, close } = await open(null, {
+    status: 503,
+    body: JSON.stringify({
+      error: {
+        code: "SERVICE_UNAVAILABLE",
+        message: "unread",
+        text: { id: "errors-wallet-read-failed" },
+      },
+    }),
+  });
+  try {
+    assert.equal(await page.locator("#wallets-funding").isVisible(), false);
+    await openBuy(page);
+    await page.waitForSelector(".trade-action-context-grid");
+    assert.equal(await page.locator(".trade-action-funding").count(), 0);
+  } finally {
+    await close();
+  }
+});

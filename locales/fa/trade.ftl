@@ -110,8 +110,6 @@ trade-error-invalid-number = عدد نامعتبر
 trade-error-percentage-range = درصد باید بین 1 تا 100 باشد
 trade-error-amount-positive = مقدار باید بزرگ‌تر از 0 باشد
 trade-error-amount-minimum = حداقل: 0.001 { -sol }
-# $needed is a formatted SOL amount, $reserve the fee headroom in SOL and $balance the formatted balance.
-trade-error-insufficient = موجودی کافی نیست (نیاز: { $needed } به‌علاوه { $reserve } برای کارمزد، موجودی: { $balance })
 trade-error-position-closed = این پوزیشن دیگر باز نیست.
 trade-error-verify-failed = بررسی موجودی توکن ممکن نشد
 trade-error-position-missing = پوزیشن پیدا نشد - ممکن است بسته شده باشد

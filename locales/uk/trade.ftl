@@ -110,8 +110,6 @@ trade-error-invalid-number = Недійсне число
 trade-error-percentage-range = Відсоток має бути від 1 до 100
 trade-error-amount-positive = Сума має бути більшою за 0
 trade-error-amount-minimum = Мінімум: 0,001 { -sol }
-# $needed is a formatted SOL amount, $reserve the fee headroom in SOL and $balance the formatted balance.
-trade-error-insufficient = Недостатньо коштів (потрібно { $needed } плюс { $reserve } на комісії, є { $balance })
 trade-error-position-closed = Ця позиція більше не відкрита.
 trade-error-verify-failed = Не вдалося перевірити баланс токена
 trade-error-position-missing = Позицію не знайдено — можливо, її закрито

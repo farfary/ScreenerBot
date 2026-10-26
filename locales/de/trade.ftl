@@ -101,7 +101,6 @@ trade-error-invalid-number = Ungültige Zahl
 trade-error-percentage-range = Der Prozentsatz muss zwischen 1 und 100 liegen
 trade-error-amount-positive = Der Betrag muss größer als 0 sein
 trade-error-amount-minimum = Minimum: 0,001 { -sol }
-trade-error-insufficient = Unzureichendes Guthaben (benötigt { $needed } plus { $reserve } für Gebühren, vorhanden { $balance })
 trade-error-position-closed = Diese Position ist nicht mehr offen.
 trade-error-verify-failed = Token-Guthaben konnte nicht verifiziert werden
 trade-error-position-missing = Position nicht gefunden – möglicherweise wurde sie geschlossen

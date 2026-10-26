@@ -85,7 +85,6 @@ trade-error-invalid-number = Geçersiz sayı
 trade-error-percentage-range = Yüzde 1 ile 100 arasında olmalıdır
 trade-error-amount-positive = Miktar 0'dan büyük olmalıdır
 trade-error-amount-minimum = Minimum: 0,001 { -sol }
-trade-error-insufficient = Yetersiz bakiye (gereken { $needed }, ücretler için ayrıca { $reserve }; mevcut { $balance })
 trade-error-position-closed = Bu pozisyon artık açık değil.
 trade-error-verify-failed = Token bakiyesi doğrulanamadı
 trade-error-position-missing = Pozisyon bulunamadı - kapanmış olabilir
