@@ -152,10 +152,9 @@ input[type="datetime-local"]:hover:not(:disabled, :read-only) {
   border-color: var(--input-border-hover);
 }
 
-/* Focus state - fully custom effect owned by us.
-   We use border + box-shadow only. No browser outline leaking.
-   Text inputs always show a clear custom focus when active (even on mouse),
-   per desktop-app convention for the field you are typing in. */
+/* Editing state of the field being typed in, shown for every input modality per
+   desktop-app convention: border, halo and a thin primary ring, never a browser outline.
+   Text-entry fields are the one exception to the keyboard-only ring in `foundation.css`. */
 input[type="text"]:focus,
 input[type="number"]:focus,
 input[type="password"]:focus,
@@ -168,26 +167,10 @@ input[type="time"]:focus,
 input[type="datetime-local"]:focus {
   outline: none !important; /* ensure no browser default leaks */
   border-color: var(--input-border-focus);
-  box-shadow: 0 0 0 var(--input-focus-ring-width) var(--input-focus-ring-color);
-  caret-color: var(--primary-color); /* our custom caret */
-}
-
-/* Keyboard-only stronger ring (gated by the global data-input system in theme.js + foundation).
-   We still customize it completely. */
-input[type="text"]:focus-visible,
-input[type="number"]:focus-visible,
-input[type="password"]:focus-visible,
-input[type="email"]:focus-visible,
-input[type="search"]:focus-visible,
-input[type="url"]:focus-visible,
-input[type="tel"]:focus-visible,
-input[type="date"]:focus-visible,
-input[type="time"]:focus-visible,
-input[type="datetime-local"]:focus-visible {
-  outline: none !important;
   box-shadow:
     0 0 0 var(--input-focus-ring-width) var(--input-focus-ring-color),
-    0 0 0 2px var(--primary-color);
+    0 0 0 var(--focus-ring-width) var(--focus-ring-color);
+  caret-color: var(--primary-color); /* our custom caret */
 }
 
 /* Disabled state */
@@ -291,15 +274,10 @@ textarea:hover:not(:disabled, :read-only) {
 textarea:focus {
   outline: none !important;
   border-color: var(--input-border-focus);
-  box-shadow: 0 0 0 var(--input-focus-ring-width) var(--input-focus-ring-color);
-  caret-color: var(--primary-color);
-}
-
-textarea:focus-visible {
-  outline: none !important;
   box-shadow:
     0 0 0 var(--input-focus-ring-width) var(--input-focus-ring-color),
-    0 0 0 2px var(--primary-color);
+    0 0 0 var(--focus-ring-width) var(--focus-ring-color);
+  caret-color: var(--primary-color);
 }
 
 textarea:disabled {
@@ -369,13 +347,6 @@ select:focus {
   border-color: var(--input-border-focus);
   box-shadow: 0 0 0 var(--input-focus-ring-width) var(--input-focus-ring-color);
   caret-color: var(--primary-color);
-}
-
-select:focus-visible {
-  outline: none !important;
-  box-shadow:
-    0 0 0 var(--input-focus-ring-width) var(--input-focus-ring-color),
-    0 0 0 2px var(--primary-color);
 }
 
 select:disabled {
@@ -504,20 +475,6 @@ select.select-lg {
   --toggle-knob-squash: 0.88;
 }
 
-/* The input carries focus but cannot paint it (it is 0x0 and transparent), so
-   the track projects the keyboard ring. :focus-visible is the modality gate. */
-.toggle > input:focus-visible + .toggle-track {
-  box-shadow:
-    inset 0 0 0 1px var(--control-ring),
-    0 0 0 var(--input-focus-ring-width) var(--input-focus-ring-color);
-}
-
-.toggle > input:checked:focus-visible + .toggle-track {
-  box-shadow:
-    inset 0 0 0 1px var(--control-accent),
-    0 0 0 var(--input-focus-ring-width) var(--input-focus-ring-color);
-}
-
 .toggle:has(> input:disabled) {
   cursor: not-allowed;
 }
@@ -633,19 +590,6 @@ input[type="checkbox"]:active:not(:disabled) {
   transform: scale(0.9);
 }
 
-input[type="checkbox"]:focus-visible {
-  box-shadow:
-    inset 0 0 0 1px var(--control-ring),
-    0 0 0 var(--input-focus-ring-width) var(--input-focus-ring-color);
-  outline: none;
-}
-
-input[type="checkbox"]:checked:focus-visible {
-  box-shadow:
-    inset 0 0 0 1px var(--control-accent),
-    0 0 0 var(--input-focus-ring-width) var(--input-focus-ring-color);
-}
-
 input[type="checkbox"]:disabled {
   opacity: 0.45;
   cursor: not-allowed;
@@ -711,19 +655,6 @@ input[type="radio"]:checked::after {
 
 input[type="radio"]:active:not(:disabled) {
   transform: scale(0.9);
-}
-
-input[type="radio"]:focus-visible {
-  box-shadow:
-    inset 0 0 0 1px var(--control-ring),
-    0 0 0 var(--input-focus-ring-width) var(--input-focus-ring-color);
-  outline: none;
-}
-
-input[type="radio"]:checked:focus-visible {
-  box-shadow:
-    inset 0 0 0 1px var(--control-accent),
-    0 0 0 var(--input-focus-ring-width) var(--input-focus-ring-color);
 }
 
 input[type="radio"]:disabled {

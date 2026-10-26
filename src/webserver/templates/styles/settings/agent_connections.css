@@ -156,11 +156,6 @@
   background: var(--bg-card-hover);
 }
 
-.agent-connections .agent-perm-choice input:focus-visible + span {
-  outline: 2px solid var(--primary-color);
-  outline-offset: -2px;
-}
-
 .agent-connections .agent-perm-choice input:checked + span {
   color: var(--primary-color);
   background: var(--primary-alpha-10);

@@ -145,11 +145,6 @@
   color: var(--text-primary);
 }
 
-.login-password-toggle:focus {
-  outline: 2px solid var(--primary-color);
-  outline-offset: 2px;
-}
-
 /* =============================================================================
    SUBMIT BUTTON
    ============================================================================= */
@@ -345,11 +340,6 @@
   color: var(--text-primary);
   border-color: var(--text-secondary);
   background: var(--bg-secondary);
-}
-
-.login-back-btn:focus {
-  outline: 2px solid var(--primary-color);
-  outline-offset: 2px;
 }
 
 .login-back-btn i {

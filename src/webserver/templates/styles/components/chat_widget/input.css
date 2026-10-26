@@ -134,8 +134,7 @@
     transition: color var(--transition-base);
   }
 
-  .cw-chat-input:focus,
-  .cw-chat-input:focus-visible {
+  .cw-chat-input:focus {
     border: none !important;
     outline: none !important;
     box-shadow: none !important;

@@ -319,12 +319,6 @@
   background: transparent;
 }
 
-.btn:focus-visible {
-  outline: 2px solid var(--link-color);
-  outline-offset: 2px;
-  box-shadow: 0 0 0 4px var(--primary-alpha-10);
-}
-
 /* Links dropdown trigger button */
 .links-dropdown-trigger {
   background: transparent;

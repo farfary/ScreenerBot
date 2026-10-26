@@ -133,17 +133,6 @@
   white-space: nowrap;
 }
 
-html[data-input="keyboard"] .setup-screen button:focus-visible,
-html[data-input="keyboard"] .setup-screen a:focus-visible,
-html[data-input="keyboard"] .setup-screen textarea:focus-visible,
-html[data-input="keyboard"]
-  .setup-screen
-  input:not([type="checkbox"], [type="radio"]):focus-visible,
-html[data-input="keyboard"] .setup-screen [tabindex="-1"]:focus-visible {
-  outline: 2px solid var(--primary-color);
-  outline-offset: 2px;
-}
-
 @media (max-width: 980px) {
   .setup-content {
     padding-inline: 16px;

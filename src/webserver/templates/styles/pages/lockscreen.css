@@ -216,12 +216,6 @@
   background: var(--primary-alpha-10);
 }
 
-.lockscreen-key:focus-visible {
-  outline: none;
-  border-color: var(--primary-color);
-  box-shadow: 0 0 0 3px var(--primary-alpha-20);
-}
-
 .lockscreen-key:disabled {
   opacity: 0;
   cursor: default;
@@ -305,12 +299,6 @@
   color: var(--text-primary);
 }
 
-.lockscreen-password-toggle:focus-visible {
-  outline: none;
-  background: var(--primary-alpha-10);
-  box-shadow: 0 0 0 2px var(--primary-alpha-20);
-}
-
 .lockscreen-password-submit {
   display: flex;
   align-items: center;
@@ -338,11 +326,6 @@
 
 .lockscreen-password-submit:active {
   transform: translateY(0);
-}
-
-.lockscreen-password-submit:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 3px var(--primary-alpha-30);
 }
 
 .lockscreen-password-submit:disabled {

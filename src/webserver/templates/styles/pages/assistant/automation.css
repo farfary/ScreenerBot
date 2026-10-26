@@ -261,7 +261,6 @@
 .automation-context-menu .context-menu-item:hover,
 .automation-context-menu .context-menu-item:focus-visible {
   background: var(--hover-bg);
-  outline: none;
 }
 
 .automation-context-menu .context-menu-item.danger {

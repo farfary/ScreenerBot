@@ -105,8 +105,7 @@
   transition: border-color var(--transition-fast);
 }
 
-.catalog-entry:hover:not(:disabled),
-.catalog-entry:focus-visible {
+.catalog-entry:hover:not(:disabled) {
   border-color: var(--primary-color);
 }
 

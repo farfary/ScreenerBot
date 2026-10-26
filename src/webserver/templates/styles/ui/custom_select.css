@@ -423,14 +423,6 @@ select.cs-enhanced-source {
   }
 }
 
-/* Focus visible for keyboard users */
-html[data-input="keyboard"] .custom-select:focus-visible .cs-trigger {
-  outline: none !important;
-  box-shadow:
-    0 0 0 var(--input-focus-ring-width, 3px) var(--input-focus-ring-color, var(--primary-alpha-10)),
-    0 0 0 2px var(--primary-color);
-}
-
 /* Reduced motion preference */
 @media (prefers-reduced-motion: reduce) {
   .cs-trigger,

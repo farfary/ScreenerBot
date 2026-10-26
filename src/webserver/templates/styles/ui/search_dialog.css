@@ -95,8 +95,7 @@
 }
 
 /* The field frames the input; the global input focus ring would draw a second frame inside it. */
-.search-dialog .search-input:focus,
-.search-dialog .search-input:focus-visible {
+.search-dialog .search-input:focus {
   border: none;
   box-shadow: none;
 }

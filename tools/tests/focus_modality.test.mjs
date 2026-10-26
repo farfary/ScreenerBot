@@ -3,18 +3,21 @@
 //
 
 /**
- * Guard: a focus indicator is drawn only in the keyboard modality.
+ * Guard: one keyboard-only focus ring, owned by `foundation.css`.
  *
- * `foundation.css` removes every outline with `!important` and suppresses box shadows
- * while the input is a pointer, so a `:focus-visible` rule that is not gated on
- * `html[data-input="keyboard"]` is either dead (an outline never shows) or fights the
- * global layer. Every stylesheet rule whose selector contains `:focus-visible` and that
- * sets `outline`, `box-shadow` or a `border` must therefore be keyboard-gated.
+ * `foundation.css` removes every native outline and draws the one ring, a thin
+ * `--focus-ring-color` outline, only under `html[data-input="keyboard"]` (outset by
+ * default, inset inside clipping strips and lists). A component that draws its own ring
+ * either fights that owner or shows to pointer users, so:
  *
- * - `foundation.css`'s global layer (the outline kill and the `data-input="mouse"`
- *   suppression) is the gate itself and is exempt.
- * - The files below still carry ungated rules. The allowlist only shrinks, and each entry
- *   must still need it.
+ * - no stylesheet but `foundation.css` has a `:focus-visible` rule that sets `outline`,
+ *   `box-shadow` or a `border`, keyboard-gated or not;
+ * - no stylesheet but `foundation.css` sets a visible `outline` on `:focus` (the global
+ *   `outline: none !important` makes it dead code that reads like a ring);
+ * - the owner's ring is gated on the keyboard modality and uses the ring tokens.
+ *
+ * Text-entry fields keep their editing state on `:focus` in `components/form_controls.css`;
+ * that is a field state shown in every modality, not a focus ring.
  *
  * Run with `npm run test:js`.
  */
@@ -24,56 +27,45 @@ import assert from "node:assert/strict";
 
 import { loadStylesheets } from "../lib/dashboard_ui.mjs";
 
-const UNGATED_ALLOWLIST = new Set([
-  "base/floating.css",
-  "base/scrollbar.css",
-  "components.css",
-  "components/chat_widget/input.css",
-  "components/form_controls.css",
-  "pages/assistant/automation.css",
-  "pages/assistant/instructions.css",
-  "pages/copy.css",
-  "pages/lockscreen.css",
-  "pages/strategies/condition_cards.css",
-  "pages/strategies/modals.css",
-  "settings/agent_connections.css",
-  "ui/confirmation_dialog.css",
-  "ui/context_menu.css",
-  "ui/data_table/column_types.css",
-  "ui/data_table/core.css",
-  "ui/data_table/pagination.css",
-  "ui/search_dialog.css",
-  "ui/trade_action_dialog.css",
-]);
-
+const OWNER = "foundation.css";
 const DRAWS_FOCUS = /(?:^|;)\s*(?:outline|box-shadow|border(?:-[\w-]+)?)\s*:/;
-const GATED = /html\[data-input="(?:keyboard|mouse)"\]/;
-const GLOBAL_LAYER = new Set(["*:focus-visible"]);
+const VISIBLE_OUTLINE = /(?:^|;)\s*outline\s*:\s*(?!none\b)[^\s;]/;
+const PLAIN_FOCUS = /:focus(?![-\w])/;
 
-async function ungatedRules() {
+async function componentRules(matches) {
   const found = [];
   for (const { path, rules } of await loadStylesheets()) {
-    for (const { selector, body, line } of rules) {
-      if (!selector.includes(":focus-visible") || GATED.test(selector)) continue;
-      if (path === "foundation.css" && GLOBAL_LAYER.has(selector)) continue;
-      if (DRAWS_FOCUS.test(body)) found.push({ path, selector, line });
+    if (path === OWNER) continue;
+    for (const rule of rules) {
+      if (matches(rule)) found.push(`${path}:${rule.line} ${rule.selector}`);
     }
   }
   return found;
 }
 
-test("every focus indicator is gated on the keyboard modality", async () => {
-  const offenders = (await ungatedRules())
-    .filter(({ path }) => !UNGATED_ALLOWLIST.has(path))
-    .map(({ path, line, selector }) => `${path}:${line} ${selector}`);
-  assert.deepEqual(offenders, []);
+test("no component stylesheet draws its own focus-visible ring", async () => {
+  const offenders = await componentRules(
+    ({ selector, body }) => selector.includes(":focus-visible") && DRAWS_FOCUS.test(body)
+  );
+  assert.deepEqual(offenders, [], "the ring belongs to foundation.css");
 });
 
-test("the tab rows' stylesheet is never allowlisted", () => {
-  assert.equal(UNGATED_ALLOWLIST.has("ui/tab_bar.css"), false);
+test("no component stylesheet sets an outline on plain focus", async () => {
+  const offenders = await componentRules(
+    ({ selector, body }) => PLAIN_FOCUS.test(selector) && VISIBLE_OUTLINE.test(body)
+  );
+  assert.deepEqual(offenders, [], "the ring belongs to foundation.css");
 });
 
-test("the ungated allowlist names only files that still need it", async () => {
-  const present = new Set((await ungatedRules()).map(({ path }) => path));
-  for (const path of UNGATED_ALLOWLIST) assert.ok(present.has(path), `${path} no longer needs it`);
+test("the owner's ring is drawn only in the keyboard modality, with the ring tokens", async () => {
+  const sheets = await loadStylesheets();
+  const { rules } = sheets.find(({ path }) => path === OWNER);
+  const rings = rules.filter(
+    ({ selector, body }) => selector.includes(":focus-visible") && VISIBLE_OUTLINE.test(body)
+  );
+  assert.ok(rings.length > 0, "foundation.css draws the ring");
+  for (const { selector, body, line } of rings) {
+    assert.match(selector, /^html\[data-input="keyboard"\]/, `${OWNER}:${line} ${selector}`);
+    assert.match(body, /var\(--focus-ring-width\) solid var\(--focus-ring-color\)/);
+  }
 });

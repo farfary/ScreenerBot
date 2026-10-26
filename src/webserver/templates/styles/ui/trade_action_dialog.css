@@ -138,12 +138,10 @@ body.trade-action-dialog-open {
   line-height: 1;
 }
 
-.trade-action-close:hover,
-.trade-action-close:focus-visible {
+.trade-action-close:hover {
   background: var(--danger-alpha-15);
   border-color: var(--danger-alpha-30);
   color: var(--danger);
-  outline: none;
 }
 
 /* Body */
@@ -584,11 +582,9 @@ body.trade-action-dialog-open {
   border-color: var(--border-color, #30363d);
 }
 
-.trade-action-btn-cancel:hover:not(:disabled),
-.trade-action-btn-cancel:focus-visible {
+.trade-action-btn-cancel:hover:not(:disabled) {
   background: var(--bg-card-hover);
   border-color: var(--text-muted);
-  outline: none;
 }
 
 .trade-action-btn-confirm {
@@ -598,13 +594,11 @@ body.trade-action-dialog-open {
   box-shadow: 0 2px 8px rgb(0, 0, 0, 0.2);
 }
 
-.trade-action-btn-confirm:hover:not(:disabled),
-.trade-action-btn-confirm:focus-visible {
+.trade-action-btn-confirm:hover:not(:disabled) {
   background: var(--action-color-dark);
   border-color: var(--action-color-dark);
   transform: translateY(-1px);
   box-shadow: 0 4px 12px rgb(0, 0, 0, 0.3);
-  outline: none;
 }
 
 .trade-action-btn-confirm:disabled {
@@ -1357,10 +1351,6 @@ body.trade-action-dialog-open {
 .trade-action-slider:active::-moz-range-thumb {
   transform: scale(1.28);
   box-shadow: 0 0 0 6px var(--action-color-light);
-}
-
-.trade-action-slider:focus-visible {
-  box-shadow: 0 0 0 3px var(--action-color-light);
 }
 
 @media (prefers-reduced-motion: reduce) {

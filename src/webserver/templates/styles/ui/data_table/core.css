@@ -927,10 +927,8 @@ body.dt-column-resizing * {
   transition: background var(--transition-fast);
 }
 
-.dt-col-menu-item:hover,
-.dt-col-menu-item:focus-visible {
+.dt-col-menu-item:hover {
   background: var(--bg-hover);
-  outline: none;
 }
 
 .dt-col-menu-icon {

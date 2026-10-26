@@ -493,20 +493,6 @@
 }
 
 /* =============================================================================
-   Focus Ring Utility
-   ============================================================================= */
-
-.floating-focus-ring:focus-visible {
-  outline: 2px solid var(--primary-color);
-  outline-offset: 2px;
-}
-
-.floating-focus-ring-inset:focus-visible {
-  outline: 2px solid var(--primary-color);
-  outline-offset: -2px;
-}
-
-/* =============================================================================
    Transform Origins
    ============================================================================= */
 
@@ -538,8 +524,7 @@
     border-width: 2px;
   }
 
-  .floating-item:hover,
-  .floating-item:focus {
+  .floating-item:hover {
     outline: 2px solid currentcolor;
     outline-offset: -2px;
   }

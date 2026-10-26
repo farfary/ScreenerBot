@@ -395,7 +395,6 @@
 .instruction-context-menu .context-menu-item:hover,
 .instruction-context-menu .context-menu-item:focus-visible {
   background: var(--hover-bg);
-  outline: none;
 }
 
 .instruction-context-menu .context-menu-item.danger {

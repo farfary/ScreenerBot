@@ -557,16 +557,6 @@
   display: none;
 }
 
-/* The navigation row and the ticker are tab strips whose controls draw the strip's inset
-   ring (`ui/tab_bar.css`): the strip would clip this outset one. */
-html[data-input="keyboard"]
-  .modern-header
-  :is(button, a):not(.header-row-2-wrapper *, .header-row-3-wrapper *):focus-visible {
-  box-shadow:
-    0 0 0 2px var(--header-solid-bg, var(--bg-primary)),
-    0 0 0 4px var(--primary-color);
-}
-
 @media (prefers-reduced-motion: reduce) {
   .modern-header,
   .modern-header .brand-logo,

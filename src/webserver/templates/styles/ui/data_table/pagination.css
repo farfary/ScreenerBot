@@ -78,15 +78,6 @@
   color: var(--text-primary);
 }
 
-.dt-client-pagination-btn:focus {
-  outline: 2px solid var(--primary-color);
-  outline-offset: 1px;
-}
-
-.dt-client-pagination-btn:focus:not(:focus-visible) {
-  outline: none;
-}
-
 .dt-client-pagination-btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
@@ -338,15 +329,6 @@
   background: var(--bg-card-hover);
   border-color: var(--text-secondary);
   color: var(--text-primary);
-}
-
-.dt-server-pagination-btn:focus {
-  outline: 2px solid var(--primary-color);
-  outline-offset: 1px;
-}
-
-.dt-server-pagination-btn:focus:not(:focus-visible) {
-  outline: none;
 }
 
 .dt-server-pagination-btn:disabled {

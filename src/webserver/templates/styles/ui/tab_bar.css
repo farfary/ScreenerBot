@@ -3,7 +3,8 @@
 
 /* The tab rows of the shell: the tab tokens shared by the main navigation row
    (`header_responsive.css`) and the page sub-tab row, the sub-tab row itself, the tab
-   scroll strip both rows and the ticker scroll in, and keyboard focus inside a strip.
+   scroll strip both rows and the ticker scroll in. Keyboard focus inside a strip is drawn
+   inset by the focus ring owner in `foundation.css`.
 
    Both rows mark the selected tab one way: the label in `--tab-bar-text-active` and a
    solid `--tab-indicator-size` bar along the tab's bottom edge. No state changes a tab's
@@ -91,18 +92,6 @@
   height: var(--tab-row-height);
   border-bottom: 1px solid var(--tab-bar-border-color);
   background: var(--tab-bar-bg-secondary);
-}
-
-/* ============================================================================
-   Keyboard focus inside a strip
-   ============================================================================ */
-
-/* A strip clips everything outside its box vertically, so the ring is drawn inside the
-   control. It shows only in the keyboard modality (`foundation.css` owns the gate) and
-   covers the main tabs, the sub-tabs, the ticker buttons and the page chevrons. */
-html[data-input="keyboard"] .tab-scroll-area :is(a, button):focus-visible,
-html[data-input="keyboard"] .tab-scroll-btn:focus-visible {
-  box-shadow: inset 0 0 0 2px var(--primary-color);
 }
 
 @media (prefers-reduced-motion: reduce) {

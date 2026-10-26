@@ -555,37 +555,81 @@ textarea {
 }
 
 /* =============================================================================
-   Global Focus - Completely customized and owned by us.
-   We never rely on browser default outlines for our UI.
+   Focus ring - the one owner of the keyboard focus indicator
    ============================================================================= */
 
-/* Kill all native focus outlines. We provide our own effects. */
-*:focus {
-  outline: none !important;
+/* Every focusable control shows the same thin ring, and only in the keyboard modality
+   (`theme.js` sets `html[data-input]`). Pointer and touch input never paints one: a
+   clicked control keeps no lingering highlight, as in a native desktop app. No component
+   stylesheet draws its own ring; the guard `tools/tests/focus_modality.test.mjs` fails
+   on one. */
+:root {
+  --focus-ring-width: 2px;
+  --focus-ring-color: var(--primary-color);
 }
 
+/* Native outlines never show; the keyboard rule below is the only ring. */
+*:focus,
 *:focus-visible {
   outline: none !important;
 }
 
-/* Mouse/touch interaction: suppress focus effects on non-text controls
-   (native desktop-app behaviour - no lingering highlight after click).
-   Keyboard navigation (Tab/arrows) re-enables custom effects via data-input.
-   Text inputs/textareas always receive our custom focus effect when focused. */
+/* Pointer input: no focus effect lingers on a clicked control. Text-entry fields keep
+   their editing state (`components/form_controls.css`) in every modality. */
 html[data-input="mouse"]
-  :focus-visible:not(input):not(textarea):not(select):not([contenteditable="true"]) {
+  :focus-visible:not(input, textarea, select, [contenteditable="true"]) {
   box-shadow: none;
 }
 
-html[data-input="mouse"] button:focus-visible,
-html[data-input="mouse"] a:focus-visible,
-html[data-input="mouse"] [role="button"]:focus-visible,
-html[data-input="mouse"] [role="tab"]:focus-visible,
-html[data-input="mouse"] .btn:focus-visible,
-html[data-input="mouse"] .btn-icon:focus-visible,
-html[data-input="mouse"] .tab:focus-visible,
-html[data-input="mouse"] .sub-tab:focus-visible {
-  box-shadow: none;
+/* Outset by default: the ring sits just outside the control. */
+html[data-input="keyboard"] :focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color) !important;
+  outline-offset: var(--focus-ring-width);
+}
+
+/* Inset where an outset ring would be clipped or overlap a neighbour: inside the tab
+   strips (which clip vertically), menu and list items, table rows and cells, and
+   full-width toggles inside cards. */
+html[data-input="keyboard"]
+  :is(
+    .tab-scroll-area :is(a, button),
+    .tab-scroll-btn,
+    [role="menuitem"],
+    [role="option"],
+    [role="row"],
+    [role="gridcell"],
+    tr,
+    td,
+    th,
+    .rule-head-toggle
+  ):focus-visible {
+  outline-offset: calc(-1 * var(--focus-ring-width));
+}
+
+/* Text-entry fields draw their editing state themselves, and a dialog or menu that
+   takes focus only to hold the keyboard inside it is a container, not a control. */
+html[data-input="keyboard"]
+  :is(
+    input:not([type="checkbox"], [type="radio"], [type="range"], [type="button"], [type="submit"]),
+    textarea,
+    [contenteditable="true"]
+  ):focus-visible,
+html[data-input="keyboard"]
+  :is([role="dialog"], [role="menu"], [role="listbox"])[tabindex="-1"]:focus-visible {
+  outline: none !important;
+}
+
+/* A control whose focusable input is invisible (zero-size or transparent) paints the
+   ring on the element that shows it. */
+html[data-input="keyboard"] .toggle > input:focus-visible + .toggle-track {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-width);
+}
+
+html[data-input="keyboard"] .agent-perm-choice input:focus-visible + span,
+html[data-input="keyboard"] .copy-seg-btn:has(> input:focus-visible) {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: calc(-1 * var(--focus-ring-width));
 }
 
 html {

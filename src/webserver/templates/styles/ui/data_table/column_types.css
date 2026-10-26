@@ -212,22 +212,22 @@
    table; the variant colours only the glyph and border on hover and focus, so a
    destructive action reads red at the moment it is about to act and is never a
    filled block repeated down the table. */
-.dt-action-btn-primary:is(:hover, :focus-visible) {
+.dt-action-btn-primary:hover {
   border-color: var(--primary-color);
   color: var(--primary-color);
 }
 
-.dt-action-btn-success:is(:hover, :focus-visible) {
+.dt-action-btn-success:hover {
   border-color: var(--success-color);
   color: var(--success-color);
 }
 
-.dt-action-btn-danger:is(:hover, :focus-visible) {
+.dt-action-btn-danger:hover {
   border-color: var(--error-color);
   color: var(--error-color);
 }
 
-.dt-action-btn-warning:is(:hover, :focus-visible) {
+.dt-action-btn-warning:hover {
   border-color: var(--warning-color);
   color: var(--warning-color);
 }

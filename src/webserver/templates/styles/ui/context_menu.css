@@ -334,16 +334,6 @@
   text-overflow: ellipsis;
 }
 
-/* Focus visible for keyboard navigation */
-.context-menu:focus-visible {
-  outline: none;
-}
-
-.context-menu-item:focus-visible {
-  outline: 2px solid var(--primary-color);
-  outline-offset: -2px;
-}
-
 /* Dark Theme Adjustments */
 [data-theme="dark"] .context-menu {
   background: var(--floating-bg-blur);
@@ -384,8 +374,7 @@
     border-width: 2px;
   }
 
-  .context-menu-item:hover,
-  .context-menu-item:focus {
+  .context-menu-item:hover {
     outline: 2px solid currentcolor;
     outline-offset: -2px;
   }
