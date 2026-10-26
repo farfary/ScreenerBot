@@ -296,14 +296,107 @@ tokens-dialog-badge-blacklisted = Daftar Hitam
 
 tokens-view-favorites = Favorit
 tokens-view-pool = Pool Service
+    .tooltip =
+        Token yang ditampilkan di sini memenuhi tiga syarat di bawah.
+
+        • Lolos semua kriteria filter — pemeriksaan likuiditas, volume, usia, dan keamanan
+        • Memiliki pool SOL yang valid — didukung oleh decoder DEX kami (Raydium, Orca, Meteora, dll.)
+        • Berhasil dihitung harganya — harga dihitung langsung dari cadangan pool on-chain
+
+        Ini adalah daftar token paling andal untuk trading karena harga berasal dari data pool sebenarnya, bukan API eksternal.
+
+        Klik token mana pun untuk melihat informasi detail dan mengelola status daftar hitam.
 tokens-view-no-market = Tanpa Data Pasar
+    .tooltip =
+        Token yang ditemukan on-chain tetapi tidak memiliki data pasar dari { -dexscreener } atau { -geckoterminal }.
+
+        Alasan umum:
+        • Token sangat baru — belum diindeks oleh agregator
+        • Volume trading rendah — di bawah ambang agregator
+        • Pair tidak terdaftar — diperdagangkan di DEX yang tidak dilacak agregator
+
+        Token ini mungkin tetap memiliki pool yang valid dan dapat diperdagangkan, tetapi tidak memiliki metrik pasar eksternal.
 tokens-view-all = Semua Token
+    .tooltip =
+        Database lengkap token yang ditemukan, apa pun status pemfilterannya.
+
+        Mencakup:
+        • Token yang lolos filter
+        • Token yang ditolak
+        • Token tanpa data pasar
+        • Token dalam daftar hitam
+
+        Gunakan tampilan ini untuk riset atau untuk menemukan token yang mungkin tersaring.
 tokens-view-passed = Lolos
+    .tooltip =
+        Token yang lolos semua kriteria filter yang aktif.
+
+        Pemeriksaan filter meliputi:
+        • Likuiditas — ambang likuiditas SOL minimum
+        • Volume — persyaratan volume trading 24h
+        • Usia token — waktu minimum sejak pembuatan
+        • Keamanan — batas skor risiko { -rugcheck }
+        • Kapitalisasi pasar — filter FDV/MC opsional
+
+        Atur filter di halaman Pemfilteran.
 tokens-view-rejected = Ditolak
+    .tooltip =
+        Token yang gagal memenuhi satu atau lebih kriteria filter.
+
+        Setiap token menampilkan alasan penolakan spesifik:
+        • Filter mana yang gagal
+        • Nilai aktual dibandingkan ambang yang dibutuhkan
+        • Kapan pemeriksaan dilakukan
+
+        Tinjau token yang ditolak untuk menyempurnakan pengaturan filter Anda.
 tokens-view-blacklisted = Daftar Hitam
+    .tooltip =
+        Token yang dikecualikan secara permanen dari trading.
+
+        Alasan masuk daftar hitam meliputi:
+        • Daftar hitam manual — token yang Anda blokir sendiri
+        • Risiko keamanan — indikator rug pull terdeteksi
+        • Ambang kerugian — melebihi batas kerugian yang dikonfigurasi
+        • Transaksi gagal — kegagalan swap berulang
+
+        Token dalam daftar hitam tidak pernah ditampilkan di daftar lolos atau dipertimbangkan untuk auto-trading.
 tokens-view-positions = Posisi
+    .tooltip =
+        Token yang saat ini dipegang dalam posisi terbuka.
+
+        Menampilkan data real-time untuk kepemilikan aktif Anda:
+        • Harga saat ini dari cadangan pool
+        • P&L belum terealisasi
+        • Ukuran posisi dan harga entry
+        • Lama dipegang
+
+        Klik token mana pun untuk pengelolaan posisi secara detail.
 tokens-view-recent = Terbaru
+    .tooltip =
+        Token yang baru ditemukan, diurutkan berdasarkan waktu penemuan.
+
+        Berguna untuk:
+        • Melihat peluncuran token baru
+        • Memantau likuiditas baru
+        • Peluang entry awal
+
+        Catatan: token baru mungkin belum memiliki data pasar lengkap pada awalnya.
 tokens-view-ohlcv = Data OHLCV
+    .tooltip =
+        Lihat dan kelola data OHLCV (candlestick) yang tersimpan untuk token.
+
+        Menampilkan:
+        • Jumlah Candle — total titik data yang tersimpan
+        • Progres Backfill — status kelengkapan timeframe
+        • Rentang Data — cakupan waktu dalam jam
+        • Jumlah Pool — pool likuiditas yang dilacak
+        • Status — pemantauan aktif atau nonaktif
+
+        Aksi:
+        • Hapus — hapus semua data OHLCV untuk token
+        • Bersihkan — hapus massal data token yang tidak aktif
+
+        Data OHLCV disimpan permanen dan tidak pernah dihapus otomatis.
 # Empty token table per view (TOKEN_VIEW_EMPTY_LABELS)
 tokens-view-pool-empty = Belum ada token berharga
     .message = Token muncul di sini setelah lolos penyaringan dan harga pool-nya dihitung.

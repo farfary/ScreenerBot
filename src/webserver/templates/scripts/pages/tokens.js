@@ -46,7 +46,6 @@ import {
   resolveSortColumn,
   normalizeSortDirection,
   loadPersistedSort,
-  attachHintsToTabs,
 } from "./tokens/formatters.js";
 import { createOhlcvModule } from "./tokens/ohlcv.js";
 import { createFavoritesModule } from "./tokens/favorites.js";
@@ -1653,9 +1652,6 @@ function createLifecycle() {
       // Show the tab bar
       tabBar.show();
 
-      // Attach hint triggers to tabs
-      attachHintsToTabs();
-
       // Get the active tab after state restoration
       const activeTab = tabBar.getActiveTab();
       if (activeTab && activeTab !== state.view) {
@@ -1904,10 +1900,6 @@ function createLifecycle() {
         ctx.manageTabBar(tabBar);
         tabBar.show({ force: true });
       }
-
-      // Re-attach hints to tabs after TabBar remounts buttons on show()
-      // (hints are lost when hide() clears innerHTML and show() rebuilds tabs)
-      attachHintsToTabs();
 
       // Handle OHLCV view specially - it has its own poller
       if (state.view === "ohlcv") {

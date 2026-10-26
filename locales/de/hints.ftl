@@ -1,6 +1,5 @@
 ## Categories
 
-hints-category-tokens = Tokens
 hints-category-positions = Positionen
 hints-category-filtering = Filterung
 hints-category-trader = Auto-Trader
@@ -12,111 +11,6 @@ hints-category-config = Konfiguration
 hints-category-config-telegram = { -telegram }
 hints-category-token-details = Token-Details
 hints-category-ui = Oberfläche
-
-## tokens
-
-hints-tokens-pool-service-title = Pool-Service-Tokens
-hints-tokens-pool-service-content =
-    Hier angezeigte Tokens erfüllen die drei folgenden Bedingungen.
-
-    • **Alle Filterkriterien bestanden** — Liquiditäts-, Volumen-, Alters- und Sicherheitsprüfungen
-    • **Gültige SOL-Liquiditätspools** — von unseren DEX-Decodern unterstützt (Raydium, Orca, Meteora usw.)
-    • **Erfolgreiche Preisberechnung** — Preise direkt aus den On-Chain-Pool-Reserven berechnet
-
-    Dies ist die zuverlässigste Token-Liste fürs Trading, da die Preise aus echten Pool-Daten stammen und nicht aus externen APIs.
-
-    Klicken Sie auf einen Token, um Details anzusehen und den Blacklist-Status zu verwalten.
-hints-tokens-no-market-title = Keine Marktdaten
-hints-tokens-no-market-content =
-    On-Chain entdeckte Tokens, für die Marktdaten von { -dexscreener } oder { -geckoterminal } fehlen.
-
-    Häufige Gründe:
-    • **Sehr neue Tokens** — noch nicht von Aggregatoren indexiert
-    • **Geringes Handelsvolumen** — unter den Schwellenwerten der Aggregatoren
-    • **Nicht gelistete Paare** — Handel auf DEXs, die Aggregatoren nicht erfassen
-
-    Diese Tokens können dennoch gültige Pools haben und handelbar sein, es fehlen jedoch externe Marktkennzahlen.
-hints-tokens-all-title = Alle Tokens
-hints-tokens-all-content =
-    Vollständige Datenbank aller entdeckten Tokens, unabhängig vom Filterstatus.
-
-    Enthält:
-    • Tokens, die die Filterung bestanden haben
-    • Abgelehnte Tokens
-    • Tokens ohne Marktdaten
-    • Tokens auf der Blacklist
-
-    Nutzen Sie diese Ansicht zur Recherche oder um Tokens zu finden, die herausgefiltert wurden.
-hints-tokens-passed-title = Filterung bestanden
-hints-tokens-passed-content =
-    Tokens, die alle aktiven Filterkriterien bestanden haben.
-
-    Die Filterung prüft unter anderem:
-    • **Liquidität** — Mindestschwelle für SOL-Liquidität
-    • **Volumen** — Anforderungen an das 24-Std.-Handelsvolumen
-    • **Token-Alter** — Mindestzeit seit der Erstellung
-    • **Sicherheit** — Grenzwerte für den { -rugcheck }-Risikoscore
-    • **Marktkapitalisierung** — optionale FDV-/MC-Filter
-
-    Filter konfigurieren Sie auf der Seite **Filterung**.
-hints-tokens-rejected-title = Abgelehnte Tokens
-hints-tokens-rejected-content =
-    Tokens, die ein oder mehrere Filterkriterien nicht erfüllt haben.
-
-    Jeder Token zeigt den konkreten Ablehnungsgrund:
-    • Welcher Filter fehlgeschlagen ist
-    • Der tatsächliche Wert im Vergleich zum geforderten Schwellenwert
-    • Wann die Prüfung stattfand
-
-    Prüfen Sie abgelehnte Tokens, um Ihre Filtereinstellungen zu verfeinern.
-hints-tokens-blacklisted-title = Tokens auf der Blacklist
-hints-tokens-blacklisted-content =
-    Dauerhaft vom Trading ausgeschlossene Tokens.
-
-    Gründe für die Blacklist:
-    • **Manuelle Blacklist** — Tokens, die Sie ausdrücklich gesperrt haben
-    • **Sicherheitsrisiken** — erkannte Rug-Pull-Indikatoren
-    • **Verlustschwelle** — konfigurierte Verlustlimits überschritten
-    • **Fehlgeschlagene Transaktionen** — wiederholte Swap-Fehler
-
-    Tokens auf der Blacklist erscheinen nie in Bestanden-Listen und werden nie fürs Auto-Trading berücksichtigt.
-hints-tokens-positions-title = Positions-Tokens
-hints-tokens-positions-content =
-    Tokens, die aktuell in offenen Positionen gehalten werden.
-
-    Zeigt Echtzeitdaten zu Ihren aktiven Beständen:
-    • Aktueller Preis aus den Pool-Reserven
-    • Unrealisierte GuV
-    • Positionsgröße und Einstiegspreis
-    • Haltedauer
-
-    Klicken Sie auf einen Token für die detaillierte Positionsverwaltung.
-hints-tokens-recent-title = Kürzlich entdeckt
-hints-tokens-recent-content =
-    Neu entdeckte Tokens, sortiert nach Entdeckungszeit.
-
-    Nützlich für:
-    • Neue Token-Launches erkennen
-    • Frische Liquidität beobachten
-    • Frühe Einstiegsgelegenheiten
-
-    Hinweis: Neue Tokens haben anfangs oft unvollständige Marktdaten.
-hints-tokens-ohlcv-title = OHLCV-Datenverwaltung
-hints-tokens-ohlcv-content =
-    Anzeigen und Verwalten der für Tokens gespeicherten OHLCV-Daten (Kerzen).
-
-    Zeigt:
-    • **Kerzenanzahl** — insgesamt gespeicherte Datenpunkte
-    • **Backfill-Fortschritt** — Abschlussstatus je Zeitrahmen
-    • **Datenspanne** — Zeitabdeckung in Stunden
-    • **Pool-Anzahl** — verfolgte Liquiditätspools
-    • **Status** — aktiv überwacht oder inaktiv
-
-    Aktionen:
-    • **Löschen** — alle OHLCV-Daten eines Tokens entfernen
-    • **Bereinigen** — Daten inaktiver Tokens gesammelt entfernen
-
-    OHLCV-Daten werden dauerhaft aufbewahrt und nie automatisch gelöscht.
 
 ## positions
 

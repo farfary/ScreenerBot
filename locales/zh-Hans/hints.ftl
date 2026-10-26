@@ -5,7 +5,6 @@
 
 ## Categories
 
-hints-category-tokens = 代币
 hints-category-positions = 仓位
 hints-category-filtering = 过滤
 hints-category-trader = 自动交易
@@ -17,111 +16,6 @@ hints-category-config = 配置
 hints-category-config-telegram = { -telegram }
 hints-category-token-details = 代币详情
 hints-category-ui = 界面
-
-## tokens
-
-hints-tokens-pool-service-title = 流动性池服务代币
-hints-tokens-pool-service-content =
-    此处显示的代币满足以下三个条件。
-
-    • **通过全部过滤条件**——流动性、成交量、年龄和安全检查
-    • **拥有有效的 SOL 流动性池**——受我们的 DEX 解码器支持（Raydium、Orca、Meteora 等）
-    • **价格计算成功**——价格直接由链上流动性池储备计算得出
-
-    这是最可靠的交易代币列表，因为价格来自实际的流动性池数据，而非外部 API。
-
-    点击任意代币可查看详细信息并管理黑名单状态。
-hints-tokens-no-market-title = 无市场数据
-hints-tokens-no-market-content =
-    在链上发现但缺少 { -dexscreener } 或 { -geckoterminal } 市场数据的代币。
-
-    常见原因：
-    • **非常新的代币**——尚未被聚合器收录
-    • **成交量低**——低于聚合器的收录门槛
-    • **未收录的交易对**——在聚合器未追踪的 DEX 上交易
-
-    这些代币可能仍有有效的流动性池并可交易，但缺少外部市场指标。
-hints-tokens-all-title = 全部代币
-hints-tokens-all-content =
-    所有已发现代币的完整数据库，不论过滤状态如何。
-
-    包括：
-    • 通过过滤的代币
-    • 被拒绝的代币
-    • 无市场数据的代币
-    • 已加入黑名单的代币
-
-    可使用此视图进行研究，或查找可能被过滤掉的代币。
-hints-tokens-passed-title = 已通过过滤
-hints-tokens-passed-content =
-    通过所有已启用过滤条件的代币。
-
-    过滤检查包括：
-    • **流动性**——最低 SOL 流动性门槛
-    • **成交量**——24h 成交量要求
-    • **代币年龄**——自创建以来的最短时间
-    • **安全性**——{ -rugcheck } 风险评分上限
-    • **市值**——可选的 FDV/市值过滤
-
-    可在**过滤**页面配置过滤器。
-hints-tokens-rejected-title = 被拒绝的代币
-hints-tokens-rejected-content =
-    未满足一项或多项过滤条件的代币。
-
-    每个代币都会显示具体的拒绝原因：
-    • 哪个过滤器未通过
-    • 实际值与要求阈值的对比
-    • 检查发生的时间
-
-    查看被拒绝的代币，以微调您的过滤设置。
-hints-tokens-blacklisted-title = 黑名单代币
-hints-tokens-blacklisted-content =
-    被永久排除在交易之外的代币。
-
-    加入黑名单的原因包括：
-    • **手动加入黑名单**——您明确屏蔽的代币
-    • **安全风险**——检测到跑路迹象
-    • **亏损阈值**——超出配置的亏损限额
-    • **交易失败**——多次兑换失败
-
-    黑名单代币不会出现在已通过列表中，也不会被自动交易考虑。
-hints-tokens-positions-title = 仓位代币
-hints-tokens-positions-content =
-    当前在持仓中的仓位所持有的代币。
-
-    显示您活跃持仓的实时数据：
-    • 来自流动性池储备的当前价格
-    • 未实现盈亏
-    • 仓位大小与入场价格
-    • 持仓时间
-
-    点击任意代币可进行详细的仓位管理。
-hints-tokens-recent-title = 最近发现
-hints-tokens-recent-content =
-    按发现时间排序的新发现代币。
-
-    适用于：
-    • 发现新代币上线
-    • 监控新增流动性
-    • 寻找早期入场机会
-
-    注意：新代币一开始可能缺少完整的市场数据。
-hints-tokens-ohlcv-title = OHLCV 数据管理
-hints-tokens-ohlcv-content =
-    查看并管理为代币存储的 OHLCV（K 线）数据。
-
-    显示：
-    • **K 线数量**——已存储的数据点总数
-    • **回填进度**——各时间周期的完成状态
-    • **数据跨度**——以小时计的时间覆盖范围
-    • **流动性池数量**——已追踪的流动性池
-    • **状态**——活跃监控或未激活
-
-    操作：
-    • **删除**——移除某个代币的全部 OHLCV 数据
-    • **清理**——批量移除未激活代币的数据
-
-    OHLCV 数据会被永久保留，不会被自动删除。
 
 ## positions
 

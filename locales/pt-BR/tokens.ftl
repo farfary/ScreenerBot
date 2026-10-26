@@ -325,14 +325,107 @@ tokens-dialog-badge-blacklisted = Na lista negra
 
 tokens-view-favorites = Favoritos
 tokens-view-pool = Serviço de pools
+    .tooltip =
+        Os tokens exibidos aqui atendem às três condições abaixo.
+
+        • Aprovação em todos os critérios de filtragem — liquidez, volume, idade e verificações de segurança
+        • Pools de liquidez SOL válidos — compatíveis com nossos decodificadores de DEX (Raydium, Orca, Meteora etc.)
+        • Cálculo de preço bem-sucedido — preços calculados diretamente das reservas on-chain do pool
+
+        Esta é a lista de tokens mais confiável para trading, pois os preços vêm dos dados reais do pool, não de APIs externas.
+
+        Clique em qualquer token para ver detalhes e gerenciar o status na lista negra.
 tokens-view-no-market = Sem dados de mercado
+    .tooltip =
+        Tokens descobertos on-chain, mas sem dados de mercado do { -dexscreener } ou do { -geckoterminal }.
+
+        Motivos comuns:
+        • Tokens muito novos — ainda não indexados pelos agregadores
+        • Baixo volume de negociação — abaixo dos limites dos agregadores
+        • Pares não listados — negociados em DEXs não monitoradas pelos agregadores
+
+        Esses tokens ainda podem ter pools válidos e ser negociados, mas não têm métricas de mercado externas.
 tokens-view-all = Todos os tokens
+    .tooltip =
+        Banco de dados completo dos tokens descobertos, independentemente do status de filtragem.
+
+        Inclui:
+        • Tokens aprovados na filtragem
+        • Tokens rejeitados
+        • Tokens sem dados de mercado
+        • Tokens na lista negra
+
+        Use esta visão para pesquisar ou encontrar tokens que possam ter sido filtrados.
 tokens-view-passed = Aprovados
+    .tooltip =
+        Tokens que passaram por todos os critérios de filtragem ativos.
+
+        As verificações de filtragem incluem:
+        • Liquidez — limite mínimo de liquidez em SOL
+        • Volume — requisitos de volume de negociação em 24h
+        • Idade do token — tempo mínimo desde a criação
+        • Segurança — limites da pontuação de risco do { -rugcheck }
+        • Market cap — filtros opcionais de FDV/MC
+
+        Configure os filtros na página Filtragem.
 tokens-view-rejected = Rejeitados
+    .tooltip =
+        Tokens que falharam em um ou mais critérios de filtragem.
+
+        Cada token mostra o motivo específico da rejeição:
+        • Qual filtro falhou
+        • O valor real versus o limite exigido
+        • Quando a verificação ocorreu
+
+        Revise os tokens rejeitados para ajustar suas configurações de filtro.
 tokens-view-blacklisted = Na lista negra
+    .tooltip =
+        Tokens excluídos permanentemente das negociações.
+
+        Os motivos da lista negra incluem:
+        • Lista negra manual — tokens que você bloqueou explicitamente
+        • Riscos de segurança — indicadores de rug pull detectados
+        • Limite de perda — limites de perda configurados excedidos
+        • Transações com falha — falhas repetidas de swap
+
+        Tokens na lista negra nunca aparecem nas listas de aprovados nem são considerados no trading automático.
 tokens-view-positions = Posições
+    .tooltip =
+        Tokens mantidos atualmente em posições abertas.
+
+        Mostra dados em tempo real das suas posses ativas:
+        • Preço atual a partir das reservas do pool
+        • P&L não realizado
+        • Tamanho da posição e preço de entrada
+        • Tempo de posse
+
+        Clique em qualquer token para gerenciar a posição em detalhes.
 tokens-view-recent = Recentes
+    .tooltip =
+        Tokens recém-descobertos, ordenados pelo momento da descoberta.
+
+        Útil para:
+        • Identificar novos lançamentos de tokens
+        • Monitorar liquidez recém-criada
+        • Oportunidades de entrada antecipada
+
+        Observação: tokens novos podem não ter dados de mercado completos no início.
 tokens-view-ohlcv = Dados OHLCV
+    .tooltip =
+        Veja e gerencie os dados OHLCV (candles) armazenados dos tokens.
+
+        Mostra:
+        • Quantidade de candles — total de pontos de dados armazenados
+        • Progresso do backfill — status de conclusão por timeframe
+        • Período dos dados — cobertura de tempo em horas
+        • Quantidade de pools — pools de liquidez monitorados
+        • Status — monitoramento ativo ou inativo
+
+        Ações:
+        • Excluir — remove todos os dados OHLCV de um token
+        • Limpeza — remove em massa os dados de tokens inativos
+
+        Os dados OHLCV são preservados permanentemente e nunca são excluídos automaticamente.
 # Empty token table per view (TOKEN_VIEW_EMPTY_LABELS)
 tokens-view-pool-empty = Nenhum token com preço ainda
     .message = Os tokens aparecem aqui quando passam na filtragem e o preço do pool é calculado.

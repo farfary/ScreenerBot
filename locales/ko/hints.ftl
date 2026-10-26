@@ -5,7 +5,6 @@
 
 ## Categories
 
-hints-category-tokens = 토큰
 hints-category-positions = 포지션
 hints-category-filtering = 필터링
 hints-category-trader = 자동 트레이더
@@ -17,111 +16,6 @@ hints-category-config = 설정
 hints-category-config-telegram = { -telegram }
 hints-category-token-details = 토큰 상세
 hints-category-ui = 인터페이스
-
-## tokens
-
-hints-tokens-pool-service-title = 풀 서비스 토큰
-hints-tokens-pool-service-content =
-    여기에 표시되는 토큰은 아래 세 가지 조건을 충족합니다.
-
-    • **모든 필터링 기준 통과** — 유동성, 거래량, 경과 기간, 보안 검사
-    • **유효한 SOL 유동성 풀** — DEX 디코더(Raydium, Orca, Meteora 등)가 지원하는 풀
-    • **가격 계산 성공** — 온체인 풀 리저브에서 직접 계산한 가격
-
-    가격이 외부 API가 아닌 실제 풀 데이터에서 산출되므로 거래에 가장 신뢰할 수 있는 토큰 목록입니다.
-
-    토큰을 클릭하면 상세 정보를 확인하고 블랙리스트 상태를 관리할 수 있습니다.
-hints-tokens-no-market-title = 시장 데이터 없음
-hints-tokens-no-market-content =
-    온체인에서 발견되었지만 { -dexscreener } 또는 { -geckoterminal }의 시장 데이터가 없는 토큰입니다.
-
-    주요 원인:
-    • **매우 새로운 토큰** — 아직 애그리게이터에 색인되지 않음
-    • **낮은 거래량** — 애그리게이터 기준 미달
-    • **미등록 페어** — 애그리게이터가 추적하지 않는 DEX에서 거래
-
-    이 토큰들도 유효한 풀이 있을 수 있고 거래할 수 있지만, 외부 시장 지표는 없습니다.
-hints-tokens-all-title = 전체 토큰
-hints-tokens-all-content =
-    필터링 상태와 관계없이 발견된 모든 토큰의 전체 데이터베이스입니다.
-
-    포함 항목:
-    • 필터링을 통과한 토큰
-    • 제외된 토큰
-    • 시장 데이터가 없는 토큰
-    • 블랙리스트 토큰
-
-    조사 목적이나 필터링에서 제외된 토큰을 찾을 때 이 보기를 사용하세요.
-hints-tokens-passed-title = 필터링 통과
-hints-tokens-passed-content =
-    활성화된 모든 필터링 기준을 통과한 토큰입니다.
-
-    필터링 검사 항목:
-    • **유동성** — 최소 SOL 유동성 기준
-    • **거래량** — 24h 거래량 요건
-    • **토큰 경과 기간** — 생성 이후 최소 경과 시간
-    • **보안** — { -rugcheck } 위험 점수 한도
-    • **시가총액** — 선택적 FDV/시가총액 필터
-
-    필터는 **필터링** 페이지에서 설정하세요.
-hints-tokens-rejected-title = 제외된 토큰
-hints-tokens-rejected-content =
-    하나 이상의 필터링 기준을 통과하지 못한 토큰입니다.
-
-    각 토큰에는 구체적인 제외 사유가 표시됩니다:
-    • 통과하지 못한 필터
-    • 실제 값과 요구 기준값 비교
-    • 검사가 이루어진 시각
-
-    제외된 토큰을 검토하여 필터 설정을 세밀하게 조정하세요.
-hints-tokens-blacklisted-title = 블랙리스트 토큰
-hints-tokens-blacklisted-content =
-    거래에서 영구적으로 제외된 토큰입니다.
-
-    블랙리스트 사유:
-    • **수동 블랙리스트** — 직접 차단한 토큰
-    • **보안 위험** — 러그풀 징후 감지
-    • **손실 기준** — 설정한 손실 한도 초과
-    • **트랜잭션 실패** — 반복된 스왑 실패
-
-    블랙리스트 토큰은 통과 목록에 표시되지 않으며 자동 거래 대상에서도 제외됩니다.
-hints-tokens-positions-title = 포지션 토큰
-hints-tokens-positions-content =
-    현재 보유 포지션으로 가지고 있는 토큰입니다.
-
-    보유 중인 자산의 실시간 데이터를 표시합니다:
-    • 풀 리저브 기준 현재 가격
-    • 미실현 손익
-    • 포지션 규모와 진입 가격
-    • 보유 시간
-
-    토큰을 클릭하면 상세 포지션 관리로 이동합니다.
-hints-tokens-recent-title = 최근 발견
-hints-tokens-recent-content =
-    발견 시각 순으로 정렬된 새로 발견된 토큰입니다.
-
-    활용 예:
-    • 신규 토큰 출시 포착
-    • 새로운 유동성 모니터링
-    • 초기 진입 기회
-
-    참고: 신규 토큰은 처음에 시장 데이터가 완전하지 않을 수 있습니다.
-hints-tokens-ohlcv-title = OHLCV 데이터 관리
-hints-tokens-ohlcv-content =
-    토큰별로 저장된 OHLCV(캔들) 데이터를 확인하고 관리합니다.
-
-    표시 항목:
-    • **캔들 수** — 저장된 전체 데이터 포인트
-    • **백필 진행률** — 타임프레임별 완료 상태
-    • **데이터 범위** — 시간 단위 커버리지
-    • **풀 수** — 추적 중인 유동성 풀
-    • **상태** — 모니터링 중 또는 비활성
-
-    작업:
-    • **삭제** — 토큰의 모든 OHLCV 데이터 제거
-    • **정리** — 비활성 토큰 데이터 일괄 제거
-
-    OHLCV 데이터는 영구 보존되며 자동으로 삭제되지 않습니다.
 
 ## positions
 

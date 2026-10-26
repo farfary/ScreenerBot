@@ -1,6 +1,5 @@
 ## Categories
 
-hints-category-tokens = Tokenlar
 hints-category-positions = Pozisyonlar
 hints-category-filtering = Filtreleme
 hints-category-trader = Otomatik Trader
@@ -12,111 +11,6 @@ hints-category-config = Yapılandırma
 hints-category-config-telegram = { -telegram }
 hints-category-token-details = Token Ayrıntıları
 hints-category-ui = Arayüz
-
-## tokens
-
-hints-tokens-pool-service-title = Havuz Hizmeti Tokenları
-hints-tokens-pool-service-content =
-    Burada gösterilen tokenlar aşağıdaki üç koşulu karşılar.
-
-    • **Tüm filtreleme ölçütlerini geçti** — likidite, hacim, yaş ve güvenlik kontrolleri
-    • **Geçerli SOL likidite havuzlarına sahip** — DEX çözücülerimiz tarafından destekleniyor (Raydium, Orca, Meteora vb.)
-    • **Fiyat hesaplaması başarılı** — fiyatlar doğrudan zincir üstü havuz rezervlerinden hesaplanır
-
-    Fiyatlar harici API'lerden değil gerçek havuz verilerinden türetildiği için işlem yapmak açısından en güvenilir token listesi budur.
-
-    Ayrıntılı bilgi görmek ve kara liste durumunu yönetmek için herhangi bir tokena tıklayın.
-hints-tokens-no-market-title = Piyasa Verisi Yok
-hints-tokens-no-market-content =
-    Zincir üstünde keşfedilen ancak { -dexscreener } veya { -geckoterminal } üzerinde piyasa verisi bulunmayan tokenlar.
-
-    Yaygın nedenler:
-    • **Çok yeni tokenlar** — henüz toplayıcılar tarafından dizinlenmedi
-    • **Düşük işlem hacmi** — toplayıcı eşiklerinin altında
-    • **Listelenmemiş çiftler** — toplayıcıların izlemediği DEX'lerde işlem görüyor
-
-    Bu tokenların geçerli havuzları olabilir ve işlem yapılabilir, ancak harici piyasa metrikleri yoktur.
-hints-tokens-all-title = Tüm Tokenlar
-hints-tokens-all-content =
-    Filtreleme durumundan bağımsız olarak keşfedilen tüm tokenların tam veritabanı.
-
-    Şunları içerir:
-    • Filtrelemeyi geçen tokenlar
-    • Reddedilen tokenlar
-    • Piyasa verisi olmayan tokenlar
-    • Kara listedeki tokenlar
-
-    Araştırma yapmak veya filtrelenmiş olabilecek tokenları bulmak için bu görünümü kullanın.
-hints-tokens-passed-title = Filtrelemeyi Geçenler
-hints-tokens-passed-content =
-    Tüm etkin filtreleme ölçütlerini geçen tokenlar.
-
-    Filtreleme kontrolleri şunları içerir:
-    • **Likidite** — asgari SOL likidite eşiği
-    • **Hacim** — 24sa işlem hacmi gereksinimleri
-    • **Token yaşı** — oluşturulmasından bu yana asgari süre
-    • **Güvenlik** — { -rugcheck } risk puanı sınırları
-    • **Piyasa değeri** — isteğe bağlı FDV/piyasa değeri filtreleri
-
-    Filtreleri **Filtreleme** sayfasında yapılandırın.
-hints-tokens-rejected-title = Reddedilen Tokenlar
-hints-tokens-rejected-content =
-    Bir veya daha fazla filtreleme ölçütünü geçemeyen tokenlar.
-
-    Her token için belirli reddedilme nedeni gösterilir:
-    • Hangi filtre başarısız oldu
-    • Gerçek değer ile gereken eşik
-    • Kontrolün yapıldığı zaman
-
-    Filtre ayarlarınızı inceltmek için reddedilen tokenları gözden geçirin.
-hints-tokens-blacklisted-title = Kara Listedeki Tokenlar
-hints-tokens-blacklisted-content =
-    İşlemlerden kalıcı olarak çıkarılan tokenlar.
-
-    Kara liste nedenleri şunları içerir:
-    • **Manuel kara liste** — sizin açıkça engellediğiniz tokenlar
-    • **Güvenlik riskleri** — tespit edilen rug pull göstergeleri
-    • **Zarar eşiği** — yapılandırılan zarar limitlerinin aşılması
-    • **Başarısız işlemler** — tekrarlanan takas hataları
-
-    Kara listedeki tokenlar geçenler listesinde gösterilmez ve otomatik işlem için değerlendirilmez.
-hints-tokens-positions-title = Pozisyon Tokenları
-hints-tokens-positions-content =
-    Şu anda açık pozisyonlarda tutulan tokenlar.
-
-    Aktif varlıklarınız için gerçek zamanlı verileri gösterir:
-    • Havuz rezervlerinden güncel fiyat
-    • Gerçekleşmemiş K/Z
-    • Pozisyon boyutu ve giriş fiyatı
-    • Tutma süresi
-
-    Ayrıntılı pozisyon yönetimi için herhangi bir tokena tıklayın.
-hints-tokens-recent-title = Yeni Keşfedilenler
-hints-tokens-recent-content =
-    Keşfedilme zamanına göre sıralanmış yeni keşfedilen tokenlar.
-
-    Şunlar için kullanışlıdır:
-    • Yeni token lansmanlarını yakalamak
-    • Yeni likiditeyi izlemek
-    • Erken giriş fırsatları
-
-    Not: Yeni tokenların piyasa verisi başlangıçta eksik olabilir.
-hints-tokens-ohlcv-title = OHLCV Veri Yönetimi
-hints-tokens-ohlcv-content =
-    Tokenlar için saklanan OHLCV (mum) verilerini görüntüleyin ve yönetin.
-
-    Şunları gösterir:
-    • **Mum Sayısı** — saklanan toplam veri noktası
-    • **Geçmiş Veri Doldurma İlerlemesi** — zaman dilimi tamamlanma durumu
-    • **Veri Aralığı** — saat cinsinden zaman kapsamı
-    • **Havuz Sayısı** — izlenen likidite havuzları
-    • **Durum** — etkin izleme veya etkin değil
-
-    Eylemler:
-    • **Sil** — bir token için tüm OHLCV verilerini kaldır
-    • **Temizle** — etkin olmayan token verilerini toplu kaldır
-
-    OHLCV verileri kalıcı olarak saklanır ve otomatik silinmez.
 
 ## positions
 

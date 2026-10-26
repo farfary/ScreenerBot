@@ -5,7 +5,6 @@
 
 ## Categories
 
-hints-category-tokens = Tokens
 hints-category-positions = Positions
 hints-category-filtering = Filtering
 hints-category-trader = Auto Trader
@@ -17,111 +16,6 @@ hints-category-config = Config
 hints-category-config-telegram = { -telegram }
 hints-category-token-details = Token Details
 hints-category-ui = Interface
-
-## tokens
-
-hints-tokens-pool-service-title = Pool Service Tokens
-hints-tokens-pool-service-content =
-    Tokens shown here meet the three conditions below.
-
-    • **Passed all filtering criteria** — liquidity, volume, age, and security checks
-    • **Valid SOL liquidity pools** — supported by our DEX decoders (Raydium, Orca, Meteora, etc.)
-    • **Successful price calculation** — prices computed directly from on-chain pool reserves
-
-    This is the most reliable token list for trading as prices are derived from actual pool data, not external APIs.
-
-    Click any token to view detailed information and manage blacklist status.
-hints-tokens-no-market-title = No Market Data
-hints-tokens-no-market-content =
-    Tokens discovered on-chain but missing market data from { -dexscreener } or { -geckoterminal }.
-
-    Common reasons:
-    • **Very new tokens** — not yet indexed by aggregators
-    • **Low trading volume** — below aggregator thresholds
-    • **Unlisted pairs** — trading on DEXs not tracked by aggregators
-
-    These tokens may still have valid pools and can be traded, but lack external market metrics.
-hints-tokens-all-title = All Tokens
-hints-tokens-all-content =
-    Complete database of discovered tokens regardless of filtering status.
-
-    Includes:
-    • Tokens that passed filtering
-    • Tokens that were rejected
-    • Tokens without market data
-    • Blacklisted tokens
-
-    Use this view for research or to find tokens that may have been filtered out.
-hints-tokens-passed-title = Passed Filtering
-hints-tokens-passed-content =
-    Tokens that passed all active filtering criteria.
-
-    Filtering checks include:
-    • **Liquidity** — minimum SOL liquidity threshold
-    • **Volume** — 24h trading volume requirements
-    • **Token age** — minimum time since creation
-    • **Security** — { -rugcheck } risk score limits
-    • **Market cap** — optional FDV/MC filters
-
-    Configure filters in the **Filtering** page.
-hints-tokens-rejected-title = Rejected Tokens
-hints-tokens-rejected-content =
-    Tokens that failed one or more filtering criteria.
-
-    Each token shows the specific rejection reason:
-    • Which filter failed
-    • The actual value vs required threshold
-    • When the check occurred
-
-    Review rejected tokens to fine-tune your filter settings.
-hints-tokens-blacklisted-title = Blacklisted Tokens
-hints-tokens-blacklisted-content =
-    Tokens permanently excluded from trading.
-
-    Blacklist reasons include:
-    • **Manual blacklist** — tokens you've explicitly blocked
-    • **Security risks** — detected rug pull indicators
-    • **Loss threshold** — exceeded configured loss limits
-    • **Failed transactions** — repeated swap failures
-
-    Blacklisted tokens are never shown in passed lists or considered for auto-trading.
-hints-tokens-positions-title = Position Tokens
-hints-tokens-positions-content =
-    Tokens currently held in open positions.
-
-    Shows real-time data for your active holdings:
-    • Current price from pool reserves
-    • Unrealized P&L
-    • Position size and entry price
-    • Time held
-
-    Click any token for detailed position management.
-hints-tokens-recent-title = Recently Discovered
-hints-tokens-recent-content =
-    Newly discovered tokens ordered by discovery time.
-
-    Useful for:
-    • Spotting new token launches
-    • Monitoring fresh liquidity
-    • Early entry opportunities
-
-    Note: New tokens may lack complete market data initially.
-hints-tokens-ohlcv-title = OHLCV Data Management
-hints-tokens-ohlcv-content =
-    View and manage OHLCV (candlestick) data stored for tokens.
-
-    Shows:
-    • **Candle Count** — total data points stored
-    • **Backfill Progress** — timeframe completion status
-    • **Data Span** — time coverage in hours
-    • **Pool Count** — tracked liquidity pools
-    • **Status** — active monitoring or inactive
-
-    Actions:
-    • **Delete** — remove all OHLCV data for a token
-    • **Cleanup** — bulk remove inactive token data
-
-    OHLCV data is preserved permanently and never auto-deleted.
 
 ## positions
 

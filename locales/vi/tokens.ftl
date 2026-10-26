@@ -292,14 +292,107 @@ tokens-dialog-badge-blacklisted = Trong danh sách đen
 
 tokens-view-favorites = Yêu thích
 tokens-view-pool = Dịch vụ pool
+    .tooltip =
+        Các token hiển thị ở đây đáp ứng ba điều kiện dưới đây.
+
+        • Đạt mọi tiêu chí lọc — kiểm tra thanh khoản, khối lượng, tuổi và bảo mật
+        • Có pool thanh khoản SOL hợp lệ — được các bộ giải mã DEX của chúng tôi hỗ trợ (Raydium, Orca, Meteora, v.v.)
+        • Tính giá thành công — giá được tính trực tiếp từ dự trữ của pool on-chain
+
+        Đây là danh sách token đáng tin cậy nhất để giao dịch vì giá được lấy từ dữ liệu pool thực tế, không phải từ API bên ngoài.
+
+        Nhấp vào bất kỳ token nào để xem thông tin chi tiết và quản lý trạng thái danh sách đen.
 tokens-view-no-market = Không có dữ liệu thị trường
+    .tooltip =
+        Các token được phát hiện on-chain nhưng thiếu dữ liệu thị trường từ { -dexscreener } hoặc { -geckoterminal }.
+
+        Lý do thường gặp:
+        • Token rất mới — chưa được các trình tổng hợp lập chỉ mục
+        • Khối lượng giao dịch thấp — dưới ngưỡng của trình tổng hợp
+        • Cặp chưa được niêm yết — giao dịch trên các DEX mà trình tổng hợp không theo dõi
+
+        Các token này vẫn có thể có pool hợp lệ và có thể giao dịch, nhưng thiếu chỉ số thị trường bên ngoài.
 tokens-view-all = Tất cả token
+    .tooltip =
+        Cơ sở dữ liệu đầy đủ của các token đã phát hiện, bất kể trạng thái lọc.
+
+        Bao gồm:
+        • Token đã đạt bộ lọc
+        • Token bị loại
+        • Token không có dữ liệu thị trường
+        • Token trong danh sách đen
+
+        Dùng chế độ xem này để nghiên cứu hoặc tìm các token có thể đã bị lọc mất.
 tokens-view-passed = Đạt
+    .tooltip =
+        Các token đạt mọi tiêu chí lọc đang bật.
+
+        Các kiểm tra lọc gồm:
+        • Thanh khoản — ngưỡng thanh khoản SOL tối thiểu
+        • Khối lượng — yêu cầu khối lượng giao dịch 24h
+        • Tuổi token — thời gian tối thiểu kể từ khi tạo
+        • Bảo mật — giới hạn điểm rủi ro { -rugcheck }
+        • Vốn hóa — bộ lọc FDV/vốn hóa tùy chọn
+
+        Cấu hình bộ lọc trong trang Lọc.
 tokens-view-rejected = Bị loại
+    .tooltip =
+        Các token không đạt một hoặc nhiều tiêu chí lọc.
+
+        Mỗi token hiển thị lý do bị loại cụ thể:
+        • Bộ lọc nào không đạt
+        • Giá trị thực tế so với ngưỡng yêu cầu
+        • Thời điểm kiểm tra
+
+        Hãy xem lại các token bị loại để tinh chỉnh cài đặt bộ lọc.
 tokens-view-blacklisted = Trong danh sách đen
+    .tooltip =
+        Các token bị loại vĩnh viễn khỏi giao dịch.
+
+        Lý do vào danh sách đen gồm:
+        • Đưa vào thủ công — token bạn đã chặn rõ ràng
+        • Rủi ro bảo mật — phát hiện dấu hiệu rug pull
+        • Ngưỡng lỗ — vượt quá giới hạn lỗ đã cấu hình
+        • Giao dịch thất bại — swap thất bại nhiều lần
+
+        Token trong danh sách đen không bao giờ xuất hiện trong danh sách đạt bộ lọc và không được xét cho giao dịch tự động.
 tokens-view-positions = Vị thế
+    .tooltip =
+        Các token hiện đang nắm giữ trong vị thế đang mở.
+
+        Hiển thị dữ liệu thời gian thực cho các khoản nắm giữ của bạn:
+        • Giá hiện tại từ dự trữ của pool
+        • P&L chưa chốt
+        • Quy mô vị thế và điểm vào lệnh
+        • Thời gian nắm giữ
+
+        Nhấp vào bất kỳ token nào để quản lý vị thế chi tiết.
 tokens-view-recent = Gần đây
+    .tooltip =
+        Các token mới phát hiện, sắp xếp theo thời điểm phát hiện.
+
+        Hữu ích để:
+        • Phát hiện các token mới ra mắt
+        • Theo dõi thanh khoản mới
+        • Tìm cơ hội vào lệnh sớm
+
+        Lưu ý: Token mới ban đầu có thể chưa có đầy đủ dữ liệu thị trường.
 tokens-view-ohlcv = Dữ liệu OHLCV
+    .tooltip =
+        Xem và quản lý dữ liệu OHLCV (nến) được lưu cho các token.
+
+        Hiển thị:
+        • Số nến — tổng số điểm dữ liệu đã lưu
+        • Tiến độ backfill — trạng thái hoàn tất theo khung thời gian
+        • Phạm vi dữ liệu — thời gian được phủ, tính bằng giờ
+        • Số pool — các pool thanh khoản đang theo dõi
+        • Trạng thái — đang giám sát hoặc không hoạt động
+
+        Thao tác:
+        • Xóa — xóa toàn bộ dữ liệu OHLCV của một token
+        • Dọn dẹp — xóa hàng loạt dữ liệu token không hoạt động
+
+        Dữ liệu OHLCV được giữ vĩnh viễn và không bao giờ tự động xóa.
 # Empty token table per view (TOKEN_VIEW_EMPTY_LABELS)
 tokens-view-pool-empty = Chưa có token được định giá
     .message = Token xuất hiện tại đây khi vượt qua bộ lọc và giá pool của chúng đã được tính.

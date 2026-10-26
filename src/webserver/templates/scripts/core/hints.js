@@ -148,7 +148,6 @@ export function getDismissedHints() {
  * Message ids of the labels for the top-level HINTS categories
  */
 export const HINT_CATEGORY_LABELS = Object.freeze({
-  tokens: "hints-category-tokens",
   positions: "hints-category-positions",
   filtering: "hints-category-filtering",
   trader: "hints-category-trader",
@@ -228,67 +227,6 @@ function localizeRegistry(registry) {
  * message ids in `locales/en/hints.ftl`.
  */
 export const HINTS = localizeRegistry({
-  // ═══════════════════════════════════════════════════════════════════════════
-  // TOKENS PAGE
-  // ═══════════════════════════════════════════════════════════════════════════
-  tokens: {
-    poolService: {
-      id: "tokens.pool_service",
-      title: "hints-tokens-pool-service-title",
-      content: "hints-tokens-pool-service-content",
-      learnMoreUrl: "https://screenerbot.io/docs/dashboard/tokens",
-    },
-
-    noMarketData: {
-      id: "tokens.no_market",
-      title: "hints-tokens-no-market-title",
-      content: "hints-tokens-no-market-content",
-    },
-
-    allTokens: {
-      id: "tokens.all",
-      title: "hints-tokens-all-title",
-      content: "hints-tokens-all-content",
-    },
-
-    passedTokens: {
-      id: "tokens.passed",
-      title: "hints-tokens-passed-title",
-      content: "hints-tokens-passed-content",
-      learnMoreUrl: "https://screenerbot.io/docs/dashboard/filtering",
-    },
-
-    rejectedTokens: {
-      id: "tokens.rejected",
-      title: "hints-tokens-rejected-title",
-      content: "hints-tokens-rejected-content",
-    },
-
-    blacklistedTokens: {
-      id: "tokens.blacklisted",
-      title: "hints-tokens-blacklisted-title",
-      content: "hints-tokens-blacklisted-content",
-    },
-
-    positionsTokens: {
-      id: "tokens.positions",
-      title: "hints-tokens-positions-title",
-      content: "hints-tokens-positions-content",
-    },
-
-    recentTokens: {
-      id: "tokens.recent",
-      title: "hints-tokens-recent-title",
-      content: "hints-tokens-recent-content",
-    },
-
-    ohlcvData: {
-      id: "tokens.ohlcv",
-      title: "hints-tokens-ohlcv-title",
-      content: "hints-tokens-ohlcv-content",
-    },
-  },
-
   // ═══════════════════════════════════════════════════════════════════════════
   // POSITIONS PAGE
   // ═══════════════════════════════════════════════════════════════════════════

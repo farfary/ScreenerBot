@@ -11,10 +11,8 @@ import * as Utils from "../../core/utils.js";
 import { formatFixed } from "../../core/format.js";
 import { boostTierForMint, boostCountForMint, formatBoostCount } from "../../core/boosts.js";
 import * as AppState from "../../core/app_state.js";
-import * as Hints from "../../core/hints.js";
-import { HintTrigger } from "../../ui/hint_popover.js";
 import { renderTokenRowCell } from "../../ui/token_identity.js";
-import { SORT_KEY_TO_COLUMN, TOKEN_VIEWS } from "./constants.js";
+import { SORT_KEY_TO_COLUMN } from "./constants.js";
 
 export function findFirstDifferenceIndex(a, b) {
   if (typeof a !== "string" || typeof b !== "string") {
@@ -205,41 +203,4 @@ export function loadPersistedSort(stateKey) {
     };
   }
   return null;
-}
-
-/**
- * Attach hint triggers to tab buttons
- * Must be called after tab bar is rendered
- */
-export async function attachHintsToTabs() {
-  // Initialize hints system (loads settings and dismissed state)
-  await Hints.init();
-
-  if (!Hints.isEnabled()) return;
-
-  const container = document.querySelector("#subTabsContainer");
-  if (!container) return;
-
-  // Find all tab buttons and attach hints
-  TOKEN_VIEWS.forEach((view) => {
-    if (!view.hintKey) return;
-
-    const hint = Hints.getHint(view.hintKey);
-    if (!hint || Hints.isDismissed(hint.id)) return;
-
-    const tabButton = container.querySelector(`[data-tab-id="${view.id}"]`);
-    if (!tabButton) return;
-
-    // Check if hint already attached
-    if (tabButton.querySelector(".hint-trigger")) return;
-
-    // Append hint trigger to tab button (pass hintKey as path)
-    const triggerHtml = HintTrigger.render(hint, view.hintKey, { size: "sm" });
-    if (triggerHtml) {
-      tabButton.insertAdjacentHTML("beforeend", triggerHtml);
-    }
-  });
-
-  // Initialize hint trigger handlers
-  HintTrigger.initAll();
 }

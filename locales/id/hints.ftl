@@ -3,7 +3,6 @@
 
 ## Categories
 
-hints-category-tokens = Token
 hints-category-positions = Posisi
 hints-category-filtering = Pemfilteran
 hints-category-trader = Auto Trader
@@ -15,111 +14,6 @@ hints-category-config = Konfigurasi
 hints-category-config-telegram = { -telegram }
 hints-category-token-details = Detail Token
 hints-category-ui = Antarmuka
-
-## tokens
-
-hints-tokens-pool-service-title = Token Pool Service
-hints-tokens-pool-service-content =
-    Token yang ditampilkan di sini memenuhi tiga syarat di bawah.
-
-    • **Lolos semua kriteria filter** — pemeriksaan likuiditas, volume, usia, dan keamanan
-    • **Memiliki pool SOL yang valid** — didukung oleh decoder DEX kami (Raydium, Orca, Meteora, dll.)
-    • **Berhasil dihitung harganya** — harga dihitung langsung dari cadangan pool on-chain
-
-    Ini adalah daftar token paling andal untuk trading karena harga berasal dari data pool sebenarnya, bukan API eksternal.
-
-    Klik token mana pun untuk melihat informasi detail dan mengelola status daftar hitam.
-hints-tokens-no-market-title = Tanpa Data Pasar
-hints-tokens-no-market-content =
-    Token yang ditemukan on-chain tetapi tidak memiliki data pasar dari { -dexscreener } atau { -geckoterminal }.
-
-    Alasan umum:
-    • **Token sangat baru** — belum diindeks oleh agregator
-    • **Volume trading rendah** — di bawah ambang agregator
-    • **Pair tidak terdaftar** — diperdagangkan di DEX yang tidak dilacak agregator
-
-    Token ini mungkin tetap memiliki pool yang valid dan dapat diperdagangkan, tetapi tidak memiliki metrik pasar eksternal.
-hints-tokens-all-title = Semua Token
-hints-tokens-all-content =
-    Database lengkap token yang ditemukan, apa pun status pemfilterannya.
-
-    Mencakup:
-    • Token yang lolos filter
-    • Token yang ditolak
-    • Token tanpa data pasar
-    • Token dalam daftar hitam
-
-    Gunakan tampilan ini untuk riset atau untuk menemukan token yang mungkin tersaring.
-hints-tokens-passed-title = Lolos Filter
-hints-tokens-passed-content =
-    Token yang lolos semua kriteria filter yang aktif.
-
-    Pemeriksaan filter meliputi:
-    • **Likuiditas** — ambang likuiditas SOL minimum
-    • **Volume** — persyaratan volume trading 24h
-    • **Usia token** — waktu minimum sejak pembuatan
-    • **Keamanan** — batas skor risiko { -rugcheck }
-    • **Kapitalisasi pasar** — filter FDV/MC opsional
-
-    Atur filter di halaman **Pemfilteran**.
-hints-tokens-rejected-title = Token Ditolak
-hints-tokens-rejected-content =
-    Token yang gagal memenuhi satu atau lebih kriteria filter.
-
-    Setiap token menampilkan alasan penolakan spesifik:
-    • Filter mana yang gagal
-    • Nilai aktual dibandingkan ambang yang dibutuhkan
-    • Kapan pemeriksaan dilakukan
-
-    Tinjau token yang ditolak untuk menyempurnakan pengaturan filter Anda.
-hints-tokens-blacklisted-title = Token Daftar Hitam
-hints-tokens-blacklisted-content =
-    Token yang dikecualikan secara permanen dari trading.
-
-    Alasan masuk daftar hitam meliputi:
-    • **Daftar hitam manual** — token yang Anda blokir sendiri
-    • **Risiko keamanan** — indikator rug pull terdeteksi
-    • **Ambang kerugian** — melebihi batas kerugian yang dikonfigurasi
-    • **Transaksi gagal** — kegagalan swap berulang
-
-    Token dalam daftar hitam tidak pernah ditampilkan di daftar lolos atau dipertimbangkan untuk auto-trading.
-hints-tokens-positions-title = Token Posisi
-hints-tokens-positions-content =
-    Token yang saat ini dipegang dalam posisi terbuka.
-
-    Menampilkan data real-time untuk kepemilikan aktif Anda:
-    • Harga saat ini dari cadangan pool
-    • P&L belum terealisasi
-    • Ukuran posisi dan harga entry
-    • Lama dipegang
-
-    Klik token mana pun untuk pengelolaan posisi secara detail.
-hints-tokens-recent-title = Baru Ditemukan
-hints-tokens-recent-content =
-    Token yang baru ditemukan, diurutkan berdasarkan waktu penemuan.
-
-    Berguna untuk:
-    • Melihat peluncuran token baru
-    • Memantau likuiditas baru
-    • Peluang entry awal
-
-    Catatan: token baru mungkin belum memiliki data pasar lengkap pada awalnya.
-hints-tokens-ohlcv-title = Manajemen Data OHLCV
-hints-tokens-ohlcv-content =
-    Lihat dan kelola data OHLCV (candlestick) yang tersimpan untuk token.
-
-    Menampilkan:
-    • **Jumlah Candle** — total titik data yang tersimpan
-    • **Progres Backfill** — status kelengkapan timeframe
-    • **Rentang Data** — cakupan waktu dalam jam
-    • **Jumlah Pool** — pool likuiditas yang dilacak
-    • **Status** — pemantauan aktif atau nonaktif
-
-    Aksi:
-    • **Hapus** — hapus semua data OHLCV untuk token
-    • **Bersihkan** — hapus massal data token yang tidak aktif
-
-    Data OHLCV disimpan permanen dan tidak pernah dihapus otomatis.
 
 ## positions
 

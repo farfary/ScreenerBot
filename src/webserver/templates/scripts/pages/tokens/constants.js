@@ -30,25 +30,26 @@ export const TOKEN_VIEW_EMPTY_LABELS = Object.freeze({
   recent: "tokens-view-recent-empty",
 });
 
-const view = (id, icon, hintKey) => ({
+// A tab's tooltip says what the view lists; Favorites needs none.
+const view = (id, icon) => ({
   id,
   icon,
   label: I18n.label(TOKEN_VIEW_LABELS, id),
-  hintKey,
+  tooltip: I18n.labelAttr(TOKEN_VIEW_LABELS, id, "tooltip"),
 });
 
-// Sub-tabs (views) configuration with hint references
+// Sub-tabs (views) of the Tokens page, in tab order.
 export const TOKEN_VIEWS = [
-  view("favorites", "icon-star", "tokens.favorites"),
-  view("pool", "icon-droplet", "tokens.poolService"),
-  view("no_market", "icon-trending-down", "tokens.noMarketData"),
-  view("all", "icon-list", "tokens.allTokens"),
-  view("passed", "icon-check", "tokens.passedTokens"),
-  view("rejected", "icon-circle-x", "tokens.rejectedTokens"),
-  view("blacklisted", "icon-ban", "tokens.blacklistedTokens"),
-  view("positions", "icon-chart-bar", "tokens.positionsTokens"),
-  view("recent", "icon-clock", "tokens.recentTokens"),
-  view("ohlcv", "icon-chart-candlestick", "tokens.ohlcvData"),
+  view("favorites", "icon-star"),
+  view("pool", "icon-droplet"),
+  view("no_market", "icon-trending-down"),
+  view("all", "icon-list"),
+  view("passed", "icon-check"),
+  view("rejected", "icon-circle-x"),
+  view("blacklisted", "icon-ban"),
+  view("positions", "icon-chart-bar"),
+  view("recent", "icon-clock"),
+  view("ohlcv", "icon-chart-candlestick"),
 ];
 
 // Constants

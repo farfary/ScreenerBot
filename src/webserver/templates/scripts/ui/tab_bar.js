@@ -34,7 +34,8 @@
  *   onHide: () => { ... }
  * });
  *
- * A tab's `label` is text and `icon` an optional icon class; the bar owns their markup.
+ * A tab's `label` is text, `icon` an optional icon class and `tooltip` optional plain text
+ * shown on hover and focus; the bar owns their markup.
  *
  * // Integrate with lifecycle
  * ctx.manageTabBar(tabBar);
@@ -374,7 +375,7 @@ export class TabBar {
             role="tab"
             aria-selected="${active}"
             tabindex="${active ? "0" : "-1"}"
-            type="button"
+            type="button"${tab.tooltip ? ` data-tooltip="${this._escapeHtml(tab.tooltip)}"` : ""}
           >
             ${icon}${this._escapeHtml(tab.label)}
           </button>
