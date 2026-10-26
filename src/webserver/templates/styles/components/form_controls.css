@@ -887,8 +887,8 @@ input[type="radio"]:disabled {
    unit suffix and our stepper. The room they need is reserved by
    the shell's gutter, which the enhancer applies as an INLINE declaration
    pointing back at `--number-field-gutter`. It has to be inline: any page rule
-   that sets the `padding` shorthand on its own inputs (`.input-large`,
-   `.trade-action-input`, `.config-field-control input[type="number"]`, …)
+   that sets the `padding` shorthand on its own inputs (`.trade-action-input`,
+   `.config-field-control input[type="number"]`, …)
    outranks a stylesheet reserve and erases it — which is how a right-aligned
    "50" ended up printed on top of its own "USD" suffix. The measurements
    themselves stay here; JavaScript passes no numbers of its own except the
