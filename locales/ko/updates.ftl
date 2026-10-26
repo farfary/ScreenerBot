@@ -140,4 +140,4 @@ updates-notice-whats-new = 새로운 기능
 updates-notice-available-detail = 변경 사항을 확인하고 설정에서 설치하세요.
 updates-notice-updated-detail = 이 버전에서 바뀐 내용을 확인하세요.
 # A headless installation cannot download or install a release itself.
-updates-headless-install-detail = 헤드리스 설치는 대시보드 밖에서 업데이트됩니다. Linux에서는 { "screenerbot-manager update" }을(를) 실행하세요.
+updates-headless-install-detail = 헤드리스 설치는 대시보드 밖에서 업데이트됩니다. Linux에서는 { "sudo screenerbot-manager update" }을(를) 실행하세요.

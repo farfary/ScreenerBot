@@ -124,4 +124,4 @@ updates-notice-whats-new = Yang baru
 updates-notice-available-detail = Lihat perubahannya dan instal dari Pengaturan.
 updates-notice-updated-detail = Lihat perubahan di versi ini.
 # A headless installation cannot download or install a release itself.
-updates-headless-install-detail = Instalasi headless diperbarui di luar dasbor. Di Linux, jalankan { "screenerbot-manager update" }.
+updates-headless-install-detail = Instalasi headless diperbarui di luar dasbor. Di Linux, jalankan { "sudo screenerbot-manager update" }.

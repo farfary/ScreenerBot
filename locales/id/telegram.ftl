@@ -339,8 +339,14 @@ telegram-update-available =
     Ukuran unduhan: { $size } MB.
 
     Diunduh otomatis; kirim /update lagi setelah siap.
+telegram-update-available-headless =
+    <b>v{ $version } tersedia</b>
+
+    { $how }
+    Ukuran unduhan: { $size } MB.
 telegram-update-how-core = Diinstal secara senyap dengan restart singkat.
 telegram-update-how-installer = Memerlukan penginstal desktop dijalankan sekali.
+telegram-update-how-headless = Instal di server dengan <code>{ "sudo screenerbot-manager update" }</code>.
 
 ## Shared values and units. Numbers arrive formatted; only the unit words live here.
 

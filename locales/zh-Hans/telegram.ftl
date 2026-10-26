@@ -339,8 +339,14 @@ telegram-update-available =
     下载大小：{ $size } MB。
 
     它会自动下载；准备就绪后请再次发送 /update。
+telegram-update-available-headless =
+    <b>v{ $version } 可用</b>
+
+    { $how }
+    下载大小：{ $size } MB。
 telegram-update-how-core = 静默安装，需短暂重启。
 telegram-update-how-installer = 需要运行一次桌面安装程序。
+telegram-update-how-headless = 请在服务器上运行 <code>{ "sudo screenerbot-manager update" }</code> 进行安装。
 
 ## Shared values and units. Numbers arrive formatted; only the unit words live here.
 

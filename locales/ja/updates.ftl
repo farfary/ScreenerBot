@@ -140,4 +140,4 @@ updates-notice-whats-new = 新機能
 updates-notice-available-detail = 変更内容を確認し、設定からインストールしてください。
 updates-notice-updated-detail = このバージョンの変更内容を確認できます。
 # A headless installation cannot download or install a release itself.
-updates-headless-install-detail = ヘッドレス環境はダッシュボードの外で更新されます。Linux では { "screenerbot-manager update" } を実行してください。
+updates-headless-install-detail = ヘッドレス環境はダッシュボードの外で更新されます。Linux では { "sudo screenerbot-manager update" } を実行してください。

@@ -129,7 +129,7 @@ updates-notice-region =
     .aria-label = Update-Status
 updates-notice-view = Update ansehen
 updates-notice-whats-new = Neuigkeiten
-updates-notice-available-detail = Sieh dir die Änderungen an und installiere das Update in den Einstellungen.
-updates-notice-updated-detail = Sieh dir an, was sich in dieser Version geändert hat.
+updates-notice-available-detail = Sehen Sie sich die Änderungen an und installieren Sie das Update in den Einstellungen.
+updates-notice-updated-detail = Sehen Sie sich an, was sich in dieser Version geändert hat.
 # A headless installation cannot download or install a release itself.
-updates-headless-install-detail = Headless-Installationen werden außerhalb des Dashboards aktualisiert. Unter Linux führe { "screenerbot-manager update" } aus.
+updates-headless-install-detail = Headless-Installationen werden außerhalb des Dashboards aktualisiert. Führen Sie unter Linux { "sudo screenerbot-manager update" } aus.

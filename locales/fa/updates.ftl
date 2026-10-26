@@ -141,4 +141,4 @@ updates-notice-whats-new = تازه‌ها
 updates-notice-available-detail = تغییرات را ببینید و آن را از تنظیمات نصب کنید.
 updates-notice-updated-detail = ببینید در این نسخه چه چیزهایی تغییر کرده است.
 # A headless installation cannot download or install a release itself.
-updates-headless-install-detail = نصب‌های بدون رابط کاربری بیرون از داشبورد به‌روزرسانی می‌شوند. در Linux، { "screenerbot-manager update" } را اجرا کنید.
+updates-headless-install-detail = نصب‌های بدون رابط کاربری بیرون از داشبورد به‌روزرسانی می‌شوند. در Linux، { "sudo screenerbot-manager update" } را اجرا کنید.

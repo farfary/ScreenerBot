@@ -315,8 +315,14 @@ telegram-update-available =
     डाउनलोड साइज़: { $size } MB।
 
     यह अपने आप डाउनलोड होता है; तैयार होने पर /update दोबारा भेजें।
+telegram-update-available-headless =
+    <b>v{ $version } उपलब्ध है</b>
+
+    { $how }
+    डाउनलोड साइज़: { $size } MB।
 telegram-update-how-core = थोड़े रीस्टार्ट के साथ चुपचाप इंस्टॉल होता है।
 telegram-update-how-installer = डेस्कटॉप इंस्टॉलर को एक बार चलाना ज़रूरी है।
+telegram-update-how-headless = इसे सर्वर पर <code>{ "sudo screenerbot-manager update" }</code> से इंस्टॉल करें।
 
 telegram-value-unknown = अज्ञात
 telegram-value-na = लागू नहीं

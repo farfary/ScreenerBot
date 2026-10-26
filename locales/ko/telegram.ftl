@@ -329,8 +329,14 @@ telegram-update-available =
     다운로드 크기: { $size } MB.
 
     자동으로 다운로드됩니다. 준비되면 /update를 다시 보내세요.
+telegram-update-available-headless =
+    <b>v{ $version } 업데이트 가능</b>
+
+    { $how }
+    다운로드 크기: { $size } MB.
 telegram-update-how-core = 짧은 재시작과 함께 자동으로 설치됩니다.
 telegram-update-how-installer = 데스크톱 설치 프로그램을 한 번 실행해야 합니다.
+telegram-update-how-headless = 서버에서 <code>{ "sudo screenerbot-manager update" }</code> 명령으로 설치하세요.
 
 ## Shared values and units.
 

@@ -124,4 +124,4 @@ updates-notice-whats-new = Что нового
 updates-notice-available-detail = Посмотрите изменения и установите обновление в настройках.
 updates-notice-updated-detail = Посмотрите, что изменилось в этой версии.
 # A headless installation cannot download or install a release itself.
-updates-headless-install-detail = Установки без интерфейса обновляются вне панели. В Linux выполните { "screenerbot-manager update" }.
+updates-headless-install-detail = Установки без интерфейса обновляются вне панели. В Linux выполните { "sudo screenerbot-manager update" }.

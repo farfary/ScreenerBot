@@ -94,20 +94,66 @@ pub async fn handle_update_command() -> String {
             ),
         ),
         UpdatePhase::Applying => installing(),
-        _ => {
-            let how = if update.kind == UpdateKind::Core {
-                ids::TELEGRAM_UPDATE_HOW_CORE
-            } else {
-                ids::TELEGRAM_UPDATE_HOW_INSTALLER
-            };
-            with_icon(
-                "⬆️",
-                &tg(
-                    &version_text(ids::TELEGRAM_UPDATE_AVAILABLE, &update.version)
-                        .arg("how", UiArg::Nested(Box::new(UiText::new(how))))
-                        .arg("size", UiArg::Text(format!("{size_mb:.1}"))),
-                ),
+        _ => with_icon(
+            "⬆️",
+            &tg(&available_text(
+                update.kind,
+                version::self_install_supported(update.kind),
+                &update.version,
             )
+            .arg("size", UiArg::Text(format!("{size_mb:.1}")))),
+        ),
+    }
+}
+
+/// What an available release needs. A release this process cannot install itself (a
+/// full release on a headless install) is installed by the package manager on the
+/// server and never downloads on its own, so its notice names that command instead.
+fn available_text(kind: UpdateKind, self_install: bool, version: &str) -> UiText {
+    let (message, how) = if !self_install {
+        (
+            ids::TELEGRAM_UPDATE_AVAILABLE_HEADLESS,
+            ids::TELEGRAM_UPDATE_HOW_HEADLESS,
+        )
+    } else if kind == UpdateKind::Core {
+        (
+            ids::TELEGRAM_UPDATE_AVAILABLE,
+            ids::TELEGRAM_UPDATE_HOW_CORE,
+        )
+    } else {
+        (
+            ids::TELEGRAM_UPDATE_AVAILABLE,
+            ids::TELEGRAM_UPDATE_HOW_INSTALLER,
+        )
+    };
+    version_text(message, version).arg("how", UiArg::Nested(Box::new(UiText::new(how))))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::available_text;
+    use crate::i18n::UiArg;
+    use crate::version::UpdateKind;
+
+    fn english(kind: UpdateKind, self_install: bool) -> String {
+        available_text(kind, self_install, "0.3.0")
+            .arg("size", UiArg::Text("42.0".to_owned()))
+            .render_source_plain()
+    }
+
+    #[test]
+    fn a_headless_install_is_told_to_run_the_package_manager() {
+        let text = english(UpdateKind::Full, false);
+        assert!(text.contains("sudo screenerbot-manager update"), "{text}");
+        assert!(!text.contains("downloads on its own"), "{text}");
+    }
+
+    #[test]
+    fn a_desktop_install_downloads_the_release_itself() {
+        for kind in [UpdateKind::Core, UpdateKind::Full] {
+            let text = english(kind, true);
+            assert!(text.contains("downloads on its own"), "{text}");
+            assert!(!text.contains("screenerbot-manager"), "{text}");
         }
     }
 }

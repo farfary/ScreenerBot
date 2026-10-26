@@ -342,8 +342,14 @@ telegram-update-available =
     حجم التنزيل: { $size } MB.
 
     يُنزَّل من تلقاء نفسه؛ أرسل /update مرة أخرى عندما يصبح جاهزًا.
+telegram-update-available-headless =
+    <b>v{ $version } متاح</b>
+
+    { $how }
+    حجم التنزيل: { $size } MB.
 telegram-update-how-core = يُثبَّت بصمت مع إعادة تشغيل قصيرة.
 telegram-update-how-installer = يتطلب تشغيل مثبّت سطح المكتب مرة واحدة.
+telegram-update-how-headless = ثبّته على الخادم باستخدام <code>{ "sudo screenerbot-manager update" }</code>.
 
 ## Shared values and units. Numbers arrive formatted; only the unit words live here.
 

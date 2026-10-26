@@ -341,8 +341,14 @@ telegram-update-available =
     حجم دانلود: { $size } MB.
 
     دانلود خودکار انجام می‌شود؛ پس از آماده شدن، دوباره /update را بفرستید.
+telegram-update-available-headless =
+    <b>v{ $version } در دسترس است</b>
+
+    { $how }
+    حجم دانلود: { $size } MB.
 telegram-update-how-core = بی‌صدا نصب می‌شود و یک راه‌اندازی مجدد کوتاه دارد.
 telegram-update-how-installer = نصب‌کننده دسکتاپ باید یک بار اجرا شود.
+telegram-update-how-headless = آن را روی سرور با <code>{ "sudo screenerbot-manager update" }</code> نصب کنید.
 
 ## Shared values and units. Numbers arrive formatted; only the unit words live here.
 

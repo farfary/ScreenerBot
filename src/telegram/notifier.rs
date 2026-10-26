@@ -15,6 +15,7 @@ use crate::telegram::pagination::PAGINATION_MANAGER;
 use crate::telegram::text::{tg, tg_id, with_icon};
 use crate::telegram::types::{ErrorSeverity, Notification, NotificationType, UpdateStage};
 use crate::telegram::{Error, Result};
+use crate::version::{self_install_supported, UpdateKind};
 use teloxide::prelude::*;
 use teloxide::types::{ChatId, InlineKeyboardButton, InlineKeyboardMarkup, ParseMode};
 use tokio::sync::mpsc;
@@ -355,10 +356,14 @@ impl TelegramNotifier {
                 let installs_silently = *silent;
                 match stage {
                     UpdateStage::Available => {
+                        // A full release on a headless install is installed by the
+                        // package manager on the server, never by this process.
                         let how = if installs_silently {
                             ids::TELEGRAM_UPDATE_HOW_CORE
-                        } else {
+                        } else if self_install_supported(UpdateKind::Full) {
                             ids::TELEGRAM_NOTIFY_UPDATE_HOW_INSTALLER
+                        } else {
+                            ids::TELEGRAM_UPDATE_HOW_HEADLESS
                         };
                         let megabytes = *transfer_bytes as f64 / (1024.0 * 1024.0);
                         with_icon(

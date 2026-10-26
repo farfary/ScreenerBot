@@ -331,8 +331,14 @@ telegram-update-available =
     Dung lượng tải: { $size } MB.
 
     Bản này tự tải xuống; hãy gửi /update lần nữa khi đã sẵn sàng.
+telegram-update-available-headless =
+    <b>Đã có v{ $version }</b>
+
+    { $how }
+    Dung lượng tải: { $size } MB.
 telegram-update-how-core = Cài đặt âm thầm kèm một lần khởi động lại ngắn.
 telegram-update-how-installer = Cần chạy trình cài đặt máy tính một lần.
+telegram-update-how-headless = Cài đặt trên máy chủ bằng <code>{ "sudo screenerbot-manager update" }</code>.
 
 ## Shared values and units. Numbers arrive formatted; only the unit words live here.
 

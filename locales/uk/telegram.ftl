@@ -337,8 +337,14 @@ telegram-update-available =
     Розмір завантаження: { $size } МБ.
 
     Завантаження відбувається саме; надішліть /update ще раз, коли воно буде готове.
+telegram-update-available-headless =
+    <b>Доступна v{ $version }</b>
+
+    { $how }
+    Розмір завантаження: { $size } МБ.
 telegram-update-how-core = Встановлюється непомітно з коротким перезапуском.
 telegram-update-how-installer = Потрібно один раз запустити десктопний інсталятор.
+telegram-update-how-headless = Встановіть її на сервері командою <code>{ "sudo screenerbot-manager update" }</code>.
 
 ## Shared values and units.
 

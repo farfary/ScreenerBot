@@ -333,8 +333,14 @@ telegram-update-available =
     İndirme boyutu: { $size } MB.
 
     Kendiliğinden iner; hazır olduğunda /update komutunu yeniden gönderin.
+telegram-update-available-headless =
+    <b>v{ $version } mevcut</b>
+
+    { $how }
+    İndirme boyutu: { $size } MB.
 telegram-update-how-core = Kısa bir yeniden başlatmayla sessizce kurulur.
 telegram-update-how-installer = Masaüstü yükleyicisinin bir kez çalıştırılması gerekir.
+telegram-update-how-headless = Sunucuda <code>{ "sudo screenerbot-manager update" }</code> ile kurun.
 
 ## Shared values and units. Numbers arrive formatted; only the unit words live here.
 

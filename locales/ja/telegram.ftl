@@ -339,8 +339,14 @@ telegram-update-available =
     ダウンロードサイズ: { $size } MB。
 
     自動でダウンロードされます。準備ができたらもう一度 /update を送信してください。
+telegram-update-available-headless =
+    <b>v{ $version } が利用可能です</b>
+
+    { $how }
+    ダウンロードサイズ: { $size } MB。
 telegram-update-how-core = 短い再起動でサイレントにインストールされます。
 telegram-update-how-installer = デスクトップのインストーラーを1回実行する必要があります。
+telegram-update-how-headless = サーバーで <code>{ "sudo screenerbot-manager update" }</code> を実行してインストールしてください。
 
 ## Shared values and units. Numbers arrive formatted; only the unit words live here.
 
