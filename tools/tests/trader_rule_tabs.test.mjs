@@ -31,6 +31,9 @@
  * - A switch field (Allow Partial Exit) sits in the same frame as the number fields
  *   beside it.
  * - A best or worst trade that is not known reads as one dash, never "— —".
+ * - Each config card has its own title glyph, and no field borrows another card's
+ *   (Trade Size once wore DCA's coins; Take Profit, Position Sizing and Entry
+ *   Strategies shared one target).
  *
  * Run with `npm run test:js`.
  */
@@ -352,4 +355,31 @@ test("an unknown best or worst trade reads as one dash", async () => {
     await statsContext.close();
     await statsHost.close();
   }
+});
+
+test("every config card has its own glyph and no field borrows another card's", async () => {
+  const report = await page.evaluate(() => {
+    const glyph = (el) => [...(el?.classList ?? [])].find((name) => name.startsWith("icon-"));
+    const cards = [...document.querySelectorAll(".trader-tab-content .config-card")]
+      .map((card) => ({
+        card,
+        title: card.querySelector(".card-header h3")?.textContent.trim(),
+        glyph: glyph(card.querySelector(".card-header h3 i")),
+      }))
+      .filter((card) => card.glyph);
+    const borrowed = [];
+    for (const { card, title } of cards) {
+      for (const label of card.querySelectorAll(".config-label")) {
+        const owner = cards.find(
+          (other) => other.card !== card && other.glyph === glyph(label.querySelector("i"))
+        );
+        if (owner)
+          borrowed.push(`${title}: ${label.textContent.trim()} wears ${owner.title}'s glyph`);
+      }
+    }
+    return { glyphs: cards.map((card) => `${card.glyph} ${card.title}`), borrowed };
+  });
+  const glyphs = report.glyphs.map((entry) => entry.split(" ")[0]);
+  assert.equal(new Set(glyphs).size, glyphs.length, report.glyphs.join(", "));
+  assert.deepEqual(report.borrowed, []);
 });
