@@ -239,6 +239,47 @@ mod tests {
     }
 
     #[test]
+    fn session_titles_carry_no_direction_controls() {
+        let pool = setup_test_pool();
+        let marked =
+            "\u{2068}Chat\u{2069} \u{200F}Oct 26\u{200E}, \u{202B}10:05\u{202C} \u{2066}PM\u{2069}";
+        let session_id = create_session(&pool, marked).unwrap();
+        assert_eq!(
+            get_session(&pool, session_id).unwrap().unwrap().title,
+            "Chat Oct 26, 10:05 PM"
+        );
+
+        update_session_title(&pool, session_id, "\u{202E}Renamed\u{202A}").unwrap();
+        let stored: String = pool
+            .get()
+            .unwrap()
+            .query_row(
+                "SELECT title FROM chat_sessions WHERE id = ?1",
+                [session_id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(stored, "Renamed");
+
+        // A row written before titles were cleaned reads without its controls.
+        pool.get()
+            .unwrap()
+            .execute(
+                "UPDATE chat_sessions SET title = ?1 WHERE id = ?2",
+                rusqlite::params![marked, session_id],
+            )
+            .unwrap();
+        assert_eq!(
+            get_session(&pool, session_id).unwrap().unwrap().title,
+            "Chat Oct 26, 10:05 PM"
+        );
+        assert_eq!(
+            get_sessions(&pool).unwrap()[0].title,
+            "Chat Oct 26, 10:05 PM"
+        );
+    }
+
+    #[test]
     fn test_message_crud() {
         let pool = setup_test_pool();
         let session_id = create_session(&pool, "Test Chat").unwrap();

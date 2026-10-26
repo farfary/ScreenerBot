@@ -19,6 +19,25 @@ use super::database::{ChatMessage, ChatSession, ToolExecution};
 // SESSION CRUD OPERATIONS
 // =============================================================================
 
+/// A session title without text-direction controls.
+///
+/// Titles are plain text rendered with `dir="auto"`. A left-to-right or right-to-left
+/// mark, embedding, override or isolate (U+200E, U+200F, U+202A-U+202E,
+/// U+2066-U+2069) carried in from a formatted date or a localized message would
+/// override that direction and travel along when the title is copied, so titles are
+/// stored without them and rows written before are cleaned when read.
+fn clean_session_title(title: &str) -> String {
+    title
+        .chars()
+        .filter(|c| {
+            !matches!(
+                c,
+                '\u{200E}' | '\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}'
+            )
+        })
+        .collect()
+}
+
 /// Create a new chat session
 pub fn create_session(pool: &Pool<SqliteConnectionManager>, title: &str) -> Result<i64> {
     let conn = pool.get().map_err(|e| {
@@ -30,7 +49,7 @@ pub fn create_session(pool: &Pool<SqliteConnectionManager>, title: &str) -> Resu
 
     conn.execute(
         "INSERT INTO chat_sessions (title, created_at, updated_at) VALUES (?1, ?2, ?3)",
-        params![title, &now, &now],
+        params![clean_session_title(title), &now, &now],
     )
     .map_err(|e| {
         Error::Database(DatabaseError::Query {
@@ -54,7 +73,7 @@ pub fn create_hidden_session(pool: &Pool<SqliteConnectionManager>, title: &str) 
 
     conn.execute(
         "INSERT INTO chat_sessions (title, is_hidden, created_at, updated_at) VALUES (?1, 1, ?2, ?3)",
-        params![title, &now, &now],
+        params![clean_session_title(title), &now, &now],
     )
     .map_err(|e| {
         Error::Database(DatabaseError::Query {
@@ -96,7 +115,7 @@ pub fn get_sessions(pool: &Pool<SqliteConnectionManager>) -> Result<Vec<ChatSess
         .query_map([], |row| {
             Ok(ChatSession {
                 id: row.get(0)?,
-                title: row.get(1)?,
+                title: clean_session_title(&row.get::<_, String>(1)?),
                 summary: row.get(2)?,
                 message_count: row.get(3)?,
                 created_at: row.get(4)?,
@@ -148,7 +167,7 @@ pub fn get_session(pool: &Pool<SqliteConnectionManager>, id: i64) -> Result<Opti
         .query_row(params![id], |row| {
             Ok(ChatSession {
                 id: row.get(0)?,
-                title: row.get(1)?,
+                title: clean_session_title(&row.get::<_, String>(1)?),
                 summary: row.get(2)?,
                 message_count: row.get(3)?,
                 created_at: row.get(4)?,
@@ -208,7 +227,7 @@ pub fn update_session_title(
 
     conn.execute(
         "UPDATE chat_sessions SET title = ?1, updated_at = ?2 WHERE id = ?3",
-        params![title, &now, id],
+        params![clean_session_title(title), &now, id],
     )
     .map_err(|e| {
         Error::Database(DatabaseError::Query {
