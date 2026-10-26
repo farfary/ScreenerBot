@@ -39,32 +39,10 @@
   min-width: 0;
 }
 
+/* The avatar inside is the shared `.ti-logo`. */
 .position-details-dialog .header-logo {
   display: flex;
   flex-shrink: 0;
-  align-items: center;
-  justify-content: center;
-  width: 44px;
-  height: 44px;
-  overflow: hidden;
-  border-radius: var(--token-logo-radius, 3px);
-  background: var(--bg-card-hover);
-}
-
-.position-details-dialog .header-logo img {
-  width: 100%;
-  height: 100%;
-  object-fit: var(--token-logo-fit, cover);
-}
-
-.position-details-dialog .logo-placeholder {
-  color: var(--text-muted);
-  font-size: 1rem;
-  font-weight: 700;
-}
-
-.position-details-dialog .logo-placeholder[hidden] {
-  display: none;
 }
 
 .position-details-dialog .header-identity {

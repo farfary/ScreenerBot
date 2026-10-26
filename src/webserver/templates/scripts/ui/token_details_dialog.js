@@ -7,7 +7,6 @@
  * Full-screen dialog showing comprehensive token information with multiple tabs
  */
 import * as Utils from "../core/utils.js";
-import { logoFallbackAttr } from "../core/dom.js";
 import { createFocusTrap } from "../core/utils.js";
 import { Poller } from "../core/poller.js";
 import { pushEscapeHandler } from "../core/escape_stack.js";
@@ -32,7 +31,12 @@ import { applyUtilitiesMixin } from "./token_details/utilities.js";
 import { applyStateHandlingMixin } from "./token_details/state_handling.js";
 import { renderStateView } from "./state_view.js";
 import { applyPositionsTabMixin } from "./token_details/positions_tab.js";
-import { resolvedTokenName, resolvedTokenSymbol } from "./token_identity.js";
+import {
+  getIdentity,
+  renderTokenLogo,
+  resolvedTokenName,
+  resolvedTokenSymbol,
+} from "./token_identity.js";
 
 // Data source status constants
 const DATA_SOURCE_STATUS = {
@@ -44,6 +48,17 @@ const DATA_SOURCE_STATUS = {
 };
 
 const esc = (text) => Utils.escapeHtml(text);
+
+/** The header avatar's identity; fields the token record carries win over the cache. */
+function headerLogoIdentity(token) {
+  const cached = getIdentity(token.mint);
+  return {
+    ...cached,
+    symbol: resolvedTokenSymbol(token.symbol) || cached.symbol,
+    name: resolvedTokenName(token.name) || cached.name,
+    logoUrl: Utils.resolveTokenLogoUrl(token) || cached.logoUrl,
+  };
+}
 
 // Ids are the DATA_SOURCE_STATUS values.
 const DATA_SOURCE_STATUS_LABELS = Object.freeze({
@@ -929,7 +944,6 @@ export class TokenDetailsDialog {
   _getDialogHTML() {
     const symbol = this.tokenData.symbol || I18n.t("tokens-dialog-unknown-symbol");
     const name = this.tokenData.name || I18n.t("tokens-dialog-unknown-name");
-    const logoUrl = this.tokenData.logo_url || this.tokenData.image_url || "";
     // WSOL/SOL is the base currency, not a tradeable/analyzable token: hide the
     // trade buttons, the per-token actions (favorite/copy/Solscan), and every tab
     // except Overview — only its price + SOL/USD chart are meaningful here.
@@ -942,9 +956,7 @@ export class TokenDetailsDialog {
         <div class="dialog-header">
           <div class="header-top-row">
             <div class="header-left">
-              <div class="header-logo token-logo-frame">
-                ${logoUrl ? `<img class="token-logo-artwork" src="${this._escapeHtml(logoUrl)}" alt="${this._escapeHtml(symbol)}" ${logoFallbackAttr("logo-placeholder")} />` : `<div class="logo-placeholder">${this._escapeHtml(symbol.charAt(0))}</div>`}
-              </div>
+              <div class="header-logo">${renderTokenLogo(headerLogoIdentity(this.tokenData), { size: "xl" })}</div>
               <div class="header-title">
                 <span class="title-main">${this._escapeHtml(symbol)}</span>
                 <span class="title-sub">${this._escapeHtml(name)}</span>
@@ -1072,11 +1084,7 @@ export class TokenDetailsDialog {
     }
     const logoEl = this.dialogEl.querySelector(".header-logo");
     if (logoEl) {
-      const sym = resolvedTokenSymbol(token.symbol) || "?";
-      const logoUrl = token.logo_url || token.image_url || "";
-      const logoHtml = logoUrl
-        ? `<img class="token-logo-artwork" src="${this._escapeHtml(logoUrl)}" alt="${this._escapeHtml(sym)}" ${logoFallbackAttr("logo-placeholder")} />`
-        : `<div class="logo-placeholder">${this._escapeHtml(sym.charAt(0))}</div>`;
+      const logoHtml = renderTokenLogo(headerLogoIdentity(token), { size: "xl" });
       this._renderHtmlIfChanged(logoEl, logoHtml, "__logoHtml");
     }
 

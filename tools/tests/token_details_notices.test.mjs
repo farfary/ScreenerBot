@@ -74,6 +74,8 @@ async function openEmptyChartDialog(t, sourceStatus) {
   await page.waitForSelector(PAGE_READY);
   await page.click("#tokens-root tr[data-row-id] .ti-row-cell__symbol");
   await page.waitForSelector(`${DIALOG} [data-dialog-tab="overview"]`);
+  // The header avatar is the shared token avatar, not a dialog-local one.
+  assert.equal(await page.locator(`${DIALOG} .header-logo > .ti-logo-xl`).count(), 1);
   return page;
 }
 

@@ -7,7 +7,7 @@
  * Contains token-related utilities: create token, token watch, and token analyzer
  */
 
-import { $, $$, on, logoFallbackAttr } from "../../core/dom.js";
+import { $, $$, on } from "../../core/dom.js";
 import {
   formatBooleanFlag,
   formatCurrencyUSD,
@@ -21,7 +21,7 @@ import { ConfirmationDialog } from "../../ui/confirmation_dialog.js";
 import { apiErrorMessage } from "../../core/request_manager.js";
 import { RISK_SEVERITY_LABELS } from "../../ui/risk_severity.js";
 import { venueLabel } from "../../ui/venue.js";
-import { renderAddress } from "../../ui/token_identity.js";
+import { getIdentity, renderAddress, renderTokenLogo } from "../../ui/token_identity.js";
 import { rugcheckRiskDescription, rugcheckRiskName } from "../../ui/rugcheck_risk.js";
 import { renderStateView } from "../../ui/state_view.js";
 
@@ -576,12 +576,19 @@ function renderTaTokenHeader(overview) {
   const priceSol = overview.price_sol;
   const priceUsd = overview.price_usd;
   const mint = overview.mint || taCurrentMint;
+  const cached = getIdentity(mint);
 
   headerEl.innerHTML = `
     <div class="ta-header-left">
-      <div class="ta-logo token-logo-frame">
-        ${logoUrl ? `<img class="token-logo-artwork" src="${escapeHtml(logoUrl)}" alt="${escapeHtml(symbol)}" ${logoFallbackAttr("ta-logo-placeholder")} />` : `<div class="ta-logo-placeholder">${escapeHtml(symbol.charAt(0))}</div>`}
-      </div>
+      ${renderTokenLogo(
+        {
+          ...cached,
+          symbol: overview.symbol || cached.symbol,
+          name: overview.name || cached.name,
+          logoUrl: logoUrl || cached.logoUrl,
+        },
+        { size: "xl" }
+      )}
       <div class="ta-header-info">
         <span class="ta-symbol">${escapeHtml(symbol)}</span>
         <span class="ta-name">${escapeHtml(name)}</span>

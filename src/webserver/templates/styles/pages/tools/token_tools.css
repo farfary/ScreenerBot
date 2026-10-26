@@ -64,35 +64,6 @@
   gap: var(--spacing-md);
 }
 
-.ta-logo {
-  width: 48px;
-  height: 48px;
-  border-radius: var(--token-logo-radius, 3px);
-  overflow: hidden;
-  background: var(--bg-secondary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.ta-logo img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.ta-logo-placeholder {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.25rem;
-  font-weight: 700;
-  color: var(--text-secondary);
-  background: var(--primary-alpha-10);
-}
-
 .ta-header-info {
   display: flex;
   flex-direction: column;

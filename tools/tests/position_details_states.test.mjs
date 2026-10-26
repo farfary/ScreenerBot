@@ -78,6 +78,8 @@ test("a failed details load offers Retry and recovers", async (t) => {
   await retry.click();
   await page.waitForSelector(BODY_STATE, { state: "hidden" });
   assert.ok(await page.locator(".position-details-dialog .header-metric").count());
+  // The header avatar is the shared token avatar, not a dialog-local one.
+  assert.equal(await page.locator(".position-details-dialog .header-logo > .ti-logo-lg").count(), 1);
 });
 
 test("an active favourite is a bare glyph", () => {

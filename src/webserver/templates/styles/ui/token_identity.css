@@ -123,6 +123,12 @@
   font-size: 44px;
 }
 
+.ti-logo-xl {
+  width: 48px;
+  height: 48px;
+  font-size: 48px;
+}
+
 .ti-logo-table {
   width: var(--token-table-logo-size);
   height: var(--token-table-logo-size);

@@ -112,22 +112,10 @@
   min-width: 0;
 }
 
+/* The avatar inside is the shared `.ti-logo`; this wrapper is the zoom target. */
 .token-details-dialog .header-logo {
   display: flex;
   flex-shrink: 0;
-  align-items: center;
-  justify-content: center;
-  width: 48px;
-  height: 48px;
-  overflow: hidden;
-  border-radius: var(--token-logo-radius, 3px);
-  background: var(--bg-card-hover);
-}
-
-.token-details-dialog .header-logo img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
 }
 
 .token-details-dialog .header-logo.clickable-logo:has(img) {
@@ -137,13 +125,6 @@
 
 .token-details-dialog .header-logo.clickable-logo:has(img):hover {
   opacity: 0.82;
-}
-
-.token-details-dialog .logo-placeholder {
-  font-size: 18px;
-  font-weight: 700;
-  color: var(--text-muted);
-  text-transform: uppercase;
 }
 
 .token-details-dialog .header-title {
@@ -635,9 +616,10 @@
     gap: 10px;
   }
 
-  .token-details-dialog .header-logo {
+  .token-details-dialog .header-logo .ti-logo {
     width: 44px;
     height: 44px;
+    font-size: 44px;
   }
 
   .token-details-dialog .header-price {

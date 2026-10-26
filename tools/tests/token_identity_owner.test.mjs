@@ -7,8 +7,10 @@
  * `ui/token_identity.js`, so every table and list shows one avatar, one letter
  * fallback and one row-cell layout.
  *
- * - No page script builds its own `<img>` for a token logo (a provider logo URL).
- *   The allowlist holds the page surfaces not yet moved to the owner; it only shrinks.
+ * - No page or shared UI script builds its own `<img>` for a token logo (a provider
+ *   logo URL); the token details, position details and token analyzer headers once
+ *   drew their own avatar with their own letter fallback. The allowlist holds the
+ *   surfaces not yet moved to the owner; it only shrinks.
  * - Every DataTable consumer that shows a token renders it with `renderTokenRowCell`
  *   or `renderTokenCell`.
  * - The row cell's hidden actions sit inside the cell, so the token column never
@@ -26,14 +28,15 @@ import { readFileSync } from "node:fs";
 import { SCRIPTS_ROOT, STYLES_ROOT, repoPath, walk } from "../lib/dashboard_ui.mjs";
 
 const RAW_LOGO_IMG = /<img\b[^>]*\$\{[^}]*\b(?:logoUrl|logo_url|image_url)\b/;
-const RAW_LOGO_ALLOWLIST = new Set(["src/webserver/templates/scripts/pages/tools/token_tools.js"]);
+const RAW_LOGO_ALLOWLIST = new Set(["src/webserver/templates/scripts/ui/tool_favorites.js"]);
+const IDENTITY_OWNER = "src/webserver/templates/scripts/ui/token_identity.js";
 
 const scripts = (await walk(SCRIPTS_ROOT)).filter((file) => file.endsWith(".js"));
 
-test("page scripts take token logos from the identity owner", () => {
+test("page and UI scripts take token logos from the identity owner", () => {
   const found = [];
-  for (const file of scripts.filter((path) => path.includes("/scripts/pages/"))) {
-    if (RAW_LOGO_ALLOWLIST.has(repoPath(file))) continue;
+  for (const file of scripts.filter((path) => /\/scripts\/(?:pages|ui)\//.test(path))) {
+    if (RAW_LOGO_ALLOWLIST.has(repoPath(file)) || repoPath(file) === IDENTITY_OWNER) continue;
     readFileSync(file, "utf8")
       .split("\n")
       .forEach((line, index) => {

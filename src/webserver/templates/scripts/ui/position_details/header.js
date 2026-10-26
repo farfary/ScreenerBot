@@ -14,7 +14,7 @@ import { HintTrigger } from "../hint_popover.js";
 import { manualTrade } from "../manual_trade.js";
 import { POSITION_MANAGEMENT_LABELS } from "../position_management.js";
 import { POSITION_STATUS_LABELS } from "../position_status.js";
-import { renderAddress } from "../token_identity.js";
+import { getIdentity, renderAddress, renderTokenLogo } from "../token_identity.js";
 
 const esc = (text) => Utils.escapeHtml(text);
 
@@ -58,15 +58,20 @@ export function applyHeaderMixin(PositionDetailsDialog) {
     const symbol = pos.symbol || "";
     const cashtag = `$${Utils.escapeHtml(symbol.toUpperCase())}`; // format-ok: token ticker cashtag, not an amount
     const name = pos.name || symbol || I18n.t("format-unknown");
-    const logoUrl = pos.logo_url || this.fullDetails?.token_info?.image_url || "";
+    const cached = getIdentity(pos.mint);
+    const logo = renderTokenLogo(
+      {
+        ...cached,
+        symbol: symbol || cached.symbol,
+        name: pos.name || cached.name,
+        logoUrl: pos.logo_url || this.fullDetails?.token_info?.image_url || cached.logoUrl,
+      },
+      { size: "lg" }
+    );
     const status = this._status();
-    const initial = Utils.escapeHtml((symbol || name || "?").charAt(0).toUpperCase());
 
     const html = `
-      <div class="header-logo token-logo-frame">
-        ${logoUrl ? `<img class="token-logo-artwork" src="${Utils.escapeHtml(logoUrl)}" alt="" />` : ""}
-        <span class="logo-placeholder"${logoUrl ? " hidden" : ""}>${initial}</span>
-      </div>
+      <div class="header-logo">${logo}</div>
       <div class="header-identity">
         <div class="header-title">
           <span class="title-main" id="pdd-dialog-title" title="${Utils.escapeHtml(name)}">${Utils.escapeHtml(name)}</span>
@@ -77,16 +82,7 @@ export function applyHeaderMixin(PositionDetailsDialog) {
       </div>`;
 
     const el = this.dialogEl?.querySelector("#pddIdentity");
-    if (!paintHtml(el, html)) return;
-    const img = el.querySelector("img");
-    img?.addEventListener(
-      "error",
-      () => {
-        img.remove();
-        el.querySelector(".logo-placeholder")?.removeAttribute("hidden");
-      },
-      { once: true }
-    );
+    paintHtml(el, html);
   };
 
   /**
