@@ -180,6 +180,7 @@ shell-copy-value-idle = Nhàn rỗi
 shell-copy-sub-active = { $active }/{ $total } đang hoạt động
 
 shell-ticker-services-healthy = Dịch vụ: <strong>Ổn định</strong>
+shell-ticker-services-starting = Dịch vụ: <strong>Đang khởi động</strong>
 shell-ticker-services-issues =
     { $count ->
        *[other] Dịch vụ: <strong>{ $count } sự cố</strong>

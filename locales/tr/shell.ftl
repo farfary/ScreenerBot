@@ -180,6 +180,7 @@ shell-copy-value-idle = Boşta
 shell-copy-sub-active = { $active } / { $total } aktif
 
 shell-ticker-services-healthy = Hizmetler: <strong>Sağlıklı</strong>
+shell-ticker-services-starting = Hizmetler: <strong>Başlatılıyor</strong>
 shell-ticker-services-issues =
     { $count ->
         [one] Hizmetler: <strong>{ $count } sorun</strong>

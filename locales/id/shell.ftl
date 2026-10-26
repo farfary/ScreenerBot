@@ -182,6 +182,7 @@ shell-copy-value-idle = Siaga
 shell-copy-sub-active = { $active } dari { $total } aktif
 
 shell-ticker-services-healthy = Layanan: <strong>Sehat</strong>
+shell-ticker-services-starting = Layanan: <strong>Memulai</strong>
 shell-ticker-services-issues =
     { $count ->
        *[other] Layanan: <strong>{ $count } Masalah</strong>

@@ -27,7 +27,7 @@
     "rejected_count": 1211,
     "last_refresh": "2026-10-07T09:29:40+00:00"
   },
-  "system": { "all_services_healthy": true, "unhealthy_services": [], "critical_degraded": false },
+  "system": { "all_services_healthy": true, "unhealthy_services": [], "critical_degraded": false, "starting": false },
   "sol": { "price_usd": 165.0, "change_24h_percent": 1.8 },
   "copy": { "enabled": true, "total_tasks": 2, "paper_tasks": 1, "live_tasks": 1, "notices": [] },
   "timestamp": "2026-10-07T09:30:00+00:00"

@@ -269,6 +269,9 @@ function updateTicker(metrics) {
   if (servicesText && metrics.system) {
     if (metrics.system.all_services_healthy) {
       renderServicesStatus(servicesText, "", "shell-ticker-services-healthy");
+    } else if (metrics.system.starting && !metrics.system.unhealthy_services?.length) {
+      // Services that have not reported yet are neither healthy nor faulty.
+      renderServicesStatus(servicesText, "unknown", "shell-ticker-services-starting");
     } else {
       const count = metrics.system.unhealthy_services?.length ?? 0;
       const dotClass = metrics.system.critical_degraded ? "error" : "warning";

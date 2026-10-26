@@ -212,6 +212,7 @@ shell-copy-sub-active = { $total }件中 { $active }件が稼働中
 ## Ticker services state
 
 shell-ticker-services-healthy = サービス: <strong>正常</strong>
+shell-ticker-services-starting = サービス: <strong>起動中</strong>
 shell-ticker-services-issues =
     { $count ->
        *[other] サービス: <strong>問題 { $count }件</strong>

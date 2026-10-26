@@ -103,7 +103,11 @@ pub struct FilteringHeaderInfo {
 
 #[derive(Debug, Serialize)]
 pub struct SystemHeaderInfo {
+    /// True only when nothing is starting and nothing is faulty.
     pub all_services_healthy: bool,
     pub unhealthy_services: Vec<String>,
     pub critical_degraded: bool,
+    /// Something has not reported yet (core services, unprobed critical endpoints, a
+    /// service still starting); a neutral state, never an issue.
+    pub starting: bool,
 }

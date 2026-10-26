@@ -212,6 +212,7 @@ shell-copy-sub-active = { $active } of { $total } active
 ## Ticker services state
 
 shell-ticker-services-healthy = Services: <strong>Healthy</strong>
+shell-ticker-services-starting = Services: <strong>Starting</strong>
 shell-ticker-services-issues =
     { $count ->
         [one] Services: <strong>{ $count } Issue</strong>

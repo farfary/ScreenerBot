@@ -7,11 +7,13 @@ use axum::response::Json;
 
 use crate::chains::ChainScope;
 use crate::config::with_config;
-use crate::connectivity::state::are_critical_endpoints_healthy;
+use crate::connectivity::state::{
+    get_confirmed_unhealthy_critical_endpoints, get_unhealthy_critical_endpoints,
+};
 use crate::filtering::{try_fetch_stats, SnapshotState};
 use crate::global::are_core_services_ready;
 use crate::rpc::{get_global_rpc_stats, RpcStats};
-use crate::services::get_service_manager;
+use crate::services::{get_service_manager, ServiceHealth};
 use crate::wallet::{
     get_wallet_worth, get_worth_at_time, worth_change, WalletWorth, WorthChange, WorthSample,
 };
@@ -182,48 +184,71 @@ fn known_price(price: f64) -> Option<f64> {
 }
 
 async fn calculate_system_health() -> SystemHeaderInfo {
-    let mut unhealthy_services = Vec::new();
-    let mut critical_degraded = false;
-
     // In Explore Mode the wallet/RPC services are intentionally not running, so
-    // "core services" being incomplete is expected and must not be flagged as a problem.
+    // "core services" being incomplete is expected and is neither an issue nor pending.
     let explore = crate::global::is_explore_mode();
+    let unprobed_or_down = get_unhealthy_critical_endpoints().await;
+    let confirmed_down = get_confirmed_unhealthy_critical_endpoints().await;
 
-    // Check core services readiness (skipped in Explore Mode)
-    if !explore && !are_core_services_ready() {
-        unhealthy_services.push("Core Services".to_owned());
-        critical_degraded = true;
-    }
-
-    // Check critical endpoints
-    if !are_critical_endpoints_healthy().await {
-        unhealthy_services.push("Critical Endpoints".to_owned());
-        critical_degraded = true;
-    }
-
-    // Check service manager health. Only enabled services can be "unhealthy" — a
-    // disabled service (e.g. trading/pools in Explore Mode, or any service
-    // turned off via config) is intentionally off, not a fault.
+    let mut services = Vec::new();
     if let Some(manager_arc) = get_service_manager().await {
         let manager = manager_arc.read().await;
         if let Some(manager) = &*manager {
-            let health_map = manager.get_health().await;
-            for (name, health) in health_map {
-                // Only genuine faults count as issues — not transient "starting" or
-                // intentionally "disabled" services.
-                if health.is_unhealthy() || health.is_degraded() {
-                    unhealthy_services.push(name.to_string());
-                }
-            }
+            services.extend(
+                manager
+                    .get_health()
+                    .await
+                    .into_iter()
+                    .map(|(name, health)| (name.to_string(), health)),
+            );
         }
     }
 
-    let all_services_healthy = unhealthy_services.is_empty();
+    system_health(SystemHealthFacts {
+        core_services_pending: !explore && !are_core_services_ready(),
+        critical_endpoints_unprobed: unprobed_or_down.len() > confirmed_down.len(),
+        critical_endpoints_down: !confirmed_down.is_empty(),
+        services,
+    })
+}
+
+/// What the header's system status is computed from.
+struct SystemHealthFacts {
+    /// Core services have not all reported ready (never set in Explore Mode).
+    core_services_pending: bool,
+    /// A critical endpoint has not been probed yet.
+    critical_endpoints_unprobed: bool,
+    /// A critical endpoint is confirmed down.
+    critical_endpoints_down: bool,
+    services: Vec<(String, ServiceHealth)>,
+}
+
+/// The header's system status. Only confirmed faults are issues: a confirmed-down
+/// critical endpoint, or an unhealthy or degraded service. Anything that has not
+/// reported yet is `starting`, a neutral state; a disabled service is intentionally off.
+fn system_health(facts: SystemHealthFacts) -> SystemHeaderInfo {
+    let mut unhealthy_services = Vec::new();
+    let mut critical_degraded = false;
+    if facts.critical_endpoints_down {
+        unhealthy_services.push("Critical Endpoints".to_owned());
+        critical_degraded = true;
+    }
+    let mut service_starting = false;
+    for (name, health) in facts.services {
+        if health.is_unhealthy() || health.is_degraded() {
+            unhealthy_services.push(name);
+        } else if matches!(health, ServiceHealth::Starting) {
+            service_starting = true;
+        }
+    }
+    let starting =
+        facts.core_services_pending || facts.critical_endpoints_unprobed || service_starting;
 
     SystemHeaderInfo {
-        all_services_healthy,
+        all_services_healthy: unhealthy_services.is_empty() && !starting,
         unhealthy_services,
         critical_degraded,
+        starting,
     }
 }
 
@@ -363,5 +388,62 @@ mod tests {
         })
         .unwrap();
         assert!(sol["price_usd"].is_null());
+    }
+
+    fn facts(services: Vec<(&str, ServiceHealth)>) -> SystemHealthFacts {
+        SystemHealthFacts {
+            core_services_pending: false,
+            critical_endpoints_unprobed: false,
+            critical_endpoints_down: false,
+            services: services
+                .into_iter()
+                .map(|(name, health)| (name.to_owned(), health))
+                .collect(),
+        }
+    }
+
+    fn fault() -> crate::i18n::UiText {
+        crate::i18n::UiText::new(crate::i18n::ids::SERVICES_HEALTH_SOL_PRICE_NOT_RUNNING)
+    }
+
+    #[test]
+    fn startup_is_neutral_until_something_is_confirmed_faulty() {
+        let mut pending = facts(vec![("pools", ServiceHealth::Healthy)]);
+        pending.core_services_pending = true;
+        pending.critical_endpoints_unprobed = true;
+        for status in [
+            system_health(pending),
+            system_health(facts(vec![("pools", ServiceHealth::Starting)])),
+        ] {
+            assert!(status.starting);
+            assert!(!status.all_services_healthy);
+            assert!(status.unhealthy_services.is_empty());
+            assert!(!status.critical_degraded);
+        }
+
+        let disabled = system_health(facts(vec![("telegram", ServiceHealth::Disabled)]));
+        assert!(disabled.all_services_healthy && !disabled.starting);
+    }
+
+    #[test]
+    fn only_confirmed_faults_are_issues() {
+        let mut down = facts(vec![
+            ("pools", ServiceHealth::Unhealthy(fault())),
+            ("ohlcv", ServiceHealth::Degraded(fault())),
+            ("tokens", ServiceHealth::Starting),
+        ]);
+        down.critical_endpoints_down = true;
+        let status = system_health(down);
+        assert_eq!(
+            status.unhealthy_services,
+            ["Critical Endpoints", "pools", "ohlcv"]
+        );
+        assert!(status.critical_degraded);
+        assert!(status.starting);
+        assert!(!status.all_services_healthy);
+
+        let degraded_only = system_health(facts(vec![("ohlcv", ServiceHealth::Degraded(fault()))]));
+        assert_eq!(degraded_only.unhealthy_services, ["ohlcv"]);
+        assert!(!degraded_only.critical_degraded && !degraded_only.starting);
     }
 }

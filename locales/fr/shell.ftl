@@ -180,6 +180,7 @@ shell-copy-value-idle = Inactif
 shell-copy-sub-active = { $active } actives sur { $total }
 
 shell-ticker-services-healthy = Services : <strong>Sains</strong>
+shell-ticker-services-starting = Services : <strong>Démarrage</strong>
 shell-ticker-services-issues =
     { $count ->
         [one] Services : <strong>{ $count } problème</strong>

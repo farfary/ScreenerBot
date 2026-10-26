@@ -212,6 +212,7 @@ shell-copy-sub-active = { $active } از { $total } فعال
 ## Ticker services state
 
 shell-ticker-services-healthy = سرویس‌ها: <strong>سالم</strong>
+shell-ticker-services-starting = سرویس‌ها: <strong>در حال شروع</strong>
 shell-ticker-services-issues =
     { $count ->
         [one] سرویس‌ها: <strong>{ $count } مشکل</strong>

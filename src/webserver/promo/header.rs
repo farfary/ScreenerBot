@@ -81,6 +81,7 @@ pub fn get_promo_header_metrics() -> HeaderMetricsResponse {
         all_services_healthy: true,
         unhealthy_services: vec![],
         critical_degraded: false,
+        starting: false,
     };
 
     HeaderMetricsResponse {

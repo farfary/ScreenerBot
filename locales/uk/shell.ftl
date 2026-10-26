@@ -212,6 +212,7 @@ shell-copy-sub-active = Активні: { $active } із { $total }
 ## Ticker services state
 
 shell-ticker-services-healthy = Сервіси: <strong>Справні</strong>
+shell-ticker-services-starting = Сервіси: <strong>Запуск</strong>
 shell-ticker-services-issues =
     { $count ->
         [one] Сервіси: <strong>{ $count } проблема</strong>

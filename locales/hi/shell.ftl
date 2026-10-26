@@ -180,6 +180,7 @@ shell-copy-value-idle = निष्क्रिय
 shell-copy-sub-active = { $total } में से { $active } सक्रिय
 
 shell-ticker-services-healthy = सर्विस: <strong>स्वस्थ</strong>
+shell-ticker-services-starting = सर्विस: <strong>शुरू हो रही हैं</strong>
 shell-ticker-services-issues =
     { $count ->
         [one] सर्विस: <strong>{ $count } समस्या</strong>

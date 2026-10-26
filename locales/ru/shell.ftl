@@ -180,6 +180,7 @@ shell-copy-value-idle = Простой
 shell-copy-sub-active = активно: { $active } из { $total }
 
 shell-ticker-services-healthy = Сервисы: <strong>в порядке</strong>
+shell-ticker-services-starting = Сервисы: <strong>запуск</strong>
 shell-ticker-services-issues =
     { $count ->
         [one] Сервисы: <strong>{ $count } проблема</strong>

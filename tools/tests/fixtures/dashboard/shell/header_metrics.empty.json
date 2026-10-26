@@ -30,7 +30,8 @@
   "system": {
     "all_services_healthy": true,
     "unhealthy_services": [],
-    "critical_degraded": false
+    "critical_degraded": false,
+    "starting": false
   },
   "sol": {
     "price_usd": 165.0,
