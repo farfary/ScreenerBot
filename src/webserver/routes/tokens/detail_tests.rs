@@ -1,12 +1,13 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! The token detail answers a token's creation time: on-chain creation when known, else discovery.
+//! The token detail answers a token's creation time: on-chain creation when known, else
+//! discovery; and the wrapped native coin carries only the figures that describe the coin.
 
 use chrono::{DateTime, Duration, TimeZone, Utc};
 use serde_json::json;
 
-use super::detail::creation_timestamp;
+use super::detail::{creation_timestamp, MarketFigures};
 use crate::tokens::types::Token;
 
 /// A token discovered at `discovered` whose provider reported `created` as its creation.
@@ -56,4 +57,27 @@ fn creation_time_falls_back_to_discovery_without_a_valid_creation() {
             "{created:?}"
         );
     }
+}
+
+#[test]
+fn the_wrapped_native_coin_is_priced_at_the_shared_native_figure() {
+    let figures = MarketFigures::of_native_asset(Some(187.25));
+    assert_eq!(figures.price_sol, Some(1.0));
+    assert_eq!(figures.price_usd, Some(187.25));
+    assert_eq!(MarketFigures::of_native_asset(None).price_usd, None);
+}
+
+#[test]
+fn the_wrapped_native_coin_shows_no_wrapper_supply_holders_or_pooled_reserves() {
+    let figures = MarketFigures::of_native_asset(Some(187.25));
+    assert_eq!(figures.market_cap, None);
+    assert_eq!(figures.fdv, None);
+    assert_eq!(figures.liquidity_usd, None);
+    assert_eq!(figures.total_holders, None);
+}
+
+#[test]
+fn the_wrapped_native_mint_is_the_native_asset() {
+    let adapter = crate::chains::adapter_for(crate::chains::ChainId::Solana);
+    assert!(adapter.is_native_asset(crate::chains::solana::constants::SOL_MINT));
 }

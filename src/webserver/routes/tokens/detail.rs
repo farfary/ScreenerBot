@@ -25,6 +25,36 @@ pub(super) fn creation_timestamp(token: &crate::tokens::types::Token) -> i64 {
     token.created_at().timestamp()
 }
 
+/// The market figures of a token detail that depend on what the token is.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(super) struct MarketFigures {
+    pub price_sol: Option<f64>,
+    pub price_usd: Option<f64>,
+    pub market_cap: Option<f64>,
+    pub fdv: Option<f64>,
+    pub liquidity_usd: Option<f64>,
+    pub total_holders: Option<i64>,
+}
+
+impl MarketFigures {
+    /// The figures of the chain's wrapped native coin. It is the unit itself: one coin
+    /// per coin, priced at the native USD figure the header and the featured card show
+    /// (`known_native_price`), so all three agree. The providers' supply, holder and
+    /// reserve figures describe the wrapper contract and every pool quoted against it
+    /// (the wrapped supply times the price, a holder count the indexer does not keep,
+    /// the summed reserves of all those pools), not the coin, so they are absent.
+    pub(super) fn of_native_asset(native_price_usd: Option<f64>) -> Self {
+        Self {
+            price_sol: Some(1.0),
+            price_usd: native_price_usd,
+            market_cap: None,
+            fdv: None,
+            liquidity_usd: None,
+            total_holders: None,
+        }
+    }
+}
+
 /// GET /api/tokens/:mint
 ///
 /// Get detailed information about a specific token
@@ -516,6 +546,19 @@ pub async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailRespo
     } else {
         Some(token.price_usd)
     };
+    let figures =
+        if crate::chains::adapter_for(crate::chains::active_chain()).is_native_asset(&mint) {
+            MarketFigures::of_native_asset(crate::native_price::known_native_price())
+        } else {
+            MarketFigures {
+                price_sol: effective_price_sol,
+                price_usd,
+                market_cap: token.market_cap,
+                fdv: token.fdv,
+                liquidity_usd: token.liquidity_usd,
+                total_holders,
+            }
+        };
 
     // Build price change periods from flat fields
     let price_change_periods = PeriodStats {
@@ -739,20 +782,20 @@ pub async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailRespo
         pool_price_last_calculated_at: pool_price_last_calculated_at_ts,
         pair_url: None,      // Not available in unified Token
         boosts_active: None, // Not available in unified Token
-        price_sol: effective_price_sol,
-        price_usd,
+        price_sol: figures.price_sol,
+        price_usd: figures.price_usd,
         price_confidence,
         price_source,
         price_change_h1: token.price_change_h1,
         price_change_h24: token.price_change_h24,
         price_change_periods,
-        liquidity_usd: token.liquidity_usd,
+        liquidity_usd: figures.liquidity_usd,
         liquidity_base,
         liquidity_quote,
         volume_24h: token.volume_h24,
         volume_periods,
-        fdv: token.fdv,
-        market_cap: token.market_cap,
+        fdv: figures.fdv,
+        market_cap: figures.market_cap,
         pool_address,
         pool_program,
         pool_reserves_native,
@@ -768,7 +811,7 @@ pub async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailRespo
         rugged,
         mint_authority,
         freeze_authority,
-        total_holders,
+        total_holders: figures.total_holders,
         top_10_concentration,
         security_risks,
         security_summary,
