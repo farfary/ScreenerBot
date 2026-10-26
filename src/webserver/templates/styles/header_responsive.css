@@ -372,13 +372,18 @@ button.ticker-segment:hover .ticker-icon {
   }
 }
 
-/* Mid-width: the Explore setup control gives up its detail line first. */
-@media (width >= 800px) and (width <= 1279px) {
-  .explore-setup-detail,
-  .explore-setup-arrow {
-    display: none;
-  }
+/* Measured compaction (`HEADER_FIT_STEPS` in core/header.js): when the desktop row does
+   not fit, the Explore setup control drops to one line, the wordmark gives way to the
+   logo glyph, then the control keeps only its action; the quick actions fold only when
+   all of it is not enough. */
+.header-row-1.is-explore-compact .explore-setup-detail,
+.header-row-1.is-explore-compact .explore-setup-arrow,
+.header-row-1.is-brand-compact .brand-text,
+.header-row-1.is-explore-minimal .explore-setup-copy {
+  display: none;
+}
 
+@media (width >= 800px) and (width <= 1279px) {
   .modern-header .header-actions {
     margin-inline-start: 0;
     padding-inline-start: 4px;

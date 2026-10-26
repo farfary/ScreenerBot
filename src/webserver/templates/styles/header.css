@@ -328,18 +328,24 @@
   white-space: nowrap;
 }
 
+/* Each figure reserves the width of a typical value (min-width below), so a value
+   replacing "—" never widens its card and re-runs the row's fit. The data font is
+   monospaced: 1ch is one digit or sign. */
 .modern-header .card-value {
+  min-width: 7ch;
   font-size: 16px;
   font-weight: 650;
 }
 
 .modern-header .card-sub-value,
 .modern-header .card-change {
+  min-width: 6ch;
   font-size: 12px;
   font-weight: 650;
 }
 
 .modern-header .card-change {
+  min-width: calc(7ch + 10px);
   padding: 2px 5px;
   border-radius: var(--radius-sm);
 }
@@ -371,7 +377,9 @@
   background: var(--bg-card-hover);
 }
 
+/* A locale may set the dollar sign apart from the price ("165,00 $"). */
 .modern-header .sol-price-card .card-value {
+  min-width: 9ch;
   letter-spacing: -0.01em;
 }
 

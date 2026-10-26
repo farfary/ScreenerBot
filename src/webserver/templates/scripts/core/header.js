@@ -246,12 +246,27 @@ function initTraderControls() {
 }
 
 /**
+ * How the desktop row makes room before the quick actions fold, cheapest first. Each
+ * step keeps the previous ones: the Explore setup control drops its detail line, the
+ * wordmark gives way to the logo glyph, then the control drops its title (the trader
+ * card already reads Explore) and keeps its action.
+ */
+const HEADER_FIT_STEPS = Object.freeze([
+  Object.freeze([]),
+  Object.freeze(["is-explore-compact"]),
+  Object.freeze(["is-explore-compact", "is-brand-compact"]),
+  Object.freeze(["is-explore-compact", "is-brand-compact", "is-explore-minimal"]),
+]);
+const HEADER_FIT_CLASSES = HEADER_FIT_STEPS.at(-1);
+
+/**
  * The quick actions sit inline while they fit beside the header cards and fold behind
- * one disclosure toggle only when they do not. The fold is measured, not tied to a
- * viewport width: the cards scroll inside their own strip, so the actions fit exactly
- * when that strip does not overflow with the actions laid out inline. Phones (the
- * two-row header) always fold; the tablet header gives the actions their own cell and
- * never folds.
+ * one disclosure toggle only when nothing else can make room. The row is measured, not
+ * tied to viewport widths: the cards scroll inside their own strip, so the row fits
+ * exactly when neither the strip nor the row overflows. Room is made by
+ * `HEADER_FIT_STEPS` first, and the actions fold only when every step is not enough.
+ * Phones (the two-row header) always fold; the tablet header gives the actions their
+ * own cell and never folds.
  */
 function initHeaderActionsToggle() {
   const actions = document.getElementById("headerActions");
@@ -282,13 +297,27 @@ function initHeaderActionsToggle() {
     releaseEscape = pushEscapeHandler(() => close({ restoreFocus: true }));
   };
 
-  // Measured with the actions inline, in one synchronous pass, so nothing paints between
-  // the unfold and the re-fold.
-  const shouldFold = () => {
-    if (phone.matches) return true;
-    if (tablet.matches) return false;
-    actions.classList.remove("is-folded");
-    return cards.scrollWidth > cards.clientWidth + 1 || row.scrollWidth > row.clientWidth + 1;
+  const apply = (step, folded) => {
+    HEADER_FIT_CLASSES.forEach((name) => row.classList.toggle(name, step.includes(name)));
+    actions.classList.toggle("is-folded", folded);
+  };
+  const overflows = () =>
+    cards.scrollWidth > cards.clientWidth + 1 || row.scrollWidth > row.clientWidth + 1;
+
+  // Applied step by step in one synchronous pass, so nothing paints between the reset
+  // and the step that fits. Returns whether the actions folded.
+  const fit = () => {
+    if (phone.matches || tablet.matches) {
+      apply(HEADER_FIT_STEPS[0], phone.matches);
+      return phone.matches;
+    }
+    const fitting = HEADER_FIT_STEPS.find((step) => {
+      apply(step, false);
+      return !overflows();
+    });
+    if (fitting) return false;
+    apply(HEADER_FIT_CLASSES, true);
+    return true;
   };
 
   let measurePending = false;
@@ -298,9 +327,7 @@ function initHeaderActionsToggle() {
     // Deferred out of the ResizeObserver callback: folding resizes observed elements.
     requestAnimationFrame(() => {
       measurePending = false;
-      const fold = shouldFold();
-      actions.classList.toggle("is-folded", fold);
-      if (!fold) close();
+      if (!fit()) close();
     });
   };
 
