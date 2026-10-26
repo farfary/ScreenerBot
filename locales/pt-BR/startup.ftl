@@ -62,6 +62,13 @@ startup-storage-upgrade-remedy = Copie os detalhes e envie-os com o arquivo de l
 
 ## Wallet replacement and wallet data reset.
 
+startup-wallet-replacement-incomplete-title = Não foi possível concluir a substituição da carteira
+startup-wallet-replacement-incomplete-detail =
+    O { -brand } parou durante a troca para a nova carteira de trading. Nada foi excluído: a chave da carteira anterior continua no cofre de carteiras e o histórico local dela continua na pasta de backups.
+
+    Causa:
+    { $error }
+startup-wallet-replacement-incomplete-remedy = Inicie o { -brand } novamente para retomar a substituição. Se esta mensagem voltar, copie os detalhes e envie-os com o arquivo de log ao suporte em t.me/screenerbotio_support. Não edite, mova nem exclua wallet_replacement.json nem a pasta de backups.
 startup-wallet-reset-refused-title = Os dados da carteira não foram redefinidos
 startup-wallet-reset-refused-open-positions = A carteira anterior ainda tem posições abertas ({ $count }), então o histórico local dela foi mantido.
 startup-wallet-reset-refused-trade-in-flight = Uma operação ainda estava em andamento, então o histórico local da carteira foi mantido.

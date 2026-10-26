@@ -62,6 +62,13 @@ startup-storage-upgrade-remedy = 复制详细信息，并连同日志文件发�
 
 ## Wallet replacement and wallet data reset.
 
+startup-wallet-replacement-incomplete-title = 钱包更换未能完成
+startup-wallet-replacement-incomplete-detail =
+    { -brand } 在切换到新交易钱包时停止。没有删除任何内容：原钱包的密钥仍在钱包库中，其本地历史仍在备份文件夹中。
+
+    原因：
+    { $error }
+startup-wallet-replacement-incomplete-remedy = 再次启动 { -brand } 以继续更换。如果此消息再次出现，请复制详细信息，并连同日志文件发送给 t.me/screenerbotio_support 的支持团队。请勿编辑、移动或删除 wallet_replacement.json 或备份文件夹。
 startup-wallet-reset-refused-title = 钱包数据未重置
 startup-wallet-reset-refused-open-positions = 原钱包仍有未平仓持仓（{ $count }），因此保留了其本地历史。
 startup-wallet-reset-refused-trade-in-flight = 仍有交易在进行，因此保留了钱包的本地历史。

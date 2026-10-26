@@ -43,6 +43,13 @@ startup-storage-upgrade-detail =
     { $error }
 startup-storage-upgrade-remedy = Copia los detalles y envíalos junto con el archivo de registro al soporte en t.me/screenerbotio_support. No edites, muevas ni elimines la base de datos: { -brand } la abrirá de nuevo cuando se instale una corrección.
 
+startup-wallet-replacement-incomplete-title = No se pudo completar el reemplazo de la billetera
+startup-wallet-replacement-incomplete-detail =
+    { -brand } se detuvo mientras cambiaba a la nueva billetera de trading. No se eliminó nada: la clave de la billetera anterior sigue en la bóveda de billeteras y su historial local sigue en la carpeta de copias de seguridad.
+
+    Causa:
+    { $error }
+startup-wallet-replacement-incomplete-remedy = Inicia { -brand } de nuevo para reanudar el reemplazo. Si este mensaje vuelve a aparecer, copia los detalles y envíalos junto con el archivo de registro al soporte en t.me/screenerbotio_support. No edites, muevas ni elimines wallet_replacement.json ni la carpeta de copias de seguridad.
 startup-wallet-reset-refused-title = Los datos de la billetera no se restablecieron
 startup-wallet-reset-refused-open-positions = La billetera anterior aún tiene posiciones abiertas ({ $count }), así que se conservó su historial local.
 startup-wallet-reset-refused-trade-in-flight = Había una operación en curso, así que se conservó el historial local de la billetera.

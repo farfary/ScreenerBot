@@ -55,6 +55,13 @@ startup-storage-upgrade-remedy = Kopieren Sie die Details und senden Sie sie zus
 
 ## Wallet replacement and wallet data reset.
 
+startup-wallet-replacement-incomplete-title = Wallet-Ersetzung konnte nicht abgeschlossen werden
+startup-wallet-replacement-incomplete-detail =
+    { -brand } wurde beim Wechsel zur neuen Trading-Wallet angehalten. Es wurde nichts gelöscht: Der Schlüssel der bisherigen Wallet bleibt im Wallet-Tresor und ihr lokaler Verlauf im Sicherungsordner.
+
+    Ursache:
+    { $error }
+startup-wallet-replacement-incomplete-remedy = Starten Sie { -brand } erneut, um die Ersetzung fortzusetzen. Erscheint diese Meldung wieder, kopieren Sie die Details und senden Sie sie zusammen mit der Logdatei an den Support unter t.me/screenerbotio_support. Bearbeiten, verschieben oder löschen Sie weder wallet_replacement.json noch den Sicherungsordner.
 startup-wallet-reset-refused-title = Wallet-Daten wurden nicht zurückgesetzt
 startup-wallet-reset-refused-open-positions = Die bisherige Wallet hat noch offene Positionen ({ $count }), daher wurde ihr lokaler Verlauf behalten.
 startup-wallet-reset-refused-trade-in-flight = Ein Trade lief noch, daher wurde der lokale Verlauf der Wallet behalten.

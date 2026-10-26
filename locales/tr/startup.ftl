@@ -55,6 +55,13 @@ startup-storage-upgrade-remedy = Ayrıntıları kopyalayın ve günlük dosyası
 
 ## Wallet replacement and wallet data reset.
 
+startup-wallet-replacement-incomplete-title = Cüzdan değişikliği tamamlanamadı
+startup-wallet-replacement-incomplete-detail =
+    { -brand } yeni işlem cüzdanına geçerken durdu. Hiçbir şey silinmedi: önceki cüzdanın anahtarı cüzdan kasasında, yerel geçmişi ise yedek klasöründe duruyor.
+
+    Neden:
+    { $error }
+startup-wallet-replacement-incomplete-remedy = Değişikliğe devam etmek için { -brand } uygulamasını yeniden başlatın. Bu mesaj tekrar görünürse ayrıntıları kopyalayıp günlük dosyasıyla birlikte t.me/screenerbotio_support adresindeki desteğe gönderin. wallet_replacement.json dosyasını veya yedek klasörünü düzenlemeyin, taşımayın ya da silmeyin.
 startup-wallet-reset-refused-title = Cüzdan verileri sıfırlanmadı
 startup-wallet-reset-refused-open-positions = Önceki cüzdanda hâlâ açık pozisyonlar var ({ $count }), bu yüzden yerel geçmişi saklandı.
 startup-wallet-reset-refused-trade-in-flight = Bir işlem hâlâ sürüyordu, bu yüzden cüzdanın yerel geçmişi saklandı.

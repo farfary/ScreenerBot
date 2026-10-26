@@ -55,6 +55,13 @@ startup-storage-upgrade-remedy = Скопируйте подробности и 
 
 ## Wallet replacement and wallet data reset.
 
+startup-wallet-replacement-incomplete-title = Не удалось завершить замену кошелька
+startup-wallet-replacement-incomplete-detail =
+    { -brand } остановился во время перехода на новый торговый кошелёк. Ничего не удалено: ключ прежнего кошелька остаётся в хранилище кошельков, а его локальная история — в папке резервных копий.
+
+    Причина:
+    { $error }
+startup-wallet-replacement-incomplete-remedy = Запустите { -brand } снова, чтобы продолжить замену. Если сообщение появится снова, скопируйте подробности и отправьте их вместе с файлом журнала в поддержку: t.me/screenerbotio_support. Не изменяйте, не перемещайте и не удаляйте wallet_replacement.json и папку резервных копий.
 startup-wallet-reset-refused-title = Данные кошелька не сброшены
 startup-wallet-reset-refused-open-positions = У прежнего кошелька ещё есть открытые позиции ({ $count }), поэтому его локальная история сохранена.
 startup-wallet-reset-refused-trade-in-flight = Ещё выполнялась сделка, поэтому локальная история кошелька сохранена.

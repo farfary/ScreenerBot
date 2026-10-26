@@ -27,6 +27,7 @@ mod balance_queries;
 pub use balance_queries::get_wallet_sol_balances;
 
 mod migration;
+pub(super) use migration::encrypted_key_address;
 
 // =============================================================================
 // GLOBAL STATE
@@ -53,6 +54,7 @@ pub async fn initialize() -> Result<(), Error> {
 
     // Try to migrate from config.toml if no wallets exist
     migration::migrate_from_config().await?;
+    migration::warn_if_config_key_is_inert().await?;
 
     // Cache main wallet
     refresh_main_wallet_cache().await?;

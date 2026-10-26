@@ -87,6 +87,7 @@ mod wallet_ata_cleanup;
 mod wallet_main_keypair;
 mod wallet_monitor_locking;
 mod wallet_readiness;
+mod wallet_replacement;
 mod wallet_snapshot_subject_scope;
 mod wallet_watch;
 mod webserver_boot_perf;

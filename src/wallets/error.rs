@@ -115,6 +115,40 @@ pub enum Error {
     /// branch on the variant instead of on a coded operation string.
     #[error(transparent)]
     ChainExecution(#[from] crate::chains::ExecutionFailure),
+    /// Replacing the trading wallet now would interrupt a trade or a tool, or hide
+    /// open positions.
+    #[error("the trading wallet cannot be replaced while {reason}")]
+    ReplacementBlocked {
+        reason: crate::version::RestartBlocker,
+    },
+    /// Another restart (an update apply or a replacement) already holds the process.
+    #[error("a restart is already in progress")]
+    ReplacementRestartInProgress,
+    /// The vault holds no trading wallet to replace.
+    #[error("there is no trading wallet to replace")]
+    ReplacementNoTradingWallet,
+    /// The new key is the current trading wallet.
+    #[error("{address} is already the trading wallet")]
+    ReplacementSameWallet { address: String },
+    /// The new key is a watched or copied wallet; a wallet of the vault may not be one.
+    #[error("{address} is a watched wallet and cannot become the trading wallet")]
+    ReplacementWalletIsWatched { address: String },
+    /// A replacement is already staged and waits for the restart that applies it.
+    #[error("a wallet replacement is already waiting for its restart")]
+    ReplacementPending,
+    /// The encrypted key does not decrypt to the address it was submitted with.
+    #[error("the encrypted key belongs to {actual}, not {expected}")]
+    ReplacementAddressMismatch { expected: String, actual: String },
+    /// The replacement marker could not be read, written or removed.
+    #[error("wallet replacement marker {operation} failed: {message}")]
+    ReplacementMarker {
+        operation: &'static str,
+        message: String,
+    },
+    /// The replacement stopped after the Auto Trader and Copy Trading were switched
+    /// off; both stay off and the trading wallet is unchanged.
+    #[error("the wallet replacement stopped at '{step}' after the Auto Trader and Copy Trading were switched off: {detail}")]
+    ReplacementInterrupted { step: &'static str, detail: String },
     /// A cross-cutting dependency this module reads from (config, chain
     /// accounts, ...) failed (no fitting variant above: this names WHICH
     /// dependency failed, distinguishable from wallets' own database or
@@ -171,6 +205,15 @@ impl ErrorClass for Error {
             Error::BalanceOutOfRange { .. } => false,
             Error::ChainRuntime { .. } | Error::ChainExecution(_) => true,
             Error::Dependency { .. } => true,
+            Error::ReplacementBlocked { .. } => true,
+            Error::ReplacementRestartInProgress => true,
+            Error::ReplacementNoTradingWallet => false,
+            Error::ReplacementSameWallet { .. } => false,
+            Error::ReplacementWalletIsWatched { .. } => false,
+            Error::ReplacementPending => false,
+            Error::ReplacementAddressMismatch { .. } => false,
+            Error::ReplacementMarker { .. } => false,
+            Error::ReplacementInterrupted { .. } => false,
         }
     }
 
@@ -224,6 +267,15 @@ impl ErrorClass for Error {
             Error::BalanceOutOfRange { .. } => Severity::Error,
             Error::ChainRuntime { .. } | Error::ChainExecution(_) => Severity::Warning,
             Error::Dependency { .. } => Severity::Warning,
+            Error::ReplacementBlocked { .. } => Severity::Warning,
+            Error::ReplacementRestartInProgress => Severity::Warning,
+            Error::ReplacementNoTradingWallet => Severity::Warning,
+            Error::ReplacementSameWallet { .. } => Severity::Warning,
+            Error::ReplacementWalletIsWatched { .. } => Severity::Warning,
+            Error::ReplacementPending => Severity::Warning,
+            Error::ReplacementAddressMismatch { .. } => Severity::Critical,
+            Error::ReplacementMarker { .. } => Severity::Critical,
+            Error::ReplacementInterrupted { .. } => Severity::Error,
         }
     }
 
@@ -257,6 +309,15 @@ impl ErrorClass for Error {
             Error::BalanceOutOfRange { .. } => 500,
             Error::ChainRuntime { .. } | Error::ChainExecution(_) => 503,
             Error::Dependency { .. } => 503,
+            Error::ReplacementBlocked { .. } => 409,
+            Error::ReplacementRestartInProgress => 409,
+            Error::ReplacementNoTradingWallet => 409,
+            Error::ReplacementSameWallet { .. } => 400,
+            Error::ReplacementWalletIsWatched { .. } => 400,
+            Error::ReplacementPending => 409,
+            Error::ReplacementAddressMismatch { .. } => 400,
+            Error::ReplacementMarker { .. } => 500,
+            Error::ReplacementInterrupted { .. } => 500,
         }
     }
 }

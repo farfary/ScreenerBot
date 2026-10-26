@@ -58,6 +58,13 @@ startup-storage-upgrade-remedy = 세부 정보를 복사해 로그 파일과 함
 
 ## Wallet replacement and wallet data reset.
 
+startup-wallet-replacement-incomplete-title = 지갑 교체를 완료할 수 없습니다
+startup-wallet-replacement-incomplete-detail =
+    { -brand }이 새 트레이딩 지갑으로 전환하는 중에 중지되었습니다. 삭제된 것은 없습니다. 이전 지갑의 키는 지갑 보관소에, 로컬 기록은 백업 폴더에 남아 있습니다.
+
+    원인:
+    { $error }
+startup-wallet-replacement-incomplete-remedy = { -brand }을 다시 시작하면 교체가 이어서 진행됩니다. 이 메시지가 다시 나타나면 세부 정보를 복사해 로그 파일과 함께 t.me/screenerbotio_support의 지원팀에 보내세요. wallet_replacement.json과 백업 폴더를 편집, 이동, 삭제하지 마세요.
 startup-wallet-reset-refused-title = 지갑 데이터가 초기화되지 않았습니다
 startup-wallet-reset-refused-open-positions = 이전 지갑에 아직 열린 포지션이 있어 ({ $count }) 로컬 기록이 보관되었습니다.
 startup-wallet-reset-refused-trade-in-flight = 거래가 아직 진행 중이어서 지갑의 로컬 기록이 보관되었습니다.

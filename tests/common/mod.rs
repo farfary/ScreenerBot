@@ -255,6 +255,43 @@ where
     assert!(status.success(), "{test} failed in its child process");
 }
 
+/// Name of the variable through which [`run_isolated_cases`] hands a child its case.
+const ISOLATED_CASE_ENV: &str = "SCREENERBOT_ISOLATED_TEST_CASE";
+
+/// Runs `body` once per entry of `cases`, each in a child process of its own like
+/// [`run_isolated`], passing the child its case. For a test that repeats one scenario
+/// from several starting states, each needing fresh process-wide stores.
+pub fn run_isolated_cases<F, Fut>(module: &str, test: &str, cases: &[&str], body: F)
+where
+    F: FnOnce(String) -> Fut,
+    Fut: std::future::Future<Output = ()>,
+{
+    if std::env::var_os(ISOLATED_CHILD_ENV).is_some() {
+        let case = std::env::var(ISOLATED_CASE_ENV).expect("the parent names the case");
+        tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .expect("create multi-thread runtime")
+            .block_on(body(case));
+        return;
+    }
+
+    for case in cases {
+        let status = std::process::Command::new(std::env::current_exe().expect("test executable"))
+            .arg("--exact")
+            .arg(test_name(module, test))
+            .arg("--nocapture")
+            .env(ISOLATED_CHILD_ENV, "1")
+            .env(ISOLATED_CASE_ENV, case)
+            .status()
+            .expect("run isolated child");
+        assert!(
+            status.success(),
+            "{test} failed in its child process for case {case}"
+        );
+    }
+}
+
 /// Take the config-mutation guard and initialise config to DEFAULTS.
 ///
 /// Returns the guard — bind it (`let _cfg = common::config_guard();`) for the test's

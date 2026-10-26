@@ -43,6 +43,13 @@ startup-storage-upgrade-detail =
     { $error }
 startup-storage-upgrade-remedy = विवरण कॉपी करें और लॉग फ़ाइल के साथ t.me/screenerbotio_support पर सपोर्ट को भेजें। डेटाबेस को एडिट, मूव या डिलीट न करें: फ़िक्स इंस्टॉल होते ही { -brand } उसे फिर से खोलेगा।
 
+startup-wallet-replacement-incomplete-title = वॉलेट बदलाव पूरा नहीं हो सका
+startup-wallet-replacement-incomplete-detail =
+    नए ट्रेडिंग वॉलेट पर जाते समय { -brand } रुक गया। कुछ भी डिलीट नहीं हुआ: पिछले वॉलेट की की वॉलेट वॉल्ट में है और उसकी लोकल हिस्ट्री बैकअप फ़ोल्डर में है।
+
+    कारण:
+    { $error }
+startup-wallet-replacement-incomplete-remedy = बदलाव जारी रखने के लिए { -brand } फिर से शुरू करें। अगर यह संदेश फिर दिखे, तो विवरण कॉपी करें और लॉग फ़ाइल के साथ t.me/screenerbotio_support पर सपोर्ट को भेजें। wallet_replacement.json या बैकअप फ़ोल्डर को एडिट, मूव या डिलीट न करें।
 startup-wallet-reset-refused-title = वॉलेट डेटा रीसेट नहीं हुआ
 startup-wallet-reset-refused-open-positions = पिछले वॉलेट में अभी भी खुली पोज़िशन हैं ({ $count }), इसलिए उसकी लोकल हिस्ट्री रखी गई।
 startup-wallet-reset-refused-trade-in-flight = एक ट्रेड अभी चल रहा था, इसलिए वॉलेट की लोकल हिस्ट्री रखी गई।

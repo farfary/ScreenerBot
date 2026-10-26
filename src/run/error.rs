@@ -101,6 +101,7 @@ impl ErrorClass for Error {
                 | StartupErrorCode::LockHeld
                 | StartupErrorCode::ConfigInvalid
                 | StartupErrorCode::StorageUpgrade
+                | StartupErrorCode::WalletReplacementIncomplete
                 | StartupErrorCode::Generic => Severity::Error,
             },
             Error::Service(error) => error.severity(),
@@ -119,7 +120,9 @@ impl ErrorClass for Error {
                 StartupErrorCode::PortInUse
                 | StartupErrorCode::LockHeld
                 | StartupErrorCode::WalletResetRefused => 409,
-                StartupErrorCode::StorageUpgrade | StartupErrorCode::Generic => 500,
+                StartupErrorCode::StorageUpgrade
+                | StartupErrorCode::WalletReplacementIncomplete
+                | StartupErrorCode::Generic => 500,
             },
             Error::Service(error) => error.http_status(),
             Error::Core { source } => source.http_status(),

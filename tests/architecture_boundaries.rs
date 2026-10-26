@@ -378,6 +378,7 @@ fn wallet_ownership_never_names_a_solana_key_type() {
         "wallets/manager/export.rs",
         "wallets/manager/migration.rs",
         "wallets/manager/balance_queries.rs",
+        "wallets/replacement.rs",
         "config/wallet.rs",
     ];
     let banned_needles = ["Keypair", "Pubkey", "solana_sdk"];
@@ -1521,6 +1522,7 @@ const PROCESS_CHAIN_SEAM_CALLER_FILES: &[&str] = &[
     "wallets/balance_monitor/worth.rs",
     "wallets/manager.rs",
     "wallets/manager/balance_queries.rs",
+    "wallets/replacement.rs",
     "wallets/watch/mod.rs",
     "webserver/promo/copy_trading.rs",
     "webserver/promo/copy_trading/desk.rs",

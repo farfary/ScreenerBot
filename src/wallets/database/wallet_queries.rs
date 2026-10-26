@@ -10,6 +10,7 @@ use rusqlite::{params, OptionalExtension};
 
 use super::super::types::{Wallet, WalletRole, WalletType};
 use super::WalletsDatabase;
+use crate::database::WriteTransaction;
 use crate::errors::DatabaseError;
 use crate::wallets::Error;
 
@@ -76,6 +77,79 @@ impl WalletsDatabase {
         .optional()
         .map_err(DatabaseError::from)
         .map_err(Error::from)
+    }
+
+    /// Get a wallet by address
+    pub fn get_wallet_by_address(&self, address: &str) -> Result<Option<Wallet>, Error> {
+        let conn = self.conn()?;
+
+        conn.query_row(
+            r#"
+            SELECT id, name, address, role, wallet_type, created_at, last_used_at, notes, is_active
+            FROM wallets WHERE chain_id = ?1 AND address = ?2
+            "#,
+            params![self.chain.as_str(), address],
+            |row| Self::row_to_wallet(row),
+        )
+        .optional()
+        .map_err(DatabaseError::from)
+        .map_err(Error::from)
+    }
+
+    /// Make the wallet `new_address` the active main wallet and the main wallet
+    /// `previous_address` a secondary that stays active, so its key stays exportable. One
+    /// IMMEDIATE transaction that commits only when exactly one active main wallet remains
+    /// and it is `new_address`; the vault is snapshotted after the change.
+    pub fn promote_to_main(&self, previous_address: &str, new_address: &str) -> Result<(), Error> {
+        let mut conn = self.conn()?;
+        let chain = self.chain.as_str();
+        {
+            let tx = conn.write_tx().map_err(DatabaseError::from)?;
+            tx.execute(
+                "UPDATE wallets SET role = ?1 WHERE chain_id = ?2 AND address = ?3 AND role = ?4",
+                params![
+                    WalletRole::Secondary.to_string(),
+                    chain,
+                    previous_address,
+                    WalletRole::Main.to_string()
+                ],
+            )
+            .map_err(DatabaseError::from)?;
+            let promoted = tx
+                .execute(
+                    "UPDATE wallets SET role = ?1, is_active = 1 WHERE chain_id = ?2 AND address = ?3",
+                    params![WalletRole::Main.to_string(), chain, new_address],
+                )
+                .map_err(DatabaseError::from)?;
+            let mains: Vec<String> = {
+                let mut statement = tx
+                    .prepare(
+                        "SELECT address FROM wallets WHERE chain_id = ?1 AND role = ?2 AND is_active = 1",
+                    )
+                    .map_err(DatabaseError::from)?;
+                let rows = statement
+                    .query_map(params![chain, WalletRole::Main.to_string()], |row| {
+                        row.get(0)
+                    })
+                    .map_err(DatabaseError::from)?
+                    .collect::<std::result::Result<Vec<String>, _>>()
+                    .map_err(DatabaseError::from)?;
+                rows
+            };
+            if promoted != 1 || mains.len() != 1 || mains[0] != new_address {
+                // Dropping the transaction rolls it back.
+                return Err(DatabaseError::Query {
+                    operation: "promote_to_main".to_owned(),
+                    message: format!(
+                        "expected {new_address} as the one active main wallet, found {mains:?}"
+                    ),
+                }
+                .into());
+            }
+            tx.commit().map_err(DatabaseError::from)?;
+        }
+        Self::snapshot_after_key_change(&conn);
+        Ok(())
     }
 
     /// Get the main wallet

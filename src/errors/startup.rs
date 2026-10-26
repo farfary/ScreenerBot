@@ -70,6 +70,8 @@ pub enum StartupErrorCode {
     /// A store could not be upgraded to this version; its open refused before
     /// committing anything.
     StorageUpgrade,
+    /// A staged trading-wallet replacement could not finish applying.
+    WalletReplacementIncomplete,
     /// The wallet data reset was refused because it would hide open positions or cut
     /// work short.
     WalletResetRefused,
@@ -86,6 +88,7 @@ impl StartupErrorCode {
             StartupErrorCode::LockHeld => "lock_held",
             StartupErrorCode::ConfigInvalid => "config_invalid",
             StartupErrorCode::StorageUpgrade => "storage_upgrade",
+            StartupErrorCode::WalletReplacementIncomplete => "wallet_replacement_incomplete",
             StartupErrorCode::WalletResetRefused => "wallet_reset_refused",
             StartupErrorCode::Generic => "generic",
         }
@@ -225,6 +228,18 @@ impl StartupError {
                 .arg("database", UiArg::Text(database.to_owned()))
                 .arg("error", UiArg::Text(causes.join("\n"))),
             UiText::new(ids::STARTUP_STORAGE_UPGRADE_REMEDY),
+        )
+    }
+
+    /// A staged trading-wallet replacement could not finish applying; `error` is the
+    /// technical detail. The next start resumes it.
+    pub fn wallet_replacement_incomplete(error: impl std::fmt::Display) -> Self {
+        Self::new(
+            StartupErrorCode::WalletReplacementIncomplete,
+            UiText::new(ids::STARTUP_WALLET_REPLACEMENT_INCOMPLETE_TITLE),
+            UiText::new(ids::STARTUP_WALLET_REPLACEMENT_INCOMPLETE_DETAIL)
+                .arg("error", UiArg::Text(error.to_string())),
+            UiText::new(ids::STARTUP_WALLET_REPLACEMENT_INCOMPLETE_REMEDY),
         )
     }
 
@@ -453,6 +468,7 @@ mod tests {
                 UiText::new(ids::STARTUP_CONFIG_LOAD_PARSE_REMEDY),
             ),
             StartupError::invalid_option("bad port"),
+            StartupError::wallet_replacement_incomplete("disk is full"),
             StartupError::wallet_reset_refused(RestartBlocker::OpenPositions { count: 2 }),
             StartupError::wallet_reset_refused(RestartBlocker::TradeInFlight),
             StartupError::wallet_reset_refused(RestartBlocker::ToolInFlight),

@@ -62,6 +62,13 @@ startup-storage-upgrade-remedy = انسخ التفاصيل وأرسلها مع �
 
 ## Wallet replacement and wallet data reset.
 
+startup-wallet-replacement-incomplete-title = تعذّر إكمال استبدال المحفظة
+startup-wallet-replacement-incomplete-detail =
+    توقف { -brand } أثناء التبديل إلى محفظة التداول الجديدة. لم يُحذف شيء: يبقى مفتاح المحفظة السابقة في خزنة المحافظ ويبقى سجلها المحلي في مجلد النسخ الاحتياطية.
+
+    السبب:
+    { $error }
+startup-wallet-replacement-incomplete-remedy = شغّل { -brand } مرة أخرى لاستئناف الاستبدال. إذا ظهرت هذه الرسالة مجددًا، فانسخ التفاصيل وأرسلها مع ملف السجل إلى الدعم على t.me/screenerbotio_support. لا تعدّل wallet_replacement.json أو مجلد النسخ الاحتياطية ولا تنقلهما ولا تحذفهما.
 startup-wallet-reset-refused-title = لم تُعَد تهيئة بيانات المحفظة
 startup-wallet-reset-refused-open-positions = لا تزال لدى المحفظة السابقة مراكز مفتوحة ({ $count })، لذا احتُفظ بسجلها المحلي.
 startup-wallet-reset-refused-trade-in-flight = كانت هناك صفقة لا تزال قيد التنفيذ، لذا احتُفظ بالسجل المحلي للمحفظة.

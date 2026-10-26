@@ -55,6 +55,13 @@ startup-storage-upgrade-remedy = Скопіюйте подробиці й над
 
 ## Wallet replacement and wallet data reset.
 
+startup-wallet-replacement-incomplete-title = Не вдалося завершити заміну гаманця
+startup-wallet-replacement-incomplete-detail =
+    { -brand } зупинився під час переходу на новий торговий гаманець. Нічого не видалено: ключ попереднього гаманця залишається у сховищі гаманців, а його локальна історія — у папці резервних копій.
+
+    Причина:
+    { $error }
+startup-wallet-replacement-incomplete-remedy = Запустіть { -brand } знову, щоб продовжити заміну. Якщо повідомлення з'явиться знову, скопіюйте подробиці та надішліть їх разом із файлом журналу до підтримки: t.me/screenerbotio_support. Не редагуйте, не переміщуйте й не видаляйте wallet_replacement.json і папку резервних копій.
 startup-wallet-reset-refused-title = Дані гаманця не скинуто
 startup-wallet-reset-refused-open-positions = Попередній гаманець ще має відкриті позиції ({ $count }), тому його локальну історію збережено.
 startup-wallet-reset-refused-trade-in-flight = Ще тривала угода, тому локальну історію гаманця збережено.

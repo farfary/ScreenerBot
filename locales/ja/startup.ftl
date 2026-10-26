@@ -62,6 +62,13 @@ startup-storage-upgrade-remedy = 詳細をコピーし、ログファイルと�
 
 ## Wallet replacement and wallet data reset.
 
+startup-wallet-replacement-incomplete-title = ウォレットの置き換えを完了できませんでした
+startup-wallet-replacement-incomplete-detail =
+    { -brand } は新しい取引ウォレットへの切り替え中に停止しました。何も削除されていません。以前のウォレットの鍵はウォレット保管庫に、ローカル履歴はバックアップフォルダーに残っています。
+
+    原因:
+    { $error }
+startup-wallet-replacement-incomplete-remedy = { -brand } を再度起動すると置き換えが再開されます。このメッセージが再び表示される場合は、詳細をコピーしてログファイルと一緒に t.me/screenerbotio_support のサポートに送ってください。wallet_replacement.json とバックアップフォルダーは編集、移動、削除しないでください。
 startup-wallet-reset-refused-title = ウォレットデータはリセットされませんでした
 startup-wallet-reset-refused-open-positions = 以前のウォレットにまだオープンポジションがあるため ({ $count })、ローカル履歴は保持されました。
 startup-wallet-reset-refused-trade-in-flight = 取引がまだ進行中だったため、ウォレットのローカル履歴は保持されました。

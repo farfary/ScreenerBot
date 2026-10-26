@@ -114,11 +114,13 @@ async fn run_bot_internal(_process_lock: ProcessLock) -> Result<()> {
     let config_exists = config_path.exists();
 
     // 5. The storage phase, under the process lock and before any service reads a
-    // store. The one-shot wallet data reset (the GUI's "Reset wallet data & restart"
-    // and `--clean-wallet-data`) moves the wallet-scoped stores into a wallet-reset
-    // backup, refusing while positions are open. Then every store opens, recovering as
-    // its class allows; a store left unavailable is in the health registry and its
-    // owner gets the error.
+    // store. A staged trading-wallet replacement is applied first, before any
+    // wallet-scoped store has a pool; an apply that cannot finish stops the start, so a
+    // half-moved state never boots. Then the one-shot wallet data reset (the GUI's
+    // "Reset wallet data & restart" and `--clean-wallet-data`) moves the wallet-scoped
+    // stores into a wallet-reset backup, refusing while positions are open. Then every
+    // store opens, recovering as its class allows; a store left unavailable is in the
+    // health registry and its owner gets the error.
     let reset_wallet_data = crate::arguments::is_clean_wallet_data_enabled();
     let reset_blocker = if reset_wallet_data {
         crate::version::restart_blocker().await
@@ -127,6 +129,8 @@ async fn run_bot_internal(_process_lock: ProcessLock) -> Result<()> {
     };
     let storage_phase =
         tokio::task::spawn_blocking(move || -> std::result::Result<(), StartupError> {
+            crate::wallets::replacement::apply_pending()
+                .map_err(StartupError::wallet_replacement_incomplete)?;
             if reset_wallet_data {
                 match crate::database::open::reset_wallet_stores(reset_blocker) {
                     Ok(_) => {}

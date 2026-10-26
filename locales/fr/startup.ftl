@@ -55,6 +55,13 @@ startup-storage-upgrade-remedy = Copiez les détails et envoyez-les avec le fich
 
 ## Wallet replacement and wallet data reset.
 
+startup-wallet-replacement-incomplete-title = Le remplacement du portefeuille n'a pas pu aboutir
+startup-wallet-replacement-incomplete-detail =
+    { -brand } s'est arrêté pendant le passage au nouveau portefeuille de trading. Rien n'a été supprimé : la clé de l'ancien portefeuille reste dans le coffre des portefeuilles et son historique local reste dans le dossier de sauvegarde.
+
+    Cause :
+    { $error }
+startup-wallet-replacement-incomplete-remedy = Relancez { -brand } pour reprendre le remplacement. Si ce message réapparaît, copiez les détails et envoyez-les avec le fichier journal au support sur t.me/screenerbotio_support. Ne modifiez, ne déplacez et ne supprimez ni wallet_replacement.json ni le dossier de sauvegarde.
 startup-wallet-reset-refused-title = Les données du portefeuille n'ont pas été réinitialisées
 startup-wallet-reset-refused-open-positions = L'ancien portefeuille a encore des positions ouvertes ({ $count }) : son historique local a donc été conservé.
 startup-wallet-reset-refused-trade-in-flight = Un trade était encore en cours : l'historique local du portefeuille a donc été conservé.

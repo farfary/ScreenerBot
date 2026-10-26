@@ -5,9 +5,10 @@
 //! watched wallets, the balance monitor and the empty-account cleanup.
 //!
 //! The trading wallet enters through setup (`config.wallet_encrypted`) and is
-//! imported into the store on first start; key material stays encrypted at
-//! rest with machine-derived keys. A listed wallet offers only its private-key
-//! export.
+//! imported into the store on first start; afterwards it changes only through a
+//! staged replacement (`replacement`), applied at the next start. Key material
+//! stays encrypted at rest with machine-derived keys. A listed wallet offers
+//! only its private-key export.
 //!
 //! This module owns wallet records, roles and encrypted-at-rest key
 //! material — never a decrypted `Keypair`/`Pubkey`. Signing, address
@@ -20,6 +21,7 @@ pub mod balance_monitor;
 pub(crate) mod database;
 mod error;
 mod manager;
+pub mod replacement;
 mod types;
 pub mod validation;
 pub mod watch;

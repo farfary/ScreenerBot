@@ -55,6 +55,13 @@ startup-storage-upgrade-remedy = Sao chép chi tiết và gửi kèm tệp nhậ
 
 ## Wallet replacement and wallet data reset.
 
+startup-wallet-replacement-incomplete-title = Không thể hoàn tất việc thay ví
+startup-wallet-replacement-incomplete-detail =
+    { -brand } đã dừng khi đang chuyển sang ví giao dịch mới. Không có gì bị xóa: khóa của ví trước vẫn ở trong kho ví và lịch sử cục bộ của nó vẫn ở trong thư mục sao lưu.
+
+    Nguyên nhân:
+    { $error }
+startup-wallet-replacement-incomplete-remedy = Khởi động lại { -brand } để tiếp tục việc thay ví. Nếu thông báo này xuất hiện lại, hãy sao chép chi tiết và gửi kèm tệp nhật ký cho bộ phận hỗ trợ tại t.me/screenerbotio_support. Không chỉnh sửa, di chuyển hay xóa wallet_replacement.json hoặc thư mục sao lưu.
 startup-wallet-reset-refused-title = Dữ liệu ví chưa được đặt lại
 startup-wallet-reset-refused-open-positions = Ví trước vẫn còn vị thế đang mở ({ $count }), nên lịch sử cục bộ của nó được giữ lại.
 startup-wallet-reset-refused-trade-in-flight = Một giao dịch vẫn đang diễn ra, nên lịch sử cục bộ của ví được giữ lại.

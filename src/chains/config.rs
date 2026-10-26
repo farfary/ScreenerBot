@@ -6,7 +6,7 @@
 //! method chooses a chain on the caller's behalf.
 
 use crate::chains::ChainId;
-use crate::config::{ChainsConfig, SwapsConfig};
+use crate::config::{ChainsConfig, RpcConfig, SwapsConfig};
 
 /// The chain whose settings the config layout before `[chains]` kept in global
 /// sections (`[rpc]`, `[swaps]`, the Jupiter/Raptor endpoint monitors). A fact
@@ -26,6 +26,13 @@ impl ChainsConfig {
     pub fn swaps(&self, chain: ChainId) -> &SwapsConfig {
         match chain {
             ChainId::Solana => &self.solana.swaps,
+        }
+    }
+
+    /// RPC endpoint settings of `chain`, for writing the endpoints setup validated.
+    pub fn rpc_mut(&mut self, chain: ChainId) -> &mut RpcConfig {
+        match chain {
+            ChainId::Solana => &mut self.solana.rpc,
         }
     }
 }

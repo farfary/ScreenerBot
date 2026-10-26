@@ -62,6 +62,13 @@ startup-storage-upgrade-remedy = جزئیات را کپی کنید و همراه
 
 ## Wallet replacement and wallet data reset.
 
+startup-wallet-replacement-incomplete-title = جایگزینی کیف پول کامل نشد
+startup-wallet-replacement-incomplete-detail =
+    { -brand } هنگام رفتن به کیف پول معاملاتی جدید متوقف شد. چیزی حذف نشد: کلید کیف پول قبلی در گاوصندوق کیف پول‌ها و تاریخچهٔ محلی آن در پوشهٔ پشتیبان باقی است.
+
+    علت:
+    { $error }
+startup-wallet-replacement-incomplete-remedy = برای ادامهٔ جایگزینی، { -brand } را دوباره اجرا کنید. اگر این پیام دوباره ظاهر شد، جزئیات را کپی کنید و همراه فایل لاگ به پشتیبانی در t.me/screenerbotio_support بفرستید. wallet_replacement.json یا پوشهٔ پشتیبان را ویرایش، جابه‌جا یا حذف نکنید.
 startup-wallet-reset-refused-title = داده‌های کیف پول بازنشانی نشد
 startup-wallet-reset-refused-open-positions = کیف پول قبلی هنوز پوزیشن باز دارد ({ $count })، پس تاریخچهٔ محلی آن نگه داشته شد.
 startup-wallet-reset-refused-trade-in-flight = یک معامله هنوز در جریان بود، پس تاریخچهٔ محلی کیف پول نگه داشته شد.
