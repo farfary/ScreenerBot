@@ -77,17 +77,16 @@ pub(super) async fn get_header_metrics() -> Json<HeaderMetricsResponse> {
         TraderHeaderState::Running
     };
 
-    let today_pnl_native = today_stats
-        .as_ref()
-        .map(|stats| stats.net_pnl_native)
-        .unwrap_or_default();
     let start_balance = start_balance.ok().flatten();
-    let today_pnl_percent = start_balance
-        .as_ref()
-        .map(|sample| sample.equity_native)
-        .filter(|balance| *balance > f64::EPSILON)
-        .map(|balance| today_pnl_native / balance * 100.0)
-        .unwrap_or_default();
+    // Explore Mode has no trader, so its P&L is unknown rather than flat.
+    let (today_pnl_native, today_pnl_percent) = today_pnl(
+        today_stats
+            .as_ref()
+            .ok()
+            .filter(|_| !explore)
+            .map(|stats| stats.net_pnl_native),
+        start_balance.as_ref().map(|sample| sample.equity_native),
+    );
 
     let trader = TraderHeaderInfo {
         enabled: !explore && trader_enabled,
@@ -116,7 +115,7 @@ pub(super) async fn get_header_metrics() -> Json<HeaderMetricsResponse> {
 
     // SOL/USD price for the header price card.
     let sol = SolHeaderInfo {
-        price_usd: crate::native_price::get_native_price(),
+        price_usd: known_price(crate::native_price::get_native_price()),
         change_24h_percent: crate::native_price::get_native_price_info()
             .and_then(|info| info.chain)
             .and_then(crate::ohlcvs::native_usd_chart::change_24h_percent),
@@ -164,6 +163,22 @@ async fn copy_header() -> Option<CopyHeaderInfo> {
         live_tasks: status.live_tasks,
         notices: crate::trader::copy::recent_notices(),
     })
+}
+
+/// Today's P&L and its percent of the start-of-day equity. Each is `None` when unknown:
+/// a failed stats read is not a flat day, and a percent needs a positive start equity.
+fn today_pnl(net_pnl: Option<f64>, start_equity: Option<f64>) -> (Option<f64>, Option<f64>) {
+    let percent = net_pnl.and_then(|pnl| {
+        start_equity
+            .filter(|equity| *equity > f64::EPSILON)
+            .map(|equity| pnl / equity * 100.0)
+    });
+    (net_pnl, percent)
+}
+
+/// The SOL/USD price, or `None` for the price service's "no fresh price" sentinel (0.0).
+fn known_price(price: f64) -> Option<f64> {
+    Some(price).filter(|price| price.is_finite() && *price > 0.0)
 }
 
 async fn calculate_system_health() -> SystemHeaderInfo {
@@ -319,5 +334,34 @@ mod tests {
 
         let measured = rpc_header_info(Some(&stats(200, 2, 99.0)));
         assert_eq!(measured.success_rate_percent, Some(99.0));
+    }
+
+    #[test]
+    fn unknown_pnl_and_price_serialize_as_null() {
+        assert_eq!(today_pnl(None, Some(10.0)), (None, None));
+        assert_eq!(today_pnl(Some(0.5), None), (Some(0.5), None));
+        assert_eq!(today_pnl(Some(0.5), Some(0.0)), (Some(0.5), None));
+        assert_eq!(today_pnl(Some(0.5), Some(10.0)), (Some(0.5), Some(5.0)));
+        assert_eq!(today_pnl(Some(0.0), Some(10.0)), (Some(0.0), Some(0.0)));
+        assert_eq!(known_price(0.0), None);
+        assert_eq!(known_price(f64::NAN), None);
+        assert_eq!(known_price(150.25), Some(150.25));
+
+        let (today_pnl_native, today_pnl_percent) = today_pnl(None, None);
+        let trader = serde_json::to_value(TraderHeaderInfo {
+            enabled: false,
+            state: TraderHeaderState::Explore,
+            today_pnl_native,
+            today_pnl_percent,
+        })
+        .unwrap();
+        assert!(trader["today_pnl_native"].is_null());
+        assert!(trader["today_pnl_percent"].is_null());
+        let sol = serde_json::to_value(SolHeaderInfo {
+            price_usd: known_price(0.0),
+            change_24h_percent: None,
+        })
+        .unwrap();
+        assert!(sol["price_usd"].is_null());
     }
 }

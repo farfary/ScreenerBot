@@ -33,7 +33,8 @@ pub struct CopyHeaderInfo {
 /// SOL/USD price for the header price card (click opens the SOL chart dialog).
 #[derive(Debug, Serialize)]
 pub struct SolHeaderInfo {
-    pub price_usd: f64,
+    /// `None` while no fresh SOL/USD price is known.
+    pub price_usd: Option<f64>,
     pub change_24h_percent: Option<f64>,
 }
 
@@ -41,8 +42,10 @@ pub struct SolHeaderInfo {
 pub struct TraderHeaderInfo {
     pub enabled: bool,
     pub state: TraderHeaderState,
-    pub today_pnl_native: f64,
-    pub today_pnl_percent: f64,
+    /// `None` when today's P&L is unknown: no trader (Explore Mode) or no stats yet.
+    pub today_pnl_native: Option<f64>,
+    /// `None` when the P&L or the start-of-day balance it is measured against is unknown.
+    pub today_pnl_percent: Option<f64>,
 }
 
 #[derive(Debug, Serialize)]

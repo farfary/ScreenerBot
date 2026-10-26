@@ -43,8 +43,8 @@ pub fn get_promo_header_metrics() -> HeaderMetricsResponse {
     let trader = TraderHeaderInfo {
         enabled: true,
         state: TraderHeaderState::Running,
-        today_pnl_native: today.net_pnl_sol,
-        today_pnl_percent,
+        today_pnl_native: Some(today.net_pnl_sol),
+        today_pnl_percent: Some(today_pnl_percent),
     };
 
     // Promo must model the real thing: the headline is WORTH (cash + holdings), measured
@@ -90,7 +90,7 @@ pub fn get_promo_header_metrics() -> HeaderMetricsResponse {
         filtering,
         system,
         sol: SolHeaderInfo {
-            price_usd: live_sol_price(),
+            price_usd: Some(live_sol_price()),
             change_24h_percent: if super::is_promo_frozen() {
                 Some(2.3)
             } else {
