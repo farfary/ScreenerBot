@@ -1133,7 +1133,7 @@ config-trader-stop-loss-threshold-pct = Stop Loss Threshold
     .hint = Exit when loss exceeds this % (50 = exit at -50%)
     .unit = %
 config-trader-time-override-duration = Time Override Duration
-    .hint = Duration before forced exit (168 hours = 7 days, 30 minutes, etc)
+    .hint = How long a position is held before the time exit checks its loss; it exits if the loss has reached the threshold
 config-trader-time-override-enabled = Enable Time Override
     .hint = Enable automatic exit for positions held too long at a loss
 config-trader-time-override-loss-threshold-percent = Time Override Loss

@@ -16,7 +16,7 @@ trader-tab-strategies = Stratejiler
 trader-tab-stop-loss = Zarar durdur
 trader-tab-trailing-stop = İz süren stop
 trader-tab-roi = Kâr al
-trader-tab-time-rules = Zaman kuralları
+trader-tab-time-rules = Zaman çıkışı
 trader-tab-dca = DCA
 trader-tab-settings = Ayarlar
 
@@ -199,7 +199,7 @@ trader-roi-full-position = Tam pozisyon
 trader-roi-sold = %100 satıldı
 trader-roi-summary = Kilitlenen kâr: <strong>+%{ $target }</strong>
 
-trader-time-title = Zamana dayalı çıkış
+trader-time-title = Zaman çıkışı
 trader-time-subtitle = Zarar eşiği aşılırsa, azami tutma süresinden sonra pozisyonlardan otomatik olarak çıkın
 trader-time-unit-seconds = saniye
 trader-time-unit-minutes = dakika

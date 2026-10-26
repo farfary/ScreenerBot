@@ -23,7 +23,7 @@ trader-tab-strategies = الاستراتيجيات
 trader-tab-stop-loss = وقف الخسارة
 trader-tab-trailing-stop = وقف متحرك
 trader-tab-roi = جني الأرباح
-trader-tab-time-rules = القواعد الزمنية
+trader-tab-time-rules = الخروج الزمني
 trader-tab-dca = DCA
 trader-tab-settings = الإعدادات
 

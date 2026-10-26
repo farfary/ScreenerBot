@@ -1130,7 +1130,7 @@ config-trader-stop-loss-threshold-pct = 損切りのしきい値
     .hint = 損失がこの % を超えたらエグジットします（50 = -50% でエグジット）
     .unit = %
 config-trader-time-override-duration = 時間オーバーライドの期間
-    .hint = 強制エグジットまでの期間（168 時間 = 7 日、30 分など）
+    .hint = 時間エグジットが損失を確認するまでポジションを保有する時間。損失がしきい値に達していれば決済します
 config-trader-time-override-enabled = 時間オーバーライドを有効化
     .hint = 損失を抱えたまま長く保有しているポジションを自動的にエグジットします
 config-trader-time-override-loss-threshold-percent = 時間オーバーライドの損失

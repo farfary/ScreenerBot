@@ -23,7 +23,7 @@ trader-tab-strategies = 전략
 trader-tab-stop-loss = 손절
 trader-tab-trailing-stop = 트레일링 스톱
 trader-tab-roi = 익절
-trader-tab-time-rules = 시간 규칙
+trader-tab-time-rules = 시간 청산
 trader-tab-dca = DCA
 trader-tab-settings = 설정
 
@@ -242,7 +242,7 @@ trader-roi-summary = 수익 <strong>+{ $target }%</strong> 확정
 
 ## Time-based exit
 
-trader-time-title = 시간 기반 청산
+trader-time-title = 시간 청산
 trader-time-subtitle = 최대 보유 시간이 지난 뒤 손실이 임계값을 넘으면 포지션을 자동으로 청산합니다
 trader-time-unit-seconds = 초
 trader-time-unit-minutes = 분

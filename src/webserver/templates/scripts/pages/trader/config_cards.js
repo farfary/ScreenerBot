@@ -284,10 +284,13 @@ export function createTraderConfigCards({ saveConfig }) {
         const input = document.getElementById(field.id);
         if (!metadata || !input) return;
 
+        // A group's hint and unit belong to the field its label names; a companion
+        // control in the same group (the duration's unit select) only names itself.
         const group = input.closest(".config-group");
+        const ownsGroup = Boolean(group?.querySelector(`label[for="${field.id}"]`));
         const label = group?.querySelector(`label[for="${field.id}"] span`);
-        const hint = group?.querySelector(".config-hint");
-        const unit = group?.querySelector(".input-unit");
+        const hint = ownsGroup ? group.querySelector(".config-hint") : null;
+        const unit = ownsGroup ? group.querySelector(".input-unit") : null;
 
         const labelText = fieldLabel(metadata.key);
         const hintText = fieldHint(metadata.key);

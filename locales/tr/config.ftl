@@ -1130,7 +1130,7 @@ config-trader-stop-loss-threshold-pct = Zarar Durdur Eşiği
     .hint = Zarar bu %'yi aştığında çıkın (50 = -%50'de çık)
     .unit = %
 config-trader-time-override-duration = Süre Geçersiz Kılma Süresi
-    .hint = Zorunlu çıkıştan önceki süre (168 saat = 7 gün, 30 dakika vb.)
+    .hint = Zaman çıkışı zararı kontrol etmeden önce pozisyonun ne kadar tutulacağı; zarar eşiğe ulaştıysa pozisyon kapatılır
 config-trader-time-override-enabled = Süre Geçersiz Kılmayı Etkinleştir
     .hint = Zararda çok uzun süre tutulan pozisyonlar için otomatik çıkışı etkinleştirin
 config-trader-time-override-loss-threshold-percent = Süre Geçersiz Kılma Zarar

@@ -23,7 +23,7 @@ trader-tab-strategies = Strategies
 trader-tab-stop-loss = Stop Loss
 trader-tab-trailing-stop = Trailing Stop
 trader-tab-roi = Take Profit
-trader-tab-time-rules = Time Rules
+trader-tab-time-rules = Time Exit
 trader-tab-dca = DCA
 trader-tab-settings = Settings
 
@@ -248,9 +248,9 @@ trader-roi-sold = 100% sold
 # $target is the target percentage as typed.
 trader-roi-summary = Locked in <strong>+{ $target }%</strong> profit
 
-## Time-based exit
+## Time exit
 
-trader-time-title = Time-Based Exit
+trader-time-title = Time Exit
 trader-time-subtitle = Automatically exit positions after a maximum hold time if loss exceeds the threshold
 trader-time-unit-seconds = seconds
 trader-time-unit-minutes = minutes

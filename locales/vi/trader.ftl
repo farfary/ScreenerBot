@@ -16,7 +16,7 @@ trader-tab-strategies = Chiến lược
 trader-tab-stop-loss = Stop loss
 trader-tab-trailing-stop = Trailing stop
 trader-tab-roi = Take profit
-trader-tab-time-rules = Quy tắc thời gian
+trader-tab-time-rules = Thoát theo thời gian
 trader-tab-dca = DCA
 trader-tab-settings = Cài đặt
 
@@ -192,7 +192,7 @@ trader-roi-full-position = Toàn bộ vị thế
 trader-roi-sold = Đã bán 100%
 trader-roi-summary = Đã chốt lãi <strong>+{ $target }%</strong>
 
-trader-time-title = Thoát lệnh theo thời gian
+trader-time-title = Thoát theo thời gian
 trader-time-subtitle = Tự động thoát vị thế sau thời gian nắm giữ tối đa nếu mức lỗ vượt ngưỡng
 trader-time-unit-seconds = giây
 trader-time-unit-minutes = phút

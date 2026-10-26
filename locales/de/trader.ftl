@@ -20,7 +20,7 @@ trader-tab-strategies = Strategien
 trader-tab-stop-loss = Stop-Loss
 trader-tab-trailing-stop = Trailing-Stop
 trader-tab-roi = Take Profit
-trader-tab-time-rules = Zeitregeln
+trader-tab-time-rules = Zeitausstieg
 trader-tab-dca = DCA
 trader-tab-settings = Einstellungen
 
@@ -207,7 +207,7 @@ trader-roi-full-position = Gesamte Position
 trader-roi-sold = 100 % verkauft
 trader-roi-summary = <strong>+{ $target } %</strong> Gewinn gesichert
 
-trader-time-title = Zeitbasierter Ausstieg
+trader-time-title = Zeitausstieg
 trader-time-subtitle = Positionen nach einer maximalen Haltedauer automatisch verlassen, wenn der Verlust die Schwelle überschreitet
 trader-time-unit-seconds = Sekunden
 trader-time-unit-minutes = Minuten

@@ -1082,7 +1082,7 @@ config-trader-stop-loss-threshold-pct = Ngưỡng stop loss
     .hint = Thoát khi mức lỗ vượt % này (50 = thoát ở -50%)
     .unit = %
 config-trader-time-override-duration = Thời lượng ghi đè theo thời gian
-    .hint = Khoảng thời gian trước khi buộc thoát (168 giờ = 7 ngày, 30 phút, v.v.)
+    .hint = Thời gian giữ vị thế trước khi thoát theo thời gian kiểm tra khoản lỗ; vị thế được đóng nếu khoản lỗ đã chạm ngưỡng
 config-trader-time-override-enabled = Bật ghi đè theo thời gian
     .hint = Bật tự động thoát cho các vị thế nắm giữ quá lâu khi đang lỗ
 config-trader-time-override-loss-threshold-percent = Mức lỗ ghi đè theo thời gian

@@ -23,7 +23,7 @@ trader-tab-strategies = Estrategias
 trader-tab-stop-loss = Stop loss
 trader-tab-trailing-stop = Trailing stop
 trader-tab-roi = Take profit
-trader-tab-time-rules = Reglas de tiempo
+trader-tab-time-rules = Salida por tiempo
 trader-tab-dca = DCA
 trader-tab-settings = Configuración
 

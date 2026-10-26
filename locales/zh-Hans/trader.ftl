@@ -23,7 +23,7 @@ trader-tab-strategies = 策略
 trader-tab-stop-loss = 止损
 trader-tab-trailing-stop = 追踪止损
 trader-tab-roi = 止盈
-trader-tab-time-rules = 时间规则
+trader-tab-time-rules = 时间出场
 trader-tab-dca = DCA
 trader-tab-settings = 设置
 
@@ -243,7 +243,7 @@ trader-roi-summary = 已锁定 <strong>+{ $target }%</strong> 的利润
 
 ## Time-based exit
 
-trader-time-title = 按时间出场
+trader-time-title = 时间出场
 trader-time-subtitle = 超过最长持仓时间且亏损超过阈值时自动出场
 trader-time-unit-seconds = 秒
 trader-time-unit-minutes = 分钟

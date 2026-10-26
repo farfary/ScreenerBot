@@ -16,7 +16,7 @@ trader-tab-strategies = स्ट्रैटेजी
 trader-tab-stop-loss = स्टॉप लॉस
 trader-tab-trailing-stop = ट्रेलिंग स्टॉप
 trader-tab-roi = टेक प्रॉफ़िट
-trader-tab-time-rules = टाइम रूल्स
+trader-tab-time-rules = समय एग्ज़िट
 trader-tab-dca = DCA
 trader-tab-settings = सेटिंग्स
 
@@ -199,7 +199,7 @@ trader-roi-full-position = पूरी पोज़िशन
 trader-roi-sold = 100% बेचा गया
 trader-roi-summary = <strong>+{ $target }%</strong> प्रॉफ़िट लॉक हुआ
 
-trader-time-title = समय-आधारित एग्ज़िट
+trader-time-title = समय एग्ज़िट
 trader-time-subtitle = नुकसान सीमा से ज़्यादा हो तो अधिकतम होल्ड समय के बाद पोज़िशन से अपने आप एग्ज़िट करें
 trader-time-unit-seconds = सेकंड
 trader-time-unit-minutes = मिनट

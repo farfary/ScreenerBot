@@ -1130,7 +1130,7 @@ config-trader-stop-loss-threshold-pct = 손절 기준
     .hint = 손실이 이 비율(%)을 넘으면 청산합니다 (50 = -50%에서 청산)
     .unit = %
 config-trader-time-override-duration = 시간 오버라이드 기간
-    .hint = 강제 청산까지의 기간 (168시간 = 7일, 30분 등)
+    .hint = 시간 청산이 손실을 확인하기 전까지 포지션을 보유하는 시간입니다. 손실이 임계값에 도달했으면 청산합니다
 config-trader-time-override-enabled = 시간 오버라이드 사용
     .hint = 손실 상태로 너무 오래 보유한 포지션을 자동으로 청산합니다
 config-trader-time-override-loss-threshold-percent = 시간 오버라이드 손실

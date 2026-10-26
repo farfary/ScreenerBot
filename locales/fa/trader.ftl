@@ -23,7 +23,7 @@ trader-tab-strategies = استراتژی‌ها
 trader-tab-stop-loss = حد ضرر
 trader-tab-trailing-stop = حد ضرر متحرک
 trader-tab-roi = حد سود
-trader-tab-time-rules = قوانین زمانی
+trader-tab-time-rules = خروج زمانی
 trader-tab-dca = DCA
 trader-tab-settings = تنظیمات
 
@@ -250,7 +250,7 @@ trader-roi-summary = <strong>+{ $target }%</strong> سود قفل شد
 
 ## Time-based exit
 
-trader-time-title = خروج زمان‌محور
+trader-time-title = خروج زمانی
 trader-time-subtitle = خروج خودکار از پوزیشن‌ها پس از حداکثر مدت نگهداری، در صورتی که ضرر از آستانه فراتر رفته باشد
 trader-time-unit-seconds = ثانیه
 trader-time-unit-minutes = دقیقه

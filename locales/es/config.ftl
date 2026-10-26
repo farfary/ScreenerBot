@@ -1130,7 +1130,7 @@ config-trader-stop-loss-threshold-pct = Umbral del stop loss
     .hint = Sale cuando la pérdida supera este % (50 = sale con -50 %)
     .unit = %
 config-trader-time-override-duration = Duración de la regla de tiempo
-    .hint = Duración antes de la salida forzada (168 horas = 7 días, 30 minutos, etc.)
+    .hint = Cuánto tiempo se mantiene una posición antes de que la salida por tiempo revise su pérdida; se cierra si la pérdida alcanzó el umbral
 config-trader-time-override-enabled = Activar regla de tiempo
     .hint = Activa la salida automática de posiciones mantenidas demasiado tiempo con pérdidas
 config-trader-time-override-loss-threshold-percent = Pérdida de la regla de tiempo

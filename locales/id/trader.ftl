@@ -18,7 +18,7 @@ trader-tab-strategies = Strategi
 trader-tab-stop-loss = Stop Loss
 trader-tab-trailing-stop = Trailing Stop
 trader-tab-roi = Take Profit
-trader-tab-time-rules = Aturan Waktu
+trader-tab-time-rules = Exit Waktu
 trader-tab-dca = DCA
 trader-tab-settings = Pengaturan
 
@@ -194,7 +194,7 @@ trader-roi-full-position = Posisi Penuh
 trader-roi-sold = 100% terjual
 trader-roi-summary = Mengunci untung <strong>+{ $target }%</strong>
 
-trader-time-title = Exit Berbasis Waktu
+trader-time-title = Exit Waktu
 trader-time-subtitle = Exit posisi secara otomatis setelah durasi hold maksimum jika kerugian melebihi ambang
 trader-time-unit-seconds = detik
 trader-time-unit-minutes = menit

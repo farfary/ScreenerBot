@@ -1130,7 +1130,7 @@ config-trader-stop-loss-threshold-pct = 止损阈值
     .hint = 亏损超过此 % 时出场（50 = 在 -50% 时出场）
     .unit = %
 config-trader-time-override-duration = 时间覆盖时长
-    .hint = 强制出场前的时长（168 小时 = 7 天、30 分钟等）
+    .hint = 时间出场检查亏损前持有仓位的时长；若亏损已达到阈值即平仓
 config-trader-time-override-enabled = 启用时间覆盖
     .hint = 对亏损状态下持仓过久的仓位自动出场
 config-trader-time-override-loss-threshold-percent = 时间覆盖亏损

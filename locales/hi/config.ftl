@@ -1084,7 +1084,7 @@ config-trader-stop-loss-threshold-pct = स्टॉप लॉस सीमा
     .hint = घाटा इस % से ऊपर जाने पर एग्ज़िट करें (50 = -50% पर एग्ज़िट)
     .unit = %
 config-trader-time-override-duration = टाइम ओवरराइड अवधि
-    .hint = ज़बरन एग्ज़िट से पहले की अवधि (168 घंटे = 7 दिन, 30 मिनट, आदि)
+    .hint = समय एग्ज़िट द्वारा नुकसान जाँचने से पहले पोज़िशन कितनी देर होल्ड की जाती है; नुकसान सीमा तक पहुँच गया हो तो एग्ज़िट होता है
 config-trader-time-override-enabled = टाइम ओवरराइड चालू करें
     .hint = घाटे में बहुत देर तक होल्ड की गई पोज़िशन के लिए अपने आप एग्ज़िट चालू करें
 config-trader-time-override-loss-threshold-percent = टाइम ओवरराइड घाटा

@@ -1124,7 +1124,7 @@ config-trader-stop-loss-threshold-pct = حد وقف الخسارة
     .hint = الخروج عندما تتجاوز الخسارة هذه النسبة (50 = الخروج عند -50%)
     .unit = %
 config-trader-time-override-duration = مدة تجاوز الوقت
-    .hint = المدة قبل الخروج القسري (168 ساعة = 7 أيام، 30 دقيقة، إلخ)
+    .hint = المدة التي يُحتفظ فيها بالمركز قبل أن يفحص الخروج الزمني خسارته؛ يخرج إذا بلغت الخسارة الحد
 config-trader-time-override-enabled = تفعيل تجاوز الوقت
     .hint = تفعيل الخروج التلقائي للمراكز التي احتُفظ بها طويلًا بخسارة
 config-trader-time-override-loss-threshold-percent = خسارة تجاوز الوقت

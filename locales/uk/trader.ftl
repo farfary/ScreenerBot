@@ -23,7 +23,7 @@ trader-tab-strategies = Стратегії
 trader-tab-stop-loss = Стоп-лос
 trader-tab-trailing-stop = Трейлінг-стоп
 trader-tab-roi = Тейк-профіт
-trader-tab-time-rules = Часові правила
+trader-tab-time-rules = Вихід за часом
 trader-tab-dca = DCA
 trader-tab-settings = Налаштування
 

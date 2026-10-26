@@ -24,12 +24,15 @@
  *   under its hint in the control row, never in the title row beside the label, so a
  *   switch field leaves no empty track under its hint.
  * - Every rule card's worked example carries the one section title, "How It Works".
+ * - The time exit is named once: its tab and its card carry the same name in every
+ *   locale, and its duration field says what the duration does.
  *
  * Run with `npm run test:js`.
  */
 
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync, readdirSync } from "node:fs";
 
 import { chromium } from "playwright";
 
@@ -234,4 +237,32 @@ test("every rule card's worked example is titled How It Works", async () => {
     titles.filter((title) => !title.endsWith(": How It Works")),
     []
   );
+});
+
+test("the time exit's tab and card carry one name", async () => {
+  const locales = new URL("../../locales/", import.meta.url);
+  const value = (catalog, key) => new RegExp(`^${key} = (.+)$`, "m").exec(catalog)?.[1];
+  const dirs = readdirSync(locales, { withFileTypes: true }).filter((entry) => entry.isDirectory());
+  for (const { name: locale } of dirs) {
+    const catalog = readFileSync(new URL(`${locale}/trader.ftl`, locales), "utf8");
+    assert.equal(
+      value(catalog, "trader-tab-time-rules"),
+      value(catalog, "trader-time-title"),
+      `${locale}: the tab and the card name the time exit alike`
+    );
+  }
+
+  await page.click('#subTabsContainer [data-tab-id="time-rules"]');
+  await page.locator("#time-rules-tab").waitFor();
+  const names = await page.evaluate(() => ({
+    tab: document.querySelector('#subTabsContainer [data-tab-id="time-rules"]').textContent.trim(),
+    card: document.querySelector("#time-rules-tab .card-header h3").textContent.trim(),
+    hint: document
+      .querySelector("#time-max-hold")
+      .closest(".config-group")
+      .querySelector(".config-hint")
+      .textContent.trim(),
+  }));
+  assert.deepEqual([names.tab, names.card], ["Time Exit", "Time Exit"]);
+  assert.match(names.hint, /^How long a position is held before the time exit checks its loss/);
 });

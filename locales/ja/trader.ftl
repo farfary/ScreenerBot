@@ -23,7 +23,7 @@ trader-tab-strategies = ストラテジー
 trader-tab-stop-loss = 損切り
 trader-tab-trailing-stop = トレーリングストップ
 trader-tab-roi = 利確
-trader-tab-time-rules = 時間ルール
+trader-tab-time-rules = 時間エグジット
 trader-tab-dca = DCA
 trader-tab-settings = 設定
 
@@ -243,7 +243,7 @@ trader-roi-summary = <strong>+{ $target }%</strong> の利益を確保
 
 ## Time-based exit
 
-trader-time-title = 時間ベースのエグジット
+trader-time-title = 時間エグジット
 trader-time-subtitle = 損失がしきい値を超えている場合、最大保有時間の経過後にポジションを自動でエグジットします
 trader-time-unit-seconds = 秒
 trader-time-unit-minutes = 分

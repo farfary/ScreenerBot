@@ -1133,7 +1133,7 @@ config-trader-stop-loss-threshold-pct = Seuil du stop loss
     .hint = Sort lorsque la perte dépasse ce % (50 = sortie à -50 %)
     .unit = %
 config-trader-time-override-duration = Durée du forçage par durée
-    .hint = Durée avant la sortie forcée (168 heures = 7 jours, 30 minutes, etc.)
+    .hint = Durée de détention d’une position avant que la sortie temporelle vérifie sa perte ; elle est clôturée si la perte a atteint le seuil
 config-trader-time-override-enabled = Activer le forçage par durée
     .hint = Active la sortie automatique des positions détenues trop longtemps à perte
 config-trader-time-override-loss-threshold-percent = Perte du forçage par durée

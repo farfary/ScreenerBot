@@ -1130,7 +1130,7 @@ config-trader-stop-loss-threshold-pct = Ambang Stop Loss
     .hint = Exit saat kerugian melebihi % ini (50 = exit pada -50%)
     .unit = %
 config-trader-time-override-duration = Durasi Time Override
-    .hint = Durasi sebelum exit paksa (168 jam = 7 hari, 30 menit, dll)
+    .hint = Berapa lama posisi ditahan sebelum exit waktu memeriksa kerugiannya; posisi ditutup jika kerugian sudah mencapai ambang
 config-trader-time-override-enabled = Aktifkan Time Override
     .hint = Aktifkan exit otomatis untuk posisi yang ditahan terlalu lama dalam keadaan rugi
 config-trader-time-override-loss-threshold-percent = Rugi Time Override

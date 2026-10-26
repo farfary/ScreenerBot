@@ -1130,7 +1130,7 @@ config-trader-stop-loss-threshold-pct = Stop-Loss-Schwelle
     .hint = Ausstieg, wenn der Verlust diesen Wert in % überschreitet (50 = Ausstieg bei -50 %)
     .unit = %
 config-trader-time-override-duration = Dauer des Zeit-Overrides
-    .hint = Dauer bis zum erzwungenen Ausstieg (168 Stunden = 7 Tage, 30 Minuten usw.)
+    .hint = Wie lange eine Position gehalten wird, bevor der Zeitausstieg ihren Verlust prüft; hat der Verlust die Schwelle erreicht, wird verkauft
 config-trader-time-override-enabled = Zeit-Override aktivieren
     .hint = Automatischen Ausstieg für Positionen aktivieren, die zu lange im Verlust gehalten werden
 config-trader-time-override-loss-threshold-percent = Verlust für Zeit-Override

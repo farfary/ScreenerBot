@@ -1130,7 +1130,7 @@ config-trader-stop-loss-threshold-pct = آستانه حد ضرر
     .hint = وقتی ضرر از این درصد بگذرد خروج انجام می‌شود (50 = خروج در -50%)
     .unit = %
 config-trader-time-override-duration = مدت بازنویسی زمانی
-    .hint = مدت پیش از خروج اجباری (168 ساعت = 7 روز، 30 دقیقه و غیره)
+    .hint = مدت نگهداری پوزیشن پیش از آنکه خروج زمانی زیان آن را بررسی کند؛ اگر زیان به آستانه رسیده باشد، بسته می‌شود
 config-trader-time-override-enabled = فعال‌سازی بازنویسی زمانی
     .hint = برای پوزیشن‌هایی که مدت زیادی با ضرر نگه داشته شده‌اند خروج خودکار انجام می‌شود
 config-trader-time-override-loss-threshold-percent = ضرر بازنویسی زمانی
