@@ -363,6 +363,12 @@ settings-telegram-test-label = 연결 테스트
 settings-telegram-test-hint = 테스트 메시지를 보내 설정을 확인합니다
 settings-telegram-test-send = 테스트 전송
 settings-telegram-test-sending = 전송 중...
+settings-telegram-restart-label = 적용하려면 다시 시작
+settings-telegram-restart-hint = { -brand }을(를) 다시 시작할 때까지 { -telegram }은(는) 이전 설정을 유지합니다
+settings-telegram-restart-action = 다시 시작
+settings-telegram-needs-token = 먼저 봇 토큰을 추가하세요
+settings-telegram-needs-chat = 먼저 채팅을 연결하세요
+settings-telegram-needs-enabled = 먼저 { -telegram }을(를) 켜세요
 
 settings-telegram-chat-type-private = 개인
 settings-telegram-chat-type-group = 그룹

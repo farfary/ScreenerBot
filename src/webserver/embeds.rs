@@ -318,6 +318,7 @@ pub const CORE_CONNECTIVITY_WATCHER: &str =
 pub const CORE_TOOLTIP: &str = include_str!("templates/scripts/core/tooltip.js");
 pub const CORE_HEADER: &str = include_str!("templates/scripts/core/header.js");
 pub const CORE_HEADER_METRICS: &str = include_str!("templates/scripts/core/header_metrics.js");
+pub const CORE_RESTART: &str = include_str!("templates/scripts/core/restart.js");
 pub const CORE_NOTIFICATIONS: &str = include_str!("templates/scripts/core/notifications.js");
 pub const CORE_TOAST: &str = include_str!("templates/scripts/core/toast.js");
 pub const CORE_ACTION_TOASTS: &str = include_str!("templates/scripts/core/action_toasts.js");

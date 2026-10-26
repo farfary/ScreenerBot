@@ -388,6 +388,12 @@ settings-telegram-test-label = اختبار الاتصال
 settings-telegram-test-hint = أرسل رسالة اختبار للتحقق من الإعداد
 settings-telegram-test-send = إرسال اختبار
 settings-telegram-test-sending = جارٍ الإرسال...
+settings-telegram-restart-label = أعد التشغيل للتطبيق
+settings-telegram-restart-hint = يحتفظ { -telegram } بإعداداته السابقة حتى إعادة تشغيل { -brand }
+settings-telegram-restart-action = إعادة التشغيل
+settings-telegram-needs-token = أضف رمز البوت أولًا
+settings-telegram-needs-chat = اربط محادثة أولًا
+settings-telegram-needs-enabled = شغّل { -telegram } أولًا
 
 settings-telegram-chat-type-private = خاصة
 settings-telegram-chat-type-group = مجموعة

@@ -339,6 +339,12 @@ settings-telegram-test-label = Kiểm tra kết nối
 settings-telegram-test-hint = Gửi tin nhắn thử để xác minh cấu hình
 settings-telegram-test-send = Gửi thử
 settings-telegram-test-sending = Đang gửi...
+settings-telegram-restart-label = Khởi động lại để áp dụng
+settings-telegram-restart-hint = { -telegram } giữ cài đặt trước đó cho đến khi { -brand } khởi động lại
+settings-telegram-restart-action = Khởi động lại
+settings-telegram-needs-token = Hãy thêm token bot trước
+settings-telegram-needs-chat = Hãy kết nối một cuộc trò chuyện trước
+settings-telegram-needs-enabled = Hãy bật { -telegram } trước
 
 settings-telegram-chat-type-private = riêng tư
 settings-telegram-chat-type-group = nhóm

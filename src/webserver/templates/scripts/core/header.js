@@ -6,7 +6,6 @@ import { loadPage } from "./router.js";
 import * as Utils from "./utils.js";
 import { notificationManager } from "./notifications.js";
 import * as NotificationPanel from "../ui/notification_panel.js";
-import { ConfirmationDialog } from "../ui/confirmation_dialog.js";
 import { subscribeToBootstrap, whenInitialized } from "./bootstrap.js";
 import { createHeaderMetrics } from "./header_metrics.js";
 import { showSettingsDialog } from "../ui/settings_dialog.js";
@@ -34,6 +33,7 @@ import "../ui/quick_trade_shortcuts.js";
 import { apiErrorMessage } from "./request_manager.js";
 import { setAutoTraderEnabled } from "../ui/auto_trader_control.js";
 import { pushEscapeHandler } from "./escape_stack.js";
+import { restartApp } from "./restart.js";
 
 const state = {
   traderEnabled: false,
@@ -425,7 +425,7 @@ function initSettingsButton() {
 }
 
 function initRestartButton() {
-  document.getElementById("restartBtn")?.addEventListener("click", () => handleRestart());
+  document.getElementById("restartBtn")?.addEventListener("click", () => restartApp());
 }
 
 // The main navigation row and the metrics ticker are tab scroll strips: edge fades,
@@ -623,53 +623,6 @@ function updateNotificationBadge(count) {
       ? I18n.t("shell-notification-button-unread", { count: count.toString() })
       : I18n.attr("shell-action-notifications", "aria-label")
   );
-}
-
-async function handleRestart() {
-  const { confirmed } = await ConfirmationDialog.show({
-    title: I18n.t("shell-restart-confirm-title"),
-    message: I18n.t("shell-restart-confirm-message"),
-    confirmLabel: I18n.t("shell-restart-confirm-action"),
-    cancelLabel: I18n.t("common-action-cancel"),
-    variant: "warning",
-  });
-
-  if (!confirmed) return;
-
-  try {
-    // ONE notice for the whole restart: it is replaced in place if the restart
-    // fails, and the page reloads out from under it when it succeeds.
-    Utils.showToast({
-      key: "system-restart",
-      type: "progress",
-      title: I18n.t("shell-restart-progress"),
-    });
-
-    const res = await fetch("/api/system/reboot", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-    });
-
-    if (!res.ok) {
-      throw new Error(I18n.t("shell-restart-failed-status", { status: String(res.status) }));
-    }
-
-    const result = await res.json();
-
-    const waitForRestart = window.waitForScreenerBotRestart;
-    if (typeof waitForRestart !== "function") {
-      throw new Error(I18n.t("shell-restart-helper-unavailable"));
-    }
-    await waitForRestart(result.instance_id, { target: window.location.pathname || "/home" });
-  } catch (err) {
-    console.error("[Header] Restart failed:", err);
-    Utils.showToast({
-      key: "system-restart",
-      type: "error",
-      title: I18n.t("shell-restart-failed"),
-      message: err.message,
-    });
-  }
 }
 
 if (document.readyState === "loading") {

@@ -11,6 +11,7 @@ import { enhanceAllSelects } from "../custom_select.js";
 import { renderStateView } from "../state_view.js";
 import { apiErrorMessage } from "../../core/request_manager.js";
 import { populateLanguageOptions } from "./interface_tab.js";
+import { restartApp } from "../../core/restart.js";
 
 // Ids are the chat kinds reported by the Telegram poller (src/telegram/polling.rs).
 const CHAT_TYPE_LABELS = Object.freeze({
@@ -127,6 +128,18 @@ function buildTelegramTab(settings) {
           </div>
         </div>
 
+        <div class="settings-field" id="tgRestartField" style="display: none;">
+          <div class="settings-field-info">
+            <label data-l10n-id="settings-telegram-restart-label"></label>
+            <span class="settings-field-hint" data-l10n-id="settings-telegram-restart-hint"></span>
+          </div>
+          <div class="settings-field-control">
+            <button class="btn btn-secondary btn-sm" id="tgRestartBtn">
+              <i class="icon-refresh-cw"></i> <span data-l10n-id="settings-telegram-restart-action"></span>
+            </button>
+          </div>
+        </div>
+
         <div class="settings-field">
           <div class="settings-field-info">
             <label data-l10n-id="settings-telegram-token-label"></label>
@@ -144,7 +157,7 @@ function buildTelegramTab(settings) {
           <div class="settings-field-info">
             <label data-l10n-id="settings-telegram-chat-label"></label>
             <span class="settings-field-hint" id="tgChatIdHint">
-              ${settings.chat_id ? `<span data-l10n-id="settings-telegram-chat-connected"></span> <bdi dir="ltr">${Utils.escapeHtml(String(settings.chat_id))}</bdi>` : '<span data-l10n-id="settings-telegram-chat-discover-hint"></span>'}
+              ${settings.chat_id ? `<span data-l10n-id="settings-telegram-chat-connected"></span> <bdi dir="ltr">${Utils.escapeHtml(String(settings.chat_id))}</bdi>` : '<span id="tgDiscoverHint" data-l10n-id="settings-telegram-chat-discover-hint"></span>'}
             </span>
           </div>
           <div class="settings-field-control" id="tgChatIdControl">
@@ -218,7 +231,7 @@ function buildTelegramTab(settings) {
         <div class="settings-field">
           <div class="settings-field-info">
             <label data-l10n-id="settings-telegram-test-label"></label>
-            <span class="settings-field-hint" data-l10n-id="settings-telegram-test-hint"></span>
+            <span class="settings-field-hint" id="tgTestHint" data-l10n-id="settings-telegram-test-hint"></span>
           </div>
           <div class="settings-field-control">
             <button class="btn btn-primary btn-sm" id="tgTestBtn">
@@ -488,8 +501,8 @@ function attachTelegramHandlers(dialog, content, settings) {
         body: JSON.stringify({ [key]: value }),
       });
 
+      const data = await response.json().catch(() => null);
       if (!response.ok) {
-        const data = await response.json().catch(() => null);
         revert();
         Utils.showToast({
           key: "telegram-setting",
@@ -497,7 +510,9 @@ function attachTelegramHandlers(dialog, content, settings) {
           title: I18n.t("settings-telegram-setting-save-failed"),
           message: apiErrorMessage(data, null),
         });
+        return null;
       }
+      return data ?? {};
     } catch (error) {
       revert();
       Utils.showToast({
@@ -506,15 +521,65 @@ function attachTelegramHandlers(dialog, content, settings) {
         title: I18n.t("settings-telegram-setting-save-failed"),
         message: error?.message || null,
       });
+      return null;
     }
   };
+
+  // The connection the actions depend on, as saved. A saved token comes back masked.
+  const connection = {
+    enabled: Boolean(settings.enabled),
+    hasToken: Boolean(settings.bot_token),
+    hasChat: Boolean(settings.chat_id),
+  };
+
+  // Discover Chat ID needs a bot token; Send Test also needs Telegram on and a chat.
+  // A disabled action names what is missing in its hint and tooltip.
+  const syncConnectionActions = () => {
+    const discover = content.querySelector("#tgDiscoverBtn");
+    const discoverHint = content.querySelector("#tgDiscoverHint");
+    const discoverReason = connection.hasToken ? null : I18n.t("settings-telegram-needs-token");
+    if (discover) {
+      discover.disabled = Boolean(discoverReason);
+      discover.title = discoverReason || "";
+    }
+    if (discoverHint) {
+      discoverHint.textContent = discoverReason || I18n.t("settings-telegram-chat-discover-hint");
+    }
+
+    const test = content.querySelector("#tgTestBtn");
+    const testHint = content.querySelector("#tgTestHint");
+    const testReason = !connection.hasToken
+      ? I18n.t("settings-telegram-needs-token")
+      : !connection.hasChat
+        ? I18n.t("settings-telegram-needs-chat")
+        : !connection.enabled
+          ? I18n.t("settings-telegram-needs-enabled")
+          : null;
+    if (test && test.dataset.submitting !== "true") {
+      test.disabled = Boolean(testReason);
+      test.title = testReason || "";
+    }
+    if (testHint) testHint.textContent = testReason || I18n.t("settings-telegram-test-hint");
+  };
+
+  // A running service keeps its previous connection until the app restarts.
+  const showServiceOutcome = (result) => {
+    if (result?.service !== "restart_required") return;
+    const restartField = content.querySelector("#tgRestartField");
+    if (restartField) restartField.style.display = "";
+  };
+  content.querySelector("#tgRestartBtn")?.addEventListener("click", () => restartApp());
 
   // Enable toggle
   const enableToggle = content.querySelector("#tgEnabled");
   if (enableToggle) {
-    enableToggle.addEventListener("change", (e) =>
-      updateSetting("enabled", e.target.checked, e.target)
-    );
+    enableToggle.addEventListener("change", async (e) => {
+      const result = await updateSetting("enabled", e.target.checked, e.target);
+      if (!result) return;
+      connection.enabled = e.target.checked;
+      showServiceOutcome(result);
+      syncConnectionActions();
+    });
   }
 
   // Bot token field
@@ -526,7 +591,14 @@ function attachTelegramHandlers(dialog, content, settings) {
       tokenField.type = isPassword ? "text" : "password";
       toggleTokenBtn.querySelector("i").className = isPassword ? "icon-eye-off" : "icon-eye";
     });
-    tokenField.addEventListener("change", (e) => updateSetting("bot_token", e.target.value));
+    tokenField.addEventListener("change", async (e) => {
+      const token = e.target.value.trim();
+      const result = await updateSetting("bot_token", token);
+      if (!result) return;
+      if (token) connection.hasToken = true;
+      showServiceOutcome(result);
+      syncConnectionActions();
+    });
   }
 
   // Message language: "app" follows the dashboard language
@@ -698,11 +770,12 @@ function attachTelegramHandlers(dialog, content, settings) {
         Utils.showToast({ type: "error", title: I18n.t("settings-telegram-test-failed") });
       } finally {
         testBtn.dataset.submitting = "false";
-        testBtn.disabled = false;
         setButton(testBtn, "icon-send", I18n.t("settings-telegram-test-send"));
+        syncConnectionActions();
       }
     });
   }
+  syncConnectionActions();
 
   // Session timeout
   const timeoutSelect = content.querySelector("#tgSessionTimeout");

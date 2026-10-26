@@ -11,6 +11,8 @@
 //! - Test message sending
 
 mod handlers;
+#[cfg(test)]
+mod handlers_tests;
 pub mod types;
 
 use crate::webserver::state::AppState;

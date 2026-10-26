@@ -375,6 +375,12 @@ settings-telegram-test-label = Tester la connexion
 settings-telegram-test-hint = Envoie un message de test pour vérifier la configuration
 settings-telegram-test-send = Envoyer un test
 settings-telegram-test-sending = Envoi…
+settings-telegram-restart-label = Redémarrer pour appliquer
+settings-telegram-restart-hint = { -telegram } conserve ses réglages précédents jusqu’au redémarrage de { -brand }
+settings-telegram-restart-action = Redémarrer
+settings-telegram-needs-token = Ajoutez d’abord un jeton de bot
+settings-telegram-needs-chat = Connectez d’abord une discussion
+settings-telegram-needs-enabled = Activez d’abord { -telegram }
 
 settings-telegram-chat-type-private = privé
 settings-telegram-chat-type-group = groupe

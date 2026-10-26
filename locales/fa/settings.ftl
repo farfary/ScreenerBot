@@ -368,6 +368,12 @@ settings-telegram-test-label = آزمایش اتصال
 settings-telegram-test-hint = برای تأیید پیکربندی، یک پیام آزمایشی ارسال کنید
 settings-telegram-test-send = ارسال آزمایشی
 settings-telegram-test-sending = در حال ارسال...
+settings-telegram-restart-label = برای اعمال، راه‌اندازی مجدد کنید
+settings-telegram-restart-hint = { -telegram } تا راه‌اندازی مجدد { -brand } تنظیمات قبلی خود را نگه می‌دارد
+settings-telegram-restart-action = راه‌اندازی مجدد
+settings-telegram-needs-token = ابتدا توکن ربات را اضافه کنید
+settings-telegram-needs-chat = ابتدا یک گفتگو را متصل کنید
+settings-telegram-needs-enabled = ابتدا { -telegram } را روشن کنید
 
 settings-telegram-chat-type-private = خصوصی
 settings-telegram-chat-type-group = گروه

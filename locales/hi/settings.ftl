@@ -346,6 +346,12 @@ settings-telegram-test-label = कनेक्शन टेस्ट करे�
 settings-telegram-test-hint = कॉन्फ़िगरेशन जाँचने के लिए टेस्ट संदेश भेजें
 settings-telegram-test-send = टेस्ट भेजें
 settings-telegram-test-sending = भेजा जा रहा है...
+settings-telegram-restart-label = लागू करने के लिए रीस्टार्ट करें
+settings-telegram-restart-hint = { -brand } के रीस्टार्ट होने तक { -telegram } अपनी पिछली सेटिंग्स रखता है
+settings-telegram-restart-action = रीस्टार्ट करें
+settings-telegram-needs-token = पहले बॉट टोकन जोड़ें
+settings-telegram-needs-chat = पहले कोई चैट कनेक्ट करें
+settings-telegram-needs-enabled = पहले { -telegram } चालू करें
 
 settings-telegram-chat-type-private = निजी
 settings-telegram-chat-type-group = ग्रुप

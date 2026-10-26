@@ -67,6 +67,23 @@ pub struct NotificationSettings {
     pub copy_paper: bool,
 }
 
+/// What a saved settings change did to the running Telegram service.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TelegramServiceOutcome {
+    /// The running service already matches the saved settings, or none needs to run.
+    Unchanged,
+    /// The service was off and has been started with the saved settings.
+    Started,
+    /// The running service keeps its previous settings until the app restarts.
+    RestartRequired,
+}
+
+#[derive(Serialize)]
+pub struct UpdateSettingsResponse {
+    pub service: TelegramServiceOutcome,
+}
+
 #[derive(Deserialize)]
 pub struct UpdateSettingsRequest {
     pub enabled: Option<bool>,

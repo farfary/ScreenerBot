@@ -363,6 +363,12 @@ settings-telegram-test-label = Uji Koneksi
 settings-telegram-test-hint = Kirim pesan uji untuk memverifikasi konfigurasi
 settings-telegram-test-send = Kirim Uji
 settings-telegram-test-sending = Mengirim...
+settings-telegram-restart-label = Mulai ulang untuk menerapkan
+settings-telegram-restart-hint = { -telegram } mempertahankan pengaturan sebelumnya hingga { -brand } dimulai ulang
+settings-telegram-restart-action = Mulai ulang
+settings-telegram-needs-token = Tambahkan token bot terlebih dahulu
+settings-telegram-needs-chat = Hubungkan obrolan terlebih dahulu
+settings-telegram-needs-enabled = Aktifkan { -telegram } terlebih dahulu
 
 settings-telegram-chat-type-private = pribadi
 settings-telegram-chat-type-group = grup

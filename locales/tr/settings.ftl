@@ -368,6 +368,12 @@ settings-telegram-test-label = Bağlantıyı Test Et
 settings-telegram-test-hint = Yapılandırmayı doğrulamak için test mesajı gönder
 settings-telegram-test-send = Test Gönder
 settings-telegram-test-sending = Gönderiliyor...
+settings-telegram-restart-label = Uygulamak için yeniden başlatın
+settings-telegram-restart-hint = { -telegram }, { -brand } yeniden başlayana kadar önceki ayarlarını korur
+settings-telegram-restart-action = Yeniden başlat
+settings-telegram-needs-token = Önce bir bot belirteci ekleyin
+settings-telegram-needs-chat = Önce bir sohbet bağlayın
+settings-telegram-needs-enabled = Önce { -telegram } özelliğini açın
 
 settings-telegram-chat-type-private = özel
 settings-telegram-chat-type-group = grup

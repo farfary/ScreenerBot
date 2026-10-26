@@ -298,13 +298,32 @@ impl ServiceManager {
             LogTag::System,
             "Starting newly enabled services after initialization",
         );
+        let candidates: Vec<&'static str> = self.services.keys().copied().collect();
+        self.start_enabled_among(&candidates).await
+    }
 
-        // Get all enabled services
-        let all_enabled: Vec<&'static str> = self
-            .services
+    /// Start one service whose config has just enabled it, with any enabled dependency
+    /// that is not running yet. A disabled or already running service is left as it is.
+    pub async fn start_enabled_service(
+        &mut self,
+        name: &'static str,
+    ) -> crate::Result<ServiceStartupReport> {
+        logger::info(
+            LogTag::System,
+            &format!("Starting service '{name}' after its config enabled it"),
+        );
+        self.start_enabled_among(&[name]).await
+    }
+
+    /// Start every enabled, not yet running service of `candidates` in dependency order.
+    async fn start_enabled_among(
+        &mut self,
+        candidates: &[&'static str],
+    ) -> crate::Result<ServiceStartupReport> {
+        let all_enabled: Vec<&'static str> = candidates
             .iter()
-            .filter(|(_, service)| service.is_enabled())
-            .map(|(name, _)| *name)
+            .copied()
+            .filter(|name| self.is_service_enabled(name))
             .collect();
 
         // Filter out services that are already running
@@ -873,6 +892,11 @@ impl ServiceManager {
     /// Get the names of services that currently have running handles
     pub fn get_running_service_names(&self) -> Vec<&'static str> {
         self.handles.keys().copied().collect()
+    }
+
+    /// Whether `name` has been started and is running.
+    pub fn is_service_running(&self, name: &str) -> bool {
+        self.handles.contains_key(name)
     }
 
     /// Get the number of services that currently have running handles

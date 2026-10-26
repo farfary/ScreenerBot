@@ -363,6 +363,12 @@ settings-telegram-test-label = 接続テスト
 settings-telegram-test-hint = テストメッセージを送信して設定を確認します
 settings-telegram-test-send = テスト送信
 settings-telegram-test-sending = 送信中...
+settings-telegram-restart-label = 再起動して適用
+settings-telegram-restart-hint = { -brand } を再起動するまで、{ -telegram } は以前の設定のまま動作します
+settings-telegram-restart-action = 再起動
+settings-telegram-needs-token = 先にボットトークンを追加してください
+settings-telegram-needs-chat = 先にチャットを接続してください
+settings-telegram-needs-enabled = 先に { -telegram } をオンにしてください
 
 settings-telegram-chat-type-private = プライベート
 settings-telegram-chat-type-group = グループ

@@ -378,6 +378,12 @@ settings-telegram-test-label = Перевірити підключення
 settings-telegram-test-hint = Надіслати тестове повідомлення для перевірки конфігурації
 settings-telegram-test-send = Надіслати тест
 settings-telegram-test-sending = Надсилання...
+settings-telegram-restart-label = Перезапустіть, щоб застосувати
+settings-telegram-restart-hint = { -telegram } працює з попередніми налаштуваннями до перезапуску { -brand }
+settings-telegram-restart-action = Перезапустити
+settings-telegram-needs-token = Спершу додайте токен бота
+settings-telegram-needs-chat = Спершу підключіть чат
+settings-telegram-needs-enabled = Спершу увімкніть { -telegram }
 
 settings-telegram-chat-type-private = приватний
 settings-telegram-chat-type-group = група

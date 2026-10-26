@@ -377,6 +377,12 @@ settings-telegram-test-label = Test Connection
 settings-telegram-test-hint = Send a test message to verify configuration
 settings-telegram-test-send = Send Test
 settings-telegram-test-sending = Sending...
+settings-telegram-restart-label = Restart to apply
+settings-telegram-restart-hint = { -telegram } keeps its previous settings until { -brand } restarts
+settings-telegram-restart-action = Restart
+settings-telegram-needs-token = Add a bot token first
+settings-telegram-needs-chat = Connect a chat first
+settings-telegram-needs-enabled = Turn on { -telegram } first
 
 # Ids are the chat kinds the Telegram poller reports.
 settings-telegram-chat-type-private = private

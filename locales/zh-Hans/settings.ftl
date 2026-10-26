@@ -363,6 +363,12 @@ settings-telegram-test-label = 测试连接
 settings-telegram-test-hint = 发送测试消息以验证配置
 settings-telegram-test-send = 发送测试
 settings-telegram-test-sending = 正在发送…
+settings-telegram-restart-label = 重启后生效
+settings-telegram-restart-hint = { -brand } 重启前，{ -telegram } 会继续使用之前的设置
+settings-telegram-restart-action = 重启
+settings-telegram-needs-token = 请先添加机器人令牌
+settings-telegram-needs-chat = 请先连接一个聊天
+settings-telegram-needs-enabled = 请先开启 { -telegram }
 
 settings-telegram-chat-type-private = 私聊
 settings-telegram-chat-type-group = 群组
