@@ -36,14 +36,17 @@ use super::types::{
 const RECENT_REJECTIONS: usize = 20;
 
 /// The headline cards. They always describe the current snapshot, in every time range, so
-/// scanned, passed, rejected and both rates agree with each other. The selected range
-/// drives only the breakdowns, which count rejection checks in that period.
+/// scanned equals passed plus rejected plus awaiting, and the rates agree with each other.
+/// The selected range drives only the breakdowns, which count rejection checks in that
+/// period.
 struct Headline {
     total_tokens: Option<usize>,
     total_passed: Option<usize>,
     total_rejected: Option<usize>,
+    total_awaiting_rugcheck_report: Option<usize>,
     pass_rate: Option<f64>,
     rejection_rate: Option<f64>,
+    awaiting_rugcheck_report_rate: Option<f64>,
 }
 
 impl Headline {
@@ -56,13 +59,16 @@ impl Headline {
                 total_tokens: None,
                 total_passed: None,
                 total_rejected: None,
+                total_awaiting_rugcheck_report: None,
                 pass_rate: None,
                 rejection_rate: None,
+                awaiting_rugcheck_report_rate: None,
             };
         };
         let total = stats.total_tokens;
         let passed = stats.passed_filtering;
         let rejected = stats.rejected();
+        let awaiting = stats.awaiting_rugcheck_report;
         let rate = |count: usize| {
             if total > 0 {
                 ((count as f64 / total as f64) * 1000.0).round() / 10.0
@@ -74,8 +80,10 @@ impl Headline {
             total_tokens: Some(total),
             total_passed: Some(passed),
             total_rejected: Some(rejected),
+            total_awaiting_rugcheck_report: Some(awaiting),
             pass_rate: Some(rate(passed)),
             rejection_rate: Some(rate(rejected)),
+            awaiting_rugcheck_report_rate: Some(rate(awaiting)),
         }
     }
 }
@@ -94,6 +102,7 @@ pub async fn get_analytics(Query(query): Query<AnalyticsQuery>) -> Response {
                 query.end_time,
             )),
             Ok(promo::get_promo_recent_rejections(RECENT_REJECTIONS)),
+            true,
         );
     }
 
@@ -124,16 +133,26 @@ pub async fn get_analytics(Query(query): Query<AnalyticsQuery>) -> Response {
         Err(error) => Err(error.into()),
     };
 
-    analytics_response(&query, stats_result, rejection_result, recent_result)
+    let rugcheck_report_required =
+        filtering::sources::rugcheck::report_required(crate::chains::active_chain());
+
+    analytics_response(
+        &query,
+        stats_result,
+        rejection_result,
+        recent_result,
+        rugcheck_report_required,
+    )
 }
 
-/// The analytics payload from the snapshot, the (reason, source, count) rejection rows
-/// and the newest rejections.
+/// The analytics payload from the snapshot, the (reason, source, count) rejection rows,
+/// the newest rejections and whether the RugCheck stage holds tokens back for a report.
 fn analytics_response(
     query: &AnalyticsQuery,
     stats_result: Option<FilteringStatsSnapshot>,
     rejection_result: TokenResult<Vec<(String, String, i64)>>,
     recent_result: TokenResult<Vec<RecentRejectionRow>>,
+    rugcheck_report_required: bool,
 ) -> Response {
     match (stats_result, rejection_result, recent_result) {
         (stats, Ok(raw_stats), Ok(recent_raw)) => {
@@ -352,8 +371,11 @@ fn analytics_response(
                 total_tokens: headline.total_tokens,
                 total_rejected: headline.total_rejected,
                 total_passed: headline.total_passed,
+                total_awaiting_rugcheck_report: headline.total_awaiting_rugcheck_report,
                 pass_rate: headline.pass_rate,
                 rejection_rate: headline.rejection_rate,
+                awaiting_rugcheck_report_rate: headline.awaiting_rugcheck_report_rate,
+                rugcheck_report_required,
                 breakdown_total,
                 by_category,
                 by_source,
@@ -436,8 +458,9 @@ mod tests {
         assert_eq!(headline.rejection_rate, Some(0.0));
     }
 
-    /// A token waiting for its RugCheck report is neither passed nor rejected, so it is
-    /// left out of both the rejected count and the rejection rate.
+    /// A token waiting for its RugCheck report is neither passed nor rejected: it is left
+    /// out of both the rejected count and the rejection rate and has its own figure, so
+    /// scanned is the sum of the three counts and the three rates.
     #[test]
     fn tokens_awaiting_their_report_are_not_counted_as_rejected() {
         let mut stats = snapshot(1_000, 100);
@@ -445,8 +468,30 @@ mod tests {
         let headline = Headline::of(Some(&stats));
 
         assert_eq!(headline.total_rejected, Some(500));
+        assert_eq!(headline.total_awaiting_rugcheck_report, Some(400));
         assert_eq!(headline.pass_rate, Some(10.0));
         assert_eq!(headline.rejection_rate, Some(50.0));
+        assert_eq!(headline.awaiting_rugcheck_report_rate, Some(40.0));
+    }
+
+    /// The recorded shape: 379 scanned, none passed, 249 awaiting their report. The three
+    /// headline counts add up to the scanned total.
+    #[test]
+    fn headline_counts_add_up_to_the_scanned_total() {
+        let mut stats = snapshot(379, 0);
+        stats.awaiting_rugcheck_report = 249;
+        let headline = Headline::of(Some(&stats));
+
+        assert_eq!(headline.total_rejected, Some(130));
+        let sum = [
+            headline.total_passed,
+            headline.total_rejected,
+            headline.total_awaiting_rugcheck_report,
+        ]
+        .iter()
+        .map(|count| count.expect("counted"))
+        .sum::<usize>();
+        assert_eq!(Some(sum), headline.total_tokens);
     }
 
     /// The promotional payload is one corpus: the breakdowns add up to the headline's
@@ -463,6 +508,7 @@ mod tests {
             Some(promo::get_promo_filtering_snapshot()),
             Ok(promo::get_promo_rejection_counts(None, None)),
             Ok(promo::get_promo_recent_rejections(RECENT_REJECTIONS)),
+            true,
         );
         let body = axum::body::to_bytes(response.into_body(), usize::MAX)
             .await
@@ -502,7 +548,9 @@ mod tests {
         assert_eq!(headline.total_tokens, None);
         assert_eq!(headline.total_passed, None);
         assert_eq!(headline.total_rejected, None);
+        assert_eq!(headline.total_awaiting_rugcheck_report, None);
         assert_eq!(headline.pass_rate, None);
         assert_eq!(headline.rejection_rate, None);
+        assert_eq!(headline.awaiting_rugcheck_report_rate, None);
     }
 }

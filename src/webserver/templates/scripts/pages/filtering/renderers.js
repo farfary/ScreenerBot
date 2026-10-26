@@ -381,6 +381,20 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
           <div class="metric-detail share-rate ${Utils.countTone(data.rejection_rate, "share-rate--error")}">${I18n.markup("filtering-analytics-rejection-rate", { share: shareText(data.rejection_rate) })}</div>
         </div>
       </div>
+      ${
+        // Tokens awaiting their RugCheck report are neither passed nor rejected; with the
+        // stage off none exist and the card is not shown.
+        data.rugcheck_report_required
+          ? `<div class="metric-card metric-card--with-icon">
+        <div class="metric-icon"><i class="icon-clock" aria-hidden="true"></i></div>
+        <div class="metric-content">
+          <div class="metric-label">${Utils.escapeHtml(I18n.t("filtering-status-awaiting"))}</div>
+          <div class="metric-value">${Utils.formatNumber(data.total_awaiting_rugcheck_report, 0)}</div>
+          <div class="metric-detail share-rate">${I18n.markup("filtering-analytics-awaiting-rate", { share: shareText(data.awaiting_rugcheck_report_rate) })}</div>
+        </div>
+      </div>`
+          : ""
+      }
     </div>
   `;
 

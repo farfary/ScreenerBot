@@ -177,6 +177,7 @@ filtering-analytics-passed = Tokens validés
 filtering-analytics-pass-rate = Taux de validation : <strong>{ $share }</strong>
 filtering-analytics-rejected = Tokens rejetés
 filtering-analytics-rejection-rate = Taux de rejet : <strong>{ $share }</strong>
+filtering-analytics-awaiting-rate = En attente du rapport : <strong>{ $share }</strong>
 filtering-analytics-breakdown-note-current = Les répartitions montrent l'état actuel : chaque token rejeté est compté une fois.
 filtering-analytics-breakdown-note-period = Les répartitions comptent les rejets qui ont commencé sur la période sélectionnée. Un token est compté une fois par motif, sauf s'il passe puis échoue de nouveau.
 filtering-analytics-by-category = Rejets par catégorie

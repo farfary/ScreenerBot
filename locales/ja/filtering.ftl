@@ -199,6 +199,7 @@ filtering-analytics-passed = 通過したトークン
 filtering-analytics-pass-rate = 通過率 <strong>{ $share }</strong>
 filtering-analytics-rejected = 除外されたトークン
 filtering-analytics-rejection-rate = 除外率 <strong>{ $share }</strong>
+filtering-analytics-awaiting-rate = レポート待ち <strong>{ $share }</strong>
 filtering-analytics-breakdown-note-current = 内訳は現在の状態を示し、除外されたトークンは1件ずつ数えます。
 filtering-analytics-breakdown-note-period = 内訳は、選択した期間に始まった除外を数えます。トークンは理由ごとに1回だけ数えられ、通過した後に再び除外された場合のみ再度数えられます。
 filtering-analytics-by-category = カテゴリー別の除外

@@ -199,6 +199,7 @@ filtering-analytics-passed = 통과한 토큰
 filtering-analytics-pass-rate = 통과율 <strong>{ $share }</strong>
 filtering-analytics-rejected = 제외된 토큰
 filtering-analytics-rejection-rate = 제외율 <strong>{ $share }</strong>
+filtering-analytics-awaiting-rate = 보고서 대기 <strong>{ $share }</strong>
 filtering-analytics-breakdown-note-current = 세부 내역은 현재 상태를 보여 주며, 제외된 토큰은 각각 한 번씩 집계됩니다.
 filtering-analytics-breakdown-note-period = 세부 내역은 선택한 기간에 시작된 제외를 집계합니다. 토큰은 사유별로 한 번만 집계되며, 통과한 뒤 다시 제외된 경우에만 다시 집계됩니다.
 filtering-analytics-by-category = 카테고리별 제외

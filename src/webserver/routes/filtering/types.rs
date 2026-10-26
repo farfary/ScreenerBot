@@ -111,8 +111,15 @@ pub struct AnalyticsResponse {
     pub total_tokens: Option<usize>,
     pub total_rejected: Option<usize>,
     pub total_passed: Option<usize>,
+    /// Tokens that passed every other stage and wait for their RugCheck report; neither
+    /// passed nor rejected.
+    pub total_awaiting_rugcheck_report: Option<usize>,
     pub pass_rate: Option<f64>,
     pub rejection_rate: Option<f64>,
+    pub awaiting_rugcheck_report_rate: Option<f64>,
+    /// Whether the RugCheck stage is on and so holds tokens back for their report. While
+    /// it is off nothing awaits a report and the awaiting figure is not shown.
+    pub rugcheck_report_required: bool,
     pub breakdown_total: i64,
 
     // Category breakdown

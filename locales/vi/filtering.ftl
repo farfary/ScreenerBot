@@ -177,6 +177,7 @@ filtering-analytics-passed = Token đạt
 filtering-analytics-pass-rate = Tỷ lệ đạt <strong>{ $share }</strong>
 filtering-analytics-rejected = Token bị loại
 filtering-analytics-rejection-rate = Tỷ lệ bị loại <strong>{ $share }</strong>
+filtering-analytics-awaiting-rate = Chờ báo cáo <strong>{ $share }</strong>
 filtering-analytics-breakdown-note-current = Phần phân tích hiển thị trạng thái hiện tại: mỗi token bị loại chỉ được đếm một lần.
 filtering-analytics-breakdown-note-period = Phần phân tích đếm các lượt loại bắt đầu trong khoảng thời gian đã chọn. Mỗi token chỉ được đếm một lần cho mỗi lý do, trừ khi nó vượt qua rồi lại bị loại.
 filtering-analytics-by-category = Bị loại theo danh mục

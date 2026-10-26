@@ -199,6 +199,7 @@ filtering-analytics-passed = Tokens aprobados
 filtering-analytics-pass-rate = <strong>{ $share }</strong> de aprobación
 filtering-analytics-rejected = Tokens rechazados
 filtering-analytics-rejection-rate = <strong>{ $share }</strong> de rechazo
+filtering-analytics-awaiting-rate = <strong>{ $share }</strong> esperando su informe
 filtering-analytics-breakdown-note-current = Los desgloses muestran el estado actual: cada token rechazado se cuenta una vez.
 filtering-analytics-breakdown-note-period = Los desgloses cuentan los rechazos que comenzaron en el período seleccionado. Un token se cuenta una vez por motivo, salvo que pase y vuelva a ser rechazado.
 filtering-analytics-by-category = Rechazos por categoría

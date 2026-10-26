@@ -199,6 +199,7 @@ filtering-analytics-passed = Tokens aprovados
 filtering-analytics-pass-rate = <strong>{ $share }</strong> de aprovação
 filtering-analytics-rejected = Tokens rejeitados
 filtering-analytics-rejection-rate = <strong>{ $share }</strong> de rejeição
+filtering-analytics-awaiting-rate = <strong>{ $share }</strong> aguardando o relatório
 filtering-analytics-breakdown-note-current = Os detalhamentos mostram o estado atual: cada token rejeitado é contado uma vez.
 filtering-analytics-breakdown-note-period = Os detalhamentos contam as rejeições que começaram no período selecionado. Um token é contado uma vez por motivo, a menos que passe e seja rejeitado novamente.
 filtering-analytics-by-category = Rejeição por categoria

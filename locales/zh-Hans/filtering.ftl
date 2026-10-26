@@ -199,6 +199,7 @@ filtering-analytics-passed = 通过的代币
 filtering-analytics-pass-rate = 通过率 <strong>{ $share }</strong>
 filtering-analytics-rejected = 未通过的代币
 filtering-analytics-rejection-rate = 未通过率 <strong>{ $share }</strong>
+filtering-analytics-awaiting-rate = 等待报告 <strong>{ $share }</strong>
 filtering-analytics-breakdown-note-current = 分类明细显示当前状态：每个未通过的代币只计一次。
 filtering-analytics-breakdown-note-period = 分类明细统计在所选时间段内开始的未通过记录。每个代币在每种原因下只计一次，除非它通过后再次未通过。
 filtering-analytics-by-category = 按类别统计未通过

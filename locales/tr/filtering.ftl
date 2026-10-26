@@ -177,6 +177,7 @@ filtering-analytics-passed = Geçen tokenlar
 filtering-analytics-pass-rate = Geçme oranı: <strong>{ $share }</strong>
 filtering-analytics-rejected = Reddedilen tokenlar
 filtering-analytics-rejection-rate = Reddedilme oranı: <strong>{ $share }</strong>
+filtering-analytics-awaiting-rate = Rapor bekleyen: <strong>{ $share }</strong>
 filtering-analytics-breakdown-note-current = Dökümler mevcut durumu gösterir: reddedilen her token bir kez sayılır.
 filtering-analytics-breakdown-note-period = Dökümler seçili dönemde başlayan retleri sayar. Bir token, geçip yeniden reddedilmediği sürece her neden için yalnızca bir kez sayılır.
 filtering-analytics-by-category = Kategoriye göre reddedilenler

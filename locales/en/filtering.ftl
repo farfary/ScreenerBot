@@ -201,6 +201,7 @@ filtering-analytics-passed = Passed Tokens
 filtering-analytics-pass-rate = <strong>{ $share }</strong> pass rate
 filtering-analytics-rejected = Rejected Tokens
 filtering-analytics-rejection-rate = <strong>{ $share }</strong> rejection rate
+filtering-analytics-awaiting-rate = <strong>{ $share }</strong> awaiting their report
 filtering-analytics-breakdown-note-current = Breakdowns show the current state: each rejected token is counted once.
 filtering-analytics-breakdown-note-period = Breakdowns count rejections that started in the selected period. A token is counted once per reason, unless it passes and fails again.
 filtering-analytics-by-category = Rejection by Category

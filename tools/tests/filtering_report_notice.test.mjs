@@ -13,6 +13,9 @@
  * With the RugCheck stage off no token waits for a report: the notice, the awaiting
  * card and the awaiting figure of the info bar are all absent, signed out included.
  *
+ * The Analytics headline shows the awaiting count beside passed and rejected, so the
+ * three add up to the scanned total, and hides it with the stage off.
+ *
  * Run with `npm run test:js`.
  */
 
@@ -31,6 +34,9 @@ after(() => browser.close());
 const [shell, filtering] = await Promise.all([loadIndex("shell"), loadIndex("filtering")]);
 const STATS = JSON.parse(
   readFileSync(resolve(FIXTURES_ROOT, "filtering", "filtering_stats.json"), "utf8")
+);
+const ANALYTICS = JSON.parse(
+  readFileSync(resolve(FIXTURES_ROOT, "filtering", "filtering_analytics.json"), "utf8")
 );
 
 /**
@@ -129,6 +135,82 @@ test("with the RugCheck stage off nothing awaits a report and no notice shows", 
       chips.every((label) => !/awaiting/i.test(label)),
       `no awaiting figure in the info bar: ${chips.join(" | ")}`
     );
+  } finally {
+    await session.close();
+  }
+});
+
+/** Opens the Filtering Analytics view with the RugCheck stage on or off. */
+async function openAnalytics(reportRequired) {
+  const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const fixtures = createApiHandler([filtering, shell], "populated");
+  const host = await serveDashboard(context, {
+    locale: "en",
+    startupPage: "filtering",
+    onApi: (request) => {
+      if (request.url.pathname === "/api/filtering/analytics") {
+        return {
+          body: JSON.stringify({ ...ANALYTICS, rugcheck_report_required: reportRequired }),
+        };
+      }
+      return fixtures.onApi(request);
+    },
+  });
+  const page = await context.newPage();
+  page.setDefaultTimeout(15000);
+  await page.goto(`${host.origin}/filtering`);
+  await page.waitForSelector(PAGE_READY);
+  await page.locator('#subTabsContainer [data-tab-id="analytics"]').click();
+  await page.locator(".analytics-view .metric-card").first().waitFor();
+  return {
+    page,
+    async close() {
+      await context.close();
+      await host.close();
+    },
+  };
+}
+
+/** Headline card values by label, as grouped numbers parsed back to integers. */
+async function headlineCounts(page) {
+  const cards = await page.$$eval(".analytics-view .metric-grid .metric-card", (els) =>
+    els.map((el) => [
+      el.querySelector(".metric-label").textContent.trim(),
+      el.querySelector(".metric-value").textContent.trim(),
+    ])
+  );
+  return new Map(cards.map(([label, value]) => [label, Number(value.replace(/,/g, ""))]));
+}
+
+test("the Analytics headline shows the awaiting count, and the counts add up", async () => {
+  const session = await openAnalytics(true);
+  try {
+    const counts = await headlineCounts(session.page);
+    assert.equal(counts.get("Awaiting RugCheck Report"), 2140);
+    assert.equal(
+      counts.get("Passed Tokens") +
+        counts.get("Rejected Tokens") +
+        counts.get("Awaiting RugCheck Report"),
+      counts.get("Total Scanned")
+    );
+    const share = session.page.locator(".analytics-view .metric-card", {
+      hasText: "Awaiting RugCheck Report",
+    });
+    assert.equal(
+      (await share.locator(".metric-detail").textContent()).trim(),
+      "11.6% awaiting their report"
+    );
+  } finally {
+    await session.close();
+  }
+});
+
+test("with the RugCheck stage off the Analytics headline has no awaiting card", async () => {
+  const session = await openAnalytics(false);
+  try {
+    const counts = await headlineCounts(session.page);
+    assert.equal(counts.size, 3);
+    assert.ok(!counts.has("Awaiting RugCheck Report"));
   } finally {
     await session.close();
   }

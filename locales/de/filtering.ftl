@@ -192,6 +192,7 @@ filtering-analytics-passed = Bestandene Token
 filtering-analytics-pass-rate = <strong>{ $share }</strong> Bestehensquote
 filtering-analytics-rejected = Abgelehnte Token
 filtering-analytics-rejection-rate = <strong>{ $share }</strong> Ablehnungsquote
+filtering-analytics-awaiting-rate = <strong>{ $share }</strong> warten auf ihren Bericht
 filtering-analytics-breakdown-note-current = Die Aufschlüsselungen zeigen den aktuellen Stand: Jeder abgelehnte Token wird einmal gezählt.
 filtering-analytics-breakdown-note-period = Die Aufschlüsselungen zählen Ablehnungen, die im gewählten Zeitraum begonnen haben. Ein Token wird pro Grund einmal gezählt, außer er besteht die Prüfung und fällt danach erneut durch.
 filtering-analytics-by-category = Ablehnungen nach Kategorie

@@ -177,6 +177,7 @@ filtering-analytics-passed = पास हुए टोकन
 filtering-analytics-pass-rate = <strong>{ $share }</strong> पास दर
 filtering-analytics-rejected = अस्वीकृत टोकन
 filtering-analytics-rejection-rate = <strong>{ $share }</strong> अस्वीकृति दर
+filtering-analytics-awaiting-rate = <strong>{ $share }</strong> रिपोर्ट की प्रतीक्षा में
 filtering-analytics-breakdown-note-current = ब्रेकडाउन मौजूदा स्थिति दिखाते हैं: हर अस्वीकृत टोकन एक बार गिना जाता है।
 filtering-analytics-breakdown-note-period = ब्रेकडाउन चुनी गई अवधि में शुरू हुई अस्वीकृतियों को गिनते हैं। एक टोकन हर कारण के लिए एक बार गिना जाता है, जब तक वह पास होकर दोबारा अस्वीकृत न हो।
 filtering-analytics-by-category = श्रेणी के अनुसार अस्वीकृति

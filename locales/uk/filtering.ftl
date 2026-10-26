@@ -199,6 +199,7 @@ filtering-analytics-passed = Токени, що пройшли
 filtering-analytics-pass-rate = Частка пройдених: <strong>{ $share }</strong>
 filtering-analytics-rejected = Відхилені токени
 filtering-analytics-rejection-rate = Частка відхилених: <strong>{ $share }</strong>
+filtering-analytics-awaiting-rate = Чекають звіту: <strong>{ $share }</strong>
 filtering-analytics-breakdown-note-current = Розбивки показують поточний стан: кожен відхилений токен враховується один раз.
 filtering-analytics-breakdown-note-period = Розбивки враховують відхилення, що почалися у вибраному періоді. Токен враховується один раз за кожною причиною, якщо тільки він не пройшов перевірку і не був відхилений знову.
 filtering-analytics-by-category = Відхилення за категоріями

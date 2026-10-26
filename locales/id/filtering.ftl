@@ -182,6 +182,7 @@ filtering-analytics-passed = Token Lolos
 filtering-analytics-pass-rate = Tingkat lolos <strong>{ $share }</strong>
 filtering-analytics-rejected = Token Ditolak
 filtering-analytics-rejection-rate = Tingkat penolakan <strong>{ $share }</strong>
+filtering-analytics-awaiting-rate = Menunggu laporan <strong>{ $share }</strong>
 filtering-analytics-breakdown-note-current = Rincian menampilkan kondisi saat ini: setiap token yang ditolak dihitung satu kali.
 filtering-analytics-breakdown-note-period = Rincian menghitung penolakan yang dimulai pada periode yang dipilih. Satu token dihitung sekali per alasan, kecuali jika lolos lalu ditolak lagi.
 filtering-analytics-by-category = Penolakan per Kategori

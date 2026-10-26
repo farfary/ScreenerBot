@@ -199,6 +199,7 @@ filtering-analytics-passed = الرموز الناجحة
 filtering-analytics-pass-rate = نسبة النجاح <strong>{ $share }</strong>
 filtering-analytics-rejected = الرموز المرفوضة
 filtering-analytics-rejection-rate = نسبة الرفض <strong>{ $share }</strong>
+filtering-analytics-awaiting-rate = بانتظار التقرير <strong>{ $share }</strong>
 filtering-analytics-breakdown-note-current = تعرض التفصيلات الحالة الحالية: يُحتسب كل رمز مرفوض مرة واحدة.
 filtering-analytics-breakdown-note-period = تحتسب التفصيلات حالات الرفض التي بدأت خلال الفترة المحددة. يُحتسب الرمز مرة واحدة لكل سبب، إلا إذا اجتاز الفلاتر ثم رُفض مجددًا.
 filtering-analytics-by-category = الرفض حسب الفئة

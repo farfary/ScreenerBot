@@ -1,11 +1,14 @@
 {
   "snapshot_state": "ready",
   "total_tokens": 18452,
-  "total_rejected": 17216,
+  "total_rejected": 15076,
   "breakdown_total": 7247,
   "total_passed": 1236,
+  "total_awaiting_rugcheck_report": 2140,
   "pass_rate": 6.7,
-  "rejection_rate": 93.3,
+  "rejection_rate": 81.7,
+  "awaiting_rugcheck_report_rate": 11.6,
+  "rugcheck_report_required": true,
   "by_category": [
     {
       "category": "liquidity",
