@@ -486,11 +486,11 @@ pub async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailRespo
         );
     }
 
-    let created_at_ts = Some(token.first_discovered_at.timestamp());
-    let token_birth_ts = token.blockchain_created_at.map(|dt| dt.timestamp());
+    // On-chain creation time, falling back to discovery; the token's age reads from it.
+    let created_at_ts = Some(token.created_at().timestamp());
     let market_data_last_fetched_at_ts = Some(token.market_data_last_fetched_at.timestamp());
     let pool_price_last_calculated_at_ts = Some(token.pool_price_last_calculated_at.timestamp());
-    let pair_created_at = token_birth_ts.or(created_at_ts);
+    let pair_created_at = created_at_ts;
 
     // Prefer pool price (real-time on-chain) over the cached API price, but ALWAYS
     // surface a SOL price when one is available so the header never shows "—" while

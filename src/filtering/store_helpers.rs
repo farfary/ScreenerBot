@@ -211,11 +211,7 @@ pub(super) fn sort_tokens(
                 let rhs = b.metadata_last_fetched_at;
                 lhs.cmp(&rhs)
             }
-            TokenSortKey::BlockchainCreatedAt => {
-                let lhs = a.blockchain_created_at.unwrap_or(a.first_discovered_at);
-                let rhs = b.blockchain_created_at.unwrap_or(b.first_discovered_at);
-                lhs.cmp(&rhs)
-            }
+            TokenSortKey::BlockchainCreatedAt => a.created_at().cmp(&b.created_at()),
             TokenSortKey::PoolPriceLastCalculatedAt => a
                 .pool_price_last_calculated_at
                 .cmp(&b.pool_price_last_calculated_at),

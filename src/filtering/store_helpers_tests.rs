@@ -741,7 +741,7 @@ fn transaction_sorts_count_a_one_sided_reading_as_the_whole_total() {
 }
 
 #[test]
-fn blockchain_created_sort_falls_back_to_discovery_time() {
+fn blockchain_created_sort_falls_back_to_discovery_time_without_a_valid_creation() {
     let now = Utc::now();
     let snapshot = snapshot_of(vec![
         EntryBuilder::new("OLDCHAIN")
@@ -756,6 +756,14 @@ fn blockchain_created_sort_falls_back_to_discovery_time() {
                 t.first_discovered_at = now - Duration::days(1);
             })
             .build(),
+        // An unset creation time stored as the Unix epoch is not a creation time: the
+        // token sorts by its discovery, never as the oldest token on the chain.
+        EntryBuilder::new("EPOCHCHAIN")
+            .edit(|t| {
+                t.blockchain_created_at = Some(chrono::DateTime::UNIX_EPOCH);
+                t.first_discovered_at = now - Duration::hours(1);
+            })
+            .build(),
     ]);
 
     assert_eq!(
@@ -764,7 +772,7 @@ fn blockchain_created_sort_falls_back_to_discovery_time() {
             TokenSortKey::BlockchainCreatedAt,
             SortDirection::Asc
         ),
-        vec!["OLDCHAIN", "NOCHAIN"]
+        vec!["OLDCHAIN", "NOCHAIN", "EPOCHCHAIN"]
     );
 }
 
