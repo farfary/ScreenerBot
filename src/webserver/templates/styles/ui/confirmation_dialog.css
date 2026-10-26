@@ -58,6 +58,11 @@
   transform: translate(-50%, -50%) scale(1);
 }
 
+/* Three actions need the room to sit on one line at desktop widths. */
+.confirmation-dialog--with-alternate {
+  max-width: 560px;
+}
+
 /* ============================================
    HEADER
    ============================================ */
@@ -162,6 +167,18 @@
   letter-spacing: 0.01em;
   line-height: 1.4;
   min-width: 100px;
+  white-space: nowrap;
+}
+
+/* Set by the dialog when its actions do not fit one line: one full-width action per
+   row, the confirm action on top. */
+.confirmation-dialog__footer--stacked {
+  flex-direction: column-reverse;
+}
+
+.confirmation-dialog__footer--stacked .confirmation-dialog__button {
+  width: 100%;
+  min-width: 0;
 }
 
 .confirmation-dialog__button--cancel,
@@ -197,6 +214,11 @@
 
 .confirmation-dialog--info .confirmation-dialog__button--confirm {
   --confirm-color: #58a6ff;
+}
+
+/* A save is the shared primary action, whatever the dialog's variant. */
+.confirmation-dialog .confirmation-dialog__button--primary {
+  --confirm-color: var(--button-primary-bg);
 }
 
 .confirmation-dialog__button--confirm:hover {

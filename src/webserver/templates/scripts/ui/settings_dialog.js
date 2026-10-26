@@ -210,6 +210,7 @@ export class SettingsDialog {
       alternateLabel: I18n.t("settings-dialog-unsaved-discard"),
       cancelLabel: I18n.t("settings-dialog-unsaved-keep"),
       variant: "warning",
+      confirmTone: "primary",
     });
     try {
       const choice = await this._closePrompt;

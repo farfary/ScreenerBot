@@ -260,6 +260,36 @@ test("Events keeps every column on screen", async (t) => {
   );
 });
 
+test("an Events layout saved under the earlier minimums gives way to the current ones", async (t) => {
+  // The widths a viewer saved while the minimums summed to ~1350px, resized by hand and
+  // stamped with the column definitions of that time.
+  const saved = {
+    columnWidths: {
+      event_time: 165,
+      category: 110,
+      subtype: 120,
+      severity: 110,
+      message: 320,
+      mint: 322,
+      payload: 200,
+    },
+    tableWidth: 1347,
+    userResizedColumns: { message: true, payload: true },
+    layoutSignature: "0badc0de",
+  };
+  const page = await openPage(t, "events", "en", {
+    "/api/ui-state/all": (body) => ({ ...body, "events-table": saved }),
+  });
+  const root = "#events-root";
+  await page.waitForSelector(`${root} tbody tr[data-row-id]`);
+  const columns = await columnsOnScreen(page, root);
+  assertOnScreen(
+    columns,
+    columns.map((column) => column.id),
+    "Events with an earlier saved layout"
+  );
+});
+
 test("the fee column keeps six fixed decimals", async (t) => {
   const fees = [0.000005, 0.0001, 0.000105];
   const page = await openPage(t, "transactions", "en", {

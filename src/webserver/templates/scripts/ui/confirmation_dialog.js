@@ -32,6 +32,8 @@ class ConfirmationDialog {
    * @param {string} [config.alternateLabel] - Optional third action between cancel and
    *   confirm (e.g. "Discard" beside "Save"); choosing it resolves with `alternate: true`
    * @param {string} [config.variant='warning'] - Variant: danger, warning, info
+   * @param {string} [config.confirmTone] - `"primary"` fills the confirm button as the
+   *   shared primary button (a save), whatever the variant's colour
    * @param {string} [config.checkbox] - Optional checkbox text (e.g., "Don't ask again")
    * @returns {Promise<{confirmed: boolean, alternate: boolean, checkboxChecked: boolean}>}
    */
@@ -59,6 +61,7 @@ class ConfirmationDialog {
       cancelLabel: config.cancelLabel || I18n.t("common-action-cancel"),
       alternateLabel: config.alternateLabel || null,
       variant: config.variant || "warning",
+      confirmTone: config.confirmTone === "primary" ? "primary" : null,
       checkbox: config.checkbox || null,
     };
     this.resolver = resolver;
@@ -75,7 +78,9 @@ class ConfirmationDialog {
 
     // Create dialog
     this.element = document.createElement("div");
-    this.element.className = `confirmation-dialog confirmation-dialog--${this.config.variant}`;
+    this.element.className = `confirmation-dialog confirmation-dialog--${this.config.variant}${
+      this.config.alternateLabel ? " confirmation-dialog--with-alternate" : ""
+    }`;
     this.element.setAttribute("role", "dialog");
     this.element.setAttribute("aria-modal", "true");
     this.element.setAttribute("aria-labelledby", "confirmation-dialog-title");
@@ -140,7 +145,9 @@ class ConfirmationDialog {
             : ""
         }
 				<button 
-					class="confirmation-dialog__button confirmation-dialog__button--confirm" 
+					class="confirmation-dialog__button confirmation-dialog__button--confirm${
+            this.config.confirmTone ? ` confirmation-dialog__button--${this.config.confirmTone}` : ""
+          }" 
 					type="button"
 					data-action="confirm"
 				>
@@ -155,6 +162,7 @@ class ConfirmationDialog {
     // Add to DOM
     document.body.appendChild(this.backdrop);
     document.body.appendChild(this.element);
+    this._fitFooter();
 
     // Trigger animation
     requestAnimationFrame(() => {
@@ -172,6 +180,19 @@ class ConfirmationDialog {
 
     // Trap focus within dialog
     this._trapFocus();
+  }
+
+  /**
+   * Keep the actions on one line while their labels fit it; otherwise stack them at
+   * full width, so no label wraps inside its button in any locale.
+   */
+  _fitFooter() {
+    const footer = this.element.querySelector(".confirmation-dialog__footer");
+    if (!footer) return;
+    footer.classList.remove("confirmation-dialog__footer--stacked");
+    if (footer.scrollWidth > footer.clientWidth) {
+      footer.classList.add("confirmation-dialog__footer--stacked");
+    }
   }
 
   _attachEventListeners() {
