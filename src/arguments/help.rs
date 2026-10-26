@@ -17,7 +17,7 @@ pub fn print_help() {
     println!();
     println!("SPECIAL MODES (execute and exit):");
     println!("    --reset-default-configs     Reset all config to defaults (preserves wallet + RPC URLs)");
-    println!("    --clean-wallet-data         Back up, then clear the previous wallet's local data and continue (use when switching wallets)");
+    println!("    --clean-wallet-data         Move the previous wallet's local data into a backup and continue (use when switching wallets)");
     println!("    --help, -h                  Show this help message");
     println!();
     println!("DISPLAY OPTIONS:");
@@ -75,7 +75,7 @@ pub fn print_help() {
     println!("    screenerbot --debug-trader                   # Start bot with trader debug logs");
     println!("    screenerbot --reset-default-configs          # Reset config to defaults");
     println!(
-        "    screenerbot --clean-wallet-data              # Clean databases when switching wallets"
+        "    screenerbot --clean-wallet-data              # Move wallet data into a backup when switching wallets"
     );
     println!();
     println!("BUILDING:");

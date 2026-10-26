@@ -44,6 +44,8 @@ desktop-boot-subtitle-lock-held = { -brand } از قبل در حال اجراس�
 desktop-boot-subtitle-config-invalid = مشکل در پیکربندی
 desktop-boot-subtitle-directory-setup = مشکل در فضای ذخیره‌سازی
 desktop-boot-subtitle-storage-upgrade = مشکل در ارتقای پایگاه داده
+desktop-boot-subtitle-wallet-replacement-incomplete = جایگزینی کیف پول کامل نشد
+desktop-boot-subtitle-wallet-reset-refused = بازنشانی داده‌های کیف پول رد شد
 desktop-boot-subtitle-generic = خطای راه‌اندازی
 
 ## Boot errors raised by the shell itself (the backend never reported one).

@@ -30,6 +30,8 @@ desktop-boot-subtitle-lock-held = { -brand } уже запущен
 desktop-boot-subtitle-config-invalid = Проблема с конфигурацией
 desktop-boot-subtitle-directory-setup = Проблема с хранилищем
 desktop-boot-subtitle-storage-upgrade = Проблема обновления базы данных
+desktop-boot-subtitle-wallet-replacement-incomplete = Замена кошелька не завершена
+desktop-boot-subtitle-wallet-reset-refused = Сброс данных кошелька отклонён
 desktop-boot-subtitle-generic = Ошибка запуска
 
 desktop-boot-error-title = { -brand } не удалось запустить

@@ -30,6 +30,8 @@ desktop-boot-subtitle-lock-held = { -brand } zaten çalışıyor
 desktop-boot-subtitle-config-invalid = Yapılandırma sorunu
 desktop-boot-subtitle-directory-setup = Depolama sorunu
 desktop-boot-subtitle-storage-upgrade = Veritabanı yükseltme sorunu
+desktop-boot-subtitle-wallet-replacement-incomplete = Cüzdan değişimi tamamlanmadı
+desktop-boot-subtitle-wallet-reset-refused = Cüzdan verilerinin sıfırlanması reddedildi
 desktop-boot-subtitle-generic = Başlatma hatası
 
 desktop-boot-error-title = { -brand } başlatılamadı

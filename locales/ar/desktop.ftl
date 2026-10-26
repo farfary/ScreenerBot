@@ -44,6 +44,8 @@ desktop-boot-subtitle-lock-held = { -brand } قيد التشغيل بالفعل
 desktop-boot-subtitle-config-invalid = مشكلة في الإعدادات
 desktop-boot-subtitle-directory-setup = مشكلة في التخزين
 desktop-boot-subtitle-storage-upgrade = مشكلة في ترقية قاعدة البيانات
+desktop-boot-subtitle-wallet-replacement-incomplete = لم يكتمل استبدال المحفظة
+desktop-boot-subtitle-wallet-reset-refused = تم رفض إعادة تعيين بيانات المحفظة
 desktop-boot-subtitle-generic = خطأ في بدء التشغيل
 
 ## Boot errors raised by the shell itself (the backend never reported one).

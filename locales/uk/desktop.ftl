@@ -44,6 +44,8 @@ desktop-boot-subtitle-lock-held = { -brand } уже запущено
 desktop-boot-subtitle-config-invalid = Проблема з конфігурацією
 desktop-boot-subtitle-directory-setup = Проблема зі сховищем
 desktop-boot-subtitle-storage-upgrade = Проблема оновлення бази даних
+desktop-boot-subtitle-wallet-replacement-incomplete = Заміну гаманця не завершено
+desktop-boot-subtitle-wallet-reset-refused = Скидання даних гаманця відхилено
 desktop-boot-subtitle-generic = Помилка запуску
 
 ## Boot errors raised by the shell itself (the backend never reported one).

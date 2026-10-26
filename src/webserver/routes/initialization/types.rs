@@ -28,10 +28,21 @@ pub struct ExploreModeResponse {
     pub errors: Vec<String>,
 }
 
-#[derive(Debug, Deserialize)]
+/// `Debug` is implemented by hand so a stray `{:?}` (log line, error context, panic
+/// message) never prints the private key or an RPC URL, which may carry a provider key.
+#[derive(Deserialize)]
 pub struct ValidateCredentialsRequest {
     pub wallet_private_key: String,
     pub rpc_urls: Vec<String>,
+}
+
+impl std::fmt::Debug for ValidateCredentialsRequest {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ValidateCredentialsRequest")
+            .field("wallet_private_key", &"[redacted]")
+            .field("rpc_urls", &self.rpc_urls.len())
+            .finish()
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -46,11 +57,22 @@ pub struct ValidationResult {
     pub validation_id: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+/// `Debug` is implemented by hand for the reason given on [`ValidateCredentialsRequest`].
+#[derive(Deserialize)]
 pub struct CompleteInitializationRequest {
     pub validation_id: String,
     pub wallet_private_key: String,
     pub rpc_urls: Vec<String>,
+}
+
+impl std::fmt::Debug for CompleteInitializationRequest {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CompleteInitializationRequest")
+            .field("validation_id", &self.validation_id)
+            .field("wallet_private_key", &"[redacted]")
+            .field("rpc_urls", &self.rpc_urls.len())
+            .finish()
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -72,4 +94,37 @@ pub struct InitializationProgressResponse {
     pub status: String,
     pub services_started: usize,
     pub services_total: usize,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const KEY: &str = "placeholder-wallet-key-for-redaction";
+    const RPC_URL: &str = "https://rpc.example.com/?api-key=provider-secret";
+
+    #[test]
+    fn credential_requests_never_print_the_key_or_an_rpc_url() {
+        let validate = format!(
+            "{:?}",
+            ValidateCredentialsRequest {
+                wallet_private_key: KEY.to_owned(),
+                rpc_urls: vec![RPC_URL.to_owned()],
+            }
+        );
+        let complete = format!(
+            "{:#?}",
+            CompleteInitializationRequest {
+                validation_id: "receipt-1".to_owned(),
+                wallet_private_key: KEY.to_owned(),
+                rpc_urls: vec![RPC_URL.to_owned()],
+            }
+        );
+        for output in [&validate, &complete] {
+            assert!(!output.contains(KEY), "{output}");
+            assert!(!output.contains("provider-secret"), "{output}");
+            assert!(output.contains("[redacted]"), "{output}");
+        }
+        assert!(complete.contains("receipt-1"));
+    }
 }

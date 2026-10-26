@@ -39,6 +39,8 @@ desktop-boot-subtitle-lock-held = { -brand } läuft bereits
 desktop-boot-subtitle-config-invalid = Konfigurationsproblem
 desktop-boot-subtitle-directory-setup = Speicherproblem
 desktop-boot-subtitle-storage-upgrade = Problem beim Datenbank-Upgrade
+desktop-boot-subtitle-wallet-replacement-incomplete = Der Wallet-Wechsel wurde nicht abgeschlossen
+desktop-boot-subtitle-wallet-reset-refused = Zurücksetzen der Wallet-Daten abgelehnt
 desktop-boot-subtitle-generic = Startfehler
 
 ## Boot errors raised by the shell itself (the backend never reported one).

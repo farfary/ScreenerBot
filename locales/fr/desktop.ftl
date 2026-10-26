@@ -30,6 +30,8 @@ desktop-boot-subtitle-lock-held = { -brand } est déjà en cours d'exécution
 desktop-boot-subtitle-config-invalid = Problème de configuration
 desktop-boot-subtitle-directory-setup = Problème de stockage
 desktop-boot-subtitle-storage-upgrade = Problème de mise à niveau de la base de données
+desktop-boot-subtitle-wallet-replacement-incomplete = Le remplacement du portefeuille n'est pas terminé
+desktop-boot-subtitle-wallet-reset-refused = Réinitialisation des données du portefeuille refusée
 desktop-boot-subtitle-generic = Erreur de démarrage
 
 desktop-boot-error-title = { -brand } n'a pas pu démarrer

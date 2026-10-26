@@ -30,6 +30,8 @@ desktop-boot-subtitle-lock-held = { -brand } पहले से चल रह�
 desktop-boot-subtitle-config-invalid = कॉन्फ़िगरेशन समस्या
 desktop-boot-subtitle-directory-setup = स्टोरेज समस्या
 desktop-boot-subtitle-storage-upgrade = डेटाबेस अपग्रेड समस्या
+desktop-boot-subtitle-wallet-replacement-incomplete = वॉलेट बदलना पूरा नहीं हुआ
+desktop-boot-subtitle-wallet-reset-refused = वॉलेट डेटा रीसेट अस्वीकार किया गया
 desktop-boot-subtitle-generic = स्टार्टअप एरर
 
 desktop-boot-error-title = { -brand } शुरू नहीं हो सका
