@@ -15,6 +15,7 @@ import {
   severityBadge,
 } from "../ui/event_labels.js";
 import { requestManager } from "../core/request_manager.js";
+import { loadPage } from "../core/router.js";
 import {
   renderAddress,
   renderTokenCell,
@@ -416,6 +417,13 @@ function createLifecycle() {
           state.recording === false
             ? I18n.attr("events-recording-off", "message")
             : I18n.attr("events-empty", "message"),
+        emptyAction: () =>
+          state.recording === false
+            ? {
+                label: I18n.t("events-recording-off-action"),
+                onClick: () => loadPage("config", { hash: "events" }),
+              }
+            : null,
         compact: true,
         stickyHeader: true,
         zebra: true,

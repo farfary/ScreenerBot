@@ -432,6 +432,15 @@ export function applyEventHandlersMixin(DataTable) {
     };
     this._addEventListener(this.elements.tbody, "click", actionHandler);
 
+    // The empty state's call to action is rendered on every empty paint, so its click
+    // is delegated like the row actions.
+    const emptyActionHandler = (e) => {
+      const btn = e.target.closest('.state-view-action[data-action="dt-empty-action"]');
+      if (!btn || !this.elements.tbody.contains(btn)) return;
+      this.options.emptyAction?.()?.onClick?.(e);
+    };
+    this._addEventListener(this.elements.tbody, "click", emptyActionHandler);
+
     // Dropdown toggle handlers
     // Shared descriptor so the global menu coordinator treats this table's open
     // row-action dropdown like any other dropdown: opening a select/menu anywhere

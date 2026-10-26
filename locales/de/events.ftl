@@ -283,3 +283,4 @@ events-empty = Noch keine Ereignisse
     .message = Dienststarts, Trades und Warnungen werden hier erfasst, sobald sie auftreten.
 events-recording-off = Die Ereignisaufzeichnung ist aus
     .message = Schalten Sie das Ereignissystem in der Konfiguration ein und starten Sie { -brand } neu, um Dienststarts, Trades und Warnungen hier aufzuzeichnen.
+events-recording-off-action = Ereigniseinstellungen öffnen

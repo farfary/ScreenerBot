@@ -269,7 +269,12 @@ async function fetchPageContent(pageName, timeoutMs, controller) {
   }
 }
 
-export async function loadPage(pageName, { historyMode = "push" } = {}) {
+/**
+ * Show a page. `hash` opens it at one of its sections or sub-tabs: the hash is part of
+ * the committed URL before the page activates, so the page selects it as it would on
+ * a reload of that address.
+ */
+export async function loadPage(pageName, { historyMode = "push", hash = "" } = {}) {
   if (!pageName || !PAGE_IDS.includes(pageName)) return;
 
   const navigationId = ++_state.navigationId;
@@ -334,10 +339,14 @@ export async function loadPage(pageName, { historyMode = "push" } = {}) {
     _state.currentPage = pageName;
     updateDocumentTitle(pageName);
 
-    const targetUrl = `/${pageName}`;
+    const targetPath = `/${pageName}`;
+    const targetUrl = hash ? `${targetPath}#${hash}` : targetPath;
     if (historyMode === "replace") {
       window.history.replaceState({ page: pageName }, "", targetUrl);
-    } else if (historyMode === "push" && window.location.pathname !== targetUrl) {
+    } else if (
+      historyMode === "push" &&
+      (window.location.pathname !== targetPath || (hash && window.location.hash !== `#${hash}`))
+    ) {
       window.history.pushState({ page: pageName }, "", targetUrl);
     }
 

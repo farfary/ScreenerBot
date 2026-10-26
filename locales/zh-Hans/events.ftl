@@ -295,3 +295,4 @@ events-empty = 暂无事件
     .message = 服务启动、交易和警告会在发生时记录在这里。
 events-recording-off = 事件记录已关闭
     .message = 在配置中开启事件系统并重启 { -brand }，即可在这里记录服务启动、交易和警告。
+events-recording-off-action = 打开事件设置

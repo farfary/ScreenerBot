@@ -1281,6 +1281,8 @@ function attachEventHandlers(ctx) {
 
 function activate() {
   loadOpenedState();
+  // A navigation that names a section (`/config#events`) selects it on a cached page too.
+  syncSectionFromHash();
   ensureActiveSectionValid();
   render();
 }

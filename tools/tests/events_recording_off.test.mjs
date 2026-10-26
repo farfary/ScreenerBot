@@ -7,7 +7,8 @@
  *
  * With Events off in the configuration nothing is ever recorded, so the empty log
  * says recording is off and how to start it instead of "No events yet". With
- * recording on, the empty log keeps the usual text.
+ * recording on, the empty log keeps the usual text. The recording-off state's action
+ * opens the events section of the configuration.
  *
  * Run with `npm run test:js`.
  */
@@ -28,13 +29,17 @@ const browser = await chromium.launch({ headless: true });
 after(() => browser.close());
 const strip = (text) => text.replace(/[⁨⁩]/g, "").replace(/\s+/g, " ").trim();
 
-async function emptyLogText(recording) {
+/** The events page over an empty log, with recording on or off; `use` runs against it. */
+async function withEmptyLog(recording, use) {
   const config = JSON.parse(
     await readFile(join(FIXTURES_ROOT, "events/config_events.json"), "utf8")
   );
   config.data.enabled = recording;
   const context = await browser.newContext({ viewport: { width: 1400, height: 900 } });
-  const api = createApiHandler([await loadIndex("events"), await loadIndex("shell")], "empty");
+  const api = createApiHandler(
+    [await loadIndex("events"), await loadIndex("config"), await loadIndex("shell")],
+    "empty"
+  );
   const onApi = async (request) =>
     request.url.pathname === "/api/config/events"
       ? { body: JSON.stringify(config) }
@@ -46,7 +51,7 @@ async function emptyLogText(recording) {
     await page.goto(`${host.origin}/events`);
     await page.waitForSelector(PAGE_READY);
     await page.waitForSelector(EMPTY_STATE);
-    return strip(await page.textContent(EMPTY_STATE));
+    return await use(page);
   } finally {
     await context.close();
     await host.close();
@@ -54,14 +59,32 @@ async function emptyLogText(recording) {
 }
 
 test("with recording off the empty log says how to start it", async () => {
-  const text = await emptyLogText(false);
-  assert.ok(text.includes("Event recording is off"), text);
-  assert.ok(text.includes("Turn on the events system in the configuration"), text);
-  assert.ok(!text.includes("No events yet"), text);
+  await withEmptyLog(false, async (page) => {
+    const text = strip(await page.textContent(EMPTY_STATE));
+    assert.ok(text.includes("Event recording is off"), text);
+    assert.ok(text.includes("Turn on the events system in the configuration"), text);
+    assert.ok(!text.includes("No events yet"), text);
+
+    // Its action opens the events section of the configuration.
+    await page.click(`${EMPTY_STATE} .state-view-action`);
+    await page.waitForURL(/\/config#events$/);
+    await page.waitForSelector("#configSectionsList .config-section-item.active");
+    assert.equal(
+      strip(
+        await page.textContent(
+          "#configSectionsList .config-section-item.active .config-section-label"
+        )
+      ),
+      "Events"
+    );
+  });
 });
 
 test("with recording on the empty log waits for events", async () => {
-  const text = await emptyLogText(true);
-  assert.ok(text.includes("No events yet"), text);
-  assert.ok(!text.includes("Event recording is off"), text);
+  await withEmptyLog(true, async (page) => {
+    const text = strip(await page.textContent(EMPTY_STATE));
+    assert.ok(text.includes("No events yet"), text);
+    assert.ok(!text.includes("Event recording is off"), text);
+    assert.equal(await page.locator(`${EMPTY_STATE} .state-view-action`).count(), 0);
+  });
 });
