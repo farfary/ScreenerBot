@@ -206,7 +206,7 @@ fn wallet_read_refusal() -> Option<ApiError> {
             ApiErrorCode::ServiceUnavailable,
             ids::ERRORS_WALLET_READ_FAILED,
         )
-        .text_arg("reason", reason)
+        .text_arg("reason", reason.to_string())
     })
 }
 

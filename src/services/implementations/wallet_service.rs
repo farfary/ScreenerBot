@@ -70,7 +70,7 @@ impl Service for WalletService {
         match crate::wallet::wallet_read_failure() {
             Some(reason) => ServiceHealth::Degraded(
                 UiText::new(ids::SERVICES_HEALTH_WALLET_READ_FAILED)
-                    .arg("reason", UiArg::Text(reason)),
+                    .arg("reason", UiArg::Text(reason.to_string())),
             ),
             None => ServiceHealth::Healthy,
         }
