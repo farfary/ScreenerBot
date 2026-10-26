@@ -94,10 +94,10 @@
   cursor: not-allowed;
 }
 
-.account-google-mark {
+.account-option-icon {
   flex: 0 0 auto;
-  width: 18px;
-  height: auto;
+  color: var(--text-secondary);
+  font-size: 1rem;
 }
 
 .account-option-title {

@@ -5,9 +5,6 @@
 (function () {
   "use strict";
 
-  const GOOGLE_MARK =
-    '<img class="account-google-mark" src="/assets/google-g.png" alt="" aria-hidden="true" />';
-
   // Scope ids are issued by the account server; a scope without an entry is not listed.
   const ACCOUNT_SCOPE_LABELS = Object.freeze({
     "data:read": "account-scope-data-read",
@@ -405,7 +402,7 @@
           ${this.renderUnlocks()}
           <div class="account-options">
             <button type="button" class="account-option" data-action="browser" ${disabled}>
-              ${GOOGLE_MARK}
+              <i class="icon-external-link account-option-icon" aria-hidden="true"></i>
               <span class="account-option-title">${escapeHtml(this.busyAction === "browser" ? I18n.t("account-panel-opening-browser") : I18n.t("account-panel-continue-browser"))}</span>
             </button>
             <button type="button" class="account-option" data-action="email" ${disabled}>
