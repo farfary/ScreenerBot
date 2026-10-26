@@ -352,22 +352,14 @@
   /* Ring in the CARD's background, not a colour, so the avatar reads as cut out
      of the banner in either theme. */
   border: 3px solid var(--bg-card);
-  background: hsl(var(--feat-hue), var(--feat-sat), 50%);
   overflow: hidden;
 }
 
-.feat-card-avatar-img {
+/* The shared token avatar fills the ring; its letter fallback scales with the box. */
+.feat-card-avatar .ti-logo {
   width: 100%;
   height: 100%;
-  object-fit: cover;
-}
-
-.feat-card-avatar-initial {
-  font-family: var(--font-mono);
-  font-size: 1.25rem;
-  font-weight: 700;
-  color: #fff;
-  text-transform: uppercase;
+  font-size: 46px;
 }
 
 /* --- Actions footer -------------------------------------------------------- */

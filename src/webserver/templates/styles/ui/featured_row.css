@@ -198,21 +198,14 @@
   background: var(--border-color);
 }
 
-/* Skeleton card logo placeholder; a token card's logo is the shared `.ti-logo` avatar. */
-.featured-row-card-logo-placeholder {
-  display: flex;
-  align-items: center;
+/* The idle strip's bare glyph, in the avatar's slot; a token card's logo and the
+   loading skeleton are the shared `.ti-logo` avatar. */
+.featured-row-card-glyph {
+  display: inline-flex;
   justify-content: center;
   width: 22px;
-  height: 22px;
-  border-radius: var(--token-logo-radius, 3px);
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
   flex-shrink: 0;
-}
-
-.featured-row-card-logo-placeholder i {
-  font-size: 0.625rem;
+  font-size: 0.75rem;
   color: var(--text-secondary);
   opacity: 0.6;
 }
@@ -311,11 +304,6 @@
   pointer-events: none;
 }
 
-.featured-row-skeleton .featured-row-card-logo-placeholder {
-  background: var(--bg-secondary);
-  border-color: transparent;
-}
-
 .featured-row-skeleton .featured-row-card-name {
   width: 42px;
   height: 9px;
@@ -377,9 +365,8 @@
     min-height: 28px;
   }
 
-  .featured-row-card-logo-placeholder {
+  .featured-row-card-glyph {
     width: 18px;
-    height: 18px;
   }
 
   .featured-row-card .ti-logo {

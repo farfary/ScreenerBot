@@ -23,16 +23,15 @@ import { escapeHtml, resolveTokenLogoUrl } from "../core/utils.js";
 import {
   formatPercentValue,
   formatPriceSubscript,
-  formatSignatureCompact,
   signedTone,
   withUsdSymbol,
 } from "../core/format.js";
 import { openFeaturedDialog } from "./featured_dialog.js";
 import {
-  COMPACT_ADDRESS,
   renderTokenLogo,
   resolvedTokenName,
   resolvedTokenSymbol,
+  tokenLabel,
 } from "./token_identity.js";
 import { boostTier, formatBoostCount } from "../core/boosts.js";
 import * as Hints from "../core/hints.js";
@@ -333,7 +332,7 @@ class FeaturedRow {
         .map(
           () => `
         <div class="featured-row-card featured-row-skeleton">
-          <div class="featured-row-card-logo-placeholder skeleton-pulse"></div>
+          <span class="ti-logo ti-logo-sm skeleton-pulse"></span>
           <span class="featured-row-card-name skeleton-pulse"></span>
         </div>
       `
@@ -352,9 +351,7 @@ class FeaturedRow {
     if (container) {
       const placeholder = `
         <div class="featured-row-card featured-row-skeleton-card">
-          <div class="featured-row-card-logo-placeholder">
-            <i class="icon-coins"></i>
-          </div>
+          <i class="featured-row-card-glyph icon-coins" aria-hidden="true"></i>
           <span class="featured-row-card-name">—</span>
         </div>`;
       container.innerHTML = `
@@ -426,7 +423,7 @@ class FeaturedRow {
     // A token without a symbol is named by its short mint, the way every other
     // surface names an unresolved asset; the full mint stays in the title.
     const symbol = resolvedTokenSymbol(token.symbol)?.toUpperCase() ?? null;
-    const label = symbol || formatSignatureCompact(mint, COMPACT_ADDRESS);
+    const label = tokenLabel(symbol, mint);
     const name = resolvedTokenName(token.name) || symbol || mint || label;
     const display = truncateForDisplay(name, label);
     const boostCount = formatBoostCount(token.boosts);

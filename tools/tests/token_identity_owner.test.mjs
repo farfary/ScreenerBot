@@ -13,6 +13,8 @@
  *   or `renderTokenCell`.
  * - The row cell's hidden actions sit inside the cell, so the token column never
  *   reports a scroll width wider than itself.
+ * - A token without a symbol is labelled by its short mint (`tokenLabel`), never by a
+ *   question-mark placeholder.
  *
  * Run with `npm run test:js`.
  */
@@ -101,4 +103,17 @@ test("hidden row-cell actions stay inside the cell's box", () => {
     /^(?:none|translateY\([^)]*\))$/,
     "an inline offset at rest widens the cell's scroll width"
   );
+});
+
+test("a token without a symbol is never labelled with a placeholder", () => {
+  const found = [];
+  for (const file of scripts) {
+    readFileSync(file, "utf8")
+      .split("\n")
+      .forEach((line, index) => {
+        const code = /^\s*(?:\*|\/\/)/.test(line) ? "" : line;
+        if (/["'`]\?{2,}["'`]/.test(code)) found.push(`${repoPath(file)}:${index + 1}`);
+      });
+  }
+  assert.deepEqual(found, [], "use tokenLabel(symbol, mint) from ui/token_identity.js");
 });

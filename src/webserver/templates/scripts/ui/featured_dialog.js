@@ -29,6 +29,12 @@ import { manualTrade } from "./manual_trade.js";
 import { renderStateView } from "./state_view.js";
 import { boostTier, formatBoostCount } from "../core/boosts.js";
 import { getTokenAccent, fallbackAccent } from "../core/token_accent.js";
+import {
+  renderTokenLogo,
+  resolvedTokenName,
+  resolvedTokenSymbol,
+  tokenLabel,
+} from "./token_identity.js";
 // Side-effect import: registers the global "screenerbot:open-token-details"
 // window listener so cards open the token details dialog even when the featured
 // dialog is opened from a page (e.g. Home) that doesn't otherwise load it.
@@ -351,9 +357,12 @@ class FeaturedDialog {
     const boostCount = formatBoostCount(token.boosts);
     const logoUrl = resolveTokenLogoUrl(token);
     const bannerUrl = resolveTokenBannerUrl(token);
-    const name = token.name || I18n.t("format-unknown");
-    const symbol = (token.symbol || "???").toUpperCase();
     const mint = token.mint || "";
+    // A token without a symbol is named by its short mint and the shared letter
+    // avatar, as on every other surface; the full mint stays in the title.
+    const symbol = resolvedTokenSymbol(token.symbol)?.toUpperCase() ?? null;
+    const label = tokenLabel(symbol, mint);
+    const name = resolvedTokenName(token.name) || I18n.t("format-unknown");
 
     // Tint the card with the token's own colour. Sampling the logo is async (and
     // may fail on a CORS-locked CDN), so the card is painted immediately with the
@@ -364,17 +373,16 @@ class FeaturedDialog {
       getTokenAccent(mint, logoUrl).then((resolved) => this._applyAccent(mint, resolved));
     }
 
-    const initial = this._escapeHtml(symbol.charAt(0));
-
     // A missing banner falls back to a gradient built from the accent, so the top
     // of the card is never dead white space.
     const bannerHtml = bannerUrl
       ? `<img src="${this._escapeHtml(bannerUrl)}" alt="" class="feat-card-banner-img" loading="lazy" onerror="this.remove()"/>`
       : "";
 
-    const avatarHtml = logoUrl
-      ? `<img src="${this._escapeHtml(logoUrl)}" alt="" class="feat-card-avatar-img token-logo-artwork" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'feat-card-avatar-initial',textContent:'${initial}'}))"/>`
-      : `<span class="feat-card-avatar-initial">${initial}</span>`;
+    const avatarHtml = renderTokenLogo(
+      { mint, symbol, name: resolvedTokenName(token.name), logoUrl },
+      { size: "lg" }
+    );
 
     const change = token.price_change_24h;
     const changeHtml =
@@ -416,16 +424,16 @@ class FeaturedDialog {
     return `
       <article class="feat-card${tier ? ` boosted ${tier}` : ""}"
         data-mint="${this._escapeHtml(mint)}"
-        data-symbol="${this._escapeHtml(symbol)}"
-        data-name="${this._escapeHtml(name)}"
+        data-symbol="${this._escapeHtml(symbol || "")}"
+        data-name="${this._escapeHtml(resolvedTokenName(token.name) || "")}"
         data-logo-url="${this._escapeHtml(logoUrl || "")}"
         style="--feat-hue:${accent.hue};--feat-sat:${accent.saturation}%"
-        title="${this._escapeHtml(name)} (${this._escapeHtml(symbol)})">
+        title="${this._escapeHtml(name)} (${this._escapeHtml(symbol || mint)})">
 
         <div class="feat-card-banner">${bannerHtml}</div>
 
         <div class="feat-card-head">
-          <div class="feat-card-avatar token-logo-frame">${avatarHtml}</div>
+          <div class="feat-card-avatar">${avatarHtml}</div>
         </div>
 
         <div class="feat-card-identity">
@@ -439,7 +447,7 @@ class FeaturedDialog {
             ${priceHtml}
           </div>
           <div class="feat-card-row">
-            <span class="feat-card-symbol">${this._escapeHtml(symbol)}</span>
+            <span class="feat-card-symbol">${this._escapeHtml(label)}</span>
             ${this._renderSecurity(token.security_score)}
             ${changeHtml}
           </div>
@@ -452,7 +460,7 @@ class FeaturedDialog {
             ${this._buildSocialIcons(token)}
             ${this._buildShortcuts(mint)}
           </div>
-          <button class="feat-card-buy" data-action="buy" title="${this._escapeHtml(I18n.attr("tokens-featured-buy", "title", { symbol }))}">
+          <button class="feat-card-buy" data-action="buy" title="${this._escapeHtml(I18n.attr("tokens-featured-buy", "title", { symbol: label }))}">
             <i class="icon-zap"></i>
             <span>${this._escapeHtml(I18n.t("tokens-featured-buy"))}</span>
           </button>

@@ -301,6 +301,18 @@ export function renderTokenRowCell(
 // Characters kept at each end of a compact address.
 export const COMPACT_ADDRESS = Object.freeze({ start: 4, end: 4 });
 
+/**
+ * The short label of a token: its symbol (upper-cased), or its compact mint when the
+ * symbol is missing or an internal marker. Never a placeholder such as "???"; the full
+ * mint belongs in the surface's title or address line.
+ */
+export function tokenLabel(symbol, mint) {
+  return (
+    resolvedTokenSymbol(symbol)?.toUpperCase() ??
+    Utils.formatSignatureCompact(mint || "", COMPACT_ADDRESS)
+  );
+}
+
 const EXPLORER_PATHS = { token: "token", account: "account" };
 
 /** Glyph advance, smallest font size and action width of `.ti-address` (token_identity.css). */

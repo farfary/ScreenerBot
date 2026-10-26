@@ -5,7 +5,7 @@
 
 import * as Utils from "../../core/utils.js";
 import { formatPriceSubscript, withSolUnit } from "../../core/format.js";
-import { renderAddress } from "../token_identity.js";
+import { renderAddress, tokenLabel } from "../token_identity.js";
 
 /**
  * Quick Trade Mode Mixin for TradeActionDialog
@@ -187,7 +187,7 @@ export function applyQuickTradeMixin(TradeActionDialog) {
       .map((token, index) => {
         return `
           <div class="search-result-item" data-index="${index}" data-mint="${Utils.escapeHtml(token.mint)}">
-            <span class="search-result-symbol token-symbol-type">${Utils.escapeHtml(token.symbol || "???")} </span>
+            <span class="search-result-symbol token-symbol-type">${Utils.escapeHtml(tokenLabel(token.symbol, token.mint))} </span>
             <span class="search-result-name token-name-type">${Utils.escapeHtml(token.name || I18n.t("format-unknown"))}</span>
             ${token.mint ? renderAddress(token.mint, { plain: true }) : ""}
           </div>
