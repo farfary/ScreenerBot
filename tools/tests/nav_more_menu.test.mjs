@@ -12,6 +12,9 @@
  *   While the page on screen is a folded tab, the More control carries the current mark
  *   and the travelling indicator sits under it.
  *
+ * - At 1400px and 1200px the compact row fits every default tab, so neither layout scrolls
+ *   or folds; the overflow cases run at a width where the default set does not fit.
+ *
  * Each case runs in a left-to-right and a right-to-left locale.
  *
  * Run with `npm run test:js`.
@@ -25,9 +28,11 @@ import { chromium } from "playwright";
 import { serveDashboard } from "../lib/dashboard_host.mjs";
 import { createApiHandler, loadIndex } from "../lib/dashboard_fixtures.mjs";
 
+// `overflowWidth`: a viewport at which the default tab set no longer fits the row in
+// that locale. Persian labels are short enough to fit down to tablet width.
 const LOCALES = [
-  { locale: "en", next: "ArrowRight" },
-  { locale: "fa", next: "ArrowLeft" },
+  { locale: "en", next: "ArrowRight", overflowWidth: 900 },
+  { locale: "fa", next: "ArrowLeft", overflowWidth: 640 },
 ];
 
 const browser = await chromium.launch({ headless: true });
@@ -81,13 +86,27 @@ function rowState(page) {
         ...rect(tab),
       })),
       more: more.hidden ? null : rect(more),
+      overflow: document.getElementById("navTabs").scrollWidth - row.clientWidth,
     };
   });
 }
 
-for (const { locale, next } of LOCALES) {
+for (const { locale, next, overflowWidth } of LOCALES) {
+  for (const width of [1400, 1200]) {
+    test(`every default tab fits the row at ${width}px (${locale})`, async () => {
+      const { context, page } = await openHome(locale, width);
+      const scrolling = await rowState(page);
+      assert.ok(scrolling.overflow <= 0, `the row overflows by ${scrolling.overflow}px`);
+      await useMenuLayout(page);
+      const { tabs, more } = await rowState(page);
+      assert.equal(more, null, "no More control when every tab fits");
+      assert.ok(tabs.every((tab) => !tab.hidden), "no tab is folded");
+      await context.close();
+    });
+  }
+
   test(`the scrolling layout keeps every tab in the row (${locale})`, async () => {
-    const { context, page } = await openHome(locale, 1200);
+    const { context, page } = await openHome(locale, overflowWidth);
     const { tabs, more } = await rowState(page);
     assert.equal(more, null, "no More control in the scrolling layout");
     assert.deepEqual(
@@ -99,13 +118,13 @@ for (const { locale, next } of LOCALES) {
   });
 
   test(`the More layout keeps the row inside its box (${locale})`, async () => {
-    const { context, page } = await openHome(locale, 1200);
+    const { context, page } = await openHome(locale, overflowWidth);
     await useMenuLayout(page);
     const { row, tabs, more } = await rowState(page);
     assert.ok(more, "the More control is shown when the tabs do not fit");
     const shown = tabs.filter((tab) => !tab.hidden);
     const folded = tabs.filter((tab) => tab.hidden);
-    assert.ok(folded.length > 0, "some tabs are folded at 1200px");
+    assert.ok(folded.length > 0, `some tabs are folded at ${overflowWidth}px`);
     assert.deepEqual(
       tabs.map((tab) => tab.hidden),
       tabs.map((_, index) => index >= shown.length),
@@ -126,7 +145,7 @@ for (const { locale, next } of LOCALES) {
   });
 
   test(`the More list works from the keyboard (${locale})`, async () => {
-    const { context, page } = await openHome(locale, 1200);
+    const { context, page } = await openHome(locale, overflowWidth);
     await useMenuLayout(page);
     const { tabs } = await rowState(page);
     const folded = tabs.filter((tab) => tab.hidden).map((tab) => tab.id);
