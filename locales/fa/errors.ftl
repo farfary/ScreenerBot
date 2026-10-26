@@ -68,6 +68,7 @@ errors-store-unavailable = مخزن داده { $store } باز نشد. این ق
 errors-initialization-onboarding-update-failed = به‌روزرسانی وضعیت راه‌اندازی اولیه ناموفق بود
 errors-initialization-validation-required = پیش از ذخیره تنظیمات، تأیید اعتبارنامه‌ها لازم است
 errors-initialization-encrypt-failed = رمزگذاری کلید خصوصی ناموفق بود
+errors-initialization-already-complete = راه‌اندازی قبلاً کامل شده است. برای معامله با کیف پول دیگر، از جایگزینی کیف پول در صفحهٔ کیف پول‌ها استفاده کنید.
 
 # Dashboard state
 errors-ui-state-save-failed = ذخیره وضعیت ناموفق بود
@@ -243,6 +244,20 @@ errors-wallets-main-get-failed = دریافت کیف پول اصلی ناموف�
 errors-wallets-not-found = کیف پول پیدا نشد
 errors-wallets-get-failed = دریافت کیف پول ناموفق بود
 errors-wallets-export-failed = خروجی گرفتن از کیف پول ناموفق بود
+errors-wallets-backups-failed = فهرست پشتیبان‌های کیف پول دریافت نشد
+errors-wallets-replace-open-positions = کیف پول معاملاتی هنوز پوزیشن باز دارد ({ $count }). پیش از جایگزینی کیف پول آن‌ها را ببندید.
+errors-wallets-replace-trade-in-flight = یک معامله در جریان است. پس از پایان آن کیف پول را جایگزین کنید.
+errors-wallets-replace-tool-in-flight = یک ابزار کیف پول در حال اجراست. پس از پایان آن کیف پول را جایگزین کنید.
+errors-wallets-replace-positions-loading = پوزیشن‌های باز هنوز در حال بارگذاری‌اند. کمی بعد دوباره تلاش کنید.
+errors-wallets-replace-positions-unreadable = مخزن پوزیشن‌ها خوانده نشد، پس نمی‌توان باز نبودن پوزیشنی را تأیید کرد. کیف پول جایگزین نشد.
+errors-wallets-replace-restart-in-progress = { -brand } در حال راه‌اندازی مجدد است. پس از آن دوباره تلاش کنید.
+errors-wallets-replace-pending = یک جایگزینی کیف پول از قبل منتظر راه‌اندازی مجدد است.
+errors-wallets-replace-no-trading-wallet = کیف پول معاملاتی‌ای برای جایگزینی وجود ندارد. به‌جای آن راه‌اندازی را کامل کنید.
+errors-wallets-replace-same-wallet = این کلید متعلق به کیف پول معاملاتی فعلی است.
+errors-wallets-replace-watched = این کیف پول در فهرست پایش‌شده است. پیش از معامله با آن، از آنجا حذفش کنید.
+errors-wallets-replace-address-mismatch = کلید با نشانی کیف پول اعتبارسنجی‌شده مطابقت ندارد. کلید را دوباره اعتبارسنجی کنید.
+errors-wallets-replace-interrupted = جایگزینی کیف پول در میانه متوقف شد و کیف پول فعلی همچنان کیف پول معاملاتی است. تنظیمات معامله‌گر و کپی‌ترید را بررسی و دوباره تلاش کنید.
+errors-wallets-replace-failed = جایگزینی کیف پول معاملاتی ناموفق بود
 
 # Wallet watching
 errors-wallet-watch-list-failed = دریافت فهرست اهداف پایش ناموفق بود

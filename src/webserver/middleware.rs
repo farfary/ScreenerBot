@@ -332,6 +332,30 @@ pub async fn full_setup_gate(request: Request, next: Next) -> Response {
     .into_response()
 }
 
+/// Setup-only gate for the routes that write the first wallet into the config
+///
+/// Completing setup and entering Explore Mode rewrite the config key, which the vault
+/// ignores once it holds a trading wallet (and an empty key would start Explore Mode).
+/// After a full setup they answer `CONFLICT`, naming the Wallets page action that
+/// replaces the trading wallet instead.
+pub async fn setup_only_gate(request: Request, next: Next) -> Response {
+    if !global::is_initialization_complete() {
+        return next.run(request).await;
+    }
+    logger::debug(
+        LogTag::Webserver,
+        &format!(
+            "Blocked setup request to {} (setup is already complete)",
+            request.uri().path()
+        ),
+    );
+    ApiError::new(
+        ApiErrorCode::Conflict,
+        ids::ERRORS_INITIALIZATION_ALREADY_COMPLETE,
+    )
+    .into_response()
+}
+
 /// Store gate for the route group of a feature whose data lives in one catalog store
 ///
 /// While the storage phase has recorded the store as not open (unavailable, or being

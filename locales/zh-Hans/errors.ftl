@@ -66,6 +66,7 @@ errors-store-unavailable = 无法打开数据存储 { $store }。在问题解决
 errors-initialization-onboarding-update-failed = 更新引导状态失败
 errors-initialization-validation-required = 保存设置前需要先验证凭据
 errors-initialization-encrypt-failed = 加密私钥失败
+errors-initialization-already-complete = 设置已完成。如需使用另一个钱包交易，请在钱包页面使用“更换钱包”。
 
 # Dashboard state
 errors-ui-state-save-failed = 保存状态失败
@@ -240,6 +241,20 @@ errors-wallets-main-get-failed = 获取主钱包失败
 errors-wallets-not-found = 未找到钱包
 errors-wallets-get-failed = 获取钱包失败
 errors-wallets-export-failed = 导出钱包失败
+errors-wallets-backups-failed = 列出钱包备份失败
+errors-wallets-replace-open-positions = 交易钱包仍有未平仓持仓（{ $count }）。请先平仓再更换钱包。
+errors-wallets-replace-trade-in-flight = 有交易正在进行。请在交易完成后更换钱包。
+errors-wallets-replace-tool-in-flight = 有钱包工具正在运行。请在其完成后更换钱包。
+errors-wallets-replace-positions-loading = 未平仓持仓仍在加载。请稍后重试。
+errors-wallets-replace-positions-unreadable = 无法读取持仓存储，因此无法排除未平仓持仓。钱包未更换。
+errors-wallets-replace-restart-in-progress = { -brand } 已在重启。请在重启后重试。
+errors-wallets-replace-pending = 已有一次钱包更换在等待重启。
+errors-wallets-replace-no-trading-wallet = 没有可更换的交易钱包。请改为完成设置。
+errors-wallets-replace-same-wallet = 此密钥属于当前交易钱包。
+errors-wallets-replace-watched = 此钱包在“监控中”列表里。请先将其移除，再用它交易。
+errors-wallets-replace-address-mismatch = 密钥与已验证的钱包地址不匹配。请重新验证密钥。
+errors-wallets-replace-interrupted = 钱包更换中途停止，当前钱包仍是交易钱包。请检查交易器和跟单交易设置，然后重试。
+errors-wallets-replace-failed = 更换交易钱包失败
 
 # Wallet watching
 errors-wallet-watch-list-failed = 获取监控目标列表失败

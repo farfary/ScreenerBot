@@ -5,10 +5,12 @@
 
 mod handlers;
 pub mod types;
-mod validation;
+pub(in crate::webserver::routes) mod validation;
 
+use crate::webserver::middleware::setup_only_gate;
 use crate::webserver::state::AppState;
 use axum::{
+    middleware::from_fn,
     routing::{get, post},
     Router,
 };
@@ -21,8 +23,14 @@ pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
         .route("/status", get(handlers::initialization_status))
         .route("/validate", post(handlers::validate_credentials))
-        .route("/complete", post(handlers::complete_initialization))
-        .route("/explore", post(handlers::enter_explore_mode))
+        .route(
+            "/complete",
+            post(handlers::complete_initialization).route_layer(from_fn(setup_only_gate)),
+        )
+        .route(
+            "/explore",
+            post(handlers::enter_explore_mode).route_layer(from_fn(setup_only_gate)),
+        )
         .route("/progress", get(handlers::initialization_progress))
         .route("/onboarding/complete", post(handlers::complete_onboarding))
 }

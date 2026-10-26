@@ -66,6 +66,7 @@ errors-store-unavailable = { $store } 데이터 저장소를 열 수 없습니�
 errors-initialization-onboarding-update-failed = 온보딩 상태를 업데이트하지 못했습니다
 errors-initialization-validation-required = 설정을 저장하기 전에 자격 증명 확인이 필요합니다
 errors-initialization-encrypt-failed = 프라이빗 키를 암호화하지 못했습니다
+errors-initialization-already-complete = 설정이 이미 완료되었습니다. 다른 지갑으로 거래하려면 지갑 페이지의 지갑 교체를 사용하세요.
 
 # Dashboard state
 errors-ui-state-save-failed = 상태를 저장하지 못했습니다
@@ -240,6 +241,20 @@ errors-wallets-main-get-failed = 메인 지갑을 가져오지 못했습니다
 errors-wallets-not-found = 지갑을 찾을 수 없습니다
 errors-wallets-get-failed = 지갑을 가져오지 못했습니다
 errors-wallets-export-failed = 지갑을 내보내지 못했습니다
+errors-wallets-backups-failed = 지갑 백업 목록을 불러오지 못했습니다
+errors-wallets-replace-open-positions = 트레이딩 지갑에 아직 열린 포지션이 있습니다 ({ $count }). 지갑을 교체하기 전에 포지션을 종료하세요.
+errors-wallets-replace-trade-in-flight = 거래가 진행 중입니다. 거래가 끝난 후 지갑을 교체하세요.
+errors-wallets-replace-tool-in-flight = 지갑 도구가 실행 중입니다. 도구가 끝난 후 지갑을 교체하세요.
+errors-wallets-replace-positions-loading = 열린 포지션을 아직 불러오는 중입니다. 잠시 후 다시 시도하세요.
+errors-wallets-replace-positions-unreadable = 포지션 저장소를 읽을 수 없어 열린 포지션이 없다고 확인할 수 없습니다. 지갑은 교체되지 않았습니다.
+errors-wallets-replace-restart-in-progress = { -brand }이 이미 재시작 중입니다. 재시작 후 다시 시도하세요.
+errors-wallets-replace-pending = 지갑 교체가 이미 재시작을 기다리고 있습니다.
+errors-wallets-replace-no-trading-wallet = 교체할 트레이딩 지갑이 없습니다. 대신 설정을 완료하세요.
+errors-wallets-replace-same-wallet = 이 키는 현재 트레이딩 지갑의 키입니다.
+errors-wallets-replace-watched = 이 지갑은 감시 중 목록에 있습니다. 이 지갑으로 거래하기 전에 목록에서 제거하세요.
+errors-wallets-replace-address-mismatch = 키가 검증된 지갑 주소와 일치하지 않습니다. 키를 다시 검증하세요.
+errors-wallets-replace-interrupted = 지갑 교체가 도중에 중단되어 현재 지갑이 계속 트레이딩 지갑으로 유지됩니다. 트레이더와 카피 트레이딩 설정을 확인한 후 다시 시도하세요.
+errors-wallets-replace-failed = 트레이딩 지갑을 교체하지 못했습니다
 
 # Wallet watching
 errors-wallet-watch-list-failed = 감시 대상 목록을 가져오지 못했습니다

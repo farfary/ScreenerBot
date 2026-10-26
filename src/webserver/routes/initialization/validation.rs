@@ -23,9 +23,9 @@ struct PendingSetupValidation {
     working_rpc_indices: Vec<usize>,
 }
 
-pub(super) struct ValidatedSetup {
-    pub(super) wallet_address: String,
-    pub(super) working_rpc_indices: Vec<usize>,
+pub(in crate::webserver::routes) struct ValidatedSetup {
+    pub(in crate::webserver::routes) wallet_address: String,
+    pub(in crate::webserver::routes) working_rpc_indices: Vec<usize>,
 }
 
 static PENDING_SETUP_VALIDATION: LazyLock<Mutex<Option<PendingSetupValidation>>> =
@@ -149,7 +149,7 @@ pub(super) fn store_setup_validation(
     id
 }
 
-pub(super) fn consume_setup_validation(
+pub(in crate::webserver::routes) fn consume_setup_validation(
     request: &CompleteInitializationRequest,
 ) -> Result<ValidatedSetup> {
     let mut guard = match PENDING_SETUP_VALIDATION.lock() {

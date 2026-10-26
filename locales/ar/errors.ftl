@@ -68,6 +68,7 @@ errors-store-unavailable = تعذّر فتح مخزن البيانات { $store 
 errors-initialization-onboarding-update-failed = تعذّر تحديث حالة الإعداد الأولي
 errors-initialization-validation-required = التحقق من بيانات الاعتماد مطلوب قبل حفظ الإعداد
 errors-initialization-encrypt-failed = تعذّر تشفير المفتاح الخاص
+errors-initialization-already-complete = اكتمل الإعداد بالفعل. للتداول بمحفظة أخرى، استخدم استبدال المحفظة في صفحة المحافظ.
 
 # Dashboard state
 errors-ui-state-save-failed = تعذّر حفظ الحالة
@@ -243,6 +244,20 @@ errors-wallets-main-get-failed = تعذّر جلب المحفظة الرئيسي
 errors-wallets-not-found = لم يتم العثور على المحفظة
 errors-wallets-get-failed = تعذّر جلب المحفظة
 errors-wallets-export-failed = تعذّر تصدير المحفظة
+errors-wallets-backups-failed = تعذّر عرض النسخ الاحتياطية للمحافظ
+errors-wallets-replace-open-positions = لا تزال لدى محفظة التداول مراكز مفتوحة ({ $count }). أغلقها قبل استبدال المحفظة.
+errors-wallets-replace-trade-in-flight = هناك صفقة قيد التنفيذ. استبدل المحفظة بعد انتهائها.
+errors-wallets-replace-tool-in-flight = هناك أداة محفظة قيد التشغيل. استبدل المحفظة بعد انتهائها.
+errors-wallets-replace-positions-loading = لا تزال المراكز المفتوحة قيد التحميل. حاول مرة أخرى بعد لحظة.
+errors-wallets-replace-positions-unreadable = تعذّرت قراءة مخزن المراكز، لذا لا يمكن استبعاد وجود مراكز مفتوحة. لم تُستبدل المحفظة.
+errors-wallets-replace-restart-in-progress = تجري إعادة تشغيل { -brand } بالفعل. حاول مرة أخرى بعد إعادة التشغيل.
+errors-wallets-replace-pending = هناك استبدال محفظة ينتظر إعادة التشغيل بالفعل.
+errors-wallets-replace-no-trading-wallet = لا توجد محفظة تداول لاستبدالها. أكمل الإعداد بدلًا من ذلك.
+errors-wallets-replace-same-wallet = هذا المفتاح يخص محفظة التداول الحالية.
+errors-wallets-replace-watched = هذه المحفظة موجودة في قائمة المراقبة. أزلها من هناك قبل التداول بها.
+errors-wallets-replace-address-mismatch = المفتاح لا يطابق عنوان المحفظة الذي تم التحقق منه. تحقق من المفتاح مرة أخرى.
+errors-wallets-replace-interrupted = توقف استبدال المحفظة في منتصفه وتبقى المحفظة الحالية محفظة التداول. راجع إعدادات المتداول والتداول بالنسخ، ثم حاول مرة أخرى.
+errors-wallets-replace-failed = تعذّر استبدال محفظة التداول
 
 # Wallet watching
 errors-wallet-watch-list-failed = تعذّر عرض أهداف المراقبة

@@ -63,6 +63,7 @@ errors-store-unavailable = { $store } veri deposu açılamadı. Sorun çözülen
 errors-initialization-onboarding-update-failed = Karşılama durumu güncellenemedi
 errors-initialization-validation-required = Kurulumu kaydetmeden önce kimlik bilgilerinin doğrulanması gerekli
 errors-initialization-encrypt-failed = Özel anahtar şifrelenemedi
+errors-initialization-already-complete = Kurulum zaten tamamlandı. Başka bir cüzdanla işlem yapmak için Cüzdanlar sayfasındaki Cüzdanı değiştir seçeneğini kullanın.
 
 # Dashboard state
 errors-ui-state-save-failed = Durum kaydedilemedi
@@ -237,6 +238,20 @@ errors-wallets-main-get-failed = Ana cüzdan alınamadı
 errors-wallets-not-found = Cüzdan bulunamadı
 errors-wallets-get-failed = Cüzdan alınamadı
 errors-wallets-export-failed = Cüzdan dışa aktarılamadı
+errors-wallets-backups-failed = Cüzdan yedekleri listelenemedi
+errors-wallets-replace-open-positions = İşlem cüzdanında hâlâ açık pozisyonlar var ({ $count }). Cüzdanı değiştirmeden önce bunları kapatın.
+errors-wallets-replace-trade-in-flight = Bir işlem sürüyor. İşlem bittiğinde cüzdanı değiştirin.
+errors-wallets-replace-tool-in-flight = Bir cüzdan aracı çalışıyor. Araç bittiğinde cüzdanı değiştirin.
+errors-wallets-replace-positions-loading = Açık pozisyonlar hâlâ yükleniyor. Biraz sonra tekrar deneyin.
+errors-wallets-replace-positions-unreadable = Pozisyon deposu okunamadı, bu yüzden açık pozisyon olmadığı doğrulanamıyor. Cüzdan değiştirilmedi.
+errors-wallets-replace-restart-in-progress = { -brand } zaten yeniden başlatılıyor. Yeniden başlatmadan sonra tekrar deneyin.
+errors-wallets-replace-pending = Bir cüzdan değişikliği zaten yeniden başlatmayı bekliyor.
+errors-wallets-replace-no-trading-wallet = Değiştirilecek bir işlem cüzdanı yok. Bunun yerine kurulumu tamamlayın.
+errors-wallets-replace-same-wallet = Bu anahtar mevcut işlem cüzdanına ait.
+errors-wallets-replace-watched = Bu cüzdan İzlenenler listesinde. Onunla işlem yapmadan önce oradan kaldırın.
+errors-wallets-replace-address-mismatch = Anahtar, doğrulanan cüzdan adresiyle eşleşmiyor. Anahtarı yeniden doğrulayın.
+errors-wallets-replace-interrupted = Cüzdan değişikliği yarıda durdu ve mevcut cüzdan işlem cüzdanı olarak kalıyor. Trader ve kopya işlem ayarlarını kontrol edip tekrar deneyin.
+errors-wallets-replace-failed = İşlem cüzdanı değiştirilemedi
 
 # Wallet watching
 errors-wallet-watch-list-failed = İzleme hedefleri listelenemedi

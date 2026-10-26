@@ -63,6 +63,7 @@ errors-store-unavailable = Le stockage de données { $store } n'a pas pu être o
 errors-initialization-onboarding-update-failed = Échec de la mise à jour de l'état d'intégration
 errors-initialization-validation-required = La vérification des identifiants est requise avant d'enregistrer la configuration
 errors-initialization-encrypt-failed = Échec du chiffrement de la clé privée
+errors-initialization-already-complete = La configuration est déjà terminée. Pour trader avec un autre portefeuille, utilisez Remplacer le portefeuille sur la page Portefeuilles.
 
 # Dashboard state
 errors-ui-state-save-failed = Échec de l'enregistrement de l'état
@@ -237,6 +238,20 @@ errors-wallets-main-get-failed = Échec de la récupération du portefeuille pri
 errors-wallets-not-found = Portefeuille introuvable
 errors-wallets-get-failed = Échec de la récupération du portefeuille
 errors-wallets-export-failed = Échec de l'export du portefeuille
+errors-wallets-backups-failed = Échec de la liste des sauvegardes de portefeuille
+errors-wallets-replace-open-positions = Le portefeuille de trading a encore des positions ouvertes ({ $count }). Clôturez-les avant de remplacer le portefeuille.
+errors-wallets-replace-trade-in-flight = Un trade est en cours. Remplacez le portefeuille une fois qu'il est terminé.
+errors-wallets-replace-tool-in-flight = Un outil de portefeuille est en cours d'exécution. Remplacez le portefeuille une fois qu'il est terminé.
+errors-wallets-replace-positions-loading = Les positions ouvertes sont encore en cours de chargement. Réessayez dans un instant.
+errors-wallets-replace-positions-unreadable = Le stockage des positions n'a pas pu être lu : des positions ouvertes ne peuvent donc pas être exclues. Le portefeuille n'a pas été remplacé.
+errors-wallets-replace-restart-in-progress = { -brand } redémarre déjà. Réessayez après le redémarrage.
+errors-wallets-replace-pending = Un remplacement de portefeuille attend déjà le redémarrage.
+errors-wallets-replace-no-trading-wallet = Il n'y a aucun portefeuille de trading à remplacer. Terminez plutôt la configuration.
+errors-wallets-replace-same-wallet = Cette clé appartient au portefeuille de trading actuel.
+errors-wallets-replace-watched = Ce portefeuille figure dans la liste Suivis. Retirez-le de cette liste avant de trader avec.
+errors-wallets-replace-address-mismatch = La clé ne correspond pas à l'adresse de portefeuille validée. Validez à nouveau la clé.
+errors-wallets-replace-interrupted = Le remplacement du portefeuille s'est arrêté en cours de route et le portefeuille actuel reste le portefeuille de trading. Vérifiez les réglages du trader et du copy trading, puis réessayez.
+errors-wallets-replace-failed = Échec du remplacement du portefeuille de trading
 
 # Wallet watching
 errors-wallet-watch-list-failed = Échec de la récupération des cibles de surveillance

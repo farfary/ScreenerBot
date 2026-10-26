@@ -69,6 +69,7 @@ errors-store-unavailable = The { $store } data store could not be opened. This f
 errors-initialization-onboarding-update-failed = Failed to update onboarding state
 errors-initialization-validation-required = Credential verification is required before saving setup
 errors-initialization-encrypt-failed = Failed to encrypt private key
+errors-initialization-already-complete = Setup is already complete. To trade with another wallet, use Replace Wallet on the Wallets page.
 
 # Dashboard state
 errors-ui-state-save-failed = Failed to save state
@@ -245,6 +246,20 @@ errors-wallets-main-get-failed = Failed to get main wallet
 errors-wallets-not-found = Wallet not found
 errors-wallets-get-failed = Failed to get wallet
 errors-wallets-export-failed = Failed to export wallet
+errors-wallets-backups-failed = Failed to list wallet backups
+errors-wallets-replace-open-positions = The trading wallet still has open positions ({ $count }). Close them before replacing the wallet.
+errors-wallets-replace-trade-in-flight = A trade is in progress. Replace the wallet once it finishes.
+errors-wallets-replace-tool-in-flight = A wallet tool is running. Replace the wallet once it finishes.
+errors-wallets-replace-positions-loading = Open positions are still loading. Try again in a moment.
+errors-wallets-replace-positions-unreadable = The positions store could not be read, so open positions cannot be ruled out. The wallet was not replaced.
+errors-wallets-replace-restart-in-progress = { -brand } is already restarting. Try again after the restart.
+errors-wallets-replace-pending = A wallet replacement is already waiting for the restart.
+errors-wallets-replace-no-trading-wallet = There is no trading wallet to replace. Complete setup instead.
+errors-wallets-replace-same-wallet = This key belongs to the current trading wallet.
+errors-wallets-replace-watched = This wallet is on the Watched list. Remove it there before trading with it.
+errors-wallets-replace-address-mismatch = The key does not match the validated wallet address. Validate the key again.
+errors-wallets-replace-interrupted = The wallet replacement stopped part way and the current wallet stays the trading wallet. Check the trader and copy trading settings, then try again.
+errors-wallets-replace-failed = Failed to replace the trading wallet
 
 # Wallet watching
 errors-wallet-watch-list-failed = Failed to list watch targets

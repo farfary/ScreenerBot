@@ -28,6 +28,23 @@ pub struct WalletListEntry {
     pub balance: Option<f64>,
 }
 
+/// A staged trading-wallet replacement; the process restarts to apply it.
+#[derive(Serialize)]
+pub struct WalletReplaceResponse {
+    pub restart_required: bool,
+    /// The instance the dashboard waits to see replaced by the restarted one.
+    pub instance_id: String,
+    pub previous_wallet: String,
+    pub new_wallet: String,
+    /// Where the restart moves the previous wallet's stores.
+    pub backup_directory: String,
+}
+
+#[derive(Serialize)]
+pub struct WalletBackupsResponse {
+    pub backups: Vec<crate::wallets::replacement::WalletBackup>,
+}
+
 // =============================================================================
 // QUERY PARAMS
 // =============================================================================

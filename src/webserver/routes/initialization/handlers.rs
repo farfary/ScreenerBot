@@ -8,7 +8,9 @@ use super::validation::{
     clear_setup_validation, consume_setup_validation, store_setup_validation, validate_rpc_url_list,
 };
 use crate::i18n::ids;
+use crate::wallets::replacement::StagedKey;
 use crate::webserver::api_error::{ApiError, ApiErrorCode};
+use crate::webserver::routes::wallets::handlers::replacement_error;
 use crate::{
     arguments,
     chains::solana::{
@@ -387,6 +389,35 @@ pub(super) async fn complete_initialization(
             .into_response();
         }
     };
+
+    // Setup is reachable only before a full setup (`setup_only_gate`). A vault that
+    // already holds another trading wallet (setup completed from Explore Mode, or a
+    // config that lost its key) keeps it until a staged replacement moves that wallet's
+    // stores at the next start; the same wallet, or an empty vault, needs nothing.
+    match crate::wallets::replacement::trading_wallet_address().await {
+        Ok(Some(current)) if current != wallet_address => {
+            let staged = crate::wallets::replacement::stage(StagedKey {
+                address: wallet_address.clone(),
+                ciphertext: encrypted.ciphertext.clone(),
+                nonce: encrypted.nonce.clone(),
+                rpc_urls: working_rpc_urls.clone(),
+            })
+            .await;
+            if let Err(e) = staged {
+                logger::warning(
+                    LogTag::Webserver,
+                    &format!("Setup refused to replace the trading wallet: {e}"),
+                );
+                return replacement_error(&e).into_response();
+            }
+        }
+        Ok(_) => {}
+        Err(e) => {
+            return ApiError::new(ApiErrorCode::Internal, ids::ERRORS_WALLETS_REPLACE_FAILED)
+                .details(e.to_string())
+                .into_response();
+        }
+    }
 
     logger::info(
         LogTag::Webserver,

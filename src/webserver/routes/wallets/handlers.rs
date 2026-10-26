@@ -1,21 +1,28 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Wallet handlers: list, summary, main wallet, one wallet and its private-key export.
+//! Wallet handlers: list, summary, main wallet, one wallet and its private-key export, and the trading-wallet replacement with its backups.
 
 use axum::{
-    extract::{Path, Query},
+    extract::{Json, Path, Query},
     response::Response,
 };
 
 use crate::i18n::ids;
 use crate::logger::{self, LogTag};
+use crate::version::RestartBlocker;
 use crate::wallets;
+use crate::wallets::replacement::StagedKey;
 use crate::webserver::api_error::{ApiError, ApiErrorCode};
+use crate::webserver::routes::initialization::validation::consume_setup_validation;
+use crate::webserver::routes::initialization::CompleteInitializationRequest;
 use crate::webserver::utils::success_response;
 use axum::response::IntoResponse as _;
 
-use super::types::{ListWalletsQuery, WalletListEntry, WalletListResponse};
+use super::types::{
+    ListWalletsQuery, WalletBackupsResponse, WalletListEntry, WalletListResponse,
+    WalletReplaceResponse,
+};
 
 // =============================================================================
 // HANDLERS
@@ -109,4 +116,132 @@ pub async fn export_wallet(Path(id): Path<i64>) -> Response {
                 .into_response()
         }
     }
+}
+
+/// Replace the trading wallet with a key that passed setup validation: stage the
+/// replacement, then restart so the next start applies it.
+pub async fn replace_wallet(Json(request): Json<CompleteInitializationRequest>) -> Response {
+    let validated = match consume_setup_validation(&request) {
+        Ok(validated) => validated,
+        Err(message) => {
+            return ApiError::new(
+                ApiErrorCode::SetupValidationRequired,
+                ids::ERRORS_INITIALIZATION_VALIDATION_REQUIRED,
+            )
+            .details(message.to_string())
+            .into_response();
+        }
+    };
+    let encrypted = match crate::secure_storage::encrypt_private_key(&request.wallet_private_key) {
+        Ok(encrypted) => encrypted,
+        Err(e) => {
+            return ApiError::new(
+                ApiErrorCode::Internal,
+                ids::ERRORS_INITIALIZATION_ENCRYPT_FAILED,
+            )
+            .details(e.to_string())
+            .into_response();
+        }
+    };
+    let rpc_urls: Vec<String> = validated
+        .working_rpc_indices
+        .into_iter()
+        .filter_map(|index| request.rpc_urls.get(index).cloned())
+        .collect();
+
+    let staged = match wallets::replacement::stage(StagedKey {
+        address: validated.wallet_address,
+        ciphertext: encrypted.ciphertext,
+        nonce: encrypted.nonce,
+        rpc_urls,
+    })
+    .await
+    {
+        Ok(staged) => staged,
+        Err(e) => {
+            logger::warning(
+                LogTag::Wallet,
+                &format!("Trading wallet replacement refused: {e}"),
+            );
+            return replacement_error(&e).into_response();
+        }
+    };
+
+    crate::webserver::routes::system::schedule_graceful_restart("wallet replaced");
+    success_response(WalletReplaceResponse {
+        restart_required: true,
+        instance_id: crate::global::instance_id().to_owned(),
+        previous_wallet: staged.previous_wallet,
+        new_wallet: staged.new_wallet,
+        backup_directory: staged.backup_directory,
+    })
+}
+
+/// List the wallet-reset backups, newest first.
+pub async fn list_wallet_backups() -> Response {
+    match tokio::task::spawn_blocking(wallets::replacement::list_backups).await {
+        Ok(backups) => success_response(WalletBackupsResponse { backups }),
+        Err(e) => ApiError::new(ApiErrorCode::Internal, ids::ERRORS_WALLETS_BACKUPS_FAILED)
+            .details(e.to_string())
+            .into_response(),
+    }
+}
+
+/// The API error of a refused or failed replacement, naming its reason.
+pub(in crate::webserver::routes) fn replacement_error(error: &wallets::Error) -> ApiError {
+    let details = error.to_string();
+    let api_error = match error {
+        wallets::Error::ReplacementBlocked { reason } => match reason {
+            RestartBlocker::OpenPositions { count } => ApiError::new(
+                ApiErrorCode::OpenPositions,
+                ids::ERRORS_WALLETS_REPLACE_OPEN_POSITIONS,
+            )
+            .count_arg("count", i64::try_from(*count).unwrap_or(i64::MAX)),
+            RestartBlocker::TradeInFlight => ApiError::new(
+                ApiErrorCode::Conflict,
+                ids::ERRORS_WALLETS_REPLACE_TRADE_IN_FLIGHT,
+            ),
+            RestartBlocker::ToolInFlight => ApiError::new(
+                ApiErrorCode::Conflict,
+                ids::ERRORS_WALLETS_REPLACE_TOOL_IN_FLIGHT,
+            ),
+            RestartBlocker::PositionsLoading => ApiError::new(
+                ApiErrorCode::Conflict,
+                ids::ERRORS_WALLETS_REPLACE_POSITIONS_LOADING,
+            ),
+            RestartBlocker::PositionsUnreadable => ApiError::new(
+                ApiErrorCode::Conflict,
+                ids::ERRORS_WALLETS_REPLACE_POSITIONS_UNREADABLE,
+            ),
+        },
+        wallets::Error::ReplacementRestartInProgress => ApiError::new(
+            ApiErrorCode::Conflict,
+            ids::ERRORS_WALLETS_REPLACE_RESTART_IN_PROGRESS,
+        ),
+        wallets::Error::ReplacementPending => {
+            ApiError::new(ApiErrorCode::Conflict, ids::ERRORS_WALLETS_REPLACE_PENDING)
+        }
+        wallets::Error::ReplacementNoTradingWallet => ApiError::new(
+            ApiErrorCode::Conflict,
+            ids::ERRORS_WALLETS_REPLACE_NO_TRADING_WALLET,
+        ),
+        wallets::Error::ReplacementSameWallet { .. } => ApiError::new(
+            ApiErrorCode::InvalidInput,
+            ids::ERRORS_WALLETS_REPLACE_SAME_WALLET,
+        ),
+        wallets::Error::ReplacementWalletIsWatched { .. } => ApiError::new(
+            ApiErrorCode::InvalidInput,
+            ids::ERRORS_WALLETS_REPLACE_WATCHED,
+        ),
+        wallets::Error::ReplacementAddressMismatch { .. } => ApiError::new(
+            ApiErrorCode::InvalidInput,
+            ids::ERRORS_WALLETS_REPLACE_ADDRESS_MISMATCH,
+        ),
+        wallets::Error::ReplacementInterrupted { .. } => ApiError::new(
+            ApiErrorCode::Internal,
+            ids::ERRORS_WALLETS_REPLACE_INTERRUPTED,
+        ),
+        _ => ApiError::new(ApiErrorCode::Internal, ids::ERRORS_WALLETS_REPLACE_FAILED),
+    };
+    api_error.details(details)
 }
