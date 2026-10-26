@@ -3,13 +3,12 @@
 //
 
 /**
- * Guard: the trade dialog's funding figure counts the rent of the token account a buy
- * opens.
+ * Guard: the trade dialog's funding figure counts the rent of the accounts a buy opens.
  *
- * A buy of a mint the trading wallet holds no token account for locks that account's
- * rent on top of the fee reserve, so "this trade needs X SOL" includes it, as the
- * swap's own funds check does. A wallet that already holds the account pays no rent,
- * and the figure is the amount plus the reserve.
+ * The server reports the rent of every account the buy opens (the wrapped-SOL account
+ * and a token account the trading wallet does not keep yet), counted as the swap's own
+ * funds check counts them; "this trade needs X SOL" adds it to the fee reserve. A wallet
+ * that already keeps both pays no rent, and the figure is the amount plus the reserve.
  *
  * Run with `npm run test:js`.
  */
@@ -83,14 +82,14 @@ async function buyRefusal(rentSol, amount) {
   }
 }
 
-test("a buy that opens a token account needs its rent too", async () => {
+test("a buy that opens accounts needs their rent too", async () => {
   assert.equal(
     await buyRefusal(0.002, 0.01),
     `The wallet holds ${BALANCE} SOL; this trade needs 0.014 SOL`
   );
 });
 
-test("a buy into a held token account needs the amount and the reserve only", async () => {
+test("a buy into kept accounts needs the amount and the reserve only", async () => {
   assert.equal(
     await buyRefusal(0, 0.01),
     `The wallet holds ${BALANCE} SOL; this trade needs 0.012 SOL`

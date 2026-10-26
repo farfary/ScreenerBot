@@ -21,12 +21,12 @@ import { renderSetupGate } from "./setup_gate.js";
 const MIN_SLIPPAGE_PCT = 0.01;
 const MAX_SLIPPAGE_PCT = 50;
 
-// SOL held back from a buy so the transaction can still pay its network fee. A buy of a
-// mint the wallet holds no token account for also locks that account's rent, read from
-// the server (`context.accountRent`) and added on top. Spending the LAST lamport always
-// fails on chain, so the slider ceiling, the MAX button and the validator must all stop
-// here — they used to disagree, and typing the exact balance produced a buy that
-// validated in the dialog and then failed.
+// SOL held back from a buy so the transaction can still pay its network fee. A buy also
+// needs the rent of the accounts it opens (the wrapped-SOL account and a token account the
+// wallet does not keep yet), read from the server (`context.accountRent`) and added on
+// top. Spending the LAST lamport always fails on chain, so the slider ceiling, the MAX
+// button and the validator must all stop here; when they disagreed, typing the exact
+// balance produced a buy that validated in the dialog and then failed.
 const SOL_FEE_RESERVE = 0.002;
 
 // How often an open dialog re-reads the wallet balance and the position it is trading.
@@ -1244,8 +1244,8 @@ export class TradeActionDialog {
   }
 
   /**
-   * SOL a buy of `mint` locks in the token account it opens, 0 when the wallet already
-   * holds one, or null when the server cannot tell; the reserve then stands alone.
+   * SOL a buy of `mint` needs for the accounts it opens, 0 when the wallet already keeps
+   * them, or null when the server cannot tell; the reserve then stands alone.
    */
   async _fetchAccountRent(mint) {
     const res = await fetch(`/api/wallet/buy-account-rent/${encodeURIComponent(mint)}`, {
@@ -1534,7 +1534,7 @@ export class TradeActionDialog {
     return Math.max(context.balance - this._buyReserveSol(context), 0);
   }
 
-  /** SOL a buy needs beyond its amount: the fee reserve and any new token account's rent. */
+  /** SOL a buy needs beyond its amount: the fee reserve and the rent of the accounts it opens. */
   _buyReserveSol(context) {
     return SOL_FEE_RESERVE + (context?.accountRent ?? 0);
   }

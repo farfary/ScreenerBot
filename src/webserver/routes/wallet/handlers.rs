@@ -131,8 +131,9 @@ pub(super) async fn get_wallet_balance() -> Result<Json<Option<WalletCurrentResp
     get_wallet_current().await
 }
 
-/// The rent a buy of `mint` locks in a new token account of the trading wallet, so the
-/// trade dialog's funding figure matches the swap's own funds check.
+/// The rent a buy of `mint` needs for the accounts it opens in the trading wallet (the
+/// wrapped-native account the swap opens and closes included), counted as the swap's own
+/// funds check counts them, so the trade dialog's funding figure matches it.
 pub(super) async fn get_buy_account_rent(
     Path(mint): Path<String>,
 ) -> Result<Json<BuyAccountRentResponse>, ApiError> {

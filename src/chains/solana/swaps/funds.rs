@@ -6,6 +6,7 @@
 use crate::chains::solana::assets::ata::get_all_token_accounts;
 use crate::chains::solana::rent;
 use crate::chains::solana::rpc::{try_get_rpc_client, RpcClientMethods, TokenAccountInfo};
+use crate::chains::ChainId;
 use crate::logger::{self, LogTag};
 use crate::swaps::funds::native_needed;
 use crate::swaps::{NotSubmittedReason, Quote, SwapExecutionError, SwapMode};
@@ -20,29 +21,41 @@ fn holds_account(accounts: &[TokenAccountInfo], mint: &str) -> bool {
     accounts.iter().any(|account| account.mint == mint)
 }
 
-/// Rent a buy of `mint` locks in the token account it opens: the token-account
-/// minimum (`minimum`, read only when needed) when `accounts` (the wallet's) hold
-/// none for the mint, zero when the wallet already keeps one.
+/// Accounts a swap from `input_mint` into `output_mint` opens for a wallet holding
+/// `accounts`: each side's token account the wallet does not keep yet. A native-input
+/// swap opens a wrapped-native account and closes it again, but its rent must be in the
+/// wallet while the swap runs.
+fn accounts_to_open(accounts: &[TokenAccountInfo], input_mint: &str, output_mint: &str) -> u64 {
+    u64::from(!holds_account(accounts, input_mint))
+        + u64::from(!holds_account(accounts, output_mint))
+}
+
+/// Rent a buy of `output_mint` with the native coin (`native_mint`) needs for the
+/// accounts it opens: the token-account minimum (`minimum`, read only when needed) for
+/// each account `accounts` (the wallet's) lack, zero when the wallet keeps both.
 async fn rent_to_open<F, Fut>(
     accounts: &[TokenAccountInfo],
-    mint: &str,
+    native_mint: &str,
+    output_mint: &str,
     minimum: F,
 ) -> Result<u64, Error>
 where
     F: FnOnce() -> Fut,
     Fut: std::future::Future<Output = crate::chains::solana::Result<u64>>,
 {
-    if holds_account(accounts, mint) {
+    let opened = accounts_to_open(accounts, native_mint, output_mint);
+    if opened == 0 {
         return Ok(0);
     }
-    Ok(minimum().await?)
+    Ok(native_needed(0, 0, minimum().await?, opened))
 }
 
-/// Rent, in lamports, that a buy of `mint` locks in a new token account of `wallet`;
-/// zero when the wallet already holds an account for the mint.
+/// Rent, in lamports, that a buy of `mint` with the native coin needs for the accounts
+/// it opens in `wallet`, counted as [`check_native_funds`] counts them.
 pub(crate) async fn buy_account_rent(wallet: &str, mint: &str) -> Result<u64, Error> {
     let accounts = get_all_token_accounts(wallet).await?;
-    rent_to_open(&accounts, mint, || {
+    let native_mint = crate::chains::adapter_for(ChainId::Solana).native_asset_address();
+    rent_to_open(&accounts, native_mint, mint, || {
         rent::minimum_balance(rent::TOKEN_ACCOUNT_LEN)
     })
     .await
@@ -96,10 +109,7 @@ pub(crate) async fn check_native_funds(quote: &Quote) -> Result<(), Error> {
     // An account the wallet already keeps is not opened again: neither a standing
     // wrapped-native account nor an output token account costs rent.
     let accounts_to_open = match get_all_token_accounts(&quote.wallet_address).await {
-        Ok(accounts) => {
-            let held = |mint: &str| holds_account(&accounts, mint);
-            u64::from(!held(&quote.input_mint)) + u64::from(!held(&quote.output_mint))
-        }
+        Ok(accounts) => accounts_to_open(&accounts, &quote.input_mint, &quote.output_mint),
         Err(e) => {
             logger::warning(
                 LogTag::Swap,
@@ -138,10 +148,11 @@ pub(crate) async fn check_native_funds(quote: &Quote) -> Result<(), Error> {
 
 #[cfg(test)]
 mod tests {
-    use super::{holds_account, rent_to_open};
+    use super::{accounts_to_open, holds_account, rent_to_open};
     use crate::chains::solana::rpc::TokenAccountInfo;
 
-    const MINT: &str = "So11111111111111111111111111111111111111112";
+    const NATIVE: &str = "So11111111111111111111111111111111111111112";
+    const MINT: &str = "7GCihgDB8fe6KNjn2MYtkzZcRjQy3t9GHdC8uHYmW2hr";
 
     fn account(mint: &str) -> TokenAccountInfo {
         TokenAccountInfo {
@@ -163,19 +174,38 @@ mod tests {
         assert!(!holds_account(&[], MINT));
     }
 
+    #[test]
+    fn a_swap_opens_each_side_the_wallet_does_not_keep() {
+        assert_eq!(accounts_to_open(&[], NATIVE, MINT), 2);
+        assert_eq!(accounts_to_open(&[account(NATIVE)], NATIVE, MINT), 1);
+        assert_eq!(accounts_to_open(&[account(MINT)], NATIVE, MINT), 1);
+        assert_eq!(
+            accounts_to_open(&[account(MINT), account(NATIVE)], NATIVE, MINT),
+            0
+        );
+    }
+
     const RENT: u64 = 1_488_440;
 
     #[tokio::test]
-    async fn a_buy_without_a_token_account_pays_its_rent() {
-        let rent = rent_to_open(&[account("other")], MINT, || async { Ok(RENT) })
+    async fn a_wallet_without_a_wrapped_native_account_pays_rent_for_both() {
+        let rent = rent_to_open(&[account("other")], NATIVE, MINT, || async { Ok(RENT) })
+            .await
+            .expect("rent");
+        assert_eq!(rent, 2 * RENT);
+    }
+
+    #[tokio::test]
+    async fn a_held_token_account_leaves_the_wrapped_native_rent() {
+        let rent = rent_to_open(&[account(MINT)], NATIVE, MINT, || async { Ok(RENT) })
             .await
             .expect("rent");
         assert_eq!(rent, RENT);
     }
 
     #[tokio::test]
-    async fn a_held_token_account_costs_no_rent_and_no_rent_read() {
-        let rent = rent_to_open(&[account(MINT)], MINT, || async {
+    async fn a_wallet_keeping_both_accounts_pays_no_rent_and_reads_none() {
+        let rent = rent_to_open(&[account(MINT), account(NATIVE)], NATIVE, MINT, || async {
             panic!("the rent is read only for an account the buy opens")
         })
         .await
