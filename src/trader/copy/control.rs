@@ -167,6 +167,15 @@ pub fn live_block_reason() -> Option<&'static str> {
     }
 }
 
+/// Switch Copy Trading off and persist it, through the same validated config update
+/// the config route uses. Already off is not an error.
+pub fn stop_copy_trading() -> Result<()> {
+    crate::config::update_config_section(|config| config.copy_trading.enabled = false, true)
+        .map_err(|e| Error::ConfigUpdate {
+            detail: e.to_string(),
+        })
+}
+
 pub async fn status() -> Result<CopyTradingStatus> {
     let tasks = open_database().await?.list_tasks().await?;
     Ok(build_status(&tasks))

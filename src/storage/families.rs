@@ -84,6 +84,7 @@ pub const FAMILIES: &[FamilySpec] = &[
             paths::get_update_state_path,
             paths::get_agent_runtime_path,
             paths::get_process_lock_path,
+            paths::get_wallet_replacement_marker_path,
         ]),
         ladder: KEEP_FOREVER,
     },

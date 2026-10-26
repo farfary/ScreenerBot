@@ -27,6 +27,12 @@ pub fn get_update_state_path() -> PathBuf {
     get_data_directory().join("update-state.json")
 }
 
+/// Returns the pending trading-wallet replacement marker path. The marker exists
+/// between the request that stages a replacement and the boot that applies it.
+pub fn get_wallet_replacement_marker_path() -> PathBuf {
+    get_data_directory().join("wallet_replacement.json")
+}
+
 /// Returns the agent runtime file path, which advertises the local webserver origin
 /// to co-located tooling.
 pub fn get_agent_runtime_path() -> PathBuf {
