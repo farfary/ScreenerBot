@@ -196,7 +196,7 @@ config-copy-trading-paper-queue-capacity = ظرفیت صف آزمایشی
 ## events
 
 config-events-enabled = فعال‌سازی سیستم رویدادها
-    .hint = هشدار: رویدادها می‌توانند روزانه بیش از 5 گیگابایت داده تولید کنند. فقط برای اشکال‌زدایی/توسعه فعال کنید.
+    .hint = رویدادها می‌توانند روزانه بیش از 5 گیگابایت داده تولید کنند. فقط برای اشکال‌زدایی/توسعه فعال کنید.
 config-events-record-api = ثبت رویدادهای API
     .hint = ثبت رویدادهای API خارجی ({ -dexscreener }، { -geckoterminal }، { -jupiter } API و غیره)
 config-events-record-connectivity = ثبت رویدادهای اتصال

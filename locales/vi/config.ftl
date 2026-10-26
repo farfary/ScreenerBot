@@ -184,7 +184,7 @@ config-chains-show-preview = Chuỗi xem trước
 config-chains-solana = Solana
 
 config-events-enabled = Bật hệ thống sự kiện
-    .hint = CẢNH BÁO: Sự kiện có thể tạo ra hơn 5 GB mỗi ngày. Chỉ bật khi gỡ lỗi/phát triển.
+    .hint = Sự kiện có thể tạo ra hơn 5 GB mỗi ngày. Chỉ bật khi gỡ lỗi/phát triển.
 config-events-record-api = Ghi sự kiện API
     .hint = Ghi các sự kiện API bên ngoài ({ -dexscreener }, { -geckoterminal }, { -jupiter } API, v.v.)
 config-events-record-connectivity = Ghi sự kiện kết nối

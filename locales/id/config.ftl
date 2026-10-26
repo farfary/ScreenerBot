@@ -196,7 +196,7 @@ config-copy-trading-paper-queue-capacity = Kapasitas Antrean Paper
 ## events
 
 config-events-enabled = Aktifkan Sistem Peristiwa
-    .hint = PERINGATAN: Peristiwa dapat menghasilkan 5+ GB/hari. Aktifkan hanya untuk debugging/pengembangan.
+    .hint = Peristiwa dapat menghasilkan 5+ GB/hari. Aktifkan hanya untuk debugging/pengembangan.
 config-events-record-api = Catat Peristiwa API
     .hint = Catat peristiwa API eksternal ({ -dexscreener }, { -geckoterminal }, { -jupiter } API, dll.)
 config-events-record-connectivity = Catat Peristiwa Konektivitas

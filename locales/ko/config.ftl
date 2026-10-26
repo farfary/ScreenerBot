@@ -196,7 +196,7 @@ config-copy-trading-paper-queue-capacity = 모의 대기열 용량
 ## events
 
 config-events-enabled = 이벤트 시스템 사용
-    .hint = 경고: 이벤트는 하루 5GB 이상 생성될 수 있습니다. 디버깅/개발 시에만 사용하세요.
+    .hint = 이벤트는 하루 5GB 이상 생성될 수 있습니다. 디버깅/개발 시에만 사용하세요.
 config-events-record-api = API 이벤트 기록
     .hint = 외부 API 이벤트를 기록합니다 ({ -dexscreener }, { -geckoterminal }, { -jupiter } API 등)
 config-events-record-connectivity = 연결 이벤트 기록

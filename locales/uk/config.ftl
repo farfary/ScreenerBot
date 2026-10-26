@@ -196,7 +196,7 @@ config-copy-trading-paper-queue-capacity = Місткість черги вір�
 ## events
 
 config-events-enabled = Увімкнути систему подій
-    .hint = УВАГА: події можуть генерувати понад 5 ГБ на добу. Вмикайте лише для налагодження чи розробки.
+    .hint = Події можуть генерувати понад 5 ГБ на добу. Вмикайте лише для налагодження чи розробки.
 config-events-record-api = Записувати події API
     .hint = Записувати події зовнішніх API ({ -dexscreener }, { -geckoterminal }, { -jupiter } API тощо)
 config-events-record-connectivity = Записувати події з’єднання

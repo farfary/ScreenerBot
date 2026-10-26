@@ -196,7 +196,7 @@ config-copy-trading-paper-queue-capacity = Paper-Warteschlangenkapazität
 ## events
 
 config-events-enabled = Ereignissystem aktivieren
-    .hint = WARNUNG: Ereignisse können über 5 GB pro Tag erzeugen. Nur zum Debuggen/Entwickeln aktivieren.
+    .hint = Ereignisse können über 5 GB pro Tag erzeugen. Nur zum Debuggen/Entwickeln aktivieren.
 config-events-record-api = API-Ereignisse aufzeichnen
     .hint = Ereignisse externer APIs aufzeichnen ({ -dexscreener }, { -geckoterminal }, { -jupiter } API usw.)
 config-events-record-connectivity = Konnektivitätsereignisse aufzeichnen

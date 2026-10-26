@@ -184,7 +184,7 @@ config-chains-show-preview = Redes em prévia
 config-chains-solana = Solana
 
 config-events-enabled = Ativar sistema de eventos
-    .hint = AVISO: os eventos podem gerar mais de 5 GB por dia. Ative apenas para depuração/desenvolvimento.
+    .hint = Os eventos podem gerar mais de 5 GB por dia. Ative apenas para depuração/desenvolvimento.
 config-events-record-api = Registrar eventos de API
     .hint = Registra eventos de APIs externas ({ -dexscreener }, { -geckoterminal }, API da { -jupiter } etc.)
 config-events-record-connectivity = Registrar eventos de conectividade

@@ -294,5 +294,5 @@ events-dialog-export-line = { $label }: { $value }
 events-empty = 아직 이벤트가 없습니다
     .message = 서비스 시작, 거래, 경고가 발생하는 즉시 여기에 기록됩니다.
 events-recording-off = 이벤트 기록이 꺼져 있습니다
-    .message = 설정에서 이벤트 시스템을 켜고 { -brand }를 다시 시작하면 서비스 시작, 거래, 경고가 여기에 기록됩니다.
+    .message = 이벤트 기록은 진단용 도구입니다. 디스크에 많은 데이터를 기록하므로 일반 사용 시에는 꺼져 있습니다.
 events-recording-off-action = 이벤트 설정 열기

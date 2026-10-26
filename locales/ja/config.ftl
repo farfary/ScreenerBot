@@ -196,7 +196,7 @@ config-copy-trading-paper-queue-capacity = ペーパーキュー容量
 ## events
 
 config-events-enabled = イベントシステムを有効化
-    .hint = 警告: イベントは 1 日あたり 5 GB 以上生成される場合があります。デバッグや開発時のみ有効にしてください。
+    .hint = イベントは 1 日あたり 5 GB 以上生成される場合があります。デバッグや開発時のみ有効にしてください。
 config-events-record-api = API イベントを記録
     .hint = 外部 API のイベント（{ -dexscreener }、{ -geckoterminal }、{ -jupiter } API など）を記録します
 config-events-record-connectivity = 接続イベントを記録

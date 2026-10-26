@@ -294,5 +294,5 @@ events-dialog-export-line = { $label }: { $value }
 events-empty = Nenhum evento ainda
     .message = Inícios de serviços, trades e avisos são registrados aqui conforme acontecem.
 events-recording-off = O registro de eventos está desligado
-    .message = Ative o sistema de eventos na configuração e reinicie o { -brand } para registrar aqui inícios de serviços, trades e avisos.
+    .message = O registro de eventos é uma ferramenta de diagnóstico. Ele grava uma grande quantidade de dados no disco, por isso fica desativado no uso normal.
 events-recording-off-action = Abrir configurações de eventos

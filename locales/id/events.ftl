@@ -280,5 +280,5 @@ events-dialog-export-line = { $label }: { $value }
 events-empty = Belum ada peristiwa
     .message = Layanan yang dimulai, trade, dan peringatan dicatat di sini saat terjadi.
 events-recording-off = Pencatatan peristiwa nonaktif
-    .message = Aktifkan sistem peristiwa di konfigurasi lalu mulai ulang { -brand } untuk mencatat layanan yang dimulai, trade, dan peringatan di sini.
+    .message = Perekaman peristiwa adalah alat diagnostik. Fitur ini menulis banyak data ke disk, jadi tetap nonaktif dalam penggunaan normal.
 events-recording-off-action = Buka pengaturan peristiwa

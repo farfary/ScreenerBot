@@ -196,7 +196,7 @@ config-copy-trading-paper-queue-capacity = سعة الطابور التجريب�
 ## events
 
 config-events-enabled = تفعيل نظام الأحداث
-    .hint = تحذير: قد تولّد الأحداث أكثر من 5 GB يوميًا. فعّله فقط للتصحيح/التطوير.
+    .hint = قد تولّد الأحداث أكثر من 5 GB يوميًا. فعّله فقط للتصحيح/التطوير.
 config-events-record-api = تسجيل أحداث API
     .hint = تسجيل أحداث واجهات API الخارجية ({ -dexscreener } و{ -geckoterminal } و{ -jupiter } API وغيرها)
 config-events-record-connectivity = تسجيل أحداث الاتصال

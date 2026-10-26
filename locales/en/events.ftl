@@ -294,5 +294,5 @@ events-dialog-export-line = { $label }: { $value }
 events-empty = No events yet
     .message = Service starts, trades and warnings are recorded here as they happen.
 events-recording-off = Event recording is off
-    .message = Turn on the events system in the configuration and restart { -brand } to record service starts, trades and warnings here.
+    .message = Event recording is a diagnostic tool. It writes a large amount of data to disk, so it stays off in normal use.
 events-recording-off-action = Open events settings

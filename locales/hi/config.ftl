@@ -186,7 +186,7 @@ config-chains-show-preview = प्रीव्यू ब्लॉकचेन
 config-chains-solana = Solana
 
 config-events-enabled = इवेंट सिस्टम चालू करें
-    .hint = चेतावनी: इवेंट रोज़ 5+ GB डेटा बना सकते हैं। केवल डीबगिंग/डेवलपमेंट के लिए चालू करें।
+    .hint = इवेंट रोज़ 5+ GB डेटा बना सकते हैं। केवल डीबगिंग/डेवलपमेंट के लिए चालू करें।
 config-events-record-api = API इवेंट रिकॉर्ड करें
     .hint = बाहरी API इवेंट रिकॉर्ड करें ({ -dexscreener }, { -geckoterminal }, { -jupiter } API आदि)
 config-events-record-connectivity = कनेक्टिविटी इवेंट रिकॉर्ड करें

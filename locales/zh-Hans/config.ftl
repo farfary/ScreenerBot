@@ -196,7 +196,7 @@ config-copy-trading-paper-queue-capacity = 模拟队列容量
 ## events
 
 config-events-enabled = 启用事件系统
-    .hint = 警告：事件每天可能产生 5 GB 以上的数据。仅在调试/开发时启用。
+    .hint = 事件每天可能产生 5 GB 以上的数据。仅在调试/开发时启用。
 config-events-record-api = 记录 API 事件
     .hint = 记录外部 API 事件（{ -dexscreener }、{ -geckoterminal }、{ -jupiter } API 等）
 config-events-record-connectivity = 记录连接事件

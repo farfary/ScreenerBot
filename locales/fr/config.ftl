@@ -199,7 +199,7 @@ config-copy-trading-paper-queue-capacity = Capacité de la file simulée
 ## events
 
 config-events-enabled = Activer le système d'événements
-    .hint = ATTENTION : les événements peuvent générer plus de 5 Go par jour. À activer uniquement pour le débogage ou le développement.
+    .hint = Les événements peuvent générer plus de 5 Go par jour. À activer uniquement pour le débogage ou le développement.
 config-events-record-api = Enregistrer les événements API
     .hint = Enregistre les événements des API externes ({ -dexscreener }, { -geckoterminal }, API { -jupiter }, etc.)
 config-events-record-connectivity = Enregistrer les événements de connectivité

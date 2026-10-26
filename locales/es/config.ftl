@@ -196,7 +196,7 @@ config-copy-trading-paper-queue-capacity = Capacidad de la cola simulada
 ## events
 
 config-events-enabled = Activar sistema de eventos
-    .hint = ADVERTENCIA: los eventos pueden generar más de 5 GB al día. Actívalo solo para depuración o desarrollo.
+    .hint = Los eventos pueden generar más de 5 GB al día. Actívalo solo para depuración o desarrollo.
 config-events-record-api = Registrar eventos de API
     .hint = Registra eventos de API externas ({ -dexscreener }, { -geckoterminal }, API de { -jupiter }, etc.)
 config-events-record-connectivity = Registrar eventos de conectividad

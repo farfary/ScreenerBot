@@ -196,7 +196,7 @@ config-copy-trading-paper-queue-capacity = Sanal Kuyruk Kapasitesi
 ## events
 
 config-events-enabled = Olay Sistemini Etkinleştir
-    .hint = UYARI: Olaylar günde 5+ GB üretebilir. Yalnızca hata ayıklama/geliştirme için etkinleştirin.
+    .hint = Olaylar günde 5+ GB üretebilir. Yalnızca hata ayıklama/geliştirme için etkinleştirin.
 config-events-record-api = API Olaylarını Kaydet
     .hint = Harici API olaylarını kaydedin ({ -dexscreener }, { -geckoterminal }, { -jupiter } API vb.)
 config-events-record-connectivity = Bağlantı Olaylarını Kaydet

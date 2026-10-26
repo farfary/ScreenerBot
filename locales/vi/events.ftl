@@ -277,5 +277,5 @@ events-dialog-export-line = { $label }: { $value }
 events-empty = Chưa có sự kiện
     .message = Các lần khởi động dịch vụ, giao dịch và cảnh báo được ghi lại tại đây khi chúng xảy ra.
 events-recording-off = Ghi sự kiện đang tắt
-    .message = Bật hệ thống sự kiện trong cấu hình và khởi động lại { -brand } để ghi lại các lần khởi động dịch vụ, giao dịch và cảnh báo tại đây.
+    .message = Ghi sự kiện là công cụ chẩn đoán. Tính năng này ghi rất nhiều dữ liệu xuống ổ đĩa nên được tắt khi sử dụng thông thường.
 events-recording-off-action = Mở cài đặt sự kiện

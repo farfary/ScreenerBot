@@ -196,7 +196,7 @@ config-copy-trading-paper-queue-capacity = Ёмкость очереди вир�
 ## events
 
 config-events-enabled = Включить систему событий
-    .hint = ВНИМАНИЕ: события могут занимать более 5 ГБ в день. Включайте только для отладки и разработки.
+    .hint = События могут занимать более 5 ГБ в день. Включайте только для отладки и разработки.
 config-events-record-api = Записывать события API
     .hint = Записывать события внешних API ({ -dexscreener }, { -geckoterminal }, { -jupiter } API и др.)
 config-events-record-connectivity = Записывать события соединений

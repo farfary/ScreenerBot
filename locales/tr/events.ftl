@@ -277,5 +277,5 @@ events-dialog-export-line = { $label }: { $value }
 events-empty = Henüz olay yok
     .message = Servis başlatmaları, işlemler ve uyarılar gerçekleştikçe burada kaydedilir.
 events-recording-off = Olay kaydı kapalı
-    .message = Servis başlatmalarını, işlemleri ve uyarıları burada kaydetmek için yapılandırmada olay sistemini açın ve { -brand } uygulamasını yeniden başlatın.
+    .message = Olay kaydı bir tanılama aracıdır. Diske büyük miktarda veri yazdığı için normal kullanımda kapalı kalır.
 events-recording-off-action = Olay ayarlarını aç

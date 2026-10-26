@@ -199,7 +199,7 @@ config-copy-trading-paper-queue-capacity = Paper Queue Capacity
 ## events
 
 config-events-enabled = Enable Events System
-    .hint = WARNING: Events can generate 5+ GB/day. Only enable for debugging/development.
+    .hint = Events can generate 5+ GB/day. Only enable for debugging/development.
 config-events-record-api = Record API Events
     .hint = Record external API events ({ -dexscreener }, { -geckoterminal }, { -jupiter } API, etc.)
 config-events-record-connectivity = Record Connectivity Events
