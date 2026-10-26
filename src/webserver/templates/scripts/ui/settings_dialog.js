@@ -9,7 +9,6 @@
 import * as Utils from "../core/utils.js";
 import { createFocusTrap } from "../core/utils.js";
 import { pushEscapeHandler } from "../core/escape_stack.js";
-import { getCurrentPage } from "../core/router.js";
 import { apiErrorMessage } from "../core/request_manager.js";
 import { setInterval as setPollingInterval } from "../core/poller.js";
 import { enhanceAllSelects } from "./custom_select.js";
@@ -35,7 +34,6 @@ import {
   buildNavigationTab,
   attachNavigationHandlers,
   startupPageOptions,
-  tabLabel,
 } from "./settings/navigation_tab.js";
 import { buildLicensesTab, attachLicensesHandlers } from "./settings/licenses_tab.js";
 import { loadTelegramTab } from "./settings/telegram_tab.js";
@@ -51,6 +49,24 @@ import {
 let updateNeedsAttention = false;
 let lastSurfacedUpdateKey = null;
 const GUI_DRAFT_TABS = new Set(["interface", "navigation", "startup"]);
+
+/** A main tab for `tab`, cloned from a server-rendered one with its identity rewritten. */
+function cloneNavTab(template, tab) {
+  const node = template.cloneNode(true);
+  node.setAttribute("href", `/${tab.id}`);
+  node.id = `nav-tab-${tab.id}`;
+  node.dataset.page = tab.id;
+  node.hidden = false;
+  node.classList.remove("active");
+  node.removeAttribute("aria-current");
+  const icon = node.querySelector("i");
+  if (icon) icon.className = tab.icon;
+  const label = node.querySelector("span[data-l10n-id]");
+  label.textContent = "";
+  label.setAttribute("data-l10n-id", `nav-${tab.id}`); // l10n-dynamic: nav-
+  I18n.localizeTree(node);
+  return node;
+}
 
 export class SettingsDialog {
   constructor(options = {}) {
@@ -394,7 +410,11 @@ export class SettingsDialog {
   }
 
   /**
-   * Apply navigation settings immediately (update nav bar without page reload)
+   * Apply navigation settings without a reload. The server renders the main tabs; this
+   * reorders, removes and adds the rendered `a.tab` nodes by `data-page` and never writes
+   * tab markup, so every tab keeps its real URL, id, localized label and the router's
+   * current mark (`.active`, `aria-current`). A newly enabled tab is a clone of a rendered
+   * one; with none to clone, the page reloads.
    */
   _applyNavigationSettings() {
     const navContainer = document.getElementById("navTabs");
@@ -404,19 +424,23 @@ export class SettingsDialog {
 
     const tabs = this.settings?.dashboard?.navigation?.tabs || [];
     const enabledTabs = tabs.filter((t) => t.enabled).sort((a, b) => a.order - b.order);
+    const rendered = new Map(
+      [...navContainer.querySelectorAll(":scope > a.tab")].map((tab) => [tab.dataset.page, tab])
+    );
+    const template = rendered.values().next().value;
+    if (!template) {
+      window.location.reload();
+      return;
+    }
 
-    // Get current active page from router
-    const currentPage = getCurrentPage() || "home";
-
-    // Rebuild navigation HTML
-    const tabsHTML = enabledTabs
-      .map((tab) => {
-        const activeClass = tab.id === currentPage ? " active" : "";
-        return `<a href="#" data-page="${tab.id}" class="tab${activeClass}"><i class="${tab.icon}"></i> <span>${Utils.escapeHtml(tabLabel(tab.id))}</span></a>`;
-      })
-      .join("\n        ");
-
-    navContainer.innerHTML = tabsHTML;
+    // The More control and the travelling indicator stay after the tabs.
+    const anchor = navContainer.querySelector(":scope > :not(a.tab)");
+    for (const tab of enabledTabs) {
+      const node = rendered.get(tab.id) ?? cloneNavTab(template, tab);
+      rendered.delete(tab.id);
+      navContainer.insertBefore(node, anchor);
+    }
+    rendered.forEach((tab) => tab.remove());
   }
 
   /**

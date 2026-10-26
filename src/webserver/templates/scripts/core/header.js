@@ -474,8 +474,8 @@ function navRowEntries(navTabs) {
  * once this runs. If the script never executes, each tab still marks itself.
  *
  * We observe `#navTabs` rather than hooking the router, because two unrelated things
- * change the active tab: the router (toggling `.active`) and the settings dialog
- * (rebuilding the whole nav's innerHTML, which would otherwise throw the bar away).
+ * change the row: the router (toggling `.active`) and the settings dialog (reordering,
+ * adding and removing tabs).
  */
 function initNavTabsIndicator() {
   const navTabs = document.getElementById("navTabs");
@@ -502,8 +502,7 @@ function initNavTabsIndicator() {
       return;
     }
 
-    // The glow spans the tab's FULL width (its own ends are faded by a mask in CSS), so
-    // it is measured edge to edge — no inset.
+    // The bar spans the tab's FULL width, so it is measured edge to edge — no inset.
     // Measured against the row rather than `offsetLeft`: the More control's toggle sits
     // inside its own wrapper.
     const row = navTabs.getBoundingClientRect();
@@ -526,7 +525,7 @@ function initNavTabsIndicator() {
     }
   };
 
-  // The router toggles `.active`; the settings dialog replaces the tabs wholesale.
+  // The router toggles `.active`; the settings dialog reorders, adds and removes tabs.
   // Mutations we caused ourselves (the bar's own classes, the bar being appended) are
   // ignored, or `update()` would re-trigger the observer that called it.
   const observer = new MutationObserver((records) => {

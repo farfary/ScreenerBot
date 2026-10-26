@@ -148,11 +148,18 @@ function defaultTabs() {
 export const TABS = defaultTabs();
 export const PAGE_IDS = TABS.map((tab) => tab.id);
 
+/**
+ * One main navigation tab, the shape `nav_tab_html` in `src/webserver/templates.rs`
+ * renders. Both are pinned to `tools/tests/fixtures/dashboard/shell/nav_tab.html`.
+ */
+export function navTabHtml(id, icon, label, active) {
+  return `<a href="/${id}" id="nav-tab-${id}" data-page="${id}" class="tab${active ? " active" : ""}"${active ? ' aria-current="page"' : ""}><i class="${icon}" aria-hidden="true"></i> <span data-l10n-id="nav-${label}"></span></a>`;
+}
+
 function navTabs(active) {
-  return TABS.map((tab) => {
-    const current = tab.id === active;
-    return `<a href="/${tab.id}" data-page="${tab.id}" class="tab${current ? " active" : ""}"${current ? ' aria-current="page"' : ""}><i class="${tab.icon}"></i> <span data-l10n-id="nav-${tab.id}"></span></a>`;
-  }).join("\n        ");
+  return TABS.map((tab) => navTabHtml(tab.id, tab.icon, tab.id, tab.id === active)).join(
+    "\n        "
+  );
 }
 
 /** The fragment `/api/pages/{page}` returns: `templates::<page>_content()`. */

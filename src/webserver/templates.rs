@@ -287,6 +287,21 @@ pub fn base_template(active_tab: &str, content: &str, locale: &LanguageIdentifie
     crate::i18n::localize_html(&html, locale)
 }
 
+/// One main navigation tab: the single shape of a `#navTabs` entry. The glyph is kept
+/// for the More list and hidden from assistive technology; `aria-current` marks the
+/// current page. `label` names the tab's `nav-*` message.
+fn nav_tab_html(id: &str, icon: &str, label: &str, active: bool) -> String {
+    let (active_class, aria_current) = if active {
+        (" active", " aria-current=\"page\"")
+    } else {
+        ("", "")
+    };
+    // Real hrefs preserve expected link behavior; data-page keeps SPA routing fast.
+    format!(
+        "<a href=\"/{id}\" id=\"nav-tab-{id}\" data-page=\"{id}\" class=\"tab{active_class}\"{aria_current}><i class=\"{icon}\" aria-hidden=\"true\"></i> <span data-l10n-id=\"nav-{label}\"></span></a>"
+    )
+}
+
 fn nav_tabs(active: &str) -> String {
     use crate::config;
     use crate::global;
@@ -296,19 +311,11 @@ fn nav_tabs(active: &str) -> String {
     // full configured navigation (token/filtering pages work without a wallet).
     if !global::is_initialization_complete() && !global::is_explore_mode() {
         // Only show initialization tab during setup
-        let active_class = if active == "initialization" {
-            " active"
-        } else {
-            ""
-        };
-        let aria_current = if active == "initialization" {
-            " aria-current=\"page\""
-        } else {
-            ""
-        };
-        return format!(
-            "<a href=\"/initialization\" data-page=\"initialization\" class=\"tab{}\"{}><i class=\"icon-settings\"></i> <span data-l10n-id=\"nav-setup\"></span></a>",
-            active_class, aria_current
+        return nav_tab_html(
+            "initialization",
+            "icon-settings",
+            "setup",
+            active == "initialization",
         );
     }
 
@@ -318,19 +325,7 @@ fn nav_tabs(active: &str) -> String {
     tabs.sort_by_key(|t| t.order);
 
     tabs.iter()
-        .map(|tab| {
-            let active_class = if tab.id == active { " active" } else { "" };
-            let aria_current = if tab.id == active {
-                " aria-current=\"page\""
-            } else {
-                ""
-            };
-            // Real hrefs preserve expected link behavior; data-page keeps SPA routing fast.
-            format!(
-                "<a href=\"/{}\" data-page=\"{}\" class=\"tab{}\"{}><i class=\"{}\"></i> <span data-l10n-id=\"nav-{}\"></span></a>",
-                tab.id, tab.id, active_class, aria_current, tab.icon, tab.id
-            )
-        })
+        .map(|tab| nav_tab_html(&tab.id, &tab.icon, &tab.id, tab.id == active))
         .collect::<Vec<_>>()
         .join("\n        ")
 }
@@ -452,7 +447,7 @@ pub fn login_template(content: &str, locale: &LanguageIdentifier) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::page_styles;
+    use super::{nav_tab_html, page_styles};
     use crate::config::schemas::default_tabs;
     use crate::i18n::format_message;
 
@@ -481,6 +476,17 @@ mod tests {
             );
         }
         assert!(page_styles("unknown-page").is_none());
+    }
+
+    /// The server is the one source of the nav-tab shape: the dashboard test host renders
+    /// the same golden file, and the settings dialog clones the rendered tabs.
+    #[test]
+    fn nav_tab_matches_the_shared_golden_shape() {
+        let golden = include_str!("../../tools/tests/fixtures/dashboard/shell/nav_tab.html");
+        assert_eq!(
+            nav_tab_html("tokens", "icon-coins", "tokens", true),
+            golden.trim_end()
+        );
     }
 
     fn english() -> crate::i18n::LanguageIdentifier {
