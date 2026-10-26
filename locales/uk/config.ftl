@@ -1122,21 +1122,21 @@ config-trader-slippage-quote-default-pct = Проковзування за за�
 config-trader-stop-loss-allow-partial = Дозволити частковий вихід
     .hint = Дозволити часткові виходи для стоп-лосу замість повного закриття позиції
 config-trader-stop-loss-enabled = Увімкнути стоп-лос
-    .hint = Увімкнути автоматичний вихід, коли збиток перевищує поріг (виходить негайно, на відміну від правила часу)
+    .hint = Увімкнути автоматичний вихід, коли збиток перевищує поріг (виходить негайно, на відміну від виходу за часом)
 config-trader-stop-loss-min-hold-seconds = Мін. час утримання
     .hint = Мінімум секунд утримання, до яких стоп-лос не може спрацювати (0 = негайно)
     .unit = с
 config-trader-stop-loss-threshold-pct = Поріг стоп-лосу,
     .hint = Вихід, коли збиток перевищує цей % (50 = вихід за -50%)
     .unit = %
-config-trader-time-override-duration = Тривалість правила часу
+config-trader-time-override-duration = Тривалість виходу за часом
     .hint = Скільки позиція утримується, перш ніж вихід за часом перевірить її збиток; якщо збиток досяг порогу, позиція закривається
-config-trader-time-override-enabled = Увімкнути правило часу
+config-trader-time-override-enabled = Увімкнути вихід за часом
     .hint = Увімкнути автоматичний вихід для позицій, що надто довго утримуються зі збитком
-config-trader-time-override-loss-threshold-percent = Збиток для правила часу,
-    .hint = Збиток у %, що запускає правило часу (-40 = вихід, якщо падіння 40%)
+config-trader-time-override-loss-threshold-percent = Збиток для виходу за часом
+    .hint = Збиток у %, що запускає вихід за часом (-40 = вихід, якщо падіння 40%)
     .unit = %
-config-trader-time-override-unit = Одиниця правила часу
+config-trader-time-override-unit = Одиниця виходу за часом
     .hint = Одиниця часу: seconds, minutes, hours, days
 config-trader-trade-size-sol = Розмір угоди
     .hint = SOL на позицію
@@ -1345,7 +1345,7 @@ config-category-statistics = Статистика
 config-category-stop-loss = Стоп-лос
 config-category-symbol-analysis = Аналіз символів
 config-category-thresholds = Пороги
-config-category-time-override = Правило часу
+config-category-time-override = Вихід за часом
 config-category-timeouts = Тайм-аути
 config-category-timing = Часові параметри
 config-category-token-info = Інформація про токен

@@ -1122,21 +1122,21 @@ config-trader-slippage-quote-default-pct = 기본 슬리피지
 config-trader-stop-loss-allow-partial = 부분 청산 허용
     .hint = 손절 시 전량 종료 대신 부분 청산을 허용합니다
 config-trader-stop-loss-enabled = 손절 사용
-    .hint = 손실이 기준을 넘으면 자동으로 청산합니다 (시간 오버라이드와 달리 즉시 청산)
+    .hint = 손실이 기준을 넘으면 자동으로 청산합니다 (시간 청산과 달리 즉시 청산)
 config-trader-stop-loss-min-hold-seconds = 최소 보유 시간
     .hint = 손절이 작동하기 전까지 보유해야 하는 최소 시간(초) (0 = 즉시)
     .unit = 초
 config-trader-stop-loss-threshold-pct = 손절 기준
     .hint = 손실이 이 비율(%)을 넘으면 청산합니다 (50 = -50%에서 청산)
     .unit = %
-config-trader-time-override-duration = 시간 오버라이드 기간
+config-trader-time-override-duration = 시간 청산 기간
     .hint = 시간 청산이 손실을 확인하기 전까지 포지션을 보유하는 시간입니다. 손실이 임계값에 도달했으면 청산합니다
-config-trader-time-override-enabled = 시간 오버라이드 사용
+config-trader-time-override-enabled = 시간 청산 사용
     .hint = 손실 상태로 너무 오래 보유한 포지션을 자동으로 청산합니다
-config-trader-time-override-loss-threshold-percent = 시간 오버라이드 손실
-    .hint = 시간 오버라이드를 작동시키는 손실률(%) (-40 = 40% 하락 시 청산)
+config-trader-time-override-loss-threshold-percent = 시간 청산 손실
+    .hint = 시간 청산을 작동시키는 손실률(%) (-40 = 40% 하락 시 청산)
     .unit = %
-config-trader-time-override-unit = 시간 오버라이드 단위
+config-trader-time-override-unit = 시간 청산 단위
     .hint = 시간 단위: seconds, minutes, hours, days
 config-trader-trade-size-sol = 거래 규모
     .hint = 포지션당 SOL
@@ -1345,7 +1345,7 @@ config-category-statistics = 통계
 config-category-stop-loss = 손절
 config-category-symbol-analysis = 심볼 분석
 config-category-thresholds = 기준값
-config-category-time-override = 시간 오버라이드
+config-category-time-override = 시간 청산
 config-category-timeouts = 제한 시간
 config-category-timing = 타이밍
 config-category-token-info = 토큰 정보

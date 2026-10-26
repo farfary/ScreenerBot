@@ -1122,21 +1122,21 @@ config-trader-slippage-quote-default-pct = Slippage Default
 config-trader-stop-loss-allow-partial = Izinkan Exit Parsial
     .hint = Izinkan exit parsial untuk stop loss alih-alih menutup seluruh posisi
 config-trader-stop-loss-enabled = Aktifkan Stop Loss
-    .hint = Aktifkan exit otomatis saat kerugian melebihi ambang (exit seketika, tidak seperti time override)
+    .hint = Aktifkan exit otomatis saat kerugian melebihi ambang (exit seketika, tidak seperti exit waktu)
 config-trader-stop-loss-min-hold-seconds = Min Durasi Hold
     .hint = Detik minimum untuk menahan sebelum stop loss dapat terpicu (0 = seketika)
     .unit = dtk
 config-trader-stop-loss-threshold-pct = Ambang Stop Loss
     .hint = Exit saat kerugian melebihi % ini (50 = exit pada -50%)
     .unit = %
-config-trader-time-override-duration = Durasi Time Override
+config-trader-time-override-duration = Durasi Exit Waktu
     .hint = Berapa lama posisi ditahan sebelum exit waktu memeriksa kerugiannya; posisi ditutup jika kerugian sudah mencapai ambang
-config-trader-time-override-enabled = Aktifkan Time Override
+config-trader-time-override-enabled = Aktifkan Exit Waktu
     .hint = Aktifkan exit otomatis untuk posisi yang ditahan terlalu lama dalam keadaan rugi
-config-trader-time-override-loss-threshold-percent = Rugi Time Override
-    .hint = Rugi % yang memicu time override (-40 = exit jika turun 40%)
+config-trader-time-override-loss-threshold-percent = Rugi Exit Waktu
+    .hint = Rugi % yang memicu exit waktu (-40 = exit jika turun 40%)
     .unit = %
-config-trader-time-override-unit = Satuan Time Override
+config-trader-time-override-unit = Satuan Exit Waktu
     .hint = Satuan waktu: seconds, minutes, hours, days
 config-trader-trade-size-sol = Ukuran Trade
     .hint = SOL per posisi
@@ -1345,7 +1345,7 @@ config-category-statistics = Statistik
 config-category-stop-loss = Stop Loss
 config-category-symbol-analysis = Analisis Simbol
 config-category-thresholds = Ambang
-config-category-time-override = Time Override
+config-category-time-override = Exit Waktu
 config-category-timeouts = Batas Waktu
 config-category-timing = Pewaktuan
 config-category-token-info = Info Token

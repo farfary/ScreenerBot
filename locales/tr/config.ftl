@@ -1122,21 +1122,21 @@ config-trader-slippage-quote-default-pct = Varsayılan Kayma
 config-trader-stop-loss-allow-partial = Kısmi Çıkışa İzin Ver
     .hint = Zarar durdur için tam pozisyon kapatma yerine kısmi çıkışlara izin verin
 config-trader-stop-loss-enabled = Zarar Durdur'u Etkinleştir
-    .hint = Zarar eşiği aşıldığında otomatik çıkışı etkinleştirin (süre geçersiz kılmanın aksine hemen çıkar)
+    .hint = Zarar eşiği aşıldığında otomatik çıkışı etkinleştirin (zaman çıkışının aksine hemen çıkar)
 config-trader-stop-loss-min-hold-seconds = Min. Tutma Süresi
     .hint = Zarar durdurun tetiklenebilmesi için tutulacak minimum saniye (0 = anında)
     .unit = sn
 config-trader-stop-loss-threshold-pct = Zarar Durdur Eşiği
     .hint = Zarar bu %'yi aştığında çıkın (50 = -%50'de çık)
     .unit = %
-config-trader-time-override-duration = Süre Geçersiz Kılma Süresi
+config-trader-time-override-duration = Zaman Çıkışı Süresi
     .hint = Zaman çıkışı zararı kontrol etmeden önce pozisyonun ne kadar tutulacağı; zarar eşiğe ulaştıysa pozisyon kapatılır
-config-trader-time-override-enabled = Süre Geçersiz Kılmayı Etkinleştir
+config-trader-time-override-enabled = Zaman Çıkışını Etkinleştir
     .hint = Zararda çok uzun süre tutulan pozisyonlar için otomatik çıkışı etkinleştirin
-config-trader-time-override-loss-threshold-percent = Süre Geçersiz Kılma Zarar
-    .hint = Süre geçersiz kılmayı tetikleyecek zarar % (-40 = %40 düştüyse çık)
+config-trader-time-override-loss-threshold-percent = Zaman Çıkışı Zararı
+    .hint = Zaman çıkışını tetikleyecek zarar % (-40 = %40 düştüyse çık)
     .unit = %
-config-trader-time-override-unit = Süre Geçersiz Kılma Birimi
+config-trader-time-override-unit = Zaman Çıkışı Birimi
     .hint = Zaman birimi: seconds, minutes, hours, days
 config-trader-trade-size-sol = İşlem Boyutu
     .hint = Pozisyon başına SOL
@@ -1345,7 +1345,7 @@ config-category-statistics = İstatistikler
 config-category-stop-loss = Zarar Durdur
 config-category-symbol-analysis = Sembol Analizi
 config-category-thresholds = Eşikler
-config-category-time-override = Süre Geçersiz Kılma
+config-category-time-override = Zaman Çıkışı
 config-category-timeouts = Zaman Aşımları
 config-category-timing = Zamanlama
 config-category-token-info = Token Bilgisi

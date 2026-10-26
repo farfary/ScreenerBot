@@ -1116,21 +1116,21 @@ config-trader-slippage-quote-default-pct = الانزلاق السعري الا�
 config-trader-stop-loss-allow-partial = السماح بالخروج الجزئي
     .hint = السماح بالخروج الجزئي عند وقف الخسارة بدلًا من إغلاق المركز كاملًا
 config-trader-stop-loss-enabled = تفعيل وقف الخسارة
-    .hint = تفعيل الخروج التلقائي عندما تتجاوز الخسارة الحد (يخرج فورًا، بخلاف تجاوز الوقت)
+    .hint = تفعيل الخروج التلقائي عندما تتجاوز الخسارة الحد (يخرج فورًا، بخلاف الخروج الزمني)
 config-trader-stop-loss-min-hold-seconds = أدنى مدة احتفاظ
     .hint = أدنى عدد من الثواني للاحتفاظ قبل أن يُطلق وقف الخسارة (0 = فورًا)
     .unit = ثانية
 config-trader-stop-loss-threshold-pct = حد وقف الخسارة
     .hint = الخروج عندما تتجاوز الخسارة هذه النسبة (50 = الخروج عند -50%)
     .unit = %
-config-trader-time-override-duration = مدة تجاوز الوقت
+config-trader-time-override-duration = مدة الخروج الزمني
     .hint = المدة التي يُحتفظ فيها بالمركز قبل أن يفحص الخروج الزمني خسارته؛ يخرج إذا بلغت الخسارة الحد
-config-trader-time-override-enabled = تفعيل تجاوز الوقت
+config-trader-time-override-enabled = تفعيل الخروج الزمني
     .hint = تفعيل الخروج التلقائي للمراكز التي احتُفظ بها طويلًا بخسارة
-config-trader-time-override-loss-threshold-percent = خسارة تجاوز الوقت
-    .hint = نسبة الخسارة التي تُطلق تجاوز الوقت (-40 = الخروج إذا هبط 40%)
+config-trader-time-override-loss-threshold-percent = خسارة الخروج الزمني
+    .hint = نسبة الخسارة التي تُطلق الخروج الزمني (-40 = الخروج إذا هبط 40%)
     .unit = %
-config-trader-time-override-unit = وحدة تجاوز الوقت
+config-trader-time-override-unit = وحدة الخروج الزمني
     .hint = وحدة الوقت: seconds أو minutes أو hours أو days
 config-trader-trade-size-sol = حجم الصفقة
     .hint = مقدار { -sol } لكل مركز
@@ -1339,7 +1339,7 @@ config-category-statistics = الإحصاءات
 config-category-stop-loss = وقف الخسارة
 config-category-symbol-analysis = تحليل الرمز الاختصاري
 config-category-thresholds = الحدود الفاصلة
-config-category-time-override = تجاوز الوقت
+config-category-time-override = الخروج الزمني
 config-category-timeouts = المهل
 config-category-timing = التوقيت
 config-category-token-info = معلومات الرمز

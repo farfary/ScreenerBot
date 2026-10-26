@@ -1074,21 +1074,21 @@ config-trader-slippage-quote-default-pct = Trượt giá mặc định
 config-trader-stop-loss-allow-partial = Cho phép thoát một phần
     .hint = Cho phép thoát một phần khi stop loss thay vì đóng toàn bộ vị thế
 config-trader-stop-loss-enabled = Bật stop loss
-    .hint = Bật tự động thoát khi mức lỗ vượt ngưỡng (thoát ngay lập tức, không như ghi đè theo thời gian)
+    .hint = Bật tự động thoát khi mức lỗ vượt ngưỡng (thoát ngay lập tức, không như thoát theo thời gian)
 config-trader-stop-loss-min-hold-seconds = Thời gian nắm giữ tối thiểu
     .hint = Số giây tối thiểu phải nắm giữ trước khi stop loss có thể kích hoạt (0 = ngay lập tức)
     .unit = giây
 config-trader-stop-loss-threshold-pct = Ngưỡng stop loss
     .hint = Thoát khi mức lỗ vượt % này (50 = thoát ở -50%)
     .unit = %
-config-trader-time-override-duration = Thời lượng ghi đè theo thời gian
+config-trader-time-override-duration = Thời lượng thoát theo thời gian
     .hint = Thời gian giữ vị thế trước khi thoát theo thời gian kiểm tra khoản lỗ; vị thế được đóng nếu khoản lỗ đã chạm ngưỡng
-config-trader-time-override-enabled = Bật ghi đè theo thời gian
+config-trader-time-override-enabled = Bật thoát theo thời gian
     .hint = Bật tự động thoát cho các vị thế nắm giữ quá lâu khi đang lỗ
-config-trader-time-override-loss-threshold-percent = Mức lỗ ghi đè theo thời gian
-    .hint = Mức lỗ % để kích hoạt ghi đè theo thời gian (-40 = thoát nếu giảm 40%)
+config-trader-time-override-loss-threshold-percent = Mức lỗ thoát theo thời gian
+    .hint = Mức lỗ % để kích hoạt thoát theo thời gian (-40 = thoát nếu giảm 40%)
     .unit = %
-config-trader-time-override-unit = Đơn vị ghi đè theo thời gian
+config-trader-time-override-unit = Đơn vị thoát theo thời gian
     .hint = Đơn vị thời gian: seconds, minutes, hours, days
 config-trader-trade-size-sol = Quy mô giao dịch
     .hint = SOL cho mỗi vị thế
@@ -1287,7 +1287,7 @@ config-category-statistics = Thống kê
 config-category-stop-loss = Stop loss
 config-category-symbol-analysis = Phân tích ký hiệu
 config-category-thresholds = Ngưỡng
-config-category-time-override = Ghi đè theo thời gian
+config-category-time-override = Thoát theo thời gian
 config-category-timeouts = Thời gian chờ
 config-category-timing = Thời điểm
 config-category-token-info = Thông tin token

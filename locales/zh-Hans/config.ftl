@@ -1122,21 +1122,21 @@ config-trader-slippage-quote-default-pct = 默认滑点
 config-trader-stop-loss-allow-partial = 允许部分出场
     .hint = 止损时允许部分出场，而不是整个仓位平仓
 config-trader-stop-loss-enabled = 启用止损
-    .hint = 亏损超过阈值时自动出场（立即出场，与时间覆盖规则不同）
+    .hint = 亏损超过阈值时自动出场（立即出场，与时间出场不同）
 config-trader-stop-loss-min-hold-seconds = 最短持仓时间
     .hint = 止损可触发前至少持仓的秒数（0 = 立即）
     .unit = 秒
 config-trader-stop-loss-threshold-pct = 止损阈值
     .hint = 亏损超过此 % 时出场（50 = 在 -50% 时出场）
     .unit = %
-config-trader-time-override-duration = 时间覆盖时长
+config-trader-time-override-duration = 时间出场时长
     .hint = 时间出场检查亏损前持有仓位的时长；若亏损已达到阈值即平仓
-config-trader-time-override-enabled = 启用时间覆盖
+config-trader-time-override-enabled = 启用时间出场
     .hint = 对亏损状态下持仓过久的仓位自动出场
-config-trader-time-override-loss-threshold-percent = 时间覆盖亏损
-    .hint = 触发时间覆盖的亏损 %（-40 = 下跌 40% 时出场）
+config-trader-time-override-loss-threshold-percent = 时间出场亏损
+    .hint = 触发时间出场的亏损 %（-40 = 下跌 40% 时出场）
     .unit = %
-config-trader-time-override-unit = 时间覆盖单位
+config-trader-time-override-unit = 时间出场单位
     .hint = 时间单位：seconds、minutes、hours、days
 config-trader-trade-size-sol = 交易规模
     .hint = 每个仓位的 SOL 数量
@@ -1345,7 +1345,7 @@ config-category-statistics = 统计
 config-category-stop-loss = 止损
 config-category-symbol-analysis = 符号分析
 config-category-thresholds = 阈值
-config-category-time-override = 时间覆盖
+config-category-time-override = 时间出场
 config-category-timeouts = 超时
 config-category-timing = 时序
 config-category-token-info = 代币信息

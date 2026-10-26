@@ -1125,21 +1125,21 @@ config-trader-slippage-quote-default-pct = Slippage par défaut
 config-trader-stop-loss-allow-partial = Autoriser la sortie partielle
     .hint = Autorise les sorties partielles pour le stop loss au lieu de clôturer toute la position
 config-trader-stop-loss-enabled = Activer le stop loss
-    .hint = Active la sortie automatique lorsque la perte dépasse le seuil (sortie immédiate, contrairement au forçage par durée)
+    .hint = Active la sortie automatique lorsque la perte dépasse le seuil (sortie immédiate, contrairement à la sortie temporelle)
 config-trader-stop-loss-min-hold-seconds = Durée de détention min.
     .hint = Nombre minimal de secondes de détention avant que le stop loss puisse se déclencher (0 = immédiat)
     .unit = s
 config-trader-stop-loss-threshold-pct = Seuil du stop loss
     .hint = Sort lorsque la perte dépasse ce % (50 = sortie à -50 %)
     .unit = %
-config-trader-time-override-duration = Durée du forçage par durée
+config-trader-time-override-duration = Durée de la sortie temporelle
     .hint = Durée de détention d’une position avant que la sortie temporelle vérifie sa perte ; elle est clôturée si la perte a atteint le seuil
-config-trader-time-override-enabled = Activer le forçage par durée
+config-trader-time-override-enabled = Activer la sortie temporelle
     .hint = Active la sortie automatique des positions détenues trop longtemps à perte
-config-trader-time-override-loss-threshold-percent = Perte du forçage par durée
-    .hint = Perte en % déclenchant le forçage par durée (-40 = sortie si la baisse atteint 40 %)
+config-trader-time-override-loss-threshold-percent = Perte de la sortie temporelle
+    .hint = Perte en % déclenchant la sortie temporelle (-40 = sortie si la baisse atteint 40 %)
     .unit = %
-config-trader-time-override-unit = Unité du forçage par durée
+config-trader-time-override-unit = Unité de la sortie temporelle
     .hint = Unité de temps : seconds, minutes, hours, days
 config-trader-trade-size-sol = Taille du trade
     .hint = SOL par position
@@ -1348,7 +1348,7 @@ config-category-statistics = Statistiques
 config-category-stop-loss = Stop loss
 config-category-symbol-analysis = Analyse des symboles
 config-category-thresholds = Seuils
-config-category-time-override = Forçage par durée
+config-category-time-override = Sortie temporelle
 config-category-timeouts = Délais d'expiration
 config-category-timing = Temporisation
 config-category-token-info = Infos du token

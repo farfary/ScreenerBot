@@ -1076,21 +1076,21 @@ config-trader-slippage-quote-default-pct = डिफ़ॉल्ट स्लि
 config-trader-stop-loss-allow-partial = आंशिक एग्ज़िट की अनुमति
     .hint = स्टॉप लॉस पर पूरी पोज़िशन बंद करने के बजाय आंशिक एग्ज़िट की अनुमति दें
 config-trader-stop-loss-enabled = स्टॉप लॉस चालू करें
-    .hint = घाटा सीमा से ऊपर जाने पर अपने आप एग्ज़िट चालू करें (टाइम ओवरराइड के विपरीत, तुरंत एग्ज़िट करता है)
+    .hint = घाटा सीमा से ऊपर जाने पर अपने आप एग्ज़िट चालू करें (समय एग्ज़िट के विपरीत, तुरंत एग्ज़िट करता है)
 config-trader-stop-loss-min-hold-seconds = न्यूनतम होल्ड टाइम
     .hint = स्टॉप लॉस ट्रिगर होने से पहले होल्ड करने के न्यूनतम सेकंड (0 = तुरंत)
     .unit = से
 config-trader-stop-loss-threshold-pct = स्टॉप लॉस सीमा
     .hint = घाटा इस % से ऊपर जाने पर एग्ज़िट करें (50 = -50% पर एग्ज़िट)
     .unit = %
-config-trader-time-override-duration = टाइम ओवरराइड अवधि
+config-trader-time-override-duration = समय एग्ज़िट अवधि
     .hint = समय एग्ज़िट द्वारा नुकसान जाँचने से पहले पोज़िशन कितनी देर होल्ड की जाती है; नुकसान सीमा तक पहुँच गया हो तो एग्ज़िट होता है
-config-trader-time-override-enabled = टाइम ओवरराइड चालू करें
+config-trader-time-override-enabled = समय एग्ज़िट चालू करें
     .hint = घाटे में बहुत देर तक होल्ड की गई पोज़िशन के लिए अपने आप एग्ज़िट चालू करें
-config-trader-time-override-loss-threshold-percent = टाइम ओवरराइड घाटा
-    .hint = टाइम ओवरराइड ट्रिगर करने वाला घाटा % (-40 = 40% गिरने पर एग्ज़िट)
+config-trader-time-override-loss-threshold-percent = समय एग्ज़िट घाटा
+    .hint = समय एग्ज़िट ट्रिगर करने वाला घाटा % (-40 = 40% गिरने पर एग्ज़िट)
     .unit = %
-config-trader-time-override-unit = टाइम ओवरराइड इकाई
+config-trader-time-override-unit = समय एग्ज़िट इकाई
     .hint = समय इकाई: seconds, minutes, hours, days
 config-trader-trade-size-sol = ट्रेड साइज़
     .hint = प्रति पोज़िशन SOL
@@ -1289,7 +1289,7 @@ config-category-statistics = आँकड़े
 config-category-stop-loss = स्टॉप लॉस
 config-category-symbol-analysis = सिंबल विश्लेषण
 config-category-thresholds = सीमाएँ
-config-category-time-override = टाइम ओवरराइड
+config-category-time-override = समय एग्ज़िट
 config-category-timeouts = टाइमआउट
 config-category-timing = टाइमिंग
 config-category-token-info = टोकन जानकारी

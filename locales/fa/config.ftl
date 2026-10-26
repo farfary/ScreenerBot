@@ -1122,21 +1122,21 @@ config-trader-slippage-quote-default-pct = اسلیپیج پیش‌فرض
 config-trader-stop-loss-allow-partial = مجاز بودن خروج جزئی
     .hint = برای حد ضرر، به‌جای بستن کامل پوزیشن، خروج جزئی مجاز است
 config-trader-stop-loss-enabled = فعال‌سازی حد ضرر
-    .hint = وقتی ضرر از آستانه بگذرد خروج خودکار انجام می‌شود (بلافاصله خارج می‌شود، برخلاف بازنویسی زمانی)
+    .hint = وقتی ضرر از آستانه بگذرد خروج خودکار انجام می‌شود (بلافاصله خارج می‌شود، برخلاف خروج زمانی)
 config-trader-stop-loss-min-hold-seconds = حداقل مدت نگهداری
     .hint = حداقل ثانیه‌های نگهداری پیش از آنکه حد ضرر بتواند فعال شود (0 = فوری)
     .unit = ثانیه
 config-trader-stop-loss-threshold-pct = آستانه حد ضرر
     .hint = وقتی ضرر از این درصد بگذرد خروج انجام می‌شود (50 = خروج در -50%)
     .unit = %
-config-trader-time-override-duration = مدت بازنویسی زمانی
+config-trader-time-override-duration = مدت خروج زمانی
     .hint = مدت نگهداری پوزیشن پیش از آنکه خروج زمانی زیان آن را بررسی کند؛ اگر زیان به آستانه رسیده باشد، بسته می‌شود
-config-trader-time-override-enabled = فعال‌سازی بازنویسی زمانی
+config-trader-time-override-enabled = فعال‌سازی خروج زمانی
     .hint = برای پوزیشن‌هایی که مدت زیادی با ضرر نگه داشته شده‌اند خروج خودکار انجام می‌شود
-config-trader-time-override-loss-threshold-percent = ضرر بازنویسی زمانی
-    .hint = درصد ضرر برای فعال‌شدن بازنویسی زمانی (-40 = خروج اگر 40% افت کند)
+config-trader-time-override-loss-threshold-percent = ضرر خروج زمانی
+    .hint = درصد ضرر برای فعال‌شدن خروج زمانی (-40 = خروج اگر 40% افت کند)
     .unit = %
-config-trader-time-override-unit = واحد بازنویسی زمانی
+config-trader-time-override-unit = واحد خروج زمانی
     .hint = واحد زمان: seconds، minutes، hours، days
 config-trader-trade-size-sol = اندازه معامله
     .hint = SOL برای هر پوزیشن
@@ -1345,7 +1345,7 @@ config-category-statistics = آمار
 config-category-stop-loss = حد ضرر
 config-category-symbol-analysis = تحلیل نماد
 config-category-thresholds = آستانه‌ها
-config-category-time-override = بازنویسی زمانی
+config-category-time-override = خروج زمانی
 config-category-timeouts = مهلت‌ها
 config-category-timing = زمان‌بندی
 config-category-token-info = اطلاعات توکن

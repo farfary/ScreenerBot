@@ -1122,21 +1122,21 @@ config-trader-slippage-quote-default-pct = Deslizamiento predeterminado
 config-trader-stop-loss-allow-partial = Permitir salida parcial
     .hint = Permite salidas parciales en el stop loss en lugar de cerrar toda la posición
 config-trader-stop-loss-enabled = Activar stop loss
-    .hint = Activa la salida automática cuando la pérdida supera el umbral (sale de inmediato, a diferencia de la regla de tiempo)
+    .hint = Activa la salida automática cuando la pérdida supera el umbral (sale de inmediato, a diferencia de la salida por tiempo)
 config-trader-stop-loss-min-hold-seconds = Tiempo mínimo de tenencia
     .hint = Segundos mínimos de tenencia antes de que el stop loss pueda activarse (0 = inmediato)
     .unit = s
 config-trader-stop-loss-threshold-pct = Umbral del stop loss
     .hint = Sale cuando la pérdida supera este % (50 = sale con -50 %)
     .unit = %
-config-trader-time-override-duration = Duración de la regla de tiempo
+config-trader-time-override-duration = Duración de la salida por tiempo
     .hint = Cuánto tiempo se mantiene una posición antes de que la salida por tiempo revise su pérdida; se cierra si la pérdida alcanzó el umbral
-config-trader-time-override-enabled = Activar regla de tiempo
+config-trader-time-override-enabled = Activar salida por tiempo
     .hint = Activa la salida automática de posiciones mantenidas demasiado tiempo con pérdidas
-config-trader-time-override-loss-threshold-percent = Pérdida de la regla de tiempo
-    .hint = % de pérdida que activa la regla de tiempo (-40 = sale si cae un 40 %)
+config-trader-time-override-loss-threshold-percent = Pérdida de la salida por tiempo
+    .hint = % de pérdida que activa la salida por tiempo (-40 = sale si cae un 40 %)
     .unit = %
-config-trader-time-override-unit = Unidad de la regla de tiempo
+config-trader-time-override-unit = Unidad de la salida por tiempo
     .hint = Unidad de tiempo: seconds, minutes, hours, days
 config-trader-trade-size-sol = Tamaño de operación
     .hint = SOL por posición
@@ -1345,7 +1345,7 @@ config-category-statistics = Estadísticas
 config-category-stop-loss = Stop loss
 config-category-symbol-analysis = Análisis de símbolos
 config-category-thresholds = Umbrales
-config-category-time-override = Regla de tiempo
+config-category-time-override = Salida por tiempo
 config-category-timeouts = Tiempos límite
 config-category-timing = Temporización
 config-category-token-info = Información del token

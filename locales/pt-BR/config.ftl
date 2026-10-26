@@ -1074,21 +1074,21 @@ config-trader-slippage-quote-default-pct = Slippage padrão
 config-trader-stop-loss-allow-partial = Permitir saída parcial
     .hint = Permite saídas parciais no stop loss em vez de fechar a posição inteira
 config-trader-stop-loss-enabled = Ativar stop loss
-    .hint = Ativa a saída automática quando a perda excede o limite (sai imediatamente, ao contrário da regra de tempo)
+    .hint = Ativa a saída automática quando a perda excede o limite (sai imediatamente, ao contrário da saída por tempo)
 config-trader-stop-loss-min-hold-seconds = Tempo mínimo de posse
     .hint = Mínimo de segundos de posse antes de o stop loss poder disparar (0 = imediato)
     .unit = s
 config-trader-stop-loss-threshold-pct = Limite do stop loss
     .hint = Sai quando a perda excede este % (50 = sai em -50%)
     .unit = %
-config-trader-time-override-duration = Duração da regra de tempo
+config-trader-time-override-duration = Duração da saída por tempo
     .hint = Por quanto tempo uma posição é mantida antes de a saída por tempo verificar a perda; ela é fechada se a perda atingiu o limite
-config-trader-time-override-enabled = Ativar regra de tempo
+config-trader-time-override-enabled = Ativar saída por tempo
     .hint = Ativa a saída automática para posições mantidas por tempo demais com prejuízo
-config-trader-time-override-loss-threshold-percent = Perda da regra de tempo
-    .hint = Perda % que dispara a regra de tempo (-40 = sai se cair 40%)
+config-trader-time-override-loss-threshold-percent = Perda da saída por tempo
+    .hint = Perda % que dispara a saída por tempo (-40 = sai se cair 40%)
     .unit = %
-config-trader-time-override-unit = Unidade da regra de tempo
+config-trader-time-override-unit = Unidade da saída por tempo
     .hint = Unidade de tempo: seconds, minutes, hours, days
 config-trader-trade-size-sol = Tamanho do trade
     .hint = SOL por posição
@@ -1287,7 +1287,7 @@ config-category-statistics = Estatísticas
 config-category-stop-loss = Stop loss
 config-category-symbol-analysis = Análise de símbolos
 config-category-thresholds = Limites
-config-category-time-override = Regra de tempo
+config-category-time-override = Saída por tempo
 config-category-timeouts = Tempos limite
 config-category-timing = Temporização
 config-category-token-info = Informações do token

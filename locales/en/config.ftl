@@ -1125,21 +1125,21 @@ config-trader-slippage-quote-default-pct = Default Slippage
 config-trader-stop-loss-allow-partial = Allow Partial Exit
     .hint = Allow partial exits for stop loss instead of full position close
 config-trader-stop-loss-enabled = Enable Stop Loss
-    .hint = Enable automatic exit when loss exceeds threshold (exits immediately, unlike time override)
+    .hint = Enable automatic exit when loss exceeds threshold (exits immediately, unlike the time exit)
 config-trader-stop-loss-min-hold-seconds = Min Hold Time
     .hint = Minimum seconds to hold before stop loss can trigger (0 = immediate)
     .unit = s
 config-trader-stop-loss-threshold-pct = Stop Loss Threshold
     .hint = Exit when loss exceeds this % (50 = exit at -50%)
     .unit = %
-config-trader-time-override-duration = Time Override Duration
+config-trader-time-override-duration = Time Exit Duration
     .hint = How long a position is held before the time exit checks its loss; it exits if the loss has reached the threshold
-config-trader-time-override-enabled = Enable Time Override
+config-trader-time-override-enabled = Enable Time Exit
     .hint = Enable automatic exit for positions held too long at a loss
-config-trader-time-override-loss-threshold-percent = Time Override Loss
-    .hint = Loss % to trigger time override (-40 = exit if down 40%)
+config-trader-time-override-loss-threshold-percent = Time Exit Loss
+    .hint = Loss % that triggers the time exit (-40 = exit if down 40%)
     .unit = %
-config-trader-time-override-unit = Time Override Unit
+config-trader-time-override-unit = Time Exit Unit
     .hint = Time unit: seconds, minutes, hours, days
 config-trader-trade-size-sol = Trade Size
     .hint = SOL spent on each new position
@@ -1348,7 +1348,7 @@ config-category-statistics = Statistics
 config-category-stop-loss = Stop Loss
 config-category-symbol-analysis = Symbol Analysis
 config-category-thresholds = Thresholds
-config-category-time-override = Time Override
+config-category-time-override = Time Exit
 config-category-timeouts = Timeouts
 config-category-timing = Timing
 config-category-token-info = Token Info

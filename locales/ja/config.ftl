@@ -1122,21 +1122,21 @@ config-trader-slippage-quote-default-pct = デフォルトのスリッページ
 config-trader-stop-loss-allow-partial = 部分エグジットを許可
     .hint = 損切りで、ポジション全体のクローズではなく部分エグジットを許可します
 config-trader-stop-loss-enabled = 損切りを有効化
-    .hint = 損失がしきい値を超えたら自動的にエグジットします（時間オーバーライドとは異なり、即座にエグジット）
+    .hint = 損失がしきい値を超えたら自動的にエグジットします（時間エグジットとは異なり、即座にエグジット）
 config-trader-stop-loss-min-hold-seconds = 最小保有時間
     .hint = 損切りが発動できるようになるまでの最小保有秒数（0 = 即時）
     .unit = 秒
 config-trader-stop-loss-threshold-pct = 損切りのしきい値
     .hint = 損失がこの % を超えたらエグジットします（50 = -50% でエグジット）
     .unit = %
-config-trader-time-override-duration = 時間オーバーライドの期間
+config-trader-time-override-duration = 時間エグジットの期間
     .hint = 時間エグジットが損失を確認するまでポジションを保有する時間。損失がしきい値に達していれば決済します
-config-trader-time-override-enabled = 時間オーバーライドを有効化
+config-trader-time-override-enabled = 時間エグジットを有効化
     .hint = 損失を抱えたまま長く保有しているポジションを自動的にエグジットします
-config-trader-time-override-loss-threshold-percent = 時間オーバーライドの損失
-    .hint = 時間オーバーライドを発動する損失率（-40 = 40% 下落していたらエグジット）
+config-trader-time-override-loss-threshold-percent = 時間エグジットの損失
+    .hint = 時間エグジットを発動する損失率（-40 = 40% 下落していたらエグジット）
     .unit = %
-config-trader-time-override-unit = 時間オーバーライドの単位
+config-trader-time-override-unit = 時間エグジットの単位
     .hint = 時間の単位: seconds、minutes、hours、days
 config-trader-trade-size-sol = 取引サイズ
     .hint = 1 ポジションあたりの SOL
@@ -1345,7 +1345,7 @@ config-category-statistics = 統計
 config-category-stop-loss = 損切り
 config-category-symbol-analysis = シンボル分析
 config-category-thresholds = しきい値
-config-category-time-override = 時間オーバーライド
+config-category-time-override = 時間エグジット
 config-category-timeouts = タイムアウト
 config-category-timing = タイミング
 config-category-token-info = トークン情報
