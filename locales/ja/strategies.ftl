@@ -212,8 +212,6 @@ strategies-toast-unknown-condition = 不明な条件
     .message = 条件の種類が見つかりません
 strategies-toast-create-first = 先にストラテジーを作成してください
     .message = 条件を追加する前に、「新規ストラテジー」をクリックしてストラテジーを作成してください
-strategies-toast-condition-added = 条件を追加しました
-    .message = { $name } をストラテジーに追加しました
 
 ## Conditions
 

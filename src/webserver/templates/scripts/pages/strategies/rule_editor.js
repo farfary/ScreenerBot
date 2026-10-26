@@ -520,13 +520,9 @@ export function createRuleEditor({
     const body = nodeEl(id)?.querySelector(".rule-body");
     const first = body?.querySelector(".param-field input, .param-field .custom-select");
     first?.focus?.();
+    // The new condition opens in place with its first field focused; that is the confirmation.
     nodeEl(id)?.scrollIntoView?.({ block: "nearest" });
-    const args = { name: conditionName(schema, type) };
-    return announce(
-      "success",
-      I18n.t("strategies-toast-condition-added", args),
-      I18n.attr("strategies-toast-condition-added", "message", args)
-    );
+    return true;
   }
 
   function addGroupTo(groupId) {

@@ -226,8 +226,6 @@ strategies-toast-unknown-condition = Unknown Condition
     .message = Condition type not found
 strategies-toast-create-first = Create Strategy First
     .message = Click 'New Strategy' to create a strategy before adding conditions
-strategies-toast-condition-added = Condition Added
-    .message = { $name } added to strategy
 
 ## Conditions
 

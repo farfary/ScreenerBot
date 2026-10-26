@@ -206,8 +206,6 @@ strategies-toast-unknown-condition = Condition inconnue
     .message = Type de condition introuvable
 strategies-toast-create-first = Créez d'abord une stratégie
     .message = Cliquez sur « Nouvelle stratégie » pour créer une stratégie avant d'ajouter des conditions
-strategies-toast-condition-added = Condition ajoutée
-    .message = { $name } ajoutée à la stratégie
 
 strategies-condition-candle-size = Motif de taille de bougie
     .description = Détecte des motifs de bougies précis : grand corps, petit corps (doji), longues mèches

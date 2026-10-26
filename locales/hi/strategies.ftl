@@ -201,8 +201,6 @@ strategies-toast-unknown-condition = अज्ञात शर्त
     .message = शर्त का प्रकार नहीं मिला
 strategies-toast-create-first = पहले स्ट्रैटेजी बनाएं
     .message = शर्तें जोड़ने से पहले स्ट्रैटेजी बनाने के लिए 'नई स्ट्रैटेजी' पर क्लिक करें
-strategies-toast-condition-added = शर्त जोड़ी गई
-    .message = { $name } स्ट्रैटेजी में जोड़ी गई
 
 strategies-condition-candle-size = कैंडल साइज़ पैटर्न
     .description = खास कैंडल पैटर्न पहचानें: बड़ी बॉडी, छोटी बॉडी (डोजी), लंबी विक

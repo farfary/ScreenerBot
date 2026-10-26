@@ -226,8 +226,6 @@ strategies-toast-unknown-condition = شرط ناشناخته
     .message = نوع شرط پیدا نشد
 strategies-toast-create-first = ابتدا استراتژی بسازید
     .message = پیش از افزودن شرط، برای ساخت استراتژی «استراتژی جدید» را بزنید
-strategies-toast-condition-added = شرط اضافه شد
-    .message = { $name } به استراتژی اضافه شد
 
 ## Conditions
 

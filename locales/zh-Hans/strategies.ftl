@@ -212,8 +212,6 @@ strategies-toast-unknown-condition = 未知条件
     .message = 未找到该条件类型
 strategies-toast-create-first = 请先创建策略
     .message = 添加条件之前，请先点击“新建策略”创建策略
-strategies-toast-condition-added = 条件已添加
-    .message = 已将 { $name } 添加到策略
 
 ## Conditions
 

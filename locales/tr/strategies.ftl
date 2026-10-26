@@ -201,8 +201,6 @@ strategies-toast-unknown-condition = Bilinmeyen koşul
     .message = Koşul türü bulunamadı
 strategies-toast-create-first = Önce strateji oluşturun
     .message = Koşul eklemeden önce bir strateji oluşturmak için "Yeni strateji"ye tıklayın
-strategies-toast-condition-added = Koşul eklendi
-    .message = Stratejiye eklendi: { $name }
 
 strategies-condition-candle-size = Mum boyutu deseni
     .description = Belirli mum desenlerini algılar: büyük gövde, küçük gövde (doji), uzun fitiller

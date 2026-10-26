@@ -149,15 +149,15 @@
       <div class="modal-body condition-catalog-body">
         <nav class="catalog-rail" id="catalog-categories" data-l10n-id="strategies-catalog-categories"></nav>
         <div class="catalog-main">
-          <div class="search-container">
+          <div class="search-wrapper catalog-search">
             <input
               type="text"
               id="condition-search"
               data-l10n-id="strategies-catalog-search"
-              class="search-input"
               autocomplete="off"
             />
-            <button type="button" class="btn-icon" id="clear-search" data-l10n-id="strategies-catalog-search-clear"><i class="icon-x"></i></button>
+            <i class="icon-search search-icon" aria-hidden="true"></i>
+            <button type="button" class="search-clear" id="clear-search" data-l10n-id="strategies-catalog-search-clear"><i class="icon-x" aria-hidden="true"></i></button>
           </div>
           <div class="catalog-list" id="catalog-list"></div>
         </div>

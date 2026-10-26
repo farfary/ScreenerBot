@@ -170,13 +170,8 @@
   white-space: nowrap;
 }
 
-/* Search */
-.catalog-main .search-container {
-  display: flex;
-  gap: var(--spacing-sm);
-}
-
-.catalog-main .search-input {
+/* Search: the shared .search-wrapper field, its clear control inside the box. */
+.catalog-search input {
   flex: 1;
 }
 

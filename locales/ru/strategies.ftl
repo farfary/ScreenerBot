@@ -211,8 +211,6 @@ strategies-toast-unknown-condition = Неизвестное условие
     .message = Тип условия не найден
 strategies-toast-create-first = Сначала создайте стратегию
     .message = Нажмите «Новая стратегия», чтобы создать стратегию перед добавлением условий
-strategies-toast-condition-added = Условие добавлено
-    .message = { $name } добавлено в стратегию
 
 strategies-condition-candle-size = Паттерн размера свечи
     .description = Обнаруживает определённые паттерны свечей: большое тело, маленькое тело (доджи), длинные тени

@@ -236,8 +236,6 @@ strategies-toast-unknown-condition = Невідома умова
     .message = Тип умови не знайдено
 strategies-toast-create-first = Спершу створіть стратегію
     .message = Натисніть «Нова стратегія», щоб створити стратегію перед додаванням умов
-strategies-toast-condition-added = Умову додано
-    .message = { $name } додано до стратегії
 
 ## Conditions
 

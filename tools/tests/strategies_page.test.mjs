@@ -17,6 +17,8 @@
  *   with the reason and leaves the editor as it was.
  * - Deleting the strategy in the editor empties the editor rather than opening an
  *   unsaved new strategy in its place.
+ * - Adding a condition from the catalog opens it in place without a toast, and the
+ *   catalog search is the shared search field: its clear control sits inside the input.
  *
  * Run with `npm run test:js`.
  */
@@ -186,8 +188,30 @@ test("a condition is added from the catalog, checked as it is edited and kept ou
     true
   );
   await page.fill("#condition-search", "relative strength");
+  const search = await page.evaluate(() => {
+    const input = document.getElementById("condition-search").getBoundingClientRect();
+    const clear = document.getElementById("clear-search");
+    const box = clear.getBoundingClientRect();
+    return {
+      shape: clear.closest(".search-wrapper") !== null && clear.classList.contains("search-clear"),
+      visible: getComputedStyle(clear).display !== "none" && box.width > 0,
+      inside:
+        box.left >= input.left &&
+        box.right <= input.right &&
+        box.top >= input.top &&
+        box.bottom <= input.bottom,
+    };
+  });
+  assert.deepEqual(search, { shape: true, visible: true, inside: true });
+  // Toasts from earlier cases may still be on screen; only a new one counts.
+  const toastsBefore = await page.locator(".toast").allInnerTexts();
   await page.keyboard.press("Enter");
   await page.locator("#condition-catalog-modal").waitFor({ state: "hidden" });
+  assert.deepEqual(
+    (await page.locator(".toast").allInnerTexts()).filter((text) => !toastsBefore.includes(text)),
+    [],
+    "adding a condition raises no toast"
+  );
 
   const row = page.locator("#conditions-list .rule-row.is-open");
   assert.equal(await row.count(), 1);

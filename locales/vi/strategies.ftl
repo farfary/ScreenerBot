@@ -187,8 +187,6 @@ strategies-toast-unknown-condition = Điều kiện không xác định
     .message = Không tìm thấy loại điều kiện
 strategies-toast-create-first = Hãy tạo chiến lược trước
     .message = Nhấp 'Chiến lược mới' để tạo chiến lược trước khi thêm điều kiện
-strategies-toast-condition-added = Đã thêm điều kiện
-    .message = Đã thêm { $name } vào chiến lược
 
 strategies-condition-candle-size = Mẫu kích thước nến
     .description = Phát hiện các mẫu nến cụ thể: thân lớn, thân nhỏ (doji), bóng nến dài

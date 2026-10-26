@@ -246,8 +246,6 @@ strategies-toast-unknown-condition = شرط غير معروف
     .message = لم يتم العثور على نوع الشرط
 strategies-toast-create-first = أنشئ استراتيجية أولًا
     .message = انقر «استراتيجية جديدة» لإنشاء استراتيجية قبل إضافة الشروط
-strategies-toast-condition-added = تمت إضافة الشرط
-    .message = تمت إضافة { $name } إلى الاستراتيجية
 
 ## Conditions
 

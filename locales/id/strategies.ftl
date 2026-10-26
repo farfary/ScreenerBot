@@ -189,8 +189,6 @@ strategies-toast-unknown-condition = Kondisi Tidak Dikenal
     .message = Jenis kondisi tidak ditemukan
 strategies-toast-create-first = Buat Strategi Terlebih Dahulu
     .message = Klik 'Strategi Baru' untuk membuat strategi sebelum menambahkan kondisi
-strategies-toast-condition-added = Kondisi Ditambahkan
-    .message = { $name } ditambahkan ke strategi
 
 strategies-condition-candle-size = Pola Ukuran Candle
     .description = Deteksi pola candle tertentu: body besar, body kecil (doji), sumbu panjang

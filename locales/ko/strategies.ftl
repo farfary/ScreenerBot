@@ -212,8 +212,6 @@ strategies-toast-unknown-condition = 알 수 없는 조건
     .message = 조건 유형을 찾을 수 없습니다
 strategies-toast-create-first = 먼저 전략 만들기
     .message = 조건을 추가하기 전에 '새 전략'을 눌러 전략을 만드세요
-strategies-toast-condition-added = 조건 추가됨
-    .message = 전략에 { $name } 추가됨
 
 ## Conditions
 
