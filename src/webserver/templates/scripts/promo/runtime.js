@@ -34,6 +34,13 @@ const DEFAULT_TIMEOUT_MS = 20000;
 const FREEZE_SETTLE_TIMEOUT_MS = 60000;
 
 /**
+ * Longest gap between two animation frames before a frame-driven wait fails. A
+ * hidden page gets no frames at all, so without this bound every wait built on
+ * `nextFrame` would hang past its own deadline instead of reporting why.
+ */
+const FRAME_STALL_MS = 4000;
+
+/**
  * Consecutive animation frames the DOM, the network and the animation engine
  * must all be quiet for before the page counts as settled. Frames, not
  * milliseconds: it scales with the machine instead of encoding one Mac's speed.
@@ -230,7 +237,18 @@ function imagesPending() {
 }
 
 function nextFrame() {
-  return new Promise((resolve) => requestAnimationFrame(() => resolve()));
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      cancelAnimationFrame(handle);
+      reject(
+        new Error(`No animation frame within ${FRAME_STALL_MS}ms: ${overlay.renderStallReason()}`)
+      );
+    }, FRAME_STALL_MS);
+    const handle = requestAnimationFrame(() => {
+      clearTimeout(timer);
+      resolve();
+    });
+  });
 }
 
 /**
@@ -395,12 +413,6 @@ function requireElement(selector) {
   return el;
 }
 
-/** Center of an element in viewport coordinates — where the promo cursor aims. */
-export function centerOf(el) {
-  const rect = el.getBoundingClientRect();
-  return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
-}
-
 // ---------------------------------------------------------------------------
 // Navigation and interaction
 // ---------------------------------------------------------------------------
@@ -435,27 +447,38 @@ export async function prepareFrame({ scrolls = [], timeout = DEFAULT_TIMEOUT_MS 
 }
 
 /**
- * Click an element the way a person would: the promo cursor travels to it, presses,
- * and only then is the real click dispatched. `moveCursor: false` clicks silently,
- * which is what screenshot scenes want.
+ * Bring an element into view and, unless the cursor stays put, move the promo
+ * cursor onto it. Returns the point the cursor rests on (null when it did not
+ * move), which is where the driver aims the in-page pointer for real hover.
  */
-export async function click({
-  selector,
-  moveCursor = true,
-  travelMs = 650,
-  settle = true,
-  timeout = DEFAULT_TIMEOUT_MS,
-} = {}) {
+async function approach({ selector, anchor, moveCursor, travelMs, timeout }) {
   await waitFor({ selector, state: "visible", timeout });
   const el = requireElement(selector);
 
   el.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "instant" });
   await nextFrame();
 
-  if (moveCursor) {
-    await overlay.cursorTo({ selector, duration: travelMs * state.motionScale });
-    await overlay.cursorPress();
-  }
+  if (!moveCursor) return { el, point: null };
+  const { x, y } = await overlay.cursorTo({ selector, anchor, duration: travelMs });
+  return { el, point: { x, y } };
+}
+
+/**
+ * Click an element the way a person would: the promo cursor travels to it, presses,
+ * and only then is the real click dispatched. `moveCursor: false` clicks silently,
+ * which is what screenshot scenes want. `travelMs` null picks a travel time from
+ * the distance; `anchor` aims at a fraction of the element's rect.
+ */
+export async function click({
+  selector,
+  anchor = null,
+  moveCursor = true,
+  travelMs = null,
+  settle = true,
+  timeout = DEFAULT_TIMEOUT_MS,
+} = {}) {
+  const { el, point } = await approach({ selector, anchor, moveCursor, travelMs, timeout });
+  if (moveCursor) await overlay.cursorPress();
 
   el.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
   el.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
@@ -464,20 +487,57 @@ export async function click({
   el.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
 
   if (settle) await waitStable({ timeout });
-  return { selector };
+  return { selector, point };
 }
 
-/** Hover an element (and move the promo cursor there) without clicking it. */
-export async function hover({ selector, travelMs = 650, timeout = DEFAULT_TIMEOUT_MS } = {}) {
-  await waitFor({ selector, state: "visible", timeout });
-  const el = requireElement(selector);
-
-  await overlay.cursorTo({ selector, duration: travelMs * state.motionScale });
+/**
+ * Hover an element (and move the promo cursor there) without clicking it.
+ * `settle: false` skips the final settle for a caller that settles next anyway,
+ * such as the driver moving the in-page pointer onto the same point.
+ */
+export async function hover({
+  selector,
+  anchor = null,
+  travelMs = null,
+  settle = true,
+  timeout = DEFAULT_TIMEOUT_MS,
+} = {}) {
+  const { el, point } = await approach({ selector, anchor, moveCursor: true, travelMs, timeout });
   el.dispatchEvent(new PointerEvent("pointerover", { bubbles: true }));
   el.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
   el.dispatchEvent(new MouseEvent("mouseenter", { bubbles: false }));
+  if (settle) await waitStable({ timeout });
+  return { selector, point };
+}
+
+/**
+ * Resolve once the page's hover state matches the in-page pointer the Electron
+ * bridge just moved: the element under (x, y) matches `:hover`, or with
+ * `leave` nothing does. Input events and commands travel on different channels,
+ * so this is what proves the move has been applied before the page settles.
+ */
+export async function waitPointer({
+  x = null,
+  y = null,
+  leave = false,
+  timeout = DEFAULT_TIMEOUT_MS,
+} = {}) {
+  const deadline = performance.now() + timeout;
+  const applied = () => {
+    if (leave) return document.querySelector(":hover") === null;
+    const target = document.elementFromPoint(x, y);
+    return !target || target.matches(":hover");
+  };
+  while (!applied()) {
+    if (performance.now() >= deadline) {
+      throw new Error(
+        `waitPointer timed out after ${timeout}ms (${leave ? "hover state not cleared" : `no hover at ${x},${y}`})`
+      );
+    }
+    await nextFrame();
+  }
   await waitStable({ timeout });
-  return { selector };
+  return leave ? { leave: true } : { x, y };
 }
 
 /**
@@ -627,6 +687,7 @@ const COMMANDS = {
   "wait.viewport": waitViewport,
   "promo.measureChrome": measureChrome,
   "wait.for": waitFor,
+  "wait.pointer": waitPointer,
   "wait.beat": beat,
   "nav.goto": goto,
   "ui.click": click,
@@ -706,13 +767,13 @@ window.__SB_PROMO__ = {
   prepareFrame,
   click,
   hover,
+  waitPointer,
   type,
   scrollTo,
   beat,
   freeze,
   thaw,
   setMotionScale,
-  centerOf,
   overlay,
   audio,
 };

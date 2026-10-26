@@ -13,11 +13,41 @@
  *
  * Every function resolves on the Web Animations API's `finished` promise, so the
  * driver knows an annotation is fully on screen — it never waits out a duration
- * it guessed.
+ * it guessed. That promise only settles while the renderer produces frames, so
+ * every wait is also bounded by the animation's own end time plus a grace period
+ * and rejects with the reason when the page has stopped painting.
  */
 
 const LAYER_ID = "promoCaptureLayer";
 const CURSOR_ID = "promoCaptureCursor";
+const SVG_NS = "http://www.w3.org/2000/svg";
+
+/**
+ * The cursor's macOS-style arrow in CSS px, drawn with its tip at (0, 0). The
+ * tip is the hotspot: the cursor element's origin is the aimed point, so every
+ * move, hover and press lands the tip exactly there.
+ */
+const CURSOR_ARROW = {
+  path: "M0 0V17L4.2 13.1L7 19.6L9.9 18.4L7.2 12H12.6Z",
+  width: 13,
+  height: 20,
+};
+
+/**
+ * How long past its scheduled end an animation may run before the wait fails.
+ * Generous against a busy main thread; a page that is not painting at all never
+ * catches up, whatever the margin.
+ */
+const ANIMATION_GRACE_MS = 4000;
+
+/** Cursor travel time in ms: a base plus a per-pixel share, clamped to a natural range. */
+const CURSOR_TRAVEL = { baseMs: 380, perPxMs: 0.45, minMs: 420, maxMs: 800 };
+
+/** Sideways bow of the travel path as a share of its length, capped in CSS px. */
+const CURSOR_ARC = { share: 0.1, maxPx: 48 };
+
+/** Keyframes sampled along the curved travel path. */
+const CURSOR_PATH_STEPS = 16;
 
 const registry = new Map();
 let sequence = 0;
@@ -45,12 +75,37 @@ function nextId(prefix) {
   return `${prefix}-${sequence}`;
 }
 
-/** Await an animation, tolerating a cancel so a cleared annotation never hangs. */
-async function settled(animation) {
+/**
+ * Why the renderer is not delivering frames. A hidden document (the window is
+ * minimised, fully covered or on another Space) gets no animation frames, so
+ * neither `requestAnimationFrame` nor the animation timeline advances.
+ */
+export function renderStallReason() {
+  return document.visibilityState === "hidden"
+    ? "the page is hidden (window minimised, covered or on another Space), so the renderer is not painting"
+    : "the renderer delivered no animation frames in time";
+}
+
+/**
+ * Await an animation, tolerating a cancel so a cleared annotation never hangs,
+ * and rejecting with `what` and the stall reason once the animation is overdue.
+ */
+async function settled(animation, what) {
+  const endTime = animation.effect?.getComputedTiming().endTime;
+  const budget = Math.round((Number.isFinite(endTime) ? endTime : 0) + ANIMATION_GRACE_MS);
+  let timer = null;
+  const overdue = new Promise((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error(`${what} did not finish within ${budget}ms: ${renderStallReason()}`)),
+      budget
+    );
+  });
   try {
-    await animation.finished;
-  } catch {
-    /* cancelled by clear() — the caller only needs to stop waiting */
+    // A cancel (clear() removing the annotation) rejects `finished`; the caller
+    // only needs to stop waiting, so it counts as settled.
+    await Promise.race([animation.finished.catch(() => null), overdue]);
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -62,6 +117,18 @@ function rectOf(target) {
   return { top: rect.top, left: rect.left, width: rect.width, height: rect.height };
 }
 
+/**
+ * A viewport point inside an element: `anchor` gives the fractions of its width
+ * and height (the centre by default), so a scene aims at real geometry rather
+ * than at pixels measured on one display.
+ */
+export function pointIn(selector, anchor = null) {
+  const rect = rectOf(selector);
+  const ax = Number.isFinite(anchor?.x) ? anchor.x : 0.5;
+  const ay = Number.isFinite(anchor?.y) ? anchor.y : 0.5;
+  return { x: Math.round(rect.left + rect.width * ax), y: Math.round(rect.top + rect.height * ay) };
+}
+
 function enter(el, { from = "translateY(6px)" } = {}) {
   return el.animate(
     [
@@ -70,14 +137,6 @@ function enter(el, { from = "translateY(6px)" } = {}) {
     ],
     { duration: 260 * motionScale(), easing: "cubic-bezier(0.22, 1, 0.36, 1)", fill: "both" }
   );
-}
-
-function exit(el) {
-  return el.animate([{ opacity: 1 }, { opacity: 0 }], {
-    duration: 180 * motionScale(),
-    easing: "ease-out",
-    fill: "both",
-  });
 }
 
 // ---------------------------------------------------------------------------
@@ -209,7 +268,7 @@ export async function callout({
     entry.raf = requestAnimationFrame(track);
   }
 
-  await settled(enter(panel));
+  await settled(enter(panel), "callout entrance");
   return { id: panelId, side: panel.dataset.side };
 }
 
@@ -249,7 +308,8 @@ export async function spotlight({
       duration: 240 * motionScale(),
       easing: "ease-out",
       fill: "both",
-    })
+    }),
+    "spotlight fade-in"
   );
   return { id };
 }
@@ -279,7 +339,8 @@ export async function caption({
   registry.set(id, { el, kind: "caption" });
 
   await settled(
-    enter(el, { from: position === "bottom" ? "translateY(12px)" : "translateY(-12px)" })
+    enter(el, { from: position === "bottom" ? "translateY(12px)" : "translateY(-12px)" }),
+    "caption entrance"
   );
   return { id };
 }
@@ -305,7 +366,8 @@ export async function titleCard({ title = "", sub = "", id = "promo-title-card" 
       duration: 420 * motionScale(),
       easing: "ease-out",
       fill: "both",
-    })
+    }),
+    "title card fade-in"
   );
   return { id };
 }
@@ -314,99 +376,215 @@ export async function titleCard({ title = "", sub = "", id = "promo-title-card" 
 // Cursor
 // ---------------------------------------------------------------------------
 
+let cursorPosition = { x: -100, y: -100 };
+
+/** The arrow as inline SVG; the ring is a sibling drawn beneath it, centred on the tip. */
+function cursorArrow() {
+  const svg = document.createElementNS(SVG_NS, "svg");
+  svg.setAttribute("class", "promo-cursor-arrow");
+  svg.setAttribute("width", String(CURSOR_ARROW.width));
+  svg.setAttribute("height", String(CURSOR_ARROW.height));
+  svg.setAttribute("viewBox", `0 0 ${CURSOR_ARROW.width} ${CURSOR_ARROW.height}`);
+  const path = document.createElementNS(SVG_NS, "path");
+  path.setAttribute("d", CURSOR_ARROW.path);
+  svg.appendChild(path);
+  return svg;
+}
+
 function cursorEl() {
   let el = document.getElementById(CURSOR_ID);
   if (!el) {
     el = document.createElement("div");
     el.id = CURSOR_ID;
     el.className = "promo-cursor";
-    el.innerHTML = '<span class="promo-cursor-ring" aria-hidden="true"></span>';
-    el.style.transform = "translate3d(-100px, -100px, 0)";
+    const ring = document.createElement("span");
+    ring.className = "promo-cursor-ring";
+    el.append(ring, cursorArrow());
+    el.style.translate = cursorTranslate(cursorPosition);
     layer().appendChild(el);
   }
   return el;
 }
 
-let cursorPosition = { x: -100, y: -100 };
+/**
+ * The cursor is positioned with the `translate` property, never `transform`.
+ * An element's matrix is translate · rotate · scale · transform, so a `scale`
+ * multiplies whatever `transform` holds: with the position inside `transform`,
+ * the press dip scaled the position too and the cursor darted toward the
+ * window's top-left corner on every press. Held in `translate`, the position is
+ * applied after the dip, which then scales the arrow about its
+ * `transform-origin` — the tip — so the hotspot never moves during a press.
+ */
+function cursorTranslate({ x, y }) {
+  return `${x}px ${y}px`;
+}
 
-export async function cursorShow({ x = null, y = null } = {}) {
+/** Resolve a cursor destination from a selector (plus anchor) or an x/y pair. */
+function cursorPoint({ selector = null, anchor = null, x = null, y = null }) {
+  if (selector) return pointIn(selector, anchor);
+  if (Number.isFinite(x) && Number.isFinite(y)) return { x, y };
+  return null;
+}
+
+/** Natural travel time for a distance: short hops are quick, long sweeps cap out. */
+export function cursorTravelMs(distance) {
+  if (distance < 1) return 0;
+  const { baseMs, perPxMs, minMs, maxMs } = CURSOR_TRAVEL;
+  return Math.round(Math.min(maxMs, Math.max(minMs, baseMs + distance * perPxMs)));
+}
+
+/**
+ * Keyframes along a gently bowed path from `from` to `to`. A hand moving a mouse
+ * pivots at the wrist, so a straight ruler line reads as synthetic; a quadratic
+ * curve with a small sideways bow reads as a person.
+ */
+function travelKeyframes(from, to) {
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const length = Math.hypot(dx, dy);
+  const bow = Math.min(length * CURSOR_ARC.share, CURSOR_ARC.maxPx);
+  const control = {
+    x: (from.x + to.x) / 2 + (dy / length) * bow,
+    y: (from.y + to.y) / 2 - (dx / length) * bow,
+  };
+  return Array.from({ length: CURSOR_PATH_STEPS + 1 }, (_, step) => {
+    const t = step / CURSOR_PATH_STEPS;
+    const u = 1 - t;
+    return {
+      translate: cursorTranslate({
+        x: u * u * from.x + 2 * u * t * control.x + t * t * to.x,
+        y: u * u * from.y + 2 * u * t * control.y + t * t * to.y,
+      }),
+    };
+  });
+}
+
+/**
+ * Show the cursor. A hidden cursor is placed at the point (an element via
+ * `selector`/`anchor`, or x/y) before it fades in, so it never appears in one
+ * place and then jumps; a cursor that is already visible travels there instead.
+ *
+ * Animations here never use a forward fill: the end state is written to the
+ * element's own style first, so nothing left behind overrides a later placement.
+ */
+export async function cursorShow({ selector = null, anchor = null, x = null, y = null } = {}) {
   const el = cursorEl();
-  if (x !== null && y !== null) {
-    cursorPosition = { x, y };
-    el.style.transform = `translate3d(${x}px, ${y}px, 0)`;
+  const point = cursorPoint({ selector, anchor, x, y });
+
+  if (el.classList.contains("is-visible")) {
+    if (point) await cursorTo({ x: point.x, y: point.y });
+    return { ...cursorPosition };
+  }
+
+  if (point) {
+    cursorPosition = point;
+    el.style.translate = cursorTranslate(point);
   }
   el.classList.add("is-visible");
   await settled(
     el.animate([{ opacity: 0 }, { opacity: 1 }], {
       duration: 180 * motionScale(),
       easing: "ease-out",
-      fill: "both",
-    })
+      fill: "backwards",
+    }),
+    "cursor fade-in"
   );
-  return { x: cursorPosition.x, y: cursorPosition.y };
+  return { ...cursorPosition };
 }
 
 export async function cursorHide() {
   const el = document.getElementById(CURSOR_ID);
-  if (!el) return { hidden: true };
-  await settled(exit(el));
-  el.classList.remove("is-visible");
+  if (!el || !el.classList.contains("is-visible")) return { hidden: true };
+  const fade = el.animate([{ opacity: 1 }, { opacity: 0 }], {
+    duration: 180 * motionScale(),
+    easing: "ease-out",
+    fill: "forwards",
+  });
+  try {
+    await settled(fade, "cursor fade-out");
+  } finally {
+    // The class and the fill are dropped together so no frame shows the cursor
+    // again, and the next show starts from a clean element.
+    el.classList.remove("is-visible");
+    fade.cancel();
+  }
   return { hidden: true };
 }
 
 /**
- * Move the promo cursor to a point or an element along an eased path. The travel
- * is one Web Animation, so the driver awaits the real end of the movement.
+ * Move the promo cursor to an element (its centre, or `anchor` fractions of its
+ * rect) or to an x/y point along an eased, gently curved path. `duration` in ms
+ * overrides the distance-based travel time; both scale with the motion setting.
+ * The travel is one Web Animation, so the driver awaits the real end of the move.
  */
-export async function cursorTo({ selector = null, x = null, y = null, duration = 650 } = {}) {
+export async function cursorTo({
+  selector = null,
+  anchor = null,
+  x = null,
+  y = null,
+  duration = null,
+} = {}) {
+  const destination = cursorPoint({ selector, anchor, x, y });
+  if (!destination) throw new Error("cursorTo needs a selector or an x/y pair");
+
   const el = cursorEl();
   if (!el.classList.contains("is-visible")) await cursorShow();
+  el.getAnimations().forEach((animation) => {
+    if (animation.effect?.getKeyframes().some((frame) => frame.translate)) animation.cancel();
+  });
 
-  let destination = { x, y };
-  if (selector) {
-    const rect = rectOf(selector);
-    destination = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
-  }
-  if (destination.x === null || destination.y === null) {
-    throw new Error("cursorTo needs a selector or an x/y pair");
-  }
+  const from = cursorPosition;
+  const distance = Math.hypot(destination.x - from.x, destination.y - from.y);
+  const travelMs =
+    Math.max(0, Number.isFinite(duration) ? duration : cursorTravelMs(distance)) * motionScale();
 
-  const from = `translate3d(${cursorPosition.x}px, ${cursorPosition.y}px, 0)`;
-  const to = `translate3d(${destination.x}px, ${destination.y}px, 0)`;
-
-  await settled(
-    el.animate([{ transform: from }, { transform: to }], {
-      duration: Math.max(0, duration),
-      easing: "cubic-bezier(0.33, 0, 0.15, 1)",
-      fill: "both",
-    })
-  );
-
-  el.style.transform = to;
   cursorPosition = destination;
-  return destination;
+  el.style.translate = cursorTranslate(destination);
+  if (distance >= 1 && travelMs > 0) {
+    await settled(
+      el.animate(travelKeyframes(from, destination), {
+        duration: travelMs,
+        easing: "cubic-bezier(0.3, 0, 0.2, 1)",
+        fill: "backwards",
+      }),
+      "cursor travel"
+    );
+  }
+  return { ...destination, duration: Math.round(travelMs) };
 }
 
-/** The press: the cursor dips and a ring expands from it, like a real tap. */
+/**
+ * The press: the arrow shrinks slightly toward its tip and a ring expands from
+ * the tip, like a real tap. Only the arrow scales, about its tip, so the hotspot
+ * stays on the target throughout. It resolves when the dip has released, which
+ * is when a real click lands, so the caller dispatches the click while the ring
+ * is still expanding on its own. The ring holds most of its opacity until it is
+ * well out, so it still reads after video compression on any surface.
+ */
 export async function cursorPress() {
   const el = cursorEl();
   const ring = el.querySelector(".promo-cursor-ring");
-  const duration = 320 * motionScale();
+  const arrow = el.querySelector(".promo-cursor-arrow");
+  const duration = 420 * motionScale();
 
   const ripple = ring.animate(
     [
-      { transform: "scale(0.2)", opacity: 0.55 },
+      { transform: "scale(0.2)", opacity: 0.85 },
+      { transform: "scale(0.8)", opacity: 0.5, offset: 0.6 },
       { transform: "scale(1)", opacity: 0 },
     ],
     { duration, easing: "cubic-bezier(0.22, 1, 0.36, 1)" }
   );
-  const dip = el.animate([{ scale: "1" }, { scale: "0.86" }, { scale: "1" }], {
-    duration: duration * 0.6,
+  const dip = arrow.animate([{ scale: "1" }, { scale: "0.86" }, { scale: "1" }], {
+    duration: duration * 0.45,
     easing: "ease-out",
   });
 
-  await Promise.all([settled(ripple), settled(dip)]);
-  return { pressed: true };
+  // The ring is not awaited: it is the shot's subject, not a completion signal,
+  // and a cancel by a later command must not fail this one.
+  ripple.finished.catch(() => null);
+  await settled(dip, "cursor press");
+  return { pressed: true, ...cursorPosition };
 }
 
 // ---------------------------------------------------------------------------

@@ -11,7 +11,7 @@
  * It exposes one local HTTP endpoint the driver posts commands to, and routes
  * each command to whoever can actually observe its completion:
  *
- *   - window shape and identity                 -> this process
+ *   - window shape, identity and page pointer   -> this process
  *   - navigation, interaction, overlays, audio  -> the dashboard's promo runtime
  *
  * It deliberately does NOT capture anything. Screenshots and video are taken by
@@ -29,7 +29,13 @@ const path = require('path');
 const { app, ipcMain, screen } = require('electron');
 
 const HOST = '127.0.0.1';
-const RENDERER_TIMEOUT_MS = 60000;
+
+/**
+ * Backstop for a renderer command that never reports back. It must exceed the
+ * runtime's own longest deadline (the 60s boot settle in freeze()) so a command
+ * that fails reaches the driver with the runtime's reason, not with this one.
+ */
+const RENDERER_TIMEOUT_MS = 90000;
 
 let server = null;
 let mainWindow = null;
@@ -281,8 +287,34 @@ function captureRect() {
   };
 }
 
+/**
+ * Move the page's own pointer to a viewport point, or take it out of the page
+ * with `leave`, and resolve once the renderer's hover state reflects it.
+ *
+ * The promo cursor is drawn by the page, so on its own it cannot trigger
+ * `:hover` styling; a synthetic input event from here does, without touching the
+ * macOS pointer (which stays parked outside the recorded window). Coordinates
+ * are CSS pixels of the page, which equal the input event's DIPs at zoom 0 and
+ * are scaled by the zoom factor otherwise.
+ */
+async function movePointer({ x = null, y = null, leave = false } = {}) {
+  if (!mainWindow) throw new Error('No dashboard window');
+  const contents = mainWindow.webContents;
+  if (leave) {
+    contents.sendInputEvent({ type: 'mouseLeave', x: -1, y: -1 });
+    return callRenderer('wait.pointer', { leave: true });
+  }
+  if (!Number.isFinite(x) || !Number.isFinite(y)) {
+    throw new Error('window.pointer needs an x/y point or leave: true');
+  }
+  const zoom = contents.getZoomFactor();
+  contents.sendInputEvent({ type: 'mouseMove', x: Math.round(x * zoom), y: Math.round(y * zoom) });
+  return callRenderer('wait.pointer', { x, y });
+}
+
 const WINDOW_COMMANDS = {
   'window.configure': configureWindow,
+  'window.pointer': movePointer,
   'window.awaitBlur': awaitBlur,
   'window.captureRect': async () => captureRect(),
   'window.state': async () => windowState(),

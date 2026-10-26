@@ -207,33 +207,67 @@
 
 /* =============================================================================
    Cursor
+
+   A macOS-style arrow: dark fill, light outline and a soft shadow, the same in
+   both themes, so it reads on light pages and on dimmed dialog backdrops alike.
+   The element's origin is the arrow tip, which is the hotspot; JS writes the
+   aimed point into `translate`, and the press scales the arrow about that tip.
    ============================================================================= */
 
 .promo-cursor {
+  --promo-cursor-fill: rgb(0, 0, 0);
+  --promo-cursor-outline: rgb(255, 255, 255);
+  --promo-cursor-shadow: rgb(0, 0, 0, 0.4);
+  --promo-cursor-ring-size: 36px;
+
   position: fixed;
   top: 0;
-  /* rtl-ok: cursor origin is positioned by JS translate3d in viewport coordinates */
+  /* rtl-ok: cursor origin is positioned by the JS translate property in viewport coordinates */
   left: 0;
-  width: 22px;
-  height: 22px;
-  /* rtl-ok: cursor origin is positioned by JS translate3d in viewport coordinates */
-  margin: -11px 0 0 -11px;
-  border-radius: var(--radius-full);
-  background: var(--text-primary);
-  border: 2px solid var(--bg-primary);
+  width: 0;
+  height: 0;
   opacity: 0;
-  will-change: transform, opacity;
+  will-change: translate, opacity;
 }
 
 .promo-cursor.is-visible {
   opacity: 1;
 }
 
+.promo-cursor-arrow {
+  position: absolute;
+  top: 0;
+  /* rtl-ok: the arrow tip sits on the cursor origin in viewport coordinates */
+  left: 0;
+  overflow: visible;
+  transform-origin: 0 0;
+  filter: drop-shadow(0 1px 1.5px var(--promo-cursor-shadow));
+  will-change: scale;
+}
+
+/* The outline is painted beneath the fill, so half its width shows outside the
+   shape and the tip stays sharp. */
+.promo-cursor-arrow path {
+  fill: var(--promo-cursor-fill);
+  stroke: var(--promo-cursor-outline);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+  paint-order: stroke;
+}
+
 .promo-cursor-ring {
   position: absolute;
-  inset: -14px;
-  border: 2px solid var(--text-primary);
+  top: calc(var(--promo-cursor-ring-size) / -2);
+  /* rtl-ok: the ring is centred on the arrow tip in viewport coordinates */
+  left: calc(var(--promo-cursor-ring-size) / -2);
+  box-sizing: border-box;
+  width: var(--promo-cursor-ring-size);
+  height: var(--promo-cursor-ring-size);
+  border: 3px solid var(--promo-cursor-fill);
   border-radius: var(--radius-full);
+  box-shadow:
+    0 0 0 1px var(--promo-cursor-outline),
+    inset 0 0 0 1px var(--promo-cursor-outline);
   opacity: 0;
 }
 
