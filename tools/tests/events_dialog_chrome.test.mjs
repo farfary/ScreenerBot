@@ -16,6 +16,7 @@
  * - Nothing is said twice: a message that fits the title is not repeated in the
  *   body, the metadata is a frameless key-value list without the severity,
  *   category and subtype the header already shows, and one time is listed.
+ * - The copied report gives the age as a span ("5m 12s"), never a moment ("5m ago").
  *
  * Run with `npm run test:js`.
  */
@@ -101,6 +102,23 @@ test("the event dialog has one shared close and a standard Copy button", async (
   for (const field of chrome.fields) {
     assert.equal(field.display, "contents", `${field.label} has no card of its own`);
   }
+
+  // The copied report gives the age as a span under its "Age" label, never "… ago".
+  await page.evaluate(() => {
+    window.__copied = null;
+    globalThis.navigator.clipboard.writeText = async (text) => {
+      window.__copied = text;
+    };
+  });
+  await page.locator(`${DIALOG} .events-dialog-footer button`).click();
+  const copied = await page.waitForFunction(() => window.__copied).then((h) => h.jsonValue());
+  const ageLine = copied
+    .replace(/[\u2068\u2069]/g, "")
+    .split("\n")
+    .find((line) => line.startsWith("Age:"));
+  assert.ok(ageLine, copied);
+  assert.doesNotMatch(ageLine, /\bago\b/);
+  assert.match(ageLine, /^Age: \d+[smhd]/);
 
   await page.locator(`${DIALOG} .modal-close`).click();
   await page.waitForSelector(DIALOG, { state: "detached" });

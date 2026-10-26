@@ -452,9 +452,13 @@ export class EventDetailsDialog {
 
     if (event.event_time) {
       line(I18n.t("events-dialog-field-time"), formatEventTimestamp(event.event_time));
+      // An age is a span ("5m 12s") under its "Age" label, never a moment ("5m ago").
+      const ageMs = Date.now() - Date.parse(event.event_time);
       line(
         I18n.t("events-dialog-field-age"),
-        Utils.formatTimeAgo(event.event_time, { fallback: notAvailable() })
+        Number.isFinite(ageMs)
+          ? Utils.formatUptime(Math.max(0, ageMs / 1000), { style: "trimmed" })
+          : notAvailable()
       );
     }
 
