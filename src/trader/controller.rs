@@ -117,24 +117,49 @@ pub struct MonitorsStatus {
     pub master_enabled: bool,
     pub force_stopped: bool,
     pub available: bool,
+    /// Whether a force stop has anything to halt right now: a running monitor, a
+    /// copy task the stop blocks, or a trade in flight.
+    pub anything_running: bool,
 }
 
-pub fn monitors_status() -> MonitorsStatus {
+pub async fn monitors_status() -> MonitorsStatus {
     use super::config;
     let available = is_available();
+    let entry_monitor = MonitorState {
+        enabled: config::is_entry_monitor_enabled_standalone(),
+        running: available && config::is_entry_monitor_enabled(),
+    };
+    let exit_monitor = MonitorState {
+        enabled: config::is_exit_monitor_enabled_standalone(),
+        running: available && config::is_exit_monitor_enabled(),
+    };
+    let copy = super::copy::control::status().await.ok();
+    let anything_running = anything_to_halt(
+        entry_monitor.running || exit_monitor.running,
+        crate::global::are_trades_active(),
+        copy.as_ref(),
+    );
     MonitorsStatus {
-        entry_monitor: MonitorState {
-            enabled: config::is_entry_monitor_enabled_standalone(),
-            running: available && config::is_entry_monitor_enabled(),
-        },
-        exit_monitor: MonitorState {
-            enabled: config::is_exit_monitor_enabled_standalone(),
-            running: available && config::is_exit_monitor_enabled(),
-        },
+        entry_monitor,
+        exit_monitor,
         master_enabled: available && config::is_trader_enabled(),
         force_stopped: crate::global::is_force_stopped(),
         available,
+        anything_running,
     }
+}
+
+/// Whether a force stop would halt anything. Copy tasks count only while copy
+/// trading is on and the stop blocks it; a copy store that could not be read
+/// counts as running, so the stop is never withheld on a missing answer.
+fn anything_to_halt(
+    monitor_running: bool,
+    trade_in_flight: bool,
+    copy: Option<&super::copy::control::CopyTradingStatus>,
+) -> bool {
+    let copy_running = copy
+        .is_none_or(|status| status.enabled && status.force_stop_blocks && status.active_tasks > 0);
+    monitor_running || trade_in_flight || copy_running
 }
 
 /// Which trader monitor a toggle addresses.
@@ -260,4 +285,45 @@ async fn record_force_stop_event(subtype: &str, payload: serde_json::Value) {
         created_at: None,
     })
     .await;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::anything_to_halt;
+    use crate::trader::copy::control::CopyTradingStatus;
+
+    fn copy(enabled: bool, force_stop_blocks: bool, active_tasks: usize) -> CopyTradingStatus {
+        CopyTradingStatus {
+            enabled,
+            live_available: false,
+            blocked_reason: None,
+            default_mode: "paper".to_string(),
+            default_slippage_pct: 1.0,
+            force_stop_blocks,
+            total_tasks: active_tasks,
+            active_tasks,
+            paper_tasks: active_tasks,
+            live_tasks: 0,
+        }
+    }
+
+    #[test]
+    fn nothing_running_leaves_nothing_to_halt() {
+        assert!(!anything_to_halt(false, false, Some(&copy(true, true, 0))));
+        assert!(!anything_to_halt(false, false, Some(&copy(false, true, 3))));
+        assert!(!anything_to_halt(false, false, Some(&copy(true, false, 3))));
+    }
+
+    #[test]
+    fn each_running_kind_gives_the_stop_something_to_halt() {
+        let idle = copy(true, true, 0);
+        assert!(anything_to_halt(true, false, Some(&idle)));
+        assert!(anything_to_halt(false, true, Some(&idle)));
+        assert!(anything_to_halt(false, false, Some(&copy(true, true, 1))));
+    }
+
+    #[test]
+    fn an_unreadable_copy_store_never_withholds_the_stop() {
+        assert!(anything_to_halt(false, false, None));
+    }
 }

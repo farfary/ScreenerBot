@@ -64,6 +64,8 @@ trader-loss-limit-none = No period loss limit configured
 trader-loss-limit-resets-in = Resets in { $hours } { $minutes }
 trader-loss-limit-reached = LIMIT REACHED
 trader-force-stop = Force Stop Everything
+trader-force-stop-hint = Halts every monitor, copy task and trade at once.
+trader-force-stop-idle = Nothing is running that a force stop would halt.
 
 ## Confirmations. `.message` is the body and `.confirm` the confirming button.
 

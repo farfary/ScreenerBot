@@ -64,6 +64,8 @@ trader-loss-limit-none = محدودیت ضرر دوره‌ای تنظیم نشد
 trader-loss-limit-resets-in = بازنشانی تا { $hours } { $minutes } دیگر
 trader-loss-limit-reached = به سقف رسیده است
 trader-force-stop = توقف اجباری همه چیز
+trader-force-stop-hint = همهٔ مانیتورها، وظایف کپی و معاملات را یک‌جا متوقف می‌کند.
+trader-force-stop-idle = چیزی در حال اجرا نیست که توقف اجباری آن را متوقف کند.
 
 ## Confirmations. `.message` is the body and `.confirm` the confirming button.
 

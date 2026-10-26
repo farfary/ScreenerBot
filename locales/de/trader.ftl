@@ -60,6 +60,8 @@ trader-loss-limit-none = Kein Verlustlimit pro Zeitraum konfiguriert
 trader-loss-limit-resets-in = Zurücksetzung in { $hours } { $minutes }
 trader-loss-limit-reached = LIMIT ERREICHT
 trader-force-stop = Alles sofort stoppen
+trader-force-stop-hint = Hält alle Monitore, Kopieraufgaben und Trades sofort an.
+trader-force-stop-idle = Es läuft nichts, das ein Notstopp anhalten würde.
 
 trader-force-stop-confirm = Trading sofort stoppen
     .message = Dadurch werden ALLE Trading-Vorgänge sofort angehalten. Fortfahren?

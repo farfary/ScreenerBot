@@ -213,7 +213,10 @@ export function createTraderControls({
     ]);
 
     if (forceStop) updateForceStopBanner(forceStop);
-    if (monitors) updateMonitorControls(monitors);
+    if (monitors) {
+      updateMonitorControls(monitors);
+      updateForceStopAvailability(monitors);
+    }
     updateLossLimitPanel(lossLimit);
   }
 
@@ -237,6 +240,22 @@ export function createTraderControls({
       banner.style.display = "none";
       btn.style.display = "flex";
     }
+    // While stopped the banner and its resume action replace the button and its hint.
+    const hint = $("#force-stop-hint");
+    if (hint) hint.hidden = Boolean(data?.is_stopped);
+  }
+
+  /**
+   * The force stop is offered only while it has something to halt; otherwise it keeps
+   * its place, disabled, and its hint says why.
+   */
+  function updateForceStopAvailability(data) {
+    const btn = $("#force-stop-btn");
+    const hint = $("#force-stop-hint");
+    if (!btn || !hint) return;
+    const idle = data.anything_running === false;
+    btn.disabled = idle;
+    hint.textContent = idle ? I18n.t("trader-force-stop-idle") : I18n.t("trader-force-stop-hint");
   }
 
   /**

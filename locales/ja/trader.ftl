@@ -64,6 +64,8 @@ trader-loss-limit-none = 期間損失上限は設定されていません
 trader-loss-limit-resets-in = { $hours } { $minutes }後にリセット
 trader-loss-limit-reached = 上限到達
 trader-force-stop = すべてを強制停止
+trader-force-stop-hint = すべてのモニター、コピータスク、取引を一度に停止します。
+trader-force-stop-idle = 強制停止で止める対象は現在何も動いていません。
 
 ## Confirmations. `.message` is the body and `.confirm` the confirming button.
 

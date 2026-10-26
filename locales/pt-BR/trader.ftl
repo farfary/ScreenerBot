@@ -64,6 +64,8 @@ trader-loss-limit-none = Nenhum limite de perda do período configurado
 trader-loss-limit-resets-in = Reinicia em { $hours } { $minutes }
 trader-loss-limit-reached = LIMITE ATINGIDO
 trader-force-stop = Forçar parada de tudo
+trader-force-stop-hint = Interrompe de uma vez todos os monitores, tarefas de cópia e trades.
+trader-force-stop-idle = Nada está em execução para uma parada forçada interromper.
 
 ## Confirmations. `.message` is the body and `.confirm` the confirming button.
 

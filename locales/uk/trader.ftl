@@ -64,6 +64,8 @@ trader-loss-limit-none = Ліміт збитків за період не нал
 trader-loss-limit-resets-in = Скидання через { $hours } { $minutes }
 trader-loss-limit-reached = ЛІМІТ ДОСЯГНУТО
 trader-force-stop = Примусово зупинити все
+trader-force-stop-hint = Одразу зупиняє всі монітори, завдання копіювання та угоди.
+trader-force-stop-idle = Зараз не працює нічого, що зупинила б примусова зупинка.
 
 ## Confirmations. `.message` is the body and `.confirm` the confirming button.
 

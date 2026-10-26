@@ -51,6 +51,7 @@ pub fn get_promo_monitors_status() -> MonitorsStatus {
         master_enabled: trader.running,
         force_stopped: false,
         available: trader.available,
+        anything_running: trader.running,
     }
 }
 
@@ -220,6 +221,7 @@ mod tests {
         assert!(monitors.available);
         assert!(!monitors.force_stopped);
         assert_eq!(monitors.master_enabled, status.running);
+        assert_eq!(monitors.anything_running, status.running);
         for monitor in [&monitors.entry_monitor, &monitors.exit_monitor] {
             assert!(monitor.enabled);
             assert_eq!(monitor.running, status.running);

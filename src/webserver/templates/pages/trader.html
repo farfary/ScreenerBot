@@ -115,10 +115,17 @@
               </div>
             </div>
 
-            <!-- Force Stop Button -->
-            <button type="button" class="btn btn-danger btn-force-stop" id="force-stop-btn">
+            <!-- Force Stop Button. Its hint line is always present, so the panel keeps
+                 one height whether the stop has something to halt or not. -->
+            <button
+              type="button"
+              class="btn btn-danger btn-force-stop"
+              id="force-stop-btn"
+              aria-describedby="force-stop-hint"
+            >
               <i class="icon-octagon"></i> <span data-l10n-id="trader-force-stop"></span>
             </button>
+            <p class="force-stop-hint" id="force-stop-hint" data-l10n-id="trader-force-stop-hint"></p>
           </div>
         </div>
         <!-- /LEFT COLUMN -->

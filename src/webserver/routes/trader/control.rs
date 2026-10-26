@@ -187,7 +187,7 @@ pub async fn monitors_status_handler(State(_state): State<Arc<AppState>>) -> Res
     if crate::webserver::promo::are_promo_fixtures_enabled() {
         return success_response(crate::webserver::promo::get_promo_monitors_status());
     }
-    success_response(trader::monitors_status())
+    success_response(trader::monitors_status().await)
 }
 
 async fn toggle_monitor(monitor: Monitor, enabled: bool, field: &str) -> Response {

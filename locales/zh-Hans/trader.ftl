@@ -64,6 +64,8 @@ trader-loss-limit-none = 未配置周期亏损限额
 trader-loss-limit-resets-in = { $hours } { $minutes }后重置
 trader-loss-limit-reached = 已达限额
 trader-force-stop = 强制停止全部
+trader-force-stop-hint = 立即停止所有监控、复制任务和交易。
+trader-force-stop-idle = 当前没有可供强制停止的运行项。
 
 ## Confirmations. `.message` is the body and `.confirm` the confirming button.
 

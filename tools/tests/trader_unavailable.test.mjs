@@ -6,7 +6,9 @@
  * Guard: the Trader Stats panel states only what is true. While the trader cannot run
  * (Explore Mode, setup incomplete) no control reads as on, the notice is a muted
  * sentence with the setup action rather than an error, and no recovery button shows.
- * The loss-limit recovery buttons appear only once a configured limit has tripped,
+ * Force Stop Everything keeps its place but is disabled, its hint saying nothing is
+ * running for it to halt; with anything running it is enabled and its hint says what
+ * it halts. The loss-limit recovery buttons appear only once a configured limit has tripped,
  * and the drawdown card carries its danger accent only when a drawdown exists.
  *
  * Run with `npm run test:js`.
@@ -37,6 +39,7 @@ const UNAVAILABLE_MONITORS = {
   master_enabled: false,
   force_stopped: false,
   available: false,
+  anything_running: false,
 };
 const LOSS_LIMIT_OFF = {
   enabled: false,
@@ -117,6 +120,13 @@ test("an unavailable trader shows no control as on and offers setup", async () =
     assert.equal(await tab.locator("#loss-limit-reset-btn").isVisible(), false);
     assert.equal(await tab.locator("#resume-trading-btn").isVisible(), false);
 
+    const forceStop = tab.locator("#force-stop-btn");
+    await tab
+      .locator("#force-stop-hint", { hasText: "Nothing is running that a force stop would halt." })
+      .waitFor();
+    assert.equal(await forceStop.isVisible(), true, "the force stop keeps its place");
+    assert.equal(await forceStop.isDisabled(), true, "nothing to halt, so nothing to press");
+
     // The bar is the sentence and its setup action; nothing else competes for the column.
     const shown = await tab
       .locator("#trader-status-bar")
@@ -182,6 +192,10 @@ test("a tripped loss limit offers recovery and a drawdown carries the accent", a
     assert.equal(await tab.locator("#loss-limit-reset-btn").isVisible(), true);
     assert.equal(await tab.locator("#trader-setup-action").isVisible(), false);
     assert.equal(await tab.locator("#entry-monitor-toggle").isChecked(), true);
+    await tab
+      .locator("#force-stop-hint", { hasText: "Halts every monitor, copy task and trade at once." })
+      .waitFor();
+    assert.equal(await tab.locator("#force-stop-btn").isDisabled(), false);
 
     const drawdownCard = tab.locator(".metric-card.metric-highlight-danger", {
       has: tab.locator("#max-drawdown"),

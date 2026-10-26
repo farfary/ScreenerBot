@@ -64,6 +64,8 @@ trader-loss-limit-none = 설정된 기간 손실 한도가 없습니다
 trader-loss-limit-resets-in = { $hours } { $minutes } 후 초기화
 trader-loss-limit-reached = 한도 도달
 trader-force-stop = 모두 강제 중지
+trader-force-stop-hint = 모든 모니터, 복사 작업, 거래를 한 번에 중지합니다.
+trader-force-stop-idle = 강제 중지로 멈출 실행 중인 항목이 없습니다.
 
 ## Confirmations. `.message` is the body and `.confirm` the confirming button.
 

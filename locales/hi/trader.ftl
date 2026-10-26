@@ -52,6 +52,8 @@ trader-loss-limit-none = कोई अवधि लॉस लिमिट से
 trader-loss-limit-resets-in = { $hours } { $minutes } में रीसेट
 trader-loss-limit-reached = लिमिट पूरी हुई
 trader-force-stop = सब कुछ ज़बरन रोकें
+trader-force-stop-hint = सभी मॉनिटर, कॉपी टास्क और ट्रेड एक साथ रोकता है।
+trader-force-stop-idle = ऐसा कुछ नहीं चल रहा जिसे ज़बरन रोकना रोक सके।
 
 trader-force-stop-confirm = ट्रेडिंग ज़बरन रोकें
     .message = इससे सभी ट्रेडिंग ऑपरेशन तुरंत रुक जाएंगे। जारी रखें?

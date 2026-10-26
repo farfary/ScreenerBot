@@ -52,6 +52,8 @@ trader-loss-limit-none = Лимит убытков за период не зад
 trader-loss-limit-resets-in = Сброс через { $hours } { $minutes }
 trader-loss-limit-reached = ЛИМИТ ДОСТИГНУТ
 trader-force-stop = Остановить всё принудительно
+trader-force-stop-hint = Сразу останавливает все мониторы, задачи копирования и сделки.
+trader-force-stop-idle = Сейчас не работает ничего, что остановила бы принудительная остановка.
 
 trader-force-stop-confirm = Принудительная остановка торговли
     .message = Все торговые операции будут немедленно остановлены. Продолжить?

@@ -64,6 +64,8 @@ trader-loss-limit-none = لم يتم ضبط حد خسارة للفترة
 trader-loss-limit-resets-in = تتم إعادة الضبط خلال { $hours } { $minutes }
 trader-loss-limit-reached = تم بلوغ الحد
 trader-force-stop = إيقاف كل شيء قسريًا
+trader-force-stop-hint = يوقف كل المراقبات ومهام النسخ والصفقات دفعة واحدة.
+trader-force-stop-idle = لا يعمل شيء يمكن للإيقاف القسري أن يوقفه.
 
 ## Confirmations. `.message` is the body and `.confirm` the confirming button.
 

@@ -52,6 +52,8 @@ trader-loss-limit-none = Chưa cấu hình giới hạn lỗ theo kỳ
 trader-loss-limit-resets-in = Đặt lại sau { $hours } { $minutes }
 trader-loss-limit-reached = ĐÃ ĐẠT GIỚI HẠN
 trader-force-stop = Dừng cưỡng chế mọi thứ
+trader-force-stop-hint = Dừng ngay mọi trình theo dõi, tác vụ sao chép và giao dịch.
+trader-force-stop-idle = Không có gì đang chạy để lệnh dừng cưỡng chế phải dừng.
 
 trader-force-stop-confirm = Dừng cưỡng chế giao dịch
     .message = Thao tác này sẽ dừng ngay TẤT CẢ hoạt động giao dịch. Tiếp tục?

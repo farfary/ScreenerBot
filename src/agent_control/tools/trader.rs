@@ -80,7 +80,7 @@ impl Tool for GetTraderStatusTool {
         ToolResult::success(json!({
             "trader": trader::trader_status(),
             "force_stop": crate::global::get_force_stop_status(),
-            "monitors": trader::monitors_status(),
+            "monitors": trader::monitors_status().await,
             "loss_limit": trader::loss_limit_snapshot(),
             "entries_blocked_by_loss_limit":
                 trader::safety::loss_limit::is_entry_blocked_by_loss_limit(),
@@ -235,7 +235,7 @@ impl Tool for SetTraderMonitorTool {
             Err(e) => return e,
         };
         match trader::set_monitor_enabled(params.monitor, params.enabled) {
-            Ok(()) => ToolResult::success(json!({ "monitors": trader::monitors_status() })),
+            Ok(()) => ToolResult::success(json!({ "monitors": trader::monitors_status().await })),
             Err(e) => ToolResult::error(e.to_string()),
         }
     }

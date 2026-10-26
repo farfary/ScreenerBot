@@ -3,5 +3,6 @@
   "exit_monitor": { "enabled": true, "running": true },
   "master_enabled": true,
   "force_stopped": false,
-  "available": true
+  "available": true,
+  "anything_running": true
 }

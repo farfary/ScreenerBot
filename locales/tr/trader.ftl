@@ -52,6 +52,8 @@ trader-loss-limit-none = Dönemlik zarar limiti yapılandırılmadı
 trader-loss-limit-resets-in = Sıfırlanmaya kalan: { $hours } { $minutes }
 trader-loss-limit-reached = LİMİTE ULAŞILDI
 trader-force-stop = Her şeyi zorla durdur
+trader-force-stop-hint = Tüm izleyicileri, kopyalama görevlerini ve işlemleri bir anda durdurur.
+trader-force-stop-idle = Zorla durdurmanın durduracağı çalışan bir şey yok.
 
 trader-force-stop-confirm = İşlemi zorla durdur
     .message = Bu, TÜM işlem operasyonlarını hemen durdurur. Devam edilsin mi?

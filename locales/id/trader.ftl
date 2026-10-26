@@ -54,6 +54,8 @@ trader-loss-limit-none = Batas kerugian periode belum dikonfigurasi
 trader-loss-limit-resets-in = Direset dalam { $hours } { $minutes }
 trader-loss-limit-reached = BATAS TERCAPAI
 trader-force-stop = Hentikan Paksa Semuanya
+trader-force-stop-hint = Menghentikan semua monitor, tugas salin, dan trade sekaligus.
+trader-force-stop-idle = Tidak ada yang berjalan untuk dihentikan oleh hentian paksa.
 
 trader-force-stop-confirm = Hentikan Paksa Trading
     .message = Ini akan langsung menghentikan SEMUA operasi trading. Lanjutkan?
