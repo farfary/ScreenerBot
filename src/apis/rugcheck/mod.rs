@@ -216,27 +216,72 @@ impl RugcheckClient {
     // Stats Endpoints
     // ========================================================================
 
+    /// Decodes a stats list. Rugcheck answers a stats list that has no entries with a
+    /// `null` body and HTTP 200; that is an empty list, not a parse error.
+    async fn parse_stats_list<T>(&self, url: &str, endpoint: &str) -> Result<Vec<T>, Error>
+    where
+        T: DeserializeOwned,
+    {
+        let list: StatsList<T> = self.parse_json(url, endpoint).await?;
+        Ok(list.unwrap_or_default())
+    }
+
     /// Fetch new tokens from /v1/stats/new_tokens
     pub async fn fetch_new_tokens(&self) -> Result<Vec<RugcheckNewToken>, Error> {
         let url = format!("{RUGCHECK_STATS_BASE_URL}/new_tokens");
-        self.parse_json(&url, "rugcheck.stats.new_tokens").await
+        self.parse_stats_list(&url, "rugcheck.stats.new_tokens")
+            .await
     }
 
     /// Fetch most viewed tokens from /v1/stats/recent
     pub async fn fetch_recent_tokens(&self) -> Result<Vec<RugcheckRecentToken>, Error> {
         let url = format!("{RUGCHECK_STATS_BASE_URL}/recent");
-        self.parse_json(&url, "rugcheck.stats.recent").await
+        self.parse_stats_list(&url, "rugcheck.stats.recent").await
     }
 
     /// Fetch trending tokens from /v1/stats/trending
     pub async fn fetch_trending_tokens(&self) -> Result<Vec<RugcheckTrendingToken>, Error> {
         let url = format!("{RUGCHECK_STATS_BASE_URL}/trending");
-        self.parse_json(&url, "rugcheck.stats.trending").await
+        self.parse_stats_list(&url, "rugcheck.stats.trending").await
     }
 
     /// Fetch verified tokens from /v1/stats/verified
     pub async fn fetch_verified_tokens(&self) -> Result<Vec<RugcheckVerifiedToken>, Error> {
         let url = format!("{RUGCHECK_STATS_BASE_URL}/verified");
-        self.parse_json(&url, "rugcheck.stats.verified").await
+        self.parse_stats_list(&url, "rugcheck.stats.verified").await
+    }
+}
+
+/// The body shape of every `/v1/stats/*` list: an array, or `null` when it is empty.
+type StatsList<T> = Option<Vec<T>>;
+
+#[cfg(test)]
+mod tests {
+    use super::types::{
+        RugcheckNewToken, RugcheckRecentToken, RugcheckTrendingToken, RugcheckVerifiedToken,
+    };
+    use super::StatsList;
+
+    fn decode<T: serde::de::DeserializeOwned>(body: &str) -> Vec<T> {
+        serde_json::from_str::<StatsList<T>>(body)
+            .expect("a stats list body decodes")
+            .unwrap_or_default()
+    }
+
+    #[test]
+    fn a_null_stats_list_is_an_empty_list() {
+        assert!(decode::<RugcheckTrendingToken>("null").is_empty());
+        assert!(decode::<RugcheckNewToken>("null").is_empty());
+        assert!(decode::<RugcheckRecentToken>("null").is_empty());
+        assert!(decode::<RugcheckVerifiedToken>("null").is_empty());
+    }
+
+    #[test]
+    fn a_stats_list_keeps_its_entries() {
+        let tokens = decode::<RugcheckTrendingToken>(
+            r#"[{"mint":"So11111111111111111111111111111111111111112","vote_count":3,"up_count":2}]"#,
+        );
+        assert_eq!(tokens.len(), 1);
+        assert_eq!(tokens[0].vote_count, 3);
     }
 }
