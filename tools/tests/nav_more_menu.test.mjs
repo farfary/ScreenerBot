@@ -12,9 +12,10 @@
  *   While the page on screen is a folded tab, the More control carries the current mark
  *   and the travelling indicator sits under it.
  *
- * - Before either layout applies, the row is compacted by measurement: icons give way
- *   only when the full row does not fit, labels tighten only when it still does not, and
- *   the row is measured again on resize and when its labels change.
+ * - Before either layout applies, the row is compacted by measurement: labels tighten
+ *   only when the full row does not fit, and the row is measured again on resize and
+ *   when its labels change.
+ * - The row shows labels only; the More list keeps each tab's glyph.
  *   The overflow cases run at a width where the default set does not fit at all.
  *
  * Each case runs in a left-to-right and a right-to-left locale.
@@ -33,7 +34,7 @@ import { createApiHandler, loadIndex } from "../lib/dashboard_fixtures.mjs";
 // `overflowWidth`: a viewport at which the default tab set no longer fits the row in
 // that locale. Persian labels are short enough to fit down to tablet width.
 const LOCALES = [
-  { locale: "en", next: "ArrowRight", overflowWidth: 900 },
+  { locale: "en", next: "ArrowRight", overflowWidth: 760 },
   { locale: "fa", next: "ArrowLeft", overflowWidth: 640 },
 ];
 
@@ -89,7 +90,7 @@ function rowState(page) {
       })),
       more: more.hidden ? null : rect(more),
       overflow: document.getElementById("navTabs").scrollWidth - row.clientWidth,
-      faces: ["is-iconless", "is-condensed"].filter((face) =>
+      faces: ["is-condensed"].filter((face) =>
         document.getElementById("navTabs").classList.contains(face)
       ),
     };
@@ -252,33 +253,51 @@ for (const locale of ["en", "de", "ru"]) {
   }
 }
 
-test("every default tab fits at 1200px and 1400px in English, icons kept at 1920px", async () => {
-  for (const [width, faces] of [
-    [1920, []],
-    [1400, null],
-    [1200, null],
-  ]) {
+test("the row shows no tab glyph at 1200px and 1920px, and the More list keeps them", async () => {
+  for (const width of [1200, 1920]) {
     const { context, page } = await openHome("en", width);
     const state = await rowState(page);
     assert.ok(fits(state), `${width}px overflows by ${state.overflow}px`);
-    if (faces) assert.deepEqual(state.faces, faces, `${width}px keeps the full face`);
+    assert.deepEqual(state.faces, [], `${width}px keeps the full face`);
+    const shown = await page.$$eval(
+      "#navTabs > a.tab i",
+      (glyphs) => glyphs.filter((glyph) => glyph.getClientRects().length > 0).length
+    );
+    assert.equal(shown, 0, `${width}px shows a glyph in the row`);
     await context.close();
   }
+
+  const { context, page } = await openHome("en", 760);
+  await useMenuLayout(page);
+  await page.click("#navMoreToggle");
+  await page.waitForSelector("#navMoreList.open");
+  const items = await page.$$eval("#navMoreList .dropdown-item", (entries) =>
+    entries.map((entry) => ({
+      page: entry.dataset.page,
+      id: entry.id,
+      glyph: entry.querySelector("i")?.getClientRects().length > 0,
+    }))
+  );
+  assert.ok(items.length > 0, "the More list has entries at 760px");
+  for (const item of items) {
+    assert.equal(item.glyph, true, `${item.page} keeps its glyph in the More list`);
+    assert.equal(item.id, "", `${item.page} does not repeat its tab's id in the More list`);
+  }
+  await context.close();
 });
 
 test("the row is measured again on resize and when a label changes", async () => {
-  const { context, page } = await openHome("en", 1920);
+  const { context, page } = await openHome("en", 1200);
   assert.deepEqual((await rowState(page)).faces, []);
 
-  await page.setViewportSize({ width: 1200, height: 800 });
+  await page.setViewportSize({ width: 800, height: 800 });
   await page.waitForFunction(() =>
-    document.getElementById("navTabs").classList.contains("is-iconless")
+    document.getElementById("navTabs").classList.contains("is-condensed")
   );
-  assert.ok(fits(await rowState(page)), "the narrower row fits once compacted");
 
-  await page.setViewportSize({ width: 1920, height: 800 });
+  await page.setViewportSize({ width: 1200, height: 800 });
   await page.waitForFunction(
-    () => !document.getElementById("navTabs").classList.contains("is-iconless")
+    () => !document.getElementById("navTabs").classList.contains("is-condensed")
   );
 
   // A language with longer labels arrives as new label text.
@@ -288,8 +307,7 @@ test("the row is measured again on resize and when a label changes", async () =>
     }
   });
   await page.waitForFunction(() =>
-    document.getElementById("navTabs").classList.contains("is-iconless")
+    document.getElementById("navTabs").classList.contains("is-condensed")
   );
   await context.close();
 });
-

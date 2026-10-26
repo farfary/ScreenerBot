@@ -1,156 +1,110 @@
 /* Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
  * SPDX-License-Identifier: BUSL-1.1 */
 
-/**
- * TabBar Component Styles
- *
- * Two-row tab system with CSS Grid for precise alignment:
- * - Row 1: Main tabs (server-rendered navigation)
- * - Row 2: Sub-tabs (page-specific navigation)
- *
- * CSS Variables for theming:
- * - --tab-bar-bg-primary: Main tabs background
- * - --tab-bar-bg-secondary: Sub-tabs background
- * - --tab-bar-text-color: Default text color
- * - --tab-bar-text-active: Active tab text color
- * - --tab-bar-border-color: Border colors
- * - --tab-bar-active-border: Active tab border color
- */
+/* The tab rows of the shell: the tab tokens shared by the main navigation row
+   (`header_responsive.css`) and the page sub-tab row, the sub-tab row itself, the tab
+   scroll strip both rows and the ticker scroll in, and keyboard focus inside a strip.
 
-/* ============================================================================
-   CSS Variables (Theme-aware)
-   ============================================================================ */
+   Both rows mark the selected tab one way: the label in `--tab-bar-text-active` and a
+   solid `--tab-indicator-size` bar along the tab's bottom edge. No state changes a tab's
+   geometry, so widths never move between idle, hover, selected and focused. */
 
 :root {
-  /* Tab bar colors - inherit from theme */
-  --tab-bar-bg-primary: var(--bg-secondary);
-  --tab-bar-bg-secondary: var(--bg-card);
+  --tab-row-height: 36px;
+  --tab-font-size: 13px;
+  /* The row's padding is the shell gutter minus this, so the first label of every row
+     starts on the brand mark's edge. */
+  --tab-pad-inline: min(12px, var(--shell-inline-padding));
+  --tab-indicator-size: 2px;
   --tab-bar-text-color: var(--text-secondary);
-  --tab-bar-text-active: var(--link-color);
+  --tab-bar-text-active: var(--primary-color);
+  --tab-bar-active-border: var(--primary-color);
   --tab-bar-border-color: var(--border-color);
-  --tab-bar-active-border: var(--link-color);
-
-  /* Tab bar dimensions */
-  --tab-bar-padding-y: 8px;
-  --tab-bar-sub-font-size: 0.9em;
+  /* The main row keeps its own band; the sub-row sits on the page surface it heads. */
+  --tab-bar-bg-primary: var(--bg-secondary);
+  --tab-bar-bg-secondary: var(--bg-primary);
 }
 
 /* ============================================================================
-   Main Tabs (First Row)
-   ============================================================================ */
-
-/* A main tab (`.tab`, server-rendered into `.nav-tabs`) and the More control beside it
-   are styled by `header_responsive.css` — see `.nav-tabs > a` and `.nav-more-toggle`,
-   which is the single source and outranks `.tab`. Only the keyboard focus ring is ours;
-   `foundation.css` suppresses it for mouse input. */
-.tab:focus-visible,
-.nav-more-toggle:focus-visible {
-  outline: 2px solid var(--tab-bar-active-border);
-  outline-offset: -2px;
-  z-index: 1;
-}
-
-/* ============================================================================
-   Sub-Tabs Container (Second Row)
+   Sub-tab row
    ============================================================================ */
 
 .sub-tabs-container {
-  background: var(--tab-bar-bg-secondary);
-  border-bottom: 1px solid var(--tab-bar-border-color);
-  padding: 0 12px;
-  display: none; /* Hidden by default, shown by TabBar */
-  gap: 2px;
-  min-height: 0; /* No minimum height needed */
   position: relative;
+  display: none; /* Shown by TabBar while a page owns the row */
+  box-sizing: border-box;
+  height: var(--tab-row-height);
+  padding: 0 calc(var(--shell-inline-padding) - var(--tab-pad-inline));
+  gap: 0;
+  border-bottom: 1px solid var(--tab-bar-border-color);
+  background: var(--tab-bar-bg-secondary);
 }
 
 .sub-tabs-container[data-ui="tab-bar"] {
-  display: flex; /* Show when managed by TabBar */
+  display: flex;
 }
-
-/* ============================================================================
-   Sub-Tab Buttons
-   ============================================================================ */
 
 .sub-tab {
+  position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: var(--tab-bar-padding-y) 14px;
-  background: transparent;
+  padding: 0 var(--tab-pad-inline);
   border: none;
   border-radius: 0;
+  background: transparent;
   color: var(--tab-bar-text-color);
-  font-weight: 500;
-  font-size: var(--tab-bar-sub-font-size);
-  cursor: pointer;
-  border-bottom: 2px solid transparent;
-  transition:
-    color 0.15s ease,
-    background 0.15s ease,
-    border-color 0.15s ease,
-    transform 0.1s ease;
-  white-space: nowrap;
-  position: relative;
-  user-select: none;
   font-family: inherit;
-  letter-spacing: 0.01em;
-}
-
-.sub-tab i {
-  font-size: 0.85em;
+  font-size: var(--tab-font-size);
+  font-weight: 500;
+  letter-spacing: 0;
   line-height: 1;
-  opacity: 0.8;
-  transition: opacity var(--transition-fast);
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+  transition: color var(--transition-fast);
 }
 
 .sub-tab:hover {
   color: var(--text-primary);
-  background: var(--primary-alpha-5);
 }
 
-.sub-tab:hover i {
-  opacity: 1;
-}
-
-.sub-tab:focus-visible {
-  outline: 2px solid var(--tab-bar-active-border);
-  outline-offset: -2px;
-  z-index: 1;
-}
-
-.sub-tab:active:not(:disabled) {
-  transform: translateY(1px);
-}
-
+/* The selected tab keeps the idle weight: a heavier label is wider and would shift
+   every tab after it on each switch. Colour and the bar are the whole state. */
 .sub-tab.active {
   color: var(--tab-bar-text-active);
-  border-bottom-color: var(--tab-bar-active-border);
-
-  /* Keep the SAME font-weight as inactive (.sub-tab is 500). Bumping to 600 on
-     active makes the bold label wider, so every sub-tab visibly reflows/jumps
-     width when you switch between them. Active is already clearly marked by the
-     accent color, background tint and bottom border — no weight change needed,
-     so widths stay fixed across switches. */
-  background: var(--primary-alpha-5);
 }
 
-.sub-tab.active i {
-  opacity: 1;
+.sub-tab.active::after {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  height: var(--tab-indicator-size);
+  background: var(--tab-bar-active-border);
+  pointer-events: none;
 }
 
-.sub-tab:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+/* While the router loads a page that has a sub-tab row, the row's slot keeps its height,
+   surface and rule, so the row does not blink between two pages that both have one. */
+.tab-scroll-wrapper.is-reserved {
+  box-sizing: border-box;
+  height: var(--tab-row-height);
+  border-bottom: 1px solid var(--tab-bar-border-color);
+  background: var(--tab-bar-bg-secondary);
 }
 
 /* ============================================================================
-   Accessibility Enhancements
+   Keyboard focus inside a strip
    ============================================================================ */
 
-/* Focus styles handled by :focus-visible above for keyboard navigation only */
+/* A strip clips everything outside its box vertically, so the ring is drawn inside the
+   control. It shows only in the keyboard modality (`foundation.css` owns the gate) and
+   covers the main tabs, the sub-tabs, the ticker buttons and the page chevrons. */
+html[data-input="keyboard"] .tab-scroll-area :is(a, button):focus-visible,
+html[data-input="keyboard"] .tab-scroll-btn:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--primary-color);
+}
 
-/* Reduced motion support */
 @media (prefers-reduced-motion: reduce) {
   .sub-tab,
   .tab-scroll-wrapper::before,
@@ -159,10 +113,6 @@
     transition: none;
   }
 }
-
-/* ============================================================================
-   High Contrast Mode Support
-   ============================================================================ */
 
 /* stylelint-disable-next-line media-feature-name-value-no-unknown */
 @media (prefers-contrast: high) {
@@ -182,51 +132,6 @@
 }
 
 /* ============================================================================
-   Responsive Design
-   ============================================================================ */
-
-/* Tablet and below: Reduce padding for more tabs visible */
-@media (width <= 1024px) {
-  :root {
-    --tab-bar-sub-font-size: 0.85em;
-  }
-
-  .sub-tabs-container {
-    padding: 0 6px;
-    min-height: 40px;
-  }
-}
-
-/* Mobile: Further reduce for small screens */
-@media (width <= 768px) {
-  :root {
-    --tab-bar-padding-y: 6px;
-    --tab-bar-sub-font-size: 0.8em;
-  }
-
-  .sub-tabs-container {
-    padding: 0 4px;
-    gap: 2px;
-    min-height: 38px;
-  }
-
-  .sub-tab {
-    padding: var(--tab-bar-padding-y) 12px;
-  }
-}
-
-/* Very small screens: Minimal padding */
-@media (width <= 425px) {
-  :root {
-    --tab-bar-padding-y: 5px;
-  }
-
-  .sub-tab {
-    padding: var(--tab-bar-padding-y) 10px;
-  }
-}
-
-/* ============================================================================
    Print Styles
    ============================================================================ */
 
@@ -238,38 +143,6 @@
 }
 
 /* ============================================================================
-   Dark Theme Adjustments
-   ============================================================================ */
-
-[data-theme="dark"] {
-  --tab-bar-bg-primary: var(--bg-secondary);
-  --tab-bar-bg-secondary: var(--bg-card);
-  --tab-bar-text-color: var(--text-secondary);
-  --tab-bar-text-active: var(--link-color);
-  --tab-bar-border-color: var(--border-color);
-}
-
-/* ============================================================================
-   Utility Classes
-   ============================================================================ */
-
-/* Force hide sub-tabs container (useful for pages without sub-tabs) */
-.sub-tabs-container.hidden {
-  display: none;
-}
-
-/* Compact mode (for dense UIs) */
-.sub-tabs-container.compact {
-  min-height: 36px;
-  padding: 0 6px;
-}
-
-.sub-tabs-container.compact .sub-tab {
-  padding: 6px 12px;
-  font-size: 0.85em;
-}
-
-/* ============================================================================
    Tab scroll strip - one row of tabs that scrolls sideways when it does not fit
    ============================================================================ */
 
@@ -277,7 +150,8 @@
    tab_bar.js). The wrapper holds the scrolling `.tab-scroll-area` and two page
    buttons; `can-scroll-start` / `can-scroll-end` on the wrapper show the edge fade and
    the button on each side that still has tabs out of view. The fade is painted in the
-   row's own surface colour, `--tab-scroll-bg` (the sub-tab surface by default), so it reads as the row running on. */
+   row's own surface colour, `--tab-scroll-bg` (the sub-tab surface by default), so it
+   reads as the row running on. */
 .tab-scroll-wrapper {
   --tab-scroll-fade: 40px;
 
@@ -359,11 +233,6 @@
 
 .tab-scroll-btn:hover {
   color: var(--text-primary);
-}
-
-.tab-scroll-btn:focus-visible {
-  outline: 2px solid var(--tab-bar-active-border);
-  outline-offset: -2px;
 }
 
 .tab-scroll-btn--start {

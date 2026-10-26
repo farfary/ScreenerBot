@@ -15,7 +15,8 @@
  *   sits in a `.tab-scroll-wrapper` with a start and an end page button, each
  *   labelled through the Fluent id for its side.
  * - Only `tab_bar.js` toggles the `can-scroll-*` state and only `tab_bar.css` styles it.
- * - The page button is a bare glyph: no background, border or shadow.
+ * - The page button is a bare glyph: no background, border or shadow outside the
+ *   keyboard focus ring.
  *
  * Run with `npm run test:js`.
  */
@@ -98,6 +99,8 @@ test("the strip page button is a bare glyph", () => {
   );
   assert.ok(rules.length > 0, "no .tab-scroll-btn rule in tab_bar.css");
   for (const { selector, body } of rules) {
+    // A focus-visible rule belongs to the keyboard-modality focus ring.
+    if (/:focus/.test(selector)) continue;
     for (const declaration of body.matchAll(
       /(?:^|;)\s*(background(?:-color|-image)?|border(?:-[a-z-]+)?|box-shadow|filter)\s*:\s*([^;]+)/g
     )) {

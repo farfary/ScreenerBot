@@ -4,8 +4,6 @@
 /* Global dashboard header: shell, brand, metrics, and actions. */
 
 .modern-header {
-  --header-inline-padding: 32px;
-
   position: sticky;
   top: 0;
   width: 100%;
@@ -63,7 +61,7 @@
   align-items: center;
   gap: 10px;
   height: 60px;
-  padding: 0 var(--header-inline-padding);
+  padding: 0 var(--shell-inline-padding);
   background: transparent;
 }
 
@@ -74,7 +72,7 @@
 
 .electron-macos .header-row-1 {
   /* rtl-ok: undoes the native title-bar reservation above on macOS */
-  padding-right: var(--header-inline-padding);
+  padding-right: var(--shell-inline-padding);
 }
 
 /* Explore Mode is a persistent application state. Its setup action belongs beside
@@ -551,8 +549,11 @@
   display: none;
 }
 
-html[data-input="keyboard"] .modern-header button:focus-visible,
-html[data-input="keyboard"] .modern-header a:focus-visible {
+/* The navigation row and the ticker are tab strips whose controls draw the strip's inset
+   ring (`ui/tab_bar.css`): the strip would clip this outset one. */
+html[data-input="keyboard"]
+  .modern-header
+  :is(button, a):not(.header-row-2-wrapper *, .header-row-3-wrapper *):focus-visible {
   box-shadow:
     0 0 0 2px var(--header-solid-bg, var(--bg-primary)),
     0 0 0 4px var(--primary-color);

@@ -3,6 +3,12 @@
 
 /* Header navigation, live ticker, theme surfaces, and responsive layout. */
 
+/* The shell gutter: the brand mark, the first label of each tab row and the ticker start
+   on it. Declared on the root so rows outside the header (the sub-tab row) read it. */
+:root {
+  --shell-inline-padding: 32px;
+}
+
 [data-theme="light"] {
   --header-solid-bg: #f1f5f9;
   --header-border: #d1d5db;
@@ -25,13 +31,13 @@
 
 /* The primary navigation is a tab scroll strip (tab_bar.css); only its surface is ours. */
 .header-row-2-wrapper {
-  --tab-scroll-bg: var(--bg-secondary);
+  --tab-scroll-bg: var(--tab-bar-bg-primary);
 }
 
 .header-row-2 {
-  height: 36px;
+  height: var(--tab-row-height);
   border-top: 1px solid var(--border-color);
-  background: var(--bg-secondary);
+  background: var(--tab-bar-bg-primary);
 }
 
 .nav-tabs {
@@ -41,40 +47,32 @@
   width: max-content;
   min-width: 100%;
   height: 100%;
-  padding: 0 var(--header-inline-padding);
-  gap: 2px;
+  padding: 0 calc(var(--shell-inline-padding) - var(--tab-pad-inline));
+  gap: 0;
 }
 
-/* One light that TRAVELS from the old tab to the new one, instead of a mark fading out
+/* One bar that TRAVELS from the old tab to the new one, instead of a mark fading out
    here and another fading in there. It is created by `core/header.js` (which measures
    the active tab and drives `--nav-indicator-x`/`-w`); until it exists, `.nav-tabs` has
-   no `has-indicator` class and each tab lights its own `::after` — so navigation still
-   looks right if the script never runs. It lives inside `.nav-tabs`, the full-width flex
-   row, so it scrolls with the tabs for free.
-
-   This is a GLOW, not a drawn bar: a faint light lying along the bottom edge across the
-   tab's full width, fading upward over 4px and blurred so it has no drawable edge. A
-   crisp filled rectangle would read as a border the row wears, rather than the tab
-   emitting light. Kept deliberately dim — it marks the current tab, it does not announce
-   it, and the row is only 36px tall. */
+   no `has-indicator` class and the current tab draws its own `::after` bar, so
+   navigation still looks right if the script never runs. It lives inside `.nav-tabs`,
+   the full-width flex row, so it scrolls with the tabs. */
 .nav-tabs-indicator {
   position: absolute;
   bottom: 0;
   /* rtl-ok: tab indicator offset is a JS-written physical translateX */
   left: 0;
   width: var(--nav-indicator-w, 0);
-  height: 4px;
-  background: linear-gradient(to top, var(--primary-alpha-20), transparent);
-  mask: linear-gradient(var(--to-inline-end), transparent, #000 20%, #000 80%, transparent);
+  height: var(--tab-indicator-size);
+  background: var(--tab-bar-active-border);
   opacity: 0;
   /* rtl-ok: indicator offset is measured from the physical left edge by JS */
   transform: translateX(var(--nav-indicator-x, 0));
-  filter: blur(1px);
   pointer-events: none;
 }
 
 .nav-tabs-indicator.is-visible {
-  opacity: 0.9;
+  opacity: 1;
 }
 
 /* Only animate once it has been placed: transitioning the first measurement would slide
@@ -86,122 +84,72 @@
     opacity var(--transition-fast);
 }
 
-.nav-tabs.has-indicator > a.active::after,
-.nav-tabs.has-indicator .nav-more-toggle.active::after {
-  display: none;
-}
-
-/* The ONE source of truth for a main tab. `tab_bar.css` owns `.sub-tab`; a main tab
-   is a direct `a` of `.nav-tabs`, and the More control's toggle wears the same face so
-   it reads as one more entry of the row. Nothing else styles them. Every state below changes only paint properties (colour, background,
-   opacity, transform), never geometry: the row is 36px and a tab that grows or
-   re-weights on hover would shove its neighbours sideways. */
+/* The ONE source of truth for a main tab. `tab_bar.css` owns the shared tab tokens and
+   `.sub-tab`; a main tab is a direct `a` of `.nav-tabs`, and the More control's toggle
+   wears the same face so it reads as one more entry of the row. Every state below
+   changes only the label colour, never geometry: a tab that grows or re-weights on hover
+   would shove its neighbours sideways. */
 .nav-tabs > a,
 .nav-more-toggle {
   position: relative;
   display: flex;
   align-items: center;
-  gap: 5px;
-  min-height: 36px;
-  padding: 0 10px;
+  gap: 6px;
+  min-height: var(--tab-row-height);
+  padding: 0 var(--tab-pad-inline);
   border-bottom: 0;
-  color: var(--text-secondary);
-  font-size: 12px;
-  font-weight: 650;
-  letter-spacing: 0.04em;
+  color: var(--tab-bar-text-color);
+  font-size: var(--tab-font-size);
+  font-weight: 600;
+  letter-spacing: 0;
   line-height: 1;
   text-decoration: none;
-  text-transform: uppercase;
   white-space: nowrap;
   cursor: pointer;
   user-select: none;
-  transition:
-    background-color var(--transition-fast),
-    color var(--transition-fast);
+  transition: color var(--transition-fast);
 }
 
-/* The icon is quieter than its label until the tab is hovered or current. */
-.nav-tabs > a i,
-.nav-more-toggle i {
-  font-size: 13px;
-  opacity: 0.6;
-  transition: opacity var(--transition-fast);
-}
-
-/* Measured compaction (nav_more_menu.js): when the full row does not fit, the icons
-   give way, then the labels tighten. Only geometry changes; every state stays. */
-.nav-tabs.is-iconless > a i,
-.nav-tabs.is-iconless .nav-more-toggle i {
+/* The row shows labels only. A tab keeps its glyph in the markup for the More list and
+   Settings > Navigation, which list the same entries with their icons. */
+.nav-tabs > a i {
   display: none;
 }
 
+/* The More control's trailing chevron marks a disclosure. */
+.nav-more-toggle i {
+  font-size: 12px;
+}
+
+/* Measured compaction (nav_more_menu.js): when the full row does not fit, the labels
+   tighten. The row padding derives from the same token, so the first label stays on the
+   shell gutter. */
 .nav-tabs.is-condensed {
-  gap: 0;
+  --tab-pad-inline: 8px;
+  --tab-font-size: 12px;
 }
 
-.nav-tabs.is-condensed > a,
-.nav-tabs.is-condensed .nav-more-toggle {
-  padding: 0 9px;
-  font-size: 11px;
-  letter-spacing: 0.03em;
-}
-
-/* Each tab's own light on the bottom edge — the hover warmth, and the fallback when the
-   travelling indicator has not been created. Same substance as the indicator: a faint
-   glow, never a filled line. It spans the tab's FULL width and fades out within 4px, so
-   only the sliver of row directly beneath the label is touched. Only opacity changes
-   between states — the light brightens and dims, it never grows or moves. */
-.nav-tabs > a::after,
-.nav-more-toggle::after {
+/* The current tab's own bar while the travelling indicator has not been created. */
+.nav-tabs:not(.has-indicator) > a.active::after,
+.nav-tabs:not(.has-indicator) .nav-more-toggle.active::after {
   content: "";
   position: absolute;
   inset-inline: 0;
   bottom: 0;
-  height: 4px;
-  background: linear-gradient(to top, var(--primary-alpha-20), transparent);
-
-  /* The ends fade out so the glow has no vertical edge where the tab stops. */
-  mask: linear-gradient(var(--to-inline-end), transparent, #000 20%, #000 80%, transparent);
-  opacity: 0;
-  filter: blur(1px);
+  height: var(--tab-indicator-size);
+  background: var(--tab-bar-active-border);
   pointer-events: none;
-  transition: opacity var(--transition-fast);
 }
 
+/* Hover changes only the label colour, so it never reads as the selection. */
 .nav-tabs > a:hover,
 .nav-more-toggle:hover {
-  background: var(--primary-alpha-5);
   color: var(--text-primary);
-}
-
-.nav-tabs > a:hover i,
-.nav-more-toggle:hover i {
-  opacity: 0.95;
-}
-
-/* Hover barely warms the edge, so the current tab stays the brightest thing in the row
-   and hovering never looks like navigating. */
-.nav-tabs > a:hover::after,
-.nav-more-toggle:hover::after {
-  opacity: 0.25;
 }
 
 .nav-tabs > a.active,
 .nav-more-toggle.active {
-  /* No wash across the tab and no glow on the label: the colour plus the light beneath it
-     is the whole state. Anything more turns a 36px row into a light show. */
-  color: var(--primary-color);
-  background: var(--primary-alpha-5);
-}
-
-.nav-tabs > a.active i,
-.nav-more-toggle.active i {
-  opacity: 1;
-}
-
-.nav-tabs > a.active::after,
-.nav-more-toggle.active::after {
-  opacity: 0.9;
+  color: var(--tab-bar-text-active);
 }
 
 /* A tab folded into the More menu leaves the row. */
@@ -259,7 +207,7 @@
   width: max-content;
   min-width: 100%;
   height: 100%;
-  padding: 0 var(--header-inline-padding);
+  padding: 0 max(0px, calc(var(--shell-inline-padding) - 14px));
   white-space: nowrap;
 }
 
@@ -363,8 +311,8 @@ button.ticker-segment:hover .ticker-icon {
 
 /* Wide desktop */
 @media (width >= 1600px) {
-  .modern-header {
-    --header-inline-padding: 40px;
+  :root {
+    --shell-inline-padding: 40px;
   }
 
   .header-row-1 {
@@ -378,8 +326,8 @@ button.ticker-segment:hover .ticker-icon {
 
 /* Compact desktop */
 @media (width >= 1100px) and (width <= 1279px) {
-  .modern-header {
-    --header-inline-padding: 20px;
+  :root {
+    --shell-inline-padding: 20px;
   }
 
   .header-row-1 {
@@ -397,8 +345,8 @@ button.ticker-segment:hover .ticker-icon {
 
 /* Tablet */
 @media (width >= 800px) and (width <= 1099px) {
-  .modern-header {
-    --header-inline-padding: 16px;
+  :root {
+    --shell-inline-padding: 16px;
   }
 
   .header-row-1 {
@@ -439,8 +387,8 @@ button.ticker-segment:hover .ticker-icon {
 
 /* Mobile: logo + vertical trader + actions on top, truthful metrics below. */
 @media (width <= 799px) {
-  .modern-header {
-    --header-inline-padding: 10px;
+  :root {
+    --shell-inline-padding: 10px;
   }
 
   .header-row-1 {
@@ -535,8 +483,8 @@ button.ticker-segment:hover .ticker-icon {
 
 /* Small phone: one 40px More control opens a touch-safe action grid. */
 @media (width <= 500px) {
-  .modern-header {
-    --header-inline-padding: 8px;
+  :root {
+    --shell-inline-padding: 8px;
   }
 
   .header-row-1 {
@@ -585,19 +533,12 @@ button.ticker-segment:hover .ticker-icon {
 @media (prefers-reduced-motion: reduce) {
   .nav-tabs > a,
   .nav-more-toggle,
-  .nav-tabs > a i,
-  .nav-more-toggle i,
   button.ticker-segment,
   .modern-header .header-actions-items {
     transition: none;
   }
 
-  /* The glow still appears, it just does not fade in or travel. */
-  .nav-tabs > a::after,
-  .nav-more-toggle::after {
-    transition: none;
-  }
-
+  /* The bar still moves to the current tab, without travelling. */
   .nav-tabs-indicator.is-ready {
     transition: opacity var(--transition-fast);
   }

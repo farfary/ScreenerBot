@@ -8,15 +8,15 @@
  * in the default "scroll" layout every tab stays in the row and the tab scroll strip
  * (`attachTabScrollStrip`) owns the overflow.
  *
- * Before either layout applies, the row is compacted by measurement: when the tabs with
- * their icons do not fit, the icons give way (`is-iconless`); when they still do not
- * fit, the labels tighten as well (`is-condensed`). Only a row that overflows at its
- * most compact face scrolls or folds, whatever the width, locale or tab set.
+ * Before either layout applies, the row is compacted by measurement: when the labels do
+ * not fit at the row's full face, they tighten (`is-condensed`). Only a row that
+ * overflows at its condensed face scrolls or folds, whatever the width, locale or tab
+ * set.
  *
  * The More control lives inside `#navTabs` as its last child, so it is measured in the
  * same row as the tabs and the travelling indicator can sit under it while the current
- * page is one of the hidden tabs. The settings dialog rebuilds `#navTabs` wholesale; the
- * control is re-attached and the row laid out again after every rebuild.
+ * page is one of the hidden tabs. The settings dialog reorders, removes and adds tabs in
+ * place; the row is laid out again after every change.
  */
 
 import { pushEscapeHandler } from "../core/escape_stack.js";
@@ -25,8 +25,8 @@ const MENU = "menu";
 const SCROLL = "scroll";
 
 // The row's faces, fullest first; each one's classes on `#navTabs`.
-const COMPACT_FACES = Object.freeze([[], ["is-iconless"], ["is-iconless", "is-condensed"]]);
-const COMPACT_CLASSES = Object.freeze(["is-iconless", "is-condensed"]);
+const COMPACT_FACES = Object.freeze([[], ["is-condensed"]]);
+const COMPACT_CLASSES = Object.freeze(["is-condensed"]);
 
 /** The overflow layout in force: "menu" or the default "scroll". */
 export function navOverflowLayout() {
@@ -45,8 +45,8 @@ function buildMoreControl() {
   more.innerHTML = `
     <button type="button" class="nav-more-toggle" id="navMoreToggle"
             aria-expanded="false" aria-controls="navMoreList">
-      <i class="icon-ellipsis" aria-hidden="true"></i>
       <span data-l10n-id="shell-nav-more"></span>
+      <i class="icon-chevron-down" aria-hidden="true"></i>
     </button>
     <div class="dropdown-menu nav-more-list" id="navMoreList" data-align="right"></div>`;
   I18n.localizeTree(more);
@@ -89,6 +89,7 @@ export function attachNavMoreMenu(navTabs) {
           .filter((tab) => tab.hidden)
           .map((tab) => {
             const item = tab.cloneNode(true);
+            item.removeAttribute("id");
             item.hidden = false;
             item.className = "dropdown-item";
             item.querySelector("i")?.classList.add("icon");
