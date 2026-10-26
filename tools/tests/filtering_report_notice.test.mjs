@@ -10,6 +10,9 @@
  * that opens the account tab of Settings. Signed in, the notice is absent. The tokens
  * waiting for their report have their own card, apart from the passed count.
  *
+ * With the RugCheck stage off no token waits for a report: the notice, the awaiting
+ * card and the awaiting figure of the info bar are all absent, signed out included.
+ *
  * Run with `npm run test:js`.
  */
 
@@ -30,8 +33,11 @@ const STATS = JSON.parse(
   readFileSync(resolve(FIXTURES_ROOT, "filtering", "filtering_stats.json"), "utf8")
 );
 
-/** Opens the Filtering status view with the stats fixture, signed in or out. */
-async function openStatus(signedIn) {
+/**
+ * Opens the Filtering status view with the stats fixture, signed in or out, with the
+ * RugCheck stage on unless `reportRequired` is false.
+ */
+async function openStatus(signedIn, reportRequired = true) {
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   const fixtures = createApiHandler([filtering, shell], "populated");
   const host = await serveDashboard(context, {
@@ -39,7 +45,13 @@ async function openStatus(signedIn) {
     startupPage: "filtering",
     onApi: (request) => {
       if (request.url.pathname === "/api/filtering/stats") {
-        return { body: JSON.stringify({ ...STATS, signed_in: signedIn }) };
+        return {
+          body: JSON.stringify({
+            ...STATS,
+            signed_in: signedIn,
+            rugcheck_report_required: reportRequired,
+          }),
+        };
       }
       return fixtures.onApi(request);
     },
@@ -94,6 +106,28 @@ test("tokens awaiting their report have their own card, apart from the passed co
     assert.equal(
       (await card.locator(".metric-value").textContent()).trim(),
       "2,140"
+    );
+  } finally {
+    await session.close();
+  }
+});
+
+test("with the RugCheck stage off nothing awaits a report and no notice shows", async () => {
+  const session = await openStatus(false, false);
+  try {
+    const { page } = session;
+    assert.equal(await page.locator(".status-report-notice").count(), 0);
+    const awaitingCard = page.locator(".status-view .metric-card", {
+      hasText: "Awaiting RugCheck Report",
+    });
+    assert.equal(await awaitingCard.count(), 0);
+    const chips = await page.$$eval(".table-toolbar-chip__label", (labels) =>
+      labels.map((label) => label.textContent.trim())
+    );
+    assert.ok(chips.length > 0, "the info bar renders");
+    assert.ok(
+      chips.every((label) => !/awaiting/i.test(label)),
+      `no awaiting figure in the info bar: ${chips.join(" | ")}`
     );
   } finally {
     await session.close();

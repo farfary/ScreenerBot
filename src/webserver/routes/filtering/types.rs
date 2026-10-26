@@ -32,6 +32,9 @@ pub struct FilteringStatsResponse {
     pub passed_filtering: Option<usize>,
     /// Tokens held back only by a missing RugCheck report; not rejections.
     pub awaiting_rugcheck_report: Option<usize>,
+    /// Whether the RugCheck stage is on and so holds tokens back for their report. While
+    /// it is off nothing awaits a report and the report-rate notice does not apply.
+    pub rugcheck_report_required: bool,
     /// Whether this install is signed in, which lets the data server supply reports in
     /// batches on top of the direct fetches.
     pub signed_in: bool,

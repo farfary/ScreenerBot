@@ -93,6 +93,14 @@ fn open_config() -> FilteringConfig {
     config
 }
 
+/// Admits everything that carries a RugCheck report: the RugCheck stage is on, so a
+/// token without one waits for it.
+fn report_required_config() -> FilteringConfig {
+    let mut config = open_config();
+    config.rugcheck.enabled = true;
+    config
+}
+
 /// Rejects every token discovered less than an hour ago.
 fn too_new_config() -> FilteringConfig {
     let mut config = open_config();
@@ -244,7 +252,7 @@ async fn a_token_without_a_report_awaits_it_and_is_neither_passed_nor_rejected()
     seed_listing(&directory, NEW_TOKEN, TEN_DAYS);
     seed_listing(&directory, OLD_TOKEN, 2 * TEN_DAYS);
 
-    let snapshot = build(open_config(), None).await;
+    let snapshot = build(report_required_config(), None).await;
 
     assert!(snapshot.filtered_mints.is_empty());
     assert!(snapshot.passed_tokens.is_empty());
@@ -262,12 +270,29 @@ async fn a_token_without_a_report_awaits_it_and_is_neither_passed_nor_rejected()
 async fn an_earlier_stage_rejection_shows_its_own_reason_before_the_missing_report() {
     let directory = setup();
     seed_listing(&directory, NEW_TOKEN, 0);
+    let mut config = too_new_config();
+    config.rugcheck.enabled = true;
 
-    let snapshot = build(too_new_config(), None).await;
+    let snapshot = build(config, None).await;
 
     assert!(snapshot.awaiting_rugcheck_report.is_empty());
     assert_eq!(
         snapshot.rejected_tokens[0].reason,
         FilterRejectionReason::TokenTooNew.label()
     );
+}
+
+#[tokio::test]
+async fn with_the_rugcheck_stage_off_a_token_without_a_report_passes() {
+    let directory = setup();
+    seed_listing(&directory, NEW_TOKEN, TEN_DAYS);
+
+    let snapshot = build(open_config(), None).await;
+
+    assert!(
+        snapshot.awaiting_rugcheck_report.is_empty(),
+        "nothing awaits a report"
+    );
+    assert!(snapshot.rejected_tokens.is_empty());
+    assert_eq!(snapshot.filtered_mints, vec![NEW_TOKEN.to_owned()]);
 }

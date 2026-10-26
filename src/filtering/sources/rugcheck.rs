@@ -51,16 +51,25 @@ pub fn has_rugcheck_report(token: &Token) -> bool {
         || token.transfer_fee_authority.is_some()
 }
 
-/// A token without a report never passes, whatever the RugCheck rules are set to: the
-/// engine counts it as awaiting its report. The rules themselves run only when enabled.
+/// Whether the RugCheck stage holds tokens back for their report on `chain`: the stage is
+/// on in the configuration and RugCheck publishes reports for the chain. Every surface
+/// that shows the awaiting state or the report-rate notice reads it here.
+pub fn report_required(chain: ChainId) -> bool {
+    RugcheckStage.supports(chain)
+        && crate::config::with_config(|cfg| cfg.filtering.rugcheck.enabled)
+}
+
+/// With the RugCheck stage on, a token without a report never passes: the engine counts
+/// it as awaiting its report. With the stage off nothing about RugCheck is required, the
+/// report included.
 fn evaluate_stage(token: &Token, config: &FilteringConfig) -> Result<(), FilterRejectionReason> {
+    if !config.rugcheck.enabled {
+        return Ok(());
+    }
     if !has_rugcheck_report(token) {
         return Err(FilterRejectionReason::RugcheckDataMissing);
     }
-    if config.rugcheck.enabled {
-        evaluate(token, &config.rugcheck)?;
-    }
-    Ok(())
+    evaluate(token, &config.rugcheck)
 }
 
 /// Evaluate a token against rugcheck filter criteria.

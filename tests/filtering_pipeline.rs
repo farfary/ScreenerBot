@@ -188,7 +188,7 @@ async fn pipeline_with_no_filters_enabled_accepts_a_hostile_token() {
         evaluate_token(&solana_filter_profile(), &token, &config)
             .await
             .is_ok(),
-        "with every switch off the pipeline passes any token that carries a RugCheck report"
+        "with every switch off the pipeline must be a pass-through, with no hidden mandatory rule"
     );
 }
 
@@ -550,15 +550,8 @@ async fn pipeline_rugcheck_gate_needs_at_least_one_security_field() {
     );
 }
 
-/// A token without a RugCheck report never passes, whatever the filter switches say:
-/// with the default rules, with the RugCheck rules off and with every filter off, the
-/// missing report is the decision.
-#[tokio::test]
-async fn pipeline_never_passes_a_token_without_a_rugcheck_report() {
-    let _cfg = config_guard();
-    let mut rugcheck_off = filters_default_dex_only();
-    rugcheck_off.rugcheck.enabled = false;
-
+/// A token whose every RugCheck report field is empty: no report has arrived for it.
+fn token_without_a_report() -> Token {
     let mut token = seeded_token();
     token.security_score = None;
     token.token_type = None;
@@ -573,16 +566,50 @@ async fn pipeline_never_passes_a_token_without_a_rugcheck_report() {
     token.transfer_fee_pct = None;
     token.transfer_fee_max_amount = None;
     token.transfer_fee_authority = None;
+    token
+}
+
+/// With the RugCheck stage on, a token without a report never passes: with the default
+/// configuration, the default rules and the stage alone among every filter, the missing
+/// report is the decision.
+#[tokio::test]
+async fn pipeline_never_passes_a_token_without_a_rugcheck_report() {
+    let _cfg = config_guard();
+    let mut rugcheck_only = filters_all_disabled();
+    rugcheck_only.rugcheck.enabled = true;
+    let token = token_without_a_report();
 
     for (label, config) in [
+        ("default configuration", FilteringConfig::default()),
         ("default rules", filters_default_dex_only()),
-        ("rugcheck rules off", rugcheck_off),
-        ("every filter off", filters_all_disabled()),
+        ("rugcheck stage alone", rugcheck_only),
     ] {
         assert_eq!(
             evaluate_token(&solana_filter_profile(), &token, &config).await,
             Err(FilterRejectionReason::RugcheckDataMissing),
             "{label}: a token without a report must wait for it"
+        );
+    }
+}
+
+/// With the RugCheck stage off, RugCheck requires nothing, its report included: a token
+/// without a report is judged by the other stages alone.
+#[tokio::test]
+async fn pipeline_disabling_rugcheck_also_disables_its_data_requirement() {
+    let _cfg = config_guard();
+    let mut rugcheck_off = filters_default_dex_only();
+    rugcheck_off.rugcheck.enabled = false;
+    let token = token_without_a_report();
+
+    for (label, config) in [
+        ("rugcheck stage off", rugcheck_off),
+        ("every filter off", filters_all_disabled()),
+    ] {
+        assert!(
+            evaluate_token(&solana_filter_profile(), &token, &config)
+                .await
+                .is_ok(),
+            "{label}: a missing report must not hold the token back"
         );
     }
 }

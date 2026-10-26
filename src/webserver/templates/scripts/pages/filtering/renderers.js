@@ -124,6 +124,7 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
       with_pool_price,
       passed_filtering,
       awaiting_rugcheck_report,
+      rugcheck_report_required,
       open_positions,
       blacklisted,
       updated_at,
@@ -142,10 +143,13 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
         countWithShare(passed_filtering, passedRate),
         Utils.countTone(passed_filtering, "success")
       ),
-      summaryChip(
-        I18n.t("filtering-info-awaiting"),
-        countWithShare(awaiting_rugcheck_report, awaitingRate)
-      ),
+      // With the RugCheck stage off nothing awaits a report, so the figure is not shown.
+      rugcheck_report_required
+        ? summaryChip(
+            I18n.t("filtering-info-awaiting"),
+            countWithShare(awaiting_rugcheck_report, awaitingRate)
+          )
+        : "",
       summaryChip(I18n.t("filtering-info-positions"), Utils.formatNumber(open_positions, 0)),
       summaryChip(
         I18n.t("filtering-info-blacklisted"),
@@ -169,6 +173,7 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
       with_ohlcv,
       passed_filtering,
       awaiting_rugcheck_report,
+      rugcheck_report_required,
       signed_in,
       direct_reports_per_minute,
       updated_at,
@@ -179,10 +184,12 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
     const building = state.stats.snapshot_state === "building";
 
     // Signed out, reports come only from the bounded direct fetches; the notice states
-    // that rate and offers the sign-in that adds the data server's batches.
-    const reportNoticeHtml = signed_in
-      ? ""
-      : `
+    // that rate and offers the sign-in that adds the data server's batches. With the
+    // RugCheck stage off no token waits for a report, so the notice does not apply.
+    const reportNoticeHtml =
+      signed_in || !rugcheck_report_required
+        ? ""
+        : `
         <div class="status-report-notice">
           <span class="status-report-notice__text">${Utils.escapeHtml(
             I18n.t("filtering-status-report-rate", {
@@ -225,11 +232,15 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
           <span class="metric-value">${Utils.formatNumber(passed_filtering, 0)}</span>
           <span class="metric-detail">${Utils.escapeHtml(I18n.t("filtering-status-passed-detail", { share: shareText(passedRate) }))}</span>
         </div>
-        <div class="metric-card">
+        ${
+          rugcheck_report_required
+            ? `<div class="metric-card">
           <span class="metric-label">${Utils.escapeHtml(I18n.t("filtering-status-awaiting"))}</span>
           <span class="metric-value">${Utils.formatNumber(awaiting_rugcheck_report, 0)}</span>
           <span class="metric-detail">${Utils.escapeHtml(I18n.t("filtering-status-awaiting-detail"))}</span>
-        </div>
+        </div>`
+            : ""
+        }
         <div class="metric-card">
           <span class="metric-label">${Utils.escapeHtml(I18n.t("filtering-status-positions"))}</span>
           <span class="metric-value">${Utils.formatNumber(open_positions, 0)}</span>
