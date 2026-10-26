@@ -6,10 +6,12 @@
  * Shared tab row for full-screen details dialogs.
  *
  * Dialogs own only their tab definitions, content loaders, and optional trailing
- * actions. This module owns markup, switching, keyboard navigation, and ARIA.
+ * actions. This module owns markup, switching, keyboard navigation, and ARIA; the tab
+ * list scrolls through the tab scroll strip of `tab_bar.js` when it does not fit.
  */
 
 import { playTabSwitch } from "../core/sounds.js";
+import { attachTabScrollStrip } from "./tab_bar.js";
 
 function escapeTabValue(value) {
   if (value === null || value === undefined) return "";
@@ -56,15 +58,19 @@ export function renderDialogTabRow({ tabs, activeTab, idPrefix, ariaLabel, actio
 
   return `
     <div class="details-tab-row">
-      <div
-        class="details-tab-list"
-        data-dialog-tab-list
-        data-dialog-tab-prefix="${safePrefix}"
-        role="tablist"
-        aria-label="${escapeTabValue(ariaLabel)}"
-        aria-orientation="horizontal"
-      >
-        ${buttons}
+      <div class="tab-scroll-wrapper">
+        <div
+          class="details-tab-list tab-scroll-area"
+          data-dialog-tab-list
+          data-dialog-tab-prefix="${safePrefix}"
+          role="tablist"
+          aria-label="${escapeTabValue(ariaLabel)}"
+          aria-orientation="horizontal"
+        >
+          ${buttons}
+        </div>
+        <button type="button" class="tab-scroll-btn tab-scroll-btn--start" aria-label="${escapeTabValue(I18n.attr("shell-tabs-scroll-start", "aria-label"))}" title="${escapeTabValue(I18n.attr("shell-tabs-scroll-start", "title"))}"><i class="icon-chevron-left" aria-hidden="true"></i></button>
+        <button type="button" class="tab-scroll-btn tab-scroll-btn--end" aria-label="${escapeTabValue(I18n.attr("shell-tabs-scroll-end", "aria-label"))}" title="${escapeTabValue(I18n.attr("shell-tabs-scroll-end", "title"))}"><i class="icon-chevron-right" aria-hidden="true"></i></button>
       </div>
       ${actionsHtml ? `<div class="details-tab-actions">${actionsHtml}</div>` : ""}
     </div>
@@ -94,6 +100,7 @@ export class DialogTabBar {
     }
 
     this.idPrefix = this.list.dataset.dialogTabPrefix || "details";
+    this.strip = attachTabScrollStrip(this.list);
     this._clickHandler = (event) => this._handleClick(event);
     this._keyHandler = (event) => this._handleKeyboard(event);
     this.list.addEventListener("click", this._clickHandler);
@@ -168,6 +175,7 @@ export class DialogTabBar {
       button.setAttribute("aria-selected", String(isActive));
       button.setAttribute("tabindex", isActive ? "0" : "-1");
     });
+    this.strip.reveal(buttons.find((button) => button.dataset.dialogTab === this.activeTab));
 
     this.panels.forEach((panel) => {
       const tabId = panel.dataset.tabContent;
@@ -193,6 +201,7 @@ export class DialogTabBar {
     }
     this.root = null;
     this.list = null;
+    this.strip = null;
     this.panels = [];
     this.tabs = [];
     this.tabIds.clear();

@@ -14,6 +14,8 @@
  * - Each `.tab-scroll-area` in the shell (the navigation row and the metrics ticker)
  *   sits in a `.tab-scroll-wrapper` with a start and an end page button, each
  *   labelled through the Fluent id for its side.
+ * - A tab row a script renders (the Copy Trading workspace, the search dialog lists,
+ *   the details dialogs) carries both labelled page buttons and attaches the strip.
  * - Only `tab_bar.js` toggles the `can-scroll-*` state and only `tab_bar.css` styles it.
  * - The page button is a bare glyph: no background, border or shadow outside the
  *   keyboard focus ring.
@@ -74,6 +76,30 @@ test("every scrolling tab row in the shell is a complete tab scroll strip", () =
       assert.match(button.tag, /type="button"/);
     }
     assert.match(inner, /class="[^"]*\btab-scroll-area\b/);
+  }
+});
+
+test("every scrolling tab row a script renders is a complete, attached tab scroll strip", async () => {
+  const strips = [];
+  for (const file of (await walk(SCRIPTS_ROOT)).filter((path) => path.endsWith(".js"))) {
+    if (file === OWNER_SCRIPT) continue;
+    const source = readFileSync(file, "utf8");
+    if (!/class="[^"]*\btab-scroll-area\b/.test(source)) continue;
+    strips.push(repoPath(file));
+    for (const side of ["start", "end"]) {
+      assert.match(
+        source,
+        new RegExp(`class="tab-scroll-btn tab-scroll-btn--${side}"[^>]*I18n\\.attr\\("shell-tabs-scroll-${side}"`),
+        `${repoPath(file)} has no labelled ${side} page button`
+      );
+    }
+    assert.match(source, /attachTabScrollStrip\(/, `${repoPath(file)} never attaches its strip`);
+  }
+  for (const owner of ["copy/workspace.js", "ui/search_dialog.js", "ui/dialog_tab_bar.js"]) {
+    assert.ok(
+      strips.some((path) => path.endsWith(owner)),
+      `${owner} renders its tabs in a tab scroll strip`
+    );
   }
 });
 

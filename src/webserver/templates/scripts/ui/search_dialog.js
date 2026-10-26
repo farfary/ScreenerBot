@@ -39,6 +39,7 @@ import {
   resolvedTokenName,
   resolvedTokenSymbol,
 } from "./token_identity.js";
+import { attachTabScrollStrip } from "./tab_bar.js";
 import "./token_details_dialog.js";
 
 const SEARCH_DEBOUNCE_MS = 250;
@@ -296,7 +297,14 @@ function createDialog() {
       </div>
       <div class="search-progress" hidden aria-hidden="true"></div>
       <div class="search-recent" hidden></div>
-      <div class="search-tabs" role="tablist" aria-label="${escapeHtml(I18n.t("tokens-search-lists-label"))}"></div>
+      <div class="search-tabs tab-row-bar" hidden>
+        <div class="tab-scroll-wrapper">
+          <div class="tab-row tab-scroll-area" role="tablist" id="search-tab-list" aria-label="${escapeHtml(I18n.t("tokens-search-lists-label"))}"></div>
+          <button type="button" class="tab-scroll-btn tab-scroll-btn--start" aria-label="${escapeHtml(I18n.attr("shell-tabs-scroll-start", "aria-label"))}" title="${escapeHtml(I18n.attr("shell-tabs-scroll-start", "title"))}"><i class="icon-chevron-left" aria-hidden="true"></i></button>
+          <button type="button" class="tab-scroll-btn tab-scroll-btn--end" aria-label="${escapeHtml(I18n.attr("shell-tabs-scroll-end", "aria-label"))}" title="${escapeHtml(I18n.attr("shell-tabs-scroll-end", "title"))}"><i class="icon-chevron-right" aria-hidden="true"></i></button>
+        </div>
+        <span class="search-tabs-hint">${escapeHtml(I18n.t("tokens-search-kinds"))}</span>
+      </div>
       <div class="search-summary" aria-live="polite" hidden></div>
       <div id="search-results" class="search-results" role="listbox" aria-label="${escapeHtml(I18n.t("tokens-search-results-label"))}"></div>
       <div class="search-dialog-footer">
@@ -323,7 +331,9 @@ function createDialog() {
     input.focus();
   });
 
-  $(".search-tabs", dialogEl).addEventListener("click", (event) => {
+  const tabList = $("#search-tab-list", dialogEl);
+  attachTabScrollStrip(tabList);
+  tabList.addEventListener("click", (event) => {
     const tab = event.target.closest("[data-tab]");
     if (!tab) return;
     state.tab = tab.dataset.tab;
@@ -389,25 +399,23 @@ function renderRecent() {
 }
 
 function renderTabs() {
-  const el = $(".search-tabs", dialogEl);
+  const bar = $(".search-tabs", dialogEl);
   if (!discovering()) {
-    el.hidden = true;
+    bar.hidden = true;
     return;
   }
-  el.hidden = false;
-  el.innerHTML = `
-    ${LISTS.map(({ id, counted }) => {
-      const list = state.lists[id];
-      const count = counted && list && !list.loading ? list.rows.length : 0;
-      return `
-        <button type="button" role="tab" class="search-tab" id="search-tab-${id}" data-tab="${id}"
-          aria-selected="${id === state.tab}" aria-controls="search-results">
+  bar.hidden = false;
+  $("#search-tab-list", dialogEl).innerHTML = LISTS.map(({ id, counted }) => {
+    const list = state.lists[id];
+    const count = counted && list && !list.loading ? list.rows.length : 0;
+    const active = id === state.tab;
+    return `
+        <button type="button" role="tab" class="sub-tab${active ? " active" : ""}" id="search-tab-${id}" data-tab="${id}"
+          aria-selected="${active}" aria-controls="search-results">
           ${escapeHtml(I18n.label(LIST_LABELS, id))}
-          ${count > 0 ? `<span class="search-tab-count">${escapeHtml(formatCompactFixed(count, { decimals: 0 }))}</span>` : ""}
+          ${count > 0 ? `<span class="sub-tab-count">${escapeHtml(formatCompactFixed(count, { decimals: 0 }))}</span>` : ""}
         </button>`;
-    }).join("")}
-    <span class="search-tabs-hint">${escapeHtml(I18n.t("tokens-search-kinds"))}</span>
-  `;
+  }).join("");
 }
 
 function renderSummary() {

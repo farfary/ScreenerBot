@@ -196,7 +196,6 @@ pub fn base_template(active_tab: &str, content: &str, locale: &LanguageIdentifie
         QUICK_TRADE_STYLES,
         INPUT_DIALOG_STYLES,
         TAB_BAR_STYLES,
-        DIALOG_TAB_BAR_STYLES,
         DIALOG_HEADER_ACTIONS_STYLES,
         ACTION_BAR_STYLES,
         EXPAND_TOGGLE_STYLES,

@@ -1,9 +1,10 @@
 /* Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
  * SPDX-License-Identifier: BUSL-1.1 */
 
-/* The tab rows of the shell: the tab tokens shared by the main navigation row
-   (`header_responsive.css`) and the page sub-tab row, the sub-tab row itself, the tab
-   scroll strip both rows and the ticker scroll in. Keyboard focus inside a strip is drawn
+/* The tab rows of the dashboard: the tab tokens shared by the main navigation row
+   (`header_responsive.css`) and the page sub-tab row, the sub-tab row itself, the
+   in-page and dialog tab rows, and the tab scroll strip every one of them and the
+   ticker scroll in. Keyboard focus inside a strip is drawn
    inset by the focus ring owner in `foundation.css`.
 
    Both rows mark the selected tab one way: the label in `--tab-bar-text-active` and a
@@ -111,6 +112,176 @@
   padding-inline-start: 0;
 }
 
+/* An in-page tab row that carries content after its tabs (the search dialog's kinds
+   hint). The bar draws the row and its rule; the tab scroll strip inside takes only the
+   room its tabs need and scrolls them when that room runs out, so the trailing content
+   stays pinned to the end edge. */
+.tab-row-bar {
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  height: var(--tab-row-height);
+  border-bottom: 1px solid var(--tab-bar-border-color);
+}
+
+.tab-row-bar > .tab-scroll-wrapper {
+  flex: 0 1 auto;
+  align-self: stretch;
+}
+
+.tab-row-bar .tab-row {
+  height: 100%;
+  border-bottom: none;
+}
+
+/* ============================================================================
+   Dialog tab row
+   ============================================================================ */
+
+/* The tab row of the details dialogs (`ui/dialog_tab_bar.js`): a tab scroll strip of
+   glyph-and-label tabs at the dialog sizes, with optional trailing actions. A tab is as
+   wide as its glyph, label and count, with no minimum width, so a short label carries
+   no trailing gap. */
+.details-tab-row {
+  --tab-scroll-bg: var(--bg-primary);
+
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+  min-height: 44px;
+  background: var(--bg-primary);
+  border-bottom: 1px solid var(--border-color);
+  flex: 0 0 auto;
+}
+
+.details-tab-row > .tab-scroll-wrapper {
+  flex: 1 1 auto;
+}
+
+.details-tab-list {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  padding: 0 20px;
+}
+
+.details-tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  box-sizing: border-box;
+  min-height: 44px;
+  padding: 0 14px;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  color: var(--text-secondary);
+  cursor: pointer;
+  flex: 0 0 auto;
+  font-family: inherit;
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  transition: color var(--transition-fast);
+}
+
+.details-tab i {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 16px;
+  block-size: 16px;
+  color: currentcolor;
+  font-size: 14px;
+  line-height: 1;
+  opacity: 0.68;
+  transition: opacity var(--transition-fast);
+}
+
+.details-tab:hover {
+  color: var(--text-primary);
+}
+
+.details-tab:hover i,
+.details-tab.active i {
+  opacity: 1;
+}
+
+.details-tab.active {
+  color: var(--primary-color);
+}
+
+/* The dialog bar is a step heavier than the page rows' bar, at the dialog's taller tab. */
+.details-tab.active::after {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  height: 3px;
+  background: var(--tab-bar-active-border);
+  pointer-events: none;
+}
+
+.details-tab-badge {
+  min-width: 1ch;
+  margin-inline-start: 1px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.details-tab.active .details-tab-badge {
+  color: currentcolor;
+}
+
+.details-tab-actions {
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  background: var(--bg-primary);
+  border-inline-start: 1px solid var(--border-color);
+  flex: 0 0 auto;
+}
+
+@media (width <= 768px) {
+  .details-tab-list {
+    padding: 0 12px;
+  }
+
+  .details-tab {
+    padding: 0 12px;
+  }
+
+  .details-tab-actions {
+    padding: 0 12px;
+  }
+}
+
+@media (width <= 425px) {
+  .details-tab-list {
+    padding: 0 8px;
+  }
+
+  .details-tab {
+    gap: 5px;
+    padding: 0 10px;
+    font-size: 0.7rem;
+  }
+
+  .details-tab i {
+    display: none;
+  }
+
+  .details-tab-actions {
+    padding: 0 8px;
+  }
+}
+
 /* While the router loads a page that has a sub-tab row, the row's slot keeps its height,
    surface and rule, so the row does not blink between two pages that both have one. */
 .tab-scroll-wrapper.is-reserved {
@@ -122,6 +293,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .sub-tab,
+  .details-tab,
   .tab-scroll-wrapper::before,
   .tab-scroll-wrapper::after,
   .tab-scroll-btn {
@@ -144,6 +316,16 @@
     color: var(--tab-bar-bg-primary);
     border-color: currentcolor;
   }
+
+  .details-tab {
+    border: 1px solid currentcolor;
+  }
+
+  .details-tab.active {
+    background: transparent;
+    color: var(--tab-bar-text-active);
+    border-color: currentcolor;
+  }
 }
 
 /* ============================================================================
@@ -152,7 +334,8 @@
 
 @media print {
   .nav-tabs,
-  .sub-tabs-container {
+  .sub-tabs-container,
+  .details-tab-row {
     display: none;
   }
 }

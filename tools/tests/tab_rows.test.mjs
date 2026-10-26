@@ -49,16 +49,7 @@ const SETS_OVERFLOW = /(?:^|;)\s*overflow(?:-x|-y|-inline|-block)?\s*:/;
  * Strips that still set their own overflow, with the reason each cannot use the owner
  * yet. The list only shrinks.
  */
-const OWN_OVERFLOW_ALLOWLIST = new Map([
-  [
-    "ui/dialog_tab_bar.css .details-tab-list",
-    "the dialog tab family keeps its own sizes and moves onto the owner as one unit",
-  ],
-  [
-    "ui/search_dialog.css .search-tabs",
-    "the row also holds the search-kinds hint pinned to its end edge, which a scroll strip would carry out of view",
-  ],
-]);
+const OWN_OVERFLOW_ALLOWLIST = new Map();
 
 const browser = await chromium.launch({ headless: true });
 const hosts = [];

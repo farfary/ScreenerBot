@@ -269,60 +269,17 @@
   color: var(--text-primary);
 }
 
+/* The list tabs are the tab-row owner's in-page row with trailing content
+   (`.tab-row-bar`, ui/tab_bar.css); the dialog sets only its inset and the fade colour. */
 .search-tabs {
-  display: flex;
+  --tab-scroll-bg: var(--floating-bg);
+
   flex: 0 0 auto;
-  align-items: stretch;
   gap: 18px;
-  min-height: 40px;
   padding: 0 14px;
-  border-bottom: 1px solid var(--border-color);
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-
-.search-tabs::-webkit-scrollbar {
-  display: none;
-}
-
-.search-tab {
-  cursor: pointer;
-  display: inline-flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 6px;
-  margin-bottom: -1px;
-  padding: 0;
-  border: none;
-  border-bottom: 2px solid transparent;
-  background: transparent;
-  color: var(--text-muted);
-  font-size: 0.8125rem;
-  font-weight: 600;
-  white-space: nowrap;
-  transition:
-    color var(--transition-fast),
-    border-color var(--transition-fast);
-}
-
-.search-tab:hover {
-  color: var(--text-secondary);
-}
-
-.search-tab[aria-selected="true"] {
-  border-bottom-color: var(--primary-color);
-  color: var(--text-primary);
-}
-
-.search-tab-count {
-  color: var(--text-muted);
-  font-family: var(--font-mono);
-  font-size: 0.6875rem;
-  font-weight: 500;
 }
 
 .search-tabs-hint {
-  align-self: center;
   margin-inline-start: auto;
   color: var(--text-muted);
   font-size: 0.6875rem;
