@@ -357,9 +357,6 @@ export class ChatWidget {
     if (providerState) providerState.hidden = ready;
     const input = this.$(".cw-chat-input");
     if (input) input.disabled = !ready;
-    this._updateInputStatus(
-      ready ? "" : Utils.escapeHtml(I18n.t("assistant-chat-provider-missing-text"))
-    );
     this._updateSendButton();
   }
 

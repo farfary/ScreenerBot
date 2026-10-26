@@ -64,7 +64,12 @@ test("without a set-up default provider the chat points to Providers", async () 
     assert.equal(await page.isHidden("#chat-panel .cw-welcome-ready"), true);
     assert.equal(await page.isDisabled("#chat-panel .cw-chat-input"), true);
     assert.equal(await page.isDisabled("#chat-panel .cw-send-btn"), true);
-    assert.match(await page.textContent("#chat-panel .cw-input-status"), /Set one up in Providers/);
+    // The welcome carries the notice; the composer does not repeat it.
+    assert.match(
+      await page.textContent("#chat-panel .cw-welcome-provider"),
+      /Set one up in Providers/
+    );
+    assert.equal((await page.textContent("#chat-panel .cw-input-status")).trim(), "");
 
     await page.click("#chat-panel .cw-open-providers");
     await page.waitForSelector('#subTabsContainer [data-tab-id="providers"].active');
