@@ -44,6 +44,7 @@ mod positions_ledger;
 mod positions_ledger_sync;
 mod positions_lifecycle;
 mod positions_pnl;
+mod service_health_reporting;
 mod service_startup_readiness;
 mod solana_pools;
 mod solana_rpc;

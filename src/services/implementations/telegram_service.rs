@@ -72,15 +72,15 @@ impl Service for TelegramService {
         vec![] // No dependencies
     }
 
+    /// Off when the config turns Telegram off, so the service manager reports it
+    /// `Disabled` like every other service its config disables, instead of a healthy
+    /// service that never runs.
+    fn is_enabled(&self) -> bool {
+        with_config(|c| c.telegram.enabled)
+    }
+
     async fn initialize(&mut self) -> crate::Result<()> {
         let config = with_config(|c| c.telegram.clone());
-
-        if !config.enabled {
-            logger::info(LogTag::Telegram, "Telegram service disabled in config");
-            self.initialized.store(true, Ordering::SeqCst);
-            *self.state.write().await = BotState::Disconnected;
-            return Ok(());
-        }
 
         if config.bot_token.is_empty() {
             logger::info(LogTag::Telegram, "No bot token configured");
@@ -124,7 +124,7 @@ impl Service for TelegramService {
     ) -> crate::Result<Vec<JoinHandle<()>>> {
         let config = with_config(|c| c.telegram.clone());
 
-        if !config.enabled || config.bot_token.is_empty() {
+        if config.bot_token.is_empty() {
             return Ok(vec![]);
         }
 
@@ -208,10 +208,6 @@ impl Service for TelegramService {
 
     async fn health(&self) -> ServiceHealth {
         let config = with_config(|c| c.telegram.clone());
-
-        if !config.enabled {
-            return ServiceHealth::Healthy; // Disabled is fine
-        }
 
         if config.bot_token.is_empty() {
             return ServiceHealth::Healthy; // Not configured is fine
