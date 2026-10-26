@@ -80,8 +80,8 @@ pub(crate) use access::get_wallet_encrypted_key;
 pub use access::{get_wallet, list_active_wallets, list_wallets};
 
 // =============================================================================
-// TOOLS & SUMMARY
+// SUMMARY
 // =============================================================================
 
-mod tools;
-pub use tools::get_wallets_summary;
+mod summary;
+pub use summary::get_wallets_summary;

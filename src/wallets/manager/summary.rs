@@ -1,7 +1,7 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Wallet tools — utility functions for wallet diagnostics and repair.
+//! The wallets summary the dashboard shows: wallet counts and the main wallet.
 
 use super::super::error::Error;
 use super::super::types::WalletsSummary;
