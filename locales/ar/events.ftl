@@ -293,3 +293,5 @@ events-dialog-export-line = { $label }: { $value }
 # Empty table (scripts/pages/events.js)
 events-empty = لا توجد أحداث بعد
     .message = تُسجَّل هنا عمليات تشغيل الخدمات والصفقات والتحذيرات فور حدوثها.
+events-recording-off = تسجيل الأحداث متوقف
+    .message = فعّل نظام الأحداث في الإعدادات ثم أعد تشغيل { -brand } لتسجيل عمليات تشغيل الخدمات والصفقات والتحذيرات هنا.

@@ -281,3 +281,5 @@ events-dialog-export-line = { $label }: { $value }
 # Empty table (scripts/pages/events.js)
 events-empty = Noch keine Ereignisse
     .message = Dienststarts, Trades und Warnungen werden hier erfasst, sobald sie auftreten.
+events-recording-off = Die Ereignisaufzeichnung ist aus
+    .message = Schalte das Ereignissystem in der Konfiguration ein und starte { -brand } neu, um Dienststarts, Trades und Warnungen hier aufzuzeichnen.

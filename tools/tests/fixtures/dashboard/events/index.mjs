@@ -28,6 +28,14 @@ export const endpoints = [
     record: null,
   },
   {
+    // Whether the events service records at all; the empty log names it when off.
+    method: "GET",
+    path: "/api/config/events",
+    fixture: "config_events.json",
+    rust: "src/webserver/routes/config/types.rs::ConfigResponse<EventsConfig>",
+    record: "/api/config/events",
+  },
+  {
     method: "GET",
     path: "/api/tokens/identities",
     fixture: "token_identities.json",

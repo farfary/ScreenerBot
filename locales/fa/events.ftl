@@ -293,3 +293,5 @@ events-dialog-export-line = { $label }: { $value }
 # Empty table (scripts/pages/events.js)
 events-empty = هنوز رویدادی نیست
     .message = شروع سرویس‌ها، معاملات و هشدارها همزمان با رخ دادن در اینجا ثبت می‌شوند.
+events-recording-off = ثبت رویدادها خاموش است
+    .message = سامانهٔ رویدادها را در پیکربندی روشن کنید و { -brand } را دوباره راه‌اندازی کنید تا شروع سرویس‌ها، معاملات و هشدارها اینجا ثبت شوند.

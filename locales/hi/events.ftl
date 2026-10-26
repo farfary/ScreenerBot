@@ -276,3 +276,5 @@ events-dialog-export-line = { $label }: { $value }
 # Empty table (scripts/pages/events.js)
 events-empty = अभी कोई इवेंट नहीं
     .message = सर्विस शुरू होना, ट्रेड और चेतावनियाँ होते ही यहाँ दर्ज होती हैं।
+events-recording-off = इवेंट रिकॉर्डिंग बंद है
+    .message = सर्विस शुरू होना, ट्रेड और चेतावनियाँ यहाँ दर्ज करने के लिए कॉन्फ़िग में इवेंट सिस्टम चालू करें और { -brand } को रीस्टार्ट करें।

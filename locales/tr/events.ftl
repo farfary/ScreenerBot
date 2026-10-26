@@ -276,3 +276,5 @@ events-dialog-export-line = { $label }: { $value }
 # Empty table (scripts/pages/events.js)
 events-empty = Henüz olay yok
     .message = Servis başlatmaları, işlemler ve uyarılar gerçekleştikçe burada kaydedilir.
+events-recording-off = Olay kaydı kapalı
+    .message = Servis başlatmalarını, işlemleri ve uyarıları burada kaydetmek için yapılandırmada olay sistemini açın ve { -brand } uygulamasını yeniden başlatın.

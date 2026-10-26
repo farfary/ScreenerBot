@@ -108,6 +108,19 @@ function createLifecycle() {
     search: "",
     totalCount: null,
     hasLoadedOnce: false,
+    // Whether the events service records anything: false while Events is off in the
+    // configuration, null until known.
+    recording: null,
+  };
+
+  const loadRecordingState = async (signal) => {
+    try {
+      const body = await requestManager.fetch("/api/config/events", { priority: "normal", signal });
+      state.recording = body?.data?.enabled !== false;
+    } catch (error) {
+      if (error?.name === "AbortError") throw error;
+      state.recording = null;
+    }
   };
 
   const buildBaseParams = (limit = PAGE_LIMIT) => {
@@ -239,6 +252,7 @@ function createLifecycle() {
         };
       }
 
+      if (state.recording === null) await loadRecordingState(signal);
       const params = buildBaseParams();
       const data = await fetchJson(`/api/events/head?${params.toString()}`);
       const fresh = normaliseEvents(data?.events, "desc", false);
@@ -395,8 +409,13 @@ function createLifecycle() {
         columns,
         rowIdField: "id",
         stateKey: "events-table",
-        emptyTitle: I18n.t("events-empty"),
-        emptyMessage: I18n.attr("events-empty", "message"),
+        // With recording off nothing will arrive, so the empty log says how to start it.
+        emptyTitle: () =>
+          state.recording === false ? I18n.t("events-recording-off") : I18n.t("events-empty"),
+        emptyMessage: () =>
+          state.recording === false
+            ? I18n.attr("events-recording-off", "message")
+            : I18n.attr("events-empty", "message"),
         compact: true,
         stickyHeader: true,
         zebra: true,

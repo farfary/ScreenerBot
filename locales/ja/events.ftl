@@ -293,3 +293,5 @@ events-dialog-export-line = { $label }: { $value }
 # Empty table (scripts/pages/events.js)
 events-empty = イベントはまだありません
     .message = サービスの起動、取引、警告は発生するたびにここに記録されます。
+events-recording-off = イベントの記録はオフです
+    .message = 設定でイベントシステムをオンにして { -brand } を再起動すると、サービスの起動、取引、警告がここに記録されます。
