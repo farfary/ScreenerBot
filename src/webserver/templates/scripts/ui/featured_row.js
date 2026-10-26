@@ -23,10 +23,17 @@ import { escapeHtml, resolveTokenLogoUrl } from "../core/utils.js";
 import {
   formatPercentValue,
   formatPriceSubscript,
+  formatSignatureCompact,
   signedTone,
   withUsdSymbol,
 } from "../core/format.js";
 import { openFeaturedDialog } from "./featured_dialog.js";
+import {
+  COMPACT_ADDRESS,
+  renderTokenLogo,
+  resolvedTokenName,
+  resolvedTokenSymbol,
+} from "./token_identity.js";
 import { boostTier, formatBoostCount } from "../core/boosts.js";
 import * as Hints from "../core/hints.js";
 import { HintTrigger } from "./hint_popover.js";
@@ -86,12 +93,11 @@ export function resetFeaturedRowConfigCache() {
 }
 
 /**
- * Truncate for compact display (prefer symbol when possible)
+ * Truncate for compact display (prefer the label — symbol or short mint — when possible)
  */
-function truncateForDisplay(name, symbol, maxLength = MAX_DISPLAY_LENGTH) {
-  const s = (symbol || "???").toUpperCase();
-  if (s.length <= maxLength) return s;
-  const n = name || s;
+function truncateForDisplay(name, label, maxLength = MAX_DISPLAY_LENGTH) {
+  if (label.length <= maxLength) return label;
+  const n = name || label;
   if (n.length <= maxLength) return n;
   return n.slice(0, maxLength - 1) + "…";
 }
@@ -416,14 +422,17 @@ class FeaturedRow {
   _renderTokenCard(token) {
     const logoUrl = resolveTokenLogoUrl(token);
     const tier = boostTier(token);
-    const symbol = (token.symbol || "???").toUpperCase();
-    const name = token.name || symbol;
     const mint = token.mint || "";
-    const display = truncateForDisplay(name, symbol);
+    // A token without a symbol is named by its short mint, the way every other
+    // surface names an unresolved asset; the full mint stays in the title.
+    const symbol = resolvedTokenSymbol(token.symbol)?.toUpperCase() ?? null;
+    const label = symbol || formatSignatureCompact(mint, COMPACT_ADDRESS);
+    const name = resolvedTokenName(token.name) || symbol || mint || label;
+    const display = truncateForDisplay(name, label);
     const boostCount = formatBoostCount(token.boosts);
     const fullTitle = tier
-      ? I18n.t("tokens-featured-row-boosted-title", { name, symbol, boosts: boostCount })
-      : I18n.t("tokens-featured-row-title", { name, symbol });
+      ? I18n.t("tokens-featured-row-boosted-title", { name, symbol: label, boosts: boostCount })
+      : I18n.t("tokens-featured-row-title", { name, symbol: label });
 
     // A boosted card prints its boost count instead of a market metric: the count
     // is the reason the card is at the front, and one number per card is the
@@ -442,12 +451,10 @@ class FeaturedRow {
       }
     }
 
-    const logoHtml = logoUrl
-      ? `<img src="${this._escapeHtml(logoUrl)}" alt="" class="featured-row-card-logo token-logo-artwork" loading="lazy" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'"/><div class="featured-row-card-logo-placeholder" style="display:none"><span>${this._escapeHtml(symbol.charAt(0))}</span></div>`
-      : `<div class="featured-row-card-logo-placeholder"><span>${this._escapeHtml(symbol.charAt(0))}</span></div>`;
+    const logoHtml = renderTokenLogo({ mint, symbol, name, logoUrl }, { size: "sm" });
 
     return `
-      <div class="featured-row-card${tier ? ` boosted ${tier}` : ""}" data-mint="${this._escapeHtml(mint)}" data-symbol="${this._escapeHtml(symbol)}" data-name="${this._escapeHtml(name)}" data-logo-url="${this._escapeHtml(logoUrl || "")}" title="${this._escapeHtml(fullTitle)}">
+      <div class="featured-row-card${tier ? ` boosted ${tier}` : ""}" data-mint="${this._escapeHtml(mint)}" data-symbol="${this._escapeHtml(symbol || "")}" data-name="${this._escapeHtml(resolvedTokenName(token.name) || "")}" data-logo-url="${this._escapeHtml(logoUrl || "")}" title="${this._escapeHtml(fullTitle)}">
         ${logoHtml}
         <span class="featured-row-card-name">${this._escapeHtml(display)}</span>
         ${metric}

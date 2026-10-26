@@ -198,18 +198,7 @@
   background: var(--border-color);
 }
 
-/* Logo */
-.featured-row-card-logo {
-  width: 22px;
-  height: 22px;
-  border-radius: var(--token-logo-radius, 3px);
-  object-fit: cover;
-  background: var(--bg-secondary);
-  flex-shrink: 0;
-  border: 1px solid var(--border-color);
-}
-
-/* Logo placeholder */
+/* Skeleton card logo placeholder; a token card's logo is the shared `.ti-logo` avatar. */
 .featured-row-card-logo-placeholder {
   display: flex;
   align-items: center;
@@ -220,14 +209,6 @@
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   flex-shrink: 0;
-}
-
-.featured-row-card-logo-placeholder span {
-  font-family: var(--font-mono);
-  font-size: 0.625rem;
-  font-weight: 600;
-  color: var(--text-secondary);
-  text-transform: uppercase;
 }
 
 .featured-row-card-logo-placeholder i {
@@ -396,10 +377,15 @@
     min-height: 28px;
   }
 
-  .featured-row-card-logo,
   .featured-row-card-logo-placeholder {
     width: 18px;
     height: 18px;
+  }
+
+  .featured-row-card .ti-logo {
+    width: 18px;
+    height: 18px;
+    font-size: 18px;
   }
 
   .featured-row-card-name {
