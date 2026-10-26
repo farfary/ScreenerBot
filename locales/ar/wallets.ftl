@@ -40,8 +40,7 @@ wallets-copied-private-key = المفتاح الخاص
 
 # wallets.js: subtabs, toasts and busy states.
 wallets-tab-main = المحفظة الرئيسية
-wallets-tab-secondaries = الثانوية
-wallets-tab-archive = الأرشيف
+wallets-tab-other = محافظ أخرى
 wallets-tab-watched = المراقبة
 wallets-refresh-failed = تعذّر تحديث المحافظ
 wallets-action-failed = فشل
@@ -139,8 +138,7 @@ wallets-list-search =
 wallets-list-loading-title = جارٍ تحميل المحافظ…
 wallets-list-loading-description = جارٍ تجهيز عرض المحفظة المحددة.
 wallets-list-kept-empty-message = تظهر هنا المحافظ من الإصدارات السابقة لتتمكن من تصدير مفاتيحها.
-wallets-secondaries-empty-title = لا توجد محافظ ثانوية
-wallets-archive-empty-title = لا توجد محافظ مؤرشفة
+wallets-other-empty-title = لا توجد محافظ أخرى
 
 # watched.js: watched wallets table and actions.
 wallets-watched-col-wallet = المحفظة

@@ -40,8 +40,7 @@ wallets-copied-private-key = Private key
 
 # wallets.js: subtabs, toasts and busy states.
 wallets-tab-main = Main Wallet
-wallets-tab-secondaries = Secondaries
-wallets-tab-archive = Archive
+wallets-tab-other = Other Wallets
 wallets-tab-watched = Watched
 wallets-refresh-failed = Could not refresh wallets
 wallets-action-failed = Failed
@@ -139,8 +138,7 @@ wallets-list-search =
 wallets-list-loading-title = Loading wallets…
 wallets-list-loading-description = Preparing the selected wallet view.
 wallets-list-kept-empty-message = Wallets from earlier versions appear here so you can still export their keys.
-wallets-secondaries-empty-title = No secondary wallets
-wallets-archive-empty-title = No archived wallets
+wallets-other-empty-title = No other wallets
 
 # watched.js: watched wallets table and actions.
 wallets-watched-col-wallet = Wallet

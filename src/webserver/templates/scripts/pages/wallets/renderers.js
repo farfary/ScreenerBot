@@ -36,8 +36,7 @@ export function createWalletRenderers({
 }) {
   // DataTable instances — created once, updated via setData() on every poll
   let tokenTable = null;
-  let secondariesTable = null;
-  let archiveTable = null;
+  let otherWalletsTable = null;
   // The read failure the holdings empty state last showed.
   let renderedReadError = null;
 
@@ -110,8 +109,8 @@ export function createWalletRenderers({
     },
   ];
 
-  // Secondaries and Archive list wallets kept from earlier versions; their one
-  // action is the private-key export.
+  // Other Wallets lists every wallet besides the trading wallet, kept from earlier
+  // versions; its one action is the private-key export.
   const WALLET_LIST_COLUMNS = [
     {
       id: "wallet",
@@ -171,8 +170,7 @@ export function createWalletRenderers({
   function renderCurrentPanel({ loading = false } = {}) {
     const tab = currentTab();
     if (tab === "main") renderMainWalletPanel({ loading });
-    else if (tab === "secondaries") renderSecondariesPanel({ loading });
-    else if (tab === "archive") renderArchivePanel({ loading });
+    else if (tab === "other") renderOtherWalletsPanel({ loading });
   }
 
   function syncLoadingState(table, loading) {
@@ -353,45 +351,40 @@ export function createWalletRenderers({
       tokenTable = null;
     }
 
-    if (secondariesTable) {
-      secondariesTable.destroy();
-      secondariesTable = null;
-    }
-
-    if (archiveTable) {
-      archiveTable.destroy();
-      archiveTable = null;
+    if (otherWalletsTable) {
+      otherWalletsTable.destroy();
+      otherWalletsTable = null;
     }
   }
 
   // =============================================================================
-  // Secondaries Panel
+  // Other Wallets Panel
   // =============================================================================
 
-  function renderSecondariesPanel({ loading = false } = {}) {
-    const container = $("#secondaries-table-container");
+  function renderOtherWalletsPanel({ loading = false } = {}) {
+    const container = $("#other-wallets-table-container");
     if (!container) return;
 
-    const wallets = walletsData();
-    const secondaryWallets = wallets.filter((w) => w.role === "secondary" && w.is_active);
+    const trading = mainWallet();
+    const otherWallets = walletsData().filter((w) => w.id !== trading?.id);
 
-    if (!secondariesTable) {
-      secondariesTable = new DataTable({
-        container: "#secondaries-table-container",
+    if (!otherWalletsTable) {
+      otherWalletsTable = new DataTable({
+        container: "#other-wallets-table-container",
         columns: WALLET_LIST_COLUMNS,
         rowIdField: "id",
-        stateKey: "wallets.secondaries-table",
+        stateKey: "wallets.other-table",
         compact: true,
         stickyHeader: true,
         zebra: true,
         fitToContainer: true,
         sorting: { mode: "client", column: "created_at", direction: "desc" },
-        emptyTitle: I18n.t("wallets-secondaries-empty-title"),
+        emptyTitle: I18n.t("wallets-other-empty-title"),
         emptyMessage: I18n.t("wallets-list-kept-empty-message"),
         toolbar: {
           summary: [
             {
-              id: "secondaries-count",
+              id: "other-count",
               label: I18n.t("wallets-list-count"),
               value: "0",
               variant: "secondary",
@@ -404,7 +397,7 @@ export function createWalletRenderers({
           },
           buttons: [
             {
-              id: "secondaries-refresh",
+              id: "other-refresh",
               icon: "icon-refresh-cw",
               tooltip: I18n.t("common-action-refresh"),
               onClick: (btn) => onRefresh?.(btn),
@@ -414,67 +407,10 @@ export function createWalletRenderers({
       });
     }
 
-    secondariesTable.setData(walletRows(secondaryWallets));
-    syncLoadingState(secondariesTable, loading);
-    secondariesTable.updateToolbarSummary?.([
-      { id: "secondaries-count", value: String(secondaryWallets.length) },
-    ]);
-  }
-
-  // =============================================================================
-  // Archive Panel
-  // =============================================================================
-
-  function renderArchivePanel({ loading = false } = {}) {
-    const container = $("#archive-table-container");
-    if (!container) return;
-
-    const wallets = walletsData();
-    const archivedWallets = wallets.filter((w) => w.role === "archive" || !w.is_active);
-
-    if (!archiveTable) {
-      archiveTable = new DataTable({
-        container: "#archive-table-container",
-        columns: WALLET_LIST_COLUMNS,
-        rowIdField: "id",
-        stateKey: "wallets.archive-table",
-        compact: true,
-        stickyHeader: true,
-        zebra: true,
-        fitToContainer: true,
-        sorting: { mode: "client", column: "created_at", direction: "desc" },
-        emptyTitle: I18n.t("wallets-archive-empty-title"),
-        emptyMessage: I18n.t("wallets-list-kept-empty-message"),
-        toolbar: {
-          summary: [
-            {
-              id: "archive-count",
-              label: I18n.t("wallets-list-count"),
-              value: "0",
-              variant: "secondary",
-            },
-          ],
-          search: {
-            enabled: true,
-            mode: "client",
-            placeholder: I18n.attr("wallets-list-search", "placeholder"),
-          },
-          buttons: [
-            {
-              id: "archive-refresh",
-              icon: "icon-refresh-cw",
-              tooltip: I18n.t("common-action-refresh"),
-              onClick: (btn) => onRefresh?.(btn),
-            },
-          ],
-        },
-      });
-    }
-
-    archiveTable.setData(walletRows(archivedWallets));
-    syncLoadingState(archiveTable, loading);
-    archiveTable.updateToolbarSummary?.([
-      { id: "archive-count", value: String(archivedWallets.length) },
+    otherWalletsTable.setData(walletRows(otherWallets));
+    syncLoadingState(otherWalletsTable, loading);
+    otherWalletsTable.updateToolbarSummary?.([
+      { id: "other-count", value: String(otherWallets.length) },
     ]);
   }
 
@@ -485,8 +421,7 @@ export function createWalletRenderers({
   return {
     renderCurrentPanel,
     renderMainWalletPanel,
-    renderSecondariesPanel,
-    renderArchivePanel,
+    renderOtherWalletsPanel,
     destroyTables,
   };
 }

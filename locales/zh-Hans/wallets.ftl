@@ -40,8 +40,7 @@ wallets-copied-private-key = 私钥
 
 # wallets.js: subtabs, toasts and busy states.
 wallets-tab-main = 主钱包
-wallets-tab-secondaries = 副钱包
-wallets-tab-archive = 归档
+wallets-tab-other = 其他钱包
 wallets-tab-watched = 监控中
 wallets-refresh-failed = 无法刷新钱包
 wallets-action-failed = 失败
@@ -139,8 +138,7 @@ wallets-list-search =
 wallets-list-loading-title = 正在加载钱包…
 wallets-list-loading-description = 正在准备所选钱包视图。
 wallets-list-kept-empty-message = 早期版本的钱包会显示在这里，方便您继续导出其密钥。
-wallets-secondaries-empty-title = 没有副钱包
-wallets-archive-empty-title = 没有已归档的钱包
+wallets-other-empty-title = 没有其他钱包
 
 # watched.js: watched wallets table and actions.
 wallets-watched-col-wallet = 钱包

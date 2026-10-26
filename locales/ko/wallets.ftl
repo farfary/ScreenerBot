@@ -40,8 +40,7 @@ wallets-copied-private-key = 개인 키
 
 # wallets.js: subtabs, toasts and busy states.
 wallets-tab-main = 메인 지갑
-wallets-tab-secondaries = 보조 지갑
-wallets-tab-archive = 보관함
+wallets-tab-other = 기타 지갑
 wallets-tab-watched = 감시 중
 wallets-refresh-failed = 지갑을 새로 고치지 못했습니다
 wallets-action-failed = 실패
@@ -139,8 +138,7 @@ wallets-list-search =
 wallets-list-loading-title = 지갑 불러오는 중…
 wallets-list-loading-description = 선택한 지갑 보기를 준비하고 있습니다.
 wallets-list-kept-empty-message = 이전 버전의 지갑이 여기에 표시되어 계속 키를 내보낼 수 있습니다.
-wallets-secondaries-empty-title = 보조 지갑 없음
-wallets-archive-empty-title = 보관된 지갑 없음
+wallets-other-empty-title = 다른 지갑이 없습니다
 
 # watched.js: watched wallets table and actions.
 wallets-watched-col-wallet = 지갑

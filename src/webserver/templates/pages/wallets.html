@@ -1,7 +1,7 @@
 <!-- Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
      SPDX-License-Identifier: BUSL-1.1
 
-     Wallets page - tab panels for main, secondaries, archive and watched wallets, plus the key export and watch dialogs. -->
+     Wallets page - tab panels for the trading wallet, the other wallets and the watched wallets, plus the key export and watch dialogs. -->
 
 <div class="wallets-page">
   <!-- Each tab's subject identity, stats, tools and actions live in its DataTable
@@ -17,14 +17,9 @@
         <div id="tokens-datatable-root"></div>
       </div>
 
-      <!-- Secondaries Tab Panel -->
-      <div class="wallet-tab-panel hidden" id="panel-secondaries" data-panel="secondaries">
-        <div id="secondaries-table-container"></div>
-      </div>
-
-      <!-- Archive Tab Panel -->
-      <div class="wallet-tab-panel hidden" id="panel-archive" data-panel="archive">
-        <div id="archive-table-container"></div>
+      <!-- Other Wallets Tab Panel -->
+      <div class="wallet-tab-panel hidden" id="panel-other" data-panel="other">
+        <div id="other-wallets-table-container"></div>
       </div>
 
       <!-- Watched Tab Panel -->

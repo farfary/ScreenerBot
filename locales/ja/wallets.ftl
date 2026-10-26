@@ -40,8 +40,7 @@ wallets-copied-private-key = 秘密鍵
 
 # wallets.js: subtabs, toasts and busy states.
 wallets-tab-main = メインウォレット
-wallets-tab-secondaries = セカンダリ
-wallets-tab-archive = アーカイブ
+wallets-tab-other = その他のウォレット
 wallets-tab-watched = ウォッチ中
 wallets-refresh-failed = ウォレットを更新できませんでした
 wallets-action-failed = 失敗
@@ -139,8 +138,7 @@ wallets-list-search =
 wallets-list-loading-title = ウォレットを読み込み中…
 wallets-list-loading-description = 選択したウォレットビューを準備しています。
 wallets-list-kept-empty-message = 以前のバージョンのウォレットはここに表示され、引き続きキーをエクスポートできます。
-wallets-secondaries-empty-title = セカンダリウォレットはありません
-wallets-archive-empty-title = アーカイブ済みのウォレットはありません
+wallets-other-empty-title = その他のウォレットはありません
 
 # watched.js: watched wallets table and actions.
 wallets-watched-col-wallet = ウォレット

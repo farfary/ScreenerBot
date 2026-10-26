@@ -30,8 +30,7 @@ wallets-summary-native = { -sol }
 wallets-copied-private-key = Private key
 
 wallets-tab-main = Dompet Utama
-wallets-tab-secondaries = Sekunder
-wallets-tab-archive = Arsip
+wallets-tab-other = Dompet Lain
 wallets-tab-watched = Dipantau
 wallets-refresh-failed = Tidak dapat menyegarkan dompet
 wallets-action-failed = Gagal
@@ -125,8 +124,7 @@ wallets-list-search =
 wallets-list-loading-title = Memuat dompet…
 wallets-list-loading-description = Menyiapkan tampilan dompet yang dipilih.
 wallets-list-kept-empty-message = Dompet dari versi sebelumnya muncul di sini agar Anda tetap dapat mengekspor kuncinya.
-wallets-secondaries-empty-title = Tidak ada dompet sekunder
-wallets-archive-empty-title = Tidak ada dompet yang diarsipkan
+wallets-other-empty-title = Tidak ada dompet lain
 
 wallets-watched-col-wallet = Dompet
 wallets-watched-col-status = Status

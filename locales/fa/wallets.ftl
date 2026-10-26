@@ -40,8 +40,7 @@ wallets-copied-private-key = کلید خصوصی
 
 # wallets.js: subtabs, toasts and busy states.
 wallets-tab-main = کیف پول اصلی
-wallets-tab-secondaries = کیف پول‌های ثانویه
-wallets-tab-archive = بایگانی
+wallets-tab-other = کیف پول‌های دیگر
 wallets-tab-watched = پایش‌شده
 wallets-refresh-failed = به‌روزرسانی کیف پول‌ها ممکن نشد
 wallets-action-failed = ناموفق
@@ -139,8 +138,7 @@ wallets-list-search =
 wallets-list-loading-title = در حال بارگذاری کیف پول‌ها…
 wallets-list-loading-description = در حال آماده‌سازی نمای کیف پول انتخاب‌شده.
 wallets-list-kept-empty-message = کیف پول‌های نسخه‌های قبلی اینجا نمایش داده می‌شوند تا همچنان بتوانید کلیدهای آن‌ها را صادر کنید.
-wallets-secondaries-empty-title = کیف پول ثانویه‌ای وجود ندارد
-wallets-archive-empty-title = کیف پول بایگانی‌شده‌ای وجود ندارد
+wallets-other-empty-title = کیف پول دیگری وجود ندارد
 
 # watched.js: watched wallets table and actions.
 wallets-watched-col-wallet = کیف پول

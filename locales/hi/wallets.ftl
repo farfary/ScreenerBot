@@ -28,8 +28,7 @@ wallets-summary-native = { -sol }
 wallets-copied-private-key = प्राइवेट की
 
 wallets-tab-main = मुख्य वॉलेट
-wallets-tab-secondaries = सेकेंडरी
-wallets-tab-archive = आर्काइव
+wallets-tab-other = अन्य वॉलेट
 wallets-tab-watched = वॉच किए गए
 wallets-refresh-failed = वॉलेट रीफ़्रेश नहीं हो सके
 wallets-action-failed = विफल
@@ -123,8 +122,7 @@ wallets-list-search =
 wallets-list-loading-title = वॉलेट लोड हो रहे हैं…
 wallets-list-loading-description = चुना गया वॉलेट व्यू तैयार हो रहा है।
 wallets-list-kept-empty-message = पिछले संस्करणों के वॉलेट यहां दिखते हैं ताकि आप अब भी उनकी कुंजियां एक्सपोर्ट कर सकें।
-wallets-secondaries-empty-title = कोई सेकेंडरी वॉलेट नहीं
-wallets-archive-empty-title = कोई आर्काइव वॉलेट नहीं
+wallets-other-empty-title = कोई अन्य वॉलेट नहीं
 
 wallets-watched-col-wallet = वॉलेट
 wallets-watched-col-status = स्टेटस

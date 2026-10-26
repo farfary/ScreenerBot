@@ -40,8 +40,7 @@ wallets-copied-private-key = Clave privada
 
 # wallets.js: subtabs, toasts and busy states.
 wallets-tab-main = Billetera principal
-wallets-tab-secondaries = Secundarias
-wallets-tab-archive = Archivo
+wallets-tab-other = Otras billeteras
 wallets-tab-watched = Vigiladas
 wallets-refresh-failed = No se pudieron actualizar las billeteras
 wallets-action-failed = Falló
@@ -139,8 +138,7 @@ wallets-list-search =
 wallets-list-loading-title = Cargando billeteras…
 wallets-list-loading-description = Preparando la vista de billeteras seleccionada.
 wallets-list-kept-empty-message = Las billeteras de versiones anteriores aparecen aquí para que aún puedas exportar sus claves.
-wallets-secondaries-empty-title = Sin billeteras secundarias
-wallets-archive-empty-title = Sin billeteras archivadas
+wallets-other-empty-title = No hay otras billeteras
 
 # watched.js: watched wallets table and actions.
 wallets-watched-col-wallet = Billetera

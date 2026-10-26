@@ -27,8 +27,7 @@ const POLL_INTERVAL = 30000; // 30 seconds for balance updates
 
 const buildWalletTabs = () => [
   { id: "main", label: I18n.t("wallets-tab-main") },
-  { id: "secondaries", label: I18n.t("wallets-tab-secondaries") },
-  { id: "archive", label: I18n.t("wallets-tab-archive") },
+  { id: "other", label: I18n.t("wallets-tab-other") },
   { id: "watched", label: I18n.t("wallets-tab-watched") },
 ];
 

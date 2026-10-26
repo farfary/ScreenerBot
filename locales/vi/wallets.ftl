@@ -28,8 +28,7 @@ wallets-summary-native = { -sol }
 wallets-copied-private-key = Khóa riêng tư
 
 wallets-tab-main = Ví chính
-wallets-tab-secondaries = Ví thứ cấp
-wallets-tab-archive = Lưu trữ
+wallets-tab-other = Ví khác
 wallets-tab-watched = Đang theo dõi
 wallets-refresh-failed = Không thể làm mới danh sách ví
 wallets-action-failed = Thất bại
@@ -123,8 +122,7 @@ wallets-list-search =
 wallets-list-loading-title = Đang tải danh sách ví…
 wallets-list-loading-description = Đang chuẩn bị chế độ xem ví đã chọn.
 wallets-list-kept-empty-message = Các ví từ phiên bản trước hiển thị ở đây để bạn vẫn có thể xuất khóa của chúng.
-wallets-secondaries-empty-title = Chưa có ví thứ cấp
-wallets-archive-empty-title = Chưa có ví lưu trữ
+wallets-other-empty-title = Không có ví khác
 
 wallets-watched-col-wallet = Ví
 wallets-watched-col-status = Trạng thái

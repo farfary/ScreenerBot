@@ -40,8 +40,7 @@ wallets-copied-private-key = Приватний ключ
 
 # wallets.js: subtabs, toasts and busy states.
 wallets-tab-main = Основний гаманець
-wallets-tab-secondaries = Додаткові
-wallets-tab-archive = Архів
+wallets-tab-other = Інші гаманці
 wallets-tab-watched = Відстежувані
 wallets-refresh-failed = Не вдалося оновити гаманці
 wallets-action-failed = Помилка
@@ -139,8 +138,7 @@ wallets-list-search =
 wallets-list-loading-title = Завантаження гаманців…
 wallets-list-loading-description = Підготовка вибраного подання гаманців.
 wallets-list-kept-empty-message = Тут відображаються гаманці з попередніх версій, щоб ви й надалі могли експортувати їхні ключі.
-wallets-secondaries-empty-title = Немає додаткових гаманців
-wallets-archive-empty-title = Немає архівованих гаманців
+wallets-other-empty-title = Інших гаманців немає
 
 # watched.js: watched wallets table and actions.
 wallets-watched-col-wallet = Гаманець

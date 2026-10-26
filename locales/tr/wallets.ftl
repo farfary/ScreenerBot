@@ -28,8 +28,7 @@ wallets-summary-native = { -sol }
 wallets-copied-private-key = Özel anahtar
 
 wallets-tab-main = Ana cüzdan
-wallets-tab-secondaries = İkincil cüzdanlar
-wallets-tab-archive = Arşiv
+wallets-tab-other = Diğer cüzdanlar
 wallets-tab-watched = İzlenenler
 wallets-refresh-failed = Cüzdanlar yenilenemedi
 wallets-action-failed = Başarısız
@@ -123,8 +122,7 @@ wallets-list-search =
 wallets-list-loading-title = Cüzdanlar yükleniyor…
 wallets-list-loading-description = Seçilen cüzdan görünümü hazırlanıyor.
 wallets-list-kept-empty-message = Önceki sürümlerdeki cüzdanlar, anahtarlarını dışa aktarmaya devam edebilmeniz için burada görünür.
-wallets-secondaries-empty-title = İkincil cüzdan yok
-wallets-archive-empty-title = Arşivlenmiş cüzdan yok
+wallets-other-empty-title = Başka cüzdan yok
 
 wallets-watched-col-wallet = Cüzdan
 wallets-watched-col-status = Durum

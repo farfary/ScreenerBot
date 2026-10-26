@@ -28,8 +28,7 @@ wallets-summary-native = { -sol }
 wallets-copied-private-key = Clé privée
 
 wallets-tab-main = Portefeuille principal
-wallets-tab-secondaries = Secondaires
-wallets-tab-archive = Archives
+wallets-tab-other = Autres portefeuilles
 wallets-tab-watched = Suivis
 wallets-refresh-failed = Impossible d'actualiser les portefeuilles
 wallets-action-failed = Échec
@@ -123,8 +122,7 @@ wallets-list-search =
 wallets-list-loading-title = Chargement des portefeuilles…
 wallets-list-loading-description = Préparation de la vue de portefeuille sélectionnée.
 wallets-list-kept-empty-message = Les portefeuilles des versions précédentes apparaissent ici pour que vous puissiez toujours exporter leurs clés.
-wallets-secondaries-empty-title = Aucun portefeuille secondaire
-wallets-archive-empty-title = Aucun portefeuille archivé
+wallets-other-empty-title = Aucun autre portefeuille
 
 wallets-watched-col-wallet = Portefeuille
 wallets-watched-col-status = Statut

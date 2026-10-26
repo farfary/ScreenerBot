@@ -4,13 +4,15 @@
 
 /**
  * Guard: the Wallets page names a wallet one way and states each figure once. Every wallet
- * name in the Secondaries, Archive and Watched tables uses one font and weight, and no
+ * name in the Other Wallets and Watched tables uses one font and weight, and no
  * toolbar chip repeats its label inside its value ("SOL 4.2187 SOL"). A holding worth less
  * than the Value column's resolution keeps its digits in subscript notation rather than
  * reading "0.0000", a true zero reads "0", and only a holding without a price reads "—". Every listed wallet shows the
- * SOL balance the list response carries for it, in the Main Wallet chip and in the Secondaries
- * and Archive Balance column; only a balance the server could not read is "—". The Main
- * Wallet tab's identity carries no "Main" chip beside a name the tab already states.
+ * SOL balance the list response carries for it, in the Main Wallet chip and in the Other
+ * Wallets Balance column; only a balance the server could not read is "—". The Main
+ * Wallet tab's identity carries no "Main" chip beside a name the tab already states. Other
+ * Wallets lists every wallet but the trading wallet, active or retired, each with the key
+ * export as its one action.
  *
  * Run with `npm run test:js`.
  */
@@ -25,7 +27,7 @@ import { chromium } from "playwright";
 import { serveDashboard, PAGE_READY } from "../lib/dashboard_host.mjs";
 import { createApiHandler, FIXTURES_ROOT, loadIndex } from "../lib/dashboard_fixtures.mjs";
 
-const LIST_TABS = ["secondaries", "archive", "watched"];
+const LIST_TABS = ["other", "watched"];
 
 const browser = await chromium.launch({ headless: true });
 after(() => browser.close());
@@ -139,12 +141,33 @@ test("every listed wallet shows the balance its list row carries", async (t) => 
       )
     );
   };
-  assert.deepEqual(await balances("secondaries", "#secondaries-table-container"), {
+  assert.deepEqual(await balances("other", "#other-wallets-table-container"), {
     2: "1.2841",
     3: "0.0₈5000",
-  });
-  assert.deepEqual(await balances("archive", "#archive-table-container"), {
     4: "0",
     5: "—",
   });
+});
+
+test("Other Wallets lists every wallet but the trading wallet, with the key export only", async (t) => {
+  const page = await openWallets(t);
+  await page.click('[data-tab-id="other"]');
+  const rows = "#other-wallets-table-container tr[data-row-id]";
+  await page.waitForSelector(`${rows} >> visible=true`);
+  const listed = await page.$$eval(rows, (found) =>
+    found.map((row) => ({
+      id: row.dataset.rowId,
+      actions: [...row.querySelectorAll(".dt-action-btn")].map((btn) => btn.dataset.actionId),
+    }))
+  );
+  assert.deepEqual(
+    listed.map((row) => row.id).sort(),
+    ["2", "3", "4", "5"],
+    "the trading wallet is not listed"
+  );
+  for (const row of listed) assert.deepEqual(row.actions, ["export"], `wallet ${row.id}`);
+  const tabs = await page.$$eval("#subTabsContainer [data-tab-id]", (found) =>
+    found.map((tab) => tab.dataset.tabId)
+  );
+  assert.deepEqual(tabs, ["main", "other", "watched"]);
 });

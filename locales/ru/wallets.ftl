@@ -28,8 +28,7 @@ wallets-summary-native = { -sol }
 wallets-copied-private-key = Приватный ключ
 
 wallets-tab-main = Основной кошелёк
-wallets-tab-secondaries = Дополнительные
-wallets-tab-archive = Архив
+wallets-tab-other = Другие кошельки
 wallets-tab-watched = Отслеживаемые
 wallets-refresh-failed = Не удалось обновить кошельки
 wallets-action-failed = Ошибка
@@ -123,8 +122,7 @@ wallets-list-search =
 wallets-list-loading-title = Загрузка кошельков…
 wallets-list-loading-description = Подготовка выбранного списка кошельков.
 wallets-list-kept-empty-message = Здесь отображаются кошельки из предыдущих версий, чтобы вы по-прежнему могли экспортировать их ключи.
-wallets-secondaries-empty-title = Нет дополнительных кошельков
-wallets-archive-empty-title = Нет архивных кошельков
+wallets-other-empty-title = Других кошельков нет
 
 wallets-watched-col-wallet = Кошелёк
 wallets-watched-col-status = Статус
