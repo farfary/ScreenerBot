@@ -9,6 +9,7 @@ pub use error::{Error, Result};
 
 pub mod api_error;
 mod embeds;
+pub(crate) mod local_request;
 pub mod middleware;
 pub mod promo;
 pub mod routes;

@@ -8,10 +8,11 @@
 use crate::database::{self, catalog::StoreSpec, health::StoreHealth};
 use crate::i18n::ids;
 use crate::webserver::api_error::{ApiError, ApiErrorCode};
+use crate::webserver::local_request::has_valid_local_request_headers;
 use axum::{
     body::Body,
     extract::{Request, State},
-    http::{header, header::HeaderValue, uri::Authority, HeaderMap, StatusCode, Uri},
+    http::{header, header::HeaderValue, HeaderMap, StatusCode},
     middleware::Next,
     response::{IntoResponse, Response},
 };
@@ -138,7 +139,6 @@ pub async fn security_gate(request: Request, next: Next) -> Response {
                 ApiErrorCode::MissingToken,
                 ids::ERRORS_SECURITY_TOKEN_REQUIRED,
             )
-            .details("This endpoint is only accessible from within ScreenerBot")
             .into_response()
         }
     }
@@ -148,58 +148,6 @@ pub async fn security_gate(request: Request, next: Next) -> Response {
 /// dashboard on its own; without it only a loopback same-origin request does.
 fn headless_request_allowed(auth_enabled: bool, headers: &HeaderMap) -> bool {
     auth_enabled || has_valid_local_request_headers(headers)
-}
-
-/// The host and port of `value` when it names this machine: `localhost` or a
-/// loopback IP literal (which no DNS answer can rebind), with an explicit port.
-fn parse_loopback_authority(value: &str) -> Option<(String, u16)> {
-    let authority = value.parse::<Authority>().ok()?;
-    let host = authority.host().to_ascii_lowercase();
-    let is_loopback = host == "localhost"
-        || host
-            .trim_start_matches('[')
-            .trim_end_matches(']')
-            .parse::<std::net::IpAddr>()
-            .is_ok_and(|address| address.is_loopback());
-    if !is_loopback {
-        return None;
-    }
-
-    Some((host, authority.port_u16()?))
-}
-
-fn has_valid_local_request_headers(headers: &HeaderMap) -> bool {
-    let host = headers
-        .get(header::HOST)
-        .and_then(|value| value.to_str().ok())
-        .and_then(parse_loopback_authority);
-    let Some(host) = host else {
-        return false;
-    };
-
-    let Some(origin) = headers.get("origin") else {
-        return true;
-    };
-    let Ok(origin) = origin.to_str() else {
-        return false;
-    };
-    let Ok(origin) = origin.parse::<Uri>() else {
-        return false;
-    };
-    if origin.scheme_str() != Some("http") {
-        return false;
-    }
-    if origin
-        .path_and_query()
-        .is_some_and(|path| path.as_str() != "/")
-    {
-        return false;
-    }
-
-    origin
-        .authority()
-        .and_then(|authority| parse_loopback_authority(authority.as_str()))
-        .is_some_and(|origin| origin == host)
 }
 
 /// The loopback-only restart check. Its handler refuses any non-loopback peer, so the
@@ -301,7 +249,6 @@ pub async fn initialization_gate(request: Request, next: Next) -> Response {
         ApiErrorCode::InitializationRequired,
         ids::ERRORS_INITIALIZATION_REQUIRED,
     )
-    .details("Please complete the initialization process through the web interface")
     .into_response()
 }
 
@@ -525,7 +472,6 @@ pub async fn auth_gate(request: Request, next: Next) -> Response {
             ApiErrorCode::AuthenticationRequired,
             ids::ERRORS_AUTH_REQUIRED,
         )
-        .details("Please log in to access this endpoint")
         .into_response();
     }
 
@@ -542,68 +488,18 @@ pub async fn auth_gate(request: Request, next: Next) -> Response {
 mod tests {
     use super::*;
 
-    fn request_headers(host: Option<&str>, origin: Option<&str>) -> HeaderMap {
+    fn request_headers(host: &str, origin: &str) -> HeaderMap {
         let mut headers = HeaderMap::new();
-        if let Some(host) = host {
-            headers.insert(header::HOST, host.parse().unwrap());
-        }
-        if let Some(origin) = origin {
-            headers.insert("origin", origin.parse().unwrap());
-        }
+        headers.insert(header::HOST, host.parse().unwrap());
+        headers.insert("origin", origin.parse().unwrap());
         headers
     }
 
     #[test]
-    fn accepts_loopback_host_and_same_origin() {
-        assert!(has_valid_local_request_headers(&request_headers(
-            Some("127.0.0.1:54321"),
-            Some("http://127.0.0.1:54321")
-        )));
-        assert!(has_valid_local_request_headers(&request_headers(
-            Some("localhost:54321"),
-            None
-        )));
-    }
-
-    #[test]
-    fn rejects_non_loopback_or_cross_origin_requests() {
-        for headers in [
-            request_headers(None, None),
-            request_headers(Some("example.com:54321"), None),
-            request_headers(Some("127.0.0.1"), None),
-            request_headers(Some("127.0.0.1:54321"), Some("null")),
-            request_headers(Some("127.0.0.1:54321"), Some("https://127.0.0.1:54321")),
-            request_headers(Some("127.0.0.1:54321"), Some("http://127.0.0.1:54322")),
-            request_headers(Some("127.0.0.1:54321"), Some("http://example.com:54321")),
-        ] {
-            assert!(!has_valid_local_request_headers(&headers));
-        }
-    }
-
-    #[test]
-    fn loopback_ip_literals_are_local_hosts() {
-        assert!(has_valid_local_request_headers(&request_headers(
-            Some("[::1]:8080"),
-            Some("http://[::1]:8080")
-        )));
-        assert!(has_valid_local_request_headers(&request_headers(
-            Some("127.0.0.2:8080"),
-            None
-        )));
-        assert!(!has_valid_local_request_headers(&request_headers(
-            Some("[::1]:8080"),
-            Some("http://127.0.0.1:8080")
-        )));
-    }
-
-    #[test]
     fn headless_without_auth_admits_only_local_same_origin_requests() {
-        let local = request_headers(Some("127.0.0.1:8080"), Some("http://127.0.0.1:8080"));
-        let rebound = request_headers(
-            Some("rebind.example:8080"),
-            Some("http://rebind.example:8080"),
-        );
-        let cross_origin = request_headers(Some("127.0.0.1:8080"), Some("http://evil.example"));
+        let local = request_headers("127.0.0.1:8080", "http://127.0.0.1:8080");
+        let rebound = request_headers("rebind.example:8080", "http://rebind.example:8080");
+        let cross_origin = request_headers("127.0.0.1:8080", "http://evil.example");
 
         assert!(headless_request_allowed(false, &local));
         assert!(!headless_request_allowed(false, &rebound));
