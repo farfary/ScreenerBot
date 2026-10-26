@@ -188,9 +188,6 @@ trader-exit-average = میانگین { $value }
 
 ## Shared example vocabulary
 
-trader-impact-label = تأثیر:
-trader-current-label = فعلی:
-trader-readable-label = به زبان ساده:
 trader-example-how-it-works = نحوه کار
 trader-step-entry = ورود
 trader-step-initial-position = پوزیشن اولیه
@@ -317,6 +314,14 @@ trader-strategy-priority = اولویت { $priority }
 
 trader-dca-title = میانگین‌گیری قیمت
 trader-dca-subtitle = افزودن خودکار به پوزیشن‌های زیان‌ده برای کاهش میانگین قیمت ورود
+trader-dca-threshold-impact = وقتی پوزیشن { $value }% پایین‌تر از ورود باشد، بیشتر می‌خرد
+trader-dca-count-impact =
+    { $count ->
+        [one] حداکثر یک ورود اضافه برای هر پوزیشن
+       *[other] حداکثر { $count } ورود اضافه برای هر پوزیشن
+    }
+trader-dca-size-impact = هر ورود اضافه { $amount } می‌خرد
+trader-dca-cooldown-impact = دست‌کم { $span } بین ورودهای اضافه
 trader-dca-example = ورود اولیه 0.01 { -sol } ← DCA شماره 1: 0.005 { -sol } در -10% ← DCA شماره 2: 0.005 { -sol } در 10% افت بیشتر
 trader-dca-info-title = اطلاعات استراتژی DCA
 trader-dca-info-subtitle = نکات مهم درباره معامله با DCA

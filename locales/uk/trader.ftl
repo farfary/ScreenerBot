@@ -202,9 +202,6 @@ trader-exit-average = сер. { $value }
 
 ## Shared example vocabulary
 
-trader-impact-label = Вплив:
-trader-current-label = Зараз:
-trader-readable-label = Читабельно:
 trader-example-how-it-works = Як це працює
 trader-step-entry = Вхід
 trader-step-initial-position = Початкова позиція
@@ -339,6 +336,16 @@ trader-strategy-priority = Пріоритет { $priority }
 
 trader-dca-title = Усереднення (DCA)
 trader-dca-subtitle = Автоматична докупівля до збиткових позицій, щоб знизити середню ціну входу
+trader-dca-threshold-impact = Докуповує, коли позиція нижче входу на { $value }%
+trader-dca-count-impact =
+    { $count ->
+        [one] Не більше { $count } додаткового входу на позицію
+        [few] Не більше { $count } додаткових входів на позицію
+        [many] Не більше { $count } додаткових входів на позицію
+       *[other] Не більше { $count } додаткового входу на позицію
+    }
+trader-dca-size-impact = Кожен додатковий вхід купує на { $amount }
+trader-dca-cooldown-impact = Щонайменше { $span } між додатковими входами
 trader-dca-example = 0,01 { -sol } початково → DCA №1: 0,005 { -sol } при -10% → DCA №2: 0,005 { -sol } ще при -10%
 trader-dca-info-title = Про стратегію DCA
 trader-dca-info-subtitle = Важливі міркування щодо торгівлі з DCA

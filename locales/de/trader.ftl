@@ -165,9 +165,6 @@ trader-exit-share =
     }
 trader-exit-average = Ø { $value }
 
-trader-impact-label = Auswirkung:
-trader-current-label = Aktuell:
-trader-readable-label = Lesbar:
 trader-example-how-it-works = So funktioniert es
 trader-step-entry = Einstieg
 trader-step-initial-position = Anfangsposition
@@ -266,6 +263,14 @@ trader-strategy-priority = Priorität { $priority }
 
 trader-dca-title = Durchschnittskosten-Strategie (DCA)
 trader-dca-subtitle = Verlustpositionen automatisch aufstocken, um den durchschnittlichen Einstiegspreis zu senken
+trader-dca-threshold-impact = Kauft nach, wenn die Position { $value } % unter dem Einstieg liegt
+trader-dca-count-impact =
+    { $count ->
+        [one] Höchstens ein zusätzlicher Einstieg pro Position
+       *[other] Höchstens { $count } zusätzliche Einstiege pro Position
+    }
+trader-dca-size-impact = Jeder zusätzliche Einstieg kauft { $amount }
+trader-dca-cooldown-impact = Mindestens { $span } zwischen zusätzlichen Einstiegen
 trader-dca-example = 0,01 { -sol } Anfang → DCA #1: 0,005 { -sol } @ -10 % → DCA #2: 0,005 { -sol } @ weitere -10 %
 trader-dca-info-title = Infos zur DCA-Strategie
 trader-dca-info-subtitle = Wichtige Hinweise zum DCA-Trading

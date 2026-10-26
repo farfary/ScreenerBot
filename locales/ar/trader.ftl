@@ -216,9 +216,6 @@ trader-exit-average = المتوسط { $value }
 
 ## Shared example vocabulary
 
-trader-impact-label = الأثر:
-trader-current-label = الحالي:
-trader-readable-label = بصيغة مقروءة:
 trader-example-how-it-works = طريقة العمل
 trader-step-entry = دخول
 trader-step-initial-position = المركز الأولي
@@ -361,6 +358,18 @@ trader-strategy-priority = الأولوية { $priority }
 
 trader-dca-title = متوسط التكلفة (DCA)
 trader-dca-subtitle = الإضافة تلقائيًا إلى المراكز الخاسرة لخفض متوسط سعر الدخول
+trader-dca-threshold-impact = يشتري المزيد عندما ينخفض المركز بنسبة { $value }% عن الدخول
+trader-dca-count-impact =
+    { $count ->
+        [zero] لا دخول إضافي لكل مركز
+        [one] دخول إضافي واحد كحد أقصى لكل مركز
+        [two] دخولان إضافيان كحد أقصى لكل مركز
+        [few] { $count } دخولات إضافية كحد أقصى لكل مركز
+        [many] { $count } دخولًا إضافيًا كحد أقصى لكل مركز
+       *[other] { $count } دخول إضافي كحد أقصى لكل مركز
+    }
+trader-dca-size-impact = كل دخول إضافي يشتري { $amount }
+trader-dca-cooldown-impact = { $span } على الأقل بين الدخولات الإضافية
 trader-dca-example = 0.01 { -sol } مبدئيًا ← DCA #1: 0.005 { -sol } @ -10% ← DCA #2: 0.005 { -sol } @ -10% إضافية
 trader-dca-info-title = معلومات استراتيجية DCA
 trader-dca-info-subtitle = اعتبارات مهمة عند التداول بـ DCA

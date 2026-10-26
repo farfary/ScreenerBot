@@ -7,6 +7,7 @@ import {
   formatFixed,
   formatPercentValue,
   formatPriceSubscript,
+  formatSol,
   formatTimeSpan,
   withSolUnit,
 } from "../../core/format.js";
@@ -24,9 +25,14 @@ import {
  * @param {Object} deps - Dependencies
  * @param {Function} deps.$ - DOM selector function
  * @param {Object} deps.Utils - Utility functions module
+ * @param {() => (number|null|undefined)} deps.tradeSize - The configured trade size in SOL
+ *   (`trader.trade_size_sol`), or nothing before the config has loaded
  * @returns {Object} Example updater functions
  */
-export function createExampleUpdaters({ $, Utils: _Utils }) {
+export function createExampleUpdaters({ $, Utils: _Utils, tradeSize }) {
+  /** A SOL amount in an example or a computed line; "—" while the trade size is unknown. */
+  const exampleSol = (amount) => formatSol(amount, { decimals: 6, fallback: "—", subscript: true });
+
   /**
    * A duration in one of the configurable units, worded through the catalog, or
    * `null` for a unit the page does not offer.
@@ -293,8 +299,43 @@ export function createExampleUpdaters({ $, Utils: _Utils }) {
     }
   }
 
+  /** The computed line under each DCA field. */
+  function updateDcaLines() {
+    const line = (id, text) => {
+      const el = $(`#${id}-impact`);
+      if (el) el.textContent = text;
+    };
+    const threshold = parseFloat($("#dca-threshold")?.value);
+    const count = parseInt($("#dca-max-count")?.value, 10);
+    const size = parseFloat($("#dca-size")?.value);
+    const cooldown = parseInt($("#dca-cooldown")?.value, 10);
+    const base = Number(tradeSize?.());
+
+    line(
+      "dca-threshold",
+      I18n.t("trader-dca-threshold-impact", { value: examplePercent(Math.abs(threshold)) })
+    );
+    line(
+      "dca-max-count",
+      Number.isFinite(count) ? I18n.t("trader-dca-count-impact", { count }) : "—"
+    );
+    line(
+      "dca-size",
+      I18n.t("trader-dca-size-impact", {
+        amount: exampleSol(base > 0 && size > 0 ? (base * size) / 100 : Number.NaN),
+      })
+    );
+    line(
+      "dca-cooldown",
+      I18n.t("trader-dca-cooldown-impact", {
+        span: formatTimeSpan(cooldown, { unit: "minute" }),
+      })
+    );
+  }
+
   // Return public API
   return {
+    updateDcaLines,
     updateRoiExample,
     updateStopLossExample,
     updateTrailingStopExample,

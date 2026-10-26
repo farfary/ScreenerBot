@@ -150,9 +150,6 @@ trader-exit-share =
     }
 trader-exit-average = TB { $value }
 
-trader-impact-label = Tác động:
-trader-current-label = Hiện tại:
-trader-readable-label = Dễ đọc:
 trader-example-how-it-works = Cách hoạt động
 trader-step-entry = Vào lệnh
 trader-step-initial-position = Vị thế ban đầu
@@ -247,6 +244,13 @@ trader-strategy-priority = Ưu tiên { $priority }
 
 trader-dca-title = DCA (trung bình giá)
 trader-dca-subtitle = Tự động thêm vào các vị thế đang lỗ để hạ giá vào trung bình
+trader-dca-threshold-impact = Mua thêm khi vị thế giảm { $value }% so với giá vào
+trader-dca-count-impact =
+    { $count ->
+       *[other] Tối đa { $count } lần vào thêm mỗi vị thế
+    }
+trader-dca-size-impact = Mỗi lần vào thêm mua { $amount }
+trader-dca-cooldown-impact = Cách nhau ít nhất { $span } giữa các lần vào thêm
 trader-dca-example = 0.01 { -sol } ban đầu → DCA #1: 0.005 { -sol } @ -10% → DCA #2: 0.005 { -sol } @ thêm -10%
 trader-dca-info-title = Thông tin chiến lược DCA
 trader-dca-info-subtitle = Những điều cần lưu ý khi giao dịch DCA

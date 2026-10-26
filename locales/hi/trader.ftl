@@ -157,9 +157,6 @@ trader-exit-share =
     }
 trader-exit-average = औसत { $value }
 
-trader-impact-label = प्रभाव:
-trader-current-label = वर्तमान:
-trader-readable-label = आसान रूप:
 trader-example-how-it-works = यह कैसे काम करता है
 trader-step-entry = एंट्री
 trader-step-initial-position = शुरुआती पोज़िशन
@@ -258,6 +255,14 @@ trader-strategy-priority = प्राथमिकता { $priority }
 
 trader-dca-title = डॉलर-कॉस्ट एवरेजिंग
 trader-dca-subtitle = औसत एंट्री प्राइस घटाने के लिए घाटे वाली पोज़िशन में अपने आप ऐड करें
+trader-dca-threshold-impact = पोज़िशन एंट्री से { $value }% नीचे होने पर और ख़रीदता है
+trader-dca-count-impact =
+    { $count ->
+        [one] हर पोज़िशन पर अधिकतम एक अतिरिक्त एंट्री
+       *[other] हर पोज़िशन पर अधिकतम { $count } अतिरिक्त एंट्री
+    }
+trader-dca-size-impact = हर अतिरिक्त एंट्री { $amount } ख़रीदती है
+trader-dca-cooldown-impact = अतिरिक्त एंट्री के बीच कम से कम { $span }
 trader-dca-example = 0.01 { -sol } शुरुआती → DCA #1: 0.005 { -sol } @ -10% → DCA #2: 0.005 { -sol } @ और -10%
 trader-dca-info-title = DCA स्ट्रैटेजी जानकारी
 trader-dca-info-subtitle = DCA ट्रेडिंग के लिए ज़रूरी बातें

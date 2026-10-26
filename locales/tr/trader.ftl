@@ -157,9 +157,6 @@ trader-exit-share =
     }
 trader-exit-average = ort. { $value }
 
-trader-impact-label = Etki:
-trader-current-label = Güncel:
-trader-readable-label = Okunabilir:
 trader-example-how-it-works = Nasıl çalışır
 trader-step-entry = Giriş
 trader-step-initial-position = İlk pozisyon
@@ -258,6 +255,14 @@ trader-strategy-priority = Öncelik { $priority }
 
 trader-dca-title = DCA (maliyet ortalaması)
 trader-dca-subtitle = Ortalama giriş fiyatınızı düşürmek için zarardaki pozisyonlara otomatik olarak ekleme yapın
+trader-dca-threshold-impact = Pozisyon girişten %{ $value } aşağıdayken ek alım yapar
+trader-dca-count-impact =
+    { $count ->
+        [one] Pozisyon başına en fazla bir ek giriş
+       *[other] Pozisyon başına en fazla { $count } ek giriş
+    }
+trader-dca-size-impact = Her ek giriş { $amount } alır
+trader-dca-cooldown-impact = Ek girişler arasında en az { $span }
 trader-dca-example = 0,01 { -sol } ilk giriş → DCA #1: 0,005 { -sol } @ -%10 → DCA #2: 0,005 { -sol } @ %10 daha
 trader-dca-info-title = DCA strateji bilgisi
 trader-dca-info-subtitle = DCA işlemi için önemli hususlar

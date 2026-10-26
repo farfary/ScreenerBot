@@ -278,14 +278,6 @@
   border-radius: var(--radius-md);
 }
 
-.impact-label {
-  font-size: 0.625rem;
-  font-weight: 600;
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
 .impact-text {
   font-size: 0.6875rem;
   color: var(--text-primary);

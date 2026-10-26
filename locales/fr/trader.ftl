@@ -164,9 +164,6 @@ trader-exit-share =
     }
 trader-exit-average = { $value } en moy.
 
-trader-impact-label = Impact :
-trader-current-label = Actuel :
-trader-readable-label = Lisible :
 trader-example-how-it-works = Fonctionnement
 trader-step-entry = Entrée
 trader-step-initial-position = Position initiale
@@ -269,6 +266,15 @@ trader-strategy-priority = Priorité { $priority }
 
 trader-dca-title = Investissement programmé (DCA)
 trader-dca-subtitle = Renforcez automatiquement les positions perdantes pour abaisser votre prix d'entrée moyen
+trader-dca-threshold-impact = Achète davantage quand la position recule de { $value } % depuis l’entrée
+trader-dca-count-impact =
+    { $count ->
+        [one] Au plus une entrée supplémentaire par position
+        [many] Au plus { $count } entrées supplémentaires par position
+       *[other] Au plus { $count } entrées supplémentaires par position
+    }
+trader-dca-size-impact = Chaque entrée supplémentaire achète { $amount }
+trader-dca-cooldown-impact = Au moins { $span } entre deux entrées supplémentaires
 trader-dca-example = 0.01 { -sol } initial → DCA n°1 : 0.005 { -sol } à -10 % → DCA n°2 : 0.005 { -sol } à -10 % supplémentaires
 trader-dca-info-title = Infos sur la stratégie DCA
 trader-dca-info-subtitle = Points importants à considérer pour le DCA

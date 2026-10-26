@@ -188,9 +188,6 @@ trader-exit-average = { $value } avg
 
 ## Shared example vocabulary
 
-trader-impact-label = Impact:
-trader-current-label = Current:
-trader-readable-label = Readable:
 trader-example-how-it-works = How It Works
 trader-step-entry = Entry
 trader-step-initial-position = Initial position
@@ -317,6 +314,14 @@ trader-strategy-priority = Priority { $priority }
 
 trader-dca-title = Dollar-Cost Averaging
 trader-dca-subtitle = Automatically add to losing positions to lower your average entry price
+trader-dca-threshold-impact = Buys more when the position is down { $value }% from entry
+trader-dca-count-impact =
+    { $count ->
+        [one] At most one extra entry per position
+       *[other] At most { $count } extra entries per position
+    }
+trader-dca-size-impact = Each extra entry buys { $amount }
+trader-dca-cooldown-impact = At least { $span } between extra entries
 trader-dca-example = 0.01 { -sol } initial → DCA #1: 0.005 { -sol } @ -10% → DCA #2: 0.005 { -sol } @ -10% more
 trader-dca-info-title = DCA Strategy Info
 trader-dca-info-subtitle = Important considerations for DCA trading

@@ -181,9 +181,6 @@ trader-exit-average = 平均 { $value }
 
 ## Shared example vocabulary
 
-trader-impact-label = 影響:
-trader-current-label = 現在:
-trader-readable-label = 読みやすい表記:
 trader-example-how-it-works = 仕組み
 trader-step-entry = エントリー
 trader-step-initial-position = 初期ポジション
@@ -306,6 +303,13 @@ trader-strategy-priority = 優先度 { $priority }
 
 trader-dca-title = ドルコスト平均法
 trader-dca-subtitle = 含み損のポジションに自動で追加購入し、平均エントリー価格を下げます
+trader-dca-threshold-impact = ポジションがエントリーから { $value }% 下落したら買い増します
+trader-dca-count-impact =
+    { $count ->
+       *[other] 1 ポジションにつき追加エントリーは最大 { $count } 回
+    }
+trader-dca-size-impact = 追加エントリーごとに { $amount } を購入
+trader-dca-cooldown-impact = 追加エントリーの間隔は最低 { $span }
 trader-dca-example = 初回 0.01 { -sol } → DCA #1: 0.005 { -sol } @ -10% → DCA #2: さらに -10% で 0.005 { -sol }
 trader-dca-info-title = DCA ストラテジー情報
 trader-dca-info-subtitle = DCA 取引における重要な注意点

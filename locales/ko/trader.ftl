@@ -181,9 +181,6 @@ trader-exit-average = 평균 { $value }
 
 ## Shared example vocabulary
 
-trader-impact-label = 영향:
-trader-current-label = 현재:
-trader-readable-label = 읽기 쉬운 표기:
 trader-example-how-it-works = 작동 방식
 trader-step-entry = 진입
 trader-step-initial-position = 초기 포지션
@@ -305,6 +302,13 @@ trader-strategy-priority = 우선순위 { $priority }
 
 trader-dca-title = 분할 매수 (DCA)
 trader-dca-subtitle = 손실 중인 포지션에 자동으로 추가 매수하여 평균 진입가를 낮춥니다
+trader-dca-threshold-impact = 포지션이 진입가 대비 { $value }% 하락하면 추가 매수합니다
+trader-dca-count-impact =
+    { $count ->
+       *[other] 포지션당 추가 진입 최대 { $count }회
+    }
+trader-dca-size-impact = 추가 진입마다 { $amount } 매수
+trader-dca-cooldown-impact = 추가 진입 사이 최소 { $span }
 trader-dca-example = 초기 0.01 { -sol } → DCA #1: 0.005 { -sol } @ -10% → DCA #2: 0.005 { -sol } @ 추가 -10%
 trader-dca-info-title = DCA 전략 정보
 trader-dca-info-subtitle = DCA 거래 시 유의할 점

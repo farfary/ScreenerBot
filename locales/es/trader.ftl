@@ -195,9 +195,6 @@ trader-exit-average = { $value } prom.
 
 ## Shared example vocabulary
 
-trader-impact-label = Impacto:
-trader-current-label = Actual:
-trader-readable-label = Legible:
 trader-example-how-it-works = Cómo funciona
 trader-step-entry = Entrada
 trader-step-initial-position = Posición inicial
@@ -328,6 +325,15 @@ trader-strategy-priority = Prioridad { $priority }
 
 trader-dca-title = Promedio de costo en dólares
 trader-dca-subtitle = Añade automáticamente a posiciones en pérdida para reducir tu precio de entrada promedio
+trader-dca-threshold-impact = Compra más cuando la posición cae un { $value }% desde la entrada
+trader-dca-count-impact =
+    { $count ->
+        [one] Como máximo una entrada extra por posición
+        [many] Como máximo { $count } entradas extra por posición
+       *[other] Como máximo { $count } entradas extra por posición
+    }
+trader-dca-size-impact = Cada entrada extra compra { $amount }
+trader-dca-cooldown-impact = Al menos { $span } entre entradas extra
 trader-dca-example = 0.01 { -sol } inicial → DCA #1: 0.005 { -sol } @ -10% → DCA #2: 0.005 { -sol } @ -10% más
 trader-dca-info-title = Información de la estrategia DCA
 trader-dca-info-subtitle = Consideraciones importantes para el trading con DCA

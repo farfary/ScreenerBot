@@ -181,9 +181,6 @@ trader-exit-average = 平均 { $value }
 
 ## Shared example vocabulary
 
-trader-impact-label = 影响：
-trader-current-label = 当前：
-trader-readable-label = 可读格式：
 trader-example-how-it-works = 工作原理
 trader-step-entry = 入场
 trader-step-initial-position = 初始仓位
@@ -306,6 +303,13 @@ trader-strategy-priority = 优先级 { $priority }
 
 trader-dca-title = 定投加仓（DCA）
 trader-dca-subtitle = 对亏损仓位自动加仓，以降低入场均价
+trader-dca-threshold-impact = 仓位较入场下跌 { $value }% 时加仓
+trader-dca-count-impact =
+    { $count ->
+       *[other] 每个仓位最多追加 { $count } 次
+    }
+trader-dca-size-impact = 每次追加买入 { $amount }
+trader-dca-cooldown-impact = 两次追加之间至少间隔 { $span }
 trader-dca-example = 初始 0.01 { -sol } → DCA #1：0.005 { -sol } @ -10% → DCA #2：0.005 { -sol } @ 再跌 -10%
 trader-dca-info-title = DCA 策略说明
 trader-dca-info-subtitle = DCA 交易的重要注意事项

@@ -98,7 +98,11 @@ function createLifecycle() {
   };
 
   // Initialize sub-modules
-  const examples = createExampleUpdaters({ $, Utils });
+  const examples = createExampleUpdaters({
+    $,
+    Utils,
+    tradeSize: () => state.config?.trader?.trade_size_sol,
+  });
   const controls = createTraderControls({
     state,
     $,
@@ -302,6 +306,7 @@ function createLifecycle() {
       examples.updateStopLossExample();
       examples.updateRoiExample();
       examples.updateTimeLossExample();
+      examples.updateDcaLines();
     } catch (error) {
       console.error("[Trader] Failed to load config:", error);
       Utils.showToast({
@@ -1131,6 +1136,11 @@ function createLifecycle() {
       });
     }
 
+    // DCA fields: each one's computed line
+    for (const id of ["#dca-threshold", "#dca-max-count", "#dca-size", "#dca-cooldown"]) {
+      addTrackedListener($(id), "input", () => examples.updateDcaLines());
+    }
+
     // Realized-window segmented control
     for (const btn of $$("#stats-period .stats-period-btn")) {
       addTrackedListener(btn, "click", () => setStatsPeriod(Number(btn.dataset.days)));
@@ -1210,6 +1220,7 @@ function createLifecycle() {
         examples.updateStopLossExample();
         examples.updateRoiExample();
         examples.updateTimeLossExample();
+        examples.updateDcaLines();
       }
     } catch (error) {
       console.error("[Trader] Failed to save config:", error);

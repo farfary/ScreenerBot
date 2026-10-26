@@ -152,9 +152,6 @@ trader-exit-share =
     }
 trader-exit-average = rata-rata { $value }
 
-trader-impact-label = Dampak:
-trader-current-label = Saat ini:
-trader-readable-label = Terbaca:
 trader-example-how-it-works = Cara Kerja
 trader-step-entry = Entry
 trader-step-initial-position = Posisi awal
@@ -249,6 +246,13 @@ trader-strategy-priority = Prioritas { $priority }
 
 trader-dca-title = Dollar-Cost Averaging
 trader-dca-subtitle = Tambah otomatis ke posisi yang rugi untuk menurunkan harga entry rata-rata Anda
+trader-dca-threshold-impact = Membeli lagi saat posisi turun { $value }% dari entry
+trader-dca-count-impact =
+    { $count ->
+       *[other] Paling banyak { $count } entry tambahan per posisi
+    }
+trader-dca-size-impact = Setiap entry tambahan membeli { $amount }
+trader-dca-cooldown-impact = Minimal { $span } di antara entry tambahan
 trader-dca-example = 0.01 { -sol } awal → DCA #1: 0.005 { -sol } @ -10% → DCA #2: 0.005 { -sol } @ -10% lagi
 trader-dca-info-title = Info Strategi DCA
 trader-dca-info-subtitle = Pertimbangan penting untuk trading DCA
