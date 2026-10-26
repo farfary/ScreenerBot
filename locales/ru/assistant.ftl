@@ -190,6 +190,7 @@ assistant-chat-close =
     .title = Закрыть
     .aria-label = Закрыть ассистента
 assistant-chat-title-new = Новый чат
+assistant-chat-title-started = Чат { $time }
 assistant-chat-sessions-empty = Сеансов чата пока нет
 assistant-chat-sessions-empty-search = Подходящих чатов нет
 assistant-chat-group-today = Сегодня

@@ -507,7 +507,12 @@ export class ChatWidget {
         const response = await fetch("/api/assistant/chat/sessions", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({}),
+          // The session is named by the moment it starts, in the viewer's time zone.
+          body: JSON.stringify({
+            title: I18n.t("assistant-chat-title-started", {
+              time: formatTimestamp(Date.now(), { includeSeconds: false }),
+            }),
+          }),
         });
         if (!response.ok) throw new Error("Failed to create session");
         const data = await response.json();

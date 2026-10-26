@@ -193,6 +193,7 @@ assistant-chat-close =
     .title = 关闭
     .aria-label = 关闭助手
 assistant-chat-title-new = 新对话
+assistant-chat-title-started = 对话 { $time }
 assistant-chat-sessions-empty = 尚无对话会话
 assistant-chat-sessions-empty-search = 没有匹配的对话
 assistant-chat-group-today = 今天

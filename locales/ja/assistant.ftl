@@ -193,6 +193,7 @@ assistant-chat-close =
     .title = 閉じる
     .aria-label = アシスタントを閉じる
 assistant-chat-title-new = 新規チャット
+assistant-chat-title-started = チャット { $time }
 assistant-chat-sessions-empty = チャットセッションはまだありません
 assistant-chat-sessions-empty-search = 一致するチャットがありません
 assistant-chat-group-today = 今日

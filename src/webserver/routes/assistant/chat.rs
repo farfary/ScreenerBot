@@ -253,7 +253,7 @@ pub async fn create_chat_session(
     };
 
     let title = req.title.unwrap_or_else(|| {
-        let now = chrono::Utc::now();
+        let now = chrono::Local::now();
         format!("Chat {}", now.format("%Y-%m-%d %H:%M"))
     });
 

@@ -193,6 +193,7 @@ assistant-chat-close =
     .title = Tutup
     .aria-label = Tutup Asisten
 assistant-chat-title-new = Chat Baru
+assistant-chat-title-started = Chat { $time }
 assistant-chat-sessions-empty = Belum ada sesi chat
 assistant-chat-sessions-empty-search = Tidak ada chat yang cocok
 assistant-chat-group-today = Hari Ini

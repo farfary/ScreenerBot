@@ -196,6 +196,7 @@ assistant-chat-close =
     .title = 닫기
     .aria-label = 어시스턴트 닫기
 assistant-chat-title-new = 새 채팅
+assistant-chat-title-started = 채팅 { $time }
 assistant-chat-sessions-empty = 채팅 세션이 아직 없습니다
 assistant-chat-sessions-empty-search = 일치하는 채팅이 없습니다
 assistant-chat-group-today = 오늘

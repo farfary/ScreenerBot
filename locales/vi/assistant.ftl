@@ -190,6 +190,7 @@ assistant-chat-close =
     .title = Đóng
     .aria-label = Đóng Trợ lý
 assistant-chat-title-new = Cuộc trò chuyện mới
+assistant-chat-title-started = Trò chuyện { $time }
 assistant-chat-sessions-empty = Chưa có phiên trò chuyện nào
 assistant-chat-sessions-empty-search = Không có cuộc trò chuyện phù hợp
 assistant-chat-group-today = Hôm nay

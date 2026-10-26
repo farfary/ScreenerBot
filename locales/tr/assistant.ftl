@@ -193,6 +193,7 @@ assistant-chat-close =
     .title = Kapat
     .aria-label = Asistanı kapat
 assistant-chat-title-new = Yeni Sohbet
+assistant-chat-title-started = Sohbet { $time }
 assistant-chat-sessions-empty = Henüz sohbet oturumu yok
 assistant-chat-sessions-empty-search = Eşleşen sohbet yok
 assistant-chat-group-today = Bugün
