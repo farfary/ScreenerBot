@@ -32,6 +32,8 @@ let currentTab = "all";
 let isInitialized = false;
 let isOpen = false;
 let releaseEscape = null;
+// The control that opened the drawer; focus returns to it when the drawer closes.
+let openTrigger = null;
 let clockTimer = null;
 
 // Infinite scroll state
@@ -98,6 +100,8 @@ export function open() {
   if (!drawer) return;
 
   isOpen = true;
+  openTrigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  drawer.inert = false;
   drawer.setAttribute("data-state", "open");
   drawer.setAttribute("aria-hidden", "false");
   document.body.classList.add("notification-drawer-open");
@@ -117,15 +121,28 @@ export function open() {
 }
 
 /**
- * Close the notification drawer
+ * Close the notification drawer. The panel only slides off-screen, so the drawer turns
+ * inert at once rather than after the transition: its controls must leave the tab order
+ * the moment it reads as closed. Focus that was inside it returns to the control that
+ * opened it.
  */
 export function close() {
   const drawer = document.getElementById("notificationDrawer");
   if (!drawer) return;
 
+  const focusWasInside = drawer.contains(document.activeElement);
   isOpen = false;
+  drawer.inert = true;
   drawer.setAttribute("data-state", "closed");
   drawer.setAttribute("aria-hidden", "true");
+  if (focusWasInside || document.activeElement === document.body) {
+    const trigger =
+      openTrigger?.isConnected && openTrigger.getClientRects().length > 0
+        ? openTrigger
+        : document.getElementById("notificationBtn");
+    trigger?.focus({ preventScroll: true });
+  }
+  openTrigger = null;
   document.body.classList.remove("notification-drawer-open");
   if (releaseEscape) {
     releaseEscape();
