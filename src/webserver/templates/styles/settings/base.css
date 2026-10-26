@@ -276,6 +276,13 @@
   opacity: 0.9;
 }
 
+/* The group of settings that are not available yet: a quiet title after the live ones. */
+.settings-section--coming .settings-section-title,
+.settings-section--coming .settings-section-title i {
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
 .settings-section-description {
   margin: -8px 0 16px;
   font-size: 0.85rem;
@@ -352,27 +359,6 @@
   font-size: 0.75rem;
   color: var(--text-secondary);
   line-height: 1.4;
-}
-
-/* A field title with a status badge set on the title's own line. */
-.settings-field-title {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 2px 8px;
-}
-
-.settings-field-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 2px 8px;
-  background: var(--warning-alpha-10);
-  border-radius: var(--radius-sm);
-  color: var(--warning-color);
-  font-size: 0.65rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
 }
 
 .settings-field-control {

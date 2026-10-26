@@ -23,7 +23,8 @@
  *   scroll, each row's glyph bare, with the switch as the only visibility control and
  *   no note asking for a page refresh: saving rebuilds the navigation bar in place, in
  *   the saved order and visibility.
- * - A field's status badge sits on its title's line, not stacked under the hint.
+ * - Startup lists its live settings first; a setting not available yet sits only in
+ *   one quiet "Coming Soon" group at the end, never among the live ones.
  * - Startup > Default Page offers exactly the navigation tabs, under their names.
  * - The Data section sets both stored paths at one start edge inside their cards, and
  *   every button and input in it stands at one height.
@@ -248,7 +249,7 @@ test("the Navigation list shows every row with bare glyphs and one visibility co
   assert.deepEqual(applied.nav, applied.list, "the navigation bar follows the saved list");
 });
 
-test("Startup badges sit on their title line and Data controls share one frame", async (t) => {
+test("Startup keeps coming-soon settings in one group at the end and Data controls share one frame", async (t) => {
   const browser = await chromium.launch({ headless: true });
   t.after(() => browser.close());
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
@@ -263,21 +264,29 @@ test("Startup badges sit on their title line and Data controls share one frame",
   await page.waitForSelector(".settings-dialog.active .settings-nav");
 
   await page.locator('.settings-nav-item[data-tab="startup"]').click();
-  await page.waitForFunction(
-    () =>
-      document.querySelector(".settings-content .settings-field-badge")?.getClientRects().length > 0
-  );
-  const badges = await page.$$eval(".settings-content .settings-field-badge", (nodes) =>
+  await page.waitForSelector(".settings-content #settingAutoStart", { state: "attached" });
+  const sections = await page.$$eval(".settings-content .settings-section", (nodes) =>
     nodes
-      .filter((badge) => badge.getClientRects().length > 0)
-      .map((badge) => {
-        const info = badge.closest(".settings-field-info");
-        const title = info.querySelector("label").getBoundingClientRect();
-        const box = badge.getBoundingClientRect();
-        return box.top < title.bottom && box.bottom > title.top;
-      })
+      .filter((section) => section.getClientRects().length > 0)
+      .map((section) => ({
+        coming: section.classList.contains("settings-section--coming"),
+        title: section.querySelector(".settings-section-title").textContent.trim(),
+        disabled: [...section.querySelectorAll(".settings-field")].map((field) =>
+          field.classList.contains("settings-field--disabled")
+        ),
+      }))
   );
-  assert.ok(badges.length > 0 && badges.every(Boolean), "each badge shares its title's line");
+  const coming = sections.filter((section) => section.coming);
+  assert.equal(coming.length, 1, "one coming-soon group");
+  assert.equal(sections.at(-1), coming[0], "the coming-soon group ends the list");
+  assert.equal(coming[0].title, "Coming Soon");
+  assert.ok(coming[0].disabled.every(Boolean), "the group holds unavailable settings only");
+  assert.ok(
+    sections
+      .filter((section) => !section.coming)
+      .every((section) => !section.disabled.some(Boolean)),
+    "no unavailable setting among the live ones"
+  );
 
   // Default Page offers the visible navigation tabs under their navigation names, in
   // navigation order; a saved id that is no tab (the fixture's "dashboard") selects

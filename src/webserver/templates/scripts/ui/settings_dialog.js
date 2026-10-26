@@ -722,22 +722,6 @@ export class SettingsDialog {
           <span data-l10n-id="settings-startup-section-title"></span>
         </h3>
         <div class="settings-group">
-          <div class="settings-field settings-field--disabled">
-            <div class="settings-field-info">
-              <div class="settings-field-title">
-                <label data-l10n-id="settings-startup-auto-start-label"></label>
-                <span class="settings-field-badge" data-l10n-id="settings-startup-coming-soon"></span>
-              </div>
-              <span class="settings-field-hint" data-l10n-id="settings-startup-auto-start-hint"></span>
-            </div>
-            <div class="settings-field-control">
-              <label class="toggle">
-                <input type="checkbox" id="settingAutoStart" ${startup.auto_start_trader ? "checked" : ""} disabled>
-                <span class="toggle-track"></span>
-              </label>
-            </div>
-          </div>
-
           <div class="settings-field">
             <div class="settings-field-info">
               <label data-l10n-id="settings-startup-default-page-label"></label>
@@ -765,6 +749,27 @@ export class SettingsDialog {
         </div>
       </div>
 
+      <!-- Not yet available: one quiet group after every live setting. -->
+      <div class="settings-section settings-section--coming">
+        <h3 class="settings-section-title">
+          <i class="icon-clock-fading"></i>
+          <span data-l10n-id="settings-startup-coming-soon"></span>
+        </h3>
+        <div class="settings-group">
+          <div class="settings-field settings-field--disabled">
+            <div class="settings-field-info">
+              <label data-l10n-id="settings-startup-auto-start-label"></label>
+              <span class="settings-field-hint" data-l10n-id="settings-startup-auto-start-hint"></span>
+            </div>
+            <div class="settings-field-control">
+              <label class="toggle">
+                <input type="checkbox" id="settingAutoStart" ${startup.auto_start_trader ? "checked" : ""} disabled>
+                <span class="toggle-track"></span>
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
     `;
   }
 
