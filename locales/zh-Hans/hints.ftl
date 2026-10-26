@@ -22,7 +22,7 @@ hints-category-ui = 界面
 
 hints-tokens-pool-service-title = 流动性池服务代币
 hints-tokens-pool-service-content =
-    此处显示的代币满足以下条件：
+    此处显示的代币满足以下三个条件。
 
     • **通过全部过滤条件**——流动性、成交量、年龄和安全检查
     • **拥有有效的 SOL 流动性池**——受我们的 DEX 解码器支持（Raydium、Orca、Meteora 等）
@@ -159,7 +159,7 @@ hints-positions-partial-exit-content =
     每次部分出场都会单独记录，以便准确追踪盈亏。
 hints-positions-management-title = 仓位管理
 hints-positions-management-content =
-    管理方式决定哪些自动化功能可以操作某个仓位：
+    管理方式决定哪些自动化功能可以操作某个仓位。
 
     • 自动交易：安全出场、策略出场和自动 DCA
     • 仅用户：不执行任何自动操作
@@ -183,7 +183,7 @@ hints-filtering-overview-content =
     已停用的条件会被完全跳过。
 hints-filtering-dexscreener-title = { -dexscreener } 过滤器
 hints-filtering-dexscreener-content =
-    基于 { -dexscreener } 市场数据的过滤器：
+    基于 { -dexscreener } 市场数据的过滤器。
 
     • **流动性**——流动性池中的最低美元流动性
     • **24h 成交量**——最低交易量
@@ -193,7 +193,7 @@ hints-filtering-dexscreener-content =
     { -dexscreener } 数据每隔几分钟更新一次。
 hints-filtering-geckoterminal-title = { -geckoterminal } 过滤器
 hints-filtering-geckoterminal-content =
-    基于 { -geckoterminal } 市场数据的过滤器：
+    基于 { -geckoterminal } 市场数据的过滤器。
 
     • **市值**——最低市值
     • **FDV**——完全稀释估值上限
@@ -202,7 +202,7 @@ hints-filtering-geckoterminal-content =
     { -geckoterminal } 通常有较新代币的数据。
 hints-filtering-rugcheck-title = 安全过滤器
 hints-filtering-rugcheck-content =
-    来自 { -rugcheck }.xyz 的安全分析：
+    来自 { -rugcheck }.xyz 的安全分析。
 
     • **风险评分**——总体风险评级（0-100）
     • **增发权限**——是否可以增发新代币？
@@ -212,7 +212,7 @@ hints-filtering-rugcheck-content =
     风险评分越高，表示潜在的危险信号越多。
 hints-filtering-meta-title = 元数据过滤器
 hints-filtering-meta-content =
-    其他过滤条件：
+    其他过滤条件。
 
     • **代币年龄**——自代币创建以来的最短时间
     • **流动性池年龄**——自流动性池创建以来的最短时间
@@ -274,7 +274,7 @@ hints-services-overview-content =
     服务之间存在依赖关系，并按顺序启动。
 hints-services-health-title = 服务健康状况
 hints-services-health-content =
-    健康指标显示服务状态：
+    健康指标显示服务状态。
 
     • **运行时长**——自上次启动以来的时间
     • **任务**——活跃的后台操作

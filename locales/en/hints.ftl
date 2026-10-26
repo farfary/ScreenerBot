@@ -22,7 +22,7 @@ hints-category-ui = Interface
 
 hints-tokens-pool-service-title = Pool Service Tokens
 hints-tokens-pool-service-content =
-    Tokens shown here have:
+    Tokens shown here meet the three conditions below.
 
     • **Passed all filtering criteria** — liquidity, volume, age, and security checks
     • **Valid SOL liquidity pools** — supported by our DEX decoders (Raydium, Orca, Meteora, etc.)
@@ -159,7 +159,7 @@ hints-positions-partial-exit-content =
     Each partial exit is recorded separately for accurate P&L tracking.
 hints-positions-management-title = Position Management
 hints-positions-management-content =
-    Management defines which automation may act on a position:
+    Management defines which automation may act on a position.
 
     • Auto Trader: safety exits, policy exits, and auto-DCA
     • User Only: no automatic actions
@@ -183,7 +183,7 @@ hints-filtering-overview-content =
     Disabled criteria are skipped entirely.
 hints-filtering-dexscreener-title = { -dexscreener } Filters
 hints-filtering-dexscreener-content =
-    Filters based on { -dexscreener } market data:
+    Filters based on { -dexscreener } market data.
 
     • **Liquidity** — minimum USD liquidity in pools
     • **Volume 24h** — minimum trading volume
@@ -193,7 +193,7 @@ hints-filtering-dexscreener-content =
     { -dexscreener } data updates every few minutes.
 hints-filtering-geckoterminal-title = { -geckoterminal } Filters
 hints-filtering-geckoterminal-content =
-    Filters based on { -geckoterminal } market data:
+    Filters based on { -geckoterminal } market data.
 
     • **Market Cap** — minimum market capitalization
     • **FDV** — Fully Diluted Valuation limits
@@ -202,7 +202,7 @@ hints-filtering-geckoterminal-content =
     { -geckoterminal } often has data for newer tokens.
 hints-filtering-rugcheck-title = Security Filters
 hints-filtering-rugcheck-content =
-    Security analysis from { -rugcheck }.xyz:
+    Security analysis from { -rugcheck }.xyz.
 
     • **Risk Score** — overall risk rating (0-100)
     • **Mint Authority** — can new tokens be minted?
@@ -212,7 +212,7 @@ hints-filtering-rugcheck-content =
     Higher risk scores indicate more potential red flags.
 hints-filtering-meta-title = Meta Filters
 hints-filtering-meta-content =
-    Additional filtering criteria:
+    Additional filtering criteria.
 
     • **Token Age** — minimum time since token creation
     • **Pool Age** — minimum time since pool creation
@@ -274,7 +274,7 @@ hints-services-overview-content =
     Services have dependencies and start in order.
 hints-services-health-title = Service Health
 hints-services-health-content =
-    Health indicators show service status:
+    Health indicators show service status.
 
     • **Uptime** — time since last start
     • **Tasks** — active background operations

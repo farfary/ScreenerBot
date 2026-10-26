@@ -22,7 +22,7 @@ hints-category-ui = 인터페이스
 
 hints-tokens-pool-service-title = 풀 서비스 토큰
 hints-tokens-pool-service-content =
-    여기에 표시되는 토큰은 다음 조건을 충족합니다:
+    여기에 표시되는 토큰은 아래 세 가지 조건을 충족합니다.
 
     • **모든 필터링 기준 통과** — 유동성, 거래량, 경과 기간, 보안 검사
     • **유효한 SOL 유동성 풀** — DEX 디코더(Raydium, Orca, Meteora 등)가 지원하는 풀
@@ -159,7 +159,7 @@ hints-positions-partial-exit-content =
     각 부분 청산은 정확한 손익 추적을 위해 별도로 기록됩니다.
 hints-positions-management-title = 포지션 관리
 hints-positions-management-content =
-    관리 방식은 포지션에 어떤 자동화가 동작할 수 있는지 정의합니다:
+    관리 방식은 포지션에 어떤 자동화가 동작할 수 있는지 정의합니다.
 
     • 자동 트레이더: 안전 청산, 정책 청산, 자동 DCA
     • 사용자 전용: 자동 동작 없음
@@ -183,7 +183,7 @@ hints-filtering-overview-content =
     비활성화된 기준은 완전히 건너뜁니다.
 hints-filtering-dexscreener-title = { -dexscreener } 필터
 hints-filtering-dexscreener-content =
-    { -dexscreener } 시장 데이터 기반 필터:
+    { -dexscreener } 시장 데이터 기반 필터.
 
     • **유동성** — 풀의 최소 USD 유동성
     • **거래량 24h** — 최소 거래량
@@ -193,7 +193,7 @@ hints-filtering-dexscreener-content =
     { -dexscreener } 데이터는 몇 분마다 업데이트됩니다.
 hints-filtering-geckoterminal-title = { -geckoterminal } 필터
 hints-filtering-geckoterminal-content =
-    { -geckoterminal } 시장 데이터 기반 필터:
+    { -geckoterminal } 시장 데이터 기반 필터.
 
     • **시가총액** — 최소 시가총액
     • **FDV** — 완전 희석 가치 한도
@@ -202,7 +202,7 @@ hints-filtering-geckoterminal-content =
     { -geckoterminal }에는 비교적 새로운 토큰의 데이터가 있는 경우가 많습니다.
 hints-filtering-rugcheck-title = 보안 필터
 hints-filtering-rugcheck-content =
-    { -rugcheck }.xyz의 보안 분석:
+    { -rugcheck }.xyz의 보안 분석.
 
     • **위험 점수** — 전체 위험 등급 (0-100)
     • **민트 권한** — 새 토큰을 발행할 수 있는가?
@@ -212,7 +212,7 @@ hints-filtering-rugcheck-content =
     위험 점수가 높을수록 잠재적인 위험 신호가 많다는 뜻입니다.
 hints-filtering-meta-title = 메타 필터
 hints-filtering-meta-content =
-    추가 필터링 기준:
+    추가 필터링 기준.
 
     • **토큰 경과 기간** — 토큰 생성 이후 최소 경과 시간
     • **풀 경과 기간** — 풀 생성 이후 최소 경과 시간
@@ -274,7 +274,7 @@ hints-services-overview-content =
     서비스에는 의존 관계가 있으며 순서대로 시작됩니다.
 hints-services-health-title = 서비스 상태
 hints-services-health-content =
-    상태 표시기는 서비스 상태를 보여줍니다:
+    상태 표시기는 서비스 상태를 보여줍니다.
 
     • **가동 시간** — 마지막 시작 이후 경과 시간
     • **작업** — 활성 백그라운드 작업

@@ -17,7 +17,7 @@ hints-category-ui = Інтерфейс
 
 hints-tokens-pool-service-title = Токени сервісу пулів
 hints-tokens-pool-service-content =
-    Токени, показані тут:
+    Токени, показані тут, відповідають трьом умовам нижче.
 
     • **Пройшли всі критерії фільтрації** — перевірки ліквідності, обсягу, віку та безпеки
     • **Мають дійсні пули SOL** — підтримувані нашими декодерами DEX (Raydium, Orca, Meteora тощо)
@@ -154,7 +154,7 @@ hints-positions-partial-exit-content =
     Кожен частковий вихід записується окремо для точного обліку прибутку/збитку.
 hints-positions-management-title = Керування позицією
 hints-positions-management-content =
-    Керування визначає, яка автоматизація може діяти з позицією:
+    Керування визначає, яка автоматизація може діяти з позицією.
 
     • Автотрейдер: безпекові виходи, виходи за політикою та авто-DCA
     • Лише користувач: жодних автоматичних дій
@@ -178,7 +178,7 @@ hints-filtering-overview-content =
     Вимкнені критерії повністю пропускаються.
 hints-filtering-dexscreener-title = Фільтри { -dexscreener }
 hints-filtering-dexscreener-content =
-    Фільтри на основі ринкових даних { -dexscreener }:
+    Фільтри на основі ринкових даних { -dexscreener }.
 
     • **Ліквідність** — мінімальна ліквідність у пулах у USD
     • **Обсяг за 24 год** — мінімальний обсяг торгів
@@ -188,7 +188,7 @@ hints-filtering-dexscreener-content =
     Дані { -dexscreener } оновлюються кожні кілька хвилин.
 hints-filtering-geckoterminal-title = Фільтри { -geckoterminal }
 hints-filtering-geckoterminal-content =
-    Фільтри на основі ринкових даних { -geckoterminal }:
+    Фільтри на основі ринкових даних { -geckoterminal }.
 
     • **Ринкова капіталізація** — мінімальна ринкова капіталізація
     • **FDV** — ліміти повністю розбавленої оцінки
@@ -197,7 +197,7 @@ hints-filtering-geckoterminal-content =
     У { -geckoterminal } часто є дані для новіших токенів.
 hints-filtering-rugcheck-title = Фільтри безпеки
 hints-filtering-rugcheck-content =
-    Аналіз безпеки від { -rugcheck }.xyz:
+    Аналіз безпеки від { -rugcheck }.xyz.
 
     • **Оцінка ризику** — загальний рейтинг ризику (0–100)
     • **Повноваження мінта** — чи можна карбувати нові токени?
@@ -207,7 +207,7 @@ hints-filtering-rugcheck-content =
     Вищі оцінки ризику вказують на більше потенційних тривожних сигналів.
 hints-filtering-meta-title = Мета-фільтри
 hints-filtering-meta-content =
-    Додаткові критерії фільтрації:
+    Додаткові критерії фільтрації.
 
     • **Вік токена** — мінімальний час від створення токена
     • **Вік пулу** — мінімальний час від створення пулу
@@ -269,7 +269,7 @@ hints-services-overview-content =
     Сервіси мають залежності й запускаються по черзі.
 hints-services-health-title = Стан сервісу
 hints-services-health-content =
-    Індикатори стану показують статус сервісу:
+    Індикатори стану показують статус сервісу.
 
     • **Аптайм** — час від останнього запуску
     • **Завдання** — активні фонові операції

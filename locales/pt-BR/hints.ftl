@@ -22,7 +22,7 @@ hints-category-ui = Interface
 
 hints-tokens-pool-service-title = Tokens do serviço de pools
 hints-tokens-pool-service-content =
-    Os tokens exibidos aqui têm:
+    Os tokens exibidos aqui atendem às três condições abaixo.
 
     • **Aprovação em todos os critérios de filtragem** — liquidez, volume, idade e verificações de segurança
     • **Pools de liquidez SOL válidos** — compatíveis com nossos decodificadores de DEX (Raydium, Orca, Meteora etc.)
@@ -159,7 +159,7 @@ hints-positions-partial-exit-content =
     Cada saída parcial é registrada separadamente para um acompanhamento preciso do P&L.
 hints-positions-management-title = Gerenciamento da posição
 hints-positions-management-content =
-    O gerenciamento define qual automação pode atuar em uma posição:
+    O gerenciamento define qual automação pode atuar em uma posição.
 
     • Trader automático: saídas de segurança, saídas por política e DCA automático
     • Somente usuário: nenhuma ação automática
@@ -183,7 +183,7 @@ hints-filtering-overview-content =
     Critérios desativados são ignorados por completo.
 hints-filtering-dexscreener-title = Filtros do { -dexscreener }
 hints-filtering-dexscreener-content =
-    Filtros baseados nos dados de mercado do { -dexscreener }:
+    Filtros baseados nos dados de mercado do { -dexscreener }.
 
     • **Liquidez** — liquidez mínima em USD nos pools
     • **Volume 24h** — volume mínimo de negociação
@@ -193,7 +193,7 @@ hints-filtering-dexscreener-content =
     Os dados do { -dexscreener } são atualizados a cada poucos minutos.
 hints-filtering-geckoterminal-title = Filtros do { -geckoterminal }
 hints-filtering-geckoterminal-content =
-    Filtros baseados nos dados de mercado do { -geckoterminal }:
+    Filtros baseados nos dados de mercado do { -geckoterminal }.
 
     • **Market cap** — capitalização de mercado mínima
     • **FDV** — limites de valuation totalmente diluído
@@ -202,7 +202,7 @@ hints-filtering-geckoterminal-content =
     O { -geckoterminal } costuma ter dados de tokens mais novos.
 hints-filtering-rugcheck-title = Filtros de segurança
 hints-filtering-rugcheck-content =
-    Análise de segurança do { -rugcheck }.xyz:
+    Análise de segurança do { -rugcheck }.xyz.
 
     • **Pontuação de risco** — classificação geral de risco (0-100)
     • **Autoridade de mint** — novos tokens podem ser criados?
@@ -212,7 +212,7 @@ hints-filtering-rugcheck-content =
     Pontuações de risco mais altas indicam mais possíveis sinais de alerta.
 hints-filtering-meta-title = Filtros meta
 hints-filtering-meta-content =
-    Critérios de filtragem adicionais:
+    Critérios de filtragem adicionais.
 
     • **Idade do token** — tempo mínimo desde a criação do token
     • **Idade do pool** — tempo mínimo desde a criação do pool
@@ -274,7 +274,7 @@ hints-services-overview-content =
     Os serviços têm dependências e iniciam em ordem.
 hints-services-health-title = Saúde dos serviços
 hints-services-health-content =
-    Os indicadores de saúde mostram o status do serviço:
+    Os indicadores de saúde mostram o status do serviço.
 
     • **Tempo ativo** — tempo desde o último início
     • **Tarefas** — operações ativas em segundo plano

@@ -17,7 +17,7 @@ hints-category-ui = Arayüz
 
 hints-tokens-pool-service-title = Havuz Hizmeti Tokenları
 hints-tokens-pool-service-content =
-    Burada gösterilen tokenlar:
+    Burada gösterilen tokenlar aşağıdaki üç koşulu karşılar.
 
     • **Tüm filtreleme ölçütlerini geçti** — likidite, hacim, yaş ve güvenlik kontrolleri
     • **Geçerli SOL likidite havuzlarına sahip** — DEX çözücülerimiz tarafından destekleniyor (Raydium, Orca, Meteora vb.)
@@ -154,7 +154,7 @@ hints-positions-partial-exit-content =
     Doğru K/Z takibi için her kısmi çıkış ayrı olarak kaydedilir.
 hints-positions-management-title = Pozisyon Yönetimi
 hints-positions-management-content =
-    Yönetim, hangi otomasyonun bir pozisyon üzerinde işlem yapabileceğini belirler:
+    Yönetim, hangi otomasyonun bir pozisyon üzerinde işlem yapabileceğini belirler.
 
     • Otomatik Trader: güvenlik çıkışları, politika çıkışları ve otomatik DCA
     • Yalnızca Kullanıcı: otomatik işlem yok
@@ -178,7 +178,7 @@ hints-filtering-overview-content =
     Devre dışı ölçütler tamamen atlanır.
 hints-filtering-dexscreener-title = { -dexscreener } Filtreleri
 hints-filtering-dexscreener-content =
-    { -dexscreener } piyasa verilerine dayalı filtreler:
+    { -dexscreener } piyasa verilerine dayalı filtreler.
 
     • **Likidite** — havuzlardaki asgari USD likiditesi
     • **Hacim 24sa** — asgari işlem hacmi
@@ -188,7 +188,7 @@ hints-filtering-dexscreener-content =
     { -dexscreener } verileri birkaç dakikada bir güncellenir.
 hints-filtering-geckoterminal-title = { -geckoterminal } Filtreleri
 hints-filtering-geckoterminal-content =
-    { -geckoterminal } piyasa verilerine dayalı filtreler:
+    { -geckoterminal } piyasa verilerine dayalı filtreler.
 
     • **Piyasa Değeri** — asgari piyasa değeri
     • **FDV** — Tam Seyreltilmiş Değerleme sınırları
@@ -197,7 +197,7 @@ hints-filtering-geckoterminal-content =
     { -geckoterminal } genellikle daha yeni tokenlar için veriye sahiptir.
 hints-filtering-rugcheck-title = Güvenlik Filtreleri
 hints-filtering-rugcheck-content =
-    { -rugcheck }.xyz tarafından yapılan güvenlik analizi:
+    { -rugcheck }.xyz tarafından yapılan güvenlik analizi.
 
     • **Risk Puanı** — genel risk derecelendirmesi (0-100)
     • **Mint Yetkisi** — yeni token basılabilir mi?
@@ -207,7 +207,7 @@ hints-filtering-rugcheck-content =
     Yüksek risk puanları daha fazla olası uyarı işareti anlamına gelir.
 hints-filtering-meta-title = Meta Filtreler
 hints-filtering-meta-content =
-    Ek filtreleme ölçütleri:
+    Ek filtreleme ölçütleri.
 
     • **Token Yaşı** — token oluşturulduktan sonra geçen asgari süre
     • **Havuz Yaşı** — havuz oluşturulduktan sonra geçen asgari süre
@@ -269,7 +269,7 @@ hints-services-overview-content =
     Hizmetlerin bağımlılıkları vardır ve sırayla başlar.
 hints-services-health-title = Hizmet Sağlığı
 hints-services-health-content =
-    Sağlık göstergeleri hizmet durumunu gösterir:
+    Sağlık göstergeleri hizmet durumunu gösterir.
 
     • **Çalışma Süresi** — son başlatmadan bu yana geçen süre
     • **Görevler** — etkin arka plan işlemleri

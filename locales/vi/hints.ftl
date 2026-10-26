@@ -17,7 +17,7 @@ hints-category-ui = Giao diện
 
 hints-tokens-pool-service-title = Token của dịch vụ pool
 hints-tokens-pool-service-content =
-    Các token hiển thị ở đây đều:
+    Các token hiển thị ở đây đáp ứng ba điều kiện dưới đây.
 
     • **Đạt mọi tiêu chí lọc** — kiểm tra thanh khoản, khối lượng, tuổi và bảo mật
     • **Có pool thanh khoản SOL hợp lệ** — được các bộ giải mã DEX của chúng tôi hỗ trợ (Raydium, Orca, Meteora, v.v.)
@@ -154,7 +154,7 @@ hints-positions-partial-exit-content =
     Mỗi lần thoát một phần được ghi riêng để theo dõi P&L chính xác.
 hints-positions-management-title = Quản lý vị thế
 hints-positions-management-content =
-    Cách quản lý xác định tự động hóa nào được phép hành động trên một vị thế:
+    Cách quản lý xác định tự động hóa nào được phép hành động trên một vị thế.
 
     • Trader tự động: thoát an toàn, thoát theo chính sách và DCA tự động
     • Chỉ người dùng: không có hành động tự động
@@ -178,7 +178,7 @@ hints-filtering-overview-content =
     Các tiêu chí đã tắt sẽ bị bỏ qua hoàn toàn.
 hints-filtering-dexscreener-title = Bộ lọc { -dexscreener }
 hints-filtering-dexscreener-content =
-    Các bộ lọc dựa trên dữ liệu thị trường của { -dexscreener }:
+    Các bộ lọc dựa trên dữ liệu thị trường của { -dexscreener }.
 
     • **Thanh khoản** — thanh khoản USD tối thiểu trong pool
     • **Khối lượng 24h** — khối lượng giao dịch tối thiểu
@@ -188,7 +188,7 @@ hints-filtering-dexscreener-content =
     Dữ liệu { -dexscreener } được cập nhật vài phút một lần.
 hints-filtering-geckoterminal-title = Bộ lọc { -geckoterminal }
 hints-filtering-geckoterminal-content =
-    Các bộ lọc dựa trên dữ liệu thị trường của { -geckoterminal }:
+    Các bộ lọc dựa trên dữ liệu thị trường của { -geckoterminal }.
 
     • **Vốn hóa** — vốn hóa thị trường tối thiểu
     • **FDV** — giới hạn giá trị pha loãng hoàn toàn
@@ -197,7 +197,7 @@ hints-filtering-geckoterminal-content =
     { -geckoterminal } thường có dữ liệu cho các token mới hơn.
 hints-filtering-rugcheck-title = Bộ lọc bảo mật
 hints-filtering-rugcheck-content =
-    Phân tích bảo mật từ { -rugcheck }.xyz:
+    Phân tích bảo mật từ { -rugcheck }.xyz.
 
     • **Điểm rủi ro** — xếp hạng rủi ro tổng thể (0-100)
     • **Quyền mint** — có thể mint thêm token mới không?
@@ -207,7 +207,7 @@ hints-filtering-rugcheck-content =
     Điểm rủi ro càng cao thì càng có nhiều dấu hiệu đáng ngờ.
 hints-filtering-meta-title = Bộ lọc meta
 hints-filtering-meta-content =
-    Các tiêu chí lọc bổ sung:
+    Các tiêu chí lọc bổ sung.
 
     • **Tuổi token** — thời gian tối thiểu kể từ khi tạo token
     • **Tuổi pool** — thời gian tối thiểu kể từ khi tạo pool
@@ -269,7 +269,7 @@ hints-services-overview-content =
     Các dịch vụ có phụ thuộc lẫn nhau và khởi động theo thứ tự.
 hints-services-health-title = Sức khỏe dịch vụ
 hints-services-health-content =
-    Các chỉ báo sức khỏe cho biết trạng thái dịch vụ:
+    Các chỉ báo sức khỏe cho biết trạng thái dịch vụ.
 
     • **Thời gian hoạt động** — thời gian kể từ lần khởi động gần nhất
     • **Tác vụ** — các thao tác nền đang hoạt động

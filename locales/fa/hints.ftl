@@ -22,7 +22,7 @@ hints-category-ui = رابط کاربری
 
 hints-tokens-pool-service-title = توکن‌های سرویس استخر
 hints-tokens-pool-service-content =
-    توکن‌هایی که اینجا نمایش داده می‌شوند:
+    توکن‌هایی که اینجا نمایش داده می‌شوند سه شرط زیر را دارند.
 
     • **همه معیارهای فیلترینگ را گذرانده‌اند** — بررسی‌های نقدینگی، حجم، عمر و امنیت
     • **استخر نقدینگی SOL معتبر دارند** — که دیکدرهای DEX ما پشتیبانی می‌کنند (Raydium، Orca، Meteora و غیره)
@@ -159,7 +159,7 @@ hints-positions-partial-exit-content =
     هر خروج جزئی برای ردیابی دقیق سود و زیان جداگانه ثبت می‌شود.
 hints-positions-management-title = مدیریت پوزیشن
 hints-positions-management-content =
-    مدیریت مشخص می‌کند کدام اتوماسیون اجازه اقدام روی پوزیشن را دارد:
+    مدیریت مشخص می‌کند کدام اتوماسیون اجازه اقدام روی پوزیشن را دارد.
 
     • معامله‌گر خودکار: خروج‌های ایمنی، خروج‌های سیاستی و DCA خودکار
     • فقط کاربر: بدون اقدام خودکار
@@ -183,7 +183,7 @@ hints-filtering-overview-content =
     معیارهای غیرفعال به‌طور کامل نادیده گرفته می‌شوند.
 hints-filtering-dexscreener-title = فیلترهای { -dexscreener }
 hints-filtering-dexscreener-content =
-    فیلترهای مبتنی بر داده بازار { -dexscreener }:
+    فیلترهای مبتنی بر داده بازار { -dexscreener }.
 
     • **نقدینگی** — حداقل نقدینگی دلاری در استخرها
     • **حجم 24h** — حداقل حجم معاملات
@@ -193,7 +193,7 @@ hints-filtering-dexscreener-content =
     داده { -dexscreener } هر چند دقیقه به‌روز می‌شود.
 hints-filtering-geckoterminal-title = فیلترهای { -geckoterminal }
 hints-filtering-geckoterminal-content =
-    فیلترهای مبتنی بر داده بازار { -geckoterminal }:
+    فیلترهای مبتنی بر داده بازار { -geckoterminal }.
 
     • **ارزش بازار** — حداقل ارزش بازار
     • **FDV** — محدودیت‌های ارزش کاملاً رقیق‌شده
@@ -202,7 +202,7 @@ hints-filtering-geckoterminal-content =
     { -geckoterminal } اغلب برای توکن‌های جدیدتر داده دارد.
 hints-filtering-rugcheck-title = فیلترهای امنیتی
 hints-filtering-rugcheck-content =
-    تحلیل امنیتی از { -rugcheck }.xyz:
+    تحلیل امنیتی از { -rugcheck }.xyz.
 
     • **امتیاز ریسک** — رتبه کلی ریسک (0 تا 100)
     • **اختیار مینت** — آیا می‌توان توکن جدید مینت کرد؟
@@ -212,7 +212,7 @@ hints-filtering-rugcheck-content =
     امتیاز ریسک بالاتر نشان‌دهنده هشدارهای بیشتر است.
 hints-filtering-meta-title = فیلترهای متا
 hints-filtering-meta-content =
-    معیارهای فیلترینگ تکمیلی:
+    معیارهای فیلترینگ تکمیلی.
 
     • **عمر توکن** — حداقل زمان از ساخت توکن
     • **عمر استخر** — حداقل زمان از ساخت استخر
@@ -274,7 +274,7 @@ hints-services-overview-content =
     سرویس‌ها به یکدیگر وابسته‌اند و به ترتیب شروع می‌شوند.
 hints-services-health-title = سلامت سرویس
 hints-services-health-content =
-    شاخص‌های سلامت وضعیت سرویس را نشان می‌دهند:
+    شاخص‌های سلامت وضعیت سرویس را نشان می‌دهند.
 
     • **مدت فعالیت** — زمان از آخرین شروع
     • **وظایف** — عملیات فعال پس‌زمینه

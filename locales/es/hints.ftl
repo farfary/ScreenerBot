@@ -13,7 +13,7 @@ hints-category-ui = Interfaz
 
 hints-tokens-pool-service-title = Tokens del servicio de pools
 hints-tokens-pool-service-content =
-    Los tokens que se muestran aquí tienen:
+    Los tokens que se muestran aquí cumplen las tres condiciones siguientes.
 
     • **Todos los criterios de filtrado superados** — comprobaciones de liquidez, volumen, antigüedad y seguridad
     • **Pools de liquidez de SOL válidos** — compatibles con nuestros decodificadores de DEX (Raydium, Orca, Meteora, etc.)
@@ -148,7 +148,7 @@ hints-positions-partial-exit-content =
     Cada salida parcial se registra por separado para un seguimiento preciso del P&L.
 hints-positions-management-title = Gestión de posiciones
 hints-positions-management-content =
-    La gestión define qué automatización puede actuar sobre una posición:
+    La gestión define qué automatización puede actuar sobre una posición.
 
     • Trader automático: salidas de seguridad, salidas por política y DCA automático
     • Solo usuario: sin acciones automáticas
@@ -170,7 +170,7 @@ hints-filtering-overview-content =
     Los criterios desactivados se omiten por completo.
 hints-filtering-dexscreener-title = Filtros de { -dexscreener }
 hints-filtering-dexscreener-content =
-    Filtros basados en los datos de mercado de { -dexscreener }:
+    Filtros basados en los datos de mercado de { -dexscreener }.
 
     • **Liquidez** — liquidez mínima en USD en los pools
     • **Volumen 24 h** — volumen de trading mínimo
@@ -180,7 +180,7 @@ hints-filtering-dexscreener-content =
     Los datos de { -dexscreener } se actualizan cada pocos minutos.
 hints-filtering-geckoterminal-title = Filtros de { -geckoterminal }
 hints-filtering-geckoterminal-content =
-    Filtros basados en los datos de mercado de { -geckoterminal }:
+    Filtros basados en los datos de mercado de { -geckoterminal }.
 
     • **Capitalización de mercado** — capitalización mínima
     • **FDV** — límites de valoración totalmente diluida
@@ -189,7 +189,7 @@ hints-filtering-geckoterminal-content =
     { -geckoterminal } suele tener datos de tokens más nuevos.
 hints-filtering-rugcheck-title = Filtros de seguridad
 hints-filtering-rugcheck-content =
-    Análisis de seguridad de { -rugcheck }.xyz:
+    Análisis de seguridad de { -rugcheck }.xyz.
 
     • **Puntuación de riesgo** — calificación de riesgo global (0-100)
     • **Autoridad de mint** — ¿se pueden crear más tokens?
@@ -199,7 +199,7 @@ hints-filtering-rugcheck-content =
     Las puntuaciones de riesgo más altas indican más posibles señales de alerta.
 hints-filtering-meta-title = Filtros meta
 hints-filtering-meta-content =
-    Criterios de filtrado adicionales:
+    Criterios de filtrado adicionales.
 
     • **Antigüedad del token** — tiempo mínimo desde la creación del token
     • **Antigüedad del pool** — tiempo mínimo desde la creación del pool
@@ -257,7 +257,7 @@ hints-services-overview-content =
     Los servicios tienen dependencias y se inician en orden.
 hints-services-health-title = Salud de los servicios
 hints-services-health-content =
-    Los indicadores de salud muestran el estado del servicio:
+    Los indicadores de salud muestran el estado del servicio.
 
     • **Tiempo activo** — tiempo desde el último inicio
     • **Tareas** — operaciones activas en segundo plano

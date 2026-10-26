@@ -17,7 +17,7 @@ hints-category-ui = Oberfläche
 
 hints-tokens-pool-service-title = Pool-Service-Tokens
 hints-tokens-pool-service-content =
-    Hier angezeigte Tokens haben:
+    Hier angezeigte Tokens erfüllen die drei folgenden Bedingungen.
 
     • **Alle Filterkriterien bestanden** — Liquiditäts-, Volumen-, Alters- und Sicherheitsprüfungen
     • **Gültige SOL-Liquiditätspools** — von unseren DEX-Decodern unterstützt (Raydium, Orca, Meteora usw.)
@@ -154,7 +154,7 @@ hints-positions-partial-exit-content =
     Jeder Teilausstieg wird separat erfasst, damit die GuV exakt nachverfolgt wird.
 hints-positions-management-title = Positionsverwaltung
 hints-positions-management-content =
-    Die Verwaltung legt fest, welche Automatisierung auf eine Position zugreifen darf:
+    Die Verwaltung legt fest, welche Automatisierung auf eine Position zugreifen darf.
 
     • Auto-Trader: Sicherheitsausstiege, Regelausstiege und Auto-DCA
     • Nur Nutzer: keine automatischen Aktionen
@@ -178,7 +178,7 @@ hints-filtering-overview-content =
     Deaktivierte Kriterien werden vollständig übersprungen.
 hints-filtering-dexscreener-title = { -dexscreener }-Filter
 hints-filtering-dexscreener-content =
-    Filter auf Basis der { -dexscreener }-Marktdaten:
+    Filter auf Basis der { -dexscreener }-Marktdaten.
 
     • **Liquidität** — minimale USD-Liquidität in Pools
     • **Volumen 24 Std.** — minimales Handelsvolumen
@@ -188,7 +188,7 @@ hints-filtering-dexscreener-content =
     { -dexscreener }-Daten werden alle paar Minuten aktualisiert.
 hints-filtering-geckoterminal-title = { -geckoterminal }-Filter
 hints-filtering-geckoterminal-content =
-    Filter auf Basis der { -geckoterminal }-Marktdaten:
+    Filter auf Basis der { -geckoterminal }-Marktdaten.
 
     • **Marktkapitalisierung** — minimale Marktkapitalisierung
     • **FDV** — Grenzen der voll verwässerten Bewertung
@@ -197,7 +197,7 @@ hints-filtering-geckoterminal-content =
     { -geckoterminal } hat oft Daten zu neueren Tokens.
 hints-filtering-rugcheck-title = Sicherheitsfilter
 hints-filtering-rugcheck-content =
-    Sicherheitsanalyse von { -rugcheck }.xyz:
+    Sicherheitsanalyse von { -rugcheck }.xyz.
 
     • **Risikoscore** — Gesamtrisikobewertung (0–100)
     • **Mint-Berechtigung** — können neue Tokens geprägt werden?
@@ -207,7 +207,7 @@ hints-filtering-rugcheck-content =
     Höhere Risikoscores deuten auf mehr mögliche Warnsignale hin.
 hints-filtering-meta-title = Meta-Filter
 hints-filtering-meta-content =
-    Zusätzliche Filterkriterien:
+    Zusätzliche Filterkriterien.
 
     • **Token-Alter** — Mindestzeit seit der Token-Erstellung
     • **Pool-Alter** — Mindestzeit seit der Pool-Erstellung
@@ -269,7 +269,7 @@ hints-services-overview-content =
     Dienste haben Abhängigkeiten und starten in Reihenfolge.
 hints-services-health-title = Dienstzustand
 hints-services-health-content =
-    Zustandsanzeigen zeigen den Status eines Dienstes:
+    Zustandsanzeigen zeigen den Status eines Dienstes.
 
     • **Laufzeit** — Zeit seit dem letzten Start
     • **Aufgaben** — aktive Hintergrundvorgänge

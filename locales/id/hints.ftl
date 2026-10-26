@@ -20,7 +20,7 @@ hints-category-ui = Antarmuka
 
 hints-tokens-pool-service-title = Token Pool Service
 hints-tokens-pool-service-content =
-    Token yang ditampilkan di sini telah:
+    Token yang ditampilkan di sini memenuhi tiga syarat di bawah.
 
     • **Lolos semua kriteria filter** — pemeriksaan likuiditas, volume, usia, dan keamanan
     • **Memiliki pool SOL yang valid** — didukung oleh decoder DEX kami (Raydium, Orca, Meteora, dll.)
@@ -157,7 +157,7 @@ hints-positions-partial-exit-content =
     Setiap exit parsial dicatat terpisah untuk pelacakan P&L yang akurat.
 hints-positions-management-title = Pengelolaan Posisi
 hints-positions-management-content =
-    Pengelolaan menentukan otomatisasi mana yang boleh bertindak pada posisi:
+    Pengelolaan menentukan otomatisasi mana yang boleh bertindak pada posisi.
 
     • Auto Trader: exit keamanan, exit kebijakan, dan auto-DCA
     • Hanya Pengguna: tanpa aksi otomatis
@@ -181,7 +181,7 @@ hints-filtering-overview-content =
     Kriteria yang dinonaktifkan dilewati sepenuhnya.
 hints-filtering-dexscreener-title = Filter { -dexscreener }
 hints-filtering-dexscreener-content =
-    Filter berdasarkan data pasar { -dexscreener }:
+    Filter berdasarkan data pasar { -dexscreener }.
 
     • **Likuiditas** — likuiditas USD minimum di pool
     • **Volume 24h** — volume trading minimum
@@ -191,7 +191,7 @@ hints-filtering-dexscreener-content =
     Data { -dexscreener } diperbarui setiap beberapa menit.
 hints-filtering-geckoterminal-title = Filter { -geckoterminal }
 hints-filtering-geckoterminal-content =
-    Filter berdasarkan data pasar { -geckoterminal }:
+    Filter berdasarkan data pasar { -geckoterminal }.
 
     • **Kapitalisasi Pasar** — kapitalisasi pasar minimum
     • **FDV** — batas Fully Diluted Valuation
@@ -200,7 +200,7 @@ hints-filtering-geckoterminal-content =
     { -geckoterminal } sering memiliki data untuk token yang lebih baru.
 hints-filtering-rugcheck-title = Filter Keamanan
 hints-filtering-rugcheck-content =
-    Analisis keamanan dari { -rugcheck }.xyz:
+    Analisis keamanan dari { -rugcheck }.xyz.
 
     • **Skor Risiko** — peringkat risiko keseluruhan (0-100)
     • **Otoritas Mint** — apakah token baru dapat dicetak?
@@ -210,7 +210,7 @@ hints-filtering-rugcheck-content =
     Skor risiko yang lebih tinggi menunjukkan lebih banyak potensi red flag.
 hints-filtering-meta-title = Filter Meta
 hints-filtering-meta-content =
-    Kriteria pemfilteran tambahan:
+    Kriteria pemfilteran tambahan.
 
     • **Usia Token** — waktu minimum sejak token dibuat
     • **Usia Pool** — waktu minimum sejak pool dibuat
@@ -272,7 +272,7 @@ hints-services-overview-content =
     Layanan memiliki dependensi dan dimulai secara berurutan.
 hints-services-health-title = Kesehatan Layanan
 hints-services-health-content =
-    Indikator kesehatan menunjukkan status layanan:
+    Indikator kesehatan menunjukkan status layanan.
 
     • **Uptime** — waktu sejak mulai terakhir
     • **Tugas** — operasi latar belakang yang aktif

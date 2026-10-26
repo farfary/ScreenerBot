@@ -13,7 +13,7 @@ hints-category-ui = इंटरफ़ेस
 
 hints-tokens-pool-service-title = पूल सर्विस टोकन
 hints-tokens-pool-service-content =
-    यहाँ दिखाए गए टोकन में ये बातें हैं:
+    यहाँ दिखाए गए टोकन नीचे दी गई तीनों शर्तें पूरी करते हैं।
 
     • **सभी फ़िल्टरिंग मानदंड पास किए** — लिक्विडिटी, वॉल्यूम, आयु और सिक्योरिटी जाँच
     • **मान्य SOL लिक्विडिटी पूल** — हमारे DEX डिकोडर द्वारा समर्थित (Raydium, Orca, Meteora आदि)
@@ -148,7 +148,7 @@ hints-positions-partial-exit-content =
     सटीक लाभ-हानि ट्रैकिंग के लिए हर आंशिक एग्ज़िट अलग से दर्ज होता है।
 hints-positions-management-title = पोज़िशन प्रबंधन
 hints-positions-management-content =
-    प्रबंधन तय करता है कि कौन सा ऑटोमेशन पोज़िशन पर कार्रवाई कर सकता है:
+    प्रबंधन तय करता है कि कौन सा ऑटोमेशन पोज़िशन पर कार्रवाई कर सकता है।
 
     • ऑटो ट्रेडर: सेफ़्टी एग्ज़िट, पॉलिसी एग्ज़िट और ऑटो-DCA
     • केवल उपयोगकर्ता: कोई स्वचालित कार्रवाई नहीं
@@ -170,7 +170,7 @@ hints-filtering-overview-content =
     बंद किए गए मानदंड पूरी तरह छोड़ दिए जाते हैं।
 hints-filtering-dexscreener-title = { -dexscreener } फ़िल्टर
 hints-filtering-dexscreener-content =
-    { -dexscreener } मार्केट डेटा पर आधारित फ़िल्टर:
+    { -dexscreener } मार्केट डेटा पर आधारित फ़िल्टर।
 
     • **लिक्विडिटी** — पूल में न्यूनतम USD लिक्विडिटी
     • **वॉल्यूम 24h** — न्यूनतम ट्रेडिंग वॉल्यूम
@@ -180,7 +180,7 @@ hints-filtering-dexscreener-content =
     { -dexscreener } का डेटा हर कुछ मिनट में अपडेट होता है।
 hints-filtering-geckoterminal-title = { -geckoterminal } फ़िल्टर
 hints-filtering-geckoterminal-content =
-    { -geckoterminal } मार्केट डेटा पर आधारित फ़िल्टर:
+    { -geckoterminal } मार्केट डेटा पर आधारित फ़िल्टर।
 
     • **मार्केट कैप** — न्यूनतम मार्केट कैपिटलाइज़ेशन
     • **FDV** — फ़ुली डाइल्यूटेड वैल्यूएशन की सीमाएँ
@@ -189,7 +189,7 @@ hints-filtering-geckoterminal-content =
     { -geckoterminal } के पास अक्सर नए टोकन का डेटा होता है।
 hints-filtering-rugcheck-title = सिक्योरिटी फ़िल्टर
 hints-filtering-rugcheck-content =
-    { -rugcheck }.xyz से सिक्योरिटी विश्लेषण:
+    { -rugcheck }.xyz से सिक्योरिटी विश्लेषण।
 
     • **रिस्क स्कोर** — कुल जोखिम रेटिंग (0-100)
     • **मिंट अथॉरिटी** — क्या नए टोकन मिंट हो सकते हैं?
@@ -199,7 +199,7 @@ hints-filtering-rugcheck-content =
     ऊँचे रिस्क स्कोर का मतलब है ज़्यादा संभावित रेड फ़्लैग।
 hints-filtering-meta-title = मेटा फ़िल्टर
 hints-filtering-meta-content =
-    अतिरिक्त फ़िल्टरिंग मानदंड:
+    अतिरिक्त फ़िल्टरिंग मानदंड।
 
     • **टोकन आयु** — टोकन बनने के बाद का न्यूनतम समय
     • **पूल आयु** — पूल बनने के बाद का न्यूनतम समय
@@ -257,7 +257,7 @@ hints-services-overview-content =
     सर्विसेज़ एक-दूसरे पर निर्भर हैं और क्रम से शुरू होती हैं।
 hints-services-health-title = सर्विस हेल्थ
 hints-services-health-content =
-    हेल्थ संकेतक सर्विस की स्थिति दिखाते हैं:
+    हेल्थ संकेतक सर्विस की स्थिति दिखाते हैं।
 
     • **अपटाइम** — पिछली शुरुआत के बाद का समय
     • **टास्क** — सक्रिय बैकग्राउंड ऑपरेशन

@@ -22,7 +22,7 @@ hints-category-ui = الواجهة
 
 hints-tokens-pool-service-title = رموز خدمة مجمعات السيولة
 hints-tokens-pool-service-content =
-    الرموز المعروضة هنا تتوفر فيها الشروط التالية:
+    الرموز المعروضة هنا تستوفي الشروط الثلاثة أدناه.
 
     • **اجتازت جميع معايير الترشيح** — فحوصات السيولة وحجم التداول والعمر والأمان
     • **مجمعات سيولة SOL صالحة** — مدعومة بمفكّكات DEX لدينا (Raydium وOrca وMeteora وغيرها)
@@ -159,7 +159,7 @@ hints-positions-partial-exit-content =
     يُسجَّل كل خروج جزئي على حدة لتتبع دقيق للأرباح والخسائر.
 hints-positions-management-title = إدارة المركز
 hints-positions-management-content =
-    تحدد الإدارة الأتمتة المسموح لها بالتصرف في المركز:
+    تحدد الإدارة الأتمتة المسموح لها بالتصرف في المركز.
 
     • المتداول الآلي: خروج الأمان وخروج السياسة وDCA التلقائي
     • المستخدم فقط: بلا إجراءات تلقائية
@@ -183,7 +183,7 @@ hints-filtering-overview-content =
     تُتخطى المعايير المعطّلة تمامًا.
 hints-filtering-dexscreener-title = مرشحات { -dexscreener }
 hints-filtering-dexscreener-content =
-    مرشحات مبنية على بيانات سوق { -dexscreener }:
+    مرشحات مبنية على بيانات سوق { -dexscreener }.
 
     • **السيولة** — الحد الأدنى للسيولة بالدولار في المجمعات
     • **حجم التداول (24 ساعة)** — الحد الأدنى لحجم التداول
@@ -193,7 +193,7 @@ hints-filtering-dexscreener-content =
     تتحدث بيانات { -dexscreener } كل بضع دقائق.
 hints-filtering-geckoterminal-title = مرشحات { -geckoterminal }
 hints-filtering-geckoterminal-content =
-    مرشحات مبنية على بيانات سوق { -geckoterminal }:
+    مرشحات مبنية على بيانات سوق { -geckoterminal }.
 
     • **القيمة السوقية** — الحد الأدنى للقيمة السوقية
     • **FDV** — حدود القيمة المخففة بالكامل
@@ -202,7 +202,7 @@ hints-filtering-geckoterminal-content =
     غالبًا ما تتوفر لدى { -geckoterminal } بيانات للرموز الأحدث.
 hints-filtering-rugcheck-title = مرشحات الأمان
 hints-filtering-rugcheck-content =
-    تحليل الأمان من { -rugcheck }.xyz:
+    تحليل الأمان من { -rugcheck }.xyz.
 
     • **درجة المخاطر** — تصنيف المخاطر الإجمالي (0-100)
     • **صلاحية الإصدار** — هل يمكن إصدار رموز جديدة؟
@@ -212,7 +212,7 @@ hints-filtering-rugcheck-content =
     تشير درجات المخاطر الأعلى إلى مزيد من علامات التحذير المحتملة.
 hints-filtering-meta-title = المرشحات الوصفية
 hints-filtering-meta-content =
-    معايير ترشيح إضافية:
+    معايير ترشيح إضافية.
 
     • **عمر الرمز** — الحد الأدنى للمدة منذ إنشاء الرمز
     • **عمر المجمع** — الحد الأدنى للمدة منذ إنشاء المجمع
@@ -274,7 +274,7 @@ hints-services-overview-content =
     للخدمات تبعيات وتبدأ بالترتيب.
 hints-services-health-title = صحة الخدمة
 hints-services-health-content =
-    تعرض مؤشرات الصحة حالة الخدمة:
+    تعرض مؤشرات الصحة حالة الخدمة.
 
     • **مدة التشغيل** — الوقت منذ آخر بدء
     • **المهام** — العمليات الخلفية النشطة
