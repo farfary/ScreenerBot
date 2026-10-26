@@ -48,9 +48,9 @@ onboarding-data-candles-title = Riwayat Candle Gabungan
 onboarding-data-candles-description = Riwayat bersama tujuh timeframe, bertahun-tahun ke belakang, disajikan dari satu cache.
 onboarding-data-pools-title = Pool Terselesaikan & Keamanan
 onboarding-data-pools-description = Registri pool terpusat dan laporan { -rugcheck } yang di-cache, sudah diambil sebelumnya.
-onboarding-data-signin-title = Perlu akun
+onboarding-data-signin-title = Perlu Akun
 onboarding-data-signin-description = Tanpa akun, data ini tidak tersedia dan penyedia publik yang digunakan.
-onboarding-data-reading-title = Hanya pencarian
+onboarding-data-reading-title = Hanya Pencarian
 onboarding-data-reading-description = Kami melihat token mana yang Anda cari. Tidak pernah key, saldo, posisi, atau trade.
 
 onboarding-privacy-title = Key Anda, Data Anda

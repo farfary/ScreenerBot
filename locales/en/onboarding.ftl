@@ -60,9 +60,9 @@ onboarding-data-candles-title = Pooled Candle History
 onboarding-data-candles-description = Seven timeframes of shared history, years deep, served from one cache.
 onboarding-data-pools-title = Resolved Pools & Security
 onboarding-data-pools-description = A central pool registry and cached { -rugcheck } reports, already fetched.
-onboarding-data-signin-title = Account required
+onboarding-data-signin-title = Account Required
 onboarding-data-signin-description = Without an account this data is unavailable and the public providers are used.
-onboarding-data-reading-title = Lookups only
+onboarding-data-reading-title = Lookups Only
 onboarding-data-reading-description = We see which tokens you look up. Never a key, a balance, a position or a trade.
 
 ## Slide: privacy
