@@ -58,8 +58,9 @@ impl TokenDatabase {
             }
             Some("first_discovered_at") => "t.first_discovered_at",
             Some("metadata_last_fetched_at") => "t.metadata_last_fetched_at",
+            // Mirrors `Token::created_at` for a token without market data.
             Some("blockchain_created_at") => {
-                "COALESCE(t.blockchain_created_at, t.first_discovered_at)"
+                "COALESCE(CASE WHEN t.blockchain_created_at >= 1 THEN t.blockchain_created_at END, t.first_discovered_at)"
             }
             Some("pool_price_last_calculated_at") => {
                 "COALESCE(ut.pool_price_last_calculated_at, t.metadata_last_fetched_at)"
@@ -116,6 +117,7 @@ impl TokenDatabase {
                     name: row.get::<_, Option<String>>(2)?,
                     decimals: row.get::<_, Option<i64>>(3)?.map(|v| v as u8),
                     first_discovered_at: row.get::<_, i64>(4)?,
+                    blockchain_created_at: row.get(11)?,
                     metadata_last_fetched_at: row.get::<_, i64>(5)?,
                 };
                 let last_market_update: Option<i64> = row.get(6)?;
@@ -126,7 +128,6 @@ impl TokenDatabase {
                     .unwrap_or_default();
                 let is_blacklisted = row.get::<_, Option<String>>(9)?.is_some();
                 let priority_value: Option<i32> = row.get(10)?;
-                let blockchain_created_at: Option<i64> = row.get(11)?;
                 let security_data_last_fetched_at: Option<i64> = row.get(12)?;
 
                 // Rejection tracking fields
@@ -141,7 +142,6 @@ impl TokenDatabase {
                     is_rugged,
                     is_blacklisted,
                     priority_value,
-                    blockchain_created_at,
                     security_data_last_fetched_at,
                     last_rejection_reason,
                     last_rejection_source,
@@ -164,7 +164,6 @@ impl TokenDatabase {
                 is_rugged,
                 is_blacklisted,
                 priority_value,
-                blockchain_created_at,
                 security_data_last_fetched_at,
                 last_rejection_reason,
                 last_rejection_source,
@@ -220,9 +219,6 @@ impl TokenDatabase {
                 .map(Priority::from_value)
                 .unwrap_or(Priority::Standard);
 
-            let blockchain_created_dt =
-                blockchain_created_at.and_then(|ts| DateTime::from_timestamp(ts, 0));
-
             let token = assemble_token_without_market_data(
                 self.chain(),
                 meta,
@@ -231,7 +227,6 @@ impl TokenDatabase {
                 priority,
                 None,
                 last_market_update.and_then(|ts| DateTime::from_timestamp(ts, 0)),
-                blockchain_created_dt,
                 last_rejection_reason,
                 last_rejection_source,
                 last_rejection_at_dt,

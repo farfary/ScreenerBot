@@ -133,7 +133,7 @@ impl Tool for AnalyzeTokenTool {
                         .collect(),
                 )
             },
-            holder_count: token.total_holders.map(|h| h as u64),
+            holder_count: token.holder_count().map(|h| h as u64),
             top_holder_percent: if !token.top_holders.is_empty() {
                 Some(token.top_holders[0].pct)
             } else {

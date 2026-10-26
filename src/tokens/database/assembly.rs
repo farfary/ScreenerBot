@@ -101,10 +101,23 @@ impl TokenDatabase {
         let is_blacklisted = self.is_blacklisted(mint)?;
         let priority = self.get_priority(mint)?;
 
+        // The DexScreener row of a token sourced from GeckoTerminal still carries the
+        // fallback images and the pair's creation time.
+        let alternate_dexscreener = match &market_data {
+            MarketDataType::GeckoTerminal(_) => self.get_dexscreener_data(mint)?,
+            MarketDataType::DexScreener(_) => None,
+        };
+        let pool_created_at = match &market_data {
+            MarketDataType::DexScreener(ds) => ds.pair_blockchain_created_at,
+            MarketDataType::GeckoTerminal(_) => alternate_dexscreener
+                .as_ref()
+                .and_then(|ds| ds.pair_blockchain_created_at),
+        };
+
         // Prepare fallback images from alternate source when primary source is missing them
         let (fallback_img, fallback_header) = match (&data_source, &market_data) {
             // When using GeckoTerminal, try DexScreener images
-            (DataSource::GeckoTerminal, _) => match self.get_dexscreener_data(mint)? {
+            (DataSource::GeckoTerminal, _) => match alternate_dexscreener {
                 Some(ds) => (ds.image_url, ds.header_image_url),
                 None => (None, None),
             },
@@ -130,6 +143,7 @@ impl TokenDatabase {
             priority,
             fallback_img,
             fallback_header,
+            pool_created_at,
         );
 
         Ok(Some(token))
@@ -198,8 +212,10 @@ impl TokenDatabase {
                 "COALESCE(ut.market_data_last_updated_at, d.market_data_last_fetched_at, g.market_data_last_fetched_at, t.metadata_last_fetched_at)",
             Some("first_discovered_at") => "t.first_discovered_at",
             Some("metadata_last_fetched_at") => "COALESCE(ut.metadata_last_updated_at, t.metadata_last_fetched_at)",
+            // Mirrors `Token::created_at`: the earlier valid on-chain or pool creation
+            // time, else discovery.
             Some("blockchain_created_at") =>
-                "COALESCE(d.pair_blockchain_created_at, t.blockchain_created_at, t.first_discovered_at)",
+                "COALESCE(MIN(COALESCE(CASE WHEN t.blockchain_created_at >= 1 THEN t.blockchain_created_at END, CASE WHEN d.pair_blockchain_created_at >= 1 THEN d.pair_blockchain_created_at END), COALESCE(CASE WHEN d.pair_blockchain_created_at >= 1 THEN d.pair_blockchain_created_at END, CASE WHEN t.blockchain_created_at >= 1 THEN t.blockchain_created_at END)), t.first_discovered_at)",
             Some("pool_price_last_calculated_at") =>
                 "COALESCE(ut.pool_price_last_calculated_at, t.first_discovered_at)",
             Some("mint") => "t.mint",
@@ -579,7 +595,7 @@ impl TokenDatabase {
             // Parse all timestamps
             let first_discovered_dt =
                 DateTime::from_timestamp(first_discovered_at, 0).unwrap_or_else(|| Utc::now());
-            let _blockchain_created_dt =
+            let blockchain_created_dt =
                 blockchain_created_at.and_then(|ts| DateTime::from_timestamp(ts, 0));
             let metadata_last_fetched_dt =
                 DateTime::from_timestamp(metadata_last_fetched_at, 0).unwrap_or_else(|| Utc::now());
@@ -866,7 +882,8 @@ impl TokenDatabase {
 
                 // Discovery & Creation timestamps
                 first_discovered_at: first_discovered_dt,
-                blockchain_created_at: d_pair_blockchain_created_at
+                blockchain_created_at: blockchain_created_dt,
+                pool_created_at: d_pair_blockchain_created_at
                     .and_then(|ts| DateTime::from_timestamp(ts, 0)),
 
                 // Metadata timestamps

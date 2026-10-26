@@ -1149,16 +1149,9 @@ function createLifecycle() {
         minWidth: 110,
         wrap: false,
         render: (_v, row) => {
-          // Blockchain creation time, fallback to bot discovery
-          const timestamp = row.blockchain_created_at || row.first_discovered_at;
-          if (!timestamp) return "—";
-
-          const timestampSeconds =
-            typeof timestamp === "string"
-              ? Math.floor(new Date(timestamp).getTime() / 1000)
-              : timestamp;
-
-          return timeAgoCell(timestampSeconds);
+          // The on-chain or pool creation; discovery alone is no age.
+          if (!Number.isFinite(row.age_origin)) return "—";
+          return timeAgoCell(row.age_origin);
         },
       },
       {
@@ -1508,15 +1501,10 @@ function createLifecycle() {
       if (mint && tbl) {
         const tableData = tbl.getData();
         const rowData = tableData.find((row) => row.mint === mint);
-        if (rowData) {
-          const timestamp = rowData.blockchain_created_at || rowData.first_discovered_at;
-          if (timestamp) {
-            const ageSeconds =
-              typeof timestamp === "string"
-                ? Math.floor(new Date(timestamp).getTime() / 1000)
-                : timestamp;
-            ageText = Utils.formatTimeAgo(ageSeconds, { fallback: I18n.t("format-unknown") });
-          }
+        if (rowData && Number.isFinite(rowData.age_origin)) {
+          ageText = Utils.formatTimeAgo(rowData.age_origin, {
+            fallback: I18n.t("format-unknown"),
+          });
         }
       }
 

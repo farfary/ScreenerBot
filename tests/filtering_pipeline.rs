@@ -410,6 +410,37 @@ async fn pipeline_age_measures_creation_not_discovery() {
 }
 
 #[tokio::test]
+async fn pipeline_age_reads_the_oldest_pool_as_a_lower_bound() {
+    // A pool cannot predate its token, so without an on-chain creation time the oldest
+    // pool the market data reports ages the token, not its discovery by this install.
+    let _cfg = config_guard();
+    let mut config = filters_default_dex_only();
+    config.age_enabled = true;
+    config.min_token_age_minutes = 60;
+
+    let mut established = seeded_token();
+    established.blockchain_created_at = None;
+    established.pool_created_at = Some(chrono::Utc::now() - chrono::Duration::days(365));
+    established.first_discovered_at = chrono::Utc::now();
+    assert!(
+        evaluate_token(&solana_filter_profile(), &established, &config)
+            .await
+            .is_ok(),
+        "a token whose pool is a year old is old enough however recently it was discovered"
+    );
+
+    let mut fresh = seeded_token();
+    fresh.blockchain_created_at = None;
+    fresh.pool_created_at = Some(chrono::Utc::now() - chrono::Duration::minutes(5));
+    fresh.first_discovered_at = chrono::Utc::now();
+    assert_eq!(
+        rejection(evaluate_token(&solana_filter_profile(), &fresh, &config).await),
+        FilterRejectionReason::TokenTooNew,
+        "a token whose only pool is minutes old is too new"
+    );
+}
+
+#[tokio::test]
 async fn pipeline_age_falls_back_to_discovery_without_a_valid_creation_time() {
     // Without a creation time, or with the zero timestamp market APIs report for an unknown
     // pair age, discovery is the only evidence of age there is.

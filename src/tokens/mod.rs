@@ -43,6 +43,8 @@ pub mod security;
 pub mod service;
 pub mod store;
 pub mod types;
+#[cfg(test)]
+mod types_tests;
 pub mod updates;
 
 use crate::chains::ChainId;

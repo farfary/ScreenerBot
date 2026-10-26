@@ -148,7 +148,7 @@ const fromSearchHit = (hit) =>
   toRow(hit, { createdAt: hit.pair_created_at ?? null, volume: known(hit.volume_24h) });
 
 const fromToken = (token) =>
-  toRow(token, { createdAt: token.blockchain_created_at ?? null, volume: known(token.volume_24h) });
+  toRow(token, { createdAt: token.age_origin ?? null, volume: known(token.volume_24h) });
 
 const fromBoostCard = (card) => toRow(card);
 

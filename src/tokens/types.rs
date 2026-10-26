@@ -43,6 +43,9 @@ pub struct TokenMetadata {
     pub name: Option<String>,
     pub decimals: Option<u8>,
     pub first_discovered_at: i64,
+    /// Unix seconds of the token's own on-chain creation, when known.
+    #[serde(default)]
+    pub blockchain_created_at: Option<i64>,
     pub metadata_last_fetched_at: i64,
 }
 
@@ -66,6 +69,7 @@ pub struct TokenMetadata {
 /// All timestamp fields follow the pattern: {what}_{when}_{action}_at
 /// - first_discovered_at: When bot first saw this token (immutable)
 /// - blockchain_created_at: When token was created on-chain (if known)
+/// - pool_created_at: When the oldest pool the market data reports was created (if known)
 /// - metadata_last_fetched_at: When symbol/name/decimals last fetched
 /// - decimals_last_fetched_at: When decimals specifically fetched
 /// - market_data_last_fetched_at: When market API data last fetched
@@ -99,9 +103,14 @@ pub struct Token {
     /// When bot first discovered this token (immutable after first insert)
     pub first_discovered_at: DateTime<Utc>,
 
-    /// When this token/pair was created on blockchain (if known from APIs)
+    /// When the token itself was created on-chain (if known)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub blockchain_created_at: Option<DateTime<Utc>>,
+
+    /// When the oldest pool the stored market data reports was created (if known). A
+    /// pool cannot predate its token, so this bounds the token's creation from below.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pool_created_at: Option<DateTime<Utc>>,
 
     // ========================================================================
     // Metadata Timestamps
@@ -258,16 +267,69 @@ pub struct Token {
 /// age they do not know, which would otherwise read as a token created in 1970.
 const MIN_VALID_CREATION_TIMESTAMP: i64 = 1;
 
+/// Where a token's creation moment comes from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CreationSource {
+    /// The token's own on-chain creation time.
+    OnChain,
+    /// The creation time of the oldest pool the market data reports.
+    Pool,
+    /// When this install first discovered the token.
+    Discovery,
+}
+
+/// The earliest known moment of a token and where it comes from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TokenCreation {
+    pub at: DateTime<Utc>,
+    pub source: CreationSource,
+}
+
+impl TokenCreation {
+    /// The moment a displayed age counts from: the on-chain or pool creation time.
+    /// `None` when only discovery is known, because discovery is a property of the
+    /// install: on a fresh install every token was discovered minutes ago.
+    pub fn age_origin(&self) -> Option<DateTime<Utc>> {
+        (self.source != CreationSource::Discovery).then_some(self.at)
+    }
+}
+
 impl Token {
-    /// When the token came into existence: its on-chain creation time when a provider
-    /// reported a valid one, otherwise when this install first discovered it.
+    /// The earliest known moment of the token: the earlier of its valid on-chain creation
+    /// time and the oldest pool creation time, else its first discovery.
     ///
-    /// The one definition of a token's age. Discovery time alone is a property of the
-    /// install, not of the token: on a fresh install every token was discovered minutes ago.
-    pub fn created_at(&self) -> DateTime<Utc> {
-        self.blockchain_created_at
-            .filter(|created| created.timestamp() >= MIN_VALID_CREATION_TIMESTAMP)
-            .unwrap_or(self.first_discovered_at)
+    /// The one definition of a token's age. Every value is a lower bound on how old the
+    /// token is (a pool cannot predate its token, and discovery cannot predate either),
+    /// so the earliest known one is the truest. Only an on-chain or pool time is an age a
+    /// surface may show ([`TokenCreation::age_origin`]).
+    pub fn created_at(&self) -> TokenCreation {
+        let valid = |at: Option<DateTime<Utc>>| {
+            at.filter(|created| created.timestamp() >= MIN_VALID_CREATION_TIMESTAMP)
+        };
+        let on_chain = valid(self.blockchain_created_at).map(|at| TokenCreation {
+            at,
+            source: CreationSource::OnChain,
+        });
+        let pool = valid(self.pool_created_at).map(|at| TokenCreation {
+            at,
+            source: CreationSource::Pool,
+        });
+        match (on_chain, pool) {
+            (Some(on_chain), Some(pool)) if pool.at < on_chain.at => pool,
+            (Some(on_chain), _) => on_chain,
+            (None, Some(pool)) => pool,
+            (None, None) => TokenCreation {
+                at: self.first_discovered_at,
+                source: CreationSource::Discovery,
+            },
+        }
+    }
+
+    /// The token's holder count when a source counted it. Rugcheck reports `0` for a
+    /// token whose holders it did not count (large established tokens), and a token
+    /// with supply always has a holder, so a count below one is unknown.
+    pub fn holder_count(&self) -> Option<i64> {
+        self.total_holders.filter(|count| *count > 0)
     }
 
     /// Total transactions (buys + sells) for the 5 minute window.

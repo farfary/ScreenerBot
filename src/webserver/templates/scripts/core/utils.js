@@ -1202,16 +1202,35 @@ export function resolveTokenLogoUrl(token) {
 }
 
 /**
+ * The identity of an image URL for comparing two of them: scheme, host and path,
+ * without the query and fragment, which only size or key the same picture on a CDN.
+ * A URL whose path names nothing keeps its query, which then names the image.
+ */
+function imageIdentity(url) {
+  try {
+    const parsed = new URL(url);
+    const path = parsed.pathname.replace(/\/+$/, "");
+    return `${parsed.protocol}//${parsed.host}${path}${path ? "" : parsed.search}`;
+  } catch {
+    return url;
+  }
+}
+
+/**
  * Resolve a token's wide banner/header image, or null when it has none.
  * Only DexScreener supplies these (1500x500), so most tokens have none and the
- * banner must simply be absent rather than showing a placeholder.
+ * banner must simply be absent rather than showing a placeholder. A banner that is
+ * the token's logo is none either: enlarged to a banner it shows the logo blurred.
  */
 export function resolveTokenBannerUrl(token) {
   if (!token) return null;
   // `banner` is the featured card's field; `header_image_url` is the token detail
   // API's. Both must be accepted -- matching only one silently renders every card
   // bannerless (it falls through to the accent gradient, so it LOOKS designed).
-  return normalizeImageUrl(token.banner || token.header_image_url || token.header);
+  const banner = normalizeImageUrl(token.banner || token.header_image_url || token.header);
+  if (!banner) return null;
+  const logo = resolveTokenLogoUrl(token);
+  return logo && imageIdentity(logo) === imageIdentity(banner) ? null : banner;
 }
 
 /**

@@ -291,6 +291,7 @@ fn normalize(source: &Token, originals: &mut BTreeSet<String>) -> Token {
         data_source: source.data_source,
         first_discovered_at: epoch,
         blockchain_created_at: None,
+        pool_created_at: None,
         metadata_last_fetched_at: epoch,
         decimals_last_fetched_at: epoch,
         market_data_last_fetched_at: epoch,

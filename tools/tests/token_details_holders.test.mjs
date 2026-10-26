@@ -5,7 +5,8 @@
 /**
  * Guard: the token details dialog shows the holder count compact in its header
  * strip, with the exact count as that figure's tooltip, and exact in Overview >
- * Token Info, so the two never read as different numbers.
+ * Token Info, so the two never read as different numbers. A count no source made
+ * (`total_holders: null`) reads "—" in both, never "0".
  *
  * Run with `npm run test:js`.
  */
@@ -54,4 +55,39 @@ test("holders are compact in the header with the exact count in its tooltip", as
         .map((fact) => fact.querySelector(".overview-fact-value").textContent.trim())
   );
   assert.deepEqual(info, [exact], "Token Info prints the exact count");
+});
+
+test("an uncounted holder total reads as one dash in the header and Token Info", async (t) => {
+  const browser = await chromium.launch({ headless: true });
+  t.after(() => browser.close());
+  const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const api = createApiHandler([await loadIndex("tokens"), await loadIndex("shell")], "populated");
+  const onApi = async (request) => {
+    const answer = await api.onApi(request);
+    if (/^\/api\/tokens\/[^/]+$/.test(request.url.pathname) && request.method === "GET") {
+      return { ...answer, body: JSON.stringify({ ...JSON.parse(answer.body), total_holders: null }) };
+    }
+    return answer;
+  };
+  const host = await serveDashboard(context, { locale: "en", onApi });
+  t.after(() => host.close());
+  const page = await context.newPage();
+  await page.goto(`${host.origin}/tokens`);
+  await page.waitForSelector(PAGE_READY);
+  await page.click("#tokens-root tr[data-row-id] .ti-row-cell__symbol");
+  await page.waitForSelector('.token-details-dialog [data-tab-content="overview"] .overview-fact');
+  const strip = page.locator('.token-details-dialog [data-live-value="holders"]');
+  assert.equal((await strip.textContent()).trim(), "—");
+  assert.equal(await strip.getAttribute("title"), "");
+
+  const info = await page.$$eval(
+    '.token-details-dialog [data-tab-content="overview"] .overview-fact',
+    (facts) =>
+      facts
+        .filter(
+          (fact) => fact.querySelector(".overview-fact-label")?.textContent.trim() === "Holders"
+        )
+        .map((fact) => fact.querySelector(".overview-fact-value").textContent.trim())
+  );
+  assert.deepEqual(info, ["—"]);
 });

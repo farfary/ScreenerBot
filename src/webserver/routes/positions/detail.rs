@@ -73,7 +73,7 @@ pub async fn get_position_details(Path(key): Path<String>) -> Response {
                 volume_24h: token.volume_h24,
                 price_change_h1: token.price_change_h1,
                 price_change_h24: token.price_change_h24,
-                holder_count: token.total_holders,
+                holder_count: token.holder_count(),
             });
 
             // Build security summary from token database

@@ -18,11 +18,10 @@ use crate::{
     tokens::{database::database, security::SecurityRiskBand, DataSource},
 };
 
-/// Unix seconds of a token's creation for the detail response: its on-chain creation
-/// time when a provider reported a valid one, else its discovery. The token's age reads
-/// from it.
-pub(super) fn creation_timestamp(token: &crate::tokens::types::Token) -> i64 {
-    token.created_at().timestamp()
+/// Unix seconds the detail response's age counts from: the token's on-chain or pool
+/// creation time. `None` when only its discovery is known, which is not an age.
+pub(super) fn age_origin_timestamp(token: &crate::tokens::types::Token) -> Option<i64> {
+    token.created_at().age_origin().map(|at| at.timestamp())
 }
 
 /// The market figures of a token detail that depend on what the token is.
@@ -73,7 +72,7 @@ impl MarketFigures {
             market_cap: token.market_cap,
             fdv: token.fdv,
             liquidity_usd: token.liquidity_usd,
-            total_holders: token.total_holders,
+            total_holders: token.holder_count(),
         }
     }
 }
@@ -443,7 +442,7 @@ pub async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailRespo
     let rugged = Some(token.is_rugged);
     let mint_authority = token.mint_authority.clone();
     let freeze_authority = token.freeze_authority.clone();
-    let total_holders = token.total_holders;
+    let total_holders = token.holder_count();
     let top_10_concentration = if !token.top_holders.is_empty() {
         // Calculate top 10 concentration from top_holders
         let top_10_pct: f64 = token.top_holders.iter().take(10).map(|h| h.pct).sum();
@@ -595,7 +594,7 @@ pub async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailRespo
         );
     }
 
-    let created_at_ts = Some(creation_timestamp(&token));
+    let created_at_ts = age_origin_timestamp(&token);
     let market_data_last_fetched_at_ts = Some(token.market_data_last_fetched_at.timestamp());
     let pool_price_last_calculated_at_ts = Some(token.pool_price_last_calculated_at.timestamp());
 

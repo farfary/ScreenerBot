@@ -1,13 +1,14 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! The token detail answers a token's creation time: on-chain creation when known, else
-//! discovery; and the wrapped native coin carries only the figures that describe the coin.
+//! The token detail answers the moment a token's age counts from: its on-chain or pool
+//! creation, never its discovery; it answers only counted holders; and the wrapped native
+//! coin carries only the figures that describe the coin.
 
 use chrono::{DateTime, Duration, TimeZone, Utc};
 use serde_json::json;
 
-use super::detail::{creation_timestamp, MarketFigures};
+use super::detail::{age_origin_timestamp, MarketFigures};
 use crate::tokens::types::Token;
 
 /// A token discovered at `discovered` whose provider reported `created` as its creation.
@@ -38,24 +39,44 @@ fn token(discovered: DateTime<Utc>, created: Option<DateTime<Utc>>) -> Token {
 }
 
 #[test]
-fn creation_time_is_the_on_chain_creation_when_one_is_known() {
+fn the_age_counts_from_the_on_chain_creation_when_one_is_known() {
     let discovered = Utc::now() - Duration::minutes(5);
     let created = Utc.with_ymd_and_hms(2025, 7, 15, 12, 0, 0).unwrap();
     assert_eq!(
-        creation_timestamp(&token(discovered, Some(created))),
-        created.timestamp()
+        age_origin_timestamp(&token(discovered, Some(created))),
+        Some(created.timestamp())
     );
 }
 
 #[test]
-fn creation_time_falls_back_to_discovery_without_a_valid_creation() {
+fn the_age_counts_from_the_oldest_pool_without_an_on_chain_creation() {
+    let discovered = Utc::now() - Duration::minutes(5);
+    let pool = Utc.with_ymd_and_hms(2021, 3, 1, 0, 0, 0).unwrap();
+    let mut token = token(discovered, None);
+    token.pool_created_at = Some(pool);
+    assert_eq!(age_origin_timestamp(&token), Some(pool.timestamp()));
+}
+
+#[test]
+fn discovery_alone_is_no_age() {
     let discovered = Utc::now() - Duration::minutes(5);
     for created in [None, Some(DateTime::UNIX_EPOCH)] {
         assert_eq!(
-            creation_timestamp(&token(discovered, created)),
-            discovered.timestamp(),
+            age_origin_timestamp(&token(discovered, created)),
+            None,
             "{created:?}"
         );
+    }
+}
+
+#[test]
+fn an_uncounted_holder_total_is_unknown_and_a_count_stays_a_count() {
+    let now = Utc::now();
+    let mut token = token(now, None);
+    for (reported, shown) in [(None, None), (Some(0), None), (Some(12_345), Some(12_345))] {
+        token.total_holders = reported;
+        let figures = MarketFigures::for_analysis(false, Some(187.25), &token, 0.5, 93.6);
+        assert_eq!(figures.total_holders, shown, "{reported:?}");
     }
 }
 

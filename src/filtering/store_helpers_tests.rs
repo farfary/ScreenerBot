@@ -43,6 +43,7 @@ fn token(mint: &str) -> Token {
         data_source: DataSource::DexScreener,
         first_discovered_at: now,
         blockchain_created_at: None,
+        pool_created_at: None,
         metadata_last_fetched_at: now,
         decimals_last_fetched_at: now,
         market_data_last_fetched_at: now,

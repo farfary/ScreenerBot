@@ -643,6 +643,7 @@ pub fn filter_token(mint: &str) -> Token {
         // Old enough for the default 60-minute age floor.
         first_discovered_at: now - Duration::hours(6),
         blockchain_created_at: Some(now - Duration::hours(8)),
+        pool_created_at: None,
         metadata_last_fetched_at: now,
         decimals_last_fetched_at: now,
         market_data_last_fetched_at: now,

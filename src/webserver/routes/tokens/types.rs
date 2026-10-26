@@ -19,10 +19,27 @@ use crate::{
 // RESPONSE TYPES
 // =============================================================================
 
+/// One row of a token list: the token and the moment its displayed age counts from.
+#[derive(Debug, Serialize)]
+pub struct TokenListItem {
+    #[serde(flatten)]
+    pub token: crate::tokens::types::Token,
+    /// Unix seconds of the token's on-chain or pool creation; `None` when only its
+    /// discovery by this install is known, which is not an age.
+    pub age_origin: Option<i64>,
+}
+
+impl From<crate::tokens::types::Token> for TokenListItem {
+    fn from(token: crate::tokens::types::Token) -> Self {
+        let age_origin = token.created_at().age_origin().map(|at| at.timestamp());
+        Self { token, age_origin }
+    }
+}
+
 /// Token list response
 #[derive(Debug, Serialize)]
 pub struct TokenListResponse {
-    pub items: Vec<crate::tokens::types::Token>,
+    pub items: Vec<TokenListItem>,
     pub page: usize,
     pub page_size: usize,
     pub total: usize,
@@ -149,6 +166,8 @@ pub struct TokenDetailResponse {
     pub has_open_position: bool,
 
     // Timestamps
+    /// Unix seconds the token's age counts from (on-chain or pool creation); `None` when
+    /// only its discovery by this install is known.
     pub created_at: Option<i64>,
     pub market_data_last_fetched_at: Option<i64>,
     pub pool_price_last_calculated_at: Option<i64>,
@@ -204,6 +223,7 @@ pub struct TokenDetailResponse {
     pub rugged: Option<bool>,
     pub mint_authority: Option<String>,
     pub freeze_authority: Option<String>,
+    /// Counted holders; `None` when no source counted them.
     pub total_holders: Option<i64>,
     pub top_10_concentration: Option<f64>,
     pub security_risks: Vec<SecurityRisk>,
@@ -677,8 +697,7 @@ pub(super) fn build_token_list_response(
         Some(start_index.saturating_sub(result.page_size))
     };
 
-    // For Pool Service view, overlay real-time pool prices from pools module
-    let items = result.items;
+    let items = result.items.into_iter().map(TokenListItem::from).collect();
 
     TokenListResponse {
         items,

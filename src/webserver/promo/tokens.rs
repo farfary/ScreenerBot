@@ -34,7 +34,7 @@ use crate::filtering::{
     BlacklistReasonInfo, FilteringQuery, FilteringView, SortDirection, TokenSortKey,
 };
 use crate::tokens::types::{DataSource, Priority, SecurityRisk, Token};
-use crate::webserver::routes::tokens::types::TokenListResponse;
+use crate::webserver::routes::tokens::types::{TokenListItem, TokenListResponse};
 
 use super::data::{
     PROMO_BLACKLISTED, PROMO_CLOSED_TOKENS, PROMO_OPEN_TOKENS, PROMO_TOKENS_TRACKED,
@@ -310,6 +310,7 @@ fn base_token(mint: &str, symbol: &str, name: &str, discovered_minutes: i64) -> 
         data_source: DataSource::DexScreener,
         first_discovered_at: discovered,
         blockchain_created_at: Some(discovered - Duration::minutes(4)),
+        pool_created_at: None,
         metadata_last_fetched_at: discovered,
         decimals_last_fetched_at: discovered,
         market_data_last_fetched_at: now - Duration::seconds(28),
@@ -728,10 +729,7 @@ fn sort_value(token: &Token, key: TokenSortKey) -> f64 {
         TokenSortKey::Txns6h => token.txns_6h_total().unwrap_or(0) as f64,
         TokenSortKey::Txns24h => token.txns_24h_total().unwrap_or(0) as f64,
         TokenSortKey::FirstDiscoveredAt => token.first_discovered_at.timestamp() as f64,
-        TokenSortKey::BlockchainCreatedAt => token
-            .blockchain_created_at
-            .map(|at| at.timestamp() as f64)
-            .unwrap_or(0.0),
+        TokenSortKey::BlockchainCreatedAt => token.created_at().at.timestamp() as f64,
         TokenSortKey::MarketDataLastFetchedAt => {
             token.market_data_last_fetched_at.timestamp() as f64
         }
@@ -864,7 +862,7 @@ pub fn get_promo_tokens_list(query: &FilteringQuery) -> TokenListResponse {
     };
 
     TokenListResponse {
-        items,
+        items: items.into_iter().map(TokenListItem::from).collect(),
         page,
         page_size,
         total,

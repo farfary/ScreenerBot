@@ -29,6 +29,7 @@ pub(super) fn assemble_token(
     priority: Priority,
     fallback_image_url: Option<String>,
     fallback_header_url: Option<String>,
+    pool_created_at: Option<DateTime<Utc>>,
 ) -> Token {
     // Extract timestamps from metadata
     let first_discovered_dt =
@@ -54,7 +55,6 @@ pub(super) fn assemble_token(
         volumes,
         txns,
         market_data_last_fetched_at,
-        pair_blockchain_created_at,
         pool_metrics,
         _market_data_first_fetched_at,
     ) = match market_data {
@@ -85,7 +85,6 @@ pub(super) fn assemble_token(
                 ),
                 txns,
                 data.market_data_last_fetched_at,
-                data.pair_blockchain_created_at,
                 (None, None),
                 data.market_data_first_fetched_at,
             )
@@ -112,7 +111,6 @@ pub(super) fn assemble_token(
                 ),
                 txns,
                 data.market_data_last_fetched_at,
-                None,
                 (data.pool_count, data.reserve_in_usd),
                 data.market_data_first_fetched_at,
             )
@@ -198,7 +196,10 @@ pub(super) fn assemble_token(
 
         // Discovery & Creation timestamps
         first_discovered_at: first_discovered_dt,
-        blockchain_created_at: pair_blockchain_created_at,
+        blockchain_created_at: metadata
+            .blockchain_created_at
+            .and_then(|ts| DateTime::from_timestamp(ts, 0)),
+        pool_created_at,
 
         // Metadata timestamps
         metadata_last_fetched_at: metadata_last_fetched_dt,
@@ -305,7 +306,6 @@ pub(super) fn assemble_token_without_market_data(
     priority: Priority,
     metadata_updated_at_override: Option<DateTime<Utc>>,
     last_market_update: Option<DateTime<Utc>>,
-    blockchain_created_at_override: Option<DateTime<Utc>>,
     last_rejection_reason: Option<String>,
     last_rejection_source: Option<String>,
     last_rejection_at: Option<DateTime<Utc>>,
@@ -386,7 +386,10 @@ pub(super) fn assemble_token_without_market_data(
 
         // Discovery & Creation timestamps
         first_discovered_at: first_discovered_dt,
-        blockchain_created_at: blockchain_created_at_override,
+        blockchain_created_at: metadata
+            .blockchain_created_at
+            .and_then(|ts| DateTime::from_timestamp(ts, 0)),
+        pool_created_at: None,
 
         // Metadata timestamps
         metadata_last_fetched_at: final_metadata_updated,

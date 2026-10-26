@@ -75,7 +75,7 @@ impl TokenDatabase {
         let conn = self.conn()?;
 
         let mut stmt = conn.prepare(
-            "SELECT mint, symbol, name, decimals, first_discovered_at, metadata_last_fetched_at FROM tokens WHERE chain_id = ?1 AND mint = ?2"
+            "SELECT mint, symbol, name, decimals, first_discovered_at, metadata_last_fetched_at, blockchain_created_at FROM tokens WHERE chain_id = ?1 AND mint = ?2"
         ).map_err(|e| Error::Database(DatabaseError::Query { operation: "Failed to prepare".to_owned(), message: e.to_string() }))?;
 
         let result = stmt.query_row(params![self.chain_id(), mint], |row| {
@@ -85,6 +85,7 @@ impl TokenDatabase {
                 name: row.get(2)?,
                 decimals: row.get::<_, Option<i64>>(3)?.map(|d| d as u8),
                 first_discovered_at: row.get(4)?,
+                blockchain_created_at: row.get(6)?,
                 metadata_last_fetched_at: row.get(5)?,
             })
         });
@@ -110,7 +111,7 @@ impl TokenDatabase {
 
         let mut stmt = conn
             .prepare(
-                "SELECT mint, symbol, name, decimals, first_discovered_at, metadata_last_fetched_at 
+                "SELECT mint, symbol, name, decimals, first_discovered_at, metadata_last_fetched_at, blockchain_created_at
              FROM tokens WHERE chain_id = ?1
              ORDER BY metadata_last_fetched_at DESC 
              LIMIT ?2",
@@ -125,6 +126,7 @@ impl TokenDatabase {
                     name: row.get(2)?,
                     decimals: row.get::<_, Option<i64>>(3)?.map(|d| d as u8),
                     first_discovered_at: row.get(4)?,
+                    blockchain_created_at: row.get(6)?,
                     metadata_last_fetched_at: row.get(5)?,
                 })
             })

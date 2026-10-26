@@ -176,6 +176,7 @@ function buildTokenInfoSection(token, options) {
   const { renderHintTrigger, escapeHtml } = options;
 
   // An age is a span ("468d 5h") under its "Age" label, never a moment ("468d ago").
+  // `created_at` is the on-chain or pool creation; discovery alone is no age.
   const age = Number.isFinite(token.created_at)
     ? Utils.formatUptime(Math.max(0, Date.now() / 1000 - token.created_at), { style: "trimmed" })
     : "—";
@@ -212,16 +213,10 @@ function buildTokenInfoSection(token, options) {
             <span class="overview-fact-label">${esc(I18n.t("tokens-overview-fact-dex"))}</span>
             <span class="overview-fact-value">${token.pool_program ? escapeHtml(venueLabel(token.pool_program)) : "—"}</span>
           </div>
-          ${
-            token.total_holders
-              ? `
           <div class="overview-fact">
             <span class="overview-fact-label">${esc(I18n.t("tokens-overview-fact-holders"))}</span>
-            <span class="overview-fact-value">${Utils.formatNumber(token.total_holders, { decimals: 0 })}</span>
+            <span class="overview-fact-value">${Number.isFinite(token.total_holders) ? Utils.formatNumber(token.total_holders, { decimals: 0 }) : "—"}</span>
           </div>
-          `
-              : ""
-          }
           ${
             token.top_10_concentration
               ? `

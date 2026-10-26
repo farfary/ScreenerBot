@@ -276,7 +276,7 @@ pub async fn compute_snapshot(
         let has_open_position = open_position_set.contains(&token.mint);
         let has_ohlcv = ohlcv_set.contains(&token.mint);
 
-        let creation_timestamp = token.created_at().timestamp();
+        let creation_timestamp = token.created_at().at.timestamp();
 
         let mut passed_at = None;
 

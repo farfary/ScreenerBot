@@ -53,7 +53,8 @@ pub async fn get_favorites() -> Result<Json<FavoritesListResponse>, ApiError> {
                 let mut row = match crate::tokens::get_full_token_async(chain, &favorite.mint).await
                 {
                     Ok(Some(token)) => {
-                        serde_json::to_value(&token).unwrap_or_else(|_| serde_json::json!({}))
+                        serde_json::to_value(super::types::TokenListItem::from(token))
+                            .unwrap_or_else(|_| serde_json::json!({}))
                     }
                     _ => serde_json::json!({
                         "mint": favorite.mint,

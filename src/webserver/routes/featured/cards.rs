@@ -65,6 +65,7 @@ struct DbStats {
 async fn enrich_from_db(mint: String) -> Option<DbStats> {
     let chain = crate::chains::chain_for_address(&mint).ok()?;
     let token = tokens::get_full_token_async(chain, &mint).await.ok()??;
+    let holders = token.holder_count();
 
     Some(DbStats {
         name: Some(token.name),
@@ -79,7 +80,7 @@ async fn enrich_from_db(mint: String) -> Option<DbStats> {
         market_cap: token.market_cap.or(token.fdv),
         liquidity_usd: token.liquidity_usd,
         volume_24h: token.volume_h24,
-        holders: token.total_holders,
+        holders,
         // RugCheck's normalised risk score: higher is riskier.
         security_score: token.security_score_normalised,
         txns_24h_buys: token.txns_h24_buys,
