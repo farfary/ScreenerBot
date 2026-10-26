@@ -323,6 +323,7 @@ trader-duration-days =
     }
 # $value is the loss percentage as typed, without its sign.
 trader-time-loss-impact = الخروج عند الهبوط بنسبة { $value }% أو أكثر بعد مدة الاحتفاظ
+trader-time-loss-hint = الخسارة التي يبيع عندها الخروج الزمني بعد انقضاء مدة الاحتفاظ (40 = الخروج عند -40%)
 # $day is the day number of the example.
 trader-time-day = اليوم { $day }
 trader-time-position-opened = تم فتح المركز
@@ -359,6 +360,7 @@ trader-strategy-priority = الأولوية { $priority }
 trader-dca-title = متوسط التكلفة (DCA)
 trader-dca-subtitle = الإضافة تلقائيًا إلى المراكز الخاسرة لخفض متوسط سعر الدخول
 trader-dca-threshold-impact = يشتري المزيد عندما ينخفض المركز بنسبة { $value }% عن الدخول
+trader-dca-threshold-hint = الهبوط عن الدخول الذي يشتري عنده DCA المزيد (10 = DCA عند -10%)
 trader-dca-count-impact =
     { $count ->
         [zero] لا دخول إضافي لكل مركز

@@ -267,6 +267,7 @@ trader-duration-days =
     }
 # $value is the loss percentage as typed, without its sign.
 trader-time-loss-impact = 보유 기간 이후 { $value }% 이상 하락 시 청산
+trader-time-loss-hint = 보유 시간이 지난 뒤 시간 청산이 매도하는 손실 (40 = -40%에서 청산)
 # $day is the day number of the example.
 trader-time-day = { $day }일째
 trader-time-position-opened = 포지션 진입
@@ -303,6 +304,7 @@ trader-strategy-priority = 우선순위 { $priority }
 trader-dca-title = 분할 매수 (DCA)
 trader-dca-subtitle = 손실 중인 포지션에 자동으로 추가 매수하여 평균 진입가를 낮춥니다
 trader-dca-threshold-impact = 포지션이 진입가 대비 { $value }% 하락하면 추가 매수합니다
+trader-dca-threshold-hint = DCA가 추가 매수하는 진입가 대비 하락폭 (10 = -10%에서 DCA)
 trader-dca-count-impact =
     { $count ->
        *[other] 포지션당 추가 진입 최대 { $count }회

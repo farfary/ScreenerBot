@@ -926,6 +926,23 @@ input[type="radio"]:disabled {
   --number-field-unit-space: calc(var(--number-field-unit-len, 3) * 1ch + 6px);
 }
 
+/* A fixed sign at the field's start (`.input-prefix`, e.g. the "−" of a loss entered
+   as its magnitude), in the value's data face. The input's start padding reserves
+   it, inline for the same reason as the end gutter. */
+.number-field > .input-prefix {
+  position: absolute;
+  inset-inline-start: 0.75rem;
+  font-family: var(--font-data);
+  font-weight: 600;
+  color: var(--text-secondary);
+  pointer-events: none;
+  user-select: none;
+}
+
+.number-field:has(> .input-prefix) {
+  --number-field-prefix-gutter: calc(0.75rem + 1ch + 4px);
+}
+
 .number-field-suffix {
   position: absolute;
   inset-inline-end: 8px;

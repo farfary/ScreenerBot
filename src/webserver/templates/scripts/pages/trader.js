@@ -15,7 +15,7 @@ import { renderTokenRowCell } from "../ui/token_identity.js";
 import { ConfirmationDialog } from "../ui/confirmation_dialog.js";
 import { closeReasonText } from "../ui/trade_reason.js";
 import { requestManager } from "../core/request_manager.js";
-import { createTraderConfigCards } from "./trader/config_cards.js";
+import { LOSS_MAGNITUDE, createTraderConfigCards, displayValue } from "./trader/config_cards.js";
 import { playToggleOn, playToggleOff, playError } from "../core/sounds.js";
 import { createExampleUpdaters } from "./trader/examples.js";
 import { createTraderControls } from "./trader/controls.js";
@@ -385,7 +385,10 @@ function createLifecycle() {
       timeUnit.value = trader.time_override_unit || "hours";
     }
     if (timeLossThreshold) {
-      timeLossThreshold.value = trader.time_override_loss_threshold_percent || -40;
+      timeLossThreshold.value = displayValue(
+        LOSS_MAGNITUDE,
+        trader.time_override_loss_threshold_percent ?? -40
+      );
     }
 
     // Update time conversion hint
@@ -407,7 +410,7 @@ function createLifecycle() {
     if (tradeSize) tradeSize.value = trader.trade_size_sol || 0.005;
     if (entrySizes) entrySizes.value = (trader.entry_sizes || [0.005, 0.01, 0.02, 0.05]).join(", ");
     if (dcaEnabled) dcaEnabled.checked = trader.dca_enabled || false;
-    if (dcaThreshold) dcaThreshold.value = trader.dca_threshold_pct || -10;
+    if (dcaThreshold) dcaThreshold.value = displayValue(LOSS_MAGNITUDE, trader.dca_threshold_pct ?? -10);
     if (dcaMaxCount) dcaMaxCount.value = trader.dca_max_count || 2;
     if (dcaSize) dcaSize.value = trader.dca_size_percentage || 50;
     if (dcaCooldown) dcaCooldown.value = trader.dca_cooldown_minutes || 30;

@@ -279,6 +279,7 @@ trader-duration-days =
     }
 # $value is the loss percentage as typed, without its sign.
 trader-time-loss-impact = Exit if down { $value }% or more after hold period
+trader-time-loss-hint = The loss at which the time exit sells once the hold time has passed (40 = exit at -40%)
 # $day is the day number of the example.
 trader-time-day = Day { $day }
 trader-time-position-opened = Position opened
@@ -315,6 +316,7 @@ trader-strategy-priority = Priority { $priority }
 trader-dca-title = Dollar-Cost Averaging
 trader-dca-subtitle = Automatically add to losing positions to lower your average entry price
 trader-dca-threshold-impact = Buys more when the position is down { $value }% from entry
+trader-dca-threshold-hint = The drop from entry at which DCA buys more (10 = DCA at -10%)
 trader-dca-count-impact =
     { $count ->
         [one] At most one extra entry per position

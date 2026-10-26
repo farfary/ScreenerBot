@@ -9,6 +9,10 @@
  *   upper-case prefix ("IMPACT:", "CURRENT:", "READABLE:"); every DCA field has one.
  * - Every worked example starts from one position: a buy at the configured trade size
  *   (`trader.trade_size_sol`), never a fixed amount of its own.
+ * - A loss threshold reads as a magnitude after a fixed "−" (Stop Loss, Time Exit
+ *   loss, DCA threshold) while the config keeps its own sign: Stop Loss stores a
+ *   positive percent, the other two a negative one. Load, display, edit and save
+ *   round-trip at both bounds of each field.
  *
  * The config served here uses a trade size other than the default, so a figure that
  * follows the default instead of the loaded config fails.
@@ -125,3 +129,70 @@ test("every worked example starts from the configured trade size", async () => {
     await close();
   }
 });
+
+// Each loss field: its tab, config key, and stored bounds with the value shown for each.
+const LOSS_FIELDS = [
+  {
+    tab: "stop-loss",
+    id: "stop-loss-threshold",
+    key: "stop_loss_threshold_pct",
+    bounds: [
+      [1, "1"],
+      [100, "100"],
+    ],
+  },
+  {
+    tab: "time-rules",
+    id: "time-loss-threshold",
+    key: "time_override_loss_threshold_percent",
+    bounds: [
+      [-100, "100"],
+      [0, "0"],
+    ],
+  },
+  {
+    tab: "dca",
+    id: "dca-threshold",
+    key: "dca_threshold_pct",
+    bounds: [
+      [-100, "100"],
+      [0, "0"],
+    ],
+  },
+];
+
+for (const { tab, id, key, bounds } of LOSS_FIELDS) {
+  for (const [from, to] of [bounds, [...bounds].reverse()]) {
+    test(`${key} round-trips from ${from[0]} to ${to[0]} through its magnitude`, async () => {
+      const { page, close } = await openTrader(tab, { [key]: from[0] });
+      try {
+        const input = page.locator(`#${id}`);
+        await page.waitForFunction(
+          ([selector, shown]) => document.querySelector(selector).value === shown,
+          [`#${id}`, from[1]]
+        );
+        assert.deepEqual(
+          await input.evaluate((el) => ({
+            min: el.min,
+            max: el.max,
+            prefix: el.closest(".number-field").querySelector(".input-prefix")?.textContent,
+          })),
+          { min: key === "stop_loss_threshold_pct" ? "1" : "0", max: "100", prefix: "−" }
+        );
+
+        await input.fill(to[1]);
+        const save = page.locator(`.config-card:has(#${id}) .config-card-save`);
+        const [request] = await Promise.all([
+          page.waitForRequest(
+            (candidate) =>
+              candidate.method() === "PATCH" && candidate.url().endsWith("/api/config/trader")
+          ),
+          save.click(),
+        ]);
+        assert.equal(request.postDataJSON()[key], to[0]);
+      } finally {
+        await close();
+      }
+    });
+  }
+}

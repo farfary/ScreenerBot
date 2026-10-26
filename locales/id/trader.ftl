@@ -216,6 +216,7 @@ trader-duration-days =
        *[other] { $amount } hari
     }
 trader-time-loss-impact = Exit jika turun { $value }% atau lebih setelah masa hold
+trader-time-loss-hint = Kerugian saat exit waktu menjual setelah waktu tahan berlalu (40 = exit di -40%)
 trader-time-day = Hari { $day }
 trader-time-position-opened = Posisi dibuka
 trader-time-limit = Batas Waktu
@@ -247,6 +248,7 @@ trader-strategy-priority = Prioritas { $priority }
 trader-dca-title = Dollar-Cost Averaging
 trader-dca-subtitle = Tambah otomatis ke posisi yang rugi untuk menurunkan harga entry rata-rata Anda
 trader-dca-threshold-impact = Membeli lagi saat posisi turun { $value }% dari entry
+trader-dca-threshold-hint = Penurunan dari entry saat DCA membeli lagi (10 = DCA di -10%)
 trader-dca-count-impact =
     { $count ->
        *[other] Paling banyak { $count } entry tambahan per posisi

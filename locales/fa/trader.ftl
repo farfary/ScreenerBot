@@ -279,6 +279,7 @@ trader-duration-days =
     }
 # $value is the loss percentage as typed, without its sign.
 trader-time-loss-impact = خروج در صورت افت { $value }% یا بیشتر پس از پایان مدت نگهداری
+trader-time-loss-hint = زیانی که خروج زمانی پس از پایان مدت نگهداری در آن می‌فروشد (40 = خروج در -40%)
 # $day is the day number of the example.
 trader-time-day = روز { $day }
 trader-time-position-opened = پوزیشن باز شد
@@ -315,6 +316,7 @@ trader-strategy-priority = اولویت { $priority }
 trader-dca-title = میانگین‌گیری قیمت
 trader-dca-subtitle = افزودن خودکار به پوزیشن‌های زیان‌ده برای کاهش میانگین قیمت ورود
 trader-dca-threshold-impact = وقتی پوزیشن { $value }% پایین‌تر از ورود باشد، بیشتر می‌خرد
+trader-dca-threshold-hint = افتی نسبت به ورود که DCA در آن بیشتر می‌خرد (10 = DCA در -10%)
 trader-dca-count-impact =
     { $count ->
         [one] حداکثر یک ورود اضافه برای هر پوزیشن

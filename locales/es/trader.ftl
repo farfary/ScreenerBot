@@ -290,6 +290,7 @@ trader-duration-days =
     }
 # $value is the loss percentage as typed, without its sign.
 trader-time-loss-impact = Sale si baja { $value }% o más tras el período de tenencia
+trader-time-loss-hint = La pérdida a la que la salida por tiempo vende una vez cumplido el tiempo de tenencia (40 = salida a -40%)
 # $day is the day number of the example.
 trader-time-day = Día { $day }
 trader-time-position-opened = Posición abierta
@@ -326,6 +327,7 @@ trader-strategy-priority = Prioridad { $priority }
 trader-dca-title = Promedio de costo en dólares
 trader-dca-subtitle = Añade automáticamente a posiciones en pérdida para reducir tu precio de entrada promedio
 trader-dca-threshold-impact = Compra más cuando la posición cae un { $value }% desde la entrada
+trader-dca-threshold-hint = La caída desde la entrada a la que DCA compra más (10 = DCA a -10%)
 trader-dca-count-impact =
     { $count ->
         [one] Como máximo una entrada extra por posición

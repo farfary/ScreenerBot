@@ -14,6 +14,11 @@
  * `.input-unit` holding a `select[data-custom-select]`: the same suffix, picked
  * in place.
  *
+ * A fixed sign the value is read with (a loss entered as its magnitude, shown
+ * after a "−") is an `.input-prefix` written right before the input, adopted into
+ * the box at its start. A signed quantity reads left to right in every locale, so
+ * a field with a prefix is laid out left to right as a whole.
+ *
  * It is installed once, document-wide (see `installGlobalNumberFieldEnhancer`),
  * for the same reason the select enhancer is: pages render their markup as HTML
  * strings and repaint constantly, so anything that has to be attached per input
@@ -175,10 +180,17 @@ export function enhanceNumberField(input) {
 
   const sibling = input.nextElementSibling;
   const unit = sibling && sibling.classList.contains("input-unit") ? sibling : null;
+  const before = input.previousElementSibling;
+  const prefix = before && before.classList.contains("input-prefix") ? before : null;
 
   const shell = document_.createElement("span");
   shell.className = "number-field";
   input.replaceWith(shell);
+  if (prefix) {
+    shell.dir = "ltr";
+    shell.appendChild(prefix);
+    input.style.setProperty("padding-inline-start", "var(--number-field-prefix-gutter)");
+  }
   shell.appendChild(input);
 
   shell.appendChild(buildSuffix(document_, unit));

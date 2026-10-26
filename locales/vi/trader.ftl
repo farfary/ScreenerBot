@@ -214,6 +214,7 @@ trader-duration-days =
        *[other] { $amount } ngày
     }
 trader-time-loss-impact = Thoát nếu giảm { $value }% trở lên sau thời gian nắm giữ
+trader-time-loss-hint = Mức lỗ mà thoát theo thời gian bán sau khi hết thời gian giữ (40 = thoát ở -40%)
 trader-time-day = Ngày { $day }
 trader-time-position-opened = Đã mở vị thế
 trader-time-limit = Hạn thời gian
@@ -245,6 +246,7 @@ trader-strategy-priority = Ưu tiên { $priority }
 trader-dca-title = DCA (trung bình giá)
 trader-dca-subtitle = Tự động thêm vào các vị thế đang lỗ để hạ giá vào trung bình
 trader-dca-threshold-impact = Mua thêm khi vị thế giảm { $value }% so với giá vào
+trader-dca-threshold-hint = Mức giảm so với giá vào mà DCA mua thêm (10 = DCA ở -10%)
 trader-dca-count-impact =
     { $count ->
        *[other] Tối đa { $count } lần vào thêm mỗi vị thế

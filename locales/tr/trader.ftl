@@ -225,6 +225,7 @@ trader-duration-days =
        *[other] { $amount } gün
     }
 trader-time-loss-impact = Tutma süresinden sonra %{ $value } veya daha fazla düşüşteyse çık
+trader-time-loss-hint = Tutma süresi dolduktan sonra zaman çıkışının sattığı zarar (40 = -%40’ta çıkış)
 trader-time-day = Gün { $day }
 trader-time-position-opened = Pozisyon açıldı
 trader-time-limit = Zaman sınırı
@@ -256,6 +257,7 @@ trader-strategy-priority = Öncelik { $priority }
 trader-dca-title = DCA (maliyet ortalaması)
 trader-dca-subtitle = Ortalama giriş fiyatınızı düşürmek için zarardaki pozisyonlara otomatik olarak ekleme yapın
 trader-dca-threshold-impact = Pozisyon girişten %{ $value } aşağıdayken ek alım yapar
+trader-dca-threshold-hint = DCA’nın ek alım yaptığı girişten düşüş (10 = -%10’da DCA)
 trader-dca-count-impact =
     { $count ->
         [one] Pozisyon başına en fazla bir ek giriş

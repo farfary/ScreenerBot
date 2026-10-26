@@ -290,6 +290,7 @@ trader-duration-days =
     }
 # $value is the loss percentage as typed, without its sign.
 trader-time-loss-impact = Sai se estiver em queda de { $value }% ou mais após o período de posse
+trader-time-loss-hint = A perda na qual a saída por tempo vende depois do tempo de retenção (40 = saída em -40%)
 # $day is the day number of the example.
 trader-time-day = Dia { $day }
 trader-time-position-opened = Posição aberta
@@ -326,6 +327,7 @@ trader-strategy-priority = Prioridade { $priority }
 trader-dca-title = Dollar-cost averaging (DCA)
 trader-dca-subtitle = Faz aportes automáticos em posições no prejuízo para reduzir o preço médio de entrada
 trader-dca-threshold-impact = Compra mais quando a posição cai { $value }% em relação à entrada
+trader-dca-threshold-hint = A queda desde a entrada na qual o DCA compra mais (10 = DCA em -10%)
 trader-dca-count-impact =
     { $count ->
         [one] No máximo uma entrada extra por posição

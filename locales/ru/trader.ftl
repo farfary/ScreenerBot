@@ -247,6 +247,7 @@ trader-duration-days =
        *[other] { $amount } дня
     }
 trader-time-loss-impact = Выход, если после периода удержания убыток составляет { $value }% или больше
+trader-time-loss-hint = Убыток, при котором выход по времени продаёт после истечения срока удержания (40 = выход при -40%)
 trader-time-day = День { $day }
 trader-time-position-opened = Позиция открыта
 trader-time-limit = Лимит времени
@@ -278,6 +279,7 @@ trader-strategy-priority = Приоритет { $priority }
 trader-dca-title = Усреднение (DCA)
 trader-dca-subtitle = Автоматически докупать убыточные позиции, чтобы снизить среднюю цену входа
 trader-dca-threshold-impact = Докупает, когда позиция ниже входа на { $value }%
+trader-dca-threshold-hint = Падение от входа, при котором DCA докупает (10 = DCA при -10%)
 trader-dca-count-impact =
     { $count ->
         [one] Не более { $count } дополнительного входа на позицию

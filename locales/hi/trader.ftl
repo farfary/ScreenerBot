@@ -225,6 +225,7 @@ trader-duration-days =
        *[other] { $amount } दिन
     }
 trader-time-loss-impact = होल्ड अवधि के बाद { $value }% या ज़्यादा नीचे होने पर एग्ज़िट
+trader-time-loss-hint = होल्ड समय पूरा होने के बाद समय एग्ज़िट जिस नुकसान पर बेचता है (40 = -40% पर एग्ज़िट)
 trader-time-day = दिन { $day }
 trader-time-position-opened = पोज़िशन खुली
 trader-time-limit = समय सीमा
@@ -256,6 +257,7 @@ trader-strategy-priority = प्राथमिकता { $priority }
 trader-dca-title = डॉलर-कॉस्ट एवरेजिंग
 trader-dca-subtitle = औसत एंट्री प्राइस घटाने के लिए घाटे वाली पोज़िशन में अपने आप ऐड करें
 trader-dca-threshold-impact = पोज़िशन एंट्री से { $value }% नीचे होने पर और ख़रीदता है
+trader-dca-threshold-hint = एंट्री से वह गिरावट जिस पर DCA और ख़रीदता है (10 = -10% पर DCA)
 trader-dca-count-impact =
     { $count ->
         [one] हर पोज़िशन पर अधिकतम एक अतिरिक्त एंट्री

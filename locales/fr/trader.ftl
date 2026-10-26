@@ -236,6 +236,7 @@ trader-duration-days =
        *[other] { $amount } jours
     }
 trader-time-loss-impact = Sortie en cas de baisse de { $value } % ou plus après la période de détention
+trader-time-loss-hint = La perte à laquelle la sortie temporelle vend une fois la durée de détention écoulée (40 = sortie à -40 %)
 trader-time-day = Jour { $day }
 trader-time-position-opened = Position ouverte
 trader-time-limit = Limite de temps
@@ -267,6 +268,7 @@ trader-strategy-priority = Priorité { $priority }
 trader-dca-title = Investissement programmé (DCA)
 trader-dca-subtitle = Renforcez automatiquement les positions perdantes pour abaisser votre prix d'entrée moyen
 trader-dca-threshold-impact = Achète davantage quand la position recule de { $value } % depuis l’entrée
+trader-dca-threshold-hint = La baisse depuis l’entrée à laquelle le DCA rachète (10 = DCA à -10 %)
 trader-dca-count-impact =
     { $count ->
         [one] Au plus une entrée supplémentaire par position

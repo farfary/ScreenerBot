@@ -268,6 +268,7 @@ trader-duration-days =
     }
 # $value is the loss percentage as typed, without its sign.
 trader-time-loss-impact = 保有期間経過後に { $value }% 以上下落していればエグジット
+trader-time-loss-hint = 保有時間の経過後に時間エグジットが売却する損失（40 = -40% でエグジット）
 # $day is the day number of the example.
 trader-time-day = { $day }日目
 trader-time-position-opened = ポジションをオープン
@@ -304,6 +305,7 @@ trader-strategy-priority = 優先度 { $priority }
 trader-dca-title = ドルコスト平均法
 trader-dca-subtitle = 含み損のポジションに自動で追加購入し、平均エントリー価格を下げます
 trader-dca-threshold-impact = ポジションがエントリーから { $value }% 下落したら買い増します
+trader-dca-threshold-hint = DCA が買い増すエントリーからの下落率（10 = -10% で DCA）
 trader-dca-count-impact =
     { $count ->
        *[other] 1 ポジションにつき追加エントリーは最大 { $count } 回

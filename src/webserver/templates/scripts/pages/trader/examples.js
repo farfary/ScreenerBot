@@ -147,17 +147,15 @@ export function createExampleUpdaters({ $, Utils: _Utils, tradeSize }) {
 
     if (!lossInput) return;
 
-    const value = parseFloat(lossInput.value) || -40;
-    const absValue = Math.abs(value);
+    // The field holds the loss as its magnitude; the "−" is the field's fixed prefix.
+    const loss = Math.abs(parseFloat(lossInput.value) || 0);
 
-    // Update impact text
     if (impactText) {
-      impactText.textContent = I18n.t("trader-time-loss-impact", { value: String(absValue) });
+      impactText.textContent = I18n.t("trader-time-loss-impact", { value: String(loss) });
     }
 
-    // Update visual example
     if (exampleLoss) {
-      exampleLoss.textContent = I18n.t("trader-value-percent", { value: String(value) });
+      exampleLoss.textContent = I18n.t("trader-value-percent", { value: String(loss ? -loss : 0) });
     }
   }
 

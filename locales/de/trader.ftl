@@ -233,6 +233,7 @@ trader-duration-days =
        *[other] { $amount } Tage
     }
 trader-time-loss-impact = Ausstieg bei { $value } % Minus oder mehr nach der Haltedauer
+trader-time-loss-hint = Der Verlust, bei dem der Zeitausstieg nach Ablauf der Haltedauer verkauft (40 = Ausstieg bei -40 %)
 trader-time-day = Tag { $day }
 trader-time-position-opened = Position eröffnet
 trader-time-limit = Zeitlimit
@@ -264,6 +265,7 @@ trader-strategy-priority = Priorität { $priority }
 trader-dca-title = Durchschnittskosten-Strategie (DCA)
 trader-dca-subtitle = Verlustpositionen automatisch aufstocken, um den durchschnittlichen Einstiegspreis zu senken
 trader-dca-threshold-impact = Kauft nach, wenn die Position { $value } % unter dem Einstieg liegt
+trader-dca-threshold-hint = Der Rückgang gegenüber dem Einstieg, bei dem DCA nachkauft (10 = DCA bei -10 %)
 trader-dca-count-impact =
     { $count ->
         [one] Höchstens ein zusätzlicher Einstieg pro Position

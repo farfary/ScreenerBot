@@ -268,6 +268,7 @@ trader-duration-days =
     }
 # $value is the loss percentage as typed, without its sign.
 trader-time-loss-impact = 持仓期结束后下跌 { $value }% 或以上时出场
+trader-time-loss-hint = 持有时间结束后时间出场卖出的亏损幅度（40 = 在 -40% 出场）
 # $day is the day number of the example.
 trader-time-day = 第 { $day } 天
 trader-time-position-opened = 仓位已开启
@@ -304,6 +305,7 @@ trader-strategy-priority = 优先级 { $priority }
 trader-dca-title = 定投加仓（DCA）
 trader-dca-subtitle = 对亏损仓位自动加仓，以降低入场均价
 trader-dca-threshold-impact = 仓位较入场下跌 { $value }% 时加仓
+trader-dca-threshold-hint = DCA 加仓时相对入场的跌幅（10 = 在 -10% 加仓）
 trader-dca-count-impact =
     { $count ->
        *[other] 每个仓位最多追加 { $count } 次

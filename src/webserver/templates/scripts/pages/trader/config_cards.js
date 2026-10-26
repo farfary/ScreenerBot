@@ -12,9 +12,24 @@
 
 import { fieldHint, fieldLabel, fieldUnit } from "../config/field_text.js";
 
+/**
+ * A loss threshold the config stores as a negative percent (-100..0) and this page
+ * shows as its magnitude after a fixed "−" (0..100). Stop Loss already stores a
+ * positive magnitude and keeps the "float" type; the Configuration page shows every
+ * value as stored.
+ */
+export const LOSS_MAGNITUDE = "loss-magnitude";
+
+/** The value a field shows for a stored config value. */
+export function displayValue(type, stored) {
+  if (type === LOSS_MAGNITUDE) return stored === 0 ? 0 : -stored;
+  return stored;
+}
+
 // Declarative spec: which DOM fields belong to which card, their config section
 // and key, and how to coerce the input value into the saved payload. Keys/types
-// mirror the backend config schema (trader / positions sections).
+// mirror the backend config schema (trader / positions sections). `hint` gives this
+// page's own hint for a field shown differently from the Configuration page.
 const CARD_SPECS = [
   {
     section: "trader",
@@ -46,14 +61,24 @@ const CARD_SPECS = [
       { id: "time-override-enabled", key: "time_override_enabled", type: "bool", autoSave: true },
       { id: "time-max-hold", key: "time_override_duration", type: "float" },
       { id: "time-unit", key: "time_override_unit", type: "string" },
-      { id: "time-loss-threshold", key: "time_override_loss_threshold_percent", type: "float" },
+      {
+        id: "time-loss-threshold",
+        key: "time_override_loss_threshold_percent",
+        type: LOSS_MAGNITUDE,
+        hint: () => I18n.t("trader-time-loss-hint"),
+      },
     ],
   },
   {
     section: "trader",
     fields: [
       { id: "dca-enabled", key: "dca_enabled", type: "bool", autoSave: true },
-      { id: "dca-threshold", key: "dca_threshold_pct", type: "float" },
+      {
+        id: "dca-threshold",
+        key: "dca_threshold_pct",
+        type: LOSS_MAGNITUDE,
+        hint: () => I18n.t("trader-dca-threshold-hint"),
+      },
       { id: "dca-max-count", key: "dca_max_count", type: "int" },
       { id: "dca-size", key: "dca_size_percentage", type: "float" },
       { id: "dca-cooldown", key: "dca_cooldown_minutes", type: "int" },
@@ -105,6 +130,10 @@ function readField(el, type) {
     case "float": {
       const n = parseFloat(el.value);
       return Number.isNaN(n) ? 0 : n;
+    }
+    case LOSS_MAGNITUDE: {
+      const n = parseFloat(el.value);
+      return Number.isNaN(n) || n === 0 ? 0 : -n;
     }
     case "csv-floats":
       return el.value
@@ -293,7 +322,7 @@ export function createTraderConfigCards({ saveConfig }) {
         const unit = ownsGroup ? group.querySelector(".input-unit") : null;
 
         const labelText = fieldLabel(metadata.key);
-        const hintText = fieldHint(metadata.key);
+        const hintText = field.hint ? field.hint() : fieldHint(metadata.key);
         const unitText = fieldUnit(metadata.key);
 
         if (label) label.textContent = labelText;
@@ -301,8 +330,13 @@ export function createTraderConfigCards({ saveConfig }) {
         if (unit && unitText) unit.textContent = unitText;
 
         if (input.type === "number" && field.type !== "minutes-to-seconds") {
-          if (metadata.min != null) input.min = String(metadata.min);
-          if (metadata.max != null) input.max = String(metadata.max);
+          // A magnitude field's bounds are the stored bounds negated and swapped.
+          const [min, max] =
+            field.type === LOSS_MAGNITUDE
+              ? [metadata.max, metadata.min].map((bound) => (bound == null ? null : displayValue(field.type, bound)))
+              : [metadata.min, metadata.max];
+          if (min != null) input.min = String(min);
+          if (max != null) input.max = String(max);
           if (metadata.step != null) input.step = String(metadata.step);
         }
 

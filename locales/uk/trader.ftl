@@ -301,6 +301,7 @@ trader-duration-days =
     }
 # $value is the loss percentage as typed, without its sign.
 trader-time-loss-impact = Вихід, якщо збиток { $value }% або більше після періоду утримання
+trader-time-loss-hint = Збиток, за якого вихід за часом продає після спливу часу утримання (40 = вихід при -40%)
 # $day is the day number of the example.
 trader-time-day = День { $day }
 trader-time-position-opened = Позицію відкрито
@@ -337,6 +338,7 @@ trader-strategy-priority = Пріоритет { $priority }
 trader-dca-title = Усереднення (DCA)
 trader-dca-subtitle = Автоматична докупівля до збиткових позицій, щоб знизити середню ціну входу
 trader-dca-threshold-impact = Докуповує, коли позиція нижче входу на { $value }%
+trader-dca-threshold-hint = Падіння від входу, за якого DCA докуповує (10 = DCA при -10%)
 trader-dca-count-impact =
     { $count ->
         [one] Не більше { $count } додаткового входу на позицію

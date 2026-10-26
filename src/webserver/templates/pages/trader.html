@@ -328,6 +328,7 @@
             </div>
             <p class="config-hint"></p>
             <div class="input-group-enhanced">
+              <span class="input-prefix" aria-hidden="true">−</span>
               <input
                 type="number"
                 id="stop-loss-threshold"
@@ -798,13 +799,14 @@
             </div>
             <p class="config-hint"></p>
             <div class="input-group-enhanced">
+              <span class="input-prefix" aria-hidden="true">−</span>
               <input
                 type="number"
                 id="time-loss-threshold"
-                min="-100"
-                max="0"
+                min="0"
+                max="100"
                 step="1"
-                value="-40"
+                value="40"
                 class="input-large"
               />
               <span class="input-unit">%</span>
@@ -979,13 +981,14 @@
             </div>
             <p class="config-hint"></p>
             <div class="input-group-enhanced">
+              <span class="input-prefix" aria-hidden="true">−</span>
               <input
                 type="number"
                 id="dca-threshold"
-                min="-100"
-                max="0"
+                min="0"
+                max="100"
                 step="1"
-                value="-10"
+                value="10"
                 class="input-large"
               />
               <span class="input-unit">%</span>
