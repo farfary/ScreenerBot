@@ -249,7 +249,6 @@ trader-strategy-active = { $enabled }/{ $total } aktif
 trader-strategy-loading = Stratejiler yükleniyor...
 trader-strategy-load-failed = Stratejiler yüklenemedi
 trader-strategy-empty = Tanımlı strateji yok
-trader-strategy-no-description = Açıklama girilmemiş.
 trader-strategy-unnamed = Adsız strateji
 trader-strategy-priority-auto = Otomatik
 trader-strategy-priority = Öncelik { $priority }

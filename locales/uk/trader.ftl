@@ -328,7 +328,6 @@ trader-strategy-active = Активні: { $enabled }/{ $total }
 trader-strategy-loading = Завантаження стратегій...
 trader-strategy-load-failed = Не вдалося завантажити стратегії
 trader-strategy-empty = Стратегій не визначено
-trader-strategy-no-description = Опису немає.
 trader-strategy-unnamed = Стратегія без назви
 trader-strategy-priority-auto = Авто
 trader-strategy-priority = Пріоритет { $priority }

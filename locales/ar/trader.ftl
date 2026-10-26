@@ -350,7 +350,6 @@ trader-strategy-active = { $enabled }/{ $total } نشطة
 trader-strategy-loading = جارٍ تحميل الاستراتيجيات...
 trader-strategy-load-failed = تعذّر تحميل الاستراتيجيات
 trader-strategy-empty = لا توجد استراتيجيات معرّفة
-trader-strategy-no-description = لا يوجد وصف.
 trader-strategy-unnamed = استراتيجية بلا اسم
 trader-strategy-priority-auto = تلقائي
 trader-strategy-priority = الأولوية { $priority }

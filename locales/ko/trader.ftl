@@ -294,7 +294,6 @@ trader-strategy-active = { $enabled }/{ $total } 활성
 trader-strategy-loading = 전략 불러오는 중...
 trader-strategy-load-failed = 전략을 불러오지 못했습니다
 trader-strategy-empty = 정의된 전략이 없습니다
-trader-strategy-no-description = 설명이 없습니다.
 trader-strategy-unnamed = 이름 없는 전략
 trader-strategy-priority-auto = 자동
 trader-strategy-priority = 우선순위 { $priority }

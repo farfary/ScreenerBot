@@ -396,9 +396,23 @@
   border-radius: var(--radius-xl);
 }
 
+.strategy-lane-count.is-empty {
+  color: var(--text-secondary);
+  background: var(--bg-card);
+  border-color: var(--border-color);
+}
+
+/* The edit action closes the meta row, at its inline end. */
+.strategy-control-edit {
+  margin-inline-start: auto;
+}
+
+/* Cards keep their own height: the rows pack at the top of the lane instead of
+   stretching to fill it. */
 .strategies-list {
   display: grid;
   gap: 0.75rem;
+  align-content: start;
   min-height: 190px;
 }
 

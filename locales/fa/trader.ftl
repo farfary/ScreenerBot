@@ -306,7 +306,6 @@ trader-strategy-active = { $enabled } از { $total } فعال
 trader-strategy-loading = در حال بارگذاری استراتژی‌ها...
 trader-strategy-load-failed = بارگذاری استراتژی‌ها ممکن نشد
 trader-strategy-empty = استراتژی‌ای تعریف نشده است
-trader-strategy-no-description = توضیحی ارائه نشده است.
 trader-strategy-unnamed = استراتژی بدون نام
 trader-strategy-priority-auto = خودکار
 trader-strategy-priority = اولویت { $priority }

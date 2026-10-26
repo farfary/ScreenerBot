@@ -240,7 +240,6 @@ trader-strategy-active = { $enabled }/{ $total } aktif
 trader-strategy-loading = Memuat strategi...
 trader-strategy-load-failed = Tidak dapat memuat strategi
 trader-strategy-empty = Belum ada strategi yang ditentukan
-trader-strategy-no-description = Tidak ada deskripsi.
 trader-strategy-unnamed = Strategi tanpa nama
 trader-strategy-priority-auto = Otomatis
 trader-strategy-priority = Prioritas { $priority }

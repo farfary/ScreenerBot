@@ -179,6 +179,15 @@ export function createLifecycle() {
       await loadStrategies();
     },
 
+    /**
+     * Act on a request from the Auto Trader page: `{ strategyId }` opens that strategy
+     * in the editor, `{ create }` opens the new-strategy dialog with that kind chosen.
+     */
+    open({ strategyId = null, create = null } = {}) {
+      if (strategyId !== null) void loadStrategy(strategyId);
+      else if (create) showCreateStrategyModal(create);
+    },
+
     deactivate() {
       console.log("[Strategies] Deactivating page");
       // Pollers stopped automatically by lifecycle
@@ -261,9 +270,18 @@ export function createLifecycle() {
 
   }
 
-  function showCreateStrategyModal() {
+  /** Open the new-strategy dialog; `type` ("ENTRY" or "EXIT") preselects that kind. */
+  function showCreateStrategyModal(type = null) {
     const modal = $("#create-strategy-modal");
-    if (modal) modal.hidden = false;
+    if (!modal) return;
+    modal.hidden = false;
+    let preselected = null;
+    $$(".type-card").forEach((card) => {
+      const selected = card.dataset.type === type;
+      card.setAttribute("aria-pressed", String(selected));
+      if (selected) preselected = card;
+    });
+    preselected?.focus();
   }
 
   function hideCreateStrategyModal() {

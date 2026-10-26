@@ -121,6 +121,8 @@ function createLifecycle() {
   let strategiesLifecycle = null;
   let strategiesInited = false;
   let strategiesActive = false;
+  // What Strategy Control asked the editor to open, handed over once it is active.
+  let strategiesRequest = null;
   const strategiesSubtabPollers = [];
   const strategiesCtx = {
     managePoller(poller) {
@@ -151,6 +153,10 @@ function createLifecycle() {
       if (!strategiesActive) {
         await strategiesLifecycle.activate(strategiesCtx);
         strategiesActive = true;
+      }
+      if (strategiesRequest) {
+        strategiesLifecycle.open(strategiesRequest);
+        strategiesRequest = null;
       }
     } catch (err) {
       console.error("[Trader] Failed to activate Strategies subtab", err);
@@ -835,8 +841,10 @@ function createLifecycle() {
 
       updateStrategyLaneCounts(entryStrategies, exitStrategies);
 
-      renderStrategiesList("#entry-strategies", entryStrategies);
-      renderStrategiesList("#exit-strategies", exitStrategies);
+      // Each render replaces the cards, so the listeners of the previous ones go first.
+      cleanupStrategyListListeners();
+      renderStrategiesList("#entry-strategies", entryStrategies, "ENTRY");
+      renderStrategiesList("#exit-strategies", exitStrategies, "EXIT");
     } catch (error) {
       console.error("[Trader] Failed to load strategies:", error);
       renderStrategiesError();
@@ -882,9 +890,16 @@ function createLifecycle() {
       }),
     };
 
+    const totals = {
+      "#strategy-entry-enabled-label": entryStrategies.length,
+      "#strategy-exit-enabled-label": exitStrategies.length,
+    };
     Object.entries(counts).forEach(([selector, value]) => {
       const el = $(selector);
-      if (el) el.textContent = String(value);
+      if (!el) return;
+      el.textContent = String(value);
+      // A lane with nothing defined has nothing to signal: its count reads neutral.
+      el.classList.toggle("is-empty", totals[selector] === 0);
     });
   }
 
@@ -905,16 +920,27 @@ function createLifecycle() {
   /**
    * Render strategies list
    */
-  function renderStrategiesList(selector, strategies) {
+  /** Show the embedded editor with `request` (`{ strategyId }` or `{ create }`) acted on. */
+  function openStrategiesEditor(request) {
+    strategiesRequest = request;
+    void tabBar?.setActive("strategies");
+  }
+
+  function renderStrategiesList(selector, strategies, type) {
     const container = $(selector);
     if (!container) return;
 
     if (strategies.length === 0) {
       container.innerHTML = renderStateView({
-        icon: "icon-circle",
+        icon: "icon-puzzle",
         message: I18n.t("trader-strategy-empty"),
+        action: { id: "new-strategy", label: I18n.t("strategies-new"), primary: true },
         compact: true,
       });
+      const create = container.querySelector('[data-action="new-strategy"]');
+      const handler = () => openStrategiesEditor({ create: type });
+      create?.addEventListener("click", handler);
+      strategyListCleanups.push(() => create?.removeEventListener("click", handler));
       return;
     }
 
@@ -923,9 +949,7 @@ function createLifecycle() {
         // The toggle is the card's one state signal, and the lane title already names
         // the strategy type, so the card carries neither a state word nor a type chip.
         const statusClass = strategy.enabled ? "is-enabled" : "is-disabled";
-        const description = Utils.escapeHtml(
-          strategy.description || I18n.t("trader-strategy-no-description")
-        );
+        const description = String(strategy.description ?? "").trim();
         const priority = Utils.escapeHtml(
           I18n.t("trader-strategy-priority", {
             priority:
@@ -944,7 +968,7 @@ function createLifecycle() {
           <div class="strategy-control-item-header">
             <div class="strategy-control-main">
               <h4 class="strategy-control-name">${strategyName}</h4>
-              <p class="strategy-control-description">${description}</p>
+              ${description ? `<p class="strategy-control-description">${Utils.escapeHtml(description)}</p>` : ""}
             </div>
             <label class="toggle">
               <input 
@@ -961,11 +985,26 @@ function createLifecycle() {
               <i class="icon-list-ordered"></i>
               ${priority}
             </span>
+            <button
+              type="button"
+              class="btn btn-sm btn-ghost strategy-control-edit"
+              data-edit-strategy="${strategyId}"
+            >
+              <i class="icon-square-pen" aria-hidden="true"></i>
+              <span>${Utils.escapeHtml(I18n.t("common-action-edit"))}</span>
+            </button>
           </div>
         </div>
       `;
       })
       .join("");
+
+    container.querySelectorAll("[data-edit-strategy]").forEach((button) => {
+      const strategy = strategies.find((item) => String(item.id) === button.dataset.editStrategy);
+      const handler = () => openStrategiesEditor({ strategyId: strategy?.id ?? null });
+      button.addEventListener("click", handler);
+      strategyListCleanups.push(() => button.removeEventListener("click", handler));
+    });
 
     // Attach event listeners for toggle switches
     container.querySelectorAll('input[type="checkbox"]').forEach((checkbox) => {

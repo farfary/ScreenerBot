@@ -238,7 +238,6 @@ trader-strategy-active = { $enabled }/{ $total } đang hoạt động
 trader-strategy-loading = Đang tải chiến lược...
 trader-strategy-load-failed = Không thể tải chiến lược
 trader-strategy-empty = Chưa có chiến lược nào
-trader-strategy-no-description = Chưa có mô tả.
 trader-strategy-unnamed = Chiến lược chưa đặt tên
 trader-strategy-priority-auto = Tự động
 trader-strategy-priority = Ưu tiên { $priority }

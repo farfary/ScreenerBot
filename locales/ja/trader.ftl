@@ -295,7 +295,6 @@ trader-strategy-active = { $enabled }/{ $total } 稼働中
 trader-strategy-loading = ストラテジーを読み込み中...
 trader-strategy-load-failed = ストラテジーを読み込めませんでした
 trader-strategy-empty = ストラテジーが定義されていません
-trader-strategy-no-description = 説明がありません。
 trader-strategy-unnamed = 名称未設定のストラテジー
 trader-strategy-priority-auto = 自動
 trader-strategy-priority = 優先度 { $priority }

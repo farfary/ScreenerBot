@@ -295,7 +295,6 @@ trader-strategy-active = 已启用 { $enabled }/{ $total }
 trader-strategy-loading = 正在加载策略...
 trader-strategy-load-failed = 无法加载策略
 trader-strategy-empty = 尚未定义策略
-trader-strategy-no-description = 暂无描述。
 trader-strategy-unnamed = 未命名策略
 trader-strategy-priority-auto = 自动
 trader-strategy-priority = 优先级 { $priority }
