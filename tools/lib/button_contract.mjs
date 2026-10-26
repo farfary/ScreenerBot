@@ -259,6 +259,24 @@ export const CHECKS = {
         message: "button has no class; it renders as a native OS control",
       })),
 
+  /**
+   * A shared `.btn` takes its variant from the shared `.btn-*` classes. A bare
+   * `primary`/`secondary`/`danger` beside it is an older spelling that only a
+   * page-scoped rule can draw, so the button loses its variant on any other page.
+   */
+  "a shared button names its variant through the shared classes": (model) =>
+    model.buttons
+      .filter((button) => button.statics.includes("btn"))
+      .flatMap((button) =>
+        ["primary", "secondary", "danger"]
+          .filter((name) => button.statics.includes(name))
+          .map((name) => ({
+            file: button.file,
+            line: button.line,
+            message: `class="btn ${name}" is the old spelling; use .btn-${name}`,
+          }))
+      ),
+
   /** A class no stylesheet declares is a rename or a typo, never a style. */
   "every class on a button is declared or is a behaviour hook": (model) =>
     model.buttons.flatMap((button) =>

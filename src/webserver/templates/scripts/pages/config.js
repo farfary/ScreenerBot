@@ -821,7 +821,7 @@ async function renderTelegramActions(container) {
           <div class="config-action-title" data-l10n-id="system-config-telegram-test-title"></div>
           <div class="config-action-desc" data-l10n-id="system-config-telegram-test-description"></div>
         </div>
-        <button type="button" class="btn primary" id="telegram-test-btn" disabled></button>
+        <button type="button" class="btn btn-primary" id="telegram-test-btn" disabled></button>
       </div>
       <div class="config-action-status" id="telegram-status" role="status" aria-live="polite"></div>
     </div>

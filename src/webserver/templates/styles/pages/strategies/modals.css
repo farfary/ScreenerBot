@@ -223,13 +223,13 @@
   border-color: var(--primary-color);
 }
 
-.strategies-page .btn.primary {
+.strategies-page .btn-primary {
   background: var(--button-primary-bg);
   border-color: var(--button-primary-bg);
   color: white;
 }
 
-.strategies-page .btn.primary:hover {
+.strategies-page .btn-primary:hover {
   background: var(--button-primary-hover);
   border-color: var(--button-primary-hover);
 }
