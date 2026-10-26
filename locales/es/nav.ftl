@@ -12,7 +12,7 @@ nav-transactions = Transacciones
 nav-tools = Herramientas
 nav-services = Servicios
 nav-events = Eventos
-nav-config = Configuración
+nav-config = Config
 nav-setup = Preparación
 
 ## Page titles (browser tab title, before the product name)
