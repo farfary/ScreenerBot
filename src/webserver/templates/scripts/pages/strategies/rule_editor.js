@@ -359,8 +359,8 @@ export function createRuleEditor({
     const add = isRoot
       ? ""
       : `<div class="rule-group-add">
-          <button type="button" class="btn btn-sm dashed" data-action="add-condition"${tree.canAddCondition(root, group.id) ? "" : " disabled"}><i class="icon-plus"></i> <span>${escape(I18n.t("strategies-add-condition"))}</span></button>
-          <button type="button" class="btn btn-sm dashed" data-action="add-group"${tree.canAddGroup(root, group.id) ? "" : " disabled"}><i class="icon-plus"></i> <span>${escape(I18n.t("strategies-add-group"))}</span></button>
+          <button type="button" class="btn btn-outline btn-sm rule-add-btn" data-action="add-condition"${tree.canAddCondition(root, group.id) ? "" : " disabled"}><i class="icon-plus"></i> <span>${escape(I18n.t("strategies-add-condition"))}</span></button>
+          <button type="button" class="btn btn-outline btn-sm rule-add-btn" data-action="add-group"${tree.canAddGroup(root, group.id) ? "" : " disabled"}><i class="icon-plus"></i> <span>${escape(I18n.t("strategies-add-group"))}</span></button>
         </div>`;
     return `
       <section class="${classes}" data-node-id="${group.id}" data-kind="group">

@@ -708,60 +708,6 @@
   gap: 8px;
 }
 
-.config-dialog-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 8px 16px;
-  border: 1px solid transparent;
-  border-radius: var(--radius-lg);
-  font-size: 0.8125rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition:
-    background 0.15s ease,
-    border-color 0.15s ease,
-    opacity 0.15s ease;
-}
-
-.config-dialog-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.config-dialog-btn.primary {
-  background: var(--button-primary-bg);
-  color: white;
-}
-
-.config-dialog-btn.primary:hover:not(:disabled) {
-  background: var(--button-primary-hover);
-}
-
-.config-dialog-btn.secondary {
-  background: transparent;
-  border-color: var(--border-color);
-  color: var(--text-secondary);
-}
-
-.config-dialog-btn.secondary:hover:not(:disabled) {
-  background: var(--bg-card-hover);
-  border-color: var(--text-tertiary);
-  color: var(--text-primary);
-}
-
-.config-dialog-btn i {
-  font-size: 0.875rem;
-}
-
-/* Spinning loader */
-.config-dialog-btn .spin {
-  animation: spin 1s linear infinite;
-}
-
-
-
 /* ============================================================================
    RESPONSIVE
    ============================================================================ */

@@ -198,49 +198,8 @@
 }
 
 /* ==========================================================================
-   Buttons - scoped to the strategies page
+   Add-condition and add-group buttons: the shared outline button, dashed
    ========================================================================== */
-.strategies-page .btn {
-  padding: var(--spacing-sm) 0.875rem;
-  background: var(--surface-color);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  font-size: 0.8rem;
-  font-weight: 500;
-  color: var(--text-color);
-  transition: all var(--transition-base);
-  display: inline-flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-  line-height: 1.4;
-  white-space: nowrap;
-}
-
-.strategies-page .btn:hover:not(:disabled) {
-  background: var(--hover-color);
-  border-color: var(--primary-color);
-}
-
-.strategies-page .btn-primary {
-  background: var(--button-primary-bg);
-  border-color: var(--button-primary-bg);
-  color: white;
-}
-
-.strategies-page .btn-primary:hover {
-  background: var(--button-primary-hover);
-  border-color: var(--button-primary-hover);
-}
-
-.strategies-page .btn.dashed {
-  border: 1px dashed var(--border-color);
-  background: transparent;
-  color: var(--text-muted);
-}
-
-.strategies-page .btn.dashed:hover:not(:disabled) {
-  border-color: var(--primary-color);
-  color: var(--primary-color);
-  background: var(--primary-color-light);
+.rule-add-btn {
+  border-style: dashed;
 }

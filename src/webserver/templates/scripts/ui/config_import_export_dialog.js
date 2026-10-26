@@ -166,8 +166,8 @@ export class ConfigExportDialog {
           <span id="exportSelectionCount"></span>
         </div>
         <div class="config-dialog-footer-actions">
-          <button type="button" class="config-dialog-btn secondary" data-action="cancel" data-l10n-id="common-action-cancel"></button>
-          <button type="button" class="config-dialog-btn primary" data-action="export" id="exportBtn">
+          <button type="button" class="btn btn-secondary" data-action="cancel" data-l10n-id="common-action-cancel"></button>
+          <button type="button" class="btn btn-primary" data-action="export" id="exportBtn">
             <i class="icon-download"></i> <span data-l10n-id="common-action-export"></span>
           </button>
         </div>
@@ -456,8 +456,8 @@ export class ConfigImportDialog {
       <div class="config-dialog-footer">
         <div class="config-dialog-footer-info"></div>
         <div class="config-dialog-footer-actions">
-          <button type="button" class="config-dialog-btn secondary" data-action="cancel" data-l10n-id="common-action-cancel"></button>
-          <button type="button" class="config-dialog-btn primary" data-action="next" id="nextBtn" disabled>
+          <button type="button" class="btn btn-secondary" data-action="cancel" data-l10n-id="common-action-cancel"></button>
+          <button type="button" class="btn btn-primary" data-action="next" id="nextBtn" disabled>
             <i class="icon-arrow-right"></i> <span data-l10n-id="system-config-import-preview"></span>
           </button>
         </div>
@@ -535,10 +535,10 @@ export class ConfigImportDialog {
           <span id="importSummary"></span>
         </div>
         <div class="config-dialog-footer-actions">
-          <button type="button" class="config-dialog-btn secondary" data-action="back">
+          <button type="button" class="btn btn-secondary" data-action="back">
             <i class="icon-arrow-left"></i> <span data-l10n-id="common-action-back"></span>
           </button>
-          <button type="button" class="config-dialog-btn primary" data-action="import" id="importBtn" ${!valid || this.selectedSections.size === 0 ? "disabled" : ""}>
+          <button type="button" class="btn btn-primary" data-action="import" id="importBtn" ${!valid || this.selectedSections.size === 0 ? "disabled" : ""}>
             <i class="icon-check"></i> <span data-l10n-id="system-config-import-selected"></span>
           </button>
         </div>

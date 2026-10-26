@@ -55,6 +55,10 @@ const DISABLED_APPEARANCE =
 const INLINE_SKIN =
   /(?:^|;)\s*(?:background|border(?!-radius)|color|font|padding|cursor)[\w-]*\s*:/i;
 
+/* Properties that make up a button's look rather than its place in a layout. */
+const PAGE_SKIN =
+  /(?:^|;)\s*(?:background(?:-color|-image)?|border(?:-(?:width|style|color))?|color|padding[\w-]*|font-size|border-radius)\s*:/;
+
 const STATE_PSEUDO =
   /:(?:hover|active|focus|focus-visible|focus-within|disabled|checked|target|visited)\b|\[(?:disabled|aria-pressed|aria-expanded|aria-selected|data-state)/;
 
@@ -63,6 +67,12 @@ const STATE_PSEUDO =
 function subjectClasses(selector) {
   const subject = subjectCompound(selector).replace(/:not\([^)]*\)/g, "");
   return classesIn(subject);
+}
+
+/** Everything left of the rightmost compound: the ancestors a rule requires. */
+function ancestorsOf(selector) {
+  const trimmed = selector.trim();
+  return trimmed.slice(0, trimmed.length - subjectCompound(trimmed).length);
 }
 
 /* `.x:disabled`, `.x[disabled]`, `.x.is-disabled` - however a skin spells it.
@@ -260,22 +270,65 @@ export const CHECKS = {
       })),
 
   /**
-   * A shared `.btn` takes its variant from the shared `.btn-*` classes. A bare
-   * `primary`/`secondary`/`danger` beside it is an older spelling that only a
-   * page-scoped rule can draw, so the button loses its variant on any other page.
+   * A button takes its variant from the shared `.btn-*` classes. A bare
+   * `primary`/`secondary` (or `danger` beside `.btn`) is either the older
+   * spelling or a component that re-implements the shared variants for itself;
+   * only its own rules can draw it, and it drifts from every other dialog.
    */
-  "a shared button names its variant through the shared classes": (model) =>
+  "a button names its variant through the shared classes": (model) =>
+    model.buttons.flatMap((button) =>
+      ["primary", "secondary", "danger"]
+        .filter(
+          (name) =>
+            button.statics.includes(name) && (name !== "danger" || button.statics.includes("btn"))
+        )
+        .map((name) => ({
+          file: button.file,
+          line: button.line,
+          message: `class="${button.statics.join(" ")}" spells its own ${name} variant; use .btn .btn-${name}`,
+        }))
+    ),
+
+  /**
+   * A `.btn` with nothing else is the neutral fallback skin, not a choice: an
+   * action states its weight through a shared variant. A variant computed in a
+   * template expression counts as named.
+   */
+  "a shared button names a variant": (model) =>
     model.buttons
-      .filter((button) => button.statics.includes("btn"))
-      .flatMap((button) =>
-        ["primary", "secondary", "danger"]
-          .filter((name) => button.statics.includes(name))
-          .map((name) => ({
-            file: button.file,
-            line: button.line,
-            message: `class="btn ${name}" is the old spelling; use .btn-${name}`,
-          }))
-      ),
+      .filter(
+        (button) =>
+          button.statics.length === 1 &&
+          button.statics[0] === "btn" &&
+          !button.conditional.length &&
+          !button.dynamic
+      )
+      .map((button) => ({
+        file: button.file,
+        line: button.line,
+        message: 'class="btn" names no variant; add .btn-secondary, .btn-primary or another .btn-*',
+      })),
+
+  /**
+   * The shared button is drawn by `components.css` alone. A page wrapper
+   * (`.<name>-page`) that redraws `.btn` or a `.btn-*` variant changes the
+   * family on that page only, so the same button looks different per page.
+   */
+  "no page redraws the shared button": (model) =>
+    model.skinRules
+      .concat(model.stateRules)
+      .filter(
+        (rule) =>
+          /\.[\w-]+-page\b/.test(ancestorsOf(rule.selector)) &&
+          rule.classes.length > 0 &&
+          rule.classes.every((name) => name === "btn" || name.startsWith("btn-")) &&
+          PAGE_SKIN.test(`;${rule.body.replace(/\n/g, ";")}`)
+      )
+      .map((rule) => ({
+        file: `src/webserver/templates/styles/${rule.sheet}`,
+        line: rule.line,
+        message: `${rule.selector} redraws the shared button for one page`,
+      })),
 
   /** A class no stylesheet declares is a rename or a typo, never a style. */
   "every class on a button is declared or is a behaviour hook": (model) =>
