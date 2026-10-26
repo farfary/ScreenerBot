@@ -18,6 +18,13 @@ use crate::{
     tokens::database::database,
 };
 
+/// Unix seconds of a token's creation for the detail response: its on-chain creation
+/// time when a provider reported a valid one, else its discovery. The token's age reads
+/// from it.
+pub(super) fn creation_timestamp(token: &crate::tokens::types::Token) -> i64 {
+    token.created_at().timestamp()
+}
+
 /// GET /api/tokens/:mint
 ///
 /// Get detailed information about a specific token
@@ -69,7 +76,6 @@ pub async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailRespo
                 created_at: None,
                 market_data_last_fetched_at: None,
                 pool_price_last_calculated_at: None,
-                pair_created_at: None,
                 pair_url: None,
                 boosts_active: None,
                 price_sol: None,
@@ -486,11 +492,9 @@ pub async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailRespo
         );
     }
 
-    // On-chain creation time, falling back to discovery; the token's age reads from it.
-    let created_at_ts = Some(token.created_at().timestamp());
+    let created_at_ts = Some(creation_timestamp(&token));
     let market_data_last_fetched_at_ts = Some(token.market_data_last_fetched_at.timestamp());
     let pool_price_last_calculated_at_ts = Some(token.pool_price_last_calculated_at.timestamp());
-    let pair_created_at = created_at_ts;
 
     // Prefer pool price (real-time on-chain) over the cached API price, but ALWAYS
     // surface a SOL price when one is available so the header never shows "—" while
@@ -731,7 +735,6 @@ pub async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailRespo
         created_at: created_at_ts,
         market_data_last_fetched_at: market_data_last_fetched_at_ts,
         pool_price_last_calculated_at: pool_price_last_calculated_at_ts,
-        pair_created_at,
         pair_url: None,      // Not available in unified Token
         boosts_active: None, // Not available in unified Token
         price_sol: effective_price_sol,

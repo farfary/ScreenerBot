@@ -14,6 +14,8 @@ use crate::webserver::state::AppState;
 // Module declarations
 mod blacklist;
 mod detail;
+#[cfg(test)]
+mod detail_tests;
 mod favorites;
 mod identity;
 mod list;

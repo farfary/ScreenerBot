@@ -175,11 +175,10 @@ function buildOverviewContent(token, options) {
 function buildTokenInfoSection(token, options) {
   const { renderHintTrigger, escapeHtml } = options;
 
-  const age = token.pair_created_at
-    ? Utils.formatTimeAgo(new Date(token.pair_created_at * 1000))
-    : token.created_at
-      ? Utils.formatTimeAgo(new Date(token.created_at * 1000))
-      : "—";
+  // An age is a span ("468d 5h") under its "Age" label, never a moment ("468d ago").
+  const age = Number.isFinite(token.created_at)
+    ? Utils.formatUptime(Math.max(0, Date.now() / 1000 - token.created_at), { style: "trimmed" })
+    : "—";
 
   const tagsContent =
     token.tags && token.tags.length > 0

@@ -153,7 +153,6 @@ pub struct TokenDetailResponse {
     pub created_at: Option<i64>,
     pub market_data_last_fetched_at: Option<i64>,
     pub pool_price_last_calculated_at: Option<i64>,
-    pub pair_created_at: Option<i64>,
     pub pair_url: Option<String>,
     pub boosts_active: Option<i64>,
 
