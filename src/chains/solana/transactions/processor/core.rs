@@ -295,6 +295,10 @@ mod tests {
         include_str!("../../../../../tests/fixtures/swaps/copy_usdc_relayed_buy.json");
     const USDC_RELAYED_SELL: &str =
         include_str!("../../../../../tests/fixtures/swaps/copy_usdc_relayed_sell.json");
+    /// A direct Raydium LaunchLab bonding-curve sale by [`LAUNCHLAB_WALLET`].
+    const LAUNCHLAB_DIRECT_SELL: &str =
+        include_str!("../../../../../tests/fixtures/swaps/copy_launchlab_direct_sell.json");
+    const LAUNCHLAB_WALLET: &str = "FZU56d9iPqohXM5XBrYYBZLi2UoUnZT4V5Qf2631tEzb";
 
     /// Decodes a recorded transaction for [`WALLET`] through the same pipeline a fetched
     /// one takes, without the RPC.
@@ -356,6 +360,28 @@ mod tests {
             ),
             "classified as {:?}",
             transaction.transaction_type
+        );
+    }
+
+    /// A launchpad trade calls only the launchpad's own program; the registry names it.
+    #[tokio::test]
+    async fn a_launchpad_trade_is_labelled_by_its_program() {
+        let transaction = decode_recorded_for(LAUNCHLAB_WALLET, LAUNCHLAB_DIRECT_SELL).await;
+
+        assert!(
+            matches!(
+                transaction.transaction_type,
+                TransactionType::SwapTokenToSol { .. }
+            ),
+            "classified as {:?}",
+            transaction.transaction_type
+        );
+        assert_eq!(
+            transaction
+                .token_swap_info
+                .expect("the transaction is a swap")
+                .router,
+            "raydium"
         );
     }
 

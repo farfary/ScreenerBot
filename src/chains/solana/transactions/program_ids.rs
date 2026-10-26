@@ -49,6 +49,19 @@ const PHOENIX_PROGRAM_ID: &str = "PhoeNiX7BPQtuPBGYWf5KhxZVsXBMNzC9mHvgSe3kfE";
 /// so the router id is `unknown`.
 const MARKET_MAKER_FILL_PROGRAM_ID: &str = "61DFfeTKM7trxYcPQCM78bJ794ddZprZpAwAnLiwTpYH";
 
+/// Raydium LaunchLab, the bonding-curve launchpad; trades are `BuyExactIn` and
+/// `SellExactIn`. It holds no pool decoder, so it is listed here for analysis only.
+const RAYDIUM_LAUNCHLAB_PROGRAM_ID: &str = "LanMV9sAd7wArD4vJFi2qDdfnVhFxYSUg6eADduJ3uj";
+
+/// Boop, a bonding-curve launchpad that trades through `BuyToken` and `SellToken`. Its
+/// operator is not established, so the router id is `unknown`.
+const BOOP_PROGRAM_ID: &str = "boop8hVGQGqehUK2iVEMEnMrL5RbjywRzHKBmBE7ry4";
+
+/// A routing program that trades pump.fun bonding curves and PumpSwap pools, directly or
+/// behind Jupiter. Its upgrade authority is not pump.fun's, so the router id is `unknown`;
+/// it sits after every named venue, so the program it calls names the swap.
+const PUMP_ROUTING_PROGRAM_ID: &str = "6Vo3245eszAb5wuqEMw8mGdbfRUdKbHhDHP5LcaGuTAB";
+
 /// Orca DEX (legacy variant not shared with pool decoding)
 pub const ORCA_V1_PROGRAM_ID: &str = "9W959DqEETiGZocYWCQPaJ6sBmUzgfxXfqGeTEdp3aQP";
 
@@ -84,8 +97,8 @@ const fn venue(id: &'static str, router: &'static str) -> KnownProgram {
 }
 
 /// Every swap program the analyzer knows, aggregators first. The order is the tie-break
-/// when a transaction holds several known programs.
-const KNOWN_PROGRAMS: &[KnownProgram] = &[
+/// when a transaction holds several known programs, so `unknown` entries stay last.
+pub(crate) const KNOWN_PROGRAMS: &[KnownProgram] = &[
     aggregator(RAPTOR_PROGRAM_ID, "raptor"),
     aggregator(JUPITER_V6_PROGRAM_ID, "jupiter"),
     aggregator(JUPITER_V4_PROGRAM_ID, "jupiter"),
@@ -94,6 +107,7 @@ const KNOWN_PROGRAMS: &[KnownProgram] = &[
     venue(RAYDIUM_CPMM_PROGRAM_ID, "raydium"),
     venue(RAYDIUM_LEGACY_AMM_PROGRAM_ID, "raydium"),
     venue(RAYDIUM_CLMM_PROGRAM_ID, "raydiumclmm"),
+    venue(RAYDIUM_LAUNCHLAB_PROGRAM_ID, "raydium"),
     venue(ORCA_WHIRLPOOL_PROGRAM_ID, "orcawhirlpool"),
     venue(ORCA_V1_PROGRAM_ID, "orca"),
     venue(METEORA_DAMM_PROGRAM_ID, "meteora"),
@@ -111,6 +125,8 @@ const KNOWN_PROGRAMS: &[KnownProgram] = &[
     venue(OPENBOOK_PROGRAM_ID, "openbook"),
     venue(PHOENIX_PROGRAM_ID, "phoenix"),
     venue(MARKET_MAKER_FILL_PROGRAM_ID, "unknown"),
+    venue(BOOP_PROGRAM_ID, "unknown"),
+    venue(PUMP_ROUTING_PROGRAM_ID, "unknown"),
 ];
 
 // =============================================================================

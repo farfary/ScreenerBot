@@ -4,7 +4,9 @@
 //! Pure wallet-watch transaction classification contracts.
 
 use screenerbot::chains::solana::constants::{SOL_MINT, USDC_MINT};
-use screenerbot::chains::solana::transactions::program_ids::JUPITER_V6_PROGRAM_ID;
+use screenerbot::chains::solana::transactions::program_ids::{
+    JUPITER_V6_PROGRAM_ID, PUMP_FUN_LEGACY_PROGRAM_ID,
+};
 use screenerbot::chains::solana::wallets::classify::classify_transaction_activity;
 use screenerbot::transactions::Transaction;
 use screenerbot::wallets::watch::{
@@ -15,6 +17,10 @@ use serde_json::{json, Value};
 const SUBJECT: &str = "11111111111111111111111111111111";
 const PRIMARY_MINT: &str = "PrimaryMint1111111111111111111111111111111";
 const SECONDARY_MINT: &str = "SecondaryMint11111111111111111111111111111";
+/// The pump.fun routing program; it is registered as a venue with the `unknown` router id.
+const PUMP_ROUTING_PROGRAM_ID: &str = "6Vo3245eszAb5wuqEMw8mGdbfRUdKbHhDHP5LcaGuTAB";
+const JITO_TIP_ACCOUNT: &str = "96gYZGLnJYVFmbjzopPSU6QiEV5fGqZNyN9nmNhvrZU5";
+const FEE_LAMPORTS: i64 = 5_000;
 
 fn token_balance_raw(account_index: u32, mint: &str, raw_amount: i128) -> Value {
     json!({
@@ -122,6 +128,38 @@ fn recorded(name: &str) -> Transaction {
     transaction.success = true;
     transaction.raw_transaction_data = Some(raw);
     transaction
+}
+
+/// A top-level System `transfer` instruction, parsed.
+fn system_transfer(source: &str, destination: &str, lamports: i64) -> Value {
+    json!({ "program": "system", "programId": "11111111111111111111111111111111", "parsed": {
+        "type": "transfer", "info": { "source": source, "destination": destination, "lamports": lamports }
+    }})
+}
+
+/// Replace a decoded transaction's top-level instructions.
+fn with_instructions(mut transaction: Transaction, instructions: Vec<Value>) -> Transaction {
+    transaction.raw_transaction_data.as_mut().unwrap()["transaction"]["message"]["instructions"] =
+        Value::Array(instructions);
+    transaction
+}
+
+/// The side, native size, token size and venue of a recorded swap.
+fn recorded_swap(name: &str, subject: &str) -> (String, SwapSide, f64, f64, Option<String>) {
+    let (kind, reason) = classify_transaction_activity(subject, &recorded(name)).unwrap();
+    assert_eq!(reason, None, "{name}");
+    let ActivityKind::Swap {
+        mint,
+        side,
+        native_amount,
+        token_amount,
+        venue,
+        ..
+    } = kind
+    else {
+        panic!("{name}: expected a swap, got {kind:?}");
+    };
+    (mint, side, native_amount, token_amount, venue)
 }
 
 fn assert_close(actual: f64, expected: f64) {
@@ -688,4 +726,234 @@ fn system_funding_into_owned_wsol_account_is_not_an_unrelated_transfer() {
     let (kind, reason) = classify_transaction_activity(SUBJECT, &transaction).unwrap();
     assert!(matches!(kind, ActivityKind::Other));
     assert_eq!(reason, Some("no nonquote token leg"));
+}
+
+#[test]
+fn a_routed_swap_with_any_extra_transfer_is_sized_by_its_swap_leg() {
+    const SWAP: i64 = 250_000_000;
+    let cases: [(&str, Vec<(&str, &str, i64)>); 4] = [
+        ("a tip", vec![(SUBJECT, JITO_TIP_ACCOUNT, 1_000_000)]),
+        (
+            "a transfer larger than the swap",
+            vec![(SUBJECT, "ExternalCounterparty", 5_000_000_000)],
+        ),
+        (
+            "several transfers",
+            vec![
+                (SUBJECT, JITO_TIP_ACCOUNT, 1_000_000),
+                (SUBJECT, "TerminalFeeAccount", 2_500_000),
+                (SUBJECT, "LandingServiceTip", 700_000),
+            ],
+        ),
+        (
+            "an incoming transfer",
+            vec![("ExternalSender", SUBJECT, 300_000_000)],
+        ),
+    ];
+    for (side, swap_leg, token_delta) in [
+        (SwapSide::Buy, -SWAP, 100.0),
+        (SwapSide::Sell, SWAP, -100.0),
+    ] {
+        for (case, transfers) in &cases {
+            let net_transfers: i64 = transfers
+                .iter()
+                .map(|(source, _, lamports)| {
+                    if *source == SUBJECT {
+                        -lamports
+                    } else {
+                        *lamports
+                    }
+                })
+                .sum();
+            let mut instructions: Vec<Value> = transfers
+                .iter()
+                .map(|(source, destination, lamports)| {
+                    system_transfer(source, destination, *lamports)
+                })
+                .collect();
+            instructions.push(json!({ "programId": JUPITER_V6_PROGRAM_ID }));
+            let transaction = with_instructions(
+                decoded(
+                    swap_leg + net_transfers - FEE_LAMPORTS,
+                    &[(PRIMARY_MINT, token_delta)],
+                    None,
+                ),
+                instructions,
+            );
+
+            let (kind, reason) = classify_transaction_activity(SUBJECT, &transaction).unwrap();
+            assert_eq!(reason, None, "{side:?} with {case}");
+            let ActivityKind::Swap {
+                side: found,
+                native_amount,
+                token_amount,
+                ..
+            } = kind
+            else {
+                panic!("{side:?} with {case}: expected a swap, got {kind:?}");
+            };
+            assert_eq!(found, side, "{case}");
+            assert_close(native_amount, 0.25);
+            assert_close(token_amount, 100.0);
+        }
+    }
+}
+
+#[test]
+fn a_native_transfer_without_a_venue_is_never_a_swap() {
+    let transfer = vec![system_transfer(
+        SUBJECT,
+        "ExternalCounterparty",
+        5_000_000_000,
+    )];
+
+    let native_only = with_instructions(
+        decoded(-5_000_000_000 - FEE_LAMPORTS, &[], None),
+        transfer.clone(),
+    );
+    let (kind, _) = classify_transaction_activity(SUBJECT, &native_only).unwrap();
+    assert!(
+        matches!(
+            &kind,
+            ActivityKind::Transfer { mint, direction: TransferDirection::Out, .. } if mint == SOL_MINT
+        ),
+        "{kind:?}"
+    );
+
+    let with_token = with_instructions(
+        decoded(
+            -5_000_000_000 - FEE_LAMPORTS,
+            &[(PRIMARY_MINT, 100.0)],
+            None,
+        ),
+        transfer,
+    );
+    let (kind, _) = classify_transaction_activity(SUBJECT, &with_token).unwrap();
+    assert!(
+        matches!(
+            &kind,
+            ActivityKind::Transfer { mint, direction: TransferDirection::In, .. } if mint == PRIMARY_MINT
+        ),
+        "{kind:?}"
+    );
+}
+
+#[test]
+fn a_venue_transaction_whose_transfers_carry_all_its_native_movement_is_not_a_swap() {
+    let transaction = with_instructions(
+        decoded(-1_000_000 - FEE_LAMPORTS, &[(PRIMARY_MINT, 100.0)], None),
+        vec![
+            system_transfer(SUBJECT, "ClaimFeeAccount", 1_000_000),
+            json!({ "programId": JUPITER_V6_PROGRAM_ID }),
+        ],
+    );
+    let (kind, reason) = classify_transaction_activity(SUBJECT, &transaction).unwrap();
+    assert!(matches!(kind, ActivityKind::Other), "{kind:?}");
+    assert_eq!(reason, Some("no opposing leg for the token"));
+}
+
+#[test]
+fn a_venue_transaction_with_a_transfer_and_no_token_leg_is_other() {
+    let transaction = with_instructions(
+        decoded(-5_000_000 - FEE_LAMPORTS, &[], None),
+        vec![
+            system_transfer(SUBJECT, "ExternalCounterparty", 5_000_000),
+            json!({ "programId": JUPITER_V6_PROGRAM_ID }),
+        ],
+    );
+    let (kind, _) = classify_transaction_activity(SUBJECT, &transaction).unwrap();
+    assert!(matches!(kind, ActivityKind::Other), "{kind:?}");
+}
+
+#[test]
+fn the_pump_routing_program_alone_is_a_venue() {
+    let transaction = decoded(
+        -250_000_000 - FEE_LAMPORTS,
+        &[(PRIMARY_MINT, 100.0)],
+        Some(PUMP_ROUTING_PROGRAM_ID),
+    );
+    let (kind, reason) = classify_transaction_activity(SUBJECT, &transaction).unwrap();
+    assert_eq!(reason, None);
+    assert!(
+        matches!(
+            &kind,
+            ActivityKind::Swap { side: SwapSide::Buy, venue: Some(venue), .. } if venue == "unknown"
+        ),
+        "{kind:?}"
+    );
+}
+
+#[test]
+fn a_named_program_beside_the_pump_routing_program_names_the_swap() {
+    for (named, router) in [
+        (PUMP_FUN_LEGACY_PROGRAM_ID, "pumpfun"),
+        (JUPITER_V6_PROGRAM_ID, "jupiter"),
+    ] {
+        let transaction = with_instructions(
+            decoded(-250_000_000 - FEE_LAMPORTS, &[(PRIMARY_MINT, 100.0)], None),
+            vec![
+                json!({ "programId": PUMP_ROUTING_PROGRAM_ID }),
+                json!({ "programId": named }),
+            ],
+        );
+        let (kind, _) = classify_transaction_activity(SUBJECT, &transaction).unwrap();
+        assert!(
+            matches!(&kind, ActivityKind::Swap { venue: Some(venue), .. } if venue == router),
+            "{router}: {kind:?}"
+        );
+    }
+}
+
+#[test]
+fn recorded_pump_routing_sell_excludes_its_tips() {
+    let (mint, side, native_amount, token_amount, venue) = recorded_swap(
+        "copy_pump_routing_tip_sell",
+        "BAU2bK9GrKskRyG8sAZBJRdaXBQVRLdmjjWQHRsw4Srq",
+    );
+    assert_eq!(mint, "GzmJJ8tcBKFfZKJMb4i7gNRdvj36QrJGCDPcm2LoheAw");
+    assert_eq!(side, SwapSide::Sell);
+    assert_close(native_amount, 0.022_916_02);
+    assert_close(token_amount, 64_337.627_219);
+    assert_eq!(venue.as_deref(), Some("pumpfun"));
+}
+
+#[test]
+fn recorded_launchpad_trades_are_swaps() {
+    const LAUNCHLAB_MINT: &str = "DAzCXa6oU7wMrTgcznXvvRoayXeskByVvPHn2fSMN4dq";
+    for (name, subject, traded_mint, side, native, tokens, router) in [
+        (
+            "copy_launchlab_direct_sell",
+            "FZU56d9iPqohXM5XBrYYBZLi2UoUnZT4V5Qf2631tEzb",
+            LAUNCHLAB_MINT,
+            SwapSide::Sell,
+            1.192_259_077,
+            9_018_535.510_774,
+            "raydium",
+        ),
+        (
+            "copy_launchlab_terminal_buy",
+            "EFJKTdAnni9eU9UULrh5Emn8evfMS8hyejUqcu8XtJ6B",
+            LAUNCHLAB_MINT,
+            SwapSide::Buy,
+            1.0,
+            7_327_962.636_537,
+            "raydium",
+        ),
+        (
+            "copy_boop_direct_sell",
+            "5pkC9zzjEb3gZ7nNxrUbftyKxjxtfjiqCP6Dj9PxREJs",
+            "PpjrLTNa9LUTnF6sZGMkuTCCnFVWXkmHPaA8dFxboop",
+            SwapSide::Sell,
+            0.079_927_656,
+            2_677_962.248_589_731,
+            "unknown",
+        ),
+    ] {
+        let (mint, found, native_amount, token_amount, venue) = recorded_swap(name, subject);
+        assert_eq!(mint, traded_mint, "{name}");
+        assert_eq!(found, side, "{name}");
+        assert_close(native_amount, native);
+        assert_close(token_amount, tokens);
+        assert_eq!(venue.as_deref(), Some(router), "{name}");
+    }
 }

@@ -17,8 +17,10 @@ pub const NATIVE_SOL_SENTINEL: &str = "native";
 /// Bumping this re-runs `TransactionDatabase::backfill_subject_deltas` for every
 /// wallet on next boot (its once-only guard compares against this value).
 /// v2 re-extracts every stored transaction so rows written before the `block_time`
-/// fallback existed regain their timestamps.
-pub const SUBJECT_DELTAS_VERSION: u32 = 2;
+/// fallback existed regain their timestamps. v3 re-extracts them so trades on venues
+/// added to the program registry (launchpads, a routing program) become trades instead
+/// of transfers.
+pub const SUBJECT_DELTAS_VERSION: u32 = 3;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DeltaKind {

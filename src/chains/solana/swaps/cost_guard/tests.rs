@@ -31,7 +31,9 @@ use crate::chains::solana::spl_associated_token_account::{
 use crate::chains::solana::spl_token;
 use crate::chains::solana::swaps::presend::scripted_tests::ScriptedNode;
 use crate::chains::solana::swaps::revenue::FEE_WALLET;
-use crate::chains::solana::transactions::program_ids::RAPTOR_PROGRAM_ID;
+use crate::chains::solana::transactions::program_ids::{
+    is_jupiter_program_id, KNOWN_PROGRAMS, RAPTOR_PROGRAM_ID,
+};
 
 const WALLET: &str = "6uodGCMLfDLfeXkyW71WpUDK1BEG19bU2EV51x2dcGMv";
 const VENUE: &str = "9H6tua7jkLhdm3w8BvgpTn5LZNU7g4ZynDmCiNN3q6Rp";
@@ -1618,4 +1620,28 @@ async fn an_unanswered_owner_lookup_never_turns_a_sale_into_a_conservation_refus
     )
     .await;
     assert_eq!(verdict, Ok(()));
+}
+
+/// The guard admits a top-level program in a third-party-built swap only when the
+/// registry names it with the quote's router id. A registry entry that carried a quote
+/// router id (`jupiter`, `raptor`, `direct`) without being that router's own program would
+/// widen what a signed swap may call.
+#[test]
+fn no_registered_program_widens_a_quote_router() {
+    for known in KNOWN_PROGRAMS {
+        match known.router {
+            "jupiter" => assert!(
+                is_jupiter_program_id(known.id),
+                "{} is labelled jupiter but is not a Jupiter program",
+                known.id
+            ),
+            "raptor" => assert_eq!(
+                known.id, RAPTOR_PROGRAM_ID,
+                "{} is labelled raptor but is not the Raptor program",
+                known.id
+            ),
+            "direct" => panic!("{} carries the direct router id", known.id),
+            _ => {}
+        }
+    }
 }

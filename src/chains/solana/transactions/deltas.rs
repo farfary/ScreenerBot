@@ -576,4 +576,27 @@ mod tests {
 
         assert!(deltas.iter().all(|d| d.block_time == Some(1_700_000_000)));
     }
+
+    /// A direct Raydium LaunchLab sale calls no pool or aggregator program; the launchpad
+    /// is in the registry, so the token leaves the wallet as a trade, not a transfer.
+    #[test]
+    fn a_launchpad_trade_is_a_trade_delta() {
+        const WALLET: &str = "FZU56d9iPqohXM5XBrYYBZLi2UoUnZT4V5Qf2631tEzb";
+        const MINT: &str = "DAzCXa6oU7wMrTgcznXvvRoayXeskByVvPHn2fSMN4dq";
+        let raw: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../../tests/fixtures/swaps/copy_launchlab_direct_sell.json"
+        ))
+        .expect("the recorded transaction parses");
+        let tx = make_transaction(raw, true);
+
+        let deltas = extract_subject_deltas(WALLET, &tx);
+
+        let token = deltas
+            .iter()
+            .find(|delta| delta.mint == MINT)
+            .expect("the sold token has a delta");
+        assert!(token.delta_raw < 0);
+        assert_eq!(token.kind, DeltaKind::Trade);
+        assert_eq!(token.venue.as_deref(), Some("raydium"));
+    }
 }

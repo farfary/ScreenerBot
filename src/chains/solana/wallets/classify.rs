@@ -528,12 +528,11 @@ fn classify_swap(
     )
 }
 
-/// No DEX program is present. A single clear leg (one token delta, or a SOL delta
-/// well above fee noise with no token delta at all) is a plain transfer; anything
-/// else is left as `Other`. This is deliberately conservative: "a coincidental SOL
-/// fee delta plus a token delta, no DEX program in sight" is exactly the
-/// airdrop/CEX-deposit shape that must never come out as a sell, so it is not forced
-/// into a `Transfer` either -- it is simply not confidently anything.
+/// No DEX program is present, so the transaction is never a swap. Exactly one token
+/// delta is a transfer of that token, whatever the SOL delta beside it: one token leg
+/// against an opposite SOL movement with no venue is the airdrop or CEX-deposit shape,
+/// and reading it as a trade would copy a non-swap. With no token delta, a SOL delta
+/// above fee noise is a SOL transfer. Anything else is `Other`.
 fn classify_transfer(
     sol_delta_lamports: i128,
     token_deltas: &[(String, i128)],
