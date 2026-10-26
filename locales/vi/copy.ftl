@@ -111,7 +111,7 @@ copy-exit-target-sell = Ví đã bán
 copy-exit-stop-loss = Stop loss
 copy-exit-trailing-stop = Trailing stop
 copy-exit-take-profit = Take profit
-copy-exit-time-override = Quy tắc thời gian
+copy-exit-time-override = Thoát theo thời gian
 copy-exit-manual = Đóng thủ công
 
 copy-request-failed = Yêu cầu thất bại

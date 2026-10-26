@@ -116,7 +116,7 @@ copy-exit-target-sell = वॉलेट ने बेचा
 copy-exit-stop-loss = स्टॉप लॉस
 copy-exit-trailing-stop = ट्रेलिंग स्टॉप
 copy-exit-take-profit = टेक प्रॉफ़िट
-copy-exit-time-override = टाइम नियम
+copy-exit-time-override = समय एग्ज़िट
 copy-exit-manual = हाथ से बंद किया
 
 copy-request-failed = अनुरोध विफल

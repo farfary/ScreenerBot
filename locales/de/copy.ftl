@@ -116,7 +116,7 @@ copy-exit-target-sell = Wallet hat verkauft
 copy-exit-stop-loss = Stop-Loss
 copy-exit-trailing-stop = Trailing-Stop
 copy-exit-take-profit = Take Profit
-copy-exit-time-override = Zeitregel
+copy-exit-time-override = Zeitausstieg
 copy-exit-manual = Manuell geschlossen
 
 ## Shared wording

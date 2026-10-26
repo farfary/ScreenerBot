@@ -113,7 +113,7 @@ copy-exit-target-sell = 钱包已卖出
 copy-exit-stop-loss = 止损
 copy-exit-trailing-stop = 追踪止损
 copy-exit-take-profit = 止盈
-copy-exit-time-override = 时间规则
+copy-exit-time-override = 时间出场
 copy-exit-manual = 手动平仓
 
 ## Shared wording

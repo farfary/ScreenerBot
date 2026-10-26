@@ -117,7 +117,7 @@ copy-exit-target-sell = Carteira vendeu
 copy-exit-stop-loss = Stop loss
 copy-exit-trailing-stop = Trailing stop
 copy-exit-take-profit = Take profit
-copy-exit-time-override = Regra de tempo
+copy-exit-time-override = Saída por tempo
 copy-exit-manual = Fechada manualmente
 
 copy-request-failed = Falha na requisição

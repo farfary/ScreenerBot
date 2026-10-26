@@ -114,7 +114,7 @@ copy-exit-target-sell = Cüzdan sattı
 copy-exit-stop-loss = Zarar durdur
 copy-exit-trailing-stop = İz süren stop
 copy-exit-take-profit = Kâr al
-copy-exit-time-override = Süre kuralı
+copy-exit-time-override = Zaman çıkışı
 copy-exit-manual = Elle kapatıldı
 
 copy-request-failed = İstek başarısız

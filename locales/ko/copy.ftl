@@ -115,7 +115,7 @@ copy-exit-target-sell = 지갑 매도
 copy-exit-stop-loss = 손절
 copy-exit-trailing-stop = 트레일링 스톱
 copy-exit-take-profit = 익절
-copy-exit-time-override = 시간 규칙
+copy-exit-time-override = 시간 청산
 copy-exit-manual = 수동 종료
 
 ## Shared wording

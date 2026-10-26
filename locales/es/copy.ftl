@@ -119,7 +119,7 @@ copy-exit-target-sell = Vendió la billetera
 copy-exit-stop-loss = Stop loss
 copy-exit-trailing-stop = Trailing stop
 copy-exit-take-profit = Take profit
-copy-exit-time-override = Regla de tiempo
+copy-exit-time-override = Salida por tiempo
 copy-exit-manual = Cerrada a mano
 
 ## Shared wording

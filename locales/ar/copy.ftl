@@ -126,7 +126,7 @@ copy-exit-target-sell = باعت المحفظة
 copy-exit-stop-loss = وقف الخسارة
 copy-exit-trailing-stop = وقف متحرك
 copy-exit-take-profit = جني الأرباح
-copy-exit-time-override = قاعدة الوقت
+copy-exit-time-override = الخروج الزمني
 copy-exit-manual = أُغلق يدويًا
 
 copy-request-failed = فشل الطلب

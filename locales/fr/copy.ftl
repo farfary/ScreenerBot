@@ -123,7 +123,7 @@ copy-exit-target-sell = Vendu par le portefeuille
 copy-exit-stop-loss = Stop loss
 copy-exit-trailing-stop = Trailing stop
 copy-exit-take-profit = Take profit
-copy-exit-time-override = Règle de durée
+copy-exit-time-override = Sortie temporelle
 copy-exit-manual = Clôturé manuellement
 
 ## Shared wording

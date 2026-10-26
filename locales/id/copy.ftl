@@ -113,7 +113,7 @@ copy-exit-target-sell = Dompet menjual
 copy-exit-stop-loss = Stop loss
 copy-exit-trailing-stop = Trailing stop
 copy-exit-take-profit = Take profit
-copy-exit-time-override = Aturan waktu
+copy-exit-time-override = Exit Waktu
 copy-exit-manual = Ditutup manual
 
 ## Shared wording

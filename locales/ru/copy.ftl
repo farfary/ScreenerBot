@@ -122,7 +122,7 @@ copy-exit-target-sell = Продал кошелёк
 copy-exit-stop-loss = Стоп-лосс
 copy-exit-trailing-stop = Трейлинг-стоп
 copy-exit-take-profit = Тейк-профит
-copy-exit-time-override = Правило по времени
+copy-exit-time-override = Выход по времени
 copy-exit-manual = Закрыто вручную
 
 ## Shared wording

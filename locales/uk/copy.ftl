@@ -116,7 +116,7 @@ copy-exit-target-sell = Гаманець продав
 copy-exit-stop-loss = Стоп-лос
 copy-exit-trailing-stop = Трейлінг-стоп
 copy-exit-take-profit = Тейк-профіт
-copy-exit-time-override = Правило часу
+copy-exit-time-override = Вихід за часом
 copy-exit-manual = Закрито вручну
 
 ## Shared wording

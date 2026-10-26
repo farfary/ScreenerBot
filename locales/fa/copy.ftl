@@ -116,7 +116,7 @@ copy-exit-target-sell = کیف پول فروخت
 copy-exit-stop-loss = حد ضرر
 copy-exit-trailing-stop = حد ضرر متحرک
 copy-exit-take-profit = حد سود
-copy-exit-time-override = قانون زمانی
+copy-exit-time-override = خروج زمانی
 copy-exit-manual = بسته‌شده دستی
 
 ## Shared wording

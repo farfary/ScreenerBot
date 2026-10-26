@@ -113,7 +113,7 @@ copy-exit-target-sell = ウォレットが売却
 copy-exit-stop-loss = 損切り
 copy-exit-trailing-stop = トレーリングストップ
 copy-exit-take-profit = 利確
-copy-exit-time-override = 時間ルール
+copy-exit-time-override = 時間エグジット
 copy-exit-manual = 手動でクローズ
 
 ## Shared wording
