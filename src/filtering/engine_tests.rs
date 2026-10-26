@@ -1,7 +1,7 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Tests for the snapshot build: the stamp, the rejection start, the pass time, the tokens held back only by a missing RugCheck report, and that the snapshot carries exactly the rejection state the token store holds after the build.
+//! Tests for the snapshot build: the stamp, the rejection start, the pass time, the tokens held back only by a missing RugCheck report (never queued for one while blacklisted by token, pool or account), and that the snapshot carries exactly the rejection state the token store holds after the build.
 
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -266,27 +266,92 @@ async fn a_token_without_a_report_awaits_it_and_is_neither_passed_nor_rejected()
     assert_eq!(stored(&directory, NEW_TOKEN).0, None, "no rejection row");
 }
 
-#[tokio::test]
-async fn a_blacklisted_token_without_a_report_is_not_queued_for_one() {
+/// Where a token's blacklisting comes from: its own entry, a pool of it that keeps
+/// failing, or an account of it that failed.
+#[derive(Debug, Clone, Copy)]
+enum BlacklistSource {
+    Token,
+    Pool,
+    Account,
+}
+
+/// Blacklist `mint` through `source`.
+async fn blacklist(directory: &tempfile::TempDir, mint: &str, source: BlacklistSource) {
+    match source {
+        BlacklistSource::Token => {
+            raw(directory)
+                .execute(
+                    "INSERT INTO blacklist (chain_id, mint, reason, source, added_at)
+                     VALUES ('solana', ?1, 'pool', 'test', ?2)",
+                    params![mint, chrono::Utc::now().timestamp()],
+                )
+                .expect("insert blacklist row");
+        }
+        BlacklistSource::Pool => {
+            crate::pools::db::initialize_database(CHAIN)
+                .await
+                .expect("open the pools store");
+            let threshold = crate::pools::types::PoolBlacklistPolicy::from_config().threshold;
+            crate::pools::db::add_pool_to_blacklist(
+                CHAIN,
+                "FailingPool11111111111111111111111111111111",
+                "decode failure",
+                Some(mint),
+                None,
+                threshold,
+            )
+            .await
+            .expect("blacklist the pool");
+        }
+        BlacklistSource::Account => {
+            crate::pools::db::initialize_database(CHAIN)
+                .await
+                .expect("open the pools store");
+            crate::pools::db::add_account_to_blacklist(
+                CHAIN,
+                "FailingAccount111111111111111111111111111111",
+                "decode failure",
+                Some("test"),
+                None,
+                Some(mint),
+            )
+            .await
+            .expect("blacklist the account");
+        }
+    }
+}
+
+/// A token blacklisted through `source` and waiting for its report is counted but never
+/// takes one of the direct report fetches.
+async fn assert_a_blacklisted_token_is_not_queued(source: BlacklistSource) {
     let directory = setup();
     seed_listing(&directory, NEW_TOKEN, TEN_DAYS);
     seed_listing(&directory, OLD_TOKEN, 2 * TEN_DAYS);
-    raw(&directory)
-        .execute(
-            "INSERT INTO blacklist (chain_id, mint, reason, source, added_at)
-             VALUES ('solana', ?1, 'pool', 'test', ?2)",
-            params![OLD_TOKEN, chrono::Utc::now().timestamp()],
-        )
-        .expect("insert blacklist row");
+    blacklist(&directory, OLD_TOKEN, source).await;
 
     let snapshot = build(report_required_config(), None).await;
 
     assert_eq!(
         snapshot.awaiting_rugcheck_report,
         vec![NEW_TOKEN.to_owned()],
-        "a blacklisted token never takes one of the direct report fetches"
+        "a token blacklisted by {source:?} never takes one of the direct report fetches"
     );
     assert!(snapshot.filtered_mints.is_empty());
+}
+
+#[tokio::test]
+async fn a_blacklisted_token_without_a_report_is_not_queued_for_one() {
+    assert_a_blacklisted_token_is_not_queued(BlacklistSource::Token).await;
+}
+
+#[tokio::test]
+async fn a_token_of_a_blacklisted_pool_is_not_queued_for_a_report() {
+    assert_a_blacklisted_token_is_not_queued(BlacklistSource::Pool).await;
+}
+
+#[tokio::test]
+async fn a_token_of_a_blacklisted_account_is_not_queued_for_a_report() {
+    assert_a_blacklisted_token_is_not_queued(BlacklistSource::Account).await;
 }
 
 #[tokio::test]
