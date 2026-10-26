@@ -8,9 +8,10 @@
  * A headless server has no browser to open, and its browser sign-in returns through the
  * loopback callback on the server's own port.
  *
- * - Served on another port (a tunnel that remaps it), the panel offers the code flow
- *   and no browser option, whose callback could never reach the server.
- * - Served on the server's port, the browser option stays; when the server hands the
+ * - Served on another port (a tunnel that remaps it), or opened by a network address
+ *   from another machine on the server's own port, the panel offers the code flow and
+ *   no browser option, whose callback could never reach the server.
+ * - Served on a loopback host and the server's port, the browser option stays; when the server hands the
  *   sign-in page back, the viewer's browser opens it and the panel waits for the
  *   callback. A page the server opened itself is not opened twice.
  * - Sign-up is a website page: handed back, the viewer's browser opens it.
@@ -50,8 +51,10 @@ const envelope = (data) => ({ body: JSON.stringify({ success: true, data }) });
 /**
  * Mounts the account panel on Home. `samePort` serves the page on the server's own
  * port; `opened` is what the server reports for the pages it was asked to open.
+ * `hostname` opens the page by that name instead of 127.0.0.1, on the same port; its
+ * requests are answered by the test server.
  */
-async function openPanel({ samePort, opened }) {
+async function openPanel({ samePort, opened, hostname = null }) {
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   const fixtures = createApiHandler([home, shell], "populated");
   const host = await serveDashboard(context, {
@@ -68,9 +71,22 @@ async function openPanel({ samePort, opened }) {
       return fixtures.onApi(request);
     },
   });
+  let origin = host.origin;
+  if (hostname) {
+    const served = new URL(host.origin);
+    origin = `http://${hostname}:${served.port}`;
+    await context.route(
+      (url) => url.origin === origin,
+      async (route) => {
+        const url = new URL(route.request().url());
+        url.host = served.host;
+        route.fulfill({ response: await route.fetch({ url: url.href }) });
+      }
+    );
+  }
   const page = await context.newPage();
   page.setDefaultTimeout(15000);
-  await page.goto(`${host.origin}/home`);
+  await page.goto(`${origin}/home`);
   await page.waitForSelector(PAGE_READY);
   await page.evaluate((same) => {
     // The test server listens on a free port; the shell names the default one.
@@ -110,6 +126,29 @@ test("behind another port the panel offers the code flow instead of the browser"
     await panel.locator('[data-action="signup"]').click();
     await panel.page().waitForFunction(() => window.__openedPages.length > 0);
     assert.deepEqual(await openedPages(), [SIGN_UP_URL]);
+  } finally {
+    await close();
+  }
+});
+
+test("on the server's port opened from another machine the panel offers the code flow", async () => {
+  const { panel, close } = await openPanel({
+    samePort: true,
+    opened: false,
+    hostname: "192.168.1.20",
+  });
+  try {
+    assert.equal(await panel.locator('[data-action="browser"]').count(), 0);
+    assert.equal(await panel.locator('[data-action="device"]').count(), 1);
+  } finally {
+    await close();
+  }
+});
+
+test("on localhost and the server's port the browser option is offered", async () => {
+  const { panel, close } = await openPanel({ samePort: true, opened: false, hostname: "localhost" });
+  try {
+    assert.equal(await panel.locator('[data-action="browser"]').count(), 1);
   } finally {
     await close();
   }

@@ -38,12 +38,19 @@
     return body?.data ?? body;
   }
 
+  // `location.hostname` keeps the brackets of an IPv6 literal.
+  const LOOPBACK_HOSTNAMES = new Set(["127.0.0.1", "localhost", "[::1]"]);
+
   // Browser sign-in returns through the loopback callback on the server's own port,
-  // which reaches this server only when the page is served on that port: the desktop
-  // app, a browser on the same machine, or a tunnel that keeps the port. Behind any
-  // other port the code flow is the way to sign in.
+  // which reaches this server only when the viewer's browser runs on a machine whose
+  // loopback port leads to it: the desktop app, a browser on the same machine, or a
+  // tunnel that keeps the port. A page opened by a network address (another machine
+  // on the LAN) or behind another port offers the code flow instead.
   function browserCallbackReachable() {
-    return window.location.port === String(window.__SCREENERBOT_PORT ?? "");
+    return (
+      LOOPBACK_HOSTNAMES.has(window.location.hostname) &&
+      window.location.port === String(window.__SCREENERBOT_PORT ?? "")
+    );
   }
 
   // The server hands a page back when it has no browser of its own (a headless

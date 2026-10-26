@@ -85,7 +85,10 @@ fn open_or_hand_over(
         Err(error) => {
             logger::info(
                 LogTag::System,
-                &format!("No browser could be opened on this machine ({error}); the dashboard opens {url}"),
+                // The URL is not logged: a sign-in URL's query carries the authorization state.
+                &format!(
+                    "No browser could be opened on this machine ({error}); the URL was handed to the dashboard"
+                ),
             );
             BrowserSignInStarted {
                 opened: false,
