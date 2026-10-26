@@ -3,6 +3,8 @@
 
 //! Shared utility functions — formatting, parsing, and conversions.
 
+pub mod atomic_file;
+
 use crate::Error;
 use std::time::Duration;
 use tokio::sync::Notify;
