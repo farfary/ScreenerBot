@@ -1,12 +1,11 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Database schema definitions and initialization.
+//! The ATA cleanup store's schema: the cleanup tables and the step that retires the tables of the removed tools area.
 
-use chrono::Utc;
 use r2d2::PooledConnection;
 use r2d2_sqlite::SqliteConnectionManager;
-use rusqlite::{params, OptionalExtension, Transaction};
+use rusqlite::Transaction;
 
 use crate::database;
 use crate::database::schema::{ddl, SchemaContext, StoreSchema};
@@ -14,22 +13,8 @@ use crate::errors::DatabaseError;
 use crate::wallets::Error;
 
 // =============================================================================
-// CONSTANTS
-// =============================================================================
-
-/// Schema version for migrations
-const TOOLS_SCHEMA_VERSION: u32 = 1;
-
-// =============================================================================
 // SCHEMA DEFINITIONS
 // =============================================================================
-
-const SCHEMA_VERSION_TABLE: &str = r#"
-CREATE TABLE IF NOT EXISTS schema_version (
-    version INTEGER PRIMARY KEY,
-    applied_at TEXT NOT NULL
-);
-"#;
 
 /// ATA cleanup sessions table
 const SCHEMA_ATA_SESSIONS: &str = r#"
@@ -116,160 +101,25 @@ CREATE INDEX IF NOT EXISTS idx_ata_failed_permanent ON ata_failed_cache(is_perma
 CREATE INDEX IF NOT EXISTS idx_ata_failed_next_retry ON ata_failed_cache(next_retry_at);
 "#;
 
-/// Multi-wallet sessions table
-const SCHEMA_MW_SESSIONS: &str = r#"
-CREATE TABLE IF NOT EXISTS mw_sessions (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    session_id TEXT NOT NULL UNIQUE,
-    session_type TEXT NOT NULL,
-    token_mint TEXT,
-    
-    -- Configuration
-    total_wallets INTEGER NOT NULL DEFAULT 0,
-    target_amount_sol REAL,
-    min_amount_sol REAL,
-    max_amount_sol REAL,
-    delay_ms INTEGER NOT NULL DEFAULT 1000,
-    delay_max_ms INTEGER,
-    concurrency INTEGER NOT NULL DEFAULT 1,
-    sol_buffer REAL NOT NULL DEFAULT 0.015,
-    
-    -- Status tracking
-    status TEXT NOT NULL DEFAULT 'pending',
-    started_at TEXT,
-    ended_at TEXT,
-    error_message TEXT,
-    
-    -- Metrics
-    wallets_funded INTEGER NOT NULL DEFAULT 0,
-    successful_ops INTEGER NOT NULL DEFAULT 0,
-    failed_ops INTEGER NOT NULL DEFAULT 0,
-    total_sol_spent REAL NOT NULL DEFAULT 0,
-    total_sol_recovered REAL NOT NULL DEFAULT 0,
-    
-    -- Timestamps
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-
-    -- Chain scope
-    chain_id TEXT NOT NULL DEFAULT 'solana'
-);
-
-CREATE INDEX IF NOT EXISTS idx_mw_sessions_session_id ON mw_sessions(session_id);
-CREATE INDEX IF NOT EXISTS idx_mw_sessions_type ON mw_sessions(session_type);
-CREATE INDEX IF NOT EXISTS idx_mw_sessions_status ON mw_sessions(status);
-"#;
-
-/// Multi-wallet individual operations table
-const SCHEMA_MW_WALLET_OPS: &str = r#"
-CREATE TABLE IF NOT EXISTS mw_wallet_ops (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    session_id TEXT NOT NULL,
-    wallet_id INTEGER NOT NULL,
-    wallet_address TEXT NOT NULL,
-    op_index INTEGER NOT NULL,
-    
-    -- Operation details
-    op_type TEXT NOT NULL,
-    amount_sol REAL,
-    token_amount REAL,
-    signature TEXT,
-    
-    -- Status
-    status TEXT NOT NULL DEFAULT 'pending',
-    error_message TEXT,
-    executed_at TEXT,
-    
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    
-    FOREIGN KEY (session_id) REFERENCES mw_sessions(session_id) ON DELETE CASCADE
-);
-
-CREATE INDEX IF NOT EXISTS idx_mw_wallet_ops_session ON mw_wallet_ops(session_id);
-CREATE INDEX IF NOT EXISTS idx_mw_wallet_ops_wallet ON mw_wallet_ops(wallet_id);
-"#;
-
-/// Tool favorites table
-const SCHEMA_TOOL_FAVORITES: &str = r#"
-CREATE TABLE IF NOT EXISTS tool_favorites (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    
-    -- Token identification
-    mint TEXT NOT NULL,
-    symbol TEXT,
-    name TEXT,
-    logo_url TEXT,
-    
-    -- Tool context
-    tool_type TEXT NOT NULL,
-    
-    -- Custom configuration (JSON)
-    config_json TEXT,
-    
-    -- User metadata
-    label TEXT,
-    notes TEXT,
-    
-    -- Usage tracking
-    use_count INTEGER NOT NULL DEFAULT 0,
-    last_used_at TEXT,
-    
-    -- Timestamps
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-    
-    UNIQUE(mint, tool_type)
-);
-
-CREATE INDEX IF NOT EXISTS idx_tool_favorites_mint ON tool_favorites(mint);
-CREATE INDEX IF NOT EXISTS idx_tool_favorites_tool_type ON tool_favorites(tool_type);
-CREATE INDEX IF NOT EXISTS idx_tool_favorites_use_count ON tool_favorites(use_count DESC);
-"#;
-
-/// Watched tokens table for copy trading / sniper functionality
-const SCHEMA_WATCHED_TOKENS: &str = r#"
-CREATE TABLE IF NOT EXISTS watched_tokens (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    mint TEXT NOT NULL,
-    symbol TEXT,
-    pool_address TEXT NOT NULL,
-    pool_source TEXT NOT NULL,
-    pool_dex TEXT,
-    pool_pair TEXT,
-    pool_liquidity REAL,
-    
-    -- Watch configuration
-    watch_type TEXT NOT NULL,
-    trigger_amount_sol REAL,
-    action_amount_sol REAL,
-    slippage_bps INTEGER DEFAULT 500,
-    is_active INTEGER NOT NULL DEFAULT 1,
-    
-    -- Tracking
-    last_checked_at TEXT,
-    last_trade_signature TEXT,
-    trades_detected INTEGER DEFAULT 0,
-    actions_triggered INTEGER DEFAULT 0,
-    
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-
-    -- Chain scope
-    chain_id TEXT NOT NULL DEFAULT 'solana'
-);
-
-CREATE INDEX IF NOT EXISTS idx_watched_tokens_mint ON watched_tokens(mint);
-CREATE INDEX IF NOT EXISTS idx_watched_tokens_active ON watched_tokens(is_active);
-"#;
-
 // =============================================================================
 // STORE
 // =============================================================================
 
-/// The ATA cleanup store's schema.
+/// Drops the tables of the removed tools area. Children come before the parent
+/// their foreign key names.
+const DROP_RETIRED_TABLES: &str = r#"
+DROP TABLE IF EXISTS mw_wallet_ops;
+DROP TABLE IF EXISTS mw_sessions;
+DROP TABLE IF EXISTS tool_favorites;
+DROP TABLE IF EXISTS watched_tokens;
+DROP TABLE IF EXISTS schema_version;
+"#;
+
+/// The ATA cleanup store's schema. Version 2 drops the retired tables, which no
+/// version 1 core can work without, so it is the oldest version that reads it.
 pub(crate) const SCHEMA: StoreSchema = StoreSchema {
-    version: 1,
-    min_reader_version: 1,
+    version: 2,
+    min_reader_version: 2,
     baseline: 1,
     renames: None,
     step: create_schema,
@@ -277,46 +127,17 @@ pub(crate) const SCHEMA: StoreSchema = StoreSchema {
 };
 
 fn create_schema(tx: &Transaction<'_>, _: &SchemaContext) -> Result<(), DatabaseError> {
-    ddl::run_batch(
-        tx,
-        "create tools schema_version table",
-        SCHEMA_VERSION_TABLE,
-    )?;
-    let current_version: Option<u32> = tx
-        .query_row(
-            "SELECT version FROM schema_version ORDER BY version DESC LIMIT 1",
-            [],
-            |row| row.get(0),
-        )
-        .optional()
-        .map_err(|e| DatabaseError::classify_sqlite_failure("read tools schema version", e))?;
-
-    if current_version.unwrap_or(0) < TOOLS_SCHEMA_VERSION {
-        for (operation, sql) in [
-            ("create ata_sessions table", SCHEMA_ATA_SESSIONS),
-            ("create ata_closures table", SCHEMA_ATA_CLOSURES),
-            ("create ata_failed_cache table", SCHEMA_ATA_FAILED_CACHE),
-            ("create tool_favorites table", SCHEMA_TOOL_FAVORITES),
-            ("create mw_sessions table", SCHEMA_MW_SESSIONS),
-            ("create mw_wallet_ops table", SCHEMA_MW_WALLET_OPS),
-            ("create watched_tokens table", SCHEMA_WATCHED_TOKENS),
-        ] {
-            ddl::run_batch(tx, operation, sql)?;
-        }
-        tx.execute(
-            "INSERT INTO schema_version (version, applied_at) VALUES (?1, ?2)",
-            params![TOOLS_SCHEMA_VERSION, Utc::now().to_rfc3339()],
-        )
-        .map_err(|e| DatabaseError::classify_sqlite_failure("record tools schema version", e))?;
+    for (operation, sql) in [
+        ("create ata_sessions table", SCHEMA_ATA_SESSIONS),
+        ("create ata_closures table", SCHEMA_ATA_CLOSURES),
+        ("create ata_failed_cache table", SCHEMA_ATA_FAILED_CACHE),
+    ] {
+        ddl::run_batch(tx, operation, sql)?;
     }
-
-    // Chain scope: `mw_sessions` and `watched_tokens` gain a chain column, checked
-    // whatever the version stamp says: a store from v0.2.13 already records version 1.
-    // Historical rows are Solana's by construction, so the migration backfills 'solana'.
-    for table in ["mw_sessions", "watched_tokens"] {
-        ddl::add_column(tx, table, "chain_id", "TEXT NOT NULL DEFAULT 'solana'")?;
-    }
-    Ok(())
+    // A store written by an older core holds the retired tables, and a core from
+    // before the store ledger re-creates them whenever it opens the store, so every
+    // open checks for them rather than only the upgrade to version 2.
+    ddl::run_batch(tx, "drop retired tools tables", DROP_RETIRED_TABLES)
 }
 
 /// Get a connection from the ATA cleanup store's pool.

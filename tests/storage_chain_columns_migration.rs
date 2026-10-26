@@ -2,9 +2,10 @@
 // SPDX-License-Identifier: BUSL-1.1
 
 //! The chain-scope migration for the shared-file stores: `events`, the five
-//! RPC-stats tables, `strategy_performance`, tools `watched_tokens` and
-//! `mw_sessions`, `actions`, and `ai_decision_history` gain
-//! `chain_id TEXT NOT NULL DEFAULT 'solana'`.
+//! RPC-stats tables, `strategy_performance`, `actions`, and
+//! `ai_decision_history` gain `chain_id TEXT NOT NULL DEFAULT 'solana'`. The
+//! v0.2.13 `tools.db` fixture still boots with them: its chain-scoped tables
+//! were retired, and the store must open cleanly without them.
 //!
 //! Each database is seeded from DDL frozen at release tag `v0.2.13`
 //! (`tests/fixtures/v0.2.13-*.sql`) with one sentinel row per table, then
@@ -16,9 +17,9 @@
 //! agree column-for-column (an `ADD COLUMN` can only append, so `chain_id`
 //! must be last in both shapes).
 //!
-//! The `strategies` and `tools` fixtures deliberately carry `schema_version`
-//! = 1 — the state a real v0.2.13 database holds — which is exactly why the
-//! chain-column migration gates on the live schema and never on that stamp.
+//! The `strategies` fixture deliberately carries `schema_version` = 1 — the
+//! state a real v0.2.13 database holds — which is exactly why the chain-column
+//! migration gates on the live schema and never on that stamp.
 
 use crate::common;
 
@@ -38,16 +39,14 @@ const CHAIN_SCOPED_TABLES: &[(&str, &str)] = &[
     ("rpc_stats.db", "minute_buckets"),
     ("rpc_stats.db", "provider_health"),
     ("strategies.db", "strategy_performance"),
-    ("tools.db", "watched_tokens"),
-    ("tools.db", "mw_sessions"),
     ("actions.db", "actions"),
     ("ai.db", "ai_decision_history"),
 ];
 
 /// The audit: every table in these databases that is NOT chain-scoped. The
-/// strategy/tool definition and schema-version tables are chain-neutral by
-/// design; the ATA tables belong to Solana-only tools (they move under
-/// `chains/solana` in a later unit); `action_steps` rows inherit their
+/// strategy definition and schema-version tables are chain-neutral by
+/// design; the ATA tables belong to the Solana-only empty-account cleanup;
+/// `action_steps` rows inherit their
 /// action's chain; `ai_instructions` are user-authored configuration;
 /// `store_schema` is the per-file schema ledger every store carries.
 const TABLES_WITHOUT_CHAIN_SCOPE: &[(&str, &[&str])] = &[
@@ -70,10 +69,7 @@ const TABLES_WITHOUT_CHAIN_SCOPE: &[(&str, &[&str])] = &[
             "ata_closures",
             "ata_failed_cache",
             "ata_sessions",
-            "mw_wallet_ops",
-            "schema_version",
             "store_schema",
-            "tool_favorites",
         ],
     ),
     ("actions.db", &["action_steps", "store_schema"]),

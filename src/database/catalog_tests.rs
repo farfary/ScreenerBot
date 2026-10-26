@@ -137,17 +137,13 @@ fn wallet_scoped_stores_name_their_metadata_tables() {
 /// Salvage names tables by hand; each must be a table its store creates.
 #[test]
 fn salvage_rules_name_tables_their_store_creates() {
-    let sources: [(&StoreSpec, &str); 7] = [
+    let sources: [(&StoreSpec, &str); 6] = [
         (&STRATEGIES, include_str!("../strategies/database.rs")),
         (&AGENT_CONTROL, include_str!("../agent_control/store.rs")),
         (&AI, include_str!("../llm_analysis/database.rs")),
         (&AI_CHAT, include_str!("../assistant/scheduled/database.rs")),
         (&TOKENS, include_str!("../tokens/schema.rs")),
         (&OHLCVS, include_str!("../ohlcvs/database/mod.rs")),
-        (
-            &ATA_CLEANUP,
-            include_str!("../wallets/ata_cleanup/database/schema.rs"),
-        ),
     ];
     let salvaging: HashSet<&str> = STORES
         .iter()

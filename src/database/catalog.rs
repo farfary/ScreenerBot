@@ -577,16 +577,8 @@ pub const ATA_CLEANUP: StoreSpec = shared(
     configure::ATA_CLEANUP_DB,
     StoreClass::Cache,
     crate::wallets::ata_cleanup::database::SCHEMA,
-    &[rule("tool_favorites"), rule("watched_tokens")],
-    &[
-        keep("tool_favorites", UserDecision),
-        keep("watched_tokens", UserDecision),
-        keep("ata_sessions", Ledger),
-        keep("ata_closures", Ledger),
-        keep("mw_sessions", Ledger),
-        keep("mw_wallet_ops", Ledger),
-        keep("schema_version", Schema),
-    ],
+    &[],
+    &[keep("ata_sessions", Ledger), keep("ata_closures", Ledger)],
 )
 .pooled(3, Some(1));
 
