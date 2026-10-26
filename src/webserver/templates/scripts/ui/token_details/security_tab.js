@@ -18,13 +18,16 @@ const esc = (text) => Utils.escapeHtml(text);
 // Percentages here are non-negative shares; only a negative value carries a sign.
 const PLAIN_PERCENT = Object.freeze({ decimals: 2, plus: "" });
 
-// Ids are the client-side bands from getSafetyScoreLabel.
-const SAFETY_SCORE_LABELS = Object.freeze({
-  shielded: "tokens-security-grade-shielded",
-  safe: "tokens-security-grade-safe",
-  caution: "tokens-security-grade-caution",
-  vulnerable: "tokens-security-grade-vulnerable",
-  unknown: "tokens-security-grade-unknown",
+// Ids are the backend's `SecurityRiskBand` of the RugCheck normalised score.
+const SECURITY_BAND_LABELS = Object.freeze({
+  low: "tokens-security-grade-safe",
+  medium: "tokens-security-grade-caution",
+  high: "tokens-security-grade-vulnerable",
+});
+const SECURITY_BAND_CLASSES = Object.freeze({
+  low: "score-safe",
+  medium: "score-caution",
+  high: "score-vulnerable",
 });
 
 // Ids are the client-side bands from getConcentrationState.
@@ -90,8 +93,8 @@ function buildSecurityLoadingContent(token, options) {
 function buildSecurityContent(token, options) {
   const { renderHintTrigger, escapeHtml } = options;
   const safetyScore = token.safety_score;
-  const scoreClass = getSafetyScoreClass(safetyScore);
-  const scoreLabel = getSafetyScoreLabel(safetyScore);
+  const scoreClass = securityBandClass(token.security_band);
+  const scoreLabel = securityBandLabel(token.security_band);
 
   return `
     <div class="security-container">
@@ -578,17 +581,11 @@ function buildTopHoldersSection(token) {
   `;
 }
 
-function getSafetyScoreClass(score) {
-  if (score === null || score === undefined) return "";
-  if (score >= 70) return "score-safe";
-  if (score >= 40) return "score-caution";
-  return "score-vulnerable";
+function securityBandClass(band) {
+  return band == null ? "" : (SECURITY_BAND_CLASSES[band] ?? "");
 }
 
-function getSafetyScoreLabel(score) {
-  if (score === null || score === undefined) return I18n.label(SAFETY_SCORE_LABELS, "unknown");
-  if (score >= 90) return I18n.label(SAFETY_SCORE_LABELS, "shielded");
-  if (score >= 70) return I18n.label(SAFETY_SCORE_LABELS, "safe");
-  if (score >= 40) return I18n.label(SAFETY_SCORE_LABELS, "caution");
-  return I18n.label(SAFETY_SCORE_LABELS, "vulnerable");
+function securityBandLabel(band) {
+  if (band == null) return I18n.t("tokens-security-grade-unknown");
+  return I18n.label(SECURITY_BAND_LABELS, band);
 }

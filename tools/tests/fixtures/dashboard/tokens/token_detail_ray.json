@@ -74,6 +74,7 @@
   "buy_sell_ratio_24h": 1.053412462908012,
   "risk_score": 14,
   "safety_score": 86,
+  "security_band": "low",
   "rugged": false,
   "mint_authority": null,
   "freeze_authority": null,

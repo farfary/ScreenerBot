@@ -88,7 +88,6 @@ tokens-security-score-caption = 以 100 为满分的标准化代币风险评分�
 tokens-security-score-label = 评分
 tokens-security-rugged = 已跑路
 tokens-security-grade-analyzing = 分析中
-tokens-security-grade-shielded = 受保护
 tokens-security-grade-safe = 安全
 tokens-security-grade-caution = 谨慎
 tokens-security-grade-vulnerable = 易受攻击

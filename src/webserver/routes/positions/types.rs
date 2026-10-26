@@ -6,6 +6,7 @@
 use crate::chains::RawAmount;
 use crate::positions::state::is_position_open;
 use crate::positions::{Position, PositionManagement, PositionOrigin, PriceSource};
+use crate::tokens::security::SecurityRiskBand;
 use serde::{Deserialize, Serialize, Serializer};
 
 #[derive(Debug, Deserialize)]
@@ -174,7 +175,8 @@ pub struct PositionMarketData {
 #[derive(Debug, Serialize)]
 pub struct PositionSecuritySummary {
     pub score_normalized: Option<i32>,
-    pub risk_level: String,
+    /// Band of `score_normalized`; `None` while the token has no report.
+    pub risk_level: Option<SecurityRiskBand>,
     pub has_mint_authority: bool,
     pub has_freeze_authority: bool,
     pub top_risks: Vec<String>,

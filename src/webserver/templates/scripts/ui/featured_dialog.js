@@ -64,11 +64,11 @@ const CATEGORY_NOTE_LABELS = Object.freeze({
   boosted: "tokens-featured-note-boosted",
 });
 
-// Ids are the bands of _renderSecurity.
-const SECURITY_LEVEL_LABELS = Object.freeze({
-  good: "tokens-security-grade-safe",
-  mid: "tokens-security-grade-caution",
-  bad: "tokens-featured-security-risky",
+// Ids are the backend's `SecurityRiskBand` of the RugCheck normalised score.
+const SECURITY_BAND_LABELS = Object.freeze({
+  low: "tokens-security-grade-safe",
+  medium: "tokens-security-grade-caution",
+  high: "tokens-featured-security-risky",
 });
 
 // Category definitions with metadata
@@ -449,7 +449,7 @@ class FeaturedDialog {
           </div>
           <div class="feat-card-row">
             <span class="feat-card-symbol">${this._escapeHtml(label)}</span>
-            ${this._renderSecurity(token.security_score)}
+            ${this._renderSecurity(token.security_band, token.security_score)}
             ${changeHtml}
           </div>
         </div>
@@ -498,15 +498,17 @@ class FeaturedDialog {
   }
 
   /**
-   * Security badge. The score is normalised so HIGHER IS SAFER.
+   * Security badge. The band comes graded from the backend; the score (RugCheck's
+   * normalised risk, higher is riskier) only fills the tooltip.
    */
-  _renderSecurity(score) {
-    if (score == null) return "";
+  _renderSecurity(band, score) {
+    if (!Object.hasOwn(SECURITY_BAND_LABELS, band ?? "")) return "";
 
-    const level = score >= 70 ? "good" : score >= 40 ? "mid" : "bad";
-    const label = I18n.label(SECURITY_LEVEL_LABELS, level);
+    const label = I18n.label(SECURITY_BAND_LABELS, band);
+    const title =
+      score == null ? "" : ` title="${this._escapeHtml(I18n.t("tokens-featured-security-score", { score }))}"`;
 
-    return `<span class="feat-card-security ${level}" title="${this._escapeHtml(I18n.t("tokens-featured-security-score", { score }))}">${this._escapeHtml(label)}</span>`;
+    return `<span class="feat-card-security ${band}"${title}>${this._escapeHtml(label)}</span>`;
   }
 
   /**

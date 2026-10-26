@@ -88,7 +88,6 @@ tokens-security-score-caption = 100점 만점으로 정규화한 토큰 위험 �
 tokens-security-score-label = 점수
 tokens-security-rugged = 러그풀 발생
 tokens-security-grade-analyzing = 분석 중
-tokens-security-grade-shielded = 보호됨
 tokens-security-grade-safe = 안전
 tokens-security-grade-caution = 주의
 tokens-security-grade-vulnerable = 취약

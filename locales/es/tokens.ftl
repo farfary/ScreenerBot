@@ -73,7 +73,6 @@ tokens-security-score-caption = Puntuación de riesgo del token normalizada sobr
 tokens-security-score-label = Puntuación
 tokens-security-rugged = Rugged
 tokens-security-grade-analyzing = Analizando
-tokens-security-grade-shielded = Blindado
 tokens-security-grade-safe = Seguro
 tokens-security-grade-caution = Precaución
 tokens-security-grade-vulnerable = Vulnerable

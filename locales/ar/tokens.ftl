@@ -92,7 +92,6 @@ tokens-security-score-caption = درجة مخاطر الرمز المعياري�
 tokens-security-score-label = الدرجة
 tokens-security-rugged = تم سحب السجادة
 tokens-security-grade-analyzing = قيد التحليل
-tokens-security-grade-shielded = محمي
 tokens-security-grade-safe = آمن
 tokens-security-grade-caution = حذر
 tokens-security-grade-vulnerable = عرضة للمخاطر

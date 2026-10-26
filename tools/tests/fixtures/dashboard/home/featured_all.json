@@ -16,6 +16,7 @@
       "volume_24h": 1240000,
       "holders": 8423,
       "security_score": 82,
+      "security_band": "high",
       "txns_24h_buys": 3120,
       "txns_24h_sells": 2874,
       "is_in_database": true
@@ -34,6 +35,7 @@
       "volume_24h": 96300,
       "holders": 1204,
       "security_score": 64,
+      "security_band": "high",
       "txns_24h_buys": 612,
       "txns_24h_sells": 655,
       "is_in_database": true

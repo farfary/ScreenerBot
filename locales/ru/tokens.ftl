@@ -73,7 +73,6 @@ tokens-security-score-caption = Нормализованная оценка ри
 tokens-security-score-label = Оценка
 tokens-security-rugged = Рагпулл
 tokens-security-grade-analyzing = Анализ
-tokens-security-grade-shielded = Защищён
 tokens-security-grade-safe = Безопасен
 tokens-security-grade-caution = Осторожно
 tokens-security-grade-vulnerable = Уязвим

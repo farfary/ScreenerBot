@@ -18,6 +18,7 @@ use crate::native_price;
 use crate::pools;
 use crate::positions;
 use crate::tokens;
+use crate::tokens::security::SecurityRiskBand;
 use crate::webserver::api_error::{ApiError, ApiErrorCode};
 use crate::webserver::utils::success_response;
 
@@ -77,14 +78,6 @@ pub async fn get_position_details(Path(key): Path<String>) -> Response {
 
             // Build security summary from token database
             let security = token_data.as_ref().map(|token| {
-                // Rugcheck normalized score: 0-100, LOWER = SAFER, HIGHER = RISKIER
-                let risk_level = match token.security_score_normalised {
-                    Some(score) if score <= 20 => "low".to_owned(),
-                    Some(score) if score <= 50 => "medium".to_owned(),
-                    Some(_) => "high".to_owned(),
-                    None => "unknown".to_owned(),
-                };
-
                 let top_risks: Vec<String> = token
                     .security_risks
                     .iter()
@@ -94,7 +87,7 @@ pub async fn get_position_details(Path(key): Path<String>) -> Response {
 
                 PositionSecuritySummary {
                     score_normalized: token.security_score_normalised,
-                    risk_level,
+                    risk_level: SecurityRiskBand::of_optional(token.security_score_normalised),
                     has_mint_authority: token.mint_authority.is_some(),
                     has_freeze_authority: token.freeze_authority.is_some(),
                     top_risks,

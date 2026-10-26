@@ -13,7 +13,7 @@ use crate::{
     },
     i18n::UiText,
     logger::{self, LogTag},
-    tokens::SecurityRisk,
+    tokens::{security::SecurityRiskBand, SecurityRisk},
 };
 
 // =============================================================================
@@ -199,6 +199,9 @@ pub struct TokenDetailResponse {
     pub risk_score: Option<i32>,
     /// Computed safety score (0-100, HIGHER = SAFER) - inverted from Rugcheck normalized score
     pub safety_score: Option<i32>,
+    /// Band of the RugCheck normalised score; the dashboard maps it to the grade
+    /// and never compares a score itself.
+    pub security_band: Option<SecurityRiskBand>,
     pub rugged: Option<bool>,
     pub mint_authority: Option<String>,
     pub freeze_authority: Option<String>,

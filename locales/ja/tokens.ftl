@@ -77,7 +77,6 @@ tokens-security-score-caption = 100点満点に正規化したトークンのリ
 tokens-security-score-label = スコア
 tokens-security-rugged = ラグプル済み
 tokens-security-grade-analyzing = 分析中
-tokens-security-grade-shielded = 保護済み
 tokens-security-grade-safe = 安全
 tokens-security-grade-caution = 注意
 tokens-security-grade-vulnerable = 脆弱

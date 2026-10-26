@@ -18,7 +18,7 @@ import { getIdentity, renderAddress, renderTokenLogo } from "../token_identity.j
 
 const esc = (text) => Utils.escapeHtml(text);
 
-// Rugcheck normalised score: lower is safer. The level is the backend's banding of it.
+// Ids are the backend's `SecurityRiskBand` of the RugCheck normalised score; null while unreported.
 const RISK_LEVEL_LABELS = Object.freeze({
   low: "positions-risk-low",
   medium: "positions-risk-medium",
@@ -202,8 +202,8 @@ export function applyHeaderMixin(PositionDetailsDialog) {
 
     const security = this.fullDetails?.security;
     if (security) {
-      const level = String(security.risk_level).toLowerCase();
-      const known = Object.hasOwn(RISK_LEVEL_LABELS, level);
+      const level = security.risk_level;
+      const known = level != null && Object.hasOwn(RISK_LEVEL_LABELS, level);
       const label = known ? I18n.label(RISK_LEVEL_LABELS, level) : I18n.t("positions-risk-unknown");
       const tone = known ? RISK_TONES[level] : "";
       const score = security.score_normalized != null ? ` · ${security.score_normalized}/100` : "";

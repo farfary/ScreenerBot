@@ -15,7 +15,7 @@ use crate::{
     logger::{self, LogTag},
     native_price::get_native_price,
     pools, positions,
-    tokens::database::database,
+    tokens::{database::database, security::SecurityRiskBand},
 };
 
 /// Unix seconds of a token's creation for the detail response: its on-chain creation
@@ -103,6 +103,7 @@ pub async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailRespo
                 buy_sell_ratio_24h: None,
                 risk_score: None,
                 safety_score: None,
+                security_band: None,
                 rugged: None,
                 mint_authority: None,
                 freeze_authority: None,
@@ -337,6 +338,7 @@ pub async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailRespo
     let security_score_normalised = token.security_score_normalised;
     // Invert it to create a safety_score where HIGHER = SAFER for the UI
     let safety_score = security_score_normalised.map(|s| (100 - s).clamp(0, 100));
+    let security_band = SecurityRiskBand::of_optional(security_score_normalised);
     let rugged = Some(token.is_rugged);
     let mint_authority = token.mint_authority.clone();
     let freeze_authority = token.freeze_authority.clone();
@@ -762,6 +764,7 @@ pub async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailRespo
         buy_sell_ratio_24h,
         risk_score: security_score,
         safety_score,
+        security_band,
         rugged,
         mint_authority,
         freeze_authority,

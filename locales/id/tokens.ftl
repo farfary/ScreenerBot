@@ -77,7 +77,6 @@ tokens-security-score-caption = Skor risiko token yang dinormalisasi dari 100.
 tokens-security-score-label = Skor
 tokens-security-rugged = Rugged
 tokens-security-grade-analyzing = Menganalisis
-tokens-security-grade-shielded = Terlindungi
 tokens-security-grade-safe = Aman
 tokens-security-grade-caution = Waspada
 tokens-security-grade-vulnerable = Rentan

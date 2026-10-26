@@ -499,17 +499,17 @@
   letter-spacing: 0.04em;
 }
 
-.feat-card-security.good {
+.feat-card-security.low {
   color: var(--success-color);
   background: var(--success-alpha-10);
 }
 
-.feat-card-security.mid {
+.feat-card-security.medium {
   color: var(--warning-color, #d29922);
   background: var(--warning-alpha-10, rgb(210, 153, 34, 0.12));
 }
 
-.feat-card-security.bad {
+.feat-card-security.high {
   color: var(--error-color);
   background: var(--danger-alpha-10);
 }

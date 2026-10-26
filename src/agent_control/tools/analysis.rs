@@ -9,6 +9,7 @@ use serde_json::json;
 
 use super::{Tool, ToolCategory, ToolDefinition, ToolResult};
 use crate::tokens;
+use crate::tokens::security::SecurityRiskBand;
 
 // ============================================================================
 // AnalyzeTokenTool - Comprehensive token analysis
@@ -334,14 +335,13 @@ impl Tool for CheckSecurityTool {
             mint: token.mint.clone(),
             score: token.security_score_normalised.map(|s| format!("{s}/100")),
             raw_score: token.security_score,
-            level: token.security_score_normalised.map(|s| {
-                if s < 30 {
-                    "Low Risk".to_owned()
-                } else if s < 70 {
-                    "Medium Risk".to_owned()
-                } else {
-                    "High Risk".to_owned()
+            level: SecurityRiskBand::of_optional(token.security_score_normalised).map(|band| {
+                match band {
+                    SecurityRiskBand::Low => "Low Risk",
+                    SecurityRiskBand::Medium => "Medium Risk",
+                    SecurityRiskBand::High => "High Risk",
                 }
+                .to_owned()
             }),
             risks: token
                 .security_risks

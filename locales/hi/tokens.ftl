@@ -73,7 +73,6 @@ tokens-security-score-caption = 100 में से सामान्यीक
 tokens-security-score-label = स्कोर
 tokens-security-rugged = रग पुल हुआ
 tokens-security-grade-analyzing = विश्लेषण जारी
-tokens-security-grade-shielded = सुरक्षित घेरे में
 tokens-security-grade-safe = सुरक्षित
 tokens-security-grade-caution = सावधानी
 tokens-security-grade-vulnerable = असुरक्षित

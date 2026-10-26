@@ -4,6 +4,7 @@
 //! Featured route types — the provider shapes plus the one card every featured
 //! endpoint returns.
 
+use crate::tokens::security::SecurityRiskBand;
 use crate::webserver::routes::boosts::BoostStanding;
 use serde::{Deserialize, Serialize};
 
@@ -75,8 +76,13 @@ pub struct FeaturedCard {
     pub volume_24h: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub holders: Option<i64>,
+    /// RugCheck's normalised score (0-100, higher = riskier), shown in the tooltip.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub security_score: Option<i32>,
+    /// Band of `security_score`; the dashboard maps it to a label and never
+    /// compares the score itself.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub security_band: Option<SecurityRiskBand>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub txns_24h_buys: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -110,6 +116,7 @@ impl FeaturedCard {
             volume_24h: None,
             holders: None,
             security_score: None,
+            security_band: None,
             txns_24h_buys: None,
             txns_24h_sells: None,
             is_in_database: false,

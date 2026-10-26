@@ -15,6 +15,7 @@
       "volume_24h": 21900000,
       "holders": 155000,
       "security_score": 11,
+      "security_band": "low",
       "txns_24h_buys": 13300,
       "txns_24h_sells": 12640,
       "is_in_database": true
@@ -33,6 +34,7 @@
       "volume_24h": 12720000,
       "holders": 173000,
       "security_score": 9,
+      "security_band": "low",
       "txns_24h_buys": 12700,
       "txns_24h_sells": 12080,
       "is_in_database": true
@@ -53,6 +55,7 @@
       "volume_24h": 5040000,
       "holders": 182000,
       "security_score": 8,
+      "security_band": "low",
       "txns_24h_buys": 12400,
       "txns_24h_sells": 11800,
       "is_in_database": true
@@ -71,6 +74,7 @@
       "volume_24h": 3720000,
       "holders": 146000,
       "security_score": 12,
+      "security_band": "low",
       "txns_24h_buys": 13600,
       "txns_24h_sells": 12920,
       "is_in_database": true
@@ -89,6 +93,7 @@
       "volume_24h": 2040000,
       "holders": 137000,
       "security_score": 13,
+      "security_band": "low",
       "txns_24h_buys": 13900,
       "txns_24h_sells": 13200,
       "is_in_database": true
@@ -109,6 +114,7 @@
       "volume_24h": 2460000,
       "holders": 164000,
       "security_score": 10,
+      "security_band": "low",
       "txns_24h_buys": 13000,
       "txns_24h_sells": 12360,
       "is_in_database": true
@@ -127,6 +133,7 @@
       "volume_24h": 7680000,
       "holders": 128000,
       "security_score": 14,
+      "security_band": "low",
       "txns_24h_buys": 14200,
       "txns_24h_sells": 13480,
       "is_in_database": true
@@ -147,6 +154,7 @@
       "volume_24h": 5820000,
       "holders": 119000,
       "security_score": 15,
+      "security_band": "low",
       "txns_24h_buys": 14500,
       "txns_24h_sells": 13760,
       "is_in_database": true
@@ -165,6 +173,7 @@
       "volume_24h": 5040000,
       "holders": 182000,
       "security_score": 8,
+      "security_band": "low",
       "txns_24h_buys": 12400,
       "txns_24h_sells": 11800,
       "is_in_database": true

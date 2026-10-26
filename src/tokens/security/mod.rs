@@ -5,9 +5,11 @@
 //!
 //! Each module handles one security analysis source:
 //! - rugcheck: Rugcheck API (comprehensive security analysis)
-//! - onchain: Future on-chain verification
+//! - risk_band: the low / medium / high bands of the normalised score
 
+pub mod risk_band;
 pub mod rugcheck;
 pub mod rugcheck_server;
 
+pub use risk_band::SecurityRiskBand;
 pub use rugcheck::fetch_rugcheck_data;

@@ -84,7 +84,6 @@ tokens-security-score-caption = 100 üzerinden normalize edilmiş token risk pua
 tokens-security-score-label = Puan
 tokens-security-rugged = Rug pull
 tokens-security-grade-analyzing = Analiz ediliyor
-tokens-security-grade-shielded = Korumalı
 tokens-security-grade-safe = Güvenli
 tokens-security-grade-caution = Dikkat
 tokens-security-grade-vulnerable = Savunmasız

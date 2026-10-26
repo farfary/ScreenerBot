@@ -14,6 +14,7 @@
 use super::identity::fill_identity;
 use super::types::FeaturedCard;
 use crate::chains::solana::constants::SOL_MINT;
+use crate::tokens::security::SecurityRiskBand;
 use crate::{native_price, tokens};
 
 /// Build enriched cards from any featured source.
@@ -79,6 +80,7 @@ async fn enrich_from_db(mint: String) -> Option<DbStats> {
         liquidity_usd: token.liquidity_usd,
         volume_24h: token.volume_h24,
         holders: token.total_holders,
+        // RugCheck's normalised risk score: higher is riskier.
         security_score: token.security_score_normalised,
         txns_24h_buys: token.txns_h24_buys,
         txns_24h_sells: token.txns_h24_sells,
@@ -131,6 +133,7 @@ fn apply_stats(card: &mut FeaturedCard, stats: DbStats) {
     card.volume_24h = stats.volume_24h.or(card.volume_24h);
     card.holders = stats.holders.or(card.holders);
     card.security_score = stats.security_score.or(card.security_score);
+    card.security_band = SecurityRiskBand::of_optional(card.security_score);
     card.txns_24h_buys = stats.txns_24h_buys.or(card.txns_24h_buys);
     card.txns_24h_sells = stats.txns_24h_sells.or(card.txns_24h_sells);
 }
@@ -226,6 +229,34 @@ mod tests {
         );
         assert_eq!(card.price_usd, Some(9.0));
         assert_eq!(card.price_sol, None);
+    }
+
+    #[test]
+    fn the_security_band_reads_a_high_score_as_high_risk() {
+        let mut risky = boosted_card();
+        apply_stats(&mut risky, stats());
+        assert_eq!(risky.security_score, Some(80));
+        assert_eq!(risky.security_band, Some(SecurityRiskBand::High));
+
+        let mut safe = boosted_card();
+        apply_stats(
+            &mut safe,
+            DbStats {
+                security_score: Some(1),
+                ..stats()
+            },
+        );
+        assert_eq!(safe.security_band, Some(SecurityRiskBand::Low));
+
+        let mut unreported = boosted_card();
+        apply_stats(
+            &mut unreported,
+            DbStats {
+                security_score: None,
+                ..stats()
+            },
+        );
+        assert_eq!(unreported.security_band, None);
     }
 
     #[test]

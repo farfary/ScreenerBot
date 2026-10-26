@@ -92,7 +92,6 @@ tokens-security-score-caption = امتیاز نرمال‌شده ریسک توک
 tokens-security-score-label = امتیاز
 tokens-security-rugged = راگ‌شده
 tokens-security-grade-analyzing = در حال تحلیل
-tokens-security-grade-shielded = محافظت‌شده
 tokens-security-grade-safe = امن
 tokens-security-grade-caution = احتیاط
 tokens-security-grade-vulnerable = آسیب‌پذیر

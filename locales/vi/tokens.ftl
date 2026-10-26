@@ -73,7 +73,6 @@ tokens-security-score-caption = Điểm rủi ro token đã chuẩn hóa trên t
 tokens-security-score-label = Điểm
 tokens-security-rugged = Đã bị rug
 tokens-security-grade-analyzing = Đang phân tích
-tokens-security-grade-shielded = Được bảo vệ
 tokens-security-grade-safe = An toàn
 tokens-security-grade-caution = Thận trọng
 tokens-security-grade-vulnerable = Dễ bị tổn thương
