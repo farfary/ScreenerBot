@@ -65,6 +65,13 @@ export async function loadSecurityTab(dialog, content) {
   }
 }
 
+/** The hint of a lock option: what it waits for, or `readyText` once the lock screen is on. */
+function lockHintText(hasPassword, isEnabled, readyText) {
+  if (!hasPassword) return I18n.t("settings-security-needs-password");
+  if (!isEnabled) return I18n.t("settings-security-needs-lockscreen");
+  return readyText;
+}
+
 /**
  * Build Security tab HTML
  */
@@ -75,12 +82,10 @@ function buildSecurityTab(status) {
   const autoLockSecs = status.auto_lock_timeout_secs || 0;
   const lockOnBlur = status.lock_on_blur || false;
   const totpEnabled = status.totp_enabled || false;
-  // A disabled action names what it waits for in its hint.
-  const lockNowHint = !hasPassword
-    ? `<span class="settings-field-hint" data-l10n-id="settings-security-needs-password"></span>`
-    : !isEnabled
-      ? `<span class="settings-field-hint" data-l10n-id="settings-security-needs-lockscreen"></span>`
-      : `<span class="settings-field-hint" data-l10n-id="settings-security-lock-now-hint"></span>`;
+  // A lock option or action that waits for the lock screen names what it waits for in
+  // its hint.
+  const lockHint = (id, readyText) =>
+    `<span class="settings-field-hint" id="${id}">${Utils.escapeHtml(lockHintText(hasPassword, isEnabled, readyText))}</span>`;
 
   // Password type display name
   const typeName = Object.hasOwn(PASSWORD_TYPE_LABELS, passwordType)
@@ -142,10 +147,10 @@ function buildSecurityTab(status) {
           <div class="settings-field">
             <div class="settings-field-info">
               <label data-l10n-id="settings-security-auto-lock-label"></label>
-              <span class="settings-field-hint" data-l10n-id="settings-security-auto-lock-hint"></span>
+              ${lockHint("securityAutoLockHint", I18n.t("settings-security-auto-lock-hint"))}
             </div>
             <div class="settings-field-control">
-              <select id="securityAutoLockTimeout" class="settings-select" data-custom-select ${!hasPassword ? "disabled" : ""}>
+              <select id="securityAutoLockTimeout" class="settings-select" data-custom-select ${!isEnabled ? "disabled" : ""}>
                 <option value="0" ${autoLockSecs === 0 ? "selected" : ""}>${Utils.escapeHtml(I18n.t("settings-security-auto-lock-never"))}</option>
                 <option value="60" ${autoLockSecs === 60 ? "selected" : ""}>${Utils.escapeHtml(I18n.t("settings-duration-minutes", { count: 1 }))}</option>
                 <option value="300" ${autoLockSecs === 300 ? "selected" : ""}>${Utils.escapeHtml(I18n.t("settings-duration-minutes", { count: 5 }))}</option>
@@ -160,11 +165,11 @@ function buildSecurityTab(status) {
           <div class="settings-field">
             <div class="settings-field-info">
               <label data-l10n-id="settings-security-lock-blur-label"></label>
-              <span class="settings-field-hint" data-l10n-id="settings-security-lock-blur-hint"></span>
+              ${lockHint("securityLockBlurHint", I18n.t("settings-security-lock-blur-hint"))}
             </div>
             <div class="settings-field-control">
               <label class="toggle">
-                <input type="checkbox" id="securityLockOnBlur" ${lockOnBlur ? "checked" : ""} ${!hasPassword ? "disabled" : ""}>
+                <input type="checkbox" id="securityLockOnBlur" ${lockOnBlur ? "checked" : ""} ${!isEnabled ? "disabled" : ""}>
                 <span class="toggle-track"></span>
               </label>
             </div>
@@ -183,10 +188,10 @@ function buildSecurityTab(status) {
           <div class="settings-field">
             <div class="settings-field-info">
               <label data-l10n-id="settings-security-lock-now-label"></label>
-              ${lockNowHint}
+              ${lockHint("securityLockNowHint", I18n.t("settings-security-lock-now-hint"))}
             </div>
             <div class="settings-field-control">
-              <button class="btn btn-primary btn-sm" id="securityLockNowBtn" ${!hasPassword || !isEnabled ? "disabled" : ""}>
+              <button class="btn btn-primary btn-sm" id="securityLockNowBtn" ${!isEnabled ? "disabled" : ""}>
                 <i class="icon-lock"></i> <span data-l10n-id="settings-security-lock-now"></span>
               </button>
             </div>
@@ -246,12 +251,34 @@ function buildSecurityTab(status) {
 /**
  * Attach handlers for Security tab
  */
-export function attachSecurityHandlers(dialog, content, _status) {
+export function attachSecurityHandlers(dialog, content, status) {
+  // The lock options and Lock Now act only while the lock screen is on.
+  const syncLockOptions = (isEnabled) => {
+    const hasPassword = Boolean(status?.has_password);
+    for (const id of ["#securityAutoLockTimeout", "#securityLockOnBlur", "#securityLockNowBtn"]) {
+      const control = content.querySelector(id);
+      if (control) control.disabled = !isEnabled;
+    }
+    for (const [id, readyText] of [
+      ["#securityAutoLockHint", I18n.t("settings-security-auto-lock-hint")],
+      ["#securityLockBlurHint", I18n.t("settings-security-lock-blur-hint")],
+      ["#securityLockNowHint", I18n.t("settings-security-lock-now-hint")],
+    ]) {
+      const hint = content.querySelector(id);
+      if (hint) hint.textContent = lockHintText(hasPassword, isEnabled, readyText);
+    }
+  };
+
   // Enable/disable toggle
   const enableToggle = content.querySelector("#securityEnableLockscreen");
   if (enableToggle) {
     enableToggle.addEventListener("change", async (e) => {
-      await updateSecuritySetting("enabled", e.target.checked);
+      const enabled = e.target.checked;
+      if (await updateSecuritySetting("enabled", enabled)) {
+        syncLockOptions(enabled);
+      } else {
+        e.target.checked = !enabled;
+      }
     });
   }
 
@@ -341,7 +368,7 @@ async function updateSecuritySetting(key, value) {
       if (window.Lockscreen) {
         window.Lockscreen.loadStatus();
       }
-      return;
+      return true;
     }
 
     const data = await response.json().catch(() => null);
@@ -349,6 +376,7 @@ async function updateSecuritySetting(key, value) {
   } catch (error) {
     reportFailure(error.message);
   }
+  return false;
 }
 
 /**
