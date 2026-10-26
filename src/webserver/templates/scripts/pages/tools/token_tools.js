@@ -91,7 +91,7 @@ function renderCreateTokenTool(container, actionsContainer) {
     <button class="btn" id="preview-token-btn">
       <i class="icon-eye"></i> <span data-l10n-id="tools-create-token-action-preview"></span>
     </button>
-    <button class="btn primary" id="create-token-btn">
+    <button class="btn btn-primary" id="create-token-btn">
       <i class="icon-circle-plus"></i> <span data-l10n-id="tools-create-token-action-create"></span>
     </button>
   `;
@@ -255,7 +255,7 @@ function renderHolderWatchContent(container, actionsContainer, config) {
           </div>
 
           <div class="hw-form-actions">
-            <button class="btn primary" id="hw-save-config">
+            <button class="btn btn-primary" id="hw-save-config">
               <i class="icon-save"></i> <span data-l10n-id="tools-holder-watch-action-save"></span>
             </button>
           </div>
@@ -270,7 +270,7 @@ function renderHolderWatchContent(container, actionsContainer, config) {
           <div class="hw-add-token-group">
             <input type="text" id="hw-token-input" class="form-input" 
               data-l10n-id="tools-holder-watch-token-input">
-            <button class="btn primary" id="hw-add-token">
+            <button class="btn btn-primary" id="hw-add-token">
               <i class="icon-plus"></i> <span data-l10n-id="common-action-add"></span>
             </button>
           </div>
@@ -350,7 +350,7 @@ function renderTokenAnalyzerTool(container, actionsContainer) {
         <div class="section-content">
           <div class="ta-input-group">
             <input dir="ltr" type="text" id="ta-mint-input" data-l10n-id="tools-analyzer-mint-input" />
-            <button class="btn primary" id="ta-analyze-btn">
+            <button class="btn btn-primary" id="ta-analyze-btn">
               <i class="icon-search"></i> <span data-l10n-id="tools-analyzer-action-analyze"></span>
             </button>
           </div>

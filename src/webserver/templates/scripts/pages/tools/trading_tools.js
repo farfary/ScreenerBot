@@ -162,10 +162,10 @@ function renderTradeWatcherTool(container, actionsContainer) {
   enhanceAllSelects(container);
 
   actionsContainer.innerHTML = `
-    <button class="btn primary" id="tw-start-btn" disabled>
+    <button class="btn btn-primary" id="tw-start-btn" disabled>
       <i class="icon-play"></i> <span data-l10n-id="tools-trade-watcher-action-start"></span>
     </button>
-    <button class="btn danger" id="tw-stop-all-btn" disabled>
+    <button class="btn btn-danger" id="tw-stop-all-btn" disabled>
       <i class="icon-square"></i> <span data-l10n-id="tools-trade-watcher-action-stop-all"></span>
     </button>
   `;

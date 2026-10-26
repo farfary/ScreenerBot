@@ -102,10 +102,10 @@ function renderWalletCleanupTool(container, actionsContainer) {
   HintTrigger.initAll();
 
   actionsContainer.innerHTML = `
-    <button class="btn primary" id="scan-atas-btn">
+    <button class="btn btn-primary" id="scan-atas-btn">
       <i class="icon-scan"></i> <span data-l10n-id="tools-wallet-action-scan"></span>
     </button>
-    <button class="btn success" id="cleanup-atas-btn" disabled>
+    <button class="btn btn-success" id="cleanup-atas-btn" disabled>
       <i class="icon-trash-2"></i> <span data-l10n-id="tools-wallet-cleanup-action-cleanup"></span>
     </button>
   `;
@@ -280,10 +280,10 @@ function renderBurnTokensTool(container, actionsContainer) {
   HintTrigger.initAll();
 
   actionsContainer.innerHTML = `
-    <button class="btn primary" id="scan-burn-tokens-btn">
+    <button class="btn btn-primary" id="scan-burn-tokens-btn">
       <i class="icon-search"></i> <span data-l10n-id="tools-wallet-action-scan"></span>
     </button>
-    <button class="btn danger" id="burn-selected-btn" disabled>
+    <button class="btn btn-danger" id="burn-selected-btn" disabled>
       <i class="icon-flame"></i> ${Utils.escapeHtml(I18n.t("tools-burn-action-burn", { count: 0 }))}
     </button>
   `;
@@ -793,10 +793,10 @@ function renderAirdropCheckerTool(container, actionsContainer) {
   I18n.localizeTree(container);
 
   actionsContainer.innerHTML = `
-    <button class="btn primary" id="check-airdrops-btn">
+    <button class="btn btn-primary" id="check-airdrops-btn">
       <i class="icon-scan"></i> <span data-l10n-id="tools-airdrop-action-check"></span>
     </button>
-    <button class="btn success" id="claim-all-btn" disabled>
+    <button class="btn btn-success" id="claim-all-btn" disabled>
       <i class="icon-gift"></i> <span data-l10n-id="tools-airdrop-action-claim-all"></span>
     </button>
   `;
@@ -862,7 +862,7 @@ function renderWalletGeneratorTool(container, actionsContainer) {
   HintTrigger.initAll();
 
   actionsContainer.innerHTML = `
-    <button class="btn primary" id="generate-wallet-btn">
+    <button class="btn btn-primary" id="generate-wallet-btn">
       <i class="icon-plus"></i> <span data-l10n-id="tools-generator-action-generate"></span>
     </button>
     <button class="btn" id="export-wallets-btn" disabled>
@@ -1168,7 +1168,7 @@ function renderWalletConsolidationTool(container, actionsContainer) {
     <button class="btn" id="wc-transfer-tokens-btn" disabled>
       <i class="icon-send"></i> <span data-l10n-id="tools-consolidation-action-transfer-tokens"></span>
     </button>
-    <button class="btn primary" id="wc-cleanup-btn" disabled>
+    <button class="btn btn-primary" id="wc-cleanup-btn" disabled>
       <i class="icon-trash-2"></i> <span data-l10n-id="tools-consolidation-action-cleanup"></span>
     </button>
   `;

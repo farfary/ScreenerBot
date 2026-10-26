@@ -259,10 +259,10 @@ function renderBuyMultiWalletsTool(container, actionsContainer) {
     <button class="btn" id="mb-preview-btn">
       <i class="icon-eye"></i> <span data-l10n-id="tools-multi-buy-action-preview"></span>
     </button>
-    <button class="btn success" id="mb-start-btn" disabled>
+    <button class="btn btn-success" id="mb-start-btn" disabled>
       <i class="icon-shopping-cart"></i> <span data-l10n-id="tools-multi-buy-action-start"></span>
     </button>
-    <button class="btn danger" id="mb-stop-btn" style="display: none;">
+    <button class="btn btn-danger" id="mb-stop-btn" style="display: none;">
       <i class="icon-x"></i> <span data-l10n-id="tools-multi-action-stop"></span>
     </button>
   `;
@@ -778,10 +778,10 @@ function renderSellMultiWalletsTool(container, actionsContainer) {
   void syncRouterChoices(container);
 
   actionsContainer.innerHTML = `
-    <button class="btn success" id="ms-start-btn" disabled>
+    <button class="btn btn-success" id="ms-start-btn" disabled>
       <i class="icon-package"></i> <span data-l10n-id="tools-multi-sell-action-start"></span>
     </button>
-    <button class="btn danger" id="ms-stop-btn" style="display: none;">
+    <button class="btn btn-danger" id="ms-stop-btn" style="display: none;">
       <i class="icon-x"></i> <span data-l10n-id="tools-multi-action-stop"></span>
     </button>
   `;
