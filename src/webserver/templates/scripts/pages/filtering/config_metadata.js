@@ -49,18 +49,18 @@ export const TIME_RANGE_LABELS = Object.freeze({
   all: "filtering-range-all",
 });
 
-/** The sub-tabs, each with its icon and localized name. */
+/** The sub-tabs, each with its localized name. */
 export function buildFilterTabs() {
-  const tab = (id, icon, label) => ({ id, icon, label });
+  const tab = (id, label) => ({ id, label });
   return [
-    tab("status", "icon-chart-bar", I18n.t("filtering-tab-status")),
-    tab("analytics", "icon-chart-pie", I18n.t("filtering-tab-analytics")),
-    tab("explorer", "icon-folder", I18n.t("filtering-tab-explorer")),
-    tab("meta", "icon-settings", I18n.label(SOURCE_LABELS, "meta")),
-    tab("onchain", "icon-shield", I18n.label(SOURCE_LABELS, "onchain")),
-    tab("dexscreener", "icon-trending-up", I18n.label(SOURCE_LABELS, "dexscreener")),
-    tab("geckoterminal", "icon-trending-up", I18n.label(SOURCE_LABELS, "geckoterminal")),
-    tab("rugcheck", "icon-shield", I18n.label(SOURCE_LABELS, "rugcheck")),
+    tab("status", I18n.t("filtering-tab-status")),
+    tab("analytics", I18n.t("filtering-tab-analytics")),
+    tab("explorer", I18n.t("filtering-tab-explorer")),
+    tab("meta", I18n.label(SOURCE_LABELS, "meta")),
+    tab("onchain", I18n.label(SOURCE_LABELS, "onchain")),
+    tab("dexscreener", I18n.label(SOURCE_LABELS, "dexscreener")),
+    tab("geckoterminal", I18n.label(SOURCE_LABELS, "geckoterminal")),
+    tab("rugcheck", I18n.label(SOURCE_LABELS, "rugcheck")),
   ];
 }
 

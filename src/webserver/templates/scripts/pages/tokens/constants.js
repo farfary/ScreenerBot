@@ -31,25 +31,24 @@ export const TOKEN_VIEW_EMPTY_LABELS = Object.freeze({
 });
 
 // A tab's tooltip says what the view lists; Favorites needs none.
-const view = (id, icon) => ({
+const view = (id) => ({
   id,
-  icon,
   label: I18n.label(TOKEN_VIEW_LABELS, id),
   tooltip: I18n.labelAttr(TOKEN_VIEW_LABELS, id, "tooltip"),
 });
 
 // Sub-tabs (views) of the Tokens page, in tab order.
 export const TOKEN_VIEWS = [
-  view("favorites", "icon-star"),
-  view("pool", "icon-droplet"),
-  view("no_market", "icon-trending-down"),
-  view("all", "icon-list"),
-  view("passed", "icon-check"),
-  view("rejected", "icon-circle-x"),
-  view("blacklisted", "icon-ban"),
-  view("positions", "icon-chart-bar"),
-  view("recent", "icon-clock"),
-  view("ohlcv", "icon-chart-candlestick"),
+  view("favorites"),
+  view("pool"),
+  view("no_market"),
+  view("all"),
+  view("passed"),
+  view("rejected"),
+  view("blacklisted"),
+  view("positions"),
+  view("recent"),
+  view("ohlcv"),
 ];
 
 // Constants
@@ -115,7 +114,7 @@ export const SORT_KEY_TO_COLUMN = Object.entries(COLUMN_TO_SORT_KEY).reduce(
     acc[sortKey] = columnId;
     return acc;
   },
-  {},
+  {}
 );
 
 export const getTokensTableStateKey = (view) => `tokens-table.${view}`;

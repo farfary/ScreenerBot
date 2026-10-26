@@ -3,13 +3,14 @@
 //
 
 /**
- * Guard: every page's sub-tabs carry an icon, drawn by the tab bar.
+ * Guard: the page sub-tabs are labels only.
  *
- * Each page once built its own icon markup into the tab label, and the Assistant page
- * built none, so its sub-tabs were the only ones without icons. A tab now passes its
- * `icon` class and a text `label`, and `ui/tab_bar.js` renders both.
+ * A sub-tab is marked selected by its colour and bar, so a glyph adds no information and
+ * costs the row the width it needs to fit at 1200 px in every catalog. The tab bar
+ * renders a tab's text `label` and nothing else.
  *
- * - Every sub-tab of every page with a tab bar shows one decorative icon before its name.
+ * - No sub-tab of any page with a tab bar renders a glyph.
+ * - No page passes `icon` in a tab bar tab definition (read from the registered bars).
  * - No page script writes icon markup into a tab label.
  *
  * Run with `npm run test:js`.
@@ -33,7 +34,7 @@ after(() => browser.close());
 const shell = await loadIndex("shell");
 
 for (const name of PAGES) {
-  test(`the ${name} sub-tabs each show an icon before the name`, async (t) => {
+  test(`the ${name} sub-tabs render their name and no glyph`, async (t) => {
     const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
     const api = createApiHandler([await loadIndex(name), shell], "populated");
     const host = await serveDashboard(context, { locale: "en", onApi: api.onApi });
@@ -49,24 +50,27 @@ for (const name of PAGES) {
     const tabs = await page.$$eval("#subTabsContainer .sub-tab", (buttons) =>
       buttons.map((button) => ({
         id: button.dataset.tabId,
-        children: [...button.children].map((child) => ({
-          tag: child.tagName,
-          icon: [...child.classList].some((token) => token.startsWith("icon-")),
-          hidden: child.getAttribute("aria-hidden"),
-        })),
-        firstIsIcon: button.firstElementChild === button.querySelector("i"),
+        children: button.children.length,
         text: button.textContent.trim(),
       }))
     );
     assert.ok(tabs.length >= 2, `${name} has a tab bar`);
     for (const tab of tabs) {
       assert.ok(tab.text, `${name}/${tab.id} has a name`);
-      assert.ok(tab.firstIsIcon, `${name}/${tab.id} starts with its icon`);
-      assert.deepEqual(
-        tab.children.filter((child) => child.tag === "I"),
-        [{ tag: "I", icon: true, hidden: "true" }],
-        `${name}/${tab.id} has one decorative icon`
+      assert.equal(tab.children, 0, `${name}/${tab.id} renders only its name`);
+    }
+
+    // The definitions themselves carry no glyph: the page's registered bar is read
+    // from the same module instance the page imported.
+    const definitions = await page.evaluate(async () => {
+      const { TabBarManager } = await import("/scripts/ui/tab_bar.js");
+      return TabBarManager.getAllTabBars().flatMap((bar) =>
+        bar.tabs.map((tab) => ({ id: tab.id, keys: Object.keys(tab) }))
       );
+    });
+    assert.ok(definitions.length >= 2, `${name} registers its tab bar`);
+    for (const { id, keys } of definitions) {
+      assert.ok(!keys.includes("icon"), `${name}/${id} passes an icon`);
     }
   });
 }

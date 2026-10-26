@@ -33,15 +33,11 @@ const ORIGIN_CLASSES = Object.freeze({ copy: "copy", manual: "manual", external:
 
 const esc = (text) => Utils.escapeHtml(text);
 
-// Sub-tabs: an icon and the view name.
+// Sub-tabs: the view names.
 const subTabs = () => [
-  { id: "open", icon: "icon-trending-up", label: I18n.label(POSITION_STATUS_LABELS, "open") },
-  { id: "closed", icon: "icon-trending-down", label: I18n.label(POSITION_STATUS_LABELS, "closed") },
-  {
-    id: "archived",
-    icon: "icon-archive",
-    label: I18n.label(POSITION_STATUS_LABELS, "archived"),
-  },
+  { id: "open", label: I18n.label(POSITION_STATUS_LABELS, "open") },
+  { id: "closed", label: I18n.label(POSITION_STATUS_LABELS, "closed") },
+  { id: "archived", label: I18n.label(POSITION_STATUS_LABELS, "archived") },
 ];
 
 // Title and aria-label attributes of an icon-only row action.

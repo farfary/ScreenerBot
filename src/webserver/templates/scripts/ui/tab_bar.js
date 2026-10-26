@@ -23,8 +23,8 @@
  * const tabBar = new TabBar({
  *   container: '#subTabsContainer',
  *   tabs: [
- *     { id: 'pool', icon: 'icon-droplet', label: 'Pool Service' },
- *     { id: 'all', icon: 'icon-list', label: 'All Tokens' }
+ *     { id: 'pool', label: 'Pool Service' },
+ *     { id: 'all', label: 'All Tokens' }
  *   ],
  *   defaultTab: 'pool',
  *   stateKey: 'tokens.activeTab',
@@ -34,8 +34,14 @@
  *   onHide: () => { ... }
  * });
  *
- * A tab's `label` is text, `icon` an optional icon class and `tooltip` optional plain text
- * shown on hover and focus; the bar owns their markup.
+ * A tab's `label` is text and `tooltip` optional plain text shown on hover and focus; the
+ * bar owns their markup. Tabs carry no glyph: the selected tab is marked by colour and
+ * its bar.
+ *
+ * The row is a tablist named by its page's main tab (`#nav-tab-{page}`), and the page
+ * element (`#page-{page}`) is its tabpanel while the bar owns the row. Activation is
+ * manual: the arrow keys, Home and End move focus (mirrored in a right-to-left locale),
+ * and Enter or Space selects the focused tab.
  *
  * // Integrate with lifecycle
  * ctx.manageTabBar(tabBar);
@@ -140,9 +146,7 @@ export class TabBar {
     if (this.mounted) return;
 
     // Set data attribute for cleanup coordination
-    this.container.setAttribute("data-page", this.pageName);
-    this.container.setAttribute("role", "tablist");
-    this.container.setAttribute("data-ui", "tab-bar");
+    this._claimContainer();
 
     this.container.innerHTML = this._buttonsHtml();
 
@@ -153,6 +157,14 @@ export class TabBar {
     // Attach keyboard navigation
     this.keyboardHandler = (event) => this._handleKeyboard(event);
     this.container.addEventListener("keydown", this.keyboardHandler);
+
+    // Focus moved by the arrows leaves the roving tab stop on another tab; once focus
+    // leaves the row, Tab must land on the selected tab again.
+    this.focusOutHandler = (event) => {
+      if (!this._ownsContainer() || this.container.contains(event.relatedTarget)) return;
+      this._updateTabStops();
+    };
+    this.container.addEventListener("focusout", this.focusOutHandler);
 
     this.strip = attachTabScrollStrip(this.container);
 
@@ -166,6 +178,27 @@ export class TabBar {
    */
   _ownsContainer() {
     return this.container.getAttribute("data-page") === this.pageName;
+  }
+
+  /** Stamp the shared container as this page's tablist, named by the page's main tab. */
+  _claimContainer() {
+    this.container.setAttribute("data-page", this.pageName);
+    this.container.setAttribute("role", "tablist");
+    this.container.setAttribute("data-ui", "tab-bar");
+    this.container.setAttribute("aria-labelledby", `nav-tab-${this.pageName}`);
+  }
+
+  /** Clear what `_claimContainer` and `_updateTabButtons` stamped, here and on the panel. */
+  _releaseContainer() {
+    this.container.style.display = "none";
+    this.container.innerHTML = "";
+    this.container.removeAttribute("data-page");
+    this.container.removeAttribute("data-ui");
+    this.container.removeAttribute("role");
+    this.container.removeAttribute("aria-labelledby");
+    const panel = document.getElementById(`page-${this.pageName}`);
+    panel?.removeAttribute("role");
+    panel?.removeAttribute("aria-labelledby");
   }
 
   _handleClick(event) {
@@ -182,38 +215,36 @@ export class TabBar {
   _handleKeyboard(event) {
     if (!this._ownsContainer()) return;
     const buttons = Array.from(this.container.querySelectorAll("[data-tab-id]"));
-    const currentIndex = buttons.findIndex(
-      (btn) => btn.getAttribute("data-tab-id") === this.activeTab
-    );
+    if (buttons.length === 0) return;
+    const focused = buttons.indexOf(document.activeElement);
+    const currentIndex =
+      focused !== -1
+        ? focused
+        : buttons.findIndex((btn) => btn.getAttribute("data-tab-id") === this.activeTab);
 
-    let targetIndex = currentIndex;
-
+    let targetIndex;
     switch (event.key) {
       case "ArrowLeft":
-        event.preventDefault();
-        targetIndex = currentIndex > 0 ? currentIndex - 1 : buttons.length - 1;
+      case "ArrowRight": {
+        const step = (event.key === "ArrowRight" ? 1 : -1) * dirSign();
+        targetIndex = (currentIndex + step + buttons.length) % buttons.length;
         break;
-      case "ArrowRight":
-        event.preventDefault();
-        targetIndex = currentIndex < buttons.length - 1 ? currentIndex + 1 : 0;
-        break;
+      }
       case "Home":
-        event.preventDefault();
         targetIndex = 0;
         break;
       case "End":
-        event.preventDefault();
         targetIndex = buttons.length - 1;
         break;
       default:
         return;
     }
 
-    if (targetIndex !== currentIndex && buttons[targetIndex]) {
-      const tabId = buttons[targetIndex].getAttribute("data-tab-id");
-      this.setActive(tabId);
-      buttons[targetIndex].focus();
-    }
+    event.preventDefault();
+    const target = buttons[targetIndex];
+    buttons.forEach((button) => button.setAttribute("tabindex", button === target ? "0" : "-1"));
+    target.focus();
+    this.strip.reveal(target);
   }
 
   _escapeHtml(value) {
@@ -349,10 +380,26 @@ export class TabBar {
       const isActive = tabId === this.activeTab;
       button.classList.toggle("active", isActive);
       button.setAttribute("aria-selected", isActive);
+    });
+    this._updateTabStops();
+    if (!this._ownsContainer()) return;
+    const active = this.container.querySelector(".sub-tab.active");
+    // The page is the panel the selected tab controls.
+    const panel = document.getElementById(`page-${this.pageName}`);
+    if (panel && active) {
+      panel.setAttribute("role", "tabpanel");
+      panel.setAttribute("aria-labelledby", active.id);
+    }
+    // The current sub-tab is scrolled into view whenever it changes or the bar is shown.
+    this.strip.reveal(active);
+  }
+
+  /** The row's single tab stop is the selected tab. */
+  _updateTabStops() {
+    this.container.querySelectorAll("[data-tab-id]").forEach((button) => {
+      const isActive = button.getAttribute("data-tab-id") === this.activeTab;
       button.setAttribute("tabindex", isActive ? "0" : "-1");
     });
-    // The current sub-tab is scrolled into view whenever it changes or the bar is shown.
-    if (this._ownsContainer()) this.strip.reveal(this.container.querySelector(".sub-tab.active"));
   }
 
   _remountButtons() {
@@ -365,19 +412,18 @@ export class TabBar {
     return this.tabs
       .map((tab) => {
         const active = tab.id === this.activeTab;
-        const icon = tab.icon
-          ? `<i class="${this._escapeHtml(tab.icon)}" aria-hidden="true"></i> `
-          : "";
         return `
           <button
             class="sub-tab"
+            id="subtab-${this._escapeHtml(this.pageName)}-${this._escapeHtml(tab.id)}"
             data-tab-id="${this._escapeHtml(tab.id)}"
             role="tab"
             aria-selected="${active}"
+            aria-controls="page-${this._escapeHtml(this.pageName)}"
             tabindex="${active ? "0" : "-1"}"
             type="button"${tab.tooltip ? ` data-tooltip="${this._escapeHtml(tab.tooltip)}"` : ""}
           >
-            ${icon}${this._escapeHtml(tab.label)}
+            ${this._escapeHtml(tab.label)}
           </button>
         `;
       })
@@ -390,15 +436,14 @@ export class TabBar {
     // Skip if already visible unless force is true
     if (this.visible && !force) return;
 
-    // Re-claim the shared container for this page (hide() releases these), so the
+    // Re-claim the shared container for this page (hide() releases it), so the
     // correct buttons render and page-specific CSS keyed on data-page applies.
-    this.container.setAttribute("data-page", this.pageName);
-    this.container.setAttribute("role", "tablist");
-    this.container.setAttribute("data-ui", "tab-bar");
+    this._claimContainer();
 
     // Remount to ensure correct buttons are displayed (important for shared containers)
     this._remountButtons();
     this.container.style.display = "flex";
+    this.container.parentElement?.classList.remove("is-reserved");
     this._updateTabButtons();
     this.visible = true;
 
@@ -415,18 +460,10 @@ export class TabBar {
   hide(options = {}) {
     const { silent = false } = options;
 
-    // Always release ownership of the shared container, even if we think we're
-    // already hidden. #subTabsContainer is shared across pages; mount() stamps it
-    // with data-page/data-ui/role and page CSS keys on those (e.g. filtering
-    // forces `.sub-tabs-container[data-page="filtering"]` visible with
-    // !important). If those attributes linger after hide, that !important rule
-    // overrides our inline display:none and leaves an empty bar on screen when
-    // navigating to another page. Clearing them lets the bar actually hide.
-    this.container.style.display = "none";
-    this.container.innerHTML = "";
-    this.container.removeAttribute("data-page");
-    this.container.removeAttribute("data-ui");
-    this.container.removeAttribute("role");
+    // Always release the shared container, even if this bar thinks it is already
+    // hidden: #subTabsContainer is shared by every page, and releasing it lets the next
+    // page's bar claim a clean one.
+    this._releaseContainer();
 
     if (!this.visible) return;
 
@@ -480,17 +517,16 @@ export class TabBar {
       this.keyboardHandler = null;
     }
 
+    if (this.focusOutHandler) {
+      this.container.removeEventListener("focusout", this.focusOutHandler);
+      this.focusOutHandler = null;
+    }
+
     // Clear context
     this.context.clear();
 
     // Clear container if owned by this instance
-    if (this.container.getAttribute("data-page") === this.pageName) {
-      this.container.innerHTML = "";
-      this.container.style.display = "none";
-      this.container.removeAttribute("data-page");
-      this.container.removeAttribute("role");
-      this.container.removeAttribute("data-ui");
-    }
+    if (this._ownsContainer()) this._releaseContainer();
 
     this.mounted = false;
     this.visible = false;
@@ -553,10 +589,12 @@ class TabBarManagerClass {
         newTabBar.show();
       } else {
         // No TabBar registered for this page — ensure the container is hidden
-        // even if no registered instance was available to hide it above.
+        // even if no registered instance was available to hide it above, and that
+        // no slot stays reserved for a row this page does not have.
         const container = document.getElementById("subTabsContainer");
         if (container) {
           container.style.display = "none";
+          container.parentElement?.classList.remove("is-reserved");
         }
       }
 
@@ -566,6 +604,21 @@ class TabBarManagerClass {
 
   hideAll() {
     this.instances.forEach((tabBar) => tabBar.hide({ silent: true }));
+  }
+
+  /**
+   * Release the row while the router loads `pageName`. When that page already has a
+   * registered bar, the row's slot stays reserved (height, surface and rule, no buttons)
+   * until the bar is shown, so the row does not blink between two pages that both have
+   * one. Any other page, or none, leaves no slot behind.
+   */
+  releaseFor(pageName) {
+    this.hideAll();
+    const container = document.getElementById("subTabsContainer");
+    container?.parentElement?.classList.toggle(
+      "is-reserved",
+      Boolean(pageName && this.instances.has(pageName))
+    );
   }
 
   getActiveTabBar() {

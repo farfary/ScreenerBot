@@ -203,7 +203,7 @@ function displayPageElement(mainContent, pageEl) {
   pageEl.style.display = "";
 }
 
-function beginPageTransition(mainContent, navigationId) {
+function beginPageTransition(mainContent, navigationId, pageName) {
   const loadingEl = document.createElement("div");
   loadingEl.className = "page-loading";
   loadingEl.dataset.navigationId = String(navigationId);
@@ -215,10 +215,11 @@ function beginPageTransition(mainContent, navigationId) {
   loadingEl.replaceChildren(spinner);
 
   // Navigation chrome belongs to the displayed page. Release it before any
-  // network/style/module wait so the outgoing page cannot remain half-visible.
+  // network/style/module wait so the outgoing page cannot remain half-visible; the
+  // sub-tab row keeps its slot when the incoming page has one.
   closeStackedOverlays();
   runCleanupHandlers();
-  TabBarManager.hideAll();
+  TabBarManager.releaseFor(pageName);
   ActionBarManager.hideAll();
 
   mainContent.setAttribute("data-loading", "true");
@@ -292,7 +293,7 @@ export async function loadPage(pageName, { historyMode = "push" } = {}) {
   let pageEl = _state.pageCache[pageName] || null;
   _state.pendingPage = pageName;
   setActiveTab(pageName);
-  const loadingEl = beginPageTransition(mainContent, navigationId);
+  const loadingEl = beginPageTransition(mainContent, navigationId, pageName);
   const deactivatePrevious =
     previousPage && previousPage !== pageName
       ? PageLifecycleRegistry.deactivate(previousPage)
@@ -360,6 +361,8 @@ export async function loadPage(pageName, { historyMode = "push" } = {}) {
       return;
     }
     console.error("[Router] Failed to load page:", pageName, error);
+    // The page never showed its sub-tab row, so no slot stays reserved for it.
+    TabBarManager.releaseFor(null);
 
     try {
       await PageLifecycleRegistry.deactivate(pageName);

@@ -37,10 +37,15 @@ test("the router replaces the viewport with one canonical transition loader", as
 
   assert.match(begin, /mainContent\.replaceChildren\(loadingEl\)/);
   assert.doesNotMatch(begin, /mainContent\.appendChild\(loadingEl\)/);
-  assert.match(begin, /TabBarManager\.hideAll\(\)/);
+  // The sub-tab row is released (every bar hidden, the slot kept only for an incoming
+  // page that has a bar) before any wait.
+  assert.match(begin, /TabBarManager\.releaseFor\(pageName\)/);
+  const tabBar = await source("scripts/ui/tab_bar.js");
+  const releaseFor = tabBar.slice(tabBar.indexOf("  releaseFor(pageName) {"));
+  assert.match(releaseFor.slice(0, releaseFor.indexOf("\n  }\n")), /this\.hideAll\(\)/);
   assert.match(begin, /ActionBarManager\.hideAll\(\)/);
 
-  const beginCall = load.indexOf("beginPageTransition(mainContent, navigationId)");
+  const beginCall = load.indexOf("beginPageTransition(mainContent, navigationId, pageName)");
   const cacheBranch = load.indexOf("if (!pageEl)");
   assert.ok(beginCall !== -1 && beginCall < cacheBranch, "cached and uncached pages use one path");
 });

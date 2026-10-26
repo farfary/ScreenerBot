@@ -34,8 +34,6 @@
  * - Each config card has its own title glyph, and no field borrows another card's
  *   (Trade Size once wore DCA's coins; Take Profit, Position Sizing and Entry
  *   Strategies shared one target).
- * - A rule tab's own card wears the glyph of its tab (Trailing Stop once wore a shield
- *   on its card and a trending line on its tab).
  * - The number fields of one rule card share one width, whatever their unit or sign
  *   (the DCA card once drew four widths for four fields).
  *
@@ -386,21 +384,6 @@ test("every config card has its own glyph and no field borrows another card's", 
   const glyphs = report.glyphs.map((entry) => entry.split(" ")[0]);
   assert.equal(new Set(glyphs).size, glyphs.length, report.glyphs.join(", "));
   assert.deepEqual(report.borrowed, []);
-});
-
-test("a rule tab's card wears its tab's glyph", async () => {
-  const pairs = await page.evaluate(() => {
-    const glyph = (el) => [...(el?.classList ?? [])].find((name) => name.startsWith("icon-"));
-    return ["stop-loss", "trailing-stop", "roi", "time-rules", "dca"].map((id) => [
-      id,
-      glyph(document.querySelector(`#subTabsContainer [data-tab-id="${id}"] i`)),
-      glyph(document.querySelector(`#${id}-tab .config-card .card-header h3 i`)),
-    ]);
-  });
-  for (const [id, tab, card] of pairs) {
-    assert.ok(tab, `${id}: the tab has a glyph`);
-    assert.equal(card, tab, `${id}: card and tab glyph`);
-  }
 });
 
 test("the number fields of one rule card share one width", async () => {

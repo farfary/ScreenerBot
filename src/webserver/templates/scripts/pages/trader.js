@@ -46,17 +46,17 @@ const EXIT_TYPE_LABELS = Object.freeze({
 // Sub-tabs configuration. Strategy Control is second and the embedded Strategies
 // editor is third (Strategies was formerly its own top-level tab).
 function buildSubTabs() {
-  const tab = (id, icon, label) => ({ id, icon, label });
+  const tab = (id, label) => ({ id, label });
   return [
-    tab("stats", "icon-chart-bar", I18n.t("trader-tab-stats")),
-    tab("strategy-control", "icon-puzzle", I18n.t("trader-tab-strategy-control")),
-    tab("strategies", "icon-square-pen", I18n.t("trader-tab-strategies")),
-    tab("stop-loss", "icon-shield-off", I18n.t("trader-tab-stop-loss")),
-    tab("trailing-stop", "icon-trending-up", I18n.t("trader-tab-trailing-stop")),
-    tab("roi", "icon-target", I18n.t("trader-tab-roi")),
-    tab("time-rules", "icon-timer", I18n.t("trader-tab-time-rules")),
-    tab("dca", "icon-coins", I18n.t("trader-tab-dca")),
-    tab("general-settings", "icon-settings", I18n.t("trader-tab-settings")),
+    tab("stats", I18n.t("trader-tab-stats")),
+    tab("strategy-control", I18n.t("trader-tab-strategy-control")),
+    tab("strategies", I18n.t("trader-tab-strategies")),
+    tab("stop-loss", I18n.t("trader-tab-stop-loss")),
+    tab("trailing-stop", I18n.t("trader-tab-trailing-stop")),
+    tab("roi", I18n.t("trader-tab-roi")),
+    tab("time-rules", I18n.t("trader-tab-time-rules")),
+    tab("dca", I18n.t("trader-tab-dca")),
+    tab("general-settings", I18n.t("trader-tab-settings")),
   ];
 }
 
