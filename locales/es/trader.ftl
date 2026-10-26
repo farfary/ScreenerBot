@@ -248,7 +248,6 @@ trader-roi-title = Take profit
 trader-roi-subtitle = Sale automáticamente de toda la posición cuando la ganancia alcanza tu objetivo
 # $target is the target percentage as typed.
 trader-roi-impact = Sale con +{ $target }% de ganancia
-trader-roi-example-title = Escenario de ejemplo
 trader-roi-initial-buy = Compra inicial
 trader-roi-target-hit = Objetivo alcanzado
 trader-roi-full-position = Posición completa
@@ -329,7 +328,6 @@ trader-strategy-priority = Prioridad { $priority }
 
 trader-dca-title = Promedio de costo en dólares
 trader-dca-subtitle = Añade automáticamente a posiciones en pérdida para reducir tu precio de entrada promedio
-trader-dca-example-title = Ejemplo de DCA
 trader-dca-example = 0.01 { -sol } inicial → DCA #1: 0.005 { -sol } @ -10% → DCA #2: 0.005 { -sol } @ -10% más
 trader-dca-info-title = Información de la estrategia DCA
 trader-dca-info-subtitle = Consideraciones importantes para el trading con DCA

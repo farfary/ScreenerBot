@@ -241,7 +241,6 @@ trader-roi-title = حد سود
 trader-roi-subtitle = خروج خودکار از کل پوزیشن وقتی سود به هدف شما برسد
 # $target is the target percentage as typed.
 trader-roi-impact = خروج در +{ $target }% سود
-trader-roi-example-title = سناریوی نمونه
 trader-roi-initial-buy = خرید اولیه
 trader-roi-target-hit = رسیدن به هدف
 trader-roi-full-position = کل پوزیشن
@@ -318,7 +317,6 @@ trader-strategy-priority = اولویت { $priority }
 
 trader-dca-title = میانگین‌گیری قیمت
 trader-dca-subtitle = افزودن خودکار به پوزیشن‌های زیان‌ده برای کاهش میانگین قیمت ورود
-trader-dca-example-title = نمونه DCA
 trader-dca-example = ورود اولیه 0.01 { -sol } ← DCA شماره 1: 0.005 { -sol } در -10% ← DCA شماره 2: 0.005 { -sol } در 10% افت بیشتر
 trader-dca-info-title = اطلاعات استراتژی DCA
 trader-dca-info-subtitle = نکات مهم درباره معامله با DCA

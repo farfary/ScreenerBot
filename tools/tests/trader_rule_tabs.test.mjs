@@ -23,6 +23,7 @@
  * - A field's control (a number input or a switch such as Allow Partial Exit) sits
  *   under its hint in the control row, never in the title row beside the label, so a
  *   switch field leaves no empty track under its hint.
+ * - Every rule card's worked example carries the one section title, "How It Works".
  *
  * Run with `npm run test:js`.
  */
@@ -213,4 +214,24 @@ test("every field control sits under its hint, never in the title row", async ()
     );
   }
   assert.deepEqual(misplaced, []);
+});
+
+test("every rule card's worked example is titled How It Works", async () => {
+  const titles = [];
+  for (const id of TABS) {
+    await page.click(`#subTabsContainer [data-tab-id="${id}"]`);
+    await page.locator(`#${id}-tab`).waitFor();
+    titles.push(
+      ...(await page.$$eval(
+        `#${id}-tab .config-card > .visual-example > h4`,
+        (heads, tab) => heads.map((head) => `${tab}: ${head.textContent.trim()}`),
+        id
+      ))
+    );
+  }
+  assert.ok(titles.length >= 5, "the rule cards carry worked examples");
+  assert.deepEqual(
+    titles.filter((title) => !title.endsWith(": How It Works")),
+    []
+  );
 });

@@ -193,7 +193,6 @@ trader-trailing-summary-avoided = Tepeden kaçınılan zarar: <strong>{ $value }
 trader-roi-title = Kâr al
 trader-roi-subtitle = Kâr hedefinize ulaştığında pozisyonun tamamından otomatik olarak çıkın
 trader-roi-impact = +%{ $target } kârda çık
-trader-roi-example-title = Örnek senaryo
 trader-roi-initial-buy = İlk alım
 trader-roi-target-hit = Hedefe ulaşıldı
 trader-roi-full-position = Tam pozisyon
@@ -259,7 +258,6 @@ trader-strategy-priority = Öncelik { $priority }
 
 trader-dca-title = DCA (maliyet ortalaması)
 trader-dca-subtitle = Ortalama giriş fiyatınızı düşürmek için zarardaki pozisyonlara otomatik olarak ekleme yapın
-trader-dca-example-title = DCA örneği
 trader-dca-example = 0,01 { -sol } ilk giriş → DCA #1: 0,005 { -sol } @ -%10 → DCA #2: 0,005 { -sol } @ %10 daha
 trader-dca-info-title = DCA strateji bilgisi
 trader-dca-info-subtitle = DCA işlemi için önemli hususlar

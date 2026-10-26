@@ -234,7 +234,6 @@ trader-roi-title = 止盈
 trader-roi-subtitle = 当利润达到目标时自动全部出场
 # $target is the target percentage as typed.
 trader-roi-impact = 盈利 +{ $target }% 时出场
-trader-roi-example-title = 示例场景
 trader-roi-initial-buy = 初始买入
 trader-roi-target-hit = 达到目标
 trader-roi-full-position = 整个仓位
@@ -307,7 +306,6 @@ trader-strategy-priority = 优先级 { $priority }
 
 trader-dca-title = 定投加仓（DCA）
 trader-dca-subtitle = 对亏损仓位自动加仓，以降低入场均价
-trader-dca-example-title = DCA 示例
 trader-dca-example = 初始 0.01 { -sol } → DCA #1：0.005 { -sol } @ -10% → DCA #2：0.005 { -sol } @ 再跌 -10%
 trader-dca-info-title = DCA 策略说明
 trader-dca-info-subtitle = DCA 交易的重要注意事项

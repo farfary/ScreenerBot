@@ -234,7 +234,6 @@ trader-roi-title = 利確
 trader-roi-subtitle = 利益が目標に達したときにポジション全体を自動でエグジットします
 # $target is the target percentage as typed.
 trader-roi-impact = +{ $target }% の利益でエグジット
-trader-roi-example-title = シナリオ例
 trader-roi-initial-buy = 初回購入
 trader-roi-target-hit = 目標到達
 trader-roi-full-position = ポジション全体
@@ -307,7 +306,6 @@ trader-strategy-priority = 優先度 { $priority }
 
 trader-dca-title = ドルコスト平均法
 trader-dca-subtitle = 含み損のポジションに自動で追加購入し、平均エントリー価格を下げます
-trader-dca-example-title = DCA の例
 trader-dca-example = 初回 0.01 { -sol } → DCA #1: 0.005 { -sol } @ -10% → DCA #2: さらに -10% で 0.005 { -sol }
 trader-dca-info-title = DCA ストラテジー情報
 trader-dca-info-subtitle = DCA 取引における重要な注意点

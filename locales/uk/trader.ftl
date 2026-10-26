@@ -255,7 +255,6 @@ trader-roi-title = Тейк-профіт
 trader-roi-subtitle = Автоматичний вихід з усієї позиції, коли прибуток досягає вашої цілі
 # $target is the target percentage as typed.
 trader-roi-impact = Вихід при прибутку +{ $target }%
-trader-roi-example-title = Приклад сценарію
 trader-roi-initial-buy = Початкова купівля
 trader-roi-target-hit = Ціль досягнуто
 trader-roi-full-position = Уся позиція
@@ -340,7 +339,6 @@ trader-strategy-priority = Пріоритет { $priority }
 
 trader-dca-title = Усереднення (DCA)
 trader-dca-subtitle = Автоматична докупівля до збиткових позицій, щоб знизити середню ціну входу
-trader-dca-example-title = Приклад DCA
 trader-dca-example = 0,01 { -sol } початково → DCA №1: 0,005 { -sol } при -10% → DCA №2: 0,005 { -sol } ще при -10%
 trader-dca-info-title = Про стратегію DCA
 trader-dca-info-subtitle = Важливі міркування щодо торгівлі з DCA

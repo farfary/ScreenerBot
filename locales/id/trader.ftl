@@ -188,7 +188,6 @@ trader-trailing-summary-avoided = Menghindari rugi <strong>{ $value }</strong> d
 trader-roi-title = Take Profit
 trader-roi-subtitle = Exit seluruh posisi secara otomatis saat untung mencapai target Anda
 trader-roi-impact = Exit pada untung +{ $target }%
-trader-roi-example-title = Skenario Contoh
 trader-roi-initial-buy = Pembelian awal
 trader-roi-target-hit = Target Tercapai
 trader-roi-full-position = Posisi Penuh
@@ -250,7 +249,6 @@ trader-strategy-priority = Prioritas { $priority }
 
 trader-dca-title = Dollar-Cost Averaging
 trader-dca-subtitle = Tambah otomatis ke posisi yang rugi untuk menurunkan harga entry rata-rata Anda
-trader-dca-example-title = Contoh DCA
 trader-dca-example = 0.01 { -sol } awal → DCA #1: 0.005 { -sol } @ -10% → DCA #2: 0.005 { -sol } @ -10% lagi
 trader-dca-info-title = Info Strategi DCA
 trader-dca-info-subtitle = Pertimbangan penting untuk trading DCA

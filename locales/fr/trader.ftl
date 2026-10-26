@@ -200,7 +200,6 @@ trader-trailing-summary-avoided = Perte de <strong>{ $value }</strong> évitée 
 trader-roi-title = Take profit
 trader-roi-subtitle = Sortez automatiquement de toute la position lorsque le profit atteint votre objectif
 trader-roi-impact = Sortie à +{ $target } % de profit
-trader-roi-example-title = Scénario d'exemple
 trader-roi-initial-buy = Achat initial
 trader-roi-target-hit = Objectif atteint
 trader-roi-full-position = Position entière
@@ -270,7 +269,6 @@ trader-strategy-priority = Priorité { $priority }
 
 trader-dca-title = Investissement programmé (DCA)
 trader-dca-subtitle = Renforcez automatiquement les positions perdantes pour abaisser votre prix d'entrée moyen
-trader-dca-example-title = Exemple de DCA
 trader-dca-example = 0.01 { -sol } initial → DCA n°1 : 0.005 { -sol } à -10 % → DCA n°2 : 0.005 { -sol } à -10 % supplémentaires
 trader-dca-info-title = Infos sur la stratégie DCA
 trader-dca-info-subtitle = Points importants à considérer pour le DCA

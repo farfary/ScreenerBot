@@ -193,7 +193,6 @@ trader-trailing-summary-avoided = पीक से <strong>{ $value }</strong> �
 trader-roi-title = टेक प्रॉफ़िट
 trader-roi-subtitle = प्रॉफ़िट आपके टारगेट तक पहुंचते ही पूरी पोज़िशन से अपने आप एग्ज़िट करें
 trader-roi-impact = +{ $target }% प्रॉफ़िट पर एग्ज़िट
-trader-roi-example-title = उदाहरण परिदृश्य
 trader-roi-initial-buy = शुरुआती खरीद
 trader-roi-target-hit = टारगेट हिट
 trader-roi-full-position = पूरी पोज़िशन
@@ -259,7 +258,6 @@ trader-strategy-priority = प्राथमिकता { $priority }
 
 trader-dca-title = डॉलर-कॉस्ट एवरेजिंग
 trader-dca-subtitle = औसत एंट्री प्राइस घटाने के लिए घाटे वाली पोज़िशन में अपने आप ऐड करें
-trader-dca-example-title = DCA उदाहरण
 trader-dca-example = 0.01 { -sol } शुरुआती → DCA #1: 0.005 { -sol } @ -10% → DCA #2: 0.005 { -sol } @ और -10%
 trader-dca-info-title = DCA स्ट्रैटेजी जानकारी
 trader-dca-info-subtitle = DCA ट्रेडिंग के लिए ज़रूरी बातें

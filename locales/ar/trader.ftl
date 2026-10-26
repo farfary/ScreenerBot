@@ -269,7 +269,6 @@ trader-roi-title = جني الأرباح
 trader-roi-subtitle = الخروج تلقائيًا من المركز بالكامل عندما يبلغ الربح هدفك
 # $target is the target percentage as typed.
 trader-roi-impact = الخروج عند ربح +{ $target }%
-trader-roi-example-title = سيناريو توضيحي
 trader-roi-initial-buy = الشراء الأولي
 trader-roi-target-hit = بلوغ الهدف
 trader-roi-full-position = المركز كاملًا
@@ -362,7 +361,6 @@ trader-strategy-priority = الأولوية { $priority }
 
 trader-dca-title = متوسط التكلفة (DCA)
 trader-dca-subtitle = الإضافة تلقائيًا إلى المراكز الخاسرة لخفض متوسط سعر الدخول
-trader-dca-example-title = مثال DCA
 trader-dca-example = 0.01 { -sol } مبدئيًا ← DCA #1: 0.005 { -sol } @ -10% ← DCA #2: 0.005 { -sol } @ -10% إضافية
 trader-dca-info-title = معلومات استراتيجية DCA
 trader-dca-info-subtitle = اعتبارات مهمة عند التداول بـ DCA

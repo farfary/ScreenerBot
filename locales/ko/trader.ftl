@@ -233,7 +233,6 @@ trader-roi-title = 익절
 trader-roi-subtitle = 수익이 목표에 도달하면 포지션 전체를 자동으로 청산합니다
 # $target is the target percentage as typed.
 trader-roi-impact = 수익 +{ $target }%에서 청산
-trader-roi-example-title = 예시 시나리오
 trader-roi-initial-buy = 최초 매수
 trader-roi-target-hit = 목표 도달
 trader-roi-full-position = 전체 포지션
@@ -306,7 +305,6 @@ trader-strategy-priority = 우선순위 { $priority }
 
 trader-dca-title = 분할 매수 (DCA)
 trader-dca-subtitle = 손실 중인 포지션에 자동으로 추가 매수하여 평균 진입가를 낮춥니다
-trader-dca-example-title = DCA 예시
 trader-dca-example = 초기 0.01 { -sol } → DCA #1: 0.005 { -sol } @ -10% → DCA #2: 0.005 { -sol } @ 추가 -10%
 trader-dca-info-title = DCA 전략 정보
 trader-dca-info-subtitle = DCA 거래 시 유의할 점

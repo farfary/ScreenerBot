@@ -241,7 +241,6 @@ trader-roi-title = Take Profit
 trader-roi-subtitle = Automatically exit the entire position when profit reaches your target
 # $target is the target percentage as typed.
 trader-roi-impact = Exit at +{ $target }% profit
-trader-roi-example-title = Example Scenario
 trader-roi-initial-buy = Initial buy
 trader-roi-target-hit = Target Hit
 trader-roi-full-position = Full Position
@@ -318,7 +317,6 @@ trader-strategy-priority = Priority { $priority }
 
 trader-dca-title = Dollar-Cost Averaging
 trader-dca-subtitle = Automatically add to losing positions to lower your average entry price
-trader-dca-example-title = DCA Example
 trader-dca-example = 0.01 { -sol } initial → DCA #1: 0.005 { -sol } @ -10% → DCA #2: 0.005 { -sol } @ -10% more
 trader-dca-info-title = DCA Strategy Info
 trader-dca-info-subtitle = Important considerations for DCA trading

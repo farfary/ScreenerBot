@@ -201,7 +201,6 @@ trader-trailing-summary-avoided = <strong>{ $value }</strong> Verlust vom Hoch v
 trader-roi-title = Take Profit
 trader-roi-subtitle = Die gesamte Position automatisch verlassen, wenn der Gewinn Ihr Ziel erreicht
 trader-roi-impact = Ausstieg bei +{ $target } % Gewinn
-trader-roi-example-title = Beispielszenario
 trader-roi-initial-buy = Erstkauf
 trader-roi-target-hit = Ziel erreicht
 trader-roi-full-position = Gesamte Position
@@ -267,7 +266,6 @@ trader-strategy-priority = Priorität { $priority }
 
 trader-dca-title = Durchschnittskosten-Strategie (DCA)
 trader-dca-subtitle = Verlustpositionen automatisch aufstocken, um den durchschnittlichen Einstiegspreis zu senken
-trader-dca-example-title = DCA-Beispiel
 trader-dca-example = 0,01 { -sol } Anfang → DCA #1: 0,005 { -sol } @ -10 % → DCA #2: 0,005 { -sol } @ weitere -10 %
 trader-dca-info-title = Infos zur DCA-Strategie
 trader-dca-info-subtitle = Wichtige Hinweise zum DCA-Trading

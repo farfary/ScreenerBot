@@ -186,7 +186,6 @@ trader-trailing-summary-avoided = Đã tránh <strong>{ $value }</strong> lỗ t
 trader-roi-title = Take profit
 trader-roi-subtitle = Tự động thoát toàn bộ vị thế khi lợi nhuận đạt mục tiêu của bạn
 trader-roi-impact = Thoát khi lãi +{ $target }%
-trader-roi-example-title = Kịch bản ví dụ
 trader-roi-initial-buy = Lần mua đầu
 trader-roi-target-hit = Đạt mục tiêu
 trader-roi-full-position = Toàn bộ vị thế
@@ -248,7 +247,6 @@ trader-strategy-priority = Ưu tiên { $priority }
 
 trader-dca-title = DCA (trung bình giá)
 trader-dca-subtitle = Tự động thêm vào các vị thế đang lỗ để hạ giá vào trung bình
-trader-dca-example-title = Ví dụ DCA
 trader-dca-example = 0.01 { -sol } ban đầu → DCA #1: 0.005 { -sol } @ -10% → DCA #2: 0.005 { -sol } @ thêm -10%
 trader-dca-info-title = Thông tin chiến lược DCA
 trader-dca-info-subtitle = Những điều cần lưu ý khi giao dịch DCA

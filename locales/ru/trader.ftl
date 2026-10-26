@@ -207,7 +207,6 @@ trader-trailing-summary-avoided = Избегнут убыток от пика: <
 trader-roi-title = Тейк-профит
 trader-roi-subtitle = Автоматически выходить из всей позиции, когда прибыль достигает цели
 trader-roi-impact = Выход при +{ $target }% прибыли
-trader-roi-example-title = Пример сценария
 trader-roi-initial-buy = Первая покупка
 trader-roi-target-hit = Цель достигнута
 trader-roi-full-position = Вся позиция
@@ -281,7 +280,6 @@ trader-strategy-priority = Приоритет { $priority }
 
 trader-dca-title = Усреднение (DCA)
 trader-dca-subtitle = Автоматически докупать убыточные позиции, чтобы снизить среднюю цену входа
-trader-dca-example-title = Пример DCA
 trader-dca-example = 0.01 { -sol } начальная → DCA №1: 0.005 { -sol } при -10% → DCA №2: 0.005 { -sol } ещё при -10%
 trader-dca-info-title = О стратегии DCA
 trader-dca-info-subtitle = Важные особенности торговли с DCA
