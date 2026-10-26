@@ -242,7 +242,7 @@ strategies-condition-liquidity-level-param-comparison-option-less-than = Inféri
 strategies-condition-liquidity-level-param-comparison-option-less-equal = Inférieure ou égale à (≤)
 
 strategies-condition-position-holding-time = Durée de détention de la position
-    .description = Vérifie depuis combien de temps une position est détenue (pour les stratégies de sortie : sorties temporelles)
+    .description = Vérifie depuis combien de temps une position est détenue
 strategies-condition-position-holding-time-param-hours = Seuil de durée (heures)
     .description = Durée en heures depuis l'ouverture de la position
 strategies-condition-position-holding-time-param-comparison = Comparaison
@@ -328,7 +328,7 @@ strategies-condition-ma-cross-param-within-candles = Croisement sur les dernièr
     .description = Nombre de dernières bougies pouvant contenir le croisement ; 1 signifie la dernière bougie seulement
 
 strategies-condition-position-profit = Profit de la position
-    .description = Se déclenche lorsque le profit latent de la position ouverte est supérieur ou inférieur à un pourcentage du prix d'entrée, mesuré sur le prix du pool. Stratégies de sortie uniquement.
+    .description = Se déclenche lorsque le profit latent de la position ouverte est supérieur ou inférieur à un pourcentage du prix d'entrée, mesuré sur le prix du pool.
 strategies-condition-position-profit-param-comparison = Comparaison
     .description = Indique si le profit doit être au moins ou au plus égal au seuil
 strategies-condition-position-profit-param-comparison-option-above = Au moins (≥)
@@ -337,7 +337,7 @@ strategies-condition-position-profit-param-threshold-pct = Seuil de profit %
     .description = Profit latent en pourcentage du prix d'entrée ; les valeurs négatives sont des pertes
 
 strategies-condition-drawdown-from-peak = Repli depuis le sommet
-    .description = Se déclenche lorsque le prix du pool a reculé d'un pourcentage par rapport au prix le plus haut atteint depuis l'entrée, une fois ce sommet suffisamment au-dessus du prix d'entrée. Lit uniquement les prix du pool. Stratégies de sortie uniquement.
+    .description = Se déclenche lorsque le prix du pool a reculé d'un pourcentage par rapport au prix le plus haut atteint depuis l'entrée, une fois ce sommet suffisamment au-dessus du prix d'entrée.
 strategies-condition-drawdown-from-peak-param-drop-pct = Repli depuis le sommet %
     .description = De combien le prix actuel doit être sous le sommet
 strategies-condition-drawdown-from-peak-param-arm-after-profit-pct = Armement après profit %

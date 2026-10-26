@@ -237,7 +237,7 @@ strategies-condition-liquidity-level-param-comparison-option-less-than = Küçü
 strategies-condition-liquidity-level-param-comparison-option-less-equal = Küçük veya eşittir (≤)
 
 strategies-condition-position-holding-time = Pozisyon tutma süresi
-    .description = Bir pozisyonun ne kadar süredir tutulduğunu kontrol eder (çıkış stratejileri için - zamana dayalı çıkışlar)
+    .description = Bir pozisyonun ne kadar süredir tutulduğunu kontrol eder
 strategies-condition-position-holding-time-param-hours = Zaman eşiği (saat)
     .description = Pozisyon açıldığından beri geçen süre (saat)
 strategies-condition-position-holding-time-param-comparison = Karşılaştırma
@@ -323,7 +323,7 @@ strategies-condition-ma-cross-param-within-candles = Kesişim son mumlar içinde
     .description = Kesişimin kaç son mumda bulunabileceği; 1 yalnızca son mum demektir
 
 strategies-condition-position-profit = Pozisyon kârı
-    .description = Açık pozisyonun gerçekleşmemiş kârı giriş fiyatının belirli bir yüzdesinin üstünde veya altında olduğunda tetiklenir; havuz fiyatıyla ölçülür. Yalnızca çıkış stratejileri için.
+    .description = Açık pozisyonun gerçekleşmemiş kârı giriş fiyatının belirli bir yüzdesinin üstünde veya altında olduğunda tetiklenir; havuz fiyatıyla ölçülür.
 strategies-condition-position-profit-param-comparison = Karşılaştırma
     .description = Kârın eşiğe en az mı en fazla mı eşit olması gerektiği
 strategies-condition-position-profit-param-comparison-option-above = En az (≥)
@@ -332,7 +332,7 @@ strategies-condition-position-profit-param-threshold-pct = Kâr eşiği %
     .description = Giriş fiyatının yüzdesi olarak gerçekleşmemiş kâr; negatif değerler zarardır
 
 strategies-condition-drawdown-from-peak = Zirveden düşüş
-    .description = Havuz fiyatı, girişten bu yana görülen en yüksek fiyattan bir yüzde kadar düştüğünde ve bu zirve giriş fiyatının yeterince üzerinde olduğunda tetiklenir. Yalnızca havuz fiyatlarını okur. Yalnızca çıkış stratejileri için.
+    .description = Havuz fiyatı, girişten bu yana görülen en yüksek fiyattan bir yüzde kadar düştüğünde ve bu zirve giriş fiyatının yeterince üzerinde olduğunda tetiklenir.
 strategies-condition-drawdown-from-peak-param-drop-pct = Zirveden düşüş %
     .description = Güncel fiyatın zirvenin ne kadar altında olması gerektiği
 strategies-condition-drawdown-from-peak-param-arm-after-profit-pct = Kârdan sonra devreye al %

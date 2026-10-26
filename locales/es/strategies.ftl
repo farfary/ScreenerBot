@@ -263,7 +263,7 @@ strategies-condition-liquidity-level-param-comparison-option-less-than = Menor q
 strategies-condition-liquidity-level-param-comparison-option-less-equal = Menor o igual (≤)
 
 strategies-condition-position-holding-time = Tiempo de tenencia de la posición
-    .description = Comprueba cuánto tiempo lleva abierta una posición (para estrategias de salida: salidas por tiempo)
+    .description = Comprueba cuánto tiempo lleva abierta una posición
 strategies-condition-position-holding-time-param-hours = Umbral de tiempo (horas)
     .description = Duración en horas desde que se abrió la posición
 strategies-condition-position-holding-time-param-comparison = Comparación
@@ -349,7 +349,7 @@ strategies-condition-ma-cross-param-within-candles = Cruce en las últimas velas
     .description = Cuántas de las últimas velas pueden contener el cruce; 1 significa solo la última vela
 
 strategies-condition-position-profit = Beneficio de la posición
-    .description = Se activa cuando el beneficio no realizado de la posición abierta está por encima o por debajo de un porcentaje del precio de entrada, medido con el precio del pool. Solo para estrategias de salida.
+    .description = Se activa cuando el beneficio no realizado de la posición abierta está por encima o por debajo de un porcentaje del precio de entrada, medido con el precio del pool.
 strategies-condition-position-profit-param-comparison = Comparación
     .description = Si el beneficio debe ser como mínimo o como máximo el umbral
 strategies-condition-position-profit-param-comparison-option-above = Al menos (≥)
@@ -358,7 +358,7 @@ strategies-condition-position-profit-param-threshold-pct = Umbral de beneficio %
     .description = Beneficio no realizado como porcentaje del precio de entrada; los valores negativos son pérdidas
 
 strategies-condition-drawdown-from-peak = Caída desde el máximo
-    .description = Se activa cuando el precio del pool ha caído un porcentaje desde el precio más alto visto desde la entrada, una vez que ese máximo estuvo lo bastante por encima del precio de entrada. Solo lee precios del pool. Solo para estrategias de salida.
+    .description = Se activa cuando el precio del pool ha caído un porcentaje desde el precio más alto visto desde la entrada, una vez que ese máximo estuvo lo bastante por encima del precio de entrada.
 strategies-condition-drawdown-from-peak-param-drop-pct = Caída desde el máximo %
     .description = Cuánto por debajo del máximo debe estar el precio actual
 strategies-condition-drawdown-from-peak-param-arm-after-profit-pct = Activar tras beneficio %

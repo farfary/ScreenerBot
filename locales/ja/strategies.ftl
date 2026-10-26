@@ -250,7 +250,7 @@ strategies-condition-liquidity-level-param-comparison-option-less-than = より�
 strategies-condition-liquidity-level-param-comparison-option-less-equal = 以下（≤）
 
 strategies-condition-position-holding-time = ポジション保有時間
-    .description = ポジションの保有時間をチェックします（エグジットストラテジー用: 時間ベースのエグジット）
+    .description = ポジションの保有時間をチェックします
 strategies-condition-position-holding-time-param-hours = 時間しきい値（時間）
     .description = ポジションをオープンしてからの経過時間（時間単位）
 strategies-condition-position-holding-time-param-comparison = 比較
@@ -336,7 +336,7 @@ strategies-condition-ma-cross-param-within-candles = クロスの対象範囲
     .description = クロスを含んでよい直近のローソク足の本数。1 は最新の 1 本のみ
 
 strategies-condition-position-profit = ポジション損益
-    .description = オープン中のポジションの含み益がエントリー価格に対する指定割合を上回る、または下回ると発動します（プール価格で算出）。エグジット戦略専用です。
+    .description = オープン中のポジションの含み益がエントリー価格に対する指定割合を上回る、または下回ると発動します（プール価格で算出）。
 strategies-condition-position-profit-param-comparison = 比較
     .description = 利益がしきい値以上か、以下か
 strategies-condition-position-profit-param-comparison-option-above = 以上（≥）
@@ -345,7 +345,7 @@ strategies-condition-position-profit-param-threshold-pct = 利益しきい値 %
     .description = エントリー価格に対する含み益の割合。負の値は損失です
 
 strategies-condition-drawdown-from-peak = 高値からの下落
-    .description = エントリー以降の最高価格から指定した割合だけプール価格が下落すると発動します。その最高価格がエントリー価格より十分高かった場合に限ります。プール価格のみを読み取ります。エグジット戦略専用です。
+    .description = エントリー以降の最高価格から指定した割合だけプール価格が下落すると発動します。その最高価格がエントリー価格より十分高かった場合に限ります。
 strategies-condition-drawdown-from-peak-param-drop-pct = 高値からの下落 %
     .description = 現在価格が最高価格よりどれだけ低い必要があるか
 strategies-condition-drawdown-from-peak-param-arm-after-profit-pct = 利益後に有効化 %

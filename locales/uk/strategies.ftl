@@ -274,7 +274,7 @@ strategies-condition-liquidity-level-param-comparison-option-less-than = Мен�
 strategies-condition-liquidity-level-param-comparison-option-less-equal = Менше або дорівнює (≤)
 
 strategies-condition-position-holding-time = Час утримання позиції
-    .description = Перевірка, як довго утримується позиція (для стратегій виходу — виходи за часом)
+    .description = Перевірка, як довго утримується позиція
 strategies-condition-position-holding-time-param-hours = Часовий поріг (години)
     .description = Тривалість у годинах з моменту відкриття позиції
 strategies-condition-position-holding-time-param-comparison = Порівняння
@@ -360,7 +360,7 @@ strategies-condition-ma-cross-param-within-candles = Перетин за ост�
     .description = Скільки останніх свічок може містити перетин; 1 означає лише останню свічку
 
 strategies-condition-position-profit = Прибуток позиції
-    .description = Спрацьовує, коли нереалізований прибуток відкритої позиції вищий або нижчий за заданий відсоток від ціни входу, за ціною пулу. Лише для стратегій виходу.
+    .description = Спрацьовує, коли нереалізований прибуток відкритої позиції вищий або нижчий за заданий відсоток від ціни входу, за ціною пулу.
 strategies-condition-position-profit-param-comparison = Порівняння
     .description = Чи має прибуток бути не меншим, чи не більшим за поріг
 strategies-condition-position-profit-param-comparison-option-above = Щонайменше (≥)
@@ -369,7 +369,7 @@ strategies-condition-position-profit-param-threshold-pct = Поріг прибу
     .description = Нереалізований прибуток у відсотках від ціни входу; від'ємні значення означають збиток
 
 strategies-condition-drawdown-from-peak = Просадка від піку
-    .description = Спрацьовує, коли ціна пулу впала на заданий відсоток від найвищої ціни з моменту входу, якщо цей пік був достатньо вищим за ціну входу. Читає лише ціни пулу. Лише для стратегій виходу.
+    .description = Спрацьовує, коли ціна пулу впала на заданий відсоток від найвищої ціни з моменту входу, якщо цей пік був достатньо вищим за ціну входу.
 strategies-condition-drawdown-from-peak-param-drop-pct = Просадка від піку, %
     .description = Наскільки поточна ціна має бути нижчою за пік
 strategies-condition-drawdown-from-peak-param-arm-after-profit-pct = Вмикати після прибутку, %

@@ -253,7 +253,7 @@ strategies-condition-liquidity-level-param-comparison-option-less-than = Kleiner
 strategies-condition-liquidity-level-param-comparison-option-less-equal = Kleiner oder gleich (≤)
 
 strategies-condition-position-holding-time = Haltedauer der Position
-    .description = Prüfen, wie lange eine Position gehalten wird (für Ausstiegsstrategien – zeitbasierte Ausstiege)
+    .description = Prüfen, wie lange eine Position gehalten wird
 strategies-condition-position-holding-time-param-hours = Zeitschwelle (Stunden)
     .description = Dauer in Stunden seit Eröffnung der Position
 strategies-condition-position-holding-time-param-comparison = Vergleich
@@ -339,7 +339,7 @@ strategies-condition-ma-cross-param-within-candles = Kreuzung innerhalb
     .description = Wie viele der letzten Kerzen die Kreuzung enthalten dürfen; 1 bedeutet nur die letzte Kerze
 
 strategies-condition-position-profit = Positionsgewinn
-    .description = Wird ausgelöst, wenn der nicht realisierte Gewinn der offenen Position über oder unter einem Prozentsatz des Einstiegspreises liegt, gemessen am Poolpreis. Nur für Ausstiegsstrategien.
+    .description = Wird ausgelöst, wenn der nicht realisierte Gewinn der offenen Position über oder unter einem Prozentsatz des Einstiegspreises liegt, gemessen am Poolpreis.
 strategies-condition-position-profit-param-comparison = Vergleich
     .description = Ob der Gewinn mindestens oder höchstens der Schwelle entsprechen muss
 strategies-condition-position-profit-param-comparison-option-above = Mindestens (≥)
@@ -348,7 +348,7 @@ strategies-condition-position-profit-param-threshold-pct = Gewinnschwelle %
     .description = Nicht realisierter Gewinn in Prozent des Einstiegspreises; negative Werte sind Verluste
 
 strategies-condition-drawdown-from-peak = Rückgang vom Höchststand
-    .description = Wird ausgelöst, wenn der Poolpreis um einen Prozentwert unter den höchsten Preis seit dem Einstieg gefallen ist und dieser Höchststand weit genug über dem Einstiegspreis lag. Liest nur Poolpreise. Nur für Ausstiegsstrategien.
+    .description = Wird ausgelöst, wenn der Poolpreis um einen Prozentwert unter den höchsten Preis seit dem Einstieg gefallen ist und dieser Höchststand weit genug über dem Einstiegspreis lag.
 strategies-condition-drawdown-from-peak-param-drop-pct = Rückgang vom Höchststand %
     .description = Wie weit der aktuelle Preis unter dem Höchststand liegen muss
 strategies-condition-drawdown-from-peak-param-arm-after-profit-pct = Aktivierung nach Gewinn %

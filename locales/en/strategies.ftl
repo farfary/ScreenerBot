@@ -264,7 +264,7 @@ strategies-condition-liquidity-level-param-comparison-option-less-than = Less Th
 strategies-condition-liquidity-level-param-comparison-option-less-equal = Less or Equal (≤)
 
 strategies-condition-position-holding-time = Position Holding Time
-    .description = Check how long a position has been held (for exit strategies - time-based exits)
+    .description = Check how long a position has been held
 strategies-condition-position-holding-time-param-hours = Time Threshold (Hours)
     .description = Duration in hours since position opened
 strategies-condition-position-holding-time-param-comparison = Comparison
@@ -350,7 +350,7 @@ strategies-condition-ma-cross-param-within-candles = Cross Within
     .description = How many of the latest candles may hold the cross; 1 means the latest candle only
 
 strategies-condition-position-profit = Position Profit
-    .description = Fires when the open position's unrealized profit is above or below a percentage of the entry price, measured on the pool price. Exit strategies only.
+    .description = Fires when the open position's unrealized profit is above or below a percentage of the entry price, measured on the pool price.
 strategies-condition-position-profit-param-comparison = Comparison
     .description = Whether the profit must be at least or at most the threshold
 strategies-condition-position-profit-param-comparison-option-above = At Least (≥)
@@ -359,7 +359,7 @@ strategies-condition-position-profit-param-threshold-pct = Profit Threshold %
     .description = Unrealized profit as a percentage of the entry price; negative values are losses
 
 strategies-condition-drawdown-from-peak = Drawdown From Peak
-    .description = Fires when the pool price has fallen by a percentage from the highest price seen since entry, once that peak stood far enough above the entry price. Reads pool prices only. Exit strategies only.
+    .description = Fires when the pool price has fallen by a percentage from the highest price seen since entry, once that peak stood far enough above the entry price.
 strategies-condition-drawdown-from-peak-param-drop-pct = Drop From Peak %
     .description = How far below the peak the current price must be
 strategies-condition-drawdown-from-peak-param-arm-after-profit-pct = Arm After Profit %

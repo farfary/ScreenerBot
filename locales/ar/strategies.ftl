@@ -284,7 +284,7 @@ strategies-condition-liquidity-level-param-comparison-option-less-than = أصغ�
 strategies-condition-liquidity-level-param-comparison-option-less-equal = أصغر من أو يساوي (≤)
 
 strategies-condition-position-holding-time = مدة الاحتفاظ بالمركز
-    .description = فحص المدة التي احتُفظ فيها بالمركز (لاستراتيجيات الخروج، أي الخروج الزمني)
+    .description = فحص المدة التي احتُفظ فيها بالمركز
 strategies-condition-position-holding-time-param-hours = الحد الزمني (ساعات)
     .description = المدة بالساعات منذ فتح المركز
 strategies-condition-position-holding-time-param-comparison = المقارنة
@@ -370,7 +370,7 @@ strategies-condition-ma-cross-param-within-candles = التقاطع خلال آ�
     .description = كم من آخر الشموع يمكن أن يحتوي التقاطع؛ القيمة 1 تعني أحدث شمعة فقط
 
 strategies-condition-position-profit = ربح المركز
-    .description = يعمل عندما يكون الربح غير المحقق للمركز المفتوح أعلى أو أقل من نسبة مئوية من سعر الدخول، مقيسًا بسعر مجمع السيولة. لاستراتيجيات الخروج فقط.
+    .description = يعمل عندما يكون الربح غير المحقق للمركز المفتوح أعلى أو أقل من نسبة مئوية من سعر الدخول، مقيسًا بسعر مجمع السيولة.
 strategies-condition-position-profit-param-comparison = المقارنة
     .description = هل يجب أن يكون الربح مساويًا للحد أو أكبر منه، أم مساويًا له أو أقل منه
 strategies-condition-position-profit-param-comparison-option-above = على الأقل (≥)
@@ -379,7 +379,7 @@ strategies-condition-position-profit-param-threshold-pct = حد الربح %
     .description = الربح غير المحقق كنسبة مئوية من سعر الدخول؛ القيم السالبة خسائر
 
 strategies-condition-drawdown-from-peak = التراجع عن القمة
-    .description = يعمل عندما ينخفض سعر مجمع السيولة بنسبة مئوية عن أعلى سعر شوهد منذ الدخول، بعد أن كانت تلك القمة أعلى من سعر الدخول بما يكفي. يقرأ أسعار مجمع السيولة فقط. لاستراتيجيات الخروج فقط.
+    .description = يعمل عندما ينخفض سعر مجمع السيولة بنسبة مئوية عن أعلى سعر شوهد منذ الدخول، بعد أن كانت تلك القمة أعلى من سعر الدخول بما يكفي.
 strategies-condition-drawdown-from-peak-param-drop-pct = التراجع عن القمة %
     .description = كم يجب أن يكون السعر الحالي أدنى من القمة
 strategies-condition-drawdown-from-peak-param-arm-after-profit-pct = التفعيل بعد ربح %

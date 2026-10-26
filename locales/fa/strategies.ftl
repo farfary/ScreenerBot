@@ -264,7 +264,7 @@ strategies-condition-liquidity-level-param-comparison-option-less-than = کوچ�
 strategies-condition-liquidity-level-param-comparison-option-less-equal = کوچک‌تر یا مساوی (≤)
 
 strategies-condition-position-holding-time = مدت نگهداری پوزیشن
-    .description = بررسی مدتی که پوزیشن نگه داشته شده است (برای استراتژی‌های خروج - خروج زمان‌محور)
+    .description = بررسی مدتی که پوزیشن نگه داشته شده است
 strategies-condition-position-holding-time-param-hours = آستانه زمانی (ساعت)
     .description = مدت زمان بر حسب ساعت از باز شدن پوزیشن
 strategies-condition-position-holding-time-param-comparison = مقایسه
@@ -350,7 +350,7 @@ strategies-condition-ma-cross-param-within-candles = تقاطع در آخرین
     .description = تقاطع می‌تواند در چند کندل آخر باشد؛ 1 یعنی فقط جدیدترین کندل
 
 strategies-condition-position-profit = سود پوزیشن
-    .description = وقتی فعال می‌شود که سود تحقق‌نیافته پوزیشن باز بالاتر یا پایین‌تر از درصدی از قیمت ورود باشد، با قیمت استخر سنجیده می‌شود. فقط برای استراتژی‌های خروج.
+    .description = وقتی فعال می‌شود که سود تحقق‌نیافته پوزیشن باز بالاتر یا پایین‌تر از درصدی از قیمت ورود باشد، با قیمت استخر سنجیده می‌شود.
 strategies-condition-position-profit-param-comparison = مقایسه
     .description = سود باید دست‌کم برابر آستانه یا حداکثر برابر آن باشد
 strategies-condition-position-profit-param-comparison-option-above = دست‌کم (≥)
@@ -359,7 +359,7 @@ strategies-condition-position-profit-param-threshold-pct = آستانه سود %
     .description = سود تحقق‌نیافته به‌صورت درصدی از قیمت ورود؛ مقادیر منفی زیان هستند
 
 strategies-condition-drawdown-from-peak = افت از اوج
-    .description = وقتی فعال می‌شود که قیمت استخر به‌اندازه یک درصد از بالاترین قیمت دیده‌شده از زمان ورود افت کرده باشد، به شرط آنکه آن اوج به‌اندازه کافی بالای قیمت ورود بوده باشد. فقط قیمت استخر را می‌خواند. فقط برای استراتژی‌های خروج.
+    .description = وقتی فعال می‌شود که قیمت استخر به‌اندازه یک درصد از بالاترین قیمت دیده‌شده از زمان ورود افت کرده باشد، به شرط آنکه آن اوج به‌اندازه کافی بالای قیمت ورود بوده باشد.
 strategies-condition-drawdown-from-peak-param-drop-pct = افت از اوج %
     .description = قیمت فعلی چقدر باید پایین‌تر از اوج باشد
 strategies-condition-drawdown-from-peak-param-arm-after-profit-pct = فعال‌سازی پس از سود %

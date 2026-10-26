@@ -225,7 +225,7 @@ strategies-condition-liquidity-level-param-comparison-option-less-than = Lebih K
 strategies-condition-liquidity-level-param-comparison-option-less-equal = Lebih Kecil atau Sama Dengan (≤)
 
 strategies-condition-position-holding-time = Durasi Hold Posisi
-    .description = Periksa berapa lama posisi di-hold (untuk strategi exit - exit berbasis waktu)
+    .description = Periksa berapa lama posisi di-hold
 strategies-condition-position-holding-time-param-hours = Ambang Waktu (Jam)
     .description = Durasi dalam jam sejak posisi dibuka
 strategies-condition-position-holding-time-param-comparison = Perbandingan
@@ -311,7 +311,7 @@ strategies-condition-ma-cross-param-within-candles = Persilangan dalam
     .description = Berapa candle terakhir yang boleh memuat persilangan; 1 berarti hanya candle terakhir
 
 strategies-condition-position-profit = Profit Posisi
-    .description = Terpicu saat profit belum terealisasi dari posisi terbuka berada di atas atau di bawah suatu persentase dari harga entry, diukur pada harga pool. Hanya untuk strategi exit.
+    .description = Terpicu saat profit belum terealisasi dari posisi terbuka berada di atas atau di bawah suatu persentase dari harga entry, diukur pada harga pool.
 strategies-condition-position-profit-param-comparison = Perbandingan
     .description = Apakah profit harus minimal atau maksimal sebesar ambang
 strategies-condition-position-profit-param-comparison-option-above = Minimal (≥)
@@ -320,7 +320,7 @@ strategies-condition-position-profit-param-threshold-pct = Ambang Profit %
     .description = Profit belum terealisasi sebagai persentase dari harga entry; nilai negatif berarti rugi
 
 strategies-condition-drawdown-from-peak = Penurunan dari Puncak
-    .description = Terpicu saat harga pool turun sebesar persentase tertentu dari harga tertinggi sejak entry, setelah puncak itu cukup jauh di atas harga entry. Hanya membaca harga pool. Hanya untuk strategi exit.
+    .description = Terpicu saat harga pool turun sebesar persentase tertentu dari harga tertinggi sejak entry, setelah puncak itu cukup jauh di atas harga entry.
 strategies-condition-drawdown-from-peak-param-drop-pct = Penurunan dari Puncak %
     .description = Seberapa jauh harga saat ini harus di bawah puncak
 strategies-condition-drawdown-from-peak-param-arm-after-profit-pct = Aktif Setelah Profit %

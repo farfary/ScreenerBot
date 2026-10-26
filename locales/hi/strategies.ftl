@@ -237,7 +237,7 @@ strategies-condition-liquidity-level-param-comparison-option-less-than = से 
 strategies-condition-liquidity-level-param-comparison-option-less-equal = कम या बराबर (≤)
 
 strategies-condition-position-holding-time = पोज़िशन होल्डिंग समय
-    .description = जांचें कि पोज़िशन कितने समय से होल्ड है (एग्ज़िट स्ट्रैटेजी के लिए - समय-आधारित एग्ज़िट)
+    .description = जांचें कि पोज़िशन कितने समय से होल्ड है
 strategies-condition-position-holding-time-param-hours = समय सीमा (घंटे)
     .description = पोज़िशन खुलने के बाद से घंटों में अवधि
 strategies-condition-position-holding-time-param-comparison = तुलना
@@ -323,7 +323,7 @@ strategies-condition-ma-cross-param-within-candles = क्रॉस इतन�
     .description = क्रॉस कितनी पिछली कैंडल में हो सकता है; 1 का मतलब केवल सबसे ताज़ा कैंडल
 
 strategies-condition-position-profit = पोज़िशन का मुनाफ़ा
-    .description = तब ट्रिगर होता है जब खुली पोज़िशन का अवास्तविक मुनाफ़ा एंट्री प्राइस के किसी प्रतिशत से ऊपर या नीचे हो, जिसे पूल प्राइस पर मापा जाता है। केवल एग्ज़िट रणनीतियों के लिए।
+    .description = तब ट्रिगर होता है जब खुली पोज़िशन का अवास्तविक मुनाफ़ा एंट्री प्राइस के किसी प्रतिशत से ऊपर या नीचे हो, जिसे पूल प्राइस पर मापा जाता है।
 strategies-condition-position-profit-param-comparison = तुलना
     .description = मुनाफ़ा सीमा के बराबर या उससे अधिक होना चाहिए, या बराबर या उससे कम
 strategies-condition-position-profit-param-comparison-option-above = कम से कम (≥)
@@ -332,7 +332,7 @@ strategies-condition-position-profit-param-threshold-pct = मुनाफ़ा
     .description = एंट्री प्राइस के प्रतिशत के रूप में अवास्तविक मुनाफ़ा; नकारात्मक मान घाटा हैं
 
 strategies-condition-drawdown-from-peak = पीक से गिरावट
-    .description = तब ट्रिगर होता है जब पूल प्राइस एंट्री के बाद देखे गए सबसे ऊँचे प्राइस से किसी प्रतिशत गिर जाए, बशर्ते वह पीक एंट्री प्राइस से पर्याप्त ऊपर रहा हो। केवल पूल प्राइस पढ़ता है। केवल एग्ज़िट रणनीतियों के लिए।
+    .description = तब ट्रिगर होता है जब पूल प्राइस एंट्री के बाद देखे गए सबसे ऊँचे प्राइस से किसी प्रतिशत गिर जाए, बशर्ते वह पीक एंट्री प्राइस से पर्याप्त ऊपर रहा हो।
 strategies-condition-drawdown-from-peak-param-drop-pct = पीक से गिरावट %
     .description = मौजूदा प्राइस पीक से कितना नीचे होना चाहिए
 strategies-condition-drawdown-from-peak-param-arm-after-profit-pct = मुनाफ़े के बाद सक्रिय %

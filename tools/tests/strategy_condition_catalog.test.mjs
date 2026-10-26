@@ -14,6 +14,7 @@
  * - A condition that does not apply to the strategy type is a disabled button naming
  *   the strategy type it is for; an applicable one is an enabled button.
  * - Every schema has a data tag, derived from its category and parameters.
+ * - No condition message repeats the strategy type it is for or a data note.
  * - Search matches the localized name or description, and a category narrows the list.
  *
  * The strategies stylesheets also read only defined tokens: the exit kind once named
@@ -145,6 +146,44 @@ test("every candle condition closes its description with the one candles-only no
       .filter((line) => line.includes(localNote) && !line.startsWith("strategies-catalog-candles-note"));
     assert.deepEqual(conditionLines, [], `${locale}: a condition message repeats the note`);
   }
+});
+
+/**
+ * The catalog states which strategy type a condition is for (the restriction line of a
+ * condition the open strategy cannot use), so no condition message repeats it: a
+ * message that did read "Exit strategies only." even inside an exit strategy, and only
+ * for some of the exit-only conditions. Where a condition reads its price is stated in
+ * the message body or by the catalog's data note, never as a second closing note.
+ */
+test("no condition message repeats the catalog's restriction or data notes", () => {
+  const locales = readdirSync(`${REPO_ROOT}/locales`, { withFileTypes: true }).filter((entry) =>
+    entry.isDirectory()
+  );
+  const conditionLines = (source) => {
+    const lines = [];
+    let inCondition = false;
+    for (const line of source.split("\n")) {
+      if (/^\S/.test(line)) inCondition = line.startsWith("strategies-condition-");
+      if (inCondition) lines.push(line);
+    }
+    return lines;
+  };
+  for (const { name: locale } of locales) {
+    const source = read(`${REPO_ROOT}/locales/${locale}/strategies.ftl`);
+    const restrictions = ["exit", "entry"].map((kind) => {
+      const text = source.match(new RegExp(`^strategies-catalog-${kind}-only = (.+)$`, "m"))?.[1];
+      assert.ok(text, `${locale}: strategies-catalog-${kind}-only`);
+      return text.trim().toLocaleLowerCase(locale);
+    });
+    const repeated = conditionLines(source).filter((line) =>
+      restrictions.some((text) => line.toLocaleLowerCase(locale).includes(text))
+    );
+    assert.deepEqual(repeated, [], `${locale}: a condition message names its strategy type`);
+  }
+  const english = conditionLines(read(`${REPO_ROOT}/locales/en/strategies.ftl`)).filter((line) =>
+    /\b(?:exit|entry) strateg(?:y|ies)\b|\bpool prices only\b/i.test(line)
+  );
+  assert.deepEqual(english, [], "en: a condition message carries a restriction or data note");
 });
 
 test("search matches the localized name or description and a category narrows the list", () => {

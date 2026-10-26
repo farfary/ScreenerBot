@@ -223,7 +223,7 @@ strategies-condition-liquidity-level-param-comparison-option-less-than = Nhỏ h
 strategies-condition-liquidity-level-param-comparison-option-less-equal = Nhỏ hơn hoặc bằng (≤)
 
 strategies-condition-position-holding-time = Thời gian nắm giữ vị thế
-    .description = Kiểm tra vị thế đã được nắm giữ bao lâu (cho chiến lược thoát lệnh - thoát theo thời gian)
+    .description = Kiểm tra vị thế đã được nắm giữ bao lâu
 strategies-condition-position-holding-time-param-hours = Ngưỡng thời gian (giờ)
     .description = Khoảng thời gian tính bằng giờ kể từ khi mở vị thế
 strategies-condition-position-holding-time-param-comparison = So sánh
@@ -309,7 +309,7 @@ strategies-condition-ma-cross-param-within-candles = Giao cắt trong
     .description = Số nến gần nhất được phép chứa điểm giao cắt; 1 nghĩa là chỉ nến mới nhất
 
 strategies-condition-position-profit = Lợi nhuận vị thế
-    .description = Kích hoạt khi lợi nhuận chưa thực hiện của vị thế đang mở cao hơn hoặc thấp hơn một tỷ lệ phần trăm của giá vào lệnh, tính theo giá pool. Chỉ dùng cho chiến lược thoát lệnh.
+    .description = Kích hoạt khi lợi nhuận chưa thực hiện của vị thế đang mở cao hơn hoặc thấp hơn một tỷ lệ phần trăm của giá vào lệnh, tính theo giá pool.
 strategies-condition-position-profit-param-comparison = So sánh
     .description = Lợi nhuận phải tối thiểu hay tối đa bằng ngưỡng
 strategies-condition-position-profit-param-comparison-option-above = Ít nhất (≥)
@@ -318,7 +318,7 @@ strategies-condition-position-profit-param-threshold-pct = Ngưỡng lợi nhu�
     .description = Lợi nhuận chưa thực hiện theo phần trăm giá vào lệnh; giá trị âm là lỗ
 
 strategies-condition-drawdown-from-peak = Sụt giảm từ đỉnh
-    .description = Kích hoạt khi giá pool giảm một tỷ lệ phần trăm so với giá cao nhất kể từ lúc vào lệnh, sau khi đỉnh đó đã đủ cao hơn giá vào lệnh. Chỉ đọc giá pool. Chỉ dùng cho chiến lược thoát lệnh.
+    .description = Kích hoạt khi giá pool giảm một tỷ lệ phần trăm so với giá cao nhất kể từ lúc vào lệnh, sau khi đỉnh đó đã đủ cao hơn giá vào lệnh.
 strategies-condition-drawdown-from-peak-param-drop-pct = Sụt giảm từ đỉnh %
     .description = Giá hiện tại phải thấp hơn đỉnh bao nhiêu
 strategies-condition-drawdown-from-peak-param-arm-after-profit-pct = Kích hoạt sau lợi nhuận %

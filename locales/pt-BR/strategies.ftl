@@ -269,7 +269,7 @@ strategies-condition-liquidity-level-param-comparison-option-less-than = Menor q
 strategies-condition-liquidity-level-param-comparison-option-less-equal = Menor ou igual (≤)
 
 strategies-condition-position-holding-time = Tempo de posse da posição
-    .description = Verifica há quanto tempo uma posição é mantida (para estratégias de saída: saídas por tempo)
+    .description = Verifica há quanto tempo uma posição é mantida
 strategies-condition-position-holding-time-param-hours = Limite de tempo (horas)
     .description = Duração em horas desde a abertura da posição
 strategies-condition-position-holding-time-param-comparison = Comparação
@@ -355,7 +355,7 @@ strategies-condition-ma-cross-param-within-candles = Cruzamento nos últimos can
     .description = Quantos dos últimos candles podem conter o cruzamento; 1 significa apenas o último candle
 
 strategies-condition-position-profit = Lucro da posição
-    .description = Dispara quando o lucro não realizado da posição aberta está acima ou abaixo de uma porcentagem do preço de entrada, medido pelo preço do pool. Somente para estratégias de saída.
+    .description = Dispara quando o lucro não realizado da posição aberta está acima ou abaixo de uma porcentagem do preço de entrada, medido pelo preço do pool.
 strategies-condition-position-profit-param-comparison = Comparação
     .description = Se o lucro deve ser no mínimo ou no máximo o limite
 strategies-condition-position-profit-param-comparison-option-above = No mínimo (≥)
@@ -364,7 +364,7 @@ strategies-condition-position-profit-param-threshold-pct = Limite de lucro %
     .description = Lucro não realizado como porcentagem do preço de entrada; valores negativos são prejuízos
 
 strategies-condition-drawdown-from-peak = Queda desde o pico
-    .description = Dispara quando o preço do pool caiu uma porcentagem desde o maior preço visto após a entrada, depois que esse pico esteve alto o bastante acima do preço de entrada. Lê apenas preços do pool. Somente para estratégias de saída.
+    .description = Dispara quando o preço do pool caiu uma porcentagem desde o maior preço visto após a entrada, depois que esse pico esteve alto o bastante acima do preço de entrada.
 strategies-condition-drawdown-from-peak-param-drop-pct = Queda desde o pico %
     .description = Quanto abaixo do pico o preço atual precisa estar
 strategies-condition-drawdown-from-peak-param-arm-after-profit-pct = Armar após lucro %

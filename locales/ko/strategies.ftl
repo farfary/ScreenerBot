@@ -250,7 +250,7 @@ strategies-condition-liquidity-level-param-comparison-option-less-than = 미만 
 strategies-condition-liquidity-level-param-comparison-option-less-equal = 이하 (≤)
 
 strategies-condition-position-holding-time = 포지션 보유 시간
-    .description = 포지션을 보유한 기간을 확인합니다 (청산 전략용 - 시간 기반 청산)
+    .description = 포지션을 보유한 기간을 확인합니다
 strategies-condition-position-holding-time-param-hours = 시간 임계값 (시간)
     .description = 포지션을 연 이후 경과 시간(시간 단위)
 strategies-condition-position-holding-time-param-comparison = 비교
@@ -336,7 +336,7 @@ strategies-condition-ma-cross-param-within-candles = 교차 허용 범위
     .description = 교차가 포함될 수 있는 최근 캔들 수. 1은 가장 최근 캔들만 의미합니다
 
 strategies-condition-position-profit = 포지션 수익
-    .description = 열린 포지션의 미실현 수익이 진입 가격 대비 지정한 비율보다 높거나 낮을 때 발동합니다(풀 가격 기준). 청산 전략 전용입니다.
+    .description = 열린 포지션의 미실현 수익이 진입 가격 대비 지정한 비율보다 높거나 낮을 때 발동합니다(풀 가격 기준).
 strategies-condition-position-profit-param-comparison = 비교
     .description = 수익이 임계값 이상이어야 하는지 이하여야 하는지
 strategies-condition-position-profit-param-comparison-option-above = 이상 (≥)
@@ -345,7 +345,7 @@ strategies-condition-position-profit-param-threshold-pct = 수익 임계값 %
     .description = 진입 가격 대비 미실현 수익 비율. 음수는 손실입니다
 
 strategies-condition-drawdown-from-peak = 고점 대비 하락
-    .description = 진입 이후 최고 가격에서 지정한 비율만큼 풀 가격이 하락하면 발동합니다. 단, 그 고점이 진입 가격보다 충분히 높았어야 합니다. 풀 가격만 읽습니다. 청산 전략 전용입니다.
+    .description = 진입 이후 최고 가격에서 지정한 비율만큼 풀 가격이 하락하면 발동합니다. 단, 그 고점이 진입 가격보다 충분히 높았어야 합니다.
 strategies-condition-drawdown-from-peak-param-drop-pct = 고점 대비 하락 %
     .description = 현재 가격이 고점보다 얼마나 낮아야 하는지
 strategies-condition-drawdown-from-peak-param-arm-after-profit-pct = 수익 후 활성화 %

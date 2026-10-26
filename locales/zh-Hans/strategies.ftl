@@ -250,7 +250,7 @@ strategies-condition-liquidity-level-param-comparison-option-less-than = 小于�
 strategies-condition-liquidity-level-param-comparison-option-less-equal = 小于或等于（≤）
 
 strategies-condition-position-holding-time = 仓位持仓时间
-    .description = 检查仓位已持有的时长（用于出场策略中的按时间出场）
+    .description = 检查仓位已持有的时长
 strategies-condition-position-holding-time-param-hours = 时间阈值（小时）
     .description = 自仓位开启以来的小时数
 strategies-condition-position-holding-time-param-comparison = 比较方式
@@ -336,7 +336,7 @@ strategies-condition-ma-cross-param-within-candles = 交叉发生在最近
     .description = 交叉可以出现在最近多少根 K 线内；1 表示仅最新一根
 
 strategies-condition-position-profit = 仓位盈利
-    .description = 当持仓的未实现盈利高于或低于入场价格的指定百分比时触发（按流动性池价格计算）。仅适用于出场策略。
+    .description = 当持仓的未实现盈利高于或低于入场价格的指定百分比时触发（按流动性池价格计算）。
 strategies-condition-position-profit-param-comparison = 比较方式
     .description = 盈利必须不低于阈值，还是不高于阈值
 strategies-condition-position-profit-param-comparison-option-above = 不低于（≥）
@@ -345,7 +345,7 @@ strategies-condition-position-profit-param-threshold-pct = 盈利阈值 %
     .description = 未实现盈利占入场价格的百分比；负值表示亏损
 
 strategies-condition-drawdown-from-peak = 从高点回撤
-    .description = 当流动性池价格从入场以来的最高价下跌指定百分比，且该高点已足够高于入场价格时触发。只读取流动性池价格。仅适用于出场策略。
+    .description = 当流动性池价格从入场以来的最高价下跌指定百分比，且该高点已足够高于入场价格时触发。
 strategies-condition-drawdown-from-peak-param-drop-pct = 从高点回撤 %
     .description = 当前价格必须比高点低多少
 strategies-condition-drawdown-from-peak-param-arm-after-profit-pct = 盈利后启用 %
