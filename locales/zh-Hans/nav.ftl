@@ -30,5 +30,5 @@ nav-page-title-tools = 工具
 nav-page-title-services = 服务
 nav-page-title-events = 事件
 nav-page-title-config = 配置
-nav-page-title-initialization = 初始化
+nav-page-title-initialization = 设置向导
 nav-page-title-login = 登录

@@ -26,8 +26,8 @@ onboarding-trade-auto-title = Otomatik işlem
 onboarding-trade-auto-description = Giriş/çıkış değerlendiricileri, DCA turları, kısmi çıkışlar ve iz süren zarar durdur.
 onboarding-trade-strategy-title = Strateji motoru
 onboarding-trade-strategy-description = Fiyat, hacim ve zamana dayalı sinyalleri birleştiren koşul ağaçları.
-onboarding-trade-routing-title = En iyi fiyat yönlendirmesi
-onboarding-trade-routing-description = Etkin her yönlendiriciden eşzamanlı fiyat teklifleri — en iyi rota kazanır.
+onboarding-trade-copy-title = Kopya İşlem
+onboarding-trade-copy-description = Takip ettiğiniz cüzdanların işlemlerini yansıtın. Her görevi gerçek { -sol } harcamadan önce sanal modda test edin.
 onboarding-trade-safety-title = Güvenlik kontrolleri
 onboarding-trade-safety-description = Acil durdurma, dönemlik zarar limitleri ve bağımsız izleyici anahtarları.
 
@@ -43,14 +43,14 @@ onboarding-connect-events-title = Canlı olay akışı
 onboarding-connect-events-description = Her işlem, takas ve sistem olayı kategori ve önem derecesiyle kaydedilir.
 
 onboarding-data-title = { -brand } Data
-onboarding-data-description = Her kurulumun herkese açık sağlayıcılar tarafından ayrı ayrı istek sınırına takılmaması için ortak bir piyasa verisi hizmeti işletiyoruz. { -brand } hesabıyla ücretsizdir ve { -brand } hesapsız da çalışır.
+onboarding-data-description = Paylaşılan bir piyasa verisi hizmeti işletiyoruz; böylece kurulumunuz herkese açık sağlayıcıların istek sınırlarına takılmaz. { -brand } hesabıyla ücretsizdir ve { -brand } hesap olmadan da çalışır.
 onboarding-data-candles-title = Havuzlanmış mum geçmişi
 onboarding-data-candles-description = Yıllarca geriye giden, tek bir önbellekten sunulan yedi zaman dilimi ortak geçmiş.
 onboarding-data-pools-title = Çözümlenmiş havuzlar ve güvenlik
 onboarding-data-pools-description = Merkezi bir havuz kaydı ve önceden alınmış, önbellekteki { -rugcheck } raporları.
-onboarding-data-signin-title = Kullanmak için oturum açın
+onboarding-data-signin-title = Hesap gerekli
 onboarding-data-signin-description = Hesap olmadan bu veri kullanılamaz ve herkese açık sağlayıcılar kullanılır.
-onboarding-data-reading-title = Yalnızca okuma
+onboarding-data-reading-title = Yalnızca sorgular
 onboarding-data-reading-description = Hangi tokenları sorguladığınızı görürüz. Anahtarı, bakiyeyi, pozisyonu veya işlemi asla görmeyiz.
 
 onboarding-privacy-title = Anahtarlarınız, verileriniz

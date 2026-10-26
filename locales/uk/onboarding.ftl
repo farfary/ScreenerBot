@@ -34,8 +34,8 @@ onboarding-trade-auto-title = Автоторгівля
 onboarding-trade-auto-description = Оцінювачі входу й виходу, раунди DCA, часткові виходи та трейлінг-стоп-лос.
 onboarding-trade-strategy-title = Рушій стратегій
 onboarding-trade-strategy-description = Дерева умов, що поєднують сигнали за ціною, обсягом і часом.
-onboarding-trade-routing-title = Маршрутизація за найкращою ціною
-onboarding-trade-routing-description = Одночасні котирування від кожного ввімкненого маршрутизатора — перемагає найкращий маршрут.
+onboarding-trade-copy-title = Копітрейдинг
+onboarding-trade-copy-description = Повторюйте угоди гаманців, за якими ви стежите. Перевірте будь-яке завдання у віртуальному режимі, перш ніж воно витратить справжні { -sol }.
 onboarding-trade-safety-title = Засоби безпеки
 onboarding-trade-safety-description = Екстрена зупинка, ліміти збитків за період і незалежні перемикачі моніторів.
 
@@ -55,14 +55,14 @@ onboarding-connect-events-description = Кожна угода, своп і си�
 ## Slide: data
 
 onboarding-data-title = Дані { -brand }
-onboarding-data-description = Ми керуємо спільним сервісом ринкових даних, щоб публічні провайдери не обмежували швидкість кожної інсталяції окремо. Він безкоштовний з обліковим записом { -brand }, а { -brand } працює й без нього.
+onboarding-data-description = Ми підтримуємо спільний сервіс ринкових даних, тож ваша інсталяція не впирається в ліміти запитів публічних провайдерів. Він безкоштовний з обліковим записом { -brand }, а { -brand } працює й без нього.
 onboarding-data-candles-title = Спільна історія свічок
 onboarding-data-candles-description = Спільна історія за сімома таймфреймами, глибиною в роки, з одного кешу.
 onboarding-data-pools-title = Визначені пули та безпека
 onboarding-data-pools-description = Центральний реєстр пулів і кешовані звіти { -rugcheck }, уже отримані.
-onboarding-data-signin-title = Увійдіть, щоб користуватися
+onboarding-data-signin-title = Потрібен обліковий запис
 onboarding-data-signin-description = Без облікового запису ці дані недоступні, і використовуються публічні провайдери.
-onboarding-data-reading-title = Лише читання
+onboarding-data-reading-title = Лише запити
 onboarding-data-reading-description = Ми бачимо, які токени ви шукаєте. Ніколи — ключ, баланс, позицію чи угоду.
 
 ## Slide: privacy

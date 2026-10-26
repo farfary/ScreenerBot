@@ -34,8 +34,8 @@ onboarding-trade-auto-title = Auto-Trading
 onboarding-trade-auto-description = Entry/exit evaluators, DCA rounds, partial exits, and trailing stop-loss.
 onboarding-trade-strategy-title = Strategy Engine
 onboarding-trade-strategy-description = Condition trees combining price, volume, and time-based signals.
-onboarding-trade-routing-title = Best-Price Routing
-onboarding-trade-routing-description = Concurrent quotes from every enabled router — best route wins.
+onboarding-trade-copy-title = Copy Trading
+onboarding-trade-copy-description = Mirror the trades of wallets you follow. Test any task in paper mode before it spends real { -sol }.
 onboarding-trade-safety-title = Safety Controls
 onboarding-trade-safety-description = Emergency stop, period-based loss limits, and independent monitor toggles.
 
@@ -55,14 +55,14 @@ onboarding-connect-events-description = Every trade, swap, and system event logg
 ## Slide: data
 
 onboarding-data-title = { -brand } Data
-onboarding-data-description = We run a shared market-data service so every install is not separately rate limited by the public providers. It is free with a { -brand } account, and { -brand } works without one.
+onboarding-data-description = We run a shared market-data service, so your install isn't throttled by public provider rate limits. It's free with a { -brand } account, and { -brand } works without one.
 onboarding-data-candles-title = Pooled Candle History
 onboarding-data-candles-description = Seven timeframes of shared history, years deep, served from one cache.
 onboarding-data-pools-title = Resolved Pools & Security
 onboarding-data-pools-description = A central pool registry and cached { -rugcheck } reports, already fetched.
-onboarding-data-signin-title = Sign In To Use It
+onboarding-data-signin-title = Account required
 onboarding-data-signin-description = Without an account this data is unavailable and the public providers are used.
-onboarding-data-reading-title = Reading Only
+onboarding-data-reading-title = Lookups only
 onboarding-data-reading-description = We see which tokens you look up. Never a key, a balance, a position or a trade.
 
 ## Slide: privacy

@@ -34,8 +34,8 @@ onboarding-trade-auto-title = معاملات خودکار
 onboarding-trade-auto-description = ارزیاب‌های ورود/خروج، دورهای DCA، خروج‌های جزئی و حد ضرر متحرک.
 onboarding-trade-strategy-title = موتور استراتژی
 onboarding-trade-strategy-description = درخت‌های شرط که سیگنال‌های قیمت، حجم و زمان را ترکیب می‌کنند.
-onboarding-trade-routing-title = مسیریابی بهترین قیمت
-onboarding-trade-routing-description = قیمت‌های هم‌زمان از همه روترهای فعال — بهترین مسیر انتخاب می‌شود.
+onboarding-trade-copy-title = کپی‌تریدینگ
+onboarding-trade-copy-description = معاملات کیف‌پول‌هایی را که دنبال می‌کنید تکرار کنید. هر وظیفه را پیش از آنکه { -sol } واقعی خرج کند در حالت آزمایشی آزمایش کنید.
 onboarding-trade-safety-title = کنترل‌های ایمنی
 onboarding-trade-safety-description = توقف اضطراری، محدودیت ضرر دوره‌ای و کلیدهای مستقل هر پایش.
 
@@ -55,14 +55,14 @@ onboarding-connect-events-description = هر معامله، سواپ و روید
 ## Slide: data
 
 onboarding-data-title = داده‌های { -brand }
-onboarding-data-description = ما یک سرویس داده بازار مشترک اجرا می‌کنیم تا هر نصب جداگانه با محدودیت نرخ ارائه‌دهندگان عمومی روبه‌رو نشود. با حساب { -brand } رایگان است و { -brand } بدون آن هم کار می‌کند.
+onboarding-data-description = ما یک سرویس مشترک داده‌های بازار اجرا می‌کنیم تا نصب شما با محدودیت نرخ درخواست ارائه‌دهندگان عمومی کند نشود. این سرویس با حساب { -brand } رایگان است و { -brand } بدون آن هم کار می‌کند.
 onboarding-data-candles-title = تاریخچه کندل مشترک
 onboarding-data-candles-description = تاریخچه مشترک در هفت بازه زمانی، با عمق چندساله، از یک کش ارائه می‌شود.
 onboarding-data-pools-title = استخرها و امنیت از پیش بررسی‌شده
 onboarding-data-pools-description = یک فهرست مرکزی استخرها و گزارش‌های کش‌شده { -rugcheck }، که از قبل دریافت شده‌اند.
-onboarding-data-signin-title = برای استفاده وارد شوید
+onboarding-data-signin-title = نیازمند حساب
 onboarding-data-signin-description = بدون حساب، این داده‌ها در دسترس نیست و از ارائه‌دهندگان عمومی استفاده می‌شود.
-onboarding-data-reading-title = فقط خواندن
+onboarding-data-reading-title = فقط جست‌وجوها
 onboarding-data-reading-description = ما فقط می‌بینیم چه توکن‌هایی را جستجو می‌کنید. هرگز کلید، موجودی، پوزیشن یا معامله‌ای را نمی‌بینیم.
 
 ## Slide: privacy

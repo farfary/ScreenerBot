@@ -26,8 +26,8 @@ onboarding-trade-auto-title = Trading automatique
 onboarding-trade-auto-description = Évaluateurs d'entrée/sortie, cycles de DCA, sorties partielles et stop loss suiveur.
 onboarding-trade-strategy-title = Moteur de stratégies
 onboarding-trade-strategy-description = Arbres de conditions combinant des signaux de prix, de volume et de temps.
-onboarding-trade-routing-title = Routage au meilleur prix
-onboarding-trade-routing-description = Cotations simultanées de chaque routeur activé — la meilleure route l'emporte.
+onboarding-trade-copy-title = Copy trading
+onboarding-trade-copy-description = Reproduisez les trades des portefeuilles que vous suivez. Testez chaque tâche en mode simulé avant qu’elle ne dépense de vrais { -sol }.
 onboarding-trade-safety-title = Contrôles de sécurité
 onboarding-trade-safety-description = Arrêt d'urgence, limites de perte par période et activation indépendante des moniteurs.
 
@@ -43,14 +43,14 @@ onboarding-connect-events-title = Flux d'événements en direct
 onboarding-connect-events-description = Chaque trade, swap et événement système est journalisé avec sa catégorie et sa gravité.
 
 onboarding-data-title = Données { -brand }
-onboarding-data-description = Nous exploitons un service de données de marché partagé pour que chaque installation ne soit pas limitée séparément en débit par les fournisseurs publics. Il est gratuit avec un compte { -brand }, et { -brand } fonctionne sans compte.
+onboarding-data-description = Nous exploitons un service de données de marché partagé, afin que votre installation ne soit pas bridée par les limites de débit des fournisseurs publics. Il est gratuit avec un compte { -brand }, et { -brand } fonctionne sans.
 onboarding-data-candles-title = Historique de bougies mutualisé
 onboarding-data-candles-description = Sept périodes d'historique partagé, sur plusieurs années, servies depuis un seul cache.
 onboarding-data-pools-title = Pools résolus et sécurité
 onboarding-data-pools-description = Un registre central de pools et des rapports { -rugcheck } en cache, déjà récupérés.
-onboarding-data-signin-title = Connectez-vous pour l'utiliser
+onboarding-data-signin-title = Compte requis
 onboarding-data-signin-description = Sans compte, ces données sont indisponibles et les fournisseurs publics sont utilisés.
-onboarding-data-reading-title = Lecture seule
+onboarding-data-reading-title = Recherches uniquement
 onboarding-data-reading-description = Nous voyons quels tokens vous recherchez. Jamais une clé, un solde, une position ou un trade.
 
 onboarding-privacy-title = Vos clés, vos données

@@ -26,5 +26,5 @@ nav-page-title-tools = Ferramentas
 nav-page-title-services = Serviços
 nav-page-title-events = Eventos
 nav-page-title-config = Config
-nav-page-title-initialization = Inicialização
+nav-page-title-initialization = Configuração inicial
 nav-page-title-login = Login

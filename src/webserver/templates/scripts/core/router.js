@@ -57,8 +57,12 @@ function activatePageStyles(pageName) {
   });
 }
 
+// The first-run onboarding and setup screens share this path and title.
+const INITIALIZATION_PAGE = "initialization";
+
 function updateDocumentTitle(pageName) {
-  const title = PAGE_IDS.includes(pageName)
+  const title =
+    PAGE_IDS.includes(pageName) || pageName === INITIALIZATION_PAGE
     ? I18n.t("nav-page-title-" + pageName) // l10n-dynamic: nav-
     : I18n.t("shell-page-title-fallback");
   // Window titles render bidi controls literally, so the message's isolates are removed.
@@ -595,7 +599,8 @@ async function bootstrapRouter() {
       }
 
       // Update URL to reflect onboarding mode
-      window.history.replaceState(null, "", "/initialization");
+      window.history.replaceState(null, "", `/${INITIALIZATION_PAGE}`);
+      updateDocumentTitle(INITIALIZATION_PAGE);
 
       // Don't initialize the main router - user must complete onboarding first
       return;
@@ -620,7 +625,8 @@ async function bootstrapRouter() {
     }
 
     // Update URL to reflect setup mode
-    window.history.replaceState(null, "", "/initialization");
+    window.history.replaceState(null, "", `/${INITIALIZATION_PAGE}`);
+    updateDocumentTitle(INITIALIZATION_PAGE);
 
     // Don't initialize the main router - user must complete setup first
     return;

@@ -30,5 +30,5 @@ nav-page-title-tools = 도구
 nav-page-title-services = 서비스
 nav-page-title-events = 이벤트
 nav-page-title-config = 설정
-nav-page-title-initialization = 초기화
+nav-page-title-initialization = 초기 설정
 nav-page-title-login = 로그인

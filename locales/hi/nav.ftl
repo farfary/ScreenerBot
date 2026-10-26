@@ -28,5 +28,5 @@ nav-page-title-tools = टूल्स
 nav-page-title-services = सर्विसेज़
 nav-page-title-events = इवेंट्स
 nav-page-title-config = कॉन्फ़िग
-nav-page-title-initialization = इनिशियलाइज़ेशन
+nav-page-title-initialization = सेटअप
 nav-page-title-login = लॉगिन

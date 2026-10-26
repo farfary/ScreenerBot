@@ -26,8 +26,8 @@ onboarding-trade-auto-title = Auto-Trading
 onboarding-trade-auto-description = Evaluator entry/exit, putaran DCA, exit parsial, dan trailing stop-loss.
 onboarding-trade-strategy-title = Mesin Strategi
 onboarding-trade-strategy-description = Pohon kondisi yang menggabungkan sinyal harga, volume, dan waktu.
-onboarding-trade-routing-title = Routing Harga Terbaik
-onboarding-trade-routing-description = Kuotasi bersamaan dari setiap router yang aktif — rute terbaik menang.
+onboarding-trade-copy-title = Copy Trading
+onboarding-trade-copy-description = Tiru transaksi dompet yang Anda ikuti. Uji setiap tugas dalam mode paper sebelum tugas itu memakai { -sol } sungguhan.
 onboarding-trade-safety-title = Kontrol Keamanan
 onboarding-trade-safety-description = Penghentian darurat, batas kerugian per periode, dan sakelar monitor independen.
 
@@ -43,14 +43,14 @@ onboarding-connect-events-title = Aliran Event Langsung
 onboarding-connect-events-description = Setiap trade, swap, dan event sistem dicatat dengan kategori dan tingkat keparahan.
 
 onboarding-data-title = Data { -brand }
-onboarding-data-description = Kami menjalankan layanan data pasar bersama agar setiap instalasi tidak dibatasi laju secara terpisah oleh penyedia publik. Gratis dengan akun { -brand }, dan { -brand } tetap berfungsi tanpa akun.
+onboarding-data-description = Kami menjalankan layanan data pasar bersama, sehingga instalasi Anda tidak terhambat batas laju penyedia publik. Gratis dengan akun { -brand }, dan { -brand } tetap berfungsi tanpa akun.
 onboarding-data-candles-title = Riwayat Candle Gabungan
 onboarding-data-candles-description = Riwayat bersama tujuh timeframe, bertahun-tahun ke belakang, disajikan dari satu cache.
 onboarding-data-pools-title = Pool Terselesaikan & Keamanan
 onboarding-data-pools-description = Registri pool terpusat dan laporan { -rugcheck } yang di-cache, sudah diambil sebelumnya.
-onboarding-data-signin-title = Masuk untuk Menggunakannya
+onboarding-data-signin-title = Perlu akun
 onboarding-data-signin-description = Tanpa akun, data ini tidak tersedia dan penyedia publik yang digunakan.
-onboarding-data-reading-title = Hanya Membaca
+onboarding-data-reading-title = Hanya pencarian
 onboarding-data-reading-description = Kami melihat token mana yang Anda cari. Tidak pernah key, saldo, posisi, atau trade.
 
 onboarding-privacy-title = Key Anda, Data Anda

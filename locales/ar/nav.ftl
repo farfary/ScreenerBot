@@ -30,5 +30,5 @@ nav-page-title-tools = الأدوات
 nav-page-title-services = الخدمات
 nav-page-title-events = الأحداث
 nav-page-title-config = الإعدادات
-nav-page-title-initialization = التهيئة
+nav-page-title-initialization = الإعداد
 nav-page-title-login = تسجيل الدخول

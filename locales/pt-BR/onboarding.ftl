@@ -34,8 +34,8 @@ onboarding-trade-auto-title = Trading automático
 onboarding-trade-auto-description = Avaliadores de entrada/saída, rodadas de DCA, saídas parciais e trailing stop loss.
 onboarding-trade-strategy-title = Motor de estratégias
 onboarding-trade-strategy-description = Árvores de condições que combinam sinais de preço, volume e tempo.
-onboarding-trade-routing-title = Roteamento pelo melhor preço
-onboarding-trade-routing-description = Cotações simultâneas de todos os roteadores ativados: vence a melhor rota.
+onboarding-trade-copy-title = Copy Trading
+onboarding-trade-copy-description = Espelhe as operações das carteiras que você segue. Teste qualquer tarefa no modo Paper antes que ela gaste { -sol } real.
 onboarding-trade-safety-title = Controles de segurança
 onboarding-trade-safety-description = Parada de emergência, limites de perda por período e chaves independentes para cada monitor.
 
@@ -55,14 +55,14 @@ onboarding-connect-events-description = Cada trade, swap e evento do sistema reg
 ## Slide: data
 
 onboarding-data-title = Dados do { -brand }
-onboarding-data-description = Mantemos um serviço compartilhado de dados de mercado para que cada instalação não sofra limites de requisições separados dos provedores públicos. É gratuito com uma conta { -brand }, e o { -brand } funciona sem ela.
+onboarding-data-description = Mantemos um serviço compartilhado de dados de mercado, para que sua instalação não seja limitada pelos limites de taxa dos provedores públicos. É gratuito com uma conta { -brand }, e o { -brand } funciona sem ela.
 onboarding-data-candles-title = Histórico de candles compartilhado
 onboarding-data-candles-description = Sete timeframes de histórico compartilhado, com anos de profundidade, servidos de um único cache.
 onboarding-data-pools-title = Pools resolvidos e segurança
 onboarding-data-pools-description = Um registro central de pools e relatórios do { -rugcheck } em cache, já obtidos.
-onboarding-data-signin-title = Entre para usar
+onboarding-data-signin-title = Conta necessária
 onboarding-data-signin-description = Sem uma conta, esses dados ficam indisponíveis e os provedores públicos são usados.
-onboarding-data-reading-title = Somente leitura
+onboarding-data-reading-title = Apenas consultas
 onboarding-data-reading-description = Vemos quais tokens você consulta. Nunca uma chave, um saldo, uma posição ou um trade.
 
 ## Slide: privacy

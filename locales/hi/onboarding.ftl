@@ -26,8 +26,8 @@ onboarding-trade-auto-title = ऑटो-ट्रेडिंग
 onboarding-trade-auto-description = एंट्री/एग्ज़िट इवैल्यूएटर, DCA राउंड, आंशिक एग्ज़िट और ट्रेलिंग स्टॉप-लॉस।
 onboarding-trade-strategy-title = स्ट्रैटेजी इंजन
 onboarding-trade-strategy-description = प्राइस, वॉल्यूम और समय-आधारित सिग्नल जोड़ने वाले कंडीशन ट्री।
-onboarding-trade-routing-title = बेस्ट-प्राइस रूटिंग
-onboarding-trade-routing-description = हर चालू राउटर से एक साथ कोट — सबसे अच्छा रूट जीतता है।
+onboarding-trade-copy-title = कॉपी ट्रेडिंग
+onboarding-trade-copy-description = जिन वॉलेट को आप फ़ॉलो करते हैं, उनके ट्रेड दोहराएँ। असली { -sol } खर्च होने से पहले किसी भी टास्क को पेपर मोड में परखें।
 onboarding-trade-safety-title = सेफ़्टी कंट्रोल
 onboarding-trade-safety-description = इमरजेंसी स्टॉप, अवधि-आधारित लॉस लिमिट और स्वतंत्र मॉनिटर टॉगल।
 
@@ -43,14 +43,14 @@ onboarding-connect-events-title = लाइव इवेंट स्ट्र�
 onboarding-connect-events-description = हर ट्रेड, स्वैप और सिस्टम इवेंट श्रेणी और गंभीरता के साथ लॉग होता है।
 
 onboarding-data-title = { -brand } डेटा
-onboarding-data-description = हम एक साझा मार्केट-डेटा सर्विस चलाते हैं ताकि हर इंस्टॉल पर पब्लिक प्रोवाइडर की अलग रेट लिमिट न लगे। यह { -brand } अकाउंट के साथ मुफ़्त है, और { -brand } बिना अकाउंट के भी काम करता है।
+onboarding-data-description = हम एक साझा मार्केट-डेटा सेवा चलाते हैं, ताकि आपका इंस्टॉल सार्वजनिक प्रदाताओं की रेट लिमिट से धीमा न हो। यह { -brand } खाते के साथ मुफ़्त है, और { -brand } इसके बिना भी काम करता है।
 onboarding-data-candles-title = पूल्ड कैंडल इतिहास
 onboarding-data-candles-description = सात टाइमफ़्रेम का साझा इतिहास, कई साल गहरा, एक ही कैश से उपलब्ध।
 onboarding-data-pools-title = रिज़ॉल्व्ड पूल और सिक्योरिटी
 onboarding-data-pools-description = एक केंद्रीय पूल रजिस्ट्री और पहले से लाई गई कैश्ड { -rugcheck } रिपोर्ट।
-onboarding-data-signin-title = इस्तेमाल के लिए साइन इन करें
+onboarding-data-signin-title = खाता ज़रूरी
 onboarding-data-signin-description = अकाउंट के बिना यह डेटा उपलब्ध नहीं है और पब्लिक प्रोवाइडर इस्तेमाल होते हैं।
-onboarding-data-reading-title = केवल पढ़ना
+onboarding-data-reading-title = केवल लुकअप
 onboarding-data-reading-description = हमें दिखता है कि आप कौन से टोकन खोजते हैं। कभी की, बैलेंस, पोज़िशन या ट्रेड नहीं।
 
 onboarding-privacy-title = आपकी की, आपका डेटा

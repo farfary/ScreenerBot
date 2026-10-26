@@ -30,5 +30,5 @@ nav-page-title-tools = ツール
 nav-page-title-services = サービス
 nav-page-title-events = イベント
 nav-page-title-config = 設定
-nav-page-title-initialization = 初期化
+nav-page-title-initialization = セットアップ
 nav-page-title-login = ログイン

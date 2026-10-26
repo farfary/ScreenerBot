@@ -34,8 +34,8 @@ onboarding-trade-auto-title = 自動売買
 onboarding-trade-auto-description = エントリー/エグジット評価、DCA ラウンド、部分エグジット、トレーリング損切り。
 onboarding-trade-strategy-title = ストラテジーエンジン
 onboarding-trade-strategy-description = 価格、出来高、時間ベースのシグナルを組み合わせた条件ツリー。
-onboarding-trade-routing-title = 最良価格ルーティング
-onboarding-trade-routing-description = 有効なすべてのルーターから同時に見積もりを取得し、最良のルートを採用します。
+onboarding-trade-copy-title = コピートレード
+onboarding-trade-copy-description = フォローしているウォレットの取引をミラーします。実際の { -sol } を使う前に、どのタスクもペーパーモードでテストできます。
 onboarding-trade-safety-title = 安全管理
 onboarding-trade-safety-description = 緊急停止、期間ベースの損失上限、独立したモニターの切り替え。
 
@@ -55,14 +55,14 @@ onboarding-connect-events-description = すべての取引、スワップ、シ�
 ## Slide: data
 
 onboarding-data-title = { -brand } データ
-onboarding-data-description = 公開プロバイダーによるレート制限を各インストールが個別に受けないよう、共有のマーケットデータサービスを運用しています。{ -brand } アカウントがあれば無料で利用でき、アカウントがなくても { -brand } は動作します。
+onboarding-data-description = 共有のマーケットデータサービスを運用しているため、お使いの環境が公開プロバイダーのレート制限で抑えられることはありません。{ -brand } アカウントがあれば無料で利用でき、アカウントがなくても { -brand } は動作します。
 onboarding-data-candles-title = 共有ローソク足履歴
 onboarding-data-candles-description = 7つの時間足にわたる共有履歴を、数年分さかのぼって1つのキャッシュから提供します。
 onboarding-data-pools-title = 解決済みプールとセキュリティ
 onboarding-data-pools-description = 中央のプールレジストリと、取得済みの { -rugcheck } レポートのキャッシュ。
-onboarding-data-signin-title = 利用するにはサインイン
+onboarding-data-signin-title = アカウントが必要
 onboarding-data-signin-description = アカウントがない場合、このデータは利用できず、公開プロバイダーが使われます。
-onboarding-data-reading-title = 読み取りのみ
+onboarding-data-reading-title = 照会のみ
 onboarding-data-reading-description = どのトークンを検索したかは把握しますが、鍵、残高、ポジション、取引は一切見ません。
 
 ## Slide: privacy

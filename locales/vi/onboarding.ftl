@@ -26,8 +26,8 @@ onboarding-trade-auto-title = Giao dịch tự động
 onboarding-trade-auto-description = Bộ đánh giá vào/thoát lệnh, các vòng DCA, thoát một phần và trailing stop loss.
 onboarding-trade-strategy-title = Bộ máy chiến lược
 onboarding-trade-strategy-description = Cây điều kiện kết hợp tín hiệu về giá, khối lượng và thời gian.
-onboarding-trade-routing-title = Định tuyến giá tốt nhất
-onboarding-trade-routing-description = Lấy báo giá đồng thời từ mọi router đã bật - tuyến tốt nhất sẽ thắng.
+onboarding-trade-copy-title = Copy trading
+onboarding-trade-copy-description = Sao chép giao dịch của các ví bạn theo dõi. Thử mọi tác vụ ở chế độ thử nghiệm trước khi nó tiêu { -sol } thật.
 onboarding-trade-safety-title = Kiểm soát an toàn
 onboarding-trade-safety-description = Dừng khẩn cấp, giới hạn lỗ theo kỳ và công tắc giám sát độc lập.
 
@@ -43,14 +43,14 @@ onboarding-connect-events-title = Luồng sự kiện trực tiếp
 onboarding-connect-events-description = Mọi giao dịch, swap và sự kiện hệ thống đều được ghi lại kèm danh mục và mức độ nghiêm trọng.
 
 onboarding-data-title = Dữ liệu { -brand }
-onboarding-data-description = Chúng tôi vận hành dịch vụ dữ liệu thị trường dùng chung để mỗi bản cài đặt không bị các nhà cung cấp công khai giới hạn tốc độ riêng lẻ. Dịch vụ miễn phí với tài khoản { -brand }, và { -brand } vẫn hoạt động khi không có tài khoản.
+onboarding-data-description = Chúng tôi vận hành một dịch vụ dữ liệu thị trường dùng chung, nên bản cài đặt của bạn không bị giới hạn tốc độ của các nhà cung cấp công khai kìm lại. Dịch vụ miễn phí với tài khoản { -brand }, và { -brand } vẫn hoạt động khi không có tài khoản.
 onboarding-data-candles-title = Lịch sử nến dùng chung
 onboarding-data-candles-description = Lịch sử dùng chung ở bảy khung thời gian, sâu nhiều năm, phục vụ từ một cache.
 onboarding-data-pools-title = Pool đã xác định & bảo mật
 onboarding-data-pools-description = Sổ đăng ký pool trung tâm và các báo cáo { -rugcheck } trong cache, đã được lấy sẵn.
-onboarding-data-signin-title = Đăng nhập để sử dụng
+onboarding-data-signin-title = Cần tài khoản
 onboarding-data-signin-description = Khi không có tài khoản, dữ liệu này không khả dụng và sẽ dùng các nhà cung cấp công khai.
-onboarding-data-reading-title = Chỉ đọc
+onboarding-data-reading-title = Chỉ tra cứu
 onboarding-data-reading-description = Chúng tôi chỉ biết bạn tra cứu token nào. Không bao giờ có khóa, số dư, vị thế hay giao dịch.
 
 onboarding-privacy-title = Khóa của bạn, dữ liệu của bạn

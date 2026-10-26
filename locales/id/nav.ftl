@@ -30,5 +30,5 @@ nav-page-title-tools = Alat
 nav-page-title-services = Layanan
 nav-page-title-events = Peristiwa
 nav-page-title-config = Konfigurasi
-nav-page-title-initialization = Inisialisasi
+nav-page-title-initialization = Penyiapan
 nav-page-title-login = Masuk

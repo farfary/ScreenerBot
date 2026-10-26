@@ -30,5 +30,5 @@ nav-page-title-tools = ابزارها
 nav-page-title-services = سرویس‌ها
 nav-page-title-events = رویدادها
 nav-page-title-config = پیکربندی
-nav-page-title-initialization = مقداردهی اولیه
+nav-page-title-initialization = راه‌اندازی
 nav-page-title-login = ورود

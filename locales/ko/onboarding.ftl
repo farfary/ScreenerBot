@@ -34,8 +34,8 @@ onboarding-trade-auto-title = 자동 거래
 onboarding-trade-auto-description = 진입/청산 평가기, DCA 라운드, 부분 청산, 트레일링 손절.
 onboarding-trade-strategy-title = 전략 엔진
 onboarding-trade-strategy-description = 가격, 거래량, 시간 기반 시그널을 결합한 조건 트리.
-onboarding-trade-routing-title = 최적가 라우팅
-onboarding-trade-routing-description = 활성화된 모든 라우터에서 동시에 견적을 받아 최적 경로를 선택합니다.
+onboarding-trade-copy-title = 카피 트레이딩
+onboarding-trade-copy-description = 팔로우하는 지갑의 거래를 그대로 따라 합니다. 실제 { -sol }를 쓰기 전에 모든 작업을 모의 모드에서 테스트하세요.
 onboarding-trade-safety-title = 안전 제어
 onboarding-trade-safety-description = 긴급 중지, 기간별 손실 한도, 독립적인 모니터 전환.
 
@@ -55,14 +55,14 @@ onboarding-connect-events-description = 모든 거래, 스왑, 시스템 이벤�
 ## Slide: data
 
 onboarding-data-title = { -brand } 데이터
-onboarding-data-description = 모든 설치본이 공용 제공자로부터 각각 요청 제한을 받지 않도록 공유 시장 데이터 서비스를 운영합니다. { -brand } 계정이 있으면 무료이며, 계정 없이도 { -brand }을 사용할 수 있습니다.
+onboarding-data-description = 공유 시장 데이터 서비스를 운영하므로 설치한 앱이 공개 제공자의 요청 한도에 묶이지 않습니다. { -brand } 계정이 있으면 무료이며, { -brand }는 계정 없이도 작동합니다.
 onboarding-data-candles-title = 통합 캔들 기록
 onboarding-data-candles-description = 하나의 캐시에서 제공되는 7개 타임프레임, 수년 분량의 공유 기록.
 onboarding-data-pools-title = 확인된 풀 및 보안
 onboarding-data-pools-description = 중앙 풀 레지스트리와 이미 가져와 둔 { -rugcheck } 리포트.
-onboarding-data-signin-title = 사용하려면 로그인
+onboarding-data-signin-title = 계정 필요
 onboarding-data-signin-description = 계정이 없으면 이 데이터를 사용할 수 없으며 공용 제공자가 사용됩니다.
-onboarding-data-reading-title = 읽기 전용
+onboarding-data-reading-title = 조회만
 onboarding-data-reading-description = 조회한 토큰은 확인할 수 있지만 키, 잔액, 포지션, 거래는 절대 볼 수 없습니다.
 
 ## Slide: privacy

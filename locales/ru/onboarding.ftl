@@ -26,8 +26,8 @@ onboarding-trade-auto-title = Автоторговля
 onboarding-trade-auto-description = Оценка входов и выходов, раунды DCA, частичные выходы и трейлинг-стоп-лосс.
 onboarding-trade-strategy-title = Движок стратегий
 onboarding-trade-strategy-description = Деревья условий, объединяющие сигналы по цене, объёму и времени.
-onboarding-trade-routing-title = Маршрутизация по лучшей цене
-onboarding-trade-routing-description = Одновременные котировки от каждого включённого роутера — побеждает лучший маршрут.
+onboarding-trade-copy-title = Копитрейдинг
+onboarding-trade-copy-description = Повторяйте сделки кошельков, на которые вы подписаны. Проверьте любую задачу в виртуальном режиме, прежде чем она потратит настоящие { -sol }.
 onboarding-trade-safety-title = Средства защиты
 onboarding-trade-safety-description = Экстренная остановка, лимиты убытков за период и независимые переключатели мониторов.
 
@@ -43,14 +43,14 @@ onboarding-connect-events-title = Живой поток событий
 onboarding-connect-events-description = Каждая сделка, своп и системное событие записываются с категорией и уровнем серьёзности.
 
 onboarding-data-title = Данные { -brand }
-onboarding-data-description = Мы запускаем общий сервис рыночных данных, чтобы каждая установка не упиралась в отдельные лимиты публичных провайдеров. Он бесплатен с аккаунтом { -brand }, а { -brand } работает и без него.
+onboarding-data-description = Мы поддерживаем общий сервис рыночных данных, поэтому ваша установка не упирается в лимиты запросов публичных провайдеров. Он бесплатен с аккаунтом { -brand }, а { -brand } работает и без него.
 onboarding-data-candles-title = Общая история свечей
 onboarding-data-candles-description = Семь таймфреймов общей истории глубиной в годы, из единого кэша.
 onboarding-data-pools-title = Найденные пулы и безопасность
 onboarding-data-pools-description = Центральный реестр пулов и кэшированные отчёты { -rugcheck }, уже загруженные.
-onboarding-data-signin-title = Войдите, чтобы пользоваться
+onboarding-data-signin-title = Нужен аккаунт
 onboarding-data-signin-description = Без аккаунта эти данные недоступны, и используются публичные провайдеры.
-onboarding-data-reading-title = Только чтение
+onboarding-data-reading-title = Только запросы
 onboarding-data-reading-description = Мы видим, какие токены вы ищете. Но никогда — ключ, баланс, позицию или сделку.
 
 onboarding-privacy-title = Ваши ключи, ваши данные

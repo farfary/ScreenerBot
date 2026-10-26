@@ -32,5 +32,5 @@ nav-page-title-tools = Araçlar
 nav-page-title-services = Servisler
 nav-page-title-events = Olaylar
 nav-page-title-config = Yapılandırma
-nav-page-title-initialization = Başlatma
+nav-page-title-initialization = Kurulum
 nav-page-title-login = Giriş

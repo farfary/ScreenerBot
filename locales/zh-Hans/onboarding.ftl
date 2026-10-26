@@ -34,8 +34,8 @@ onboarding-trade-auto-title = 自动交易
 onboarding-trade-auto-description = 入场/出场评估器、DCA 轮次、部分出场和追踪止损。
 onboarding-trade-strategy-title = 策略引擎
 onboarding-trade-strategy-description = 结合价格、成交量和时间信号的条件树。
-onboarding-trade-routing-title = 最优价格路由
-onboarding-trade-routing-description = 并发获取所有已启用路由的报价，最优路由胜出。
+onboarding-trade-copy-title = 跟单交易
+onboarding-trade-copy-description = 跟随你关注的钱包进行交易。任何任务在花费真实 { -sol } 之前，都可以先在模拟模式中测试。
 onboarding-trade-safety-title = 安全控制
 onboarding-trade-safety-description = 紧急停止、按周期的亏损限额，以及独立的监控开关。
 
@@ -55,14 +55,14 @@ onboarding-connect-events-description = 每一笔交易、兑换和系统事件�
 ## Slide: data
 
 onboarding-data-title = { -brand } 数据
-onboarding-data-description = 我们运营一项共享的市场数据服务，这样每个安装实例就不必各自受到公共提供商的速率限制。拥有 { -brand } 账户即可免费使用，没有账户 { -brand } 也能正常工作。
+onboarding-data-description = 我们运行一项共享的市场数据服务，你的安装不会受公共提供方速率限制的拖累。拥有 { -brand } 账户即可免费使用，没有账户 { -brand } 也能正常运行。
 onboarding-data-candles-title = 汇集的 K 线历史
 onboarding-data-candles-description = 七个时间周期的共享历史数据，长达数年，由同一缓存提供。
 onboarding-data-pools-title = 已解析的流动性池与安全信息
 onboarding-data-pools-description = 集中的流动性池注册表和已缓存的 { -rugcheck } 报告，均已预先获取。
-onboarding-data-signin-title = 登录后使用
+onboarding-data-signin-title = 需要账户
 onboarding-data-signin-description = 没有账户时无法使用这些数据，将改用公共提供商。
-onboarding-data-reading-title = 仅读取
+onboarding-data-reading-title = 仅限查询
 onboarding-data-reading-description = 我们只能看到您查询了哪些代币，绝不会接触密钥、余额、仓位或交易。
 
 ## Slide: privacy

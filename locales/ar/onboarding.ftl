@@ -34,8 +34,8 @@ onboarding-trade-auto-title = التداول الآلي
 onboarding-trade-auto-description = مقيّمات الدخول/الخروج وجولات DCA والخروج الجزئي ووقف الخسارة المتحرك.
 onboarding-trade-strategy-title = محرك الاستراتيجيات
 onboarding-trade-strategy-description = أشجار شروط تجمع إشارات السعر وحجم التداول والوقت.
-onboarding-trade-routing-title = توجيه بأفضل سعر
-onboarding-trade-routing-description = عروض أسعار متزامنة من كل موجّه مفعّل، ويفوز أفضل مسار.
+onboarding-trade-copy-title = نسخ التداول
+onboarding-trade-copy-description = انسخ صفقات المحافظ التي تتابعها. اختبر أي مهمة في الوضع التجريبي قبل أن تنفق { -sol } حقيقيًا.
 onboarding-trade-safety-title = ضوابط الأمان
 onboarding-trade-safety-description = إيقاف طارئ وحدود خسارة بحسب الفترة ومفاتيح تبديل مستقلة للمراقبين.
 
@@ -55,14 +55,14 @@ onboarding-connect-events-description = كل صفقة ومبادلة وحدث ن
 ## Slide: data
 
 onboarding-data-title = بيانات { -brand }
-onboarding-data-description = نشغّل خدمة بيانات سوق مشتركة حتى لا يخضع كل تثبيت لحد معدل منفصل لدى المزوّدين العامين. هي مجانية مع حساب { -brand }، ويعمل { -brand } بدونه.
+onboarding-data-description = نشغّل خدمة مشتركة لبيانات السوق، فلا يتباطأ تثبيتك بسبب حدود معدّل الطلبات لدى المزوّدين العامّين. وهي مجانية مع حساب { -brand }، ويعمل { -brand } من دونه.
 onboarding-data-candles-title = سجل شموع مجمّع
 onboarding-data-candles-description = سبعة أطر زمنية من سجل مشترك بعمق سنوات، يُقدَّم من ذاكرة مؤقتة واحدة.
 onboarding-data-pools-title = مجمعات سيولة محلولة وأمان
 onboarding-data-pools-description = سجل مركزي لمجمعات السيولة وتقارير { -rugcheck } المخزّنة مؤقتًا والمجلوبة مسبقًا.
-onboarding-data-signin-title = سجّل الدخول لاستخدامها
+onboarding-data-signin-title = يتطلب حسابًا
 onboarding-data-signin-description = بدون حساب لا تتوفر هذه البيانات ويتم استخدام المزوّدين العامين.
-onboarding-data-reading-title = قراءة فقط
+onboarding-data-reading-title = عمليات البحث فقط
 onboarding-data-reading-description = نرى الرموز التي تبحث عنها فقط. لا مفتاحًا ولا رصيدًا ولا مركزًا ولا صفقة.
 
 ## Slide: privacy

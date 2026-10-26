@@ -26,5 +26,5 @@ nav-page-title-tools = Công cụ
 nav-page-title-services = Dịch vụ
 nav-page-title-events = Sự kiện
 nav-page-title-config = Cấu hình
-nav-page-title-initialization = Khởi tạo
+nav-page-title-initialization = Thiết lập
 nav-page-title-login = Đăng nhập
