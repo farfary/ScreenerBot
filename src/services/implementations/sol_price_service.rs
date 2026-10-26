@@ -26,8 +26,11 @@ impl Service for SolPriceService {
         vec![]
     }
 
+    /// The price comes from public HTTP sources and needs no wallet or RPC, so it runs in
+    /// Explore Mode as well as after setup; entering Explore Mode at runtime starts it
+    /// with the other explore-tier services.
     fn is_enabled(&self) -> bool {
-        crate::global::is_initialization_complete()
+        crate::global::is_explore_or_full()
     }
 
     async fn initialize(&mut self) -> crate::Result<()> {
