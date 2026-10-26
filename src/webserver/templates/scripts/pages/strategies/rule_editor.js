@@ -340,8 +340,11 @@ export function createRuleEditor({
     const sentence = isRoot
       ? I18n.t("strategies-rules-match", { mode: MODE_MARK })
       : I18n.t("strategies-group-match", { mode: MODE_MARK });
+    // With no condition yet there is nothing for the root to negate.
+    const canInvertRoot =
+      group.inverted || (group.children.length > 0 && tree.canInvert(root, group.id));
     const invert = isRoot
-      ? `<button type="button" class="btn btn-sm rule-invert" data-action="invert" aria-pressed="${group.inverted}" title="${escape(I18n.attr("strategies-invert", "title"))}"${group.inverted || tree.canInvert(root, group.id) ? "" : " disabled"}><i class="icon-flip-vertical-2"></i> <span>${escape(I18n.t("strategies-invert"))}</span></button>`
+      ? `<button type="button" class="btn btn-sm rule-invert" data-action="invert" aria-pressed="${group.inverted}" title="${escape(I18n.attr("strategies-invert", "title"))}"${canInvertRoot ? "" : " disabled"}><i class="icon-flip-vertical-2"></i> <span>${escape(I18n.t("strategies-invert"))}</span></button>`
       : renderActions(group, siblings);
     const noted = own.find(isNodeProblem);
     let children = renderChildren(group, found);
@@ -382,7 +385,11 @@ export function createRuleEditor({
   const nodeEl = (id) => list()?.querySelector(`[data-node-id="${id}"]`);
 
   function syncFooter() {
-    const found = problems();
+    // A blank strategy is not wrong yet: the empty rule list shows adding a condition as
+    // the next step, so the problem bar waits until there is something to correct.
+    const found = root.children.length
+      ? problems()
+      : problems().filter((problem) => problem.code !== "rules-empty");
     const bar = $("#rule-problems");
     if (bar) {
       bar.hidden = found.length === 0;

@@ -282,7 +282,7 @@ strategies-condition-volume-spike-param-multiplier = Pengali Volume
     .description = Berapa kali di atas rata-rata (mis., 2.0 = 200% dari rata-rata)
 
 strategies-condition-rsi = RSI (Relative Strength Index)
-    .description = Terpicu saat RSI dari harga penutupan candle, yang dihaluskan menurut Wilder, berada di bawah atau di atas ambang. Hanya membaca candle.
+    .description = Terpicu saat RSI, dengan penghalusan Wilder pada candle yang sudah ditutup, berada di atas atau di bawah ambang.
 strategies-condition-rsi-param-period = Periode RSI
     .description = Jumlah candle yang dipakai untuk menghitung RSI; kondisi ini membutuhkan satu candle lebih banyak dari nilai ini
 strategies-condition-rsi-param-comparison = Perbandingan
@@ -310,7 +310,7 @@ strategies-condition-ma-cross-param-within-candles = Persilangan dalam
     .description = Berapa candle terakhir yang boleh memuat persilangan; 1 berarti hanya candle terakhir
 
 strategies-condition-position-profit = Profit Posisi
-    .description = Terpicu saat profit belum terealisasi dari posisi terbuka, diukur dari harga pool terhadap harga entry, berada di atas atau di bawah suatu persentase. Hanya untuk strategi exit.
+    .description = Terpicu saat profit belum terealisasi dari posisi terbuka berada di atas atau di bawah suatu persentase dari harga entry, diukur pada harga pool. Hanya untuk strategi exit.
 strategies-condition-position-profit-param-comparison = Perbandingan
     .description = Apakah profit harus minimal atau maksimal sebesar ambang
 strategies-condition-position-profit-param-comparison-option-above = Minimal (≥)

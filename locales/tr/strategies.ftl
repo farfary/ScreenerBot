@@ -294,7 +294,7 @@ strategies-condition-volume-spike-param-multiplier = Hacim çarpanı
     .description = Ortalamanın kaç katı üstünde (örn. 2,0 = ortalamanın %200'ü)
 
 strategies-condition-rsi = RSI (Göreceli Güç Endeksi)
-    .description = Mum kapanışlarının Wilder yöntemiyle yumuşatılmış RSI değeri bir eşiğin altında veya üstünde olduğunda tetiklenir. Yalnızca mumları okur.
+    .description = Kapanmış mumlarda Wilder yumuşatmasıyla hesaplanan RSI bir eşiğin üstünde veya altında olduğunda tetiklenir.
 strategies-condition-rsi-param-period = RSI dönemi
     .description = RSI'nin hesaplandığı mum sayısı; koşul bu değerden bir mum fazlasına ihtiyaç duyar
 strategies-condition-rsi-param-comparison = Karşılaştırma
@@ -322,7 +322,7 @@ strategies-condition-ma-cross-param-within-candles = Kesişim son mumlar içinde
     .description = Kesişimin kaç son mumda bulunabileceği; 1 yalnızca son mum demektir
 
 strategies-condition-position-profit = Pozisyon kârı
-    .description = Açık pozisyonun, havuz fiyatının giriş fiyatına göre ölçülen gerçekleşmemiş kârı bir yüzdenin üstünde veya altında olduğunda tetiklenir. Yalnızca çıkış stratejileri için.
+    .description = Açık pozisyonun gerçekleşmemiş kârı giriş fiyatının belirli bir yüzdesinin üstünde veya altında olduğunda tetiklenir; havuz fiyatıyla ölçülür. Yalnızca çıkış stratejileri için.
 strategies-condition-position-profit-param-comparison = Karşılaştırma
     .description = Kârın eşiğe en az mı en fazla mı eşit olması gerektiği
 strategies-condition-position-profit-param-comparison-option-above = En az (≥)

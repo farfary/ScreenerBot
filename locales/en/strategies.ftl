@@ -321,7 +321,7 @@ strategies-condition-volume-spike-param-multiplier = Volume Multiplier
     .description = How many times above average (e.g., 2.0 = 200% of average)
 
 strategies-condition-rsi = RSI (Relative Strength Index)
-    .description = Fires when the RSI of the candle closes, smoothed the way Wilder defined it, is below or above a threshold. Reads candles only.
+    .description = Fires when the RSI, with Wilder smoothing on closed candles, is above or below a threshold.
 strategies-condition-rsi-param-period = RSI Period
     .description = Number of candles the RSI is calculated over; the condition needs one more candle than this
 strategies-condition-rsi-param-comparison = Comparison
@@ -349,7 +349,7 @@ strategies-condition-ma-cross-param-within-candles = Cross Within
     .description = How many of the latest candles may hold the cross; 1 means the latest candle only
 
 strategies-condition-position-profit = Position Profit
-    .description = Fires when the open position's unrealized profit, measured on the pool price against the entry price, is above or below a percentage. Exit strategies only.
+    .description = Fires when the open position's unrealized profit is above or below a percentage of the entry price, measured on the pool price. Exit strategies only.
 strategies-condition-position-profit-param-comparison = Comparison
     .description = Whether the profit must be at least or at most the threshold
 strategies-condition-position-profit-param-comparison-option-above = At Least (≥)

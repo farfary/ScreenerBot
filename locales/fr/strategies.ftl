@@ -299,7 +299,7 @@ strategies-condition-volume-spike-param-multiplier = Multiplicateur de volume
     .description = Combien de fois au-dessus de la moyenne (p. ex. 2.0 = 200 % de la moyenne)
 
 strategies-condition-rsi = RSI (indice de force relative)
-    .description = Se déclenche lorsque le RSI des clôtures des bougies, lissé selon la méthode de Wilder, est inférieur ou supérieur à un seuil. Lit uniquement les bougies.
+    .description = Se déclenche lorsque le RSI, avec le lissage de Wilder sur les bougies clôturées, est supérieur ou inférieur à un seuil.
 strategies-condition-rsi-param-period = Période du RSI
     .description = Nombre de bougies sur lesquelles le RSI est calculé ; la condition exige une bougie de plus que cette valeur
 strategies-condition-rsi-param-comparison = Comparaison
@@ -327,7 +327,7 @@ strategies-condition-ma-cross-param-within-candles = Croisement sur les dernièr
     .description = Nombre de dernières bougies pouvant contenir le croisement ; 1 signifie la dernière bougie seulement
 
 strategies-condition-position-profit = Profit de la position
-    .description = Se déclenche lorsque le profit latent de la position ouverte, mesuré sur le prix du pool par rapport au prix d'entrée, est supérieur ou inférieur à un pourcentage. Stratégies de sortie uniquement.
+    .description = Se déclenche lorsque le profit latent de la position ouverte est supérieur ou inférieur à un pourcentage du prix d'entrée, mesuré sur le prix du pool. Stratégies de sortie uniquement.
 strategies-condition-position-profit-param-comparison = Comparaison
     .description = Indique si le profit doit être au moins ou au plus égal au seuil
 strategies-condition-position-profit-param-comparison-option-above = Au moins (≥)

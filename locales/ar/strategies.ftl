@@ -341,7 +341,7 @@ strategies-condition-volume-spike-param-multiplier = مضاعف حجم التد�
     .description = كم مرة فوق المتوسط (مثال: 2.0 = 200% من المتوسط)
 
 strategies-condition-rsi = RSI (مؤشر القوة النسبية)
-    .description = يعمل عندما يكون مؤشر RSI لأسعار إغلاق الشموع، بعد تنعيمه بطريقة وايلدر، أقل من حد معيّن أو أعلى منه. يقرأ الشموع فقط.
+    .description = يعمل عندما يكون مؤشر RSI، بتنعيم وايلدر على الشموع المغلقة، أعلى من حد معيّن أو أقل منه.
 strategies-condition-rsi-param-period = فترة RSI
     .description = عدد الشموع التي يُحسب عليها المؤشر؛ يحتاج الشرط إلى شمعة أكثر من هذه القيمة
 strategies-condition-rsi-param-comparison = المقارنة
@@ -369,7 +369,7 @@ strategies-condition-ma-cross-param-within-candles = التقاطع خلال آ�
     .description = كم من آخر الشموع يمكن أن يحتوي التقاطع؛ القيمة 1 تعني أحدث شمعة فقط
 
 strategies-condition-position-profit = ربح المركز
-    .description = يعمل عندما يكون الربح غير المحقق للمركز المفتوح، مقيسًا بسعر مجمع السيولة مقابل سعر الدخول، أعلى من نسبة مئوية أو أقل منها. لاستراتيجيات الخروج فقط.
+    .description = يعمل عندما يكون الربح غير المحقق للمركز المفتوح أعلى أو أقل من نسبة مئوية من سعر الدخول، مقيسًا بسعر مجمع السيولة. لاستراتيجيات الخروج فقط.
 strategies-condition-position-profit-param-comparison = المقارنة
     .description = هل يجب أن يكون الربح مساويًا للحد أو أكبر منه، أم مساويًا له أو أقل منه
 strategies-condition-position-profit-param-comparison-option-above = على الأقل (≥)

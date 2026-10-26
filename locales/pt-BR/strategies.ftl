@@ -326,7 +326,7 @@ strategies-condition-volume-spike-param-multiplier = Multiplicador de volume
     .description = Quantas vezes acima da média (ex.: 2.0 = 200% da média)
 
 strategies-condition-rsi = RSI (Índice de Força Relativa)
-    .description = Dispara quando o RSI dos fechamentos dos candles, suavizado como Wilder definiu, está abaixo ou acima de um limite. Lê apenas candles.
+    .description = Dispara quando o RSI, com a suavização de Wilder sobre candles fechados, está acima ou abaixo de um limite.
 strategies-condition-rsi-param-period = Período do RSI
     .description = Número de candles sobre os quais o RSI é calculado; a condição precisa de um candle a mais que este valor
 strategies-condition-rsi-param-comparison = Comparação
@@ -354,7 +354,7 @@ strategies-condition-ma-cross-param-within-candles = Cruzamento nos últimos can
     .description = Quantos dos últimos candles podem conter o cruzamento; 1 significa apenas o último candle
 
 strategies-condition-position-profit = Lucro da posição
-    .description = Dispara quando o lucro não realizado da posição aberta, medido pelo preço do pool em relação ao preço de entrada, está acima ou abaixo de uma porcentagem. Somente para estratégias de saída.
+    .description = Dispara quando o lucro não realizado da posição aberta está acima ou abaixo de uma porcentagem do preço de entrada, medido pelo preço do pool. Somente para estratégias de saída.
 strategies-condition-position-profit-param-comparison = Comparação
     .description = Se o lucro deve ser no mínimo ou no máximo o limite
 strategies-condition-position-profit-param-comparison-option-above = No mínimo (≥)

@@ -307,7 +307,7 @@ strategies-condition-volume-spike-param-multiplier = 成交量倍数
     .description = 高于平均值的倍数（例如 2.0 = 平均值的 200%）
 
 strategies-condition-rsi = RSI（相对强弱指数）
-    .description = 当 K 线收盘价的 RSI（按威尔德方式平滑）低于或高于阈值时触发。只读取 K 线。
+    .description = 当基于已收盘 K 线、采用威尔德平滑的 RSI 高于或低于阈值时触发。
 strategies-condition-rsi-param-period = RSI 周期
     .description = 计算 RSI 所用的 K 线数量；条件需要比该值多一根 K 线
 strategies-condition-rsi-param-comparison = 比较方式
@@ -335,7 +335,7 @@ strategies-condition-ma-cross-param-within-candles = 交叉发生在最近
     .description = 交叉可以出现在最近多少根 K 线内；1 表示仅最新一根
 
 strategies-condition-position-profit = 仓位盈利
-    .description = 当持仓的未实现盈利（按流动性池价格相对入场价格计算）高于或低于指定百分比时触发。仅适用于出场策略。
+    .description = 当持仓的未实现盈利高于或低于入场价格的指定百分比时触发（按流动性池价格计算）。仅适用于出场策略。
 strategies-condition-position-profit-param-comparison = 比较方式
     .description = 盈利必须不低于阈值，还是不高于阈值
 strategies-condition-position-profit-param-comparison-option-above = 不低于（≥）

@@ -294,7 +294,7 @@ strategies-condition-volume-spike-param-multiplier = वॉल्यूम ग�
     .description = औसत से कितने गुना ऊपर (जैसे, 2.0 = औसत का 200%)
 
 strategies-condition-rsi = RSI (रिलेटिव स्ट्रेंथ इंडेक्स)
-    .description = तब ट्रिगर होता है जब कैंडल क्लोज़ का RSI, वाइल्डर की विधि से स्मूद किया हुआ, किसी सीमा से नीचे या ऊपर हो। केवल कैंडल पढ़ता है।
+    .description = तब ट्रिगर होता है जब बंद कैंडलों पर वाइल्डर स्मूदिंग वाला RSI किसी सीमा से ऊपर या नीचे हो।
 strategies-condition-rsi-param-period = RSI अवधि
     .description = कितनी कैंडल पर RSI निकाला जाता है; शर्त को इस मान से एक कैंडल अधिक चाहिए
 strategies-condition-rsi-param-comparison = तुलना
@@ -322,7 +322,7 @@ strategies-condition-ma-cross-param-within-candles = क्रॉस इतन�
     .description = क्रॉस कितनी पिछली कैंडल में हो सकता है; 1 का मतलब केवल सबसे ताज़ा कैंडल
 
 strategies-condition-position-profit = पोज़िशन का मुनाफ़ा
-    .description = तब ट्रिगर होता है जब खुली पोज़िशन का अवास्तविक मुनाफ़ा, पूल प्राइस को एंट्री प्राइस से तुलना कर मापा गया, किसी प्रतिशत से ऊपर या नीचे हो। केवल एग्ज़िट रणनीतियों के लिए।
+    .description = तब ट्रिगर होता है जब खुली पोज़िशन का अवास्तविक मुनाफ़ा एंट्री प्राइस के किसी प्रतिशत से ऊपर या नीचे हो, जिसे पूल प्राइस पर मापा जाता है। केवल एग्ज़िट रणनीतियों के लिए।
 strategies-condition-position-profit-param-comparison = तुलना
     .description = मुनाफ़ा सीमा के बराबर या उससे अधिक होना चाहिए, या बराबर या उससे कम
 strategies-condition-position-profit-param-comparison-option-above = कम से कम (≥)

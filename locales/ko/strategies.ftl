@@ -307,7 +307,7 @@ strategies-condition-volume-spike-param-multiplier = 거래량 배수
     .description = 평균의 몇 배인지 (예: 2.0 = 평균의 200%)
 
 strategies-condition-rsi = RSI (상대강도지수)
-    .description = 캔들 종가의 RSI(와일더 방식으로 평활화)가 임계값보다 낮거나 높을 때 발동합니다. 캔들만 읽습니다.
+    .description = 마감된 캔들에 와일더 평활화를 적용한 RSI가 임계값보다 높거나 낮을 때 발동합니다.
 strategies-condition-rsi-param-period = RSI 기간
     .description = RSI를 계산하는 캔들 수. 이 값보다 캔들이 하나 더 필요합니다
 strategies-condition-rsi-param-comparison = 비교
@@ -335,7 +335,7 @@ strategies-condition-ma-cross-param-within-candles = 교차 허용 범위
     .description = 교차가 포함될 수 있는 최근 캔들 수. 1은 가장 최근 캔들만 의미합니다
 
 strategies-condition-position-profit = 포지션 수익
-    .description = 열린 포지션의 미실현 수익(풀 가격을 진입 가격과 비교해 측정)이 지정한 비율보다 높거나 낮을 때 발동합니다. 청산 전략 전용입니다.
+    .description = 열린 포지션의 미실현 수익이 진입 가격 대비 지정한 비율보다 높거나 낮을 때 발동합니다(풀 가격 기준). 청산 전략 전용입니다.
 strategies-condition-position-profit-param-comparison = 비교
     .description = 수익이 임계값 이상이어야 하는지 이하여야 하는지
 strategies-condition-position-profit-param-comparison-option-above = 이상 (≥)

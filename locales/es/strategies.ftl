@@ -320,7 +320,7 @@ strategies-condition-volume-spike-param-multiplier = Multiplicador de volumen
     .description = Cuántas veces por encima del promedio (p. ej., 2.0 = 200% del promedio)
 
 strategies-condition-rsi = RSI (índice de fuerza relativa)
-    .description = Se activa cuando el RSI de los cierres de las velas, suavizado como lo definió Wilder, está por debajo o por encima de un umbral. Solo lee velas.
+    .description = Se activa cuando el RSI, con suavizado de Wilder sobre velas cerradas, está por encima o por debajo de un umbral.
 strategies-condition-rsi-param-period = Período del RSI
     .description = Número de velas sobre las que se calcula el RSI; la condición necesita una vela más que este valor
 strategies-condition-rsi-param-comparison = Comparación
@@ -348,7 +348,7 @@ strategies-condition-ma-cross-param-within-candles = Cruce en las últimas velas
     .description = Cuántas de las últimas velas pueden contener el cruce; 1 significa solo la última vela
 
 strategies-condition-position-profit = Beneficio de la posición
-    .description = Se activa cuando el beneficio no realizado de la posición abierta, medido con el precio del pool frente al precio de entrada, está por encima o por debajo de un porcentaje. Solo para estrategias de salida.
+    .description = Se activa cuando el beneficio no realizado de la posición abierta está por encima o por debajo de un porcentaje del precio de entrada, medido con el precio del pool. Solo para estrategias de salida.
 strategies-condition-position-profit-param-comparison = Comparación
     .description = Si el beneficio debe ser como mínimo o como máximo el umbral
 strategies-condition-position-profit-param-comparison-option-above = Al menos (≥)

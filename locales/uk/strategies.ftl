@@ -331,7 +331,7 @@ strategies-condition-volume-spike-param-multiplier = Множник обсягу
     .description = У скільки разів вище середнього (напр., 2,0 = 200% від середнього)
 
 strategies-condition-rsi = RSI (індекс відносної сили)
-    .description = Спрацьовує, коли RSI цін закриття свічок, згладжений за Вайлдером, нижчий або вищий за поріг. Читає лише свічки.
+    .description = Спрацьовує, коли RSI зі згладжуванням Вайлдера за закритими свічками вищий або нижчий за поріг.
 strategies-condition-rsi-param-period = Період RSI
     .description = Кількість свічок, за якими обчислюється RSI; умові потрібна ще одна свічка понад це значення
 strategies-condition-rsi-param-comparison = Порівняння
@@ -359,7 +359,7 @@ strategies-condition-ma-cross-param-within-candles = Перетин за ост�
     .description = Скільки останніх свічок може містити перетин; 1 означає лише останню свічку
 
 strategies-condition-position-profit = Прибуток позиції
-    .description = Спрацьовує, коли нереалізований прибуток відкритої позиції, виміряний за ціною пулу відносно ціни входу, вищий або нижчий за заданий відсоток. Лише для стратегій виходу.
+    .description = Спрацьовує, коли нереалізований прибуток відкритої позиції вищий або нижчий за заданий відсоток від ціни входу, за ціною пулу. Лише для стратегій виходу.
 strategies-condition-position-profit-param-comparison = Порівняння
     .description = Чи має прибуток бути не меншим, чи не більшим за поріг
 strategies-condition-position-profit-param-comparison-option-above = Щонайменше (≥)

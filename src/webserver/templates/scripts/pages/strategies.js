@@ -256,6 +256,12 @@ export function createLifecycle() {
         showCreateStrategyModal();
       });
     }
+    const placeholder = $("#editor-empty");
+    if (placeholder) {
+      addTrackedListener(placeholder, "click", (event) => {
+        if (event.target.closest('[data-action="create-strategy"]')) showCreateStrategyModal();
+      });
+    }
 
     // Setup create strategy modal
     setupCreateStrategyModal();
@@ -473,6 +479,24 @@ export function createLifecycle() {
   }
 
   // Render Functions
+
+  /**
+   * The editor area while nothing is open: with no strategy yet it offers New Strategy
+   * in place, otherwise it asks for a strategy from the list.
+   */
+  function renderEditorPlaceholder() {
+    const placeholder = $("#editor-empty");
+    if (!placeholder) return;
+    placeholder.innerHTML =
+      strategies.length === 0
+        ? renderStateView({
+            icon: "icon-square-pen",
+            message: I18n.t("strategies-list-empty-hint"),
+            action: { id: "create-strategy", label: I18n.t("strategies-new"), primary: true },
+          })
+        : renderStateView({ icon: "icon-square-pen", message: I18n.t("strategies-editor-empty") });
+  }
+
   function renderStrategies() {
     const key = JSON.stringify(strategies.map(s => ({ ...s, active: currentStrategy?.id === s.id })));
     if (key === _lastStrategiesKey) return;
@@ -480,14 +504,16 @@ export function createLifecycle() {
 
     clearScope(CleanupScope.STRATEGIES_LIST);
 
+    renderEditorPlaceholder();
+
     const listContainer = $("#strategy-list");
     if (!listContainer) return;
 
+    // The list states that it is empty; the editor beside it offers the first strategy.
     if (strategies.length === 0) {
       listContainer.innerHTML = renderStateView({
         icon: "icon-file-text",
         title: I18n.t("strategies-list-empty-title"),
-        message: I18n.t("strategies-list-empty-hint"),
         compact: true,
       });
       return;

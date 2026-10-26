@@ -310,7 +310,7 @@ strategies-condition-volume-spike-param-multiplier = Volumenmultiplikator
     .description = Wievielfaches des Durchschnitts (z. B. 2,0 = 200 % des Durchschnitts)
 
 strategies-condition-rsi = RSI (Relative-Stärke-Index)
-    .description = Wird ausgelöst, wenn der RSI der Schlusskurse der Kerzen, nach Wilder geglättet, unter oder über einer Schwelle liegt. Liest nur Kerzen.
+    .description = Wird ausgelöst, wenn der RSI, mit Wilder-Glättung auf abgeschlossenen Kerzen, über oder unter einer Schwelle liegt.
 strategies-condition-rsi-param-period = RSI-Periode
     .description = Anzahl der Kerzen, über die der RSI berechnet wird; die Bedingung braucht eine Kerze mehr als diesen Wert
 strategies-condition-rsi-param-comparison = Vergleich
@@ -338,7 +338,7 @@ strategies-condition-ma-cross-param-within-candles = Kreuzung innerhalb
     .description = Wie viele der letzten Kerzen die Kreuzung enthalten dürfen; 1 bedeutet nur die letzte Kerze
 
 strategies-condition-position-profit = Positionsgewinn
-    .description = Wird ausgelöst, wenn der nicht realisierte Gewinn der offenen Position, gemessen am Poolpreis gegenüber dem Einstiegspreis, über oder unter einem Prozentwert liegt. Nur für Ausstiegsstrategien.
+    .description = Wird ausgelöst, wenn der nicht realisierte Gewinn der offenen Position über oder unter einem Prozentsatz des Einstiegspreises liegt, gemessen am Poolpreis. Nur für Ausstiegsstrategien.
 strategies-condition-position-profit-param-comparison = Vergleich
     .description = Ob der Gewinn mindestens oder höchstens der Schwelle entsprechen muss
 strategies-condition-position-profit-param-comparison-option-above = Mindestens (≥)

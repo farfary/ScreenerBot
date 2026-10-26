@@ -19,6 +19,9 @@
  *   unsaved new strategy in its place.
  * - Adding a condition from the catalog opens it in place without a toast, and the
  *   catalog search is the shared search field: its clear control sits inside the input.
+ * - A blank new strategy shows adding a condition as its next step, with no problem
+ *   bar, and its Invert stays off until there is a condition to negate.
+ * - With no strategy at all, the editor area offers New Strategy in place.
  *
  * Run with `npm run test:js`.
  */
@@ -73,7 +76,10 @@ const browser = await chromium.launch({ headless: true });
 after(() => browser.close());
 
 const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
-const fixtures = createApiHandler([await loadIndex("trader"), await loadIndex("shell")], "populated");
+const fixtures = createApiHandler(
+  [await loadIndex("trader"), await loadIndex("shell")],
+  "populated"
+);
 const host = await serveDashboard(context, {
   locale: "en",
   onApi: async (request) => {
@@ -101,7 +107,10 @@ await page.waitForSelector("#strategy-list .strategy-item");
 const plain = (text) => text.replace(/[\u2068\u2069]/g, "");
 
 async function importFile(file) {
-  const [chooser] = await Promise.all([page.waitForEvent("filechooser"), page.click("#import-strategy")]);
+  const [chooser] = await Promise.all([
+    page.waitForEvent("filechooser"),
+    page.click("#import-strategy"),
+  ]);
   await chooser.setFiles({
     name: "strategy.json",
     mimeType: "application/json",
@@ -114,7 +123,10 @@ test("the list toggle changes only enabled, through the enabled route", async ()
   // Only the strategy resource counts: the shell also POSTs reads such as
   // `/api/ui-state/load`, which a slow page start can issue inside this window.
   const record = (request) => {
-    if (request.method() !== "GET" && new URL(request.url()).pathname.startsWith("/api/strategies")) {
+    if (
+      request.method() !== "GET" &&
+      new URL(request.url()).pathname.startsWith("/api/strategies")
+    ) {
       writes.push(request);
     }
   };
@@ -138,7 +150,11 @@ test("an imported export opens as a new unsaved strategy and exports back unchan
   assert.equal(await page.inputValue("#strategy-priority"), "12");
   assert.equal(await page.inputValue("#strategy-timeframe"), "1h");
   assert.equal(await page.inputValue("#strategy-description"), "Imported from a file.");
-  assert.equal(await page.isChecked("#strategy-enabled-toggle"), false, "an import arrives switched off");
+  assert.equal(
+    await page.isChecked("#strategy-enabled-toggle"),
+    false,
+    "an import arrives switched off"
+  );
   assert.equal(await page.locator("#conditions-list .rule-row").count(), 4);
   assert.equal(await page.locator("#conditions-list .rule-row.is-off").count(), 1);
   assert.equal(await page.locator("#conditions-list .rule-group.is-inverted").count(), 1);
@@ -177,7 +193,13 @@ test("a condition is added from the catalog, checked as it is edited and kept ou
   await page.getByText("Discard unsaved changes?").waitFor();
   await page.getByRole("button", { name: "Discard" }).click();
   await page.waitForSelector("#editor-header.dirty");
-  assert.match(plain(await page.textContent("#rule-problems")), /1 problem to fix: Add at least one condition/);
+  assert.equal(
+    await page.locator("#rule-problems").isHidden(),
+    true,
+    "a blank strategy is not a problem yet"
+  );
+  assert.match(plain(await page.textContent("#conditions-list .state-view")), /No conditions yet/);
+  assert.equal(await page.locator("#conditions-list .rule-invert").isDisabled(), true);
 
   await page.click("#add-condition");
   assert.equal(await page.evaluate(() => document.activeElement?.id), "condition-search");
@@ -215,13 +237,20 @@ test("a condition is added from the catalog, checked as it is edited and kept ou
 
   const row = page.locator("#conditions-list .rule-row.is-open");
   assert.equal(await row.count(), 1);
-  assert.equal(await page.evaluate(() => document.activeElement?.closest(".rule-body") !== null), true);
+  assert.equal(
+    await page.evaluate(() => document.activeElement?.closest(".rule-body") !== null),
+    true
+  );
   assert.equal(await page.locator("#rule-problems").isHidden(), true);
+  assert.equal(await page.locator("#conditions-list .rule-invert").isDisabled(), false);
 
   await page.fill('[data-key="period"]', "");
   assert.equal(await page.getAttribute('[data-key="period"]', "aria-invalid"), "true");
   assert.equal(await row.locator(".param-field-error:not(:empty)").textContent(), "Enter a number");
-  assert.match(plain(await page.textContent("#rule-problems")), /1 problem to fix: .*RSI Period: Enter a number/);
+  assert.match(
+    plain(await page.textContent("#rule-problems")),
+    /1 problem to fix: .*RSI Period: Enter a number/
+  );
 
   await page.click("#save-strategy");
   assert.equal(saves.length, 0, "Save does not call the API while a field is invalid");
@@ -234,7 +263,11 @@ test("a condition is added from the catalog, checked as it is edited and kept ou
 
   await page.locator('#conditions-list [data-action="duplicate"]').first().click();
   assert.equal(await page.locator("#conditions-list .rule-row").count(), 2);
-  await page.locator('#conditions-list .rule-row').first().locator('[data-action="move-down"]').click();
+  await page
+    .locator("#conditions-list .rule-row")
+    .first()
+    .locator('[data-action="move-down"]')
+    .click();
   assert.deepEqual(
     await page.evaluate(() => {
       const active = document.activeElement;
@@ -253,14 +286,20 @@ test("a condition is added from the catalog, checked as it is edited and kept ou
   await page.fill("#condition-search", "buy");
   await page.keyboard.press("Enter");
   assert.equal(await group.locator(".rule-row").count(), 1);
-  assert.equal(await page.locator("#conditions-list > .rule-group > .rule-children > .rule-row").count(), 2);
+  assert.equal(
+    await page.locator("#conditions-list > .rule-group > .rule-children > .rule-row").count(),
+    2
+  );
 });
 
 test("deleting the strategy in the editor returns the editor to its empty state", async () => {
   await page.click(`[data-strategy-id="${ID}"] .strategy-item-name`);
   await page.getByText("Discard unsaved changes?").waitFor();
   await page.getByRole("button", { name: "Discard" }).click();
-  await page.waitForFunction((name) => document.querySelector("#strategy-name")?.value === name, STORED.name);
+  await page.waitForFunction(
+    (name) => document.querySelector("#strategy-name")?.value === name,
+    STORED.name
+  );
 
   const [request] = await Promise.all([
     page.waitForRequest((candidate) => candidate.method() === "DELETE"),
@@ -273,4 +312,29 @@ test("deleting the strategy in the editor returns the editor to its empty state"
   await page.locator("#editor-empty").waitFor({ state: "visible" });
   assert.equal(await page.locator("#editor-header").isHidden(), true);
   assert.equal(await page.locator("#editor-header.dirty").count(), 0);
+});
+
+test("with no strategy the editor area offers New Strategy", async () => {
+  const empty = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const emptyFixtures = createApiHandler(
+    [await loadIndex("trader"), await loadIndex("shell")],
+    "empty"
+  );
+  const emptyHost = await serveDashboard(empty, { locale: "en", onApi: emptyFixtures.onApi });
+  try {
+    const tab = await empty.newPage();
+    tab.setDefaultTimeout(15000);
+    await tab.goto(`${emptyHost.origin}/trader`);
+    await tab.waitForSelector(PAGE_READY);
+    await tab.click('#subTabsContainer [data-tab-id="strategies"]');
+    const action = tab.locator('#editor-empty [data-action="create-strategy"]');
+    await action.waitFor();
+    assert.equal((await action.textContent()).trim(), "New Strategy");
+    assert.match(plain(await tab.textContent("#strategy-list")), /No strategies yet/);
+    await action.click();
+    await tab.locator("#create-strategy-modal").waitFor({ state: "visible" });
+  } finally {
+    await empty.close();
+    await emptyHost.close();
+  }
 });

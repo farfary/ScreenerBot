@@ -321,7 +321,7 @@ strategies-condition-volume-spike-param-multiplier = ضریب حجم
     .description = چند برابر میانگین (مثلاً 2.0 = 200% میانگین)
 
 strategies-condition-rsi = RSI (شاخص قدرت نسبی)
-    .description = وقتی فعال می‌شود که RSI قیمت‌های بسته‌شدن کندل‌ها، هموارشده به روش وایلدر، پایین‌تر یا بالاتر از یک آستانه باشد. فقط کندل‌ها را می‌خواند.
+    .description = وقتی فعال می‌شود که RSI، با هموارسازی وایلدر روی کندل‌های بسته‌شده، بالاتر یا پایین‌تر از یک آستانه باشد.
 strategies-condition-rsi-param-period = دوره RSI
     .description = تعداد کندل‌هایی که RSI روی آن‌ها محاسبه می‌شود؛ شرط به یک کندل بیشتر از این مقدار نیاز دارد
 strategies-condition-rsi-param-comparison = مقایسه
@@ -349,7 +349,7 @@ strategies-condition-ma-cross-param-within-candles = تقاطع در آخرین
     .description = تقاطع می‌تواند در چند کندل آخر باشد؛ 1 یعنی فقط جدیدترین کندل
 
 strategies-condition-position-profit = سود پوزیشن
-    .description = وقتی فعال می‌شود که سود تحقق‌نیافته پوزیشن باز، که با قیمت استخر نسبت به قیمت ورود سنجیده می‌شود، بالاتر یا پایین‌تر از یک درصد باشد. فقط برای استراتژی‌های خروج.
+    .description = وقتی فعال می‌شود که سود تحقق‌نیافته پوزیشن باز بالاتر یا پایین‌تر از درصدی از قیمت ورود باشد، با قیمت استخر سنجیده می‌شود. فقط برای استراتژی‌های خروج.
 strategies-condition-position-profit-param-comparison = مقایسه
     .description = سود باید دست‌کم برابر آستانه یا حداکثر برابر آن باشد
 strategies-condition-position-profit-param-comparison-option-above = دست‌کم (≥)

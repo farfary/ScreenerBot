@@ -280,7 +280,7 @@ strategies-condition-volume-spike-param-multiplier = Hệ số khối lượng
     .description = Cao hơn trung bình bao nhiêu lần (ví dụ: 2.0 = 200% mức trung bình)
 
 strategies-condition-rsi = RSI (Chỉ số sức mạnh tương đối)
-    .description = Kích hoạt khi RSI của giá đóng cửa các nến, làm mượt theo cách của Wilder, thấp hơn hoặc cao hơn một ngưỡng. Chỉ đọc nến.
+    .description = Kích hoạt khi RSI, làm mượt theo Wilder trên các nến đã đóng, cao hơn hoặc thấp hơn một ngưỡng.
 strategies-condition-rsi-param-period = Chu kỳ RSI
     .description = Số nến dùng để tính RSI; điều kiện cần nhiều hơn giá trị này một nến
 strategies-condition-rsi-param-comparison = So sánh
@@ -308,7 +308,7 @@ strategies-condition-ma-cross-param-within-candles = Giao cắt trong
     .description = Số nến gần nhất được phép chứa điểm giao cắt; 1 nghĩa là chỉ nến mới nhất
 
 strategies-condition-position-profit = Lợi nhuận vị thế
-    .description = Kích hoạt khi lợi nhuận chưa thực hiện của vị thế đang mở, tính theo giá pool so với giá vào lệnh, cao hơn hoặc thấp hơn một tỷ lệ phần trăm. Chỉ dùng cho chiến lược thoát lệnh.
+    .description = Kích hoạt khi lợi nhuận chưa thực hiện của vị thế đang mở cao hơn hoặc thấp hơn một tỷ lệ phần trăm của giá vào lệnh, tính theo giá pool. Chỉ dùng cho chiến lược thoát lệnh.
 strategies-condition-position-profit-param-comparison = So sánh
     .description = Lợi nhuận phải tối thiểu hay tối đa bằng ngưỡng
 strategies-condition-position-profit-param-comparison-option-above = Ít nhất (≥)

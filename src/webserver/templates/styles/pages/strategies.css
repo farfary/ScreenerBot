@@ -178,3 +178,9 @@
   flex-direction: column;
   pointer-events: none;
 }
+
+/* The placeholder is inert except for its call to action (New Strategy while the list
+   is empty). */
+.editor-placeholder .state-view-action {
+  pointer-events: auto;
+}

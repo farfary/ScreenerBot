@@ -307,7 +307,7 @@ strategies-condition-volume-spike-param-multiplier = 出来高倍率
     .description = 平均の何倍か（例: 2.0 = 平均の 200%）
 
 strategies-condition-rsi = RSI（相対力指数）
-    .description = ローソク足の終値から求めた RSI（ワイルダー方式で平滑化）がしきい値を下回る、または上回ると発動します。ローソク足のみを読み取ります。
+    .description = 確定したローソク足でワイルダー方式の平滑化を行った RSI がしきい値を上回る、または下回ると発動します。
 strategies-condition-rsi-param-period = RSI 期間
     .description = RSI の計算に使うローソク足の本数。この値より 1 本多く必要です
 strategies-condition-rsi-param-comparison = 比較
@@ -335,7 +335,7 @@ strategies-condition-ma-cross-param-within-candles = クロスの対象範囲
     .description = クロスを含んでよい直近のローソク足の本数。1 は最新の 1 本のみ
 
 strategies-condition-position-profit = ポジション損益
-    .description = オープン中のポジションの含み益（プール価格をエントリー価格と比べて算出）が指定した割合を上回る、または下回ると発動します。エグジット戦略専用です。
+    .description = オープン中のポジションの含み益がエントリー価格に対する指定割合を上回る、または下回ると発動します（プール価格で算出）。エグジット戦略専用です。
 strategies-condition-position-profit-param-comparison = 比較
     .description = 利益がしきい値以上か、以下か
 strategies-condition-position-profit-param-comparison-option-above = 以上（≥）

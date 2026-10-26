@@ -304,7 +304,7 @@ strategies-condition-volume-spike-param-multiplier = Множитель объё
     .description = Во сколько раз выше среднего (например, 2.0 = 200% от среднего)
 
 strategies-condition-rsi = RSI (индекс относительной силы)
-    .description = Срабатывает, когда RSI цен закрытия свечей, сглаженный по Уайлдеру, ниже или выше порога. Читает только свечи.
+    .description = Срабатывает, когда RSI со сглаживанием Уайлдера по закрытым свечам выше или ниже порога.
 strategies-condition-rsi-param-period = Период RSI
     .description = Число свечей, по которым считается RSI; условию нужна на одну свечу больше этого значения
 strategies-condition-rsi-param-comparison = Сравнение
@@ -332,7 +332,7 @@ strategies-condition-ma-cross-param-within-candles = Пересечение за
     .description = Сколько последних свечей может содержать пересечение; 1 означает только последнюю свечу
 
 strategies-condition-position-profit = Прибыль позиции
-    .description = Срабатывает, когда нереализованная прибыль открытой позиции, измеренная по цене пула относительно цены входа, выше или ниже заданного процента. Только для стратегий выхода.
+    .description = Срабатывает, когда нереализованная прибыль открытой позиции выше или ниже заданного процента от цены входа, по цене пула. Только для стратегий выхода.
 strategies-condition-position-profit-param-comparison = Сравнение
     .description = Должна ли прибыль быть не меньше или не больше порога
 strategies-condition-position-profit-param-comparison-option-above = Не меньше (≥)
