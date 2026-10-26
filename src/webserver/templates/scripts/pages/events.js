@@ -347,11 +347,13 @@ function createLifecycle() {
         detailsDialog = new EventDetailsDialog();
       }
 
+      // The minimums sum below the 1200px window floor, so every column, Details
+      // included, stays on screen; spare width goes to the message.
       const columns = [
         {
           id: "event_time",
           label: I18n.t("events-col-time"),
-          minWidth: 165,
+          minWidth: 130,
           sortable: true,
           floating: true,
           wrap: false,
@@ -362,7 +364,7 @@ function createLifecycle() {
         {
           id: "category",
           label: I18n.t("events-col-category"),
-          minWidth: 110,
+          minWidth: 100,
           sortable: true,
           wrap: false,
           render: (value) => (value ? Utils.escapeHtml(eventCategoryLabel(value)) : "—"),
@@ -370,7 +372,7 @@ function createLifecycle() {
         {
           id: "subtype",
           label: I18n.t("events-col-type"),
-          minWidth: 120,
+          minWidth: 110,
           sortable: true,
           wrap: false,
           render: (value) => Utils.escapeHtml(formatSubtype(value)),
@@ -378,7 +380,7 @@ function createLifecycle() {
         {
           id: "severity",
           label: I18n.t("events-col-severity"),
-          minWidth: 110,
+          minWidth: 100,
           sortable: true,
           render: (value) => severityBadge(value) || '<span class="badge">—</span>',
         },
@@ -386,7 +388,7 @@ function createLifecycle() {
           id: "message",
           label: I18n.t("events-col-message"),
           grow: true,
-          minWidth: 320,
+          minWidth: 220,
           wrap: false,
           render: (_value, row) => formatMessagePreview(row),
         },
@@ -399,7 +401,7 @@ function createLifecycle() {
         {
           id: "payload",
           label: I18n.t("events-col-details"),
-          minWidth: 200,
+          minWidth: 120,
           wrap: false,
           render: (value) => formatPayloadPreview(value),
         },

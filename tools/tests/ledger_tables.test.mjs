@@ -3,8 +3,8 @@
 //
 
 /**
- * Guard: the Transactions, Positions and Main Wallet tables read correctly at the
- * 1200px window floor.
+ * Guard: the Transactions, Positions, Events and Main Wallet tables read correctly at
+ * the 1200px window floor.
  *
  * At 1200px the Transactions Router and Instr. columns and the Positions P&L columns
  * sat off-screen behind wide minimums; the Time cell wrapped into "Oct 7, 2026," over
@@ -22,6 +22,8 @@
  *   SOL figures, so a 0.000005 fee never reads as zero.
  *   In every locale each badge fits its cell, and every column but the signature is
  *   on screen apart from the locales still listed as too wide.
+ * - Events: every column, Details included, is on screen; at 1200px the Details
+ *   header sat cut off behind the minimums of the columns before it.
  * - Positions Open and Closed: both P&L columns are on screen and headed "P&L", and
  *   the two prices of a row show the same digits.
  * - A position origin tag is set apart from the name as an uppercase caption.
@@ -240,6 +242,22 @@ test("Transactions keeps its columns on screen and states each fact once", async
     "a failure count takes the error tone"
   );
   assert.ok(!summary.includes("tx-estimate"), "no separate estimate count");
+});
+
+test("Events keeps every column on screen", async (t) => {
+  const page = await openPage(t, "events");
+  const root = "#events-root";
+  await page.waitForSelector(`${root} tbody tr[data-row-id]`);
+  const columns = await columnsOnScreen(page, root);
+  assertOnScreen(
+    columns,
+    columns.map((column) => column.id),
+    "Events"
+  );
+  assert.ok(
+    columns.some((column) => column.id === "payload"),
+    "the Details column renders"
+  );
 });
 
 test("the fee column keeps six fixed decimals", async (t) => {
