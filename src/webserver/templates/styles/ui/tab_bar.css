@@ -85,6 +85,32 @@
   pointer-events: none;
 }
 
+/* A count after a tab's label (open holdings, decisions). */
+.sub-tab-count {
+  margin-inline-start: 6px;
+  font-family: var(--font-data);
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+}
+
+/* ============================================================================
+   In-page tab row
+   ============================================================================ */
+
+/* A panel's own tabs (the Copy Trading workspace) in the sub-tab shape, inside a tab
+   scroll strip: the first label starts on the panel's edge, and the strip scrolls the
+   row when it does not fit. */
+.tab-row {
+  display: flex;
+  box-sizing: border-box;
+  height: var(--tab-row-height);
+  border-bottom: 1px solid var(--tab-bar-border-color);
+}
+
+.tab-row > .sub-tab:first-child {
+  padding-inline-start: 0;
+}
+
 /* While the router loads a page that has a sub-tab row, the row's slot keeps its height,
    surface and rule, so the row does not blink between two pages that both have one. */
 .tab-scroll-wrapper.is-reserved {

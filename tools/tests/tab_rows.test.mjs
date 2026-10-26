@@ -23,6 +23,9 @@
  *   `nav_tab_html` is pinned to, and the settings dialog's navigation apply path keeps
  *   every tab's URL, id, label and current mark.
  * - Transition: the sub-row keeps its slot between two pages that both have one.
+ * - Overflow: only the tab-row owner (`ui/tab_bar.css`) decides how a tab strip
+ *   overflows. A strip that sets its own `overflow` shows a scrollbar under tabs that
+ *   fit, since its tabs' indicator bars reach its bottom edge.
  *
  * Run with `npm run test:js`.
  */
@@ -35,6 +38,27 @@ import { chromium } from "playwright";
 
 import { PAGE_READY, navTabHtml, serveDashboard } from "../lib/dashboard_host.mjs";
 import { FIXTURES_ROOT, createApiHandler, loadIndex } from "../lib/dashboard_fixtures.mjs";
+import { loadStylesheets } from "../lib/dashboard_ui.mjs";
+
+const TAB_ROW_OWNER = "ui/tab_bar.css";
+/** A rule addressing a tab strip: a class that names tabs, a tab list or a tab bar. */
+const TAB_STRIP =
+  /(?:^|[\s>+~,(])\.[\w-]*tabs?(?:-(?:bar|row|list|strip|nav|header))?(?![\w-])/;
+const SETS_OVERFLOW = /(?:^|;)\s*overflow(?:-x|-y|-inline|-block)?\s*:/;
+/**
+ * Strips that still set their own overflow, with the reason each cannot use the owner
+ * yet. The list only shrinks.
+ */
+const OWN_OVERFLOW_ALLOWLIST = new Map([
+  [
+    "ui/dialog_tab_bar.css .details-tab-list",
+    "the dialog tab family keeps its own sizes and moves onto the owner as one unit",
+  ],
+  [
+    "ui/search_dialog.css .search-tabs",
+    "the row also holds the search-kinds hint pinned to its end edge, which a scroll strip would carry out of view",
+  ],
+]);
 
 const browser = await chromium.launch({ headless: true });
 const hosts = [];
@@ -378,4 +402,16 @@ test("the sub-row keeps its slot between two pages that both have one", async ()
   assert.ok(heights.length > 1, "the transition was sampled");
   assert.ok(Math.min(...heights) > 0, `the row collapsed: ${heights.join(", ")}`);
   await context.close();
+});
+
+test("no stylesheet but the tab-row owner gives a tab strip its own overflow", async () => {
+  const found = [];
+  for (const { path, rules } of await loadStylesheets()) {
+    if (path === TAB_ROW_OWNER) continue;
+    for (const { selector, body, line } of rules) {
+      if (!TAB_STRIP.test(selector) || !SETS_OVERFLOW.test(body)) continue;
+      if (!OWN_OVERFLOW_ALLOWLIST.has(`${path} ${selector}`)) found.push(`${path}:${line} ${selector}`);
+    }
+  }
+  assert.deepEqual(found, [], "a tab strip scrolls through the tab scroll strip in ui/tab_bar.css");
 });

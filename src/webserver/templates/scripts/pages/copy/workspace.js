@@ -6,6 +6,7 @@
 import { renderAddress } from "../../ui/token_identity.js";
 import { modeLabel, rangeQuery, stateLabel, taskName, timeAgo } from "./format.js";
 import { forgetPaint } from "../../core/dom.js";
+import { attachTabScrollStrip } from "../../ui/tab_bar.js";
 import { panelMessage, renderOverview } from "./overview.js";
 import { renderExecution } from "./execution.js";
 import { renderRules } from "./rules.js";
@@ -203,8 +204,13 @@ export function createWorkspace(page) {
       <div class="copy-ws-recovery" id="copy-ws-watch-recovery"></div>
       <div class="copy-ws-actions" id="copy-ws-actions"></div>
     </header>
-    <div class="copy-tabs" role="tablist" aria-label="${esc(I18n.t("copy-tabs-label"))}" id="copy-ws-tabs"></div>
+    <div class="tab-scroll-wrapper copy-ws-tab-strip">
+      <div class="tab-row tab-scroll-area" role="tablist" aria-label="${esc(I18n.t("copy-tabs-label"))}" id="copy-ws-tabs"></div>
+      <button type="button" class="tab-scroll-btn tab-scroll-btn--start" aria-label="${esc(I18n.attr("shell-tabs-scroll-start", "aria-label"))}" title="${esc(I18n.attr("shell-tabs-scroll-start", "title"))}"><i class="icon-chevron-left" aria-hidden="true"></i></button>
+      <button type="button" class="tab-scroll-btn tab-scroll-btn--end" aria-label="${esc(I18n.attr("shell-tabs-scroll-end", "aria-label"))}" title="${esc(I18n.attr("shell-tabs-scroll-end", "title"))}"><i class="icon-chevron-right" aria-hidden="true"></i></button>
+    </div>
     <section class="copy-ws-panel" id="copy-ws-panel" role="tabpanel"></section>`;
+    attachTabScrollStrip($("#copy-ws-tabs"));
     activity.reset(id);
     holdings.reset();
   }
@@ -392,9 +398,9 @@ export function createWorkspace(page) {
       TABS.map((tab) => {
         const active = tab.id === state.tab;
         const count = counts[tab.id]
-          ? `<span class="copy-tab-count">${esc(String(counts[tab.id]))}</span>`
+          ? `<span class="sub-tab-count">${esc(String(counts[tab.id]))}</span>`
           : "";
-        return `<button type="button" role="tab" id="copy-tab-${tab.id}" class="copy-tab${active ? " is-active" : ""}" data-tab="${tab.id}" aria-selected="${active}">${esc(tab.label)}${count}</button>`;
+        return `<button type="button" role="tab" id="copy-tab-${tab.id}" class="sub-tab${active ? " active" : ""}" data-tab="${tab.id}" aria-selected="${active}">${esc(tab.label)}${count}</button>`;
       }).join("")
     );
   }

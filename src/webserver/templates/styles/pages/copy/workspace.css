@@ -149,40 +149,9 @@
   gap: var(--spacing-xs);
 }
 
-.copy-tabs {
-  display: flex;
-  gap: var(--spacing-md);
-  border-bottom: 1px solid var(--border-color);
-  overflow-x: auto;
-}
-
-.copy-tab {
-  margin-bottom: -1px;
-  padding: var(--spacing-sm) 2px;
-  border: 0;
-  border-bottom: 2px solid transparent;
-  background: transparent;
-  color: var(--text-secondary);
-  font-size: var(--font-size-sm);
-  font-weight: 600;
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-.copy-tab:hover {
-  color: var(--text-primary);
-}
-
-.copy-tab.is-active {
-  border-bottom-color: var(--primary-color);
-  color: var(--text-primary);
-}
-
-.copy-tab-count {
-  margin-inline-start: 6px;
-  font-family: var(--font-data);
-  font-size: var(--font-size-xs);
-  color: var(--text-muted);
+/* The tab row's edge fade runs on in the workspace card's surface. */
+.copy-ws-tab-strip {
+  --tab-scroll-bg: var(--bg-card);
 }
 
 .copy-ws-panel {
