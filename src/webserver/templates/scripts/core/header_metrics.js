@@ -16,6 +16,9 @@ import { formatNumber, showToast } from "./utils.js";
 
 const METRICS_POLL_INTERVAL = 5000;
 
+/** What a header figure reads while its value is unknown. */
+const PLACEHOLDER = "—";
+
 // Wallet SOL figures render with the same precision as the home hero — a headline that
 // reads 1.234 in one place and 1.2345 in the other looks like two different numbers.
 const WALLET_SOL_DECIMALS = 4;
@@ -290,6 +293,19 @@ function markTickerUnknown() {
   if (servicesText) renderServicesStatus(servicesText, "unknown", "shell-ticker-services-unknown");
 }
 
+/**
+ * Marks each header card figure that reads the placeholder. A marked figure sits next
+ * to its label as a value would, and its reserved width moves to the end of its row
+ * (`header.css`), so the card keeps its width without a gap opening after the dash.
+ */
+function markPlaceholders() {
+  for (const figure of document.querySelectorAll(
+    ".modern-header .header-card :is(.card-value, .card-sub-value, .card-change)"
+  )) {
+    figure.toggleAttribute("data-empty", figure.textContent.trim() === PLACEHOLDER);
+  }
+}
+
 /** Dispatched by `core/action_toasts.js` when a trade completes or fails. */
 const TRADE_SETTLED_EVENT = "screenerbot:trade-settled";
 
@@ -324,6 +340,7 @@ export function createHeaderMetrics({ state, setAvailability }) {
         updateCopyCard(metrics.copy);
         announceCopyNotices(metrics.copy);
         updateTicker(metrics);
+        markPlaceholders();
         setAvailability(true);
         syncBotControlState();
         return metrics;

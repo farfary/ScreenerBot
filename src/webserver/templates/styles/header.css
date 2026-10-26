@@ -285,9 +285,11 @@
 
 .modern-header .card-top,
 .modern-header .card-bottom {
+  --card-gap: 7px;
+
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: var(--card-gap);
   min-height: 16px;
   line-height: 1.15;
   white-space: nowrap;
@@ -328,26 +330,46 @@
   white-space: nowrap;
 }
 
-/* Each figure reserves the width of a typical value (min-width below), so a value
-   replacing "—" never widens its card and re-runs the row's fit. The data font is
-   monospaced: 1ch is one digit or sign. */
+/* Each figure reserves the width of a typical value (--reserve), so a value replacing
+   "—" never widens its card and re-runs the row's fit. The data font is monospaced:
+   1ch is one digit or sign. */
 .modern-header .card-value {
-  min-width: 7ch;
+  --reserve: 7ch;
+
+  min-width: var(--reserve);
   font-size: 16px;
   font-weight: 650;
 }
 
 .modern-header .card-sub-value,
 .modern-header .card-change {
-  min-width: 6ch;
+  --reserve: 6ch;
+
+  min-width: var(--reserve);
   font-size: 12px;
   font-weight: 650;
 }
 
 .modern-header .card-change {
-  min-width: calc(7ch + 10px);
+  --reserve: calc(7ch + 10px);
+
   padding: 2px 5px;
   border-radius: var(--radius-sm);
+}
+
+/* A figure that reads "—" (data-empty, core/header_metrics.js) sits next to its label
+   as a value would. Its box dissolves into the row, and the width it reserves trails
+   the row as a spacer (ordered last), so the card measures the same as with a value:
+   the reserve, less the dash and the gap the spacer adds. */
+.modern-header .header-card [data-empty] {
+  display: contents;
+}
+
+.modern-header .header-card [data-empty]::after {
+  content: "";
+  flex: none;
+  order: 1;
+  width: calc(var(--reserve) - 1ch - var(--card-gap));
 }
 
 .modern-header .positive,
@@ -379,7 +401,8 @@
 
 /* A locale may set the dollar sign apart from the price ("165,00 $"). */
 .modern-header .sol-price-card .card-value {
-  min-width: 9ch;
+  --reserve: 9ch;
+
   letter-spacing: -0.01em;
 }
 
@@ -391,7 +414,7 @@
 
 .modern-header .bot-card .card-top,
 .modern-header .bot-card .card-bottom {
-  gap: 5px;
+  --card-gap: 5px;
 }
 
 .modern-header .bot-card .card-value {

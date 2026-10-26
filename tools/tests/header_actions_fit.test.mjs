@@ -16,6 +16,9 @@
  *   and in Explore Mode the setup control is one line.
  * - Every metric figure reserves its width: the metric cards measure the same with "—"
  *   and with the values that replace it, so an arriving value never reflows the row.
+ * - A "—" sits next to its label as a value would; the width it reserves trails its row
+ *   instead of opening a gap after the dash.
+ * - Hiding the Assistant action (on the Assistant page) does not move the metric cards.
  *
  * Run with `npm run test:js`.
  */
@@ -194,3 +197,53 @@ for (const locale of LOCALES) {
     }
   });
 }
+
+/** Offset of each "—" from where a value would start after its label (0 = in place). */
+function placeholderGaps(page) {
+  return page.evaluate(() =>
+    [...document.querySelectorAll("#headerCards .header-card [data-empty]")]
+      .filter(
+        (figure) =>
+          !figure.closest("[hidden]") &&
+          figure.previousElementSibling?.matches(".card-label, .card-sub")
+      )
+      .map((figure) => {
+        const range = document.createRange();
+        range.selectNodeContents(figure);
+        const dash = range.getBoundingClientRect();
+        const label = figure.previousElementSibling.getBoundingClientRect();
+        const gap = parseFloat(getComputedStyle(figure.parentElement).columnGap);
+        return { id: figure.id, offset: dash.left - label.right - gap };
+      })
+  );
+}
+
+test("an unknown figure sits next to its label and the cards ignore a hidden action", async () => {
+  const { page, release, close } = await openHeader("en", "explore");
+  try {
+    release();
+    await page.waitForFunction(
+      () => document.getElementById("solPriceValue").textContent !== "—"
+    );
+    await settled(page);
+    const gaps = await placeholderGaps(page);
+    assert.ok(gaps.length >= 3, `only ${gaps.length} empty figures were measured`);
+    for (const { id, offset } of gaps) {
+      assert.ok(Math.abs(offset) <= 1, `#${id}: "—" sits ${offset}px from where a value starts`);
+    }
+
+    const cardsAt = () =>
+      page.evaluate(() => document.getElementById("headerCards").getBoundingClientRect().left);
+    const before = await cardsAt();
+    await page.evaluate(() =>
+      document.querySelector(".header-action-btn.global-chat-btn").classList.add("hidden")
+    );
+    await settled(page);
+    assert.ok(
+      Math.abs((await cardsAt()) - before) <= 0.5,
+      "the metric cards move when the Assistant action is hidden"
+    );
+  } finally {
+    await close();
+  }
+});

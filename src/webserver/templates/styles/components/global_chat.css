@@ -13,10 +13,15 @@
   gap: 0;
 }
 
-/* Hide button on the Assistant page (chat already visible) */
-[data-page="assistant"] .header-action-btn.global-chat-btn,
+/* On the Assistant page the chat is already on screen (global_chat.js sets .hidden).
+   Inline, the button keeps its slot (hidden, out of the focus order), so the header
+   metrics beside the actions do not move; in the folded actions menu it leaves no gap. */
 .header-action-btn.global-chat-btn.hidden {
-  display: none !important;
+  visibility: hidden;
+}
+
+.header-actions.is-folded .header-action-btn.global-chat-btn.hidden {
+  display: none;
 }
 
 /* ---------------------------------------------------------------------------
