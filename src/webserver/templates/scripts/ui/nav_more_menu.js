@@ -8,6 +8,11 @@
  * in the default "scroll" layout every tab stays in the row and the tab scroll strip
  * (`attachTabScrollStrip`) owns the overflow.
  *
+ * Before either layout applies, the row is compacted by measurement: when the tabs with
+ * their icons do not fit, the icons give way (`is-iconless`); when they still do not
+ * fit, the labels tighten as well (`is-condensed`). Only a row that overflows at its
+ * most compact face scrolls or folds, whatever the width, locale or tab set.
+ *
  * The More control lives inside `#navTabs` as its last child, so it is measured in the
  * same row as the tabs and the travelling indicator can sit under it while the current
  * page is one of the hidden tabs. The settings dialog rebuilds `#navTabs` wholesale; the
@@ -18,6 +23,10 @@ import { pushEscapeHandler } from "../core/escape_stack.js";
 
 const MENU = "menu";
 const SCROLL = "scroll";
+
+// The row's faces, fullest first; each one's classes on `#navTabs`.
+const COMPACT_FACES = Object.freeze([[], ["is-iconless"], ["is-iconless", "is-condensed"]]);
+const COMPACT_CLASSES = Object.freeze(["is-iconless", "is-condensed"]);
 
 /** The overflow layout in force: "menu" or the default "scroll". */
 export function navOverflowLayout() {
@@ -96,6 +105,30 @@ export function attachNavMoreMenu(navTabs) {
     if (focus === "last") entries.at(-1)?.focus();
   };
 
+  // The row's room, gap and each tab's width in the face currently applied.
+  const measure = (tabs) => {
+    const style = getComputedStyle(navTabs);
+    const gap = parseFloat(style.columnGap) || 0;
+    const room =
+      scroller.clientWidth -
+      parseFloat(style.paddingInlineStart) -
+      parseFloat(style.paddingInlineEnd);
+    const widths = tabs.map((tab) => tab.getBoundingClientRect().width);
+    const needed = widths.reduce((sum, width) => sum + width, 0) + gap * (tabs.length - 1);
+    return { gap, room, widths, fits: needed <= room + 0.5 };
+  };
+
+  // The fullest face in which every tab fits, else the most compact one.
+  const compact = (tabs) => {
+    let row = null;
+    for (const face of COMPACT_FACES) {
+      COMPACT_CLASSES.forEach((name) => navTabs.classList.toggle(name, face.includes(name)));
+      row = measure(tabs);
+      if (row.fits) break;
+    }
+    return row;
+  };
+
   const layout = () => {
     close();
     if (more.parentElement !== navTabs) navTabs.appendChild(more);
@@ -106,17 +139,10 @@ export function attachNavMoreMenu(navTabs) {
     more.hidden = true;
     const folding = navOverflowLayout() === MENU;
     strip?.classList.toggle("is-folded", folding);
+    const { gap, room, widths, fits } = compact(tabs);
 
     if (folding) {
-      const style = getComputedStyle(navTabs);
-      const gap = parseFloat(style.columnGap) || 0;
-      const room =
-        scroller.clientWidth -
-        parseFloat(style.paddingInlineStart) -
-        parseFloat(style.paddingInlineEnd);
-      const widths = tabs.map((tab) => tab.getBoundingClientRect().width);
-      const needed = widths.reduce((sum, width) => sum + width, 0) + gap * (tabs.length - 1);
-      if (needed > room + 0.5) {
+      if (!fits) {
         more.hidden = false;
         let used = more.getBoundingClientRect().width;
         let fitting = 0;
@@ -190,8 +216,9 @@ export function attachNavMoreMenu(navTabs) {
     if (outside.some((record) => record.type === "childList")) schedule();
     else if (outside.length) markCurrent();
   }).observe(navTabs, { childList: true, subtree: true, attributeFilter: ["class"] });
+  // The layout setting and the interface language both change what the row needs.
   new MutationObserver(schedule).observe(document.documentElement, {
-    attributeFilter: ["data-nav-overflow"],
+    attributeFilter: ["data-nav-overflow", "lang"],
   });
   new ResizeObserver(schedule).observe(scroller);
   document.fonts?.ready.then(schedule).catch(() => {});

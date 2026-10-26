@@ -128,6 +128,24 @@
   transition: opacity var(--transition-fast);
 }
 
+/* Measured compaction (nav_more_menu.js): when the full row does not fit, the icons
+   give way, then the labels tighten. Only geometry changes; every state stays. */
+.nav-tabs.is-iconless > a i,
+.nav-tabs.is-iconless .nav-more-toggle i {
+  display: none;
+}
+
+.nav-tabs.is-condensed {
+  gap: 0;
+}
+
+.nav-tabs.is-condensed > a,
+.nav-tabs.is-condensed .nav-more-toggle {
+  padding: 0 9px;
+  font-size: 11px;
+  letter-spacing: 0.03em;
+}
+
 /* Each tab's own light on the bottom edge — the hover warmth, and the fallback when the
    travelling indicator has not been created. Same substance as the indicator: a faint
    glow, never a filled line. It spans the tab's FULL width and fades out within 4px, so
@@ -355,30 +373,6 @@ button.ticker-segment:hover .ticker-icon {
 
   .modern-header .header-cards {
     gap: 18px;
-  }
-}
-
-/* Navigation fit: below 1480px the tab icons give way so all default tabs keep their
-   labels on one row, and below 1440px the labels tighten as well. A row that still
-   overflows (a long locale, a custom tab set) falls back to the Navigation setting's
-   scroll strip or More menu. Only geometry changes; the active and hover states stay. */
-@media (width <= 1479px) {
-  .nav-tabs > a i,
-  .nav-more-toggle i {
-    display: none;
-  }
-}
-
-@media (width <= 1439px) {
-  .nav-tabs {
-    gap: 0;
-  }
-
-  .nav-tabs > a,
-  .nav-more-toggle {
-    padding: 0 9px;
-    font-size: 11px;
-    letter-spacing: 0.03em;
   }
 }
 

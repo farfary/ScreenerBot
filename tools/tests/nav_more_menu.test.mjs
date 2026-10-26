@@ -12,8 +12,10 @@
  *   While the page on screen is a folded tab, the More control carries the current mark
  *   and the travelling indicator sits under it.
  *
- * - At 1400px and 1200px the compact row fits every default tab, so neither layout scrolls
- *   or folds; the overflow cases run at a width where the default set does not fit.
+ * - Before either layout applies, the row is compacted by measurement: icons give way
+ *   only when the full row does not fit, labels tighten only when it still does not, and
+ *   the row is measured again on resize and when its labels change.
+ *   The overflow cases run at a width where the default set does not fit at all.
  *
  * Each case runs in a left-to-right and a right-to-left locale.
  *
@@ -87,24 +89,14 @@ function rowState(page) {
       })),
       more: more.hidden ? null : rect(more),
       overflow: document.getElementById("navTabs").scrollWidth - row.clientWidth,
+      faces: ["is-iconless", "is-condensed"].filter((face) =>
+        document.getElementById("navTabs").classList.contains(face)
+      ),
     };
   });
 }
 
 for (const { locale, next, overflowWidth } of LOCALES) {
-  for (const width of [1400, 1200]) {
-    test(`every default tab fits the row at ${width}px (${locale})`, async () => {
-      const { context, page } = await openHome(locale, width);
-      const scrolling = await rowState(page);
-      assert.ok(scrolling.overflow <= 0, `the row overflows by ${scrolling.overflow}px`);
-      await useMenuLayout(page);
-      const { tabs, more } = await rowState(page);
-      assert.equal(more, null, "no More control when every tab fits");
-      assert.ok(tabs.every((tab) => !tab.hidden), "no tab is folded");
-      await context.close();
-    });
-  }
-
   test(`the scrolling layout keeps every tab in the row (${locale})`, async () => {
     const { context, page } = await openHome(locale, overflowWidth);
     const { tabs, more } = await rowState(page);
@@ -227,3 +219,77 @@ test("the More layout shows every tab when they all fit", async () => {
   assert.ok(tabs.every((tab) => !tab.hidden));
   await context.close();
 });
+
+/** True when the row, laid out in the face it has, needs no more room than it has. */
+const fits = (state) => state.overflow <= 0;
+
+for (const locale of ["en", "de", "ru"]) {
+  for (const width of [1200, 1400, 1600, 1920]) {
+    test(`the row takes its fullest face that fits at ${width}px (${locale})`, async () => {
+      const { context, page } = await openHome(locale, width);
+      const state = await rowState(page);
+      assert.ok(
+        fits(state) || state.faces.includes("is-condensed"),
+        `overflows by ${state.overflow}px without being fully compacted`
+      );
+      if (state.faces.length > 0) {
+        // A fuller face would not have fit: drop the compaction and measure.
+        const fuller = await page.evaluate((faces) => {
+          const navTabs = document.getElementById("navTabs");
+          const row = document.querySelector(".header-row-2");
+          navTabs.classList.remove(faces.at(-1));
+          const overflow = navTabs.scrollWidth - row.clientWidth;
+          navTabs.classList.add(faces.at(-1));
+          return overflow;
+        }, state.faces);
+        assert.ok(fuller > 0, `the fuller face fits too (${fuller}px)`);
+      }
+      await useMenuLayout(page);
+      const menu = await rowState(page);
+      assert.equal(menu.more === null, fits(state), "the More control appears only on overflow");
+      await context.close();
+    });
+  }
+}
+
+test("every default tab fits at 1200px and 1400px in English, icons kept at 1920px", async () => {
+  for (const [width, faces] of [
+    [1920, []],
+    [1400, null],
+    [1200, null],
+  ]) {
+    const { context, page } = await openHome("en", width);
+    const state = await rowState(page);
+    assert.ok(fits(state), `${width}px overflows by ${state.overflow}px`);
+    if (faces) assert.deepEqual(state.faces, faces, `${width}px keeps the full face`);
+    await context.close();
+  }
+});
+
+test("the row is measured again on resize and when a label changes", async () => {
+  const { context, page } = await openHome("en", 1920);
+  assert.deepEqual((await rowState(page)).faces, []);
+
+  await page.setViewportSize({ width: 1200, height: 800 });
+  await page.waitForFunction(() =>
+    document.getElementById("navTabs").classList.contains("is-iconless")
+  );
+  assert.ok(fits(await rowState(page)), "the narrower row fits once compacted");
+
+  await page.setViewportSize({ width: 1920, height: 800 });
+  await page.waitForFunction(
+    () => !document.getElementById("navTabs").classList.contains("is-iconless")
+  );
+
+  // A language with longer labels arrives as new label text.
+  await page.evaluate(() => {
+    for (const label of document.querySelectorAll("#navTabs > a.tab span")) {
+      label.textContent = `${label.textContent} ${label.textContent}`;
+    }
+  });
+  await page.waitForFunction(() =>
+    document.getElementById("navTabs").classList.contains("is-iconless")
+  );
+  await context.close();
+});
+
