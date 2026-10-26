@@ -22,7 +22,3 @@ links-copy-mint =
     .aria-label = Salin alamat mint
 
 links-mint-address = Alamat mint
-
-links-social-website = Situs web
-links-social-twitter = { -twitter }
-links-social-telegram = { -telegram }

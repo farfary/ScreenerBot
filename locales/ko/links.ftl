@@ -22,7 +22,3 @@ links-copy-mint =
     .aria-label = 민트 주소 복사
 
 links-mint-address = 민트 주소
-
-links-social-website = 웹사이트
-links-social-twitter = { -twitter }
-links-social-telegram = { -telegram }

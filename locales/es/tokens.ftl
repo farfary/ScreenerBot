@@ -618,21 +618,6 @@ tokens-featured-row-empty = No hay tokens destacados
 tokens-featured-row-title = { $name } ({ $symbol })
 tokens-featured-row-boosted-title = { $name } ({ $symbol }) — impulsado { $boosts }
 
-tokens-pool-selector-title = Seleccionar pool
-tokens-pool-selector-loading = Cargando pools...
-tokens-pool-selector-empty = No se encontraron pools para este token
-tokens-pool-selector-load-failed = Error al cargar los pools: { $message }
-tokens-pool-selector-count =
-    { $count ->
-        [one] { $count } pool encontrado
-        [many] { $count } pools encontrados
-       *[other] { $count } pools encontrados
-    }
-tokens-pool-selector-liquidity = { $amount } liq.
-    .title = Liquidez
-tokens-pool-selector-volume = { $amount } 24h
-    .title = Volumen 24 h
-
 tokens-identity-unknown-asset = Activo desconocido
 tokens-identity-copy-address =
     .title = Copiar dirección

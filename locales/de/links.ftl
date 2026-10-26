@@ -22,7 +22,3 @@ links-copy-mint =
     .aria-label = Mint-Adresse kopieren
 
 links-mint-address = Mint-Adresse
-
-links-social-website = Website
-links-social-twitter = { -twitter }
-links-social-telegram = { -telegram }

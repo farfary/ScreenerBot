@@ -654,19 +654,6 @@ tokens-featured-row-boosted-title = { $name }（{ $symbol }）— 已加速 { $b
 
 # Pool selector dialog (scripts/ui/pool_selector.js)
 
-tokens-pool-selector-title = 选择流动性池
-tokens-pool-selector-loading = 正在加载流动性池…
-tokens-pool-selector-empty = 未找到此代币的流动性池
-tokens-pool-selector-load-failed = 加载流动性池失败：{ $message }
-tokens-pool-selector-count =
-    { $count ->
-       *[other] 找到 { $count } 个流动性池
-    }
-tokens-pool-selector-liquidity = 流动性 { $amount }
-    .title = 流动性
-tokens-pool-selector-volume = 24h { $amount }
-    .title = 24h 成交量
-
 # Token identity chips and address rows (scripts/ui/token_identity.js)
 
 tokens-identity-unknown-asset = 未知资产

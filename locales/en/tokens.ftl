@@ -687,23 +687,6 @@ tokens-featured-row-boosted-title = { $name } ({ $symbol }) — boosted { $boost
 
 # Pool selector dialog (scripts/ui/pool_selector.js)
 
-tokens-pool-selector-title = Select Pool
-tokens-pool-selector-loading = Loading pools...
-tokens-pool-selector-empty = No pools found for this token
-# $message is the failure text.
-tokens-pool-selector-load-failed = Failed to load pools: { $message }
-tokens-pool-selector-count =
-    { $count ->
-        [one] { $count } pool found
-       *[other] { $count } pools found
-    }
-# $amount is the formatted pool liquidity in USD.
-tokens-pool-selector-liquidity = { $amount } liq
-    .title = Liquidity
-# $amount is the formatted 24 hour pool volume in USD.
-tokens-pool-selector-volume = { $amount } 24h
-    .title = 24h Volume
-
 # Token identity chips and address rows (scripts/ui/token_identity.js)
 
 tokens-identity-unknown-asset = Unknown asset

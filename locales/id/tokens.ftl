@@ -608,19 +608,6 @@ tokens-featured-row-empty = Tidak ada token unggulan
 tokens-featured-row-title = { $name } ({ $symbol })
 tokens-featured-row-boosted-title = { $name } ({ $symbol }) — di-boost { $boosts }
 
-tokens-pool-selector-title = Pilih Pool
-tokens-pool-selector-loading = Memuat pool...
-tokens-pool-selector-empty = Tidak ada pool ditemukan untuk token ini
-tokens-pool-selector-load-failed = Gagal memuat pool: { $message }
-tokens-pool-selector-count =
-    { $count ->
-       *[other] { $count } pool ditemukan
-    }
-tokens-pool-selector-liquidity = { $amount } lik
-    .title = Likuiditas
-tokens-pool-selector-volume = { $amount } 24h
-    .title = Volume 24h
-
 tokens-identity-unknown-asset = Aset tidak dikenal
 tokens-identity-copy-address =
     .title = Salin alamat

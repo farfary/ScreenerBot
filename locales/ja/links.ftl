@@ -22,7 +22,3 @@ links-copy-mint =
     .aria-label = ミントアドレスをコピー
 
 links-mint-address = ミントアドレス
-
-links-social-website = ウェブサイト
-links-social-twitter = { -twitter }
-links-social-telegram = { -telegram }

@@ -21,7 +21,6 @@ common-action-export = Xuất
 common-action-import = Nhập
 common-action-edit = Sửa
 common-action-duplicate = Nhân bản
-common-action-add = Thêm
 common-action-select-all = Chọn tất cả
 common-action-clear = Xóa sạch
 common-action-expand-all = Mở rộng tất cả
@@ -39,8 +38,6 @@ common-severity-warning = Cảnh báo
 common-severity-info = Thông tin
 common-severity-error = Lỗi
 common-severity-debug = Gỡ lỗi
-
-common-error-with-message = Lỗi: { $message }
 
 common-copied-signature = Chữ ký
 common-copied-json = JSON

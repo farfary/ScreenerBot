@@ -657,20 +657,6 @@ tokens-featured-row-boosted-title = { $name } ({ $symbol }) — boost: { $boosts
 
 # Pool selector dialog (scripts/ui/pool_selector.js)
 
-tokens-pool-selector-title = Havuz Seç
-tokens-pool-selector-loading = Havuzlar yükleniyor...
-tokens-pool-selector-empty = Bu token için havuz bulunamadı
-tokens-pool-selector-load-failed = Havuzlar yüklenemedi: { $message }
-tokens-pool-selector-count =
-    { $count ->
-        [one] { $count } havuz bulundu
-       *[other] { $count } havuz bulundu
-    }
-tokens-pool-selector-liquidity = { $amount } lik.
-    .title = Likidite
-tokens-pool-selector-volume = { $amount } 24sa
-    .title = 24sa Hacim
-
 # Token identity chips and address rows (scripts/ui/token_identity.js)
 
 tokens-identity-unknown-asset = Bilinmeyen varlık

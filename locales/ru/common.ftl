@@ -21,7 +21,6 @@ common-action-export = Экспорт
 common-action-import = Импорт
 common-action-edit = Изменить
 common-action-duplicate = Дублировать
-common-action-add = Добавить
 common-action-select-all = Выбрать все
 common-action-clear = Очистить
 common-action-expand-all = Развернуть все
@@ -39,8 +38,6 @@ common-severity-warning = Предупреждение
 common-severity-info = Информация
 common-severity-error = Ошибка
 common-severity-debug = Отладка
-
-common-error-with-message = Ошибка: { $message }
 
 common-copied-signature = Подпись
 common-copied-json = JSON

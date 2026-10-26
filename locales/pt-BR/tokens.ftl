@@ -668,21 +668,6 @@ tokens-featured-row-boosted-title = { $name } ({ $symbol }) — impulsionado { $
 
 # Pool selector dialog (scripts/ui/pool_selector.js)
 
-tokens-pool-selector-title = Selecionar pool
-tokens-pool-selector-loading = Carregando pools...
-tokens-pool-selector-empty = Nenhum pool encontrado para este token
-tokens-pool-selector-load-failed = Falha ao carregar os pools: { $message }
-tokens-pool-selector-count =
-    { $count ->
-        [one] { $count } pool encontrado
-        [many] { $count } pools encontrados
-       *[other] { $count } pools encontrados
-    }
-tokens-pool-selector-liquidity = { $amount } liq.
-    .title = Liquidez
-tokens-pool-selector-volume = { $amount } 24h
-    .title = Volume 24h
-
 # Token identity chips and address rows (scripts/ui/token_identity.js)
 
 tokens-identity-unknown-asset = Ativo desconhecido

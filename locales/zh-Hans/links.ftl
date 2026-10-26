@@ -22,7 +22,3 @@ links-copy-mint =
     .aria-label = 复制铸造地址
 
 links-mint-address = 铸造地址
-
-links-social-website = 网站
-links-social-twitter = { -twitter }
-links-social-telegram = { -telegram }

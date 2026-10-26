@@ -611,20 +611,6 @@ tokens-featured-row-empty = कोई फ़ीचर्ड टोकन नह�
 tokens-featured-row-title = { $name } ({ $symbol })
 tokens-featured-row-boosted-title = { $name } ({ $symbol }) — बूस्ट किया गया { $boosts }
 
-tokens-pool-selector-title = पूल चुनें
-tokens-pool-selector-loading = पूल लोड हो रहे हैं...
-tokens-pool-selector-empty = इस टोकन के लिए कोई पूल नहीं मिला
-tokens-pool-selector-load-failed = पूल लोड करने में विफल: { $message }
-tokens-pool-selector-count =
-    { $count ->
-        [one] { $count } पूल मिला
-       *[other] { $count } पूल मिले
-    }
-tokens-pool-selector-liquidity = { $amount } लिक्विडिटी
-    .title = लिक्विडिटी
-tokens-pool-selector-volume = { $amount } 24h
-    .title = 24h वॉल्यूम
-
 tokens-identity-unknown-asset = अज्ञात एसेट
 tokens-identity-copy-address =
     .title = एड्रेस कॉपी करें

@@ -21,7 +21,6 @@ common-action-export = 导出
 common-action-import = 导入
 common-action-edit = 编辑
 common-action-duplicate = 复制副本
-common-action-add = 添加
 common-action-select-all = 全选
 common-action-clear = 清除
 common-action-expand-all = 全部展开
@@ -39,8 +38,6 @@ common-severity-warning = 警告
 common-severity-info = 信息
 common-severity-error = 错误
 common-severity-debug = 调试
-
-common-error-with-message = 错误：{ $message }
 
 common-copied-signature = 签名
 common-copied-json = JSON

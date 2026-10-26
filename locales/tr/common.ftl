@@ -21,7 +21,6 @@ common-action-export = Dışa aktar
 common-action-import = İçe aktar
 common-action-edit = Düzenle
 common-action-duplicate = Çoğalt
-common-action-add = Ekle
 common-action-select-all = Tümünü seç
 common-action-clear = Temizle
 common-action-expand-all = Tümünü genişlet
@@ -39,8 +38,6 @@ common-severity-warning = Uyarı
 common-severity-info = Bilgi
 common-severity-error = Hata
 common-severity-debug = Hata ayıklama
-
-common-error-with-message = Hata: { $message }
 
 common-copied-signature = İmza
 common-copied-json = JSON

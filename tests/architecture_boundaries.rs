@@ -3653,7 +3653,18 @@ fn every_trade_runs_where_no_caller_can_cancel_it() {
             (relative, code)
         })
         .collect();
-    let mut calls = 0;
+    let undefined: Vec<_> = TRADE_RUNNERS
+        .iter()
+        .filter(|name| {
+            !sources
+                .iter()
+                .any(|(_, code)| code.contains(&format!("fn {name}(")))
+        })
+        .collect();
+    assert!(
+        undefined.is_empty(),
+        "trade runners no longer defined under src/; update the list: {undefined:?}"
+    );
     let mut violations = Vec::new();
     let mut helpers_matched = vec![false; SAME_NAME_HELPERS.len()];
     for (relative, code) in &sources {
@@ -3688,7 +3699,6 @@ fn every_trade_runs_where_no_caller_can_cancel_it() {
                 helpers_matched[entry] = true;
                 continue;
             }
-            calls += 1;
             let at = whole.start();
             if !spawned.iter().any(|(start, end)| *start < at && at < *end) {
                 let line = code[..at].lines().count();
@@ -3696,10 +3706,6 @@ fn every_trade_runs_where_no_caller_can_cancel_it() {
             }
         }
     }
-    assert!(
-        calls > 0,
-        "the guard must see the trade runners called outside their owners"
-    );
     let stale: Vec<_> = SAME_NAME_HELPERS
         .iter()
         .zip(&helpers_matched)

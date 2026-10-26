@@ -21,7 +21,6 @@ common-action-export = エクスポート
 common-action-import = インポート
 common-action-edit = 編集
 common-action-duplicate = 複製
-common-action-add = 追加
 common-action-select-all = すべて選択
 common-action-clear = クリア
 common-action-expand-all = すべて展開
@@ -39,8 +38,6 @@ common-severity-warning = 警告
 common-severity-info = 情報
 common-severity-error = エラー
 common-severity-debug = デバッグ
-
-common-error-with-message = エラー: { $message }
 
 common-copied-signature = シグネチャ
 common-copied-json = JSON

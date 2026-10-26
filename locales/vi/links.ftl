@@ -22,7 +22,3 @@ links-copy-mint =
     .aria-label = Sao chép địa chỉ mint
 
 links-mint-address = Địa chỉ mint
-
-links-social-website = Website
-links-social-twitter = { -twitter }
-links-social-telegram = { -telegram }

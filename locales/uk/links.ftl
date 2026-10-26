@@ -22,7 +22,3 @@ links-copy-mint =
     .aria-label = Копіювати адресу мінта
 
 links-mint-address = Адреса мінта
-
-links-social-website = Вебсайт
-links-social-twitter = { -twitter }
-links-social-telegram = { -telegram }

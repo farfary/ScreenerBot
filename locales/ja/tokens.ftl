@@ -608,19 +608,6 @@ tokens-featured-row-empty = 注目のトークンはありません
 tokens-featured-row-title = { $name }（{ $symbol }）
 tokens-featured-row-boosted-title = { $name }（{ $symbol }）— { $boosts } 回ブースト
 
-tokens-pool-selector-title = プールを選択
-tokens-pool-selector-loading = プールを読み込み中...
-tokens-pool-selector-empty = このトークンのプールが見つかりません
-tokens-pool-selector-load-failed = プールを読み込めませんでした: { $message }
-tokens-pool-selector-count =
-    { $count ->
-       *[other] { $count }個のプールが見つかりました
-    }
-tokens-pool-selector-liquidity = 流動性 { $amount }
-    .title = 流動性
-tokens-pool-selector-volume = { $amount } 24h
-    .title = 24h 出来高
-
 tokens-identity-unknown-asset = 不明なアセット
 tokens-identity-copy-address =
     .title = アドレスをコピー

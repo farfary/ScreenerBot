@@ -21,7 +21,6 @@ common-action-export = خروجی گرفتن
 common-action-import = وارد کردن
 common-action-edit = ویرایش
 common-action-duplicate = تکثیر
-common-action-add = افزودن
 common-action-select-all = انتخاب همه
 common-action-clear = پاک‌کردن
 common-action-expand-all = باز کردن همه
@@ -39,8 +38,6 @@ common-severity-warning = هشدار
 common-severity-info = اطلاعات
 common-severity-error = خطا
 common-severity-debug = دیباگ
-
-common-error-with-message = خطا: { $message }
 
 common-copied-signature = امضا
 common-copied-json = JSON

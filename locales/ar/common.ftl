@@ -21,7 +21,6 @@ common-action-export = تصدير
 common-action-import = استيراد
 common-action-edit = تعديل
 common-action-duplicate = تكرار
-common-action-add = إضافة
 common-action-select-all = تحديد الكل
 common-action-clear = مسح
 common-action-expand-all = توسيع الكل
@@ -39,8 +38,6 @@ common-severity-warning = تحذير
 common-severity-info = معلومة
 common-severity-error = خطأ
 common-severity-debug = تصحيح
-
-common-error-with-message = خطأ: { $message }
 
 common-copied-signature = التوقيع
 common-copied-json = JSON

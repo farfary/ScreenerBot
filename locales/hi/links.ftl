@@ -24,7 +24,3 @@ links-copy-mint =
     .aria-label = मिंट एड्रेस कॉपी करें
 
 links-mint-address = मिंट एड्रेस
-
-links-social-website = वेबसाइट
-links-social-twitter = { -twitter }
-links-social-telegram = { -telegram }

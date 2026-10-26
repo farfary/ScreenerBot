@@ -21,7 +21,6 @@ common-action-export = 내보내기
 common-action-import = 가져오기
 common-action-edit = 편집
 common-action-duplicate = 복제
-common-action-add = 추가
 common-action-select-all = 모두 선택
 common-action-clear = 지우기
 common-action-expand-all = 모두 펼치기
@@ -39,8 +38,6 @@ common-severity-warning = 경고
 common-severity-info = 정보
 common-severity-error = 오류
 common-severity-debug = 디버그
-
-common-error-with-message = 오류: { $message }
 
 common-copied-signature = 서명
 common-copied-json = JSON

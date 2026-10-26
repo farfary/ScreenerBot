@@ -23,7 +23,6 @@ common-action-export = एक्सपोर्ट करें
 common-action-import = इंपोर्ट करें
 common-action-edit = संपादित करें
 common-action-duplicate = डुप्लिकेट करें
-common-action-add = जोड़ें
 common-action-select-all = सभी चुनें
 common-action-clear = साफ़ करें
 common-action-expand-all = सभी खोलें
@@ -41,8 +40,6 @@ common-severity-warning = चेतावनी
 common-severity-info = जानकारी
 common-severity-error = त्रुटि
 common-severity-debug = डीबग
-
-common-error-with-message = त्रुटि: { $message }
 
 common-copied-signature = सिग्नेचर
 common-copied-json = JSON

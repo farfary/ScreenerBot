@@ -649,19 +649,6 @@ tokens-featured-row-boosted-title = { $name } ({ $symbol }) — 부스트 { $boo
 
 # Pool selector dialog (scripts/ui/pool_selector.js)
 
-tokens-pool-selector-title = 풀 선택
-tokens-pool-selector-loading = 풀을 불러오는 중...
-tokens-pool-selector-empty = 이 토큰의 풀을 찾을 수 없습니다
-tokens-pool-selector-load-failed = 풀을 불러오지 못했습니다: { $message }
-tokens-pool-selector-count =
-    { $count ->
-       *[other] 풀 { $count }개 발견
-    }
-tokens-pool-selector-liquidity = { $amount } 유동성
-    .title = 유동성
-tokens-pool-selector-volume = { $amount } 24h
-    .title = 24h 거래량
-
 # Token identity chips and address rows (scripts/ui/token_identity.js)
 
 tokens-identity-unknown-asset = 알 수 없는 자산

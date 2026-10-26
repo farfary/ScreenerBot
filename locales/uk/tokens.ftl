@@ -625,22 +625,6 @@ tokens-featured-row-empty = Немає рекомендованих токені
 tokens-featured-row-title = { $name } ({ $symbol })
 tokens-featured-row-boosted-title = { $name } ({ $symbol }) — бустів: { $boosts }
 
-tokens-pool-selector-title = Вибір пулу
-tokens-pool-selector-loading = Завантаження пулів...
-tokens-pool-selector-empty = Для цього токена пулів не знайдено
-tokens-pool-selector-load-failed = Не вдалося завантажити пули: { $message }
-tokens-pool-selector-count =
-    { $count ->
-        [one] Знайдено { $count } пул
-        [few] Знайдено { $count } пули
-        [many] Знайдено { $count } пулів
-       *[other] Знайдено { $count } пулу
-    }
-tokens-pool-selector-liquidity = { $amount } ліквід.
-    .title = Ліквідність
-tokens-pool-selector-volume = { $amount } за 24 год
-    .title = Обсяг за 24 год
-
 tokens-identity-unknown-asset = Невідомий актив
 tokens-identity-copy-address =
     .title = Копіювати адресу

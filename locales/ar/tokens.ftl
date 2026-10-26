@@ -700,27 +700,6 @@ tokens-featured-row-boosted-title = { $name } ({ $symbol }) — التعزيزا
 
 # Pool selector dialog (scripts/ui/pool_selector.js)
 
-tokens-pool-selector-title = اختيار مجمع السيولة
-tokens-pool-selector-loading = جارٍ تحميل المجمعات...
-tokens-pool-selector-empty = لم يتم العثور على مجمعات سيولة لهذا الرمز
-# $message is the failure text.
-tokens-pool-selector-load-failed = تعذّر تحميل المجمعات: { $message }
-tokens-pool-selector-count =
-    { $count ->
-        [zero] تم العثور على { $count } مجمع سيولة
-        [one] تم العثور على { $count } مجمع سيولة
-        [two] تم العثور على { $count } مجمعي سيولة
-        [few] تم العثور على { $count } مجمعات سيولة
-        [many] تم العثور على { $count } مجمع سيولة
-       *[other] تم العثور على { $count } مجمع سيولة
-    }
-# $amount is the formatted pool liquidity in USD.
-tokens-pool-selector-liquidity = { $amount } سيولة
-    .title = السيولة
-# $amount is the formatted 24 hour pool volume in USD.
-tokens-pool-selector-volume = { $amount } 24h
-    .title = حجم التداول (24h)
-
 # Token identity chips and address rows (scripts/ui/token_identity.js)
 
 tokens-identity-unknown-asset = أصل غير معروف

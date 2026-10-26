@@ -687,23 +687,6 @@ tokens-featured-row-boosted-title = { $name } ({ $symbol }) — { $boosts } با
 
 # Pool selector dialog (scripts/ui/pool_selector.js)
 
-tokens-pool-selector-title = انتخاب استخر
-tokens-pool-selector-loading = در حال بارگیری استخرها...
-tokens-pool-selector-empty = استخری برای این توکن پیدا نشد
-# $message is the failure text.
-tokens-pool-selector-load-failed = بارگیری استخرها ناموفق بود: { $message }
-tokens-pool-selector-count =
-    { $count ->
-        [one] { $count } استخر پیدا شد
-       *[other] { $count } استخر پیدا شد
-    }
-# $amount is the formatted pool liquidity in USD.
-tokens-pool-selector-liquidity = نقدینگی { $amount }
-    .title = نقدینگی
-# $amount is the formatted 24 hour pool volume in USD.
-tokens-pool-selector-volume = { $amount } 24h
-    .title = حجم 24h
-
 # Token identity chips and address rows (scripts/ui/token_identity.js)
 
 tokens-identity-unknown-asset = دارایی ناشناس

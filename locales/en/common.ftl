@@ -25,7 +25,6 @@ common-action-export = Export
 common-action-import = Import
 common-action-edit = Edit
 common-action-duplicate = Duplicate
-common-action-add = Add
 common-action-select-all = Select All
 common-action-clear = Clear
 common-action-expand-all = Expand all
@@ -46,9 +45,6 @@ common-severity-warning = Warning
 common-severity-info = Info
 common-severity-error = Error
 common-severity-debug = Debug
-
-# A failed action, prefixed to the reason. $message is the reason text.
-common-error-with-message = Error: { $message }
 
 # Names of copied values, shown in the copy confirmation. A mint address is `links-mint-address`.
 common-copied-signature = Signature

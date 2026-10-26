@@ -604,19 +604,6 @@ tokens-featured-row-empty = Không có token nổi bật
 tokens-featured-row-title = { $name } ({ $symbol })
 tokens-featured-row-boosted-title = { $name } ({ $symbol }) — đã boost { $boosts }
 
-tokens-pool-selector-title = Chọn pool
-tokens-pool-selector-loading = Đang tải pool...
-tokens-pool-selector-empty = Không tìm thấy pool nào cho token này
-tokens-pool-selector-load-failed = Không tải được pool: { $message }
-tokens-pool-selector-count =
-    { $count ->
-       *[other] Tìm thấy { $count } pool
-    }
-tokens-pool-selector-liquidity = { $amount } thanh khoản
-    .title = Thanh khoản
-tokens-pool-selector-volume = { $amount } 24h
-    .title = Khối lượng 24h
-
 tokens-identity-unknown-asset = Tài sản không xác định
 tokens-identity-copy-address =
     .title = Sao chép địa chỉ

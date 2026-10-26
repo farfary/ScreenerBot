@@ -42,7 +42,10 @@ mod tests {
         }
         let features = serde_json::to_value(get_features()).unwrap();
         assert_eq!(features["trading"]["copy_wallet"], "available");
-        assert!(features.get("tools").is_none(), "the tools group is removed");
+        assert!(
+            features.get("tools").is_none(),
+            "the tools group is removed"
+        );
         assert!(!is_trading_feature_available("unknown-feature"));
     }
 

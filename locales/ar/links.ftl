@@ -22,7 +22,3 @@ links-copy-mint =
     .aria-label = نسخ عنوان الإصدار
 
 links-mint-address = عنوان الإصدار
-
-links-social-website = الموقع الإلكتروني
-links-social-twitter = { -twitter }
-links-social-telegram = { -telegram }

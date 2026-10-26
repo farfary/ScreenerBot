@@ -178,7 +178,12 @@ fn a_store_from_the_tools_release_drops_only_the_retired_tables() {
     }
     assert_eq!(
         remaining,
-        ["ata_closures", "ata_failed_cache", "ata_sessions", "store_schema"],
+        [
+            "ata_closures",
+            "ata_failed_cache",
+            "ata_sessions",
+            "store_schema"
+        ],
         "the store keeps exactly the cleanup tables and its ledger"
     );
     for table in ["ata_closures", "ata_failed_cache", "ata_sessions"] {

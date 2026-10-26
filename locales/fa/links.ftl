@@ -22,7 +22,3 @@ links-copy-mint =
     .aria-label = کپی آدرس مینت
 
 links-mint-address = آدرس مینت
-
-links-social-website = وب‌سایت
-links-social-twitter = { -twitter }
-links-social-telegram = { -telegram }
