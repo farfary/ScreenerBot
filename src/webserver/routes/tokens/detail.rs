@@ -9,13 +9,13 @@ use crate::{
 };
 use axum::{extract::Path, Json};
 
-use super::source_status::build_source_status;
+use super::source_status::{build_source_status, MarketKnowledge};
 use super::types::*;
 use crate::{
     logger::{self, LogTag},
     native_price::get_native_price,
     pools, positions,
-    tokens::{database::database, security::SecurityRiskBand},
+    tokens::{database::database, security::SecurityRiskBand, DataSource},
 };
 
 /// Unix seconds of a token's creation for the detail response: its on-chain creation
@@ -53,6 +53,77 @@ impl MarketFigures {
             total_holders: None,
         }
     }
+
+    /// The figures the token analysis reports: the native coin's own for the wrapped
+    /// native coin, else the quoted price (absent when not positive) and the token's
+    /// stored market figures.
+    pub(super) fn for_analysis(
+        is_native_asset: bool,
+        native_price_usd: Option<f64>,
+        token: &crate::tokens::types::Token,
+        price_sol: f64,
+        price_usd: f64,
+    ) -> Self {
+        if is_native_asset {
+            return Self::of_native_asset(native_price_usd);
+        }
+        Self {
+            price_sol: (price_sol > 0.0).then_some(price_sol),
+            price_usd: (price_usd > 0.0).then_some(price_usd),
+            market_cap: token.market_cap,
+            fdv: token.fdv,
+            liquidity_usd: token.liquidity_usd,
+            total_holders: token.total_holders,
+        }
+    }
+}
+
+/// Ceiling on fetching a token the store holds no market data for, below the
+/// dashboard's 10 s request abort. Each source fetch has its own deadline; this one
+/// also bounds the token row's decimals read.
+const ON_DEMAND_TOKEN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(9);
+
+/// The token with its market data, fetched from the market sources and stored when the
+/// store holds none yet ([`crate::tokens::ensure_token_available`]). `None` when no
+/// source lists it or the fetch did not finish in time.
+async fn token_with_market_data(mint: &str) -> Option<crate::tokens::Token> {
+    let fetch = crate::tokens::ensure_token_available(crate::chains::active_chain(), mint);
+    match tokio::time::timeout(ON_DEMAND_TOKEN_TIMEOUT, fetch).await {
+        Ok(Ok(token)) => Some(token),
+        Ok(Err(e)) => {
+            logger::debug(
+                LogTag::Webserver,
+                &format!("No market data for mint={mint}: {e}"),
+            );
+            None
+        }
+        Err(_) => {
+            logger::debug(
+                LogTag::Webserver,
+                &format!(
+                    "Market data fetch for mint={mint} did not finish within {}s",
+                    ON_DEMAND_TOKEN_TIMEOUT.as_secs()
+                ),
+            );
+            None
+        }
+    }
+}
+
+/// The dialog's source list for `mint`, from which sources hold stored data.
+async fn market_source_status(
+    mint: &str,
+    has_dexscreener: bool,
+    has_geckoterminal: bool,
+    has_rugcheck: bool,
+) -> Vec<SourceStatus> {
+    let chain = crate::chains::active_chain();
+    build_source_status(
+        MarketKnowledge::of(chain, DataSource::DexScreener, mint, has_dexscreener),
+        MarketKnowledge::of(chain, DataSource::GeckoTerminal, mint, has_geckoterminal),
+        has_rugcheck,
+    )
+    .await
 }
 
 /// GET /api/tokens/:mint
@@ -69,11 +140,11 @@ pub async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailRespo
     let snapshot =
         match crate::tokens::get_full_token_async(crate::chains::active_chain(), &mint).await {
             Ok(Some(snap)) => Some(snap),
-            // Not in our DB yet — fetch from external APIs (DexScreener/Jupiter) and
-            // add it, so opening a token we have not tracked (e.g. from the featured
-            // or search) shows real data instead of an empty NOT_FOUND stub. Mirrors
+            // No market data stored yet — fetch it from the market sources and store
+            // it, so opening a token we have not tracked (e.g. from Featured or search)
+            // shows real data instead of an empty NOT_FOUND stub. Mirrors
             // get_token_analysis.
-            Ok(None) => fetch_and_add_token_from_external(&mint).await,
+            Ok(None) => token_with_market_data(&mint).await,
             Err(_) => None,
         };
     logger::debug(
@@ -157,7 +228,7 @@ pub async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailRespo
                 has_pool_price: false,
                 has_open_position: false,
                 blacklisted: false,
-                source_status: build_source_status(false, false, false).await,
+                source_status: market_source_status(&mint, false, false, false).await,
                 timestamp: chrono::Utc::now().to_rfc3339(),
             });
         }
@@ -760,7 +831,8 @@ pub async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailRespo
         } else {
             (false, false, false)
         };
-    let source_status = build_source_status(has_dexscreener, has_geckoterminal, has_rugcheck).await;
+    let source_status =
+        market_source_status(&mint, has_dexscreener, has_geckoterminal, has_rugcheck).await;
 
     Json(TokenDetailResponse {
         mint: token.mint.clone(),
@@ -874,7 +946,7 @@ pub async fn get_token_analysis(
                     &format!("Token not in DB, trying external APIs: mint={mint}"),
                 );
 
-                match fetch_and_add_token_from_external(&mint).await {
+                match token_with_market_data(&mint).await {
                     Some(t) => {
                         logger::info(
                             LogTag::Webserver,
@@ -927,6 +999,15 @@ pub async fn get_token_analysis(
         .map(|p| p.price_native)
         .unwrap_or(token.price_sol);
     let effective_price_usd = effective_price_sol * sol_price_usd;
+    let is_native_asset =
+        crate::chains::adapter_for(crate::chains::active_chain()).is_native_asset(&mint);
+    let figures = MarketFigures::for_analysis(
+        is_native_asset,
+        crate::native_price::known_native_price(),
+        &token,
+        effective_price_sol,
+        effective_price_usd,
+    );
 
     // Build overview
     let overview = TokenOverview {
@@ -937,17 +1018,9 @@ pub async fn get_token_analysis(
         logo_url: token.image_url.clone(),
         decimals: token.decimals,
         supply: token.supply.clone(),
-        price_sol: if effective_price_sol > 0.0 {
-            Some(effective_price_sol)
-        } else {
-            None
-        },
-        price_usd: if effective_price_usd > 0.0 {
-            Some(effective_price_usd)
-        } else {
-            None
-        },
-        total_holders: token.total_holders,
+        price_sol: figures.price_sol,
+        price_usd: figures.price_usd,
+        total_holders: figures.total_holders,
         website: token.websites.first().map(|w| w.url.clone()),
         twitter: token
             .socials
@@ -996,13 +1069,12 @@ pub async fn get_token_analysis(
         None
     };
 
-    // Build market analysis using the effective_price_sol computed earlier
-    let has_market_data = effective_price_sol > 0.0 || token.volume_h24.is_some();
+    let has_market_data = figures.price_sol.is_some() || token.volume_h24.is_some();
 
     let market = if has_market_data {
         Some(MarketAnalysis {
-            price_sol: effective_price_sol,
-            price_usd: Some(effective_price_usd),
+            price_sol: figures.price_sol.unwrap_or_default(),
+            price_usd: figures.price_usd,
             volume_h24: token.volume_h24,
             volume_h6: token.volume_h6,
             volume_h1: token.volume_h1,
@@ -1011,15 +1083,16 @@ pub async fn get_token_analysis(
             price_change_h1: token.price_change_h1,
             txns_buys_h24: token.txns_h24_buys,
             txns_sells_h24: token.txns_h24_sells,
-            fdv: token.fdv,
-            market_cap: token.market_cap,
+            fdv: figures.fdv,
+            market_cap: figures.market_cap,
         })
     } else {
         None
     };
 
-    // Build liquidity analysis from pool descriptors
-    let liquidity = if !pool_descriptors.is_empty() {
+    // The pooled reserves of the wrapped native coin sum every pool quoted against it,
+    // not a figure of the coin (`MarketFigures::of_native_asset`), so it has none.
+    let liquidity = if !pool_descriptors.is_empty() && !is_native_asset {
         let total_liquidity_native: f64 = pool_descriptors
             .iter()
             .map(|p| {

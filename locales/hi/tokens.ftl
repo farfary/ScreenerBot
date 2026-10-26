@@ -1,5 +1,6 @@
 tokens-result-source-live = लाइव मार्केट डेटा
 tokens-result-source-unavailable = { $label } उपलब्ध नहीं — दोबारा प्रयास हो रहा है
+tokens-result-source-pending = { $label } का इंतज़ार
 tokens-result-source-not-listed = { $label } पर लिस्ट नहीं है
 tokens-result-security-available = सिक्योरिटी रिपोर्ट उपलब्ध है
 tokens-result-security-missing = कोई { -rugcheck } रिपोर्ट नहीं

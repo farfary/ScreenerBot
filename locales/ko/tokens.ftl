@@ -4,6 +4,7 @@
 
 tokens-result-source-live = 실시간 시장 데이터
 tokens-result-source-unavailable = { $label } 사용 불가 — 재시도 중
+tokens-result-source-pending = { $label } 응답 대기 중
 tokens-result-source-not-listed = { $label }에 등록되지 않음
 tokens-result-security-available = 보안 리포트 있음
 tokens-result-security-missing = { -rugcheck } 리포트 없음

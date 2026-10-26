@@ -5,7 +5,9 @@
 
 use crate::chains::{ChainId, PerChain};
 use crate::tokens::database;
-use crate::tokens::types::{DexScreenerData, GeckoTerminalData, RugcheckData, Token, TokenResult};
+use crate::tokens::types::{
+    DataSource, DexScreenerData, GeckoTerminalData, RugcheckData, Token, TokenResult,
+};
 use std::collections::HashMap;
 use std::sync::LazyLock;
 use std::sync::RwLock;
@@ -15,6 +17,8 @@ const TOKEN_SNAPSHOT_TTL_SECS: u64 = 30;
 const DEXSCREENER_TTL_SECS: u64 = 30;
 const GECKOTERMINAL_TTL_SECS: u64 = 60;
 const RUGCHECK_TTL_SECS: u64 = 300; // 5 minutes - security data shouldn't be stale
+/// How long a market source's answer that it lists no pair for a token is believed.
+const NOT_LISTED_TTL_SECS: u64 = 600;
 const MARKET_CACHE_CAPACITY: u64 = 2000;
 const SECURITY_CACHE_CAPACITY: u64 = 3000;
 
@@ -137,6 +141,39 @@ fn new_rugcheck_cache(_chain: ChainId) -> moka::sync::Cache<String, RugcheckData
         .build()
 }
 
+/// Tokens a market source answered for without listing a pair, keyed by source and mint.
+/// Only such an answer lets a source be reported as not listing a token; no data and no
+/// answer yet is not the same claim.
+static NOT_LISTED_ANSWERS: PerChain<moka::sync::Cache<(DataSource, String), ()>> =
+    PerChain::new(new_not_listed_answers);
+
+fn new_not_listed_answers(_chain: ChainId) -> moka::sync::Cache<(DataSource, String), ()> {
+    moka::sync::Cache::builder()
+        .max_capacity(MARKET_CACHE_CAPACITY)
+        .time_to_live(Duration::from_secs(NOT_LISTED_TTL_SECS))
+        .build()
+}
+
+/// Record that `source` answered and lists no pair for `mint`.
+pub fn record_not_listed(chain: ChainId, source: DataSource, mint: &str) {
+    NOT_LISTED_ANSWERS
+        .get(chain)
+        .insert((source, mint.to_owned()), ());
+}
+
+/// Whether `source` recently answered that it lists no pair for `mint`.
+pub fn answered_not_listed(chain: ChainId, source: DataSource, mint: &str) -> bool {
+    NOT_LISTED_ANSWERS
+        .get(chain)
+        .contains_key(&(source, mint.to_owned()))
+}
+
+fn forget_not_listed(chain: ChainId, source: DataSource, mint: &str) {
+    NOT_LISTED_ANSWERS
+        .get(chain)
+        .invalidate(&(source, mint.to_owned()));
+}
+
 /// Entries across every chain's slot of a per-chain cache.
 fn entry_count<V>(caches: &PerChain<moka::sync::Cache<String, V>>) -> u64
 where
@@ -150,11 +187,12 @@ pub fn get_cached_dexscreener(chain: ChainId, mint: &str) -> Option<DexScreenerD
     DEXSCREENER_CACHE.get(chain).get(mint)
 }
 
-/// Cache DexScreener data for a token mint
+/// Cache DexScreener data for a token mint; the source now lists it.
 pub fn store_dexscreener(chain: ChainId, mint: &str, data: &DexScreenerData) {
     DEXSCREENER_CACHE
         .get(chain)
         .insert(mint.to_owned(), data.clone());
+    forget_not_listed(chain, DataSource::DexScreener, mint);
 }
 
 /// Get DexScreener cache usage metrics
@@ -178,11 +216,12 @@ pub fn get_cached_geckoterminal(chain: ChainId, mint: &str) -> Option<GeckoTermi
     GECKOTERMINAL_CACHE.get(chain).get(mint)
 }
 
-/// Cache GeckoTerminal data for a token mint
+/// Cache GeckoTerminal data for a token mint; the source now lists it.
 pub fn store_geckoterminal(chain: ChainId, mint: &str, data: &GeckoTerminalData) {
     GECKOTERMINAL_CACHE
         .get(chain)
         .insert(mint.to_owned(), data.clone());
+    forget_not_listed(chain, DataSource::GeckoTerminal, mint);
 }
 
 /// Get GeckoTerminal cache usage metrics

@@ -4,6 +4,7 @@
 
 tokens-result-source-live = Live market data
 tokens-result-source-unavailable = { $label } unavailable — retrying
+tokens-result-source-pending = Waiting for { $label }
 tokens-result-source-not-listed = Not listed on { $label }
 tokens-result-security-available = Security report available
 tokens-result-security-missing = No { -rugcheck } report

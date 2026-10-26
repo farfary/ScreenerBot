@@ -4,6 +4,7 @@
 
 tokens-result-source-live = ライブのマーケットデータ
 tokens-result-source-unavailable = { $label } は利用できません — 再試行中
+tokens-result-source-pending = { $label } の応答を待っています
 tokens-result-source-not-listed = { $label } に掲載されていません
 tokens-result-security-available = セキュリティレポートあり
 tokens-result-security-missing = { -rugcheck } のレポートなし

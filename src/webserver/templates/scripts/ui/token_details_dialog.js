@@ -511,7 +511,8 @@ export class TokenDetailsDialog {
 
     // "All failed" = no market and no security data — the full blackout case.
     const allFailed = !marketOk && !isOk("rugcheck");
-    const icon = (state) => (state === "unavailable" ? "icon-circle-alert" : "icon-circle-x");
+    const icons = { unavailable: "icon-circle-alert", pending: "icon-clock" };
+    const icon = (state) => icons[state] || "icon-circle-x";
 
     const chips = issues
       .map(

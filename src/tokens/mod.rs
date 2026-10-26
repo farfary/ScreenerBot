@@ -107,9 +107,10 @@ pub use priorities::Priority;
 
 // Re-export store APIs
 pub use store::{
-    dexscreener_cache_metrics, dexscreener_cache_size, geckoterminal_cache_metrics,
-    geckoterminal_cache_size, get_cached_token, invalidate_token_snapshot, refresh_token_snapshot,
-    rugcheck_cache_metrics, rugcheck_cache_size, store_token_snapshot, CacheMetrics,
+    answered_not_listed, dexscreener_cache_metrics, dexscreener_cache_size,
+    geckoterminal_cache_metrics, geckoterminal_cache_size, get_cached_token,
+    invalidate_token_snapshot, refresh_token_snapshot, rugcheck_cache_metrics, rugcheck_cache_size,
+    store_token_snapshot, CacheMetrics,
 };
 
 // Re-export pools APIs
@@ -191,17 +192,27 @@ pub async fn request_immediate_update(chain: ChainId, mint: &str) -> TokenResult
     updates::force_update_token(mint, db, service::rate_budget(chain)).await
 }
 
-/// Ensure a token is available for manual trading, fetching it on demand if missing.
+/// Ensure a token is available with its market data, fetching it on demand if missing.
 ///
-/// Manual/force buys allow trading tokens that aren't tracked by the pool service or
-/// that failed filtering — those already live in the DB and resolve immediately. For a
-/// token the bot has never seen (e.g. a future paste-by-address flow) this bootstraps
-/// it best-effort: it stamps a metadata row (decimals fetched from chain) and triggers
-/// an immediate API fetch, then retries assembly.
+/// Manual trades and the token-details view reach tokens that aren't tracked by the
+/// pool service, that failed filtering, or that nothing has stored yet (a Featured or
+/// search result opened right after boot). A token with market data resolves at once.
+/// Otherwise this stamps the token row (decimals fetched from chain), runs an immediate
+/// fetch from every source, which stores their market rows, and assembles it again.
 ///
 /// Returns the assembled [`Token`] or an error if the token still has no market data
-/// (in which case it cannot be priced or swapped anyway).
+/// (in which case it cannot be priced or swapped anyway). A value that is not an
+/// address is refused before anything is stored.
 pub async fn ensure_token_available(chain: ChainId, mint: &str) -> TokenResult<Token> {
+    if crate::chains::adapter_for(chain)
+        .validate_address(mint)
+        .is_err()
+    {
+        return Err(Error::InvalidMint {
+            value: mint.to_owned(),
+        });
+    }
+
     // Fast path: token already known (discovered, has market data) — covers
     // not-pool-tracked and filter-failed tokens shown in the dashboard.
     let db = database::require_database(chain)?;
@@ -211,7 +222,7 @@ pub async fn ensure_token_available(chain: ChainId, mint: &str) -> TokenResult<T
 
     crate::logger::info(
         crate::logger::LogTag::Tokens,
-        &format!("Token {mint} not in DB — bootstrapping on demand for manual trade"),
+        &format!("Token {mint} has no market data yet, fetching it on demand"),
     );
 
     // Stamp a metadata row so the token is persisted, fetching decimals from chain.

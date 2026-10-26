@@ -779,6 +779,10 @@
   color: var(--text-tertiary, var(--text-secondary));
 }
 
+.source-issue--pending i {
+  color: var(--text-tertiary, var(--text-secondary));
+}
+
 .source-issue--unavailable {
   color: var(--warning, #d29922);
 }

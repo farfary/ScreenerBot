@@ -81,3 +81,28 @@ fn the_wrapped_native_mint_is_the_native_asset() {
     let adapter = crate::chains::adapter_for(crate::chains::ChainId::Solana);
     assert!(adapter.is_native_asset(crate::chains::solana::constants::SOL_MINT));
 }
+
+#[test]
+fn the_analysis_reports_the_native_coin_figures_for_the_wrapped_native_coin() {
+    let now = Utc::now();
+    let mut wrapped = token(now, None);
+    wrapped.market_cap = Some(90_000_000_000.0);
+    wrapped.fdv = Some(95_000_000_000.0);
+    wrapped.liquidity_usd = Some(4_000_000_000.0);
+    wrapped.total_holders = Some(12);
+
+    assert_eq!(
+        MarketFigures::for_analysis(true, Some(187.25), &wrapped, 0.98, 183.5),
+        MarketFigures::of_native_asset(Some(187.25))
+    );
+
+    let quoted = MarketFigures::for_analysis(false, Some(187.25), &wrapped, 0.5, 93.6);
+    assert_eq!(quoted.price_sol, Some(0.5));
+    assert_eq!(quoted.price_usd, Some(93.6));
+    assert_eq!(quoted.market_cap, wrapped.market_cap);
+    assert_eq!(quoted.fdv, wrapped.fdv);
+    assert_eq!(quoted.total_holders, wrapped.total_holders);
+
+    let unpriced = MarketFigures::for_analysis(false, Some(187.25), &wrapped, 0.0, 0.0);
+    assert_eq!((unpriced.price_sol, unpriced.price_usd), (None, None));
+}

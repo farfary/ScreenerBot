@@ -4,6 +4,7 @@
 
 tokens-result-source-live = داده زنده بازار
 tokens-result-source-unavailable = { $label } در دسترس نیست — در حال تلاش مجدد
+tokens-result-source-pending = در انتظار { $label }
 tokens-result-source-not-listed = در { $label } فهرست نشده است
 tokens-result-security-available = گزارش امنیتی موجود است
 tokens-result-security-missing = گزارش { -rugcheck } موجود نیست

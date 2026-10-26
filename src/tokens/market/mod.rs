@@ -9,6 +9,9 @@
 
 pub mod dexscreener;
 pub mod geckoterminal;
+mod persist;
+#[cfg(test)]
+mod persist_tests;
 
 pub use dexscreener::{fetch_dexscreener_data, fetch_dexscreener_data_batch};
 pub use geckoterminal::{fetch_geckoterminal_data, fetch_geckoterminal_data_batch};

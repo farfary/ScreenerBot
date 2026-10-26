@@ -14,8 +14,9 @@
 use crate::apis::dexscreener::DexScreenerPool;
 use crate::logger::{self, LogTag};
 use crate::tokens::database::TokenDatabase;
+use crate::tokens::market::persist;
 use crate::tokens::store::{self, CacheMetrics};
-use crate::tokens::types::{DexScreenerData, TokenResult};
+use crate::tokens::types::{DataSource, DexScreenerData, TokenResult};
 use crate::tokens::Error;
 use chrono::{DateTime, Utc};
 use std::collections::HashMap;
@@ -121,10 +122,24 @@ fn convert_pool_to_data(pool: &DexScreenerPool, is_native_pair: bool) -> DexScre
 /// `Error::Api` when the endpoint is unhealthy (no request is made) or the batch
 /// request fails. No mint is reported as `None` in that case, so a failure can
 /// never be mistaken for "not listed".
+///
+/// A token whose answer could not be stored is left out of the map, so the caller
+/// counts it as a failed fetch, never as "not listed".
 pub async fn fetch_dexscreener_data_batch(
     mints: &[String],
     db: &TokenDatabase,
 ) -> TokenResult<HashMap<String, Option<DexScreenerData>>> {
+    fetch_and_store(mints, db).await.map(|(answers, _)| answers)
+}
+
+/// The answers of one batch fetch, and the error of every token whose answer could not
+/// be stored.
+type BatchOutcome = (
+    HashMap<String, Option<DexScreenerData>>,
+    HashMap<String, Error>,
+);
+
+async fn fetch_and_store(mints: &[String], db: &TokenDatabase) -> TokenResult<BatchOutcome> {
     // Check connectivity before API call - skip the request only when the
     // endpoint is EXPLICITLY Unhealthy. An `Unknown` state (the health monitor
     // hasn't completed its first probe yet — every endpoint starts Unknown at
@@ -145,10 +160,11 @@ pub async fn fetch_dexscreener_data_batch(
     }
 
     if mints.is_empty() {
-        return Ok(HashMap::new());
+        return Ok((HashMap::new(), HashMap::new()));
     }
 
     let mut results: HashMap<String, Option<DexScreenerData>> = HashMap::new();
+    let mut store_failures: HashMap<String, Error> = HashMap::new();
     let mut to_fetch: Vec<String> = Vec::new();
 
     // Check cache and database for each token
@@ -188,7 +204,7 @@ pub async fn fetch_dexscreener_data_batch(
 
     // If all tokens were cached, return early
     if to_fetch.is_empty() {
-        return Ok(results);
+        return Ok((results, store_failures));
     }
 
     // Connectivity is down: the API is not asked, so nothing is known about these
@@ -227,40 +243,22 @@ pub async fn fetch_dexscreener_data_batch(
             crate::chains::adapter_for(db.chain()).is_native_asset(&pool.quote_token_address);
         let data = convert_pool_to_data(&pool, is_native_pair);
 
-        // Store market data in database
-        if let Err(e) = db.upsert_dexscreener_data(mint, &data) {
-            logger::error(
-                LogTag::Tokens,
-                &format!(
-                    "[TOKENS][DEXSCREENER] Failed to store data for {}: {}",
-                    mint, e
-                ),
-            );
-        }
-
-        // CRITICAL: Update token metadata (symbol/name) from pool data
-        // This fixes race condition where Pool Service discovers token first without metadata
-        let symbol = if !pool.base_token_symbol.is_empty() {
-            Some(pool.base_token_symbol.as_str())
-        } else {
-            None
-        };
-        let name = if !pool.base_token_name.is_empty() {
-            Some(pool.base_token_name.as_str())
-        } else {
-            None
-        };
-
-        if symbol.is_some() || name.is_some() {
-            if let Err(e) = db.upsert_token(mint, symbol, name, None) {
-                logger::error(
-                    LogTag::Tokens,
-                    &format!(
-                        "[TOKENS][DEXSCREENER] Failed to update metadata for {}: {}",
-                        mint, e
-                    ),
-                );
-            }
+        // Store the token row (with the pair's symbol and name) and its market data
+        let symbol = Some(pool.base_token_symbol.as_str()).filter(|s| !s.is_empty());
+        let name = Some(pool.base_token_name.as_str()).filter(|s| !s.is_empty());
+        if let Err(e) = persist::store_market_answer(
+            db,
+            "DEXSCREENER",
+            mint,
+            persist::AnsweredMetadata {
+                symbol,
+                name,
+                decimals: None,
+            },
+            || db.upsert_dexscreener_data(mint, &data),
+        ) {
+            store_failures.insert(mint.clone(), e);
+            continue;
         }
 
         // Cache it
@@ -278,12 +276,16 @@ pub async fn fetch_dexscreener_data_batch(
         results.insert(mint.clone(), Some(data));
     }
 
-    // Mark tokens with no pools as None (not listed)
+    // The API answered without a pair for the rest: not listed
     for mint in &to_fetch {
-        results.entry(mint.clone()).or_default();
+        if results.contains_key(mint) || store_failures.contains_key(mint) {
+            continue;
+        }
+        store::record_not_listed(db.chain(), DataSource::DexScreener, mint);
+        results.insert(mint.clone(), None);
     }
 
-    Ok(results)
+    Ok((results, store_failures))
 }
 
 /// Fetch DexScreener data for a single token (wrapper around batch endpoint)
@@ -298,15 +300,19 @@ pub async fn fetch_dexscreener_data_batch(
 /// * `db` - Database instance
 ///
 /// # Returns
-/// DexScreenerData if found, None if token not listed; `Err` when the lookup failed
+/// DexScreenerData if found, None if token not listed; `Err` when the lookup failed or
+/// the answer could not be stored
 pub async fn fetch_dexscreener_data(
     mint: &str,
     db: &TokenDatabase,
 ) -> TokenResult<Option<DexScreenerData>> {
     // Use batch endpoint with single token
-    let mut batch_results = fetch_dexscreener_data_batch(&[mint.to_string()], db).await?;
+    let (mut answers, mut store_failures) = fetch_and_store(&[mint.to_string()], db).await?;
+    if let Some(error) = store_failures.remove(mint) {
+        return Err(error);
+    }
 
-    Ok(batch_results.remove(mint).flatten())
+    Ok(answers.remove(mint).flatten())
 }
 
 /// Get cache metrics for monitoring

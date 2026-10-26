@@ -1,5 +1,6 @@
 tokens-result-source-live = Рыночные данные в реальном времени
 tokens-result-source-unavailable = { $label } недоступен — повторяем попытку
+tokens-result-source-pending = Ожидаем ответ { $label }
 tokens-result-source-not-listed = Нет в списке { $label }
 tokens-result-security-available = Отчёт безопасности доступен
 tokens-result-security-missing = Нет отчёта { -rugcheck }

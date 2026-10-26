@@ -1,5 +1,6 @@
 tokens-result-source-live = Données de marché en direct
 tokens-result-source-unavailable = { $label } indisponible — nouvelle tentative
+tokens-result-source-pending = En attente de { $label }
 tokens-result-source-not-listed = Non listé sur { $label }
 tokens-result-security-available = Rapport de sécurité disponible
 tokens-result-security-missing = Aucun rapport { -rugcheck }

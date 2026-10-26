@@ -4,6 +4,7 @@
 
 tokens-result-source-live = بيانات السوق المباشرة
 tokens-result-source-unavailable = { $label } غير متاح — جارٍ إعادة المحاولة
+tokens-result-source-pending = في انتظار { $label }
 tokens-result-source-not-listed = غير مدرج على { $label }
 tokens-result-security-available = تقرير الأمان متاح
 tokens-result-security-missing = لا يوجد تقرير من { -rugcheck }

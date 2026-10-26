@@ -50,6 +50,10 @@ fn token_source_results_render_english() {
         "DexScreener unavailable — retrying"
     );
     assert_eq!(
+        render(label(ids::TOKENS_RESULT_SOURCE_PENDING, "DexScreener")),
+        "Waiting for DexScreener"
+    );
+    assert_eq!(
         render(label(ids::TOKENS_RESULT_SOURCE_NOT_LISTED, "GeckoTerminal")),
         "Not listed on GeckoTerminal"
     );

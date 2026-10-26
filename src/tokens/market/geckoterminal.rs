@@ -13,8 +13,9 @@
 
 use crate::logger::{self, LogTag};
 use crate::tokens::database::TokenDatabase;
+use crate::tokens::market::persist;
 use crate::tokens::store::{self, CacheMetrics};
-use crate::tokens::types::{GeckoTerminalData, TokenResult};
+use crate::tokens::types::{DataSource, GeckoTerminalData, TokenResult};
 use crate::tokens::Error;
 use chrono::Utc;
 use std::collections::HashMap;
@@ -38,15 +39,30 @@ use std::collections::HashMap;
 /// HashMap mapping mint -> Option<GeckoTerminalData>
 /// - Some(data) if token has market data
 /// - None if token not listed on any DEX
+///
+/// A token whose answer could not be stored is left out of the map, so the caller
+/// counts it as a failed fetch, never as "not listed".
 pub async fn fetch_geckoterminal_data_batch(
     mints: &[String],
     db: &TokenDatabase,
 ) -> TokenResult<HashMap<String, Option<GeckoTerminalData>>> {
+    fetch_and_store(mints, db).await.map(|(answers, _)| answers)
+}
+
+/// The answers of one batch fetch, and the error of every token whose answer could not
+/// be stored.
+type BatchOutcome = (
+    HashMap<String, Option<GeckoTerminalData>>,
+    HashMap<String, Error>,
+);
+
+async fn fetch_and_store(mints: &[String], db: &TokenDatabase) -> TokenResult<BatchOutcome> {
     if mints.is_empty() {
-        return Ok(HashMap::new());
+        return Ok((HashMap::new(), HashMap::new()));
     }
 
     let mut results: HashMap<String, Option<GeckoTerminalData>> = HashMap::new();
+    let mut store_failures: HashMap<String, Error> = HashMap::new();
     let mut to_fetch: Vec<String> = Vec::new();
 
     // Check cache and database for each token
@@ -85,7 +101,7 @@ pub async fn fetch_geckoterminal_data_batch(
 
     // If all tokens were cached, return early
     if to_fetch.is_empty() {
-        return Ok(results);
+        return Ok((results, store_failures));
     }
 
     // 3. Fetch from batch API endpoint
@@ -153,47 +169,26 @@ pub async fn fetch_geckoterminal_data_batch(
             market_data_first_fetched_at: Utc::now(),
         };
 
-        // Store market data in database
-        if let Err(e) = db.upsert_geckoterminal_data(mint, &data) {
-            logger::error(
-                LogTag::Tokens,
-                &format!(
-                    "[TOKENS][GECKOTERMINAL] Failed to save GeckoTerminal data for {}: {}",
-                    mint, e
-                ),
-            );
-        }
-
-        // CRITICAL: Update token metadata (symbol/name/decimals) from GeckoTerminal data
-        // This fixes race condition where Pool Service discovers token first without metadata.
-        // Decimals are written only while none is known: an upsert replaces the stored value,
-        // and a chain-resolved value must never be overwritten by an API value.
-        let symbol = if !attrs.symbol.is_empty() {
-            Some(attrs.symbol.as_str())
-        } else {
-            None
-        };
-        let name = if !attrs.name.is_empty() {
-            Some(attrs.name.as_str())
-        } else {
-            None
-        };
-
+        // Store the token row (with symbol, name and decimals) and its market data.
+        // Decimals are written only while none is known: an upsert replaces the stored
+        // value, and a chain-resolved value must never be overwritten by an API value.
         let decimals = attrs
             .decimals
             .filter(|d| crate::tokens::decimals::is_valid(*d))
             .filter(|_| crate::tokens::decimals::get_cached(db.chain(), mint).is_none());
-
-        if symbol.is_some() || name.is_some() || decimals.is_some() {
-            if let Err(e) = db.upsert_token(mint, symbol, name, decimals) {
-                logger::error(
-                    LogTag::Tokens,
-                    &format!(
-                        "[TOKENS][GECKOTERMINAL] Failed to update metadata for {}: {}",
-                        mint, e
-                    ),
-                );
-            }
+        if let Err(e) = persist::store_market_answer(
+            db,
+            "GECKOTERMINAL",
+            mint,
+            persist::AnsweredMetadata {
+                symbol: Some(attrs.symbol.as_str()).filter(|s| !s.is_empty()),
+                name: Some(attrs.name.as_str()).filter(|s| !s.is_empty()),
+                decimals,
+            },
+            || db.upsert_geckoterminal_data(mint, &data),
+        ) {
+            store_failures.insert(mint.clone(), e);
+            continue;
         }
 
         // Cache it
@@ -203,12 +198,16 @@ pub async fn fetch_geckoterminal_data_batch(
         results.insert(mint.clone(), Some(data));
     }
 
-    // Mark tokens with no data as None (not listed)
+    // The API answered without data for the rest: not listed
     for mint in &to_fetch {
-        results.entry(mint.clone()).or_default();
+        if results.contains_key(mint) || store_failures.contains_key(mint) {
+            continue;
+        }
+        store::record_not_listed(db.chain(), DataSource::GeckoTerminal, mint);
+        results.insert(mint.clone(), None);
     }
 
-    Ok(results)
+    Ok((results, store_failures))
 }
 
 /// Fetch GeckoTerminal data for a single token (wrapper around batch endpoint)
@@ -223,15 +222,19 @@ pub async fn fetch_geckoterminal_data_batch(
 /// * `db` - Database instance
 ///
 /// # Returns
-/// GeckoTerminalData if found, None if token not listed
+/// GeckoTerminalData if found, None if token not listed; `Err` when the lookup failed or
+/// the answer could not be stored
 pub async fn fetch_geckoterminal_data(
     mint: &str,
     db: &TokenDatabase,
 ) -> TokenResult<Option<GeckoTerminalData>> {
     // Use batch endpoint with single token
-    let mut batch_results = fetch_geckoterminal_data_batch(&[mint.to_string()], db).await?;
+    let (mut answers, mut store_failures) = fetch_and_store(&[mint.to_string()], db).await?;
+    if let Some(error) = store_failures.remove(mint) {
+        return Err(error);
+    }
 
-    Ok(batch_results.remove(mint).flatten())
+    Ok(answers.remove(mint).flatten())
 }
 
 /// Get cache metrics for monitoring

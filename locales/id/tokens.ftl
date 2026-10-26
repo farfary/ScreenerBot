@@ -4,6 +4,7 @@
 
 tokens-result-source-live = Data pasar langsung
 tokens-result-source-unavailable = { $label } tidak tersedia — mencoba lagi
+tokens-result-source-pending = Menunggu { $label }
 tokens-result-source-not-listed = Tidak terdaftar di { $label }
 tokens-result-security-available = Laporan keamanan tersedia
 tokens-result-security-missing = Tidak ada laporan { -rugcheck }

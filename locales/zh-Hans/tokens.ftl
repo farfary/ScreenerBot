@@ -4,6 +4,7 @@
 
 tokens-result-source-live = 实时市场数据
 tokens-result-source-unavailable = { $label } 不可用，正在重试
+tokens-result-source-pending = 正在等待 { $label }
 tokens-result-source-not-listed = 未在 { $label } 上架
 tokens-result-security-available = 安全报告可用
 tokens-result-security-missing = 无 { -rugcheck } 报告

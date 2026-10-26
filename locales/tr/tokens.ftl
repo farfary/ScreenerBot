@@ -1,5 +1,6 @@
 tokens-result-source-live = Canlı piyasa verileri
 tokens-result-source-unavailable = { $label } kullanılamıyor — yeniden deneniyor
+tokens-result-source-pending = { $label } bekleniyor
 tokens-result-source-not-listed = { $label } üzerinde listelenmemiş
 tokens-result-security-available = Güvenlik raporu mevcut
 tokens-result-security-missing = { -rugcheck } raporu yok

@@ -1,5 +1,6 @@
 tokens-result-source-live = Dữ liệu thị trường trực tiếp
 tokens-result-source-unavailable = { $label } không khả dụng — đang thử lại
+tokens-result-source-pending = Đang chờ { $label }
 tokens-result-source-not-listed = Chưa được niêm yết trên { $label }
 tokens-result-security-available = Có báo cáo bảo mật
 tokens-result-security-missing = Không có báo cáo { -rugcheck }
