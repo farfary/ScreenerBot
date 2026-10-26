@@ -34,6 +34,8 @@
  *   block heads that control from the top edge. No Settings action is a frameless
  *   ghost button, whose label reads as indented text; the account panel shared with
  *   the setup screen keeps its own button set and is the one exemption.
+ * - Closing by Escape, the backdrop or the close button with unsaved changes asks
+ *   first: save, discard or keep editing. Nothing pending closes at once.
  * - Licenses: the header glyph is bare and a package name that wraps starts every
  *   line on the card's start edge. About: the product title is set in the wordmark face.
  *
@@ -522,4 +524,80 @@ test("Licenses names start-align and the About title is the wordmark", async (t)
     ].map((family) => family.replace(/["']/g, "").trim())
   );
   assert.equal(brand[0], brand[1], "the About title is set in the wordmark face");
+});
+
+test("closing with unsaved changes asks to save, discard or keep editing", async (t) => {
+  const browser = await chromium.launch({ headless: true });
+  t.after(() => browser.close());
+  const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const api = createApiHandler([await loadIndex("home"), await loadIndex("shell")], "populated");
+  const saves = [];
+  const onApi = (request) => {
+    if (request.method === "PATCH" && request.url.pathname === "/api/config/gui") {
+      saves.push(request.url.pathname);
+      return { body: JSON.stringify({ success: true }) };
+    }
+    return api.onApi(request);
+  };
+  const host = await serveDashboard(context, { locale: "en", onApi });
+  t.after(() => host.close());
+  const page = await context.newPage();
+  page.setDefaultTimeout(15000);
+  await page.goto(`${host.origin}/home`);
+  await page.waitForSelector(PAGE_READY);
+
+  const open = async () => {
+    await page.locator("#settingsBtn").dispatchEvent("click");
+    await page.waitForSelector(".settings-dialog.active .settings-nav");
+  };
+  const edit = async () => {
+    await page.locator('.settings-nav-item[data-tab="navigation"]').click();
+    const row = await page.$eval(
+      "#navTabsList .settings-nav-tab-item:has(input:not(:disabled))",
+      (node) => node.dataset.tabId
+    );
+    await page.locator(`#navTabsList .settings-nav-tab-item[data-tab-id="${row}"] .toggle`).click();
+    assert.equal((await page.locator("#settingsSaveBtn").textContent()).trim(), "Save Changes");
+  };
+  const prompt = page.locator(".confirmation-dialog--visible");
+  const closed = () => page.waitForSelector(".settings-dialog", { state: "detached" });
+
+  // Nothing pending: Escape closes at once.
+  await open();
+  await page.keyboard.press("Escape");
+  await closed();
+  assert.equal(await prompt.count(), 0, "no question when nothing is pending");
+
+  // Keep editing leaves the dialog and its pending change in place.
+  await open();
+  await edit();
+  await page.keyboard.press("Escape");
+  await prompt.waitFor();
+  assert.deepEqual(
+    (await prompt.locator(".confirmation-dialog__button").allTextContents()).map((label) =>
+      label.trim()
+    ),
+    ["Keep editing", "Discard", "Save Changes"],
+    "the question offers keep editing, discard and save"
+  );
+  await prompt.locator('[data-action="cancel"]').click();
+  await prompt.waitFor({ state: "detached" });
+  assert.equal(await page.locator(".settings-dialog.active").count(), 1, "the dialog stays open");
+  assert.equal((await page.locator("#settingsSaveBtn").textContent()).trim(), "Save Changes");
+
+  // Discard closes without saving.
+  await page.locator(".settings-dialog .modal-close").click();
+  await prompt.waitFor();
+  await prompt.locator('[data-action="alternate"]').click();
+  await closed();
+  assert.equal(saves.length, 0, "discarding saves nothing");
+
+  // Save writes the change, then closes.
+  await open();
+  await edit();
+  await page.keyboard.press("Escape");
+  await prompt.waitFor();
+  await prompt.locator('[data-action="confirm"]').click();
+  await closed();
+  assert.equal(saves.length, 1, "saving writes the pending change once");
 });

@@ -164,18 +164,21 @@
   min-width: 100px;
 }
 
-.confirmation-dialog__button--cancel {
+.confirmation-dialog__button--cancel,
+.confirmation-dialog__button--alternate {
   background: rgb(255, 255, 255, 0.08);
   color: rgb(255, 255, 255, 0.9);
   border: 1px solid rgb(255, 255, 255, 0.15);
 }
 
-.confirmation-dialog__button--cancel:hover {
+.confirmation-dialog__button--cancel:hover,
+.confirmation-dialog__button--alternate:hover {
   background: rgb(255, 255, 255, 0.12);
   border-color: rgb(255, 255, 255, 0.25);
 }
 
-.confirmation-dialog__button--cancel:active {
+.confirmation-dialog__button--cancel:active,
+.confirmation-dialog__button--alternate:active {
   background: rgb(255, 255, 255, 0.06);
 }
 
@@ -302,13 +305,15 @@
   color: rgb(0, 0, 0, 0.8);
 }
 
-[data-theme="light"] .confirmation-dialog__button--cancel {
+[data-theme="light"] .confirmation-dialog__button--cancel,
+[data-theme="light"] .confirmation-dialog__button--alternate {
   background: rgb(0, 0, 0, 0.06);
   color: rgb(0, 0, 0, 0.9);
   border-color: rgb(0, 0, 0, 0.15);
 }
 
-[data-theme="light"] .confirmation-dialog__button--cancel:hover {
+[data-theme="light"] .confirmation-dialog__button--cancel:hover,
+[data-theme="light"] .confirmation-dialog__button--alternate:hover {
   background: rgb(0, 0, 0, 0.1);
   border-color: rgb(0, 0, 0, 0.2);
 }

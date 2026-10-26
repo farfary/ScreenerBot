@@ -9,6 +9,7 @@
 import * as Utils from "../core/utils.js";
 import { createFocusTrap } from "../core/utils.js";
 import { pushEscapeHandler } from "../core/escape_stack.js";
+import { ConfirmationDialog } from "./confirmation_dialog.js";
 import { apiErrorMessage } from "../core/request_manager.js";
 import { setInterval as setPollingInterval } from "../core/poller.js";
 import { enhanceAllSelects } from "./custom_select.js";
@@ -189,6 +190,37 @@ export class SettingsDialog {
     } catch (error) {
       console.error("Failed to load paths info:", error);
       this.pathsInfo = null;
+    }
+  }
+
+  /**
+   * Close by Escape, the backdrop or the close button. Unsaved changes are kept
+   * unless the user saves or discards them; keeping on editing leaves the dialog open.
+   */
+  async requestClose() {
+    if (!this.dialogEl || this._closePrompt) return;
+    if (!this.hasChanges) {
+      this.close();
+      return;
+    }
+    this._closePrompt = ConfirmationDialog.show({
+      title: I18n.t("settings-dialog-unsaved-title"),
+      message: I18n.t("settings-dialog-unsaved-message"),
+      confirmLabel: I18n.t("settings-dialog-save"),
+      alternateLabel: I18n.t("settings-dialog-unsaved-discard"),
+      cancelLabel: I18n.t("settings-dialog-unsaved-keep"),
+      variant: "warning",
+    });
+    try {
+      const choice = await this._closePrompt;
+      if (choice.confirmed) {
+        await this._saveSettings();
+        if (!this.hasChanges) this.close();
+      } else if (choice.alternate) {
+        this.close();
+      }
+    } finally {
+      this._closePrompt = null;
     }
   }
 
@@ -593,14 +625,14 @@ export class SettingsDialog {
   _attachEventHandlers() {
     // Close button
     const closeBtn = this.dialogEl.querySelector(".modal-close");
-    closeBtn.addEventListener("click", () => this.close());
+    closeBtn.addEventListener("click", () => this.requestClose());
 
     // Backdrop click
     const backdrop = this.dialogEl.querySelector(".settings-backdrop");
-    backdrop.addEventListener("click", () => this.close());
+    backdrop.addEventListener("click", () => this.requestClose());
 
     // ESC key
-    this._releaseEscape = pushEscapeHandler(() => this.close());
+    this._releaseEscape = pushEscapeHandler(() => this.requestClose());
 
     // Save button
     const saveBtn = this.dialogEl.querySelector("#settingsSaveBtn");

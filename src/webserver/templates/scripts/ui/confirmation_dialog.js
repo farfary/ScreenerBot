@@ -29,9 +29,11 @@ class ConfirmationDialog {
    * @param {string} config.message - Dialog message
    * @param {string} [config.confirmLabel='Confirm'] - Confirm button label
    * @param {string} [config.cancelLabel='Cancel'] - Cancel button label
+   * @param {string} [config.alternateLabel] - Optional third action between cancel and
+   *   confirm (e.g. "Discard" beside "Save"); choosing it resolves with `alternate: true`
    * @param {string} [config.variant='warning'] - Variant: danger, warning, info
    * @param {string} [config.checkbox] - Optional checkbox text (e.g., "Don't ask again")
-   * @returns {Promise<{confirmed: boolean, checkboxChecked: boolean}>}
+   * @returns {Promise<{confirmed: boolean, alternate: boolean, checkboxChecked: boolean}>}
    */
   static async show(config) {
     // A dialog takes over the viewport — dismiss any open dropdown/menu underneath.
@@ -55,6 +57,7 @@ class ConfirmationDialog {
       message: config.message || I18n.t("shell-confirm-message"),
       confirmLabel: config.confirmLabel || I18n.t("common-action-confirm"),
       cancelLabel: config.cancelLabel || I18n.t("common-action-cancel"),
+      alternateLabel: config.alternateLabel || null,
       variant: config.variant || "warning",
       checkbox: config.checkbox || null,
     };
@@ -123,6 +126,19 @@ class ConfirmationDialog {
 				>
 					${escapeHTML(this.config.cancelLabel)}
 				</button>
+				${
+          this.config.alternateLabel
+            ? `
+				<button
+					class="confirmation-dialog__button confirmation-dialog__button--alternate"
+					type="button"
+					data-action="alternate"
+				>
+					${escapeHTML(this.config.alternateLabel)}
+				</button>
+				`
+            : ""
+        }
 				<button 
 					class="confirmation-dialog__button confirmation-dialog__button--confirm" 
 					type="button"
@@ -173,6 +189,12 @@ class ConfirmationDialog {
       cancelBtn.addEventListener("click", this._cancelHandler);
     }
 
+    const alternateBtn = this.element.querySelector('[data-action="alternate"]');
+    if (alternateBtn) {
+      this._alternateHandler = () => this._settle({ confirmed: false, alternate: true });
+      alternateBtn.addEventListener("click", this._alternateHandler);
+    }
+
     // Backdrop click cancels
     this._backdropHandler = () => this._handleCancel();
     this.backdrop.addEventListener("click", this._backdropHandler);
@@ -199,24 +221,17 @@ class ConfirmationDialog {
   }
 
   _handleConfirm() {
-    playClick();
-    if (this.resolver) {
-      this.resolver({
-        confirmed: true,
-        checkboxChecked: this.checkboxChecked,
-      });
-      this.resolver = null;
-    }
-    this.destroy();
+    this._settle({ confirmed: true, alternate: false });
   }
 
   _handleCancel() {
+    this._settle({ confirmed: false, alternate: false });
+  }
+
+  _settle(choice) {
     playClick();
     if (this.resolver) {
-      this.resolver({
-        confirmed: false,
-        checkboxChecked: this.checkboxChecked,
-      });
+      this.resolver({ ...choice, checkboxChecked: this.checkboxChecked });
       this.resolver = null;
     }
     this.destroy();
@@ -227,6 +242,7 @@ class ConfirmationDialog {
     if (this.resolver) {
       this.resolver({
         confirmed: false,
+        alternate: false,
         checkboxChecked: this.checkboxChecked,
         cancelled: true,
       });
@@ -257,6 +273,14 @@ class ConfirmationDialog {
         cancelBtn.removeEventListener("click", this._cancelHandler);
       }
       this._cancelHandler = null;
+    }
+
+    if (this._alternateHandler) {
+      const alternateBtn = this.element?.querySelector('[data-action="alternate"]');
+      if (alternateBtn) {
+        alternateBtn.removeEventListener("click", this._alternateHandler);
+      }
+      this._alternateHandler = null;
     }
 
     if (this._backdropHandler && this.backdrop) {
