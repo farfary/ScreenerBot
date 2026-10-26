@@ -178,7 +178,7 @@ config_struct! {
             impact: ConfigImpact::High,
             category: ConfigCategory::StopLoss,
         })]
-        stop_loss_enabled: bool = false,
+        stop_loss_enabled: bool = true,
         #[metadata(field_metadata! {
             min: 1,
             max: 100,

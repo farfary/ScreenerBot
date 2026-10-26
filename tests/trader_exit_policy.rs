@@ -29,7 +29,7 @@ use screenerbot::trader::policy::{
 fn stop_loss_policy_carries_exactly_its_five_config_fields() {
     let _cfg = config_guard();
     common::set_config(|cfg| {
-        cfg.trader.stop_loss_enabled = true; // default: false
+        cfg.trader.stop_loss_enabled = false; // default: true
         cfg.trader.stop_loss_threshold_pct = 33.0; // default: 50.0
         cfg.trader.stop_loss_min_hold_seconds = 120; // default: 0
         cfg.trader.stop_loss_allow_partial = true; // default: false
@@ -41,7 +41,7 @@ fn stop_loss_policy_carries_exactly_its_five_config_fields() {
     assert_eq!(
         policy.stop_loss,
         StopLossPolicy {
-            enabled: true,
+            enabled: false,
             threshold_pct: 33.0,
             min_hold_seconds: 120,
             allow_partial: true,

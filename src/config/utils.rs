@@ -147,18 +147,21 @@ pub fn persist_pending_config_migration() {
 /// A config document parsed into the canonical shape.
 pub struct ParsedConfig {
     pub config: Config,
-    /// True when a legacy layout was rewritten in memory; persisting `config`
-    /// makes the migration permanent.
+    /// True when a legacy layout was rewritten in memory or an omitted key's
+    /// earlier default was written in; persisting `config` makes the migration
+    /// permanent.
     pub migrated: bool,
 }
 
 /// Parse `raw` TOML: relocate legacy chain sections, typed parse, backfill
-/// legacy [ai]/[agents], normalize navigation tabs. The single parse used by
-/// load, reload and the disk/memory diff.
+/// legacy [ai]/[agents], keep the values implied by omitted keys whose default
+/// changed, normalize navigation tabs. The single parse used by load, reload
+/// and the disk/memory diff.
 pub fn parse_config_document(raw: &str) -> Result<ParsedConfig> {
     let table: toml::Table = toml::from_str(raw).map_err(|e| Error::ParseFailed {
         detail: e.to_string(),
     })?;
+    let implied = super::migrate::ImpliedDefaults::of(&table);
     let mut document = toml::Value::Table(table);
 
     // Documents without a legacy section take the typed TOML parse, which
@@ -179,6 +182,7 @@ pub fn parse_config_document(raw: &str) -> Result<ParsedConfig> {
     };
 
     let legacy_ai = super::migrate::migrate_legacy_sections(raw, &mut config)?;
+    let implied = implied.apply(&mut config);
 
     // Ensure all navigation tabs are present (handles migrations like wallet -> wallets, adds new tabs like tools)
     config.gui.dashboard.navigation.tabs =
@@ -186,7 +190,7 @@ pub fn parse_config_document(raw: &str) -> Result<ParsedConfig> {
 
     Ok(ParsedConfig {
         config,
-        migrated: relocated || legacy_ai,
+        migrated: relocated || legacy_ai || implied,
     })
 }
 

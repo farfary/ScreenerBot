@@ -18,6 +18,11 @@
 //! typed parse, so keys the schema no longer knows move with their subtree and
 //! are dropped by the first persist. A canonical leaf present in the document
 //! always wins over its legacy counterpart.
+//!
+//! A file that omits a key ran with that key's default at the time. When a
+//! default changes, [`ImpliedDefaults`] writes the earlier default into a
+//! document that omits the key, so an upgrade keeps the behaviour the file
+//! had; only a config created after the change starts from the new default.
 
 use serde::Deserialize;
 use serde_json::{Map, Value};
@@ -87,6 +92,33 @@ fn has_key(root: &toml::Table, section: &str, field: &str) -> bool {
         .and_then(toml::Value::as_table)
         .map(|t| t.contains_key(field))
         .unwrap_or(false)
+}
+
+/// The values a config document implies by omitting a key whose default has
+/// changed since files were first written without it.
+pub(super) struct ImpliedDefaults {
+    /// `trader.stop_loss_enabled` defaulted to `false` before it defaulted to
+    /// `true`; a file without the key ran with the stop loss off.
+    stop_loss_enabled: Option<bool>,
+}
+
+impl ImpliedDefaults {
+    /// Read from the document as written, before any typed parse fills defaults.
+    pub(super) fn of(root: &toml::Table) -> Self {
+        Self {
+            stop_loss_enabled: (!has_key(root, "trader", "stop_loss_enabled")).then_some(false),
+        }
+    }
+
+    /// Write the implied values into `config`. Returns `true` when any was
+    /// written (the caller must then persist `config` to make it permanent).
+    pub(super) fn apply(self, config: &mut Config) -> bool {
+        let Some(enabled) = self.stop_loss_enabled else {
+            return false;
+        };
+        config.trader.stop_loss_enabled = enabled;
+        true
+    }
 }
 
 /// Resolve a dotted key path (e.g. `["llm", "providers", "openai", "api_key"]`)
@@ -1207,6 +1239,7 @@ max_retries = 9
         let raw = r#"
 [trader]
 max_open_positions = 3
+stop_loss_enabled = true
 
 [trader.slippage]
 quote_default_pct = 1.5
@@ -1245,5 +1278,49 @@ urls = ["https://canonical.fixture.invalid/"]
                 "trader": { "slippage": { "quote_default_pct": 3.0 } }
             })
         );
+    }
+
+    // ------------------------------------------------------------------
+    // Values implied by omitted keys whose default changed
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn a_new_config_starts_with_the_stop_loss_on_at_half_the_entry() {
+        let trader = Config::default().trader;
+        assert!(trader.stop_loss_enabled);
+        assert_eq!(trader.stop_loss_threshold_pct, 50.0);
+    }
+
+    #[test]
+    fn a_written_stop_loss_switch_is_kept_either_way() {
+        for enabled in [true, false] {
+            let parsed = parse(&format!(
+                "[trader]\nstop_loss_enabled = {enabled}\nstop_loss_threshold_pct = 30.0\n"
+            ));
+            assert!(!parsed.migrated, "stop_loss_enabled = {enabled}");
+            assert_eq!(parsed.config.trader.stop_loss_enabled, enabled);
+            assert_eq!(parsed.config.trader.stop_loss_threshold_pct, 30.0);
+        }
+    }
+
+    #[test]
+    fn a_file_without_the_stop_loss_switch_keeps_it_off_once_written() {
+        for raw in ["[trader]\nmax_open_positions = 3\n", "[positions]\n", ""] {
+            let parsed = parse(raw);
+            assert!(parsed.migrated, "{raw:?} is written back with the switch");
+            assert!(!parsed.config.trader.stop_loss_enabled, "{raw:?}");
+            assert_eq!(parsed.config.trader.stop_loss_threshold_pct, 50.0);
+
+            let written = toml::to_string(&parsed.config).expect("serialize");
+            assert!(has_key(
+                &table(&parsed.config),
+                "trader",
+                "stop_loss_enabled"
+            ));
+            let second = parse(&written);
+            assert!(!second.migrated, "{raw:?} migrates once");
+            assert!(!second.config.trader.stop_loss_enabled);
+        }
+        assert!(!parse(V0_2_13_CONFIG).config.trader.stop_loss_enabled);
     }
 }

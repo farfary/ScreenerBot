@@ -257,7 +257,7 @@
         "impact": "high",
         "category": "stop-loss",
         "visibility": "secondary",
-        "default": false
+        "default": true
       },
       "stop_loss_min_hold_seconds": {
         "type": "integer",
