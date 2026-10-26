@@ -24,7 +24,7 @@ const SETS = {
   js: ["src/webserver/templates/scripts/*.js", "tools/*.mjs", "electron/*.js", "eslint.config.js"],
   css: ["src/webserver/templates/*.css"],
   html: ["src/webserver/templates/*.html", "electron/src/*.html"],
-  hash: ["tools/*.py", "screenerbot.sh"],
+  hash: ["tools/*.py", "install.sh"],
 };
 
 function tracked(pattern) {

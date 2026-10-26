@@ -255,7 +255,7 @@ cargo build --release --target aarch64-pc-windows-msvc
 
 - Supports both **x64** and **arm64** architectures
 - OpenSSL is vendored for maximum compatibility
-- GLIBC requirement: **2.29+** (compatible with Ubuntu 20.04+, Debian 11+, Fedora 34+)
+- GLIBC requirement: **2.34+** (Ubuntu 22.04+, Debian 12+, Fedora 35+); release builds run on Ubuntu 22.04
 - Cross-compilation supported via [cross](https://github.com/cross-rs/cross) tool with Docker
 
 ```bash
@@ -271,11 +271,11 @@ cross build --release --target aarch64-unknown-linux-gnu
 
 | Distribution | Minimum Version | GLIBC |
 |-------------|----------------|-------|
-| Ubuntu | 20.04 | 2.31 |
-| Debian | 11 | 2.31 |
-| Fedora | 34 | 2.34 |
-| Linux Mint | 20 | 2.31 |
-| Pop!_OS | 20.04 | 2.31 |
+| Ubuntu | 22.04 | 2.35 |
+| Debian | 12 | 2.36 |
+| Fedora | 35 | 2.34 |
+| Linux Mint | 21 | 2.35 |
+| Pop!_OS | 22.04 | 2.35 |
 
 ## Cross-Compilation
 

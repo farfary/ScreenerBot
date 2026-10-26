@@ -147,7 +147,7 @@ Download the latest build from **[screenerbot.io/download](https://screenerbot.i
 | -------- | ----------------------- | --------------- | ------------------------------ |
 | macOS    | Apple Silicon, Intel    | `.dmg`, `.zip`  | macOS 11 Big Sur or later      |
 | Windows  | x64, arm64              | `.msi`, `.zip`  | Windows 10 or later            |
-| Linux    | x64, arm64              | `.deb`, `.zip`  | glibc 2.29+ (Ubuntu 20.04+, Debian 11+) |
+| Linux    | x64, arm64              | `.deb`, `.zip`  | glibc 2.34+ (Ubuntu 22.04+, Debian 12+) |
 
 The first run opens a setup wizard for your wallet and RPC endpoints. You can also skip setup and
 browse in Explore Mode. Guide: [Getting started](https://screenerbot.io/docs/getting-started/setup).
@@ -158,10 +158,20 @@ browse in Explore Mode. Guide: [Getting started](https://screenerbot.io/docs/get
 curl -fsSL https://screenerbot.io/install.sh | sudo bash
 ```
 
-This opens an interactive manager. It detects x64 or arm64, installs the headless build as a systemd
-service, and handles updates, backups and removal. The dashboard listens on `localhost:8080` on the
-server. To reach it from your computer, use an SSH tunnel: `ssh -L 8080:localhost:8080 user@your-server`.
-See the [VPS installation guide](https://screenerbot.io/docs/getting-started/installation/vps).
+The script detects x64 or arm64, checks every download against the release checksums, installs the
+headless build as a systemd service and prints the next steps. It needs glibc 2.34 or newer. The
+dashboard listens on `127.0.0.1:8080` on the server; reach it from your computer through an SSH tunnel,
+then open `http://localhost:8080`:
+
+```bash
+ssh -N -L 8080:127.0.0.1:8080 user@your-server
+```
+
+`sudo screenerbot-manager signin` signs the server in to your ScreenerBot account with a code you
+approve in any browser. `sudo screenerbot-manager` opens the manager for updates, backups, logs and
+settings, and `sudo screenerbot-manager uninstall` removes the service while keeping your data. The
+script is [`install.sh`](install.sh) in this repository; screenerbot.io serves the copy from the latest
+release. See the [VPS installation guide](https://screenerbot.io/docs/getting-started/installation/vps).
 
 ### From source
 
