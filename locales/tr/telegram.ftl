@@ -214,6 +214,18 @@ telegram-start-ready =
 
     Botu yönetmek için aşağıdaki klavyeyi kullanın.
     Kullanılabilir komutlar için /help yazın.
+telegram-trader-start-unavailable =
+    <b>İşlem etkinleştirilmedi</b>
+
+    Önce { -brand } içinde cüzdan ve RPC kurulumunu tamamlayın.
+telegram-trader-start-force-stopped =
+    <b>İşlem etkinleştirilmedi</b>
+
+    Zorla durdurma etkin. Önce /resume_trading ile kaldırın.
+telegram-start-failed =
+    <b>İşlem etkinleştirilemedi</b>
+
+    Hata: { $detail }
 telegram-stop-already = <b>İşlem zaten devre dışı</b>
 telegram-stop-done =
     <b>İşlem Devre Dışı</b>

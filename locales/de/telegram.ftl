@@ -214,6 +214,18 @@ telegram-start-ready =
 
     Steuern Sie den Bot mit der Tastatur unten.
     Mit /help sehen Sie die verfügbaren Befehle.
+telegram-trader-start-unavailable =
+    <b>Trading nicht aktiviert</b>
+
+    Schließen Sie zuerst die Wallet- und RPC-Einrichtung in { -brand } ab.
+telegram-trader-start-force-stopped =
+    <b>Trading nicht aktiviert</b>
+
+    Der Sofortstopp ist aktiv. Heben Sie ihn zuerst mit /resume_trading auf.
+telegram-start-failed =
+    <b>Trading konnte nicht aktiviert werden</b>
+
+    Fehler: { $detail }
 telegram-stop-already = <b>Trading ist bereits deaktiviert</b>
 telegram-stop-done =
     <b>Trading deaktiviert</b>

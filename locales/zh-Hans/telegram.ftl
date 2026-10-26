@@ -220,6 +220,18 @@ telegram-start-ready =
 
     使用下方键盘控制机器人。
     输入 /help 查看可用命令。
+telegram-trader-start-unavailable =
+    <b>交易未启用</b>
+
+    请先在 { -brand } 中完成钱包和 RPC 设置。
+telegram-trader-start-force-stopped =
+    <b>交易未启用</b>
+
+    强制停止已激活。请先使用 /resume_trading 清除。
+telegram-start-failed =
+    <b>启用交易失败</b>
+
+    错误：{ $detail }
 telegram-stop-already = <b>交易已处于停用状态</b>
 telegram-stop-done =
     <b>交易已停用</b>

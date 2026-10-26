@@ -218,6 +218,18 @@ telegram-start-ready =
 
     Для управления ботом используйте клавиатуру ниже.
     Список команд: /help.
+telegram-trader-start-unavailable =
+    <b>Торговля не включена</b>
+
+    Сначала завершите настройку кошелька и RPC в { -brand }.
+telegram-trader-start-force-stopped =
+    <b>Торговля не включена</b>
+
+    Принудительная остановка активна. Сначала снимите её командой /resume_trading.
+telegram-start-failed =
+    <b>Не удалось включить торговлю</b>
+
+    Ошибка: { $detail }
 telegram-stop-already = <b>Торговля уже отключена</b>
 telegram-stop-done =
     <b>Торговля отключена</b>

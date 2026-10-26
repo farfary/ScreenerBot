@@ -216,6 +216,18 @@ telegram-start-ready =
 
     Utilisez le clavier ci-dessous pour piloter le bot.
     Tapez /help pour voir les commandes disponibles.
+telegram-trader-start-unavailable =
+    <b>Trading non activé</b>
+
+    Terminez d'abord la configuration du portefeuille et du RPC dans { -brand }.
+telegram-trader-start-force-stopped =
+    <b>Trading non activé</b>
+
+    L'arrêt forcé est actif. Utilisez d'abord /resume_trading pour le lever.
+telegram-start-failed =
+    <b>Échec de l'activation du trading</b>
+
+    Erreur : { $detail }
 telegram-stop-already = <b>Le trading est déjà désactivé</b>
 telegram-stop-done =
     <b>Trading désactivé</b>

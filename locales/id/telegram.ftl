@@ -220,6 +220,18 @@ telegram-start-ready =
 
     Gunakan keyboard di bawah untuk mengendalikan bot.
     Ketik /help untuk melihat perintah yang tersedia.
+telegram-trader-start-unavailable =
+    <b>Trading tidak diaktifkan</b>
+
+    Selesaikan penyiapan dompet dan RPC di { -brand } terlebih dahulu.
+telegram-trader-start-force-stopped =
+    <b>Trading tidak diaktifkan</b>
+
+    Hentikan paksa sedang aktif. Gunakan /resume_trading untuk menghapusnya terlebih dahulu.
+telegram-start-failed =
+    <b>Gagal mengaktifkan trading</b>
+
+    Error: { $detail }
 telegram-stop-already = <b>Trading sudah dinonaktifkan</b>
 telegram-stop-done =
     <b>Trading Dinonaktifkan</b>

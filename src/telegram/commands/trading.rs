@@ -22,16 +22,33 @@ fn failure_message(icon: &str, id: MessageId, error: &impl std::fmt::Display) ->
     )
 }
 
-/// Handle /start command - Welcome message and enable trading
+/// The chat message of a trader start the setup or emergency-stop gate refused, or of a
+/// start that failed; `None` when the trader runs.
+fn start_refusal(
+    result: std::result::Result<(), trader::Error>,
+    failed: MessageId,
+) -> Option<String> {
+    match result {
+        Ok(()) | Err(trader::Error::AlreadyRunning) => None,
+        Err(trader::Error::TraderUnavailable) => Some(with_icon(
+            "⚠️",
+            &tg_id(ids::TELEGRAM_TRADER_START_UNAVAILABLE),
+        )),
+        Err(trader::Error::ForceStopActive) => Some(with_icon(
+            "🚨",
+            &tg_id(ids::TELEGRAM_TRADER_START_FORCE_STOPPED),
+        )),
+        Err(e) => Some(failure_message("❌", failed, &e)),
+    }
+}
+
+/// Handle /start command - Welcome message and enable trading through the same gates
+/// as every other trader start; a refusal is the reply instead of the welcome.
 pub async fn handle_start_command() -> String {
-    // The welcome is shown whether or not the trader was already running.
-    if let Err(e) = trader::start_trader().await {
-        if !matches!(e, trader::Error::AlreadyRunning) {
-            logger::warning(
-                LogTag::Telegram,
-                &format!("Trading not enabled by the start command: {e}"),
-            );
-        }
+    let started = trader::start_trader_checked().await.map(|_| ());
+    if let Some(refusal) = start_refusal(started, ids::TELEGRAM_START_FAILED) {
+        logger::warning(LogTag::Telegram, "Trading not enabled by the start command");
+        return refusal;
     }
 
     with_icon("🚀", &tg_id(ids::TELEGRAM_START_READY))
@@ -66,13 +83,12 @@ pub async fn handle_resume_entries_command() -> String {
         return failure_message("❌", ids::TELEGRAM_RESUME_FAILED, &e);
     }
     // Resuming entries also turns the trader on, so a stopped trader starts entering.
-    match trader::start_trader().await {
-        Ok(()) | Err(trader::Error::AlreadyRunning) => {
-            logger::info(LogTag::Telegram, "Entry monitor resumed via Telegram");
-            with_icon("▶️", &tg_id(ids::TELEGRAM_RESUME_DONE))
-        }
-        Err(e) => failure_message("❌", ids::TELEGRAM_RESUME_FAILED, &e),
+    let started = trader::start_trader_checked().await.map(|_| ());
+    if let Some(refusal) = start_refusal(started, ids::TELEGRAM_RESUME_FAILED) {
+        return refusal;
     }
+    logger::info(LogTag::Telegram, "Entry monitor resumed via Telegram");
+    with_icon("▶️", &tg_id(ids::TELEGRAM_RESUME_DONE))
 }
 
 /// Handle /force_stop command - Show confirmation
@@ -200,4 +216,61 @@ pub async fn handle_login_command(bot: &Bot, chat_id: ChatId, user_id: i64) -> R
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn configure() {
+        let _ = crate::config::utils::CONFIG
+            .get_or_init(|| std::sync::RwLock::new(crate::config::schemas::Config::default()));
+    }
+
+    #[test]
+    fn each_refused_start_names_its_gate_and_a_running_trader_none() {
+        configure();
+        assert_eq!(start_refusal(Ok(()), ids::TELEGRAM_START_FAILED), None);
+        assert_eq!(
+            start_refusal(
+                Err(trader::Error::AlreadyRunning),
+                ids::TELEGRAM_START_FAILED
+            ),
+            None
+        );
+        assert_eq!(
+            start_refusal(
+                Err(trader::Error::TraderUnavailable),
+                ids::TELEGRAM_START_FAILED
+            ),
+            Some(with_icon(
+                "⚠️",
+                &tg_id(ids::TELEGRAM_TRADER_START_UNAVAILABLE)
+            ))
+        );
+        assert_eq!(
+            start_refusal(
+                Err(trader::Error::ForceStopActive),
+                ids::TELEGRAM_START_FAILED
+            ),
+            Some(with_icon(
+                "🚨",
+                &tg_id(ids::TELEGRAM_TRADER_START_FORCE_STOPPED)
+            ))
+        );
+    }
+
+    #[tokio::test]
+    async fn the_start_command_refuses_before_setup_and_leaves_the_trader_off() {
+        configure();
+        assert!(!crate::global::is_initialization_complete());
+
+        let reply = handle_start_command().await;
+
+        assert_eq!(
+            reply,
+            with_icon("⚠️", &tg_id(ids::TELEGRAM_TRADER_START_UNAVAILABLE))
+        );
+        assert!(!crate::config::with_config(|cfg| cfg.trader.enabled));
+    }
 }

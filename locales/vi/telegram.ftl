@@ -212,6 +212,18 @@ telegram-start-ready =
 
     Dùng bàn phím bên dưới để điều khiển bot.
     Gõ /help để xem các lệnh khả dụng.
+telegram-trader-start-unavailable =
+    <b>Chưa bật giao dịch</b>
+
+    Hãy hoàn tất thiết lập ví và RPC trong { -brand } trước.
+telegram-trader-start-force-stopped =
+    <b>Chưa bật giao dịch</b>
+
+    Dừng cưỡng chế đang bật. Hãy dùng /resume_trading để xóa nó trước.
+telegram-start-failed =
+    <b>Không bật được giao dịch</b>
+
+    Lỗi: { $detail }
 telegram-stop-already = <b>Giao dịch đã được tắt</b>
 telegram-stop-done =
     <b>Đã tắt giao dịch</b>

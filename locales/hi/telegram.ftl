@@ -200,6 +200,18 @@ telegram-start-ready =
 
     बॉट को नियंत्रित करने के लिए नीचे दिए कीबोर्ड का उपयोग करें।
     उपलब्ध कमांड के लिए /help लिखें।
+telegram-trader-start-unavailable =
+    <b>ट्रेडिंग चालू नहीं हुई</b>
+
+    पहले { -brand } में वॉलेट और RPC सेटअप पूरा करें।
+telegram-trader-start-force-stopped =
+    <b>ट्रेडिंग चालू नहीं हुई</b>
+
+    ज़बरन रोक सक्रिय है। पहले इसे हटाने के लिए /resume_trading का उपयोग करें।
+telegram-start-failed =
+    <b>ट्रेडिंग चालू करने में विफल</b>
+
+    त्रुटि: { $detail }
 telegram-stop-already = <b>ट्रेडिंग पहले से बंद है</b>
 telegram-stop-done =
     <b>ट्रेडिंग बंद हो गई</b>

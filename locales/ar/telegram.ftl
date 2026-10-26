@@ -223,6 +223,18 @@ telegram-start-ready =
 
     استخدم لوحة المفاتيح أدناه للتحكم في البوت.
     اكتب /help لعرض الأوامر المتاحة.
+telegram-trader-start-unavailable =
+    <b>لم يتم تفعيل التداول</b>
+
+    أكمل إعداد المحفظة وRPC في { -brand } أولًا.
+telegram-trader-start-force-stopped =
+    <b>لم يتم تفعيل التداول</b>
+
+    الإيقاف القسري مفعّل. استخدم /resume_trading لإلغائه أولًا.
+telegram-start-failed =
+    <b>تعذّر تفعيل التداول</b>
+
+    الخطأ: { $detail }
 telegram-stop-already = <b>التداول معطّل بالفعل</b>
 telegram-stop-done =
     <b>تم تعطيل التداول</b>

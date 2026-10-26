@@ -13,8 +13,9 @@ pub fn is_trader_running() -> bool {
     super::config::is_trader_enabled()
 }
 
-/// Start the trader by enabling trader operations
-pub async fn start_trader() -> Result<(), Error> {
+/// Start the trader by enabling trader operations; every caller goes through
+/// [`start_trader_checked`].
+async fn start_trader() -> Result<(), Error> {
     if super::config::is_trader_enabled() {
         return Err(Error::AlreadyRunning);
     }

@@ -220,6 +220,18 @@ telegram-start-ready =
 
     下のキーボードでボットを操作できます。
     利用できるコマンドは /help で確認できます。
+telegram-trader-start-unavailable =
+    <b>取引は有効になっていません</b>
+
+    まず { -brand } でウォレットと RPC のセットアップを完了してください。
+telegram-trader-start-force-stopped =
+    <b>取引は有効になっていません</b>
+
+    強制停止が有効です。先に /resume_trading で解除してください。
+telegram-start-failed =
+    <b>取引を有効にできませんでした</b>
+
+    エラー: { $detail }
 telegram-stop-already = <b>取引はすでに無効です</b>
 telegram-stop-done =
     <b>取引を無効にしました</b>

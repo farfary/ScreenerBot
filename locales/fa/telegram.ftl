@@ -222,6 +222,18 @@ telegram-start-ready =
 
     برای کنترل ربات از کیبورد زیر استفاده کنید.
     برای دیدن دستورهای موجود، /help را بنویسید.
+telegram-trader-start-unavailable =
+    <b>معاملات فعال نشد</b>
+
+    ابتدا راه‌اندازی کیف پول و RPC را در { -brand } کامل کنید.
+telegram-trader-start-force-stopped =
+    <b>معاملات فعال نشد</b>
+
+    توقف اجباری فعال است. ابتدا با /resume_trading آن را لغو کنید.
+telegram-start-failed =
+    <b>فعال‌سازی معاملات ناموفق بود</b>
+
+    خطا: { $detail }
 telegram-stop-already = <b>معاملات از قبل غیرفعال است</b>
 telegram-stop-done =
     <b>معاملات غیرفعال شد</b>

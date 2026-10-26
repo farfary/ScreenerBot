@@ -210,6 +210,18 @@ telegram-start-ready =
 
     아래 키보드로 봇을 제어하세요.
     사용 가능한 명령은 /help를 입력하세요.
+telegram-trader-start-unavailable =
+    <b>거래가 활성화되지 않았습니다</b>
+
+    먼저 { -brand }에서 지갑과 RPC 설정을 완료하세요.
+telegram-trader-start-force-stopped =
+    <b>거래가 활성화되지 않았습니다</b>
+
+    강제 중지가 활성화되어 있습니다. 먼저 /resume_trading으로 해제하세요.
+telegram-start-failed =
+    <b>거래를 활성화하지 못했습니다</b>
+
+    오류: { $detail }
 telegram-stop-already = <b>거래가 이미 비활성화되어 있습니다</b>
 telegram-stop-done =
     <b>거래 비활성화됨</b>
