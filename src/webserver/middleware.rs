@@ -497,6 +497,7 @@ mod tests {
 
     #[test]
     fn headless_without_auth_admits_only_local_same_origin_requests() {
+        crate::global::set_webserver_port(8080);
         let local = request_headers("127.0.0.1:8080", "http://127.0.0.1:8080");
         let rebound = request_headers("rebind.example:8080", "http://rebind.example:8080");
         let cross_origin = request_headers("127.0.0.1:8080", "http://evil.example");
