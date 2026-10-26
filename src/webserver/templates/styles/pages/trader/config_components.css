@@ -235,11 +235,12 @@
 }
 
 /* The numeric shell is the flex item here, so it — not the input — carries the
-   row's share of the width and the compact cap. The cap grows by the unit's own
-   reserve, so a field with a unit keeps the value room of one without. */
+   row's share of the width and the compact cap. The cap is one fixed width, so the
+   fields of a rule card line up whatever their unit or sign; it leaves room for a
+   six-digit value beside the longest short unit ("min"). */
 .input-group-enhanced .number-field {
   flex: 1;
-  max-width: calc(120px + var(--number-field-unit-space));
+  max-width: 160px;
 }
 
 /* A rule value reads at the weight of a figure; the box, face and focus come from the

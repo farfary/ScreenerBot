@@ -36,6 +36,8 @@
  *   Strategies shared one target).
  * - A rule tab's own card wears the glyph of its tab (Trailing Stop once wore a shield
  *   on its card and a trending line on its tab).
+ * - The number fields of one rule card share one width, whatever their unit or sign
+ *   (the DCA card once drew four widths for four fields).
  *
  * Run with `npm run test:js`.
  */
@@ -398,5 +400,27 @@ test("a rule tab's card wears its tab's glyph", async () => {
   for (const [id, tab, card] of pairs) {
     assert.ok(tab, `${id}: the tab has a glyph`);
     assert.equal(card, tab, `${id}: card and tab glyph`);
+  }
+});
+
+test("the number fields of one rule card share one width", async () => {
+  for (const id of TABS) {
+    await page.click(`#subTabsContainer [data-tab-id="${id}"]`);
+    const panel = page.locator(`#${id}-tab`);
+    await panel.waitFor();
+    const cards = await panel.evaluate((root) =>
+      [...root.querySelectorAll(".config-card")].map((card) =>
+        [...card.querySelectorAll(".input-group-enhanced > .number-field")]
+          .filter((field) => field.getClientRects().length > 0)
+          .map((field) => ({
+            id: field.querySelector("input").id,
+            width: Math.round(field.getBoundingClientRect().width),
+          }))
+      )
+    );
+    for (const fields of cards.filter((fields) => fields.length > 1)) {
+      const widths = new Set(fields.map((field) => field.width));
+      assert.equal(widths.size, 1, `${id}: ${JSON.stringify(fields)}`);
+    }
   }
 });
