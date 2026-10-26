@@ -251,7 +251,10 @@ trader-dca-count-impact =
     }
 trader-dca-size-impact = Mỗi lần vào thêm mua { $amount }
 trader-dca-cooldown-impact = Cách nhau ít nhất { $span } giữa các lần vào thêm
-trader-dca-example = 0.01 { -sol } ban đầu → DCA #1: 0.005 { -sol } @ -10% → DCA #2: 0.005 { -sol } @ thêm -10%
+trader-dca-example =
+    { $count ->
+       *[other] Mua { $initial } → mỗi lần giảm thêm -{ $threshold }% mua thêm { $add }, tối đa { $count } lần
+    }
 trader-dca-info-title = Thông tin chiến lược DCA
 trader-dca-info-subtitle = Những điều cần lưu ý khi giao dịch DCA
 trader-dca-how-title = DCA hoạt động thế nào

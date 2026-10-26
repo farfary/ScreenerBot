@@ -253,7 +253,10 @@ trader-dca-count-impact =
     }
 trader-dca-size-impact = Setiap entry tambahan membeli { $amount }
 trader-dca-cooldown-impact = Minimal { $span } di antara entry tambahan
-trader-dca-example = 0.01 { -sol } awal → DCA #1: 0.005 { -sol } @ -10% → DCA #2: 0.005 { -sol } @ -10% lagi
+trader-dca-example =
+    { $count ->
+       *[other] Beli { $initial } → setiap turun -{ $threshold }% lagi menambah { $add }, hingga { $count } kali
+    }
 trader-dca-info-title = Info Strategi DCA
 trader-dca-info-subtitle = Pertimbangan penting untuk trading DCA
 trader-dca-how-title = Cara Kerja DCA

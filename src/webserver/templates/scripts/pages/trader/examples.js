@@ -6,10 +6,8 @@
 import {
   formatFixed,
   formatPercentValue,
-  formatPriceSubscript,
   formatSol,
   formatTimeSpan,
-  withSolUnit,
 } from "../../core/format.js";
 
 /**
@@ -130,9 +128,10 @@ export function createExampleUpdaters({ $, Utils: _Utils, tradeSize }) {
     if (exampleProfit) {
       exampleProfit.textContent = I18n.t("trader-example-profit", { value: String(value) });
     }
-    if (exampleTarget) {
-      exampleTarget.textContent = withSolUnit(formatPriceSubscript(0.01 * (1 + value / 100)));
-    }
+    const entry = Number(tradeSize?.());
+    const exampleEntry = $("#roi-example-entry");
+    if (exampleEntry) exampleEntry.textContent = exampleSol(entry);
+    if (exampleTarget) exampleTarget.textContent = exampleSol(entry * (1 + value / 100));
     if (exampleSummary) {
       exampleSummary.innerHTML = I18n.markup("trader-roi-summary", { target: String(value) });
     }
@@ -188,14 +187,14 @@ export function createExampleUpdaters({ $, Utils: _Utils, tradeSize }) {
     const exampleExit = $("#stop-loss-example-exit");
     const exampleLoss = $("#stop-loss-example-loss");
 
-    // Example: Entry at 0.01 SOL
-    const entryPrice = 0.01;
-    const exitPrice = entryPrice * (1 - threshold / 100);
+    // The example position is one buy at the configured trade size.
+    const entry = Number(tradeSize?.());
+    const exit = entry * (1 - threshold / 100);
 
-    if (exampleEntry) exampleEntry.textContent = withSolUnit(formatPriceSubscript(entryPrice));
+    if (exampleEntry) exampleEntry.textContent = exampleSol(entry);
     const lossPercent = I18n.t("trader-value-percent", { value: `-${threshold}` });
     if (exampleTrigger) exampleTrigger.textContent = lossPercent;
-    if (exampleExit) exampleExit.textContent = withSolUnit(formatPriceSubscript(exitPrice));
+    if (exampleExit) exampleExit.textContent = exampleSol(exit);
     if (exampleLoss) {
       exampleLoss.innerHTML = I18n.markup("trader-stop-loss-summary", { loss: lossPercent });
     }
@@ -240,12 +239,16 @@ export function createExampleUpdaters({ $, Utils: _Utils, tradeSize }) {
     const activation = parseFloat(activationInput.value) || 15;
     const distance = parseFloat(distanceInput.value) || 5;
 
-    // Example scenario: Entry at 1.00 SOL
-    const entryPrice = 1.0;
-    const activationPrice = entryPrice * (1 + activation / 100);
-    const peakPrice = activationPrice * 1.2; // +20% from activation
-    const exitPrice = peakPrice * (1 - distance / 100);
-    const protectedProfit = ((exitPrice - entryPrice) / entryPrice) * 100;
+    // The example position is one buy at the configured trade size.
+    const entryValue = Number(tradeSize?.());
+    // Relative steps: activation, a peak 20% above it, and the trail below the peak.
+    const activationRatio = 1 + activation / 100;
+    const peakRatio = activationRatio * 1.2;
+    const exitRatio = peakRatio * (1 - distance / 100);
+    const activationValue = entryValue * activationRatio;
+    const peakValue = entryValue * peakRatio;
+    const exitValue = entryValue * exitRatio;
+    const protectedProfit = (exitRatio - 1) * 100;
 
     // Update timeline values
     const stepEntry = $("#example-entry");
@@ -253,9 +256,9 @@ export function createExampleUpdaters({ $, Utils: _Utils, tradeSize }) {
     const stepPeak = $("#example-peak");
     const stepExit = $("#example-exit");
 
-    if (stepEntry) stepEntry.textContent = withSolUnit(formatPriceSubscript(entryPrice));
+    if (stepEntry) stepEntry.textContent = exampleSol(entryValue);
     if (stepActivation) {
-      stepActivation.textContent = withSolUnit(formatPriceSubscript(activationPrice));
+      stepActivation.textContent = exampleSol(activationValue);
       const activationDetail = $("#example-activation-pct");
       if (activationDetail) {
         activationDetail.textContent = I18n.t("trader-example-profit", {
@@ -264,17 +267,17 @@ export function createExampleUpdaters({ $, Utils: _Utils, tradeSize }) {
       }
     }
     if (stepPeak) {
-      stepPeak.textContent = withSolUnit(formatPriceSubscript(peakPrice));
+      stepPeak.textContent = exampleSol(peakValue);
       const peakDetail = $("#example-peak-pct");
       if (peakDetail) {
-        const gainFromEntry = ((peakPrice - entryPrice) / entryPrice) * 100;
+        const gainFromEntry = (peakRatio - 1) * 100;
         peakDetail.textContent = I18n.t("trader-example-profit", {
           value: examplePercent(gainFromEntry),
         });
       }
     }
     if (stepExit) {
-      stepExit.textContent = withSolUnit(formatPriceSubscript(exitPrice));
+      stepExit.textContent = exampleSol(exitValue);
       const exitDetail = $("#example-exit-pct");
       if (exitDetail) {
         exitDetail.textContent = I18n.t("trader-trailing-final", {
@@ -292,15 +295,15 @@ export function createExampleUpdaters({ $, Utils: _Utils, tradeSize }) {
       });
     }
     if (summaryAvoided) {
-      const avoidedLoss = ((peakPrice - exitPrice) / peakPrice) * 100;
+      // The trail gives back exactly its distance from the peak.
       summaryAvoided.innerHTML = I18n.markup("trader-trailing-summary-avoided", {
-        value: formatPercentValue(avoidedLoss, { decimals: 1, plus: "", trim: true }),
+        value: formatPercentValue(distance, { decimals: 1, plus: "", trim: true }),
       });
     }
   }
 
-  /** The computed line under each DCA field. */
-  function updateDcaLines() {
+  /** The computed line under each DCA field, and the worked example. */
+  function updateDcaExample() {
     const line = (id, text) => {
       const el = $(`#${id}-impact`);
       if (el) el.textContent = text;
@@ -331,11 +334,21 @@ export function createExampleUpdaters({ $, Utils: _Utils, tradeSize }) {
         span: formatTimeSpan(cooldown, { unit: "minute" }),
       })
     );
+
+    const example = $("#dca-example");
+    if (example) {
+      example.textContent = I18n.t("trader-dca-example", {
+        initial: exampleSol(base),
+        add: exampleSol(base > 0 && size > 0 ? (base * size) / 100 : Number.NaN),
+        threshold: examplePercent(Math.abs(threshold)),
+        count: Number.isFinite(count) ? count : 0,
+      });
+    }
   }
 
   // Return public API
   return {
-    updateDcaLines,
+    updateDcaExample,
     updateRoiExample,
     updateStopLossExample,
     updateTrailingStopExample,

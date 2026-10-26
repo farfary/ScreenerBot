@@ -310,7 +310,10 @@ trader-dca-count-impact =
     }
 trader-dca-size-impact = 每次追加买入 { $amount }
 trader-dca-cooldown-impact = 两次追加之间至少间隔 { $span }
-trader-dca-example = 初始 0.01 { -sol } → DCA #1：0.005 { -sol } @ -10% → DCA #2：0.005 { -sol } @ 再跌 -10%
+trader-dca-example =
+    { $count ->
+       *[other] 买入 { $initial } → 每再下跌 -{ $threshold }% 追加 { $add }，最多 { $count } 次
+    }
 trader-dca-info-title = DCA 策略说明
 trader-dca-info-subtitle = DCA 交易的重要注意事项
 trader-dca-how-title = DCA 的工作原理

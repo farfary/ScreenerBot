@@ -309,7 +309,10 @@ trader-dca-count-impact =
     }
 trader-dca-size-impact = 추가 진입마다 { $amount } 매수
 trader-dca-cooldown-impact = 추가 진입 사이 최소 { $span }
-trader-dca-example = 초기 0.01 { -sol } → DCA #1: 0.005 { -sol } @ -10% → DCA #2: 0.005 { -sol } @ 추가 -10%
+trader-dca-example =
+    { $count ->
+       *[other] { $initial } 매수 → -{ $threshold }% 추가 하락마다 { $add } 추가 (최대 { $count }회)
+    }
 trader-dca-info-title = DCA 전략 정보
 trader-dca-info-subtitle = DCA 거래 시 유의할 점
 trader-dca-how-title = DCA 작동 방식

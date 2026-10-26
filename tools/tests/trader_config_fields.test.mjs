@@ -7,6 +7,8 @@
  *
  * - The line under a field states its computed effect in one plain format, with no
  *   upper-case prefix ("IMPACT:", "CURRENT:", "READABLE:"); every DCA field has one.
+ * - Every worked example starts from one position: a buy at the configured trade size
+ *   (`trader.trade_size_sol`), never a fixed amount of its own.
  *
  * The config served here uses a trade size other than the default, so a figure that
  * follows the default instead of the loaded config fails.
@@ -90,6 +92,35 @@ test("a field's computed line is plain text, and every DCA field has one", async
 
     await page.fill("#dca-max-count", "1");
     assert.equal(await line(page, "dca-max-count"), "At most one extra entry per position");
+  } finally {
+    await close();
+  }
+});
+
+test("every worked example starts from the configured trade size", async () => {
+  const { page, close } = await openTrader("stop-loss");
+  try {
+    await page.locator("#stop-loss-example-entry", { hasText: "SOL" }).waitFor();
+    const text = async (selector) => plain(await page.locator(selector).textContent());
+    const expected = {
+      "stop-loss": {
+        "#stop-loss-example-entry": "0.02 SOL",
+        "#stop-loss-example-exit": "0.01 SOL",
+      },
+      "trailing-stop": { "#example-entry": "0.02 SOL" },
+      roi: { "#roi-example-entry": "0.02 SOL", "#roi-example-target": "0.024 SOL" },
+    };
+    for (const [tab, figures] of Object.entries(expected)) {
+      await page.click(`#subTabsContainer [data-tab-id="${tab}"]`);
+      for (const [selector, figure] of Object.entries(figures)) {
+        assert.equal(await text(selector), figure, `${tab} ${selector}`);
+      }
+    }
+    await page.click('#subTabsContainer [data-tab-id="dca"]');
+    assert.equal(
+      await text("#dca-example"),
+      "Buy 0.02 SOL → each further -10% adds 0.01 SOL, up to 2 times"
+    );
   } finally {
     await close();
   }

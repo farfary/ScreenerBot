@@ -271,7 +271,11 @@ trader-dca-count-impact =
     }
 trader-dca-size-impact = Jeder zusätzliche Einstieg kauft { $amount }
 trader-dca-cooldown-impact = Mindestens { $span } zwischen zusätzlichen Einstiegen
-trader-dca-example = 0,01 { -sol } Anfang → DCA #1: 0,005 { -sol } @ -10 % → DCA #2: 0,005 { -sol } @ weitere -10 %
+trader-dca-example =
+    { $count ->
+        [one] Kauf { $initial } → bei -{ $threshold } % einmal { $add } nachkaufen
+       *[other] Kauf { $initial } → jede weitere -{ $threshold } % kauft { $add } nach, bis zu { $count }-mal
+    }
 trader-dca-info-title = Infos zur DCA-Strategie
 trader-dca-info-subtitle = Wichtige Hinweise zum DCA-Trading
 trader-dca-how-title = So funktioniert DCA

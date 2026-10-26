@@ -310,7 +310,10 @@ trader-dca-count-impact =
     }
 trader-dca-size-impact = 追加エントリーごとに { $amount } を購入
 trader-dca-cooldown-impact = 追加エントリーの間隔は最低 { $span }
-trader-dca-example = 初回 0.01 { -sol } → DCA #1: 0.005 { -sol } @ -10% → DCA #2: さらに -10% で 0.005 { -sol }
+trader-dca-example =
+    { $count ->
+       *[other] { $initial } を購入 → さらに -{ $threshold }% 下落するごとに { $add } を追加（最大 { $count } 回）
+    }
 trader-dca-info-title = DCA ストラテジー情報
 trader-dca-info-subtitle = DCA 取引における重要な注意点
 trader-dca-how-title = DCA の仕組み

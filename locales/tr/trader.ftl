@@ -263,7 +263,11 @@ trader-dca-count-impact =
     }
 trader-dca-size-impact = Her ek giriş { $amount } alır
 trader-dca-cooldown-impact = Ek girişler arasında en az { $span }
-trader-dca-example = 0,01 { -sol } ilk giriş → DCA #1: 0,005 { -sol } @ -%10 → DCA #2: 0,005 { -sol } @ %10 daha
+trader-dca-example =
+    { $count ->
+        [one] { $initial } alım → -%{ $threshold } düşüşte bir kez { $add } eklenir
+       *[other] { $initial } alım → her ek -%{ $threshold } düşüş { $add } ekler, en fazla { $count } kez
+    }
 trader-dca-info-title = DCA strateji bilgisi
 trader-dca-info-subtitle = DCA işlemi için önemli hususlar
 trader-dca-how-title = DCA nasıl çalışır

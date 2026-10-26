@@ -306,7 +306,8 @@ function createLifecycle() {
       examples.updateStopLossExample();
       examples.updateRoiExample();
       examples.updateTimeLossExample();
-      examples.updateDcaLines();
+      examples.updateTrailingStopExample();
+      examples.updateDcaExample();
     } catch (error) {
       console.error("[Trader] Failed to load config:", error);
       Utils.showToast({
@@ -1138,7 +1139,7 @@ function createLifecycle() {
 
     // DCA fields: each one's computed line
     for (const id of ["#dca-threshold", "#dca-max-count", "#dca-size", "#dca-cooldown"]) {
-      addTrackedListener($(id), "input", () => examples.updateDcaLines());
+      addTrackedListener($(id), "input", () => examples.updateDcaExample());
     }
 
     // Realized-window segmented control
@@ -1220,7 +1221,7 @@ function createLifecycle() {
         examples.updateStopLossExample();
         examples.updateRoiExample();
         examples.updateTimeLossExample();
-        examples.updateDcaLines();
+        examples.updateDcaExample();
       }
     } catch (error) {
       console.error("[Trader] Failed to save config:", error);
