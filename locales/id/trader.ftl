@@ -37,7 +37,6 @@ trader-status-unavailable = Selesaikan penyiapan dompet dan RPC untuk menggunaka
 trader-setup-action = Selesaikan penyiapan
 trader-toggle-on = AKTIF
 trader-toggle-off = NONAKTIF
-trader-toggle-unavailable = TIDAK TERSEDIA
 trader-toggle-start-failed = Gagal memulai trader
 trader-toggle-stop-failed = Gagal menghentikan trader
 trader-controls-title = Kontrol Trading

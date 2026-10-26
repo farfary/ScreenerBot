@@ -43,7 +43,6 @@ trader-status-unavailable = Schließen Sie die Wallet- und RPC-Einrichtung ab, u
 trader-setup-action = Einrichtung abschließen
 trader-toggle-on = AN
 trader-toggle-off = AUS
-trader-toggle-unavailable = NICHT VERFÜGBAR
 trader-toggle-start-failed = Trader konnte nicht gestartet werden
 trader-toggle-stop-failed = Trader konnte nicht gestoppt werden
 trader-controls-title = Trading-Steuerung

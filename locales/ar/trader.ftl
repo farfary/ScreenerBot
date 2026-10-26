@@ -46,7 +46,6 @@ trader-status-unavailable = أكمل إعداد المحفظة وRPC لاستخ�
 trader-setup-action = إكمال الإعداد
 trader-toggle-on = مفعّل
 trader-toggle-off = معطّل
-trader-toggle-unavailable = غير متاح
 trader-toggle-start-failed = فشل تشغيل المتداول
 trader-toggle-stop-failed = فشل إيقاف المتداول
 trader-controls-title = عناصر التحكم بالتداول

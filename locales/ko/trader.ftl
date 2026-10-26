@@ -46,7 +46,6 @@ trader-status-unavailable = 자동 트레이더를 사용하려면 지갑과 RPC
 trader-setup-action = 설정 완료
 trader-toggle-on = 사용
 trader-toggle-off = 사용 안 함
-trader-toggle-unavailable = 사용 불가
 trader-toggle-start-failed = 트레이더를 시작하지 못했습니다
 trader-toggle-stop-failed = 트레이더를 중지하지 못했습니다
 trader-controls-title = 트레이딩 제어

@@ -496,9 +496,10 @@ function createLifecycle() {
         }),
         Number.isFinite(data.win_rate_pct) && data.win_rate_pct >= 50 ? "positive" : null
       );
+      // Counts are facts even in an empty window: 0 wins · 0 losses, never a dash.
       setDetail(
         "win-rate-detail",
-        data.total_trades > 0
+        Number.isFinite(data.winners) && Number.isFinite(data.losers)
           ? I18n.t("trader-stats-record", {
               wins: I18n.t("trader-stats-wins", {
                 count: data.winners,
@@ -556,7 +557,10 @@ function createLifecycle() {
       );
       setDetail("avg-win-loss-detail", I18n.t("trader-stats-avg-basis"));
 
-      setValue("total-trades", data.total_trades > 0 ? String(data.total_trades) : "—");
+      setValue(
+        "total-trades",
+        Number.isFinite(data.total_trades) ? String(data.total_trades) : "—"
+      );
       setDetail(
         "total-trades-detail",
         I18n.t("trader-stats-closed", {

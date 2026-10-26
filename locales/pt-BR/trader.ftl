@@ -46,7 +46,6 @@ trader-status-unavailable = Conclua a configuração de carteira e RPC para usar
 trader-setup-action = Concluir configuração
 trader-toggle-on = ATIVADO
 trader-toggle-off = DESATIVADO
-trader-toggle-unavailable = INDISPONÍVEL
 trader-toggle-start-failed = Falha ao iniciar o trader
 trader-toggle-stop-failed = Falha ao parar o trader
 trader-controls-title = Controles de trading

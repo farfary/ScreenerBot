@@ -46,7 +46,6 @@ trader-status-unavailable = 自動トレーダーを使うには、ウォレッ�
 trader-setup-action = セットアップを完了
 trader-toggle-on = 有効
 trader-toggle-off = 無効
-trader-toggle-unavailable = 利用不可
 trader-toggle-start-failed = トレーダーを開始できませんでした
 trader-toggle-stop-failed = トレーダーを停止できませんでした
 trader-controls-title = トレード制御

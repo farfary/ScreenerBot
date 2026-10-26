@@ -46,7 +46,6 @@ trader-status-unavailable = 请先完成钱包和 RPC 设置以使用自动交�
 trader-setup-action = 完成设置
 trader-toggle-on = 已启用
 trader-toggle-off = 已停用
-trader-toggle-unavailable = 不可用
 trader-toggle-start-failed = 启动交易引擎失败
 trader-toggle-stop-failed = 停止交易引擎失败
 trader-controls-title = 交易控制

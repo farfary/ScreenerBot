@@ -74,11 +74,7 @@ export function createTraderControls({
     // Unavailable is neither running nor stopped: the bar reads as a notice with the
     // setup action, not as an error.
     const statusAttr = !isAvailable ? "unavailable" : isRunning ? "running" : "stopped";
-    const toggleLabel = !isAvailable
-      ? I18n.t("trader-toggle-unavailable")
-      : isRunning
-        ? I18n.t("trader-toggle-on")
-        : I18n.t("trader-toggle-off");
+    const toggleLabel = isRunning ? I18n.t("trader-toggle-on") : I18n.t("trader-toggle-off");
 
     // Update stats tab status bar
     const statsBar = $("#trader-status-bar");

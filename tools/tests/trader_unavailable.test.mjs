@@ -58,8 +58,8 @@ const LOSS_LIMIT_TRIPPED = {
 };
 
 /** The trader page on its Stats tab, with the given live responses and fixture variant. */
-async function openTrader({ variant, overrides }) {
-  const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+async function openTrader({ variant, overrides, width = 1440 }) {
+  const context = await browser.newContext({ viewport: { width, height: 900 } });
   const api = createApiHandler([traderPage, shell], variant);
   const onApi = (request) => {
     const body = overrides[request.url.pathname];
@@ -84,6 +84,7 @@ test("an unavailable trader shows no control as on and offers setup", async () =
       "/api/trader/monitors/status": UNAVAILABLE_MONITORS,
       "/api/trader/loss-limit/status": LOSS_LIMIT_OFF,
     },
+    width: 1200,
   });
   try {
     await tab.locator('#trader-status-bar[data-status="unavailable"]').waitFor();
@@ -116,9 +117,36 @@ test("an unavailable trader shows no control as on and offers setup", async () =
     assert.equal(await tab.locator("#loss-limit-reset-btn").isVisible(), false);
     assert.equal(await tab.locator("#resume-trading-btn").isVisible(), false);
 
+    // The bar is the sentence and its setup action; nothing else competes for the column.
+    const shown = await tab
+      .locator("#trader-status-bar")
+      .evaluate((bar) =>
+        [
+          ...bar.querySelectorAll(
+            ".status-bar-icon, .status-bar-title, .status-bar-status, .trader-setup-action, .toggle"
+          ),
+        ]
+          .filter((el) => el.getClientRects().length > 0)
+          .map((el) => el.className)
+      );
+    assert.deepEqual(shown, ["status-bar-status", "btn btn-sm btn-primary trader-setup-action"]);
+
+    // An empty window counts zero; only the ratios have nothing to divide and read "—".
+    await tab.locator("#total-trades", { hasText: "0" }).waitFor();
+    assert.equal(
+      (await tab.locator("#win-rate-detail").textContent()).replace(/[\u2068\u2069]/g, "").trim(),
+      "0 wins · 0 losses"
+    );
+    for (const id of ["#win-rate", "#profit-factor", "#avg-win-loss", "#median-hold"]) {
+      assert.equal((await tab.locator(id).textContent()).trim(), "—", `${id} reads —`);
+    }
+
     const drawdownCard = tab.locator(".metric-card", { has: tab.locator("#max-drawdown") });
     assert.equal((await tab.locator("#max-drawdown").textContent()).trim(), "—");
-    assert.equal(await drawdownCard.evaluate((el) => el.classList.contains("metric-highlight-danger")), false);
+    assert.equal(
+      await drawdownCard.evaluate((el) => el.classList.contains("metric-highlight-danger")),
+      false
+    );
 
     const setup = tab.locator("#trader-setup-action");
     assert.equal((await setup.textContent()).trim(), "Complete setup");

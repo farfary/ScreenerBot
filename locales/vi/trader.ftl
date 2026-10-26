@@ -35,7 +35,6 @@ trader-status-unavailable = Hoàn tất thiết lập ví và RPC để dùng Au
 trader-setup-action = Hoàn tất thiết lập
 trader-toggle-on = BẬT
 trader-toggle-off = TẮT
-trader-toggle-unavailable = KHÔNG KHẢ DỤNG
 trader-toggle-start-failed = Không thể khởi động Trader
 trader-toggle-stop-failed = Không thể dừng Trader
 trader-controls-title = Điều khiển giao dịch

@@ -35,7 +35,6 @@ trader-status-unavailable = Auto Trader'ı kullanmak için cüzdan ve RPC kurulu
 trader-setup-action = Kurulumu tamamla
 trader-toggle-on = AÇIK
 trader-toggle-off = KAPALI
-trader-toggle-unavailable = KULLANILAMIYOR
 trader-toggle-start-failed = Trader başlatılamadı
 trader-toggle-stop-failed = Trader durdurulamadı
 trader-controls-title = İşlem kontrolleri

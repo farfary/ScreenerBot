@@ -46,7 +46,6 @@ trader-status-unavailable = برای استفاده از معامله‌گر خ�
 trader-setup-action = تکمیل راه‌اندازی
 trader-toggle-on = فعال
 trader-toggle-off = غیرفعال
-trader-toggle-unavailable = در دسترس نیست
 trader-toggle-start-failed = راه‌اندازی معامله‌گر ناموفق بود
 trader-toggle-stop-failed = توقف معامله‌گر ناموفق بود
 trader-controls-title = کنترل معاملات

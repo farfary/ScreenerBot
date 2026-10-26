@@ -46,7 +46,6 @@ trader-status-unavailable = Complete wallet and RPC setup to use Auto Trader
 trader-setup-action = Complete setup
 trader-toggle-on = ON
 trader-toggle-off = OFF
-trader-toggle-unavailable = UNAVAILABLE
 trader-toggle-start-failed = Failed to start trader
 trader-toggle-stop-failed = Failed to stop trader
 trader-controls-title = Trading Controls

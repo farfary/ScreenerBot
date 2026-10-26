@@ -46,7 +46,6 @@ trader-status-unavailable = Completa la configuración de billetera y RPC para u
 trader-setup-action = Completar configuración
 trader-toggle-on = ACTIVADO
 trader-toggle-off = DESACTIVADO
-trader-toggle-unavailable = NO DISPONIBLE
 trader-toggle-start-failed = No se pudo iniciar el trader
 trader-toggle-stop-failed = No se pudo detener el trader
 trader-controls-title = Controles de trading

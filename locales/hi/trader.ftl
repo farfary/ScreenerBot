@@ -35,7 +35,6 @@ trader-status-unavailable = ऑटो ट्रेडर इस्तेमा�
 trader-setup-action = सेटअप पूरा करें
 trader-toggle-on = चालू
 trader-toggle-off = बंद
-trader-toggle-unavailable = अनुपलब्ध
 trader-toggle-start-failed = ट्रेडर शुरू करने में विफल
 trader-toggle-stop-failed = ट्रेडर रोकने में विफल
 trader-controls-title = ट्रेडिंग कंट्रोल

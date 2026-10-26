@@ -46,7 +46,6 @@ trader-status-unavailable = Завершіть налаштування гама
 trader-setup-action = Завершити налаштування
 trader-toggle-on = УВІМКНЕНО
 trader-toggle-off = ВИМКНЕНО
-trader-toggle-unavailable = НЕДОСТУПНО
 trader-toggle-start-failed = Не вдалося запустити трейдер
 trader-toggle-stop-failed = Не вдалося зупинити трейдер
 trader-controls-title = Керування торгівлею

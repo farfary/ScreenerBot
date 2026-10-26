@@ -35,7 +35,6 @@ trader-status-unavailable = Завершите настройку кошельк
 trader-setup-action = Завершить настройку
 trader-toggle-on = ВКЛ.
 trader-toggle-off = ВЫКЛ.
-trader-toggle-unavailable = НЕДОСТУПНО
 trader-toggle-start-failed = Не удалось запустить трейдер
 trader-toggle-stop-failed = Не удалось остановить трейдер
 trader-controls-title = Управление торговлей

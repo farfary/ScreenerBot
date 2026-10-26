@@ -168,6 +168,12 @@
   letter-spacing: normal;
 }
 
+/* Unavailable, the bar is the sentence and its setup action: the title and an
+   inert toggle would only crowd the narrow controls column. */
+.trader-status-bar[data-status="unavailable"] :is(.status-bar-icon, .status-bar-title, .toggle) {
+  display: none;
+}
+
 .trader-setup-action {
   align-self: flex-start;
   margin-block-start: var(--spacing-xs);
