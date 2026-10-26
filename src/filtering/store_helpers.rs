@@ -281,6 +281,13 @@ pub(super) fn overlay_pool_price_data(chain: ChainId, tokens: &mut [Token]) {
     }
 }
 
+/// Tokens that passed this build, counted from the full pass set. `passed_tokens` is the
+/// decision history, truncated to the newest `MAX_DECISION_HISTORY`, so its length stops
+/// at that bound. A mint listed twice counts once, as the Passed view shows it once.
+pub(super) fn passed_count(snapshot: &FilteringSnapshot) -> usize {
+    snapshot.filtered_mints.iter().collect::<HashSet<_>>().len()
+}
+
 pub(super) async fn build_stats(
     chain: ChainId,
     snapshot: &FilteringSnapshot,
@@ -329,7 +336,7 @@ pub(super) async fn build_stats(
         open_positions,
         blacklisted,
         with_ohlcv,
-        passed_filtering: snapshot.passed_tokens.len(),
+        passed_filtering: passed_count(snapshot),
         awaiting_rugcheck_report: snapshot.awaiting_rugcheck_report.len(),
         updated_at: snapshot.updated_at,
     }

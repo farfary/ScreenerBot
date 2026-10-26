@@ -85,7 +85,7 @@ pub(super) async fn system_status() -> Response {
     logger::debug(
         LogTag::Webserver,
         &format!(
-            "Status snapshot ready (uptime={}s, trading_enabled={}, open_positions={})",
+            "Status snapshot ready (uptime={}s, trading_enabled={}, open_positions={:?})",
             snapshot.uptime_seconds, snapshot.trading_enabled, snapshot.open_positions
         ),
     );

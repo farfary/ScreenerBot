@@ -96,12 +96,12 @@ pub struct WalletDatabase {
     schema_version: u32,
     chain: ChainId,
     /// The wallet address every read/write in this database is scoped to.
-    /// Resolved ONCE (here and on `rebind_subject`) rather than re-derived on
-    /// every query, so a query never has to re-resolve "the configured
-    /// wallet" — and never touches signing/key material to do it, since
-    /// `configured_address_async()` is key-free once the multi-wallet
-    /// database is initialized. See `rebind_subject` for how this stays
-    /// current when the main wallet changes.
+    /// Resolved ONCE when the store opens rather than re-derived on every
+    /// query, so a query never has to re-resolve "the configured wallet" —
+    /// and never touches signing/key material to do it, since
+    /// `configured_address_async()` is key-free once the wallet store is
+    /// initialized. The trading wallet is fixed for the life of the process,
+    /// so the subject never changes while the store is open.
     subject: String,
 }
 /// The schema of the wallet-monitor store.

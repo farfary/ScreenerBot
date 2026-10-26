@@ -4,8 +4,8 @@
 //! Wallet address resolution — the one chain-neutral entry point shared
 //! code may use for "what is the configured trading wallet".
 //!
-//! Actual keypair/pubkey resolution (multi-wallet database main wallet, or
-//! the legacy single-wallet fallback from `config.toml`) lives in
+//! Actual keypair/pubkey resolution (the wallet store's trading wallet, or
+//! the `config.toml` fallback before the store initializes) lives in
 //! `crate::chains::solana::accounts` (`configured_keypair`,
 //! `configured_pubkey`) — this module never returns a Solana-typed value.
 

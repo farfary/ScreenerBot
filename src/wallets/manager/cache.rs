@@ -3,8 +3,9 @@
 
 //! Wallet cache — in-memory main-wallet record for fast access without a
 //! database query. Holds only the chain-neutral `Wallet` record; the
-//! decrypted keypair cache lives in `crate::chains::solana::accounts::signing`
-//! and is invalidated separately (see call sites in `crud.rs`).
+//! decrypted keypair cache lives in `crate::chains::solana::accounts::signing`,
+//! which never needs invalidating because the trading wallet is fixed for the
+//! life of the process.
 
 use std::sync::Arc;
 use std::sync::LazyLock;

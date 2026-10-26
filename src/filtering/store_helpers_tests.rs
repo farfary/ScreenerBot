@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 
 //! Unit tests for the filtering store helpers — view membership, query filtering,
-//! sorting and staleness.
+//! sorting, staleness and the passed count.
 //!
 //! These live inside the crate because `collect_entries` / `apply_filters` /
 //! `sort_tokens` are `pub(super)`: they are what the tokens dashboard actually asks for
@@ -14,10 +14,12 @@ use std::sync::Arc;
 use chrono::{Duration, Utc};
 
 use super::store_helpers::{
-    apply_filters, collect_entries, is_snapshot_stale, needs_build, sort_tokens, BuildMode,
+    apply_filters, collect_entries, is_snapshot_stale, needs_build, passed_count, sort_tokens,
+    BuildMode,
 };
 use super::types::{
-    FilteringQuery, FilteringSnapshot, FilteringView, SortDirection, TokenEntry, TokenSortKey,
+    FilteringQuery, FilteringSnapshot, FilteringView, PassedToken, SortDirection, TokenEntry,
+    TokenSortKey, MAX_DECISION_HISTORY,
 };
 use crate::chains::ChainId;
 use crate::tokens::types::{DataSource, Token};
@@ -256,6 +258,32 @@ fn passed_view_follows_the_filtered_list_and_deduplicates_it() {
 
     let passed = collect_entries(&snapshot, FilteringView::Passed, None);
     assert_eq!(mints(&passed), vec!["A", "B"]);
+}
+
+#[test]
+fn the_passed_count_reads_the_full_pass_set_not_the_truncated_history() {
+    let mut snapshot = snapshot_of(Vec::new());
+    let total = MAX_DECISION_HISTORY + 250;
+    snapshot.filtered_mints = (0..total).map(|i| format!("Mint{i}")).collect();
+    snapshot.passed_tokens = snapshot
+        .filtered_mints
+        .iter()
+        .take(MAX_DECISION_HISTORY)
+        .map(|mint| PassedToken {
+            chain: ChainId::Solana,
+            mint: mint.clone(),
+            symbol: String::new(),
+            name: None,
+            passed_time: 0,
+        })
+        .collect();
+    snapshot.filtered_mints.push("Mint0".to_owned());
+
+    assert_eq!(
+        passed_count(&snapshot),
+        total,
+        "a duplicated mint counts once"
+    );
 }
 
 #[test]

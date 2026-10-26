@@ -770,10 +770,13 @@ dashboard_login_if_needed() {
 # Open positions as the trader reports them. Before the first setup the status API
 # answers INITIALIZATION_REQUIRED; with no config file yet no wallet was ever set
 # up, so nothing can be open. Any other unreadable state is an error, never zero.
+# Returns 2 when the app answers but reports the count as unknown (null): it could
+# not read its positions store, so the caller must not assume none are open.
 open_positions_count() {
     local count
     if local_api GET /api/status; then
-        count=$(jq -r '.open_positions // empty' <<<"$API_BODY" 2>/dev/null)
+        count=$(jq -r '.open_positions' <<<"$API_BODY" 2>/dev/null)
+        [ "$count" = null ] && return 2
         [[ "$count" =~ ^[0-9]+$ ]] || return 1
         printf '%s' "$count"
         return 0
@@ -2446,7 +2449,9 @@ auto_update_run() {
         fi
     elif [ "${defer:-true}" = true ] && service_active; then
         positions=$(open_positions_count 2>/dev/null) || {
-            if local_api GET /api/auth/status && [ "$(jq -r '.has_password // false' <<<"$API_BODY")" = true ]; then
+            if [ $? = 2 ]; then
+                say "v${latest} is available; postponed because ScreenerBot reports its open positions as unknown."
+            elif local_api GET /api/auth/status && [ "$(jq -r '.has_password // false' <<<"$API_BODY")" = true ]; then
                 say "v${latest} is available; postponed because the dashboard password keeps this check from reading the open positions. Install it with: sudo screenerbot-manager update"
             else
                 say "v${latest} is available; postponed because the open positions could not be read."

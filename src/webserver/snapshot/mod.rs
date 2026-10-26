@@ -38,6 +38,22 @@ struct CachedSystemMetrics {
 static SYSTEM_METRICS_CACHE: LazyLock<RwLock<Option<CachedSystemMetrics>>> =
     LazyLock::new(|| RwLock::new(None));
 
+/// Open positions for the status response, `None` when the positions store cannot be
+/// read: an unknown count is never reported as zero, because a reader such as the
+/// installer's update check would take zero as safe to restart. A store not opened yet
+/// is empty only while setup has not completed (no wallet, so nothing can be open), the
+/// rule `version::is_restart_safe` applies.
+fn open_positions_count(
+    count: Result<usize, crate::positions::Error>,
+    initialization_complete: bool,
+) -> Option<usize> {
+    match count {
+        Ok(count) => Some(count),
+        Err(crate::positions::Error::NotInitialised) if !initialization_complete => Some(0),
+        Err(_) => None,
+    }
+}
+
 /// Gather current status snapshot (aggregates data from multiple sources)
 pub async fn gather_status_snapshot() -> StatusSnapshot {
     // In Explore Mode trading is disabled outright — report it as off regardless
@@ -58,9 +74,10 @@ pub async fn gather_status_snapshot() -> StatusSnapshot {
         crate::positions::get_db_closed_positions_count_since(day_start),
     );
 
-    let open_positions = open_positions_result
-        .map(|positions| positions.len())
-        .unwrap_or_default();
+    let open_positions = open_positions_count(
+        open_positions_result.map(|positions| positions.len()),
+        crate::global::is_initialization_complete(),
+    );
     let closed_positions_today = closed_positions_result
         .map(|count| count.max(0) as usize)
         .unwrap_or_default();
@@ -149,5 +166,26 @@ pub async fn gather_status_snapshot() -> StatusSnapshot {
             .iter()
             .map(StoreStatusSnapshot::from)
             .collect(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::open_positions_count;
+    use crate::positions::Error;
+
+    #[test]
+    fn a_read_store_reports_its_count() {
+        assert_eq!(open_positions_count(Ok(3), true), Some(3));
+        assert_eq!(open_positions_count(Ok(0), true), Some(0));
+    }
+
+    #[test]
+    fn an_unopened_store_is_empty_only_before_setup_completes() {
+        assert_eq!(
+            open_positions_count(Err(Error::NotInitialised), false),
+            Some(0)
+        );
+        assert_eq!(open_positions_count(Err(Error::NotInitialised), true), None);
     }
 }

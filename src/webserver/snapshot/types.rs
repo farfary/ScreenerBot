@@ -39,7 +39,8 @@ pub struct StatusSnapshot {
     pub trading_enabled: bool,
     pub trader_mode: String,
     pub trader_running: bool,
-    pub open_positions: usize,
+    /// Open positions; `None` when the positions store cannot be read.
+    pub open_positions: Option<usize>,
     pub closed_positions_today: usize,
     pub sol_balance: f64,
     pub usdc_balance: f64,

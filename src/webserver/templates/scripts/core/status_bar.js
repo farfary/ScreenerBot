@@ -107,8 +107,10 @@ import { formatCallRate, formatLatencyMs, formatMemoryMb, formatPercentValue, fo
     }
 
     // Open Positions
-    if (elements.positions && typeof data.open_positions === "number") {
-      elements.positions.textContent = data.open_positions;
+    // Null when the positions store could not be read: unknown, never zero.
+    if (elements.positions) {
+      elements.positions.textContent =
+        typeof data.open_positions === "number" ? data.open_positions : "—";
     }
 
     // Tokens Count (from wallet if available)

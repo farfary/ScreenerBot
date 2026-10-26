@@ -3,7 +3,8 @@
 
 //! Wallet database operations
 //!
-//! SQLite storage for multi-wallet management with encrypted private keys.
+//! SQLite storage for the trading wallet and the export-only other wallets,
+//! with encrypted private keys.
 
 use r2d2::{Pool, PooledConnection};
 use r2d2_sqlite::SqliteConnectionManager;

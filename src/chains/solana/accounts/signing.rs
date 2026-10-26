@@ -145,8 +145,8 @@ pub async fn configured_keypair_async() -> Result<Keypair> {
     configured_keypair_from_legacy_config()
 }
 
-/// Async, key-free form of [`configured_address`]. Once the multi-wallet
-/// database is initialized this never touches `main_keypair()` or
+/// Async, key-free form of [`configured_address`]. Once the wallet store is
+/// initialized this never touches `main_keypair()` or
 /// `MAIN_KEYPAIR_CACHE` — it reads `crate::wallets::get_main_address()`,
 /// which resolves the cached wallet record only. Any read-only caller that
 /// wants an address (dashboard, wallet-monitor snapshots/metrics) should
@@ -163,9 +163,9 @@ pub async fn configured_address_async() -> Result<String> {
     configured_keypair_from_legacy_config().map(|kp| kp.pubkey().to_string())
 }
 
-/// The configured trading wallet's keypair — the multi-wallet database's
-/// main wallet once it's initialized, else the legacy single-wallet keypair
-/// straight from `config.toml`. Callable from sync or async context.
+/// The configured trading wallet's keypair — the wallet store's trading
+/// wallet once the store is initialized, else the keypair stored directly in
+/// `config.toml`. Callable from sync or async context.
 ///
 /// On a multi-thread Tokio runtime this drives the async lookup via
 /// `tokio::task::block_in_place`, which tells the runtime this worker thread
@@ -196,8 +196,8 @@ pub fn configured_keypair() -> Result<Keypair> {
     }
 }
 
-/// Legacy fallback: decrypt the single wallet stored directly in
-/// `config.toml`, used only before the multi-wallet database initializes.
+/// Fallback: decrypt the wallet stored directly in `config.toml`, used only
+/// before the wallet store initializes.
 fn configured_keypair_from_legacy_config() -> Result<Keypair> {
     crate::config::with_config(|cfg| {
         if cfg.wallet_encrypted.is_empty() || cfg.wallet_nonce.is_empty() {
@@ -238,9 +238,9 @@ pub fn configured_pubkey() -> Result<Pubkey> {
 /// one of this trio that shared code outside `crate::chains::solana` may
 /// call (`crate::config::get_wallet_pubkey_string`).
 ///
-/// Key-free once the multi-wallet database is initialized (see
-/// `configured_address_async`); only the legacy pre-multi-wallet fallback
-/// decrypts. Same runtime-flavor bridging as `configured_keypair`.
+/// Key-free once the wallet store is initialized (see
+/// `configured_address_async`); only the `config.toml` fallback used before
+/// then decrypts. Same runtime-flavor bridging as `configured_keypair`.
 pub fn configured_address() -> Result<String> {
     match tokio::runtime::Handle::try_current() {
         Ok(handle) => match handle.runtime_flavor() {

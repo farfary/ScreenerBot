@@ -30,7 +30,7 @@ pub fn apply_promo_status(snapshot: &mut StatusSnapshot) {
     snapshot.uptime_formatted = PROMO_UPTIME_STR.to_owned();
     snapshot.trading_enabled = true;
     snapshot.trader_running = true;
-    snapshot.open_positions = open.count;
+    snapshot.open_positions = Some(open.count);
     snapshot.closed_positions_today = today.sells.max(0) as usize;
     snapshot.sol_balance = PROMO_SOL_BALANCE;
     snapshot.usdc_balance = 0.0;
