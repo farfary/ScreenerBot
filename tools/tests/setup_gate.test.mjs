@@ -116,12 +116,15 @@ test("Copy Trading gates its wallet-backed controls with one reason", async (t) 
   assert.equal(await page.locator("#copy-onboarding").isVisible(), false);
   assert.equal(await page.locator("#copy-add").isVisible(), false, "one call to action");
   assert.equal(
-    await page.locator("#copy-system-state").textContent(),
-    "Setup required · copy trading needs a wallet and RPC"
+    await page.locator("#copy-system-state").isVisible(),
+    false,
+    "the strip does not repeat the setup notice"
   );
-  const global = page.locator("#copy-global-action");
-  assert.equal(await global.isDisabled(), true);
-  assert.equal(await global.getAttribute("title"), REASON);
+  assert.equal(
+    await page.locator("#copy-global-action").isVisible(),
+    false,
+    "no bulk action without a task"
+  );
 
   const populated = await openExplore("copy");
   t.after(populated.close);
@@ -131,6 +134,14 @@ test("Copy Trading gates its wallet-backed controls with one reason", async (t) 
   assert.equal(await add.isVisible(), true);
   assert.equal(await add.isDisabled(), true);
   assert.equal(await add.getAttribute("title"), REASON);
+  assert.equal(
+    await populated.page.locator("#copy-system-state").textContent(),
+    "Setup required · copy trading needs a wallet and RPC"
+  );
+  const global = populated.page.locator("#copy-global-action");
+  assert.equal(await global.isVisible(), true);
+  assert.equal(await global.isDisabled(), true);
+  assert.equal(await global.getAttribute("title"), REASON);
 });
 
 test("Transactions shows the setup notice and reads no transaction route", async (t) => {

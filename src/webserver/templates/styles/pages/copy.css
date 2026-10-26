@@ -457,6 +457,13 @@
   color: var(--text-muted);
 }
 
+.copy-paused-note {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+}
+
 .copy-muted {
   color: var(--text-muted);
 }

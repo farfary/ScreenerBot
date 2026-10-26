@@ -142,6 +142,12 @@ export function duplicateNote({ draft, mode, source, tasks }, esc) {
   return `<p class="copy-warning" role="note"><i class="icon-triangle-alert" aria-hidden="true"></i>${esc(I18n.t("copy-editor-duplicate", { tasks: tasksText }))}</p>`;
 }
 
+/** While copy processing is paused for every task, a saved task waits: say so and offer Resume. */
+function pausedNote({ processingPaused }, esc) {
+  if (!processingPaused) return "";
+  return `<div class="copy-paused-note" role="note"><p class="copy-note">${esc(I18n.t("copy-editor-processing-paused"))}</p><button class="btn btn-secondary btn-sm" type="button" data-copy-resume>${esc(I18n.t("copy-strip-resume"))}</button></div>`;
+}
+
 function walletStep(context, esc) {
   const { draft, mode, source } = context;
   const address =
@@ -159,6 +165,7 @@ function walletStep(context, esc) {
   return `${address}
     <label class="copy-field"><span>${I18n.markup("copy-editor-name-label")}</span><input type="text" data-field="label" value="${esc(draft.label || "")}" maxlength="64" placeholder="${esc(I18n.t("copy-editor-name-placeholder"))}" /></label>
     ${toggleRow(esc, { name: "enabled", title: I18n.t("copy-editor-enabled-title"), help: I18n.t("copy-editor-enabled-help"), checked: draft.enabled })}
+    ${pausedNote(context, esc)}
     <p class="copy-note">${esc(note)}</p>`;
 }
 
@@ -351,7 +358,8 @@ function exitsStep(context, esc) {
     <div class="copy-rule-cards${draft.exit_mode === "mirror" ? " is-inactive" : ""}">${RULES.map((rule) => ruleCard(rule, context, esc)).join("")}</div>`;
 }
 
-function reviewStep({ draft, defaults, mode, source }, esc) {
+function reviewStep(context, esc) {
+  const { draft, defaults, mode, source, processingPaused } = context;
   const global = Boolean(defaults?.require_filter_pass);
   const globalStable = Boolean(defaults?.copy_stable_quoted);
   const task = {
@@ -362,11 +370,13 @@ function reviewStep({ draft, defaults, mode, source }, esc) {
     I18n.t("copy-editor-review-head", {
       name: draft.label || I18n.t("copy-task-unnamed"),
       mode: modeLabel(mode === "edit" && source.mode === "live" ? "live" : "paper"),
-      status: draft.enabled
-        ? I18n.t("copy-editor-review-processes")
-        : I18n.t("copy-editor-review-paused"),
+      status: !draft.enabled
+        ? I18n.t("copy-editor-review-paused")
+        : processingPaused
+          ? I18n.t("copy-editor-review-waits")
+          : I18n.t("copy-editor-review-processes"),
     })
-  )}</p></div>`;
+  )}</p></div>${draft.enabled ? pausedNote(context, esc) : ""}`;
   return (
     head +
     rulesHtml(

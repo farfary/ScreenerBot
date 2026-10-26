@@ -15,7 +15,8 @@
  * their place top-right as on every other task.
  *
  * The strip's bulk action follows the task states: Pause all only while a task copies,
- * Resume while any task exists.
+ * Resume while any task exists, and no bulk action at all without a task. With no task
+ * the strip reads idle, never paused, whatever the global switch says.
  *
  * Run with `npm run test:js`.
  */
@@ -164,7 +165,11 @@ test("Pause all is offered only while a task copies", async (t) => {
   const states = [
     [{ enabled: true, active_tasks: 0, paper_tasks: 0, live_tasks: 0 }, "Pause all", true],
     [{ enabled: true, active_tasks: 1, paper_tasks: 1, live_tasks: 0 }, "Pause all", false],
-    [{ enabled: false, active_tasks: 0, paper_tasks: 0, live_tasks: 0 }, "Resume processing", false],
+    [
+      { enabled: false, active_tasks: 0, paper_tasks: 0, live_tasks: 0 },
+      "Resume processing",
+      false,
+    ],
   ];
   for (const [patch, label, disabled] of states) {
     Object.assign(status, patch);
@@ -172,5 +177,22 @@ test("Pause all is offered only while a task copies", async (t) => {
     await page.waitForSelector("#copy-system-state[data-state]:not([data-state='unknown'])");
     assert.equal((await action.textContent()).trim(), label);
     assert.equal(await action.isDisabled(), disabled, JSON.stringify(patch));
+  }
+
+  (overview.data ?? overview).tasks = [];
+  for (const enabled of [true, false]) {
+    Object.assign(status, {
+      enabled,
+      total_tasks: 0,
+      active_tasks: 0,
+      paper_tasks: 0,
+      live_tasks: 0,
+    });
+    await page.goto(`${host.origin}/copy`);
+    const state = page.locator("#copy-system-state[data-state]:not([data-state='unknown'])");
+    await state.waitFor();
+    assert.equal(await state.getAttribute("data-state"), "idle", `enabled: ${enabled}`);
+    assert.equal((await state.textContent()).trim(), "Idle · no tasks yet");
+    assert.equal(await action.isVisible(), false, "no bulk action without a task");
   }
 });

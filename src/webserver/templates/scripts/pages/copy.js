@@ -138,10 +138,18 @@ function createLifecycle() {
     }
   }
 
-  async function toggleGlobal(event) {
+  function toggleGlobal(event) {
     const status = state.overview?.status;
     if (!status) return;
-    const enabled = !status.enabled;
+    void setProcessing(!status.enabled, event.currentTarget);
+  }
+
+  /**
+   * Pauses or resumes copy processing for every task; resuming asks first while a
+   * live task would submit real swaps. Resolves true once the change is saved.
+   */
+  async function setProcessing(enabled, button) {
+    if (!state.overview) return false;
     const live = (state.overview.tasks || []).filter(
       (task) => task.enabled && task.mode === "live"
     ).length;
@@ -153,10 +161,9 @@ function createLifecycle() {
         cancelLabel: I18n.t("copy-keep-paused"),
         variant: "danger",
       });
-      if (!result.confirmed) return;
+      if (!result.confirmed) return false;
     }
-    const button = event.currentTarget;
-    button.disabled = true;
+    if (button) button.disabled = true;
     try {
       await page.api.patchConfig({ enabled });
       notify(
@@ -164,10 +171,12 @@ function createLifecycle() {
         enabled ? I18n.t("copy-toast-resumed-all") : I18n.t("copy-toast-paused-all")
       );
       await load();
+      return true;
     } catch (error) {
       notify("error", I18n.t("copy-toast-global-failed"), error.detail);
+      return false;
     } finally {
-      button.disabled = false;
+      if (button) button.disabled = false;
     }
   }
 
@@ -195,6 +204,7 @@ function createLifecycle() {
         reloadDefaults: loadDefaults,
         select,
         openCompare,
+        setProcessing,
       };
       page.dialogs = createDialogs($, on);
       page.list = createTaskList(page);

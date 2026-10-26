@@ -937,6 +937,8 @@ copy-task-unnamed = Unnamed task
 copy-editor-review-head = { $name } · { $mode } · { $status }
 copy-editor-review-processes = processes trades once saved
 copy-editor-review-paused = saved paused
+copy-editor-review-waits = waits until copy processing resumes
+copy-editor-processing-paused = Copy processing is paused for every task, so this task copies nothing until it resumes.
 copy-editor-error-address = Enter a valid Solana wallet address.
 copy-editor-error-sizing = Every sizing value must be above zero.
 # $minimum is the smallest copy in SOL.

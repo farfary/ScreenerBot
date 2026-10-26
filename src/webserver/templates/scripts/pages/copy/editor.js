@@ -42,6 +42,7 @@ export function createEditor(page) {
     source,
     defaults: state.defaults,
     tasks: state.overview?.tasks || [],
+    processingPaused: state.overview?.status?.enabled === false,
   });
   const body = () => $("#copy-editor-body");
 
@@ -54,6 +55,7 @@ export function createEditor(page) {
       if (button) goTo(Number(button.dataset.editorStep));
     });
     on(body(), "click", onSegment);
+    on(body(), "click", onResume);
     on(body(), "input", onInput);
     on(body(), "change", onInput);
     on(body(), "submit", (event) => event.preventDefault());
@@ -308,6 +310,14 @@ export function createEditor(page) {
     setError("");
     step = Math.max(0, step - 1);
     render();
+  }
+
+  // Resuming copy processing from the editor keeps the draft and repaints the step.
+  async function onResume(event) {
+    const button = event.target.closest("[data-copy-resume]");
+    if (!button) return;
+    readStep();
+    if (await page.setProcessing(true, button)) render();
   }
 
   function onSegment(event) {

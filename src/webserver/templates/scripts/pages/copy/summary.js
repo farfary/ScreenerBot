@@ -11,12 +11,18 @@ export function renderStrip(page) {
   const node = $("#copy-system-state");
   const button = $("#copy-global-action");
   if (!node || !button) return;
+  const taskCount = state.overview?.tasks?.length ?? 0;
+  // The bulk action exists only while there is a task to act on, in every mode.
+  button.hidden = taskCount === 0;
   if (setupRequired()) {
+    // Without tasks the setup notice below says it all; the strip repeats nothing.
+    node.hidden = taskCount === 0;
     node.textContent = I18n.t("copy-strip-setup-required");
     node.dataset.state = "paused";
     gateControl(button);
     return;
   }
+  node.hidden = false;
   if (!status) {
     node.textContent = state.loadError
       ? I18n.t("copy-strip-unavailable")
@@ -27,7 +33,11 @@ export function renderStrip(page) {
   }
   let label;
   let tone;
-  if (!status.enabled) {
+  if (!status.total_tasks) {
+    // Nothing to pause or process: the global switch has no effect to report yet.
+    label = I18n.t("copy-strip-idle-empty");
+    tone = "idle";
+  } else if (!status.enabled) {
     label = I18n.t("copy-strip-paused-globally");
     tone = "paused";
   } else if (status.blocked_reason === "force_stop") {
@@ -37,9 +47,7 @@ export function renderStrip(page) {
     label = I18n.t("copy-strip-loss-limit");
     tone = "blocked";
   } else if (!status.live_tasks && !status.paper_tasks) {
-    label = status.total_tasks
-      ? I18n.t("copy-strip-idle-paused", { count: status.total_tasks })
-      : I18n.t("copy-strip-idle-empty");
+    label = I18n.t("copy-strip-idle-paused", { count: status.total_tasks });
     tone = "idle";
   } else {
     label = status.live_tasks
