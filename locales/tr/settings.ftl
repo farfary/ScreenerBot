@@ -430,6 +430,7 @@ settings-telegram-inline-hint = Bildirim mesajlarında eylem düğmelerini göst
 settings-telegram-setting-save-failed = { -telegram } ayarı kaydedilemedi
 settings-telegram-discovery-start-failed = Bulma işlemi başlatılamadı
 settings-telegram-chat-selected = Sohbet seçildi
+settings-telegram-chat-selected-restart = Sohbet seçildi. { -telegram }, { -brand } yeniden başladıktan sonra bu sohbete gönderir
 settings-telegram-chat-select-failed = Sohbet seçilemedi
 settings-telegram-test-sent = Test mesajı gönderildi
 settings-telegram-test-failed = Test mesajı başarısız oldu

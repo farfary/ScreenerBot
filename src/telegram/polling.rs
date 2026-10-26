@@ -18,7 +18,7 @@ use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::sync::Arc;
 use teloxide::prelude::*;
 use teloxide::types::ParseMode;
-use tokio::sync::Notify;
+use tokio::sync::watch;
 use tokio::task::JoinHandle;
 
 /// Track last processed update ID for proper offset handling
@@ -29,7 +29,7 @@ static LAST_UPDATE_ID: AtomicI32 = AtomicI32::new(0);
 /// This starts the command handler that listens for and processes
 /// Telegram updates (messages and callback queries).
 pub async fn start_polling(
-    shutdown: Arc<Notify>,
+    mut stop: watch::Receiver<bool>,
     running: Arc<AtomicBool>,
 ) -> Result<JoinHandle<()>> {
     let bot_token = with_config(|c| c.telegram.bot_token.clone());
@@ -56,8 +56,8 @@ pub async fn start_polling(
 
         loop {
             tokio::select! {
-                _ = shutdown.notified() => {
-                    logger::info(LogTag::Telegram, "Telegram command handler received shutdown signal");
+                _ = stop.wait_for(|stopped| *stopped) => {
+                    logger::info(LogTag::Telegram, "Telegram command handler received its stop signal");
                     break;
                 }
                 _ = poll_updates(&bot) => {

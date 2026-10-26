@@ -207,19 +207,8 @@ pub(super) async fn update_settings(
     ) {
         Ok(()) => {
             logger::info(LogTag::Telegram, "Telegram settings updated via API");
-            let (enabled, token, chat_id) = with_config(|c| {
-                (
-                    c.telegram.enabled,
-                    c.telegram.bot_token.clone(),
-                    c.telegram.chat_id.clone(),
-                )
-            });
-            let change = TelegramSettingsChange {
-                enabled,
-                has_token: !token.is_empty(),
-                connection_changed: token != previous_token || chat_id != previous_chat_id,
-            };
-            let service = apply_service_change(change).await;
+            let service =
+                apply_service_change(saved_change(&previous_token, &previous_chat_id)).await;
             success_response(UpdateSettingsResponse { service })
         }
         Err(e) => ApiError::new(
@@ -240,17 +229,32 @@ pub(super) struct TelegramSettingsChange {
     pub connection_changed: bool,
 }
 
+/// The saved settings compared with the token and chat ID saved before the change.
+fn saved_change(previous_token: &str, previous_chat_id: &str) -> TelegramSettingsChange {
+    let (enabled, token, chat_id) = with_config(|c| {
+        (
+            c.telegram.enabled,
+            c.telegram.bot_token.clone(),
+            c.telegram.chat_id.clone(),
+        )
+    });
+    TelegramSettingsChange {
+        enabled,
+        has_token: !token.is_empty(),
+        connection_changed: token != previous_token || chat_id != previous_chat_id,
+    }
+}
+
 /// What the service needs after a save. The service reads its token and chat ID when
-/// it starts, so a running service keeps the old ones until a restart, and turning
-/// Telegram off stops nothing until then. A service that is not running starts at once
-/// when Telegram is on with a token.
+/// it starts, so new credentials restart a running service; turning Telegram off stops
+/// it, and turning it on with a token starts it.
 pub(super) fn required_service_action(
     change: TelegramSettingsChange,
     running: bool,
 ) -> RequiredServiceAction {
     match (running, change.enabled) {
         (false, true) if change.has_token => RequiredServiceAction::Start,
-        (true, false) => RequiredServiceAction::Restart,
+        (true, false) => RequiredServiceAction::Stop,
         (true, true) if change.connection_changed => RequiredServiceAction::Restart,
         _ => RequiredServiceAction::None,
     }
@@ -260,11 +264,12 @@ pub(super) fn required_service_action(
 pub(super) enum RequiredServiceAction {
     None,
     Start,
+    Stop,
     Restart,
 }
 
-/// Brings the running Telegram service in line with a save: starts it when it can
-/// start now, and reports a restart when the running one cannot take the change.
+/// Brings the running Telegram service in line with a save: starts, stops or restarts it
+/// at once, and reports a restart only when the service could not take the change now.
 /// Before setup completes no service runs, so the saved settings apply at startup.
 async fn apply_service_change(change: TelegramSettingsChange) -> TelegramServiceOutcome {
     if !crate::global::is_initialization_complete() && !crate::global::is_explore_mode() {
@@ -277,36 +282,54 @@ async fn apply_service_change(change: TelegramSettingsChange) -> TelegramService
     let Some(manager) = guard.as_mut() else {
         return TelegramServiceOutcome::RestartRequired;
     };
-    match required_service_action(change, manager.is_service_running(TELEGRAM_SERVICE)) {
+    let action = required_service_action(change, manager.is_service_running(TELEGRAM_SERVICE));
+    if matches!(
+        action,
+        RequiredServiceAction::Stop | RequiredServiceAction::Restart
+    ) {
+        if let Err(e) = manager.stop_service(TELEGRAM_SERVICE).await {
+            logger::warning(
+                LogTag::Telegram,
+                &format!("Telegram service did not stop after settings change: {e}"),
+            );
+            return TelegramServiceOutcome::RestartRequired;
+        }
+        logger::info(
+            LogTag::Telegram,
+            "Telegram service stopped after settings change",
+        );
+    }
+    match action {
         RequiredServiceAction::None => TelegramServiceOutcome::Unchanged,
-        RequiredServiceAction::Restart => TelegramServiceOutcome::RestartRequired,
-        RequiredServiceAction::Start => match manager.start_enabled_service(TELEGRAM_SERVICE).await
-        {
-            Ok(report) if report.started.contains(&TELEGRAM_SERVICE) => {
-                logger::info(
-                    LogTag::Telegram,
-                    "Telegram service started after settings change",
-                );
-                TelegramServiceOutcome::Started
+        RequiredServiceAction::Stop => TelegramServiceOutcome::Stopped,
+        RequiredServiceAction::Start | RequiredServiceAction::Restart => {
+            match manager.start_enabled_service(TELEGRAM_SERVICE).await {
+                Ok(report) if report.started.contains(&TELEGRAM_SERVICE) => {
+                    logger::info(
+                        LogTag::Telegram,
+                        "Telegram service started after settings change",
+                    );
+                    TelegramServiceOutcome::Started
+                }
+                Ok(report) => {
+                    logger::warning(
+                        LogTag::Telegram,
+                        &format!(
+                            "Telegram service did not start after settings change: {:?}",
+                            report.failures.iter().map(|f| &f.error).collect::<Vec<_>>()
+                        ),
+                    );
+                    TelegramServiceOutcome::RestartRequired
+                }
+                Err(e) => {
+                    logger::warning(
+                        LogTag::Telegram,
+                        &format!("Telegram service did not start after settings change: {e}"),
+                    );
+                    TelegramServiceOutcome::RestartRequired
+                }
             }
-            Ok(report) => {
-                logger::warning(
-                    LogTag::Telegram,
-                    &format!(
-                        "Telegram service did not start after settings change: {:?}",
-                        report.failures.iter().map(|f| &f.error).collect::<Vec<_>>()
-                    ),
-                );
-                TelegramServiceOutcome::RestartRequired
-            }
-            Err(e) => {
-                logger::warning(
-                    LogTag::Telegram,
-                    &format!("Telegram service did not start after settings change: {e}"),
-                );
-                TelegramServiceOutcome::RestartRequired
-            }
-        },
+        }
     }
 }
 
@@ -493,6 +516,8 @@ pub(super) async fn select_discovered_chat(
     State(_state): State<Arc<AppState>>,
     Path(chat_id): Path<i64>,
 ) -> Response {
+    let (previous_token, previous_chat_id) =
+        with_config(|c| (c.telegram.bot_token.clone(), c.telegram.chat_id.clone()));
     // Select the chat and save to config
     match crate::telegram::discovery::select_discovered_chat(chat_id).await {
         Ok(()) => {
@@ -504,9 +529,11 @@ pub(super) async fn select_discovered_chat(
                 &format!("Selected Telegram chat ID: {chat_id}"),
             );
 
-            success_response(serde_json::json!({
-                "chat_id": chat_id
-            }))
+            // The running service sends to the chat it started with; the new one takes
+            // effect through a restart of the service.
+            let service =
+                apply_service_change(saved_change(&previous_token, &previous_chat_id)).await;
+            success_response(SelectChatResponse { chat_id, service })
         }
         Err(e) => ApiError::new(
             ApiErrorCode::NotFound,

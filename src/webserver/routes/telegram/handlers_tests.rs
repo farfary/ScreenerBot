@@ -38,11 +38,17 @@ fn a_stopped_service_stays_off_without_a_token_or_while_telegram_is_off() {
 }
 
 #[test]
-fn a_running_service_needs_a_restart_to_stop_or_take_new_credentials() {
-    assert_eq!(
-        required_service_action(change(false, true, false), true),
-        RequiredServiceAction::Restart
-    );
+fn turning_telegram_off_stops_a_running_service_at_once() {
+    for (has_token, connection_changed) in [(true, false), (true, true), (false, true)] {
+        assert_eq!(
+            required_service_action(change(false, has_token, connection_changed), true),
+            RequiredServiceAction::Stop
+        );
+    }
+}
+
+#[test]
+fn new_credentials_restart_a_running_service() {
     assert_eq!(
         required_service_action(change(true, true, true), true),
         RequiredServiceAction::Restart

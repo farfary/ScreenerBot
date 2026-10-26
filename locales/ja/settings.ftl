@@ -425,6 +425,7 @@ settings-telegram-inline-hint = 通知メッセージにアクションボタン
 settings-telegram-setting-save-failed = { -telegram } 設定を保存できませんでした
 settings-telegram-discovery-start-failed = 検出を開始できませんでした
 settings-telegram-chat-selected = チャットを選択しました
+settings-telegram-chat-selected-restart = チャットを選択しました。{ -brand } の再起動後に { -telegram } がこのチャットへ送信します
 settings-telegram-chat-select-failed = チャットを選択できませんでした
 settings-telegram-test-sent = テストメッセージを送信しました
 settings-telegram-test-failed = テストメッセージの送信に失敗しました

@@ -430,6 +430,7 @@ settings-telegram-inline-hint = نمایش دکمه‌های اقدام در پ�
 settings-telegram-setting-save-failed = ذخیره تنظیم { -telegram } ممکن نشد
 settings-telegram-discovery-start-failed = شروع یافتن ممکن نشد
 settings-telegram-chat-selected = چت انتخاب شد
+settings-telegram-chat-selected-restart = گفتگو انتخاب شد. { -telegram } پس از راه‌اندازی دوباره { -brand } به آن ارسال می‌کند
 settings-telegram-chat-select-failed = انتخاب چت ممکن نشد
 settings-telegram-test-sent = پیام آزمایشی ارسال شد
 settings-telegram-test-failed = پیام آزمایشی ناموفق بود

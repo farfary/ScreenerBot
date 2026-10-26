@@ -425,6 +425,7 @@ settings-telegram-inline-hint = 在通知消息中显示操作按钮
 settings-telegram-setting-save-failed = 无法保存 { -telegram } 设置
 settings-telegram-discovery-start-failed = 无法开始发现
 settings-telegram-chat-selected = 已选择聊天
+settings-telegram-chat-selected-restart = 已选择聊天。{ -brand } 重启后，{ -telegram } 将发送到此聊天
 settings-telegram-chat-select-failed = 无法选择聊天
 settings-telegram-test-sent = 测试消息已发送
 settings-telegram-test-failed = 测试消息发送失败

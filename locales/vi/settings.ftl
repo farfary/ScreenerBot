@@ -401,6 +401,7 @@ settings-telegram-inline-hint = Hiển thị nút thao tác trong tin nhắn th�
 settings-telegram-setting-save-failed = Không thể lưu cài đặt { -telegram }
 settings-telegram-discovery-start-failed = Không thể bắt đầu tìm kiếm
 settings-telegram-chat-selected = Đã chọn chat
+settings-telegram-chat-selected-restart = Đã chọn cuộc trò chuyện. { -telegram } sẽ gửi đến đó sau khi { -brand } khởi động lại
 settings-telegram-chat-select-failed = Không thể chọn chat
 settings-telegram-test-sent = Đã gửi tin nhắn thử
 settings-telegram-test-failed = Gửi tin nhắn thử thất bại

@@ -12,6 +12,8 @@ mod metrics;
 pub mod startup;
 #[cfg(test)]
 mod startup_order_tests;
+#[cfg(test)]
+mod stop_service_tests;
 
 pub use global::*;
 pub use health::ServiceHealth;
@@ -71,6 +73,14 @@ pub trait Service: Send + Sync {
     /// Stop the service
     async fn stop(&mut self) -> crate::Result<()> {
         Ok(())
+    }
+
+    /// Whether [`ServiceManager::stop_service`] may stop this service while the rest keep
+    /// running. Only a service whose `stop` ends its own tasks qualifies: the shared
+    /// shutdown signal ends every service, so it is never sent to stop one, and any task
+    /// still running after the stop grace period is aborted.
+    fn stops_alone(&self) -> bool {
+        false
     }
 
     /// Check service health
@@ -140,6 +150,10 @@ pub struct ServiceStartupReport {
     pub total_enabled: usize,
     pub duration_ms: u128,
 }
+
+/// How long [`ServiceManager::stop_service`] waits for each task of the stopped service
+/// before aborting it.
+const STOP_ALONE_GRACE: Duration = Duration::from_secs(5);
 
 pub struct ServiceManager {
     services: HashMap<&'static str, Box<dyn Service>>,
@@ -674,6 +688,65 @@ impl ServiceManager {
             ),
         );
         Ok(())
+    }
+
+    /// Stop one running service while every other service keeps running. Returns `false`
+    /// when the service is not running. Refused for a service that cannot stop alone
+    /// ([`Service::stops_alone`]) and for one a running service depends on.
+    pub async fn stop_service(&mut self, name: &'static str) -> crate::Result<bool> {
+        if !self.handles.contains_key(name) {
+            return Ok(false);
+        }
+        let Some(service) = self.services.get(name) else {
+            return Ok(false);
+        };
+        if !service.stops_alone() {
+            return Err(crate::Error::Service(crate::errors::ServiceError::Stop {
+                service: name.to_owned(),
+                message: "the service cannot stop while the others keep running".to_owned(),
+            }));
+        }
+        if let Some(dependent) = self.handles.keys().copied().find(|running| {
+            self.services
+                .get(running)
+                .is_some_and(|s| s.dependencies().contains(&name))
+        }) {
+            return Err(crate::Error::Service(
+                crate::errors::ServiceError::Dependency {
+                    service: dependent.to_owned(),
+                    dependency: name.to_owned(),
+                    message: "a running service depends on the one being stopped".to_owned(),
+                },
+            ));
+        }
+
+        log_service_event(name, ServiceLogEvent::StopStart, None, true);
+        if let Some(service) = self.services.get_mut(name) {
+            if let Err(e) = service.stop().await {
+                logger::warning(
+                    LogTag::System,
+                    &format!("Service stop error for {name}: {e}"),
+                );
+            }
+        }
+        for handle in self.handles.remove(name).unwrap_or_default() {
+            let abort = handle.abort_handle();
+            if tokio::time::timeout(STOP_ALONE_GRACE, handle)
+                .await
+                .is_err()
+            {
+                abort.abort();
+                logger::warning(
+                    LogTag::System,
+                    &format!(
+                        "Service {name} task still running {}s after its stop; aborted",
+                        STOP_ALONE_GRACE.as_secs()
+                    ),
+                );
+            }
+        }
+        log_service_event(name, ServiceLogEvent::StopSuccess, None, true);
+        Ok(true)
     }
 
     /// Resolve the startup order of `services` and every registered service they

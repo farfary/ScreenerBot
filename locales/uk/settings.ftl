@@ -440,6 +440,7 @@ settings-telegram-inline-hint = Показувати кнопки дій у по
 settings-telegram-setting-save-failed = Не вдалося зберегти налаштування { -telegram }
 settings-telegram-discovery-start-failed = Не вдалося запустити визначення
 settings-telegram-chat-selected = Чат вибрано
+settings-telegram-chat-selected-restart = Чат вибрано. { -telegram } почне надсилати в нього після перезапуску { -brand }
 settings-telegram-chat-select-failed = Не вдалося вибрати чат
 settings-telegram-test-sent = Тестове повідомлення надіслано
 settings-telegram-test-failed = Тестове повідомлення не вдалося надіслати

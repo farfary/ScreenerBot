@@ -425,6 +425,7 @@ settings-telegram-inline-hint = 알림 메시지에 동작 버튼을 표시합�
 settings-telegram-setting-save-failed = { -telegram } 설정을 저장하지 못했습니다
 settings-telegram-discovery-start-failed = 검색을 시작하지 못했습니다
 settings-telegram-chat-selected = 채팅이 선택되었습니다
+settings-telegram-chat-selected-restart = 채팅을 선택했습니다. { -brand }가 다시 시작된 후 { -telegram }이 이 채팅으로 보냅니다
 settings-telegram-chat-select-failed = 채팅을 선택하지 못했습니다
 settings-telegram-test-sent = 테스트 메시지를 보냈습니다
 settings-telegram-test-failed = 테스트 메시지 전송에 실패했습니다

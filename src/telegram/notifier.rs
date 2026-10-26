@@ -520,6 +520,17 @@ pub fn set_notification_queue(sender: mpsc::Sender<Notification>) {
     }
 }
 
+/// Drop the notifier and the notification queue when the Telegram service stops, so no
+/// notification is sent or queued until it starts again.
+pub fn clear_notifier() {
+    if let Ok(mut guard) = NOTIFIER.write() {
+        *guard = None;
+    }
+    if let Ok(mut guard) = NOTIFICATION_QUEUE.write() {
+        *guard = None;
+    }
+}
+
 /// Check if a notification should be sent based on config preferences
 fn should_send_notification(notification: &Notification) -> bool {
     let config = with_config(|c| c.telegram.clone());

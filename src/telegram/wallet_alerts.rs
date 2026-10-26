@@ -3,9 +3,7 @@
 
 //! Telegram consumer for alert-only wallet-watch targets.
 
-use std::sync::Arc;
-
-use tokio::sync::{broadcast::error::RecvError, Notify};
+use tokio::sync::{broadcast::error::RecvError, watch};
 
 use crate::logger::{self, LogTag};
 use crate::telegram::{queue_notification, Notification};
@@ -66,12 +64,12 @@ pub(super) fn notification_for_activity(activity: &WalletActivity) -> Option<Not
 /// Consume the shared wallet-watch broadcast without ever blocking its producer.
 /// The broadcast is bounded, so a slow Telegram connection drops alerts for this
 /// consumer rather than delaying copy decisions or own-wallet processing.
-pub(crate) async fn run(shutdown: Arc<Notify>) {
+pub(crate) async fn run(mut stop: watch::Receiver<bool>) {
     let mut activity_rx = crate::wallets::watch::subscribe_activity();
 
     loop {
         tokio::select! {
-            _ = shutdown.notified() => break,
+            _ = stop.wait_for(|stopped| *stopped) => break,
             activity = activity_rx.recv() => {
                 match activity {
                     Ok(activity) => {

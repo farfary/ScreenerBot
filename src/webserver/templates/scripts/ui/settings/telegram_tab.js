@@ -562,7 +562,8 @@ function attachTelegramHandlers(dialog, content, settings) {
     if (testHint) testHint.textContent = testReason || I18n.t("settings-telegram-test-hint");
   };
 
-  // A running service keeps its previous connection until the app restarts.
+  // A save starts, stops or restarts the service at once; only a change the service
+  // could not take now waits for the app to restart.
   const showServiceOutcome = (result) => {
     if (result?.service !== "restart_required") return;
     const restartField = content.querySelector("#tgRestartField");
@@ -708,7 +709,12 @@ function attachTelegramHandlers(dialog, content, settings) {
         method: "POST",
       });
       if (response.ok) {
-        Utils.showToast(I18n.t("settings-telegram-chat-selected"), "success");
+        const data = await response.json().catch(() => null);
+        if (data?.service === "restart_required") {
+          Utils.showToast(I18n.t("settings-telegram-chat-selected-restart"), "warning");
+        } else {
+          Utils.showToast(I18n.t("settings-telegram-chat-selected"), "success");
+        }
         stopDiscovery();
         // Reload the Telegram tab
         loadTelegramTab(dialog, content);

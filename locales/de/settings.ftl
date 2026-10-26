@@ -430,6 +430,7 @@ settings-telegram-inline-hint = Aktionsschaltflächen in Benachrichtigungen anze
 settings-telegram-setting-save-failed = { -telegram }-Einstellung konnte nicht gespeichert werden
 settings-telegram-discovery-start-failed = Die Ermittlung konnte nicht gestartet werden
 settings-telegram-chat-selected = Chat ausgewählt
+settings-telegram-chat-selected-restart = Chat ausgewählt. { -telegram } sendet nach dem Neustart von { -brand } an diesen Chat
 settings-telegram-chat-select-failed = Chat konnte nicht ausgewählt werden
 settings-telegram-test-sent = Testnachricht gesendet
 settings-telegram-test-failed = Testnachricht fehlgeschlagen

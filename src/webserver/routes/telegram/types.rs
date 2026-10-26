@@ -73,14 +73,23 @@ pub struct NotificationSettings {
 pub enum TelegramServiceOutcome {
     /// The running service already matches the saved settings, or none needs to run.
     Unchanged,
-    /// The service was off and has been started with the saved settings.
+    /// The service has been started, or restarted, with the saved settings.
     Started,
+    /// Telegram was turned off and the running service has been stopped.
+    Stopped,
     /// The running service keeps its previous settings until the app restarts.
     RestartRequired,
 }
 
 #[derive(Serialize)]
 pub struct UpdateSettingsResponse {
+    pub service: TelegramServiceOutcome,
+}
+
+/// A discovered chat saved as the notification target, and what the service did with it.
+#[derive(Serialize)]
+pub struct SelectChatResponse {
+    pub chat_id: i64,
     pub service: TelegramServiceOutcome,
 }
 

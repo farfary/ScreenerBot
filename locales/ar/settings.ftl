@@ -450,6 +450,7 @@ settings-telegram-inline-hint = عرض أزرار الإجراءات في رسا
 settings-telegram-setting-save-failed = تعذّر حفظ إعداد { -telegram }
 settings-telegram-discovery-start-failed = تعذّر بدء الاكتشاف
 settings-telegram-chat-selected = تم اختيار الدردشة
+settings-telegram-chat-selected-restart = تم اختيار المحادثة. سيرسل { -telegram } إليها بعد إعادة تشغيل { -brand }
 settings-telegram-chat-select-failed = تعذّر اختيار الدردشة
 settings-telegram-test-sent = تم إرسال رسالة الاختبار
 settings-telegram-test-failed = فشلت رسالة الاختبار

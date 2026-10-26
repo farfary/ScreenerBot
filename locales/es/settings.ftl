@@ -435,6 +435,7 @@ settings-telegram-inline-hint = Muestra botones de acción en los mensajes de no
 settings-telegram-setting-save-failed = No se pudo guardar el ajuste de { -telegram }
 settings-telegram-discovery-start-failed = No se pudo iniciar la detección
 settings-telegram-chat-selected = Chat seleccionado
+settings-telegram-chat-selected-restart = Chat seleccionado. { -telegram } enviará a este chat después de reiniciar { -brand }
 settings-telegram-chat-select-failed = No se pudo seleccionar el chat
 settings-telegram-test-sent = Mensaje de prueba enviado
 settings-telegram-test-failed = Falló el mensaje de prueba

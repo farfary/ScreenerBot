@@ -13,7 +13,7 @@ use crate::telegram::types::{BotState, Notification};
 use async_trait::async_trait;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use tokio::sync::{mpsc, Notify, RwLock};
+use tokio::sync::{mpsc, watch, Notify, RwLock};
 use tokio::task::JoinHandle;
 
 /// Telegram service state
@@ -22,8 +22,10 @@ pub struct TelegramService {
     initialized: Arc<AtomicBool>,
     /// Current bot state
     state: Arc<RwLock<BotState>>,
-    /// Shutdown notifier
-    shutdown: Arc<Notify>,
+    /// This service's own stop signal. Its tasks end on it alone, so the service can stop
+    /// while every other service keeps running; level-triggered, so a task busy with a
+    /// request when the stop arrives still sees it.
+    stop_signal: watch::Sender<bool>,
     /// Command handler running flag
     command_handler_running: Arc<AtomicBool>,
     /// Notification queue sender
@@ -35,7 +37,7 @@ impl TelegramService {
         Self {
             initialized: Arc::new(AtomicBool::new(false)),
             state: Arc::new(RwLock::new(BotState::Disconnected)),
-            shutdown: Arc::new(Notify::new()),
+            stop_signal: watch::Sender::new(false),
             command_handler_running: Arc::new(AtomicBool::new(false)),
             notification_sender: None,
         }
@@ -79,6 +81,12 @@ impl Service for TelegramService {
         with_config(|c| c.telegram.enabled)
     }
 
+    /// Turning Telegram off in Settings stops the service at once, and new credentials
+    /// restart it; its tasks end on the service's own stop signal.
+    fn stops_alone(&self) -> bool {
+        true
+    }
+
     async fn initialize(&mut self) -> crate::Result<()> {
         let config = with_config(|c| c.telegram.clone());
 
@@ -119,7 +127,7 @@ impl Service for TelegramService {
 
     async fn start(
         &mut self,
-        shutdown: Arc<Notify>,
+        _shutdown: Arc<Notify>,
         monitor: tokio_metrics::TaskMonitor,
     ) -> crate::Result<Vec<JoinHandle<()>>> {
         let config = with_config(|c| c.telegram.clone());
@@ -127,6 +135,8 @@ impl Service for TelegramService {
         if config.bot_token.is_empty() {
             return Ok(vec![]);
         }
+
+        self.stop_signal = watch::Sender::new(false);
 
         let mut handles = Vec::new();
 
@@ -137,7 +147,7 @@ impl Service for TelegramService {
 
         // Start notification sender worker (only if we have a chat_id)
         if !config.chat_id.is_empty() {
-            let shutdown_clone = shutdown.clone();
+            let mut stop = self.stop_signal.subscribe();
             let sender_handle = tokio::spawn(monitor.instrument(async move {
                 logger::info(LogTag::Telegram, "Notification sender worker started");
 
@@ -146,7 +156,9 @@ impl Service for TelegramService {
                         Some(notification) = rx.recv() => {
                             send_notification(notification).await;
                         }
-                        _ = shutdown_clone.notified() => {
+                        // The guard `wait_for` returns is not `Send`; drop it inside the
+                        // branch future so the other branch can await.
+                        _ = async { stop.wait_for(|stopped| *stopped).await.map(|_| ()) } => {
                             logger::info(LogTag::Telegram, "Notification sender worker shutting down");
                             break;
                         }
@@ -155,16 +167,19 @@ impl Service for TelegramService {
             }));
             handles.push(sender_handle);
 
-            let shutdown_clone = shutdown.clone();
+            let stop = self.stop_signal.subscribe();
             let alert_monitor = monitor.clone();
             handles.push(tokio::spawn(alert_monitor.instrument(async move {
-                crate::telegram::wallet_alerts::run(shutdown_clone).await;
+                crate::telegram::wallet_alerts::run(stop).await;
             })));
 
             // Start command handler if enabled
             if config.commands_enabled {
-                match polling::start_polling(shutdown.clone(), self.command_handler_running.clone())
-                    .await
+                match polling::start_polling(
+                    self.stop_signal.subscribe(),
+                    self.command_handler_running.clone(),
+                )
+                .await
                 {
                     Ok(handle) => handles.push(handle),
                     Err(e) => {
@@ -184,8 +199,6 @@ impl Service for TelegramService {
             send_notification(startup_notification).await;
         }
 
-        self.shutdown = shutdown;
-
         Ok(handles)
     }
 
@@ -199,8 +212,12 @@ impl Service for TelegramService {
             send_notification(shutdown_notification).await;
         }
 
-        // Signal shutdown - tasks will be awaited by ServiceManager
-        self.shutdown.notify_waiters();
+        // End this service's tasks; the ServiceManager awaits them. The notifier goes with
+        // them, so nothing is sent while the service is stopped.
+        self.stop_signal.send_replace(true);
+        notifier::clear_notifier();
+        self.notification_sender = None;
+        *self.state.write().await = BotState::Disconnected;
 
         logger::info(LogTag::Telegram, "Telegram service stopped");
         Ok(())

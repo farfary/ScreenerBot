@@ -440,6 +440,7 @@ settings-telegram-inline-hint = Show action buttons in notification messages
 settings-telegram-setting-save-failed = Could not save { -telegram } setting
 settings-telegram-discovery-start-failed = Could not start discovery
 settings-telegram-chat-selected = Chat selected
+settings-telegram-chat-selected-restart = Chat selected. { -telegram } sends to it after { -brand } restarts
 settings-telegram-chat-select-failed = Could not select chat
 settings-telegram-test-sent = Test message sent
 settings-telegram-test-failed = Test message failed

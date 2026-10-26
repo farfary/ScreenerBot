@@ -425,6 +425,7 @@ settings-telegram-inline-hint = Tampilkan tombol aksi di pesan notifikasi
 settings-telegram-setting-save-failed = Tidak dapat menyimpan pengaturan { -telegram }
 settings-telegram-discovery-start-failed = Tidak dapat memulai pencarian
 settings-telegram-chat-selected = Chat dipilih
+settings-telegram-chat-selected-restart = Chat dipilih. { -telegram } mengirim ke chat ini setelah { -brand } dimulai ulang
 settings-telegram-chat-select-failed = Tidak dapat memilih chat
 settings-telegram-test-sent = Pesan uji terkirim
 settings-telegram-test-failed = Pesan uji gagal

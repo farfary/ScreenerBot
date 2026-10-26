@@ -408,6 +408,7 @@ settings-telegram-inline-hint = नोटिफ़िकेशन संदे�
 settings-telegram-setting-save-failed = { -telegram } सेटिंग सहेजी नहीं जा सकी
 settings-telegram-discovery-start-failed = खोज शुरू नहीं हो सकी
 settings-telegram-chat-selected = चैट चुनी गई
+settings-telegram-chat-selected-restart = चैट चुनी गई। { -brand } रीस्टार्ट होने के बाद { -telegram } इसी चैट पर भेजेगा
 settings-telegram-chat-select-failed = चैट चुनी नहीं जा सकी
 settings-telegram-test-sent = टेस्ट संदेश भेजा गया
 settings-telegram-test-failed = टेस्ट संदेश विफल
