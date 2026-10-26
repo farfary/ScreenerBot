@@ -9,7 +9,8 @@
  * than the Value column's resolution keeps its digits in subscript notation rather than
  * reading "0.0000", a true zero reads "0", and only a holding without a price reads "—". Every listed wallet shows the
  * SOL balance the list response carries for it, in the Main Wallet chip and in the Secondaries
- * and Archive Balance column; only a balance the server could not read is "—".
+ * and Archive Balance column; only a balance the server could not read is "—". The Main
+ * Wallet tab's identity carries no "Main" chip beside a name the tab already states.
  *
  * Run with `npm run test:js`.
  */
@@ -64,6 +65,15 @@ test("toolbar chips state their label once", async (t) => {
       .map(({ label, value }) => `${label} ${value}`)
   );
   assert.deepEqual(repeated, [], "a toolbar chip repeats its label in its value");
+});
+
+test("the main wallet identity has no chip restating its tab", async (t) => {
+  const page = await openWallets(t);
+  await page.waitForSelector('.table-toolbar-chip[data-summary-id="wt-sol-balance"]');
+  const tags = await page.$$eval(".table-toolbar-identity__tag", (found) =>
+    found.filter((tag) => tag.getClientRects().length).map((tag) => tag.textContent.trim())
+  );
+  assert.deepEqual(tags, []);
 });
 
 test("every wallet table names a wallet in one font and weight", async (t) => {

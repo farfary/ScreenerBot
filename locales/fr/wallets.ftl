@@ -236,7 +236,6 @@ wallets-holdings-col-decimals = Décimales
 wallets-holdings-empty-title = Aucun token détenu
 wallets-holdings-empty-message = Les tokens détenus par ce portefeuille apparaîtront ici.
 wallets-holdings-no-main = Aucun portefeuille principal
-wallets-holdings-main-tag = Principal
 wallets-holdings-main-title = Portefeuille principal
 wallets-holdings-tokens = Tokens
 wallets-holdings-last-used = Dernière utilisation

@@ -261,7 +261,6 @@ wallets-holdings-col-decimals = Десяткові знаки
 wallets-holdings-empty-title = Немає токенів
 wallets-holdings-empty-message = Токени, які утримує цей гаманець, з’являться тут.
 wallets-holdings-no-main = Немає основного гаманця
-wallets-holdings-main-tag = Основний
 wallets-holdings-main-title = Основний гаманець
 wallets-holdings-tokens = Токени
 wallets-holdings-last-used = Востаннє використано

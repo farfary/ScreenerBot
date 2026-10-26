@@ -231,7 +231,6 @@ wallets-holdings-col-decimals = Ondalık
 wallets-holdings-empty-title = Token varlığı yok
 wallets-holdings-empty-message = Bu cüzdanın sahip olduğu tokenlar burada görünecek.
 wallets-holdings-no-main = Ana cüzdan yok
-wallets-holdings-main-tag = Ana
 wallets-holdings-main-title = Ana cüzdan
 wallets-holdings-tokens = Tokenlar
 wallets-holdings-last-used = Son kullanım

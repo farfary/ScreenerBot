@@ -251,7 +251,6 @@ wallets-holdings-col-decimals = اعشار
 wallets-holdings-empty-title = هیچ توکنی نگهداری نمی‌شود
 wallets-holdings-empty-message = توکن‌هایی که این کیف پول نگه می‌دارد اینجا نمایش داده می‌شوند.
 wallets-holdings-no-main = کیف پول اصلی وجود ندارد
-wallets-holdings-main-tag = اصلی
 wallets-holdings-main-title = کیف پول اصلی
 wallets-holdings-tokens = توکن‌ها
 wallets-holdings-last-used = آخرین استفاده

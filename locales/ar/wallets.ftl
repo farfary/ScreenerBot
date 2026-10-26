@@ -271,7 +271,6 @@ wallets-holdings-col-decimals = الخانات العشرية
 wallets-holdings-empty-title = لا توجد حيازات رموز
 wallets-holdings-empty-message = ستظهر هنا الرموز التي تحتفظ بها هذه المحفظة.
 wallets-holdings-no-main = لا توجد محفظة رئيسية
-wallets-holdings-main-tag = رئيسية
 wallets-holdings-main-title = المحفظة الرئيسية
 wallets-holdings-tokens = الرموز
 wallets-holdings-last-used = آخر استخدام

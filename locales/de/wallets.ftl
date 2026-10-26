@@ -233,7 +233,6 @@ wallets-holdings-col-decimals = Dezimalstellen
 wallets-holdings-empty-title = Keine Token-Bestände
 wallets-holdings-empty-message = Von dieser Wallet gehaltene Token erscheinen hier.
 wallets-holdings-no-main = Keine Haupt-Wallet
-wallets-holdings-main-tag = Haupt
 wallets-holdings-main-title = Haupt-Wallet
 wallets-holdings-tokens = Token
 wallets-holdings-last-used = Zuletzt verwendet

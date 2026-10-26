@@ -258,7 +258,6 @@ export function createWalletRenderers({
 
     tokenTable.setToolbarIdentity({
       title: wallet?.name || I18n.t("wallets-holdings-no-main"),
-      tag: wallet ? I18n.t("wallets-holdings-main-tag") : "",
       address: { html: walletAddressHtml(wallet) },
     });
 
@@ -321,7 +320,6 @@ export function createWalletRenderers({
         identity: {
           icon: "icon-wallet",
           title: wallet?.name || I18n.t("wallets-holdings-main-title"),
-          tag: I18n.t("wallets-holdings-main-tag"),
           address: { html: walletAddressHtml(wallet) },
         },
         summary: [

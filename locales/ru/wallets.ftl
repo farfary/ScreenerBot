@@ -241,7 +241,6 @@ wallets-holdings-col-decimals = Знаков после запятой
 wallets-holdings-empty-title = Нет токенов
 wallets-holdings-empty-message = Здесь появятся токены, которые хранятся в этом кошельке.
 wallets-holdings-no-main = Нет основного кошелька
-wallets-holdings-main-tag = Основной
 wallets-holdings-main-title = Основной кошелёк
 wallets-holdings-tokens = Токены
 wallets-holdings-last-used = Последнее использование

@@ -246,7 +246,6 @@ wallets-holdings-col-decimals = 小数位数
 wallets-holdings-empty-title = 暂无代币持仓
 wallets-holdings-empty-message = 此钱包持有的代币将显示在这里。
 wallets-holdings-no-main = 没有主钱包
-wallets-holdings-main-tag = 主钱包
 wallets-holdings-main-title = 主钱包
 wallets-holdings-tokens = 代币
 wallets-holdings-last-used = 最近使用

@@ -246,7 +246,6 @@ wallets-holdings-col-decimals = 소수 자릿수
 wallets-holdings-empty-title = 보유 토큰 없음
 wallets-holdings-empty-message = 이 지갑이 보유한 토큰이 여기에 표시됩니다.
 wallets-holdings-no-main = 메인 지갑 없음
-wallets-holdings-main-tag = 메인
 wallets-holdings-main-title = 메인 지갑
 wallets-holdings-tokens = 토큰
 wallets-holdings-last-used = 마지막 사용

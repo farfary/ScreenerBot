@@ -256,7 +256,6 @@ wallets-holdings-col-decimals = Decimales
 wallets-holdings-empty-title = Sin tenencias de tokens
 wallets-holdings-empty-message = Los tokens de esta billetera aparecerán aquí.
 wallets-holdings-no-main = Sin billetera principal
-wallets-holdings-main-tag = Principal
 wallets-holdings-main-title = Billetera principal
 wallets-holdings-tokens = Tokens
 wallets-holdings-last-used = Último uso

@@ -246,7 +246,6 @@ wallets-holdings-col-decimals = 小数桁数
 wallets-holdings-empty-title = トークンの保有はありません
 wallets-holdings-empty-message = このウォレットが保有するトークンがここに表示されます。
 wallets-holdings-no-main = メインウォレットがありません
-wallets-holdings-main-tag = メイン
 wallets-holdings-main-title = メインウォレット
 wallets-holdings-tokens = トークン
 wallets-holdings-last-used = 最終使用

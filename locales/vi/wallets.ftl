@@ -226,7 +226,6 @@ wallets-holdings-col-decimals = Số thập phân
 wallets-holdings-empty-title = Không có token nào
 wallets-holdings-empty-message = Các token ví này đang nắm giữ sẽ hiện ở đây.
 wallets-holdings-no-main = Chưa có ví chính
-wallets-holdings-main-tag = Chính
 wallets-holdings-main-title = Ví chính
 wallets-holdings-tokens = Token
 wallets-holdings-last-used = Dùng lần cuối

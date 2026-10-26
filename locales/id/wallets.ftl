@@ -228,7 +228,6 @@ wallets-holdings-col-decimals = Desimal
 wallets-holdings-empty-title = Tidak ada kepemilikan token
 wallets-holdings-empty-message = Token yang dimiliki dompet ini akan muncul di sini.
 wallets-holdings-no-main = Tidak ada dompet utama
-wallets-holdings-main-tag = Utama
 wallets-holdings-main-title = Dompet Utama
 wallets-holdings-tokens = Token
 wallets-holdings-last-used = Terakhir digunakan
