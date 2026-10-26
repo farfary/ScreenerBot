@@ -267,6 +267,29 @@ async fn a_token_without_a_report_awaits_it_and_is_neither_passed_nor_rejected()
 }
 
 #[tokio::test]
+async fn a_blacklisted_token_without_a_report_is_not_queued_for_one() {
+    let directory = setup();
+    seed_listing(&directory, NEW_TOKEN, TEN_DAYS);
+    seed_listing(&directory, OLD_TOKEN, 2 * TEN_DAYS);
+    raw(&directory)
+        .execute(
+            "INSERT INTO blacklist (chain_id, mint, reason, source, added_at)
+             VALUES ('solana', ?1, 'pool', 'test', ?2)",
+            params![OLD_TOKEN, chrono::Utc::now().timestamp()],
+        )
+        .expect("insert blacklist row");
+
+    let snapshot = build(report_required_config(), None).await;
+
+    assert_eq!(
+        snapshot.awaiting_rugcheck_report,
+        vec![NEW_TOKEN.to_owned()],
+        "a blacklisted token never takes one of the direct report fetches"
+    );
+    assert!(snapshot.filtered_mints.is_empty());
+}
+
+#[tokio::test]
 async fn an_earlier_stage_rejection_shows_its_own_reason_before_the_missing_report() {
     let directory = setup();
     seed_listing(&directory, NEW_TOKEN, 0);

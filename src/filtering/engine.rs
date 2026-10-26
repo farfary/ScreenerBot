@@ -330,6 +330,8 @@ pub async fn compute_snapshot(
             }
             // Every earlier stage passed and only the report is missing: the token
             // waits for it, neither passed nor rejected, and carries no rejection row.
+            // A blacklisted token (by its own entry, a pool or an account) is counted
+            // but never queued for one of the few direct report fetches per cycle.
             Err(FilterRejectionReason::RugcheckDataMissing) => {
                 stats.awaiting_rugcheck_report += 1;
                 token.last_rejection_reason = None;
@@ -339,7 +341,9 @@ pub async fn compute_snapshot(
                     mint: token.mint.clone(),
                     rejection: None,
                 });
-                awaiting_rugcheck_report.push((token.first_discovered_at, token.mint.clone()));
+                if !token.is_blacklisted {
+                    awaiting_rugcheck_report.push((token.first_discovered_at, token.mint.clone()));
+                }
             }
             Err(reason) => {
                 let reason_label = reason.label();

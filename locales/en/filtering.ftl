@@ -176,7 +176,7 @@ filtering-status-passed = Passed Filters
 filtering-status-passed-detail = { $share } passed
 # A token that passed every other filter and waits only for its RugCheck report: neither passed nor rejected.
 filtering-status-awaiting = Awaiting { -rugcheck } Report
-filtering-status-awaiting-detail = Passed every other filter
+filtering-status-awaiting-earlier-passed = Passed every filter before { -rugcheck }
 # $rate is the formatted number of reports fetched directly per minute, e.g. "3".
 filtering-status-report-rate = { -rugcheck } reports arrive at about { $rate } a minute. Signed-in installs get them faster.
 filtering-status-report-sign-in = Sign in

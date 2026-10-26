@@ -237,7 +237,7 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
             ? `<div class="metric-card">
           <span class="metric-label">${Utils.escapeHtml(I18n.t("filtering-status-awaiting"))}</span>
           <span class="metric-value">${Utils.formatNumber(awaiting_rugcheck_report, 0)}</span>
-          <span class="metric-detail">${Utils.escapeHtml(I18n.t("filtering-status-awaiting-detail"))}</span>
+          <span class="metric-detail">${Utils.escapeHtml(I18n.t("filtering-status-awaiting-earlier-passed"))}</span>
         </div>`
             : ""
         }
