@@ -15,6 +15,7 @@ common-action-close = 닫기
 common-action-save = 저장
 common-action-apply = 적용
 common-action-reset = 초기화
+common-action-reset-filters = 필터 초기화
 common-action-refresh = 새로고침
 common-action-export = 내보내기
 common-action-import = 가져오기

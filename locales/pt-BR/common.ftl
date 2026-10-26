@@ -15,6 +15,7 @@ common-action-close = Fechar
 common-action-save = Salvar
 common-action-apply = Aplicar
 common-action-reset = Redefinir
+common-action-reset-filters = Redefinir filtros
 common-action-refresh = Atualizar
 common-action-export = Exportar
 common-action-import = Importar

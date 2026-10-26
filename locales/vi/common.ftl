@@ -15,6 +15,7 @@ common-action-close = Đóng
 common-action-save = Lưu
 common-action-apply = Áp dụng
 common-action-reset = Đặt lại
+common-action-reset-filters = Đặt lại bộ lọc
 common-action-refresh = Làm mới
 common-action-export = Xuất
 common-action-import = Nhập

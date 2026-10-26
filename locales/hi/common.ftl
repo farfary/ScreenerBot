@@ -17,6 +17,7 @@ common-action-close = बंद करें
 common-action-save = सहेजें
 common-action-apply = लागू करें
 common-action-reset = रीसेट करें
+common-action-reset-filters = फ़िल्टर रीसेट करें
 common-action-refresh = रीफ़्रेश करें
 common-action-export = एक्सपोर्ट करें
 common-action-import = इंपोर्ट करें

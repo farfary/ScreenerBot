@@ -15,6 +15,7 @@ common-action-close = بستن
 common-action-save = ذخیره
 common-action-apply = اعمال
 common-action-reset = بازنشانی
+common-action-reset-filters = بازنشانی فیلترها
 common-action-refresh = تازه‌سازی
 common-action-export = خروجی گرفتن
 common-action-import = وارد کردن

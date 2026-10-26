@@ -15,6 +15,7 @@ common-action-close = Tutup
 common-action-save = Simpan
 common-action-apply = Terapkan
 common-action-reset = Atur ulang
+common-action-reset-filters = Atur ulang filter
 common-action-refresh = Segarkan
 common-action-export = Ekspor
 common-action-import = Impor

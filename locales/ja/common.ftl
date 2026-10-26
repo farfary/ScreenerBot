@@ -15,6 +15,7 @@ common-action-close = 閉じる
 common-action-save = 保存
 common-action-apply = 適用
 common-action-reset = リセット
+common-action-reset-filters = フィルターをリセット
 common-action-refresh = 更新
 common-action-export = エクスポート
 common-action-import = インポート

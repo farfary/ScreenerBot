@@ -15,6 +15,7 @@ common-action-close = 关闭
 common-action-save = 保存
 common-action-apply = 应用
 common-action-reset = 重置
+common-action-reset-filters = 重置筛选
 common-action-refresh = 刷新
 common-action-export = 导出
 common-action-import = 导入

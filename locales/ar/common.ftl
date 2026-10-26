@@ -15,6 +15,7 @@ common-action-close = إغلاق
 common-action-save = حفظ
 common-action-apply = تطبيق
 common-action-reset = إعادة تعيين
+common-action-reset-filters = إعادة تعيين عوامل التصفية
 common-action-refresh = تحديث
 common-action-export = تصدير
 common-action-import = استيراد

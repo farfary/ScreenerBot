@@ -15,6 +15,7 @@ common-action-close = Закрити
 common-action-save = Зберегти
 common-action-apply = Застосувати
 common-action-reset = Скинути
+common-action-reset-filters = Скинути фільтри
 common-action-refresh = Оновити
 common-action-export = Експортувати
 common-action-import = Імпортувати

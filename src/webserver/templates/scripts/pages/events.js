@@ -290,10 +290,19 @@ function createLifecycle() {
     updateToolbar();
   };
 
+  /** True while the search or any filter differs from its default. */
+  const filtersActive = () =>
+    Boolean(state.search) ||
+    Object.entries(DEFAULT_FILTERS).some(([key, value]) => state.filters[key] !== value);
+
+  // Reset filters is offered only while there is a filter to reset.
+  const syncResetFilters = () => table?.setToolbarItem("reset", { disabled: !filtersActive() });
+
   const requestReload = (reason = "manual", options = {}) => {
     if (!table) {
       return Promise.resolve(null);
     }
+    syncResetFilters();
     return table.reload({
       reason,
       silent: options.silent ?? false,
@@ -492,7 +501,8 @@ function createLifecycle() {
           buttons: [
             {
               id: "reset",
-              label: I18n.t("common-action-reset"),
+              label: I18n.t("common-action-reset-filters"),
+              disabled: true,
               onClick: () => resetFilters(),
             },
           ],
@@ -519,6 +529,7 @@ function createLifecycle() {
         apply: false,
       });
       table.setToolbarSearchValue(state.search, { apply: false });
+      syncResetFilters();
       updateToolbar();
     },
 

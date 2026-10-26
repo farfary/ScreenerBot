@@ -15,6 +15,7 @@ common-action-close = Kapat
 common-action-save = Kaydet
 common-action-apply = Uygula
 common-action-reset = Sıfırla
+common-action-reset-filters = Filtreleri sıfırla
 common-action-refresh = Yenile
 common-action-export = Dışa aktar
 common-action-import = İçe aktar

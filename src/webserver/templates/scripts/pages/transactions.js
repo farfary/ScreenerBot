@@ -355,9 +355,18 @@ function createLifecycle() {
     return false;
   };
 
+  /** True while the search or any filter differs from its default. */
+  const filtersActive = () =>
+    Boolean(state.signature) ||
+    Object.entries(DEFAULT_FILTERS).some(([key, value]) => state.filters[key] !== value);
+
+  // Reset filters is offered only while there is a filter to reset.
+  const syncResetFilters = () => table?.setToolbarItem("reset", { disabled: !filtersActive() });
+
   const requestReload = (reason = "manual", options = {}) => {
     if (!table) return Promise.resolve(null);
     if (reason === "poll" && shouldSkipPollReload()) return Promise.resolve(null);
+    syncResetFilters();
 
     if (reason !== "poll") {
       lastUserReloadAt = Date.now();
@@ -656,8 +665,9 @@ function createLifecycle() {
           buttons: [
             {
               id: "reset",
-              label: I18n.t("common-action-reset"),
+              label: I18n.t("common-action-reset-filters"),
               icon: "icon-rotate-ccw",
+              disabled: true,
               onClick: () => resetFilters(),
             },
           ],
@@ -690,6 +700,7 @@ function createLifecycle() {
       }
 
       table.setToolbarSearchValue(state.signature, { apply: false });
+      syncResetFilters();
       table.setToolbarFilterValue("type", state.filters.type, {
         apply: false,
       });
