@@ -4,7 +4,6 @@ hints-category-trader = Trader automático
 hints-category-services = Servicios
 hints-category-wallet = Billetera
 hints-category-wallets = Billeteras
-hints-category-tools = Herramientas
 hints-category-config = Configuración
 hints-category-config-telegram = { -telegram }
 hints-category-token-details = Detalles del token
@@ -204,179 +203,6 @@ hints-wallets-secondary-content =
 
     El trading automático no usa las billeteras secundarias a menos que se configure explícitamente.
 
-hints-tools-wallet-cleanup-title = Herramienta de limpieza de billetera
-hints-tools-wallet-cleanup-content =
-    { "*" }*Recupera SOL de las cuentas de token vacías**
-
-    { "*" }*¿Qué son las ATA?**
-    Las Associated Token Accounts (ATA) son cuentas de Solana que guardan tus tokens. Cada token con el que interactúas crea una ATA que guarda un depósito de renta: ~0.0015 SOL para cuentas abiertas ahora, ~0.002 SOL para las más antiguas.
-
-    { "*" }*¿Por qué limpiar las ATA vacías?**
-    • Recuperar la renta (~0.0015–0.002 SOL por ATA)
-    • Los traders activos pueden acumular cientos de ATA vacías
-    • 100 ATA vacías = ~0.15–0.2 SOL recuperables
-
-    { "*" }*Cómo funciona:**
-    • Escanea tu billetera en busca de ATA con saldo cero
-    • Muestra el total de SOL recuperable
-    • Cierra las cuentas vacías para recuperar la renta
-
-    { "*" }*Limpieza automática:**
-    Cuando está activada, escanea y cierra automáticamente las ATA vacías cada 5 minutos en segundo plano.
-
-    { "*" }*Importante:**
-    • Solo cierra cuentas con saldo exactamente 0
-    • Los cierres fallidos se guardan en caché para evitar reintentos repetidos
-    • Las billeteras grandes pueden requerir varias pasadas de limpieza
-hints-tools-burn-tokens-title = Herramienta para quemar tokens
-hints-tools-burn-tokens-content =
-    { "*" }*Destruye tokens de forma permanente**
-
-    Quemar tokens los elimina de forma permanente de tu billetera y de la circulación.
-
-    { "*" }*Qué ocurre al quemar:**
-    • Los tokens se envían a una dirección de quema (irrecuperable)
-    • El saldo del token pasa a cero
-    • Después se puede cerrar la ATA con la limpieza de billetera para recuperar ~0.0015–0.002 SOL de renta
-
-    { "*" }*Categorías de tokens:**
-    • **Posiciones abiertas** - No se pueden quemar (operaciones activas)
-    • **Posiciones cerradas** - Restos de operaciones pasadas
-    • **Con valor** - Tokens con liquidez (considera venderlos)
-    • **Sin liquidez** - Tokens sin valor o residuales (seguros de quemar)
-
-    { "*" }*Advertencia:** Esta acción es **irreversible**. Los tokens quemados no se pueden recuperar bajo ninguna circunstancia.
-
-    { "*" }*Después de quemar:** Ejecuta la limpieza de billetera para cerrar las ATA vacías y recuperar la renta en SOL.
-hints-tools-wallet-generator-title = Herramienta generadora de billeteras
-hints-tools-wallet-generator-content =
-    { "*" }*Genera nuevos pares de claves de Solana**
-
-    Crea billeteras nuevas de forma segura en tu dispositivo.
-
-    { "*" }*Funciones:**
-    • Genera pares de claves criptográficamente seguros
-    • Prefijo de dirección personalizada opcional (p. ej., "SOL...")
-    • Exportación en base58 o como matriz JSON
-
-    { "*" }*Seguridad:**
-    • Las claves se generan localmente
-    • Nunca se transmiten por la red
-    • Haz siempre una copia de seguridad segura de las claves
-hints-tools-multi-buy-title = Herramienta de compra múltiple
-hints-tools-multi-buy-content =
-    { "*" }*Coordina compras entre varias billeteras**
-
-    Ejecuta órdenes de compra en varias subbilleteras con montos aleatorios para simular una actividad de compra orgánica.
-
-    { "*" }*Cómo funciona:**
-    1. Crea o usa subbilleteras existentes
-    2. Distribuye SOL de la billetera principal a las subbilleteras
-    3. Ejecuta órdenes de compra con montos y retrasos aleatorios
-    4. Cada billetera compra de forma independiente con firmas únicas
-
-    { "*" }*Ajustes de billeteras:**
-    • **Número de billeteras** — cantidad de subbilleteras a usar (2-10)
-    • **Reserva de SOL** — SOL reservado por billetera para comisiones (~0.015)
-
-    { "*" }*Ajustes de montos:**
-    • **SOL mín./máx.** — rango de montos de compra por billetera
-    • **Límite total** — tope opcional del total de SOL a gastar
-
-    { "*" }*Ajustes de ejecución:**
-    • **Retraso** — retraso aleatorio entre transacciones
-    • **Concurrencia** — ejecución en paralelo (1 = secuencial)
-    • **Deslizamiento** — deslizamiento máximo aceptable
-    • **Enrutador** — enrutamiento del swap (Auto, { -jupiter }, Raydium)
-
-    { "*" }*Importante:**
-    • Requiere suficiente SOL en la billetera principal
-    • Las compras fallidas se registran pero no detienen la sesión
-    • Las subbilleteras se pueden reutilizar entre sesiones
-hints-tools-multi-sell-title = Herramienta de venta múltiple
-hints-tools-multi-sell-content =
-    { "*" }*Coordina ventas entre varias billeteras**
-
-    Vende tokens de todas las subbilleteras que tengan un token concreto, con consolidación automática del SOL.
-
-    { "*" }*Cómo funciona:**
-    1. Escanea las subbilleteras en busca de saldos del token
-    2. Opcionalmente recarga las billeteras con poco SOL para comisiones
-    3. Ejecuta órdenes de venta con un porcentaje configurable
-    4. Consolida lo obtenido de vuelta en la billetera principal
-
-    { "*" }*Ajustes de venta:**
-    • **% de venta** — porcentaje de tokens a vender (100% por defecto)
-    • **SOL mín. para comisión** — SOL mínimo necesario para la transacción
-    • **Recarga automática** — transfiere SOL desde la principal si hace falta
-
-    { "*" }*Acciones posteriores a la venta:**
-    • **Consolidar SOL** — transfiere todo el SOL de vuelta a la billetera principal
-    • **Cerrar ATA** — cierra las cuentas de token para recuperar la renta (~0.0015–0.002 SOL cada una)
-
-    { "*" }*Ajustes de ejecución:**
-    • **Retraso** — retraso aleatorio entre transacciones
-    • **Concurrencia** — ejecución en paralelo
-    • **Deslizamiento** — deslizamiento máximo aceptable
-    • **Enrutador** — preferencia de enrutamiento del swap
-
-    { "*" }*Consejos:**
-    • La vista previa muestra todas las billeteras que tienen el token
-    • Deselecciona las billeteras desde las que no quieras vender
-    • La consolidación se realiza cuando terminan todas las ventas
-hints-tools-trade-watcher-title = Herramienta de seguimiento de operaciones
-hints-tools-trade-watcher-content =
-    { "*" }*Monitorea operaciones y activa acciones automáticas**
-
-    Observa la actividad de trading de un token y reacciona automáticamente cuando se producen operaciones.
-
-    { "*" }*Tipos de seguimiento:**
-    • **Comprar al vender** — compra automáticamente cuando alguien vende (aprovecha las caídas)
-    • **Vender al comprar** — vende automáticamente cuando alguien compra (sigue al mercado)
-    • **Solo notificar** — recibe alertas sin realizar ninguna acción
-
-    { "*" }*Cómo funciona:**
-    1. Introduce la dirección mint de un token
-    2. Haz clic en "Buscar pools" para encontrar los pools de liquidez disponibles
-    3. Selecciona un pool para monitorear (obligatorio para acciones de compra o venta)
-    4. Define el monto de activación (tamaño mínimo de operación al que reaccionar)
-    5. Define el monto de la acción (cuánto SOL comprar o vender)
-    6. Inicia el seguimiento
-
-    { "*" }*Requisitos:**
-    • Dirección mint de token válida
-    • Selección de un pool (para acciones de compra o venta)
-    • Saldo de SOL suficiente para los montos de las acciones
-
-    { "*" }*Integración con { -telegram }:**
-    Configura { -telegram } en Configuración → { -telegram } para recibir notificaciones instantáneas cuando se activen los seguimientos.
-hints-tools-wallet-consolidation-title = Herramienta de consolidación de billeteras
-hints-tools-wallet-consolidation-content =
-    { "*" }*Gestiona y consolida los fondos de las subbilleteras**
-
-    Consulta todas las subbilleteras y consolida SOL, tokens y la renta de las ATA en tu billetera principal.
-
-    { "*" }*El resumen muestra:**
-    • **Subbilleteras** — número total de subbilleteras creadas
-    • **SOL total** — saldo de SOL combinado de todas las subbilleteras
-    • **Tipos de token** — número de tokens distintos en posesión
-    • **Renta recuperable** — SOL bloqueado en ATA vacías
-
-    { "*" }*Acciones:**
-    • **Transferir SOL** — mueve todo el SOL de las billeteras seleccionadas a la principal
-    • **Transferir tokens** — mueve todos los tokens a la billetera principal
-    • **Limpiar ATA** — cierra las cuentas de token vacías para recuperar la renta
-
-    { "*" }*Información de la tabla:**
-    • Casilla para seleccionar billeteras en operaciones por lotes
-    • Nombre, dirección, saldo de SOL, número de tokens, ATA vacías
-    • Las billeteras vacías se atenúan para identificarlas fácilmente
-
-    { "*" }*Consejos:**
-    • Úsala después de una venta múltiple para recoger el SOL restante
-    • Limpia las ATA con regularidad para recuperar la renta
-    • Las billeteras vacías se pueden reutilizar en operaciones futuras
-
 hints-config-overview-title = Configuración
 hints-config-overview-content =
     Ajustes globales de { -brand }.
@@ -414,7 +240,6 @@ hints-config-telegram-content =
     { "*" }*Qué recibirás:**
     • Confirmaciones de ejecución de operaciones
     • Actualizaciones de posiciones (entrada/salida)
-    • Alertas del seguimiento de operaciones
     • Notificaciones de error
 
     { "*" }*Privacidad:**

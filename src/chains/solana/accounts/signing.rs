@@ -4,9 +4,9 @@
 //! Wallet-credential resolution and the one cache that may ever hold a
 //! decrypted Solana keypair in memory.
 //!
-//! Shared code (`crate::wallets`, `crate::config::wallet`, `crate::tools`,
-//! the webserver) never sees a `Keypair`: it passes a `wallet_id` (or relies
-//! on "the main wallet") to the functions here, which resolve the wallet's
+//! Shared code (`crate::wallets`, `crate::config::wallet`, the webserver)
+//! never sees a `Keypair`: it passes a `wallet_id` (or relies on "the main
+//! wallet") to the functions here, which resolve the wallet's
 //! encrypted credential via `crate::wallets` (ciphertext + nonce only, never
 //! Solana-typed), decrypt, use, and drop. The one exception is the main
 //! wallet, cached here — not in `crate::wallets` — because it is read on

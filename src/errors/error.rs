@@ -45,10 +45,6 @@ pub enum Error {
     #[error(transparent)]
     Wallets(#[from] crate::wallets::Error),
 
-    /// Tool session errors: ATA cleanup, multi-wallet sessions, favorites, trade watching.
-    #[error(transparent)]
-    Tools(#[from] crate::tools::Error),
-
     /// Chain-neutral identity/execution errors.
     #[error(transparent)]
     Chains(#[from] crate::chains::Error),
@@ -229,8 +225,7 @@ impl Error {
             | Error::Transactions(crate::transactions::Error::Database(error))
             | Error::Trader(crate::trader::Error::Database(error))
             | Error::Wallets(crate::wallets::Error::Database(error))
-            | Error::Pools(crate::pools::Error::Database(error))
-            | Error::Tools(crate::tools::Error::Database(error)) => Some(error),
+            | Error::Pools(crate::pools::Error::Database(error)) => Some(error),
             _ => None,
         }
     }

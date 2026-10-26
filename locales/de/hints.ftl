@@ -6,7 +6,6 @@ hints-category-trader = Auto-Trader
 hints-category-services = Dienste
 hints-category-wallet = Wallet
 hints-category-wallets = Wallets
-hints-category-tools = Tools
 hints-category-config = Konfiguration
 hints-category-config-telegram = { -telegram }
 hints-category-token-details = Token-Details
@@ -218,181 +217,6 @@ hints-wallets-secondary-content =
 
     Sekundäre Wallets werden vom Auto-Trading nur verwendet, wenn sie ausdrücklich konfiguriert sind.
 
-## tools
-
-hints-tools-wallet-cleanup-title = Wallet-Bereinigung
-hints-tools-wallet-cleanup-content =
-    { "*" }*SOL aus leeren Token-Konten zurückholen**
-
-    { "*" }*Was sind ATAs?**
-    Associated Token Accounts (ATAs) sind Solana-Konten, die Ihre Tokens halten. Jeder Token, mit dem Sie interagieren, erzeugt ein ATA, das eine Mietkaution hält: ca. 0,0015 SOL bei jetzt eröffneten Konten, ca. 0,002 SOL bei älteren.
-
-    { "*" }*Warum leere ATAs bereinigen?**
-    • Miete zurückholen (ca. 0,0015–0,002 SOL pro ATA)
-    • Aktive Trader können Hunderte leere ATAs ansammeln
-    • 100 leere ATAs = ca. 0,15–0,2 SOL zurückholbar
-
-    { "*" }*So funktioniert es:**
-    • Scannt Ihre Wallet nach ATAs mit Guthaben null
-    • Zeigt den insgesamt zurückholbaren SOL-Betrag
-    • Schließt leere Konten, um die Miete zurückzuerhalten
-
-    { "*" }*Auto-Bereinigung:**
-    Wenn aktiviert, werden leere ATAs alle 5 Minuten im Hintergrund automatisch gescannt und geschlossen.
-
-    { "*" }*Wichtig:**
-    • Schließt nur Konten mit einem Guthaben von genau 0
-    • Fehlgeschlagene Schließungen werden zwischengespeichert, um wiederholte Versuche zu vermeiden
-    • Große Wallets erfordern ggf. mehrere Bereinigungsläufe
-hints-tools-burn-tokens-title = Tokens verbrennen
-hints-tools-burn-tokens-content =
-    { "*" }*Tokens dauerhaft vernichten**
-
-    Beim Verbrennen werden Tokens dauerhaft aus Ihrer Wallet und aus dem Umlauf entfernt.
-
-    { "*" }*Was beim Verbrennen passiert:**
-    • Tokens werden an eine Burn-Adresse gesendet (nicht wiederherstellbar)
-    • Das Token-Guthaben wird null
-    • Das ATA kann danach über die Wallet-Bereinigung geschlossen werden, um ca. 0,0015–0,002 SOL Miete zurückzuholen
-
-    { "*" }*Token-Kategorien:**
-    • **Offene Positionen** - Können nicht verbrannt werden (aktive Trades)
-    • **Geschlossene Positionen** - Reste aus früheren Trades
-    • **Mit Wert** - Tokens mit Liquidität (besser verkaufen)
-    • **Keine Liquidität** - Dust/wertlose Tokens (sicher zu verbrennen)
-
-    { "*" }*Warnung:** Diese Aktion ist **unumkehrbar**. Verbrannte Tokens können unter keinen Umständen wiederhergestellt werden.
-
-    { "*" }*Nach dem Verbrennen:** Führen Sie die Wallet-Bereinigung aus, um leere ATAs zu schließen und SOL-Miete zurückzuholen.
-hints-tools-wallet-generator-title = Wallet-Generator
-hints-tools-wallet-generator-content =
-    { "*" }*Neue Solana-Keypairs erzeugen**
-
-    Erstellen Sie neue Wallets sicher auf Ihrem Gerät.
-
-    { "*" }*Funktionen:**
-    • Erzeugt kryptografisch sichere Keypairs
-    • Optionales Vanity-Adresspräfix (z. B. „SOL...“)
-    • Export als base58 oder JSON-Array
-
-    { "*" }*Sicherheit:**
-    • Schlüssel werden lokal erzeugt
-    • Werden nie über das Netzwerk übertragen
-    • Sichern Sie Schlüssel immer sicher
-hints-tools-multi-buy-title = Multi-Buy
-hints-tools-multi-buy-content =
-    { "*" }*Käufe über mehrere Wallets koordinieren**
-
-    Führen Sie Kaufaufträge über mehrere Sub-Wallets mit zufälligen Beträgen aus, um organische Kaufaktivität zu simulieren.
-
-    { "*" }*So funktioniert es:**
-    1. Erstellt Sub-Wallets oder nutzt vorhandene
-    2. Verteilt SOL von der Haupt-Wallet auf die Sub-Wallets
-    3. Führt Kaufaufträge mit zufälligen Beträgen und Verzögerungen aus
-    4. Jede Wallet kauft unabhängig mit eigenen Signaturen
-
-    { "*" }*Wallet-Einstellungen:**
-    • **Wallet-Anzahl** — Anzahl der zu verwendenden Sub-Wallets (2–10)
-    • **SOL-Puffer** — pro Wallet für Gebühren reserviertes SOL (ca. 0,015)
-
-    { "*" }*Betragseinstellungen:**
-    • **Min./Max. SOL** — Bereich der Kaufbeträge pro Wallet
-    • **Gesamtlimit** — optionale Obergrenze für das insgesamt ausgegebene SOL
-
-    { "*" }*Ausführungseinstellungen:**
-    • **Verzögerung** — zufällige Verzögerung zwischen Transaktionen
-    • **Parallelität** — parallele Ausführung (1 = sequenziell)
-    • **Slippage** — maximal akzeptable Slippage
-    • **Router** — Swap-Routing (Auto, { -jupiter }, Raydium)
-
-    { "*" }*Wichtig:**
-    • Erfordert ausreichend SOL in der Haupt-Wallet
-    • Fehlgeschlagene Käufe werden protokolliert, stoppen die Sitzung aber nicht
-    • Sub-Wallets können sitzungsübergreifend wiederverwendet werden
-hints-tools-multi-sell-title = Multi-Sell
-hints-tools-multi-sell-content =
-    { "*" }*Verkäufe über mehrere Wallets koordinieren**
-
-    Verkaufen Sie einen bestimmten Token aus allen Sub-Wallets, die ihn halten, mit automatischer SOL-Zusammenführung.
-
-    { "*" }*So funktioniert es:**
-    1. Scannt Sub-Wallets nach Token-Guthaben
-    2. Füllt Wallets mit wenig SOL optional für Gebühren auf
-    3. Führt Verkaufsaufträge mit konfigurierbarem Prozentsatz aus
-    4. Führt den Erlös in der Haupt-Wallet zusammen
-
-    { "*" }*Verkaufseinstellungen:**
-    • **Verkauf %** — Prozentsatz der zu verkaufenden Tokens (Standard 100 %)
-    • **Min. SOL für Gebühr** — für die Transaktion mindestens benötigtes SOL
-    • **Auto-Aufladung** — bei Bedarf SOL von der Haupt-Wallet übertragen
-
-    { "*" }*Aktionen nach dem Verkauf:**
-    • **SOL zusammenführen** — gesamtes SOL zurück an die Haupt-Wallet übertragen
-    • **ATAs schließen** — Token-Konten schließen, um Miete zurückzuholen (je ca. 0,0015–0,002 SOL)
-
-    { "*" }*Ausführungseinstellungen:**
-    • **Verzögerung** — zufällige Verzögerung zwischen Transaktionen
-    • **Parallelität** — parallele Ausführung
-    • **Slippage** — maximal akzeptable Slippage
-    • **Router** — bevorzugtes Swap-Routing
-
-    { "*" }*Tipps:**
-    • Die Vorschau zeigt alle Wallets, die den Token halten
-    • Wählen Sie Wallets ab, aus denen Sie nicht verkaufen möchten
-    • Die Zusammenführung erfolgt nach Abschluss aller Verkäufe
-hints-tools-trade-watcher-title = Trade-Watcher
-hints-tools-trade-watcher-content =
-    { "*" }*Trades überwachen und automatische Aktionen auslösen**
-
-    Beobachten Sie die Handelsaktivität eines Tokens und reagieren Sie automatisch auf Trades.
-
-    { "*" }*Watch-Typen:**
-    • **Kaufen bei Verkauf** — automatisch kaufen, wenn jemand verkauft (Dips mitnehmen)
-    • **Verkaufen bei Kauf** — automatisch verkaufen, wenn jemand kauft (dem Markt folgen)
-    • **Nur benachrichtigen** — Benachrichtigungen ohne Aktion
-
-    { "*" }*So funktioniert es:**
-    1. Token-Mint-Adresse eingeben
-    2. Auf „Pools suchen“ klicken, um verfügbare Liquiditätspools zu finden
-    3. Einen zu überwachenden Pool wählen (für Kauf-/Verkaufsaktionen erforderlich)
-    4. Auslösebetrag festlegen (minimale Trade-Größe, auf die reagiert wird)
-    5. Aktionsbetrag festlegen (wie viel SOL gekauft/verkauft wird)
-    6. Watch starten
-
-    { "*" }*Voraussetzungen:**
-    • Gültige Token-Mint-Adresse
-    • Pool-Auswahl (für Kauf-/Verkaufsaktionen)
-    • Ausreichendes SOL-Guthaben für die Aktionsbeträge
-
-    { "*" }*{ -telegram }-Integration:**
-    Konfigurieren Sie { -telegram } unter Konfiguration → { -telegram }, um sofort benachrichtigt zu werden, wenn Watches auslösen.
-hints-tools-wallet-consolidation-title = Wallet-Zusammenführung
-hints-tools-wallet-consolidation-content =
-    { "*" }*Sub-Wallet-Guthaben verwalten und zusammenführen**
-
-    Zeigen Sie alle Sub-Wallets an und führen Sie SOL und Tokens zusammen sowie ATA-Miete zurück in Ihre Haupt-Wallet.
-
-    { "*" }*Die Zusammenfassung zeigt:**
-    • **Sub-Wallets** — Gesamtzahl der erstellten Sub-Wallets
-    • **SOL gesamt** — kombiniertes SOL-Guthaben aller Sub-Wallets
-    • **Token-Typen** — Anzahl verschiedener gehaltener Tokens
-    • **Zurückholbare Miete** — in leeren ATAs gebundenes SOL
-
-    { "*" }*Aktionen:**
-    • **SOL übertragen** — gesamtes SOL der gewählten Wallets an die Haupt-Wallet senden
-    • **Tokens übertragen** — alle Tokens an die Haupt-Wallet senden
-    • **ATAs bereinigen** — leere Token-Konten für die Mietrückerstattung schließen
-
-    { "*" }*Tabelleninfos:**
-    • Kontrollkästchen zur Auswahl von Wallets für Stapelvorgänge
-    • Name, Adresse, SOL-Guthaben, Token-Anzahl, leere ATAs
-    • Leere Wallets sind abgedunkelt und leicht erkennbar
-
-    { "*" }*Tipps:**
-    • Nach Multi-Sell verwenden, um verbleibendes SOL einzusammeln
-    • ATAs regelmäßig bereinigen, um Miete zurückzuholen
-    • Leere Wallets können für künftige Vorgänge wiederverwendet werden
-
 ## config
 
 hints-config-overview-title = Konfiguration
@@ -432,7 +256,6 @@ hints-config-telegram-content =
     { "*" }*Das erhalten Sie:**
     • Bestätigungen von Trade-Ausführungen
     • Positionsupdates (Einstieg/Ausstieg)
-    • Trade-Watcher-Alarme
     • Fehlerbenachrichtigungen
 
     { "*" }*Datenschutz:**

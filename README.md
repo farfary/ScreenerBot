@@ -387,9 +387,8 @@ localhost port. Headless, it runs on `127.0.0.1:8080`, which you can change with
 | **Filtering**    | Passed and rejected tokens with reasons, plus filtering analytics          |
 | **Auto Trader**  | Trader controls, strategies, monitors, safety gates and loss limits        |
 | **Copy Trading** | Copy tasks, paper books, live readiness, insights and wallet comparison    |
-| **Wallets**      | Multi-wallet management and balances                                       |
+| **Wallets**      | Trading wallet and balances                                                |
 | **Transactions** | Your wallet's and watched wallets' history, with DEX classification and P&L |
-| **Tools**        | Multi-wallet buy and sell, wallet cleanup and consolidation, burn tokens, wallet generator, token analyzer, trade watcher, airdrop checker |
 | **Services**     | Service health, metrics and dependencies                                   |
 | **Events**       | Searchable system event log                                                |
 | **Config**       | Schema-driven settings editor; most changes apply without a restart        |

@@ -233,13 +233,6 @@ mod tests {
                 })),
                 "wallets.db",
             ),
-            (
-                crate::Error::Tools(crate::tools::Error::Database(DatabaseError::Migration {
-                    store: "tools.db".to_owned(),
-                    detail: "create table refused".to_owned(),
-                })),
-                "tools.db",
-            ),
         ];
         for (source, database) in cases {
             let cause = source.to_string();

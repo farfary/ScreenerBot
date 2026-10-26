@@ -31,60 +31,6 @@ impl FeatureStatus {
     }
 }
 
-/// Feature flags for all tools in the Tools page.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ToolFeatures {
-    pub wallet_cleanup: FeatureStatus,
-    pub burn_tokens: FeatureStatus,
-    pub token_analyzer: FeatureStatus,
-    pub create_token: FeatureStatus,
-    pub trade_watcher: FeatureStatus,
-    pub holder_watch: FeatureStatus,
-    pub multi_buy: FeatureStatus,
-    pub multi_sell: FeatureStatus,
-    pub wallet_consolidation: FeatureStatus,
-    pub airdrop_checker: FeatureStatus,
-    pub wallet_generator: FeatureStatus,
-}
-
-impl Default for ToolFeatures {
-    fn default() -> Self {
-        Self {
-            wallet_cleanup: FeatureStatus::Available,
-            burn_tokens: FeatureStatus::ComingSoon,
-            token_analyzer: FeatureStatus::ComingSoon,
-            create_token: FeatureStatus::ComingSoon,
-            trade_watcher: FeatureStatus::ComingSoon,
-            holder_watch: FeatureStatus::ComingSoon,
-            multi_buy: FeatureStatus::ComingSoon,
-            multi_sell: FeatureStatus::ComingSoon,
-            wallet_consolidation: FeatureStatus::ComingSoon,
-            airdrop_checker: FeatureStatus::ComingSoon,
-            wallet_generator: FeatureStatus::ComingSoon,
-        }
-    }
-}
-
-impl ToolFeatures {
-    /// Get the status of a tool by its ID.
-    pub fn get_status(&self, tool_id: &str) -> FeatureStatus {
-        match tool_id {
-            "wallet-cleanup" => self.wallet_cleanup,
-            "burn-tokens" => self.burn_tokens,
-            "token-analyzer" => self.token_analyzer,
-            "create-token" => self.create_token,
-            "trade-watcher" => self.trade_watcher,
-            "token-watch" | "holder-watch" => self.holder_watch,
-            "buy-multi-wallets" => self.multi_buy,
-            "sell-multi-wallets" => self.multi_sell,
-            "wallet-consolidation" => self.wallet_consolidation,
-            "airdrop-checker" => self.airdrop_checker,
-            "wallet-generator" => self.wallet_generator,
-            _ => FeatureStatus::Disabled,
-        }
-    }
-}
-
 /// Feature flags for trading features.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TradingFeatures {
@@ -150,7 +96,6 @@ impl Default for IntegrationFeatures {
 /// All feature flags for ScreenerBot.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Features {
-    pub tools: ToolFeatures,
     pub trading: TradingFeatures,
     pub integrations: IntegrationFeatures,
     pub version: String,
@@ -159,7 +104,6 @@ pub struct Features {
 impl Default for Features {
     fn default() -> Self {
         Self {
-            tools: ToolFeatures::default(),
             trading: TradingFeatures::default(),
             integrations: IntegrationFeatures::default(),
             version: env!("CARGO_PKG_VERSION").to_string(),

@@ -6,7 +6,6 @@ hints-category-trader = Trader tự động
 hints-category-services = Dịch vụ
 hints-category-wallet = Ví
 hints-category-wallets = Các ví
-hints-category-tools = Công cụ
 hints-category-config = Cấu hình
 hints-category-config-telegram = { -telegram }
 hints-category-token-details = Chi tiết token
@@ -218,181 +217,6 @@ hints-wallets-secondary-content =
 
     Giao dịch tự động không dùng ví thứ cấp trừ khi được cấu hình rõ ràng.
 
-## tools
-
-hints-tools-wallet-cleanup-title = Công cụ dọn dẹp ví
-hints-tools-wallet-cleanup-content =
-    { "*" }*Thu hồi SOL từ các tài khoản token trống**
-
-    { "*" }*ATA là gì?**
-    Associated Token Account (ATA) là các tài khoản Solana chứa token của bạn. Mỗi token bạn tương tác sẽ tạo một ATA giữ khoản đặt cọc rent: khoảng 0.0015 SOL với tài khoản mở hiện nay, khoảng 0.002 SOL với tài khoản cũ hơn.
-
-    { "*" }*Vì sao nên dọn dẹp ATA trống?**
-    • Thu hồi phí rent (~0.0015–0.002 SOL cho mỗi ATA)
-    • Trader hoạt động nhiều có thể tích lũy hàng trăm ATA trống
-    • 100 ATA trống = ~0.15–0.2 SOL có thể thu hồi
-
-    { "*" }*Cách hoạt động:**
-    • Quét ví để tìm các ATA có số dư bằng 0
-    • Hiển thị tổng lượng SOL có thể thu hồi
-    • Đóng các tài khoản trống để lấy lại phí rent
-
-    { "*" }*Tự động dọn dẹp:**
-    Khi được bật, hệ thống tự động quét và đóng các ATA trống mỗi 5 phút ở chế độ nền.
-
-    { "*" }*Lưu ý quan trọng:**
-    • Chỉ đóng các tài khoản có số dư đúng bằng 0
-    • Các lần đóng thất bại được lưu đệm để tránh thử lại liên tục
-    • Ví lớn có thể cần dọn dẹp nhiều lượt
-hints-tools-burn-tokens-title = Công cụ burn token
-hints-tools-burn-tokens-content =
-    { "*" }*Hủy vĩnh viễn token**
-
-    Burn token sẽ xóa vĩnh viễn chúng khỏi ví của bạn và khỏi lưu thông.
-
-    { "*" }*Điều xảy ra khi burn:**
-    • Token được gửi đến một địa chỉ burn (không thể khôi phục)
-    • Số dư token về 0
-    • Sau đó có thể đóng ATA qua Dọn dẹp ví để thu hồi ~0.0015–0.002 SOL phí rent
-
-    { "*" }*Các loại token:**
-    • **Vị thế đang mở** - Không thể burn (giao dịch đang hoạt động)
-    • **Vị thế đã đóng** - Phần còn lại từ các giao dịch cũ
-    • **Có giá trị** - Token có thanh khoản (nên cân nhắc bán thay vì burn)
-    • **Không có thanh khoản** - Token dust/vô giá trị (có thể burn an toàn)
-
-    { "*" }*Cảnh báo:** Hành động này **không thể hoàn tác**. Token đã burn không thể khôi phục trong bất kỳ trường hợp nào.
-
-    { "*" }*Sau khi burn:** Hãy chạy Dọn dẹp ví để đóng ATA trống và thu hồi phí rent SOL.
-hints-tools-wallet-generator-title = Công cụ tạo ví
-hints-tools-wallet-generator-content =
-    { "*" }*Tạo keypair Solana mới**
-
-    Tạo ví mới một cách an toàn trên thiết bị của bạn.
-
-    { "*" }*Tính năng:**
-    • Tạo keypair an toàn về mặt mật mã
-    • Tiền tố địa chỉ vanity tùy chọn (ví dụ: "SOL...")
-    • Xuất dưới dạng base58 hoặc mảng JSON
-
-    { "*" }*Bảo mật:**
-    • Khóa được tạo cục bộ
-    • Không bao giờ truyền qua mạng
-    • Luôn sao lưu khóa an toàn
-hints-tools-multi-buy-title = Công cụ mua nhiều lần
-hints-tools-multi-buy-content =
-    { "*" }*Phối hợp mua trên nhiều ví**
-
-    Thực hiện lệnh mua trên nhiều ví phụ với số lượng ngẫu nhiên để mô phỏng hoạt động mua tự nhiên.
-
-    { "*" }*Cách hoạt động:**
-    1. Tạo hoặc dùng các ví phụ có sẵn
-    2. Phân phối SOL từ ví chính sang các ví phụ
-    3. Thực hiện lệnh mua với số lượng và độ trễ ngẫu nhiên
-    4. Mỗi ví mua độc lập với chữ ký riêng
-
-    { "*" }*Cài đặt ví:**
-    • **Số lượng ví** — số ví phụ sẽ dùng (2-10)
-    • **SOL dự phòng** — SOL giữ lại cho mỗi ví để trả phí (~0.015)
-
-    { "*" }*Cài đặt số lượng:**
-    • **SOL tối thiểu/tối đa** — khoảng số lượng mua cho mỗi ví
-    • **Giới hạn tổng** — mức trần tùy chọn cho tổng SOL sẽ chi
-
-    { "*" }*Cài đặt thực thi:**
-    • **Độ trễ** — độ trễ ngẫu nhiên giữa các giao dịch
-    • **Số luồng đồng thời** — thực thi song song (1 = tuần tự)
-    • **Trượt giá** — mức trượt giá tối đa chấp nhận được
-    • **Router** — định tuyến swap (Auto, { -jupiter }, Raydium)
-
-    { "*" }*Lưu ý quan trọng:**
-    • Cần đủ SOL trong ví chính
-    • Các lệnh mua thất bại được ghi nhật ký nhưng không dừng phiên
-    • Có thể dùng lại các ví phụ qua nhiều phiên
-hints-tools-multi-sell-title = Công cụ bán nhiều lần
-hints-tools-multi-sell-content =
-    { "*" }*Phối hợp bán trên nhiều ví**
-
-    Bán token từ tất cả ví phụ đang nắm giữ một token cụ thể, kèm tự động gộp SOL.
-
-    { "*" }*Cách hoạt động:**
-    1. Quét các ví phụ để xem số dư token
-    2. Tùy chọn nạp thêm cho các ví ít SOL để trả phí
-    3. Thực hiện lệnh bán với phần trăm có thể cấu hình
-    4. Gộp số tiền thu được về ví chính
-
-    { "*" }*Cài đặt bán:**
-    • **% bán** — phần trăm token cần bán (mặc định 100%)
-    • **SOL tối thiểu cho phí** — SOL tối thiểu cần cho giao dịch
-    • **Tự động nạp thêm** — chuyển SOL từ ví chính nếu cần
-
-    { "*" }*Hành động sau khi bán:**
-    • **Gộp SOL** — chuyển toàn bộ SOL về ví chính
-    • **Đóng ATA** — đóng tài khoản token để thu hồi phí rent (~0.0015–0.002 SOL mỗi tài khoản)
-
-    { "*" }*Cài đặt thực thi:**
-    • **Độ trễ** — độ trễ ngẫu nhiên giữa các giao dịch
-    • **Số luồng đồng thời** — thực thi song song
-    • **Trượt giá** — mức trượt giá tối đa chấp nhận được
-    • **Router** — tùy chọn định tuyến swap
-
-    { "*" }*Mẹo:**
-    • Phần xem trước hiển thị tất cả ví đang nắm giữ token
-    • Bỏ chọn các ví bạn không muốn bán
-    • Việc gộp số dư diễn ra sau khi tất cả lệnh bán hoàn tất
-hints-tools-trade-watcher-title = Công cụ Trade Watcher
-hints-tools-trade-watcher-content =
-    { "*" }*Giám sát giao dịch và kích hoạt hành động tự động**
-
-    Theo dõi hoạt động giao dịch của một token và tự động phản ứng khi có giao dịch xảy ra.
-
-    { "*" }*Các loại theo dõi:**
-    • **Mua khi có bán** — tự động mua khi có người bán (bắt đáy)
-    • **Bán khi có mua** — tự động bán khi có người mua (đi theo thị trường)
-    • **Chỉ thông báo** — nhận cảnh báo mà không thực hiện hành động
-
-    { "*" }*Cách hoạt động:**
-    1. Nhập địa chỉ mint của token
-    2. Nhấp "Tìm pool" để tìm các pool thanh khoản khả dụng
-    3. Chọn một pool để giám sát (bắt buộc với hành động mua/bán)
-    4. Đặt số lượng kích hoạt (quy mô giao dịch tối thiểu để phản ứng)
-    5. Đặt số lượng thực hiện (mua/bán bao nhiêu SOL)
-    6. Bắt đầu theo dõi
-
-    { "*" }*Yêu cầu:**
-    • Địa chỉ mint của token hợp lệ
-    • Đã chọn pool (cho hành động mua/bán)
-    • Đủ số dư SOL cho các số lượng thực hiện
-
-    { "*" }*Tích hợp { -telegram }:**
-    Cấu hình { -telegram } trong Cấu hình → { -telegram } để nhận thông báo tức thì khi các lượt theo dõi được kích hoạt.
-hints-tools-wallet-consolidation-title = Công cụ gộp số dư ví
-hints-tools-wallet-consolidation-content =
-    { "*" }*Quản lý và gộp tiền trong các ví phụ**
-
-    Xem tất cả ví phụ, gộp SOL, token và thu hồi phí rent ATA về ví chính của bạn.
-
-    { "*" }*Phần tóm tắt hiển thị:**
-    • **Ví phụ** — tổng số ví phụ đã tạo
-    • **Tổng SOL** — tổng số dư SOL của tất cả ví phụ
-    • **Số loại token** — số token khác nhau đang nắm giữ
-    • **Phí rent có thể thu hồi** — SOL bị khóa trong các ATA trống
-
-    { "*" }*Thao tác:**
-    • **Chuyển SOL** — chuyển toàn bộ SOL từ các ví đã chọn về ví chính
-    • **Chuyển token** — chuyển toàn bộ token về ví chính
-    • **Dọn dẹp ATA** — đóng các tài khoản token trống để hoàn phí rent
-
-    { "*" }*Thông tin bảng:**
-    • Hộp chọn để chọn ví cho thao tác hàng loạt
-    • Tên, địa chỉ, số dư SOL, số token, ATA trống
-    • Các ví trống được làm mờ để dễ nhận biết
-
-    { "*" }*Mẹo:**
-    • Dùng sau Bán nhiều lần để thu gom SOL còn lại
-    • Thường xuyên dọn dẹp ATA để thu hồi phí rent
-    • Có thể dùng lại các ví trống cho các thao tác sau
-
 ## config
 
 hints-config-overview-title = Cấu hình
@@ -432,7 +256,6 @@ hints-config-telegram-content =
     { "*" }*Bạn sẽ nhận được:**
     • Xác nhận thực hiện giao dịch
     • Cập nhật vị thế (vào/thoát lệnh)
-    • Cảnh báo Trade Watcher
     • Thông báo lỗi
 
     { "*" }*Quyền riêng tư:**

@@ -18,11 +18,6 @@
  *   onboarding card while no task exists.
  * - Transactions shows the setup notice in place of its table and requests no
  *   transaction or wallet route, so no refresh failure is raised.
- * - Tools shows the setup notice in place of a wallet-backed tool and keeps its
- *   actions visible, disabled with the reason. A tool action wears a shared button
- *   variant (`btn-primary`, `btn-success`, `btn-danger`), so its disabled state drops
- *   to the neutral surface; the bare `primary`/`success` classes the tools once used
- *   styled nothing, and a disabled action looked like an enabled one.
  * - Home shows no wallet figure: the worth the API cannot know arrives as null and
  *   every portfolio, P&L and exposure value reads "—", never a measured zero.
  *
@@ -31,7 +26,7 @@
 
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync } from "node:fs";
+import { readFileSync } from "node:fs";
 
 import { chromium } from "playwright";
 
@@ -39,8 +34,6 @@ import { serveDashboard, PAGE_READY } from "../lib/dashboard_host.mjs";
 import { createApiHandler, FIXTURES_ROOT, loadIndex } from "../lib/dashboard_fixtures.mjs";
 
 const WAIT_MS = 15000;
-const TOOLS_SCRIPTS = new URL("../../src/webserver/templates/scripts/pages/tools", import.meta.url)
-  .pathname;
 const REASON = "Explore Mode runs without a wallet or RPC. Complete setup to connect them.";
 
 const fixture = (path) => JSON.parse(readFileSync(`${FIXTURES_ROOT}/${path}`, "utf8"));
@@ -159,46 +152,6 @@ test("Transactions shows the setup notice and reads no transaction route", async
     []
   );
   assert.equal(await page.locator(".toast").count(), 0);
-});
-
-test("Tools gates a wallet-backed tool with the setup notice", async (t) => {
-  const { page, close } = await openExplore("tools");
-  t.after(close);
-
-  const gate = page.locator("#tools-content .setup-gate");
-  await gate.waitFor();
-  assert.equal(await gate.locator(".state-view-title").textContent(), "This tool needs a wallet");
-  assert.equal(await gate.locator(".state-view-message").textContent(), REASON);
-  const scan = page.locator("#tool-actions #scan-atas-btn");
-  assert.equal(await scan.isDisabled(), true);
-  assert.equal(await scan.getAttribute("title"), REASON);
-  // Disabled, the filled action drops to the neutral surface and muted text.
-  const [disabled, enabled] = await scan.evaluate((button) => {
-    // Read the settled state of each, not a colour transition between them.
-    button.style.transition = "none";
-    const look = () => [getComputedStyle(button).backgroundColor, getComputedStyle(button).color];
-    const before = look();
-    button.disabled = false;
-    const after = look();
-    button.disabled = true;
-    return [before, after];
-  });
-  assert.notEqual(disabled[0], enabled[0], "a disabled tool action drops its filled surface");
-  assert.notEqual(disabled[1], enabled[1], "a disabled tool action mutes its label");
-});
-
-test("tool actions wear the shared button variants", () => {
-  const found = [];
-  for (const name of readdirSync(TOOLS_SCRIPTS)) {
-    readFileSync(`${TOOLS_SCRIPTS}/${name}`, "utf8")
-      .split("\n")
-      .forEach((line, index) => {
-        if (/class="btn (?:primary|success|danger|warning)\b/.test(line)) {
-          found.push(`${name}:${index + 1}`);
-        }
-      });
-  }
-  assert.deepEqual(found, []);
 });
 
 test("Home shows no wallet figure without a wallet", async (t) => {

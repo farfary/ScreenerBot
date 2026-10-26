@@ -184,7 +184,8 @@ pub fn parse_config_document(raw: &str) -> Result<ParsedConfig> {
     let legacy_ai = super::migrate::migrate_legacy_sections(raw, &mut config)?;
     let implied = implied.apply(&mut config);
 
-    // Ensure all navigation tabs are present (handles migrations like wallet -> wallets, adds new tabs like tools)
+    // Normalize the navigation tabs: renamed ids migrate (wallet -> wallets), new
+    // default tabs are added and removed tabs are dropped.
     config.gui.dashboard.navigation.tabs =
         crate::config::schemas::ensure_all_tabs_present(config.gui.dashboard.navigation.tabs);
 

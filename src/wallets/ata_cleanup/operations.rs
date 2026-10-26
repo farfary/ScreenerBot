@@ -11,14 +11,10 @@ use chrono::Utc;
 
 use crate::chains::adapter;
 use crate::logger::{self, LogTag};
-use crate::utils::get_wallet_address;
 use crate::wallets::Error;
 
-use super::database::{
-    get_excluded_atas_for_wallet, get_failed_atas_for_wallet, is_ata_failed, remove_failed_ata,
-    upsert_failed_ata,
-};
-use super::types::{AtaCleanupResult, AtaCleanupStats, AtaInfo};
+use super::database::{get_excluded_atas_for_wallet, remove_failed_ata, upsert_failed_ata};
+use super::types::{AtaCleanupResult, AtaInfo};
 
 // =============================================================================
 // SCAN OPERATIONS
@@ -230,112 +226,4 @@ pub async fn cleanup_empty_atas(wallet_address: &str) -> Result<AtaCleanupResult
     );
 
     Ok(result)
-}
-
-// =============================================================================
-// CACHE OPERATIONS
-// =============================================================================
-
-/// Get the count of failed ATAs in cache
-pub fn get_failed_ata_count() -> usize {
-    match get_wallet_address() {
-        Ok(wallet_address) => get_failed_atas_for_wallet(&wallet_address)
-            .map(|rows| rows.len())
-            .unwrap_or_default(),
-        Err(_) => 0,
-    }
-}
-
-/// Check if an ATA is in the failed cache
-pub fn is_ata_in_failed_cache(ata_address: &str) -> bool {
-    is_ata_failed(ata_address).unwrap_or_default()
-}
-
-/// Clear all failed ATAs from cache (force retry)
-///
-/// This is async for backward compatibility with the old API
-pub async fn clear_failed_ata_cache() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let wallet_address = get_wallet_address()
-        .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
-
-    let failed_atas = get_failed_atas_for_wallet(&wallet_address)
-        .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
-
-    let count = failed_atas.len();
-
-    for ata in failed_atas {
-        if let Err(e) = remove_failed_ata(&ata.ata_address) {
-            logger::error(
-                LogTag::Wallet,
-                &format!("Failed to remove ATA from cache: {e}"),
-            );
-        }
-    }
-
-    logger::info(
-        LogTag::Wallet,
-        &format!(
-            "Cleared {} failed ATAs from cache - will retry all ATAs",
-            count
-        ),
-    );
-
-    Ok(())
-}
-
-// =============================================================================
-// STATS
-// =============================================================================
-
-/// Global stats tracking (in-memory for current session)
-static STATS: std::sync::LazyLock<std::sync::Mutex<AtaCleanupStats>> =
-    std::sync::LazyLock::new(|| std::sync::Mutex::new(AtaCleanupStats::default()));
-
-/// Update global cleanup stats
-pub fn update_stats(result: &AtaCleanupResult) {
-    if let Ok(mut stats) = STATS.lock() {
-        stats.total_closed += result.closed_count;
-        stats.total_rent_reclaimed += result.rent_reclaimed;
-        stats.failed_attempts += result.failed_count;
-        stats.last_cleanup_time = Some(Utc::now().format("%Y-%m-%d %H:%M:%S UTC").to_string());
-    }
-}
-
-/// Get current cleanup statistics
-pub fn get_cleanup_stats() -> AtaCleanupStats {
-    STATS.lock().map(|stats| stats.clone()).unwrap_or_default()
-}
-
-/// Get comprehensive ATA status for the wallet
-pub async fn get_ata_status() -> Result<String, Error> {
-    let wallet_address = get_wallet_address().map_err(|e| Error::Dependency {
-        dependency: "config",
-        detail: e.to_string(),
-    })?;
-
-    let all_atas = scan_wallet_atas(&wallet_address).await?;
-    let empty_count = all_atas.iter().filter(|ata| ata.is_empty()).count();
-    let non_empty_count = all_atas.len() - empty_count;
-    let failed_count = get_failed_ata_count();
-    let stats = get_cleanup_stats();
-    let potential_rent = adapter().raw_to_native(
-        all_atas
-            .iter()
-            .filter(|ata| ata.is_empty())
-            .map(|ata| ata.lamports)
-            .sum(),
-    );
-
-    let status = format!(
-        "ATA Status - Total: {}, Empty: {}, Active: {}, Failed Cache: {}, Total Closed: {}, Rent Reclaimed: {:.6} SOL, Potential: {:.6} SOL",
-        all_atas.len(),
-        empty_count,
-        non_empty_count,
-        failed_count,
-        stats.total_closed,
-        stats.total_rent_reclaimed,
-        potential_rent
-    );
-
-    Ok(status)
 }

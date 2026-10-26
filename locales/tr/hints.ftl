@@ -6,7 +6,6 @@ hints-category-trader = Otomatik Trader
 hints-category-services = Hizmetler
 hints-category-wallet = Cüzdan
 hints-category-wallets = Cüzdanlar
-hints-category-tools = Araçlar
 hints-category-config = Yapılandırma
 hints-category-config-telegram = { -telegram }
 hints-category-token-details = Token Ayrıntıları
@@ -218,181 +217,6 @@ hints-wallets-secondary-content =
 
     İkincil cüzdanlar, açıkça yapılandırılmadıkça otomatik işlem tarafından kullanılmaz.
 
-## tools
-
-hints-tools-wallet-cleanup-title = Cüzdan Temizleme Aracı
-hints-tools-wallet-cleanup-content =
-    { "*" }*Boş Token Hesaplarından SOL Geri Alın**
-
-    { "*" }*ATA nedir?**
-    İlişkili Token Hesapları (ATA), tokenlarınızı tutan Solana hesaplarıdır. Etkileşime girdiğiniz her token, bir kira (rent) depozitosu tutan bir ATA oluşturur: şimdi açılan hesaplarda ~0,0015 SOL, eski hesaplarda ~0,002 SOL.
-
-    { "*" }*Boş ATA'lar neden temizlenmeli?**
-    • Kirayı geri alın (ATA başına ~0,0015–0,002 SOL)
-    • Aktif trader'larda yüzlerce boş ATA birikebilir
-    • 100 boş ATA = geri alınabilir ~0,15–0,2 SOL
-
-    { "*" }*Nasıl çalışır:**
-    • Cüzdanınızda bakiyesi sıfır olan ATA'ları tarar
-    • Geri alınabilir toplam SOL miktarını gösterir
-    • Kirayı geri almak için boş hesapları kapatır
-
-    { "*" }*Otomatik Temizlik:**
-    Etkinleştirildiğinde boş ATA'ları arka planda her 5 dakikada bir otomatik olarak tarar ve kapatır.
-
-    { "*" }*Önemli:**
-    • Yalnızca bakiyesi tam olarak 0 olan hesapları kapatır
-    • Başarısız kapatmalar, tekrar deneme yığılmasını önlemek için önbelleğe alınır
-    • Büyük cüzdanlar birden fazla temizlik turu gerektirebilir
-hints-tools-burn-tokens-title = Token Yakma Aracı
-hints-tools-burn-tokens-content =
-    { "*" }*Tokenları Kalıcı Olarak Yok Edin**
-
-    Token yakmak, tokenları cüzdanınızdan ve dolaşımdan kalıcı olarak kaldırır.
-
-    { "*" }*Yaktığınızda ne olur:**
-    • Tokenlar bir yakma adresine gönderilir (geri alınamaz)
-    • Token bakiyesi sıfır olur
-    • ATA daha sonra Cüzdan Temizleme ile kapatılıp ~0,0015–0,002 SOL kira geri alınabilir
-
-    { "*" }*Token Kategorileri:**
-    • **Açık Pozisyonlar** - Yakılamaz (aktif işlemler)
-    • **Kapalı Pozisyonlar** - Geçmiş işlemlerden kalanlar
-    • **Değerli** - Likiditesi olan tokenlar (bunun yerine satmayı düşünün)
-    • **Sıfır Likidite** - Toz/değersiz tokenlar (yakmak güvenli)
-
-    { "*" }*Uyarı:** Bu eylem **geri alınamaz**. Yakılan tokenlar hiçbir koşulda geri getirilemez.
-
-    { "*" }*Yaktıktan sonra:** Boş ATA'ları kapatıp SOL kirasını geri almak için Cüzdan Temizleme'yi çalıştırın.
-hints-tools-wallet-generator-title = Cüzdan Oluşturucu Aracı
-hints-tools-wallet-generator-content =
-    { "*" }*Yeni Solana Anahtar Çiftleri Oluşturun**
-
-    Cihazınızda güvenli şekilde yeni cüzdanlar oluşturun.
-
-    { "*" }*Özellikler:**
-    • Kriptografik olarak güvenli anahtar çiftleri üretir
-    • İsteğe bağlı özel (vanity) adres öneki (örn. "SOL...")
-    • base58 veya JSON dizisi olarak dışa aktarım
-
-    { "*" }*Güvenlik:**
-    • Anahtarlar yerel olarak üretilir
-    • Ağ üzerinden asla iletilmez
-    • Anahtarları her zaman güvenli şekilde yedekleyin
-hints-tools-multi-buy-title = Çoklu Alım Aracı
-hints-tools-multi-buy-content =
-    { "*" }*Birden Fazla Cüzdanda Alımları Koordine Edin**
-
-    Organik alım etkinliğini taklit etmek için rastgele miktarlarla birden fazla alt cüzdanda alım emirleri yürütün.
-
-    { "*" }*Nasıl çalışır:**
-    1. Alt cüzdanlar oluşturur veya mevcut olanları kullanır
-    2. Ana cüzdandan alt cüzdanlara SOL dağıtır
-    3. Rastgele miktarlar ve gecikmelerle alım emirlerini yürütür
-    4. Her cüzdan benzersiz imzalarla bağımsız olarak alım yapar
-
-    { "*" }*Cüzdan Ayarları:**
-    • **Cüzdan Sayısı** — kullanılacak alt cüzdan sayısı (2-10)
-    • **SOL Tamponu** — ücretler için cüzdan başına ayrılan SOL (~0,015)
-
-    { "*" }*Miktar Ayarları:**
-    • **Min/Maks SOL** — cüzdan başına alım miktarı aralığı
-    • **Toplam Limit** — harcanacak toplam SOL için isteğe bağlı üst sınır
-
-    { "*" }*Yürütme Ayarları:**
-    • **Gecikme** — işlemler arasında rastgele gecikme
-    • **Eşzamanlılık** — paralel yürütme (1 = sıralı)
-    • **Kayma** — kabul edilebilir azami kayma
-    • **Yönlendirici** — takas yönlendirmesi (Otomatik, { -jupiter }, Raydium)
-
-    { "*" }*Önemli:**
-    • Ana cüzdanda yeterli SOL gerekir
-    • Başarısız alımlar günlüğe kaydedilir ancak oturumu durdurmaz
-    • Alt cüzdanlar oturumlar arasında yeniden kullanılabilir
-hints-tools-multi-sell-title = Çoklu Satım Aracı
-hints-tools-multi-sell-content =
-    { "*" }*Birden Fazla Cüzdanda Satışları Koordine Edin**
-
-    Belirli bir tokenı tutan tüm alt cüzdanlardan otomatik SOL birleştirmeyle satış yapın.
-
-    { "*" }*Nasıl çalışır:**
-    1. Alt cüzdanlarda token bakiyelerini tarar
-    2. İsteğe bağlı olarak ücret için SOL'u düşük cüzdanlara bakiye yükler
-    3. Yapılandırılabilir yüzdeyle satış emirlerini yürütür
-    4. Gelirleri ana cüzdanda birleştirir
-
-    { "*" }*Satış Ayarları:**
-    • **Satış %** — satılacak token yüzdesi (varsayılan %100)
-    • **Ücret için Min SOL** — işlem için gereken asgari SOL
-    • **Otomatik Bakiye Yükleme** — gerekirse ana cüzdandan SOL aktar
-
-    { "*" }*Satış Sonrası Eylemler:**
-    • **SOL'u Birleştir** — tüm SOL'u ana cüzdana geri aktar
-    • **ATA'ları Kapat** — kirayı geri almak için token hesaplarını kapat (her biri ~0,0015–0,002 SOL)
-
-    { "*" }*Yürütme Ayarları:**
-    • **Gecikme** — işlemler arasında rastgele gecikme
-    • **Eşzamanlılık** — paralel yürütme
-    • **Kayma** — kabul edilebilir azami kayma
-    • **Yönlendirici** — takas yönlendirme tercihi
-
-    { "*" }*İpuçları:**
-    • Önizleme, tokenı tutan tüm cüzdanları gösterir
-    • Satış yapmak istemediğiniz cüzdanların işaretini kaldırın
-    • Birleştirme tüm satışlar tamamlandıktan sonra yapılır
-hints-tools-trade-watcher-title = İşlem İzleyici Aracı
-hints-tools-trade-watcher-content =
-    { "*" }*İşlemleri İzleyin ve Otomatik Eylemleri Tetikleyin**
-
-    Bir tokenın işlem etkinliğini izleyin ve işlemler gerçekleştiğinde otomatik olarak tepki verin.
-
-    { "*" }*İzleme Türleri:**
-    • **Satışta Al** — biri sattığında otomatik al (düşüşleri yakala)
-    • **Alımda Sat** — biri aldığında otomatik sat (piyasayı takip et)
-    • **Yalnızca Bildir** — işlem yapmadan uyarı al
-
-    { "*" }*Nasıl çalışır:**
-    1. Bir token mint adresi girin
-    2. Mevcut likidite havuzlarını bulmak için "Havuz Ara"ya tıklayın
-    3. İzlenecek bir havuz seçin (alım/satım eylemleri için gerekli)
-    4. Tetikleyici miktarını belirleyin (tepki verilecek asgari işlem boyutu)
-    5. Eylem miktarını belirleyin (ne kadar SOL alınacak/satılacak)
-    6. İzlemeyi başlatın
-
-    { "*" }*Gereksinimler:**
-    • Geçerli token mint adresi
-    • Havuz seçimi (alım/satım eylemleri için)
-    • Eylem miktarları için yeterli SOL bakiyesi
-
-    { "*" }*{ -telegram } Entegrasyonu:**
-    İzlemeler tetiklendiğinde anında bildirim almak için { -telegram } ayarlarını Yapılandırma → { -telegram } bölümünde yapın.
-hints-tools-wallet-consolidation-title = Cüzdan Birleştirme Aracı
-hints-tools-wallet-consolidation-content =
-    { "*" }*Alt Cüzdan Fonlarını Yönetin ve Birleştirin**
-
-    Tüm alt cüzdanları görüntüleyin; SOL'u, tokenları birleştirin ve ATA kirasını ana cüzdanınıza geri alın.
-
-    { "*" }*Özet Şunları Gösterir:**
-    • **Alt cüzdanlar** — oluşturulan alt cüzdanların toplam sayısı
-    • **Toplam SOL** — tüm alt cüzdanlardaki birleşik SOL bakiyesi
-    • **Token Türleri** — tutulan farklı token sayısı
-    • **Geri Alınabilir Kira** — boş ATA'larda kilitli SOL
-
-    { "*" }*Eylemler:**
-    • **SOL Aktar** — seçili cüzdanlardaki tüm SOL'u ana cüzdana taşı
-    • **Token Aktar** — tüm tokenları ana cüzdana taşı
-    • **ATA'ları Temizle** — kira iadesi için boş token hesaplarını kapat
-
-    { "*" }*Tablo Bilgisi:**
-    • Toplu işlemler için cüzdan seçmek üzere onay kutusu
-    • Ad, adres, SOL bakiyesi, token sayısı, boş ATA'lar
-    • Boş cüzdanlar kolay ayırt edilmesi için soluk gösterilir
-
-    { "*" }*İpuçları:**
-    • Kalan SOL'u toplamak için Çoklu Satım'dan sonra kullanın
-    • Kirayı geri almak için ATA'ları düzenli olarak temizleyin
-    • Boş cüzdanlar gelecekteki operasyonlar için yeniden kullanılabilir
-
 ## config
 
 hints-config-overview-title = Yapılandırma
@@ -432,7 +256,6 @@ hints-config-telegram-content =
     { "*" }*Alacaklarınız:**
     • İşlem yürütme onayları
     • Pozisyon güncellemeleri (giriş/çıkış)
-    • İşlem İzleyici uyarıları
     • Hata bildirimleri
 
     { "*" }*Gizlilik:**

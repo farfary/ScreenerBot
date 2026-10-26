@@ -18,7 +18,7 @@ pub use balances::{
 };
 pub use keypair::{
     address_from_encrypted_key, address_from_private_key, decrypt_to_keypair, export_private_key,
-    generate_and_encrypt_keypair, generate_keypair, generate_keypair_strings,
+    generate_and_encrypt_keypair, generate_keypair,
     generate_wallet_material, import_and_encrypt, import_wallet_material, keypair_to_address,
     parse_private_key, parse_pubkey_safe, validate_address,
 };

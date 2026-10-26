@@ -48,7 +48,6 @@ pub mod strategies;
 pub mod swaps;
 pub mod telegram;
 pub mod tokens;
-pub mod tools;
 pub mod trader;
 pub mod transactions;
 pub mod utils;

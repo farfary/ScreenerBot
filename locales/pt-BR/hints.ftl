@@ -11,7 +11,6 @@ hints-category-trader = Trader automático
 hints-category-services = Serviços
 hints-category-wallet = Carteira
 hints-category-wallets = Carteiras
-hints-category-tools = Ferramentas
 hints-category-config = Configurações
 hints-category-config-telegram = { -telegram }
 hints-category-token-details = Detalhes do token
@@ -223,181 +222,6 @@ hints-wallets-secondary-content =
 
     Carteiras secundárias não são usadas pelo trading automático, a menos que sejam configuradas explicitamente.
 
-## tools
-
-hints-tools-wallet-cleanup-title = Ferramenta de limpeza de carteira
-hints-tools-wallet-cleanup-content =
-    { "*" }*Recupere SOL de contas de token vazias**
-
-    { "*" }*O que são ATAs?**
-    Associated Token Accounts (ATAs) são contas Solana que guardam seus tokens. Cada token com o qual você interage cria uma ATA que retém um depósito de rent: ~0.0015 SOL para contas abertas agora, ~0.002 SOL para as mais antigas.
-
-    { "*" }*Por que limpar ATAs vazias?**
-    • Recupere o rent (~0.0015–0.002 SOL por ATA)
-    • Traders ativos podem acumular centenas de ATAs vazias
-    • 100 ATAs vazias = ~0.15–0.2 SOL recuperáveis
-
-    { "*" }*Como funciona:**
-    • Escaneia sua carteira em busca de ATAs com saldo zero
-    • Mostra o total de SOL recuperável
-    • Fecha as contas vazias para recuperar o rent
-
-    { "*" }*Limpeza automática:**
-    Quando ativada, escaneia e fecha ATAs vazias automaticamente a cada 5 minutos em segundo plano.
-
-    { "*" }*Importante:**
-    • Só fecha contas com saldo exatamente 0
-    • Fechamentos com falha ficam em cache para evitar novas tentativas repetidas
-    • Carteiras grandes podem exigir várias passagens de limpeza
-hints-tools-burn-tokens-title = Ferramenta de queima de tokens
-hints-tools-burn-tokens-content =
-    { "*" }*Destrua tokens permanentemente**
-
-    Queimar tokens os remove permanentemente da sua carteira e da circulação.
-
-    { "*" }*O que acontece ao queimar:**
-    • Os tokens são enviados a um endereço de queima (irrecuperável)
-    • O saldo do token passa a ser zero
-    • A ATA pode então ser fechada pela Limpeza de carteira para recuperar ~0.0015–0.002 SOL de rent
-
-    { "*" }*Categorias de tokens:**
-    • **Posições abertas** - Não podem ser queimados (trades ativos)
-    • **Posições fechadas** - Resquícios de trades anteriores
-    • **Com valor** - Tokens com liquidez (considere vender em vez de queimar)
-    • **Liquidez zero** - Tokens sem valor/poeira (seguros para queimar)
-
-    { "*" }*Aviso:** Esta ação é **irreversível**. Tokens queimados não podem ser recuperados em nenhuma circunstância.
-
-    { "*" }*Depois de queimar:** Execute a Limpeza de carteira para fechar ATAs vazias e recuperar o rent em SOL.
-hints-tools-wallet-generator-title = Ferramenta de gerador de carteiras
-hints-tools-wallet-generator-content =
-    { "*" }*Gere novos pares de chaves Solana**
-
-    Crie novas carteiras com segurança no seu dispositivo.
-
-    { "*" }*Recursos:**
-    • Gera pares de chaves criptograficamente seguros
-    • Prefixo opcional de endereço personalizado (ex.: "SOL...")
-    • Exportação em base58 ou array JSON
-
-    { "*" }*Segurança:**
-    • As chaves são geradas localmente
-    • Nunca são transmitidas pela rede
-    • Sempre faça backup das chaves com segurança
-hints-tools-multi-buy-title = Ferramenta de compra múltipla
-hints-tools-multi-buy-content =
-    { "*" }*Coordene compras em várias carteiras**
-
-    Execute ordens de compra em várias subcarteiras com valores aleatórios para simular uma atividade de compra orgânica.
-
-    { "*" }*Como funciona:**
-    1. Cria ou usa subcarteiras existentes
-    2. Distribui SOL da carteira principal para as subcarteiras
-    3. Executa ordens de compra com valores e atrasos aleatórios
-    4. Cada carteira compra de forma independente, com assinaturas únicas
-
-    { "*" }*Configurações das carteiras:**
-    • **Quantidade de carteiras** — número de subcarteiras a usar (2-10)
-    • **Reserva de SOL** — SOL reservado por carteira para taxas (~0.015)
-
-    { "*" }*Configurações de valores:**
-    • **Mín./máx. de SOL** — faixa de valores de compra por carteira
-    • **Limite total** — teto opcional do total de SOL a gastar
-
-    { "*" }*Configurações de execução:**
-    • **Atraso** — atraso aleatório entre transações
-    • **Concorrência** — execução em paralelo (1 = sequencial)
-    • **Slippage** — slippage máximo aceitável
-    • **Roteador** — roteamento do swap (Auto, { -jupiter }, Raydium)
-
-    { "*" }*Importante:**
-    • Exige SOL suficiente na carteira principal
-    • Compras com falha são registradas, mas não interrompem a sessão
-    • As subcarteiras podem ser reutilizadas entre sessões
-hints-tools-multi-sell-title = Ferramenta de venda múltipla
-hints-tools-multi-sell-content =
-    { "*" }*Coordene vendas em várias carteiras**
-
-    Venda tokens de todas as subcarteiras que possuem um token específico, com consolidação automática de SOL.
-
-    { "*" }*Como funciona:**
-    1. Escaneia as subcarteiras em busca de saldos do token
-    2. Opcionalmente recarrega carteiras com pouco SOL para taxas
-    3. Executa ordens de venda com porcentagem configurável
-    4. Consolida os ganhos de volta na carteira principal
-
-    { "*" }*Configurações de venda:**
-    • **% de venda** — porcentagem de tokens a vender (padrão 100%)
-    • **Mín. de SOL para taxa** — SOL mínimo necessário para a transação
-    • **Recarga automática** — transfere SOL da carteira principal, se necessário
-
-    { "*" }*Ações após a venda:**
-    • **Consolidar SOL** — transfere todo o SOL de volta para a carteira principal
-    • **Fechar ATAs** — fecha contas de token para recuperar o rent (~0.0015–0.002 SOL cada)
-
-    { "*" }*Configurações de execução:**
-    • **Atraso** — atraso aleatório entre transações
-    • **Concorrência** — execução em paralelo
-    • **Slippage** — slippage máximo aceitável
-    • **Roteador** — preferência de roteamento do swap
-
-    { "*" }*Dicas:**
-    • A prévia mostra todas as carteiras que possuem o token
-    • Desmarque as carteiras das quais você não quer vender
-    • A consolidação acontece depois que todas as vendas terminam
-hints-tools-trade-watcher-title = Ferramenta Monitor de Trades
-hints-tools-trade-watcher-content =
-    { "*" }*Monitore trades e dispare ações automáticas**
-
-    Acompanhe a atividade de negociação de um token e reaja automaticamente quando ocorrerem trades.
-
-    { "*" }*Tipos de monitoramento:**
-    • **Comprar na venda** — compra automaticamente quando alguém vende (aproveite quedas)
-    • **Vender na compra** — vende automaticamente quando alguém compra (siga o mercado)
-    • **Somente notificar** — receba alertas sem tomar nenhuma ação
-
-    { "*" }*Como funciona:**
-    1. Informe o endereço do mint de um token
-    2. Clique em "Buscar pools" para encontrar os pools de liquidez disponíveis
-    3. Selecione um pool para monitorar (obrigatório para ações de compra/venda)
-    4. Defina o valor de gatilho (tamanho mínimo do trade para reagir)
-    5. Defina o valor da ação (quanto SOL comprar/vender)
-    6. Inicie o monitoramento
-
-    { "*" }*Requisitos:**
-    • Endereço de mint do token válido
-    • Seleção de pool (para ações de compra/venda)
-    • Saldo em SOL suficiente para os valores das ações
-
-    { "*" }*Integração com o { -telegram }:**
-    Configure o { -telegram } em Configurações → { -telegram } para receber notificações instantâneas quando os monitoramentos dispararem.
-hints-tools-wallet-consolidation-title = Ferramenta de consolidação de carteiras
-hints-tools-wallet-consolidation-content =
-    { "*" }*Gerencie e consolide os fundos das subcarteiras**
-
-    Veja todas as subcarteiras e consolide SOL, tokens e o rent das ATAs de volta na sua carteira principal.
-
-    { "*" }*O resumo mostra:**
-    • **Subcarteiras** — quantidade total de subcarteiras criadas
-    • **Total de SOL** — saldo combinado em SOL de todas as subcarteiras
-    • **Tipos de token** — número de tokens diferentes em posse
-    • **Rent recuperável** — SOL preso em ATAs vazias
-
-    { "*" }*Ações:**
-    • **Transferir SOL** — move todo o SOL das carteiras selecionadas para a principal
-    • **Transferir tokens** — move todos os tokens para a carteira principal
-    • **Limpar ATAs** — fecha contas de token vazias para reaver o rent
-
-    { "*" }*Informações da tabela:**
-    • Caixa de seleção para escolher carteiras em operações em lote
-    • Nome, endereço, saldo em SOL, quantidade de tokens, ATAs vazias
-    • Carteiras vazias aparecem esmaecidas para fácil identificação
-
-    { "*" }*Dicas:**
-    • Use depois da Venda múltipla para coletar o SOL restante
-    • Limpe as ATAs regularmente para recuperar o rent
-    • Carteiras vazias podem ser reutilizadas em operações futuras
-
 ## config
 
 hints-config-overview-title = Configurações
@@ -437,7 +261,6 @@ hints-config-telegram-content =
     { "*" }*O que você vai receber:**
     • Confirmações de execução de trades
     • Atualizações de posições (entrada/saída)
-    • Alertas do Monitor de Trades
     • Notificações de erro
 
     { "*" }*Privacidade:**

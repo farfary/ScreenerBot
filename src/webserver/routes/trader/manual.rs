@@ -220,7 +220,8 @@ pub async fn quote_preview_handler(Query(req): Query<QuotePreviewRequest>) -> Re
         .validate_address(&req.mint)
         .is_err()
     {
-        return ApiError::new(ApiErrorCode::InvalidInput, ids::ERRORS_TOOLS_MINT_INVALID)
+        return ApiError::new(ApiErrorCode::InvalidInput, ids::ERRORS_TRADE_MINT_INVALID)
+            .text_arg("mint", req.mint.clone())
             .into_response();
     }
 

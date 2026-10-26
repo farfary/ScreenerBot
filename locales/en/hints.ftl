@@ -11,7 +11,6 @@ hints-category-trader = Auto Trader
 hints-category-services = Services
 hints-category-wallet = Wallet
 hints-category-wallets = Wallets
-hints-category-tools = Tools
 hints-category-config = Config
 hints-category-config-telegram = { -telegram }
 hints-category-token-details = Token Details
@@ -223,181 +222,6 @@ hints-wallets-secondary-content =
 
     Secondary wallets are not used by auto-trading unless explicitly configured.
 
-## tools
-
-hints-tools-wallet-cleanup-title = Wallet Cleanup Tool
-hints-tools-wallet-cleanup-content =
-    { "*" }*Reclaim SOL from Empty Token Accounts**
-
-    { "*" }*What are ATAs?**
-    Associated Token Accounts (ATAs) are Solana accounts that hold your tokens. Each token you interact with creates an ATA that holds a rent deposit: ~0.0015 SOL for accounts opened now, ~0.002 SOL for older ones.
-
-    { "*" }*Why clean up empty ATAs?**
-    • Reclaim rent (~0.0015–0.002 SOL per ATA)
-    • Active traders can accumulate hundreds of empty ATAs
-    • 100 empty ATAs = ~0.15–0.2 SOL reclaimable
-
-    { "*" }*How it works:**
-    • Scans your wallet for ATAs with zero balance
-    • Shows total reclaimable SOL amount
-    • Closes empty accounts to recover rent
-
-    { "*" }*Auto Cleanup:**
-    When enabled, automatically scans and closes empty ATAs every 5 minutes in the background.
-
-    { "*" }*Important:**
-    • Only closes accounts with exactly 0 balance
-    • Failed closures are cached to avoid retry spam
-    • Large wallets may require multiple cleanup passes
-hints-tools-burn-tokens-title = Burn Tokens Tool
-hints-tools-burn-tokens-content =
-    { "*" }*Permanently Destroy Tokens**
-
-    Burning tokens permanently removes them from your wallet and from circulation.
-
-    { "*" }*What happens when you burn:**
-    • Tokens are sent to a burn address (unrecoverable)
-    • Token balance becomes zero
-    • ATA can then be closed via Wallet Cleanup to reclaim ~0.0015–0.002 SOL rent
-
-    { "*" }*Token Categories:**
-    • **Open Positions** - Cannot burn (active trades)
-    • **Closed Positions** - Leftovers from past trades
-    • **Has Value** - Tokens with liquidity (consider selling instead)
-    • **Zero Liquidity** - Dust/worthless tokens (safe to burn)
-
-    { "*" }*Warning:** This action is **irreversible**. Burned tokens cannot be recovered under any circumstances.
-
-    { "*" }*After burning:** Run Wallet Cleanup to close empty ATAs and reclaim SOL rent.
-hints-tools-wallet-generator-title = Wallet Generator Tool
-hints-tools-wallet-generator-content =
-    { "*" }*Generate New Solana Keypairs**
-
-    Create new wallets securely on your device.
-
-    { "*" }*Features:**
-    • Generates cryptographically secure keypairs
-    • Optional vanity address prefix (e.g., "SOL...")
-    • Export as base58 or JSON array
-
-    { "*" }*Security:**
-    • Keys are generated locally
-    • Never transmitted over the network
-    • Always backup keys securely
-hints-tools-multi-buy-title = Multi-Buy Tool
-hints-tools-multi-buy-content =
-    { "*" }*Coordinate Buys Across Multiple Wallets**
-
-    Execute buy orders across multiple sub-wallets with randomized amounts to simulate organic buying activity.
-
-    { "*" }*How it works:**
-    1. Creates or uses existing sub-wallets
-    2. Distributes SOL from main wallet to sub-wallets
-    3. Executes buy orders with randomized amounts and delays
-    4. Each wallet buys independently with unique signatures
-
-    { "*" }*Wallet Settings:**
-    • **Wallet Count** — number of sub-wallets to use (2-10)
-    • **SOL Buffer** — SOL reserved per wallet for fees (~0.015)
-
-    { "*" }*Amount Settings:**
-    • **Min/Max SOL** — range for buy amounts per wallet
-    • **Total Limit** — optional cap on total SOL to spend
-
-    { "*" }*Execution Settings:**
-    • **Delay** — random delay between transactions
-    • **Concurrency** — parallel execution (1 = sequential)
-    • **Slippage** — maximum acceptable slippage
-    • **Router** — swap routing (Auto, { -jupiter }, Raydium)
-
-    { "*" }*Important:**
-    • Requires sufficient SOL in main wallet
-    • Failed buys are logged but don't stop the session
-    • Sub-wallets can be reused across sessions
-hints-tools-multi-sell-title = Multi-Sell Tool
-hints-tools-multi-sell-content =
-    { "*" }*Coordinate Sells Across Multiple Wallets**
-
-    Sell tokens from all sub-wallets holding a specific token with automatic SOL consolidation.
-
-    { "*" }*How it works:**
-    1. Scans sub-wallets for token balances
-    2. Optionally tops up wallets with low SOL for fees
-    3. Executes sell orders with configurable percentage
-    4. Consolidates proceeds back to main wallet
-
-    { "*" }*Sell Settings:**
-    • **Sell %** — percentage of tokens to sell (default 100%)
-    • **Min SOL for Fee** — minimum SOL needed for transaction
-    • **Auto Topup** — transfer SOL from main if needed
-
-    { "*" }*Post-Sell Actions:**
-    • **Consolidate SOL** — transfer all SOL back to main wallet
-    • **Close ATAs** — close token accounts to reclaim rent (~0.0015–0.002 SOL each)
-
-    { "*" }*Execution Settings:**
-    • **Delay** — random delay between transactions
-    • **Concurrency** — parallel execution
-    • **Slippage** — maximum acceptable slippage
-    • **Router** — swap routing preference
-
-    { "*" }*Tips:**
-    • Preview shows all wallets holding the token
-    • Deselect wallets you don't want to sell from
-    • Consolidation happens after all sells complete
-hints-tools-trade-watcher-title = Trade Watcher Tool
-hints-tools-trade-watcher-content =
-    { "*" }*Monitor Trades & Trigger Automatic Actions**
-
-    Watch a token's trading activity and automatically react when trades occur.
-
-    { "*" }*Watch Types:**
-    • **Buy on Sell** — automatically buy when someone sells (catch dips)
-    • **Sell on Buy** — automatically sell when someone buys (follow the market)
-    • **Notify Only** — get alerts without taking action
-
-    { "*" }*How it works:**
-    1. Enter a token mint address
-    2. Click "Search Pools" to find available liquidity pools
-    3. Select a pool to monitor (required for buy/sell actions)
-    4. Set trigger amount (minimum trade size to react to)
-    5. Set action amount (how much SOL to buy/sell)
-    6. Start the watch
-
-    { "*" }*Requirements:**
-    • Valid token mint address
-    • Pool selection (for buy/sell actions)
-    • Sufficient SOL balance for action amounts
-
-    { "*" }*{ -telegram } Integration:**
-    Configure { -telegram } in Config → { -telegram } to receive instant notifications when watches trigger.
-hints-tools-wallet-consolidation-title = Wallet Consolidation Tool
-hints-tools-wallet-consolidation-content =
-    { "*" }*Manage and Consolidate Sub-Wallet Funds**
-
-    View all sub-wallets and consolidate SOL, tokens, and reclaim ATA rent back to your main wallet.
-
-    { "*" }*Summary Shows:**
-    • **Sub-wallets** — total count of created sub-wallets
-    • **Total SOL** — combined SOL balance across all sub-wallets
-    • **Token Types** — number of different tokens held
-    • **Reclaimable Rent** — SOL locked in empty ATAs
-
-    { "*" }*Actions:**
-    • **Transfer SOL** — move all SOL from selected wallets to main
-    • **Transfer Tokens** — move all tokens to main wallet
-    • **Cleanup ATAs** — close empty token accounts for rent refund
-
-    { "*" }*Table Info:**
-    • Checkbox to select wallets for batch operations
-    • Name, address, SOL balance, token count, empty ATAs
-    • Empty wallets are dimmed for easy identification
-
-    { "*" }*Tips:**
-    • Use after Multi-Sell to collect remaining SOL
-    • Regularly cleanup ATAs to reclaim rent
-    • Empty wallets can be reused for future operations
-
 ## config
 
 hints-config-overview-title = Configuration
@@ -437,7 +261,6 @@ hints-config-telegram-content =
     { "*" }*What you'll receive:**
     • Trade execution confirmations
     • Position updates (entry/exit)
-    • Trade Watcher alerts
     • Error notifications
 
     { "*" }*Privacy:**

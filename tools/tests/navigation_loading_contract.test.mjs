@@ -63,7 +63,6 @@ test("main page init hooks never block first paint", async () => {
     "transactions",
     "filtering",
     "wallets",
-    "tools",
     "assistant",
     "config",
     "trader",

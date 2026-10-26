@@ -7,8 +7,8 @@ mod failed_cache;
 mod schema;
 
 pub use failed_cache::{
-    get_excluded_atas_for_wallet, get_failed_atas_for_wallet, is_ata_failed, remove_failed_ata,
+    get_excluded_atas_for_wallet, get_failed_atas_for_wallet, remove_failed_ata,
     upsert_failed_ata, FailedAtaRow,
 };
 pub use schema::init_ata_cleanup_db;
-pub(crate) use schema::{get_connection, SCHEMA};
+pub(crate) use schema::SCHEMA;

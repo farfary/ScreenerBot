@@ -9,7 +9,6 @@ hints-category-trader = Auto Trader
 hints-category-services = Layanan
 hints-category-wallet = Dompet
 hints-category-wallets = Dompet
-hints-category-tools = Alat
 hints-category-config = Konfigurasi
 hints-category-config-telegram = { -telegram }
 hints-category-token-details = Detail Token
@@ -221,181 +220,6 @@ hints-wallets-secondary-content =
 
     Dompet sekunder tidak digunakan oleh auto-trading kecuali dikonfigurasi secara eksplisit.
 
-## tools
-
-hints-tools-wallet-cleanup-title = Alat Pembersihan Dompet
-hints-tools-wallet-cleanup-content =
-    { "*" }*Klaim Kembali SOL dari Akun Token Kosong**
-
-    { "*" }*Apa itu ATA?**
-    Associated Token Account (ATA) adalah akun Solana yang menyimpan token Anda. Setiap token yang Anda gunakan membuat ATA yang menyimpan deposit rent: ~0.0015 SOL untuk akun yang dibuka sekarang, ~0.002 SOL untuk akun yang lebih lama.
-
-    { "*" }*Mengapa membersihkan ATA kosong?**
-    • Klaim kembali rent (~0.0015–0.002 SOL per ATA)
-    • Trader aktif dapat mengumpulkan ratusan ATA kosong
-    • 100 ATA kosong = ~0.15–0.2 SOL dapat diklaim
-
-    { "*" }*Cara kerja:**
-    • Memindai dompet Anda untuk ATA dengan saldo nol
-    • Menampilkan total SOL yang dapat diklaim
-    • Menutup akun kosong untuk memulihkan rent
-
-    { "*" }*Pembersihan Otomatis:**
-    Jika diaktifkan, otomatis memindai dan menutup ATA kosong setiap 5 menit di latar belakang.
-
-    { "*" }*Penting:**
-    • Hanya menutup akun dengan saldo tepat 0
-    • Penutupan yang gagal disimpan di cache untuk menghindari retry berulang
-    • Dompet besar mungkin memerlukan beberapa kali pembersihan
-hints-tools-burn-tokens-title = Alat Burn Token
-hints-tools-burn-tokens-content =
-    { "*" }*Hancurkan Token Secara Permanen**
-
-    Burn token menghapusnya secara permanen dari dompet Anda dan dari peredaran.
-
-    { "*" }*Yang terjadi saat burn:**
-    • Token dikirim ke alamat burn (tidak dapat dipulihkan)
-    • Saldo token menjadi nol
-    • ATA kemudian dapat ditutup lewat Pembersihan Dompet untuk mengklaim kembali rent ~0.0015–0.002 SOL
-
-    { "*" }*Kategori Token:**
-    • **Posisi Terbuka** - Tidak dapat di-burn (trade aktif)
-    • **Posisi Tertutup** - Sisa dari trade sebelumnya
-    • **Bernilai** - Token dengan likuiditas (pertimbangkan menjual)
-    • **Likuiditas Nol** - Token dust/tak bernilai (aman di-burn)
-
-    { "*" }*Peringatan:** Tindakan ini **tidak dapat dibatalkan**. Token yang di-burn tidak dapat dipulihkan dalam kondisi apa pun.
-
-    { "*" }*Setelah burn:** Jalankan Pembersihan Dompet untuk menutup ATA kosong dan mengklaim kembali rent SOL.
-hints-tools-wallet-generator-title = Alat Generator Dompet
-hints-tools-wallet-generator-content =
-    { "*" }*Buat Keypair Solana Baru**
-
-    Buat dompet baru dengan aman di perangkat Anda.
-
-    { "*" }*Fitur:**
-    • Menghasilkan keypair yang aman secara kriptografis
-    • Prefiks alamat vanity opsional (mis., "SOL...")
-    • Ekspor sebagai base58 atau array JSON
-
-    { "*" }*Keamanan:**
-    • Key dibuat secara lokal
-    • Tidak pernah dikirim melalui jaringan
-    • Selalu cadangkan key dengan aman
-hints-tools-multi-buy-title = Alat Multi-beli
-hints-tools-multi-buy-content =
-    { "*" }*Koordinasikan Pembelian di Beberapa Dompet**
-
-    Jalankan order beli di beberapa sub-dompet dengan jumlah acak untuk mensimulasikan aktivitas pembelian organik.
-
-    { "*" }*Cara kerja:**
-    1. Membuat atau menggunakan sub-dompet yang ada
-    2. Mendistribusikan SOL dari dompet utama ke sub-dompet
-    3. Mengeksekusi order beli dengan jumlah dan jeda acak
-    4. Setiap dompet membeli secara independen dengan signature unik
-
-    { "*" }*Pengaturan Dompet:**
-    • **Jumlah Dompet** — jumlah sub-dompet yang digunakan (2-10)
-    • **Buffer SOL** — SOL yang dicadangkan per dompet untuk biaya (~0.015)
-
-    { "*" }*Pengaturan Jumlah:**
-    • **SOL Min/Maks** — rentang jumlah beli per dompet
-    • **Batas Total** — batas opsional total SOL yang dibelanjakan
-
-    { "*" }*Pengaturan Eksekusi:**
-    • **Jeda** — jeda acak antar transaksi
-    • **Konkurensi** — eksekusi paralel (1 = berurutan)
-    • **Slippage** — slippage maksimum yang dapat diterima
-    • **Router** — rute swap (Auto, { -jupiter }, Raydium)
-
-    { "*" }*Penting:**
-    • Membutuhkan SOL yang cukup di dompet utama
-    • Pembelian yang gagal dicatat di log tetapi tidak menghentikan sesi
-    • Sub-dompet dapat digunakan ulang di beberapa sesi
-hints-tools-multi-sell-title = Alat Multi-jual
-hints-tools-multi-sell-content =
-    { "*" }*Koordinasikan Penjualan di Beberapa Dompet**
-
-    Jual token dari semua sub-dompet yang memegang token tertentu dengan konsolidasi SOL otomatis.
-
-    { "*" }*Cara kerja:**
-    1. Memindai sub-dompet untuk saldo token
-    2. Opsional mengisi ulang dompet yang SOL-nya sedikit untuk biaya
-    3. Mengeksekusi order jual dengan persentase yang dapat diatur
-    4. Mengonsolidasikan hasil kembali ke dompet utama
-
-    { "*" }*Pengaturan Jual:**
-    • **% Jual** — persentase token yang dijual (default 100%)
-    • **SOL Min untuk Biaya** — SOL minimum yang dibutuhkan untuk transaksi
-    • **Isi Ulang Otomatis** — transfer SOL dari dompet utama jika perlu
-
-    { "*" }*Aksi Setelah Jual:**
-    • **Konsolidasi SOL** — transfer semua SOL kembali ke dompet utama
-    • **Tutup ATA** — tutup akun token untuk mengklaim kembali rent (~0.0015–0.002 SOL masing-masing)
-
-    { "*" }*Pengaturan Eksekusi:**
-    • **Jeda** — jeda acak antar transaksi
-    • **Konkurensi** — eksekusi paralel
-    • **Slippage** — slippage maksimum yang dapat diterima
-    • **Router** — preferensi rute swap
-
-    { "*" }*Tips:**
-    • Pratinjau menampilkan semua dompet yang memegang token
-    • Batalkan pilihan dompet yang tidak ingin dijual
-    • Konsolidasi terjadi setelah semua penjualan selesai
-hints-tools-trade-watcher-title = Alat Trade Watcher
-hints-tools-trade-watcher-content =
-    { "*" }*Pantau Trade & Picu Aksi Otomatis**
-
-    Pantau aktivitas trading token dan bereaksi otomatis saat trade terjadi.
-
-    { "*" }*Jenis Pemantauan:**
-    • **Beli saat Jual** — beli otomatis saat ada yang menjual (tangkap dip)
-    • **Jual saat Beli** — jual otomatis saat ada yang membeli (ikuti pasar)
-    • **Hanya Notifikasi** — dapatkan peringatan tanpa melakukan aksi
-
-    { "*" }*Cara kerja:**
-    1. Masukkan alamat mint token
-    2. Klik "Cari Pool" untuk menemukan pool likuiditas yang tersedia
-    3. Pilih pool untuk dipantau (wajib untuk aksi beli/jual)
-    4. Atur jumlah pemicu (ukuran trade minimum untuk direspons)
-    5. Atur jumlah aksi (berapa SOL yang dibeli/dijual)
-    6. Mulai pemantauan
-
-    { "*" }*Persyaratan:**
-    • Alamat mint token yang valid
-    • Pemilihan pool (untuk aksi beli/jual)
-    • Saldo SOL yang cukup untuk jumlah aksi
-
-    { "*" }*Integrasi { -telegram }:**
-    Atur { -telegram } di Konfigurasi → { -telegram } untuk menerima notifikasi instan saat pemantauan terpicu.
-hints-tools-wallet-consolidation-title = Alat Konsolidasi Dompet
-hints-tools-wallet-consolidation-content =
-    { "*" }*Kelola dan Konsolidasikan Dana Sub-Dompet**
-
-    Lihat semua sub-dompet dan konsolidasikan SOL, token, serta klaim kembali rent ATA ke dompet utama Anda.
-
-    { "*" }*Ringkasan Menampilkan:**
-    • **Sub-dompet** — total jumlah sub-dompet yang dibuat
-    • **Total SOL** — gabungan saldo SOL di semua sub-dompet
-    • **Jenis Token** — jumlah token berbeda yang dipegang
-    • **Rent yang Dapat Diklaim** — SOL yang terkunci di ATA kosong
-
-    { "*" }*Aksi:**
-    • **Transfer SOL** — pindahkan semua SOL dari dompet terpilih ke dompet utama
-    • **Transfer Token** — pindahkan semua token ke dompet utama
-    • **Bersihkan ATA** — tutup akun token kosong untuk pengembalian rent
-
-    { "*" }*Info Tabel:**
-    • Kotak centang untuk memilih dompet pada operasi massal
-    • Nama, alamat, saldo SOL, jumlah token, ATA kosong
-    • Dompet kosong diredupkan agar mudah dikenali
-
-    { "*" }*Tips:**
-    • Gunakan setelah Multi-jual untuk mengumpulkan sisa SOL
-    • Bersihkan ATA secara berkala untuk mengklaim kembali rent
-    • Dompet kosong dapat digunakan ulang untuk operasi berikutnya
-
 ## config
 
 hints-config-overview-title = Konfigurasi
@@ -435,7 +259,6 @@ hints-config-telegram-content =
     { "*" }*Yang akan Anda terima:**
     • Konfirmasi eksekusi trade
     • Pembaruan posisi (entry/exit)
-    • Peringatan Trade Watcher
     • Notifikasi error
 
     { "*" }*Privasi:**

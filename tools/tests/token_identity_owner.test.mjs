@@ -28,7 +28,7 @@ import { readFileSync } from "node:fs";
 import { SCRIPTS_ROOT, STYLES_ROOT, repoPath, walk } from "../lib/dashboard_ui.mjs";
 
 const RAW_LOGO_IMG = /<img\b[^>]*\$\{[^}]*\b(?:logoUrl|logo_url|image_url)\b/;
-const RAW_LOGO_ALLOWLIST = new Set(["src/webserver/templates/scripts/ui/tool_favorites.js"]);
+const RAW_LOGO_ALLOWLIST = new Set();
 const IDENTITY_OWNER = "src/webserver/templates/scripts/ui/token_identity.js";
 
 const scripts = (await walk(SCRIPTS_ROOT)).filter((file) => file.endsWith(".js"));

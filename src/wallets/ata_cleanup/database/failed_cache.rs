@@ -135,21 +135,6 @@ pub fn get_excluded_atas_for_wallet(
         .collect())
 }
 
-/// Check if ATA is in failed cache
-pub fn is_ata_failed(ata_address: &str) -> Result<bool, Error> {
-    let conn = get_connection()?;
-
-    let count: i32 = conn
-        .query_row(
-            "SELECT COUNT(*) FROM ata_failed_cache WHERE ata_address = ?1",
-            params![ata_address],
-            |row| row.get(0),
-        )
-        .map_err(DatabaseError::from)?;
-
-    Ok(count > 0)
-}
-
 /// Get all failed ATAs for a wallet
 pub fn get_failed_atas_for_wallet(wallet_address: &str) -> Result<Vec<FailedAtaRow>, Error> {
     let conn = get_connection()?;

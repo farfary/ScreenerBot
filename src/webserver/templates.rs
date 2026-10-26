@@ -67,15 +67,6 @@ pub fn page_styles(page: &str) -> Option<String> {
             WALLETS_WATCHED_STYLES,
         ]
         .join("\n"),
-        "tools" => [
-            TOOLS_BASE_STYLES,
-            TOOLS_CONTENT_STYLES,
-            TOOLS_COMPONENTS_STYLES,
-            TOOLS_WALLET_STYLES,
-            TOOLS_TOKEN_STYLES,
-            TOOLS_TRADING_STYLES,
-        ]
-        .join("\n"),
         "assistant" => [
             ASSISTANT_BASE_STYLES,
             ASSISTANT_SETTINGS_TESTING_STYLES,
@@ -250,7 +241,6 @@ pub fn base_template(active_tab: &str, content: &str, locale: &LanguageIdentifie
         FEATURED_DIALOG_STYLES,
         FEATURED_ROW_STYLES,
         BOOST_MARK_STYLES,
-        POOL_SELECTOR_STYLES,
         EXIT_DIALOG_STYLES,
         CHAT_WIDGET_LAYOUT_STYLES,
         CHAT_WIDGET_MESSAGES_STYLES,
@@ -393,10 +383,6 @@ pub fn wallets_content() -> String {
     render_page(WALLETS_PAGE)
 }
 
-pub fn tools_content() -> String {
-    render_page(TOOLS_PAGE)
-}
-
 pub fn assistant_content() -> String {
     render_page(ASSISTANT_PAGE)
 }
@@ -485,7 +471,6 @@ mod tests {
             "trader",
             "copy",
             "wallets",
-            "tools",
             "assistant",
             "initialization",
         ];

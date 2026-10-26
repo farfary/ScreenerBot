@@ -38,7 +38,6 @@ pub mod system;
 pub mod telegram;
 pub mod token_profiles;
 pub mod tokens;
-pub mod tools;
 pub mod trader;
 pub mod trading;
 pub mod transactions;
@@ -69,7 +68,6 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/transactions", get(transactions_page))
         .route("/filtering", get(filtering_page))
         .route("/wallets", get(wallets_page))
-        .route("/tools", get(tools_page))
         .route("/assistant", get(assistant_page))
         .route("/config", get(config_page))
         .route("/trader", get(trader_page))
@@ -188,13 +186,6 @@ async fn wallets_page(headers: HeaderMap) -> Html<String> {
     Html(templates::base_template("wallets", &content, &locale))
 }
 
-/// Tools page handler
-async fn tools_page(headers: HeaderMap) -> Html<String> {
-    let content = templates::tools_content();
-    let locale = crate::i18n::resolve_request_locale(&headers);
-    Html(templates::base_template("tools", &content, &locale))
-}
-
 /// Assistant page handler
 async fn assistant_page(headers: HeaderMap) -> Html<String> {
     let content = templates::assistant_content();
@@ -246,7 +237,6 @@ fn api_routes() -> Router<Arc<AppState>> {
         .nest("/system", system::routes())
         .nest("/transactions", transactions::routes())
         .nest("/strategies", strategies::routes())
-        .nest("/tools", tools::routes())
         .nest("/wallets", wallets::routes())
         .nest("/lockscreen", lockscreen::routes())
         .nest("/auth", auth::routes())
@@ -273,7 +263,6 @@ fn page_content(page: &str) -> Option<String> {
         "transactions" => templates::transactions_content(),
         "filtering" => templates::filtering_content(),
         "wallets" => templates::wallets_content(),
-        "tools" => templates::tools_content(),
         "config" => templates::config_content(),
         "trader" => templates::trader_content(),
         "assistant" => templates::assistant_content(),

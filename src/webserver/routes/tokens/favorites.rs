@@ -191,7 +191,7 @@ pub async fn remove_favorite(Path(mint): Path<String>) -> Result<Json<FavoriteRe
                 );
                 Err(ApiError::new(
                     ApiErrorCode::NotFound,
-                    ids::ERRORS_TOOLS_FAVORITE_NOT_FOUND,
+                    ids::ERRORS_TOKENS_FAVORITE_NOT_FOUND,
                 ))
             }
         }
@@ -250,7 +250,7 @@ pub async fn update_favorite(
             );
             Err(ApiError::new(
                 ApiErrorCode::NotFound,
-                ids::ERRORS_TOOLS_FAVORITE_NOT_FOUND,
+                ids::ERRORS_TOKENS_FAVORITE_NOT_FOUND,
             ))
         }
         Err(e) => {

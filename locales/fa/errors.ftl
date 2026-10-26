@@ -284,42 +284,6 @@ errors-wallet-watch-resume-failed = از سرگیری پایش ممکن نشد
 errors-wallet-watch-approval-failed = به‌روزرسانی تأیید { -helius } ممکن نشد
 errors-wallet-watch-status-failed = دریافت وضعیت پایش ناموفق بود
 
-# Tools
-errors-tools-wallet-failed = دریافت کیف پول ناموفق بود
-errors-tools-wallet-address-failed = دریافت آدرس کیف پول ناموفق بود
-errors-tools-accounts-scan-failed = اسکن حساب‌ها ناموفق بود
-errors-tools-token-accounts-scan-failed = اسکن حساب‌های توکن ناموفق بود
-errors-tools-token-accounts-get-failed = دریافت حساب‌های توکن ناموفق بود
-errors-tools-cleanup-failed = پاکسازی ناموفق بود
-errors-tools-cache-clear-failed = پاک کردن کش ناموفق بود
-errors-tools-no-tokens = توکنی برای برن انتخاب نشده است
-errors-tools-burn-failed = برن توکن‌ها ناموفق بود
-errors-tools-favorites-list-failed = دریافت علاقه‌مندی‌ها ناموفق بود
-errors-tools-favorite-type-invalid = نوع ابزار نامعتبر است. باید یکی از این‌ها باشد: { $types }
-errors-tools-favorite-add-failed = افزودن علاقه‌مندی ناموفق بود
-errors-tools-favorite-not-found = علاقه‌مندی پیدا نشد
-errors-tools-favorite-update-failed = به‌روزرسانی علاقه‌مندی ناموفق بود
-errors-tools-favorite-delete-failed = حذف علاقه‌مندی ناموفق بود
-errors-tools-favorite-use-failed = به‌روزرسانی شمارنده استفاده ناموفق بود
-errors-tools-pool-search-failed = جست‌وجوی استخر برای توکن { $mint } ناموفق بود
-errors-tools-watched-list-failed = دریافت فهرست توکن‌های تحت پایش ناموفق بود
-errors-tools-watched-add-failed = افزودن توکن تحت پایش ناموفق بود
-errors-tools-watched-delete-failed = حذف توکن تحت پایش ناموفق بود
-errors-tools-mint-invalid = آدرس مینت توکن نامعتبر است
-errors-tools-wallets-get-failed = دریافت کیف پول‌ها ناموفق بود
-errors-tools-balance-failed = دریافت موجودی کیف پول ناموفق بود
-errors-tools-session-active = عملیات چندکیف‌پولی دیگری در حال انجام است
-# The reason is the tool configuration check's own wording, shown exactly as produced.
-errors-tools-config-invalid = پیکربندی ابزار نامعتبر است: { $reason }
-errors-tools-config-rejected = پیکربندی ابزار نامعتبر است
-errors-tools-consolidate-failed = تجمیع کیف پول‌ها ناموفق بود
-errors-tools-routers-unavailable = روترهای سواپ هنوز آماده نیستند
-errors-tools-router-disabled-chain-settings = { $router } در تنظیمات > زنجیره‌ها غیرفعال است
-errors-tools-router-unknown = روتر سواپ ناشناخته '{ $router }'
-errors-tools-session-type-mismatch = نوع نشست { $actual } است، نه { $expected }
-errors-tools-session-not-found = نشست پیدا نشد
-errors-tools-session-complete = نشست از قبل کامل شده است
-
 # Configuration import and reload
 errors-config-reload-failed = بارگذاری مجدد پیکربندی ناموفق بود
 errors-config-reset-failed = بازنشانی پیکربندی ناموفق بود
@@ -447,6 +411,7 @@ errors-tokens-favorites-fetch-failed = دریافت علاقه‌مندی‌ها
 errors-tokens-favorite-add-failed = افزودن علاقه‌مندی ناموفق بود
 errors-tokens-favorite-remove-failed = حذف علاقه‌مندی ناموفق بود
 errors-tokens-favorite-update-failed = به‌روزرسانی علاقه‌مندی ناموفق بود
+errors-tokens-favorite-not-found = علاقه‌مندی پیدا نشد
 errors-tokens-detail-not-found = توکن در پایگاه‌داده یا منابع خارجی پیدا نشد
 errors-tokens-fetch-failed = دریافت توکن ناموفق بود
 errors-tokens-refresh-all-failed = همه منابع داده ناموفق بودند

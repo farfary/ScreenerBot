@@ -88,17 +88,6 @@ pub(super) const WALLETS_IMPORT_EXPORT_STYLES: &str =
     include_str!("templates/styles/pages/wallets/import_export.css");
 pub(super) const WALLETS_WATCHED_STYLES: &str =
     include_str!("templates/styles/pages/wallets/watched.css");
-pub(super) const TOOLS_BASE_STYLES: &str = include_str!("templates/styles/pages/tools/base.css");
-pub(super) const TOOLS_CONTENT_STYLES: &str =
-    include_str!("templates/styles/pages/tools/content.css");
-pub(super) const TOOLS_COMPONENTS_STYLES: &str =
-    include_str!("templates/styles/pages/tools/components.css");
-pub(super) const TOOLS_WALLET_STYLES: &str =
-    include_str!("templates/styles/pages/tools/wallet_tools.css");
-pub(super) const TOOLS_TOKEN_STYLES: &str =
-    include_str!("templates/styles/pages/tools/token_tools.css");
-pub(super) const TOOLS_TRADING_STYLES: &str =
-    include_str!("templates/styles/pages/tools/trading_tools.css");
 pub(super) const ASSISTANT_BASE_STYLES: &str =
     include_str!("templates/styles/pages/assistant/base.css");
 pub(super) const ASSISTANT_SETTINGS_TESTING_STYLES: &str =
@@ -224,7 +213,6 @@ pub(super) const FEATURED_DIALOG_STYLES: &str =
     include_str!("templates/styles/ui/featured_dialog.css");
 pub(super) const FEATURED_ROW_STYLES: &str = include_str!("templates/styles/ui/featured_row.css");
 pub(super) const BOOST_MARK_STYLES: &str = include_str!("templates/styles/ui/boost_mark.css");
-pub(super) const POOL_SELECTOR_STYLES: &str = include_str!("templates/styles/ui/pool_selector.css");
 pub(super) const EXIT_DIALOG_STYLES: &str = include_str!("templates/styles/ui/exit_dialog.css");
 pub(super) const GLOBAL_CHAT_STYLES: &str =
     include_str!("templates/styles/components/global_chat.css");
@@ -447,7 +435,6 @@ pub const POSITION_DETAILS_ACTIVITY_EVENT_JS: &str =
     include_str!("templates/scripts/ui/position_details/activity_event.js");
 pub const POSITION_DETAILS_UTILITIES_JS: &str =
     include_str!("templates/scripts/ui/position_details/utilities.js");
-pub const TOOL_FAVORITES_UI: &str = include_str!("templates/scripts/ui/tool_favorites.js");
 pub const CONTEXT_MENU_UI: &str = include_str!("templates/scripts/ui/context_menu.js");
 pub const CONTEXT_MENU_ACTIONS_JS: &str =
     include_str!("templates/scripts/ui/context_menu/actions.js");
@@ -495,7 +482,6 @@ pub const CUSTOM_SELECT_UI: &str = include_str!("templates/scripts/ui/custom_sel
 pub const NUMBER_FIELD_UI: &str = include_str!("templates/scripts/ui/number_field.js");
 pub const FEATURED_DIALOG_UI: &str = include_str!("templates/scripts/ui/featured_dialog.js");
 pub const FEATURED_ROW_UI: &str = include_str!("templates/scripts/ui/featured_row.js");
-pub const POOL_SELECTOR_UI: &str = include_str!("templates/scripts/ui/pool_selector.js");
 pub const EXIT_DIALOG_UI: &str = include_str!("templates/scripts/ui/exit_dialog.js");
 pub const CONFIG_IMPORT_EXPORT_DIALOG_UI: &str =
     include_str!("templates/scripts/ui/config_import_export_dialog.js");
@@ -569,13 +555,6 @@ pub const WALLETS_BULK_OPERATIONS_JS: &str =
     include_str!("templates/scripts/pages/wallets/bulk_operations.js");
 pub const WALLETS_RENDERERS_JS: &str = include_str!("templates/scripts/pages/wallets/renderers.js");
 pub const WALLETS_WATCHED_JS: &str = include_str!("templates/scripts/pages/wallets/watched.js");
-pub const TOOLS_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/tools.js");
-pub const TOOLS_WALLET_TOOLS: &str = include_str!("templates/scripts/pages/tools/wallet_tools.js");
-pub const TOOLS_TOKEN_TOOLS: &str = include_str!("templates/scripts/pages/tools/token_tools.js");
-pub const TOOLS_TRADING_TOOLS: &str =
-    include_str!("templates/scripts/pages/tools/trading_tools.js");
-pub const TOOLS_MULTI_WALLET_TOOLS: &str =
-    include_str!("templates/scripts/pages/tools/multi_wallet_tools.js");
 pub const ASSISTANT_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/assistant.js");
 pub const ASSISTANT_CONFIG_CONTRACT: &str =
     include_str!("templates/scripts/pages/assistant/config_contract.js");
@@ -604,7 +583,6 @@ pub(super) const CONFIG_PAGE: &str = include_str!("templates/pages/config.html")
 pub(super) const STRATEGIES_PAGE: &str = include_str!("templates/pages/strategies.html");
 pub(super) const TRADER_PAGE: &str = include_str!("templates/pages/trader.html");
 pub(super) const WALLETS_PAGE: &str = include_str!("templates/pages/wallets.html");
-pub(super) const TOOLS_PAGE: &str = include_str!("templates/pages/tools.html");
 pub(super) const ASSISTANT_PAGE: &str = include_str!("templates/pages/assistant.html");
 pub(super) const HOME_PAGE: &str = include_str!("templates/pages/home.html");
 pub(super) const SPLASH_PAGE: &str = include_str!("templates/pages/splash.html");

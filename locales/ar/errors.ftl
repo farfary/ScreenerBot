@@ -284,42 +284,6 @@ errors-wallet-watch-resume-failed = تعذّر استئناف المراقبة
 errors-wallet-watch-approval-failed = تعذّر تحديث موافقة { -helius }
 errors-wallet-watch-status-failed = تعذّر جلب حالة المراقبة
 
-# Tools
-errors-tools-wallet-failed = تعذّر جلب المحفظة
-errors-tools-wallet-address-failed = تعذّر جلب عنوان المحفظة
-errors-tools-accounts-scan-failed = تعذّر فحص الحسابات
-errors-tools-token-accounts-scan-failed = تعذّر فحص حسابات الرموز
-errors-tools-token-accounts-get-failed = تعذّر جلب حسابات الرموز
-errors-tools-cleanup-failed = فشل التنظيف
-errors-tools-cache-clear-failed = تعذّر مسح الذاكرة المؤقتة
-errors-tools-no-tokens = لم يتم تحديد رموز للحرق
-errors-tools-burn-failed = تعذّر حرق الرموز
-errors-tools-favorites-list-failed = تعذّر جلب المفضلات
-errors-tools-favorite-type-invalid = نوع الأداة غير صالح. يجب أن يكون أحد: { $types }
-errors-tools-favorite-add-failed = تعذّرت إضافة المفضلة
-errors-tools-favorite-not-found = لم يتم العثور على المفضلة
-errors-tools-favorite-update-failed = تعذّر تحديث المفضلة
-errors-tools-favorite-delete-failed = تعذّر حذف المفضلة
-errors-tools-favorite-use-failed = تعذّر تحديث عدد الاستخدام
-errors-tools-pool-search-failed = فشل البحث عن مجمعات السيولة للرمز { $mint }
-errors-tools-watched-list-failed = تعذّر عرض الرموز المراقبة
-errors-tools-watched-add-failed = تعذّرت إضافة الرمز المراقب
-errors-tools-watched-delete-failed = تعذّر حذف الرمز المراقب
-errors-tools-mint-invalid = عنوان إصدار الرمز غير صالح
-errors-tools-wallets-get-failed = تعذّر جلب المحافظ
-errors-tools-balance-failed = تعذّر جلب رصيد المحفظة
-errors-tools-session-active = عملية متعددة المحافظ أخرى قيد التنفيذ بالفعل
-# The reason is the tool configuration check's own wording, shown exactly as produced.
-errors-tools-config-invalid = إعدادات الأداة غير صالحة: { $reason }
-errors-tools-config-rejected = إعدادات الأداة غير صالحة
-errors-tools-consolidate-failed = تعذّر تجميع المحافظ
-errors-tools-routers-unavailable = موجّهات المبادلة غير جاهزة بعد
-errors-tools-router-disabled-chain-settings = { $router } معطّل في الإعدادات > السلاسل
-errors-tools-router-unknown = موجّه مبادلة غير معروف '{ $router }'
-errors-tools-session-type-mismatch = الجلسة من نوع { $actual } وليست { $expected }
-errors-tools-session-not-found = لم يتم العثور على الجلسة
-errors-tools-session-complete = الجلسة مكتملة بالفعل
-
 # Configuration import and reload
 errors-config-reload-failed = تعذّرت إعادة تحميل الإعدادات
 errors-config-reset-failed = تعذّرت إعادة ضبط الإعدادات
@@ -447,6 +411,7 @@ errors-tokens-favorites-fetch-failed = تعذّر جلب المفضلات
 errors-tokens-favorite-add-failed = تعذّرت إضافة المفضلة
 errors-tokens-favorite-remove-failed = تعذّرت إزالة المفضلة
 errors-tokens-favorite-update-failed = تعذّر تحديث المفضلة
+errors-tokens-favorite-not-found = لم يتم العثور على المفضلة
 errors-tokens-detail-not-found = لم يتم العثور على الرمز في قاعدة البيانات أو المصادر الخارجية
 errors-tokens-fetch-failed = تعذّر جلب الرمز
 errors-tokens-refresh-all-failed = فشلت جميع مصادر البيانات

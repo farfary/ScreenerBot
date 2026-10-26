@@ -25,7 +25,6 @@ const PAGE_IDS = Object.freeze([
   "transactions",
   "filtering",
   "wallets",
-  "tools",
   "assistant",
   "config",
   "trader",

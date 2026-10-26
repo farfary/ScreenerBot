@@ -6,7 +6,6 @@ hints-category-trader = Trader automatique
 hints-category-services = Services
 hints-category-wallet = Portefeuille
 hints-category-wallets = Portefeuilles
-hints-category-tools = Outils
 hints-category-config = Config
 hints-category-config-telegram = { -telegram }
 hints-category-token-details = Détails du token
@@ -218,181 +217,6 @@ hints-wallets-secondary-content =
 
     Les portefeuilles secondaires ne sont pas utilisés par le trading automatique, sauf configuration explicite.
 
-## tools
-
-hints-tools-wallet-cleanup-title = Outil de nettoyage du portefeuille
-hints-tools-wallet-cleanup-content =
-    { "*" }*Récupérez du SOL des comptes de token vides**
-
-    { "*" }*Que sont les ATA ?**
-    Les comptes de token associés (ATA) sont des comptes Solana qui contiennent vos tokens. Chaque token avec lequel vous interagissez crée un ATA qui contient un dépôt de rent : environ 0.0015 SOL pour les comptes ouverts maintenant, environ 0.002 SOL pour les plus anciens.
-
-    { "*" }*Pourquoi nettoyer les ATA vides ?**
-    • Récupérer le rent (environ 0.0015–0.002 SOL par ATA)
-    • Les traders actifs peuvent accumuler des centaines d'ATA vides
-    • 100 ATA vides = environ 0.15–0.2 SOL récupérables
-
-    { "*" }*Fonctionnement :**
-    • Analyse votre portefeuille à la recherche d'ATA à solde nul
-    • Affiche le montant total de SOL récupérable
-    • Ferme les comptes vides pour récupérer le rent
-
-    { "*" }*Nettoyage automatique :**
-    Lorsqu'il est activé, analyse et ferme automatiquement les ATA vides toutes les 5 minutes en arrière-plan.
-
-    { "*" }*Important :**
-    • Ne ferme que les comptes dont le solde est exactement 0
-    • Les fermetures échouées sont mises en cache pour éviter les nouvelles tentatives répétées
-    • Les gros portefeuilles peuvent nécessiter plusieurs passes de nettoyage
-hints-tools-burn-tokens-title = Outil de burn de tokens
-hints-tools-burn-tokens-content =
-    { "*" }*Détruire définitivement des tokens**
-
-    Brûler des tokens les retire définitivement de votre portefeuille et de la circulation.
-
-    { "*" }*Ce qui se passe lors d'un burn :**
-    • Les tokens sont envoyés à une adresse de burn (irrécupérable)
-    • Le solde du token devient nul
-    • L'ATA peut ensuite être fermé via le nettoyage du portefeuille pour récupérer environ 0.0015–0.002 SOL de rent
-
-    { "*" }*Catégories de tokens :**
-    • **Positions ouvertes** - Burn impossible (trades actifs)
-    • **Positions clôturées** - Reliquats de trades passés
-    • **Avec valeur** - Tokens avec liquidité (envisagez plutôt de vendre)
-    • **Liquidité nulle** - Tokens sans valeur (burn sans risque)
-
-    { "*" }*Avertissement :** Cette action est **irréversible**. Les tokens brûlés ne peuvent être récupérés en aucun cas.
-
-    { "*" }*Après le burn :** Lancez le nettoyage du portefeuille pour fermer les ATA vides et récupérer le rent en SOL.
-hints-tools-wallet-generator-title = Outil de génération de portefeuilles
-hints-tools-wallet-generator-content =
-    { "*" }*Générez de nouvelles paires de clés Solana**
-
-    Créez de nouveaux portefeuilles en toute sécurité sur votre appareil.
-
-    { "*" }*Fonctions :**
-    • Génère des paires de clés cryptographiquement sûres
-    • Préfixe d'adresse personnalisé facultatif (p. ex. « SOL... »)
-    • Export en base58 ou en tableau JSON
-
-    { "*" }*Sécurité :**
-    • Les clés sont générées localement
-    • Jamais transmises sur le réseau
-    • Sauvegardez toujours vos clés en lieu sûr
-hints-tools-multi-buy-title = Outil de multi-achat
-hints-tools-multi-buy-content =
-    { "*" }*Coordonnez des achats sur plusieurs portefeuilles**
-
-    Exécutez des ordres d'achat sur plusieurs sous-portefeuilles avec des montants aléatoires pour simuler une activité d'achat organique.
-
-    { "*" }*Fonctionnement :**
-    1. Crée ou réutilise des sous-portefeuilles existants
-    2. Distribue du SOL du portefeuille principal vers les sous-portefeuilles
-    3. Exécute les ordres d'achat avec des montants et des délais aléatoires
-    4. Chaque portefeuille achète indépendamment avec des signatures uniques
-
-    { "*" }*Paramètres des portefeuilles :**
-    • **Nombre de portefeuilles** — nombre de sous-portefeuilles à utiliser (2-10)
-    • **Réserve de SOL** — SOL réservé par portefeuille pour les frais (~0.015)
-
-    { "*" }*Paramètres des montants :**
-    • **SOL min./max.** — plage des montants d'achat par portefeuille
-    • **Limite totale** — plafond facultatif du SOL total à dépenser
-
-    { "*" }*Paramètres d'exécution :**
-    • **Délai** — délai aléatoire entre les transactions
-    • **Concurrence** — exécution en parallèle (1 = séquentielle)
-    • **Slippage** — slippage maximal acceptable
-    • **Routeur** — routage des swaps (Auto, { -jupiter }, Raydium)
-
-    { "*" }*Important :**
-    • Nécessite suffisamment de SOL dans le portefeuille principal
-    • Les achats échoués sont consignés mais n'interrompent pas la session
-    • Les sous-portefeuilles peuvent être réutilisés d'une session à l'autre
-hints-tools-multi-sell-title = Outil de multi-vente
-hints-tools-multi-sell-content =
-    { "*" }*Coordonnez des ventes sur plusieurs portefeuilles**
-
-    Vendez un token depuis tous les sous-portefeuilles qui le détiennent, avec consolidation automatique du SOL.
-
-    { "*" }*Fonctionnement :**
-    1. Analyse les soldes de tokens des sous-portefeuilles
-    2. Recharge éventuellement les portefeuilles à faible SOL pour les frais
-    3. Exécute les ordres de vente avec un pourcentage configurable
-    4. Consolide le produit vers le portefeuille principal
-
-    { "*" }*Paramètres de vente :**
-    • **% de vente** — pourcentage de tokens à vendre (100 % par défaut)
-    • **SOL min. pour les frais** — SOL minimal requis pour la transaction
-    • **Recharge auto** — transfère du SOL depuis le portefeuille principal si nécessaire
-
-    { "*" }*Actions après la vente :**
-    • **Consolider le SOL** — transfère tout le SOL vers le portefeuille principal
-    • **Fermer les ATA** — ferme les comptes de token pour récupérer le rent (~0.0015–0.002 SOL chacun)
-
-    { "*" }*Paramètres d'exécution :**
-    • **Délai** — délai aléatoire entre les transactions
-    • **Concurrence** — exécution en parallèle
-    • **Slippage** — slippage maximal acceptable
-    • **Routeur** — préférence de routage des swaps
-
-    { "*" }*Conseils :**
-    • L'aperçu affiche tous les portefeuilles détenant le token
-    • Désélectionnez les portefeuilles dont vous ne voulez pas vendre
-    • La consolidation a lieu une fois toutes les ventes terminées
-hints-tools-trade-watcher-title = Outil de surveillance de trades
-hints-tools-trade-watcher-content =
-    { "*" }*Surveillez les trades et déclenchez des actions automatiques**
-
-    Observez l'activité d'échange d'un token et réagissez automatiquement lorsque des trades ont lieu.
-
-    { "*" }*Types de surveillance :**
-    • **Achat sur vente** — achète automatiquement quand quelqu'un vend (saisir les creux)
-    • **Vente sur achat** — vend automatiquement quand quelqu'un achète (suivre le marché)
-    • **Notification seule** — recevez des alertes sans action
-
-    { "*" }*Fonctionnement :**
-    1. Saisissez une adresse de mint de token
-    2. Cliquez sur « Rechercher des pools » pour trouver les pools de liquidité disponibles
-    3. Sélectionnez un pool à surveiller (requis pour les actions d'achat/vente)
-    4. Définissez le montant de déclenchement (taille de trade minimale pour réagir)
-    5. Définissez le montant de l'action (combien de SOL acheter/vendre)
-    6. Lancez la surveillance
-
-    { "*" }*Prérequis :**
-    • Adresse de mint de token valide
-    • Sélection d'un pool (pour les actions d'achat/vente)
-    • Solde de SOL suffisant pour les montants d'action
-
-    { "*" }*Intégration { -telegram } :**
-    Configurez { -telegram } dans Config → { -telegram } pour recevoir des notifications instantanées lorsque les surveillances se déclenchent.
-hints-tools-wallet-consolidation-title = Outil de consolidation des portefeuilles
-hints-tools-wallet-consolidation-content =
-    { "*" }*Gérez et consolidez les fonds des sous-portefeuilles**
-
-    Consultez tous les sous-portefeuilles et consolidez le SOL, les tokens et le rent des ATA vers votre portefeuille principal.
-
-    { "*" }*Le résumé affiche :**
-    • **Sous-portefeuilles** — nombre total de sous-portefeuilles créés
-    • **SOL total** — solde SOL cumulé de tous les sous-portefeuilles
-    • **Types de tokens** — nombre de tokens différents détenus
-    • **Rent récupérable** — SOL bloqué dans des ATA vides
-
-    { "*" }*Actions :**
-    • **Transférer le SOL** — déplace tout le SOL des portefeuilles sélectionnés vers le principal
-    • **Transférer les tokens** — déplace tous les tokens vers le portefeuille principal
-    • **Nettoyer les ATA** — ferme les comptes de token vides pour récupérer le rent
-
-    { "*" }*Informations du tableau :**
-    • Case à cocher pour sélectionner les portefeuilles pour les opérations groupées
-    • Nom, adresse, solde SOL, nombre de tokens, ATA vides
-    • Les portefeuilles vides sont atténués pour les repérer facilement
-
-    { "*" }*Conseils :**
-    • À utiliser après une multi-vente pour récupérer le SOL restant
-    • Nettoyez régulièrement les ATA pour récupérer le rent
-    • Les portefeuilles vides peuvent être réutilisés pour de futures opérations
-
 ## config
 
 hints-config-overview-title = Configuration
@@ -432,7 +256,6 @@ hints-config-telegram-content =
     { "*" }*Ce que vous recevrez :**
     • Confirmations d'exécution des trades
     • Mises à jour des positions (entrée/sortie)
-    • Alertes de surveillance de trades
     • Notifications d'erreur
 
     { "*" }*Confidentialité :**

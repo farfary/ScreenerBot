@@ -154,7 +154,6 @@ export const HINT_CATEGORY_LABELS = Object.freeze({
   services: "hints-category-services",
   wallet: "hints-category-wallet",
   wallets: "hints-category-wallets",
-  tools: "hints-category-tools",
   config: "hints-category-config",
   configTelegram: "hints-category-config-telegram",
   tokenDetails: "hints-category-token-details",
@@ -366,57 +365,6 @@ export const HINTS = localizeRegistry({
       id: "wallets.secondary",
       title: "hints-wallets-secondary-title",
       content: "hints-wallets-secondary-content",
-    },
-  },
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // TOOLS PAGE
-  // ═══════════════════════════════════════════════════════════════════════════
-  tools: {
-    walletCleanup: {
-      id: "tools.wallet_cleanup",
-      title: "hints-tools-wallet-cleanup-title",
-      content: "hints-tools-wallet-cleanup-content",
-    },
-
-    burnTokens: {
-      id: "tools.burn_tokens",
-      title: "hints-tools-burn-tokens-title",
-      content: "hints-tools-burn-tokens-content",
-    },
-
-    walletGenerator: {
-      id: "tools.wallet_generator",
-      title: "hints-tools-wallet-generator-title",
-      content: "hints-tools-wallet-generator-content",
-    },
-
-    multiBuy: {
-      id: "tools.multi_buy",
-      title: "hints-tools-multi-buy-title",
-      content: "hints-tools-multi-buy-content",
-      learnMoreUrl: "https://screenerbot.io/docs/tools/multi-buy",
-    },
-
-    multiSell: {
-      id: "tools.multi_sell",
-      title: "hints-tools-multi-sell-title",
-      content: "hints-tools-multi-sell-content",
-      learnMoreUrl: "https://screenerbot.io/docs/tools/multi-sell",
-    },
-
-    tradeWatcher: {
-      id: "tools.trade_watcher",
-      title: "hints-tools-trade-watcher-title",
-      content: "hints-tools-trade-watcher-content",
-      learnMoreUrl: "https://screenerbot.io/docs/tools/trade-watcher",
-    },
-
-    walletConsolidation: {
-      id: "tools.wallet_consolidation",
-      title: "hints-tools-wallet-consolidation-title",
-      content: "hints-tools-wallet-consolidation-content",
-      learnMoreUrl: "https://screenerbot.io/docs/tools/consolidation",
     },
   },
 

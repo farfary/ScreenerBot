@@ -244,27 +244,21 @@ pub fn default_tabs() -> Vec<TabConfig> {
             enabled: true,
         },
         TabConfig {
-            id: "tools".into(),
-            icon: "icon-wrench".into(),
-            order: 9,
-            enabled: true,
-        },
-        TabConfig {
             id: "services".into(),
             icon: "icon-server".into(),
-            order: 10,
+            order: 9,
             enabled: true,
         },
         TabConfig {
             id: "events".into(),
             icon: "icon-radio-tower".into(),
-            order: 11,
+            order: 10,
             enabled: true,
         },
         TabConfig {
             id: "config".into(),
             icon: "icon-settings".into(),
-            order: 12,
+            order: 11,
             enabled: true,
         },
     ]
@@ -299,9 +293,10 @@ pub fn ensure_all_tabs_present(mut tabs: Vec<TabConfig>) -> Vec<TabConfig> {
     let default_map: HashMap<String, &TabConfig> =
         defaults.iter().map(|t| (t.id.clone(), t)).collect();
 
-    // Drop any saved tab that is no longer a known default (e.g. the removed
-    // "strategies" tab, now a subtab of Auto Trader). The tab set is fixed —
-    // there are no user-defined tabs — so pruning unknowns is safe.
+    // Drop any saved tab that is no longer a known default (the removed
+    // "strategies" tab, now a subtab of Auto Trader, and the removed "tools"
+    // tab). The tab set is fixed — there are no user-defined tabs — so pruning
+    // unknowns is safe.
     tabs.retain(|t| default_map.contains_key(&t.id));
 
     // Force icons from defaults for existing tabs
@@ -396,7 +391,7 @@ mod tests {
             saved
                 .iter()
                 .enumerate()
-                .map(|(order, id)| tab(id, order as u32, *id != "tools"))
+                .map(|(order, id)| tab(id, order as u32, *id != "events"))
                 .collect(),
         );
         let ids: Vec<&str> = merged.iter().map(|t| t.id.as_str()).collect();
@@ -412,16 +407,39 @@ mod tests {
                 "trader",
                 "copy",
                 "transactions",
-                "tools",
                 "services",
                 "events",
                 "config",
             ]
         );
         let orders: Vec<u32> = merged.iter().map(|t| t.order).collect();
-        assert_eq!(orders, (0..13).collect::<Vec<u32>>());
-        assert!(!merged.iter().find(|t| t.id == "tools").unwrap().enabled);
+        assert_eq!(orders, (0..12).collect::<Vec<u32>>());
+        assert!(!merged.iter().find(|t| t.id == "events").unwrap().enabled);
         assert!(merged.iter().find(|t| t.id == "copy").unwrap().enabled);
+    }
+
+    #[test]
+    fn a_saved_tools_tab_is_dropped_and_the_order_closes_up() {
+        let mut saved: Vec<String> = super::default_tabs().into_iter().map(|t| t.id).collect();
+        let after_transactions = saved
+            .iter()
+            .position(|id| id == "transactions")
+            .expect("transactions is a default tab")
+            + 1;
+        saved.insert(after_transactions, "tools".to_owned());
+        let merged = ensure_all_tabs_present(
+            saved
+                .iter()
+                .enumerate()
+                .map(|(order, id)| tab(id, order as u32, true))
+                .collect(),
+        );
+        assert!(!merged.iter().any(|t| t.id == "tools"));
+        let ids: Vec<String> = merged.iter().map(|t| t.id.clone()).collect();
+        let defaults: Vec<String> = super::default_tabs().into_iter().map(|t| t.id).collect();
+        assert_eq!(ids, defaults);
+        let orders: Vec<u32> = merged.iter().map(|t| t.order).collect();
+        assert_eq!(orders, (0..defaults.len() as u32).collect::<Vec<u32>>());
     }
 
     #[test]

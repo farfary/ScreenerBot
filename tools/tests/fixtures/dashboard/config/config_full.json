@@ -446,10 +446,9 @@
           { "id": "copy", "icon": "icon-copy", "order": 6, "enabled": true },
           { "id": "wallets", "icon": "icon-wallet", "order": 7, "enabled": true },
           { "id": "transactions", "icon": "icon-activity", "order": 8, "enabled": true },
-          { "id": "tools", "icon": "icon-wrench", "order": 9, "enabled": true },
-          { "id": "services", "icon": "icon-server", "order": 10, "enabled": true },
-          { "id": "events", "icon": "icon-radio-tower", "order": 11, "enabled": true },
-          { "id": "config", "icon": "icon-settings", "order": 12, "enabled": true }
+          { "id": "services", "icon": "icon-server", "order": 9, "enabled": true },
+          { "id": "events", "icon": "icon-radio-tower", "order": 10, "enabled": true },
+          { "id": "config", "icon": "icon-settings", "order": 11, "enabled": true }
         ]
       },
       "lockscreen": {

@@ -320,7 +320,7 @@ fn create_schema(tx: &Transaction<'_>, _: &SchemaContext) -> Result<(), Database
 }
 
 /// Get a connection from the ATA cleanup store's pool.
-pub(crate) fn get_connection() -> Result<PooledConnection<SqliteConnectionManager>, Error> {
+pub(super) fn get_connection() -> Result<PooledConnection<SqliteConnectionManager>, Error> {
     database::open::store(&database::catalog::ATA_CLEANUP)?
         .get()
         .map_err(|e| DatabaseError::from(e).into())

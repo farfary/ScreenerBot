@@ -23,11 +23,6 @@ import { STYLES_ROOT, repoPath, walk } from "../lib/dashboard_ui.mjs";
 
 const BORDER_STRIPE_ALLOWLIST = new Set([
   "src/webserver/templates/styles/ui/data_table/core.css .dt-header-column.is-drag-over",
-  "src/webserver/templates/styles/pages/tools/token_tools.css .ta-authority-item.success",
-  "src/webserver/templates/styles/pages/tools/token_tools.css .ta-authority-item.warning",
-  "src/webserver/templates/styles/pages/tools/token_tools.css .ta-risk-item.danger",
-  "src/webserver/templates/styles/pages/tools/token_tools.css .ta-risk-item.warn, .ta-risk-item.warning",
-  "src/webserver/templates/styles/pages/tools/token_tools.css .ta-risk-item.info",
 ]);
 
 const rules = async () => {

@@ -1,7 +1,7 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! The tokens no eviction may remove: everything a position, the wallet, the trader, the filters, a tool or an action in progress holds or watches right now.
+//! The tokens no eviction may remove: everything a position, the wallet, the trader, the filters or an action in progress holds or watches right now.
 
 use std::collections::{HashMap, HashSet};
 
@@ -55,13 +55,11 @@ impl ProtectedMints {
 pub enum ProtectedMintsUnavailable {
     /// Open positions are not loaded yet, so an open position's token could be missed.
     PositionsNotReady,
-    /// The watched tokens of the tools could not be read.
-    WatchedTokens,
 }
 
 /// Every token that is in use right now on any chain: open positions and paper
 /// holdings, wallet holdings, tokens that passed the filters or have a pool price,
-/// tokens watched by a tool and the subjects of actions in progress. The chart
+/// and the subjects of actions in progress. The chart
 /// monitor's tokens are read from the chart store by the caller. Refuses while open
 /// positions are not loaded, so nothing is evicted on a partial view.
 pub async fn protected_mints() -> Result<ProtectedMints, ProtectedMintsUnavailable> {
@@ -89,13 +87,6 @@ pub async fn protected_mints() -> Result<ProtectedMints, ProtectedMintsUnavailab
     }
     for action in crate::actions::state::get_active_actions().await {
         protected.insert(action.entity_id, Protection::Watched);
-    }
-    let watched = tokio::task::spawn_blocking(crate::tools::get_watched_tokens)
-        .await
-        .map_err(|_| ProtectedMintsUnavailable::WatchedTokens)?
-        .map_err(|_| ProtectedMintsUnavailable::WatchedTokens)?;
-    for token in watched {
-        protected.insert(token.mint, Protection::Watched);
     }
     Ok(protected)
 }

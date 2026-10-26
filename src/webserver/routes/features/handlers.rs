@@ -1,13 +1,13 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Feature flag API handlers - the full feature list, tool availability checks and trading feature checks.
+//! Feature flag API handlers - the full feature list and trading feature checks.
 
 use axum::extract::Path;
 use axum::response::Response;
 
 use crate::{
-    features::{get_features, get_tool_status, get_trading_feature_status},
+    features::{get_features, get_trading_feature_status},
     webserver::utils::success_response,
 };
 
@@ -17,18 +17,6 @@ use super::types::*;
 /// Returns all feature flags
 pub(super) async fn get_all_features() -> Response {
     success_response(get_features())
-}
-
-/// GET /api/features/tool/{tool_id}
-/// Check if a specific tool is available
-pub(super) async fn check_tool(Path(tool_id): Path<String>) -> Response {
-    let status = get_tool_status(&tool_id);
-    success_response(FeatureCheckResponse {
-        id: tool_id,
-        status,
-        available: status.is_usable(),
-        visible: status.is_visible(),
-    })
 }
 
 /// GET /api/features/trading/{feature_id}

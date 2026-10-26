@@ -14,7 +14,7 @@ use crate::logger::{self, LogTag};
 use crate::utils::{check_shutdown_or_delay, get_wallet_address, run_or_shutdown};
 use crate::wallets::Error;
 
-use super::operations::{cleanup_empty_atas, update_stats};
+use super::operations::cleanup_empty_atas;
 
 // =============================================================================
 // CONSTANTS
@@ -123,9 +123,6 @@ async fn perform_scheduled_cleanup() -> Result<(u32, Vec<String>), Error> {
 
     let result = cleanup_empty_atas(&wallet_address).await?;
 
-    // Update global stats
-    update_stats(&result);
-
     if result.closed_count == 0 && result.failed_count == 0 {
         logger::debug(
             LogTag::Wallet,
@@ -134,34 +131,6 @@ async fn perform_scheduled_cleanup() -> Result<(u32, Vec<String>), Error> {
     }
 
     logger::debug(LogTag::Wallet, "Periodic ATA cleanup check completed");
-
-    Ok((result.closed_count, result.signatures))
-}
-
-/// Trigger an immediate ATA cleanup (manual trigger)
-pub async fn trigger_immediate_cleanup(
-) -> Result<(u32, Vec<String>), Box<dyn std::error::Error + Send + Sync>> {
-    logger::info(LogTag::Wallet, "Manual ATA cleanup triggered...");
-
-    let wallet_address = get_wallet_address()
-        .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
-
-    let result = cleanup_empty_atas(&wallet_address).await.map_err(|e| {
-        Box::new(std::io::Error::new(std::io::ErrorKind::Other, e))
-            as Box<dyn std::error::Error + Send + Sync>
-    })?;
-
-    // Update global stats
-    update_stats(&result);
-
-    logger::info(
-        LogTag::Wallet,
-        &format!(
-            "Manual ATA cleanup completed: {} closed, {} signatures",
-            result.closed_count,
-            result.signatures.len()
-        ),
-    );
 
     Ok((result.closed_count, result.signatures))
 }

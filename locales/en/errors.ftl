@@ -286,42 +286,6 @@ errors-wallet-watch-resume-failed = Watch could not be resumed
 errors-wallet-watch-approval-failed = { -helius } approval could not be updated
 errors-wallet-watch-status-failed = Failed to get watch status
 
-# Tools
-errors-tools-wallet-failed = Failed to get wallet
-errors-tools-wallet-address-failed = Failed to get wallet address
-errors-tools-accounts-scan-failed = Failed to scan accounts
-errors-tools-token-accounts-scan-failed = Failed to scan token accounts
-errors-tools-token-accounts-get-failed = Failed to get token accounts
-errors-tools-cleanup-failed = Cleanup failed
-errors-tools-cache-clear-failed = Failed to clear cache
-errors-tools-no-tokens = No tokens selected for burning
-errors-tools-burn-failed = Failed to burn tokens
-errors-tools-favorites-list-failed = Failed to get favorites
-errors-tools-favorite-type-invalid = Invalid tool type. Must be one of: { $types }
-errors-tools-favorite-add-failed = Failed to add favorite
-errors-tools-favorite-not-found = Favorite not found
-errors-tools-favorite-update-failed = Failed to update favorite
-errors-tools-favorite-delete-failed = Failed to delete favorite
-errors-tools-favorite-use-failed = Failed to update use count
-errors-tools-pool-search-failed = Pool search failed for token { $mint }
-errors-tools-watched-list-failed = Failed to list watched tokens
-errors-tools-watched-add-failed = Failed to add watched token
-errors-tools-watched-delete-failed = Failed to delete watched token
-errors-tools-mint-invalid = Invalid token mint address
-errors-tools-wallets-get-failed = Failed to get wallets
-errors-tools-balance-failed = Failed to get wallet balance
-errors-tools-session-active = Another multi-wallet operation is already in progress
-# The reason is the tool configuration check's own wording, shown exactly as produced.
-errors-tools-config-invalid = Invalid tool configuration: { $reason }
-errors-tools-config-rejected = Invalid tool configuration
-errors-tools-consolidate-failed = Failed to consolidate wallets
-errors-tools-routers-unavailable = Swap routers are not ready yet
-errors-tools-router-disabled-chain-settings = { $router } is disabled in Settings > Chains
-errors-tools-router-unknown = Unknown swap router '{ $router }'
-errors-tools-session-type-mismatch = Session is { $actual } not { $expected }
-errors-tools-session-not-found = Session not found
-errors-tools-session-complete = Session is already complete
-
 # Configuration import and reload
 errors-config-reload-failed = Failed to reload config
 errors-config-reset-failed = Failed to reset config
@@ -449,6 +413,7 @@ errors-tokens-favorites-fetch-failed = Failed to fetch favorites
 errors-tokens-favorite-add-failed = Failed to add favorite
 errors-tokens-favorite-remove-failed = Failed to remove favorite
 errors-tokens-favorite-update-failed = Failed to update favorite
+errors-tokens-favorite-not-found = Favorite not found
 errors-tokens-detail-not-found = Token not found in database or external sources
 errors-tokens-fetch-failed = Failed to fetch token
 errors-tokens-refresh-all-failed = All data sources failed

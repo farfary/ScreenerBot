@@ -12,7 +12,6 @@
 //! calls into `mint` as its on-chain adapter.
 
 pub mod ata;
-pub mod burn;
 pub mod metaplex;
 pub mod mint;
 pub mod transfer;
@@ -22,7 +21,6 @@ pub use ata::{
     close_token_account_with_context, get_all_token_accounts, get_sol_balance, get_token_balance,
     get_total_token_balance,
 };
-pub use burn::burn_configured_wallet_token;
 pub use metaplex::{fetch_nft_metadata, fetch_nft_metadata_batch, NftMetadata, NftMetadataError};
 pub use mint::{fetch_mint_account, MintAccountData};
 pub use transfer::{close_ata as transfer_close_ata, transfer_sol, transfer_token};

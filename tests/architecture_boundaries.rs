@@ -353,9 +353,8 @@ fn shared_pools_domain_never_names_a_solana_address_type() {
     );
 }
 
-/// Wallet ownership boundary: shared wallet records, manager APIs,
-/// configuration and multi-wallet tooling must never hold a decrypted
-/// `Keypair` or a `Pubkey` — only `crate::chains::solana::accounts` (and the
+/// Wallet ownership boundary: shared wallet records, manager APIs and
+/// configuration must never hold a decrypted `Keypair` or a `Pubkey` — only `crate::chains::solana::accounts` (and the
 /// concrete swap/asset executors it hands a resolved keypair to) may. Shared
 /// code passes a `wallet_id`, an address string, or relies on "the main
 /// wallet"; it gets back signatures and addresses, never key material.
@@ -383,11 +382,6 @@ fn wallet_ownership_never_names_a_solana_key_type() {
         "wallets/manager/balance_ops.rs",
         "wallets/manager/balance_queries.rs",
         "config/wallet.rs",
-        "tools/swap_executor.rs",
-        "tools/multi_wallet/buy.rs",
-        "tools/multi_wallet/sell.rs",
-        "tools/multi_wallet/consolidate.rs",
-        "tools/multi_wallet/transfer.rs",
     ];
     let banned_needles = ["Keypair", "Pubkey", "solana_sdk"];
 
@@ -813,31 +807,6 @@ fn shared_swaps_registry_never_panics_on_missing_factory() {
     }
 }
 
-/// Tool swaps must bind execution to the quoting router via the SwapRouter
-/// contract. Calling Jupiter's wallet helper with another router's quote
-/// submits foreign `execution_data` to Jupiter.
-#[test]
-fn tool_swap_executor_never_calls_jupiter_wallet_helper() {
-    let path = "tools/swap_executor.rs";
-    let contents = fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("src").join(path))
-        .expect("src/tools/swap_executor.rs must exist");
-    let code = code_lines(&contents);
-
-    for needle in [
-        "swaps::routers::execute_for_wallet",
-        "execute_with_keypair",
-        "JupiterRouter",
-        "enabled_routers()",
-        "enabled[0]",
-    ] {
-        assert!(
-            !code.contains(needle),
-            "src/{path} must not {needle} — quote and wallet execution go through \
-             crate::swaps::quote_and_execute_for_wallet so the producing router owns the payload"
-        );
-    }
-}
-
 /// Shared transaction subject and delta domain files stay chain-neutral:
 /// Solana pubkey conversion lives under `src/chains/solana/transactions/subject.rs`,
 /// and native fees use a raw-unit name rather than Solana lamports.
@@ -1131,10 +1100,6 @@ const NEUTRAL_FILES_NAMING_CHAINS_SOLANA: &[&str] = &[
     "services/implementations/referral_service.rs",
     "swaps/operations.rs",
     "telegram/commands/status.rs",
-    "tools/multi_wallet/buy.rs",
-    "tools/multi_wallet/consolidate.rs",
-    "tools/multi_wallet/sell.rs",
-    "tools/multi_wallet/transfer.rs",
     "transactions/database/deltas.rs",
     "transactions/debug.rs",
     "transactions/debug_helpers.rs",
@@ -1154,11 +1119,6 @@ const NEUTRAL_FILES_NAMING_CHAINS_SOLANA: &[&str] = &[
     "wallets/manager/migration.rs",
     "webserver/routes/initialization/handlers.rs",
     "webserver/routes/initialization/types.rs",
-    "webserver/routes/tools/ata_cleanup.rs",
-    "webserver/routes/tools/burn_tokens.rs",
-    "webserver/routes/tools/multi_wallet/multi_buy.rs",
-    "webserver/routes/tools/multi_wallet/multi_sell.rs",
-    "webserver/routes/tools/multi_wallet/wallet_ops.rs",
     "webserver/routes/trader/manual.rs",
     "webserver/routes/transactions/handlers.rs",
 ];
@@ -1552,12 +1512,6 @@ const PROCESS_CHAIN_SEAM_CALLER_FILES: &[&str] = &[
     "swaps/operations.rs",
     "swaps/registry.rs",
     "telegram/wallet_alerts.rs",
-    "tools/multi_wallet/buy.rs",
-    "tools/multi_wallet/consolidate.rs",
-    "tools/multi_wallet/sell.rs",
-    "tools/multi_wallet/transfer.rs",
-    "tools/swap_executor.rs",
-    "tools/trade_watcher/monitor.rs",
     "trader/copy/control.rs",
     "trader/copy/workspace/profile.rs",
     "trader/manual/guard.rs",
@@ -1589,10 +1543,6 @@ const PROCESS_CHAIN_SEAM_CALLER_FILES: &[&str] = &[
     "webserver/routes/tokens/detail.rs",
     "webserver/routes/tokens/ohlcv.rs",
     "webserver/routes/tokens/types.rs",
-    "webserver/routes/tools/ata_cleanup.rs",
-    "webserver/routes/tools/burn_tokens.rs",
-    "webserver/routes/tools/multi_wallet/multi_buy.rs",
-    "webserver/routes/tools/multi_wallet/multi_sell.rs",
     "webserver/routes/trader/manual.rs",
 ];
 
@@ -2438,10 +2388,10 @@ fn shared_modules_never_name_solana_vendor_types_through_the_facade() {
 /// (`native_asset_address`, `is_native_asset`, `stable_assets`,
 /// `native_asset_decimals`, `raw_to_native`, `native_to_raw`).
 ///
-/// The ATA/rent constants are deliberately NOT on this list: the ATA-cleanup and
-/// multi-wallet tools model a Solana-only concept end to end, so importing the
-/// constant is honest there. When those tools move behind a chain-asset-operations
-/// seam, add the names here.
+/// The ATA/rent constants are deliberately NOT on this list: the empty-account
+/// cleanup models a Solana-only concept end to end, so importing the constant is
+/// honest there. When it moves behind a chain-asset-operations seam, add the
+/// names here.
 #[test]
 fn shared_modules_take_asset_and_unit_facts_from_the_adapter() {
     const ADAPTER_OWNED: &[&str] = &[
@@ -2718,7 +2668,6 @@ const MIGRATED_TO_TYPED_ERRORS: &[&str] = &[
     "transactions",
     "trader",
     "wallets",
-    "tools",
     "chains",
     "apis",
     "pools",
@@ -3650,13 +3599,6 @@ const TRADE_RUNNERS: &[&str] = &[
     "submit_entry",
     "submit_entry_with_context",
     "quote_and_execute_for_wallet",
-    "execute_tool_swap",
-    "tool_buy",
-    "tool_sell",
-    "execute_multi_buy",
-    "execute_multi_sell",
-    "execute_consolidation",
-    "burn_configured_wallet_token",
 ];
 
 /// Functions that share a runner's name but are a caller's own helper, as
@@ -3695,7 +3637,6 @@ const INLINE_TRADE_OWNERS: &[(&str, &str)] = &[
         "trader/copy/service.rs",
         "the copy service loop, never a request",
     ),
-    ("tools/", "multi-wallet sessions, started on their own task"),
 ];
 
 /// Every trade is awaited only where no caller can cancel it: inside its
@@ -3761,7 +3702,7 @@ fn every_trade_runs_where_no_caller_can_cancel_it() {
     }
     assert!(
         calls > 0,
-        "the guard must see the spawned multi-wallet sessions"
+        "the guard must see the trade runners called outside their owners"
     );
     let stale: Vec<_> = SAME_NAME_HELPERS
         .iter()

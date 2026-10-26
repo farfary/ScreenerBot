@@ -184,15 +184,6 @@ pub fn address_from_encrypted_key(ciphertext: &str, nonce: &str) -> Result<Strin
     decrypt_to_keypair(ciphertext, nonce).map(|kp| keypair_to_address(&kp))
 }
 
-/// Generate a fresh ephemeral keypair and return its address plus base58
-/// secret, for tools that hand the user a brand-new burner wallet rather
-/// than storing it (the dashboard's wallet generator).
-pub fn generate_keypair_strings() -> (String, String) {
-    let keypair = generate_keypair();
-    let secret = bs58::encode(keypair.to_bytes()).into_string();
-    (keypair_to_address(&keypair), secret)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

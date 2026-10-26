@@ -275,10 +275,9 @@ pub async fn close_ata(owner_keypair: &Keypair, mint: &str, is_token_2022: bool)
 // WALLET-ID ENTRY POINTS
 // =============================================================================
 //
-// Multi-wallet tooling (`crate::tools::multi_wallet`) identifies wallets only
-// by database ID or "the main wallet" — it never holds a `Keypair`. These
-// resolve+decrypt the signer here, inside `crate::chains::solana`, use it for
-// exactly one transaction, and drop it.
+// Callers outside `crate::chains::solana` identify a wallet only by database ID
+// or "the main wallet" and never hold a `Keypair`. These resolve+decrypt the
+// signer here, use it for exactly one transaction, and drop it.
 
 /// Transfer SOL from the main wallet.
 pub async fn transfer_sol_from_main(to_address: &str, amount_sol: f64) -> Result<String> {

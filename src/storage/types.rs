@@ -266,8 +266,7 @@ pub enum Protection {
     OpenPosition,
     /// Held by the wallet.
     Held,
-    /// Watched by the trader, the filters, the chart monitor, a tool or an action in
-    /// progress.
+    /// Watched by the trader, the filters, the chart monitor or an action in progress.
     Watched,
     /// Used or viewed within the floor no eviction goes below.
     RecentlyViewed,

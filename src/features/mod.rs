@@ -1,10 +1,10 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Feature flags for ScreenerBot tools and trading features.
+//! Feature flags for ScreenerBot trading features and integrations.
 //!
-//! Provides compile-time feature flags that control which tools and trading
-//! features are available, coming soon, in beta, or disabled.
+//! Provides compile-time feature flags that control which trading features are
+//! available, coming soon, in beta, or disabled.
 //! Used by the frontend to control UI visibility and by the backend to gate functionality.
 
 mod types;
@@ -16,19 +16,9 @@ pub fn get_features() -> Features {
     Features::default()
 }
 
-/// Check if a specific tool is available by ID.
-pub fn is_tool_available(tool_id: &str) -> bool {
-    get_tool_status(tool_id).is_usable()
-}
-
 /// Check if a trading feature is available by ID.
 pub fn is_trading_feature_available(feature_id: &str) -> bool {
     get_trading_feature_status(feature_id).is_usable()
-}
-
-/// Get feature status for a tool.
-pub fn get_tool_status(tool_id: &str) -> FeatureStatus {
-    ToolFeatures::default().get_status(tool_id)
 }
 
 /// Get feature status for a trading feature.
@@ -39,15 +29,6 @@ pub fn get_trading_feature_status(feature_id: &str) -> FeatureStatus {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_tool_availability() {
-        assert!(is_tool_available("wallet-cleanup"));
-        assert!(!is_tool_available("burn-tokens"));
-        assert!(!is_tool_available("create-token"));
-        assert!(!is_tool_available("airdrop-checker"));
-        assert!(!is_tool_available("unknown-tool"));
-    }
 
     #[test]
     fn test_trading_feature_availability() {
@@ -61,6 +42,7 @@ mod tests {
         }
         let features = serde_json::to_value(get_features()).unwrap();
         assert_eq!(features["trading"]["copy_wallet"], "available");
+        assert!(features.get("tools").is_none(), "the tools group is removed");
         assert!(!is_trading_feature_available("unknown-feature"));
     }
 
@@ -74,13 +56,5 @@ mod tests {
         assert!(FeatureStatus::Available.is_visible());
         assert!(FeatureStatus::ComingSoon.is_visible());
         assert!(!FeatureStatus::Disabled.is_visible());
-    }
-
-    #[test]
-    fn test_holder_watch_aliases() {
-        assert_eq!(
-            get_tool_status("token-watch"),
-            get_tool_status("holder-watch")
-        );
     }
 }
