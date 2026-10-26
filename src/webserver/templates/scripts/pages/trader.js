@@ -469,6 +469,10 @@ function createLifecycle() {
         return shown === "neutral" ? null : shown;
       };
 
+      // A window without closed trades leaves every ratio card without a basis; its
+      // subtitle then says why instead of repeating the value's dash.
+      const hasTrades = data.total_trades > 0;
+
       // Net P&L — the booked, fee- and DCA-aware SOL the window actually returned.
       setValue(
         "net-pnl",
@@ -479,7 +483,7 @@ function createLifecycle() {
       );
       setDetail(
         "net-pnl-detail",
-        data.total_trades > 0
+        hasTrades
           ? I18n.t("trader-stats-won-lost", {
               won: sol(data.gross_profit_native),
               lost: sol(data.gross_loss_native),
@@ -510,7 +514,7 @@ function createLifecycle() {
                 amount: String(data.losers),
               }),
             })
-          : "—"
+          : I18n.t("trader-stats-empty")
       );
 
       setValue(
@@ -524,20 +528,25 @@ function createLifecycle() {
       );
       setDetail(
         "profit-factor-detail",
-        Number.isFinite(data.expectancy_native)
-          ? I18n.t("trader-stats-expected", { amount: sol(data.expectancy_native) })
-          : I18n.t("trader-stats-profit-factor-basis")
+        !hasTrades
+          ? I18n.t("trader-stats-empty")
+          : Number.isFinite(data.expectancy_native)
+            ? I18n.t("trader-stats-expected", { amount: sol(data.expectancy_native) })
+            : I18n.t("trader-stats-profit-factor-basis")
       );
 
       const hasDrawdown =
-        data.total_trades > 0 && Utils.signedTone(data.max_drawdown_native, 4) === "positive";
+        hasTrades && Utils.signedTone(data.max_drawdown_native, 4) === "positive";
       setValue(
         "max-drawdown",
-        data.total_trades > 0 ? sol(data.max_drawdown_native) : "—",
+        hasTrades ? sol(data.max_drawdown_native) : "—",
         hasDrawdown ? "negative" : null
       );
       setDrawdownAccent(hasDrawdown);
-      setDetail("max-drawdown-detail", I18n.t("trader-stats-drawdown-basis"));
+      setDetail(
+        "max-drawdown-detail",
+        hasTrades ? I18n.t("trader-stats-drawdown-basis") : I18n.t("trader-stats-empty")
+      );
 
       setValue("capital-at-work", sol(data.locked_native));
       setDetail(
@@ -555,7 +564,10 @@ function createLifecycle() {
         "avg-win-loss",
         hasWin || hasLoss ? `${pct(data.avg_win_pct)} / ${pct(data.avg_loss_pct)}` : "—"
       );
-      setDetail("avg-win-loss-detail", I18n.t("trader-stats-avg-basis"));
+      setDetail(
+        "avg-win-loss-detail",
+        hasWin || hasLoss ? I18n.t("trader-stats-avg-basis") : I18n.t("trader-stats-empty")
+      );
 
       setValue(
         "total-trades",
@@ -576,7 +588,7 @@ function createLifecycle() {
         "median-hold-detail",
         Number.isFinite(data.avg_hold_time_hours)
           ? I18n.t("trader-stats-hold-average", { span: holdText(data.avg_hold_time_hours) })
-          : "—"
+          : I18n.t("trader-stats-empty")
       );
 
       // Rounds with an incomplete cost basis carry no honest P&L and are left out of

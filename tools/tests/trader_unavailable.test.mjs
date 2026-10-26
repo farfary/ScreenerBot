@@ -140,6 +140,20 @@ test("an unavailable trader shows no control as on and offers setup", async () =
     for (const id of ["#win-rate", "#profit-factor", "#avg-win-loss", "#median-hold"]) {
       assert.equal((await tab.locator(id).textContent()).trim(), "—", `${id} reads —`);
     }
+    // An empty card says why it is empty; its subtitle never repeats the dash.
+    for (const id of [
+      "#net-pnl-detail",
+      "#profit-factor-detail",
+      "#max-drawdown-detail",
+      "#avg-win-loss-detail",
+      "#median-hold-detail",
+    ]) {
+      assert.equal(
+        (await tab.locator(id).textContent()).trim(),
+        "No closed trades in this window",
+        `${id} explains the empty window`
+      );
+    }
 
     const drawdownCard = tab.locator(".metric-card", { has: tab.locator("#max-drawdown") });
     assert.equal((await tab.locator("#max-drawdown").textContent()).trim(), "—");
