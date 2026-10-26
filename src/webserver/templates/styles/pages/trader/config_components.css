@@ -243,30 +243,10 @@
   max-width: 160px;
 }
 
-/* A rule value reads at the weight of a figure; the box, face and focus come from the
-   shared number input (form_controls.css), as on every other page. */
+/* A rule value, or a list of amounts, reads at the weight of a figure; the box, face and
+   focus come from the shared inputs (form_controls.css), as on every other page. */
 .input-large {
   font-weight: 600;
-}
-
-/* A list of amounts reads as figures: the data face comes from `dir="ltr"` on the input
-   (form_controls.css) and the weight matches the number fields beside it. */
-.input-text-compact {
-  width: 100%;
-  padding: 0.5rem 0.75rem;
-  font-size: 0.875rem;
-  font-weight: 600;
-  border: 2px solid var(--border-color);
-  border-radius: var(--radius-md);
-  background: var(--background-secondary);
-  color: var(--text-primary);
-  transition: all var(--transition-base);
-}
-
-.input-text-compact:focus {
-  outline: none;
-  border-color: var(--primary);
-  box-shadow: 0 0 0 3px var(--primary-alpha-10);
 }
 
 .config-impact {
