@@ -614,12 +614,9 @@ pub async fn test_port_binding(
 // AGENT RUNTIME FILE
 // =============================================================================
 
-/// Write the agent runtime metadata file atomically. It advertises the local
-/// webserver URL/port/pid to co-located tooling and carries no security token or
-/// secret. On Unix the temp file is
-/// created with `0600` before it is written or renamed, so it is never briefly
-/// group/world-readable; the mode is preserved across the rename. On other
-/// platforms the standard atomic write is used.
+/// Write the agent runtime metadata file atomically, owner read/write only. It
+/// advertises the local webserver URL/port/pid to co-located tooling and carries no
+/// security token or secret.
 fn write_agent_runtime_file(port: u16, is_gui: bool) {
     let content = serde_json::json!({
         "url": format!("http://127.0.0.1:{}", port),
@@ -630,41 +627,15 @@ fn write_agent_runtime_file(port: u16, is_gui: bool) {
     });
 
     let path = crate::paths::get_agent_runtime_path();
-    let temporary = path.with_extension("json.tmp");
-    let write_result = (|| -> std::io::Result<()> {
-        use std::io::Write;
-        let mut options = std::fs::OpenOptions::new();
-        options.write(true).create(true).truncate(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            options.mode(0o600);
-        }
-        let mut file = options.open(&temporary)?;
-        file.write_all(
-            serde_json::to_string_pretty(&content)
-                .unwrap_or_default()
-                .as_bytes(),
-        )?;
-        file.sync_all()?;
-        std::fs::rename(&temporary, &path)
-    })();
-    match write_result {
-        Ok(_) => {
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::PermissionsExt;
-                // Defensive: enforce owner-only even if the file already existed
-                // with a wider mode before this write.
-                let _ = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600));
-            }
+    let body = serde_json::to_string_pretty(&content).unwrap_or_default();
+    match crate::utils::atomic_file::replace(&path, body.as_bytes(), 0o600) {
+        Ok(()) => {
             logger::debug(
                 LogTag::Webserver,
                 &format!("Agent runtime file written to {}", path.display()),
             );
         }
         Err(e) => {
-            let _ = std::fs::remove_file(&temporary);
             logger::warning(
                 LogTag::Webserver,
                 &format!("Failed to write agent runtime file: {e}"),

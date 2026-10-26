@@ -195,32 +195,14 @@ pub fn parse_config_document(raw: &str) -> Result<ParsedConfig> {
     })
 }
 
-/// Serialize `config` and replace `path` as atomically as the platform allows
-/// (write a sibling temp file, fsync it, then rename over `path`). Every write
-/// of `config.toml` goes through here, so a crash or a full disk mid-write never
+/// Serialize `config` and replace `path` through `utils::atomic_file::replace`. Every
+/// write of `config.toml` goes through here, so a crash or a full disk mid-write never
 /// leaves a truncated file, and a write never widens access to its secrets.
 ///
-/// Permissions: `config.toml` holds provider API keys, so the temp file is
-/// created with mode `0600` **before its first byte is written** (via
-/// `OpenOptionsExt::mode`) — there is no window in which a secret-bearing file
-/// exists at the process umask. When `path` already exists, its owner
-/// read/write bits are preserved but nothing wider: an existing `0644`/`0640`
-/// is tightened to `0600`, never copied.
-///
-/// Atomicity: on Unix `rename(2)` replaces the destination atomically. On
-/// Windows `std::fs::rename` fails if the destination exists, so the existing
-/// file is removed first and the replacement is therefore **not** atomic there;
-/// a crash between the two steps can leave `path` missing. This is documented
-/// rather than silently claimed to be atomic.
-///
-/// Concurrency: the sibling temp path carries the pid **and** a process-monotonic
-/// counter, and is opened `O_EXCL` (`create_new`) with a bounded retry. Two
-/// concurrent callers in this process therefore never select — let alone
-/// truncate — the same temp, and a stale leftover temp is stepped over rather
-/// than clobbered.
+/// Permissions: `config.toml` holds provider API keys, so the file is written owner
+/// read/write only. When `path` already exists, its owner read/write bits are preserved
+/// but nothing wider: an existing `0644`/`0640` is tightened to `0600`, never copied.
 pub(crate) fn write_config_atomic(config: &Config, path: &str) -> Result<()> {
-    use std::io::Write;
-
     let body = toml::to_string_pretty(config).map_err(|e| Error::WriteFailed {
         detail: format!("Failed to serialize config: {e}"),
     })?;
@@ -242,147 +224,14 @@ pub(crate) fn write_config_atomic(config: &Config, path: &str) -> Result<()> {
             _ => 0o600,
         }
     };
-
-    // Create the temp with `O_EXCL` and the restrictive mode already applied, so
-    // an existing candidate (a concurrent writer's temp, or a stale leftover) is
-    // never opened or truncated. A fresh process-monotonic token per attempt
-    // makes a genuine collision improbable; the bounded retry covers the residue.
-    let mut opts = std::fs::OpenOptions::new();
-    opts.write(true).create_new(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        opts.mode(mode);
-    }
-
-    let (tmp, mut file) = {
-        let mut opened = None;
-        let mut last_err = None;
-        for _ in 0..MAX_TEMP_ATTEMPTS {
-            let seq = TEMP_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-            let candidate = sibling_temp_path(dest, seq);
-            match opts.open(&candidate) {
-                Ok(f) => {
-                    opened = Some((candidate, f));
-                    break;
-                }
-                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
-                    last_err = Some(e);
-                }
-                Err(e) => {
-                    return Err(Error::WriteFailed {
-                        detail: format!(
-                            "Failed to create temp config '{}': {e}",
-                            candidate.display()
-                        ),
-                    });
-                }
-            }
-        }
-        match opened {
-            Some(pair) => pair,
-            None => {
-                return Err(Error::WriteFailed {
-                    detail: format!(
-                        "Failed to create a unique temp config beside '{path}' after \
-                         {MAX_TEMP_ATTEMPTS} attempts: {}",
-                        last_err
-                            .map(|e| e.to_string())
-                            .unwrap_or_else(|| "unknown error".to_owned())
-                    ),
-                });
-            }
-        }
-    };
-
-    // Any failure past this point must not leave the temp behind.
-    let write_and_sync = (|| -> std::io::Result<()> {
-        file.write_all(body.as_bytes())?;
-        file.sync_all()?;
-        Ok(())
-    })();
-    if let Err(e) = write_and_sync {
-        drop(file);
-        let _ = std::fs::remove_file(&tmp);
-        return Err(Error::WriteFailed {
-            detail: format!("Failed to write temp config '{}': {e}", tmp.display()),
-        });
-    }
-
-    // `OpenOptionsExt::mode` is subject to the umask; re-assert the exact mode
-    // so an existing over-broad file is genuinely tightened, not merely masked.
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        if let Err(e) = std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(mode)) {
-            drop(file);
-            let _ = std::fs::remove_file(&tmp);
-            return Err(IoError::Generic {
-                message: format!("Failed to set permissions on '{}': {e}", tmp.display()),
-            }
-            .into());
-        }
-    }
-    drop(file);
-
     #[cfg(not(unix))]
-    {
-        // Windows: rename onto an existing path fails. Best-effort replace; see
-        // the doc comment — this is not crash-atomic.
-        if dest.exists() {
-            if let Err(e) = std::fs::remove_file(dest) {
-                let _ = std::fs::remove_file(&tmp);
-                return Err(Error::WriteFailed {
-                    detail: format!("Failed to replace config '{path}': {e}"),
-                });
-            }
-        }
-    }
+    let mode: u32 = 0o600;
 
-    std::fs::rename(&tmp, dest).map_err(|e| {
-        let _ = std::fs::remove_file(&tmp);
+    crate::utils::atomic_file::replace(dest, body.as_bytes(), mode).map_err(|e| {
         Error::WriteFailed {
             detail: format!("Failed to persist config to '{path}': {e}"),
         }
-    })?;
-
-    // Persist the directory entry for the rename where the platform supports it.
-    #[cfg(unix)]
-    {
-        if let Some(parent) = dest.parent() {
-            if let Ok(dir) = std::fs::File::open(parent) {
-                let _ = dir.sync_all();
-            }
-        }
-    }
-
-    Ok(())
-}
-
-/// Upper bound on how many temp-name tokens `write_config_atomic` will try
-/// before giving up. With a process-monotonic counter a single retry is already
-/// enough in practice; the slack absorbs a burst of concurrent writers plus any
-/// stale leftover temps.
-const MAX_TEMP_ATTEMPTS: u32 = 16;
-
-/// Process-monotonic token that makes every in-process temp path distinct, so
-/// two concurrent `write_config_atomic` calls never select the same sibling temp.
-static TEMP_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-
-/// A never-clobbering temp path in the same directory as `dest` (so `rename`
-/// stays within one filesystem), hidden and suffixed to avoid colliding with the
-/// real file. `seq` is a per-attempt token from [`TEMP_SEQ`]; combined with the
-/// pid it is unique across every writer that can race here.
-fn sibling_temp_path(dest: &std::path::Path, seq: u64) -> std::path::PathBuf {
-    let name = dest
-        .file_name()
-        .map(|n| n.to_string_lossy().into_owned())
-        .unwrap_or_else(|| "config.toml".to_owned());
-    let tmp_name = format!(".{name}.migrate.{}.{seq}.tmp", std::process::id());
-    match dest.parent() {
-        Some(parent) => parent.join(tmp_name),
-        None => std::path::PathBuf::from(tmp_name),
-    }
+    })
 }
 
 /// Reload configuration from disk
@@ -1030,24 +879,6 @@ mod atomic_write_tests {
         let err = write_config_atomic(&Config::default(), &clash.to_string_lossy());
         assert!(err.is_err());
         assert!(!has_temp_file(dir.path()), "temp file leaked on error path");
-    }
-
-    #[test]
-    fn existing_temp_candidate_is_never_opened_or_truncated() {
-        // Squat a file at a candidate temp path and try to create it with the
-        // exact options `write_config_atomic` uses: `O_EXCL` must refuse it and
-        // leave its bytes intact — the writer then moves to the next token.
-        let dir = tempfile::tempdir().unwrap();
-        let dest = dir.path().join("config.toml");
-        let victim = sibling_temp_path(&dest, 0);
-        std::fs::write(&victim, b"PRECIOUS").unwrap();
-
-        let mut opts = std::fs::OpenOptions::new();
-        opts.write(true).create_new(true);
-        let err = opts.open(&victim).unwrap_err();
-
-        assert_eq!(err.kind(), std::io::ErrorKind::AlreadyExists);
-        assert_eq!(std::fs::read(&victim).unwrap(), b"PRECIOUS");
     }
 
     #[test]

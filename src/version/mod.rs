@@ -173,34 +173,13 @@ async fn persist_state(snapshot: UpdateState) {
         std::fs::create_dir_all(parent)
             .map_err(|error| Error::Io(crate::errors::IoError::from(error)))?;
 
-        let temporary = path.with_extension("json.part");
         let bytes = serde_json::to_vec_pretty(&snapshot).map_err(|error| {
             Error::Data(crate::errors::DataError::ParseError {
                 data_type: "update state".to_owned(),
                 error: error.to_string(),
             })
         })?;
-
-        #[cfg(unix)]
-        {
-            use std::io::Write;
-            use std::os::unix::fs::OpenOptionsExt;
-            let mut file = std::fs::OpenOptions::new()
-                .create(true)
-                .truncate(true)
-                .write(true)
-                .mode(0o600)
-                .open(&temporary)
-                .map_err(|error| Error::Io(crate::errors::IoError::from(error)))?;
-            file.write_all(&bytes)
-                .and_then(|_| file.sync_all())
-                .map_err(|error| Error::Io(crate::errors::IoError::from(error)))?;
-        }
-        #[cfg(not(unix))]
-        std::fs::write(&temporary, bytes)
-            .map_err(|error| Error::Io(crate::errors::IoError::from(error)))?;
-
-        std::fs::rename(&temporary, &path)
+        crate::utils::atomic_file::replace(&path, &bytes, 0o600)
             .map_err(|error| Error::Io(crate::errors::IoError::from(error)))?;
         Ok(())
     })

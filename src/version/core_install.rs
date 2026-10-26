@@ -171,17 +171,14 @@ fn stage_core_blocking(version: &str, core: &CoreArtifact, archive: &Path) -> Re
 
 /// Publish the pointer atomically so the shell never reads a half-written record.
 fn write_pointer(staged: &StagedCore) -> Result<()> {
-    let path = pointer_path();
-    let temporary = path.with_extension("json.part");
     let bytes = serde_json::to_vec_pretty(staged).map_err(|error| {
         Error::Data(crate::errors::DataError::ParseError {
             data_type: "staged core pointer".to_owned(),
             error: error.to_string(),
         })
     })?;
-    std::fs::write(&temporary, bytes).map_err(|e| Error::Io(crate::errors::IoError::from(e)))?;
-    std::fs::rename(&temporary, &path).map_err(|e| Error::Io(crate::errors::IoError::from(e)))?;
-    Ok(())
+    crate::utils::atomic_file::replace(&pointer_path(), &bytes, 0o644)
+        .map_err(|e| Error::Io(crate::errors::IoError::from(e)))
 }
 
 /// Remove staged cores other than the one the pointer names. Only entries whose
