@@ -89,6 +89,12 @@ pub struct TestPositionData {
     pub position_age_hours: f64,
     #[serde(default)]
     pub peak_price: Option<f64>,
+    #[serde(default)]
+    pub dca_count: u32,
+    #[serde(default)]
+    pub partial_exit_count: u32,
+    #[serde(default)]
+    pub remaining_value_native: Option<f64>,
 }
 
 #[derive(Debug, Deserialize)]

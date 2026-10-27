@@ -4,7 +4,7 @@
 //! Position profit condition — the open position's unrealized profit against a percentage.
 
 use crate::strategies::conditions::{get_param_choice, get_param_f64_in_range, ConditionEvaluator};
-use crate::strategies::types::{Condition, EvaluationContext, StrategyType};
+use crate::strategies::types::{Condition, ConditionData, EvaluationContext, StrategyType};
 use crate::strategies::{Error, Result};
 use async_trait::async_trait;
 use serde_json::json;
@@ -62,6 +62,10 @@ impl ConditionEvaluator for PositionProfitCondition {
 
     fn applies_to(&self) -> &'static [StrategyType] {
         &[StrategyType::Exit]
+    }
+
+    fn reads(&self) -> ConditionData {
+        ConditionData::Position
     }
 
     fn parameter_schema(&self) -> serde_json::Value {

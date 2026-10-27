@@ -30,8 +30,9 @@ use crate::common;
 
 use common::{
     anchor_ts, bundle_with, candle, candle_series, condition, context_bare, context_with_candles,
-    TEST_MINT,
+    filter_token, test_position, TEST_MINT,
 };
+use screenerbot::chains::RawAmount;
 use screenerbot::ohlcvs::{Candle, TimeframeBundle};
 use screenerbot::strategies::conditions::{
     ConditionEvaluator, ConsecutiveCandlesCondition, LiquidityLevelCondition,
@@ -43,6 +44,7 @@ use screenerbot::strategies::types::{
     StrategyType,
 };
 use screenerbot::strategies::Error as StrategyError;
+use screenerbot::trader::evaluators::strategies::{strategy_market_data, strategy_position_data};
 use serde_json::json;
 
 const MINUTE: i64 = 60;
@@ -211,43 +213,32 @@ fn every_candle_rule() -> Vec<(&'static str, Box<dyn ConditionEvaluator>, Condit
 // ==================== THE CONTEXT THE TRADER ACTUALLY BUILDS ====================
 //
 // `src/trader/evaluators/strategies.rs` is the only place that turns live bot state into
-// an `EvaluationContext`. The two helpers below mirror what it builds, field for field,
-// so a change there that quietly starves a rule of its input fails here.
+// an `EvaluationContext`, through `strategy_market_data` and `strategy_position_data`. The
+// helpers below call those builders with the inputs each path passes, so a change there
+// that quietly starves a rule of its input fails here.
 
-/// `check_entry_strategies`: liquidity comes from the pool price result's `native_reserves`;
-/// the transaction counts come from the token cache and are `None` for an uncached token.
+/// `check_entry_strategies`: liquidity comes from the pool price result's `native_reserves`,
+/// the reference size from the configured trade size; an uncached token carries no
+/// snapshot.
 fn entry_market_data(liquidity_sol: f64) -> MarketData {
-    MarketData {
-        liquidity_sol: Some(liquidity_sol),
-        transactions: None,
-    }
+    strategy_market_data(None, Some(liquidity_sol), Some(0.01))
 }
 
 /// `check_exit_strategies`: liquidity is read from the live pool price result — the same
 /// single source the entry path uses — and stays `None` only when no pool price exists
-/// for the mint (an API-derived price carries no reserves). Transaction counts are `None` for
-/// an uncached token.
+/// for the mint (an API-derived price carries no reserves). An exit has no reference size.
 fn exit_market_data(liquidity_sol: Option<f64>) -> MarketData {
-    MarketData {
-        liquidity_sol,
-        transactions: None,
-    }
+    strategy_market_data(None, liquidity_sol, None)
 }
 
 fn exit_position_data(entry_price: f64, current_price: f64) -> PositionData {
-    let unrealized_profit_pct = if entry_price > 0.0 {
-        Some(((current_price - entry_price) / entry_price) * 100.0)
-    } else {
-        None
-    };
-    PositionData {
-        entry_price,
-        entry_time: chrono::Utc::now(),
-        current_size_sol: 1.0,
-        unrealized_profit_pct,
-        position_age_hours: 1.0,
-        peak_price: None,
-    }
+    strategy_position_data(
+        &test_position(entry_price, 1.0),
+        current_price,
+        Some(current_price),
+        None,
+        chrono::Utc::now(),
+    )
 }
 
 fn entry_context(liquidity_sol: f64, price: f64) -> EvaluationContext {
@@ -334,6 +325,93 @@ async fn an_exit_context_still_carries_the_position_the_rules_need() {
 
     // A broken (zero) average entry price is reported as "no percentage", never as 0%.
     assert_eq!(exit_position_data(0.0, 2.0).unrealized_profit_pct, None);
+}
+
+#[test]
+fn the_exit_context_carries_the_adds_partials_and_basis_peak_of_the_position() {
+    let mut position = test_position(1.0, 1.0);
+    position.dca_count = 2;
+    position.partial_exit_count = 1;
+    position.average_entry_price = 0.8;
+    position.basis_peak_price = 1.25;
+    position.price_highest = 3.0;
+
+    let data = strategy_position_data(&position, 1.0, Some(1.0), None, chrono::Utc::now());
+    assert_eq!(data.dca_count, 2);
+    assert_eq!(data.partial_exit_count, 1);
+    assert_eq!(data.entry_price, 0.8);
+    // The peak since the average last moved, never the round maximum before the adds.
+    assert_eq!(data.peak_price, Some(1.25));
+
+    position.basis_peak_price = f64::NAN;
+    let data = strategy_position_data(&position, 1.0, Some(1.0), None, chrono::Utc::now());
+    assert_eq!(
+        data.peak_price, None,
+        "a broken peak is absent, not the highest"
+    );
+}
+
+#[test]
+fn the_value_still_held_is_priced_at_the_pool_and_needs_known_decimals() {
+    let mut position = test_position(1.0, 1.0);
+    position.token_amount = Some(RawAmount::new(5_000_000_000));
+    position.remaining_token_amount = Some(RawAmount::new(2_000_000_000));
+    let now = chrono::Utc::now();
+    let value = |pool: Option<f64>, decimals: Option<u8>, current: f64| {
+        strategy_position_data(&position, current, pool, decimals, now).remaining_value_native
+    };
+
+    // What is left after partial exits, at the pool price — not the entry fill, and not
+    // the price the profit is measured at.
+    assert_eq!(value(Some(0.25), Some(9), 9.0), Some(0.5));
+    // Unknown decimals or no pool price: absent, never a guess.
+    assert_eq!(value(Some(0.25), None, 9.0), None);
+    assert_eq!(value(None, Some(9), 9.0), None);
+    for broken in [0.0, -1.0, f64::NAN, f64::INFINITY] {
+        assert_eq!(
+            value(Some(broken), Some(9), 9.0),
+            None,
+            "pool price {broken}"
+        );
+    }
+
+    // Before any partial exit the held amount is the entry fill.
+    position.remaining_token_amount = None;
+    let data = strategy_position_data(&position, 9.0, Some(0.25), Some(9), now);
+    assert_eq!(data.remaining_value_native, Some(1.25));
+
+    // Nothing recorded as held: absent.
+    position.token_amount = None;
+    let data = strategy_position_data(&position, 9.0, Some(0.25), Some(9), now);
+    assert_eq!(data.remaining_value_native, None);
+}
+
+#[test]
+fn the_market_context_takes_each_time_from_its_own_source() {
+    // No cached token: no counts, no snapshot time, no creation time.
+    let bare = strategy_market_data(None, Some(10.0), Some(0.05));
+    assert_eq!(bare.liquidity_sol, Some(10.0));
+    assert_eq!(bare.reference_size_native, Some(0.05));
+    assert!(bare.transactions.is_none());
+    assert!(bare.snapshot_at.is_none());
+    assert!(bare.token_created_at.is_none());
+
+    let mut token = filter_token(TEST_MINT);
+    let fetched = chrono::DateTime::from_timestamp(1_700_000_000, 0).expect("instant");
+    token.market_data_last_fetched_at = fetched;
+    token.blockchain_created_at = None;
+    token.pool_created_at = Some(fetched - chrono::Duration::days(2));
+    let market = strategy_market_data(Some(&token), None, None);
+    assert_eq!(market.snapshot_at, Some(fetched));
+    assert!(market.transactions.is_some());
+    // A pool time or a discovery time is never passed off as the creation time.
+    assert_eq!(market.token_created_at, None);
+    assert_eq!(market.reference_size_native, None);
+
+    let created = fetched - chrono::Duration::days(5);
+    token.blockchain_created_at = Some(created);
+    let market = strategy_market_data(Some(&token), None, None);
+    assert_eq!(market.token_created_at, Some(created));
 }
 
 // ==================== OHLCV READINESS ====================
@@ -594,7 +672,7 @@ async fn a_zero_reference_price_is_refused_instead_of_reading_as_an_infinite_gai
         assert!(
             matches!(
                 err,
-                StrategyError::InvalidConditionValue {
+                StrategyError::UnusableData {
                     field: "reference candle close",
                     ..
                 }
@@ -618,7 +696,7 @@ async fn a_dead_series_cannot_place_the_price_above_its_moving_average() {
     assert!(
         matches!(
             err,
-            StrategyError::InvalidConditionValue {
+            StrategyError::UnusableData {
                 field: "moving average",
                 ..
             }
@@ -687,7 +765,7 @@ async fn a_not_a_number_price_is_refused_by_every_price_rule() {
         assert!(
             matches!(
                 err,
-                StrategyError::InvalidConditionValue {
+                StrategyError::UnusableData {
                     field: "current price",
                     ..
                 }
@@ -697,14 +775,14 @@ async fn a_not_a_number_price_is_refused_by_every_price_rule() {
     }
     assert!(matches!(
         eval_err(&PriceToMaCondition, &price_to_ma(5, "WITHIN", 100.0), &ctx).await,
-        StrategyError::InvalidConditionValue {
+        StrategyError::UnusableData {
             field: "current price",
             ..
         }
     ));
     assert!(matches!(
         eval_err(&PriceBreakoutCondition, &breakout(5, "DOWNWARD", 0.0), &ctx).await,
-        StrategyError::InvalidConditionValue {
+        StrategyError::UnusableData {
             field: "current price",
             ..
         }
@@ -737,10 +815,11 @@ async fn a_strategy_with_no_candle_rule_still_trades_through_a_total_ohlcv_outag
 }
 
 #[tokio::test]
-async fn one_unavailable_input_fails_the_whole_strategy_not_just_its_own_leaf() {
-    // A missing bundle does not evaluate to `false` inside an AND — it aborts the tree.
-    // The trader turns that `Err` into `Ok(None)`, so the strategy neither fires nor
-    // reports a market opinion: it is inert until the data comes back.
+async fn an_unavailable_input_leaves_the_strategy_undecided_when_nothing_else_decides_it() {
+    // A missing bundle is unknown inside an AND, never `false`. With every other rule
+    // true, nothing decides the AND, so the strategy reports the data error and the
+    // trader turns it into `Ok(None)`: it neither fires nor reports a market opinion
+    // until the data comes back.
     let engine = uncached_engine();
     let s = strategy(
         StrategyType::Exit,
@@ -768,52 +847,36 @@ async fn one_unavailable_input_fails_the_whole_strategy_not_just_its_own_leaf() 
 }
 
 #[tokio::test]
-async fn whether_a_data_outage_is_even_visible_depends_on_the_order_of_the_conditions() {
-    // AND short-circuits on the first `false`, so an outage in a LATER condition is
-    // never reached. The same two rules, same missing data, produce either "no signal"
-    // or "unanswerable" depending purely on the order the user happened to add them in.
-    //
-    // This is why an outage cannot be detected by watching for strategy errors alone —
-    // `check_entry_strategies`/`check_exit_strategies` log the missing bundle at warning
-    // level at the boundary instead, where rule order cannot hide it.
+async fn a_rule_that_decides_the_group_answers_in_whichever_order_the_outage_sits() {
+    // An unknown rule never stops a group, so a later false rule still decides an AND.
+    // The same two rules with the same missing data give the same plain "no signal" in
+    // both orders; the outage itself is reported at warning level by
+    // `check_entry_strategies`/`check_exit_strategies`, where the bundle is built.
     let engine = uncached_engine();
     let ctx = entry_context(10.0, 1.0); // liquidity 10 SOL, no bundle
 
-    let liquidity_first = strategy(
-        StrategyType::Entry,
-        "1m",
-        RuleTree::branch(
-            LogicalOperator::And,
-            vec![
-                RuleTree::leaf(liquidity_at_least(1_000.0)), // false: 10 < 1000
-                RuleTree::leaf(price_to_ma(5, "ABOVE", 1.0)), // would error
-            ],
-        ),
-    );
-    let verdict = engine
-        .evaluate_strategy(&liquidity_first, &ctx)
-        .await
-        .expect("short-circuited before the missing data");
-    assert!(!verdict.result, "reported as a plain `no signal`");
-
-    let candles_first = strategy(
-        StrategyType::Entry,
-        "1m",
-        RuleTree::branch(
-            LogicalOperator::And,
-            vec![
-                RuleTree::leaf(price_to_ma(5, "ABOVE", 1.0)),
-                RuleTree::leaf(liquidity_at_least(1_000.0)),
-            ],
-        ),
-    );
-    assert!(
-        engine
-            .evaluate_strategy(&candles_first, &ctx)
+    let orders = [
+        vec![
+            RuleTree::leaf(liquidity_at_least(1_000.0)), // false: 10 < 1000
+            RuleTree::leaf(price_to_ma(5, "ABOVE", 1.0)), // unknown: no candles
+        ],
+        vec![
+            RuleTree::leaf(price_to_ma(5, "ABOVE", 1.0)),
+            RuleTree::leaf(liquidity_at_least(1_000.0)),
+        ],
+    ];
+    for rules in orders {
+        let s = strategy(
+            StrategyType::Entry,
+            "1m",
+            RuleTree::branch(LogicalOperator::And, rules),
+        );
+        let verdict = engine
+            .evaluate_strategy(&s, &ctx)
             .await
-            .is_err(),
-        "the identical strategy, reordered, reports the outage"
-    );
+            .expect("the false rule decides the group");
+        assert!(!verdict.result, "reported as a plain `no signal`");
+    }
 }
 
 #[tokio::test]

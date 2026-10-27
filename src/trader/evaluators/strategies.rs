@@ -13,9 +13,10 @@ use crate::positions::Position;
 use crate::strategies;
 use crate::strategies::db::has_enabled_strategies;
 use crate::strategies::types::{MarketData, PositionData, StrategyType, TransactionCounts};
+use crate::tokens::Token;
 use crate::trader::constants::STRATEGY_EVALUATION_TIMEOUT_SECS;
 use crate::trader::types::{TradeAction, TradeDecision, TradePriority, TradeReason};
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use std::time::Duration;
 
 /// Pool reserves only count as a liquidity reading when they are a real measurement.
@@ -72,9 +73,62 @@ fn exit_decision(
     }
 }
 
-/// Transaction counts of the cached token snapshot; `None` when the token is not cached.
-fn cached_transactions(chain: ChainId, mint: &str) -> Option<TransactionCounts> {
-    crate::tokens::get_cached_token(chain, mint).map(|token| TransactionCounts::from_token(&token))
+/// The market inputs of a strategy: the live pool's liquidity, the trade size an entry
+/// would spend, and from the cached token snapshot its transaction counts, when that
+/// snapshot was fetched and when the token was created on-chain.
+///
+/// Each value stays absent when its own source is: an uncached token has no counts and no
+/// snapshot time, and a token without an on-chain creation time has none, whatever other
+/// time the token carries.
+pub fn strategy_market_data(
+    token: Option<&Token>,
+    liquidity_sol: Option<f64>,
+    reference_size_native: Option<f64>,
+) -> MarketData {
+    MarketData {
+        liquidity_sol,
+        transactions: token.map(TransactionCounts::from_token),
+        snapshot_at: token.map(|token| token.market_data_last_fetched_at),
+        token_created_at: token.and_then(|token| token.blockchain_created_at),
+        reference_size_native,
+    }
+}
+
+/// The strategy view of an open position at `current_price`.
+///
+/// The peak is the basis peak (the highest pool price since the average entry last
+/// changed), never the round maximum. The value still held is priced at the live pool
+/// price only, and is `None` when that price, the held amount or the token's decimals
+/// are unknown.
+pub fn strategy_position_data(
+    position: &Position,
+    current_price: f64,
+    pool_price: Option<f64>,
+    decimals: Option<u8>,
+    now: DateTime<Utc>,
+) -> PositionData {
+    let unrealized_profit_pct = (position.average_entry_price > 0.0).then(|| {
+        ((current_price - position.average_entry_price) / position.average_entry_price) * 100.0
+    });
+    let pool_price = pool_price.filter(|price| price.is_finite() && *price > 0.0);
+    let remaining_value_native = position
+        .held_amount()
+        .zip(decimals)
+        .zip(pool_price)
+        .map(|((held, decimals), price)| held.to_whole_units(decimals) * price)
+        .filter(|value| value.is_finite());
+
+    PositionData {
+        entry_price: position.average_entry_price,
+        entry_time: position.entry_time,
+        current_size_sol: position.total_size_native,
+        unrealized_profit_pct,
+        position_age_hours: (now - position.entry_time).num_seconds() as f64 / 3600.0,
+        peak_price: Some(position.basis_peak_price).filter(|peak| peak.is_finite() && *peak > 0.0),
+        dca_count: position.dca_count,
+        partial_exit_count: position.partial_exit_count,
+        remaining_value_native,
+    }
 }
 
 /// Evaluator for applying strategies to trading decisions
@@ -111,11 +165,12 @@ impl StrategyEvaluator {
             ),
         );
 
-        // Build market data from price info
-        let market_data = MarketData {
-            liquidity_sol: usable_liquidity(price_info.native_reserves),
-            transactions: cached_transactions(chain, token_mint),
-        };
+        // Build market data from price info, the token snapshot and the configured size
+        let market_data = strategy_market_data(
+            crate::tokens::get_cached_token(chain, token_mint).as_ref(),
+            usable_liquidity(price_info.native_reserves),
+            Some(crate::trader::config::get_trade_size_native()),
+        );
 
         // Prefetch OHLCV bundle from cache (non-blocking)
         let timeframe_bundle = match crate::ohlcvs::get_timeframe_bundle(chain, token_mint).await {
@@ -282,36 +337,30 @@ impl StrategyEvaluator {
             ),
         );
 
-        // Build position data
-        let unrealized_profit_pct = if position.average_entry_price > 0.0 {
-            Some(
-                ((current_price - position.average_entry_price) / position.average_entry_price)
-                    * 100.0,
-            )
-        } else {
-            None
-        };
+        // The live pool price result: the one source of the liquidity and of the price the
+        // held tokens are valued at.
+        let live_pool = crate::positions::price_resolution::live_pool_price(&position.mint);
 
-        let position_data = PositionData {
-            entry_price: position.average_entry_price,
-            entry_time: position.entry_time,
-            current_size_sol: position.total_size_native,
-            unrealized_profit_pct,
-            position_age_hours: (Utc::now() - position.entry_time).num_seconds() as f64 / 3600.0,
-            peak_price: Some(position.basis_peak_price)
-                .filter(|peak| peak.is_finite() && *peak > 0.0),
-        };
+        let position_data = strategy_position_data(
+            position,
+            current_price,
+            live_pool.as_ref().map(|price| price.price_native),
+            crate::tokens::get_cached_decimals(chain, &position.mint),
+            Utc::now(),
+        );
 
         // Build market data. Liquidity comes from the same single source the entry path
         // reads — the live pool price result. It used to be left `None` here, which made
         // the liquidity-drain exit (the documented exit use of LiquidityLevel) impossible:
         // the condition errored on every tick, the error aborted the whole strategy, and
         // the rule never fired once in the life of any position.
-        let market_data = MarketData {
-            liquidity_sol: crate::positions::price_resolution::live_pool_price(&position.mint)
+        let market_data = strategy_market_data(
+            crate::tokens::get_cached_token(chain, &position.mint).as_ref(),
+            live_pool
+                .as_ref()
                 .and_then(|price| usable_liquidity(price.native_reserves)),
-            transactions: cached_transactions(chain, &position.mint),
-        };
+            None,
+        );
 
         // Prefetch OHLCV bundle from cache (non-blocking)
         let timeframe_bundle = match crate::ohlcvs::get_timeframe_bundle(chain, &position.mint)

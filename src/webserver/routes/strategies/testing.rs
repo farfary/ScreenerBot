@@ -51,6 +51,9 @@ pub async fn test_strategy(
     let market_data = request.market_data.map(|md| MarketData {
         liquidity_sol: md.liquidity_native,
         transactions: None,
+        snapshot_at: None,
+        token_created_at: None,
+        reference_size_native: None,
     });
 
     let position_data = request.position_data.and_then(|pd| {
@@ -63,6 +66,9 @@ pub async fn test_strategy(
                 unrealized_profit_pct: pd.unrealized_profit_pct,
                 position_age_hours: pd.position_age_hours,
                 peak_price: pd.peak_price,
+                dca_count: pd.dca_count,
+                partial_exit_count: pd.partial_exit_count,
+                remaining_value_native: pd.remaining_value_native,
             })
     });
 

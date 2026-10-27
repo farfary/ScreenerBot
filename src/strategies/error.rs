@@ -70,6 +70,22 @@ pub enum Error {
         max_age_seconds: i64,
     },
 
+    /// The transaction counts of the market snapshot are older than the window they
+    /// describe, so they no longer say what happened over that window.
+    #[error(
+        "the {window} transaction counts are stale: age {age_seconds}s exceeds {max_age_seconds}s"
+    )]
+    StaleMarketData {
+        window: String,
+        age_seconds: i64,
+        max_age_seconds: i64,
+    },
+
+    /// A data value reached a condition but no comparison can use it: a zero or
+    /// non-finite price or basis. It describes the market, not the configuration.
+    #[error("{field} value {value} cannot be used")]
+    UnusableData { field: &'static str, value: String },
+
     /// A rule tree is structurally invalid.
     #[error("invalid rule tree: {reason}")]
     InvalidRuleTree { reason: &'static str },
@@ -88,6 +104,29 @@ pub enum Error {
 
 /// Result alias for the strategies module.
 pub type Result<T> = std::result::Result<T, Error>;
+
+impl Error {
+    /// Whether the error says the data needed to answer a condition is absent, too short,
+    /// stale or unusable, rather than that the strategy itself is wrong. Inside a rule tree
+    /// such a condition is unknown; every other error stops the evaluation.
+    pub fn is_data_unavailable(&self) -> bool {
+        match self {
+            Error::MissingContextData { .. }
+            | Error::NoCandleData { .. }
+            | Error::InsufficientHistory { .. }
+            | Error::InsufficientCandles { .. }
+            | Error::StaleCandleData { .. }
+            | Error::StaleMarketData { .. }
+            | Error::UnusableData { .. } => true,
+            Error::MissingConditionParameter { .. }
+            | Error::ConditionParameterType { .. }
+            | Error::InvalidConditionValue { .. }
+            | Error::InvalidRuleTree { .. }
+            | Error::ConditionNotApplicable { .. }
+            | Error::EvaluationTimeout { .. } => false,
+        }
+    }
+}
 
 impl ErrorClass for Error {
     fn is_retryable(&self) -> bool {
@@ -113,6 +152,8 @@ impl ErrorClass for Error {
             | Error::InsufficientCandles { .. }
             | Error::InsufficientHistory { .. }
             | Error::StaleCandleData { .. }
+            | Error::StaleMarketData { .. }
+            | Error::UnusableData { .. }
             | Error::EvaluationTimeout { .. } => Severity::Error,
         }
     }
@@ -128,7 +169,9 @@ impl ErrorClass for Error {
             | Error::NoCandleData { .. }
             | Error::InsufficientCandles { .. }
             | Error::InsufficientHistory { .. }
-            | Error::StaleCandleData { .. } => 424,
+            | Error::StaleCandleData { .. }
+            | Error::StaleMarketData { .. }
+            | Error::UnusableData { .. } => 424,
             Error::EvaluationTimeout { .. } => 504,
         }
     }

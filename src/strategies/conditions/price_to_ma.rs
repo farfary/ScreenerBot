@@ -3,11 +3,12 @@
 
 //! Price-to-MA condition — compares current price against moving averages.
 
+use crate::strategies::conditions::indicators::sma;
 use crate::strategies::conditions::{
     get_candles_for_timeframe, get_current_price, get_param_f64, get_param_string,
     get_param_string_optional, usable_basis, validate_timeframe_param, ConditionEvaluator,
 };
-use crate::strategies::types::{Condition, EvaluationContext};
+use crate::strategies::types::{Condition, ConditionData, EvaluationContext};
 use crate::strategies::{Error, Result};
 use async_trait::async_trait;
 use serde_json::json;
@@ -29,17 +30,17 @@ impl ConditionEvaluator for PriceToMaCondition {
 
         let candles = get_candles_for_timeframe(context, timeframe.as_deref())?;
 
-        if candles.len() < period {
-            return Err(Error::InsufficientCandles {
+        // Simple moving average of the last `period` closes
+        let closes: Vec<f64> = candles.iter().map(|c| c.close).collect();
+        let ma = closes
+            .len()
+            .checked_sub(period)
+            .and_then(|start| sma(&closes[start..], period).first().copied())
+            .ok_or(Error::InsufficientCandles {
                 indicator: "moving average",
                 available: candles.len(),
                 required: period,
-            });
-        }
-
-        // Calculate simple moving average
-        let recent_candles = &candles[candles.len() - period..];
-        let ma: f64 = recent_candles.iter().map(|c| c.close).sum::<f64>() / period as f64;
+            })?;
         // A dead series averages to zero, which would put any price infinitely above its
         // own moving average and satisfy every ABOVE rule ever configured.
         let ma = usable_basis("moving average", ma)?;
@@ -105,6 +106,10 @@ impl ConditionEvaluator for PriceToMaCondition {
         }
 
         Ok(())
+    }
+
+    fn reads(&self) -> ConditionData {
+        ConditionData::Candles
     }
 
     fn parameter_schema(&self) -> serde_json::Value {

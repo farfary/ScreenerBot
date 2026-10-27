@@ -48,6 +48,7 @@
         }
       },
       "applies_to": ["ENTRY", "EXIT"],
+      "reads": "market",
       "key": "strategies-condition-buy-pressure",
       "category_key": "strategies-condition-category-market-context"
     },
@@ -105,6 +106,7 @@
         }
       },
       "applies_to": ["ENTRY", "EXIT"],
+      "reads": "candles",
       "key": "strategies-condition-candle-size",
       "category_key": "strategies-condition-category-candle-patterns"
     },
@@ -163,6 +165,7 @@
         }
       },
       "applies_to": ["ENTRY", "EXIT"],
+      "reads": "candles",
       "key": "strategies-condition-consecutive-candles",
       "category_key": "strategies-condition-category-candle-patterns"
     },
@@ -190,6 +193,7 @@
         }
       },
       "applies_to": ["EXIT"],
+      "reads": "position",
       "key": "strategies-condition-drawdown-from-peak",
       "category_key": "strategies-condition-category-position-performance"
     },
@@ -232,6 +236,7 @@
         }
       },
       "applies_to": ["ENTRY", "EXIT"],
+      "reads": "pool",
       "key": "strategies-condition-liquidity-level",
       "category_key": "strategies-condition-category-market-context"
     },
@@ -315,6 +320,7 @@
         }
       },
       "applies_to": ["ENTRY", "EXIT"],
+      "reads": "candles",
       "key": "strategies-condition-ma-cross",
       "category_key": "strategies-condition-category-technical-indicators"
     },
@@ -358,6 +364,7 @@
         }
       },
       "applies_to": ["EXIT"],
+      "reads": "position",
       "key": "strategies-condition-position-holding-time",
       "category_key": "strategies-condition-category-position-performance"
     },
@@ -392,6 +399,7 @@
         }
       },
       "applies_to": ["EXIT"],
+      "reads": "position",
       "key": "strategies-condition-position-profit",
       "category_key": "strategies-condition-category-position-performance"
     },
@@ -450,6 +458,7 @@
         }
       },
       "applies_to": ["ENTRY", "EXIT"],
+      "reads": "candles",
       "key": "strategies-condition-price-breakout",
       "category_key": "strategies-condition-category-price-analysis"
     },
@@ -530,6 +539,7 @@
         }
       },
       "applies_to": ["ENTRY", "EXIT"],
+      "reads": "candles",
       "key": "strategies-condition-price-change-percent",
       "category_key": "strategies-condition-category-price-analysis"
     },
@@ -592,6 +602,7 @@
         }
       },
       "applies_to": ["ENTRY", "EXIT"],
+      "reads": "candles",
       "key": "strategies-condition-price-to-ma",
       "category_key": "strategies-condition-category-technical-indicators"
     },
@@ -650,6 +661,7 @@
         }
       },
       "applies_to": ["ENTRY", "EXIT"],
+      "reads": "candles",
       "key": "strategies-condition-rsi",
       "category_key": "strategies-condition-category-technical-indicators"
     },
@@ -694,6 +706,7 @@
         }
       },
       "applies_to": ["ENTRY", "EXIT"],
+      "reads": "candles",
       "key": "strategies-condition-volume-spike",
       "category_key": "strategies-condition-category-volume-analysis"
     }

@@ -7,6 +7,7 @@ mod candle_size;
 mod catalog;
 mod consecutive_candles;
 mod drawdown_from_peak;
+mod indicators;
 mod liquidity_level;
 mod ma_cross;
 mod position_holding_time;
@@ -32,7 +33,9 @@ pub use rsi::RsiCondition;
 pub use volume_spike::VolumeSpikeCondition;
 
 use crate::ohlcvs::{Candle, Timeframe};
-use crate::strategies::types::{Condition, EvaluationContext, StrategyType};
+use crate::strategies::types::{
+    Condition, ConditionData, EvaluationContext, StrategyType, TransactionCounts, WindowCounts,
+};
 use crate::strategies::{Error, Result};
 use async_trait::async_trait;
 use serde_json::json;
@@ -113,13 +116,62 @@ pub fn get_candles_for_timeframe(
     Ok(candles.clone())
 }
 
+/// Transaction counts of one market window (`5m`, `1h`, `6h` or `24h`), refusing a
+/// snapshot older than the window it describes.
+///
+/// The counts are a rolling window as of the moment the token snapshot was fetched. Once
+/// the snapshot is older than the window, none of the trades it counts need still be
+/// inside that window, so the figure describes a past market rather than this one. Age
+/// is measured against [`EvaluationContext::evaluated_at`], never the wall clock.
+pub fn market_window(context: &EvaluationContext, window: &str) -> Result<WindowCounts> {
+    let (select, max_age_seconds): (fn(&TransactionCounts) -> Option<WindowCounts>, i64) =
+        match window {
+            "5m" => (|counts| counts.m5, 300),
+            "1h" => (|counts| counts.h1, 3_600),
+            "6h" => (|counts| counts.h6, 21_600),
+            "24h" => (|counts| counts.h24, 86_400),
+            _ => {
+                return Err(Error::InvalidConditionValue {
+                    field: "window",
+                    value: window.to_owned(),
+                })
+            }
+        };
+
+    let missing = || Error::MissingContextData {
+        data: "transaction counts",
+    };
+    let market = context.market_data.as_ref().ok_or_else(missing)?;
+    let counts = market
+        .transactions
+        .as_ref()
+        .and_then(select)
+        .ok_or_else(missing)?;
+    let snapshot_at = market.snapshot_at.ok_or(Error::MissingContextData {
+        data: "market data",
+    })?;
+
+    let age_seconds = (context.evaluated_at - snapshot_at).num_seconds();
+    if age_seconds > max_age_seconds {
+        return Err(Error::StaleMarketData {
+            window: window.to_owned(),
+            age_seconds,
+            max_age_seconds,
+        });
+    }
+
+    Ok(counts)
+}
+
 /// The live price the whole context is built around, refusing a value no comparison can
 /// use.
 ///
 /// `NaN` is the dangerous one: every `>=`/`<=` against it is `false`, so a rule fed a
 /// `NaN` price reports "no signal" forever instead of failing. An entry that never fires
 /// is money not spent, but an EXIT that never fires is a position that cannot be closed
-/// by strategy, so this is an `Err` and never a `false`.
+/// by strategy, so this is an `Err` and never a `false`. A price that is present but
+/// unusable is data, not configuration: inside a rule tree it leaves the condition
+/// unknown.
 pub fn get_current_price(context: &EvaluationContext) -> Result<f64> {
     let price = context
         .current_price
@@ -128,7 +180,7 @@ pub fn get_current_price(context: &EvaluationContext) -> Result<f64> {
         })?;
 
     if !price.is_finite() || price <= 0.0 {
-        return Err(Error::InvalidConditionValue {
+        return Err(Error::UnusableData {
             field: "current price",
             value: price.to_string(),
         });
@@ -142,10 +194,11 @@ pub fn get_current_price(context: &EvaluationContext) -> Result<f64> {
 /// A zero or non-finite basis turns `(current - basis) / basis` into `+inf`, which
 /// clears EVERY upward threshold a user can configure — the validator caps the
 /// threshold at 1000%, and infinity is above that too. Refusing the basis is the only
-/// way such a series produces no signal rather than a guaranteed one.
+/// way such a series produces no signal rather than a guaranteed one. The refusal names
+/// the data, not the configuration, so a rule tree reads the condition as unknown.
 pub fn usable_basis(label: &'static str, value: f64) -> Result<f64> {
     if !value.is_finite() || value <= 0.0 {
-        return Err(Error::InvalidConditionValue {
+        return Err(Error::UnusableData {
             field: label,
             value: value.to_string(),
         });
@@ -170,6 +223,9 @@ pub trait ConditionEvaluator: Send + Sync {
     fn applies_to(&self) -> &'static [StrategyType] {
         &[StrategyType::Entry, StrategyType::Exit]
     }
+
+    /// The data this condition reads, published in its schema as `reads`.
+    fn reads(&self) -> ConditionData;
 
     /// Structure of the parameters for the UI. Carries no display text: the registry adds
     /// the localization keys (see `catalog`).
@@ -228,6 +284,7 @@ impl ConditionRegistry {
         for (name, evaluator) in &self.evaluators {
             let mut schema = evaluator.parameter_schema();
             schema["applies_to"] = json!(evaluator.applies_to());
+            schema["reads"] = json!(evaluator.reads());
             catalog::attach_text_keys(&mut schema);
             schemas.insert(name.clone(), schema);
         }

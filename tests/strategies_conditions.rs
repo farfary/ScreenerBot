@@ -16,10 +16,11 @@ use common::{
     anchor_ts, bundle_with, candle, candle_series, condition, context_bare, context_with_candles,
 };
 use screenerbot::strategies::conditions::{
-    BuyPressureCondition, CandleSizeCondition, ConditionEvaluator, ConsecutiveCandlesCondition,
-    DrawdownFromPeakCondition, LiquidityLevelCondition, MaCrossCondition,
-    PositionHoldingTimeCondition, PositionProfitCondition, PriceBreakoutCondition,
-    PriceChangePercentCondition, PriceToMaCondition, RsiCondition, VolumeSpikeCondition,
+    get_current_price, usable_basis, BuyPressureCondition, CandleSizeCondition, ConditionEvaluator,
+    ConsecutiveCandlesCondition, DrawdownFromPeakCondition, LiquidityLevelCondition,
+    MaCrossCondition, PositionHoldingTimeCondition, PositionProfitCondition,
+    PriceBreakoutCondition, PriceChangePercentCondition, PriceToMaCondition, RsiCondition,
+    VolumeSpikeCondition,
 };
 use screenerbot::strategies::types::{
     Condition, EvaluationContext, MarketData, PositionData, TransactionCounts, WindowCounts,
@@ -58,6 +59,9 @@ fn market_context(liquidity_sol: Option<f64>) -> EvaluationContext {
     ctx.market_data = Some(MarketData {
         liquidity_sol,
         transactions: None,
+        snapshot_at: None,
+        token_created_at: None,
+        reference_size_native: None,
     });
     ctx
 }
@@ -71,6 +75,9 @@ fn position_context(age_hours: f64) -> EvaluationContext {
         unrealized_profit_pct: None,
         position_age_hours: age_hours,
         peak_price: None,
+        dca_count: 0,
+        partial_exit_count: 0,
+        remaining_value_native: None,
     });
     ctx
 }
@@ -1157,6 +1164,9 @@ fn profit_context(unrealized_profit_pct: Option<f64>) -> EvaluationContext {
         unrealized_profit_pct,
         position_age_hours: 1.0,
         peak_price: None,
+        dca_count: 0,
+        partial_exit_count: 0,
+        remaining_value_native: None,
     });
     ctx
 }
@@ -1234,6 +1244,9 @@ fn peak_context(entry: f64, peak: Option<f64>, price: Option<f64>) -> Evaluation
         unrealized_profit_pct: None,
         position_age_hours: 1.0,
         peak_price: peak,
+        dca_count: 0,
+        partial_exit_count: 0,
+        remaining_value_native: None,
     });
     ctx
 }
@@ -1299,7 +1312,7 @@ async fn drawdown_refuses_missing_or_unusable_data() {
     .await;
     assert!(matches!(
         zero_entry,
-        StrategyError::InvalidConditionValue {
+        StrategyError::UnusableData {
             field: "entry price",
             ..
         }
@@ -1312,7 +1325,7 @@ async fn drawdown_refuses_missing_or_unusable_data() {
     .await;
     assert!(matches!(
         zero_peak,
-        StrategyError::InvalidConditionValue {
+        StrategyError::UnusableData {
             field: "peak price",
             ..
         }
@@ -1363,6 +1376,9 @@ fn transactions_context(transactions: Option<TransactionCounts>) -> EvaluationCo
     ctx.market_data = Some(MarketData {
         liquidity_sol: None,
         transactions,
+        snapshot_at: Some(common::anchor_time()),
+        token_created_at: None,
+        reference_size_native: None,
     });
     ctx
 }
@@ -1432,6 +1448,105 @@ async fn buy_pressure_refuses_missing_counts() {
             "unexpected error: {err}"
         );
     }
+}
+
+/// Every window's counts from a snapshot taken `age_seconds` before the evaluation instant.
+fn snapshot_aged(age_seconds: i64) -> EvaluationContext {
+    let counts = counts(80, 20);
+    let mut ctx = transactions_context(Some(TransactionCounts {
+        m5: counts,
+        h1: counts,
+        h6: counts,
+        h24: counts,
+    }));
+    let market = ctx.market_data.as_mut().expect("market data");
+    market.snapshot_at = Some(common::anchor_time() - chrono::Duration::seconds(age_seconds));
+    ctx
+}
+
+#[tokio::test]
+async fn buy_pressure_refuses_a_snapshot_older_than_its_window() {
+    // Counts of a rolling window describe the market at the moment they were fetched; a
+    // snapshot older than the window may count none of the trades still inside it.
+    for (window, max_age) in [("5m", 300), ("1h", 3_600), ("6h", 21_600), ("24h", 86_400)] {
+        let cond = pressure(window, 60.0, 50);
+        let fresh = snapshot_aged(max_age);
+        assert!(
+            eval(&BuyPressureCondition, &cond, &fresh).await,
+            "{window} at its own length is still current"
+        );
+
+        let stale = snapshot_aged(max_age + 1);
+        let err = eval_err(&BuyPressureCondition, &cond, &stale).await;
+        assert!(
+            matches!(
+                &err,
+                StrategyError::StaleMarketData {
+                    window: stale_window,
+                    age_seconds,
+                    max_age_seconds,
+                } if stale_window == window
+                    && *age_seconds == max_age + 1
+                    && *max_age_seconds == max_age
+            ),
+            "{window}: unexpected error: {err}"
+        );
+        assert!(
+            err.is_data_unavailable(),
+            "{window}: stale data is not configuration"
+        );
+    }
+}
+
+#[tokio::test]
+async fn buy_pressure_refuses_counts_without_a_snapshot_time() {
+    // Counts whose age is unknown are never assumed fresh.
+    let mut ctx = one_hour(60, 40);
+    ctx.market_data.as_mut().expect("market data").snapshot_at = None;
+    let err = eval_err(&BuyPressureCondition, &pressure("1h", 60.0, 100), &ctx).await;
+    assert!(
+        matches!(
+            err,
+            StrategyError::MissingContextData {
+                data: "market data"
+            }
+        ),
+        "unexpected error: {err}"
+    );
+}
+
+#[test]
+fn a_zero_or_non_finite_basis_or_price_is_unusable_data() {
+    // A degenerate number is a fact about the market, so a rule tree reads the condition
+    // as unknown instead of failing the whole strategy as a configuration error.
+    for value in [0.0, -1.0, f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+        let err = usable_basis("moving average", value).expect_err("refused basis");
+        assert!(
+            matches!(
+                err,
+                StrategyError::UnusableData {
+                    field: "moving average",
+                    ..
+                }
+            ),
+            "{value}: unexpected error: {err}"
+        );
+        assert!(err.is_data_unavailable());
+
+        let err = get_current_price(&context_bare(Some(value))).expect_err("refused price");
+        assert!(
+            matches!(
+                err,
+                StrategyError::UnusableData {
+                    field: "current price",
+                    ..
+                }
+            ),
+            "{value}: unexpected error: {err}"
+        );
+        assert!(err.is_data_unavailable());
+    }
+    assert_eq!(usable_basis("moving average", 2.5).expect("usable"), 2.5);
 }
 
 #[test]

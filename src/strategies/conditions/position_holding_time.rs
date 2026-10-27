@@ -4,7 +4,7 @@
 //! Position holding time condition — triggers based on how long a position has been held.
 
 use crate::strategies::conditions::{get_param_f64, get_param_string, ConditionEvaluator};
-use crate::strategies::types::{Condition, EvaluationContext, StrategyType};
+use crate::strategies::types::{Condition, ConditionData, EvaluationContext, StrategyType};
 use crate::strategies::{Error, Result};
 use async_trait::async_trait;
 use serde_json::json;
@@ -71,6 +71,10 @@ impl ConditionEvaluator for PositionHoldingTimeCondition {
 
     fn applies_to(&self) -> &'static [StrategyType] {
         &[StrategyType::Exit]
+    }
+
+    fn reads(&self) -> ConditionData {
+        ConditionData::Position
     }
 
     fn parameter_schema(&self) -> serde_json::Value {

@@ -6,8 +6,8 @@
 use crate::logger::{self, LogTag};
 use crate::strategies::conditions::ConditionRegistry;
 use crate::strategies::types::{
-    EvaluationContext, EvaluationResult, LogicalOperator, RuleTree, Strategy, StrategyType,
-    WindowCounts,
+    EvaluationContext, EvaluationResult, LogicalOperator, MarketData, PositionData, RuleTree,
+    Strategy, StrategyType, TransactionCounts, WindowCounts,
 };
 use crate::strategies::{Error, Result};
 use crate::trader::STRATEGY_CACHE_MAX_ENTRIES;
@@ -43,6 +43,29 @@ impl Default for EngineConfig {
             evaluation_timeout_ms: 50,
             cache_ttl_seconds: 5,
             max_concurrent_evaluations: 10,
+        }
+    }
+}
+
+/// Truth value of a rule-tree node under three-valued (Kleene) logic.
+///
+/// A condition whose data is absent, too short, stale or unusable is `Unknown`, carrying
+/// the error that made it so. It is never read as true or false: an `And` it belongs to is
+/// still decided by a false sibling, an `Or` by a true one, and anything left undecided
+/// reports the data error instead of a signal.
+#[derive(Debug)]
+enum Truth {
+    True,
+    False,
+    Unknown(Error),
+}
+
+impl From<bool> for Truth {
+    fn from(value: bool) -> Self {
+        if value {
+            Truth::True
+        } else {
+            Truth::False
         }
     }
 }
@@ -103,8 +126,10 @@ impl StrategyEngine {
         let evaluation_future = self.evaluate_rule_tree(&strategy.rules, context);
 
         let result = match timeout(timeout_duration, evaluation_future).await {
-            Ok(Ok(res)) => res,
-            Ok(Err(e)) => {
+            Ok(Ok(Truth::True)) => true,
+            Ok(Ok(Truth::False)) => false,
+            // An undecided root is no signal, reported as the first data error it reached.
+            Ok(Ok(Truth::Unknown(e))) | Ok(Err(e)) => {
                 logger::error(
                     LogTag::System,
                     &format!(
@@ -152,12 +177,22 @@ impl StrategyEngine {
         })
     }
 
-    /// Evaluate a rule tree recursively
+    /// Evaluate a rule tree recursively under three-valued logic.
+    ///
+    /// A leaf whose condition fails for lack of data ([`Error::is_data_unavailable`]) is
+    /// `Unknown`; any other error is a fault in the strategy and propagates at once.
+    /// - And: any False is False; else any Unknown is Unknown; else True.
+    /// - Or: any True is True; else any Unknown is Unknown; else False.
+    /// - Not: Unknown stays Unknown.
+    ///
+    /// A group stops at its first decisive child (False for And, True for Or) and never at
+    /// an Unknown one, so a later child can still decide it. An undecided group carries
+    /// the first data error it reached.
     fn evaluate_rule_tree<'a>(
         &'a self,
         rule_tree: &'a RuleTree,
         context: &'a EvaluationContext,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<bool>> + Send + 'a>> {
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Truth>> + Send + 'a>> {
         Box::pin(async move {
             // Leaf node - evaluate condition
             if rule_tree.is_leaf() {
@@ -174,7 +209,11 @@ impl StrategyEngine {
                     evaluator.validate(condition)?;
 
                     // Evaluate condition
-                    return evaluator.evaluate(condition, context).await;
+                    return match evaluator.evaluate(condition, context).await {
+                        Ok(value) => Ok(Truth::from(value)),
+                        Err(e) if e.is_data_unavailable() => Ok(Truth::Unknown(e)),
+                        Err(e) => Err(e),
+                    };
                 } else {
                     return Err(Error::InvalidRuleTree {
                         reason: "leaf node missing condition",
@@ -197,25 +236,24 @@ impl StrategyEngine {
                         })?;
 
                 return match operator {
-                    LogicalOperator::And => {
-                        // Short-circuit AND: return false on first false
+                    LogicalOperator::And | LogicalOperator::Or => {
+                        // The child value that decides the group on its own.
+                        let decisive = operator == LogicalOperator::Or;
+                        let mut first_unknown = None;
                         for child in enabled_children(conditions)? {
-                            let result = self.evaluate_rule_tree(child, context).await?;
-                            if !result {
-                                return Ok(false);
+                            match self.evaluate_rule_tree(child, context).await? {
+                                Truth::True if decisive => return Ok(Truth::True),
+                                Truth::False if !decisive => return Ok(Truth::False),
+                                Truth::Unknown(e) => {
+                                    first_unknown.get_or_insert(e);
+                                }
+                                Truth::True | Truth::False => {}
                             }
                         }
-                        Ok(true)
-                    }
-                    LogicalOperator::Or => {
-                        // Short-circuit OR: return true on first true
-                        for child in enabled_children(conditions)? {
-                            let result = self.evaluate_rule_tree(child, context).await?;
-                            if result {
-                                return Ok(true);
-                            }
-                        }
-                        Ok(false)
+                        Ok(match first_unknown {
+                            Some(e) => Truth::Unknown(e),
+                            None => Truth::from(!decisive),
+                        })
                     }
                     LogicalOperator::Not => {
                         if conditions.len() != 1 {
@@ -228,8 +266,13 @@ impl StrategyEngine {
                                 reason: "NOT operator cannot have a switched-off child",
                             });
                         }
-                        let result = self.evaluate_rule_tree(&conditions[0], context).await?;
-                        Ok(!result)
+                        Ok(
+                            match self.evaluate_rule_tree(&conditions[0], context).await? {
+                                Truth::True => Truth::False,
+                                Truth::False => Truth::True,
+                                unknown @ Truth::Unknown(_) => unknown,
+                            },
+                        )
                     }
                 };
             }
@@ -401,59 +444,81 @@ fn enabled_children(children: &[RuleTree]) -> Result<Vec<&RuleTree>> {
 /// Build a stable fingerprint for an evaluation context. The goal is correctness first:
 /// include all inputs that can affect a condition result so cached decisions are never
 /// reused across materially different contexts.
+///
+/// Every context struct is destructured without `..`, so a field added to the context
+/// does not compile until it is hashed here (or named and deliberately skipped).
 fn context_fingerprint(ctx: &EvaluationContext) -> u64 {
     let mut s = std::collections::hash_map::DefaultHasher::new();
+    let EvaluationContext {
+        token_mint,
+        current_price,
+        position_data,
+        market_data,
+        timeframe_bundle,
+        strategy_timeframe,
+        evaluated_at,
+    } = ctx;
 
     // Always include token and current price (high precision formatting)
-    ctx.token_mint.hash(&mut s);
-    if let Some(p) = ctx.current_price {
-        // 12+ decimals to avoid accidental collisions for tiny price changes
-        format!("{:.12}", p).hash(&mut s);
-    } else {
-        "no_price".hash(&mut s);
-    }
+    token_mint.hash(&mut s);
+    // 12+ decimals to avoid accidental collisions for tiny price changes
+    hash_number(*current_price, 12, &mut s);
+    strategy_timeframe.hash(&mut s);
+    // Time-derived conditions are exact to the minute; the cache TTL bounds the rest.
+    evaluated_at.timestamp().div_euclid(60).hash(&mut s);
 
     // Position-scoped inputs (exit strategies)
-    if let Some(pos) = &ctx.position_data {
-        // Use time and price; age is derived but include to be safe
-        pos.entry_time.timestamp().hash(&mut s);
-        format!("{:.12}", pos.entry_price).hash(&mut s);
-        format!("{:.6}", pos.position_age_hours).hash(&mut s);
-        format!("{:.6}", pos.current_size_sol).hash(&mut s);
-        if let Some(pct) = pos.unrealized_profit_pct {
-            format!("{:.6}", pct).hash(&mut s);
-        } else {
-            "no_profit".hash(&mut s);
-        }
-        if let Some(peak) = pos.peak_price {
-            format!("{:.12}", peak).hash(&mut s);
-        } else {
-            "no_peak".hash(&mut s);
-        }
+    if let Some(PositionData {
+        entry_price,
+        entry_time,
+        current_size_sol,
+        unrealized_profit_pct,
+        position_age_hours,
+        peak_price,
+        dca_count,
+        partial_exit_count,
+        remaining_value_native,
+    }) = position_data
+    {
+        entry_time.timestamp().hash(&mut s);
+        hash_number(Some(*entry_price), 12, &mut s);
+        hash_number(Some(*position_age_hours), 6, &mut s);
+        hash_number(Some(*current_size_sol), 6, &mut s);
+        hash_number(*unrealized_profit_pct, 6, &mut s);
+        hash_number(*peak_price, 12, &mut s);
+        dca_count.hash(&mut s);
+        partial_exit_count.hash(&mut s);
+        hash_number(*remaining_value_native, 9, &mut s);
     } else {
         "no_position".hash(&mut s);
     }
 
     // Market data inputs commonly used by conditions
-    if let Some(m) = &ctx.market_data {
-        if let Some(v) = m.liquidity_sol {
-            format!("{:.6}", v).hash(&mut s);
-        } else {
-            "nlq".hash(&mut s);
-        }
-        if let Some(counts) = &m.transactions {
-            for window in [counts.m5, counts.h1, counts.h6, counts.h24] {
-                hash_window(window, &mut s);
+    if let Some(MarketData {
+        liquidity_sol,
+        transactions,
+        snapshot_at,
+        token_created_at,
+        reference_size_native,
+    }) = market_data
+    {
+        hash_number(*liquidity_sol, 6, &mut s);
+        if let Some(TransactionCounts { m5, h1, h6, h24 }) = transactions {
+            for window in [m5, h1, h6, h24] {
+                hash_window(*window, &mut s);
             }
         } else {
             "no_txns".hash(&mut s);
         }
+        snapshot_at.map(|at| at.timestamp()).hash(&mut s);
+        token_created_at.map(|at| at.timestamp()).hash(&mut s);
+        hash_number(*reference_size_native, 9, &mut s);
     } else {
         "no_market".hash(&mut s);
     }
 
     // TimeframeBundle: hash bundle timestamp for cache invalidation
-    if let Some(bundle) = &ctx.timeframe_bundle {
+    if let Some(bundle) = timeframe_bundle {
         bundle.timestamp.timestamp().hash(&mut s);
         bundle.cache_age_seconds.hash(&mut s);
     } else {
@@ -461,6 +526,14 @@ fn context_fingerprint(ctx: &EvaluationContext) -> u64 {
     }
 
     s.finish()
+}
+
+/// Hash a number at a fixed precision; an absent number is told apart from every value.
+fn hash_number(value: Option<f64>, decimals: usize, hasher: &mut impl Hasher) {
+    match value {
+        Some(value) => format!("{value:.decimals$}").hash(hasher),
+        None => "absent".hash(hasher),
+    }
 }
 
 /// Hash one transaction window; a window never reported is told apart from zero counts.
@@ -471,5 +544,146 @@ fn hash_window(window: Option<WindowCounts>, hasher: &mut impl Hasher) {
             counts.sells.hash(hasher);
         }
         None => "no_window".hash(hasher),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ohlcvs::TimeframeBundle;
+    use chrono::{DateTime, Duration, Utc};
+
+    /// A minute boundary, so seconds can be added without leaving the minute.
+    fn minute_start() -> DateTime<Utc> {
+        DateTime::from_timestamp(1_700_000_040, 0).expect("valid instant")
+    }
+
+    /// A context with every field present.
+    fn full_context() -> EvaluationContext {
+        EvaluationContext {
+            token_mint: "mint".to_owned(),
+            current_price: Some(1.5),
+            position_data: Some(PositionData {
+                entry_price: 1.0,
+                entry_time: minute_start() - Duration::hours(2),
+                current_size_sol: 0.5,
+                unrealized_profit_pct: Some(50.0),
+                position_age_hours: 2.0,
+                peak_price: Some(1.8),
+                dca_count: 1,
+                partial_exit_count: 1,
+                remaining_value_native: Some(0.6),
+            }),
+            market_data: Some(MarketData {
+                liquidity_sol: Some(120.0),
+                transactions: Some(TransactionCounts {
+                    m5: Some(WindowCounts { buys: 5, sells: 3 }),
+                    h1: Some(WindowCounts {
+                        buys: 50,
+                        sells: 30,
+                    }),
+                    h6: Some(WindowCounts {
+                        buys: 300,
+                        sells: 200,
+                    }),
+                    h24: Some(WindowCounts {
+                        buys: 900,
+                        sells: 800,
+                    }),
+                }),
+                snapshot_at: Some(minute_start() - Duration::seconds(30)),
+                token_created_at: Some(minute_start() - Duration::days(3)),
+                reference_size_native: Some(0.1),
+            }),
+            timeframe_bundle: Some(TimeframeBundle::new("mint".to_owned(), "pool".to_owned())),
+            strategy_timeframe: "5m".to_owned(),
+            evaluated_at: minute_start(),
+        }
+    }
+
+    fn position(ctx: &mut EvaluationContext) -> &mut PositionData {
+        ctx.position_data.as_mut().expect("position data")
+    }
+
+    fn market(ctx: &mut EvaluationContext) -> &mut MarketData {
+        ctx.market_data.as_mut().expect("market data")
+    }
+
+    /// Every input a condition can read changes the fingerprint, so a cached answer is
+    /// never served for a context it was not computed for. With the exhaustive
+    /// destructuring in `context_fingerprint`, a new field fails to compile there and
+    /// earns a line here.
+    #[test]
+    fn every_context_field_changes_the_fingerprint() {
+        type Change = fn(&mut EvaluationContext);
+        let changes: [(&str, Change); 22] = [
+            ("token_mint", |c| c.token_mint = "other".to_owned()),
+            ("current_price", |c| {
+                c.current_price = Some(1.500_000_000_001)
+            }),
+            ("position_data", |c| c.position_data = None),
+            ("entry_price", |c| position(c).entry_price = 1.1),
+            ("entry_time", |c| {
+                position(c).entry_time += Duration::seconds(1)
+            }),
+            ("current_size_sol", |c| position(c).current_size_sol = 0.6),
+            ("unrealized_profit_pct", |c| {
+                position(c).unrealized_profit_pct = None
+            }),
+            ("position_age_hours", |c| {
+                position(c).position_age_hours = 2.5
+            }),
+            ("peak_price", |c| position(c).peak_price = Some(1.9)),
+            ("dca_count", |c| position(c).dca_count = 2),
+            ("partial_exit_count", |c| position(c).partial_exit_count = 2),
+            ("remaining_value_native", |c| {
+                position(c).remaining_value_native = None
+            }),
+            ("market_data", |c| c.market_data = None),
+            ("liquidity_sol", |c| market(c).liquidity_sol = Some(121.0)),
+            ("transactions", |c| {
+                market(c).transactions.as_mut().expect("counts").h1 = Some(WindowCounts {
+                    buys: 51,
+                    sells: 30,
+                })
+            }),
+            ("snapshot_at", |c| {
+                market(c).snapshot_at = Some(minute_start() - Duration::seconds(29))
+            }),
+            ("token_created_at", |c| market(c).token_created_at = None),
+            ("reference_size_native", |c| {
+                market(c).reference_size_native = Some(0.2)
+            }),
+            ("timeframe_bundle", |c| c.timeframe_bundle = None),
+            ("bundle age", |c| {
+                c.timeframe_bundle
+                    .as_mut()
+                    .expect("bundle")
+                    .cache_age_seconds = 9
+            }),
+            ("strategy_timeframe", |c| {
+                c.strategy_timeframe = "1h".to_owned()
+            }),
+            ("evaluated_at", |c| c.evaluated_at += Duration::minutes(1)),
+        ];
+
+        let base = context_fingerprint(&full_context());
+        for (field, change) in changes {
+            let mut ctx = full_context();
+            change(&mut ctx);
+            assert_ne!(
+                context_fingerprint(&ctx),
+                base,
+                "{field} is not fingerprinted"
+            );
+        }
+    }
+
+    #[test]
+    fn the_evaluation_instant_counts_to_the_minute() {
+        let base = context_fingerprint(&full_context());
+        let mut later = full_context();
+        later.evaluated_at += Duration::seconds(59);
+        assert_eq!(context_fingerprint(&later), base);
     }
 }

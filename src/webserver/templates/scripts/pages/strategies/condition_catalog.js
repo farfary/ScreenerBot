@@ -5,7 +5,7 @@
 
 import { categoryLabel, conditionDescription, conditionName } from "./condition_text.js";
 
-/** Message ids of the data tags, by tag. */
+/** Message ids of the data tags, by the `reads` value of a condition schema. */
 export const DATA_TAG_LABELS = Object.freeze({
   candles: "strategies-data-candles",
   pool: "strategies-data-pool",
@@ -19,22 +19,6 @@ const RESTRICTION_LABELS = Object.freeze({
   ENTRY: "strategies-catalog-entry-only",
 });
 
-const CANDLE_CATEGORIES = new Set(["Candle Patterns", "Technical Indicators", "Volume Analysis"]);
-
-/**
- * What a condition reads, from its category and parameters: the open position's pool
- * price and P&L, the token's buy and sell counts over a time window, candles (any
- * condition with a timeframe), or the pool itself.
- * @param {object} schema Condition schema.
- * @returns {"candles"|"pool"|"position"|"market"}
- */
-export function dataTagOf(schema) {
-  const params = schema.parameters ?? {};
-  if (schema.category === "Position & Performance") return "position";
-  if (CANDLE_CATEGORIES.has(schema.category) || "timeframe" in params) return "candles";
-  return "window" in params ? "market" : "pool";
-}
-
 /** Whether a condition can be used in a strategy of `strategyType`. */
 export function appliesTo(schema, strategyType) {
   return !Array.isArray(schema.applies_to) || schema.applies_to.includes(strategyType);
@@ -42,12 +26,12 @@ export function appliesTo(schema, strategyType) {
 
 /**
  * The catalog description of a condition. A candle condition's description is closed
- * by the note that it reads candles only, written here once for every condition the
- * data tag marks as candle-based rather than in each condition's message.
+ * by the note that it reads candles only, written here once for every condition whose
+ * schema `reads` candles rather than in each condition's message.
  */
-export function catalogDescription(schema, tag = dataTagOf(schema)) {
+export function catalogDescription(schema) {
   const description = conditionDescription(schema);
-  return tag === "candles"
+  return schema.reads === "candles"
     ? I18n.t("strategies-catalog-candles-note", { description }).trim()
     : description;
 }
@@ -56,20 +40,17 @@ export function catalogDescription(schema, tag = dataTagOf(schema)) {
 export function catalogEntries(schemas, strategyType) {
   return Object.entries(schemas ?? {})
     .filter(([, schema]) => !schema.origin || String(schema.origin).toLowerCase() === "strategy")
-    .map(([type, schema]) => {
-      const tag = dataTagOf(schema);
-      return {
-        type,
-        icon: schema.icon || "icon-puzzle",
-        category: schema.category || "General",
-        categoryName: categoryLabel(schema),
-        name: conditionName(schema, type),
-        description: catalogDescription(schema, tag),
-        tag,
-        applicable: appliesTo(schema, strategyType),
-        only: schema.applies_to?.length === 1 ? schema.applies_to[0] : null,
-      };
-    })
+    .map(([type, schema]) => ({
+      type,
+      icon: schema.icon || "icon-puzzle",
+      category: schema.category || "General",
+      categoryName: categoryLabel(schema),
+      name: conditionName(schema, type),
+      description: catalogDescription(schema),
+      tag: schema.reads,
+      applicable: appliesTo(schema, strategyType),
+      only: schema.applies_to?.length === 1 ? schema.applies_to[0] : null,
+    }))
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 

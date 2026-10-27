@@ -6,7 +6,7 @@
 use crate::strategies::conditions::{
     get_current_price, get_param_f64_in_range, usable_basis, ConditionEvaluator,
 };
-use crate::strategies::types::{Condition, EvaluationContext, StrategyType};
+use crate::strategies::types::{Condition, ConditionData, EvaluationContext, StrategyType};
 use crate::strategies::{Error, Result};
 use async_trait::async_trait;
 use serde_json::json;
@@ -70,6 +70,10 @@ impl ConditionEvaluator for DrawdownFromPeakCondition {
 
     fn applies_to(&self) -> &'static [StrategyType] {
         &[StrategyType::Exit]
+    }
+
+    fn reads(&self) -> ConditionData {
+        ConditionData::Position
     }
 
     fn parameter_schema(&self) -> serde_json::Value {

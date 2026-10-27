@@ -3,11 +3,12 @@
 
 //! Moving-average cross condition — a fast average crossing a slow one within the last candles.
 
+use crate::strategies::conditions::indicators::{ema, sma};
 use crate::strategies::conditions::{
     get_candles_for_timeframe, get_param_choice, get_param_f64_in_range, get_param_string_optional,
     validate_timeframe_param, ConditionEvaluator,
 };
-use crate::strategies::types::{Condition, EvaluationContext};
+use crate::strategies::types::{Condition, ConditionData, EvaluationContext};
 use crate::strategies::{Error, Result};
 use async_trait::async_trait;
 use serde_json::json;
@@ -55,26 +56,6 @@ impl Params {
     }
 }
 
-/// Moving average of `closes`; element `j` belongs to close index `j + period - 1`. An
-/// exponential average is seeded with the simple average of its first `period` closes.
-fn moving_average(closes: &[f64], period: usize, exponential: bool) -> Vec<f64> {
-    let period_f = period as f64;
-    if !exponential {
-        return closes
-            .windows(period)
-            .map(|window| window.iter().sum::<f64>() / period_f)
-            .collect();
-    }
-    let k = 2.0 / (period_f + 1.0);
-    let mut average = closes[..period].iter().sum::<f64>() / period_f;
-    let mut series = vec![average];
-    for close in &closes[period..] {
-        average += k * (close - average);
-        series.push(average);
-    }
-    series
-}
-
 #[async_trait]
 impl ConditionEvaluator for MaCrossCondition {
     fn condition_type(&self) -> &'static str {
@@ -95,8 +76,9 @@ impl ConditionEvaluator for MaCrossCondition {
         }
 
         let closes: Vec<f64> = candles.iter().map(|c| c.close).collect();
-        let fast = moving_average(&closes, params.fast_period, params.exponential);
-        let slow = moving_average(&closes, params.slow_period, params.exponential);
+        let moving_average = if params.exponential { ema } else { sma };
+        let fast = moving_average(&closes, params.fast_period);
+        let slow = moving_average(&closes, params.slow_period);
         let fast_at = |index: usize| fast[index + 1 - params.fast_period];
         let slow_at = |index: usize| slow[index + 1 - params.slow_period];
 
@@ -115,6 +97,10 @@ impl ConditionEvaluator for MaCrossCondition {
 
     fn validate(&self, condition: &Condition) -> Result<()> {
         Params::read(condition).map(|_| ())
+    }
+
+    fn reads(&self) -> ConditionData {
+        ConditionData::Candles
     }
 
     fn parameter_schema(&self) -> serde_json::Value {

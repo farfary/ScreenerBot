@@ -4,7 +4,7 @@
 //! Liquidity level condition — checks pool liquidity against thresholds.
 
 use crate::strategies::conditions::{get_param_f64, get_param_string, ConditionEvaluator};
-use crate::strategies::types::{Condition, EvaluationContext};
+use crate::strategies::types::{Condition, ConditionData, EvaluationContext};
 use crate::strategies::{Error, Result};
 use async_trait::async_trait;
 use serde_json::json;
@@ -71,6 +71,10 @@ impl ConditionEvaluator for LiquidityLevelCondition {
         }
 
         Ok(())
+    }
+
+    fn reads(&self) -> ConditionData {
+        ConditionData::Pool
     }
 
     fn parameter_schema(&self) -> serde_json::Value {

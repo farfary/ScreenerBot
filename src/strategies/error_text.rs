@@ -49,12 +49,17 @@ const FIELDS: &[(&str, MessageId)] = &[
         "moving average type",
         ids::STRATEGIES_ERROR_FIELD_MOVING_AVERAGE_TYPE,
     ),
+    ("moving average", ids::STRATEGIES_ERROR_FIELD_MOVING_AVERAGE),
     ("multiplier", ids::STRATEGIES_ERROR_FIELD_MULTIPLIER),
     ("pattern", ids::STRATEGIES_ERROR_FIELD_PATTERN),
     ("peak price", ids::STRATEGIES_ERROR_FIELD_PEAK_PRICE),
     ("percentage", ids::STRATEGIES_ERROR_FIELD_PERCENTAGE),
     ("period", ids::STRATEGIES_ERROR_FIELD_PERIOD),
     ("position", ids::STRATEGIES_ERROR_FIELD_POSITION),
+    (
+        "reference candle close",
+        ids::STRATEGIES_ERROR_FIELD_REFERENCE_CANDLE_CLOSE,
+    ),
     ("slow period", ids::STRATEGIES_ERROR_FIELD_SLOW_PERIOD),
     ("threshold", ids::STRATEGIES_ERROR_FIELD_THRESHOLD),
     ("time unit", ids::STRATEGIES_ERROR_FIELD_TIME_UNIT),
@@ -242,6 +247,19 @@ impl Error {
                 .arg("timeframe", UiArg::Text(timeframe.clone()))
                 .arg("age", seconds(*age_seconds))
                 .arg("max", seconds(*max_age_seconds)),
+            Error::StaleMarketData {
+                window,
+                age_seconds,
+                max_age_seconds,
+            } => UiText::new(ids::STRATEGIES_ERROR_STALE_MARKET_DATA)
+                .arg("window", UiArg::Text(window.clone()))
+                .arg("age", seconds(*age_seconds))
+                .arg("max", seconds(*max_age_seconds)),
+            Error::UnusableData { field, value } => {
+                UiText::new(ids::STRATEGIES_ERROR_UNUSABLE_DATA)
+                    .arg("field", field_text(field))
+                    .arg("value", UiArg::Text(value.clone()))
+            }
             Error::InvalidRuleTree { reason } => {
                 UiText::new(ids::STRATEGIES_ERROR_INVALID_RULE_TREE)
                     .arg("reason", token(RULE_FAULTS, reason))
@@ -269,6 +287,7 @@ impl Error {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::errors::ErrorClass;
     use crate::i18n::{format_en, LanguageIdentifier};
     use std::path::Path;
 
@@ -284,6 +303,8 @@ mod tests {
             | Error::InsufficientHistory { .. }
             | Error::InsufficientCandles { .. }
             | Error::StaleCandleData { .. }
+            | Error::StaleMarketData { .. }
+            | Error::UnusableData { .. }
             | Error::InvalidRuleTree { .. }
             | Error::ConditionNotApplicable { .. }
             | Error::EvaluationTimeout { .. } => error,
@@ -319,6 +340,15 @@ mod tests {
                 age_seconds: 400,
                 max_age_seconds: 120,
             }),
+            listed(Error::StaleMarketData {
+                window: "1h".to_owned(),
+                age_seconds: 4000,
+                max_age_seconds: 3600,
+            }),
+            listed(Error::UnusableData {
+                field: "moving average",
+                value: "0".to_owned(),
+            }),
             listed(Error::InvalidRuleTree {
                 reason: "leaf node missing condition",
             }),
@@ -343,6 +373,19 @@ mod tests {
             let rendered = text.render_plain(&en);
             assert!(!rendered.is_empty());
             assert!(!rendered.contains("strategies-error-"), "{rendered}");
+        }
+    }
+
+    /// A rule tree reads an error as "this condition is unknown" exactly when the error
+    /// is the failed-dependency class the dashboard is told about as 424.
+    #[test]
+    fn data_unavailable_is_exactly_the_failed_dependency_class() {
+        for error in all() {
+            assert_eq!(
+                error.is_data_unavailable(),
+                error.http_status() == 424,
+                "{error:?}"
+            );
         }
     }
 
@@ -420,11 +463,22 @@ mod tests {
             ("reason", RULE_FAULTS),
         ];
         let mut seen = 0;
+        let basis_needle = format!("usable_basis({}", '"');
         for file in files
             .iter()
             .filter(|f| !f.ends_with("error_text.rs") && !f.ends_with("database.rs"))
         {
             let source = std::fs::read_to_string(file).unwrap();
+            for (at, _) in source.match_indices(&basis_needle) {
+                let rest = &source[at + basis_needle.len()..];
+                let literal = &rest[..rest.find('"').unwrap()];
+                seen += 1;
+                assert!(
+                    FIELDS.iter().any(|(name, _)| *name == literal),
+                    "{}: unmapped basis label {literal:?}",
+                    file.display()
+                );
+            }
             for (key, table) in tables {
                 let needle = format!("{key}: {}", '"');
                 for (at, _) in source.match_indices(&needle) {

@@ -202,6 +202,33 @@ mod tests {
         }
     }
 
+    /// Every schema says what it reads, and the schemas recorded for the dashboard tests
+    /// say the same, so the catalog's data tags are tested against what Rust emits.
+    #[test]
+    fn every_schema_reads_what_the_recorded_schemas_say() {
+        let schemas = ConditionRegistry::new().get_all_schemas();
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tools/tests/fixtures/dashboard/trader/strategies_condition_schemas.json");
+        let recorded: Value =
+            serde_json::from_str(&std::fs::read_to_string(path).expect("recorded schemas"))
+                .expect("recorded schemas parse");
+        let recorded = recorded["schemas"].as_object().expect("recorded schemas");
+        let schemas = schemas.as_object().expect("schemas object");
+        assert_eq!(
+            schemas.keys().collect::<BTreeSet<_>>(),
+            recorded.keys().collect::<BTreeSet<_>>(),
+            "recorded schemas list other conditions"
+        );
+        for (name, schema) in schemas {
+            let reads = schema["reads"].as_str().expect("reads");
+            assert!(
+                ["candles", "position", "pool", "market"].contains(&reads),
+                "{name} reads {reads}"
+            );
+            assert_eq!(schema["reads"], recorded[name]["reads"], "{name}");
+        }
+    }
+
     #[test]
     fn kebab_splits_type_and_parameter_ids() {
         assert_eq!(kebab("PriceToMA"), "price-to-ma");

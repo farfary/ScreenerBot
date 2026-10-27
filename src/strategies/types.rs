@@ -28,6 +28,21 @@ impl std::fmt::Display for StrategyType {
     }
 }
 
+/// The data a condition reads, published in its schema as `reads` so the editor can say
+/// what a condition depends on without inferring it from the category.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ConditionData {
+    /// OHLCV candles of a timeframe.
+    Candles,
+    /// The open position the exit strategy manages.
+    Position,
+    /// The live pool the price is read from.
+    Pool,
+    /// The token's market snapshot (transaction counts per window).
+    Market,
+}
+
 /// Strategy definition with rule tree and metadata
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Strategy {
@@ -160,6 +175,13 @@ pub struct PositionData {
     pub position_age_hours: f64,
     /// Highest pool price since the position's average entry price last changed.
     pub peak_price: Option<f64>,
+    /// Additions booked on the position after its first entry.
+    pub dca_count: u32,
+    /// Partial exits booked on the position.
+    pub partial_exit_count: u32,
+    /// What the tokens still held are worth at the live pool price, in the native coin;
+    /// `None` when the token's decimals or a pool price are unknown.
+    pub remaining_value_native: Option<f64>,
 }
 
 /// Market-related data for evaluation
@@ -169,6 +191,13 @@ pub struct MarketData {
     /// Buy and sell counts per window from the cached token snapshot; `None` when the
     /// token is not cached.
     pub transactions: Option<TransactionCounts>,
+    /// When the cached token snapshot's market data was fetched; `None` when the token is
+    /// not cached.
+    pub snapshot_at: Option<DateTime<Utc>>,
+    /// When the token was created on-chain; `None` when that time is unknown.
+    pub token_created_at: Option<DateTime<Utc>>,
+    /// The trade size an entry would spend, in the native coin; `None` for an exit.
+    pub reference_size_native: Option<f64>,
 }
 
 /// Buy and sell transaction counts of one time window.

@@ -7,7 +7,7 @@ use crate::strategies::conditions::{
     get_candles_for_timeframe, get_param_f64, get_param_string_optional, validate_timeframe_param,
     ConditionEvaluator,
 };
-use crate::strategies::types::{Condition, EvaluationContext};
+use crate::strategies::types::{Condition, ConditionData, EvaluationContext};
 use crate::strategies::{Error, Result};
 use async_trait::async_trait;
 use serde_json::json;
@@ -97,6 +97,10 @@ impl ConditionEvaluator for VolumeSpikeCondition {
         }
 
         Ok(())
+    }
+
+    fn reads(&self) -> ConditionData {
+        ConditionData::Candles
     }
 
     fn parameter_schema(&self) -> serde_json::Value {

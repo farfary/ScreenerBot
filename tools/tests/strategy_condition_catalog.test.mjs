@@ -13,7 +13,9 @@
  * - No script, markup or message carries a fold control or a stored fold state.
  * - A condition that does not apply to the strategy type is a disabled button naming
  *   the strategy type it is for; an applicable one is an enabled button.
- * - Every schema has a data tag, derived from its category and parameters.
+ * - Every schema names the data it reads (`reads`, emitted by the Rust condition), and
+ *   the catalog tags each entry with exactly that value rather than guessing it from
+ *   the category.
  * - No condition message repeats the strategy type it is for or a data note.
  * - Search matches the localized name or description, and a category narrows the list.
  *
@@ -44,7 +46,6 @@ import {
   catalogEntries,
   categoriesOf,
   createConditionCatalog,
-  dataTagOf,
   filterEntries,
 } from "../../src/webserver/templates/scripts/pages/strategies/condition_catalog.js";
 
@@ -96,9 +97,9 @@ test("a condition the strategy type cannot use is a disabled button naming its t
   assert.match(everywhere, /catalog-entry-tag">Candles</);
 });
 
-test("every schema has a data tag derived from its category and parameters", () => {
+test("every schema names what it reads and the catalog tags it with exactly that", () => {
   const tags = Object.fromEntries(
-    Object.entries(schemas).map(([type, schema]) => [type, dataTagOf(schema)])
+    Object.entries(schemas).map(([type, schema]) => [type, schema.reads])
   );
   for (const [type, tag] of Object.entries(tags)) {
     assert.ok(Object.hasOwn(DATA_TAG_LABELS, tag), `${type} has no tag label`);
@@ -119,6 +120,13 @@ test("every schema has a data tag derived from its category and parameters", () 
     Rsi: "candles",
     VolumeSpike: "candles",
   });
+  for (const strategyType of ["ENTRY", "EXIT"]) {
+    for (const entry of catalogEntries(schemas, strategyType)) {
+      assert.equal(entry.tag, schemas[entry.type].reads, `${entry.type} tag`);
+    }
+  }
+  // The tag is the schema's own field: a category or parameter never decides it.
+  assert.doesNotMatch(catalogSource, /CANDLE_CATEGORIES|dataTagOf|"timeframe" in params/);
 });
 
 test("every candle condition closes its description with the one candles-only note", () => {

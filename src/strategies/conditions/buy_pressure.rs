@@ -3,9 +3,11 @@
 
 //! Buy pressure condition — the share of buys among a window's transactions.
 
-use crate::strategies::conditions::{get_param_choice, get_param_f64_in_range, ConditionEvaluator};
-use crate::strategies::types::{Condition, EvaluationContext, WindowCounts};
-use crate::strategies::{Error, Result};
+use crate::strategies::conditions::{
+    get_param_choice, get_param_f64_in_range, market_window, ConditionEvaluator,
+};
+use crate::strategies::types::{Condition, ConditionData, EvaluationContext, WindowCounts};
+use crate::strategies::Result;
 use async_trait::async_trait;
 use serde_json::json;
 
@@ -50,21 +52,7 @@ impl ConditionEvaluator for BuyPressureCondition {
     async fn evaluate(&self, condition: &Condition, context: &EvaluationContext) -> Result<bool> {
         let params = Params::read(condition)?;
 
-        let missing = Error::MissingContextData {
-            data: "transaction counts",
-        };
-        let transactions = context
-            .market_data
-            .as_ref()
-            .and_then(|market| market.transactions)
-            .ok_or_else(|| missing.clone())?;
-        let WindowCounts { buys, sells } = match params.window.as_str() {
-            "5m" => transactions.m5,
-            "1h" => transactions.h1,
-            "6h" => transactions.h6,
-            _ => transactions.h24,
-        }
-        .ok_or(missing)?;
+        let WindowCounts { buys, sells } = market_window(context, &params.window)?;
 
         let total = buys.saturating_add(sells);
         if (total as f64) < params.min_transactions {
@@ -76,6 +64,10 @@ impl ConditionEvaluator for BuyPressureCondition {
 
     fn validate(&self, condition: &Condition) -> Result<()> {
         Params::read(condition).map(|_| ())
+    }
+
+    fn reads(&self) -> ConditionData {
+        ConditionData::Market
     }
 
     fn parameter_schema(&self) -> serde_json::Value {

@@ -74,6 +74,9 @@ fn context(liquidity_sol: f64) -> EvaluationContext {
     ctx.market_data = Some(MarketData {
         liquidity_sol: Some(liquidity_sol),
         transactions: None,
+        snapshot_at: None,
+        token_created_at: None,
+        reference_size_native: None,
     });
     ctx
 }
@@ -238,6 +241,297 @@ async fn a_child_error_propagates_when_it_is_actually_reached() {
         .evaluate_strategy(&strategy(rules), &context(500.0))
         .await
         .is_err());
+}
+
+// ==================== THREE-VALUED LOGIC ====================
+//
+// A condition that cannot be answered for lack of data is Unknown: never true, never
+// false. A group is still decided by a decisive child (False for And, True for Or) and
+// stops there; an Unknown child never stops it. Any other error is a fault in the
+// strategy and propagates the moment it is reached, so a fault placed after a decisive
+// child is not reached (strategy validation at save time is what catches it there).
+
+/// The four kinds of child a group can hold, in the order the probes below build them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum Kind {
+    True,
+    False,
+    Unknown,
+    Fault,
+}
+
+const KINDS: [Kind; 4] = [Kind::True, Kind::False, Kind::Unknown, Kind::Fault];
+
+/// What a strategy evaluation produced, by class.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Outcome {
+    Signal(bool),
+    DataUnavailable,
+    Fault,
+}
+
+/// The liquidity of [`kleene_context`], which decides the two liquidity probes.
+const PROBE_LIQUIDITY: f64 = 500.0;
+
+/// A context with liquidity and nothing else: no transaction counts, no position.
+fn kleene_context() -> EvaluationContext {
+    context(PROBE_LIQUIDITY)
+}
+
+/// Buy pressure reads transaction counts, which [`kleene_context`] does not carry.
+fn unknown_condition() -> Condition {
+    condition(
+        "BuyPressure",
+        &[
+            ("window", json!("1h")),
+            ("min_buy_share_pct", json!(60.0)),
+            ("min_transactions", json!(10.0)),
+        ],
+    )
+}
+
+fn probe(kind: Kind) -> RuleTree {
+    leaf(match kind {
+        Kind::True => liquidity_at_least(100.0),
+        Kind::False => liquidity_at_least(1_000.0),
+        Kind::Unknown => unknown_condition(),
+        Kind::Fault => condition("NoSuchCondition", &[]),
+    })
+}
+
+async fn outcome_of(engine: &StrategyEngine, rules: RuleTree) -> Outcome {
+    match engine
+        .evaluate_strategy(&strategy(rules), &kleene_context())
+        .await
+    {
+        Ok(result) => Outcome::Signal(result.result),
+        Err(e) if e.is_data_unavailable() => Outcome::DataUnavailable,
+        Err(_) => Outcome::Fault,
+    }
+}
+
+/// The contract, read left to right: a fault ends the group the moment it is reached, a
+/// decisive child ends it with its value, an Unknown child is remembered and passed over.
+fn contract(operator: LogicalOperator, children: &[Kind]) -> Outcome {
+    let decisive = operator == LogicalOperator::Or;
+    let mut unknown = false;
+    for child in children {
+        match child {
+            Kind::Fault => return Outcome::Fault,
+            Kind::True if decisive => return Outcome::Signal(true),
+            Kind::False if !decisive => return Outcome::Signal(false),
+            Kind::Unknown => unknown = true,
+            Kind::True | Kind::False => {}
+        }
+    }
+    if unknown {
+        Outcome::DataUnavailable
+    } else {
+        Outcome::Signal(!decisive)
+    }
+}
+
+fn negated(outcome: Outcome) -> Outcome {
+    match outcome {
+        Outcome::Signal(value) => Outcome::Signal(!value),
+        other => other,
+    }
+}
+
+/// Every sequence of up to four children drawn from the four kinds.
+fn sequences() -> Vec<Vec<Kind>> {
+    let mut all: Vec<Vec<Kind>> = vec![Vec::new()];
+    let mut out = Vec::new();
+    for _ in 0..4 {
+        all = all
+            .iter()
+            .flat_map(|prefix| {
+                KINDS.iter().map(move |kind| {
+                    let mut next = prefix.clone();
+                    next.push(*kind);
+                    next
+                })
+            })
+            .collect();
+        out.extend(all.iter().cloned());
+    }
+    out
+}
+
+#[tokio::test]
+async fn every_group_follows_the_three_valued_contract() {
+    let engine = uncached_engine();
+    let sequences = sequences();
+    assert_eq!(sequences.len(), 4 + 16 + 64 + 256);
+    for operator in [LogicalOperator::And, LogicalOperator::Or] {
+        for children in &sequences {
+            let group = RuleTree::branch(operator, children.iter().copied().map(probe).collect());
+            let expected = contract(operator, children);
+            assert_eq!(
+                outcome_of(&engine, group.clone()).await,
+                expected,
+                "{operator:?} {children:?}"
+            );
+            let not = RuleTree::branch(LogicalOperator::Not, vec![group]);
+            assert_eq!(
+                outcome_of(&engine, not).await,
+                negated(expected),
+                "NOT {operator:?} {children:?}"
+            );
+        }
+    }
+}
+
+#[tokio::test]
+async fn child_order_never_changes_the_answer_except_where_a_fault_meets_a_decisive_child() {
+    // The permutation property. Over true, false and unknown children the result is the
+    // same in every order. A fault is reached in every order unless a decisive child
+    // stands before it, so a group holding a fault and no decisive child always fails;
+    // a group holding both is decided by which comes first, and is then either that
+    // fault or the decisive value, never the opposite value and never unknown.
+    let engine = uncached_engine();
+    for operator in [LogicalOperator::And, LogicalOperator::Or] {
+        let decisive = if operator == LogicalOperator::Or {
+            Kind::True
+        } else {
+            Kind::False
+        };
+        for children in sequences() {
+            let mut canonical = children.clone();
+            canonical.sort();
+            let got = outcome_of(
+                &engine,
+                RuleTree::branch(operator, children.iter().copied().map(probe).collect()),
+            )
+            .await;
+            let has_fault = children.contains(&Kind::Fault);
+            let has_decisive = children.contains(&decisive);
+            if has_fault && has_decisive {
+                let fault_first = children.iter().position(|kind| *kind == Kind::Fault)
+                    < children.iter().position(|kind| *kind == decisive);
+                let expected = if fault_first {
+                    Outcome::Fault
+                } else {
+                    Outcome::Signal(decisive == Kind::True)
+                };
+                assert_eq!(got, expected, "{operator:?} {children:?}");
+                continue;
+            }
+            let reordered = outcome_of(
+                &engine,
+                RuleTree::branch(operator, canonical.iter().copied().map(probe).collect()),
+            )
+            .await;
+            assert_eq!(got, reordered, "{operator:?} {children:?} vs {canonical:?}");
+            if has_fault {
+                assert_eq!(got, Outcome::Fault, "{operator:?} {children:?}");
+            }
+        }
+    }
+}
+
+#[tokio::test]
+async fn and_or_not_follow_the_kleene_tables() {
+    use Kind::{False as F, True as T, Unknown as U};
+    use Outcome::{DataUnavailable as Unknown, Signal};
+    let engine = uncached_engine();
+    let table = [
+        (T, T, Signal(true), Signal(true)),
+        (T, F, Signal(false), Signal(true)),
+        (T, U, Unknown, Signal(true)),
+        (F, T, Signal(false), Signal(true)),
+        (F, F, Signal(false), Signal(false)),
+        (F, U, Signal(false), Unknown),
+        (U, T, Unknown, Signal(true)),
+        (U, F, Signal(false), Unknown),
+        (U, U, Unknown, Unknown),
+    ];
+    for (left, right, and, or) in table {
+        let pair = || vec![probe(left), probe(right)];
+        assert_eq!(
+            outcome_of(&engine, RuleTree::branch(LogicalOperator::And, pair())).await,
+            and,
+            "{left:?} AND {right:?}"
+        );
+        assert_eq!(
+            outcome_of(&engine, RuleTree::branch(LogicalOperator::Or, pair())).await,
+            or,
+            "{left:?} OR {right:?}"
+        );
+    }
+    for (child, not) in [(T, Signal(false)), (F, Signal(true)), (U, Unknown)] {
+        assert_eq!(
+            outcome_of(
+                &engine,
+                RuleTree::branch(LogicalOperator::Not, vec![probe(child)])
+            )
+            .await,
+            not,
+            "NOT {child:?}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn an_undecided_strategy_reports_the_first_data_error_it_reached() {
+    // Two different missing inputs: the error names the one evaluated first, which is
+    // the same "no signal" the trader logged before unknown children were passed over.
+    let engine = uncached_engine();
+    let missing_counts = leaf(unknown_condition());
+    let missing_position = leaf(profit_condition());
+    for operator in [LogicalOperator::And, LogicalOperator::Or] {
+        for (children, data) in [
+            (
+                vec![missing_counts.clone(), missing_position.clone()],
+                "transaction counts",
+            ),
+            (
+                vec![missing_position.clone(), missing_counts.clone()],
+                "position data",
+            ),
+        ] {
+            let err = engine
+                .evaluate_strategy(
+                    &strategy(RuleTree::branch(operator, children)),
+                    &kleene_context(),
+                )
+                .await
+                .expect_err("an undecided root is no signal");
+            assert!(
+                matches!(err, StrategyError::MissingContextData { data: reported } if reported == data),
+                "{operator:?}: got {err}"
+            );
+        }
+    }
+}
+
+#[tokio::test]
+async fn an_unknown_child_never_hides_a_fault_after_it() {
+    // Unknown passes over to the next child, so a fault there is still reached and
+    // reported as a fault, not as missing data.
+    let engine = uncached_engine();
+    for operator in [LogicalOperator::And, LogicalOperator::Or] {
+        let err = engine
+            .evaluate_strategy(
+                &strategy(RuleTree::branch(
+                    operator,
+                    vec![probe(Kind::Unknown), probe(Kind::Fault)],
+                )),
+                &kleene_context(),
+            )
+            .await
+            .expect_err("the fault is reached");
+        assert!(
+            matches!(
+                err,
+                StrategyError::InvalidConditionValue {
+                    field: "condition type",
+                    ..
+                }
+            ),
+            "{operator:?}: got {err}"
+        );
+    }
 }
 
 #[tokio::test]
@@ -714,6 +1008,9 @@ fn exit_context(peak: f64) -> EvaluationContext {
         unrealized_profit_pct: Some(50.0),
         position_age_hours: 1.0,
         peak_price: Some(peak),
+        dca_count: 0,
+        partial_exit_count: 0,
+        remaining_value_native: None,
     });
     ctx
 }
@@ -760,6 +1057,9 @@ fn counts_context(buys: u64, sells: u64) -> EvaluationContext {
             h6: None,
             h24: None,
         }),
+        snapshot_at: Some(common::anchor_time()),
+        token_created_at: None,
+        reference_size_native: None,
     });
     ctx
 }
