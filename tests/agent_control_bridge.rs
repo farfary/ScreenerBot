@@ -225,16 +225,19 @@ async fn an_approval_runs_to_its_outcome_when_the_decide_request_drops() {
     let (client_id, secret) = trading_connection("approval-dropped", PermissionLevel::AskUser);
     let approval_id = parked_approval(&client_id, &secret).await;
 
-    // A zero timeout polls the decide future once and then drops it.
-    let dropped = tokio::time::timeout(
-        std::time::Duration::ZERO,
-        bridge::approve(approval_id.clone()),
-    )
+    // The decide future is polled exactly once and then dropped. On the current-thread
+    // runtime its spawned task cannot run before the test yields, so the first poll is
+    // always pending; a timeout instead raced that task against the timer driver.
+    let mut decide = Box::pin(bridge::approve(approval_id.clone()));
+    let first = std::future::poll_fn(|cx| {
+        std::task::Poll::Ready(std::future::Future::poll(decide.as_mut(), cx))
+    })
     .await;
     assert!(
-        dropped.is_err(),
+        first.is_pending(),
         "the decide future answered before it was dropped"
     );
+    drop(decide);
 
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
     loop {

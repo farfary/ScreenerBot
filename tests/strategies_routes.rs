@@ -11,6 +11,7 @@ use std::sync::Arc;
 use axum::body::{to_bytes, Body};
 use axum::http::{Request, StatusCode};
 use common::condition;
+use screenerbot::chains::solana::solana_sdk::pubkey::Pubkey;
 use screenerbot::strategies::db::{get_strategy, insert_strategy, update_strategy};
 use screenerbot::strategies::engine::EngineConfig;
 use screenerbot::strategies::types::{Condition, RuleTree, Strategy, StrategyType};
@@ -571,7 +572,7 @@ async fn a_test_without_a_price_reads_the_tokens_live_context() {
     let (status, body) = send(
         "POST",
         "/api/strategies/live-exit/test",
-        json!({ "token_mint": "mint-without-position" }),
+        json!({ "token_mint": Pubkey::new_unique().to_string() }),
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{body}");
@@ -582,6 +583,23 @@ async fn a_test_without_a_price_reads_the_tokens_live_context() {
         json!("strategies-error-missing-data"),
         "{body}"
     );
+}
+
+#[tokio::test]
+async fn a_live_test_of_a_token_no_enabled_chain_accepts_is_refused() {
+    let _dir = strategy_system().await;
+    stored("live-exit", StrategyType::Exit, position_profit(), true);
+
+    // Without a supplied price the test reads the token's live context on its own chain,
+    // so a token that is no address on any enabled chain is refused before any read.
+    let (status, body) = send(
+        "POST",
+        "/api/strategies/live-exit/test",
+        json!({ "token_mint": "not-an-address" }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+    assert_eq!(body["error"]["code"], json!("INVALID_INPUT"), "{body}");
 }
 
 #[tokio::test]
@@ -608,7 +626,7 @@ async fn a_live_test_of_a_candle_rule_without_a_running_ohlcv_service_answers_un
     let (status, body) = send(
         "POST",
         "/api/strategies/live-candles/test",
-        json!({ "token_mint": "mint-without-candles" }),
+        json!({ "token_mint": Pubkey::new_unique().to_string() }),
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{body}");
