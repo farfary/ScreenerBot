@@ -180,12 +180,15 @@
 }
 
 /* ===== Calendar month summary =====
-   An even grid that wraps whole: five across, then 3 + 2 (on a six-column track),
-   then 2 + 2 + 1, by the width the calendar section has. */
+   A grid that wraps whole: five across, then 3 + 2 (on a six-column track), then
+   2 + 2 + 1, by the width the calendar section has. Five across, each column takes
+   its content's width before the spare room is shared, so the long best-day value is
+   not cut at the panel edge while the counts beside it keep only what they need. A
+   track narrower than its value cuts it with an ellipsis, never into the next stat. */
 .calendar-summary {
   display: grid;
   flex-shrink: 0;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(5, auto);
   border-top: 1px solid var(--border-color);
 }
 
@@ -207,7 +210,7 @@
   border-inline-start: 1px solid var(--border-color);
 }
 
-@container calendar (width < 40rem) {
+@container calendar (width < 46rem) {
   .calendar-summary {
     grid-template-columns: repeat(6, minmax(0, 1fr));
   }
@@ -267,6 +270,8 @@
 }
 
 .calendar-summary-value {
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-family: var(--font-data);
   font-size: var(--value-size);
   font-weight: 700;
