@@ -21,8 +21,14 @@ use crate::tokens::Error;
 use chrono::{DateTime, Utc};
 use std::collections::HashMap;
 
-/// Convert API pool data to our DexScreenerData type
-fn convert_pool_to_data(pool: &DexScreenerPool, is_native_pair: bool) -> DexScreenerData {
+/// Convert API pool data to our DexScreenerData type.
+///
+/// `native_price_usd` is the USD price of the native asset of the pool's chain (0.0 when unknown).
+fn convert_pool_to_data(
+    pool: &DexScreenerPool,
+    is_native_pair: bool,
+    native_price_usd: f64,
+) -> DexScreenerData {
     fn parse_f64(value: &str) -> Option<f64> {
         value.parse::<f64>().ok()
     }
@@ -45,9 +51,8 @@ fn convert_pool_to_data(pool: &DexScreenerPool, is_native_pair: bool) -> DexScre
         // priceNative here is denominated in the quote token (e.g. USDC), NOT SOL — using it as
         // a fallback would emit a USDC value mislabelled as SOL and corrupt P&L/quotes. When the
         // SOL price is unavailable we leave price_sol at 0.0 so downstream treats it as unpriced.
-        let native_price = crate::native_price::get_native_price();
-        if native_price > 0.0 {
-            price_usd / native_price
+        if native_price_usd > 0.0 {
+            price_usd / native_price_usd
         } else {
             0.0
         }
@@ -241,7 +246,8 @@ async fn fetch_and_store(mints: &[String], db: &TokenDatabase) -> TokenResult<Ba
 
         let is_native_pair =
             crate::chains::adapter_for(db.chain()).is_native_asset(&pool.quote_token_address);
-        let data = convert_pool_to_data(&pool, is_native_pair);
+        let native_price_usd = crate::native_price::get_native_price_for(db.chain());
+        let data = convert_pool_to_data(&pool, is_native_pair, native_price_usd);
 
         // Store the token row (with the pair's symbol and name) and its market data
         let symbol = Some(pool.base_token_symbol.as_str()).filter(|s| !s.is_empty());

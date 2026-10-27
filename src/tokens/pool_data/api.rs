@@ -8,7 +8,7 @@ use crate::apis::manager::get_api_manager;
 use crate::chains::{adapter_for, ChainId};
 use crate::events::{record_token_event, Severity};
 use crate::logger::{self, LogTag};
-use crate::native_price::get_native_price;
+use crate::native_price::get_native_price_for;
 use crate::tokens::types::{TokenPoolInfo, TokenResult};
 use crate::tokens::updates::RateLimitCoordinator;
 use crate::tokens::Error;
@@ -43,7 +43,7 @@ pub async fn fetch_from_sources(
     coordinator: Arc<RateLimitCoordinator>,
 ) -> TokenResult<FetchedPools> {
     let api = get_api_manager();
-    let native_price = get_native_price();
+    let native_price = get_native_price_for(chain);
 
     let should_fetch_dex = api.dexscreener.is_enabled();
     let should_fetch_gecko = api.geckoterminal.is_enabled();

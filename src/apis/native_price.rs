@@ -186,6 +186,31 @@ pub fn get_native_price() -> f64 {
     }
 }
 
+/// The USD price of `chain`'s native asset, or 0.0 while no fresh price of that chain is
+/// known. The service prices the active chain's native asset only, so a row of any other
+/// chain reads the 0.0 sentinel, the same unknown price every conversion already handles.
+pub fn get_native_price_for(chain: crate::chains::ChainId) -> f64 {
+    match NATIVE_PRICE_CACHE.read() {
+        Ok(cache) => fresh_price_of(&cache, chain),
+        Err(e) => {
+            logger::error(
+                LogTag::SolPrice,
+                &format!("Failed to read SOL price cache: {e}"),
+            );
+            0.0
+        }
+    }
+}
+
+/// `cache`'s price when it is fresh and prices `chain`'s native asset, else 0.0.
+fn fresh_price_of(cache: &NativePriceData, chain: crate::chains::ChainId) -> f64 {
+    if cache.chain == Some(chain) && cache.is_fresh() {
+        cache.price_usd
+    } else {
+        0.0
+    }
+}
+
 /// The current SOL/USD price, or `None` while no fresh price is known. Every
 /// display of the SOL/USD figure reads it here, so they all show the same price.
 pub fn known_native_price() -> Option<f64> {
@@ -678,11 +703,45 @@ pub async fn force_refresh_native_price() -> Result<f64, Error> {
 
 #[cfg(test)]
 mod tests {
-    use super::{known_price, NativePriceData};
+    use super::{fresh_price_of, known_price, NativePriceData};
+    use crate::chains::ChainId;
+    use std::time::Instant;
 
     #[test]
     fn a_default_price_names_no_chain() {
         assert_eq!(NativePriceData::default().chain, None);
+    }
+
+    fn fresh(chain: Option<ChainId>) -> NativePriceData {
+        NativePriceData {
+            price_usd: 150.25,
+            last_updated: Instant::now(),
+            is_valid: true,
+            source: "dexscreener".to_owned(),
+            fetch_count: 1,
+            error_count: 0,
+            chain,
+        }
+    }
+
+    #[test]
+    fn a_chain_reads_only_a_fresh_price_of_its_own_native_asset() {
+        for &chain in ChainId::ALL {
+            assert_eq!(fresh_price_of(&fresh(Some(chain)), chain), 150.25);
+            // A price that names no chain is no chain's price.
+            assert_eq!(fresh_price_of(&fresh(None), chain), 0.0);
+            let invalid = NativePriceData {
+                is_valid: false,
+                ..fresh(Some(chain))
+            };
+            assert_eq!(fresh_price_of(&invalid, chain), 0.0);
+            assert_eq!(fresh_price_of(&NativePriceData::default(), chain), 0.0);
+        }
+        for &priced in ChainId::ALL {
+            for &other in ChainId::ALL.iter().filter(|&&c| c != priced) {
+                assert_eq!(fresh_price_of(&fresh(Some(priced)), other), 0.0);
+            }
+        }
     }
 
     #[test]

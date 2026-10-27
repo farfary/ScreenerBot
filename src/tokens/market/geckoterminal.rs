@@ -123,7 +123,7 @@ async fn fetch_and_store(
             .as_ref()
             .and_then(|s| s.parse::<f64>().ok())
             .unwrap_or_default();
-        let native_price = crate::native_price::get_native_price();
+        let native_price = crate::native_price::get_native_price_for(db.chain());
         let price_sol = if native_price > 0.0 {
             price_usd / native_price
         } else {
