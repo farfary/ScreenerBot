@@ -27,19 +27,3 @@ pub use progress::{with_swap_stage_listener, SwapStage, SwapStageListener};
 pub use registry::{get_registry, try_get_registry, RouterRegistry};
 pub use router::SwapRouter;
 pub use types::{ExitType, Quote, QuoteRequest, SwapAmountLimit, SwapMode, SwapResult};
-
-use crate::chains::RawAmount;
-
-/// The share of `total_amount` for `percentage`, truncated toward zero and never above the
-/// total. Zero for an empty total or a NaN or nonpositive percentage; the whole total at 100%
-/// or more.
-pub fn calculate_partial_amount(total_amount: RawAmount, percentage: f64) -> RawAmount {
-    if total_amount == RawAmount::ZERO || percentage.is_nan() || percentage <= 0.0 {
-        return RawAmount::ZERO;
-    }
-    if percentage >= 100.0 {
-        return total_amount;
-    }
-    let partial = (total_amount.raw() as f64 * percentage / 100.0).trunc();
-    RawAmount::from_integral_f64(partial).map_or(total_amount, |partial| partial.min(total_amount))
-}

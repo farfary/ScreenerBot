@@ -1,8 +1,8 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Pure: position lifecycle mechanics — partial-exit sizing, transition classification,
-//! and the global position-slot accounting that enforces `max_open_positions`.
+//! Pure: position lifecycle mechanics — transition classification and the global
+//! position-slot accounting that enforces `max_open_positions`.
 //!
 //! None of this is arithmetic the user ever sees, which is exactly why it is dangerous:
 //! a slot released twice silently raises the position cap, and a transition
@@ -17,111 +17,16 @@ use crate::common;
 
 use chrono::Utc;
 use common::config_guard;
-use screenerbot::chains::RawAmount;
 use screenerbot::positions::state::{
     init_global_position_semaphore, register_position_slot, release_position_slot,
     try_consume_global_position_permit,
 };
 use screenerbot::positions::transitions::NotLandedEvidence;
 use screenerbot::positions::PositionTransition;
-use screenerbot::swaps::calculate_partial_amount;
 
 /// A raw token amount in whatever integer type the field under test uses.
 fn raw<T: From<u64>>(value: u64) -> T {
     T::from(value)
-}
-
-// ==================== PARTIAL EXIT SIZING ====================
-
-#[test]
-fn a_partial_amount_is_the_requested_share_of_the_balance() {
-    assert_eq!(
-        calculate_partial_amount(raw(1_000), 25.0),
-        raw::<RawAmount>(250)
-    );
-    assert_eq!(
-        calculate_partial_amount(raw(1_000), 50.0),
-        raw::<RawAmount>(500)
-    );
-    assert_eq!(
-        calculate_partial_amount(raw(1_000), 99.0),
-        raw::<RawAmount>(990)
-    );
-}
-
-#[test]
-fn a_full_percentage_sells_the_entire_balance() {
-    // Exactly 100 must return the balance itself, not a rounded product — selling
-    // 999_999_999 of 1_000_000_000 units leaves dust that blocks the account close.
-    assert_eq!(
-        calculate_partial_amount(raw(1_000_000_000), 100.0),
-        raw::<RawAmount>(1_000_000_000)
-    );
-    assert_eq!(
-        calculate_partial_amount(raw(1_000_000_000), 150.0),
-        raw::<RawAmount>(1_000_000_000)
-    );
-}
-
-#[test]
-fn a_partial_amount_can_never_exceed_the_balance() {
-    // The wallet cannot sell what it does not hold; an over-sized amount fails the
-    // swap outright rather than partially filling.
-    for pct in [100.0, 100.000_001, 1_000.0, f64::INFINITY] {
-        assert!(
-            calculate_partial_amount(raw(12_345), pct) <= raw::<RawAmount>(12_345),
-            "percentage {pct} produced more than the balance"
-        );
-    }
-}
-
-#[test]
-fn a_zero_balance_or_non_positive_percentage_sells_nothing() {
-    assert_eq!(calculate_partial_amount(raw(0), 50.0), raw::<RawAmount>(0));
-    assert_eq!(
-        calculate_partial_amount(raw(1_000), 0.0),
-        raw::<RawAmount>(0)
-    );
-    assert_eq!(
-        calculate_partial_amount(raw(1_000), -25.0),
-        raw::<RawAmount>(0)
-    );
-    assert_eq!(
-        calculate_partial_amount(raw(1_000), f64::NAN),
-        raw::<RawAmount>(0)
-    );
-}
-
-#[test]
-fn a_partial_amount_truncates_rather_than_rounding_up() {
-    // Truncating keeps the result inside the balance for every input. Rounding up on
-    // the last percent would try to sell one unit more than is held.
-    assert_eq!(calculate_partial_amount(raw(7), 50.0), raw::<RawAmount>(3));
-    assert_eq!(calculate_partial_amount(raw(3), 99.9), raw::<RawAmount>(2));
-}
-
-#[test]
-fn a_dust_sized_share_of_a_small_balance_is_zero() {
-    // The caller must treat 0 as "do not submit" — `partial_close_position` refuses a
-    // zero exit amount rather than sending a swap that cannot fill.
-    assert_eq!(calculate_partial_amount(raw(10), 1.0), raw::<RawAmount>(0));
-}
-
-#[test]
-fn a_partial_amount_stays_exact_above_the_u64_range() {
-    assert_eq!(
-        calculate_partial_amount(RawAmount::new(1u128 << 70), 50.0),
-        RawAmount::new(1u128 << 69)
-    );
-    assert_eq!(
-        calculate_partial_amount(RawAmount::MAX, 100.0),
-        RawAmount::MAX
-    );
-    let just_below_100 = f64::from_bits(100f64.to_bits() - 1);
-    assert_eq!(
-        calculate_partial_amount(RawAmount::MAX, just_below_100),
-        RawAmount::new(u128::MAX >> 75 << 75)
-    );
 }
 
 // ==================== TRANSITION CLASSIFICATION ====================

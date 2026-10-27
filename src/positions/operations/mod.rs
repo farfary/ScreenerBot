@@ -21,6 +21,7 @@ mod slippage;
 pub use close::{close_position_direct, mark_exit_submitted};
 pub use dca::add_to_position;
 pub(crate) use dca::check_auto_add;
+pub(crate) use exit_sizing::{read_exit_sale, ExitSale, ExitShare};
 pub use force_close::{force_close_position, ForceClosed};
 pub use open::{open_position_direct, open_position_with_size};
 pub use partial_close::partial_close_position;

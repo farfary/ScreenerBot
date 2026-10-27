@@ -4,7 +4,6 @@
 //! Partial close operations — sell a percentage of remaining tokens without closing the position.
 
 use crate::chains::adapter;
-use crate::chains::solana::assets::ata::get_total_token_balance;
 use crate::chains::RawAmount;
 use crate::logger::{self, LogTag};
 use crate::positions::apply::apply_transition;
@@ -20,7 +19,7 @@ use crate::utils::get_wallet_address;
 use chrono::Utc;
 
 use super::exit_ladder::{run_exit_ladder, ExitSwap};
-use super::exit_sizing::partial_exit_amount;
+use super::exit_sizing::{read_exit_sale, ExitSale, ExitShare};
 
 /// Partially close a position by selling a percentage of remaining tokens.
 /// `take_profit_level` is the take-profit step the sale takes, reserved on the position
@@ -83,19 +82,25 @@ pub async fn partial_close_position(
         })?;
 
     // Size against what the WALLET actually holds as well as what the position books
-    // (`exit_sizing::partial_exit_amount`): the lower of the two, so a drifted row never
-    // sells more than the wallet has and a wallet never gives up more than the row owns.
+    // (`exit_sizing`): the lower of the two, so a drifted row never sells more than the
+    // wallet has and a wallet never gives up more than the row owns.
     let wallet_address = get_wallet_address().map_err(|e| Error::WalletUnavailable {
         detail: e.to_string(),
     })?;
 
-    // The balance lookup is best-effort: an RPC hiccup must not block an exit, so a failed
-    // read sizes from the position's own accounting.
-    let on_chain = get_total_token_balance(&wallet_address, token_mint)
-        .await
-        .ok();
-    if let Some(on_chain) = on_chain.filter(|on_chain| *on_chain > 0) {
-        if RawAmount::from(on_chain) != remaining_amount {
+    let ExitSale {
+        amount: exit_amount,
+        wallet_holding,
+        ..
+    } = read_exit_sale(
+        &wallet_address,
+        token_mint,
+        Some(&position),
+        ExitShare::Part(exit_percentage),
+    )
+    .await?;
+    if let Some(on_chain) = wallet_holding.filter(|on_chain| *on_chain > RawAmount::ZERO) {
+        if on_chain != remaining_amount {
             logger::warning(
                 LogTag::Positions,
                 &format!(
@@ -105,8 +110,6 @@ pub async fn partial_close_position(
             );
         }
     }
-
-    let exit_amount = partial_exit_amount(remaining_amount, on_chain, exit_percentage);
 
     if exit_amount == RawAmount::ZERO {
         return Err(Error::ZeroExitAmount {

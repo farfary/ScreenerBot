@@ -3,11 +3,10 @@
 
 //! Close position operations — full position exit with swap execution and verification.
 
-use crate::chains::solana::assets::ata::{get_token_balance, get_total_token_balance};
 use crate::chains::RawAmount;
 use crate::errors::ErrorClass;
 use crate::logger::{self, LogTag};
-use crate::positions::db::{get_other_open_held, record_exit_submission};
+use crate::positions::db::record_exit_submission;
 use crate::positions::price_resolution::get_price_with_api_fallback;
 use crate::positions::queue::{enqueue_verification, VerificationItem};
 use crate::positions::state::{
@@ -23,7 +22,7 @@ use serde_json::json;
 use tokio::time::{sleep, Duration};
 
 use super::exit_ladder::{run_exit_ladder, ExitSwap};
-use super::exit_sizing::{full_exit_amount, ExitSizing};
+use super::exit_sizing::{read_exit_sale, ExitSale, ExitShare};
 
 /// Close an existing position
 pub async fn close_position_direct(
@@ -156,52 +155,27 @@ pub async fn close_position_direct(
         }
     }
 
-    // Get TOTAL token balance across ALL accounts (CRITICAL FOR COMPLETE LIQUIDATION)
     let wallet_address = get_wallet_address().map_err(|e| Error::WalletUnavailable {
         detail: e.to_string(),
     })?;
 
-    let total_token_balance = get_total_token_balance(&wallet_address, token_mint)
-        .await
-        .map_err(|e| Error::TransitionFailed {
-            transition: "close",
-            mint: api_token.mint.clone(),
-            detail: format!("failed to get total token balance: {e}"),
-        })?;
-
-    // Fetch primary (associated) token account balance separately. This is the balance most
-    // swap routes will actually spend from. When multiple token accounts exist, passing the
-    // aggregated total to a router that only sources a single ATA causes an "insufficient funds"
-    // simulation failure (observed in logs). We therefore cap the sell amount to the primary
-    // balance when it is lower than the aggregate, and log the discrepancy.
-    let primary_token_balance = get_token_balance(&wallet_address, token_mint)
-        .await
-        .unwrap_or_default();
-
-    // What the other open positions of the mint hold is not this position's to sell.
-    let others = get_other_open_held(token_mint, own_position.as_ref().and_then(|p| p.id))
-        .await
-        .map_err(|e| Error::TransitionFailed {
-            transition: "close",
-            mint: api_token.mint.clone(),
-            detail: format!("failed to read the other open positions' holding: {e}"),
-        })?;
-    let own_remaining = own_position
-        .as_ref()
-        .and_then(|p| p.held_amount())
-        .unwrap_or_default();
-    let ExitSizing {
+    // Sized from the wallet's holding across ALL its token accounts, capped at the primary
+    // account most routes spend from and at what the mint's other open positions do not
+    // hold (`exit_sizing`).
+    let ExitSale {
         amount: sell_amount,
         note: multi_account_note,
-    } = full_exit_amount(
-        total_token_balance,
-        primary_token_balance,
-        own_remaining,
-        others,
-        quote_asset,
-    );
+        wallet_holding,
+    } = read_exit_sale(
+        &wallet_address,
+        token_mint,
+        own_position.as_ref(),
+        ExitShare::All,
+    )
+    .await?;
+    let total_token_balance = wallet_holding.unwrap_or_default();
 
-    if sell_amount == 0 {
+    if sell_amount == RawAmount::ZERO {
         return Err(Error::ZeroExitAmount {
             mint: api_token.mint.clone(),
         });
@@ -239,7 +213,7 @@ pub async fn close_position_direct(
         chain: crate::chains::active_chain(),
         input_mint: token_mint.to_string(),
         output_mint: crate::chains::adapter().native_asset_address().to_string(),
-        input_amount: sell_amount.into(),
+        input_amount: sell_amount,
         wallet_address: wallet_address.clone(),
         slippage_pct: 0.0,
         swap_mode: SwapMode::ExactIn,
@@ -284,7 +258,7 @@ pub async fn close_position_direct(
 
             // CRITICAL: Log execution vs requested amounts to detect partial execution
             let executed_amount = result.input_amount.raw();
-            if executed_amount < u128::from(sell_amount) {
+            if executed_amount < sell_amount.raw() {
                 logger::warning(
                     LogTag::Positions,
                     &format!(
@@ -292,7 +266,7 @@ pub async fn close_position_direct(
         api_token.symbol,
         sell_amount,
         executed_amount,
-        u128::from(sell_amount) - executed_amount
+        sell_amount.raw() - executed_amount
       ),
                 );
             } else {

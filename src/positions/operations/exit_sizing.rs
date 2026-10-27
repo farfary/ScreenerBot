@@ -7,14 +7,135 @@
 //! size their sale here, so what is quoted is what is sold.
 
 use crate::chains::RawAmount;
-use crate::positions::db::OtherOpenHeld;
-use crate::swaps::calculate_partial_amount;
+use crate::positions::db::{get_other_open_held, OtherOpenHeld};
+use crate::positions::types::Position;
+use crate::positions::{Error, Result};
+
+/// The part of a position one exit sells.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) enum ExitShare {
+    /// The whole position: a full close.
+    All,
+    /// This percentage of the position, strictly between 0 and 100: a partial exit.
+    Part(f64),
+}
+
+/// The size of one exit and the wallet holding it was sized against.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) struct ExitSale {
+    /// Raw units the exit sells.
+    pub(crate) amount: RawAmount,
+    /// Why a full close sells less than the wallet's sweep, when it does.
+    pub(crate) note: Option<String>,
+    /// The wallet's holding of the mint across its token accounts; `None` when a partial
+    /// exit could not read it and sized from the booked remainder.
+    pub(crate) wallet_holding: Option<RawAmount>,
+}
+
+/// What one exit is sized from, as read from the wallet and the positions store.
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum ExitReadings {
+    All {
+        total: u64,
+        primary: u64,
+        own_remaining: RawAmount,
+        others: OtherOpenHeld,
+        quote_asset: bool,
+    },
+    Part {
+        holding: Option<RawAmount>,
+        own_remaining: RawAmount,
+        percentage: f64,
+    },
+}
+
+/// Reads what an exit of `mint` from `wallet` is sized from and sizes `share` of `own`, the
+/// open round of the mint when one exists.
+///
+/// A full close reads the wallet's holding across its token accounts, the primary
+/// account's balance, the other open positions' holding and whether the mint is a quote
+/// asset; a partial exit reads the wallet's holding. Both read `own`'s booked remainder.
+/// The full close, the partial exit and the manual sell preview all size through here, so
+/// the preview quotes what execution sells.
+pub(crate) async fn read_exit_sale(
+    wallet: &str,
+    mint: &str,
+    own: Option<&Position>,
+    share: ExitShare,
+) -> Result<ExitSale> {
+    let own_remaining = own.and_then(Position::held_amount).unwrap_or_default();
+    let readings = match share {
+        ExitShare::All => {
+            let holding = crate::positions::settle::holding(wallet, mint).await?;
+            let total = u64::try_from(holding.amount.raw()).map_err(|_| Error::AmountOverflow {
+                mint: mint.to_owned(),
+                operation: "sizing a full exit from the wallet holding",
+            })?;
+            // The primary account is what most routes spend from; an unread balance sizes
+            // from the total.
+            let primary = crate::chains::solana::assets::ata::get_token_balance(wallet, mint)
+                .await
+                .unwrap_or_default();
+            ExitReadings::All {
+                total,
+                primary,
+                own_remaining,
+                others: get_other_open_held(mint, own.and_then(|p| p.id)).await?,
+                quote_asset: crate::chains::adapter().is_quote_asset(mint),
+            }
+        }
+        // The read is best-effort: a failed one sizes from the booked remainder.
+        ExitShare::Part(percentage) => ExitReadings::Part {
+            holding: crate::positions::settle::holding(wallet, mint)
+                .await
+                .ok()
+                .map(|holding| holding.amount),
+            own_remaining,
+            percentage,
+        },
+    };
+    Ok(size_exit(readings))
+}
+
+/// Sizes one exit from its readings through the full or the partial rule.
+fn size_exit(readings: ExitReadings) -> ExitSale {
+    match readings {
+        ExitReadings::All {
+            total,
+            primary,
+            own_remaining,
+            others,
+            quote_asset,
+        } => {
+            let ExitSizing { amount, note } =
+                full_exit_amount(total, primary, own_remaining, others, quote_asset);
+            ExitSale {
+                amount: RawAmount::from(amount),
+                note,
+                wallet_holding: Some(RawAmount::from(total)),
+            }
+        }
+        ExitReadings::Part {
+            holding,
+            own_remaining,
+            percentage,
+        } => ExitSale {
+            amount: partial_exit_amount(
+                own_remaining,
+                holding.map(|holding| u64::try_from(holding.raw()).unwrap_or(u64::MAX)),
+                percentage,
+            ),
+            note: None,
+            wallet_holding: holding,
+        },
+    }
+}
 
 /// How many raw tokens a full close sells, and why it is below the wallet total when it is.
 #[derive(Debug, PartialEq, Eq)]
-pub(super) struct ExitSizing {
-    pub(super) amount: u64,
-    pub(super) note: Option<String>,
+struct ExitSizing {
+    amount: u64,
+    note: Option<String>,
 }
 
 /// Sizes a full close from the wallet's `total` holding across its token accounts and the
@@ -29,7 +150,7 @@ pub(super) struct ExitSizing {
 /// A `quote_asset` mint (the chain's native coin or a stablecoin) is cash the wallet holds
 /// beside the position: the row books only what the bot bought, so the sale is at most
 /// `own_remaining` and never sweeps the wallet.
-pub(super) fn full_exit_amount(
+fn full_exit_amount(
     total: u64,
     primary: u64,
     own_remaining: RawAmount,
@@ -96,16 +217,26 @@ pub(super) fn full_exit_amount(
 /// holding: never more than the wallet has, never more than the position owns. An
 /// unreadable or empty chain balance (`None` or zero) falls back to the booked remainder,
 /// so a lookup failure never blocks an exit.
-pub(super) fn partial_exit_amount(
-    remaining: RawAmount,
-    on_chain: Option<u64>,
-    percentage: f64,
-) -> RawAmount {
+fn partial_exit_amount(remaining: RawAmount, on_chain: Option<u64>, percentage: f64) -> RawAmount {
     let base = match on_chain {
         Some(on_chain) if on_chain > 0 => RawAmount::from(on_chain).min(remaining),
         _ => remaining,
     };
     calculate_partial_amount(base, percentage)
+}
+
+/// The share of `total_amount` for `percentage`, truncated toward zero and never above the
+/// total. Zero for an empty total or a NaN or nonpositive percentage; the whole total at 100%
+/// or more.
+fn calculate_partial_amount(total_amount: RawAmount, percentage: f64) -> RawAmount {
+    if total_amount == RawAmount::ZERO || percentage.is_nan() || percentage <= 0.0 {
+        return RawAmount::ZERO;
+    }
+    if percentage >= 100.0 {
+        return total_amount;
+    }
+    let partial = (total_amount.raw() as f64 * percentage / 100.0).trunc();
+    RawAmount::from_integral_f64(partial).map_or(total_amount, |partial| partial.min(total_amount))
 }
 
 #[cfg(test)]
@@ -264,6 +395,193 @@ mod tests {
                         assert!(sold <= RawAmount::from(on_chain));
                     }
                 }
+            }
+        }
+    }
+
+    #[test]
+    fn a_partial_amount_is_the_requested_share_of_the_balance() {
+        let balance = RawAmount::new(1_000);
+        assert_eq!(calculate_partial_amount(balance, 25.0), RawAmount::new(250));
+        assert_eq!(calculate_partial_amount(balance, 50.0), RawAmount::new(500));
+        assert_eq!(calculate_partial_amount(balance, 99.0), RawAmount::new(990));
+    }
+
+    #[test]
+    fn a_full_percentage_sells_the_entire_balance() {
+        // Exactly 100 must return the balance itself, not a rounded product — selling
+        // 999_999_999 of 1_000_000_000 units leaves dust that blocks the account close.
+        let balance = RawAmount::new(1_000_000_000);
+        assert_eq!(calculate_partial_amount(balance, 100.0), balance);
+        assert_eq!(calculate_partial_amount(balance, 150.0), balance);
+    }
+
+    #[test]
+    fn a_partial_amount_can_never_exceed_the_balance() {
+        // The wallet cannot sell what it does not hold; an over-sized amount fails the
+        // swap outright rather than partially filling.
+        for pct in [100.0, 100.000_001, 1_000.0, f64::INFINITY] {
+            assert!(
+                calculate_partial_amount(RawAmount::new(12_345), pct) <= RawAmount::new(12_345),
+                "percentage {pct} produced more than the balance"
+            );
+        }
+    }
+
+    #[test]
+    fn a_zero_balance_or_non_positive_percentage_sells_nothing() {
+        assert_eq!(
+            calculate_partial_amount(RawAmount::ZERO, 50.0),
+            RawAmount::ZERO
+        );
+        for pct in [0.0, -25.0, f64::NAN] {
+            assert_eq!(
+                calculate_partial_amount(RawAmount::new(1_000), pct),
+                RawAmount::ZERO,
+                "percentage {pct}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_partial_amount_truncates_rather_than_rounding_up() {
+        // Truncating keeps the result inside the balance for every input. Rounding up on
+        // the last percent would try to sell one unit more than is held.
+        assert_eq!(
+            calculate_partial_amount(RawAmount::new(7), 50.0),
+            RawAmount::new(3)
+        );
+        assert_eq!(
+            calculate_partial_amount(RawAmount::new(3), 99.9),
+            RawAmount::new(2)
+        );
+    }
+
+    #[test]
+    fn a_dust_sized_share_of_a_small_balance_is_zero() {
+        // The caller must treat 0 as "do not submit": `partial_close_position` refuses a
+        // zero exit amount rather than sending a swap that cannot fill.
+        assert_eq!(
+            calculate_partial_amount(RawAmount::new(10), 1.0),
+            RawAmount::ZERO
+        );
+    }
+
+    #[test]
+    fn a_partial_amount_stays_exact_above_the_u64_range() {
+        assert_eq!(
+            calculate_partial_amount(RawAmount::new(1u128 << 70), 50.0),
+            RawAmount::new(1u128 << 69)
+        );
+        assert_eq!(
+            calculate_partial_amount(RawAmount::MAX, 100.0),
+            RawAmount::MAX
+        );
+        let just_below_100 = f64::from_bits(100f64.to_bits() - 1);
+        assert_eq!(
+            calculate_partial_amount(RawAmount::MAX, just_below_100),
+            RawAmount::new(u128::MAX >> 75 << 75)
+        );
+    }
+
+    /// The share the manual sell preview quotes for a requested percentage: a partial exit
+    /// below 100%, the full close at 100% or with none.
+    fn preview_share(percentage: Option<f64>) -> ExitShare {
+        match percentage {
+            Some(pct) if pct < 100.0 => ExitShare::Part(pct),
+            _ => ExitShare::All,
+        }
+    }
+
+    /// Over a grid of wallet total, primary account, booked remainder and percentage, the
+    /// sale the preview sizes is the sale execution sizes: both read through
+    /// `read_exit_sale`, whose sizing half is `size_exit` over the full or the partial rule.
+    #[test]
+    fn the_preview_and_execution_size_the_same_sale() {
+        let grid = [0_u64, 1, 7, 423_386, 1_000_000_000, u64::MAX];
+        let percentages = [
+            None,
+            Some(0.5),
+            Some(25.0),
+            Some(50.0),
+            Some(99.9),
+            Some(100.0),
+        ];
+        for total in grid {
+            for primary in grid.iter().copied().filter(|primary| *primary <= total) {
+                for own_booked in grid {
+                    for quote_asset in [false, true] {
+                        for percentage in percentages {
+                            let own_remaining = RawAmount::from(own_booked);
+                            let readings = match preview_share(percentage) {
+                                ExitShare::All => ExitReadings::All {
+                                    total,
+                                    primary,
+                                    own_remaining,
+                                    others: booked(0),
+                                    quote_asset,
+                                },
+                                ExitShare::Part(percentage) => ExitReadings::Part {
+                                    holding: Some(RawAmount::from(total)),
+                                    own_remaining,
+                                    percentage,
+                                },
+                            };
+                            let previewed = size_exit(readings);
+                            let executed = match percentage {
+                                Some(pct) if pct < 100.0 => {
+                                    partial_exit_amount(own_remaining, Some(total), pct)
+                                }
+                                _ => RawAmount::from(
+                                    full_exit_amount(
+                                        total,
+                                        primary,
+                                        own_remaining,
+                                        booked(0),
+                                        quote_asset,
+                                    )
+                                    .amount,
+                                ),
+                            };
+                            assert_eq!(
+                                previewed.amount, executed,
+                                "total={total} primary={primary} booked={own_booked} quote={quote_asset} pct={percentage:?}"
+                            );
+                            assert!(previewed.amount <= RawAmount::from(total).max(own_remaining));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// The full close, the partial exit and the manual sell preview of a position read and
+    /// size through `read_exit_sale` alone; none of them applies a sizing rule itself, and
+    /// the exits read no balance of their own. The preview reads the wallet balance only for
+    /// a token no open position holds.
+    #[test]
+    fn every_exit_and_its_preview_size_through_the_one_reader() {
+        for (file, source, reads_wallet) in [
+            ("close.rs", include_str!("close.rs"), false),
+            ("partial_close.rs", include_str!("partial_close.rs"), false),
+            (
+                "webserver/routes/trader/manual.rs",
+                include_str!("../../webserver/routes/trader/manual.rs"),
+                true,
+            ),
+        ] {
+            let code = source.split("#[cfg(test)]").next().unwrap();
+            assert!(code.contains("read_exit_sale("), "{file}");
+            for bypass in [
+                "full_exit_amount(",
+                "partial_exit_amount(",
+                "get_other_open_held(",
+                "get_token_balance(",
+            ] {
+                assert!(!code.contains(bypass), "{file} calls {bypass}");
+            }
+            if !reads_wallet {
+                assert!(!code.contains("get_total_token_balance("), "{file}");
             }
         }
     }

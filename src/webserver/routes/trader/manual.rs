@@ -9,10 +9,13 @@ use axum::{
     Json,
 };
 
+use crate::chains::RawAmount;
 use crate::config::with_config;
 use crate::errors::ErrorClass;
 use crate::i18n::{ids, UiArg};
 use crate::logger::{self, LogTag};
+use crate::positions::operations::{read_exit_sale, ExitSale, ExitShare};
+use crate::positions::Error as PositionsError;
 use crate::swaps::{try_get_best_quote, NotSubmittedReason, QuoteError};
 use crate::trader::manual::guard::{self, BlacklistPolicy, ManualTradeKind};
 use crate::webserver::api_error::{ApiError, ApiErrorCode};
@@ -217,7 +220,9 @@ pub async fn manual_sell_handler(Json(req): Json<ManualSellRequest>) -> Response
 
 /// GET /api/trader/quote - Get quote preview without execution
 /// For BUY: requires amount_sol (SOL to spend), returns tokens received
-/// For SELL: requires amount_tokens (tokens to sell), returns SOL received
+/// For SELL: sizes an open position's sale exactly as execution does from `percentage`
+/// (the full close without one); a token no position holds is quoted from the wallet
+/// balance, by `percentage` or the legacy `amount_tokens`. Returns SOL received
 pub async fn quote_preview_handler(Query(req): Query<QuotePreviewRequest>) -> Response {
     use crate::swaps::types::{QuoteRequest, SwapMode};
     use crate::utils::get_wallet_address;
@@ -279,30 +284,12 @@ pub async fn quote_preview_handler(Query(req): Query<QuotePreviewRequest>) -> Re
         (
             crate::chains::adapter().native_asset_address().to_string(),
             req.mint.clone(),
-            amount_lamports,
+            RawAmount::from(amount_lamports),
             amount_sol,
         )
     } else {
-        // SELL: Token → SOL. Quote against the REAL on-chain balance (raw units),
-        // not the frontend's holdings. The DB-stored token_amount is in raw units
-        // and can be stale, so trusting it (and re-scaling by decimals) produced a
-        // wildly inflated, misleading quote. Execution is already percentage-based
-        // against the real balance — the preview now matches it exactly.
-        let actual_balance =
-            crate::chains::solana::assets::ata::get_total_token_balance(&wallet_address, &req.mint)
-                .await
-                .unwrap_or(0);
-        if actual_balance == 0 {
-            return ApiError::new(
-                ApiErrorCode::IntegrityFailed,
-                ids::ERRORS_TRADE_NO_TOKENS_IN_WALLET,
-            )
-            .into_response();
-        }
-
-        // Percentage of the real balance (default = full close). Legacy callers may
-        // still send amount_tokens (whole tokens); honour it only as a fallback.
-        let amount_raw = if let Some(pct) = req.percentage {
+        // SELL: Token → SOL. A percentage outside (0, 100] is refused before any read.
+        if let Some(pct) = req.percentage {
             if !pct.is_finite() || pct <= 0.0 || pct > 100.0 {
                 return ApiError::new(
                     ApiErrorCode::InvalidInput,
@@ -310,22 +297,83 @@ pub async fn quote_preview_handler(Query(req): Query<QuotePreviewRequest>) -> Re
                 )
                 .into_response();
             }
-            ((actual_balance as f64) * pct / 100.0).floor() as u64
-        } else if let Some(tokens) = req.amount_tokens {
-            if !tokens.is_finite() || tokens <= 0.0 {
+        }
+
+        // The open round of the mint is sized exactly as execution sizes its sale: a
+        // percentage below 100 as a partial exit, anything else as the full close, both
+        // through `read_exit_sale`. The preview then quotes what the sell will sell.
+        let amount_raw = if let Some(position) =
+            crate::positions::state::get_open_round_by_mint(&req.mint).await
+        {
+            let share = match req.percentage {
+                Some(pct) if pct < 100.0 => ExitShare::Part(pct),
+                _ => ExitShare::All,
+            };
+            match read_exit_sale(&wallet_address, &req.mint, Some(&position), share).await {
+                Ok(ExitSale {
+                    wallet_holding: Some(holding),
+                    ..
+                }) if holding == RawAmount::ZERO => {
+                    return ApiError::new(
+                        ApiErrorCode::IntegrityFailed,
+                        ids::ERRORS_TRADE_NO_TOKENS_IN_WALLET,
+                    )
+                    .into_response();
+                }
+                Ok(sale) => sale.amount,
+                // The wallet's holding could not be read: nothing to quote.
+                Err(PositionsError::Chain(_)) => {
+                    return ApiError::new(
+                        ApiErrorCode::IntegrityFailed,
+                        ids::ERRORS_TRADE_NO_TOKENS_IN_WALLET,
+                    )
+                    .into_response();
+                }
+                Err(error) => {
+                    return ApiError::new(
+                        ApiErrorCode::IntegrityFailed,
+                        ids::ERRORS_TRADE_STORAGE_UNAVAILABLE,
+                    )
+                    .text_arg("detail", error.to_string())
+                    .into_response();
+                }
+            }
+        } else {
+            // No open position: quote against the REAL on-chain balance (raw units).
+            let actual_balance = crate::chains::solana::assets::ata::get_total_token_balance(
+                &wallet_address,
+                &req.mint,
+            )
+            .await
+            .unwrap_or(0);
+            if actual_balance == 0 {
                 return ApiError::new(
-                    ApiErrorCode::InvalidInput,
-                    ids::ERRORS_TRADE_AMOUNT_TOKENS_INVALID,
+                    ApiErrorCode::IntegrityFailed,
+                    ids::ERRORS_TRADE_NO_TOKENS_IN_WALLET,
                 )
                 .into_response();
             }
-            // Clamp to the real balance so we never quote more than exists.
-            ((tokens * 10f64.powi(token_decimals as i32)) as u64).min(actual_balance)
-        } else {
-            actual_balance // No amount given → quote a full close.
+
+            // Percentage of the real balance (default = full close). Legacy callers may
+            // still send amount_tokens (whole tokens); honour it only as a fallback.
+            RawAmount::from(if let Some(pct) = req.percentage {
+                ((actual_balance as f64) * pct / 100.0).floor() as u64
+            } else if let Some(tokens) = req.amount_tokens {
+                if !tokens.is_finite() || tokens <= 0.0 {
+                    return ApiError::new(
+                        ApiErrorCode::InvalidInput,
+                        ids::ERRORS_TRADE_AMOUNT_TOKENS_INVALID,
+                    )
+                    .into_response();
+                }
+                // Clamp to the real balance so we never quote more than exists.
+                ((tokens * 10f64.powi(token_decimals as i32)) as u64).min(actual_balance)
+            } else {
+                actual_balance // No amount given → quote a full close.
+            })
         };
 
-        if amount_raw == 0 {
+        if amount_raw == RawAmount::ZERO {
             return ApiError::new(
                 ApiErrorCode::InvalidInput,
                 ids::ERRORS_TRADE_SELL_AMOUNT_ZERO,
@@ -333,7 +381,7 @@ pub async fn quote_preview_handler(Query(req): Query<QuotePreviewRequest>) -> Re
             .into_response();
         }
 
-        let amount_tokens_display = amount_raw as f64 / 10f64.powi(token_decimals as i32);
+        let amount_tokens_display = amount_raw.raw() as f64 / 10f64.powi(token_decimals as i32);
         (
             req.mint.clone(),
             crate::chains::adapter().native_asset_address().to_string(),
@@ -346,7 +394,7 @@ pub async fn quote_preview_handler(Query(req): Query<QuotePreviewRequest>) -> Re
         chain: crate::chains::active_chain(),
         input_mint,
         output_mint,
-        input_amount: input_amount.into(),
+        input_amount,
         wallet_address,
         // Price the preview at the slippage the trade will actually use, so the quote
         // the user confirms is the quote they get.
