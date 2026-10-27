@@ -44,4 +44,13 @@ pub trait SettlementReader: Send + Sync {
     async fn holding(&self, owner: &str, asset: &str) -> Result<Holding>;
     /// A bound no transaction submitted before now can still land after.
     async fn expiry_bound(&self) -> Result<u64>;
+    /// The wallet's holding of `asset` once no transaction submitted before `expiry_bound`
+    /// can still land, read at or after the finalized tip that passed the bound. `None`
+    /// while the bound has not passed, or when the holding read is older than that tip.
+    async fn settled_holding(
+        &self,
+        owner: &str,
+        asset: &str,
+        expiry_bound: u64,
+    ) -> Result<Option<Holding>>;
 }

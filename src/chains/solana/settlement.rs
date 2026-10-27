@@ -6,7 +6,7 @@
 use std::str::FromStr;
 
 use crate::chains::settlement::{Holding, SettlementReader, SignatureCheck, SignatureVerdict};
-use crate::chains::solana::assets::ata::token_holding;
+use crate::chains::solana::assets::ata::{token_holding, token_holding_with_slot};
 use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 use crate::chains::solana::solana_sdk::commitment_config::CommitmentLevel;
 use crate::chains::solana::solana_sdk::signature::Signature;
@@ -119,6 +119,28 @@ impl SettlementReader for SolanaSettlement {
             })?;
         Ok(height.saturating_add(SOLANA_BLOCKHASH_VALIDITY_SLOTS))
     }
+
+    async fn settled_holding(
+        &self,
+        owner: &str,
+        asset: &str,
+        expiry_bound: u64,
+    ) -> Result<Option<Holding>> {
+        let settlement_read = |error: crate::Error| Error::SettlementRead {
+            chain: ChainId::Solana,
+            detail: error.to_string(),
+        };
+        let tip = finalized_tip(get_rpc_client())
+            .await
+            .map_err(settlement_read)?;
+        if tip.block_height <= expiry_bound {
+            return Ok(None);
+        }
+        let (holding, read_slot) = token_holding_with_slot(owner, asset)
+            .await
+            .map_err(settlement_read)?;
+        Ok(holding_settled(tip, expiry_bound, read_slot).then_some(holding))
+    }
 }
 
 /// The finalized tip an expiry is judged against: a block height and the slot
@@ -135,6 +157,17 @@ pub(crate) async fn finalized_tip(rpc: &impl RpcClientMethods) -> crate::Result<
         .get_slot_and_block_height(EXPIRED_HEIGHT_COMMITMENT)
         .await?;
     Ok(FinalizedTip { slot, block_height })
+}
+
+/// Whether a holding read at `read_slot` is settled against `expiry_bound`: the finalized
+/// height has passed the bound and the read is at or after the slot that height was read
+/// at, the rule [`classify_status`] applies to a null status.
+pub(crate) fn holding_settled(
+    tip: FinalizedTip,
+    expiry_bound: u64,
+    read_slot: Option<u64>,
+) -> bool {
+    tip.block_height > expiry_bound && read_slot.is_some_and(|slot| slot >= tip.slot)
 }
 
 /// What a signature status alone decides.
@@ -409,6 +442,30 @@ mod tests {
             transaction_lookup(Ok(Some(transaction(serde_json::Value::Null)))).verdict(),
             SignatureVerdict::Pending
         );
+    }
+
+    /// A holding settles only past the bound and only from a read at or after the
+    /// finalized slot that passed it.
+    #[test]
+    fn a_holding_settles_only_past_the_bound_and_read_at_or_after_the_tip() {
+        let tip = FinalizedTip {
+            slot: 800,
+            block_height: 101,
+        };
+        let cases = [
+            (100, Some(800), true),
+            (100, Some(801), true),
+            (101, Some(800), false),
+            (100, Some(799), false),
+            (100, None, false),
+        ];
+        for (bound, read_slot, settled) in cases {
+            assert_eq!(
+                holding_settled(tip, bound, read_slot),
+                settled,
+                "bound={bound} read_slot={read_slot:?}"
+            );
+        }
     }
 
     #[test]

@@ -97,7 +97,17 @@ pub async fn get_token_balance(wallet_address: &str, mint: &str) -> Result<u64> 
 /// The wallet's holding of `mint`, summed over its accounts of both token programs, and
 /// frozen when any of those accounts is frozen.
 pub async fn token_holding(wallet_address: &str, mint: &str) -> Result<Holding> {
-    let holding = holding_of(&get_all_token_accounts(wallet_address).await?, mint);
+    Ok(token_holding_with_slot(wallet_address, mint).await?.0)
+}
+
+/// The wallet's holding of `mint` as [`token_holding`] reads it, with the context slot the
+/// accounts were read at; `None` when a response carried no slot.
+pub async fn token_holding_with_slot(
+    wallet_address: &str,
+    mint: &str,
+) -> Result<(Holding, Option<u64>)> {
+    let snapshot = get_token_accounts_snapshot(wallet_address).await?;
+    let holding = holding_of(&snapshot.accounts, mint);
     logger::debug(
         LogTag::Wallet,
         &format!(
@@ -107,7 +117,7 @@ pub async fn token_holding(wallet_address: &str, mint: &str) -> Result<Holding> 
             holding.frozen
         ),
     );
-    Ok(holding)
+    Ok((holding, snapshot.slot))
 }
 
 /// The wallet's total balance of `mint` across all its token accounts, for selling all of
