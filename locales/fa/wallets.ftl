@@ -126,7 +126,6 @@ wallets-holdings-search =
     .placeholder = جستجو بر اساس نماد یا مینت...
 wallets-holdings-export = خروجی کلید
 wallets-holdings-export-tooltip = خروجی گرفتن از کلید خصوصی این کیف پول
-wallets-holdings-replace = جایگزینی کیف پول
 wallets-holdings-replace-tooltip = با کیف پول دیگری معامله کنید؛ کلید و تاریخچهٔ این کیف پول نگه داشته می‌شود
 wallets-list-col-name = نام
 wallets-list-col-balance = موجودی ({ -sol })

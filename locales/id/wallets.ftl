@@ -112,7 +112,6 @@ wallets-holdings-search =
     .placeholder = Cari berdasarkan simbol atau mint...
 wallets-holdings-export = Ekspor Key
 wallets-holdings-export-tooltip = Ekspor private key dompet ini
-wallets-holdings-replace = Ganti Dompet
 wallets-holdings-replace-tooltip = Trading dengan dompet lain; key dan riwayat dompet ini tetap disimpan
 wallets-list-col-name = Nama
 wallets-list-col-balance = Saldo ({ -sol })

@@ -110,7 +110,6 @@ wallets-holdings-search =
     .placeholder = Rechercher par symbole ou mint...
 wallets-holdings-export = Exporter la clé
 wallets-holdings-export-tooltip = Exporter la clé privée de ce portefeuille
-wallets-holdings-replace = Remplacer le portefeuille
 wallets-holdings-replace-tooltip = Trader avec un autre portefeuille ; la clé et l'historique de ce portefeuille sont conservés
 wallets-list-col-name = Nom
 wallets-list-col-balance = Solde ({ -sol })

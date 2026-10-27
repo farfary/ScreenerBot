@@ -110,7 +110,6 @@ wallets-holdings-search =
     .placeholder = Tìm theo ký hiệu hoặc mint...
 wallets-holdings-export = Xuất khóa
 wallets-holdings-export-tooltip = Xuất khóa riêng tư của ví này
-wallets-holdings-replace = Thay ví
 wallets-holdings-replace-tooltip = Giao dịch bằng ví khác; khóa và lịch sử của ví này được giữ lại
 wallets-list-col-name = Tên
 wallets-list-col-balance = Số dư ({ -sol })

@@ -126,7 +126,6 @@ wallets-holdings-search =
     .placeholder = シンボルまたはミントで検索...
 wallets-holdings-export = 鍵をエクスポート
 wallets-holdings-export-tooltip = このウォレットの秘密鍵をエクスポート
-wallets-holdings-replace = ウォレットを置き換え
 wallets-holdings-replace-tooltip = 別のウォレットで取引します。このウォレットの鍵と履歴は保持されます
 wallets-list-col-name = 名前
 wallets-list-col-balance = 残高（{ -sol }）

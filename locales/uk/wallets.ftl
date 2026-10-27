@@ -126,7 +126,6 @@ wallets-holdings-search =
     .placeholder = Пошук за символом або мінтом...
 wallets-holdings-export = Експортувати ключ
 wallets-holdings-export-tooltip = Експортувати приватний ключ цього гаманця
-wallets-holdings-replace = Замінити гаманець
 wallets-holdings-replace-tooltip = Торгувати з іншим гаманцем; ключ та історія цього гаманця зберігаються
 wallets-list-col-name = Назва
 wallets-list-col-balance = Баланс ({ -sol })

@@ -110,7 +110,6 @@ wallets-holdings-search =
     .placeholder = सिंबल या मिंट से खोजें...
 wallets-holdings-export = की एक्सपोर्ट करें
 wallets-holdings-export-tooltip = इस वॉलेट की प्राइवेट की एक्सपोर्ट करें
-wallets-holdings-replace = वॉलेट बदलें
 wallets-holdings-replace-tooltip = किसी दूसरे वॉलेट से ट्रेड करें; इस वॉलेट की की और हिस्ट्री रखी जाती हैं
 wallets-list-col-name = नाम
 wallets-list-col-balance = बैलेंस ({ -sol })

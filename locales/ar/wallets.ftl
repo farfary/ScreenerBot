@@ -126,7 +126,6 @@ wallets-holdings-search =
     .placeholder = البحث بالرمز أو عنوان الإصدار...
 wallets-holdings-export = تصدير المفتاح
 wallets-holdings-export-tooltip = تصدير المفتاح الخاص لهذه المحفظة
-wallets-holdings-replace = استبدال المحفظة
 wallets-holdings-replace-tooltip = تداول بمحفظة أخرى؛ يُحتفظ بمفتاح هذه المحفظة وسجلها
 wallets-list-col-name = الاسم
 wallets-list-col-balance = الرصيد ({ -sol })

@@ -21,20 +21,24 @@
 
 import { escapeHtml } from "../../core/utils.js";
 
-const VERDICTS = Object.freeze({
-  pass: { icon: "icon-circle-check", label: () => I18n.t("strategies-test-verdict-pass") },
-  fail: { icon: "icon-circle-x", label: () => I18n.t("strategies-test-verdict-fail") },
-  unknown: {
-    icon: "icon-circle-question-mark",
-    label: () => I18n.t("strategies-test-verdict-unknown"),
-  },
-  off: { icon: "icon-circle-off", label: () => I18n.t("strategies-chip-off") },
+// An unknown verdict reached no answer; the question-mark glyph belongs to help hints.
+const VERDICT_ICONS = Object.freeze({
+  pass: "icon-circle-check",
+  fail: "icon-circle-x",
+  unknown: "icon-circle-dashed",
+  off: "icon-circle-off",
+});
+
+const VERDICT_LABELS = Object.freeze({
+  pass: "strategies-test-verdict-pass",
+  fail: "strategies-test-verdict-fail",
+  unknown: "strategies-test-verdict-unknown",
+  off: "strategies-chip-off",
 });
 
 function verdictHtml(verdict) {
-  const known = Object.hasOwn(VERDICTS, verdict) ? verdict : "unknown";
-  const { icon, label } = VERDICTS[known];
-  return `<span class="strategy-test-verdict" data-verdict="${known}" data-test-mark><i class="${icon}" aria-hidden="true"></i> ${escapeHtml(label())}</span>`;
+  const known = Object.hasOwn(VERDICT_ICONS, verdict) ? verdict : "unknown";
+  return `<span class="strategy-test-verdict" data-verdict="${known}" data-test-mark><i class="${VERDICT_ICONS[known]}" aria-hidden="true"></i> ${escapeHtml(I18n.label(VERDICT_LABELS, known))}</span>`;
 }
 
 const isNot = (outcome) => outcome?.operator === "NOT";

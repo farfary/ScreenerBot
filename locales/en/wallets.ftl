@@ -126,7 +126,6 @@ wallets-holdings-search =
     .placeholder = Search by symbol or mint...
 wallets-holdings-export = Export Key
 wallets-holdings-export-tooltip = Export this wallet's private key
-wallets-holdings-replace = Replace Wallet
 wallets-holdings-replace-tooltip = Trade with another wallet; this wallet's key and history are kept
 wallets-list-col-name = Name
 wallets-list-col-balance = Balance ({ -sol })

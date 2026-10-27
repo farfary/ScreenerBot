@@ -112,7 +112,6 @@ wallets-holdings-search =
     .placeholder = Nach Symbol oder Mint suchen...
 wallets-holdings-export = Schlüssel exportieren
 wallets-holdings-export-tooltip = Privaten Schlüssel dieser Wallet exportieren
-wallets-holdings-replace = Wallet ersetzen
 wallets-holdings-replace-tooltip = Mit einer anderen Wallet handeln; Schlüssel und Verlauf dieser Wallet bleiben erhalten
 wallets-list-col-name = Name
 wallets-list-col-balance = Guthaben ({ -sol })

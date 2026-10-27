@@ -126,7 +126,6 @@ wallets-holdings-search =
     .placeholder = Buscar por símbolo ou mint...
 wallets-holdings-export = Exportar chave
 wallets-holdings-export-tooltip = Exportar a chave privada desta carteira
-wallets-holdings-replace = Substituir carteira
 wallets-holdings-replace-tooltip = Opere com outra carteira; a chave e o histórico desta carteira são mantidos
 wallets-list-col-name = Nome
 wallets-list-col-balance = Saldo ({ -sol })

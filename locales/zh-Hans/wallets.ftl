@@ -126,7 +126,6 @@ wallets-holdings-search =
     .placeholder = 按代币符号或铸造地址搜索...
 wallets-holdings-export = 导出密钥
 wallets-holdings-export-tooltip = 导出此钱包的私钥
-wallets-holdings-replace = 更换钱包
 wallets-holdings-replace-tooltip = 使用另一个钱包交易；此钱包的密钥和历史将被保留
 wallets-list-col-name = 名称
 wallets-list-col-balance = 余额（{ -sol }）

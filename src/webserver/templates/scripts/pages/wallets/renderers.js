@@ -379,7 +379,6 @@ export function createWalletRenderers({
           },
           {
             id: "wt-replace",
-            label: I18n.t("wallets-holdings-replace"),
             icon: "icon-replace",
             tooltip: I18n.t("wallets-holdings-replace-tooltip"),
             onClick: () => handleWalletAction("replace"),

@@ -126,7 +126,6 @@ wallets-holdings-search =
     .placeholder = 심볼 또는 민트로 검색...
 wallets-holdings-export = 키 내보내기
 wallets-holdings-export-tooltip = 이 지갑의 개인 키를 내보냅니다
-wallets-holdings-replace = 지갑 교체
 wallets-holdings-replace-tooltip = 다른 지갑으로 거래합니다. 이 지갑의 키와 기록은 보관됩니다
 wallets-list-col-name = 이름
 wallets-list-col-balance = 잔액 ({ -sol })

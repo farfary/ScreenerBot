@@ -110,7 +110,6 @@ wallets-holdings-search =
     .placeholder = Поиск по символу или минту...
 wallets-holdings-export = Экспорт ключа
 wallets-holdings-export-tooltip = Экспортировать приватный ключ этого кошелька
-wallets-holdings-replace = Заменить кошелёк
 wallets-holdings-replace-tooltip = Торговать с другим кошельком; ключ и история этого кошелька сохраняются
 wallets-list-col-name = Название
 wallets-list-col-balance = Баланс ({ -sol })

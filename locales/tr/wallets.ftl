@@ -110,7 +110,6 @@ wallets-holdings-search =
     .placeholder = Sembol veya mint ile ara...
 wallets-holdings-export = Anahtarı dışa aktar
 wallets-holdings-export-tooltip = Bu cüzdanın özel anahtarını dışa aktar
-wallets-holdings-replace = Cüzdanı değiştir
 wallets-holdings-replace-tooltip = Başka bir cüzdanla işlem yapın; bu cüzdanın anahtarı ve geçmişi saklanır
 wallets-list-col-name = Ad
 wallets-list-col-balance = Bakiye ({ -sol })
