@@ -137,6 +137,132 @@ async fn sell_activity_is_idempotent_and_never_increments_entry_spend() {
 }
 
 #[tokio::test]
+async fn a_paper_buy_restarts_the_peak_and_a_stale_raise_cannot_restore_it() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = CopyDatabase::open(
+        dir.path().join("copy_trading.db"),
+        crate::chains::active_chain(),
+    )
+    .unwrap();
+    let mut configured_task = task();
+    configured_task.max_native_per_trade = 1.1;
+    configured_task.max_native_per_token = 3.0;
+    let configured = db.insert_task(configured_task).await.unwrap();
+    let holding = |position: Option<crate::trader::copy::types::PaperPosition>| {
+        position.expect("paper position")
+    };
+    let peak = |position: Option<crate::trader::copy::types::PaperPosition>| {
+        holding(position).peak_price_native.expect("a peak")
+    };
+
+    db.record_outcome(paper_buy(&configured, "buy-1", 100.0, 1.0))
+        .await
+        .unwrap();
+    let opened_at = holding(db.paper_position(configured.id, "book-mint").await.unwrap()).opened_at;
+    db.raise_paper_peak(configured.id, "book-mint", opened_at, 1, 0.02)
+        .await
+        .unwrap();
+    assert_eq!(
+        peak(db.paper_position(configured.id, "book-mint").await.unwrap()),
+        0.02
+    );
+
+    // The second buy moves the holding's average: the peak restarts at its market price.
+    db.record_outcome(paper_buy(&configured, "buy-2", 100.0, 1.0))
+        .await
+        .unwrap();
+    assert_eq!(
+        peak(db.paper_position(configured.id, "book-mint").await.unwrap()),
+        0.01
+    );
+
+    // A sweep that read the holding before the second buy cannot raise it back.
+    db.raise_paper_peak(configured.id, "book-mint", opened_at, 1, 0.02)
+        .await
+        .unwrap();
+    assert_eq!(
+        peak(db.paper_position(configured.id, "book-mint").await.unwrap()),
+        0.01
+    );
+
+    db.raise_paper_peak(configured.id, "book-mint", opened_at, 2, 0.015)
+        .await
+        .unwrap();
+    assert_eq!(
+        peak(db.paper_position(configured.id, "book-mint").await.unwrap()),
+        0.015
+    );
+}
+
+#[tokio::test]
+async fn a_stale_paper_peak_raise_cannot_land_on_a_holding_opened_after_a_reset() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = CopyDatabase::open(
+        dir.path().join("copy_trading.db"),
+        crate::chains::active_chain(),
+    )
+    .unwrap();
+    let mut configured_task = task();
+    configured_task.max_native_per_trade = 1.1;
+    configured_task.max_native_per_token = 3.0;
+    let configured = db.insert_task(configured_task).await.unwrap();
+    let holding = |position: Option<crate::trader::copy::types::PaperPosition>| {
+        position.expect("paper position")
+    };
+
+    db.record_outcome(paper_buy(&configured, "buy-before-reset", 100.0, 1.0))
+        .await
+        .unwrap();
+    // A sweep reads this holding, then the paper book is reset before it writes.
+    let stale = holding(db.paper_position(configured.id, "book-mint").await.unwrap());
+    assert_eq!(stale.buys, 1);
+    db.reset_paper_book(configured.id).await.unwrap();
+
+    // The next holding starts again at one buy, opened later, in the new epoch.
+    let mut outcome = paper_buy(&configured, "buy-after-reset", 100.0, 1.0);
+    let CopyOutcome::PaperFilled(decision) = &mut outcome else {
+        unreachable!();
+    };
+    decision.telemetry.decided_at = stale.opened_at + chrono::Duration::seconds(1);
+    decision.fill.quote.as_mut().expect("a quoted fill").epoch =
+        db.paper_epoch(configured.id).await.unwrap();
+    db.record_outcome(outcome).await.unwrap();
+    let fresh = holding(db.paper_position(configured.id, "book-mint").await.unwrap());
+    assert_eq!(fresh.buys, stale.buys);
+    assert_ne!(fresh.opened_at, stale.opened_at);
+    assert_eq!(fresh.peak_price_native, Some(0.01));
+
+    db.raise_paper_peak(
+        configured.id,
+        "book-mint",
+        stale.opened_at,
+        stale.buys,
+        0.02,
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        holding(db.paper_position(configured.id, "book-mint").await.unwrap()).peak_price_native,
+        Some(0.01),
+        "a peak read from the reset holding landed on the new one"
+    );
+
+    db.raise_paper_peak(
+        configured.id,
+        "book-mint",
+        fresh.opened_at,
+        fresh.buys,
+        0.015,
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        holding(db.paper_position(configured.id, "book-mint").await.unwrap()).peak_price_native,
+        Some(0.015)
+    );
+}
+
+#[tokio::test]
 async fn the_paper_book_books_buys_and_partial_then_full_sells_exactly_once() {
     let dir = tempfile::tempdir().unwrap();
     let db = CopyDatabase::open(

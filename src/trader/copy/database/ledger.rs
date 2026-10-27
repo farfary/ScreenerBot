@@ -210,22 +210,30 @@ impl CopyDatabase {
         })?
     }
 
-    /// Raise an open paper holding's running peak to `price_native` when it is higher.
+    /// Raise an open paper holding's running peak to `price_native` when it is higher,
+    /// while the holding is still the one read: opened at `opened_at` and holding the `buys`
+    /// it was read with. A buy booked since then restarted the peak at its fill, and a
+    /// holding opened since then (after a close or a paper reset) has its own peak; a peak
+    /// read before either must not land on it.
     pub async fn raise_paper_peak(
         &self,
         task_id: i64,
         mint: &str,
+        opened_at: DateTime<Utc>,
+        buys: u64,
         price_native: f64,
     ) -> crate::trader::Result<()> {
         let db = self.clone();
         let mint = mint.to_owned();
+        let opened_at = opened_at.to_rfc3339();
         tokio::task::spawn_blocking(move || {
             db.connection()?
                 .execute(
                     "UPDATE copy_paper_positions \
                      SET peak_price_native = MAX(COALESCE(peak_price_native, ?3), ?3) \
-                     WHERE task_id = ?1 AND mint = ?2 AND closed_at IS NULL",
-                    params![task_id, mint, price_native],
+                     WHERE task_id = ?1 AND mint = ?2 AND closed_at IS NULL AND buys = ?4 \
+                     AND opened_at = ?5",
+                    params![task_id, mint, price_native, buys, opened_at],
                 )
                 .map(|_| ())
                 .map_err(|e| Error::from(crate::errors::DatabaseError::from(e)))

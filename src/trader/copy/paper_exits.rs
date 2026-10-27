@@ -304,7 +304,13 @@ pub async fn sweep(database: &CopyDatabase) -> crate::trader::Result<()> {
                 .peak_price_native
                 .map_or(mark, |peak| peak.max(mark));
             database
-                .raise_paper_peak(task.id, &position.mint, peak)
+                .raise_paper_peak(
+                    task.id,
+                    &position.mint,
+                    position.opened_at,
+                    position.buys,
+                    peak,
+                )
                 .await?;
             let Some(policy) = &policy else {
                 continue;

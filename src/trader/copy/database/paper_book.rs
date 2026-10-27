@@ -11,7 +11,9 @@ use crate::trader::copy::types::{PaperDecision, PaperModel, PaperSellFill};
 use crate::trader::error::Error;
 
 /// Book a paper fill: the tokens and their full cost (input plus fees) join the
-/// position, reopening it when an earlier round was sold out.
+/// position, reopening it when an earlier round was sold out. Every buy moves the
+/// holding's average cost, so the peak restarts at the fill's market price: a peak from
+/// before the buy would arm the trailing stop on a gain made against the old average.
 pub(super) fn apply_paper_buy(
     transaction: &Transaction<'_>,
     decision: &PaperDecision,
@@ -61,7 +63,7 @@ pub(super) fn apply_paper_buy(
         .query_row(
             "SELECT token_amount_raw, token_decimals, cost_basis_native, invested_native, \
              realized_proceeds_native, realized_cost_native, buys, sells, closed_at, \
-             opened_at, peak_price_native FROM copy_paper_positions WHERE task_id=?1 AND mint=?2",
+             opened_at FROM copy_paper_positions WHERE task_id=?1 AND mint=?2",
             params![decision.task_id, decision.mint],
             |row| {
                 Ok((
@@ -75,13 +77,12 @@ pub(super) fn apply_paper_buy(
                     row.get::<_, u64>(7)?,
                     row.get::<_, Option<String>>(8)?,
                     row.get::<_, String>(9)?,
-                    row.get::<_, Option<f64>>(10)?,
                 ))
             },
         )
         .optional()
         .map_err(crate::errors::DatabaseError::from)?;
-    let (raw_held, cost, invested, proceeds, realized_cost, buys, sells, is_open, opened_at, peak) =
+    let (raw_held, cost, invested, proceeds, realized_cost, buys, sells, is_open, opened_at) =
         match current {
             Some((
                 Some(held),
@@ -94,7 +95,6 @@ pub(super) fn apply_paper_buy(
                 sells,
                 closed,
                 opened_at,
-                peak,
             )) => {
                 let is_open = closed.is_none();
                 if is_open && stored_decimals != decimals {
@@ -120,7 +120,6 @@ pub(super) fn apply_paper_buy(
                     sells,
                     is_open,
                     opened_at,
-                    peak,
                 )
             }
             Some(_) => {
@@ -128,18 +127,7 @@ pub(super) fn apply_paper_buy(
                     detail: "active paper holding lacks canonical raw balance".to_owned(),
                 })
             }
-            None => (
-                raw_output,
-                0.0,
-                0.0,
-                0.0,
-                0.0,
-                0,
-                0,
-                false,
-                at.clone(),
-                None,
-            ),
+            None => (raw_output, 0.0, 0.0, 0.0, 0.0, 0, 0, false, at.clone()),
         };
     if [cost, invested, proceeds, realized_cost]
         .iter()
@@ -187,7 +175,7 @@ pub(super) fn apply_paper_buy(
                 decision.fill.market_price_sol,
                 at,
                 if is_open { opened_at } else { at.clone() },
-                if is_open { peak.unwrap_or(decision.fill.market_price_sol).max(decision.fill.market_price_sol) } else { decision.fill.market_price_sol },
+                decision.fill.market_price_sol,
             ],
         )
         .map_err(crate::errors::DatabaseError::from)?;
@@ -209,9 +197,7 @@ pub(super) fn apply_historical_paper_buy(
          invested_native=invested_native+excluded.invested_native, buys=buys+1, \
          last_price_native=excluded.last_price_native, last_price_at=excluded.last_price_at, \
          opened_at=CASE WHEN closed_at IS NULL THEN opened_at ELSE excluded.opened_at END, \
-         peak_price_native=CASE WHEN closed_at IS NULL \
-         THEN MAX(COALESCE(peak_price_native, excluded.peak_price_native), excluded.peak_price_native) \
-         ELSE excluded.peak_price_native END, closed_at=NULL, updated_at=excluded.updated_at",
+         peak_price_native=excluded.peak_price_native, closed_at=NULL, updated_at=excluded.updated_at",
         params![decision.task_id, decision.mint, decision.fill.token_amount,
             decision.fill.total_cost_sol, decision.fill.market_price_sol, at],
     ).map_err(crate::errors::DatabaseError::from)?;
