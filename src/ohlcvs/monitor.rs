@@ -2257,9 +2257,10 @@ impl OhlcvMonitor {
         if !self.pool_manager.fetch_due(mint, &pool) {
             return Ok(());
         }
-        let spans =
-            self.gap_manager
-                .due_spans(mint, &pool.address, Utc::now().timestamp(), *budget)?;
+        let spans = self
+            .gap_manager
+            .due_spans(mint, &pool.address, Utc::now().timestamp(), *budget)
+            .await?;
         if spans.is_empty() || !self.try_start_backfill(mint) {
             return Ok(());
         }

@@ -5,6 +5,7 @@
 //! them from the sources, recording every attempt.
 
 use crate::config::with_config;
+use crate::errors::InternalError;
 use crate::events::{record_ohlcv_event, Severity};
 use crate::ohlcvs::aggregator::OhlcvAggregator;
 use crate::ohlcvs::cache::OhlcvCache;
@@ -17,6 +18,7 @@ use crate::ohlcvs::types::{Candle, Timeframe};
 use chrono::Utc;
 use serde_json::json;
 use std::sync::Arc;
+use tokio::task::spawn_blocking;
 use tokio::time::Duration;
 
 /// Gap-fill requests one scan may spend across all tokens. The scan runs every
@@ -318,6 +320,18 @@ impl GapManager {
         }
     }
 
+    /// Run `op` against the candle database on the blocking pool, off the async runtime.
+    async fn blocking<T, F>(&self, op: F) -> OhlcvResult<T>
+    where
+        T: Send + 'static,
+        F: FnOnce(&OhlcvDatabase) -> OhlcvResult<T> + Send + 'static,
+    {
+        let db = Arc::clone(&self.db);
+        spawn_blocking(move || op(&db))
+            .await
+            .map_err(|e| OhlcvError::Internal(InternalError::from(e)))?
+    }
+
     /// Detect gaps in stored data for a token
     pub async fn detect_gaps(
         &self,
@@ -350,35 +364,43 @@ impl GapManager {
         )
         .await;
 
-        // Get existing data sliced to the retention window in ascending order
-        let data = self.db.get_candles(
-            mint,
-            Some(pool_address),
-            Timeframe::Minute1,
-            Some(lookback_start),
-            None,
-            Some(limit),
-        )?;
+        let (owned_mint, owned_pool) = (mint.to_string(), pool_address.to_string());
+        let Some((gaps, data_points_analyzed)) = self
+            .blocking(move |db| {
+                // Existing data sliced to the retention window in ascending order
+                let data = db.get_candles(
+                    &owned_mint,
+                    Some(&owned_pool),
+                    Timeframe::Minute1,
+                    Some(lookback_start),
+                    None,
+                    Some(limit),
+                )?;
 
-        if data.is_empty() {
+                if data.is_empty() {
+                    return Ok(None);
+                }
+
+                // Normalize data for requested timeframe.
+                let normalized = if timeframe == Timeframe::Minute1 {
+                    data
+                } else {
+                    OhlcvAggregator::aggregate(&data, Timeframe::Minute1, timeframe)?
+                };
+
+                // Detect gaps using aggregator
+                let gaps = OhlcvAggregator::detect_gaps(&normalized, timeframe);
+
+                // Store detected gaps in database
+                for (start, end) in &gaps {
+                    db.insert_gap(&owned_mint, &owned_pool, timeframe, *start, *end)?;
+                }
+                Ok(Some((gaps, normalized.len())))
+            })
+            .await?
+        else {
             return Ok(Vec::new());
-        }
-
-        // Normalize data for requested timeframe.
-        let normalized = if timeframe == Timeframe::Minute1 {
-            data
-        } else {
-            OhlcvAggregator::aggregate(&data, Timeframe::Minute1, timeframe)?
         };
-
-        // Detect gaps using aggregator
-        let gaps = OhlcvAggregator::detect_gaps(&normalized, timeframe);
-
-        // Store detected gaps in database
-        for (start, end) in &gaps {
-            self.db
-                .insert_gap(mint, pool_address, timeframe, *start, *end)?;
-        }
 
         // INFO: Record gap detection completion
         record_ohlcv_event(
@@ -391,7 +413,7 @@ impl GapManager {
                 "pool_address": pool_address,
                 "timeframe": timeframe.to_string(),
                 "gaps_found": gaps.len(),
-                "data_points_analyzed": normalized.len(),
+                "data_points_analyzed": data_points_analyzed,
             }),
         )
         .await;
@@ -405,7 +427,10 @@ impl GapManager {
         mint: &str,
         timeframe: Timeframe,
     ) -> OhlcvResult<Vec<Gap>> {
-        let gap_tuples = self.db.get_unfilled_gaps(mint, timeframe)?;
+        let owned_mint = mint.to_string();
+        let gap_tuples = self
+            .blocking(move |db| db.get_unfilled_gaps(&owned_mint, timeframe))
+            .await?;
 
         Ok(gap_tuples
             .into_iter()
@@ -426,14 +451,19 @@ impl GapManager {
         pool_address: &str,
         timeframe: Timeframe,
     ) -> OhlcvResult<DataQualityReport> {
-        let mut data = self.db.get_candles(
-            mint,
-            Some(pool_address),
-            Timeframe::Minute1,
-            None,
-            None,
-            Some(10000),
-        )?;
+        let (owned_mint, owned_pool) = (mint.to_string(), pool_address.to_string());
+        let mut data = self
+            .blocking(move |db| {
+                db.get_candles(
+                    &owned_mint,
+                    Some(&owned_pool),
+                    Timeframe::Minute1,
+                    None,
+                    None,
+                    Some(10000),
+                )
+            })
+            .await?;
 
         let total_candles = data.len();
 
@@ -470,7 +500,7 @@ impl GapManager {
 
     /// Due gap spans of one pool within the retention window, most recent
     /// first, at most `budget` of them.
-    pub fn due_spans(
+    pub async fn due_spans(
         &self,
         mint: &str,
         pool_address: &str,
@@ -482,9 +512,10 @@ impl GapManager {
         }
         let retention_days = with_config(|cfg| cfg.ohlcv.retention_days).max(1);
         let since = now.saturating_sub(retention_days.saturating_mul(86_400));
+        let (mint, pool_address) = (mint.to_string(), pool_address.to_string());
         let rows = self
-            .db
-            .get_open_gaps(mint, pool_address, since, MAX_GAP_ATTEMPTS)?;
+            .blocking(move |db| db.get_open_gaps(&mint, &pool_address, since, MAX_GAP_ATTEMPTS))
+            .await?;
         Ok(select_due_spans(group_spans(rows), now, budget))
     }
 
@@ -515,15 +546,21 @@ impl GapManager {
         {
             Ok(response) => response,
             Err(e) => {
-                self.db.record_gap_attempt(
-                    mint,
-                    pool_address,
-                    span.timeframe,
-                    span.start,
-                    span.end,
-                    Utc::now().timestamp(),
-                    &e.to_string(),
-                )?;
+                let (owned_mint, owned_pool) = (mint.to_string(), pool_address.to_string());
+                let (timeframe, start, end) = (span.timeframe, span.start, span.end);
+                let reason = e.to_string();
+                self.blocking(move |db| {
+                    db.record_gap_attempt(
+                        &owned_mint,
+                        &owned_pool,
+                        timeframe,
+                        start,
+                        end,
+                        Utc::now().timestamp(),
+                        &reason,
+                    )
+                })
+                .await?;
                 return Err(e);
             }
         };
@@ -556,16 +593,28 @@ impl GapManager {
             });
         }
 
-        let fill = apply_answer(
-            &self.db,
-            &self.cache,
-            mint,
-            pool_address,
-            span,
-            &response.candles,
-            response.server_refreshing,
-            Utc::now().timestamp(),
-        )?;
+        let cache = Arc::clone(&self.cache);
+        let (owned_mint, owned_pool, owned_span) =
+            (mint.to_string(), pool_address.to_string(), span.clone());
+        let FetchResponse {
+            candles,
+            server_refreshing,
+            ..
+        } = response;
+        let fill = self
+            .blocking(move |db| {
+                apply_answer(
+                    db,
+                    &cache,
+                    &owned_mint,
+                    &owned_pool,
+                    &owned_span,
+                    &candles,
+                    server_refreshing,
+                    Utc::now().timestamp(),
+                )
+            })
+            .await?;
 
         let (event, severity) = match fill.outcome {
             GapOutcome::Resolved { candles: 0 } => ("gap_fill_confirmed_no_trade", Severity::Debug),
@@ -995,6 +1044,58 @@ mod tests {
             vec![T0 + 15 * MIN, T0 + 18 * MIN]
         );
 
+        drop(db);
+        let _ = std::fs::remove_file(path);
+    }
+
+    /// The gap reads the async gap fill makes run on the blocking pool and answer exactly the
+    /// rows the store holds.
+    #[tokio::test]
+    async fn gap_reads_answer_the_stored_rows_from_the_blocking_pool() {
+        crate::config::utils::install_default_config();
+        let (db, cache, path) = open_store("blocking-reads");
+        let (db, cache) = (Arc::new(db), Arc::new(cache));
+        let gaps = GapManager::new(
+            Arc::clone(&db),
+            Arc::new(OhlcvFetcher::new(ChainId::Solana)),
+            Arc::clone(&cache),
+            Arc::new(PoolManager::new(Arc::clone(&db), Arc::clone(&cache))),
+        );
+        let m1 = Timeframe::Minute1;
+        let end = OhlcvDatabase::bucket_start(NOW, m1) - 10 * MIN;
+        db.insert_gap("mint", "pool", m1, end - 5 * MIN, end)
+            .unwrap();
+
+        let due = gaps
+            .due_spans("mint", "pool", NOW, GAP_FILL_REQUESTS_PER_CYCLE)
+            .await
+            .unwrap();
+        let expected = select_due_spans(
+            group_spans(
+                db.get_open_gaps("mint", "pool", 0, MAX_GAP_ATTEMPTS)
+                    .unwrap(),
+            ),
+            NOW,
+            GAP_FILL_REQUESTS_PER_CYCLE,
+        );
+        assert_eq!(due.len(), 1);
+        assert_eq!(due, expected);
+        assert!(gaps
+            .due_spans("mint", "pool", NOW, 0)
+            .await
+            .unwrap()
+            .is_empty());
+
+        let unfilled: Vec<(String, i64, i64)> = gaps
+            .get_unfilled_gaps("mint", m1)
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|gap| (gap.pool_address, gap.start_timestamp, gap.end_timestamp))
+            .collect();
+        assert_eq!(unfilled, vec![("pool".to_string(), end - 5 * MIN, end)]);
+
+        drop(gaps);
         drop(db);
         let _ = std::fs::remove_file(path);
     }
