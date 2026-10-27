@@ -74,7 +74,7 @@ pub async fn add_to_position(
 
     // The DCA config governs what the AUTO-TRADER may do on its own — it is not a
     // capability switch for the user. A manual "Add to Position" from the dashboard is
-    // the user overriding the bot, so `dca_enabled`, `dca_max_count` and the cooldown
+    // the user overriding the bot, so `dca_enabled`, the ladder's length and the cooldown
     // do not apply to it. Gating manual adds on them meant anyone who simply did not
     // want automatic DCA got "DCA is disabled in configuration" when clicking Add, and
     // a user who did want to average down was told to wait out the BOT's cooldown.
@@ -84,14 +84,14 @@ pub async fn add_to_position(
             return Err(Error::DcaDisabled);
         }
 
-        let max_dca_count = with_config(|cfg| cfg.trader.dca_max_count);
-        if position.dca_count >= max_dca_count as u32 {
+        let ladder_steps = crate::trader::config::get_dca_levels().len();
+        if usize::try_from(position.dca_count).map_or(true, |count| count >= ladder_steps) {
             return Err(Error::TransitionFailed {
                 transition: "dca",
                 mint: token_mint.to_owned(),
                 detail: format!(
-                    "maximum DCA count reached: {} (max: {})",
-                    position.dca_count, max_dca_count
+                    "every DCA step is used: {} (steps: {})",
+                    position.dca_count, ladder_steps
                 ),
             });
         }

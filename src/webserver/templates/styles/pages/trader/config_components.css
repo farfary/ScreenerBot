@@ -290,8 +290,8 @@
   color: var(--warning);
 }
 
-/* Take-profit ladder: one row per step, its name, profit level, share and remove
-   control on one line, wrapping on narrow cards. */
+/* Ladder editor (take profit, DCA): one row per step, its name, its two inputs and its
+   remove control on one line, wrapping on narrow cards. */
 .level-list {
   display: flex;
   flex-direction: column;
@@ -304,6 +304,23 @@
   display: grid;
   grid-template-columns: minmax(4.5rem, max-content) repeat(2, minmax(0, 12rem)) max-content;
   gap: 0.5rem 0.75rem;
+}
+
+/* The DCA ladder adds a column for what each step buys, before the remove control. */
+.level-list[data-ladder="dca"] .level-list-rows {
+  grid-template-columns:
+    minmax(4.5rem, max-content) repeat(2, minmax(0, 12rem)) minmax(0, max-content)
+    max-content;
+}
+
+.level-list-amount {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.level-list-amount.is-warning {
+  color: var(--warning);
 }
 
 .level-list-caption,

@@ -317,6 +317,7 @@ errors-trade-blacklisted = Token kara listede: { $mint }
 errors-trade-slippage-invalid = Kayma %{ $slippage } değeri %{ $minimum } ile %{ $maximum } arasında olmalı
 errors-trade-percentage-invalid = Satış yüzdesi { $percentage } değeri (0, 100] aralığında olmalı
 errors-trade-percentage-required = Kısmi satış için satılacak pozisyon yüzdesi gerekir
+errors-trade-add-size-required = { $mint } pozisyonuna ekleme için { -sol } cinsinden bir miktar gerekir
 errors-trade-record-failed = Manuel işlem kaydedilemedi
 errors-trade-task-cancelled = Uygulama kapandığı için manuel işlem yanıt vermeden durdu; sonucu pozisyonda yer alır
 errors-trade-no-open-position = Bu token için açık pozisyon yok: { $mint }

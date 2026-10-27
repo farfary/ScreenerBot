@@ -1051,15 +1051,17 @@ config-trader-dca-cooldown-minutes = Délai entre DCA
     .unit = min
 config-trader-dca-enabled = Activer le DCA
     .hint = Active l'investissement programmé (DCA) sur les positions
-config-trader-dca-max-count = Nombre de DCA max.
-    .hint = Nombre maximal d'entrées DCA supplémentaires par position
-    .unit = entrées
-config-trader-dca-size-percentage = Taille du DCA
-    .hint = Taille de chaque entrée DCA en % de la taille initiale de la position
+config-trader-dca-levels-pct = Paliers DCA
+    .hint = De combien le prix doit baisser sous l'entrée pour que chaque renfort achète (10 = renfort à −10 %)
     .unit = %
-config-trader-dca-threshold-pct = Seuil du DCA
-    .hint = Déclenche un DCA lorsque la position baisse de ce % (-10 = DCA à -10 %)
-    .unit = %
+config-trader-dca-measure-from = Mesurer la baisse depuis
+    .hint = Le prix d'entrée depuis lequel la baisse de chaque palier est mesurée : entrée moyenne ou première entrée
+config-trader-dca-min-hold-minutes = Attente après l'entrée
+    .hint = Minutes après l'entrée avant le premier renfort
+    .unit = min
+config-trader-dca-size-multipliers = Tailles DCA
+    .hint = Ce que chaque renfort achète, en multiple du premier achat
+    .unit = ×
 config-trader-enabled = Activé
     .hint = Interrupteur général du système de trading
 config-trader-entry-check-concurrency = Concurrence des vérifications d'entrée

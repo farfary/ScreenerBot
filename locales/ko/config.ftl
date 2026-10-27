@@ -1048,15 +1048,17 @@ config-trader-dca-cooldown-minutes = DCA 쿨다운
     .unit = 분
 config-trader-dca-enabled = DCA 사용
     .hint = 포지션에 분할 매수(DCA)를 사용합니다
-config-trader-dca-max-count = 최대 DCA 횟수
-    .hint = 포지션당 추가 DCA 진입의 최대 횟수
-    .unit = 회
-config-trader-dca-size-percentage = DCA 규모
-    .hint = 각 DCA 진입 규모를 최초 포지션 규모 대비 비율(%)로 설정합니다
+config-trader-dca-levels-pct = DCA 단계
+    .hint = 각 추가 매수가 실행되려면 진입가 아래로 얼마나 하락해야 하는지 (10 = −10%에서 추가)
     .unit = %
-config-trader-dca-threshold-pct = DCA 기준
-    .hint = 포지션이 이 비율(%)만큼 하락하면 DCA를 진행합니다 (-10 = -10%에서 DCA)
-    .unit = %
+config-trader-dca-measure-from = 하락 측정 기준
+    .hint = 각 단계의 하락을 측정하는 진입가: 평균 진입가 또는 첫 진입가
+config-trader-dca-min-hold-minutes = 진입 후 대기
+    .hint = 첫 추가 매수 전 진입 후 대기 시간(분)
+    .unit = 분
+config-trader-dca-size-multipliers = DCA 크기
+    .hint = 각 추가 매수가 사는 양, 첫 매수의 배수
+    .unit = ×
 config-trader-enabled = 사용
     .hint = 거래 시스템의 마스터 스위치
 config-trader-entry-check-concurrency = 진입 확인 동시성

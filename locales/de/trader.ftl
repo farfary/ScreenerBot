@@ -315,26 +315,34 @@ trader-strategy-priority = Priorität { $priority }
 
 trader-dca-title = Durchschnittskosten-Strategie (DCA)
 trader-dca-subtitle = Verlustpositionen automatisch aufstocken, um den durchschnittlichen Einstiegspreis zu senken
-trader-dca-threshold-impact = Kauft nach, wenn die Position { $value } % unter dem Einstieg liegt
-trader-dca-threshold-hint = Der Rückgang gegenüber dem Einstieg, bei dem DCA nachkauft (10 = DCA bei -10 %)
-trader-dca-count-impact =
-    { $count ->
-        [one] Höchstens ein zusätzlicher Einstieg pro Position
-       *[other] Höchstens { $count } zusätzliche Einstiege pro Position
-    }
-trader-dca-size-impact = Jeder zusätzliche Einstieg kauft { $amount }
+trader-dca-measure-average = Durchschnittseinstieg
+trader-dca-measure-first-entry = Erster Einstieg
+trader-dca-step = Nachkauf { $step }
+trader-dca-drop-label = Kursrückgang für Nachkauf { $step }
+trader-dca-size-label = Größe von Nachkauf { $step } als Vielfaches des ersten Kaufs
+trader-dca-drop-caption = Kursrückgang
+trader-dca-size-caption = Kauf × erster Kauf
+trader-dca-add-step = Stufe hinzufügen
+trader-dca-remove-step = Nachkauf { $step } entfernen
+trader-dca-step-amount = = { $amount }
+trader-dca-step-below-minimum = Unter dem Mindesthandel von { $minimum }: dieser Nachkauf wird nicht gesendet
+trader-dca-error-drop-range = Jeder Rückgang muss zwischen { $min } % und { $max } % liegen
+trader-dca-error-size-range = Jede Größe muss zwischen { $min }× und { $max }× des ersten Kaufs liegen
+trader-dca-error-order = Gemessen ab dem ersten Einstieg braucht jeder Nachkauf einen tieferen Rückgang als der vorherige
 trader-dca-cooldown-impact = Mindestens { $span } zwischen zusätzlichen Einstiegen
-trader-dca-example =
-    { $count ->
-        [one] Kauf { $initial } → bei -{ $threshold } % einmal { $add } nachkaufen
-       *[other] Kauf { $initial } → jede weitere -{ $threshold } % kauft { $add } nach, bis zu { $count }-mal
+trader-dca-min-hold-impact =
+    { $minutes ->
+        [0] Der erste Nachkauf kann direkt nach dem Einstieg folgen
+       *[other] Der erste Nachkauf wartet mindestens { $span } nach dem Einstieg
     }
+trader-dca-capacity = Höchstens hält diese Position: { $amount } ({ $multiple }× der erste Kauf)
 trader-dca-info-title = Infos zur DCA-Strategie
 trader-dca-info-subtitle = Wichtige Hinweise zum DCA-Trading
 trader-dca-how-title = So funktioniert DCA
-trader-dca-how-trigger = <strong>Auslöser:</strong> Die Position fällt unter die DCA-Schwelle (z. B. -10 %)
+trader-dca-how-trigger = <strong>Auslöser:</strong> Der Kurs fällt unter die nächste Stufe, gemessen ab dem Durchschnitts- oder dem ersten Einstieg
 trader-dca-how-action = <strong>Aktion:</strong> Mehr { -sol } nachkaufen, um die durchschnittliche Einstandsbasis zu senken
-trader-dca-how-repeat = <strong>Wiederholung:</strong> DCA kann bis zur maximalen Anzahl mehrfach erfolgen
+trader-dca-how-repeat = <strong>Stufen:</strong> Jeder Nachkauf rückt zur nächsten Stufe vor; sind alle Stufen genutzt, enden die Nachkäufe
+trader-dca-how-pause = <strong>Pausen:</strong> Kein Nachkauf, solange der vorherige noch abgewickelt wird oder das Verlustlimit neue Einstiege sperrt
 trader-dca-risk-title = Risikohinweise
 trader-dca-risk-exposure = <strong>Höheres Engagement:</strong> DCA erhöht das insgesamt riskierte Kapital pro Position
 trader-dca-risk-knife = <strong>Fallendes Messer:</strong> DCA hilft nicht, wenn der Token weiter im Abwärtstrend bleibt

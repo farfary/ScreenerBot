@@ -1051,15 +1051,17 @@ config-trader-dca-cooldown-minutes = DCA Cooldown
     .unit = min
 config-trader-dca-enabled = Enable DCA
     .hint = Enable Dollar Cost Averaging for positions
-config-trader-dca-max-count = Max DCA Count
-    .hint = Maximum number of additional DCA entries per position
-    .unit = entries
-config-trader-dca-size-percentage = DCA Size
-    .hint = Size of each DCA entry as % of initial position size
+config-trader-dca-levels-pct = DCA Levels
+    .hint = How far the price must fall below the entry before each add buys (10 = add at −10%)
     .unit = %
-config-trader-dca-threshold-pct = DCA Threshold
-    .hint = Enter DCA when position down by this % (-10 = DCA at -10%)
-    .unit = %
+config-trader-dca-measure-from = Measure Drop From
+    .hint = The entry price each level's drop is measured from: the average entry or the first entry
+config-trader-dca-min-hold-minutes = Wait After Entry
+    .hint = Minutes after the entry before the first add
+    .unit = min
+config-trader-dca-size-multipliers = DCA Sizes
+    .hint = What each add buys, as a multiple of the first buy
+    .unit = ×
 config-trader-enabled = Enabled
     .hint = Master switch for the trading system
 config-trader-entry-check-concurrency = Entry Check Concurrency

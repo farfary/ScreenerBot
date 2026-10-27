@@ -9,6 +9,7 @@ use crate::config::metadata::{
 use crate::config::Result;
 use crate::errors::ConfigurationError;
 use crate::field_metadata;
+use crate::trader::MIN_TRADE_SIZE_NATIVE;
 use serde::{Deserialize, Serialize};
 
 /// Unit of the time-override duration, stored as its lowercase name. Every write is
@@ -25,7 +26,7 @@ pub enum TimeUnit {
 }
 
 /// Every canonical unit name, in the order the units grow.
-const TIME_UNIT_NAMES: &[&str] = &["seconds", "minutes", "hours", "days"];
+pub(crate) const TIME_UNIT_NAMES: &[&str] = &["seconds", "minutes", "hours", "days"];
 
 impl TimeUnit {
     /// Convert duration to seconds
@@ -39,7 +40,7 @@ impl TimeUnit {
     }
 
     /// The canonical lowercase name the unit is stored and sent as.
-    pub fn as_str(self) -> &'static str {
+    pub const fn as_str(self) -> &'static str {
         match self {
             TimeUnit::Seconds => "seconds",
             TimeUnit::Minutes => "minutes",
@@ -89,6 +90,72 @@ impl FieldTypeInfo for TimeUnit {
 
 impl NestedMetadata for TimeUnit {}
 
+/// The price a DCA step's drop is measured from, stored as its lowercase name. Every
+/// write is strict: a name that matches no basis, in any letter case, is refused. A
+/// config file that holds such a name still loads, because the load-time migration
+/// (`config/migrate.rs`) rewrites it to the average entry before the typed parse.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum DcaMeasureFrom {
+    /// The average entry price of every buy booked so far; an add moves it, so each step
+    /// measures from the average the previous add left.
+    #[default]
+    Average,
+    /// The fill price of the position's first buy; it never moves, so the steps must
+    /// reach strictly deeper drops.
+    FirstEntry,
+}
+
+/// Every canonical basis name.
+pub(crate) const DCA_MEASURE_FROM_NAMES: &[&str] = &["average", "first_entry"];
+
+impl DcaMeasureFrom {
+    /// The canonical lowercase name the basis is stored and sent as.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            DcaMeasureFrom::Average => "average",
+            DcaMeasureFrom::FirstEntry => "first_entry",
+        }
+    }
+
+    /// The basis `name` names, case-insensitively; `None` for a name that matches no
+    /// basis.
+    pub fn from_name(name: &str) -> Option<Self> {
+        match name.to_lowercase().as_str() {
+            "average" => Some(DcaMeasureFrom::Average),
+            "first_entry" => Some(DcaMeasureFrom::FirstEntry),
+            _ => None,
+        }
+    }
+}
+
+impl Serialize for DcaMeasureFrom {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(self.as_str())
+    }
+}
+
+impl<'de> Deserialize<'de> for DcaMeasureFrom {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let name = String::deserialize(deserializer)?;
+        Self::from_name(&name)
+            .ok_or_else(|| serde::de::Error::unknown_variant(&name, DCA_MEASURE_FROM_NAMES))
+    }
+}
+
+impl FieldTypeInfo for DcaMeasureFrom {
+    fn field_type() -> FieldType {
+        FieldType::String
+    }
+}
+
+impl NestedMetadata for DcaMeasureFrom {}
+
 config_struct! {
     /// Slippage configuration
     pub struct SlippageConfig {
@@ -134,6 +201,35 @@ pub const TAKE_PROFIT_PROFIT_PCT_MAX: f64 = 1000.0;
 /// The maximum is the whole position, which a single-step ladder sells.
 const TAKE_PROFIT_SELL_PCT_MIN: f64 = 5.0;
 pub const TAKE_PROFIT_SELL_PCT_MAX: f64 = 100.0;
+
+/// The most steps a DCA ladder holds; the DCA tab reads it from the field metadata.
+pub const DCA_MAX_STEPS: usize = 5;
+/// Bounds of one DCA step's drop, in percent from the chosen basis; a step is always a
+/// loss.
+pub const DCA_DROP_PCT_MIN: f64 = -95.0;
+pub const DCA_DROP_PCT_MAX: f64 = -1.0;
+/// Bounds of one DCA step's size, as a multiple of the position's first buy.
+pub const DCA_SIZE_MULTIPLIER_MIN: f64 = 0.1;
+pub const DCA_SIZE_MULTIPLIER_MAX: f64 = 5.0;
+/// Bounds of the wait after a position's entry before its first add, in minutes.
+const DCA_MIN_HOLD_MINUTES_MIN: i64 = 0;
+const DCA_MIN_HOLD_MINUTES_MAX: i64 = 1440;
+
+/// One step of the DCA ladder: once the price is `drop_pct` (negative) or further below
+/// the basis, buy `size_multiplier` times the position's first buy.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct DcaLevel {
+    pub drop_pct: f64,
+    pub size_multiplier: f64,
+}
+
+impl DcaLevel {
+    /// The amount an add at this step buys, in native units, for a position whose first
+    /// buy spent `first_buy_native`.
+    pub fn add_size_native(&self, first_buy_native: f64) -> f64 {
+        first_buy_native * self.size_multiplier
+    }
+}
 
 /// Bounds of the break-even stop's arming profit and its kept margin, in percent from
 /// the average entry.
@@ -184,8 +280,10 @@ config_struct! {
             category: ConfigCategory::CoreTrading,
         })]
         max_open_positions: usize = 2,
+        /// SOL each automatic entry buys; its minimum is the smallest trade the trader
+        /// sends, which the DCA tab also reads to flag a step too small to buy.
         #[metadata(field_metadata! {
-            min: 0.001,
+            min: MIN_TRADE_SIZE_NATIVE,
             max: 10,
             step: 0.001,
             impact: ConfigImpact::Critical,
@@ -407,30 +505,41 @@ config_struct! {
             category: ConfigCategory::Dca,
         })]
         dca_enabled: bool = false,
+        /// Drop from the basis, in percent (negative), at which each step adds; read
+        /// together with `dca_size_multipliers` through `dca_levels`.
         #[metadata(field_metadata! {
-            min: -100,
-            max: 0,
+            min: DCA_DROP_PCT_MIN,
+            max: DCA_DROP_PCT_MAX,
             step: 1,
+            max_items: DCA_MAX_STEPS,
             impact: ConfigImpact::High,
             category: ConfigCategory::Dca,
         })]
-        dca_threshold_pct: f64 = -10.0,
+        dca_levels_pct: Vec<f64> = vec![-10.0, -10.0],
+        /// Size of each step's add, as a multiple of the position's first buy.
         #[metadata(field_metadata! {
-            min: 1,
-            max: 5,
-            step: 1,
+            min: DCA_SIZE_MULTIPLIER_MIN,
+            max: DCA_SIZE_MULTIPLIER_MAX,
+            step: 0.1,
+            max_items: DCA_MAX_STEPS,
             impact: ConfigImpact::Critical,
             category: ConfigCategory::Dca,
         })]
-        dca_max_count: usize = 2,
+        dca_size_multipliers: Vec<f64> = vec![0.5, 0.5],
         #[metadata(field_metadata! {
-            min: 10,
-            max: 100,
-            step: 10,
             impact: ConfigImpact::High,
             category: ConfigCategory::Dca,
         })]
-        dca_size_percentage: f64 = 50.0,
+        dca_measure_from: DcaMeasureFrom = DcaMeasureFrom::Average,
+        /// Minutes after the position's entry before its first add may run.
+        #[metadata(field_metadata! {
+            min: DCA_MIN_HOLD_MINUTES_MIN,
+            max: DCA_MIN_HOLD_MINUTES_MAX,
+            step: 5,
+            impact: ConfigImpact::Medium,
+            category: ConfigCategory::Dca,
+        })]
+        dca_min_hold_minutes: i64 = 0,
         #[metadata(field_metadata! {
             min: 1,
             max: 1440,
@@ -519,12 +628,27 @@ impl TraderConfig {
             .collect()
     }
 
+    /// The DCA ladder, one step per configured drop, in the order the adds run. The only
+    /// reader of `dca_levels_pct` and `dca_size_multipliers`.
+    pub fn dca_levels(&self) -> Vec<DcaLevel> {
+        self.dca_levels_pct
+            .iter()
+            .zip(&self.dca_size_multipliers)
+            .map(|(&drop_pct, &size_multiplier)| DcaLevel {
+                drop_pct,
+                size_multiplier,
+            })
+            .collect()
+    }
+
     /// Refuse a take-profit ladder the exit rule cannot follow: one to
     /// [`TAKE_PROFIT_MAX_STEPS`] steps with a sell share for every level, each value
     /// inside its bounds, levels strictly ascending, and shares adding up to at most 100.
+    /// Refuse a DCA ladder the evaluator cannot follow (see [`Self::validate_dca`]).
     /// Refuse a break-even stop or stagnation exit outside its bounds, and a break-even
     /// margin that is not below its arming profit.
     pub fn validate(&self) -> Result<()> {
+        self.validate_dca()?;
         let steps = self.take_profit_levels_pct.len();
         if !(1..=TAKE_PROFIT_MAX_STEPS).contains(&steps) {
             return Err(ConfigurationError::Generic {
@@ -632,11 +756,86 @@ impl TraderConfig {
         }
         Ok(())
     }
+
+    /// Refuse a DCA ladder the evaluator cannot follow: one to [`DCA_MAX_STEPS`] steps
+    /// with a size for every drop, each drop and size inside its bounds, and, measured
+    /// from the first entry (a basis no add moves), every step deeper than the one before
+    /// it. Measured from the average entry, equal drops are a valid uniform ladder. The
+    /// wait after entry must lie inside its bounds.
+    fn validate_dca(&self) -> Result<()> {
+        let steps = self.dca_levels_pct.len();
+        if !(1..=DCA_MAX_STEPS).contains(&steps) {
+            return Err(ConfigurationError::Generic {
+                message: format!(
+                    "trader.dca_levels_pct must hold between 1 and {DCA_MAX_STEPS} steps"
+                ),
+            }
+            .into());
+        }
+        if self.dca_size_multipliers.len() != steps {
+            return Err(ConfigurationError::Generic {
+                message: "trader.dca_size_multipliers must hold one size per DCA level".to_owned(),
+            }
+            .into());
+        }
+        let in_range =
+            |value: f64, min: f64, max: f64| value.is_finite() && (min..=max).contains(&value);
+        if !self
+            .dca_levels_pct
+            .iter()
+            .all(|&drop| in_range(drop, DCA_DROP_PCT_MIN, DCA_DROP_PCT_MAX))
+        {
+            return Err(ConfigurationError::Generic {
+                message: format!(
+                    "trader.dca_levels_pct values must be between {DCA_DROP_PCT_MIN} and {DCA_DROP_PCT_MAX}"
+                ),
+            }
+            .into());
+        }
+        if !self
+            .dca_size_multipliers
+            .iter()
+            .all(|&size| in_range(size, DCA_SIZE_MULTIPLIER_MIN, DCA_SIZE_MULTIPLIER_MAX))
+        {
+            return Err(ConfigurationError::Generic {
+                message: format!(
+                    "trader.dca_size_multipliers values must be between {DCA_SIZE_MULTIPLIER_MIN} and {DCA_SIZE_MULTIPLIER_MAX}"
+                ),
+            }
+            .into());
+        }
+        if self.dca_measure_from == DcaMeasureFrom::FirstEntry
+            && self
+                .dca_levels_pct
+                .windows(2)
+                .any(|pair| pair[1] >= pair[0])
+        {
+            return Err(ConfigurationError::Generic {
+                message: "trader.dca_levels_pct must reach a deeper drop at every step when measured from the first entry"
+                    .to_owned(),
+            }
+            .into());
+        }
+        if !(DCA_MIN_HOLD_MINUTES_MIN..=DCA_MIN_HOLD_MINUTES_MAX)
+            .contains(&self.dca_min_hold_minutes)
+        {
+            return Err(ConfigurationError::Generic {
+                message: format!(
+                    "trader.dca_min_hold_minutes must be between {DCA_MIN_HOLD_MINUTES_MIN} and {DCA_MIN_HOLD_MINUTES_MAX}"
+                ),
+            }
+            .into());
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{TakeProfitLevel, TimeUnit, TraderConfig, TAKE_PROFIT_MAX_STEPS};
+    use super::{
+        DcaLevel, DcaMeasureFrom, TakeProfitLevel, TimeUnit, TraderConfig, DCA_MAX_STEPS,
+        TAKE_PROFIT_MAX_STEPS,
+    };
 
     #[test]
     fn auto_trading_is_opt_in_by_default() {
@@ -847,6 +1046,148 @@ mod tests {
         assert!(
             section.is_err(),
             "a typed trader section refuses an unknown unit"
+        );
+    }
+
+    fn dca_ladder(drops: &[f64], sizes: &[f64], measure_from: DcaMeasureFrom) -> TraderConfig {
+        TraderConfig {
+            dca_levels_pct: drops.to_vec(),
+            dca_size_multipliers: sizes.to_vec(),
+            dca_measure_from: measure_from,
+            ..TraderConfig::default()
+        }
+    }
+
+    #[test]
+    fn the_default_dca_ladder_is_two_half_size_adds_ten_percent_below_the_average() {
+        let config = TraderConfig::default();
+        assert!(!config.dca_enabled);
+        assert_eq!(config.dca_measure_from, DcaMeasureFrom::Average);
+        assert_eq!(config.dca_min_hold_minutes, 0);
+        assert_eq!(config.dca_cooldown_minutes, 30);
+        assert_eq!(
+            config.dca_levels(),
+            vec![
+                DcaLevel {
+                    drop_pct: -10.0,
+                    size_multiplier: 0.5,
+                };
+                2
+            ]
+        );
+        config.validate().expect("the default DCA ladder is valid");
+    }
+
+    #[test]
+    fn a_dca_step_buys_its_multiple_of_the_first_buy() {
+        let level = DcaLevel {
+            drop_pct: -20.0,
+            size_multiplier: 1.5,
+        };
+        assert_eq!(level.add_size_native(0.02), 0.02 * 1.5);
+    }
+
+    #[test]
+    fn a_dca_ladder_the_evaluator_can_follow_is_valid() {
+        dca_ladder(
+            &[-10.0, -10.0, -10.0],
+            &[0.5, 1.0, 2.0],
+            DcaMeasureFrom::Average,
+        )
+        .validate()
+        .expect("equal drops from the average are a uniform ladder");
+        dca_ladder(
+            &[-10.0, -25.0, -40.0],
+            &[0.5, 1.0, 2.0],
+            DcaMeasureFrom::FirstEntry,
+        )
+        .validate()
+        .expect("deeper drops from the first entry are valid");
+        dca_ladder(&[-95.0], &[5.0], DcaMeasureFrom::Average)
+            .validate()
+            .expect("values on their bounds are valid");
+    }
+
+    #[test]
+    fn an_impossible_dca_ladder_is_refused() {
+        let too_many = vec![-10.0; DCA_MAX_STEPS + 1];
+        let too_many_sizes = vec![0.5; DCA_MAX_STEPS + 1];
+        let average = DcaMeasureFrom::Average;
+        let first = DcaMeasureFrom::FirstEntry;
+        for (case, config) in [
+            ("no steps", dca_ladder(&[], &[], average)),
+            (
+                "too many steps",
+                dca_ladder(&too_many, &too_many_sizes, average),
+            ),
+            (
+                "unpaired size",
+                dca_ladder(&[-10.0, -20.0], &[0.5], average),
+            ),
+            ("a gain", dca_ladder(&[5.0], &[0.5], average)),
+            ("no drop", dca_ladder(&[0.0], &[0.5], average)),
+            (
+                "drop under its bound",
+                dca_ladder(&[-96.0], &[0.5], average),
+            ),
+            ("drop over its bound", dca_ladder(&[-0.5], &[0.5], average)),
+            (
+                "size under its bound",
+                dca_ladder(&[-10.0], &[0.05], average),
+            ),
+            ("size over its bound", dca_ladder(&[-10.0], &[5.5], average)),
+            ("drop not finite", dca_ladder(&[f64::NAN], &[0.5], average)),
+            (
+                "size not finite",
+                dca_ladder(&[-10.0], &[f64::INFINITY], average),
+            ),
+            (
+                "equal from first entry",
+                dca_ladder(&[-10.0, -10.0], &[0.5, 0.5], first),
+            ),
+            (
+                "shallower from first entry",
+                dca_ladder(&[-20.0, -10.0], &[0.5, 0.5], first),
+            ),
+        ] {
+            assert!(config.validate().is_err(), "{case} must be refused");
+        }
+        for minutes in [-1, 1441] {
+            let config = TraderConfig {
+                dca_min_hold_minutes: minutes,
+                ..TraderConfig::default()
+            };
+            assert!(
+                config.validate().is_err(),
+                "min hold {minutes} must be refused"
+            );
+        }
+    }
+
+    #[test]
+    fn the_dca_basis_round_trips_under_its_stored_names_and_refuses_others() {
+        for (basis, name) in [
+            (DcaMeasureFrom::Average, "average"),
+            (DcaMeasureFrom::FirstEntry, "first_entry"),
+        ] {
+            assert_eq!(basis.as_str(), name);
+            let stored = serde_json::to_value(basis).expect("a basis serializes");
+            assert_eq!(stored, serde_json::json!(name));
+            let loaded: DcaMeasureFrom = serde_json::from_value(stored).expect("a basis loads");
+            assert_eq!(loaded, basis);
+        }
+        let loaded: DcaMeasureFrom =
+            serde_json::from_value(serde_json::json!("First_Entry")).expect("any case loads");
+        assert_eq!(loaded, DcaMeasureFrom::FirstEntry);
+        for name in ["peak", "first entry", "", "averages"] {
+            assert!(
+                serde_json::from_value::<DcaMeasureFrom>(serde_json::json!(name)).is_err(),
+                "{name} is refused"
+            );
+        }
+        assert!(
+            toml::from_str::<TraderConfig>("dca_measure_from = \"peak\"\n").is_err(),
+            "a typed trader section refuses an unknown basis"
         );
     }
 }

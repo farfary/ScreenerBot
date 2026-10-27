@@ -382,31 +382,6 @@ pub fn validate_config(config: &Config) -> Result<()> {
         .into());
     }
 
-    // DCA validation
-    if config.trader.dca_enabled {
-        if config.trader.dca_threshold_pct >= 0.0 {
-            return Err(ConfigurationError::Generic {
-                message:
-                    "trader.dca_threshold_pct must be negative (represents price drop percentage)"
-                        .to_owned(),
-            }
-            .into());
-        }
-        if config.trader.dca_size_percentage <= 0.0 || config.trader.dca_size_percentage > 100.0 {
-            return Err(ConfigurationError::Generic {
-                message: "trader.dca_size_percentage must be between 0 and 100 (exclusive)"
-                    .to_owned(),
-            }
-            .into());
-        }
-        if config.trader.dca_max_count == 0 {
-            return Err(ConfigurationError::Generic {
-                message: "trader.dca_max_count must be at least 1 when DCA is enabled".to_owned(),
-            }
-            .into());
-        }
-    }
-
     // Time override validation
     if config.trader.time_override_enabled {
         if config.trader.time_override_duration <= 0.0 {

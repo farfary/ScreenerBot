@@ -38,7 +38,8 @@ export function displayValue(type, stored) {
 // and key, and how to coerce the input value into the saved payload. Keys/types
 // mirror the backend config schema (trader section). `hint` gives this
 // page's own hint for a field shown differently from the Configuration page. A
-// `LEVELS` field edits two paired list keys, `key` and `pairKey`, as one ladder.
+// `LEVELS` field edits two paired list keys, `key` and `pairKey`, as one ladder; its
+// `minimumKey` names the field whose metadata minimum is the smallest trade a step may buy.
 const CARD_SPECS = [
   {
     section: "trader",
@@ -109,15 +110,16 @@ const CARD_SPECS = [
     section: "trader",
     fields: [
       { id: "dca-enabled", key: "dca_enabled", type: "bool", autoSave: true },
+      { id: "dca-measure-from", key: "dca_measure_from", type: "string" },
       {
-        id: "dca-threshold",
-        key: "dca_threshold_pct",
-        type: LOSS_MAGNITUDE,
-        hint: () => I18n.t("trader-dca-threshold-hint"),
+        id: "dca-levels",
+        key: "dca_levels_pct",
+        pairKey: "dca_size_multipliers",
+        minimumKey: "trade_size_sol",
+        type: LEVELS,
       },
-      { id: "dca-max-count", key: "dca_max_count", type: "int" },
-      { id: "dca-size", key: "dca_size_percentage", type: "float" },
       { id: "dca-cooldown", key: "dca_cooldown_minutes", type: "int" },
+      { id: "dca-min-hold", key: "dca_min_hold_minutes", type: "int" },
     ],
   },
   {
@@ -370,11 +372,12 @@ export function createTraderConfigCards({ saveConfig }) {
         if (field.type === LEVELS) {
           const pair = sectionMetadata[field.pairKey];
           configureLevels(input, {
-            profit: metadata,
-            sell: pair,
+            first: metadata,
+            second: pair,
             maxItems: metadata.max_items,
-            profitUnit: fieldUnit(metadata.key),
-            sellUnit: pair ? fieldUnit(pair.key) : undefined,
+            firstUnit: fieldUnit(metadata.key),
+            secondUnit: pair ? fieldUnit(pair.key) : undefined,
+            minimum: field.minimumKey ? sectionMetadata[field.minimumKey]?.min : undefined,
           });
         }
 

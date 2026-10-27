@@ -49,7 +49,7 @@ trade-sell-input = درصد دلخواه
 trade-add-title = افزودن به پوزیشن
 trade-add-subtitle = DCA روی پوزیشن موجود
 trade-add-confirm = افزودن به پوزیشن
-trade-add-hint = برای اندازه DCA تنظیم‌شده، خالی بگذارید
+trade-add-hint = خالی بگذارید تا گام بعدی DCA موقعیت اضافه شود، در غیر این صورت اولین خرید آن، و در غیر این صورت اندازه معامله
 trade-amount-input = مقدار دلخواه
     .placeholder = مقدار { -sol } را وارد کنید
 

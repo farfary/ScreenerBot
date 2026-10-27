@@ -49,7 +49,7 @@ trade-sell-input = Власний відсоток
 trade-add-title = Докупити до позиції
 trade-add-subtitle = DCA в наявну позицію
 trade-add-confirm = Докупити
-trade-add-hint = Залиште порожнім для налаштованого розміру DCA
+trade-add-hint = Залиште порожнім, щоб додати наступний крок DCA позиції, інакше її першу купівлю, інакше розмір угоди
 trade-amount-input = Власна сума
     .placeholder = Введіть суму в { -sol }
 

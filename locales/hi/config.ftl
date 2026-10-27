@@ -1002,15 +1002,17 @@ config-trader-dca-cooldown-minutes = DCA कूलडाउन
     .unit = मि
 config-trader-dca-enabled = DCA चालू करें
     .hint = पोज़िशन के लिए डॉलर कॉस्ट एवरेजिंग चालू करें
-config-trader-dca-max-count = अधिकतम DCA संख्या
-    .hint = प्रति पोज़िशन अतिरिक्त DCA एंट्री की अधिकतम संख्या
-    .unit = एंट्री
-config-trader-dca-size-percentage = DCA साइज़
-    .hint = हर DCA एंट्री का साइज़, शुरुआती पोज़िशन साइज़ के % के रूप में
+config-trader-dca-levels-pct = DCA स्तर
+    .hint = एंट्री से कीमत कितनी गिरने पर हर जोड़ खरीदता है (10 = −10% पर जोड़)
     .unit = %
-config-trader-dca-threshold-pct = DCA सीमा
-    .hint = पोज़िशन इतने % गिरने पर DCA करें (-10 = -10% पर DCA)
-    .unit = %
+config-trader-dca-measure-from = गिरावट यहाँ से मापें
+    .hint = वह एंट्री कीमत जिससे हर स्तर की गिरावट मापी जाती है: औसत एंट्री या पहली एंट्री
+config-trader-dca-min-hold-minutes = एंट्री के बाद प्रतीक्षा
+    .hint = पहले जोड़ से पहले एंट्री के बाद के मिनट
+    .unit = मि
+config-trader-dca-size-multipliers = DCA आकार
+    .hint = हर जोड़ क्या खरीदता है, पहली खरीद के गुणक के रूप में
+    .unit = ×
 config-trader-enabled = चालू
     .hint = ट्रेडिंग सिस्टम का मास्टर स्विच
 config-trader-entry-check-concurrency = एंट्री जाँच समवर्तिता

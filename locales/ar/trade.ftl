@@ -49,7 +49,7 @@ trade-sell-input = نسبة مخصصة
 trade-add-title = إضافة إلى المركز
 trade-add-subtitle = DCA في المركز الحالي
 trade-add-confirm = إضافة إلى المركز
-trade-add-hint = اتركه فارغًا لاستخدام حجم DCA المضبوط
+trade-add-hint = اتركه فارغًا لإضافة خطوة DCA التالية للمركز، وإلا فأول شراء له، وإلا فحجم الصفقة
 trade-amount-input = مبلغ مخصص
     .placeholder = أدخل مبلغ { -sol }
 

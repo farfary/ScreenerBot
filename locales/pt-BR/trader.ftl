@@ -376,28 +376,34 @@ trader-strategy-priority = Prioridade { $priority }
 
 trader-dca-title = Dollar-cost averaging (DCA)
 trader-dca-subtitle = Faz aportes automáticos em posições no prejuízo para reduzir o preço médio de entrada
-trader-dca-threshold-impact = Compra mais quando a posição cai { $value }% em relação à entrada
-trader-dca-threshold-hint = A queda desde a entrada na qual o DCA compra mais (10 = DCA em -10%)
-trader-dca-count-impact =
-    { $count ->
-        [one] No máximo uma entrada extra por posição
-        [many] No máximo { $count } entradas extras por posição
-       *[other] No máximo { $count } entradas extras por posição
-    }
-trader-dca-size-impact = Cada entrada extra compra { $amount }
+trader-dca-measure-average = Entrada média
+trader-dca-measure-first-entry = Primeira entrada
+trader-dca-step = Aporte { $step }
+trader-dca-drop-label = Queda de preço do aporte { $step }
+trader-dca-size-label = Tamanho do aporte { $step }, vezes a primeira compra
+trader-dca-drop-caption = Queda de preço
+trader-dca-size-caption = Compra × primeira compra
+trader-dca-add-step = Adicionar nível
+trader-dca-remove-step = Remover aporte { $step }
+trader-dca-step-amount = = { $amount }
+trader-dca-step-below-minimum = Abaixo da operação mínima de { $minimum }: este aporte não é enviado
+trader-dca-error-drop-range = Cada queda deve estar entre { $min }% e { $max }%
+trader-dca-error-size-range = Cada tamanho deve estar entre { $min }× e { $max }× a primeira compra
+trader-dca-error-order = Medido a partir da primeira entrada, cada aporte precisa de uma queda mais funda que o anterior
 trader-dca-cooldown-impact = Pelo menos { $span } entre entradas extras
-trader-dca-example =
-    { $count ->
-        [one] Compra de { $initial } → a -{ $threshold }%, aporte de { $add }, uma vez
-        [many] Compra de { $initial } → cada -{ $threshold }% adicional aporta { $add }, até { $count } vezes
-       *[other] Compra de { $initial } → cada -{ $threshold }% adicional aporta { $add }, até { $count } vezes
+trader-dca-min-hold-impact =
+    { $minutes ->
+        [0] O primeiro aporte pode vir logo após a entrada
+       *[other] O primeiro aporte espera pelo menos { $span } após a entrada
     }
+trader-dca-capacity = O máximo que esta posição pode ter: { $amount } ({ $multiple }× a primeira compra)
 trader-dca-info-title = Sobre a estratégia de DCA
 trader-dca-info-subtitle = Pontos importantes ao usar DCA
 trader-dca-how-title = Como o DCA funciona
-trader-dca-how-trigger = <strong>Gatilho:</strong> a posição cai abaixo do limite de DCA (ex.: -10%)
+trader-dca-how-trigger = <strong>Gatilho:</strong> o preço cai abaixo do próximo nível, medido a partir da entrada média ou da primeira
 trader-dca-how-action = <strong>Ação:</strong> aporta mais { -sol } para reduzir o custo base médio
-trader-dca-how-repeat = <strong>Repetição:</strong> pode fazer DCA várias vezes, conforme a contagem máxima
+trader-dca-how-repeat = <strong>Escada:</strong> cada aporte passa ao próximo nível; os aportes param quando todos os níveis são usados
+trader-dca-how-pause = <strong>Pausas:</strong> nenhum aporte enquanto o anterior está sendo liquidado ou enquanto o limite de perdas bloqueia novas entradas
 trader-dca-risk-title = Avisos de risco
 trader-dca-risk-exposure = <strong>Maior exposição:</strong> o DCA aumenta o capital total em risco por posição
 trader-dca-risk-knife = <strong>Faca caindo:</strong> o DCA não ajuda se o token continuar em tendência de queda

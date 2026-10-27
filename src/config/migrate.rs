@@ -23,15 +23,17 @@
 //! stop-loss share) move into `[trader]` the same way, and the auto-trader
 //! partial-exit switch is retired while the stop-loss behaviour the document
 //! ran with is kept. The single ROI target of `[trader]` becomes the one step of
-//! the take-profit ladder, selling the whole position as it did. Every move is
-//! one row of [`RELOCATIONS`], applied by [`relocate_legacy_layout`] to the TOML
-//! file and to a JSON import alike.
+//! the take-profit ladder, selling the whole position as it did. The uniform DCA rule of
+//! `[trader]` (one drop, one size and a count) becomes the DCA ladder, one equal step per
+//! counted add, measured from the average entry as it was. Every move is one row of
+//! [`RELOCATIONS`], applied by [`relocate_legacy_layout`] to the TOML file and to a JSON
+//! import alike.
 //!
-//! The same pass rewrites the stored time-override unit to its canonical name: an alias
-//! or another letter case becomes the lowercase unit name, and a name that matches no
-//! unit becomes hours, the unit the exit monitor has always read it as. The typed
-//! schema refuses such a name on every write, so only a stored document reaches this
-//! tolerance.
+//! The same pass rewrites every stored strict name ([`STRICT_NAMES`]: the time-override
+//! unit and the DCA basis) to its canonical spelling: an alias or another letter case
+//! becomes the lowercase name, and a name that matches nothing becomes the value the
+//! trader has always read it as. The typed schema refuses such a name on every write, so
+//! only a stored document reaches this tolerance.
 //!
 //! A file that omits a key ran with that key's default at the time. When a
 //! default changes, [`ImpliedDefaults`] writes the earlier default into a
@@ -41,7 +43,7 @@
 use serde::Deserialize;
 use serde_json::{Map, Value};
 
-use super::schemas::{Config, TimeUnit};
+use super::schemas::{Config, DcaMeasureFrom, TimeUnit};
 use super::{Error, Result};
 
 /// Legacy `[ai]` section. Every field is optional so an absent key never
@@ -434,6 +436,43 @@ enum RelocationNode {
         item: f64,
         bounds: (f64, f64),
     },
+    /// One value that became every item of a list, once per step another legacy leaf
+    /// counted: stored at `to` as `count` copies of the value passed through `convert`
+    /// and clamped into `bounds`. The count leaf is read, never moved (a later row drops it);
+    /// a document without it ran with `absent_count`. A document that holds the count
+    /// but not the value ran with `absent_value`, so the row fires for it too. A count
+    /// above `max_items` is cut to it with a warning. When `pair`, the list read in step
+    /// with this one, is already stored, the list takes its length instead, so the two
+    /// stay equal. The migrated rule never spends more than the legacy one: `switch` is
+    /// turned off when a count of zero stopped every step (the list gets one item), and,
+    /// with a warning, when the clamp makes the step add sooner or buy more than the
+    /// legacy value did, as `adds_more(legacy, migrated)` judges it.
+    Repeated {
+        count: &'static [&'static str],
+        absent_count: u64,
+        absent_value: f64,
+        convert: fn(f64) -> f64,
+        bounds: (f64, f64),
+        max_items: usize,
+        pair: &'static [&'static str],
+        switch: &'static [&'static str],
+        adds_more: fn(f64, f64) -> bool,
+    },
+}
+
+impl RelocationNode {
+    /// The legacy value a row moves when `doc` lacks its node: for a repeated list, the
+    /// value the document ran with when it holds only the count leaf.
+    fn implied_value<T: ConfigTree>(self, doc: &T) -> Option<T> {
+        match self {
+            RelocationNode::Repeated {
+                count,
+                absent_value,
+                ..
+            } => node_at(doc, count).map(|_| T::from_f64(absent_value)),
+            RelocationNode::Table | RelocationNode::Leaf | RelocationNode::ListOfOne { .. } => None,
+        }
+    }
 }
 
 /// One relocation of a legacy node. `to` names the destination, created when
@@ -460,7 +499,85 @@ const STOP_LOSS_ALLOWANCE: &[&str] = &["trader", "stop_loss_allow_partial"];
 
 /// Where the time-override unit is stored; [`relocate_legacy_layout`] rewrites it to
 /// its canonical name.
-pub(crate) const TIME_OVERRIDE_UNIT: &[&str] = &["trader", "time_override_unit"];
+const TIME_OVERRIDE_UNIT: &[&str] = &["trader", "time_override_unit"];
+
+/// Where the DCA basis is stored; [`relocate_legacy_layout`] rewrites it to its
+/// canonical name.
+const DCA_MEASURE_FROM: &[&str] = &["trader", "dca_measure_from"];
+
+/// The retired count of uniform DCA adds, read by both rows that build the ladder from
+/// it and dropped after them.
+const LEGACY_DCA_COUNT: &[&str] = &["trader", "dca_max_count"];
+
+/// The two lists of the DCA ladder, read in step, and the switch of automatic adds.
+const DCA_LEVELS: &[&str] = &["trader", "dca_levels_pct"];
+const DCA_SIZE_MULTIPLIERS: &[&str] = &["trader", "dca_size_multipliers"];
+const DCA_ENABLED: &[&str] = &["trader", "dca_enabled"];
+
+/// What the retired uniform DCA rule defaulted to when its keys were absent: two adds of
+/// half the first buy, each 10% below the average entry.
+const LEGACY_DCA_COUNT_DEFAULT: u64 = 2;
+const LEGACY_DCA_THRESHOLD_DEFAULT: f64 = -10.0;
+const LEGACY_DCA_SIZE_PERCENTAGE_DEFAULT: f64 = 50.0;
+
+/// A retired DCA threshold as a ladder drop of its magnitude. The retired rule added
+/// while the P&L was below the signed threshold, so a positive one, which validation
+/// refused, fired below that profit; it migrates to the loss of the same size, which
+/// never adds sooner.
+fn legacy_dca_drop(threshold_pct: f64) -> f64 {
+    -threshold_pct.abs()
+}
+
+/// Whether a migrated drop fires sooner than the retired threshold did: the retired rule
+/// added below `threshold_pct`, the ladder step adds below `drop_pct`.
+fn dca_drop_adds_more(threshold_pct: f64, drop_pct: f64) -> bool {
+    drop_pct > threshold_pct
+}
+
+/// A retired DCA size, a percent of the first buy, as a ladder multiple of it.
+fn legacy_dca_multiple(size_percentage: f64) -> f64 {
+    size_percentage / 100.0
+}
+
+/// Whether a migrated multiple buys more than the retired size percentage did.
+fn dca_multiple_adds_more(size_percentage: f64, multiple: f64) -> bool {
+    multiple > legacy_dca_multiple(size_percentage)
+}
+
+/// A leaf the schema types as a strict name: every writer refuses a name it does not
+/// know, and [`relocate_legacy_layout`] rewrites a stored name to its canonical
+/// spelling, `fallback` for one that names nothing.
+pub(crate) struct StrictName {
+    path: &'static [&'static str],
+    names: &'static [&'static str],
+    canonical: fn(&str) -> Option<&'static str>,
+    fallback: &'static str,
+}
+
+fn canonical_time_unit_name(name: &str) -> Option<&'static str> {
+    TimeUnit::from_name(name).map(TimeUnit::as_str)
+}
+
+fn canonical_dca_basis_name(name: &str) -> Option<&'static str> {
+    DcaMeasureFrom::from_name(name).map(DcaMeasureFrom::as_str)
+}
+
+/// Every strict-name leaf, with the value the trader has always read an unknown stored
+/// name as: hours for the time-override unit, the average entry for the DCA basis.
+const STRICT_NAMES: &[StrictName] = &[
+    StrictName {
+        path: TIME_OVERRIDE_UNIT,
+        names: super::schemas::TIME_UNIT_NAMES,
+        canonical: canonical_time_unit_name,
+        fallback: TimeUnit::Hours.as_str(),
+    },
+    StrictName {
+        path: DCA_MEASURE_FROM,
+        names: super::schemas::DCA_MEASURE_FROM_NAMES,
+        canonical: canonical_dca_basis_name,
+        fallback: DcaMeasureFrom::Average.as_str(),
+    },
+];
 
 /// Every legacy node and where it lives now, applied in order. Order matters:
 /// slippage leaves `swaps` before the rest of `swaps` moves.
@@ -547,19 +664,62 @@ const RELOCATIONS: &[Relocation] = &[
             ),
         },
     },
+    Relocation {
+        from: &["trader", "dca_threshold_pct"],
+        to: Some(DCA_LEVELS),
+        node: RelocationNode::Repeated {
+            count: LEGACY_DCA_COUNT,
+            absent_count: LEGACY_DCA_COUNT_DEFAULT,
+            absent_value: LEGACY_DCA_THRESHOLD_DEFAULT,
+            convert: legacy_dca_drop,
+            bounds: (
+                super::schemas::DCA_DROP_PCT_MIN,
+                super::schemas::DCA_DROP_PCT_MAX,
+            ),
+            max_items: super::schemas::DCA_MAX_STEPS,
+            pair: DCA_SIZE_MULTIPLIERS,
+            switch: DCA_ENABLED,
+            adds_more: dca_drop_adds_more,
+        },
+    },
+    Relocation {
+        from: &["trader", "dca_size_percentage"],
+        to: Some(DCA_SIZE_MULTIPLIERS),
+        node: RelocationNode::Repeated {
+            count: LEGACY_DCA_COUNT,
+            absent_count: LEGACY_DCA_COUNT_DEFAULT,
+            absent_value: LEGACY_DCA_SIZE_PERCENTAGE_DEFAULT,
+            convert: legacy_dca_multiple,
+            bounds: (
+                super::schemas::DCA_SIZE_MULTIPLIER_MIN,
+                super::schemas::DCA_SIZE_MULTIPLIER_MAX,
+            ),
+            max_items: super::schemas::DCA_MAX_STEPS,
+            pair: DCA_LEVELS,
+            switch: DCA_ENABLED,
+            adds_more: dca_multiple_adds_more,
+        },
+    },
+    Relocation {
+        from: LEGACY_DCA_COUNT,
+        to: None,
+        node: RelocationNode::Leaf,
+    },
 ];
 
 /// Every relocation that keeps its node, as (legacy path, canonical path), with
 /// a list row's companion as a second destination of the same legacy path. A
 /// config import uses it to keep the current value of a destination an older
 /// export does not carry, and to follow a selected legacy section to the
-/// sections its values feed.
+/// sections its values feed. A repeated-list row's switch is not a destination: the
+/// row writes it only to turn automatic adds off, and an import that lacks it takes
+/// the section default.
 pub(crate) fn relocation_destinations(
 ) -> impl Iterator<Item = (&'static [&'static str], &'static [&'static str])> {
     RELOCATIONS.iter().flat_map(|relocation| {
         let companion = match relocation.node {
             RelocationNode::ListOfOne { companion, .. } => Some(companion),
-            RelocationNode::Table | RelocationNode::Leaf => None,
+            RelocationNode::Table | RelocationNode::Leaf | RelocationNode::Repeated { .. } => None,
         };
         relocation
             .to
@@ -593,6 +753,8 @@ pub(crate) trait ConfigTree: Clone + Sized {
     fn as_str(&self) -> Option<&str>;
     fn from_string(value: String) -> Self;
     fn list_of(items: Vec<Self>) -> Self;
+    /// The number of items of a list; `None` when the node is not a list.
+    fn list_len(&self) -> Option<usize>;
 }
 
 impl ConfigTree for toml::Value {
@@ -655,6 +817,9 @@ impl ConfigTree for toml::Value {
     fn list_of(items: Vec<Self>) -> Self {
         toml::Value::Array(items)
     }
+    fn list_len(&self) -> Option<usize> {
+        self.as_array().map(Vec::len)
+    }
 }
 
 impl ConfigTree for Value {
@@ -713,6 +878,9 @@ impl ConfigTree for Value {
     fn list_of(items: Vec<Self>) -> Self {
         Value::Array(items)
     }
+    fn list_len(&self) -> Option<usize> {
+        self.as_array().map(Vec::len)
+    }
 }
 
 /// The node at `path`, or `None` when a segment is absent or a parent on the
@@ -760,8 +928,13 @@ pub(crate) fn read_legacy_partial_exit_switch<T: ConfigTree>(doc: &T) -> Result<
 ///   drops the switch, and fires for a document with no legacy node at all.
 ///   Once persisted, the document carries the share and the rule never fires
 ///   again.
-/// - The stored time-override unit is rewritten to its canonical name, hours for a
-///   name that matches no unit ([`canonical_time_unit`]).
+/// - A repeated-list row writes its value once per counted step, or once per item of
+///   its stored pair list, and fires as well for a document that holds only the count;
+///   the count leaf is read, then dropped by its own row. A count of zero, or a clamp
+///   that would add sooner or buy more than the legacy value, turns the row's switch
+///   off.
+/// - Every stored strict name is rewritten to its canonical spelling, its fallback for
+///   a name that matches nothing ([`canonical_strict_names`]).
 pub(crate) fn relocate_legacy_layout<T: ConfigTree>(doc: &mut T) -> Result<bool> {
     let keep_full_stop_loss = node_at(doc, STOP_LOSS_PARTIAL_SHARE).is_none()
         && node_at(doc, STOP_LOSS_ALLOWANCE).and_then(T::as_bool) == Some(true)
@@ -777,7 +950,9 @@ pub(crate) fn relocate_legacy_layout<T: ConfigTree>(doc: &mut T) -> Result<bool>
         }
     }
     for relocation in RELOCATIONS {
-        let Some(legacy) = take_node(&mut working, relocation.from) else {
+        let Some(legacy) = take_node(&mut working, relocation.from)
+            .or_else(|| relocation.node.implied_value(&working))
+        else {
             continue;
         };
         match relocation.node {
@@ -836,10 +1011,64 @@ pub(crate) fn relocate_legacy_layout<T: ConfigTree>(doc: &mut T) -> Result<bool>
                     }
                 }
             }
+            RelocationNode::Repeated {
+                count,
+                absent_count,
+                convert,
+                bounds,
+                max_items,
+                pair,
+                switch,
+                adds_more,
+                ..
+            } => {
+                let source = relocation.from.join(".");
+                if legacy.table().is_some() {
+                    return Err(Error::ParseFailed {
+                        detail: format!("legacy {source} must be a value, not a table"),
+                    });
+                }
+                let steps = legacy_count(&working, count, absent_count, max_items)?;
+                let items = node_at(&working, pair)
+                    .and_then(T::list_len)
+                    .filter(|len| *len > 0)
+                    .unwrap_or(steps.max(1));
+                if let Some((leaf, section)) = relocation.to.and_then(<[_]>::split_last) {
+                    let destination = table_at(&mut working, section, &source)?;
+                    if T::get(destination, leaf).is_none() {
+                        let stored = legacy.as_f64();
+                        let item = clamped_into(converted(legacy, convert), bounds, &source);
+                        let raised = stored
+                            .zip(item.as_f64())
+                            .filter(|(stored, migrated)| adds_more(*stored, *migrated));
+                        T::insert(
+                            destination,
+                            (*leaf).to_owned(),
+                            T::list_of(vec![item; items]),
+                        );
+                        if let Some((stored, migrated)) = raised {
+                            crate::logger::warning(
+                                crate::logger::LogTag::System,
+                                &format!(
+                                    "Legacy {source} = {stored} migrated as {migrated} would add \
+                                     sooner or buy more than before; {} turned off",
+                                    switch.join(".")
+                                ),
+                            );
+                        }
+                        if steps == 0 || raised.is_some() {
+                            if let Some((leaf, section)) = switch.split_last() {
+                                let destination = table_at(&mut working, section, &source)?;
+                                T::insert(destination, (*leaf).to_owned(), T::from_bool(false));
+                            }
+                        }
+                    }
+                }
+            }
         }
         changed = true;
     }
-    if canonical_time_unit(&mut working) {
+    if canonical_strict_names(&mut working) {
         changed = true;
     }
     if changed {
@@ -848,44 +1077,107 @@ pub(crate) fn relocate_legacy_layout<T: ConfigTree>(doc: &mut T) -> Result<bool>
     Ok(changed)
 }
 
-/// Rewrite the time-override unit of `doc` to its canonical lowercase name: an alias or
-/// another letter case names its unit, and a name that matches no unit becomes hours,
-/// with a warning naming the stored value. Returns `true` when the stored name changed.
-/// A value that is not a string is left for the typed load to refuse.
-fn canonical_time_unit<T: ConfigTree>(doc: &mut T) -> bool {
-    let Some(stored) = node_at(doc, TIME_OVERRIDE_UNIT)
-        .and_then(T::as_str)
-        .map(str::to_owned)
-    else {
-        return false;
+/// Rewrite every strict-name leaf of `doc` ([`STRICT_NAMES`]) to its canonical
+/// lowercase name: an alias or another letter case names its value, and a name that
+/// matches nothing becomes the leaf's fallback, with a warning naming the stored value.
+/// Returns `true` when a stored name changed. A value that is not a string is left for
+/// the typed load to refuse.
+fn canonical_strict_names<T: ConfigTree>(doc: &mut T) -> bool {
+    let mut changed = false;
+    for strict in STRICT_NAMES {
+        let Some(stored) = node_at(doc, strict.path)
+            .and_then(T::as_str)
+            .map(str::to_owned)
+        else {
+            continue;
+        };
+        let canonical = (strict.canonical)(&stored).unwrap_or_else(|| {
+            crate::logger::warning(
+                crate::logger::LogTag::System,
+                &format!(
+                    "{} = \"{stored}\" names no known value; migrated as {}",
+                    strict.path.join("."),
+                    strict.fallback
+                ),
+            );
+            strict.fallback
+        });
+        if stored == canonical {
+            continue;
+        }
+        let Some((leaf, section)) = strict.path.split_last() else {
+            continue;
+        };
+        let Some(table) = node_at_mut(doc, section).and_then(T::table_mut) else {
+            continue;
+        };
+        T::insert(
+            table,
+            (*leaf).to_owned(),
+            T::from_string(canonical.to_owned()),
+        );
+        changed = true;
+    }
+    changed
+}
+
+/// Why `doc` holds a strict-name leaf no writer may store, as the path and the reason;
+/// `None` when every strict-name leaf it holds names a known value. A writer checks
+/// this before relocation, whose tolerance is only for a stored config file.
+pub(crate) fn refused_strict_name<T: ConfigTree>(doc: &T) -> Option<String> {
+    STRICT_NAMES.iter().find_map(|strict| {
+        let node = node_at(doc, strict.path)?;
+        let path = strict.path.join(".");
+        let expected = strict.names.join(", ");
+        match node.as_str() {
+            Some(name) if (strict.canonical)(name).is_some() => None,
+            Some(name) => Some(format!("{path}: \"{name}\" is not one of {expected}")),
+            None => Some(format!("{path}: must be one of {expected}")),
+        }
+    })
+}
+
+/// The number of steps the count leaf at `count` of `doc` holds, `absent` when the
+/// document lacks it, cut to `max_items` with a warning. Fails when the leaf is not a
+/// whole, non-negative number.
+fn legacy_count<T: ConfigTree>(
+    doc: &T,
+    count: &[&str],
+    absent: u64,
+    max_items: usize,
+) -> Result<usize> {
+    let source = count.join(".");
+    let steps = match node_at(doc, count) {
+        None => absent,
+        Some(node) => match node.as_f64() {
+            Some(value) if value.is_finite() && value >= 0.0 && value.fract() == 0.0 => {
+                value as u64
+            }
+            _ => {
+                return Err(Error::ParseFailed {
+                    detail: format!("legacy {source} must be a whole number of steps"),
+                })
+            }
+        },
     };
-    let unit = TimeUnit::from_name(&stored).unwrap_or_else(|| {
-        let fallback = TimeUnit::default();
+    let steps = usize::try_from(steps).unwrap_or(usize::MAX);
+    if steps > max_items {
         crate::logger::warning(
             crate::logger::LogTag::System,
-            &format!(
-                "{} = \"{stored}\" names no time unit; migrated as {}",
-                TIME_OVERRIDE_UNIT.join("."),
-                fallback.as_str()
-            ),
+            &format!("Legacy {source} = {steps} is above {max_items}; migrated as {max_items}"),
         );
-        fallback
-    });
-    if stored == unit.as_str() {
-        return false;
+        return Ok(max_items);
     }
-    let Some((leaf, section)) = TIME_OVERRIDE_UNIT.split_last() else {
-        return false;
-    };
-    let Some(table) = node_at_mut(doc, section).and_then(T::table_mut) else {
-        return false;
-    };
-    T::insert(
-        table,
-        (*leaf).to_owned(),
-        T::from_string(unit.as_str().to_owned()),
-    );
-    true
+    Ok(steps)
+}
+
+/// `value` passed through `convert`; a value that is not a number is left for the typed
+/// load to refuse.
+fn converted<T: ConfigTree>(value: T, convert: fn(f64) -> f64) -> T {
+    match value.as_f64() {
+        Some(number) => T::from_f64(convert(number)),
+        None => value,
+    }
 }
 
 /// The node at `path`, mutable; `None` when a segment is absent or a parent on the way
@@ -1903,6 +2195,129 @@ urls = ["https://canonical.fixture.invalid/"]
         assert_eq!(
             document, original,
             "a value that is not a name is left to the typed load"
+        );
+    }
+
+    #[test]
+    fn a_json_document_takes_the_dca_ladder_and_the_canonical_basis() {
+        let mut document = serde_json::json!({ "trader": {
+            "dca_threshold_pct": -12.0,
+            "dca_max_count": 3,
+            "dca_size_percentage": 50.0,
+            "dca_measure_from": "First_Entry"
+        } });
+        assert!(relocate_legacy_layout(&mut document).expect("migrate"));
+        assert_eq!(
+            document,
+            serde_json::json!({ "trader": {
+                "dca_levels_pct": [-12.0, -12.0, -12.0],
+                "dca_size_multipliers": [0.5, 0.5, 0.5],
+                "dca_measure_from": "first_entry"
+            } })
+        );
+        assert!(!relocate_legacy_layout(&mut document).expect("second pass"));
+    }
+
+    #[test]
+    fn a_dca_count_of_zero_turns_the_ladder_off() {
+        let mut document = serde_json::json!({ "trader": {
+            "dca_enabled": true,
+            "dca_threshold_pct": -10.0,
+            "dca_max_count": 0
+        } });
+        assert!(relocate_legacy_layout(&mut document).expect("migrate"));
+        assert_eq!(
+            document,
+            serde_json::json!({ "trader": {
+                "dca_enabled": false,
+                "dca_levels_pct": [-10.0],
+                "dca_size_multipliers": [0.5]
+            } })
+        );
+    }
+
+    #[test]
+    fn a_dca_clamp_that_would_spend_more_turns_the_ladder_off() {
+        for (threshold, size, levels, multipliers) in [
+            (-100.0, 50.0, [-95.0, -95.0], [0.5, 0.5]),
+            (-10.0, 5.0, [-10.0, -10.0], [0.1, 0.1]),
+        ] {
+            let mut document = serde_json::json!({ "trader": {
+                "dca_enabled": true,
+                "dca_threshold_pct": threshold,
+                "dca_size_percentage": size
+            } });
+            assert!(relocate_legacy_layout(&mut document).expect("migrate"));
+            assert_eq!(
+                document,
+                serde_json::json!({ "trader": {
+                    "dca_enabled": false,
+                    "dca_levels_pct": levels,
+                    "dca_size_multipliers": multipliers
+                } }),
+                "threshold {threshold}, size {size}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_dca_clamp_that_spends_less_keeps_the_ladder_on() {
+        let mut document = serde_json::json!({ "trader": {
+            "dca_enabled": true,
+            "dca_threshold_pct": 15.0,
+            "dca_size_percentage": 600.0
+        } });
+        assert!(relocate_legacy_layout(&mut document).expect("migrate"));
+        assert_eq!(
+            document,
+            serde_json::json!({ "trader": {
+                "dca_enabled": true,
+                "dca_levels_pct": [-15.0, -15.0],
+                "dca_size_multipliers": [5.0, 5.0]
+            } })
+        );
+    }
+
+    #[test]
+    fn a_repeated_list_switch_is_no_import_destination() {
+        assert!(relocation_destinations().all(|(_, to)| to != DCA_ENABLED));
+    }
+
+    #[test]
+    fn a_misshapen_dca_count_is_refused_without_touching_the_document() {
+        for count in [
+            serde_json::json!(-1),
+            serde_json::json!(1.5),
+            serde_json::json!("2"),
+        ] {
+            let original = serde_json::json!({ "trader": {
+                "dca_threshold_pct": -10.0,
+                "dca_max_count": count
+            } });
+            let mut document = original.clone();
+            let err = relocate_legacy_layout(&mut document).unwrap_err();
+            assert!(matches!(err, Error::ParseFailed { .. }));
+            assert_eq!(document, original);
+        }
+    }
+
+    #[test]
+    fn a_writer_refuses_every_strict_name_it_does_not_know() {
+        for (path, known) in [
+            ("time_override_unit", "minutes"),
+            ("dca_measure_from", "first_entry"),
+        ] {
+            let accepted = serde_json::json!({ "trader": { path: known } });
+            assert_eq!(refused_strict_name(&accepted), None, "{path}");
+            for refused in [serde_json::json!("fortnights"), serde_json::json!(3)] {
+                let document = serde_json::json!({ "trader": { path: refused } });
+                let reason = refused_strict_name(&document).expect("refused");
+                assert!(reason.starts_with(&format!("trader.{path}")), "{reason}");
+            }
+        }
+        assert_eq!(
+            refused_strict_name(&serde_json::json!({ "trader": {} })),
+            None
         );
     }
 

@@ -1048,15 +1048,17 @@ config-trader-dca-cooldown-minutes = Пауза DCA
     .unit = хв
 config-trader-dca-enabled = Увімкнути DCA
     .hint = Увімкнути усереднення (Dollar Cost Averaging) для позицій
-config-trader-dca-max-count = Макс. кількість DCA
-    .hint = Максимальна кількість додаткових входів DCA на позицію
-    .unit = входів
-config-trader-dca-size-percentage = Розмір DCA,
-    .hint = Розмір кожного входу DCA у % від початкового розміру позиції
+config-trader-dca-levels-pct = Рівні DCA
+    .hint = Наскільки ціна має впасти нижче входу, щоб спрацювала кожна докупівля (10 = докупівля при −10%)
     .unit = %
-config-trader-dca-threshold-pct = Поріг DCA,
-    .hint = Входити в DCA, коли позиція впала на цей % (-10 = DCA за -10%)
-    .unit = %
+config-trader-dca-measure-from = Вимірювати падіння від
+    .hint = Ціна входу, від якої вимірюється падіння кожного рівня: середній вхід або перший вхід
+config-trader-dca-min-hold-minutes = Очікування після входу
+    .hint = Хвилини після входу до першої докупівлі
+    .unit = хв
+config-trader-dca-size-multipliers = Розміри DCA
+    .hint = Скільки купує кожна докупівля, кратно першій покупці
+    .unit = ×
 config-trader-enabled = Увімкнено
     .hint = Головний перемикач торгової системи
 config-trader-entry-check-concurrency = Паралельність перевірок входу

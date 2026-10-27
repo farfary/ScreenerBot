@@ -290,6 +290,7 @@ errors-trade-blacklisted = टोकन { $mint } ब्लैकलिस्ट
 errors-trade-slippage-invalid = स्लिपेज { $slippage }% { $minimum }% और { $maximum }% के बीच होना चाहिए
 errors-trade-percentage-invalid = बिक्री प्रतिशत { $percentage } (0, 100] के भीतर होना चाहिए
 errors-trade-percentage-required = आंशिक बिक्री के लिए बेचे जाने वाले पोज़िशन का प्रतिशत ज़रूरी है
+errors-trade-add-size-required = { $mint } की पोज़िशन में जोड़ने के लिए { -sol } में राशि ज़रूरी है
 errors-trade-record-failed = मैन्युअल ट्रेड दर्ज नहीं हो सका
 errors-trade-task-cancelled = ऐप बंद हो रहा है, इसलिए मैन्युअल ट्रेड जवाब देने से पहले रुक गया; उसका परिणाम पोज़िशन में है
 errors-trade-no-open-position = टोकन { $mint } की कोई खुली पोज़िशन नहीं है

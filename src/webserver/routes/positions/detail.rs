@@ -200,7 +200,19 @@ async fn map_position_to_detail(position: &positions::Position) -> PositionDetai
         peak_since_last_buy: peak_since_last_buy(position),
         trailing_stop_active,
         break_even_active,
+        default_add_size_native: default_add_size_native(position),
     }
+}
+
+/// The size a manual add of `position` presets, from the one owner the add route and
+/// the agent add tool share; `None` once the position is closed.
+fn default_add_size_native(position: &positions::Position) -> Option<f64> {
+    if !positions::state::is_position_open(position) {
+        return None;
+    }
+    let levels = crate::trader::config::get_dca_levels();
+    let trade_size = crate::trader::config::get_trade_size_native();
+    crate::trader::evaluators::default_add_size_native(position, &levels, trade_size)
 }
 
 /// Which stops measured from the basis peak the exit monitor evaluates, as

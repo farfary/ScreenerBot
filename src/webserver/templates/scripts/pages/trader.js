@@ -465,21 +465,21 @@ function createLifecycle() {
     const tradeSize = $("#trade-size");
     const entrySizes = $("#entry-sizes");
     const dcaEnabled = $("#dca-enabled");
-    const dcaThreshold = $("#dca-threshold");
-    const dcaMaxCount = $("#dca-max-count");
-    const dcaSize = $("#dca-size");
+    const dcaMeasureFrom = $("#dca-measure-from");
+    const dcaLevels = $("#dca-levels");
     const dcaCooldown = $("#dca-cooldown");
+    const dcaMinHold = $("#dca-min-hold");
     const closeCooldown = $("#close-cooldown");
     const entryConcurrency = $("#entry-concurrency");
 
     if (maxPositions) maxPositions.value = trader.max_open_positions || 2;
     if (tradeSize) tradeSize.value = trader.trade_size_sol || 0.005;
     if (entrySizes) entrySizes.value = (trader.entry_sizes || [0.005, 0.01, 0.02, 0.05]).join(", ");
-    if (dcaEnabled) dcaEnabled.checked = trader.dca_enabled || false;
-    if (dcaThreshold) dcaThreshold.value = displayValue(LOSS_MAGNITUDE, trader.dca_threshold_pct ?? -10);
-    if (dcaMaxCount) dcaMaxCount.value = trader.dca_max_count || 2;
-    if (dcaSize) dcaSize.value = trader.dca_size_percentage || 50;
-    if (dcaCooldown) dcaCooldown.value = trader.dca_cooldown_minutes || 30;
+    if (dcaEnabled) dcaEnabled.checked = trader.dca_enabled === true;
+    if (dcaMeasureFrom) dcaMeasureFrom.value = trader.dca_measure_from;
+    if (dcaLevels) renderLevels(dcaLevels, trader.dca_levels_pct, trader.dca_size_multipliers);
+    if (dcaCooldown) dcaCooldown.value = trader.dca_cooldown_minutes;
+    if (dcaMinHold) dcaMinHold.value = trader.dca_min_hold_minutes;
     if (closeCooldown) closeCooldown.value = trader.position_close_cooldown_minutes ?? 15;
     if (entryConcurrency) entryConcurrency.value = trader.entry_check_concurrency ?? 10;
   }
@@ -1308,10 +1308,13 @@ function createLifecycle() {
       });
     }
 
-    // DCA fields: each one's computed line
-    for (const id of ["#dca-threshold", "#dca-max-count", "#dca-size", "#dca-cooldown"]) {
+    // DCA fields: the ladder's amounts and the tab's computed lines. The ladder's rows
+    // are redrawn on add and remove, so the ladder element itself carries the listener.
+    for (const id of ["#dca-levels", "#dca-cooldown", "#dca-min-hold"]) {
       addTrackedListener($(id), "input", () => examples.updateDcaExample());
     }
+    // The basis decides whether the ladder's steps must deepen.
+    addTrackedListener($("#dca-measure-from"), "change", () => examples.updateDcaExample());
 
     // Realized-window segmented control
     for (const btn of $$("#stats-period .stats-period-btn")) {

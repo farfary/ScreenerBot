@@ -142,22 +142,27 @@ pub async fn manual_add_handler(Json(req): Json<ManualAddRequest>) -> Response {
         Ok(v) => v,
         Err(error) => return trader_failure(&error),
     };
-    // Default add size = the configured DCA size (a fraction of the trade size). The
-    // fraction must come from `trader.dca_size_percentage`, never a hardcoded 0.5.
-    let size = match req.size_sol {
-        Some(v) => match guard::validate_size(v) {
-            Ok(size) => size,
-            Err(error) => return trader_failure(&error),
-        },
-        None => {
-            with_config(|cfg| cfg.trader.trade_size_sol * (cfg.trader.dca_size_percentage / 100.0))
-        }
+    let requested = match req.size_sol.map(guard::validate_size).transpose() {
+        Ok(size) => size,
+        Err(error) => return trader_failure(&error),
     };
     if let Err(error) =
         guard::preflight(ManualTradeKind::Add, &req.mint, BlacklistPolicy::Enforce).await
     {
         return trader_failure(&error);
     }
+    // An add that names no size takes the position's default add size, the amount the
+    // dashboard presets from the position's details.
+    let size = match requested {
+        Some(size) => size,
+        None => match guard::default_add_size(&req.mint)
+            .await
+            .and_then(guard::validate_size)
+        {
+            Ok(size) => size,
+            Err(error) => return trader_failure(&error),
+        },
+    };
     logger::info(
         LogTag::Webserver,
         &format!("mint={} size_sol={}", req.mint, size),

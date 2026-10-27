@@ -81,12 +81,8 @@ fn buy_message(target: crate::positions::BuyTarget, size: f64) -> String {
 
 /// Agent trades are capped at the configured trade size: an agent can size down,
 /// never past what the owner set the auto trader to risk per trade.
-fn checked_size(
-    size_native: Option<f64>,
-    default_native: f64,
-) -> Result<f64, crate::agent_control::Error> {
+fn checked_size(size: f64) -> Result<f64, crate::agent_control::Error> {
     let cap = with_config(|cfg| cfg.trader.trade_size_sol);
-    let size = size_native.unwrap_or(default_native);
     if !size.is_finite() || size <= 0.0 {
         return Err(crate::agent_control::Error::InvalidParameters {
             detail: "Amount must be greater than 0".to_owned(),
@@ -129,7 +125,7 @@ impl Tool for BuyTokenTool {
                  without one the buy opens it, with one (archived included) the buy is added \
                  to it, and an archived one returns to the open positions; the result message \
                  says which. Refused while the emergency stop is active or for blacklisted \
-                 tokens. The size is capped at trader.trade_size_sol."
+                 tokens. An amount above trader.trade_size_sol is refused."
                 .to_owned(),
             category: ToolCategory::Trading,
             parameters: json!({
@@ -160,8 +156,9 @@ impl Tool for BuyTokenTool {
             Err(e) => return ToolResult::error(format!("Invalid parameters: {e}")),
         };
         let size = match checked_size(
-            params.amount_native,
-            with_config(|cfg| cfg.trader.trade_size_sol),
+            params
+                .amount_native
+                .unwrap_or_else(|| with_config(|cfg| cfg.trader.trade_size_sol)),
         ) {
             Ok(size) => size,
             Err(crate::agent_control::Error::InvalidParameters { detail }) => {
@@ -214,7 +211,8 @@ impl Tool for AddToPositionTool {
         ToolDefinition {
             name: "add_to_position".to_owned(),
             description: "Add to (DCA into) an open position with a real on-chain buy. The size \
-                 defaults to the configured DCA size and is capped at trader.trade_size_sol."
+                 defaults to the position's next DCA ladder step. An amount above \
+                 trader.trade_size_sol is refused; name a smaller amount_native."
                 .to_owned(),
             category: ToolCategory::Trading,
             parameters: json!({
@@ -223,7 +221,7 @@ impl Tool for AddToPositionTool {
                     "mint_address": { "type": "string", "description": "Mint of the open position" },
                     "amount_native": {
                         "type": "number",
-                        "description": "SOL to add. Defaults to trader.trade_size_sol * trader.dca_size_percentage / 100."
+                        "description": "SOL to add. Defaults to the next DCA ladder step: its size multiplier (trader.dca_size_multipliers) times the position's first buy, the first buy once every step is used, or trader.trade_size_sol for a position imported from the wallet, which has no first buy."
                     },
                     "slippage_pct": slippage_schema()
                 },
@@ -239,9 +237,7 @@ impl Tool for AddToPositionTool {
             Ok(p) => p,
             Err(e) => return ToolResult::error(format!("Invalid parameters: {e}")),
         };
-        let dca_default =
-            with_config(|cfg| cfg.trader.trade_size_sol * (cfg.trader.dca_size_percentage / 100.0));
-        let size = match checked_size(params.amount_native, dca_default) {
+        let requested = match params.amount_native.map(checked_size).transpose() {
             Ok(size) => size,
             Err(crate::agent_control::Error::InvalidParameters { detail }) => {
                 return ToolResult::error(detail)
@@ -261,6 +257,23 @@ impl Tool for AddToPositionTool {
         {
             return ToolResult::error(e.to_string());
         }
+        let size = match requested {
+            Some(size) => size,
+            None => match guard::default_add_size(&params.mint_address).await {
+                Ok(default) => {
+                    let cap = with_config(|cfg| cfg.trader.trade_size_sol);
+                    if default > cap {
+                        return ToolResult::error(format!(
+                            "The position's default add size is {default} SOL, above the \
+                             configured trade size of {cap} SOL (trader.trade_size_sol); \
+                             name amount_native at or below {cap} SOL"
+                        ));
+                    }
+                    default
+                }
+                Err(e) => return ToolResult::error(e.to_string()),
+            },
+        };
         let result = manual::manual_add(&params.mint_address, size, slippage).await;
         finish(
             result,

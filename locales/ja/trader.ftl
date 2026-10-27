@@ -354,24 +354,34 @@ trader-strategy-priority = 優先度 { $priority }
 
 trader-dca-title = ドルコスト平均法
 trader-dca-subtitle = 含み損のポジションに自動で追加購入し、平均エントリー価格を下げます
-trader-dca-threshold-impact = ポジションがエントリーから { $value }% 下落したら買い増します
-trader-dca-threshold-hint = DCA が買い増すエントリーからの下落率（10 = -10% で DCA）
-trader-dca-count-impact =
-    { $count ->
-       *[other] 1 ポジションにつき追加エントリーは最大 { $count } 回
-    }
-trader-dca-size-impact = 追加エントリーごとに { $amount } を購入
+trader-dca-measure-average = 平均エントリー
+trader-dca-measure-first-entry = 初回エントリー
+trader-dca-step = 追加 { $step }
+trader-dca-drop-label = 追加 { $step } の価格下落
+trader-dca-size-label = 追加 { $step } のサイズ（初回購入の倍率）
+trader-dca-drop-caption = 価格下落
+trader-dca-size-caption = 購入 × 初回購入
+trader-dca-add-step = レベルを追加
+trader-dca-remove-step = 追加 { $step } を削除
+trader-dca-step-amount = = { $amount }
+trader-dca-step-below-minimum = 最小取引額 { $minimum } を下回るため、この追加購入は送信されません
+trader-dca-error-drop-range = 各下落率は { $min }% から { $max }% の間にしてください
+trader-dca-error-size-range = 各サイズは初回購入の { $min }× から { $max }× の間にしてください
+trader-dca-error-order = 初回エントリーを基準にする場合、各追加は前回より深い下落が必要です
 trader-dca-cooldown-impact = 追加エントリーの間隔は最低 { $span }
-trader-dca-example =
-    { $count ->
-       *[other] { $initial } を購入 → さらに -{ $threshold }% 下落するごとに { $add } を追加（最大 { $count } 回）
+trader-dca-min-hold-impact =
+    { $minutes ->
+        [0] 初回の追加購入はエントリー直後から可能です
+       *[other] 初回の追加購入はエントリー後少なくとも { $span } 待ちます
     }
+trader-dca-capacity = このポジションの最大保有額：{ $amount }（初回購入の { $multiple }×）
 trader-dca-info-title = DCA ストラテジー情報
 trader-dca-info-subtitle = DCA 取引における重要な注意点
 trader-dca-how-title = DCA の仕組み
-trader-dca-how-trigger = <strong>トリガー:</strong> ポジションが DCA しきい値を下回る（例: -10%）
+trader-dca-how-trigger = <strong>トリガー：</strong>価格が次のレベルを下回ったとき（平均または初回エントリーから測定）
 trader-dca-how-action = <strong>アクション:</strong> { -sol } を追加して平均取得原価を下げる
-trader-dca-how-repeat = <strong>繰り返し:</strong> 最大回数まで複数回 DCA できる
+trader-dca-how-repeat = <strong>ラダー：</strong>追加ごとに次のレベルへ進み、すべてのレベルを使うと追加は止まります
+trader-dca-how-pause = <strong>一時停止：</strong>前回の追加購入が決済中の間、または損失上限が新規エントリーを止めている間は追加しません
 trader-dca-risk-title = リスクに関する警告
 trader-dca-risk-exposure = <strong>エクスポージャーの増加:</strong> DCA はポジションごとのリスク資金の合計を増やします
 trader-dca-risk-knife = <strong>落ちるナイフ:</strong> トークンが下落トレンドを続ける場合、DCA は効果がありません

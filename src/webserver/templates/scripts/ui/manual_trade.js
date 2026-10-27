@@ -98,6 +98,9 @@ async function fetchPosition(mint) {
       name: position.name || null,
       logo: position.logo_url || data?.token_info?.image_url || null,
       positionManagement: position.management || "auto_trader",
+      // What the backend adds when no size is sent: the next DCA ladder step's multiple
+      // of the first buy. Absent when the position has no first buy to size from.
+      defaultAddSize: position.default_add_size_native ?? null,
     };
   } catch {
     // No position, or the lookup failed — the trade still proceeds.
@@ -130,10 +133,8 @@ async function fetchTokenIdentity(mint) {
 /**
  * The trader's configured sizing, used to build the "Add to Position" presets.
  *
- * `trade_size_sol` x `dca_size_percentage` is exactly what the BACKEND adds when no
- * size is sent, so showing it as a preset means the user sees the amount they are
- * about to commit instead of confirming an invisible default. `entry_sizes` is the
- * configured quick-amount list. All read from config — never hardcoded, and resolved
+ * `trade_size_sol` sizes the multiplier presets when the position's size is unknown, and
+ * `entry_sizes` is the configured quick-amount list. All read from config — never hardcoded, and resolved
  * HERE so no page carries its own copy of the defaults (the tokens and positions pages
  * each fetched the section themselves and fell back to a hardcoded
  * `[0.005, 0.01, 0.02, 0.05]`, which silently drifts from the real config).
@@ -147,24 +148,17 @@ export async function fetchTraderDefaults() {
     // Config GET routes wrap the section in { data, timestamp }.
     const body = await requestManager.fetch("/api/config/trader", { priority: "high" });
     const tradeSize = Number(body?.data?.trade_size_sol);
-    const dcaPct = Number(body?.data?.dca_size_percentage);
     const entrySizes = body?.data?.entry_sizes;
 
     return {
       tradeSize: Number.isFinite(tradeSize) && tradeSize > 0 ? tradeSize : null,
-      dcaSize:
-        Number.isFinite(tradeSize) && tradeSize > 0
-          ? Number.isFinite(dcaPct) && dcaPct > 0
-            ? tradeSize * (dcaPct / 100)
-            : tradeSize
-          : null,
       entrySizes: Array.isArray(entrySizes)
         ? entrySizes.filter((size) => Number.isFinite(size) && size > 0)
         : [],
     };
   } catch {
     // The dialog still opens — the user just types an amount instead of picking one.
-    return { tradeSize: null, dcaSize: null, entrySizes: [] };
+    return { tradeSize: null, entrySizes: [] };
   }
 }
 
@@ -313,10 +307,13 @@ export async function manualTrade({ action, mint, symbol, name, logo, context = 
       // trade size when the position's size could not be resolved.
       dialogContext.entrySize = position?.currentSize ?? defaults.tradeSize ?? null;
 
-      // Flat presets: the configured DCA size (the exact amount the backend adds when
-      // no size_sol is sent) plus the configured entry sizes, deduplicated.
+      // Flat presets: the position's default add (the exact amount the backend adds
+      // when no size_sol is sent) plus the configured entry sizes, deduplicated.
       const flat = [];
-      if (defaults.dcaSize) flat.push(Number(defaults.dcaSize.toFixed(4)));
+      const defaultAdd = position?.defaultAddSize;
+      if (Number.isFinite(defaultAdd) && defaultAdd > 0) {
+        flat.push(Number(defaultAdd.toFixed(4)));
+      }
       defaults.entrySizes.forEach((size) => {
         if (!flat.includes(size)) flat.push(size);
       });

@@ -138,6 +138,14 @@ pub async fn execute_buy_managed(
 
 /// Execute a DCA (dollar cost averaging) buy
 pub async fn execute_dca(decision: &TradeDecision) -> crate::trader::Result<TradeResult> {
+    // Every caller sizes its add: the DCA evaluator from the ladder, a manual add from
+    // its request or the ladder's default. A decision without a size is refused before
+    // anything else runs, rather than sized here from settings that do not describe it.
+    let Some(dca_amount_native) = decision.size_native else {
+        return Err(crate::trader::Error::AddSizeRequired {
+            mint: decision.mint.clone(),
+        });
+    };
     let Some(_active_trade) = crate::global::begin_trade() else {
         return Ok(TradeResult::failure_at(
             decision.clone(),
@@ -181,13 +189,6 @@ pub async fn execute_dca(decision: &TradeDecision) -> crate::trader::Result<Trad
             origin
         ),
     );
-
-    // Determine DCA amount from decision, else the configured DCA size (a fraction of
-    // the trade size). Never hardcode the fraction — `trader.dca_size_percentage` is
-    // the single source of truth for it.
-    let dca_amount_native = decision.size_native.unwrap_or_else(|| {
-        config::get_trade_size_native() * (config::get_dca_size_percentage() / 100.0)
-    });
 
     // Call positions::add_to_position to handle DCA entry
     match positions::add_to_position(

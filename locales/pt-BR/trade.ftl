@@ -49,7 +49,7 @@ trade-sell-input = Porcentagem personalizada
 trade-add-title = Aportar na posição
 trade-add-subtitle = Faça DCA em uma posição existente
 trade-add-confirm = Aportar
-trade-add-hint = Deixe vazio para usar o tamanho de DCA configurado
+trade-add-hint = Deixe vazio para adicionar o próximo passo de DCA da posição, senão a primeira compra, senão o tamanho do trade
 trade-amount-input = Valor personalizado
     .placeholder = Informe o valor em { -sol }
 

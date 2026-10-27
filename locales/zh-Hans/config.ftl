@@ -1048,15 +1048,17 @@ config-trader-dca-cooldown-minutes = DCA 冷却时间
     .unit = 分钟
 config-trader-dca-enabled = 启用 DCA
     .hint = 为仓位启用 DCA（定投加仓）
-config-trader-dca-max-count = DCA 最大次数
-    .hint = 每个仓位额外 DCA 入场的最大次数
-    .unit = 次
-config-trader-dca-size-percentage = DCA 规模
-    .hint = 每次 DCA 入场占初始仓位规模的 %
+config-trader-dca-levels-pct = DCA 档位
+    .hint = 价格需比入场价下跌多少才触发每次加仓（10 = 在 −10% 加仓）
     .unit = %
-config-trader-dca-threshold-pct = DCA 触发阈值
-    .hint = 仓位下跌达到此 % 时执行 DCA 入场（-10 = 在 -10% 时 DCA）
-    .unit = %
+config-trader-dca-measure-from = 跌幅计算基准
+    .hint = 计算每一档跌幅所用的入场价：平均入场价或首次入场价
+config-trader-dca-min-hold-minutes = 入场后等待
+    .hint = 入场后到首次加仓前的分钟数
+    .unit = 分钟
+config-trader-dca-size-multipliers = DCA 数量
+    .hint = 每次加仓买入的数量，以首次买入的倍数表示
+    .unit = ×
 config-trader-enabled = 已启用
     .hint = 交易系统的总开关
 config-trader-entry-check-concurrency = 入场检查并发数

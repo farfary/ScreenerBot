@@ -10,7 +10,8 @@
 //! The exit-rule leaves of `[positions]` (trailing stop, partial stop-loss share and the
 //! retired partial-exit switch) follow the same load, persist and reload path into `[trader]`;
 //! the switch the loaded file held stays readable for the store migrations. The ROI target of
-//! `[trader]` becomes the one step of the take-profit ladder on the same path.
+//! `[trader]` becomes the one step of the take-profit ladder on the same path, and its
+//! uniform DCA rule (one drop, one size and a count) becomes an equal DCA ladder.
 //!
 //! It runs in a process of its own (nextest isolates every test) because `load_config_from_path`
 //! initialises the global CONFIG (`OnceLock::set`). The steps share that global,
@@ -20,6 +21,7 @@ use screenerbot::config::utils::{
     load_config_from_path, parse_config_document, persist_pending_config_migration,
     reload_config_from_path, validate_config, with_config,
 };
+use screenerbot::config::DcaMeasureFrom;
 
 const V0_2_13_CONFIG: &str = include_str!("fixtures/v0.2.13-config.toml");
 
@@ -62,6 +64,12 @@ fn legacy_layout_is_migrated_in_memory_then_persisted_after_startup() {
         assert!(!cfg.trader.take_profit_enabled);
         assert_eq!(cfg.trader.take_profit_levels_pct, vec![35.0]);
         assert_eq!(cfg.trader.take_profit_sell_pct, vec![100.0]);
+        assert!(cfg.trader.dca_enabled);
+        assert_eq!(cfg.trader.dca_levels_pct, vec![-15.0; 3]);
+        assert_eq!(cfg.trader.dca_size_multipliers, vec![0.4; 3]);
+        assert_eq!(cfg.trader.dca_measure_from, DcaMeasureFrom::Average);
+        assert_eq!(cfg.trader.dca_cooldown_minutes, 45);
+        assert_eq!(cfg.trader.dca_min_hold_minutes, 0);
     });
 
     // Startup completed: the canonical layout reaches disk.
@@ -80,6 +88,14 @@ fn legacy_layout_is_migrated_in_memory_then_persisted_after_startup() {
     let trader = tables["trader"].as_table().expect("trader table");
     assert!(!trader.contains_key("roi_target_percent"));
     assert!(!trader.contains_key("roi_exit_enabled"));
+    for retired in ["dca_threshold_pct", "dca_max_count", "dca_size_percentage"] {
+        assert!(
+            !trader.contains_key(retired),
+            "[trader] {retired} still on disk"
+        );
+    }
+    assert_eq!(reparsed.config.trader.dca_levels_pct, vec![-15.0; 3]);
+    assert_eq!(reparsed.config.trader.dca_size_multipliers, vec![0.4; 3]);
 
     // A second persist has nothing pending and leaves the file alone.
     persist_pending_config_migration();
@@ -288,5 +304,213 @@ fn a_roi_target_outside_the_step_bounds_migrates_into_them() {
         validate_config(&parsed.config).unwrap_or_else(|error| {
             panic!("roi_target_percent = {legacy} migrated invalid: {error}")
         });
+    }
+}
+
+/// The ladder a `[trader]` section in the uniform DCA layout migrates into, as
+/// (drops, multiples, switch), after checking it passes the validation every later save runs.
+fn migrated_dca(trader: &str) -> (Vec<f64>, Vec<f64>, bool) {
+    let parsed = parse_config_document(&format!("[trader]\n{trader}"))
+        .unwrap_or_else(|error| panic!("{trader:?} must parse: {error}"));
+    assert!(parsed.migrated, "{trader:?} holds a legacy layout");
+    validate_config(&parsed.config)
+        .unwrap_or_else(|error| panic!("{trader:?} migrated invalid: {error}"));
+    let trader = parsed.config.trader;
+    assert_eq!(trader.dca_measure_from, DcaMeasureFrom::Average);
+    (
+        trader.dca_levels_pct,
+        trader.dca_size_multipliers,
+        trader.dca_enabled,
+    )
+}
+
+/// Each counted add of the uniform rule becomes one equal step, clamped into the step
+/// bounds; a key the file lacked takes the value the uniform rule defaulted to. A clamp
+/// that adds later or buys less than the stored value keeps DCA on; one that would add
+/// sooner or buy more turns it off, so no install spends more than it did.
+#[test]
+fn a_uniform_dca_rule_migrates_into_an_equal_ladder() {
+    for (trader, drops, multiples, enabled) in [
+        (
+            "dca_threshold_pct = -12.0\ndca_max_count = 4\ndca_size_percentage = 75.0\n",
+            vec![-12.0; 4],
+            vec![0.75; 4],
+            true,
+        ),
+        ("dca_max_count = 3\n", vec![-10.0; 3], vec![0.5; 3], true),
+        (
+            "dca_threshold_pct = -20.0\n",
+            vec![-20.0; 2],
+            vec![0.5; 2],
+            true,
+        ),
+        (
+            "dca_size_percentage = 30.0\n",
+            vec![-10.0; 2],
+            vec![0.3; 2],
+            true,
+        ),
+        // A positive threshold fired below that profit; the loss of its size adds later.
+        (
+            "dca_threshold_pct = 15.0\ndca_max_count = 1\n",
+            vec![-15.0],
+            vec![0.5],
+            true,
+        ),
+        (
+            "dca_threshold_pct = 97.0\ndca_max_count = 1\n",
+            vec![-95.0],
+            vec![0.5],
+            true,
+        ),
+        // A threshold shallower than the shallowest step adds later at that step.
+        (
+            "dca_threshold_pct = -0.5\n",
+            vec![-1.0; 2],
+            vec![0.5; 2],
+            true,
+        ),
+        (
+            "dca_threshold_pct = 0.0\n",
+            vec![-1.0; 2],
+            vec![0.5; 2],
+            true,
+        ),
+        // A size above the largest multiple buys less at that multiple.
+        (
+            "dca_threshold_pct = -12.0\ndca_max_count = 9\ndca_size_percentage = 600.0\n",
+            vec![-12.0; 5],
+            vec![5.0; 5],
+            true,
+        ),
+        // A threshold deeper than the deepest step, -100 never firing at all, would add
+        // sooner at that step.
+        (
+            "dca_threshold_pct = -99.0\n",
+            vec![-95.0; 2],
+            vec![0.5; 2],
+            false,
+        ),
+        (
+            "dca_threshold_pct = -100.0\n",
+            vec![-95.0; 2],
+            vec![0.5; 2],
+            false,
+        ),
+        // A size below the smallest multiple would buy more at that multiple.
+        (
+            "dca_size_percentage = 5.0\n",
+            vec![-10.0; 2],
+            vec![0.1; 2],
+            false,
+        ),
+        (
+            "dca_size_percentage = 0.0\n",
+            vec![-10.0; 2],
+            vec![0.1; 2],
+            false,
+        ),
+    ] {
+        let (migrated_drops, migrated_multiples, migrated_enabled) =
+            migrated_dca(&format!("dca_enabled = true\n{trader}"));
+        assert_eq!(migrated_drops, drops, "{trader:?}");
+        assert_eq!(migrated_multiples, multiples, "{trader:?}");
+        assert_eq!(migrated_enabled, enabled, "{trader:?}");
+    }
+}
+
+/// A count of zero made no add at all: the migrated ladder holds one step and its switch
+/// is off, so it still makes none and still validates.
+#[test]
+fn a_dca_count_of_zero_migrates_into_a_switched_off_ladder() {
+    let (drops, multiples, enabled) = migrated_dca(
+        "dca_enabled = true\ndca_threshold_pct = -10.0\ndca_max_count = 0\ndca_size_percentage = 50.0\n",
+    );
+    assert_eq!(drops, vec![-10.0]);
+    assert_eq!(multiples, vec![0.5]);
+    assert!(!enabled);
+}
+
+/// A count that is not a whole number of adds cannot become a ladder, and the file is
+/// refused instead of guessed at.
+#[test]
+fn a_dca_count_that_is_not_a_whole_number_is_refused() {
+    for count in ["-1", "2.5", "\"two\""] {
+        let raw = format!("[trader]\ndca_threshold_pct = -10.0\ndca_max_count = {count}\n");
+        assert!(
+            parse_config_document(&raw).is_err(),
+            "dca_max_count = {count} must be refused"
+        );
+    }
+}
+
+/// A ladder already stored wins over the retired keys beside it, and the retired keys are
+/// dropped either way.
+#[test]
+fn a_stored_dca_ladder_wins_over_the_retired_keys() {
+    let parsed = parse_config_document(
+        "[trader]\ndca_levels_pct = [-30.0]\ndca_size_multipliers = [1.0]\n\
+         dca_threshold_pct = -10.0\ndca_max_count = 3\ndca_size_percentage = 50.0\n",
+    )
+    .expect("the mixed file parses");
+    assert!(parsed.migrated);
+    assert_eq!(parsed.config.trader.dca_levels_pct, vec![-30.0]);
+    assert_eq!(parsed.config.trader.dca_size_multipliers, vec![1.0]);
+}
+
+/// A hand-edited file holding one ladder list beside the other list's retired key gets a
+/// migrated list of the stored list's length, so the two stay equal and validate.
+#[test]
+fn a_retired_dca_key_beside_a_stored_ladder_list_takes_its_length() {
+    let (drops, multiples, enabled) = migrated_dca(
+        "dca_enabled = true\ndca_levels_pct = [-10.0, -20.0, -30.0]\ndca_size_percentage = 50.0\n",
+    );
+    assert_eq!(drops, vec![-10.0, -20.0, -30.0]);
+    assert_eq!(multiples, vec![0.5; 3]);
+    assert!(enabled);
+
+    let (drops, multiples, enabled) = migrated_dca(
+        "dca_enabled = true\ndca_size_multipliers = [0.5, 1.0, 2.0]\ndca_threshold_pct = -15.0\n\
+         dca_max_count = 1\n",
+    );
+    assert_eq!(drops, vec![-15.0; 3]);
+    assert_eq!(multiples, vec![0.5, 1.0, 2.0]);
+    assert!(enabled);
+}
+
+/// The migration is final: the migrated config written back out parses without one.
+#[test]
+fn a_migrated_dca_ladder_migrates_no_further() {
+    let parsed = parse_config_document(
+        "[trader]\ndca_enabled = true\ndca_threshold_pct = -12.0\ndca_max_count = 3\n",
+    )
+    .expect("the legacy file parses");
+    let written = toml::to_string(&parsed.config).expect("the config serialises");
+    let reparsed = parse_config_document(&written).expect("the migrated file parses");
+    assert!(!reparsed.migrated);
+    assert_eq!(reparsed.config.trader.dca_levels_pct, vec![-12.0; 3]);
+    assert_eq!(reparsed.config.trader.dca_size_multipliers, vec![0.5; 3]);
+    assert_eq!(
+        reparsed.config.trader.dca_measure_from,
+        DcaMeasureFrom::Average
+    );
+}
+
+/// A stored DCA basis in another letter case loads under its canonical name, and one that
+/// names no basis loads as the average entry the trader has always measured from.
+#[test]
+fn a_stored_dca_basis_loads_under_its_canonical_name() {
+    for (stored, basis) in [
+        ("First_Entry", DcaMeasureFrom::FirstEntry),
+        ("AVERAGE", DcaMeasureFrom::Average),
+        ("fortnightly", DcaMeasureFrom::Average),
+    ] {
+        let parsed = parse_config_document(&format!(
+            "[trader]\ndca_measure_from = \"{stored}\"\ndca_levels_pct = [-10.0, -20.0]\n\
+             dca_size_multipliers = [0.5, 0.5]\n"
+        ))
+        .expect("the stored basis loads");
+        assert!(parsed.migrated, "{stored}");
+        assert_eq!(parsed.config.trader.dca_measure_from, basis, "{stored}");
     }
 }

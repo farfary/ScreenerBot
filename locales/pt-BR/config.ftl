@@ -1000,15 +1000,17 @@ config-trader-dca-cooldown-minutes = Cooldown do DCA
     .unit = min
 config-trader-dca-enabled = Ativar DCA
     .hint = Ativa o custo médio em dólar (DCA) para posições
-config-trader-dca-max-count = Máximo de DCAs
-    .hint = Número máximo de entradas adicionais de DCA por posição
-    .unit = entradas
-config-trader-dca-size-percentage = Tamanho do DCA
-    .hint = Tamanho de cada entrada de DCA como % do tamanho inicial da posição
+config-trader-dca-levels-pct = Níveis de DCA
+    .hint = Quanto o preço deve cair abaixo da entrada para cada aporte comprar (10 = aporte em −10%)
     .unit = %
-config-trader-dca-threshold-pct = Limite do DCA
-    .hint = Faz DCA quando a posição cai este % (-10 = DCA em -10%)
-    .unit = %
+config-trader-dca-measure-from = Medir a queda a partir de
+    .hint = O preço de entrada a partir do qual a queda de cada nível é medida: entrada média ou primeira entrada
+config-trader-dca-min-hold-minutes = Espera após a entrada
+    .hint = Minutos após a entrada antes do primeiro aporte
+    .unit = min
+config-trader-dca-size-multipliers = Tamanhos de DCA
+    .hint = O que cada aporte compra, como múltiplo da primeira compra
+    .unit = ×
 config-trader-enabled = Ativado
     .hint = Interruptor geral do sistema de trading
 config-trader-entry-check-concurrency = Concorrência das verificações de entrada

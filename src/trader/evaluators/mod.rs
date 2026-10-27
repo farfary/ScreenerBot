@@ -29,7 +29,10 @@ pub mod exit_trailing;
 pub mod strategies;
 
 // Re-exports for convenience
-pub use dca::{process_dca_opportunities, DcaCalculations, DcaConfigSnapshot, DcaEvaluation};
+pub use dca::{
+    default_add_size_native, process_dca_opportunities, DcaCalculations, DcaConfigSnapshot,
+    DcaContext, DcaEvaluation,
+};
 pub use entry::evaluate_entry_for_token;
 pub use exit::evaluate_exit_for_position;
 pub use strategies::StrategyEvaluator;
@@ -63,5 +66,14 @@ mod tests {
                 "{file} is pure and must not wait for reconciliation"
             );
         }
+    }
+
+    /// Automatic adds stop while the loss limit blocks entries: the DCA cycle reads the
+    /// same gate entry admission reads, never a copy of its rule.
+    #[test]
+    fn the_dca_cycle_reads_the_entry_loss_limit_gate() {
+        let gate = "loss_limit::is_entry_blocked_by_loss_limit()";
+        assert!(include_str!("dca.rs").contains(gate));
+        assert!(include_str!("../admission.rs").contains(gate));
     }
 }

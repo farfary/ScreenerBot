@@ -1,48 +1,74 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Dollar Cost Averaging (DCA) implementation
+//! The DCA ladder: decides when an open position takes its next automatic add, and how
+//! much each add buys.
 //!
-//! Merged DCA orchestration and evaluation logic.
-//! Evaluates all open positions for DCA opportunities based on:
-//! - Price drop threshold
-//! - DCA count limits
-//! - Cooldown periods
-//! - DCA size percentage
-//! - No add of the mint still in flight
+//! Add `k` (the position's `dca_count`) follows step `k` of the configured ladder. It
+//! fires only when the ladder has that step, the price dropped below the step's level
+//! from the configured basis (the average entry or the first buy's fill), the wait after
+//! entry (first add only) and the wait after the last add passed, no add of the mint is
+//! in flight, the position is the auto trader's, the pool price is fresh, and the loss
+//! limit does not block entries. The add buys the step's multiple of the first buy.
 //!
-//! NOTE: This evaluator uses simple price-threshold logic and does NOT integrate
-//! with the strategy system or OHLCV data. For OHLCV-based DCA decisions, consider
-//! creating DCA-specific strategies in the strategy system instead.
+//! [`DcaEvaluation::evaluate`] is pure: the live inputs it needs (an add in flight, the
+//! loss-limit gate, the clock) arrive in [`DcaContext`]. The evaluator reads pool prices
+//! only, never OHLCV candles.
 
+use crate::config::{DcaLevel, DcaMeasureFrom};
 use crate::logger::{self, LogTag};
 use crate::positions;
 use crate::positions::Position;
+use crate::trader::constants::{DCA_PRICE_MAX_AGE_SECS, MIN_TRADE_SIZE_NATIVE};
 use crate::trader::policy::ExitPolicy;
 use crate::trader::types::{TradeAction, TradeDecision, TradePriority, TradeReason};
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 /// Configuration snapshot for DCA evaluation
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DcaConfigSnapshot {
     pub enabled: bool,
-    pub max_count: u32,
+    /// One step per automatic add, in firing order.
+    pub levels: Vec<DcaLevel>,
+    pub measure_from: DcaMeasureFrom,
     pub cooldown_minutes: i64,
-    pub threshold_pct: f64,
-    pub size_percentage: f64,
+    /// Minutes after the entry before the first add may fire.
+    pub min_hold_minutes: i64,
+}
+
+/// The live inputs of one evaluation, read by the caller so the decision stays pure.
+#[derive(Debug, Clone, Copy)]
+pub struct DcaContext {
+    /// An add of the position's mint is sent and not yet settled: the count and the
+    /// cooldown it would move are not booked yet, so no further add is decided on them.
+    pub add_in_flight: bool,
+    /// The loss limit blocks new entries; automatic adds stop with them.
+    pub entries_blocked: bool,
+    pub now: DateTime<Utc>,
 }
 
 /// Calculated metrics for DCA evaluation
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DcaCalculations {
     pub current_dca_count: u32,
+    /// Index of the ladder step the next add follows; `None` once every step is used.
+    pub step: Option<usize>,
+    pub measure_from: DcaMeasureFrom,
+    /// The entry price the drop is measured from; `None` when the position has none.
+    pub basis_price: Option<f64>,
+    pub current_price: Option<f64>,
+    /// Percent move of the current price from the basis (negative below it).
+    pub drop_pct: Option<f64>,
+    /// The step's level the drop must pass, in percent (negative).
+    pub required_drop_pct: Option<f64>,
+    /// What the next add buys, in the native coin.
+    pub dca_amount_native: Option<f64>,
+    pub price_age_secs: Option<i64>,
     pub minutes_since_last: Option<i64>,
-    pub pnl_pct: f64,
-    pub required_drop_pct: f64,
-    pub dca_amount_native: f64,
-    pub entry_price: f64,
-    pub current_price: f64,
+    pub minutes_held: i64,
+    /// Every gate passed except the minimum trade size.
+    pub below_minimum_trade: bool,
 }
 
 /// Structured DCA evaluation result
@@ -54,154 +80,188 @@ pub struct DcaEvaluation {
     pub calculations: DcaCalculations,
 }
 
+/// The first buy's size in the native coin, which every add is a multiple of. `None` for
+/// a wallet-derived round, whose recorded entry size is the round's whole investment
+/// rather than one buy, and for a size that is not a positive finite number.
+fn first_buy_native(position: &Position) -> Option<f64> {
+    if position.is_wallet_derived() {
+        return None;
+    }
+    let size = position.entry_size_native;
+    (size.is_finite() && size > 0.0).then_some(size)
+}
+
+/// The size of a manual add to `position` that names none, the amount the dashboard
+/// presets: the next ladder step's multiple of the first buy, or the first buy itself
+/// once every step is used. A wallet-derived round has no first buy, so it takes
+/// `trade_size_native`, the configured trade size; the automatic add never uses that
+/// stand-in and refuses such a round instead. `None` when the chosen size is not a
+/// positive finite number.
+pub fn default_add_size_native(
+    position: &Position,
+    levels: &[DcaLevel],
+    trade_size_native: f64,
+) -> Option<f64> {
+    let size = match first_buy_native(position) {
+        Some(first_buy) => {
+            let step = usize::try_from(position.dca_count)
+                .ok()
+                .and_then(|k| levels.get(k));
+            step.map_or(first_buy, |level| level.add_size_native(first_buy))
+        }
+        None if position.is_wallet_derived() => trade_size_native,
+        None => return None,
+    };
+    (size.is_finite() && size > 0.0).then_some(size)
+}
+
+/// The entry price `basis` names: the average entry, or the verified fill of the first
+/// buy. `None` when that price is missing or not a positive finite number; the first
+/// buy's fill never falls back to another price.
+fn basis_price(position: &Position, basis: DcaMeasureFrom) -> Option<f64> {
+    let price = match basis {
+        DcaMeasureFrom::Average => Some(position.average_entry_price),
+        DcaMeasureFrom::FirstEntry => position.effective_entry_price,
+    };
+    price.filter(|price| price.is_finite() && *price > 0.0)
+}
+
 impl DcaEvaluation {
-    /// Evaluate whether DCA should trigger for a position. `add_in_flight` is true while an
-    /// add of the position's mint is sent and not yet settled: the count and the cooldown
-    /// it would move are not booked yet, so no further add is decided on them.
+    /// Evaluate whether the next automatic add of `position` fires.
     pub fn evaluate(
         position: &Position,
         config: DcaConfigSnapshot,
-        add_in_flight: bool,
+        context: DcaContext,
     ) -> crate::trader::Result<Self> {
         let mut reasons = Vec::new();
-        let mut should_trigger = true;
 
-        // Extract position data
-        let current_price = match position.current_price {
-            Some(price) if price > 0.0 && price.is_finite() => price,
-            _ => {
-                return Ok(Self {
-                    should_trigger: false,
-                    reasons: vec!["No valid current price".to_owned()],
-                    config: config.clone(),
-                    calculations: DcaCalculations {
-                        current_dca_count: position.dca_count,
-                        minutes_since_last: None,
-                        pnl_pct: 0.0,
-                        required_drop_pct: config.threshold_pct.abs(),
-                        dca_amount_native: 0.0,
-                        entry_price: position.average_entry_price,
-                        current_price: 0.0,
-                    },
-                });
-            }
-        };
-
-        let entry_price = position.average_entry_price;
-        if entry_price <= 0.0 || !entry_price.is_finite() {
-            return Ok(Self {
-                should_trigger: false,
-                reasons: vec!["No valid entry price".to_owned()],
-                config: config.clone(),
-                calculations: DcaCalculations {
-                    current_dca_count: position.dca_count,
-                    minutes_since_last: None,
-                    pnl_pct: 0.0,
-                    required_drop_pct: config.threshold_pct.abs(),
-                    dca_amount_native: 0.0,
-                    entry_price,
-                    current_price,
-                },
-            });
-        }
-
-        // Calculate metrics
-        let pnl_pct = ((current_price - entry_price) / entry_price) * 100.0;
-        let required_drop_pct = config.threshold_pct.abs();
-        let dca_amount_native = position.entry_size_native * (config.size_percentage / 100.0);
-
+        let step = usize::try_from(position.dca_count)
+            .ok()
+            .filter(|k| *k < config.levels.len());
+        let level = step.and_then(|k| config.levels.get(k)).copied();
+        let current_price = position
+            .current_price
+            .filter(|price| price.is_finite() && *price > 0.0);
+        let basis_price = basis_price(position, config.measure_from);
+        let drop_pct = basis_price
+            .zip(current_price)
+            .map(|(basis, current)| ((current - basis) / basis) * 100.0);
+        let dca_amount_native = level
+            .zip(first_buy_native(position))
+            .map(|(level, first_buy)| level.add_size_native(first_buy));
+        let price_age_secs = position
+            .current_price_updated
+            .map(|updated| (context.now - updated).num_seconds());
         let minutes_since_last = position
             .last_dca_time
-            .map(|t| (Utc::now() - t).num_minutes());
-
-        let calculations = DcaCalculations {
-            current_dca_count: position.dca_count,
-            minutes_since_last,
-            pnl_pct,
-            required_drop_pct,
-            dca_amount_native,
-            entry_price,
-            current_price,
-        };
+            .map(|last| (context.now - last).num_minutes());
+        // An entry time ahead of the evaluator's clock counts as no time held.
+        let minutes_held = (context.now - position.entry_time).num_minutes().max(0);
 
         // Auto-DCA belongs exclusively to AutoTrader ownership. Copy/Hybrid positions
         // follow their source task and UserOnly positions remain under the user.
         if !position.management.allows_auto_dca() {
-            should_trigger = false;
             reasons.push(format!(
                 "Position management '{}' does not allow auto-DCA",
                 position.management.as_str()
             ));
         }
-
         if !config.enabled {
-            should_trigger = false;
             reasons.push("DCA disabled in config".to_owned());
         }
-
-        if add_in_flight {
-            should_trigger = false;
+        if context.add_in_flight {
             reasons.push("A DCA add of this token is still in flight".to_owned());
         }
-
-        if calculations.current_dca_count >= config.max_count {
-            should_trigger = false;
+        if context.entries_blocked {
+            reasons.push("The loss limit blocks entries".to_owned());
+        }
+        match level {
+            None => reasons.push(format!(
+                "Every DCA step is used ({}/{})",
+                position.dca_count,
+                config.levels.len()
+            )),
+            Some(level) => match drop_pct {
+                // A drop strictly below the step's level fires the add.
+                Some(drop) if drop < level.drop_pct => {}
+                Some(drop) => reasons.push(format!(
+                    "Price drop insufficient: {drop:.2}% from the {} (need < {:.2}%)",
+                    config.measure_from.as_str(),
+                    level.drop_pct
+                )),
+                None if current_price.is_none() => {
+                    reasons.push("No valid current price".to_owned());
+                }
+                None => reasons.push(format!(
+                    "No valid {} price to measure the drop from",
+                    config.measure_from.as_str()
+                )),
+            },
+        }
+        if position.dca_count == 0
+            && config.min_hold_minutes > 0
+            && minutes_held < config.min_hold_minutes
+        {
             reasons.push(format!(
-                "DCA count limit reached ({}/{})",
-                calculations.current_dca_count, config.max_count
+                "Held {minutes_held}/{} minutes before the first add",
+                config.min_hold_minutes
             ));
         }
-
-        if let Some(minutes) = calculations.minutes_since_last {
+        if let Some(minutes) = minutes_since_last {
             if minutes < config.cooldown_minutes {
-                should_trigger = false;
                 reasons.push(format!(
-                    "DCA cooldown active ({}/{} minutes)",
-                    minutes, config.cooldown_minutes
+                    "DCA cooldown active ({minutes}/{} minutes)",
+                    config.cooldown_minutes
                 ));
             }
         }
+        match price_age_secs {
+            Some(age) if age <= DCA_PRICE_MAX_AGE_SECS => {}
+            Some(age) => reasons.push(format!(
+                "Price is {age}s old (fresh within {DCA_PRICE_MAX_AGE_SECS}s)"
+            )),
+            None => reasons.push("Price has no update time".to_owned()),
+        }
 
-        // Check if price has dropped enough to trigger DCA
-        // IMPORTANT: This comparison logic is intentionally inverted for negative percentages
-        //
-        // Configuration: threshold_pct is NEGATIVE (e.g., -10.0 means "trigger at 10% loss")
-        // Current P&L: pnl_pct is NEGATIVE when losing money (e.g., -15.0 means 15% loss)
-        //
-        // Example scenarios:
-        // - Config threshold: -10.0 (trigger at 10% loss)
-        // - Current loss: -15.0 (losing 15%)
-        // - Check: -15.0 >= -10.0? NO → -15.0 < -10.0 → Trigger DCA
-        //
-        // - Config threshold: -10.0 (trigger at 10% loss)
-        // - Current loss: -5.0 (losing only 5%)
-        // - Check: -5.0 >= -10.0? YES → Not losing enough → Skip DCA
-        //
-        // The >= comparison works because more negative = bigger loss
-        if pnl_pct >= config.threshold_pct {
-            should_trigger = false;
+        let mut below_minimum_trade = false;
+        match dca_amount_native {
+            Some(amount) if amount >= MIN_TRADE_SIZE_NATIVE => {}
+            Some(amount) => {
+                below_minimum_trade = reasons.is_empty();
+                reasons.push(format!(
+                    "DCA amount {amount:.6} SOL below minimum {MIN_TRADE_SIZE_NATIVE:.6} SOL"
+                ));
+            }
+            None if level.is_some() => {
+                reasons.push("No first buy size to size the add from".to_owned());
+            }
+            None => {}
+        }
+
+        let should_trigger = reasons.is_empty();
+        if let (true, Some(level), Some(drop)) = (should_trigger, level, drop_pct) {
             reasons.push(format!(
-                "Price drop insufficient: {:.2}% P&L (need < {:.2}%)",
-                pnl_pct, config.threshold_pct
+                "DCA step {} triggered: {drop:.2}% from the {} passes {:.2}%",
+                position.dca_count + 1,
+                config.measure_from.as_str(),
+                level.drop_pct
             ));
         }
 
-        // Check if DCA amount is valid and above minimum trade size
-        use crate::trader::constants::MIN_TRADE_SIZE_NATIVE;
-        if calculations.dca_amount_native < MIN_TRADE_SIZE_NATIVE {
-            should_trigger = false;
-            reasons.push(format!(
-                "DCA amount {:.6} SOL below minimum {:.6} SOL",
-                calculations.dca_amount_native, MIN_TRADE_SIZE_NATIVE
-            ));
-        }
-
-        if should_trigger {
-            reasons.push(format!(
-                "DCA triggered: {:.2}% loss exceeds {:.2}% threshold (price: {:.9} → {:.9} SOL)",
-                pnl_pct, config.threshold_pct, entry_price, current_price
-            ));
-        }
+        let calculations = DcaCalculations {
+            current_dca_count: position.dca_count,
+            step,
+            measure_from: config.measure_from,
+            basis_price,
+            current_price,
+            drop_pct,
+            required_drop_pct: level.map(|level| level.drop_pct),
+            dca_amount_native,
+            price_age_secs,
+            minutes_since_last,
+            minutes_held,
+            below_minimum_trade,
+        };
 
         Ok(Self {
             should_trigger,
@@ -213,15 +273,17 @@ impl DcaEvaluation {
 
     /// Get a human-readable summary of the evaluation
     pub fn summary(&self) -> String {
-        if self.should_trigger {
-            format!(
-                "DCA #{}: {:.2}% loss, amount: {:.4} SOL",
+        match (
+            self.should_trigger,
+            self.calculations.drop_pct,
+            self.calculations.dca_amount_native,
+        ) {
+            (true, Some(drop), Some(amount)) => format!(
+                "DCA #{}: {drop:.2}% from the {}, amount: {amount:.4} SOL",
                 self.calculations.current_dca_count + 1,
-                self.calculations.pnl_pct,
-                self.calculations.dca_amount_native
-            )
-        } else {
-            self.reasons.join(", ")
+                self.calculations.measure_from.as_str()
+            ),
+            _ => self.reasons.join(", "),
         }
     }
 }
@@ -250,6 +312,8 @@ pub async fn process_dca_opportunities() -> crate::trader::Result<Vec<TradeDecis
         return Ok(Vec::new());
     }
 
+    // The same gate entry admission applies, read once for the whole cycle.
+    let entries_blocked = crate::trader::safety::loss_limit::is_entry_blocked_by_loss_limit();
     let mut dca_decisions = Vec::new();
 
     for position in open_positions {
@@ -263,9 +327,12 @@ pub async fn process_dca_opportunities() -> crate::trader::Result<Vec<TradeDecis
             None => continue,
         };
 
-        let add_in_flight = positions::is_dca_pending(&position.mint).await;
-        let evaluation = match DcaEvaluation::evaluate(&position, dca_config.clone(), add_in_flight)
-        {
+        let context = DcaContext {
+            add_in_flight: positions::is_dca_pending(&position.mint).await,
+            entries_blocked,
+            now: Utc::now(),
+        };
+        let evaluation = match DcaEvaluation::evaluate(&position, dca_config.clone(), context) {
             Ok(eval) => eval,
             Err(e) => {
                 logger::error(
@@ -276,40 +343,54 @@ pub async fn process_dca_opportunities() -> crate::trader::Result<Vec<TradeDecis
             }
         };
 
-        if evaluation.should_trigger {
-            logger::info(
+        let calculations = &evaluation.calculations;
+        match (
+            evaluation.should_trigger,
+            calculations.current_price,
+            calculations.dca_amount_native,
+        ) {
+            (true, Some(price), Some(amount)) => {
+                logger::info(
+                    LogTag::Trader,
+                    &format!(
+                        "DCA opportunity: {} | {}",
+                        position.symbol,
+                        evaluation.summary()
+                    ),
+                );
+
+                dca_decisions.push(TradeDecision {
+                    position_id: Some(position_id.to_string()),
+                    mint: position.mint.clone(),
+                    action: TradeAction::DCA,
+                    reason: TradeReason::DCAScheduled,
+                    strategy_id: None,
+                    timestamp: Utc::now(),
+                    priority: TradePriority::Normal,
+                    price_native: Some(price),
+                    size_native: Some(amount),
+                    exit_percentage: None,
+                    // Auto-trader slippage always follows config.
+                    slippage_pct: None,
+                    take_profit_level: None,
+                });
+            }
+            _ if calculations.below_minimum_trade => logger::warning(
                 LogTag::Trader,
                 &format!(
-                    "DCA opportunity: {} | {}",
+                    "DCA add refused for {}: {}",
                     position.symbol,
                     evaluation.summary()
                 ),
-            );
-
-            dca_decisions.push(TradeDecision {
-                position_id: Some(position_id.to_string()),
-                mint: position.mint.clone(),
-                action: TradeAction::DCA,
-                reason: TradeReason::DCAScheduled,
-                strategy_id: None,
-                timestamp: Utc::now(),
-                priority: TradePriority::Normal,
-                price_native: Some(evaluation.calculations.current_price),
-                size_native: Some(evaluation.calculations.dca_amount_native),
-                exit_percentage: None,
-                // Auto-trader slippage always follows config.
-                slippage_pct: None,
-                take_profit_level: None,
-            });
-        } else {
-            logger::debug(
+            ),
+            _ => logger::debug(
                 LogTag::Trader,
                 &format!(
                     "DCA not triggered for {}: {}",
                     position.symbol,
                     evaluation.summary()
                 ),
-            );
+            ),
         }
     }
 

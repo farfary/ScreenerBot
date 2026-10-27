@@ -6,13 +6,14 @@
  * Guard: what the Auto Trader rule fields compute from the loaded config.
  *
  * - The line under a field states its computed effect in one plain format, with no
- *   upper-case prefix ("IMPACT:", "CURRENT:", "READABLE:"); every DCA field has one.
+ *   upper-case prefix ("IMPACT:", "CURRENT:", "READABLE:"); the DCA tab states both
+ *   waits and the most a position can hold once every step has bought.
  * - Every worked example starts from one position: a buy at the configured trade size
  *   (`trader.trade_size_sol`), never a fixed amount of its own.
  * - A loss threshold reads as a magnitude after a fixed "−" (Stop Loss, Time Exit
- *   loss, DCA threshold) while the config keeps its own sign: Stop Loss stores a
- *   positive percent, the other two a negative one. Load, display, edit and save
- *   round-trip at both bounds of each field.
+ *   loss) while the config keeps its own sign: Stop Loss stores a positive percent,
+ *   the time exit a negative one. Load, display, edit and save round-trip at both
+ *   bounds of each field.
  * - Sell Part First shows its Part to Sell field only while on; the field takes its bounds
  *   and unit from the metadata, saves through its card, and the stop-loss example sells
  *   that part at the threshold and the rest if the price stays below the stop.
@@ -29,6 +30,12 @@
  * - A ladder that keeps a runner warns that only the stop loss or the user can close it
  *   while the trailing stop, the break-even stop, both time exits and every exit
  *   strategy are off.
+ * - The DCA ladder is the same editor: each step's drop reads as a magnitude after a
+ *   fixed "−" within the metadata bounds, states what it buys from the configured trade
+ *   size and flags a step under the minimum trade; a step added doubles the last drop
+ *   and keeps the last multiple, up to the metadata's step limit. Measured from the
+ *   first entry, a step that is not deeper than the one before it keeps Save disabled.
+ *   The ladder saves as its two config lists, and the basis as its stored name.
  * - The trailing stop states the minimum it locks when it arms, and warns when that
  *   stop sits at or below the entry.
  * - The break-even stop and the flat-position exit state their rule in one line, take
@@ -108,10 +115,10 @@ const line = async (page, id) =>
     )
   );
 
-test("a field's computed line is plain text, and every DCA field has one", async () => {
+test("a computed line is plain text, and the DCA tab states its waits and its most", async () => {
   const { page, close } = await openTrader("dca");
   try {
-    await page.locator("#dca-size-impact", { hasText: "SOL" }).waitFor();
+    await page.locator("#dca-capacity", { hasText: "SOL" }).waitFor();
     const prefixes = await page.$$eval(".trader-tab-content .config-impact", (lines) =>
       lines
         .map((el) => el.textContent.trim())
@@ -121,15 +128,17 @@ test("a field's computed line is plain text, and every DCA field has one", async
     assert.equal(await page.locator(".impact-label").count(), 0);
 
     assert.equal(
-      await line(page, "dca-threshold"),
-      "Buys more when the position is down 10% from entry"
+      await line(page, "dca-levels"),
+      "Most this position can hold: 0.04 SOL (2× the first buy)"
     );
-    assert.equal(await line(page, "dca-max-count"), "At most 2 extra entries per position");
-    assert.equal(await line(page, "dca-size"), "Each extra entry buys 0.01 SOL");
     assert.match(await line(page, "dca-cooldown"), /^At least 30\D.*between extra entries$/);
+    assert.equal(await line(page, "dca-min-hold"), "The first add may follow the entry at once");
 
-    await page.fill("#dca-max-count", "1");
-    assert.equal(await line(page, "dca-max-count"), "At most one extra entry per position");
+    await page.fill("#dca-min-hold", "15");
+    assert.match(
+      await line(page, "dca-min-hold"),
+      /^The first add waits at least 15\D.*after the entry$/
+    );
   } finally {
     await close();
   }
@@ -158,10 +167,10 @@ test("every worked example starts from the configured trade size", async () => {
       }
     }
     await page.click('#subTabsContainer [data-tab-id="dca"]');
-    assert.equal(
-      await text("#dca-example"),
-      "Buy 0.02 SOL → each further -10% adds 0.01 SOL, up to 2 times"
-    );
+    const bought = await page
+      .locator("#dca-levels .level-list-amount")
+      .evaluateAll((cells) => cells.map((cell) => cell.textContent));
+    assert.deepEqual(bought.map(plain), ["= 0.01 SOL", "= 0.01 SOL"]);
   } finally {
     await close();
   }
@@ -182,15 +191,6 @@ const LOSS_FIELDS = [
     tab: "time-rules",
     id: "time-loss-threshold",
     key: "time_override_loss_threshold_percent",
-    bounds: [
-      [-100, "100"],
-      [0, "0"],
-    ],
-  },
-  {
-    tab: "dca",
-    id: "dca-threshold",
-    key: "dca_threshold_pct",
     bounds: [
       [-100, "100"],
       [0, "0"],
@@ -464,6 +464,160 @@ test("a ladder that keeps a runner warns while no other rule can close it", asyn
       toggle.dispatchEvent(new Event("change", { bubbles: true }));
     });
     assert.equal(await warning.isVisible(), false, "the trailing stop can close the runner");
+  } finally {
+    await close();
+  }
+});
+
+/** The PATCH a click on the Save control of the card holding `id` sends, as JSON. */
+async function savedBody(page, id) {
+  const [request] = await Promise.all([
+    page.waitForRequest(
+      (candidate) =>
+        candidate.method() === "PATCH" && candidate.url().endsWith("/api/config/trader")
+    ),
+    page.locator(`.config-card:has(#${id}) .config-card-save`).click(),
+  ]);
+  return request.postDataJSON();
+}
+
+test("the DCA ladder shows each drop as a magnitude and saves its steps", async () => {
+  const { page, close } = await openTrader("dca", {
+    dca_levels_pct: [-10, -25],
+    dca_size_multipliers: [0.5, 1],
+  });
+  try {
+    const ladder = page.getByRole("group", { name: "DCA Levels" });
+    const rows = ladder.locator(".level-list-row");
+    const add = ladder.locator(".level-list-add");
+    await page.waitForFunction(
+      () => document.querySelector("#dca-levels .level-list-add")?.disabled === false
+    );
+    assert.equal(await ladder.getAttribute("id"), "dca-levels");
+    const values = async (selector) =>
+      rows.locator(selector).evaluateAll((inputs) => inputs.map((input) => input.value));
+    assert.deepEqual(await values(".level-list-drop"), ["10", "25"]);
+    assert.deepEqual(await values(".level-list-size"), ["0.5", "1"]);
+
+    const drop = rows.first().locator(".level-list-drop");
+    assert.deepEqual(
+      await drop.evaluate((el) => ({
+        min: el.min,
+        max: el.max,
+        prefix: el.closest(".number-field").querySelector(".input-prefix")?.textContent,
+      })),
+      { min: "1", max: "95", prefix: "−" }
+    );
+    const caption = ladder.locator(".level-list-rows > .level-list-caption > span");
+    assert.deepEqual((await caption.allTextContents()).map(plain), [
+      "",
+      "Price Drop",
+      "Buy × First Buy",
+      "",
+      "",
+    ]);
+    const bought = async () =>
+      (await rows.locator(".level-list-amount").allTextContents()).map(plain);
+    assert.deepEqual(await bought(), ["= 0.01 SOL", "= 0.02 SOL"]);
+
+    await add.click();
+    assert.deepEqual(await values(".level-list-drop"), ["10", "25", "50"]);
+    assert.deepEqual(await values(".level-list-size"), ["0.5", "1", "1"]);
+    await add.click();
+    await add.click();
+    assert.equal(await rows.count(), 5);
+    assert.equal(await add.isDisabled(), true, "the metadata allows five steps");
+    assert.deepEqual(await values(".level-list-drop"), ["10", "25", "50", "95", "95"]);
+    assert.equal(await ladder.locator(".level-list-error").isVisible(), false);
+
+    await rows.nth(4).locator(".level-list-remove").click();
+    await rows.nth(3).locator(".level-list-remove").click();
+    const body = await savedBody(page, "dca-levels");
+    assert.deepEqual(body.dca_levels_pct, [-10, -25, -50]);
+    assert.deepEqual(body.dca_size_multipliers, [0.5, 1, 1]);
+    assert.equal(body.dca_measure_from, "average");
+  } finally {
+    await close();
+  }
+});
+
+test("a DCA step under the minimum trade is flagged on its row", async () => {
+  const { page, close } = await openTrader("dca", {
+    dca_levels_pct: [-10, -20],
+    dca_size_multipliers: [0.5, 0.1],
+    trade_size_sol: 0.005,
+  });
+  try {
+    const rows = page.locator("#dca-levels .level-list-row");
+    await rows.nth(1).locator(".level-list-amount", { hasText: "SOL" }).waitFor();
+    const flagged = await rows
+      .locator(".level-list-amount")
+      .evaluateAll((cells) => cells.map((cell) => cell.classList.contains("is-warning")));
+    assert.deepEqual(flagged, [false, true], "0.0005 SOL is under the 0.001 SOL minimum");
+    assert.equal(
+      plain(await rows.nth(1).locator(".level-list-amount").getAttribute("title")),
+      "Below the minimum trade of 0.001 SOL: this add is not sent"
+    );
+  } finally {
+    await close();
+  }
+});
+
+test("measured from the first entry, a DCA step must be deeper than the one before", async () => {
+  const { page, close } = await openTrader("dca");
+  try {
+    const ladder = page.locator("#dca-levels");
+    const rows = ladder.locator(".level-list-row");
+    const error = ladder.locator(".level-list-error");
+    await rows.first().waitFor();
+    assert.equal(await error.isVisible(), false, "the average basis allows equal drops");
+
+    await page.locator("#dca-measure-from").evaluate((select) => {
+      select.value = "first_entry";
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await rows.nth(1).locator(".level-list-drop").fill("10");
+    assert.equal(
+      plain(await error.textContent()),
+      "Measured from the first entry, each add needs a deeper drop than the one before it"
+    );
+    const save = page.locator(".config-card:has(#dca-levels) .config-card-save");
+    assert.equal(await save.isDisabled(), true);
+
+    await rows.nth(1).locator(".level-list-drop").fill("20");
+    assert.equal(await error.isVisible(), false);
+    const body = await savedBody(page, "dca-levels");
+    assert.equal(body.dca_measure_from, "first_entry");
+    assert.deepEqual(body.dca_levels_pct, [-10, -20]);
+  } finally {
+    await close();
+  }
+});
+
+test("the DCA capacity line shows a dash while the ladder is invalid and follows every change", async () => {
+  const { page, close } = await openTrader("dca");
+  try {
+    const ladder = page.locator("#dca-levels");
+    const rows = ladder.locator(".level-list-row");
+    const capacity = page.locator("#dca-capacity");
+    await rows.first().waitFor();
+    await capacity.filter({ hasText: "SOL" }).waitFor();
+    assert.match(plain(await capacity.textContent()), /^Most this position can hold: 0\.04 SOL/);
+
+    await page.locator("#dca-measure-from").evaluate((select) => {
+      select.value = "first_entry";
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await ladder.locator(".level-list-add").click();
+    await rows.nth(2).waitFor();
+    assert.equal(await ladder.locator(".level-list-error").isVisible(), true);
+    assert.equal(plain(await capacity.textContent()), "—");
+
+    await page.locator("#dca-measure-from").evaluate((select) => {
+      select.value = "average";
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    assert.match(plain(await capacity.textContent()), /^Most this position can hold: \d.* SOL/);
   } finally {
     await close();
   }

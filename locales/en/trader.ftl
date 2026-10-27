@@ -365,26 +365,34 @@ trader-strategy-priority = Priority { $priority }
 
 trader-dca-title = Dollar-Cost Averaging
 trader-dca-subtitle = Automatically add to losing positions to lower your average entry price
-trader-dca-threshold-impact = Buys more when the position is down { $value }% from entry
-trader-dca-threshold-hint = The drop from entry at which DCA buys more (10 = DCA at -10%)
-trader-dca-count-impact =
-    { $count ->
-        [one] At most one extra entry per position
-       *[other] At most { $count } extra entries per position
-    }
-trader-dca-size-impact = Each extra entry buys { $amount }
+trader-dca-measure-average = Average entry
+trader-dca-measure-first-entry = First entry
+trader-dca-step = Add { $step }
+trader-dca-drop-label = Add { $step } price drop
+trader-dca-size-label = Add { $step } size, times the first buy
+trader-dca-drop-caption = Price Drop
+trader-dca-size-caption = Buy × First Buy
+trader-dca-add-step = Add level
+trader-dca-remove-step = Remove add { $step }
+trader-dca-step-amount = = { $amount }
+trader-dca-step-below-minimum = Below the minimum trade of { $minimum }: this add is not sent
+trader-dca-error-drop-range = Each drop must be between { $min }% and { $max }%
+trader-dca-error-size-range = Each size must be between { $min }× and { $max }× the first buy
+trader-dca-error-order = Measured from the first entry, each add needs a deeper drop than the one before it
 trader-dca-cooldown-impact = At least { $span } between extra entries
-trader-dca-example =
-    { $count ->
-        [one] Buy { $initial } → at -{ $threshold }% add { $add }, once
-       *[other] Buy { $initial } → each further -{ $threshold }% adds { $add }, up to { $count } times
+trader-dca-min-hold-impact =
+    { $minutes ->
+        [0] The first add may follow the entry at once
+       *[other] The first add waits at least { $span } after the entry
     }
+trader-dca-capacity = Most this position can hold: { $amount } ({ $multiple }× the first buy)
 trader-dca-info-title = DCA Strategy Info
 trader-dca-info-subtitle = Important considerations for DCA trading
 trader-dca-how-title = How DCA Works
-trader-dca-how-trigger = <strong>Trigger:</strong> Position drops below DCA threshold (e.g., -10%)
+trader-dca-how-trigger = <strong>Trigger:</strong> The price falls below the next level, measured from the average or the first entry
 trader-dca-how-action = <strong>Action:</strong> Add more { -sol } to reduce average cost basis
-trader-dca-how-repeat = <strong>Repeat:</strong> Can DCA multiple times based on max count
+trader-dca-how-repeat = <strong>Ladder:</strong> Each add moves to the next level; adds stop once every level is used
+trader-dca-how-pause = <strong>Pauses:</strong> No add while the previous one is still settling, or while the loss limit blocks new entries
 trader-dca-risk-title = Risk Warnings
 trader-dca-risk-exposure = <strong>Increased Exposure:</strong> DCA increases total capital at risk per position
 trader-dca-risk-knife = <strong>Falling Knife:</strong> DCA won't help if token continues downward trend

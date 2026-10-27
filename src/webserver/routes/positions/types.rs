@@ -273,6 +273,10 @@ pub struct PositionDetail {
     /// The break-even stop is evaluated for this position: it is open, its exits run the
     /// exit policy, and that policy enables the break-even stop.
     pub break_even_active: bool,
+    /// What a manual add that names no size buys, in the native coin: the next DCA
+    /// ladder step's multiple of the first buy, or the first buy once every step is
+    /// used. Absent on a closed position and on one with no first buy to size from.
+    pub default_add_size_native: Option<f64>,
 }
 
 #[derive(Debug, Serialize)]

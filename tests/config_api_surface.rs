@@ -26,7 +26,7 @@ use screenerbot::config::updates::update_config_section;
 use screenerbot::config::utils::{
     load_config_from_path, parse_config_document, save_config_to_file, with_config,
 };
-use screenerbot::config::TimeUnit;
+use screenerbot::config::{DcaMeasureFrom, TimeUnit};
 use screenerbot::webserver::routes::config::getters::{get_full_config, patch_any_config};
 use screenerbot::webserver::routes::config::import_export::{
     export_config, import_config, import_config_preview,
@@ -400,30 +400,38 @@ async fn patch_of_a_break_even_margin_at_its_trigger_is_refused() {
     );
 }
 
-/// A config writer the time-override unit can arrive through.
+/// A config writer a strict `[trader]` name (the time-override unit, the DCA basis) can
+/// arrive through.
 #[derive(Debug, Clone, Copy)]
-enum UnitWriter {
+enum NameWriter {
     Patch,
     AgentConfigWrite,
     Import,
 }
 
-impl UnitWriter {
-    /// Send `unit` through this writer; true when the writer accepted it.
-    async fn write(self, unit: &str) -> bool {
+impl NameWriter {
+    const ALL: [NameWriter; 3] = [
+        NameWriter::Patch,
+        NameWriter::AgentConfigWrite,
+        NameWriter::Import,
+    ];
+
+    /// Send `name` as the `[trader]` field `key` through this writer; true when the
+    /// writer accepted it.
+    async fn write(self, key: &str, name: &str) -> bool {
         match self {
-            UnitWriter::Patch => patch_any_config::<TraderConfig>(Json(serde_json::json!({
-                "time_override_unit": unit,
-            })))
-            .await
-            .status()
-            .is_success(),
-            UnitWriter::AgentConfigWrite => {
-                config_access::set_one("trader.time_override_unit", serde_json::json!(unit)).is_ok()
+            NameWriter::Patch => {
+                patch_any_config::<TraderConfig>(Json(serde_json::json!({ key: name })))
+                    .await
+                    .status()
+                    .is_success()
             }
-            UnitWriter::Import => {
+            NameWriter::AgentConfigWrite => {
+                config_access::set_one(&format!("trader.{key}"), serde_json::json!(name)).is_ok()
+            }
+            NameWriter::Import => {
                 let request = serde_json::from_value(serde_json::json!({
-                    "config": { "trader": { "time_override_unit": unit } },
+                    "config": { "trader": { key: name } },
                     "merge": true,
                     "save_to_disk": false,
                 }))
@@ -444,11 +452,7 @@ async fn every_config_writer_refuses_a_time_unit_the_schema_does_not_name() {
     let _writes = CONFIG_WRITES.lock().await;
     let before = with_config(|cfg| cfg.trader.time_override_unit);
 
-    for writer in [
-        UnitWriter::Patch,
-        UnitWriter::AgentConfigWrite,
-        UnitWriter::Import,
-    ] {
+    for writer in NameWriter::ALL {
         for (sent, landed) in [
             ("weeks", None),
             ("minutes", Some(TimeUnit::Minutes)),
@@ -460,7 +464,7 @@ async fn every_config_writer_refuses_a_time_unit_the_schema_does_not_name() {
             )
             .expect("seed the time unit");
             assert_eq!(
-                writer.write(sent).await,
+                writer.write("time_override_unit", sent).await,
                 landed.is_some(),
                 "{writer:?} answers {sent}"
             );
@@ -485,6 +489,107 @@ async fn every_config_writer_refuses_a_time_unit_the_schema_does_not_name() {
 
     update_config_section(|cfg| cfg.trader.time_override_unit = before, false)
         .expect("restore the time unit");
+}
+
+/// Every writer refuses a DCA basis the schema does not name, leaving the stored basis
+/// as it was, and lands a basis name in any letter case as its basis.
+#[tokio::test]
+async fn every_config_writer_refuses_a_dca_basis_the_schema_does_not_name() {
+    init_config();
+    let _writes = CONFIG_WRITES.lock().await;
+    let before = with_config(|cfg| {
+        (
+            cfg.trader.dca_measure_from,
+            cfg.trader.dca_levels_pct.clone(),
+            cfg.trader.dca_size_multipliers.clone(),
+        )
+    });
+
+    for writer in NameWriter::ALL {
+        for (sent, seeded, landed) in [
+            ("weekly", DcaMeasureFrom::FirstEntry, None),
+            ("lowest", DcaMeasureFrom::Average, None),
+            (
+                "first_entry",
+                DcaMeasureFrom::Average,
+                Some(DcaMeasureFrom::FirstEntry),
+            ),
+            (
+                "AVERAGE",
+                DcaMeasureFrom::FirstEntry,
+                Some(DcaMeasureFrom::Average),
+            ),
+        ] {
+            // A ladder that deepens at every step is valid under either basis.
+            update_config_section(
+                |cfg| {
+                    cfg.trader.dca_measure_from = seeded;
+                    cfg.trader.dca_levels_pct = vec![-10.0, -20.0];
+                    cfg.trader.dca_size_multipliers = vec![0.5, 0.5];
+                },
+                false,
+            )
+            .expect("seed the DCA basis");
+            assert_eq!(
+                writer.write("dca_measure_from", sent).await,
+                landed.is_some(),
+                "{writer:?} answers {sent}"
+            );
+            assert_eq!(
+                with_config(|cfg| cfg.trader.dca_measure_from),
+                landed.unwrap_or(seeded),
+                "{writer:?} stores {sent}"
+            );
+        }
+    }
+
+    update_config_section(
+        |cfg| {
+            cfg.trader.dca_measure_from = before.0;
+            cfg.trader.dca_levels_pct = before.1.clone();
+            cfg.trader.dca_size_multipliers = before.2.clone();
+        },
+        false,
+    )
+    .expect("restore the DCA ladder");
+}
+
+/// The DCA ladder's keys are served and described; the uniform rule's retired keys are
+/// neither, so no page or tool can read or write them.
+#[tokio::test]
+async fn the_dca_ladder_keys_replace_the_uniform_rule_keys() {
+    init_config();
+    let config = full_config_json().await;
+    let metadata = serde_json::to_value(collect_config_metadata()).expect("metadata serializes");
+    for key in [
+        "dca_levels_pct",
+        "dca_size_multipliers",
+        "dca_measure_from",
+        "dca_min_hold_minutes",
+        "dca_cooldown_minutes",
+        "dca_enabled",
+    ] {
+        assert!(
+            config["trader"].get(key).is_some(),
+            "/api/config lacks trader.{key}"
+        );
+        assert!(
+            metadata["trader"].get(key).is_some(),
+            "metadata lacks trader.{key}"
+        );
+    }
+    for retired in ["dca_threshold_pct", "dca_max_count", "dca_size_percentage"] {
+        assert!(
+            config["trader"].get(retired).is_none(),
+            "/api/config serves trader.{retired}"
+        );
+        assert!(
+            metadata["trader"].get(retired).is_none(),
+            "metadata describes trader.{retired}"
+        );
+    }
+    assert_eq!(metadata["trader"]["dca_levels_pct"]["max_items"], 5);
+    assert_eq!(metadata["trader"]["dca_size_multipliers"]["max_items"], 5);
 }
 
 /// The config layout written by v0.2.13, as a TOML document.

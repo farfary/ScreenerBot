@@ -39,7 +39,7 @@ trade-sell-input = Persentase Kustom
 trade-add-title = Tambah ke Posisi
 trade-add-subtitle = DCA ke posisi yang ada
 trade-add-confirm = Tambah Posisi
-trade-add-hint = Kosongkan untuk ukuran DCA yang dikonfigurasi
+trade-add-hint = Kosongkan untuk menambah sebesar langkah DCA berikutnya dari posisi, jika tidak ada maka pembelian pertamanya, jika tidak ada maka ukuran trade
 trade-amount-input = Jumlah Kustom
     .placeholder = Masukkan jumlah { -sol }
 

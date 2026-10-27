@@ -20,7 +20,7 @@
 use crate::common;
 
 use common::config_guard;
-use screenerbot::config::{TakeProfitLevel, TimeUnit};
+use screenerbot::config::{DcaLevel, DcaMeasureFrom, TakeProfitLevel, TimeUnit};
 use screenerbot::trader::evaluators::DcaConfigSnapshot;
 use screenerbot::trader::policy::{
     BreakEvenPolicy, ExitPolicy, ExitPolicyOverrides, StopLossPolicy, TakeProfitPolicy, TimePolicy,
@@ -222,27 +222,35 @@ fn dca_policy_equals_the_snapshot_the_dca_evaluator_expects() {
     let _cfg = config_guard();
     common::set_config(|cfg| {
         cfg.trader.dca_enabled = true; // default: false
-        cfg.trader.dca_max_count = 5; // default: 2
+        cfg.trader.dca_levels_pct = vec![-15.0, -30.0, -60.0]; // default: [-10, -10]
+        cfg.trader.dca_size_multipliers = vec![0.5, 1.0, 2.0]; // default: [0.5, 0.5]
+        cfg.trader.dca_measure_from = DcaMeasureFrom::FirstEntry; // default: average
         cfg.trader.dca_cooldown_minutes = 90; // default: 30
-        cfg.trader.dca_threshold_pct = -25.0; // default: -10.0
-        cfg.trader.dca_size_percentage = 30.0; // default: 50.0
+        cfg.trader.dca_min_hold_minutes = 20; // default: 0
     });
 
     let expected = DcaConfigSnapshot {
         enabled: true,
-        max_count: 5,
+        levels: vec![
+            DcaLevel {
+                drop_pct: -15.0,
+                size_multiplier: 0.5,
+            },
+            DcaLevel {
+                drop_pct: -30.0,
+                size_multiplier: 1.0,
+            },
+            DcaLevel {
+                drop_pct: -60.0,
+                size_multiplier: 2.0,
+            },
+        ],
+        measure_from: DcaMeasureFrom::FirstEntry,
         cooldown_minutes: 90,
-        threshold_pct: -25.0,
-        size_percentage: 30.0,
+        min_hold_minutes: 20,
     };
 
-    let dca = ExitPolicy::from_config().dca;
-
-    assert_eq!(dca.enabled, expected.enabled);
-    assert_eq!(dca.max_count, expected.max_count);
-    assert_eq!(dca.cooldown_minutes, expected.cooldown_minutes);
-    assert_eq!(dca.threshold_pct, expected.threshold_pct);
-    assert_eq!(dca.size_percentage, expected.size_percentage);
+    assert_eq!(ExitPolicy::from_config().dca, expected);
 }
 
 #[test]

@@ -64,6 +64,9 @@ pub(super) fn trader_failure(error: &trader::Error) -> Response {
                 .arg("percentage", UiArg::Number(*percentage))
         }
         Error::PercentageRequired => ApiError::new(code, ids::ERRORS_TRADE_PERCENTAGE_REQUIRED),
+        Error::AddSizeRequired { mint } => {
+            ApiError::new(code, ids::ERRORS_TRADE_ADD_SIZE_REQUIRED).text_arg("mint", mint.clone())
+        }
         Error::Database(_) | Error::Positions(_) | Error::Transactions(_) => {
             ApiError::new(code, ids::ERRORS_TRADE_STORAGE_FAILED)
         }

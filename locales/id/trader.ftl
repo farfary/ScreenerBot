@@ -298,24 +298,34 @@ trader-strategy-priority = Prioritas { $priority }
 
 trader-dca-title = Dollar-Cost Averaging
 trader-dca-subtitle = Tambah otomatis ke posisi yang rugi untuk menurunkan harga entry rata-rata Anda
-trader-dca-threshold-impact = Membeli lagi saat posisi turun { $value }% dari entry
-trader-dca-threshold-hint = Penurunan dari entry saat DCA membeli lagi (10 = DCA di -10%)
-trader-dca-count-impact =
-    { $count ->
-       *[other] Paling banyak { $count } entry tambahan per posisi
-    }
-trader-dca-size-impact = Setiap entry tambahan membeli { $amount }
+trader-dca-measure-average = Rata-rata masuk
+trader-dca-measure-first-entry = Masuk pertama
+trader-dca-step = Tambahan { $step }
+trader-dca-drop-label = Penurunan harga tambahan { $step }
+trader-dca-size-label = Ukuran tambahan { $step }, kali pembelian pertama
+trader-dca-drop-caption = Penurunan Harga
+trader-dca-size-caption = Beli × Pembelian Pertama
+trader-dca-add-step = Tambah level
+trader-dca-remove-step = Hapus tambahan { $step }
+trader-dca-step-amount = = { $amount }
+trader-dca-step-below-minimum = Di bawah transaksi minimum { $minimum }: tambahan ini tidak dikirim
+trader-dca-error-drop-range = Setiap penurunan harus antara { $min }% dan { $max }%
+trader-dca-error-size-range = Setiap ukuran harus antara { $min }× dan { $max }× pembelian pertama
+trader-dca-error-order = Diukur dari masuk pertama, setiap tambahan perlu penurunan lebih dalam dari sebelumnya
 trader-dca-cooldown-impact = Minimal { $span } di antara entry tambahan
-trader-dca-example =
-    { $count ->
-       *[other] Beli { $initial } → setiap turun -{ $threshold }% lagi menambah { $add }, hingga { $count } kali
+trader-dca-min-hold-impact =
+    { $minutes ->
+        [0] Tambahan pertama boleh langsung setelah masuk
+       *[other] Tambahan pertama menunggu setidaknya { $span } setelah masuk
     }
+trader-dca-capacity = Paling banyak yang bisa dipegang posisi ini: { $amount } ({ $multiple }× pembelian pertama)
 trader-dca-info-title = Info Strategi DCA
 trader-dca-info-subtitle = Pertimbangan penting untuk trading DCA
 trader-dca-how-title = Cara Kerja DCA
-trader-dca-how-trigger = <strong>Pemicu:</strong> Posisi turun di bawah ambang DCA (mis., -10%)
+trader-dca-how-trigger = <strong>Pemicu:</strong> harga turun di bawah level berikutnya, diukur dari rata-rata masuk atau masuk pertama
 trader-dca-how-action = <strong>Aksi:</strong> Tambah lebih banyak { -sol } untuk menurunkan harga pokok rata-rata
-trader-dca-how-repeat = <strong>Ulangi:</strong> Dapat DCA beberapa kali sesuai jumlah maksimum
+trader-dca-how-repeat = <strong>Tangga:</strong> setiap tambahan pindah ke level berikutnya; tambahan berhenti setelah semua level terpakai
+trader-dca-how-pause = <strong>Jeda:</strong> tidak ada tambahan selama yang sebelumnya masih diselesaikan, atau selama batas kerugian memblokir entri baru
 trader-dca-risk-title = Peringatan Risiko
 trader-dca-risk-exposure = <strong>Eksposur Meningkat:</strong> DCA menambah total modal yang berisiko per posisi
 trader-dca-risk-knife = <strong>Falling Knife:</strong> DCA tidak membantu jika token terus turun

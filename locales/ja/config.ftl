@@ -1048,15 +1048,17 @@ config-trader-dca-cooldown-minutes = DCA クールダウン
     .unit = 分
 config-trader-dca-enabled = DCA を有効化
     .hint = ポジションにドルコスト平均法（DCA）を適用します
-config-trader-dca-max-count = 最大 DCA 回数
-    .hint = 1 ポジションあたりの追加 DCA エントリーの最大数
-    .unit = 回
-config-trader-dca-size-percentage = DCA サイズ
-    .hint = 各 DCA エントリーのサイズを、当初のポジションサイズに対する % で指定します
+config-trader-dca-levels-pct = DCA レベル
+    .hint = 各追加購入が行われる、エントリー価格からの下落幅（10 = −10% で追加）
     .unit = %
-config-trader-dca-threshold-pct = DCA しきい値
-    .hint = ポジションがこの % 下落したら DCA を実行します（-10 = -10% で DCA）
-    .unit = %
+config-trader-dca-measure-from = 下落の基準
+    .hint = 各レベルの下落を測る基準のエントリー価格：平均エントリーまたは初回エントリー
+config-trader-dca-min-hold-minutes = エントリー後の待機
+    .hint = 初回の追加購入までのエントリー後の待機時間（分）
+    .unit = 分
+config-trader-dca-size-multipliers = DCA サイズ
+    .hint = 各追加購入の数量（初回購入に対する倍率）
+    .unit = ×
 config-trader-enabled = 有効
     .hint = 取引システムのマスタースイッチ
 config-trader-entry-check-concurrency = エントリーチェックの同時実行数

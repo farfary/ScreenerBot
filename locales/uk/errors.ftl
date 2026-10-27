@@ -290,6 +290,7 @@ errors-trade-blacklisted = токен { $mint } у чорному списку
 errors-trade-slippage-invalid = проковзування { $slippage }% має бути в межах від { $minimum }% до { $maximum }%
 errors-trade-percentage-invalid = відсоток продажу { $percentage } має бути в межах (0, 100]
 errors-trade-percentage-required = частковий продаж потребує відсотка позиції, який треба продати
+errors-trade-add-size-required = докупівля в позицію { $mint } потребує розміру в { -sol }
 errors-trade-record-failed = не вдалося записати ручну угоду
 errors-trade-task-cancelled = ручна угода зупинилася до відповіді, бо застосунок завершує роботу; її результат відображено в позиції
 errors-trade-no-open-position = немає відкритої позиції для токена { $mint }

@@ -99,8 +99,9 @@ const ACTION_CONFIG = {
       confirmLabel: I18n.t("trade-add-confirm"),
       inputLabel: I18n.t("trade-amount-input"),
       inputPlaceholder: I18n.attr("trade-amount-input", "placeholder"),
-      // The backend's default add is trade_size_sol x dca_size_percentage — NOT "50% of
-      // the original entry", which is what this used to claim.
+      // The backend's default add is the position's next DCA ladder step, its first buy
+      // once every step is used, or the trade size for a wallet-imported position,
+      // preset from the position's `default_add_size_native`.
       inputHint: I18n.t("trade-add-hint"),
     }),
     colorClass: "action-add",

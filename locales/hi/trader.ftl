@@ -307,26 +307,34 @@ trader-strategy-priority = प्राथमिकता { $priority }
 
 trader-dca-title = डॉलर-कॉस्ट एवरेजिंग
 trader-dca-subtitle = औसत एंट्री प्राइस घटाने के लिए घाटे वाली पोज़िशन में अपने आप ऐड करें
-trader-dca-threshold-impact = पोज़िशन एंट्री से { $value }% नीचे होने पर और ख़रीदता है
-trader-dca-threshold-hint = एंट्री से वह गिरावट जिस पर DCA और ख़रीदता है (10 = -10% पर DCA)
-trader-dca-count-impact =
-    { $count ->
-        [one] हर पोज़िशन पर अधिकतम एक अतिरिक्त एंट्री
-       *[other] हर पोज़िशन पर अधिकतम { $count } अतिरिक्त एंट्री
-    }
-trader-dca-size-impact = हर अतिरिक्त एंट्री { $amount } ख़रीदती है
+trader-dca-measure-average = औसत एंट्री
+trader-dca-measure-first-entry = पहली एंट्री
+trader-dca-step = जोड़ { $step }
+trader-dca-drop-label = जोड़ { $step } की कीमत गिरावट
+trader-dca-size-label = जोड़ { $step } का आकार, पहली खरीद का गुणक
+trader-dca-drop-caption = कीमत गिरावट
+trader-dca-size-caption = खरीद × पहली खरीद
+trader-dca-add-step = स्तर जोड़ें
+trader-dca-remove-step = जोड़ { $step } हटाएँ
+trader-dca-step-amount = = { $amount }
+trader-dca-step-below-minimum = न्यूनतम ट्रेड { $minimum } से कम: यह जोड़ भेजा नहीं जाता
+trader-dca-error-drop-range = हर गिरावट { $min }% और { $max }% के बीच होनी चाहिए
+trader-dca-error-size-range = हर आकार पहली खरीद के { $min }× और { $max }× के बीच होना चाहिए
+trader-dca-error-order = पहली एंट्री से मापने पर हर जोड़ को पिछले से गहरी गिरावट चाहिए
 trader-dca-cooldown-impact = अतिरिक्त एंट्री के बीच कम से कम { $span }
-trader-dca-example =
-    { $count ->
-        [one] { $initial } ख़रीदें → -{ $threshold }% पर एक बार { $add } जोड़ें
-       *[other] { $initial } ख़रीदें → हर अगली -{ $threshold }% गिरावट पर { $add } जुड़ता है, अधिकतम { $count } बार
+trader-dca-min-hold-impact =
+    { $minutes ->
+        [0] पहला जोड़ एंट्री के तुरंत बाद हो सकता है
+       *[other] पहला जोड़ एंट्री के बाद कम से कम { $span } प्रतीक्षा करता है
     }
+trader-dca-capacity = यह पोज़िशन अधिकतम इतना रख सकती है: { $amount } (पहली खरीद का { $multiple }×)
 trader-dca-info-title = DCA स्ट्रैटेजी जानकारी
 trader-dca-info-subtitle = DCA ट्रेडिंग के लिए ज़रूरी बातें
 trader-dca-how-title = DCA कैसे काम करता है
-trader-dca-how-trigger = <strong>ट्रिगर:</strong> पोज़िशन DCA सीमा से नीचे गिरती है (जैसे, -10%)
+trader-dca-how-trigger = <strong>ट्रिगर:</strong> कीमत अगले स्तर से नीचे जाती है, औसत या पहली एंट्री से मापी गई
 trader-dca-how-action = <strong>कार्रवाई:</strong> औसत कॉस्ट बेसिस घटाने के लिए और { -sol } ऐड करें
-trader-dca-how-repeat = <strong>दोहराव:</strong> अधिकतम गिनती के अनुसार कई बार DCA हो सकता है
+trader-dca-how-repeat = <strong>सीढ़ी:</strong> हर जोड़ अगले स्तर पर जाता है; सभी स्तर इस्तेमाल होने पर जोड़ रुक जाते हैं
+trader-dca-how-pause = <strong>विराम:</strong> पिछला जोड़ निपटने तक, या जब तक हानि सीमा नई एंट्री रोकती है, कोई जोड़ नहीं
 trader-dca-risk-title = जोखिम चेतावनियां
 trader-dca-risk-exposure = <strong>बढ़ा हुआ एक्सपोज़र:</strong> DCA से प्रति पोज़िशन जोखिम में पड़ी कुल पूंजी बढ़ती है
 trader-dca-risk-knife = <strong>फ़ॉलिंग नाइफ़:</strong> टोकन गिरता रहे तो DCA मदद नहीं करेगा

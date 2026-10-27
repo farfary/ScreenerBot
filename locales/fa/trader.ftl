@@ -365,26 +365,34 @@ trader-strategy-priority = اولویت { $priority }
 
 trader-dca-title = میانگین‌گیری قیمت
 trader-dca-subtitle = افزودن خودکار به پوزیشن‌های زیان‌ده برای کاهش میانگین قیمت ورود
-trader-dca-threshold-impact = وقتی پوزیشن { $value }% پایین‌تر از ورود باشد، بیشتر می‌خرد
-trader-dca-threshold-hint = افتی نسبت به ورود که DCA در آن بیشتر می‌خرد (10 = DCA در -10%)
-trader-dca-count-impact =
-    { $count ->
-        [one] حداکثر یک ورود اضافه برای هر پوزیشن
-       *[other] حداکثر { $count } ورود اضافه برای هر پوزیشن
-    }
-trader-dca-size-impact = هر ورود اضافه { $amount } می‌خرد
+trader-dca-measure-average = میانگین ورود
+trader-dca-measure-first-entry = ورود اول
+trader-dca-step = افزایش { $step }
+trader-dca-drop-label = افت قیمت افزایش { $step }
+trader-dca-size-label = اندازه افزایش { $step }، ضریب خرید اول
+trader-dca-drop-caption = افت قیمت
+trader-dca-size-caption = خرید × خرید اول
+trader-dca-add-step = افزودن سطح
+trader-dca-remove-step = حذف افزایش { $step }
+trader-dca-step-amount = = { $amount }
+trader-dca-step-below-minimum = کمتر از حداقل معامله { $minimum }: این افزایش ارسال نمی‌شود
+trader-dca-error-drop-range = هر افت باید بین { $min }% و { $max }% باشد
+trader-dca-error-size-range = هر اندازه باید بین { $min }× و { $max }× خرید اول باشد
+trader-dca-error-order = با سنجش از ورود اول، هر افزایش به افتی عمیق‌تر از قبلی نیاز دارد
 trader-dca-cooldown-impact = دست‌کم { $span } بین ورودهای اضافه
-trader-dca-example =
-    { $count ->
-        [one] خرید { $initial } ← در -{ $threshold }% یک بار { $add } اضافه می‌شود
-       *[other] خرید { $initial } ← هر -{ $threshold }% افت بیشتر { $add } اضافه می‌کند، حداکثر { $count } بار
+trader-dca-min-hold-impact =
+    { $minutes ->
+        [0] نخستین افزایش می‌تواند بلافاصله پس از ورود باشد
+       *[other] نخستین افزایش دست‌کم { $span } پس از ورود صبر می‌کند
     }
+trader-dca-capacity = بیشترین مقداری که این پوزیشن می‌تواند داشته باشد: { $amount } ({ $multiple }× خرید اول)
 trader-dca-info-title = اطلاعات استراتژی DCA
 trader-dca-info-subtitle = نکات مهم درباره معامله با DCA
 trader-dca-how-title = DCA چگونه کار می‌کند
-trader-dca-how-trigger = <strong>محرک:</strong> افت پوزیشن به کمتر از آستانه DCA (مثلاً -10%)
+trader-dca-how-trigger = <strong>محرک:</strong> قیمت به زیر سطح بعدی می‌رسد، سنجیده از میانگین ورود یا ورود اول
 trader-dca-how-action = <strong>اقدام:</strong> افزودن { -sol } بیشتر برای کاهش قیمت تمام‌شده میانگین
-trader-dca-how-repeat = <strong>تکرار:</strong> بسته به حداکثر تعداد، DCA چند بار قابل انجام است
+trader-dca-how-repeat = <strong>نردبان:</strong> هر افزایش به سطح بعدی می‌رود؛ پس از استفاده از همه سطوح، افزایش‌ها متوقف می‌شوند
+trader-dca-how-pause = <strong>توقف‌ها:</strong> تا وقتی افزایش قبلی در حال تسویه است یا محدودیت زیان ورودهای تازه را مسدود کرده، افزایشی انجام نمی‌شود
 trader-dca-risk-title = هشدارهای ریسک
 trader-dca-risk-exposure = <strong>افزایش مواجهه:</strong> DCA کل سرمایه در معرض ریسک هر پوزیشن را بیشتر می‌کند
 trader-dca-risk-knife = <strong>چاقوی در حال سقوط:</strong> اگر روند نزولی توکن ادامه یابد، DCA کمکی نمی‌کند

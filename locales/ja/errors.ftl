@@ -293,6 +293,7 @@ errors-trade-blacklisted = トークン { $mint } はブラックリストに登
 errors-trade-slippage-invalid = スリッページ { $slippage }% は { $minimum }% から { $maximum }% の範囲で指定してください
 errors-trade-percentage-invalid = 売却割合 { $percentage } は (0, 100] の範囲で指定してください
 errors-trade-percentage-required = 部分売却には売却するポジションの割合を指定してください
+errors-trade-add-size-required = { $mint } のポジションへの追加には { -sol } での数量を指定してください
 errors-trade-record-failed = 手動取引を記録できませんでした
 errors-trade-task-cancelled = アプリの終了中のため、手動取引は応答前に停止しました。結果はポジションに記録されています
 errors-trade-no-open-position = トークン { $mint } のオープンポジションがありません

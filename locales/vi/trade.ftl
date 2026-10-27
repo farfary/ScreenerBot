@@ -37,7 +37,7 @@ trade-sell-input = Phần trăm tùy chỉnh
 trade-add-title = Thêm vào vị thế
 trade-add-subtitle = DCA vào vị thế hiện có
 trade-add-confirm = Thêm vào vị thế
-trade-add-hint = Để trống để dùng quy mô DCA đã cấu hình
+trade-add-hint = Để trống để thêm bước DCA tiếp theo của vị thế, nếu không thì lần mua đầu tiên, nếu không nữa thì quy mô giao dịch
 trade-amount-input = Số lượng tùy chỉnh
     .placeholder = Nhập số lượng { -sol }
 

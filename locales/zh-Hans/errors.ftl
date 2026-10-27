@@ -320,6 +320,7 @@ errors-trade-blacklisted = 代币 { $mint } 已加入黑名单
 errors-trade-slippage-invalid = 滑点 { $slippage }% 必须在 { $minimum }% 到 { $maximum }% 之间
 errors-trade-percentage-invalid = 卖出比例 { $percentage } 必须在 (0, 100] 范围内
 errors-trade-percentage-required = 部分卖出需要指定要卖出的仓位比例
+errors-trade-add-size-required = 向 { $mint } 的仓位加仓需要指定 { -sol } 数量
 errors-trade-record-failed = 无法记录手动交易
 errors-trade-task-cancelled = 应用正在关闭，手动交易在返回结果前已停止；其结果以持仓为准
 errors-trade-no-open-position = 代币 { $mint } 没有持仓中的仓位

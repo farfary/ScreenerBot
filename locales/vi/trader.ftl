@@ -296,24 +296,34 @@ trader-strategy-priority = Ưu tiên { $priority }
 
 trader-dca-title = DCA (trung bình giá)
 trader-dca-subtitle = Tự động thêm vào các vị thế đang lỗ để hạ giá vào trung bình
-trader-dca-threshold-impact = Mua thêm khi vị thế giảm { $value }% so với giá vào
-trader-dca-threshold-hint = Mức giảm so với giá vào mà DCA mua thêm (10 = DCA ở -10%)
-trader-dca-count-impact =
-    { $count ->
-       *[other] Tối đa { $count } lần vào thêm mỗi vị thế
-    }
-trader-dca-size-impact = Mỗi lần vào thêm mua { $amount }
+trader-dca-measure-average = Giá vào trung bình
+trader-dca-measure-first-entry = Giá vào lần đầu
+trader-dca-step = Mua thêm { $step }
+trader-dca-drop-label = Mức giảm giá cho lần mua thêm { $step }
+trader-dca-size-label = Kích thước lần mua thêm { $step }, bội số của lần mua đầu
+trader-dca-drop-caption = Mức giảm giá
+trader-dca-size-caption = Mua × lần mua đầu
+trader-dca-add-step = Thêm mức
+trader-dca-remove-step = Xóa lần mua thêm { $step }
+trader-dca-step-amount = = { $amount }
+trader-dca-step-below-minimum = Dưới giao dịch tối thiểu { $minimum }: lần mua thêm này không được gửi
+trader-dca-error-drop-range = Mỗi mức giảm phải nằm trong khoảng { $min }% đến { $max }%
+trader-dca-error-size-range = Mỗi kích thước phải nằm trong khoảng { $min }× đến { $max }× lần mua đầu
+trader-dca-error-order = Khi đo từ giá vào lần đầu, mỗi lần mua thêm cần mức giảm sâu hơn lần trước
 trader-dca-cooldown-impact = Cách nhau ít nhất { $span } giữa các lần vào thêm
-trader-dca-example =
-    { $count ->
-       *[other] Mua { $initial } → mỗi lần giảm thêm -{ $threshold }% mua thêm { $add }, tối đa { $count } lần
+trader-dca-min-hold-impact =
+    { $minutes ->
+        [0] Lần mua thêm đầu tiên có thể diễn ra ngay sau khi vào lệnh
+       *[other] Lần mua thêm đầu tiên chờ ít nhất { $span } sau khi vào lệnh
     }
+trader-dca-capacity = Mức tối đa vị thế này có thể nắm giữ: { $amount } ({ $multiple }× lần mua đầu)
 trader-dca-info-title = Thông tin chiến lược DCA
 trader-dca-info-subtitle = Những điều cần lưu ý khi giao dịch DCA
 trader-dca-how-title = DCA hoạt động thế nào
-trader-dca-how-trigger = <strong>Điều kiện kích hoạt:</strong> Vị thế giảm dưới ngưỡng DCA (ví dụ: -10%)
+trader-dca-how-trigger = <strong>Kích hoạt:</strong> giá giảm xuống dưới mức tiếp theo, đo từ giá vào trung bình hoặc lần đầu
 trader-dca-how-action = <strong>Hành động:</strong> Thêm { -sol } để giảm giá vốn trung bình
-trader-dca-how-repeat = <strong>Lặp lại:</strong> Có thể DCA nhiều lần theo số lần tối đa
+trader-dca-how-repeat = <strong>Bậc thang:</strong> mỗi lần mua thêm chuyển sang mức tiếp theo; dùng hết các mức thì dừng mua thêm
+trader-dca-how-pause = <strong>Tạm dừng:</strong> không mua thêm khi lần trước vẫn đang được xử lý, hoặc khi giới hạn lỗ chặn lệnh vào mới
 trader-dca-risk-title = Cảnh báo rủi ro
 trader-dca-risk-exposure = <strong>Rủi ro tăng:</strong> DCA làm tăng tổng vốn chịu rủi ro của mỗi vị thế
 trader-dca-risk-knife = <strong>Bắt dao rơi:</strong> DCA không giúp được nếu token tiếp tục xu hướng giảm

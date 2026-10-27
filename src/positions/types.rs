@@ -288,7 +288,7 @@ pub struct Position {
     pub entry_transaction_signature: Option<String>,
     pub exit_transaction_signature: Option<String>,
     pub token_amount: Option<RawAmount>, // Initial amount of tokens bought (first entry)
-    pub effective_entry_price: Option<f64>, // Initial entry price (deprecated, use average_entry_price)
+    pub effective_entry_price: Option<f64>, // Verified fill price of the first buy (the round average on a wallet-derived row)
     pub effective_exit_price: Option<f64>,  // Final exit price (deprecated, use average_exit_price)
     pub native_received: Option<f64>,       // Total SOL received after all exits
     // Profit targets

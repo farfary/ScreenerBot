@@ -3,8 +3,9 @@
 
 //! Preflight gates shared by every manual trade entry point (dashboard routes and
 //! agent tools): emergency stop, core-service readiness, storage settlement for
-//! buys and adds, address shape, blacklist, and the per-trade slippage bound. A refused trade is also recorded
-//! as a failed action so it shows in the dashboard like any other attempt.
+//! buys and adds, address shape, blacklist, and the per-trade slippage bound, plus the
+//! size of an add that names none. A refused trade is also recorded as a failed action so
+//! it shows in the dashboard like any other attempt.
 
 use crate::trader::admission::{check_entry_storage, EntryBlock};
 use crate::trader::constants::{MAX_MANUAL_SLIPPAGE_PCT, MIN_MANUAL_SLIPPAGE_PCT};
@@ -161,6 +162,27 @@ pub fn validate_size(size_native: f64) -> Result<f64, Error> {
         });
     }
     Ok(size_native)
+}
+
+/// The size of a manual add to the open position of `mint` that names none, the same
+/// amount the dashboard presets: the next DCA ladder step's multiple of the first buy,
+/// the first buy once every step is used, or the configured trade size for a
+/// wallet-derived round, which has no first buy. Fails when the mint holds no open
+/// position, or when that size is not a positive amount (a position with a broken entry
+/// size, or a trade size of zero), in which case the add must name its size.
+pub async fn default_add_size(mint: &str) -> Result<f64, Error> {
+    let Some(position) = crate::positions::get_open_round_by_mint(mint).await else {
+        return Err(Error::NoOpenPosition {
+            mint: mint.to_owned(),
+        });
+    };
+    let levels = crate::trader::config::get_dca_levels();
+    let trade_size = crate::trader::config::get_trade_size_native();
+    crate::trader::evaluators::default_add_size_native(&position, &levels, trade_size).ok_or_else(
+        || Error::AddSizeRequired {
+            mint: mint.to_owned(),
+        },
+    )
 }
 
 #[cfg(test)]

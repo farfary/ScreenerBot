@@ -329,30 +329,34 @@ trader-strategy-priority = Приоритет { $priority }
 
 trader-dca-title = Усреднение (DCA)
 trader-dca-subtitle = Автоматически докупать убыточные позиции, чтобы снизить среднюю цену входа
-trader-dca-threshold-impact = Докупает, когда позиция ниже входа на { $value }%
-trader-dca-threshold-hint = Падение от входа, при котором DCA докупает (10 = DCA при -10%)
-trader-dca-count-impact =
-    { $count ->
-        [one] Не более { $count } дополнительного входа на позицию
-        [few] Не более { $count } дополнительных входов на позицию
-        [many] Не более { $count } дополнительных входов на позицию
-       *[other] Не более { $count } дополнительного входа на позицию
-    }
-trader-dca-size-impact = Каждый дополнительный вход покупает на { $amount }
+trader-dca-measure-average = Средний вход
+trader-dca-measure-first-entry = Первый вход
+trader-dca-step = Докупка { $step }
+trader-dca-drop-label = Падение цены для докупки { $step }
+trader-dca-size-label = Размер докупки { $step }, кратно первой покупке
+trader-dca-drop-caption = Падение цены
+trader-dca-size-caption = Покупка × первая покупка
+trader-dca-add-step = Добавить уровень
+trader-dca-remove-step = Удалить докупку { $step }
+trader-dca-step-amount = = { $amount }
+trader-dca-step-below-minimum = Меньше минимальной сделки { $minimum }: эта докупка не отправляется
+trader-dca-error-drop-range = Каждое падение должно быть от { $min }% до { $max }%
+trader-dca-error-size-range = Каждый размер должен быть от { $min }× до { $max }× первой покупки
+trader-dca-error-order = При измерении от первого входа каждой докупке нужно падение глубже предыдущего
 trader-dca-cooldown-impact = Не менее { $span } между дополнительными входами
-trader-dca-example =
-    { $count ->
-        [one] Покупка на { $initial } → каждые следующие -{ $threshold }% докупают на { $add }, до { $count } раза
-        [few] Покупка на { $initial } → каждые следующие -{ $threshold }% докупают на { $add }, до { $count } раз
-        [many] Покупка на { $initial } → каждые следующие -{ $threshold }% докупают на { $add }, до { $count } раз
-       *[other] Покупка на { $initial } → каждые следующие -{ $threshold }% докупают на { $add }, до { $count } раза
+trader-dca-min-hold-impact =
+    { $minutes ->
+        [0] Первая докупка может последовать сразу после входа
+       *[other] Первая докупка ждёт не менее { $span } после входа
     }
+trader-dca-capacity = Максимум, который может держать эта позиция: { $amount } ({ $multiple }× первая покупка)
 trader-dca-info-title = О стратегии DCA
 trader-dca-info-subtitle = Важные особенности торговли с DCA
 trader-dca-how-title = Как работает DCA
-trader-dca-how-trigger = <strong>Триггер:</strong> позиция падает ниже порога DCA (например, -10%)
+trader-dca-how-trigger = <strong>Триггер:</strong> цена опускается ниже следующего уровня, считая от среднего или первого входа
 trader-dca-how-action = <strong>Действие:</strong> докупить ещё { -sol }, чтобы снизить среднюю базовую стоимость
-trader-dca-how-repeat = <strong>Повтор:</strong> DCA можно выполнять несколько раз, вплоть до максимального числа
+trader-dca-how-repeat = <strong>Лестница:</strong> каждая докупка переходит к следующему уровню; когда все уровни использованы, докупки прекращаются
+trader-dca-how-pause = <strong>Паузы:</strong> докупок нет, пока предыдущая ещё проводится или пока лимит убытков блокирует новые входы
 trader-dca-risk-title = Предупреждения о рисках
 trader-dca-risk-exposure = <strong>Рост экспозиции:</strong> DCA увеличивает общий капитал под риском в каждой позиции
 trader-dca-risk-knife = <strong>Падающий нож:</strong> DCA не поможет, если токен продолжит падать

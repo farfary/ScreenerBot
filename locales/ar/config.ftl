@@ -1042,15 +1042,17 @@ config-trader-dca-cooldown-minutes = فترة تهدئة DCA
     .unit = دقيقة
 config-trader-dca-enabled = تفعيل DCA
     .hint = تفعيل متوسط التكلفة بالدولار (DCA) للمراكز
-config-trader-dca-max-count = أقصى عدد لعمليات DCA
-    .hint = أقصى عدد لعمليات دخول DCA الإضافية لكل مركز
-    .unit = دخول
-config-trader-dca-size-percentage = حجم DCA
-    .hint = حجم كل عملية دخول DCA كنسبة من حجم المركز الأولي
+config-trader-dca-levels-pct = مستويات DCA
+    .hint = مقدار انخفاض السعر تحت سعر الدخول الذي تنتظره كل إضافة (10 = إضافة عند −10%)
     .unit = %
-config-trader-dca-threshold-pct = حد DCA
-    .hint = تنفيذ DCA عندما يهبط المركز بهذه النسبة (-10 = DCA عند -10%)
-    .unit = %
+config-trader-dca-measure-from = قياس الانخفاض من
+    .hint = سعر الدخول الذي يُقاس منه انخفاض كل مستوى: متوسط الدخول أو الدخول الأول
+config-trader-dca-min-hold-minutes = الانتظار بعد الدخول
+    .hint = الدقائق بعد الدخول قبل أول إضافة
+    .unit = دقيقة
+config-trader-dca-size-multipliers = أحجام DCA
+    .hint = ما تشتريه كل إضافة، كمضاعف لأول شراء
+    .unit = ×
 config-trader-enabled = مفعّل
     .hint = المفتاح الرئيسي لنظام التداول
 config-trader-entry-check-concurrency = تزامن فحص الدخول

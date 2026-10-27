@@ -1048,15 +1048,17 @@ config-trader-dca-cooldown-minutes = DCA Bekleme Süresi
     .unit = dk
 config-trader-dca-enabled = DCA'yı Etkinleştir
     .hint = Pozisyonlar için Maliyet Ortalaması (DCA) etkinleştirin
-config-trader-dca-max-count = Maks. DCA Sayısı
-    .hint = Pozisyon başına maksimum ek DCA girişi sayısı
-    .unit = giriş
-config-trader-dca-size-percentage = DCA Boyutu
-    .hint = Her DCA girişinin başlangıç pozisyon boyutuna göre %'si
+config-trader-dca-levels-pct = DCA Seviyeleri
+    .hint = Her eklemenin alım yapması için fiyatın girişin ne kadar altına düşmesi gerekir (10 = −10% düşüşte ekleme)
     .unit = %
-config-trader-dca-threshold-pct = DCA Eşiği
-    .hint = Pozisyon bu % kadar düştüğünde DCA yapın (-10 = -%10'da DCA)
-    .unit = %
+config-trader-dca-measure-from = Düşüşü şuradan ölç
+    .hint = Her seviyenin düşüşünün ölçüldüğü giriş fiyatı: ortalama giriş veya ilk giriş
+config-trader-dca-min-hold-minutes = Girişten Sonra Bekleme
+    .hint = İlk eklemeden önce girişten sonraki dakikalar
+    .unit = dk
+config-trader-dca-size-multipliers = DCA Boyutları
+    .hint = Her eklemenin aldığı miktar, ilk alımın katı olarak
+    .unit = ×
 config-trader-enabled = Etkin
     .hint = İşlem sistemi için ana anahtar
 config-trader-entry-check-concurrency = Giriş Kontrolü Eşzamanlılığı

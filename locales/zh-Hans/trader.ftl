@@ -354,24 +354,34 @@ trader-strategy-priority = 优先级 { $priority }
 
 trader-dca-title = 定投加仓（DCA）
 trader-dca-subtitle = 对亏损仓位自动加仓，以降低入场均价
-trader-dca-threshold-impact = 仓位较入场下跌 { $value }% 时加仓
-trader-dca-threshold-hint = DCA 加仓时相对入场的跌幅（10 = 在 -10% 加仓）
-trader-dca-count-impact =
-    { $count ->
-       *[other] 每个仓位最多追加 { $count } 次
-    }
-trader-dca-size-impact = 每次追加买入 { $amount }
+trader-dca-measure-average = 平均入场价
+trader-dca-measure-first-entry = 首次入场价
+trader-dca-step = 加仓 { $step }
+trader-dca-drop-label = 加仓 { $step } 的价格跌幅
+trader-dca-size-label = 加仓 { $step } 的数量，首次买入的倍数
+trader-dca-drop-caption = 价格跌幅
+trader-dca-size-caption = 买入 × 首次买入
+trader-dca-add-step = 添加档位
+trader-dca-remove-step = 移除加仓 { $step }
+trader-dca-step-amount = = { $amount }
+trader-dca-step-below-minimum = 低于最小交易额 { $minimum }：此次加仓不会发送
+trader-dca-error-drop-range = 每档跌幅必须在 { $min }% 到 { $max }% 之间
+trader-dca-error-size-range = 每档数量必须在首次买入的 { $min }× 到 { $max }× 之间
+trader-dca-error-order = 以首次入场价为基准时，每次加仓的跌幅都必须比上一次更深
 trader-dca-cooldown-impact = 两次追加之间至少间隔 { $span }
-trader-dca-example =
-    { $count ->
-       *[other] 买入 { $initial } → 每再下跌 -{ $threshold }% 追加 { $add }，最多 { $count } 次
+trader-dca-min-hold-impact =
+    { $minutes ->
+        [0] 首次加仓可在入场后立即进行
+       *[other] 首次加仓在入场后至少等待 { $span }
     }
+trader-dca-capacity = 此仓位最多可持有：{ $amount }（首次买入的 { $multiple }×）
 trader-dca-info-title = DCA 策略说明
 trader-dca-info-subtitle = DCA 交易的重要注意事项
 trader-dca-how-title = DCA 的工作原理
-trader-dca-how-trigger = <strong>触发：</strong>仓位跌破 DCA 阈值（例如 -10%）
+trader-dca-how-trigger = <strong>触发：</strong>价格跌破下一档，按平均或首次入场价计算
 trader-dca-how-action = <strong>操作：</strong>追加 { -sol } 以降低平均成本
-trader-dca-how-repeat = <strong>重复：</strong>可根据最大次数多次 DCA
+trader-dca-how-repeat = <strong>阶梯：</strong>每次加仓进入下一档；所有档位用完后停止加仓
+trader-dca-how-pause = <strong>暂停：</strong>上一次加仓仍在结算时，或亏损上限阻止新入场时，不会加仓
 trader-dca-risk-title = 风险提示
 trader-dca-risk-exposure = <strong>敞口增加：</strong>DCA 会增加每个仓位承担风险的总资金
 trader-dca-risk-knife = <strong>接飞刀：</strong>如果代币持续下跌，DCA 也无济于事

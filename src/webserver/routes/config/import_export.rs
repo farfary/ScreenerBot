@@ -188,21 +188,19 @@ struct LegacyRelocation {
 /// Move what an older export still carries at its legacy paths (the `rpc`,
 /// `swaps` and `sol_price` sections, the exit-rule leaves of `positions`) to
 /// its canonical place before any section is chosen. A malformed legacy value
-/// refuses the whole import, and so does a time-override unit the schema does not
-/// name: an import is a write, and the relocation would otherwise read that unit as
-/// hours the way it tolerates a stored config file.
+/// refuses the whole import, and so does a strict name (the time-override unit, the
+/// DCA basis) the schema does not know: an import is a write, and the relocation would
+/// otherwise read that name as its fallback the way it tolerates a stored config file.
 fn relocate_legacy_sections(
     imported: &mut serde_json::Value,
 ) -> std::result::Result<LegacyRelocation, Response> {
-    if let Some(unit) = json_node_at(imported, config::TIME_OVERRIDE_UNIT) {
-        serde_json::from_value::<config::TimeUnit>(unit.clone()).map_err(|e| {
-            ApiError::new(
-                ApiErrorCode::InvalidInput,
-                ids::ERRORS_CONFIG_IMPORT_VALIDATION_FAILED,
-            )
-            .details(format!("{}: {e}", config::TIME_OVERRIDE_UNIT.join(".")))
-            .into_response()
-        })?;
+    if let Some(reason) = config::refused_strict_name(imported) {
+        return Err(ApiError::new(
+            ApiErrorCode::InvalidInput,
+            ids::ERRORS_CONFIG_IMPORT_VALIDATION_FAILED,
+        )
+        .details(reason)
+        .into_response());
     }
     let sections_before: Vec<String> = imported
         .as_object()

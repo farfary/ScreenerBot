@@ -9,7 +9,7 @@ use super::*;
 
 use chrono::Duration;
 
-use crate::config::TakeProfitLevel;
+use crate::config::{DcaMeasureFrom, TakeProfitLevel};
 use crate::trader::evaluators::dca::DcaConfigSnapshot;
 use crate::trader::policy::{
     BreakEvenPolicy, StopLossPolicy, TakeProfitPolicy, TimePolicy, TimeStagnationPolicy,
@@ -131,10 +131,10 @@ fn policy() -> ExitPolicy {
         },
         dca: DcaConfigSnapshot {
             enabled: false,
-            max_count: 0,
+            levels: Vec::new(),
+            measure_from: DcaMeasureFrom::Average,
             cooldown_minutes: 0,
-            threshold_pct: 0.0,
-            size_percentage: 0.0,
+            min_hold_minutes: 0,
         },
     }
 }

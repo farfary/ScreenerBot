@@ -61,7 +61,8 @@
     "phantom_first_seen": null,
     "peak_since_last_buy": null,
     "trailing_stop_active": false,
-    "break_even_active": false
+    "break_even_active": false,
+    "default_add_size_native": null
   },
   "entries": [
     {

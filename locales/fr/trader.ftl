@@ -318,28 +318,34 @@ trader-strategy-priority = Priorité { $priority }
 
 trader-dca-title = Investissement programmé (DCA)
 trader-dca-subtitle = Renforcez automatiquement les positions perdantes pour abaisser votre prix d'entrée moyen
-trader-dca-threshold-impact = Achète davantage quand la position recule de { $value } % depuis l’entrée
-trader-dca-threshold-hint = La baisse depuis l’entrée à laquelle le DCA rachète (10 = DCA à -10 %)
-trader-dca-count-impact =
-    { $count ->
-        [one] Au plus une entrée supplémentaire par position
-        [many] Au plus { $count } entrées supplémentaires par position
-       *[other] Au plus { $count } entrées supplémentaires par position
-    }
-trader-dca-size-impact = Chaque entrée supplémentaire achète { $amount }
+trader-dca-measure-average = Entrée moyenne
+trader-dca-measure-first-entry = Première entrée
+trader-dca-step = Renfort { $step }
+trader-dca-drop-label = Baisse de prix du renfort { $step }
+trader-dca-size-label = Taille du renfort { $step }, en fois le premier achat
+trader-dca-drop-caption = Baisse de prix
+trader-dca-size-caption = Achat × premier achat
+trader-dca-add-step = Ajouter un palier
+trader-dca-remove-step = Retirer le renfort { $step }
+trader-dca-step-amount = = { $amount }
+trader-dca-step-below-minimum = Sous le trade minimum de { $minimum } : ce renfort n'est pas envoyé
+trader-dca-error-drop-range = Chaque baisse doit être comprise entre { $min } % et { $max } %
+trader-dca-error-size-range = Chaque taille doit être comprise entre { $min }× et { $max }× le premier achat
+trader-dca-error-order = Mesuré depuis la première entrée, chaque renfort doit avoir une baisse plus profonde que le précédent
 trader-dca-cooldown-impact = Au moins { $span } entre deux entrées supplémentaires
-trader-dca-example =
-    { $count ->
-        [one] Achat de { $initial } → à -{ $threshold } %, ajout de { $add }, une fois
-        [many] Achat de { $initial } → chaque -{ $threshold } % supplémentaire ajoute { $add }, jusqu’à { $count } fois
-       *[other] Achat de { $initial } → chaque -{ $threshold } % supplémentaire ajoute { $add }, jusqu’à { $count } fois
+trader-dca-min-hold-impact =
+    { $minutes ->
+        [0] Le premier renfort peut suivre l'entrée immédiatement
+       *[other] Le premier renfort attend au moins { $span } après l'entrée
     }
+trader-dca-capacity = Le maximum que cette position peut détenir : { $amount } ({ $multiple }× le premier achat)
 trader-dca-info-title = Infos sur la stratégie DCA
 trader-dca-info-subtitle = Points importants à considérer pour le DCA
 trader-dca-how-title = Fonctionnement du DCA
-trader-dca-how-trigger = <strong>Déclencheur :</strong> la position passe sous le seuil de DCA (p. ex. -10 %)
+trader-dca-how-trigger = <strong>Déclencheur :</strong> le prix passe sous le palier suivant, mesuré depuis l'entrée moyenne ou la première entrée
 trader-dca-how-action = <strong>Action :</strong> ajout de { -sol } pour réduire le prix de revient moyen
-trader-dca-how-repeat = <strong>Répétition :</strong> le DCA peut se répéter jusqu'au nombre maximal défini
+trader-dca-how-repeat = <strong>Échelle :</strong> chaque renfort passe au palier suivant ; les renforts s'arrêtent une fois tous les paliers utilisés
+trader-dca-how-pause = <strong>Pauses :</strong> aucun renfort tant que le précédent est en cours de règlement, ni tant que la limite de pertes bloque les nouvelles entrées
 trader-dca-risk-title = Avertissements sur les risques
 trader-dca-risk-exposure = <strong>Exposition accrue :</strong> le DCA augmente le capital total à risque par position
 trader-dca-risk-knife = <strong>Couteau qui tombe :</strong> le DCA n'aide pas si le token poursuit sa baisse

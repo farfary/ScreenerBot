@@ -409,34 +409,34 @@ trader-strategy-priority = الأولوية { $priority }
 
 trader-dca-title = متوسط التكلفة (DCA)
 trader-dca-subtitle = الإضافة تلقائيًا إلى المراكز الخاسرة لخفض متوسط سعر الدخول
-trader-dca-threshold-impact = يشتري المزيد عندما ينخفض المركز بنسبة { $value }% عن الدخول
-trader-dca-threshold-hint = الهبوط عن الدخول الذي يشتري عنده DCA المزيد (10 = DCA عند -10%)
-trader-dca-count-impact =
-    { $count ->
-        [zero] لا دخول إضافي لكل مركز
-        [one] دخول إضافي واحد كحد أقصى لكل مركز
-        [two] دخولان إضافيان كحد أقصى لكل مركز
-        [few] { $count } دخولات إضافية كحد أقصى لكل مركز
-        [many] { $count } دخولًا إضافيًا كحد أقصى لكل مركز
-       *[other] { $count } دخول إضافي كحد أقصى لكل مركز
-    }
-trader-dca-size-impact = كل دخول إضافي يشتري { $amount }
+trader-dca-measure-average = متوسط الدخول
+trader-dca-measure-first-entry = الدخول الأول
+trader-dca-step = إضافة { $step }
+trader-dca-drop-label = انخفاض السعر للإضافة { $step }
+trader-dca-size-label = حجم الإضافة { $step }، مضاعف أول شراء
+trader-dca-drop-caption = انخفاض السعر
+trader-dca-size-caption = الشراء × أول شراء
+trader-dca-add-step = إضافة مستوى
+trader-dca-remove-step = إزالة الإضافة { $step }
+trader-dca-step-amount = = { $amount }
+trader-dca-step-below-minimum = أقل من الحد الأدنى للصفقة { $minimum }: لن تُرسل هذه الإضافة
+trader-dca-error-drop-range = يجب أن يكون كل انخفاض بين { $min }% و{ $max }%
+trader-dca-error-size-range = يجب أن يكون كل حجم بين { $min }× و{ $max }× من أول شراء
+trader-dca-error-order = عند القياس من الدخول الأول، تحتاج كل إضافة إلى انخفاض أعمق من السابقة
 trader-dca-cooldown-impact = { $span } على الأقل بين الدخولات الإضافية
-trader-dca-example =
-    { $count ->
-        [zero] شراء { $initial } دون أي دخول إضافي
-        [one] شراء { $initial } ← عند -{ $threshold }% إضافة { $add } مرة واحدة
-        [two] شراء { $initial } ← كل هبوط إضافي بنسبة -{ $threshold }% يضيف { $add }، حتى مرتين
-        [few] شراء { $initial } ← كل هبوط إضافي بنسبة -{ $threshold }% يضيف { $add }، حتى { $count } مرات
-        [many] شراء { $initial } ← كل هبوط إضافي بنسبة -{ $threshold }% يضيف { $add }، حتى { $count } مرة
-       *[other] شراء { $initial } ← كل هبوط إضافي بنسبة -{ $threshold }% يضيف { $add }، حتى { $count } مرة
+trader-dca-min-hold-impact =
+    { $minutes ->
+        [0] قد تأتي أول إضافة فور الدخول
+       *[other] تنتظر أول إضافة { $span } على الأقل بعد الدخول
     }
+trader-dca-capacity = أقصى ما يمكن أن يحمله هذا المركز: { $amount } ({ $multiple }× أول شراء)
 trader-dca-info-title = معلومات استراتيجية DCA
 trader-dca-info-subtitle = اعتبارات مهمة عند التداول بـ DCA
 trader-dca-how-title = طريقة عمل DCA
-trader-dca-how-trigger = <strong>المشغّل:</strong> ينخفض المركز دون حد DCA (مثل -10%)
+trader-dca-how-trigger = <strong>المحفّز:</strong> ينخفض السعر تحت المستوى التالي، مقيسًا من متوسط الدخول أو الدخول الأول
 trader-dca-how-action = <strong>الإجراء:</strong> إضافة المزيد من { -sol } لخفض تكلفة الأساس المتوسطة
-trader-dca-how-repeat = <strong>التكرار:</strong> يمكن تنفيذ DCA عدة مرات بحسب الحد الأقصى للعدد
+trader-dca-how-repeat = <strong>السلّم:</strong> تنتقل كل إضافة إلى المستوى التالي، وتتوقف الإضافات بعد استخدام كل المستويات
+trader-dca-how-pause = <strong>التوقف:</strong> لا إضافة ما دامت السابقة قيد التسوية، أو ما دام حد الخسارة يمنع الدخول الجديد
 trader-dca-risk-title = تحذيرات المخاطر
 trader-dca-risk-exposure = <strong>زيادة التعرض:</strong> يزيد DCA إجمالي رأس المال المعرّض للخطر في كل مركز
 trader-dca-risk-knife = <strong>السكين الساقط:</strong> لن يفيد DCA إذا واصل الرمز اتجاهه الهابط

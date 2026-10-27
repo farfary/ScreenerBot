@@ -10,7 +10,7 @@ import {
   formatTimeSpan,
   formatUptime,
 } from "../../core/format.js";
-import { levelError, readLevels, runnerShare } from "./level_list.js";
+import { levelError, readLevels, runnerShare, setLevelContext } from "./level_list.js";
 
 /**
  * Trader Example Updaters Module
@@ -162,7 +162,7 @@ export function createExampleUpdaters({
   function takeProfitLadder(levels) {
     if (levels && levelError(levels) === null) {
       const edited = readLevels(levels);
-      if (edited.profits.length > 0) return edited;
+      if (edited.levels.length > 0) return { profits: edited.levels, sells: edited.amounts };
     }
     const trader = traderConfig?.();
     if (!trader) return null;
@@ -513,48 +513,62 @@ export function createExampleUpdaters({
     }
   }
 
-  /** The computed line under each DCA field, and the worked example. */
+  /**
+   * The DCA ladder's multiples as edited, or null while the edited ladder is invalid or
+   * empty. Without a ladder element the loaded config's multiples apply.
+   */
+  function dcaMultiples(ladder) {
+    if (!ladder) return traderConfig?.()?.dca_size_multipliers ?? null;
+    if (levelError(ladder) !== null) return null;
+    const edited = readLevels(ladder);
+    return edited.amounts.length > 0 ? edited.amounts : null;
+  }
+
+  /**
+   * The DCA tab's computed lines: what each ladder step buys from the configured trade
+   * size, the two waits, and the most a position can hold once every step has bought.
+   */
   function updateDcaExample() {
+    const ladder = $("#dca-levels");
+    const base = Number(tradeSize?.());
+    const firstBuy = base > 0 ? base : Number.NaN;
+    if (ladder) setLevelContext(ladder, { firstBuy });
+
     const line = (id, text) => {
-      const el = $(`#${id}-impact`);
+      const el = $(`#${id}`);
       if (el) el.textContent = text;
     };
-    const threshold = parseFloat($("#dca-threshold")?.value);
-    const count = parseInt($("#dca-max-count")?.value, 10);
-    const size = parseFloat($("#dca-size")?.value);
     const cooldown = parseInt($("#dca-cooldown")?.value, 10);
-    const base = Number(tradeSize?.());
-
+    const minHold = parseInt($("#dca-min-hold")?.value, 10);
     line(
-      "dca-threshold",
-      I18n.t("trader-dca-threshold-impact", { value: examplePercent(Math.abs(threshold)) })
+      "dca-cooldown-impact",
+      Number.isFinite(cooldown)
+        ? I18n.t("trader-dca-cooldown-impact", {
+            span: formatTimeSpan(cooldown, { unit: "minute" }),
+          })
+        : "—"
     );
     line(
-      "dca-max-count",
-      Number.isFinite(count) ? I18n.t("trader-dca-count-impact", { count }) : "—"
-    );
-    line(
-      "dca-size",
-      I18n.t("trader-dca-size-impact", {
-        amount: exampleSol(base > 0 && size > 0 ? (base * size) / 100 : Number.NaN),
-      })
-    );
-    line(
-      "dca-cooldown",
-      I18n.t("trader-dca-cooldown-impact", {
-        span: formatTimeSpan(cooldown, { unit: "minute" }),
-      })
+      "dca-min-hold-impact",
+      Number.isFinite(minHold)
+        ? I18n.t("trader-dca-min-hold-impact", {
+            minutes: minHold,
+            span: formatTimeSpan(minHold, { unit: "minute" }),
+          })
+        : "—"
     );
 
-    const example = $("#dca-example");
-    if (example) {
-      example.textContent = I18n.t("trader-dca-example", {
-        initial: exampleSol(base),
-        add: exampleSol(base > 0 && size > 0 ? (base * size) / 100 : Number.NaN),
-        threshold: examplePercent(Math.abs(threshold)),
-        count: Number.isFinite(count) ? count : 0,
-      });
-    }
+    const multiples = dcaMultiples(ladder);
+    const whole = multiples ? 1 + multiples.reduce((sum, value) => sum + value, 0) : Number.NaN;
+    line(
+      "dca-capacity",
+      multiples
+        ? I18n.t("trader-dca-capacity", {
+            amount: exampleSol(firstBuy * whole),
+            multiple: formatFixed(whole, { decimals: 2, trim: true }),
+          })
+        : "—"
+    );
   }
 
   // Return public API

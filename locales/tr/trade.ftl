@@ -37,7 +37,7 @@ trade-sell-input = Özel yüzde
 trade-add-title = Pozisyona ekle
 trade-add-subtitle = Mevcut pozisyona DCA yap
 trade-add-confirm = Pozisyona ekle
-trade-add-hint = Yapılandırılmış DCA boyutu için boş bırakın
+trade-add-hint = Pozisyonun bir sonraki DCA adımını, yoksa ilk alımını, o da yoksa işlem boyutunu eklemek için boş bırakın
 trade-amount-input = Özel miktar
     .placeholder = { -sol } miktarı girin
 

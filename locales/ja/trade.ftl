@@ -49,7 +49,7 @@ trade-sell-input = カスタム割合
 trade-add-title = ポジションに追加
 trade-add-subtitle = 既存ポジションに DCA
 trade-add-confirm = ポジションに追加
-trade-add-hint = 空欄の場合は設定済みの DCA サイズを使用
+trade-add-hint = 空欄の場合はポジションの次の DCA ステップ、なければ最初の購入額、それもなければ取引サイズを追加します
 trade-amount-input = カスタム数量
     .placeholder = { -sol } の数量を入力
 

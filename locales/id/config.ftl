@@ -1048,15 +1048,17 @@ config-trader-dca-cooldown-minutes = Cooldown DCA
     .unit = mnt
 config-trader-dca-enabled = Aktifkan DCA
     .hint = Aktifkan Dollar Cost Averaging untuk posisi
-config-trader-dca-max-count = Maks Jumlah DCA
-    .hint = Jumlah maksimum entry DCA tambahan per posisi
-    .unit = entri
-config-trader-dca-size-percentage = Ukuran DCA
-    .hint = Ukuran setiap entry DCA sebagai % dari ukuran posisi awal
+config-trader-dca-levels-pct = Level DCA
+    .hint = Seberapa jauh harga turun di bawah entri sebelum setiap tambahan membeli (10 = tambah di −10%)
     .unit = %
-config-trader-dca-threshold-pct = Ambang DCA
-    .hint = Lakukan DCA saat posisi turun sebesar % ini (-10 = DCA pada -10%)
-    .unit = %
+config-trader-dca-measure-from = Ukur penurunan dari
+    .hint = Harga masuk tempat penurunan setiap level diukur: rata-rata masuk atau masuk pertama
+config-trader-dca-min-hold-minutes = Tunggu setelah masuk
+    .hint = Menit setelah masuk sebelum tambahan pertama
+    .unit = mnt
+config-trader-dca-size-multipliers = Ukuran DCA
+    .hint = Yang dibeli setiap tambahan, sebagai kelipatan pembelian pertama
+    .unit = ×
 config-trader-enabled = Aktif
     .hint = Sakelar utama untuk sistem trading
 config-trader-entry-check-concurrency = Konkurensi Pemeriksaan Entry

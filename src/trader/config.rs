@@ -3,7 +3,7 @@
 
 //! Trading configuration utilities.
 
-use crate::config::{with_config, TakeProfitLevel};
+use crate::config::{with_config, DcaLevel, DcaMeasureFrom, TakeProfitLevel};
 
 /// Get the maximum number of open positions allowed
 pub fn get_max_open_positions() -> usize {
@@ -30,19 +30,19 @@ pub fn is_dca_enabled() -> bool {
     with_config(|cfg| cfg.trader.dca_enabled)
 }
 
-/// Get DCA threshold percentage
-pub fn get_dca_threshold_pct() -> f64 {
-    with_config(|cfg| cfg.trader.dca_threshold_pct)
+/// The DCA ladder: one step per automatic add, in the order the adds fire
+pub fn get_dca_levels() -> Vec<DcaLevel> {
+    with_config(|cfg| cfg.trader.dca_levels())
 }
 
-/// Get maximum DCA count per position
-pub fn get_dca_max_count() -> usize {
-    with_config(|cfg| cfg.trader.dca_max_count)
+/// Which entry price the DCA drop is measured from
+pub fn get_dca_measure_from() -> DcaMeasureFrom {
+    with_config(|cfg| cfg.trader.dca_measure_from)
 }
 
-/// Get DCA size as percentage of initial position
-pub fn get_dca_size_percentage() -> f64 {
-    with_config(|cfg| cfg.trader.dca_size_percentage)
+/// Minutes a position is held after its entry before its first automatic add
+pub fn get_dca_min_hold_minutes() -> i64 {
+    with_config(|cfg| cfg.trader.dca_min_hold_minutes)
 }
 
 /// Get DCA cooldown in minutes

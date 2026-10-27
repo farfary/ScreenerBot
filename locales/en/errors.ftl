@@ -325,6 +325,7 @@ errors-trade-blacklisted = token { $mint } is blacklisted
 errors-trade-slippage-invalid = slippage { $slippage }% must be between { $minimum }% and { $maximum }%
 errors-trade-percentage-invalid = sell percentage { $percentage } must be in (0, 100]
 errors-trade-percentage-required = a partial sell needs the percentage of the position to sell
+errors-trade-add-size-required = an add to the position of { $mint } needs a size in { -sol }
 errors-trade-record-failed = could not record manual trade
 errors-trade-task-cancelled = the manual trade stopped before it answered because the app is shutting down; its position holds the outcome
 errors-trade-no-open-position = no open position for token { $mint }

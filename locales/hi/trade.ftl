@@ -37,7 +37,7 @@ trade-sell-input = कस्टम प्रतिशत
 trade-add-title = पोज़िशन में ऐड करें
 trade-add-subtitle = मौजूदा पोज़िशन में DCA करें
 trade-add-confirm = पोज़िशन ऐड करें
-trade-add-hint = कॉन्फ़िगर किए गए DCA साइज़ के लिए खाली छोड़ें
+trade-add-hint = खाली छोड़ें ताकि पोज़िशन का अगला DCA चरण जोड़ा जाए, नहीं तो उसकी पहली खरीद, नहीं तो ट्रेड साइज़
 trade-amount-input = कस्टम राशि
     .placeholder = { -sol } राशि दर्ज करें
 

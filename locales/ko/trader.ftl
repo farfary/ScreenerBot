@@ -353,24 +353,34 @@ trader-strategy-priority = 우선순위 { $priority }
 
 trader-dca-title = 분할 매수 (DCA)
 trader-dca-subtitle = 손실 중인 포지션에 자동으로 추가 매수하여 평균 진입가를 낮춥니다
-trader-dca-threshold-impact = 포지션이 진입가 대비 { $value }% 하락하면 추가 매수합니다
-trader-dca-threshold-hint = DCA가 추가 매수하는 진입가 대비 하락폭 (10 = -10%에서 DCA)
-trader-dca-count-impact =
-    { $count ->
-       *[other] 포지션당 추가 진입 최대 { $count }회
-    }
-trader-dca-size-impact = 추가 진입마다 { $amount } 매수
+trader-dca-measure-average = 평균 진입가
+trader-dca-measure-first-entry = 첫 진입가
+trader-dca-step = 추가 { $step }
+trader-dca-drop-label = 추가 { $step } 가격 하락
+trader-dca-size-label = 추가 { $step } 크기, 첫 매수의 배수
+trader-dca-drop-caption = 가격 하락
+trader-dca-size-caption = 매수 × 첫 매수
+trader-dca-add-step = 단계 추가
+trader-dca-remove-step = 추가 { $step } 삭제
+trader-dca-step-amount = = { $amount }
+trader-dca-step-below-minimum = 최소 거래액 { $minimum } 미만: 이 추가 매수는 전송되지 않습니다
+trader-dca-error-drop-range = 각 하락률은 { $min }%에서 { $max }% 사이여야 합니다
+trader-dca-error-size-range = 각 크기는 첫 매수의 { $min }×에서 { $max }× 사이여야 합니다
+trader-dca-error-order = 첫 진입가 기준일 때 각 추가는 이전보다 더 깊은 하락이 필요합니다
 trader-dca-cooldown-impact = 추가 진입 사이 최소 { $span }
-trader-dca-example =
-    { $count ->
-       *[other] { $initial } 매수 → -{ $threshold }% 추가 하락마다 { $add } 추가 (최대 { $count }회)
+trader-dca-min-hold-impact =
+    { $minutes ->
+        [0] 첫 추가 매수는 진입 직후 가능합니다
+       *[other] 첫 추가 매수는 진입 후 최소 { $span } 기다립니다
     }
+trader-dca-capacity = 이 포지션의 최대 보유액: { $amount } (첫 매수의 { $multiple }×)
 trader-dca-info-title = DCA 전략 정보
 trader-dca-info-subtitle = DCA 거래 시 유의할 점
 trader-dca-how-title = DCA 작동 방식
-trader-dca-how-trigger = <strong>조건:</strong> 포지션이 DCA 임계값(예: -10%) 아래로 하락
+trader-dca-how-trigger = <strong>트리거:</strong> 가격이 다음 단계 아래로 내려갈 때 (평균 또는 첫 진입가 기준)
 trader-dca-how-action = <strong>동작:</strong> { -sol }을 추가 투입하여 평균 매입 원가를 낮춥니다
-trader-dca-how-repeat = <strong>반복:</strong> 최대 횟수까지 여러 번 DCA할 수 있습니다
+trader-dca-how-repeat = <strong>사다리:</strong> 추가할 때마다 다음 단계로 넘어가며, 모든 단계를 쓰면 추가가 멈춥니다
+trader-dca-how-pause = <strong>일시 중지:</strong> 이전 추가 매수가 정산 중이거나 손실 한도가 신규 진입을 막는 동안에는 추가하지 않습니다
 trader-dca-risk-title = 위험 경고
 trader-dca-risk-exposure = <strong>노출 증가:</strong> DCA는 포지션당 위험에 노출되는 총자본을 늘립니다
 trader-dca-risk-knife = <strong>떨어지는 칼날:</strong> 토큰이 계속 하락하면 DCA는 도움이 되지 않습니다

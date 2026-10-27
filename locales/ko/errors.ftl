@@ -320,6 +320,7 @@ errors-trade-blacklisted = 블랙리스트에 등록된 토큰입니다: { $mint
 errors-trade-slippage-invalid = 슬리피지 { $slippage }%는 { $minimum }%에서 { $maximum }% 사이여야 합니다
 errors-trade-percentage-invalid = 매도 비율({ $percentage })은 (0, 100] 범위여야 합니다
 errors-trade-percentage-required = 부분 매도에는 매도할 포지션 비율이 필요합니다
+errors-trade-add-size-required = { $mint } 포지션에 추가하려면 { -sol } 수량이 필요합니다
 errors-trade-record-failed = 수동 거래를 기록할 수 없습니다
 errors-trade-task-cancelled = 앱이 종료되는 중이어서 수동 거래가 응답 전에 중단되었습니다. 결과는 포지션에 기록되어 있습니다
 errors-trade-no-open-position = 보유 포지션이 없는 토큰입니다: { $mint }

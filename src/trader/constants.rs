@@ -23,6 +23,11 @@ pub const EMERGENCY_LOSS_THRESHOLD_PCT: f64 = 90.0;
 pub const MAX_TRADE_SIZE_MULTIPLIER: f64 = 100.0;
 pub const MIN_TRADE_SIZE_NATIVE: f64 = 0.001;
 
+/// Oldest pool price, in seconds, an automatic DCA add may act on. The price updater
+/// refreshes open positions every second; a price this old means the feed stalled, and
+/// an add decided on it would buy at a drop that may no longer exist.
+pub const DCA_PRICE_MAX_AGE_SECS: i64 = 30;
+
 /// Hard ceiling on a MANUAL per-trade slippage override, in percent.
 ///
 /// The config's own slippage fields cap at 25-50%, but a manual override is a

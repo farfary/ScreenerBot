@@ -167,10 +167,10 @@ impl ExitPolicy {
             },
             dca: DcaConfigSnapshot {
                 enabled: config::is_dca_enabled(),
-                max_count: config::get_dca_max_count() as u32,
+                levels: config::get_dca_levels(),
+                measure_from: config::get_dca_measure_from(),
                 cooldown_minutes: config::get_dca_cooldown_minutes(),
-                threshold_pct: config::get_dca_threshold_pct(),
-                size_percentage: config::get_dca_size_percentage(),
+                min_hold_minutes: config::get_dca_min_hold_minutes(),
             },
         }
     }

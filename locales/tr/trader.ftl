@@ -307,26 +307,34 @@ trader-strategy-priority = Öncelik { $priority }
 
 trader-dca-title = DCA (maliyet ortalaması)
 trader-dca-subtitle = Ortalama giriş fiyatınızı düşürmek için zarardaki pozisyonlara otomatik olarak ekleme yapın
-trader-dca-threshold-impact = Pozisyon girişten %{ $value } aşağıdayken ek alım yapar
-trader-dca-threshold-hint = DCA’nın ek alım yaptığı girişten düşüş (10 = -%10’da DCA)
-trader-dca-count-impact =
-    { $count ->
-        [one] Pozisyon başına en fazla bir ek giriş
-       *[other] Pozisyon başına en fazla { $count } ek giriş
-    }
-trader-dca-size-impact = Her ek giriş { $amount } alır
+trader-dca-measure-average = Ortalama giriş
+trader-dca-measure-first-entry = İlk giriş
+trader-dca-step = Ekleme { $step }
+trader-dca-drop-label = Ekleme { $step } fiyat düşüşü
+trader-dca-size-label = Ekleme { $step } boyutu, ilk alımın katı
+trader-dca-drop-caption = Fiyat Düşüşü
+trader-dca-size-caption = Alım × İlk Alım
+trader-dca-add-step = Seviye ekle
+trader-dca-remove-step = Ekleme { $step } kaldır
+trader-dca-step-amount = = { $amount }
+trader-dca-step-below-minimum = { $minimum } minimum işlem tutarının altında: bu ekleme gönderilmez
+trader-dca-error-drop-range = Her düşüş { $min }% ile { $max }% arasında olmalıdır
+trader-dca-error-size-range = Her boyut ilk alımın { $min }× ile { $max }× katı arasında olmalıdır
+trader-dca-error-order = İlk girişten ölçüldüğünde her ekleme bir öncekinden daha derin bir düşüş gerektirir
 trader-dca-cooldown-impact = Ek girişler arasında en az { $span }
-trader-dca-example =
-    { $count ->
-        [one] { $initial } alım → -%{ $threshold } düşüşte bir kez { $add } eklenir
-       *[other] { $initial } alım → her ek -%{ $threshold } düşüş { $add } ekler, en fazla { $count } kez
+trader-dca-min-hold-impact =
+    { $minutes ->
+        [0] İlk ekleme girişten hemen sonra gelebilir
+       *[other] İlk ekleme girişten sonra en az { $span } bekler
     }
+trader-dca-capacity = Bu pozisyonun tutabileceği en fazla: { $amount } (ilk alımın { $multiple }×)
 trader-dca-info-title = DCA strateji bilgisi
 trader-dca-info-subtitle = DCA işlemi için önemli hususlar
 trader-dca-how-title = DCA nasıl çalışır
-trader-dca-how-trigger = <strong>Tetikleyici:</strong> Pozisyon DCA eşiğinin altına düşer (örn. -%10)
+trader-dca-how-trigger = <strong>Tetikleyici:</strong> fiyat bir sonraki seviyenin altına iner; ortalama veya ilk girişten ölçülür
 trader-dca-how-action = <strong>Eylem:</strong> Ortalama maliyet bazını düşürmek için daha fazla { -sol } ekle
-trader-dca-how-repeat = <strong>Tekrar:</strong> Azami sayıya göre birden çok kez DCA yapılabilir
+trader-dca-how-repeat = <strong>Merdiven:</strong> her ekleme bir sonraki seviyeye geçer; tüm seviyeler kullanılınca eklemeler durur
+trader-dca-how-pause = <strong>Duraklamalar:</strong> önceki ekleme sonuçlanırken veya zarar limiti yeni girişleri engellerken ekleme yapılmaz
 trader-dca-risk-title = Risk uyarıları
 trader-dca-risk-exposure = <strong>Artan maruziyet:</strong> DCA, pozisyon başına riske atılan toplam sermayeyi artırır
 trader-dca-risk-knife = <strong>Düşen bıçak:</strong> Token düşüş eğilimini sürdürürse DCA yardımcı olmaz

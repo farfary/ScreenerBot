@@ -1000,15 +1000,17 @@ config-trader-dca-cooldown-minutes = Thời gian chờ DCA
     .unit = phút
 config-trader-dca-enabled = Bật DCA
     .hint = Bật Dollar Cost Averaging cho các vị thế
-config-trader-dca-max-count = Số lần DCA tối đa
-    .hint = Số lần vào DCA bổ sung tối đa cho mỗi vị thế
-    .unit = lần
-config-trader-dca-size-percentage = Quy mô DCA
-    .hint = Quy mô mỗi lần vào DCA tính theo % quy mô vị thế ban đầu
+config-trader-dca-levels-pct = Các mức DCA
+    .hint = Giá phải giảm bao nhiêu dưới giá vào lệnh thì mỗi lần mua thêm được thực hiện (10 = mua thêm ở −10%)
     .unit = %
-config-trader-dca-threshold-pct = Ngưỡng DCA
-    .hint = Vào DCA khi vị thế giảm quá % này (-10 = DCA ở mức -10%)
-    .unit = %
+config-trader-dca-measure-from = Đo mức giảm từ
+    .hint = Giá vào lệnh dùng để đo mức giảm của mỗi mức: giá vào trung bình hoặc giá vào lần đầu
+config-trader-dca-min-hold-minutes = Chờ sau khi vào lệnh
+    .hint = Số phút sau khi vào lệnh trước lần mua thêm đầu tiên
+    .unit = phút
+config-trader-dca-size-multipliers = Kích thước DCA
+    .hint = Lượng mỗi lần mua thêm, tính theo bội số của lần mua đầu
+    .unit = ×
 config-trader-enabled = Đã bật
     .hint = Công tắc chính của hệ thống giao dịch
 config-trader-entry-check-concurrency = Số lượt kiểm tra điểm vào đồng thời

@@ -293,6 +293,7 @@ errors-trade-blacklisted = token { $mint } masuk daftar hitam
 errors-trade-slippage-invalid = slippage { $slippage }% harus antara { $minimum }% dan { $maximum }%
 errors-trade-percentage-invalid = persentase jual { $percentage } harus dalam rentang (0, 100]
 errors-trade-percentage-required = penjualan parsial memerlukan persentase posisi yang akan dijual
+errors-trade-add-size-required = penambahan ke posisi { $mint } memerlukan ukuran dalam { -sol }
 errors-trade-record-failed = tidak dapat mencatat trade manual
 errors-trade-task-cancelled = trade manual berhenti sebelum menjawab karena aplikasi sedang ditutup; posisinya memuat hasilnya
 errors-trade-no-open-position = tidak ada posisi terbuka untuk token { $mint }

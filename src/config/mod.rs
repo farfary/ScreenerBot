@@ -100,7 +100,7 @@ pub(crate) use merge::merge_document;
 // relocation of legacy global Solana sections under [chains.solana], and of the
 // exit-rule leaves of [positions] into [trader]
 mod migrate;
-pub(crate) use migrate::{relocate_legacy_layout, relocation_destinations, TIME_OVERRIDE_UNIT};
+pub(crate) use migrate::{refused_strict_name, relocate_legacy_layout, relocation_destinations};
 
 // Wallet management (keypair loading, pubkey access)
 pub mod wallet;
@@ -115,13 +115,13 @@ pub use metadata::{
 
 pub use schemas::{
     AccountConfig, AgentControlConfig, AssistantConfig, ChainsConfig, Config, CopyTradingConfig,
-    DashboardConfig, EventsConfig, FilteringConfig, GuiConfig, HolderWatchConfig, InterfaceConfig,
-    LlmAnalysisConfig, LlmConfig, LlmProviderConfig, LlmProvidersConfig, LockscreenConfig,
-    MaintenanceConfig, MonitoringConfig, NetworkConfig, OhlcvConfig, OllamaConfig,
-    PerformanceConfig, PoolsConfig, PositionsConfig, ReferralConfig, RpcConfig, ServicesConfig,
-    SolanaChainConfig, StartupConfig, StrategiesConfig, SwapsConfig, TakeProfitLevel,
-    TelegramConfig, TimeUnit, TokensConfig, TraderConfig, UpdatesConfig, WalletConfig,
-    WebserverConfig, TAKE_PROFIT_MAX_STEPS,
+    DashboardConfig, DcaLevel, DcaMeasureFrom, EventsConfig, FilteringConfig, GuiConfig,
+    HolderWatchConfig, InterfaceConfig, LlmAnalysisConfig, LlmConfig, LlmProviderConfig,
+    LlmProvidersConfig, LockscreenConfig, MaintenanceConfig, MonitoringConfig, NetworkConfig,
+    OhlcvConfig, OllamaConfig, PerformanceConfig, PoolsConfig, PositionsConfig, ReferralConfig,
+    RpcConfig, ServicesConfig, SolanaChainConfig, StartupConfig, StrategiesConfig, SwapsConfig,
+    TakeProfitLevel, TelegramConfig, TimeUnit, TokensConfig, TraderConfig, UpdatesConfig,
+    WalletConfig, WebserverConfig, DCA_MAX_STEPS, TAKE_PROFIT_MAX_STEPS,
 };
 
 pub use utils::{

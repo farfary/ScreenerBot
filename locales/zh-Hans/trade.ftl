@@ -49,7 +49,7 @@ trade-sell-input = 自定义比例
 trade-add-title = 加仓
 trade-add-subtitle = 对现有仓位 DCA
 trade-add-confirm = 确认加仓
-trade-add-hint = 留空则使用配置的 DCA 规模
+trade-add-hint = 留空则加仓该持仓的下一个 DCA 档位，没有则按首次买入金额，再没有则按交易规模
 trade-amount-input = 自定义数量
     .placeholder = 输入 { -sol } 数量
 

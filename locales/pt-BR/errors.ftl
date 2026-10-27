@@ -293,6 +293,7 @@ errors-trade-blacklisted = o token { $mint } está na lista negra
 errors-trade-slippage-invalid = o slippage { $slippage }% deve estar entre { $minimum }% e { $maximum }%
 errors-trade-percentage-invalid = a porcentagem de venda { $percentage } deve estar em (0, 100]
 errors-trade-percentage-required = uma venda parcial precisa da porcentagem da posição a vender
+errors-trade-add-size-required = um aporte na posição de { $mint } precisa de um valor em { -sol }
 errors-trade-record-failed = não foi possível registrar o trade manual
 errors-trade-task-cancelled = o trade manual parou antes de responder porque o aplicativo está sendo encerrado; a posição mostra o resultado
 errors-trade-no-open-position = nenhuma posição aberta para o token { $mint }

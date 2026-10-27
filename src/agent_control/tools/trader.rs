@@ -84,7 +84,10 @@ impl Tool for GetTraderStatusTool {
                 },
                 "dca": {
                     "enabled": cfg.trader.dca_enabled,
-                    "size_percentage": cfg.trader.dca_size_percentage,
+                    "levels": cfg.trader.dca_levels(),
+                    "measure_from": cfg.trader.dca_measure_from,
+                    "cooldown_minutes": cfg.trader.dca_cooldown_minutes,
+                    "min_hold_minutes": cfg.trader.dca_min_hold_minutes,
                 },
             })
         });

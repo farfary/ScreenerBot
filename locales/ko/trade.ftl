@@ -49,7 +49,7 @@ trade-sell-input = 직접 입력 비율
 trade-add-title = 포지션에 추가 매수
 trade-add-subtitle = 기존 포지션에 DCA
 trade-add-confirm = 추가 매수
-trade-add-hint = 비워 두면 설정된 DCA 규모를 사용합니다
+trade-add-hint = 비워 두면 포지션의 다음 DCA 단계를, 없으면 첫 매수 금액을, 그것도 없으면 거래 규모를 추가합니다
 trade-amount-input = 직접 입력 수량
     .placeholder = { -sol } 수량 입력
 

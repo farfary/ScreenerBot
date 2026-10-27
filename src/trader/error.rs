@@ -43,6 +43,8 @@ pub enum Error {
     InvalidPercentage { percentage: f64 },
     #[error("a partial sell needs a percentage of the position")]
     PercentageRequired,
+    #[error("an add to the position of {mint} needs a size")]
+    AddSizeRequired { mint: String },
     #[error(transparent)]
     Database(#[from] crate::errors::DatabaseError),
     #[error(transparent)]
@@ -146,7 +148,8 @@ impl ErrorClass for Error {
             | Error::Blacklisted { .. }
             | Error::InvalidSlippage { .. }
             | Error::InvalidPercentage { .. }
-            | Error::PercentageRequired => false,
+            | Error::PercentageRequired
+            | Error::AddSizeRequired { .. } => false,
             Error::CopyTaskRejected { .. }
             | Error::CopyTaskLimit { .. }
             | Error::CopyWatchRejected { .. }
@@ -203,7 +206,8 @@ impl ErrorClass for Error {
             | Error::Blacklisted { .. }
             | Error::InvalidSlippage { .. }
             | Error::InvalidPercentage { .. }
-            | Error::PercentageRequired => Severity::Warning,
+            | Error::PercentageRequired
+            | Error::AddSizeRequired { .. } => Severity::Warning,
             Error::CopyTaskRejected { .. }
             | Error::CopyTaskLimit { .. }
             | Error::CopyWatchRejected { .. }
@@ -243,7 +247,8 @@ impl ErrorClass for Error {
             Error::InvalidMint { .. }
             | Error::InvalidSlippage { .. }
             | Error::InvalidPercentage { .. }
-            | Error::PercentageRequired => 400,
+            | Error::PercentageRequired
+            | Error::AddSizeRequired { .. } => 400,
             Error::CopyTaskRejected { .. }
             | Error::CopyTaskLimit { .. }
             | Error::CopyWatchRejected { .. } => 400,

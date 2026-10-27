@@ -1061,79 +1061,42 @@
             </label>
           </div>
 
+          <!-- Basis of every level's drop -->
           <div class="config-group">
             <div class="config-label-row">
-              <label for="dca-threshold" class="config-label">
-                <i class="icon-trending-down"></i>
-                <span data-l10n-id="config-trader-dca-threshold-pct"></span>
+              <label for="dca-measure-from" class="config-label">
+                <i class="icon-crosshair"></i>
+                <span data-l10n-id="config-trader-dca-measure-from"></span>
               </label>
             </div>
             <p class="config-hint"></p>
             <div class="input-group-enhanced">
-              <span class="input-prefix" aria-hidden="true">−</span>
-              <input
-                type="number"
-                id="dca-threshold"
-                min="0"
-                max="100"
-                step="1"
-                value="10"
-                class="input-large"
-              />
-              <span class="input-unit">%</span>
-            </div>
-            <div class="config-impact">
-              <span class="impact-text" id="dca-threshold-impact"></span>
+              <select id="dca-measure-from" class="unit-select" data-custom-select>
+                <option value="average" data-l10n-id="trader-dca-measure-average"></option>
+                <option value="first_entry" data-l10n-id="trader-dca-measure-first-entry"></option>
+              </select>
             </div>
           </div>
 
-          <div class="config-group">
+          <!-- DCA ladder -->
+          <div class="config-group config-group-full">
             <div class="config-label-row">
-              <label for="dca-max-count" class="config-label">
-                <i class="icon-repeat"></i>
-                <span data-l10n-id="config-trader-dca-max-count"></span>
+              <label id="dca-levels-label" class="config-label">
+                <i class="icon-layers"></i>
+                <span data-l10n-id="config-trader-dca-levels-pct"></span>
               </label>
             </div>
             <p class="config-hint"></p>
-            <div class="input-group-enhanced">
-              <input
-                type="number"
-                id="dca-max-count"
-                min="1"
-                max="5"
-                step="1"
-                value="2"
-                class="input-large"
-              />
-              <span class="input-unit"></span>
-            </div>
+            <div
+              id="dca-levels"
+              class="level-list"
+              data-ladder="dca"
+              data-basis="dca-measure-from"
+              role="group"
+              aria-labelledby="dca-levels-label"
+            ></div>
             <div class="config-impact">
-              <span class="impact-text" id="dca-max-count-impact"></span>
-            </div>
-          </div>
-
-          <div class="config-group">
-            <div class="config-label-row">
-              <label for="dca-size" class="config-label">
-                <i class="icon-percent"></i>
-                <span data-l10n-id="config-trader-dca-size-percentage"></span>
-              </label>
-            </div>
-            <p class="config-hint"></p>
-            <div class="input-group-enhanced">
-              <input
-                type="number"
-                id="dca-size"
-                min="10"
-                max="200"
-                step="10"
-                value="50"
-                class="input-large"
-              />
-              <span class="input-unit">%</span>
-            </div>
-            <div class="config-impact">
-              <span class="impact-text" id="dca-size-impact"></span>
+              <span class="impact-text" id="dca-capacity"></span>
             </div>
           </div>
 
@@ -1146,15 +1109,7 @@
             </div>
             <p class="config-hint"></p>
             <div class="input-group-enhanced">
-              <input
-                type="number"
-                id="dca-cooldown"
-                min="1"
-                max="1440"
-                step="5"
-                value="30"
-                class="input-large"
-              />
+              <input type="number" id="dca-cooldown" class="input-large" />
               <span class="input-unit"></span>
             </div>
             <div class="config-impact">
@@ -1162,16 +1117,20 @@
             </div>
           </div>
 
-          <!-- Visual Example -->
-          <div class="visual-example">
-            <h4>
-              <i class="icon-chart-bar"></i> <span data-l10n-id="trader-example-how-it-works"></span>
-            </h4>
-            <div class="example-summary">
-              <div class="summary-item summary-item-info">
-                <i class="icon-info"></i>
-                <span id="dca-example">—</span>
-              </div>
+          <div class="config-group">
+            <div class="config-label-row">
+              <label for="dca-min-hold" class="config-label">
+                <i class="icon-hourglass"></i>
+                <span data-l10n-id="config-trader-dca-min-hold-minutes"></span>
+              </label>
+            </div>
+            <p class="config-hint"></p>
+            <div class="input-group-enhanced">
+              <input type="number" id="dca-min-hold" class="input-large" />
+              <span class="input-unit"></span>
+            </div>
+            <div class="config-impact">
+              <span class="impact-text" id="dca-min-hold-impact"></span>
             </div>
           </div>
         </div>
@@ -1205,6 +1164,10 @@
                 <div class="summary-item summary-item-info">
                   <i class="icon-repeat"></i>
                   <span data-l10n-id="trader-dca-how-repeat" data-l10n-markup></span>
+                </div>
+                <div class="summary-item summary-item-info">
+                  <i class="icon-circle-pause"></i>
+                  <span data-l10n-id="trader-dca-how-pause" data-l10n-markup></span>
                 </div>
               </div>
             </div>

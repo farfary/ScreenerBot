@@ -1048,15 +1048,17 @@ config-trader-dca-cooldown-minutes = زمان انتظار DCA
     .unit = دقیقه
 config-trader-dca-enabled = فعال‌سازی DCA
     .hint = میانگین‌گیری قیمت (DCA) را برای پوزیشن‌ها فعال می‌کند
-config-trader-dca-max-count = بیشینه تعداد DCA
-    .hint = بیشینه تعداد ورودهای DCA اضافی برای هر پوزیشن
-    .unit = ورود
-config-trader-dca-size-percentage = اندازه DCA
-    .hint = اندازه هر ورود DCA به‌صورت درصدی از اندازه اولیه پوزیشن
+config-trader-dca-levels-pct = سطوح DCA
+    .hint = میزان افت قیمت زیر ورود برای خرید هر افزایش (10 = افزایش در −10%)
     .unit = %
-config-trader-dca-threshold-pct = آستانه DCA
-    .hint = وقتی پوزیشن به این درصد افت کند، DCA انجام می‌شود (-10 = DCA در -10%)
-    .unit = %
+config-trader-dca-measure-from = اندازه‌گیری افت از
+    .hint = قیمت ورودی که افت هر سطح از آن سنجیده می‌شود: میانگین ورود یا ورود اول
+config-trader-dca-min-hold-minutes = انتظار پس از ورود
+    .hint = دقیقه‌های پس از ورود پیش از نخستین افزایش
+    .unit = دقیقه
+config-trader-dca-size-multipliers = اندازه‌های DCA
+    .hint = آنچه هر افزایش می‌خرد، به‌صورت ضریبی از خرید اول
+    .unit = ×
 config-trader-enabled = فعال
     .hint = کلید اصلی سیستم معاملاتی
 config-trader-entry-check-concurrency = همزمانی بررسی ورود
