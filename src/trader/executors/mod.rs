@@ -69,16 +69,21 @@ pub async fn init_execution_system() -> crate::trader::Result<()> {
 /// Executes a trade decision on the book it names: a paper decision is filled by the
 /// paper executor and never reaches a live executor; a live decision runs the swap.
 /// `context` is the provenance a buy opens its round with.
+///
+/// Each executor's future is boxed. Manual trades, agent tools, monitors and copy trading
+/// all await this dispatcher, and inlining every executor's state machine into each of
+/// their futures exceeds the compiler's layout depth limit in a full build (`cargo check`
+/// does not compute those layouts).
 pub async fn execute_trade(
     decision: &TradeDecision,
     context: ExecutionContext,
 ) -> crate::trader::Result<TradeResult> {
     match decision.book {
-        Book::Paper => crate::trader::paper::executor::execute(decision, &context).await,
+        Book::Paper => Box::pin(crate::trader::paper::executor::execute(decision, &context)).await,
         Book::Live => match decision.action {
-            TradeAction::Buy => buy::execute_buy(decision, context).await,
-            TradeAction::Sell => sell::execute_sell(decision).await,
-            TradeAction::DCA => buy::execute_dca(decision).await,
+            TradeAction::Buy => Box::pin(buy::execute_buy(decision, context)).await,
+            TradeAction::Sell => Box::pin(sell::execute_sell(decision)).await,
+            TradeAction::DCA => Box::pin(buy::execute_dca(decision)).await,
         },
     }
 }
