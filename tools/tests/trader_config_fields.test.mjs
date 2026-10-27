@@ -20,6 +20,12 @@
  *   names what it cannot save and keeps Save disabled until it can, and saves its
  *   levels and shares as their two config lists. Its group takes its accessible name
  *   from its label, and decimal shares that add up to the whole position save.
+ * - A step added to the ladder doubles the last level, capped at the profit maximum, and
+ *   keeps the ladder valid: it splits the last share in half when the steps already sell
+ *   the whole position and otherwise sells the smallest share. Add is disabled while the
+ *   last level is at the profit maximum.
+ * - A caption row names the profit and share columns over the inputs, hidden from
+ *   assistive technology, since each input carries its own name.
  * - A ladder that keeps a runner warns that only the stop loss or the user can close it
  *   while the trailing stop, the time exit and every exit strategy are off.
  *
@@ -291,6 +297,13 @@ test("the take-profit ladder adds steps up to its limit and saves only a valid l
     assert.equal(await text("#take-profit-example-step-2"), "0.032 SOL");
 
     await add.click();
+    assert.equal(await rows.nth(2).locator(".level-list-profit").inputValue(), "120");
+    assert.equal(
+      await rows.nth(2).locator(".level-list-sell").inputValue(),
+      "5",
+      "with a runner left, a new step sells the smallest share"
+    );
+    assert.equal(await rows.nth(1).locator(".level-list-sell").inputValue(), "30");
     await add.click();
     assert.equal(await rows.count(), 4);
     assert.equal(await add.isDisabled(), true, "the metadata allows four steps");
@@ -317,8 +330,74 @@ test("the take-profit ladder adds steps up to its limit and saves only a valid l
       save.click(),
     ]);
     const body = request.postDataJSON();
-    assert.deepEqual(body.take_profit_levels_pct, [25, 60, 61]);
+    assert.deepEqual(body.take_profit_levels_pct, [25, 60, 120]);
     assert.deepEqual(body.take_profit_sell_pct, [40, 30, 5]);
+  } finally {
+    await close();
+  }
+});
+
+test("a step added to a ladder that sells the whole position splits the last share", async () => {
+  const { page, close } = await openTrader("take-profit");
+  try {
+    const ladder = page.locator("#take-profit-levels");
+    const rows = ladder.locator(".level-list-row");
+    const add = ladder.locator(".level-list-add");
+    await page.waitForFunction(
+      () => document.querySelector("#take-profit-levels .level-list-add")?.disabled === false
+    );
+    assert.equal(await rows.count(), 1);
+
+    await add.click();
+    const values = async (selector) =>
+      rows.locator(selector).evaluateAll((inputs) => inputs.map((input) => input.value));
+    assert.deepEqual(await values(".level-list-profit"), ["20", "40"]);
+    assert.deepEqual(await values(".level-list-sell"), ["50", "50"]);
+    assert.equal(await ladder.locator(".level-list-error").isVisible(), false);
+    const save = page.locator(".config-card:has(#take-profit-levels) .config-card-save");
+    assert.equal(await save.isDisabled(), false);
+  } finally {
+    await close();
+  }
+});
+
+test("Add is disabled while the last level is at the profit maximum", async () => {
+  const { page, close } = await openTrader("take-profit", {
+    take_profit_levels_pct: [500, 1000],
+    take_profit_sell_pct: [50, 50],
+  });
+  try {
+    const ladder = page.locator("#take-profit-levels");
+    await ladder.locator(".level-list-row").first().waitFor();
+    const add = ladder.locator(".level-list-add");
+    assert.equal(await add.isDisabled(), true);
+
+    await ladder.locator(".level-list-row").nth(1).locator(".level-list-profit").fill("900");
+    assert.equal(await add.isDisabled(), false, "a level below the maximum leaves room");
+  } finally {
+    await close();
+  }
+});
+
+test("a caption row names the ladder's input columns, hidden from assistive technology", async () => {
+  const { page, close } = await openTrader("take-profit", {
+    take_profit_levels_pct: [25, 60],
+    take_profit_sell_pct: [40, 30],
+  });
+  try {
+    const ladder = page.locator("#take-profit-levels");
+    const caption = ladder.locator(".level-list-rows > .level-list-caption");
+    await caption.waitFor();
+    assert.equal(await caption.count(), 1);
+    assert.equal(await caption.getAttribute("aria-hidden"), "true");
+    const cells = caption.locator(":scope > span");
+    const texts = (await cells.allTextContents()).map(plain);
+    assert.deepEqual(texts, ["", "Profit Level", "Share to Sell", ""]);
+
+    const row = ladder.locator(".level-list-row").first();
+    const start = async (locator) => (await locator.boundingBox()).x;
+    assert.equal(await start(cells.nth(1)), await start(row.locator(".level-list-field").nth(0)));
+    assert.equal(await start(cells.nth(2)), await start(row.locator(".level-list-field").nth(1)));
   } finally {
     await close();
   }

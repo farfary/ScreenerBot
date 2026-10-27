@@ -248,6 +248,8 @@ trader-take-profit-step = Step { $step }
 trader-take-profit-profit-label = Step { $step } profit level
 # $step is the step's position in the ladder, from 1.
 trader-take-profit-sell-label = Step { $step } share to sell
+trader-take-profit-profit-caption = Profit Level
+trader-take-profit-sell-caption = Share to Sell
 trader-take-profit-add-step = Add step
 # $step is the step's position in the ladder, from 1.
 trader-take-profit-remove-step = Remove step { $step }

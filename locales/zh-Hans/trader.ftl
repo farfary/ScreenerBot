@@ -241,6 +241,8 @@ trader-take-profit-step = 第 { $step } 步
 trader-take-profit-profit-label = 第 { $step } 步利润水平
 # $step is the step's position in the ladder, from 1.
 trader-take-profit-sell-label = 第 { $step } 步卖出比例
+trader-take-profit-profit-caption = 利润水平
+trader-take-profit-sell-caption = 卖出比例
 trader-take-profit-add-step = 添加一步
 # $step is the step's position in the ladder, from 1.
 trader-take-profit-remove-step = 删除第 { $step } 步

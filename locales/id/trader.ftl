@@ -195,6 +195,8 @@ trader-take-profit-step = Tahap { $step }
 trader-take-profit-profit-label = Level profit tahap { $step }
 # $step is the step's position in the ladder, from 1.
 trader-take-profit-sell-label = Porsi jual tahap { $step }
+trader-take-profit-profit-caption = Level profit
+trader-take-profit-sell-caption = Porsi jual
 trader-take-profit-add-step = Tambah tahap
 # $step is the step's position in the ladder, from 1.
 trader-take-profit-remove-step = Hapus tahap { $step }

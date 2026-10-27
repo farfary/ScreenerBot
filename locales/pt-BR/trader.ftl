@@ -255,6 +255,8 @@ trader-take-profit-step = Etapa { $step }
 trader-take-profit-profit-label = Nível de lucro da etapa { $step }
 # $step is the step's position in the ladder, from 1.
 trader-take-profit-sell-label = Parte a vender da etapa { $step }
+trader-take-profit-profit-caption = Nível de lucro
+trader-take-profit-sell-caption = Parte a vender
 trader-take-profit-add-step = Adicionar etapa
 # $step is the step's position in the ladder, from 1.
 trader-take-profit-remove-step = Remover etapa { $step }

@@ -240,6 +240,8 @@ trader-take-profit-step = { $step }단계
 trader-take-profit-profit-label = { $step }단계 수익 수준
 # $step is the step's position in the ladder, from 1.
 trader-take-profit-sell-label = { $step }단계 매도 비중
+trader-take-profit-profit-caption = 수익 수준
+trader-take-profit-sell-caption = 매도 비중
 trader-take-profit-add-step = 단계 추가
 # $step is the step's position in the ladder, from 1.
 trader-take-profit-remove-step = { $step }단계 삭제

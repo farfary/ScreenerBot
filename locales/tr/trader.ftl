@@ -200,6 +200,8 @@ trader-take-profit-step = Kademe { $step }
 trader-take-profit-profit-label = Kademe { $step } kâr seviyesi
 # $step is the step's position in the ladder, from 1.
 trader-take-profit-sell-label = Kademe { $step } satış payı
+trader-take-profit-profit-caption = Kâr seviyesi
+trader-take-profit-sell-caption = Satış payı
 trader-take-profit-add-step = Kademe ekle
 # $step is the step's position in the ladder, from 1.
 trader-take-profit-remove-step = Kademe { $step } kaldır

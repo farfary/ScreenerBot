@@ -193,6 +193,8 @@ trader-take-profit-step = Bậc { $step }
 trader-take-profit-profit-label = Mức lợi nhuận bậc { $step }
 # $step is the step's position in the ladder, from 1.
 trader-take-profit-sell-label = Phần bán của bậc { $step }
+trader-take-profit-profit-caption = Mức lợi nhuận
+trader-take-profit-sell-caption = Phần bán
 trader-take-profit-add-step = Thêm bậc
 # $step is the step's position in the ladder, from 1.
 trader-take-profit-remove-step = Xóa bậc { $step }

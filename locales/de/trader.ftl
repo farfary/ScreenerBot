@@ -208,6 +208,8 @@ trader-take-profit-step = Stufe { $step }
 trader-take-profit-profit-label = Gewinnschwelle von Stufe { $step }
 # $step is the step's position in the ladder, from 1.
 trader-take-profit-sell-label = Verkaufsanteil von Stufe { $step }
+trader-take-profit-profit-caption = Gewinnschwelle
+trader-take-profit-sell-caption = Verkaufsanteil
 trader-take-profit-add-step = Stufe hinzufügen
 # $step is the step's position in the ladder, from 1.
 trader-take-profit-remove-step = Stufe { $step } entfernen

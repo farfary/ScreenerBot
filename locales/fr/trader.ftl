@@ -207,6 +207,8 @@ trader-take-profit-step = Palier { $step }
 trader-take-profit-profit-label = Niveau de gain du palier { $step }
 # $step is the step's position in the ladder, from 1.
 trader-take-profit-sell-label = Part à vendre du palier { $step }
+trader-take-profit-profit-caption = Niveau de gain
+trader-take-profit-sell-caption = Part à vendre
 trader-take-profit-add-step = Ajouter un palier
 # $step is the step's position in the ladder, from 1.
 trader-take-profit-remove-step = Retirer le palier { $step }

@@ -200,6 +200,8 @@ trader-take-profit-step = चरण { $step }
 trader-take-profit-profit-label = चरण { $step } का मुनाफ़ा स्तर
 # $step is the step's position in the ladder, from 1.
 trader-take-profit-sell-label = चरण { $step } का बिक्री हिस्सा
+trader-take-profit-profit-caption = मुनाफ़ा स्तर
+trader-take-profit-sell-caption = बिक्री हिस्सा
 trader-take-profit-add-step = चरण जोड़ें
 # $step is the step's position in the ladder, from 1.
 trader-take-profit-remove-step = चरण { $step } हटाएँ

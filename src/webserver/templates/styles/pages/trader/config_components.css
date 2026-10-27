@@ -298,21 +298,28 @@
   gap: 0.5rem;
 }
 
+/* One grid for the caption row and every step row (each a subgrid), so a caption sits
+   over its input column at every width: step name, profit level, share, remove. */
 .level-list-rows {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.level-list-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
+  display: grid;
+  grid-template-columns: minmax(4.5rem, max-content) repeat(2, minmax(0, 12rem)) max-content;
   gap: 0.5rem 0.75rem;
 }
 
+.level-list-caption,
+.level-list-row {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  align-items: center;
+}
+
+.level-list-caption {
+  align-items: end;
+}
+
+.level-list-caption,
 .level-list-step {
-  min-inline-size: 4.5rem;
   font-size: 0.75rem;
   font-weight: 600;
   color: var(--text-secondary);

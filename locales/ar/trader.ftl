@@ -276,6 +276,8 @@ trader-take-profit-step = المرحلة { $step }
 trader-take-profit-profit-label = مستوى ربح المرحلة { $step }
 # $step is the step's position in the ladder, from 1.
 trader-take-profit-sell-label = حصة بيع المرحلة { $step }
+trader-take-profit-profit-caption = مستوى الربح
+trader-take-profit-sell-caption = حصة البيع
 trader-take-profit-add-step = إضافة مرحلة
 # $step is the step's position in the ladder, from 1.
 trader-take-profit-remove-step = إزالة المرحلة { $step }

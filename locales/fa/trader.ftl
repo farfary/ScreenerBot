@@ -248,6 +248,8 @@ trader-take-profit-step = پله { $step }
 trader-take-profit-profit-label = سطح سود پله { $step }
 # $step is the step's position in the ladder, from 1.
 trader-take-profit-sell-label = سهم فروش پله { $step }
+trader-take-profit-profit-caption = سطح سود
+trader-take-profit-sell-caption = سهم فروش
 trader-take-profit-add-step = افزودن پله
 # $step is the step's position in the ladder, from 1.
 trader-take-profit-remove-step = حذف پله { $step }

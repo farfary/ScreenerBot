@@ -241,6 +241,8 @@ trader-take-profit-step = 段階 { $step }
 trader-take-profit-profit-label = 段階 { $step } の利益水準
 # $step is the step's position in the ladder, from 1.
 trader-take-profit-sell-label = 段階 { $step } の売却割合
+trader-take-profit-profit-caption = 利益水準
+trader-take-profit-sell-caption = 売却割合
 trader-take-profit-add-step = 段階を追加
 # $step is the step's position in the ladder, from 1.
 trader-take-profit-remove-step = 段階 { $step } を削除

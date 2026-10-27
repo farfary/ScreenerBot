@@ -59,6 +59,9 @@ const bound = (value) => formatNumber(value, { decimals: 0, maxDecimals: 2 });
  */
 const SHARE_SUM_TOLERANCE_PCT = 1e-9;
 
+/** The total share the shares `sells` sell together. */
+const shareTotal = (sells) => sells.reduce((sum, value) => sum + value, 0);
+
 /**
  * Why the ladder `el` cannot be saved, worded for the user, or `null` when it can.
  * Mirrors the config's own validation: every level and share inside its bounds,
@@ -86,7 +89,7 @@ export function levelError(el) {
   if (profits.some((value, index) => index > 0 && value <= profits[index - 1])) {
     return I18n.t("trader-take-profit-error-order");
   }
-  const total = sells.reduce((sum, value) => sum + value, 0);
+  const total = shareTotal(sells);
   if (total > sell.max + SHARE_SUM_TOLERANCE_PCT) {
     return I18n.t("trader-take-profit-error-total", { max: bound(sell.max) });
   }
@@ -97,8 +100,16 @@ export function levelError(el) {
 export function runnerShare(el) {
   const settings = SETTINGS.get(el);
   if (!settings) return null;
-  const total = readLevels(el).sells.reduce((sum, value) => sum + value, 0);
-  return settings.sell.max - total;
+  return settings.sell.max - shareTotal(readLevels(el).sells);
+}
+
+/**
+ * `value` rounded down to a multiple of the metadata `step`, without the floating-point
+ * tail a decimal step leaves (0.1 * 3 is 0.30000000000000004).
+ */
+function floorToStep(value, step) {
+  if (!step) return value;
+  return Number((Math.floor(value / step + 1e-9) * step).toPrecision(12));
 }
 
 /** Applies a number field's metadata bounds to `input`. */
@@ -175,12 +186,17 @@ function stepRow(el, step, profit, sell) {
   return row;
 }
 
-/** Shows the ladder's validation message and enables the controls its step count allows. */
+/** Shows the ladder's validation message and enables the controls its steps allow. */
 function refresh(el) {
   const settings = SETTINGS.get(el);
-  const count = rows(el).length;
+  const { profits } = readLevels(el);
+  const count = profits.length;
   const add = el.querySelector(":scope > .level-list-add");
-  if (add) add.disabled = !settings || count >= settings.maxItems;
+  if (add) {
+    // No step fits above a last level at the profit maximum: levels rise strictly.
+    add.disabled =
+      !settings || count >= settings.maxItems || profits[count - 1] >= settings.profit.max;
+  }
   el.querySelectorAll(".level-list-remove").forEach((button) => {
     button.disabled = count <= 1;
   });
@@ -192,12 +208,58 @@ function refresh(el) {
   }
 }
 
+/**
+ * Appends a step to `profits` and `sells` (as read from a ladder with the metadata
+ * `settings`). The new level is twice the last one, capped at the profit maximum; the
+ * add control is disabled while the last level is at that maximum, so the levels keep
+ * rising strictly. When the steps already sell the whole position, the new step takes
+ * half of the last step's share, rounded down to the share step and never below the
+ * smallest share, and the last keeps the rest, so the ladder stays valid. When the last
+ * step could not keep the smallest share itself, or a runner is left, the new step sells
+ * the smallest share allowed.
+ */
+function appendStep(profits, sells, { profit, sell }) {
+  const lastLevel = profits[profits.length - 1];
+  profits.push(Number.isFinite(lastLevel) ? Math.min(lastLevel * 2, profit.max) : profit.min);
+
+  const last = sells.length - 1;
+  const wholePosition = Math.abs(shareTotal(sells) - sell.max) <= SHARE_SUM_TOLERANCE_PCT;
+  if (wholePosition && last >= 0) {
+    const share = Math.max(floorToStep(sells[last] / 2, sell.step), sell.min);
+    const kept = Number((sells[last] - share).toPrecision(12));
+    if (kept >= sell.min) {
+      sells[last] = kept;
+      sells.push(share);
+      return;
+    }
+  }
+  sells.push(sell.min);
+}
+
 /** Draws the ladder `el` with the steps `profits` and `sells`, paired by index. */
 export function renderLevels(el, profits, sells) {
   let list = el.querySelector(":scope > .level-list-rows");
+  let caption = list?.querySelector(":scope > .level-list-caption");
   if (!list) {
     list = document.createElement("div");
     list.className = "level-list-rows";
+
+    // Column captions over the two inputs of every row. Each input carries its own
+    // accessible name, so the captions are hidden from assistive technology.
+    caption = document.createElement("div");
+    caption.className = "level-list-caption";
+    caption.setAttribute("aria-hidden", "true");
+    const column = (text) => {
+      const cell = document.createElement("span");
+      cell.textContent = text;
+      return cell;
+    };
+    caption.append(
+      column(""),
+      column(I18n.t("trader-take-profit-profit-caption")),
+      column(I18n.t("trader-take-profit-sell-caption")),
+      column("")
+    );
 
     const add = document.createElement("button");
     add.type = "button";
@@ -209,12 +271,9 @@ export function renderLevels(el, profits, sells) {
     add.append(icon, label);
     add.addEventListener("click", () => {
       const current = readLevels(el);
-      const last = current.profits[current.profits.length - 1];
-      const settings = SETTINGS.get(el);
-      // A new step starts one metadata step above the last level and sells the
-      // smallest share allowed, so it is valid wherever the ladder leaves room.
-      current.profits.push(Number.isFinite(last) ? last + settings.profit.step : settings.profit.min);
-      current.sells.push(settings.sell.min);
+      // The new step's level and share follow `appendStep`: twice the last level, and
+      // half of the last share when the steps already sell the whole position.
+      appendStep(current.profits, current.sells, SETTINGS.get(el));
       renderLevels(el, current.profits, current.sells);
       el.dispatchEvent(new Event("input", { bubbles: true }));
     });
@@ -228,6 +287,7 @@ export function renderLevels(el, profits, sells) {
     el.addEventListener("input", () => refresh(el));
   }
   list.replaceChildren(
+    caption,
     ...profits.map((profit, index) => stepRow(el, index + 1, profit, sells[index]))
   );
   refresh(el);

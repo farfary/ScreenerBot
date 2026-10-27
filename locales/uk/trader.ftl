@@ -262,6 +262,8 @@ trader-take-profit-step = Сходинка { $step }
 trader-take-profit-profit-label = Рівень прибутку сходинки { $step }
 # $step is the step's position in the ladder, from 1.
 trader-take-profit-sell-label = Частка продажу сходинки { $step }
+trader-take-profit-profit-caption = Рівень прибутку
+trader-take-profit-sell-caption = Частка продажу
 trader-take-profit-add-step = Додати сходинку
 # $step is the step's position in the ladder, from 1.
 trader-take-profit-remove-step = Видалити сходинку { $step }
