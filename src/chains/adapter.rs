@@ -119,3 +119,22 @@ pub fn adapter_for(chain: ChainId) -> &'static dyn ChainAdapter {
 pub fn adapter() -> &'static dyn ChainAdapter {
     adapter_for(active_chain())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_quote_assets_are_the_native_asset_in_any_spelling_and_every_stablecoin() {
+        for chain in ChainId::ALL.iter().copied() {
+            let adapter = adapter_for(chain);
+            assert!(adapter.is_quote_asset(adapter.native_asset_address()));
+            for stable in adapter.stable_assets() {
+                assert!(adapter.is_quote_asset(stable), "{chain} {stable}");
+            }
+        }
+        let solana = adapter_for(ChainId::Solana);
+        assert!(solana.is_quote_asset(crate::chains::solana::constants::SYSTEM_PROGRAM_ID));
+        assert!(!solana.is_quote_asset("DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263"));
+    }
+}

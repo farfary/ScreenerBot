@@ -4,6 +4,8 @@
 //! Entry evaluation logic with integrated LLM analysis
 //!
 //! Evaluates whether an entry should be made for a token by checking:
+//! 0. The token is not one of the chain's quote assets (native coin or stablecoin):
+//!    strategies never open a position in what denominates trades
 //! 1. Admission of each mode with enabled entry strategies, on its own book (see
 //!    `trader::admission::admit_modes`): force stop, loss limit (live only), entry storage,
 //!    connectivity, position limits, existing position, re-entry cooldown, paper cash
@@ -11,7 +13,7 @@
 //! 2. LLM entry analysis (if enabled)
 //! 3. Strategy signals of the admitted modes
 
-use crate::chains::ChainId;
+use crate::chains::{adapter_for, ChainId};
 use crate::pools::PriceResult;
 use crate::strategies::db::has_enabled_strategies;
 use crate::strategies::types::StrategyType;
@@ -53,7 +55,9 @@ pub async fn entry_cycle() -> EntryCycle {
 
 /// Evaluate entry opportunity for a token
 ///
-/// Runs the admission gauntlet of each mode `cycle` wants first (see
+/// Refuses the chain's quote assets before anything else: a strategy entry never opens
+/// the native coin or a stablecoin. Manual, Telegram, agent and copy entries do not pass
+/// through here. Then runs the admission gauntlet of each mode `cycle` wants (see
 /// [`crate::trader::admission::admit_modes`]), then LLM entry analysis (if enabled), then
 /// the strategies of the admitted modes.
 ///
@@ -67,6 +71,14 @@ pub async fn evaluate_entry_for_token(
     price_info: &PriceResult,
     cycle: &EntryCycle,
 ) -> crate::trader::Result<Option<TradeDecision>> {
+    if adapter_for(chain).is_quote_asset(token_mint) {
+        crate::logger::debug(
+            crate::logger::LogTag::Trader,
+            &format!("Entry skipped for {token_mint}: a quote asset of {chain} is never a strategy entry"),
+        );
+        return Ok(None);
+    }
+
     let admitted = match admit_modes(
         token_mint,
         &["rpc", "dexscreener", "rugcheck"],
@@ -152,4 +164,29 @@ pub async fn evaluate_entry_for_token(
     // 7. Strategy evaluation - check configured entry strategies
     evaluators::StrategyEvaluator::check_entry_strategies(chain, token_mint, price_info, &admitted)
         .await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn a_strategy_entry_never_opens_a_quote_asset() {
+        let cycle = EntryCycle::read(vec![TradingMode::Live]).await;
+        for chain in ChainId::ALL.iter().copied() {
+            let adapter = adapter_for(chain);
+            let quote_assets = std::iter::once(adapter.native_asset_address())
+                .chain(adapter.stable_assets().iter().copied());
+            for mint in quote_assets {
+                let price = PriceResult {
+                    mint: mint.to_owned(),
+                    ..PriceResult::default()
+                };
+                let decision = evaluate_entry_for_token(chain, mint, &price, &cycle)
+                    .await
+                    .expect("a quote asset is refused before any check that can fail");
+                assert!(decision.is_none(), "{chain:?} {mint}");
+            }
+        }
+    }
 }

@@ -282,6 +282,59 @@ fn dex_program_id_literals_have_exactly_one_owner() {
     );
 }
 
+/// The files that may name the USDT mint: its definition, the adapter that lists it among
+/// the chain's stable assets, and the fee module. Everything else asks
+/// `ChainAdapter::is_stable_asset` / `is_quote_asset`.
+const USDT_MINT_OWNERS: &[&str] = &[
+    "chains/solana/constants.rs",
+    "chains/solana/adapter.rs",
+    "chains/solana/swaps/revenue.rs",
+];
+
+/// Files that still compare against the USDT mint directly. Entries may only be removed.
+const USDT_MINT_ALLOWLIST: &[&str] = &[];
+
+const USDT_MINT_LITERAL: &str = "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB";
+
+fn names_usdt_mint(contents: &str) -> bool {
+    let code = code_lines(contents);
+    code.contains("USDT_MINT") || code.contains(USDT_MINT_LITERAL)
+}
+
+#[test]
+fn only_the_chain_owners_name_the_usdt_mint() {
+    let files = walk_src();
+    let violations: Vec<String> = files
+        .iter()
+        .filter(|(relative, _)| {
+            let path = relative.to_string_lossy();
+            !USDT_MINT_OWNERS.contains(&&*path) && !USDT_MINT_ALLOWLIST.contains(&&*path)
+        })
+        .filter(|(_, contents)| names_usdt_mint(contents))
+        .map(|(relative, _)| format!("src/{}", relative.display()))
+        .collect();
+    assert!(
+        violations.is_empty(),
+        "a stablecoin is recognised through ChainAdapter::is_stable_asset or is_quote_asset, \
+         never by comparing against the USDT mint:\n{}",
+        violations.join("\n")
+    );
+
+    let stale: Vec<&str> = USDT_MINT_ALLOWLIST
+        .iter()
+        .copied()
+        .filter(|allowed| {
+            !files.iter().any(|(relative, contents)| {
+                relative.to_string_lossy() == *allowed && names_usdt_mint(contents)
+            })
+        })
+        .collect();
+    assert!(
+        stale.is_empty(),
+        "remove allowlist entries that no longer name the USDT mint: {stale:?}"
+    );
+}
+
 /// Chain-specific discovery/fetcher types must not leak into the shared
 /// `crate::pools` public surface — callers that need them import
 /// `crate::chains::solana::pools` directly (regression guard, see

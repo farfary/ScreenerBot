@@ -502,7 +502,7 @@ fn normalize_mint(chain: ChainId, candidate: &str) -> Option<String> {
         return None;
     }
 
-    if adapter.is_native_asset(trimmed) || adapter.is_stable_asset(trimmed) {
+    if adapter.is_quote_asset(trimmed) {
         return None;
     }
 

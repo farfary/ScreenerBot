@@ -63,8 +63,7 @@ pub async fn should_blacklist_for_authorities(
 /// True for the chain's native asset and its canonical stablecoin quote assets, which no
 /// automatic rule may blacklist.
 pub fn is_exempt_from_auto_blacklist(chain: ChainId, mint: &str) -> bool {
-    let adapter = crate::chains::adapter_for(chain);
-    adapter.is_native_asset(mint) || adapter.is_stable_asset(mint)
+    crate::chains::adapter_for(chain).is_quote_asset(mint)
 }
 
 /// Evaluate all blacklist conditions for a token

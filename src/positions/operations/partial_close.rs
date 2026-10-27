@@ -15,13 +15,12 @@ use crate::positions::state::{
 use crate::positions::transitions::PositionTransition;
 use crate::positions::types::PendingPartialExit;
 use crate::positions::{Error, Result};
-use crate::swaps::{
-    calculate_partial_amount, execute_swap_with_fallback, get_best_quote, QuoteRequest, SwapMode,
-};
+use crate::swaps::{execute_swap_with_fallback, get_best_quote, QuoteRequest, SwapMode};
 use crate::utils::get_wallet_address;
 use chrono::Utc;
 
 use super::exit_ladder::{run_exit_ladder, ExitSwap};
+use super::exit_sizing::partial_exit_amount;
 
 /// Partially close a position by selling a percentage of remaining tokens.
 /// `take_profit_level` is the take-profit step the sale takes, reserved on the position
@@ -83,37 +82,31 @@ pub async fn partial_close_position(
             detail: "position has no token amount".to_owned(),
         })?;
 
-    // Size against what the WALLET actually holds, not only what the position believes.
-    // The quote preview (`/api/trader/quote`) already prices the percentage against the
-    // real on-chain balance, so sizing execution off the DB alone made the preview and
-    // the trade disagree whenever the two drifted — and a DB amount larger than the real
-    // balance simply failed the swap with insufficient funds. Take the LOWER of the two:
-    // never sell more than the wallet has, never more than the position owns.
+    // Size against what the WALLET actually holds as well as what the position books
+    // (`exit_sizing::partial_exit_amount`): the lower of the two, so a drifted row never
+    // sells more than the wallet has and a wallet never gives up more than the row owns.
     let wallet_address = get_wallet_address().map_err(|e| Error::WalletUnavailable {
         detail: e.to_string(),
     })?;
 
-    let sell_base = match get_total_token_balance(&wallet_address, token_mint).await {
-        Ok(on_chain) if on_chain > 0 => {
-            let on_chain = RawAmount::from(on_chain);
-            if on_chain != remaining_amount {
-                logger::warning(
-                    LogTag::Positions,
-                    &format!(
-                        "Partial exit balance drift for {}: position={} on-chain={} — sizing against the lower",
-                        position.symbol, remaining_amount, on_chain
-                    ),
-                );
-            }
-            on_chain.min(remaining_amount)
+    // The balance lookup is best-effort: an RPC hiccup must not block an exit, so a failed
+    // read sizes from the position's own accounting.
+    let on_chain = get_total_token_balance(&wallet_address, token_mint)
+        .await
+        .ok();
+    if let Some(on_chain) = on_chain.filter(|on_chain| *on_chain > 0) {
+        if RawAmount::from(on_chain) != remaining_amount {
+            logger::warning(
+                LogTag::Positions,
+                &format!(
+                    "Partial exit balance drift for {}: position={} on-chain={} — sizing against the lower",
+                    position.symbol, remaining_amount, on_chain
+                ),
+            );
         }
-        // The balance lookup is best-effort: an RPC hiccup must not block an exit. Fall
-        // back to the position's own accounting, which is what this always used.
-        _ => remaining_amount,
-    };
+    }
 
-    // Calculate partial exit amount
-    let exit_amount = calculate_partial_amount(sell_base, exit_percentage);
+    let exit_amount = partial_exit_amount(remaining_amount, on_chain, exit_percentage);
 
     if exit_amount == RawAmount::ZERO {
         return Err(Error::ZeroExitAmount {
@@ -141,8 +134,8 @@ pub async fn partial_close_position(
     logger::info(
         LogTag::Positions,
         &format!(
-            "Partial exit initiated: {} | {}% ({} of {} tokens) | Reason: {}",
-            position.symbol, exit_percentage, exit_amount, sell_base, exit_reason
+            "Partial exit initiated: {} | {}% ({} of {} booked tokens) | Reason: {}",
+            position.symbol, exit_percentage, exit_amount, remaining_amount, exit_reason
         ),
     );
 

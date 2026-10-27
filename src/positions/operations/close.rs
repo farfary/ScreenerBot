@@ -7,7 +7,7 @@ use crate::chains::solana::assets::ata::{get_token_balance, get_total_token_bala
 use crate::chains::RawAmount;
 use crate::errors::ErrorClass;
 use crate::logger::{self, LogTag};
-use crate::positions::db::{get_other_open_held, record_exit_submission, OtherOpenHeld};
+use crate::positions::db::{get_other_open_held, record_exit_submission};
 use crate::positions::price_resolution::get_price_with_api_fallback;
 use crate::positions::queue::{enqueue_verification, VerificationItem};
 use crate::positions::state::{
@@ -23,6 +23,7 @@ use serde_json::json;
 use tokio::time::{sleep, Duration};
 
 use super::exit_ladder::{run_exit_ladder, ExitSwap};
+use super::exit_sizing::{full_exit_amount, ExitSizing};
 
 /// Close an existing position
 pub async fn close_position_direct(
@@ -77,7 +78,25 @@ pub async fn close_position_direct(
     // again. Only a second PARTIAL can oversell, because that sizes a percentage off the
     // position's `remaining_token_amount`, which the pending partial has not yet decremented
     // — and `partial_close_position` refuses exactly that case.
+    //
+    // A quote asset (the native coin or a stablecoin) is the exception: its close is sized
+    // from the row's booked remainder, which the pending partial has not yet decremented,
+    // so closing now would sell the wallet's cash in place of what the partial already sold.
+    let quote_asset = crate::chains::adapter().is_quote_asset(token_mint);
+    if quote_asset {
+        // Sized from the stored row, so a restored row waits for reconciliation like a
+        // partial exit does.
+        super::refuse_until_reconciled("close", token_mint)?;
+    }
     if crate::positions::state::is_partial_exit_pending(token_mint).await {
+        if quote_asset {
+            return Err(Error::TransitionFailed {
+                transition: "close",
+                mint: api_token.mint.clone(),
+                detail: "a partial exit of this quote-asset position is still confirming"
+                    .to_owned(),
+            });
+        }
         logger::warning(
             LogTag::Positions,
             &format!(
@@ -174,11 +193,12 @@ pub async fn close_position_direct(
     let ExitSizing {
         amount: sell_amount,
         note: multi_account_note,
-    } = exit_sell_amount(
+    } = full_exit_amount(
         total_token_balance,
         primary_token_balance,
         own_remaining,
         others,
+        quote_asset,
     );
 
     if sell_amount == 0 {
@@ -442,72 +462,8 @@ pub async fn mark_exit_submitted(
     .await
 }
 
-/// How many raw tokens a full close sells, and why it is below the wallet total when it is.
-#[derive(Debug, PartialEq, Eq)]
-struct ExitSizing {
-    amount: u64,
-    note: Option<String>,
-}
-
-/// Sizes a full close from the wallet's `total` holding across its token accounts and the
-/// `primary` account's balance, the one most routes spend from.
-///
-/// With no other open position of the mint the close sweeps the wallet: the primary balance
-/// when the total is split across accounts, the total when the primary account is empty.
-/// Tokens the mint's other open positions hold are not this position's to sell: with
-/// `others` booked, the sale is at most the total less their holding, and while their
-/// holding cannot be attributed it is at most `own_remaining`.
-fn exit_sell_amount(
-    total: u64,
-    primary: u64,
-    own_remaining: RawAmount,
-    others: OtherOpenHeld,
-) -> ExitSizing {
-    let (swept, note) = if primary == 0 && total > 0 {
-        (total, Some("primary_ata_empty_using_total".to_owned()))
-    } else if total > primary && primary > 0 {
-        (
-            primary,
-            Some(format!(
-                "multi_account_total={total} primary={primary} shortfall={}, limiting_to_primary",
-                total - primary
-            )),
-        )
-    } else {
-        (total, None)
-    };
-    let own_cap = match others {
-        OtherOpenHeld::Booked(held) if held == RawAmount::ZERO => {
-            return ExitSizing {
-                amount: swept,
-                note,
-            }
-        }
-        OtherOpenHeld::Booked(held) => {
-            u64::try_from(held.raw()).map_or(0, |held| total.saturating_sub(held))
-        }
-        OtherOpenHeld::Unattributable { .. } => {
-            u64::try_from(own_remaining.raw()).unwrap_or(u64::MAX)
-        }
-    };
-    if own_cap >= swept {
-        return ExitSizing {
-            amount: swept,
-            note,
-        };
-    }
-    ExitSizing {
-        amount: own_cap,
-        note: Some(format!(
-            "wallet_total={total} swept={swept} limiting_to_own_holding={own_cap}"
-        )),
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     /// A full and a partial exit sell the open round of the mint, archived or not, the row a
     /// manual sell targets: a lookup that skips archived rows counts the closing row as
     /// another holder and sizes its own sale to nothing.
@@ -521,53 +477,5 @@ mod tests {
             assert!(code.contains("get_open_round_by_mint"), "{file}");
             assert!(!code.contains("get_position_by_mint"), "{file}");
         }
-    }
-
-    fn booked(raw: u128) -> OtherOpenHeld {
-        OtherOpenHeld::Booked(RawAmount::new(raw))
-    }
-
-    const UNATTRIBUTABLE: OtherOpenHeld = OtherOpenHeld::Unattributable { position_id: 7 };
-
-    fn amount(total: u64, primary: u64, own: u128, others: OtherOpenHeld) -> u64 {
-        exit_sell_amount(total, primary, RawAmount::new(own), others).amount
-    }
-
-    #[test]
-    fn a_close_with_no_other_open_position_sweeps_the_wallet_as_before() {
-        assert_eq!(amount(2_000, 2_000, 1_000, booked(0)), 2_000);
-        assert_eq!(amount(2_000, 1_500, 1_000, booked(0)), 1_500);
-        assert_eq!(amount(2_000, 0, 1_000, booked(0)), 2_000);
-        assert_eq!(amount(0, 0, 1_000, booked(0)), 0);
-    }
-
-    #[test]
-    fn a_close_leaves_what_the_other_open_positions_hold() {
-        assert_eq!(amount(2_000, 2_000, 1_000, booked(600)), 1_400);
-        assert_eq!(amount(2_000, 1_200, 1_000, booked(600)), 1_200);
-        assert_eq!(amount(2_000, 2_000, 1_000, booked(2_000)), 0);
-        assert_eq!(amount(2_000, 2_000, 1_000, booked(5_000)), 0);
-        assert_eq!(amount(2_000, 2_000, 1_000, booked(u128::MAX)), 0);
-    }
-
-    #[test]
-    fn a_close_beside_a_holding_that_cannot_be_attributed_sells_at_most_its_own_remainder() {
-        assert_eq!(amount(2_000, 2_000, 1_000, UNATTRIBUTABLE), 1_000);
-        assert_eq!(amount(2_000, 800, 1_000, UNATTRIBUTABLE), 800);
-        assert_eq!(amount(900, 900, 1_000, UNATTRIBUTABLE), 900);
-        assert_eq!(amount(2_000, 2_000, 0, UNATTRIBUTABLE), 0);
-    }
-
-    #[test]
-    fn a_capped_sale_says_why() {
-        let sizing = exit_sell_amount(2_000, 2_000, RawAmount::new(1_000), booked(600));
-        assert_eq!(sizing.amount, 1_400);
-        assert!(sizing
-            .note
-            .is_some_and(|note| note.contains("limiting_to_own_holding=1400")));
-        assert_eq!(
-            exit_sell_amount(2_000, 2_000, RawAmount::new(1_000), booked(0)).note,
-            None
-        );
     }
 }

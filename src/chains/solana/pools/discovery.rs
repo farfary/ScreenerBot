@@ -13,7 +13,7 @@
 
 use super::types::ProgramKind;
 
-use super::decode_utils::{is_sol_mint, is_stablecoin_mint};
+use super::decode_utils::is_sol_mint;
 use crate::chains::solana::pools::service::get_pool_analyzer;
 use crate::chains::{adapter_for, AssetId, ChainId, PoolId};
 use crate::events::{record_safe, Event, EventCategory};
@@ -189,7 +189,7 @@ impl PoolDiscovery {
         let mut token_set: HashSet<String> = tokens.iter().cloned().collect();
 
         for mint in open_position_mints.iter().chain(held_mints.iter()) {
-            if !is_stablecoin_mint(mint) && !token_set.contains(mint) {
+            if !token_set.contains(mint) {
                 token_set.insert(mint.clone());
                 tokens.push(mint.clone());
             }
@@ -211,11 +211,8 @@ impl PoolDiscovery {
             return Ok(0);
         }
 
-        // Early stablecoin filtering
-        tokens.retain(|m| !is_stablecoin_mint(m));
-
-        // Cap to max_watched, prioritizing tokens we hold, have a position in, or hold
-        // in a paper copy book — those are the ones a missing price actually costs the
+        // Cap to max_watched, prioritizing tokens we hold or have a live or paper round
+        // in — those are the ones a missing price actually costs the
         // user (a wrong P&L, an understated wallet worth, a paper exit rule that never
         // fires). Discovery candidates take what is left.
         if tokens.len() > max_watched {
@@ -492,17 +489,6 @@ impl PoolDiscovery {
             LogTag::PoolDiscovery,
             &format!("Starting pool discovery for token {mint}"),
         );
-
-        if is_stablecoin_mint(mint) {
-            logger::warning(
-                LogTag::PoolDiscovery,
-                &format!(
-                    "Token {} is a stablecoin - skipping pool discovery",
-                    &mint[..8.min(mint.len())]
-                ),
-            );
-            return Vec::new();
-        }
 
         // Get snapshot from tokens module
         let snapshot = match get_token_pools_snapshot(ChainId::Solana, mint).await {

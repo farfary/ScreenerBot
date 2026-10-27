@@ -12,6 +12,7 @@
 mod close;
 mod dca;
 mod exit_ladder;
+mod exit_sizing;
 mod force_close;
 mod open;
 mod partial_close;
@@ -36,8 +37,8 @@ use tokio::time::{sleep, Duration};
 
 /// Refuse `transition` of `mint` while the positions store holds restored or recreated
 /// contents not yet reconciled with the wallet history. Only changes sized from the
-/// stored position call this (an add, a partial exit); a full close sizes from the
-/// on-chain balance and stays available.
+/// stored position call this (an add, a partial exit, the full close of a quote asset); any
+/// other full close sizes from the on-chain balance and stays available.
 pub(crate) fn refuse_until_reconciled(transition: &'static str, mint: &str) -> Result<()> {
     reconciliation_refusal(positions_status().as_ref(), transition, mint)
 }
@@ -290,15 +291,25 @@ mod tests {
     }
 
     /// Only operations sized from the stored position wait for reconciliation; a full
-    /// close sizes from the on-chain balance, and a force close books a write-off, so
-    /// both stay available after a restore.
+    /// close sizes from the on-chain balance (a quote asset's from its booked remainder,
+    /// which waits), and a force close books a write-off, so both stay available after a
+    /// restore.
     #[test]
     fn only_position_sized_operations_wait_for_reconciliation() {
         let gate = "refuse_until_reconciled(";
         assert!(include_str!("dca.rs").contains(gate));
         assert!(include_str!("partial_close.rs").contains(gate));
+        let close = include_str!("close.rs");
+        assert_eq!(close.matches(gate).count(), 1, "close.rs gates once");
+        let quote_branch = close
+            .find("if quote_asset {")
+            .expect("close.rs branches on the quote asset");
+        let gated = close.find(gate).unwrap();
+        assert!(
+            gated > quote_branch && !close[quote_branch..gated].contains('}'),
+            "close.rs waits for reconciliation only for a quote asset"
+        );
         for (file, source) in [
-            ("close.rs", include_str!("close.rs")),
             ("force_close.rs", include_str!("force_close.rs")),
             ("open.rs", include_str!("open.rs")),
             ("exit_ladder.rs", include_str!("exit_ladder.rs")),

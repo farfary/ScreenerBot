@@ -21,8 +21,8 @@
 //!
 //! No database, no network, no clock: `SubjectAssetDelta` values are built inline.
 
-use screenerbot::chains::solana::constants::{SOL_MINT, USDC_MINT};
-use screenerbot::chains::{ChainId, RawAmount};
+use screenerbot::chains::solana::constants::{SOL_MINT, SYSTEM_PROGRAM_ID, USDC_MINT};
+use screenerbot::chains::{adapter_for, ChainId, RawAmount};
 use screenerbot::positions::ledger::{
     reconcile_with_wallet, reduce_rounds, LedgerEventKind, LedgerRound, QuoteAsset, WalletHolding,
 };
@@ -800,6 +800,43 @@ fn reconciliation_surfaces_a_holding_no_transaction_ever_explained() {
         a.basis_complete,
         "a round that agrees with the wallet keeps its basis"
     );
+}
+
+/// A held quote asset (the native coin in any spelling or a stablecoin) is cash, never an
+/// external position: reconciliation opens no genesis round for it, while a token held
+/// beside it still gets one.
+#[test]
+fn reconciliation_never_opens_a_round_for_a_quote_asset_holding() {
+    let adapter = adapter_for(ChainId::Solana);
+    let quote_assets: Vec<&str> = std::iter::once(adapter.native_asset_address())
+        .chain(std::iter::once(SYSTEM_PROGRAM_ID))
+        .chain(adapter.stable_assets().iter().copied())
+        .collect();
+    let mut holdings: Vec<WalletHolding> = quote_assets
+        .iter()
+        .map(|mint| WalletHolding {
+            mint: mint.to_string(),
+            amount_raw: 1_000_000_000,
+            decimals: 6,
+        })
+        .collect();
+    holdings.push(WalletHolding {
+        mint: MINT_B.to_string(),
+        amount_raw: 7_500_000,
+        decimals: TOKEN_DECIMALS,
+    });
+
+    let mut rounds = Vec::new();
+    reconcile_with_wallet(&mut rounds, &holdings, None);
+
+    for mint in &quote_assets {
+        assert!(
+            rounds.iter().all(|round| round.mint != *mint),
+            "a quote-asset holding is cash, not a position: {mint}"
+        );
+    }
+    assert_eq!(rounds.len(), 1);
+    assert!(round_for(&rounds, MINT_B).is_genesis());
 }
 
 #[test]

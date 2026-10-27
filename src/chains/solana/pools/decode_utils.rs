@@ -6,9 +6,9 @@
 //! - Pubkey parsing: reading a 32-byte pubkey out of raw account data and
 //!   formatting/round-tripping it through `Pubkey`. Fixed-width integer reads
 //!   live in `crate::chains::solana::layout`.
-//! - SOL pairing: SOL and stablecoin mint detection, and token-pair orientation
-//!   (TOKEN/SOL vs SOL/TOKEN) with the matching vault order, so the analyzer
-//!   and the decoders pair vaults identically.
+//! - SOL pairing: SOL mint detection and token-pair orientation (TOKEN/SOL vs
+//!   SOL/TOKEN) with the matching vault order, so the analyzer and the
+//!   decoders pair vaults identically.
 
 use super::types::{PoolMintVaultInfo, TokenPairInfo};
 use crate::chains::adapter::ChainAdapter;
@@ -83,11 +83,6 @@ pub fn is_sol_mint(mint: &str) -> bool {
     ADAPTER.is_native_asset(mint)
 }
 
-/// Check if a mint address is a stablecoin that we should skip
-pub fn is_stablecoin_mint(mint: &str) -> bool {
-    ADAPTER.is_stable_asset(mint)
-}
-
 /// Normalize SOL mint to wrapped SOL format
 pub fn normalize_sol_mint(mint: &str) -> String {
     ADAPTER.normalize_native_asset(mint)
@@ -98,7 +93,7 @@ pub fn normalize_sol_mint(mint: &str) -> String {
 /// This function handles all possible configurations:
 /// - TOKEN/SOL (token as base, SOL as quote)
 /// - SOL/TOKEN (SOL as base, token as quote)
-/// - Rejects stablecoin pairs (USDC, USDT, etc.)
+/// - A SOL/stablecoin pool is a SOL pair whose token is the stablecoin
 /// - Rejects non-SOL pairs
 ///
 /// Returns TokenPairInfo with correct pairing for price calculation
@@ -118,14 +113,6 @@ pub fn analyze_token_pair(pool_info: PoolMintVaultInfo) -> TokenPairInfo {
             &vault2[..8]
         ),
     );
-
-    // Check for stablecoin pairs - reject these
-    if is_stablecoin_mint(mint1) {
-        return TokenPairInfo::invalid(format!("Mint1 is stablecoin: {}", &mint1[..8]));
-    }
-    if is_stablecoin_mint(mint2) {
-        return TokenPairInfo::invalid(format!("Mint2 is stablecoin: {}", &mint2[..8]));
-    }
 
     // Determine SOL pairing
     let (token_mint, sol_mint, token_vault, sol_vault, sol_is_first) = if is_sol_mint(mint1) {
@@ -249,5 +236,55 @@ mod tests {
         let read = read_pubkey_struct_at_offset(&data, &mut offset).unwrap();
         assert_eq!(read, pk);
         assert_eq!(offset, 32);
+    }
+
+    fn pool(mint1: &str, mint2: &str) -> PoolMintVaultInfo {
+        PoolMintVaultInfo {
+            mint1: mint1.to_string(),
+            mint2: mint2.to_string(),
+            vault1: "Vault1111111111111111111111111111111111111".to_string(),
+            vault2: "Vault2222222222222222222222222222222222222".to_string(),
+        }
+    }
+
+    #[test]
+    fn a_sol_stablecoin_pool_is_a_sol_pair_with_the_stablecoin_as_token_in_either_orientation() {
+        let sol = ADAPTER.native_asset_address();
+        for stable in ADAPTER.stable_assets() {
+            let sol_first = analyze_token_pair(pool(sol, stable));
+            assert!(sol_first.is_native_pair, "SOL/{stable}");
+            assert_eq!(sol_first.token_mint, *stable);
+            assert_eq!(sol_first.sol_mint, sol);
+            assert!(sol_first.sol_is_first);
+            assert_eq!(sol_first.token_vault, pool(sol, stable).vault2);
+            assert_eq!(sol_first.sol_vault, pool(sol, stable).vault1);
+
+            let stable_first = analyze_token_pair(pool(stable, sol));
+            assert!(stable_first.is_native_pair, "{stable}/SOL");
+            assert_eq!(stable_first.token_mint, *stable);
+            assert!(!stable_first.sol_is_first);
+            assert_eq!(stable_first.token_vault, pool(stable, sol).vault1);
+            assert_eq!(stable_first.sol_vault, pool(stable, sol).vault2);
+        }
+    }
+
+    #[test]
+    fn a_pool_without_a_sol_leg_is_rejected_stablecoins_included() {
+        let token = "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263";
+        let stables = ADAPTER.stable_assets();
+        for a in stables {
+            for b in stables {
+                assert!(!analyze_token_pair(pool(a, b)).is_native_pair, "{a}/{b}");
+            }
+            assert!(
+                !analyze_token_pair(pool(a, token)).is_native_pair,
+                "{a}/token"
+            );
+            assert!(
+                !analyze_token_pair(pool(token, a)).is_native_pair,
+                "token/{a}"
+            );
+            assert!(validate_sol_pool(pool(token, a)).is_err());
+        }
     }
 }

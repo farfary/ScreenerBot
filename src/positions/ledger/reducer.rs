@@ -134,7 +134,9 @@ fn apply_delta(
 /// they disagree the on-chain number wins and the round is marked incomplete — never
 /// the other way around. A held mint with no round at all gets a genesis round so the
 /// dashboard shows everything the wallet holds, and an open round the wallet no longer
-/// holds is closed without inventing a closing transaction or timestamp.
+/// holds is closed without inventing a closing transaction or timestamp. A holding of a
+/// reference asset (the native coin or a stablecoin) is cash, never a genesis round, by the
+/// same rule that keeps its deltas out of the reduction.
 ///
 /// `read_slot` is the slot the holdings were read at. A round with an event after it is
 /// newer than the read, which cannot see that event — a buy that created the token account
@@ -188,7 +190,9 @@ pub fn reconcile_with_wallet(
 
     let missing: Vec<&WalletHolding> = holdings
         .iter()
-        .filter(|h| h.amount_raw > 0 && !known.contains(h.mint.as_str()))
+        .filter(|h| {
+            h.amount_raw > 0 && !known.contains(h.mint.as_str()) && !is_reference_asset(&h.mint)
+        })
         .collect();
 
     for holding in missing {
@@ -655,9 +659,8 @@ fn quote_for(
         })
 }
 
-/// Assets that denominate trades rather than being positions themselves.
+/// Assets that denominate trades rather than being positions themselves: the native
+/// sentinel and the chain's quote assets.
 fn is_reference_asset(mint: &str) -> bool {
-    mint == NATIVE_SOL_SENTINEL
-        || crate::chains::adapter().is_native_asset(mint)
-        || crate::chains::adapter().is_stable_asset(mint)
+    mint == NATIVE_SOL_SENTINEL || crate::chains::adapter().is_quote_asset(mint)
 }
