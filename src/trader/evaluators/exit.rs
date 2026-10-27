@@ -574,7 +574,7 @@ async fn record_rule_signal(
 /// Returns:
 /// - Ok(Some(TradeDecision)) if exit should be made
 /// - Ok(None) if no exit signal
-/// - Err(String) if evaluation failed
+/// - Err([`crate::trader::Error`]) if evaluation failed
 pub async fn evaluate_exit_for_position(
     position: Position,
     cycle: &ExitCycle,

@@ -115,7 +115,7 @@ pub async fn monitor_positions(
         );
 
         // The position-independent exit inputs, read once for the whole cycle
-        let cycle_inputs = Arc::new(evaluators::exit::exit_cycle().await);
+        let cycle_inputs = Arc::new(evaluators::exit_cycle().await);
 
         // Create semaphore for concurrent position evaluation
         let sell_concurrency = config::get_sell_concurrency().max(1);

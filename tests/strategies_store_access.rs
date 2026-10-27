@@ -42,13 +42,17 @@ fn files_naming(needle: &str) -> Vec<String> {
     files
 }
 
-/// The enabled entry strategies are read by the entry cycle alone; every token of the
-/// cycle takes them from `EntryCycle`, however many tokens the cycle holds.
+/// The enabled entry strategies are read by the entry cycle alone, on the blocking pool;
+/// every token of the cycle takes them from `EntryCycle`, however many tokens the cycle holds.
 #[test]
 fn enabled_entry_strategies_are_read_once_per_entry_cycle() {
     assert_eq!(
-        files_naming("get_enabled_strategies(StrategyType::Entry)"),
+        files_naming("get_enabled_strategies_async(StrategyType::Entry)"),
         ["trader/evaluators/entry.rs"]
+    );
+    assert!(
+        files_naming("get_enabled_strategies(StrategyType::Entry)").is_empty(),
+        "an entry path reads the strategies store on the runtime"
     );
 }
 
@@ -85,15 +89,18 @@ const SYNCHRONOUS_STORE_CALLS: &[&str] = &[
     "get_strategy_performance(",
 ];
 
-/// Every strategy route, and the arming flow its mode route calls, reaches the store
-/// through the `*_async` wrappers, so no handler holds a SQLite connection on a runtime
-/// worker.
+/// Every strategy route, the arming flow its mode route calls, the entry cycle and the paper
+/// executor's intent check reach the store through the `*_async` wrappers, so none holds a
+/// SQLite connection on a runtime worker.
 #[test]
 fn strategy_routes_reach_the_store_only_on_the_blocking_pool() {
     let violations: Vec<String> = source_code()
         .into_iter()
         .filter(|(path, _)| {
-            path.starts_with("webserver/routes/strategies") || path.ends_with("strategies/arm.rs")
+            path.starts_with("webserver/routes/strategies")
+                || path.ends_with("strategies/arm.rs")
+                || path.ends_with("trader/evaluators/entry.rs")
+                || path.ends_with("trader/paper/executor/io.rs")
         })
         .flat_map(|(path, code)| {
             SYNCHRONOUS_STORE_CALLS

@@ -34,7 +34,7 @@ pub use dca::{
     DcaContext, DcaEvaluation,
 };
 pub use entry::{entry_cycle, evaluate_entry_for_token};
-pub use exit::evaluate_exit_for_position;
+pub use exit::{evaluate_exit_for_position, exit_cycle};
 pub use strategies::StrategyEvaluator;
 
 #[cfg(test)]

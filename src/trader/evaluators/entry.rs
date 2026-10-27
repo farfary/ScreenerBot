@@ -15,7 +15,7 @@
 
 use crate::chains::{adapter_for, ChainId};
 use crate::pools::PriceResult;
-use crate::strategies::db::get_enabled_strategies;
+use crate::strategies::db::get_enabled_strategies_async;
 use crate::strategies::types::{Strategy, StrategyType};
 use crate::trader::admission::{admit_modes, EntryBlock, EntryCycle};
 use crate::trader::paper::TradingMode;
@@ -41,21 +41,16 @@ fn wanted_modes(strategies: &[Strategy]) -> Vec<TradingMode> {
 /// pool, the modes they want, and the paper cash when paper is wanted. A failed read
 /// leaves the cycle without strategies, so no token of it signals an entry.
 pub async fn entry_cycle() -> EntryCycle {
-    let strategies =
-        match tokio::task::spawn_blocking(|| get_enabled_strategies(StrategyType::Entry))
-            .await
-            .map_err(crate::Error::from)
-            .and_then(|read| read)
-        {
-            Ok(strategies) => strategies,
-            Err(error) => {
-                crate::logger::warning(
-                    crate::logger::LogTag::Trader,
-                    &format!("Enabled entry strategies unavailable: {error}"),
-                );
-                Vec::new()
-            }
-        };
+    let strategies = match get_enabled_strategies_async(StrategyType::Entry).await {
+        Ok(strategies) => strategies,
+        Err(error) => {
+            crate::logger::warning(
+                crate::logger::LogTag::Trader,
+                &format!("Enabled entry strategies unavailable: {error}"),
+            );
+            Vec::new()
+        }
+    };
     EntryCycle::read(wanted_modes(&strategies), strategies).await
 }
 

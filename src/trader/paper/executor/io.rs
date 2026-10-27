@@ -98,7 +98,7 @@ impl PaperTradeIo for ProductionPaperTradeIo {
         match (&decision.action, decision.strategy_id.as_deref()) {
             (TradeAction::Buy | TradeAction::DCA, Some(strategy_id)) => {
                 matches!(
-                    crate::strategies::db::get_strategy(strategy_id),
+                    crate::strategies::db::get_strategy_async(strategy_id).await,
                     Ok(Some(strategy)) if strategy.enabled && strategy.mode == TradingMode::Paper
                 )
             }
