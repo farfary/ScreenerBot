@@ -14,7 +14,7 @@ use crate::chains::RawAmount;
 use crate::logger::{self, LogTag};
 use crate::positions::PositionManagement;
 use crate::swaps::{QuoteRequest, SwapMode};
-use crate::trader::evaluators::{exit_roi, exit_stop_loss, exit_time, exit_trailing};
+use crate::trader::evaluators::exit_rules::{self, ExitInputs, ExitRule};
 use crate::trader::policy::ExitPolicy;
 
 use super::{
@@ -77,49 +77,50 @@ pub(super) fn paper_sell_request(
 }
 
 /// Which rule, if any, closes this holding at `mark_price_native`, checked in the
-/// live monitor's order. The inner percentage is a partial exit; `None` sells all.
-/// `Err` carries [`crate::trader::Error::InvalidExitPolicy`].
+/// order the live monitor shares (`exit_rules`). The inner percentage is a partial
+/// exit; `None` sells all. A rule whose configuration is impossible is logged against
+/// `task_id` and does not fire.
 pub fn evaluate_paper_exit(
+    task_id: i64,
     position: &PaperPosition,
     mark_price_native: f64,
     peak_price_native: f64,
     policy: &ExitPolicy,
     now: DateTime<Utc>,
-) -> crate::trader::Result<Option<(PaperExitRule, Option<f64>)>> {
+) -> Option<(PaperExitRule, Option<f64>)> {
     if !position.is_open() || !mark_price_native.is_finite() || mark_price_native <= 0.0 {
-        return Ok(None);
+        return None;
     }
-    let entry_price = position.cost_basis_native / position.token_amount;
-    let held_seconds = (now - position.opened_at).num_seconds();
-    if let Some(exit_percentage) = exit_stop_loss::stop_loss_exit(
-        entry_price,
-        mark_price_native,
-        held_seconds,
-        position.sells > 0,
-        &policy.stop_loss,
-    ) {
-        return Ok(Some((PaperExitRule::StopLoss, exit_percentage)));
+    let inputs = ExitInputs {
+        average_entry_price: position.cost_basis_native / position.token_amount,
+        current_price: mark_price_native,
+        basis_peak_price: peak_price_native,
+        held_seconds: (now - position.opened_at).num_seconds(),
+        partial_exits_taken: position.sells > 0,
+    };
+    let decision = exit_rules::decide(&inputs, policy);
+    for (rule, e) in &decision.rule_errors {
+        logger::warning(
+            LogTag::Trader,
+            &format!(
+                "Copy task {task_id} paper {rule:?} rule skipped for {}: {e}",
+                position.mint
+            ),
+        );
     }
-    if exit_trailing::trailing_stop_triggered(
-        entry_price,
-        peak_price_native,
-        mark_price_native,
-        &policy.trailing,
-    )? {
-        return Ok(Some((PaperExitRule::TrailingStop, None)));
+    decision
+        .outcome
+        .map(|outcome| (paper_exit_rule(outcome.rule), outcome.exit_percentage))
+}
+
+/// The persisted paper rule a fired built-in rule is booked under.
+fn paper_exit_rule(rule: ExitRule) -> PaperExitRule {
+    match rule {
+        ExitRule::StopLoss => PaperExitRule::StopLoss,
+        ExitRule::Trailing => PaperExitRule::TrailingStop,
+        ExitRule::TakeProfit => PaperExitRule::TakeProfit,
+        ExitRule::TimeLoss => PaperExitRule::TimeOverride,
     }
-    if exit_roi::roi_target_reached(entry_price, mark_price_native, &policy.roi) {
-        return Ok(Some((PaperExitRule::TakeProfit, None)));
-    }
-    if exit_time::time_override_triggered(
-        entry_price,
-        mark_price_native,
-        held_seconds as f64,
-        &policy.time,
-    )? {
-        return Ok(Some((PaperExitRule::TimeOverride, None)));
-    }
-    Ok(None)
 }
 
 /// The simulated sell a triggered rule books. Its signature is unique per exit
@@ -316,18 +317,11 @@ pub async fn sweep(database: &CopyDatabase) -> crate::trader::Result<()> {
                 continue;
             };
             let now = Utc::now();
-            let (rule, exit_percentage) =
-                match evaluate_paper_exit(position, mark, peak, policy, now) {
-                    Ok(Some(triggered)) => triggered,
-                    Ok(None) => continue,
-                    Err(e) => {
-                        logger::warning(
-                            LogTag::Trader,
-                            &format!("Copy task {} paper exit skipped: {e}", task.id),
-                        );
-                        continue;
-                    }
-                };
+            let Some((rule, exit_percentage)) =
+                evaluate_paper_exit(task.id, position, mark, peak, policy, now)
+            else {
+                continue;
+            };
             let epoch = database.paper_epoch(task.id).await?;
             let opened_nanos = position.opened_at.timestamp_nanos_opt().unwrap_or_default();
             let pending_key = format!(
@@ -440,8 +434,8 @@ pub async fn sweep(database: &CopyDatabase) -> crate::trader::Result<()> {
                     let mut fresh_policy = ExitPolicy::from_config();
                     fresh_policy.apply_overrides(&current_task_after.exit_policy_overrides);
                     if !matches!(
-                        evaluate_paper_exit(&current_position, fresh_mark, fresh_peak, &fresh_policy, Utc::now()),
-                        Ok(Some((fresh_rule, fresh_pct))) if fresh_rule == rule && fresh_pct == exit_percentage
+                        evaluate_paper_exit(task.id, &current_position, fresh_mark, fresh_peak, &fresh_policy, Utc::now()),
+                        Some((fresh_rule, fresh_pct)) if fresh_rule == rule && fresh_pct == exit_percentage
                     ) {
                         return Err(CopySkip::PaperExecutionUnavailable);
                     }

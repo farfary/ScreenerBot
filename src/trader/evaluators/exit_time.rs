@@ -4,8 +4,9 @@
 //! Time-based exit override.
 
 use crate::positions::Position;
+use crate::trader::evaluators::exit_rules::{ExitRule, RuleOutcome};
 use crate::trader::policy::TimePolicy;
-use crate::trader::types::{TradeAction, TradeDecision, TradePriority, TradeReason};
+use crate::trader::types::TradeDecision;
 use chrono::Utc;
 
 /// The time-override rule on plain numbers, shared by the live evaluator and the
@@ -83,18 +84,12 @@ pub async fn check_time_override(
     if !triggered {
         return Ok(None);
     }
-    Ok(Some(TradeDecision {
-        position_id: position.id.map(|id| id.to_string()),
-        mint: position.mint.clone(),
-        action: TradeAction::Sell,
-        reason: TradeReason::TimeOverride,
-        strategy_id: None,
-        timestamp: Utc::now(),
-        priority: TradePriority::High,
-        price_native: Some(current_price),
-        size_native: None, // Sell entire position
-        exit_percentage: None,
-        // Auto-trader slippage always follows config.
-        slippage_pct: None,
-    }))
+    Ok(Some(super::exit::rule_decision(
+        position,
+        current_price,
+        &RuleOutcome {
+            rule: ExitRule::TimeLoss,
+            exit_percentage: None,
+        },
+    )))
 }

@@ -15,8 +15,8 @@ use crate::positions::{Position, PositionOrigin};
 use crate::trader::config;
 use crate::trader::evaluators::dca::DcaConfigSnapshot;
 
-/// The stop-loss rule `exit_stop_loss::check_stop_loss` applies: its switch, threshold,
-/// minimum hold and the partial first sale.
+/// The stop-loss rule's switch, threshold, minimum hold and partial first sale, read by
+/// `exit_rules`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct StopLossPolicy {
     pub enabled: bool,
@@ -27,7 +27,7 @@ pub struct StopLossPolicy {
     pub partial_exit_default_pct: f64,
 }
 
-/// The config values `exit_trailing::check_trailing_stop` reads today.
+/// The trailing-stop rule's switch, activation and distance, read by `exit_rules`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TrailingPolicy {
     pub enabled: bool,
@@ -35,14 +35,14 @@ pub struct TrailingPolicy {
     pub distance_pct: f64,
 }
 
-/// The config values `exit_roi::check_roi_exit` reads today.
+/// The take-profit rule's switch and profit target, read by `exit_rules`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RoiPolicy {
     pub enabled: bool,
     pub target_profit_pct: f64,
 }
 
-/// The config values `exit_time::check_time_override` reads today.
+/// The time-override rule's switch, loss threshold and duration, read by `exit_rules`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TimePolicy {
     pub enabled: bool,

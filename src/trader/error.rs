@@ -112,9 +112,9 @@ pub enum Error {
     StrategyEvaluation { mint: String, detail: String },
     /// An exit evaluator rejected an impossible policy configuration: a
     /// trailing distance at least as wide as its activation, or a time override
-    /// whose duration or loss threshold cannot represent a loss. The live
-    /// evaluators re-wrap it as [`Error::StrategyEvaluation`]; the paper copy
-    /// book logs it and skips the sweep.
+    /// whose duration or loss threshold cannot represent a loss. The exit rule
+    /// order reports it per rule (`exit_rules::Decision::rule_errors`); the live
+    /// and paper books log it and keep checking the other rules.
     #[error("{detail}")]
     InvalidExitPolicy { detail: String },
     #[error("token data unavailable for {mint}")]

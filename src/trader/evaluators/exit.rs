@@ -11,16 +11,21 @@
 //! 2. Risk limits (>90% loss - emergency)
 //!
 //! Policy (3-8, only when the auto-trader owns this position's exits):
-//! 3. LLM exit analysis (high priority - if enabled)
+//! 3. LLM exit analysis (emergency, high or normal priority by the analysis' urgency - if enabled)
 //! 4. Stop loss (high priority - fixed threshold from entry)
-//! 5. Trailing stop (high priority - from peak)
+//! 5. Trailing stop (high priority - from the basis peak)
 //! 6. ROI target (normal priority)
-//! 7. Time override (normal priority)
+//! 7. Time override (high priority)
 //! 8. Strategy exit (normal priority)
+//!
+//! Priorities 4-7 are the built-in rules; their order is owned by `exit_rules`, which the
+//! paper copy book shares.
 
 use crate::positions::price_resolution::get_price_with_api_fallback;
 use crate::positions::Position;
-use crate::trader::types::TradeDecision;
+use crate::trader::evaluators::exit_rules::{self, ExitInputs, ExitRule, RuleOutcome};
+use crate::trader::policy::ExitPolicy;
+use crate::trader::types::{TradeAction, TradeDecision, TradePriority, TradeReason};
 use crate::trader::{evaluators, llm_analysis, safety};
 
 /// Force stop, the price cascade and the fresh position re-read — everything every exit
@@ -131,18 +136,16 @@ pub(crate) async fn evaluate_policy_exit(
                             let trade_decision = TradeDecision {
                                 position_id: position.id.map(|id| id.to_string()),
                                 mint: position.mint.clone(),
-                                action: crate::trader::types::TradeAction::Sell,
-                                reason: crate::trader::types::TradeReason::LlmAnalysisExit,
+                                action: TradeAction::Sell,
+                                reason: TradeReason::LlmAnalysisExit,
                                 strategy_id: Some("llm_analysis_exit".to_owned()),
                                 timestamp: chrono::Utc::now(),
                                 priority: match result.urgency {
                                     llm_analysis::ExitUrgency::Immediate => {
-                                        crate::trader::types::TradePriority::Emergency
+                                        TradePriority::Emergency
                                     }
-                                    llm_analysis::ExitUrgency::High => {
-                                        crate::trader::types::TradePriority::High
-                                    }
-                                    _ => crate::trader::types::TradePriority::Normal,
+                                    llm_analysis::ExitUrgency::High => TradePriority::High,
+                                    _ => TradePriority::Normal,
                                 },
                                 price_native: Some(current_price),
                                 size_native: None,
@@ -208,149 +211,39 @@ pub(crate) async fn evaluate_policy_exit(
         }
     }
 
-    // Priority 4: Stop loss (high priority - fixed threshold from entry)
-    match evaluators::exit_stop_loss::check_stop_loss(position, current_price, &policy.stop_loss)
-        .await
-    {
-        Ok(Some(decision)) => {
-            // Log already done in check_stop_loss with full context
-
-            // Record stop loss exit signal event
-            crate::events::record_trader_event(
-        "exit_signal_stop_loss",
-        crate::events::Severity::Warn,
-        Some(&position.mint),
-        None,
-        serde_json::json!({
-          "exit_type": "stop_loss",
-          "mint": position.mint,
-          "symbol": position.symbol,
-          "entry_price": position.average_entry_price,
-          "current_price": current_price,
-          "loss_pct": ((position.average_entry_price - current_price) / position.average_entry_price) * 100.0,
-        }),
-      )
-      .await;
-
-            return Ok(Some(decision));
+    // Priorities 4-7: the built-in rules, in the one order `exit_rules` owns. A partial
+    // outcome is passed over while the positions store awaits reconciliation, so the rules
+    // after it still run this tick.
+    let inputs = live_exit_inputs(position, current_price, chrono::Utc::now());
+    let admit = |outcome: &RuleOutcome| {
+        if outcome.exit_percentage.is_none() || !crate::positions::awaiting_reconciliation() {
+            return true;
         }
-        Ok(None) => {}
-        Err(e) => {
-            crate::logger::warning(
-                crate::logger::LogTag::Trader,
-                &format!("Error checking stop loss for {}: {}", position.symbol, e),
-            );
-        }
+        crate::logger::debug(
+            crate::logger::LogTag::Trader,
+            &format!(
+                "Partial {:?} exit skipped for {}: the positions store is not reconciled",
+                outcome.rule, position.symbol
+            ),
+        );
+        false
+    };
+    let decision = exit_rules::decide_admitting(&inputs, &policy, admit);
+    for (rule, e) in &decision.rule_errors {
+        let check = match rule {
+            ExitRule::StopLoss => "stop loss",
+            ExitRule::Trailing => "trailing stop",
+            ExitRule::TakeProfit => "ROI exit",
+            ExitRule::TimeLoss => "time override",
+        };
+        crate::logger::warning(
+            crate::logger::LogTag::Trader,
+            &format!("Error checking {check} for {}: {e}", position.symbol),
+        );
     }
-
-    // Priority 5: Trailing stop (high priority)
-    match evaluators::exit_trailing::check_trailing_stop(position, current_price, &policy.trailing)
-        .await
-    {
-        Ok(Some(decision)) => {
-            crate::logger::info(
-                crate::logger::LogTag::Trader,
-                &format!("Trailing stop triggered for {}", position.symbol),
-            );
-
-            // Record exit signal event
-            crate::events::record_trader_event(
-                "exit_signal_trailing_stop",
-                crate::events::Severity::Info,
-                Some(&position.mint),
-                None,
-                serde_json::json!({
-                  "exit_type": "trailing_stop",
-                  "mint": position.mint,
-                  "symbol": position.symbol,
-                  "current_price": current_price,
-                }),
-            )
-            .await;
-
-            return Ok(Some(decision));
-        }
-        Ok(None) => {}
-        Err(e) => {
-            crate::logger::warning(
-                crate::logger::LogTag::Trader,
-                &format!(
-                    "Error checking trailing stop for {}: {}",
-                    position.symbol, e
-                ),
-            );
-        }
-    }
-
-    // Priority 6: ROI target (normal priority)
-    match evaluators::exit_roi::check_roi_exit(position, current_price, &policy.roi).await {
-        Ok(Some(decision)) => {
-            crate::logger::info(
-                crate::logger::LogTag::Trader,
-                &format!("ROI target reached for {}", position.symbol),
-            );
-
-            // Record ROI exit signal event
-            crate::events::record_trader_event(
-                "exit_signal_roi_target",
-                crate::events::Severity::Info,
-                Some(&position.mint),
-                None,
-                serde_json::json!({
-                  "exit_type": "roi_target",
-                  "mint": position.mint,
-                  "symbol": position.symbol,
-                  "current_price": current_price,
-                }),
-            )
-            .await;
-
-            return Ok(Some(decision));
-        }
-        Ok(None) => {}
-        Err(e) => {
-            crate::logger::warning(
-                crate::logger::LogTag::Trader,
-                &format!("Error checking ROI exit for {}: {}", position.symbol, e),
-            );
-        }
-    }
-
-    // Priority 7: Time override (normal priority)
-    match evaluators::exit_time::check_time_override(position, current_price, &policy.time).await {
-        Ok(Some(decision)) => {
-            crate::logger::info(
-                crate::logger::LogTag::Trader,
-                &format!("Time override triggered for {}", position.symbol),
-            );
-
-            // Record time override exit signal event
-            crate::events::record_trader_event(
-                "exit_signal_time_override",
-                crate::events::Severity::Info,
-                Some(&position.mint),
-                None,
-                serde_json::json!({
-                  "exit_type": "time_override",
-                  "mint": position.mint,
-                  "symbol": position.symbol,
-                  "current_price": current_price,
-                }),
-            )
-            .await;
-
-            return Ok(Some(decision));
-        }
-        Ok(None) => {}
-        Err(e) => {
-            crate::logger::warning(
-                crate::logger::LogTag::Trader,
-                &format!(
-                    "Error checking time override for {}: {}",
-                    position.symbol, e
-                ),
-            );
-        }
+    if let Some(outcome) = decision.outcome {
+        record_rule_signal(position, current_price, &outcome, &policy).await;
+        return Ok(Some(rule_decision(position, current_price, &outcome)));
     }
 
     // Priority 8: Strategy exit (normal priority)
@@ -410,6 +303,132 @@ pub(crate) async fn evaluate_policy_exit(
 
     // No exit signals
     Ok(None)
+}
+
+/// What the live book gives the built-in exit rules: the position's average entry and
+/// basis peak, the resolved price, its age at `now`, and whether it already booked a
+/// partial exit.
+pub fn live_exit_inputs(
+    position: &Position,
+    current_price: f64,
+    now: chrono::DateTime<chrono::Utc>,
+) -> ExitInputs {
+    ExitInputs {
+        average_entry_price: position.average_entry_price,
+        current_price,
+        basis_peak_price: position.basis_peak_price,
+        held_seconds: (now - position.entry_time).num_seconds(),
+        partial_exits_taken: position.partial_exit_count > 0,
+    }
+}
+
+/// The sell a fired built-in rule asks of the live book. Stop loss, trailing stop and
+/// the time override sell at high priority; the ROI target at normal priority.
+pub fn rule_decision(
+    position: &Position,
+    current_price: f64,
+    outcome: &RuleOutcome,
+) -> TradeDecision {
+    let (reason, priority) = match outcome.rule {
+        ExitRule::StopLoss => (TradeReason::StopLoss, TradePriority::High),
+        ExitRule::Trailing => (TradeReason::TrailingStop, TradePriority::High),
+        ExitRule::TakeProfit => (TradeReason::TakeProfit, TradePriority::Normal),
+        ExitRule::TimeLoss => (TradeReason::TimeOverride, TradePriority::High),
+    };
+    TradeDecision {
+        position_id: position.id.map(|id| id.to_string()),
+        mint: position.mint.clone(),
+        action: TradeAction::Sell,
+        reason,
+        strategy_id: None,
+        timestamp: chrono::Utc::now(),
+        priority,
+        price_native: Some(current_price),
+        size_native: None,
+        exit_percentage: outcome.exit_percentage,
+        // Auto-trader slippage always follows config.
+        slippage_pct: None,
+    }
+}
+
+/// Log and record the exit signal of a fired built-in rule.
+async fn record_rule_signal(
+    position: &Position,
+    current_price: f64,
+    outcome: &RuleOutcome,
+    policy: &ExitPolicy,
+) {
+    let (event, severity, payload) = match outcome.rule {
+        ExitRule::StopLoss => {
+            evaluators::exit_stop_loss::log_stop_loss_triggered(
+                position,
+                current_price,
+                outcome.exit_percentage,
+                &policy.stop_loss,
+            );
+            (
+                "exit_signal_stop_loss",
+                crate::events::Severity::Warn,
+                serde_json::json!({
+                  "exit_type": "stop_loss",
+                  "mint": position.mint,
+                  "symbol": position.symbol,
+                  "entry_price": position.average_entry_price,
+                  "current_price": current_price,
+                  "loss_pct": ((position.average_entry_price - current_price) / position.average_entry_price) * 100.0,
+                }),
+            )
+        }
+        ExitRule::Trailing => {
+            crate::logger::info(
+                crate::logger::LogTag::Trader,
+                &format!("Trailing stop triggered for {}", position.symbol),
+            );
+            (
+                "exit_signal_trailing_stop",
+                crate::events::Severity::Info,
+                serde_json::json!({
+                  "exit_type": "trailing_stop",
+                  "mint": position.mint,
+                  "symbol": position.symbol,
+                  "current_price": current_price,
+                }),
+            )
+        }
+        ExitRule::TakeProfit => {
+            crate::logger::info(
+                crate::logger::LogTag::Trader,
+                &format!("ROI target reached for {}", position.symbol),
+            );
+            (
+                "exit_signal_roi_target",
+                crate::events::Severity::Info,
+                serde_json::json!({
+                  "exit_type": "roi_target",
+                  "mint": position.mint,
+                  "symbol": position.symbol,
+                  "current_price": current_price,
+                }),
+            )
+        }
+        ExitRule::TimeLoss => {
+            crate::logger::info(
+                crate::logger::LogTag::Trader,
+                &format!("Time override triggered for {}", position.symbol),
+            );
+            (
+                "exit_signal_time_override",
+                crate::events::Severity::Info,
+                serde_json::json!({
+                  "exit_type": "time_override",
+                  "mint": position.mint,
+                  "symbol": position.symbol,
+                  "current_price": current_price,
+                }),
+            )
+        }
+    };
+    crate::events::record_trader_event(event, severity, Some(&position.mint), None, payload).await;
 }
 
 /// Evaluate exit opportunity for a position

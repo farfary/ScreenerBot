@@ -4,9 +4,9 @@
 //! Return on Investment (ROI) based exit strategy.
 
 use crate::positions::Position;
+use crate::trader::evaluators::exit_rules::{ExitRule, RuleOutcome};
 use crate::trader::policy::RoiPolicy;
-use crate::trader::types::{TradeAction, TradeDecision, TradePriority, TradeReason};
-use chrono::Utc;
+use crate::trader::types::TradeDecision;
 
 /// The ROI-target rule on plain numbers, shared by the live evaluator and the
 /// paper copy book.
@@ -33,18 +33,12 @@ pub async fn check_roi_exit(
     if !roi_target_reached(position.average_entry_price, current_price, policy) {
         return Ok(None);
     }
-    Ok(Some(TradeDecision {
-        position_id: position.id.map(|id| id.to_string()),
-        mint: position.mint.clone(),
-        action: TradeAction::Sell,
-        reason: TradeReason::TakeProfit,
-        strategy_id: None,
-        timestamp: Utc::now(),
-        priority: TradePriority::Normal,
-        price_native: Some(current_price),
-        size_native: None, // Will sell entire position
-        exit_percentage: None,
-        // Auto-trader slippage always follows config.
-        slippage_pct: None,
-    }))
+    Ok(Some(super::exit::rule_decision(
+        position,
+        current_price,
+        &RuleOutcome {
+            rule: ExitRule::TakeProfit,
+            exit_percentage: None,
+        },
+    )))
 }

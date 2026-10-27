@@ -8,8 +8,9 @@
 
 use crate::logger::{self, LogTag};
 use crate::positions::Position;
+use crate::trader::evaluators::exit_rules::{ExitRule, RuleOutcome};
 use crate::trader::policy::StopLossPolicy;
-use crate::trader::types::{TradeAction, TradeDecision, TradePriority, TradeReason};
+use crate::trader::types::TradeDecision;
 use chrono::Utc;
 
 /// The stop-loss rule on plain numbers, shared by the live evaluator and the
@@ -92,6 +93,25 @@ pub async fn check_stop_loss(
         return Ok(None);
     }
 
+    log_stop_loss_triggered(position, current_price, exit_percentage, policy);
+    Ok(Some(super::exit::rule_decision(
+        position,
+        current_price,
+        &RuleOutcome {
+            rule: ExitRule::StopLoss,
+            exit_percentage,
+        },
+    )))
+}
+
+/// The log line of a fired stop loss, with the figures it fired on.
+pub(crate) fn log_stop_loss_triggered(
+    position: &Position,
+    current_price: f64,
+    exit_percentage: Option<f64>,
+    policy: &StopLossPolicy,
+) {
+    let entry_price = position.average_entry_price;
     logger::info(
         LogTag::Trader,
         &format!(
@@ -105,19 +125,4 @@ pub async fn check_stop_loss(
             position.mint
         ),
     );
-
-    Ok(Some(TradeDecision {
-        position_id: position.id.map(|id| id.to_string()),
-        mint: position.mint.clone(),
-        action: TradeAction::Sell,
-        reason: TradeReason::StopLoss,
-        strategy_id: None,
-        timestamp: Utc::now(),
-        priority: TradePriority::High,
-        price_native: Some(current_price),
-        size_native: None,
-        exit_percentage,
-        // Auto-trader slippage always follows config.
-        slippage_pct: None,
-    }))
 }

@@ -186,7 +186,7 @@ fn evaluate(
     mark: f64,
     peak: f64,
 ) -> Option<(PaperExitRule, Option<f64>)> {
-    evaluate_paper_exit(position, mark, peak, &policy(), Utc::now()).unwrap()
+    evaluate_paper_exit(1, position, mark, peak, &policy(), Utc::now())
 }
 
 #[test]
@@ -237,7 +237,10 @@ fn an_impossible_trailing_configuration_is_reported_not_traded() {
     let mut broken = policy();
     broken.trailing.distance_pct = 25.0;
     let position = holding(0, Duration::seconds(60));
-    assert!(evaluate_paper_exit(&position, 0.0105, 0.0125, &broken, Utc::now()).is_err());
+    assert_eq!(
+        evaluate_paper_exit(1, &position, 0.0105, 0.0125, &broken, Utc::now()),
+        None
+    );
 }
 
 #[test]
@@ -246,4 +249,198 @@ fn exit_legs_book_distinct_idempotent_signatures() {
         paper_exit_signature(&holding(0, Duration::seconds(60)), 0),
         paper_exit_signature(&holding(1, Duration::seconds(60)), 0)
     );
+}
+
+/// An open live position entered at 0.01 like [`holding`], opened `age` before `now`,
+/// with its basis peak at `peak` and `partial_exits` partial sales booked.
+fn live_position(
+    peak: f64,
+    age: Duration,
+    partial_exits: u32,
+    now: DateTime<Utc>,
+) -> crate::positions::Position {
+    let mut position: crate::positions::Position = serde_json::from_str(
+        r#"{
+        "id": 1,
+        "mint": "mint",
+        "symbol": "TEST",
+        "name": "Test",
+        "entry_price": 0.01,
+        "entry_time": "2026-10-01T00:00:00Z",
+        "exit_price": null,
+        "exit_time": null,
+        "position_type": "buy",
+        "entry_size_native": 1.0,
+        "total_size_native": 1.0,
+        "price_highest": 0.01,
+        "price_lowest": 0.01,
+        "basis_peak_price": 0.01,
+        "entry_transaction_signature": "entry",
+        "exit_transaction_signature": null,
+        "token_amount": "100",
+        "effective_entry_price": 0.01,
+        "effective_exit_price": null,
+        "native_received": null,
+        "profit_target_min": null,
+        "profit_target_max": null,
+        "liquidity_tier": null,
+        "transaction_entry_verified": true,
+        "transaction_exit_verified": false,
+        "entry_fee_raw": null,
+        "exit_fee_raw": null,
+        "current_price": null,
+        "current_price_updated": null,
+        "phantom_remove": false,
+        "phantom_confirmations": 0,
+        "phantom_first_seen": null,
+        "synthetic_exit": false,
+        "closed_reason": null,
+        "pnl": null,
+        "pnl_percent": null,
+        "unrealized_pnl": null,
+        "unrealized_pnl_percent": null,
+        "remaining_token_amount": "100",
+        "total_exited_amount": "0",
+        "average_exit_price": null,
+        "partial_exit_count": 0,
+        "dca_count": 0,
+        "average_entry_price": 0.01,
+        "last_dca_time": null,
+        "origin": { "kind": "auto", "strategy_id": null },
+        "management": "auto_trader"
+    }"#,
+    )
+    .expect("position fixture deserializes");
+    position.basis_peak_price = peak;
+    position.price_highest = peak;
+    position.entry_time = now - age;
+    position.partial_exit_count = partial_exits;
+    position
+}
+
+/// For the same holding, mark, peak, age and policy, the live exit monitor and the paper
+/// book pick the same rule and the same share: each rule alone, the order when several
+/// fire, the partial already taken, and nothing firing.
+#[test]
+fn live_and_paper_books_pick_the_same_rule_for_the_same_inputs() {
+    use crate::trader::evaluators::{exit, exit_rules};
+    use crate::trader::TradeReason;
+
+    let policy = policy();
+    let now = Utc::now();
+    let young = Duration::seconds(60);
+    let old = Duration::hours(2);
+    let stop_loss = Some((TradeReason::StopLoss, PaperExitRule::StopLoss));
+    let trailing = Some((TradeReason::TrailingStop, PaperExitRule::TrailingStop));
+    let take_profit = Some((TradeReason::TakeProfit, PaperExitRule::TakeProfit));
+    let time_loss = Some((TradeReason::TimeOverride, PaperExitRule::TimeOverride));
+    // (case, mark, peak, age, partial already taken, expected rules, expected share)
+    let cases = [
+        (
+            "stop loss, first leg",
+            0.0065,
+            0.01,
+            young,
+            false,
+            stop_loss.clone(),
+            Some(50.0),
+        ),
+        (
+            "stop loss after a partial",
+            0.0065,
+            0.01,
+            young,
+            true,
+            stop_loss.clone(),
+            None,
+        ),
+        (
+            "trailing stop",
+            0.0112,
+            0.0125,
+            young,
+            false,
+            trailing.clone(),
+            None,
+        ),
+        (
+            "take profit",
+            0.02,
+            0.02,
+            young,
+            false,
+            take_profit.clone(),
+            None,
+        ),
+        (
+            "time loss",
+            0.0085,
+            0.01,
+            old,
+            false,
+            time_loss.clone(),
+            None,
+        ),
+        (
+            "time loss after a partial",
+            0.0085,
+            0.01,
+            old,
+            true,
+            time_loss.clone(),
+            None,
+        ),
+        (
+            "stop loss before time loss",
+            0.0065,
+            0.01,
+            old,
+            false,
+            stop_loss.clone(),
+            Some(50.0),
+        ),
+        (
+            "trailing before take profit",
+            0.022,
+            0.025,
+            young,
+            false,
+            trailing.clone(),
+            None,
+        ),
+        ("nothing fires", 0.0095, 0.01, young, false, None, None),
+        (
+            "nothing fires after a partial",
+            0.0095,
+            0.01,
+            old,
+            true,
+            None,
+            None,
+        ),
+    ];
+    for (case, mark, peak, age, partial_taken, expected, share) in cases {
+        let live_position = live_position(peak, age, u32::from(partial_taken), now);
+        let live = exit_rules::decide(&exit::live_exit_inputs(&live_position, mark, now), &policy)
+            .outcome
+            .map(|outcome| {
+                let decision = exit::rule_decision(&live_position, mark, &outcome);
+                (decision.reason, decision.exit_percentage)
+            });
+
+        let mut paper_position = holding(u64::from(partial_taken), age);
+        paper_position.opened_at = now - age;
+        let paper = evaluate_paper_exit(1, &paper_position, mark, peak, &policy, now);
+
+        assert_eq!(
+            live,
+            expected.clone().map(|(reason, _)| (reason, share)),
+            "{case}: live"
+        );
+        assert_eq!(
+            paper,
+            expected.map(|(_, rule)| (rule, share)),
+            "{case}: paper"
+        );
+    }
 }
