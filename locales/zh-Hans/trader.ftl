@@ -174,6 +174,9 @@ trader-daily-title = 每日盈亏
 trader-daily-subtitle = 每日已实现 { -sol }，含累计总额
 trader-daily-loading = 正在加载每日盈亏...
 trader-daily-chart = 以 { -sol } 计的每日已实现盈亏
+trader-weekly-title = 每周盈亏
+trader-weekly-subtitle = 每个 ISO 周已实现 { -sol }，含累计总额
+trader-weekly-chart = 以 { -sol } 计的每周已实现盈亏
 trader-extreme-best = 最佳交易
 trader-extreme-worst = 最差交易
 
@@ -183,6 +186,7 @@ trader-exit-title = 出场策略明细
 trader-exit-subtitle = 仓位的平仓方式，以及每种出场的回收情况
 trader-exit-loading = 正在加载出场数据...
 trader-exit-empty-day = 过去 24 小时内没有已平仓交易
+trader-exit-empty-all = 暂无已平仓交易
 trader-exit-empty-days =
     { $count ->
        *[other] 过去 { $amount } 天内没有已平仓交易

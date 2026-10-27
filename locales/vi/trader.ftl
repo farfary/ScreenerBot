@@ -149,6 +149,9 @@ trader-daily-title = P&L hằng ngày
 trader-daily-subtitle = { -sol } đã chốt mỗi ngày, kèm tổng lũy kế
 trader-daily-loading = Đang tải P&L hằng ngày...
 trader-daily-chart = Lãi/lỗ đã chốt hằng ngày tính bằng { -sol }
+trader-weekly-title = P&L hằng tuần
+trader-weekly-subtitle = { -sol } đã chốt mỗi tuần ISO, kèm tổng lũy kế
+trader-weekly-chart = Lãi/lỗ đã chốt hằng tuần tính bằng { -sol }
 trader-extreme-best = Lệnh tốt nhất
 trader-extreme-worst = Lệnh tệ nhất
 
@@ -156,6 +159,7 @@ trader-exit-title = Phân tích chiến lược thoát lệnh
 trader-exit-subtitle = Cách các vị thế được đóng và mỗi lần thoát thu về bao nhiêu
 trader-exit-loading = Đang tải dữ liệu thoát lệnh...
 trader-exit-empty-day = Không có lệnh đã đóng trong 24 giờ qua
+trader-exit-empty-all = Chưa có lệnh đã đóng
 trader-exit-empty-days =
     { $count ->
        *[other] Không có lệnh đã đóng trong { $amount } ngày qua

@@ -162,19 +162,19 @@
                     <button
                       type="button"
                       class="stats-period-btn"
-                      data-days="1"
+                      data-window="24h"
                       data-l10n-id="trader-stats-window-day"
                     ></button>
                     <button
                       type="button"
                       class="stats-period-btn"
-                      data-days="7"
+                      data-window="7d"
                       data-l10n-id="trader-stats-window-week"
                     ></button>
                     <button
                       type="button"
                       class="stats-period-btn active"
-                      data-days="30"
+                      data-window="30d"
                       data-l10n-id="trader-stats-window-month"
                     ></button>
                   </div>
@@ -226,14 +226,19 @@
               <p class="stats-note" id="stats-excluded" hidden></p>
             </div>
 
-            <!-- Daily realized P&L across the window -->
+            <!-- Realized P&L across the window, by day or by ISO week -->
             <div class="stats-section">
               <div class="section-header">
                 <div>
                   <h3>
-                    <i class="icon-calendar"></i> <span data-l10n-id="trader-daily-title"></span>
+                    <i class="icon-calendar"></i>
+                    <span id="daily-pnl-title" data-l10n-id="trader-daily-title"></span>
                   </h3>
-                  <p class="section-subtitle" data-l10n-id="trader-daily-subtitle"></p>
+                  <p
+                    class="section-subtitle"
+                    id="daily-pnl-subtitle"
+                    data-l10n-id="trader-daily-subtitle"
+                  ></p>
                 </div>
                 <div class="daily-pnl-total" id="daily-pnl-total">—</div>
               </div>

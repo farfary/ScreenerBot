@@ -154,6 +154,9 @@ trader-daily-title = Günlük K/Z
 trader-daily-subtitle = Günlük gerçekleşmiş { -sol }, kümülatif toplamla
 trader-daily-loading = Günlük K/Z yükleniyor...
 trader-daily-chart = { -sol } cinsinden günlük gerçekleşmiş kâr ve zarar
+trader-weekly-title = Haftalık K/Z
+trader-weekly-subtitle = ISO haftası başına gerçekleşmiş { -sol }, kümülatif toplamla
+trader-weekly-chart = { -sol } cinsinden haftalık gerçekleşmiş kâr ve zarar
 trader-extreme-best = En iyi işlem
 trader-extreme-worst = En kötü işlem
 
@@ -161,6 +164,7 @@ trader-exit-title = Çıkış stratejisi dökümü
 trader-exit-subtitle = Pozisyonların nasıl kapandığı ve her çıkışın getirisi
 trader-exit-loading = Çıkış verileri yükleniyor...
 trader-exit-empty-day = Son 24 saatte kapanan işlem yok
+trader-exit-empty-all = Henüz kapanan işlem yok
 trader-exit-empty-days =
     { $count ->
         [one] Son { $amount } günde kapanan işlem yok

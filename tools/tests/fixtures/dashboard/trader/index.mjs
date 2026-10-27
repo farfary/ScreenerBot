@@ -31,11 +31,11 @@ export const endpoints = [
   {
     method: "GET",
     path: "/api/trader/stats",
-    query: { days: 30 },
+    query: { window: "30d" },
     fixture: "trader_stats.json",
     empty: "trader_stats.empty.json",
     rust: "src/trader/stats.rs::TraderStats",
-    record: "/api/trader/stats?days=30",
+    record: "/api/trader/stats?window=30d",
   },
   {
     method: "GET",

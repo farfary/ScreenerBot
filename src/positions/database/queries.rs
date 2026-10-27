@@ -76,6 +76,42 @@ fn auto_trade_activity_in(
     })
 }
 
+/// The fingerprint of the closed rounds of `wallet` on `chain` that exited from `since`,
+/// selected as `get_closed_positions_since` selects them. One indexed aggregate statement:
+/// `exit_time` is compared bare, as that query explains, so it reads only the window.
+fn closed_fingerprint_in(
+    conn: &Connection,
+    wallet: &str,
+    chain: &str,
+    since: DateTime<Utc>,
+) -> std::result::Result<ClosedFingerprint, DatabaseError> {
+    conn.query_row(
+        r#"
+      SELECT COUNT(1), MIN(exit_time), MAX(exit_time), MAX(updated_at), TOTAL(pnl)
+      FROM positions
+      WHERE wallet_address = ?1 AND chain_id = ?2
+        AND archived = 0
+        AND transaction_exit_verified = 1
+        AND origin_kind != 'external'
+        AND exit_time >= ?3
+      "#,
+        params![wallet, chain, since.to_rfc3339()],
+        |row| {
+            Ok(ClosedFingerprint {
+                count: row.get(0)?,
+                first_exit: row.get(1)?,
+                last_exit: row.get(2)?,
+                last_update: row.get(3)?,
+                total_pnl: row.get(4)?,
+            })
+        },
+    )
+    .map_err(|e| DatabaseError::Query {
+        operation: "execute closed fingerprint query".to_owned(),
+        message: e.to_string(),
+    })
+}
+
 /// Count the open positions of `wallet` on every chain in the positions store at `path`,
 /// opened read-only so the count never creates, migrates or pools the file. A missing file
 /// or a store without the `positions` table holds no position and counts 0.
@@ -514,6 +550,25 @@ impl PositionsDatabase {
         }
 
         Ok(positions)
+    }
+
+    /// The fingerprint of the closed positions `get_closed_positions_since(since)` returns,
+    /// so a caller can tell whether that set changed without loading it.
+    pub async fn closed_fingerprint_since(
+        &self,
+        since: DateTime<Utc>,
+    ) -> Result<ClosedFingerprint> {
+        let conn = self.get_connection()?;
+        let wallet_address =
+            crate::utils::get_wallet_address().map_err(|e| Error::WalletUnavailable {
+                detail: e.to_string(),
+            })?;
+        Ok(closed_fingerprint_in(
+            &conn,
+            &wallet_address,
+            self.chain.as_str(),
+            since,
+        )?)
     }
 
     /// Count closed positions since the provided timestamp
@@ -1085,8 +1140,8 @@ mod tests {
     use chrono::{DateTime, Utc};
 
     use super::{
-        auto_trade_activity_in, count_open_positions_in_file, open_positions_by_wallet_in_file,
-        AutoTradeActivity,
+        auto_trade_activity_in, closed_fingerprint_in, count_open_positions_in_file,
+        open_positions_by_wallet_in_file, AutoTradeActivity,
     };
 
     #[test]
@@ -1187,5 +1242,104 @@ mod tests {
                 closed: 0
             }
         );
+    }
+
+    #[test]
+    fn the_closed_fingerprint_moves_with_a_close_an_archive_and_a_rewrite_only() {
+        let connection = Connection::open_in_memory().unwrap();
+        connection
+            .execute_batch(
+                "CREATE TABLE positions (
+                    id INTEGER PRIMARY KEY,
+                    wallet_address TEXT NOT NULL,
+                    chain_id TEXT NOT NULL,
+                    archived INTEGER NOT NULL DEFAULT 0,
+                    transaction_exit_verified INTEGER NOT NULL DEFAULT 0,
+                    origin_kind TEXT NOT NULL,
+                    exit_time TEXT,
+                    pnl REAL,
+                    updated_at TEXT NOT NULL
+                 );
+                 -- counted: verified, not archived, inside the window
+                 INSERT INTO positions VALUES (1, 'w', 'solana', 0, 1, 'auto', '2026-10-20T10:00:00+00:00', 0.02, '2026-10-20 10:00:01');
+                 INSERT INTO positions VALUES (2, 'w', 'solana', 0, 1, 'manual', '2026-10-25T10:00:00+00:00', -0.01, '2026-10-25 10:00:01');
+                 -- not counted: before the window, unverified, archived, external, open,
+                 -- another wallet or chain
+                 INSERT INTO positions VALUES (3, 'w', 'solana', 0, 1, 'auto', '2026-09-01T10:00:00+00:00', 0.5, '2026-10-26 10:00:00');
+                 INSERT INTO positions VALUES (4, 'w', 'solana', 0, 0, 'auto', '2026-10-21T10:00:00+00:00', 0.5, '2026-10-26 10:00:00');
+                 INSERT INTO positions VALUES (5, 'w', 'solana', 1, 1, 'auto', '2026-10-21T10:00:00+00:00', 0.5, '2026-10-26 10:00:00');
+                 INSERT INTO positions VALUES (6, 'w', 'solana', 0, 1, 'external', '2026-10-21T10:00:00+00:00', 0.5, '2026-10-26 10:00:00');
+                 INSERT INTO positions VALUES (7, 'w', 'solana', 0, 0, 'auto', NULL, NULL, '2026-10-26 10:00:00');
+                 INSERT INTO positions VALUES (8, 'other', 'solana', 0, 1, 'auto', '2026-10-21T10:00:00+00:00', 0.5, '2026-10-26 10:00:00');
+                 INSERT INTO positions VALUES (9, 'w', 'base', 0, 1, 'auto', '2026-10-21T10:00:00+00:00', 0.5, '2026-10-26 10:00:00');",
+            )
+            .unwrap();
+        let since = "2026-10-01T00:00:00+00:00"
+            .parse::<DateTime<Utc>>()
+            .unwrap();
+        let fingerprint = || closed_fingerprint_in(&connection, "w", "solana", since).unwrap();
+
+        let base = fingerprint();
+        assert_eq!(base.count, 2);
+        assert_eq!(
+            base.first_exit.as_deref(),
+            Some("2026-10-20T10:00:00+00:00")
+        );
+        assert_eq!(base.last_exit.as_deref(), Some("2026-10-25T10:00:00+00:00"));
+        assert_eq!(base.last_update.as_deref(), Some("2026-10-25 10:00:01"));
+        assert!((base.total_pnl - 0.01).abs() < 1e-12);
+        assert_eq!(
+            fingerprint(),
+            base,
+            "an unchanged window keeps its fingerprint"
+        );
+
+        // A write to a row outside the window leaves the fingerprint alone.
+        connection
+            .execute(
+                "UPDATE positions SET pnl = 0.7, updated_at = '2026-10-27 09:00:00' WHERE id = 3",
+                [],
+            )
+            .unwrap();
+        assert_eq!(fingerprint(), base);
+
+        // A rewrite of a counted round's booked P&L moves it.
+        connection
+            .execute("UPDATE positions SET pnl = 0.03 WHERE id = 1", [])
+            .unwrap();
+        let rewritten = fingerprint();
+        assert_ne!(rewritten, base);
+
+        // A rewrite that keeps the total still moves the latest update.
+        connection
+            .execute(
+                "UPDATE positions SET updated_at = '2026-10-27 10:00:00' WHERE id = 1",
+                [],
+            )
+            .unwrap();
+        let touched = fingerprint();
+        assert_ne!(touched, rewritten);
+
+        // A verified close inside the window moves it.
+        connection
+            .execute(
+                "UPDATE positions SET transaction_exit_verified = 1 WHERE id = 4",
+                [],
+            )
+            .unwrap();
+        let closed = fingerprint();
+        assert_eq!(closed.count, 3);
+
+        // Archiving a counted round moves it back out.
+        connection
+            .execute("UPDATE positions SET archived = 1 WHERE id = 4", [])
+            .unwrap();
+        assert_eq!(fingerprint().count, 2);
+        assert_ne!(fingerprint(), closed);
+
+        let empty = closed_fingerprint_in(&connection, "nobody", "solana", since).unwrap();
+        assert_eq!(empty.count, 0);
+        assert_eq!(empty.first_exit, None);
+        assert_eq!(empty.total_pnl, 0.0);
     }
 }

@@ -79,15 +79,41 @@ pub struct ManualTradeSuccess {
 }
 
 /// Query for `GET /api/trader/stats`. The window is a request parameter, never a
-/// constant baked into the dashboard: the Stats tab offers 24h / 7d / 30d and the
-/// handler is the only place that decides what a window means.
+/// constant baked into the dashboard: the Stats tab offers `24h`, `7d`, `30d` and `all`,
+/// and the handler is the only place that decides what a window means.
 #[derive(Debug, Deserialize)]
 pub struct TraderStatsQuery {
+    /// The realized window; 30 days when absent.
     #[serde(default)]
-    pub days: Option<u32>,
+    pub window: StatsWindowParam,
     /// The book the stats are of; live when absent.
     #[serde(default)]
     pub book: Option<crate::positions::Book>,
+}
+
+/// The realized windows the Stats tab offers.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
+pub enum StatsWindowParam {
+    #[serde(rename = "24h")]
+    Day,
+    #[serde(rename = "7d")]
+    Week,
+    #[default]
+    #[serde(rename = "30d")]
+    Month,
+    #[serde(rename = "all")]
+    All,
+}
+
+impl From<StatsWindowParam> for crate::trader::stats::StatsWindow {
+    fn from(window: StatsWindowParam) -> Self {
+        match window {
+            StatsWindowParam::Day => Self::Days(1),
+            StatsWindowParam::Week => Self::Days(7),
+            StatsWindowParam::Month => Self::Days(30),
+            StatsWindowParam::All => Self::All,
+        }
+    }
 }
 
 // =============================================================================

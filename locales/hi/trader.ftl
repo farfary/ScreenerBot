@@ -154,6 +154,9 @@ trader-daily-title = दैनिक लाभ-हानि
 trader-daily-subtitle = प्रतिदिन वास्तविक { -sol }, कुल योग के साथ
 trader-daily-loading = दैनिक लाभ-हानि लोड हो रही है...
 trader-daily-chart = { -sol } में दैनिक वास्तविक लाभ और हानि
+trader-weekly-title = साप्ताहिक लाभ-हानि
+trader-weekly-subtitle = प्रति ISO सप्ताह वास्तविक { -sol }, कुल योग के साथ
+trader-weekly-chart = { -sol } में साप्ताहिक वास्तविक लाभ और हानि
 trader-extreme-best = सबसे अच्छा ट्रेड
 trader-extreme-worst = सबसे खराब ट्रेड
 
@@ -161,6 +164,7 @@ trader-exit-title = एग्ज़िट स्ट्रैटेजी ब्�
 trader-exit-subtitle = पोज़िशन कैसे बंद हुईं, और हर एग्ज़िट से क्या मिला
 trader-exit-loading = एग्ज़िट डेटा लोड हो रहा है...
 trader-exit-empty-day = पिछले 24 घंटों में कोई बंद ट्रेड नहीं
+trader-exit-empty-all = अभी तक कोई बंद ट्रेड नहीं
 trader-exit-empty-days =
     { $count ->
         [one] पिछले { $amount } दिन में कोई बंद ट्रेड नहीं

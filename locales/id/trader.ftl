@@ -151,6 +151,9 @@ trader-daily-title = P&L Harian
 trader-daily-subtitle = { -sol } terealisasi per hari, beserta total berjalan
 trader-daily-loading = Memuat P&L harian...
 trader-daily-chart = Untung rugi terealisasi harian dalam { -sol }
+trader-weekly-title = P&L Mingguan
+trader-weekly-subtitle = { -sol } terealisasi per minggu ISO, beserta total berjalan
+trader-weekly-chart = Untung rugi terealisasi mingguan dalam { -sol }
 trader-extreme-best = Trade terbaik
 trader-extreme-worst = Trade terburuk
 
@@ -158,6 +161,7 @@ trader-exit-title = Rincian Strategi Exit
 trader-exit-subtitle = Cara posisi ditutup, dan hasil dari setiap exit
 trader-exit-loading = Memuat data exit...
 trader-exit-empty-day = Tidak ada trade tertutup dalam 24 jam terakhir
+trader-exit-empty-all = Belum ada trade tertutup
 trader-exit-empty-days =
     { $count ->
        *[other] Tidak ada trade tertutup dalam { $amount } hari terakhir

@@ -8,7 +8,7 @@ use std::collections::HashMap;
 
 use chrono::{Duration, Utc};
 
-use crate::trader::stats::{DailyPnlPoint, ExitBreakdown, TraderStats};
+use crate::trader::stats::{DailyPnlPoint, ExitBreakdown, PnlBucket, RealizedStats, TraderStats};
 use crate::trader::{LossLimitSnapshot, MonitorState, MonitorsStatus, TraderStatus};
 
 use super::aggregates;
@@ -131,6 +131,7 @@ pub fn get_promo_trader_stats() -> TraderStats {
         let (net_pnl_sol, count) = per_day.get(&date).copied().unwrap_or((0.0, 0));
         daily_pnl.push(DailyPnlPoint {
             date,
+            bucket: PnlBucket::Day,
             net_pnl_native: net_pnl_sol,
             trades: count,
         });
@@ -170,34 +171,38 @@ pub fn get_promo_trader_stats() -> TraderStats {
     });
 
     TraderStats {
-        period_days: PROMO_PERIOD_DAYS,
         open_positions_count: open.count,
         max_open_positions: open.count.max(1),
         locked_native: open.invested_sol,
-        total_trades,
-        winners,
-        losers,
-        excluded_untrusted: 0,
-        // Trader stats reports REALIZED P&L (closed trades) like the live handler.
-        total_pnl_native: realized.net_pnl_sol,
-        gross_profit_native: realized.profit_sol,
-        gross_loss_native: realized.loss_sol,
-        profit_factor: (realized.loss_sol > 0.0).then(|| realized.profit_sol / realized.loss_sol),
-        expectancy_native: (total_trades > 0).then(|| realized.net_pnl_sol / total_trades as f64),
-        max_drawdown_native: max_drawdown_sol,
-        win_rate_pct: (total_trades > 0).then_some(realized.win_rate),
-        avg_win_pct: (!win_pcts.is_empty())
-            .then(|| win_pcts.iter().sum::<f64>() / win_pcts.len() as f64),
-        avg_loss_pct: (!loss_pcts.is_empty())
-            .then(|| loss_pcts.iter().sum::<f64>() / loss_pcts.len() as f64),
-        avg_hold_time_hours: (total_trades > 0).then(|| aggregates::avg_hold_hours(&trades)),
-        median_hold_time_hours,
-        best_trade_pct: Some(best.pnl_percent),
-        best_trade_token: Some(best.symbol.to_owned()),
-        worst_trade_pct: Some(worst.pnl_percent),
-        worst_trade_token: Some(worst.symbol.to_owned()),
-        daily_pnl,
-        exit_breakdown,
+        realized: RealizedStats {
+            period_days: Some(PROMO_PERIOD_DAYS),
+            total_trades,
+            winners,
+            losers,
+            excluded_untrusted: 0,
+            // Trader stats reports REALIZED P&L (closed trades) like the live handler.
+            total_pnl_native: realized.net_pnl_sol,
+            gross_profit_native: realized.profit_sol,
+            gross_loss_native: realized.loss_sol,
+            profit_factor: (realized.loss_sol > 0.0)
+                .then(|| realized.profit_sol / realized.loss_sol),
+            expectancy_native: (total_trades > 0)
+                .then(|| realized.net_pnl_sol / total_trades as f64),
+            max_drawdown_native: max_drawdown_sol,
+            win_rate_pct: (total_trades > 0).then_some(realized.win_rate),
+            avg_win_pct: (!win_pcts.is_empty())
+                .then(|| win_pcts.iter().sum::<f64>() / win_pcts.len() as f64),
+            avg_loss_pct: (!loss_pcts.is_empty())
+                .then(|| loss_pcts.iter().sum::<f64>() / loss_pcts.len() as f64),
+            avg_hold_time_hours: (total_trades > 0).then(|| aggregates::avg_hold_hours(&trades)),
+            median_hold_time_hours,
+            best_trade_pct: Some(best.pnl_percent),
+            best_trade_token: Some(best.symbol.to_owned()),
+            worst_trade_pct: Some(worst.pnl_percent),
+            worst_trade_token: Some(worst.symbol.to_owned()),
+            daily_pnl,
+            exit_breakdown,
+        },
     }
 }
 

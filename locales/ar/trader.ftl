@@ -199,6 +199,9 @@ trader-daily-title = الأرباح والخسائر اليومية
 trader-daily-subtitle = { -sol } المحققة يوميًا مع الإجمالي التراكمي
 trader-daily-loading = جارٍ تحميل الأرباح والخسائر اليومية...
 trader-daily-chart = الأرباح والخسائر اليومية المحققة بـ { -sol }
+trader-weekly-title = الأرباح والخسائر الأسبوعية
+trader-weekly-subtitle = { -sol } المحققة أسبوعيًا (أسابيع ISO) مع الإجمالي التراكمي
+trader-weekly-chart = الأرباح والخسائر الأسبوعية المحققة بـ { -sol }
 trader-extreme-best = أفضل صفقة
 trader-extreme-worst = أسوأ صفقة
 
@@ -208,6 +211,7 @@ trader-exit-title = تفصيل استراتيجيات الخروج
 trader-exit-subtitle = كيف أُغلقت المراكز وما عاد به كل خروج
 trader-exit-loading = جارٍ تحميل بيانات الخروج...
 trader-exit-empty-day = لا توجد صفقات مغلقة خلال آخر 24 ساعة
+trader-exit-empty-all = لا توجد صفقات مغلقة بعد
 trader-exit-empty-days =
     { $count ->
         [zero] لا توجد صفقات مغلقة خلال آخر { $amount } يوم

@@ -162,6 +162,9 @@ trader-daily-title = Tägliche GuV
 trader-daily-subtitle = Realisierte { -sol } pro Tag, mit laufender Summe
 trader-daily-loading = Tägliche GuV wird geladen...
 trader-daily-chart = Täglicher realisierter Gewinn und Verlust in { -sol }
+trader-weekly-title = Wöchentliche GuV
+trader-weekly-subtitle = Realisierte { -sol } pro ISO-Woche, mit laufender Summe
+trader-weekly-chart = Wöchentlicher realisierter Gewinn und Verlust in { -sol }
 trader-extreme-best = Bester Trade
 trader-extreme-worst = Schlechtester Trade
 
@@ -169,6 +172,7 @@ trader-exit-title = Aufschlüsselung der Ausstiegsstrategien
 trader-exit-subtitle = Wie Positionen geschlossen wurden und was jeder Ausstieg eingebracht hat
 trader-exit-loading = Ausstiegsdaten werden geladen...
 trader-exit-empty-day = Keine geschlossenen Trades in den letzten 24 Stunden
+trader-exit-empty-all = Noch keine geschlossenen Trades
 trader-exit-empty-days =
     { $count ->
         [one] Keine geschlossenen Trades in den letzten { $amount } Tag

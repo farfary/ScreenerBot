@@ -174,6 +174,9 @@ trader-daily-title = 日次損益
 trader-daily-subtitle = 1日ごとの確定 { -sol } と累計
 trader-daily-loading = 日次損益を読み込み中...
 trader-daily-chart = { -sol } 建ての日次確定損益
+trader-weekly-title = 週次損益
+trader-weekly-subtitle = ISO週ごとの確定 { -sol } と累計
+trader-weekly-chart = { -sol } 建ての週次確定損益
 trader-extreme-best = 最良の取引
 trader-extreme-worst = 最悪の取引
 
@@ -183,6 +186,7 @@ trader-exit-title = エグジット戦略の内訳
 trader-exit-subtitle = ポジションのクローズ方法と、各エグジットの成果
 trader-exit-loading = エグジットデータを読み込み中...
 trader-exit-empty-day = 過去24時間にクローズ済みの取引はありません
+trader-exit-empty-all = クローズ済みの取引はまだありません
 trader-exit-empty-days =
     { $count ->
        *[other] 過去{ $amount }日間にクローズ済みの取引はありません

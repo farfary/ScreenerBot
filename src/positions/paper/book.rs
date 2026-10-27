@@ -18,7 +18,7 @@ use crate::positions::db::{
 use crate::positions::types::{
     Book, EntryRecord, ExitRecord, Opening, Position, PositionManagement, PriceSource,
 };
-use crate::positions::{marks, Error, PositionsDatabase, Result};
+use crate::positions::{marks, ClosedFingerprint, Error, PositionsDatabase, Result};
 
 use super::leg::PaperLeg;
 
@@ -150,6 +150,14 @@ impl PaperBook {
     /// The paper rounds closed at or after `since`, newest first.
     pub async fn closed_since(&self, since: DateTime<Utc>) -> Result<Vec<Position>> {
         self.db.get_closed_positions_since(since).await
+    }
+
+    /// The fingerprint of the paper rounds `closed_since(since)` returns.
+    pub async fn closed_fingerprint_since(
+        &self,
+        since: DateTime<Utc>,
+    ) -> Result<ClosedFingerprint> {
+        self.db.closed_fingerprint_since(since).await
     }
 
     /// The closed paper rounds of the active wallet, newest exit first.

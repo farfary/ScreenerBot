@@ -78,7 +78,7 @@ test("a figure the account does not carry reads as a dash", () => {
 
 test("the Stats tab asks for the book it shows", () => {
   const page = read("scripts/pages/trader.js");
-  assert.match(page, /\/api\/trader\/stats\?days=\$\{statsPeriodDays\}&book=\$\{statsBook\}/);
+  assert.match(page, /\/api\/trader\/stats\?window=\$\{statsWindow\}&book=\$\{statsBook\}/);
   assert.match(page, /let statsBook = "live";/);
   const markup = read("pages/trader.html");
   const seg = markup.slice(markup.indexOf('id="stats-book"'), markup.indexOf('id="stats-period"'));

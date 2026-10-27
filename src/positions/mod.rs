@@ -84,9 +84,9 @@ pub use db::{
     get_recent_closed_positions_for_mint, get_swap_records_by_signatures, get_token_snapshot,
     get_token_snapshots, initialize_positions_database, load_all_positions, save_position,
     save_token_snapshot, set_position_archived_db, set_position_management_db,
-    with_positions_database, with_positions_database_async, AutoTradeActivity, DailyTradingStats,
-    PeriodTradingStats, PositionState, PositionStateHistory, PositionTracking, PositionsDatabase,
-    PositionsDatabaseStats, TokenSnapshot,
+    with_positions_database, with_positions_database_async, AutoTradeActivity, ClosedFingerprint,
+    DailyTradingStats, PeriodTradingStats, PositionState, PositionStateHistory, PositionTracking,
+    PositionsDatabase, PositionsDatabaseStats, TokenSnapshot,
 };
 
 pub use helpers::{

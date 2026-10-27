@@ -164,6 +164,9 @@ trader-daily-title = P&L по дням
 trader-daily-subtitle = Реализованный { -sol } за день с накопленным итогом
 trader-daily-loading = Загрузка P&L по дням...
 trader-daily-chart = Реализованная прибыль и убыток по дням в { -sol }
+trader-weekly-title = P&L по неделям
+trader-weekly-subtitle = Реализованный { -sol } за неделю ISO с накопленным итогом
+trader-weekly-chart = Реализованная прибыль и убыток по неделям в { -sol }
 trader-extreme-best = Лучшая сделка
 trader-extreme-worst = Худшая сделка
 
@@ -171,6 +174,7 @@ trader-exit-title = Разбивка стратегий выхода
 trader-exit-subtitle = Как закрывались позиции и что вернул каждый выход
 trader-exit-loading = Загрузка данных о выходах...
 trader-exit-empty-day = Нет закрытых сделок за последние 24 часа
+trader-exit-empty-all = Закрытых сделок пока нет
 trader-exit-empty-days =
     { $count ->
         [one] Нет закрытых сделок за последний { $amount } день

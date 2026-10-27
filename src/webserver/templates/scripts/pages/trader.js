@@ -78,9 +78,9 @@ function createLifecycle() {
   let lifecycleContext = null;
   let timePositions = null;
 
-  // Realized window for the Stats tab, in days. Owned here and sent to the API —
-  // the tab never labels a window it did not ask for.
-  let statsPeriodDays = 30;
+  // Realized window for the Stats tab (`24h`, `7d`, `30d` or `all`). Owned here and sent
+  // to the API — the tab never labels a window it did not ask for.
+  let statsWindow = "30d";
   // The book the Stats tab reads: the live book by default, the paper book on request.
   // The two are never summed into one figure.
   let statsBook = "live";
@@ -517,7 +517,7 @@ function createLifecycle() {
   async function loadStats() {
     try {
       const data = await requestManager.fetch(
-        `/api/trader/stats?days=${statsPeriodDays}&book=${statsBook}`,
+        `/api/trader/stats?window=${statsWindow}&book=${statsBook}`,
         { priority: "normal" }
       );
       if (statsBook === "paper") void paperAccount.load($("#stats-paper-account"));
@@ -709,11 +709,11 @@ function createLifecycle() {
    * Switch the realized window and reload immediately, so the click is answered by
    * the panel rather than by the next poll tick.
    */
-  function setStatsPeriod(days) {
-    if (days === statsPeriodDays) return;
-    statsPeriodDays = days;
+  function setStatsPeriod(range) {
+    if (range === statsWindow) return;
+    statsWindow = range;
     for (const btn of $$("#stats-period .stats-period-btn")) {
-      btn.classList.toggle("active", Number(btn.dataset.days) === days);
+      btn.classList.toggle("active", btn.dataset.window === range);
     }
     _lastDailyKey = null;
     _lastExitKey = null;
@@ -738,7 +738,27 @@ function createLifecycle() {
   }
 
   /**
-   * Render the daily realized P&L: one bar per day plus the cumulative line.
+   * Name the P&L series by the bucket the server chose: one bar per day, or per ISO week
+   * on a history too long for daily bars. Rewritten only when the bucket changes.
+   */
+  function setPnlSeriesHeading(weekly) {
+    const title = $("#daily-pnl-title");
+    const subtitle = $("#daily-pnl-subtitle");
+    const titleId = weekly ? "trader-weekly-title" : "trader-daily-title";
+    const subtitleId = weekly ? "trader-weekly-subtitle" : "trader-daily-subtitle";
+    if (title && title.getAttribute("data-l10n-id") !== titleId) {
+      title.setAttribute("data-l10n-id", titleId);
+      I18n.localizeTree(title);
+    }
+    if (subtitle && subtitle.getAttribute("data-l10n-id") !== subtitleId) {
+      subtitle.setAttribute("data-l10n-id", subtitleId);
+      I18n.localizeTree(subtitle);
+    }
+  }
+
+  /**
+   * Render the realized P&L series: one bar per day, or per week on a long history, plus
+   * the cumulative line.
    *
    * Hand-built SVG on purpose — this is a fixed-size, non-interactive shape, and a
    * charting library would cost more than the whole panel.
@@ -756,6 +776,9 @@ function createLifecycle() {
       const totalTone = Utils.signedTone(totalPnlSol, 4);
       totalEl.className = `daily-pnl-total${totalTone === "neutral" ? "" : ` ${totalTone}`}`;
     }
+
+    const weekly = Array.isArray(days) && days[0]?.bucket === "week";
+    setPnlSeriesHeading(weekly);
 
     if (!Array.isArray(days) || days.every((d) => (d.trades || 0) === 0)) {
       container.innerHTML = renderStateView({
@@ -804,12 +827,12 @@ function createLifecycle() {
 
     const first = days[0];
     const last = days[days.length - 1];
-    // Days are UTC calendar dates ("2026-08-31"), shown as a short month and day.
+    // Buckets start on UTC calendar dates ("2026-08-31"), shown as a short month and day.
     const axisDate = (date) => Utils.formatDate(`${date}T00:00:00Z`, { includeYear: false, utc: true });
     container.dir = "ltr";
     container.innerHTML = `
       <svg class="daily-pnl-chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img"
-           aria-label="${Utils.escapeHtml(I18n.t("trader-daily-chart"))}">
+           aria-label="${Utils.escapeHtml(I18n.t(weekly ? "trader-weekly-chart" : "trader-daily-chart"))}">
         <line class="daily-pnl-zero" x1="0" y1="${mid}" x2="${W}" y2="${mid}"></line>
         ${bars}
         <polyline class="daily-pnl-line" points="${points}"></polyline>
@@ -866,10 +889,15 @@ function createLifecycle() {
     if (!container) return;
 
     if (!Array.isArray(breakdown) || breakdown.length === 0) {
-      const message =
-        periodDays === 1
-          ? I18n.t("trader-exit-empty-day")
-          : I18n.t("trader-exit-empty-days", { count: periodDays, amount: String(periodDays) });
+      // A null window is the whole history of the book.
+      let message;
+      if (periodDays == null) message = I18n.t("trader-exit-empty-all");
+      else if (periodDays === 1) message = I18n.t("trader-exit-empty-day");
+      else
+        message = I18n.t("trader-exit-empty-days", {
+          count: periodDays,
+          amount: String(periodDays),
+        });
       container.innerHTML = renderStateView({ icon: "icon-inbox", message, compact: true });
       _lastExitKey = null;
       return;
@@ -1392,7 +1420,7 @@ function createLifecycle() {
 
     // Realized-window segmented control
     for (const btn of $$("#stats-period .stats-period-btn")) {
-      addTrackedListener(btn, "click", () => setStatsPeriod(Number(btn.dataset.days)));
+      addTrackedListener(btn, "click", () => setStatsPeriod(btn.dataset.window));
     }
     for (const btn of $$("#stats-book .stats-period-btn")) {
       addTrackedListener(btn, "click", () => setStatsBook(btn.dataset.book));

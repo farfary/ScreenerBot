@@ -29,7 +29,7 @@ pub async fn get_trader_stats(Query(query): Query<TraderStatsQuery>) -> Response
     if crate::webserver::promo::are_promo_fixtures_enabled() && book == Book::Live {
         return success_response(crate::webserver::promo::get_promo_trader_stats());
     }
-    success_response(crate::trader::stats::trader_stats(book, query.days.unwrap_or(30)).await)
+    success_response(crate::trader::stats::trader_stats(book, query.window.into()).await)
 }
 
 // =============================================================================

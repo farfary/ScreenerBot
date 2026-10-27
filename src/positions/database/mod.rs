@@ -25,8 +25,9 @@ mod types;
 
 // Re-export types
 pub use types::{
-    AutoTradeActivity, DailyTradingStats, PeriodTradingStats, PositionState, PositionStateHistory,
-    PositionTracking, PositionsDatabase, PositionsDatabaseStats, TokenSnapshot,
+    AutoTradeActivity, ClosedFingerprint, DailyTradingStats, PeriodTradingStats, PositionState,
+    PositionStateHistory, PositionTracking, PositionsDatabase, PositionsDatabaseStats,
+    TokenSnapshot,
 };
 pub(crate) use types::{PENDING_PARTIAL_EXIT_METADATA_KEY, SWAP_HOLD_METADATA_KEY};
 

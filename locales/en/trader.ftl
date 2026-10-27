@@ -179,6 +179,9 @@ trader-daily-title = Daily P&L
 trader-daily-subtitle = Realized { -sol } per day, with the running total
 trader-daily-loading = Loading daily P&L...
 trader-daily-chart = Daily realized profit and loss in { -sol }
+trader-weekly-title = Weekly P&L
+trader-weekly-subtitle = Realized { -sol } per ISO week, with the running total
+trader-weekly-chart = Weekly realized profit and loss in { -sol }
 trader-extreme-best = Best trade
 trader-extreme-worst = Worst trade
 
@@ -188,6 +191,7 @@ trader-exit-title = Exit Strategy Breakdown
 trader-exit-subtitle = How positions were closed, and what each exit returned
 trader-exit-loading = Loading exit data...
 trader-exit-empty-day = No closed trades in the last 24 hours
+trader-exit-empty-all = No closed trades yet
 trader-exit-empty-days =
     { $count ->
         [one] No closed trades in the last { $amount } day

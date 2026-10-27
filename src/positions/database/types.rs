@@ -565,6 +565,24 @@ pub struct PeriodTradingStats {
     pub wins: i64,
 }
 
+/// The fingerprint of the closed rounds a window holds: equal fingerprints mean the
+/// window's closed set has not changed. A new close or an archive moves the count and
+/// the exit bounds, and a rewrite of a closed round moves the latest update and the P&L
+/// total.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ClosedFingerprint {
+    /// Closed rounds in the window.
+    pub count: i64,
+    /// The earliest `exit_time` in the window, as stored.
+    pub first_exit: Option<String>,
+    /// The latest `exit_time` in the window, as stored.
+    pub last_exit: Option<String>,
+    /// The latest `updated_at` of a closed round in the window, as stored.
+    pub last_update: Option<String>,
+    /// The sum of the booked `pnl` of the window's closed rounds.
+    pub total_pnl: f64,
+}
+
 /// How many positions the Auto Trader opened and fully closed in a period.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AutoTradeActivity {

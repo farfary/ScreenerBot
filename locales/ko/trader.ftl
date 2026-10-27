@@ -174,6 +174,9 @@ trader-daily-title = 일별 손익
 trader-daily-subtitle = 일별 실현 { -sol }과 누적 합계
 trader-daily-loading = 일별 손익 불러오는 중...
 trader-daily-chart = { -sol } 기준 일별 실현 손익
+trader-weekly-title = 주별 손익
+trader-weekly-subtitle = ISO 주별 실현 { -sol }과 누적 합계
+trader-weekly-chart = { -sol } 기준 주별 실현 손익
 trader-extreme-best = 최고 거래
 trader-extreme-worst = 최악 거래
 
@@ -183,6 +186,7 @@ trader-exit-title = 청산 전략별 분석
 trader-exit-subtitle = 포지션이 종료된 방식과 각 청산의 회수 결과
 trader-exit-loading = 청산 데이터 불러오는 중...
 trader-exit-empty-day = 최근 24시간 동안 종료된 거래가 없습니다
+trader-exit-empty-all = 아직 종료된 거래가 없습니다
 trader-exit-empty-days =
     { $count ->
        *[other] 최근 { $amount }일 동안 종료된 거래가 없습니다

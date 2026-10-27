@@ -147,11 +147,13 @@ impl Tool for GetTraderStatsTool {
             Ok(p) => p,
             Err(e) => return e,
         };
-        let mut stats =
-            trader::stats::trader_stats(crate::positions::Book::Live, params.days.unwrap_or(30))
-                .await;
+        let mut stats = trader::stats::trader_stats(
+            crate::positions::Book::Live,
+            trader::stats::StatsWindow::Days(params.days.unwrap_or(30)),
+        )
+        .await;
         if !params.include_daily {
-            stats.daily_pnl.clear();
+            stats.realized.daily_pnl.clear();
         }
         ToolResult::success(json!(stats))
     }

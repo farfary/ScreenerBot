@@ -189,6 +189,9 @@ trader-daily-title = Щоденний прибуток/збиток
 trader-daily-subtitle = Реалізований { -sol } за день із наростаючим підсумком
 trader-daily-loading = Завантаження щоденного прибутку/збитку...
 trader-daily-chart = Щоденний реалізований прибуток і збиток у { -sol }
+trader-weekly-title = Щотижневий прибуток/збиток
+trader-weekly-subtitle = Реалізований { -sol } за тиждень ISO із наростаючим підсумком
+trader-weekly-chart = Щотижневий реалізований прибуток і збиток у { -sol }
 trader-extreme-best = Найкраща угода
 trader-extreme-worst = Найгірша угода
 
@@ -198,6 +201,7 @@ trader-exit-title = Розподіл стратегій виходу
 trader-exit-subtitle = Як закривалися позиції та що повернув кожен вихід
 trader-exit-loading = Завантаження даних про виходи...
 trader-exit-empty-day = За останні 24 години немає закритих угод
+trader-exit-empty-all = Закритих угод поки немає
 trader-exit-empty-days =
     { $count ->
         [one] За останні { $amount } д немає закритих угод

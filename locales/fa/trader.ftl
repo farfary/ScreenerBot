@@ -179,6 +179,9 @@ trader-daily-title = سود و زیان روزانه
 trader-daily-subtitle = { -sol } تحقق‌یافته در هر روز، همراه با مجموع تجمعی
 trader-daily-loading = در حال بارگذاری سود و زیان روزانه...
 trader-daily-chart = سود و زیان تحقق‌یافته روزانه به { -sol }
+trader-weekly-title = سود و زیان هفتگی
+trader-weekly-subtitle = { -sol } تحقق‌یافته در هر هفته ISO، همراه با مجموع تجمعی
+trader-weekly-chart = سود و زیان تحقق‌یافته هفتگی به { -sol }
 trader-extreme-best = بهترین معامله
 trader-extreme-worst = بدترین معامله
 
@@ -188,6 +191,7 @@ trader-exit-title = تفکیک استراتژی‌های خروج
 trader-exit-subtitle = نحوه بسته شدن پوزیشن‌ها و بازده هر خروج
 trader-exit-loading = در حال بارگذاری داده‌های خروج...
 trader-exit-empty-day = در 24 ساعت گذشته معامله بسته‌شده‌ای وجود ندارد
+trader-exit-empty-all = هنوز معامله بسته‌شده‌ای وجود ندارد
 trader-exit-empty-days =
     { $count ->
         [one] در { $amount } روز گذشته معامله بسته‌شده‌ای وجود ندارد
