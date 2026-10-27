@@ -98,6 +98,11 @@ fn create_schema(tx: &Transaction<'_>, chains: &[ChainId]) -> Result<Vec<String>
         "positions",
         POSITIONS_TAKE_PROFIT_COLUMNS,
     )?);
+    added.extend(add_missing_columns(
+        tx,
+        "positions",
+        POSITIONS_ENTRY_LIQUIDITY_COLUMNS,
+    )?);
     if !added.is_empty() {
         summary.push(format!("added positions columns {}", added.join(", ")));
     }
@@ -350,12 +355,12 @@ impl PositionsDatabase {
         remaining_token_amount, total_exited_amount, average_exit_price, partial_exit_count,
         dca_count, average_entry_price, last_dca_time, origin_kind, origin_ref, management,
         round_key, basis_complete, history_complete, holding_state, basis_peak_price,
-        take_profit_level
+        take_profit_level, entry_liquidity_native, entry_liquidity_pool
       ) VALUES (
         ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17,
         ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32, ?33,
         ?34, ?35, ?36, ?37, ?38, ?39, ?40, ?41, ?42, ?43, ?44, ?45, ?46, ?47,
-        ?48, ?49, ?50, ?51, ?52, ?53
+        ?48, ?49, ?50, ?51, ?52, ?53, ?54, ?55
       ) RETURNING id
       "#,
                 params![
@@ -412,6 +417,8 @@ impl PositionsDatabase {
                     position.holding_state,
                     position.basis_peak_price,
                     i64::from(position.take_profit_level),
+                    position.entry_liquidity_native,
+                    position.entry_liquidity_pool,
                 ],
                 |row| row.get::<_, i64>(0),
             )
@@ -793,6 +800,8 @@ impl PositionsDatabase {
             average_exit_price: row.get("average_exit_price")?,
             partial_exit_count: row.get::<_, i64>("partial_exit_count")? as u32,
             take_profit_level: row.get("take_profit_level")?,
+            entry_liquidity_native: row.get("entry_liquidity_native")?,
+            entry_liquidity_pool: row.get("entry_liquidity_pool")?,
             dca_count: row.get::<_, i64>("dca_count")? as u32,
             average_entry_price: row.get("average_entry_price")?,
             last_dca_time,
@@ -883,7 +892,8 @@ pub(super) fn write_position_row(
         remaining_token_amount = ?37, total_exited_amount = ?38, average_exit_price = ?39,
         partial_exit_count = ?40, dca_count = ?41, average_entry_price = ?42, last_dca_time = ?43,
         round_key = ?44, basis_complete = ?45, history_complete = ?46, holding_state = ?47,
-        basis_peak_price = ?48, take_profit_level = ?50, updated_at = datetime('now')
+        basis_peak_price = ?48, take_profit_level = ?50, entry_liquidity_native = ?51,
+        entry_liquidity_pool = ?52, updated_at = datetime('now')
       WHERE id = ?1 AND chain_id = ?49
       "#,
         params![
@@ -937,6 +947,8 @@ pub(super) fn write_position_row(
             position.basis_peak_price,
             chain,
             i64::from(position.take_profit_level),
+            position.entry_liquidity_native,
+            position.entry_liquidity_pool,
         ],
     )
 }
@@ -1048,6 +1060,8 @@ mod tests {
             "holding_state",
             "basis_peak_price",
             "take_profit_level",
+            "entry_liquidity_native",
+            "entry_liquidity_pool",
         ] {
             assert!(
                 schema::table_has_column(connection, "positions", column).unwrap(),
@@ -1566,6 +1580,62 @@ mod tests {
         let manifest: crate::database::backup::UpgradeBackupManifest =
             serde_json::from_slice(&std::fs::read(manifest_path).unwrap()).unwrap();
         assert_eq!(manifest.from_schema_version, Some(older.to_string()));
+    }
+
+    /// The entry liquidity reading and the pool it came from are read, kept by a booking
+    /// that does not touch them, and written back as a pair.
+    #[tokio::test]
+    async fn the_entry_liquidity_reading_keeps_its_pool_through_the_row_codec_and_writer() {
+        let (database, _directory) = test_database();
+        upgrade(&database).await.unwrap();
+        database.get_connection().unwrap().execute(
+            "INSERT INTO positions (id, chain_id, wallet_address, mint, symbol, name, entry_price, entry_time, position_type, entry_size_native, total_size_native, price_highest, price_lowest, basis_peak_price, entry_liquidity_native, entry_liquidity_pool, origin_kind, management) VALUES (41, 'solana', 'wallet', 'mint', 'SYM', 'Token', 0.5, '2026-01-01T00:00:00Z', 'buy', 1.0, 1.0, 0.5, 0.5, 0.5, 64.0, 'entry-pool', 'auto', 'auto_trader')",
+            [],
+        ).unwrap();
+        let stored = || -> (Option<f64>, Option<String>) {
+            database
+                .get_connection()
+                .unwrap()
+                .query_row(
+                    "SELECT entry_liquidity_native, entry_liquidity_pool FROM positions WHERE id = 41",
+                    [],
+                    |row| Ok((row.get(0)?, row.get(1)?)),
+                )
+                .unwrap()
+        };
+        let read = {
+            let connection = database.get_connection().unwrap();
+            connection
+                .query_row(
+                    &format!(
+                        "SELECT {} FROM positions WHERE id = 41",
+                        super::POSITION_SELECT_COLUMNS
+                    ),
+                    [],
+                    |row| database.row_to_position(row),
+                )
+                .unwrap()
+        };
+        assert_eq!(read.entry_liquidity_native, Some(64.0));
+        assert_eq!(read.entry_liquidity_pool.as_deref(), Some("entry-pool"));
+
+        let book = |pool: Option<&str>| {
+            database
+                .commit_booking(41, Ok("wallet"), |row, _| {
+                    if let Some(pool) = pool {
+                        row.entry_liquidity_pool = Some(pool.to_owned());
+                    }
+                    Ok(Booking::Write {
+                        record: None,
+                        outcome: (),
+                    })
+                })
+                .unwrap();
+        };
+        book(None);
+        assert_eq!(stored(), (Some(64.0), Some("entry-pool".to_owned())));
+        book(Some("other-pool"));
+        assert_eq!(stored(), (Some(64.0), Some("other-pool".to_owned())));
     }
 
     #[tokio::test]

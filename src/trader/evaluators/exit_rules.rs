@@ -245,6 +245,7 @@ mod tests {
                 enabled: true,
                 activation_pct: 20.0,
                 distance_pct: 10.0,
+                bands: Vec::new(),
             },
             break_even: BreakEvenPolicy {
                 enabled: false,

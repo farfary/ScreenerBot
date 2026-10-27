@@ -239,6 +239,23 @@ trader-trailing-final = +{ $value }% نهایی
 trader-trailing-summary-protected = <strong>{ $value }</strong> سود حفظ شد
 # $value is a formatted percentage.
 trader-trailing-summary-avoided = از <strong>{ $value }</strong> ضرر نسبت به اوج جلوگیری شد
+# $step is the band's position in the list, from 1.
+trader-trailing-band = باند { $step }
+# $step is the band's position in the list, from 1.
+trader-trailing-band-profit-label = سود اوج باند { $step }
+# $step is the band's position in the list, from 1.
+trader-trailing-band-distance-label = فاصله دنبال‌کردن باند { $step }
+trader-trailing-band-profit-caption = از سود اوج
+trader-trailing-band-distance-caption = فاصله دنبال‌کردن
+trader-trailing-add-band = افزودن باند
+# $step is the band's position in the list, from 1.
+trader-trailing-remove-band = حذف باند { $step }
+# $min and $max are the configured bounds of a band's peak profit.
+trader-trailing-band-error-profit-range = سود اوج هر باند باید بین { $min }% و { $max }% باشد
+# $min and $max are the configured bounds of a band's distance.
+trader-trailing-band-error-distance-range = فاصله هر باند باید بین { $min }% و { $max }% باشد
+trader-trailing-band-error-order = سود اوج هر باند باید از سطح فعال‌سازی و باند قبلی بالاتر باشد
+trader-trailing-band-error-distance = فاصله هر باند باید کمتر از سود اوج آن باشد
 
 ## Break-even stop
 
@@ -294,8 +311,6 @@ trader-time-unit-seconds = ثانیه
 trader-time-unit-minutes = دقیقه
 trader-time-unit-hours = ساعت
 trader-time-unit-days = روز
-# Shown before the configured duration loads.
-trader-time-conversion-default = 168 ساعت = 7 روز
 # $duration and $readable are formatted durations.
 trader-time-conversion = { $duration } = { $readable }
 trader-duration-seconds =
@@ -380,11 +395,8 @@ trader-dca-error-drop-range = هر افت باید بین { $min }% و { $max }%
 trader-dca-error-size-range = هر اندازه باید بین { $min }× و { $max }× خرید اول باشد
 trader-dca-error-order = با سنجش از ورود اول، هر افزایش به افتی عمیق‌تر از قبلی نیاز دارد
 trader-dca-cooldown-impact = دست‌کم { $span } بین ورودهای اضافه
-trader-dca-min-hold-impact =
-    { $minutes ->
-        [0] نخستین افزایش می‌تواند بلافاصله پس از ورود باشد
-       *[other] نخستین افزایش دست‌کم { $span } پس از ورود صبر می‌کند
-    }
+trader-dca-min-hold-none = نخستین افزایش می‌تواند بلافاصله پس از ورود باشد
+trader-dca-min-hold-impact = نخستین افزایش دست‌کم { $span } پس از ورود صبر می‌کند
 trader-dca-capacity = بیشترین مقداری که این پوزیشن می‌تواند داشته باشد: { $amount } ({ $multiple }× خرید اول)
 trader-dca-info-title = اطلاعات استراتژی DCA
 trader-dca-info-subtitle = نکات مهم درباره معامله با DCA

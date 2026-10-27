@@ -11,6 +11,7 @@ export const DATA_TAG_LABELS = Object.freeze({
   pool: "strategies-data-pool",
   position: "strategies-data-position",
   market: "strategies-data-market",
+  clock: "strategies-data-clock",
 });
 
 /** Message ids of the line a condition shows when the strategy type cannot use it. */

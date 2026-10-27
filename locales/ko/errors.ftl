@@ -123,6 +123,7 @@ errors-strategies-no-performance = 이 전략의 성과 데이터가 없습니�
 errors-strategies-performance-failed = 성과 통계를 가져오지 못했습니다
 errors-strategies-schemas-failed = 조건 스키마를 가져오지 못했습니다
 errors-strategies-evaluation-failed = 전략 평가에 실패했습니다
+errors-strategies-test-data-without-price = 전송된 시장 또는 포지션 데이터에는 현재 가격이 필요합니다
 
 # Transactions
 errors-transactions-own-wallet-unavailable = 메인 지갑이 설정되어 있지 않습니다

@@ -13,6 +13,7 @@ use super::super::{
 use super::live_block_reason;
 use super::open_database;
 use crate::positions::PositionOrigin;
+use crate::trader::policy::ExitPolicy;
 use crate::trader::{Error, Result};
 use crate::wallets::watch;
 
@@ -104,7 +105,11 @@ pub(in crate::trader::copy) async fn sync_task_watch(
 /// separate confirmed transition (`set_task_mode`).
 pub async fn create_task(input: CopyTaskInput) -> Result<CopyTask> {
     let task = input
-        .into_task(crate::chains::active_chain(), Utc::now())
+        .into_task(
+            crate::chains::active_chain(),
+            Utc::now(),
+            ExitPolicy::from_config(),
+        )
         .map_err(|reason| Error::CopyTaskRejected { reason })?;
     crate::chains::adapter()
         .validate_address(&task.target_address)
@@ -155,6 +160,25 @@ pub fn merge_task_patch(original: &CopyTask, patch: serde_json::Value) -> Result
     serde_json::from_value(merged).map_err(|e| invalid(e.to_string()))
 }
 
+/// The task a PATCH makes of `original`, validated as an update: exit overrides the
+/// patch changes are checked over `exit_base`, unchanged stored ones are not, so a task
+/// whose overrides a global change invalidated still pauses, resumes and takes edits.
+pub(super) fn patched_task(
+    original: &CopyTask,
+    patch: serde_json::Value,
+    exit_base: ExitPolicy,
+) -> Result<CopyTask> {
+    merge_task_patch(original, patch)?
+        .into_task_for_update(
+            crate::chains::active_chain(),
+            Utc::now(),
+            original.mode,
+            &original.exit_policy_overrides,
+            exit_base,
+        )
+        .map_err(|reason| Error::CopyTaskRejected { reason })
+}
+
 /// Apply a partial update, keeping the watch source and the ownership of the
 /// task's open positions consistent with the stored task. The task is written
 /// first and every watch or position change after it rolls the task back on
@@ -167,9 +191,7 @@ pub async fn update_task(id: i64, patch: serde_json::Value) -> Result<CopyTask> 
         .get_task(id)
         .await?
         .ok_or(Error::CopyTaskNotFound { task_id: id })?;
-    let mut task = merge_task_patch(&original, patch)?
-        .into_task_for_update(crate::chains::active_chain(), Utc::now(), original.mode)
-        .map_err(|reason| Error::CopyTaskRejected { reason })?;
+    let mut task = patched_task(&original, patch, ExitPolicy::from_config())?;
     if task.target_address != original.target_address {
         return Err(Error::CopyValidation {
             detail:

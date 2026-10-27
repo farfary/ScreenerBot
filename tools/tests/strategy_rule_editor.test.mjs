@@ -16,7 +16,10 @@
  * - An unset optional parameter is its own editor choice and summary value, naming
  *   the strategy's value it falls back to; the saved tree keeps it unset.
  * - A lookback stored as `time_value` + `time_unit` is one duration field: the amount
- *   input with its unit select as the field's `.input-unit`, under one label.
+ *   input with its unit select as the field's `.input-unit`, under one label. Its
+ *   summary is the amount with the unit, days included, under the amount's label.
+ * - An hour of the UTC day reads "UTC" beside the input and in the summary, with the
+ *   local clock time as a hint; a pool-to-size multiple shows its price impact.
  * - A switched-off row is rendered, dimmed, and saved with `disabled`; an inverted row
  *   is saved under a NOT; a nested group has its own match select.
  * - An empty number field is a `required` error at the field and blocks Save.
@@ -34,6 +37,8 @@ import assert from "node:assert/strict";
 import { defaultTimeframe, schemas } from "../lib/strategy_rules.mjs";
 import { createRuleEditor } from "../../src/webserver/templates/scripts/pages/strategies/rule_editor.js";
 import * as tree from "../../src/webserver/templates/scripts/pages/strategies/rule_tree.js";
+import { formatTimestamp } from "../../src/webserver/templates/scripts/core/format.js";
+import { paramHint } from "../../src/webserver/templates/scripts/pages/strategies/condition_text.js";
 
 const escapeHtml = (text) =>
   String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
@@ -107,7 +112,12 @@ test("the summary names every parameter with the option the editor shows", () =>
         );
       }
     }
-    if (period) assert.match(summary, /Lookback: 5 min/, `${type} lookback missing`);
+    if (period) {
+      // One entry under the amount's own label, in the unit picked inside the field.
+      const label = plain(I18n.t(params.time_value.key));
+      const expected = `${label}: ${params.time_value.default} min`;
+      assert.ok(summary.includes(expected), `${type}: "${expected}" missing from "${summary}"`);
+    }
   }
 });
 
@@ -149,6 +159,68 @@ test("a lookback is one duration field with its unit picked inside it", () => {
   const [saved] = editor.serialize().conditions;
   assert.equal(saved.condition.parameters.time_value.value, 2);
   assert.equal(saved.condition.parameters.time_unit.value, "HOURS");
+});
+
+test("a token age in days reads as days in the summary and the duration field", () => {
+  const editor = editorFor();
+  const node = add(editor, "TokenAge");
+  tree.setParam(editor.model(), node.id, "time_value", 3);
+  tree.setParam(editor.model(), node.id, "time_unit", "DAYS");
+
+  assert.ok(plain(editor.buildConditionSummary(node)).includes("Age: 3 d"));
+  const html = editor.renderParamEditor(node);
+  assert.match(html, /<input [^>]*data-key="time_value" type="number" value="3"[^>]*>\s*<span class="input-unit"><select [^>]*data-key="time_unit"/);
+  assert.deepEqual(selectedOptions(html), { comparison: "Older Than (≥)", time_unit: "d" });
+});
+
+test("a UTC hour shows UTC beside the input and the local time as a hint", () => {
+  const editor = editorFor();
+  const node = add(editor, "TimeOfDay");
+  const html = editor.renderParamEditor(node);
+  const start = html.split('<div class="param-field"').find((part) => /data-key="start_hour"/.test(part));
+
+  assert.match(start, /<input [^>]*data-key="start_hour"[^>]*>\s*<span class="input-unit">UTC<\/span>/);
+  const expected = paramHint(schemas.TimeOfDay.parameters.start_hour, 13);
+  assert.match(plain(expected), /^Your local time: /);
+  assert.ok(plain(unescape(start)).includes(plain(expected)), "the local-time hint is shown");
+  assert.ok(plain(editor.buildConditionSummary(node)).includes("Start Hour (UTC): 13:00 UTC"));
+});
+
+test("the local-time hint is the same instant of the UTC day on the viewer's clock", () => {
+  const spec = schemas.TimeOfDay.parameters.start_hour;
+  const now = new Date(Date.UTC(2026, 0, 15, 9, 30));
+  const time = formatTimestamp(Date.UTC(2026, 0, 15, 22), {
+    includeDate: false,
+    includeSeconds: false,
+  });
+  assert.equal(plain(paramHint(spec, 22, now)), `Your local time: ${plain(time)}`);
+  assert.equal(paramHint(spec, null, now), "");
+  assert.equal(paramHint(schemas.TimeOfDay.parameters.end_hour, ""), "");
+});
+
+test("a pool-to-size multiple shows the price impact a trade of that size has", () => {
+  const spec = schemas.LiquidityToSize.parameters.multiple;
+  assert.equal(spec.hint, "price_impact");
+  assert.equal(
+    plain(paramHint(spec, 99)),
+    "A trade of this size moves the price by about 1%"
+  );
+  assert.equal(plain(paramHint(spec, 3)), "A trade of this size moves the price by about 25%");
+  assert.equal(paramHint(spec, 0), "");
+
+  const editor = editorFor();
+  const node = add(editor, "LiquidityToSize");
+  tree.setParam(editor.model(), node.id, "multiple", 19);
+  assert.ok(
+    plain(unescape(editor.renderParamEditor(node))).includes("moves the price by about 5%"),
+    "the impact hint follows the value"
+  );
+});
+
+test("a parameter without a hint renders no hint line", () => {
+  const editor = editorFor();
+  const node = add(editor, "PriceChangePercent");
+  assert.doesNotMatch(editor.renderParamEditor(node), /data-hint/);
 });
 
 test("move actions are disabled where the row cannot move", () => {

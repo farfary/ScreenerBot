@@ -16,10 +16,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import "./fixtures/i18n_en.mjs";
-
-globalThis.window = { addEventListener() {} };
-// core/utils.js registers document listeners when it is imported.
-globalThis.document = { addEventListener() {}, readyState: "complete" };
+import "./fixtures/document_shim.mjs";
 
 const { resolveTokenBannerUrl } = await import("../../src/webserver/templates/scripts/core/utils.js");
 

@@ -400,6 +400,61 @@ async fn patch_of_a_break_even_margin_at_its_trigger_is_refused() {
     );
 }
 
+/// The trailing bands are served and described as two lists of at most three values,
+/// and a trader PATCH saves a valid pair and refuses bands the exit policy cannot
+/// follow, keeping the stored ones.
+#[tokio::test]
+async fn trailing_bands_are_served_saved_and_refused_by_the_policy_rules() {
+    init_config();
+    let _writes = CONFIG_WRITES.lock().await;
+    let config = full_config_json().await;
+    let metadata = serde_json::to_value(collect_config_metadata()).expect("metadata serializes");
+    for key in [
+        "trailing_stop_band_profit_pct",
+        "trailing_stop_band_distance_pct",
+    ] {
+        assert!(
+            config["trader"].get(key).is_some(),
+            "/api/config lacks trader.{key}"
+        );
+        assert_eq!(metadata["trader"][key]["max_items"], 3, "{key}");
+    }
+
+    let response = patch_any_config::<TraderConfig>(Json(serde_json::json!({
+        "trailing_stop_enabled": true,
+        "trailing_stop_activation_pct": 20.0,
+        "trailing_stop_distance_pct": 10.0,
+        "trailing_stop_band_profit_pct": [50.0, 100.0],
+        "trailing_stop_band_distance_pct": [6.0, 4.0],
+    })))
+    .await;
+    assert!(response.status().is_success(), "{}", response.status());
+    let saved = with_config(|cfg| cfg.trader.trailing_stop_bands());
+    assert_eq!(saved.len(), 2);
+
+    for refused in [
+        serde_json::json!({ "trailing_stop_band_profit_pct": [15.0, 100.0] }),
+        serde_json::json!({ "trailing_stop_band_distance_pct": [60.0, 4.0] }),
+        serde_json::json!({ "trailing_stop_band_profit_pct": [50.0] }),
+    ] {
+        let response = patch_any_config::<TraderConfig>(Json(refused.clone())).await;
+        assert!(
+            !response.status().is_success(),
+            "accepted {refused}: {}",
+            response.status()
+        );
+        assert_eq!(with_config(|cfg| cfg.trader.trailing_stop_bands()), saved);
+    }
+
+    let response = patch_any_config::<TraderConfig>(Json(serde_json::json!({
+        "trailing_stop_enabled": false,
+        "trailing_stop_band_profit_pct": [],
+        "trailing_stop_band_distance_pct": [],
+    })))
+    .await;
+    assert!(response.status().is_success(), "{}", response.status());
+}
+
 /// A config writer a strict `[trader]` name (the time-override unit, the DCA basis) can
 /// arrive through.
 #[derive(Debug, Clone, Copy)]

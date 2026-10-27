@@ -60,6 +60,89 @@ fn the_filter_override_is_patchable_and_inherits_when_null() {
     assert_eq!(merged.require_filter_pass, None);
 }
 
+/// A task stored with a trailing distance of 12% and no activation of its own: over
+/// the default global activation (10%) the merged trail could never sell at a profit,
+/// as happens to a stored task when the global activation is lowered under it.
+fn stored_with_stale_trail() -> CopyTask {
+    let mut task = stored();
+    task.exit_policy_overrides.trailing.distance_pct = Some(12.0);
+    task
+}
+
+fn global_policy() -> crate::trader::policy::ExitPolicy {
+    crate::trader::policy::ExitPolicy::from_trader_config(&crate::config::TraderConfig::default())
+}
+
+#[test]
+fn a_task_whose_stored_overrides_no_longer_fit_still_pauses_resumes_and_takes_edits() {
+    let original = stored_with_stale_trail();
+    assert!(original
+        .exit_policy_overrides
+        .validate_over(global_policy())
+        .is_err());
+    for patch in [
+        serde_json::json!({ "enabled": false }),
+        serde_json::json!({ "enabled": true }),
+        serde_json::json!({ "label": "Renamed" }),
+    ] {
+        let task = super::tasks::patched_task(&original, patch.clone(), global_policy())
+            .unwrap_or_else(|error| panic!("{patch} was refused: {error}"));
+        assert_eq!(task.exit_policy_overrides, original.exit_policy_overrides);
+    }
+}
+
+#[test]
+fn a_patch_that_changes_the_overrides_is_checked_on_the_merged_policy() {
+    let original = stored_with_stale_trail();
+    let still_wide = super::tasks::patched_task(
+        &original,
+        serde_json::json!({
+            "enabled": false,
+            "exit_policy_overrides": { "trailing": { "distance_pct": 15.0 } }
+        }),
+        global_policy(),
+    );
+    assert!(matches!(
+        still_wide,
+        Err(crate::trader::Error::CopyTaskRejected {
+            reason: crate::trader::copy::CopySkip::InvalidExitPolicy
+        })
+    ));
+    let fixed = super::tasks::patched_task(
+        &original,
+        serde_json::json!({
+            "exit_policy_overrides": { "trailing": { "activation_pct": 30.0, "distance_pct": 12.0 } }
+        }),
+        global_policy(),
+    )
+    .expect("a distance below the task's own activation");
+    assert_eq!(
+        fixed.exit_policy_overrides.trailing.activation_pct,
+        Some(30.0)
+    );
+}
+
+#[test]
+fn a_task_whose_overrides_no_longer_fit_is_flagged_with_the_rule_they_break() {
+    let issue = super::books::exit_policy_issue(&stored_with_stale_trail(), global_policy())
+        .expect("a 12% distance over the 10% global activation is flagged");
+    assert_eq!(issue.id, "copy-exit-issue-warning");
+    let crate::i18n::UiArg::Nested(reason) = &issue.args["reason"] else {
+        panic!("the reason is the broken rule's own text");
+    };
+    assert_eq!(
+        reason.id,
+        "copy-exit-issue-trailing-distance-above-activation"
+    );
+    let en: crate::i18n::LanguageIdentifier = "en".parse().unwrap();
+    assert!(!issue.render_plain(&en).is_empty());
+
+    assert_eq!(
+        super::books::exit_policy_issue(&stored(), global_policy()),
+        None
+    );
+}
+
 fn paper_row(id: i64, mint: &str, at: chrono::DateTime<Utc>, sell: Option<f64>) -> CopyActivityRow {
     use crate::trader::copy::{
         CopyOutcome, CopySellDecision, CopyTelemetry, PaperDecision, PaperFill, PaperQuoteMetadata,

@@ -16,6 +16,12 @@ import { createRuleEditor } from "./strategies/rule_editor.js";
 import { createConditionCatalog } from "./strategies/condition_catalog.js";
 import { conditionName, optionLabel, optionValue } from "./strategies/condition_text.js";
 import {
+  renderNodeVerdict,
+  renderTestRunning,
+  renderTestSummary,
+  verdictsByNode,
+} from "./strategies/test_result.js";
+import {
   DEFAULT_PRIORITY,
   exportEnvelope,
   exportFileName,
@@ -25,6 +31,12 @@ import {
   strategyFromDetail,
   timeframeOptions,
 } from "./strategies/strategy_io.js";
+
+/**
+ * A live test first waits up to 10 s on the server for the candles of a token the app holds
+ * none for, past the request manager's 10 s default, then evaluates the strategy.
+ */
+const TEST_TIMEOUT_MS = 30000;
 
 export function createLifecycle() {
   // State
@@ -41,6 +53,9 @@ export function createLifecycle() {
 
   // Dirty tracking — unsaved editor changes
   let _isDirty = false;
+
+  // Incremented per strategy test; a response for an older test is dropped.
+  let testSeq = 0;
 
   // Event listener cleanup tracking
   const eventCleanups = [];
@@ -100,6 +115,8 @@ export function createLifecycle() {
   function markDirty() {
     if (_isDirty) return;
     _isDirty = true;
+    // A test result describes the saved rules, which an edit leaves behind.
+    hideTestResult();
     const header = $("#editor-header");
     if (header) header.classList.add("dirty");
   }
@@ -126,6 +143,7 @@ export function createLifecycle() {
     $,
     Utils,
     renderStateView,
+    renderVerdict: renderNodeVerdict,
     announce,
     confirm: (config) => ConfirmationDialog.show(config),
     enhanceAllSelects,
@@ -151,6 +169,7 @@ export function createLifecycle() {
       setupFilterTabs();
       setupSidebarActions();
       setupHeaderActions();
+      setupSettingsActions();
 
       // Load condition schemas
       await loadConditionSchemas();
@@ -324,32 +343,51 @@ export function createLifecycle() {
     });
   }
 
-  /** Editor header: every field edits the open strategy and marks it unsaved. */
-  function setupHeaderActions() {
-    const edit = (apply) => (event) => {
+  /** A field handler that edits the open strategy and marks it unsaved. */
+  function editField(apply) {
+    return (event) => {
       if (!currentStrategy) return;
       apply(event.target);
       markDirty();
     };
+  }
 
+  /** Editor toolbar: the name, the Active switch and the strategy actions. */
+  function setupHeaderActions() {
     addTrackedListener(
       $("#strategy-name"),
       "input",
-      edit((input) => {
+      editField((input) => {
         currentStrategy.name = input.value;
       })
     );
     addTrackedListener(
       $("#strategy-enabled-toggle"),
       "change",
-      edit((input) => {
+      editField((input) => {
         currentStrategy.enabled = input.checked;
       })
     );
+
+    // A narrow editor shows these actions as their glyph alone; the label stays their
+    // accessible name and becomes their tooltip.
+    $$("#editor-header .editor-action").forEach((button) => {
+      button.title = button.textContent.trim();
+    });
+
+    addTrackedListener($("#save-strategy"), "click", saveStrategy);
+    addTrackedListener($("#test-strategy"), "click", pickTestToken);
+    addTrackedListener($("#strategy-test-close"), "click", hideTestResult);
+    addTrackedListener($("#validate-strategy"), "click", validateStrategy);
+    addTrackedListener($("#export-strategy"), "click", exportStrategy);
+  }
+
+  /** Strategy settings above the rules: timeframe, priority, description and binding. */
+  function setupSettingsActions() {
     addTrackedListener(
       $("#strategy-timeframe"),
       "change",
-      edit((select) => {
+      editField((select) => {
         currentStrategy.timeframe = select.value;
         // Conditions without a timeframe of their own show the strategy's.
         ruleEditor.render();
@@ -358,7 +396,7 @@ export function createLifecycle() {
     addTrackedListener(
       $("#strategy-priority"),
       "input",
-      edit((input) => {
+      editField((input) => {
         currentStrategy.priority = input.value === "" ? null : Number(input.value);
         setPriorityInvalid(!isValidPriority(currentStrategy.priority));
       })
@@ -366,17 +404,26 @@ export function createLifecycle() {
     addTrackedListener(
       $("#strategy-description"),
       "input",
-      edit((input) => {
+      editField((input) => {
         currentStrategy.description = input.value;
       })
     );
     addTrackedListener($("#toggle-description"), "click", () => {
       setDescriptionOpen($("#strategy-description-panel")?.hidden ?? false);
     });
-
-    addTrackedListener($("#save-strategy"), "click", saveStrategy);
-    addTrackedListener($("#validate-strategy"), "click", validateStrategy);
-    addTrackedListener($("#export-strategy"), "click", exportStrategy);
+    addTrackedListener(
+      $("#strategy-entry-binding"),
+      "change",
+      editField((input) => {
+        currentStrategy.entry_strategy_ids = [
+          ...input.closest("#strategy-entry-binding").querySelectorAll("input:checked"),
+        ].map((box) => box.value);
+        updateEntryBindingSummary();
+      })
+    );
+    addTrackedListener($("#toggle-entry-binding"), "click", () => {
+      setEntryBindingOpen($("#strategy-entry-binding-panel")?.hidden ?? false);
+    });
   }
 
   function setPriorityInvalid(invalid) {
@@ -391,6 +438,81 @@ export function createLifecycle() {
     const toggle = $("#toggle-description");
     if (panel) panel.hidden = !open;
     if (toggle) toggle.setAttribute("aria-expanded", String(open));
+  }
+
+  function setEntryBindingOpen(open) {
+    const panel = $("#strategy-entry-binding-panel");
+    const toggle = $("#toggle-entry-binding");
+    if (panel) panel.hidden = !open;
+    if (toggle) toggle.setAttribute("aria-expanded", String(open));
+  }
+
+  /**
+   * The entry strategies an exit strategy can be bound to: every entry strategy, then a
+   * bound id whose strategy no longer exists, so it can be unchecked.
+   */
+  function entryBindingChoices() {
+    const entries = strategies
+      .filter((strategy) => strategy.type === "ENTRY")
+      .map((strategy) => ({ id: strategy.id, label: strategy.name }));
+    const known = new Set(entries.map((entry) => entry.id));
+    const deleted = currentStrategy.entry_strategy_ids
+      .filter((id) => !known.has(id))
+      .map((id) => ({ id, label: I18n.t("strategies-editor-entry-binding-deleted", { id }) }));
+    return [...entries, ...deleted];
+  }
+
+  /** The binding button's text after its label: every entry strategy, or the bound ones' names. */
+  function updateEntryBindingSummary() {
+    const summary = $("#entry-binding-summary");
+    if (!summary || !currentStrategy) return;
+    const bound = new Set(currentStrategy.entry_strategy_ids);
+    const names = entryBindingChoices()
+      .filter((choice) => bound.has(choice.id))
+      .map((choice) => choice.label);
+    summary.textContent =
+      names.length === 0 ? I18n.t("strategies-editor-entry-binding-all") : Utils.formatList(names);
+  }
+
+  /**
+   * The exit strategy's binding: a checkbox per entry strategy, none checked for every
+   * position. An entry strategy manages no positions and shows no binding.
+   */
+  function renderEntryBinding() {
+    const field = $("#entry-binding-field");
+    const list = $("#strategy-entry-binding");
+    if (!field || !list) return;
+    const isExit = currentStrategy?.type === "EXIT";
+    field.hidden = !isExit;
+    if (!isExit) {
+      setEntryBindingOpen(false);
+      list.replaceChildren();
+      return;
+    }
+    const bound = new Set(currentStrategy.entry_strategy_ids);
+    const choices = entryBindingChoices();
+    if (choices.length === 0) {
+      const empty = document.createElement("p");
+      empty.className = "editor-entry-binding-empty";
+      empty.textContent = I18n.t("strategies-editor-entry-binding-empty");
+      list.replaceChildren(empty);
+    } else {
+      list.replaceChildren(
+        ...choices.map((choice) => {
+          const label = document.createElement("label");
+          label.className = "editor-entry-binding-choice";
+          const box = document.createElement("input");
+          box.type = "checkbox";
+          box.value = choice.id;
+          box.checked = bound.has(choice.id);
+          const name = document.createElement("span");
+          name.textContent = choice.label;
+          label.append(box, name);
+          return label;
+        })
+      );
+    }
+    updateEntryBindingSummary();
   }
 
   /** The timeframe select: the options candle conditions offer, plus a saved value outside them. */
@@ -409,7 +531,7 @@ export function createLifecycle() {
     select.value = value ?? "";
   }
 
-  /** Show a strategy in the header and the rule editor. */
+  /** Show a strategy in the toolbar, the settings line and the rule editor. */
   function fillEditor(strategy) {
     const nameInput = $("#strategy-name");
     if (nameInput) nameInput.value = strategy.name;
@@ -422,7 +544,10 @@ export function createLifecycle() {
     setPriorityInvalid(false);
     const description = $("#strategy-description");
     if (description) description.value = strategy.description ?? "";
-    setDescriptionOpen(Boolean(strategy.description));
+    setDescriptionOpen(false);
+    setEntryBindingOpen(false);
+    renderEntryBinding();
+    hideTestResult();
     ruleEditor.load(strategy.rules);
   }
 
@@ -456,6 +581,8 @@ export function createLifecycle() {
       }));
 
       renderStrategies();
+      // An entry strategy added, renamed or deleted changes what an exit strategy can bind.
+      if (currentStrategy) renderEntryBinding();
     } catch (error) {
       console.error("Failed to load strategies:", error);
       announce(
@@ -637,6 +764,7 @@ export function createLifecycle() {
 
   /** Clear the editor back to its empty state, as when nothing is selected. */
   function closeEditor() {
+    hideTestResult();
     currentStrategy = null;
     clearDirty();
     hideEditor();
@@ -655,6 +783,7 @@ export function createLifecycle() {
         timeframe: defaultTimeframe,
         rules: null,
         parameters: {},
+        entry_strategy_ids: [],
       },
       { dirty: true }
     );
@@ -791,6 +920,73 @@ export function createLifecycle() {
         "error",
         I18n.t("strategies-toast-validation-failed"),
         await errorMessageOf(error, null)
+      );
+    }
+  }
+
+  /** Close the test result and take its marks off the rules; a test still running is dropped. */
+  function hideTestResult() {
+    testSeq += 1;
+    const line = $("#strategy-test-line");
+    if (line) line.hidden = true;
+    const body = $("#strategy-test-result");
+    if (body) body.replaceChildren();
+    ruleEditor.clearVerdicts();
+  }
+
+  /**
+   * Test the stored strategy against a token picked in the search dialog. The test reads
+   * the saved rules, so a strategy with unsaved changes or never saved is saved first.
+   */
+  function pickTestToken() {
+    if (!currentStrategy) {
+      Utils.showToast(I18n.t("strategies-toast-no-strategy-test"), "warning");
+      return;
+    }
+    if (_isDirty || !currentStrategy.id) {
+      Utils.showToast(I18n.t("strategies-toast-test-save-first"), "warning");
+      return;
+    }
+    // An exit strategy reads a position, so its picker opens on the held tokens.
+    window.openSearchDialog?.({
+      onPick: testAgainstToken,
+      tab: currentStrategy.type === "EXIT" ? "positions" : null,
+    });
+  }
+
+  async function testAgainstToken(token) {
+    const strategyId = currentStrategy?.id;
+    const line = $("#strategy-test-line");
+    const body = $("#strategy-test-result");
+    if (!strategyId || !line || !body) return;
+    ruleEditor.clearVerdicts();
+    testSeq += 1;
+    const seq = testSeq;
+    const label = token.symbol || token.mint;
+    body.innerHTML = renderTestRunning({ token: label });
+    line.hidden = false;
+
+    try {
+      const result = await requestManager.fetch(
+        `/api/strategies/${encodeURIComponent(strategyId)}/test`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token_mint: token.mint }),
+          priority: "high",
+          timeout: TEST_TIMEOUT_MS,
+        }
+      );
+      if (seq !== testSeq) return;
+      body.innerHTML = renderTestSummary(result.rules, { token: label });
+      ruleEditor.setVerdicts(verdictsByNode(ruleEditor.model(), result.rules));
+    } catch (error) {
+      if (seq !== testSeq) return;
+      line.hidden = true;
+      announce(
+        "error",
+        I18n.t("strategies-toast-test-failed"),
+        await errorMessageOf(error, I18n.attr("strategies-toast-test-failed", "message"))
       );
     }
   }

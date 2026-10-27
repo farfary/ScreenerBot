@@ -489,6 +489,8 @@ pub fn test_position(entry_price: f64, size_sol: f64) -> Position {
         average_exit_price: None,
         partial_exit_count: 0,
         take_profit_level: 0,
+        entry_liquidity_native: None,
+        entry_liquidity_pool: None,
         dca_count: 0,
         average_entry_price: entry_price,
         last_dca_time: None,

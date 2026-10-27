@@ -1149,6 +1149,12 @@ config-trader-trade-size-sol = 交易规模
 config-trader-trailing-stop-activation-pct = 追踪止损启动
     .hint = 盈利达到此 % 后启动追踪止损（10 = 在 +10% 时启动）
     .unit = %
+config-trader-trailing-stop-band-distance-pct = 分段追踪距离
+    .hint = 达到分段后止损在峰值下方跟随的距离；须小于该分段的峰值利润
+    .unit = %
+config-trader-trailing-stop-band-profit-pct = 追踪分段
+    .hint = 相对平均入场价的峰值利润，达到后由该分段接管追踪距离
+    .unit = %
 config-trader-trailing-stop-distance-pct = 追踪止损距离
     .hint = 在峰值下方追踪的距离（5 = 价格较峰值下跌 5% 时出场）
     .unit = %

@@ -16,14 +16,18 @@ use common::{
     anchor_ts, bundle_with, candle, candle_series, condition, context_bare, context_with_candles,
 };
 use screenerbot::strategies::conditions::{
-    get_current_price, usable_basis, BuyPressureCondition, CandleSizeCondition, ConditionEvaluator,
-    ConsecutiveCandlesCondition, DrawdownFromPeakCondition, LiquidityLevelCondition,
-    MaCrossCondition, PositionHoldingTimeCondition, PositionProfitCondition,
-    PriceBreakoutCondition, PriceChangePercentCondition, PriceToMaCondition, RsiCondition,
-    VolumeSpikeCondition,
+    get_current_price, usable_basis, BollingerBandsCondition, BuyPressureCondition,
+    CandleSizeCondition, ConditionEvaluator, ConsecutiveCandlesCondition,
+    DrawdownFromPeakCondition, LiquidityChangeSinceEntryCondition, LiquidityLevelCondition,
+    LiquidityToSizeCondition, MaCrossCondition, PositionAddsCondition,
+    PositionHoldingTimeCondition, PositionProfitCondition, PriceBreakoutCondition,
+    PriceChangePercentCondition, PriceToMaCondition, ProfitGivebackCondition,
+    PullbackFromHighCondition, RsiCondition, TimeOfDayCondition, TokenAgeCondition,
+    TransactionVelocityCondition, VolatilityRangeCondition, VolumeSpikeCondition, VwapCondition,
 };
 use screenerbot::strategies::types::{
-    Condition, EvaluationContext, MarketData, PositionData, TransactionCounts, WindowCounts,
+    Condition, EvaluationContext, LiquidityPool, MarketData, PositionData, StrategyType,
+    TransactionCounts, WindowCounts,
 };
 use screenerbot::strategies::Error as StrategyError;
 use serde_json::json;
@@ -58,6 +62,7 @@ fn market_context(liquidity_sol: Option<f64>) -> EvaluationContext {
     let mut ctx = context_bare(Some(1.0));
     ctx.market_data = Some(MarketData {
         liquidity_sol,
+        liquidity_pool: None,
         transactions: None,
         snapshot_at: None,
         token_created_at: None,
@@ -78,6 +83,8 @@ fn position_context(age_hours: f64) -> EvaluationContext {
         dca_count: 0,
         partial_exit_count: 0,
         remaining_value_native: None,
+        entry_liquidity_native: None,
+        entry_liquidity_pool: None,
     });
     ctx
 }
@@ -554,6 +561,25 @@ async fn candle_size_zero_range_candle_does_not_produce_nan() {
 }
 
 #[tokio::test]
+async fn candle_size_refuses_a_zero_open_as_unusable_data() {
+    // A zero open divides to infinity and would clear every large-body threshold.
+    let broken = vec![candle(anchor_ts(), 0.0, 110.0, 0.0, 110.0, 1.0)];
+    let ctx = context_with_candles(110.0, "1m", bundle_with("1m", broken));
+    let err = eval_err(&CandleSizeCondition, &shape("LARGE_BODY", 10.0), &ctx).await;
+    assert!(
+        matches!(
+            err,
+            StrategyError::UnusableData {
+                field: "candle open",
+                ..
+            }
+        ),
+        "unexpected error: {err}"
+    );
+    assert!(err.is_data_unavailable());
+}
+
+#[tokio::test]
 async fn candle_size_unknown_pattern_errors() {
     let big = vec![candle(anchor_ts(), 100.0, 110.0, 100.0, 110.0, 1.0)];
     let ctx = context_with_candles(110.0, "1m", bundle_with("1m", big));
@@ -700,8 +726,9 @@ async fn volume_spike_excludes_the_current_candle_from_its_own_average() {
 }
 
 #[tokio::test]
-async fn volume_spike_errors_when_the_baseline_is_zero() {
-    // A zero baseline would divide to infinity and fire on every token forever.
+async fn volume_spike_refuses_a_zero_baseline_as_unusable_data() {
+    // A zero baseline would divide to infinity and fire on every token forever. It is a
+    // fact about the market, not the configuration, so a rule tree reads it as unknown.
     let mut candles: Vec<_> = (0..5)
         .map(|i| {
             let ts = anchor_ts() - (5 - i) * MINUTE;
@@ -714,13 +741,14 @@ async fn volume_spike_errors_when_the_baseline_is_zero() {
     assert!(
         matches!(
             err,
-            StrategyError::InvalidConditionValue {
+            StrategyError::UnusableData {
                 field: "average volume",
                 ..
             }
         ),
         "unexpected error: {err}"
     );
+    assert!(err.is_data_unavailable());
 }
 
 #[tokio::test]
@@ -1167,6 +1195,8 @@ fn profit_context(unrealized_profit_pct: Option<f64>) -> EvaluationContext {
         dca_count: 0,
         partial_exit_count: 0,
         remaining_value_native: None,
+        entry_liquidity_native: None,
+        entry_liquidity_pool: None,
     });
     ctx
 }
@@ -1247,6 +1277,8 @@ fn peak_context(entry: f64, peak: Option<f64>, price: Option<f64>) -> Evaluation
         dca_count: 0,
         partial_exit_count: 0,
         remaining_value_native: None,
+        entry_liquidity_native: None,
+        entry_liquidity_pool: None,
     });
     ctx
 }
@@ -1367,6 +1399,85 @@ fn pressure(window: &str, min_buy_share_pct: f64, min_transactions: i64) -> Cond
     )
 }
 
+#[tokio::test]
+async fn liquidity_read_from_another_pool_than_the_entry_is_unknown() {
+    // A graduation from the bonding curve, or a deeper pool found later: the live
+    // reserves belong to a pool the entry reading says nothing about. Measured anyway,
+    // 64 at entry against 20 now reads as a 69% drain and sells.
+    let cond = liquidity_change("DROPPED_BY", 25.0);
+    let mut moved = liquidity_since(Some(64.0), Some(20.0));
+    live_pool(&mut moved).address = "graduated-pool".to_owned();
+    let err = eval_err(&LiquidityChangeSinceEntryCondition, &cond, &moved).await;
+    assert!(
+        matches!(
+            err,
+            StrategyError::MissingContextData {
+                data: "entry pool liquidity"
+            }
+        ),
+        "unexpected error: {err}"
+    );
+    assert!(err.is_data_unavailable());
+
+    // The same drain in the pool the entry was read from still fires.
+    assert!(
+        eval(
+            &LiquidityChangeSinceEntryCondition,
+            &cond,
+            &liquidity_since(Some(64.0), Some(20.0))
+        )
+        .await
+    );
+}
+
+#[tokio::test]
+async fn liquidity_of_a_pool_without_a_known_reserve_kind_is_unknown() {
+    let cond = liquidity_change("DROPPED_BY", 25.0);
+
+    // The pool's decoder reports virtual reserves: the bonding curve's fixed virtual base
+    // dilutes every change, so even a full drain of its real coin can read under 50%.
+    let mut curve = liquidity_since(Some(64.0), Some(20.0));
+    live_pool(&mut curve).virtual_reserves = Some(true);
+    let err = eval_err(&LiquidityChangeSinceEntryCondition, &cond, &curve).await;
+    assert!(
+        matches!(
+            err,
+            StrategyError::MissingContextData {
+                data: "real pool reserves"
+            }
+        ),
+        "unexpected error: {err}"
+    );
+
+    // A pool whose program is not known says nothing about its reserves either.
+    let mut unknown = liquidity_since(Some(64.0), Some(20.0));
+    live_pool(&mut unknown).virtual_reserves = None;
+    let err = eval_err(&LiquidityChangeSinceEntryCondition, &cond, &unknown).await;
+    assert!(
+        matches!(
+            err,
+            StrategyError::MissingContextData {
+                data: "real pool reserves"
+            }
+        ),
+        "unexpected error: {err}"
+    );
+
+    // A live reading that names no pool cannot be matched to the entry pool.
+    let mut unnamed = liquidity_since(Some(64.0), Some(20.0));
+    unnamed.market_data.as_mut().expect("market").liquidity_pool = None;
+    let err = eval_err(&LiquidityChangeSinceEntryCondition, &cond, &unnamed).await;
+    assert!(
+        matches!(
+            err,
+            StrategyError::MissingContextData {
+                data: "entry pool liquidity"
+            }
+        ),
+        "unexpected error: {err}"
+    );
+}
+
 fn counts(buys: u64, sells: u64) -> Option<WindowCounts> {
     Some(WindowCounts { buys, sells })
 }
@@ -1375,6 +1486,7 @@ fn transactions_context(transactions: Option<TransactionCounts>) -> EvaluationCo
     let mut ctx = context_bare(Some(1.0));
     ctx.market_data = Some(MarketData {
         liquidity_sol: None,
+        liquidity_pool: None,
         transactions,
         snapshot_at: Some(common::anchor_time()),
         token_created_at: None,
@@ -1602,6 +1714,1340 @@ fn transaction_counts_follow_the_token_snapshot_windows() {
     assert_eq!(transactions.h24, None);
 }
 
+// ==================== TransactionVelocity ====================
+
+fn velocity(window: &str, comparison: &str, ratio: f64, min_transactions: i64) -> Condition {
+    condition(
+        "TransactionVelocity",
+        &[
+            ("window", json!(window)),
+            ("comparison", json!(comparison)),
+            ("ratio", json!(ratio)),
+            ("min_transactions", json!(min_transactions)),
+        ],
+    )
+}
+
+/// 60 trades in the last 5 minutes against 360 in the hour: twice the hourly pace.
+fn twice_the_hourly_pace() -> EvaluationContext {
+    transactions_context(Some(TransactionCounts {
+        m5: counts(30, 30),
+        h1: counts(200, 160),
+        h6: None,
+        h24: None,
+    }))
+}
+
+#[tokio::test]
+async fn transaction_velocity_boundaries_are_inclusive() {
+    let ctx = twice_the_hourly_pace();
+    let cond = |comparison, ratio| velocity("5m_vs_1h", comparison, ratio, 30);
+    assert!(eval(&TransactionVelocityCondition, &cond("ABOVE", 2.0), &ctx).await);
+    assert!(!eval(&TransactionVelocityCondition, &cond("ABOVE", 2.1), &ctx).await);
+    assert!(eval(&TransactionVelocityCondition, &cond("BELOW", 2.0), &ctx).await);
+    assert!(!eval(&TransactionVelocityCondition, &cond("BELOW", 1.9), &ctx).await);
+}
+
+#[tokio::test]
+async fn transaction_velocity_is_false_below_the_short_window_floor() {
+    let ctx = twice_the_hourly_pace();
+    for comparison in ["ABOVE", "BELOW"] {
+        let cond = velocity("5m_vs_1h", comparison, 2.0, 61);
+        assert!(
+            !eval(&TransactionVelocityCondition, &cond, &ctx).await,
+            "{comparison}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn transaction_velocity_reads_the_selected_pair() {
+    // 6h: 600 trades over 21600 s; 24h: 1200 over 86400 s, so the 6h pace is twice the
+    // daily one, while the 5m/1h pair is flat.
+    let ctx = transactions_context(Some(TransactionCounts {
+        m5: counts(5, 0),
+        h1: counts(60, 0),
+        h6: counts(300, 300),
+        h24: counts(600, 600),
+    }));
+    assert!(
+        eval(
+            &TransactionVelocityCondition,
+            &velocity("6h_vs_24h", "ABOVE", 2.0, 1),
+            &ctx
+        )
+        .await
+    );
+    assert!(
+        !eval(
+            &TransactionVelocityCondition,
+            &velocity("5m_vs_1h", "ABOVE", 1.1, 1),
+            &ctx
+        )
+        .await
+    );
+}
+
+#[tokio::test]
+async fn transaction_velocity_refuses_missing_zero_or_stale_counts() {
+    let cond = velocity("5m_vs_1h", "ABOVE", 2.0, 1);
+
+    let missing = transactions_context(Some(TransactionCounts {
+        m5: counts(30, 30),
+        h1: None,
+        h6: None,
+        h24: None,
+    }));
+    let err = eval_err(&TransactionVelocityCondition, &cond, &missing).await;
+    assert!(
+        matches!(
+            err,
+            StrategyError::MissingContextData {
+                data: "transaction counts"
+            }
+        ),
+        "unexpected error: {err}"
+    );
+
+    let empty_long = transactions_context(Some(TransactionCounts {
+        m5: counts(30, 30),
+        h1: counts(0, 0),
+        h6: None,
+        h24: None,
+    }));
+    let err = eval_err(&TransactionVelocityCondition, &cond, &empty_long).await;
+    assert!(
+        matches!(
+            err,
+            StrategyError::UnusableData {
+                field: "long window transactions",
+                ..
+            }
+        ),
+        "unexpected error: {err}"
+    );
+    assert!(err.is_data_unavailable());
+
+    // The short window decides staleness: a snapshot older than five minutes no longer
+    // counts the trades inside the last five minutes.
+    let err = eval_err(&TransactionVelocityCondition, &cond, &snapshot_aged(301)).await;
+    assert!(
+        matches!(&err, StrategyError::StaleMarketData { window, .. } if window == "5m"),
+        "unexpected error: {err}"
+    );
+}
+
+#[test]
+fn transaction_velocity_validation_bounds() {
+    let validate = |cond: Condition| TransactionVelocityCondition.validate(&cond);
+    assert!(validate(velocity("5m_vs_1h", "ABOVE", 2.0, 30)).is_ok());
+    assert!(validate(velocity("5m_vs_1h", "ABOVE", 0.05, 30)).is_err());
+    assert!(validate(velocity("5m_vs_1h", "ABOVE", 51.0, 30)).is_err());
+    assert!(validate(velocity("5m_vs_1h", "ABOVE", 2.0, 0)).is_err());
+    assert!(validate(velocity("1h", "ABOVE", 2.0, 30)).is_err());
+    assert!(validate(velocity("5m_vs_1h", "EQUAL", 2.0, 30)).is_err());
+}
+
+// ==================== PullbackFromHigh ====================
+
+fn pullback(lookback: i64, min_drop_pct: f64, max_drop_pct: f64) -> Condition {
+    condition(
+        "PullbackFromHigh",
+        &[
+            ("lookback", json!(lookback)),
+            ("min_drop_pct", json!(min_drop_pct)),
+            ("max_drop_pct", json!(max_drop_pct)),
+        ],
+    )
+}
+
+/// One-minute candles ending at the anchor, all closing at 10, with the given highs.
+fn highs_series(highs: &[f64]) -> Vec<screenerbot::ohlcvs::Candle> {
+    let n = highs.len() as i64;
+    highs
+        .iter()
+        .enumerate()
+        .map(|(i, &high)| {
+            let ts = anchor_ts() - (n - 1 - i as i64) * MINUTE;
+            candle(ts, 10.0, high, 9.0, 10.0, 1.0)
+        })
+        .collect()
+}
+
+fn pullback_context(price: f64) -> EvaluationContext {
+    context_with_candles(
+        price,
+        "1m",
+        bundle_with("1m", highs_series(&[11.0, 16.0, 13.0, 12.0, 11.0])),
+    )
+}
+
+#[tokio::test]
+async fn pullback_measures_the_highest_high_not_the_closes() {
+    // Every close is 10, so a pullback measured from the closes could never see 12 as a
+    // 25% dip; the highest high is 16.
+    assert!(
+        eval(
+            &PullbackFromHighCondition,
+            &pullback(5, 25.0, 50.0),
+            &pullback_context(12.0)
+        )
+        .await
+    );
+}
+
+#[tokio::test]
+async fn pullback_band_boundaries_are_inclusive() {
+    let cond = pullback(5, 25.0, 50.0);
+    assert!(eval(&PullbackFromHighCondition, &cond, &pullback_context(12.0)).await);
+    assert!(eval(&PullbackFromHighCondition, &cond, &pullback_context(8.0)).await);
+    assert!(
+        !eval(
+            &PullbackFromHighCondition,
+            &pullback(5, 26.0, 50.0),
+            &pullback_context(12.0)
+        )
+        .await
+    );
+    assert!(!eval(&PullbackFromHighCondition, &cond, &pullback_context(7.9)).await);
+}
+
+#[tokio::test]
+async fn pullback_is_false_above_the_high_and_reads_only_the_lookback() {
+    let cond = pullback(5, 1.0, 50.0);
+    assert!(!eval(&PullbackFromHighCondition, &cond, &pullback_context(17.0)).await);
+    // With a lookback of 3 the 16 high is outside the window: the high is 13.
+    assert!(
+        !eval(
+            &PullbackFromHighCondition,
+            &pullback(3, 25.0, 50.0),
+            &pullback_context(12.0)
+        )
+        .await
+    );
+}
+
+#[tokio::test]
+async fn pullback_refuses_short_or_stale_series() {
+    let err = eval_err(
+        &PullbackFromHighCondition,
+        &pullback(20, 10.0, 30.0),
+        &pullback_context(12.0),
+    )
+    .await;
+    assert!(
+        matches!(
+            err,
+            StrategyError::InsufficientCandles {
+                indicator: "pullback from high",
+                available: 5,
+                required: 20,
+            }
+        ),
+        "unexpected error: {err}"
+    );
+
+    let mut stale = highs_series(&[11.0, 16.0, 13.0, 12.0, 11.0]);
+    for candle in &mut stale {
+        candle.timestamp -= 60 * MINUTE;
+    }
+    let ctx = context_with_candles(12.0, "1m", bundle_with("1m", stale));
+    let err = eval_err(&PullbackFromHighCondition, &pullback(5, 10.0, 30.0), &ctx).await;
+    assert!(
+        matches!(err, StrategyError::StaleCandleData { .. }),
+        "unexpected error: {err}"
+    );
+}
+
+#[test]
+fn pullback_validation_bounds() {
+    let validate = |cond: Condition| PullbackFromHighCondition.validate(&cond);
+    assert!(validate(pullback(20, 10.0, 30.0)).is_ok());
+    assert!(validate(pullback(2, 10.0, 30.0)).is_err());
+    assert!(validate(pullback(100, 10.0, 30.0)).is_ok());
+    assert!(validate(pullback(101, 10.0, 30.0)).is_err());
+    assert!(validate(pullback(20, 0.5, 30.0)).is_err());
+    assert!(validate(pullback(20, 10.0, 96.0)).is_err());
+    // The band needs a minimum below its maximum.
+    for (min, max) in [(30.0, 30.0), (40.0, 30.0)] {
+        assert!(
+            matches!(
+                validate(pullback(20, min, max)),
+                Err(StrategyError::InvalidConditionValue {
+                    field: "maximum drop",
+                    ..
+                })
+            ),
+            "{min}..{max}"
+        );
+    }
+}
+
+// ==================== ProfitGiveback ====================
+
+fn giveback(arm_after_profit_pct: f64, giveback_pct: f64) -> Condition {
+    condition(
+        "ProfitGiveback",
+        &[
+            ("arm_after_profit_pct", json!(arm_after_profit_pct)),
+            ("giveback_pct", json!(giveback_pct)),
+        ],
+    )
+}
+
+#[tokio::test]
+async fn profit_giveback_fires_at_the_share_given_back() {
+    // Entry 1, best 2 (+100%), now 1.5 (+50%): half the best gain is gone.
+    let ctx = peak_context(1.0, Some(2.0), Some(1.5));
+    assert!(eval(&ProfitGivebackCondition, &giveback(30.0, 50.0), &ctx).await);
+    assert!(!eval(&ProfitGivebackCondition, &giveback(30.0, 51.0), &ctx).await);
+    let held = peak_context(1.0, Some(2.0), Some(1.51));
+    assert!(!eval(&ProfitGivebackCondition, &giveback(30.0, 50.0), &held).await);
+}
+
+#[tokio::test]
+async fn profit_giveback_arms_once_the_best_gain_is_large_enough() {
+    let ctx = peak_context(1.0, Some(2.0), Some(1.0));
+    assert!(eval(&ProfitGivebackCondition, &giveback(100.0, 50.0), &ctx).await);
+    assert!(!eval(&ProfitGivebackCondition, &giveback(101.0, 50.0), &ctx).await);
+}
+
+#[tokio::test]
+async fn profit_giveback_of_everything_is_back_at_the_entry_price() {
+    let at_entry = peak_context(1.0, Some(2.0), Some(1.0));
+    assert!(eval(&ProfitGivebackCondition, &giveback(30.0, 100.0), &at_entry).await);
+    let above = peak_context(1.0, Some(2.0), Some(1.01));
+    assert!(!eval(&ProfitGivebackCondition, &giveback(30.0, 100.0), &above).await);
+}
+
+#[tokio::test]
+async fn profit_giveback_measures_from_the_average_after_an_add() {
+    // An add lowered the average to 0.8 and restarted the peak at 1.0 (+25%); the gain
+    // before the add belongs to an older average and is not counted.
+    let ctx = peak_context(0.8, Some(1.0), Some(0.9));
+    assert!(eval(&ProfitGivebackCondition, &giveback(25.0, 50.0), &ctx).await);
+    assert!(!eval(&ProfitGivebackCondition, &giveback(26.0, 50.0), &ctx).await);
+}
+
+#[tokio::test]
+async fn profit_giveback_never_fires_without_a_gain() {
+    let below_entry = peak_context(2.0, Some(1.5), Some(1.0));
+    assert!(!eval(&ProfitGivebackCondition, &giveback(1.0, 5.0), &below_entry).await);
+}
+
+#[tokio::test]
+async fn profit_giveback_grows_as_the_price_falls() {
+    let cond = giveback(30.0, 40.0);
+    let mut fired = false;
+    for step in 0..=20 {
+        let price = 2.0 - f64::from(step) * 0.05;
+        let now = eval(
+            &ProfitGivebackCondition,
+            &cond,
+            &peak_context(1.0, Some(2.0), Some(price)),
+        )
+        .await;
+        assert!(!fired || now, "fired, then stopped at {price}");
+        fired = now;
+    }
+    assert!(fired);
+}
+
+#[tokio::test]
+async fn profit_giveback_refuses_missing_data() {
+    let cond = giveback(30.0, 50.0);
+    let err = eval_err(&ProfitGivebackCondition, &cond, &context_bare(Some(1.0))).await;
+    assert!(matches!(
+        err,
+        StrategyError::MissingContextData {
+            data: "position data"
+        }
+    ));
+    let err = eval_err(
+        &ProfitGivebackCondition,
+        &cond,
+        &peak_context(1.0, None, Some(1.0)),
+    )
+    .await;
+    assert!(matches!(
+        err,
+        StrategyError::MissingContextData { data: "peak price" }
+    ));
+}
+
+#[test]
+fn profit_giveback_validation_bounds() {
+    let validate = |cond: Condition| ProfitGivebackCondition.validate(&cond);
+    assert!(validate(giveback(30.0, 50.0)).is_ok());
+    assert!(validate(giveback(0.5, 50.0)).is_err());
+    assert!(validate(giveback(10_001.0, 50.0)).is_err());
+    assert!(validate(giveback(30.0, 4.0)).is_err());
+    assert!(validate(giveback(30.0, 101.0)).is_err());
+}
+
+// ==================== TokenAge ====================
+
+fn token_age(comparison: &str, time_value: f64, time_unit: &str) -> Condition {
+    condition(
+        "TokenAge",
+        &[
+            ("comparison", json!(comparison)),
+            ("time_value", json!(time_value)),
+            ("time_unit", json!(time_unit)),
+        ],
+    )
+}
+
+fn created_ago(age: chrono::Duration) -> EvaluationContext {
+    let mut ctx = market_context(None);
+    ctx.market_data
+        .as_mut()
+        .expect("market data")
+        .token_created_at = Some(common::anchor_time() - age);
+    ctx
+}
+
+#[tokio::test]
+async fn token_age_boundaries_split_older_from_younger() {
+    let ctx = created_ago(chrono::Duration::minutes(30));
+    assert!(
+        eval(
+            &TokenAgeCondition,
+            &token_age("OLDER_THAN", 30.0, "MINUTES"),
+            &ctx
+        )
+        .await
+    );
+    assert!(
+        !eval(
+            &TokenAgeCondition,
+            &token_age("OLDER_THAN", 31.0, "MINUTES"),
+            &ctx
+        )
+        .await
+    );
+    assert!(
+        !eval(
+            &TokenAgeCondition,
+            &token_age("YOUNGER_THAN", 30.0, "MINUTES"),
+            &ctx
+        )
+        .await
+    );
+    assert!(
+        eval(
+            &TokenAgeCondition,
+            &token_age("YOUNGER_THAN", 31.0, "MINUTES"),
+            &ctx
+        )
+        .await
+    );
+}
+
+#[tokio::test]
+async fn token_age_converts_hours_and_days() {
+    let two_hours = created_ago(chrono::Duration::hours(2));
+    assert!(
+        eval(
+            &TokenAgeCondition,
+            &token_age("OLDER_THAN", 2.0, "HOURS"),
+            &two_hours
+        )
+        .await
+    );
+    assert!(
+        !eval(
+            &TokenAgeCondition,
+            &token_age("OLDER_THAN", 121.0, "MINUTES"),
+            &two_hours
+        )
+        .await
+    );
+    let three_days = created_ago(chrono::Duration::days(3));
+    assert!(
+        eval(
+            &TokenAgeCondition,
+            &token_age("OLDER_THAN", 3.0, "DAYS"),
+            &three_days
+        )
+        .await
+    );
+    assert!(
+        eval(
+            &TokenAgeCondition,
+            &token_age("YOUNGER_THAN", 4.0, "DAYS"),
+            &three_days
+        )
+        .await
+    );
+    assert!(
+        !eval(
+            &TokenAgeCondition,
+            &token_age("OLDER_THAN", 73.0, "HOURS"),
+            &three_days
+        )
+        .await
+    );
+}
+
+#[tokio::test]
+async fn token_age_refuses_an_unknown_or_future_creation_time() {
+    let cond = token_age("OLDER_THAN", 30.0, "MINUTES");
+    let err = eval_err(&TokenAgeCondition, &cond, &market_context(None)).await;
+    assert!(
+        matches!(
+            err,
+            StrategyError::MissingContextData {
+                data: "token creation time"
+            }
+        ),
+        "unexpected error: {err}"
+    );
+    let err = eval_err(&TokenAgeCondition, &cond, &context_bare(Some(1.0))).await;
+    assert!(matches!(
+        err,
+        StrategyError::MissingContextData {
+            data: "market data"
+        }
+    ));
+    let err = eval_err(
+        &TokenAgeCondition,
+        &cond,
+        &created_ago(chrono::Duration::minutes(-5)),
+    )
+    .await;
+    assert!(
+        matches!(
+            err,
+            StrategyError::UnusableData {
+                field: "token creation time",
+                ..
+            }
+        ),
+        "unexpected error: {err}"
+    );
+    assert!(err.is_data_unavailable());
+}
+
+#[test]
+fn token_age_is_an_entry_condition_with_validated_bounds() {
+    assert_eq!(TokenAgeCondition.applies_to(), [StrategyType::Entry]);
+    let validate = |cond: Condition| TokenAgeCondition.validate(&cond);
+    assert!(validate(token_age("OLDER_THAN", 30.0, "DAYS")).is_ok());
+    assert!(validate(token_age("OLDER_THAN", 0.0, "MINUTES")).is_err());
+    assert!(validate(token_age("OLDER_THAN", 10_001.0, "MINUTES")).is_err());
+    assert!(validate(token_age("OLDER_THAN", 30.0, "SECONDS")).is_err());
+    assert!(validate(token_age("SAME_AS", 30.0, "MINUTES")).is_err());
+}
+
+// ==================== Vwap ====================
+
+fn vwap(lookback: i64, position: &str, distance_pct: f64) -> Condition {
+    condition(
+        "Vwap",
+        &[
+            ("lookback", json!(lookback)),
+            ("position", json!(position)),
+            ("distance_pct", json!(distance_pct)),
+        ],
+    )
+}
+
+/// Five candles with typical prices 9, 9, 9, 18, 18 and volumes 1, 1, 1, 1, 2: a VWAP of
+/// 81 / 6 = 13.5. `prefix` candles of a far price and volume come before them.
+fn vwap_series(prefix: usize, volume_scale: f64) -> Vec<screenerbot::ohlcvs::Candle> {
+    let mut rows: Vec<(f64, f64, f64, f64)> = vec![(1000.0, 1000.0, 1000.0, 1000.0); prefix];
+    rows.extend([
+        (12.0, 6.0, 9.0, 1.0),
+        (12.0, 6.0, 9.0, 1.0),
+        (12.0, 6.0, 9.0, 1.0),
+        (24.0, 12.0, 18.0, 1.0),
+        (24.0, 12.0, 18.0, 2.0),
+    ]);
+    let n = rows.len() as i64;
+    rows.into_iter()
+        .enumerate()
+        .map(|(i, (high, low, close, volume))| {
+            let ts = anchor_ts() - (n - 1 - i as i64) * MINUTE;
+            candle(ts, close, high, low, close, volume * volume_scale)
+        })
+        .collect()
+}
+
+fn vwap_context(price: f64, series: Vec<screenerbot::ohlcvs::Candle>) -> EvaluationContext {
+    context_with_candles(price, "1m", bundle_with("1m", series))
+}
+
+#[tokio::test]
+async fn vwap_matches_a_hand_computed_value() {
+    let at = vwap_context(13.5, vwap_series(0, 1.0));
+    assert!(eval(&VwapCondition, &vwap(5, "ABOVE", 0.0), &at).await);
+    assert!(eval(&VwapCondition, &vwap(5, "BELOW", 0.0), &at).await);
+    let under = vwap_context(13.4, vwap_series(0, 1.0));
+    assert!(!eval(&VwapCondition, &vwap(5, "ABOVE", 0.0), &under).await);
+    assert!(eval(&VwapCondition, &vwap(5, "BELOW", 0.0), &under).await);
+}
+
+#[tokio::test]
+async fn vwap_distance_and_window() {
+    // 10% above 13.5 is 14.85.
+    assert!(
+        eval(
+            &VwapCondition,
+            &vwap(5, "ABOVE", 10.0),
+            &vwap_context(15.0, vwap_series(0, 1.0))
+        )
+        .await
+    );
+    assert!(
+        !eval(
+            &VwapCondition,
+            &vwap(5, "ABOVE", 10.0),
+            &vwap_context(14.8, vwap_series(0, 1.0))
+        )
+        .await
+    );
+    // Candles before the lookback do not move the average.
+    assert!(
+        eval(
+            &VwapCondition,
+            &vwap(5, "ABOVE", 0.0),
+            &vwap_context(13.5, vwap_series(3, 1.0))
+        )
+        .await
+    );
+}
+
+#[tokio::test]
+async fn vwap_refuses_no_volume_or_too_few_candles() {
+    let err = eval_err(
+        &VwapCondition,
+        &vwap(5, "ABOVE", 0.0),
+        &vwap_context(13.5, vwap_series(0, 0.0)),
+    )
+    .await;
+    assert!(
+        matches!(
+            err,
+            StrategyError::UnusableData {
+                field: "total volume",
+                ..
+            }
+        ),
+        "unexpected error: {err}"
+    );
+    assert!(err.is_data_unavailable());
+    let err = eval_err(
+        &VwapCondition,
+        &vwap(6, "ABOVE", 0.0),
+        &vwap_context(13.5, vwap_series(0, 1.0)),
+    )
+    .await;
+    assert!(
+        matches!(
+            err,
+            StrategyError::InsufficientCandles {
+                indicator: "vwap",
+                available: 5,
+                required: 6,
+            }
+        ),
+        "unexpected error: {err}"
+    );
+}
+
+#[test]
+fn vwap_validation_bounds() {
+    let validate = |cond: Condition| VwapCondition.validate(&cond);
+    assert!(validate(vwap(30, "ABOVE", 0.0)).is_ok());
+    assert!(validate(vwap(4, "ABOVE", 0.0)).is_err());
+    assert!(validate(vwap(100, "ABOVE", 0.0)).is_ok());
+    assert!(validate(vwap(101, "ABOVE", 0.0)).is_err());
+    assert!(validate(vwap(30, "ABOVE", 101.0)).is_err());
+    assert!(validate(vwap(30, "WITHIN", 1.0)).is_err());
+}
+
+// ==================== VolatilityRange ====================
+
+fn volatility(period: i64, comparison: &str, threshold_pct: f64) -> Condition {
+    condition(
+        "VolatilityRange",
+        &[
+            ("period", json!(period)),
+            ("comparison", json!(comparison)),
+            ("threshold_pct", json!(threshold_pct)),
+        ],
+    )
+}
+
+/// `count` one-minute candles, each ranging 9 to 11 and closing at 10: a true range of 2.
+fn steady_range(count: usize) -> Vec<screenerbot::ohlcvs::Candle> {
+    (0..count)
+        .map(|i| {
+            let ts = anchor_ts() - (count - 1 - i) as i64 * MINUTE;
+            candle(ts, 10.0, 11.0, 9.0, 10.0, 1.0)
+        })
+        .collect()
+}
+
+#[tokio::test]
+async fn volatility_range_is_the_true_range_as_a_share_of_the_price() {
+    // An ATR of 2 against a price of 8 is 25%.
+    let ctx = context_with_candles(8.0, "1m", bundle_with("1m", steady_range(15)));
+    assert!(
+        eval(
+            &VolatilityRangeCondition,
+            &volatility(14, "ABOVE", 25.0),
+            &ctx
+        )
+        .await
+    );
+    assert!(
+        !eval(
+            &VolatilityRangeCondition,
+            &volatility(14, "ABOVE", 25.5),
+            &ctx
+        )
+        .await
+    );
+    assert!(
+        eval(
+            &VolatilityRangeCondition,
+            &volatility(14, "BELOW", 25.0),
+            &ctx
+        )
+        .await
+    );
+    assert!(
+        !eval(
+            &VolatilityRangeCondition,
+            &volatility(14, "BELOW", 24.5),
+            &ctx
+        )
+        .await
+    );
+}
+
+#[tokio::test]
+async fn volatility_range_counts_a_gap_from_the_previous_close() {
+    // Ranges are 2 wide, but each candle opens 4 above the last close: a true range of 5.
+    let candles: Vec<_> = (0..4)
+        .map(|i| {
+            let base = 10.0 + 4.0 * f64::from(i);
+            let ts = anchor_ts() - (3 - i64::from(i)) * MINUTE;
+            candle(ts, base, base + 1.0, base - 1.0, base, 1.0)
+        })
+        .collect();
+    let ctx = context_with_candles(10.0, "1m", bundle_with("1m", candles));
+    assert!(
+        eval(
+            &VolatilityRangeCondition,
+            &volatility(3, "ABOVE", 50.0),
+            &ctx
+        )
+        .await
+    );
+}
+
+#[tokio::test]
+async fn volatility_range_needs_one_more_candle_than_its_period() {
+    let ctx = context_with_candles(8.0, "1m", bundle_with("1m", steady_range(14)));
+    let err = eval_err(
+        &VolatilityRangeCondition,
+        &volatility(14, "ABOVE", 5.0),
+        &ctx,
+    )
+    .await;
+    assert!(
+        matches!(
+            err,
+            StrategyError::InsufficientCandles {
+                indicator: "volatility range",
+                available: 14,
+                required: 15,
+            }
+        ),
+        "unexpected error: {err}"
+    );
+}
+
+#[test]
+fn volatility_range_validation_bounds() {
+    let validate = |cond: Condition| VolatilityRangeCondition.validate(&cond);
+    assert!(validate(volatility(14, "ABOVE", 5.0)).is_ok());
+    assert!(validate(volatility(1, "ABOVE", 5.0)).is_err());
+    assert!(validate(volatility(99, "ABOVE", 5.0)).is_ok());
+    assert!(validate(volatility(100, "ABOVE", 5.0)).is_err());
+    assert!(validate(volatility(14, "ABOVE", 0.05)).is_err());
+    assert!(validate(volatility(14, "ABOVE", 501.0)).is_err());
+}
+
+// ==================== BollingerBands ====================
+
+fn bands(period: i64, std_dev: f64, signal: &str, squeeze_width_pct: f64) -> Condition {
+    condition(
+        "BollingerBands",
+        &[
+            ("period", json!(period)),
+            ("std_dev", json!(std_dev)),
+            ("signal", json!(signal)),
+            ("squeeze_width_pct", json!(squeeze_width_pct)),
+        ],
+    )
+}
+
+/// Closes with an average of 5 and a population deviation of 2: bands at 1 and 9 for two
+/// deviations.
+fn bands_context(price: f64) -> EvaluationContext {
+    closes_at(price, &[2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0])
+}
+
+fn closes_at(price: f64, closes: &[f64]) -> EvaluationContext {
+    context_with_candles(
+        price,
+        "1m",
+        bundle_with("1m", candle_series(anchor_ts(), MINUTE, closes)),
+    )
+}
+
+#[tokio::test]
+async fn bollinger_signals_compare_the_price_with_the_bands() {
+    let below = bands(8, 2.0, "BELOW_LOWER", 10.0);
+    let above = bands(8, 2.0, "ABOVE_UPPER", 10.0);
+    assert!(eval(&BollingerBandsCondition, &below, &bands_context(1.0)).await);
+    assert!(!eval(&BollingerBandsCondition, &below, &bands_context(1.01)).await);
+    assert!(eval(&BollingerBandsCondition, &above, &bands_context(9.0)).await);
+    assert!(!eval(&BollingerBandsCondition, &above, &bands_context(8.99)).await);
+}
+
+#[tokio::test]
+async fn bollinger_squeeze_reads_the_band_width() {
+    // Bands 1..9 around 5 are 160% wide; a flat series has no width at all.
+    assert!(
+        !eval(
+            &BollingerBandsCondition,
+            &bands(8, 2.0, "SQUEEZE", 100.0),
+            &bands_context(5.0)
+        )
+        .await
+    );
+    assert!(
+        eval(
+            &BollingerBandsCondition,
+            &bands(8, 1.0, "SQUEEZE", 80.0),
+            &bands_context(5.0)
+        )
+        .await
+    );
+    let flat = closes_at(5.0, &[5.0; 8]);
+    assert!(
+        eval(
+            &BollingerBandsCondition,
+            &bands(8, 2.0, "SQUEEZE", 0.5),
+            &flat
+        )
+        .await
+    );
+}
+
+#[tokio::test]
+async fn bollinger_refuses_a_zero_average_or_a_short_series() {
+    let zero = closes_at(1.0, &[0.0; 8]);
+    let err = eval_err(
+        &BollingerBandsCondition,
+        &bands(8, 2.0, "SQUEEZE", 10.0),
+        &zero,
+    )
+    .await;
+    assert!(
+        matches!(
+            err,
+            StrategyError::UnusableData {
+                field: "moving average",
+                ..
+            }
+        ),
+        "unexpected error: {err}"
+    );
+    let err = eval_err(
+        &BollingerBandsCondition,
+        &bands(20, 2.0, "BELOW_LOWER", 10.0),
+        &bands_context(1.0),
+    )
+    .await;
+    assert!(
+        matches!(
+            err,
+            StrategyError::InsufficientCandles {
+                indicator: "bollinger bands",
+                available: 8,
+                required: 20,
+            }
+        ),
+        "unexpected error: {err}"
+    );
+}
+
+#[test]
+fn bollinger_validation_bounds() {
+    let validate = |cond: Condition| BollingerBandsCondition.validate(&cond);
+    assert!(validate(bands(20, 2.0, "BELOW_LOWER", 10.0)).is_ok());
+    assert!(validate(bands(4, 2.0, "BELOW_LOWER", 10.0)).is_err());
+    assert!(validate(bands(100, 2.0, "BELOW_LOWER", 10.0)).is_ok());
+    assert!(validate(bands(101, 2.0, "BELOW_LOWER", 10.0)).is_err());
+    assert!(validate(bands(20, 0.4, "BELOW_LOWER", 10.0)).is_err());
+    assert!(validate(bands(20, 5.1, "BELOW_LOWER", 10.0)).is_err());
+    assert!(validate(bands(20, 2.0, "INSIDE", 10.0)).is_err());
+    assert!(validate(bands(20, 2.0, "SQUEEZE", 0.4)).is_err());
+}
+
+// ==================== LiquidityToSize ====================
+
+fn liquidity_to_size(comparison: &str, multiple: f64) -> Condition {
+    condition(
+        "LiquidityToSize",
+        &[
+            ("comparison", json!(comparison)),
+            ("multiple", json!(multiple)),
+        ],
+    )
+}
+
+/// An entry context: 100 in the pool, a configured trade size of 2.
+fn entry_sizing(liquidity: Option<f64>, size: Option<f64>) -> EvaluationContext {
+    let mut ctx = market_context(liquidity);
+    ctx.market_data
+        .as_mut()
+        .expect("market data")
+        .reference_size_native = size;
+    ctx
+}
+
+/// An exit context: 100 in the pool, a position whose remaining tokens are worth `value`.
+fn exit_sizing(value: Option<f64>) -> EvaluationContext {
+    let mut ctx = market_context(Some(100.0));
+    ctx.position_data = position_context(1.0).position_data;
+    ctx.position_data
+        .as_mut()
+        .expect("position")
+        .remaining_value_native = value;
+    ctx
+}
+
+#[tokio::test]
+async fn liquidity_to_size_on_entry_uses_the_trade_size() {
+    let ctx = entry_sizing(Some(100.0), Some(2.0));
+    assert!(
+        eval(
+            &LiquidityToSizeCondition,
+            &liquidity_to_size("AT_LEAST", 50.0),
+            &ctx
+        )
+        .await
+    );
+    assert!(
+        !eval(
+            &LiquidityToSizeCondition,
+            &liquidity_to_size("AT_LEAST", 51.0),
+            &ctx
+        )
+        .await
+    );
+    assert!(
+        eval(
+            &LiquidityToSizeCondition,
+            &liquidity_to_size("BELOW", 51.0),
+            &ctx
+        )
+        .await
+    );
+    assert!(
+        !eval(
+            &LiquidityToSizeCondition,
+            &liquidity_to_size("BELOW", 50.0),
+            &ctx
+        )
+        .await
+    );
+}
+
+#[tokio::test]
+async fn liquidity_to_size_on_exit_uses_the_value_still_held() {
+    // After a partial sale the position is worth 4: a multiple of 25, whatever trade size
+    // an entry would spend.
+    let mut ctx = exit_sizing(Some(4.0));
+    ctx.market_data
+        .as_mut()
+        .expect("market data")
+        .reference_size_native = Some(1.0);
+    assert!(
+        eval(
+            &LiquidityToSizeCondition,
+            &liquidity_to_size("AT_LEAST", 25.0),
+            &ctx
+        )
+        .await
+    );
+    assert!(
+        !eval(
+            &LiquidityToSizeCondition,
+            &liquidity_to_size("AT_LEAST", 26.0),
+            &ctx
+        )
+        .await
+    );
+}
+
+#[tokio::test]
+async fn liquidity_to_size_refuses_unknown_inputs() {
+    let cond = liquidity_to_size("AT_LEAST", 50.0);
+    for (ctx, data) in [
+        (entry_sizing(None, Some(2.0)), "liquidity data"),
+        (entry_sizing(Some(100.0), None), "trade size"),
+        (exit_sizing(None), "remaining position value"),
+        (context_bare(Some(1.0)), "market data"),
+    ] {
+        let err = eval_err(&LiquidityToSizeCondition, &cond, &ctx).await;
+        assert!(
+            matches!(&err, StrategyError::MissingContextData { data: missing } if *missing == data),
+            "{data}: unexpected error: {err}"
+        );
+    }
+    let err = eval_err(
+        &LiquidityToSizeCondition,
+        &cond,
+        &entry_sizing(Some(100.0), Some(0.0)),
+    )
+    .await;
+    assert!(
+        matches!(
+            err,
+            StrategyError::UnusableData {
+                field: "trade size",
+                ..
+            }
+        ),
+        "unexpected error: {err}"
+    );
+}
+
+#[test]
+fn liquidity_to_size_validation_bounds() {
+    let validate = |cond: Condition| LiquidityToSizeCondition.validate(&cond);
+    assert!(validate(liquidity_to_size("AT_LEAST", 50.0)).is_ok());
+    assert!(validate(liquidity_to_size("AT_LEAST", 0.5)).is_err());
+    assert!(validate(liquidity_to_size("AT_LEAST", 10_001.0)).is_err());
+    assert!(validate(liquidity_to_size("ABOVE", 50.0)).is_err());
+}
+
+// ==================== PositionAdds ====================
+
+fn adds(subject: &str, comparison: &str, count: i64) -> Condition {
+    condition(
+        "PositionAdds",
+        &[
+            ("subject", json!(subject)),
+            ("comparison", json!(comparison)),
+            ("count", json!(count)),
+        ],
+    )
+}
+
+fn booked(dca_count: u32, partial_exit_count: u32) -> EvaluationContext {
+    let mut ctx = position_context(1.0);
+    let position = ctx.position_data.as_mut().expect("position");
+    position.dca_count = dca_count;
+    position.partial_exit_count = partial_exit_count;
+    ctx
+}
+
+#[tokio::test]
+async fn position_adds_counts_each_subject_inclusively() {
+    let ctx = booked(2, 1);
+    assert!(eval(&PositionAddsCondition, &adds("ADDS", "AT_LEAST", 2), &ctx).await);
+    assert!(!eval(&PositionAddsCondition, &adds("ADDS", "AT_LEAST", 3), &ctx).await);
+    assert!(eval(&PositionAddsCondition, &adds("ADDS", "AT_MOST", 2), &ctx).await);
+    assert!(!eval(&PositionAddsCondition, &adds("ADDS", "AT_MOST", 1), &ctx).await);
+    assert!(
+        eval(
+            &PositionAddsCondition,
+            &adds("PARTIAL_SELLS", "AT_LEAST", 1),
+            &ctx
+        )
+        .await
+    );
+    assert!(
+        !eval(
+            &PositionAddsCondition,
+            &adds("PARTIAL_SELLS", "AT_LEAST", 2),
+            &ctx
+        )
+        .await
+    );
+    assert!(
+        eval(
+            &PositionAddsCondition,
+            &adds("ADDS", "AT_MOST", 0),
+            &booked(0, 3)
+        )
+        .await
+    );
+}
+
+#[tokio::test]
+async fn position_adds_without_a_position_errors() {
+    let err = eval_err(
+        &PositionAddsCondition,
+        &adds("ADDS", "AT_LEAST", 1),
+        &context_bare(Some(1.0)),
+    )
+    .await;
+    assert!(matches!(
+        err,
+        StrategyError::MissingContextData {
+            data: "position data"
+        }
+    ));
+}
+
+#[test]
+fn position_adds_validation_bounds() {
+    let validate = |cond: Condition| PositionAddsCondition.validate(&cond);
+    assert!(validate(adds("ADDS", "AT_LEAST", 0)).is_ok());
+    assert!(validate(adds("ADDS", "AT_LEAST", 21)).is_err());
+    assert!(validate(adds("FILLS", "AT_LEAST", 1)).is_err());
+    assert!(validate(adds("ADDS", "ABOVE", 1)).is_err());
+}
+
+// ==================== TimeOfDay ====================
+
+fn hours(start_hour: f64, end_hour: f64) -> Condition {
+    condition(
+        "TimeOfDay",
+        &[
+            ("start_hour", json!(start_hour)),
+            ("end_hour", json!(end_hour)),
+        ],
+    )
+}
+
+/// A context evaluated `hour` hours and 30 minutes after a UTC midnight.
+fn at_hour(hour: i64) -> EvaluationContext {
+    let mut ctx = context_bare(Some(1.0));
+    ctx.evaluated_at =
+        common::anchor_time() + chrono::Duration::hours(hour) + chrono::Duration::minutes(30);
+    ctx
+}
+
+#[tokio::test]
+async fn time_of_day_window_includes_its_start_and_excludes_its_end() {
+    let cond = hours(13.0, 22.0);
+    for (hour, inside) in [(12, false), (13, true), (21, true), (22, false), (0, false)] {
+        assert_eq!(
+            eval(&TimeOfDayCondition, &cond, &at_hour(hour)).await,
+            inside,
+            "hour {hour}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn time_of_day_window_wraps_past_midnight() {
+    let cond = hours(22.0, 2.0);
+    for (hour, inside) in [
+        (21, false),
+        (22, true),
+        (23, true),
+        (0, true),
+        (1, true),
+        (2, false),
+    ] {
+        assert_eq!(
+            eval(&TimeOfDayCondition, &cond, &at_hour(hour)).await,
+            inside,
+            "hour {hour}"
+        );
+    }
+    let whole_day = hours(0.0, 24.0);
+    for hour in 0..24 {
+        assert!(
+            eval(&TimeOfDayCondition, &whole_day, &at_hour(hour)).await,
+            "hour {hour}"
+        );
+    }
+}
+
+#[test]
+fn time_of_day_validation_bounds() {
+    let validate = |cond: Condition| TimeOfDayCondition.validate(&cond);
+    assert!(validate(hours(13.0, 22.0)).is_ok());
+    assert!(matches!(
+        validate(hours(13.0, 13.0)),
+        Err(StrategyError::InvalidConditionValue {
+            field: "end hour",
+            ..
+        })
+    ));
+    assert!(validate(hours(13.5, 22.0)).is_err());
+    assert!(validate(hours(24.0, 2.0)).is_err());
+    assert!(validate(hours(13.0, 0.0)).is_err());
+    assert!(validate(hours(13.0, 25.0)).is_err());
+}
+
+// ==================== LiquidityChangeSinceEntry ====================
+
+fn liquidity_change(comparison: &str, change_pct: f64) -> Condition {
+    condition(
+        "LiquidityChangeSinceEntry",
+        &[
+            ("comparison", json!(comparison)),
+            ("change_pct", json!(change_pct)),
+        ],
+    )
+}
+
+const ENTRY_POOL: &str = "entry-pool";
+
+/// A position that entered with `entry` in `ENTRY_POOL`, whose live price now comes from
+/// the same pool, holding `now` real reserves.
+fn liquidity_since(entry: Option<f64>, now: Option<f64>) -> EvaluationContext {
+    let mut ctx = market_context(now);
+    ctx.market_data.as_mut().expect("market").liquidity_pool = Some(LiquidityPool {
+        address: ENTRY_POOL.to_owned(),
+        virtual_reserves: Some(false),
+    });
+    ctx.position_data = position_context(1.0).position_data;
+    let position = ctx.position_data.as_mut().expect("position");
+    position.entry_liquidity_native = entry;
+    position.entry_liquidity_pool = entry.map(|_| ENTRY_POOL.to_owned());
+    ctx
+}
+
+fn live_pool(ctx: &mut EvaluationContext) -> &mut LiquidityPool {
+    ctx.market_data
+        .as_mut()
+        .and_then(|market| market.liquidity_pool.as_mut())
+        .expect("live pool")
+}
+
+#[tokio::test]
+async fn liquidity_change_measures_both_directions_from_the_entry() {
+    let drained = liquidity_since(Some(64.0), Some(48.0));
+    let cond = |comparison, pct| liquidity_change(comparison, pct);
+    assert!(
+        eval(
+            &LiquidityChangeSinceEntryCondition,
+            &cond("DROPPED_BY", 25.0),
+            &drained
+        )
+        .await
+    );
+    assert!(
+        !eval(
+            &LiquidityChangeSinceEntryCondition,
+            &cond("DROPPED_BY", 26.0),
+            &drained
+        )
+        .await
+    );
+    assert!(
+        !eval(
+            &LiquidityChangeSinceEntryCondition,
+            &cond("ROSE_BY", 25.0),
+            &drained
+        )
+        .await
+    );
+    let deepened = liquidity_since(Some(64.0), Some(80.0));
+    assert!(
+        eval(
+            &LiquidityChangeSinceEntryCondition,
+            &cond("ROSE_BY", 25.0),
+            &deepened
+        )
+        .await
+    );
+    assert!(
+        !eval(
+            &LiquidityChangeSinceEntryCondition,
+            &cond("DROPPED_BY", 1.0),
+            &deepened
+        )
+        .await
+    );
+}
+
+#[tokio::test]
+async fn liquidity_change_of_a_row_without_an_entry_reading_is_unknown() {
+    // Rows opened before the reading was recorded, imported or adopted.
+    let cond = liquidity_change("DROPPED_BY", 30.0);
+    let err = eval_err(
+        &LiquidityChangeSinceEntryCondition,
+        &cond,
+        &liquidity_since(None, Some(48.0)),
+    )
+    .await;
+    assert!(
+        matches!(
+            err,
+            StrategyError::MissingContextData {
+                data: "entry liquidity"
+            }
+        ),
+        "unexpected error: {err}"
+    );
+    assert!(err.is_data_unavailable());
+    let err = eval_err(
+        &LiquidityChangeSinceEntryCondition,
+        &cond,
+        &liquidity_since(Some(64.0), None),
+    )
+    .await;
+    assert!(matches!(
+        err,
+        StrategyError::MissingContextData {
+            data: "liquidity data"
+        }
+    ));
+    let err = eval_err(
+        &LiquidityChangeSinceEntryCondition,
+        &cond,
+        &market_context(Some(48.0)),
+    )
+    .await;
+    assert!(matches!(
+        err,
+        StrategyError::MissingContextData {
+            data: "position data"
+        }
+    ));
+}
+
+#[test]
+fn liquidity_change_validation_bounds() {
+    let validate = |cond: Condition| LiquidityChangeSinceEntryCondition.validate(&cond);
+    assert!(validate(liquidity_change("DROPPED_BY", 30.0)).is_ok());
+    assert!(validate(liquidity_change("DROPPED_BY", 0.5)).is_err());
+    assert!(validate(liquidity_change("DROPPED_BY", 101.0)).is_err());
+    assert!(validate(liquidity_change("FELL", 30.0)).is_err());
+}
+
+#[test]
+fn position_conditions_apply_to_exit_strategies_only() {
+    for evaluator in [
+        &ProfitGivebackCondition as &dyn ConditionEvaluator,
+        &PositionAddsCondition,
+        &LiquidityChangeSinceEntryCondition,
+    ] {
+        assert_eq!(
+            evaluator.applies_to(),
+            [StrategyType::Exit],
+            "{}",
+            evaluator.condition_type()
+        );
+    }
+}
+
 // ==================== PARAMETER PLUMBING ====================
 
 #[tokio::test]
@@ -1671,4 +3117,98 @@ fn every_condition_reports_the_type_name_it_is_registered_under() {
         "DrawdownFromPeak"
     );
     assert_eq!(BuyPressureCondition.condition_type(), "BuyPressure");
+    assert_eq!(
+        TransactionVelocityCondition.condition_type(),
+        "TransactionVelocity"
+    );
+    assert_eq!(
+        PullbackFromHighCondition.condition_type(),
+        "PullbackFromHigh"
+    );
+    assert_eq!(ProfitGivebackCondition.condition_type(), "ProfitGiveback");
+    assert_eq!(TokenAgeCondition.condition_type(), "TokenAge");
+    assert_eq!(VwapCondition.condition_type(), "Vwap");
+    assert_eq!(VolatilityRangeCondition.condition_type(), "VolatilityRange");
+    assert_eq!(BollingerBandsCondition.condition_type(), "BollingerBands");
+    assert_eq!(LiquidityToSizeCondition.condition_type(), "LiquidityToSize");
+    assert_eq!(PositionAddsCondition.condition_type(), "PositionAdds");
+    assert_eq!(TimeOfDayCondition.condition_type(), "TimeOfDay");
+    assert_eq!(
+        LiquidityChangeSinceEntryCondition.condition_type(),
+        "LiquidityChangeSinceEntry"
+    );
+}
+
+/// Every candle-count parameter of every registered condition, with the candles its
+/// evaluation reads beyond the parameter's own value at the other parameters' maxima.
+const CANDLE_WINDOW_PARAMETERS: &[(&str, &str, usize)] = &[
+    ("BollingerBands", "period", 0),
+    ("ConsecutiveCandles", "count", 0),
+    ("MaCross", "fast_period", 0),
+    ("MaCross", "slow_period", 20),
+    ("MaCross", "within_candles", 200),
+    ("PriceBreakout", "lookback", 1),
+    ("PriceToMA", "period", 0),
+    ("PullbackFromHigh", "lookback", 0),
+    ("Rsi", "period", 1),
+    ("VolatilityRange", "period", 1),
+    ("VolumeSpike", "lookback", 1),
+    ("Vwap", "lookback", 0),
+];
+
+/// Windows that can still ask for more candles than the strategy bundle holds. Stored
+/// strategies may hold those values, so each needs its own decision; the list only
+/// shrinks.
+const CANDLE_WINDOWS_ABOVE_THE_BUNDLE: &[(&str, &str)] = &[
+    ("MaCross", "slow_period"),
+    ("MaCross", "within_candles"),
+    ("PriceBreakout", "lookback"),
+    ("PriceToMA", "period"),
+    ("Rsi", "period"),
+    ("VolumeSpike", "lookback"),
+];
+
+#[test]
+fn no_condition_window_asks_for_more_candles_than_the_bundle_holds() {
+    let schemas = screenerbot::strategies::conditions::ConditionRegistry::new().get_all_schemas();
+    let bundle = screenerbot::ohlcvs::BUNDLE_CANDLE_COUNT;
+    let mut listed: Vec<(String, String)> = Vec::new();
+    for (condition, schema) in schemas.as_object().expect("schemas are an object") {
+        for (parameter, spec) in schema["parameters"]
+            .as_object()
+            .expect("parameters are an object")
+        {
+            if spec["unit"] == "candles" {
+                listed.push((condition.clone(), parameter.clone()));
+            }
+        }
+    }
+    listed.sort();
+    let mut known: Vec<(String, String)> = CANDLE_WINDOW_PARAMETERS
+        .iter()
+        .map(|(condition, parameter, _)| ((*condition).to_owned(), (*parameter).to_owned()))
+        .collect();
+    known.sort();
+    assert_eq!(
+        listed, known,
+        "every candle-count parameter is listed with the candles it reads"
+    );
+
+    for &(condition, parameter, extra) in CANDLE_WINDOW_PARAMETERS {
+        let max = schemas[condition]["parameters"][parameter]["max"]
+            .as_u64()
+            .unwrap_or_else(|| panic!("{condition}.{parameter} has a whole maximum"))
+            as usize;
+        let fits = max + extra <= bundle;
+        let allowed = CANDLE_WINDOWS_ABOVE_THE_BUNDLE.contains(&(condition, parameter));
+        assert!(
+            fits || allowed,
+            "{condition}.{parameter} reads up to {} candles; the bundle holds {bundle}",
+            max + extra
+        );
+        assert!(
+            !(fits && allowed),
+            "{condition}.{parameter} now fits the bundle: remove it from the allowlist"
+        );
+    }
 }

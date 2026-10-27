@@ -8,6 +8,7 @@ use std::sync::Arc;
 
 use chrono::{TimeZone, Utc};
 use screenerbot::chains::ChainId;
+use screenerbot::config::TraderConfig;
 use screenerbot::positions::{PositionManagement, PositionOrigin};
 use screenerbot::trader::admission::EntryBlock;
 use screenerbot::trader::copy::{
@@ -15,8 +16,14 @@ use screenerbot::trader::copy::{
     CopyMode, CopyOutcome, CopySkip, CopyTask, CopyTaskInput, ExitMode, LiveSubmitResult,
     PipelinePolicy, RiskContext, SizingMode, SpendState, LIVE_ARM_CONFIRMATION,
 };
+use screenerbot::trader::policy::ExitPolicy;
 use screenerbot::trader::TradeResult;
 use screenerbot::wallets::watch::{ActivityKind, SwapSide, WalletActivity, WatchSource};
+
+/// The exit policy of a default trader config, the base copy overrides are checked over.
+fn default_exit_policy() -> ExitPolicy {
+    ExitPolicy::from_trader_config(&TraderConfig::default())
+}
 
 fn task(exit_mode: ExitMode) -> CopyTask {
     let now = Utc.timestamp_opt(10, 0).unwrap();
@@ -119,15 +126,27 @@ fn live_arming_requires_the_dedicated_confirmation_and_crud_cannot_bypass_it() {
         Ok(CopyMode::Live)
     );
     assert_eq!(
-        input(CopyMode::Live).into_task(ChainId::Solana, Utc::now()),
+        input(CopyMode::Live).into_task(ChainId::Solana, Utc::now(), default_exit_policy()),
         Err(CopySkip::ModeTransitionRequired)
     );
     assert_eq!(
-        input(CopyMode::Live).into_task_for_update(ChainId::Solana, Utc::now(), CopyMode::Paper),
+        input(CopyMode::Live).into_task_for_update(
+            ChainId::Solana,
+            Utc::now(),
+            CopyMode::Paper,
+            &Default::default(),
+            default_exit_policy()
+        ),
         Err(CopySkip::ModeTransitionRequired)
     );
     assert!(input(CopyMode::Live)
-        .into_task_for_update(ChainId::Solana, Utc::now(), CopyMode::Live)
+        .into_task_for_update(
+            ChainId::Solana,
+            Utc::now(),
+            CopyMode::Live,
+            &Default::default(),
+            default_exit_policy()
+        )
         .is_ok());
 }
 

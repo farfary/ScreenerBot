@@ -13,7 +13,7 @@
  * empty state), and feeds entry/exit markers to the chart.
  */
 import * as Utils from "../../core/utils.js";
-import { formatPercentValue, withSolUnit } from "../../core/format.js";
+import { formatPercentValue, formatUptime, withSolUnit } from "../../core/format.js";
 import { requestManager } from "../../core/request_manager.js";
 import { renderStateView } from "../state_view.js";
 import { POSITION_MANAGEMENT_LABELS } from "../position_management.js";
@@ -89,8 +89,6 @@ export function applyPositionsTabMixin(DialogClass) {
     }
 
     // Feed chart markers (entry/exit points) so the Overview chart can draw them.
-    // NOTE: profit_target_min/max are PERCENTAGES, not prices, so they are not
-    // passed as horizontal price lines (that would draw lines at 5/20 SOL).
     this.positionsData = {
       entries: Array.isArray(data.entries) ? data.entries : [],
       exits: Array.isArray(data.exits) ? data.exits : [],
@@ -192,16 +190,12 @@ function renderPositionSummary(position) {
     }
   }
 
-  const hasTargets = position.profit_target_min != null || position.profit_target_max != null;
   const hasExtremes = position.price_highest != null || position.price_lowest != null;
-  const rangeSection =
-    hasTargets || hasExtremes
-      ? `
+  const rangeSection = hasExtremes
+    ? `
       <section class="position-section">
         <div class="position-section-heading">${escapeText(I18n.t("tokens-positions-section-range"))}</div>
         <div class="position-facts">
-          ${renderPositionFact(I18n.t("tokens-positions-fact-target-min"), fmtPct(position.profit_target_min))}
-          ${renderPositionFact(I18n.t("tokens-positions-fact-target-max"), fmtPct(position.profit_target_max))}
           ${renderPositionFact(I18n.t("tokens-positions-fact-highest"), fmtPrice(position.price_highest))}
           ${
             position.peak_since_last_buy != null
@@ -211,7 +205,7 @@ function renderPositionSummary(position) {
           ${renderPositionFact(I18n.t("tokens-positions-fact-lowest"), fmtPrice(position.price_lowest))}
         </div>
       </section>`
-      : "";
+    : "";
 
   return `
     <div class="positions-tab-content">
@@ -247,10 +241,93 @@ function renderPositionSummary(position) {
           </div>
         </section>
 
+        ${renderExitPlan(position.exit_plan)}
         ${rangeSection}
       </div>
     </div>
   `;
+}
+
+/**
+ * Every exit rule the exit monitor applies to the position, as its resolved policy
+ * switches them on (`exit_plan` from the position details route): the stop loss, each
+ * take-profit step (a step this round already sold reads as Sold), the trailing stop
+ * and its bands, the break-even stop, the losing-time exit and the flat-position exit.
+ * A rule that is off is not listed. Absent where the monitor evaluates no policy exit
+ * (a closed, archived or user-managed position).
+ */
+export function renderExitPlan(plan) {
+  if (!plan) return "";
+  const facts = [];
+  const fact = (label, value) => facts.push(renderPositionFact(label, escapeText(value)));
+  if (plan.stop_loss_pct != null) {
+    fact(I18n.t("tokens-positions-plan-stop-loss"), fmtPct(-plan.stop_loss_pct));
+  }
+  plan.take_profit_steps.forEach((step, index) => {
+    fact(
+      I18n.t("tokens-positions-plan-step", { step: index + 1 }),
+      step.taken
+        ? I18n.t("tokens-positions-plan-step-taken")
+        : I18n.t("tokens-positions-plan-step-value", {
+            profit: fmtPct(step.profit_pct),
+            share: fmtShare(step.sell_pct, 0),
+          })
+    );
+  });
+  const trailing = plan.trailing_stop;
+  if (trailing) {
+    fact(
+      I18n.t("tokens-positions-plan-trailing"),
+      I18n.t("tokens-positions-plan-trailing-value", {
+        activation: fmtPct(trailing.activation_pct),
+        distance: fmtShare(trailing.distance_pct, 1),
+      })
+    );
+    trailing.bands.forEach((band, index) => {
+      fact(
+        I18n.t("tokens-positions-plan-trailing-band", { step: index + 1 }),
+        I18n.t("tokens-positions-plan-trailing-band-value", {
+          profit: fmtPct(band.profit_pct),
+          distance: fmtShare(band.distance_pct, 1),
+        })
+      );
+    });
+  }
+  if (plan.break_even) {
+    fact(
+      I18n.t("tokens-positions-plan-break-even"),
+      I18n.t("tokens-positions-plan-break-even-value", {
+        trigger: fmtPct(plan.break_even.trigger_pct),
+        offset: fmtPct(plan.break_even.offset_pct),
+      })
+    );
+  }
+  if (plan.time_loss) {
+    fact(
+      I18n.t("tokens-positions-plan-time-loss"),
+      I18n.t("tokens-positions-plan-time-loss-value", {
+        duration: formatUptime(plan.time_loss.duration_seconds, { style: "trimmed" }),
+        threshold: fmtPct(plan.time_loss.loss_threshold_pct),
+      })
+    );
+  }
+  if (plan.time_stagnation) {
+    fact(
+      I18n.t("tokens-positions-plan-time-stagnation"),
+      I18n.t("tokens-positions-plan-time-stagnation-value", {
+        duration: formatUptime(plan.time_stagnation.duration_seconds, { style: "trimmed" }),
+        band: fmtShare(plan.time_stagnation.band_pct, 1),
+      })
+    );
+  }
+  const body = facts.length
+    ? `<div class="position-facts">${facts.join("")}</div>`
+    : `<p class="position-section-note">${escapeText(I18n.t("tokens-positions-plan-none"))}</p>`;
+  return `
+    <section class="position-section">
+      <div class="position-section-heading">${escapeText(I18n.t("tokens-positions-section-exit-plan"))}</div>
+      ${body}
+    </section>`;
 }
 
 // ---- formatting helpers -----------------------------------------------------
@@ -295,6 +372,11 @@ function fmtSol(value) {
 function fmtPct(value) {
   if (value === null || value === undefined || !Number.isFinite(Number(value))) return "—";
   return formatPercentValue(value, { decimals: 1, signZero: true });
+}
+
+/** An unsigned share or distance in percent ("60%", "6.5%"). */
+function fmtShare(value, decimals) {
+  return formatPercentValue(value, { decimals, includeSign: false, trim: true });
 }
 
 function fmtPnl(sol, pct) {

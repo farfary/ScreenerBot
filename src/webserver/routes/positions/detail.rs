@@ -193,6 +193,7 @@ async fn map_position_to_detail(position: &positions::Position) -> PositionDetai
         None
     };
     let (trailing_stop_active, break_even_active) = peak_stops_active(policy.as_ref());
+    let exit_plan = policy.as_ref().map(|policy| exit_plan(position, policy));
     PositionDetail {
         summary: map_position_to_response_async(position).await,
         phantom_remove: position.phantom_remove,
@@ -201,6 +202,54 @@ async fn map_position_to_detail(position: &positions::Position) -> PositionDetai
         trailing_stop_active,
         break_even_active,
         default_add_size_native: default_add_size_native(position),
+        exit_plan,
+    }
+}
+
+/// Every exit rule `policy` switches on for `position`; a take-profit step below the
+/// round's reserved level is taken.
+fn exit_plan(position: &positions::Position, policy: &ExitPolicy) -> ExitPlanResponse {
+    let take_profit = &policy.take_profit;
+    let steps = if take_profit.enabled {
+        take_profit.levels.as_slice()
+    } else {
+        &[]
+    };
+    let trailing = &policy.trailing;
+    let break_even = &policy.break_even;
+    let time = &policy.time;
+    let stagnation = &policy.time_stagnation;
+    ExitPlanResponse {
+        stop_loss_pct: policy
+            .stop_loss
+            .enabled
+            .then_some(policy.stop_loss.threshold_pct),
+        take_profit_steps: steps
+            .iter()
+            .enumerate()
+            .map(|(index, step)| ExitPlanStepResponse {
+                profit_pct: step.profit_pct,
+                sell_pct: step.sell_pct,
+                taken: (index as u64) < u64::from(position.take_profit_level),
+            })
+            .collect(),
+        trailing_stop: trailing.enabled.then(|| ExitPlanTrailingResponse {
+            activation_pct: trailing.activation_pct,
+            distance_pct: trailing.distance_pct,
+            bands: trailing.bands.clone(),
+        }),
+        break_even: break_even.enabled.then_some(ExitPlanBreakEvenResponse {
+            trigger_pct: break_even.trigger_pct,
+            offset_pct: break_even.offset_pct,
+        }),
+        time_loss: time.enabled.then_some(ExitPlanTimeLossResponse {
+            duration_seconds: time.duration_seconds,
+            loss_threshold_pct: time.loss_threshold_pct,
+        }),
+        time_stagnation: stagnation.enabled.then_some(ExitPlanStagnationResponse {
+            duration_seconds: stagnation.duration_seconds,
+            band_pct: stagnation.band_pct,
+        }),
     }
 }
 
@@ -344,9 +393,14 @@ async fn load_entry_exit_history(
 
 #[cfg(test)]
 mod tests {
-    use super::{peak_since_last_buy, peak_stops_active, runs_policy_exits};
+    use super::{exit_plan, peak_since_last_buy, peak_stops_active, runs_policy_exits};
+    use crate::config::{TakeProfitLevel, TraderConfig, TrailingStopBand};
     use crate::positions::{Position, PositionManagement, PositionOrigin};
     use crate::trader::policy::ExitPolicy;
+    use crate::webserver::routes::positions::types::{
+        ExitPlanBreakEvenResponse, ExitPlanResponse, ExitPlanStagnationResponse,
+        ExitPlanStepResponse, ExitPlanTimeLossResponse, ExitPlanTrailingResponse,
+    };
 
     /// An open bot position that took an add: its basis peak restarted below the round's
     /// peak.
@@ -471,6 +525,100 @@ mod tests {
             peak_stops_active(None),
             (false, false),
             "no stop is active where the exit monitor runs no policy exit"
+        );
+    }
+
+    #[test]
+    fn the_exit_plan_states_every_exit_rule_the_policy_switches_on() {
+        let mut policy = ExitPolicy::from_trader_config(&TraderConfig::default());
+        policy.stop_loss.enabled = true;
+        policy.stop_loss.threshold_pct = 30.0;
+        policy.take_profit.enabled = true;
+        policy.take_profit.levels = vec![
+            TakeProfitLevel {
+                profit_pct: 20.0,
+                sell_pct: 30.0,
+            },
+            TakeProfitLevel {
+                profit_pct: 50.0,
+                sell_pct: 70.0,
+            },
+        ];
+        policy.trailing.enabled = true;
+        policy.trailing.activation_pct = 20.0;
+        policy.trailing.distance_pct = 10.0;
+        policy.trailing.bands = vec![TrailingStopBand {
+            profit_pct: 50.0,
+            distance_pct: 6.0,
+        }];
+        policy.break_even.enabled = true;
+        policy.break_even.trigger_pct = 15.0;
+        policy.break_even.offset_pct = 2.0;
+        policy.time.enabled = true;
+        policy.time.duration_seconds = 7200.0;
+        policy.time.loss_threshold_pct = -10.0;
+        policy.time_stagnation.enabled = true;
+        policy.time_stagnation.duration_seconds = 14_400.0;
+        policy.time_stagnation.band_pct = 3.0;
+        let mut position = averaged_position();
+        position.take_profit_level = 1;
+
+        assert_eq!(
+            exit_plan(&position, &policy),
+            ExitPlanResponse {
+                stop_loss_pct: Some(30.0),
+                take_profit_steps: vec![
+                    ExitPlanStepResponse {
+                        profit_pct: 20.0,
+                        sell_pct: 30.0,
+                        taken: true,
+                    },
+                    ExitPlanStepResponse {
+                        profit_pct: 50.0,
+                        sell_pct: 70.0,
+                        taken: false,
+                    },
+                ],
+                trailing_stop: Some(ExitPlanTrailingResponse {
+                    activation_pct: 20.0,
+                    distance_pct: 10.0,
+                    bands: vec![TrailingStopBand {
+                        profit_pct: 50.0,
+                        distance_pct: 6.0,
+                    }],
+                }),
+                break_even: Some(ExitPlanBreakEvenResponse {
+                    trigger_pct: 15.0,
+                    offset_pct: 2.0,
+                }),
+                time_loss: Some(ExitPlanTimeLossResponse {
+                    duration_seconds: 7200.0,
+                    loss_threshold_pct: -10.0,
+                }),
+                time_stagnation: Some(ExitPlanStagnationResponse {
+                    duration_seconds: 14_400.0,
+                    band_pct: 3.0,
+                }),
+            }
+        );
+
+        policy.stop_loss.enabled = false;
+        policy.take_profit.enabled = false;
+        policy.trailing.enabled = false;
+        policy.break_even.enabled = false;
+        policy.time.enabled = false;
+        policy.time_stagnation.enabled = false;
+        assert_eq!(
+            exit_plan(&position, &policy),
+            ExitPlanResponse {
+                stop_loss_pct: None,
+                take_profit_steps: Vec::new(),
+                trailing_stop: None,
+                break_even: None,
+                time_loss: None,
+                time_stagnation: None,
+            },
+            "a rule that is off states nothing"
         );
     }
 }

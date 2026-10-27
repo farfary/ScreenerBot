@@ -97,6 +97,19 @@ pub(in crate::chains::solana) fn get_pool_program(
         .map(|pool| ProgramKind::from_protocol_id(&pool.program_kind).protocol_slug())
 }
 
+/// Whether the decoder of `pool_address`, a registered pool of `mint`, reports virtual
+/// native reserves (see `ProgramKind::reports_virtual_reserves`); `None` for a pool the
+/// analyzer does not know.
+pub(in crate::chains::solana) fn pool_reports_virtual_reserves(
+    mint: &str,
+    pool_address: &str,
+) -> Option<bool> {
+    get_token_pools(mint)
+        .into_iter()
+        .find(|pool| pool.pool_id.address() == pool_address)
+        .map(|pool| ProgramKind::from_protocol_id(&pool.program_kind).reports_virtual_reserves())
+}
+
 /// Initialize the concrete Solana pool runtime components (discovery, analyzer,
 /// fetcher, calculator) and store them in global state, replacing any previous
 /// set. Returns the RPC provider count for logging/event purposes.

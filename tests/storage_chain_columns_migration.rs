@@ -225,7 +225,8 @@ fn v0_2_13_fixtures_gain_chain_scope_and_survive_a_second_boot() {
     }
 
     // `strategy_assignments`, which nothing read or wrote, is dropped from the v0.2.13
-    // store, and the drop makes the strategies store's own version its oldest reader.
+    // store, and the drop makes version 2 the store's oldest reader; version 3 only adds
+    // a column, which a version 2 core still reads.
     let strategies = open_database(fixture_dir.path(), "strategies.db");
     let retired: i64 = strategies
         .query_row(
@@ -245,7 +246,36 @@ fn v0_2_13_fixtures_gain_chain_scope_and_survive_a_second_boot() {
             |row| Ok((row.get(0)?, row.get(1)?)),
         )
         .expect("read the strategies store ledger");
-    assert_eq!(ledger, (2, 2), "strategies.db: store ledger");
+    assert_eq!(ledger, (3, 2), "strategies.db: store ledger");
+
+    // The exit-strategy binding is appended with the default that manages every
+    // position, which is what a strategy did before the column existed, and the fresh
+    // schema ends in the same column.
+    let binding: String = strategies
+        .query_row(
+            "SELECT entry_strategy_ids_json FROM strategies WHERE id = 'sentinel-strategy'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("read the sentinel strategy's binding");
+    assert_eq!(
+        binding, "[]",
+        "strategies.db: a migrated strategy manages every position"
+    );
+    let migrated_columns = column_names(&strategies, "strategies");
+    assert_eq!(
+        migrated_columns.last().map(String::as_str),
+        Some("entry_strategy_ids_json"),
+        "strategies.db: the binding column is appended"
+    );
+    assert_eq!(
+        migrated_columns,
+        column_names(
+            &open_database(fresh_dir.path(), "strategies.db"),
+            "strategies"
+        ),
+        "strategies.db/strategies: fresh schema and migrated schema disagree"
+    );
     drop(strategies);
 
     // The audit: no table in these databases is chain-scoped without a

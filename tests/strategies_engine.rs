@@ -14,8 +14,8 @@ use crate::common;
 use common::{condition, context_bare, TEST_MINT};
 use screenerbot::strategies::engine::{EngineConfig, StrategyEngine};
 use screenerbot::strategies::types::{
-    Condition, EvaluationContext, LogicalOperator, MarketData, PositionData, RuleTree, Strategy,
-    StrategyType, TransactionCounts, WindowCounts,
+    Condition, EvaluationContext, LogicalOperator, MarketData, PositionData, RuleOutcome, RuleTree,
+    RuleVerdict, Strategy, StrategyType, TransactionCounts, WindowCounts,
 };
 use screenerbot::strategies::Error as StrategyError;
 use serde_json::json;
@@ -65,6 +65,7 @@ fn strategy_of(strategy_type: StrategyType, rules: RuleTree) -> Strategy {
         updated_at: chrono::Utc::now(),
         author: None,
         version: 1,
+        entry_strategy_ids: Vec::new(),
     }
 }
 
@@ -73,6 +74,7 @@ fn context(liquidity_sol: f64) -> EvaluationContext {
     ctx.token_mint = TEST_MINT.to_owned();
     ctx.market_data = Some(MarketData {
         liquidity_sol: Some(liquidity_sol),
+        liquidity_pool: None,
         transactions: None,
         snapshot_at: None,
         token_created_at: None,
@@ -814,6 +816,138 @@ fn the_disabled_flag_is_written_only_when_set() {
     assert!(reloaded.disabled);
 }
 
+// ==================== EXPLAINED EVALUATION ====================
+
+fn verdict_of(kind: Kind) -> RuleVerdict {
+    match kind {
+        Kind::True => RuleVerdict::Pass,
+        Kind::False => RuleVerdict::Fail,
+        Kind::Unknown => RuleVerdict::Unknown,
+        Kind::Fault => unreachable!("a fault has no verdict"),
+    }
+}
+
+async fn explained(engine: &StrategyEngine, rules: RuleTree) -> RuleOutcome {
+    engine
+        .explain_strategy(&strategy(rules), &kleene_context())
+        .await
+        .expect("explanation succeeded")
+}
+
+#[tokio::test]
+async fn an_explained_group_reaches_the_evaluated_verdict_and_reports_every_child() {
+    // The explanation folds with the evaluation's rule, so its root says what the trader
+    // would do; it never stops at a decisive child, so every condition reports itself.
+    let engine = uncached_engine();
+    let fault_free = sequences()
+        .into_iter()
+        .filter(|children| !children.contains(&Kind::Fault));
+    for children in fault_free {
+        for operator in [LogicalOperator::And, LogicalOperator::Or] {
+            let group = RuleTree::branch(operator, children.iter().copied().map(probe).collect());
+            let expected = match outcome_of(&engine, group.clone()).await {
+                Outcome::Signal(true) => RuleVerdict::Pass,
+                Outcome::Signal(false) => RuleVerdict::Fail,
+                Outcome::DataUnavailable => RuleVerdict::Unknown,
+                Outcome::Fault => panic!("{operator:?} {children:?} has no fault"),
+            };
+            let outcome = explained(&engine, group.clone()).await;
+            assert_eq!(outcome.verdict, expected, "{operator:?} {children:?}");
+            assert_eq!(outcome.operator, Some(operator));
+            assert_eq!(
+                outcome.reason.is_some(),
+                expected == RuleVerdict::Unknown,
+                "{operator:?} {children:?}"
+            );
+            assert_eq!(
+                outcome
+                    .children
+                    .iter()
+                    .map(|child| child.verdict)
+                    .collect::<Vec<_>>(),
+                children.iter().copied().map(verdict_of).collect::<Vec<_>>(),
+                "{operator:?} {children:?}"
+            );
+
+            let not = explained(&engine, RuleTree::branch(LogicalOperator::Not, vec![group])).await;
+            let negated = match expected {
+                RuleVerdict::Pass => RuleVerdict::Fail,
+                RuleVerdict::Fail => RuleVerdict::Pass,
+                other => other,
+            };
+            assert_eq!(not.verdict, negated, "NOT {operator:?} {children:?}");
+            assert_eq!(not.children.len(), 1);
+        }
+    }
+}
+
+#[tokio::test]
+async fn an_explained_tree_names_each_node_and_reports_switched_off_ones_as_off() {
+    let engine = uncached_engine();
+    let rules = and(vec![
+        probe(Kind::True),
+        off(probe(Kind::False)),
+        RuleTree::branch(
+            LogicalOperator::Not,
+            vec![RuleTree::branch(
+                LogicalOperator::Or,
+                vec![probe(Kind::Unknown), probe(Kind::False)],
+            )],
+        ),
+    ]);
+    let outcome = serde_json::to_value(explained(&engine, rules).await).expect("serializes");
+    assert_eq!(
+        outcome,
+        json!({
+            "verdict": "unknown",
+            "operator": "AND",
+            "reason": outcome["children"][2]["reason"],
+            "children": [
+                { "verdict": "pass", "condition_type": "LiquidityLevel" },
+                { "verdict": "off", "condition_type": "LiquidityLevel" },
+                {
+                    "verdict": "unknown",
+                    "operator": "NOT",
+                    "reason": outcome["children"][2]["children"][0]["children"][0]["reason"],
+                    "children": [{
+                        "verdict": "unknown",
+                        "operator": "OR",
+                        "reason": outcome["children"][2]["children"][0]["children"][0]["reason"],
+                        "children": [
+                            {
+                                "verdict": "unknown",
+                                "condition_type": "BuyPressure",
+                                "reason": outcome["children"][2]["children"][0]["children"][0]["reason"],
+                            },
+                            { "verdict": "fail", "condition_type": "LiquidityLevel" },
+                        ],
+                    }],
+                },
+            ],
+        })
+    );
+    assert_eq!(
+        outcome["reason"]["id"],
+        json!("strategies-error-missing-data"),
+        "an undecided node carries the data error it reached: {outcome}"
+    );
+}
+
+#[tokio::test]
+async fn an_explanation_refuses_what_the_evaluation_refuses() {
+    let engine = uncached_engine();
+    for rules in [
+        and(vec![probe(Kind::True), probe(Kind::Fault)]),
+        and(vec![off(probe(Kind::True))]),
+        off(and(vec![probe(Kind::True)])),
+    ] {
+        assert!(engine
+            .explain_strategy(&strategy(rules), &kleene_context())
+            .await
+            .is_err());
+    }
+}
+
 // ==================== APPLICABILITY ====================
 
 fn profit_condition() -> Condition {
@@ -858,10 +992,20 @@ fn a_switched_off_exit_only_condition_is_still_refused_in_an_entry_strategy() {
 #[test]
 fn every_schema_declares_the_strategy_types_it_applies_to() {
     let schemas = uncached_engine().get_condition_registry().get_all_schemas();
-    let exit_only = ["PositionHoldingTime", "PositionProfit", "DrawdownFromPeak"];
+    let exit_only = [
+        "PositionHoldingTime",
+        "PositionProfit",
+        "DrawdownFromPeak",
+        "ProfitGiveback",
+        "PositionAdds",
+        "LiquidityChangeSinceEntry",
+    ];
+    let entry_only = ["TokenAge"];
     for (name, schema) in schemas.as_object().expect("schemas are an object") {
         let expected = if exit_only.contains(&name.as_str()) {
             json!(["EXIT"])
+        } else if entry_only.contains(&name.as_str()) {
+            json!(["ENTRY"])
         } else {
             json!(["ENTRY", "EXIT"])
         };
@@ -1011,6 +1155,8 @@ fn exit_context(peak: f64) -> EvaluationContext {
         dca_count: 0,
         partial_exit_count: 0,
         remaining_value_native: None,
+        entry_liquidity_native: None,
+        entry_liquidity_pool: None,
     });
     ctx
 }
@@ -1051,6 +1197,7 @@ fn counts_context(buys: u64, sells: u64) -> EvaluationContext {
     let mut ctx = context(100.0);
     ctx.market_data = Some(MarketData {
         liquidity_sol: Some(100.0),
+        liquidity_pool: None,
         transactions: Some(TransactionCounts {
             m5: None,
             h1: Some(WindowCounts { buys, sells }),
@@ -1190,19 +1337,30 @@ fn the_registry_exposes_every_built_in_condition() {
     assert_eq!(
         types,
         vec![
+            "BollingerBands",
             "BuyPressure",
             "CandleSize",
             "ConsecutiveCandles",
             "DrawdownFromPeak",
+            "LiquidityChangeSinceEntry",
             "LiquidityLevel",
+            "LiquidityToSize",
             "MaCross",
+            "PositionAdds",
             "PositionHoldingTime",
             "PositionProfit",
             "PriceBreakout",
             "PriceChangePercent",
             "PriceToMA",
+            "ProfitGiveback",
+            "PullbackFromHigh",
             "Rsi",
+            "TimeOfDay",
+            "TokenAge",
+            "TransactionVelocity",
+            "VolatilityRange",
             "VolumeSpike",
+            "Vwap",
         ]
     );
 }
@@ -1212,11 +1370,59 @@ fn every_registered_condition_publishes_a_parameter_schema() {
     let engine = uncached_engine();
     let schemas = engine.get_condition_registry().get_all_schemas();
     let object = schemas.as_object().expect("schemas are an object");
-    assert_eq!(object.len(), 13);
+    assert_eq!(object.len(), 24);
     for (name, schema) in object {
         assert!(
             schema.get("parameters").is_some(),
             "{name} publishes no parameters block"
         );
     }
+}
+
+/// The candle timeframes a strategy reads are those of its switched-on candle rules: a
+/// rule's own timeframe, else the strategy's, each once. A rule that reads no candles, a
+/// switched-off rule and an unknown condition type add none, so a live test fetches only
+/// the series the evaluation will read.
+#[test]
+fn a_strategy_reads_the_candle_timeframes_of_its_switched_on_candle_rules() {
+    use screenerbot::ohlcvs::Timeframe;
+
+    let candles = |timeframe: Option<&str>| {
+        let mut params = vec![
+            ("period", json!(14)),
+            ("comparison", json!("BELOW")),
+            ("threshold", json!(30)),
+        ];
+        if let Some(timeframe) = timeframe {
+            params.push(("timeframe", json!(timeframe)));
+        }
+        RuleTree::leaf(condition("Rsi", &params))
+    };
+    let mut switched_off = candles(Some("1d"));
+    switched_off.disabled = true;
+    let rules = RuleTree::branch(
+        LogicalOperator::And,
+        vec![
+            candles(Some("1h")),
+            RuleTree::leaf(liquidity_at_least(10.0)),
+            RuleTree::branch(
+                LogicalOperator::Or,
+                vec![candles(None), candles(Some("1h")), switched_off],
+            ),
+            RuleTree::leaf(condition("NoSuchCondition", &[("timeframe", json!("4h"))])),
+        ],
+    );
+
+    let registry = uncached_engine();
+    let registry = registry.get_condition_registry();
+    assert_eq!(
+        registry.candle_timeframes(&rules, "5m"),
+        [Timeframe::Hour1, Timeframe::Minute5]
+    );
+    assert!(
+        registry
+            .candle_timeframes(&RuleTree::leaf(liquidity_at_least(10.0)), "5m")
+            .is_empty(),
+        "a strategy without a candle rule reads no candles"
+    );
 }

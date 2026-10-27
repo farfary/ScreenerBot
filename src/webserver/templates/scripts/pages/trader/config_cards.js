@@ -57,6 +57,12 @@ const CARD_SPECS = [
       { id: "trailing-enabled", key: "trailing_stop_enabled", type: "bool", autoSave: true },
       { id: "trail-activation", key: "trailing_stop_activation_pct", type: "float" },
       { id: "trail-distance", key: "trailing_stop_distance_pct", type: "float" },
+      {
+        id: "trailing-bands",
+        key: "trailing_stop_band_profit_pct",
+        pairKey: "trailing_stop_band_distance_pct",
+        type: LEVELS,
+      },
     ],
   },
   {
@@ -361,13 +367,22 @@ export function createTraderConfigCards({ saveConfig }) {
    * curated Auto Trader layout. The layout remains task-focused, while field
    * names, help text, units and numeric constraints retain one backend owner.
    */
-  function applyMetadata(allMetadata = {}) {
+  function applyMetadata(allMetadata) {
     CARD_SPECS.forEach((spec) => {
-      const sectionMetadata = allMetadata[spec.section] || {};
+      const sectionMetadata = allMetadata[spec.section];
+      if (!sectionMetadata) {
+        console.warn(`[Trader] No configuration metadata for section "${spec.section}"`);
+        return;
+      }
       spec.fields.forEach((field) => {
-        const metadata = sectionMetadata[field.key];
         const input = document.getElementById(field.id);
-        if (!metadata || !input) return;
+        if (!input) return;
+        // A field without metadata keeps no bounds: say so rather than leave it unbounded quietly.
+        const metadata = sectionMetadata[field.key];
+        if (!metadata) {
+          console.warn(`[Trader] No configuration metadata for ${spec.section}.${field.key}`);
+          return;
+        }
 
         if (field.type === LEVELS) {
           const pair = sectionMetadata[field.pairKey];
@@ -392,8 +407,9 @@ export function createTraderConfigCards({ saveConfig }) {
         const ownsGroup = Boolean(ownLabel);
         const label = ownLabel?.querySelector("span");
         const hint = ownsGroup ? group.querySelector(".config-hint") : null;
-        // A ladder's units sit on its own rows, set by `configureLevels`.
-        const unit = ownsGroup && field.type !== LEVELS ? group.querySelector(".input-unit") : null;
+        // A field's unit sits beside it in its own input wrapper; a ladder's units sit on its
+        // own rows, set by `configureLevels`.
+        const unit = input.closest(".input-group-enhanced")?.querySelector(".input-unit") ?? null;
 
         const labelText = fieldLabel(metadata.key);
         const hintText = field.hint ? field.hint() : fieldHint(metadata.key);

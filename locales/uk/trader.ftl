@@ -253,6 +253,23 @@ trader-trailing-final = +{ $value }% підсумок
 trader-trailing-summary-protected = Захищено прибуток <strong>{ $value }</strong>
 # $value is a formatted percentage.
 trader-trailing-summary-avoided = Уникнуто збитку <strong>{ $value }</strong> від піку
+# $step is the band's position in the list, from 1.
+trader-trailing-band = Смуга { $step }
+# $step is the band's position in the list, from 1.
+trader-trailing-band-profit-label = Піковий прибуток смуги { $step }
+# $step is the band's position in the list, from 1.
+trader-trailing-band-distance-label = Відступ смуги { $step }
+trader-trailing-band-profit-caption = З пікового прибутку
+trader-trailing-band-distance-caption = Відступ
+trader-trailing-add-band = Додати смугу
+# $step is the band's position in the list, from 1.
+trader-trailing-remove-band = Видалити смугу { $step }
+# $min and $max are the configured bounds of a band's peak profit.
+trader-trailing-band-error-profit-range = Піковий прибуток кожної смуги має бути від { $min }% до { $max }%
+# $min and $max are the configured bounds of a band's distance.
+trader-trailing-band-error-distance-range = Відступ кожної смуги має бути від { $min }% до { $max }%
+trader-trailing-band-error-order = Піковий прибуток кожної смуги має бути вищим за активацію та попередню смугу
+trader-trailing-band-error-distance = Відступ кожної смуги має бути меншим за її піковий прибуток
 
 ## Break-even stop
 
@@ -308,8 +325,6 @@ trader-time-unit-seconds = с
 trader-time-unit-minutes = хв
 trader-time-unit-hours = год
 trader-time-unit-days = д
-# Shown before the configured duration loads.
-trader-time-conversion-default = 168 год = 7 д
 # $duration and $readable are formatted durations.
 trader-time-conversion = { $duration } = { $readable }
 trader-duration-seconds =
@@ -402,11 +417,8 @@ trader-dca-error-drop-range = Кожне падіння має бути від {
 trader-dca-error-size-range = Кожен розмір має бути від { $min }× до { $max }× першої покупки
 trader-dca-error-order = Якщо вимірювати від першого входу, кожній докупівлі потрібне глибше падіння, ніж попередній
 trader-dca-cooldown-impact = Щонайменше { $span } між додатковими входами
-trader-dca-min-hold-impact =
-    { $minutes ->
-        [0] Перша докупівля може відбутися одразу після входу
-       *[other] Перша докупівля чекає щонайменше { $span } після входу
-    }
+trader-dca-min-hold-none = Перша докупівля може відбутися одразу після входу
+trader-dca-min-hold-impact = Перша докупівля чекає щонайменше { $span } після входу
 trader-dca-capacity = Найбільше, що може тримати ця позиція: { $amount } ({ $multiple }× перша покупка)
 trader-dca-info-title = Про стратегію DCA
 trader-dca-info-subtitle = Важливі міркування щодо торгівлі з DCA

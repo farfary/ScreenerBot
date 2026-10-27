@@ -1143,6 +1143,12 @@ config-trader-trade-size-sol = حجم الصفقة
 config-trader-trailing-stop-activation-pct = تفعيل الوقف المتحرك
     .hint = تفعيل الوقف المتحرك بعد هذه النسبة من الربح (10 = التفعيل عند +10%)
     .unit = %
+config-trader-trailing-stop-band-distance-pct = مسافات نطاقات التتبع
+    .hint = المسافة التي يتبع بها الإيقاف أسفل القمة بعد بلوغ نطاقه؛ أقل من أعلى ربح للنطاق
+    .unit = %
+config-trader-trailing-stop-band-profit-pct = نطاقات التتبع
+    .hint = أعلى ربح من متوسط سعر الدخول يتولى عنده كل نطاق مسافة التتبع
+    .unit = %
 config-trader-trailing-stop-distance-pct = مسافة الوقف المتحرك
     .hint = مدى التتبع أسفل الذروة (5 = الخروج إذا هبط السعر 5% عن الذروة)
     .unit = %

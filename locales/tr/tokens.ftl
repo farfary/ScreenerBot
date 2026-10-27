@@ -59,12 +59,34 @@ tokens-positions-fact-opened = Açılış
 tokens-positions-fact-exit-price = Çıkış Fiyatı
 tokens-positions-fact-native-received = Alınan { -sol }
 tokens-positions-fact-closed-reason = Kapanış Nedeni
-tokens-positions-fact-target-min = Kâr Hedefi Min.
-tokens-positions-fact-target-max = Kâr Hedefi Maks.
 tokens-positions-fact-highest = En Yüksek Fiyat
 tokens-positions-fact-basis-peak = Son Alımdan Beri Tepe
 tokens-positions-fact-lowest = En Düşük Fiyat
-tokens-positions-section-range = Hedefler { "&" } aralık
+tokens-positions-section-range = Fiyat aralığı
+tokens-positions-section-exit-plan = Çıkış planı
+tokens-positions-plan-stop-loss = Zarar durdur
+# $step is the take-profit step's position in the ladder, from 1.
+tokens-positions-plan-step = Kâr al { $step }
+# $profit is the formatted profit level, $share the formatted share of the position it sells.
+tokens-positions-plan-step-value = { $profit } seviyesinde { $share } satar
+tokens-positions-plan-step-taken = Satıldı
+tokens-positions-plan-trailing = Takip eden stop
+# $activation is the formatted profit that arms the trail, $distance the formatted share it trails by.
+tokens-positions-plan-trailing-value = { $activation } seviyesinde devreye girer, zirvenin { $distance } altından takip eder
+# $step is the band's position in the list, from 1.
+tokens-positions-plan-trailing-band = Takip kademesi { $step }
+# $profit is the formatted profit the band starts at, $distance the formatted share it trails by.
+tokens-positions-plan-trailing-band-value = { $profit } seviyesinden itibaren zirvenin { $distance } altından takip eder
+tokens-positions-plan-break-even = Başabaş stopu
+# $trigger and $offset are formatted profits.
+tokens-positions-plan-break-even-value = { $trigger } seviyesinde devreye girer, { $offset } seviyesinde satar
+tokens-positions-plan-time-loss = Zararda süre çıkışı
+# $duration is a formatted duration, $threshold a formatted loss.
+tokens-positions-plan-time-loss-value = { $duration } sonra, { $threshold } veya altında
+tokens-positions-plan-time-stagnation = Yatay pozisyon çıkışı
+# $duration is a formatted duration, $band a formatted share.
+tokens-positions-plan-time-stagnation-value = { $duration } sonra, girişin { $band } yakınında kaldıkça
+tokens-positions-plan-none = Hiçbir çıkış kuralı açık değil
 tokens-positions-section-market = Piyasa { "&" } varlıklar
 tokens-positions-kicker = Pozisyon
 tokens-positions-fallback-symbol = Token

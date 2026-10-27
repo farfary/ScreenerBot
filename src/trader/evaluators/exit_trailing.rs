@@ -18,6 +18,9 @@ use crate::trader::policy::TrailingPolicy;
 /// below the stop (peak * 0.9 = +12.5%) but under the activation on its CURRENT
 /// profit, so the trail stayed silent and rode down to the stop loss.
 ///
+/// The trail follows the distance in force at the peak: the band with the highest
+/// threshold the peak profit has reached, else the base distance.
+///
 /// It fires only while the position is still in profit, so a retracement never
 /// turns the trail into a loss exit.
 pub fn trailing_stop_triggered(
@@ -29,14 +32,7 @@ pub fn trailing_stop_triggered(
     if peak_price <= 0.0 || !policy.enabled {
         return Ok(false);
     }
-    if policy.distance_pct >= policy.activation_pct {
-        return Err(crate::trader::Error::InvalidExitPolicy {
-            detail: format!(
-            "invalid trailing stop config: distance_pct ({:.1}%) must be less than activation_pct ({:.1}%)",
-            policy.distance_pct, policy.activation_pct
-        ),
-        });
-    }
+    policy.validate()?;
     if entry_price <= 0.0 || !entry_price.is_finite() {
         return Ok(false);
     }
@@ -44,7 +40,7 @@ pub fn trailing_stop_triggered(
     if peak_profit_pct < policy.activation_pct {
         return Ok(false);
     }
-    let stop_price = peak_price * (1.0 - policy.distance_pct / 100.0);
+    let stop_price = peak_price * (1.0 - policy.distance_in_force(peak_profit_pct) / 100.0);
     let current_profit_pct = (current_price / entry_price - 1.0) * 100.0;
     Ok(current_price <= stop_price && current_profit_pct > 0.0)
 }

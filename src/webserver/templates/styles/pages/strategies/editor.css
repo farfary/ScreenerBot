@@ -2,36 +2,31 @@
  * SPDX-License-Identifier: BUSL-1.1 */
 
 /* ==========================================================================
-   Editor header, rules area and sticky footer. Rule groups and condition rows
-   are styled in strategies/condition_cards.css.
+   Editor toolbar, settings line, rules area, test verdicts and sticky footer. Rule
+   groups and condition rows are styled in strategies/condition_cards.css.
    ========================================================================== */
 
-/* Header: two rows, hidden until a strategy is loaded (the page script shows it). */
+/* Toolbar: one row that never wraps, hidden until a strategy is loaded (the page script
+   shows it). The editor is the container its labels collapse against. */
 .editor-header {
   display: none;
   flex: 0 0 auto;
-  flex-direction: column;
-  gap: var(--spacing-sm);
-  padding: var(--spacing-sm) var(--spacing-md);
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: var(--spacing-sm) var(--spacing-md);
+  min-height: 48px;
+  padding: var(--spacing-xs) var(--spacing-md);
   border-bottom: 1px solid var(--border-color);
   background: var(--surface-color);
   z-index: 5;
 }
 
-.editor-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: var(--spacing-sm) var(--spacing-md);
-}
-
-/* Identity group: type badge + name input + dirty dot */
+/* Identity group: type badge + name input + dirty dot; the name gives way first. */
 .editor-identity {
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
-  flex: 1;
+  flex: 1 1 auto;
   min-width: 0;
 }
 
@@ -43,8 +38,8 @@
   border: 1px solid transparent;
   border-radius: var(--radius-md);
   color: var(--text-color);
-  flex: 1;
-  min-width: 0;
+  flex: 1 1 auto;
+  min-width: 120px;
   max-width: 320px;
   transition:
     border-color var(--transition-fast),
@@ -78,15 +73,74 @@
   display: block;
 }
 
+.editor-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  flex: 0 0 auto;
+}
+
 /* The Active switch carries its own visible label. */
 .editor-active {
   gap: var(--spacing-sm);
+  margin-inline-start: var(--spacing-xs);
   font-size: var(--font-size-sm);
   font-weight: 600;
   color: var(--text-secondary);
+  white-space: nowrap;
 }
 
-.editor-fields {
+/* Save button — hidden until dirty */
+.editor-save-btn {
+  display: none;
+}
+
+.editor-header.dirty .editor-save-btn {
+  display: inline-flex;
+}
+
+/* With Save showing and the name at a readable 200 px, the labelled toolbar needs about
+   950 px in the longest locales (Russian, Ukrainian, German) and 850 px in English. Below 1000 px Validate and Export show
+   their glyph alone; Test, whose glyph says least, keeps its label down to 820 px. A
+   collapsed action keeps its label in the accessibility tree as its name. */
+@container strategy-editor (width < 1000px) {
+  .editor-action:not(.editor-action-lead) {
+    position: relative;
+    width: var(--control-height);
+    padding: 0;
+    gap: 0;
+  }
+
+  .editor-action:not(.editor-action-lead) .editor-action-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
+@container strategy-editor (width < 820px) {
+  .editor-action-lead {
+    position: relative;
+    width: var(--control-height);
+    padding: 0;
+    gap: 0;
+  }
+
+  .editor-action-lead .editor-action-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
+/* Settings line: the first line of the scrolling column, above the rules. */
+.editor-settings {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
@@ -99,6 +153,7 @@
   gap: var(--spacing-sm);
 }
 
+.editor-field-label,
 .editor-field
   label:not(.checkbox-label, :has(> input[type="checkbox"]), :has(> input[type="radio"])) {
   font-size: var(--font-size-xs);
@@ -107,29 +162,111 @@
   white-space: nowrap;
 }
 
-.editor-field :is(.number-field, input[type="number"]) {
+/* A narrower number sizes its shell, which holds the stepper at the field's edge. */
+.editor-field .number-field {
   width: 96px;
 }
 
-.editor-controls {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-  flex-shrink: 0;
+/* The panel toggles: Description sits at the line's end; an open toggle reads in the
+   primary colour and turns its chevron. */
+.editor-description-toggle {
+  margin-inline-start: auto;
 }
 
-/* Save button — hidden until dirty */
-.editor-save-btn {
+.editor-panel-toggle[aria-expanded="true"] {
+  color: var(--primary-color);
+}
+
+.editor-panel-chevron {
+  font-size: 0.85em;
+  transition: transform var(--transition-fast);
+}
+
+.editor-panel-toggle[aria-expanded="true"] .editor-panel-chevron {
+  transform: rotate(180deg);
+}
+
+/* The description grows with its text, from two lines to twelve. */
+.editor-description textarea {
+  width: 100%;
+  field-sizing: content;
+  min-height: 3.5rem;
+  max-height: 12lh;
+  resize: none;
+}
+
+/* Exit strategy binding: the entry strategies whose positions it manages */
+.editor-entry-binding {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+/* The panel's and the field's flex display would override the hidden attribute: an entry
+   strategy and a closed panel must not show. */
+.editor-entry-binding[hidden],
+.editor-entry-binding-field[hidden] {
   display: none;
 }
 
-.editor-header.dirty .editor-save-btn {
-  display: inline-flex;
+.editor-entry-binding-hint,
+.editor-entry-binding-empty {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
 }
 
-.editor-description textarea {
-  width: 100%;
-  resize: vertical;
+.editor-entry-binding-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs) var(--spacing-md);
+}
+
+.editor-entry-binding-choice {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  font-size: var(--font-size-sm);
+}
+
+/* Test verdicts on the rules: a bare glyph and the word at the end of a condition row's
+   or nested group's head, and an unknown condition's reason as a muted line under it. */
+.strategy-test-verdict {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  flex-shrink: 0;
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--text-muted);
+}
+
+.strategy-test-verdict[data-verdict="pass"] {
+  color: var(--success-color);
+}
+
+.strategy-test-verdict[data-verdict="fail"] {
+  color: var(--error-color);
+}
+
+.strategy-test-verdict[data-verdict="unknown"] {
+  color: var(--warning-color);
+}
+
+.rule-group.is-nested > .rule-group-head > .strategy-test-verdict {
+  margin-inline-start: auto;
+}
+
+.rule-group.is-nested > .rule-group-head > .strategy-test-verdict + .rule-actions {
+  margin-inline-start: 0;
+}
+
+.strategy-test-reason {
+  margin: 0;
+  padding: 0 var(--spacing-md) var(--spacing-sm);
+  font-size: 0.8rem;
+  color: var(--text-muted);
 }
 
 /* Scrollable rules area */
@@ -142,19 +279,30 @@
   align-items: flex-start;
 }
 
+/* One centred column: the settings line, its panels, then the rules. */
 .conditions-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
   width: 100%;
   max-width: 900px; /* Optimal reading width */
 }
 
-/* Sticky footer: the problems line, then the buttons that add to the root group. */
+/* The rules start under a hairline, apart from the settings and panels above them. */
+.conditions-list {
+  padding-top: var(--spacing-md);
+  border-top: 1px solid var(--border-color);
+}
+
+/* Sticky footer: the test line, the problems line, then the buttons that add to the root
+   group. Each line keeps to one row so the footer never takes the rules' space. */
 .editor-footer {
   flex: 0 0 auto;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: var(--spacing-sm);
-  padding: var(--spacing-sm) var(--spacing-lg) var(--spacing-md);
+  padding: var(--spacing-sm) var(--spacing-lg);
   background: var(--surface-color);
   border-top: 1px solid var(--border-color);
 }
@@ -171,25 +319,32 @@
   justify-content: center;
 }
 
-.rule-problems {
+.rule-problems,
+.strategy-test-line {
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
   width: 100%;
   max-width: 900px;
-  min-height: 44px;
-  padding: var(--spacing-sm) var(--spacing-md);
-  border: 1px solid var(--warning-alpha-30);
+  min-height: 28px;
+  padding-block: 2px;
+  padding-inline: var(--spacing-md) var(--spacing-sm);
+  border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
-  background: var(--warning-alpha-10);
   color: var(--text-primary);
   font-size: var(--font-size-sm);
   text-align: start;
-  cursor: pointer;
 }
 
-.rule-problems[hidden] {
+.rule-problems[hidden],
+.strategy-test-line[hidden] {
   display: none;
+}
+
+.rule-problems {
+  border-color: var(--warning-alpha-30);
+  background: var(--warning-alpha-10);
+  cursor: pointer;
 }
 
 .rule-problems:hover {
@@ -199,6 +354,54 @@
 .rule-problems i {
   flex-shrink: 0;
   color: var(--warning-color);
+}
+
+.rule-problems span,
+.strategy-test-summary-reason {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The overall test outcome: the tested token, the verdict and an unknown strategy's
+   reason, with the running spinner in the same place while the test runs. */
+.strategy-test-line {
+  background: var(--bg-card-hover);
+}
+
+.strategy-test-summary {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.strategy-test-title {
+  flex-shrink: 0;
+  font-weight: 600;
+}
+
+.strategy-test-summary-reason {
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+}
+
+.strategy-test-running.loading-spinner {
+  justify-content: flex-start;
+  font-size: var(--font-size-xs);
+}
+
+.strategy-test-running.loading-spinner::before {
+  width: 14px;
+  height: 14px;
+}
+
+.strategy-test-close {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
 }
 
 .property-description {

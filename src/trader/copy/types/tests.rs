@@ -61,7 +61,11 @@ fn input() -> CopyTaskInput {
 }
 
 fn validate(input: CopyTaskInput) -> Result<CopyTask, CopySkip> {
-    input.into_task(ChainId::Solana, Utc::now())
+    input.into_task(
+        ChainId::Solana,
+        Utc::now(),
+        ExitPolicy::from_trader_config(&crate::config::TraderConfig::default()),
+    )
 }
 
 #[test]

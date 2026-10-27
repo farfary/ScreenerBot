@@ -22,8 +22,6 @@
     "effective_entry_price": 0.0042125999999999995,
     "effective_exit_price": 0.004480517999999999,
     "sol_received": 0.3189,
-    "profit_target_min": 20,
-    "profit_target_max": 80,
     "liquidity_tier": "medium",
     "transaction_entry_verified": true,
     "transaction_exit_verified": true,
@@ -62,7 +60,8 @@
     "peak_since_last_buy": null,
     "trailing_stop_active": false,
     "break_even_active": false,
-    "default_add_size_native": null
+    "default_add_size_native": null,
+    "exit_plan": null
   },
   "entries": [
     {

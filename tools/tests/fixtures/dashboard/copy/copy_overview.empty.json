@@ -110,7 +110,8 @@
       "effective_state": "paper",
       "effective_require_filter_pass": true,
       "pnl_trend": [],
-      "pause_text": null
+      "pause_text": null,
+      "exit_policy_issue": null
     }
   ],
   "activity": []

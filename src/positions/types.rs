@@ -69,6 +69,15 @@ impl PositionOrigin {
         }
     }
 
+    /// The entry strategy that opened an automatic position; `None` for every other origin
+    /// and for an automatic position opened without a strategy.
+    pub fn entry_strategy_id(&self) -> Option<&str> {
+        match self {
+            Self::Auto { strategy_id } => strategy_id.as_deref(),
+            Self::Manual | Self::Copy { .. } | Self::External => None,
+        }
+    }
+
     pub fn from_columns(kind: &str, reference: Option<String>) -> super::error::Result<Self> {
         use super::error::Error;
         match kind {
@@ -335,6 +344,15 @@ pub struct Position {
     /// proof the swap did not land; a full step reserves nothing.
     #[serde(default)]
     pub take_profit_level: u32,
+    /// The pool's native reserves in the price result the entry was made at. `None` for
+    /// a row opened before they were recorded, an imported or adopted round, or an entry
+    /// priced without measured reserves.
+    #[serde(default)]
+    pub entry_liquidity_native: Option<f64>,
+    /// The pool whose reserves `entry_liquidity_native` holds; reserves read from another
+    /// pool are not comparable with them.
+    #[serde(default)]
+    pub entry_liquidity_pool: Option<String>,
 
     // DCA tracking
     // Adds after the first entry. On a bot row: the adds booked on it (its DCAs and the

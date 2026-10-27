@@ -555,6 +555,18 @@ copy-validate-trailing-distance = Дистанция трейлинга долж
 copy-validate-take-profit = Тейк-профит должен быть больше 0%.
 copy-validate-time-duration = Для правила по времени нужна длительность больше нуля.
 copy-validate-time-threshold = Порог правила по времени — это убыток: укажите 0% или отрицательное число.
+# $reason is the message of the rule the stored overrides break.
+copy-exit-issue-warning = Правила выхода требуют внимания: { $reason } Пока вы их не исправите, позиции используют настройку Трейдера для этого правила.
+# $distance and $activation are percentages.
+copy-exit-issue-trailing-distance-above-activation = Дистанция трейлинга { $distance }% должна быть ниже активации, сейчас { $activation }%.
+# $maximum is the number of bands allowed.
+copy-exit-issue-trailing-band-count = Трейлинг-стоп может иметь не более { $maximum } ступеней.
+# $profit and $floor are percentages.
+copy-exit-issue-trailing-band-order = Ступень трейлинга на { $profit }% должна начинаться выше { $floor }% — активации или предыдущей ступени.
+# $profit and $distance are percentages.
+copy-exit-issue-trailing-band-distance = Ступень трейлинга на { $profit }% должна отставать больше чем на 0% и меньше своего начала, сейчас { $distance }%.
+# $value is a percentage.
+copy-exit-issue-time-loss-threshold = Порог правила убыточного времени должен быть убытком от -100% до 0%, сейчас { $value }%.
 copy-warning-mirror = Активы закрывают только продажи кошелька: стоп-лосс их не защищает, а токен, который кошелёк никогда не продаёт, остаётся в активах.
 copy-warning-no-rules = Ни одно правило выхода не включено, а продажи кошелька игнорируются: активы никогда не продаются.
 copy-warning-no-stop-loss = Стоп-лосс не действует: падающий токен удерживается, пока его не продаст другое правило или кошелёк.

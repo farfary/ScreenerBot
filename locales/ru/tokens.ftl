@@ -51,12 +51,34 @@ tokens-positions-fact-opened = Открыта
 tokens-positions-fact-exit-price = Цена выхода
 tokens-positions-fact-native-received = Получено { -sol }
 tokens-positions-fact-closed-reason = Причина закрытия
-tokens-positions-fact-target-min = Мин. цель прибыли
-tokens-positions-fact-target-max = Макс. цель прибыли
 tokens-positions-fact-highest = Наивысшая цена
 tokens-positions-fact-basis-peak = Пик после последней покупки
 tokens-positions-fact-lowest = Наименьшая цена
-tokens-positions-section-range = Цели и диапазон
+tokens-positions-section-range = Диапазон цены
+tokens-positions-section-exit-plan = План выхода
+tokens-positions-plan-stop-loss = Стоп-лосс
+# $step is the take-profit step's position in the ladder, from 1.
+tokens-positions-plan-step = Тейк-профит { $step }
+# $profit is the formatted profit level, $share the formatted share of the position it sells.
+tokens-positions-plan-step-value = При { $profit } продаёт { $share }
+tokens-positions-plan-step-taken = Продано
+tokens-positions-plan-trailing = Трейлинг-стоп
+# $activation is the formatted profit that arms the trail, $distance the formatted share it trails by.
+tokens-positions-plan-trailing-value = Включается при { $activation }, следует на { $distance } ниже пика
+# $step is the band's position in the list, from 1.
+tokens-positions-plan-trailing-band = Ступень трейлинга { $step }
+# $profit is the formatted profit the band starts at, $distance the formatted share it trails by.
+tokens-positions-plan-trailing-band-value = С { $profit } следует на { $distance } ниже пика
+tokens-positions-plan-break-even = Стоп в безубыток
+# $trigger and $offset are formatted profits.
+tokens-positions-plan-break-even-value = Включается при { $trigger }, продаёт при { $offset }
+tokens-positions-plan-time-loss = Выход по времени в убытке
+# $duration is a formatted duration, $threshold a formatted loss.
+tokens-positions-plan-time-loss-value = Через { $duration }, при { $threshold } или ниже
+tokens-positions-plan-time-stagnation = Выход из стоящей позиции
+# $duration is a formatted duration, $band a formatted share.
+tokens-positions-plan-time-stagnation-value = Через { $duration }, пока цена в пределах { $band } от входа
+tokens-positions-plan-none = Ни одно правило выхода не включено
 tokens-positions-section-market = Рынок и активы
 tokens-positions-kicker = Позиция
 tokens-positions-fallback-symbol = Токен

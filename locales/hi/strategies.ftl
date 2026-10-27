@@ -43,9 +43,15 @@ strategies-summary-param = { $label }: { $value }
 strategies-summary-none = कोई पैरामीटर नहीं
 # An unset optional parameter: the strategy's own value it falls back to.
 strategies-param-inherit = स्ट्रैटेजी की सेटिंग ({ $value })
-strategies-summary-period-seconds = लुकबैक अवधि: { $amount } सेकंड
-strategies-summary-period-minutes = लुकबैक अवधि: { $amount } मिनट
-strategies-summary-period-hours = लुकबैक अवधि: { $amount } घंटे
+# A duration amount with its unit, and an hour of the UTC day. $amount is the formatted number.
+strategies-value-duration-seconds = { $amount } सेकंड
+strategies-value-duration-minutes = { $amount } मिनट
+strategies-value-duration-hours = { $amount } घंटे
+strategies-value-duration-days = { $amount } दिन
+strategies-value-utc-hour = { $amount }:00 UTC
+# A hint under a field, display only. $time is a local clock time, $amount a percentage.
+strategies-hint-local-time = आपका स्थानीय समय: { $time }
+strategies-hint-price-impact = इस आकार का ट्रेड कीमत को लगभग { $amount }% हिलाता है
 
 strategies-value-percent = { $amount }%
 strategies-value-multiplier = { $amount }×
@@ -64,6 +70,7 @@ strategies-unit-percent = %
 strategies-unit-native = { -sol }
 strategies-unit-hours = घं
 strategies-unit-multiplier = ×
+strategies-unit-utc = UTC
 
 strategies-catalog-search =
     .placeholder = शर्तें खोजें...
@@ -82,7 +89,23 @@ strategies-editor-description = विवरण
 strategies-editor-description-field =
     .placeholder = यह स्ट्रैटेजी क्या करती है
     .aria-label = स्ट्रैटेजी का विवरण
+# The exit strategy's binding to the entry strategies whose positions it manages.
+strategies-editor-entry-binding-all = सभी एंट्री स्ट्रैटेजी
+# Labels the button that names the entry strategies an exit strategy manages.
+strategies-editor-entry-binding-label = प्रबंधन
+strategies-editor-entry-binding-hint = चुनी गई एंट्री स्ट्रैटेजी से खुली पोज़िशन संभालती है। कोई न चुनी हो तो मैनुअल और कॉपी की गई पोज़िशन समेत हर पोज़िशन संभालती है।
+strategies-editor-entry-binding-empty = अभी कोई एंट्री स्ट्रैटेजी नहीं है
+# $id is the id of an entry strategy that no longer exists.
+strategies-editor-entry-binding-deleted = { $id } (हटाई गई)
 strategies-action-export = एक्सपोर्ट
+strategies-action-test = किसी टोकन पर जाँचें
+# $token is the tested token's symbol or address.
+strategies-test-title = { $token } पर जाँच
+# $token is the tested token's symbol or address.
+strategies-test-running = { $token } पर जाँच जारी…
+strategies-test-verdict-pass = पूरी होती है
+strategies-test-verdict-fail = पूरी नहीं होती
+strategies-test-verdict-unknown = अज्ञात
 
 # Rule groups. $mode is the all/any select written into the sentence.
 strategies-rules-match = पूरी होने वाली शर्तें: { $mode }
@@ -138,6 +161,7 @@ strategies-data-candles = कैंडल
 strategies-data-pool = पूल
 strategies-data-position = पोज़िशन
 strategies-data-market = बाज़ार गतिविधि
+strategies-data-clock = दिन का समय
 
 # Trade counts: $count selects the plural, $amount is the formatted number.
 strategies-unit-trades = ट्रेड
@@ -186,6 +210,10 @@ strategies-toast-saved = स्ट्रैटेजी सहेजी गई
 strategies-toast-save-failed = सहेजना विफल
     .message = स्ट्रैटेजी को डेटाबेस में सहेजने में विफल
 strategies-toast-no-strategy-validate = सत्यापित करने के लिए कोई स्ट्रैटेजी नहीं
+strategies-toast-no-strategy-test = जाँचने के लिए कोई रणनीति नहीं
+strategies-toast-test-save-first = जाँच से पहले रणनीति सहेजें: जाँच सहेजे गए नियम पढ़ती है
+strategies-toast-test-failed = जाँच विफल
+    .message = रणनीति की जाँच नहीं हो सकी
 strategies-toast-valid = स्ट्रैटेजी मान्य है
 strategies-toast-invalid = स्ट्रैटेजी में त्रुटियां हैं
 strategies-toast-validation-failed = सत्यापन विफल
@@ -351,6 +379,126 @@ strategies-condition-buy-pressure-param-min-buy-share-pct = न्यूनत�
 strategies-condition-buy-pressure-param-min-transactions = न्यूनतम ट्रांज़ैक्शन
     .description = कम ट्रांज़ैक्शन वाली विंडो शर्त को कभी ट्रिगर नहीं करतीं
 
+strategies-condition-transaction-velocity = लेनदेन वेग
+    .description = तब सक्रिय होती है जब हाल की विंडो की लेनदेन दर, उसे शामिल करने वाली लंबी विंडो की दर के किसी गुणक के कम से कम या अधिकतम बराबर हो। टोकन की खरीद और बिक्री गिनती पढ़ती है।
+strategies-condition-transaction-velocity-param-window = विंडो
+    .description = हाल की विंडो और वह लंबी विंडो जिससे उसकी तुलना होती है
+strategies-condition-transaction-velocity-param-window-option-5m-vs-1h = 5 मिनट बनाम 1 घंटा
+strategies-condition-transaction-velocity-param-window-option-1h-vs-6h = 1 घंटा बनाम 6 घंटे
+strategies-condition-transaction-velocity-param-window-option-6h-vs-24h = 6 घंटे बनाम 24 घंटे
+strategies-condition-transaction-velocity-param-comparison = तुलना
+    .description = हाल की दर अनुपात से कम से कम हो या अधिकतम
+strategies-condition-transaction-velocity-param-comparison-option-above = कम से कम (≥)
+strategies-condition-transaction-velocity-param-comparison-option-below = अधिकतम (≤)
+strategies-condition-transaction-velocity-param-ratio = दर अनुपात
+    .description = हाल की विंडो में प्रति सेकंड लेनदेन को लंबी विंडो के प्रति सेकंड लेनदेन से भाग
+strategies-condition-transaction-velocity-param-min-transactions = न्यूनतम लेनदेन
+    .description = कम लेनदेन वाली हाल की विंडो कभी शर्त सक्रिय नहीं करतीं
+
+strategies-condition-pullback-from-high = हाई से गिरावट
+    .description = तब सक्रिय होती है जब लाइव कीमत हाल की कैंडलों के सर्वोच्च हाई से नीचे न्यूनतम और अधिकतम गिरावट के बीच हो।
+strategies-condition-pullback-from-high-param-lookback = लुकबैक अवधि
+    .description = कैंडलों की संख्या जिनसे सर्वोच्च हाई लिया जाता है
+strategies-condition-pullback-from-high-param-min-drop-pct = न्यूनतम गिरावट %
+    .description = कीमत हाई से कम से कम इतनी नीचे होनी चाहिए
+strategies-condition-pullback-from-high-param-max-drop-pct = अधिकतम गिरावट %
+    .description = कीमत हाई से अधिकतम इतनी नीचे होनी चाहिए; न्यूनतम गिरावट से बड़ी होनी चाहिए
+
+strategies-condition-profit-giveback = मुनाफ़ा वापसी
+    .description = तब सक्रिय होती है जब पोज़िशन ने पिछली खरीद के बाद अपने सबसे अच्छे अप्राप्त लाभ का एक हिस्सा लौटा दिया हो, जब वह लाभ एक स्तर तक पहुँच चुका हो।
+strategies-condition-profit-giveback-param-arm-after-profit-pct = मुनाफ़े के बाद सक्रिय %
+    .description = शर्त सक्रिय होने से पहले सबसे अच्छा लाभ प्रवेश कीमत के इस प्रतिशत तक पहुँचना चाहिए
+strategies-condition-profit-giveback-param-giveback-pct = वापसी %
+    .description = सबसे अच्छे लाभ का लौटाया गया हिस्सा; 100% का अर्थ है कीमत प्रवेश कीमत पर लौट आई
+
+strategies-condition-token-age = टोकन की उम्र
+    .description = तब सक्रिय होती है जब टोकन के ऑन-चेन बनने के बाद का समय किसी अवधि से अधिक या कम हो। जिस टोकन के बनने का समय अज्ञात है, उसके लिए शर्त अनिर्णीत रहती है।
+strategies-condition-token-age-param-comparison = तुलना
+    .description = टोकन अवधि से पुराना हो या नया
+strategies-condition-token-age-param-comparison-option-older-than = इससे पुराना (≥)
+strategies-condition-token-age-param-comparison-option-younger-than = इससे नया ({ "<" })
+strategies-condition-token-age-param-time-value = उम्र
+    .description = टोकन बनने के बाद का समय, फ़ील्ड में चुनी इकाई में (1-10000)
+strategies-condition-token-age-param-time-unit = समय इकाई
+    .description = उम्र की इकाई
+strategies-condition-token-age-param-time-unit-option-minutes = मिनट
+strategies-condition-token-age-param-time-unit-option-hours = घंटे
+strategies-condition-token-age-param-time-unit-option-days = दिन
+
+strategies-condition-vwap = VWAP
+    .description = तब सक्रिय होती है जब लाइव कीमत हाल की कैंडलों की वॉल्यूम-भारित औसत कीमत से कम से कम एक दूरी ऊपर या नीचे हो।
+strategies-condition-vwap-param-lookback = लुकबैक अवधि
+    .description = वॉल्यूम-भारित औसत में शामिल कैंडलों की संख्या
+strategies-condition-vwap-param-position = स्थिति
+    .description = VWAP के सापेक्ष कीमत की स्थिति
+strategies-condition-vwap-param-position-option-above = VWAP से ऊपर
+strategies-condition-vwap-param-position-option-below = VWAP से नीचे
+strategies-condition-vwap-param-distance-pct = दूरी %
+    .description = VWAP से न्यूनतम दूरी; 0 का अर्थ है चुनी हुई ओर कोई भी दूरी
+
+strategies-condition-volatility-range = अस्थिरता रेंज
+    .description = तब सक्रिय होती है जब हाल की कैंडलों का औसत ट्रू रेंज, लाइव कीमत के प्रतिशत के रूप में, किसी सीमा से ऊपर या नीचे हो। एक समूह में ऐसी दो शर्तें एक रेंज बनाती हैं।
+strategies-condition-volatility-range-param-period = ATR अवधि
+    .description = कैंडलों की संख्या जिन पर औसत ट्रू रेंज स्मूद किया जाता है; शर्त को एक कैंडल और चाहिए
+strategies-condition-volatility-range-param-comparison = तुलना
+    .description = रेंज सीमा से ऊपर हो या नीचे
+strategies-condition-volatility-range-param-comparison-option-above = ऊपर
+strategies-condition-volatility-range-param-comparison-option-below = नीचे
+strategies-condition-volatility-range-param-threshold-pct = रेंज सीमा %
+    .description = लाइव कीमत के प्रतिशत के रूप में औसत ट्रू रेंज
+
+strategies-condition-bollinger-bands = बोलिंजर बैंड
+    .description = तब सक्रिय होती है जब लाइव कीमत निचले बैंड से नीचे या ऊपरी बैंड से ऊपर हो, या जब बैंड सिकुड़ जाएँ। बैंड औसत क्लोज़ के चारों ओर कुछ मानक विचलन पर होते हैं।
+strategies-condition-bollinger-bands-param-period = अवधि
+    .description = औसत और मानक विचलन में शामिल कैंडलों की संख्या
+strategies-condition-bollinger-bands-param-std-dev = मानक विचलन
+    .description = हर बैंड औसत से कितने मानक विचलन दूर है
+strategies-condition-bollinger-bands-param-signal = सिग्नल
+    .description = बैंड को क्या दिखाना चाहिए
+strategies-condition-bollinger-bands-param-signal-option-below-lower = निचले बैंड से नीचे
+strategies-condition-bollinger-bands-param-signal-option-above-upper = ऊपरी बैंड से ऊपर
+strategies-condition-bollinger-bands-param-signal-option-squeeze = स्क्वीज़
+strategies-condition-bollinger-bands-param-squeeze-width-pct = स्क्वीज़ चौड़ाई %
+    .description = स्क्वीज़ के लिए: बैंडों के बीच अधिकतम दूरी, औसत के प्रतिशत के रूप में
+
+strategies-condition-liquidity-to-size = आकार के मुकाबले लिक्विडिटी
+    .description = तब सक्रिय होती है जब पूल के रिज़र्व दाँव पर लगे आकार के किसी गुणक के कम से कम या उससे कम हों: प्रवेश रणनीति में ट्रेड आकार, निकास रणनीति में पोज़िशन का शेष मूल्य।
+strategies-condition-liquidity-to-size-param-comparison = तुलना
+    .description = रिज़र्व गुणक के कम से कम हों या उससे कम
+strategies-condition-liquidity-to-size-param-comparison-option-at-least = कम से कम (≥)
+strategies-condition-liquidity-to-size-param-comparison-option-below = इससे कम ({ "<" })
+strategies-condition-liquidity-to-size-param-multiple = लिक्विडिटी गुणक
+    .description = पूल रिज़र्व को दाँव पर लगे आकार से भाग; N का गुणक कीमत को लगभग 1/(N+1) हिलाता है
+
+strategies-condition-position-adds = पोज़िशन में जोड़
+    .description = तब सक्रिय होती है जब पहले प्रवेश के बाद जोड़ी गई खरीदों, या आंशिक बिक्रियों, की संख्या किसी संख्या के कम से कम या अधिकतम हो।
+strategies-condition-position-adds-param-subject = गिनती का विषय
+    .description = कौन सी क्रियाएँ गिनी जाती हैं
+strategies-condition-position-adds-param-subject-option-adds = जोड़ी गई खरीदें
+strategies-condition-position-adds-param-subject-option-partial-sells = आंशिक बिक्रियाँ
+strategies-condition-position-adds-param-comparison = तुलना
+    .description = गिनती संख्या के कम से कम हो या अधिकतम
+strategies-condition-position-adds-param-comparison-option-at-least = कम से कम (≥)
+strategies-condition-position-adds-param-comparison-option-at-most = अधिकतम (≤)
+strategies-condition-position-adds-param-count = गिनती
+    .description = क्रियाओं की संख्या
+
+strategies-condition-time-of-day = दिन का समय
+    .description = तब सक्रिय होती है जब वर्तमान घंटा UTC घंटों की किसी विंडो में हो। समाप्ति के बाद का आरंभ आधी रात के पार जाता है।
+strategies-condition-time-of-day-param-start-hour = आरंभ घंटा (UTC)
+    .description = विंडो का पहला घंटा, 0 से 23
+strategies-condition-time-of-day-param-end-hour = समाप्ति घंटा (UTC)
+    .description = वह घंटा जिस पर विंडो समाप्त होती है, 1 से 24; वह घंटा स्वयं विंडो से बाहर है
+
+strategies-condition-liquidity-change-since-entry = प्रवेश के बाद लिक्विडिटी बदलाव
+    .description = तब सक्रिय होती है जब पोज़िशन खुलने के बाद से पूल के रिज़र्व कम से कम किसी प्रतिशत से गिरे या बढ़े हों। जिस पोज़िशन की प्रवेश लिक्विडिटी दर्ज नहीं है, उसके लिए शर्त अनिर्णीत रहती है।
+strategies-condition-liquidity-change-since-entry-param-comparison = तुलना
+    .description = रिज़र्व गिरे हों या बढ़े हों
+strategies-condition-liquidity-change-since-entry-param-comparison-option-dropped-by = इतना गिरा
+strategies-condition-liquidity-change-since-entry-param-comparison-option-rose-by = इतना बढ़ा
+strategies-condition-liquidity-change-since-entry-param-change-pct = बदलाव %
+    .description = प्रवेश के बाद पूल रिज़र्व में बदलाव
+
 strategies-condition-param-timeframe = टाइमफ़्रेम
     .description = कैंडल आकार: शर्त जिस हर कैंडल को पढ़ती है उसकी अवधि (सेट न होने पर स्ट्रैटेजी टाइमफ़्रेम)
 strategies-condition-timeframe-option-1m = 1 मिनट
@@ -417,6 +565,27 @@ strategies-error-field-peak-price = पीक प्राइस
 strategies-error-field-slow-period = धीमी अवधि
 strategies-error-field-window = विंडो
 strategies-error-field-within-candles = क्रॉस की कैंडल संख्या
+strategies-error-field-change = बदलाव
+strategies-error-field-end-hour = समाप्ति घंटा
+strategies-error-field-entry-liquidity = प्रवेश लिक्विडिटी
+strategies-error-field-giveback = वापसी
+strategies-error-field-highest-high = सर्वोच्च हाई
+strategies-error-field-long-window-transactions = लंबी विंडो के लेनदेन
+strategies-error-field-maximum-drop = अधिकतम गिरावट
+strategies-error-field-minimum-drop = न्यूनतम गिरावट
+strategies-error-field-multiple = गुणक
+strategies-error-field-pool-liquidity = पूल लिक्विडिटी
+strategies-error-field-ratio = अनुपात
+strategies-error-field-remaining-position-value = पोज़िशन का शेष मूल्य
+strategies-error-field-signal = सिग्नल
+strategies-error-field-squeeze-width = स्क्वीज़ चौड़ाई
+strategies-error-field-standard-deviations = मानक विचलन
+strategies-error-field-start-hour = आरंभ घंटा
+strategies-error-field-subject = गिनती का विषय
+strategies-error-field-token-creation-time = टोकन बनने का समय
+strategies-error-field-total-volume = कुल वॉल्यूम
+strategies-error-field-trade-size = ट्रेड आकार
+strategies-error-field-vwap = VWAP
 
 strategies-error-expected-boolean = बूलियन
 strategies-error-expected-number = संख्या
@@ -429,6 +598,12 @@ strategies-error-data-ohlcv-data = OHLCV डेटा
 strategies-error-data-position-data = पोज़िशन डेटा
 strategies-error-data-peak-price = पीक प्राइस
 strategies-error-data-transaction-counts = ट्रांज़ैक्शन की गिनती
+strategies-error-data-entry-liquidity = प्रवेश लिक्विडिटी
+strategies-error-data-entry-pool-liquidity = एंट्री पूल की लिक्विडिटी
+strategies-error-data-real-pool-reserves = पूल की वास्तविक लिक्विडिटी
+strategies-error-data-remaining-position-value = पोज़िशन का शेष मूल्य
+strategies-error-data-token-creation-time = टोकन बनने का समय
+strategies-error-data-trade-size = ट्रेड आकार
 
 strategies-error-indicator-consecutive-candles = लगातार कैंडल
 strategies-error-indicator-moving-average = मूविंग एवरेज
@@ -437,6 +612,10 @@ strategies-error-indicator-price-change-lookback = प्राइस बदल�
 strategies-error-indicator-volume-spike = वॉल्यूम स्पाइक
 strategies-error-indicator-moving-average-cross = मूविंग एवरेज क्रॉस
 strategies-error-indicator-rsi = RSI
+strategies-error-indicator-bollinger-bands = बोलिंजर बैंड
+strategies-error-indicator-pullback-from-high = हाई से गिरावट
+strategies-error-indicator-volatility-range = अस्थिरता रेंज
+strategies-error-indicator-vwap = VWAP
 
 strategies-error-rule-branch-node-missing-conditions = ब्रांच नोड में शर्तें नहीं हैं
 strategies-error-rule-branch-node-missing-operator = ब्रांच नोड में ऑपरेटर नहीं है

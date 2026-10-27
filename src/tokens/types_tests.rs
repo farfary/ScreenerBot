@@ -111,6 +111,27 @@ fn invalid_timestamps_are_ignored() {
 }
 
 #[test]
+fn the_on_chain_creation_time_is_valid_or_absent() {
+    let discovered = Utc::now();
+    assert_eq!(
+        token(discovered, Some(at(2023, 5)), Some(at(2021, 3))).on_chain_created_at(),
+        Some(at(2023, 5))
+    );
+    assert_eq!(
+        token(discovered, None, Some(at(2021, 3))).on_chain_created_at(),
+        None
+    );
+    let epoch = DateTime::UNIX_EPOCH;
+    for invalid in [epoch, epoch - Duration::days(1)] {
+        assert_eq!(
+            token(discovered, Some(invalid), Some(at(2021, 3))).on_chain_created_at(),
+            None,
+            "{invalid}"
+        );
+    }
+}
+
+#[test]
 fn discovery_is_never_a_displayed_age() {
     let discovered = Utc::now() - Duration::seconds(16);
     assert_eq!(

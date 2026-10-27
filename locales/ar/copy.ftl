@@ -587,6 +587,18 @@ copy-validate-trailing-distance = يجب أن تكون مسافة الوقف ا�
 copy-validate-take-profit = يجب أن يكون جني الأرباح أعلى من 0%.
 copy-validate-time-duration = قاعدة الوقت تحتاج إلى مدة أكبر من صفر.
 copy-validate-time-threshold = حد قاعدة الوقت هو خسارة: استخدم 0% أو رقمًا سالبًا.
+# $reason is the message of the rule the stored overrides break.
+copy-exit-issue-warning = قواعد الخروج تحتاج إلى مراجعة: { $reason } حتى تصلحها، تستخدم المراكز إعداد المتداول لتلك القاعدة.
+# $distance and $activation are percentages.
+copy-exit-issue-trailing-distance-above-activation = يجب أن تكون مسافة التتبع { $distance }% أقل من التفعيل، حاليًا { $activation }%.
+# $maximum is the number of bands allowed.
+copy-exit-issue-trailing-band-count = يمكن أن يحتوي وقف التتبع على { $maximum } شرائح كحد أقصى.
+# $profit and $floor are percentages.
+copy-exit-issue-trailing-band-order = يجب أن تبدأ شريحة التتبع عند { $profit }% فوق { $floor }%، أي التفعيل أو الشريحة السابقة.
+# $profit and $distance are percentages.
+copy-exit-issue-trailing-band-distance = يجب أن تتبع شريحة التتبع عند { $profit }% بأكثر من 0% وأقل من بدايتها، حاليًا { $distance }%.
+# $value is a percentage.
+copy-exit-issue-time-loss-threshold = يجب أن يكون حد قاعدة زمن الخسارة خسارة بين -100% و0%، حاليًا { $value }%.
 copy-warning-mirror = عمليات بيع المحفظة وحدها تغلق الحيازات: لا وقف خسارة يحميها، والرمز الذي لا تبيعه المحفظة يبقى محتفَظًا به.
 copy-warning-no-rules = لا توجد قاعدة خروج مفعّلة وعمليات بيع المحفظة متجاهلة: لن تُباع الحيازات أبدًا.
 copy-warning-no-stop-loss = لا يوجد وقف خسارة: الرمز الهابط يبقى محتفَظًا به حتى تبيعه قاعدة أخرى أو المحفظة.

@@ -88,6 +88,18 @@ pub fn pool_protocol(chain: ChainId, mint: &str, pool: &str) -> Option<&'static 
         .pool_protocol(mint, pool)
 }
 
+/// Whether the decoder of `pool`, a known pool of `mint` on `chain`, reports its native
+/// reserves as virtual reserves; `None` while the pool is unknown or the pool service is
+/// not running.
+pub fn pool_reports_virtual_reserves(chain: ChainId, mint: &str, pool: &str) -> Option<bool> {
+    if !service::is_pool_service_running() {
+        return None;
+    }
+    service::pricing_driver(chain)
+        .ok()?
+        .pool_reports_virtual_reserves(mint, pool)
+}
+
 /// The pricing pipelines' state, merged over the chains of `scope`.
 pub fn pricing_status(scope: ChainScope) -> PricingStatus {
     scope

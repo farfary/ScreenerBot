@@ -43,9 +43,15 @@ strategies-summary-param = { $label }: { $value }
 strategies-summary-none = Нет параметров
 # An unset optional parameter: the strategy's own value it falls back to.
 strategies-param-inherit = Настройка стратегии ({ $value })
-strategies-summary-period-seconds = Период просмотра: { $amount } с
-strategies-summary-period-minutes = Период просмотра: { $amount } мин
-strategies-summary-period-hours = Период просмотра: { $amount } ч
+# A duration amount with its unit, and an hour of the UTC day. $amount is the formatted number.
+strategies-value-duration-seconds = { $amount } с
+strategies-value-duration-minutes = { $amount } мин
+strategies-value-duration-hours = { $amount } ч
+strategies-value-duration-days = { $amount } д
+strategies-value-utc-hour = { $amount }:00 UTC
+# A hint under a field, display only. $time is a local clock time, $amount a percentage.
+strategies-hint-local-time = Ваше местное время: { $time }
+strategies-hint-price-impact = Сделка такого размера сдвигает цену примерно на { $amount }%
 
 strategies-value-percent = { $amount }%
 strategies-value-multiplier = { $amount }×
@@ -68,6 +74,7 @@ strategies-unit-percent = %
 strategies-unit-native = { -sol }
 strategies-unit-hours = ч
 strategies-unit-multiplier = ×
+strategies-unit-utc = UTC
 
 strategies-catalog-search =
     .placeholder = Поиск условий...
@@ -86,7 +93,23 @@ strategies-editor-description = Описание
 strategies-editor-description-field =
     .placeholder = Что делает эта стратегия
     .aria-label = Описание стратегии
+# The exit strategy's binding to the entry strategies whose positions it manages.
+strategies-editor-entry-binding-all = Все стратегии входа
+# Labels the button that names the entry strategies an exit strategy manages.
+strategies-editor-entry-binding-label = Управляет
+strategies-editor-entry-binding-hint = Управляет позициями, открытыми отмеченными стратегиями входа. Если ничего не отмечено, управляет всеми позициями, включая ручные и скопированные.
+strategies-editor-entry-binding-empty = Стратегий входа пока нет
+# $id is the id of an entry strategy that no longer exists.
+strategies-editor-entry-binding-deleted = { $id } (удалена)
 strategies-action-export = Экспорт
+strategies-action-test = Проверить на токене
+# $token is the tested token's symbol or address.
+strategies-test-title = Проверка на { $token }
+# $token is the tested token's symbol or address.
+strategies-test-running = Проверка на { $token }…
+strategies-test-verdict-pass = Выполнено
+strategies-test-verdict-fail = Не выполнено
+strategies-test-verdict-unknown = Неизвестно
 
 # Rule groups. $mode is the all/any select written into the sentence.
 strategies-rules-match = Условия должны выполняться: { $mode }
@@ -146,6 +169,7 @@ strategies-data-candles = Свечи
 strategies-data-pool = Пул
 strategies-data-position = Позиция
 strategies-data-market = Рыночная активность
+strategies-data-clock = Время суток
 
 # Trade counts: $count selects the plural, $amount is the formatted number.
 strategies-unit-trades = сделок
@@ -196,6 +220,10 @@ strategies-toast-saved = Стратегия сохранена
 strategies-toast-save-failed = Ошибка сохранения
     .message = Не удалось сохранить стратегию в базе данных
 strategies-toast-no-strategy-validate = Нет стратегии для проверки
+strategies-toast-no-strategy-test = Нет стратегии для проверки
+strategies-toast-test-save-first = Сохраните стратегию перед проверкой: проверка читает сохранённые правила
+strategies-toast-test-failed = Проверка не удалась
+    .message = Не удалось проверить стратегию
 strategies-toast-valid = Стратегия корректна
 strategies-toast-invalid = В стратегии есть ошибки
 strategies-toast-validation-failed = Ошибка проверки
@@ -361,6 +389,126 @@ strategies-condition-buy-pressure-param-min-buy-share-pct = Минимальна
 strategies-condition-buy-pressure-param-min-transactions = Минимум транзакций
     .description = Окна с меньшим числом транзакций никогда не запускают условие
 
+strategies-condition-transaction-velocity = Скорость транзакций
+    .description = Срабатывает, когда темп транзакций недавнего окна не меньше или не больше кратного темпа более длинного окна, в которое оно входит. Использует число покупок и продаж токена.
+strategies-condition-transaction-velocity-param-window = Окна
+    .description = Недавнее окно и более длинное окно, с которым оно сравнивается
+strategies-condition-transaction-velocity-param-window-option-5m-vs-1h = 5 минут и 1 час
+strategies-condition-transaction-velocity-param-window-option-1h-vs-6h = 1 час и 6 часов
+strategies-condition-transaction-velocity-param-window-option-6h-vs-24h = 6 часов и 24 часа
+strategies-condition-transaction-velocity-param-comparison = Сравнение
+    .description = Должен ли недавний темп быть не меньше или не больше отношения
+strategies-condition-transaction-velocity-param-comparison-option-above = Не меньше (≥)
+strategies-condition-transaction-velocity-param-comparison-option-below = Не больше (≤)
+strategies-condition-transaction-velocity-param-ratio = Отношение темпов
+    .description = Транзакции в секунду недавнего окна, делённые на транзакции в секунду длинного окна
+strategies-condition-transaction-velocity-param-min-transactions = Минимум транзакций
+    .description = Недавние окна с меньшим числом транзакций никогда не запускают условие
+
+strategies-condition-pullback-from-high = Откат от максимума
+    .description = Срабатывает, когда текущая цена находится между минимальным и максимальным падением ниже наивысшего максимума последних свечей.
+strategies-condition-pullback-from-high-param-lookback = Период просмотра
+    .description = Количество свечей, из которых берётся наивысший максимум
+strategies-condition-pullback-from-high-param-min-drop-pct = Минимальное падение %
+    .description = Цена должна быть ниже максимума как минимум на столько
+strategies-condition-pullback-from-high-param-max-drop-pct = Максимальное падение %
+    .description = Цена должна быть ниже максимума не более чем на столько; должно быть больше минимального падения
+
+strategies-condition-profit-giveback = Отдача прибыли
+    .description = Срабатывает, когда позиция отдала долю своей лучшей нереализованной прибыли с последней покупки после того, как эта прибыль достигла уровня.
+strategies-condition-profit-giveback-param-arm-after-profit-pct = Взвести после прибыли %
+    .description = Лучшая прибыль должна достичь этого процента от цены входа, прежде чем условие сможет сработать
+strategies-condition-profit-giveback-param-giveback-pct = Отдача %
+    .description = Доля отданной лучшей прибыли; 100% означает, что цена вернулась к цене входа
+
+strategies-condition-token-age = Возраст токена
+    .description = Срабатывает, когда время с момента создания токена в блокчейне больше или меньше заданной длительности. Если время создания неизвестно, условие остаётся неопределённым.
+strategies-condition-token-age-param-comparison = Сравнение
+    .description = Должен ли токен быть старше или моложе длительности
+strategies-condition-token-age-param-comparison-option-older-than = Старше (≥)
+strategies-condition-token-age-param-comparison-option-younger-than = Моложе ({ "<" })
+strategies-condition-token-age-param-time-value = Возраст
+    .description = Время с создания токена в единице, выбранной в поле (1-10000)
+strategies-condition-token-age-param-time-unit = Единица времени
+    .description = Единица возраста
+strategies-condition-token-age-param-time-unit-option-minutes = мин
+strategies-condition-token-age-param-time-unit-option-hours = ч
+strategies-condition-token-age-param-time-unit-option-days = д
+
+strategies-condition-vwap = VWAP
+    .description = Срабатывает, когда текущая цена выше или ниже средневзвешенной по объёму цены последних свечей как минимум на заданное расстояние.
+strategies-condition-vwap-param-lookback = Период просмотра
+    .description = Количество свечей, охватываемых средневзвешенной по объёму ценой
+strategies-condition-vwap-param-position = Положение
+    .description = Положение цены относительно VWAP
+strategies-condition-vwap-param-position-option-above = Выше VWAP
+strategies-condition-vwap-param-position-option-below = Ниже VWAP
+strategies-condition-vwap-param-distance-pct = Расстояние %
+    .description = Минимальное расстояние от VWAP; 0 означает любое расстояние с выбранной стороны
+
+strategies-condition-volatility-range = Диапазон волатильности
+    .description = Срабатывает, когда средний истинный диапазон последних свечей в процентах от текущей цены выше или ниже порога. Два таких условия в группе задают диапазон.
+strategies-condition-volatility-range-param-period = Период ATR
+    .description = Количество свечей для сглаживания среднего истинного диапазона; условию нужна ещё одна свеча
+strategies-condition-volatility-range-param-comparison = Сравнение
+    .description = Должен ли диапазон быть выше или ниже порога
+strategies-condition-volatility-range-param-comparison-option-above = Выше
+strategies-condition-volatility-range-param-comparison-option-below = Ниже
+strategies-condition-volatility-range-param-threshold-pct = Порог диапазона %
+    .description = Средний истинный диапазон в процентах от текущей цены
+
+strategies-condition-bollinger-bands = Полосы Боллинджера
+    .description = Срабатывает, когда текущая цена ниже нижней полосы или выше верхней либо когда полосы сжимаются. Полосы отстоят на несколько стандартных отклонений от средней цены закрытия.
+strategies-condition-bollinger-bands-param-period = Период
+    .description = Количество свечей для средней и стандартного отклонения
+strategies-condition-bollinger-bands-param-std-dev = Стандартные отклонения
+    .description = На сколько стандартных отклонений каждая полоса отстоит от средней
+strategies-condition-bollinger-bands-param-signal = Сигнал
+    .description = Что должны показывать полосы
+strategies-condition-bollinger-bands-param-signal-option-below-lower = Ниже нижней полосы
+strategies-condition-bollinger-bands-param-signal-option-above-upper = Выше верхней полосы
+strategies-condition-bollinger-bands-param-signal-option-squeeze = Сжатие
+strategies-condition-bollinger-bands-param-squeeze-width-pct = Ширина сжатия %
+    .description = Для сжатия: наибольшее расстояние между полосами в процентах от средней
+
+strategies-condition-liquidity-to-size = Ликвидность к размеру
+    .description = Срабатывает, когда резервы пула не меньше или меньше кратного размера на кону: размера сделки в стратегии входа, оставшейся стоимости позиции в стратегии выхода.
+strategies-condition-liquidity-to-size-param-comparison = Сравнение
+    .description = Должны ли резервы быть не меньше или меньше кратного
+strategies-condition-liquidity-to-size-param-comparison-option-at-least = Не меньше (≥)
+strategies-condition-liquidity-to-size-param-comparison-option-below = Меньше ({ "<" })
+strategies-condition-liquidity-to-size-param-multiple = Кратность ликвидности
+    .description = Резервы пула, делённые на размер на кону; кратность N сдвигает цену примерно на 1/(N+1)
+
+strategies-condition-position-adds = Докупки позиции
+    .description = Срабатывает, когда число докупок после первого входа или частичных продаж не меньше или не больше заданного.
+strategies-condition-position-adds-param-subject = Что считать
+    .description = Какие действия считаются
+strategies-condition-position-adds-param-subject-option-adds = Докупки
+strategies-condition-position-adds-param-subject-option-partial-sells = Частичные продажи
+strategies-condition-position-adds-param-comparison = Сравнение
+    .description = Должно ли число быть не меньше или не больше заданного
+strategies-condition-position-adds-param-comparison-option-at-least = Не меньше (≥)
+strategies-condition-position-adds-param-comparison-option-at-most = Не больше (≤)
+strategies-condition-position-adds-param-count = Количество
+    .description = Количество действий
+
+strategies-condition-time-of-day = Время суток
+    .description = Срабатывает, когда текущий час попадает в окно часов UTC. Начало позже окончания переходит через полночь.
+strategies-condition-time-of-day-param-start-hour = Час начала (UTC)
+    .description = Первый час окна, от 0 до 23
+strategies-condition-time-of-day-param-end-hour = Час окончания (UTC)
+    .description = Час, которым заканчивается окно, от 1 до 24; сам этот час вне окна
+
+strategies-condition-liquidity-change-since-entry = Изменение ликвидности с входа
+    .description = Срабатывает, когда резервы пула упали или выросли как минимум на процент с открытия позиции. Без записанной ликвидности при входе условие остаётся неопределённым.
+strategies-condition-liquidity-change-since-entry-param-comparison = Сравнение
+    .description = Должны ли резервы упасть или вырасти
+strategies-condition-liquidity-change-since-entry-param-comparison-option-dropped-by = Упала на
+strategies-condition-liquidity-change-since-entry-param-comparison-option-rose-by = Выросла на
+strategies-condition-liquidity-change-since-entry-param-change-pct = Изменение %
+    .description = Изменение резервов пула с момента входа
+
 strategies-condition-param-timeframe = Таймфрейм
     .description = Размер свечи: длительность каждой свечи, которую читает условие (таймфрейм стратегии, если не задан)
 strategies-condition-timeframe-option-1m = 1 минута
@@ -427,6 +575,27 @@ strategies-error-field-peak-price = цена пика
 strategies-error-field-slow-period = медленный период
 strategies-error-field-window = окно
 strategies-error-field-within-candles = число свечей пересечения
+strategies-error-field-change = изменение
+strategies-error-field-end-hour = час окончания
+strategies-error-field-entry-liquidity = ликвидность при входе
+strategies-error-field-giveback = отдача
+strategies-error-field-highest-high = максимум
+strategies-error-field-long-window-transactions = транзакции длинного окна
+strategies-error-field-maximum-drop = максимальное падение
+strategies-error-field-minimum-drop = минимальное падение
+strategies-error-field-multiple = кратность
+strategies-error-field-pool-liquidity = ликвидность пула
+strategies-error-field-ratio = отношение
+strategies-error-field-remaining-position-value = оставшаяся стоимость позиции
+strategies-error-field-signal = сигнал
+strategies-error-field-squeeze-width = ширина сжатия
+strategies-error-field-standard-deviations = стандартные отклонения
+strategies-error-field-start-hour = час начала
+strategies-error-field-subject = что считать
+strategies-error-field-token-creation-time = время создания токена
+strategies-error-field-total-volume = общий объём
+strategies-error-field-trade-size = размер сделки
+strategies-error-field-vwap = VWAP
 
 strategies-error-expected-boolean = логическое значение
 strategies-error-expected-number = число
@@ -439,6 +608,12 @@ strategies-error-data-ohlcv-data = Данные OHLCV
 strategies-error-data-position-data = Данные о позиции
 strategies-error-data-peak-price = Цена пика
 strategies-error-data-transaction-counts = Число транзакций
+strategies-error-data-entry-liquidity = Ликвидность при входе
+strategies-error-data-entry-pool-liquidity = Ликвидность пула входа
+strategies-error-data-real-pool-reserves = Реальная ликвидность пула
+strategies-error-data-remaining-position-value = Оставшаяся стоимость позиции
+strategies-error-data-token-creation-time = Время создания токена
+strategies-error-data-trade-size = Размер сделки
 
 strategies-error-indicator-consecutive-candles = свечи подряд
 strategies-error-indicator-moving-average = скользящая средняя
@@ -447,6 +622,10 @@ strategies-error-indicator-price-change-lookback = период просмотр
 strategies-error-indicator-volume-spike = всплеск объёма
 strategies-error-indicator-moving-average-cross = пересечение скользящих средних
 strategies-error-indicator-rsi = RSI
+strategies-error-indicator-bollinger-bands = полосы Боллинджера
+strategies-error-indicator-pullback-from-high = откат от максимума
+strategies-error-indicator-volatility-range = диапазон волатильности
+strategies-error-indicator-vwap = VWAP
 
 strategies-error-rule-branch-node-missing-conditions = У узла ветви нет условий
 strategies-error-rule-branch-node-missing-operator = У узла ветви нет оператора

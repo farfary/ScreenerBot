@@ -501,6 +501,18 @@ copy-validate-trailing-distance = Jarak trailing harus di atas 0% dan maksimal 1
 copy-validate-take-profit = Take profit harus di atas 0%.
 copy-validate-time-duration = Aturan waktu memerlukan durasi di atas nol.
 copy-validate-time-threshold = Ambang aturan waktu berupa kerugian: gunakan 0% atau angka negatif.
+# $reason is the message of the rule the stored overrides break.
+copy-exit-issue-warning = Aturan keluar perlu diperhatikan: { $reason } Sampai Anda memperbaikinya, kepemilikan memakai pengaturan Trader untuk aturan itu.
+# $distance and $activation are percentages.
+copy-exit-issue-trailing-distance-above-activation = Jarak trailing { $distance }% harus di bawah aktivasi, saat ini { $activation }%.
+# $maximum is the number of bands allowed.
+copy-exit-issue-trailing-band-count = Trailing stop dapat memiliki paling banyak { $maximum } tingkat.
+# $profit and $floor are percentages.
+copy-exit-issue-trailing-band-order = Tingkat trailing pada { $profit }% harus dimulai di atas { $floor }%, yaitu aktivasi atau tingkat sebelumnya.
+# $profit and $distance are percentages.
+copy-exit-issue-trailing-band-distance = Tingkat trailing pada { $profit }% harus mengikuti lebih dari 0% dan kurang dari titik mulainya, saat ini { $distance }%.
+# $value is a percentage.
+copy-exit-issue-time-loss-threshold = Ambang aturan waktu rugi harus berupa kerugian antara -100% dan 0%, saat ini { $value }%.
 copy-warning-mirror = Hanya penjualan dompet yang menutup kepemilikan: tidak ada stop loss yang melindunginya, dan token yang tidak pernah dijual dompet tetap ditahan.
 copy-warning-no-rules = Tidak ada aturan exit yang aktif dan penjualan dompet diabaikan: kepemilikan tidak pernah dijual.
 copy-warning-no-stop-loss = Tidak ada stop loss yang berlaku: token yang turun ditahan sampai aturan lain atau dompet menjual.

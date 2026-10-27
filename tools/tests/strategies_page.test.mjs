@@ -22,6 +22,19 @@
  * - A blank new strategy shows adding a condition as its next step, with no problem
  *   bar, and its Invert stays off until there is a condition to negate.
  * - With no strategy at all, the editor area offers New Strategy in place.
+ * - The editor's toolbar is one row of the name and the actions, also at the smallest
+ *   window; the strategy settings, the description and the exit binding sit in the
+ *   scrolling column above the rules, and the description stays closed until asked for,
+ *   also for a strategy that has one.
+ * - Testing against a picked token shows a spinner with the token's name in the footer
+ *   line while the test runs, which can take as long as the server waits for the token's
+ *   candles. The result then marks each rule by position with its verdict, an unknown
+ *   condition with its reason, and the footer line reads the whole strategy's verdict
+ *   under the same name. An edit takes the marks and the line away.
+ * - An exit strategy names the entry strategies whose positions it manages: a checkbox per
+ *   entry strategy plus a bound one deleted since, "All entry strategies" with none
+ *   checked, and the checked ids saved; an entry strategy shows neither the button nor the
+ *   note and choices, and the panel stays closed until its button opens it.
  *
  * Run with `npm run test:js`.
  */
@@ -36,7 +49,49 @@ import { serveDashboard, PAGE_READY } from "../lib/dashboard_host.mjs";
 import { createApiHandler, loadIndex } from "../lib/dashboard_fixtures.mjs";
 import { branch, leaf } from "../lib/strategy_rules.mjs";
 
+/** The condition schemas the trader fixtures serve, so catalog counts follow the catalog. */
+const SCHEMAS = Object.values(
+  JSON.parse(
+    readFileSync(
+      new URL("./fixtures/dashboard/trader/strategies_condition_schemas.json", import.meta.url),
+      "utf8"
+    )
+  ).schemas
+);
+
 const ID = "8f3c2a1e-4b6d-4c7a-9e21-3a5f7b9d1c01";
+const MISSING_COUNTS = {
+  id: "strategies-error-missing-data",
+  args: {
+    data: { type: "nested", value: { id: "strategies-error-data-transaction-counts" } },
+  },
+};
+/** The test outcome of RULES, in the shape of the saved tree. */
+const OUTCOME = {
+  verdict: "unknown",
+  operator: "AND",
+  reason: MISSING_COUNTS,
+  children: [
+    { verdict: "pass", condition_type: "Rsi" },
+    { verdict: "off", condition_type: "VolumeSpike" },
+    {
+      verdict: "unknown",
+      operator: "NOT",
+      reason: MISSING_COUNTS,
+      children: [
+        {
+          verdict: "unknown",
+          operator: "OR",
+          reason: MISSING_COUNTS,
+          children: [
+            { verdict: "unknown", condition_type: "CandleSize", reason: MISSING_COUNTS },
+            { verdict: "fail", condition_type: "PriceToMA" },
+          ],
+        },
+      ],
+    },
+  ],
+};
 const RULES = branch(
   "AND",
   leaf("Rsi", { period: 21, timeframe: "1h" }),
@@ -57,6 +112,26 @@ const STORED = {
   updated_at: "2026-10-01T12:15:00+00:00",
   author: null,
   version: 1,
+  entry_strategy_ids: [],
+};
+/** A stored exit strategy bound to one listed entry strategy and one deleted since. */
+const EXIT_ID = "8f3c2a1e-4b6d-4c7a-9e21-3a5f7b9d1c05";
+const DIP_RECOVERY_ID = "8f3c2a1e-4b6d-4c7a-9e21-3a5f7b9d1c02";
+const EXIT_STORED = {
+  id: EXIT_ID,
+  name: "Moving average cross exit",
+  description: null,
+  strategy_type: "EXIT",
+  enabled: true,
+  priority: 10,
+  timeframe: "15m",
+  rules: branch("AND", leaf("PositionHoldingTime")),
+  parameters: {},
+  created_at: "2026-09-10T08:30:00+00:00",
+  updated_at: "2026-10-01T12:15:00+00:00",
+  author: null,
+  version: 3,
+  entry_strategy_ids: [DIP_RECOVERY_ID, "retired-entry"],
 };
 const EXPORTED = {
   format: "screenerbot.strategy",
@@ -72,6 +147,9 @@ const EXPORTED = {
   },
 };
 
+/** Holds the answer of a strategy test until a test case releases it. */
+const testGate = { open: Promise.resolve() };
+
 const browser = await chromium.launch({ headless: true });
 after(() => browser.close());
 
@@ -85,6 +163,26 @@ const host = await serveDashboard(context, {
   onApi: async (request) => {
     if (request.url.pathname === `/api/strategies/${ID}`) {
       return { body: JSON.stringify(request.method === "GET" ? STORED : {}) };
+    }
+    if (request.url.pathname === `/api/strategies/${EXIT_ID}`) {
+      return {
+        body: JSON.stringify(
+          request.method === "GET" ? EXIT_STORED : { id: EXIT_ID, version: 4 }
+        ),
+      };
+    }
+    if (request.url.pathname === `/api/strategies/${ID}/test`) {
+      await testGate.open;
+      return {
+        body: JSON.stringify({
+          strategy_id: ID,
+          strategy_name: STORED.name,
+          result: null,
+          unknown_reason: MISSING_COUNTS,
+          execution_time_ms: 3,
+          rules: OUTCOME,
+        }),
+      };
     }
     if (request.url.pathname === `/api/strategies/${ID}/enabled`) {
       return { body: JSON.stringify({ id: ID, enabled: false, version: 2 }) };
@@ -203,8 +301,12 @@ test("a condition is added from the catalog, checked as it is edited and kept ou
 
   await page.click("#add-condition");
   assert.equal(await page.evaluate(() => document.activeElement?.id), "condition-search");
-  assert.equal(await page.locator("#catalog-list .catalog-entry").count(), 13);
-  assert.equal(await page.locator("#catalog-list .catalog-entry:disabled").count(), 3);
+  assert.equal(await page.locator("#catalog-list .catalog-entry").count(), SCHEMAS.length);
+  assert.equal(
+    await page.locator("#catalog-list .catalog-entry:disabled").count(),
+    SCHEMAS.filter((schema) => !schema.applies_to.includes("ENTRY")).length,
+    "an entry strategy cannot use the conditions that read a position"
+  );
   assert.equal(
     await page.locator('.catalog-entry[data-condition-type="PositionProfit"]').isDisabled(),
     true
@@ -283,7 +385,7 @@ test("a condition is added from the catalog, checked as it is edited and kept ou
   assert.equal(await group.count(), 1);
   assert.match(plain(await group.textContent()), /^\s*Match[\s\S]*of these/);
   await group.locator('[data-action="add-condition"]').click();
-  await page.fill("#condition-search", "buy");
+  await page.fill("#condition-search", "buy pressure");
   await page.keyboard.press("Enter");
   assert.equal(await group.locator(".rule-row").count(), 1);
   assert.equal(
@@ -314,6 +416,181 @@ test("deleting the strategy in the editor returns the editor to its empty state"
   assert.equal(await page.locator("#editor-header.dirty").count(), 0);
 });
 
+test("the toolbar is one row of actions; settings and panels scroll with the rules", async () => {
+  await page.click(`[data-strategy-id="${ID}"] .strategy-item-name`);
+  await page.waitForFunction(
+    (name) => document.querySelector("#strategy-name")?.value === name,
+    STORED.name
+  );
+
+  const placement = await page.evaluate(() => {
+    const inside = (selector, owner) =>
+      document.querySelector(owner).contains(document.querySelector(selector));
+    return {
+      toolbar: [
+        "#strategy-name",
+        "#test-strategy",
+        "#validate-strategy",
+        "#export-strategy",
+        "#save-strategy",
+        "#strategy-enabled-toggle",
+      ].every((selector) => inside(selector, "#editor-header")),
+      noSettingsInToolbar: [
+        "#strategy-timeframe",
+        "#strategy-priority",
+        "#toggle-description",
+        "#toggle-entry-binding",
+        "#strategy-description-panel",
+        "#strategy-entry-binding-panel",
+      ].every((selector) => !inside(selector, "#editor-header")),
+      scrolling: [
+        "#editor-settings",
+        "#strategy-description-panel",
+        "#strategy-entry-binding-panel",
+      ].every((selector) => inside(selector, "#editor-scroll-area")),
+    };
+  });
+  assert.deepEqual(placement, { toolbar: true, noSettingsInToolbar: true, scrolling: true });
+
+  assert.equal(
+    await page.locator("#strategy-description-panel").isHidden(),
+    true,
+    "a strategy with a description opens with it closed"
+  );
+  assert.equal(await page.getAttribute("#toggle-description", "aria-expanded"), "false");
+  await page.click("#toggle-description");
+  assert.equal(await page.locator("#strategy-description-panel").isVisible(), true);
+  await page.click("#toggle-description");
+
+  // The smallest window: the toolbar stays one row and leaves the rules the editor's height.
+  await page.setViewportSize({ width: 1200, height: 700 });
+  try {
+    const layout = await page.evaluate(() => {
+      const toolbar = document.querySelector("#editor-header");
+      const middles = [...toolbar.querySelectorAll(".editor-identity, .editor-controls > *")]
+        .filter((element) => element.getClientRects().length > 0)
+        .map((element) => element.getBoundingClientRect())
+        .map((box) => box.top + box.height / 2);
+      const footer = document.querySelector("#editor-footer").getBoundingClientRect();
+      return {
+        height: toolbar.getBoundingClientRect().height,
+        fixed: toolbar.getBoundingClientRect().height + footer.height,
+        oneRow: Math.max(...middles) - Math.min(...middles) <= 2,
+        overflow: toolbar.scrollWidth > toolbar.clientWidth,
+        rules: document.querySelectorAll("#editor-scroll-area .rule-row").length > 0,
+      };
+    });
+    assert.ok(layout.height <= 52, `toolbar height ${layout.height}`);
+    assert.ok(layout.fixed <= 160, `toolbar and footer take ${layout.fixed}px`);
+    assert.deepEqual(
+      { oneRow: layout.oneRow, overflow: layout.overflow, rules: layout.rules },
+      { oneRow: true, overflow: false, rules: true }
+    );
+    const labels = await page.evaluate(() =>
+      Object.fromEntries(
+        ["#test-strategy", "#validate-strategy", "#export-strategy"].map((selector) => [
+          selector,
+          document.querySelector(`${selector} .editor-action-label`).getBoundingClientRect().width > 1,
+        ])
+      )
+    );
+    assert.deepEqual(
+      labels,
+      { "#test-strategy": true, "#validate-strategy": false, "#export-strategy": false },
+      "Validate and Export collapse to their glyph first; Test keeps its label"
+    );
+    assert.equal(
+      await page.getAttribute("#validate-strategy", "title"),
+      "Validate",
+      "an action shown as its glyph keeps its label as tooltip"
+    );
+    assert.equal(
+      await page.getByRole("button", { name: "Validate" }).count(),
+      1,
+      "and as its accessible name"
+    );
+  } finally {
+    await page.setViewportSize({ width: 1440, height: 900 });
+  }
+});
+
+test("a test against a picked token marks each rule and reads the strategy in the footer", async () => {
+  await page.click(`[data-strategy-id="${ID}"] .strategy-item-name`);
+  await page.waitForFunction(
+    (name) => document.querySelector("#strategy-name")?.value === name,
+    STORED.name
+  );
+  await page.evaluate(() => {
+    window.openSearchDialog = ({ onPick }) =>
+      onPick({ mint: "TrendMint1111111111111111111111111111111111", symbol: "TREND", name: "Trend" });
+  });
+  let release;
+  testGate.open = new Promise((resolve) => {
+    release = resolve;
+  });
+
+  await page.click("#test-strategy");
+  const running = page.locator("#strategy-test-result .strategy-test-running.loading-spinner");
+  await running.waitFor();
+  assert.equal(plain(await running.textContent()), "Testing against TREND…");
+  assert.equal(
+    await page.evaluate(() =>
+      document
+        .querySelector("#editor-footer")
+        .contains(document.querySelector("#strategy-test-line"))
+    ),
+    true,
+    "the outcome is a footer line"
+  );
+
+  release();
+  const title = page.locator("#strategy-test-result .strategy-test-title");
+  await title.waitFor();
+  assert.equal(plain(await title.textContent()), "Test against TREND");
+  assert.equal(await running.count(), 0);
+  assert.match(
+    plain(await page.textContent("#strategy-test-result")),
+    /Test against TREND\s+Unknown\s+Transaction counts is not available/
+  );
+
+  const marked = await page.evaluate(() =>
+    [
+      ...document.querySelectorAll(
+        "#conditions-list .rule-row, #conditions-list .rule-group.is-nested"
+      ),
+    ].map((node) => {
+      const head = node.querySelector(":scope > .rule-head, :scope > .rule-group-head");
+      const reason = node.querySelector(":scope > .strategy-test-reason");
+      return [
+        node.dataset.kind,
+        head.querySelector(":scope > .strategy-test-verdict")?.dataset.verdict ?? null,
+        reason ? reason.textContent.replace(/[\u2068\u2069]/g, "").trim() : null,
+        reason?.getAttribute("role") ?? null,
+      ];
+    })
+  );
+  assert.deepEqual(marked, [
+    ["condition", "pass", null, null],
+    ["condition", "off", null, null],
+    ["group", "unknown", null, null],
+    ["condition", "unknown", "Transaction counts is not available", null],
+    ["condition", "fail", null, null],
+  ]);
+  assert.equal(
+    await page.locator("#strategy-test-panel, .strategy-test-tree").count(),
+    0,
+    "no second tree of the rules"
+  );
+
+  await page.fill("#strategy-priority", "8");
+  await page.waitForSelector("#editor-header.dirty");
+  assert.equal(await page.locator("#conditions-list [data-test-mark]").count(), 0);
+  assert.equal(await page.locator("#strategy-test-line").isHidden(), true);
+
+  await page.click("#save-strategy");
+  await page.waitForSelector("#editor-header:not(.dirty)");
+});
+
 test("with no strategy the editor area offers New Strategy", async () => {
   const empty = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   const emptyFixtures = createApiHandler(
@@ -337,4 +614,71 @@ test("with no strategy the editor area offers New Strategy", async () => {
     await empty.close();
     await emptyHost.close();
   }
+});
+
+test("an exit strategy picks the entry strategies it manages and saves their ids", async () => {
+  await page.click(`[data-strategy-id="${EXIT_ID}"] .strategy-item-name`);
+  await page.waitForFunction(
+    (name) => document.querySelector("#strategy-name")?.value === name,
+    EXIT_STORED.name
+  );
+  const toggle = page.locator("#toggle-entry-binding");
+  const summary = page.locator("#entry-binding-summary");
+  const choices = page.locator("#strategy-entry-binding input[type=checkbox]");
+  const panel = page.locator("#strategy-entry-binding-panel");
+  assert.equal(await toggle.isVisible(), true);
+  assert.equal(plain(await page.locator("#entry-binding-label").textContent()), "Manages");
+
+  const pickerTab = await page.evaluate(() => {
+    let options = null;
+    const open = window.openSearchDialog;
+    window.openSearchDialog = (given) => {
+      options = given;
+    };
+    document.querySelector("#test-strategy").click();
+    window.openSearchDialog = open;
+    return options?.tab;
+  });
+  assert.equal(pickerTab, "positions", "an exit strategy is tested against a held token");
+  assert.equal(await panel.isHidden(), true, "the binding panel opens only from its button");
+  assert.equal(plain(await summary.textContent()), "Dip recovery and retired-entry (deleted)");
+
+  await toggle.click();
+  assert.equal(await toggle.getAttribute("aria-expanded"), "true");
+  assert.equal(await panel.isVisible(), true);
+  assert.equal(await choices.count(), 4, "three entry strategies and the deleted one");
+  const checked = await choices.evaluateAll((boxes) =>
+    boxes.filter((box) => box.checked).map((box) => box.value)
+  );
+  assert.deepEqual(checked, [DIP_RECOVERY_ID, "retired-entry"]);
+
+  await page.locator(`#strategy-entry-binding input[value="${DIP_RECOVERY_ID}"]`).uncheck();
+  await page.locator('#strategy-entry-binding input[value="retired-entry"]').uncheck();
+  assert.equal(plain(await summary.textContent()), "All entry strategies");
+  await page.locator(`#strategy-entry-binding input[value="${ID}"]`).check();
+  assert.equal(plain(await summary.textContent()), "Momentum breakout");
+  await page.waitForSelector("#editor-header.dirty");
+
+  const [request] = await Promise.all([
+    page.waitForRequest(
+      (candidate) =>
+        candidate.method() === "PUT" && new URL(candidate.url()).pathname === `/api/strategies/${EXIT_ID}`
+    ),
+    page.click("#save-strategy"),
+  ]);
+  assert.deepEqual(request.postDataJSON().entry_strategy_ids, [ID]);
+
+  await page.click(`[data-strategy-id="${ID}"] .strategy-item-name`);
+  await page.waitForFunction(
+    (name) => document.querySelector("#strategy-name")?.value === name,
+    STORED.name
+  );
+  assert.equal(await toggle.isHidden(), true, "an entry strategy manages no positions");
+  assert.equal(await panel.isHidden(), true, "nor shows the binding note or its choices");
+
+  await page.click("#create-strategy");
+  await page.click('#create-strategy-modal .type-card[data-type="EXIT"]');
+  await page.waitForSelector("#strategy-type-badge.exit");
+  assert.equal(await toggle.isVisible(), true, "a new exit strategy offers the binding");
+  assert.equal(plain(await summary.textContent()), "All entry strategies");
 });

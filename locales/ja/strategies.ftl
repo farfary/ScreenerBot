@@ -57,9 +57,15 @@ strategies-summary-param = { $label }: { $value }
 strategies-summary-none = パラメーターなし
 # An unset optional parameter: the strategy's own value it falls back to.
 strategies-param-inherit = ストラテジーの設定（{ $value }）
-strategies-summary-period-seconds = 参照期間: { $amount }秒
-strategies-summary-period-minutes = 参照期間: { $amount }分
-strategies-summary-period-hours = 参照期間: { $amount }時間
+# A duration amount with its unit, and an hour of the UTC day. $amount is the formatted number.
+strategies-value-duration-seconds = { $amount }秒
+strategies-value-duration-minutes = { $amount }分
+strategies-value-duration-hours = { $amount }時間
+strategies-value-duration-days = { $amount }日
+strategies-value-utc-hour = { $amount }:00 UTC
+# A hint under a field, display only. $time is a local clock time, $amount a percentage.
+strategies-hint-local-time = 現地時刻: { $time }
+strategies-hint-price-impact = このサイズの取引で価格は約 { $amount }% 動きます
 
 # Parameter values in a card summary. $count selects the plural, $amount is the formatted number.
 strategies-value-percent = { $amount }%
@@ -78,6 +84,7 @@ strategies-unit-percent = %
 strategies-unit-native = { -sol }
 strategies-unit-hours = 時間
 strategies-unit-multiplier = ×
+strategies-unit-utc = UTC
 
 ## Condition catalog
 
@@ -98,7 +105,23 @@ strategies-editor-description = 説明
 strategies-editor-description-field =
     .placeholder = このストラテジーの内容
     .aria-label = ストラテジーの説明
+# The exit strategy's binding to the entry strategies whose positions it manages.
+strategies-editor-entry-binding-all = すべてのエントリー戦略
+# Labels the button that names the entry strategies an exit strategy manages.
+strategies-editor-entry-binding-label = 管理対象
+strategies-editor-entry-binding-hint = チェックしたエントリー戦略が開いたポジションを管理します。何もチェックしないと、手動やコピーを含むすべてのポジションを管理します。
+strategies-editor-entry-binding-empty = エントリー戦略はまだありません
+# $id is the id of an entry strategy that no longer exists.
+strategies-editor-entry-binding-deleted = { $id }（削除済み）
 strategies-action-export = エクスポート
+strategies-action-test = トークンでテスト
+# $token is the tested token's symbol or address.
+strategies-test-title = { $token } でのテスト
+# $token is the tested token's symbol or address.
+strategies-test-running = { $token } でテスト中…
+strategies-test-verdict-pass = 成立
+strategies-test-verdict-fail = 不成立
+strategies-test-verdict-unknown = 不明
 
 # Rule groups. $mode is the all/any select written into the sentence.
 strategies-rules-match = 次の条件のうち{ $mode }を満たす
@@ -146,6 +169,7 @@ strategies-data-candles = ローソク足
 strategies-data-pool = プール
 strategies-data-position = ポジション
 strategies-data-market = 市場アクティビティ
+strategies-data-clock = 時刻
 
 # Trade counts: $count selects the plural, $amount is the formatted number.
 strategies-unit-trades = 件
@@ -197,6 +221,10 @@ strategies-toast-saved = ストラテジーを保存しました
 strategies-toast-save-failed = 保存失敗
     .message = ストラテジーをデータベースに保存できませんでした
 strategies-toast-no-strategy-validate = 検証するストラテジーがありません
+strategies-toast-no-strategy-test = テストするストラテジーがありません
+strategies-toast-test-save-first = テストの前にストラテジーを保存してください。テストは保存済みのルールを読み込みます
+strategies-toast-test-failed = テストに失敗しました
+    .message = ストラテジーをテストできませんでした
 strategies-toast-valid = ストラテジーは有効です
 strategies-toast-invalid = ストラテジーにエラーがあります
 strategies-toast-validation-failed = 検証に失敗しました
@@ -364,6 +392,126 @@ strategies-condition-buy-pressure-param-min-buy-share-pct = 最低買い比率 %
 strategies-condition-buy-pressure-param-min-transactions = 最低取引数
     .description = 取引数がこれより少ない集計期間では条件が発動しません
 
+strategies-condition-transaction-velocity = 取引速度
+    .description = 直近期間の取引ペースが、それを含む長い期間のペースの指定倍率以上または以下のときに成立します。トークンの買いと売りの件数を読み取ります。
+strategies-condition-transaction-velocity-param-window = 期間
+    .description = 直近期間と、比較する長い期間
+strategies-condition-transaction-velocity-param-window-option-5m-vs-1h = 5分 対 1時間
+strategies-condition-transaction-velocity-param-window-option-1h-vs-6h = 1時間 対 6時間
+strategies-condition-transaction-velocity-param-window-option-6h-vs-24h = 6時間 対 24時間
+strategies-condition-transaction-velocity-param-comparison = 比較
+    .description = 直近のペースが比率以上か以下か
+strategies-condition-transaction-velocity-param-comparison-option-above = 以上（≥）
+strategies-condition-transaction-velocity-param-comparison-option-below = 以下（≤）
+strategies-condition-transaction-velocity-param-ratio = ペース比率
+    .description = 直近期間の毎秒取引数を長い期間の毎秒取引数で割った値
+strategies-condition-transaction-velocity-param-min-transactions = 最低取引数
+    .description = 取引数がこれより少ない直近期間では成立しません
+
+strategies-condition-pullback-from-high = 高値からの押し目
+    .description = 現在価格が直近ローソク足の最高値から最小下落と最大下落の間にあるときに成立します。
+strategies-condition-pullback-from-high-param-lookback = 参照期間
+    .description = 最高値を取るローソク足の本数
+strategies-condition-pullback-from-high-param-min-drop-pct = 最小下落 %
+    .description = 価格は最高値から少なくともこれだけ下にある必要があります
+strategies-condition-pullback-from-high-param-max-drop-pct = 最大下落 %
+    .description = 価格は最高値から最大でもこれだけ下にある必要があります。最小下落より大きくしてください
+
+strategies-condition-profit-giveback = 利益の戻し
+    .description = 直近の買い以降の最高含み益が一定水準に達した後、その一部を戻したときに成立します。
+strategies-condition-profit-giveback-param-arm-after-profit-pct = 有効化する利益 %
+    .description = 条件が成立するには、最高含み益がエントリー価格のこの割合に達している必要があります
+strategies-condition-profit-giveback-param-giveback-pct = 戻し %
+    .description = 最高含み益のうち戻した割合。100% は価格がエントリー価格まで戻ったことを意味します
+
+strategies-condition-token-age = トークンの経過時間
+    .description = トークンのオンチェーン作成からの時間が指定期間より長いまたは短いときに成立します。作成時刻が不明なトークンでは条件は未確定のままです。
+strategies-condition-token-age-param-comparison = 比較
+    .description = トークンが期間より古いか新しいか
+strategies-condition-token-age-param-comparison-option-older-than = より古い（≥）
+strategies-condition-token-age-param-comparison-option-younger-than = より新しい（{ "<" }）
+strategies-condition-token-age-param-time-value = 経過時間
+    .description = トークン作成からの時間。単位はフィールド内で選択（1-10000）
+strategies-condition-token-age-param-time-unit = 時間単位
+    .description = 経過時間の単位
+strategies-condition-token-age-param-time-unit-option-minutes = 分
+strategies-condition-token-age-param-time-unit-option-hours = 時間
+strategies-condition-token-age-param-time-unit-option-days = 日
+
+strategies-condition-vwap = VWAP
+    .description = 現在価格が直近ローソク足の出来高加重平均価格より、指定距離以上上または下にあるときに成立します。
+strategies-condition-vwap-param-lookback = 参照期間
+    .description = 出来高加重平均の対象となるローソク足の本数
+strategies-condition-vwap-param-position = 位置
+    .description = VWAP に対する価格の位置
+strategies-condition-vwap-param-position-option-above = VWAP より上
+strategies-condition-vwap-param-position-option-below = VWAP より下
+strategies-condition-vwap-param-distance-pct = 距離 %
+    .description = VWAP からの最小距離。0 は選んだ側であれば距離を問いません
+
+strategies-condition-volatility-range = ボラティリティレンジ
+    .description = 直近ローソク足の ATR（平均真の値幅）が現在価格に対する割合でしきい値より上または下のときに成立します。グループ内に 2 つ置くと範囲になります。
+strategies-condition-volatility-range-param-period = ATR 期間
+    .description = 平均真の値幅を平滑化するローソク足の本数。条件にはこれより 1 本多く必要です
+strategies-condition-volatility-range-param-comparison = 比較
+    .description = 値幅がしきい値より上か下か
+strategies-condition-volatility-range-param-comparison-option-above = 上
+strategies-condition-volatility-range-param-comparison-option-below = 下
+strategies-condition-volatility-range-param-threshold-pct = 値幅しきい値 %
+    .description = 現在価格に対する平均真の値幅の割合
+
+strategies-condition-bollinger-bands = ボリンジャーバンド
+    .description = 現在価格が下側バンドより下または上側バンドより上にあるとき、またはバンドが収縮したときに成立します。バンドは平均終値から標準偏差の数倍離れた位置にあります。
+strategies-condition-bollinger-bands-param-period = 期間
+    .description = 平均と標準偏差の対象となるローソク足の本数
+strategies-condition-bollinger-bands-param-std-dev = 標準偏差
+    .description = 各バンドが平均から何標準偏差離れるか
+strategies-condition-bollinger-bands-param-signal = シグナル
+    .description = バンドが示すべき状態
+strategies-condition-bollinger-bands-param-signal-option-below-lower = 下側バンドより下
+strategies-condition-bollinger-bands-param-signal-option-above-upper = 上側バンドより上
+strategies-condition-bollinger-bands-param-signal-option-squeeze = スクイーズ
+strategies-condition-bollinger-bands-param-squeeze-width-pct = スクイーズ幅 %
+    .description = スクイーズの場合: バンド間の最大距離（平均に対する割合）
+
+strategies-condition-liquidity-to-size = サイズに対する流動性
+    .description = プールの準備金が、対象サイズの倍率以上または未満のときに成立します。エントリー戦略では取引サイズ、エグジット戦略ではポジションの残存価値です。
+strategies-condition-liquidity-to-size-param-comparison = 比較
+    .description = 準備金が倍率以上か未満か
+strategies-condition-liquidity-to-size-param-comparison-option-at-least = 以上（≥）
+strategies-condition-liquidity-to-size-param-comparison-option-below = 未満（{ "<" }）
+strategies-condition-liquidity-to-size-param-multiple = 流動性倍率
+    .description = プール準備金を対象サイズで割った値。倍率 N で価格は約 1/(N+1) 動きます
+
+strategies-condition-position-adds = ポジションの追加
+    .description = 最初のエントリー後の追加買いの回数、または部分売却の回数が指定数以上または以下のときに成立します。
+strategies-condition-position-adds-param-subject = 対象
+    .description = 数える操作
+strategies-condition-position-adds-param-subject-option-adds = 追加買い
+strategies-condition-position-adds-param-subject-option-partial-sells = 部分売却
+strategies-condition-position-adds-param-comparison = 比較
+    .description = 回数が指定数以上か以下か
+strategies-condition-position-adds-param-comparison-option-at-least = 以上（≥）
+strategies-condition-position-adds-param-comparison-option-at-most = 以下（≤）
+strategies-condition-position-adds-param-count = 回数
+    .description = 操作の回数
+
+strategies-condition-time-of-day = 時刻
+    .description = 現在の時が UTC の時間帯に入っているときに成立します。開始が終了より後の場合は深夜 0 時をまたぎます。
+strategies-condition-time-of-day-param-start-hour = 開始時（UTC）
+    .description = 時間帯の最初の時。0 から 23
+strategies-condition-time-of-day-param-end-hour = 終了時（UTC）
+    .description = 時間帯が終わる時。1 から 24。その時自体は時間帯に含まれません
+
+strategies-condition-liquidity-change-since-entry = エントリー以降の流動性変化
+    .description = ポジションを開いてからプールの準備金が指定割合以上減少または増加したときに成立します。エントリー時の流動性が記録されていないポジションでは条件は未確定のままです。
+strategies-condition-liquidity-change-since-entry-param-comparison = 比較
+    .description = 準備金が減少したか増加したか
+strategies-condition-liquidity-change-since-entry-param-comparison-option-dropped-by = 減少
+strategies-condition-liquidity-change-since-entry-param-comparison-option-rose-by = 増加
+strategies-condition-liquidity-change-since-entry-param-change-pct = 変化 %
+    .description = エントリー以降のプール準備金の変化
+
 ## Shared by every condition
 
 strategies-condition-param-timeframe = 時間足
@@ -439,6 +587,27 @@ strategies-error-field-peak-price = 最高価格
 strategies-error-field-slow-period = 長期の期間
 strategies-error-field-window = 集計期間
 strategies-error-field-within-candles = クロス対象の本数
+strategies-error-field-change = 変化
+strategies-error-field-end-hour = 終了時
+strategies-error-field-entry-liquidity = エントリー時の流動性
+strategies-error-field-giveback = 利益の戻し
+strategies-error-field-highest-high = 最高値
+strategies-error-field-long-window-transactions = 長い期間の取引数
+strategies-error-field-maximum-drop = 最大下落
+strategies-error-field-minimum-drop = 最小下落
+strategies-error-field-multiple = 倍率
+strategies-error-field-pool-liquidity = プール流動性
+strategies-error-field-ratio = 比率
+strategies-error-field-remaining-position-value = ポジションの残存価値
+strategies-error-field-signal = シグナル
+strategies-error-field-squeeze-width = スクイーズ幅
+strategies-error-field-standard-deviations = 標準偏差
+strategies-error-field-start-hour = 開始時
+strategies-error-field-subject = 対象
+strategies-error-field-token-creation-time = トークン作成時刻
+strategies-error-field-total-volume = 総出来高
+strategies-error-field-trade-size = 取引サイズ
+strategies-error-field-vwap = VWAP
 
 # Expected parameter types
 
@@ -455,6 +624,12 @@ strategies-error-data-ohlcv-data = OHLCV データ
 strategies-error-data-position-data = ポジションデータ
 strategies-error-data-peak-price = 最高価格
 strategies-error-data-transaction-counts = 取引数
+strategies-error-data-entry-liquidity = エントリー時の流動性
+strategies-error-data-entry-pool-liquidity = エントリー時のプールの流動性
+strategies-error-data-real-pool-reserves = プールの実際の流動性
+strategies-error-data-remaining-position-value = ポジションの残存価値
+strategies-error-data-token-creation-time = トークン作成時刻
+strategies-error-data-trade-size = 取引サイズ
 
 # Indicators
 
@@ -465,6 +640,10 @@ strategies-error-indicator-price-change-lookback = 価格変動の参照期間
 strategies-error-indicator-volume-spike = 出来高急増
 strategies-error-indicator-moving-average-cross = 移動平均のクロス
 strategies-error-indicator-rsi = RSI
+strategies-error-indicator-bollinger-bands = ボリンジャーバンド
+strategies-error-indicator-pullback-from-high = 高値からの押し目
+strategies-error-indicator-volatility-range = ボラティリティレンジ
+strategies-error-indicator-vwap = VWAP
 
 # Rule tree faults
 

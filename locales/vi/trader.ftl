@@ -186,6 +186,23 @@ trader-trailing-peak = Đỉnh
 trader-trailing-final = Cuối cùng +{ $value }%
 trader-trailing-summary-protected = Đã bảo vệ <strong>{ $value }</strong> lợi nhuận
 trader-trailing-summary-avoided = Đã tránh <strong>{ $value }</strong> lỗ tính từ đỉnh
+# $step is the band's position in the list, from 1.
+trader-trailing-band = Dải { $step }
+# $step is the band's position in the list, from 1.
+trader-trailing-band-profit-label = Lợi nhuận đỉnh của dải { $step }
+# $step is the band's position in the list, from 1.
+trader-trailing-band-distance-label = Khoảng cách trailing của dải { $step }
+trader-trailing-band-profit-caption = Từ lợi nhuận đỉnh
+trader-trailing-band-distance-caption = Bám cách
+trader-trailing-add-band = Thêm dải
+# $step is the band's position in the list, from 1.
+trader-trailing-remove-band = Xóa dải { $step }
+# $min and $max are the configured bounds of a band's peak profit.
+trader-trailing-band-error-profit-range = Lợi nhuận đỉnh của mỗi dải phải từ { $min }% đến { $max }%
+# $min and $max are the configured bounds of a band's distance.
+trader-trailing-band-error-distance-range = Khoảng cách của mỗi dải phải từ { $min }% đến { $max }%
+trader-trailing-band-error-order = Mỗi dải cần lợi nhuận đỉnh cao hơn mức kích hoạt và dải trước đó
+trader-trailing-band-error-distance = Mỗi dải phải bám với khoảng cách nhỏ hơn lợi nhuận đỉnh của nó
 
 ## Break-even stop
 
@@ -237,7 +254,6 @@ trader-time-unit-seconds = giây
 trader-time-unit-minutes = phút
 trader-time-unit-hours = giờ
 trader-time-unit-days = ngày
-trader-time-conversion-default = 168 giờ = 7 ngày
 trader-time-conversion = { $duration } = { $readable }
 trader-duration-seconds =
     { $count ->
@@ -311,11 +327,8 @@ trader-dca-error-drop-range = Mỗi mức giảm phải nằm trong khoảng { $
 trader-dca-error-size-range = Mỗi kích thước phải nằm trong khoảng { $min }× đến { $max }× lần mua đầu
 trader-dca-error-order = Khi đo từ giá vào lần đầu, mỗi lần mua thêm cần mức giảm sâu hơn lần trước
 trader-dca-cooldown-impact = Cách nhau ít nhất { $span } giữa các lần vào thêm
-trader-dca-min-hold-impact =
-    { $minutes ->
-        [0] Lần mua thêm đầu tiên có thể diễn ra ngay sau khi vào lệnh
-       *[other] Lần mua thêm đầu tiên chờ ít nhất { $span } sau khi vào lệnh
-    }
+trader-dca-min-hold-none = Lần mua thêm đầu tiên có thể diễn ra ngay sau khi vào lệnh
+trader-dca-min-hold-impact = Lần mua thêm đầu tiên chờ ít nhất { $span } sau khi vào lệnh
 trader-dca-capacity = Mức tối đa vị thế này có thể nắm giữ: { $amount } ({ $multiple }× lần mua đầu)
 trader-dca-info-title = Thông tin chiến lược DCA
 trader-dca-info-subtitle = Những điều cần lưu ý khi giao dịch DCA

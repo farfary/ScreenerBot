@@ -66,12 +66,34 @@ tokens-positions-fact-opened = زمان باز شدن
 tokens-positions-fact-exit-price = قیمت خروج
 tokens-positions-fact-native-received = { -sol } دریافتی
 tokens-positions-fact-closed-reason = دلیل بسته شدن
-tokens-positions-fact-target-min = حداقل هدف سود
-tokens-positions-fact-target-max = حداکثر هدف سود
 tokens-positions-fact-highest = بالاترین قیمت
 tokens-positions-fact-basis-peak = اوج از آخرین خرید
 tokens-positions-fact-lowest = پایین‌ترین قیمت
-tokens-positions-section-range = اهداف و بازه
+tokens-positions-section-range = بازه قیمت
+tokens-positions-section-exit-plan = برنامه خروج
+tokens-positions-plan-stop-loss = حد ضرر
+# $step is the take-profit step's position in the ladder, from 1.
+tokens-positions-plan-step = حد سود { $step }
+# $profit is the formatted profit level, $share the formatted share of the position it sells.
+tokens-positions-plan-step-value = در { $profit }، { $share } را می‌فروشد
+tokens-positions-plan-step-taken = فروخته شد
+tokens-positions-plan-trailing = حد ضرر متحرک
+# $activation is the formatted profit that arms the trail, $distance the formatted share it trails by.
+tokens-positions-plan-trailing-value = در { $activation } فعال می‌شود و { $distance } زیر اوج دنبال می‌کند
+# $step is the band's position in the list, from 1.
+tokens-positions-plan-trailing-band = پله تریلینگ { $step }
+# $profit is the formatted profit the band starts at, $distance the formatted share it trails by.
+tokens-positions-plan-trailing-band-value = از { $profit }، { $distance } زیر اوج دنبال می‌کند
+tokens-positions-plan-break-even = حد ضرر سر به سر
+# $trigger and $offset are formatted profits.
+tokens-positions-plan-break-even-value = در { $trigger } فعال می‌شود و در { $offset } می‌فروشد
+tokens-positions-plan-time-loss = خروج پس از زمان در ضرر
+# $duration is a formatted duration, $threshold a formatted loss.
+tokens-positions-plan-time-loss-value = پس از { $duration }، در { $threshold } یا پایین‌تر
+tokens-positions-plan-time-stagnation = خروج از موقعیت راکد
+# $duration is a formatted duration, $band a formatted share.
+tokens-positions-plan-time-stagnation-value = پس از { $duration }، تا وقتی در محدوده { $band } از ورود است
+tokens-positions-plan-none = هیچ قانون خروجی روشن نیست
 tokens-positions-section-market = بازار و دارایی‌ها
 tokens-positions-kicker = پوزیشن
 tokens-positions-fallback-symbol = توکن

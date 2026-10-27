@@ -131,6 +131,7 @@ pub async fn list_strategies(Query(query): Query<StrategyListQuery>) -> Response
             updated_at: s.updated_at.to_rfc3339(),
             author: s.author,
             version: s.version,
+            entry_strategy_ids: s.entry_strategy_ids,
         })
         .collect();
 
@@ -186,6 +187,7 @@ pub async fn get_strategy_detail(Path(id): Path<String>) -> Response {
         updated_at: strategy.updated_at.to_rfc3339(),
         author: strategy.author,
         version: strategy.version,
+        entry_strategy_ids: strategy.entry_strategy_ids,
     };
 
     success_response(response)
@@ -256,6 +258,10 @@ pub async fn create_strategy(Json(request): Json<StrategyRequest>) -> Response {
         updated_at: now,
         author: request.author,
         version: 1,
+        entry_strategy_ids: Strategy::entry_binding(
+            strategy_type,
+            request.entry_strategy_ids.unwrap_or_default(),
+        ),
     };
 
     // Validate strategy before saving
@@ -347,6 +353,12 @@ pub async fn update_strategy_handler(
         updated_at: Utc::now(),
         author: request.author,
         version: existing.version + 1,
+        entry_strategy_ids: Strategy::entry_binding(
+            strategy_type,
+            request
+                .entry_strategy_ids
+                .unwrap_or_else(|| existing.entry_strategy_ids.clone()),
+        ),
     };
 
     // Validate strategy before saving

@@ -8,11 +8,15 @@
 
 use crate::chains::ChainId;
 use crate::logger::{self, LogTag};
+use crate::ohlcvs::TimeframeBundle;
 use crate::pools::PriceResult;
 use crate::positions::Position;
 use crate::strategies;
 use crate::strategies::db::has_enabled_strategies;
-use crate::strategies::types::{MarketData, PositionData, StrategyType, TransactionCounts};
+use crate::strategies::types::{
+    EvaluationContext, LiquidityPool, MarketData, PositionData, Strategy, StrategyType,
+    TransactionCounts,
+};
 use crate::tokens::Token;
 use crate::trader::constants::STRATEGY_EVALUATION_TIMEOUT_SECS;
 use crate::trader::types::{TradeAction, TradeDecision, TradePriority, TradeReason};
@@ -26,6 +30,19 @@ use std::time::Duration;
 /// would satisfy every "liquidity below X" rule on a token whose liquidity is unknown.
 fn usable_liquidity(native_reserves: f64) -> Option<f64> {
     (native_reserves.is_finite() && native_reserves > 0.0).then_some(native_reserves)
+}
+
+/// The pool a price result's reserves were read from, with what the pool's decoder
+/// declares about them; `None` for a price that names no pool.
+fn liquidity_pool(chain: ChainId, price: &PriceResult) -> Option<LiquidityPool> {
+    (!price.pool_address.is_empty()).then(|| LiquidityPool {
+        virtual_reserves: crate::pools::pool_reports_virtual_reserves(
+            chain,
+            &price.mint,
+            &price.pool_address,
+        ),
+        address: price.pool_address.clone(),
+    })
 }
 
 /// The buy an entry strategy signal decides: the configured trade size.
@@ -73,23 +90,25 @@ fn exit_decision(
     }
 }
 
-/// The market inputs of a strategy: the live pool's liquidity, the trade size an entry
-/// would spend, and from the cached token snapshot its transaction counts, when that
+/// The market inputs of a strategy: the live pool's liquidity and the pool it was read
+/// from, the trade size an entry would spend, and from the cached token snapshot its transaction counts, when that
 /// snapshot was fetched and when the token was created on-chain.
 ///
 /// Each value stays absent when its own source is: an uncached token has no counts and no
-/// snapshot time, and a token without an on-chain creation time has none, whatever other
-/// time the token carries.
+/// snapshot time, and a token without a valid on-chain creation time has none, whatever
+/// other time the token carries.
 pub fn strategy_market_data(
     token: Option<&Token>,
     liquidity_sol: Option<f64>,
+    liquidity_pool: Option<LiquidityPool>,
     reference_size_native: Option<f64>,
 ) -> MarketData {
     MarketData {
         liquidity_sol,
+        liquidity_pool,
         transactions: token.map(TransactionCounts::from_token),
         snapshot_at: token.map(|token| token.market_data_last_fetched_at),
-        token_created_at: token.and_then(|token| token.blockchain_created_at),
+        token_created_at: token.and_then(Token::on_chain_created_at),
         reference_size_native,
     }
 }
@@ -128,6 +147,106 @@ pub fn strategy_position_data(
         dca_count: position.dca_count,
         partial_exit_count: position.partial_exit_count,
         remaining_value_native,
+        entry_liquidity_native: position.entry_liquidity_native,
+        entry_liquidity_pool: position.entry_liquidity_pool.clone(),
+    }
+}
+
+/// The candles a strategy reads for `mint`: the cached bundle, else one built now and
+/// cached. `None` when neither is available; every candle condition then reads as
+/// unknown, so the outage is logged here, where it is unambiguous.
+pub async fn strategy_candles(chain: ChainId, mint: &str) -> Option<TimeframeBundle> {
+    match crate::ohlcvs::get_timeframe_bundle(chain, mint).await {
+        Ok(Some(bundle)) => {
+            logger::debug(
+                LogTag::Trader,
+                &format!(
+                    "OHLCV bundle available for {} (age: {}s)",
+                    mint, bundle.cache_age_seconds
+                ),
+            );
+            Some(bundle)
+        }
+        Ok(None) => {
+            logger::debug(
+                LogTag::Trader,
+                &format!("OHLCV bundle cache miss for {mint} - building on demand"),
+            );
+            match crate::ohlcvs::build_timeframe_bundle(chain, mint).await {
+                Ok(bundle) => {
+                    let _ =
+                        crate::ohlcvs::store_bundle(chain, mint.to_string(), bundle.clone()).await;
+                    Some(bundle)
+                }
+                Err(e) => {
+                    logger::warning(
+                        LogTag::Trader,
+                        &format!(
+                            "Failed to build OHLCV bundle for {mint}: {e} - evaluating without OHLCV"
+                        ),
+                    );
+                    None
+                }
+            }
+        }
+        Err(e) => {
+            logger::warning(
+                LogTag::Trader,
+                &format!("Failed to get OHLCV bundle for {mint}: {e} - evaluating without OHLCV"),
+            );
+            None
+        }
+    }
+}
+
+/// The context the trader would evaluate `strategy` in for `mint` now: the live pool price
+/// and its liquidity, the token snapshot, the candles and, for an exit strategy, the
+/// mint's open position. An entry strategy reads the configured trade size. A value whose
+/// source is absent stays absent, and the rules that read it answer unknown.
+pub async fn live_strategy_context(
+    chain: ChainId,
+    mint: &str,
+    strategy: &Strategy,
+) -> EvaluationContext {
+    let live_pool = crate::positions::price_resolution::live_pool_price(mint);
+    let pool_price = live_pool.as_ref().map(|price| price.price_native);
+    let now = Utc::now();
+    let (position_data, reference_size_native) = match strategy.strategy_type {
+        StrategyType::Entry => (None, Some(crate::trader::config::get_trade_size_native())),
+        StrategyType::Exit => {
+            let position = crate::positions::get_position_by_mint(mint).await;
+            let position_data = position.as_ref().and_then(|position| {
+                pool_price.or(position.current_price).map(|current_price| {
+                    strategy_position_data(
+                        position,
+                        current_price,
+                        pool_price,
+                        crate::tokens::get_cached_decimals(chain, mint),
+                        now,
+                    )
+                })
+            });
+            (position_data, None)
+        }
+    };
+    let market_data = strategy_market_data(
+        crate::tokens::get_cached_token(chain, mint).as_ref(),
+        live_pool
+            .as_ref()
+            .and_then(|price| usable_liquidity(price.native_reserves)),
+        live_pool
+            .as_ref()
+            .and_then(|price| liquidity_pool(chain, price)),
+        reference_size_native,
+    );
+    EvaluationContext {
+        token_mint: mint.to_owned(),
+        current_price: pool_price,
+        position_data,
+        market_data: Some(market_data),
+        timeframe_bundle: strategy_candles(chain, mint).await,
+        strategy_timeframe: strategy.timeframe.clone(),
+        evaluated_at: now,
     }
 }
 
@@ -169,68 +288,11 @@ impl StrategyEvaluator {
         let market_data = strategy_market_data(
             crate::tokens::get_cached_token(chain, token_mint).as_ref(),
             usable_liquidity(price_info.native_reserves),
+            liquidity_pool(chain, price_info),
             Some(crate::trader::config::get_trade_size_native()),
         );
 
-        // Prefetch OHLCV bundle from cache (non-blocking)
-        let timeframe_bundle = match crate::ohlcvs::get_timeframe_bundle(chain, token_mint).await {
-            Ok(Some(bundle)) => {
-                logger::debug(
-                    LogTag::Trader,
-                    &format!(
-                        "OHLCV bundle available for {} (age: {}s)",
-                        token_mint, bundle.cache_age_seconds
-                    ),
-                );
-                Some(bundle)
-            }
-            Ok(None) => {
-                // Bundle not in cache - build it on demand
-                logger::debug(
-                    LogTag::Trader,
-                    &format!(
-                        "OHLCV bundle cache miss for {} - building on demand",
-                        token_mint
-                    ),
-                );
-
-                match crate::ohlcvs::build_timeframe_bundle(chain, token_mint).await {
-                    Ok(bundle) => {
-                        // Store in cache for future use (takes bundle by move)
-                        let _ = crate::ohlcvs::store_bundle(
-                            chain,
-                            token_mint.to_string(),
-                            bundle.clone(),
-                        )
-                        .await;
-                        Some(bundle)
-                    }
-                    Err(e) => {
-                        // Visible on purpose: with no bundle every candle condition
-                        // errors, so each affected strategy is silently reduced to its
-                        // non-candle rules. Whether that surfaces as a strategy error
-                        // depends on rule order (an `And` short-circuits on the first
-                        // false leaf), so the outage is reported here, at the boundary
-                        // where it is unambiguous.
-                        logger::warning(
-              LogTag::Trader,
-              &format!("Failed to build OHLCV bundle for {token_mint}: {e} - evaluating without OHLCV"),
-            );
-                        None
-                    }
-                }
-            }
-            Err(e) => {
-                logger::warning(
-                    LogTag::Trader,
-                    &format!(
-                        "Failed to get OHLCV bundle for {}: {} - evaluating without OHLCV",
-                        token_mint, e
-                    ),
-                );
-                None
-            }
-        };
+        let timeframe_bundle = strategy_candles(chain, token_mint).await;
 
         // Call strategies module for evaluation with timeout
         let strategy_timeout = Duration::from_secs(STRATEGY_EVALUATION_TIMEOUT_SECS);
@@ -359,64 +421,13 @@ impl StrategyEvaluator {
             live_pool
                 .as_ref()
                 .and_then(|price| usable_liquidity(price.native_reserves)),
+            live_pool
+                .as_ref()
+                .and_then(|price| liquidity_pool(chain, price)),
             None,
         );
 
-        // Prefetch OHLCV bundle from cache (non-blocking)
-        let timeframe_bundle = match crate::ohlcvs::get_timeframe_bundle(chain, &position.mint)
-            .await
-        {
-            Ok(Some(bundle)) => {
-                logger::debug(
-                    LogTag::Trader,
-                    &format!(
-                        "OHLCV bundle available for position {:?} (age: {}s)",
-                        position.id, bundle.cache_age_seconds
-                    ),
-                );
-                Some(bundle)
-            }
-            Ok(None) => {
-                // Bundle not in cache - build it on demand
-                logger::debug(
-                    LogTag::Trader,
-                    &format!(
-                        "OHLCV bundle cache miss for position {:?} - building on demand",
-                        position.id
-                    ),
-                );
-
-                match crate::ohlcvs::build_timeframe_bundle(chain, &position.mint).await {
-                    Ok(bundle) => {
-                        // Store in cache for future use (takes bundle by move)
-                        let _ = crate::ohlcvs::store_bundle(
-                            chain,
-                            position.mint.clone(),
-                            bundle.clone(),
-                        )
-                        .await;
-                        Some(bundle)
-                    }
-                    Err(e) => {
-                        // See the entry path: an exit strategy without candles keeps only
-                        // its non-candle rules, so the outage is reported here rather than
-                        // left to whichever leaf happens to be evaluated first.
-                        logger::warning(
-              LogTag::Trader,
-              &format!("Failed to build OHLCV bundle for position {:?}: {} - evaluating without OHLCV", position.id, e),
-            );
-                        None
-                    }
-                }
-            }
-            Err(e) => {
-                logger::warning(
-          LogTag::Trader,
-          &format!("Failed to get OHLCV bundle for position {:?}: {} - evaluating without OHLCV", position.id, e),
-        );
-                None
-            }
-        };
+        let timeframe_bundle = strategy_candles(chain, &position.mint).await;
 
         // Call strategies module for evaluation with timeout
         let strategy_timeout = Duration::from_secs(STRATEGY_EVALUATION_TIMEOUT_SECS);
@@ -428,6 +439,7 @@ impl StrategyEvaluator {
                 position_data,
                 Some(market_data),
                 timeframe_bundle,
+                position.origin.entry_strategy_id(),
             ),
         )
         .await;

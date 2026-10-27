@@ -57,9 +57,15 @@ strategies-summary-param = { $label }: { $value }
 strategies-summary-none = بدون پارامتر
 # An unset optional parameter: the strategy's own value it falls back to.
 strategies-param-inherit = تنظیم استراتژی ({ $value })
-strategies-summary-period-seconds = بازه بازبینی: { $amount } ثانیه
-strategies-summary-period-minutes = بازه بازبینی: { $amount } دقیقه
-strategies-summary-period-hours = بازه بازبینی: { $amount } ساعت
+# A duration amount with its unit, and an hour of the UTC day. $amount is the formatted number.
+strategies-value-duration-seconds = { $amount } ثانیه
+strategies-value-duration-minutes = { $amount } دقیقه
+strategies-value-duration-hours = { $amount } ساعت
+strategies-value-duration-days = { $amount } روز
+strategies-value-utc-hour = { $amount }:00 UTC
+# A hint under a field, display only. $time is a local clock time, $amount a percentage.
+strategies-hint-local-time = وقت محلی شما: { $time }
+strategies-hint-price-impact = معامله‌ای به این اندازه قیمت را حدود { $amount }٪ جابه‌جا می‌کند
 
 # Parameter values in a card summary. $count selects the plural, $amount is the formatted number.
 strategies-value-percent = { $amount }%
@@ -80,6 +86,7 @@ strategies-unit-percent = %
 strategies-unit-native = { -sol }
 strategies-unit-hours = ساعت
 strategies-unit-multiplier = ×
+strategies-unit-utc = UTC
 
 ## Condition catalog
 
@@ -100,7 +107,23 @@ strategies-editor-description = توضیحات
 strategies-editor-description-field =
     .placeholder = این استراتژی چه می‌کند
     .aria-label = توضیحات استراتژی
+# The exit strategy's binding to the entry strategies whose positions it manages.
+strategies-editor-entry-binding-all = همه استراتژی‌های ورود
+# Labels the button that names the entry strategies an exit strategy manages.
+strategies-editor-entry-binding-label = مدیریت
+strategies-editor-entry-binding-hint = موقعیت‌هایی را مدیریت می‌کند که استراتژی‌های ورودِ انتخاب‌شده باز کرده‌اند. اگر هیچ‌کدام انتخاب نشود، همه موقعیت‌ها از جمله دستی و کپی‌شده را مدیریت می‌کند.
+strategies-editor-entry-binding-empty = هنوز هیچ استراتژی ورودی وجود ندارد
+# $id is the id of an entry strategy that no longer exists.
+strategies-editor-entry-binding-deleted = { $id } (حذف‌شده)
 strategies-action-export = برون‌بری
+strategies-action-test = آزمایش روی یک توکن
+# $token is the tested token's symbol or address.
+strategies-test-title = آزمایش روی { $token }
+# $token is the tested token's symbol or address.
+strategies-test-running = در حال آزمایش روی { $token }…
+strategies-test-verdict-pass = برقرار است
+strategies-test-verdict-fail = برقرار نیست
+strategies-test-verdict-unknown = نامشخص
 
 # Rule groups. $mode is the all/any select written into the sentence.
 strategies-rules-match = شرط‌هایی که باید برقرار باشند: { $mode }
@@ -156,6 +179,7 @@ strategies-data-candles = کندل‌ها
 strategies-data-pool = استخر
 strategies-data-position = موقعیت
 strategies-data-market = فعالیت بازار
+strategies-data-clock = ساعت روز
 
 # Trade counts: $count selects the plural, $amount is the formatted number.
 strategies-unit-trades = معامله
@@ -211,6 +235,10 @@ strategies-toast-saved = استراتژی ذخیره شد
 strategies-toast-save-failed = ذخیره ناموفق بود
     .message = ذخیره استراتژی در پایگاه داده ناموفق بود
 strategies-toast-no-strategy-validate = استراتژی‌ای برای اعتبارسنجی وجود ندارد
+strategies-toast-no-strategy-test = استراتژی‌ای برای آزمایش نیست
+strategies-toast-test-save-first = پیش از آزمایش، استراتژی را ذخیره کنید: آزمایش قوانین ذخیره‌شده را می‌خواند
+strategies-toast-test-failed = آزمایش ناموفق بود
+    .message = آزمایش استراتژی ممکن نشد
 strategies-toast-valid = استراتژی معتبر است
 strategies-toast-invalid = استراتژی خطا دارد
 strategies-toast-validation-failed = اعتبارسنجی ناموفق بود
@@ -378,6 +406,126 @@ strategies-condition-buy-pressure-param-min-buy-share-pct = حداقل سهم خ
 strategies-condition-buy-pressure-param-min-transactions = حداقل تراکنش
     .description = بازه‌هایی با تراکنش کمتر هرگز شرط را فعال نمی‌کنند
 
+strategies-condition-transaction-velocity = سرعت تراکنش
+    .description = وقتی فعال می‌شود که نرخ تراکنش یک بازه اخیر دست‌کم یا حداکثر ضریبی از نرخ بازه بلندتری باشد که آن را در بر دارد. تعداد خرید و فروش توکن را می‌خواند.
+strategies-condition-transaction-velocity-param-window = بازه‌ها
+    .description = بازه اخیر و بازه بلندتری که با آن مقایسه می‌شود
+strategies-condition-transaction-velocity-param-window-option-5m-vs-1h = ۵ دقیقه در برابر ۱ ساعت
+strategies-condition-transaction-velocity-param-window-option-1h-vs-6h = ۱ ساعت در برابر ۶ ساعت
+strategies-condition-transaction-velocity-param-window-option-6h-vs-24h = ۶ ساعت در برابر ۲۴ ساعت
+strategies-condition-transaction-velocity-param-comparison = مقایسه
+    .description = آیا نرخ اخیر باید دست‌کم یا حداکثر برابر نسبت باشد
+strategies-condition-transaction-velocity-param-comparison-option-above = دست‌کم (≥)
+strategies-condition-transaction-velocity-param-comparison-option-below = حداکثر (≤)
+strategies-condition-transaction-velocity-param-ratio = نسبت نرخ
+    .description = تراکنش در ثانیه بازه اخیر تقسیم بر تراکنش در ثانیه بازه بلند
+strategies-condition-transaction-velocity-param-min-transactions = حداقل تراکنش
+    .description = بازه‌های اخیر با تراکنش کمتر هرگز شرط را فعال نمی‌کنند
+
+strategies-condition-pullback-from-high = اصلاح از سقف
+    .description = وقتی فعال می‌شود که قیمت زنده بین کمترین و بیشترین افت زیر بالاترین سقف کندل‌های اخیر باشد.
+strategies-condition-pullback-from-high-param-lookback = بازه بازبینی
+    .description = تعداد کندل‌هایی که بالاترین سقف از آن‌ها گرفته می‌شود
+strategies-condition-pullback-from-high-param-min-drop-pct = کمترین افت ٪
+    .description = قیمت باید دست‌کم این اندازه زیر سقف باشد
+strategies-condition-pullback-from-high-param-max-drop-pct = بیشترین افت ٪
+    .description = قیمت باید حداکثر این اندازه زیر سقف باشد؛ باید از کمترین افت بزرگ‌تر باشد
+
+strategies-condition-profit-giveback = بازپس‌دهی سود
+    .description = وقتی فعال می‌شود که پوزیشن بخشی از بهترین سود تحقق‌نیافته‌اش از آخرین خرید را پس داده باشد، پس از آنکه آن سود به سطحی رسیده باشد.
+strategies-condition-profit-giveback-param-arm-after-profit-pct = فعال پس از سود ٪
+    .description = بهترین سود باید پیش از فعال شدن شرط به این درصد از قیمت ورود رسیده باشد
+strategies-condition-profit-giveback-param-giveback-pct = بازپس‌دهی ٪
+    .description = سهم بازپس‌داده‌شده از بهترین سود؛ ۱۰۰٪ یعنی قیمت به قیمت ورود برگشته است
+
+strategies-condition-token-age = عمر توکن
+    .description = وقتی فعال می‌شود که زمان سپری‌شده از ساخت درون‌زنجیره‌ای توکن بیشتر یا کمتر از یک مدت باشد. توکنی که زمان ساختش معلوم نیست شرط را نامعلوم می‌گذارد.
+strategies-condition-token-age-param-comparison = مقایسه
+    .description = آیا توکن باید قدیمی‌تر یا جدیدتر از مدت باشد
+strategies-condition-token-age-param-comparison-option-older-than = قدیمی‌تر از (≥)
+strategies-condition-token-age-param-comparison-option-younger-than = جدیدتر از ({ "<" })
+strategies-condition-token-age-param-time-value = عمر
+    .description = زمان از ساخت توکن، با واحدی که درون فیلد انتخاب می‌شود (۱ تا ۱۰۰۰۰)
+strategies-condition-token-age-param-time-unit = واحد زمان
+    .description = واحد عمر
+strategies-condition-token-age-param-time-unit-option-minutes = دقیقه
+strategies-condition-token-age-param-time-unit-option-hours = ساعت
+strategies-condition-token-age-param-time-unit-option-days = روز
+
+strategies-condition-vwap = VWAP
+    .description = وقتی فعال می‌شود که قیمت زنده دست‌کم به اندازه یک فاصله بالاتر یا پایین‌تر از میانگین قیمت وزن‌دار با حجم کندل‌های اخیر باشد.
+strategies-condition-vwap-param-lookback = بازه بازبینی
+    .description = تعداد کندل‌هایی که میانگین وزن‌دار با حجم در بر می‌گیرد
+strategies-condition-vwap-param-position = موقعیت
+    .description = موقعیت قیمت نسبت به VWAP
+strategies-condition-vwap-param-position-option-above = بالای VWAP
+strategies-condition-vwap-param-position-option-below = پایین VWAP
+strategies-condition-vwap-param-distance-pct = فاصله ٪
+    .description = کمترین فاصله از VWAP؛ صفر یعنی هر فاصله‌ای در سمت انتخاب‌شده
+
+strategies-condition-volatility-range = دامنه نوسان
+    .description = وقتی فعال می‌شود که میانگین دامنه واقعی کندل‌های اخیر، به‌صورت درصدی از قیمت زنده، بالاتر یا پایین‌تر از یک آستانه باشد. دو شرط از این نوع در یک گروه یک بازه می‌سازند.
+strategies-condition-volatility-range-param-period = دوره ATR
+    .description = تعداد کندل‌هایی که میانگین دامنه واقعی روی آن‌ها هموار می‌شود؛ شرط یک کندل بیشتر لازم دارد
+strategies-condition-volatility-range-param-comparison = مقایسه
+    .description = آیا دامنه باید بالاتر یا پایین‌تر از آستانه باشد
+strategies-condition-volatility-range-param-comparison-option-above = بالاتر
+strategies-condition-volatility-range-param-comparison-option-below = پایین‌تر
+strategies-condition-volatility-range-param-threshold-pct = آستانه دامنه ٪
+    .description = میانگین دامنه واقعی به‌صورت درصدی از قیمت زنده
+
+strategies-condition-bollinger-bands = باندهای بولینگر
+    .description = وقتی فعال می‌شود که قیمت زنده زیر باند پایین یا بالای باند بالا باشد، یا باندها به هم فشرده شوند. باندها چند انحراف معیار دورتر از میانگین قیمت بسته شدن قرار دارند.
+strategies-condition-bollinger-bands-param-period = دوره
+    .description = تعداد کندل‌هایی که میانگین و انحراف معیار در بر می‌گیرند
+strategies-condition-bollinger-bands-param-std-dev = انحراف‌های معیار
+    .description = هر باند چند انحراف معیار از میانگین فاصله دارد
+strategies-condition-bollinger-bands-param-signal = سیگنال
+    .description = آنچه باندها باید نشان دهند
+strategies-condition-bollinger-bands-param-signal-option-below-lower = زیر باند پایین
+strategies-condition-bollinger-bands-param-signal-option-above-upper = بالای باند بالا
+strategies-condition-bollinger-bands-param-signal-option-squeeze = فشردگی
+strategies-condition-bollinger-bands-param-squeeze-width-pct = پهنای فشردگی ٪
+    .description = برای فشردگی: بیشترین فاصله میان باندها، به‌صورت درصدی از میانگین
+
+strategies-condition-liquidity-to-size = نقدینگی نسبت به اندازه
+    .description = وقتی فعال می‌شود که ذخایر استخر دست‌کم یا کمتر از ضریبی از اندازه درگیر باشد: اندازه معامله در استراتژی ورود، ارزش باقی‌مانده پوزیشن در استراتژی خروج.
+strategies-condition-liquidity-to-size-param-comparison = مقایسه
+    .description = آیا ذخایر باید دست‌کم یا کمتر از ضریب باشد
+strategies-condition-liquidity-to-size-param-comparison-option-at-least = دست‌کم (≥)
+strategies-condition-liquidity-to-size-param-comparison-option-below = کمتر از ({ "<" })
+strategies-condition-liquidity-to-size-param-multiple = ضریب نقدینگی
+    .description = ذخایر استخر تقسیم بر اندازه درگیر؛ ضریب N قیمت را حدود 1/(N+1) جابه‌جا می‌کند
+
+strategies-condition-position-adds = افزوده‌های پوزیشن
+    .description = وقتی فعال می‌شود که تعداد خریدهای افزوده پس از ورود اول، یا فروش‌های جزئی، دست‌کم یا حداکثر یک عدد باشد.
+strategies-condition-position-adds-param-subject = مورد شمارش
+    .description = کدام اقدام‌ها شمرده می‌شوند
+strategies-condition-position-adds-param-subject-option-adds = خریدهای افزوده
+strategies-condition-position-adds-param-subject-option-partial-sells = فروش‌های جزئی
+strategies-condition-position-adds-param-comparison = مقایسه
+    .description = آیا شمارش باید دست‌کم یا حداکثر برابر عدد باشد
+strategies-condition-position-adds-param-comparison-option-at-least = دست‌کم (≥)
+strategies-condition-position-adds-param-comparison-option-at-most = حداکثر (≤)
+strategies-condition-position-adds-param-count = تعداد
+    .description = تعداد اقدام‌ها
+
+strategies-condition-time-of-day = ساعت روز
+    .description = وقتی فعال می‌شود که ساعت کنونی درون بازه‌ای از ساعت‌های UTC باشد. شروعی پس از پایان از نیمه‌شب می‌گذرد.
+strategies-condition-time-of-day-param-start-hour = ساعت شروع (UTC)
+    .description = نخستین ساعت بازه، از ۰ تا ۲۳
+strategies-condition-time-of-day-param-end-hour = ساعت پایان (UTC)
+    .description = ساعتی که بازه در آن پایان می‌یابد، از ۱ تا ۲۴؛ خود آن ساعت بیرون از بازه است
+
+strategies-condition-liquidity-change-since-entry = تغییر نقدینگی از ورود
+    .description = وقتی فعال می‌شود که ذخایر استخر از زمان باز شدن پوزیشن دست‌کم به اندازه یک درصد کاهش یا افزایش یافته باشد. پوزیشنی که نقدینگی ورود ثبت‌شده ندارد شرط را نامعلوم می‌گذارد.
+strategies-condition-liquidity-change-since-entry-param-comparison = مقایسه
+    .description = آیا ذخایر باید کاهش یا افزایش یافته باشد
+strategies-condition-liquidity-change-since-entry-param-comparison-option-dropped-by = کاهش به اندازه
+strategies-condition-liquidity-change-since-entry-param-comparison-option-rose-by = افزایش به اندازه
+strategies-condition-liquidity-change-since-entry-param-change-pct = تغییر ٪
+    .description = تغییر ذخایر استخر از زمان ورود
+
 ## Shared by every condition
 
 strategies-condition-param-timeframe = بازه زمانی
@@ -453,6 +601,27 @@ strategies-error-field-peak-price = قیمت اوج
 strategies-error-field-slow-period = دوره کند
 strategies-error-field-window = بازه
 strategies-error-field-within-candles = تعداد کندل تقاطع
+strategies-error-field-change = تغییر
+strategies-error-field-end-hour = ساعت پایان
+strategies-error-field-entry-liquidity = نقدینگی ورود
+strategies-error-field-giveback = بازپس‌دهی
+strategies-error-field-highest-high = بالاترین سقف
+strategies-error-field-long-window-transactions = تراکنش‌های بازه بلند
+strategies-error-field-maximum-drop = بیشترین افت
+strategies-error-field-minimum-drop = کمترین افت
+strategies-error-field-multiple = ضریب
+strategies-error-field-pool-liquidity = نقدینگی استخر
+strategies-error-field-ratio = نسبت
+strategies-error-field-remaining-position-value = ارزش باقی‌مانده پوزیشن
+strategies-error-field-signal = سیگنال
+strategies-error-field-squeeze-width = پهنای فشردگی
+strategies-error-field-standard-deviations = انحراف‌های معیار
+strategies-error-field-start-hour = ساعت شروع
+strategies-error-field-subject = مورد شمارش
+strategies-error-field-token-creation-time = زمان ساخت توکن
+strategies-error-field-total-volume = حجم کل
+strategies-error-field-trade-size = اندازه معامله
+strategies-error-field-vwap = VWAP
 
 # Expected parameter types
 
@@ -469,6 +638,12 @@ strategies-error-data-ohlcv-data = داده OHLCV
 strategies-error-data-position-data = داده پوزیشن
 strategies-error-data-peak-price = قیمت اوج
 strategies-error-data-transaction-counts = تعداد تراکنش‌ها
+strategies-error-data-entry-liquidity = نقدینگی ورود
+strategies-error-data-entry-pool-liquidity = نقدینگی استخر ورود
+strategies-error-data-real-pool-reserves = نقدینگی واقعی استخر
+strategies-error-data-remaining-position-value = ارزش باقی‌مانده پوزیشن
+strategies-error-data-token-creation-time = زمان ساخت توکن
+strategies-error-data-trade-size = اندازه معامله
 
 # Indicators
 
@@ -479,6 +654,10 @@ strategies-error-indicator-price-change-lookback = بازه بازبینی تغ�
 strategies-error-indicator-volume-spike = جهش حجم
 strategies-error-indicator-moving-average-cross = تقاطع میانگین‌های متحرک
 strategies-error-indicator-rsi = RSI
+strategies-error-indicator-bollinger-bands = باندهای بولینگر
+strategies-error-indicator-pullback-from-high = اصلاح از سقف
+strategies-error-indicator-volatility-range = دامنه نوسان
+strategies-error-indicator-vwap = VWAP
 
 # Rule tree faults
 

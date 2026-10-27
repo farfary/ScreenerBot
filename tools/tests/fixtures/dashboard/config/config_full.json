@@ -82,6 +82,8 @@
     "trailing_stop_enabled": false,
     "trailing_stop_activation_pct": 10,
     "trailing_stop_distance_pct": 5,
+    "trailing_stop_band_profit_pct": [],
+    "trailing_stop_band_distance_pct": [],
     "break_even_enabled": false,
     "break_even_trigger_pct": 15,
     "break_even_offset_pct": 1,

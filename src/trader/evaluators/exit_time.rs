@@ -18,26 +18,9 @@ pub fn time_override_triggered(
     if !policy.enabled {
         return Ok(false);
     }
+    policy.validate()?;
     let loss_threshold_pct = policy.loss_threshold_pct;
     let duration_seconds = policy.duration_seconds;
-    if !duration_seconds.is_finite() || duration_seconds <= 0.0 {
-        return Err(crate::trader::Error::InvalidExitPolicy {
-            detail: format!("invalid time_override_duration: {duration_seconds} seconds"),
-        });
-    }
-    if !loss_threshold_pct.is_finite() {
-        return Err(crate::trader::Error::InvalidExitPolicy {
-            detail: format!("invalid time_override_loss_threshold_pct: {loss_threshold_pct}"),
-        });
-    }
-    // A positive threshold would exit on profit, which is a misconfiguration.
-    if loss_threshold_pct > 0.0 {
-        return Err(crate::trader::Error::InvalidExitPolicy {
-            detail: format!(
-                "invalid time_override_loss_threshold_pct: {loss_threshold_pct} (must be <= 0 to represent loss)"
-            ),
-        });
-    }
     if (held_seconds as f64) < duration_seconds || entry_price <= 0.0 || !entry_price.is_finite() {
         return Ok(false);
     }

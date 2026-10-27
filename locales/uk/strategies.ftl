@@ -57,9 +57,15 @@ strategies-summary-param = { $label }: { $value }
 strategies-summary-none = Без параметрів
 # An unset optional parameter: the strategy's own value it falls back to.
 strategies-param-inherit = Налаштування стратегії ({ $value })
-strategies-summary-period-seconds = Період огляду: { $amount } с
-strategies-summary-period-minutes = Період огляду: { $amount } хв
-strategies-summary-period-hours = Період огляду: { $amount } год
+# A duration amount with its unit, and an hour of the UTC day. $amount is the formatted number.
+strategies-value-duration-seconds = { $amount } с
+strategies-value-duration-minutes = { $amount } хв
+strategies-value-duration-hours = { $amount } год
+strategies-value-duration-days = { $amount } д
+strategies-value-utc-hour = { $amount }:00 UTC
+# A hint under a field, display only. $time is a local clock time, $amount a percentage.
+strategies-hint-local-time = Ваш місцевий час: { $time }
+strategies-hint-price-impact = Угода такого розміру зсуває ціну приблизно на { $amount }%
 
 # Parameter values in a card summary. $count selects the plural, $amount is the formatted number.
 strategies-value-percent = { $amount }%
@@ -84,6 +90,7 @@ strategies-unit-percent = %
 strategies-unit-native = { -sol }
 strategies-unit-hours = год
 strategies-unit-multiplier = ×
+strategies-unit-utc = UTC
 
 ## Condition catalog
 
@@ -104,7 +111,23 @@ strategies-editor-description = Опис
 strategies-editor-description-field =
     .placeholder = Що робить ця стратегія
     .aria-label = Опис стратегії
+# The exit strategy's binding to the entry strategies whose positions it manages.
+strategies-editor-entry-binding-all = Усі стратегії входу
+# Labels the button that names the entry strategies an exit strategy manages.
+strategies-editor-entry-binding-label = Керує
+strategies-editor-entry-binding-hint = Керує позиціями, відкритими позначеними стратегіями входу. Якщо нічого не позначено, керує всіма позиціями, зокрема ручними та скопійованими.
+strategies-editor-entry-binding-empty = Стратегій входу ще немає
+# $id is the id of an entry strategy that no longer exists.
+strategies-editor-entry-binding-deleted = { $id } (видалена)
 strategies-action-export = Експорт
+strategies-action-test = Перевірити на токені
+# $token is the tested token's symbol or address.
+strategies-test-title = Перевірка на { $token }
+# $token is the tested token's symbol or address.
+strategies-test-running = Перевірка на { $token }…
+strategies-test-verdict-pass = Виконано
+strategies-test-verdict-fail = Не виконано
+strategies-test-verdict-unknown = Невідомо
 
 # Rule groups. $mode is the all/any select written into the sentence.
 strategies-rules-match = Умови, що мають виконуватися: { $mode }
@@ -164,6 +187,7 @@ strategies-data-candles = Свічки
 strategies-data-pool = Пул
 strategies-data-position = Позиція
 strategies-data-market = Ринкова активність
+strategies-data-clock = Час доби
 
 # Trade counts: $count selects the plural, $amount is the formatted number.
 strategies-unit-trades = угод
@@ -221,6 +245,10 @@ strategies-toast-saved = Стратегію збережено
 strategies-toast-save-failed = Помилка збереження
     .message = Не вдалося зберегти стратегію в базу даних
 strategies-toast-no-strategy-validate = Немає стратегії для перевірки
+strategies-toast-no-strategy-test = Немає стратегії для перевірки
+strategies-toast-test-save-first = Збережіть стратегію перед перевіркою: перевірка читає збережені правила
+strategies-toast-test-failed = Перевірка не вдалася
+    .message = Не вдалося перевірити стратегію
 strategies-toast-valid = Стратегія дійсна
 strategies-toast-invalid = Стратегія має помилки
 strategies-toast-validation-failed = Помилка перевірки
@@ -388,6 +416,126 @@ strategies-condition-buy-pressure-param-min-buy-share-pct = Мінімальна
 strategies-condition-buy-pressure-param-min-transactions = Мінімум транзакцій
     .description = Вікна з меншою кількістю транзакцій ніколи не запускають умову
 
+strategies-condition-transaction-velocity = Швидкість транзакцій
+    .description = Спрацьовує, коли темп транзакцій недавнього вікна не менший або не більший за кратне темпу довшого вікна, що його містить. Використовує кількість купівель і продажів токена.
+strategies-condition-transaction-velocity-param-window = Вікна
+    .description = Недавнє вікно і довше вікно, з яким воно порівнюється
+strategies-condition-transaction-velocity-param-window-option-5m-vs-1h = 5 хвилин і 1 година
+strategies-condition-transaction-velocity-param-window-option-1h-vs-6h = 1 година і 6 годин
+strategies-condition-transaction-velocity-param-window-option-6h-vs-24h = 6 годин і 24 години
+strategies-condition-transaction-velocity-param-comparison = Порівняння
+    .description = Чи має недавній темп бути не меншим або не більшим за відношення
+strategies-condition-transaction-velocity-param-comparison-option-above = Не менше (≥)
+strategies-condition-transaction-velocity-param-comparison-option-below = Не більше (≤)
+strategies-condition-transaction-velocity-param-ratio = Відношення темпів
+    .description = Транзакції за секунду недавнього вікна, поділені на транзакції за секунду довгого вікна
+strategies-condition-transaction-velocity-param-min-transactions = Мінімум транзакцій
+    .description = Недавні вікна з меншою кількістю транзакцій ніколи не запускають умову
+
+strategies-condition-pullback-from-high = Відкат від максимуму
+    .description = Спрацьовує, коли поточна ціна між мінімальним і максимальним падінням нижче найвищого максимуму останніх свічок.
+strategies-condition-pullback-from-high-param-lookback = Період огляду
+    .description = Кількість свічок, з яких береться найвищий максимум
+strategies-condition-pullback-from-high-param-min-drop-pct = Мінімальне падіння %
+    .description = Ціна має бути нижче максимуму щонайменше на стільки
+strategies-condition-pullback-from-high-param-max-drop-pct = Максимальне падіння %
+    .description = Ціна має бути нижче максимуму не більше ніж на стільки; має перевищувати мінімальне падіння
+
+strategies-condition-profit-giveback = Віддача прибутку
+    .description = Спрацьовує, коли позиція віддала частку свого найкращого нереалізованого прибутку від останньої купівлі після того, як цей прибуток досяг рівня.
+strategies-condition-profit-giveback-param-arm-after-profit-pct = Звести після прибутку %
+    .description = Найкращий прибуток має досягти цього відсотка ціни входу, перш ніж умова зможе спрацювати
+strategies-condition-profit-giveback-param-giveback-pct = Віддача %
+    .description = Частка відданого найкращого прибутку; 100% означає, що ціна повернулася до ціни входу
+
+strategies-condition-token-age = Вік токена
+    .description = Спрацьовує, коли час від створення токена в блокчейні більший або менший за тривалість. Якщо час створення невідомий, умова лишається невизначеною.
+strategies-condition-token-age-param-comparison = Порівняння
+    .description = Чи має токен бути старшим або молодшим за тривалість
+strategies-condition-token-age-param-comparison-option-older-than = Старший за (≥)
+strategies-condition-token-age-param-comparison-option-younger-than = Молодший за ({ "<" })
+strategies-condition-token-age-param-time-value = Вік
+    .description = Час від створення токена в одиниці, вибраній у полі (1-10000)
+strategies-condition-token-age-param-time-unit = Одиниця часу
+    .description = Одиниця віку
+strategies-condition-token-age-param-time-unit-option-minutes = хв
+strategies-condition-token-age-param-time-unit-option-hours = год
+strategies-condition-token-age-param-time-unit-option-days = д
+
+strategies-condition-vwap = VWAP
+    .description = Спрацьовує, коли поточна ціна вища або нижча за середньозважену за обсягом ціну останніх свічок щонайменше на задану відстань.
+strategies-condition-vwap-param-lookback = Період огляду
+    .description = Кількість свічок, які охоплює середньозважена за обсягом ціна
+strategies-condition-vwap-param-position = Положення
+    .description = Положення ціни відносно VWAP
+strategies-condition-vwap-param-position-option-above = Вище VWAP
+strategies-condition-vwap-param-position-option-below = Нижче VWAP
+strategies-condition-vwap-param-distance-pct = Відстань %
+    .description = Мінімальна відстань від VWAP; 0 означає будь-яку відстань з вибраного боку
+
+strategies-condition-volatility-range = Діапазон волатильності
+    .description = Спрацьовує, коли середній істинний діапазон останніх свічок у відсотках від поточної ціни вищий або нижчий за поріг. Дві такі умови в групі задають діапазон.
+strategies-condition-volatility-range-param-period = Період ATR
+    .description = Кількість свічок для згладжування середнього істинного діапазону; умові потрібна ще одна свічка
+strategies-condition-volatility-range-param-comparison = Порівняння
+    .description = Чи має діапазон бути вищим або нижчим за поріг
+strategies-condition-volatility-range-param-comparison-option-above = Вище
+strategies-condition-volatility-range-param-comparison-option-below = Нижче
+strategies-condition-volatility-range-param-threshold-pct = Поріг діапазону %
+    .description = Середній істинний діапазон у відсотках від поточної ціни
+
+strategies-condition-bollinger-bands = Смуги Боллінджера
+    .description = Спрацьовує, коли поточна ціна нижча за нижню смугу або вища за верхню чи коли смуги стискаються. Смуги віддалені на кілька стандартних відхилень від середньої ціни закриття.
+strategies-condition-bollinger-bands-param-period = Період
+    .description = Кількість свічок для середньої і стандартного відхилення
+strategies-condition-bollinger-bands-param-std-dev = Стандартні відхилення
+    .description = На скільки стандартних відхилень кожна смуга віддалена від середньої
+strategies-condition-bollinger-bands-param-signal = Сигнал
+    .description = Що мають показувати смуги
+strategies-condition-bollinger-bands-param-signal-option-below-lower = Нижче нижньої смуги
+strategies-condition-bollinger-bands-param-signal-option-above-upper = Вище верхньої смуги
+strategies-condition-bollinger-bands-param-signal-option-squeeze = Стиснення
+strategies-condition-bollinger-bands-param-squeeze-width-pct = Ширина стиснення %
+    .description = Для стиснення: найбільша відстань між смугами у відсотках від середньої
+
+strategies-condition-liquidity-to-size = Ліквідність до розміру
+    .description = Спрацьовує, коли резерви пулу не менші або менші за кратне розміру на кону: розміру угоди у стратегії входу, залишкової вартості позиції у стратегії виходу.
+strategies-condition-liquidity-to-size-param-comparison = Порівняння
+    .description = Чи мають резерви бути не меншими або меншими за кратне
+strategies-condition-liquidity-to-size-param-comparison-option-at-least = Не менше (≥)
+strategies-condition-liquidity-to-size-param-comparison-option-below = Менше ({ "<" })
+strategies-condition-liquidity-to-size-param-multiple = Кратність ліквідності
+    .description = Резерви пулу, поділені на розмір на кону; кратність N зсуває ціну приблизно на 1/(N+1)
+
+strategies-condition-position-adds = Докупівлі позиції
+    .description = Спрацьовує, коли кількість докупівель після першого входу або часткових продажів не менша або не більша за задану.
+strategies-condition-position-adds-param-subject = Що рахувати
+    .description = Які дії рахуються
+strategies-condition-position-adds-param-subject-option-adds = Докупівлі
+strategies-condition-position-adds-param-subject-option-partial-sells = Часткові продажі
+strategies-condition-position-adds-param-comparison = Порівняння
+    .description = Чи має кількість бути не меншою або не більшою за задану
+strategies-condition-position-adds-param-comparison-option-at-least = Не менше (≥)
+strategies-condition-position-adds-param-comparison-option-at-most = Не більше (≤)
+strategies-condition-position-adds-param-count = Кількість
+    .description = Кількість дій
+
+strategies-condition-time-of-day = Час доби
+    .description = Спрацьовує, коли поточна година потрапляє у вікно годин UTC. Початок після закінчення переходить через північ.
+strategies-condition-time-of-day-param-start-hour = Година початку (UTC)
+    .description = Перша година вікна, від 0 до 23
+strategies-condition-time-of-day-param-end-hour = Година закінчення (UTC)
+    .description = Година, якою закінчується вікно, від 1 до 24; сама ця година поза вікном
+
+strategies-condition-liquidity-change-since-entry = Зміна ліквідності від входу
+    .description = Спрацьовує, коли резерви пулу впали або зросли щонайменше на відсоток від відкриття позиції. Без записаної ліквідності під час входу умова лишається невизначеною.
+strategies-condition-liquidity-change-since-entry-param-comparison = Порівняння
+    .description = Чи мають резерви впасти або зрости
+strategies-condition-liquidity-change-since-entry-param-comparison-option-dropped-by = Впала на
+strategies-condition-liquidity-change-since-entry-param-comparison-option-rose-by = Зросла на
+strategies-condition-liquidity-change-since-entry-param-change-pct = Зміна %
+    .description = Зміна резервів пулу від входу
+
 ## Shared by every condition
 
 strategies-condition-param-timeframe = Таймфрейм
@@ -463,6 +611,27 @@ strategies-error-field-peak-price = ціна піку
 strategies-error-field-slow-period = повільний період
 strategies-error-field-window = вікно
 strategies-error-field-within-candles = кількість свічок перетину
+strategies-error-field-change = зміна
+strategies-error-field-end-hour = година закінчення
+strategies-error-field-entry-liquidity = ліквідність під час входу
+strategies-error-field-giveback = віддача
+strategies-error-field-highest-high = максимум
+strategies-error-field-long-window-transactions = транзакції довгого вікна
+strategies-error-field-maximum-drop = максимальне падіння
+strategies-error-field-minimum-drop = мінімальне падіння
+strategies-error-field-multiple = кратність
+strategies-error-field-pool-liquidity = ліквідність пулу
+strategies-error-field-ratio = відношення
+strategies-error-field-remaining-position-value = залишкова вартість позиції
+strategies-error-field-signal = сигнал
+strategies-error-field-squeeze-width = ширина стиснення
+strategies-error-field-standard-deviations = стандартні відхилення
+strategies-error-field-start-hour = година початку
+strategies-error-field-subject = що рахувати
+strategies-error-field-token-creation-time = час створення токена
+strategies-error-field-total-volume = загальний обсяг
+strategies-error-field-trade-size = розмір угоди
+strategies-error-field-vwap = VWAP
 
 # Expected parameter types
 
@@ -479,6 +648,12 @@ strategies-error-data-ohlcv-data = Дані OHLCV
 strategies-error-data-position-data = Дані позиції
 strategies-error-data-peak-price = Ціна піку
 strategies-error-data-transaction-counts = Кількість транзакцій
+strategies-error-data-entry-liquidity = Ліквідність під час входу
+strategies-error-data-entry-pool-liquidity = Ліквідність пулу входу
+strategies-error-data-real-pool-reserves = Реальна ліквідність пулу
+strategies-error-data-remaining-position-value = Залишкова вартість позиції
+strategies-error-data-token-creation-time = Час створення токена
+strategies-error-data-trade-size = Розмір угоди
 
 # Indicators
 
@@ -489,6 +664,10 @@ strategies-error-indicator-price-change-lookback = огляд зміни цін�
 strategies-error-indicator-volume-spike = сплеск обсягу
 strategies-error-indicator-moving-average-cross = перетин ковзних середніх
 strategies-error-indicator-rsi = RSI
+strategies-error-indicator-bollinger-bands = смуги Боллінджера
+strategies-error-indicator-pullback-from-high = відкат від максимуму
+strategies-error-indicator-volatility-range = діапазон волатильності
+strategies-error-indicator-vwap = VWAP
 
 # Rule tree faults
 

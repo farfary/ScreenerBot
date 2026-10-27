@@ -1152,6 +1152,12 @@ config-trader-trade-size-sol = Trade Size
 config-trader-trailing-stop-activation-pct = Trailing Stop Activation
     .hint = Activate trailing stop after this profit % (10 = activate at +10%)
     .unit = %
+config-trader-trailing-stop-band-distance-pct = Trailing Band Distances
+    .hint = How far below the peak the trail follows once its band is reached; less than the band's peak profit
+    .unit = %
+config-trader-trailing-stop-band-profit-pct = Trailing Bands
+    .hint = Peak profit from the average entry at which each band takes over the trail distance
+    .unit = %
 config-trader-trailing-stop-distance-pct = Trailing Stop Distance
     .hint = How far to trail below peak (5 = exit if price drops 5% from peak)
     .unit = %

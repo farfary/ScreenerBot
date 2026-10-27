@@ -188,6 +188,23 @@ trader-trailing-peak = Puncak
 trader-trailing-final = +{ $value }% akhir
 trader-trailing-summary-protected = Melindungi untung <strong>{ $value }</strong>
 trader-trailing-summary-avoided = Menghindari rugi <strong>{ $value }</strong> dari puncak
+# $step is the band's position in the list, from 1.
+trader-trailing-band = Pita { $step }
+# $step is the band's position in the list, from 1.
+trader-trailing-band-profit-label = Profit puncak pita { $step }
+# $step is the band's position in the list, from 1.
+trader-trailing-band-distance-label = Jarak trailing pita { $step }
+trader-trailing-band-profit-caption = Dari profit puncak
+trader-trailing-band-distance-caption = Ikuti sejauh
+trader-trailing-add-band = Tambah pita
+# $step is the band's position in the list, from 1.
+trader-trailing-remove-band = Hapus pita { $step }
+# $min and $max are the configured bounds of a band's peak profit.
+trader-trailing-band-error-profit-range = Profit puncak setiap pita harus antara { $min }% dan { $max }%
+# $min and $max are the configured bounds of a band's distance.
+trader-trailing-band-error-distance-range = Jarak setiap pita harus antara { $min }% dan { $max }%
+trader-trailing-band-error-order = Setiap pita membutuhkan profit puncak lebih tinggi dari aktivasi dan pita sebelumnya
+trader-trailing-band-error-distance = Setiap pita harus mengikuti dengan jarak lebih kecil dari profit puncaknya
 
 ## Break-even stop
 
@@ -239,7 +256,6 @@ trader-time-unit-seconds = detik
 trader-time-unit-minutes = menit
 trader-time-unit-hours = jam
 trader-time-unit-days = hari
-trader-time-conversion-default = 168 jam = 7 hari
 trader-time-conversion = { $duration } = { $readable }
 trader-duration-seconds =
     { $count ->
@@ -313,11 +329,8 @@ trader-dca-error-drop-range = Setiap penurunan harus antara { $min }% dan { $max
 trader-dca-error-size-range = Setiap ukuran harus antara { $min }× dan { $max }× pembelian pertama
 trader-dca-error-order = Diukur dari masuk pertama, setiap tambahan perlu penurunan lebih dalam dari sebelumnya
 trader-dca-cooldown-impact = Minimal { $span } di antara entry tambahan
-trader-dca-min-hold-impact =
-    { $minutes ->
-        [0] Tambahan pertama boleh langsung setelah masuk
-       *[other] Tambahan pertama menunggu setidaknya { $span } setelah masuk
-    }
+trader-dca-min-hold-none = Tambahan pertama boleh langsung setelah masuk
+trader-dca-min-hold-impact = Tambahan pertama menunggu setidaknya { $span } setelah masuk
 trader-dca-capacity = Paling banyak yang bisa dipegang posisi ini: { $amount } ({ $multiple }× pembelian pertama)
 trader-dca-info-title = Info Strategi DCA
 trader-dca-info-subtitle = Pertimbangan penting untuk trading DCA

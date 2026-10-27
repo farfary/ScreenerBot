@@ -55,12 +55,34 @@ tokens-positions-fact-opened = Dibuka
 tokens-positions-fact-exit-price = Harga Exit
 tokens-positions-fact-native-received = { -sol } Diterima
 tokens-positions-fact-closed-reason = Alasan Ditutup
-tokens-positions-fact-target-min = Target Profit Min
-tokens-positions-fact-target-max = Target Profit Maks
 tokens-positions-fact-highest = Harga Tertinggi
 tokens-positions-fact-basis-peak = Puncak Sejak Pembelian Terakhir
 tokens-positions-fact-lowest = Harga Terendah
-tokens-positions-section-range = Target & rentang
+tokens-positions-section-range = Rentang harga
+tokens-positions-section-exit-plan = Rencana keluar
+tokens-positions-plan-stop-loss = Stop loss
+# $step is the take-profit step's position in the ladder, from 1.
+tokens-positions-plan-step = Take profit { $step }
+# $profit is the formatted profit level, $share the formatted share of the position it sells.
+tokens-positions-plan-step-value = Pada { $profit }, menjual { $share }
+tokens-positions-plan-step-taken = Terjual
+tokens-positions-plan-trailing = Trailing stop
+# $activation is the formatted profit that arms the trail, $distance the formatted share it trails by.
+tokens-positions-plan-trailing-value = Aktif pada { $activation }, mengikuti { $distance } di bawah puncak
+# $step is the band's position in the list, from 1.
+tokens-positions-plan-trailing-band = Tingkat trailing { $step }
+# $profit is the formatted profit the band starts at, $distance the formatted share it trails by.
+tokens-positions-plan-trailing-band-value = Mulai { $profit }, mengikuti { $distance } di bawah puncak
+tokens-positions-plan-break-even = Stop impas
+# $trigger and $offset are formatted profits.
+tokens-positions-plan-break-even-value = Aktif pada { $trigger }, menjual kembali pada { $offset }
+tokens-positions-plan-time-loss = Keluar karena waktu rugi
+# $duration is a formatted duration, $threshold a formatted loss.
+tokens-positions-plan-time-loss-value = Setelah { $duration }, pada atau di bawah { $threshold }
+tokens-positions-plan-time-stagnation = Keluar karena posisi datar
+# $duration is a formatted duration, $band a formatted share.
+tokens-positions-plan-time-stagnation-value = Setelah { $duration }, selama masih dalam { $band } dari harga masuk
+tokens-positions-plan-none = Tidak ada aturan keluar yang aktif
 tokens-positions-section-market = Pasar & kepemilikan
 tokens-positions-kicker = Posisi
 tokens-positions-fallback-symbol = Token

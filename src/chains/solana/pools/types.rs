@@ -124,6 +124,28 @@ impl ProgramKind {
         }
     }
 
+    /// Whether the decoder of this program reports a pool's native reserves as virtual
+    /// reserves: the pump.fun bonding curve prices from `virtual_sol_reserves`, a fixed
+    /// virtual base plus the SOL actually deposited. Such a reading is no measure of the
+    /// SOL a pool holds, and no two of them, or one of them and a real pool's reserves,
+    /// can be compared as liquidity.
+    pub const fn reports_virtual_reserves(&self) -> bool {
+        match self {
+            ProgramKind::PumpFunLegacy => true,
+            ProgramKind::RaydiumCpmm
+            | ProgramKind::RaydiumLegacyAmm
+            | ProgramKind::RaydiumClmm
+            | ProgramKind::OrcaWhirlpool
+            | ProgramKind::MeteoraDamm
+            | ProgramKind::MeteoraDlmm
+            | ProgramKind::MeteoraDbc
+            | ProgramKind::PumpFunAmm
+            | ProgramKind::Moonit
+            | ProgramKind::FluxbeamAmm
+            | ProgramKind::Unknown => false,
+        }
+    }
+
     /// Converts to the chain-neutral protocol identity carried by the shared
     /// `PoolDescriptor` (persistence/display/routing use `ProtocolId`, never
     /// this Solana-only enum, outside `crate::chains::solana`). Always the
@@ -292,6 +314,18 @@ mod tests {
                 ProgramKind::from_protocol_id(&legacy_id),
                 kind,
                 "historical display-name identity for {:?} must still route",
+                kind
+            );
+        }
+    }
+
+    #[test]
+    fn only_the_pumpfun_bonding_curve_reports_virtual_reserves() {
+        for kind in ALL_KNOWN {
+            assert_eq!(
+                kind.reports_virtual_reserves(),
+                kind == ProgramKind::PumpFunLegacy,
+                "{:?}",
                 kind
             );
         }

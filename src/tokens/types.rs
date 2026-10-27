@@ -294,7 +294,22 @@ impl TokenCreation {
     }
 }
 
+/// A creation time a source reported, or `None` when it is not a plausible creation
+/// moment (the 0 epoch some sources report for an unknown time).
+fn valid_creation(at: Option<DateTime<Utc>>) -> Option<DateTime<Utc>> {
+    at.filter(|created| created.timestamp() >= MIN_VALID_CREATION_TIMESTAMP)
+}
+
 impl Token {
+    /// The token's own on-chain creation time, or `None` when it is unknown or invalid.
+    ///
+    /// Unlike [`Token::created_at`] it never falls back to a pool or discovery time: a
+    /// reader that needs the on-chain fact (a token age rule) must not be handed a
+    /// different one.
+    pub fn on_chain_created_at(&self) -> Option<DateTime<Utc>> {
+        valid_creation(self.blockchain_created_at)
+    }
+
     /// The earliest known moment of the token: the earlier of its valid on-chain creation
     /// time and the oldest pool creation time, else its first discovery.
     ///
@@ -303,14 +318,11 @@ impl Token {
     /// so the earliest known one is the truest. Only an on-chain or pool time is an age a
     /// surface may show ([`TokenCreation::age_origin`]).
     pub fn created_at(&self) -> TokenCreation {
-        let valid = |at: Option<DateTime<Utc>>| {
-            at.filter(|created| created.timestamp() >= MIN_VALID_CREATION_TIMESTAMP)
-        };
-        let on_chain = valid(self.blockchain_created_at).map(|at| TokenCreation {
+        let on_chain = self.on_chain_created_at().map(|at| TokenCreation {
             at,
             source: CreationSource::OnChain,
         });
-        let pool = valid(self.pool_created_at).map(|at| TokenCreation {
+        let pool = valid_creation(self.pool_created_at).map(|at| TokenCreation {
             at,
             source: CreationSource::Pool,
         });

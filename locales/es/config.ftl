@@ -1149,6 +1149,12 @@ config-trader-trade-size-sol = Tamaño de operación
 config-trader-trailing-stop-activation-pct = Activación del trailing stop
     .hint = Activa el trailing stop tras este % de beneficio (10 = se activa con +10 %)
     .unit = %
+config-trader-trailing-stop-band-distance-pct = Distancias de las bandas
+    .hint = Qué tan por debajo del máximo sigue el stop una vez alcanzada su banda; menor que la ganancia máxima de la banda
+    .unit = %
+config-trader-trailing-stop-band-profit-pct = Bandas del trailing
+    .hint = Ganancia máxima desde la entrada promedio a partir de la cual cada banda toma el control de la distancia
+    .unit = %
 config-trader-trailing-stop-distance-pct = Distancia del trailing stop
     .hint = Cuánto por debajo del máximo se sigue (5 = sale si el precio cae un 5 % desde el máximo)
     .unit = %

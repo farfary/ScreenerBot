@@ -7,11 +7,13 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 // Database schema version
-pub(super) const POSITIONS_SCHEMA_VERSION: u32 = 8;
+pub(super) const POSITIONS_SCHEMA_VERSION: u32 = 9;
 
 /// The oldest core that reads the store. Version 7 adds `basis_peak_price NOT NULL`
 /// without a default, which no earlier core writes. Version 8 adds `take_profit_level`
-/// with a default, so a version 7 core still inserts and rewrites rows.
+/// with a default and version 9 the nullable `entry_liquidity_native` and
+/// `entry_liquidity_pool`, so a version 7
+/// core still inserts and rewrites rows.
 pub(super) const POSITIONS_MIN_READER_VERSION: u32 = 7;
 
 /// The version the store held when the schema ledger was adopted.
@@ -41,7 +43,8 @@ pub(super) const POSITION_SELECT_COLUMNS: &str = r#"
   remaining_token_amount, total_exited_amount, average_exit_price, partial_exit_count,
   take_profit_level, dca_count, average_entry_price, last_dca_time,
   archived, archived_at, origin_kind, origin_ref, management,
-  round_key, basis_complete, history_complete, holding_state, basis_peak_price
+  round_key, basis_complete, history_complete, holding_state, basis_peak_price,
+  entry_liquidity_native, entry_liquidity_pool
 "#;
 
 pub(super) const SCHEMA_POSITIONS: &str = r#"
@@ -62,6 +65,8 @@ CREATE TABLE IF NOT EXISTS positions (
   price_highest REAL NOT NULL,
   price_lowest REAL NOT NULL,
   basis_peak_price REAL NOT NULL, -- Highest price since the average entry price last changed
+  entry_liquidity_native REAL, -- Pool native reserves at the entry price; NULL when not measured
+  entry_liquidity_pool TEXT, -- Pool those reserves were read from; NULL when not measured
   -- Real swap tracking
   entry_transaction_signature TEXT,
   exit_transaction_signature TEXT,
@@ -297,6 +302,20 @@ pub(super) const POSITIONS_TAKE_PROFIT_COLUMNS: &[(&str, &str)] = &[(
     "take_profit_level",
     "ALTER TABLE positions ADD COLUMN take_profit_level INTEGER NOT NULL DEFAULT 0",
 )];
+
+/// The pool reserves at entry and the pool they were read from, added to tables created
+/// before they were recorded. Nullable with no default: a row opened before then has no
+/// reading, and a liquidity rule reads it as unknown rather than measured against a guess.
+pub(super) const POSITIONS_ENTRY_LIQUIDITY_COLUMNS: &[(&str, &str)] = &[
+    (
+        "entry_liquidity_native",
+        "ALTER TABLE positions ADD COLUMN entry_liquidity_native REAL",
+    ),
+    (
+        "entry_liquidity_pool",
+        "ALTER TABLE positions ADD COLUMN entry_liquidity_pool TEXT",
+    ),
+];
 
 /// Positions columns of earlier releases that the canonical table no longer has.
 /// Their meaning lives on in the provenance columns; the rebuild drops them.

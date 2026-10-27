@@ -51,12 +51,34 @@ tokens-positions-fact-opened = Eröffnet
 tokens-positions-fact-exit-price = Ausstiegspreis
 tokens-positions-fact-native-received = Erhaltene { -sol }
 tokens-positions-fact-closed-reason = Schließgrund
-tokens-positions-fact-target-min = Gewinnziel min.
-tokens-positions-fact-target-max = Gewinnziel max.
 tokens-positions-fact-highest = Höchstpreis
 tokens-positions-fact-basis-peak = Hoch seit letztem Kauf
 tokens-positions-fact-lowest = Tiefstpreis
-tokens-positions-section-range = Ziele & Spanne
+tokens-positions-section-range = Preisspanne
+tokens-positions-section-exit-plan = Ausstiegsplan
+tokens-positions-plan-stop-loss = Stop-Loss
+# $step is the take-profit step's position in the ladder, from 1.
+tokens-positions-plan-step = Take-Profit { $step }
+# $profit is the formatted profit level, $share the formatted share of the position it sells.
+tokens-positions-plan-step-value = Bei { $profit } werden { $share } verkauft
+tokens-positions-plan-step-taken = Verkauft
+tokens-positions-plan-trailing = Trailing-Stop
+# $activation is the formatted profit that arms the trail, $distance the formatted share it trails by.
+tokens-positions-plan-trailing-value = Aktiv ab { $activation }, folgt { $distance } unter dem Hoch
+# $step is the band's position in the list, from 1.
+tokens-positions-plan-trailing-band = Trailing-Stufe { $step }
+# $profit is the formatted profit the band starts at, $distance the formatted share it trails by.
+tokens-positions-plan-trailing-band-value = Ab { $profit }, folgt { $distance } unter dem Hoch
+tokens-positions-plan-break-even = Break-Even-Stop
+# $trigger and $offset are formatted profits.
+tokens-positions-plan-break-even-value = Aktiv ab { $trigger }, verkauft bei { $offset }
+tokens-positions-plan-time-loss = Ausstieg nach Verlustzeit
+# $duration is a formatted duration, $threshold a formatted loss.
+tokens-positions-plan-time-loss-value = Nach { $duration }, bei oder unter { $threshold }
+tokens-positions-plan-time-stagnation = Ausstieg bei Seitwärtslage
+# $duration is a formatted duration, $band a formatted share.
+tokens-positions-plan-time-stagnation-value = Nach { $duration }, solange innerhalb von { $band } um den Einstieg
+tokens-positions-plan-none = Keine Exit-Regel ist aktiv
 tokens-positions-section-market = Markt & Bestände
 tokens-positions-kicker = Position
 tokens-positions-fallback-symbol = Token

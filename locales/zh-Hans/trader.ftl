@@ -232,6 +232,23 @@ trader-trailing-final = 最终 +{ $value }%
 trader-trailing-summary-protected = 保住了 <strong>{ $value }</strong> 的利润
 # $value is a formatted percentage.
 trader-trailing-summary-avoided = 避免了较峰值 <strong>{ $value }</strong> 的亏损
+# $step is the band's position in the list, from 1.
+trader-trailing-band = 分段 { $step }
+# $step is the band's position in the list, from 1.
+trader-trailing-band-profit-label = 分段 { $step } 峰值利润
+# $step is the band's position in the list, from 1.
+trader-trailing-band-distance-label = 分段 { $step } 追踪距离
+trader-trailing-band-profit-caption = 峰值利润起
+trader-trailing-band-distance-caption = 追踪距离
+trader-trailing-add-band = 添加分段
+# $step is the band's position in the list, from 1.
+trader-trailing-remove-band = 删除分段 { $step }
+# $min and $max are the configured bounds of a band's peak profit.
+trader-trailing-band-error-profit-range = 每个分段的峰值利润须在 { $min }% 到 { $max }% 之间
+# $min and $max are the configured bounds of a band's distance.
+trader-trailing-band-error-distance-range = 每个分段的距离须在 { $min }% 到 { $max }% 之间
+trader-trailing-band-error-order = 每个分段的峰值利润须高于激活值和前一个分段
+trader-trailing-band-error-distance = 每个分段的追踪距离须小于其峰值利润
 
 ## Break-even stop
 
@@ -287,8 +304,6 @@ trader-time-unit-seconds = 秒
 trader-time-unit-minutes = 分钟
 trader-time-unit-hours = 小时
 trader-time-unit-days = 天
-# Shown before the configured duration loads.
-trader-time-conversion-default = 168 小时 = 7 天
 # $duration and $readable are formatted durations.
 trader-time-conversion = { $duration } = { $readable }
 trader-duration-seconds =
@@ -369,11 +384,8 @@ trader-dca-error-drop-range = 每档跌幅必须在 { $min }% 到 { $max }% 之�
 trader-dca-error-size-range = 每档数量必须在首次买入的 { $min }× 到 { $max }× 之间
 trader-dca-error-order = 以首次入场价为基准时，每次加仓的跌幅都必须比上一次更深
 trader-dca-cooldown-impact = 两次追加之间至少间隔 { $span }
-trader-dca-min-hold-impact =
-    { $minutes ->
-        [0] 首次加仓可在入场后立即进行
-       *[other] 首次加仓在入场后至少等待 { $span }
-    }
+trader-dca-min-hold-none = 首次加仓可在入场后立即进行
+trader-dca-min-hold-impact = 首次加仓在入场后至少等待 { $span }
 trader-dca-capacity = 此仓位最多可持有：{ $amount }（首次买入的 { $multiple }×）
 trader-dca-info-title = DCA 策略说明
 trader-dca-info-subtitle = DCA 交易的重要注意事项

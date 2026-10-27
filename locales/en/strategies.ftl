@@ -57,9 +57,15 @@ strategies-summary-param = { $label }: { $value }
 strategies-summary-none = No parameters
 # An unset optional parameter: the strategy's own value it falls back to.
 strategies-param-inherit = Strategy setting ({ $value })
-strategies-summary-period-seconds = Lookback: { $amount } s
-strategies-summary-period-minutes = Lookback: { $amount } min
-strategies-summary-period-hours = Lookback: { $amount } h
+# A duration amount with its unit, and an hour of the UTC day. $amount is the formatted number.
+strategies-value-duration-seconds = { $amount } s
+strategies-value-duration-minutes = { $amount } min
+strategies-value-duration-hours = { $amount } h
+strategies-value-duration-days = { $amount } d
+strategies-value-utc-hour = { $amount }:00 UTC
+# A hint under a field, display only. $time is a local clock time, $amount a percentage.
+strategies-hint-local-time = Your local time: { $time }
+strategies-hint-price-impact = A trade of this size moves the price by about { $amount }%
 
 # Parameter values in a card summary. $count selects the plural, $amount is the formatted number.
 strategies-value-percent = { $amount }%
@@ -80,6 +86,7 @@ strategies-unit-percent = %
 strategies-unit-native = { -sol }
 strategies-unit-hours = h
 strategies-unit-multiplier = ×
+strategies-unit-utc = UTC
 
 ## Condition catalog
 
@@ -100,7 +107,23 @@ strategies-editor-description = Description
 strategies-editor-description-field =
     .placeholder = What this strategy does
     .aria-label = Strategy description
+# The exit strategy's binding to the entry strategies whose positions it manages.
+strategies-editor-entry-binding-all = All entry strategies
+# Labels the button that names the entry strategies an exit strategy manages.
+strategies-editor-entry-binding-label = Manages
+strategies-editor-entry-binding-hint = Manages the positions opened by the checked entry strategies. With none checked it manages every position, manual and copied ones included.
+strategies-editor-entry-binding-empty = No entry strategy exists yet
+# $id is the id of an entry strategy that no longer exists.
+strategies-editor-entry-binding-deleted = { $id } (deleted)
 strategies-action-export = Export
+strategies-action-test = Test against a token
+# $token is the tested token's symbol or address.
+strategies-test-title = Test against { $token }
+# $token is the tested token's symbol or address.
+strategies-test-running = Testing against { $token }…
+strategies-test-verdict-pass = Passes
+strategies-test-verdict-fail = Fails
+strategies-test-verdict-unknown = Unknown
 
 # Rule groups. $mode is the all/any select written into the sentence.
 strategies-rules-match = Match { $mode } of these conditions
@@ -156,6 +179,7 @@ strategies-data-candles = Candles
 strategies-data-pool = Pool
 strategies-data-position = Position
 strategies-data-market = Market activity
+strategies-data-clock = Time of day
 
 # Trade counts: $count selects the plural, $amount is the formatted number.
 strategies-unit-trades = trades
@@ -211,6 +235,10 @@ strategies-toast-saved = Strategy Saved
 strategies-toast-save-failed = Save Failed
     .message = Failed to save strategy to database
 strategies-toast-no-strategy-validate = No strategy to validate
+strategies-toast-no-strategy-test = No strategy to test
+strategies-toast-test-save-first = Save the strategy before testing it: the test reads the saved rules
+strategies-toast-test-failed = Test Failed
+    .message = Failed to test the strategy
 strategies-toast-valid = Strategy is valid
 strategies-toast-invalid = Strategy has errors
 strategies-toast-validation-failed = Validation failed
@@ -378,6 +406,126 @@ strategies-condition-buy-pressure-param-min-buy-share-pct = Minimum Buy Share %
 strategies-condition-buy-pressure-param-min-transactions = Minimum Transactions
     .description = Windows with fewer transactions never fire the condition
 
+strategies-condition-transaction-velocity = Transaction Velocity
+    .description = Fires when the transaction rate of a recent window is at least or at most a multiple of the rate over the longer window that contains it. Reads the token's buy and sell counts.
+strategies-condition-transaction-velocity-param-window = Windows
+    .description = The recent window and the longer window it is compared with
+strategies-condition-transaction-velocity-param-window-option-5m-vs-1h = 5 Minutes vs 1 Hour
+strategies-condition-transaction-velocity-param-window-option-1h-vs-6h = 1 Hour vs 6 Hours
+strategies-condition-transaction-velocity-param-window-option-6h-vs-24h = 6 Hours vs 24 Hours
+strategies-condition-transaction-velocity-param-comparison = Comparison
+    .description = Whether the recent rate must be at least or at most the ratio
+strategies-condition-transaction-velocity-param-comparison-option-above = At Least (≥)
+strategies-condition-transaction-velocity-param-comparison-option-below = At Most (≤)
+strategies-condition-transaction-velocity-param-ratio = Rate Ratio
+    .description = Transactions per second in the recent window divided by transactions per second in the longer window
+strategies-condition-transaction-velocity-param-min-transactions = Minimum Transactions
+    .description = Recent windows with fewer transactions never fire the condition
+
+strategies-condition-pullback-from-high = Pullback From High
+    .description = Fires when the live price sits between a minimum and a maximum drop below the highest high of the latest candles.
+strategies-condition-pullback-from-high-param-lookback = Lookback Period
+    .description = Number of candles the highest high is taken from
+strategies-condition-pullback-from-high-param-min-drop-pct = Minimum Drop %
+    .description = The price must be at least this far below the high
+strategies-condition-pullback-from-high-param-max-drop-pct = Maximum Drop %
+    .description = The price must be at most this far below the high; must be larger than the minimum drop
+
+strategies-condition-profit-giveback = Profit Giveback
+    .description = Fires when the position has given back a share of its best unrealized gain since the last buy, once that gain reached a level.
+strategies-condition-profit-giveback-param-arm-after-profit-pct = Arm After Profit %
+    .description = The best gain must have reached this percentage of the entry price before the condition can fire
+strategies-condition-profit-giveback-param-giveback-pct = Giveback %
+    .description = Share of the best gain given back; 100% means the price is back at the entry price
+
+strategies-condition-token-age = Token Age
+    .description = Fires when the time since the token's on-chain creation is longer or shorter than a duration. A token whose creation time is unknown leaves the condition undecided.
+strategies-condition-token-age-param-comparison = Comparison
+    .description = Whether the token must be older or younger than the duration
+strategies-condition-token-age-param-comparison-option-older-than = Older Than (≥)
+strategies-condition-token-age-param-comparison-option-younger-than = Younger Than ({ "<" })
+strategies-condition-token-age-param-time-value = Age
+    .description = Time since the token was created, in the unit picked inside the field (1-10000)
+strategies-condition-token-age-param-time-unit = Time Unit
+    .description = Unit of the age
+strategies-condition-token-age-param-time-unit-option-minutes = min
+strategies-condition-token-age-param-time-unit-option-hours = h
+strategies-condition-token-age-param-time-unit-option-days = d
+
+strategies-condition-vwap = VWAP
+    .description = Fires when the live price is above or below the volume-weighted average price of the latest candles by at least a distance.
+strategies-condition-vwap-param-lookback = Lookback Period
+    .description = Number of candles the volume-weighted average covers
+strategies-condition-vwap-param-position = Position
+    .description = Price position relative to the VWAP
+strategies-condition-vwap-param-position-option-above = Above VWAP
+strategies-condition-vwap-param-position-option-below = Below VWAP
+strategies-condition-vwap-param-distance-pct = Distance %
+    .description = Minimum distance from the VWAP; 0 means any distance on the chosen side
+
+strategies-condition-volatility-range = Volatility Range
+    .description = Fires when the average true range of the latest candles, as a percentage of the live price, is above or below a threshold. Two of these in a group make a range.
+strategies-condition-volatility-range-param-period = ATR Period
+    .description = Number of candles the average true range is smoothed over; the condition needs one more candle than this
+strategies-condition-volatility-range-param-comparison = Comparison
+    .description = Whether the range must be above or below the threshold
+strategies-condition-volatility-range-param-comparison-option-above = Above
+strategies-condition-volatility-range-param-comparison-option-below = Below
+strategies-condition-volatility-range-param-threshold-pct = Range Threshold %
+    .description = Average true range as a percentage of the live price
+
+strategies-condition-bollinger-bands = Bollinger Bands
+    .description = Fires when the live price is below the lower band or above the upper band, or when the bands squeeze together. The bands sit a number of standard deviations around the average close.
+strategies-condition-bollinger-bands-param-period = Period
+    .description = Number of candles the average and the standard deviation cover
+strategies-condition-bollinger-bands-param-std-dev = Standard Deviations
+    .description = How many standard deviations each band sits from the average
+strategies-condition-bollinger-bands-param-signal = Signal
+    .description = What the bands must show
+strategies-condition-bollinger-bands-param-signal-option-below-lower = Below Lower Band
+strategies-condition-bollinger-bands-param-signal-option-above-upper = Above Upper Band
+strategies-condition-bollinger-bands-param-signal-option-squeeze = Squeeze
+strategies-condition-bollinger-bands-param-squeeze-width-pct = Squeeze Width %
+    .description = For a squeeze: the most the distance between the bands may be, as a percentage of the average
+
+strategies-condition-liquidity-to-size = Liquidity to Size
+    .description = Fires when the pool's reserves are at least or below a multiple of the size at stake: the trade size before a buy, the position's remaining value while it is held.
+strategies-condition-liquidity-to-size-param-comparison = Comparison
+    .description = Whether the reserves must be at least or below the multiple
+strategies-condition-liquidity-to-size-param-comparison-option-at-least = At Least (≥)
+strategies-condition-liquidity-to-size-param-comparison-option-below = Below ({ "<" })
+strategies-condition-liquidity-to-size-param-multiple = Liquidity Multiple
+    .description = Pool reserves divided by the size at stake; a multiple of N moves the price by about 1/(N+1)
+
+strategies-condition-position-adds = Position Adds
+    .description = Fires when the number of buys added to the position after its first entry, or of partial sells taken from it, is at least or at most a count.
+strategies-condition-position-adds-param-subject = Counted
+    .description = Which actions are counted
+strategies-condition-position-adds-param-subject-option-adds = Added Buys
+strategies-condition-position-adds-param-subject-option-partial-sells = Partial Sells
+strategies-condition-position-adds-param-comparison = Comparison
+    .description = Whether the count must be at least or at most the number
+strategies-condition-position-adds-param-comparison-option-at-least = At Least (≥)
+strategies-condition-position-adds-param-comparison-option-at-most = At Most (≤)
+strategies-condition-position-adds-param-count = Count
+    .description = Number of actions
+
+strategies-condition-time-of-day = Time of Day
+    .description = Fires when the current hour is inside a window of UTC hours. A start after the end wraps past midnight.
+strategies-condition-time-of-day-param-start-hour = Start Hour (UTC)
+    .description = First hour of the window, from 0 to 23
+strategies-condition-time-of-day-param-end-hour = End Hour (UTC)
+    .description = Hour the window ends at, from 1 to 24; that hour itself is outside the window
+
+strategies-condition-liquidity-change-since-entry = Liquidity Change Since Entry
+    .description = Fires when the pool's reserves have dropped or risen by at least a percentage since the position opened. A position with no recorded entry liquidity leaves the condition undecided.
+strategies-condition-liquidity-change-since-entry-param-comparison = Comparison
+    .description = Whether the reserves must have dropped or risen
+strategies-condition-liquidity-change-since-entry-param-comparison-option-dropped-by = Dropped By
+strategies-condition-liquidity-change-since-entry-param-comparison-option-rose-by = Rose By
+strategies-condition-liquidity-change-since-entry-param-change-pct = Change %
+    .description = Change of the pool's reserves since entry
+
 ## Shared by every condition
 
 strategies-condition-param-timeframe = Timeframe
@@ -453,6 +601,27 @@ strategies-error-field-peak-price = peak price
 strategies-error-field-slow-period = slow period
 strategies-error-field-window = window
 strategies-error-field-within-candles = within candles
+strategies-error-field-change = change
+strategies-error-field-end-hour = end hour
+strategies-error-field-entry-liquidity = entry liquidity
+strategies-error-field-giveback = giveback
+strategies-error-field-highest-high = highest high
+strategies-error-field-long-window-transactions = long window transactions
+strategies-error-field-maximum-drop = maximum drop
+strategies-error-field-minimum-drop = minimum drop
+strategies-error-field-multiple = multiple
+strategies-error-field-pool-liquidity = pool liquidity
+strategies-error-field-ratio = ratio
+strategies-error-field-remaining-position-value = remaining position value
+strategies-error-field-signal = signal
+strategies-error-field-squeeze-width = squeeze width
+strategies-error-field-standard-deviations = standard deviations
+strategies-error-field-start-hour = start hour
+strategies-error-field-subject = subject
+strategies-error-field-token-creation-time = token creation time
+strategies-error-field-total-volume = total volume
+strategies-error-field-trade-size = trade size
+strategies-error-field-vwap = VWAP
 
 # Expected parameter types
 
@@ -469,6 +638,12 @@ strategies-error-data-ohlcv-data = OHLCV data
 strategies-error-data-position-data = Position data
 strategies-error-data-peak-price = Peak price
 strategies-error-data-transaction-counts = Transaction counts
+strategies-error-data-entry-liquidity = Entry liquidity
+strategies-error-data-entry-pool-liquidity = Liquidity of the entry pool
+strategies-error-data-real-pool-reserves = Real pool liquidity
+strategies-error-data-remaining-position-value = Remaining position value
+strategies-error-data-token-creation-time = Token creation time
+strategies-error-data-trade-size = Trade size
 
 # Indicators
 
@@ -479,6 +654,10 @@ strategies-error-indicator-price-change-lookback = price change lookback
 strategies-error-indicator-volume-spike = volume spike
 strategies-error-indicator-moving-average-cross = moving average cross
 strategies-error-indicator-rsi = RSI
+strategies-error-indicator-bollinger-bands = Bollinger bands
+strategies-error-indicator-pullback-from-high = pullback from high
+strategies-error-indicator-volatility-range = volatility range
+strategies-error-indicator-vwap = VWAP
 
 # Rule tree faults
 

@@ -22,28 +22,12 @@
  */
 
 import "./fixtures/i18n_en.mjs";
+import "./fixtures/document_shim.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 
 import { BASE_HTML, SCRIPTS_ROOT, STYLES_ROOT, rulesIn } from "../lib/dashboard_ui.mjs";
-
-globalThis.window = globalThis.window || { addEventListener() {} };
-globalThis.document = {
-  addEventListener() {},
-  readyState: "complete",
-  createElement() {
-    let text = "";
-    return {
-      set textContent(value) {
-        text = String(value);
-      },
-      get innerHTML() {
-        return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-      },
-    };
-  },
-};
 
 const script = (relative) => `${SCRIPTS_ROOT}/${relative}`;
 const read = (file) => fs.readFileSync(file, "utf8");

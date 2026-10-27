@@ -557,6 +557,18 @@ copy-validate-trailing-distance = Trailing distance must be above 0% and at most
 copy-validate-take-profit = Take profit must be above 0%.
 copy-validate-time-duration = The time rule needs a duration above zero.
 copy-validate-time-threshold = The time rule threshold is a loss: use 0% or a negative number.
+# $reason is the message of the rule the stored overrides break.
+copy-exit-issue-warning = Exit rules need attention: { $reason } Until you fix them, holdings use the Trader's setting for that rule.
+# $distance and $activation are percentages.
+copy-exit-issue-trailing-distance-above-activation = Trailing distance { $distance }% must be below the activation, now { $activation }%.
+# $maximum is the number of bands allowed.
+copy-exit-issue-trailing-band-count = The trailing stop can hold at most { $maximum } bands.
+# $profit and $floor are percentages.
+copy-exit-issue-trailing-band-order = The trailing band at { $profit }% must start above { $floor }%, the activation or the band before it.
+# $profit and $distance are percentages.
+copy-exit-issue-trailing-band-distance = The trailing band at { $profit }% must trail by more than 0% and less than its start, now { $distance }%.
+# $value is a percentage.
+copy-exit-issue-time-loss-threshold = The losing-time threshold must be a loss between -100% and 0%, now { $value }%.
 copy-warning-mirror = Only the wallet's sells close holdings: no stop loss protects them, and a token the wallet never sells stays held.
 copy-warning-no-rules = No exit rule is on and wallet sells are ignored: holdings are never sold.
 copy-warning-no-stop-loss = No stop loss applies: a falling token is held until another rule or the wallet sells.

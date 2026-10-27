@@ -18,7 +18,7 @@ import { requestManager } from "../core/request_manager.js";
 import { LOSS_MAGNITUDE, createTraderConfigCards, displayValue } from "./trader/config_cards.js";
 import { playToggleOn, playToggleOff, playError } from "../core/sounds.js";
 import { createExampleUpdaters } from "./trader/examples.js";
-import { renderLevels } from "./trader/level_list.js";
+import { refreshLevels, renderLevels } from "./trader/level_list.js";
 import { timeExitStatus } from "./trader/time_status.js";
 import { createTraderControls } from "./trader/controls.js";
 import {
@@ -396,6 +396,14 @@ function createLifecycle() {
     if (trailDistance) {
       trailDistance.value = trader.trailing_stop_distance_pct;
     }
+    const trailingBands = $("#trailing-bands");
+    if (trailingBands) {
+      renderLevels(
+        trailingBands,
+        trader.trailing_stop_band_profit_pct,
+        trader.trailing_stop_band_distance_pct
+      );
+    }
 
     // Break-even Stop
     const breakEvenEnabled = $("#break-even-enabled");
@@ -428,18 +436,18 @@ function createLifecycle() {
     const timeLossThreshold = $("#time-loss-threshold");
 
     if (timeOverrideEnabled) {
-      timeOverrideEnabled.checked = trader.time_override_enabled || false;
+      timeOverrideEnabled.checked = trader.time_override_enabled === true;
     }
     if (timeMaxHold) {
-      timeMaxHold.value = trader.time_override_duration || 168;
+      timeMaxHold.value = trader.time_override_duration;
     }
     if (timeUnit) {
-      timeUnit.value = trader.time_override_unit || "hours";
+      timeUnit.value = trader.time_override_unit;
     }
     if (timeLossThreshold) {
       timeLossThreshold.value = displayValue(
         LOSS_MAGNITUDE,
-        trader.time_override_loss_threshold_percent ?? -40
+        trader.time_override_loss_threshold_percent
       );
     }
 
@@ -472,16 +480,16 @@ function createLifecycle() {
     const closeCooldown = $("#close-cooldown");
     const entryConcurrency = $("#entry-concurrency");
 
-    if (maxPositions) maxPositions.value = trader.max_open_positions || 2;
-    if (tradeSize) tradeSize.value = trader.trade_size_sol || 0.005;
-    if (entrySizes) entrySizes.value = (trader.entry_sizes || [0.005, 0.01, 0.02, 0.05]).join(", ");
+    if (maxPositions) maxPositions.value = trader.max_open_positions;
+    if (tradeSize) tradeSize.value = trader.trade_size_sol;
+    if (entrySizes) entrySizes.value = trader.entry_sizes.join(", ");
     if (dcaEnabled) dcaEnabled.checked = trader.dca_enabled === true;
     if (dcaMeasureFrom) dcaMeasureFrom.value = trader.dca_measure_from;
     if (dcaLevels) renderLevels(dcaLevels, trader.dca_levels_pct, trader.dca_size_multipliers);
     if (dcaCooldown) dcaCooldown.value = trader.dca_cooldown_minutes;
     if (dcaMinHold) dcaMinHold.value = trader.dca_min_hold_minutes;
-    if (closeCooldown) closeCooldown.value = trader.position_close_cooldown_minutes ?? 15;
-    if (entryConcurrency) entryConcurrency.value = trader.entry_check_concurrency ?? 10;
+    if (closeCooldown) closeCooldown.value = trader.position_close_cooldown_minutes;
+    if (entryConcurrency) entryConcurrency.value = trader.entry_check_concurrency;
   }
 
   /**
@@ -1314,7 +1322,13 @@ function createLifecycle() {
       addTrackedListener($(id), "input", () => examples.updateDcaExample());
     }
     // The basis decides whether the ladder's steps must deepen.
-    addTrackedListener($("#dca-measure-from"), "change", () => examples.updateDcaExample());
+    addTrackedListener($("#dca-measure-from"), "change", () => {
+      refreshLevels($("#dca-levels"));
+      examples.updateDcaExample();
+    });
+
+    // Trailing bands must sit above the activation: the band list re-checks on its change.
+    addTrackedListener($("#trail-activation"), "input", () => refreshLevels($("#trailing-bands")));
 
     // Realized-window segmented control
     for (const btn of $$("#stats-period .stats-period-btn")) {
@@ -1500,7 +1514,8 @@ function createLifecycle() {
       // resolves while this cached page is detached, activate() reapplies it.
       void Promise.all([featurePromise, metadataPromise]).then(([features, metadataResponse]) => {
         tradingFeatures = features;
-        configCards?.applyMetadata(metadataResponse?.data || metadataResponse || {});
+        // Without metadata (its fetch failure is logged above) the cards keep their markup.
+        if (metadataResponse?.data) configCards?.applyMetadata(metadataResponse.data);
         examples.updateTakeProfitExample();
         if (lifecycleContext?.isActive()) syncTradingFeatureUi();
       });

@@ -159,6 +159,10 @@ impl PricingDriver for SolanaPricingDriver {
         service::get_pool_program(mint, pool)
     }
 
+    fn pool_reports_virtual_reserves(&self, mint: &str, pool: &str) -> Option<bool> {
+        service::pool_reports_virtual_reserves(mint, pool)
+    }
+
     fn status(&self) -> PricingStatus {
         let directory = service::get_pool_analyzer().and_then(|analyzer| {
             let directory = analyzer.get_pool_directory();

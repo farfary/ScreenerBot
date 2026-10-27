@@ -110,6 +110,7 @@ errors-strategies-no-performance = このストラテジーのパフォーマン
 errors-strategies-performance-failed = パフォーマンス統計を取得できませんでした
 errors-strategies-schemas-failed = 条件スキーマを取得できませんでした
 errors-strategies-evaluation-failed = ストラテジーの評価に失敗しました
+errors-strategies-test-data-without-price = 送信された市場データまたはポジションデータには現在価格が必要です
 
 errors-transactions-own-wallet-unavailable = メインウォレットが設定されていません
 errors-transactions-invalid-subject = トランザクションの対象が有効な Solana アドレスではありません

@@ -6,8 +6,9 @@
 use crate::logger::{self, LogTag};
 use crate::strategies::conditions::ConditionRegistry;
 use crate::strategies::types::{
-    EvaluationContext, EvaluationResult, LogicalOperator, MarketData, PositionData, RuleTree,
-    Strategy, StrategyType, TransactionCounts, WindowCounts,
+    Condition, EvaluationContext, EvaluationResult, LiquidityPool, LogicalOperator, MarketData,
+    PositionData, RuleOutcome, RuleTree, RuleVerdict, Strategy, StrategyType, TransactionCounts,
+    WindowCounts,
 };
 use crate::strategies::{Error, Result};
 use crate::trader::STRATEGY_CACHE_MAX_ENTRIES;
@@ -67,6 +68,146 @@ impl From<bool> for Truth {
         } else {
             Truth::False
         }
+    }
+}
+
+impl Truth {
+    fn negate(self) -> Self {
+        match self {
+            Truth::True => Truth::False,
+            Truth::False => Truth::True,
+            unknown @ Truth::Unknown(_) => unknown,
+        }
+    }
+
+    /// The outcome of a node that reached this value.
+    fn outcome(
+        &self,
+        operator: Option<LogicalOperator>,
+        children: Vec<RuleOutcome>,
+    ) -> RuleOutcome {
+        let (verdict, reason) = match self {
+            Truth::True => (RuleVerdict::Pass, None),
+            Truth::False => (RuleVerdict::Fail, None),
+            Truth::Unknown(e) => (RuleVerdict::Unknown, Some(e.ui_text())),
+        };
+        RuleOutcome {
+            verdict,
+            operator,
+            condition_type: None,
+            reason,
+            children,
+        }
+    }
+}
+
+/// The value of an And or Or group, folded one child at a time under three-valued logic.
+struct GroupFold {
+    /// The child value that decides the group on its own: true for Or, false for And.
+    decisive: bool,
+    decided: bool,
+    first_unknown: Option<Error>,
+}
+
+impl GroupFold {
+    fn new(operator: LogicalOperator) -> Self {
+        Self {
+            decisive: operator == LogicalOperator::Or,
+            decided: false,
+            first_unknown: None,
+        }
+    }
+
+    /// Fold one child's value; true once the group is decided whatever the children
+    /// still to come are.
+    fn push(&mut self, child: Truth) -> bool {
+        match child {
+            Truth::True if self.decisive => self.decided = true,
+            Truth::False if !self.decisive => self.decided = true,
+            Truth::Unknown(e) => {
+                self.first_unknown.get_or_insert(e);
+            }
+            Truth::True | Truth::False => {}
+        }
+        self.decided
+    }
+
+    fn finish(self) -> Truth {
+        if self.decided {
+            return Truth::from(self.decisive);
+        }
+        match self.first_unknown {
+            Some(e) => Truth::Unknown(e),
+            None => Truth::from(!self.decisive),
+        }
+    }
+}
+
+/// The shape of one rule tree node, checked.
+enum NodeKind<'a> {
+    Leaf(&'a Condition),
+    Group(LogicalOperator, &'a [RuleTree]),
+    Not(&'a RuleTree),
+}
+
+fn node_kind(rule_tree: &RuleTree) -> Result<NodeKind<'_>> {
+    if rule_tree.is_leaf() {
+        return rule_tree
+            .condition
+            .as_ref()
+            .map(NodeKind::Leaf)
+            .ok_or(Error::InvalidRuleTree {
+                reason: "leaf node missing condition",
+            });
+    }
+    if !rule_tree.is_branch() {
+        return Err(Error::InvalidRuleTree {
+            reason: "invalid rule tree structure",
+        });
+    }
+    let operator = rule_tree.operator.ok_or(Error::InvalidRuleTree {
+        reason: "branch node missing operator",
+    })?;
+    let conditions = rule_tree
+        .conditions
+        .as_deref()
+        .ok_or(Error::InvalidRuleTree {
+            reason: "branch node missing conditions",
+        })?;
+    match operator {
+        LogicalOperator::And | LogicalOperator::Or => Ok(NodeKind::Group(operator, conditions)),
+        LogicalOperator::Not => {
+            if conditions.len() != 1 {
+                return Err(Error::InvalidRuleTree {
+                    reason: "NOT operator must have exactly one child",
+                });
+            }
+            if conditions[0].disabled {
+                return Err(Error::InvalidRuleTree {
+                    reason: "NOT operator cannot have a switched-off child",
+                });
+            }
+            Ok(NodeKind::Not(&conditions[0]))
+        }
+    }
+}
+
+/// The outcome of a switched-off node and of every node under it: off, not evaluated.
+fn switched_off(rule_tree: &RuleTree) -> RuleOutcome {
+    RuleOutcome {
+        verdict: RuleVerdict::Off,
+        operator: rule_tree.operator,
+        condition_type: rule_tree
+            .condition
+            .as_ref()
+            .map(|condition| condition.condition_type.clone()),
+        reason: None,
+        children: rule_tree
+            .conditions
+            .iter()
+            .flatten()
+            .map(switched_off)
+            .collect(),
     }
 }
 
@@ -177,6 +318,36 @@ impl StrategyEngine {
         })
     }
 
+    /// Evaluate every node of a strategy's rule tree, switched-off nodes reported as off,
+    /// to show why the strategy does or does not signal.
+    ///
+    /// The root's verdict is the one [`Self::evaluate_strategy`] reaches: a group folds its
+    /// children with the same three-valued rule, only without stopping at the first
+    /// decisive child, so every condition reports its own verdict. Nothing is cached.
+    pub async fn explain_strategy(
+        &self,
+        strategy: &Strategy,
+        context: &EvaluationContext,
+    ) -> Result<RuleOutcome> {
+        if strategy.rules.disabled {
+            return Err(Error::InvalidRuleTree {
+                reason: "the root group cannot be switched off",
+            });
+        }
+        let timeout_duration = Duration::from_millis(self.config.evaluation_timeout_ms);
+        match timeout(
+            timeout_duration,
+            self.explain_rule_tree(&strategy.rules, context),
+        )
+        .await
+        {
+            Ok(result) => result.map(|(outcome, _)| outcome),
+            Err(_) => Err(Error::EvaluationTimeout {
+                timeout_ms: self.config.evaluation_timeout_ms,
+            }),
+        }
+    }
+
     /// Evaluate a rule tree recursively under three-valued logic.
     ///
     /// A leaf whose condition fails for lack of data ([`Error::is_data_unavailable`]) is
@@ -194,93 +365,89 @@ impl StrategyEngine {
         context: &'a EvaluationContext,
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Truth>> + Send + 'a>> {
         Box::pin(async move {
-            // Leaf node - evaluate condition
-            if rule_tree.is_leaf() {
-                if let Some(condition) = &rule_tree.condition {
-                    let evaluator = self
-                        .condition_registry
-                        .get(&condition.condition_type)
-                        .ok_or_else(|| Error::InvalidConditionValue {
-                            field: "condition type",
-                            value: condition.condition_type.clone(),
-                        })?;
+            match node_kind(rule_tree)? {
+                NodeKind::Leaf(condition) => self.evaluate_leaf(condition, context).await,
+                NodeKind::Group(operator, conditions) => {
+                    let mut fold = GroupFold::new(operator);
+                    for child in enabled_children(conditions)? {
+                        if fold.push(self.evaluate_rule_tree(child, context).await?) {
+                            break;
+                        }
+                    }
+                    Ok(fold.finish())
+                }
+                NodeKind::Not(child) => Ok(self.evaluate_rule_tree(child, context).await?.negate()),
+            }
+        })
+    }
 
-                    // Validate condition first
-                    evaluator.validate(condition)?;
-
-                    // Evaluate condition
-                    return match evaluator.evaluate(condition, context).await {
-                        Ok(value) => Ok(Truth::from(value)),
-                        Err(e) if e.is_data_unavailable() => Ok(Truth::Unknown(e)),
-                        Err(e) => Err(e),
+    /// [`Self::evaluate_rule_tree`] for every enabled node, recording each node's outcome.
+    fn explain_rule_tree<'a>(
+        &'a self,
+        rule_tree: &'a RuleTree,
+        context: &'a EvaluationContext,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<(RuleOutcome, Truth)>> + Send + 'a>,
+    > {
+        Box::pin(async move {
+            match node_kind(rule_tree)? {
+                NodeKind::Leaf(condition) => {
+                    let truth = self.evaluate_leaf(condition, context).await?;
+                    let outcome = RuleOutcome {
+                        condition_type: Some(condition.condition_type.clone()),
+                        ..truth.outcome(None, Vec::new())
                     };
-                } else {
-                    return Err(Error::InvalidRuleTree {
-                        reason: "leaf node missing condition",
-                    });
+                    Ok((outcome, truth))
+                }
+                NodeKind::Group(operator, conditions) => {
+                    enabled_children(conditions)?;
+                    let mut fold = GroupFold::new(operator);
+                    let mut children = Vec::with_capacity(conditions.len());
+                    for child in conditions {
+                        if child.disabled {
+                            children.push(switched_off(child));
+                            continue;
+                        }
+                        let (outcome, truth) = self.explain_rule_tree(child, context).await?;
+                        fold.push(truth);
+                        children.push(outcome);
+                    }
+                    let truth = fold.finish();
+                    Ok((truth.outcome(Some(operator), children), truth))
+                }
+                NodeKind::Not(child) => {
+                    let (outcome, truth) = self.explain_rule_tree(child, context).await?;
+                    let truth = truth.negate();
+                    Ok((
+                        truth.outcome(Some(LogicalOperator::Not), vec![outcome]),
+                        truth,
+                    ))
                 }
             }
-
-            // Branch node - evaluate operator
-            if rule_tree.is_branch() {
-                let operator = rule_tree.operator.ok_or_else(|| Error::InvalidRuleTree {
-                    reason: "branch node missing operator",
-                })?;
-
-                let conditions =
-                    rule_tree
-                        .conditions
-                        .as_ref()
-                        .ok_or_else(|| Error::InvalidRuleTree {
-                            reason: "branch node missing conditions",
-                        })?;
-
-                return match operator {
-                    LogicalOperator::And | LogicalOperator::Or => {
-                        // The child value that decides the group on its own.
-                        let decisive = operator == LogicalOperator::Or;
-                        let mut first_unknown = None;
-                        for child in enabled_children(conditions)? {
-                            match self.evaluate_rule_tree(child, context).await? {
-                                Truth::True if decisive => return Ok(Truth::True),
-                                Truth::False if !decisive => return Ok(Truth::False),
-                                Truth::Unknown(e) => {
-                                    first_unknown.get_or_insert(e);
-                                }
-                                Truth::True | Truth::False => {}
-                            }
-                        }
-                        Ok(match first_unknown {
-                            Some(e) => Truth::Unknown(e),
-                            None => Truth::from(!decisive),
-                        })
-                    }
-                    LogicalOperator::Not => {
-                        if conditions.len() != 1 {
-                            return Err(Error::InvalidRuleTree {
-                                reason: "NOT operator must have exactly one child",
-                            });
-                        }
-                        if conditions[0].disabled {
-                            return Err(Error::InvalidRuleTree {
-                                reason: "NOT operator cannot have a switched-off child",
-                            });
-                        }
-                        Ok(
-                            match self.evaluate_rule_tree(&conditions[0], context).await? {
-                                Truth::True => Truth::False,
-                                Truth::False => Truth::True,
-                                unknown @ Truth::Unknown(_) => unknown,
-                            },
-                        )
-                    }
-                };
-            }
-
-            Err(Error::InvalidRuleTree {
-                reason: "invalid rule tree structure",
-            })
         })
+    }
+
+    /// Evaluate one condition: a lack of data is `Unknown`, any other error a fault.
+    async fn evaluate_leaf(
+        &self,
+        condition: &Condition,
+        context: &EvaluationContext,
+    ) -> Result<Truth> {
+        let evaluator = self
+            .condition_registry
+            .get(&condition.condition_type)
+            .ok_or_else(|| Error::InvalidConditionValue {
+                field: "condition type",
+                value: condition.condition_type.clone(),
+            })?;
+
+        evaluator.validate(condition)?;
+
+        match evaluator.evaluate(condition, context).await {
+            Ok(value) => Ok(Truth::from(value)),
+            Err(e) if e.is_data_unavailable() => Ok(Truth::Unknown(e)),
+            Err(e) => Err(e),
+        }
     }
 
     /// Get cached evaluation if still valid
@@ -478,6 +645,8 @@ fn context_fingerprint(ctx: &EvaluationContext) -> u64 {
         dca_count,
         partial_exit_count,
         remaining_value_native,
+        entry_liquidity_native,
+        entry_liquidity_pool,
     }) = position_data
     {
         entry_time.timestamp().hash(&mut s);
@@ -489,6 +658,8 @@ fn context_fingerprint(ctx: &EvaluationContext) -> u64 {
         dca_count.hash(&mut s);
         partial_exit_count.hash(&mut s);
         hash_number(*remaining_value_native, 9, &mut s);
+        hash_number(*entry_liquidity_native, 6, &mut s);
+        entry_liquidity_pool.hash(&mut s);
     } else {
         "no_position".hash(&mut s);
     }
@@ -496,6 +667,7 @@ fn context_fingerprint(ctx: &EvaluationContext) -> u64 {
     // Market data inputs commonly used by conditions
     if let Some(MarketData {
         liquidity_sol,
+        liquidity_pool,
         transactions,
         snapshot_at,
         token_created_at,
@@ -503,6 +675,16 @@ fn context_fingerprint(ctx: &EvaluationContext) -> u64 {
     }) = market_data
     {
         hash_number(*liquidity_sol, 6, &mut s);
+        if let Some(LiquidityPool {
+            address,
+            virtual_reserves,
+        }) = liquidity_pool
+        {
+            address.hash(&mut s);
+            virtual_reserves.hash(&mut s);
+        } else {
+            "no_pool".hash(&mut s);
+        }
         if let Some(TransactionCounts { m5, h1, h6, h24 }) = transactions {
             for window in [m5, h1, h6, h24] {
                 hash_window(*window, &mut s);
@@ -573,9 +755,15 @@ mod tests {
                 dca_count: 1,
                 partial_exit_count: 1,
                 remaining_value_native: Some(0.6),
+                entry_liquidity_native: Some(140.0),
+                entry_liquidity_pool: Some("pool".to_owned()),
             }),
             market_data: Some(MarketData {
                 liquidity_sol: Some(120.0),
+                liquidity_pool: Some(LiquidityPool {
+                    address: "pool".to_owned(),
+                    virtual_reserves: Some(false),
+                }),
                 transactions: Some(TransactionCounts {
                     m5: Some(WindowCounts { buys: 5, sells: 3 }),
                     h1: Some(WindowCounts {
@@ -616,7 +804,7 @@ mod tests {
     #[test]
     fn every_context_field_changes_the_fingerprint() {
         type Change = fn(&mut EvaluationContext);
-        let changes: [(&str, Change); 22] = [
+        let changes: [(&str, Change); 27] = [
             ("token_mint", |c| c.token_mint = "other".to_owned()),
             ("current_price", |c| {
                 c.current_price = Some(1.500_000_000_001)
@@ -639,8 +827,25 @@ mod tests {
             ("remaining_value_native", |c| {
                 position(c).remaining_value_native = None
             }),
+            ("entry_liquidity_native", |c| {
+                position(c).entry_liquidity_native = None
+            }),
+            ("entry_liquidity_pool", |c| {
+                position(c).entry_liquidity_pool = Some("other".to_owned())
+            }),
             ("market_data", |c| c.market_data = None),
             ("liquidity_sol", |c| market(c).liquidity_sol = Some(121.0)),
+            ("liquidity_pool", |c| market(c).liquidity_pool = None),
+            ("liquidity pool address", |c| {
+                market(c).liquidity_pool.as_mut().expect("pool").address = "other".to_owned()
+            }),
+            ("liquidity pool reserves", |c| {
+                market(c)
+                    .liquidity_pool
+                    .as_mut()
+                    .expect("pool")
+                    .virtual_reserves = Some(true)
+            }),
             ("transactions", |c| {
                 market(c).transactions.as_mut().expect("counts").h1 = Some(WindowCounts {
                     buys: 51,

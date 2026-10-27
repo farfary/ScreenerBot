@@ -542,6 +542,18 @@ copy-validate-trailing-distance = La distance du trailing doit être supérieure
 copy-validate-take-profit = Le take profit doit être supérieur à 0 %.
 copy-validate-time-duration = La règle de durée exige une durée supérieure à zéro.
 copy-validate-time-threshold = Le seuil de la règle de durée est une perte : utilisez 0 % ou un nombre négatif.
+# $reason is the message of the rule the stored overrides break.
+copy-exit-issue-warning = Les règles de sortie demandent votre attention : { $reason } Tant que vous ne les corrigez pas, les positions utilisent le réglage du Trader pour cette règle.
+# $distance and $activation are percentages.
+copy-exit-issue-trailing-distance-above-activation = La distance du trailing de { $distance } % doit être inférieure à l'activation, actuellement { $activation } %.
+# $maximum is the number of bands allowed.
+copy-exit-issue-trailing-band-count = Le trailing stop peut avoir au plus { $maximum } paliers.
+# $profit and $floor are percentages.
+copy-exit-issue-trailing-band-order = Le palier du trailing à { $profit } % doit commencer au-dessus de { $floor } %, l'activation ou le palier précédent.
+# $profit and $distance are percentages.
+copy-exit-issue-trailing-band-distance = Le palier du trailing à { $profit } % doit suivre de plus de 0 % et de moins que son début, actuellement { $distance } %.
+# $value is a percentage.
+copy-exit-issue-time-loss-threshold = Le seuil de la règle de durée en perte doit être une perte entre -100 % et 0 %, actuellement { $value } %.
 copy-warning-mirror = Seules les ventes du portefeuille clôturent les détentions : aucun stop loss ne les protège, et un token que le portefeuille ne vend jamais reste détenu.
 copy-warning-no-rules = Aucune règle de sortie n'est activée et les ventes du portefeuille sont ignorées : les détentions ne sont jamais vendues.
 copy-warning-no-stop-loss = Aucun stop loss ne s'applique : un token en baisse est conservé jusqu'à ce qu'une autre règle ou le portefeuille vende.

@@ -158,6 +158,16 @@ export function pauseReasonShort(reason) {
     : "";
 }
 
+/**
+ * The warning a task carries while its stored exit overrides no longer fit the
+ * Trader's exit rules (`exit_policy_issue`, a backend UiText naming the broken rule);
+ * empty while they fit.
+ */
+export function exitPolicyIssueHtml(task, escapeHtml, className) {
+  if (!task.exit_policy_issue) return "";
+  return `<span class="${className}" role="note"><i class="icon-triangle-alert" aria-hidden="true"></i><span>${escapeHtml(I18n.text(task.exit_policy_issue))}</span></span>`;
+}
+
 export function finite(value) {
   const number = Number(value);
   return value !== null && value !== undefined && value !== "" && Number.isFinite(number)

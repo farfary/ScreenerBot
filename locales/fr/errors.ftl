@@ -120,6 +120,7 @@ errors-strategies-no-performance = Aucune donnée de performance disponible pour
 errors-strategies-performance-failed = Échec de la récupération des statistiques de performance
 errors-strategies-schemas-failed = Échec de la récupération des schémas de conditions
 errors-strategies-evaluation-failed = Échec de l'évaluation de la stratégie
+errors-strategies-test-data-without-price = Les données de marché ou de position fournies nécessitent un prix actuel
 
 # Transactions
 errors-transactions-own-wallet-unavailable = Le portefeuille principal n'est pas configuré

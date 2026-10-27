@@ -120,6 +120,17 @@ pub async fn evaluate_entry_strategies(
                     return Ok(Some(strategy.id.clone()));
                 }
             }
+            // A token without the data a condition needs (a fresh token short of
+            // candles) answers Unknown: an expected state, not a fault.
+            Err(e) if e.is_data_unavailable() => {
+                logger::debug(
+                    LogTag::System,
+                    &format!(
+                        "Entry strategy unknown: strategy={}, token={}, reason={}",
+                        strategy.name, token_mint, e
+                    ),
+                );
+            }
             Err(e) => {
                 logger::error(
                     LogTag::System,
@@ -146,6 +157,8 @@ pub async fn evaluate_entry_strategies(
 /// * `position_data` - Position data (entry price, age, etc.)
 /// * `market_data` - Optional market data (liquidity, transaction counts)
 /// * `timeframe_bundle` - Optional multi-timeframe OHLCV bundle
+/// * `entry_strategy_id` - The entry strategy that opened the position, if any; an exit
+///   strategy bound to other entry strategies is not evaluated
 ///
 /// # Returns
 /// * `Ok(Some(strategy_id))` - If a strategy signals exit
@@ -157,6 +170,7 @@ pub async fn evaluate_exit_strategies(
     position_data: PositionData,
     market_data: Option<MarketData>,
     timeframe_bundle: Option<TimeframeBundle>,
+    entry_strategy_id: Option<&str>,
 ) -> crate::Result<Option<String>> {
     let engine_lock = get_engine().await?;
     let engine_guard = engine_lock.read().await;
@@ -164,8 +178,11 @@ pub async fn evaluate_exit_strategies(
         .as_ref()
         .ok_or_else(|| crate::Error::internal_error("Strategy engine not available"))?;
 
-    // Get enabled exit strategies
-    let strategies = get_enabled_strategies(StrategyType::Exit)?;
+    // Enabled exit strategies that manage positions of this entry strategy
+    let strategies: Vec<Strategy> = get_enabled_strategies(StrategyType::Exit)?
+        .into_iter()
+        .filter(|strategy| strategy.manages(entry_strategy_id))
+        .collect();
 
     if strategies.is_empty() {
         return Ok(None);
@@ -200,6 +217,15 @@ pub async fn evaluate_exit_strategies(
                     );
                     return Ok(Some(strategy.id.clone()));
                 }
+            }
+            Err(e) if e.is_data_unavailable() => {
+                logger::debug(
+                    LogTag::System,
+                    &format!(
+                        "Exit strategy unknown: strategy={}, token={}, reason={}",
+                        strategy.name, token_mint, e
+                    ),
+                );
             }
             Err(e) => {
                 logger::error(

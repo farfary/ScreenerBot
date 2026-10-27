@@ -125,6 +125,7 @@ errors-strategies-no-performance = داده عملکردی برای این اس�
 errors-strategies-performance-failed = دریافت آمار عملکرد ناموفق بود
 errors-strategies-schemas-failed = دریافت طرحواره‌های شرط ناموفق بود
 errors-strategies-evaluation-failed = ارزیابی استراتژی ناموفق بود
+errors-strategies-test-data-without-price = داده‌های بازار یا موقعیت ارسال‌شده به قیمت فعلی نیاز دارند
 
 # Transactions
 errors-transactions-own-wallet-unavailable = کیف پول اصلی پیکربندی نشده است

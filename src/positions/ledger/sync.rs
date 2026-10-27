@@ -1056,6 +1056,10 @@ fn build_position(
             .saturating_sub(if round.is_open { 0 } else { 1 }),
         // Steps only the trader reserves; a resync of the same round keeps them.
         take_profit_level: existing.map_or(0, |p| p.take_profit_level),
+        // Only the trader's own entry measures the pool; a round read from wallet history
+        // has no reading of its own.
+        entry_liquidity_native: existing.and_then(|p| p.entry_liquidity_native),
+        entry_liquidity_pool: existing.and_then(|p| p.entry_liquidity_pool.clone()),
         dca_count: round.entry_count.saturating_sub(1),
         average_entry_price: entry_price,
         last_dca_time: existing.and_then(|p| p.last_dca_time),

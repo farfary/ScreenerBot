@@ -519,6 +519,18 @@ copy-validate-trailing-distance = فاصله حد ضرر متحرک باید ب�
 copy-validate-take-profit = حد سود باید بیشتر از 0% باشد.
 copy-validate-time-duration = قانون زمانی به مدتی بیشتر از صفر نیاز دارد.
 copy-validate-time-threshold = آستانه قانون زمانی یک ضرر است: از 0% یا عدد منفی استفاده کنید.
+# $reason is the message of the rule the stored overrides break.
+copy-exit-issue-warning = قوانین خروج نیاز به بررسی دارند: { $reason } تا وقتی آن‌ها را اصلاح نکنید، دارایی‌ها برای آن قانون از تنظیم معامله‌گر استفاده می‌کنند.
+# $distance and $activation are percentages.
+copy-exit-issue-trailing-distance-above-activation = فاصله تریلینگ { $distance }% باید کمتر از فعال‌سازی باشد، اکنون { $activation }%.
+# $maximum is the number of bands allowed.
+copy-exit-issue-trailing-band-count = حد ضرر متحرک حداکثر می‌تواند { $maximum } پله داشته باشد.
+# $profit and $floor are percentages.
+copy-exit-issue-trailing-band-order = پله تریلینگ در { $profit }% باید بالاتر از { $floor }%، یعنی فعال‌سازی یا پله قبلی، شروع شود.
+# $profit and $distance are percentages.
+copy-exit-issue-trailing-band-distance = پله تریلینگ در { $profit }% باید بیش از 0% و کمتر از نقطه شروعش دنبال کند، اکنون { $distance }%.
+# $value is a percentage.
+copy-exit-issue-time-loss-threshold = آستانه قانون زمان در ضرر باید ضرری بین -100% و 0% باشد، اکنون { $value }%.
 copy-warning-mirror = فقط فروش‌های کیف پول دارایی‌ها را می‌بندند: هیچ حد ضرری از آن‌ها محافظت نمی‌کند و توکنی که کیف پول هرگز نفروشد نگه داشته می‌شود.
 copy-warning-no-rules = هیچ قانون خروجی روشن نیست و فروش‌های کیف پول نادیده گرفته می‌شوند: دارایی‌ها هرگز فروخته نمی‌شوند.
 copy-warning-no-stop-loss = هیچ حد ضرری اعمال نمی‌شود: توکن در حال ریزش تا زمانی که قانون دیگری یا کیف پول بفروشد نگه داشته می‌شود.

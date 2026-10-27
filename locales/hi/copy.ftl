@@ -497,6 +497,18 @@ copy-validate-trailing-distance = ट्रेलिंग दूरी 0% स�
 copy-validate-take-profit = टेक प्रॉफ़िट 0% से ऊपर होना चाहिए।
 copy-validate-time-duration = टाइम नियम के लिए शून्य से ऊपर की अवधि चाहिए।
 copy-validate-time-threshold = टाइम नियम की सीमा एक घाटा है: 0% या ऋणात्मक संख्या इस्तेमाल करें।
+# $reason is the message of the rule the stored overrides break.
+copy-exit-issue-warning = एग्ज़िट नियमों पर ध्यान देना ज़रूरी है: { $reason } जब तक आप इन्हें ठीक नहीं करते, होल्डिंग्स उस नियम के लिए ट्रेडर की सेटिंग इस्तेमाल करती हैं।
+# $distance and $activation are percentages.
+copy-exit-issue-trailing-distance-above-activation = ट्रेलिंग दूरी { $distance }% एक्टिवेशन से कम होनी चाहिए, अभी { $activation }%।
+# $maximum is the number of bands allowed.
+copy-exit-issue-trailing-band-count = ट्रेलिंग स्टॉप में अधिकतम { $maximum } बैंड हो सकते हैं।
+# $profit and $floor are percentages.
+copy-exit-issue-trailing-band-order = { $profit }% पर ट्रेलिंग बैंड { $floor }% से ऊपर शुरू होना चाहिए, जो एक्टिवेशन या पिछला बैंड है।
+# $profit and $distance are percentages.
+copy-exit-issue-trailing-band-distance = { $profit }% पर ट्रेलिंग बैंड 0% से अधिक और अपनी शुरुआत से कम दूरी पर चलना चाहिए, अभी { $distance }%।
+# $value is a percentage.
+copy-exit-issue-time-loss-threshold = घाटे में समय नियम की सीमा -100% और 0% के बीच का घाटा होनी चाहिए, अभी { $value }%।
 copy-warning-mirror = केवल वॉलेट के सेल होल्डिंग बंद करते हैं: कोई स्टॉप लॉस उनकी रक्षा नहीं करता, और जिस टोकन को वॉलेट कभी नहीं बेचता वह होल्ड ही रहता है।
 copy-warning-no-rules = कोई एग्ज़िट नियम चालू नहीं है और वॉलेट के सेल अनदेखे किए जाते हैं: होल्डिंग कभी नहीं बिकती।
 copy-warning-no-stop-loss = कोई स्टॉप लॉस लागू नहीं: गिरता टोकन तब तक होल्ड रहता है जब तक कोई दूसरा नियम या वॉलेट न बेचे।

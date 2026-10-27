@@ -159,6 +159,7 @@ pub async fn get_page_script(Path(file): Path<String>) -> Response {
         "strategies/strategy_io.js" => Some(embeds::STRATEGIES_STRATEGY_IO_JS),
         "strategies/condition_catalog.js" => Some(embeds::STRATEGIES_CONDITION_CATALOG_JS),
         "strategies/condition_text.js" => Some(embeds::STRATEGIES_CONDITION_TEXT_JS),
+        "strategies/test_result.js" => Some(embeds::STRATEGIES_TEST_RESULT_JS),
         "copy.js" => Some(embeds::COPY_PAGE_SCRIPT),
         "copy/api.js" => Some(embeds::COPY_API_JS),
         "copy/format.js" => Some(embeds::COPY_FORMAT_JS),

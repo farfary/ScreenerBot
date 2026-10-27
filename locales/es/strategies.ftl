@@ -51,9 +51,15 @@ strategies-summary-param = { $label }: { $value }
 strategies-summary-none = Sin parámetros
 # An unset optional parameter: the strategy's own value it falls back to.
 strategies-param-inherit = Ajuste de la estrategia ({ $value })
-strategies-summary-period-seconds = Período de revisión: { $amount } s
-strategies-summary-period-minutes = Período de revisión: { $amount } min
-strategies-summary-period-hours = Período de revisión: { $amount } h
+# A duration amount with its unit, and an hour of the UTC day. $amount is the formatted number.
+strategies-value-duration-seconds = { $amount } s
+strategies-value-duration-minutes = { $amount } min
+strategies-value-duration-hours = { $amount } h
+strategies-value-duration-days = { $amount } d
+strategies-value-utc-hour = { $amount }:00 UTC
+# A hint under a field, display only. $time is a local clock time, $amount a percentage.
+strategies-hint-local-time = Tu hora local: { $time }
+strategies-hint-price-impact = Una operación de este tamaño mueve el precio alrededor de un { $amount } %
 
 # Parameter values in a card summary. $count selects the plural, $amount is the formatted number.
 strategies-value-percent = { $amount }%
@@ -76,6 +82,7 @@ strategies-unit-percent = %
 strategies-unit-native = { -sol }
 strategies-unit-hours = h
 strategies-unit-multiplier = ×
+strategies-unit-utc = UTC
 
 ## Condition catalog
 
@@ -96,7 +103,23 @@ strategies-editor-description = Descripción
 strategies-editor-description-field =
     .placeholder = Qué hace esta estrategia
     .aria-label = Descripción de la estrategia
+# The exit strategy's binding to the entry strategies whose positions it manages.
+strategies-editor-entry-binding-all = Todas las estrategias de entrada
+# Labels the button that names the entry strategies an exit strategy manages.
+strategies-editor-entry-binding-label = Gestiona
+strategies-editor-entry-binding-hint = Gestiona las posiciones abiertas por las estrategias de entrada marcadas. Sin ninguna marcada gestiona todas las posiciones, incluidas las manuales y las copiadas.
+strategies-editor-entry-binding-empty = Aún no hay ninguna estrategia de entrada
+# $id is the id of an entry strategy that no longer exists.
+strategies-editor-entry-binding-deleted = { $id } (eliminada)
 strategies-action-export = Exportar
+strategies-action-test = Probar con un token
+# $token is the tested token's symbol or address.
+strategies-test-title = Prueba con { $token }
+# $token is the tested token's symbol or address.
+strategies-test-running = Probando con { $token }…
+strategies-test-verdict-pass = Se cumple
+strategies-test-verdict-fail = No se cumple
+strategies-test-verdict-unknown = Desconocido
 
 # Rule groups. $mode is the all/any select written into the sentence.
 strategies-rules-match = Condiciones que deben cumplirse: { $mode }
@@ -154,6 +177,7 @@ strategies-data-candles = Velas
 strategies-data-pool = Pool
 strategies-data-position = Posición
 strategies-data-market = Actividad del mercado
+strategies-data-clock = Hora del día
 
 # Trade counts: $count selects the plural, $amount is the formatted number.
 strategies-unit-trades = trades
@@ -210,6 +234,10 @@ strategies-toast-saved = Estrategia guardada
 strategies-toast-save-failed = Error al guardar
     .message = No se pudo guardar la estrategia en la base de datos
 strategies-toast-no-strategy-validate = No hay estrategia que validar
+strategies-toast-no-strategy-test = No hay ninguna estrategia que probar
+strategies-toast-test-save-first = Guarda la estrategia antes de probarla: la prueba lee las reglas guardadas
+strategies-toast-test-failed = Error en la prueba
+    .message = No se pudo probar la estrategia
 strategies-toast-valid = La estrategia es válida
 strategies-toast-invalid = La estrategia tiene errores
 strategies-toast-validation-failed = Falló la validación
@@ -377,6 +405,126 @@ strategies-condition-buy-pressure-param-min-buy-share-pct = Cuota mínima de com
 strategies-condition-buy-pressure-param-min-transactions = Transacciones mínimas
     .description = Las ventanas con menos transacciones nunca activan la condición
 
+strategies-condition-transaction-velocity = Velocidad de transacciones
+    .description = Se activa cuando el ritmo de transacciones de una ventana reciente es al menos o como máximo un múltiplo del ritmo de la ventana más larga que la contiene. Lee los conteos de compras y ventas del token.
+strategies-condition-transaction-velocity-param-window = Ventanas
+    .description = La ventana reciente y la ventana más larga con la que se compara
+strategies-condition-transaction-velocity-param-window-option-5m-vs-1h = 5 minutos vs 1 hora
+strategies-condition-transaction-velocity-param-window-option-1h-vs-6h = 1 hora vs 6 horas
+strategies-condition-transaction-velocity-param-window-option-6h-vs-24h = 6 horas vs 24 horas
+strategies-condition-transaction-velocity-param-comparison = Comparación
+    .description = Si el ritmo reciente debe ser al menos o como máximo el ratio
+strategies-condition-transaction-velocity-param-comparison-option-above = Al menos (≥)
+strategies-condition-transaction-velocity-param-comparison-option-below = Como máximo (≤)
+strategies-condition-transaction-velocity-param-ratio = Ratio de ritmo
+    .description = Transacciones por segundo de la ventana reciente divididas entre las de la ventana larga
+strategies-condition-transaction-velocity-param-min-transactions = Transacciones mínimas
+    .description = Las ventanas recientes con menos transacciones nunca activan la condición
+
+strategies-condition-pullback-from-high = Retroceso desde el máximo
+    .description = Se activa cuando el precio en vivo está entre una caída mínima y una máxima por debajo del máximo más alto de las últimas velas.
+strategies-condition-pullback-from-high-param-lookback = Período de revisión
+    .description = Número de velas de las que se toma el máximo más alto
+strategies-condition-pullback-from-high-param-min-drop-pct = Caída mínima %
+    .description = El precio debe estar al menos así de lejos por debajo del máximo
+strategies-condition-pullback-from-high-param-max-drop-pct = Caída máxima %
+    .description = El precio debe estar como máximo así de lejos por debajo del máximo; debe ser mayor que la caída mínima
+
+strategies-condition-profit-giveback = Devolución de ganancias
+    .description = Se activa cuando la posición ha devuelto una parte de su mejor ganancia no realizada desde la última compra, una vez que esa ganancia alcanzó un nivel.
+strategies-condition-profit-giveback-param-arm-after-profit-pct = Armar tras ganancia %
+    .description = La mejor ganancia debe haber alcanzado este porcentaje del precio de entrada antes de que la condición pueda activarse
+strategies-condition-profit-giveback-param-giveback-pct = Devolución %
+    .description = Parte de la mejor ganancia devuelta; 100 % significa que el precio volvió al de entrada
+
+strategies-condition-token-age = Antigüedad del token
+    .description = Se activa cuando el tiempo desde la creación on-chain del token es mayor o menor que una duración. Si la hora de creación es desconocida, la condición queda sin decidir.
+strategies-condition-token-age-param-comparison = Comparación
+    .description = Si el token debe ser más antiguo o más reciente que la duración
+strategies-condition-token-age-param-comparison-option-older-than = Más antiguo que (≥)
+strategies-condition-token-age-param-comparison-option-younger-than = Más reciente que ({ "<" })
+strategies-condition-token-age-param-time-value = Antigüedad
+    .description = Tiempo desde la creación del token, en la unidad elegida dentro del campo (1-10000)
+strategies-condition-token-age-param-time-unit = Unidad de tiempo
+    .description = Unidad de la antigüedad
+strategies-condition-token-age-param-time-unit-option-minutes = min
+strategies-condition-token-age-param-time-unit-option-hours = h
+strategies-condition-token-age-param-time-unit-option-days = d
+
+strategies-condition-vwap = VWAP
+    .description = Se activa cuando el precio en vivo está por encima o por debajo del precio medio ponderado por volumen de las últimas velas por al menos una distancia.
+strategies-condition-vwap-param-lookback = Período de revisión
+    .description = Número de velas que cubre la media ponderada por volumen
+strategies-condition-vwap-param-position = Posición
+    .description = Posición del precio respecto al VWAP
+strategies-condition-vwap-param-position-option-above = Por encima del VWAP
+strategies-condition-vwap-param-position-option-below = Por debajo del VWAP
+strategies-condition-vwap-param-distance-pct = Distancia %
+    .description = Distancia mínima al VWAP; 0 significa cualquier distancia en el lado elegido
+
+strategies-condition-volatility-range = Rango de volatilidad
+    .description = Se activa cuando el rango verdadero medio de las últimas velas, como porcentaje del precio en vivo, está por encima o por debajo de un umbral. Dos de estas en un grupo forman un rango.
+strategies-condition-volatility-range-param-period = Período ATR
+    .description = Número de velas sobre las que se suaviza el rango verdadero medio; la condición necesita una vela más
+strategies-condition-volatility-range-param-comparison = Comparación
+    .description = Si el rango debe estar por encima o por debajo del umbral
+strategies-condition-volatility-range-param-comparison-option-above = Por encima
+strategies-condition-volatility-range-param-comparison-option-below = Por debajo
+strategies-condition-volatility-range-param-threshold-pct = Umbral de rango %
+    .description = Rango verdadero medio como porcentaje del precio en vivo
+
+strategies-condition-bollinger-bands = Bandas de Bollinger
+    .description = Se activa cuando el precio en vivo está por debajo de la banda inferior o por encima de la superior, o cuando las bandas se comprimen. Las bandas se sitúan a varias desviaciones estándar del cierre medio.
+strategies-condition-bollinger-bands-param-period = Período
+    .description = Número de velas que cubren la media y la desviación estándar
+strategies-condition-bollinger-bands-param-std-dev = Desviaciones estándar
+    .description = A cuántas desviaciones estándar de la media está cada banda
+strategies-condition-bollinger-bands-param-signal = Señal
+    .description = Lo que deben mostrar las bandas
+strategies-condition-bollinger-bands-param-signal-option-below-lower = Bajo la banda inferior
+strategies-condition-bollinger-bands-param-signal-option-above-upper = Sobre la banda superior
+strategies-condition-bollinger-bands-param-signal-option-squeeze = Compresión
+strategies-condition-bollinger-bands-param-squeeze-width-pct = Ancho de compresión %
+    .description = Para una compresión: la distancia máxima entre las bandas, como porcentaje de la media
+
+strategies-condition-liquidity-to-size = Liquidez frente al tamaño
+    .description = Se activa cuando las reservas del pool son al menos o menos que un múltiplo del tamaño en juego: el tamaño de la operación en una estrategia de entrada, el valor restante de la posición en una de salida.
+strategies-condition-liquidity-to-size-param-comparison = Comparación
+    .description = Si las reservas deben ser al menos o menos que el múltiplo
+strategies-condition-liquidity-to-size-param-comparison-option-at-least = Al menos (≥)
+strategies-condition-liquidity-to-size-param-comparison-option-below = Menos de ({ "<" })
+strategies-condition-liquidity-to-size-param-multiple = Múltiplo de liquidez
+    .description = Reservas del pool divididas entre el tamaño en juego; un múltiplo N mueve el precio alrededor de 1/(N+1)
+
+strategies-condition-position-adds = Ampliaciones de posición
+    .description = Se activa cuando el número de compras añadidas tras la primera entrada, o de ventas parciales, es al menos o como máximo un número.
+strategies-condition-position-adds-param-subject = Contado
+    .description = Qué acciones se cuentan
+strategies-condition-position-adds-param-subject-option-adds = Compras añadidas
+strategies-condition-position-adds-param-subject-option-partial-sells = Ventas parciales
+strategies-condition-position-adds-param-comparison = Comparación
+    .description = Si el conteo debe ser al menos o como máximo el número
+strategies-condition-position-adds-param-comparison-option-at-least = Al menos (≥)
+strategies-condition-position-adds-param-comparison-option-at-most = Como máximo (≤)
+strategies-condition-position-adds-param-count = Cantidad
+    .description = Número de acciones
+
+strategies-condition-time-of-day = Hora del día
+    .description = Se activa cuando la hora actual está dentro de una ventana de horas UTC. Un inicio posterior al fin pasa por la medianoche.
+strategies-condition-time-of-day-param-start-hour = Hora de inicio (UTC)
+    .description = Primera hora de la ventana, de 0 a 23
+strategies-condition-time-of-day-param-end-hour = Hora de fin (UTC)
+    .description = Hora en que termina la ventana, de 1 a 24; esa hora queda fuera de la ventana
+
+strategies-condition-liquidity-change-since-entry = Cambio de liquidez desde la entrada
+    .description = Se activa cuando las reservas del pool han bajado o subido al menos un porcentaje desde que se abrió la posición. Sin liquidez de entrada registrada, la condición queda sin decidir.
+strategies-condition-liquidity-change-since-entry-param-comparison = Comparación
+    .description = Si las reservas deben haber bajado o subido
+strategies-condition-liquidity-change-since-entry-param-comparison-option-dropped-by = Bajó un
+strategies-condition-liquidity-change-since-entry-param-comparison-option-rose-by = Subió un
+strategies-condition-liquidity-change-since-entry-param-change-pct = Cambio %
+    .description = Cambio de las reservas del pool desde la entrada
+
 ## Shared by every condition
 
 strategies-condition-param-timeframe = Temporalidad
@@ -452,6 +600,27 @@ strategies-error-field-peak-price = precio máximo
 strategies-error-field-slow-period = período lento
 strategies-error-field-window = ventana
 strategies-error-field-within-candles = velas del cruce
+strategies-error-field-change = cambio
+strategies-error-field-end-hour = hora de fin
+strategies-error-field-entry-liquidity = liquidez de entrada
+strategies-error-field-giveback = devolución
+strategies-error-field-highest-high = máximo más alto
+strategies-error-field-long-window-transactions = transacciones de la ventana larga
+strategies-error-field-maximum-drop = caída máxima
+strategies-error-field-minimum-drop = caída mínima
+strategies-error-field-multiple = múltiplo
+strategies-error-field-pool-liquidity = liquidez del pool
+strategies-error-field-ratio = ratio
+strategies-error-field-remaining-position-value = valor restante de la posición
+strategies-error-field-signal = señal
+strategies-error-field-squeeze-width = ancho de compresión
+strategies-error-field-standard-deviations = desviaciones estándar
+strategies-error-field-start-hour = hora de inicio
+strategies-error-field-subject = conteo
+strategies-error-field-token-creation-time = hora de creación del token
+strategies-error-field-total-volume = volumen total
+strategies-error-field-trade-size = tamaño de la operación
+strategies-error-field-vwap = VWAP
 
 # Expected parameter types
 
@@ -468,6 +637,12 @@ strategies-error-data-ohlcv-data = Los datos OHLCV
 strategies-error-data-position-data = Los datos de la posición
 strategies-error-data-peak-price = El precio máximo
 strategies-error-data-transaction-counts = Los recuentos de transacciones
+strategies-error-data-entry-liquidity = Liquidez de entrada
+strategies-error-data-entry-pool-liquidity = Liquidez del pool de entrada
+strategies-error-data-real-pool-reserves = Liquidez real del pool
+strategies-error-data-remaining-position-value = Valor restante de la posición
+strategies-error-data-token-creation-time = Hora de creación del token
+strategies-error-data-trade-size = Tamaño de la operación
 
 # Indicators
 
@@ -478,6 +653,10 @@ strategies-error-indicator-price-change-lookback = período de revisión de vari
 strategies-error-indicator-volume-spike = pico de volumen
 strategies-error-indicator-moving-average-cross = cruce de medias móviles
 strategies-error-indicator-rsi = RSI
+strategies-error-indicator-bollinger-bands = bandas de Bollinger
+strategies-error-indicator-pullback-from-high = retroceso desde el máximo
+strategies-error-indicator-volatility-range = rango de volatilidad
+strategies-error-indicator-vwap = VWAP
 
 # Rule tree faults
 

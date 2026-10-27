@@ -463,12 +463,7 @@
             <div class="example-summary">
               <div class="summary-item summary-item-warning">
                 <i class="icon-shield-off"></i>
-                <span
-                  id="stop-loss-example-loss"
-                  data-l10n-id="trader-stop-loss-summary"
-                  data-l10n-markup
-                  data-l10n-args='{"loss":"-50%"}'
-                ></span>
+                <span id="stop-loss-example-loss"></span>
               </div>
               <div class="summary-item summary-item-info">
                 <i class="icon-info"></i>
@@ -508,15 +503,7 @@
             </div>
             <p class="config-hint"></p>
             <div class="input-group-enhanced">
-              <input
-                type="number"
-                id="trail-activation"
-                min="0"
-                max="100"
-                step="1"
-                value="10"
-                class="input-large"
-              />
+              <input type="number" id="trail-activation" class="input-large" />
               <span class="input-unit">%</span>
             </div>
             <div class="config-impact">
@@ -534,20 +521,32 @@
             </div>
             <p class="config-hint"></p>
             <div class="input-group-enhanced">
-              <input
-                type="number"
-                id="trail-distance"
-                min="0"
-                max="50"
-                step="1"
-                value="5"
-                class="input-large"
-              />
+              <input type="number" id="trail-distance" class="input-large" />
               <span class="input-unit">%</span>
             </div>
             <div class="config-impact">
               <span class="impact-text" id="distance-impact"></span>
             </div>
+          </div>
+
+          <!-- Distance bands -->
+          <div class="config-group config-group-full">
+            <div class="config-label-row">
+              <label id="trailing-bands-label" class="config-label">
+                <i class="icon-arrow-up-narrow-wide"></i>
+                <span data-l10n-id="config-trader-trailing-stop-band-profit-pct"></span>
+              </label>
+            </div>
+            <p class="config-hint"></p>
+            <div
+              id="trailing-bands"
+              class="level-list"
+              data-ladder="trailing"
+              data-activation="trail-activation"
+              data-distance="trail-distance"
+              role="group"
+              aria-labelledby="trailing-bands-label"
+            ></div>
           </div>
 
           <!-- Locked Minimum -->
@@ -581,12 +580,7 @@
                 <div class="step-content">
                   <div class="step-title" data-l10n-id="trader-trailing-activation"></div>
                   <div class="step-value" id="example-activation">—</div>
-                  <div
-                    class="step-detail"
-                    id="example-activation-pct"
-                    data-l10n-id="trader-example-profit"
-                    data-l10n-args='{"value":"10"}'
-                  ></div>
+                  <div class="step-detail" id="example-activation-pct"></div>
                 </div>
               </div>
               <div class="timeline-arrow"><i class="icon-chevron-right"></i></div>
@@ -597,12 +591,7 @@
                 <div class="step-content">
                   <div class="step-title" data-l10n-id="trader-trailing-peak"></div>
                   <div class="step-value" id="example-peak">—</div>
-                  <div
-                    class="step-detail"
-                    id="example-peak-pct"
-                    data-l10n-id="trader-example-profit"
-                    data-l10n-args='{"value":"20"}'
-                  ></div>
+                  <div class="step-detail" id="example-peak-pct"></div>
                 </div>
               </div>
               <div class="timeline-arrow"><i class="icon-chevron-right"></i></div>
@@ -613,33 +602,18 @@
                 <div class="step-content">
                   <div class="step-title" data-l10n-id="trader-step-exit"></div>
                   <div class="step-value" id="example-exit">—</div>
-                  <div
-                    class="step-detail"
-                    id="example-exit-pct"
-                    data-l10n-id="trader-trailing-final"
-                    data-l10n-args='{"value":"14"}'
-                  ></div>
+                  <div class="step-detail" id="example-exit-pct"></div>
                 </div>
               </div>
             </div>
             <div class="example-summary">
               <div class="summary-item summary-item-success">
                 <i class="icon-circle-check"></i>
-                <span
-                  id="example-protected"
-                  data-l10n-id="trader-trailing-summary-protected"
-                  data-l10n-markup
-                  data-l10n-args='{"value":"14%"}'
-                ></span>
+                <span id="example-protected"></span>
               </div>
               <div class="summary-item summary-item-info">
                 <i class="icon-shield"></i>
-                <span
-                  id="example-avoided"
-                  data-l10n-id="trader-trailing-summary-avoided"
-                  data-l10n-markup
-                  data-l10n-args='{"value":"6%"}'
-                ></span>
+                <span id="example-avoided"></span>
               </div>
             </div>
           </div>
@@ -693,12 +667,7 @@
           <!-- What the stop does -->
           <div class="config-group config-group-full">
             <div class="config-impact">
-              <span
-                class="impact-text"
-                id="break-even-summary"
-                data-l10n-id="trader-break-even-summary"
-                data-l10n-args='{"trigger":"+15%","offset":"+1%"}'
-              ></span>
+              <span class="impact-text" id="break-even-summary"></span>
             </div>
           </div>
         </div>
@@ -794,15 +763,7 @@
             </div>
             <p class="config-hint"></p>
             <div class="input-group-enhanced">
-              <input
-                type="number"
-                id="time-max-hold"
-                min="1"
-                max="43200"
-                step="1"
-                value="168"
-                class="input-large"
-              />
+              <input type="number" id="time-max-hold" class="input-large" />
               <select id="time-unit" class="unit-select" data-custom-select>
                 <option value="seconds" data-l10n-id="trader-time-unit-seconds"></option>
                 <option value="minutes" data-l10n-id="trader-time-unit-minutes"></option>
@@ -811,11 +772,7 @@
               </select>
             </div>
             <div class="config-impact">
-              <span
-                class="impact-text"
-                id="time-conversion-hint"
-                data-l10n-id="trader-time-conversion-default"
-              ></span>
+              <span class="impact-text" id="time-conversion-hint"></span>
             </div>
           </div>
 
@@ -830,24 +787,11 @@
             <p class="config-hint"></p>
             <div class="input-group-enhanced">
               <span class="input-prefix" aria-hidden="true">−</span>
-              <input
-                type="number"
-                id="time-loss-threshold"
-                min="0"
-                max="100"
-                step="1"
-                value="40"
-                class="input-large"
-              />
+              <input type="number" id="time-loss-threshold" class="input-large" />
               <span class="input-unit">%</span>
             </div>
             <div class="config-impact">
-              <span
-                class="impact-text"
-                id="time-loss-impact"
-                data-l10n-id="trader-time-loss-impact"
-                data-l10n-args='{"value":"40"}'
-              ></span>
+              <span class="impact-text" id="time-loss-impact"></span>
             </div>
           </div>
 
@@ -878,12 +822,7 @@
                 </div>
                 <div class="step-content">
                   <div class="step-title" data-l10n-id="trader-time-limit"></div>
-                  <div
-                    class="step-value"
-                    id="time-example-duration"
-                    data-l10n-id="trader-time-day"
-                    data-l10n-args='{"day":"7"}'
-                  ></div>
+                  <div class="step-value" id="time-example-duration"></div>
                   <div class="step-detail" data-l10n-id="trader-time-hold-reached"></div>
                 </div>
               </div>
@@ -894,7 +833,7 @@
                 </div>
                 <div class="step-content">
                   <div class="step-title" data-l10n-id="trader-step-auto-exit"></div>
-                  <div class="step-value" id="time-example-loss">-40%</div>
+                  <div class="step-value" id="time-example-loss"></div>
                   <div class="step-detail" data-l10n-id="trader-time-loss-met"></div>
                 </div>
               </div>
@@ -970,12 +909,7 @@
           <!-- What the rule does -->
           <div class="config-group config-group-full">
             <div class="config-impact">
-              <span
-                class="impact-text"
-                id="time-stagnation-summary"
-                data-l10n-id="trader-time-flat-summary"
-                data-l10n-args='{"span":"4h","band":"5%"}'
-              ></span>
+              <span class="impact-text" id="time-stagnation-summary"></span>
             </div>
           </div>
         </div>

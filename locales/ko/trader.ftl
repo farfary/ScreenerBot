@@ -232,6 +232,23 @@ trader-trailing-final = 최종 +{ $value }%
 trader-trailing-summary-protected = 수익 <strong>{ $value }</strong> 보호됨
 # $value is a formatted percentage.
 trader-trailing-summary-avoided = 고점 대비 손실 <strong>{ $value }</strong> 회피
+# $step is the band's position in the list, from 1.
+trader-trailing-band = 구간 { $step }
+# $step is the band's position in the list, from 1.
+trader-trailing-band-profit-label = 구간 { $step } 최고 수익
+# $step is the band's position in the list, from 1.
+trader-trailing-band-distance-label = 구간 { $step } 트레일링 간격
+trader-trailing-band-profit-caption = 최고 수익부터
+trader-trailing-band-distance-caption = 간격
+trader-trailing-add-band = 구간 추가
+# $step is the band's position in the list, from 1.
+trader-trailing-remove-band = 구간 { $step } 삭제
+# $min and $max are the configured bounds of a band's peak profit.
+trader-trailing-band-error-profit-range = 각 구간의 최고 수익은 { $min }%에서 { $max }% 사이여야 합니다
+# $min and $max are the configured bounds of a band's distance.
+trader-trailing-band-error-distance-range = 각 구간의 간격은 { $min }%에서 { $max }% 사이여야 합니다
+trader-trailing-band-error-order = 각 구간의 최고 수익은 활성화 값과 이전 구간보다 높아야 합니다
+trader-trailing-band-error-distance = 각 구간의 간격은 그 구간의 최고 수익보다 작아야 합니다
 
 ## Break-even stop
 
@@ -286,8 +303,6 @@ trader-time-unit-seconds = 초
 trader-time-unit-minutes = 분
 trader-time-unit-hours = 시간
 trader-time-unit-days = 일
-# Shown before the configured duration loads.
-trader-time-conversion-default = 168시간 = 7일
 # $duration and $readable are formatted durations.
 trader-time-conversion = { $duration } = { $readable }
 trader-duration-seconds =
@@ -368,11 +383,8 @@ trader-dca-error-drop-range = 각 하락률은 { $min }%에서 { $max }% 사이�
 trader-dca-error-size-range = 각 크기는 첫 매수의 { $min }×에서 { $max }× 사이여야 합니다
 trader-dca-error-order = 첫 진입가 기준일 때 각 추가는 이전보다 더 깊은 하락이 필요합니다
 trader-dca-cooldown-impact = 추가 진입 사이 최소 { $span }
-trader-dca-min-hold-impact =
-    { $minutes ->
-        [0] 첫 추가 매수는 진입 직후 가능합니다
-       *[other] 첫 추가 매수는 진입 후 최소 { $span } 기다립니다
-    }
+trader-dca-min-hold-none = 첫 추가 매수는 진입 직후 가능합니다
+trader-dca-min-hold-impact = 첫 추가 매수는 진입 후 최소 { $span } 기다립니다
 trader-dca-capacity = 이 포지션의 최대 보유액: { $amount } (첫 매수의 { $multiple }×)
 trader-dca-info-title = DCA 전략 정보
 trader-dca-info-subtitle = DCA 거래 시 유의할 점

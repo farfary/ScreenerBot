@@ -126,6 +126,7 @@ errors-strategies-no-performance = No performance data available for this strate
 errors-strategies-performance-failed = Failed to get performance stats
 errors-strategies-schemas-failed = Failed to get condition schemas
 errors-strategies-evaluation-failed = Strategy evaluation failed
+errors-strategies-test-data-without-price = Supplied market or position data needs a current price
 
 # Transactions
 errors-transactions-own-wallet-unavailable = The main wallet is not configured

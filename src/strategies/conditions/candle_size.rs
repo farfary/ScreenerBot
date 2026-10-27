@@ -5,7 +5,7 @@
 
 use crate::strategies::conditions::{
     get_candles_for_timeframe, get_param_f64, get_param_string, get_param_string_optional,
-    validate_timeframe_param, ConditionEvaluator,
+    usable_basis, validate_timeframe_param, ConditionEvaluator,
 };
 use crate::strategies::types::{Condition, ConditionData, EvaluationContext};
 use crate::strategies::{Error, Result};
@@ -60,14 +60,8 @@ impl ConditionEvaluator for CandleSizeCondition {
 
         // Guard the denominator: a zero or non-finite open produces inf/NaN, and inf
         // clears every LARGE_BODY threshold while NaN silently fails all of them.
-        let price_change_pct = if candle.open.is_finite() && candle.open > 0.0 {
-            ((candle.close - candle.open) / candle.open).abs() * 100.0
-        } else {
-            return Err(Error::InvalidConditionValue {
-                field: "candle open",
-                value: candle.open.to_string(),
-            });
-        };
+        let open = usable_basis("candle open", candle.open)?;
+        let price_change_pct = ((candle.close - open) / open).abs() * 100.0;
 
         let result = match pattern.as_str() {
             "LARGE_BODY" => {

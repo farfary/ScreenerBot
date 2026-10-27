@@ -326,6 +326,14 @@
   color: var(--error-color);
 }
 
+.copy-row-warning {
+  justify-content: flex-start;
+  gap: var(--spacing-xs);
+  font-size: var(--font-size-xs);
+  color: var(--warning-color);
+  text-align: start;
+}
+
 .copy-row-pnl {
   font-family: var(--font-data);
   font-size: var(--font-size-sm);

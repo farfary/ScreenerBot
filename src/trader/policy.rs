@@ -11,10 +11,86 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::config::TakeProfitLevel;
+use crate::config::{
+    with_config, TakeProfitLevel, TraderConfig, TrailingStopBand, TRAILING_STOP_MAX_BANDS,
+};
+use crate::i18n::{ids, UiArg, UiText};
 use crate::positions::{Position, PositionOrigin};
-use crate::trader::config;
 use crate::trader::evaluators::dca::DcaConfigSnapshot;
+
+/// Why an exit policy cannot act as configured: the typed reason behind
+/// `trader::Error::InvalidExitPolicy`, a refused trader config and a copy task whose
+/// stored overrides no longer fit the global policy.
+#[derive(Debug, Clone, PartialEq, thiserror::Error)]
+pub enum ExitPolicyFault {
+    #[error("stop loss threshold must be greater than 0 and at most 100, got {value}")]
+    StopLossThreshold { value: f64 },
+    #[error("partial stop loss share must be between 0 and 100 (exclusive), got {value}")]
+    PartialShare { value: f64 },
+    #[error("take-profit target must be greater than 0, got {value}")]
+    TakeProfitTarget { value: f64 },
+    #[error("trailing stop activation must be greater than 0 and at most 100, got {value}")]
+    TrailingActivation { value: f64 },
+    #[error("trailing stop distance must be greater than 0 and at most 100, got {value}")]
+    TrailingDistance { value: f64 },
+    #[error("trailing stop distance ({distance:.1}%) must be less than its activation ({activation:.1}%)")]
+    TrailingDistanceNotBelowActivation { distance: f64, activation: f64 },
+    #[error("trailing stop holds {count} bands, at most {maximum} are allowed", maximum = TRAILING_STOP_MAX_BANDS)]
+    TrailingBandCount { count: usize },
+    #[error("trailing stop band at {profit}% must sit above the activation and the band before it ({floor}%)")]
+    TrailingBandOrder { profit: f64, floor: f64 },
+    #[error("trailing stop band at {profit}% must trail by more than 0 and less than its threshold, got {distance}%")]
+    TrailingBandDistance { profit: f64, distance: f64 },
+    #[error("time override duration must be greater than 0, got {seconds} seconds")]
+    TimeDuration { seconds: f64 },
+    #[error("time override loss threshold must be between -100 and 0, got {value}")]
+    TimeLossThreshold { value: f64 },
+}
+
+impl ExitPolicyFault {
+    /// The catalog text a copy task shows for this fault: the task editor's own wording
+    /// for a rule of one field, `copy-exit-issue-*` for a rule that relates two values.
+    pub fn ui_text(&self) -> UiText {
+        let number = UiArg::Number;
+        match *self {
+            Self::StopLossThreshold { .. } => UiText::new(ids::COPY_VALIDATE_STOP_LOSS),
+            Self::PartialShare { .. } => UiText::new(ids::COPY_VALIDATE_PARTIAL_SIZE),
+            Self::TakeProfitTarget { .. } => UiText::new(ids::COPY_VALIDATE_TAKE_PROFIT),
+            Self::TrailingActivation { .. } => UiText::new(ids::COPY_VALIDATE_TRAILING_ACTIVATION),
+            Self::TrailingDistance { .. } => UiText::new(ids::COPY_VALIDATE_TRAILING_DISTANCE),
+            Self::TrailingDistanceNotBelowActivation {
+                distance,
+                activation,
+            } => UiText::new(ids::COPY_EXIT_ISSUE_TRAILING_DISTANCE_ABOVE_ACTIVATION)
+                .arg("distance", number(distance))
+                .arg("activation", number(activation)),
+            Self::TrailingBandCount { .. } => UiText::new(ids::COPY_EXIT_ISSUE_TRAILING_BAND_COUNT)
+                .arg("maximum", number(TRAILING_STOP_MAX_BANDS as f64)),
+            Self::TrailingBandOrder { profit, floor } => {
+                UiText::new(ids::COPY_EXIT_ISSUE_TRAILING_BAND_ORDER)
+                    .arg("profit", number(profit))
+                    .arg("floor", number(floor))
+            }
+            Self::TrailingBandDistance { profit, distance } => {
+                UiText::new(ids::COPY_EXIT_ISSUE_TRAILING_BAND_DISTANCE)
+                    .arg("profit", number(profit))
+                    .arg("distance", number(distance))
+            }
+            Self::TimeDuration { .. } => UiText::new(ids::COPY_VALIDATE_TIME_DURATION),
+            Self::TimeLossThreshold { value } => {
+                UiText::new(ids::COPY_EXIT_ISSUE_TIME_LOSS_THRESHOLD).arg("value", number(value))
+            }
+        }
+    }
+}
+
+impl From<ExitPolicyFault> for crate::trader::Error {
+    fn from(fault: ExitPolicyFault) -> Self {
+        Self::InvalidExitPolicy {
+            detail: fault.to_string(),
+        }
+    }
+}
 
 /// The stop-loss rule's switch, threshold, minimum hold and partial first sale, read by
 /// `exit_rules`.
@@ -28,12 +104,18 @@ pub struct StopLossPolicy {
     pub partial_exit_default_pct: f64,
 }
 
-/// The trailing-stop rule's switch, activation and distance, read by `exit_rules`.
+/// The trailing-stop rule's switch, activation, base distance and distance bands, read by
+/// `exit_rules`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TrailingPolicy {
     pub enabled: bool,
     pub activation_pct: f64,
     pub distance_pct: f64,
+    /// Distances that replace the base distance once the basis peak reaches each band's
+    /// profit; thresholds ascend and sit above the activation. Empty: the base distance at
+    /// every profit.
+    #[serde(default)]
+    pub bands: Vec<TrailingStopBand>,
 }
 
 /// The break-even stop's switch, arming profit and kept margin, both in percent from the
@@ -133,49 +215,88 @@ impl ExitPolicy {
     /// Snapshot the global trader config. One read per position per cycle replaces the
     /// scattered per-evaluator reads.
     pub fn from_config() -> Self {
+        with_config(|cfg| Self::from_trader_config(&cfg.trader))
+    }
+
+    /// The policy a trader config section describes; [`Self::from_config`] reads the
+    /// global one, config validation reads the section being saved.
+    pub fn from_trader_config(trader: &TraderConfig) -> Self {
         Self {
             stop_loss: StopLossPolicy {
-                enabled: config::is_stop_loss_enabled(),
-                threshold_pct: config::get_stop_loss_threshold_pct(),
-                min_hold_seconds: config::get_stop_loss_min_hold_seconds(),
-                allow_partial: config::get_stop_loss_allow_partial(),
-                partial_exit_default_pct: config::get_stop_loss_partial_pct(),
+                enabled: trader.stop_loss_enabled,
+                threshold_pct: trader.stop_loss_threshold_pct,
+                min_hold_seconds: trader.stop_loss_min_hold_seconds,
+                allow_partial: trader.stop_loss_allow_partial,
+                partial_exit_default_pct: trader.stop_loss_partial_pct,
             },
             trailing: TrailingPolicy {
-                enabled: config::is_trailing_stop_enabled(),
-                activation_pct: config::get_trailing_stop_activation_pct(),
-                distance_pct: config::get_trailing_stop_distance_pct(),
+                enabled: trader.trailing_stop_enabled,
+                activation_pct: trader.trailing_stop_activation_pct,
+                distance_pct: trader.trailing_stop_distance_pct,
+                bands: trader.trailing_stop_bands(),
             },
             break_even: BreakEvenPolicy {
-                enabled: config::is_break_even_enabled(),
-                trigger_pct: config::get_break_even_trigger_pct(),
-                offset_pct: config::get_break_even_offset_pct(),
+                enabled: trader.break_even_enabled,
+                trigger_pct: trader.break_even_trigger_pct,
+                offset_pct: trader.break_even_offset_pct,
             },
             take_profit: TakeProfitPolicy {
-                enabled: config::is_take_profit_enabled(),
-                levels: config::get_take_profit_levels(),
+                enabled: trader.take_profit_enabled,
+                levels: trader.take_profit_levels(),
             },
             time: TimePolicy {
-                enabled: config::is_time_override_enabled(),
-                loss_threshold_pct: config::get_time_override_loss_threshold_pct(),
-                duration_seconds: config::get_time_override_duration_seconds(),
+                enabled: trader.time_override_enabled,
+                loss_threshold_pct: trader.time_override_loss_threshold_percent,
+                duration_seconds: trader
+                    .time_override_unit
+                    .to_seconds(trader.time_override_duration),
             },
             time_stagnation: TimeStagnationPolicy {
-                enabled: config::is_time_exit_stagnation_enabled(),
-                duration_seconds: config::get_time_exit_stagnation_minutes() * 60.0,
-                band_pct: config::get_time_exit_stagnation_band_pct(),
+                enabled: trader.time_exit_stagnation_enabled,
+                duration_seconds: trader.time_exit_stagnation_minutes * 60.0,
+                band_pct: trader.time_exit_stagnation_band_pct,
             },
             dca: DcaConfigSnapshot {
-                enabled: config::is_dca_enabled(),
-                levels: config::get_dca_levels(),
-                measure_from: config::get_dca_measure_from(),
-                cooldown_minutes: config::get_dca_cooldown_minutes(),
-                min_hold_minutes: config::get_dca_min_hold_minutes(),
+                enabled: trader.dca_enabled,
+                levels: trader.dca_levels(),
+                measure_from: trader.dca_measure_from,
+                cooldown_minutes: trader.dca_cooldown_minutes,
+                min_hold_minutes: trader.dca_min_hold_minutes,
             },
         }
     }
 
+    /// Refuse a policy whose stop loss, trailing stop or time override cannot act as
+    /// configured. The one owner of these rules: the trader config and a copy task's
+    /// merged overrides are both checked here, and the rules check their own policy
+    /// before deciding.
+    pub fn validate(&self) -> Result<(), ExitPolicyFault> {
+        self.stop_loss.validate()?;
+        self.trailing.validate()?;
+        self.time.validate()
+    }
+
+    /// Overlay a copy task's overrides for the positions it runs. A rule whose merged
+    /// values break [`Self::validate`] keeps this policy's own rule: a global change can
+    /// leave a stored override contradicting a value it inherits (a task distance above a
+    /// lowered global activation), and the global rule, which config validation keeps
+    /// valid, is the last valid policy for that rule. The task's other rules still apply.
     pub fn apply_overrides(&mut self, overrides: &ExitPolicyOverrides) {
+        let base = self.clone();
+        self.merge_overrides(overrides);
+        if self.stop_loss.validate().is_err() {
+            self.stop_loss = base.stop_loss;
+        }
+        if self.trailing.validate().is_err() {
+            self.trailing = base.trailing;
+        }
+        if self.time.validate().is_err() {
+            self.time = base.time;
+        }
+    }
+
+    /// Overlay every set override as it stands, valid or not.
+    fn merge_overrides(&mut self, overrides: &ExitPolicyOverrides) {
         apply(&mut self.stop_loss.enabled, overrides.stop_loss.enabled);
         apply(
             &mut self.stop_loss.threshold_pct,
@@ -202,6 +323,12 @@ impl ExitPolicy {
             &mut self.trailing.distance_pct,
             overrides.trailing.distance_pct,
         );
+        // Bands are tuned to the global activation and distance; a task that sets its own
+        // trails at its own distance at every profit.
+        if overrides.trailing.activation_pct.is_some() || overrides.trailing.distance_pct.is_some()
+        {
+            self.trailing.bands.clear();
+        }
         apply(&mut self.take_profit.enabled, overrides.roi.enabled);
         if let Some(profit_pct) = overrides.roi.target_profit_pct {
             self.take_profit.levels = vec![TakeProfitLevel::sell_all_at(profit_pct)];
@@ -219,34 +346,140 @@ impl ExitPolicy {
 }
 
 impl ExitPolicyOverrides {
-    pub fn is_valid(&self) -> bool {
-        optional_percent(self.stop_loss.threshold_pct, false)
-            && optional_percent(self.stop_loss.partial_exit_default_pct, true)
-            && optional_percent(self.trailing.activation_pct, false)
-            && optional_percent(self.trailing.distance_pct, false)
-            && optional_positive(self.roi.target_profit_pct)
-            && self
-                .time
-                .loss_threshold_pct
-                .is_none_or(|value| value.is_finite())
-            && optional_positive(self.time.duration_seconds)
+    /// The policy these overrides make of `base`, refused when the merged policy breaks
+    /// a rule [`ExitPolicy::validate`] enforces or a share or target is out of range.
+    pub fn validate_over(&self, mut base: ExitPolicy) -> Result<ExitPolicy, ExitPolicyFault> {
+        if let Some(value) = self.stop_loss.partial_exit_default_pct {
+            if !(value.is_finite() && value > 0.0 && value < 100.0) {
+                return Err(ExitPolicyFault::PartialShare { value });
+            }
+        }
+        if let Some(value) = self.roi.target_profit_pct {
+            if !(value.is_finite() && value > 0.0) {
+                return Err(ExitPolicyFault::TakeProfitTarget { value });
+            }
+        }
+        base.merge_overrides(self);
+        // A value the task sets is checked even while its rule is switched off: the switch
+        // may be inherited and turned on later.
+        let mut checked = base.clone();
+        checked.stop_loss.enabled |= self.stop_loss.threshold_pct.is_some();
+        checked.trailing.enabled |=
+            self.trailing.activation_pct.is_some() || self.trailing.distance_pct.is_some();
+        checked.time.enabled |=
+            self.time.loss_threshold_pct.is_some() || self.time.duration_seconds.is_some();
+        checked.validate()?;
+        Ok(base)
     }
 }
 
-fn optional_percent(value: Option<f64>, exclusive_maximum: bool) -> bool {
-    value.is_none_or(|value| {
-        value.is_finite()
-            && value > 0.0
-            && if exclusive_maximum {
-                value < 100.0
-            } else {
-                value <= 100.0
-            }
-    })
+impl StopLossPolicy {
+    /// An enabled stop loss needs a finite loss threshold above 0 and at most 100.
+    pub fn validate(&self) -> Result<(), ExitPolicyFault> {
+        if self.enabled && !percent_in_range(self.threshold_pct) {
+            return Err(ExitPolicyFault::StopLossThreshold {
+                value: self.threshold_pct,
+            });
+        }
+        Ok(())
+    }
 }
 
-fn optional_positive(value: Option<f64>) -> bool {
-    value.is_none_or(|value| value.is_finite() && value > 0.0)
+impl TrailingPolicy {
+    /// The distance the trail follows below a basis peak `peak_profit_pct` above the
+    /// entry: the band with the highest threshold the peak has reached, else the base
+    /// distance.
+    pub fn distance_in_force(&self, peak_profit_pct: f64) -> f64 {
+        self.bands
+            .iter()
+            .filter(|band| band.profit_pct <= peak_profit_pct)
+            .max_by(|a, b| a.profit_pct.total_cmp(&b.profit_pct))
+            .map_or(self.distance_pct, |band| band.distance_pct)
+    }
+
+    /// An enabled trailing stop needs an activation and a distance above 0 and at most
+    /// 100, a distance below the activation (a trail armed at the activation must sit in
+    /// profit), and bands that pass [`Self::validate_bands`].
+    pub fn validate(&self) -> Result<(), ExitPolicyFault> {
+        if !self.enabled {
+            return Ok(());
+        }
+        if !percent_in_range(self.activation_pct) {
+            return Err(ExitPolicyFault::TrailingActivation {
+                value: self.activation_pct,
+            });
+        }
+        if !percent_in_range(self.distance_pct) {
+            return Err(ExitPolicyFault::TrailingDistance {
+                value: self.distance_pct,
+            });
+        }
+        if self.distance_pct >= self.activation_pct {
+            return Err(ExitPolicyFault::TrailingDistanceNotBelowActivation {
+                distance: self.distance_pct,
+                activation: self.activation_pct,
+            });
+        }
+        self.validate_bands()
+    }
+
+    /// At most [`TRAILING_STOP_MAX_BANDS`] bands whose thresholds ascend above the
+    /// activation, each with a distance above 0 and below its threshold. Checked whether
+    /// or not the trail is on: a copy task that switches the trail on inherits the bands.
+    pub fn validate_bands(&self) -> Result<(), ExitPolicyFault> {
+        if self.bands.len() > TRAILING_STOP_MAX_BANDS {
+            return Err(ExitPolicyFault::TrailingBandCount {
+                count: self.bands.len(),
+            });
+        }
+        let mut floor = self.activation_pct;
+        for band in &self.bands {
+            if !band.profit_pct.is_finite() || band.profit_pct <= floor {
+                return Err(ExitPolicyFault::TrailingBandOrder {
+                    profit: band.profit_pct,
+                    floor,
+                });
+            }
+            if !band.distance_pct.is_finite()
+                || band.distance_pct <= 0.0
+                || band.distance_pct >= band.profit_pct
+            {
+                return Err(ExitPolicyFault::TrailingBandDistance {
+                    profit: band.profit_pct,
+                    distance: band.distance_pct,
+                });
+            }
+            floor = band.profit_pct;
+        }
+        Ok(())
+    }
+}
+
+impl TimePolicy {
+    /// An enabled time override needs a finite duration above 0 and a finite loss
+    /// threshold from -100 to 0 (a positive threshold would close a winning position).
+    pub fn validate(&self) -> Result<(), ExitPolicyFault> {
+        if !self.enabled {
+            return Ok(());
+        }
+        if !self.duration_seconds.is_finite() || self.duration_seconds <= 0.0 {
+            return Err(ExitPolicyFault::TimeDuration {
+                seconds: self.duration_seconds,
+            });
+        }
+        if !self.loss_threshold_pct.is_finite()
+            || !(-100.0..=0.0).contains(&self.loss_threshold_pct)
+        {
+            return Err(ExitPolicyFault::TimeLossThreshold {
+                value: self.loss_threshold_pct,
+            });
+        }
+        Ok(())
+    }
+}
+
+fn percent_in_range(value: f64) -> bool {
+    value.is_finite() && value > 0.0 && value <= 100.0
 }
 
 fn apply<T: Copy>(target: &mut T, value: Option<T>) {

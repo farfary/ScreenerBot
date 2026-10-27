@@ -123,6 +123,7 @@ errors-strategies-no-performance = 此策略暂无表现数据
 errors-strategies-performance-failed = 获取表现统计失败
 errors-strategies-schemas-failed = 获取条件结构失败
 errors-strategies-evaluation-failed = 策略评估失败
+errors-strategies-test-data-without-price = 提交的市场或持仓数据需要当前价格
 
 # Transactions
 errors-transactions-own-wallet-unavailable = 未配置主钱包

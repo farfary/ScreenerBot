@@ -4,6 +4,7 @@
 //! Position route types — data structures for position API responses.
 
 use crate::chains::RawAmount;
+use crate::config::TrailingStopBand;
 use crate::positions::state::is_position_open;
 use crate::positions::{Position, PositionManagement, PositionOrigin, PriceSource};
 use crate::tokens::security::SecurityRiskBand;
@@ -67,8 +68,6 @@ pub struct PositionResponse {
     pub effective_exit_price: Option<f64>,
     #[serde(rename = "sol_received")]
     pub native_received: Option<f64>,
-    pub profit_target_min: Option<f64>,
-    pub profit_target_max: Option<f64>,
     pub liquidity_tier: Option<String>,
     pub transaction_entry_verified: bool,
     pub transaction_exit_verified: bool,
@@ -277,6 +276,73 @@ pub struct PositionDetail {
     /// ladder step's multiple of the first buy, or the first buy once every step is
     /// used. Absent on a closed position and on one with no first buy to size from.
     pub default_add_size_native: Option<f64>,
+    /// Every exit rule the exit monitor applies to this position at a price or a time,
+    /// from the policy it resolves; absent where it evaluates no policy exit.
+    pub exit_plan: Option<ExitPlanResponse>,
+}
+
+/// The exit rules that can sell an open position, as its resolved policy switches them
+/// on. A rule that is off is absent (an empty take-profit ladder).
+#[derive(Debug, Serialize, PartialEq)]
+pub struct ExitPlanResponse {
+    /// Loss from the average entry at which the stop loss sells, in percent.
+    pub stop_loss_pct: Option<f64>,
+    /// The take-profit ladder in firing order.
+    pub take_profit_steps: Vec<ExitPlanStepResponse>,
+    pub trailing_stop: Option<ExitPlanTrailingResponse>,
+    pub break_even: Option<ExitPlanBreakEvenResponse>,
+    /// The losing-time exit: sells a position held this long while at or below the loss.
+    pub time_loss: Option<ExitPlanTimeLossResponse>,
+    /// The flat-position exit: sells a position held this long while its P&L stays
+    /// inside the band.
+    pub time_stagnation: Option<ExitPlanStagnationResponse>,
+}
+
+/// One take-profit step of an exit plan.
+#[derive(Debug, Serialize, PartialEq)]
+pub struct ExitPlanStepResponse {
+    /// Profit from the average entry at which the step sells, in percent.
+    pub profit_pct: f64,
+    /// Share of the position as opened the step sells, in percent.
+    pub sell_pct: f64,
+    /// This round already sold the step (or reserved it for a sale in flight).
+    pub taken: bool,
+}
+
+/// The trailing stop of an exit plan, in percent from the average entry.
+#[derive(Debug, Serialize, PartialEq)]
+pub struct ExitPlanTrailingResponse {
+    /// Profit at which the trail arms.
+    pub activation_pct: f64,
+    /// Distance below the peak the trail sells at until the peak reaches a band.
+    pub distance_pct: f64,
+    /// Distances that replace it once the peak reaches each band's profit, ascending.
+    pub bands: Vec<TrailingStopBand>,
+}
+
+/// The break-even stop of an exit plan, in percent from the average entry.
+#[derive(Debug, Serialize, PartialEq)]
+pub struct ExitPlanBreakEvenResponse {
+    /// Profit at which the stop arms.
+    pub trigger_pct: f64,
+    /// Profit the stop keeps: it sells when the price falls back to this margin.
+    pub offset_pct: f64,
+}
+
+/// The losing-time exit of an exit plan.
+#[derive(Debug, Serialize, PartialEq)]
+pub struct ExitPlanTimeLossResponse {
+    pub duration_seconds: f64,
+    /// P&L from the average entry at or below which it sells, in percent (0 or less).
+    pub loss_threshold_pct: f64,
+}
+
+/// The flat-position exit of an exit plan.
+#[derive(Debug, Serialize, PartialEq)]
+pub struct ExitPlanStagnationResponse {
+    pub duration_seconds: f64,
+    /// Width of the flat band either side of the average entry, in percent.
+    pub band_pct: f64,
 }
 
 #[derive(Debug, Serialize)]

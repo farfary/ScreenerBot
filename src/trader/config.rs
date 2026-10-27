@@ -3,7 +3,7 @@
 
 //! Trading configuration utilities.
 
-use crate::config::{with_config, DcaLevel, DcaMeasureFrom, TakeProfitLevel};
+use crate::config::{with_config, DcaLevel};
 
 /// Get the maximum number of open positions allowed
 pub fn get_max_open_positions() -> usize {
@@ -25,128 +25,9 @@ pub fn is_trader_enabled() -> bool {
     with_config(|cfg| cfg.trader.enabled)
 }
 
-/// Check if DCA is enabled
-pub fn is_dca_enabled() -> bool {
-    with_config(|cfg| cfg.trader.dca_enabled)
-}
-
 /// The DCA ladder: one step per automatic add, in the order the adds fire
 pub fn get_dca_levels() -> Vec<DcaLevel> {
     with_config(|cfg| cfg.trader.dca_levels())
-}
-
-/// Which entry price the DCA drop is measured from
-pub fn get_dca_measure_from() -> DcaMeasureFrom {
-    with_config(|cfg| cfg.trader.dca_measure_from)
-}
-
-/// Minutes a position is held after its entry before its first automatic add
-pub fn get_dca_min_hold_minutes() -> i64 {
-    with_config(|cfg| cfg.trader.dca_min_hold_minutes)
-}
-
-/// Get DCA cooldown in minutes
-pub fn get_dca_cooldown_minutes() -> i64 {
-    with_config(|cfg| cfg.trader.dca_cooldown_minutes)
-}
-
-/// Check if stop loss is enabled
-pub fn is_stop_loss_enabled() -> bool {
-    with_config(|cfg| cfg.trader.stop_loss_enabled)
-}
-
-/// Get stop loss threshold percentage
-pub fn get_stop_loss_threshold_pct() -> f64 {
-    with_config(|cfg| cfg.trader.stop_loss_threshold_pct)
-}
-
-/// Get stop loss minimum hold seconds
-pub fn get_stop_loss_min_hold_seconds() -> u64 {
-    with_config(|cfg| cfg.trader.stop_loss_min_hold_seconds)
-}
-
-/// Check if partial exits are allowed for stop loss
-pub fn get_stop_loss_allow_partial() -> bool {
-    with_config(|cfg| cfg.trader.stop_loss_allow_partial)
-}
-
-/// Get the share of the position a partial stop loss sells, in percent
-pub fn get_stop_loss_partial_pct() -> f64 {
-    with_config(|cfg| cfg.trader.stop_loss_partial_pct)
-}
-
-/// Check if trailing stop is enabled
-pub fn is_trailing_stop_enabled() -> bool {
-    with_config(|cfg| cfg.trader.trailing_stop_enabled)
-}
-
-/// Get trailing stop activation percentage
-pub fn get_trailing_stop_activation_pct() -> f64 {
-    with_config(|cfg| cfg.trader.trailing_stop_activation_pct)
-}
-
-/// Get trailing stop distance percentage
-pub fn get_trailing_stop_distance_pct() -> f64 {
-    with_config(|cfg| cfg.trader.trailing_stop_distance_pct)
-}
-
-/// Check if the break-even stop is enabled
-pub fn is_break_even_enabled() -> bool {
-    with_config(|cfg| cfg.trader.break_even_enabled)
-}
-
-/// Get the profit from the average entry that arms the break-even stop, in percent
-pub fn get_break_even_trigger_pct() -> f64 {
-    with_config(|cfg| cfg.trader.break_even_trigger_pct)
-}
-
-/// Get the margin above the average entry the break-even stop keeps, in percent
-pub fn get_break_even_offset_pct() -> f64 {
-    with_config(|cfg| cfg.trader.break_even_offset_pct)
-}
-
-/// Check if the take-profit ladder is enabled
-pub fn is_take_profit_enabled() -> bool {
-    with_config(|cfg| cfg.trader.take_profit_enabled)
-}
-
-/// Get the take-profit ladder, one step per configured level
-pub fn get_take_profit_levels() -> Vec<TakeProfitLevel> {
-    with_config(|cfg| cfg.trader.take_profit_levels())
-}
-
-/// Check if time override is enabled
-pub fn is_time_override_enabled() -> bool {
-    with_config(|cfg| cfg.trader.time_override_enabled)
-}
-
-/// Get time override duration in seconds (converted from configured unit)
-pub fn get_time_override_duration_seconds() -> f64 {
-    with_config(|cfg| {
-        cfg.trader
-            .time_override_unit
-            .to_seconds(cfg.trader.time_override_duration)
-    })
-}
-
-/// Check if the stagnation exit is enabled
-pub fn is_time_exit_stagnation_enabled() -> bool {
-    with_config(|cfg| cfg.trader.time_exit_stagnation_enabled)
-}
-
-/// Get how long a position stays flat before the stagnation exit closes it, in minutes
-pub fn get_time_exit_stagnation_minutes() -> f64 {
-    with_config(|cfg| cfg.trader.time_exit_stagnation_minutes)
-}
-
-/// Get the profit-or-loss band the stagnation exit counts as flat, in percent
-pub fn get_time_exit_stagnation_band_pct() -> f64 {
-    with_config(|cfg| cfg.trader.time_exit_stagnation_band_pct)
-}
-
-/// Get time override loss threshold percentage
-pub fn get_time_override_loss_threshold_pct() -> f64 {
-    with_config(|cfg| cfg.trader.time_override_loss_threshold_percent)
 }
 
 /// Get position close cooldown in minutes

@@ -110,6 +110,7 @@ errors-strategies-no-performance = Nenhum dado de desempenho disponível para es
 errors-strategies-performance-failed = Falha ao obter as estatísticas de desempenho
 errors-strategies-schemas-failed = Falha ao obter os esquemas de condições
 errors-strategies-evaluation-failed = Falha na avaliação da estratégia
+errors-strategies-test-data-without-price = Dados de mercado ou de posição enviados precisam de um preço atual
 
 errors-transactions-own-wallet-unavailable = A carteira principal não está configurada
 errors-transactions-invalid-subject = O assunto da transação não é um endereço Solana válido

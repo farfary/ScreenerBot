@@ -67,6 +67,42 @@ const FIELDS: &[(&str, MessageId)] = &[
     ("timeframe", ids::STRATEGIES_ERROR_FIELD_TIMEFRAME),
     ("window", ids::STRATEGIES_ERROR_FIELD_WINDOW),
     ("within candles", ids::STRATEGIES_ERROR_FIELD_WITHIN_CANDLES),
+    ("change", ids::STRATEGIES_ERROR_FIELD_CHANGE),
+    ("end hour", ids::STRATEGIES_ERROR_FIELD_END_HOUR),
+    (
+        "entry liquidity",
+        ids::STRATEGIES_ERROR_FIELD_ENTRY_LIQUIDITY,
+    ),
+    ("giveback", ids::STRATEGIES_ERROR_FIELD_GIVEBACK),
+    ("highest high", ids::STRATEGIES_ERROR_FIELD_HIGHEST_HIGH),
+    (
+        "long window transactions",
+        ids::STRATEGIES_ERROR_FIELD_LONG_WINDOW_TRANSACTIONS,
+    ),
+    ("maximum drop", ids::STRATEGIES_ERROR_FIELD_MAXIMUM_DROP),
+    ("minimum drop", ids::STRATEGIES_ERROR_FIELD_MINIMUM_DROP),
+    ("multiple", ids::STRATEGIES_ERROR_FIELD_MULTIPLE),
+    ("pool liquidity", ids::STRATEGIES_ERROR_FIELD_POOL_LIQUIDITY),
+    ("ratio", ids::STRATEGIES_ERROR_FIELD_RATIO),
+    (
+        "remaining position value",
+        ids::STRATEGIES_ERROR_FIELD_REMAINING_POSITION_VALUE,
+    ),
+    ("signal", ids::STRATEGIES_ERROR_FIELD_SIGNAL),
+    ("squeeze width", ids::STRATEGIES_ERROR_FIELD_SQUEEZE_WIDTH),
+    (
+        "standard deviations",
+        ids::STRATEGIES_ERROR_FIELD_STANDARD_DEVIATIONS,
+    ),
+    ("start hour", ids::STRATEGIES_ERROR_FIELD_START_HOUR),
+    ("subject", ids::STRATEGIES_ERROR_FIELD_SUBJECT),
+    (
+        "token creation time",
+        ids::STRATEGIES_ERROR_FIELD_TOKEN_CREATION_TIME,
+    ),
+    ("total volume", ids::STRATEGIES_ERROR_FIELD_TOTAL_VOLUME),
+    ("trade size", ids::STRATEGIES_ERROR_FIELD_TRADE_SIZE),
+    ("vwap", ids::STRATEGIES_ERROR_FIELD_VWAP),
 ];
 
 /// Parameter ids whose spaced form is not their field label: a missing or mistyped parameter
@@ -87,6 +123,16 @@ const PARAMETER_FIELDS: &[(&str, MessageId)] = &[
         ids::STRATEGIES_ERROR_FIELD_MINIMUM_TRANSACTIONS,
     ),
     ("threshold_pct", ids::STRATEGIES_ERROR_FIELD_THRESHOLD),
+    ("change_pct", ids::STRATEGIES_ERROR_FIELD_CHANGE),
+    ("distance_pct", ids::STRATEGIES_ERROR_FIELD_DISTANCE),
+    ("giveback_pct", ids::STRATEGIES_ERROR_FIELD_GIVEBACK),
+    ("max_drop_pct", ids::STRATEGIES_ERROR_FIELD_MAXIMUM_DROP),
+    ("min_drop_pct", ids::STRATEGIES_ERROR_FIELD_MINIMUM_DROP),
+    (
+        "squeeze_width_pct",
+        ids::STRATEGIES_ERROR_FIELD_SQUEEZE_WIDTH,
+    ),
+    ("std_dev", ids::STRATEGIES_ERROR_FIELD_STANDARD_DEVIATIONS),
 ];
 
 const EXPECTED: &[(&str, MessageId)] = &[
@@ -106,6 +152,27 @@ const DATA: &[(&str, MessageId)] = &[
         "transaction counts",
         ids::STRATEGIES_ERROR_DATA_TRANSACTION_COUNTS,
     ),
+    (
+        "entry liquidity",
+        ids::STRATEGIES_ERROR_DATA_ENTRY_LIQUIDITY,
+    ),
+    (
+        "entry pool liquidity",
+        ids::STRATEGIES_ERROR_DATA_ENTRY_POOL_LIQUIDITY,
+    ),
+    (
+        "real pool reserves",
+        ids::STRATEGIES_ERROR_DATA_REAL_POOL_RESERVES,
+    ),
+    (
+        "remaining position value",
+        ids::STRATEGIES_ERROR_DATA_REMAINING_POSITION_VALUE,
+    ),
+    (
+        "token creation time",
+        ids::STRATEGIES_ERROR_DATA_TOKEN_CREATION_TIME,
+    ),
+    ("trade size", ids::STRATEGIES_ERROR_DATA_TRADE_SIZE),
 ];
 
 const INDICATORS: &[(&str, MessageId)] = &[
@@ -131,6 +198,19 @@ const INDICATORS: &[(&str, MessageId)] = &[
     ),
     ("rsi", ids::STRATEGIES_ERROR_INDICATOR_RSI),
     ("volume spike", ids::STRATEGIES_ERROR_INDICATOR_VOLUME_SPIKE),
+    (
+        "bollinger bands",
+        ids::STRATEGIES_ERROR_INDICATOR_BOLLINGER_BANDS,
+    ),
+    (
+        "pullback from high",
+        ids::STRATEGIES_ERROR_INDICATOR_PULLBACK_FROM_HIGH,
+    ),
+    (
+        "volatility range",
+        ids::STRATEGIES_ERROR_INDICATOR_VOLATILITY_RANGE,
+    ),
+    ("vwap", ids::STRATEGIES_ERROR_INDICATOR_VWAP),
 ];
 
 const RULE_FAULTS: &[(&str, MessageId)] = &[

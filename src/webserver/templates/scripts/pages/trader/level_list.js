@@ -1,7 +1,7 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 //
-//! The ladder editor of the Auto Trader tabs: a list of steps, each a level and an amount, edited as one config field, configured as the take-profit ladder or the DCA ladder.
+//! The ladder editor of the Auto Trader tabs: a list of steps, each a level and an amount, edited as one config field, configured as the take-profit ladder, the DCA ladder or the trailing stop's distance bands.
 
 import { formatNumber, formatSol } from "../../core/format.js";
 
@@ -55,6 +55,13 @@ function dcaStrictOrder(el) {
   return basis?.value === "first_entry";
 }
 
+/** The number held by the input the ladder `el` names in `data-{name}`, or NaN. */
+function linkedNumber(el, name) {
+  const id = el.dataset[name];
+  const input = id ? document.getElementById(id) : null;
+  return input ? parseFloat(input.value) : Number.NaN;
+}
+
 /**
  * Appends a take-profit step to `levels` and `amounts`. The new level is twice the last
  * one, capped at the profit maximum; the add control is disabled while the last level is
@@ -95,26 +102,45 @@ function appendDcaStep(levels, amounts, { first, second }) {
 }
 
 /**
- * The two ladders this editor draws, selected by the element's `data-ladder`: the
- * classes, texts and rules of their two columns. A `magnitude` column stores a
+ * Appends a trailing band to `levels` and `amounts`: twice the last threshold, or twice
+ * the activation for a first band, capped at the profit maximum and never below the
+ * profit minimum; it trails by the last band's distance, or the base distance for a
+ * first band, kept inside the distance bounds.
+ */
+function appendTrailingBand(levels, amounts, { first, second }, el) {
+  const lastLevel = levels[levels.length - 1];
+  const from = Number.isFinite(lastLevel) ? lastLevel : linkedNumber(el, "activation");
+  levels.push(Number.isFinite(from) ? Math.min(Math.max(from * 2, first.min), first.max) : first.min);
+  const lastAmount = amounts[amounts.length - 1];
+  const distance = Number.isFinite(lastAmount) ? lastAmount : linkedNumber(el, "distance");
+  amounts.push(
+    Number.isFinite(distance) ? Math.min(Math.max(distance, second.min), second.max) : second.min
+  );
+}
+
+/**
+ * The ladders this editor draws, selected by the element's `data-ladder`: the
+ * classes, texts and rules of their two columns; each text is a function of the step
+ * number it names, so every message id stays a static string. A `magnitude` column stores a
  * negative percent and shows its magnitude after a fixed "−".
  */
 const LADDERS = {
   take_profit: {
     first: {
       className: "level-list-profit",
-      caption: "trader-take-profit-profit-caption",
-      label: "trader-take-profit-profit-label",
+      caption: () => I18n.t("trader-take-profit-profit-caption"),
+      label: (args) => I18n.t("trader-take-profit-profit-label", args),
     },
     second: {
       className: "level-list-sell",
-      caption: "trader-take-profit-sell-caption",
-      label: "trader-take-profit-sell-label",
+      caption: () => I18n.t("trader-take-profit-sell-caption"),
+      label: (args) => I18n.t("trader-take-profit-sell-label", args),
     },
-    step: "trader-take-profit-step",
-    add: "trader-take-profit-add-step",
-    remove: "trader-take-profit-remove-step",
+    step: (args) => I18n.t("trader-take-profit-step", args),
+    add: () => I18n.t("trader-take-profit-add-step"),
+    remove: (args) => I18n.t("trader-take-profit-remove-step", args),
     amountColumn: false,
+    minSteps: 1,
     append: appendTakeProfitStep,
     // No step fits above a last level at the profit maximum: levels rise strictly.
     full: (el, levels, { first }) => levels[levels.length - 1] >= first.max,
@@ -147,19 +173,20 @@ const LADDERS = {
   dca: {
     first: {
       className: "level-list-drop",
-      caption: "trader-dca-drop-caption",
-      label: "trader-dca-drop-label",
+      caption: () => I18n.t("trader-dca-drop-caption"),
+      label: (args) => I18n.t("trader-dca-drop-label", args),
       magnitude: true,
     },
     second: {
       className: "level-list-size",
-      caption: "trader-dca-size-caption",
-      label: "trader-dca-size-label",
+      caption: () => I18n.t("trader-dca-size-caption"),
+      label: (args) => I18n.t("trader-dca-size-label", args),
     },
-    step: "trader-dca-step",
-    add: "trader-dca-add-step",
-    remove: "trader-dca-remove-step",
+    step: (args) => I18n.t("trader-dca-step", args),
+    add: () => I18n.t("trader-dca-add-step"),
+    remove: (args) => I18n.t("trader-dca-remove-step", args),
     amountColumn: true,
+    minSteps: 1,
     append: appendDcaStep,
     // With strictly deeper steps, none fits below a last drop at the deepest level.
     full: (el, levels, { first }) =>
@@ -186,6 +213,55 @@ const LADDERS = {
         levels.some((value, index) => index > 0 && value >= levels[index - 1])
       ) {
         return I18n.t("trader-dca-error-order");
+      }
+      return null;
+    },
+  },
+  trailing: {
+    first: {
+      className: "level-list-band-profit",
+      caption: () => I18n.t("trader-trailing-band-profit-caption"),
+      label: (args) => I18n.t("trader-trailing-band-profit-label", args),
+    },
+    second: {
+      className: "level-list-band-distance",
+      caption: () => I18n.t("trader-trailing-band-distance-caption"),
+      label: (args) => I18n.t("trader-trailing-band-distance-label", args),
+    },
+    step: (args) => I18n.t("trader-trailing-band", args),
+    add: () => I18n.t("trader-trailing-add-band"),
+    remove: (args) => I18n.t("trader-trailing-remove-band", args),
+    amountColumn: false,
+    // No band is a valid list: the base distance applies at every profit.
+    minSteps: 0,
+    append: appendTrailingBand,
+    // No band fits above a last threshold at the profit maximum: thresholds rise strictly.
+    full: (el, levels, { first }) => levels[levels.length - 1] >= first.max,
+    /**
+     * Mirrors the exit policy's own validation: every threshold and distance inside its
+     * bounds, thresholds rising strictly above the activation, and each band trailing
+     * by less than its threshold.
+     */
+    error(el, levels, amounts, { first, second }) {
+      if (levels.some((value) => outside(value, first))) {
+        return I18n.t("trader-trailing-band-error-profit-range", {
+          min: bound(first.min),
+          max: bound(first.max),
+        });
+      }
+      if (amounts.some((value) => outside(value, second))) {
+        return I18n.t("trader-trailing-band-error-distance-range", {
+          min: bound(second.min),
+          max: bound(second.max),
+        });
+      }
+      const activation = linkedNumber(el, "activation");
+      const floorOf = (index) => (index > 0 ? levels[index - 1] : activation);
+      if (levels.some((value, index) => Number.isFinite(floorOf(index)) && value <= floorOf(index))) {
+        return I18n.t("trader-trailing-band-error-order");
+      }
+      if (amounts.some((value, index) => value >= levels[index])) {
+        return I18n.t("trader-trailing-band-error-distance");
       }
       return null;
     },
@@ -300,12 +376,12 @@ function stepRow(el, step, level, amount) {
 
   const name = document.createElement("span");
   name.className = "level-list-step";
-  name.textContent = I18n.t(ladder.step, { step });
+  name.textContent = ladder.step({ step });
 
   const remove = document.createElement("button");
   remove.type = "button";
   remove.className = "btn btn-sm btn-ghost level-list-remove";
-  remove.setAttribute("aria-label", I18n.t(ladder.remove, { step }));
+  remove.setAttribute("aria-label", ladder.remove({ step }));
   const icon = document.createElement("i");
   icon.className = "icon-x";
   remove.append(icon);
@@ -322,14 +398,14 @@ function stepRow(el, step, level, amount) {
     numberInput(
       ladder.first,
       level,
-      I18n.t(ladder.first.label, { step }),
+      ladder.first.label({ step }),
       settings?.first,
       settings?.firstUnit
     ),
     numberInput(
       ladder.second,
       amount,
-      I18n.t(ladder.second.label, { step }),
+      ladder.second.label({ step }),
       settings?.second,
       settings?.secondUnit
     )
@@ -383,7 +459,7 @@ function refresh(el) {
     add.disabled = !settings || count >= settings.maxItems || ladder.full(el, levels, settings);
   }
   el.querySelectorAll(".level-list-remove").forEach((button) => {
-    button.disabled = count <= 1;
+    button.disabled = count <= ladder.minSteps;
   });
   const message = el.querySelector(":scope > .level-list-error");
   if (message) {
@@ -415,8 +491,8 @@ export function renderLevels(el, levels, amounts) {
     };
     caption.append(
       column(""),
-      column(I18n.t(ladder.first.caption)),
-      column(I18n.t(ladder.second.caption)),
+      column(ladder.first.caption()),
+      column(ladder.second.caption()),
       ...(ladder.amountColumn ? [column("")] : []),
       column("")
     );
@@ -427,11 +503,11 @@ export function renderLevels(el, levels, amounts) {
     const icon = document.createElement("i");
     icon.className = "icon-plus";
     const label = document.createElement("span");
-    label.textContent = I18n.t(ladder.add);
+    label.textContent = ladder.add();
     add.append(icon, label);
     add.addEventListener("click", () => {
       const current = readLevels(el);
-      ladder.append(current.levels, current.amounts, SETTINGS.get(el));
+      ladder.append(current.levels, current.amounts, SETTINGS.get(el), el);
       renderLevels(el, current.levels, current.amounts);
       el.dispatchEvent(new Event("input", { bubbles: true }));
     });
@@ -444,6 +520,8 @@ export function renderLevels(el, levels, amounts) {
     el.replaceChildren(list, add, message);
     el.addEventListener("input", () => refresh(el));
   }
+  // Captions name the columns of rows; a list with no rows (no trailing band) has none.
+  caption.hidden = levels.length === 0;
   list.replaceChildren(
     caption,
     ...levels.map((level, index) => stepRow(el, index + 1, level, amounts[index]))
@@ -460,6 +538,14 @@ export function configureLevels(el, { first, second, maxItems, firstUnit, second
   SETTINGS.set(el, { first, second, maxItems, firstUnit, secondUnit, minimum });
   const { levels, amounts } = readLevels(el);
   renderLevels(el, levels, amounts);
+}
+
+/**
+ * Redraws the validation of the ladder `el` after an input it reads changed: the DCA
+ * basis, or the trailing activation.
+ */
+export function refreshLevels(el) {
+  if (el) refresh(el);
 }
 
 /**

@@ -477,6 +477,18 @@ copy-validate-trailing-distance = Khoảng cách trailing phải lớn hơn 0% v
 copy-validate-take-profit = Take profit phải lớn hơn 0%.
 copy-validate-time-duration = Quy tắc thời gian cần khoảng thời gian lớn hơn không.
 copy-validate-time-threshold = Ngưỡng của quy tắc thời gian là một khoản lỗ: hãy dùng 0% hoặc số âm.
+# $reason is the message of the rule the stored overrides break.
+copy-exit-issue-warning = Quy tắc thoát cần được xem lại: { $reason } Cho đến khi bạn sửa, các vị thế dùng thiết lập của Trader cho quy tắc đó.
+# $distance and $activation are percentages.
+copy-exit-issue-trailing-distance-above-activation = Khoảng cách trailing { $distance }% phải nhỏ hơn mức kích hoạt, hiện là { $activation }%.
+# $maximum is the number of bands allowed.
+copy-exit-issue-trailing-band-count = Trailing stop chỉ có tối đa { $maximum } bậc.
+# $profit and $floor are percentages.
+copy-exit-issue-trailing-band-order = Bậc trailing tại { $profit }% phải bắt đầu trên { $floor }%, là mức kích hoạt hoặc bậc trước đó.
+# $profit and $distance are percentages.
+copy-exit-issue-trailing-band-distance = Bậc trailing tại { $profit }% phải bám theo lớn hơn 0% và nhỏ hơn điểm bắt đầu, hiện là { $distance }%.
+# $value is a percentage.
+copy-exit-issue-time-loss-threshold = Ngưỡng của quy tắc thời gian lỗ phải là mức lỗ từ -100% đến 0%, hiện là { $value }%.
 copy-warning-mirror = Chỉ lệnh bán của ví mới đóng các khoản nắm giữ: không có stop loss bảo vệ, và token mà ví không bao giờ bán sẽ được giữ mãi.
 copy-warning-no-rules = Không có quy tắc thoát nào đang bật và lệnh bán của ví bị bỏ qua: các khoản nắm giữ sẽ không bao giờ được bán.
 copy-warning-no-stop-loss = Không có stop loss nào áp dụng: token đang giảm sẽ được giữ cho đến khi một quy tắc khác hoặc ví bán.

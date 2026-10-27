@@ -2,10 +2,12 @@
 // SPDX-License-Identifier: BUSL-1.1
 //
 // The sortable wallet list: one row per task with its state (and why it is
-// paused), its execution mode, P&L with a trend, and its budget use.
+// paused), its execution mode, P&L with a trend, its budget use, and a warning
+// while its exit overrides no longer fit the Trader's exit rules.
 import { renderAddress } from "../../ui/token_identity.js";
 import { sparkline } from "./charts.js";
 import {
+  exitPolicyIssueHtml,
   modeLabel,
   pauseReasonShort,
   segmented,
@@ -107,7 +109,7 @@ export function createTaskList(page) {
       <span class="copy-row-line copy-row-detail">
         <span class="copy-row-budget"><span class="copy-meter" aria-hidden="true"><span style="width:${budgetPct.toFixed(1)}%"></span></span><span>${esc(I18n.t("copy-budget-of", { spent: solNumber(spent, 2), budget: solNumber(budget, 2) }))}</span></span>
         ${sparkline(task.pnl_trend)}
-      </span>
+      </span>${exitPolicyIssueHtml(task, esc, "copy-row-line copy-row-warning")}
     </button>`;
   }
 

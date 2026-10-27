@@ -483,6 +483,18 @@ copy-validate-trailing-distance = İz süren stop mesafesi %0'ın üzerinde ve e
 copy-validate-take-profit = Kâr al %0'ın üzerinde olmalıdır.
 copy-validate-time-duration = Süre kuralı sıfırdan büyük bir süre gerektirir.
 copy-validate-time-threshold = Süre kuralı eşiği bir zarardır: %0 veya negatif bir sayı kullanın.
+# $reason is the message of the rule the stored overrides break.
+copy-exit-issue-warning = Çıkış kuralları dikkat gerektiriyor: { $reason } Siz düzeltene kadar varlıklar bu kural için Trader ayarını kullanır.
+# $distance and $activation are percentages.
+copy-exit-issue-trailing-distance-above-activation = %{ $distance } takip mesafesi aktivasyonun altında olmalıdır, şu an %{ $activation }.
+# $maximum is the number of bands allowed.
+copy-exit-issue-trailing-band-count = Takip eden stop en fazla { $maximum } kademe içerebilir.
+# $profit and $floor are percentages.
+copy-exit-issue-trailing-band-order = %{ $profit } seviyesindeki takip kademesi, aktivasyon veya önceki kademe olan %{ $floor } üzerinde başlamalıdır.
+# $profit and $distance are percentages.
+copy-exit-issue-trailing-band-distance = %{ $profit } seviyesindeki takip kademesi %0'dan fazla ve başlangıcından az takip etmelidir, şu an %{ $distance }.
+# $value is a percentage.
+copy-exit-issue-time-loss-threshold = Zararda süre kuralının eşiği %-100 ile %0 arasında bir zarar olmalıdır, şu an %{ $value }.
 copy-warning-mirror = Varlıkları yalnızca cüzdanın satışları kapatır: hiçbir zarar durdur onları korumaz ve cüzdanın hiç satmadığı bir token elde kalır.
 copy-warning-no-rules = Hiçbir çıkış kuralı açık değil ve cüzdan satışları yok sayılıyor: varlıklar hiç satılmaz.
 copy-warning-no-stop-loss = Zarar durdur uygulanmıyor: düşen bir token, başka bir kural veya cüzdan satana kadar elde tutulur.

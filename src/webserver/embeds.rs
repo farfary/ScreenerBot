@@ -518,6 +518,8 @@ pub const STRATEGIES_CONDITION_CATALOG_JS: &str =
     include_str!("templates/scripts/pages/strategies/condition_catalog.js");
 pub const STRATEGIES_CONDITION_TEXT_JS: &str =
     include_str!("templates/scripts/pages/strategies/condition_text.js");
+pub const STRATEGIES_TEST_RESULT_JS: &str =
+    include_str!("templates/scripts/pages/strategies/test_result.js");
 pub const TRADER_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/trader.js");
 pub const TRADER_EXAMPLES_JS: &str = include_str!("templates/scripts/pages/trader/examples.js");
 pub const TRADER_CONTROLS_JS: &str = include_str!("templates/scripts/pages/trader/controls.js");

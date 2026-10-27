@@ -55,12 +55,34 @@ tokens-positions-fact-opened = オープン日時
 tokens-positions-fact-exit-price = エグジット価格
 tokens-positions-fact-native-received = 受取 { -sol }
 tokens-positions-fact-closed-reason = クローズ理由
-tokens-positions-fact-target-min = 利益目標（最小）
-tokens-positions-fact-target-max = 利益目標（最大）
 tokens-positions-fact-highest = 最高値
 tokens-positions-fact-basis-peak = 最終購入後の高値
 tokens-positions-fact-lowest = 最安値
-tokens-positions-section-range = 目標とレンジ
+tokens-positions-section-range = 価格レンジ
+tokens-positions-section-exit-plan = イグジットプラン
+tokens-positions-plan-stop-loss = ストップロス
+# $step is the take-profit step's position in the ladder, from 1.
+tokens-positions-plan-step = 利確 { $step }
+# $profit is the formatted profit level, $share the formatted share of the position it sells.
+tokens-positions-plan-step-value = { $profit } で { $share } を売却
+tokens-positions-plan-step-taken = 売却済み
+tokens-positions-plan-trailing = トレーリングストップ
+# $activation is the formatted profit that arms the trail, $distance the formatted share it trails by.
+tokens-positions-plan-trailing-value = { $activation } で発動し、高値から { $distance } 下を追随
+# $step is the band's position in the list, from 1.
+tokens-positions-plan-trailing-band = トレーリング段階 { $step }
+# $profit is the formatted profit the band starts at, $distance the formatted share it trails by.
+tokens-positions-plan-trailing-band-value = { $profit } から、高値から { $distance } 下を追随
+tokens-positions-plan-break-even = 建値ストップ
+# $trigger and $offset are formatted profits.
+tokens-positions-plan-break-even-value = { $trigger } で発動し、{ $offset } で売却
+tokens-positions-plan-time-loss = 含み損時間による決済
+# $duration is a formatted duration, $threshold a formatted loss.
+tokens-positions-plan-time-loss-value = { $duration } 後、{ $threshold } 以下
+tokens-positions-plan-time-stagnation = 横ばいポジションの決済
+# $duration is a formatted duration, $band a formatted share.
+tokens-positions-plan-time-stagnation-value = { $duration } 後、エントリーから { $band } 以内の間
+tokens-positions-plan-none = 有効な決済ルールはありません
 tokens-positions-section-market = マーケットと保有
 tokens-positions-kicker = ポジション
 tokens-positions-fallback-symbol = トークン

@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: BUSL-1.1
 
 //! Pure: `ExitPolicy::from_config` — the single place that resolves the config values every
-//! exit rule used to read for itself.
+//! exit rule used to read for itself — and `ExitPolicy::validate`, the one owner of the
+//! rules a trader config and a copy task's merged overrides must both satisfy.
 //!
 //! Each sub-policy struct claims to carry an exact, fixed set of config fields. The
 //! failure mode this file exists to catch is a field wired to the WRONG getter — for
@@ -20,11 +21,13 @@
 use crate::common;
 
 use common::config_guard;
-use screenerbot::config::{DcaLevel, DcaMeasureFrom, TakeProfitLevel, TimeUnit};
+use screenerbot::config::{
+    DcaLevel, DcaMeasureFrom, TakeProfitLevel, TimeUnit, TraderConfig, TrailingStopBand,
+};
 use screenerbot::trader::evaluators::DcaConfigSnapshot;
 use screenerbot::trader::policy::{
-    BreakEvenPolicy, ExitPolicy, ExitPolicyOverrides, StopLossPolicy, TakeProfitPolicy, TimePolicy,
-    TimeStagnationPolicy, TrailingPolicy,
+    BreakEvenPolicy, ExitPolicy, ExitPolicyFault, ExitPolicyOverrides, StopLossPolicy,
+    TakeProfitPolicy, TimePolicy, TimeStagnationPolicy, TrailingPolicy,
 };
 
 #[test]
@@ -69,6 +72,7 @@ fn trailing_policy_carries_exactly_its_three_config_fields() {
             enabled: true,
             activation_pct: 22.0,
             distance_pct: 8.0,
+            bands: Vec::new(),
         }
     );
 }
@@ -280,4 +284,251 @@ fn task_override_changes_only_set_fields_and_unset_fields_inherit() {
     assert_eq!(resolved.take_profit, inherited.take_profit);
     assert_eq!(resolved.time, inherited.time);
     assert_eq!(resolved.dca.enabled, inherited.dca.enabled);
+}
+
+fn band(profit_pct: f64, distance_pct: f64) -> TrailingStopBand {
+    TrailingStopBand {
+        profit_pct,
+        distance_pct,
+    }
+}
+
+/// A trailing policy enabled at activation 20% and distance 10%, with `bands`.
+fn trailing_with(bands: Vec<TrailingStopBand>) -> TrailingPolicy {
+    TrailingPolicy {
+        enabled: true,
+        activation_pct: 20.0,
+        distance_pct: 10.0,
+        bands,
+    }
+}
+
+#[test]
+fn trailing_policy_carries_the_configured_bands_in_order() {
+    let _cfg = config_guard();
+    common::set_config(|cfg| {
+        cfg.trader.trailing_stop_band_profit_pct = vec![50.0, 100.0]; // default: []
+        cfg.trader.trailing_stop_band_distance_pct = vec![6.0, 4.0]; // default: []
+    });
+
+    assert_eq!(
+        ExitPolicy::from_config().trailing.bands,
+        vec![band(50.0, 6.0), band(100.0, 4.0)]
+    );
+}
+
+#[test]
+fn the_distance_in_force_is_the_highest_band_the_peak_reached() {
+    let trailing = trailing_with(vec![band(50.0, 6.0), band(100.0, 4.0), band(200.0, 2.0)]);
+
+    for (peak_profit_pct, expected) in [
+        (25.0, 10.0),
+        (49.9, 10.0),
+        (50.0, 6.0),
+        (99.0, 6.0),
+        (100.0, 4.0),
+        (199.0, 4.0),
+        (500.0, 2.0),
+    ] {
+        assert_eq!(
+            trailing.distance_in_force(peak_profit_pct),
+            expected,
+            "peak +{peak_profit_pct}%"
+        );
+    }
+    assert_eq!(trailing_with(Vec::new()).distance_in_force(500.0), 10.0);
+}
+
+#[test]
+fn trailing_bands_must_climb_above_the_activation_and_trail_inside_their_threshold() {
+    assert!(trailing_with(vec![band(50.0, 6.0), band(100.0, 4.0)])
+        .validate()
+        .is_ok());
+
+    for (case, bands) in [
+        ("at the activation", vec![band(20.0, 5.0)]),
+        ("below the activation", vec![band(15.0, 5.0)]),
+        ("not ascending", vec![band(100.0, 4.0), band(50.0, 6.0)]),
+        ("repeated threshold", vec![band(50.0, 6.0), band(50.0, 4.0)]),
+        ("distance at its threshold", vec![band(50.0, 50.0)]),
+        ("no distance", vec![band(50.0, 0.0)]),
+        ("not a number", vec![band(f64::NAN, 5.0)]),
+        (
+            "too many",
+            vec![
+                band(30.0, 5.0),
+                band(40.0, 5.0),
+                band(50.0, 5.0),
+                band(60.0, 5.0),
+            ],
+        ),
+    ] {
+        assert!(trailing_with(bands).validate().is_err(), "{case}");
+    }
+
+    // A switched-off trail is not checked, as the trader config never checked it.
+    let mut off = trailing_with(vec![band(5.0, 50.0)]);
+    off.enabled = false;
+    assert!(off.validate().is_ok());
+}
+
+#[test]
+fn the_trader_config_refuses_bands_the_policy_refuses() {
+    let mut trader = TraderConfig {
+        trailing_stop_enabled: true,
+        trailing_stop_activation_pct: 20.0,
+        trailing_stop_distance_pct: 10.0,
+        trailing_stop_band_profit_pct: vec![50.0, 100.0],
+        trailing_stop_band_distance_pct: vec![6.0, 4.0],
+        ..TraderConfig::default()
+    };
+    assert!(trader.validate().is_ok());
+
+    trader.trailing_stop_band_profit_pct = vec![100.0, 50.0];
+    assert!(trader.validate().is_err(), "descending thresholds");
+
+    trader.trailing_stop_band_profit_pct = vec![50.0];
+    assert!(
+        trader.validate().is_err(),
+        "a threshold without its distance"
+    );
+
+    // A copy task can switch the trail on and inherit the bands, so their order is
+    // checked while the global trail is off too.
+    trader.trailing_stop_enabled = false;
+    trader.trailing_stop_band_profit_pct = vec![100.0, 50.0];
+    trader.trailing_stop_band_distance_pct = vec![6.0, 4.0];
+    assert!(
+        trader.validate().is_err(),
+        "descending thresholds while the trail is off"
+    );
+    trader.trailing_stop_band_profit_pct = vec![20.0];
+    trader.trailing_stop_band_distance_pct = vec![5.0];
+    assert!(
+        trader.validate().is_err(),
+        "a band at the activation while the trail is off"
+    );
+    trader.trailing_stop_band_profit_pct = vec![50.0, 100.0];
+    trader.trailing_stop_band_distance_pct = vec![6.0, 4.0];
+    assert!(trader.validate().is_ok());
+}
+
+#[test]
+fn a_task_that_sets_its_own_trail_drops_the_global_bands() {
+    let mut base = ExitPolicy::from_trader_config(&TraderConfig {
+        trailing_stop_band_profit_pct: vec![50.0],
+        trailing_stop_band_distance_pct: vec![6.0],
+        ..TraderConfig::default()
+    });
+    let mut switched_on = base.clone();
+    let mut overrides = ExitPolicyOverrides::default();
+    overrides.trailing.enabled = Some(true);
+    switched_on.apply_overrides(&overrides);
+    assert_eq!(switched_on.trailing.bands, vec![band(50.0, 6.0)]);
+
+    overrides.trailing.distance_pct = Some(4.0);
+    base.apply_overrides(&overrides);
+    assert!(base.trailing.bands.is_empty());
+}
+
+#[test]
+fn task_overrides_are_validated_on_the_policy_they_make() {
+    let base = || ExitPolicy::from_trader_config(&TraderConfig::default());
+
+    let mut overrides = ExitPolicyOverrides::default();
+    assert!(overrides.validate_over(base()).is_ok());
+
+    // Global activation 10%: a 12% distance could never sell at a profit.
+    overrides.trailing.distance_pct = Some(12.0);
+    assert!(overrides.validate_over(base()).is_err());
+    overrides.trailing.activation_pct = Some(30.0);
+    let merged = overrides
+        .validate_over(base())
+        .expect("a distance below the task's own activation");
+    assert_eq!(merged.trailing.activation_pct, 30.0);
+    assert_eq!(merged.trailing.distance_pct, 12.0);
+
+    let mut positive_loss = ExitPolicyOverrides::default();
+    positive_loss.time.loss_threshold_pct = Some(5.0);
+    assert!(positive_loss.validate_over(base()).is_err());
+
+    let mut no_target = ExitPolicyOverrides::default();
+    no_target.roi.target_profit_pct = Some(0.0);
+    assert!(no_target.validate_over(base()).is_err());
+
+    let mut whole_position = ExitPolicyOverrides::default();
+    whole_position.stop_loss.partial_exit_default_pct = Some(100.0);
+    assert!(whole_position.validate_over(base()).is_err());
+}
+
+#[test]
+fn a_rule_a_tasks_stored_overrides_break_runs_as_the_global_rule() {
+    let global = ExitPolicy::from_trader_config(&TraderConfig {
+        trailing_stop_enabled: true,
+        trailing_stop_activation_pct: 10.0,
+        trailing_stop_distance_pct: 5.0,
+        time_override_enabled: true,
+        ..TraderConfig::default()
+    });
+    let mut overrides = ExitPolicyOverrides::default();
+    // Valid when stored over a 20% activation; the global activation was lowered since.
+    overrides.trailing.distance_pct = Some(12.0);
+    // Stored before the time threshold was bounded at -100.
+    overrides.time.loss_threshold_pct = Some(-150.0);
+    overrides.stop_loss.threshold_pct = Some(25.0);
+
+    let mut resolved = global.clone();
+    resolved.apply_overrides(&overrides);
+
+    assert_eq!(resolved.trailing, global.trailing);
+    assert_eq!(resolved.time, global.time);
+    assert_eq!(resolved.stop_loss.threshold_pct, 25.0);
+    assert!(resolved.validate().is_ok());
+}
+
+#[test]
+fn every_exit_policy_fault_has_catalog_text() {
+    let listed = |fault: ExitPolicyFault| match fault {
+        ExitPolicyFault::StopLossThreshold { .. }
+        | ExitPolicyFault::PartialShare { .. }
+        | ExitPolicyFault::TakeProfitTarget { .. }
+        | ExitPolicyFault::TrailingActivation { .. }
+        | ExitPolicyFault::TrailingDistance { .. }
+        | ExitPolicyFault::TrailingDistanceNotBelowActivation { .. }
+        | ExitPolicyFault::TrailingBandCount { .. }
+        | ExitPolicyFault::TrailingBandOrder { .. }
+        | ExitPolicyFault::TrailingBandDistance { .. }
+        | ExitPolicyFault::TimeDuration { .. }
+        | ExitPolicyFault::TimeLossThreshold { .. } => fault,
+    };
+    for fault in [
+        listed(ExitPolicyFault::StopLossThreshold { value: 120.0 }),
+        listed(ExitPolicyFault::PartialShare { value: 100.0 }),
+        listed(ExitPolicyFault::TakeProfitTarget { value: 0.0 }),
+        listed(ExitPolicyFault::TrailingActivation { value: 0.0 }),
+        listed(ExitPolicyFault::TrailingDistance { value: 0.0 }),
+        listed(ExitPolicyFault::TrailingDistanceNotBelowActivation {
+            distance: 12.0,
+            activation: 10.0,
+        }),
+        listed(ExitPolicyFault::TrailingBandCount { count: 4 }),
+        listed(ExitPolicyFault::TrailingBandOrder {
+            profit: 15.0,
+            floor: 20.0,
+        }),
+        listed(ExitPolicyFault::TrailingBandDistance {
+            profit: 50.0,
+            distance: 50.0,
+        }),
+        listed(ExitPolicyFault::TimeDuration { seconds: 0.0 }),
+        listed(ExitPolicyFault::TimeLossThreshold { value: -150.0 }),
+    ] {
+        let text = fault.ui_text();
+        assert_ne!(
+            screenerbot::i18n::format_en(&text.id, None),
+            text.id,
+            "missing {}",
+            text.id
+        );
+    }
 }

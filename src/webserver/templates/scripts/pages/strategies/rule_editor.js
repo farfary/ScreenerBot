@@ -6,12 +6,14 @@
 import { formatFixed, formatList } from "../../core/format.js";
 import {
   conditionName,
+  formatDurationParam,
   formatParamValue,
   inheritedParamText,
   inputUnitText,
   optionLabel,
   optionValue,
   paramDescription,
+  paramHint,
   paramLabel,
 } from "./condition_text.js";
 import * as tree from "./rule_tree.js";
@@ -26,6 +28,7 @@ export function createRuleEditor({
   $,
   Utils,
   renderStateView,
+  renderVerdict,
   announce,
   confirm,
   enhanceAllSelects,
@@ -36,6 +39,8 @@ export function createRuleEditor({
   let root = tree.parseRules(null, conditionSchemas);
   const open = new Set();
   let pendingFocus = null;
+  // Test verdicts by node id, kept across redraws until cleared.
+  let verdicts = new Map();
 
   const escape = (text) => Utils.escapeHtml(String(text ?? ""));
   const strategyType = () => state.currentStrategy?.type;
@@ -116,6 +121,14 @@ export function createRuleEditor({
     return chips.length ? `<span class="rule-chips">${chips.join("")}</span>` : "";
   }
 
+  /** The test mark of a node: its verdict and an unknown condition's reason, or nothing. */
+  function testMark(node) {
+    const mark = verdicts.get(node.id);
+    return mark
+      ? renderVerdict(mark, { condition: node.kind === "condition" })
+      : { verdict: "", reason: "" };
+  }
+
   /** Switch, invert, duplicate, move and remove of a condition row or a nested group. */
   function renderActions(node, siblings) {
     const index = siblings.indexOf(node);
@@ -136,43 +149,24 @@ export function createRuleEditor({
   /** One-line summary of a condition: every schema parameter in editor order. */
   function buildConditionSummary(node) {
     const params = conditionSchemas?.[node.type]?.parameters || {};
-    // A lookback given as `time_value` + `time_unit` is one "Period" entry.
+    // A duration given as `time_value` + `time_unit` is one entry under the amount's label.
     const hasPeriod = Object.hasOwn(params, "time_value") && Object.hasOwn(params, "time_unit");
 
     const parts = Object.entries(params).flatMap(([key, spec]) => {
       if (hasPeriod && key === "time_unit") return [];
-      if (hasPeriod && key === "time_value") {
-        return [periodText(node.params.time_value, node.params.time_unit)];
-      }
       const value = node.params[key];
-      return [
-        I18n.t("strategies-summary-param", {
-          label: paramLabel(spec, key),
-          value:
-            value === null && spec.optional
-              ? inheritedParamText(spec, state.currentStrategy?.[key])
-              : formatParamValue(value, spec),
-        }),
-      ];
+      let text;
+      if (hasPeriod && key === "time_value") {
+        text = formatDurationParam(value, node.params.time_unit);
+      } else if (value === null && spec.optional) {
+        text = inheritedParamText(spec, state.currentStrategy?.[key]);
+      } else {
+        text = formatParamValue(value, spec);
+      }
+      return [I18n.t("strategies-summary-param", { label: paramLabel(spec, key), value: text })];
     });
 
     return parts.length ? formatList(parts, { type: "unit" }) : I18n.t("strategies-summary-none");
-  }
-
-  /** A lookback amount and its unit as one summary entry. */
-  function periodText(value, unit) {
-    // Ids are the `time_unit` values of the price change condition.
-    const text = value === null ? "—" : amount(Number(value));
-    switch (unit) {
-      case "SECONDS":
-        return I18n.t("strategies-summary-period-seconds", { amount: text });
-      case "MINUTES":
-        return I18n.t("strategies-summary-period-minutes", { amount: text });
-      case "HOURS":
-        return I18n.t("strategies-summary-period-hours", { amount: text });
-      default:
-        return text;
-    }
   }
 
   /** The `<option>` list of an enum parameter, with the unset choice of an optional one. */
@@ -257,6 +251,7 @@ export function createRuleEditor({
       const errorId = `param-${node.id}-${key}-error`;
       const flags = { invalid: Boolean(problem), errorId };
       const description = paramDescription(spec);
+      const hint = spec.hint ? paramHint(spec, node.params[key]) : "";
       const control =
         keys.length > 1
           ? renderPeriodInput(node, spec, params.time_unit, flags)
@@ -266,6 +261,7 @@ export function createRuleEditor({
           <label for="param-${node.id}-${key}">${escape(paramLabel(spec, key))}</label>
           ${control}
           ${description ? `<div class="property-description">${escape(description)}</div>` : ""}
+          ${spec.hint ? `<div class="property-description" data-hint aria-live="polite">${escape(hint)}</div>` : ""}
           <div class="param-field-error" id="${errorId}">${problem ? escape(problemText(problem)) : ""}</div>
         </div>
       `;
@@ -287,6 +283,7 @@ export function createRuleEditor({
       .filter(Boolean)
       .join(" ");
     const noted = own.find(isNodeProblem);
+    const mark = testMark(node);
     const label = escape(I18n.attr("strategies-row-expand", "aria-label"));
     return `
       <div class="${classes}" data-node-id="${node.id}" data-kind="condition">
@@ -297,9 +294,11 @@ export function createRuleEditor({
             <span class="rule-summary summary-content">${node.known ? escape(buildConditionSummary(node)) : ""}</span>
             ${renderChips(node)}
           </button>
+          ${mark.verdict}
           ${renderActions(node, siblings)}
           <button type="button" class="btn-icon rule-chevron" data-action="toggle" tabindex="-1" aria-hidden="true" title="${label}"${node.known ? "" : " disabled"}><i class="icon-chevron-down"></i></button>
         </div>
+        ${mark.reason}
         ${noted ? `<div class="rule-node-problem" role="alert">${escape(problemText(noted))}</div>` : ""}
         <div class="rule-body" id="rule-body-${node.id}"${isOpen ? "" : " hidden"}>${isOpen ? renderParamEditor(node) : ""}</div>
       </div>`;
@@ -367,6 +366,7 @@ export function createRuleEditor({
         <div class="rule-group-head">
           ${renderMatchLine(group, sentence)}
           ${isRoot ? "" : renderChips(group)}
+          ${isRoot ? "" : testMark(group).verdict}
           ${invert}
         </div>
         ${noted && !isRoot ? `<div class="rule-node-problem" role="alert">${escape(problemText(noted))}</div>` : ""}
@@ -398,6 +398,8 @@ export function createRuleEditor({
           count: found.length,
           first: describeProblem(found[0]),
         });
+        // The line keeps to one row; the whole message stays readable as its tooltip.
+        bar.title = text;
         bar.innerHTML = `<i class="icon-triangle-alert" aria-hidden="true"></i> <span>${escape(text)}</span>`;
       }
     }
@@ -451,12 +453,15 @@ export function createRuleEditor({
     const summary = row.querySelector(".rule-summary");
     if (summary) summary.textContent = buildConditionSummary(node);
     const own = problems().filter((problem) => problem.nodeId === id);
+    const schemaParams = conditionSchemas?.[node.type]?.parameters || {};
     row.classList.toggle("has-problem", own.length > 0);
     row.querySelectorAll(".param-field").forEach((field) => {
       const keys = field.dataset.field.split(" ");
       const problem = own.find((candidate) => keys.includes(candidate.key));
       const error = field.querySelector(".param-field-error");
       if (error) error.textContent = problem ? problemText(problem) : "";
+      const hint = field.querySelector("[data-hint]");
+      if (hint) hint.textContent = paramHint(schemaParams[keys[0]], node.params[keys[0]]);
       field.querySelectorAll("[data-key]").forEach((control) => {
         if (problem && control.dataset.key === problem.key) {
           control.setAttribute("aria-invalid", "true");
@@ -488,6 +493,23 @@ export function createRuleEditor({
     if (!found.length) return true;
     revealProblem(found[0]);
     return false;
+  }
+
+  // --- Test verdicts -------------------------------------------------------------
+
+  /** Mark each node with its test verdict (node id to `{verdict, reason}`). */
+  function setVerdicts(next) {
+    verdicts = new Map(next);
+    render();
+  }
+
+  /** Take the test marks off the rules in place, so a field being edited keeps its focus. */
+  function clearVerdicts() {
+    if (!verdicts.size) return;
+    verdicts = new Map();
+    list()
+      ?.querySelectorAll("[data-test-mark]")
+      .forEach((element) => element.remove());
   }
 
   // --- Edits --------------------------------------------------------------------
@@ -700,6 +722,7 @@ export function createRuleEditor({
       root = tree.parseRules(rules, conditionSchemas);
       open.clear();
       pendingFocus = null;
+      verdicts = new Map();
       render();
     },
     serialize: () => tree.serializeRules(root, conditionSchemas),
@@ -708,6 +731,8 @@ export function createRuleEditor({
     describeProblem,
     checkBeforeSave,
     revealProblem,
+    setVerdicts,
+    clearVerdicts,
     render,
     renderRules,
     renderConditionRow,

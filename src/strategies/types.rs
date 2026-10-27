@@ -7,6 +7,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+use crate::i18n::UiText;
 // Import unified types from OHLCV module
 use crate::ohlcvs::TimeframeBundle;
 use crate::tokens::Token;
@@ -39,8 +40,10 @@ pub enum ConditionData {
     Position,
     /// The live pool the price is read from.
     Pool,
-    /// The token's market snapshot (transaction counts per window).
+    /// The token's market snapshot (transaction counts per window, creation time).
     Market,
+    /// The evaluation instant alone.
+    Clock,
 }
 
 /// Strategy definition with rule tree and metadata
@@ -59,6 +62,37 @@ pub struct Strategy {
     pub updated_at: DateTime<Utc>,
     pub author: Option<String>,
     pub version: i32,
+    /// Exit strategies only: the entry strategies whose positions this one manages.
+    /// Empty manages every position, including those no entry strategy opened.
+    #[serde(default)]
+    pub entry_strategy_ids: Vec<String>,
+}
+
+impl Strategy {
+    /// The binding a strategy of `strategy_type` keeps from the requested entry strategy
+    /// ids: each id once, in the order given, for an exit strategy; none for an entry
+    /// strategy, which manages no positions.
+    pub fn entry_binding(strategy_type: StrategyType, requested: Vec<String>) -> Vec<String> {
+        if strategy_type != StrategyType::Exit {
+            return Vec::new();
+        }
+        let mut binding: Vec<String> = Vec::with_capacity(requested.len());
+        for id in requested {
+            let id = id.trim().to_owned();
+            if !id.is_empty() && !binding.contains(&id) {
+                binding.push(id);
+            }
+        }
+        binding
+    }
+
+    /// Whether this exit strategy manages a position opened by `entry_strategy_id`
+    /// (`None` for a position no entry strategy opened).
+    pub fn manages(&self, entry_strategy_id: Option<&str>) -> bool {
+        self.entry_strategy_ids.is_empty()
+            || entry_strategy_id
+                .is_some_and(|id| self.entry_strategy_ids.iter().any(|bound| bound == id))
+    }
 }
 
 /// Rule tree structure supporting logical operators
@@ -182,12 +216,19 @@ pub struct PositionData {
     /// What the tokens still held are worth at the live pool price, in the native coin;
     /// `None` when the token's decimals or a pool price are unknown.
     pub remaining_value_native: Option<f64>,
+    /// The pool's native reserves at the price the entry was made at; `None` for a
+    /// position opened before that reading was recorded, imported or adopted.
+    pub entry_liquidity_native: Option<f64>,
+    /// The pool `entry_liquidity_native` was read from.
+    pub entry_liquidity_pool: Option<String>,
 }
 
 /// Market-related data for evaluation
 #[derive(Debug, Clone)]
 pub struct MarketData {
     pub liquidity_sol: Option<f64>,
+    /// The pool `liquidity_sol` was read from; `None` when the reading names no pool.
+    pub liquidity_pool: Option<LiquidityPool>,
     /// Buy and sell counts per window from the cached token snapshot; `None` when the
     /// token is not cached.
     pub transactions: Option<TransactionCounts>,
@@ -198,6 +239,15 @@ pub struct MarketData {
     pub token_created_at: Option<DateTime<Utc>>,
     /// The trade size an entry would spend, in the native coin; `None` for an exit.
     pub reference_size_native: Option<f64>,
+}
+
+/// The pool a liquidity reading was taken from.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LiquidityPool {
+    pub address: String,
+    /// Whether the pool's decoder reports its native reserves as virtual reserves, as a
+    /// bonding curve does; `None` when the pool's program is not known.
+    pub virtual_reserves: Option<bool>,
 }
 
 /// Buy and sell transaction counts of one time window.
@@ -252,6 +302,35 @@ pub struct EvaluationResult {
     pub confidence: f64,
     pub execution_time_ms: u64,
     pub details: HashMap<String, serde_json::Value>,
+}
+
+/// What one node of a strategy's rule tree evaluated to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RuleVerdict {
+    Pass,
+    Fail,
+    /// The node's data was absent, too short, stale or unusable; it is neither a pass
+    /// nor a fail.
+    Unknown,
+    /// The node is switched off and was not evaluated.
+    Off,
+}
+
+/// The evaluation of one rule tree node and of every node under it, in the order the
+/// tree holds them: a group names its operator, a condition its type.
+#[derive(Debug, Clone, Serialize)]
+pub struct RuleOutcome {
+    pub verdict: RuleVerdict,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub operator: Option<LogicalOperator>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub condition_type: Option<String>,
+    /// Why the verdict is unknown: the data error the node reached.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<UiText>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub children: Vec<RuleOutcome>,
 }
 
 /// Performance tracking for strategies

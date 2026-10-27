@@ -1101,6 +1101,12 @@ config-trader-trade-size-sol = Quy mô giao dịch
 config-trader-trailing-stop-activation-pct = Ngưỡng kích hoạt trailing stop
     .hint = Kích hoạt trailing stop sau khi đạt mức lãi % này (10 = kích hoạt ở +10%)
     .unit = %
+config-trader-trailing-stop-band-distance-pct = Khoảng cách của các dải
+    .hint = Stop bám dưới đỉnh bao xa khi đạt tới dải; nhỏ hơn lợi nhuận đỉnh của dải
+    .unit = %
+config-trader-trailing-stop-band-profit-pct = Các dải trailing
+    .hint = Lợi nhuận đỉnh tính từ giá vào trung bình mà từ đó mỗi dải thay khoảng cách trailing
+    .unit = %
 config-trader-trailing-stop-distance-pct = Khoảng cách trailing stop
     .hint = Bám theo dưới đỉnh bao xa (5 = thoát nếu giá giảm 5% từ đỉnh)
     .unit = %

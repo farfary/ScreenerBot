@@ -159,6 +159,9 @@ pub trait PricingDriver: Send + Sync + 'static {
     fn token_pools(&self, mint: &str) -> Vec<PoolDescriptor>;
     /// The stable protocol slug of a known pool of `mint`.
     fn pool_protocol(&self, mint: &str, pool: &str) -> Option<&'static str>;
+    /// Whether the decoder of a known pool of `mint` reports its native reserves as
+    /// virtual reserves rather than the coin the pool holds; `None` for an unknown pool.
+    fn pool_reports_virtual_reserves(&self, mint: &str, pool: &str) -> Option<bool>;
     /// The pipeline's current state.
     fn status(&self) -> PricingStatus;
 }

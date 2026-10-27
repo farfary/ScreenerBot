@@ -125,6 +125,7 @@ errors-strategies-no-performance = لا تتوفر بيانات أداء لهذ�
 errors-strategies-performance-failed = تعذّر جلب إحصاءات الأداء
 errors-strategies-schemas-failed = تعذّر جلب مخططات الشروط
 errors-strategies-evaluation-failed = فشل تقييم الاستراتيجية
+errors-strategies-test-data-without-price = تحتاج بيانات السوق أو المركز المرسلة إلى سعر حالي
 
 # Transactions
 errors-transactions-own-wallet-unavailable = المحفظة الرئيسية غير مهيأة

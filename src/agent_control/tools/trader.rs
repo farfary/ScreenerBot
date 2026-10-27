@@ -61,6 +61,7 @@ impl Tool for GetTraderStatusTool {
                     "enabled": cfg.trader.trailing_stop_enabled,
                     "activation_pct": cfg.trader.trailing_stop_activation_pct,
                     "distance_pct": cfg.trader.trailing_stop_distance_pct,
+                    "bands": cfg.trader.trailing_stop_bands(),
                 },
                 "break_even": {
                     "enabled": cfg.trader.break_even_enabled,

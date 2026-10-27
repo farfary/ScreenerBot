@@ -7,7 +7,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 use crate::chains::ChainId;
-use crate::trader::policy::ExitPolicyOverrides;
+use crate::trader::policy::{ExitPolicy, ExitPolicyOverrides};
 
 mod paper;
 pub use paper::{
@@ -146,23 +146,37 @@ pub struct CopyTaskInput {
 }
 
 impl CopyTaskInput {
-    pub fn into_task(self, chain: ChainId, now: DateTime<Utc>) -> Result<CopyTask, CopySkip> {
+    /// Validate a new task. `exit_base` is the global exit policy the task's exit
+    /// overrides are layered onto; the merged policy must pass its own validation.
+    pub fn into_task(
+        self,
+        chain: ChainId,
+        now: DateTime<Utc>,
+        exit_base: ExitPolicy,
+    ) -> Result<CopyTask, CopySkip> {
         if self.mode != CopyMode::Paper {
             return Err(CopySkip::ModeTransitionRequired);
         }
-        self.into_task_with_mode(chain, now, CopyMode::Paper)
+        self.into_task_with_mode(chain, now, CopyMode::Paper, Some(exit_base))
     }
 
+    /// Validate an update of a stored task. The exit overrides are checked over
+    /// `exit_base` only when they differ from `stored_overrides`: a global change can
+    /// leave stored overrides that no longer fit the policy they inherit, and that task
+    /// must still pause, resume and take every other edit.
     pub fn into_task_for_update(
         self,
         chain: ChainId,
         now: DateTime<Utc>,
         current_mode: CopyMode,
+        stored_overrides: &ExitPolicyOverrides,
+        exit_base: ExitPolicy,
     ) -> Result<CopyTask, CopySkip> {
         if self.mode != current_mode {
             return Err(CopySkip::ModeTransitionRequired);
         }
-        self.into_task_with_mode(chain, now, current_mode)
+        let exit_base = (self.exit_policy_overrides != *stored_overrides).then_some(exit_base);
+        self.into_task_with_mode(chain, now, current_mode, exit_base)
     }
 
     fn into_task_with_mode(
@@ -170,6 +184,7 @@ impl CopyTaskInput {
         chain: ChainId,
         now: DateTime<Utc>,
         mode: CopyMode,
+        exit_base: Option<ExitPolicy>,
     ) -> Result<CopyTask, CopySkip> {
         if self.target_address.trim().is_empty()
             || !self.max_native_per_trade.is_finite()
@@ -224,7 +239,16 @@ impl CopyTaskInput {
                 maximum_pct: crate::trader::constants::MAX_MANUAL_SLIPPAGE_PCT,
             });
         }
-        if !self.exit_policy_overrides.is_valid() {
+        if let Some(Err(fault)) =
+            exit_base.map(|base| self.exit_policy_overrides.validate_over(base))
+        {
+            crate::logger::info(
+                crate::logger::LogTag::Trader,
+                &format!(
+                    "Copy task for {} refused: exit overrides {fault}",
+                    self.target_address
+                ),
+            );
             return Err(CopySkip::InvalidExitPolicy);
         }
         Ok(CopyTask {

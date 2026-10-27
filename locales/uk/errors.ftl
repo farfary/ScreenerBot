@@ -107,6 +107,7 @@ errors-strategies-no-performance = Для цієї стратегії немає
 errors-strategies-performance-failed = Не вдалося отримати статистику продуктивності
 errors-strategies-schemas-failed = Не вдалося отримати схеми умов
 errors-strategies-evaluation-failed = Оцінка стратегії не вдалася
+errors-strategies-test-data-without-price = Для переданих ринкових даних або даних позиції потрібна поточна ціна
 
 errors-transactions-own-wallet-unavailable = Основний гаманець не налаштовано
 errors-transactions-invalid-subject = Суб’єкт транзакції не є дійсною адресою Solana

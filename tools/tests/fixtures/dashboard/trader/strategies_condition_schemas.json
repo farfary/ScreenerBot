@@ -1,5 +1,76 @@
 {
   "schemas": {
+    "BollingerBands": {
+      "type": "BollingerBands",
+      "category": "Technical Indicators",
+      "icon": "icon-unfold-vertical",
+      "origin": "strategy",
+      "parameters": {
+        "timeframe": {
+          "type": "enum",
+          "default": null,
+          "optional": true,
+          "options": [
+            { "value": "1m", "key": "strategies-condition-timeframe-option-1m" },
+            { "value": "5m", "key": "strategies-condition-timeframe-option-5m" },
+            { "value": "15m", "key": "strategies-condition-timeframe-option-15m" },
+            { "value": "1h", "key": "strategies-condition-timeframe-option-1h" },
+            { "value": "4h", "key": "strategies-condition-timeframe-option-4h" },
+            { "value": "12h", "key": "strategies-condition-timeframe-option-12h" },
+            { "value": "1d", "key": "strategies-condition-timeframe-option-1d" }
+          ],
+          "key": "strategies-condition-param-timeframe"
+        },
+        "period": {
+          "type": "number",
+          "unit": "candles",
+          "default": 20,
+          "min": 5,
+          "max": 100,
+          "step": 1,
+          "key": "strategies-condition-bollinger-bands-param-period"
+        },
+        "std_dev": {
+          "type": "number",
+          "default": 2,
+          "min": 0.5,
+          "max": 5,
+          "step": 0.1,
+          "key": "strategies-condition-bollinger-bands-param-std-dev"
+        },
+        "signal": {
+          "type": "enum",
+          "default": "BELOW_LOWER",
+          "options": [
+            {
+              "value": "BELOW_LOWER",
+              "key": "strategies-condition-bollinger-bands-param-signal-option-below-lower"
+            },
+            {
+              "value": "ABOVE_UPPER",
+              "key": "strategies-condition-bollinger-bands-param-signal-option-above-upper"
+            },
+            {
+              "value": "SQUEEZE",
+              "key": "strategies-condition-bollinger-bands-param-signal-option-squeeze"
+            }
+          ],
+          "key": "strategies-condition-bollinger-bands-param-signal"
+        },
+        "squeeze_width_pct": {
+          "type": "percent",
+          "default": 10,
+          "min": 0.5,
+          "max": 100,
+          "step": 0.5,
+          "key": "strategies-condition-bollinger-bands-param-squeeze-width-pct"
+        }
+      },
+      "applies_to": ["ENTRY", "EXIT"],
+      "reads": "candles",
+      "key": "strategies-condition-bollinger-bands",
+      "category_key": "strategies-condition-category-technical-indicators"
+    },
     "BuyPressure": {
       "type": "BuyPressure",
       "category": "Market Context",
@@ -197,6 +268,41 @@
       "key": "strategies-condition-drawdown-from-peak",
       "category_key": "strategies-condition-category-position-performance"
     },
+    "LiquidityChangeSinceEntry": {
+      "type": "LiquidityChangeSinceEntry",
+      "category": "Position & Performance",
+      "icon": "icon-waves",
+      "origin": "strategy",
+      "parameters": {
+        "comparison": {
+          "type": "enum",
+          "default": "DROPPED_BY",
+          "options": [
+            {
+              "value": "DROPPED_BY",
+              "key": "strategies-condition-liquidity-change-since-entry-param-comparison-option-dropped-by"
+            },
+            {
+              "value": "ROSE_BY",
+              "key": "strategies-condition-liquidity-change-since-entry-param-comparison-option-rose-by"
+            }
+          ],
+          "key": "strategies-condition-liquidity-change-since-entry-param-comparison"
+        },
+        "change_pct": {
+          "type": "percent",
+          "default": 30,
+          "min": 1,
+          "max": 100,
+          "step": 1,
+          "key": "strategies-condition-liquidity-change-since-entry-param-change-pct"
+        }
+      },
+      "applies_to": ["EXIT"],
+      "reads": "pool",
+      "key": "strategies-condition-liquidity-change-since-entry",
+      "category_key": "strategies-condition-category-position-performance"
+    },
     "LiquidityLevel": {
       "type": "LiquidityLevel",
       "category": "Market Context",
@@ -238,6 +344,43 @@
       "applies_to": ["ENTRY", "EXIT"],
       "reads": "pool",
       "key": "strategies-condition-liquidity-level",
+      "category_key": "strategies-condition-category-market-context"
+    },
+    "LiquidityToSize": {
+      "type": "LiquidityToSize",
+      "category": "Market Context",
+      "icon": "icon-ruler",
+      "origin": "strategy",
+      "parameters": {
+        "comparison": {
+          "type": "enum",
+          "default": "AT_LEAST",
+          "options": [
+            {
+              "value": "AT_LEAST",
+              "key": "strategies-condition-liquidity-to-size-param-comparison-option-at-least"
+            },
+            {
+              "value": "BELOW",
+              "key": "strategies-condition-liquidity-to-size-param-comparison-option-below"
+            }
+          ],
+          "key": "strategies-condition-liquidity-to-size-param-comparison"
+        },
+        "multiple": {
+          "type": "number",
+          "unit": "multiplier",
+          "hint": "price_impact",
+          "default": 50,
+          "min": 1,
+          "max": 10000,
+          "step": 1,
+          "key": "strategies-condition-liquidity-to-size-param-multiple"
+        }
+      },
+      "applies_to": ["ENTRY", "EXIT"],
+      "reads": "pool",
+      "key": "strategies-condition-liquidity-to-size",
       "category_key": "strategies-condition-category-market-context"
     },
     "MaCross": {
@@ -323,6 +466,56 @@
       "reads": "candles",
       "key": "strategies-condition-ma-cross",
       "category_key": "strategies-condition-category-technical-indicators"
+    },
+    "PositionAdds": {
+      "type": "PositionAdds",
+      "category": "Position & Performance",
+      "icon": "icon-layers",
+      "origin": "strategy",
+      "parameters": {
+        "subject": {
+          "type": "enum",
+          "default": "ADDS",
+          "options": [
+            {
+              "value": "ADDS",
+              "key": "strategies-condition-position-adds-param-subject-option-adds"
+            },
+            {
+              "value": "PARTIAL_SELLS",
+              "key": "strategies-condition-position-adds-param-subject-option-partial-sells"
+            }
+          ],
+          "key": "strategies-condition-position-adds-param-subject"
+        },
+        "comparison": {
+          "type": "enum",
+          "default": "AT_LEAST",
+          "options": [
+            {
+              "value": "AT_LEAST",
+              "key": "strategies-condition-position-adds-param-comparison-option-at-least"
+            },
+            {
+              "value": "AT_MOST",
+              "key": "strategies-condition-position-adds-param-comparison-option-at-most"
+            }
+          ],
+          "key": "strategies-condition-position-adds-param-comparison"
+        },
+        "count": {
+          "type": "number",
+          "default": 1,
+          "min": 0,
+          "max": 20,
+          "step": 1,
+          "key": "strategies-condition-position-adds-param-count"
+        }
+      },
+      "applies_to": ["EXIT"],
+      "reads": "position",
+      "key": "strategies-condition-position-adds",
+      "category_key": "strategies-condition-category-position-performance"
     },
     "PositionHoldingTime": {
       "type": "PositionHoldingTime",
@@ -606,6 +799,86 @@
       "key": "strategies-condition-price-to-ma",
       "category_key": "strategies-condition-category-technical-indicators"
     },
+    "ProfitGiveback": {
+      "type": "ProfitGiveback",
+      "category": "Position & Performance",
+      "icon": "icon-coins",
+      "origin": "strategy",
+      "parameters": {
+        "arm_after_profit_pct": {
+          "type": "percent",
+          "default": 30,
+          "min": 1,
+          "max": 10000,
+          "step": 1,
+          "key": "strategies-condition-profit-giveback-param-arm-after-profit-pct"
+        },
+        "giveback_pct": {
+          "type": "percent",
+          "default": 50,
+          "min": 5,
+          "max": 100,
+          "step": 1,
+          "key": "strategies-condition-profit-giveback-param-giveback-pct"
+        }
+      },
+      "applies_to": ["EXIT"],
+      "reads": "position",
+      "key": "strategies-condition-profit-giveback",
+      "category_key": "strategies-condition-category-position-performance"
+    },
+    "PullbackFromHigh": {
+      "type": "PullbackFromHigh",
+      "category": "Price Analysis",
+      "icon": "icon-undo-2",
+      "origin": "strategy",
+      "parameters": {
+        "timeframe": {
+          "type": "enum",
+          "default": null,
+          "optional": true,
+          "options": [
+            { "value": "1m", "key": "strategies-condition-timeframe-option-1m" },
+            { "value": "5m", "key": "strategies-condition-timeframe-option-5m" },
+            { "value": "15m", "key": "strategies-condition-timeframe-option-15m" },
+            { "value": "1h", "key": "strategies-condition-timeframe-option-1h" },
+            { "value": "4h", "key": "strategies-condition-timeframe-option-4h" },
+            { "value": "12h", "key": "strategies-condition-timeframe-option-12h" },
+            { "value": "1d", "key": "strategies-condition-timeframe-option-1d" }
+          ],
+          "key": "strategies-condition-param-timeframe"
+        },
+        "lookback": {
+          "type": "number",
+          "unit": "candles",
+          "default": 20,
+          "min": 3,
+          "max": 100,
+          "step": 1,
+          "key": "strategies-condition-pullback-from-high-param-lookback"
+        },
+        "min_drop_pct": {
+          "type": "percent",
+          "default": 10,
+          "min": 1,
+          "max": 90,
+          "step": 1,
+          "key": "strategies-condition-pullback-from-high-param-min-drop-pct"
+        },
+        "max_drop_pct": {
+          "type": "percent",
+          "default": 30,
+          "min": 2,
+          "max": 95,
+          "step": 1,
+          "key": "strategies-condition-pullback-from-high-param-max-drop-pct"
+        }
+      },
+      "applies_to": ["ENTRY", "EXIT"],
+      "reads": "candles",
+      "key": "strategies-condition-pullback-from-high",
+      "category_key": "strategies-condition-category-price-analysis"
+    },
     "Rsi": {
       "type": "Rsi",
       "category": "Technical Indicators",
@@ -665,6 +938,215 @@
       "key": "strategies-condition-rsi",
       "category_key": "strategies-condition-category-technical-indicators"
     },
+    "TimeOfDay": {
+      "type": "TimeOfDay",
+      "category": "Market Context",
+      "icon": "icon-calendar-clock",
+      "origin": "strategy",
+      "parameters": {
+        "start_hour": {
+          "type": "number",
+          "unit": "utc_hour",
+          "hint": "local_time",
+          "default": 13,
+          "min": 0,
+          "max": 23,
+          "step": 1,
+          "key": "strategies-condition-time-of-day-param-start-hour"
+        },
+        "end_hour": {
+          "type": "number",
+          "unit": "utc_hour",
+          "hint": "local_time",
+          "default": 22,
+          "min": 1,
+          "max": 24,
+          "step": 1,
+          "key": "strategies-condition-time-of-day-param-end-hour"
+        }
+      },
+      "applies_to": ["ENTRY", "EXIT"],
+      "reads": "clock",
+      "key": "strategies-condition-time-of-day",
+      "category_key": "strategies-condition-category-market-context"
+    },
+    "TokenAge": {
+      "type": "TokenAge",
+      "category": "Market Context",
+      "icon": "icon-sprout",
+      "origin": "strategy",
+      "parameters": {
+        "comparison": {
+          "type": "enum",
+          "default": "OLDER_THAN",
+          "options": [
+            {
+              "value": "OLDER_THAN",
+              "key": "strategies-condition-token-age-param-comparison-option-older-than"
+            },
+            {
+              "value": "YOUNGER_THAN",
+              "key": "strategies-condition-token-age-param-comparison-option-younger-than"
+            }
+          ],
+          "key": "strategies-condition-token-age-param-comparison"
+        },
+        "time_value": {
+          "type": "number",
+          "default": 30,
+          "min": 1,
+          "max": 10000,
+          "step": 1,
+          "key": "strategies-condition-token-age-param-time-value"
+        },
+        "time_unit": {
+          "type": "enum",
+          "default": "MINUTES",
+          "options": [
+            {
+              "value": "MINUTES",
+              "key": "strategies-condition-token-age-param-time-unit-option-minutes"
+            },
+            {
+              "value": "HOURS",
+              "key": "strategies-condition-token-age-param-time-unit-option-hours"
+            },
+            {
+              "value": "DAYS",
+              "key": "strategies-condition-token-age-param-time-unit-option-days"
+            }
+          ],
+          "key": "strategies-condition-token-age-param-time-unit"
+        }
+      },
+      "applies_to": ["ENTRY"],
+      "reads": "market",
+      "key": "strategies-condition-token-age",
+      "category_key": "strategies-condition-category-market-context"
+    },
+    "TransactionVelocity": {
+      "type": "TransactionVelocity",
+      "category": "Market Context",
+      "icon": "icon-activity",
+      "origin": "strategy",
+      "parameters": {
+        "window": {
+          "type": "enum",
+          "default": "5m_vs_1h",
+          "options": [
+            {
+              "value": "5m_vs_1h",
+              "key": "strategies-condition-transaction-velocity-param-window-option-5m-vs-1h"
+            },
+            {
+              "value": "1h_vs_6h",
+              "key": "strategies-condition-transaction-velocity-param-window-option-1h-vs-6h"
+            },
+            {
+              "value": "6h_vs_24h",
+              "key": "strategies-condition-transaction-velocity-param-window-option-6h-vs-24h"
+            }
+          ],
+          "key": "strategies-condition-transaction-velocity-param-window"
+        },
+        "comparison": {
+          "type": "enum",
+          "default": "ABOVE",
+          "options": [
+            {
+              "value": "ABOVE",
+              "key": "strategies-condition-transaction-velocity-param-comparison-option-above"
+            },
+            {
+              "value": "BELOW",
+              "key": "strategies-condition-transaction-velocity-param-comparison-option-below"
+            }
+          ],
+          "key": "strategies-condition-transaction-velocity-param-comparison"
+        },
+        "ratio": {
+          "type": "number",
+          "unit": "multiplier",
+          "default": 2,
+          "min": 0.1,
+          "max": 50,
+          "step": 0.1,
+          "key": "strategies-condition-transaction-velocity-param-ratio"
+        },
+        "min_transactions": {
+          "type": "number",
+          "unit": "trades",
+          "default": 30,
+          "min": 1,
+          "max": 100000,
+          "step": 10,
+          "key": "strategies-condition-transaction-velocity-param-min-transactions"
+        }
+      },
+      "applies_to": ["ENTRY", "EXIT"],
+      "reads": "market",
+      "key": "strategies-condition-transaction-velocity",
+      "category_key": "strategies-condition-category-market-context"
+    },
+    "VolatilityRange": {
+      "type": "VolatilityRange",
+      "category": "Technical Indicators",
+      "icon": "icon-move-vertical",
+      "origin": "strategy",
+      "parameters": {
+        "timeframe": {
+          "type": "enum",
+          "default": null,
+          "optional": true,
+          "options": [
+            { "value": "1m", "key": "strategies-condition-timeframe-option-1m" },
+            { "value": "5m", "key": "strategies-condition-timeframe-option-5m" },
+            { "value": "15m", "key": "strategies-condition-timeframe-option-15m" },
+            { "value": "1h", "key": "strategies-condition-timeframe-option-1h" },
+            { "value": "4h", "key": "strategies-condition-timeframe-option-4h" },
+            { "value": "12h", "key": "strategies-condition-timeframe-option-12h" },
+            { "value": "1d", "key": "strategies-condition-timeframe-option-1d" }
+          ],
+          "key": "strategies-condition-param-timeframe"
+        },
+        "period": {
+          "type": "number",
+          "unit": "candles",
+          "default": 14,
+          "min": 2,
+          "max": 99,
+          "step": 1,
+          "key": "strategies-condition-volatility-range-param-period"
+        },
+        "comparison": {
+          "type": "enum",
+          "default": "ABOVE",
+          "options": [
+            {
+              "value": "ABOVE",
+              "key": "strategies-condition-volatility-range-param-comparison-option-above"
+            },
+            {
+              "value": "BELOW",
+              "key": "strategies-condition-volatility-range-param-comparison-option-below"
+            }
+          ],
+          "key": "strategies-condition-volatility-range-param-comparison"
+        },
+        "threshold_pct": {
+          "type": "percent",
+          "default": 5,
+          "min": 0.1,
+          "max": 500,
+          "step": 0.1,
+          "key": "strategies-condition-volatility-range-param-threshold-pct"
+        }
+      },
+      "applies_to": ["ENTRY", "EXIT"],
+      "reads": "candles",
+      "key": "strategies-condition-volatility-range",
+      "category_key": "strategies-condition-category-technical-indicators"
+    },
     "VolumeSpike": {
       "type": "VolumeSpike",
       "category": "Volume Analysis",
@@ -709,6 +1191,65 @@
       "reads": "candles",
       "key": "strategies-condition-volume-spike",
       "category_key": "strategies-condition-category-volume-analysis"
+    },
+    "Vwap": {
+      "type": "Vwap",
+      "category": "Technical Indicators",
+      "icon": "icon-chart-spline",
+      "origin": "strategy",
+      "parameters": {
+        "timeframe": {
+          "type": "enum",
+          "default": null,
+          "optional": true,
+          "options": [
+            { "value": "1m", "key": "strategies-condition-timeframe-option-1m" },
+            { "value": "5m", "key": "strategies-condition-timeframe-option-5m" },
+            { "value": "15m", "key": "strategies-condition-timeframe-option-15m" },
+            { "value": "1h", "key": "strategies-condition-timeframe-option-1h" },
+            { "value": "4h", "key": "strategies-condition-timeframe-option-4h" },
+            { "value": "12h", "key": "strategies-condition-timeframe-option-12h" },
+            { "value": "1d", "key": "strategies-condition-timeframe-option-1d" }
+          ],
+          "key": "strategies-condition-param-timeframe"
+        },
+        "lookback": {
+          "type": "number",
+          "unit": "candles",
+          "default": 30,
+          "min": 5,
+          "max": 100,
+          "step": 1,
+          "key": "strategies-condition-vwap-param-lookback"
+        },
+        "position": {
+          "type": "enum",
+          "default": "ABOVE",
+          "options": [
+            {
+              "value": "ABOVE",
+              "key": "strategies-condition-vwap-param-position-option-above"
+            },
+            {
+              "value": "BELOW",
+              "key": "strategies-condition-vwap-param-position-option-below"
+            }
+          ],
+          "key": "strategies-condition-vwap-param-position"
+        },
+        "distance_pct": {
+          "type": "percent",
+          "default": 0,
+          "min": 0,
+          "max": 100,
+          "step": 0.5,
+          "key": "strategies-condition-vwap-param-distance-pct"
+        }
+      },
+      "applies_to": ["ENTRY", "EXIT"],
+      "reads": "candles",
+      "key": "strategies-condition-vwap",
+      "category_key": "strategies-condition-category-technical-indicators"
     }
   },
   "default_timeframe": "5m",

@@ -5,7 +5,7 @@
 
    Page layout, the sidebar and the strategy list. The editor is split by concern
    (registered in templates.rs):
-   - strategies/editor.css           - editor header, rules area, sticky footer
+   - strategies/editor.css           - editor toolbar, settings line, rules, test marks, footer
    - strategies/condition_cards.css  - rule groups, condition rows, parameter fields
    - strategies/modals.css           - condition catalog dialog
    - strategies/ui_components.css    - filter tabs, kind colours, type badge, create dialog */
@@ -163,7 +163,10 @@
 /* ==========================================================================
    Main Editor Area
    ========================================================================== */
+/* The editor is a size container: its toolbar collapses against the editor's width, which
+   the sidebar and the window share. */
 .strategy-editor {
+  container: strategy-editor / inline-size;
   flex: 1;
   display: flex;
   flex-direction: column;

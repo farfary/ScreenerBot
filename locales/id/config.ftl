@@ -1149,6 +1149,12 @@ config-trader-trade-size-sol = Ukuran Trade
 config-trader-trailing-stop-activation-pct = Aktivasi Trailing Stop
     .hint = Aktifkan trailing stop setelah profit sebesar % ini (10 = aktif pada +10%)
     .unit = %
+config-trader-trailing-stop-band-distance-pct = Jarak pita trailing
+    .hint = Seberapa jauh di bawah puncak stop mengikuti setelah pitanya tercapai; lebih kecil dari profit puncak pita
+    .unit = %
+config-trader-trailing-stop-band-profit-pct = Pita trailing
+    .hint = Profit puncak dari harga masuk rata-rata saat setiap pita mengambil alih jarak trailing
+    .unit = %
 config-trader-trailing-stop-distance-pct = Jarak Trailing Stop
     .hint = Seberapa jauh mengikuti di bawah puncak (5 = exit jika harga turun 5% dari puncak)
     .unit = %

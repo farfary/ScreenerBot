@@ -382,22 +382,9 @@ pub fn validate_config(config: &Config) -> Result<()> {
         .into());
     }
 
-    // Time override validation
+    // Time override length; the rule's own bounds are the exit policy's
+    // (`TraderConfig::validate`)
     if config.trader.time_override_enabled {
-        if config.trader.time_override_duration <= 0.0 {
-            return Err(ConfigurationError::Generic {
-                message: "trader.time_override_duration must be greater than 0".to_owned(),
-            }
-            .into());
-        }
-        if !config.trader.time_override_duration.is_finite() {
-            return Err(ConfigurationError::Generic {
-                message: "trader.time_override_duration must be a finite number".to_owned(),
-            }
-            .into());
-        }
-
-        // Validate duration based on unit (max 30 days in any unit)
         let max_seconds = 30.0 * 86400.0; // 30 days
         let duration = config.trader.time_override_duration;
         let unit = config.trader.time_override_unit;
@@ -408,57 +395,6 @@ pub fn validate_config(config: &Config) -> Result<()> {
                     "trader.time_override_duration ({duration} {}, {duration_seconds} seconds) exceeds maximum of 30 days",
                     unit.as_str()
                 ),
-            }
-            .into());
-        }
-
-        if config.trader.time_override_loss_threshold_percent > 0.0 {
-            return Err(ConfigurationError::Generic {
-                message: "trader.time_override_loss_threshold_percent must be <= 0 (represents loss percentage)"
-                    .to_owned(),
-            }
-            .into());
-        }
-        if !config
-            .trader
-            .time_override_loss_threshold_percent
-            .is_finite()
-        {
-            return Err(ConfigurationError::Generic {
-                message: "trader.time_override_loss_threshold_percent must be a finite number"
-                    .to_owned(),
-            }
-            .into());
-        }
-        if config.trader.time_override_loss_threshold_percent < -100.0 {
-            return Err(ConfigurationError::Generic {
-                message: "trader.time_override_loss_threshold_percent must be >= -100 (cannot lose more than 100%)"
-                    .to_owned(),
-            }
-            .into());
-        }
-    }
-
-    // Stop loss validation
-    if config.trader.stop_loss_enabled {
-        if config.trader.stop_loss_threshold_pct <= 0.0 {
-            return Err(ConfigurationError::Generic {
-                message: "trader.stop_loss_threshold_pct must be greater than 0 (represents loss percentage)"
-                    .to_owned(),
-            }
-            .into());
-        }
-        if config.trader.stop_loss_threshold_pct > 100.0 {
-            return Err(ConfigurationError::Generic {
-                message:
-                    "trader.stop_loss_threshold_pct must be <= 100 (cannot lose more than 100%)"
-                        .to_owned(),
-            }
-            .into());
-        }
-        if !config.trader.stop_loss_threshold_pct.is_finite() {
-            return Err(ConfigurationError::Generic {
-                message: "trader.stop_loss_threshold_pct must be a finite number".to_owned(),
             }
             .into());
         }
@@ -488,39 +424,6 @@ pub fn validate_config(config: &Config) -> Result<()> {
             message: "trader.stop_loss_partial_pct must be between 10 and 90".to_owned(),
         }
         .into());
-    }
-
-    // Trailing stop validation
-    if config.trader.trailing_stop_enabled {
-        if config.trader.trailing_stop_activation_pct <= 0.0
-            || config.trader.trailing_stop_activation_pct > 100.0
-        {
-            return Err(ConfigurationError::Generic {
-                message:
-                    "trader.trailing_stop_activation_pct must be between 0 and 100 (exclusive)"
-                        .to_owned(),
-            }
-            .into());
-        }
-        if config.trader.trailing_stop_distance_pct <= 0.0
-            || config.trader.trailing_stop_distance_pct > 100.0
-        {
-            return Err(ConfigurationError::Generic {
-                message: "trader.trailing_stop_distance_pct must be between 0 and 100 (exclusive)"
-                    .to_owned(),
-            }
-            .into());
-        }
-        if config.trader.trailing_stop_distance_pct >= config.trader.trailing_stop_activation_pct {
-            return Err(ConfigurationError::Generic {
-                message: format!(
-                    "trader.trailing_stop_distance_pct ({:.1}%) must be less than trailing_stop_activation_pct ({:.1}%)",
-                    config.trader.trailing_stop_distance_pct,
-                    config.trader.trailing_stop_activation_pct
-                ),
-            }
-            .into());
-        }
     }
 
     // Slippage validation

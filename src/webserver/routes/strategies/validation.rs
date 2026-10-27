@@ -93,6 +93,10 @@ pub async fn validate_strategy_inline_handler(Json(request): Json<StrategyReques
         updated_at: now,
         author: request.author,
         version: 1,
+        entry_strategy_ids: Strategy::entry_binding(
+            strategy_type,
+            request.entry_strategy_ids.unwrap_or_default(),
+        ),
     };
 
     validation_response(&strategy).await

@@ -335,6 +335,12 @@
   align-items: end;
 }
 
+/* A ladder with no rows (no trailing band) has no columns to caption; the grid display
+   above would otherwise override the hidden attribute. */
+.level-list-caption[hidden] {
+  display: none;
+}
+
 .level-list-caption,
 .level-list-step {
   font-size: 0.75rem;

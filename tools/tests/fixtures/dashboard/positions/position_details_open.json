@@ -22,8 +22,6 @@
     "effective_entry_price": 1.2035999999999997e-7,
     "effective_exit_price": null,
     "sol_received": null,
-    "profit_target_min": 20,
-    "profit_target_max": 80,
     "liquidity_tier": "medium",
     "transaction_entry_verified": true,
     "transaction_exit_verified": false,
@@ -62,7 +60,22 @@
     "peak_since_last_buy": 1.44e-7,
     "trailing_stop_active": true,
     "break_even_active": false,
-    "default_add_size_native": 0.25
+    "default_add_size_native": 0.25,
+    "exit_plan": {
+      "stop_loss_pct": 50,
+      "take_profit_steps": [
+        { "profit_pct": 20, "sell_pct": 40, "taken": true },
+        { "profit_pct": 60, "sell_pct": 60, "taken": false }
+      ],
+      "trailing_stop": {
+        "activation_pct": 20,
+        "distance_pct": 10,
+        "bands": [{ "profit_pct": 50, "distance_pct": 6 }]
+      },
+      "break_even": null,
+      "time_loss": { "duration_seconds": 14400, "loss_threshold_pct": -10 },
+      "time_stagnation": null
+    }
   },
   "entries": [
     {

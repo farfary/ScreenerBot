@@ -1,10 +1,17 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 //
-// The selected task's workspace: the header (state, why it is paused, actions)
-// and the Overview / Holdings / Activity / Rules / Execution tabs.
+// The selected task's workspace: the header (state, why it is paused, an exit
+// override warning, actions) and the Overview / Holdings / Activity / Rules / Execution tabs.
 import { renderAddress } from "../../ui/token_identity.js";
-import { modeLabel, rangeQuery, stateLabel, taskName, timeAgo } from "./format.js";
+import {
+  exitPolicyIssueHtml,
+  modeLabel,
+  rangeQuery,
+  stateLabel,
+  taskName,
+  timeAgo,
+} from "./format.js";
 import { forgetPaint } from "../../core/dom.js";
 import { attachTabScrollStrip } from "../../ui/tab_bar.js";
 import { panelMessage, renderOverview } from "./overview.js";
@@ -199,6 +206,7 @@ export function createWorkspace(page) {
         <div class="copy-ws-title"><h2 id="copy-ws-name"></h2><span id="copy-ws-mode"></span></div>
         <div class="copy-ws-address" id="copy-ws-address"></div>
         <div class="copy-ws-state" id="copy-ws-state" aria-live="polite"></div>
+        <div class="copy-ws-exit-issue" id="copy-ws-exit-issue"></div>
         <div class="copy-ws-watch-status" id="copy-ws-watch-status"></div>
       </div>
       <div class="copy-ws-recovery" id="copy-ws-watch-recovery"></div>
@@ -367,6 +375,7 @@ export function createWorkspace(page) {
           : "blocked";
       paint(stateNode, stateHtml(task));
     }
+    paint($("#copy-ws-exit-issue"), exitPolicyIssueHtml(task, esc, "copy-ws-warning"));
     paint($("#copy-ws-watch-status"), watchStatusHtml(task));
     const recoveryNode = $("#copy-ws-watch-recovery");
     if (recoveryNode) {

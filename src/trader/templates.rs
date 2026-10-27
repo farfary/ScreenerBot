@@ -40,6 +40,10 @@ impl TemplateConfig {
         trader.trailing_stop_enabled = self.trailing_stop_enabled;
         trader.trailing_stop_activation_pct = self.trailing_stop_activation_pct;
         trader.trailing_stop_distance_pct = self.trailing_stop_distance_pct;
+        // Bands are tuned to the activation and distance they replace; a preset's trail
+        // follows its own distance at every profit.
+        trader.trailing_stop_band_profit_pct.clear();
+        trader.trailing_stop_band_distance_pct.clear();
         trader.take_profit_enabled = self.take_profit_enabled;
         trader.take_profit_levels_pct = self
             .take_profit_levels
@@ -183,6 +187,19 @@ mod tests {
                 "{} writes its own rules",
                 template.id
             );
+        }
+    }
+
+    #[test]
+    fn a_preset_trails_at_its_own_distance_and_passes_validation() {
+        let mut configured = TraderConfig::default();
+        configured.trailing_stop_band_profit_pct = vec![50.0];
+        configured.trailing_stop_band_distance_pct = vec![4.0];
+        for template in all_templates() {
+            let mut trader = configured.clone();
+            template.config.apply_to(&mut trader);
+            assert!(trader.trailing_stop_bands().is_empty(), "{}", template.id);
+            assert!(trader.validate().is_ok(), "{}", template.id);
         }
     }
 }

@@ -38,66 +38,42 @@
 
   <!-- Main Editor Area -->
   <main class="strategy-editor">
-    <!-- Header: only shown when a strategy is loaded -->
+    <!-- Toolbar: one row, shown only while a strategy is loaded -->
     <header class="editor-header" id="editor-header">
-      <div class="editor-row">
-        <div class="editor-identity">
-          <span class="strategy-type-badge entry" id="strategy-type-badge">
-            <i class="icon-trending-up"></i> <span data-l10n-id="strategies-type-entry"></span>
-          </span>
-          <input
-            type="text"
-            id="strategy-name"
-            data-l10n-id="strategies-editor-name"
-            class="strategy-name-input"
-            spellcheck="false"
-          />
-          <span class="editor-dirty-dot" id="editor-dirty-dot" data-l10n-id="strategies-editor-dirty"></span>
-        </div>
+      <div class="editor-identity">
+        <span class="strategy-type-badge entry" id="strategy-type-badge">
+          <i class="icon-trending-up"></i> <span data-l10n-id="strategies-type-entry"></span>
+        </span>
+        <input
+          type="text"
+          id="strategy-name"
+          data-l10n-id="strategies-editor-name"
+          class="strategy-name-input"
+          spellcheck="false"
+        />
+        <span class="editor-dirty-dot" id="editor-dirty-dot" data-l10n-id="strategies-editor-dirty"></span>
+      </div>
+      <div class="editor-controls">
+        <button type="button" class="btn btn-sm editor-action editor-action-lead" id="test-strategy">
+          <i class="icon-flask-conical" aria-hidden="true"></i>
+          <span class="editor-action-label" data-l10n-id="strategies-action-test"></span>
+        </button>
+        <button type="button" class="btn btn-sm editor-action" id="validate-strategy">
+          <i class="icon-circle-check" aria-hidden="true"></i>
+          <span class="editor-action-label" data-l10n-id="strategies-action-validate"></span>
+        </button>
+        <button type="button" class="btn btn-sm editor-action" id="export-strategy">
+          <i class="icon-upload" aria-hidden="true"></i>
+          <span class="editor-action-label" data-l10n-id="strategies-action-export"></span>
+        </button>
+        <button type="button" class="btn btn-primary btn-sm editor-save-btn" id="save-strategy">
+          <i class="icon-save"></i> <span data-l10n-id="common-action-save"></span>
+        </button>
         <label class="toggle editor-active">
           <span data-l10n-id="strategies-editor-active"></span>
           <input type="checkbox" id="strategy-enabled-toggle" />
           <span class="toggle-track"></span>
         </label>
-      </div>
-      <div class="editor-row">
-        <div class="editor-fields">
-          <div class="editor-field">
-            <label for="strategy-timeframe" data-l10n-id="strategies-editor-timeframe"></label>
-            <select id="strategy-timeframe" data-custom-select data-cs-fit-options></select>
-          </div>
-          <div class="editor-field">
-            <label for="strategy-priority" data-l10n-id="strategies-editor-priority"></label>
-            <input type="number" id="strategy-priority" min="1" max="100" step="1" />
-          </div>
-          <button
-            type="button"
-            class="btn btn-sm"
-            id="toggle-description"
-            aria-expanded="false"
-            aria-controls="strategy-description-panel"
-          >
-            <i class="icon-file-text"></i> <span data-l10n-id="strategies-editor-description"></span>
-          </button>
-        </div>
-        <div class="editor-controls">
-          <button type="button" class="btn btn-sm" id="validate-strategy">
-            <i class="icon-circle-check"></i> <span data-l10n-id="strategies-action-validate"></span>
-          </button>
-          <button type="button" class="btn btn-sm" id="export-strategy">
-            <i class="icon-upload"></i> <span data-l10n-id="strategies-action-export"></span>
-          </button>
-          <button type="button" class="btn btn-primary btn-sm editor-save-btn" id="save-strategy">
-            <i class="icon-save"></i> <span data-l10n-id="common-action-save"></span>
-          </button>
-        </div>
-      </div>
-      <div class="editor-description" id="strategy-description-panel" hidden>
-        <textarea
-          id="strategy-description"
-          rows="2"
-          data-l10n-id="strategies-editor-description-field"
-        ></textarea>
       </div>
     </header>
 
@@ -111,15 +87,86 @@
       </div>
     </div>
 
-    <!-- Scrollable Content Area: the root rule group -->
+    <!-- Scrollable Content Area: the strategy settings, then the root rule group -->
     <div class="editor-scroll-area" id="editor-scroll-area">
       <div class="conditions-container">
+        <div class="editor-settings" id="editor-settings">
+          <div class="editor-field">
+            <label for="strategy-timeframe" data-l10n-id="strategies-editor-timeframe"></label>
+            <select id="strategy-timeframe" data-custom-select data-cs-fit-options></select>
+          </div>
+          <div class="editor-field">
+            <label for="strategy-priority" data-l10n-id="strategies-editor-priority"></label>
+            <input type="number" id="strategy-priority" min="1" max="100" step="1" />
+          </div>
+          <div class="editor-field editor-entry-binding-field" id="entry-binding-field" hidden>
+            <span
+              class="editor-field-label"
+              id="entry-binding-label"
+              data-l10n-id="strategies-editor-entry-binding-label"
+            ></span>
+            <button
+              type="button"
+              class="btn btn-sm editor-panel-toggle"
+              id="toggle-entry-binding"
+              aria-expanded="false"
+              aria-controls="strategy-entry-binding-panel"
+              aria-labelledby="entry-binding-label entry-binding-summary"
+            >
+              <i class="icon-waypoints" aria-hidden="true"></i>
+              <span id="entry-binding-summary"></span>
+              <i class="icon-chevron-down editor-panel-chevron" aria-hidden="true"></i>
+            </button>
+          </div>
+          <button
+            type="button"
+            class="btn btn-sm editor-panel-toggle editor-description-toggle"
+            id="toggle-description"
+            aria-expanded="false"
+            aria-controls="strategy-description-panel"
+          >
+            <i class="icon-file-text" aria-hidden="true"></i>
+            <span data-l10n-id="strategies-editor-description"></span>
+            <i class="icon-chevron-down editor-panel-chevron" aria-hidden="true"></i>
+          </button>
+        </div>
+        <div class="editor-entry-binding" id="strategy-entry-binding-panel" hidden>
+          <p
+            class="editor-entry-binding-hint"
+            id="strategy-entry-binding-label"
+            data-l10n-id="strategies-editor-entry-binding-hint"
+          ></p>
+          <div
+            class="editor-entry-binding-list"
+            id="strategy-entry-binding"
+            role="group"
+            aria-labelledby="strategy-entry-binding-label"
+          ></div>
+        </div>
+        <div class="editor-description" id="strategy-description-panel" hidden>
+          <textarea
+            id="strategy-description"
+            rows="2"
+            data-l10n-id="strategies-editor-description-field"
+          ></textarea>
+        </div>
         <div class="conditions-list" id="conditions-list"></div>
       </div>
     </div>
 
     <!-- Sticky Footer -->
     <footer class="editor-footer" id="editor-footer">
+      <div class="strategy-test-line" id="strategy-test-line" hidden>
+        <div class="strategy-test-summary" id="strategy-test-result" aria-live="polite"></div>
+        <button
+          type="button"
+          class="btn-icon strategy-test-close"
+          id="strategy-test-close"
+          data-l10n-id="strategies-modal-close"
+        >
+          <i class="icon-x" aria-hidden="true"></i>
+        </button>
+      </div>
       <button type="button" class="rule-problems" id="rule-problems" hidden></button>
       <div class="editor-footer-actions">
         <button type="button" class="btn btn-outline rule-add-btn" id="add-condition">

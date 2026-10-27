@@ -549,6 +549,18 @@ copy-validate-trailing-distance = Відстань трейлінгу має б�
 copy-validate-take-profit = Тейк-профіт має бути більшим за 0%.
 copy-validate-time-duration = Правило часу потребує тривалості більше нуля.
 copy-validate-time-threshold = Поріг правила часу — це збиток: використайте 0% або від’ємне число.
+# $reason is the message of the rule the stored overrides break.
+copy-exit-issue-warning = Правила виходу потребують уваги: { $reason } Доки ви їх не виправите, позиції використовують налаштування Трейдера для цього правила.
+# $distance and $activation are percentages.
+copy-exit-issue-trailing-distance-above-activation = Відстань трейлінгу { $distance }% має бути нижчою за активацію, зараз { $activation }%.
+# $maximum is the number of bands allowed.
+copy-exit-issue-trailing-band-count = Трейлінг-стоп може мати щонайбільше { $maximum } сходинок.
+# $profit and $floor are percentages.
+copy-exit-issue-trailing-band-order = Сходинка трейлінгу на { $profit }% має починатися вище { $floor }% — активації або попередньої сходинки.
+# $profit and $distance are percentages.
+copy-exit-issue-trailing-band-distance = Сходинка трейлінгу на { $profit }% має відставати більше ніж на 0% і менше за свій початок, зараз { $distance }%.
+# $value is a percentage.
+copy-exit-issue-time-loss-threshold = Поріг правила збиткового часу має бути збитком від -100% до 0%, зараз { $value }%.
 copy-warning-mirror = Утримувані токени закривають лише продажі гаманця: жоден стоп-лос їх не захищає, а токен, який гаманець ніколи не продає, залишається утримуваним.
 copy-warning-no-rules = Жодне правило виходу не ввімкнено, а продажі гаманця ігноруються: утримувані токени ніколи не продаються.
 copy-warning-no-stop-loss = Стоп-лос не діє: токен, що падає, утримується, доки його не продасть інше правило або гаманець.

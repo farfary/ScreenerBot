@@ -109,6 +109,7 @@ fn policy() -> ExitPolicy {
             enabled: true,
             activation_pct: 20.0,
             distance_pct: 10.0,
+            bands: Vec::new(),
         },
         break_even: BreakEvenPolicy {
             enabled: false,
@@ -706,6 +707,72 @@ fn live_and_paper_books_agree_on_the_break_even_stop_and_the_stagnation_exit() {
         assert_eq!(
             paper,
             expected.map(|(_, rule)| (rule, None)),
+            "{case}: paper"
+        );
+    }
+}
+
+#[test]
+fn live_and_paper_books_trail_by_the_band_the_peak_reached() {
+    use crate::config::TrailingStopBand;
+    use crate::trader::evaluators::{exit, exit_rules};
+    use crate::trader::TradeReason;
+
+    // Entry 0.01, activation +20%, base distance 10%; from +50% trail by 5%, from +100%
+    // by 3%. The take-profit ladder is off so every sale here is the trail's.
+    let mut policy = policy();
+    policy.take_profit.enabled = false;
+    policy.trailing.bands = vec![
+        TrailingStopBand {
+            profit_pct: 50.0,
+            distance_pct: 5.0,
+        },
+        TrailingStopBand {
+            profit_pct: 100.0,
+            distance_pct: 3.0,
+        },
+    ];
+    let now = Utc::now();
+    let young = Duration::seconds(60);
+    // (case, mark, peak, fires)
+    let cases = [
+        (
+            "base distance below the first band: stop 0.01125",
+            0.0112,
+            0.0125,
+            true,
+        ),
+        ("base distance, above its stop", 0.0113, 0.0125, false),
+        ("first band at +60%: stop 0.0152", 0.0151, 0.016, true),
+        ("first band, above its stop", 0.0153, 0.016, false),
+        (
+            "first band up to the second: stop 0.01805",
+            0.0180,
+            0.019,
+            true,
+        ),
+        ("second band at +150%: stop 0.02425", 0.0242, 0.025, true),
+        ("second band, above its stop", 0.0243, 0.025, false),
+    ];
+    for (case, mark, peak, fires) in cases {
+        let live_position = live_position(peak, young, 0, now);
+        let live = exit_rules::decide(&exit::live_exit_inputs(&live_position, mark, now), &policy)
+            .outcome
+            .map(|outcome| {
+                let decision = exit::rule_decision(&live_position, mark, &outcome);
+                (decision.reason, decision.exit_percentage)
+            });
+        let paper = evaluate_paper_exit(1, &holding(0, young), mark, peak, &policy, now)
+            .map(|exit| (exit.rule, exit.exit_percentage));
+
+        assert_eq!(
+            live,
+            fires.then_some((TradeReason::TrailingStop, None)),
+            "{case}: live"
+        );
+        assert_eq!(
+            paper,
+            fires.then_some((PaperExitRule::TrailingStop, None)),
             "{case}: paper"
         );
     }

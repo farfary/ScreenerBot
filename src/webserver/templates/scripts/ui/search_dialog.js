@@ -18,6 +18,10 @@
  * Each row carries a favorite star and a "more" button that opens the shared
  * token context menu (right-click on a row opens the same menu). Dialogs opened
  * from that menu stack ABOVE the search, which stays open beneath them.
+ *
+ * Opened with `onPick`, the dialog is the dashboard's token picker: choosing a row
+ * hands it to `onPick` instead of opening the token details, and closing returns
+ * the focus to the element that opened it.
  */
 
 import { $, create } from "../core/dom.js";
@@ -93,6 +97,10 @@ const state = {
   lists: {},
   /** Mints the user has starred. */
   favorites: new Set(),
+  /** Receives the chosen row while the dialog serves as a token picker. */
+  onPick: null,
+  /** Where the focus returns on close; the header search button when null. */
+  returnFocus: null,
 };
 
 // =============================================================================
@@ -596,11 +604,16 @@ function updateActive({ scroll = true } = {}) {
 // ACTIONS
 // =============================================================================
 
-/** Open the token details dialog for a row and remember it. */
+/** Hand a row to the picker, or open the token details dialog for it; remember it. */
 function openToken(row) {
   if (!row?.mint) return;
   rememberToken(row);
+  const onPick = state.onPick;
   closeDialog();
+  if (onPick) {
+    onPick(row);
+    return;
+  }
   window.dispatchEvent(
     new CustomEvent("screenerbot:open-token-details", {
       detail: {
@@ -797,11 +810,20 @@ function canOpen() {
   return !isSetupActive() && !hasOpenOverlay();
 }
 
-export function openDialog() {
+/**
+ * Open the search. With `onPick`, the dialog picks a token: the chosen row (`mint`,
+ * `symbol`, `name`, `logo_url`) goes to `onPick`, and the focus returns to the
+ * element that held it. `tab` opens on that list (a `LISTS` id) instead of the last one
+ * used.
+ */
+export function openDialog({ onPick = null, tab = null } = {}) {
   if (state.open || !canOpen()) return;
 
   createDialog();
   state.open = true;
+  state.onPick = onPick;
+  if (LISTS.some(({ id }) => id === tab)) state.tab = tab;
+  state.returnFocus = onPick ? document.activeElement : null;
   state.query = "";
   state.active = 0;
   state.results = null;
@@ -830,7 +852,10 @@ export function closeDialog() {
   document.body.style.overflow = "";
   releaseEscape?.();
   releaseEscape = null;
-  document.getElementById("searchBtn")?.focus();
+  const returnFocus = state.returnFocus;
+  state.onPick = null;
+  state.returnFocus = null;
+  (returnFocus || document.getElementById("searchBtn"))?.focus();
 }
 
 export function isDialogOpen() {

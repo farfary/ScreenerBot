@@ -45,9 +45,15 @@ strategies-summary-param = { $label }: { $value }
 strategies-summary-none = Tanpa parameter
 # An unset optional parameter: the strategy's own value it falls back to.
 strategies-param-inherit = Pengaturan strategi ({ $value })
-strategies-summary-period-seconds = Periode lookback: { $amount } dtk
-strategies-summary-period-minutes = Periode lookback: { $amount } mnt
-strategies-summary-period-hours = Periode lookback: { $amount } jam
+# A duration amount with its unit, and an hour of the UTC day. $amount is the formatted number.
+strategies-value-duration-seconds = { $amount } dtk
+strategies-value-duration-minutes = { $amount } mnt
+strategies-value-duration-hours = { $amount } jam
+strategies-value-duration-days = { $amount } hr
+strategies-value-utc-hour = { $amount }:00 UTC
+# A hint under a field, display only. $time is a local clock time, $amount a percentage.
+strategies-hint-local-time = Waktu lokal Anda: { $time }
+strategies-hint-price-impact = Trade sebesar ini menggerakkan harga sekitar { $amount }%
 
 strategies-value-percent = { $amount }%
 strategies-value-multiplier = { $amount }×
@@ -64,6 +70,7 @@ strategies-unit-percent = %
 strategies-unit-native = { -sol }
 strategies-unit-hours = jam
 strategies-unit-multiplier = ×
+strategies-unit-utc = UTC
 
 strategies-catalog-search =
     .placeholder = Cari kondisi...
@@ -82,7 +89,23 @@ strategies-editor-description = Deskripsi
 strategies-editor-description-field =
     .placeholder = Apa yang dilakukan strategi ini
     .aria-label = Deskripsi strategi
+# The exit strategy's binding to the entry strategies whose positions it manages.
+strategies-editor-entry-binding-all = Semua strategi masuk
+# Labels the button that names the entry strategies an exit strategy manages.
+strategies-editor-entry-binding-label = Mengelola
+strategies-editor-entry-binding-hint = Mengelola posisi yang dibuka oleh strategi masuk yang dicentang. Tanpa centang, strategi ini mengelola setiap posisi, termasuk yang manual dan disalin.
+strategies-editor-entry-binding-empty = Belum ada strategi masuk
+# $id is the id of an entry strategy that no longer exists.
+strategies-editor-entry-binding-deleted = { $id } (dihapus)
 strategies-action-export = Ekspor
+strategies-action-test = Uji dengan token
+# $token is the tested token's symbol or address.
+strategies-test-title = Uji dengan { $token }
+# $token is the tested token's symbol or address.
+strategies-test-running = Menguji dengan { $token }…
+strategies-test-verdict-pass = Terpenuhi
+strategies-test-verdict-fail = Tidak terpenuhi
+strategies-test-verdict-unknown = Tidak diketahui
 
 # Rule groups. $mode is the all/any select written into the sentence.
 strategies-rules-match = Cocokkan { $mode } kondisi ini
@@ -130,6 +153,7 @@ strategies-data-candles = Candle
 strategies-data-pool = Pool
 strategies-data-position = Posisi
 strategies-data-market = Aktivitas pasar
+strategies-data-clock = Waktu dalam hari
 
 # Trade counts: $count selects the plural, $amount is the formatted number.
 strategies-unit-trades = trade
@@ -174,6 +198,10 @@ strategies-toast-saved = Strategi Disimpan
 strategies-toast-save-failed = Gagal Menyimpan
     .message = Gagal menyimpan strategi ke database
 strategies-toast-no-strategy-validate = Tidak ada strategi untuk divalidasi
+strategies-toast-no-strategy-test = Tidak ada strategi untuk diuji
+strategies-toast-test-save-first = Simpan strategi sebelum mengujinya: pengujian membaca aturan yang tersimpan
+strategies-toast-test-failed = Pengujian gagal
+    .message = Gagal menguji strategi
 strategies-toast-valid = Strategi valid
 strategies-toast-invalid = Strategi memiliki kesalahan
 strategies-toast-validation-failed = Validasi gagal
@@ -339,6 +367,126 @@ strategies-condition-buy-pressure-param-min-buy-share-pct = Porsi Beli Minimum %
 strategies-condition-buy-pressure-param-min-transactions = Transaksi Minimum
     .description = Jendela dengan transaksi lebih sedikit tidak pernah memicu kondisi ini
 
+strategies-condition-transaction-velocity = Kecepatan Transaksi
+    .description = Aktif saat laju transaksi jendela terbaru minimal atau maksimal sebuah kelipatan dari laju jendela lebih panjang yang memuatnya. Membaca jumlah beli dan jual token.
+strategies-condition-transaction-velocity-param-window = Jendela
+    .description = Jendela terbaru dan jendela lebih panjang pembandingnya
+strategies-condition-transaction-velocity-param-window-option-5m-vs-1h = 5 Menit vs 1 Jam
+strategies-condition-transaction-velocity-param-window-option-1h-vs-6h = 1 Jam vs 6 Jam
+strategies-condition-transaction-velocity-param-window-option-6h-vs-24h = 6 Jam vs 24 Jam
+strategies-condition-transaction-velocity-param-comparison = Perbandingan
+    .description = Apakah laju terbaru harus minimal atau maksimal rasio tersebut
+strategies-condition-transaction-velocity-param-comparison-option-above = Minimal (≥)
+strategies-condition-transaction-velocity-param-comparison-option-below = Maksimal (≤)
+strategies-condition-transaction-velocity-param-ratio = Rasio Laju
+    .description = Transaksi per detik jendela terbaru dibagi transaksi per detik jendela panjang
+strategies-condition-transaction-velocity-param-min-transactions = Transaksi Minimum
+    .description = Jendela terbaru dengan transaksi lebih sedikit tidak pernah mengaktifkan kondisi
+
+strategies-condition-pullback-from-high = Koreksi dari Tertinggi
+    .description = Aktif saat harga live berada antara penurunan minimum dan maksimum di bawah harga tertinggi candle terakhir.
+strategies-condition-pullback-from-high-param-lookback = Periode Lookback
+    .description = Jumlah candle tempat harga tertinggi diambil
+strategies-condition-pullback-from-high-param-min-drop-pct = Penurunan Minimum %
+    .description = Harga harus setidaknya sejauh ini di bawah tertinggi
+strategies-condition-pullback-from-high-param-max-drop-pct = Penurunan Maksimum %
+    .description = Harga paling jauh sejauh ini di bawah tertinggi; harus lebih besar dari penurunan minimum
+
+strategies-condition-profit-giveback = Pengembalian Profit
+    .description = Aktif saat posisi telah mengembalikan sebagian keuntungan belum terealisasi terbaiknya sejak pembelian terakhir, setelah keuntungan itu mencapai suatu level.
+strategies-condition-profit-giveback-param-arm-after-profit-pct = Aktif Setelah Profit %
+    .description = Keuntungan terbaik harus sudah mencapai persentase harga masuk ini sebelum kondisi bisa aktif
+strategies-condition-profit-giveback-param-giveback-pct = Pengembalian %
+    .description = Bagian keuntungan terbaik yang dikembalikan; 100% berarti harga kembali ke harga masuk
+
+strategies-condition-token-age = Umur Token
+    .description = Aktif saat waktu sejak pembuatan on-chain token lebih lama atau lebih singkat dari suatu durasi. Token tanpa waktu pembuatan yang diketahui membuat kondisi tidak terputuskan.
+strategies-condition-token-age-param-comparison = Perbandingan
+    .description = Apakah token harus lebih tua atau lebih muda dari durasi
+strategies-condition-token-age-param-comparison-option-older-than = Lebih Tua Dari (≥)
+strategies-condition-token-age-param-comparison-option-younger-than = Lebih Baru Dari ({ "<" })
+strategies-condition-token-age-param-time-value = Umur
+    .description = Waktu sejak token dibuat, dalam satuan yang dipilih di dalam kolom (1-10000)
+strategies-condition-token-age-param-time-unit = Satuan Waktu
+    .description = Satuan umur
+strategies-condition-token-age-param-time-unit-option-minutes = mnt
+strategies-condition-token-age-param-time-unit-option-hours = jam
+strategies-condition-token-age-param-time-unit-option-days = hr
+
+strategies-condition-vwap = VWAP
+    .description = Aktif saat harga live berada di atas atau di bawah harga rata-rata tertimbang volume dari candle terakhir dengan jarak minimal tertentu.
+strategies-condition-vwap-param-lookback = Periode Lookback
+    .description = Jumlah candle yang dicakup rata-rata tertimbang volume
+strategies-condition-vwap-param-position = Posisi
+    .description = Posisi harga terhadap VWAP
+strategies-condition-vwap-param-position-option-above = Di Atas VWAP
+strategies-condition-vwap-param-position-option-below = Di Bawah VWAP
+strategies-condition-vwap-param-distance-pct = Jarak %
+    .description = Jarak minimum dari VWAP; 0 berarti jarak berapa pun di sisi yang dipilih
+
+strategies-condition-volatility-range = Rentang Volatilitas
+    .description = Aktif saat average true range candle terakhir, sebagai persentase harga live, berada di atas atau di bawah ambang. Dua kondisi ini dalam satu grup membentuk rentang.
+strategies-condition-volatility-range-param-period = Periode ATR
+    .description = Jumlah candle untuk menghaluskan average true range; kondisi butuh satu candle lebih banyak
+strategies-condition-volatility-range-param-comparison = Perbandingan
+    .description = Apakah rentang harus di atas atau di bawah ambang
+strategies-condition-volatility-range-param-comparison-option-above = Di Atas
+strategies-condition-volatility-range-param-comparison-option-below = Di Bawah
+strategies-condition-volatility-range-param-threshold-pct = Ambang Rentang %
+    .description = Average true range sebagai persentase harga live
+
+strategies-condition-bollinger-bands = Bollinger Bands
+    .description = Aktif saat harga live di bawah band bawah atau di atas band atas, atau saat band menyempit. Band berada beberapa deviasi standar di sekitar rata-rata penutupan.
+strategies-condition-bollinger-bands-param-period = Periode
+    .description = Jumlah candle yang dicakup rata-rata dan deviasi standar
+strategies-condition-bollinger-bands-param-std-dev = Deviasi Standar
+    .description = Berapa deviasi standar jarak setiap band dari rata-rata
+strategies-condition-bollinger-bands-param-signal = Sinyal
+    .description = Apa yang harus ditunjukkan band
+strategies-condition-bollinger-bands-param-signal-option-below-lower = Di Bawah Band Bawah
+strategies-condition-bollinger-bands-param-signal-option-above-upper = Di Atas Band Atas
+strategies-condition-bollinger-bands-param-signal-option-squeeze = Squeeze
+strategies-condition-bollinger-bands-param-squeeze-width-pct = Lebar Squeeze %
+    .description = Untuk squeeze: jarak terbesar antar band, sebagai persentase rata-rata
+
+strategies-condition-liquidity-to-size = Likuiditas terhadap Ukuran
+    .description = Aktif saat cadangan pool minimal atau kurang dari kelipatan ukuran yang dipertaruhkan: ukuran trade pada strategi masuk, nilai sisa posisi pada strategi keluar.
+strategies-condition-liquidity-to-size-param-comparison = Perbandingan
+    .description = Apakah cadangan harus minimal atau kurang dari kelipatan
+strategies-condition-liquidity-to-size-param-comparison-option-at-least = Minimal (≥)
+strategies-condition-liquidity-to-size-param-comparison-option-below = Kurang Dari ({ "<" })
+strategies-condition-liquidity-to-size-param-multiple = Kelipatan Likuiditas
+    .description = Cadangan pool dibagi ukuran yang dipertaruhkan; kelipatan N menggerakkan harga sekitar 1/(N+1)
+
+strategies-condition-position-adds = Penambahan Posisi
+    .description = Aktif saat jumlah pembelian tambahan setelah entri pertama, atau penjualan parsial, minimal atau maksimal suatu angka.
+strategies-condition-position-adds-param-subject = Dihitung
+    .description = Aksi mana yang dihitung
+strategies-condition-position-adds-param-subject-option-adds = Pembelian Tambahan
+strategies-condition-position-adds-param-subject-option-partial-sells = Penjualan Parsial
+strategies-condition-position-adds-param-comparison = Perbandingan
+    .description = Apakah jumlah harus minimal atau maksimal angka tersebut
+strategies-condition-position-adds-param-comparison-option-at-least = Minimal (≥)
+strategies-condition-position-adds-param-comparison-option-at-most = Maksimal (≤)
+strategies-condition-position-adds-param-count = Jumlah
+    .description = Jumlah aksi
+
+strategies-condition-time-of-day = Waktu dalam Hari
+    .description = Aktif saat jam sekarang berada dalam jendela jam UTC. Awal setelah akhir melewati tengah malam.
+strategies-condition-time-of-day-param-start-hour = Jam Mulai (UTC)
+    .description = Jam pertama jendela, dari 0 sampai 23
+strategies-condition-time-of-day-param-end-hour = Jam Akhir (UTC)
+    .description = Jam berakhirnya jendela, dari 1 sampai 24; jam itu sendiri di luar jendela
+
+strategies-condition-liquidity-change-since-entry = Perubahan Likuiditas Sejak Masuk
+    .description = Aktif saat cadangan pool turun atau naik setidaknya suatu persentase sejak posisi dibuka. Posisi tanpa likuiditas masuk tercatat membuat kondisi tidak terputuskan.
+strategies-condition-liquidity-change-since-entry-param-comparison = Perbandingan
+    .description = Apakah cadangan harus turun atau naik
+strategies-condition-liquidity-change-since-entry-param-comparison-option-dropped-by = Turun Sebesar
+strategies-condition-liquidity-change-since-entry-param-comparison-option-rose-by = Naik Sebesar
+strategies-condition-liquidity-change-since-entry-param-change-pct = Perubahan %
+    .description = Perubahan cadangan pool sejak masuk
+
 strategies-condition-param-timeframe = Timeframe
     .description = Ukuran candle: durasi setiap candle yang dibaca kondisi (timeframe strategi jika tidak diatur)
 strategies-condition-timeframe-option-1m = 1 Menit
@@ -405,6 +553,27 @@ strategies-error-field-peak-price = harga puncak
 strategies-error-field-slow-period = periode lambat
 strategies-error-field-window = jendela
 strategies-error-field-within-candles = jumlah candle persilangan
+strategies-error-field-change = perubahan
+strategies-error-field-end-hour = jam akhir
+strategies-error-field-entry-liquidity = likuiditas masuk
+strategies-error-field-giveback = pengembalian
+strategies-error-field-highest-high = tertinggi
+strategies-error-field-long-window-transactions = transaksi jendela panjang
+strategies-error-field-maximum-drop = penurunan maksimum
+strategies-error-field-minimum-drop = penurunan minimum
+strategies-error-field-multiple = kelipatan
+strategies-error-field-pool-liquidity = likuiditas pool
+strategies-error-field-ratio = rasio
+strategies-error-field-remaining-position-value = nilai sisa posisi
+strategies-error-field-signal = sinyal
+strategies-error-field-squeeze-width = lebar squeeze
+strategies-error-field-standard-deviations = deviasi standar
+strategies-error-field-start-hour = jam mulai
+strategies-error-field-subject = yang dihitung
+strategies-error-field-token-creation-time = waktu pembuatan token
+strategies-error-field-total-volume = volume total
+strategies-error-field-trade-size = ukuran trade
+strategies-error-field-vwap = VWAP
 
 strategies-error-expected-boolean = boolean
 strategies-error-expected-number = angka
@@ -417,6 +586,12 @@ strategies-error-data-ohlcv-data = Data OHLCV
 strategies-error-data-position-data = Data posisi
 strategies-error-data-peak-price = Harga puncak
 strategies-error-data-transaction-counts = Jumlah transaksi
+strategies-error-data-entry-liquidity = Likuiditas masuk
+strategies-error-data-entry-pool-liquidity = Likuiditas pool masuk
+strategies-error-data-real-pool-reserves = Likuiditas riil pool
+strategies-error-data-remaining-position-value = Nilai sisa posisi
+strategies-error-data-token-creation-time = Waktu pembuatan token
+strategies-error-data-trade-size = Ukuran trade
 
 strategies-error-indicator-consecutive-candles = candle berurutan
 strategies-error-indicator-moving-average = moving average
@@ -425,6 +600,10 @@ strategies-error-indicator-price-change-lookback = lookback perubahan harga
 strategies-error-indicator-volume-spike = lonjakan volume
 strategies-error-indicator-moving-average-cross = persilangan moving average
 strategies-error-indicator-rsi = RSI
+strategies-error-indicator-bollinger-bands = Bollinger bands
+strategies-error-indicator-pullback-from-high = koreksi dari tertinggi
+strategies-error-indicator-volatility-range = rentang volatilitas
+strategies-error-indicator-vwap = VWAP
 
 strategies-error-rule-branch-node-missing-conditions = Node cabang tidak memiliki kondisi
 strategies-error-rule-branch-node-missing-operator = Node cabang tidak memiliki operator

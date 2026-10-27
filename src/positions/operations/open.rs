@@ -217,7 +217,7 @@ async fn open_position_impl(
         })?;
 
     let expected_output_amount = quote.output_amount;
-    let entry_price = match market_price {
+    let entry_price = match &market_price {
         Some((price, source)) => {
             logger::info(
                 LogTag::Positions,
@@ -306,6 +306,19 @@ async fn open_position_impl(
             },
         };
 
+    // The pool reserves of the price the entry was made at, and the pool they were read
+    // from. An API price carries no measured reserves, and a quote-priced entry has no
+    // pool reading at all.
+    let (entry_liquidity_native, entry_liquidity_pool) = market_price
+        .as_ref()
+        .filter(|(price, _)| {
+            price.native_reserves.is_finite()
+                && price.native_reserves > 0.0
+                && !price.pool_address.is_empty()
+        })
+        .map(|(price, _)| (price.native_reserves, price.pool_address.clone()))
+        .unzip();
+
     // Create position
     let position = Position {
         id: None,
@@ -329,8 +342,8 @@ async fn open_position_impl(
         effective_entry_price: None,
         effective_exit_price: None,
         native_received: None,
-        profit_target_min: Some(5.0),
-        profit_target_max: Some(20.0),
+        profit_target_min: None,
+        profit_target_max: None,
         liquidity_tier: Some("UNKNOWN".to_owned()),
         transaction_entry_verified: false,
         transaction_exit_verified: false,
@@ -355,6 +368,8 @@ async fn open_position_impl(
         average_exit_price: None,
         partial_exit_count: 0,
         take_profit_level: 0,
+        entry_liquidity_native,
+        entry_liquidity_pool,
         dca_count: 0,
         average_entry_price: entry_price, // Initial entry price
         last_dca_time: None,

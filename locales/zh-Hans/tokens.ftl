@@ -63,12 +63,34 @@ tokens-positions-fact-opened = 开仓时间
 tokens-positions-fact-exit-price = 出场价格
 tokens-positions-fact-native-received = 收到的 { -sol }
 tokens-positions-fact-closed-reason = 平仓原因
-tokens-positions-fact-target-min = 最低盈利目标
-tokens-positions-fact-target-max = 最高盈利目标
 tokens-positions-fact-highest = 最高价
 tokens-positions-fact-basis-peak = 上次买入后的峰值
 tokens-positions-fact-lowest = 最低价
-tokens-positions-section-range = 目标与区间
+tokens-positions-section-range = 价格区间
+tokens-positions-section-exit-plan = 退出计划
+tokens-positions-plan-stop-loss = 止损
+# $step is the take-profit step's position in the ladder, from 1.
+tokens-positions-plan-step = 止盈 { $step }
+# $profit is the formatted profit level, $share the formatted share of the position it sells.
+tokens-positions-plan-step-value = 在 { $profit } 卖出 { $share }
+tokens-positions-plan-step-taken = 已卖出
+tokens-positions-plan-trailing = 追踪止损
+# $activation is the formatted profit that arms the trail, $distance the formatted share it trails by.
+tokens-positions-plan-trailing-value = 在 { $activation } 激活，在峰值下方 { $distance } 追踪
+# $step is the band's position in the list, from 1.
+tokens-positions-plan-trailing-band = 追踪档位 { $step }
+# $profit is the formatted profit the band starts at, $distance the formatted share it trails by.
+tokens-positions-plan-trailing-band-value = 自 { $profit } 起，在峰值下方 { $distance } 追踪
+tokens-positions-plan-break-even = 保本止损
+# $trigger and $offset are formatted profits.
+tokens-positions-plan-break-even-value = 在 { $trigger } 激活，在 { $offset } 卖出
+tokens-positions-plan-time-loss = 亏损时长退出
+# $duration is a formatted duration, $threshold a formatted loss.
+tokens-positions-plan-time-loss-value = { $duration } 后，处于 { $threshold } 或更低
+tokens-positions-plan-time-stagnation = 横盘持仓退出
+# $duration is a formatted duration, $band a formatted share.
+tokens-positions-plan-time-stagnation-value = { $duration } 后，仍在入场价 { $band } 范围内
+tokens-positions-plan-none = 没有开启任何退出规则
 tokens-positions-section-market = 市场与持仓
 tokens-positions-kicker = 仓位
 tokens-positions-fallback-symbol = 代币

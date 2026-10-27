@@ -246,6 +246,23 @@ trader-trailing-final = +{ $value }% final
 trader-trailing-summary-protected = Ganancia protegida de <strong>{ $value }</strong>
 # $value is a formatted percentage.
 trader-trailing-summary-avoided = Pérdida evitada de <strong>{ $value }</strong> desde el máximo
+# $step is the band's position in the list, from 1.
+trader-trailing-band = Banda { $step }
+# $step is the band's position in the list, from 1.
+trader-trailing-band-profit-label = Ganancia máxima de la banda { $step }
+# $step is the band's position in the list, from 1.
+trader-trailing-band-distance-label = Distancia de la banda { $step }
+trader-trailing-band-profit-caption = Desde ganancia máxima
+trader-trailing-band-distance-caption = Seguir a
+trader-trailing-add-band = Añadir banda
+# $step is the band's position in the list, from 1.
+trader-trailing-remove-band = Quitar banda { $step }
+# $min and $max are the configured bounds of a band's peak profit.
+trader-trailing-band-error-profit-range = La ganancia máxima de cada banda debe estar entre { $min }% y { $max }%
+# $min and $max are the configured bounds of a band's distance.
+trader-trailing-band-error-distance-range = La distancia de cada banda debe estar entre { $min }% y { $max }%
+trader-trailing-band-error-order = Cada banda necesita una ganancia máxima mayor que la activación y que la banda anterior
+trader-trailing-band-error-distance = Cada banda debe seguir a una distancia menor que su ganancia máxima
 
 ## Break-even stop
 
@@ -301,8 +318,6 @@ trader-time-unit-seconds = segundos
 trader-time-unit-minutes = minutos
 trader-time-unit-hours = horas
 trader-time-unit-days = días
-# Shown before the configured duration loads.
-trader-time-conversion-default = 168 horas = 7 días
 # $duration and $readable are formatted durations.
 trader-time-conversion = { $duration } = { $readable }
 trader-duration-seconds =
@@ -391,11 +406,8 @@ trader-dca-error-drop-range = Cada caída debe estar entre { $min }% y { $max }%
 trader-dca-error-size-range = Cada tamaño debe estar entre { $min }× y { $max }× la primera compra
 trader-dca-error-order = Medido desde la primera entrada, cada añadido necesita una caída más profunda que el anterior
 trader-dca-cooldown-impact = Al menos { $span } entre entradas extra
-trader-dca-min-hold-impact =
-    { $minutes ->
-        [0] El primer añadido puede llegar justo después de la entrada
-       *[other] El primer añadido espera al menos { $span } tras la entrada
-    }
+trader-dca-min-hold-none = El primer añadido puede llegar justo después de la entrada
+trader-dca-min-hold-impact = El primer añadido espera al menos { $span } tras la entrada
 trader-dca-capacity = Lo máximo que puede tener esta posición: { $amount } ({ $multiple }× la primera compra)
 trader-dca-info-title = Información de la estrategia DCA
 trader-dca-info-subtitle = Consideraciones importantes para el trading con DCA

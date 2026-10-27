@@ -1103,6 +1103,12 @@ config-trader-trade-size-sol = ट्रेड साइज़
 config-trader-trailing-stop-activation-pct = ट्रेलिंग स्टॉप सक्रियण
     .hint = इतने लाभ % के बाद ट्रेलिंग स्टॉप सक्रिय करें (10 = +10% पर सक्रिय)
     .unit = %
+config-trader-trailing-stop-band-distance-pct = ट्रेलिंग बैंड की दूरियाँ
+    .hint = बैंड तक पहुँचने के बाद स्टॉप पीक से कितना नीचे चलता है; बैंड के पीक प्रॉफ़िट से कम
+    .unit = %
+config-trader-trailing-stop-band-profit-pct = ट्रेलिंग बैंड
+    .hint = औसत एंट्री से पीक प्रॉफ़िट, जिस पर हर बैंड ट्रेल की दूरी संभालता है
+    .unit = %
 config-trader-trailing-stop-distance-pct = ट्रेलिंग स्टॉप दूरी
     .hint = पीक से कितना नीचे ट्रेल करें (5 = कीमत पीक से 5% गिरे तो एग्ज़िट)
     .unit = %

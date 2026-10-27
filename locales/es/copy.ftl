@@ -537,6 +537,18 @@ copy-validate-trailing-distance = La distancia del trailing debe ser mayor que 0
 copy-validate-take-profit = El take profit debe ser mayor que 0 %.
 copy-validate-time-duration = La regla de tiempo necesita una duración mayor que cero.
 copy-validate-time-threshold = El umbral de la regla de tiempo es una pérdida: usa 0 % o un número negativo.
+# $reason is the message of the rule the stored overrides break.
+copy-exit-issue-warning = Las reglas de salida requieren atención: { $reason } Hasta que las corrijas, las posiciones usan el ajuste del Trader para esa regla.
+# $distance and $activation are percentages.
+copy-exit-issue-trailing-distance-above-activation = La distancia del trailing de { $distance } % debe ser menor que la activación, ahora { $activation } %.
+# $maximum is the number of bands allowed.
+copy-exit-issue-trailing-band-count = El trailing stop puede tener como máximo { $maximum } tramos.
+# $profit and $floor are percentages.
+copy-exit-issue-trailing-band-order = El tramo del trailing en { $profit } % debe empezar por encima de { $floor } %, la activación o el tramo anterior.
+# $profit and $distance are percentages.
+copy-exit-issue-trailing-band-distance = El tramo del trailing en { $profit } % debe seguir a más de 0 % y a menos que su inicio, ahora { $distance } %.
+# $value is a percentage.
+copy-exit-issue-time-loss-threshold = El umbral de la regla de tiempo en pérdida debe ser una pérdida entre -100 % y 0 %, ahora { $value } %.
 copy-warning-mirror = Solo las ventas de la billetera cierran las tenencias: ningún stop loss las protege, y un token que la billetera nunca vende se queda en cartera.
 copy-warning-no-rules = Ninguna regla de salida está activa y las ventas de la billetera se ignoran: las tenencias nunca se venden.
 copy-warning-no-stop-loss = No se aplica ningún stop loss: un token a la baja se mantiene hasta que otra regla o la billetera venda.

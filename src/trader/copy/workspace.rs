@@ -167,8 +167,10 @@ fn exit_watch(position: &PaperPosition, entry: f64, policy: &ExitPolicy) -> Hold
             .map(|step| entry * (1.0 + step.profit_pct / 100.0)),
         trailing_activation_price_native: activation,
         trailing_armed: armed_peak.is_some(),
-        trailing_stop_price_native: armed_peak
-            .map(|peak| peak * (1.0 - trailing.distance_pct / 100.0)),
+        trailing_stop_price_native: armed_peak.map(|peak| {
+            let distance_pct = trailing.distance_in_force((peak / entry - 1.0) * 100.0);
+            peak * (1.0 - distance_pct / 100.0)
+        }),
         break_even_activation_price_native: break_even_activation,
         break_even_armed: position
             .peak_price_native

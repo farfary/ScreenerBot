@@ -110,7 +110,8 @@
       "effective_state": "paper",
       "effective_require_filter_pass": true,
       "pnl_trend": [0.031, 0.087, 0.052, 0.121, 0.198, 0.176, 0.262, 0.311, 0.287, 0.402, 0.4825],
-      "pause_text": null
+      "pause_text": null,
+      "exit_policy_issue": null
     },
     {
       "id": 2,
@@ -191,7 +192,8 @@
       "effective_state": "live",
       "effective_require_filter_pass": false,
       "pnl_trend": [-0.022, 0.041, 0.09, 0.064, 0.133, 0.171, 0.1934],
-      "pause_text": null
+      "pause_text": null,
+      "exit_policy_issue": null
     },
     {
       "id": 3,
@@ -276,7 +278,8 @@
       "pnl_trend": [0.012, -0.018, -0.0391],
       "pause_text": {
         "id": "copy-pause-user"
-      }
+      },
+      "exit_policy_issue": null
     }
   ],
   "activity": [

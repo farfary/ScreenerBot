@@ -120,6 +120,7 @@ errors-strategies-no-performance = Bu strateji için performans verisi yok
 errors-strategies-performance-failed = Performans istatistikleri alınamadı
 errors-strategies-schemas-failed = Koşul şemaları alınamadı
 errors-strategies-evaluation-failed = Strateji değerlendirmesi başarısız oldu
+errors-strategies-test-data-without-price = Gönderilen piyasa veya pozisyon verileri güncel bir fiyat gerektirir
 
 # Transactions
 errors-transactions-own-wallet-unavailable = Ana cüzdan yapılandırılmamış

@@ -193,6 +193,23 @@ trader-trailing-peak = Tepe
 trader-trailing-final = Nihai +%{ $value }
 trader-trailing-summary-protected = Korunan kâr: <strong>{ $value }</strong>
 trader-trailing-summary-avoided = Tepeden kaçınılan zarar: <strong>{ $value }</strong>
+# $step is the band's position in the list, from 1.
+trader-trailing-band = Bant { $step }
+# $step is the band's position in the list, from 1.
+trader-trailing-band-profit-label = Bant { $step } zirve kârı
+# $step is the band's position in the list, from 1.
+trader-trailing-band-distance-label = Bant { $step } takip mesafesi
+trader-trailing-band-profit-caption = Zirve kârından itibaren
+trader-trailing-band-distance-caption = Takip mesafesi
+trader-trailing-add-band = Bant ekle
+# $step is the band's position in the list, from 1.
+trader-trailing-remove-band = Bant { $step } kaldır
+# $min and $max are the configured bounds of a band's peak profit.
+trader-trailing-band-error-profit-range = Her bandın zirve kârı %{ $min } ile %{ $max } arasında olmalı
+# $min and $max are the configured bounds of a band's distance.
+trader-trailing-band-error-distance-range = Her bandın mesafesi %{ $min } ile %{ $max } arasında olmalı
+trader-trailing-band-error-order = Her bandın zirve kârı aktivasyondan ve önceki banttan yüksek olmalı
+trader-trailing-band-error-distance = Her bant, zirve kârından küçük bir mesafeyle takip etmeli
 
 ## Break-even stop
 
@@ -244,7 +261,6 @@ trader-time-unit-seconds = saniye
 trader-time-unit-minutes = dakika
 trader-time-unit-hours = saat
 trader-time-unit-days = gün
-trader-time-conversion-default = 168 saat = 7 gün
 trader-time-conversion = { $duration } = { $readable }
 trader-duration-seconds =
     { $count ->
@@ -322,11 +338,8 @@ trader-dca-error-drop-range = Her düşüş { $min }% ile { $max }% arasında ol
 trader-dca-error-size-range = Her boyut ilk alımın { $min }× ile { $max }× katı arasında olmalıdır
 trader-dca-error-order = İlk girişten ölçüldüğünde her ekleme bir öncekinden daha derin bir düşüş gerektirir
 trader-dca-cooldown-impact = Ek girişler arasında en az { $span }
-trader-dca-min-hold-impact =
-    { $minutes ->
-        [0] İlk ekleme girişten hemen sonra gelebilir
-       *[other] İlk ekleme girişten sonra en az { $span } bekler
-    }
+trader-dca-min-hold-none = İlk ekleme girişten hemen sonra gelebilir
+trader-dca-min-hold-impact = İlk ekleme girişten sonra en az { $span } bekler
 trader-dca-capacity = Bu pozisyonun tutabileceği en fazla: { $amount } (ilk alımın { $multiple }×)
 trader-dca-info-title = DCA strateji bilgisi
 trader-dca-info-subtitle = DCA işlemi için önemli hususlar

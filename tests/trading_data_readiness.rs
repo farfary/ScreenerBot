@@ -35,8 +35,10 @@ use common::{
 use screenerbot::chains::RawAmount;
 use screenerbot::ohlcvs::{Candle, TimeframeBundle};
 use screenerbot::strategies::conditions::{
-    ConditionEvaluator, ConsecutiveCandlesCondition, LiquidityLevelCondition,
-    PriceBreakoutCondition, PriceChangePercentCondition, PriceToMaCondition, VolumeSpikeCondition,
+    BollingerBandsCondition, ConditionEvaluator, ConsecutiveCandlesCondition,
+    LiquidityLevelCondition, PriceBreakoutCondition, PriceChangePercentCondition,
+    PriceToMaCondition, PullbackFromHighCondition, VolatilityRangeCondition, VolumeSpikeCondition,
+    VwapCondition,
 };
 use screenerbot::strategies::engine::{EngineConfig, StrategyEngine};
 use screenerbot::strategies::types::{
@@ -97,6 +99,7 @@ fn strategy(strategy_type: StrategyType, timeframe: &str, rules: RuleTree) -> St
         updated_at: chrono::Utc::now(),
         author: None,
         version: 1,
+        entry_strategy_ids: Vec::new(),
     }
 }
 
@@ -177,6 +180,51 @@ fn volume_spike(lookback: i64, multiplier: f64) -> Condition {
     )
 }
 
+fn pullback_from_high(lookback: i64, min_drop_pct: f64, max_drop_pct: f64) -> Condition {
+    condition(
+        "PullbackFromHigh",
+        &[
+            ("lookback", json!(lookback)),
+            ("min_drop_pct", json!(min_drop_pct)),
+            ("max_drop_pct", json!(max_drop_pct)),
+        ],
+    )
+}
+
+fn vwap(lookback: i64, position: &str, distance_pct: f64) -> Condition {
+    condition(
+        "Vwap",
+        &[
+            ("lookback", json!(lookback)),
+            ("position", json!(position)),
+            ("distance_pct", json!(distance_pct)),
+        ],
+    )
+}
+
+fn volatility_range(period: i64, comparison: &str, threshold_pct: f64) -> Condition {
+    condition(
+        "VolatilityRange",
+        &[
+            ("period", json!(period)),
+            ("comparison", json!(comparison)),
+            ("threshold_pct", json!(threshold_pct)),
+        ],
+    )
+}
+
+fn bollinger(period: i64, std_dev: f64, signal: &str) -> Condition {
+    condition(
+        "BollingerBands",
+        &[
+            ("period", json!(period)),
+            ("std_dev", json!(std_dev)),
+            ("signal", json!(signal)),
+            ("squeeze_width_pct", json!(10.0)),
+        ],
+    )
+}
+
 /// Every rule that reads candles, paired with a parameter set that is satisfiable on a
 /// healthy series — so a verdict of `false` here really would mean "the market did not
 /// do that", and anything else is a data-availability answer.
@@ -207,6 +255,22 @@ fn every_candle_rule() -> Vec<(&'static str, Box<dyn ConditionEvaluator>, Condit
             Box::new(VolumeSpikeCondition),
             volume_spike(5, 2.0),
         ),
+        (
+            "PullbackFromHigh",
+            Box::new(PullbackFromHighCondition),
+            pullback_from_high(5, 1.0, 50.0),
+        ),
+        ("Vwap", Box::new(VwapCondition), vwap(5, "ABOVE", 0.0)),
+        (
+            "VolatilityRange",
+            Box::new(VolatilityRangeCondition),
+            volatility_range(3, "BELOW", 50.0),
+        ),
+        (
+            "BollingerBands",
+            Box::new(BollingerBandsCondition),
+            bollinger(5, 2.0, "SQUEEZE"),
+        ),
     ]
 }
 
@@ -221,14 +285,14 @@ fn every_candle_rule() -> Vec<(&'static str, Box<dyn ConditionEvaluator>, Condit
 /// the reference size from the configured trade size; an uncached token carries no
 /// snapshot.
 fn entry_market_data(liquidity_sol: f64) -> MarketData {
-    strategy_market_data(None, Some(liquidity_sol), Some(0.01))
+    strategy_market_data(None, Some(liquidity_sol), None, Some(0.01))
 }
 
 /// `check_exit_strategies`: liquidity is read from the live pool price result — the same
 /// single source the entry path uses — and stays `None` only when no pool price exists
 /// for the mint (an API-derived price carries no reserves). An exit has no reference size.
 fn exit_market_data(liquidity_sol: Option<f64>) -> MarketData {
-    strategy_market_data(None, liquidity_sol, None)
+    strategy_market_data(None, liquidity_sol, None, None)
 }
 
 fn exit_position_data(entry_price: f64, current_price: f64) -> PositionData {
@@ -389,7 +453,7 @@ fn the_value_still_held_is_priced_at_the_pool_and_needs_known_decimals() {
 #[test]
 fn the_market_context_takes_each_time_from_its_own_source() {
     // No cached token: no counts, no snapshot time, no creation time.
-    let bare = strategy_market_data(None, Some(10.0), Some(0.05));
+    let bare = strategy_market_data(None, Some(10.0), None, Some(0.05));
     assert_eq!(bare.liquidity_sol, Some(10.0));
     assert_eq!(bare.reference_size_native, Some(0.05));
     assert!(bare.transactions.is_none());
@@ -401,7 +465,7 @@ fn the_market_context_takes_each_time_from_its_own_source() {
     token.market_data_last_fetched_at = fetched;
     token.blockchain_created_at = None;
     token.pool_created_at = Some(fetched - chrono::Duration::days(2));
-    let market = strategy_market_data(Some(&token), None, None);
+    let market = strategy_market_data(Some(&token), None, None, None);
     assert_eq!(market.snapshot_at, Some(fetched));
     assert!(market.transactions.is_some());
     // A pool time or a discovery time is never passed off as the creation time.
@@ -410,8 +474,14 @@ fn the_market_context_takes_each_time_from_its_own_source() {
 
     let created = fetched - chrono::Duration::days(5);
     token.blockchain_created_at = Some(created);
-    let market = strategy_market_data(Some(&token), None, None);
+    let market = strategy_market_data(Some(&token), None, None, None);
     assert_eq!(market.token_created_at, Some(created));
+
+    // The 0 epoch a source reports for an unknown time is not a creation time: a token
+    // age rule would otherwise read every such token as decades old.
+    token.blockchain_created_at = Some(chrono::DateTime::UNIX_EPOCH);
+    let market = strategy_market_data(Some(&token), None, None, None);
+    assert_eq!(market.token_created_at, None);
 }
 
 // ==================== OHLCV READINESS ====================

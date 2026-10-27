@@ -106,19 +106,30 @@ test("every schema names what it reads and the catalog tags it with exactly that
     assert.ok(I18n.has(DATA_TAG_LABELS[tag]), `${type}: ${DATA_TAG_LABELS[tag]} is not a message`);
   }
   assert.deepEqual(tags, {
+    BollingerBands: "candles",
     BuyPressure: "market",
     CandleSize: "candles",
     ConsecutiveCandles: "candles",
     DrawdownFromPeak: "position",
+    LiquidityChangeSinceEntry: "pool",
     LiquidityLevel: "pool",
+    LiquidityToSize: "pool",
     MaCross: "candles",
+    PositionAdds: "position",
     PositionHoldingTime: "position",
     PositionProfit: "position",
     PriceBreakout: "candles",
     PriceChangePercent: "candles",
     PriceToMA: "candles",
+    ProfitGiveback: "position",
+    PullbackFromHigh: "candles",
     Rsi: "candles",
+    TimeOfDay: "clock",
+    TokenAge: "market",
+    TransactionVelocity: "market",
+    VolatilityRange: "candles",
     VolumeSpike: "candles",
+    Vwap: "candles",
   });
   for (const strategyType of ["ENTRY", "EXIT"]) {
     for (const entry of catalogEntries(schemas, strategyType)) {

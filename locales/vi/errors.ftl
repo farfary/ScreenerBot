@@ -107,6 +107,7 @@ errors-strategies-no-performance = Không có dữ liệu hiệu suất cho chi�
 errors-strategies-performance-failed = Không lấy được thống kê hiệu suất
 errors-strategies-schemas-failed = Không lấy được lược đồ điều kiện
 errors-strategies-evaluation-failed = Đánh giá chiến lược thất bại
+errors-strategies-test-data-without-price = Dữ liệu thị trường hoặc vị thế được gửi cần có giá hiện tại
 
 errors-transactions-own-wallet-unavailable = Chưa cấu hình ví chính
 errors-transactions-invalid-subject = Đối tượng giao dịch không phải địa chỉ Solana hợp lệ

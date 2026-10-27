@@ -501,6 +501,18 @@ copy-validate-trailing-distance = 追踪距离必须大于 0% 且不超过 100%�
 copy-validate-take-profit = 止盈必须大于 0%。
 copy-validate-time-duration = 时间规则的时长必须大于零。
 copy-validate-time-threshold = 时间规则的阈值为亏损：请使用 0% 或负数。
+# $reason is the message of the rule the stored overrides break.
+copy-exit-issue-warning = 退出规则需要处理：{ $reason } 在你修正之前，持仓对该规则使用交易器的设置。
+# $distance and $activation are percentages.
+copy-exit-issue-trailing-distance-above-activation = 追踪距离 { $distance }% 必须低于激活水平，当前为 { $activation }%。
+# $maximum is the number of bands allowed.
+copy-exit-issue-trailing-band-count = 追踪止损最多可设 { $maximum } 个档位。
+# $profit and $floor are percentages.
+copy-exit-issue-trailing-band-order = { $profit }% 的追踪档位必须从 { $floor }%（激活水平或上一档位）之上开始。
+# $profit and $distance are percentages.
+copy-exit-issue-trailing-band-distance = { $profit }% 的追踪档位回撤幅度必须大于 0% 且小于其起点，当前为 { $distance }%。
+# $value is a percentage.
+copy-exit-issue-time-loss-threshold = 亏损时长规则的阈值必须是 -100% 到 0% 之间的亏损，当前为 { $value }%。
 copy-warning-mirror = 仅钱包的卖出会平掉持仓：没有止损保护，钱包从不卖出的代币会一直持有。
 copy-warning-no-rules = 没有开启任何出场规则，且钱包的卖出被忽略：持仓永远不会被卖出。
 copy-warning-no-stop-loss = 未设置止损：下跌的代币会一直持有，直到其他规则触发或钱包卖出。

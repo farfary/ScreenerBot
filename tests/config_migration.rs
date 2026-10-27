@@ -11,7 +11,8 @@
 //! retired partial-exit switch) follow the same load, persist and reload path into `[trader]`;
 //! the switch the loaded file held stays readable for the store migrations. The ROI target of
 //! `[trader]` becomes the one step of the take-profit ladder on the same path, and its
-//! uniform DCA rule (one drop, one size and a count) becomes an equal DCA ladder.
+//! uniform DCA rule (one drop, one size and a count) becomes an equal DCA ladder. A file
+//! written before trailing bands existed loads with none.
 //!
 //! It runs in a process of its own (nextest isolates every test) because `load_config_from_path`
 //! initialises the global CONFIG (`OnceLock::set`). The steps share that global,
@@ -513,4 +514,24 @@ fn a_stored_dca_basis_loads_under_its_canonical_name() {
         assert!(parsed.migrated, "{stored}");
         assert_eq!(parsed.config.trader.dca_measure_from, basis, "{stored}");
     }
+}
+
+/// A file written before trailing bands existed loads with none, so its trailing stop
+/// keeps the one distance it had; a file that stores bands loads them.
+#[test]
+fn a_file_without_trailing_bands_trails_at_its_one_distance() {
+    let parsed = parse_config_document(
+        "[trader]\ntrailing_stop_enabled = true\ntrailing_stop_activation_pct = 20.0\n\
+         trailing_stop_distance_pct = 8.0\n",
+    )
+    .expect("a trader section without bands loads");
+    assert!(parsed.config.trader.trailing_stop_bands().is_empty());
+    assert!(validate_config(&parsed.config).is_ok());
+
+    let stored = parse_config_document(
+        "[trader]\ntrailing_stop_band_profit_pct = [50.0]\n\
+         trailing_stop_band_distance_pct = [5.0]\n",
+    )
+    .expect("stored bands load");
+    assert_eq!(stored.config.trader.trailing_stop_bands().len(), 1);
 }

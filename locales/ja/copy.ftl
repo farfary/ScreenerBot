@@ -501,6 +501,18 @@ copy-validate-trailing-distance = トレーリングの下落幅は 0% より大
 copy-validate-take-profit = 利確は 0% より大きくしてください。
 copy-validate-time-duration = 時間ルールには 0 より大きい期間が必要です。
 copy-validate-time-threshold = 時間ルールのしきい値は損失です。0% または負の数を指定してください。
+# $reason is the message of the rule the stored overrides break.
+copy-exit-issue-warning = 決済ルールの確認が必要です: { $reason } 修正するまで、保有分はそのルールについてトレーダーの設定を使用します。
+# $distance and $activation are percentages.
+copy-exit-issue-trailing-distance-above-activation = トレーリング幅 { $distance }% は発動水準より小さくしてください。現在 { $activation }%。
+# $maximum is the number of bands allowed.
+copy-exit-issue-trailing-band-count = トレーリングストップの段階は最大 { $maximum } つです。
+# $profit and $floor are percentages.
+copy-exit-issue-trailing-band-order = { $profit }% のトレーリング段階は、発動水準または前の段階である { $floor }% より上から始めてください。
+# $profit and $distance are percentages.
+copy-exit-issue-trailing-band-distance = { $profit }% のトレーリング段階の追随幅は 0% より大きく開始点より小さくしてください。現在 { $distance }%。
+# $value is a percentage.
+copy-exit-issue-time-loss-threshold = 含み損時間ルールのしきい値は -100% から 0% の損失にしてください。現在 { $value }%。
 copy-warning-mirror = 保有をクローズするのはウォレットの売却のみです。損切りによる保護はなく、ウォレットが売却しないトークンは保有され続けます。
 copy-warning-no-rules = エグジットルールが無効で、ウォレットの売却も無視されます。保有は売却されません。
 copy-warning-no-stop-loss = 損切りが適用されません。下落するトークンは、別のルールが働くかウォレットが売却するまで保有されます。

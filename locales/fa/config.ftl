@@ -1149,6 +1149,12 @@ config-trader-trade-size-sol = اندازه معامله
 config-trader-trailing-stop-activation-pct = فعال‌سازی حد ضرر متحرک
     .hint = حد ضرر متحرک پس از رسیدن به این درصد سود فعال می‌شود (10 = فعال‌سازی در +10%)
     .unit = %
+config-trader-trailing-stop-band-distance-pct = فاصله باندهای حد ضرر متحرک
+    .hint = پس از رسیدن به باند، حد ضرر چقدر پایین‌تر از اوج دنبال می‌کند؛ کمتر از سود اوج همان باند
+    .unit = %
+config-trader-trailing-stop-band-profit-pct = باندهای حد ضرر متحرک
+    .hint = سود اوج نسبت به میانگین قیمت ورود که از آن هر باند فاصله حد ضرر متحرک را تعیین می‌کند
+    .unit = %
 config-trader-trailing-stop-distance-pct = فاصله حد ضرر متحرک
     .hint = فاصله دنبال‌کردن زیر اوج (5 = خروج اگر قیمت 5% از اوج افت کند)
     .unit = %

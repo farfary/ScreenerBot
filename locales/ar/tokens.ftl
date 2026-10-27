@@ -66,12 +66,34 @@ tokens-positions-fact-opened = تاريخ الفتح
 tokens-positions-fact-exit-price = سعر الخروج
 tokens-positions-fact-native-received = { -sol } المستلم
 tokens-positions-fact-closed-reason = سبب الإغلاق
-tokens-positions-fact-target-min = الحد الأدنى لهدف الربح
-tokens-positions-fact-target-max = الحد الأقصى لهدف الربح
 tokens-positions-fact-highest = أعلى سعر
 tokens-positions-fact-basis-peak = القمة منذ آخر شراء
 tokens-positions-fact-lowest = أدنى سعر
-tokens-positions-section-range = الأهداف والنطاق
+tokens-positions-section-range = نطاق السعر
+tokens-positions-section-exit-plan = خطة الخروج
+tokens-positions-plan-stop-loss = وقف الخسارة
+# $step is the take-profit step's position in the ladder, from 1.
+tokens-positions-plan-step = جني الأرباح { $step }
+# $profit is the formatted profit level, $share the formatted share of the position it sells.
+tokens-positions-plan-step-value = عند { $profit } يبيع { $share }
+tokens-positions-plan-step-taken = تم البيع
+tokens-positions-plan-trailing = وقف التتبع
+# $activation is the formatted profit that arms the trail, $distance the formatted share it trails by.
+tokens-positions-plan-trailing-value = يتفعّل عند { $activation }، ويتتبع بمسافة { $distance } تحت القمة
+# $step is the band's position in the list, from 1.
+tokens-positions-plan-trailing-band = شريحة التتبع { $step }
+# $profit is the formatted profit the band starts at, $distance the formatted share it trails by.
+tokens-positions-plan-trailing-band-value = من { $profit }، يتتبع بمسافة { $distance } تحت القمة
+tokens-positions-plan-break-even = وقف التعادل
+# $trigger and $offset are formatted profits.
+tokens-positions-plan-break-even-value = يتفعّل عند { $trigger }، ويبيع عند { $offset }
+tokens-positions-plan-time-loss = خروج بعد زمن الخسارة
+# $duration is a formatted duration, $threshold a formatted loss.
+tokens-positions-plan-time-loss-value = بعد { $duration }، عند { $threshold } أو أقل
+tokens-positions-plan-time-stagnation = خروج المركز الراكد
+# $duration is a formatted duration, $band a formatted share.
+tokens-positions-plan-time-stagnation-value = بعد { $duration }، ما دام ضمن { $band } من الدخول
+tokens-positions-plan-none = لا توجد قاعدة خروج مفعّلة
 tokens-positions-section-market = السوق والحيازات
 tokens-positions-kicker = مركز
 tokens-positions-fallback-symbol = الرمز

@@ -5,11 +5,18 @@
 
 use chrono::Utc;
 use screenerbot::chains::ChainId;
+use screenerbot::config::TraderConfig;
 use screenerbot::trader::copy::{
     precheck, size_for, CopyMode, CopySkip, CopyTask, CopyTaskInput, ExitMode, PipelinePolicy,
     RiskContext, SizingMode, SpendState,
 };
+use screenerbot::trader::policy::ExitPolicy;
 use screenerbot::trader::{MAX_MANUAL_SLIPPAGE_PCT, MAX_TRADE_SIZE_MULTIPLIER};
+
+/// The exit policy of a default trader config, the base copy overrides are checked over.
+fn default_exit_policy() -> ExitPolicy {
+    ExitPolicy::from_trader_config(&TraderConfig::default())
+}
 
 fn task(sizing: SizingMode) -> CopyTask {
     CopyTask {
@@ -192,9 +199,9 @@ fn live_mode_uses_the_same_risk_precheck_as_paper() {
     );
 }
 
-#[test]
-fn task_input_rejects_invalid_mode_sizing_ranges_and_slippage() {
-    let input = |sizing| CopyTaskInput {
+/// A paper task input with no exit overrides.
+fn task_input(sizing: SizingMode) -> CopyTaskInput {
+    CopyTaskInput {
         target_address: "target".to_owned(),
         label: None,
         enabled: true,
@@ -211,32 +218,85 @@ fn task_input_rejects_invalid_mode_sizing_ranges_and_slippage() {
         slippage_pct: 1.0,
         require_filter_pass: None,
         copy_stable_quoted: None,
-    };
+    }
+}
 
+#[test]
+fn task_input_rejects_invalid_mode_sizing_ranges_and_slippage() {
     assert_eq!(
-        input(SizingMode::Fixed { sol: f64::NAN }).into_task(ChainId::Solana, Utc::now()),
+        task_input(SizingMode::Fixed { sol: f64::NAN }).into_task(
+            ChainId::Solana,
+            Utc::now(),
+            default_exit_policy()
+        ),
         Err(CopySkip::InvalidSizing)
     );
     assert_eq!(
-        input(SizingMode::RatioOfTarget { pct: 0.0 }).into_task(ChainId::Solana, Utc::now()),
+        task_input(SizingMode::RatioOfTarget { pct: 0.0 }).into_task(
+            ChainId::Solana,
+            Utc::now(),
+            default_exit_policy()
+        ),
         Err(CopySkip::InvalidSizing)
     );
-    let mut invalid_range = input(SizingMode::Fixed { sol: 0.1 });
+    let mut invalid_range = task_input(SizingMode::Fixed { sol: 0.1 });
     invalid_range.min_target_trade_native = Some(-1.0);
     assert_eq!(
-        invalid_range.into_task(ChainId::Solana, Utc::now()),
+        invalid_range.into_task(ChainId::Solana, Utc::now(), default_exit_policy()),
         Err(CopySkip::InvalidSizing)
     );
-    let mut live = input(SizingMode::Fixed { sol: 0.1 });
+    let mut live = task_input(SizingMode::Fixed { sol: 0.1 });
     live.mode = CopyMode::Live;
     assert_eq!(
-        live.into_task(ChainId::Solana, Utc::now()),
+        live.into_task(ChainId::Solana, Utc::now(), default_exit_policy()),
         Err(CopySkip::ModeTransitionRequired)
     );
-    let mut invalid_policy = input(SizingMode::Fixed { sol: 0.1 });
+    let mut invalid_policy = task_input(SizingMode::Fixed { sol: 0.1 });
     invalid_policy.exit_policy_overrides.trailing.distance_pct = Some(150.0);
     assert_eq!(
-        invalid_policy.into_task(ChainId::Solana, Utc::now()),
+        invalid_policy.into_task(ChainId::Solana, Utc::now(), default_exit_policy()),
         Err(CopySkip::InvalidExitPolicy)
     );
+}
+
+/// Overrides are checked on the policy they make of the global one, with the rules the
+/// trader config is checked with.
+#[test]
+fn task_exit_overrides_are_checked_on_the_merged_policy() {
+    let with_overrides = |edit: &dyn Fn(&mut CopyTaskInput)| {
+        let mut input = task_input(SizingMode::Fixed { sol: 0.1 });
+        edit(&mut input);
+        input.into_task(ChainId::Solana, Utc::now(), default_exit_policy())
+    };
+
+    // Global activation 10%: a task trailing 12% below the peak could never sell in profit,
+    // even though the trailing stop it would switch on is inherited as off.
+    assert_eq!(
+        with_overrides(&|input| input.exit_policy_overrides.trailing.distance_pct = Some(12.0)),
+        Err(CopySkip::InvalidExitPolicy)
+    );
+    // A positive loss threshold would close a winning position.
+    assert_eq!(
+        with_overrides(&|input| {
+            input.exit_policy_overrides.time.loss_threshold_pct = Some(5.0);
+        }),
+        Err(CopySkip::InvalidExitPolicy)
+    );
+    assert_eq!(
+        with_overrides(&|input| {
+            input.exit_policy_overrides.stop_loss.threshold_pct = Some(0.0);
+        }),
+        Err(CopySkip::InvalidExitPolicy)
+    );
+    // Raising the activation with the distance keeps the trail in profit.
+    assert!(with_overrides(&|input| {
+        input.exit_policy_overrides.trailing.enabled = Some(true);
+        input.exit_policy_overrides.trailing.activation_pct = Some(30.0);
+        input.exit_policy_overrides.trailing.distance_pct = Some(12.0);
+    })
+    .is_ok());
+    assert!(with_overrides(&|input| {
+        input.exit_policy_overrides.time.loss_threshold_pct = Some(-20.0);
+    })
+    .is_ok());
 }

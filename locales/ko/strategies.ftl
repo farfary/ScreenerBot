@@ -57,9 +57,15 @@ strategies-summary-param = { $label }: { $value }
 strategies-summary-none = 매개변수 없음
 # An unset optional parameter: the strategy's own value it falls back to.
 strategies-param-inherit = 전략 설정 ({ $value })
-strategies-summary-period-seconds = 조회 기간: { $amount }초
-strategies-summary-period-minutes = 조회 기간: { $amount }분
-strategies-summary-period-hours = 조회 기간: { $amount }시간
+# A duration amount with its unit, and an hour of the UTC day. $amount is the formatted number.
+strategies-value-duration-seconds = { $amount }초
+strategies-value-duration-minutes = { $amount }분
+strategies-value-duration-hours = { $amount }시간
+strategies-value-duration-days = { $amount }일
+strategies-value-utc-hour = { $amount }:00 UTC
+# A hint under a field, display only. $time is a local clock time, $amount a percentage.
+strategies-hint-local-time = 현지 시간: { $time }
+strategies-hint-price-impact = 이 크기의 거래는 가격을 약 { $amount }% 움직입니다
 
 # Parameter values in a card summary. $count selects the plural, $amount is the formatted number.
 strategies-value-percent = { $amount }%
@@ -78,6 +84,7 @@ strategies-unit-percent = %
 strategies-unit-native = { -sol }
 strategies-unit-hours = 시간
 strategies-unit-multiplier = ×
+strategies-unit-utc = UTC
 
 ## Condition catalog
 
@@ -98,7 +105,23 @@ strategies-editor-description = 설명
 strategies-editor-description-field =
     .placeholder = 이 전략이 하는 일
     .aria-label = 전략 설명
+# The exit strategy's binding to the entry strategies whose positions it manages.
+strategies-editor-entry-binding-all = 모든 진입 전략
+# Labels the button that names the entry strategies an exit strategy manages.
+strategies-editor-entry-binding-label = 관리 대상
+strategies-editor-entry-binding-hint = 선택한 진입 전략이 연 포지션을 관리합니다. 아무것도 선택하지 않으면 수동 및 복사 포지션을 포함한 모든 포지션을 관리합니다.
+strategies-editor-entry-binding-empty = 아직 진입 전략이 없습니다
+# $id is the id of an entry strategy that no longer exists.
+strategies-editor-entry-binding-deleted = { $id } (삭제됨)
 strategies-action-export = 내보내기
+strategies-action-test = 토큰으로 테스트
+# $token is the tested token's symbol or address.
+strategies-test-title = { $token } 테스트
+# $token is the tested token's symbol or address.
+strategies-test-running = { $token }(으)로 테스트 중…
+strategies-test-verdict-pass = 충족
+strategies-test-verdict-fail = 미충족
+strategies-test-verdict-unknown = 알 수 없음
 
 # Rule groups. $mode is the all/any select written into the sentence.
 strategies-rules-match = 다음 조건 중 { $mode } 충족
@@ -146,6 +169,7 @@ strategies-data-candles = 캔들
 strategies-data-pool = 풀
 strategies-data-position = 포지션
 strategies-data-market = 시장 활동
+strategies-data-clock = 시간대
 
 # Trade counts: $count selects the plural, $amount is the formatted number.
 strategies-unit-trades = 건
@@ -197,6 +221,10 @@ strategies-toast-saved = 전략 저장됨
 strategies-toast-save-failed = 저장 실패
     .message = 전략을 데이터베이스에 저장하지 못했습니다
 strategies-toast-no-strategy-validate = 검증할 전략이 없습니다
+strategies-toast-no-strategy-test = 테스트할 전략이 없습니다
+strategies-toast-test-save-first = 테스트하기 전에 전략을 저장하세요. 테스트는 저장된 규칙을 읽습니다
+strategies-toast-test-failed = 테스트 실패
+    .message = 전략을 테스트하지 못했습니다
 strategies-toast-valid = 전략이 유효합니다
 strategies-toast-invalid = 전략에 오류가 있습니다
 strategies-toast-validation-failed = 검증에 실패했습니다
@@ -364,6 +392,126 @@ strategies-condition-buy-pressure-param-min-buy-share-pct = 최소 매수 비율
 strategies-condition-buy-pressure-param-min-transactions = 최소 거래 수
     .description = 거래가 이보다 적은 구간은 조건을 발동하지 않습니다
 
+strategies-condition-transaction-velocity = 거래 속도
+    .description = 최근 구간의 거래 속도가 그 구간을 포함하는 더 긴 구간 속도의 배수 이상 또는 이하일 때 충족됩니다. 토큰의 매수 및 매도 건수를 읽습니다.
+strategies-condition-transaction-velocity-param-window = 구간
+    .description = 최근 구간과 비교 대상인 더 긴 구간
+strategies-condition-transaction-velocity-param-window-option-5m-vs-1h = 5분 대 1시간
+strategies-condition-transaction-velocity-param-window-option-1h-vs-6h = 1시간 대 6시간
+strategies-condition-transaction-velocity-param-window-option-6h-vs-24h = 6시간 대 24시간
+strategies-condition-transaction-velocity-param-comparison = 비교
+    .description = 최근 속도가 비율 이상이어야 하는지 이하여야 하는지
+strategies-condition-transaction-velocity-param-comparison-option-above = 이상 (≥)
+strategies-condition-transaction-velocity-param-comparison-option-below = 이하 (≤)
+strategies-condition-transaction-velocity-param-ratio = 속도 비율
+    .description = 최근 구간의 초당 거래 수를 긴 구간의 초당 거래 수로 나눈 값
+strategies-condition-transaction-velocity-param-min-transactions = 최소 거래 수
+    .description = 거래 수가 이보다 적은 최근 구간은 조건을 충족하지 않습니다
+
+strategies-condition-pullback-from-high = 고점 대비 되돌림
+    .description = 실시간 가격이 최근 캔들 최고가 아래로 최소 하락과 최대 하락 사이에 있을 때 충족됩니다.
+strategies-condition-pullback-from-high-param-lookback = 조회 기간
+    .description = 최고가를 찾는 캔들 수
+strategies-condition-pullback-from-high-param-min-drop-pct = 최소 하락 %
+    .description = 가격은 최고가보다 최소 이만큼 아래에 있어야 합니다
+strategies-condition-pullback-from-high-param-max-drop-pct = 최대 하락 %
+    .description = 가격은 최고가보다 최대 이만큼 아래에 있어야 합니다. 최소 하락보다 커야 합니다
+
+strategies-condition-profit-giveback = 수익 반납
+    .description = 포지션이 마지막 매수 이후 최고 미실현 수익이 일정 수준에 도달한 뒤 그 일부를 반납했을 때 충족됩니다.
+strategies-condition-profit-giveback-param-arm-after-profit-pct = 수익 후 활성화 %
+    .description = 조건이 충족되려면 최고 수익이 먼저 진입가의 이 비율에 도달해야 합니다
+strategies-condition-profit-giveback-param-giveback-pct = 반납 %
+    .description = 최고 수익 중 반납한 비율. 100%는 가격이 진입가로 돌아왔다는 뜻입니다
+
+strategies-condition-token-age = 토큰 경과 시간
+    .description = 토큰이 온체인에서 생성된 후 지난 시간이 지정 기간보다 길거나 짧을 때 충족됩니다. 생성 시각을 알 수 없는 토큰은 조건을 미정으로 둡니다.
+strategies-condition-token-age-param-comparison = 비교
+    .description = 토큰이 기간보다 오래되었는지 새로운지
+strategies-condition-token-age-param-comparison-option-older-than = 초과 (≥)
+strategies-condition-token-age-param-comparison-option-younger-than = 미만 ({ "<" })
+strategies-condition-token-age-param-time-value = 경과 시간
+    .description = 토큰 생성 후 시간. 단위는 필드 안에서 선택 (1-10000)
+strategies-condition-token-age-param-time-unit = 시간 단위
+    .description = 경과 시간의 단위
+strategies-condition-token-age-param-time-unit-option-minutes = 분
+strategies-condition-token-age-param-time-unit-option-hours = 시간
+strategies-condition-token-age-param-time-unit-option-days = 일
+
+strategies-condition-vwap = VWAP
+    .description = 실시간 가격이 최근 캔들의 거래량 가중 평균 가격보다 최소 일정 거리 위 또는 아래에 있을 때 충족됩니다.
+strategies-condition-vwap-param-lookback = 조회 기간
+    .description = 거래량 가중 평균이 포함하는 캔들 수
+strategies-condition-vwap-param-position = 위치
+    .description = VWAP 대비 가격 위치
+strategies-condition-vwap-param-position-option-above = VWAP 위
+strategies-condition-vwap-param-position-option-below = VWAP 아래
+strategies-condition-vwap-param-distance-pct = 거리 %
+    .description = VWAP으로부터의 최소 거리. 0은 선택한 쪽이면 거리와 무관함을 뜻합니다
+
+strategies-condition-volatility-range = 변동성 범위
+    .description = 최근 캔들의 평균 실제 범위(ATR)가 실시간 가격 대비 비율로 기준값보다 높거나 낮을 때 충족됩니다. 그룹 안에 두 개를 두면 범위가 됩니다.
+strategies-condition-volatility-range-param-period = ATR 기간
+    .description = 평균 실제 범위를 평활하는 캔들 수. 조건에는 이보다 캔들 하나가 더 필요합니다
+strategies-condition-volatility-range-param-comparison = 비교
+    .description = 범위가 기준값보다 높아야 하는지 낮아야 하는지
+strategies-condition-volatility-range-param-comparison-option-above = 높음
+strategies-condition-volatility-range-param-comparison-option-below = 낮음
+strategies-condition-volatility-range-param-threshold-pct = 범위 기준값 %
+    .description = 실시간 가격 대비 평균 실제 범위의 비율
+
+strategies-condition-bollinger-bands = 볼린저 밴드
+    .description = 실시간 가격이 하단 밴드 아래 또는 상단 밴드 위에 있거나 밴드가 수축할 때 충족됩니다. 밴드는 평균 종가에서 표준편차의 몇 배만큼 떨어져 있습니다.
+strategies-condition-bollinger-bands-param-period = 기간
+    .description = 평균과 표준편차가 포함하는 캔들 수
+strategies-condition-bollinger-bands-param-std-dev = 표준편차
+    .description = 각 밴드가 평균에서 떨어진 표준편차 수
+strategies-condition-bollinger-bands-param-signal = 신호
+    .description = 밴드가 보여야 하는 상태
+strategies-condition-bollinger-bands-param-signal-option-below-lower = 하단 밴드 아래
+strategies-condition-bollinger-bands-param-signal-option-above-upper = 상단 밴드 위
+strategies-condition-bollinger-bands-param-signal-option-squeeze = 스퀴즈
+strategies-condition-bollinger-bands-param-squeeze-width-pct = 스퀴즈 폭 %
+    .description = 스퀴즈의 경우: 밴드 사이 최대 거리(평균 대비 비율)
+
+strategies-condition-liquidity-to-size = 규모 대비 유동성
+    .description = 풀 준비금이 걸린 규모의 배수 이상이거나 미만일 때 충족됩니다. 진입 전략에서는 거래 규모, 청산 전략에서는 포지션 잔여 가치입니다.
+strategies-condition-liquidity-to-size-param-comparison = 비교
+    .description = 준비금이 배수 이상이어야 하는지 미만이어야 하는지
+strategies-condition-liquidity-to-size-param-comparison-option-at-least = 이상 (≥)
+strategies-condition-liquidity-to-size-param-comparison-option-below = 미만 ({ "<" })
+strategies-condition-liquidity-to-size-param-multiple = 유동성 배수
+    .description = 풀 준비금을 걸린 규모로 나눈 값. 배수 N이면 가격이 약 1/(N+1) 움직입니다
+
+strategies-condition-position-adds = 포지션 추가
+    .description = 첫 진입 후 추가 매수 횟수 또는 부분 매도 횟수가 지정 수 이상 또는 이하일 때 충족됩니다.
+strategies-condition-position-adds-param-subject = 대상
+    .description = 세는 동작
+strategies-condition-position-adds-param-subject-option-adds = 추가 매수
+strategies-condition-position-adds-param-subject-option-partial-sells = 부분 매도
+strategies-condition-position-adds-param-comparison = 비교
+    .description = 횟수가 지정 수 이상이어야 하는지 이하여야 하는지
+strategies-condition-position-adds-param-comparison-option-at-least = 이상 (≥)
+strategies-condition-position-adds-param-comparison-option-at-most = 이하 (≤)
+strategies-condition-position-adds-param-count = 횟수
+    .description = 동작 횟수
+
+strategies-condition-time-of-day = 시간대
+    .description = 현재 시각이 UTC 시간 구간 안에 있을 때 충족됩니다. 시작이 종료보다 늦으면 자정을 넘깁니다.
+strategies-condition-time-of-day-param-start-hour = 시작 시각 (UTC)
+    .description = 구간의 첫 시각, 0부터 23
+strategies-condition-time-of-day-param-end-hour = 종료 시각 (UTC)
+    .description = 구간이 끝나는 시각, 1부터 24. 그 시각 자체는 구간 밖입니다
+
+strategies-condition-liquidity-change-since-entry = 진입 이후 유동성 변화
+    .description = 포지션을 연 이후 풀 준비금이 일정 비율 이상 감소하거나 증가했을 때 충족됩니다. 진입 시 유동성이 기록되지 않은 포지션은 조건을 미정으로 둡니다.
+strategies-condition-liquidity-change-since-entry-param-comparison = 비교
+    .description = 준비금이 감소했어야 하는지 증가했어야 하는지
+strategies-condition-liquidity-change-since-entry-param-comparison-option-dropped-by = 감소
+strategies-condition-liquidity-change-since-entry-param-comparison-option-rose-by = 증가
+strategies-condition-liquidity-change-since-entry-param-change-pct = 변화 %
+    .description = 진입 이후 풀 준비금의 변화
+
 ## Shared by every condition
 
 strategies-condition-param-timeframe = 타임프레임
@@ -439,6 +587,27 @@ strategies-error-field-peak-price = 고점 가격
 strategies-error-field-slow-period = 느린 기간
 strategies-error-field-window = 시간 구간
 strategies-error-field-within-candles = 교차 캔들 수
+strategies-error-field-change = 변화
+strategies-error-field-end-hour = 종료 시각
+strategies-error-field-entry-liquidity = 진입 시 유동성
+strategies-error-field-giveback = 반납
+strategies-error-field-highest-high = 최고가
+strategies-error-field-long-window-transactions = 긴 구간 거래 수
+strategies-error-field-maximum-drop = 최대 하락
+strategies-error-field-minimum-drop = 최소 하락
+strategies-error-field-multiple = 배수
+strategies-error-field-pool-liquidity = 풀 유동성
+strategies-error-field-ratio = 비율
+strategies-error-field-remaining-position-value = 포지션 잔여 가치
+strategies-error-field-signal = 신호
+strategies-error-field-squeeze-width = 스퀴즈 폭
+strategies-error-field-standard-deviations = 표준편차
+strategies-error-field-start-hour = 시작 시각
+strategies-error-field-subject = 대상
+strategies-error-field-token-creation-time = 토큰 생성 시각
+strategies-error-field-total-volume = 총 거래량
+strategies-error-field-trade-size = 거래 규모
+strategies-error-field-vwap = VWAP
 
 # Expected parameter types
 
@@ -455,6 +624,12 @@ strategies-error-data-ohlcv-data = OHLCV 데이터
 strategies-error-data-position-data = 포지션 데이터
 strategies-error-data-peak-price = 고점 가격
 strategies-error-data-transaction-counts = 거래 건수
+strategies-error-data-entry-liquidity = 진입 시 유동성
+strategies-error-data-entry-pool-liquidity = 진입 풀의 유동성
+strategies-error-data-real-pool-reserves = 풀의 실제 유동성
+strategies-error-data-remaining-position-value = 포지션 잔여 가치
+strategies-error-data-token-creation-time = 토큰 생성 시각
+strategies-error-data-trade-size = 거래 규모
 
 # Indicators
 
@@ -465,6 +640,10 @@ strategies-error-indicator-price-change-lookback = 가격 변동 조회
 strategies-error-indicator-volume-spike = 거래량 급증
 strategies-error-indicator-moving-average-cross = 이동평균 교차
 strategies-error-indicator-rsi = RSI
+strategies-error-indicator-bollinger-bands = 볼린저 밴드
+strategies-error-indicator-pullback-from-high = 고점 대비 되돌림
+strategies-error-indicator-volatility-range = 변동성 범위
+strategies-error-indicator-vwap = VWAP
 
 # Rule tree faults
 

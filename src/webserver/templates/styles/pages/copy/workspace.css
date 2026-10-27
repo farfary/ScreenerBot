@@ -71,6 +71,15 @@
   color: var(--error-color);
 }
 
+.copy-ws-warning {
+  display: flex;
+  gap: var(--spacing-xs);
+  align-items: baseline;
+  max-width: 60ch;
+  font-size: var(--font-size-sm);
+  color: var(--warning-color);
+}
+
 .copy-ws-state small {
   display: block;
   max-width: 60ch;

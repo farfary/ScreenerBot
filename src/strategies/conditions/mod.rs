@@ -1,40 +1,63 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Strategy condition evaluators for rule-tree nodes (price, volume, candle patterns).
+//! Strategy condition evaluators for rule-tree nodes (price, volume, candles, market, position, clock).
+mod bollinger_bands;
 mod buy_pressure;
 mod candle_size;
 mod catalog;
 mod consecutive_candles;
 mod drawdown_from_peak;
 mod indicators;
+mod liquidity_change_since_entry;
 mod liquidity_level;
+mod liquidity_to_size;
 mod ma_cross;
+mod position_adds;
 mod position_holding_time;
 mod position_profit;
 mod price_breakout;
 mod price_change_percent;
 mod price_to_ma;
+mod profit_giveback;
+mod pullback_from_high;
 mod rsi;
+mod time_of_day;
+mod token_age;
+mod transaction_velocity;
+mod volatility_range;
 mod volume_spike;
+mod vwap;
 
+pub use bollinger_bands::BollingerBandsCondition;
 pub use buy_pressure::BuyPressureCondition;
 pub use candle_size::CandleSizeCondition;
 pub use consecutive_candles::ConsecutiveCandlesCondition;
 pub use drawdown_from_peak::DrawdownFromPeakCondition;
+pub use liquidity_change_since_entry::LiquidityChangeSinceEntryCondition;
 pub use liquidity_level::LiquidityLevelCondition;
+pub use liquidity_to_size::LiquidityToSizeCondition;
 pub use ma_cross::MaCrossCondition;
+pub use position_adds::PositionAddsCondition;
 pub use position_holding_time::PositionHoldingTimeCondition;
 pub use position_profit::PositionProfitCondition;
 pub use price_breakout::PriceBreakoutCondition;
 pub use price_change_percent::PriceChangePercentCondition;
 pub use price_to_ma::PriceToMaCondition;
+pub use profit_giveback::ProfitGivebackCondition;
+pub use pullback_from_high::PullbackFromHighCondition;
 pub use rsi::RsiCondition;
+pub use time_of_day::TimeOfDayCondition;
+pub use token_age::TokenAgeCondition;
+pub use transaction_velocity::TransactionVelocityCondition;
+pub use volatility_range::VolatilityRangeCondition;
 pub use volume_spike::VolumeSpikeCondition;
+pub use vwap::VwapCondition;
 
 use crate::ohlcvs::{Candle, Timeframe};
 use crate::strategies::types::{
-    Condition, ConditionData, EvaluationContext, StrategyType, TransactionCounts, WindowCounts,
+    Condition, ConditionData, EvaluationContext, RuleTree, StrategyType, TransactionCounts,
+    WindowCounts,
 };
 use crate::strategies::{Error, Result};
 use async_trait::async_trait;
@@ -53,6 +76,11 @@ use std::collections::HashMap;
 /// Three buckets tolerates the ordinary quiet gap (a minute or two of no trades on a 1m
 /// series) and refuses a series that has genuinely stopped tracking the price.
 const MAX_SERIES_STALENESS_BUCKETS: i64 = 3;
+
+/// The most candles a condition's window may span: the strategy bundle holds
+/// [`BUNDLE_CANDLE_COUNT`](crate::ohlcvs::BUNDLE_CANDLE_COUNT) candles per timeframe, so a
+/// wider window could never fill and its leaf would stay unknown.
+pub const CANDLE_WINDOW_MAX: usize = crate::ohlcvs::BUNDLE_CANDLE_COUNT;
 
 /// Helper to extract candles for a specific timeframe from TimeframeBundle
 ///
@@ -258,6 +286,17 @@ impl ConditionRegistry {
         registry.register(Box::new(PositionProfitCondition));
         registry.register(Box::new(DrawdownFromPeakCondition));
         registry.register(Box::new(BuyPressureCondition));
+        registry.register(Box::new(TransactionVelocityCondition));
+        registry.register(Box::new(PullbackFromHighCondition));
+        registry.register(Box::new(ProfitGivebackCondition));
+        registry.register(Box::new(TokenAgeCondition));
+        registry.register(Box::new(VwapCondition));
+        registry.register(Box::new(VolatilityRangeCondition));
+        registry.register(Box::new(BollingerBandsCondition));
+        registry.register(Box::new(LiquidityToSizeCondition));
+        registry.register(Box::new(PositionAddsCondition));
+        registry.register(Box::new(TimeOfDayCondition));
+        registry.register(Box::new(LiquidityChangeSinceEntryCondition));
 
         registry
     }
@@ -276,6 +315,42 @@ impl ConditionRegistry {
     /// List all registered condition types
     pub fn list_types(&self) -> Vec<String> {
         self.evaluators.keys().cloned().collect()
+    }
+
+    /// The candle timeframes the switched-on rules of `rules` read, each once in rule order:
+    /// a candle condition's own `timeframe`, else `strategy_timeframe`, as
+    /// [`get_candles_for_timeframe`] resolves it. A rule of an unknown condition type or an
+    /// invalid timeframe adds none; its evaluation reports that itself.
+    pub fn candle_timeframes(&self, rules: &RuleTree, strategy_timeframe: &str) -> Vec<Timeframe> {
+        let mut timeframes = Vec::new();
+        self.collect_candle_timeframes(rules, strategy_timeframe, &mut timeframes);
+        timeframes
+    }
+
+    fn collect_candle_timeframes(
+        &self,
+        node: &RuleTree,
+        strategy_timeframe: &str,
+        timeframes: &mut Vec<Timeframe>,
+    ) {
+        if node.disabled {
+            return;
+        }
+        if let Some(condition) = &node.condition {
+            let reads_candles = self
+                .get(&condition.condition_type)
+                .is_some_and(|evaluator| evaluator.reads() == ConditionData::Candles);
+            let timeframe = get_param_string_optional(condition, "timeframe");
+            let timeframe = Timeframe::from_str(timeframe.as_deref().unwrap_or(strategy_timeframe));
+            if let Some(timeframe) = timeframe.filter(|_| reads_candles) {
+                if !timeframes.contains(&timeframe) {
+                    timeframes.push(timeframe);
+                }
+            }
+        }
+        for child in node.conditions.iter().flatten() {
+            self.collect_candle_timeframes(child, strategy_timeframe, timeframes);
+        }
     }
 
     /// Get all parameter schemas for UI

@@ -10,8 +10,9 @@
 //! - get_pool_price(chain, mint) -> current fresh price for a token
 //! - get_available_tokens(chain) -> tokens of that chain with fresh prices
 //! - get_cache_stats(scope) -> cache counts summed over the scope's chains
-//! - token_pools(chain, mint) / pool_protocol(chain, mint, pool) -> the
-//!   chain's known pools of a token
+//! - token_pools(chain, mint) / pool_protocol(chain, mint, pool) /
+//!   pool_reports_virtual_reserves(chain, mint, pool) -> the chain's known
+//!   pools of a token
 //! - pricing_status(scope) -> the pricing pipelines' state, merged over the
 //!   scope's chains
 //!
@@ -40,8 +41,8 @@ pub mod service;
 pub mod types;
 
 pub use api::{
-    get_available_tokens, get_cache_stats, get_pool_price, pool_protocol, pricing_status,
-    token_pools,
+    get_available_tokens, get_cache_stats, get_pool_price, pool_protocol,
+    pool_reports_virtual_reserves, pricing_status, token_pools,
 };
 pub use driver::{
     sort_protocol_counts, AccountFetchStatus, PoolDirectoryStatus, PricingDriver, PricingInit,

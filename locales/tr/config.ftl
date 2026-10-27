@@ -1149,6 +1149,12 @@ config-trader-trade-size-sol = İşlem Boyutu
 config-trader-trailing-stop-activation-pct = İz Süren Stop Devreye Girme
     .hint = İz süren stopu bu kâr %'sinden sonra etkinleştirin (10 = +%10'da etkinleştir)
     .unit = %
+config-trader-trailing-stop-band-distance-pct = Bant mesafeleri
+    .hint = Bandına ulaşıldığında stopun zirvenin ne kadar altından takip ettiği; bandın zirve kârından küçük
+    .unit = %
+config-trader-trailing-stop-band-profit-pct = Takip bantları
+    .hint = Her bandın takip mesafesini devraldığı, ortalama girişe göre zirve kâr
+    .unit = %
 config-trader-trailing-stop-distance-pct = İz Süren Stop Mesafesi
     .hint = Zirvenin ne kadar altından izleneceği (5 = fiyat zirveden %5 düşerse çık)
     .unit = %

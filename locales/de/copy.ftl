@@ -519,6 +519,18 @@ copy-validate-trailing-distance = Der Trailing-Abstand muss über 0 % und höchs
 copy-validate-take-profit = Take Profit muss über 0 % liegen.
 copy-validate-time-duration = Die Zeitregel benötigt eine Dauer größer als null.
 copy-validate-time-threshold = Der Schwellenwert der Zeitregel ist ein Verlust: Verwenden Sie 0 % oder eine negative Zahl.
+# $reason is the message of the rule the stored overrides break.
+copy-exit-issue-warning = Exit-Regeln brauchen Aufmerksamkeit: { $reason } Bis Sie sie korrigieren, nutzen Bestände für diese Regel die Einstellung des Traders.
+# $distance and $activation are percentages.
+copy-exit-issue-trailing-distance-above-activation = Der Trailing-Abstand von { $distance } % muss unter der Aktivierung liegen, derzeit { $activation } %.
+# $maximum is the number of bands allowed.
+copy-exit-issue-trailing-band-count = Der Trailing-Stop kann höchstens { $maximum } Stufen haben.
+# $profit and $floor are percentages.
+copy-exit-issue-trailing-band-order = Die Trailing-Stufe bei { $profit } % muss über { $floor } % beginnen, der Aktivierung oder der Stufe davor.
+# $profit and $distance are percentages.
+copy-exit-issue-trailing-band-distance = Die Trailing-Stufe bei { $profit } % muss mit mehr als 0 % und weniger als ihrem Start nachziehen, derzeit { $distance } %.
+# $value is a percentage.
+copy-exit-issue-time-loss-threshold = Der Schwellenwert der Verlustzeit-Regel muss ein Verlust zwischen -100 % und 0 % sein, derzeit { $value } %.
 copy-warning-mirror = Nur die Verkäufe der Wallet schließen Bestände: Kein Stop-Loss schützt sie, und ein Token, den die Wallet nie verkauft, bleibt im Bestand.
 copy-warning-no-rules = Keine Ausstiegsregel ist aktiv und Wallet-Verkäufe werden ignoriert: Bestände werden nie verkauft.
 copy-warning-no-stop-loss = Kein Stop-Loss aktiv: Ein fallender Token wird gehalten, bis eine andere Regel oder die Wallet verkauft.

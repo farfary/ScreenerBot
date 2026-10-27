@@ -193,6 +193,23 @@ trader-trailing-peak = पीक
 trader-trailing-final = अंतिम +{ $value }%
 trader-trailing-summary-protected = <strong>{ $value }</strong> प्रॉफ़िट सुरक्षित रहा
 trader-trailing-summary-avoided = पीक से <strong>{ $value }</strong> नुकसान से बचाव
+# $step is the band's position in the list, from 1.
+trader-trailing-band = बैंड { $step }
+# $step is the band's position in the list, from 1.
+trader-trailing-band-profit-label = बैंड { $step } का पीक प्रॉफ़िट
+# $step is the band's position in the list, from 1.
+trader-trailing-band-distance-label = बैंड { $step } की ट्रेल दूरी
+trader-trailing-band-profit-caption = पीक प्रॉफ़िट से
+trader-trailing-band-distance-caption = ट्रेल दूरी
+trader-trailing-add-band = बैंड जोड़ें
+# $step is the band's position in the list, from 1.
+trader-trailing-remove-band = बैंड { $step } हटाएँ
+# $min and $max are the configured bounds of a band's peak profit.
+trader-trailing-band-error-profit-range = हर बैंड का पीक प्रॉफ़िट { $min }% और { $max }% के बीच होना चाहिए
+# $min and $max are the configured bounds of a band's distance.
+trader-trailing-band-error-distance-range = हर बैंड की दूरी { $min }% और { $max }% के बीच होनी चाहिए
+trader-trailing-band-error-order = हर बैंड का पीक प्रॉफ़िट एक्टिवेशन और पिछले बैंड से ज़्यादा होना चाहिए
+trader-trailing-band-error-distance = हर बैंड की दूरी उसके पीक प्रॉफ़िट से कम होनी चाहिए
 
 ## Break-even stop
 
@@ -244,7 +261,6 @@ trader-time-unit-seconds = सेकंड
 trader-time-unit-minutes = मिनट
 trader-time-unit-hours = घंटे
 trader-time-unit-days = दिन
-trader-time-conversion-default = 168 घंटे = 7 दिन
 trader-time-conversion = { $duration } = { $readable }
 trader-duration-seconds =
     { $count ->
@@ -322,11 +338,8 @@ trader-dca-error-drop-range = हर गिरावट { $min }% और { $max 
 trader-dca-error-size-range = हर आकार पहली खरीद के { $min }× और { $max }× के बीच होना चाहिए
 trader-dca-error-order = पहली एंट्री से मापने पर हर जोड़ को पिछले से गहरी गिरावट चाहिए
 trader-dca-cooldown-impact = अतिरिक्त एंट्री के बीच कम से कम { $span }
-trader-dca-min-hold-impact =
-    { $minutes ->
-        [0] पहला जोड़ एंट्री के तुरंत बाद हो सकता है
-       *[other] पहला जोड़ एंट्री के बाद कम से कम { $span } प्रतीक्षा करता है
-    }
+trader-dca-min-hold-none = पहला जोड़ एंट्री के तुरंत बाद हो सकता है
+trader-dca-min-hold-impact = पहला जोड़ एंट्री के बाद कम से कम { $span } प्रतीक्षा करता है
 trader-dca-capacity = यह पोज़िशन अधिकतम इतना रख सकती है: { $amount } (पहली खरीद का { $multiple }×)
 trader-dca-info-title = DCA स्ट्रैटेजी जानकारी
 trader-dca-info-subtitle = DCA ट्रेडिंग के लिए ज़रूरी बातें

@@ -26,7 +26,8 @@
  *   the whole position and otherwise sells the smallest share. Add is disabled while the
  *   last level is at the profit maximum.
  * - A caption row names the profit and share columns over the inputs, hidden from
- *   assistive technology, since each input carries its own name.
+ *   assistive technology, since each input carries its own name, and is not shown while
+ *   the ladder has no row.
  * - A ladder that keeps a runner warns that only the stop loss or the user can close it
  *   while the trailing stop, the break-even stop, both time exits and every exit
  *   strategy are off.
@@ -37,9 +38,17 @@
  *   first entry, a step that is not deeper than the one before it keeps Save disabled.
  *   The ladder saves as its two config lists, and the basis as its stored name.
  * - The trailing stop states the minimum it locks when it arms, and warns when that
- *   stop sits at or below the entry.
+ *   stop sits at or below the entry. Its distance bands are the same editor: empty by
+ *   default, a band added doubles the last threshold (the activation for the first) at
+ *   the last distance (the base distance for the first), up to the metadata's limit;
+ *   thresholds must rise above the activation, re-checked as the activation is typed,
+ *   each band trails by less than its threshold, and the last band can be removed.
  * - The break-even stop and the flat-position exit state their rule in one line, take
  *   their bounds and units from the metadata, and save through their cards.
+ * - The time limit fields take their bounds from the metadata, not the markup, and a
+ *   blank threshold or duration shows a dash in its example instead of a stand-in figure.
+ * - A line the page script writes carries no static catalog id, so a re-localization pass
+ *   cannot restore a placeholder over it.
  *
  * The config served here uses a trade size other than the default, so a figure that
  * follows the default instead of the loaded config fails.
@@ -105,6 +114,14 @@ async function openTrader(tab, trader = {}, { exitStrategiesOff = false } = {}) 
 
 /** Text without the bidi isolation marks Fluent puts around each placeable. */
 const plain = (text) => text.replace(/[\u2068\u2069]/g, "").trim();
+
+/** Waits until the element `id` contains `text` once those isolation marks are dropped. */
+const waitForPlain = (page, id, text) =>
+  page.waitForFunction(
+    ([id, text]) =>
+      document.getElementById(id)?.textContent.replace(/[\u2068\u2069]/g, "").includes(text),
+    [id, text]
+  );
 
 /** The computed line under the field `id`. */
 const line = async (page, id) =>
@@ -654,13 +671,13 @@ test("the trailing stop's computed lines follow the typed activation and distanc
   try {
     const activation = page.locator("#activation-impact");
     const distance = page.locator("#distance-impact");
-    await activation.filter({ hasText: "+10%" }).waitFor();
+    await waitForPlain(page, "activation-impact", "+10%");
     assert.equal(plain(await distance.textContent()), "Exits at -5% from peak");
 
     await page.locator("#trail-activation").fill("25");
     await page.locator("#trail-distance").fill("8");
-    await activation.filter({ hasText: "+25%" }).waitFor();
-    await distance.filter({ hasText: "-8%" }).waitFor();
+    await waitForPlain(page, "activation-impact", "+25%");
+    await waitForPlain(page, "distance-impact", "-8%");
     assert.equal(plain(await activation.textContent()), "Starts trailing at +25% profit");
     assert.equal(plain(await distance.textContent()), "Exits at -8% from peak");
 
@@ -668,6 +685,100 @@ test("the trailing stop's computed lines follow the typed activation and distanc
     await page.locator("#trail-distance").fill("");
     await activation.filter({ hasText: "—" }).waitFor();
     await distance.filter({ hasText: "—" }).waitFor();
+    // The worked example's profit lines show the dash alone, never a signed blank.
+    for (const line of ["#example-activation-pct", "#example-peak-pct", "#example-exit-pct"]) {
+      assert.equal(plain(await page.locator(line).textContent()), "—", line);
+    }
+  } finally {
+    await close();
+  }
+});
+
+test("the trailing bands list starts empty, adds bands above the activation and saves both lists", async () => {
+  const { page, close } = await openTrader("trailing-stop", {
+    trailing_stop_activation_pct: 20,
+    trailing_stop_distance_pct: 10,
+    trailing_stop_band_profit_pct: [],
+    trailing_stop_band_distance_pct: [],
+  });
+  try {
+    const bands = page.locator("#trailing-bands");
+    const rows = bands.locator(".level-list-row");
+    const add = bands.locator(".level-list-add");
+    const error = bands.locator(".level-list-error");
+    const save = page.locator(".config-card:has(#trailing-bands) .config-card-save");
+
+    await page.waitForFunction(
+      () => document.querySelector("#trailing-bands .level-list-add")?.disabled === false
+    );
+    assert.equal(await rows.count(), 0, "no band: the base distance applies at every profit");
+    assert.equal(await bands.locator(".level-list-caption").isHidden(), true);
+
+    await add.click();
+    assert.equal(await bands.locator(".level-list-caption").isVisible(), true);
+    assert.equal(await rows.nth(0).locator(".level-list-band-profit").inputValue(), "40");
+    assert.equal(
+      await rows.nth(0).locator(".level-list-band-distance").inputValue(),
+      "10",
+      "a first band starts from twice the activation at the base distance"
+    );
+    await add.click();
+    await add.click();
+    assert.equal(await rows.count(), 3);
+    assert.equal(await rows.nth(2).locator(".level-list-band-profit").inputValue(), "160");
+    assert.equal(await add.isDisabled(), true, "the metadata allows three bands");
+    assert.equal(await error.isVisible(), false);
+
+    await rows.nth(1).locator(".level-list-band-profit").fill("30");
+    assert.equal(
+      plain(await error.textContent()),
+      "Each band needs a higher peak profit than the activation and the band before it"
+    );
+    assert.equal(await save.isDisabled(), true);
+    await rows.nth(1).locator(".level-list-band-profit").fill("80");
+
+    await rows.nth(0).locator(".level-list-band-distance").fill("40");
+    assert.equal(plain(await error.textContent()), "Each band must trail by less than its peak profit");
+    await rows.nth(0).locator(".level-list-band-distance").fill("8");
+    await rows.nth(1).locator(".level-list-band-distance").fill("6");
+    await rows.nth(2).locator(".level-list-remove").click();
+    assert.equal(await error.isVisible(), false);
+
+    // The bands must sit above the activation: raising it past a band is refused at once.
+    await page.locator("#trail-activation").fill("50");
+    await error.filter({ hasText: "higher peak profit" }).waitFor();
+    await page.locator("#trail-activation").fill("20");
+    await error.waitFor({ state: "hidden" });
+
+    const body = await savedBody(page, "trailing-bands");
+    assert.deepEqual(body.trailing_stop_band_profit_pct, [40, 80]);
+    assert.deepEqual(body.trailing_stop_band_distance_pct, [8, 6]);
+  } finally {
+    await close();
+  }
+});
+
+test("the last trailing band can be removed, leaving the base distance", async () => {
+  const { page, close } = await openTrader("trailing-stop", {
+    trailing_stop_band_profit_pct: [50],
+    trailing_stop_band_distance_pct: [4],
+  });
+  try {
+    const rows = page.locator("#trailing-bands .level-list-row");
+    await rows.first().waitFor();
+    await page.waitForFunction(
+      () => document.querySelector("#trailing-bands .level-list-remove")?.disabled === false
+    );
+    await rows.first().locator(".level-list-remove").click();
+    assert.equal(await rows.count(), 0);
+    assert.equal(
+      await page.locator("#trailing-bands .level-list-caption").isHidden(),
+      true,
+      "no column captions over an empty list"
+    );
+    const body = await savedBody(page, "trailing-bands");
+    assert.deepEqual(body.trailing_stop_band_profit_pct, []);
+    assert.deepEqual(body.trailing_stop_band_distance_pct, []);
   } finally {
     await close();
   }
@@ -756,6 +867,64 @@ test("the flat-position exit takes its bounds from the metadata and saves its fi
     const body = request.postDataJSON();
     assert.equal(body.time_exit_stagnation_minutes, 90);
     assert.equal(body.time_exit_stagnation_band_pct, 3);
+  } finally {
+    await close();
+  }
+});
+
+test("the time limit takes its bounds from the metadata and a blank field shows a dash", async () => {
+  const { page, close } = await openTrader("time-rules", {
+    time_override_duration: 48,
+    time_override_unit: "hours",
+    time_override_loss_threshold_percent: -25,
+  });
+  try {
+    const loss = page.locator("#time-loss-impact");
+    await loss.filter({ hasText: "25" }).waitFor();
+    const bounds = (id) =>
+      page.locator(`#${id}`).evaluate((el) => ({ min: el.min, max: el.max, value: el.value }));
+    assert.deepEqual(await bounds("time-max-hold"), { min: "1", max: "43200", value: "48" });
+    assert.deepEqual(await bounds("time-loss-threshold"), { min: "0", max: "100", value: "25" });
+
+    await page.locator("#time-loss-threshold").fill("");
+    assert.equal(plain(await loss.textContent()), "—");
+    assert.equal(plain(await page.locator("#time-example-loss").textContent()), "—");
+    await page.locator("#time-max-hold").fill("");
+    assert.equal(plain(await page.locator("#time-conversion-hint").textContent()), "—");
+    assert.equal(plain(await page.locator("#time-example-duration").textContent()), "—");
+  } finally {
+    await close();
+  }
+});
+
+test("a line the page script writes carries no static catalog placeholder", async () => {
+  const { page, close } = await openTrader("stop-loss");
+  try {
+    const scriptOwned = [
+      "stop-loss-impact",
+      "stop-loss-example-loss",
+      "activation-impact",
+      "example-activation-pct",
+      "example-peak-pct",
+      "example-exit-pct",
+      "example-protected",
+      "example-avoided",
+      "break-even-summary",
+      "time-conversion-hint",
+      "time-loss-impact",
+      "time-example-loss",
+      "time-example-duration",
+      "time-stagnation-summary",
+    ];
+    const placeholders = await page.$$eval(
+      scriptOwned.map((id) => `#${id}`).join(","),
+      (lines) => lines.filter((el) => el.hasAttribute("data-l10n-id")).map((el) => el.id)
+    );
+    assert.equal(
+      await page.locator(scriptOwned.map((id) => `#${id}`).join(",")).count(),
+      scriptOwned.length
+    );
+    assert.deepEqual(placeholders, []);
   } finally {
     await close();
   }

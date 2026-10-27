@@ -107,6 +107,7 @@ errors-strategies-no-performance = Für diese Strategie liegen keine Performance
 errors-strategies-performance-failed = Performance-Statistiken konnten nicht abgerufen werden
 errors-strategies-schemas-failed = Bedingungsschemata konnten nicht abgerufen werden
 errors-strategies-evaluation-failed = Strategiebewertung fehlgeschlagen
+errors-strategies-test-data-without-price = Übergebene Markt- oder Positionsdaten benötigen einen aktuellen Preis
 
 errors-transactions-own-wallet-unavailable = Die Haupt-Wallet ist nicht konfiguriert
 errors-transactions-invalid-subject = Das Transaktionssubjekt ist keine gültige Solana-Adresse

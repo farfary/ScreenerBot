@@ -222,7 +222,7 @@ mod tests {
         for (name, schema) in schemas {
             let reads = schema["reads"].as_str().expect("reads");
             assert!(
-                ["candles", "position", "pool", "market"].contains(&reads),
+                ["candles", "position", "pool", "market", "clock"].contains(&reads),
                 "{name} reads {reads}"
             );
             assert_eq!(schema["reads"], recorded[name]["reads"], "{name}");

@@ -13,7 +13,7 @@
  * Rust test `strategies_catalog_covers_conditions` keeps complete.
  */
 
-import { formatBooleanFlag, formatFixed, withSolUnit } from "../../core/format.js";
+import { formatBooleanFlag, formatFixed, formatTimestamp, withSolUnit } from "../../core/format.js";
 
 // Ids are the `unit` values of a numeric parameter schema; summaries write them as counted amounts.
 
@@ -22,6 +22,15 @@ const PARAM_UNIT_INPUT_LABELS = Object.freeze({
   hours: "strategies-unit-hours",
   multiplier: "strategies-unit-multiplier",
   trades: "strategies-unit-trades",
+  utc_hour: "strategies-unit-utc",
+});
+
+// Ids are the `time_unit` values of a duration parameter pair (`time_value` + `time_unit`).
+const DURATION_VALUE_KEYS = Object.freeze({
+  SECONDS: "strategies-value-duration-seconds",
+  MINUTES: "strategies-value-duration-minutes",
+  HOURS: "strategies-value-duration-hours",
+  DAYS: "strategies-value-duration-days",
 });
 
 /** Name of a condition, or its type id when the schema is unknown. */
@@ -107,10 +116,44 @@ export function formatParamValue(value, spec) {
         return I18n.t("strategies-value-multiplier", counted);
       case "trades":
         return I18n.t("strategies-value-trades", counted);
+      case "utc_hour":
+        return I18n.t("strategies-value-utc-hour", { amount: trimmed(value) });
       default:
         break;
     }
     return formatFixed(value, { decimals: Number.isInteger(value) ? 0 : 2 });
   }
   return String(value);
+}
+
+/** A duration amount with its `time_unit` id, as the card summary shows it. */
+export function formatDurationParam(value, unit) {
+  if (value === undefined || value === null) return "—";
+  const amount = trimmed(Number(value));
+  return I18n.label(DURATION_VALUE_KEYS, unit, { amount });
+}
+
+/**
+ * Display-only hint under a numeric field whose schema names one in `hint`, or an
+ * empty string. `local_time` reads an hour of the UTC day as the viewer's local
+ * clock time today; `price_impact` reads a pool-to-size multiple N as the price
+ * impact a constant-product swap of that size has, about 1 / (N + 1).
+ */
+export function paramHint(spec, value, now = new Date()) {
+  const number = Number(value);
+  if (value === null || value === undefined || value === "" || !Number.isFinite(number)) return "";
+  switch (spec?.hint) {
+    case "local_time": {
+      const at = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), number);
+      return I18n.t("strategies-hint-local-time", {
+        time: formatTimestamp(at, { includeDate: false, includeSeconds: false }),
+      });
+    }
+    case "price_impact":
+      return number > 0
+        ? I18n.t("strategies-hint-price-impact", { amount: trimmed(100 / (number + 1)) })
+        : "";
+    default:
+      return "";
+  }
 }

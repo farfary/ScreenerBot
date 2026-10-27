@@ -6,6 +6,9 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+use crate::i18n::UiText;
+use crate::strategies::types::RuleOutcome;
+
 // =============================================================================
 // RESPONSE TYPES (Inline with routes as per ScreenerBot patterns)
 // =============================================================================
@@ -31,6 +34,8 @@ pub struct StrategyItem {
     pub updated_at: String,
     pub author: Option<String>,
     pub version: i32,
+    /// Exit strategies: the entry strategies whose positions it manages; empty = all.
+    pub entry_strategy_ids: Vec<String>,
 }
 
 /// Strategy detail response
@@ -49,6 +54,8 @@ pub struct StrategyDetailResponse {
     pub updated_at: String,
     pub author: Option<String>,
     pub version: i32,
+    /// Exit strategies: the entry strategies whose positions it manages; empty = all.
+    pub entry_strategy_ids: Vec<String>,
 }
 
 /// Strategy performance response
@@ -63,16 +70,19 @@ pub struct StrategyPerformanceResponse {
 }
 
 /// Strategy test request
+///
+/// Without `current_price` the strategy is tested in the token's live context, the one
+/// the trader would evaluate it in; with it, in the supplied price, market and position
+/// data alone.
 #[derive(Debug, Deserialize)]
 pub struct StrategyTestRequest {
     pub token_mint: String,
-    pub current_price: f64,
+    #[serde(default)]
+    pub current_price: Option<f64>,
     #[serde(default)]
     pub market_data: Option<TestMarketData>,
     #[serde(default)]
     pub position_data: Option<TestPositionData>,
-    #[serde(default)]
-    pub ohlcv_data: Option<TestOhlcvData>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -95,22 +105,10 @@ pub struct TestPositionData {
     pub partial_exit_count: u32,
     #[serde(default)]
     pub remaining_value_native: Option<f64>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct TestOhlcvData {
-    pub candles: Vec<TestCandle>,
-    pub timeframe: String,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct TestCandle {
-    pub timestamp: String,
-    pub open: f64,
-    pub high: f64,
-    pub low: f64,
-    pub close: f64,
-    pub volume: f64,
+    #[serde(default)]
+    pub entry_liquidity_native: Option<f64>,
+    #[serde(default)]
+    pub entry_liquidity_pool: Option<String>,
 }
 
 /// Strategy test response
@@ -118,10 +116,13 @@ pub struct TestCandle {
 pub struct StrategyTestResponse {
     pub strategy_id: String,
     pub strategy_name: String,
-    pub result: bool,
-    pub confidence: f64,
+    /// Whether the strategy signals; `None` when a rule it needs had no usable data.
+    pub result: Option<bool>,
+    /// Why the result is unknown: the data error the undecided rule reached.
+    pub unknown_reason: Option<UiText>,
     pub execution_time_ms: u64,
-    pub details: HashMap<String, serde_json::Value>,
+    /// The verdict of every node of the rule tree, the root first.
+    pub rules: RuleOutcome,
 }
 
 /// Strategy create/update request
@@ -140,6 +141,11 @@ pub struct StrategyRequest {
     #[serde(default)]
     pub parameters: HashMap<String, serde_json::Value>,
     pub author: Option<String>,
+    /// Exit strategies: the entry strategies whose positions it manages; empty = all.
+    /// Absent: none on create, the stored binding on update, so a request that omits
+    /// the field never widens a binding to every position.
+    #[serde(default)]
+    pub entry_strategy_ids: Option<Vec<String>>,
 }
 
 /// Strategy enabled-state update request.

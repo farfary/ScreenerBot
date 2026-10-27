@@ -57,9 +57,15 @@ strategies-summary-param = { $label }: { $value }
 strategies-summary-none = لا توجد معاملات
 # An unset optional parameter: the strategy's own value it falls back to.
 strategies-param-inherit = إعداد الاستراتيجية ({ $value })
-strategies-summary-period-seconds = فترة الرجوع: { $amount } ث
-strategies-summary-period-minutes = فترة الرجوع: { $amount } د
-strategies-summary-period-hours = فترة الرجوع: { $amount } س
+# A duration amount with its unit, and an hour of the UTC day. $amount is the formatted number.
+strategies-value-duration-seconds = { $amount } ث
+strategies-value-duration-minutes = { $amount } د
+strategies-value-duration-hours = { $amount } س
+strategies-value-duration-days = { $amount } ي
+strategies-value-utc-hour = { $amount }:00 UTC
+# A hint under a field, display only. $time is a local clock time, $amount a percentage.
+strategies-hint-local-time = وقتك المحلي: { $time }
+strategies-hint-price-impact = صفقة بهذا الحجم تحرّك السعر بنحو { $amount }%
 
 # Parameter values in a card summary. $count selects the plural, $amount is the formatted number.
 strategies-value-percent = { $amount }%
@@ -88,6 +94,7 @@ strategies-unit-percent = %
 strategies-unit-native = { -sol }
 strategies-unit-hours = ساعة
 strategies-unit-multiplier = ×
+strategies-unit-utc = UTC
 
 ## Condition catalog
 
@@ -108,7 +115,23 @@ strategies-editor-description = الوصف
 strategies-editor-description-field =
     .placeholder = ما تفعله هذه الاستراتيجية
     .aria-label = وصف الاستراتيجية
+# The exit strategy's binding to the entry strategies whose positions it manages.
+strategies-editor-entry-binding-all = كل استراتيجيات الدخول
+# Labels the button that names the entry strategies an exit strategy manages.
+strategies-editor-entry-binding-label = تدير
+strategies-editor-entry-binding-hint = تدير المراكز التي فتحتها استراتيجيات الدخول المحددة. إذا لم تُحدد أي استراتيجية فإنها تدير كل المراكز، بما فيها اليدوية والمنسوخة.
+strategies-editor-entry-binding-empty = لا توجد استراتيجية دخول بعد
+# $id is the id of an entry strategy that no longer exists.
+strategies-editor-entry-binding-deleted = { $id } (محذوفة)
 strategies-action-export = تصدير
+strategies-action-test = اختبار على رمز
+# $token is the tested token's symbol or address.
+strategies-test-title = اختبار على { $token }
+# $token is the tested token's symbol or address.
+strategies-test-running = جارٍ الاختبار على { $token }…
+strategies-test-verdict-pass = تتحقق
+strategies-test-verdict-fail = لا تتحقق
+strategies-test-verdict-unknown = غير معروف
 
 # Rule groups. $mode is the all/any select written into the sentence.
 strategies-rules-match = الشروط المطلوب تحققها: { $mode }
@@ -172,6 +195,7 @@ strategies-data-candles = الشموع
 strategies-data-pool = المجمّع
 strategies-data-position = المركز
 strategies-data-market = نشاط السوق
+strategies-data-clock = وقت اليوم
 
 # Trade counts: $count selects the plural, $amount is the formatted number.
 strategies-unit-trades = صفقة
@@ -231,6 +255,10 @@ strategies-toast-saved = تم حفظ الاستراتيجية
 strategies-toast-save-failed = فشل الحفظ
     .message = فشل حفظ الاستراتيجية في قاعدة البيانات
 strategies-toast-no-strategy-validate = لا توجد استراتيجية للتحقق منها
+strategies-toast-no-strategy-test = لا توجد استراتيجية لاختبارها
+strategies-toast-test-save-first = احفظ الاستراتيجية قبل اختبارها: يقرأ الاختبار القواعد المحفوظة
+strategies-toast-test-failed = فشل الاختبار
+    .message = تعذّر اختبار الاستراتيجية
 strategies-toast-valid = الاستراتيجية صالحة
 strategies-toast-invalid = الاستراتيجية تحتوي على أخطاء
 strategies-toast-validation-failed = فشل التحقق
@@ -398,6 +426,126 @@ strategies-condition-buy-pressure-param-min-buy-share-pct = الحد الأدن�
 strategies-condition-buy-pressure-param-min-transactions = الحد الأدنى للمعاملات
     .description = النوافذ ذات المعاملات الأقل لا تُفعّل الشرط أبدًا
 
+strategies-condition-transaction-velocity = سرعة المعاملات
+    .description = تتحقق عندما يكون معدل المعاملات في نافذة حديثة على الأقل أو على الأكثر مضاعفًا لمعدل النافذة الأطول التي تحتويها. تقرأ أعداد الشراء والبيع للرمز.
+strategies-condition-transaction-velocity-param-window = النوافذ
+    .description = النافذة الحديثة والنافذة الأطول التي تُقارن بها
+strategies-condition-transaction-velocity-param-window-option-5m-vs-1h = 5 دقائق مقابل ساعة
+strategies-condition-transaction-velocity-param-window-option-1h-vs-6h = ساعة مقابل 6 ساعات
+strategies-condition-transaction-velocity-param-window-option-6h-vs-24h = 6 ساعات مقابل 24 ساعة
+strategies-condition-transaction-velocity-param-comparison = المقارنة
+    .description = هل يجب أن يكون المعدل الحديث على الأقل أو على الأكثر النسبة
+strategies-condition-transaction-velocity-param-comparison-option-above = على الأقل (≥)
+strategies-condition-transaction-velocity-param-comparison-option-below = على الأكثر (≤)
+strategies-condition-transaction-velocity-param-ratio = نسبة المعدل
+    .description = المعاملات في الثانية في النافذة الحديثة مقسومة على المعاملات في الثانية في النافذة الطويلة
+strategies-condition-transaction-velocity-param-min-transactions = الحد الأدنى للمعاملات
+    .description = النوافذ الحديثة ذات المعاملات الأقل لا تحقق الشرط أبدًا
+
+strategies-condition-pullback-from-high = التراجع من القمة
+    .description = تتحقق عندما يقع السعر الحي بين هبوط أدنى وهبوط أقصى تحت أعلى قمة لآخر الشموع.
+strategies-condition-pullback-from-high-param-lookback = فترة الرجوع
+    .description = عدد الشموع التي تؤخذ منها أعلى قمة
+strategies-condition-pullback-from-high-param-min-drop-pct = الهبوط الأدنى %
+    .description = يجب أن يكون السعر تحت القمة بهذا القدر على الأقل
+strategies-condition-pullback-from-high-param-max-drop-pct = الهبوط الأقصى %
+    .description = يجب أن يكون السعر تحت القمة بهذا القدر على الأكثر؛ يجب أن يكون أكبر من الهبوط الأدنى
+
+strategies-condition-profit-giveback = التنازل عن الربح
+    .description = تتحقق عندما يكون المركز قد تنازل عن حصة من أفضل ربح غير محقق منذ آخر شراء، بعد أن بلغ ذلك الربح مستوى معينًا.
+strategies-condition-profit-giveback-param-arm-after-profit-pct = التفعيل بعد ربح %
+    .description = يجب أن يبلغ أفضل ربح هذه النسبة من سعر الدخول قبل أن يمكن للشرط أن يتحقق
+strategies-condition-profit-giveback-param-giveback-pct = التنازل %
+    .description = حصة أفضل ربح التي تم التنازل عنها؛ 100% تعني أن السعر عاد إلى سعر الدخول
+
+strategies-condition-token-age = عمر الرمز
+    .description = تتحقق عندما تكون المدة منذ إنشاء الرمز على السلسلة أطول أو أقصر من مدة محددة. الرمز ذو وقت الإنشاء المجهول يترك الشرط غير محسوم.
+strategies-condition-token-age-param-comparison = المقارنة
+    .description = هل يجب أن يكون الرمز أقدم أو أحدث من المدة
+strategies-condition-token-age-param-comparison-option-older-than = أقدم من (≥)
+strategies-condition-token-age-param-comparison-option-younger-than = أحدث من ({ "<" })
+strategies-condition-token-age-param-time-value = العمر
+    .description = الوقت منذ إنشاء الرمز، بالوحدة المختارة داخل الحقل (1-10000)
+strategies-condition-token-age-param-time-unit = وحدة الوقت
+    .description = وحدة العمر
+strategies-condition-token-age-param-time-unit-option-minutes = دقيقة
+strategies-condition-token-age-param-time-unit-option-hours = ساعة
+strategies-condition-token-age-param-time-unit-option-days = يوم
+
+strategies-condition-vwap = VWAP
+    .description = تتحقق عندما يكون السعر الحي فوق أو تحت متوسط السعر المرجح بالحجم لآخر الشموع بمسافة على الأقل.
+strategies-condition-vwap-param-lookback = فترة الرجوع
+    .description = عدد الشموع التي يغطيها المتوسط المرجح بالحجم
+strategies-condition-vwap-param-position = الموضع
+    .description = موضع السعر بالنسبة إلى VWAP
+strategies-condition-vwap-param-position-option-above = فوق VWAP
+strategies-condition-vwap-param-position-option-below = تحت VWAP
+strategies-condition-vwap-param-distance-pct = المسافة %
+    .description = أدنى مسافة عن VWAP؛ 0 تعني أي مسافة في الجهة المختارة
+
+strategies-condition-volatility-range = نطاق التقلب
+    .description = تتحقق عندما يكون متوسط المدى الحقيقي لآخر الشموع، كنسبة من السعر الحي، فوق أو تحت حد معين. اثنان منها في مجموعة يكوّنان نطاقًا.
+strategies-condition-volatility-range-param-period = فترة ATR
+    .description = عدد الشموع التي يُنعَّم عليها متوسط المدى الحقيقي؛ يحتاج الشرط إلى شمعة إضافية
+strategies-condition-volatility-range-param-comparison = المقارنة
+    .description = هل يجب أن يكون المدى فوق أو تحت الحد
+strategies-condition-volatility-range-param-comparison-option-above = فوق
+strategies-condition-volatility-range-param-comparison-option-below = تحت
+strategies-condition-volatility-range-param-threshold-pct = حد المدى %
+    .description = متوسط المدى الحقيقي كنسبة من السعر الحي
+
+strategies-condition-bollinger-bands = نطاقات بولينجر
+    .description = تتحقق عندما يكون السعر الحي تحت النطاق السفلي أو فوق النطاق العلوي، أو عندما تنضغط النطاقات. تقع النطاقات على بعد عدد من الانحرافات المعيارية حول متوسط الإغلاق.
+strategies-condition-bollinger-bands-param-period = الفترة
+    .description = عدد الشموع التي يغطيها المتوسط والانحراف المعياري
+strategies-condition-bollinger-bands-param-std-dev = الانحرافات المعيارية
+    .description = كم انحرافًا معياريًا يبعد كل نطاق عن المتوسط
+strategies-condition-bollinger-bands-param-signal = الإشارة
+    .description = ما يجب أن تظهره النطاقات
+strategies-condition-bollinger-bands-param-signal-option-below-lower = تحت النطاق السفلي
+strategies-condition-bollinger-bands-param-signal-option-above-upper = فوق النطاق العلوي
+strategies-condition-bollinger-bands-param-signal-option-squeeze = انضغاط
+strategies-condition-bollinger-bands-param-squeeze-width-pct = عرض الانضغاط %
+    .description = للانضغاط: أكبر مسافة بين النطاقين، كنسبة من المتوسط
+
+strategies-condition-liquidity-to-size = السيولة مقابل الحجم
+    .description = تتحقق عندما تكون احتياطيات المجمع على الأقل أو أقل من مضاعف للحجم المعني: حجم الصفقة في استراتيجية الدخول، والقيمة المتبقية للمركز في استراتيجية الخروج.
+strategies-condition-liquidity-to-size-param-comparison = المقارنة
+    .description = هل يجب أن تكون الاحتياطيات على الأقل أو أقل من المضاعف
+strategies-condition-liquidity-to-size-param-comparison-option-at-least = على الأقل (≥)
+strategies-condition-liquidity-to-size-param-comparison-option-below = أقل من ({ "<" })
+strategies-condition-liquidity-to-size-param-multiple = مضاعف السيولة
+    .description = احتياطيات المجمع مقسومة على الحجم المعني؛ المضاعف N يحرّك السعر بنحو 1/(N+1)
+
+strategies-condition-position-adds = إضافات المركز
+    .description = تتحقق عندما يكون عدد المشتريات المضافة بعد الدخول الأول، أو عمليات البيع الجزئي، على الأقل أو على الأكثر عددًا معينًا.
+strategies-condition-position-adds-param-subject = المعدود
+    .description = الإجراءات التي تُعد
+strategies-condition-position-adds-param-subject-option-adds = المشتريات المضافة
+strategies-condition-position-adds-param-subject-option-partial-sells = عمليات البيع الجزئي
+strategies-condition-position-adds-param-comparison = المقارنة
+    .description = هل يجب أن يكون العدد على الأقل أو على الأكثر الرقم
+strategies-condition-position-adds-param-comparison-option-at-least = على الأقل (≥)
+strategies-condition-position-adds-param-comparison-option-at-most = على الأكثر (≤)
+strategies-condition-position-adds-param-count = العدد
+    .description = عدد الإجراءات
+
+strategies-condition-time-of-day = وقت اليوم
+    .description = تتحقق عندما تقع الساعة الحالية ضمن نافذة من ساعات UTC. البداية بعد النهاية تمتد عبر منتصف الليل.
+strategies-condition-time-of-day-param-start-hour = ساعة البداية (UTC)
+    .description = أول ساعة في النافذة، من 0 إلى 23
+strategies-condition-time-of-day-param-end-hour = ساعة النهاية (UTC)
+    .description = الساعة التي تنتهي عندها النافذة، من 1 إلى 24؛ تلك الساعة نفسها خارج النافذة
+
+strategies-condition-liquidity-change-since-entry = تغير السيولة منذ الدخول
+    .description = تتحقق عندما تنخفض احتياطيات المجمع أو ترتفع بنسبة مئوية على الأقل منذ فتح المركز. المركز الذي لا توجد له سيولة دخول مسجلة يترك الشرط غير محسوم.
+strategies-condition-liquidity-change-since-entry-param-comparison = المقارنة
+    .description = هل يجب أن تكون الاحتياطيات قد انخفضت أو ارتفعت
+strategies-condition-liquidity-change-since-entry-param-comparison-option-dropped-by = انخفضت بمقدار
+strategies-condition-liquidity-change-since-entry-param-comparison-option-rose-by = ارتفعت بمقدار
+strategies-condition-liquidity-change-since-entry-param-change-pct = التغير %
+    .description = تغير احتياطيات المجمع منذ الدخول
+
 ## Shared by every condition
 
 strategies-condition-param-timeframe = الإطار الزمني
@@ -473,6 +621,27 @@ strategies-error-field-peak-price = سعر القمة
 strategies-error-field-slow-period = الفترة البطيئة
 strategies-error-field-window = النافذة
 strategies-error-field-within-candles = عدد شموع التقاطع
+strategies-error-field-change = التغير
+strategies-error-field-end-hour = ساعة النهاية
+strategies-error-field-entry-liquidity = سيولة الدخول
+strategies-error-field-giveback = التنازل
+strategies-error-field-highest-high = أعلى قمة
+strategies-error-field-long-window-transactions = معاملات النافذة الطويلة
+strategies-error-field-maximum-drop = الهبوط الأقصى
+strategies-error-field-minimum-drop = الهبوط الأدنى
+strategies-error-field-multiple = المضاعف
+strategies-error-field-pool-liquidity = سيولة المجمع
+strategies-error-field-ratio = النسبة
+strategies-error-field-remaining-position-value = القيمة المتبقية للمركز
+strategies-error-field-signal = الإشارة
+strategies-error-field-squeeze-width = عرض الانضغاط
+strategies-error-field-standard-deviations = الانحرافات المعيارية
+strategies-error-field-start-hour = ساعة البداية
+strategies-error-field-subject = المعدود
+strategies-error-field-token-creation-time = وقت إنشاء الرمز
+strategies-error-field-total-volume = الحجم الكلي
+strategies-error-field-trade-size = حجم الصفقة
+strategies-error-field-vwap = VWAP
 
 # Expected parameter types
 
@@ -489,6 +658,12 @@ strategies-error-data-ohlcv-data = بيانات OHLCV
 strategies-error-data-position-data = بيانات المركز
 strategies-error-data-peak-price = سعر القمة
 strategies-error-data-transaction-counts = أعداد المعاملات
+strategies-error-data-entry-liquidity = سيولة الدخول
+strategies-error-data-entry-pool-liquidity = سيولة مجمع الدخول
+strategies-error-data-real-pool-reserves = السيولة الفعلية للمجمع
+strategies-error-data-remaining-position-value = القيمة المتبقية للمركز
+strategies-error-data-token-creation-time = وقت إنشاء الرمز
+strategies-error-data-trade-size = حجم الصفقة
 
 # Indicators
 
@@ -499,6 +674,10 @@ strategies-error-indicator-price-change-lookback = فترة رجوع تغير ا
 strategies-error-indicator-volume-spike = طفرة حجم التداول
 strategies-error-indicator-moving-average-cross = تقاطع المتوسطات المتحركة
 strategies-error-indicator-rsi = RSI
+strategies-error-indicator-bollinger-bands = نطاقات بولينجر
+strategies-error-indicator-pullback-from-high = التراجع من القمة
+strategies-error-indicator-volatility-range = نطاق التقلب
+strategies-error-indicator-vwap = VWAP
 
 # Rule tree faults
 

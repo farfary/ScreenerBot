@@ -57,9 +57,15 @@ strategies-summary-param = { $label }：{ $value }
 strategies-summary-none = 无参数
 # An unset optional parameter: the strategy's own value it falls back to.
 strategies-param-inherit = 策略设置（{ $value }）
-strategies-summary-period-seconds = 回溯期：{ $amount } 秒
-strategies-summary-period-minutes = 回溯期：{ $amount } 分钟
-strategies-summary-period-hours = 回溯期：{ $amount } 小时
+# A duration amount with its unit, and an hour of the UTC day. $amount is the formatted number.
+strategies-value-duration-seconds = { $amount } 秒
+strategies-value-duration-minutes = { $amount } 分钟
+strategies-value-duration-hours = { $amount } 小时
+strategies-value-duration-days = { $amount } 天
+strategies-value-utc-hour = { $amount }:00 UTC
+# A hint under a field, display only. $time is a local clock time, $amount a percentage.
+strategies-hint-local-time = 你的本地时间：{ $time }
+strategies-hint-price-impact = 此规模的交易会使价格变动约 { $amount }%
 
 # Parameter values in a card summary. $count selects the plural, $amount is the formatted number.
 strategies-value-percent = { $amount }%
@@ -78,6 +84,7 @@ strategies-unit-percent = %
 strategies-unit-native = { -sol }
 strategies-unit-hours = 小时
 strategies-unit-multiplier = ×
+strategies-unit-utc = UTC
 
 ## Condition catalog
 
@@ -98,7 +105,23 @@ strategies-editor-description = 描述
 strategies-editor-description-field =
     .placeholder = 此策略的作用
     .aria-label = 策略描述
+# The exit strategy's binding to the entry strategies whose positions it manages.
+strategies-editor-entry-binding-all = 所有入场策略
+# Labels the button that names the entry strategies an exit strategy manages.
+strategies-editor-entry-binding-label = 管理
+strategies-editor-entry-binding-hint = 管理所勾选入场策略开立的仓位。未勾选任何策略时，管理所有仓位，包括手动和跟单仓位。
+strategies-editor-entry-binding-empty = 还没有入场策略
+# $id is the id of an entry strategy that no longer exists.
+strategies-editor-entry-binding-deleted = { $id }（已删除）
 strategies-action-export = 导出
+strategies-action-test = 用代币测试
+# $token is the tested token's symbol or address.
+strategies-test-title = 用 { $token } 测试
+# $token is the tested token's symbol or address.
+strategies-test-running = 正在用 { $token } 测试…
+strategies-test-verdict-pass = 满足
+strategies-test-verdict-fail = 不满足
+strategies-test-verdict-unknown = 未知
 
 # Rule groups. $mode is the all/any select written into the sentence.
 strategies-rules-match = 满足这些条件中的{ $mode }
@@ -146,6 +169,7 @@ strategies-data-candles = K 线
 strategies-data-pool = 池
 strategies-data-position = 仓位
 strategies-data-market = 市场活动
+strategies-data-clock = 时段
 
 # Trade counts: $count selects the plural, $amount is the formatted number.
 strategies-unit-trades = 笔
@@ -197,6 +221,10 @@ strategies-toast-saved = 策略已保存
 strategies-toast-save-failed = 保存失败
     .message = 将策略保存到数据库失败
 strategies-toast-no-strategy-validate = 没有可验证的策略
+strategies-toast-no-strategy-test = 没有可测试的策略
+strategies-toast-test-save-first = 测试前请先保存策略：测试读取已保存的规则
+strategies-toast-test-failed = 测试失败
+    .message = 无法测试策略
 strategies-toast-valid = 策略有效
 strategies-toast-invalid = 策略存在错误
 strategies-toast-validation-failed = 验证失败
@@ -364,6 +392,126 @@ strategies-condition-buy-pressure-param-min-buy-share-pct = 最低买入占比 %
 strategies-condition-buy-pressure-param-min-transactions = 最低交易笔数
     .description = 交易笔数少于该值的窗口永远不会触发条件
 
+strategies-condition-transaction-velocity = 交易速度
+    .description = 当最近窗口的交易速率至少或至多为包含它的较长窗口速率的某个倍数时触发。读取代币的买入和卖出笔数。
+strategies-condition-transaction-velocity-param-window = 窗口
+    .description = 最近窗口及与之比较的较长窗口
+strategies-condition-transaction-velocity-param-window-option-5m-vs-1h = 5 分钟 对 1 小时
+strategies-condition-transaction-velocity-param-window-option-1h-vs-6h = 1 小时 对 6 小时
+strategies-condition-transaction-velocity-param-window-option-6h-vs-24h = 6 小时 对 24 小时
+strategies-condition-transaction-velocity-param-comparison = 比较
+    .description = 最近速率必须至少还是至多为该比率
+strategies-condition-transaction-velocity-param-comparison-option-above = 至少（≥）
+strategies-condition-transaction-velocity-param-comparison-option-below = 至多（≤）
+strategies-condition-transaction-velocity-param-ratio = 速率比
+    .description = 最近窗口每秒交易数除以长窗口每秒交易数
+strategies-condition-transaction-velocity-param-min-transactions = 最少交易数
+    .description = 交易数少于此值的最近窗口永不触发条件
+
+strategies-condition-pullback-from-high = 高点回撤
+    .description = 当实时价格位于最近 K 线最高价下方最小跌幅与最大跌幅之间时触发。
+strategies-condition-pullback-from-high-param-lookback = 回溯周期
+    .description = 用于取最高价的 K 线数量
+strategies-condition-pullback-from-high-param-min-drop-pct = 最小跌幅 %
+    .description = 价格必须至少低于最高价这么多
+strategies-condition-pullback-from-high-param-max-drop-pct = 最大跌幅 %
+    .description = 价格最多低于最高价这么多；必须大于最小跌幅
+
+strategies-condition-profit-giveback = 利润回吐
+    .description = 当持仓自上次买入以来的最佳未实现收益达到某一水平后又回吐了一部分时触发。
+strategies-condition-profit-giveback-param-arm-after-profit-pct = 盈利后启用 %
+    .description = 最佳收益须先达到入场价的此百分比，条件才能触发
+strategies-condition-profit-giveback-param-giveback-pct = 回吐 %
+    .description = 最佳收益中回吐的比例；100% 表示价格回到入场价
+
+strategies-condition-token-age = 代币年龄
+    .description = 当代币链上创建以来的时间长于或短于某一时长时触发。创建时间未知的代币会使条件保持未定。
+strategies-condition-token-age-param-comparison = 比较
+    .description = 代币必须早于还是晚于该时长
+strategies-condition-token-age-param-comparison-option-older-than = 早于（≥）
+strategies-condition-token-age-param-comparison-option-younger-than = 晚于（{ "<" }）
+strategies-condition-token-age-param-time-value = 年龄
+    .description = 代币创建以来的时间，单位在字段内选择（1-10000）
+strategies-condition-token-age-param-time-unit = 时间单位
+    .description = 年龄的单位
+strategies-condition-token-age-param-time-unit-option-minutes = 分钟
+strategies-condition-token-age-param-time-unit-option-hours = 小时
+strategies-condition-token-age-param-time-unit-option-days = 天
+
+strategies-condition-vwap = VWAP
+    .description = 当实时价格高于或低于最近 K 线的成交量加权平均价至少一定距离时触发。
+strategies-condition-vwap-param-lookback = 回溯周期
+    .description = 成交量加权平均覆盖的 K 线数量
+strategies-condition-vwap-param-position = 位置
+    .description = 价格相对 VWAP 的位置
+strategies-condition-vwap-param-position-option-above = 高于 VWAP
+strategies-condition-vwap-param-position-option-below = 低于 VWAP
+strategies-condition-vwap-param-distance-pct = 距离 %
+    .description = 与 VWAP 的最小距离；0 表示所选一侧的任意距离
+
+strategies-condition-volatility-range = 波动区间
+    .description = 当最近 K 线的平均真实波幅占实时价格的百分比高于或低于阈值时触发。一个组中放两个即构成区间。
+strategies-condition-volatility-range-param-period = ATR 周期
+    .description = 平滑平均真实波幅所用的 K 线数量；条件需要比此多一根 K 线
+strategies-condition-volatility-range-param-comparison = 比较
+    .description = 波幅必须高于还是低于阈值
+strategies-condition-volatility-range-param-comparison-option-above = 高于
+strategies-condition-volatility-range-param-comparison-option-below = 低于
+strategies-condition-volatility-range-param-threshold-pct = 波幅阈值 %
+    .description = 平均真实波幅占实时价格的百分比
+
+strategies-condition-bollinger-bands = 布林带
+    .description = 当实时价格低于下轨或高于上轨，或布林带收窄时触发。上下轨位于平均收盘价上下若干个标准差处。
+strategies-condition-bollinger-bands-param-period = 周期
+    .description = 均值和标准差覆盖的 K 线数量
+strategies-condition-bollinger-bands-param-std-dev = 标准差
+    .description = 每条轨道距均值的标准差倍数
+strategies-condition-bollinger-bands-param-signal = 信号
+    .description = 布林带须呈现的状态
+strategies-condition-bollinger-bands-param-signal-option-below-lower = 低于下轨
+strategies-condition-bollinger-bands-param-signal-option-above-upper = 高于上轨
+strategies-condition-bollinger-bands-param-signal-option-squeeze = 收窄
+strategies-condition-bollinger-bands-param-squeeze-width-pct = 收窄宽度 %
+    .description = 收窄时：上下轨之间的最大距离，占均值的百分比
+
+strategies-condition-liquidity-to-size = 流动性与规模
+    .description = 当池储备至少为或低于所涉规模的某个倍数时触发：入场策略中为交易规模，出场策略中为持仓剩余价值。
+strategies-condition-liquidity-to-size-param-comparison = 比较
+    .description = 储备必须至少为还是低于该倍数
+strategies-condition-liquidity-to-size-param-comparison-option-at-least = 至少（≥）
+strategies-condition-liquidity-to-size-param-comparison-option-below = 低于（{ "<" }）
+strategies-condition-liquidity-to-size-param-multiple = 流动性倍数
+    .description = 池储备除以所涉规模；倍数 N 使价格变动约 1/(N+1)
+
+strategies-condition-position-adds = 持仓加仓
+    .description = 当首次入场后的加仓次数或部分卖出次数至少或至多为某个数时触发。
+strategies-condition-position-adds-param-subject = 计数对象
+    .description = 计数哪些操作
+strategies-condition-position-adds-param-subject-option-adds = 加仓买入
+strategies-condition-position-adds-param-subject-option-partial-sells = 部分卖出
+strategies-condition-position-adds-param-comparison = 比较
+    .description = 次数必须至少还是至多为该数
+strategies-condition-position-adds-param-comparison-option-at-least = 至少（≥）
+strategies-condition-position-adds-param-comparison-option-at-most = 至多（≤）
+strategies-condition-position-adds-param-count = 次数
+    .description = 操作次数
+
+strategies-condition-time-of-day = 时段
+    .description = 当当前小时处于 UTC 小时窗口内时触发。开始晚于结束时跨越午夜。
+strategies-condition-time-of-day-param-start-hour = 开始小时（UTC）
+    .description = 窗口的第一个小时，0 到 23
+strategies-condition-time-of-day-param-end-hour = 结束小时（UTC）
+    .description = 窗口结束的小时，1 到 24；该小时本身不在窗口内
+
+strategies-condition-liquidity-change-since-entry = 入场以来流动性变化
+    .description = 当池储备自开仓以来下降或上升至少某个百分比时触发。未记录入场流动性的持仓会使条件保持未定。
+strategies-condition-liquidity-change-since-entry-param-comparison = 比较
+    .description = 储备必须是下降还是上升
+strategies-condition-liquidity-change-since-entry-param-comparison-option-dropped-by = 下降
+strategies-condition-liquidity-change-since-entry-param-comparison-option-rose-by = 上升
+strategies-condition-liquidity-change-since-entry-param-change-pct = 变化 %
+    .description = 入场以来池储备的变化
+
 ## Shared by every condition
 
 strategies-condition-param-timeframe = 时间周期
@@ -439,6 +587,27 @@ strategies-error-field-peak-price = 高点价格
 strategies-error-field-slow-period = 慢线周期
 strategies-error-field-window = 时间窗口
 strategies-error-field-within-candles = 交叉 K 线数
+strategies-error-field-change = 变化
+strategies-error-field-end-hour = 结束小时
+strategies-error-field-entry-liquidity = 入场流动性
+strategies-error-field-giveback = 回吐
+strategies-error-field-highest-high = 最高价
+strategies-error-field-long-window-transactions = 长窗口交易数
+strategies-error-field-maximum-drop = 最大跌幅
+strategies-error-field-minimum-drop = 最小跌幅
+strategies-error-field-multiple = 倍数
+strategies-error-field-pool-liquidity = 池流动性
+strategies-error-field-ratio = 比率
+strategies-error-field-remaining-position-value = 持仓剩余价值
+strategies-error-field-signal = 信号
+strategies-error-field-squeeze-width = 收窄宽度
+strategies-error-field-standard-deviations = 标准差
+strategies-error-field-start-hour = 开始小时
+strategies-error-field-subject = 计数对象
+strategies-error-field-token-creation-time = 代币创建时间
+strategies-error-field-total-volume = 总成交量
+strategies-error-field-trade-size = 交易规模
+strategies-error-field-vwap = VWAP
 
 # Expected parameter types
 
@@ -455,6 +624,12 @@ strategies-error-data-ohlcv-data = OHLCV 数据
 strategies-error-data-position-data = 仓位数据
 strategies-error-data-peak-price = 高点价格
 strategies-error-data-transaction-counts = 交易笔数
+strategies-error-data-entry-liquidity = 入场流动性
+strategies-error-data-entry-pool-liquidity = 入场池的流动性
+strategies-error-data-real-pool-reserves = 池的真实流动性
+strategies-error-data-remaining-position-value = 持仓剩余价值
+strategies-error-data-token-creation-time = 代币创建时间
+strategies-error-data-trade-size = 交易规模
 
 # Indicators
 
@@ -465,6 +640,10 @@ strategies-error-indicator-price-change-lookback = 价格变化回溯期
 strategies-error-indicator-volume-spike = 成交量激增
 strategies-error-indicator-moving-average-cross = 移动平均线交叉
 strategies-error-indicator-rsi = RSI
+strategies-error-indicator-bollinger-bands = 布林带
+strategies-error-indicator-pullback-from-high = 高点回撤
+strategies-error-indicator-volatility-range = 波动区间
+strategies-error-indicator-vwap = VWAP
 
 # Rule tree faults
 

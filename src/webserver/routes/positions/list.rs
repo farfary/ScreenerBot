@@ -151,8 +151,6 @@ fn map_position_to_response_with_logo(
         effective_entry_price: p.effective_entry_price,
         effective_exit_price: p.effective_exit_price,
         native_received: p.native_received,
-        profit_target_min: p.profit_target_min,
-        profit_target_max: p.profit_target_max,
         liquidity_tier: p.liquidity_tier.clone(),
         transaction_entry_verified: p.transaction_entry_verified,
         transaction_exit_verified: p.transaction_exit_verified,

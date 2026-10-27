@@ -51,12 +51,34 @@ tokens-positions-fact-opened = खोली गई
 tokens-positions-fact-exit-price = एग्ज़िट कीमत
 tokens-positions-fact-native-received = प्राप्त { -sol }
 tokens-positions-fact-closed-reason = बंद करने का कारण
-tokens-positions-fact-target-min = न्यूनतम प्रॉफ़िट टारगेट
-tokens-positions-fact-target-max = अधिकतम प्रॉफ़िट टारगेट
 tokens-positions-fact-highest = सर्वोच्च कीमत
 tokens-positions-fact-basis-peak = अंतिम खरीद के बाद का पीक
 tokens-positions-fact-lowest = न्यूनतम कीमत
-tokens-positions-section-range = टारगेट और रेंज
+tokens-positions-section-range = प्राइस रेंज
+tokens-positions-section-exit-plan = एग्ज़िट प्लान
+tokens-positions-plan-stop-loss = स्टॉप लॉस
+# $step is the take-profit step's position in the ladder, from 1.
+tokens-positions-plan-step = टेक प्रॉफ़िट { $step }
+# $profit is the formatted profit level, $share the formatted share of the position it sells.
+tokens-positions-plan-step-value = { $profit } पर { $share } बेचता है
+tokens-positions-plan-step-taken = बिक गया
+tokens-positions-plan-trailing = ट्रेलिंग स्टॉप
+# $activation is the formatted profit that arms the trail, $distance the formatted share it trails by.
+tokens-positions-plan-trailing-value = { $activation } पर सक्रिय, शिखर से { $distance } नीचे चलता है
+# $step is the band's position in the list, from 1.
+tokens-positions-plan-trailing-band = ट्रेलिंग बैंड { $step }
+# $profit is the formatted profit the band starts at, $distance the formatted share it trails by.
+tokens-positions-plan-trailing-band-value = { $profit } से, शिखर से { $distance } नीचे चलता है
+tokens-positions-plan-break-even = ब्रेक-ईवन स्टॉप
+# $trigger and $offset are formatted profits.
+tokens-positions-plan-break-even-value = { $trigger } पर सक्रिय, { $offset } पर बेचता है
+tokens-positions-plan-time-loss = घाटे के समय पर एग्ज़िट
+# $duration is a formatted duration, $threshold a formatted loss.
+tokens-positions-plan-time-loss-value = { $duration } के बाद, { $threshold } या उससे नीचे
+tokens-positions-plan-time-stagnation = स्थिर पोज़िशन एग्ज़िट
+# $duration is a formatted duration, $band a formatted share.
+tokens-positions-plan-time-stagnation-value = { $duration } के बाद, जब तक एंट्री के { $band } के भीतर रहे
+tokens-positions-plan-none = कोई एग्ज़िट नियम चालू नहीं है
 tokens-positions-section-market = मार्केट और होल्डिंग
 tokens-positions-kicker = पोज़िशन
 tokens-positions-fallback-symbol = टोकन

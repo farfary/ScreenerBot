@@ -267,6 +267,23 @@ trader-trailing-final = +{ $value }% نهائي
 trader-trailing-summary-protected = تمت حماية ربح <strong>{ $value }</strong>
 # $value is a formatted percentage.
 trader-trailing-summary-avoided = تم تفادي خسارة <strong>{ $value }</strong> من القمة
+# $step is the band's position in the list, from 1.
+trader-trailing-band = النطاق { $step }
+# $step is the band's position in the list, from 1.
+trader-trailing-band-profit-label = أعلى ربح للنطاق { $step }
+# $step is the band's position in the list, from 1.
+trader-trailing-band-distance-label = مسافة تتبع النطاق { $step }
+trader-trailing-band-profit-caption = من أعلى ربح
+trader-trailing-band-distance-caption = التتبع بمسافة
+trader-trailing-add-band = إضافة نطاق
+# $step is the band's position in the list, from 1.
+trader-trailing-remove-band = إزالة النطاق { $step }
+# $min and $max are the configured bounds of a band's peak profit.
+trader-trailing-band-error-profit-range = يجب أن يكون أعلى ربح لكل نطاق بين { $min }% و{ $max }%
+# $min and $max are the configured bounds of a band's distance.
+trader-trailing-band-error-distance-range = يجب أن تكون مسافة كل نطاق بين { $min }% و{ $max }%
+trader-trailing-band-error-order = يحتاج كل نطاق إلى أعلى ربح أكبر من التفعيل ومن النطاق الذي قبله
+trader-trailing-band-error-distance = يجب أن يتتبع كل نطاق بمسافة أقل من أعلى ربح له
 
 ## Break-even stop
 
@@ -322,8 +339,6 @@ trader-time-unit-seconds = ثوانٍ
 trader-time-unit-minutes = دقائق
 trader-time-unit-hours = ساعات
 trader-time-unit-days = أيام
-# Shown before the configured duration loads.
-trader-time-conversion-default = 168 ساعة = 7 أيام
 # $duration and $readable are formatted durations.
 trader-time-conversion = { $duration } = { $readable }
 trader-duration-seconds =
@@ -424,11 +439,8 @@ trader-dca-error-drop-range = يجب أن يكون كل انخفاض بين { $m
 trader-dca-error-size-range = يجب أن يكون كل حجم بين { $min }× و{ $max }× من أول شراء
 trader-dca-error-order = عند القياس من الدخول الأول، تحتاج كل إضافة إلى انخفاض أعمق من السابقة
 trader-dca-cooldown-impact = { $span } على الأقل بين الدخولات الإضافية
-trader-dca-min-hold-impact =
-    { $minutes ->
-        [0] قد تأتي أول إضافة فور الدخول
-       *[other] تنتظر أول إضافة { $span } على الأقل بعد الدخول
-    }
+trader-dca-min-hold-none = قد تأتي أول إضافة فور الدخول
+trader-dca-min-hold-impact = تنتظر أول إضافة { $span } على الأقل بعد الدخول
 trader-dca-capacity = أقصى ما يمكن أن يحمله هذا المركز: { $amount } ({ $multiple }× أول شراء)
 trader-dca-info-title = معلومات استراتيجية DCA
 trader-dca-info-subtitle = اعتبارات مهمة عند التداول بـ DCA

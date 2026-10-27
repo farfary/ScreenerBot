@@ -103,8 +103,14 @@ export function createExampleUpdaters({
 
     if (!durationInput || !unitSelect || !hintText) return;
 
-    const duration = parseFloat(durationInput.value) || 168;
-    const unit = unitSelect.value || "hours";
+    // A blank or unreadable duration has no example; the page shows a dash, not a made-up one.
+    const duration = parseFloat(durationInput.value);
+    const unit = unitSelect.value;
+    if (!Number.isFinite(duration)) {
+      hintText.textContent = "—";
+      if (exampleDuration) exampleDuration.textContent = "—";
+      return;
+    }
 
     const readable = convertTimeToReadable(duration, unit);
     hintText.textContent = I18n.t("trader-time-conversion", {
@@ -267,7 +273,12 @@ export function createExampleUpdaters({
     if (!lossInput) return;
 
     // The field holds the loss as its magnitude; the "−" is the field's fixed prefix.
-    const loss = Math.abs(parseFloat(lossInput.value) || 0);
+    const loss = Math.abs(parseFloat(lossInput.value));
+    if (!Number.isFinite(loss)) {
+      if (impactText) impactText.textContent = "—";
+      if (exampleLoss) exampleLoss.textContent = "—";
+      return;
+    }
 
     if (impactText) {
       impactText.textContent = I18n.t("trader-time-loss-impact", { value: String(loss) });
@@ -289,8 +300,9 @@ export function createExampleUpdaters({
 
     if (!thresholdInput) return;
 
-    const threshold = parseFloat(thresholdInput.value) || 50;
-    const minHold = parseInt(minHoldInput?.value || "0", 10);
+    // A blank field reads as NaN, which every figure below renders as a dash.
+    const threshold = parseFloat(thresholdInput.value);
+    const minHold = Number.parseInt(minHoldInput?.value ?? "", 10);
     const allowPartial = allowPartialInput?.checked === true;
     // The share the first stop-loss sale sells, as loaded from `trader.stop_loss_partial_pct`
     // or as edited; the second sale sells the rest.
@@ -299,7 +311,9 @@ export function createExampleUpdaters({
     // Update impact text
     const impactText = $("#stop-loss-impact");
     if (impactText) {
-      impactText.textContent = I18n.t("trader-stop-loss-impact", { threshold: String(threshold) });
+      impactText.textContent = Number.isFinite(threshold)
+        ? I18n.t("trader-stop-loss-impact", { threshold: String(threshold) })
+        : "—";
     }
 
     // Update example values
@@ -313,7 +327,9 @@ export function createExampleUpdaters({
     const exit = entry * (1 - threshold / 100);
 
     if (exampleEntry) exampleEntry.textContent = exampleSol(entry);
-    const lossPercent = I18n.t("trader-value-percent", { value: `-${threshold}` });
+    const lossPercent = Number.isFinite(threshold)
+      ? I18n.t("trader-value-percent", { value: `-${threshold}` })
+      : "—";
     if (exampleTrigger) exampleTrigger.textContent = lossPercent;
     if (exampleExit) {
       exampleExit.textContent = exampleSol(allowPartial ? exit * (partialPct / 100) : exit);
@@ -325,7 +341,9 @@ export function createExampleUpdaters({
     // Update hold time display
     const holdTimeDisplay = $("#stop-loss-hold-time-display");
     if (holdTimeDisplay) {
-      if (minHold === 0) {
+      if (!Number.isFinite(minHold)) {
+        holdTimeDisplay.textContent = "—";
+      } else if (minHold === 0) {
         holdTimeDisplay.textContent = I18n.t("trader-stop-loss-hold-immediate");
       } else {
         const span =
@@ -364,6 +382,12 @@ export function createExampleUpdaters({
 
   /** A percent figure in an example strip: one decimal at most, no trailing zero. */
   const examplePercent = (value) => formatFixed(value, { decimals: 1, trim: true });
+
+  /** A profit figure through the signed message `text`, or the dash alone for a blank field. */
+  const exampleProfit = (text, value) =>
+    Number.isFinite(value) ? text({ value: examplePercent(value) }) : "—";
+  const profitText = (args) => I18n.t("trader-example-profit", args);
+  const finalText = (args) => I18n.t("trader-trailing-final", args);
 
   /** A signed percent in a computed line: one decimal at most, no trailing zero. */
   const signedPercent = (value) => formatPercentValue(value, { decimals: 1, trim: true });
@@ -432,23 +456,21 @@ export function createExampleUpdaters({
 
     if (!activationInput || !distanceInput) return;
 
-    const typedActivation = parseFloat(activationInput.value);
-    const typedDistance = parseFloat(distanceInput.value);
+    // A blank field reads as NaN, which every figure below renders as a dash.
+    const activation = parseFloat(activationInput.value);
+    const distance = parseFloat(distanceInput.value);
     const activationImpact = $("#activation-impact");
     if (activationImpact) {
-      activationImpact.textContent = Number.isFinite(typedActivation)
-        ? I18n.t("trader-trailing-activation-impact", { value: examplePercent(typedActivation) })
+      activationImpact.textContent = Number.isFinite(activation)
+        ? I18n.t("trader-trailing-activation-impact", { value: examplePercent(activation) })
         : "—";
     }
     const distanceImpact = $("#distance-impact");
     if (distanceImpact) {
-      distanceImpact.textContent = Number.isFinite(typedDistance)
-        ? I18n.t("trader-trailing-distance-impact", { value: examplePercent(typedDistance) })
+      distanceImpact.textContent = Number.isFinite(distance)
+        ? I18n.t("trader-trailing-distance-impact", { value: examplePercent(distance) })
         : "—";
     }
-
-    const activation = typedActivation || 15;
-    const distance = typedDistance || 5;
 
     // The example position is one buy at the configured trade size.
     const entryValue = Number(tradeSize?.());
@@ -472,9 +494,7 @@ export function createExampleUpdaters({
       stepActivation.textContent = exampleSol(activationValue);
       const activationDetail = $("#example-activation-pct");
       if (activationDetail) {
-        activationDetail.textContent = I18n.t("trader-example-profit", {
-          value: examplePercent(activation),
-        });
+        activationDetail.textContent = exampleProfit(profitText, activation);
       }
     }
     if (stepPeak) {
@@ -482,18 +502,14 @@ export function createExampleUpdaters({
       const peakDetail = $("#example-peak-pct");
       if (peakDetail) {
         const gainFromEntry = (peakRatio - 1) * 100;
-        peakDetail.textContent = I18n.t("trader-example-profit", {
-          value: examplePercent(gainFromEntry),
-        });
+        peakDetail.textContent = exampleProfit(profitText, gainFromEntry);
       }
     }
     if (stepExit) {
       stepExit.textContent = exampleSol(exitValue);
       const exitDetail = $("#example-exit-pct");
       if (exitDetail) {
-        exitDetail.textContent = I18n.t("trader-trailing-final", {
-          value: examplePercent(protectedProfit),
-        });
+        exitDetail.textContent = exampleProfit(finalText, protectedProfit);
       }
     }
 
@@ -548,15 +564,15 @@ export function createExampleUpdaters({
           })
         : "—"
     );
-    line(
-      "dca-min-hold-impact",
-      Number.isFinite(minHold)
-        ? I18n.t("trader-dca-min-hold-impact", {
-            minutes: minHold,
-            span: formatTimeSpan(minHold, { unit: "minute" }),
-          })
-        : "—"
-    );
+    let minHoldText = "—";
+    if (minHold === 0) {
+      minHoldText = I18n.t("trader-dca-min-hold-none");
+    } else if (Number.isFinite(minHold)) {
+      minHoldText = I18n.t("trader-dca-min-hold-impact", {
+        span: formatTimeSpan(minHold, { unit: "minute" }),
+      });
+    }
+    line("dca-min-hold-impact", minHoldText);
 
     const multiples = dcaMultiples(ladder);
     const whole = multiples ? 1 + multiples.reduce((sum, value) => sum + value, 0) : Number.NaN;

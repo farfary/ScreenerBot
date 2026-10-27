@@ -43,9 +43,15 @@ strategies-summary-param = { $label }: { $value }
 strategies-summary-none = Không có tham số
 # An unset optional parameter: the strategy's own value it falls back to.
 strategies-param-inherit = Thiết lập của chiến lược ({ $value })
-strategies-summary-period-seconds = Khoảng nhìn lại: { $amount } giây
-strategies-summary-period-minutes = Khoảng nhìn lại: { $amount } phút
-strategies-summary-period-hours = Khoảng nhìn lại: { $amount } giờ
+# A duration amount with its unit, and an hour of the UTC day. $amount is the formatted number.
+strategies-value-duration-seconds = { $amount } giây
+strategies-value-duration-minutes = { $amount } phút
+strategies-value-duration-hours = { $amount } giờ
+strategies-value-duration-days = { $amount } ngày
+strategies-value-utc-hour = { $amount }:00 UTC
+# A hint under a field, display only. $time is a local clock time, $amount a percentage.
+strategies-hint-local-time = Giờ địa phương của bạn: { $time }
+strategies-hint-price-impact = Một giao dịch cỡ này làm giá dịch chuyển khoảng { $amount }%
 
 strategies-value-percent = { $amount }%
 strategies-value-multiplier = { $amount }×
@@ -62,6 +68,7 @@ strategies-unit-percent = %
 strategies-unit-native = { -sol }
 strategies-unit-hours = giờ
 strategies-unit-multiplier = ×
+strategies-unit-utc = UTC
 
 strategies-catalog-search =
     .placeholder = Tìm điều kiện...
@@ -80,7 +87,23 @@ strategies-editor-description = Mô tả
 strategies-editor-description-field =
     .placeholder = Chiến lược này làm gì
     .aria-label = Mô tả chiến lược
+# The exit strategy's binding to the entry strategies whose positions it manages.
+strategies-editor-entry-binding-all = Tất cả chiến lược vào lệnh
+# Labels the button that names the entry strategies an exit strategy manages.
+strategies-editor-entry-binding-label = Quản lý
+strategies-editor-entry-binding-hint = Quản lý các vị thế do những chiến lược vào lệnh được chọn mở. Khi không chọn chiến lược nào, nó quản lý mọi vị thế, kể cả vị thế thủ công và sao chép.
+strategies-editor-entry-binding-empty = Chưa có chiến lược vào lệnh nào
+# $id is the id of an entry strategy that no longer exists.
+strategies-editor-entry-binding-deleted = { $id } (đã xóa)
 strategies-action-export = Xuất
+strategies-action-test = Thử với một token
+# $token is the tested token's symbol or address.
+strategies-test-title = Thử với { $token }
+# $token is the tested token's symbol or address.
+strategies-test-running = Đang thử với { $token }…
+strategies-test-verdict-pass = Đạt
+strategies-test-verdict-fail = Không đạt
+strategies-test-verdict-unknown = Không rõ
 
 # Rule groups. $mode is the all/any select written into the sentence.
 strategies-rules-match = Điều kiện cần thỏa mãn: { $mode }
@@ -128,6 +151,7 @@ strategies-data-candles = Nến
 strategies-data-pool = Pool
 strategies-data-position = Vị thế
 strategies-data-market = Hoạt động thị trường
+strategies-data-clock = Giờ trong ngày
 
 # Trade counts: $count selects the plural, $amount is the formatted number.
 strategies-unit-trades = lệnh
@@ -172,6 +196,10 @@ strategies-toast-saved = Đã lưu chiến lược
 strategies-toast-save-failed = Lưu thất bại
     .message = Không thể lưu chiến lược vào cơ sở dữ liệu
 strategies-toast-no-strategy-validate = Không có chiến lược để kiểm tra
+strategies-toast-no-strategy-test = Không có chiến lược để thử
+strategies-toast-test-save-first = Hãy lưu chiến lược trước khi thử: phép thử đọc các quy tắc đã lưu
+strategies-toast-test-failed = Thử thất bại
+    .message = Không thể thử chiến lược
 strategies-toast-valid = Chiến lược hợp lệ
 strategies-toast-invalid = Chiến lược có lỗi
 strategies-toast-validation-failed = Kiểm tra thất bại
@@ -337,6 +365,126 @@ strategies-condition-buy-pressure-param-min-buy-share-pct = Tỷ lệ mua tối 
 strategies-condition-buy-pressure-param-min-transactions = Số giao dịch tối thiểu
     .description = Khung có ít giao dịch hơn sẽ không bao giờ kích hoạt điều kiện
 
+strategies-condition-transaction-velocity = Tốc độ giao dịch
+    .description = Kích hoạt khi tốc độ giao dịch của cửa sổ gần đây ít nhất hoặc nhiều nhất bằng một bội số tốc độ của cửa sổ dài hơn chứa nó. Đọc số lệnh mua và bán của token.
+strategies-condition-transaction-velocity-param-window = Cửa sổ
+    .description = Cửa sổ gần đây và cửa sổ dài hơn dùng để so sánh
+strategies-condition-transaction-velocity-param-window-option-5m-vs-1h = 5 phút so với 1 giờ
+strategies-condition-transaction-velocity-param-window-option-1h-vs-6h = 1 giờ so với 6 giờ
+strategies-condition-transaction-velocity-param-window-option-6h-vs-24h = 6 giờ so với 24 giờ
+strategies-condition-transaction-velocity-param-comparison = So sánh
+    .description = Tốc độ gần đây phải ít nhất hay nhiều nhất bằng tỷ lệ
+strategies-condition-transaction-velocity-param-comparison-option-above = Ít nhất (≥)
+strategies-condition-transaction-velocity-param-comparison-option-below = Nhiều nhất (≤)
+strategies-condition-transaction-velocity-param-ratio = Tỷ lệ tốc độ
+    .description = Số giao dịch mỗi giây của cửa sổ gần đây chia cho số giao dịch mỗi giây của cửa sổ dài
+strategies-condition-transaction-velocity-param-min-transactions = Số giao dịch tối thiểu
+    .description = Cửa sổ gần đây có ít giao dịch hơn không bao giờ kích hoạt điều kiện
+
+strategies-condition-pullback-from-high = Điều chỉnh từ đỉnh
+    .description = Kích hoạt khi giá trực tiếp nằm giữa mức giảm tối thiểu và tối đa dưới đỉnh cao nhất của các nến gần nhất.
+strategies-condition-pullback-from-high-param-lookback = Khoảng nhìn lại
+    .description = Số nến dùng để lấy đỉnh cao nhất
+strategies-condition-pullback-from-high-param-min-drop-pct = Mức giảm tối thiểu %
+    .description = Giá phải thấp hơn đỉnh ít nhất chừng này
+strategies-condition-pullback-from-high-param-max-drop-pct = Mức giảm tối đa %
+    .description = Giá phải thấp hơn đỉnh nhiều nhất chừng này; phải lớn hơn mức giảm tối thiểu
+
+strategies-condition-profit-giveback = Trả lại lợi nhuận
+    .description = Kích hoạt khi vị thế đã trả lại một phần lợi nhuận chưa chốt tốt nhất kể từ lần mua gần nhất, sau khi lợi nhuận đó đạt một mức.
+strategies-condition-profit-giveback-param-arm-after-profit-pct = Kích hoạt sau lợi nhuận %
+    .description = Lợi nhuận tốt nhất phải đạt phần trăm này của giá vào trước khi điều kiện có thể kích hoạt
+strategies-condition-profit-giveback-param-giveback-pct = Mức trả lại %
+    .description = Phần lợi nhuận tốt nhất đã trả lại; 100% nghĩa là giá đã về lại giá vào
+
+strategies-condition-token-age = Tuổi token
+    .description = Kích hoạt khi thời gian kể từ khi token được tạo on-chain dài hơn hoặc ngắn hơn một khoảng thời gian. Token không rõ thời điểm tạo khiến điều kiện chưa xác định.
+strategies-condition-token-age-param-comparison = So sánh
+    .description = Token phải cũ hơn hay mới hơn khoảng thời gian
+strategies-condition-token-age-param-comparison-option-older-than = Cũ hơn (≥)
+strategies-condition-token-age-param-comparison-option-younger-than = Mới hơn ({ "<" })
+strategies-condition-token-age-param-time-value = Tuổi
+    .description = Thời gian kể từ khi token được tạo, theo đơn vị chọn trong ô (1-10000)
+strategies-condition-token-age-param-time-unit = Đơn vị thời gian
+    .description = Đơn vị của tuổi
+strategies-condition-token-age-param-time-unit-option-minutes = phút
+strategies-condition-token-age-param-time-unit-option-hours = giờ
+strategies-condition-token-age-param-time-unit-option-days = ngày
+
+strategies-condition-vwap = VWAP
+    .description = Kích hoạt khi giá trực tiếp cao hơn hoặc thấp hơn giá trung bình gia quyền theo khối lượng của các nến gần nhất ít nhất một khoảng cách.
+strategies-condition-vwap-param-lookback = Khoảng nhìn lại
+    .description = Số nến mà trung bình gia quyền theo khối lượng bao phủ
+strategies-condition-vwap-param-position = Vị trí
+    .description = Vị trí của giá so với VWAP
+strategies-condition-vwap-param-position-option-above = Trên VWAP
+strategies-condition-vwap-param-position-option-below = Dưới VWAP
+strategies-condition-vwap-param-distance-pct = Khoảng cách %
+    .description = Khoảng cách tối thiểu tới VWAP; 0 nghĩa là khoảng cách bất kỳ ở phía đã chọn
+
+strategies-condition-volatility-range = Biên độ biến động
+    .description = Kích hoạt khi biên độ thực trung bình của các nến gần nhất, tính theo phần trăm giá trực tiếp, cao hơn hoặc thấp hơn một ngưỡng. Hai điều kiện này trong một nhóm tạo thành một khoảng.
+strategies-condition-volatility-range-param-period = Chu kỳ ATR
+    .description = Số nến dùng để làm mượt biên độ thực trung bình; điều kiện cần thêm một nến
+strategies-condition-volatility-range-param-comparison = So sánh
+    .description = Biên độ phải cao hơn hay thấp hơn ngưỡng
+strategies-condition-volatility-range-param-comparison-option-above = Cao hơn
+strategies-condition-volatility-range-param-comparison-option-below = Thấp hơn
+strategies-condition-volatility-range-param-threshold-pct = Ngưỡng biên độ %
+    .description = Biên độ thực trung bình theo phần trăm giá trực tiếp
+
+strategies-condition-bollinger-bands = Dải Bollinger
+    .description = Kích hoạt khi giá trực tiếp dưới dải dưới hoặc trên dải trên, hoặc khi các dải co hẹp lại. Các dải cách giá đóng cửa trung bình vài độ lệch chuẩn.
+strategies-condition-bollinger-bands-param-period = Chu kỳ
+    .description = Số nến mà trung bình và độ lệch chuẩn bao phủ
+strategies-condition-bollinger-bands-param-std-dev = Độ lệch chuẩn
+    .description = Mỗi dải cách trung bình bao nhiêu độ lệch chuẩn
+strategies-condition-bollinger-bands-param-signal = Tín hiệu
+    .description = Điều các dải phải thể hiện
+strategies-condition-bollinger-bands-param-signal-option-below-lower = Dưới dải dưới
+strategies-condition-bollinger-bands-param-signal-option-above-upper = Trên dải trên
+strategies-condition-bollinger-bands-param-signal-option-squeeze = Co thắt
+strategies-condition-bollinger-bands-param-squeeze-width-pct = Độ rộng co thắt %
+    .description = Với co thắt: khoảng cách lớn nhất giữa các dải, theo phần trăm của trung bình
+
+strategies-condition-liquidity-to-size = Thanh khoản so với quy mô
+    .description = Kích hoạt khi dự trữ của pool ít nhất hoặc dưới một bội số của quy mô đang đặt cược: quy mô giao dịch trong chiến lược vào lệnh, giá trị còn lại của vị thế trong chiến lược thoát.
+strategies-condition-liquidity-to-size-param-comparison = So sánh
+    .description = Dự trữ phải ít nhất hay dưới bội số
+strategies-condition-liquidity-to-size-param-comparison-option-at-least = Ít nhất (≥)
+strategies-condition-liquidity-to-size-param-comparison-option-below = Dưới ({ "<" })
+strategies-condition-liquidity-to-size-param-multiple = Bội số thanh khoản
+    .description = Dự trữ pool chia cho quy mô đang đặt cược; bội số N làm giá dịch chuyển khoảng 1/(N+1)
+
+strategies-condition-position-adds = Mua thêm vào vị thế
+    .description = Kích hoạt khi số lần mua thêm sau lần vào đầu tiên, hoặc số lần bán một phần, ít nhất hoặc nhiều nhất bằng một số.
+strategies-condition-position-adds-param-subject = Đối tượng đếm
+    .description = Hành động nào được đếm
+strategies-condition-position-adds-param-subject-option-adds = Lần mua thêm
+strategies-condition-position-adds-param-subject-option-partial-sells = Lần bán một phần
+strategies-condition-position-adds-param-comparison = So sánh
+    .description = Số đếm phải ít nhất hay nhiều nhất bằng con số
+strategies-condition-position-adds-param-comparison-option-at-least = Ít nhất (≥)
+strategies-condition-position-adds-param-comparison-option-at-most = Nhiều nhất (≤)
+strategies-condition-position-adds-param-count = Số lượng
+    .description = Số hành động
+
+strategies-condition-time-of-day = Giờ trong ngày
+    .description = Kích hoạt khi giờ hiện tại nằm trong một cửa sổ giờ UTC. Giờ bắt đầu sau giờ kết thúc sẽ vắt qua nửa đêm.
+strategies-condition-time-of-day-param-start-hour = Giờ bắt đầu (UTC)
+    .description = Giờ đầu tiên của cửa sổ, từ 0 đến 23
+strategies-condition-time-of-day-param-end-hour = Giờ kết thúc (UTC)
+    .description = Giờ cửa sổ kết thúc, từ 1 đến 24; chính giờ đó nằm ngoài cửa sổ
+
+strategies-condition-liquidity-change-since-entry = Thay đổi thanh khoản từ lúc vào
+    .description = Kích hoạt khi dự trữ pool đã giảm hoặc tăng ít nhất một phần trăm kể từ khi mở vị thế. Vị thế không có thanh khoản lúc vào được ghi lại khiến điều kiện chưa xác định.
+strategies-condition-liquidity-change-since-entry-param-comparison = So sánh
+    .description = Dự trữ phải đã giảm hay đã tăng
+strategies-condition-liquidity-change-since-entry-param-comparison-option-dropped-by = Giảm
+strategies-condition-liquidity-change-since-entry-param-comparison-option-rose-by = Tăng
+strategies-condition-liquidity-change-since-entry-param-change-pct = Mức thay đổi %
+    .description = Thay đổi dự trữ pool kể từ lúc vào
+
 strategies-condition-param-timeframe = Khung thời gian
     .description = Kích thước nến: độ dài mỗi cây nến mà điều kiện đọc (khung thời gian của chiến lược nếu không đặt)
 strategies-condition-timeframe-option-1m = 1 phút
@@ -403,6 +551,27 @@ strategies-error-field-peak-price = giá đỉnh
 strategies-error-field-slow-period = chu kỳ chậm
 strategies-error-field-window = khung
 strategies-error-field-within-candles = số nến giao cắt
+strategies-error-field-change = mức thay đổi
+strategies-error-field-end-hour = giờ kết thúc
+strategies-error-field-entry-liquidity = thanh khoản lúc vào
+strategies-error-field-giveback = mức trả lại
+strategies-error-field-highest-high = đỉnh cao nhất
+strategies-error-field-long-window-transactions = giao dịch của cửa sổ dài
+strategies-error-field-maximum-drop = mức giảm tối đa
+strategies-error-field-minimum-drop = mức giảm tối thiểu
+strategies-error-field-multiple = bội số
+strategies-error-field-pool-liquidity = thanh khoản pool
+strategies-error-field-ratio = tỷ lệ
+strategies-error-field-remaining-position-value = giá trị còn lại của vị thế
+strategies-error-field-signal = tín hiệu
+strategies-error-field-squeeze-width = độ rộng co thắt
+strategies-error-field-standard-deviations = độ lệch chuẩn
+strategies-error-field-start-hour = giờ bắt đầu
+strategies-error-field-subject = đối tượng đếm
+strategies-error-field-token-creation-time = thời điểm tạo token
+strategies-error-field-total-volume = tổng khối lượng
+strategies-error-field-trade-size = quy mô giao dịch
+strategies-error-field-vwap = VWAP
 
 strategies-error-expected-boolean = giá trị đúng/sai
 strategies-error-expected-number = một số
@@ -415,6 +584,12 @@ strategies-error-data-ohlcv-data = Dữ liệu OHLCV
 strategies-error-data-position-data = Dữ liệu vị thế
 strategies-error-data-peak-price = Giá đỉnh
 strategies-error-data-transaction-counts = Số lượng giao dịch
+strategies-error-data-entry-liquidity = Thanh khoản lúc vào
+strategies-error-data-entry-pool-liquidity = Thanh khoản của pool lúc vào
+strategies-error-data-real-pool-reserves = Thanh khoản thực của pool
+strategies-error-data-remaining-position-value = Giá trị còn lại của vị thế
+strategies-error-data-token-creation-time = Thời điểm tạo token
+strategies-error-data-trade-size = Quy mô giao dịch
 
 strategies-error-indicator-consecutive-candles = nến liên tiếp
 strategies-error-indicator-moving-average = đường trung bình động
@@ -423,6 +598,10 @@ strategies-error-indicator-price-change-lookback = khoảng nhìn lại biến �
 strategies-error-indicator-volume-spike = khối lượng tăng vọt
 strategies-error-indicator-moving-average-cross = giao cắt đường trung bình động
 strategies-error-indicator-rsi = RSI
+strategies-error-indicator-bollinger-bands = dải Bollinger
+strategies-error-indicator-pullback-from-high = điều chỉnh từ đỉnh
+strategies-error-indicator-volatility-range = biên độ biến động
+strategies-error-indicator-vwap = VWAP
 
 strategies-error-rule-branch-node-missing-conditions = Nút nhánh thiếu điều kiện
 strategies-error-rule-branch-node-missing-operator = Nút nhánh thiếu toán tử

@@ -4,8 +4,8 @@
 //! Volume spike condition — detects unusual volume relative to recent average.
 
 use crate::strategies::conditions::{
-    get_candles_for_timeframe, get_param_f64, get_param_string_optional, validate_timeframe_param,
-    ConditionEvaluator,
+    get_candles_for_timeframe, get_param_f64, get_param_string_optional, usable_basis,
+    validate_timeframe_param, ConditionEvaluator,
 };
 use crate::strategies::types::{Condition, ConditionData, EvaluationContext};
 use crate::strategies::{Error, Result};
@@ -61,13 +61,9 @@ impl ConditionEvaluator for VolumeSpikeCondition {
 
         let avg_volume: f64 =
             lookback_candles.iter().map(|c| c.volume).sum::<f64>() / lookback_candles.len() as f64;
-
-        if avg_volume <= 0.0 {
-            return Err(Error::InvalidConditionValue {
-                field: "average volume",
-                value: avg_volume.to_string(),
-            });
-        }
+        // A window that traded nothing has no baseline: dividing by it would fire on every
+        // token, and the refusal names the data, not the configuration.
+        let avg_volume = usable_basis("average volume", avg_volume)?;
 
         // Check if current volume is multiplier times the average
         let volume_ratio = current_volume / avg_volume;

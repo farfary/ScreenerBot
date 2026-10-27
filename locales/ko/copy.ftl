@@ -504,6 +504,18 @@ copy-validate-trailing-distance = 트레일링 거리는 0%보다 크고 100% �
 copy-validate-take-profit = 익절은 0%보다 커야 합니다.
 copy-validate-time-duration = 시간 규칙에는 0보다 큰 기간이 필요합니다.
 copy-validate-time-threshold = 시간 규칙의 기준은 손실입니다. 0% 또는 음수를 사용하세요.
+# $reason is the message of the rule the stored overrides break.
+copy-exit-issue-warning = 청산 규칙을 확인해야 합니다: { $reason } 수정하기 전까지 보유 물량은 해당 규칙에 트레이더 설정을 사용합니다.
+# $distance and $activation are percentages.
+copy-exit-issue-trailing-distance-above-activation = 트레일링 간격 { $distance }%은 활성화 수준보다 작아야 합니다. 현재 { $activation }%.
+# $maximum is the number of bands allowed.
+copy-exit-issue-trailing-band-count = 트레일링 스톱은 최대 { $maximum }개 구간을 가질 수 있습니다.
+# $profit and $floor are percentages.
+copy-exit-issue-trailing-band-order = { $profit }%의 트레일링 구간은 활성화 수준 또는 이전 구간인 { $floor }%보다 위에서 시작해야 합니다.
+# $profit and $distance are percentages.
+copy-exit-issue-trailing-band-distance = { $profit }%의 트레일링 구간 간격은 0%보다 크고 시작점보다 작아야 합니다. 현재 { $distance }%.
+# $value is a percentage.
+copy-exit-issue-time-loss-threshold = 손실 시간 규칙의 기준은 -100%에서 0% 사이의 손실이어야 합니다. 현재 { $value }%.
 copy-warning-mirror = 지갑의 매도만 보유 수량을 종료합니다. 손절로 보호되지 않으며, 지갑이 매도하지 않는 토큰은 계속 보유됩니다.
 copy-warning-no-rules = 청산 규칙이 없고 지갑 매도도 무시됩니다. 보유 수량이 매도되지 않습니다.
 copy-warning-no-stop-loss = 적용되는 손절이 없습니다. 하락하는 토큰은 다른 규칙이나 지갑의 매도가 있을 때까지 보유됩니다.

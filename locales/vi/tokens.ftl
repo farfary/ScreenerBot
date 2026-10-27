@@ -51,12 +51,34 @@ tokens-positions-fact-opened = Đã mở
 tokens-positions-fact-exit-price = Giá thoát lệnh
 tokens-positions-fact-native-received = { -sol } đã nhận
 tokens-positions-fact-closed-reason = Lý do đóng
-tokens-positions-fact-target-min = Mục tiêu lợi nhuận tối thiểu
-tokens-positions-fact-target-max = Mục tiêu lợi nhuận tối đa
 tokens-positions-fact-highest = Giá cao nhất
 tokens-positions-fact-basis-peak = Đỉnh kể từ lần mua cuối
 tokens-positions-fact-lowest = Giá thấp nhất
-tokens-positions-section-range = Mục tiêu và biên độ
+tokens-positions-section-range = Khoảng giá
+tokens-positions-section-exit-plan = Kế hoạch thoát
+tokens-positions-plan-stop-loss = Cắt lỗ
+# $step is the take-profit step's position in the ladder, from 1.
+tokens-positions-plan-step = Chốt lời { $step }
+# $profit is the formatted profit level, $share the formatted share of the position it sells.
+tokens-positions-plan-step-value = Tại { $profit }, bán { $share }
+tokens-positions-plan-step-taken = Đã bán
+tokens-positions-plan-trailing = Trailing stop
+# $activation is the formatted profit that arms the trail, $distance the formatted share it trails by.
+tokens-positions-plan-trailing-value = Kích hoạt tại { $activation }, bám theo { $distance } dưới đỉnh
+# $step is the band's position in the list, from 1.
+tokens-positions-plan-trailing-band = Bậc trailing { $step }
+# $profit is the formatted profit the band starts at, $distance the formatted share it trails by.
+tokens-positions-plan-trailing-band-value = Từ { $profit }, bám theo { $distance } dưới đỉnh
+tokens-positions-plan-break-even = Dừng hòa vốn
+# $trigger and $offset are formatted profits.
+tokens-positions-plan-break-even-value = Kích hoạt tại { $trigger }, bán lại tại { $offset }
+tokens-positions-plan-time-loss = Thoát theo thời gian lỗ
+# $duration is a formatted duration, $threshold a formatted loss.
+tokens-positions-plan-time-loss-value = Sau { $duration }, tại hoặc dưới { $threshold }
+tokens-positions-plan-time-stagnation = Thoát vị thế đi ngang
+# $duration is a formatted duration, $band a formatted share.
+tokens-positions-plan-time-stagnation-value = Sau { $duration }, khi vẫn trong khoảng { $band } quanh giá vào
+tokens-positions-plan-none = Không có quy tắc thoát nào đang bật
 tokens-positions-section-market = Thị trường và số token nắm giữ
 tokens-positions-kicker = Vị thế
 tokens-positions-fallback-symbol = Token

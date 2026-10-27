@@ -201,6 +201,23 @@ trader-trailing-peak = Hoch
 trader-trailing-final = +{ $value } % am Ende
 trader-trailing-summary-protected = <strong>{ $value }</strong> Gewinn gesichert
 trader-trailing-summary-avoided = <strong>{ $value }</strong> Verlust vom Hoch vermieden
+# $step is the band's position in the list, from 1.
+trader-trailing-band = Band { $step }
+# $step is the band's position in the list, from 1.
+trader-trailing-band-profit-label = Spitzengewinn von Band { $step }
+# $step is the band's position in the list, from 1.
+trader-trailing-band-distance-label = Trailing-Abstand von Band { $step }
+trader-trailing-band-profit-caption = Ab Spitzengewinn
+trader-trailing-band-distance-caption = Abstand
+trader-trailing-add-band = Band hinzufügen
+# $step is the band's position in the list, from 1.
+trader-trailing-remove-band = Band { $step } entfernen
+# $min and $max are the configured bounds of a band's peak profit.
+trader-trailing-band-error-profit-range = Der Spitzengewinn jedes Bands muss zwischen { $min }% und { $max }% liegen
+# $min and $max are the configured bounds of a band's distance.
+trader-trailing-band-error-distance-range = Der Abstand jedes Bands muss zwischen { $min }% und { $max }% liegen
+trader-trailing-band-error-order = Jedes Band braucht einen höheren Spitzengewinn als die Aktivierung und das vorherige Band
+trader-trailing-band-error-distance = Jedes Band muss mit einem kleineren Abstand als seinem Spitzengewinn folgen
 
 ## Break-even stop
 
@@ -252,7 +269,6 @@ trader-time-unit-seconds = Sekunden
 trader-time-unit-minutes = Minuten
 trader-time-unit-hours = Stunden
 trader-time-unit-days = Tage
-trader-time-conversion-default = 168 Stunden = 7 Tage
 trader-time-conversion = { $duration } = { $readable }
 trader-duration-seconds =
     { $count ->
@@ -330,11 +346,8 @@ trader-dca-error-drop-range = Jeder Rückgang muss zwischen { $min } % und { $ma
 trader-dca-error-size-range = Jede Größe muss zwischen { $min }× und { $max }× des ersten Kaufs liegen
 trader-dca-error-order = Gemessen ab dem ersten Einstieg braucht jeder Nachkauf einen tieferen Rückgang als der vorherige
 trader-dca-cooldown-impact = Mindestens { $span } zwischen zusätzlichen Einstiegen
-trader-dca-min-hold-impact =
-    { $minutes ->
-        [0] Der erste Nachkauf kann direkt nach dem Einstieg folgen
-       *[other] Der erste Nachkauf wartet mindestens { $span } nach dem Einstieg
-    }
+trader-dca-min-hold-none = Der erste Nachkauf kann direkt nach dem Einstieg folgen
+trader-dca-min-hold-impact = Der erste Nachkauf wartet mindestens { $span } nach dem Einstieg
 trader-dca-capacity = Höchstens hält diese Position: { $amount } ({ $multiple }× der erste Kauf)
 trader-dca-info-title = Infos zur DCA-Strategie
 trader-dca-info-subtitle = Wichtige Hinweise zum DCA-Trading

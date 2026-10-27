@@ -43,9 +43,15 @@ strategies-summary-param = { $label }: { $value }
 strategies-summary-none = Parametre yok
 # An unset optional parameter: the strategy's own value it falls back to.
 strategies-param-inherit = Strateji ayarı ({ $value })
-strategies-summary-period-seconds = Geriye bakış: { $amount }sn
-strategies-summary-period-minutes = Geriye bakış: { $amount }dk
-strategies-summary-period-hours = Geriye bakış: { $amount }sa
+# A duration amount with its unit, and an hour of the UTC day. $amount is the formatted number.
+strategies-value-duration-seconds = { $amount }sn
+strategies-value-duration-minutes = { $amount }dk
+strategies-value-duration-hours = { $amount }sa
+strategies-value-duration-days = { $amount }g
+strategies-value-utc-hour = { $amount }:00 UTC
+# A hint under a field, display only. $time is a local clock time, $amount a percentage.
+strategies-hint-local-time = Yerel saatiniz: { $time }
+strategies-hint-price-impact = Bu büyüklükte bir işlem fiyatı yaklaşık %{ $amount } oynatır
 
 strategies-value-percent = %{ $amount }
 strategies-value-multiplier = { $amount }×
@@ -64,6 +70,7 @@ strategies-unit-percent = %
 strategies-unit-native = { -sol }
 strategies-unit-hours = sa
 strategies-unit-multiplier = ×
+strategies-unit-utc = UTC
 
 strategies-catalog-search =
     .placeholder = Koşullarda ara...
@@ -82,7 +89,23 @@ strategies-editor-description = Açıklama
 strategies-editor-description-field =
     .placeholder = Bu stratejinin ne yaptığı
     .aria-label = Strateji açıklaması
+# The exit strategy's binding to the entry strategies whose positions it manages.
+strategies-editor-entry-binding-all = Tüm giriş stratejileri
+# Labels the button that names the entry strategies an exit strategy manages.
+strategies-editor-entry-binding-label = Yönetir
+strategies-editor-entry-binding-hint = İşaretli giriş stratejilerinin açtığı pozisyonları yönetir. Hiçbiri işaretli değilse manuel ve kopyalananlar dahil her pozisyonu yönetir.
+strategies-editor-entry-binding-empty = Henüz giriş stratejisi yok
+# $id is the id of an entry strategy that no longer exists.
+strategies-editor-entry-binding-deleted = { $id } (silindi)
 strategies-action-export = Dışa aktar
+strategies-action-test = Bir tokenla test et
+# $token is the tested token's symbol or address.
+strategies-test-title = { $token } ile test
+# $token is the tested token's symbol or address.
+strategies-test-running = { $token } ile test ediliyor…
+strategies-test-verdict-pass = Sağlanıyor
+strategies-test-verdict-fail = Sağlanmıyor
+strategies-test-verdict-unknown = Bilinmiyor
 
 # Rule groups. $mode is the all/any select written into the sentence.
 strategies-rules-match = Bu koşulların { $mode } sağlanmalı
@@ -138,6 +161,7 @@ strategies-data-candles = Mumlar
 strategies-data-pool = Havuz
 strategies-data-position = Pozisyon
 strategies-data-market = Piyasa etkinliği
+strategies-data-clock = Günün saati
 
 # Trade counts: $count selects the plural, $amount is the formatted number.
 strategies-unit-trades = işlem
@@ -186,6 +210,10 @@ strategies-toast-saved = Strateji kaydedildi
 strategies-toast-save-failed = Kaydetme başarısız
     .message = Strateji veritabanına kaydedilemedi
 strategies-toast-no-strategy-validate = Doğrulanacak strateji yok
+strategies-toast-no-strategy-test = Test edilecek strateji yok
+strategies-toast-test-save-first = Test etmeden önce stratejiyi kaydedin: test kayıtlı kuralları okur
+strategies-toast-test-failed = Test başarısız
+    .message = Strateji test edilemedi
 strategies-toast-valid = Strateji geçerli
 strategies-toast-invalid = Stratejide hatalar var
 strategies-toast-validation-failed = Doğrulama başarısız
@@ -351,6 +379,126 @@ strategies-condition-buy-pressure-param-min-buy-share-pct = Asgari alım payı %
 strategies-condition-buy-pressure-param-min-transactions = Asgari işlem sayısı
     .description = Daha az işlemi olan pencereler koşulu asla tetiklemez
 
+strategies-condition-transaction-velocity = İşlem Hızı
+    .description = Yakın bir penceredeki işlem hızı, onu içeren daha uzun pencerenin hızının en az veya en fazla bir katı olduğunda tetiklenir. Token'ın alım ve satım sayılarını okur.
+strategies-condition-transaction-velocity-param-window = Pencereler
+    .description = Yakın pencere ve karşılaştırıldığı daha uzun pencere
+strategies-condition-transaction-velocity-param-window-option-5m-vs-1h = 5 Dakika / 1 Saat
+strategies-condition-transaction-velocity-param-window-option-1h-vs-6h = 1 Saat / 6 Saat
+strategies-condition-transaction-velocity-param-window-option-6h-vs-24h = 6 Saat / 24 Saat
+strategies-condition-transaction-velocity-param-comparison = Karşılaştırma
+    .description = Yakın hızın oranın en az mı en fazla mı olması gerektiği
+strategies-condition-transaction-velocity-param-comparison-option-above = En Az (≥)
+strategies-condition-transaction-velocity-param-comparison-option-below = En Fazla (≤)
+strategies-condition-transaction-velocity-param-ratio = Hız Oranı
+    .description = Yakın penceredeki saniye başına işlem, uzun penceredeki saniye başına işleme bölünür
+strategies-condition-transaction-velocity-param-min-transactions = En Az İşlem
+    .description = Daha az işlemi olan yakın pencereler koşulu asla tetiklemez
+
+strategies-condition-pullback-from-high = Tepeden Geri Çekilme
+    .description = Canlı fiyat, son mumların en yüksek tepesinin altında en az ve en fazla düşüş arasında olduğunda tetiklenir.
+strategies-condition-pullback-from-high-param-lookback = Geriye Bakış Süresi
+    .description = En yüksek tepenin alındığı mum sayısı
+strategies-condition-pullback-from-high-param-min-drop-pct = En Az Düşüş %
+    .description = Fiyat tepenin en az bu kadar altında olmalıdır
+strategies-condition-pullback-from-high-param-max-drop-pct = En Fazla Düşüş %
+    .description = Fiyat tepenin en fazla bu kadar altında olmalıdır; en az düşüşten büyük olmalıdır
+
+strategies-condition-profit-giveback = Kâr Geri Verme
+    .description = Pozisyon, son alımdan bu yana en iyi gerçekleşmemiş kazancının bir kısmını, bu kazanç bir seviyeye ulaştıktan sonra geri verdiğinde tetiklenir.
+strategies-condition-profit-giveback-param-arm-after-profit-pct = Kârdan Sonra Kur %
+    .description = Koşulun tetiklenebilmesi için en iyi kazancın giriş fiyatının bu yüzdesine ulaşmış olması gerekir
+strategies-condition-profit-giveback-param-giveback-pct = Geri Verme %
+    .description = En iyi kazancın geri verilen payı; %100 fiyatın giriş fiyatına döndüğü anlamına gelir
+
+strategies-condition-token-age = Token Yaşı
+    .description = Token'ın zincir üstü oluşturulmasından bu yana geçen süre bir süreden uzun veya kısa olduğunda tetiklenir. Oluşturma zamanı bilinmeyen bir token koşulu belirsiz bırakır.
+strategies-condition-token-age-param-comparison = Karşılaştırma
+    .description = Token'ın süreden daha eski mi daha yeni mi olması gerektiği
+strategies-condition-token-age-param-comparison-option-older-than = Daha Eski (≥)
+strategies-condition-token-age-param-comparison-option-younger-than = Daha Yeni ({ "<" })
+strategies-condition-token-age-param-time-value = Yaş
+    .description = Token oluşturulduğundan beri geçen süre, alanın içinde seçilen birimde (1-10000)
+strategies-condition-token-age-param-time-unit = Zaman Birimi
+    .description = Yaşın birimi
+strategies-condition-token-age-param-time-unit-option-minutes = dk
+strategies-condition-token-age-param-time-unit-option-hours = sa
+strategies-condition-token-age-param-time-unit-option-days = g
+
+strategies-condition-vwap = VWAP
+    .description = Canlı fiyat, son mumların hacim ağırlıklı ortalama fiyatının en az bir mesafe kadar üstünde veya altında olduğunda tetiklenir.
+strategies-condition-vwap-param-lookback = Geriye Bakış Süresi
+    .description = Hacim ağırlıklı ortalamanın kapsadığı mum sayısı
+strategies-condition-vwap-param-position = Konum
+    .description = Fiyatın VWAP'a göre konumu
+strategies-condition-vwap-param-position-option-above = VWAP Üstünde
+strategies-condition-vwap-param-position-option-below = VWAP Altında
+strategies-condition-vwap-param-distance-pct = Mesafe %
+    .description = VWAP'tan en az mesafe; 0 seçilen taraftaki her mesafe anlamına gelir
+
+strategies-condition-volatility-range = Volatilite Aralığı
+    .description = Son mumların ortalama gerçek aralığı, canlı fiyatın yüzdesi olarak bir eşiğin üstünde veya altında olduğunda tetiklenir. Bir grupta bunlardan ikisi bir aralık oluşturur.
+strategies-condition-volatility-range-param-period = ATR Periyodu
+    .description = Ortalama gerçek aralığın yumuşatıldığı mum sayısı; koşul bundan bir fazla mum gerektirir
+strategies-condition-volatility-range-param-comparison = Karşılaştırma
+    .description = Aralığın eşiğin üstünde mi altında mı olması gerektiği
+strategies-condition-volatility-range-param-comparison-option-above = Üstünde
+strategies-condition-volatility-range-param-comparison-option-below = Altında
+strategies-condition-volatility-range-param-threshold-pct = Aralık Eşiği %
+    .description = Canlı fiyatın yüzdesi olarak ortalama gerçek aralık
+
+strategies-condition-bollinger-bands = Bollinger Bantları
+    .description = Canlı fiyat alt bandın altında veya üst bandın üstünde olduğunda ya da bantlar sıkıştığında tetiklenir. Bantlar ortalama kapanışın birkaç standart sapma çevresindedir.
+strategies-condition-bollinger-bands-param-period = Periyot
+    .description = Ortalamanın ve standart sapmanın kapsadığı mum sayısı
+strategies-condition-bollinger-bands-param-std-dev = Standart Sapmalar
+    .description = Her bandın ortalamadan kaç standart sapma uzakta olduğu
+strategies-condition-bollinger-bands-param-signal = Sinyal
+    .description = Bantların göstermesi gereken
+strategies-condition-bollinger-bands-param-signal-option-below-lower = Alt Bandın Altında
+strategies-condition-bollinger-bands-param-signal-option-above-upper = Üst Bandın Üstünde
+strategies-condition-bollinger-bands-param-signal-option-squeeze = Sıkışma
+strategies-condition-bollinger-bands-param-squeeze-width-pct = Sıkışma Genişliği %
+    .description = Sıkışma için: bantlar arasındaki en fazla mesafe, ortalamanın yüzdesi olarak
+
+strategies-condition-liquidity-to-size = Büyüklüğe Göre Likidite
+    .description = Havuz rezervleri, söz konusu büyüklüğün en az veya altında bir katı olduğunda tetiklenir: giriş stratejisinde işlem büyüklüğü, çıkış stratejisinde pozisyonun kalan değeri.
+strategies-condition-liquidity-to-size-param-comparison = Karşılaştırma
+    .description = Rezervlerin katın en az mı altında mı olması gerektiği
+strategies-condition-liquidity-to-size-param-comparison-option-at-least = En Az (≥)
+strategies-condition-liquidity-to-size-param-comparison-option-below = Altında ({ "<" })
+strategies-condition-liquidity-to-size-param-multiple = Likidite Katı
+    .description = Havuz rezervleri bölü söz konusu büyüklük; N katı fiyatı yaklaşık 1/(N+1) oynatır
+
+strategies-condition-position-adds = Pozisyon Eklemeleri
+    .description = İlk girişten sonra eklenen alımların veya kısmi satışların sayısı en az veya en fazla bir sayı olduğunda tetiklenir.
+strategies-condition-position-adds-param-subject = Sayılan
+    .description = Hangi işlemlerin sayıldığı
+strategies-condition-position-adds-param-subject-option-adds = Eklenen Alımlar
+strategies-condition-position-adds-param-subject-option-partial-sells = Kısmi Satışlar
+strategies-condition-position-adds-param-comparison = Karşılaştırma
+    .description = Sayının en az mı en fazla mı olması gerektiği
+strategies-condition-position-adds-param-comparison-option-at-least = En Az (≥)
+strategies-condition-position-adds-param-comparison-option-at-most = En Fazla (≤)
+strategies-condition-position-adds-param-count = Sayı
+    .description = İşlem sayısı
+
+strategies-condition-time-of-day = Günün Saati
+    .description = Geçerli saat bir UTC saat penceresi içindeyken tetiklenir. Bitişten sonraki bir başlangıç gece yarısını geçer.
+strategies-condition-time-of-day-param-start-hour = Başlangıç Saati (UTC)
+    .description = Pencerenin ilk saati, 0 ile 23 arası
+strategies-condition-time-of-day-param-end-hour = Bitiş Saati (UTC)
+    .description = Pencerenin bittiği saat, 1 ile 24 arası; o saatin kendisi pencerenin dışındadır
+
+strategies-condition-liquidity-change-since-entry = Girişten Bu Yana Likidite Değişimi
+    .description = Havuz rezervleri pozisyon açıldığından beri en az bir yüzde düştüğünde veya yükseldiğinde tetiklenir. Kayıtlı giriş likiditesi olmayan bir pozisyon koşulu belirsiz bırakır.
+strategies-condition-liquidity-change-since-entry-param-comparison = Karşılaştırma
+    .description = Rezervlerin düşmüş mü yükselmiş mi olması gerektiği
+strategies-condition-liquidity-change-since-entry-param-comparison-option-dropped-by = Düştü
+strategies-condition-liquidity-change-since-entry-param-comparison-option-rose-by = Yükseldi
+strategies-condition-liquidity-change-since-entry-param-change-pct = Değişim %
+    .description = Girişten bu yana havuz rezervlerindeki değişim
+
 strategies-condition-param-timeframe = Zaman dilimi
     .description = Mum boyutu: koşulun okuduğu her mumun süresi (ayarlanmazsa strateji zaman dilimi)
 strategies-condition-timeframe-option-1m = 1 dakika
@@ -417,6 +565,27 @@ strategies-error-field-peak-price = zirve fiyatı
 strategies-error-field-slow-period = yavaş dönem
 strategies-error-field-window = pencere
 strategies-error-field-within-candles = kesişim mum sayısı
+strategies-error-field-change = değişim
+strategies-error-field-end-hour = bitiş saati
+strategies-error-field-entry-liquidity = giriş likiditesi
+strategies-error-field-giveback = geri verme
+strategies-error-field-highest-high = en yüksek tepe
+strategies-error-field-long-window-transactions = uzun pencere işlemleri
+strategies-error-field-maximum-drop = en fazla düşüş
+strategies-error-field-minimum-drop = en az düşüş
+strategies-error-field-multiple = kat
+strategies-error-field-pool-liquidity = havuz likiditesi
+strategies-error-field-ratio = oran
+strategies-error-field-remaining-position-value = pozisyonun kalan değeri
+strategies-error-field-signal = sinyal
+strategies-error-field-squeeze-width = sıkışma genişliği
+strategies-error-field-standard-deviations = standart sapmalar
+strategies-error-field-start-hour = başlangıç saati
+strategies-error-field-subject = sayılan
+strategies-error-field-token-creation-time = token oluşturma zamanı
+strategies-error-field-total-volume = toplam hacim
+strategies-error-field-trade-size = işlem büyüklüğü
+strategies-error-field-vwap = VWAP
 
 strategies-error-expected-boolean = bir mantıksal değer
 strategies-error-expected-number = bir sayı
@@ -429,6 +598,12 @@ strategies-error-data-ohlcv-data = OHLCV verisi
 strategies-error-data-position-data = Pozisyon verisi
 strategies-error-data-peak-price = Zirve fiyatı
 strategies-error-data-transaction-counts = İşlem sayıları
+strategies-error-data-entry-liquidity = Giriş likiditesi
+strategies-error-data-entry-pool-liquidity = Giriş havuzunun likiditesi
+strategies-error-data-real-pool-reserves = Havuzun gerçek likiditesi
+strategies-error-data-remaining-position-value = Pozisyonun kalan değeri
+strategies-error-data-token-creation-time = Token oluşturma zamanı
+strategies-error-data-trade-size = İşlem büyüklüğü
 
 strategies-error-indicator-consecutive-candles = ardışık mumlar
 strategies-error-indicator-moving-average = hareketli ortalama
@@ -437,6 +612,10 @@ strategies-error-indicator-price-change-lookback = fiyat değişimi geriye bakı
 strategies-error-indicator-volume-spike = hacim sıçraması
 strategies-error-indicator-moving-average-cross = hareketli ortalama kesişimi
 strategies-error-indicator-rsi = RSI
+strategies-error-indicator-bollinger-bands = Bollinger bantları
+strategies-error-indicator-pullback-from-high = tepeden geri çekilme
+strategies-error-indicator-volatility-range = volatilite aralığı
+strategies-error-indicator-vwap = VWAP
 
 strategies-error-rule-branch-node-missing-conditions = Dal düğümünde koşullar eksik
 strategies-error-rule-branch-node-missing-operator = Dal düğümünde operatör eksik

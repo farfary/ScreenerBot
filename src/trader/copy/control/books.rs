@@ -13,8 +13,9 @@ use super::super::{
 };
 use super::open_database;
 use super::status::{build_status, effective_state, CopyTradingStatus};
-use crate::i18n::UiText;
+use crate::i18n::{ids, UiArg, UiText};
 use crate::positions::Position;
+use crate::trader::policy::ExitPolicy;
 use crate::trader::{Error, Result};
 
 /// Decisions read per task for its stats, rounds and analytics.
@@ -39,6 +40,23 @@ pub struct CopyTaskSummary {
     pub pnl_trend: Vec<f64>,
     /// Why the task is paused; absent while it is enabled.
     pub pause_text: Option<UiText>,
+    /// Why the task's stored exit overrides no longer fit the global exit policy, so an
+    /// edit of them would be refused; absent while they fit. Its open positions run the
+    /// global rule in place of each rule the overrides break
+    /// (`trader::policy::ExitPolicy::apply_overrides`).
+    pub exit_policy_issue: Option<UiText>,
+}
+
+/// The warning for a task whose exit overrides break a rule of the policy they make of
+/// `global`, with that rule as the reason.
+pub(super) fn exit_policy_issue(task: &CopyTask, global: ExitPolicy) -> Option<UiText> {
+    task.exit_policy_overrides
+        .validate_over(global)
+        .err()
+        .map(|fault| {
+            UiText::new(ids::COPY_EXIT_ISSUE_WARNING)
+                .arg("reason", UiArg::Nested(Box::new(fault.ui_text())))
+        })
 }
 
 /// Figures across every task. P&L and holdings count paused tasks too (they
@@ -229,6 +247,7 @@ pub fn summarize(
             effective_copy_stable_quoted: task.copies_stable_quoted(global_stable),
             pnl_trend,
             pause_text: (!task.enabled).then(|| pause_text(task.pause_reason.as_ref())),
+            exit_policy_issue: exit_policy_issue(&task, ExitPolicy::from_config()),
             task,
         },
         samples,

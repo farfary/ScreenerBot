@@ -110,6 +110,7 @@ errors-strategies-no-performance = Tidak ada data performa untuk strategi ini
 errors-strategies-performance-failed = Gagal mengambil statistik performa
 errors-strategies-schemas-failed = Gagal mengambil skema kondisi
 errors-strategies-evaluation-failed = Evaluasi strategi gagal
+errors-strategies-test-data-without-price = Data pasar atau posisi yang dikirim memerlukan harga saat ini
 
 errors-transactions-own-wallet-unavailable = Dompet utama belum dikonfigurasi
 errors-transactions-invalid-subject = Subjek transaksi bukan alamat Solana yang valid

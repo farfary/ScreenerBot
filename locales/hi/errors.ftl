@@ -107,6 +107,7 @@ errors-strategies-no-performance = इस स्ट्रैटेजी के 
 errors-strategies-performance-failed = परफ़ॉर्मेंस आँकड़े प्राप्त करने में विफल
 errors-strategies-schemas-failed = शर्त स्कीमा प्राप्त करने में विफल
 errors-strategies-evaluation-failed = स्ट्रैटेजी मूल्यांकन विफल रहा
+errors-strategies-test-data-without-price = भेजे गए बाज़ार या पोज़िशन डेटा के लिए मौजूदा कीमत ज़रूरी है
 
 errors-transactions-own-wallet-unavailable = मुख्य वॉलेट कॉन्फ़िगर नहीं है
 errors-transactions-invalid-subject = ट्रांज़ैक्शन का विषय मान्य Solana एड्रेस नहीं है

@@ -107,6 +107,7 @@ errors-strategies-no-performance = Для этой стратегии нет д�
 errors-strategies-performance-failed = Не удалось получить статистику эффективности
 errors-strategies-schemas-failed = Не удалось получить схемы условий
 errors-strategies-evaluation-failed = Не удалось оценить стратегию
+errors-strategies-test-data-without-price = Для переданных рыночных данных или данных позиции нужна текущая цена
 
 errors-transactions-own-wallet-unavailable = Основной кошелёк не настроен
 errors-transactions-invalid-subject = Субъект транзакции не является допустимым адресом Solana

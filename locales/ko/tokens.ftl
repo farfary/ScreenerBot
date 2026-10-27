@@ -63,12 +63,34 @@ tokens-positions-fact-opened = 진입 시각
 tokens-positions-fact-exit-price = 청산 가격
 tokens-positions-fact-native-received = 수령한 { -sol }
 tokens-positions-fact-closed-reason = 종료 사유
-tokens-positions-fact-target-min = 목표 수익 최소
-tokens-positions-fact-target-max = 목표 수익 최대
 tokens-positions-fact-highest = 최고가
 tokens-positions-fact-basis-peak = 마지막 매수 이후 고점
 tokens-positions-fact-lowest = 최저가
-tokens-positions-section-range = 목표 및 범위
+tokens-positions-section-range = 가격 범위
+tokens-positions-section-exit-plan = 청산 계획
+tokens-positions-plan-stop-loss = 손절
+# $step is the take-profit step's position in the ladder, from 1.
+tokens-positions-plan-step = 익절 { $step }
+# $profit is the formatted profit level, $share the formatted share of the position it sells.
+tokens-positions-plan-step-value = { $profit }에서 { $share } 매도
+tokens-positions-plan-step-taken = 매도됨
+tokens-positions-plan-trailing = 트레일링 스톱
+# $activation is the formatted profit that arms the trail, $distance the formatted share it trails by.
+tokens-positions-plan-trailing-value = { $activation }에서 활성화, 고점 대비 { $distance } 아래를 추적
+# $step is the band's position in the list, from 1.
+tokens-positions-plan-trailing-band = 트레일링 구간 { $step }
+# $profit is the formatted profit the band starts at, $distance the formatted share it trails by.
+tokens-positions-plan-trailing-band-value = { $profit }부터 고점 대비 { $distance } 아래를 추적
+tokens-positions-plan-break-even = 본전 스톱
+# $trigger and $offset are formatted profits.
+tokens-positions-plan-break-even-value = { $trigger }에서 활성화, { $offset }에서 매도
+tokens-positions-plan-time-loss = 손실 시간 청산
+# $duration is a formatted duration, $threshold a formatted loss.
+tokens-positions-plan-time-loss-value = { $duration } 후 { $threshold } 이하
+tokens-positions-plan-time-stagnation = 횡보 포지션 청산
+# $duration is a formatted duration, $band a formatted share.
+tokens-positions-plan-time-stagnation-value = { $duration } 후 진입가 대비 { $band } 이내인 동안
+tokens-positions-plan-none = 켜진 청산 규칙이 없습니다
 tokens-positions-section-market = 시장 및 보유 수량
 tokens-positions-kicker = 포지션
 tokens-positions-fallback-symbol = 토큰

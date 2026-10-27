@@ -1149,6 +1149,12 @@ config-trader-trade-size-sol = Розмір угоди
 config-trader-trailing-stop-activation-pct = Активація трейлінг-стопу,
     .hint = Активувати трейлінг-стоп після цього % прибутку (10 = активувати за +10%)
     .unit = %
+config-trader-trailing-stop-band-distance-pct = Відступи смуг трейлінгу
+    .hint = Наскільки нижче піку рухається стоп після досягнення смуги; менше за піковий прибуток смуги
+    .unit = %
+config-trader-trailing-stop-band-profit-pct = Смуги трейлінгу
+    .hint = Піковий прибуток від середньої ціни входу, з якого кожна смуга задає відступ трейлінгу
+    .unit = %
 config-trader-trailing-stop-distance-pct = Відстань трейлінг-стопу,
     .hint = Наскільки нижче піку тягнути стоп (5 = вихід, якщо ціна впала на 5% від піку)
     .unit = %

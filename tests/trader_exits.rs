@@ -431,6 +431,45 @@ fn trailing_stop_rejects_a_config_whose_distance_swallows_the_activation() {
 }
 
 #[test]
+fn trailing_stop_follows_the_band_its_peak_reached() {
+    // Activation 20%, base distance 10%; from +50% the trail follows 5% below the peak.
+    let _cfg = config_guard();
+    enable_trailing(20.0, 10.0);
+    set_config(|cfg| {
+        cfg.trader.trailing_stop_band_profit_pct = vec![50.0];
+        cfg.trader.trailing_stop_band_distance_pct = vec![5.0];
+    });
+
+    // Peak +60%: band stop at 1.52. 1.51 sells; the base distance (stop 1.44) would hold.
+    let banded = peaked_at(1.6);
+    assert!(sell(&banded, 1.53, ExitRule::Trailing).is_none());
+    let decision =
+        sell(&banded, 1.51, ExitRule::Trailing).expect("the band in force tightens the trail");
+    assert_eq!(decision.reason, TradeReason::TrailingStop);
+
+    // Peak +40%, short of the band: the base 10% applies, stop at 1.26.
+    let short_of_band = peaked_at(1.4);
+    assert!(sell(&short_of_band, 1.27, ExitRule::Trailing).is_none());
+    assert!(sell(&short_of_band, 1.25, ExitRule::Trailing).is_some());
+}
+
+#[test]
+fn trailing_stop_rejects_a_band_that_does_not_climb_above_the_activation() {
+    let _cfg = config_guard();
+    enable_trailing(20.0, 10.0);
+    set_config(|cfg| {
+        cfg.trader.trailing_stop_band_profit_pct = vec![15.0];
+        cfg.trader.trailing_stop_band_distance_pct = vec![5.0];
+    });
+
+    let err = rule_error(&peaked_at(2.0), 1.5, ExitRule::Trailing);
+    assert!(
+        err.to_string().contains("above the activation"),
+        "got: {err}"
+    );
+}
+
+#[test]
 fn trailing_stop_is_off_when_disabled() {
     let _cfg = config_guard();
     set_config(|cfg| cfg.trader.trailing_stop_enabled = false);

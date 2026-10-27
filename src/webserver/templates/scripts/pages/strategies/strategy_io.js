@@ -31,6 +31,7 @@ export function strategyFromDetail(data) {
     updated_at: data.updated_at,
     author: data.author || null,
     version: data.version,
+    entry_strategy_ids: data.entry_strategy_ids,
   };
 }
 
@@ -46,6 +47,8 @@ export function requestBodyOf(strategy) {
     rules: strategy.rules || null,
     parameters: strategy.parameters || {},
     author: strategy.author || null,
+    // Only an exit strategy manages positions; the ids belong to this install.
+    entry_strategy_ids: strategy.type === "EXIT" ? strategy.entry_strategy_ids : [],
   };
 }
 
@@ -135,6 +138,9 @@ export function parseImport(text, schemas, defaultTimeframe) {
       timeframe: typeof body.timeframe === "string" ? body.timeframe : defaultTimeframe,
       rules,
       parameters: isObject(body.parameters) ? body.parameters : {},
+      // Strategy ids belong to the install that exported the file: an import manages
+      // every position until its entry strategies are picked here.
+      entry_strategy_ids: [],
     },
   };
 }

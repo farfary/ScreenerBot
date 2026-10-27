@@ -231,6 +231,26 @@ impl DcaLevel {
     }
 }
 
+/// The most distance bands a trailing stop holds; the Trailing Stop tab reads it from
+/// the field metadata.
+pub const TRAILING_STOP_MAX_BANDS: usize = 3;
+/// Bounds of one trailing band's threshold, in percent of basis-peak profit from the
+/// average entry.
+pub const TRAILING_STOP_BAND_PROFIT_PCT_MIN: f64 = 1.0;
+pub const TRAILING_STOP_BAND_PROFIT_PCT_MAX: f64 = 1000.0;
+/// Bounds of one trailing band's distance, in percent below the peak.
+pub const TRAILING_STOP_BAND_DISTANCE_PCT_MIN: f64 = 1.0;
+pub const TRAILING_STOP_BAND_DISTANCE_PCT_MAX: f64 = 90.0;
+
+/// One distance band of the trailing stop: once the basis peak stands `profit_pct` or
+/// more above the average entry, the trail follows `distance_pct` below the peak in
+/// place of the base distance.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct TrailingStopBand {
+    pub profit_pct: f64,
+    pub distance_pct: f64,
+}
+
 /// Bounds of the break-even stop's arming profit and its kept margin, in percent from
 /// the average entry.
 const BREAK_EVEN_TRIGGER_PCT_MIN: f64 = 0.5;
@@ -444,6 +464,29 @@ config_struct! {
             category: ConfigCategory::TrailingStop,
         })]
         trailing_stop_distance_pct: f64 = 5.0,
+        /// Basis-peak profit from the average entry at which each band's distance takes
+        /// over, ascending and above the activation; read together with
+        /// `trailing_stop_band_distance_pct` through `trailing_stop_bands`. Empty trails
+        /// at the base distance alone.
+        #[metadata(field_metadata! {
+            min: TRAILING_STOP_BAND_PROFIT_PCT_MIN,
+            max: TRAILING_STOP_BAND_PROFIT_PCT_MAX,
+            step: 1,
+            max_items: TRAILING_STOP_MAX_BANDS,
+            impact: ConfigImpact::High,
+            category: ConfigCategory::TrailingStop,
+        })]
+        trailing_stop_band_profit_pct: Vec<f64> = vec![],
+        /// Distance below the peak each band trails at, below its own threshold.
+        #[metadata(field_metadata! {
+            min: TRAILING_STOP_BAND_DISTANCE_PCT_MIN,
+            max: TRAILING_STOP_BAND_DISTANCE_PCT_MAX,
+            step: 1,
+            max_items: TRAILING_STOP_MAX_BANDS,
+            impact: ConfigImpact::Critical,
+            category: ConfigCategory::TrailingStop,
+        })]
+        trailing_stop_band_distance_pct: Vec<f64> = vec![],
         /// Once the best price since the last buy reaches `break_even_trigger_pct` above
         /// the average entry, sell everything when the price falls back to
         /// `break_even_offset_pct` above it.
@@ -628,6 +671,20 @@ impl TraderConfig {
             .collect()
     }
 
+    /// The trailing stop's distance bands, one per configured threshold, in ascending
+    /// order. The only reader of `trailing_stop_band_profit_pct` and
+    /// `trailing_stop_band_distance_pct`.
+    pub fn trailing_stop_bands(&self) -> Vec<TrailingStopBand> {
+        self.trailing_stop_band_profit_pct
+            .iter()
+            .zip(&self.trailing_stop_band_distance_pct)
+            .map(|(&profit_pct, &distance_pct)| TrailingStopBand {
+                profit_pct,
+                distance_pct,
+            })
+            .collect()
+    }
+
     /// The DCA ladder, one step per configured drop, in the order the adds run. The only
     /// reader of `dca_levels_pct` and `dca_size_multipliers`.
     pub fn dca_levels(&self) -> Vec<DcaLevel> {
@@ -647,8 +704,17 @@ impl TraderConfig {
     /// Refuse a DCA ladder the evaluator cannot follow (see [`Self::validate_dca`]).
     /// Refuse a break-even stop or stagnation exit outside its bounds, and a break-even
     /// margin that is not below its arming profit.
+    /// Refuse trailing bands the rule cannot follow (see [`Self::validate_trailing_bands`]),
+    /// and an exit policy whose rules contradict each other
+    /// (`trader::policy::ExitPolicy::validate`, the one owner of those rules).
     pub fn validate(&self) -> Result<()> {
         self.validate_dca()?;
+        self.validate_trailing_bands()?;
+        crate::trader::policy::ExitPolicy::from_trader_config(self)
+            .validate()
+            .map_err(|error| ConfigurationError::Generic {
+                message: format!("trader: {error}"),
+            })?;
         let steps = self.take_profit_levels_pct.len();
         if !(1..=TAKE_PROFIT_MAX_STEPS).contains(&steps) {
             return Err(ConfigurationError::Generic {
@@ -754,6 +820,63 @@ impl TraderConfig {
             }
             .into());
         }
+        Ok(())
+    }
+
+    /// Refuse trailing bands the configuration cannot describe: at most
+    /// [`TRAILING_STOP_MAX_BANDS`] bands with a distance for every threshold, each value
+    /// inside its bounds, in the order the exit policy follows
+    /// (`trader::policy::TrailingPolicy::validate_bands`, the one owner of that rule).
+    /// The order is checked while the trailing stop is off too: a copy task that switches
+    /// the trail on inherits these bands.
+    fn validate_trailing_bands(&self) -> Result<()> {
+        let bands = self.trailing_stop_band_profit_pct.len();
+        if bands > TRAILING_STOP_MAX_BANDS {
+            return Err(ConfigurationError::Generic {
+                message: format!(
+                    "trader.trailing_stop_band_profit_pct must hold at most {TRAILING_STOP_MAX_BANDS} bands"
+                ),
+            }
+            .into());
+        }
+        if self.trailing_stop_band_distance_pct.len() != bands {
+            return Err(ConfigurationError::Generic {
+                message:
+                    "trader.trailing_stop_band_distance_pct must hold one distance per trailing band"
+                        .to_owned(),
+            }
+            .into());
+        }
+        for (field, values, min, max) in [
+            (
+                "trailing_stop_band_profit_pct",
+                &self.trailing_stop_band_profit_pct,
+                TRAILING_STOP_BAND_PROFIT_PCT_MIN,
+                TRAILING_STOP_BAND_PROFIT_PCT_MAX,
+            ),
+            (
+                "trailing_stop_band_distance_pct",
+                &self.trailing_stop_band_distance_pct,
+                TRAILING_STOP_BAND_DISTANCE_PCT_MIN,
+                TRAILING_STOP_BAND_DISTANCE_PCT_MAX,
+            ),
+        ] {
+            if !values
+                .iter()
+                .all(|&value| value.is_finite() && (min..=max).contains(&value))
+            {
+                return Err(ConfigurationError::Generic {
+                    message: format!("trader.{field} values must be between {min} and {max}"),
+                }
+                .into());
+            }
+        }
+        crate::trader::policy::ExitPolicy::from_trader_config(self)
+            .trailing
+            .validate_bands()
+            .map_err(|fault| ConfigurationError::Generic {
+                message: format!("trader: {fault}"),
+            })?;
         Ok(())
     }
 

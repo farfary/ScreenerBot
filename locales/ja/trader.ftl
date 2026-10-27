@@ -232,6 +232,23 @@ trader-trailing-final = 最終 +{ $value }%
 trader-trailing-summary-protected = 利益 <strong>{ $value }</strong> を確保
 # $value is a formatted percentage.
 trader-trailing-summary-avoided = 高値からの損失 <strong>{ $value }</strong> を回避
+# $step is the band's position in the list, from 1.
+trader-trailing-band = 段階 { $step }
+# $step is the band's position in the list, from 1.
+trader-trailing-band-profit-label = 段階 { $step } のピーク利益
+# $step is the band's position in the list, from 1.
+trader-trailing-band-distance-label = 段階 { $step } のトレール幅
+trader-trailing-band-profit-caption = ピーク利益から
+trader-trailing-band-distance-caption = トレール幅
+trader-trailing-add-band = 段階を追加
+# $step is the band's position in the list, from 1.
+trader-trailing-remove-band = 段階 { $step } を削除
+# $min and $max are the configured bounds of a band's peak profit.
+trader-trailing-band-error-profit-range = 各段階のピーク利益は { $min }% から { $max }% の範囲にしてください
+# $min and $max are the configured bounds of a band's distance.
+trader-trailing-band-error-distance-range = 各段階のトレール幅は { $min }% から { $max }% の範囲にしてください
+trader-trailing-band-error-order = 各段階のピーク利益は有効化の値と前の段階より高くしてください
+trader-trailing-band-error-distance = 各段階のトレール幅はそのピーク利益より小さくしてください
 
 ## Break-even stop
 
@@ -287,8 +304,6 @@ trader-time-unit-seconds = 秒
 trader-time-unit-minutes = 分
 trader-time-unit-hours = 時間
 trader-time-unit-days = 日
-# Shown before the configured duration loads.
-trader-time-conversion-default = 168時間 = 7日
 # $duration and $readable are formatted durations.
 trader-time-conversion = { $duration } = { $readable }
 trader-duration-seconds =
@@ -369,11 +384,8 @@ trader-dca-error-drop-range = 各下落率は { $min }% から { $max }% の間�
 trader-dca-error-size-range = 各サイズは初回購入の { $min }× から { $max }× の間にしてください
 trader-dca-error-order = 初回エントリーを基準にする場合、各追加は前回より深い下落が必要です
 trader-dca-cooldown-impact = 追加エントリーの間隔は最低 { $span }
-trader-dca-min-hold-impact =
-    { $minutes ->
-        [0] 初回の追加購入はエントリー直後から可能です
-       *[other] 初回の追加購入はエントリー後少なくとも { $span } 待ちます
-    }
+trader-dca-min-hold-none = 初回の追加購入はエントリー直後から可能です
+trader-dca-min-hold-impact = 初回の追加購入はエントリー後少なくとも { $span } 待ちます
 trader-dca-capacity = このポジションの最大保有額：{ $amount }（初回購入の { $multiple }×）
 trader-dca-info-title = DCA ストラテジー情報
 trader-dca-info-subtitle = DCA 取引における重要な注意点
