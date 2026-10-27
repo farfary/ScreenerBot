@@ -1,14 +1,20 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Task patch merging and the per-task book stats.
+//! Task patch merging, the per-task book stats and the removal of a task.
+
+use std::sync::{Arc, Mutex};
 
 use chrono::Utc;
 
+use super::tasks::delete_task_with;
 use super::{book_stats, followed_wallets, merge_task_patch, CopyTradingStatus, TaskRounds};
-use crate::positions::Book;
+use crate::positions::{Book, Position};
+use crate::trader::copy::paper_execution::PaperExecutionHandle;
 use crate::trader::copy::round_fixtures::{closed, open_round};
-use crate::trader::copy::{CopyActivityRow, CopyOutcome, CopyTask, ExitMode, SizingMode};
+use crate::trader::copy::{
+    CopyActivityRow, CopyDatabase, CopyOutcome, CopySkip, CopyTask, ExitMode, SizingMode,
+};
 use crate::trader::paper::TradingMode;
 use crate::trader::types::TradeReason;
 
@@ -375,4 +381,253 @@ fn followed_wallets_counts_distinct_targets() {
     other.target_address = "other".to_owned();
     assert_eq!(followed_wallets(&[]), 0);
     assert_eq!(followed_wallets(&[stored(), second, other]), 2);
+}
+
+/// What a scripted removal did: the paper rounds it settled and how often it detached
+/// and attached the watch source.
+#[derive(Default)]
+struct Removal {
+    settled: Vec<i64>,
+    detached: usize,
+    attached: usize,
+}
+
+/// A copy store holding `task`, as stored with the id the store gives it.
+async fn store_with(task: CopyTask) -> (tempfile::TempDir, CopyDatabase, CopyTask) {
+    crate::config::utils::install_default_config();
+    let directory = tempfile::tempdir().unwrap();
+    let database = CopyDatabase::open(
+        directory.path().join("copy_trading.db"),
+        crate::chains::ChainId::Solana,
+    )
+    .unwrap();
+    let task = database.insert_task(task).await.unwrap();
+    (directory, database, task)
+}
+
+/// Deletes task `id` over scripted reads: `live` open live positions, the paper rounds
+/// in `book` at the moment of the settle, and a settle that fails when `settle_fails`.
+async fn remove(
+    database: &CopyDatabase,
+    runtime: Option<PaperExecutionHandle>,
+    id: i64,
+    live: usize,
+    book: Arc<Mutex<Vec<Position>>>,
+    settle_fails: bool,
+) -> (crate::trader::Result<()>, Removal) {
+    let removal = Arc::new(Mutex::new(Removal::default()));
+    let (settled, detached, attached) = (removal.clone(), removal.clone(), removal.clone());
+    let result = delete_task_with(
+        database.clone(),
+        runtime,
+        id,
+        move |_| std::future::ready(live),
+        move |_| std::future::ready(book.lock().unwrap().clone()),
+        move |rounds: Vec<Position>| {
+            let count = rounds.len();
+            if !settle_fails {
+                settled
+                    .lock()
+                    .unwrap()
+                    .settled
+                    .extend(rounds.into_iter().filter_map(|round| round.id));
+            }
+            std::future::ready(if settle_fails {
+                Err(crate::trader::Error::PaperBookUnavailable)
+            } else {
+                Ok(count)
+            })
+        },
+        move |_| {
+            detached.lock().unwrap().detached += 1;
+            std::future::ready(Ok(()))
+        },
+        move |_| {
+            attached.lock().unwrap().attached += 1;
+            std::future::ready(Ok(()))
+        },
+    )
+    .await;
+    let removal = std::mem::take(&mut *removal.lock().unwrap());
+    (result, removal)
+}
+
+/// A paper buy of the task queued before the delete books its round first, and the
+/// delete settles that round too: no round of the task outlives it.
+#[tokio::test]
+async fn a_delete_settles_the_round_of_a_buy_queued_before_it() {
+    let (_directory, database, task) = store_with(stored()).await;
+    let (handle, stop, dispatcher) = crate::trader::copy::paper_execution::install();
+    let book = Arc::new(Mutex::new(vec![open_round(
+        task.id,
+        Book::Paper,
+        "held",
+        0.01,
+        0.5,
+        30,
+    )]));
+    let (release, released) = tokio::sync::oneshot::channel::<()>();
+    let buy_book = book.clone();
+    let buy_id = task.id;
+    let buy = handle
+        .enqueue_step(
+            task.id,
+            crate::trader::copy::paper_execution::activity_key("queued-buy"),
+            database.clone(),
+            async move {
+                let _ = released.await;
+                buy_book.lock().unwrap().push(open_round(
+                    buy_id,
+                    Book::Paper,
+                    "bought",
+                    0.02,
+                    0.5,
+                    1,
+                ));
+                Ok(())
+            },
+        )
+        .unwrap();
+    let delete_database = database.clone();
+    let delete_handle = handle.clone();
+    let delete_book = book.clone();
+    let delete = tokio::spawn(async move {
+        remove(
+            &delete_database,
+            Some(delete_handle),
+            task.id,
+            0,
+            delete_book,
+            false,
+        )
+        .await
+    });
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    assert!(
+        !delete.is_finished(),
+        "the delete waits for the buy queued before it"
+    );
+    release.send(()).unwrap();
+    buy.await.unwrap().unwrap();
+    let (result, removal) = delete.await.unwrap();
+    result.unwrap();
+    assert_eq!(
+        removal.settled,
+        vec![task.id * 1_000 + 30, task.id * 1_000 + 1],
+        "the round the queued buy opened is settled with the others"
+    );
+    assert_eq!((removal.detached, removal.attached), (1, 0));
+    assert!(database.get_task(task.id).await.unwrap().is_none());
+    let _ = stop.send(true);
+    dispatcher.await.unwrap();
+}
+
+#[tokio::test]
+async fn a_delete_without_a_running_queue_settles_and_removes_in_place() {
+    let (_directory, database, task) = store_with(stored()).await;
+    let book = Arc::new(Mutex::new(vec![open_round(
+        task.id,
+        Book::Paper,
+        "held",
+        0.01,
+        0.5,
+        5,
+    )]));
+    let (result, removal) = remove(&database, None, task.id, 0, book, false).await;
+    result.unwrap();
+    assert_eq!(removal.settled, vec![task.id * 1_000 + 5]);
+    assert_eq!((removal.detached, removal.attached), (1, 0));
+    assert!(database.get_task(task.id).await.unwrap().is_none());
+}
+
+/// A queue that refuses the removal settles nothing, keeps the task and attaches its
+/// watch source again, so the delete can be retried.
+#[tokio::test]
+async fn a_delete_the_queue_refuses_keeps_the_task_and_its_watch() {
+    let (_directory, database, task) = store_with(stored()).await;
+    let (handle, stop, dispatcher) = crate::trader::copy::paper_execution::install();
+    let _ = stop.send(true);
+    dispatcher.await.unwrap();
+    let book = Arc::new(Mutex::new(vec![open_round(
+        task.id,
+        Book::Paper,
+        "held",
+        0.01,
+        0.5,
+        5,
+    )]));
+    let (result, removal) = remove(&database, Some(handle), task.id, 0, book, false).await;
+    assert!(matches!(
+        result,
+        Err(crate::trader::Error::CopyTaskRejected {
+            reason: CopySkip::PaperExecutionUnavailable
+        })
+    ));
+    assert!(removal.settled.is_empty());
+    assert_eq!((removal.detached, removal.attached), (1, 1));
+    assert!(database.get_task(task.id).await.unwrap().is_some());
+}
+
+#[tokio::test]
+async fn a_failed_settle_keeps_the_task_and_attaches_its_watch_again() {
+    let (_directory, database, task) = store_with(stored()).await;
+    let book = Arc::new(Mutex::new(vec![open_round(
+        task.id,
+        Book::Paper,
+        "held",
+        0.01,
+        0.5,
+        5,
+    )]));
+    let (result, removal) = remove(&database, None, task.id, 0, book, true).await;
+    assert!(matches!(
+        result,
+        Err(crate::trader::Error::PaperBookUnavailable)
+    ));
+    assert_eq!((removal.detached, removal.attached), (1, 1));
+    assert!(database.get_task(task.id).await.unwrap().is_some());
+}
+
+/// An enabled live task and a task with open live positions are refused before anything
+/// is detached or settled.
+#[tokio::test]
+async fn a_delete_that_could_move_money_is_refused_untouched() {
+    let live = CopyTask {
+        mode: TradingMode::Live,
+        ..stored()
+    };
+    let (_directory, database, task) = store_with(live).await;
+    let book = Arc::new(Mutex::new(vec![open_round(
+        task.id,
+        Book::Paper,
+        "held",
+        0.01,
+        0.5,
+        5,
+    )]));
+    let (result, removal) = remove(&database, None, task.id, 0, book.clone(), false).await;
+    assert!(matches!(
+        result,
+        Err(crate::trader::Error::CopyTaskLive { task_id }) if task_id == task.id
+    ));
+    assert!(removal.settled.is_empty());
+    assert_eq!((removal.detached, removal.attached), (0, 0));
+
+    let paused = CopyTask {
+        enabled: false,
+        ..task.clone()
+    };
+    let (_owned_directory, owned_database, paused) = store_with(paused).await;
+    let (result, removal) = remove(&owned_database, None, paused.id, 2, book, false).await;
+    assert!(matches!(
+        result,
+        Err(crate::trader::Error::CopyTaskOwnsPositions {
+            task_id,
+            open_positions: 2,
+        }) if task_id == paused.id
+    ));
+    assert!(removal.settled.is_empty());
+    assert_eq!((removal.detached, removal.attached), (0, 0));
+    assert!(database.get_task(task.id).await.unwrap().is_some());
+    assert!(owned_database.get_task(paused.id).await.unwrap().is_some());
 }

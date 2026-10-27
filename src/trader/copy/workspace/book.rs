@@ -12,7 +12,7 @@ use super::super::control::{self, open_database};
 use super::super::entries::quote_context;
 use super::super::exits::{owns_copy_position, sell_decision};
 use super::super::paper_execution::{
-    self, skipped_paper_intent, EnqueueError, PaperExecutionHandle,
+    self, queue_refusal, skipped_paper_intent, EnqueueError, PaperExecutionHandle,
 };
 use super::super::{
     notify, paper_book, CopyDatabase, CopyOutcome, CopySellSubmitResult, CopySkip, CopyTask,
@@ -147,14 +147,6 @@ async fn paper_task(db: &CopyDatabase, id: i64, detail: &str) -> Result<CopyTask
         });
     }
     Ok(task)
-}
-
-/// The skip a paper queue refusal is recorded as.
-fn queue_refusal(error: EnqueueError) -> CopySkip {
-    match error {
-        EnqueueError::Full => CopySkip::PaperQueueFull,
-        EnqueueError::Unavailable | EnqueueError::Duplicate => CopySkip::PaperExecutionUnavailable,
-    }
 }
 
 #[derive(Debug, Serialize)]

@@ -4,11 +4,14 @@
 //! Task lifecycle: create, update, delete and the guarded paper/live transition,
 //! with the active-task limit and the watch source kept in step with each task.
 
+use std::future::Future;
+
 use chrono::Utc;
 
+use super::super::paper_execution::{self, queue_refusal, PaperExecutionHandle};
 use super::super::{
     confirm_mode_transition, sync_open_position_management, CopyDatabase, CopyPauseReason,
-    CopyTask, CopyTaskInput, ExitMode,
+    CopySkip, CopyTask, CopyTaskInput, ExitMode,
 };
 use super::live_block_reason;
 use super::open_database;
@@ -220,13 +223,109 @@ pub async fn update_task(id: i64, patch: serde_json::Value) -> Result<CopyTask> 
     Ok(updated)
 }
 
-/// Delete a task and detach its watch source. Its open paper rounds close at their
-/// last price first and stay in the paper history; its decisions, spend and archived
-/// copy paper book go with it (foreign-key cascade). Refused while it could still move
-/// money: an enabled live task must be paused first, and a task whose live positions
-/// are still open keeps them until they are closed.
+/// Delete a task. Its watch source is detached first, so no new copy of the task is
+/// queued; then, as one step on the task's paper queue, every paper job queued before it
+/// runs out, the task's open paper rounds close at their last price and the task row is
+/// removed. A paper job queued behind the step finds no task and opens no round. The
+/// closed rounds stay in the paper history; the task's decisions, spend and
+/// archived copy paper book go with it (foreign-key cascade). Refused while it could
+/// still move money: an enabled live task must be paused first, and a task whose live
+/// positions are still open keeps them until they are closed. When any step after the
+/// detach fails, the task row is still there and its watch source is attached again as
+/// the task needs it, so the delete can be retried; rounds already closed stay closed.
 pub async fn delete_task(id: i64) -> Result<()> {
     let db = open_database().await?;
+    delete_task_with(
+        db,
+        paper_execution::active(),
+        id,
+        |id| async move { live_copies(id).await },
+        |id| async move { paper_rounds(id).await },
+        crate::trader::paper::settle_rounds,
+        |task| async move {
+            watch::remove_copy_source(task.id, &task.target_address)
+                .await
+                .map_err(|e| Error::CopyReconciliation {
+                    detail: format!("failed to detach the copy target: {e}"),
+                })
+        },
+        |task| async move { sync_task_watch(&task).await },
+    )
+    .await
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(super) async fn delete_task_with<L, LFut, R, RFut, S, SFut, D, DFut, A, AFut>(
+    db: CopyDatabase,
+    runtime: Option<PaperExecutionHandle>,
+    id: i64,
+    live_copies: L,
+    paper_rounds: R,
+    settle: S,
+    detach: D,
+    attach: A,
+) -> Result<()>
+where
+    L: Fn(i64) -> LFut + Send + Sync + 'static,
+    LFut: Future<Output = usize> + Send + 'static,
+    R: FnOnce(i64) -> RFut + Send + 'static,
+    RFut: Future<Output = Vec<Position>> + Send + 'static,
+    S: FnOnce(Vec<Position>) -> SFut + Send + 'static,
+    SFut: Future<Output = Result<usize>> + Send + 'static,
+    D: FnOnce(CopyTask) -> DFut,
+    DFut: Future<Output = Result<()>>,
+    A: FnOnce(CopyTask) -> AFut,
+    AFut: Future<Output = Result<()>>,
+{
+    let task = deletable_task(&db, id, &live_copies).await?;
+    detach(task).await?;
+    let job_db = db.clone();
+    let job = async move {
+        deletable_task(&job_db, id, &live_copies).await?;
+        settle(paper_rounds(id).await).await?;
+        if job_db.delete_task(id).await? {
+            Ok(())
+        } else {
+            Err(Error::CopyTaskNotFound { task_id: id })
+        }
+    };
+    // Without a running queue no paper job of the task can run, so the removal runs here.
+    let removed = match runtime {
+        None => job.await,
+        Some(runtime) => {
+            match runtime.enqueue_step(id, paper_execution::delete_key(), db.clone(), job) {
+                Ok(receiver) => receiver.await.unwrap_or(Err(Error::CopyTaskRejected {
+                    reason: CopySkip::PaperExecutionUnavailable,
+                })),
+                Err(error) => Err(Error::CopyTaskRejected {
+                    reason: queue_refusal(error),
+                }),
+            }
+        }
+    };
+    let Err(error) = removed else {
+        return Ok(());
+    };
+    let restored = match db.get_task(id).await {
+        Ok(Some(task)) => attach(task).await,
+        Ok(None) => Ok(()),
+        Err(lookup) => Err(lookup),
+    };
+    Err(match restored {
+        Ok(()) => error,
+        Err(restore) => Error::CopyReconciliation {
+            detail: format!("{error}; attaching the copy target again failed too: {restore}"),
+        },
+    })
+}
+
+/// The task `id` while deleting it moves no money: not enabled in live, and holding no
+/// open live position.
+async fn deletable_task<L, LFut>(db: &CopyDatabase, id: i64, live_copies: &L) -> Result<CopyTask>
+where
+    L: Fn(i64) -> LFut,
+    LFut: Future<Output = usize>,
+{
     let task = db
         .get_task(id)
         .await?
@@ -234,37 +333,36 @@ pub async fn delete_task(id: i64) -> Result<()> {
     if task.enabled && task.mode == TradingMode::Live {
         return Err(Error::CopyTaskLive { task_id: id });
     }
-    let open_positions = crate::positions::get_open_positions()
-        .await
-        .into_iter()
-        .filter(|position| {
-            matches!(position.origin, PositionOrigin::Copy { task_id, .. } if task_id == id)
-        })
-        .count();
+    let open_positions = live_copies(id).await;
     if open_positions > 0 {
         return Err(Error::CopyTaskOwnsPositions {
             task_id: id,
             open_positions,
         });
     }
-    let paper_rounds = books::open_positions(Book::Paper)
+    Ok(task)
+}
+
+/// The open live positions task `id` opened.
+async fn live_copies(id: i64) -> usize {
+    crate::positions::get_open_positions()
         .await
         .into_iter()
-        .filter(|position| {
-            matches!(position.origin, PositionOrigin::Copy { task_id, .. } if task_id == id)
-        })
-        .collect::<Vec<_>>();
-    crate::trader::paper::settle_rounds(paper_rounds).await?;
-    watch::remove_copy_source(id, &task.target_address)
+        .filter(|position| owned_by(position, id))
+        .count()
+}
+
+/// The open paper rounds task `id` opened.
+async fn paper_rounds(id: i64) -> Vec<Position> {
+    books::open_positions(Book::Paper)
         .await
-        .map_err(|e| Error::CopyReconciliation {
-            detail: format!("failed to detach the copy target: {e}"),
-        })?;
-    if db.delete_task(id).await? {
-        Ok(())
-    } else {
-        Err(Error::CopyTaskNotFound { task_id: id })
-    }
+        .into_iter()
+        .filter(|position| owned_by(position, id))
+        .collect()
+}
+
+fn owned_by(position: &Position, id: i64) -> bool {
+    matches!(position.origin, PositionOrigin::Copy { task_id, .. } if task_id == id)
 }
 
 /// The guarded paper/live transition. Arming live requires the exact

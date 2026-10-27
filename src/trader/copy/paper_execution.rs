@@ -12,7 +12,7 @@ use std::sync::{Arc, LazyLock, Mutex};
 use tokio::sync::{mpsc, oneshot, watch};
 use tokio::task::JoinSet;
 
-use super::{CopyDatabase, CopyOutcome};
+use super::{CopyDatabase, CopyOutcome, CopySkip};
 use crate::trader::executors::ExecutionContext;
 use crate::trader::types::{TradeDecision, TradeResult};
 mod error;
@@ -26,7 +26,10 @@ type Settlement = Arc<dyn Fn(CopyDatabase, CopyOutcome) -> SettleFuture + Send +
 /// Runs a paper trade decision of a copy task on the shared paper executor, where no
 /// stop of the FIFO can cancel it half booked.
 pub type PaperDispatch = Arc<
-    dyn Fn(TradeDecision, ExecutionContext) -> Pin<Box<dyn Future<Output = crate::trader::Result<TradeResult>> + Send>>
+    dyn Fn(
+            TradeDecision,
+            ExecutionContext,
+        ) -> Pin<Box<dyn Future<Output = crate::trader::Result<TradeResult>> + Send>>
         + Send
         + Sync,
 >;
@@ -244,6 +247,14 @@ impl PaperExecutionHandle {
     }
 }
 
+/// The skip a refused admission to a task's paper queue is reported as.
+pub(super) fn queue_refusal(error: EnqueueError) -> CopySkip {
+    match error {
+        EnqueueError::Full => CopySkip::PaperQueueFull,
+        EnqueueError::Unavailable | EnqueueError::Duplicate => CopySkip::PaperExecutionUnavailable,
+    }
+}
+
 /// The admission key of a copy activity's paper work, one per target transaction.
 pub fn activity_key(signature: &str) -> String {
     format!("activity:{signature}")
@@ -257,6 +268,11 @@ pub fn manual_close_key(position_id: i64) -> String {
 /// The admission key of a reset of a task's paper run; one reset of a task at a time.
 pub fn reset_key() -> String {
     "reset".to_owned()
+}
+
+/// The admission key of a task's removal; one removal of a task at a time.
+pub fn delete_key() -> String {
+    "delete".to_owned()
 }
 
 static ACTIVE: LazyLock<Mutex<Option<PaperExecutionHandle>>> = LazyLock::new(|| Mutex::new(None));
@@ -453,7 +469,7 @@ fn reject_completion(
 ) {
     if let Some(completion) = completion.take() {
         let _ = completion.send(Err(crate::trader::Error::CopyTaskRejected {
-            reason: super::CopySkip::PaperExecutionUnavailable,
+            reason: CopySkip::PaperExecutionUnavailable,
         }));
     }
 }
@@ -461,8 +477,8 @@ fn reject_completion(
 mod executor;
 mod wanted;
 pub(super) use executor::{
-    as_paper, execute_paper_entry, observation_telemetry, skipped, skipped_activity,
-    skipped_paper, skipped_paper_intent,
+    as_paper, execute_paper_entry, observation_telemetry, skipped, skipped_activity, skipped_paper,
+    skipped_paper_intent,
 };
 pub use wanted::paper_trade_wanted;
 
