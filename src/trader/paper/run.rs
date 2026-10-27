@@ -28,7 +28,7 @@ pub async fn paper_account() -> Result<PaperAccount> {
 pub async fn reset_paper_run() -> Result<PaperAccount> {
     let book = crate::positions::paper::book().ok_or(Error::PaperBookUnavailable)?;
     let wallet = crate::utils::get_wallet_address().map_err(|_| Error::PaperBookUnavailable)?;
-    let chain = crate::chains::active_chain();
+    let chain = book.chain();
     let reason = format!("{:?}", TradeReason::PaperReset);
     let account = crate::global::paper_scope(book.reset_run(
         &wallet,
@@ -56,7 +56,7 @@ pub async fn settle_rounds(rounds: Vec<Position>) -> Result<usize> {
     }
     let book = crate::positions::paper::book().ok_or(Error::PaperBookUnavailable)?;
     let wallet = crate::utils::get_wallet_address().map_err(|_| Error::PaperBookUnavailable)?;
-    let chain = crate::chains::active_chain();
+    let chain = book.chain();
     let reason = format!("{:?}", TradeReason::PaperReset);
     let closed = crate::global::paper_scope(book.settle_at_mark(
         &wallet,

@@ -7,7 +7,7 @@
 //! size their sale here, so what is quoted is what is sold.
 
 use crate::chains::RawAmount;
-use crate::positions::db::{get_other_open_held, OtherOpenHeld};
+use crate::positions::db::{get_other_open_held, get_store_chain, OtherOpenHeld};
 use crate::positions::types::Position;
 use crate::positions::{Error, Result};
 
@@ -74,15 +74,18 @@ pub(crate) async fn read_exit_sale(
             })?;
             // The primary account is what most routes spend from; an unread balance sizes
             // from the total.
-            let primary = crate::chains::solana::assets::ata::get_token_balance(wallet, mint)
+            let primary = crate::positions::settle::primary_holding(wallet, mint)
                 .await
+                .ok()
+                .and_then(|amount| u64::try_from(amount.raw()).ok())
                 .unwrap_or_default();
             ExitReadings::All {
                 total,
                 primary,
                 own_remaining,
                 others: get_other_open_held(mint, own.and_then(|p| p.id)).await?,
-                quote_asset: crate::chains::adapter().is_quote_asset(mint),
+                quote_asset: crate::chains::adapter_for(get_store_chain().await?)
+                    .is_quote_asset(mint),
             }
         }
         ExitShare::Part(percentage) => ExitReadings::Part {
@@ -583,8 +586,9 @@ mod tests {
         let code = source.split("#[cfg(test)]").next().unwrap();
         let start = code.find("ExitShare::Part(percentage) =>").unwrap();
         let arm = &code[start..start + code[start..].find("},").unwrap()];
+        let compact: String = arm.chars().filter(|c| !c.is_whitespace()).collect();
         assert!(
-            arm.contains("settle::holding(wallet, mint).await?"),
+            compact.contains("settle::holding(wallet,mint).await?"),
             "{arm}"
         );
         assert!(!arm.contains(".ok()"), "{arm}");

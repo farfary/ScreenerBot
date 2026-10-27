@@ -7,8 +7,8 @@ mod async_api;
 
 pub use async_api::*;
 
-use crate::database;
 use crate::database::schema::{ddl, SchemaContext, StoreSchema};
+use crate::database::{self, WriteTransaction};
 use crate::errors::{DatabaseError, Error};
 use crate::logger::{self, LogTag};
 use crate::strategies::types::{EvaluationResult, Strategy, StrategyPerformance, StrategyType};
@@ -567,7 +567,7 @@ fn insert_evaluations(
     records: &[EvaluationRecord],
 ) -> crate::Result<()> {
     let chain_id = crate::chains::legacy_row_chain().as_str();
-    let tx = conn.transaction()?;
+    let tx = conn.write_tx()?;
     {
         let mut stmt = tx.prepare_cached(
             "INSERT INTO strategy_performance (strategy_id, execution_time_ms, result, confidence, details_json, token_mint, execution_timestamp, chain_id)

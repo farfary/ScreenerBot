@@ -156,7 +156,7 @@ impl Marker {
     /// `backups/`.
     fn backup_path(&self) -> Option<PathBuf> {
         is_backup_directory_name(&self.backup_directory)
-            .then(|| crate::paths::get_backups_directory().join(&self.backup_directory))
+            .then(|| crate::paths::get_backup_path(&self.backup_directory))
     }
 }
 

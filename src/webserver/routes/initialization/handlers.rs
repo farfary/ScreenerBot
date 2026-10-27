@@ -401,7 +401,21 @@ pub(super) async fn complete_initialization(
                     LogTag::Webserver,
                     &format!("Setup refused to replace the trading wallet: {e}"),
                 );
-                return setup_replacement_error(&e).into_response();
+                // Open positions cannot be closed from setup: the refusal says to finish
+                // setup with the current trading wallet's key and replace the wallet from
+                // the Wallets page afterwards.
+                let refusal = match &e {
+                    crate::wallets::Error::ReplacementBlocked {
+                        reason: RestartBlocker::OpenPositions { count },
+                    } => ApiError::new(
+                        ApiErrorCode::OpenPositions,
+                        ids::ERRORS_INITIALIZATION_REPLACE_OPEN_POSITIONS,
+                    )
+                    .count_arg("count", i64::try_from(*count).unwrap_or(i64::MAX))
+                    .details(e.to_string()),
+                    other => replacement_error(other),
+                };
+                return refusal.into_response();
             }
             true
         }
@@ -486,23 +500,6 @@ pub(super) async fn complete_initialization(
     };
 
     success_response(response)
-}
-
-/// The API error of a replacement setup refused. Open positions cannot be closed from
-/// setup, so that refusal says to finish setup with the current trading wallet's key and
-/// replace the wallet from the Wallets page afterwards.
-fn setup_replacement_error(error: &crate::wallets::Error) -> ApiError {
-    match error {
-        crate::wallets::Error::ReplacementBlocked {
-            reason: RestartBlocker::OpenPositions { count },
-        } => ApiError::new(
-            ApiErrorCode::OpenPositions,
-            ids::ERRORS_INITIALIZATION_REPLACE_OPEN_POSITIONS,
-        )
-        .count_arg("count", i64::try_from(*count).unwrap_or(i64::MAX))
-        .details(error.to_string()),
-        other => replacement_error(other),
-    }
 }
 
 /// GET /api/initialization/progress

@@ -35,12 +35,12 @@ pub fn build_routers() -> Vec<std::sync::Arc<dyn crate::swaps::router::SwapRoute
 /// Refuse amounts outside Solana's instruction range before router I/O.
 pub(super) fn checked_quote_amounts(quote: &crate::swaps::Quote) -> crate::Result<()> {
     match quote.amount_outside_u64() {
-        Some((field, amount)) => Err(not_submitted(
-            &quote.router_name,
-            NotSubmittedReason::QuoteUnusable {
+        Some((field, amount)) => Err(crate::Error::Swaps(SwapExecutionError::NotSubmitted {
+            router: quote.router_name.clone(),
+            reason: NotSubmittedReason::QuoteUnusable {
                 detail: format!("{field} {amount} exceeds the Solana u64 limit"),
             },
-        )),
+        })),
         None => Ok(()),
     }
 }
@@ -49,19 +49,12 @@ pub(super) fn checked_quote_amounts(quote: &crate::swaps::Quote) -> crate::Resul
 /// load is refused before anything is built or signed.
 pub(super) fn signing_keypair(router: &str) -> crate::Result<Keypair> {
     crate::chains::solana::accounts::configured_keypair().map_err(|error| {
-        not_submitted(
-            router,
-            NotSubmittedReason::SignerUnavailable {
+        crate::Error::Swaps(SwapExecutionError::NotSubmitted {
+            router: router.to_owned(),
+            reason: NotSubmittedReason::SignerUnavailable {
                 detail: error.to_string(),
             },
-        )
-    })
-}
-
-fn not_submitted(router: &str, reason: NotSubmittedReason) -> crate::Error {
-    crate::Error::Swaps(SwapExecutionError::NotSubmitted {
-        router: router.to_owned(),
-        reason,
+        })
     })
 }
 

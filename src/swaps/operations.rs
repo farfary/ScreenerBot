@@ -471,30 +471,24 @@ pub async fn execute_swap_with_fallback(
 ) -> Result<SwapResult> {
     // A force stop refuses before any router is asked: nothing is built or sent.
     if crate::global::is_force_stopped() {
-        return Err(not_submitted(
-            &quote.router_name,
-            crate::swaps::NotSubmittedReason::Halted,
+        return Err(Error::Swaps(
+            crate::swaps::SwapExecutionError::NotSubmitted {
+                router: quote.router_name.clone(),
+                reason: crate::swaps::NotSubmittedReason::Halted,
+            },
         ));
     }
     let registry = get_registry().map_err(|error| {
-        not_submitted(
-            &quote.router_name,
-            crate::swaps::NotSubmittedReason::RouterUnavailable {
+        Error::Swaps(crate::swaps::SwapExecutionError::NotSubmitted {
+            router: quote.router_name.clone(),
+            reason: crate::swaps::NotSubmittedReason::RouterUnavailable {
                 detail: error.to_string(),
             },
-        )
+        })
     })?;
     execute_with_fallback_on(registry, token, quote, amount_limit)
         .await
         .map(|(_, result)| result)
-}
-
-/// A refusal decided before any transaction was built, signed or sent.
-fn not_submitted(router: &str, reason: crate::swaps::NotSubmittedReason) -> Error {
-    Error::Swaps(crate::swaps::SwapExecutionError::NotSubmitted {
-        router: router.to_owned(),
-        reason,
-    })
 }
 
 /// The main wallet's execution chain: the quote's own router first, a re-quote on
@@ -510,40 +504,44 @@ async fn execute_with_fallback_on(
     // Paper trading never executes a swap: refused before any router, key or
     // balance read.
     if crate::global::in_paper_scope() {
-        return Err(not_submitted(
-            &quote.router_name,
-            crate::swaps::NotSubmittedReason::PaperScope,
+        return Err(Error::Swaps(
+            crate::swaps::SwapExecutionError::NotSubmitted {
+                router: quote.router_name.clone(),
+                reason: crate::swaps::NotSubmittedReason::PaperScope,
+            },
         ));
     }
     let primary = registry.get_router(&quote.router_id).ok_or_else(|| {
-        not_submitted(
-            &quote.router_name,
-            crate::swaps::NotSubmittedReason::RouterUnavailable {
+        Error::Swaps(crate::swaps::SwapExecutionError::NotSubmitted {
+            router: quote.router_name.clone(),
+            reason: crate::swaps::NotSubmittedReason::RouterUnavailable {
                 detail: format!("router {} is not registered", quote.router_id),
             },
-        )
+        })
     })?;
     // The registry answers live: a router disabled between quoting and
     // execution must not still execute the quote it produced.
     if !primary.is_enabled() {
-        return Err(not_submitted(
-            &quote.router_name,
-            crate::swaps::NotSubmittedReason::RouterUnavailable {
-                detail: format!(
-                    "router {} was disabled before its quote could be executed",
-                    quote.router_name
-                ),
+        return Err(Error::Swaps(
+            crate::swaps::SwapExecutionError::NotSubmitted {
+                router: quote.router_name.clone(),
+                reason: crate::swaps::NotSubmittedReason::RouterUnavailable {
+                    detail: format!(
+                        "router {} was disabled before its quote could be executed",
+                        quote.router_name
+                    ),
+                },
             },
         ));
     }
 
     amount_limit.check_quote(&quote).map_err(|error| {
-        not_submitted(
-            &quote.router_name,
-            crate::swaps::NotSubmittedReason::QuoteUnusable {
+        Error::Swaps(crate::swaps::SwapExecutionError::NotSubmitted {
+            router: quote.router_name.clone(),
+            reason: crate::swaps::NotSubmittedReason::QuoteUnusable {
                 detail: error.to_string(),
             },
-        )
+        })
     })?;
     crate::chains::solana::swaps::funds::check_native_funds(&quote).await?;
 

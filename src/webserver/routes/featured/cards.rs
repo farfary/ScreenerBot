@@ -13,7 +13,6 @@
 
 use super::identity::fill_identity;
 use super::types::FeaturedCard;
-use crate::chains::solana::constants::SOL_MINT;
 use crate::tokens::security::SecurityRiskBand;
 use crate::{native_price, tokens};
 
@@ -141,9 +140,14 @@ fn apply_stats(card: &mut FeaturedCard, stats: DbStats) {
 
 /// The wrapped native coin's card shows the SOL/USD price the header shows, absent
 /// while that price is unknown. Its token row carries the last stored market price,
-/// which drifts from the live figure, so the two surfaces disagreed side by side.
+/// which drifts from the live figure, so the two surfaces disagreed side by side. The
+/// card is the one whose mint is the native asset address of the chain that accepts it.
 fn apply_native_price(cards: &mut [FeaturedCard], price_usd: Option<f64>) {
-    for card in cards.iter_mut().filter(|card| card.mint == SOL_MINT) {
+    let is_native_asset = |mint: &str| {
+        crate::chains::chain_for_address(mint)
+            .is_ok_and(|chain| crate::chains::adapter_for(chain).native_asset_address() == mint)
+    };
+    for card in cards.iter_mut().filter(|card| is_native_asset(&card.mint)) {
         card.price_usd = price_usd;
     }
 }
@@ -263,7 +267,9 @@ mod tests {
     #[test]
     fn the_native_coin_card_shows_the_header_sol_price() {
         let mut sol = boosted_card();
-        sol.mint = SOL_MINT.to_owned();
+        sol.mint = crate::chains::adapter_for(crate::chains::ChainId::Solana)
+            .native_asset_address()
+            .to_owned();
         apply_stats(&mut sol, stats());
         let mut other = boosted_card();
         apply_stats(&mut other, stats());

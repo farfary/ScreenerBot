@@ -103,25 +103,11 @@ async fn paper_routes_answer_paper_book_unavailable_until_the_paper_book_loads()
 
 /// A live round and a loaded paper book in an isolated data directory: closing the live
 /// round's id through the paper route answers not found and leaves the live round open.
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn a_paper_close_resolves_its_id_in_the_paper_book_only() {
-    use crate::chains::solana::solana_sdk::signature::{Keypair, Signer};
-
     let directory = tempfile::tempdir().expect("temp dir");
     std::env::set_var("SCREENERBOT_DATA_DIR", directory.path());
-    let config = crate::config::utils::CONFIG
-        .get_or_init(|| std::sync::RwLock::new(crate::config::schemas::Config::default()));
-    let keypair = Keypair::new();
-    let encrypted =
-        crate::secure_storage::encrypt_private_key(&bs58::encode(keypair.to_bytes()).into_string())
-            .expect("encrypt the test key");
-    {
-        let mut config = config
-            .write()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        config.wallet_encrypted = encrypted.ciphertext;
-        config.wallet_nonce = encrypted.nonce;
-    }
+    let wallet = crate::chains::solana::accounts::configure_test_trading_wallet();
     crate::paths::ensure_all_directories().expect("create data directories");
     crate::positions::initialize_positions_database()
         .await
@@ -132,12 +118,12 @@ async fn a_paper_close_resolves_its_id_in_the_paper_book_only() {
     let live_id = crate::positions::db::save_position(&live)
         .await
         .expect("store the live round");
-    let book = crate::positions::paper::initialize(
-        crate::chains::active_chain(),
-        &keypair.pubkey().to_string(),
-    )
-    .await
-    .expect("load the paper book");
+    let chain = crate::positions::db::get_store_chain()
+        .await
+        .expect("the live store's chain");
+    let book = crate::positions::paper::initialize(chain, &wallet)
+        .await
+        .expect("load the paper book");
     assert!(book.position(live_id).await.is_none());
 
     let (status, body) = answer("POST", &format!("/api/positions/paper/{live_id}/close")).await;
@@ -279,7 +265,7 @@ fn paper_fills_are_ordered_joined_to_their_legs_and_carry_no_signature() {
         ],
     };
 
-    let fills = paper_fills(history);
+    let fills = paper_fills(history, ChainId::Solana);
     let kinds: Vec<&str> = fills.iter().map(|fill| fill.kind.as_str()).collect();
     assert_eq!(kinds, ["entry", "partial", "exit"]);
     assert_eq!(fills[0].strategy_id.as_deref(), Some("paper-entry"));

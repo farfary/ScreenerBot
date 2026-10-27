@@ -135,8 +135,7 @@ const WALLET_RESET_MANIFEST_NAME: &str = "manifest.json";
 /// `wallet-reset-<YYYYMMDDTHHMMSSZ>-<label>`.
 pub fn wallet_reset_directory(label: &str) -> PathBuf {
     let stamp = chrono::Utc::now().format("%Y%m%dT%H%M%SZ");
-    crate::paths::get_backups_directory()
-        .join(format!("{WALLET_RESET_DIRECTORY_PREFIX}{stamp}-{label}"))
+    crate::paths::get_backup_path(format!("{WALLET_RESET_DIRECTORY_PREFIX}{stamp}-{label}"))
 }
 
 /// Move every file of the wallet-scoped stores into `directory` and write `manifest`

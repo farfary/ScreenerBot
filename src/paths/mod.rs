@@ -108,6 +108,11 @@ pub fn get_backups_directory() -> PathBuf {
     get_data_directory().join(BACKUPS_DIRECTORY_NAME)
 }
 
+/// Returns the path of the entry named `name` inside the backups directory.
+pub fn get_backup_path(name: impl AsRef<std::path::Path>) -> PathBuf {
+    get_backups_directory().join(name)
+}
+
 /// Name of the directory beside the stores that holds stores moved aside after a
 /// failed open.
 pub const QUARANTINE_DIRECTORY_NAME: &str = "quarantine";

@@ -56,6 +56,16 @@ impl ChainRuntime for SolanaRuntime {
         }
     }
 
+    async fn buy_account_rent(&self, wallet: &str, asset: &str) -> crate::chains::Result<u64> {
+        crate::chains::solana::swaps::funds::buy_account_rent(wallet, asset)
+            .await
+            .map_err(|error| crate::chains::Error::AccountRead {
+                chain: ChainId::Solana,
+                address: wallet.to_owned(),
+                detail: error.to_string(),
+            })
+    }
+
     fn filter_profile(&self) -> Arc<crate::filtering::FilterProfile> {
         crate::chains::solana::filtering::profile()
     }

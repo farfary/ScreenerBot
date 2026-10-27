@@ -98,6 +98,11 @@ impl PaperBook {
         }
     }
 
+    /// The chain whose paper rounds this book holds.
+    pub fn chain(&self) -> crate::chains::ChainId {
+        self.db.chain()
+    }
+
     /// When the latest paper round opened in this process. The live open time is not
     /// read or written by the paper book.
     pub fn last_open(&self) -> Option<DateTime<Utc>> {

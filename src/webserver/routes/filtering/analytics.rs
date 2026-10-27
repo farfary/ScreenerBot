@@ -133,8 +133,10 @@ pub async fn get_analytics(Query(query): Query<AnalyticsQuery>) -> Response {
         Err(error) => Err(error.into()),
     };
 
-    let rugcheck_report_required =
-        filtering::sources::rugcheck::report_required(crate::chains::active_chain());
+    let rugcheck_report_required = ChainScope::All
+        .chains()
+        .into_iter()
+        .any(filtering::sources::rugcheck::report_required);
 
     analytics_response(
         &query,

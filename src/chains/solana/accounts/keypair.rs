@@ -139,6 +139,18 @@ pub fn address_from_encrypted_key(ciphertext: &str, nonce: &str) -> Result<Strin
     decrypt_to_keypair(ciphertext, nonce).map(|kp| keypair_to_address(&kp))
 }
 
+/// A fresh key as its address and its base58 secret, the form the setup flow accepts.
+/// Tests outside this module take a trading-wallet key through it and never hold a
+/// `Keypair`.
+#[cfg(test)]
+pub(crate) fn new_test_key() -> (String, String) {
+    let keypair = Keypair::new();
+    (
+        keypair_to_address(&keypair),
+        bs58::encode(keypair.to_bytes()).into_string(),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

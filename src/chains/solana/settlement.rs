@@ -6,14 +6,16 @@
 use std::str::FromStr;
 
 use crate::chains::settlement::{Holding, SettlementReader, SignatureCheck, SignatureVerdict};
-use crate::chains::solana::assets::ata::{token_holding, token_holding_with_slot};
+use crate::chains::solana::assets::ata::{
+    get_token_balance, token_holding, token_holding_with_slot,
+};
 use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 use crate::chains::solana::solana_sdk::commitment_config::CommitmentLevel;
 use crate::chains::solana::solana_sdk::signature::Signature;
 use crate::chains::solana::solana_transaction_status::{
     EncodedConfirmedTransactionWithStatusMeta, TransactionConfirmationStatus, TransactionStatus,
 };
-use crate::chains::{ChainId, Error, Result};
+use crate::chains::{ChainId, Error, RawAmount, Result};
 
 /// Blocks after its blockhash was fetched during which a transaction can still land.
 pub(crate) const SOLANA_BLOCKHASH_VALIDITY_SLOTS: u64 = 150;
@@ -103,6 +105,17 @@ impl SettlementReader for SolanaSettlement {
     async fn holding(&self, owner: &str, asset: &str) -> Result<Holding> {
         token_holding(owner, asset)
             .await
+            .map_err(|error| Error::SettlementRead {
+                chain: ChainId::Solana,
+                detail: error.to_string(),
+            })
+    }
+
+    /// The balance of the wallet's associated token account of `asset`.
+    async fn primary_holding(&self, owner: &str, asset: &str) -> Result<RawAmount> {
+        get_token_balance(owner, asset)
+            .await
+            .map(RawAmount::from)
             .map_err(|error| Error::SettlementRead {
                 chain: ChainId::Solana,
                 detail: error.to_string(),

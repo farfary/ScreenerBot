@@ -42,6 +42,11 @@ pub trait SettlementReader: Send + Sync {
     async fn signature_verdicts(&self, checks: &[SignatureCheck]) -> Result<Vec<SignatureVerdict>>;
     /// The wallet's holding of `asset`, summed over its token accounts.
     async fn holding(&self, owner: &str, asset: &str) -> Result<Holding>;
+    /// The balance of `asset` in the wallet's primary account, the one most routes spend
+    /// from. A chain that keeps each asset in one account answers the whole holding.
+    async fn primary_holding(&self, owner: &str, asset: &str) -> Result<RawAmount> {
+        Ok(self.holding(owner, asset).await?.amount)
+    }
     /// A bound no transaction submitted before now can still land after.
     async fn expiry_bound(&self) -> Result<u64>;
     /// The wallet's holding of `asset` once no transaction submitted before `expiry_bound`

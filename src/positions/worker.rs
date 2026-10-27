@@ -3,7 +3,7 @@
 
 //! Position worker — background task that processes position lifecycle events.
 
-use super::db::initialize_positions_database;
+use super::db::{get_store_chain, initialize_positions_database};
 use super::{
     apply::apply_transition,
     queue::{
@@ -41,8 +41,8 @@ const VERIFICATION_BATCH_SIZE: usize = 10;
 /// in time is deferred to a later read instead of stalling the worker.
 const SETTLEMENT_LOCK_WAIT: Duration = Duration::from_millis(500);
 
-/// Loads the paper book. A paper store that cannot be opened is reported and never
-/// stops the live positions from loading.
+/// Loads the paper book on the chain of the live positions store. A paper store that cannot
+/// be opened is reported and never stops the live positions from loading.
 async fn initialize_paper_book() {
     let wallet_address = match crate::utils::get_wallet_address() {
         Ok(wallet_address) => wallet_address,
@@ -54,9 +54,17 @@ async fn initialize_paper_book() {
             return;
         }
     };
-    if let Err(error) =
-        crate::positions::paper::initialize(crate::chains::active_chain(), &wallet_address).await
-    {
+    let chain = match get_store_chain().await {
+        Ok(chain) => chain,
+        Err(error) => {
+            logger::warning(
+                LogTag::Positions,
+                &format!("Paper book not loaded: no positions store ({error})"),
+            );
+            return;
+        }
+    };
+    if let Err(error) = crate::positions::paper::initialize(chain, &wallet_address).await {
         logger::warning(
             LogTag::Positions,
             &format!("Paper book not loaded: {error}"),

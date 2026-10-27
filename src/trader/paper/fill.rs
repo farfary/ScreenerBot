@@ -64,10 +64,6 @@ pub enum SettledPaperQuote {
     Sell(PaperSellFill),
 }
 
-fn quote_failure(_: QuoteError) -> PaperFillError {
-    PaperFillError::QuoteUnavailable
-}
-
 fn quote_matches(request: &QuoteRequest, quote: &Quote) -> bool {
     quote.chain == request.chain
         && quote.input_mint == request.input_mint
@@ -146,13 +142,17 @@ where
     WFut: Future<Output = Result<(), E>>,
 {
     let queued_duration_start = Utc::now();
-    let initial = quote(request.clone()).await.map_err(quote_failure)?;
+    let initial = quote(request.clone())
+        .await
+        .map_err(|_| PaperFillError::QuoteUnavailable)?;
     let initial_at = Utc::now();
     if !quote_matches(request, &initial) || initial.estimated_network_fee_lamports.is_none() {
         return Err(PaperFillError::QuoteUnfillable.into());
     }
     wait(Duration::from_millis(delay_ms)).await?;
-    let landing = quote(request.clone()).await.map_err(quote_failure)?;
+    let landing = quote(request.clone())
+        .await
+        .map_err(|_| PaperFillError::QuoteUnavailable)?;
     let landing_at = Utc::now();
     let (initial, landing) = checked_samples(request, initial, landing)?;
     let metadata = quote_metadata(

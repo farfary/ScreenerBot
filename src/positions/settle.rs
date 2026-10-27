@@ -5,7 +5,9 @@
 
 use std::sync::Arc;
 
-use crate::chains::{runtime_for, Holding, SettlementReader, SignatureCheck, SignatureVerdict};
+use crate::chains::{
+    runtime_for, Holding, RawAmount, SettlementReader, SignatureCheck, SignatureVerdict,
+};
 use crate::logger::{self, LogTag};
 
 use super::db::{get_other_open_held, get_store_chain, OtherOpenHeld};
@@ -43,6 +45,11 @@ pub(crate) async fn submission_expiry_bound() -> Option<u64> {
 /// The holding of `owner` in `mint` on the chain whose positions the store holds.
 pub(crate) async fn holding(owner: &str, mint: &str) -> Result<Holding> {
     Ok(reader().await?.holding(owner, mint).await?)
+}
+
+/// The balance of `mint` in the owner's primary account, the one most routes spend from.
+pub(crate) async fn primary_holding(owner: &str, mint: &str) -> Result<RawAmount> {
+    Ok(reader().await?.primary_holding(owner, mint).await?)
 }
 
 /// One verdict per item, in order, from one batched read.
@@ -223,7 +230,6 @@ pub(crate) async fn entry_attributable_is_dust(item: &VerificationItem) -> Optio
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::chains::RawAmount;
 
     const ALL_VERDICTS: [SignatureVerdict; 4] = [
         SignatureVerdict::Landed,

@@ -139,7 +139,7 @@ impl PaperEntryIo for ScriptedIo {
 fn task() -> CopyTask {
     CopyTask {
         id: 0,
-        chain: crate::chains::active_chain(),
+        chain: crate::chains::ChainId::Solana,
         target_address: "target-wallet".to_owned(),
         label: None,
         enabled: true,
@@ -189,11 +189,7 @@ fn activity(signature: &str) -> WalletActivity {
 
 async fn setup(task: CopyTask) -> (tempfile::TempDir, CopyDatabase, CopyTask) {
     let dir = tempfile::tempdir().unwrap();
-    let database = CopyDatabase::open(
-        dir.path().join("copy_trading.db"),
-        crate::chains::active_chain(),
-    )
-    .unwrap();
+    let database = CopyDatabase::open(dir.path().join("copy_trading.db"), task.chain).unwrap();
     let task = database.insert_task(task).await.unwrap();
     (dir, database, task)
 }

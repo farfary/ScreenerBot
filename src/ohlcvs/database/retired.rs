@@ -35,10 +35,6 @@ pub enum RetiredPurge {
     Done,
 }
 
-fn db_error(context: &str, error: rusqlite::Error) -> OhlcvError {
-    OhlcvError::Database(DatabaseError::classify_sqlite_failure(context, error))
-}
-
 /// Rename `chain_id`'s candle and gap tables aside and recreate them empty; a table holding
 /// no row of the chain, as in a new store, is left in place. Rows of other
 /// chains are copied back through the leading `chain_id` column of each table's unique
@@ -56,7 +52,12 @@ pub(super) fn retire_chain_tables(conn: &Connection, chain_id: &str) -> OhlcvRes
                 params![chain_id],
                 |row| row.get(0),
             )
-            .map_err(|e| db_error("inspect OHLCV table", e))?;
+            .map_err(|e| {
+                OhlcvError::Database(DatabaseError::classify_sqlite_failure(
+                    "inspect OHLCV table",
+                    e,
+                ))
+            })?;
         if !holds_rows {
             continue;
         }
@@ -65,7 +66,12 @@ pub(super) fn retire_chain_tables(conn: &Connection, chain_id: &str) -> OhlcvRes
         conn.execute_batch(&format!(
             "ALTER TABLE {table} RENAME TO {retired}; {create};"
         ))
-        .map_err(|e| db_error("retire OHLCV table", e))?;
+        .map_err(|e| {
+            OhlcvError::Database(DatabaseError::classify_sqlite_failure(
+                "retire OHLCV table",
+                e,
+            ))
+        })?;
         conn.execute(
             &format!(
                 "INSERT INTO {table} ({columns}) SELECT {columns} FROM {retired}
@@ -73,7 +79,12 @@ pub(super) fn retire_chain_tables(conn: &Connection, chain_id: &str) -> OhlcvRes
             ),
             params![chain_id],
         )
-        .map_err(|e| db_error("keep other chains' OHLCV rows", e))?;
+        .map_err(|e| {
+            OhlcvError::Database(DatabaseError::classify_sqlite_failure(
+                "keep other chains' OHLCV rows",
+                e,
+            ))
+        })?;
     }
     Ok(())
 }
@@ -99,14 +110,29 @@ fn retired_tables(conn: &Connection) -> OhlcvResult<Vec<String>> {
                 "SELECT name FROM sqlite_master WHERE type = 'table' AND name GLOB ?1
                  ORDER BY length(name), name",
             )
-            .map_err(|e| db_error("list retired OHLCV tables", e))?;
+            .map_err(|e| {
+                OhlcvError::Database(DatabaseError::classify_sqlite_failure(
+                    "list retired OHLCV tables",
+                    e,
+                ))
+            })?;
         let rows = statement
             .query_map(params![format!("{table}{RETIRED_INFIX}*")], |row| {
                 row.get::<_, String>(0)
             })
-            .map_err(|e| db_error("list retired OHLCV tables", e))?;
+            .map_err(|e| {
+                OhlcvError::Database(DatabaseError::classify_sqlite_failure(
+                    "list retired OHLCV tables",
+                    e,
+                ))
+            })?;
         for name in rows {
-            names.push(name.map_err(|e| db_error("list retired OHLCV tables", e))?);
+            names.push(name.map_err(|e| {
+                OhlcvError::Database(DatabaseError::classify_sqlite_failure(
+                    "list retired OHLCV tables",
+                    e,
+                ))
+            })?);
         }
     }
     Ok(names)
@@ -127,10 +153,20 @@ impl OhlcvDatabase {
                 &format!("DELETE FROM {table} WHERE rowid IN (SELECT rowid FROM {table} LIMIT ?1)"),
                 params![i64::try_from(batch).unwrap_or(i64::MAX)],
             )
-            .map_err(|e| db_error("purge retired OHLCV rows", e))?;
+            .map_err(|e| {
+                OhlcvError::Database(DatabaseError::classify_sqlite_failure(
+                    "purge retired OHLCV rows",
+                    e,
+                ))
+            })?;
         if deleted == 0 {
             conn.execute_batch(&format!("DROP TABLE {table}"))
-                .map_err(|e| db_error("drop retired OHLCV table", e))?;
+                .map_err(|e| {
+                    OhlcvError::Database(DatabaseError::classify_sqlite_failure(
+                        "drop retired OHLCV table",
+                        e,
+                    ))
+                })?;
         }
         Ok(RetiredPurge::Pending)
     }
@@ -302,9 +338,10 @@ mod tests {
         .unwrap();
         db.conn()
             .unwrap()
-            .execute(
-                "UPDATE ohlcv_data_versions SET version = 5 WHERE chain_id = 'solana'",
-                [],
+            .execute_batch(
+                "INSERT INTO ohlcv_gaps (chain_id, mint, pool_address, timeframe, start_timestamp, end_timestamp)
+                     VALUES ('solana', 'mint', 'pool', '1m', 0, 600);
+                 UPDATE ohlcv_data_versions SET version = 5 WHERE chain_id = 'solana';",
             )
             .unwrap();
         drop(db);

@@ -15,6 +15,7 @@ use axum::{
     Router,
 };
 
+use crate::chains::ChainId;
 use crate::database::catalog;
 use crate::i18n::ids;
 use crate::logger::{self, LogTag};
@@ -164,15 +165,16 @@ async fn paper_position_details(Path(position_id): Path<i64>) -> Response {
     match book.round_history(&wallet, position_id).await {
         Ok(history) => success_response(PaperPositionDetailResponse {
             position: map_position_to_response_async(&position).await,
-            fills: paper_fills(history),
+            fills: paper_fills(history, book.chain()),
         }),
         Err(error) => paper_load_failed(&error),
     }
 }
 
-/// Every fill of a paper round, oldest first, each joined to the leg its record carries.
-fn paper_fills(history: PaperRoundHistory) -> Vec<PaperFillResponse> {
-    let adapter = crate::chains::adapter();
+/// Every fill of a paper round on `chain`, oldest first, each joined to the leg its
+/// record carries.
+fn paper_fills(history: PaperRoundHistory, chain: ChainId) -> Vec<PaperFillResponse> {
+    let adapter = crate::chains::adapter_for(chain);
     let leg_of = |reference: &str| history.legs.iter().find(|leg| leg.leg_ref == reference);
     let provenance = |leg: Option<&PaperLegRecord>| {
         (

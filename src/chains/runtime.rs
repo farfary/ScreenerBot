@@ -5,7 +5,7 @@
 //! behaviour.
 //!
 //! The two injected factories (swap routers, the wallet-watch
-//! runtime), the token-account read, the filter profile, the discovery
+//! runtime), the token-account read, the buy account rent, the filter profile, the discovery
 //! feeds, the candle feeds, the pool pricing driver and the settlement reader
 //! behind it. Methods are added as further domains thread the chain through
 //! (wallets, trading) — a method without a caller is forbidden until then.
@@ -38,6 +38,9 @@ pub trait ChainRuntime: Send + Sync + 'static {
     fn wallet_watch_runtime(&self) -> Arc<dyn WalletWatchRuntime>;
     /// Read a token's account from the chain: its decimals and authorities.
     async fn read_token_account(&self, address: &str) -> crate::chains::Result<TokenAccountFacts>;
+    /// Raw native units of rent a buy of `asset` with the native coin needs for the
+    /// accounts it opens in `wallet`, counted as the swap funds check counts them.
+    async fn buy_account_rent(&self, wallet: &str, asset: &str) -> crate::chains::Result<u64>;
     /// The filter stages this chain's tokens are evaluated through, in canonical order.
     fn filter_profile(&self) -> Arc<crate::filtering::FilterProfile>;
     /// The discovery feeds this chain contributes beyond the shared market-data

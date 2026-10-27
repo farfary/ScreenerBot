@@ -22,3 +22,8 @@ pub use signing::{
     configured_keypair_async, configured_pubkey, main_keypair, sign_message_for_active_wallets,
     sign_message_with_main_wallet,
 };
+
+#[cfg(test)]
+pub(crate) use keypair::new_test_key;
+#[cfg(test)]
+pub(crate) use signing::configure_test_trading_wallet;

@@ -293,13 +293,13 @@ async fn cash_covering(
     Ok(account.epoch)
 }
 
-/// The quote request of a buy of `size_native` of `decision.mint`.
+/// The quote request of a buy of `size_native` of `decision.mint` on `chain`.
 fn buy_request(
     decision: &TradeDecision,
+    chain: crate::chains::ChainId,
     wallet: &str,
     size_native: f64,
 ) -> std::result::Result<QuoteRequest, TradeResult> {
-    let chain = crate::chains::active_chain();
     let adapter = crate::chains::adapter_for(chain);
     let scale = 10_f64.powi(i32::from(adapter.native_asset_decimals()));
     let Some(input_amount) = RawAmount::from_integral_f64((size_native * scale).floor())
@@ -413,7 +413,7 @@ async fn buy(
             "token decimals unknown".to_owned(),
         ));
     };
-    let request = match buy_request(decision, wallet, size_native) {
+    let request = match buy_request(decision, book.chain(), wallet, size_native) {
         Ok(request) => request,
         Err(result) => return Ok(result),
     };
@@ -550,7 +550,7 @@ async fn add(
             "token decimals unknown".to_owned(),
         ));
     };
-    let request = match buy_request(decision, wallet, size_native) {
+    let request = match buy_request(decision, book.chain(), wallet, size_native) {
         Ok(request) => request,
         Err(result) => return Ok(result),
     };
@@ -596,12 +596,12 @@ async fn fill_sale(
     decision: &TradeDecision,
     position: &Position,
     io: &impl PaperTradeIo,
+    chain: crate::chains::ChainId,
     wallet: &str,
     amount: RawAmount,
     decimals: u8,
     epoch: i64,
 ) -> std::result::Result<PaperSellFill, Error> {
-    let chain = crate::chains::active_chain();
     let adapter = crate::chains::adapter_for(chain);
     let mut last_error = Error::PaperFill(super::PaperFillError::QuoteUnfillable);
     for slippage_pct in exit_slippage_ladder(decision.slippage_pct) {
@@ -701,7 +701,18 @@ async fn sell(
         Err(error) => return Ok(booking_failed(decision, &error)),
     };
 
-    let fill = match fill_sale(decision, &position, io, wallet, amount, decimals, epoch).await {
+    let fill = match fill_sale(
+        decision,
+        &position,
+        io,
+        book.chain(),
+        wallet,
+        amount,
+        decimals,
+        epoch,
+    )
+    .await
+    {
         Ok(fill) => fill,
         Err(error @ Error::PaperFillAborted { .. }) => {
             return Ok(refused(

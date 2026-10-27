@@ -142,13 +142,28 @@ pub(super) async fn get_buy_account_rent(
         ApiError::new(ApiErrorCode::NotConfigured, ids::ERRORS_WALLET_UNAVAILABLE)
             .details(err.to_string())
     })?;
-    let rent_raw = crate::chains::solana::swaps::funds::buy_account_rent(&wallet, &mint)
+    let chain = crate::chains::chain_for_address(&mint).map_err(|err| {
+        ApiError::new(ApiErrorCode::InvalidInput, ids::ERRORS_WALLET_UNAVAILABLE)
+            .details(err.to_string())
+    })?;
+    let runtime = crate::chains::runtime_for(chain).ok_or_else(|| {
+        ApiError::new(
+            ApiErrorCode::ServiceUnavailable,
+            ids::ERRORS_WALLET_UNAVAILABLE,
+        )
+        .details(crate::chains::Error::ChainNotEnabled { chain }.to_string())
+    })?;
+    let rent_raw = runtime
+        .buy_account_rent(&wallet, &mint)
         .await
         .map_err(|err| {
             ApiError::new(ApiErrorCode::UpstreamError, ids::ERRORS_WALLET_UNAVAILABLE)
                 .details(err.to_string())
         })?;
-    Ok(Json(buy_funding(crate::chains::adapter(), rent_raw)))
+    Ok(Json(buy_funding(
+        crate::chains::adapter_for(chain),
+        rent_raw,
+    )))
 }
 
 /// What a buy needs beside its amount: `rent_raw` for the accounts it opens and the swap
@@ -159,8 +174,7 @@ pub(super) fn buy_funding(
 ) -> BuyAccountRentResponse {
     BuyAccountRentResponse {
         rent_sol: adapter.raw_to_native(rent_raw),
-        fee_reserve_sol: adapter
-            .raw_to_native(crate::chains::solana::swaps::funds::NETWORK_FEE_RESERVE_LAMPORTS),
+        fee_reserve_sol: adapter.raw_to_native(adapter.network_fee_reserve_raw()),
     }
 }
 

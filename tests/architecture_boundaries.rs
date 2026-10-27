@@ -1146,8 +1146,6 @@ const NEUTRAL_FILES_NAMING_CHAINS_SOLANA: &[&str] = &[
     "connectivity/monitors/rpc.rs",
     "errors/error.rs",
     "positions/ledger/sync.rs",
-    "positions/operations/close.rs",
-    "positions/operations/partial_close.rs",
     "services/implementations/referral_service.rs",
     "swaps/operations.rs",
     "telegram/commands/status.rs",
@@ -1164,7 +1162,6 @@ const NEUTRAL_FILES_NAMING_CHAINS_SOLANA: &[&str] = &[
     "wallets/balance_monitor/service.rs",
     "wallets/manager/balance_queries.rs",
     "wallets/manager/export.rs",
-    "wallets/manager/migration.rs",
     "webserver/routes/initialization/handlers.rs",
     "webserver/routes/initialization/types.rs",
     "webserver/routes/trader/manual.rs",
@@ -1437,8 +1434,7 @@ fn rpc_client_never_reports_a_failed_read_as_success() {
 /// Neutral code reads chain settings through `ChainsConfig` methods that take
 /// a `ChainId`; a direct `.chains.solana` field read binds the file to one chain.
 /// The list freezes the current exceptions and only shrinks.
-const NEUTRAL_FILES_READING_SOLANA_SETTINGS: &[&str] =
-    &["webserver/routes/initialization/handlers.rs"];
+const NEUTRAL_FILES_READING_SOLANA_SETTINGS: &[&str] = &[];
 
 #[test]
 fn neutral_code_reads_chain_settings_by_chain_id() {
@@ -1574,7 +1570,6 @@ const PROCESS_CHAIN_SEAM_CALLER_FILES: &[&str] = &[
     "wallets/balance_monitor/service.rs",
     "wallets/balance_monitor/worth.rs",
     "wallets/manager.rs",
-    "wallets/manager/balance_queries.rs",
     "wallets/watch/mod.rs",
     "webserver/promo/copy_trading.rs",
     "webserver/promo/copy_trading/desk.rs",
@@ -1590,7 +1585,6 @@ const PROCESS_CHAIN_SEAM_CALLER_FILES: &[&str] = &[
     "webserver/routes/positions/types.rs",
     "webserver/routes/tokens/detail.rs",
     "webserver/routes/tokens/ohlcv.rs",
-    "webserver/routes/tokens/types.rs",
     "webserver/routes/trader/manual.rs",
 ];
 
@@ -1766,6 +1760,7 @@ const IMPLICIT_CHAIN_RESOLUTION_FILES: &[&str] = &[
     "webserver/routes/filtering/tokens.rs",
     "webserver/routes/ohlcv/handlers.rs",
     "webserver/routes/positions/list.rs",
+    "webserver/routes/strategies/testing.rs",
     "webserver/routes/tokens/blacklist.rs",
     "webserver/routes/tokens/favorites.rs",
     "webserver/routes/tokens/identity.rs",
@@ -1937,7 +1932,6 @@ const BARE_STRING_KEYED_STATICS: &[&str] = &[
     "positions/state_pending.rs::PENDING_PARTIAL_EXIT_DETAILS",
     "positions/verifier.rs::LAST_TOKEN_ACCOUNTS_CHECK",
     "swaps/operations.rs::NO_ROUTE_STRIKES",
-    "trader/entry.rs::ENTRY_CYCLE_RESERVATIONS",
     "transactions/utils.rs::GLOBAL_KNOWN_SIGNATURES",
     "transactions/utils.rs::GLOBAL_PENDING_TRANSACTIONS",
 ];
@@ -2994,6 +2988,8 @@ fn no_catch_all_error_variants() {
 /// - `unknown_path` renders the walk's dead-end context (the available child
 ///   keys at the point the walk stopped) into the typed `InvalidParameters`
 ///   variant; that context exists only where the walk stopped.
+/// - `replacement_error` maps a `wallets::Error` from a trading-wallet replacement
+///   onto the API error envelope for both the Wallets and the setup handlers.
 const ERROR_MAPPING_FUNCTIONS: &[&str] = &[
     "map_llm_error",
     "select_quote_failure",
@@ -3006,6 +3002,7 @@ const ERROR_MAPPING_FUNCTIONS: &[&str] = &[
     "analysis_failure",
     "invalid_config",
     "unknown_path",
+    "replacement_error",
 ];
 
 /// A function whose whole job is to return an error is a variant wearing a

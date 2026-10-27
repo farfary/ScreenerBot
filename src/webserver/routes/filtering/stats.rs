@@ -53,9 +53,10 @@ pub async fn get_stats() -> Response {
         with_ohlcv: stats.as_ref().map(|s| s.with_ohlcv),
         passed_filtering: stats.as_ref().map(|s| s.passed_filtering),
         awaiting_rugcheck_report: stats.as_ref().map(|s| s.awaiting_rugcheck_report),
-        rugcheck_report_required: filtering::sources::rugcheck::report_required(
-            crate::chains::active_chain(),
-        ),
+        rugcheck_report_required: ChainScope::All
+            .chains()
+            .into_iter()
+            .any(filtering::sources::rugcheck::report_required),
         signed_in: crate::account::is_signed_in(),
         direct_reports_per_minute: direct_reports_per_minute(with_config(|cfg| {
             cfg.tokens.update_intervals.security_seconds

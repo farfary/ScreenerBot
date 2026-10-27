@@ -6,6 +6,7 @@
 use chrono::Utc;
 
 use super::*;
+use crate::database::WriteTransaction;
 use crate::trader::copy::{ExitMode, SizingMode, SpendState};
 use crate::trader::paper::TradingMode;
 
@@ -333,7 +334,7 @@ async fn a_v10_store_retires_partial_stop_loss_overrides_unless_the_switch_was_o
         );
 
         let mut connection = rusqlite::Connection::open(&path).unwrap();
-        let transaction = connection.transaction().unwrap();
+        let transaction = connection.write_tx().unwrap();
         schema::retire_stop_loss_partial_overrides(&transaction, switch).unwrap();
         transaction.commit().unwrap();
         drop(connection);
@@ -369,7 +370,7 @@ async fn a_partial_stop_loss_override_saved_after_the_upgrade_is_kept_on_reopen(
     drop(db);
 
     let mut connection = rusqlite::Connection::open(&path).unwrap();
-    let transaction = connection.transaction().unwrap();
+    let transaction = connection.write_tx().unwrap();
     schema::retire_stop_loss_partial_overrides(&transaction, None).unwrap();
     transaction.commit().unwrap();
     drop(connection);

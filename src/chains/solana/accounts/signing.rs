@@ -274,6 +274,23 @@ pub fn configured_address() -> Result<String> {
     }
 }
 
+/// Stores a fresh key, encrypted, as the configured trading wallet of the loaded config
+/// (the default config when none is loaded yet) and returns its address.
+#[cfg(test)]
+pub(crate) fn configure_test_trading_wallet() -> String {
+    let (address, secret) = super::keypair::new_test_key();
+    let encrypted =
+        crate::secure_storage::encrypt_private_key(&secret).expect("encrypt the test key");
+    let config = crate::config::utils::CONFIG
+        .get_or_init(|| std::sync::RwLock::new(crate::config::schemas::Config::default()));
+    let mut config = config
+        .write()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    config.wallet_encrypted = encrypted.ciphertext;
+    config.wallet_nonce = encrypted.nonce;
+    address
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

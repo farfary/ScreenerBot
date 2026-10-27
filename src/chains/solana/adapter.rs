@@ -38,6 +38,10 @@ impl ChainAdapter for SolanaAdapter {
         super::swaps::revenue::PLATFORM_FEE_BPS
     }
 
+    fn network_fee_reserve_raw(&self) -> u64 {
+        super::swaps::funds::NETWORK_FEE_RESERVE_LAMPORTS
+    }
+
     fn validate_address(&self, address: &str) -> Result<(), ChainError> {
         super::accounts::validate_address(address).map_err(|_| ChainError::InvalidAccount {
             chain: ChainId::Solana,

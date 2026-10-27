@@ -23,6 +23,9 @@ pub trait ChainAdapter: Send + Sync + 'static {
     fn raw_units_per_native(&self) -> u64;
     /// Platform swap-fee rate in basis points; estimates and rounding affect measured charges.
     fn platform_swap_fee_bps(&self) -> u16;
+    /// Raw native units a native-coin buy reserves for its network fee when its quote
+    /// carries no fee estimate.
+    fn network_fee_reserve_raw(&self) -> u64;
     /// Converts a raw base-unit amount to whole native-asset units.
     fn raw_to_native(&self, raw: u64) -> f64 {
         raw as f64 / self.raw_units_per_native() as f64

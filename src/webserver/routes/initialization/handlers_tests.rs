@@ -13,20 +13,10 @@ use serde_json::Value;
 use super::handlers::complete_initialization;
 use super::types::CompleteInitializationRequest;
 use super::validation::{store_setup_validation, RpcSource};
-use crate::chains::solana::accounts::keypair_to_address;
-use crate::chains::solana::solana_sdk::signature::Keypair;
+use crate::chains::solana::accounts::new_test_key;
 use crate::chains::ChainId;
 
 const RPC: &str = "https://rpc.example.com";
-
-/// A fresh key: its address and its base58 secret, as the setup form sends it.
-fn new_key() -> (String, String) {
-    let keypair = Keypair::new();
-    (
-        keypair_to_address(&keypair),
-        bs58::encode(keypair.to_bytes()).into_string(),
-    )
-}
 
 /// A data directory of its own with `config.toml` and a vault whose trading wallet is
 /// `secret`, as a setup completed from Explore Mode finds it.
@@ -87,9 +77,9 @@ fn marker_exists() -> bool {
 
 #[tokio::test]
 async fn setup_with_another_key_stages_the_replacement_of_the_vault_wallet() {
-    let (current, current_secret) = new_key();
+    let (current, current_secret) = new_test_key();
     let _directory = vault_with(&current_secret).await;
-    let (address, secret) = new_key();
+    let (address, secret) = new_test_key();
 
     let response = complete_with(&address, &secret).await;
 
@@ -112,7 +102,7 @@ async fn setup_with_another_key_stages_the_replacement_of_the_vault_wallet() {
 
 #[tokio::test]
 async fn setup_with_the_vault_wallet_key_stages_nothing() {
-    let (address, secret) = new_key();
+    let (address, secret) = new_test_key();
     let _directory = vault_with(&secret).await;
 
     let response = complete_with(&address, &secret).await;
@@ -123,7 +113,7 @@ async fn setup_with_the_vault_wallet_key_stages_nothing() {
 
 #[tokio::test]
 async fn a_staged_replacement_restarts_even_when_the_setup_settings_cannot_be_saved() {
-    let (_, current_secret) = new_key();
+    let (_, current_secret) = new_test_key();
     let _directory = vault_with(&current_secret).await;
     // Without config.toml the stage leaves the settings alone; the in-memory config
     // then no longer validates, so saving the setup settings fails after the stage.
@@ -135,7 +125,7 @@ async fn a_staged_replacement_restarts_even_when_the_setup_settings_cannot_be_sa
         .expect("config lock")
         .trader
         .max_open_positions = 0;
-    let (address, secret) = new_key();
+    let (address, secret) = new_test_key();
 
     let response = complete_with(&address, &secret).await;
 

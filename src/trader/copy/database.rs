@@ -49,6 +49,11 @@ pub struct CopyDatabase {
 static SHARED_COPY_DATABASE: OnceLock<CopyDatabase> = OnceLock::new();
 
 impl CopyDatabase {
+    /// The chain whose copy tasks this database holds.
+    pub fn chain(&self) -> crate::chains::ChainId {
+        self.chain
+    }
+
     pub fn new(chain: crate::chains::ChainId) -> crate::trader::Result<Self> {
         Self::open(crate::paths::get_copy_trading_db_path(), chain)
     }

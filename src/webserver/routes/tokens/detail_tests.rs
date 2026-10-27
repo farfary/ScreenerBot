@@ -100,7 +100,7 @@ fn the_wrapped_native_coin_shows_no_wrapper_supply_holders_or_pooled_reserves() 
 #[test]
 fn the_wrapped_native_mint_is_the_native_asset() {
     let adapter = crate::chains::adapter_for(crate::chains::ChainId::Solana);
-    assert!(adapter.is_native_asset(crate::chains::solana::constants::SOL_MINT));
+    assert!(adapter.is_native_asset("So11111111111111111111111111111111111111112"));
 }
 
 #[test]

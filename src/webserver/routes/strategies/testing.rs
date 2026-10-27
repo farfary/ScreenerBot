@@ -75,7 +75,16 @@ pub async fn test_strategy(
             );
         }
         None => {
-            let chain = crate::chains::active_chain();
+            let chain = match crate::chains::chain_for_address(&request.token_mint) {
+                Ok(chain) => chain,
+                Err(e) => {
+                    return err_cause(
+                        ApiErrorCode::InvalidInput,
+                        ids::ERRORS_STRATEGIES_EVALUATION_FAILED,
+                        &e,
+                    );
+                }
+            };
             let timeframes = engine
                 .get_condition_registry()
                 .candle_timeframes(&strategy.rules, &strategy.timeframe);

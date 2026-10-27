@@ -125,19 +125,15 @@ async fn detach_watch(task: CopyTask) -> Result<()> {
 /// Create a task. New tasks always start in paper mode; arming live is a
 /// separate confirmed transition (`set_task_mode`).
 pub async fn create_task(input: CopyTaskInput) -> Result<CopyTask> {
+    let db = open_database().await?;
     let task = input
-        .into_task(
-            crate::chains::active_chain(),
-            Utc::now(),
-            ExitPolicy::from_config(),
-        )
+        .into_task(db.chain(), Utc::now(), ExitPolicy::from_config())
         .map_err(|reason| Error::CopyTaskRejected { reason })?;
-    crate::chains::adapter()
+    crate::chains::adapter_for(task.chain)
         .validate_address(&task.target_address)
         .map_err(|e| Error::CopyWatchRejected {
             detail: format!("invalid target wallet: {e}"),
         })?;
-    let db = open_database().await?;
     if task.enabled {
         ensure_active_slot(&db).await?;
     }
@@ -191,7 +187,7 @@ pub(super) fn patched_task(
 ) -> Result<CopyTask> {
     merge_task_patch(original, patch)?
         .into_task_for_update(
-            crate::chains::active_chain(),
+            original.chain,
             Utc::now(),
             original.mode,
             &original.exit_policy_overrides,

@@ -64,13 +64,6 @@ fn metadata() -> AnsweredMetadata<'static> {
     }
 }
 
-fn write_failure() -> Error {
-    Error::Database(DatabaseError::Query {
-        operation: "upsert market row".to_owned(),
-        message: "FOREIGN KEY constraint failed".to_owned(),
-    })
-}
-
 #[test]
 fn a_source_answering_before_the_token_is_stored_still_lands_its_market_row() {
     let (_directory, db) = store();
@@ -98,7 +91,10 @@ fn a_write_that_fails_once_is_stored_on_the_retry() {
     store_market_answer(&db, "DEXSCREENER", MINT, metadata(), || {
         attempts.set(attempts.get() + 1);
         if attempts.get() == 1 {
-            Err(write_failure())
+            Err(Error::Database(DatabaseError::Query {
+                operation: "upsert market row".to_owned(),
+                message: "FOREIGN KEY constraint failed".to_owned(),
+            }))
         } else {
             Ok(())
         }
@@ -115,7 +111,10 @@ fn a_write_that_keeps_failing_is_retried_once_and_returned() {
 
     let result = store_market_answer(&db, "DEXSCREENER", MINT, metadata(), || {
         attempts.set(attempts.get() + 1);
-        Err(write_failure())
+        Err(Error::Database(DatabaseError::Query {
+            operation: "upsert market row".to_owned(),
+            message: "FOREIGN KEY constraint failed".to_owned(),
+        }))
     });
 
     assert_eq!(attempts.get(), 2);

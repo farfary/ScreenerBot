@@ -108,7 +108,7 @@ impl PaperTradeIo for ProductionPaperTradeIo {
 
     async fn token(&self, mint: &str, origin: &PositionOrigin) -> Option<PaperToken> {
         crate::tokens::ensure_token_available(
-            crate::chains::active_chain(),
+            crate::positions::paper::book()?.chain(),
             mint,
             crate::positions::operations::token_fetch_lane(origin),
         )
