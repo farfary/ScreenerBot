@@ -566,14 +566,30 @@ impl SwapRouter for JupiterRouter {
         let keypair = crate::chains::solana::accounts::configured_keypair()?;
         self.build_and_submit(quote, &keypair).await
     }
+
+    async fn build_for_simulation(&self, quote: &Quote, owner: &str) -> Result<Vec<u8>> {
+        self.accept_own_quote(quote)?;
+        super::checked_quote_amounts(quote)?;
+        let built = self.build_transaction(quote, owner).await?;
+        crate::chains::solana::swaps::presend::built_transaction_bytes(&built.swap_transaction)
+            .map_err(|reason| {
+                Error::Swaps(SwapExecutionError::NotSubmitted {
+                    router: self.name().to_owned(),
+                    reason,
+                })
+            })
+    }
 }
 
 impl JupiterRouter {
-    /// Ask Jupiter to build the transaction for `quote`, addressed to `signer`,
-    /// and hand it to the pre-send gate, which measures, simulates, signs,
-    /// sends and confirms it with the platform fee collected.
-    async fn build_and_submit(&self, quote: &Quote, signer: &Keypair) -> Result<SwapResult> {
-        let start = Instant::now();
+    /// Ask Jupiter to build the unsigned transaction for `quote`, addressed to
+    /// `user_public_key`, with the platform fee account the revenue rule names.
+    /// Every failure here is before submission.
+    async fn build_transaction(
+        &self,
+        quote: &Quote,
+        user_public_key: &str,
+    ) -> Result<JupiterSwapResponse> {
         let not_submitted = |reason| {
             Error::Swaps(SwapExecutionError::NotSubmitted {
                 router: self.name().to_owned(),
@@ -589,7 +605,7 @@ impl JupiterRouter {
             })?;
         let fee_account = fee_account(&quote.input_mint, &quote.output_mint);
         let swap_req = JupiterSwapRequest {
-            user_public_key: signer.pubkey().to_string(),
+            user_public_key: user_public_key.to_owned(),
             quote_response,
             dynamic_compute_unit_limit: Some(with_config(|cfg| {
                 cfg.chains.solana.swaps.jupiter.dynamic_compute_unit_limit
@@ -656,6 +672,20 @@ impl JupiterRouter {
                 swap_response.compute_unit_limit, swap_response.prioritization_fee_lamports
             ),
         );
+        Ok(swap_response)
+    }
+
+    /// Ask Jupiter to build the transaction for `quote`, addressed to `signer`,
+    /// and hand it to the pre-send gate, which measures, simulates, signs,
+    /// sends and confirms it with the platform fee collected.
+    async fn build_and_submit(&self, quote: &Quote, signer: &Keypair) -> Result<SwapResult> {
+        let start = Instant::now();
+        // Background Jupiter pollers stay deferred from the build until the
+        // swap settles (see throttle module).
+        let _swap_guard = crate::chains::solana::apis::jupiter::throttle::swap_guard();
+        let built = self
+            .build_transaction(quote, &signer.pubkey().to_string())
+            .await?;
 
         // The send/confirm error is propagated UNCHANGED: a submitted but
         // unconfirmed swap carries its signature as a typed outcome, and
@@ -663,8 +693,8 @@ impl JupiterRouter {
         let signature = crate::chains::solana::swaps::presend::submit_built_swap(
             self.name(),
             crate::chains::solana::swaps::presend::ComputeLimit::TightenToMeasured,
-            &swap_response.swap_transaction,
-            swap_response.last_valid_block_height,
+            &built.swap_transaction,
+            built.last_valid_block_height,
             quote,
             signer,
         )

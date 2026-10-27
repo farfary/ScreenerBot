@@ -46,6 +46,18 @@ pub trait SwapRouter: Send + Sync {
     /// Execute swap using quote from this router
     async fn execute_swap(&self, token: &Token, quote: &Quote) -> Result<SwapResult>;
 
+    /// Build, for `owner`, exactly the unsigned transaction `execute_swap` would
+    /// sign for `quote`, with the same parameters, and return it in the chain's
+    /// wire encoding. Nothing is signed, simulated or sent: the result exists to
+    /// be simulated against real state, which proves the route and the platform
+    /// fee of every router without spending anything.
+    async fn build_for_simulation(&self, _quote: &Quote, _owner: &str) -> Result<Vec<u8>> {
+        Err(Error::internal_error(format!(
+            "router '{}' builds no transaction for simulation",
+            self.id()
+        )))
+    }
+
     /// Refuse a quote produced by a different router. Router-specific
     /// `execution_data` must never be submitted through another adapter.
     fn accept_own_quote(&self, quote: &Quote) -> Result<()> {

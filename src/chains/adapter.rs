@@ -69,6 +69,12 @@ pub trait ChainAdapter: Send + Sync + 'static {
     fn is_stable_asset(&self, address: &str) -> bool {
         self.stable_assets().contains(&address)
     }
+    /// True for any of this chain's quote assets: the native asset in any
+    /// spelling and every canonical stablecoin. The one owner of which assets
+    /// denominate trades on this chain rather than being traded.
+    fn is_quote_asset(&self, address: &str) -> bool {
+        self.is_native_asset(address) || self.is_stable_asset(address)
+    }
 
     // --- token authorities ---
     /// True for the address a token authority holds once it is given up. It

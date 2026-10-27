@@ -292,14 +292,30 @@ pub async fn simulate_plan(
     plan: &SwapPlan,
     owner: &Pubkey,
 ) -> DirectSwapResult<crate::chains::solana::rpc::types::SimulationOutcome> {
-    let rpc = get_rpc_client();
-    let blockhash =
-        rpc.get_latest_blockhash()
-            .await
-            .map_err(|e| DirectSwapError::NodeUnavailable {
-                operation: "getLatestBlockhash",
-                detail: format!("no recent blockhash: {e}"),
-            })?;
+    let transaction = unsigned_transaction(plan, owner).await?;
+    match presend::gate(&transaction).await {
+        Verdict::Cleared(outcome) | Verdict::Failed(outcome) => Ok(outcome),
+        Verdict::Refused(reason) => Err(reason.into()),
+        Verdict::NodeUnavailable { detail } => Err(DirectSwapError::SimulationUnavailable {
+            detail: format!("simulation could not be run: {detail}"),
+        }),
+    }
+}
+
+/// `plan` as the unsigned transaction [`execute_plan`] signs: the same
+/// instructions with `owner` as the fee payer, on a blockhash read at
+/// `Confirmed`, with an empty signature slot per required signer.
+pub async fn unsigned_transaction(
+    plan: &SwapPlan,
+    owner: &Pubkey,
+) -> DirectSwapResult<VersionedTransaction> {
+    let (blockhash, _) = get_rpc_client()
+        .get_latest_blockhash_with_commitment(CommitmentLevel::Confirmed)
+        .await
+        .map_err(|e| DirectSwapError::NodeUnavailable {
+            operation: "getLatestBlockhash",
+            detail: format!("no recent blockhash: {e}"),
+        })?;
 
     let mut transaction = Transaction::new_with_payer(&plan.instructions, Some(owner));
     transaction.message.recent_blockhash = blockhash;
@@ -307,14 +323,7 @@ pub async fn simulate_plan(
     // it fails to deserialise on the node.
     transaction.signatures =
         vec![Signature::default(); transaction.message.header.num_required_signatures as usize];
-
-    match presend::gate(&VersionedTransaction::from(transaction)).await {
-        Verdict::Cleared(outcome) | Verdict::Failed(outcome) => Ok(outcome),
-        Verdict::Refused(reason) => Err(reason.into()),
-        Verdict::NodeUnavailable { detail } => Err(DirectSwapError::SimulationUnavailable {
-            detail: format!("simulation could not be run: {detail}"),
-        }),
-    }
+    Ok(VersionedTransaction::from(transaction))
 }
 
 /// Build, sign, simulate, send, settle and verify `plan`.

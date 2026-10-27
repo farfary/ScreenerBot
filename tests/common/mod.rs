@@ -33,7 +33,7 @@ pub mod solana_pools;
 
 use chrono::{DateTime, Duration, Utc};
 use screenerbot::ohlcvs::{Candle, TimeframeBundle};
-use screenerbot::positions::Position;
+use screenerbot::positions::{Book, Position};
 use screenerbot::strategies::types::{Condition, EvaluationContext, Parameter};
 use screenerbot::tokens::types::{DataSource, SecurityRisk, Token, TokenHolder, WebsiteLink};
 use screenerbot::tokens::Priority;
@@ -202,6 +202,278 @@ pub fn load_keypair(path: &str) -> screenerbot::chains::solana::solana_sdk::sign
         .unwrap_or_else(|e| panic!("test wallet {path} is not a keypair JSON array: {e}"));
     screenerbot::chains::solana::solana_sdk::signature::Keypair::try_from(bytes.as_slice())
         .unwrap_or_else(|e| panic!("test wallet {path} is not a usable keypair: {e}"))
+}
+
+// ==================== MAINNET STAND-INS ====================
+//
+// A simulation sends `sigVerify: false`, so nothing is signed and any mainnet
+// address can stand in as the owner of a swap. The live tiers borrow real
+// wallets this way: a well-funded one to pay for a buy, and a real holder of the
+// token to sell it.
+
+/// A real Solana validator identity: a plain, System-Program-owned wallet with
+/// a large public SOL balance. Nothing here is signed or submitted -- this is
+/// only a fee-payer stand-in for a simulation, and only the wallet's real
+/// on-chain balance is used, so any well-funded public address works. It pays
+/// for buys larger than an ordinary wallet holds, such as one sized to move a
+/// deep pool's price across a whole initialised tick.
+pub fn deep_pockets_owner() -> screenerbot::chains::solana::solana_sdk::pubkey::Pubkey {
+    use std::str::FromStr;
+    screenerbot::chains::solana::solana_sdk::pubkey::Pubkey::from_str(
+        "JUPiTERrZqgf1jUyR7dSkhMx4Kn2qJyekWsg3LT1h4b",
+    )
+    .expect("validator identity constant must be a pubkey")
+}
+
+/// Real mainnet wallets whose ASSOCIATED token account for `mint` currently
+/// holds something, richest first, with what each holds.
+///
+/// The candidates come from the POOL'S OWN RECENT TRADES rather than from
+/// `getTokenLargestAccounts` — two reasons, both discovered the hard way. Public
+/// RPC endpoints refuse `getTokenLargestAccounts` outright (it is one of the
+/// expensive scans they disable), and even where it answers, the twenty largest
+/// accounts of a real token are protocol vaults and PDAs, not the ordinary
+/// wallets this engine is built to spend from. Whoever traded the pool an hour
+/// ago is exactly the right population: a wallet, holding the token, in its
+/// associated account.
+///
+/// Only an ATA qualifies, because that is the account the swap plan derives and
+/// spends from, and only a system-owned owner qualifies, because a PDA holding
+/// the balance is usually the pool itself.
+pub async fn holder_with_associated_account(
+    pool: &screenerbot::chains::solana::solana_sdk::pubkey::Pubkey,
+    mint: &screenerbot::chains::solana::solana_sdk::pubkey::Pubkey,
+    token_program: &screenerbot::chains::solana::solana_sdk::pubkey::Pubkey,
+) -> Vec<(screenerbot::chains::solana::solana_sdk::pubkey::Pubkey, u64)> {
+    use screenerbot::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
+    use screenerbot::chains::solana::solana_sdk::commitment_config::CommitmentLevel;
+    use screenerbot::chains::solana::solana_sdk::pubkey::Pubkey;
+    use screenerbot::chains::solana::spl_associated_token_account::get_associated_token_address_with_program_id;
+    use std::str::FromStr;
+
+    const SIGNATURES_PER_PAGE: usize = 40;
+    const PAGES_TO_SCAN: usize = 3;
+    const CANDIDATES_WANTED: usize = 40;
+
+    let rpc = get_rpc_client();
+    let mint_str = mint.to_string();
+
+    // A quiet pool's last forty transactions can be all adds and removes with
+    // no trader left holding anything, so the scan pages backwards rather than
+    // giving up on one window.
+    let mut signatures = Vec::new();
+    let mut before = None;
+    for _ in 0..PAGES_TO_SCAN {
+        let Ok(page) = rpc
+            .get_signatures_for_address(pool, Some(SIGNATURES_PER_PAGE), before.as_ref(), None)
+            .await
+        else {
+            break;
+        };
+        let Some(last) = page.last() else { break };
+        before = Some(last.signature);
+        signatures.extend(page);
+    }
+
+    let mut candidates: Vec<Pubkey> = Vec::new();
+    for info in signatures {
+        if info.err.is_some() {
+            continue;
+        }
+        let Ok(details) = rpc
+            .get_transaction_details_with_commitment(
+                &info.signature.to_string(),
+                CommitmentLevel::Confirmed,
+            )
+            .await
+        else {
+            continue;
+        };
+        let Some(meta) = details.meta.as_ref() else {
+            continue;
+        };
+        for balances in [&meta.post_token_balances, &meta.pre_token_balances] {
+            let Some(balances) = balances.as_ref() else {
+                continue;
+            };
+            for balance in balances {
+                if balance.mint != mint_str {
+                    continue;
+                }
+                let Some(owner) = balance
+                    .owner
+                    .as_deref()
+                    .and_then(|o| Pubkey::from_str(o).ok())
+                else {
+                    continue;
+                };
+                if owner == *pool || candidates.contains(&owner) {
+                    continue;
+                }
+                candidates.push(owner);
+            }
+        }
+        if candidates.len() >= CANDIDATES_WANTED {
+            break;
+        }
+    }
+    if candidates.is_empty() {
+        return Vec::new();
+    }
+
+    // What a past transaction says a wallet held is not what it holds now, so
+    // the balance is re-read; and the read is against the ATA specifically,
+    // because an owner holding the token somewhere else is of no use to a plan
+    // that spends from the associated account.
+    let atas: Vec<Pubkey> = candidates
+        .iter()
+        .map(|owner| get_associated_token_address_with_program_id(owner, mint, token_program))
+        .collect();
+    let Ok(token_accounts) = rpc.get_multiple_accounts(&atas).await else {
+        return Vec::new();
+    };
+    let mut funded: Vec<(Pubkey, u64)> = Vec::new();
+    for (owner, account) in candidates.iter().zip(token_accounts.into_iter()) {
+        let Some(account) = account else { continue };
+        let amount = account
+            .data
+            .get(64..72)
+            .and_then(|b| <[u8; 8]>::try_from(b).ok())
+            .map(u64::from_le_bytes)
+            .unwrap_or(0);
+        if amount > 0 {
+            funded.push((*owner, amount));
+        }
+    }
+    if funded.is_empty() {
+        return Vec::new();
+    }
+    // Richest first: a bigger balance is more likely to cover the size the buy
+    // leg would have returned, and the caller caps the sell at what it finds.
+    funded.sort_by(|a, b| b.1.cmp(&a.1));
+
+    // The owner must be an ordinary wallet with enough SOL to be a plausible
+    // fee payer: a program-owned owner is a PDA, and a PDA holding the balance
+    // is almost always the pool or a vault.
+    let owners: Vec<Pubkey> = funded.iter().map(|(owner, _)| *owner).collect();
+    let Ok(owner_accounts) = rpc.get_multiple_accounts(&owners).await else {
+        return Vec::new();
+    };
+    funded
+        .into_iter()
+        .zip(owner_accounts.into_iter())
+        .filter(|(_, account)| {
+            account.as_ref().is_some_and(|a| {
+                a.owner == screenerbot::chains::solana::solana_sdk::system_program::id()
+                    && a.lamports > 10_000_000
+            })
+        })
+        .map(|(holder, _)| holder)
+        .collect()
+}
+
+/// Wallets to simulate a sale of `wanted` raw units of `mint` from, richest
+/// first: the recent traders of `pool` with an associated account, and only
+/// when none of them holds a hundredth of `wanted`, the token programme's own
+/// list where it is richer. A quiet pool can leave every recent trader holding
+/// dust; a widely held mint (a stablecoin) is never listed off the programme,
+/// which public endpoints refuse and paid ones bill by the response.
+pub async fn sell_holders(
+    pool: &screenerbot::chains::solana::solana_sdk::pubkey::Pubkey,
+    mint: &screenerbot::chains::solana::solana_sdk::pubkey::Pubkey,
+    token_program: &screenerbot::chains::solana::solana_sdk::pubkey::Pubkey,
+    wanted: u64,
+) -> Vec<(screenerbot::chains::solana::solana_sdk::pubkey::Pubkey, u64)> {
+    let holders = holder_with_associated_account(pool, mint, token_program).await;
+    let richest = holders.first().map(|(_, held)| *held);
+    if richest.is_some_and(|held| held.saturating_mul(100) >= wanted) {
+        return holders;
+    }
+    let from_programme = holders_from_the_token_programme(mint, token_program).await;
+    if from_programme.first().map(|(_, held)| *held) > richest {
+        from_programme
+    } else {
+        holders
+    }
+}
+
+/// Every holder of `mint`, straight off the token programme, richest first.
+///
+/// The fallback for a quiet pool whose last hundred transactions leave nobody
+/// still holding a usable balance. `getProgramAccounts` with a mint memcmp is
+/// exact where it is allowed at all; a public endpoint refuses it for a mint
+/// with hundreds of thousands of holders, which is precisely the case where the
+/// recent-trader scan already works.
+pub async fn holders_from_the_token_programme(
+    mint: &screenerbot::chains::solana::solana_sdk::pubkey::Pubkey,
+    token_program: &screenerbot::chains::solana::solana_sdk::pubkey::Pubkey,
+) -> Vec<(screenerbot::chains::solana::solana_sdk::pubkey::Pubkey, u64)> {
+    use screenerbot::chains::solana::rpc::{get_rpc_client, RpcClientMethods, RpcFilterType};
+    use screenerbot::chains::solana::solana_sdk::pubkey::Pubkey;
+    use screenerbot::chains::solana::spl_associated_token_account::get_associated_token_address_with_program_id;
+
+    const TOKEN_ACCOUNT_SIZE: u64 = 165;
+
+    let rpc = get_rpc_client();
+    let Ok(accounts) = rpc
+        .get_program_accounts(
+            token_program,
+            Some(vec![
+                RpcFilterType::DataSize(TOKEN_ACCOUNT_SIZE),
+                RpcFilterType::Memcmp {
+                    offset: 0,
+                    bytes: mint.to_string(),
+                },
+            ]),
+        )
+        .await
+    else {
+        return Vec::new();
+    };
+
+    let mut holders: Vec<(Pubkey, u64)> = accounts
+        .into_iter()
+        .filter_map(|(address, account)| {
+            let owner = account
+                .data
+                .get(32..64)
+                .and_then(|b| <[u8; 32]>::try_from(b).ok())
+                .map(Pubkey::new_from_array)?;
+            let amount = account
+                .data
+                .get(64..72)
+                .and_then(|b| <[u8; 8]>::try_from(b).ok())
+                .map(u64::from_le_bytes)?;
+            if amount == 0
+                || get_associated_token_address_with_program_id(&owner, mint, token_program)
+                    != address
+            {
+                return None;
+            }
+            Some((owner, amount))
+        })
+        .collect();
+    holders.sort_by(|a, b| b.1.cmp(&a.1));
+    holders.truncate(24);
+    if holders.is_empty() {
+        return Vec::new();
+    }
+
+    let owners: Vec<Pubkey> = holders.iter().map(|(owner, _)| *owner).collect();
+    let Ok(owner_accounts) = rpc.get_multiple_accounts(&owners).await else {
+        return Vec::new();
+    };
+    holders
+        .into_iter()
+        .zip(owner_accounts.into_iter())
+        .filter(|(_, account)| {
+            account.as_ref().is_some_and(|a| {
+                a.owner == screenerbot::chains::solana::solana_sdk::system_program::id()
+                    && a.lamports > 10_000_000
+            })
+        })
+        .map(|(holder, _)| holder)
+        .collect()
 }
 
 // ==================== GLOBAL-CONFIG MUTATION ====================
@@ -475,6 +747,7 @@ pub fn test_position(entry_price: f64, size_sol: f64) -> Position {
         current_price: Some(entry_price),
         current_price_updated: Some(Utc::now()),
         current_price_source: None,
+        book: Book::Live,
         phantom_remove: false,
         phantom_confirmations: 0,
         phantom_first_seen: None,

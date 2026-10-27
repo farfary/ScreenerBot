@@ -74,6 +74,7 @@ mod strategies_routes;
 mod subject_deltas_persistence;
 mod swap_amount_execution;
 mod swap_resilience;
+mod swap_routers_mainnet;
 mod swaps_chain_routing;
 mod token_blacklist_scope;
 mod trader_dca;

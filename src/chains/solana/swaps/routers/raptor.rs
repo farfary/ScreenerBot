@@ -593,6 +593,20 @@ impl SwapRouter for RaptorRouter {
         let keypair = crate::chains::solana::accounts::configured_keypair()?;
         self.build_and_submit(quote, &keypair).await
     }
+
+    async fn build_for_simulation(&self, quote: &Quote, owner: &str) -> Result<Vec<u8>> {
+        self.accept_own_quote(quote)?;
+        super::checked_quote_amounts(quote)?;
+        let (transaction, _) = self.build_transaction(quote, owner).await?;
+        crate::chains::solana::swaps::presend::built_transaction_bytes(&transaction).map_err(
+            |reason| {
+                Error::Swaps(SwapExecutionError::NotSubmitted {
+                    router: self.name().to_owned(),
+                    reason,
+                })
+            },
+        )
+    }
 }
 
 /// Classify a failed Raptor call into the quote vocabulary.

@@ -38,6 +38,16 @@ const CLMM_SOL_USDC: &str = "3ucNos4NbumPLZNWztqGHNFFgkHeRMBQAVemeeomsUxv";
 /// Orca Whirlpool, SOL/USDC. The deepest Orca pool on mainnet.
 const ORCA_SOL_USDC: &str = "Czfq3xZZDmsdGdUyrNLtRhGc47cXcZtLG4crryfu44zE";
 
+/// Raydium AMM v4, SOL/USDT. The deepest SOL/USDT pool on a venue this engine
+/// trades.
+const AMM_V4_SOL_USDT: &str = "7XawhbbxtsRcQA8KTkHT9f9nc6d69UwqCDh6U5EEbEmX";
+
+/// Raydium CLMM, SOL/USDT.
+const CLMM_SOL_USDT: &str = "3nMFwZXwY1s1M5s8vYAHqd4wGs4iSxXE4LRoUMMYqEgF";
+
+/// Orca Whirlpool, SOL/USDT.
+const ORCA_SOL_USDT: &str = "FwewVm8u6tFPGewAyHmWAqad9hmF7mvqxK4mJ7iNqqGC";
+
 /// Raydium CPMM (CP-Swap), SOL paired against a Token-2022 mint.
 const CPMM_POOL: &str = "Q2sPHPdUWFMg7M7wwrQKLrn619cAucfRsmhVJffodSp";
 
@@ -163,6 +173,7 @@ const PUMP_LEGACY_SELL_POOL: &str = "6ZSN9gAqMphoAoUSsryxcASZv5dUxecT7yfy2HHjaDL
 
 const WSOL: &str = "So11111111111111111111111111111111111111112";
 const USDC: &str = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+const USDT: &str = "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB";
 
 /// The smallest swap the bot ever makes: 0.005 SOL.
 const MINIMUM_SWAP_LAMPORTS: u64 = 5_000_000;
@@ -181,7 +192,19 @@ fn mint(address: &str) -> Pubkey {
 
 /// Quote, plan and simulate one direction, asserting the node accepts it.
 async fn simulate_direction(pool: &str, input_mint: &str, output_mint: &str, amount_in: u64) {
-    let owner = simulation_owner();
+    simulate_direction_as(simulation_owner(), pool, input_mint, output_mint, amount_in).await;
+}
+
+/// [`simulate_direction`] with an explicit owner: a real holder of the input
+/// token when the leg sells one, since the simulation runs against the owner's
+/// real balances.
+async fn simulate_direction_as(
+    owner: Pubkey,
+    pool: &str,
+    input_mint: &str,
+    output_mint: &str,
+    amount_in: u64,
+) {
     let intent = DirectSwapIntent {
         pool: Pubkey::from_str(pool).expect("pool constant must be a pubkey"),
         owner,
@@ -228,6 +251,46 @@ async fn simulate_direction(pool: &str, input_mint: &str, output_mint: &str, amo
             plan.venue_compute_units
         );
     }
+}
+
+/// [`simulate_direction`] for the sell leg, `token` -> SOL, owned by a real
+/// holder of `token` found among the pool's recent traders or the token
+/// programme's accounts. The size mirrors a `MINIMUM_SWAP_LAMPORTS` buy in the
+/// same pool, capped at what the holder has.
+async fn simulate_sell_direction(pool: &str, token: &str) {
+    let pool_key = Pubkey::from_str(pool).expect("pool constant must be a pubkey");
+    let token_key = mint(token);
+    let market = direct::load_market(&pool_key, &NodeAccounts)
+        .await
+        .unwrap_or_else(|e| panic!("{pool} must decode: {e}"));
+    let sizing = DirectSwapIntent {
+        pool: pool_key,
+        owner: simulation_owner(),
+        input_mint: mint(WSOL),
+        output_mint: token_key,
+        amount_in: MINIMUM_SWAP_LAMPORTS,
+        slippage_bps: 300,
+    };
+    let sized = direct::quote_with_market(&sizing, market.as_ref())
+        .unwrap_or_else(|e| panic!("the sizing buy in {pool} would not quote: {e}"));
+    let token_program = market
+        .token_program(&token_key)
+        .unwrap_or_else(|| panic!("{pool} must report the token programme of {token}"));
+    let holders = common::sell_holders(
+        &pool_key,
+        &token_key,
+        &token_program,
+        sized.expected_net_out,
+    )
+    .await;
+    let (owner, held) = holders
+        .iter()
+        .copied()
+        .find(|(_, held)| *held >= sized.expected_net_out)
+        .or_else(|| holders.iter().copied().max_by_key(|(_, held)| *held))
+        .filter(|(_, held)| *held > 0)
+        .unwrap_or_else(|| panic!("no holder of {token} with a balance could be found for {pool}"));
+    simulate_direction_as(owner, pool, token, WSOL, sized.expected_net_out.min(held)).await;
 }
 
 /// The other side of the pair a SOL pool trades.
@@ -471,18 +534,6 @@ async fn a_clmm_swap_reaches_different_tick_arrays_in_each_direction() {
     );
 }
 
-/// A real Solana validator identity: a plain, System-Program-owned wallet with
-/// a large public SOL balance. Nothing here is signed or submitted -- this is
-/// only a fee-payer stand-in for a simulation, and only the wallet's real
-/// on-chain balance is used, so any well-funded public address works. Chosen
-/// deliberately over the default `simulation_owner()`, whose balance is far
-/// too small to move the SOL/USDC CLMM pool's price across a whole
-/// initialised tick.
-fn deep_pockets_owner() -> Pubkey {
-    Pubkey::from_str("JUPiTERrZqgf1jUyR7dSkhMx4Kn2qJyekWsg3LT1h4b")
-        .expect("validator identity constant must be a pubkey")
-}
-
 /// The sharpest proof the tick walk exists at all: a size picked, against the
 /// live pool, to cross at least one real initialised tick -- confirmed by
 /// hand against this pool's own on-chain tick arrays before this constant was
@@ -495,12 +546,12 @@ fn deep_pockets_owner() -> Pubkey {
 #[ignore = "live network"]
 async fn a_clmm_quote_that_crosses_a_tick_is_exact_to_the_raw_unit() {
     let _guard = common::isolated_env();
-    // 10 SOL against the deepest SOL/USDC CLMM pool: small enough that the
-    // deep-pockets wallet above easily covers it, large enough to walk past
+    // 10 SOL against the deepest SOL/USDC CLMM pool: small enough that
+    // `common::deep_pockets_owner` easily covers it, large enough to walk past
     // the first initialised tick below the pool's current price.
     const CROSSES_A_TICK_LAMPORTS: u64 = 10_000_000_000;
     simulate_with_no_slippage_room_as(
-        deep_pockets_owner(),
+        common::deep_pockets_owner(),
         CLMM_SOL_USDC,
         WSOL,
         USDC,
@@ -958,6 +1009,99 @@ async fn a_pool_refuses_a_pair_it_does_not_hold() {
 }
 
 // ============================================================================
+// SOL/USDT — the second stablecoin, both directions
+// ============================================================================
+//
+// USDT is a stable asset of the chain but not a fee reference, so SOL -> USDT
+// pays the platform fee on the SOL INPUT and USDT -> SOL on the SOL output.
+// Every pool here has SOL on one side; `assert_fee_is_collected` proves the
+// native fee transfer is in each plan.
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "live network"]
+async fn amm_v4_accepts_a_minimum_sol_to_usdt_swap() {
+    let _guard = common::isolated_env();
+    simulate_direction(AMM_V4_SOL_USDT, WSOL, USDT, MINIMUM_SWAP_LAMPORTS).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "live network"]
+async fn amm_v4_accepts_a_usdt_to_sol_swap() {
+    let _guard = common::isolated_env();
+    simulate_sell_direction(AMM_V4_SOL_USDT, USDT).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "live network"]
+async fn clmm_accepts_a_minimum_sol_to_usdt_swap() {
+    let _guard = common::isolated_env();
+    simulate_direction(CLMM_SOL_USDT, WSOL, USDT, MINIMUM_SWAP_LAMPORTS).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "live network"]
+async fn clmm_accepts_a_usdt_to_sol_swap() {
+    let _guard = common::isolated_env();
+    simulate_sell_direction(CLMM_SOL_USDT, USDT).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "live network"]
+async fn orca_whirlpool_accepts_a_minimum_sol_to_usdt_swap() {
+    let _guard = common::isolated_env();
+    simulate_direction(ORCA_SOL_USDT, WSOL, USDT, MINIMUM_SWAP_LAMPORTS).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "live network"]
+async fn orca_whirlpool_accepts_a_usdt_to_sol_swap() {
+    let _guard = common::isolated_env();
+    simulate_sell_direction(ORCA_SOL_USDT, USDT).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "live network"]
+async fn an_amm_v4_sol_usdt_quote_is_exact_to_the_raw_unit() {
+    let _guard = common::isolated_env();
+    simulate_with_no_slippage_room(AMM_V4_SOL_USDT, WSOL, USDT, MINIMUM_SWAP_LAMPORTS).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "live network"]
+async fn a_clmm_sol_usdt_quote_is_exact_to_the_raw_unit() {
+    let _guard = common::isolated_env();
+    simulate_with_no_slippage_room(CLMM_SOL_USDT, WSOL, USDT, MINIMUM_SWAP_LAMPORTS).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "live network"]
+async fn an_orca_whirlpool_sol_usdt_quote_is_exact_to_the_raw_unit() {
+    let _guard = common::isolated_env();
+    simulate_with_no_slippage_room(ORCA_SOL_USDT, WSOL, USDT, MINIMUM_SWAP_LAMPORTS).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "live network"]
+async fn an_amm_v4_usdt_sell_is_exact_to_the_raw_unit() {
+    let _guard = common::isolated_env();
+    simulate_sell_with_no_slippage_room(AMM_V4_SOL_USDT, "amm v4 sol/usdt").await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "live network"]
+async fn a_clmm_usdt_sell_is_exact_to_the_raw_unit() {
+    let _guard = common::isolated_env();
+    simulate_sell_with_no_slippage_room(CLMM_SOL_USDT, "clmm sol/usdt").await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "live network"]
+async fn an_orca_whirlpool_usdt_sell_is_exact_to_the_raw_unit() {
+    let _guard = common::isolated_env();
+    simulate_sell_with_no_slippage_room(ORCA_SOL_USDT, "orca whirlpool sol/usdt").await;
+}
+
+// ============================================================================
 // MAINNET TIER — real SOL, capped, opt-in
 // ============================================================================
 
@@ -1104,6 +1248,36 @@ async fn a_real_round_trip_through_fluxbeam_settles_and_pays_the_platform_fee() 
     round_trip(&ctx, FLUXBEAM_SOL_QUOTE_POOL, &token).await;
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "spends real SOL"]
+async fn a_real_round_trip_through_amm_v4_sol_usdt_settles_and_pays_the_platform_fee() {
+    let _guard = common::isolated_env();
+    let Some(ctx) = common::require_mainnet() else {
+        return;
+    };
+    round_trip(&ctx, AMM_V4_SOL_USDT, USDT).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "spends real SOL"]
+async fn a_real_round_trip_through_clmm_sol_usdt_settles_and_pays_the_platform_fee() {
+    let _guard = common::isolated_env();
+    let Some(ctx) = common::require_mainnet() else {
+        return;
+    };
+    round_trip(&ctx, CLMM_SOL_USDT, USDT).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "spends real SOL"]
+async fn a_real_round_trip_through_orca_whirlpool_sol_usdt_settles_and_pays_the_platform_fee() {
+    let _guard = common::isolated_env();
+    let Some(ctx) = common::require_mainnet() else {
+        return;
+    };
+    round_trip(&ctx, ORCA_SOL_USDT, USDT).await;
+}
+
 /// Buy `token` with the capped amount of SOL, then sell every unit back.
 ///
 /// Both legs are real. The buy proves SOL -> TOKEN settles and that the wallet
@@ -1199,229 +1373,6 @@ async fn round_trip(ctx: &common::MainnetCtx, pool: &str, token: &str) {
 // sell direction does not over-state its output by one raw unit, and it proves
 // the sell's account list, orientation and fee side at the same time.
 
-/// Real mainnet wallets whose ASSOCIATED token account for `mint` currently
-/// holds something, richest first, with what each holds.
-///
-/// The candidates come from the POOL'S OWN RECENT TRADES rather than from
-/// `getTokenLargestAccounts` — two reasons, both discovered the hard way. Public
-/// RPC endpoints refuse `getTokenLargestAccounts` outright (it is one of the
-/// expensive scans they disable), and even where it answers, the twenty largest
-/// accounts of a real token are protocol vaults and PDAs, not the ordinary
-/// wallets this engine is built to spend from. Whoever traded the pool an hour
-/// ago is exactly the right population: a wallet, holding the token, in its
-/// associated account.
-///
-/// Only an ATA qualifies, because that is the account the swap plan derives and
-/// spends from, and only a system-owned owner qualifies, because a PDA holding
-/// the balance is usually the pool itself.
-async fn holder_with_associated_account(
-    pool: &Pubkey,
-    mint: &Pubkey,
-    token_program: &Pubkey,
-) -> Vec<(Pubkey, u64)> {
-    use screenerbot::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
-    use screenerbot::chains::solana::solana_sdk::commitment_config::CommitmentLevel;
-    use screenerbot::chains::solana::spl_associated_token_account::get_associated_token_address_with_program_id;
-
-    const SIGNATURES_PER_PAGE: usize = 40;
-    const PAGES_TO_SCAN: usize = 3;
-    const CANDIDATES_WANTED: usize = 40;
-
-    let rpc = get_rpc_client();
-    let mint_str = mint.to_string();
-
-    // A quiet pool's last forty transactions can be all adds and removes with
-    // no trader left holding anything, so the scan pages backwards rather than
-    // giving up on one window.
-    let mut signatures = Vec::new();
-    let mut before = None;
-    for _ in 0..PAGES_TO_SCAN {
-        let Ok(page) = rpc
-            .get_signatures_for_address(pool, Some(SIGNATURES_PER_PAGE), before.as_ref(), None)
-            .await
-        else {
-            break;
-        };
-        let Some(last) = page.last() else { break };
-        before = Some(last.signature);
-        signatures.extend(page);
-    }
-
-    let mut candidates: Vec<Pubkey> = Vec::new();
-    for info in signatures {
-        if info.err.is_some() {
-            continue;
-        }
-        let Ok(details) = rpc
-            .get_transaction_details_with_commitment(
-                &info.signature.to_string(),
-                CommitmentLevel::Confirmed,
-            )
-            .await
-        else {
-            continue;
-        };
-        let Some(meta) = details.meta.as_ref() else {
-            continue;
-        };
-        for balances in [&meta.post_token_balances, &meta.pre_token_balances] {
-            let Some(balances) = balances.as_ref() else {
-                continue;
-            };
-            for balance in balances {
-                if balance.mint != mint_str {
-                    continue;
-                }
-                let Some(owner) = balance
-                    .owner
-                    .as_deref()
-                    .and_then(|o| Pubkey::from_str(o).ok())
-                else {
-                    continue;
-                };
-                if owner == *pool || candidates.contains(&owner) {
-                    continue;
-                }
-                candidates.push(owner);
-            }
-        }
-        if candidates.len() >= CANDIDATES_WANTED {
-            break;
-        }
-    }
-    if candidates.is_empty() {
-        return Vec::new();
-    }
-
-    // What a past transaction says a wallet held is not what it holds now, so
-    // the balance is re-read; and the read is against the ATA specifically,
-    // because an owner holding the token somewhere else is of no use to a plan
-    // that spends from the associated account.
-    let atas: Vec<Pubkey> = candidates
-        .iter()
-        .map(|owner| get_associated_token_address_with_program_id(owner, mint, token_program))
-        .collect();
-    let Ok(token_accounts) = rpc.get_multiple_accounts(&atas).await else {
-        return Vec::new();
-    };
-    let mut funded: Vec<(Pubkey, u64)> = Vec::new();
-    for (owner, account) in candidates.iter().zip(token_accounts.into_iter()) {
-        let Some(account) = account else { continue };
-        let amount = account
-            .data
-            .get(64..72)
-            .and_then(|b| <[u8; 8]>::try_from(b).ok())
-            .map(u64::from_le_bytes)
-            .unwrap_or(0);
-        if amount > 0 {
-            funded.push((*owner, amount));
-        }
-    }
-    if funded.is_empty() {
-        return Vec::new();
-    }
-    // Richest first: a bigger balance is more likely to cover the size the buy
-    // leg would have returned, and the caller caps the sell at what it finds.
-    funded.sort_by(|a, b| b.1.cmp(&a.1));
-
-    // The owner must be an ordinary wallet with enough SOL to be a plausible
-    // fee payer: a program-owned owner is a PDA, and a PDA holding the balance
-    // is almost always the pool or a vault.
-    let owners: Vec<Pubkey> = funded.iter().map(|(owner, _)| *owner).collect();
-    let Ok(owner_accounts) = rpc.get_multiple_accounts(&owners).await else {
-        return Vec::new();
-    };
-    funded
-        .into_iter()
-        .zip(owner_accounts.into_iter())
-        .filter(|(_, account)| {
-            account.as_ref().is_some_and(|a| {
-                a.owner == screenerbot::chains::solana::solana_sdk::system_program::id()
-                    && a.lamports > 10_000_000
-            })
-        })
-        .map(|(holder, _)| holder)
-        .collect()
-}
-
-/// Every holder of `mint`, straight off the token programme, richest first.
-///
-/// The fallback for a quiet pool whose last hundred transactions leave nobody
-/// still holding a usable balance. `getProgramAccounts` with a mint memcmp is
-/// exact where it is allowed at all; a public endpoint refuses it for a mint
-/// with hundreds of thousands of holders, which is precisely the case where the
-/// recent-trader scan already works.
-async fn holders_from_the_token_programme(
-    mint: &Pubkey,
-    token_program: &Pubkey,
-) -> Vec<(Pubkey, u64)> {
-    use screenerbot::chains::solana::rpc::{get_rpc_client, RpcClientMethods, RpcFilterType};
-    use screenerbot::chains::solana::spl_associated_token_account::get_associated_token_address_with_program_id;
-
-    const TOKEN_ACCOUNT_SIZE: u64 = 165;
-
-    let rpc = get_rpc_client();
-    let Ok(accounts) = rpc
-        .get_program_accounts(
-            token_program,
-            Some(vec![
-                RpcFilterType::DataSize(TOKEN_ACCOUNT_SIZE),
-                RpcFilterType::Memcmp {
-                    offset: 0,
-                    bytes: mint.to_string(),
-                },
-            ]),
-        )
-        .await
-    else {
-        return Vec::new();
-    };
-
-    let mut holders: Vec<(Pubkey, u64)> = accounts
-        .into_iter()
-        .filter_map(|(address, account)| {
-            let owner = account
-                .data
-                .get(32..64)
-                .and_then(|b| <[u8; 32]>::try_from(b).ok())
-                .map(Pubkey::new_from_array)?;
-            let amount = account
-                .data
-                .get(64..72)
-                .and_then(|b| <[u8; 8]>::try_from(b).ok())
-                .map(u64::from_le_bytes)?;
-            if amount == 0
-                || get_associated_token_address_with_program_id(&owner, mint, token_program)
-                    != address
-            {
-                return None;
-            }
-            Some((owner, amount))
-        })
-        .collect();
-    holders.sort_by(|a, b| b.1.cmp(&a.1));
-    holders.truncate(24);
-    if holders.is_empty() {
-        return Vec::new();
-    }
-
-    let owners: Vec<Pubkey> = holders.iter().map(|(owner, _)| *owner).collect();
-    let Ok(owner_accounts) = rpc.get_multiple_accounts(&owners).await else {
-        return Vec::new();
-    };
-    holders
-        .into_iter()
-        .zip(owner_accounts.into_iter())
-        .filter(|(_, account)| {
-            account.as_ref().is_some_and(|a| {
-                a.owner == screenerbot::chains::solana::solana_sdk::system_program::id()
-                    && a.lamports > 10_000_000
-            })
-        })
-        .map(|(holder, _)| holder)
-        .collect()
-}
-
 /// Simulate a TOKEN -> SOL sell with `min_out` set to the quote exactly.
 ///
 /// The size is the amount a `MINIMUM_SWAP_LAMPORTS` buy in the same pool would
@@ -1460,21 +1411,8 @@ async fn simulate_sell_with_no_slippage_room(pool: &str, label: &str) {
     let token_program = market
         .token_program(&token)
         .unwrap_or_else(|| panic!("{label}: the pool must report its own token programme"));
-    let mut holders = holder_with_associated_account(&pool_key, &token, &token_program).await;
-    // A quiet pool can leave every recent trader holding dust. Fall back to the
-    // token programme's own account list before giving up on the venue.
-    if holders
-        .first()
-        .is_none_or(|(_, held)| *held * 100 < sized.expected_net_out)
-    {
-        let from_programme = holders_from_the_token_programme(&token, &token_program).await;
-        if from_programme
-            .first()
-            .is_some_and(|(_, held)| Some(*held) > holders.first().map(|(_, h)| *h))
-        {
-            holders = from_programme;
-        }
-    }
+    let holders =
+        common::sell_holders(&pool_key, &token, &token_program, sized.expected_net_out).await;
     assert!(
         !holders.is_empty(),
         "{label}: no holder of {token} could be found for {pool}, so the sell leg cannot be \

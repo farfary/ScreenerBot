@@ -29,6 +29,8 @@
 //! never does.
 
 use crate::chains::solana::swaps::direct::{self, DirectSwapIntent, DirectSwapOutcome};
+use crate::chains::solana::swaps::revenue::fee_reference_for_mint;
+use crate::chains::{adapter_for, ChainId};
 use crate::config::with_config;
 use crate::errors::DataError;
 use crate::logger::{self, LogTag};
@@ -153,14 +155,15 @@ impl DirectPoolRouter {
     /// buy, or a holding priced from elsewhere -- falls back to the pools the
     /// pool service has discovered for it, canonical first and then by
     /// liquidity, so a direct swap is not limited to the tokens that happen to
-    /// be priced right now. The pool is keyed by the non-reference leg, which
-    /// is the token for a SOL or USDC pair. [`best_quote`] picks among them in
+    /// be priced right now. The pools are keyed by [`pair_token`], the same leg
+    /// whichever way the pair is traded. [`best_quote`] picks among them in
     /// this order, so an earlier candidate wins a tie.
     fn candidate_pools(input_mint: &str, output_mint: &str) -> Vec<Pubkey> {
-        let (token, other) = if is_reference_mint(input_mint) {
-            (output_mint, input_mint)
+        let token = pair_token(input_mint, output_mint);
+        let other = if token == input_mint {
+            output_mint
         } else {
-            (input_mint, output_mint)
+            input_mint
         };
 
         let mut candidates: Vec<Pubkey> = Vec::new();
@@ -172,7 +175,7 @@ impl DirectPoolRouter {
             }
         };
 
-        if let Some(price) = crate::pools::get_pool_price(crate::chains::ChainId::Solana, token) {
+        if let Some(price) = crate::pools::get_pool_price(ChainId::Solana, token) {
             push(&price.pool_address);
         }
 
@@ -193,8 +196,11 @@ impl DirectPoolRouter {
         candidates
     }
 
-    /// Quote one pool, with every refusal a single pool can produce.
-    async fn quote_pool(&self, request: &QuoteRequest, pool: Pubkey) -> QuoteResult<Quote> {
+    /// Quote one named pool, with every refusal a single pool can produce. The
+    /// router's own quotes run through here for each candidate pool; a caller
+    /// that already knows the pool reaches the same quote without the pool
+    /// service.
+    pub async fn quote_pool(&self, request: &QuoteRequest, pool: Pubkey) -> QuoteResult<Quote> {
         let intent = Self::intent_for(request, pool)?;
         let (quote, market) = direct::quote(&intent)
             .await
@@ -293,15 +299,8 @@ impl DirectPoolRouter {
         })
     }
 
-    /// Execute an accepted quote with a specific signer.
-    ///
-    /// Quotes and builds explicitly (`direct::quote` -> `direct::build_plan` ->
-    /// `direct::execute_plan`) rather than calling the opaque `direct::swap`, so
-    /// the FRESH quote is in hand and can be checked against what the caller
-    /// actually accepted before anything is built or sent. The comparison layer
-    /// may have chosen this router over Jupiter on a number that no longer
-    /// exists by the time execution runs; refusing below the accepted floor is
-    /// what keeps that choice honest.
+    /// Execute an accepted quote with a specific signer: the plan
+    /// [`Self::fresh_plan`] builds for the signer's wallet, executed.
     async fn execute_with_keypair(
         &self,
         quote: &Quote,
@@ -309,6 +308,20 @@ impl DirectPoolRouter {
     ) -> Result<DirectSwapOutcome> {
         use crate::chains::solana::solana_sdk::signature::Signer;
 
+        let plan = self.fresh_plan(quote, keypair.pubkey()).await?;
+        Ok(direct::execute_plan(&plan, keypair).await?)
+    }
+
+    /// The plan an accepted quote executes as, for `owner`'s wallet.
+    ///
+    /// Quotes and builds explicitly (`direct::quote` -> `direct::build_plan`)
+    /// rather than calling the opaque `direct::swap`, so the FRESH quote is in
+    /// hand and can be checked against what the caller actually accepted before
+    /// anything is built or sent. The comparison layer may have chosen this
+    /// router over Jupiter on a number that no longer exists by the time
+    /// execution runs; refusing below the accepted floor is what keeps that
+    /// choice honest.
+    async fn fresh_plan(&self, quote: &Quote, owner: Pubkey) -> Result<direct::SwapPlan> {
         let data: DirectExecutionData =
             serde_json::from_slice(&quote.execution_data).map_err(|e| {
                 Error::Data(DataError::ParseError {
@@ -324,7 +337,7 @@ impl DirectPoolRouter {
                     error: e.to_string(),
                 })
             })?,
-            owner: keypair.pubkey(),
+            owner,
             input_mint: Pubkey::from_str(&quote.input_mint).map_err(|e| {
                 Error::Data(DataError::ParseError {
                     data_type: format!("quote input mint ({})", quote.input_mint),
@@ -378,8 +391,7 @@ impl DirectPoolRouter {
             );
         }
 
-        let plan = direct::build_plan(&intent, market.as_ref(), &fresh_quote)?;
-        Ok(direct::execute_plan(&plan, keypair).await?)
+        Ok(direct::build_plan(&intent, market.as_ref(), &fresh_quote)?)
     }
 }
 
@@ -408,7 +420,7 @@ impl SwapRouter for DirectPoolRouter {
     }
 
     fn chain(&self) -> crate::chains::ChainId {
-        crate::chains::ChainId::Solana
+        ChainId::Solana
     }
 
     async fn get_quote(&self, request: &QuoteRequest) -> QuoteResult<Quote> {
@@ -501,24 +513,66 @@ impl SwapRouter for DirectPoolRouter {
             effective_price_sol: None,
         })
     }
+
+    async fn build_for_simulation(&self, quote: &Quote, owner: &str) -> Result<Vec<u8>> {
+        self.accept_own_quote(quote)?;
+        super::checked_quote_amounts(quote)?;
+        let owner = Pubkey::from_str(owner).map_err(|e| {
+            Error::Data(DataError::ParseError {
+                data_type: format!("direct pool simulation owner ({owner})"),
+                error: e.to_string(),
+            })
+        })?;
+        let plan = self.fresh_plan(quote, owner).await?;
+        let transaction = direct::unsigned_transaction(&plan, &owner).await?;
+        bincode::serialize(&transaction).map_err(|e| {
+            Error::Data(DataError::ParseError {
+                data_type: "direct pool simulation transaction".to_owned(),
+                error: e.to_string(),
+            })
+        })
+    }
 }
 
-fn is_reference_mint(mint: &str) -> bool {
-    mint == crate::chains::solana::constants::SOL_MINT
-        || mint == crate::chains::solana::constants::USDC_MINT
+/// The leg a pair's pools are keyed by, whichever way the pair is traded.
+///
+/// Each leg is ranked by how much it is a quote asset: the native asset first,
+/// then a fee reference, then any other quote asset of the chain, then a traded
+/// token. The lower-ranked leg is the one whose pools list the pair; SOL<->USDC
+/// keys USDC, SOL<->USDT keys USDT, USDC<->USDT keys USDT. Equal ranks are
+/// broken by address order, so the key never depends on the direction.
+fn pair_token<'a>(input_mint: &'a str, output_mint: &'a str) -> &'a str {
+    let adapter = adapter_for(ChainId::Solana);
+    let rank = |mint: &str| -> u8 {
+        if adapter.is_native_asset(mint) {
+            3
+        } else if fee_reference_for_mint(mint).is_some() {
+            2
+        } else if adapter.is_quote_asset(mint) {
+            1
+        } else {
+            0
+        }
+    };
+    match rank(input_mint).cmp(&rank(output_mint)) {
+        std::cmp::Ordering::Less => input_mint,
+        std::cmp::Ordering::Greater => output_mint,
+        std::cmp::Ordering::Equal => input_mint.min(output_mint),
+    }
 }
 
-/// The pump.fun bonding curve of the token in a SOL pair, derived from its mint.
+/// The pump.fun bonding curve of the token in a pair with the native asset,
+/// derived from its mint. A quote asset has no launch curve.
 fn launch_curve_for(input_mint: &str, output_mint: &str) -> Option<Pubkey> {
-    let sol = crate::chains::solana::constants::SOL_MINT;
-    let token = if input_mint == sol {
+    let adapter = adapter_for(ChainId::Solana);
+    let token = if adapter.is_native_asset(input_mint) {
         output_mint
-    } else if output_mint == sol {
+    } else if adapter.is_native_asset(output_mint) {
         input_mint
     } else {
         return None;
     };
-    if is_reference_mint(token) {
+    if adapter.is_quote_asset(token) {
         return None;
     }
     let mint = Pubkey::from_str(token).ok()?;
@@ -606,7 +660,7 @@ mod tests {
     #[tokio::test]
     async fn oversized_input_is_rejected_before_router_io() {
         let request = QuoteRequest {
-            chain: crate::chains::ChainId::Solana,
+            chain: ChainId::Solana,
             input_mint: crate::chains::solana::constants::SOL_MINT.to_owned(),
             output_mint: crate::chains::solana::constants::USDC_MINT.to_owned(),
             input_amount: crate::chains::RawAmount::new(u128::from(u64::MAX) + 1),
@@ -647,6 +701,80 @@ mod tests {
             "a reference pair has no curve"
         );
         assert_eq!(launch_curve_for(sol, "not-a-mint"), None);
+    }
+
+    /// No quote asset of the chain is ever probed at a launch curve, in either
+    /// direction, while a token's curve is unchanged.
+    #[test]
+    fn no_quote_asset_is_tried_at_a_launch_curve() {
+        let adapter = adapter_for(ChainId::Solana);
+        let sol = adapter.native_asset_address();
+        for stable in adapter.stable_assets() {
+            assert_eq!(launch_curve_for(sol, stable), None, "buying {stable}");
+            assert_eq!(launch_curve_for(stable, sol), None, "selling {stable}");
+        }
+        assert_eq!(launch_curve_for(sol, sol), None);
+
+        let token = "AMmANDhpdoJiyqqzkHAC2c992WDR9DXbTw6AezTApump";
+        let curve = direct::venues::pumpfun_legacy::bonding_curve_address(
+            &Pubkey::from_str(token).expect("valid mint"),
+        );
+        assert_eq!(launch_curve_for(sol, token), Some(curve));
+        assert_eq!(launch_curve_for(token, sol), Some(curve));
+    }
+
+    /// Every pair over the native asset, the stablecoins and a token.
+    fn pair_legs() -> Vec<&'static str> {
+        let adapter = adapter_for(ChainId::Solana);
+        let mut legs = vec![adapter.native_asset_address()];
+        legs.extend(adapter.stable_assets().iter().copied());
+        legs.push("AMmANDhpdoJiyqqzkHAC2c992WDR9DXbTw6AezTApump");
+        legs
+    }
+
+    /// A sell must find the same pools as the buy it reverses: the key never
+    /// depends on which leg is the input.
+    #[test]
+    fn a_pair_is_keyed_by_the_same_leg_in_both_directions() {
+        let legs = pair_legs();
+        for a in &legs {
+            for b in &legs {
+                assert_eq!(pair_token(a, b), pair_token(b, a), "{a} <-> {b}");
+                let key = pair_token(a, b);
+                assert!(key == *a || key == *b, "the key is one of the two legs");
+            }
+        }
+    }
+
+    #[test]
+    fn the_key_is_the_leg_that_is_traded_against_the_quote_asset() {
+        let adapter = adapter_for(ChainId::Solana);
+        let sol = adapter.native_asset_address();
+        let token = "AMmANDhpdoJiyqqzkHAC2c992WDR9DXbTw6AezTApump";
+
+        for stable in adapter.stable_assets() {
+            assert_eq!(pair_token(sol, stable), *stable, "SOL -> {stable}");
+            assert_eq!(pair_token(stable, sol), *stable, "{stable} -> SOL");
+            assert_eq!(pair_token(stable, token), token, "{stable} -> token");
+            assert_eq!(pair_token(token, stable), token, "token -> {stable}");
+        }
+        assert_eq!(pair_token(sol, token), token);
+        assert_eq!(pair_token(token, sol), token);
+
+        // Between two stablecoins the fee-reference one is the quote, so the
+        // other one keys the pools.
+        let reference = adapter
+            .stable_assets()
+            .iter()
+            .copied()
+            .find(|mint| fee_reference_for_mint(mint).is_some())
+            .expect("a stablecoin is a fee reference");
+        for stable in adapter.stable_assets() {
+            if *stable != reference {
+                assert_eq!(pair_token(reference, stable), *stable);
+                assert_eq!(pair_token(stable, reference), *stable);
+            }
+        }
     }
 
     #[test]
@@ -764,7 +892,7 @@ mod tests {
     #[tokio::test]
     async fn an_exact_out_request_is_not_offered() {
         let request = QuoteRequest {
-            chain: crate::chains::ChainId::Solana,
+            chain: ChainId::Solana,
             input_mint: crate::chains::solana::constants::SOL_MINT.to_owned(),
             output_mint: crate::chains::solana::constants::USDC_MINT.to_owned(),
             input_amount: 1_000_000u64.into(),
@@ -815,7 +943,7 @@ mod tests {
     fn the_router_identifies_itself_by_mechanism_not_by_dex() {
         let router = DirectPoolRouter::new();
         assert_eq!(router.id(), "direct");
-        assert_eq!(router.chain(), crate::chains::ChainId::Solana);
+        assert_eq!(router.chain(), ChainId::Solana);
         assert!(router.priority() > 0, "Jupiter stays the primary router");
     }
 
@@ -900,7 +1028,7 @@ mod tests {
 
     fn candidate_quote(output_amount: u64, pool_label: &str) -> Quote {
         Quote {
-            chain: crate::chains::ChainId::Solana,
+            chain: ChainId::Solana,
             router_id: "direct_pool".to_owned(),
             router_name: "Direct Pool".to_owned(),
             input_mint: crate::chains::solana::constants::SOL_MINT.to_owned(),

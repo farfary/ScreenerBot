@@ -628,6 +628,16 @@ pub enum ComputeLimit {
     AsBuilt,
 }
 
+/// The wire bytes of a transaction an aggregator returned base64-encoded,
+/// exactly as [`submit_built_swap`] receives them before measuring and signing.
+pub fn built_transaction_bytes(transaction_base64: &str) -> Result<Vec<u8>, NotSubmittedReason> {
+    base64::engine::general_purpose::STANDARD
+        .decode(transaction_base64)
+        .map_err(|e| NotSubmittedReason::BuildUnusable {
+            detail: format!("the transaction is not base64: {e}"),
+        })
+}
+
 /// Gate, sign, send and settle a transaction an aggregator built for `quote`.
 ///
 /// Every failure before the send is a [`SwapExecutionError::NotSubmitted`].
@@ -677,13 +687,7 @@ async fn submit_on<N: SwapNode>(
         })
     };
 
-    let bytes = base64::engine::general_purpose::STANDARD
-        .decode(transaction_base64)
-        .map_err(|e| {
-            not_submitted(NotSubmittedReason::BuildUnusable {
-                detail: format!("the transaction is not base64: {e}"),
-            })
-        })?;
+    let bytes = built_transaction_bytes(transaction_base64).map_err(not_submitted)?;
     let measured = measure(&bytes).map_err(not_submitted)?;
     let mut transaction: VersionedTransaction = bincode::deserialize(&bytes).map_err(|e| {
         not_submitted(NotSubmittedReason::BuildUnusable {
