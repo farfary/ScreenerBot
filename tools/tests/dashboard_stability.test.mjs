@@ -422,6 +422,23 @@ async function assertValuesWhole(page, label) {
 }
 
 /**
+ * An element carrying the `hidden` attribute is not displayed. A class rule that sets
+ * `display` outranks the bare attribute, so the component needs its own `[hidden]`
+ * rule; without one, content a script hid stays on screen with stale values.
+ */
+async function assertHiddenStaysHidden(page, label) {
+  const shown = await page.evaluate(() =>
+    [...document.querySelectorAll("[hidden]")]
+      .filter((element) => getComputedStyle(element).display !== "none")
+      .map((element) => {
+        const name = element.id ? `#${element.id}` : `.${[...element.classList].join(".")}`;
+        return `${name} (display: ${getComputedStyle(element).display})`;
+      })
+  );
+  assert.deepEqual([...new Set(shown)], [], `${label}: hidden elements still displayed`);
+}
+
+/**
  * An empty table keeps its body: the empty message sits whole and vertically centred
  * in the table's scroll area, and no pager is drawn under it. A sibling that takes
  * the table's height, or a "0 of 0" pager, squeezes the body until the message is
@@ -536,6 +553,7 @@ describe("dashboard stability", { concurrency: 4 }, () => {
           await assertUnitsInside(session.page, `${id} ${view.name}`);
           await assertSummaryLabelsBare(session.page, `${id} ${view.name}`);
           await assertValuesWhole(session.page, `${id} ${view.name}`);
+          await assertHiddenStaysHidden(session.page, `${id} ${view.name}`);
         }
         if (id === "positions") {
           // A new column set opens at its start edge, not at the previous view's offset.
@@ -616,6 +634,7 @@ describe("dashboard stability", { concurrency: 4 }, () => {
           await assertEmpty(session.page, view);
           await assertStatesCentred(session.page, `${id} ${view.name}`);
           await assertEmptyTablesKeepBody(session.page, `${id} ${view.name}`);
+          await assertHiddenStaysHidden(session.page, `${id} ${view.name}`);
         }
         await finish(session);
       });

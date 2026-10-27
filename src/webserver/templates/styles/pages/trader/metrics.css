@@ -75,6 +75,12 @@
   border-top: 1px solid var(--border-color);
 }
 
+/* `display:flex` above outranks the bare [hidden] attribute; a book or window with
+   no closed round would otherwise keep the previous book's best and worst trade. */
+.stats-extremes[hidden] {
+  display: none;
+}
+
 .stats-extreme {
   display: flex;
   align-items: baseline;
