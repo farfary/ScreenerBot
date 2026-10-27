@@ -18,15 +18,16 @@ impl DexScreenerClient {
     /// PRIMARY METHOD: Fetch ALL pools for a single token address
     /// Uses /token-pairs/v1/{chainId}/{tokenAddress}
     ///
-    /// Returns ALL liquidity pools (can be 30+) for the token across all DEXes.
+    /// Returns the token's liquidity pools across all DEXes, at most `TOKEN_PAIRS_CAP` (30):
+    /// a list of that length was cut and can omit the token's deepest pools.
     /// For batch operations with multiple tokens, use fetch_token_batch() instead.
     ///
     /// # Arguments
     /// * `token_address` - Token mint address
-    /// * `chain_id` - Chain identifier (defaults to "solana")
+    /// * `chain_id` - DexScreener chain slug (defaults to the active chain's)
     ///
     /// # Returns
-    /// Vec<DexScreenerPool> - ALL pools for this token (typically 10-30 pools)
+    /// Vec<DexScreenerPool> - the token's pools, up to `TOKEN_PAIRS_CAP`
     pub async fn fetch_token_pools(
         &self,
         token_address: &str,

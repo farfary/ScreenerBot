@@ -5,7 +5,7 @@
 
 use crate::apis::geckoterminal::RequestLane;
 use crate::apis::manager::get_api_manager;
-use crate::chains::ChainId;
+use crate::chains::{adapter_for, ChainId};
 use crate::events::{record_token_event, Severity};
 use crate::logger::{self, LogTag};
 use crate::native_price::get_native_price;
@@ -49,6 +49,7 @@ pub async fn fetch_from_sources(
     let should_fetch_gecko = api.geckoterminal.is_enabled();
 
     let mint_owned = mint.to_string();
+    let network = adapter_for(chain).market_data_network();
 
     let dex_future = {
         let api = api.clone();
@@ -67,7 +68,7 @@ pub async fn fetch_from_sources(
                         // Got permit, proceed with fetch
                         let result = api
                             .dexscreener
-                            .fetch_token_pools(&mint, None)
+                            .fetch_token_pools(&mint, Some(network))
                             .await
                             .map_err(|e| Error::Api {
                                 provider: "DexScreener".to_owned(),
@@ -109,7 +110,7 @@ pub async fn fetch_from_sources(
                         // deferred the request during its rate-limit penalty.
                         let result = match api
                             .geckoterminal
-                            .fetch_pools(&mint, RequestLane::Background)
+                            .fetch_pools_on_network(&mint, Some(network), RequestLane::Background)
                             .await
                         {
                             Ok(pools) => Ok(Some(pools)),
@@ -230,7 +231,7 @@ pub async fn fetch_from_sources(
             }
             let fetched: Vec<TokenPoolInfo> = pools
                 .iter()
-                .filter_map(|pool| conversion::from_geckoterminal(chain, pool, native_price))
+                .filter_map(|pool| conversion::from_geckoterminal(chain, mint, pool, native_price))
                 .collect();
             let merged = if gecko_fills_empty {
                 fetched

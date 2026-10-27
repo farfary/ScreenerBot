@@ -104,10 +104,10 @@ pub fn dexscreener_list_is_incomplete(listed: &[TokenPoolInfo], pair_count: usiz
     pair_count >= TOKEN_PAIRS_CAP || !listed.iter().any(|pool| pool.is_native_pair)
 }
 
-/// The GeckoTerminal pools that complete `known` for `mint`: those whose counter asset is the
-/// chain's native coin or one of its stablecoins, matched by mint, and whose address `known`
-/// does not hold, so the row already listed wins a pool both providers report. A pool without
-/// `mint` on either side is dropped.
+/// The GeckoTerminal pools that complete `known` for `mint`: rows oriented to `mint` (its
+/// `base_mint`) whose counter asset is the chain's native coin or one of its stablecoins, and
+/// whose address `known` does not hold, so the row already listed wins a pool both providers
+/// report. A row for another mint is dropped.
 pub fn reliable_completion_pools(
     chain: ChainId,
     mint: &str,
@@ -118,14 +118,9 @@ pub fn reliable_completion_pools(
     extra
         .into_iter()
         .filter(|pool| {
-            let counter = if pool.base_mint == mint {
-                pool.quote_mint.as_str()
-            } else if pool.quote_mint == mint {
-                pool.base_mint.as_str()
-            } else {
-                return false;
-            };
-            adapter.is_quote_asset(counter) && !known.contains_key(&pool.pool_address)
+            pool.base_mint == mint
+                && adapter.is_quote_asset(&pool.quote_mint)
+                && !known.contains_key(&pool.pool_address)
         })
         .collect()
 }
@@ -225,11 +220,11 @@ mod tests {
         let mut listed_row = pair("shared", MEME, SOL);
         listed_row.liquidity_usd = Some(1.0);
         let known = HashMap::from([("shared".to_owned(), listed_row)]);
-        let mut duplicate = pair("shared", SOL, MEME);
+        let mut duplicate = pair("shared", MEME, SOL);
         duplicate.liquidity_usd = Some(999.0);
         let extra = vec![
             duplicate,
-            pair("deep-sol", SOL, MEME),
+            pair("deep-sol", MEME, SOL),
             pair("usdc", MEME, USDC),
             pair("other", MEME, OTHER),
             pair("unrelated", SOL, USDC),

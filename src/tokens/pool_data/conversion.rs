@@ -95,9 +95,18 @@ pub fn from_dexscreener(
     })
 }
 
-/// Convert a GeckoTerminal pool on `chain` to TokenPoolInfo
+/// Convert a GeckoTerminal pool on `chain` to TokenPoolInfo oriented to the requested `mint`,
+/// the same shape as [`from_dexscreener`]: `base_mint` is `mint` and `quote_mint` its counter
+/// asset. GeckoTerminal prices each side on its own (`*_price_native_currency` in the chain's
+/// native coin, `*_price_usd` in USD), so the token's figures are read from the side `mint` is on;
+/// the provider's `"0"` placeholder is no price. The native price is the token's own price in the
+/// chain coin, else its USD price converted at `native_price_usd`. GeckoTerminal reports only the
+/// total reserve in USD, so each side is half of it: `liquidity_token` is that half in token
+/// units at the token's USD price, `liquidity_native` that half in the native coin for a native
+/// pair. `None` when `mint` is on neither side of the pool.
 pub fn from_geckoterminal(
     chain: ChainId,
+    mint: &str,
     pool: &GeckoTerminalPool,
     native_price_usd: f64,
 ) -> Option<TokenPoolInfo> {
@@ -105,64 +114,48 @@ pub fn from_geckoterminal(
         return None;
     }
 
-    let base_mint =
+    let pair_base =
         parse_gecko_token_id(&pool.base_token_id).unwrap_or_else(|| pool.base_token_id.clone());
-    let quote_mint =
+    let pair_quote =
         parse_gecko_token_id(&pool.quote_token_id).unwrap_or_else(|| pool.quote_token_id.clone());
 
-    if base_mint.is_empty() || quote_mint.is_empty() {
+    if pair_base.is_empty() || pair_quote.is_empty() {
         return None;
     }
 
-    let adapter = adapter_for(chain);
-    let is_native_pair =
-        adapter.is_native_asset(&base_mint) || adapter.is_native_asset(&quote_mint);
-
-    let (price_native_str, price_usd) = if pool.mint == base_mint {
+    let (counter_mint, token_price_native, token_price_usd) = if pair_base == mint {
         (
-            if pool.base_token_price_native.trim().is_empty() {
-                None
-            } else {
-                Some(pool.base_token_price_native.clone())
-            },
-            parse_f64(&pool.base_token_price_usd).or_else(|| parse_f64(&pool.token_price_usd)),
+            pair_quote,
+            &pool.base_token_price_native,
+            &pool.base_token_price_usd,
         )
-    } else if pool.mint == quote_mint {
+    } else if pair_quote == mint {
         (
-            if pool.quote_token_price_native.trim().is_empty() {
-                None
-            } else {
-                Some(pool.quote_token_price_native.clone())
-            },
-            parse_f64(&pool.quote_token_price_usd).or_else(|| parse_f64(&pool.token_price_usd)),
+            pair_base,
+            &pool.quote_token_price_native,
+            &pool.quote_token_price_usd,
         )
     } else {
-        (
-            if pool.base_token_price_native.trim().is_empty() {
-                None
-            } else {
-                Some(pool.base_token_price_native.clone())
-            },
-            parse_f64(&pool.token_price_usd),
-        )
+        return None;
     };
 
-    let price_sol = price_native_str
-        .as_ref()
-        .and_then(|value| parse_f64(value))
-        .or_else(|| {
-            price_usd.and_then(|usd| {
-                if native_price_usd > 0.0 {
-                    Some(usd / native_price_usd)
-                } else {
-                    None
-                }
-            })
-        });
+    let positive = |value: &str| parse_f64(value).filter(|p| p.is_finite() && *p > 0.0);
+    let price_usd = positive(token_price_usd).or_else(|| positive(&pool.token_price_usd));
+    let price_native = positive(token_price_native).map(|_| token_price_native.trim().to_string());
+    let price_sol = price_native.as_deref().and_then(parse_f64).or_else(|| {
+        price_usd
+            .filter(|_| native_price_usd > 0.0)
+            .map(|usd| usd / native_price_usd)
+    });
+
+    let adapter = adapter_for(chain);
+    let is_native_pair = adapter.is_native_asset(&counter_mint) || adapter.is_native_asset(mint);
 
     let liquidity_usd = pool.reserve_usd;
+    let side_usd = liquidity_usd.map(|usd| usd / 2.0);
+    let liquidity_token = side_usd.zip(price_usd).map(|(usd, price)| usd / price);
     let liquidity_native = if is_native_pair && native_price_usd > 0.0 {
-        liquidity_usd.map(|usd| (usd / 2.0) / native_price_usd)
+        side_usd.map(|usd| usd / native_price_usd)
     } else {
         None
     };
@@ -179,16 +172,16 @@ pub fn from_geckoterminal(
         } else {
             Some(pool.dex_id.clone())
         },
-        base_mint,
-        quote_mint,
+        base_mint: mint.to_string(),
+        quote_mint: counter_mint,
         is_native_pair,
         liquidity_usd,
-        liquidity_token: None,
+        liquidity_token,
         liquidity_native,
         volume_h24: pool.volume_h24,
         price_usd,
         price_sol,
-        price_native: price_native_str,
+        price_native,
         sources,
         pool_data_last_fetched_at: chrono::Utc::now(),
         pool_data_first_seen_at: chrono::Utc::now(),
@@ -302,5 +295,97 @@ mod tests {
     #[test]
     fn a_pair_without_the_token_on_either_side_is_refused() {
         assert!(from_dexscreener(ChainId::Solana, MEME, &pair(SOL, USDC, "200", "200")).is_none());
+    }
+
+    /// SOL priced at 200 USD, the native price the GeckoTerminal conversion receives.
+    const SOL_USD: f64 = 200.0;
+
+    /// A GeckoTerminal pool as `tokens/{mint}/pools` reports it: each side priced on its own,
+    /// in the native coin and in USD, and one total reserve in USD.
+    fn gecko_pool(
+        base: (&str, &str, &str),
+        quote: (&str, &str, &str),
+        token_price_usd: &str,
+    ) -> GeckoTerminalPool {
+        GeckoTerminalPool {
+            pool_address: "GeckoPool111".to_string(),
+            dex_id: "raydium".to_string(),
+            base_token_id: format!("solana_{}", base.0),
+            base_token_price_native: base.1.to_string(),
+            base_token_price_usd: base.2.to_string(),
+            quote_token_id: format!("solana_{}", quote.0),
+            quote_token_price_native: quote.1.to_string(),
+            quote_token_price_usd: quote.2.to_string(),
+            token_price_usd: token_price_usd.to_string(),
+            reserve_usd: Some(20_000.0),
+            ..GeckoTerminalPool::default()
+        }
+    }
+
+    #[test]
+    fn a_gecko_token_on_the_base_side_against_sol_keeps_its_figures() {
+        let pool = gecko_pool((MEME, "0.0025", "0.5"), (SOL, "1", "200"), "0.5");
+        let info =
+            from_geckoterminal(ChainId::Solana, MEME, &pool, SOL_USD).expect("token is the base");
+        assert_eq!(
+            (info.base_mint.as_str(), info.quote_mint.as_str()),
+            (MEME, SOL)
+        );
+        assert!(info.is_native_pair);
+        assert_eq!(info.liquidity_token, Some(20_000.0));
+        assert_eq!(info.liquidity_native, Some(50.0));
+        assert_eq!(info.price_sol, Some(0.0025));
+        assert_eq!(info.price_native.as_deref(), Some("0.0025"));
+        assert_eq!(info.price_usd, Some(0.5));
+    }
+
+    #[test]
+    fn a_gecko_token_quoted_against_sol_is_read_from_the_quote_side() {
+        let pool = gecko_pool((SOL, "1", "200"), (MEME, "0.0025", "0.5"), "0.5");
+        let info =
+            from_geckoterminal(ChainId::Solana, MEME, &pool, SOL_USD).expect("token is the quote");
+        assert_eq!(
+            (info.base_mint.as_str(), info.quote_mint.as_str()),
+            (MEME, SOL)
+        );
+        assert!(info.is_native_pair);
+        assert_eq!(info.liquidity_token, Some(20_000.0));
+        assert_eq!(info.liquidity_native, Some(50.0));
+        assert_eq!(info.price_sol, Some(0.0025));
+        assert_eq!(info.price_native.as_deref(), Some("0.0025"));
+        assert_eq!(info.price_usd, Some(0.5));
+    }
+
+    #[test]
+    fn a_gecko_token_against_another_asset_carries_its_own_price_and_no_native_liquidity() {
+        // MEME/USDC listed under USDC: the quote side's figures are USDC's own.
+        let pool = gecko_pool((MEME, "0.0025", "0.5"), (USDC, "0.005", "1"), "1");
+        let info =
+            from_geckoterminal(ChainId::Solana, USDC, &pool, SOL_USD).expect("token is the quote");
+        assert_eq!(
+            (info.base_mint.as_str(), info.quote_mint.as_str()),
+            (USDC, MEME)
+        );
+        assert!(!info.is_native_pair);
+        assert_eq!(info.liquidity_token, Some(10_000.0));
+        assert_eq!(info.liquidity_native, None);
+        assert_eq!(info.price_sol, Some(0.005));
+        assert_eq!(info.price_native.as_deref(), Some("0.005"));
+        assert_eq!(info.price_usd, Some(1.0));
+    }
+
+    #[test]
+    fn a_gecko_placeholder_native_price_falls_back_to_the_usd_price() {
+        let pool = gecko_pool((MEME, "0", "0.5"), (SOL, "1", "200"), "0.5");
+        let info =
+            from_geckoterminal(ChainId::Solana, MEME, &pool, SOL_USD).expect("token is the base");
+        assert_eq!(info.price_native, None);
+        assert_eq!(info.price_sol, Some(0.0025));
+    }
+
+    #[test]
+    fn a_gecko_pool_without_the_token_on_either_side_is_refused() {
+        let pool = gecko_pool((SOL, "1", "200"), (USDC, "0.005", "1"), "200");
+        assert!(from_geckoterminal(ChainId::Solana, MEME, &pool, SOL_USD).is_none());
     }
 }
