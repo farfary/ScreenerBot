@@ -565,3 +565,24 @@ fn admission_keys_name_the_activity_the_round_and_the_reset_only() {
     assert_eq!(reset_key(), "reset");
     assert_ne!(reset_key(), activity_key("reset"));
 }
+
+/// A duplicate key refuses a step, a close or a reset as unavailable, while for a copied
+/// activity it means the activity is already queued and nothing is skipped.
+#[test]
+fn a_duplicate_activity_is_admitted_once_while_other_refusals_skip() {
+    assert_eq!(
+        queue_refusal(EnqueueError::Duplicate),
+        CopySkip::PaperExecutionUnavailable
+    );
+    assert_eq!(activity_refusal(EnqueueError::Duplicate), None);
+    for (refused, skip) in [
+        (EnqueueError::Full, CopySkip::PaperQueueFull),
+        (
+            EnqueueError::Unavailable,
+            CopySkip::PaperExecutionUnavailable,
+        ),
+    ] {
+        assert_eq!(queue_refusal(refused), skip);
+        assert_eq!(activity_refusal(refused), Some(skip));
+    }
+}

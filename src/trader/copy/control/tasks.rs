@@ -54,8 +54,7 @@ pub(in crate::trader::copy) async fn holds_open_copies(
     mint: Option<&str>,
 ) -> bool {
     let owned = |position: &Position| {
-        mint.is_none_or(|mint| mint == position.mint)
-            && matches!(position.origin, PositionOrigin::Copy { task_id, .. } if task_id == task.id)
+        mint.is_none_or(|mint| mint == position.mint) && owned_by(position, task.id)
     };
     books::open_positions(Book::Paper).await.iter().any(owned)
         || books::open_positions(Book::Live).await.iter().any(owned)
@@ -69,22 +68,58 @@ pub(in crate::trader::copy) async fn wants_watch(task: &CopyTask) -> bool {
 }
 
 /// Attach or release the task's watch source so it matches `wants_watch`. Both
-/// directions are idempotent.
+/// directions are idempotent, and an attach never outlives the task row.
 pub(in crate::trader::copy) async fn sync_task_watch(task: &CopyTask) -> Result<()> {
     if wants_watch(task).await {
-        watch::add_copy_source(task.id, &task.target_address, task.label.as_deref())
-            .await
-            .map(|_| ())
-            .map_err(|error| Error::CopyWatchRejected {
-                detail: error.to_string(),
-            })
+        attach_while_stored(
+            &open_database().await?,
+            task.clone(),
+            attach_watch,
+            detach_watch,
+        )
+        .await
     } else {
-        watch::remove_copy_source(task.id, &task.target_address)
-            .await
-            .map_err(|error| Error::CopyReconciliation {
-                detail: format!("failed to detach the copy target: {error}"),
-            })
+        detach_watch(task.clone()).await
     }
+}
+
+/// Attach the task's watch source, then release it again when the task row is gone by
+/// the time the attach finished. A delete detaches once more after removing the row, so
+/// whichever of the two runs last leaves no source of a deleted task attached.
+pub(super) async fn attach_while_stored<A, AFut, D, DFut>(
+    db: &CopyDatabase,
+    task: CopyTask,
+    attach: A,
+    detach: D,
+) -> Result<()>
+where
+    A: FnOnce(CopyTask) -> AFut,
+    AFut: Future<Output = Result<()>>,
+    D: FnOnce(CopyTask) -> DFut,
+    DFut: Future<Output = Result<()>>,
+{
+    attach(task.clone()).await?;
+    if db.get_task(task.id).await?.is_some() {
+        return Ok(());
+    }
+    detach(task).await
+}
+
+async fn attach_watch(task: CopyTask) -> Result<()> {
+    watch::add_copy_source(task.id, &task.target_address, task.label.as_deref())
+        .await
+        .map(|_| ())
+        .map_err(|error| Error::CopyWatchRejected {
+            detail: error.to_string(),
+        })
+}
+
+async fn detach_watch(task: CopyTask) -> Result<()> {
+    watch::remove_copy_source(task.id, &task.target_address)
+        .await
+        .map_err(|error| Error::CopyReconciliation {
+            detail: format!("failed to detach the copy target: {error}"),
+        })
 }
 
 /// Create a task. New tasks always start in paper mode; arming live is a
@@ -233,6 +268,8 @@ pub async fn update_task(id: i64, patch: serde_json::Value) -> Result<CopyTask> 
 /// positions are still open keeps them until they are closed. When any step after the
 /// detach fails, the task row is still there and its watch source is attached again as
 /// the task needs it, so the delete can be retried; rounds already closed stay closed.
+/// Once the row is gone the watch source is detached again: an update or reconcile that
+/// attached it while the step waited in the queue does not outlive the task.
 pub async fn delete_task(id: i64) -> Result<()> {
     let db = open_database().await?;
     delete_task_with(
@@ -242,13 +279,7 @@ pub async fn delete_task(id: i64) -> Result<()> {
         |id| async move { live_copies(id).await },
         |id| async move { paper_rounds(id).await },
         crate::trader::paper::settle_rounds,
-        |task| async move {
-            watch::remove_copy_source(task.id, &task.target_address)
-                .await
-                .map_err(|e| Error::CopyReconciliation {
-                    detail: format!("failed to detach the copy target: {e}"),
-                })
-        },
+        detach_watch,
         |task| async move { sync_task_watch(&task).await },
     )
     .await
@@ -272,13 +303,13 @@ where
     RFut: Future<Output = Vec<Position>> + Send + 'static,
     S: FnOnce(Vec<Position>) -> SFut + Send + 'static,
     SFut: Future<Output = Result<usize>> + Send + 'static,
-    D: FnOnce(CopyTask) -> DFut,
+    D: Fn(CopyTask) -> DFut,
     DFut: Future<Output = Result<()>>,
     A: FnOnce(CopyTask) -> AFut,
     AFut: Future<Output = Result<()>>,
 {
     let task = deletable_task(&db, id, &live_copies).await?;
-    detach(task).await?;
+    detach(task.clone()).await?;
     let job_db = db.clone();
     let job = async move {
         deletable_task(&job_db, id, &live_copies).await?;
@@ -303,8 +334,9 @@ where
             }
         }
     };
-    let Err(error) = removed else {
-        return Ok(());
+    let error = match removed {
+        Ok(()) => return detach(task).await,
+        Err(error) => error,
     };
     let restored = match db.get_task(id).await {
         Ok(Some(task)) => attach(task).await,

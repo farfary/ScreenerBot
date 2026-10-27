@@ -3,11 +3,12 @@
 
 //! Task patch merging, the per-task book stats and the removal of a task.
 
+use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 
 use chrono::Utc;
 
-use super::tasks::delete_task_with;
+use super::tasks::{attach_while_stored, delete_task_with};
 use super::{book_stats, followed_wallets, merge_task_patch, CopyTradingStatus, TaskRounds};
 use crate::positions::{Book, Position};
 use crate::trader::copy::paper_execution::PaperExecutionHandle;
@@ -516,7 +517,11 @@ async fn a_delete_settles_the_round_of_a_buy_queued_before_it() {
         vec![task.id * 1_000 + 30, task.id * 1_000 + 1],
         "the round the queued buy opened is settled with the others"
     );
-    assert_eq!((removal.detached, removal.attached), (1, 0));
+    assert_eq!(
+        (removal.detached, removal.attached),
+        (2, 0),
+        "detached before the step and once more after the row is gone"
+    );
     assert!(database.get_task(task.id).await.unwrap().is_none());
     let _ = stop.send(true);
     dispatcher.await.unwrap();
@@ -536,7 +541,11 @@ async fn a_delete_without_a_running_queue_settles_and_removes_in_place() {
     let (result, removal) = remove(&database, None, task.id, 0, book, false).await;
     result.unwrap();
     assert_eq!(removal.settled, vec![task.id * 1_000 + 5]);
-    assert_eq!((removal.detached, removal.attached), (1, 0));
+    assert_eq!(
+        (removal.detached, removal.attached),
+        (2, 0),
+        "detached before the step and once more after the row is gone"
+    );
     assert!(database.get_task(task.id).await.unwrap().is_none());
 }
 
@@ -630,4 +639,135 @@ async fn a_delete_that_could_move_money_is_refused_untouched() {
     assert_eq!((removal.detached, removal.attached), (0, 0));
     assert!(database.get_task(task.id).await.unwrap().is_some());
     assert!(owned_database.get_task(paused.id).await.unwrap().is_some());
+}
+
+/// The watch sources a scripted attach and detach leave attached, by task id.
+type Watched = Arc<Mutex<HashSet<i64>>>;
+
+fn attach_to(
+    watched: &Watched,
+) -> impl Fn(CopyTask) -> std::future::Ready<crate::trader::Result<()>> {
+    let watched = watched.clone();
+    move |task| {
+        watched.lock().unwrap().insert(task.id);
+        std::future::ready(Ok(()))
+    }
+}
+
+fn detach_from(
+    watched: &Watched,
+) -> impl Fn(CopyTask) -> std::future::Ready<crate::trader::Result<()>> {
+    let watched = watched.clone();
+    move |task| {
+        watched.lock().unwrap().remove(&task.id);
+        std::future::ready(Ok(()))
+    }
+}
+
+/// An update that lands after the delete detached the watch source, while the delete
+/// waits in the task's paper queue, attaches the source again; the delete releases it
+/// once the row is gone, so no source of the deleted task stays attached.
+#[tokio::test]
+async fn an_update_while_the_delete_waits_leaves_no_watch_source() {
+    let (_directory, database, task) = store_with(stored()).await;
+    let watched: Watched = Arc::new(Mutex::new(HashSet::from([task.id])));
+    let (handle, stop, dispatcher) = crate::trader::copy::paper_execution::install();
+    let (release, released) = tokio::sync::oneshot::channel::<()>();
+    let queued = handle
+        .enqueue_step(
+            task.id,
+            crate::trader::copy::paper_execution::activity_key("queued-buy"),
+            database.clone(),
+            async move {
+                let _ = released.await;
+                Ok(())
+            },
+        )
+        .unwrap();
+    let delete = tokio::spawn({
+        let (database, handle, attach, detach) = (
+            database.clone(),
+            handle.clone(),
+            attach_to(&watched),
+            detach_from(&watched),
+        );
+        async move {
+            delete_task_with(
+                database,
+                Some(handle),
+                task.id,
+                |_| std::future::ready(0),
+                |_| std::future::ready(Vec::<Position>::new()),
+                |_: Vec<Position>| std::future::ready(Ok(0)),
+                detach,
+                attach,
+            )
+            .await
+        }
+    });
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    assert!(
+        !delete.is_finished(),
+        "the delete waits for the queued step"
+    );
+    assert!(!watched.lock().unwrap().contains(&task.id));
+
+    let updated = database
+        .update_task(CopyTask {
+            label: Some("Edited".to_owned()),
+            ..task.clone()
+        })
+        .await
+        .unwrap();
+    attach_while_stored(
+        &database,
+        updated,
+        attach_to(&watched),
+        detach_from(&watched),
+    )
+    .await
+    .unwrap();
+    assert!(
+        watched.lock().unwrap().contains(&task.id),
+        "the update attached the source again while the row still existed"
+    );
+
+    release.send(()).unwrap();
+    queued.await.unwrap().unwrap();
+    delete.await.unwrap().unwrap();
+    assert!(database.get_task(task.id).await.unwrap().is_none());
+    assert!(
+        watched.lock().unwrap().is_empty(),
+        "no watch source of the deleted task remains attached"
+    );
+    let _ = stop.send(true);
+    dispatcher.await.unwrap();
+}
+
+/// An attach keeps the source while the task row exists, and releases it when the row
+/// was deleted before the attach finished.
+#[tokio::test]
+async fn an_attach_never_outlives_the_task_row() {
+    let (_directory, database, task) = store_with(stored()).await;
+    let watched: Watched = Arc::new(Mutex::new(HashSet::new()));
+    attach_while_stored(
+        &database,
+        task.clone(),
+        attach_to(&watched),
+        detach_from(&watched),
+    )
+    .await
+    .unwrap();
+    assert!(watched.lock().unwrap().contains(&task.id));
+
+    assert!(database.delete_task(task.id).await.unwrap());
+    attach_while_stored(
+        &database,
+        task.clone(),
+        attach_to(&watched),
+        detach_from(&watched),
+    )
+    .await
+    .unwrap();
+    assert!(watched.lock().unwrap().is_empty());
 }

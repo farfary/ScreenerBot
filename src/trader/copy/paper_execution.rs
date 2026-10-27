@@ -255,6 +255,16 @@ pub(super) fn queue_refusal(error: EnqueueError) -> CopySkip {
     }
 }
 
+/// The skip a refused admission of a copied activity's paper work is reported as, or
+/// `None` when the refusal is a duplicate key: that activity is already queued for the
+/// task, so it is admitted once and nothing is skipped.
+pub(super) fn activity_refusal(error: EnqueueError) -> Option<CopySkip> {
+    match error {
+        EnqueueError::Duplicate => None,
+        refused => Some(queue_refusal(refused)),
+    }
+}
+
 /// The admission key of a copy activity's paper work, one per target transaction.
 pub fn activity_key(signature: &str) -> String {
     format!("activity:{signature}")

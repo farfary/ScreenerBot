@@ -11,8 +11,8 @@ use tokio::sync::broadcast::error::RecvError;
 use tokio::sync::Notify;
 
 use super::paper_execution::{
-    activity_key, as_paper, execute_paper_entry, skipped, skipped_activity, skipped_paper,
-    EnqueueError, PaperDispatch, PaperExecutionHandle,
+    activity_key, activity_refusal, as_paper, execute_paper_entry, skipped, skipped_activity,
+    skipped_paper, PaperDispatch, PaperExecutionHandle,
 };
 use crate::config::with_config;
 use crate::logger::{self, LogTag};
@@ -496,17 +496,19 @@ where
     JFut: std::future::Future<Output = CopyOutcome> + Send + 'static,
 {
     let reason = match paper_runtime {
-        Some(runtime) => match runtime.handle.enqueue(
-            task_id,
-            activity_key(&activity.signature),
-            database.clone(),
-            Some(mint.to_owned()),
-            job(runtime.dispatch.clone()),
-        ) {
-            Ok(()) | Err(EnqueueError::Duplicate) => return Ok(()),
-            Err(EnqueueError::Full) => CopySkip::PaperQueueFull,
-            Err(EnqueueError::Unavailable) => CopySkip::PaperExecutionUnavailable,
-        },
+        Some(runtime) => {
+            let admitted = runtime.handle.enqueue(
+                task_id,
+                activity_key(&activity.signature),
+                database.clone(),
+                Some(mint.to_owned()),
+                job(runtime.dispatch.clone()),
+            );
+            match admitted.err().and_then(activity_refusal) {
+                Some(reason) => reason,
+                None => return Ok(()),
+            }
+        }
         None => CopySkip::PaperExecutionUnavailable,
     };
     notify::record(database, skipped_paper(task_id, activity, mint, reason)).await?;
