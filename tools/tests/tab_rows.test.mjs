@@ -229,6 +229,15 @@ test("keyboard focus draws an inset ring in both rows and on the chevrons; a cli
   await page.keyboard.press("End");
   assert.match(await ring(), INSET, `sub-tab ${await focused()}`);
 
+  // End scrolls the row to its end; the strip marks which chevrons show on the next
+  // scroll event. Tab before that lands on the end chevron, which then hides.
+  await page.waitForFunction(() => {
+    const wrapper = document.querySelector("#subTabsContainer").closest(".tab-scroll-wrapper");
+    return (
+      wrapper.classList.contains("can-scroll-start") &&
+      !wrapper.classList.contains("can-scroll-end")
+    );
+  });
   await page.keyboard.press("Tab");
   assert.ok(
     await page.evaluate(() => document.activeElement.matches(".tab-scroll-btn")),
