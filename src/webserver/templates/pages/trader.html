@@ -361,20 +361,20 @@
                 </label>
               </span>
             </div>
-          </div>
 
-          <!-- Part to Sell: shown while Sell Part First is on; bounds and unit come from the field metadata -->
-          <div class="config-group" id="stop-loss-partial-pct-group" hidden>
-            <div class="config-label-row">
-              <label for="stop-loss-partial-pct" class="config-label">
-                <i class="icon-chart-pie"></i>
-                <span data-l10n-id="config-trader-stop-loss-partial-pct"></span>
-              </label>
-            </div>
-            <p class="config-hint"></p>
-            <div class="input-group-enhanced">
-              <input type="number" id="stop-loss-partial-pct" class="input-large" />
-              <span class="input-unit"></span>
+            <!-- Part to Sell: shown under its switch while Sell Part First is on; bounds and unit come from the field metadata -->
+            <div class="config-group config-group-dependent" id="stop-loss-partial-pct-group" hidden>
+              <div class="config-label-row">
+                <label for="stop-loss-partial-pct" class="config-label">
+                  <i class="icon-chart-pie"></i>
+                  <span data-l10n-id="config-trader-stop-loss-partial-pct"></span>
+                </label>
+              </div>
+              <p class="config-hint"></p>
+              <div class="input-group-enhanced">
+                <input type="number" id="stop-loss-partial-pct" class="input-large" />
+                <span class="input-unit"></span>
+              </div>
             </div>
           </div>
 

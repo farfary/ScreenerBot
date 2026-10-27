@@ -94,6 +94,27 @@
   align-self: stretch;
 }
 
+/* A field that depends on a switch sits in the switch group's impact row, directly
+   under the switch, so showing it never moves another group. It keeps the group
+   rhythm in one column; the impact boxes beside it keep their own height instead
+   of stretching to the field's. */
+.config-group-dependent {
+  display: flex;
+  flex-direction: column;
+  row-gap: 0.4rem;
+  min-width: 0;
+}
+
+.config-group-dependent > * {
+  margin: 0;
+}
+
+.config-card:has(.config-group-dependent:not([hidden]))
+  > .config-group:not(.config-group-full)
+  > .config-impact {
+  align-self: start;
+}
+
 /* A switch field puts its switch in the control row under the hint, inside the
    same frame a number field draws (the shared input tokens, height, width cap), so
    the column has no empty control track and the fields read as one row. */
@@ -360,8 +381,8 @@
 }
 
 /* A field or example step that depends on a switch leaves the layout while the
-   switch is off; these rules outrank the grid and flex displays above. */
-.config-card > .config-group[hidden],
+   switch is off; this rule outranks the flex displays above. */
+.config-group-dependent[hidden],
 .timeline-step[hidden] {
   display: none;
 }
