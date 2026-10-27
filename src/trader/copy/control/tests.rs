@@ -5,7 +5,7 @@
 
 use chrono::Utc;
 
-use super::{book_stats, merge_task_patch};
+use super::{book_stats, followed_wallets, merge_task_patch, CopyTradingStatus};
 use crate::trader::copy::{CopyActivityRow, CopyMode, CopyOutcome, CopyTask, ExitMode, SizingMode};
 
 fn stored() -> CopyTask {
@@ -208,4 +208,47 @@ fn a_patch_with_an_unknown_or_mistyped_field_is_refused() {
     assert!(merge_task_patch(&stored(), serde_json::json!({ "enabld": false })).is_err());
     assert!(merge_task_patch(&stored(), serde_json::json!({ "enabled": "no" })).is_err());
     assert!(merge_task_patch(&stored(), serde_json::json!([1])).is_err());
+}
+
+fn copy_status(
+    enabled: bool,
+    blocked_reason: Option<&'static str>,
+    active_tasks: usize,
+) -> CopyTradingStatus {
+    CopyTradingStatus {
+        enabled,
+        live_available: true,
+        blocked_reason,
+        default_mode: "paper".to_owned(),
+        default_slippage_pct: 1.0,
+        force_stop_blocks: true,
+        total_tasks: active_tasks + 1,
+        active_tasks,
+        paper_tasks: active_tasks,
+        live_tasks: 0,
+    }
+}
+
+/// Copying needs the system on, no force stop and an enabled task; a loss-limit block
+/// still copies exits.
+#[test]
+fn copying_needs_the_system_on_an_enabled_task_and_no_force_stop() {
+    assert!(copy_status(true, None, 1).is_copying());
+    assert!(copy_status(true, Some("loss_limit"), 1).is_copying());
+    assert!(!copy_status(false, None, 1).is_copying());
+    assert!(!copy_status(true, Some("force_stop"), 1).is_copying());
+    assert!(!copy_status(true, None, 0).is_copying());
+}
+
+/// Two tasks on one wallet follow one wallet.
+#[test]
+fn followed_wallets_counts_distinct_targets() {
+    let mut second = stored();
+    second.id = 4;
+    second.enabled = false;
+    let mut other = stored();
+    other.id = 5;
+    other.target_address = "other".to_owned();
+    assert_eq!(followed_wallets(&[]), 0);
+    assert_eq!(followed_wallets(&[stored(), second, other]), 2);
 }

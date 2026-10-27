@@ -64,6 +64,28 @@ home-calendar-pop-gross-profit = 総利益
 home-calendar-pop-gross-loss = 総損失
 home-calendar-pop-end-balance = 期末残高
 
+## Auto Trader and Copy Trading status
+
+home-status =
+    .aria-label = 自動化の状態
+home-status-trader-title = 自動トレーダー
+home-status-copy-title = コピートレード
+home-status-running = 実行中
+home-status-stopped = 停止中
+home-status-setup-required = セットアップが必要です
+home-status-open-positions = オープンポジション
+home-status-capacity = { $used } / { $limit }
+home-status-entries-today = 本日のエントリー
+home-status-exits-today = 本日のエグジット
+home-status-followed-wallets = フォロー中のウォレット
+home-status-active-tasks = 有効なタスク
+home-status-last-copy = 最後にコピーした取引
+home-status-trader-unavailable = 自動トレーダーを使うには、ウォレットと RPC のセットアップを完了してください
+home-status-copy-unavailable = コピートレードを使うには、ウォレットと RPC のセットアップを完了してください
+home-status-setup = セットアップを完了
+home-status-trader-open = 自動トレーダーを開く
+home-status-copy-open = コピートレードを開く
+
 ## Position exposure and market pipeline
 
 home-operations =

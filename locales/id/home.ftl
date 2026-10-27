@@ -64,6 +64,28 @@ home-calendar-pop-gross-profit = Profit kotor
 home-calendar-pop-gross-loss = Rugi kotor
 home-calendar-pop-end-balance = Saldo akhir
 
+## Auto Trader and Copy Trading status
+
+home-status =
+    .aria-label = Status otomasi
+home-status-trader-title = Auto Trader
+home-status-copy-title = Copy Trading
+home-status-running = Berjalan
+home-status-stopped = Berhenti
+home-status-setup-required = Perlu penyiapan
+home-status-open-positions = Posisi terbuka
+home-status-capacity = { $used } dari { $limit }
+home-status-entries-today = Entri hari ini
+home-status-exits-today = Exit hari ini
+home-status-followed-wallets = Dompet yang diikuti
+home-status-active-tasks = Tugas aktif
+home-status-last-copy = Trade terakhir yang disalin
+home-status-trader-unavailable = Selesaikan penyiapan dompet dan RPC untuk menggunakan Auto Trader
+home-status-copy-unavailable = Selesaikan penyiapan dompet dan RPC untuk menggunakan Copy Trading
+home-status-setup = Selesaikan penyiapan
+home-status-trader-open = Buka Auto Trader
+home-status-copy-open = Buka Copy Trading
+
 ## Position exposure and market pipeline
 
 home-operations =

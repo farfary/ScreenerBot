@@ -12,12 +12,12 @@ use crate::global::{
 };
 use crate::positions;
 use crate::rpc::get_global_rpc_stats;
-use crate::trader::is_trader_running;
 use crate::wallet::{worth_change, WalletWorth, WorthChange, WorthSample};
 use crate::webserver::promo;
 use crate::webserver::snapshot::get_cached_system_metrics;
 use crate::webserver::state::AppState;
 
+use super::status_cards::{auto_trader_card, read_copy_trading_card};
 use super::types::*;
 use super::utils::format_uptime;
 
@@ -127,6 +127,10 @@ pub async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<Home
         cached_metrics,
         // Filtering stats
         filtering_stats_result,
+        // Status cards
+        position_capacity,
+        copy_trading,
+        auto_activity_result,
     ) = tokio::join!(
         // Trader stats - 5 parallel SQL queries
         async {
@@ -152,6 +156,9 @@ pub async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<Home
         // in its loading state for that entire timeout on every launch. Counts that are
         // briefly absent cost nothing; a dashboard that will not paint costs everything.
         crate::filtering::try_fetch_stats(crate::chains::ChainScope::All),
+        crate::trader::safety::position_capacity(),
+        read_copy_trading_card(),
+        positions::get_auto_trade_activity(today_start),
     );
 
     // Convert from database PeriodTradingStats to dashboard TradingPeriodStats
@@ -432,10 +439,12 @@ pub async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<Home
         found_all_time: total_in_database,
     };
 
-    // Get trader status (always off in Explore Mode — trading is disabled)
-    let trader_status = TraderStatusInfo {
-        running: !crate::global::is_explore_mode() && is_trader_running(),
-    };
+    // The trader owner reports Explore Mode and incomplete setup as unavailable.
+    let auto_trader = auto_trader_card(
+        &crate::trader::trader_status(),
+        position_capacity,
+        auto_activity_result.ok(),
+    );
 
     Json(HomeDashboardResponse {
         trader,
@@ -443,7 +452,8 @@ pub async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<Home
         positions: positions_snapshot,
         system,
         tokens,
-        trader_status,
+        auto_trader,
+        copy_trading,
         timestamp: now.to_rfc3339(),
     })
 }

@@ -70,6 +70,28 @@ home-calendar-pop-gross-profit = Profit brut
 home-calendar-pop-gross-loss = Perte brute
 home-calendar-pop-end-balance = Solde final
 
+## Auto Trader and Copy Trading status
+
+home-status =
+    .aria-label = État de l'automatisation
+home-status-trader-title = Trader auto
+home-status-copy-title = Copy trading
+home-status-running = En marche
+home-status-stopped = Arrêté
+home-status-setup-required = Configuration requise
+home-status-open-positions = Positions ouvertes
+home-status-capacity = { $used } sur { $limit }
+home-status-entries-today = Entrées du jour
+home-status-exits-today = Sorties du jour
+home-status-followed-wallets = Portefeuilles suivis
+home-status-active-tasks = Tâches actives
+home-status-last-copy = Dernier trade copié
+home-status-trader-unavailable = Terminez la configuration du portefeuille et du RPC pour utiliser Trader auto
+home-status-copy-unavailable = Terminez la configuration du portefeuille et du RPC pour utiliser le copy trading
+home-status-setup = Terminer la configuration
+home-status-trader-open = Ouvrir Trader auto
+home-status-copy-open = Ouvrir Copy trading
+
 ## Position exposure and market pipeline
 
 home-operations =

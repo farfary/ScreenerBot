@@ -8,12 +8,16 @@ use std::collections::HashMap;
 use chrono::{NaiveDate, Utc};
 
 use crate::filtering::SnapshotState;
+use crate::positions::AutoTradeActivity;
+use crate::trader::copy::control::followed_wallets;
+use crate::trader::copy::workspace::ActivityFilter;
+use crate::trader::safety::PositionCapacity;
 use crate::webserver::routes::dashboard::{
-    BlacklistInfo, CalendarDay, DashboardOverview, HomeDashboardResponse, MonitoringInfo,
-    OpenPositionDetail, PortfolioCalendarResponse, PositionPerformer, PositionsSnapshot,
-    PositionsSummary, RpcInfo, ServiceStatus, SystemInfo, SystemMetrics, TokenStatistics,
-    TraderAnalytics, TraderStatusInfo, TradingPeriodStats, WalletAnalytics, WalletInfo,
-    WorthChangeStatus,
+    auto_trader_card, copy_trading_card, BlacklistInfo, CalendarDay, DashboardOverview,
+    HomeDashboardResponse, MonitoringInfo, OpenPositionDetail, PortfolioCalendarResponse,
+    PositionPerformer, PositionsSnapshot, PositionsSummary, RpcInfo, ServiceStatus, SystemInfo,
+    SystemMetrics, TokenStatistics, TraderAnalytics, TradingPeriodStats, WalletAnalytics,
+    WalletInfo, WorthChangeStatus,
 };
 
 use super::aggregates::{self, PeriodAgg};
@@ -126,13 +130,45 @@ pub fn get_promo_home_dashboard() -> HomeDashboardResponse {
         found_all_time: 12847,
     };
 
+    // The cards are built by the same functions as the live route, over the promo trader
+    // status, the trader stats' capacity and the promo copy desk.
+    let auto_trader = auto_trader_card(
+        &super::get_promo_trader_status(),
+        PositionCapacity {
+            used: open.count,
+            limit: open.count.max(1),
+        },
+        Some(AutoTradeActivity {
+            opened: trader.today.buys,
+            closed: trader.today.sells,
+        }),
+    );
+    let copy_tasks = super::get_promo_copy_tasks();
+    let last_fill = super::get_promo_copy_activity(
+        None,
+        ActivityFilter {
+            filter: Some("fills".to_owned()),
+            limit: Some(1),
+            ..ActivityFilter::default()
+        },
+    )
+    .ok()
+    .and_then(|page| page.activity.first().map(|row| row.created_at));
+    let copy_trading = copy_trading_card(
+        false,
+        Some(&super::get_promo_copy_status()),
+        Some(followed_wallets(&copy_tasks)),
+        last_fill,
+    );
+
     HomeDashboardResponse {
         trader,
         wallet,
         positions,
         system,
         tokens,
-        trader_status: TraderStatusInfo { running: true },
+        auto_trader,
+        copy_trading,
         timestamp: now.to_rfc3339(),
     }
 }

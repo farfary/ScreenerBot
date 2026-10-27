@@ -61,11 +61,11 @@
   text-align: end;
 }
 
-/* The rows share the room the section has, never below a readable cell height:
-   the grid grows to fill it and does not shrink below its rows (the section scrolls
-   instead), so the month summary always sits directly under the last week. */
+/* Short rows: a day is its number and its tint, its figures open in the day detail.
+   The rows share the room the section has and never shrink below that height, so the
+   month summary always sits directly under the last week. */
 .calendar-grid {
-  grid-auto-rows: minmax(2.5rem, 1fr);
+  grid-auto-rows: minmax(1.9rem, 1fr);
   flex: 1 0 auto;
   background: var(--border-color);
 }
@@ -93,8 +93,8 @@
 }
 
 /* A traded day is its own fill tinted toward the profit or loss colour by
-   `--cell-tint` (set per cell from the day's share of the month's largest move); the
-   figure carries the full colour. Cells stay opaque: the grid paints its 1px gaps
+   `--cell-tint` (set per cell from the day's share of the month's largest move); a day
+   without trades keeps the plain fill. Cells stay opaque: the grid paints its 1px gaps
    with the border colour, so a translucent cell would show that colour through. */
 .calendar-cell.profit {
   background: color-mix(in srgb, var(--badge-online) var(--cell-tint, 0%), var(--cell-base));
@@ -151,7 +151,7 @@
   border-radius: 999px;
 }
 
-/* The day's (or week's) realized P&L, at the foot of the cell in its tone. */
+/* The week's realized P&L, at the foot of its cell in its tone. */
 .cell-pnl {
   margin-top: auto;
   overflow: hidden;
@@ -171,12 +171,10 @@
   align-items: flex-end;
 }
 
-.calendar-cell.profit .cell-pnl,
 .calendar-week.profit .cell-pnl {
   color: var(--semantic-success-text);
 }
 
-.calendar-cell.loss .cell-pnl,
 .calendar-week.loss .cell-pnl {
   color: var(--semantic-error-text);
 }
@@ -291,7 +289,7 @@
   font-weight: 600;
 }
 
-/* A phone keeps the seven days only, each a tinted cell whose detail opens on a tap. */
+/* A phone keeps the seven days only; a day's detail opens on a tap. */
 @media (width <= 640px) {
   .calendar-weekdays,
   .calendar-grid {
@@ -299,8 +297,7 @@
   }
 
   .calendar-week,
-  .calendar-weekdays .calendar-week-head,
-  .calendar-cell .cell-pnl {
+  .calendar-weekdays .calendar-week-head {
     display: none;
   }
 

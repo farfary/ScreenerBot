@@ -58,6 +58,28 @@ home-calendar-pop-gross-profit = Tổng lãi
 home-calendar-pop-gross-loss = Tổng lỗ
 home-calendar-pop-end-balance = Số dư cuối kỳ
 
+## Auto Trader and Copy Trading status
+
+home-status =
+    .aria-label = Trạng thái tự động hóa
+home-status-trader-title = Auto Trader
+home-status-copy-title = Copy trading
+home-status-running = Đang chạy
+home-status-stopped = Đã dừng
+home-status-setup-required = Cần thiết lập
+home-status-open-positions = Vị thế đang mở
+home-status-capacity = { $used } / { $limit }
+home-status-entries-today = Lệnh vào hôm nay
+home-status-exits-today = Lệnh thoát hôm nay
+home-status-followed-wallets = Ví đang theo dõi
+home-status-active-tasks = Tác vụ đang bật
+home-status-last-copy = Giao dịch sao chép gần nhất
+home-status-trader-unavailable = Hoàn tất thiết lập ví và RPC để dùng Auto Trader
+home-status-copy-unavailable = Hoàn tất thiết lập ví và RPC để dùng Copy trading
+home-status-setup = Hoàn tất thiết lập
+home-status-trader-open = Mở Auto Trader
+home-status-copy-open = Mở Copy trading
+
 home-operations =
     .aria-label = Trạng thái danh mục và thị trường
 home-exposure-title = Mức độ phơi nhiễm vị thế

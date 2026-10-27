@@ -64,6 +64,28 @@ home-calendar-pop-gross-profit = 총수익
 home-calendar-pop-gross-loss = 총손실
 home-calendar-pop-end-balance = 종료 잔액
 
+## Auto Trader and Copy Trading status
+
+home-status =
+    .aria-label = 자동화 상태
+home-status-trader-title = 자동 트레이더
+home-status-copy-title = 카피 트레이딩
+home-status-running = 실행 중
+home-status-stopped = 중지됨
+home-status-setup-required = 설정 필요
+home-status-open-positions = 보유 포지션
+home-status-capacity = { $used } / { $limit }
+home-status-entries-today = 오늘 진입
+home-status-exits-today = 오늘 청산
+home-status-followed-wallets = 팔로우 중인 지갑
+home-status-active-tasks = 활성 작업
+home-status-last-copy = 마지막 복사 거래
+home-status-trader-unavailable = 자동 트레이더를 사용하려면 지갑과 RPC 설정을 완료하세요
+home-status-copy-unavailable = 카피 트레이딩을 사용하려면 지갑과 RPC 설정을 완료하세요
+home-status-setup = 설정 완료
+home-status-trader-open = 자동 트레이더 열기
+home-status-copy-open = 카피 트레이딩 열기
+
 ## Position exposure and market pipeline
 
 home-operations =

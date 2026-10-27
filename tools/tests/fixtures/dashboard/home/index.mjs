@@ -48,6 +48,8 @@ export const views = [
       { selector: "#homeWalletIdentity:not([hidden])", min: 1 },
       { selector: "#featured-row .featured-row-card[data-mint]", min: 7 },
       { selector: "#featured-row .featured-row-card.boosted", min: 2 },
+      { selector: "#homeTraderStatus[data-state=running]", min: 1 },
+      { selector: "#homeCopyStatus[data-state=running]", min: 1 },
     ],
     empty: [
       { selector: "#featured-row .featured-row-skeleton-caption", text: "No featured tokens" },
@@ -56,6 +58,8 @@ export const views = [
       { selector: "#walletTokenCount", text: "^—$" },
       { selector: "#calendarMonthTrades", text: "^0$" },
       { selector: "#exposureEmpty", text: "^No open positions$" },
+      { selector: "#traderStatusState", text: "^Setup required$" },
+      { selector: "#copyStatusState", text: "^Setup required$" },
     ],
     dialogs: [
       {

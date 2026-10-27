@@ -25,6 +25,23 @@ pub struct CopyTradingStatus {
     pub live_tasks: usize,
 }
 
+impl CopyTradingStatus {
+    /// Whether any task is copying: Copy Trading is on, no force stop halts it, and at
+    /// least one task is enabled. A loss-limit block still copies exits, so it counts.
+    pub fn is_copying(&self) -> bool {
+        self.enabled && self.blocked_reason != Some("force_stop") && self.active_tasks > 0
+    }
+}
+
+/// The distinct wallets the task set follows, whatever each task's state.
+pub fn followed_wallets(tasks: &[CopyTask]) -> usize {
+    tasks
+        .iter()
+        .map(|task| task.target_address.as_str())
+        .collect::<std::collections::HashSet<_>>()
+        .len()
+}
+
 pub fn build_status(tasks: &[CopyTask]) -> CopyTradingStatus {
     let (enabled, default_mode, default_slippage_pct, force_stop_blocks) =
         crate::config::with_config(|config| {

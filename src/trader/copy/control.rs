@@ -23,7 +23,9 @@ pub use books::{
 /// The task state label, reached by the copy module's label tests.
 #[cfg(test)]
 pub(super) use status::effective_state;
-pub use status::{build_status, live_block_reason, status, stop_copy_trading, CopyTradingStatus};
+pub use status::{
+    build_status, followed_wallets, live_block_reason, status, stop_copy_trading, CopyTradingStatus,
+};
 pub use tasks::{
     create_task, delete_task, get_task, list_tasks, merge_task_patch, set_task_mode, update_task,
 };

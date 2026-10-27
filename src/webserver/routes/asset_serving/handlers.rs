@@ -135,6 +135,7 @@ pub async fn get_page_script(Path(file): Path<String>) -> Response {
         "home.js" => Some(embeds::HOME_PAGE_SCRIPT),
         "home/portfolio_calendar.js" => Some(embeds::HOME_CALENDAR_JS),
         "home/update_notice.js" => Some(embeds::HOME_UPDATE_NOTICE_JS),
+        "home/status_cards.js" => Some(embeds::HOME_STATUS_CARDS_JS),
         "services.js" => Some(embeds::SERVICES_PAGE_SCRIPT),
         "transactions.js" => Some(embeds::TRANSACTIONS_PAGE_SCRIPT),
         "events.js" => Some(embeds::EVENTS_PAGE_SCRIPT),

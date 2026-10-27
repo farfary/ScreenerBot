@@ -62,6 +62,28 @@ home-calendar-pop-gross-profit = कुल लाभ
 home-calendar-pop-gross-loss = कुल हानि
 home-calendar-pop-end-balance = अंतिम बैलेंस
 
+## Auto Trader and Copy Trading status
+
+home-status =
+    .aria-label = ऑटोमेशन स्थिति
+home-status-trader-title = ऑटो ट्रेडर
+home-status-copy-title = कॉपी ट्रेडिंग
+home-status-running = चालू
+home-status-stopped = रुका हुआ
+home-status-setup-required = सेटअप ज़रूरी
+home-status-open-positions = खुली पोज़िशन
+home-status-capacity = { $limit } में से { $used }
+home-status-entries-today = आज की एंट्री
+home-status-exits-today = आज के एग्ज़िट
+home-status-followed-wallets = फ़ॉलो किए गए वॉलेट
+home-status-active-tasks = सक्रिय टास्क
+home-status-last-copy = आख़िरी कॉपी किया गया ट्रेड
+home-status-trader-unavailable = ऑटो ट्रेडर इस्तेमाल करने के लिए वॉलेट और RPC सेटअप पूरा करें
+home-status-copy-unavailable = कॉपी ट्रेडिंग इस्तेमाल करने के लिए वॉलेट और RPC सेटअप पूरा करें
+home-status-setup = सेटअप पूरा करें
+home-status-trader-open = ऑटो ट्रेडर खोलें
+home-status-copy-open = कॉपी ट्रेडिंग खोलें
+
 home-operations =
     .aria-label = पोर्टफ़ोलियो और मार्केट की स्थिति
 home-exposure-title = पोज़िशन एक्सपोज़र

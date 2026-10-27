@@ -66,6 +66,28 @@ home-calendar-pop-gross-profit = Bruttogewinn
 home-calendar-pop-gross-loss = Bruttoverlust
 home-calendar-pop-end-balance = Endsaldo
 
+## Auto Trader and Copy Trading status
+
+home-status =
+    .aria-label = Automatisierungsstatus
+home-status-trader-title = Auto-Trader
+home-status-copy-title = Copy-Trading
+home-status-running = Läuft
+home-status-stopped = Gestoppt
+home-status-setup-required = Einrichtung erforderlich
+home-status-open-positions = Offene Positionen
+home-status-capacity = { $used } von { $limit }
+home-status-entries-today = Einstiege heute
+home-status-exits-today = Ausstiege heute
+home-status-followed-wallets = Gefolgte Wallets
+home-status-active-tasks = Aktive Aufgaben
+home-status-last-copy = Zuletzt kopierter Trade
+home-status-trader-unavailable = Schließen Sie die Wallet- und RPC-Einrichtung ab, um den Auto-Trader zu nutzen
+home-status-copy-unavailable = Schließen Sie die Wallet- und RPC-Einrichtung ab, um Copy-Trading zu nutzen
+home-status-setup = Einrichtung abschließen
+home-status-trader-open = Auto-Trader öffnen
+home-status-copy-open = Copy-Trading öffnen
+
 ## Position exposure and market pipeline
 
 home-operations =

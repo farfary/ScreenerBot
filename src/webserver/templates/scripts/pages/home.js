@@ -17,6 +17,8 @@ import { closeMenu, openMenu } from "../core/menu_manager.js";
 import { paintHtml, paintText } from "../core/dom.js";
 import { createCalendar } from "./home/portfolio_calendar.js";
 import { createUpdateNotice } from "./home/update_notice.js";
+import { createStatusCards } from "./home/status_cards.js";
+import { SetupDialog } from "../ui/setup_dialog.js";
 
 const ABSENT = "—";
 
@@ -34,6 +36,7 @@ function createLifecycle() {
   let isFetching = false;
   let calendar = null;
   let updateNotice = null;
+  let statusCards = null;
   let walletAddress = "";
   let walletQrOpen = false;
   let walletIdentityCleanup = null;
@@ -231,6 +234,9 @@ function createLifecycle() {
 
     // Update the market pipeline.
     updateTokenStats(data.tokens);
+
+    // Update the Auto Trader and Copy Trading cards.
+    statusCards?.update(data);
   }
 
   // Number + a muted "SOL" unit span. Suppress formatSol's built-in " SOL" suffix so
@@ -660,6 +666,7 @@ function createLifecycle() {
       calendar = createCalendar(calendarFetch);
       calendar.mount();
       updateNotice = createUpdateNotice(Utils);
+      statusCards = createStatusCards(Utils, () => SetupDialog.show());
       mountWalletIdentity();
       mountSparkRoom();
       mountExposure();
@@ -681,6 +688,9 @@ function createLifecycle() {
       }
       if (!updateNotice) {
         updateNotice = createUpdateNotice(Utils);
+      }
+      if (!statusCards) {
+        statusCards = createStatusCards(Utils, () => SetupDialog.show());
       }
       if (!walletIdentityCleanup) {
         mountWalletIdentity();
@@ -740,6 +750,8 @@ function createLifecycle() {
       calendar = null;
       updateNotice?.dispose();
       updateNotice = null;
+      statusCards?.dispose();
+      statusCards = null;
       walletIdentityCleanup?.();
       walletIdentityCleanup = null;
       sparkRoomCleanup?.();

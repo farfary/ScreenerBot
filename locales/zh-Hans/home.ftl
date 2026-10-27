@@ -64,6 +64,28 @@ home-calendar-pop-gross-profit = 总盈利
 home-calendar-pop-gross-loss = 总亏损
 home-calendar-pop-end-balance = 期末余额
 
+## Auto Trader and Copy Trading status
+
+home-status =
+    .aria-label = 自动化状态
+home-status-trader-title = 自动交易
+home-status-copy-title = 跟单交易
+home-status-running = 运行中
+home-status-stopped = 已停止
+home-status-setup-required = 需要设置
+home-status-open-positions = 持仓
+home-status-capacity = { $used } / { $limit }
+home-status-entries-today = 今日开仓
+home-status-exits-today = 今日平仓
+home-status-followed-wallets = 关注的钱包
+home-status-active-tasks = 启用的任务
+home-status-last-copy = 最近一笔跟单
+home-status-trader-unavailable = 请先完成钱包和 RPC 设置以使用自动交易
+home-status-copy-unavailable = 请先完成钱包和 RPC 设置以使用跟单交易
+home-status-setup = 完成设置
+home-status-trader-open = 打开自动交易
+home-status-copy-open = 打开跟单交易
+
 ## Position exposure and market pipeline
 
 home-operations =

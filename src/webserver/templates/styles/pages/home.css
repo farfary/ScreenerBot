@@ -544,18 +544,22 @@
   white-space: nowrap;
 }
 
-/* Fixed workspace */
+/* Fixed workspace: two rows of two halves. The calendar sits beside the Auto Trader
+   and Copy Trading cards, the position exposure beside the market pipeline. The first
+   row takes the height the second leaves, never less than its content; below that the
+   workspace scrolls. */
 .home-workspace {
   grid-row: 3;
   display: grid;
-  grid-template-columns: minmax(0, 1.85fr) minmax(19rem, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: minmax(min-content, 1fr) auto;
   min-width: 0;
   min-height: 0;
-  overflow: hidden;
+  overflow: hidden auto;
 }
 
-/* The grid grows with the room it has up to a readable cell height, and the month
-   summary follows it directly. */
+/* The grid grows with the room its row has, and the month summary follows it
+   directly. */
 .calendar-workspace {
   container: calendar / inline-size;
   display: flex;
@@ -597,13 +601,64 @@
   font-size: 0.82rem;
 }
 
-/* The cards take their content's height, the pipeline directly under the exposure. */
-.home-operations {
+/* The status cards stack at their content's height. */
+.home-status {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  min-height: 0;
-  overflow: hidden auto;
+}
+
+.status-section + .status-section {
+  border-top: 1px solid var(--border-color);
+}
+
+/* A card's state beside its title, in words, so it never rests on colour alone. */
+.status-state {
+  color: var(--text-secondary);
+  font-size: 0.7rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.status-section[data-state="running"] .status-state {
+  color: var(--semantic-success-text);
+}
+
+.status-section[data-state="unavailable"] .status-state {
+  color: var(--text-tertiary);
+}
+
+/* In place of the figures while the feature needs setup: why, and the setup action. */
+.status-setup {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.75rem 0;
+  border-top: 1px solid var(--border-color);
+}
+
+.status-setup[hidden] {
+  display: none;
+}
+
+.status-note {
+  margin: 0;
+  color: var(--text-tertiary);
+  font-size: 0.75rem;
+}
+
+/* The second row: exposure and pipeline side by side under the first row's halves. */
+.home-operations {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  min-width: 0;
+  border-top: 1px solid var(--border-color);
+}
+
+.exposure-section {
+  border-inline-end: 1px solid var(--border-color);
 }
 
 .operations-section {
@@ -676,8 +731,10 @@
   font-weight: 600;
 }
 
-/* A position's symbol opens its details: a text link, no button chrome. */
-.exposure-position {
+/* A position's symbol opens its details, and a status card links to its page: text
+   links, no button chrome. */
+.exposure-position,
+.status-link {
   padding: 0;
   border: 0;
   background: none;
@@ -692,19 +749,17 @@
     text-decoration-color var(--transition-fast);
 }
 
-.exposure-position:hover {
+.exposure-position:hover,
+.status-link:hover {
   color: var(--primary);
   text-decoration-color: currentcolor;
 }
 
-.pipeline-section {
-  border-top: 1px solid var(--border-color);
-}
-
-/* With no open position the exposure card is its title and one line of text; the
-   pipeline's rule under that text would box it in. */
-.exposure-section:has(> .exposure-empty:not([hidden])) + .pipeline-section {
-  border-top: 0;
+.status-link {
+  display: inline-block;
+  margin-top: 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
 }
 
 /* The funnel's steps narrow in order: tracked, monitored, passed. */
@@ -790,6 +845,7 @@
 .loading .hero-stat-value,
 .loading .position-value,
 .loading .pipeline-metric strong,
+.loading .status-state,
 .loading .cell-pnl {
   display: inline-block;
   min-width: 3ch;
@@ -831,14 +887,11 @@
   .portfolio-headline {
     padding-inline: 1rem;
   }
-
-  .home-workspace {
-    grid-template-columns: minmax(0, 1.55fr) minmax(18rem, 1fr);
-  }
 }
 
 /* Below a two-column workspace the page scrolls as one column: hero, figures,
-   calendar, then the right column's cards. Every block takes its natural height:
+   calendar, the status cards, exposure, then the pipeline. Every block takes its
+   natural height:
    the page is a flex item of the scrolling container, and a shrinkable item with a
    zero minimum height squeezed the workspace rows until the sections overlapped. */
 @media (width <= 900px) {
@@ -852,19 +905,34 @@
 
   .home-workspace {
     grid-template-columns: minmax(0, 1fr);
-    min-height: auto;
-    overflow: visible;
-  }
-
-  .calendar-workspace,
-  .home-operations {
+    grid-template-rows: none;
     min-height: auto;
     overflow: visible;
   }
 
   .calendar-workspace {
+    min-height: auto;
+    overflow: visible;
     border-inline-end: 0;
     border-bottom: 1px solid var(--border-color);
+  }
+
+  .home-operations {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .exposure-section {
+    border-inline-end: 0;
+  }
+
+  .pipeline-section {
+    border-top: 1px solid var(--border-color);
+  }
+
+  /* With no open position the exposure card is its title and one line of text; the
+     pipeline's rule under that text would box it in. */
+  .exposure-section:has(> .exposure-empty:not([hidden])) + .pipeline-section {
+    border-top: 0;
   }
 }
 

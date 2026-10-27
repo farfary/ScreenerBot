@@ -10,12 +10,14 @@ use crate::webserver::state::AppState;
 mod calendar;
 mod home;
 mod overview;
+mod status_cards;
 mod types;
 mod utils;
 
 pub use calendar::get_portfolio_calendar;
 pub use home::get_home_dashboard;
 pub use overview::get_dashboard_overview;
+pub use status_cards::{auto_trader_card, copy_trading_card};
 pub use types::*;
 
 /// Create dashboard routes

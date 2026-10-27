@@ -184,13 +184,44 @@ pub struct HomeDashboardResponse {
     pub positions: PositionsSnapshot,
     pub system: SystemMetrics,
     pub tokens: TokenStatistics,
-    pub trader_status: TraderStatusInfo,
+    pub auto_trader: AutoTraderCard,
+    pub copy_trading: CopyTradingCard,
     pub timestamp: String,
 }
 
+/// The state a Home status card reports for its feature.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FeatureState {
+    Running,
+    Stopped,
+    /// Explore Mode, or wallet and RPC setup not complete: the feature cannot run.
+    Unavailable,
+}
+
+/// The Home Auto Trader card. Figures are absent while the trader is unavailable, and
+/// a figure that could not be read is absent too, never zero.
 #[derive(Debug, Serialize, Deserialize)]
-pub struct TraderStatusInfo {
-    pub running: bool,
+pub struct AutoTraderCard {
+    pub state: FeatureState,
+    /// Open positions counted against the limit (wallet-derived rounds excluded).
+    pub open_positions: Option<usize>,
+    pub max_open_positions: Option<usize>,
+    /// Entries and exits since the start of the UTC day.
+    pub entries_today: Option<i64>,
+    pub exits_today: Option<i64>,
+}
+
+/// The Home Copy Trading card. `state` is absent when the copy store could not be
+/// read; figures are absent while Copy Trading is unavailable or unreadable.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CopyTradingCard {
+    pub state: Option<FeatureState>,
+    pub followed_wallets: Option<usize>,
+    pub active_tasks: Option<usize>,
+    pub total_tasks: Option<usize>,
+    /// When the newest copied fill was recorded (RFC 3339).
+    pub last_copy_at: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

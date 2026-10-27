@@ -11,7 +11,7 @@ mod risk;
 
 pub use blacklist::{check_blacklist_exit, is_blacklisted};
 pub use cooldown::is_in_reentry_cooldown;
-pub use limits::{check_position_limits, has_open_position};
+pub use limits::{check_position_limits, has_open_position, position_capacity, PositionCapacity};
 pub use loss_limit::*;
 pub use risk::check_risk_limits;
 

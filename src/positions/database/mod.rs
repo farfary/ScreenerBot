@@ -25,8 +25,8 @@ mod types;
 // Re-export types
 pub(crate) use types::PENDING_PARTIAL_EXIT_METADATA_KEY;
 pub use types::{
-    DailyTradingStats, PeriodTradingStats, PositionState, PositionStateHistory, PositionTracking,
-    PositionsDatabase, PositionsDatabaseStats, TokenSnapshot,
+    AutoTradeActivity, DailyTradingStats, PeriodTradingStats, PositionState, PositionStateHistory,
+    PositionTracking, PositionsDatabase, PositionsDatabaseStats, TokenSnapshot,
 };
 
 // Re-export global database functions
@@ -46,12 +46,13 @@ pub(crate) use convenience::{
 };
 pub use convenience::{
     delete_archived_positions, delete_position_by_id, force_database_sync,
-    get_all_positions_for_mint, get_closed_positions, get_closed_positions_count_since,
-    get_closed_positions_since, get_daily_trading_stats, get_entry_history, get_exit_history,
-    get_latest_position_by_mint, get_metadata, get_open_positions, get_period_trading_stats,
-    get_position_by_id, get_recent_closed_positions_for_mint, get_store_chain,
-    get_swap_records_by_signatures, get_token_snapshot, get_token_snapshots, get_trader_swap_legs,
-    load_all_positions, record_exit_submission, save_position, save_token_snapshot, set_metadata,
+    get_all_positions_for_mint, get_auto_trade_activity, get_closed_positions,
+    get_closed_positions_count_since, get_closed_positions_since, get_daily_trading_stats,
+    get_entry_history, get_exit_history, get_latest_position_by_mint, get_metadata,
+    get_open_positions, get_period_trading_stats, get_position_by_id,
+    get_recent_closed_positions_for_mint, get_store_chain, get_swap_records_by_signatures,
+    get_token_snapshot, get_token_snapshots, get_trader_swap_legs, load_all_positions,
+    record_exit_submission, save_position, save_token_snapshot, set_metadata,
     set_position_archived_db, set_position_management_db, update_position_price_and_pnl_fields,
     update_position_price_fields,
 };

@@ -41,6 +41,41 @@ const COUNTED_CLOSED_POSITIONS: &str = r#"
 const OPEN_POSITION_FILTER: &str =
     "archived = 0 AND exit_time IS NULL AND transaction_exit_verified = 0";
 
+/// The positions of origin `auto` of `wallet` on `chain` opened from `since` and, apart,
+/// those fully closed from `since`. A close is `exit_time`; a partial exit leaves it unset.
+/// Positions of other origins (manual, copy, external) are never counted.
+fn auto_trade_activity_in(
+    conn: &Connection,
+    wallet: &str,
+    chain: &str,
+    since: DateTime<Utc>,
+) -> std::result::Result<AutoTradeActivity, DatabaseError> {
+    conn.query_row(
+        r#"
+      SELECT
+        COALESCE(SUM(CASE WHEN datetime(entry_time) >= datetime(?3) THEN 1 ELSE 0 END), 0),
+        COALESCE(SUM(CASE
+          WHEN exit_time IS NOT NULL AND datetime(exit_time) >= datetime(?3) THEN 1
+          ELSE 0
+        END), 0)
+      FROM positions
+      WHERE wallet_address = ?1 AND chain_id = ?2
+        AND origin_kind = 'auto'
+      "#,
+        params![wallet, chain, since.to_rfc3339()],
+        |row| {
+            Ok(AutoTradeActivity {
+                opened: row.get(0)?,
+                closed: row.get(1)?,
+            })
+        },
+    )
+    .map_err(|e| DatabaseError::Query {
+        operation: "execute auto trade activity query".to_owned(),
+        message: e.to_string(),
+    })
+}
+
 /// Count the open positions of `wallet` on every chain in the positions store at `path`,
 /// opened read-only so the count never creates, migrates or pools the file. A missing file
 /// or a store without the `positions` table holds no position and counts 0.
@@ -540,6 +575,21 @@ impl PositionsDatabase {
         })
     }
 
+    /// How many positions the Auto Trader opened and fully closed from `since`.
+    pub async fn get_auto_trade_activity(&self, since: DateTime<Utc>) -> Result<AutoTradeActivity> {
+        let conn = self.get_connection()?;
+        let wallet_address =
+            crate::utils::get_wallet_address().map_err(|e| Error::WalletUnavailable {
+                detail: e.to_string(),
+            })?;
+        Ok(auto_trade_activity_in(
+            &conn,
+            &wallet_address,
+            self.chain.as_str(),
+            since,
+        )?)
+    }
+
     /// Get realized trading statistics grouped by calendar day (UTC) for a period.
     /// Used by the home portfolio calendar. Only exit-verified, closed positions count,
     /// keyed by the day their exit was recorded (`exit_time`), with P&L counted as
@@ -972,7 +1022,12 @@ pub(super) fn query_records_by_signatures(
 mod tests {
     use rusqlite::Connection;
 
-    use super::{count_open_positions_in_file, open_positions_by_wallet_in_file};
+    use chrono::{DateTime, Utc};
+
+    use super::{
+        auto_trade_activity_in, count_open_positions_in_file, open_positions_by_wallet_in_file,
+        AutoTradeActivity,
+    };
 
     #[test]
     fn a_missing_store_or_table_counts_no_open_position() {
@@ -1019,6 +1074,58 @@ mod tests {
             [("wallet-a".to_owned(), 2), ("wallet-b".to_owned(), 1)]
                 .into_iter()
                 .collect()
+        );
+    }
+
+    #[test]
+    fn auto_activity_counts_only_auto_positions_opened_and_fully_closed_in_the_period() {
+        let connection = Connection::open_in_memory().unwrap();
+        connection
+            .execute_batch(
+                "CREATE TABLE positions (
+                    wallet_address TEXT NOT NULL,
+                    chain_id TEXT NOT NULL,
+                    origin_kind TEXT NOT NULL,
+                    entry_time TEXT NOT NULL,
+                    exit_time TEXT
+                 );
+                 -- auto, opened today and still held
+                 INSERT INTO positions VALUES ('w', 'solana', 'auto', '2026-10-27T08:00:00+00:00', NULL);
+                 -- auto, opened and closed today
+                 INSERT INTO positions VALUES ('w', 'solana', 'auto', '2026-10-27T09:00:00+00:00', '2026-10-27T10:00:00+00:00');
+                 -- auto, opened yesterday and closed today
+                 INSERT INTO positions VALUES ('w', 'solana', 'auto', '2026-10-26T09:00:00+00:00', '2026-10-27T11:00:00+00:00');
+                 -- auto, opened and closed before today
+                 INSERT INTO positions VALUES ('w', 'solana', 'auto', '2026-10-25T09:00:00+00:00', '2026-10-25T10:00:00+00:00');
+                 -- manual, copy and external positions opened and closed today
+                 INSERT INTO positions VALUES ('w', 'solana', 'manual', '2026-10-27T09:00:00+00:00', '2026-10-27T10:00:00+00:00');
+                 INSERT INTO positions VALUES ('w', 'solana', 'copy', '2026-10-27T09:00:00+00:00', '2026-10-27T10:00:00+00:00');
+                 INSERT INTO positions VALUES ('w', 'solana', 'external', '2026-10-27T09:00:00+00:00', '2026-10-27T10:00:00+00:00');
+                 -- auto, another wallet and another chain
+                 INSERT INTO positions VALUES ('other', 'solana', 'auto', '2026-10-27T09:00:00+00:00', '2026-10-27T10:00:00+00:00');
+                 INSERT INTO positions VALUES ('w', 'base', 'auto', '2026-10-27T09:00:00+00:00', '2026-10-27T10:00:00+00:00');",
+            )
+            .unwrap();
+        let today_start = "2026-10-27T00:00:00+00:00"
+            .parse::<DateTime<Utc>>()
+            .unwrap();
+
+        assert_eq!(
+            auto_trade_activity_in(&connection, "w", "solana", today_start).unwrap(),
+            AutoTradeActivity {
+                opened: 2,
+                closed: 2
+            }
+        );
+        let none = "2026-10-28T00:00:00+00:00"
+            .parse::<DateTime<Utc>>()
+            .unwrap();
+        assert_eq!(
+            auto_trade_activity_in(&connection, "w", "solana", none).unwrap(),
+            AutoTradeActivity {
+                opened: 0,
+                closed: 0
+            }
         );
     }
 }

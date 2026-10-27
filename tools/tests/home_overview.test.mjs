@@ -7,10 +7,10 @@
  *
  * - The balance trend is drawn at least at its CSS minimum width, or not at all; it is
  *   never squeezed into a sliver beside a wide balance.
- * - A calendar day cell shows its P&L only; every day with a detail opens it on hover
- *   and on keyboard focus, the popover names the end balance and never covers the
+ * - A calendar day cell shows its number only, its P&L as a tint; every traded day opens
+ *   its detail on hover and on keyboard focus, the popover names the end balance and never covers the
  *   month navigation, and a past day without trades is classed as such, never empty.
- * - Every week row holds seven day cells and a week total that sums its days.
+ * - Every week row holds seven day cells and a week total that sums its traded days.
  * - A day change between samples that priced different holdings is a dash that explains
  *   itself on hover and keyboard focus, with no trend line beside it.
  * - The exposure ledger names a single position instead of averaging it, and its
@@ -19,7 +19,9 @@
  *   0 or a value counted up from one while a position is listed.
  * - No width scrolls the page sideways, and the hero's figure labels stay in their cells.
  * - A phone stacks every section at its natural height, nothing overlapping or clipped.
- * - The calendar fills the workspace height, and its summary wraps into full rows.
+ * - The calendar fills its row, and its summary wraps into full rows.
+ * - On a desktop the calendar shares its row with the status cards and the exposure its
+ *   row with the pipeline, mirrored in a right-to-left locale.
  * - A poll that changed nothing replaces no exposure control and closes no day detail.
  * - The day-change percent has one precision in the header Worth card and the hero.
  * - Every pipeline label fits inside its own cell at every desktop width and locale.
@@ -98,23 +100,27 @@ test("the balance trend is drawn at its minimum width or not at all", async (t) 
   }
 });
 
-test("calendar days show P&L only and open their detail on hover and focus", async (t) => {
+test("calendar days show their number and tint and open their detail on hover and focus", async (t) => {
   const page = await openHome(t, 1440);
   await page.waitForSelector(".calendar-cell.no-trades[data-date]");
   const cells = await page.$$eval(".calendar-grid > .calendar-cell", (all) =>
     all.map((cell) => ({
       cls: cell.className,
-      pnl: !!cell.querySelector(".cell-pnl"),
-      other: cell.querySelectorAll(":scope > span:not(.cell-day, .cell-pnl)").length,
+      traded: cell.matches(".profit, .loss"),
+      other: cell.querySelectorAll(":scope > :not(.cell-day)").length,
       date: cell.dataset.date ?? null,
       focusable: cell.tabIndex === 0,
     }))
   );
   assert.ok(cells.length > 0, "calendar cells render");
+  assert.ok(
+    cells.some((cell) => cell.traded),
+    "the fixture month has traded days"
+  );
   for (const cell of cells) {
     assert.doesNotMatch(cell.cls, /\bempty\b/, "no day is classed empty");
-    assert.equal(cell.other, 0, `a ${cell.cls} cell shows an unlabelled figure`);
-    if (cell.pnl) assert.ok(cell.date && cell.focusable, `a ${cell.cls} cell has no detail`);
+    assert.equal(cell.other, 0, `a ${cell.cls} cell shows more than its day number`);
+    if (cell.traded) assert.ok(cell.date && cell.focusable, `a ${cell.cls} cell has no detail`);
   }
 
   await page.hover(".calendar-cell.no-trades[data-date]");
@@ -144,28 +150,41 @@ test("calendar days show P&L only and open their detail on hover and focus", asy
 });
 
 test("every week row holds seven days and a week total that sums them", async (t) => {
+  const calendar = JSON.parse(
+    readFileSync(`${FIXTURES_ROOT}/home/portfolio_calendar.json`, "utf8")
+  );
+  // The day cells carry no figure; each traded day's P&L is the recorded one.
+  const traded = Object.fromEntries(
+    calendar.days.filter((day) => day.has_data).map((day) => [day.date, day.net_pnl_native])
+  );
   const page = await openHome(t, 1440);
   await page.waitForSelector(".calendar-week .cell-pnl");
-  const rows = await page.$$eval(".calendar-grid > *", (all) => {
-    const number = (text) => Number(text.replace(/[\u2066-\u2069]/g, "").replace(/[^0-9.-]/g, ""));
-    const weeks = [];
-    let days = [];
-    for (const el of all) {
-      if (el.classList.contains("calendar-week")) {
-        const total = el.querySelector(".cell-pnl")?.textContent ?? null;
-        weeks.push({
-          days: days.length,
-          total: total === null ? null : number(total),
-          sum: days.reduce((sum, day) => sum + (day ? number(day) : 0), 0),
-          traded: days.some(Boolean),
-        });
-        days = [];
-      } else {
-        days.push(el.querySelector(".cell-pnl")?.textContent ?? null);
+  const rows = await page.$$eval(
+    ".calendar-grid > *",
+    (all, pnl) => {
+      const number = (text) =>
+        Number(text.replace(/[\u2066-\u2069]/g, "").replace(/[^0-9.-]/g, ""));
+      const weeks = [];
+      let days = [];
+      for (const el of all) {
+        if (el.classList.contains("calendar-week")) {
+          const total = el.querySelector(".cell-pnl")?.textContent ?? null;
+          const amounts = days.filter((date) => date in pnl).map((date) => pnl[date]);
+          weeks.push({
+            days: days.length,
+            total: total === null ? null : number(total),
+            sum: amounts.reduce((sum, value) => sum + value, 0),
+            traded: amounts.length > 0,
+          });
+          days = [];
+        } else {
+          days.push(el.dataset.date ?? null);
+        }
       }
-    }
-    return { weeks, trailing: days.length };
-  });
+      return { weeks, trailing: days.length };
+    },
+    traded
+  );
   assert.equal(rows.trailing, 0, "the grid ends on a week cell");
   for (const week of rows.weeks) {
     assert.equal(week.days, 7, "a week row holds seven day cells");
@@ -294,6 +313,8 @@ test("a phone stacks every section at its natural height", async (t) => {
       ".portfolio-stats",
       ".calendar-grid",
       ".calendar-summary",
+      "#homeTraderStatus",
+      "#homeCopyStatus",
       ".exposure-section",
       ".pipeline-section",
     ];
@@ -330,7 +351,7 @@ test("a phone stacks every section at its natural height", async (t) => {
   );
 });
 
-test("the calendar fills the workspace height with no band under it", async (t) => {
+test("the calendar fills its row with no band under it", async (t) => {
   const page = await openHome(t, 1440);
   const gap = await page.evaluate(() => {
     const section = document.querySelector(".calendar-workspace").getBoundingClientRect();
@@ -423,4 +444,114 @@ test("today's P&L in the header takes the shared SOL precision", async (t) => {
       .then((handle) => handle.jsonValue());
   assert.equal(await text("#botPnL .pnl-num"), "+0.0123");
   assert.match(await text("#tickerTodayPnL"), /^\+0\.0123 SOL /);
+});
+
+for (const locale of ["en", "fa"]) {
+  test(`the workspace pairs calendar with status and exposure with pipeline (${locale})`, async (t) => {
+    const page = await openHome(t, 1440, locale);
+    const boxes = await page.evaluate(() => {
+      const box = (css) => {
+        const rect = document.querySelector(css).getBoundingClientRect();
+        return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom };
+      };
+      return {
+        rtl: document.documentElement.dir === "rtl",
+        calendar: box(".calendar-workspace"),
+        status: box(".home-status"),
+        exposure: box(".exposure-section"),
+        pipeline: box(".pipeline-section"),
+      };
+    });
+    const { calendar, status, exposure, pipeline } = boxes;
+    assert.equal(boxes.rtl, locale === "fa", "the document direction follows the locale");
+    // Each row holds two halves side by side, the second row under the first.
+    assert.ok(Math.abs(calendar.top - status.top) < 1, "calendar and status share a row");
+    assert.ok(Math.abs(exposure.top - pipeline.top) < 1, "exposure and pipeline share a row");
+    assert.ok(exposure.top >= calendar.bottom - 1, "the panels sit under the calendar row");
+    assert.ok(
+      Math.abs(calendar.right - calendar.left - (status.right - status.left)) < 2,
+      "the calendar takes half the width"
+    );
+    // The calendar and the exposure open the inline start: left in LTR, right in RTL.
+    const first = (a, b) => (boxes.rtl ? a.left >= b.right - 1 : a.right <= b.left + 1);
+    assert.ok(first(calendar, status), "the calendar is not at the inline start");
+    assert.ok(first(exposure, pipeline), "the exposure is not at the inline start");
+  });
+}
+
+test("the status cards render running, stopped with absent figures, and setup required", async (t) => {
+  const body = JSON.parse(readFileSync(`${FIXTURES_ROOT}/home/dashboard_home.json`, "utf8"));
+  const running = await openHome(t, 1440);
+  await running.waitForSelector("#homeTraderStatus[data-state=running]");
+  const shown = (page) =>
+    page.evaluate(() => {
+      const text = (id) => document.getElementById(id).textContent.replace(/[\u2066-\u2069]/g, "");
+      return {
+        trader: text("traderStatusState"),
+        copy: text("copyStatusState"),
+        open: text("traderOpenPositions"),
+        entries: text("traderEntriesToday"),
+        exits: text("traderExitsToday"),
+        followed: text("copyFollowedWallets"),
+        tasks: text("copyActiveTasks"),
+        last: text("copyLastCopy"),
+        ledgers: [...document.querySelectorAll("#traderStatusLedger, #copyStatusLedger")].map(
+          (el) => el.hidden
+        ),
+        setups: [...document.querySelectorAll("#traderStatusSetup, #copyStatusSetup")].map(
+          (el) => el.hidden
+        ),
+        links: [...document.querySelectorAll(".status-link")].map((el) => el.dataset.page),
+      };
+    });
+  const live = await shown(running);
+  assert.deepEqual(
+    { ...live, last: undefined },
+    {
+      trader: "Running",
+      copy: "Running",
+      open: "5 of 8",
+      entries: "4",
+      exits: "3",
+      followed: "2",
+      tasks: "2 of 3",
+      last: undefined,
+      ledgers: [false, false],
+      setups: [true, true],
+      links: ["trader", "copy"],
+    }
+  );
+  assert.match(live.last, /ago/, `the last copied trade reads "${live.last}"`);
+
+  body.auto_trader = { ...body.auto_trader, state: "stopped", entries_today: null, exits_today: null };
+  body.copy_trading = {
+    state: null,
+    followed_wallets: null,
+    active_tasks: null,
+    total_tasks: null,
+    last_copy_at: null,
+  };
+  const stopped = await openHome(t, 1440, "en", { "/api/dashboard/home": JSON.stringify(body) });
+  await stopped.waitForSelector("#homeTraderStatus[data-state=stopped]");
+  const absent = await shown(stopped);
+  assert.equal(absent.trader, "Stopped");
+  assert.equal(absent.open, "5 of 8");
+  for (const key of ["copy", "entries", "exits", "followed", "tasks", "last"]) {
+    assert.equal(absent[key], "—", `${key} is not a dash when absent`);
+  }
+
+  const empty = JSON.parse(
+    readFileSync(`${FIXTURES_ROOT}/home/dashboard_home.empty.json`, "utf8")
+  );
+  const unavailable = await openHome(t, 1440, "en", {
+    "/api/dashboard/home": JSON.stringify(empty),
+  });
+  await unavailable.waitForSelector("#homeTraderStatus[data-state=unavailable]");
+  const gated = await shown(unavailable);
+  assert.equal(gated.trader, "Setup required");
+  assert.equal(gated.copy, "Setup required");
+  assert.deepEqual(gated.ledgers, [true, true], "an unavailable card shows no figures");
+  assert.deepEqual(gated.setups, [false, false], "an unavailable card offers setup");
+  await unavailable.click("#homeTraderStatus [data-status-setup]");
+  await unavailable.waitForSelector(".setup-dialog, [data-dialog=setup], .dialog-overlay");
 });

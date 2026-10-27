@@ -1,6 +1,6 @@
 # Home page.
 
-# Source: templates/pages/home.html, scripts/pages/home.js, scripts/pages/home/portfolio_calendar.js
+# Source: templates/pages/home.html, scripts/pages/home.js, scripts/pages/home/portfolio_calendar.js, scripts/pages/home/status_cards.js
 
 ## Portfolio overview
 
@@ -77,6 +77,31 @@ home-calendar-pop-win-rate-value = { $rate } · { $wins }W / { $losses }L
 home-calendar-pop-gross-profit = Gross profit
 home-calendar-pop-gross-loss = Gross loss
 home-calendar-pop-end-balance = End balance
+
+## Auto Trader and Copy Trading status
+
+home-status =
+    .aria-label = Automation status
+home-status-trader-title = Auto Trader
+home-status-copy-title = Copy Trading
+home-status-running = Running
+home-status-stopped = Stopped
+# State of a feature that needs wallet and RPC setup (Explore Mode).
+home-status-setup-required = Setup required
+home-status-open-positions = Open positions
+# Used against available: open positions against the limit, or enabled copy tasks against all tasks. $used and $limit are formatted counts.
+home-status-capacity = { $used } of { $limit }
+home-status-entries-today = Entries today
+home-status-exits-today = Exits today
+home-status-followed-wallets = Followed wallets
+home-status-active-tasks = Active tasks
+# Time since the newest copied fill.
+home-status-last-copy = Last copied trade
+home-status-trader-unavailable = Complete wallet and RPC setup to use Auto Trader
+home-status-copy-unavailable = Complete wallet and RPC setup to use Copy Trading
+home-status-setup = Complete setup
+home-status-trader-open = Open Auto Trader
+home-status-copy-open = Open Copy Trading
 
 ## Position exposure and market pipeline
 

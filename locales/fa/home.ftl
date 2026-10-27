@@ -66,6 +66,28 @@ home-calendar-pop-gross-profit = سود ناخالص
 home-calendar-pop-gross-loss = زیان ناخالص
 home-calendar-pop-end-balance = موجودی پایانی
 
+## Auto Trader and Copy Trading status
+
+home-status =
+    .aria-label = وضعیت خودکارسازی
+home-status-trader-title = ترید خودکار
+home-status-copy-title = کپی‌تریدینگ
+home-status-running = در حال اجرا
+home-status-stopped = متوقف
+home-status-setup-required = نیازمند راه‌اندازی
+home-status-open-positions = پوزیشن‌های باز
+home-status-capacity = { $used } از { $limit }
+home-status-entries-today = ورودهای امروز
+home-status-exits-today = خروج‌های امروز
+home-status-followed-wallets = کیف پول‌های دنبال‌شده
+home-status-active-tasks = وظایف فعال
+home-status-last-copy = آخرین معامله کپی‌شده
+home-status-trader-unavailable = برای استفاده از ترید خودکار، راه‌اندازی کیف پول و RPC را کامل کنید
+home-status-copy-unavailable = برای استفاده از کپی‌تریدینگ، راه‌اندازی کیف پول و RPC را کامل کنید
+home-status-setup = تکمیل راه‌اندازی
+home-status-trader-open = باز کردن ترید خودکار
+home-status-copy-open = باز کردن کپی‌تریدینگ
+
 ## Position exposure and market pipeline
 
 home-operations =

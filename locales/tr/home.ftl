@@ -66,6 +66,28 @@ home-calendar-pop-gross-profit = Brüt kâr
 home-calendar-pop-gross-loss = Brüt zarar
 home-calendar-pop-end-balance = Dönem sonu bakiyesi
 
+## Auto Trader and Copy Trading status
+
+home-status =
+    .aria-label = Otomasyon durumu
+home-status-trader-title = Otomatik Trader
+home-status-copy-title = Kopya İşlem
+home-status-running = Çalışıyor
+home-status-stopped = Durduruldu
+home-status-setup-required = Kurulum gerekli
+home-status-open-positions = Açık pozisyonlar
+home-status-capacity = { $used } / { $limit }
+home-status-entries-today = Bugünkü girişler
+home-status-exits-today = Bugünkü çıkışlar
+home-status-followed-wallets = Takip edilen cüzdanlar
+home-status-active-tasks = Etkin görevler
+home-status-last-copy = Son kopyalanan işlem
+home-status-trader-unavailable = Otomatik Trader'ı kullanmak için cüzdan ve RPC kurulumunu tamamlayın
+home-status-copy-unavailable = Kopya İşlem'i kullanmak için cüzdan ve RPC kurulumunu tamamlayın
+home-status-setup = Kurulumu tamamla
+home-status-trader-open = Otomatik Trader'ı aç
+home-status-copy-open = Kopya İşlem'i aç
+
 ## Position exposure and market pipeline
 
 home-operations =

@@ -6,15 +6,37 @@
 use crate::positions;
 use crate::trader::config;
 
-/// Check if we can open a new position based on limits
-pub async fn check_position_limits() -> crate::trader::Result<bool> {
-    let max_positions = config::get_max_open_positions();
+/// The trader's position capacity: the open positions that consume it and the configured
+/// maximum.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PositionCapacity {
+    pub used: usize,
+    pub limit: usize,
+}
+
+impl PositionCapacity {
+    /// Whether another position may open.
+    pub const fn has_room(self) -> bool {
+        self.used < self.limit
+    }
+}
+
+/// The open positions counted against the limit, and the limit.
+pub async fn position_capacity() -> PositionCapacity {
     // Wallet-derived rounds are the user's pre-existing holdings, not trades we placed,
     // so they must not eat the trader's capacity.
-    let open_positions = positions::state::get_capacity_consuming_positions().await;
+    let used = positions::state::get_capacity_consuming_positions()
+        .await
+        .len();
+    PositionCapacity {
+        used,
+        limit: config::get_max_open_positions(),
+    }
+}
 
-    // Check if we're under the limit
-    Ok(open_positions.len() < max_positions)
+/// Check if we can open a new position based on limits
+pub async fn check_position_limits() -> crate::trader::Result<bool> {
+    Ok(position_capacity().await.has_room())
 }
 
 /// Whether a token is held: it has an open position, archived ones included, or an open

@@ -470,6 +470,15 @@ pub struct PeriodTradingStats {
     pub wins: i64,
 }
 
+/// How many positions the Auto Trader opened and fully closed in a period.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AutoTradeActivity {
+    /// Positions of origin `auto` whose entry is in the period.
+    pub opened: i64,
+    /// Positions of origin `auto` whose full exit is in the period.
+    pub closed: i64,
+}
+
 /// Realized trading statistics for a single calendar day (UTC), grouped by exit_time.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DailyTradingStats {

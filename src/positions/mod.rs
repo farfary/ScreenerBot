@@ -71,7 +71,8 @@ pub use loss_detection::{
 // Database and library exports
 pub use db::{
     delete_archived_positions, delete_position_by_id, force_database_sync,
-    get_all_positions_for_mint, get_closed_positions as get_db_closed_positions,
+    get_all_positions_for_mint, get_auto_trade_activity,
+    get_closed_positions as get_db_closed_positions,
     get_closed_positions_count_since as get_db_closed_positions_count_since,
     get_closed_positions_since as get_db_closed_positions_since, get_daily_trading_stats,
     get_entry_history, get_exit_history,
@@ -82,8 +83,8 @@ pub use db::{
     get_token_snapshots, initialize_positions_database, load_all_positions, save_position,
     save_token_snapshot, set_position_archived_db, set_position_management_db,
     update_position_price_fields, with_positions_database, with_positions_database_async,
-    DailyTradingStats, PeriodTradingStats, PositionState, PositionStateHistory, PositionTracking,
-    PositionsDatabase, PositionsDatabaseStats, TokenSnapshot,
+    AutoTradeActivity, DailyTradingStats, PeriodTradingStats, PositionState, PositionStateHistory,
+    PositionTracking, PositionsDatabase, PositionsDatabaseStats, TokenSnapshot,
 };
 
 pub use helpers::{

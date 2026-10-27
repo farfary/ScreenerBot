@@ -228,6 +228,92 @@
       </div>
     </section>
 
+    <aside class="home-status" data-l10n-id="home-status">
+      <section
+        class="operations-section status-section"
+        id="homeTraderStatus"
+        aria-labelledby="traderStatusHeading"
+      >
+        <div class="workspace-header">
+          <h2 id="traderStatusHeading">
+            <i class="icon-bot"></i> <span data-l10n-id="home-status-trader-title"></span>
+          </h2>
+          <span class="status-state" id="traderStatusState">—</span>
+        </div>
+        <div class="metric-ledger" id="traderStatusLedger">
+          <div class="metric-row">
+            <span class="position-label" data-l10n-id="home-status-open-positions"></span>
+            <span class="position-value" id="traderOpenPositions">—</span>
+          </div>
+          <div class="metric-row">
+            <span class="position-label" data-l10n-id="home-status-entries-today"></span>
+            <span class="position-value" id="traderEntriesToday">—</span>
+          </div>
+          <div class="metric-row">
+            <span class="position-label" data-l10n-id="home-status-exits-today"></span>
+            <span class="position-value" id="traderExitsToday">—</span>
+          </div>
+        </div>
+        <div class="status-setup" id="traderStatusSetup" hidden>
+          <p class="status-note" data-l10n-id="home-status-trader-unavailable"></p>
+          <button
+            type="button"
+            class="btn btn-sm btn-primary"
+            data-status-setup
+            data-l10n-id="home-status-setup"
+          ></button>
+        </div>
+        <a
+          class="status-link"
+          href="/trader"
+          data-page="trader"
+          data-l10n-id="home-status-trader-open"
+        ></a>
+      </section>
+
+      <section
+        class="operations-section status-section"
+        id="homeCopyStatus"
+        aria-labelledby="copyStatusHeading"
+      >
+        <div class="workspace-header">
+          <h2 id="copyStatusHeading">
+            <i class="icon-copy"></i> <span data-l10n-id="home-status-copy-title"></span>
+          </h2>
+          <span class="status-state" id="copyStatusState">—</span>
+        </div>
+        <div class="metric-ledger" id="copyStatusLedger">
+          <div class="metric-row">
+            <span class="position-label" data-l10n-id="home-status-followed-wallets"></span>
+            <span class="position-value" id="copyFollowedWallets">—</span>
+          </div>
+          <div class="metric-row">
+            <span class="position-label" data-l10n-id="home-status-active-tasks"></span>
+            <span class="position-value" id="copyActiveTasks">—</span>
+          </div>
+          <div class="metric-row">
+            <span class="position-label" data-l10n-id="home-status-last-copy"></span>
+            <span class="position-value" id="copyLastCopy">—</span>
+          </div>
+        </div>
+        <div class="status-setup" id="copyStatusSetup" hidden>
+          <p class="status-note" data-l10n-id="home-status-copy-unavailable"></p>
+          <button
+            type="button"
+            class="btn btn-sm btn-primary"
+            data-status-setup
+            data-l10n-id="home-status-setup"
+          ></button>
+        </div>
+        <a
+          class="status-link"
+          href="/copy"
+          data-page="copy"
+          data-l10n-id="home-status-copy-open"
+        ></a>
+      </section>
+    </aside>
+
     <aside class="home-operations" data-l10n-id="home-operations">
       <section class="operations-section exposure-section" aria-labelledby="exposureHeading">
         <div class="workspace-header">

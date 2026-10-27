@@ -108,6 +108,19 @@
     "found_this_month": 0,
     "found_all_time": 18452
   },
-  "trader_status": { "running": true },
+  "auto_trader": {
+    "state": "running",
+    "open_positions": 5,
+    "max_open_positions": 8,
+    "entries_today": 4,
+    "exits_today": 3
+  },
+  "copy_trading": {
+    "state": "running",
+    "followed_wallets": 2,
+    "active_tasks": 2,
+    "total_tasks": 3,
+    "last_copy_at": "2026-10-07T09:12:00+00:00"
+  },
   "timestamp": "2026-10-07T09:30:00+00:00"
 }

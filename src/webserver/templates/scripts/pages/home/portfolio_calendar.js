@@ -1,7 +1,7 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 //
-// Portfolio calendar — month grid of daily realized P&L and weekly totals, with a per-day detail popover.
+// Portfolio calendar — month grid of days tinted by their realized P&L and weekly totals, with a per-day detail popover.
 import { firstDayOfWeek, formatMonthYear, formatWeekday } from "../../core/format.js";
 import * as Utils from "../../core/utils.js";
 
@@ -17,6 +17,21 @@ const DAYS_PER_WEEK = 7;
 // the faintest day starts at the floor, the month's largest reaches floor + span.
 const TINT_FLOOR = 8;
 const TINT_SPAN = 18;
+
+/**
+ * A day cell's tint: its tone class (`profit` or `loss`) and the share of that colour
+ * mixed into the cell, scaled by the day's P&L against the month's largest absolute
+ * daily P&L on a square-root curve so a small day still reads as a gain or a loss.
+ * A day without trades, or one that nets to zero at the shown precision, is neutral
+ * (`null`).
+ */
+export function dayTint(day, maxAbs) {
+  const pnl = day?.net_pnl_native || 0;
+  const tone = day?.has_data ? Utils.signedTone(pnl) : "neutral";
+  if (tone === "neutral") return null;
+  const share = maxAbs > 0 ? Math.sqrt(Math.abs(pnl) / maxAbs) : 0;
+  return { tone: PNL_CLASSES[tone], percent: (TINT_FLOOR + share * TINT_SPAN).toFixed(1) };
+}
 
 /**
  * Create a portfolio calendar controller bound to the home page DOM.
@@ -159,22 +174,16 @@ export function createCalendar(fetcher) {
     dayMap.clear();
 
     const days = data.days.map((d) => {
-      const pnl = d.net_pnl_native || 0;
       const isFuture = d.date > todayIso;
       let cls = "calendar-cell";
       if (isFuture) cls += " future";
       if (d.date === todayIso) cls += " today";
       // A past day without trades is a quiet day, not an empty one.
       if (!d.has_data && !isFuture) cls += " no-trades";
-      const tone = d.has_data ? Utils.signedTone(pnl) : "neutral";
-      if (tone !== "neutral") cls += ` ${PNL_CLASSES[tone]}`;
-
-      // Tint intensity relative to the month's largest absolute P&L, on a sqrt curve
-      // so a small day still reads as green or red.
-      const style =
-        tone !== "neutral" && maxAbs > 0
-          ? ` style="--cell-tint: ${(TINT_FLOOR + Math.sqrt(Math.abs(pnl) / maxAbs) * TINT_SPAN).toFixed(1)}%"`
-          : "";
+      // The day is its tint; its figures are in the day detail.
+      const tint = dayTint(d, maxAbs);
+      if (tint) cls += ` ${tint.tone}`;
+      const style = tint ? ` style="--cell-tint: ${tint.percent}%"` : "";
 
       // Every day with a detail (trades, or an end-of-day worth) opens it on hover,
       // keyboard focus or a tap.
@@ -183,14 +192,11 @@ export function createCalendar(fetcher) {
       const detailAttr = hasDetail
         ? ` data-date="${d.date}" tabindex="0" aria-label="${Utils.escapeHtml(dayLabel(d))}"`
         : "";
-      const pnlText = d.has_data ? Utils.formatSignedSol(pnl, { unit: false }) : "";
-
       return {
         day: d,
         html:
           `<div class="${cls}"${style}${detailAttr}>` +
           `<span class="cell-day">${d.day}</span>` +
-          (pnlText ? `<span class="cell-pnl">${pnlText}</span>` : "") +
           "</div>",
       };
     });

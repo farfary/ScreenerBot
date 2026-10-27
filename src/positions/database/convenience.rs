@@ -18,7 +18,7 @@ use super::queries::{
     entry_record_from_row, exit_record_from_row, query_records_by_signatures,
     query_trader_swap_legs, SwapLegScope, TraderSwapLeg, ENTRY_RECORD_COLUMNS, EXIT_RECORD_COLUMNS,
 };
-use super::types::{DailyTradingStats, PeriodTradingStats, TokenSnapshot};
+use super::types::{AutoTradeActivity, DailyTradingStats, PeriodTradingStats, TokenSnapshot};
 
 // =============================================================================
 // HELPER FUNCTIONS FOR POSITIONS MANAGEMENT
@@ -308,6 +308,15 @@ pub async fn get_period_trading_stats(
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;
     match db_guard.as_ref() {
         Some(db) => db.get_period_trading_stats(period_start, period_end).await,
+        None => Err(Error::NotInitialised),
+    }
+}
+
+/// How many positions the Auto Trader opened and fully closed from `since`
+pub async fn get_auto_trade_activity(since: DateTime<Utc>) -> Result<AutoTradeActivity> {
+    let db_guard = GLOBAL_POSITIONS_DB.lock().await;
+    match db_guard.as_ref() {
+        Some(db) => db.get_auto_trade_activity(since).await,
         None => Err(Error::NotInitialised),
     }
 }

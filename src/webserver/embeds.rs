@@ -562,6 +562,7 @@ pub const HOME_CALENDAR_JS: &str =
     include_str!("templates/scripts/pages/home/portfolio_calendar.js");
 pub const HOME_UPDATE_NOTICE_JS: &str =
     include_str!("templates/scripts/pages/home/update_notice.js");
+pub const HOME_STATUS_CARDS_JS: &str = include_str!("templates/scripts/pages/home/status_cards.js");
 pub const LOGIN_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/login.js");
 
 // HTML Page Templates

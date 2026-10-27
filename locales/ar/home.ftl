@@ -74,6 +74,28 @@ home-calendar-pop-gross-profit = إجمالي الربح
 home-calendar-pop-gross-loss = إجمالي الخسارة
 home-calendar-pop-end-balance = الرصيد النهائي
 
+## Auto Trader and Copy Trading status
+
+home-status =
+    .aria-label = حالة الأتمتة
+home-status-trader-title = المتداول الآلي
+home-status-copy-title = نسخ التداول
+home-status-running = قيد التشغيل
+home-status-stopped = متوقف
+home-status-setup-required = الإعداد مطلوب
+home-status-open-positions = المراكز المفتوحة
+home-status-capacity = { $used } من { $limit }
+home-status-entries-today = عمليات الدخول اليوم
+home-status-exits-today = عمليات الخروج اليوم
+home-status-followed-wallets = المحافظ المتابَعة
+home-status-active-tasks = المهام النشطة
+home-status-last-copy = آخر صفقة منسوخة
+home-status-trader-unavailable = أكمل إعداد المحفظة وRPC لاستخدام المتداول الآلي
+home-status-copy-unavailable = أكمل إعداد المحفظة وRPC لاستخدام نسخ التداول
+home-status-setup = إكمال الإعداد
+home-status-trader-open = فتح المتداول الآلي
+home-status-copy-open = فتح نسخ التداول
+
 ## Position exposure and market pipeline
 
 home-operations =

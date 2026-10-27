@@ -70,6 +70,28 @@ home-calendar-pop-gross-profit = Валовая прибыль
 home-calendar-pop-gross-loss = Валовой убыток
 home-calendar-pop-end-balance = Конечный баланс
 
+## Auto Trader and Copy Trading status
+
+home-status =
+    .aria-label = Статус автоматизации
+home-status-trader-title = Автотрейдер
+home-status-copy-title = Копитрейдинг
+home-status-running = Работает
+home-status-stopped = Остановлен
+home-status-setup-required = Требуется настройка
+home-status-open-positions = Открытые позиции
+home-status-capacity = { $used } из { $limit }
+home-status-entries-today = Входы сегодня
+home-status-exits-today = Выходы сегодня
+home-status-followed-wallets = Отслеживаемые кошельки
+home-status-active-tasks = Активные задачи
+home-status-last-copy = Последняя скопированная сделка
+home-status-trader-unavailable = Завершите настройку кошелька и RPC, чтобы использовать автотрейдер
+home-status-copy-unavailable = Завершите настройку кошелька и RPC, чтобы использовать копитрейдинг
+home-status-setup = Завершить настройку
+home-status-trader-open = Открыть автотрейдер
+home-status-copy-open = Открыть копитрейдинг
+
 ## Position exposure and market pipeline
 
 home-operations =
