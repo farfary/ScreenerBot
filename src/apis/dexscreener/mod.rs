@@ -47,6 +47,10 @@ pub(crate) fn default_chain_id() -> &'static str {
 /// Maximum tokens per batch request
 pub(crate) const MAX_TOKENS_PER_REQUEST: usize = 30;
 
+/// Most pairs `token-pairs/v1` returns for one mint. A list this long was cut and can omit
+/// the mint's deepest pools against the chain's native coin.
+pub(crate) const TOKEN_PAIRS_CAP: usize = 30;
+
 /// Request timeout in seconds - DexScreener is fast, 10s is sufficient
 pub const TIMEOUT_SECS: u64 = 10;
 

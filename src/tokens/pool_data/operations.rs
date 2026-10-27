@@ -3,6 +3,8 @@
 
 //! Pool operations - merging, deduplication, canonical selection.
 
+use crate::apis::dexscreener::TOKEN_PAIRS_CAP;
+use crate::chains::{adapter_for, ChainId};
 use crate::tokens::types::{TokenPoolInfo, TokenPoolSources};
 use std::cmp::Ordering;
 use std::collections::{hash_map::Entry, HashMap};
@@ -94,6 +96,40 @@ pub fn ingest_pool_entry(map: &mut HashMap<String, TokenPoolInfo>, info: TokenPo
     }
 }
 
+/// Whether a mint's DexScreener list must be completed from GeckoTerminal. `token-pairs/v1`
+/// stops at `TOKEN_PAIRS_CAP` pairs and can omit the mint's deepest pools against the chain's
+/// native coin, so a list holding no native pair, or one cut at the cap, is incomplete.
+/// `listed` holds the converted rows and `pair_count` the pairs DexScreener returned.
+pub fn dexscreener_list_is_incomplete(listed: &[TokenPoolInfo], pair_count: usize) -> bool {
+    pair_count >= TOKEN_PAIRS_CAP || !listed.iter().any(|pool| pool.is_native_pair)
+}
+
+/// The GeckoTerminal pools that complete `known` for `mint`: those whose counter asset is the
+/// chain's native coin or one of its stablecoins, matched by mint, and whose address `known`
+/// does not hold, so the row already listed wins a pool both providers report. A pool without
+/// `mint` on either side is dropped.
+pub fn reliable_completion_pools(
+    chain: ChainId,
+    mint: &str,
+    known: &HashMap<String, TokenPoolInfo>,
+    extra: Vec<TokenPoolInfo>,
+) -> Vec<TokenPoolInfo> {
+    let adapter = adapter_for(chain);
+    extra
+        .into_iter()
+        .filter(|pool| {
+            let counter = if pool.base_mint == mint {
+                pool.quote_mint.as_str()
+            } else if pool.quote_mint == mint {
+                pool.base_mint.as_str()
+            } else {
+                return false;
+            };
+            adapter.is_quote_asset(counter) && !known.contains_key(&pool.pool_address)
+        })
+        .collect()
+}
+
 /// Share of the best pool's liquidity metric an incumbent canonical pool keeps and still
 /// wins. Two venues of one token report liquidity within a few percent of each other and swap
 /// the lead on every refresh; a canonical that flips moves the pricing pool, and with it a
@@ -151,6 +187,60 @@ pub fn sort_pools_for_snapshot(pools: &mut [TokenPoolInfo]) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const SOL: &str = "So11111111111111111111111111111111111111112";
+    const USDC: &str = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+    const MEME: &str = "MemeMint1111111111111111111111111111111111";
+    const OTHER: &str = "OtherMint111111111111111111111111111111111";
+
+    fn pair(address: &str, base: &str, quote: &str) -> TokenPoolInfo {
+        TokenPoolInfo {
+            pool_address: address.to_owned(),
+            base_mint: base.to_owned(),
+            quote_mint: quote.to_owned(),
+            is_native_pair: base == SOL || quote == SOL,
+            ..TokenPoolInfo::default()
+        }
+    }
+
+    #[test]
+    fn a_dexscreener_list_without_a_native_pair_is_incomplete() {
+        let listed = [pair("usdc", MEME, USDC)];
+        assert!(dexscreener_list_is_incomplete(&listed, listed.len()));
+        assert!(dexscreener_list_is_incomplete(&[], 0));
+    }
+
+    #[test]
+    fn a_native_pair_under_the_cap_is_complete_and_a_list_at_the_cap_is_not() {
+        let listed = [pair("sol", MEME, SOL), pair("usdc", MEME, USDC)];
+        assert!(!dexscreener_list_is_incomplete(
+            &listed,
+            TOKEN_PAIRS_CAP - 1
+        ));
+        assert!(dexscreener_list_is_incomplete(&listed, TOKEN_PAIRS_CAP));
+    }
+
+    #[test]
+    fn only_new_native_or_stable_countered_pools_complete_the_list() {
+        let mut listed_row = pair("shared", MEME, SOL);
+        listed_row.liquidity_usd = Some(1.0);
+        let known = HashMap::from([("shared".to_owned(), listed_row)]);
+        let mut duplicate = pair("shared", SOL, MEME);
+        duplicate.liquidity_usd = Some(999.0);
+        let extra = vec![
+            duplicate,
+            pair("deep-sol", SOL, MEME),
+            pair("usdc", MEME, USDC),
+            pair("other", MEME, OTHER),
+            pair("unrelated", SOL, USDC),
+        ];
+        let merged: Vec<String> = reliable_completion_pools(ChainId::Solana, MEME, &known, extra)
+            .into_iter()
+            .map(|pool| pool.pool_address)
+            .collect();
+        assert_eq!(merged, ["deep-sol", "usdc"]);
+        assert_eq!(known["shared"].liquidity_usd, Some(1.0));
+    }
 
     fn native_pool(address: &str, liquidity_native: f64) -> TokenPoolInfo {
         TokenPoolInfo {

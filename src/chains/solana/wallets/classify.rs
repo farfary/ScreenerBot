@@ -12,9 +12,9 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::chains::solana::constants::{
-    LAMPORTS_PER_SOL, SOL_MINT, SYSTEM_PROGRAM_ID, USDC_MINT, USDT_MINT,
-};
+use crate::chains::adapter::ChainAdapter;
+use crate::chains::solana::adapter::ADAPTER;
+use crate::chains::solana::constants::{LAMPORTS_PER_SOL, SOL_MINT, SYSTEM_PROGRAM_ID};
 use crate::chains::solana::transactions::analyzer::balance::account_keys_from_message;
 use crate::chains::solana::transactions::analyzer::dex::extract_program_ids;
 use crate::chains::solana::transactions::deltas::{extract_subject_deltas, subject_native_delta};
@@ -393,10 +393,6 @@ fn external_native_transfers(
     Some(external)
 }
 
-fn is_stable(mint: &str) -> bool {
-    mint == USDC_MINT || mint == USDT_MINT
-}
-
 fn decimal_amount(raw: i128, mint: &str, decimals: &HashMap<String, u8>) -> f64 {
     raw.unsigned_abs() as f64 / 10_f64.powi(i32::from(*decimals.get(mint).unwrap_or(&0)))
 }
@@ -415,11 +411,11 @@ fn classify_swap(
 ) -> (ActivityKind, Option<&'static str>) {
     let candidates: Vec<&(String, i128)> = token_deltas
         .iter()
-        .filter(|(mint, _)| mint != SOL_MINT && !is_stable(mint))
+        .filter(|(mint, _)| mint != SOL_MINT && !ADAPTER.is_stable_asset(mint))
         .collect();
     let stables: Vec<&(String, i128)> = token_deltas
         .iter()
-        .filter(|(mint, _)| is_stable(mint))
+        .filter(|(mint, _)| ADAPTER.is_stable_asset(mint))
         .collect();
     if candidates.is_empty() {
         return (ActivityKind::Other, Some("no nonquote token leg"));

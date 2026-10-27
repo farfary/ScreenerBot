@@ -16,7 +16,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use super::conversion;
-use super::operations::ingest_pool_entry;
+use super::operations::{
+    dexscreener_list_is_incomplete, ingest_pool_entry, reliable_completion_pools,
+};
 use serde_json::json;
 
 /// Timeout for acquiring rate limit permits (prevents indefinite blocking)
@@ -137,11 +139,10 @@ pub async fn fetch_from_sources(
     let server_future = super::server::fetch_pools_from_server(chain, &mint_owned);
 
     // Fetch the proxy-backed server (no direct rate limit) + DexScreener first.
-    // Direct GeckoTerminal is a LAST-RESORT fallback below — it used to be fetched
-    // in PARALLEL here for every token, which hammered the direct GeckoTerminal
-    // API into constant 429s (marking the endpoint unhealthy and starving the
-    // OHLCV fetcher's own Gecko fallback), even though the server + DexScreener
-    // already cover ~every token's pools.
+    // Direct GeckoTerminal is a fallback below, never a parallel source: fetched
+    // for every token it hammered the direct GeckoTerminal API into constant 429s
+    // (marking the endpoint unhealthy and starving the OHLCV fetcher's own Gecko
+    // fallback), even though the server + DexScreener cover ~every token's pools.
     let (server_pools, dex_result) = tokio::join!(server_future, dex_future);
 
     let mut pools_map: HashMap<String, TokenPoolInfo> = HashMap::new();
@@ -160,15 +161,20 @@ pub async fn fetch_from_sources(
         _ => false,
     };
 
+    let mut dex_incomplete = false;
     match dex_result {
         Ok(pools) => {
             if should_fetch_dex {
                 success_sources += 1;
             }
-            for pool in pools.iter() {
-                if let Some(info) = conversion::from_dexscreener(chain, pool) {
-                    ingest_pool_entry(&mut pools_map, info);
-                }
+            let listed: Vec<TokenPoolInfo> = pools
+                .iter()
+                .filter_map(|pool| conversion::from_dexscreener(chain, mint, pool))
+                .collect();
+            dex_incomplete =
+                should_fetch_dex && dexscreener_list_is_incomplete(&listed, pools.len());
+            for info in listed {
+                ingest_pool_entry(&mut pools_map, info);
             }
         }
         Err(err) => {
@@ -194,11 +200,16 @@ pub async fn fetch_from_sources(
         }
     }
 
-    // Direct GeckoTerminal only as a last resort: fetch it ONLY when the server
-    // and DexScreener both yielded zero pools. This keeps direct Gecko usage rare
-    // so its shared rate limit stays free for the OHLCV fetcher's Gecko fallback
-    // instead of being burned (and 429'd) on redundant pool lookups.
-    let gecko_attempted = should_fetch_gecko && pools_map.is_empty();
+    // Direct GeckoTerminal stays rare, at most one call per resolution, so its
+    // shared rate limit stays free for the OHLCV fetcher's Gecko fallback instead
+    // of being burned (and 429'd) on redundant pool lookups. It is fetched only
+    // when the server and DexScreener yielded no pool (its whole list is taken),
+    // or when the server did not answer and DexScreener's list holds no native
+    // pair or was cut at its `token-pairs` cap (only its native- and
+    // stable-countered pools DexScreener did not list are merged).
+    let gecko_fills_empty = pools_map.is_empty();
+    let gecko_attempted =
+        should_fetch_gecko && (gecko_fills_empty || (!server_ok && dex_incomplete));
     let gecko_result = if gecko_attempted {
         gecko_future.await
     } else {
@@ -210,10 +221,17 @@ pub async fn fetch_from_sources(
             if gecko_attempted {
                 success_sources += 1;
             }
-            for pool in pools.iter() {
-                if let Some(info) = conversion::from_geckoterminal(chain, pool, native_price) {
-                    ingest_pool_entry(&mut pools_map, info);
-                }
+            let fetched: Vec<TokenPoolInfo> = pools
+                .iter()
+                .filter_map(|pool| conversion::from_geckoterminal(chain, pool, native_price))
+                .collect();
+            let merged = if gecko_fills_empty {
+                fetched
+            } else {
+                reliable_completion_pools(chain, mint, &pools_map, fetched)
+            };
+            for info in merged {
+                ingest_pool_entry(&mut pools_map, info);
             }
         }
         Err(err) => {
