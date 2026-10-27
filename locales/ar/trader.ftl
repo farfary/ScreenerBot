@@ -5,8 +5,8 @@
 # shown as readable labels) and the reasons written by src/positions and src/trader/stats.rs.
 trader-exit-type-stop-loss = وقف الخسارة
 trader-exit-type-take-profit = جني الأرباح
-trader-exit-type-roi = هدف العائد
-trader-exit-type-roi-exit = هدف العائد
+trader-exit-type-roi = جني الأرباح
+trader-exit-type-roi-exit = جني الأرباح
 trader-exit-type-trailing-stop = وقف متحرك
 trader-exit-type-time-override = الخروج الزمني
 trader-exit-type-time-rule = قاعدة زمنية
@@ -22,7 +22,7 @@ trader-tab-strategy-control = التحكم بالاستراتيجيات
 trader-tab-strategies = الاستراتيجيات
 trader-tab-stop-loss = وقف الخسارة
 trader-tab-trailing-stop = وقف متحرك
-trader-tab-roi = جني الأرباح
+trader-tab-take-profit = جني الأرباح
 trader-tab-time-rules = الخروج الزمني
 trader-tab-dca = DCA
 trader-tab-settings = الإعدادات
@@ -267,16 +267,36 @@ trader-trailing-summary-avoided = تم تفادي خسارة <strong>{ $value }<
 
 ## Take profit
 
-trader-roi-title = جني الأرباح
-trader-roi-subtitle = الخروج تلقائيًا من المركز بالكامل عندما يبلغ الربح هدفك
-# $target is the target percentage as typed.
-trader-roi-impact = الخروج عند ربح +{ $target }%
-trader-roi-initial-buy = الشراء الأولي
-trader-roi-target-hit = بلوغ الهدف
-trader-roi-full-position = المركز كاملًا
-trader-roi-sold = تم بيع 100%
-# $target is the target percentage as typed.
-trader-roi-summary = تم تثبيت ربح <strong>+{ $target }%</strong>
+trader-take-profit-title = جني الأرباح
+trader-take-profit-subtitle = يبيع المركز على مراحل كلما بلغ الربح كل مستوى
+trader-take-profit-initial-buy = الشراء الأولي
+# $step is the step's position in the ladder, from 1.
+trader-take-profit-step = المرحلة { $step }
+# $step is the step's position in the ladder, from 1.
+trader-take-profit-profit-label = مستوى ربح المرحلة { $step }
+# $step is the step's position in the ladder, from 1.
+trader-take-profit-sell-label = حصة بيع المرحلة { $step }
+trader-take-profit-add-step = إضافة مرحلة
+# $step is the step's position in the ladder, from 1.
+trader-take-profit-remove-step = إزالة المرحلة { $step }
+# $min and $max are the configured bounds of a profit level.
+trader-take-profit-error-profit-range = يجب أن يكون كل مستوى ربح بين { $min }% و{ $max }%
+# $min and $max are the configured bounds of a share.
+trader-take-profit-error-sell-range = يجب أن تكون كل حصة بين { $min }% و{ $max }%
+trader-take-profit-error-order = تحتاج كل مرحلة إلى مستوى ربح أعلى من المرحلة السابقة
+# $max is the largest total share, the whole position.
+trader-take-profit-error-total = يمكن للمراحل مجتمعة بيع { $max }% كحد أقصى
+# $runner is the formatted percentage of the position no step sells.
+trader-take-profit-runner = يبقى { $runner }% من المركز مفتوحًا كجزء متبقٍّ
+trader-take-profit-runner-none = تبيع المرحلة الأخيرة ما تبقى من المركز
+trader-take-profit-runner-warning = مع إيقاف الوقف المتحرك والخروج الزمني وكل استراتيجيات الخروج، لا يُغلق الجزء المتبقي إلا بوقف الخسارة أو يدويًا
+trader-take-profit-info = تُحسب الحصص من المركز الأصلي. إذا تجاوز السعر عدة مستويات دفعة واحدة، تُباع مرحلة واحدة في كل فحص.
+# $profit is the step's formatted profit level; $share is its formatted share.
+trader-take-profit-example-step = عند +{ $profit }%، بيع { $share }%
+trader-take-profit-example-runner = الجزء المتبقي
+trader-take-profit-example-runner-detail = يُترك لقواعد الخروج الأخرى
+# $sold is the formatted total share the ladder sells; $profit is its last formatted level.
+trader-take-profit-summary = يبيع <strong>{ $sold }%</strong> حتى ربح +{ $profit }%
 
 ## Time-based exit
 

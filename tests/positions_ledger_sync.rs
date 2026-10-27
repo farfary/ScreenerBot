@@ -1541,6 +1541,7 @@ fn a_ledger_write_keeps_a_booking_committed_after_the_plan() {
                 requested_exit_percentage: 40.0,
                 expiry_height: None,
                 created_at: Utc::now(),
+                take_profit_level: None,
             })
             .await
             .expect("register pending partial exit");
@@ -1875,6 +1876,7 @@ fn a_ledger_write_leaves_a_bot_row_whose_fill_was_booked_after_the_history_was_r
                 requested_exit_percentage: 40.0,
                 expiry_height: None,
                 created_at: Utc::now(),
+                take_profit_level: None,
             })
             .await
             .expect("register pending partial exit");
@@ -1991,6 +1993,7 @@ fn a_fill_booked_after_the_history_was_read_holds_back_only_its_own_row() {
                 requested_exit_percentage: 40.0,
                 expiry_height: None,
                 created_at: Utc::now(),
+                take_profit_level: None,
             })
             .await
             .expect("register pending partial exit");
@@ -2192,6 +2195,7 @@ fn an_abandoned_verification_frees_its_mint_for_the_ledger() {
                 requested_exit_percentage: 50.0,
                 expiry_height: None,
                 created_at: Utc::now(),
+                take_profit_level: None,
             })
             .await
             .expect("register the partial exit");

@@ -5,8 +5,8 @@
 # shown as readable labels) and the reasons written by src/positions and src/trader/stats.rs.
 trader-exit-type-stop-loss = 止损
 trader-exit-type-take-profit = 止盈
-trader-exit-type-roi = ROI 目标
-trader-exit-type-roi-exit = ROI 目标
+trader-exit-type-roi = 止盈
+trader-exit-type-roi-exit = 止盈
 trader-exit-type-trailing-stop = 追踪止损
 trader-exit-type-time-override = 时间出场
 trader-exit-type-time-rule = 时间规则
@@ -22,7 +22,7 @@ trader-tab-strategy-control = 策略控制
 trader-tab-strategies = 策略
 trader-tab-stop-loss = 止损
 trader-tab-trailing-stop = 追踪止损
-trader-tab-roi = 止盈
+trader-tab-take-profit = 止盈
 trader-tab-time-rules = 时间出场
 trader-tab-dca = DCA
 trader-tab-settings = 设置
@@ -232,16 +232,36 @@ trader-trailing-summary-avoided = 避免了较峰值 <strong>{ $value }</strong>
 
 ## Take profit
 
-trader-roi-title = 止盈
-trader-roi-subtitle = 当利润达到目标时自动全部出场
-# $target is the target percentage as typed.
-trader-roi-impact = 盈利 +{ $target }% 时出场
-trader-roi-initial-buy = 初始买入
-trader-roi-target-hit = 达到目标
-trader-roi-full-position = 整个仓位
-trader-roi-sold = 已卖出 100%
-# $target is the target percentage as typed.
-trader-roi-summary = 已锁定 <strong>+{ $target }%</strong> 的利润
+trader-take-profit-title = 止盈
+trader-take-profit-subtitle = 在利润达到每个水平时分步卖出仓位
+trader-take-profit-initial-buy = 初始买入
+# $step is the step's position in the ladder, from 1.
+trader-take-profit-step = 第 { $step } 步
+# $step is the step's position in the ladder, from 1.
+trader-take-profit-profit-label = 第 { $step } 步利润水平
+# $step is the step's position in the ladder, from 1.
+trader-take-profit-sell-label = 第 { $step } 步卖出比例
+trader-take-profit-add-step = 添加一步
+# $step is the step's position in the ladder, from 1.
+trader-take-profit-remove-step = 删除第 { $step } 步
+# $min and $max are the configured bounds of a profit level.
+trader-take-profit-error-profit-range = 每个利润水平必须在 { $min }% 到 { $max }% 之间
+# $min and $max are the configured bounds of a share.
+trader-take-profit-error-sell-range = 每个比例必须在 { $min }% 到 { $max }% 之间
+trader-take-profit-error-order = 每一步的利润水平必须高于上一步
+# $max is the largest total share, the whole position.
+trader-take-profit-error-total = 所有步骤合计最多卖出 { $max }%
+# $runner is the formatted percentage of the position no step sells.
+trader-take-profit-runner = 仓位的 { $runner }% 作为留仓继续持有
+trader-take-profit-runner-none = 最后一步卖出仓位的剩余部分
+trader-take-profit-runner-warning = 追踪止损、时间出场和所有出场策略均已关闭，留仓只能通过止损或手动平仓
+trader-take-profit-info = 比例按初始仓位计算。价格一次越过多个水平时，每次检查只卖出一步。
+# $profit is the step's formatted profit level; $share is its formatted share.
+trader-take-profit-example-step = 在 +{ $profit }% 时卖出 { $share }%
+trader-take-profit-example-runner = 留仓
+trader-take-profit-example-runner-detail = 交由其他退出规则处理
+# $sold is the formatted total share the ladder sells; $profit is its last formatted level.
+trader-take-profit-summary = 到 +{ $profit }% 利润时卖出 <strong>{ $sold }%</strong>
 
 ## Time-based exit
 

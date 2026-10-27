@@ -483,6 +483,8 @@ copy-rules-target-max = До { $amount }
 copy-rules-target-between = { $min } – { $max } { -sol }
 copy-rules-source-override = Переопределено в задаче · у трейдера { $value }
 copy-rules-source-default = По умолчанию трейдера
+# $profit is the step's signed profit level; $share is the share of the position it sells, both formatted.
+copy-rules-take-profit-step = При { $profit } продать { $share }
 copy-rules-not-used = Не используется: решают продажи кошелька
 copy-rules-col-rule = Правило
 copy-rules-col-applies = Значение
@@ -529,6 +531,7 @@ copy-rule-partial-size = Доля для продажи
 copy-rule-trailing-activation = Включается при росте на
 copy-rule-trailing-distance = Продаёт при падении от пика на
 copy-rule-take-profit-target = Продаёт при росте на
+copy-rule-take-profit-target-hint = Цель здесь заменяет ступени тейк-профита трейдера одной ступенью, которая продаёт всю позицию
 copy-rule-time-duration = Проверка после удержания
 copy-rule-time-threshold = Продаёт, пока P&L не выше
 copy-preset-inherit = По умолчанию трейдера

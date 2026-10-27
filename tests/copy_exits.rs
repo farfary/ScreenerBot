@@ -194,6 +194,8 @@ async fn paper_sell_without_a_paper_holding_is_skipped_before_quoting() {
         opened_at: Utc.timestamp_opt(10, 0).unwrap(),
         closed_at: None,
         peak_price_native: None,
+        take_profit_level: 0,
+        round_partial_exits: 0,
     };
     assert_eq!(
         paper_sell_outcome(

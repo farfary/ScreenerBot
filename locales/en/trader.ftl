@@ -5,8 +5,8 @@
 # shown as readable labels) and the reasons written by src/positions and src/trader/stats.rs.
 trader-exit-type-stop-loss = Stop Loss
 trader-exit-type-take-profit = Take Profit
-trader-exit-type-roi = ROI Target
-trader-exit-type-roi-exit = ROI Target
+trader-exit-type-roi = Take Profit
+trader-exit-type-roi-exit = Take Profit
 trader-exit-type-trailing-stop = Trailing Stop
 trader-exit-type-time-override = Time Exit
 trader-exit-type-time-rule = Time Rule
@@ -22,7 +22,7 @@ trader-tab-strategy-control = Strategy Control
 trader-tab-strategies = Strategies
 trader-tab-stop-loss = Stop Loss
 trader-tab-trailing-stop = Trailing Stop
-trader-tab-roi = Take Profit
+trader-tab-take-profit = Take Profit
 trader-tab-time-rules = Time Exit
 trader-tab-dca = DCA
 trader-tab-settings = Settings
@@ -239,16 +239,36 @@ trader-trailing-summary-avoided = Avoided <strong>{ $value }</strong> loss from 
 
 ## Take profit
 
-trader-roi-title = Take Profit
-trader-roi-subtitle = Automatically exit the entire position when profit reaches your target
-# $target is the target percentage as typed.
-trader-roi-impact = Exit at +{ $target }% profit
-trader-roi-initial-buy = Initial buy
-trader-roi-target-hit = Target Hit
-trader-roi-full-position = Full Position
-trader-roi-sold = 100% sold
-# $target is the target percentage as typed.
-trader-roi-summary = Locked in <strong>+{ $target }%</strong> profit
+trader-take-profit-title = Take Profit
+trader-take-profit-subtitle = Sell the position in steps as profit reaches each level
+trader-take-profit-initial-buy = Initial buy
+# $step is the step's position in the ladder, from 1.
+trader-take-profit-step = Step { $step }
+# $step is the step's position in the ladder, from 1.
+trader-take-profit-profit-label = Step { $step } profit level
+# $step is the step's position in the ladder, from 1.
+trader-take-profit-sell-label = Step { $step } share to sell
+trader-take-profit-add-step = Add step
+# $step is the step's position in the ladder, from 1.
+trader-take-profit-remove-step = Remove step { $step }
+# $min and $max are the configured bounds of a profit level.
+trader-take-profit-error-profit-range = Each profit level must be between { $min }% and { $max }%
+# $min and $max are the configured bounds of a share.
+trader-take-profit-error-sell-range = Each share must be between { $min }% and { $max }%
+trader-take-profit-error-order = Each step needs a higher profit level than the one before it
+# $max is the largest total share, the whole position.
+trader-take-profit-error-total = The steps together can sell at most { $max }%
+# $runner is the formatted percentage of the position no step sells.
+trader-take-profit-runner = { $runner }% of the position stays open as a runner
+trader-take-profit-runner-none = The last step sells the rest of the position
+trader-take-profit-runner-warning = With the trailing stop, the time exit and every exit strategy off, the runner closes only by the stop loss or by hand
+trader-take-profit-info = Shares are of the position as opened. When the price passes several levels at once, one step sells per check.
+# $profit is the step's formatted profit level; $share is its formatted share.
+trader-take-profit-example-step = At +{ $profit }%, sell { $share }%
+trader-take-profit-example-runner = Runner
+trader-take-profit-example-runner-detail = Left to the other exit rules
+# $sold is the formatted total share the ladder sells; $profit is its last formatted level.
+trader-take-profit-summary = Sells <strong>{ $sold }%</strong> by +{ $profit }% profit
 
 ## Time exit
 

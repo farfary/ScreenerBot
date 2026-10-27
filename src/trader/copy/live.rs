@@ -167,6 +167,7 @@ pub fn prepare_live_entry(
             size_native: Some(sized_native),
             exit_percentage: None,
             slippage_pct: Some(task.slippage_pct),
+            take_profit_level: None,
         },
         context: EntryContext {
             origin: PositionOrigin::Copy {

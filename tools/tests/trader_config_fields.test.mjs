@@ -16,6 +16,12 @@
  * - Sell Part First shows its Part to Sell field only while on; the field takes its bounds
  *   and unit from the metadata, saves through its card, and the stop-loss example sells
  *   that part at the threshold and the rest if the price stays below the stop.
+ * - The take-profit ladder edits its steps in place up to the metadata's step limit,
+ *   names what it cannot save and keeps Save disabled until it can, and saves its
+ *   levels and shares as their two config lists. Its group takes its accessible name
+ *   from its label, and decimal shares that add up to the whole position save.
+ * - A ladder that keeps a runner warns that only the stop loss or the user can close it
+ *   while the trailing stop, the time exit and every exit strategy are off.
  *
  * The config served here uses a trade size other than the default, so a figure that
  * follows the default instead of the loaded config fails.
@@ -33,20 +39,34 @@ import { serveDashboard, PAGE_READY } from "../lib/dashboard_host.mjs";
 import { FIXTURES_ROOT, createApiHandler, loadIndex } from "../lib/dashboard_fixtures.mjs";
 
 const CONFIG = JSON.parse(readFileSync(`${FIXTURES_ROOT}/trader/config_full.json`, "utf8"));
+const EXIT_STRATEGIES = JSON.parse(
+  readFileSync(`${FIXTURES_ROOT}/trader/strategies_exit.json`, "utf8")
+);
 const TRADE_SIZE = 0.02;
 
 const browser = await chromium.launch({ headless: true });
 after(() => browser.close());
 const indexes = [await loadIndex("trader"), await loadIndex("shell")];
 
-/** The trader page on `tab`, served `trader` merged over the recorded trader config. */
-async function openTrader(tab, trader = {}) {
+/**
+ * The trader page on `tab`, served `trader` merged over the recorded trader config.
+ * `exitStrategiesOff` serves the recorded exit strategies with every one switched off.
+ */
+async function openTrader(tab, trader = {}, { exitStrategiesOff = false } = {}) {
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   const api = createApiHandler(indexes, "populated");
   const config = { ...CONFIG, trader: { ...CONFIG.trader, trade_size_sol: TRADE_SIZE, ...trader } };
   const onApi = (request) => {
     if (request.url.pathname === "/api/config" && request.method === "GET") {
       return { body: JSON.stringify(config) };
+    }
+    if (
+      exitStrategiesOff &&
+      request.url.pathname === "/api/strategies" &&
+      request.url.searchParams.get("type") === "EXIT"
+    ) {
+      const items = EXIT_STRATEGIES.items.map((strategy) => ({ ...strategy, enabled: false }));
+      return { body: JSON.stringify({ ...EXIT_STRATEGIES, items }) };
     }
     if (request.method === "PATCH") return { body: JSON.stringify({ success: true }) };
     return api.onApi(request);
@@ -115,7 +135,10 @@ test("every worked example starts from the configured trade size", async () => {
         "#stop-loss-example-exit": "0.01 SOL",
       },
       "trailing-stop": { "#example-entry": "0.02 SOL" },
-      roi: { "#roi-example-entry": "0.02 SOL", "#roi-example-target": "0.024 SOL" },
+      "take-profit": {
+        "#take-profit-example-entry": "0.02 SOL",
+        "#take-profit-example-step-1": "0.024 SOL",
+      },
     };
     for (const [tab, figures] of Object.entries(expected)) {
       await page.click(`#subTabsContainer [data-tab-id="${tab}"]`);
@@ -242,6 +265,112 @@ test("Sell Part First shows its part field and a two-step stop-loss example", as
     assert.equal(await text("#stop-loss-exit-title"), "Auto Exit");
     assert.equal(await text("#stop-loss-exit-detail"), "Full position exit");
     assert.equal(await text("#stop-loss-example-exit"), "0.01 SOL");
+  } finally {
+    await close();
+  }
+});
+
+test("the take-profit ladder adds steps up to its limit and saves only a valid ladder", async () => {
+  const { page, close } = await openTrader("take-profit", {
+    take_profit_levels_pct: [25, 60],
+    take_profit_sell_pct: [40, 30],
+  });
+  try {
+    const ladder = page.locator("#take-profit-levels");
+    const rows = ladder.locator(".level-list-row");
+    const add = ladder.locator(".level-list-add");
+    const error = ladder.locator(".level-list-error");
+    const save = page.locator(".config-card:has(#take-profit-levels) .config-card-save");
+    const text = async (selector) => plain(await page.locator(selector).textContent());
+
+    await page.waitForFunction(
+      () => document.querySelector("#take-profit-levels .level-list-add")?.disabled === false
+    );
+    assert.equal(await rows.count(), 2);
+    assert.equal(await text("#take-profit-runner"), "30% of the position stays open as a runner");
+    assert.equal(await text("#take-profit-example-step-2"), "0.032 SOL");
+
+    await add.click();
+    await add.click();
+    assert.equal(await rows.count(), 4);
+    assert.equal(await add.isDisabled(), true, "the metadata allows four steps");
+    assert.equal(await error.isVisible(), false);
+
+    await rows.nth(3).locator(".level-list-sell").fill("50");
+    assert.equal(await error.isVisible(), true);
+    assert.equal(plain(await error.textContent()), "The steps together can sell at most 100%");
+    assert.equal(await save.isDisabled(), true);
+
+    await rows.nth(1).locator(".level-list-profit").fill("20");
+    assert.equal(plain(await error.textContent()), "Each step needs a higher profit level than the one before it");
+
+    await rows.nth(3).locator(".level-list-remove").click();
+    await rows.nth(1).locator(".level-list-profit").fill("60");
+    assert.equal(await rows.count(), 3);
+    assert.equal(await error.isVisible(), false);
+    assert.equal(await save.isDisabled(), false);
+
+    const [request] = await Promise.all([
+      page.waitForRequest(
+        (candidate) => candidate.method() === "PATCH" && candidate.url().endsWith("/api/config/trader")
+      ),
+      save.click(),
+    ]);
+    const body = request.postDataJSON();
+    assert.deepEqual(body.take_profit_levels_pct, [25, 60, 61]);
+    assert.deepEqual(body.take_profit_sell_pct, [40, 30, 5]);
+  } finally {
+    await close();
+  }
+});
+
+test("the ladder group is named by its label, and decimal shares of the whole position save", async () => {
+  const { page, close } = await openTrader("take-profit", {
+    take_profit_levels_pct: [20, 50, 100],
+    take_profit_sell_pct: [30, 30, 40],
+  });
+  try {
+    const ladder = page.getByRole("group", { name: "Take-Profit Levels" });
+    await ladder.locator(".level-list-row").first().waitFor();
+    assert.equal(await ladder.getAttribute("id"), "take-profit-levels");
+
+    const rows = ladder.locator(".level-list-row");
+    const shares = ["5.2", "78.9", "15.9"];
+    for (const [index, share] of shares.entries()) {
+      await rows.nth(index).locator(".level-list-sell").fill(share);
+    }
+    const save = page.locator(".config-card:has(#take-profit-levels) .config-card-save");
+    assert.equal(await ladder.locator(".level-list-error").isVisible(), false);
+    assert.equal(await save.isDisabled(), false, "shares that add up to 100% save");
+  } finally {
+    await close();
+  }
+});
+
+test("a ladder that keeps a runner warns while no other rule can close it", async () => {
+  const { page, close } = await openTrader(
+    "take-profit",
+    {
+      take_profit_levels_pct: [25, 60],
+      take_profit_sell_pct: [40, 30],
+      trailing_stop_enabled: false,
+      time_override_enabled: false,
+    },
+    { exitStrategiesOff: true }
+  );
+  try {
+    const warning = page.locator("#take-profit-runner-warning");
+    await warning.waitFor();
+    assert.equal(
+      plain(await warning.textContent()),
+      "With the trailing stop, the time exit and every exit strategy off, the runner closes only by the stop loss or by hand"
+    );
+
+    await page.locator("#trailing-enabled").evaluate((toggle) => {
+      toggle.checked = true;
+      toggle.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    assert.equal(await warning.isVisible(), false, "the trailing stop can close the runner");
   } finally {
     await close();
   }

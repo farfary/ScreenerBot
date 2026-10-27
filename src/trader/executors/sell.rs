@@ -115,6 +115,7 @@ pub async fn execute_sell(decision: &TradeDecision) -> crate::trader::Result<Tra
             exit_percentage,
             &exit_reason.clone(),
             decision.slippage_pct,
+            decision.take_profit_level,
         )
         .await
         {

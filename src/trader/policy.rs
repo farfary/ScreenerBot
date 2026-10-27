@@ -11,6 +11,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::config::TakeProfitLevel;
 use crate::positions::{Position, PositionOrigin};
 use crate::trader::config;
 use crate::trader::evaluators::dca::DcaConfigSnapshot;
@@ -35,11 +36,12 @@ pub struct TrailingPolicy {
     pub distance_pct: f64,
 }
 
-/// The take-profit rule's switch and profit target, read by `exit_rules`.
+/// The take-profit ladder's switch and steps, read by `exit_rules`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct RoiPolicy {
+pub struct TakeProfitPolicy {
     pub enabled: bool,
-    pub target_profit_pct: f64,
+    /// Ascending steps; each `sell_pct` is a share of the position as opened.
+    pub levels: Vec<TakeProfitLevel>,
 }
 
 /// The time-override rule's switch, loss threshold and duration, read by `exit_rules`.
@@ -54,7 +56,7 @@ pub struct TimePolicy {
 pub struct ExitPolicy {
     pub stop_loss: StopLossPolicy,
     pub trailing: TrailingPolicy,
-    pub roi: RoiPolicy,
+    pub take_profit: TakeProfitPolicy,
     pub time: TimePolicy,
     pub dca: DcaConfigSnapshot,
 }
@@ -88,6 +90,8 @@ pub struct TrailingPolicyOverrides {
     pub distance_pct: Option<f64>,
 }
 
+/// The single take-profit target a copy task may set: `target_profit_pct` replaces the
+/// ladder with one step that sells everything at that profit.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct RoiPolicyOverrides {
@@ -120,9 +124,9 @@ impl ExitPolicy {
                 activation_pct: config::get_trailing_stop_activation_pct(),
                 distance_pct: config::get_trailing_stop_distance_pct(),
             },
-            roi: RoiPolicy {
-                enabled: config::is_roi_exit_enabled(),
-                target_profit_pct: config::get_target_profit_pct(),
+            take_profit: TakeProfitPolicy {
+                enabled: config::is_take_profit_enabled(),
+                levels: config::get_take_profit_levels(),
             },
             time: TimePolicy {
                 enabled: config::is_time_override_enabled(),
@@ -166,11 +170,10 @@ impl ExitPolicy {
             &mut self.trailing.distance_pct,
             overrides.trailing.distance_pct,
         );
-        apply(&mut self.roi.enabled, overrides.roi.enabled);
-        apply(
-            &mut self.roi.target_profit_pct,
-            overrides.roi.target_profit_pct,
-        );
+        apply(&mut self.take_profit.enabled, overrides.roi.enabled);
+        if let Some(profit_pct) = overrides.roi.target_profit_pct {
+            self.take_profit.levels = vec![TakeProfitLevel::sell_all_at(profit_pct)];
+        }
         apply(&mut self.time.enabled, overrides.time.enabled);
         apply(
             &mut self.time.loss_threshold_pct,

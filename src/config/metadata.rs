@@ -59,6 +59,9 @@ pub struct FieldMetadata {
     pub max: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub step: Option<f64>,
+    /// The most items an array field may hold; `min` and `max` bound each item.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_items: Option<usize>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub default: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -89,6 +92,7 @@ impl FieldMetadata {
             min: extras.min,
             max: extras.max,
             step: extras.step,
+            max_items: extras.max_items,
             default,
             children: None,
             hidden: extras.hidden.then_some(true),
@@ -105,6 +109,7 @@ pub struct FieldMetadataExtras {
     pub min: Option<f64>,
     pub max: Option<f64>,
     pub step: Option<f64>,
+    pub max_items: Option<usize>,
     pub hidden: bool,
     pub restart_required: bool,
 }
@@ -409,6 +414,10 @@ macro_rules! field_metadata {
         $meta.step = Some($value as f64);
         $crate::field_metadata!(@assign $meta $(, $($rest)*)?);
     }};
+    (@assign $meta:ident, max_items: $value:expr $(, $($rest:tt)*)?) => {{
+        $meta.max_items = Some($value);
+        $crate::field_metadata!(@assign $meta $(, $($rest)*)?);
+    }};
     (@assign $meta:ident, hidden: $value:expr $(, $($rest:tt)*)?) => {{
         $meta.hidden = $value;
         $crate::field_metadata!(@assign $meta $(, $($rest)*)?);
@@ -495,6 +504,34 @@ mod tests {
         let round_tripped: crate::config::ReferralConfig =
             serde_json::from_value(value).expect("referral must deserialize");
         assert_eq!(round_tripped.code, config.referral.code);
+    }
+
+    /// The take-profit ladder publishes its step limit and per-item bounds, which the
+    /// Take Profit tab reads instead of carrying its own.
+    #[test]
+    fn the_take_profit_ladder_publishes_its_step_limit() {
+        let metadata = collect_config_metadata();
+        let trader = metadata.get("trader").expect("trader section");
+        for (field, min, max) in [
+            ("take_profit_levels_pct", 1.0, 1000.0),
+            ("take_profit_sell_pct", 5.0, 100.0),
+        ] {
+            let meta = trader.get(field).expect("ladder field");
+            assert_eq!(
+                meta.max_items,
+                Some(crate::config::TAKE_PROFIT_MAX_STEPS),
+                "{field}"
+            );
+            assert_eq!((meta.min, meta.max), (Some(min), Some(max)), "{field}");
+            let published = serde_json::to_value(meta).expect("metadata serializes");
+            assert_eq!(
+                published["max_items"],
+                serde_json::json!(crate::config::TAKE_PROFIT_MAX_STEPS)
+            );
+        }
+        let scalar = serde_json::to_value(trader.get("take_profit_enabled").expect("switch"))
+            .expect("metadata serializes");
+        assert!(scalar.get("max_items").is_none());
     }
 
     /// The account section is subject to exactly the same seven-step trap as

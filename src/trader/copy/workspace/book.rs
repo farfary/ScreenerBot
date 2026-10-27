@@ -98,8 +98,11 @@ pub async fn close_paper_holding(
                 &database,
                 &task,
                 &position,
-                super::super::PaperExitRule::Manual,
-                None,
+                super::super::paper_exits::PaperExit {
+                    rule: super::super::PaperExitRule::Manual,
+                    exit_percentage: None,
+                    take_profit_level: None,
+                },
                 epoch,
                 queued_at,
                 crate::swaps::try_get_best_quote,

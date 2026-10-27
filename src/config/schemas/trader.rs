@@ -4,6 +4,8 @@
 //! Trading system configuration.
 
 use crate::config::metadata::{ConfigCategory, ConfigImpact};
+use crate::config::Result;
+use crate::errors::ConfigurationError;
 use crate::field_metadata;
 use serde::{Deserialize, Serialize};
 
@@ -90,6 +92,35 @@ config_struct! {
     }
 }
 
+/// The most steps a take-profit ladder holds; the Take Profit tab reads it from the
+/// field metadata.
+pub const TAKE_PROFIT_MAX_STEPS: usize = 4;
+/// Bounds of one take-profit step's profit target, in percent from the average entry.
+pub const TAKE_PROFIT_PROFIT_PCT_MIN: f64 = 1.0;
+pub const TAKE_PROFIT_PROFIT_PCT_MAX: f64 = 1000.0;
+/// Bounds of one take-profit step's sell share, in percent of the position as opened.
+/// The maximum is the whole position, which a single-step ladder sells.
+const TAKE_PROFIT_SELL_PCT_MIN: f64 = 5.0;
+pub const TAKE_PROFIT_SELL_PCT_MAX: f64 = 100.0;
+
+/// One step of the take-profit ladder: once profit from the average entry reaches
+/// `profit_pct`, sell `sell_pct` of the position as it was opened.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct TakeProfitLevel {
+    pub profit_pct: f64,
+    pub sell_pct: f64,
+}
+
+impl TakeProfitLevel {
+    /// The one step of a single-target ladder: sell the whole position at `profit_pct`.
+    pub fn sell_all_at(profit_pct: f64) -> Self {
+        Self {
+            profit_pct,
+            sell_pct: TAKE_PROFIT_SELL_PCT_MAX,
+        }
+    }
+}
+
 config_struct! {
     /// Trading system configuration
     pub struct TraderConfig {
@@ -130,20 +161,34 @@ config_struct! {
         })]
         slippage: SlippageConfig = SlippageConfig::default(),
 
-        // ==================== ROI EXIT CONFIGURATION ====================
+        // ==================== TAKE PROFIT CONFIGURATION ====================
         #[metadata(field_metadata! {
             impact: ConfigImpact::High,
-            category: ConfigCategory::RoiExit,
+            category: ConfigCategory::TakeProfit,
         })]
-        roi_exit_enabled: bool = true,
+        take_profit_enabled: bool = true,
+        /// Profit from the average entry at which each step sells, ascending; read
+        /// together with `take_profit_sell_pct` through `take_profit_levels`.
         #[metadata(field_metadata! {
-            min: 1,
-            max: 1000,
+            min: TAKE_PROFIT_PROFIT_PCT_MIN,
+            max: TAKE_PROFIT_PROFIT_PCT_MAX,
             step: 1,
+            max_items: TAKE_PROFIT_MAX_STEPS,
             impact: ConfigImpact::High,
-            category: ConfigCategory::RoiExit,
+            category: ConfigCategory::TakeProfit,
         })]
-        roi_target_percent: f64 = 20.0,
+        take_profit_levels_pct: Vec<f64> = vec![20.0],
+        /// Share of the position as opened that each step sells; the shares add up to
+        /// at most 100, and what they leave is the runner.
+        #[metadata(field_metadata! {
+            min: TAKE_PROFIT_SELL_PCT_MIN,
+            max: TAKE_PROFIT_SELL_PCT_MAX,
+            step: 1,
+            max_items: TAKE_PROFIT_MAX_STEPS,
+            impact: ConfigImpact::High,
+            category: ConfigCategory::TakeProfit,
+        })]
+        take_profit_sell_pct: Vec<f64> = vec![100.0],
 
         // ==================== TIME OVERRIDE CONFIGURATION ====================
         #[metadata(field_metadata! {
@@ -368,12 +413,179 @@ config_struct! {
     }
 }
 
+impl TraderConfig {
+    /// The take-profit ladder, one step per configured level, in ascending order. The
+    /// only reader of `take_profit_levels_pct` and `take_profit_sell_pct`.
+    pub fn take_profit_levels(&self) -> Vec<TakeProfitLevel> {
+        self.take_profit_levels_pct
+            .iter()
+            .zip(&self.take_profit_sell_pct)
+            .map(|(&profit_pct, &sell_pct)| TakeProfitLevel {
+                profit_pct,
+                sell_pct,
+            })
+            .collect()
+    }
+
+    /// Refuse a take-profit ladder the exit rule cannot follow: one to
+    /// [`TAKE_PROFIT_MAX_STEPS`] steps with a sell share for every level, each value
+    /// inside its bounds, levels strictly ascending, and shares adding up to at most 100.
+    pub fn validate(&self) -> Result<()> {
+        let steps = self.take_profit_levels_pct.len();
+        if !(1..=TAKE_PROFIT_MAX_STEPS).contains(&steps) {
+            return Err(ConfigurationError::Generic {
+                message: format!(
+                    "trader.take_profit_levels_pct must hold between 1 and {TAKE_PROFIT_MAX_STEPS} steps"
+                ),
+            }
+            .into());
+        }
+        if self.take_profit_sell_pct.len() != steps {
+            return Err(ConfigurationError::Generic {
+                message: "trader.take_profit_sell_pct must hold one share per take-profit level"
+                    .to_owned(),
+            }
+            .into());
+        }
+        let in_range =
+            |value: f64, min: f64, max: f64| value.is_finite() && (min..=max).contains(&value);
+        if !self.take_profit_levels_pct.iter().all(|&level| {
+            in_range(
+                level,
+                TAKE_PROFIT_PROFIT_PCT_MIN,
+                TAKE_PROFIT_PROFIT_PCT_MAX,
+            )
+        }) {
+            return Err(ConfigurationError::Generic {
+                message: format!(
+                    "trader.take_profit_levels_pct values must be between {TAKE_PROFIT_PROFIT_PCT_MIN} and {TAKE_PROFIT_PROFIT_PCT_MAX}"
+                ),
+            }
+            .into());
+        }
+        if !self
+            .take_profit_sell_pct
+            .iter()
+            .all(|&share| in_range(share, TAKE_PROFIT_SELL_PCT_MIN, TAKE_PROFIT_SELL_PCT_MAX))
+        {
+            return Err(ConfigurationError::Generic {
+                message: format!(
+                    "trader.take_profit_sell_pct values must be between {TAKE_PROFIT_SELL_PCT_MIN} and {TAKE_PROFIT_SELL_PCT_MAX}"
+                ),
+            }
+            .into());
+        }
+        if self
+            .take_profit_levels_pct
+            .windows(2)
+            .any(|pair| pair[1] <= pair[0])
+        {
+            return Err(ConfigurationError::Generic {
+                message: "trader.take_profit_levels_pct must be strictly ascending".to_owned(),
+            }
+            .into());
+        }
+        if self.take_profit_sell_pct.iter().sum::<f64>()
+            > TAKE_PROFIT_SELL_PCT_MAX
+                + crate::trader::evaluators::exit_take_profit::TAKE_PROFIT_SHARE_SUM_TOLERANCE_PCT
+        {
+            return Err(ConfigurationError::Generic {
+                message: format!(
+                    "trader.take_profit_sell_pct shares must add up to at most {TAKE_PROFIT_SELL_PCT_MAX}"
+                ),
+            }
+            .into());
+        }
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::TraderConfig;
+    use super::{TakeProfitLevel, TraderConfig, TAKE_PROFIT_MAX_STEPS};
 
     #[test]
     fn auto_trading_is_opt_in_by_default() {
         assert!(!TraderConfig::default().enabled);
+    }
+
+    fn ladder(levels: &[f64], sells: &[f64]) -> TraderConfig {
+        TraderConfig {
+            take_profit_levels_pct: levels.to_vec(),
+            take_profit_sell_pct: sells.to_vec(),
+            ..TraderConfig::default()
+        }
+    }
+
+    #[test]
+    fn the_default_ladder_is_one_full_step_at_twenty_percent() {
+        let config = TraderConfig::default();
+        assert!(config.take_profit_enabled);
+        assert_eq!(
+            config.take_profit_levels(),
+            vec![TakeProfitLevel {
+                profit_pct: 20.0,
+                sell_pct: 100.0,
+            }]
+        );
+        config.validate().expect("the default ladder is valid");
+    }
+
+    #[test]
+    fn the_ladder_pairs_each_level_with_its_share_in_order() {
+        let config = ladder(&[20.0, 50.0, 100.0], &[30.0, 30.0, 40.0]);
+        config.validate().expect("a three-step ladder is valid");
+        let steps = config.take_profit_levels();
+        assert_eq!(steps.len(), 3);
+        assert_eq!(
+            steps[1],
+            TakeProfitLevel {
+                profit_pct: 50.0,
+                sell_pct: 30.0,
+            }
+        );
+    }
+
+    #[test]
+    fn a_ladder_that_leaves_a_runner_is_valid() {
+        ladder(&[25.0, 60.0], &[25.0, 25.0])
+            .validate()
+            .expect("shares under 100 leave a runner");
+    }
+
+    #[test]
+    fn decimal_shares_that_sell_exactly_the_whole_position_are_valid() {
+        let shares = [5.2, 78.9, 15.9];
+        assert!(
+            shares.iter().sum::<f64>() > 100.0,
+            "the float sum carries past 100"
+        );
+        ladder(&[20.0, 50.0, 100.0], &shares)
+            .validate()
+            .expect("shares that add up to 100 are valid");
+    }
+
+    #[test]
+    fn an_impossible_ladder_is_refused() {
+        let too_many: Vec<f64> = (1..=TAKE_PROFIT_MAX_STEPS + 1)
+            .map(|step| step as f64 * 10.0)
+            .collect();
+        let too_many_shares = vec![5.0; TAKE_PROFIT_MAX_STEPS + 1];
+        for (case, config) in [
+            ("no steps", ladder(&[], &[])),
+            ("too many steps", ladder(&too_many, &too_many_shares)),
+            ("unpaired share", ladder(&[20.0, 40.0], &[50.0])),
+            ("not ascending", ladder(&[40.0, 40.0], &[50.0, 50.0])),
+            ("descending", ladder(&[60.0, 40.0], &[50.0, 50.0])),
+            ("over 100 sold", ladder(&[20.0, 40.0], &[60.0, 50.0])),
+            ("over 100 by a tenth", ladder(&[20.0, 40.0], &[50.0, 50.1])),
+            ("level under its bound", ladder(&[0.5], &[100.0])),
+            ("level over its bound", ladder(&[1001.0], &[100.0])),
+            ("share under its bound", ladder(&[20.0], &[4.0])),
+            ("level not finite", ladder(&[f64::NAN], &[100.0])),
+            ("share not finite", ladder(&[20.0], &[f64::INFINITY])),
+        ] {
+            assert!(config.validate().is_err(), "{case} must be refused");
+        }
     }
 }

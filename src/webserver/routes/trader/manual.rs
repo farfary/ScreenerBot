@@ -501,6 +501,7 @@ mod tests {
             size_native: Some(0.005),
             exit_percentage: None,
             slippage_pct: None,
+            take_profit_level: None,
         };
         let mut result = crate::trader::TradeResult::failure_at(
             decision,

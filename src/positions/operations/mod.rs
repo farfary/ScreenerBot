@@ -268,7 +268,7 @@ mod tests {
             ),
             "{add:?}"
         );
-        let partial = partial_close_position("mint", 50.0, "manual_exit", None).await;
+        let partial = partial_close_position("mint", 50.0, "manual_exit", None, None).await;
         assert!(
             matches!(
                 partial,

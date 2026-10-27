@@ -1,7 +1,7 @@
 trader-exit-type-stop-loss = Stop loss
 trader-exit-type-take-profit = Take profit
-trader-exit-type-roi = Objectif de ROI
-trader-exit-type-roi-exit = Objectif de ROI
+trader-exit-type-roi = Take profit
+trader-exit-type-roi-exit = Take profit
 trader-exit-type-trailing-stop = Trailing stop
 trader-exit-type-time-override = Sortie temporelle
 trader-exit-type-time-rule = Règle temporelle
@@ -15,7 +15,7 @@ trader-tab-strategy-control = Contrôle des stratégies
 trader-tab-strategies = Stratégies
 trader-tab-stop-loss = Stop loss
 trader-tab-trailing-stop = Trailing stop
-trader-tab-roi = Take profit
+trader-tab-take-profit = Take profit
 trader-tab-time-rules = Sortie temporelle
 trader-tab-dca = DCA
 trader-tab-settings = Paramètres
@@ -198,14 +198,36 @@ trader-trailing-final = +{ $value } % final
 trader-trailing-summary-protected = Profit de <strong>{ $value }</strong> protégé
 trader-trailing-summary-avoided = Perte de <strong>{ $value }</strong> évitée depuis le pic
 
-trader-roi-title = Take profit
-trader-roi-subtitle = Sortez automatiquement de toute la position lorsque le profit atteint votre objectif
-trader-roi-impact = Sortie à +{ $target } % de profit
-trader-roi-initial-buy = Achat initial
-trader-roi-target-hit = Objectif atteint
-trader-roi-full-position = Position entière
-trader-roi-sold = 100 % vendu
-trader-roi-summary = Profit de <strong>+{ $target } %</strong> sécurisé
+trader-take-profit-title = Take profit
+trader-take-profit-subtitle = Vend la position par paliers à mesure que le gain atteint chaque niveau
+trader-take-profit-initial-buy = Achat initial
+# $step is the step's position in the ladder, from 1.
+trader-take-profit-step = Palier { $step }
+# $step is the step's position in the ladder, from 1.
+trader-take-profit-profit-label = Niveau de gain du palier { $step }
+# $step is the step's position in the ladder, from 1.
+trader-take-profit-sell-label = Part à vendre du palier { $step }
+trader-take-profit-add-step = Ajouter un palier
+# $step is the step's position in the ladder, from 1.
+trader-take-profit-remove-step = Retirer le palier { $step }
+# $min and $max are the configured bounds of a profit level.
+trader-take-profit-error-profit-range = Chaque niveau de gain doit être compris entre { $min }% et { $max }%
+# $min and $max are the configured bounds of a share.
+trader-take-profit-error-sell-range = Chaque part doit être comprise entre { $min }% et { $max }%
+trader-take-profit-error-order = Chaque palier doit avoir un niveau de gain supérieur au précédent
+# $max is the largest total share, the whole position.
+trader-take-profit-error-total = Les paliers peuvent vendre au total { $max }% au maximum
+# $runner is the formatted percentage of the position no step sells.
+trader-take-profit-runner = { $runner }% de la position restent ouverts comme runner
+trader-take-profit-runner-none = Le dernier palier vend le reste de la position
+trader-take-profit-runner-warning = Avec le trailing stop, la sortie temporelle et toutes les stratégies de sortie désactivés, le runner ne se ferme que par le stop loss ou à la main
+trader-take-profit-info = Les parts portent sur la position initiale. Si le prix franchit plusieurs niveaux d'un coup, un palier est vendu par vérification.
+# $profit is the step's formatted profit level; $share is its formatted share.
+trader-take-profit-example-step = À +{ $profit }%, vendre { $share }%
+trader-take-profit-example-runner = Runner
+trader-take-profit-example-runner-detail = Laissé aux autres règles de sortie
+# $sold is the formatted total share the ladder sells; $profit is its last formatted level.
+trader-take-profit-summary = Vend <strong>{ $sold }%</strong> d'ici +{ $profit }% de gain
 
 trader-time-title = Sortie temporelle
 trader-time-subtitle = Sortez automatiquement des positions après une durée de détention maximale si la perte dépasse le seuil

@@ -227,6 +227,10 @@ pub struct PendingPartialExit {
     pub requested_exit_percentage: f64,
     pub expiry_height: Option<u64>,
     pub created_at: DateTime<Utc>,
+    /// The take-profit step this partial exit sells, reserved on the position before the
+    /// swap was sent. Defaulted so an entry persisted before the ladder still rehydrates.
+    #[serde(default)]
+    pub take_profit_level: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -326,6 +330,11 @@ pub struct Position {
     pub total_exited_amount: RawAmount,            // Cumulative tokens sold
     pub average_exit_price: Option<f64>,           // Weighted average exit price
     pub partial_exit_count: u32, // Partial exits booked on the row (plus the recorded closing sale of a reopened row)
+    /// Take-profit steps this round reserved: the next step due is the one at this index of
+    /// the ladder. A partial step is reserved before its swap is sent and given back only on
+    /// proof the swap did not land; a full step reserves nothing.
+    #[serde(default)]
+    pub take_profit_level: u32,
 
     // DCA tracking
     // Adds after the first entry. On a bot row: the adds booked on it (its DCAs and the

@@ -222,6 +222,7 @@ pub fn prepare_copy_sell(
             size_native: None,
             exit_percentage,
             slippage_pct: Some(task.slippage_pct),
+            take_profit_level: None,
         },
         telemetry,
     })
@@ -303,6 +304,7 @@ fn sell_decision(
         telemetry,
         paper_fill: None,
         exit_rule: None,
+        take_profit_level: None,
         paper_context: None,
     }
 }

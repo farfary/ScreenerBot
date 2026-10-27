@@ -18,6 +18,7 @@ import { requestManager } from "../core/request_manager.js";
 import { LOSS_MAGNITUDE, createTraderConfigCards, displayValue } from "./trader/config_cards.js";
 import { playToggleOn, playToggleOff, playError } from "../core/sounds.js";
 import { createExampleUpdaters } from "./trader/examples.js";
+import { renderLevels } from "./trader/level_list.js";
 import { createTraderControls } from "./trader/controls.js";
 import {
   fetchFeatureStatus,
@@ -53,7 +54,7 @@ function buildSubTabs() {
     tab("strategies", I18n.t("trader-tab-strategies")),
     tab("stop-loss", I18n.t("trader-tab-stop-loss")),
     tab("trailing-stop", I18n.t("trader-tab-trailing-stop")),
-    tab("roi", I18n.t("trader-tab-roi")),
+    tab("take-profit", I18n.t("trader-tab-take-profit")),
     tab("time-rules", I18n.t("trader-tab-time-rules")),
     tab("dca", I18n.t("trader-tab-dca")),
     tab("general-settings", I18n.t("trader-tab-settings")),
@@ -95,6 +96,8 @@ function createLifecycle() {
     config: null,
     stats: null,
     strategies: [],
+    // Whether an exit strategy is enabled; `null` until the strategy list loads.
+    exitStrategiesOn: null,
   };
 
   // Initialize sub-modules
@@ -102,6 +105,8 @@ function createLifecycle() {
     $,
     Utils,
     tradeSize: () => state.config?.trader?.trade_size_sol,
+    traderConfig: () => state.config?.trader,
+    exitStrategiesOn: () => state.exitStrategiesOn,
   });
   const controls = createTraderControls({
     state,
@@ -218,7 +223,7 @@ function createLifecycle() {
       stats: "stats-tab",
       "stop-loss": "stop-loss-tab",
       "trailing-stop": "trailing-stop-tab",
-      roi: "roi-tab",
+      "take-profit": "take-profit-tab",
       "time-rules": "time-rules-tab",
       dca: "dca-tab",
       "strategy-control": "strategy-control-tab",
@@ -293,6 +298,11 @@ function createLifecycle() {
     if (tabId === "time-rules") {
       updateTimeRulesStatus();
     }
+
+    // The runner warning reads the exit strategies, which change on their own tabs.
+    if (tabId === "take-profit") {
+      void loadStrategies();
+    }
   }
 
   /**
@@ -318,7 +328,7 @@ function createLifecycle() {
 
       // Update visual examples with loaded values
       examples.updateStopLossExample();
-      examples.updateRoiExample();
+      examples.updateTakeProfitExample();
       examples.updateTimeLossExample();
       examples.updateTrailingStopExample();
       examples.updateDcaExample();
@@ -384,14 +394,14 @@ function createLifecycle() {
       trailDistance.value = trader.trailing_stop_distance_pct;
     }
 
-    // ROI
-    const roiEnabled = $("#roi-enabled");
-    const roiTarget = $("#roi-target");
-    if (roiEnabled) {
-      roiEnabled.checked = trader.roi_exit_enabled || false;
+    // Take profit
+    const takeProfitEnabled = $("#take-profit-enabled");
+    const takeProfitLevels = $("#take-profit-levels");
+    if (takeProfitEnabled) {
+      takeProfitEnabled.checked = trader.take_profit_enabled === true;
     }
-    if (roiTarget) {
-      roiTarget.value = trader.roi_target_percent || 20;
+    if (takeProfitLevels) {
+      renderLevels(takeProfitLevels, trader.take_profit_levels_pct, trader.take_profit_sell_pct);
     }
 
     // Time Rules
@@ -865,6 +875,8 @@ function createLifecycle() {
       const entryStrategies = entryData.items || [];
       const exitStrategies = exitData.items || [];
       state.strategies = [...entryStrategies, ...exitStrategies];
+      state.exitStrategiesOn = exitStrategies.some((strategy) => strategy.enabled === true);
+      examples.updateTakeProfitExample();
 
       updateStrategyLaneCounts(entryStrategies, exitStrategies);
 
@@ -1210,12 +1222,18 @@ function createLifecycle() {
       });
     }
 
-    // ROI target input listener
-    const roiTarget = $("#roi-target");
-    if (roiTarget) {
-      addTrackedListener(roiTarget, "input", () => {
-        examples.updateRoiExample();
+    // Take-profit ladder listener: rows are redrawn on add and remove, so the
+    // ladder element itself carries the listener.
+    const takeProfitLevels = $("#take-profit-levels");
+    if (takeProfitLevels) {
+      addTrackedListener(takeProfitLevels, "input", () => {
+        examples.updateTakeProfitExample();
       });
+    }
+
+    // The other exits that can close a take-profit runner: the runner warning follows them.
+    for (const id of ["#trailing-enabled", "#time-override-enabled"]) {
+      addTrackedListener($(id), "change", () => examples.updateTakeProfitExample());
     }
 
     // Time loss threshold input listener
@@ -1308,7 +1326,7 @@ function createLifecycle() {
           };
         });
         examples.updateStopLossExample();
-        examples.updateRoiExample();
+        examples.updateTakeProfitExample();
         examples.updateTimeLossExample();
         examples.updateDcaExample();
       }
@@ -1414,6 +1432,7 @@ function createLifecycle() {
       void Promise.all([featurePromise, metadataPromise]).then(([features, metadataResponse]) => {
         tradingFeatures = features;
         configCards?.applyMetadata(metadataResponse?.data || metadataResponse || {});
+        examples.updateTakeProfitExample();
         if (lifecycleContext?.isActive()) syncTradingFeatureUi();
       });
     },
@@ -1527,6 +1546,7 @@ function createLifecycle() {
       strategiesPoller = null;
       lifecycleContext = null;
       state.strategies = [];
+      state.exitStrategiesOn = null;
       _lastDailyKey = null;
       _lastExitKey = null;
     },

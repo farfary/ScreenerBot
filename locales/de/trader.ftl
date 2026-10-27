@@ -2,8 +2,8 @@
 
 trader-exit-type-stop-loss = Stop-Loss
 trader-exit-type-take-profit = Take Profit
-trader-exit-type-roi = ROI-Ziel
-trader-exit-type-roi-exit = ROI-Ziel
+trader-exit-type-roi = Take Profit
+trader-exit-type-roi-exit = Take Profit
 trader-exit-type-trailing-stop = Trailing-Stop
 trader-exit-type-time-override = Zeitausstieg
 trader-exit-type-time-rule = Zeitregel
@@ -19,7 +19,7 @@ trader-tab-strategy-control = Strategiesteuerung
 trader-tab-strategies = Strategien
 trader-tab-stop-loss = Stop-Loss
 trader-tab-trailing-stop = Trailing-Stop
-trader-tab-roi = Take Profit
+trader-tab-take-profit = Take Profit
 trader-tab-time-rules = Zeitausstieg
 trader-tab-dca = DCA
 trader-tab-settings = Einstellungen
@@ -199,14 +199,36 @@ trader-trailing-final = +{ $value } % am Ende
 trader-trailing-summary-protected = <strong>{ $value }</strong> Gewinn gesichert
 trader-trailing-summary-avoided = <strong>{ $value }</strong> Verlust vom Hoch vermieden
 
-trader-roi-title = Take Profit
-trader-roi-subtitle = Die gesamte Position automatisch verlassen, wenn der Gewinn Ihr Ziel erreicht
-trader-roi-impact = Ausstieg bei +{ $target } % Gewinn
-trader-roi-initial-buy = Erstkauf
-trader-roi-target-hit = Ziel erreicht
-trader-roi-full-position = Gesamte Position
-trader-roi-sold = 100 % verkauft
-trader-roi-summary = <strong>+{ $target } %</strong> Gewinn gesichert
+trader-take-profit-title = Take Profit
+trader-take-profit-subtitle = Verkauft die Position in Stufen, sobald der Gewinn jede Schwelle erreicht
+trader-take-profit-initial-buy = Erstkauf
+# $step is the step's position in the ladder, from 1.
+trader-take-profit-step = Stufe { $step }
+# $step is the step's position in the ladder, from 1.
+trader-take-profit-profit-label = Gewinnschwelle von Stufe { $step }
+# $step is the step's position in the ladder, from 1.
+trader-take-profit-sell-label = Verkaufsanteil von Stufe { $step }
+trader-take-profit-add-step = Stufe hinzufügen
+# $step is the step's position in the ladder, from 1.
+trader-take-profit-remove-step = Stufe { $step } entfernen
+# $min and $max are the configured bounds of a profit level.
+trader-take-profit-error-profit-range = Jede Gewinnschwelle muss zwischen { $min }% und { $max }% liegen
+# $min and $max are the configured bounds of a share.
+trader-take-profit-error-sell-range = Jeder Anteil muss zwischen { $min }% und { $max }% liegen
+trader-take-profit-error-order = Jede Stufe braucht eine höhere Gewinnschwelle als die vorherige
+# $max is the largest total share, the whole position.
+trader-take-profit-error-total = Die Stufen können zusammen höchstens { $max }% verkaufen
+# $runner is the formatted percentage of the position no step sells.
+trader-take-profit-runner = { $runner }% der Position bleiben als Runner offen
+trader-take-profit-runner-none = Die letzte Stufe verkauft den Rest der Position
+trader-take-profit-runner-warning = Sind Trailing-Stop, Zeitausstieg und alle Ausstiegsstrategien aus, schließt der Runner nur per Stop-Loss oder von Hand
+trader-take-profit-info = Anteile beziehen sich auf die ursprüngliche Position. Überschreitet der Preis mehrere Schwellen auf einmal, verkauft pro Prüfung eine Stufe.
+# $profit is the step's formatted profit level; $share is its formatted share.
+trader-take-profit-example-step = Bei +{ $profit }% { $share }% verkaufen
+trader-take-profit-example-runner = Runner
+trader-take-profit-example-runner-detail = Den anderen Ausstiegsregeln überlassen
+# $sold is the formatted total share the ladder sells; $profit is its last formatted level.
+trader-take-profit-summary = Verkauft <strong>{ $sold }%</strong> bis +{ $profit }% Gewinn
 
 trader-time-title = Zeitausstieg
 trader-time-subtitle = Positionen nach einer maximalen Haltedauer automatisch verlassen, wenn der Verlust die Schwelle überschreitet

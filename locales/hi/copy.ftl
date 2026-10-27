@@ -429,6 +429,8 @@ copy-rules-target-max = अधिकतम { $amount }
 copy-rules-target-between = { $min } – { $max } { -sol }
 copy-rules-source-override = टास्क ओवरराइड · ट्रेडर { $value }
 copy-rules-source-default = ट्रेडर डिफ़ॉल्ट
+# $profit is the step's signed profit level; $share is the share of the position it sells, both formatted.
+copy-rules-take-profit-step = { $profit } पर { $share } बेचें
 copy-rules-not-used = उपयोग नहीं: वॉलेट के सेल तय करते हैं
 copy-rules-col-rule = नियम
 copy-rules-col-applies = लागू
@@ -471,6 +473,7 @@ copy-rule-partial-size = बेचने वाला हिस्सा
 copy-rule-trailing-activation = इतने लाभ पर सक्रिय होता है
 copy-rule-trailing-distance = पीक से इतना नीचे बेचता है
 copy-rule-take-profit-target = इतने लाभ पर बेचता है
+copy-rule-take-profit-target-hint = यहाँ लक्ष्य देने पर ट्रेडर के टेक प्रॉफ़िट चरणों की जगह एक ही चरण आता है जो पूरी पोज़िशन बेचता है
 copy-rule-time-duration = इतना होल्ड करने के बाद जाँचता है
 copy-rule-time-threshold = लाभ-हानि इसके बराबर या नीचे होने पर बेचता है
 copy-preset-inherit = ट्रेडर डिफ़ॉल्ट

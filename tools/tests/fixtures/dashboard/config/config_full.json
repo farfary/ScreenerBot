@@ -64,8 +64,9 @@
       "exit_loss_shortfall_pct": 5,
       "exit_retry_steps_pct": [3, 10, 25]
     },
-    "roi_exit_enabled": true,
-    "roi_target_percent": 20,
+    "take_profit_enabled": true,
+    "take_profit_levels_pct": [20],
+    "take_profit_sell_pct": [100],
     "time_override_enabled": true,
     "time_override_duration": 168,
     "time_override_unit": "hours",

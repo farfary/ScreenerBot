@@ -156,25 +156,6 @@
         "step": 5,
         "default": 15
       },
-      "roi_exit_enabled": {
-        "type": "boolean",
-        "key": "config-trader-roi-exit-enabled",
-        "impact": "high",
-        "category": "roi-exit",
-        "visibility": "primary",
-        "default": true
-      },
-      "roi_target_percent": {
-        "type": "number",
-        "key": "config-trader-roi-target-percent",
-        "impact": "high",
-        "category": "roi-exit",
-        "visibility": "primary",
-        "min": 1,
-        "max": 1000,
-        "step": 1,
-        "default": 20
-      },
       "sell_concurrency": {
         "type": "integer",
         "key": "config-trader-sell-concurrency",
@@ -291,6 +272,40 @@
         "max": 100,
         "step": 1,
         "default": 50
+      },
+      "take_profit_enabled": {
+        "type": "boolean",
+        "key": "config-trader-take-profit-enabled",
+        "impact": "high",
+        "category": "take-profit",
+        "visibility": "primary",
+        "default": true
+      },
+      "take_profit_levels_pct": {
+        "type": "array",
+        "key": "config-trader-take-profit-levels-pct",
+        "item_type": "number",
+        "impact": "high",
+        "category": "take-profit",
+        "visibility": "primary",
+        "min": 1,
+        "max": 1000,
+        "step": 1,
+        "max_items": 4,
+        "default": [20]
+      },
+      "take_profit_sell_pct": {
+        "type": "array",
+        "key": "config-trader-take-profit-sell-pct",
+        "item_type": "number",
+        "impact": "high",
+        "category": "take-profit",
+        "visibility": "primary",
+        "min": 5,
+        "max": 100,
+        "step": 1,
+        "max_items": 4,
+        "default": [100]
       },
       "time_override_duration": {
         "type": "number",

@@ -3,10 +3,7 @@
 
 //! Trailing stop loss implementation.
 
-use crate::positions::Position;
-use crate::trader::evaluators::exit_rules::{ExitRule, RuleOutcome};
 use crate::trader::policy::TrailingPolicy;
-use crate::trader::types::TradeDecision;
 
 /// The trailing-stop rule on plain numbers, shared by the live evaluator and the
 /// paper copy book. `Err` carries the detail of an impossible configuration.
@@ -50,45 +47,4 @@ pub fn trailing_stop_triggered(
     let stop_price = peak_price * (1.0 - policy.distance_pct / 100.0);
     let current_profit_pct = (current_price / entry_price - 1.0) * 100.0;
     Ok(current_price <= stop_price && current_profit_pct > 0.0)
-}
-
-/// Check if a position should be exited based on trailing stop
-pub async fn check_trailing_stop(
-    position: &Position,
-    current_price: f64,
-    policy: &TrailingPolicy,
-) -> crate::trader::Result<Option<TradeDecision>> {
-    if !current_price.is_finite() || current_price <= 0.0 {
-        return Err(crate::positions::Error::InvalidPrice {
-            mint: position.mint.clone(),
-            price: current_price,
-        }
-        .into());
-    }
-    let triggered = trailing_stop_triggered(
-        position.average_entry_price,
-        position.basis_peak_price,
-        current_price,
-        policy,
-    )
-    .map_err(|e| match e {
-        crate::trader::Error::InvalidExitPolicy { detail } => {
-            crate::trader::Error::StrategyEvaluation {
-                mint: position.mint.clone(),
-                detail,
-            }
-        }
-        other => other,
-    })?;
-    if !triggered {
-        return Ok(None);
-    }
-    Ok(Some(super::exit::rule_decision(
-        position,
-        current_price,
-        &RuleOutcome {
-            rule: ExitRule::Trailing,
-            exit_percentage: None,
-        },
-    )))
 }

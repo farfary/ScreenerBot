@@ -7,7 +7,12 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 // Database schema version
-pub(super) const POSITIONS_SCHEMA_VERSION: u32 = 7;
+pub(super) const POSITIONS_SCHEMA_VERSION: u32 = 8;
+
+/// The oldest core that reads the store. Version 7 adds `basis_peak_price NOT NULL`
+/// without a default, which no earlier core writes. Version 8 adds `take_profit_level`
+/// with a default, so a version 7 core still inserts and rewrites rows.
+pub(super) const POSITIONS_MIN_READER_VERSION: u32 = 7;
 
 /// The version the store held when the schema ledger was adopted.
 pub(super) const POSITIONS_LEDGER_BASELINE_VERSION: u32 = 6;
@@ -34,7 +39,7 @@ pub(super) const POSITION_SELECT_COLUMNS: &str = r#"
   phantom_confirmations, phantom_first_seen, synthetic_exit, closed_reason,
   pnl, pnl_percent, unrealized_pnl, unrealized_pnl_percent,
   remaining_token_amount, total_exited_amount, average_exit_price, partial_exit_count,
-  dca_count, average_entry_price, last_dca_time,
+  take_profit_level, dca_count, average_entry_price, last_dca_time,
   archived, archived_at, origin_kind, origin_ref, management,
   round_key, basis_complete, history_complete, holding_state, basis_peak_price
 "#;
@@ -92,6 +97,7 @@ CREATE TABLE IF NOT EXISTS positions (
   total_exited_amount TEXT NOT NULL DEFAULT '0', -- Cumulative tokens sold
   average_exit_price REAL, -- Weighted average exit price
   partial_exit_count INTEGER NOT NULL DEFAULT 0, -- Number of partial exits
+  take_profit_level INTEGER NOT NULL DEFAULT 0, -- Take-profit steps this round reserved
   -- DCA tracking
   dca_count INTEGER NOT NULL DEFAULT 0, -- Number of additional entries (DCA)
   average_entry_price REAL NOT NULL DEFAULT 0, -- Weighted average entry price
@@ -281,6 +287,15 @@ pub(super) const POSITIONS_CHAIN_COLUMNS: &[(&str, &str)] = &[(
 pub(super) const POSITIONS_BASIS_PEAK_COLUMNS: &[(&str, &str)] = &[(
     "basis_peak_price",
     "ALTER TABLE positions ADD COLUMN basis_peak_price REAL NOT NULL DEFAULT 0",
+)];
+
+/// The take-profit steps a round reserved, added to tables created before the ladder.
+/// The canonical table carries the same default, so no row needs a backfill: every open
+/// position of an earlier release sold its single take-profit target in full, so none of
+/// them reserved a step.
+pub(super) const POSITIONS_TAKE_PROFIT_COLUMNS: &[(&str, &str)] = &[(
+    "take_profit_level",
+    "ALTER TABLE positions ADD COLUMN take_profit_level INTEGER NOT NULL DEFAULT 0",
 )];
 
 /// Positions columns of earlier releases that the canonical table no longer has.

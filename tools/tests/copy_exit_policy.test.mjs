@@ -8,6 +8,8 @@
  * The backend merges a task's exit overrides per field, so a stored threshold under a
  * switch that follows the Trader still applies. The card note and the warnings both
  * read the resolved policy; neither may fall back to the Trader default alone.
+ * An inherited take-profit ladder reads as its steps on the Rules tab, never as the target
+ * of its first step alone, and the editor says that a target override is one full exit.
  *
  * Run with `npm run test:js`.
  */
@@ -23,6 +25,7 @@ import {
   exitWarnings,
   inheritNote,
 } from "../../src/webserver/templates/scripts/pages/copy/policy.js";
+import { rulesHtml } from "../../src/webserver/templates/scripts/pages/copy/rules.js";
 
 const plain = (text) => text.replace(/[⁨⁩]/g, "");
 const workspace = JSON.parse(
@@ -68,4 +71,61 @@ test("a rule with no stored values follows the Trader's own summary", () => {
   const note = plain(inheritNote(STOP, traderDefaults, { stop_loss: { enabled: null } }));
   assert.match(note, /^Follows the Trader: /);
   assert.ok(percents(note).includes(40), note);
+});
+
+const esc = (text) =>
+  String(text).replace(/[&<>"']/g, (char) => `&#${char.charCodeAt(0)};`);
+const LADDER = [
+  { profit_pct: 20, sell_pct: 30 },
+  { profit_pct: 40, sell_pct: 30 },
+  { profit_pct: 80, sell_pct: 40 },
+];
+const TAKE_PROFIT = RULES.find((rule) => rule.group === "roi");
+
+/** The text of the take-profit target row of a rendered Rules table. */
+function targetRow(html) {
+  const label = TAKE_PROFIT.fields.find((field) => field.key === "target_profit_pct").label;
+  const row = plain(html).match(new RegExp(`<tr[^>]*><td>${label}</td><td>([^<]*)</td>`));
+  assert.ok(row, "the Rules table has a take-profit target row");
+  return row[1];
+}
+
+test("an inherited take-profit ladder reads as its steps on the Rules tab", () => {
+  const roi = { enabled: true, target_profit_pct: 20, levels: LADDER };
+  const traderDefaults = { ...workspace.trader_defaults, roi };
+  const overrides = {
+    ...workspace.exit_policy_overrides,
+    roi: { enabled: null, target_profit_pct: null },
+  };
+  const task = { ...workspace, exit_policy_overrides: overrides };
+  const context = { task, traderDefaults, managesExits: true };
+
+  const steps = "At +20%, sell 30%, At +40%, sell 30%, At +80%, sell 40%";
+  const backend = { ...workspace.effective_policy, roi };
+  assert.equal(targetRow(rulesHtml({ ...context, effective: backend }, esc)), steps);
+  assert.equal(
+    targetRow(rulesHtml({ ...context, effective: effectivePolicy(traderDefaults, overrides) }, esc)),
+    steps,
+    "the editor's review reads the same steps"
+  );
+
+  // A target override is one full exit, named by its target alone.
+  const own = { ...overrides, roi: { enabled: true, target_profit_pct: 50 } };
+  assert.equal(
+    targetRow(
+      rulesHtml(
+        { ...context, task: { ...task, exit_policy_overrides: own }, effective: effectivePolicy(traderDefaults, own) },
+        esc
+      )
+    ),
+    "+50%"
+  );
+});
+
+test("the take-profit target field says an override replaces the ladder with one full exit", () => {
+  const target = TAKE_PROFIT.fields.find((field) => field.key === "target_profit_pct");
+  assert.equal(
+    plain(target.hint),
+    "A target here replaces the Trader's take-profit steps with one step that sells the whole position"
+  );
 });

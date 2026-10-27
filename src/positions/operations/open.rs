@@ -354,6 +354,7 @@ async fn open_position_impl(
         total_exited_amount: Default::default(),
         average_exit_price: None,
         partial_exit_count: 0,
+        take_profit_level: 0,
         dca_count: 0,
         average_entry_price: entry_price, // Initial entry price
         last_dca_time: None,

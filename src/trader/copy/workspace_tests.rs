@@ -76,6 +76,8 @@ fn legacy_workspace_values_use_only_saved_paper_estimates() {
         opened_at: now,
         closed_at: None,
         peak_price_native: None,
+        take_profit_level: 0,
+        round_partial_exits: 0,
     };
 
     let summary = legacy_paper_summary(&[position], 2.5);

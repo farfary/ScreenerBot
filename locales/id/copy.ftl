@@ -432,6 +432,8 @@ copy-rules-target-max = Maksimal { $amount }
 copy-rules-target-between = { $min } – { $max } { -sol }
 copy-rules-source-override = Penggantian tugas · Trader { $value }
 copy-rules-source-default = Default Trader
+# $profit is the step's signed profit level; $share is the share of the position it sells, both formatted.
+copy-rules-take-profit-step = Pada { $profit }, jual { $share }
 copy-rules-not-used = Tidak digunakan: penjualan dompet yang menentukan
 copy-rules-col-rule = Aturan
 copy-rules-col-applies = Berlaku
@@ -475,6 +477,7 @@ copy-rule-partial-size = Bagian yang Dijual
 copy-rule-trailing-activation = Aktif saat untung sebesar
 copy-rule-trailing-distance = Menjual saat turun dari puncak sebesar
 copy-rule-take-profit-target = Menjual saat untung sebesar
+copy-rule-take-profit-target-hint = Target di sini mengganti tahap take profit Trader dengan satu tahap yang menjual seluruh posisi
 copy-rule-time-duration = Memeriksa setelah ditahan selama
 copy-rule-time-threshold = Menjual selama P&L sama dengan atau di bawah
 copy-preset-inherit = Default Trader

@@ -1,7 +1,7 @@
 trader-exit-type-stop-loss = Zarar durdur
 trader-exit-type-take-profit = Kâr al
-trader-exit-type-roi = ROI hedefi
-trader-exit-type-roi-exit = ROI hedefi
+trader-exit-type-roi = Kâr al
+trader-exit-type-roi-exit = Kâr al
 trader-exit-type-trailing-stop = İz süren stop
 trader-exit-type-time-override = Zaman çıkışı
 trader-exit-type-time-rule = Zaman kuralı
@@ -15,7 +15,7 @@ trader-tab-strategy-control = Strateji kontrolü
 trader-tab-strategies = Stratejiler
 trader-tab-stop-loss = Zarar durdur
 trader-tab-trailing-stop = İz süren stop
-trader-tab-roi = Kâr al
+trader-tab-take-profit = Kâr al
 trader-tab-time-rules = Zaman çıkışı
 trader-tab-dca = DCA
 trader-tab-settings = Ayarlar
@@ -191,14 +191,36 @@ trader-trailing-final = Nihai +%{ $value }
 trader-trailing-summary-protected = Korunan kâr: <strong>{ $value }</strong>
 trader-trailing-summary-avoided = Tepeden kaçınılan zarar: <strong>{ $value }</strong>
 
-trader-roi-title = Kâr al
-trader-roi-subtitle = Kâr hedefinize ulaştığında pozisyonun tamamından otomatik olarak çıkın
-trader-roi-impact = +%{ $target } kârda çık
-trader-roi-initial-buy = İlk alım
-trader-roi-target-hit = Hedefe ulaşıldı
-trader-roi-full-position = Tam pozisyon
-trader-roi-sold = %100 satıldı
-trader-roi-summary = Kilitlenen kâr: <strong>+%{ $target }</strong>
+trader-take-profit-title = Kâr al
+trader-take-profit-subtitle = Kâr her seviyeye ulaştıkça pozisyonu kademeli olarak satar
+trader-take-profit-initial-buy = İlk alım
+# $step is the step's position in the ladder, from 1.
+trader-take-profit-step = Kademe { $step }
+# $step is the step's position in the ladder, from 1.
+trader-take-profit-profit-label = Kademe { $step } kâr seviyesi
+# $step is the step's position in the ladder, from 1.
+trader-take-profit-sell-label = Kademe { $step } satış payı
+trader-take-profit-add-step = Kademe ekle
+# $step is the step's position in the ladder, from 1.
+trader-take-profit-remove-step = Kademe { $step } kaldır
+# $min and $max are the configured bounds of a profit level.
+trader-take-profit-error-profit-range = Her kâr seviyesi %{ $min } ile %{ $max } arasında olmalı
+# $min and $max are the configured bounds of a share.
+trader-take-profit-error-sell-range = Her pay %{ $min } ile %{ $max } arasında olmalı
+trader-take-profit-error-order = Her kademenin kâr seviyesi bir öncekinden yüksek olmalı
+# $max is the largest total share, the whole position.
+trader-take-profit-error-total = Kademeler birlikte en fazla %{ $max } satabilir
+# $runner is the formatted percentage of the position no step sells.
+trader-take-profit-runner = Pozisyonun %{ $runner } kadarı runner olarak açık kalır
+trader-take-profit-runner-none = Son kademe pozisyonun kalanını satar
+trader-take-profit-runner-warning = İz süren stop, zaman çıkışı ve tüm çıkış stratejileri kapalıyken runner yalnızca zarar durdur ile ya da elle kapanır
+trader-take-profit-info = Paylar ilk pozisyona göredir. Fiyat aynı anda birkaç seviyeyi geçerse her kontrolde bir kademe satılır.
+# $profit is the step's formatted profit level; $share is its formatted share.
+trader-take-profit-example-step = +%{ $profit } kârda %{ $share } sat
+trader-take-profit-example-runner = Runner
+trader-take-profit-example-runner-detail = Diğer çıkış kurallarına bırakılır
+# $sold is the formatted total share the ladder sells; $profit is its last formatted level.
+trader-take-profit-summary = +%{ $profit } kâra kadar <strong>%{ $sold }</strong> satar
 
 trader-time-title = Zaman çıkışı
 trader-time-subtitle = Zarar eşiği aşılırsa, azami tutma süresinden sonra pozisyonlardan otomatik olarak çıkın

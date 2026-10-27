@@ -449,6 +449,8 @@ copy-rules-target-max = Höchstens { $amount }
 copy-rules-target-between = { $min } – { $max } { -sol }
 copy-rules-source-override = Aufgaben-Überschreibung · Trader { $value }
 copy-rules-source-default = Trader-Standard
+# $profit is the step's signed profit level; $share is the share of the position it sells, both formatted.
+copy-rules-take-profit-step = Bei { $profit } { $share } verkaufen
 copy-rules-not-used = Nicht verwendet: Die Verkäufe der Wallet entscheiden
 copy-rules-col-rule = Regel
 copy-rules-col-applies = Gilt
@@ -493,6 +495,7 @@ copy-rule-partial-size = Zu verkaufender Anteil
 copy-rule-trailing-activation = Aktiviert sich bei einem Gewinn von
 copy-rule-trailing-distance = Verkauft unterhalb des Höchststands um
 copy-rule-take-profit-target = Verkauft bei einem Gewinn von
+copy-rule-take-profit-target-hint = Ein Ziel hier ersetzt die Take-Profit-Stufen des Traders durch eine Stufe, die die ganze Position verkauft
 copy-rule-time-duration = Prüft nach einer Haltedauer von
 copy-rule-time-threshold = Verkauft, solange die GuV höchstens beträgt
 copy-preset-inherit = Trader-Standards

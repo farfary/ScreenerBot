@@ -26,9 +26,7 @@ use super::types::*;
 /// The schema of `positions.db`. Older cores read `position_metadata.schema_version`.
 pub(crate) const SCHEMA: StoreSchema = StoreSchema {
     version: POSITIONS_SCHEMA_VERSION as i64,
-    // Version 7 adds `basis_peak_price NOT NULL` without a default, which no earlier core
-    // writes, so v7 is the oldest version that reads the store.
-    min_reader_version: POSITIONS_SCHEMA_VERSION as i64,
+    min_reader_version: POSITIONS_MIN_READER_VERSION as i64,
     baseline: POSITIONS_LEDGER_BASELINE_VERSION as i64,
     renames: Some(&super::column_names::RENAMES),
     step,
@@ -95,6 +93,11 @@ fn create_schema(tx: &Transaction<'_>, chains: &[ChainId]) -> Result<Vec<String>
     let basis_peak_added = add_missing_columns(tx, "positions", POSITIONS_BASIS_PEAK_COLUMNS)?;
     let seeds_basis_peak = !basis_peak_added.is_empty();
     added.extend(basis_peak_added);
+    added.extend(add_missing_columns(
+        tx,
+        "positions",
+        POSITIONS_TAKE_PROFIT_COLUMNS,
+    )?);
     if !added.is_empty() {
         summary.push(format!("added positions columns {}", added.join(", ")));
     }
@@ -346,12 +349,13 @@ impl PositionsDatabase {
         pnl, pnl_percent, unrealized_pnl, unrealized_pnl_percent,
         remaining_token_amount, total_exited_amount, average_exit_price, partial_exit_count,
         dca_count, average_entry_price, last_dca_time, origin_kind, origin_ref, management,
-        round_key, basis_complete, history_complete, holding_state, basis_peak_price
+        round_key, basis_complete, history_complete, holding_state, basis_peak_price,
+        take_profit_level
       ) VALUES (
         ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17,
         ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32, ?33,
         ?34, ?35, ?36, ?37, ?38, ?39, ?40, ?41, ?42, ?43, ?44, ?45, ?46, ?47,
-        ?48, ?49, ?50, ?51, ?52
+        ?48, ?49, ?50, ?51, ?52, ?53
       ) RETURNING id
       "#,
                 params![
@@ -407,6 +411,7 @@ impl PositionsDatabase {
                     position.history_complete,
                     position.holding_state,
                     position.basis_peak_price,
+                    i64::from(position.take_profit_level),
                 ],
                 |row| row.get::<_, i64>(0),
             )
@@ -787,6 +792,7 @@ impl PositionsDatabase {
             total_exited_amount: row.get("total_exited_amount")?,
             average_exit_price: row.get("average_exit_price")?,
             partial_exit_count: row.get::<_, i64>("partial_exit_count")? as u32,
+            take_profit_level: row.get("take_profit_level")?,
             dca_count: row.get::<_, i64>("dca_count")? as u32,
             average_entry_price: row.get("average_entry_price")?,
             last_dca_time,
@@ -877,7 +883,7 @@ pub(super) fn write_position_row(
         remaining_token_amount = ?37, total_exited_amount = ?38, average_exit_price = ?39,
         partial_exit_count = ?40, dca_count = ?41, average_entry_price = ?42, last_dca_time = ?43,
         round_key = ?44, basis_complete = ?45, history_complete = ?46, holding_state = ?47,
-        basis_peak_price = ?48, updated_at = datetime('now')
+        basis_peak_price = ?48, take_profit_level = ?50, updated_at = datetime('now')
       WHERE id = ?1 AND chain_id = ?49
       "#,
         params![
@@ -930,6 +936,7 @@ pub(super) fn write_position_row(
             position.holding_state,
             position.basis_peak_price,
             chain,
+            i64::from(position.take_profit_level),
         ],
     )
 }
@@ -1040,6 +1047,7 @@ mod tests {
             "history_complete",
             "holding_state",
             "basis_peak_price",
+            "take_profit_level",
         ] {
             assert!(
                 schema::table_has_column(connection, "positions", column).unwrap(),

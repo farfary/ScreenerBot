@@ -1,7 +1,7 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 //
-// Trader example panels - live calculation previews for stop loss, trailing stop and ROI settings.
+// Trader example panels - live calculation previews for stop loss, trailing stop and take-profit settings.
 
 import {
   formatFixed,
@@ -9,6 +9,7 @@ import {
   formatSol,
   formatTimeSpan,
 } from "../../core/format.js";
+import { levelError, readLevels, runnerShare } from "./level_list.js";
 
 /**
  * Trader Example Updaters Module
@@ -25,9 +26,19 @@ import {
  * @param {Object} deps.Utils - Utility functions module
  * @param {() => (number|null|undefined)} deps.tradeSize - The configured trade size in SOL
  *   (`trader.trade_size_sol`), or nothing before the config has loaded
+ * @param {() => (Object|null|undefined)} deps.traderConfig - The loaded `trader` config
+ *   section, or nothing before the config has loaded
+ * @param {() => (boolean|null)} deps.exitStrategiesOn - Whether an exit strategy is enabled,
+ *   or `null` before the strategy list has loaded
  * @returns {Object} Example updater functions
  */
-export function createExampleUpdaters({ $, Utils: _Utils, tradeSize }) {
+export function createExampleUpdaters({
+  $,
+  Utils: _Utils,
+  tradeSize,
+  traderConfig,
+  exitStrategiesOn,
+}) {
   /** A SOL amount in an example or a computed line; "—" while the trade size is unknown. */
   const exampleSol = (amount) => formatSol(amount, { decimals: 6, fallback: "—", subscript: true });
 
@@ -106,34 +117,139 @@ export function createExampleUpdaters({ $, Utils: _Utils, tradeSize }) {
   }
 
   /**
-   * Update ROI example display
+   * One step of a worked example: its bare glyph, title, figure and detail. `valueId`
+   * names the figure for the page's own checks.
    */
-  function updateRoiExample() {
-    const roiInput = $("#roi-target");
-    const impactText = $("#roi-impact");
-    const exampleProfit = $("#roi-example-profit");
-    const exampleTarget = $("#roi-example-target");
-    const exampleSummary = $("#roi-example-summary");
+  function timelineStep({ tone, icon, title, value, valueId, detail }) {
+    const step = document.createElement("div");
+    step.className = "timeline-step";
+    const glyph = document.createElement("div");
+    glyph.className = `step-icon step-icon-${tone}`;
+    const glyphIcon = document.createElement("i");
+    glyphIcon.className = icon;
+    glyph.append(glyphIcon);
+    const content = document.createElement("div");
+    content.className = "step-content";
+    const titleEl = document.createElement("div");
+    titleEl.className = "step-title";
+    titleEl.textContent = title;
+    const valueEl = document.createElement("div");
+    valueEl.className = "step-value";
+    valueEl.id = valueId;
+    valueEl.textContent = value;
+    const detailEl = document.createElement("div");
+    detailEl.className = "step-detail";
+    detailEl.textContent = detail;
+    content.append(titleEl, valueEl, detailEl);
+    step.append(glyph, content);
+    return step;
+  }
 
-    if (!roiInput) return;
+  function timelineArrow() {
+    const arrow = document.createElement("div");
+    arrow.className = "timeline-arrow";
+    const icon = document.createElement("i");
+    icon.className = "icon-chevron-right";
+    arrow.append(icon);
+    return arrow;
+  }
 
-    const value = parseFloat(roiInput.value) || 20;
-
-    // Update impact text
-    if (impactText) {
-      impactText.textContent = I18n.t("trader-roi-impact", { target: String(value) });
+  /**
+   * The take-profit ladder the example and the runner line describe: the steps as
+   * edited while they are valid, otherwise the loaded config.
+   */
+  function takeProfitLadder(levels) {
+    if (levels && levelError(levels) === null) {
+      const edited = readLevels(levels);
+      if (edited.profits.length > 0) return edited;
     }
+    const trader = traderConfig?.();
+    if (!trader) return null;
+    return { profits: trader.take_profit_levels_pct, sells: trader.take_profit_sell_pct };
+  }
 
-    // Update visual example
-    if (exampleProfit) {
-      exampleProfit.textContent = I18n.t("trader-example-profit", { value: String(value) });
+  /**
+   * Update the take-profit ladder's runner line and its worked example: one buy at
+   * the configured trade size, each step's position value and share, and the part
+   * no step sells.
+   */
+  function updateTakeProfitExample() {
+    const levels = $("#take-profit-levels");
+    const runnerLine = $("#take-profit-runner");
+    const runnerWarning = $("#take-profit-runner-warning");
+    const timeline = $("#take-profit-example");
+    const summary = $("#take-profit-example-summary");
+    const ladder = takeProfitLadder(levels);
+    const runner = levels && levelError(levels) === null ? runnerShare(levels) : null;
+
+    if (runnerLine) {
+      runnerLine.hidden = runner === null;
+      if (runner !== null) {
+        runnerLine.textContent =
+          runner > 0
+            ? I18n.t("trader-take-profit-runner", { runner: examplePercent(runner) })
+            : I18n.t("trader-take-profit-runner-none");
+      }
     }
+    if (runnerWarning) {
+      // Only a rule that is known to be off leaves the runner to the stop loss and the
+      // user: a switch not drawn yet or a strategy list not loaded yet warns of nothing.
+      const otherExitsOff =
+        $("#trailing-enabled")?.checked === false &&
+        $("#time-override-enabled")?.checked === false &&
+        exitStrategiesOn?.() === false;
+      runnerWarning.hidden = !(runner !== null && runner > 0 && otherExitsOff);
+    }
+    if (!ladder || !timeline) return;
+
     const entry = Number(tradeSize?.());
-    const exampleEntry = $("#roi-example-entry");
-    if (exampleEntry) exampleEntry.textContent = exampleSol(entry);
-    if (exampleTarget) exampleTarget.textContent = exampleSol(entry * (1 + value / 100));
-    if (exampleSummary) {
-      exampleSummary.innerHTML = I18n.markup("trader-roi-summary", { target: String(value) });
+    const steps = [
+      timelineStep({
+        tone: "entry",
+        icon: "icon-arrow-right",
+        title: I18n.t("trader-step-entry"),
+        value: exampleSol(entry),
+        valueId: "take-profit-example-entry",
+        detail: I18n.t("trader-take-profit-initial-buy"),
+      }),
+    ];
+    ladder.profits.forEach((profit, index) => {
+      steps.push(
+        timelineArrow(),
+        timelineStep({
+          tone: "peak",
+          icon: "icon-trending-up",
+          title: I18n.t("trader-take-profit-step", { step: index + 1 }),
+          value: exampleSol(entry * (1 + profit / 100)),
+          valueId: `take-profit-example-step-${index + 1}`,
+          detail: I18n.t("trader-take-profit-example-step", {
+            profit: examplePercent(profit),
+            share: examplePercent(ladder.sells[index]),
+          }),
+        })
+      );
+    });
+    if (runner !== null && runner > 0) {
+      steps.push(
+        timelineArrow(),
+        timelineStep({
+          tone: "activation",
+          icon: "icon-flag",
+          title: I18n.t("trader-take-profit-example-runner"),
+          value: I18n.t("trader-value-percent", { value: examplePercent(runner) }),
+          valueId: "take-profit-example-runner",
+          detail: I18n.t("trader-take-profit-example-runner-detail"),
+        })
+      );
+    }
+    timeline.replaceChildren(...steps);
+
+    if (summary) {
+      const sold = ladder.sells.reduce((total, share) => total + share, 0);
+      summary.innerHTML = I18n.markup("trader-take-profit-summary", {
+        sold: examplePercent(sold),
+        profit: examplePercent(ladder.profits[ladder.profits.length - 1]),
+      });
     }
   }
 
@@ -368,7 +484,7 @@ export function createExampleUpdaters({ $, Utils: _Utils, tradeSize }) {
   // Return public API
   return {
     updateDcaExample,
-    updateRoiExample,
+    updateTakeProfitExample,
     updateStopLossExample,
     updateTrailingStopExample,
     updateTimeConversionHint,

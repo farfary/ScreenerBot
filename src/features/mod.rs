@@ -32,8 +32,8 @@ mod tests {
 
     #[test]
     fn test_trading_feature_availability() {
-        assert!(is_trading_feature_available("roi-exit"));
-        assert!(is_trading_feature_available("roi_exit"));
+        assert!(is_trading_feature_available("take-profit"));
+        assert!(is_trading_feature_available("take_profit"));
         assert!(is_trading_feature_available("stop-loss"));
         assert!(is_trading_feature_available("dca"));
         assert!(is_trading_feature_available("copy-wallet"));

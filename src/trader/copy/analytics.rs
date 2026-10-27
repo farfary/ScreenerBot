@@ -193,6 +193,8 @@ mod tests {
             opened_at: Utc::now(),
             closed_at: (tokens == 0.0).then(Utc::now),
             peak_price_native: None,
+            take_profit_level: 0,
+            round_partial_exits: 0,
         }
     }
 

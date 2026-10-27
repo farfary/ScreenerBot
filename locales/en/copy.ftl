@@ -486,6 +486,8 @@ copy-rules-target-between = { $min } – { $max } { -sol }
 # $value is the Trader default in the rule's own wording.
 copy-rules-source-override = Task override · Trader { $value }
 copy-rules-source-default = Trader default
+# $profit is the step's signed profit level; $share is the share of the position it sells, both formatted.
+copy-rules-take-profit-step = At { $profit }, sell { $share }
 copy-rules-not-used = Not used: the wallet's sells decide
 copy-rules-col-rule = Rule
 copy-rules-col-applies = Applies
@@ -531,6 +533,7 @@ copy-rule-partial-size = Part to Sell
 copy-rule-trailing-activation = Arms at a Gain of
 copy-rule-trailing-distance = Sells Below the Peak by
 copy-rule-take-profit-target = Sells at a Gain of
+copy-rule-take-profit-target-hint = A target here replaces the Trader's take-profit steps with one step that sells the whole position
 copy-rule-time-duration = Checks After Holding
 copy-rule-time-threshold = Sells While P&L Is at or Below
 copy-preset-inherit = Trader Defaults

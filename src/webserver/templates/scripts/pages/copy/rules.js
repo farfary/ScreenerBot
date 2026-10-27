@@ -11,7 +11,7 @@ import {
   settingPct,
   settingSol,
 } from "./format.js";
-import { RULES, exitWarnings, fieldText, isOverridden } from "./policy.js";
+import { RULES, exitWarnings, fieldText, isOverridden, ladderText } from "./policy.js";
 
 function sizeText(task) {
   if (task.sizing?.kind === "ratio_of_target") {
@@ -52,11 +52,16 @@ function ruleTable({ task, effective, traderDefaults, managesExits }, esc) {
               value: fieldText(field, traderDefaults?.[rule.group]?.[field.key]),
             })
           : I18n.t("copy-rules-source-default");
-        // A rule that is on but never runs must not read as running.
+        // A rule that is on but never runs must not read as running, and an inherited
+        // take-profit ladder reads as its steps rather than as its first step's target.
+        const ladder =
+          rule.group === "roi" && field.key === "target_profit_pct"
+            ? ladderText(effective?.roi?.levels)
+            : null;
         const applies =
           !managesExits && field.key === "enabled"
             ? I18n.t("copy-rules-not-used")
-            : fieldText(field, effective?.[rule.group]?.[field.key]);
+            : (ladder ?? fieldText(field, effective?.[rule.group]?.[field.key]));
         return `<tr class="${inactive ? "is-inactive" : ""}"><td>${esc(field.label)}</td><td>${esc(applies)}</td><td class="copy-rules-source">${esc(source)}</td></tr>`;
       })
       .join("");

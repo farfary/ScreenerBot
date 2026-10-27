@@ -30,6 +30,9 @@ pub(super) enum ExitSwap {
         detail: String,
         not_submitted: Option<NotSubmittedReason>,
     },
+    /// The last send failed and nothing proves it sold nothing: no signature
+    /// to verify, and no proof that the share is still held.
+    Unresolved { detail: String },
 }
 
 /// The Pump.fun program's error for a trade against a bonding curve that has
@@ -48,7 +51,7 @@ fn closed_bonding_curve(error: &crate::Error) -> bool {
 /// `execute_quote` sends a quote. After a failed send the ladder reads
 /// [`failed_swap`]: a signature that may still land ends it as
 /// [`ExitSwap::Submitted`], a failure that cannot prove it sold nothing ends it
-/// as [`ExitSwap::Failed`], and only a failure that provably sold nothing
+/// as [`ExitSwap::Unresolved`], and only a failure that provably sold nothing
 /// moves on to another send. A partial exit re-sent after an unproven failure
 /// would sell the same share twice while the position books one.
 pub(super) async fn run_exit_ladder<Q, QF, X, XF>(
@@ -100,9 +103,8 @@ where
                         "{exit} swap for {symbol} failed at {rung}, and nothing proves it sold nothing - not selling again: {error}"
                     ),
                 );
-                return ExitSwap::Failed {
+                return ExitSwap::Unresolved {
                     detail: format!("{exit} swap failed at {rung}: {error}"),
-                    not_submitted: None,
                 };
             }
             FailedSwap::Resendable => {}
@@ -133,11 +135,10 @@ where
             match failed_swap(&retry_error) {
                 FailedSwap::Reconcile { signature } => return ExitSwap::Submitted(signature),
                 FailedSwap::Unresolved => {
-                    return ExitSwap::Failed {
+                    return ExitSwap::Unresolved {
                         detail: format!(
                             "Retry without {CLOSED_CURVE_VENUE} failed at {rung}: {retry_error}"
                         ),
-                        not_submitted: None,
                     }
                 }
                 FailedSwap::Resendable => {
@@ -231,13 +232,7 @@ mod tests {
         })
         .await;
         assert_eq!(sent.len(), 1);
-        assert!(matches!(
-            outcome,
-            ExitSwap::Failed {
-                not_submitted: None,
-                ..
-            }
-        ));
+        assert!(matches!(outcome, ExitSwap::Unresolved { .. }));
     }
 
     /// A signature that may still land is handed back to be verified, never

@@ -116,11 +116,12 @@ function numberInput(
     min,
     max,
     help = "",
+    note = "",
     required = false,
     integer = false,
   }
 ) {
-  return `<label class="copy-field"><span>${esc(label)}</span><span class="copy-number-row"><input type="number" ${attr}="${esc(name)}" value="${esc(value)}" placeholder="${esc(placeholder)}" step="${integer ? "1" : "any"}"${min != null ? ` min="${min}"` : ""}${max != null ? ` max="${max}"` : ""} inputmode="decimal"${required ? " required" : ""} /><span class="input-unit">${esc(unit)}</span></span>${help ? `<small>${esc(help)}</small>` : ""}</label>`;
+  return `<label class="copy-field"><span>${esc(label)}</span><span class="copy-number-row"><input type="number" ${attr}="${esc(name)}" value="${esc(value)}" placeholder="${esc(placeholder)}" step="${integer ? "1" : "any"}"${min != null ? ` min="${min}"` : ""}${max != null ? ` max="${max}"` : ""} inputmode="decimal"${required ? " required" : ""} /><span class="input-unit">${esc(unit)}</span></span>${help ? `<small>${esc(help)}</small>` : ""}${note ? `<small>${esc(note)}</small>` : ""}</label>`;
 }
 
 function toggleRow(esc, { name, title, help, checked }) {
@@ -316,6 +317,7 @@ function ruleCard(rule, { draft, defaults }, esc) {
           placeholder: valueAttr(fallback, field.scale),
           integer: field.integer,
           help: I18n.t("copy-editor-rule-empty-uses", { value: fieldText(field, fallback) }),
+          note: field.hint,
         });
       })
       .join("")}</div>`;

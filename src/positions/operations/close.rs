@@ -243,6 +243,21 @@ pub async fn close_position_direct(
     )
     .await;
 
+    // A sell sized from the aggregated balance that the router could only source
+    // from one account fails for want of funds.
+    let with_balance_hint = |detail: String| {
+        if detail.to_lowercase().contains("insufficient funds")
+            && multi_account_note.is_none()
+            && total_token_balance > sell_amount
+        {
+            format!(
+                "Swap failed (insufficient funds) - aggregated balance mismatch; consider consolidating ATAs: {detail}"
+            )
+        } else {
+            detail
+        }
+    };
+
     let transaction_signature = match exit {
         ExitSwap::Executed(result) => {
             let transaction_signature = result.transaction_signature.clone();
@@ -277,25 +292,22 @@ pub async fn close_position_direct(
         // settles the exit or (if the transaction never landed) clears it for a retry. What
         // we must NOT do is send it again.
         ExitSwap::Submitted(signature) => signature,
+        // A full close sizes from the wallet balance, so a send whose outcome is unproven
+        // fails like any other: the next attempt sells only what is still held.
+        ExitSwap::Unresolved { detail } => {
+            return Err(Error::SwapFailed {
+                mint: api_token.mint.clone(),
+                detail: with_balance_hint(detail),
+                not_submitted: None,
+            });
+        }
         ExitSwap::Failed {
             detail,
             not_submitted,
         } => {
-            // A sell sized from the aggregated balance that the router could
-            // only source from one account fails for want of funds.
-            let detail = if detail.to_lowercase().contains("insufficient funds")
-                && multi_account_note.is_none()
-                && total_token_balance > sell_amount
-            {
-                format!(
-                    "Swap failed (insufficient funds) - aggregated balance mismatch; consider consolidating ATAs: {detail}"
-                )
-            } else {
-                detail
-            };
             return Err(Error::SwapFailed {
                 mint: api_token.mint.clone(),
-                detail,
+                detail: with_balance_hint(detail),
                 not_submitted,
             });
         }

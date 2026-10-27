@@ -2,8 +2,8 @@
 
 trader-exit-type-stop-loss = Stop Loss
 trader-exit-type-take-profit = Take Profit
-trader-exit-type-roi = Target ROI
-trader-exit-type-roi-exit = Target ROI
+trader-exit-type-roi = Take Profit
+trader-exit-type-roi-exit = Take Profit
 trader-exit-type-trailing-stop = Trailing Stop
 trader-exit-type-time-override = Exit Waktu
 trader-exit-type-time-rule = Aturan Waktu
@@ -17,7 +17,7 @@ trader-tab-strategy-control = Kontrol Strategi
 trader-tab-strategies = Strategi
 trader-tab-stop-loss = Stop Loss
 trader-tab-trailing-stop = Trailing Stop
-trader-tab-roi = Take Profit
+trader-tab-take-profit = Take Profit
 trader-tab-time-rules = Exit Waktu
 trader-tab-dca = DCA
 trader-tab-settings = Pengaturan
@@ -186,14 +186,36 @@ trader-trailing-final = +{ $value }% akhir
 trader-trailing-summary-protected = Melindungi untung <strong>{ $value }</strong>
 trader-trailing-summary-avoided = Menghindari rugi <strong>{ $value }</strong> dari puncak
 
-trader-roi-title = Take Profit
-trader-roi-subtitle = Exit seluruh posisi secara otomatis saat untung mencapai target Anda
-trader-roi-impact = Exit pada untung +{ $target }%
-trader-roi-initial-buy = Pembelian awal
-trader-roi-target-hit = Target Tercapai
-trader-roi-full-position = Posisi Penuh
-trader-roi-sold = 100% terjual
-trader-roi-summary = Mengunci untung <strong>+{ $target }%</strong>
+trader-take-profit-title = Take Profit
+trader-take-profit-subtitle = Menjual posisi secara bertahap saat profit mencapai setiap level
+trader-take-profit-initial-buy = Pembelian awal
+# $step is the step's position in the ladder, from 1.
+trader-take-profit-step = Tahap { $step }
+# $step is the step's position in the ladder, from 1.
+trader-take-profit-profit-label = Level profit tahap { $step }
+# $step is the step's position in the ladder, from 1.
+trader-take-profit-sell-label = Porsi jual tahap { $step }
+trader-take-profit-add-step = Tambah tahap
+# $step is the step's position in the ladder, from 1.
+trader-take-profit-remove-step = Hapus tahap { $step }
+# $min and $max are the configured bounds of a profit level.
+trader-take-profit-error-profit-range = Setiap level profit harus antara { $min }% dan { $max }%
+# $min and $max are the configured bounds of a share.
+trader-take-profit-error-sell-range = Setiap porsi harus antara { $min }% dan { $max }%
+trader-take-profit-error-order = Setiap tahap perlu level profit lebih tinggi dari tahap sebelumnya
+# $max is the largest total share, the whole position.
+trader-take-profit-error-total = Semua tahap bersama-sama dapat menjual paling banyak { $max }%
+# $runner is the formatted percentage of the position no step sells.
+trader-take-profit-runner = { $runner }% posisi tetap terbuka sebagai runner
+trader-take-profit-runner-none = Tahap terakhir menjual sisa posisi
+trader-take-profit-runner-warning = Dengan trailing stop, exit waktu, dan semua strategi exit nonaktif, runner hanya ditutup oleh stop loss atau secara manual
+trader-take-profit-info = Porsi dihitung dari posisi awal. Jika harga melewati beberapa level sekaligus, satu tahap dijual per pemeriksaan.
+# $profit is the step's formatted profit level; $share is its formatted share.
+trader-take-profit-example-step = Pada +{ $profit }%, jual { $share }%
+trader-take-profit-example-runner = Runner
+trader-take-profit-example-runner-detail = Diserahkan ke aturan keluar lainnya
+# $sold is the formatted total share the ladder sells; $profit is its last formatted level.
+trader-take-profit-summary = Menjual <strong>{ $sold }%</strong> hingga profit +{ $profit }%
 
 trader-time-title = Exit Waktu
 trader-time-subtitle = Exit posisi secara otomatis setelah durasi hold maksimum jika kerugian melebihi ambang

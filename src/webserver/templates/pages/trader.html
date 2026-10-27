@@ -651,51 +651,47 @@
     </div>
     <!-- #trailing-stop-tab -->
 
-    <!-- Take Profit (ROI) Tab -->
-    <div id="roi-tab" class="trader-tab-content" style="display: none">
+    <!-- Take Profit Tab -->
+    <div id="take-profit-tab" class="trader-tab-content" style="display: none">
       <div class="config-section">
         <div class="config-card">
           <div class="card-header">
             <div class="card-header-text">
               <h3>
-                <i class="icon-target"></i> <span data-l10n-id="trader-roi-title"></span>
+                <i class="icon-target"></i> <span data-l10n-id="trader-take-profit-title"></span>
               </h3>
-              <p class="card-subtitle" data-l10n-id="trader-roi-subtitle"></p>
+              <p class="card-subtitle" data-l10n-id="trader-take-profit-subtitle"></p>
             </div>
             <label class="toggle">
-              <input type="checkbox" id="roi-enabled" />
+              <input type="checkbox" id="take-profit-enabled" />
               <span class="toggle-track"></span>
             </label>
           </div>
 
-          <!-- Target Profit -->
-          <div class="config-group">
+          <!-- Take-profit ladder -->
+          <div class="config-group config-group-full">
             <div class="config-label-row">
-              <label for="roi-target" class="config-label">
+              <label id="take-profit-levels-label" class="config-label">
                 <i class="icon-goal"></i>
-                <span data-l10n-id="config-trader-roi-target-percent"></span>
+                <span data-l10n-id="config-trader-take-profit-levels-pct"></span>
               </label>
             </div>
             <p class="config-hint"></p>
-            <div class="input-group-enhanced">
-              <input
-                type="number"
-                id="roi-target"
-                min="1"
-                max="1000"
-                step="1"
-                value="20"
-                class="input-large"
-              />
-              <span class="input-unit">%</span>
-            </div>
+            <div
+              id="take-profit-levels"
+              class="level-list"
+              role="group"
+              aria-labelledby="take-profit-levels-label"
+            ></div>
             <div class="config-impact">
+              <span class="impact-text" id="take-profit-runner" hidden></span>
               <span
-                class="impact-text"
-                id="roi-impact"
-                data-l10n-id="trader-roi-impact"
-                data-l10n-args='{"target":"20"}'
+                class="impact-text is-warning"
+                id="take-profit-runner-warning"
+                data-l10n-id="trader-take-profit-runner-warning"
+                hidden
               ></span>
+              <span class="impact-text" data-l10n-id="trader-take-profit-info"></span>
             </div>
           </div>
 
@@ -704,54 +700,11 @@
             <h4>
               <i class="icon-chart-bar"></i> <span data-l10n-id="trader-example-how-it-works"></span>
             </h4>
-            <div class="example-timeline">
-              <div class="timeline-step">
-                <div class="step-icon step-icon-entry">
-                  <i class="icon-arrow-right"></i>
-                </div>
-                <div class="step-content">
-                  <div class="step-title" data-l10n-id="trader-step-entry"></div>
-                  <div class="step-value" id="roi-example-entry">—</div>
-                  <div class="step-detail" data-l10n-id="trader-roi-initial-buy"></div>
-                </div>
-              </div>
-              <div class="timeline-arrow"><i class="icon-chevron-right"></i></div>
-              <div class="timeline-step">
-                <div class="step-icon step-icon-peak">
-                  <i class="icon-trending-up"></i>
-                </div>
-                <div class="step-content">
-                  <div class="step-title" data-l10n-id="trader-roi-target-hit"></div>
-                  <div class="step-value" id="roi-example-target">—</div>
-                  <div
-                    class="step-detail"
-                    id="roi-example-profit"
-                    data-l10n-id="trader-example-profit"
-                    data-l10n-args='{"value":"20"}'
-                  ></div>
-                </div>
-              </div>
-              <div class="timeline-arrow"><i class="icon-chevron-right"></i></div>
-              <div class="timeline-step">
-                <div class="step-icon step-icon-exit">
-                  <i class="icon-log-out"></i>
-                </div>
-                <div class="step-content">
-                  <div class="step-title" data-l10n-id="trader-step-auto-exit"></div>
-                  <div class="step-value" data-l10n-id="trader-roi-full-position"></div>
-                  <div class="step-detail" data-l10n-id="trader-roi-sold"></div>
-                </div>
-              </div>
-            </div>
+            <div class="example-timeline" id="take-profit-example"></div>
             <div class="example-summary">
               <div class="summary-item summary-item-success">
                 <i class="icon-circle-check"></i>
-                <span
-                  id="roi-example-summary"
-                  data-l10n-id="trader-roi-summary"
-                  data-l10n-markup
-                  data-l10n-args='{"target":"20"}'
-                ></span>
+                <span id="take-profit-example-summary"></span>
               </div>
             </div>
           </div>

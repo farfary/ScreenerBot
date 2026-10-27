@@ -9,16 +9,16 @@
 //! - DCA evaluation (dollar cost averaging logic)
 //! - Strategy evaluation (user-configured trading strategies)
 //!
-//! Built-in exit rules (roi, trailing stop, stop loss, time override) are in separate files,
+//! Built-in exit rules (stop loss, trailing stop, take profit, time override) are in separate files,
 //! and `exit_rules` owns the order they are checked in for the live and the paper books.
 //! These are NOT strategy-system strategies - they're hardcoded rules with config toggles.
 
 pub mod dca;
 pub mod entry;
 pub mod exit;
-pub mod exit_roi;
 pub mod exit_rules;
 pub mod exit_stop_loss;
+pub mod exit_take_profit;
 pub mod exit_time;
 pub mod exit_trailing;
 pub mod strategies;
@@ -34,16 +34,16 @@ mod tests {
     /// The evaluators that propose a position-sized change (an add, a partial exit) stay
     /// quiet while the positions store awaits reconciliation, instead of proposing one
     /// every tick for the operation to refuse. The pure rule files never ask: the live
-    /// coordinator and the single-rule stop-loss check gate the partial they act on.
+    /// coordinator gates the partial it acts on.
     #[test]
     fn position_sized_evaluators_check_reconciliation() {
         let gate = "awaiting_reconciliation()";
         assert!(include_str!("dca.rs").contains(gate));
         assert!(include_str!("exit.rs").contains(gate));
-        assert!(include_str!("exit_stop_loss.rs").contains(gate));
         for (file, source) in [
-            ("exit_roi.rs", include_str!("exit_roi.rs")),
             ("exit_rules.rs", include_str!("exit_rules.rs")),
+            ("exit_stop_loss.rs", include_str!("exit_stop_loss.rs")),
+            ("exit_take_profit.rs", include_str!("exit_take_profit.rs")),
             ("exit_time.rs", include_str!("exit_time.rs")),
             ("exit_trailing.rs", include_str!("exit_trailing.rs")),
         ] {

@@ -23,7 +23,7 @@ export const FEATURE_STATUS = {
  * Maps tab IDs to feature API keys (trading features)
  */
 export const TAB_TO_FEATURE_MAP = {
-  roi: "roi_exit",
+  "take-profit": "take_profit",
   "trailing-stop": "trailing_stop",
   "stop-loss": "stop_loss",
   "time-rules": "time_override",
@@ -88,7 +88,7 @@ export async function fetchFeatureStatus(_requestManager) {
 /**
  * Get the feature status for a tab
  * @param {Object} tradingFeatures - Feature status object from API
- * @param {string} tabId - The tab ID (e.g., "roi", "stop-loss")
+ * @param {string} tabId - The tab ID (e.g., "take-profit", "stop-loss")
  * @returns {string} The status ("available", "coming_soon", "beta", "disabled")
  */
 export function getTabFeatureStatus(tradingFeatures, tabId) {

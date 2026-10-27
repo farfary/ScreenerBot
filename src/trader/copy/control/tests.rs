@@ -150,6 +150,7 @@ fn paper_row(id: i64, mint: &str, at: chrono::DateTime<Utc>, sell: Option<f64>) 
                     )),
                 }),
                 exit_rule: None,
+                take_profit_level: None,
                 paper_context: None,
             }),
         ),

@@ -35,8 +35,8 @@ impl Tool for GetTraderStatusTool {
             name: "get_trader_status".to_owned(),
             description: "Full auto-trader state in one call: running/available, emergency stop, \
                           entry/exit monitors, loss limit progress, open-slot usage and the \
-                          effective sizing and exit settings (stop loss, trailing stop, ROI, \
-                          time override, DCA)."
+                          effective sizing and exit settings (stop loss, trailing stop, \
+                          take-profit ladder, time override, DCA)."
                 .to_owned(),
             category: ToolCategory::System,
             parameters: no_params(),
@@ -61,9 +61,9 @@ impl Tool for GetTraderStatusTool {
                     "activation_pct": cfg.trader.trailing_stop_activation_pct,
                     "distance_pct": cfg.trader.trailing_stop_distance_pct,
                 },
-                "roi_exit": {
-                    "enabled": cfg.trader.roi_exit_enabled,
-                    "target_pct": cfg.trader.roi_target_percent,
+                "take_profit": {
+                    "enabled": cfg.trader.take_profit_enabled,
+                    "levels": cfg.trader.take_profit_levels(),
                 },
                 "time_override": {
                     "enabled": cfg.trader.time_override_enabled,
@@ -213,7 +213,7 @@ impl Tool for SetTraderMonitorTool {
             name: "set_trader_monitor".to_owned(),
             description: "Enable or disable one auto-trader monitor. entry: whether the trader \
                           opens new positions. exit: whether it manages open ones (stop loss, \
-                          trailing, ROI, time). Disabling exit leaves positions unprotected."
+                          trailing, take profit, time). Disabling exit leaves positions unprotected."
                 .to_owned(),
             category: ToolCategory::Trading,
             parameters: json!({
@@ -302,7 +302,7 @@ impl Tool for ListTraderTemplatesTool {
     fn definition(&self) -> ToolDefinition {
         ToolDefinition {
             name: "list_trader_templates".to_owned(),
-            description: "List the preset exit templates (trailing stop, ROI target, time \
+            description: "List the preset exit templates (trailing stop, take profit, time \
                           override bundles) that apply_trader_template can apply."
                 .to_owned(),
             category: ToolCategory::Config,
@@ -330,7 +330,7 @@ impl Tool for ApplyTraderTemplateTool {
         ToolDefinition {
             name: "apply_trader_template".to_owned(),
             description: "Apply a preset exit template to the auto-trader config (trailing stop, \
-                          ROI exit, time override) and save it. See list_trader_templates."
+                          take profit, time override) and save it. See list_trader_templates."
                 .to_owned(),
             category: ToolCategory::Config,
             parameters: json!({

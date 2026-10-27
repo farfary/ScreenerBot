@@ -33,8 +33,8 @@ pub(super) async fn get_trading_config() -> Response {
             },
         },
         profit_targets: ProfitTargets {
-            base_min_profit_percent: cfg.trader.roi_target_percent,
-            min_profit_threshold_enabled: cfg.trader.roi_exit_enabled,
+            take_profit_enabled: cfg.trader.take_profit_enabled,
+            take_profit_levels: cfg.trader.take_profit_levels(),
             profit_extra_needed_sol: cfg.positions.profit_extra_needed_sol,
         },
         timestamp: chrono::Utc::now().to_rfc3339(),

@@ -49,7 +49,7 @@ import { chromium } from "playwright";
 import { serveDashboard, PAGE_READY } from "../lib/dashboard_host.mjs";
 import { FIXTURES_ROOT, createApiHandler, loadIndex } from "../lib/dashboard_fixtures.mjs";
 
-const TABS = ["stop-loss", "trailing-stop", "roi", "time-rules", "dca", "general-settings"];
+const TABS = ["stop-loss", "trailing-stop", "take-profit", "time-rules", "dca", "general-settings"];
 
 const browser = await chromium.launch({ headless: true });
 after(() => browser.close());

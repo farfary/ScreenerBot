@@ -74,6 +74,9 @@ pub struct VerificationItem {
     /// that was reported. A renewal keeps the mark, so the report is made once while the
     /// item keeps being renewed.
     pub unbooked_reported: bool,
+    /// The take-profit step this partial exit sells, reserved on the position before the
+    /// swap was sent. Settlement returns it to the ladder when the swap provably moved nothing.
+    pub take_profit_level: Option<u32>,
 }
 
 impl VerificationItem {
@@ -101,6 +104,7 @@ impl VerificationItem {
             swap_confirmed: false,
             not_landed_reads: 0,
             unbooked_reported: false,
+            take_profit_level: None,
         }
     }
 
@@ -130,6 +134,15 @@ impl VerificationItem {
             swap_confirmed: false,
             not_landed_reads: 0,
             unbooked_reported: false,
+            take_profit_level: None,
+        }
+    }
+
+    /// The same item carrying the take-profit step its exit sells.
+    pub fn with_take_profit_level(self, take_profit_level: Option<u32>) -> Self {
+        Self {
+            take_profit_level,
+            ..self
         }
     }
 

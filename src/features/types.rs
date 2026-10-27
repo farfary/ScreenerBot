@@ -34,7 +34,7 @@ impl FeatureStatus {
 /// Feature flags for trading features.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TradingFeatures {
-    pub roi_exit: FeatureStatus,
+    pub take_profit: FeatureStatus,
     pub trailing_stop: FeatureStatus,
     pub stop_loss: FeatureStatus,
     pub time_override: FeatureStatus,
@@ -48,7 +48,7 @@ pub struct TradingFeatures {
 impl Default for TradingFeatures {
     fn default() -> Self {
         Self {
-            roi_exit: FeatureStatus::Available,
+            take_profit: FeatureStatus::Available,
             trailing_stop: FeatureStatus::Available,
             stop_loss: FeatureStatus::Available,
             time_override: FeatureStatus::Available,
@@ -65,7 +65,7 @@ impl TradingFeatures {
     /// Get the status of a trading feature by its ID.
     pub fn get_status(&self, feature_id: &str) -> FeatureStatus {
         match feature_id {
-            "roi-exit" | "roi_exit" => self.roi_exit,
+            "take-profit" | "take_profit" => self.take_profit,
             "trailing-stop" | "trailing_stop" => self.trailing_stop,
             "stop-loss" | "stop_loss" => self.stop_loss,
             "time-override" | "time_override" => self.time_override,

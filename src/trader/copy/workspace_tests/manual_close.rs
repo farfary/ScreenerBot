@@ -114,6 +114,7 @@ fn paper_sell_outcome(
         transaction_signature: None,
         error: None,
         exit_rule: manual.then_some(PaperExitRule::Manual),
+        take_profit_level: None,
         telemetry: CopyTelemetry {
             target_block_time: None,
             detected_at: decided_at,

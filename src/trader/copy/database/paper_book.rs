@@ -159,7 +159,12 @@ pub(super) fn apply_paper_buy(
              cost_basis_native=excluded.cost_basis_native, invested_native=excluded.invested_native, \
              buys=excluded.buys, last_price_native=excluded.last_price_native, \
              last_price_at=excluded.last_price_at, opened_at=excluded.opened_at, \
-             peak_price_native=excluded.peak_price_native, closed_at=NULL, updated_at=excluded.updated_at",
+             peak_price_native=excluded.peak_price_native, \
+             take_profit_level=CASE WHEN copy_paper_positions.closed_at IS NULL \
+             THEN copy_paper_positions.take_profit_level ELSE 0 END, \
+             round_partial_exits=CASE WHEN copy_paper_positions.closed_at IS NULL \
+             THEN copy_paper_positions.round_partial_exits ELSE 0 END, \
+             closed_at=NULL, updated_at=excluded.updated_at",
             params![
                 decision.task_id,
                 decision.mint,
@@ -204,12 +209,15 @@ pub(super) fn apply_historical_paper_buy(
     Ok(())
 }
 
-/// Book an exact raw sell; only a zero raw remainder closes the holding.
+/// Book an exact raw sell; only a zero raw remainder closes the holding. A sale that
+/// leaves tokens counts as a partial sale of the round, and `take_profit_level` is the
+/// take-profit step the sale takes, recorded with it.
 pub(super) fn apply_paper_sell(
     transaction: &Transaction<'_>,
     task_id: i64,
     mint: &str,
     fill: &PaperSellFill,
+    take_profit_level: Option<u32>,
     at: DateTime<Utc>,
 ) -> crate::trader::Result<()> {
     let metadata = fill
@@ -308,7 +316,9 @@ pub(super) fn apply_paper_sell(
             "UPDATE copy_paper_positions SET token_amount=?3, token_amount_raw=?4, token_decimals=?5, \
              cost_basis_native=?6, realized_proceeds_native=realized_proceeds_native+?7, \
              realized_cost_native=realized_cost_native+?8, sells=sells+1, last_price_native=?9, \
-             last_price_at=?10, closed_at=?11, updated_at=?10 \
+             last_price_at=?10, closed_at=?11, updated_at=?10, \
+             round_partial_exits=round_partial_exits+?12, \
+             take_profit_level=MAX(take_profit_level, ?13) \
              WHERE task_id = ?1 AND mint = ?2",
             params![
                 task_id,
@@ -322,6 +332,8 @@ pub(super) fn apply_paper_sell(
                 fill.market_price_sol,
                 at,
                 closes.then_some(at.as_str()),
+                u32::from(!closes),
+                take_profit_level.unwrap_or(0),
             ],
         )
         .map_err(crate::errors::DatabaseError::from)?;

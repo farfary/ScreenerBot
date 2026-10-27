@@ -7,6 +7,8 @@
 
 use serde::Serialize;
 
+use crate::config::TakeProfitLevel;
+
 #[derive(Debug, Serialize)]
 pub struct TradingConfigResponse {
     pub trading_limits: TradingLimits,
@@ -32,7 +34,9 @@ pub struct RiskManagement {
 
 #[derive(Debug, Serialize)]
 pub struct ProfitTargets {
-    pub base_min_profit_percent: f64,
-    pub min_profit_threshold_enabled: bool,
+    pub take_profit_enabled: bool,
+    /// The take-profit ladder: each step's profit level and the share of the original
+    /// position it sells.
+    pub take_profit_levels: Vec<TakeProfitLevel>,
     pub profit_extra_needed_sol: f64,
 }

@@ -316,6 +316,8 @@ pub(super) fn paper_desk(
             opened_at,
             closed_at: Some(closed_at),
             peak_price_native: None,
+            take_profit_level: 0,
+            round_partial_exits: 0,
         });
         decisions.push((
             closed_at,
@@ -332,6 +334,7 @@ pub(super) fn paper_desk(
                 telemetry,
                 paper_fill: Some(sell),
                 exit_rule: rule,
+                take_profit_level: None,
                 paper_context: None,
             }),
         ));
@@ -363,6 +366,8 @@ pub(super) fn paper_desk(
             opened_at,
             closed_at: None,
             peak_price_native: Some((current * (1.0 + peak_pct / 100.0)).max(fill.fill_price_sol)),
+            take_profit_level: 0,
+            round_partial_exits: 0,
         });
     }
     spent

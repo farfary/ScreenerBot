@@ -415,6 +415,8 @@ copy-rules-target-max = En fazla { $amount }
 copy-rules-target-between = { $min } – { $max } { -sol }
 copy-rules-source-override = Görev ayarı · Trader: { $value }
 copy-rules-source-default = Trader varsayılanı
+# $profit is the step's signed profit level; $share is the share of the position it sells, both formatted.
+copy-rules-take-profit-step = { $profit } kârda { $share } sat
 copy-rules-not-used = Kullanılmıyor: cüzdanın satışları belirler
 copy-rules-col-rule = Kural
 copy-rules-col-applies = Geçerli
@@ -457,6 +459,7 @@ copy-rule-partial-size = Satılacak Kısım
 copy-rule-trailing-activation = Şu kazançta devreye girer
 copy-rule-trailing-distance = Zirvenin şu kadar altında satar
 copy-rule-take-profit-target = Şu kazançta satar
+copy-rule-take-profit-target-hint = Burada bir hedef, Trader'ın kâr al kademelerini tüm pozisyonu satan tek bir kademeyle değiştirir
 copy-rule-time-duration = Şu kadar tuttuktan sonra kontrol eder
 copy-rule-time-threshold = K/Z şuna eşit veya altındayken satar
 copy-preset-inherit = Trader varsayılanları

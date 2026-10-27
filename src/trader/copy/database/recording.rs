@@ -254,6 +254,7 @@ fn book_outcome(
                 decision.task_id,
                 &decision.mint,
                 fill,
+                decision.take_profit_level,
                 decided_at,
             )
         }

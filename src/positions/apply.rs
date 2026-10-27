@@ -1187,6 +1187,57 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                 return Err(err);
             }
         }
+
+        // =================================================================
+        // TAKE PROFIT
+        // =================================================================
+        PositionTransition::TakeProfitLevelReserved { position_id, level } => {
+            let committed = book_position(position_id, |row, _| {
+                if level.checked_sub(1) != Some(row.take_profit_level) {
+                    return Ok(Booking::Skip(()));
+                }
+                row.take_profit_level = level;
+                Ok(Booking::Write {
+                    record: None,
+                    outcome: (),
+                })
+            })
+            .await?;
+            if let Committed::Written { row, .. } = committed {
+                effects.db_updated = true;
+                logger::info(
+                    LogTag::Positions,
+                    &format!(
+                        "Take-profit step {level} reserved for position {position_id} ({})",
+                        row.symbol
+                    ),
+                );
+            }
+        }
+
+        PositionTransition::TakeProfitLevelReleased { position_id, level } => {
+            let committed = book_position(position_id, |row, _| {
+                if level == 0 || row.take_profit_level != level {
+                    return Ok(Booking::Skip(()));
+                }
+                row.take_profit_level = level - 1;
+                Ok(Booking::Write {
+                    record: None,
+                    outcome: (),
+                })
+            })
+            .await?;
+            if let Committed::Written { row, .. } = committed {
+                effects.db_updated = true;
+                logger::info(
+                    LogTag::Positions,
+                    &format!(
+                        "Take-profit step {level} released for position {position_id} ({}): its sale did not land",
+                        row.symbol
+                    ),
+                );
+            }
+        }
     }
 
     Ok(effects)

@@ -46,7 +46,8 @@ pub(super) fn mode_key(mode: CopyMode) -> &'static str {
 
 const PAPER_POSITION_COLUMNS: &str = "task_id, mint, token_amount, cost_basis_native, invested_native, \
      realized_proceeds_native, realized_cost_native, buys, sells, last_price_native, last_price_at, \
-     opened_at, closed_at, peak_price_native, token_amount_raw, token_decimals";
+     opened_at, closed_at, peak_price_native, token_amount_raw, token_decimals, take_profit_level, \
+     round_partial_exits";
 
 pub(super) fn spend_state_on(
     connection: &Connection,
@@ -174,7 +175,7 @@ impl CopyDatabase {
                 .prepare(&format!(
                     "SELECT task_id, mint, token_amount, cost_basis_native, invested_native, \
                      realized_proceeds_native, realized_cost_native, buys, sells, last_price_native, \
-                     last_price_at, opened_at, closed_at, peak_price_native, NULL, NULL \
+                     last_price_at, opened_at, closed_at, peak_price_native, NULL, NULL, 0, 0 \
                      FROM copy_paper_legacy_positions \
                      WHERE task_id = ?1 ORDER BY closed_at IS NOT NULL, opened_at DESC"
                 ))
@@ -294,6 +295,8 @@ fn row_to_paper_position(row: &rusqlite::Row<'_>) -> rusqlite::Result<PaperPosit
         opened_at: parse_datetime(&row.get::<_, String>(11)?, 11)?,
         closed_at: optional_time(12)?,
         peak_price_native: row.get(13)?,
+        take_profit_level: row.get(16)?,
+        round_partial_exits: row.get(17)?,
     })
 }
 

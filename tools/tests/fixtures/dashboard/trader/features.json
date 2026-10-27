@@ -1,6 +1,6 @@
 {
   "trading": {
-    "roi_exit": "available",
+    "take_profit": "available",
     "trailing_stop": "available",
     "stop_loss": "available",
     "time_override": "available",

@@ -352,7 +352,7 @@ fn a_v9_store_drops_the_position_link_table_and_keeps_its_rows() {
             |row| Ok((row.get(0)?, row.get(1)?)),
         )
         .unwrap();
-    assert_eq!(ledger, (11, 10));
+    assert_eq!(ledger, (12, 10));
     let fk_violations = conn
         .prepare("PRAGMA foreign_key_check")
         .unwrap()
@@ -425,7 +425,7 @@ fn a_released_partial_stop_loss_override_is_turned_off_once() {
             |row| Ok((row.get(0)?, row.get(1)?)),
         )
         .unwrap();
-    assert_eq!(ledger, (11, 10));
+    assert_eq!(ledger, (12, 10));
     let integrity: String = conn
         .query_row("PRAGMA integrity_check", [], |row| row.get(0))
         .unwrap();
@@ -678,6 +678,103 @@ fn paper_peaks_from_both_builds_merge_on_open() {
     drop(conn);
     drop(CopyDatabase::open(&path, ChainId::Solana).unwrap());
     assert_eq!(schema(&Connection::open(&path).unwrap()), merged);
+}
+
+/// A v11 store gains each paper round's take-profit steps and partial sales. An open
+/// round's partial sales start from its `sells`, so its stop loss keeps exiting fully
+/// after a sale exactly as before; a closed round starts at zero. The ledger keeps v10
+/// as the oldest reader, since only columns with defaults are added.
+#[test]
+fn a_v11_store_gains_the_paper_round_exit_state() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("copy_trading.db");
+    released(&path);
+    drop(CopyDatabase::open(&path, ChainId::Solana).unwrap());
+    let fresh_dir = tempfile::tempdir().unwrap();
+    let fresh_path = fresh_dir.path().join("copy_trading.db");
+    drop(CopyDatabase::open(&fresh_path, ChainId::Solana).unwrap());
+    let fresh_columns = columns(
+        &Connection::open(&fresh_path).unwrap(),
+        "copy_paper_positions",
+    );
+
+    let conn = Connection::open(&path).unwrap();
+    conn.execute_batch(
+        "ALTER TABLE copy_paper_positions DROP COLUMN round_partial_exits;
+         ALTER TABLE copy_paper_positions DROP COLUMN take_profit_level;
+         UPDATE copy_metadata SET value = '11' WHERE key = 'schema_version';
+         UPDATE store_schema SET version = 11, min_reader_version = 10 WHERE id = 1;
+         INSERT INTO copy_paper_positions (task_id, mint, token_amount, cost_basis_native, \
+             invested_native, buys, sells, opened_at, updated_at, token_amount_raw, token_decimals) \
+         VALUES (7, 'open-mint', 40.0, 0.25, 0.5, 2, 2, '2026-10-01T00:00:00Z', \
+             '2026-10-02T00:00:00Z', '40000000', 6);
+         INSERT INTO copy_paper_positions (task_id, mint, token_amount, cost_basis_native, \
+             invested_native, buys, sells, opened_at, closed_at, updated_at, token_amount_raw, \
+             token_decimals) \
+         VALUES (7, 'closed-mint', 0.0, 0.0, 0.5, 1, 3, '2026-10-01T00:00:00Z', \
+             '2026-10-02T00:00:00Z', '2026-10-02T00:00:00Z', '0', 6);",
+    )
+    .unwrap();
+    assert!(!columns(&conn, "copy_paper_positions")
+        .iter()
+        .any(|name| name == "take_profit_level" || name == "round_partial_exits"));
+    drop(conn);
+
+    drop(CopyDatabase::open(&path, ChainId::Solana).unwrap());
+    let conn = Connection::open(&path).unwrap();
+    assert_eq!(columns(&conn, "copy_paper_positions"), fresh_columns);
+    let rounds: Vec<(String, i64, i64, i64)> = conn
+        .prepare(
+            "SELECT mint, sells, round_partial_exits, take_profit_level \
+             FROM copy_paper_positions ORDER BY mint",
+        )
+        .unwrap()
+        .query_map([], |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+        })
+        .unwrap()
+        .collect::<Result<_, _>>()
+        .unwrap();
+    assert_eq!(
+        rounds,
+        vec![
+            ("closed-mint".to_owned(), 3, 0, 0),
+            ("open-mint".to_owned(), 2, 2, 0),
+        ]
+    );
+    let ledger: (i64, i64) = conn
+        .query_row(
+            "SELECT version, min_reader_version FROM store_schema WHERE id = 1",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .unwrap();
+    assert_eq!(ledger, (12, 10));
+    let integrity: String = conn
+        .query_row("PRAGMA integrity_check", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(integrity, "ok");
+    let fk_violations = conn
+        .prepare("PRAGMA foreign_key_check")
+        .unwrap()
+        .query_map([], |_| Ok(()))
+        .unwrap()
+        .count();
+    assert_eq!(fk_violations, 0);
+
+    let upgraded = schema(&conn);
+    drop(conn);
+    drop(CopyDatabase::open(&path, ChainId::Solana).unwrap());
+    let conn = Connection::open(&path).unwrap();
+    assert_eq!(schema(&conn), upgraded, "a second open is a no-op");
+    let backfilled: i64 = conn
+        .query_row(
+            "SELECT round_partial_exits FROM copy_paper_positions WHERE mint = 'open-mint'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(backfilled, 2, "the backfill runs once");
 }
 
 #[test]

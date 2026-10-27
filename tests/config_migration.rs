@@ -9,7 +9,8 @@
 //! in the file, which keeps the loaded layout until startup completes.
 //! The exit-rule leaves of `[positions]` (trailing stop, partial stop-loss share and the
 //! retired partial-exit switch) follow the same load, persist and reload path into `[trader]`;
-//! the switch the loaded file held stays readable for the store migrations.
+//! the switch the loaded file held stays readable for the store migrations. The ROI target of
+//! `[trader]` becomes the one step of the take-profit ladder on the same path.
 //!
 //! It runs in a process of its own (nextest isolates every test) because `load_config_from_path`
 //! initialises the global CONFIG (`OnceLock::set`). The steps share that global,
@@ -17,7 +18,7 @@
 
 use screenerbot::config::utils::{
     load_config_from_path, parse_config_document, persist_pending_config_migration,
-    reload_config_from_path, with_config,
+    reload_config_from_path, validate_config, with_config,
 };
 
 const V0_2_13_CONFIG: &str = include_str!("fixtures/v0.2.13-config.toml");
@@ -58,6 +59,9 @@ fn legacy_layout_is_migrated_in_memory_then_persisted_after_startup() {
         assert_eq!(cfg.trader.slippage.quote_default_pct, 2.5);
         assert_eq!(cfg.chains.solana.connectivity.jupiter.timeout_secs, 7);
         assert_eq!(cfg.trader.trade_size_sol, 0.02);
+        assert!(!cfg.trader.take_profit_enabled);
+        assert_eq!(cfg.trader.take_profit_levels_pct, vec![35.0]);
+        assert_eq!(cfg.trader.take_profit_sell_pct, vec![100.0]);
     });
 
     // Startup completed: the canonical layout reaches disk.
@@ -72,6 +76,10 @@ fn legacy_layout_is_migrated_in_memory_then_persisted_after_startup() {
     assert!(!reparsed.migrated, "a persisted migration must be final");
     assert_eq!(reparsed.config.chains.solana.rpc.max_retries, 5);
     assert_eq!(reparsed.config.trader.slippage.exit_loss_shortfall_pct, 7.5);
+    assert_eq!(reparsed.config.trader.take_profit_levels_pct, vec![35.0]);
+    let trader = tables["trader"].as_table().expect("trader table");
+    assert!(!trader.contains_key("roi_target_percent"));
+    assert!(!trader.contains_key("roi_exit_enabled"));
 
     // A second persist has nothing pending and leaves the file alone.
     persist_pending_config_migration();
@@ -86,7 +94,8 @@ fn legacy_layout_is_migrated_in_memory_then_persisted_after_startup() {
     std::fs::write(
         &reload_path,
         "[rpc]\nurls = [\"https://reload.fixture.invalid/\"]\nmax_retries = 8\n\n\
-         [swaps.slippage]\nquote_default_pct = 3.5\n",
+         [swaps.slippage]\nquote_default_pct = 3.5\n\n\
+         [trader]\nroi_target_percent = 60.0\n",
     )
     .expect("write reload fixture");
     reload_config_from_path(&reload_str).expect("legacy layout reloads");
@@ -97,6 +106,8 @@ fn legacy_layout_is_migrated_in_memory_then_persisted_after_startup() {
             vec!["https://reload.fixture.invalid/".to_owned()]
         );
         assert_eq!(cfg.trader.slippage.quote_default_pct, 3.5);
+        assert_eq!(cfg.trader.take_profit_levels_pct, vec![60.0]);
+        assert_eq!(cfg.trader.take_profit_sell_pct, vec![100.0]);
     });
     let rewritten = std::fs::read_to_string(&reload_path).expect("read reloaded config");
     let tables = top_level_tables(&rewritten);
@@ -258,4 +269,24 @@ fn exit_rule_leaves_move_into_trader_on_load_and_on_hot_reload() {
             assert!(!parse_config_document(&rewritten).expect("parses").migrated);
         },
     );
+}
+
+/// A legacy ROI target outside the bounds of a take-profit step migrates clamped into them,
+/// so the migrated ladder passes the validation every later config save runs.
+#[test]
+fn a_roi_target_outside_the_step_bounds_migrates_into_them() {
+    for (legacy, migrated) in [("1500", 1000.0), ("1500.0", 1000.0), ("0.5", 1.0)] {
+        let parsed = parse_config_document(&format!("[trader]\nroi_target_percent = {legacy}\n"))
+            .expect("the legacy file parses");
+        assert!(parsed.migrated);
+        assert_eq!(
+            parsed.config.trader.take_profit_levels_pct,
+            vec![migrated],
+            "roi_target_percent = {legacy}"
+        );
+        assert_eq!(parsed.config.trader.take_profit_sell_pct, vec![100.0]);
+        validate_config(&parsed.config).unwrap_or_else(|error| {
+            panic!("roi_target_percent = {legacy} migrated invalid: {error}")
+        });
+    }
 }

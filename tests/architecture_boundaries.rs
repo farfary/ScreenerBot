@@ -3573,6 +3573,23 @@ fn every_loop_that_may_send_a_trade_again_decides_from_failed_swap() {
     }
 }
 
+/// A full exit takes no take-profit step: it sizes from the wallet and is guarded by its
+/// exit signature, so it never sells a step twice, and a step it reserved would stay taken
+/// whenever the close ends without a sale. Only the partial exit reserves a step.
+#[test]
+fn only_the_partial_exit_reserves_a_take_profit_step() {
+    let full = code_lines(&read_src("positions/operations/close.rs"));
+    assert!(
+        !full.contains("take_profit"),
+        "src/positions/operations/close.rs must not take or carry a take-profit step"
+    );
+    let partial = code_lines(&read_src("positions/operations/partial_close.rs"));
+    assert!(
+        partial.contains("reserve_take_profit_step("),
+        "src/positions/operations/partial_close.rs reserves the step it sells"
+    );
+}
+
 /// Functions that send a trade or a wallet transaction and record its outcome
 /// in the caller's own future, matched by bare name so every path and import
 /// spelling is found. Awaited inline from something that can be dropped — an

@@ -3,7 +3,7 @@
 
 //! Trading configuration utilities.
 
-use crate::config::with_config;
+use crate::config::{with_config, TakeProfitLevel};
 
 /// Get the maximum number of open positions allowed
 pub fn get_max_open_positions() -> usize {
@@ -90,14 +90,14 @@ pub fn get_trailing_stop_distance_pct() -> f64 {
     with_config(|cfg| cfg.trader.trailing_stop_distance_pct)
 }
 
-/// Check if ROI-based exit is enabled
-pub fn is_roi_exit_enabled() -> bool {
-    with_config(|cfg| cfg.trader.roi_exit_enabled)
+/// Check if the take-profit ladder is enabled
+pub fn is_take_profit_enabled() -> bool {
+    with_config(|cfg| cfg.trader.take_profit_enabled)
 }
 
-/// Get target ROI percentage
-pub fn get_target_profit_pct() -> f64 {
-    with_config(|cfg| cfg.trader.roi_target_percent)
+/// Get the take-profit ladder, one step per configured level
+pub fn get_take_profit_levels() -> Vec<TakeProfitLevel> {
+    with_config(|cfg| cfg.trader.take_profit_levels())
 }
 
 /// Check if time override is enabled

@@ -449,6 +449,8 @@ copy-rules-target-max = حداکثر { $amount }
 copy-rules-target-between = { $min } – { $max } { -sol }
 copy-rules-source-override = بازنویسی وظیفه · معامله‌گر { $value }
 copy-rules-source-default = پیش‌فرض معامله‌گر
+# $profit is the step's signed profit level; $share is the share of the position it sells, both formatted.
+copy-rules-take-profit-step = در { $profit }، فروش { $share }
 copy-rules-not-used = استفاده نمی‌شود: فروش‌های کیف پول تصمیم می‌گیرند
 copy-rules-col-rule = قانون
 copy-rules-col-applies = اعمال
@@ -493,6 +495,7 @@ copy-rule-partial-size = بخش فروش
 copy-rule-trailing-activation = فعال‌سازی در سود
 copy-rule-trailing-distance = فروش در فاصله زیر اوج
 copy-rule-take-profit-target = فروش در سود
+copy-rule-take-profit-target-hint = هدف در اینجا پله‌های حد سود معامله‌گر را با یک پله جایگزین می‌کند که کل پوزیشن را می‌فروشد
 copy-rule-time-duration = بررسی پس از نگهداری
 copy-rule-time-threshold = فروش وقتی سود و زیان برابر یا کمتر از
 copy-preset-inherit = پیش‌فرض‌های معامله‌گر

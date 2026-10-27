@@ -435,6 +435,8 @@ copy-rules-target-max = 최대 { $amount }
 copy-rules-target-between = { $min } – { $max } { -sol }
 copy-rules-source-override = 작업 재정의 · 트레이더 { $value }
 copy-rules-source-default = 트레이더 기본값
+# $profit is the step's signed profit level; $share is the share of the position it sells, both formatted.
+copy-rules-take-profit-step = { $profit }에서 { $share } 매도
 copy-rules-not-used = 사용 안 함: 지갑의 매도가 결정합니다
 copy-rules-col-rule = 규칙
 copy-rules-col-applies = 적용 값
@@ -478,6 +480,7 @@ copy-rule-partial-size = 매도할 비율
 copy-rule-trailing-activation = 활성화 수익률
 copy-rule-trailing-distance = 고점 대비 매도 하락폭
 copy-rule-take-profit-target = 매도 수익률
+copy-rule-take-profit-target-hint = 여기서 목표를 정하면 트레이더의 익절 단계가 포지션 전체를 매도하는 한 단계로 바뀝니다
 copy-rule-time-duration = 보유 후 확인 시점
 copy-rule-time-threshold = 손익이 다음 이하일 때 매도
 copy-preset-inherit = 트레이더 기본값

@@ -128,6 +128,10 @@ pub struct PaperPosition {
     pub closed_at: Option<DateTime<Utc>>,
     /// Highest pool price seen while this round was open; arms the trailing stop.
     pub peak_price_native: Option<f64>,
+    /// Take-profit steps this round has taken.
+    pub take_profit_level: u32,
+    /// Partial sales this round has booked; `sells` counts every round's sales.
+    pub round_partial_exits: u32,
 }
 
 impl PaperPosition {

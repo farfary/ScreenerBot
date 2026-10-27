@@ -5,8 +5,8 @@
 # shown as readable labels) and the reasons written by src/positions and src/trader/stats.rs.
 trader-exit-type-stop-loss = Stop loss
 trader-exit-type-take-profit = Take profit
-trader-exit-type-roi = Meta de ROI
-trader-exit-type-roi-exit = Meta de ROI
+trader-exit-type-roi = Take profit
+trader-exit-type-roi-exit = Take profit
 trader-exit-type-trailing-stop = Trailing stop
 trader-exit-type-time-override = Saída por tempo
 trader-exit-type-time-rule = Regra de tempo
@@ -22,7 +22,7 @@ trader-tab-strategy-control = Controle de estratégias
 trader-tab-strategies = Estratégias
 trader-tab-stop-loss = Stop loss
 trader-tab-trailing-stop = Trailing stop
-trader-tab-roi = Take profit
+trader-tab-take-profit = Take profit
 trader-tab-time-rules = Saída por tempo
 trader-tab-dca = DCA
 trader-tab-settings = Configurações
@@ -246,16 +246,36 @@ trader-trailing-summary-avoided = <strong>{ $value }</strong> de perda evitada d
 
 ## Take profit
 
-trader-roi-title = Take profit
-trader-roi-subtitle = Sai automaticamente de toda a posição quando o lucro atinge a sua meta
-# $target is the target percentage as typed.
-trader-roi-impact = Sai com +{ $target }% de lucro
-trader-roi-initial-buy = Compra inicial
-trader-roi-target-hit = Meta atingida
-trader-roi-full-position = Posição total
-trader-roi-sold = 100% vendido
-# $target is the target percentage as typed.
-trader-roi-summary = <strong>+{ $target }%</strong> de lucro garantido
+trader-take-profit-title = Take profit
+trader-take-profit-subtitle = Vende a posição em etapas conforme o lucro atinge cada nível
+trader-take-profit-initial-buy = Compra inicial
+# $step is the step's position in the ladder, from 1.
+trader-take-profit-step = Etapa { $step }
+# $step is the step's position in the ladder, from 1.
+trader-take-profit-profit-label = Nível de lucro da etapa { $step }
+# $step is the step's position in the ladder, from 1.
+trader-take-profit-sell-label = Parte a vender da etapa { $step }
+trader-take-profit-add-step = Adicionar etapa
+# $step is the step's position in the ladder, from 1.
+trader-take-profit-remove-step = Remover etapa { $step }
+# $min and $max are the configured bounds of a profit level.
+trader-take-profit-error-profit-range = Cada nível de lucro deve ficar entre { $min }% e { $max }%
+# $min and $max are the configured bounds of a share.
+trader-take-profit-error-sell-range = Cada parte deve ficar entre { $min }% e { $max }%
+trader-take-profit-error-order = Cada etapa precisa de um nível de lucro maior que o anterior
+# $max is the largest total share, the whole position.
+trader-take-profit-error-total = As etapas juntas podem vender no máximo { $max }%
+# $runner is the formatted percentage of the position no step sells.
+trader-take-profit-runner = { $runner }% da posição ficam abertos como runner
+trader-take-profit-runner-none = A última etapa vende o restante da posição
+trader-take-profit-runner-warning = Com o trailing stop, a saída por tempo e todas as estratégias de saída desligados, o runner só fecha pelo stop loss ou manualmente
+trader-take-profit-info = As partes se referem à posição inicial. Se o preço passar vários níveis de uma vez, uma etapa é vendida por verificação.
+# $profit is the step's formatted profit level; $share is its formatted share.
+trader-take-profit-example-step = Em +{ $profit }%, vender { $share }%
+trader-take-profit-example-runner = Runner
+trader-take-profit-example-runner-detail = Fica com as outras regras de saída
+# $sold is the formatted total share the ladder sells; $profit is its last formatted level.
+trader-take-profit-summary = Vende <strong>{ $sold }%</strong> até +{ $profit }% de lucro
 
 ## Time-based exit
 

@@ -325,6 +325,79 @@ async fn the_paper_book_books_buys_and_partial_then_full_sells_exactly_once() {
     );
 }
 
+/// Each paper round counts its own partial sales and take-profit steps: a sale that
+/// leaves tokens is a partial of the round, a policy sale records the step it takes, and
+/// a holding that reopens starts both again at zero while `sells` keeps every round's
+/// sales.
+#[tokio::test]
+async fn a_reopened_paper_round_starts_its_partials_and_take_profit_steps_again() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = CopyDatabase::open(
+        dir.path().join("copy_trading.db"),
+        crate::chains::active_chain(),
+    )
+    .unwrap();
+    let mut configured_task = task();
+    configured_task.max_native_per_trade = 1.1;
+    configured_task.max_native_per_token = 3.0;
+    let configured = db.insert_task(configured_task).await.unwrap();
+    let round = |position: &crate::trader::copy::PaperPosition| {
+        (
+            position.sells,
+            position.round_partial_exits,
+            position.take_profit_level,
+        )
+    };
+
+    db.record_outcome(paper_buy(&configured, "buy-1", 100.0, 1.0))
+        .await
+        .unwrap();
+    let mut first_step = paper_sell(&configured, "sell-1", 40.0, 0.6);
+    if let CopyOutcome::PaperSellObserved(decision) = &mut first_step {
+        decision.exit_rule = Some(crate::trader::copy::PaperExitRule::TakeProfit);
+        decision.take_profit_level = Some(1);
+    }
+    db.record_outcome(first_step.clone()).await.unwrap();
+    db.record_outcome(first_step).await.unwrap();
+    let stepped = db
+        .paper_position(configured.id, "book-mint")
+        .await
+        .unwrap()
+        .expect("paper position");
+    assert!(stepped.is_open());
+    assert_eq!(round(&stepped), (1, 1, 1), "one partial sale took step 1");
+
+    db.record_outcome(paper_sell(&configured, "sell-2", 60.0, 0.9))
+        .await
+        .unwrap();
+    let closed = db
+        .paper_position(configured.id, "book-mint")
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(!closed.is_open());
+    assert_eq!(
+        round(&closed),
+        (2, 1, 1),
+        "the closing sale is not a partial and takes no step"
+    );
+
+    db.record_outcome(paper_buy(&configured, "buy-2", 100.0, 1.0))
+        .await
+        .unwrap();
+    let reopened = db
+        .paper_position(configured.id, "book-mint")
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(reopened.is_open());
+    assert_eq!(
+        round(&reopened),
+        (2, 0, 0),
+        "a new round has sold nothing and taken no step"
+    );
+}
+
 #[tokio::test]
 async fn paper_reset_preserves_legacy_live_data_and_rejects_stale_quote_fills_and_skips() {
     let dir = tempfile::tempdir().unwrap();

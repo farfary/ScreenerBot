@@ -178,7 +178,8 @@ pub async fn initialize_positions_system() -> Result<()> {
                         entry.expected_exit_amount,
                         entry.requested_exit_percentage,
                         entry.expiry_height,
-                    );
+                    )
+                    .with_take_profit_level(entry.take_profit_level);
                     enqueue_verification(item).await;
                     restored += 1;
                 }
@@ -471,6 +472,7 @@ async fn reenqueue_missing_verifications() -> (usize, usize) {
                             pending.requested_exit_percentage,
                             pending.expiry_height,
                         )
+                        .with_take_profit_level(pending.take_profit_level)
                     } else {
                         VerificationItem::new(
                             exit_sig.to_owned(),
@@ -740,8 +742,9 @@ fn refused_settlement(item: &VerificationItem, error: &Error) -> RefusedSettleme
     }
 }
 
-/// Applies the transition a signature verdict decided and settles the trade action waiting
-/// on the signature. A refusal that a retry cannot change abandons the signature for the
+/// Applies the transition a signature verdict decided, after the release of any take-profit
+/// step it returns to the ladder ([`settle::settlement_transitions`]), and settles the trade
+/// action waiting on the signature. A refusal that a retry cannot change abandons the signature for the
 /// session, so the next cycle does not re-enqueue and refuse it again; any other refusal
 /// reads the signature again after a deferral.
 async fn apply_settlement(
@@ -759,6 +762,18 @@ async fn apply_settlement(
             ))
         }),
     };
+    let (release, transition) = settle::settlement_transitions(item, transition);
+    if let Some(release) = release {
+        if let Err(error) = apply_transition(release).await {
+            logger::error(
+                LogTag::Positions,
+                &format!(
+                    "Take-profit step of {} (mint {}) stays taken after its sale did not land: {error}",
+                    item.signature, item.mint
+                ),
+            );
+        }
+    }
     match apply_transition(transition).await {
         Ok(_) => {
             logger::info(

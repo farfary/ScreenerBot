@@ -1,7 +1,7 @@
 trader-exit-type-stop-loss = Стоп-лосс
 trader-exit-type-take-profit = Тейк-профит
-trader-exit-type-roi = Цель по ROI
-trader-exit-type-roi-exit = Цель по ROI
+trader-exit-type-roi = Тейк-профит
+trader-exit-type-roi-exit = Тейк-профит
 trader-exit-type-trailing-stop = Трейлинг-стоп
 trader-exit-type-time-override = Выход по времени
 trader-exit-type-time-rule = Правило по времени
@@ -15,7 +15,7 @@ trader-tab-strategy-control = Управление стратегиями
 trader-tab-strategies = Стратегии
 trader-tab-stop-loss = Стоп-лосс
 trader-tab-trailing-stop = Трейлинг-стоп
-trader-tab-roi = Тейк-профит
+trader-tab-take-profit = Тейк-профит
 trader-tab-time-rules = Выход по времени
 trader-tab-dca = DCA
 trader-tab-settings = Настройки
@@ -205,14 +205,36 @@ trader-trailing-final = итог +{ $value }%
 trader-trailing-summary-protected = Прибыль защищена: <strong>{ $value }</strong>
 trader-trailing-summary-avoided = Избегнут убыток от пика: <strong>{ $value }</strong>
 
-trader-roi-title = Тейк-профит
-trader-roi-subtitle = Автоматически выходить из всей позиции, когда прибыль достигает цели
-trader-roi-impact = Выход при +{ $target }% прибыли
-trader-roi-initial-buy = Первая покупка
-trader-roi-target-hit = Цель достигнута
-trader-roi-full-position = Вся позиция
-trader-roi-sold = 100% продано
-trader-roi-summary = Зафиксирована прибыль <strong>+{ $target }%</strong>
+trader-take-profit-title = Тейк-профит
+trader-take-profit-subtitle = Продаёт позицию ступенями по мере достижения каждого уровня прибыли
+trader-take-profit-initial-buy = Первая покупка
+# $step is the step's position in the ladder, from 1.
+trader-take-profit-step = Ступень { $step }
+# $step is the step's position in the ladder, from 1.
+trader-take-profit-profit-label = Уровень прибыли ступени { $step }
+# $step is the step's position in the ladder, from 1.
+trader-take-profit-sell-label = Доля продажи ступени { $step }
+trader-take-profit-add-step = Добавить ступень
+# $step is the step's position in the ladder, from 1.
+trader-take-profit-remove-step = Удалить ступень { $step }
+# $min and $max are the configured bounds of a profit level.
+trader-take-profit-error-profit-range = Каждый уровень прибыли должен быть от { $min }% до { $max }%
+# $min and $max are the configured bounds of a share.
+trader-take-profit-error-sell-range = Каждая доля должна быть от { $min }% до { $max }%
+trader-take-profit-error-order = У каждой ступени уровень прибыли должен быть выше, чем у предыдущей
+# $max is the largest total share, the whole position.
+trader-take-profit-error-total = Все ступени вместе могут продать не более { $max }%
+# $runner is the formatted percentage of the position no step sells.
+trader-take-profit-runner = { $runner }% позиции остаётся открытыми как раннер
+trader-take-profit-runner-none = Последняя ступень продаёт остаток позиции
+trader-take-profit-runner-warning = Когда трейлинг-стоп, выход по времени и все стратегии выхода выключены, раннер закрывается только стоп-лоссом или вручную
+trader-take-profit-info = Доли считаются от исходной позиции. Если цена проходит несколько уровней сразу, за одну проверку продаётся одна ступень.
+# $profit is the step's formatted profit level; $share is its formatted share.
+trader-take-profit-example-step = При +{ $profit }% продать { $share }%
+trader-take-profit-example-runner = Раннер
+trader-take-profit-example-runner-detail = Остаётся на другие правила выхода
+# $sold is the formatted total share the ladder sells; $profit is its last formatted level.
+trader-take-profit-summary = Продаёт <strong>{ $sold }%</strong> к +{ $profit }% прибыли
 
 trader-time-title = Выход по времени
 trader-time-subtitle = Автоматически выходить из позиций по истечении максимального времени удержания, если убыток превышает порог

@@ -530,6 +530,7 @@ fn paper_sell(task: &CopyTask, signature: &str, tokens: f64, proceeds: f64) -> C
         transaction_signature: None,
         error: None,
         exit_rule: None,
+        take_profit_level: None,
         paper_fill: Some(super::super::types::PaperSellFill {
             token_amount: tokens,
             market_price_sol: 0.012,

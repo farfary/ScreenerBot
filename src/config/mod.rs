@@ -119,8 +119,9 @@ pub use schemas::{
     LlmAnalysisConfig, LlmConfig, LlmProviderConfig, LlmProvidersConfig, LockscreenConfig,
     MaintenanceConfig, MonitoringConfig, NetworkConfig, OhlcvConfig, OllamaConfig,
     PerformanceConfig, PoolsConfig, PositionsConfig, ReferralConfig, RpcConfig, ServicesConfig,
-    SolanaChainConfig, StartupConfig, StrategiesConfig, SwapsConfig, TelegramConfig, TimeUnit,
-    TokensConfig, TraderConfig, UpdatesConfig, WalletConfig, WebserverConfig,
+    SolanaChainConfig, StartupConfig, StrategiesConfig, SwapsConfig, TakeProfitLevel,
+    TelegramConfig, TimeUnit, TokensConfig, TraderConfig, UpdatesConfig, WalletConfig,
+    WebserverConfig, TAKE_PROFIT_MAX_STEPS,
 };
 
 pub use utils::{

@@ -119,6 +119,7 @@ async fn sell_forced(
         exit_percentage: Some(exit_percentage),
         // Manual trade: honour the user's slippage override (None = config).
         slippage_pct,
+        take_profit_level: None,
     };
 
     // Execute trade (includes quote + swap)

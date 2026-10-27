@@ -183,6 +183,7 @@ async fn register_partial(id: i64) {
         requested_exit_percentage: 40.0,
         expiry_height: None,
         created_at: Utc::now(),
+        take_profit_level: None,
     })
     .await
     .expect("register pending partial exit");
@@ -435,6 +436,7 @@ fn a_sent_swap_whose_pending_record_cannot_be_stored_stays_pending_in_memory() {
                 requested_exit_percentage: 40.0,
                 expiry_height: None,
                 created_at: Utc::now(),
+                take_profit_level: None,
             })
             .await
             .expect_err("the pending partial exit is not stored");
@@ -3651,6 +3653,7 @@ fn late_fills_on_two_closed_positions_of_a_mint_book_in_send_order() {
                 requested_exit_percentage: 40.0,
                 expiry_height: None,
                 created_at: sent,
+                take_profit_level: None,
             })
             .await
             .expect("register the second position's partial exit");
@@ -3733,6 +3736,7 @@ fn deleting_a_position_clears_its_pending_swaps_so_later_late_fills_book() {
                     requested_exit_percentage: 40.0,
                     expiry_height: None,
                     created_at,
+                    take_profit_level: None,
                 })
                 .await
                 .expect("register a partial exit");
@@ -3827,6 +3831,7 @@ fn startup_drops_the_pending_swaps_of_deleted_positions() {
                     requested_exit_percentage: 40.0,
                     expiry_height: None,
                     created_at: Utc::now(),
+                    take_profit_level: None,
                 })
                 .await
                 .expect("register a partial exit");
@@ -5443,6 +5448,223 @@ fn a_restate_never_writes_a_position_its_records_do_not_cover() {
 
             assert_eq!(restate().await, 0);
             assert_eq!(cost_basis_of(&stored_position(id).await), before);
+        },
+    );
+}
+
+/// The take-profit steps memory and storage both hold for `id`, asserted equal.
+async fn take_profit_level(id: i64) -> u32 {
+    let memory = memory_position(id).await.take_profit_level;
+    assert_eq!(
+        stored_column(id, "take_profit_level"),
+        Value::Integer(i64::from(memory)),
+        "memory and storage agree"
+    );
+    memory
+}
+
+fn reserve(id: i64, level: u32) -> PositionTransition {
+    PositionTransition::TakeProfitLevelReserved {
+        position_id: id,
+        level,
+    }
+}
+
+fn release(id: i64, level: u32) -> PositionTransition {
+    PositionTransition::TakeProfitLevelReleased {
+        position_id: id,
+        level,
+    }
+}
+
+#[test]
+fn a_take_profit_reservation_takes_only_the_next_step_and_a_replay_changes_nothing() {
+    common::run_isolated(
+        module_path!(),
+        "a_take_profit_reservation_takes_only_the_next_step_and_a_replay_changes_nothing",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            let id = open_position(|_| {}).await;
+            let before = in_storage(id).await;
+            assert_eq!(take_profit_level(id).await, 0);
+
+            let effects = apply_transition(reserve(id, 1)).await.expect("reserved");
+            assert!(effects.db_updated);
+            assert_eq!(take_profit_level(id).await, 1);
+
+            let replay = apply_transition(reserve(id, 1)).await.expect("replayed");
+            assert!(!replay.db_updated, "a replay writes nothing");
+            assert_eq!(take_profit_level(id).await, 1);
+
+            // A decision made on a stale level, one step past the next, skips no step.
+            let skipping = apply_transition(reserve(id, 3))
+                .await
+                .expect("past the next");
+            assert!(
+                !skipping.db_updated,
+                "a step past the next is never reserved"
+            );
+            assert_eq!(take_profit_level(id).await, 1);
+
+            let next = apply_transition(reserve(id, 2)).await.expect("next step");
+            assert!(next.db_updated, "the step after the last taken is reserved");
+            assert_eq!(take_profit_level(id).await, 2);
+            let older = apply_transition(reserve(id, 1))
+                .await
+                .expect("an older reservation");
+            assert!(!older.db_updated);
+            assert_eq!(
+                take_profit_level(id).await,
+                2,
+                "a reservation never lowers the level"
+            );
+            // Nothing the reservation does not own moved.
+            assert_unchanged(id, &before).await;
+        },
+    );
+}
+
+#[test]
+fn a_take_profit_release_steps_back_only_from_its_own_level_and_once() {
+    common::run_isolated(
+        module_path!(),
+        "a_take_profit_release_steps_back_only_from_its_own_level_and_once",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            let id = open_position(|_| {}).await;
+            for level in [1, 2] {
+                apply_transition(reserve(id, level))
+                    .await
+                    .expect("reserved");
+            }
+            assert_eq!(take_profit_level(id).await, 2);
+
+            // A release of a step the row has moved past is left alone.
+            let stale = apply_transition(release(id, 1)).await.expect("stale");
+            assert!(!stale.db_updated);
+            assert_eq!(take_profit_level(id).await, 2);
+
+            let effects = apply_transition(release(id, 2)).await.expect("released");
+            assert!(effects.db_updated);
+            assert_eq!(take_profit_level(id).await, 1);
+
+            let replay = apply_transition(release(id, 2)).await.expect("replayed");
+            assert!(!replay.db_updated, "a replay writes nothing");
+            assert_eq!(take_profit_level(id).await, 1);
+
+            apply_transition(release(id, 1)).await.expect("released");
+            assert_eq!(take_profit_level(id).await, 0);
+            let floor = apply_transition(release(id, 0)).await.expect("no step");
+            assert!(!floor.db_updated, "level 0 has nothing to release");
+            assert_eq!(take_profit_level(id).await, 0);
+        },
+    );
+}
+
+#[test]
+fn a_reserved_take_profit_step_survives_a_booked_partial_exit() {
+    common::run_isolated(
+        module_path!(),
+        "a_reserved_take_profit_step_survives_a_booked_partial_exit",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            let id = open_position(|_| {}).await;
+            apply_transition(reserve(id, 1)).await.expect("reserved");
+            register_partial(id).await;
+
+            apply_transition(partial_exit(id))
+                .await
+                .expect("the partial is booked");
+            assert_eq!(in_storage(id).await.partial_exit_count, 1);
+            assert_eq!(take_profit_level(id).await, 1);
+        },
+    );
+}
+
+/// A full exit takes no take-profit step: whatever settles it, the row's level stays at the
+/// partial steps actually booked, so the step the full exit was selling fires again.
+#[test]
+fn a_full_exit_that_left_a_residual_keeps_the_take_profit_level_of_the_booked_steps() {
+    common::run_isolated(
+        module_path!(),
+        "a_full_exit_that_left_a_residual_keeps_the_take_profit_level_of_the_booked_steps",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            // One partial step booked, then the full last step sent.
+            let id = open_position(|position| {
+                position.take_profit_level = 1;
+                position.partial_exit_count = 1;
+                position.exit_transaction_signature = Some(CLOSE_SIGNATURE.to_owned());
+            })
+            .await;
+
+            apply_transition(PositionTransition::ExitResidualClearForRetry {
+                position_id: id,
+                exit_amount: RawAmount::new(HELD / 2),
+                native_received: 0.75,
+                effective_exit_price: 1.5,
+                fee_raw: SWAP_FEE_RAW,
+                exit_time: Utc::now(),
+                exit_signature: CLOSE_SIGNATURE.to_owned(),
+                exit_percentage: 50.0,
+                held_after: Some(RawAmount::new(HELD / 2)),
+            })
+            .await
+            .expect("the residual is booked for a retry");
+
+            for position in [stored_position(id).await, memory_position(id).await] {
+                assert!(position.exit_time.is_none(), "the residual keeps it open");
+                assert_eq!(position.exit_transaction_signature, None);
+            }
+            assert_eq!(
+                take_profit_level(id).await,
+                1,
+                "the level stays at the one partial step booked"
+            );
+        },
+    );
+}
+
+/// A late sale that reopens a closed round keeps the take-profit level of the partial steps
+/// booked before the close: the full exit reserved none.
+#[test]
+fn a_reopened_round_keeps_the_take_profit_level_of_the_booked_steps() {
+    common::run_isolated(
+        module_path!(),
+        "a_reopened_round_keeps_the_take_profit_level_of_the_booked_steps",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            let id = written_off(|position| {
+                position.take_profit_level = 1;
+                position.partial_exit_count = 1;
+            })
+            .await;
+            apply_transition(PositionTransition::ExitVerified {
+                position_id: id,
+                effective_exit_price: 1.5,
+                native_received: 0.6,
+                fee_raw: SWAP_FEE_RAW,
+                exit_time: Utc::now(),
+                exit_signature: "late-sale-sig".to_owned(),
+                exit_amount: RawAmount::new(400_000),
+                held_after: Some(RawAmount::new(600_000)),
+            })
+            .await
+            .expect("the late sale is booked");
+
+            for position in [stored_position(id).await, memory_position(id).await] {
+                assert!(position.exit_time.is_none(), "the round reopened");
+            }
+            assert_eq!(
+                take_profit_level(id).await,
+                1,
+                "the level stays at the one partial step booked"
+            );
         },
     );
 }

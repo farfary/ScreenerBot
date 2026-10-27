@@ -299,6 +299,7 @@ pub async fn process_dca_opportunities() -> crate::trader::Result<Vec<TradeDecis
                 exit_percentage: None,
                 // Auto-trader slippage always follows config.
                 slippage_pct: None,
+                take_profit_level: None,
             });
         } else {
             logger::debug(

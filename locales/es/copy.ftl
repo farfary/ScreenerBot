@@ -466,6 +466,8 @@ copy-rules-target-max = Como máximo { $amount }
 copy-rules-target-between = { $min } – { $max } { -sol }
 copy-rules-source-override = Ajuste de la tarea · Trader { $value }
 copy-rules-source-default = Valor predeterminado del Trader
+# $profit is the step's signed profit level; $share is the share of the position it sells, both formatted.
+copy-rules-take-profit-step = A { $profit }, vender { $share }
 copy-rules-not-used = No se usa: deciden las ventas de la billetera
 copy-rules-col-rule = Regla
 copy-rules-col-applies = Se aplica
@@ -511,6 +513,7 @@ copy-rule-partial-size = Parte a vender
 copy-rule-trailing-activation = Se activa con una ganancia de
 copy-rule-trailing-distance = Vende por debajo del máximo en
 copy-rule-take-profit-target = Vende con una ganancia de
+copy-rule-take-profit-target-hint = Un objetivo aquí sustituye los tramos de take profit del Trader por un solo tramo que vende toda la posición
 copy-rule-time-duration = Comprueba tras mantener
 copy-rule-time-threshold = Vende mientras el P&L esté en o por debajo de
 copy-preset-inherit = Valores del Trader

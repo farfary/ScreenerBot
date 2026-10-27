@@ -97,6 +97,7 @@ fn live_position(task: &CopyTask, round: &LiveRound, now: DateTime<Utc>) -> Posi
         },
         average_exit_price: exit_price,
         partial_exit_count: 0,
+        take_profit_level: 0,
         dca_count: 0,
         average_entry_price: round.entry,
         last_dca_time: None,

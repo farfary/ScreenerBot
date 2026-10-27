@@ -5,8 +5,8 @@
 # shown as readable labels) and the reasons written by src/positions and src/trader/stats.rs.
 trader-exit-type-stop-loss = Стоп-лос
 trader-exit-type-take-profit = Тейк-профіт
-trader-exit-type-roi = Ціль ROI
-trader-exit-type-roi-exit = Ціль ROI
+trader-exit-type-roi = Тейк-профіт
+trader-exit-type-roi-exit = Тейк-профіт
 trader-exit-type-trailing-stop = Трейлінг-стоп
 trader-exit-type-time-override = Вихід за часом
 trader-exit-type-time-rule = Часове правило
@@ -22,7 +22,7 @@ trader-tab-strategy-control = Керування стратегіями
 trader-tab-strategies = Стратегії
 trader-tab-stop-loss = Стоп-лос
 trader-tab-trailing-stop = Трейлінг-стоп
-trader-tab-roi = Тейк-профіт
+trader-tab-take-profit = Тейк-профіт
 trader-tab-time-rules = Вихід за часом
 trader-tab-dca = DCA
 trader-tab-settings = Налаштування
@@ -253,16 +253,36 @@ trader-trailing-summary-avoided = Уникнуто збитку <strong>{ $value
 
 ## Take profit
 
-trader-roi-title = Тейк-профіт
-trader-roi-subtitle = Автоматичний вихід з усієї позиції, коли прибуток досягає вашої цілі
-# $target is the target percentage as typed.
-trader-roi-impact = Вихід при прибутку +{ $target }%
-trader-roi-initial-buy = Початкова купівля
-trader-roi-target-hit = Ціль досягнуто
-trader-roi-full-position = Уся позиція
-trader-roi-sold = 100% продано
-# $target is the target percentage as typed.
-trader-roi-summary = Зафіксовано прибуток <strong>+{ $target }%</strong>
+trader-take-profit-title = Тейк-профіт
+trader-take-profit-subtitle = Продає позицію сходинками, коли прибуток досягає кожного рівня
+trader-take-profit-initial-buy = Початкова купівля
+# $step is the step's position in the ladder, from 1.
+trader-take-profit-step = Сходинка { $step }
+# $step is the step's position in the ladder, from 1.
+trader-take-profit-profit-label = Рівень прибутку сходинки { $step }
+# $step is the step's position in the ladder, from 1.
+trader-take-profit-sell-label = Частка продажу сходинки { $step }
+trader-take-profit-add-step = Додати сходинку
+# $step is the step's position in the ladder, from 1.
+trader-take-profit-remove-step = Видалити сходинку { $step }
+# $min and $max are the configured bounds of a profit level.
+trader-take-profit-error-profit-range = Кожен рівень прибутку має бути від { $min }% до { $max }%
+# $min and $max are the configured bounds of a share.
+trader-take-profit-error-sell-range = Кожна частка має бути від { $min }% до { $max }%
+trader-take-profit-error-order = Кожна сходинка потребує вищого рівня прибутку, ніж попередня
+# $max is the largest total share, the whole position.
+trader-take-profit-error-total = Усі сходинки разом можуть продати не більше { $max }%
+# $runner is the formatted percentage of the position no step sells.
+trader-take-profit-runner = { $runner }% позиції залишається відкритими як ранер
+trader-take-profit-runner-none = Остання сходинка продає залишок позиції
+trader-take-profit-runner-warning = Коли трейлінг-стоп, вихід за часом і всі стратегії виходу вимкнені, ранер закривається лише стоп-лосом або вручну
+trader-take-profit-info = Частки рахуються від початкової позиції. Якщо ціна проходить кілька рівнів одразу, за одну перевірку продається одна сходинка.
+# $profit is the step's formatted profit level; $share is its formatted share.
+trader-take-profit-example-step = При +{ $profit }% продати { $share }%
+trader-take-profit-example-runner = Ранер
+trader-take-profit-example-runner-detail = Залишається іншим правилам виходу
+# $sold is the formatted total share the ladder sells; $profit is its last formatted level.
+trader-take-profit-summary = Продає <strong>{ $sold }%</strong> до +{ $profit }% прибутку
 
 ## Time-based exit
 

@@ -506,6 +506,9 @@ async fn merge_import_of_a_v0_2_13_export_lands_every_moved_value_at_its_new_pat
         assert_eq!(cfg.trader.trailing_stop_distance_pct, 4.0);
         assert_eq!(cfg.trader.stop_loss_partial_pct, 35.0);
         assert!(!cfg.trader.stop_loss_allow_partial);
+        assert!(!cfg.trader.take_profit_enabled);
+        assert_eq!(cfg.trader.take_profit_levels_pct, [35.0]);
+        assert_eq!(cfg.trader.take_profit_sell_pct, [100.0]);
         assert_eq!(cfg.positions.profit_extra_needed_sol, 0.0005);
     });
 }
@@ -701,7 +704,8 @@ async fn replace_import_of_a_legacy_positions_export_moves_the_exit_leaves_into_
 /// A legacy export carried the trailing stop and the partial stop-loss share in
 /// `positions` and the slippage in `swaps`, never in `trader`. Replacing `trader`
 /// from it keeps the current values of every field that moved into `trader`
-/// instead of resetting them to defaults.
+/// instead of resetting them to defaults. The ROI target it did carry in `trader`
+/// replaces the ladder with its one full step.
 #[tokio::test]
 async fn replace_import_of_a_legacy_trader_export_keeps_the_values_that_moved_into_trader() {
     init_config();
@@ -714,6 +718,8 @@ async fn replace_import_of_a_legacy_trader_export_keeps_the_values_that_moved_in
             cfg.trader.trailing_stop_distance_pct = 5.0;
             cfg.trader.stop_loss_partial_pct = 45.0;
             cfg.trader.slippage.quote_default_pct = 1.25;
+            cfg.trader.take_profit_levels_pct = vec![10.0, 30.0];
+            cfg.trader.take_profit_sell_pct = vec![50.0, 50.0];
         },
         false,
     )
@@ -735,6 +741,45 @@ async fn replace_import_of_a_legacy_trader_export_keeps_the_values_that_moved_in
         assert_eq!(cfg.trader.trailing_stop_distance_pct, 5.0);
         assert_eq!(cfg.trader.stop_loss_partial_pct, 45.0);
         assert_eq!(cfg.trader.slippage.quote_default_pct, 1.25);
+        assert!(!cfg.trader.take_profit_enabled);
+        assert_eq!(cfg.trader.take_profit_levels_pct, [35.0]);
+        assert_eq!(cfg.trader.take_profit_sell_pct, [100.0]);
+    });
+}
+
+/// A `trader` export that carries neither the ROI target nor the take-profit
+/// ladder replaces the section without resetting the current ladder: both of its
+/// lists are relocation destinations the export lacks.
+#[tokio::test]
+async fn replace_import_of_a_trader_export_without_a_ladder_keeps_the_current_ladder() {
+    init_config();
+    let _writes = CONFIG_WRITES.lock().await;
+    update_config_section(
+        |cfg| {
+            cfg.trader.take_profit_enabled = true;
+            cfg.trader.take_profit_levels_pct = vec![25.0, 50.0, 120.0];
+            cfg.trader.take_profit_sell_pct = vec![30.0, 30.0, 20.0];
+        },
+        false,
+    )
+    .expect("seed the take-profit ladder");
+
+    let mut export = v0_2_13_export(&["trader"]);
+    let trader = export["trader"].as_object_mut().expect("trader object");
+    trader.remove("roi_exit_enabled");
+    trader.remove("roi_target_percent");
+    let body = post_import(serde_json::json!({
+        "config": export,
+        "merge": false,
+        "save_to_disk": false,
+    }))
+    .await;
+    assert_eq!(imported_sections(&body), BTreeSet::from(["trader"]));
+
+    with_config(|cfg| {
+        assert_eq!(cfg.trader.max_open_positions, 4);
+        assert_eq!(cfg.trader.take_profit_levels_pct, [25.0, 50.0, 120.0]);
+        assert_eq!(cfg.trader.take_profit_sell_pct, [30.0, 30.0, 20.0]);
     });
 }
 
@@ -751,6 +796,8 @@ async fn a_selected_legacy_section_imports_the_values_it_fed_into_other_sections
             cfg.trader.stop_loss_allow_partial = true;
             cfg.trader.stop_loss_partial_pct = 50.0;
             cfg.trader.trailing_stop_enabled = false;
+            cfg.trader.take_profit_levels_pct = vec![10.0, 30.0];
+            cfg.trader.take_profit_sell_pct = vec![50.0, 50.0];
         },
         false,
     )
@@ -775,6 +822,8 @@ async fn a_selected_legacy_section_imports_the_values_it_fed_into_other_sections
         assert_eq!(cfg.trader.stop_loss_partial_pct, 35.0);
         assert_eq!(cfg.trader.max_open_positions, 7);
         assert!(cfg.trader.stop_loss_allow_partial);
+        assert_eq!(cfg.trader.take_profit_levels_pct, [10.0, 30.0]);
+        assert_eq!(cfg.trader.take_profit_sell_pct, [50.0, 50.0]);
         assert_eq!(cfg.positions.profit_extra_needed_sol, 0.0005);
     });
 }

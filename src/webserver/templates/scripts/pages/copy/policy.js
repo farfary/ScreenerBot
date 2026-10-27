@@ -3,7 +3,11 @@
 //
 // The four exit rules as the editor and the Rules tab present them: field specs,
 // the policy a task runs under after its overrides, presets, and validation.
+import { formatList } from "../../core/format.js";
 import { duration, finite, settingPct, settingSignedPct } from "./format.js";
+
+/** The share of the position a take-profit step sells when it sells all of it. */
+const WHOLE_POSITION_PCT = 100;
 
 const status = {
   key: "enabled",
@@ -97,6 +101,9 @@ export const RULES = [
         get label() {
           return I18n.t("copy-rule-take-profit-target");
         },
+        get hint() {
+          return I18n.t("copy-rule-take-profit-target-hint");
+        },
         unit: "%",
         text: (v) => settingSignedPct(v),
       },
@@ -154,7 +161,7 @@ export function normalizeOverrides(overrides) {
 }
 
 export function effectivePolicy(traderDefaults, overrides) {
-  return Object.fromEntries(
+  const policy = Object.fromEntries(
     RULES.map((rule) => [
       rule.group,
       Object.fromEntries(
@@ -164,6 +171,31 @@ export function effectivePolicy(traderDefaults, overrides) {
         ])
       ),
     ])
+  );
+  // A target override replaces the Trader's ladder with one full step, which the target
+  // names; otherwise the task follows the Trader's steps.
+  policy.roi.levels = isOverridden(overrides, "roi", "target_profit_pct")
+    ? null
+    : (traderDefaults?.roi?.levels ?? null);
+  return policy;
+}
+
+/**
+ * The take-profit steps `levels` as text, each step's profit and the share of the position
+ * it sells, or `null` when there is no ladder or its one step sells everything: that step's
+ * target then says it all.
+ */
+export function ladderText(levels) {
+  if (!Array.isArray(levels) || levels.length === 0) return null;
+  if (levels.length === 1 && levels[0].sell_pct >= WHOLE_POSITION_PCT) return null;
+  return formatList(
+    levels.map((step) =>
+      I18n.t("copy-rules-take-profit-step", {
+        profit: settingSignedPct(step.profit_pct),
+        share: settingPct(step.sell_pct),
+      })
+    ),
+    { type: "unit" }
   );
 }
 

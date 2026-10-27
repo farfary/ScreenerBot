@@ -163,7 +163,7 @@ export const views = [
   },
   settings("stop-loss", "stop-loss-tab", 4),
   settings("trailing-stop", "trailing-stop-tab", 3),
-  settings("roi", "roi-tab", 2),
+  settings("take-profit", "take-profit-tab", 3),
   {
     ...settings("time-rules", "time-rules-tab", 4),
     populated: [

@@ -446,6 +446,9 @@ pub struct CopySellDecision {
     /// mirrored target sell.
     #[serde(default)]
     pub exit_rule: Option<PaperExitRule>,
+    /// The take-profit step a policy sale of a paper holding takes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub take_profit_level: Option<u32>,
     #[serde(default)]
     pub paper_context: Option<PaperContext>,
 }

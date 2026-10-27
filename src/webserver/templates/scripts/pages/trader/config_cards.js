@@ -11,6 +11,14 @@
 //! Reset discards the unsaved edits, restoring the last-saved values.
 
 import { fieldHint, fieldLabel, fieldUnit } from "../config/field_text.js";
+import {
+  LEVELS,
+  configureLevels,
+  levelError,
+  levelSnapshot,
+  levelValues,
+  restoreLevels,
+} from "./level_list.js";
 
 /**
  * A loss threshold the config stores as a negative percent (-100..0) and this page
@@ -29,7 +37,8 @@ export function displayValue(type, stored) {
 // Declarative spec: which DOM fields belong to which card, their config section
 // and key, and how to coerce the input value into the saved payload. Keys/types
 // mirror the backend config schema (trader section). `hint` gives this
-// page's own hint for a field shown differently from the Configuration page.
+// page's own hint for a field shown differently from the Configuration page. A
+// `LEVELS` field edits two paired list keys, `key` and `pairKey`, as one ladder.
 const CARD_SPECS = [
   {
     section: "trader",
@@ -52,8 +61,13 @@ const CARD_SPECS = [
   {
     section: "trader",
     fields: [
-      { id: "roi-enabled", key: "roi_exit_enabled", type: "bool", autoSave: true },
-      { id: "roi-target", key: "roi_target_percent", type: "float" },
+      { id: "take-profit-enabled", key: "take_profit_enabled", type: "bool", autoSave: true },
+      {
+        id: "take-profit-levels",
+        key: "take_profit_levels_pct",
+        pairKey: "take_profit_sell_pct",
+        type: LEVELS,
+      },
     ],
   },
   {
@@ -115,8 +129,15 @@ function buttonLabel(text) {
 }
 
 /** Snapshot string used for dirty comparison (independent of value coercion). */
-function snapValue(el) {
+function snapValue(el, type) {
+  if (type === LEVELS) return levelSnapshot(el);
   return el.type === "checkbox" ? String(el.checked) : el.value;
+}
+
+/** The config values a card saves for `field`, keyed by config key. */
+function fieldValues(el, field) {
+  if (field.type === LEVELS) return levelValues(el, field);
+  return { [field.key]: readField(el, field.type) };
 }
 
 /** Coerce an input into the value sent to the backend for a given field type. */
@@ -162,7 +183,15 @@ export function createTraderConfigCards({ saveConfig }) {
   function isDirty(card) {
     return card.spec.fields.some((f) => {
       const el = document.getElementById(f.id);
-      return el && snapValue(el) !== card.saved[f.id];
+      return el && snapValue(el, f.type) !== card.saved[f.id];
+    });
+  }
+
+  /** Whether a field of the card holds a value its config refuses. */
+  function isInvalid(card) {
+    return card.spec.fields.some((f) => {
+      const el = document.getElementById(f.id);
+      return f.type === LEVELS && el !== null && levelError(el) !== null;
     });
   }
 
@@ -170,6 +199,7 @@ export function createTraderConfigCards({ saveConfig }) {
     const dirty = isDirty(card);
     card.saveBtn.hidden = !dirty;
     card.resetBtn.hidden = !dirty;
+    card.saveBtn.disabled = isInvalid(card);
   }
 
   function hasDirtyCards() {
@@ -180,7 +210,7 @@ export function createTraderConfigCards({ saveConfig }) {
     const payload = { [card.spec.section]: {} };
     card.spec.fields.forEach((f) => {
       const el = document.getElementById(f.id);
-      if (el) payload[card.spec.section][f.key] = readField(el, f.type);
+      if (el) Object.assign(payload[card.spec.section], fieldValues(el, f));
     });
     card.saveBtn.disabled = true;
     card.resetBtn.disabled = true;
@@ -190,13 +220,13 @@ export function createTraderConfigCards({ saveConfig }) {
       // saveConfig already surfaced an error toast; keep the buttons visible so
       // the user can retry.
     } finally {
-      card.saveBtn.disabled = false;
       card.resetBtn.disabled = false;
+      evaluate(card);
     }
   }
 
   async function saveField(card, field, el) {
-    const nextSaved = snapValue(el);
+    const nextSaved = snapValue(el, field.type);
     const previousSaved = card.saved[field.id];
     const payload = { [card.spec.section]: { [field.key]: readField(el, field.type) } };
 
@@ -228,7 +258,9 @@ export function createTraderConfigCards({ saveConfig }) {
       const el = document.getElementById(f.id);
       if (!el) return;
       const saved = card.saved[f.id];
-      if (el.type === "checkbox") {
+      if (f.type === LEVELS) {
+        restoreLevels(el, saved);
+      } else if (el.type === "checkbox") {
         el.checked = saved === "true";
       } else {
         el.value = saved;
@@ -314,13 +346,30 @@ export function createTraderConfigCards({ saveConfig }) {
         const input = document.getElementById(field.id);
         if (!metadata || !input) return;
 
-        // A group's hint and unit belong to the field its label names; a companion
+        if (field.type === LEVELS) {
+          const pair = sectionMetadata[field.pairKey];
+          configureLevels(input, {
+            profit: metadata,
+            sell: pair,
+            maxItems: metadata.max_items,
+            profitUnit: fieldUnit(metadata.key),
+            sellUnit: pair ? fieldUnit(pair.key) : undefined,
+          });
+        }
+
+        // A group's hint and unit belong to the field its label names: the label `for` a
+        // control, or the one a group control (the ladder) is labelled by. A companion
         // control in the same group (the duration's unit select) only names itself.
         const group = input.closest(".config-group");
-        const ownsGroup = Boolean(group?.querySelector(`label[for="${field.id}"]`));
-        const label = group?.querySelector(`label[for="${field.id}"] span`);
+        const labelledBy = input.getAttribute("aria-labelledby");
+        const ownLabel =
+          group?.querySelector(`label[for="${field.id}"]`) ??
+          (labelledBy ? group?.querySelector(`label[id="${labelledBy}"]`) : null);
+        const ownsGroup = Boolean(ownLabel);
+        const label = ownLabel?.querySelector("span");
         const hint = ownsGroup ? group.querySelector(".config-hint") : null;
-        const unit = ownsGroup ? group.querySelector(".input-unit") : null;
+        // A ladder's units sit on its own rows, set by `configureLevels`.
+        const unit = ownsGroup && field.type !== LEVELS ? group.querySelector(".input-unit") : null;
 
         const labelText = fieldLabel(metadata.key);
         const hintText = field.hint ? field.hint() : fieldHint(metadata.key);
@@ -341,7 +390,8 @@ export function createTraderConfigCards({ saveConfig }) {
           if (metadata.step != null) input.step = String(metadata.step);
         }
 
-        input.setAttribute("aria-label", labelText);
+        // A control labelled by its group's label takes its name from that label.
+        if (!labelledBy) input.setAttribute("aria-label", labelText);
         if (hintText) input.setAttribute("title", hintText);
       });
     });
@@ -353,7 +403,7 @@ export function createTraderConfigCards({ saveConfig }) {
     cards.forEach((card) => {
       card.spec.fields.forEach((f) => {
         const el = document.getElementById(f.id);
-        if (el) card.saved[f.id] = snapValue(el);
+        if (el) card.saved[f.id] = snapValue(el, f.type);
       });
       evaluate(card);
     });

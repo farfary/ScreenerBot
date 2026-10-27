@@ -8,6 +8,8 @@ trade_size_sol = 0.02
 entry_sizes = [0.01, 0.03]
 loss_limit_sol = 0.4
 stop_loss_allow_partial = true
+roi_exit_enabled = false
+roi_target_percent = 35.0
 
 [positions]
 profit_extra_needed_sol = 0.0005

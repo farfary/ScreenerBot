@@ -3,7 +3,7 @@
 
 //! The one order of the built-in exit rules, shared by the live exit monitor and the paper copy book.
 
-use crate::trader::evaluators::{exit_roi, exit_stop_loss, exit_time, exit_trailing};
+use crate::trader::evaluators::{exit_stop_loss, exit_take_profit, exit_time, exit_trailing};
 use crate::trader::policy::ExitPolicy;
 
 /// What the built-in exit rules read from a holding, on plain numbers. Each book fills it
@@ -21,6 +21,9 @@ pub struct ExitInputs {
     pub held_seconds: i64,
     /// True once the holding has sold part of itself, which spends the one partial stop loss.
     pub partial_exits_taken: bool,
+    /// Take-profit steps the holding has reserved this round; the next step due is the one
+    /// at this index of the ladder.
+    pub take_profit_levels_taken: u32,
 }
 
 /// A built-in exit rule, named by what it protects.
@@ -30,21 +33,19 @@ pub enum ExitRule {
     StopLoss,
     /// The price fell the trailing distance from an armed basis peak while still in profit.
     Trailing,
-    /// Profit from the average entry reached the target.
-    TakeProfit,
+    /// Profit from the average entry reached the level of take-profit step `level`
+    /// (1 is the first step). A partial sale of it reserves that step.
+    TakeProfit { level: u32 },
     /// Held past the time limit at or below the loss threshold.
     TimeLoss,
 }
 
-impl ExitRule {
-    /// The order the rules are checked in; the first that fires wins.
-    pub const ORDER: [ExitRule; 4] = [
-        ExitRule::StopLoss,
-        ExitRule::Trailing,
-        ExitRule::TakeProfit,
-        ExitRule::TimeLoss,
-    ];
-}
+/// One rule on its own: the rule as it would fire for these inputs, and
+/// `Some(exit_percentage)` when it fires.
+type Check = fn(&ExitInputs, &ExitPolicy) -> (ExitRule, crate::trader::Result<Option<Option<f64>>>);
+
+/// The order the rules are checked in; the first that fires wins.
+const ORDER: [Check; 4] = [stop_loss, trailing, take_profit, time_loss];
 
 /// The rule that fired and how much of the holding it sells: `Some(pct)` is a partial
 /// exit of that share, `None` sells everything.
@@ -64,7 +65,8 @@ pub struct Decision {
     pub rule_errors: Vec<(ExitRule, crate::trader::Error)>,
 }
 
-/// The first rule in [`ExitRule::ORDER`] that fires for `inputs` under `policy`.
+/// The first rule that fires for `inputs` under `policy`, checked in the order stop loss,
+/// trailing stop, take profit, time loss.
 ///
 /// A rule whose configuration is impossible does not fire; the rules after it still
 /// run, so one broken setting never disables the others, and its error is reported in
@@ -89,8 +91,9 @@ pub fn decide_admitting(
     if !inputs.current_price.is_finite() || inputs.current_price <= 0.0 {
         return decision;
     }
-    for rule in ExitRule::ORDER {
-        match fires(rule, inputs, policy) {
+    for check in ORDER {
+        let (rule, fired) = check(inputs, policy);
+        match fired {
             Ok(Some(exit_percentage)) => {
                 let outcome = RuleOutcome {
                     rule,
@@ -108,47 +111,68 @@ pub fn decide_admitting(
     decision
 }
 
-/// One rule on its own: `Some(exit_percentage)` when it fires.
-fn fires(
-    rule: ExitRule,
+fn stop_loss(
     inputs: &ExitInputs,
     policy: &ExitPolicy,
-) -> crate::trader::Result<Option<Option<f64>>> {
-    let entry_price = inputs.average_entry_price;
-    let current_price = inputs.current_price;
-    Ok(match rule {
-        ExitRule::StopLoss => exit_stop_loss::stop_loss_exit(
-            entry_price,
-            current_price,
-            inputs.held_seconds,
-            inputs.partial_exits_taken,
-            &policy.stop_loss,
-        ),
-        ExitRule::Trailing => exit_trailing::trailing_stop_triggered(
-            entry_price,
-            inputs.basis_peak_price,
-            current_price,
-            &policy.trailing,
-        )?
-        .then_some(None),
-        ExitRule::TakeProfit => {
-            exit_roi::roi_target_reached(entry_price, current_price, &policy.roi).then_some(None)
-        }
-        ExitRule::TimeLoss => exit_time::time_override_triggered(
-            entry_price,
-            current_price,
-            inputs.held_seconds as f64,
-            &policy.time,
-        )?
-        .then_some(None),
-    })
+) -> (ExitRule, crate::trader::Result<Option<Option<f64>>>) {
+    let fired = exit_stop_loss::stop_loss_exit(
+        inputs.average_entry_price,
+        inputs.current_price,
+        inputs.held_seconds,
+        inputs.partial_exits_taken,
+        &policy.stop_loss,
+    );
+    (ExitRule::StopLoss, Ok(fired))
+}
+
+fn trailing(
+    inputs: &ExitInputs,
+    policy: &ExitPolicy,
+) -> (ExitRule, crate::trader::Result<Option<Option<f64>>>) {
+    let fired = exit_trailing::trailing_stop_triggered(
+        inputs.average_entry_price,
+        inputs.basis_peak_price,
+        inputs.current_price,
+        &policy.trailing,
+    )
+    .map(|triggered| triggered.then_some(None));
+    (ExitRule::Trailing, fired)
+}
+
+fn take_profit(
+    inputs: &ExitInputs,
+    policy: &ExitPolicy,
+) -> (ExitRule, crate::trader::Result<Option<Option<f64>>>) {
+    let fired = exit_take_profit::take_profit_step(
+        inputs.average_entry_price,
+        inputs.current_price,
+        inputs.take_profit_levels_taken,
+        &policy.take_profit,
+    );
+    let level = inputs.take_profit_levels_taken.saturating_add(1);
+    (ExitRule::TakeProfit { level }, fired)
+}
+
+fn time_loss(
+    inputs: &ExitInputs,
+    policy: &ExitPolicy,
+) -> (ExitRule, crate::trader::Result<Option<Option<f64>>>) {
+    let fired = exit_time::time_override_triggered(
+        inputs.average_entry_price,
+        inputs.current_price,
+        inputs.held_seconds as f64,
+        &policy.time,
+    )
+    .map(|triggered| triggered.then_some(None));
+    (ExitRule::TimeLoss, fired)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::TakeProfitLevel;
     use crate::trader::evaluators::dca::DcaConfigSnapshot;
-    use crate::trader::policy::{RoiPolicy, StopLossPolicy, TimePolicy, TrailingPolicy};
+    use crate::trader::policy::{StopLossPolicy, TakeProfitPolicy, TimePolicy, TrailingPolicy};
 
     /// Every rule enabled: stop at -30% (partial 50%), trail 10% once +20%, take profit at
     /// +100%, time loss after an hour at -10% or worse.
@@ -166,9 +190,9 @@ mod tests {
                 activation_pct: 20.0,
                 distance_pct: 10.0,
             },
-            roi: RoiPolicy {
+            take_profit: TakeProfitPolicy {
                 enabled: true,
-                target_profit_pct: 100.0,
+                levels: vec![TakeProfitLevel::sell_all_at(100.0)],
             },
             time: TimePolicy {
                 enabled: true,
@@ -193,8 +217,11 @@ mod tests {
             basis_peak_price: peak,
             held_seconds,
             partial_exits_taken: partial_taken,
+            take_profit_levels_taken: 0,
         }
     }
+
+    const FIRST_STEP: ExitRule = ExitRule::TakeProfit { level: 1 };
 
     fn outcome(rule: ExitRule, exit_percentage: Option<f64>) -> Option<RuleOutcome> {
         Some(RuleOutcome {
@@ -215,10 +242,7 @@ mod tests {
                 inputs(1.12, 1.25, 60, false),
                 outcome(ExitRule::Trailing, None),
             ),
-            (
-                inputs(2.0, 1.0, 60, false),
-                outcome(ExitRule::TakeProfit, None),
-            ),
+            (inputs(2.0, 1.0, 60, false), outcome(FIRST_STEP, None)),
             (
                 inputs(0.85, 1.0, 7200, false),
                 outcome(ExitRule::TimeLoss, None),
@@ -248,7 +272,7 @@ mod tests {
         no_trail.trailing.enabled = false;
         assert_eq!(
             decide(&inputs(2.2, 2.5, 60, false), &no_trail).outcome,
-            outcome(ExitRule::TakeProfit, None)
+            outcome(FIRST_STEP, None)
         );
         // With the stop off, an old losing holding falls to the time loss.
         let mut no_stop = policy.clone();
@@ -324,7 +348,7 @@ mod tests {
         ));
         // A later rule still fires past the broken one, and the error is still reported.
         let later = decide(&inputs(2.0, 1.0, 60, false), &broken);
-        assert_eq!(later.outcome, outcome(ExitRule::TakeProfit, None));
+        assert_eq!(later.outcome, outcome(FIRST_STEP, None));
         assert!(matches!(
             later.rule_errors.as_slice(),
             [(ExitRule::Trailing, _)]
@@ -357,5 +381,94 @@ mod tests {
                 None
             );
         }
+    }
+    /// A three-step ladder, 30% at +20%, 30% at +50% and the last 40% at +100%, with
+    /// every other rule off.
+    fn ladder_only() -> ExitPolicy {
+        let mut policy = policy();
+        policy.stop_loss.enabled = false;
+        policy.trailing.enabled = false;
+        policy.time.enabled = false;
+        policy.take_profit.levels = vec![
+            TakeProfitLevel {
+                profit_pct: 20.0,
+                sell_pct: 30.0,
+            },
+            TakeProfitLevel {
+                profit_pct: 50.0,
+                sell_pct: 30.0,
+            },
+            TakeProfitLevel {
+                profit_pct: 100.0,
+                sell_pct: 40.0,
+            },
+        ];
+        policy
+    }
+
+    fn after_steps(current: f64, taken: u32) -> ExitInputs {
+        ExitInputs {
+            take_profit_levels_taken: taken,
+            ..inputs(current, current, 60, taken > 0)
+        }
+    }
+
+    #[test]
+    fn the_ladder_fires_the_step_due_with_its_share_of_what_is_left() {
+        let policy = ladder_only();
+        assert_eq!(
+            decide(&after_steps(1.2, 0), &policy).outcome,
+            outcome(ExitRule::TakeProfit { level: 1 }, Some(30.0))
+        );
+        let second = decide(&after_steps(1.5, 1), &policy)
+            .outcome
+            .expect("the second step fires");
+        assert_eq!(second.rule, ExitRule::TakeProfit { level: 2 });
+        let share = second.exit_percentage.expect("a partial");
+        assert!((share - 30.0 / 70.0 * 100.0).abs() < 1e-9, "{share}");
+        assert_eq!(
+            decide(&after_steps(2.0, 2), &policy).outcome,
+            outcome(ExitRule::TakeProfit { level: 3 }, None)
+        );
+        assert_eq!(decide(&after_steps(9.0, 3), &policy).outcome, None);
+    }
+
+    #[test]
+    fn one_step_fires_per_evaluation_however_many_levels_the_price_passed() {
+        let policy = ladder_only();
+        assert_eq!(
+            decide(&after_steps(2.5, 0), &policy).outcome,
+            outcome(ExitRule::TakeProfit { level: 1 }, Some(30.0)),
+            "a gap through every level sells the first step alone"
+        );
+        assert_eq!(
+            decide(&after_steps(1.3, 1), &policy).outcome,
+            None,
+            "the next step waits for its own level"
+        );
+    }
+
+    #[test]
+    fn a_one_step_ladder_decides_like_the_single_profit_target() {
+        let mut policy = ladder_only();
+        policy.take_profit.levels = vec![TakeProfitLevel::sell_all_at(20.0)];
+        assert_eq!(
+            decide(&after_steps(1.2, 0), &policy).outcome,
+            outcome(FIRST_STEP, None)
+        );
+        assert_eq!(decide(&after_steps(1.19, 0), &policy).outcome, None);
+        policy.take_profit.enabled = false;
+        assert_eq!(decide(&after_steps(5.0, 0), &policy).outcome, None);
+    }
+
+    #[test]
+    fn a_refused_ladder_step_is_passed_over() {
+        let policy = ladder_only();
+        let refuse_ladder =
+            |outcome: &RuleOutcome| !matches!(outcome.rule, ExitRule::TakeProfit { .. });
+        assert_eq!(
+            decide_admitting(&after_steps(1.2, 0), &policy, refuse_ladder).outcome,
+            None
+        );
     }
 }

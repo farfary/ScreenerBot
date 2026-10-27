@@ -145,6 +145,29 @@ pub(crate) fn disposition(
     Disposition::Apply(transition)
 }
 
+/// The transitions that settle `item` by `transition`, in the order they are applied: the
+/// release of the take-profit step a failed partial exit reserved, then the settlement
+/// itself. Only a partial exit reserves a step, so any other settlement releases nothing.
+/// The release goes first because the partial stays pending until its settlement applies,
+/// and a pending partial refuses a new take-profit partial: no decision reads the step as
+/// still taken and reserves the step after it. When the settlement then fails, its retry
+/// finds the step already released and releases nothing more.
+pub(crate) fn settlement_transitions(
+    item: &VerificationItem,
+    transition: PositionTransition,
+) -> (Option<PositionTransition>, PositionTransition) {
+    let release = match (item.take_profit_level, &transition) {
+        (Some(level), PositionTransition::PartialExitFailed { position_id, .. }) => {
+            Some(PositionTransition::TakeProfitLevelReleased {
+                position_id: *position_id,
+                level,
+            })
+        }
+        _ => None,
+    };
+    (release, transition)
+}
+
 /// Whether the wallet's holding of the item's mint, less what the other open positions of
 /// the mint hold, is dust against the acquisition the entry price implies. A holding that is
 /// dust on its own is dust whatever the others hold, so an unverified entry of another
@@ -476,6 +499,70 @@ mod tests {
                     }
                 }
             }
+        }
+    }
+
+    /// A take-profit step whose partial exit failed on chain or did not land returns to the
+    /// ladder for its own position, ahead of the settlement that clears the pending partial.
+    #[test]
+    fn a_take_profit_step_whose_partial_did_not_land_is_released_first() {
+        let item = seen(partial_exit().with_take_profit_level(Some(2)));
+        for verdict in [SignatureVerdict::FailedOnChain, SignatureVerdict::NotLanded] {
+            let transition = applied(disposition(&item, verdict, None));
+            let (release, settlement) = settlement_transitions(&item, transition);
+            assert!(
+                matches!(
+                    release,
+                    Some(PositionTransition::TakeProfitLevelReleased {
+                        position_id: 7,
+                        level: 2
+                    })
+                ),
+                "{verdict:?} released {release:?}"
+            );
+            assert!(
+                matches!(settlement, PositionTransition::PartialExitFailed { .. }),
+                "{verdict:?} settled by {settlement:?}"
+            );
+        }
+    }
+
+    /// Only a failed partial exit releases a step: an exit that carries no step, a full exit
+    /// cleared for a retry, and a transition that books or keeps the sale release nothing.
+    #[test]
+    fn only_a_failed_partial_exit_releases_its_step() {
+        for item in [partial_exit(), full_exit()] {
+            let unladdered = seen(item.clone());
+            let transition = applied(disposition(&unladdered, SignatureVerdict::NotLanded, None));
+            assert!(settlement_transitions(&unladdered, transition).0.is_none());
+        }
+
+        let full = seen(full_exit().with_take_profit_level(Some(1)));
+        for verdict in [SignatureVerdict::FailedOnChain, SignatureVerdict::NotLanded] {
+            let transition = applied(disposition(&full, verdict, None));
+            assert!(
+                matches!(
+                    transition,
+                    PositionTransition::ExitFailedClearForRetry { .. }
+                ),
+                "{verdict:?} settled the full exit by {transition:?}"
+            );
+            assert!(settlement_transitions(&full, transition).0.is_none());
+        }
+
+        let laddered = partial_exit().with_take_profit_level(Some(1));
+        for kept in [
+            PositionTransition::TakeProfitLevelReserved {
+                position_id: 7,
+                level: 1,
+            },
+            PositionTransition::RemoveOrphanEntry {
+                position_id: 7,
+                signature: "exit-sig".to_owned(),
+                evidence: NotLandedEvidence::Expired,
+            },
+        ] {
+            assert!(settlement_transitions(&laddered, kept).0.is_none());
         }
     }
 }

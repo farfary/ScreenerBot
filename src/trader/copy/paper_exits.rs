@@ -76,9 +76,18 @@ pub(super) fn paper_sell_request(
     })
 }
 
+/// A sale of a paper holding: the rule it is booked under, the share of the holding it
+/// sells (`None` sells all), and the take-profit step it takes.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PaperExit {
+    pub rule: PaperExitRule,
+    pub exit_percentage: Option<f64>,
+    pub take_profit_level: Option<u32>,
+}
+
 /// Which rule, if any, closes this holding at `mark_price_native`, checked in the
-/// order the live monitor shares (`exit_rules`). The inner percentage is a partial
-/// exit; `None` sells all. A rule whose configuration is impossible is logged against
+/// order the live monitor shares (`exit_rules`), from the round's own partial sales
+/// and take-profit steps. A rule whose configuration is impossible is logged against
 /// `task_id` and does not fire.
 pub fn evaluate_paper_exit(
     task_id: i64,
@@ -87,7 +96,7 @@ pub fn evaluate_paper_exit(
     peak_price_native: f64,
     policy: &ExitPolicy,
     now: DateTime<Utc>,
-) -> Option<(PaperExitRule, Option<f64>)> {
+) -> Option<PaperExit> {
     if !position.is_open() || !mark_price_native.is_finite() || mark_price_native <= 0.0 {
         return None;
     }
@@ -96,7 +105,8 @@ pub fn evaluate_paper_exit(
         current_price: mark_price_native,
         basis_peak_price: peak_price_native,
         held_seconds: (now - position.opened_at).num_seconds(),
-        partial_exits_taken: position.sells > 0,
+        partial_exits_taken: position.round_partial_exits > 0,
+        take_profit_levels_taken: position.take_profit_level,
     };
     let decision = exit_rules::decide(&inputs, policy);
     for (rule, e) in &decision.rule_errors {
@@ -108,9 +118,14 @@ pub fn evaluate_paper_exit(
             ),
         );
     }
-    decision
-        .outcome
-        .map(|outcome| (paper_exit_rule(outcome.rule), outcome.exit_percentage))
+    decision.outcome.map(|outcome| PaperExit {
+        rule: paper_exit_rule(outcome.rule),
+        exit_percentage: outcome.exit_percentage,
+        take_profit_level: match outcome.rule {
+            ExitRule::TakeProfit { level } => Some(level),
+            ExitRule::StopLoss | ExitRule::Trailing | ExitRule::TimeLoss => None,
+        },
+    })
 }
 
 /// The persisted paper rule a fired built-in rule is booked under.
@@ -118,20 +133,19 @@ fn paper_exit_rule(rule: ExitRule) -> PaperExitRule {
     match rule {
         ExitRule::StopLoss => PaperExitRule::StopLoss,
         ExitRule::Trailing => PaperExitRule::TrailingStop,
-        ExitRule::TakeProfit => PaperExitRule::TakeProfit,
+        ExitRule::TakeProfit { .. } => PaperExitRule::TakeProfit,
         ExitRule::TimeLoss => PaperExitRule::TimeOverride,
     }
 }
 
-/// The simulated sell a triggered rule books. Its signature is unique per exit
-/// leg of a round (`sells` grows with every booked sell), so a sweep that repeats
-/// before the ledger moves is absorbed by the decision table's uniqueness.
+/// The simulated sell `exit` books. Its signature is unique per exit leg of a round
+/// (`sells` grows with every booked sell), so a sweep that repeats before the ledger
+/// moves is absorbed by the decision table's uniqueness.
 pub async fn paper_exit_outcome<Q, QFut, W, WFut>(
     database: &CopyDatabase,
     task: &CopyTask,
     position: &PaperPosition,
-    rule: PaperExitRule,
-    exit_percentage: Option<f64>,
+    exit: PaperExit,
     epoch: u64,
     now: DateTime<Utc>,
     quote: Q,
@@ -158,7 +172,7 @@ where
         task,
         &position.mint,
         held_raw,
-        exit_percentage,
+        exit.exit_percentage,
         wallet_address,
     )?;
     let raw = request.input_amount;
@@ -214,7 +228,7 @@ where
         mint: position.mint.clone(),
         target_token_amount: 0.0,
         target_sol_amount: 0.0,
-        exit_percentage,
+        exit_percentage: exit.exit_percentage,
         transaction_signature: None,
         error: None,
         telemetry: CopyTelemetry {
@@ -229,7 +243,8 @@ where
             backfill: false,
         },
         paper_fill: Some(fill),
-        exit_rule: Some(rule),
+        exit_rule: Some(exit.rule),
+        take_profit_level: exit.take_profit_level,
         paper_context: Some(super::types::PaperContext {
             model: super::types::PaperModel::Quote,
             epoch,
@@ -317,9 +332,7 @@ pub async fn sweep(database: &CopyDatabase) -> crate::trader::Result<()> {
                 continue;
             };
             let now = Utc::now();
-            let Some((rule, exit_percentage)) =
-                evaluate_paper_exit(task.id, position, mark, peak, policy, now)
-            else {
+            let Some(exit) = evaluate_paper_exit(task.id, position, mark, peak, policy, now) else {
                 continue;
             };
             let epoch = database.paper_epoch(task.id).await?;
@@ -386,8 +399,7 @@ pub async fn sweep(database: &CopyDatabase) -> crate::trader::Result<()> {
                         &db,
                         &current_task,
                         &current_position,
-                        rule,
-                        exit_percentage,
+                        exit,
                         epoch,
                         queued_at,
                         crate::swaps::try_get_best_quote,
@@ -435,7 +447,7 @@ pub async fn sweep(database: &CopyDatabase) -> crate::trader::Result<()> {
                     fresh_policy.apply_overrides(&current_task_after.exit_policy_overrides);
                     if !matches!(
                         evaluate_paper_exit(task.id, &current_position, fresh_mark, fresh_peak, &fresh_policy, Utc::now()),
-                        Some((fresh_rule, fresh_pct)) if fresh_rule == rule && fresh_pct == exit_percentage
+                        Some(fresh) if fresh == exit
                     ) {
                         return Err(CopySkip::PaperExecutionUnavailable);
                     }

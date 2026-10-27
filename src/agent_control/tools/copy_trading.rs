@@ -32,7 +32,8 @@ fn respond<T: serde::Serialize>(result: crate::trader::Result<T>) -> ToolResult 
 const EXIT_SEMANTICS: &str = "exit_mode: buy_only never copies the target's sells; mirror sells \
 the same fraction of the holding the target sold; hybrid mirrors target sells AND lets the auto \
 trader's exit policy manage the position. exit_policy_overrides (stop_loss, trailing, roi, time) \
-tune that policy for this task. The policy applies in both books: live positions through the \
+tune that policy for this task; roi.target_profit_pct replaces the take-profit ladder with one \
+step that sells the whole holding at that profit. The policy applies in both books: live positions through the \
 auto trader's exit monitor (which needs the trader running), paper holdings through the copy \
 service's own sweep at pool price; paper exit activity carries exit_rule. mirror tasks exit only \
 on target sells in both modes.";

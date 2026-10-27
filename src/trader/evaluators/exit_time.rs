@@ -3,11 +3,7 @@
 
 //! Time-based exit override.
 
-use crate::positions::Position;
-use crate::trader::evaluators::exit_rules::{ExitRule, RuleOutcome};
 use crate::trader::policy::TimePolicy;
-use crate::trader::types::TradeDecision;
-use chrono::Utc;
 
 /// The time-override rule on plain numbers, shared by the live evaluator and the
 /// paper copy book: exit a position held at least `duration_seconds` whose P&L is
@@ -47,49 +43,4 @@ pub fn time_override_triggered(
     }
     let pnl_pct = ((current_price - entry_price) / entry_price) * 100.0;
     Ok(pnl_pct <= loss_threshold_pct)
-}
-
-/// Check if a position should be exited based on time override rules
-///
-/// Supports flexible time units: seconds, minutes, hours, days (resolved into
-/// `duration_seconds` by the policy snapshot).
-pub async fn check_time_override(
-    position: &Position,
-    current_price: f64,
-    policy: &TimePolicy,
-) -> crate::trader::Result<Option<TradeDecision>> {
-    if !current_price.is_finite() || current_price <= 0.0 {
-        return Err(crate::positions::Error::InvalidPrice {
-            mint: position.mint.clone(),
-            price: current_price,
-        }
-        .into());
-    }
-    let held_seconds = (Utc::now() - position.entry_time).num_seconds() as f64;
-    let triggered = time_override_triggered(
-        position.average_entry_price,
-        current_price,
-        held_seconds,
-        policy,
-    )
-    .map_err(|e| match e {
-        crate::trader::Error::InvalidExitPolicy { detail } => {
-            crate::trader::Error::StrategyEvaluation {
-                mint: position.mint.clone(),
-                detail,
-            }
-        }
-        other => other,
-    })?;
-    if !triggered {
-        return Ok(None);
-    }
-    Ok(Some(super::exit::rule_decision(
-        position,
-        current_price,
-        &RuleOutcome {
-            rule: ExitRule::TimeLoss,
-            exit_percentage: None,
-        },
-    )))
 }

@@ -8,10 +8,7 @@
 
 use crate::logger::{self, LogTag};
 use crate::positions::Position;
-use crate::trader::evaluators::exit_rules::{ExitRule, RuleOutcome};
 use crate::trader::policy::StopLossPolicy;
-use crate::trader::types::TradeDecision;
-use chrono::Utc;
 
 /// The stop-loss rule on plain numbers, shared by the live evaluator and the
 /// paper copy book. Returns `Some(exit_percentage)` when it fires, where the
@@ -46,62 +43,6 @@ pub fn stop_loss_exit(
         (policy.allow_partial && !already_partially_exited)
             .then_some(policy.partial_exit_default_pct),
     )
-}
-
-/// Check if a position should be exited based on fixed stop loss
-pub async fn check_stop_loss(
-    position: &Position,
-    current_price: f64,
-    policy: &StopLossPolicy,
-) -> crate::trader::Result<Option<TradeDecision>> {
-    if !current_price.is_finite() || current_price <= 0.0 {
-        return Err(crate::positions::Error::InvalidPrice {
-            mint: position.mint.clone(),
-            price: current_price,
-        }
-        .into());
-    }
-    if !policy.enabled {
-        return Ok(None);
-    }
-    let entry_price = position.average_entry_price;
-    if entry_price <= 0.0 || !entry_price.is_finite() {
-        return Err(crate::positions::Error::InvalidPrice {
-            mint: position.mint.clone(),
-            price: entry_price,
-        }
-        .into());
-    }
-    let held_seconds = (Utc::now() - position.entry_time).num_seconds();
-    let Some(exit_percentage) = stop_loss_exit(
-        entry_price,
-        current_price,
-        held_seconds,
-        position.partial_exit_count > 0,
-        policy,
-    ) else {
-        return Ok(None);
-    };
-    if exit_percentage.is_some() && crate::positions::awaiting_reconciliation() {
-        logger::debug(
-            LogTag::Trader,
-            &format!(
-                "Partial stop loss skipped for {}: the positions store is not reconciled",
-                position.symbol
-            ),
-        );
-        return Ok(None);
-    }
-
-    log_stop_loss_triggered(position, current_price, exit_percentage, policy);
-    Ok(Some(super::exit::rule_decision(
-        position,
-        current_price,
-        &RuleOutcome {
-            rule: ExitRule::StopLoss,
-            exit_percentage,
-        },
-    )))
 }
 
 /// The log line of a fired stop loss, with the figures it fired on.

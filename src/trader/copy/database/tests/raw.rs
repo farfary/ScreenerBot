@@ -81,6 +81,7 @@ fn exact_paper_sell(
         transaction_signature: None,
         error: None,
         exit_rule: Some(crate::trader::copy::types::PaperExitRule::Manual),
+        take_profit_level: None,
         telemetry: crate::trader::copy::types::CopyTelemetry {
             target_block_time: None,
             detected_at: now,

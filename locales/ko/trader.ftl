@@ -5,8 +5,8 @@
 # shown as readable labels) and the reasons written by src/positions and src/trader/stats.rs.
 trader-exit-type-stop-loss = 손절
 trader-exit-type-take-profit = 익절
-trader-exit-type-roi = ROI 목표
-trader-exit-type-roi-exit = ROI 목표
+trader-exit-type-roi = 익절
+trader-exit-type-roi-exit = 익절
 trader-exit-type-trailing-stop = 트레일링 스톱
 trader-exit-type-time-override = 시간 청산
 trader-exit-type-time-rule = 시간 규칙
@@ -22,7 +22,7 @@ trader-tab-strategy-control = 전략 제어
 trader-tab-strategies = 전략
 trader-tab-stop-loss = 손절
 trader-tab-trailing-stop = 트레일링 스톱
-trader-tab-roi = 익절
+trader-tab-take-profit = 익절
 trader-tab-time-rules = 시간 청산
 trader-tab-dca = DCA
 trader-tab-settings = 설정
@@ -231,16 +231,36 @@ trader-trailing-summary-protected = 수익 <strong>{ $value }</strong> 보호됨
 trader-trailing-summary-avoided = 고점 대비 손실 <strong>{ $value }</strong> 회피
 ## Take profit
 
-trader-roi-title = 익절
-trader-roi-subtitle = 수익이 목표에 도달하면 포지션 전체를 자동으로 청산합니다
-# $target is the target percentage as typed.
-trader-roi-impact = 수익 +{ $target }%에서 청산
-trader-roi-initial-buy = 최초 매수
-trader-roi-target-hit = 목표 도달
-trader-roi-full-position = 전체 포지션
-trader-roi-sold = 100% 매도
-# $target is the target percentage as typed.
-trader-roi-summary = 수익 <strong>+{ $target }%</strong> 확정
+trader-take-profit-title = 익절
+trader-take-profit-subtitle = 수익이 각 수준에 도달할 때마다 포지션을 단계적으로 매도합니다
+trader-take-profit-initial-buy = 최초 매수
+# $step is the step's position in the ladder, from 1.
+trader-take-profit-step = { $step }단계
+# $step is the step's position in the ladder, from 1.
+trader-take-profit-profit-label = { $step }단계 수익 수준
+# $step is the step's position in the ladder, from 1.
+trader-take-profit-sell-label = { $step }단계 매도 비중
+trader-take-profit-add-step = 단계 추가
+# $step is the step's position in the ladder, from 1.
+trader-take-profit-remove-step = { $step }단계 삭제
+# $min and $max are the configured bounds of a profit level.
+trader-take-profit-error-profit-range = 각 수익 수준은 { $min }%에서 { $max }% 사이여야 합니다
+# $min and $max are the configured bounds of a share.
+trader-take-profit-error-sell-range = 각 비중은 { $min }%에서 { $max }% 사이여야 합니다
+trader-take-profit-error-order = 각 단계의 수익 수준은 이전 단계보다 높아야 합니다
+# $max is the largest total share, the whole position.
+trader-take-profit-error-total = 모든 단계를 합쳐 최대 { $max }%까지 매도할 수 있습니다
+# $runner is the formatted percentage of the position no step sells.
+trader-take-profit-runner = 포지션의 { $runner }%는 러너로 계속 보유합니다
+trader-take-profit-runner-none = 마지막 단계가 포지션의 나머지를 매도합니다
+trader-take-profit-runner-warning = 트레일링 스톱, 시간 청산, 모든 청산 전략이 꺼져 있으면 러너는 손절이나 수동으로만 청산됩니다
+trader-take-profit-info = 비중은 최초 포지션 기준입니다. 가격이 한 번에 여러 수준을 넘으면 확인할 때마다 한 단계씩 매도합니다.
+# $profit is the step's formatted profit level; $share is its formatted share.
+trader-take-profit-example-step = +{ $profit }%에서 { $share }% 매도
+trader-take-profit-example-runner = 러너
+trader-take-profit-example-runner-detail = 다른 청산 규칙에 맡깁니다
+# $sold is the formatted total share the ladder sells; $profit is its last formatted level.
+trader-take-profit-summary = +{ $profit }% 수익까지 <strong>{ $sold }%</strong> 매도
 
 ## Time-based exit
 

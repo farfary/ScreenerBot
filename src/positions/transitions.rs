@@ -126,6 +126,23 @@ pub enum PositionTransition {
         dca_signature: String,
         reason: String,
     },
+    // ==================== TAKE-PROFIT TRANSITIONS ====================
+    /// Take-profit step `level` (1 is the first) is about to be sold: the row's level
+    /// becomes `level`, only while it holds `level - 1`. Written before the swap is sent, so
+    /// the step can never be sold twice; a decision made on a stale level, for a step taken
+    /// or for one past the next, changes nothing, and neither does applying it again.
+    TakeProfitLevelReserved {
+        position_id: i64,
+        level: u32,
+    },
+    /// The swap of take-profit step `level` is proven not to have landed: the row's level
+    /// steps back to `level - 1`, only while it still holds `level`, so the step can fire
+    /// again. A later step reserved meanwhile is left alone; applying it again changes
+    /// nothing.
+    TakeProfitLevelReleased {
+        position_id: i64,
+        level: u32,
+    },
 }
 
 impl PositionTransition {
@@ -141,7 +158,9 @@ impl PositionTransition {
             | Self::ExitResidualClearForRetry { position_id, .. }
             | Self::DcaSubmitted { position_id, .. }
             | Self::DcaVerified { position_id, .. }
-            | Self::DcaFailed { position_id, .. } => *position_id,
+            | Self::DcaFailed { position_id, .. }
+            | Self::TakeProfitLevelReserved { position_id, .. }
+            | Self::TakeProfitLevelReleased { position_id, .. } => *position_id,
         }
     }
 

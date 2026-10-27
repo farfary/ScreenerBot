@@ -11,7 +11,7 @@ use crate::trader::copy::types::CopyOutcome;
 use crate::trader::error::Error;
 use crate::trader::policy::ExitPolicyOverrides;
 
-const SCHEMA_VERSION: i64 = 11;
+const SCHEMA_VERSION: i64 = 12;
 
 /// Version 10 drops the position-link table, which nothing read or wrote. A drop is
 /// a breaking change, so v10 is the oldest version that reads the store.
@@ -129,6 +129,8 @@ CREATE TABLE IF NOT EXISTS copy_paper_positions (
     peak_price_native REAL,
     token_amount_raw TEXT,
     token_decimals INTEGER,
+    take_profit_level INTEGER NOT NULL DEFAULT 0,
+    round_partial_exits INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (task_id, mint),
     FOREIGN KEY (task_id) REFERENCES copy_tasks(id) ON DELETE CASCADE
 );
@@ -296,7 +298,36 @@ fn migrate(connection: &Transaction<'_>) -> crate::trader::Result<()> {
         "token_decimals",
         "INTEGER",
     )?;
+    add_paper_round_exit_state(connection)?;
     validate_active_paper_amounts(connection)?;
+    Ok(())
+}
+
+/// v12: each paper round keeps the take-profit steps it took and the partial sales it
+/// booked; both start at zero when a holding reopens. `sells` counts every sale of the
+/// holding across its rounds, so an open round's partial sales are backfilled from it:
+/// the stop loss of a round that already sold exits fully, exactly as before. A data
+/// addition with defaults, so v10 readers still open the store.
+fn add_paper_round_exit_state(transaction: &Transaction<'_>) -> crate::trader::Result<()> {
+    ddl::add_column(
+        transaction,
+        "copy_paper_positions",
+        "take_profit_level",
+        "INTEGER NOT NULL DEFAULT 0",
+    )?;
+    if ddl::add_column(
+        transaction,
+        "copy_paper_positions",
+        "round_partial_exits",
+        "INTEGER NOT NULL DEFAULT 0",
+    )? {
+        transaction
+            .execute(
+                "UPDATE copy_paper_positions SET round_partial_exits = sells WHERE closed_at IS NULL",
+                [],
+            )
+            .map_err(crate::errors::DatabaseError::from)?;
+    }
     Ok(())
 }
 

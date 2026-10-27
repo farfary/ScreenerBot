@@ -5,8 +5,8 @@
 # shown as readable labels) and the reasons written by src/positions and src/trader/stats.rs.
 trader-exit-type-stop-loss = 損切り
 trader-exit-type-take-profit = 利確
-trader-exit-type-roi = ROI 目標
-trader-exit-type-roi-exit = ROI 目標
+trader-exit-type-roi = 利確
+trader-exit-type-roi-exit = 利確
 trader-exit-type-trailing-stop = トレーリングストップ
 trader-exit-type-time-override = 時間エグジット
 trader-exit-type-time-rule = 時間ルール
@@ -22,7 +22,7 @@ trader-tab-strategy-control = ストラテジー制御
 trader-tab-strategies = ストラテジー
 trader-tab-stop-loss = 損切り
 trader-tab-trailing-stop = トレーリングストップ
-trader-tab-roi = 利確
+trader-tab-take-profit = 利確
 trader-tab-time-rules = 時間エグジット
 trader-tab-dca = DCA
 trader-tab-settings = 設定
@@ -232,16 +232,36 @@ trader-trailing-summary-avoided = 高値からの損失 <strong>{ $value }</stro
 
 ## Take profit
 
-trader-roi-title = 利確
-trader-roi-subtitle = 利益が目標に達したときにポジション全体を自動でエグジットします
-# $target is the target percentage as typed.
-trader-roi-impact = +{ $target }% の利益でエグジット
-trader-roi-initial-buy = 初回購入
-trader-roi-target-hit = 目標到達
-trader-roi-full-position = ポジション全体
-trader-roi-sold = 100% 売却
-# $target is the target percentage as typed.
-trader-roi-summary = <strong>+{ $target }%</strong> の利益を確保
+trader-take-profit-title = 利確
+trader-take-profit-subtitle = 利益が各水準に達するたびにポジションを段階的に売却します
+trader-take-profit-initial-buy = 初回購入
+# $step is the step's position in the ladder, from 1.
+trader-take-profit-step = 段階 { $step }
+# $step is the step's position in the ladder, from 1.
+trader-take-profit-profit-label = 段階 { $step } の利益水準
+# $step is the step's position in the ladder, from 1.
+trader-take-profit-sell-label = 段階 { $step } の売却割合
+trader-take-profit-add-step = 段階を追加
+# $step is the step's position in the ladder, from 1.
+trader-take-profit-remove-step = 段階 { $step } を削除
+# $min and $max are the configured bounds of a profit level.
+trader-take-profit-error-profit-range = 各利益水準は { $min }% から { $max }% の範囲にしてください
+# $min and $max are the configured bounds of a share.
+trader-take-profit-error-sell-range = 各割合は { $min }% から { $max }% の範囲にしてください
+trader-take-profit-error-order = 各段階の利益水準は前の段階より高くしてください
+# $max is the largest total share, the whole position.
+trader-take-profit-error-total = 全段階の合計で売却できるのは最大 { $max }% です
+# $runner is the formatted percentage of the position no step sells.
+trader-take-profit-runner = ポジションの { $runner }% はランナーとして保有を続けます
+trader-take-profit-runner-none = 最後の段階でポジションの残りを売却します
+trader-take-profit-runner-warning = トレーリングストップ、時間エグジット、すべてのエグジットストラテジーがオフのため、ランナーは損切りか手動でのみ決済されます
+trader-take-profit-info = 割合は当初ポジションに対するものです。価格が一度に複数の水準を超えた場合、1 回のチェックで 1 段階ずつ売却します。
+# $profit is the step's formatted profit level; $share is its formatted share.
+trader-take-profit-example-step = +{ $profit }% で { $share }% を売却
+trader-take-profit-example-runner = ランナー
+trader-take-profit-example-runner-detail = 他の決済ルールに任せます
+# $sold is the formatted total share the ladder sells; $profit is its last formatted level.
+trader-take-profit-summary = +{ $profit }% の利益までに <strong>{ $sold }%</strong> を売却
 
 ## Time-based exit
 

@@ -432,6 +432,8 @@ copy-rules-target-max = 至多 { $amount }
 copy-rules-target-between = { $min } – { $max } { -sol }
 copy-rules-source-override = 任务覆盖 · 交易引擎 { $value }
 copy-rules-source-default = 交易引擎默认值
+# $profit is the step's signed profit level; $share is the share of the position it sells, both formatted.
+copy-rules-take-profit-step = 在 { $profit } 时卖出 { $share }
 copy-rules-not-used = 未使用：由钱包的卖出决定
 copy-rules-col-rule = 规则
 copy-rules-col-applies = 生效
@@ -475,6 +477,7 @@ copy-rule-partial-size = 卖出比例
 copy-rule-trailing-activation = 盈利达到以下幅度时启动
 copy-rule-trailing-distance = 较峰值回落以下幅度时卖出
 copy-rule-take-profit-target = 盈利达到以下幅度时卖出
+copy-rule-take-profit-target-hint = 在此设置目标会将交易引擎的止盈各步替换为卖出全部仓位的一步
 copy-rule-time-duration = 持仓达到以下时长后检查
 copy-rule-time-threshold = 盈亏不高于以下值时卖出
 copy-preset-inherit = 交易引擎默认值

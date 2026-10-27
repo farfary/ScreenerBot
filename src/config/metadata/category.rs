@@ -163,8 +163,6 @@ pub enum ConfigCategory {
     RiskScore,
     #[serde(rename = "risk-scoring")]
     RiskScoring,
-    #[serde(rename = "roi-exit")]
-    RoiExit,
     #[serde(rename = "router")]
     Router,
     #[serde(rename = "routers")]
@@ -187,6 +185,8 @@ pub enum ConfigCategory {
     StopLoss,
     #[serde(rename = "symbol-analysis")]
     SymbolAnalysis,
+    #[serde(rename = "take-profit")]
+    TakeProfit,
     #[serde(rename = "thresholds")]
     Thresholds,
     #[serde(rename = "time-override")]
@@ -284,7 +284,6 @@ impl ConfigCategory {
         ConfigCategory::RiskLevel,
         ConfigCategory::RiskScore,
         ConfigCategory::RiskScoring,
-        ConfigCategory::RoiExit,
         ConfigCategory::Router,
         ConfigCategory::Routers,
         ConfigCategory::Routing,
@@ -296,6 +295,7 @@ impl ConfigCategory {
         ConfigCategory::Statistics,
         ConfigCategory::StopLoss,
         ConfigCategory::SymbolAnalysis,
+        ConfigCategory::TakeProfit,
         ConfigCategory::Thresholds,
         ConfigCategory::TimeOverride,
         ConfigCategory::Timeouts,
@@ -380,7 +380,6 @@ impl ConfigCategory {
             ConfigCategory::RiskLevel => "risk-level",
             ConfigCategory::RiskScore => "risk-score",
             ConfigCategory::RiskScoring => "risk-scoring",
-            ConfigCategory::RoiExit => "roi-exit",
             ConfigCategory::Router => "router",
             ConfigCategory::Routers => "routers",
             ConfigCategory::Routing => "routing",
@@ -392,6 +391,7 @@ impl ConfigCategory {
             ConfigCategory::Statistics => "statistics",
             ConfigCategory::StopLoss => "stop-loss",
             ConfigCategory::SymbolAnalysis => "symbol-analysis",
+            ConfigCategory::TakeProfit => "take-profit",
             ConfigCategory::Thresholds => "thresholds",
             ConfigCategory::TimeOverride => "time-override",
             ConfigCategory::Timeouts => "timeouts",
@@ -423,10 +423,10 @@ impl ConfigCategory {
             | ConfigCategory::MarketCap
             | ConfigCategory::Notifications
             | ConfigCategory::Profit
-            | ConfigCategory::RoiExit
             | ConfigCategory::Router
             | ConfigCategory::Slippage
             | ConfigCategory::SourceControl
+            | ConfigCategory::TakeProfit
             | ConfigCategory::TrailingStop => Visibility::Primary,
             ConfigCategory::Activity
             | ConfigCategory::Api

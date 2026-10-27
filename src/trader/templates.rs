@@ -2,11 +2,11 @@
 // SPDX-License-Identifier: BUSL-1.1
 
 //! Preset exit templates for the auto trader: named bundles of trailing-stop,
-//! ROI and time-override settings applied to config in one step.
+//! take-profit and time-override settings applied to config in one step.
 
 use serde::{Deserialize, Serialize};
 
-use crate::config::update_config_section;
+use crate::config::{update_config_section, TakeProfitLevel};
 use crate::logger::{self, LogTag};
 use crate::trader::{Error, Result};
 
@@ -24,8 +24,8 @@ pub struct TemplateConfig {
     pub trailing_stop_enabled: bool,
     pub trailing_stop_activation_pct: f64,
     pub trailing_stop_distance_pct: f64,
-    pub roi_exit_enabled: bool,
-    pub roi_target_pct: f64,
+    pub take_profit_enabled: bool,
+    pub take_profit_levels: Vec<TakeProfitLevel>,
     pub time_override_enabled: bool,
     pub time_override_duration: f64,
     pub time_override_unit: String,
@@ -46,8 +46,17 @@ pub fn apply_template(template_id: &str) -> Result<Template> {
             config.trader.trailing_stop_enabled = cfg.trailing_stop_enabled;
             config.trader.trailing_stop_activation_pct = cfg.trailing_stop_activation_pct;
             config.trader.trailing_stop_distance_pct = cfg.trailing_stop_distance_pct;
-            config.trader.roi_exit_enabled = cfg.roi_exit_enabled;
-            config.trader.roi_target_percent = cfg.roi_target_pct;
+            config.trader.take_profit_enabled = cfg.take_profit_enabled;
+            config.trader.take_profit_levels_pct = cfg
+                .take_profit_levels
+                .iter()
+                .map(|level| level.profit_pct)
+                .collect();
+            config.trader.take_profit_sell_pct = cfg
+                .take_profit_levels
+                .iter()
+                .map(|level| level.sell_pct)
+                .collect();
             config.trader.time_override_enabled = cfg.time_override_enabled;
             config.trader.time_override_duration = cfg.time_override_duration;
             config.trader.time_override_unit = cfg.time_override_unit.clone();
@@ -77,8 +86,8 @@ pub fn all_templates() -> Vec<Template> {
                 trailing_stop_enabled: true,
                 trailing_stop_activation_pct: 5.0,
                 trailing_stop_distance_pct: 3.0,
-                roi_exit_enabled: true,
-                roi_target_pct: 10.0,
+                take_profit_enabled: true,
+                take_profit_levels: vec![TakeProfitLevel::sell_all_at(10.0)],
                 time_override_enabled: true,
                 time_override_duration: 3.0,
                 time_override_unit: "days".to_owned(),
@@ -94,8 +103,8 @@ pub fn all_templates() -> Vec<Template> {
                 trailing_stop_enabled: true,
                 trailing_stop_activation_pct: 10.0,
                 trailing_stop_distance_pct: 5.0,
-                roi_exit_enabled: true,
-                roi_target_pct: 20.0,
+                take_profit_enabled: true,
+                take_profit_levels: vec![TakeProfitLevel::sell_all_at(20.0)],
                 time_override_enabled: true,
                 time_override_duration: 7.0,
                 time_override_unit: "days".to_owned(),
@@ -111,8 +120,8 @@ pub fn all_templates() -> Vec<Template> {
                 trailing_stop_enabled: true,
                 trailing_stop_activation_pct: 15.0,
                 trailing_stop_distance_pct: 7.0,
-                roi_exit_enabled: true,
-                roi_target_pct: 50.0,
+                take_profit_enabled: true,
+                take_profit_levels: vec![TakeProfitLevel::sell_all_at(50.0)],
                 time_override_enabled: true,
                 time_override_duration: 14.0,
                 time_override_unit: "days".to_owned(),
@@ -128,8 +137,8 @@ pub fn all_templates() -> Vec<Template> {
                 trailing_stop_enabled: true,
                 trailing_stop_activation_pct: 5.0,
                 trailing_stop_distance_pct: 2.0,
-                roi_exit_enabled: true,
-                roi_target_pct: 5.0,
+                take_profit_enabled: true,
+                take_profit_levels: vec![TakeProfitLevel::sell_all_at(5.0)],
                 time_override_enabled: true,
                 time_override_duration: 4.0,
                 time_override_unit: "hours".to_owned(),

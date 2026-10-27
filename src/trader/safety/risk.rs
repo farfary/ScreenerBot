@@ -44,6 +44,7 @@ pub async fn check_risk_limits(
             exit_percentage: None,
             // Auto-trader slippage always follows config.
             slippage_pct: None,
+            take_profit_level: None,
         }));
     }
 

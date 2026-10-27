@@ -1,7 +1,7 @@
 trader-exit-type-stop-loss = Stop loss
 trader-exit-type-take-profit = Take profit
-trader-exit-type-roi = Mục tiêu ROI
-trader-exit-type-roi-exit = Mục tiêu ROI
+trader-exit-type-roi = Take profit
+trader-exit-type-roi-exit = Take profit
 trader-exit-type-trailing-stop = Trailing stop
 trader-exit-type-time-override = Thoát theo thời gian
 trader-exit-type-time-rule = Quy tắc thời gian
@@ -15,7 +15,7 @@ trader-tab-strategy-control = Điều khiển chiến lược
 trader-tab-strategies = Chiến lược
 trader-tab-stop-loss = Stop loss
 trader-tab-trailing-stop = Trailing stop
-trader-tab-roi = Take profit
+trader-tab-take-profit = Take profit
 trader-tab-time-rules = Thoát theo thời gian
 trader-tab-dca = DCA
 trader-tab-settings = Cài đặt
@@ -184,14 +184,36 @@ trader-trailing-final = Cuối cùng +{ $value }%
 trader-trailing-summary-protected = Đã bảo vệ <strong>{ $value }</strong> lợi nhuận
 trader-trailing-summary-avoided = Đã tránh <strong>{ $value }</strong> lỗ tính từ đỉnh
 
-trader-roi-title = Take profit
-trader-roi-subtitle = Tự động thoát toàn bộ vị thế khi lợi nhuận đạt mục tiêu của bạn
-trader-roi-impact = Thoát khi lãi +{ $target }%
-trader-roi-initial-buy = Lần mua đầu
-trader-roi-target-hit = Đạt mục tiêu
-trader-roi-full-position = Toàn bộ vị thế
-trader-roi-sold = Đã bán 100%
-trader-roi-summary = Đã chốt lãi <strong>+{ $target }%</strong>
+trader-take-profit-title = Take profit
+trader-take-profit-subtitle = Bán vị thế theo từng bậc khi lợi nhuận chạm mỗi mức
+trader-take-profit-initial-buy = Lần mua đầu
+# $step is the step's position in the ladder, from 1.
+trader-take-profit-step = Bậc { $step }
+# $step is the step's position in the ladder, from 1.
+trader-take-profit-profit-label = Mức lợi nhuận bậc { $step }
+# $step is the step's position in the ladder, from 1.
+trader-take-profit-sell-label = Phần bán của bậc { $step }
+trader-take-profit-add-step = Thêm bậc
+# $step is the step's position in the ladder, from 1.
+trader-take-profit-remove-step = Xóa bậc { $step }
+# $min and $max are the configured bounds of a profit level.
+trader-take-profit-error-profit-range = Mỗi mức lợi nhuận phải nằm trong khoảng { $min }% đến { $max }%
+# $min and $max are the configured bounds of a share.
+trader-take-profit-error-sell-range = Mỗi phần bán phải nằm trong khoảng { $min }% đến { $max }%
+trader-take-profit-error-order = Mỗi bậc cần mức lợi nhuận cao hơn bậc trước
+# $max is the largest total share, the whole position.
+trader-take-profit-error-total = Tổng các bậc chỉ được bán tối đa { $max }%
+# $runner is the formatted percentage of the position no step sells.
+trader-take-profit-runner = { $runner }% vị thế vẫn mở như phần runner
+trader-take-profit-runner-none = Bậc cuối bán phần còn lại của vị thế
+trader-take-profit-runner-warning = Khi trailing stop, thoát theo thời gian và mọi chiến lược thoát lệnh đều tắt, phần runner chỉ đóng bằng stop loss hoặc thủ công
+trader-take-profit-info = Phần bán tính theo vị thế ban đầu. Khi giá vượt nhiều mức cùng lúc, mỗi lần kiểm tra chỉ bán một bậc.
+# $profit is the step's formatted profit level; $share is its formatted share.
+trader-take-profit-example-step = Tại +{ $profit }%, bán { $share }%
+trader-take-profit-example-runner = Runner
+trader-take-profit-example-runner-detail = Để các quy tắc thoát khác xử lý
+# $sold is the formatted total share the ladder sells; $profit is its last formatted level.
+trader-take-profit-summary = Bán <strong>{ $sold }%</strong> đến mức lợi nhuận +{ $profit }%
 
 trader-time-title = Thoát theo thời gian
 trader-time-subtitle = Tự động thoát vị thế sau thời gian nắm giữ tối đa nếu mức lỗ vượt ngưỡng

@@ -1,7 +1,7 @@
 trader-exit-type-stop-loss = स्टॉप लॉस
 trader-exit-type-take-profit = टेक प्रॉफ़िट
-trader-exit-type-roi = ROI टारगेट
-trader-exit-type-roi-exit = ROI टारगेट
+trader-exit-type-roi = टेक प्रॉफ़िट
+trader-exit-type-roi-exit = टेक प्रॉफ़िट
 trader-exit-type-trailing-stop = ट्रेलिंग स्टॉप
 trader-exit-type-time-override = समय एग्ज़िट
 trader-exit-type-time-rule = टाइम रूल
@@ -15,7 +15,7 @@ trader-tab-strategy-control = स्ट्रैटेजी कंट्रो�
 trader-tab-strategies = स्ट्रैटेजी
 trader-tab-stop-loss = स्टॉप लॉस
 trader-tab-trailing-stop = ट्रेलिंग स्टॉप
-trader-tab-roi = टेक प्रॉफ़िट
+trader-tab-take-profit = टेक प्रॉफ़िट
 trader-tab-time-rules = समय एग्ज़िट
 trader-tab-dca = DCA
 trader-tab-settings = सेटिंग्स
@@ -191,14 +191,36 @@ trader-trailing-final = अंतिम +{ $value }%
 trader-trailing-summary-protected = <strong>{ $value }</strong> प्रॉफ़िट सुरक्षित रहा
 trader-trailing-summary-avoided = पीक से <strong>{ $value }</strong> नुकसान से बचाव
 
-trader-roi-title = टेक प्रॉफ़िट
-trader-roi-subtitle = प्रॉफ़िट आपके टारगेट तक पहुंचते ही पूरी पोज़िशन से अपने आप एग्ज़िट करें
-trader-roi-impact = +{ $target }% प्रॉफ़िट पर एग्ज़िट
-trader-roi-initial-buy = शुरुआती खरीद
-trader-roi-target-hit = टारगेट हिट
-trader-roi-full-position = पूरी पोज़िशन
-trader-roi-sold = 100% बेचा गया
-trader-roi-summary = <strong>+{ $target }%</strong> प्रॉफ़िट लॉक हुआ
+trader-take-profit-title = टेक प्रॉफ़िट
+trader-take-profit-subtitle = मुनाफ़ा हर स्तर पर पहुँचने पर पोज़िशन को चरणों में बेचता है
+trader-take-profit-initial-buy = शुरुआती खरीद
+# $step is the step's position in the ladder, from 1.
+trader-take-profit-step = चरण { $step }
+# $step is the step's position in the ladder, from 1.
+trader-take-profit-profit-label = चरण { $step } का मुनाफ़ा स्तर
+# $step is the step's position in the ladder, from 1.
+trader-take-profit-sell-label = चरण { $step } का बिक्री हिस्सा
+trader-take-profit-add-step = चरण जोड़ें
+# $step is the step's position in the ladder, from 1.
+trader-take-profit-remove-step = चरण { $step } हटाएँ
+# $min and $max are the configured bounds of a profit level.
+trader-take-profit-error-profit-range = हर मुनाफ़ा स्तर { $min }% और { $max }% के बीच होना चाहिए
+# $min and $max are the configured bounds of a share.
+trader-take-profit-error-sell-range = हर हिस्सा { $min }% और { $max }% के बीच होना चाहिए
+trader-take-profit-error-order = हर चरण का मुनाफ़ा स्तर पिछले चरण से ऊँचा होना चाहिए
+# $max is the largest total share, the whole position.
+trader-take-profit-error-total = सभी चरण मिलकर अधिकतम { $max }% बेच सकते हैं
+# $runner is the formatted percentage of the position no step sells.
+trader-take-profit-runner = पोज़िशन का { $runner }% रनर के रूप में खुला रहता है
+trader-take-profit-runner-none = आख़िरी चरण पोज़िशन का बाकी हिस्सा बेचता है
+trader-take-profit-runner-warning = ट्रेलिंग स्टॉप, समय एग्ज़िट और सभी एग्ज़िट स्ट्रैटेजी बंद होने पर रनर केवल स्टॉप लॉस से या हाथ से बंद होता है
+trader-take-profit-info = हिस्से शुरुआती पोज़िशन से गिने जाते हैं। अगर कीमत एक साथ कई स्तर पार करे, तो हर जाँच में एक चरण बिकता है।
+# $profit is the step's formatted profit level; $share is its formatted share.
+trader-take-profit-example-step = +{ $profit }% पर { $share }% बेचें
+trader-take-profit-example-runner = रनर
+trader-take-profit-example-runner-detail = बाकी एग्ज़िट नियमों पर छोड़ा गया
+# $sold is the formatted total share the ladder sells; $profit is its last formatted level.
+trader-take-profit-summary = +{ $profit }% मुनाफ़े तक <strong>{ $sold }%</strong> बेचता है
 
 trader-time-title = समय एग्ज़िट
 trader-time-subtitle = नुकसान सीमा से ज़्यादा हो तो अधिकतम होल्ड समय के बाद पोज़िशन से अपने आप एग्ज़िट करें

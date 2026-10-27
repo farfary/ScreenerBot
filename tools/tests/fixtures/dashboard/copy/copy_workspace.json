@@ -93,7 +93,10 @@
     },
     "roi": {
       "enabled": false,
-      "target_profit_pct": 100
+      "target_profit_pct": 100,
+      "levels": [
+        { "profit_pct": 100, "sell_pct": 100 }
+      ]
     },
     "time": {
       "enabled": false,
@@ -116,7 +119,10 @@
     },
     "roi": {
       "enabled": true,
-      "target_profit_pct": 80
+      "target_profit_pct": 80,
+      "levels": [
+        { "profit_pct": 80, "sell_pct": 100 }
+      ]
     },
     "time": {
       "enabled": false,

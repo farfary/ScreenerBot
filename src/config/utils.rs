@@ -354,6 +354,7 @@ pub fn validate_config(config: &Config) -> Result<()> {
         .into());
     }
     config.copy_trading.validate()?;
+    config.trader.validate()?;
 
     // Trader validation
     if config.trader.max_open_positions == 0 {
@@ -404,20 +405,6 @@ pub fn validate_config(config: &Config) -> Result<()> {
             }
             .into());
         }
-    }
-
-    // ROI exit validation
-    if config.trader.roi_target_percent <= 0.0 {
-        return Err(ConfigurationError::Generic {
-            message: "trader.roi_target_percent must be greater than 0".to_owned(),
-        }
-        .into());
-    }
-    if !config.trader.roi_target_percent.is_finite() {
-        return Err(ConfigurationError::Generic {
-            message: "trader.roi_target_percent must be a finite number".to_owned(),
-        }
-        .into());
     }
 
     // Time override validation

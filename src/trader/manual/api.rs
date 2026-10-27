@@ -137,6 +137,7 @@ async fn buy(
         exit_percentage: None,
         // Manual trade: honour the user's slippage override (None = config).
         slippage_pct,
+        take_profit_level: None,
     };
 
     // Execute trade (includes quote + swap). A manual buy is always a Buy, so route
@@ -289,6 +290,7 @@ async fn sell(
         exit_percentage: Some(exit_percentage),
         // Manual trade: honour the user's slippage override (None = config).
         slippage_pct,
+        take_profit_level: None,
     };
 
     // Execute trade (includes quote + swap)
@@ -458,6 +460,7 @@ async fn add(
         exit_percentage: None,
         // Manual trade: honour the user's slippage override (None = config).
         slippage_pct,
+        take_profit_level: None,
     };
 
     // Execute trade (includes quote + swap)

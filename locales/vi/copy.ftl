@@ -410,6 +410,8 @@ copy-rules-target-max = Tối đa { $amount }
 copy-rules-target-between = { $min } – { $max } { -sol }
 copy-rules-source-override = Ghi đè của tác vụ · Trader { $value }
 copy-rules-source-default = Mặc định của Trader
+# $profit is the step's signed profit level; $share is the share of the position it sells, both formatted.
+copy-rules-take-profit-step = Tại { $profit }, bán { $share }
 copy-rules-not-used = Không dùng: lệnh bán của ví quyết định
 copy-rules-col-rule = Quy tắc
 copy-rules-col-applies = Áp dụng
@@ -451,6 +453,7 @@ copy-rule-partial-size = Phần cần bán
 copy-rule-trailing-activation = Kích hoạt khi lãi đến
 copy-rule-trailing-distance = Bán khi thấp hơn đỉnh
 copy-rule-take-profit-target = Bán khi lãi đến
+copy-rule-take-profit-target-hint = Mục tiêu ở đây thay các bậc take profit của Trader bằng một bậc bán toàn bộ vị thế
 copy-rule-time-duration = Kiểm tra sau khi nắm giữ
 copy-rule-time-threshold = Bán khi P&L bằng hoặc thấp hơn
 copy-preset-inherit = Mặc định của Trader

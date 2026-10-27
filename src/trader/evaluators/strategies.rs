@@ -42,6 +42,7 @@ fn entry_decision(mint: &str, strategy_id: String, price_native: f64) -> TradeDe
         exit_percentage: None,
         // Auto-trader slippage always follows config.
         slippage_pct: None,
+        take_profit_level: None,
     }
 }
 
@@ -67,6 +68,7 @@ fn exit_decision(
         exit_percentage: None,
         // Auto-trader slippage always follows config.
         slippage_pct: None,
+        take_profit_level: None,
     }
 }
 
@@ -259,7 +261,7 @@ impl StrategyEvaluator {
             Ok(true) => {} // Continue with evaluation
         }
 
-        // NOTE: Exit strategy evaluation is called after other exit checks (blacklist, risk, trailing, ROI, time)
+        // NOTE: Exit strategy evaluation is called after other exit checks (blacklist, risk, trailing, take profit, time)
         // Connectivity check here is defensive since exit coordinator doesn't pre-check
         if let Some(unhealthy) = crate::connectivity::check_endpoints_usable(&["rpc"]).await {
             logger::debug(

@@ -16,9 +16,9 @@ use super::{
     build_insights, closed_rounds, management_for_exit_mode, ActivityQuery, CopyActivityRow,
     CopyBook, CopyInsights, CopyMode, CopyTask, InsightRange, PaperPosition, LIVE_ARM_CONFIRMATION,
 };
-use crate::config::with_config;
+use crate::config::{with_config, TakeProfitLevel};
 use crate::positions::{Position, PositionManagement};
-use crate::trader::policy::{ExitPolicy, RoiPolicy, StopLossPolicy, TimePolicy, TrailingPolicy};
+use crate::trader::policy::{ExitPolicy, StopLossPolicy, TimePolicy, TrailingPolicy};
 use crate::trader::{Error, Result};
 
 mod book;
@@ -37,12 +37,23 @@ const DEFAULT_PAGE: usize = 50;
 const MAX_PAGE: usize = 500;
 
 /// The four exit rules as they apply, serializable for the editor and the Rules tab.
+/// The take-profit rule sits under `roi`, the group a task's overrides name it by.
 #[derive(Debug, Clone, Serialize)]
 pub struct EffectiveExitPolicy {
     pub stop_loss: StopLossPolicy,
     pub trailing: TrailingPolicy,
-    pub roi: RoiPolicy,
+    pub roi: EffectiveTakeProfit,
     pub time: TimePolicy,
+}
+
+/// The take-profit rule as a task sees it: its switch, the profit of the ladder's first
+/// step, which is the single target a task override replaces the ladder with, and every
+/// step in effect.
+#[derive(Debug, Clone, Serialize)]
+pub struct EffectiveTakeProfit {
+    pub enabled: bool,
+    pub target_profit_pct: Option<f64>,
+    pub levels: Vec<TakeProfitLevel>,
 }
 
 impl From<&ExitPolicy> for EffectiveExitPolicy {
@@ -50,7 +61,15 @@ impl From<&ExitPolicy> for EffectiveExitPolicy {
         Self {
             stop_loss: policy.stop_loss.clone(),
             trailing: policy.trailing.clone(),
-            roi: policy.roi.clone(),
+            roi: EffectiveTakeProfit {
+                enabled: policy.take_profit.enabled,
+                target_profit_pct: policy
+                    .take_profit
+                    .levels
+                    .first()
+                    .map(|level| level.profit_pct),
+                levels: policy.take_profit.levels.clone(),
+            },
             time: policy.time.clone(),
         }
     }
@@ -83,6 +102,7 @@ pub struct HoldingExitWatch {
     pub stop_loss_price_native: Option<f64>,
     /// The stop loss is held off until this moment (its minimum hold).
     pub stop_loss_armed_at: Option<DateTime<Utc>>,
+    /// The price of the round's next take-profit step; `None` once the ladder is done.
     pub take_profit_price_native: Option<f64>,
     pub trailing_activation_price_native: Option<f64>,
     pub trailing_armed: bool,
@@ -112,9 +132,11 @@ fn exit_watch(position: &PaperPosition, entry: f64, policy: &ExitPolicy) -> Hold
                 + Duration::seconds(stop.min_hold_seconds.min(i64::MAX as u64) as i64)
         }),
         take_profit_price_native: policy
-            .roi
-            .enabled
-            .then(|| entry * (1.0 + policy.roi.target_profit_pct / 100.0)),
+            .take_profit
+            .levels
+            .get(position.take_profit_level as usize)
+            .filter(|_| policy.take_profit.enabled)
+            .map(|step| entry * (1.0 + step.profit_pct / 100.0)),
         trailing_activation_price_native: activation,
         trailing_armed: armed_peak.is_some(),
         trailing_stop_price_native: armed_peak

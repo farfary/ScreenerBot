@@ -513,6 +513,8 @@ copy-rules-target-max = { $amount } على الأكثر
 copy-rules-target-between = { $min } – { $max } { -sol }
 copy-rules-source-override = تجاوز المهمة · المتداول { $value }
 copy-rules-source-default = افتراضي المتداول
+# $profit is the step's signed profit level; $share is the share of the position it sells, both formatted.
+copy-rules-take-profit-step = عند { $profit }، بيع { $share }
 copy-rules-not-used = غير مستخدمة: عمليات بيع المحفظة هي التي تحدد
 copy-rules-col-rule = القاعدة
 copy-rules-col-applies = التطبيق
@@ -561,6 +563,7 @@ copy-rule-partial-size = الجزء المراد بيعه
 copy-rule-trailing-activation = يُفعَّل عند ربح قدره
 copy-rule-trailing-distance = البيع عند الهبوط عن الذروة بمقدار
 copy-rule-take-profit-target = البيع عند ربح قدره
+copy-rule-take-profit-target-hint = يستبدل الهدف هنا مراحل جني الأرباح لدى المتداول بمرحلة واحدة تبيع المركز كله
 copy-rule-time-duration = يفحص بعد الاحتفاظ لمدة
 copy-rule-time-threshold = يبيع عندما تكون الأرباح والخسائر عند هذا الحد أو أقل
 copy-preset-inherit = افتراضيات المتداول

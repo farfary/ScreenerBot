@@ -22,8 +22,10 @@
 //! The exit-rule leaves of `[positions]` (trailing stop and the partial
 //! stop-loss share) move into `[trader]` the same way, and the auto-trader
 //! partial-exit switch is retired while the stop-loss behaviour the document
-//! ran with is kept. Every move is one row of [`RELOCATIONS`], applied by
-//! [`relocate_legacy_layout`] to the TOML file and to a JSON import alike.
+//! ran with is kept. The single ROI target of `[trader]` becomes the one step of
+//! the take-profit ladder, selling the whole position as it did. Every move is
+//! one row of [`RELOCATIONS`], applied by [`relocate_legacy_layout`] to the TOML
+//! file and to a JSON import alike.
 //!
 //! A file that omits a key ran with that key's default at the time. When a
 //! default changes, [`ImpliedDefaults`] writes the earlier default into a
@@ -416,6 +418,16 @@ enum RelocationNode {
     Table,
     /// One value, stored under the last segment of `to`, which may rename it.
     Leaf,
+    /// One value that became the single item of a list: stored at `to` as a
+    /// one-item list, and `companion` (a sibling list read in step with it) is
+    /// written as `[item]` when the list was written and the document lacks it.
+    /// A number outside `bounds`, which the list's items must keep, is clamped
+    /// into them: the legacy key accepted values the list refuses.
+    ListOfOne {
+        companion: &'static [&'static str],
+        item: f64,
+        bounds: (f64, f64),
+    },
 }
 
 /// One relocation of a legacy node. `to` names the destination, created when
@@ -508,17 +520,43 @@ const RELOCATIONS: &[Relocation] = &[
         to: None,
         node: RelocationNode::Leaf,
     },
+    Relocation {
+        from: &["trader", "roi_exit_enabled"],
+        to: Some(&["trader", "take_profit_enabled"]),
+        node: RelocationNode::Leaf,
+    },
+    Relocation {
+        from: &["trader", "roi_target_percent"],
+        to: Some(&["trader", "take_profit_levels_pct"]),
+        node: RelocationNode::ListOfOne {
+            companion: &["trader", "take_profit_sell_pct"],
+            item: super::schemas::TAKE_PROFIT_SELL_PCT_MAX,
+            bounds: (
+                super::schemas::TAKE_PROFIT_PROFIT_PCT_MIN,
+                super::schemas::TAKE_PROFIT_PROFIT_PCT_MAX,
+            ),
+        },
+    },
 ];
 
-/// Every relocation that keeps its node, as (legacy path, canonical path). A
+/// Every relocation that keeps its node, as (legacy path, canonical path), with
+/// a list row's companion as a second destination of the same legacy path. A
 /// config import uses it to keep the current value of a destination an older
 /// export does not carry, and to follow a selected legacy section to the
 /// sections its values feed.
 pub(crate) fn relocation_destinations(
 ) -> impl Iterator<Item = (&'static [&'static str], &'static [&'static str])> {
-    RELOCATIONS
-        .iter()
-        .filter_map(|relocation| Some((relocation.from, relocation.to?)))
+    RELOCATIONS.iter().flat_map(|relocation| {
+        let companion = match relocation.node {
+            RelocationNode::ListOfOne { companion, .. } => Some(companion),
+            RelocationNode::Table | RelocationNode::Leaf => None,
+        };
+        relocation
+            .to
+            .into_iter()
+            .chain(companion)
+            .map(|to| (relocation.from, to))
+    })
 }
 
 /// An untyped config document the relocation rewrites: the TOML file at
@@ -540,6 +578,9 @@ pub(crate) trait ConfigTree: Clone + Sized {
     fn child<'a>(table: &'a mut Self::Table, key: &str) -> &'a mut Self;
     fn as_bool(&self) -> Option<bool>;
     fn from_bool(value: bool) -> Self;
+    fn as_f64(&self) -> Option<f64>;
+    fn from_f64(value: f64) -> Self;
+    fn list_of(items: Vec<Self>) -> Self;
 }
 
 impl ConfigTree for toml::Value {
@@ -582,6 +623,19 @@ impl ConfigTree for toml::Value {
     }
     fn from_bool(value: bool) -> Self {
         toml::Value::Boolean(value)
+    }
+    fn as_f64(&self) -> Option<f64> {
+        match self {
+            toml::Value::Float(value) => Some(*value),
+            toml::Value::Integer(value) => Some(*value as f64),
+            _ => None,
+        }
+    }
+    fn from_f64(value: f64) -> Self {
+        toml::Value::Float(value)
+    }
+    fn list_of(items: Vec<Self>) -> Self {
+        toml::Value::Array(items)
     }
 }
 
@@ -626,6 +680,15 @@ impl ConfigTree for Value {
     fn from_bool(value: bool) -> Self {
         Value::Bool(value)
     }
+    fn as_f64(&self) -> Option<f64> {
+        Value::as_f64(self)
+    }
+    fn from_f64(value: f64) -> Self {
+        serde_json::Number::from_f64(value).map_or(Value::Null, Value::Number)
+    }
+    fn list_of(items: Vec<Self>) -> Self {
+        Value::Array(items)
+    }
 }
 
 /// The node at `path`, or `None` when a segment is absent or a parent on the
@@ -660,7 +723,9 @@ pub(crate) fn read_legacy_partial_exit_switch<T: ConfigTree>(doc: &T) -> Result<
 ///
 /// - A table row merges leaf by leaf: a leaf already present at the destination
 ///   wins, and a legacy leaf fills only what the destination lacks. A leaf row
-///   moves one value and keeps the canonical one when both exist. A row
+///   moves one value and keeps the canonical one when both exist. A list row
+///   moves one value as a one-item list and writes its companion list beside
+///   it; a canonical list already present keeps both lists as they are. A row
 ///   without a destination drops its node.
 /// - The one rule that is not a move: a stop loss sold part of a position only
 ///   while both [`STOP_LOSS_ALLOWANCE`] and [`LEGACY_PARTIAL_SWITCH`] were on
@@ -716,6 +781,35 @@ pub(crate) fn relocate_legacy_layout<T: ConfigTree>(doc: &mut T) -> Result<bool>
                     }
                 }
             }
+            RelocationNode::ListOfOne {
+                companion,
+                item,
+                bounds,
+            } => {
+                let source = relocation.from.join(".");
+                if legacy.table().is_some() {
+                    return Err(Error::ParseFailed {
+                        detail: format!("legacy {source} must be a value, not a table"),
+                    });
+                }
+                if let Some((leaf, section)) = relocation.to.and_then(<[_]>::split_last) {
+                    let destination = table_at(&mut working, section, &source)?;
+                    if T::get(destination, leaf).is_none() {
+                        let legacy = clamped_into(legacy, bounds, &source);
+                        T::insert(destination, (*leaf).to_owned(), T::list_of(vec![legacy]));
+                        if let Some((leaf, section)) = companion.split_last() {
+                            let destination = table_at(&mut working, section, &source)?;
+                            if T::get(destination, leaf).is_none() {
+                                T::insert(
+                                    destination,
+                                    (*leaf).to_owned(),
+                                    T::list_of(vec![T::from_f64(item)]),
+                                );
+                            }
+                        }
+                    }
+                }
+            }
         }
         changed = true;
     }
@@ -723,6 +817,24 @@ pub(crate) fn relocate_legacy_layout<T: ConfigTree>(doc: &mut T) -> Result<bool>
         *doc = working;
     }
     Ok(changed)
+}
+
+/// `value` clamped into `(min, max)`, with a warning naming `source` when it
+/// moved. A value that is not a number, NaN included, is left for the typed
+/// load to refuse.
+fn clamped_into<T: ConfigTree>(value: T, (min, max): (f64, f64), source: &str) -> T {
+    let Some(number) = value.as_f64() else {
+        return value;
+    };
+    if number.is_nan() || (min..=max).contains(&number) {
+        return value;
+    }
+    let clamped = number.clamp(min, max);
+    crate::logger::warning(
+        crate::logger::LogTag::System,
+        &format!("Legacy {source} = {number} is outside {min}..={max}; migrated as {clamped}"),
+    );
+    T::from_f64(clamped)
 }
 
 /// Remove and return the node at `path`; `None` when it is absent.
@@ -1221,6 +1333,16 @@ api_key = "sk-ant-secret"
         }
         assert_eq!(parsed.legacy_partial_exit_switch, Some(false));
 
+        // The ROI target becomes the one step of the take-profit ladder, selling
+        // everything as it did, under the switch the file held.
+        assert!(!config.trader.take_profit_enabled);
+        assert_eq!(config.trader.take_profit_levels_pct, vec![35.0]);
+        assert_eq!(config.trader.take_profit_sell_pct, vec![100.0]);
+        let trader = written["trader"].as_table().expect("trader table");
+        for leaf in ["roi_exit_enabled", "roi_target_percent"] {
+            assert!(!trader.contains_key(leaf), "[trader] {leaf} persisted");
+        }
+
         assert_eq!(config.wallet.min_balance_sol, 0.03);
         assert_eq!(config.telegram.trade_alert_min_sol, 0.25);
         assert_eq!(config.telegram.significant_pnl_threshold, 0.8);
@@ -1267,6 +1389,8 @@ api_key = "sk-ant-secret"
         assert_eq!(json(&second.config), json(&first.config));
         assert!(!second.config.trader.stop_loss_allow_partial);
         assert_eq!(second.config.trader.stop_loss_partial_pct, 35.0);
+        assert_eq!(second.config.trader.take_profit_levels_pct, vec![35.0]);
+        assert_eq!(second.config.trader.take_profit_sell_pct, vec![100.0]);
         assert_eq!(second.legacy_partial_exit_switch, None);
     }
 
@@ -1726,5 +1850,129 @@ urls = ["https://canonical.fixture.invalid/"]
             assert_eq!(node_at(&document, to), Some(&value), "{}", to.join("."));
             assert_eq!(node_at(&document, relocation.from), None);
         }
+    }
+    #[test]
+    fn a_list_row_lands_as_a_one_item_list_beside_its_companion() {
+        for relocation in RELOCATIONS {
+            let (
+                RelocationNode::ListOfOne {
+                    companion, item, ..
+                },
+                Some(to),
+            ) = (relocation.node, relocation.to)
+            else {
+                continue;
+            };
+            let mut document = serde_json::Value::Object(serde_json::Map::new());
+            let value = serde_json::json!(35.0);
+            let (leaf, parents) = relocation.from.split_last().expect("leaf path");
+            let mut node = &mut document;
+            for segment in parents {
+                node = node
+                    .as_object_mut()
+                    .expect("object")
+                    .entry(*segment)
+                    .or_insert_with(|| serde_json::json!({}));
+            }
+            node.as_object_mut()
+                .expect("object")
+                .insert((*leaf).to_owned(), value.clone());
+
+            assert!(relocate_legacy_layout(&mut document).expect("relocate"));
+            assert_eq!(
+                node_at(&document, to),
+                Some(&serde_json::json!([value])),
+                "{}",
+                to.join(".")
+            );
+            assert_eq!(
+                node_at(&document, companion),
+                Some(&serde_json::json!([item])),
+                "{}",
+                companion.join(".")
+            );
+            assert_eq!(node_at(&document, relocation.from), None);
+            assert!(!relocate_legacy_layout(&mut document).expect("second pass"));
+        }
+    }
+
+    #[test]
+    fn the_roi_target_becomes_a_one_step_take_profit_ladder() {
+        let parsed = parse("[trader]\nroi_exit_enabled = true\nroi_target_percent = 42.0\n");
+        assert!(parsed.migrated);
+        let trader = &parsed.config.trader;
+        assert!(trader.take_profit_enabled);
+        assert_eq!(
+            trader.take_profit_levels(),
+            vec![crate::config::TakeProfitLevel {
+                profit_pct: 42.0,
+                sell_pct: 100.0,
+            }]
+        );
+        assert!(super::super::utils::validate_config(&parsed.config).is_ok());
+
+        let serialized = toml::to_string(&parsed.config).expect("serialize");
+        let second = parse(&serialized);
+        assert!(!second.migrated);
+        assert_eq!(json(&second.config), json(&parsed.config));
+    }
+
+    #[test]
+    fn a_canonical_take_profit_ladder_wins_over_the_roi_target() {
+        let raw = "[trader]\nroi_exit_enabled = false\nroi_target_percent = 42.0\n\
+                   take_profit_enabled = true\n\
+                   take_profit_levels_pct = [20.0, 60.0]\n\
+                   take_profit_sell_pct = [50.0, 30.0]\n";
+        let parsed = parse(raw);
+        assert!(parsed.migrated, "the legacy leaves are dropped");
+        let trader = &parsed.config.trader;
+        assert!(trader.take_profit_enabled);
+        assert_eq!(trader.take_profit_levels_pct, vec![20.0, 60.0]);
+        assert_eq!(trader.take_profit_sell_pct, vec![50.0, 30.0]);
+    }
+
+    #[test]
+    fn a_json_import_turns_the_roi_target_into_a_ladder_like_the_config_file() {
+        let mut document = serde_json::json!({
+            "trader": { "roi_exit_enabled": false, "roi_target_percent": 15.0 }
+        });
+        assert!(relocate_legacy_layout(&mut document).expect("migrate"));
+        assert_eq!(
+            document,
+            serde_json::json!({
+                "trader": {
+                    "take_profit_enabled": false,
+                    "take_profit_levels_pct": [15.0],
+                    "take_profit_sell_pct": [100.0]
+                }
+            })
+        );
+        assert!(!relocate_legacy_layout(&mut document).expect("second pass"));
+
+        // A canonical sell list already present is kept beside the moved level.
+        let mut document = serde_json::json!({
+            "trader": { "roi_target_percent": 15.0, "take_profit_sell_pct": [40.0] }
+        });
+        assert!(relocate_legacy_layout(&mut document).expect("migrate"));
+        assert_eq!(
+            document,
+            serde_json::json!({
+                "trader": {
+                    "take_profit_levels_pct": [15.0],
+                    "take_profit_sell_pct": [40.0]
+                }
+            })
+        );
+    }
+
+    #[test]
+    fn a_roi_target_table_is_refused_without_touching_the_document() {
+        let original = serde_json::json!({
+            "trader": { "roi_target_percent": { "value": 20.0 }, "roi_exit_enabled": true }
+        });
+        let mut document = original.clone();
+        let err = relocate_legacy_layout(&mut document).unwrap_err();
+        assert!(matches!(err, Error::ParseFailed { .. }));
+        assert_eq!(document, original);
     }
 }

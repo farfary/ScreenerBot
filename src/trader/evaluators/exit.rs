@@ -14,7 +14,7 @@
 //! 3. LLM exit analysis (emergency, high or normal priority by the analysis' urgency - if enabled)
 //! 4. Stop loss (high priority - fixed threshold from entry)
 //! 5. Trailing stop (high priority - from the basis peak)
-//! 6. ROI target (normal priority)
+//! 6. Take profit (normal priority - one ladder step per evaluation)
 //! 7. Time override (high priority)
 //! 8. Strategy exit (normal priority)
 //!
@@ -98,7 +98,7 @@ pub(crate) async fn evaluate_safety_exit(
     Ok(None)
 }
 
-/// Priorities 3-8: LLM analysis, stop loss, trailing stop, ROI target, time override, strategy exit.
+/// Priorities 3-8: LLM analysis, stop loss, trailing stop, take profit, time override, strategy exit.
 /// These are POLICY — opinions about when to take a trade off — and only run when the
 /// auto-trader owns this position's exits.
 pub(crate) async fn evaluate_policy_exit(
@@ -152,6 +152,7 @@ pub(crate) async fn evaluate_policy_exit(
                                 exit_percentage: None, // Full exit
                                 // Auto-trader slippage always follows config.
                                 slippage_pct: None,
+                                take_profit_level: None,
                             };
 
                             // Record the LLM-analysis exit signal event.
@@ -212,17 +213,26 @@ pub(crate) async fn evaluate_policy_exit(
     }
 
     // Priorities 4-7: the built-in rules, in the one order `exit_rules` owns. A partial
-    // outcome is passed over while the positions store awaits reconciliation, so the rules
-    // after it still run this tick.
+    // outcome is passed over while the positions store awaits reconciliation, and a partial
+    // take-profit step while another partial exit of the mint is confirming (the next step
+    // sells only after the previous one settles), so the rules after it still run this tick.
     let inputs = live_exit_inputs(position, current_price, chrono::Utc::now());
+    let partial_pending = crate::positions::is_partial_exit_pending(&position.mint).await;
     let admit = |outcome: &RuleOutcome| {
-        if outcome.exit_percentage.is_none() || !crate::positions::awaiting_reconciliation() {
+        if outcome.exit_percentage.is_none() {
             return true;
         }
+        let refusal = if crate::positions::awaiting_reconciliation() {
+            "the positions store is not reconciled"
+        } else if partial_pending && matches!(outcome.rule, ExitRule::TakeProfit { .. }) {
+            "a partial exit is still confirming"
+        } else {
+            return true;
+        };
         crate::logger::debug(
             crate::logger::LogTag::Trader,
             &format!(
-                "Partial {:?} exit skipped for {}: the positions store is not reconciled",
+                "Partial {:?} exit skipped for {}: {refusal}",
                 outcome.rule, position.symbol
             ),
         );
@@ -233,7 +243,7 @@ pub(crate) async fn evaluate_policy_exit(
         let check = match rule {
             ExitRule::StopLoss => "stop loss",
             ExitRule::Trailing => "trailing stop",
-            ExitRule::TakeProfit => "ROI exit",
+            ExitRule::TakeProfit { .. } => "take profit",
             ExitRule::TimeLoss => "time override",
         };
         crate::logger::warning(
@@ -306,8 +316,8 @@ pub(crate) async fn evaluate_policy_exit(
 }
 
 /// What the live book gives the built-in exit rules: the position's average entry and
-/// basis peak, the resolved price, its age at `now`, and whether it already booked a
-/// partial exit.
+/// basis peak, the resolved price, its age at `now`, whether it already booked a partial
+/// exit, and the take-profit steps it reserved.
 pub fn live_exit_inputs(
     position: &Position,
     current_price: f64,
@@ -319,11 +329,13 @@ pub fn live_exit_inputs(
         basis_peak_price: position.basis_peak_price,
         held_seconds: (now - position.entry_time).num_seconds(),
         partial_exits_taken: position.partial_exit_count > 0,
+        take_profit_levels_taken: position.take_profit_level,
     }
 }
 
 /// The sell a fired built-in rule asks of the live book. Stop loss, trailing stop and
-/// the time override sell at high priority; the ROI target at normal priority.
+/// the time override sell at high priority; a take-profit step at normal priority,
+/// carrying the step it takes.
 pub fn rule_decision(
     position: &Position,
     current_price: f64,
@@ -332,8 +344,12 @@ pub fn rule_decision(
     let (reason, priority) = match outcome.rule {
         ExitRule::StopLoss => (TradeReason::StopLoss, TradePriority::High),
         ExitRule::Trailing => (TradeReason::TrailingStop, TradePriority::High),
-        ExitRule::TakeProfit => (TradeReason::TakeProfit, TradePriority::Normal),
+        ExitRule::TakeProfit { .. } => (TradeReason::TakeProfit, TradePriority::Normal),
         ExitRule::TimeLoss => (TradeReason::TimeOverride, TradePriority::High),
+    };
+    let take_profit_level = match outcome.rule {
+        ExitRule::TakeProfit { level } => Some(level),
+        ExitRule::StopLoss | ExitRule::Trailing | ExitRule::TimeLoss => None,
     };
     TradeDecision {
         position_id: position.id.map(|id| id.to_string()),
@@ -348,6 +364,7 @@ pub fn rule_decision(
         exit_percentage: outcome.exit_percentage,
         // Auto-trader slippage always follows config.
         slippage_pct: None,
+        take_profit_level,
     }
 }
 
@@ -395,11 +412,19 @@ async fn record_rule_signal(
                 }),
             )
         }
-        ExitRule::TakeProfit => {
+        ExitRule::TakeProfit { level } => {
             crate::logger::info(
                 crate::logger::LogTag::Trader,
-                &format!("ROI target reached for {}", position.symbol),
+                &format!(
+                    "Take-profit step {level} reached for {} ({})",
+                    position.symbol,
+                    outcome
+                        .exit_percentage
+                        .map_or("full exit".to_owned(), |pct| format!("sells {pct:.2}%"))
+                ),
             );
+            // The event id and exit type are stored with every recorded event, so they
+            // keep the names the event log already holds.
             (
                 "exit_signal_roi_target",
                 crate::events::Severity::Info,
@@ -408,6 +433,8 @@ async fn record_rule_signal(
                   "mint": position.mint,
                   "symbol": position.symbol,
                   "current_price": current_price,
+                  "level": level,
+                  "exit_percentage": outcome.exit_percentage,
                 }),
             )
         }

@@ -7,10 +7,12 @@ use crate::chains::adapter;
 use crate::chains::solana::assets::ata::get_total_token_balance;
 use crate::chains::RawAmount;
 use crate::logger::{self, LogTag};
+use crate::positions::apply::apply_transition;
 use crate::positions::queue::{enqueue_verification, VerificationItem};
 use crate::positions::state::{
     acquire_position_lock, add_signature_to_index, register_pending_partial_exit,
 };
+use crate::positions::transitions::PositionTransition;
 use crate::positions::types::PendingPartialExit;
 use crate::positions::{Error, Result};
 use crate::swaps::{
@@ -21,13 +23,17 @@ use chrono::Utc;
 
 use super::exit_ladder::{run_exit_ladder, ExitSwap};
 
-/// Partially close a position by selling a percentage of remaining tokens
+/// Partially close a position by selling a percentage of remaining tokens.
+/// `take_profit_level` is the take-profit step the sale takes, reserved on the position
+/// before the swap is sent and returned to the ladder only when the swap provably sold
+/// nothing.
 /// CRITICAL: This does NOT release the semaphore permit - position stays open
 pub async fn partial_close_position(
     token_mint: &str,
     exit_percentage: f64,
     exit_reason: &str,
     slippage_pct: Option<f64>,
+    take_profit_level: Option<u32>,
 ) -> Result<String> {
     super::refuse_until_reconciled("partial_exit", token_mint)?;
     // Serialize per-mint operations to avoid overlapping partials/full exits
@@ -115,6 +121,23 @@ pub async fn partial_close_position(
         });
     }
 
+    // Get API token for swap
+    let api_token = crate::tokens::get_full_token_async(crate::chains::active_chain(), token_mint)
+        .await
+        .map_err(|_| Error::TokenNotFound {
+            mint: token_mint.to_owned(),
+        })?
+        .ok_or_else(|| Error::TokenNotFound {
+            mint: token_mint.to_owned(),
+        })?;
+
+    // Manual override starts the ladder; configured steps above it still escalate.
+    let slippage_exit_retry_steps = super::slippage::exit_slippage_ladder(slippage_pct);
+
+    if let Some(level) = take_profit_level {
+        reserve_take_profit_step(token_mint, position_id, level).await?;
+    }
+
     logger::info(
         LogTag::Positions,
         &format!(
@@ -136,19 +159,6 @@ pub async fn partial_close_position(
         Some(exit_percentage),
     )
     .await;
-
-    // Get API token for swap
-    let api_token = crate::tokens::get_full_token_async(crate::chains::active_chain(), token_mint)
-        .await
-        .map_err(|_| Error::TokenNotFound {
-            mint: token_mint.to_owned(),
-        })?
-        .ok_or_else(|| Error::TokenNotFound {
-            mint: token_mint.to_owned(),
-        })?;
-
-    // Manual override starts the ladder; configured steps above it still escalate.
-    let slippage_exit_retry_steps = super::slippage::exit_slippage_ladder(slippage_pct);
 
     // Mark the partial pending BEFORE the first submission: the per-mint lock is released
     // as soon as this function returns, long before verification lands, so this registry is
@@ -203,27 +213,29 @@ pub async fn partial_close_position(
             detail,
             not_submitted,
         } => {
-            crate::positions::state::clear_partial_exit_pending(token_mint).await;
-
-            // Record partial exit failure
-            crate::events::record_position_event(
-                &position_id.to_string(),
-                token_mint,
-                "partial_exit_swap_failed",
-                position.entry_transaction_signature.as_deref(),
-                None,
-                0.0,
+            // Nothing was sold, so the step returns to the ladder.
+            if let Some(level) = take_profit_level {
+                release_take_profit_step(token_mint, position_id, level).await;
+            }
+            return Err(PartialExitFailure {
+                position: &position,
+                position_id,
                 exit_amount,
-                None,
-                Some(exit_percentage),
-            )
-            .await;
-
-            return Err(Error::SwapFailed {
-                mint: token_mint.to_owned(),
-                detail,
-                not_submitted,
-            });
+                exit_percentage,
+            }
+            .record(token_mint, detail, not_submitted)
+            .await);
+        }
+        // Nothing proves the share is still held, so a reserved step stays taken.
+        ExitSwap::Unresolved { detail } => {
+            return Err(PartialExitFailure {
+                position: &position,
+                position_id,
+                exit_amount,
+                exit_percentage,
+            }
+            .record(token_mint, detail, None)
+            .await);
         }
     };
 
@@ -237,6 +249,7 @@ pub async fn partial_close_position(
         requested_exit_percentage: exit_percentage,
         expiry_height,
         created_at: Utc::now(),
+        take_profit_level,
     };
 
     // The swap was sent, so from here nothing may drop its signature: every bookkeeping
@@ -303,7 +316,8 @@ pub async fn partial_close_position(
         exit_amount,
         exit_percentage,
         expiry_height,
-    );
+    )
+    .with_take_profit_level(take_profit_level);
 
     enqueue_verification(verification_item).await;
 
@@ -318,4 +332,77 @@ pub async fn partial_close_position(
     // CRITICAL: Do NOT release semaphore permit - position still open!
 
     Ok(transaction_signature)
+}
+
+/// The partial exit whose swap failed: what its failure record names.
+struct PartialExitFailure<'a> {
+    position: &'a crate::positions::types::Position,
+    position_id: i64,
+    exit_amount: RawAmount,
+    exit_percentage: f64,
+}
+
+impl PartialExitFailure<'_> {
+    /// Clears the pending partial of `token_mint`, records the failure event and returns
+    /// the error the caller reports.
+    async fn record(
+        self,
+        token_mint: &str,
+        detail: String,
+        not_submitted: Option<crate::swaps::NotSubmittedReason>,
+    ) -> Error {
+        crate::positions::state::clear_partial_exit_pending(token_mint).await;
+        crate::events::record_position_event(
+            &self.position_id.to_string(),
+            token_mint,
+            "partial_exit_swap_failed",
+            self.position.entry_transaction_signature.as_deref(),
+            None,
+            0.0,
+            self.exit_amount,
+            None,
+            Some(self.exit_percentage),
+        )
+        .await;
+        Error::SwapFailed {
+            mint: token_mint.to_owned(),
+            detail,
+            not_submitted,
+        }
+    }
+}
+
+/// Takes take-profit step `level` of `position_id` before the swap that sells it is sent,
+/// under the mint's position lock. Refuses unless `level` is the step after the last one
+/// taken, so a second decision for the same step never sells and a decision made on a stale
+/// level never skips a step: the step is booked once, ahead of its sale.
+async fn reserve_take_profit_step(mint: &str, position_id: i64, level: u32) -> Result<()> {
+    let effects =
+        apply_transition(PositionTransition::TakeProfitLevelReserved { position_id, level })
+            .await?;
+    if effects.db_updated {
+        Ok(())
+    } else {
+        Err(Error::TransitionFailed {
+            transition: "partial_exit",
+            mint: mint.to_owned(),
+            detail: format!("take-profit step {level} is not the next step of the ladder"),
+        })
+    }
+}
+
+/// Returns take-profit step `level` of `position_id` to the ladder after its sale provably
+/// sold nothing. A failed write keeps the step taken, which can skip it but never sells it
+/// twice.
+async fn release_take_profit_step(mint: &str, position_id: i64, level: u32) {
+    if let Err(error) =
+        apply_transition(PositionTransition::TakeProfitLevelReleased { position_id, level }).await
+    {
+        logger::error(
+            LogTag::Positions,
+            &format!(
+                "Take-profit step {level} of position {position_id} (mint {mint}) stays taken after its sale sold nothing: {error}"
+            ),
+        );
+    }
 }

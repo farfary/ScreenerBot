@@ -1054,6 +1054,8 @@ fn build_position(
         partial_exit_count: round
             .exit_count
             .saturating_sub(if round.is_open { 0 } else { 1 }),
+        // Steps only the trader reserves; a resync of the same round keeps them.
+        take_profit_level: existing.map_or(0, |p| p.take_profit_level),
         dca_count: round.entry_count.saturating_sub(1),
         average_entry_price: entry_price,
         last_dca_time: existing.and_then(|p| p.last_dca_time),

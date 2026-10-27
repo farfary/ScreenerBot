@@ -9,8 +9,9 @@ use super::*;
 
 use chrono::Duration;
 
+use crate::config::TakeProfitLevel;
 use crate::trader::evaluators::dca::DcaConfigSnapshot;
-use crate::trader::policy::{RoiPolicy, StopLossPolicy, TimePolicy, TrailingPolicy};
+use crate::trader::policy::{StopLossPolicy, TakeProfitPolicy, TimePolicy, TrailingPolicy};
 
 fn task() -> CopyTask {
     CopyTask {
@@ -106,9 +107,9 @@ fn policy() -> ExitPolicy {
             activation_pct: 20.0,
             distance_pct: 10.0,
         },
-        roi: RoiPolicy {
+        take_profit: TakeProfitPolicy {
             enabled: true,
-            target_profit_pct: 100.0,
+            levels: vec![TakeProfitLevel::sell_all_at(100.0)],
         },
         time: TimePolicy {
             enabled: true,
@@ -145,6 +146,8 @@ fn policy_decision_signatures_distinguish_subsecond_rounds_and_epochs() {
         opened_at,
         closed_at: None,
         peak_price_native: Some(1.0),
+        take_profit_level: 0,
+        round_partial_exits: 0,
     };
     let mut next_round = base.clone();
     next_round.opened_at = opened_at + chrono::Duration::nanoseconds(1);
@@ -158,7 +161,8 @@ fn policy_decision_signatures_distinguish_subsecond_rounds_and_epochs() {
     );
 }
 
-/// 100 tokens for 1 SOL: entry 0.01 SOL per token.
+/// 100 tokens for 1 SOL: entry 0.01 SOL per token, in a round that booked `sells`
+/// partial sales.
 fn holding(sells: u64, age: Duration) -> PaperPosition {
     let now = Utc::now();
     PaperPosition {
@@ -178,6 +182,8 @@ fn holding(sells: u64, age: Duration) -> PaperPosition {
         opened_at: now - age,
         closed_at: None,
         peak_price_native: Some(0.01),
+        take_profit_level: 0,
+        round_partial_exits: u32::try_from(sells).expect("a test round's sales fit a u32"),
     }
 }
 
@@ -187,6 +193,7 @@ fn evaluate(
     peak: f64,
 ) -> Option<(PaperExitRule, Option<f64>)> {
     evaluate_paper_exit(1, position, mark, peak, &policy(), Utc::now())
+        .map(|exit| (exit.rule, exit.exit_percentage))
 }
 
 #[test]
@@ -217,8 +224,20 @@ fn trailing_stop_arms_off_the_peak_and_fires_only_in_profit() {
     assert_eq!(evaluate(&position, 0.0095, 0.0125), None);
 }
 
+/// A holding that reopened keeps every earlier round's sales in `sells`, yet its own
+/// round sold nothing: its stop loss takes the partial cut again.
 #[test]
-fn roi_target_and_time_override_fire_in_monitor_order() {
+fn a_reopened_round_takes_its_own_partial_stop_loss() {
+    let mut reopened = holding(0, Duration::seconds(60));
+    reopened.sells = 3;
+    assert_eq!(
+        evaluate(&reopened, 0.0065, 0.01),
+        Some((PaperExitRule::StopLoss, Some(50.0)))
+    );
+}
+
+#[test]
+fn take_profit_and_time_override_fire_in_monitor_order() {
     let young = holding(0, Duration::seconds(60));
     assert_eq!(
         evaluate(&young, 0.02, 0.02),
@@ -430,7 +449,8 @@ fn live_and_paper_books_pick_the_same_rule_for_the_same_inputs() {
 
         let mut paper_position = holding(u64::from(partial_taken), age);
         paper_position.opened_at = now - age;
-        let paper = evaluate_paper_exit(1, &paper_position, mark, peak, &policy, now);
+        let paper = evaluate_paper_exit(1, &paper_position, mark, peak, &policy, now)
+            .map(|exit| (exit.rule, exit.exit_percentage));
 
         assert_eq!(
             live,
@@ -442,5 +462,104 @@ fn live_and_paper_books_pick_the_same_rule_for_the_same_inputs() {
             expected.map(|(_, rule)| (rule, share)),
             "{case}: paper"
         );
+    }
+}
+
+/// The live exit monitor and the paper book climb the same take-profit ladder: for each
+/// step already taken they fire the same next step with the same share of what is left,
+/// and a finished ladder fires nothing in either book.
+#[test]
+fn live_and_paper_books_climb_the_same_take_profit_ladder() {
+    use crate::trader::evaluators::{exit, exit_rules};
+    use crate::trader::TradeReason;
+
+    let mut policy = policy();
+    policy.stop_loss.enabled = false;
+    policy.trailing.enabled = false;
+    policy.time.enabled = false;
+    policy.take_profit.levels = vec![
+        TakeProfitLevel {
+            profit_pct: 50.0,
+            sell_pct: 30.0,
+        },
+        TakeProfitLevel {
+            profit_pct: 100.0,
+            sell_pct: 30.0,
+        },
+        TakeProfitLevel {
+            profit_pct: 200.0,
+            sell_pct: 40.0,
+        },
+    ];
+    let now = Utc::now();
+    let age = Duration::seconds(60);
+    // (case, mark, steps taken, partial already taken, expected share and step)
+    let cases = [
+        ("below the first level", 0.014, 0, false, None),
+        ("first step", 0.016, 0, false, Some((Some(30.0), 1))),
+        (
+            "past every level, first step only",
+            0.05,
+            0,
+            false,
+            Some((Some(30.0), 1)),
+        ),
+        ("first step taken, below the second", 0.016, 1, true, None),
+        ("second step", 0.02, 1, true, Some((Some(300.0 / 7.0), 2))),
+        (
+            "last step sells what is left",
+            0.04,
+            2,
+            true,
+            Some((None, 3)),
+        ),
+        ("finished ladder", 0.05, 3, true, None),
+    ];
+    for (case, mark, taken, partial_taken, expected) in cases {
+        let mut live_position = live_position(mark, age, u32::from(partial_taken), now);
+        live_position.take_profit_level = taken;
+        let live = exit_rules::decide(&exit::live_exit_inputs(&live_position, mark, now), &policy)
+            .outcome
+            .map(|outcome| {
+                let decision = exit::rule_decision(&live_position, mark, &outcome);
+                assert_eq!(decision.reason, TradeReason::TakeProfit, "{case}: live");
+                (
+                    decision.exit_percentage,
+                    decision
+                        .take_profit_level
+                        .expect("a ladder step carries its level"),
+                )
+            });
+
+        let mut paper_position = holding(u64::from(partial_taken), age);
+        paper_position.opened_at = now - age;
+        paper_position.take_profit_level = taken;
+        let paper = evaluate_paper_exit(1, &paper_position, mark, mark, &policy, now).map(|exit| {
+            assert_eq!(exit.rule, PaperExitRule::TakeProfit, "{case}: paper");
+            (
+                exit.exit_percentage,
+                exit.take_profit_level
+                    .expect("a ladder step carries its level"),
+            )
+        });
+
+        assert_eq!(live.is_some(), expected.is_some(), "{case}: live");
+        assert_eq!(paper.is_some(), expected.is_some(), "{case}: paper");
+        for (book, found) in [("live", live), ("paper", paper)] {
+            let (Some((share, step)), Some((expected_share, expected_step))) = (found, expected)
+            else {
+                continue;
+            };
+            assert_eq!(step, expected_step, "{case}: {book} step");
+            match (share, expected_share) {
+                (Some(share), Some(expected_share)) => assert!(
+                    (share - expected_share).abs() < 1e-9,
+                    "{case}: {book} share {share} != {expected_share}"
+                ),
+                (share, expected_share) => {
+                    assert_eq!(share, expected_share, "{case}: {book} share")
+                }
+            }
+        }
     }
 }

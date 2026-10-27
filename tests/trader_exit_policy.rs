@@ -6,7 +6,7 @@
 //!
 //! Each sub-policy struct claims to carry an exact, fixed set of config fields. The
 //! failure mode this file exists to catch is a field wired to the WRONG getter — for
-//! example a stop loss threshold silently sourced from the ROI target — which would
+//! example a stop loss threshold silently sourced from a take-profit level — which would
 //! compile fine, read a real number, and quietly disable or misconfigure a real risk
 //! rule. So every test here mutates every underlying field of one sub-policy to a
 //! distinctive, non-default value and asserts the resolved policy carries exactly those
@@ -20,9 +20,10 @@
 use crate::common;
 
 use common::config_guard;
+use screenerbot::config::TakeProfitLevel;
 use screenerbot::trader::evaluators::DcaConfigSnapshot;
 use screenerbot::trader::policy::{
-    ExitPolicy, ExitPolicyOverrides, RoiPolicy, StopLossPolicy, TimePolicy, TrailingPolicy,
+    ExitPolicy, ExitPolicyOverrides, StopLossPolicy, TakeProfitPolicy, TimePolicy, TrailingPolicy,
 };
 
 #[test]
@@ -72,22 +73,63 @@ fn trailing_policy_carries_exactly_its_three_config_fields() {
 }
 
 #[test]
-fn roi_policy_carries_exactly_its_two_config_fields() {
+fn take_profit_policy_carries_exactly_its_three_config_fields() {
     let _cfg = config_guard();
     common::set_config(|cfg| {
-        cfg.trader.roi_exit_enabled = false; // default: true
-        cfg.trader.roi_target_percent = 77.0; // default: 20.0
+        cfg.trader.take_profit_enabled = false; // default: true
+        cfg.trader.take_profit_levels_pct = vec![15.0, 77.0]; // default: [20.0]
+        cfg.trader.take_profit_sell_pct = vec![40.0, 35.0]; // default: [100.0]
     });
 
     let policy = ExitPolicy::from_config();
 
     assert_eq!(
-        policy.roi,
-        RoiPolicy {
+        policy.take_profit,
+        TakeProfitPolicy {
             enabled: false,
-            target_profit_pct: 77.0,
+            levels: vec![
+                TakeProfitLevel {
+                    profit_pct: 15.0,
+                    sell_pct: 40.0,
+                },
+                TakeProfitLevel {
+                    profit_pct: 77.0,
+                    sell_pct: 35.0,
+                },
+            ],
         }
     );
+}
+
+#[test]
+fn a_task_profit_target_overrides_the_ladder_with_one_full_step() {
+    // A copy task's single profit target is a ladder of one step that sells everything;
+    // the configured steps are replaced, never mixed with it.
+    let _cfg = config_guard();
+    common::set_config(|cfg| {
+        cfg.trader.take_profit_levels_pct = vec![15.0, 77.0];
+        cfg.trader.take_profit_sell_pct = vec![40.0, 35.0];
+    });
+    let inherited = ExitPolicy::from_config();
+    let mut resolved = inherited.clone();
+    let mut overrides = ExitPolicyOverrides::default();
+    overrides.roi.target_profit_pct = Some(42.0);
+    resolved.apply_overrides(&overrides);
+
+    assert_eq!(
+        resolved.take_profit,
+        TakeProfitPolicy {
+            enabled: inherited.take_profit.enabled,
+            levels: vec![TakeProfitLevel::sell_all_at(42.0)],
+        }
+    );
+
+    let mut disabled = inherited.clone();
+    overrides = ExitPolicyOverrides::default();
+    overrides.roi.enabled = Some(false);
+    disabled.apply_overrides(&overrides);
+    assert!(!disabled.take_profit.enabled);
+    assert_eq!(disabled.take_profit.levels, inherited.take_profit.levels);
 }
 
 #[test]
@@ -149,7 +191,8 @@ fn task_override_changes_only_set_fields_and_unset_fields_inherit() {
         cfg.trader.stop_loss_enabled = true;
         cfg.trader.stop_loss_threshold_pct = 40.0;
         cfg.trader.trailing_stop_distance_pct = 5.0;
-        cfg.trader.roi_target_percent = 20.0;
+        cfg.trader.take_profit_levels_pct = vec![20.0];
+        cfg.trader.take_profit_sell_pct = vec![100.0];
     });
     let inherited = ExitPolicy::from_config();
     let mut resolved = inherited.clone();
@@ -165,7 +208,7 @@ fn task_override_changes_only_set_fields_and_unset_fields_inherit() {
         resolved.trailing.distance_pct,
         inherited.trailing.distance_pct
     );
-    assert_eq!(resolved.roi, inherited.roi);
+    assert_eq!(resolved.take_profit, inherited.take_profit);
     assert_eq!(resolved.time, inherited.time);
     assert_eq!(resolved.dca.enabled, inherited.dca.enabled);
 }

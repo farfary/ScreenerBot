@@ -376,6 +376,7 @@ fn every_released_layout_upgrades_to_a_fresh_install_and_reopens_unchanged() {
                 [0.75, 0.0, 0.0],
                 "{case}"
             );
+            assert_eq!(take_profit_levels(&conn), [0, 0, 0], "{case}");
             assert_eq!(
                 conn.query_row(
                     "SELECT e.amount, e.native_spent, e.fees_raw, x.amount, x.native_received, x.fees_raw FROM position_entries e, position_exits x WHERE e.id = 1 AND x.id = 1",
@@ -450,8 +451,10 @@ fn assert_basis_peak_backfilled(conn: &Connection, case: &str) -> Vec<f64> {
 }
 
 /// The positions store as the release before the basis peak leaves it: the current layout
-/// without `basis_peak_price`, its ledger and legacy stamp at version 6.
+/// without `basis_peak_price` and the later `take_profit_level`, its ledger and legacy
+/// stamp at version 6.
 const BEFORE_BASIS_PEAK: &str = "
+    ALTER TABLE positions DROP COLUMN take_profit_level;
     ALTER TABLE positions DROP COLUMN basis_peak_price;
     UPDATE store_schema SET version = 6, min_reader_version = 6 WHERE id = 1;
     UPDATE position_metadata SET value = '6' WHERE key = 'schema_version';
@@ -568,6 +571,150 @@ fn a_store_before_the_basis_peak_backfills_it_and_reopens_unchanged() {
         assert_basis_peak_backfilled(&conn, case),
         [1.5, 1.6, 1.25, 0.75],
         "{case}"
+    );
+    assert_eq!(take_profit_levels(&conn), [0, 0, 0, 0], "{case}");
+
+    let upgraded = (schema(&conn), contents(&conn));
+    drop(conn);
+    boot(dir.path(), true);
+    let conn = open(dir.path());
+    assert_eq!(
+        (schema(&conn), contents(&conn)),
+        upgraded,
+        "{case}: second launch"
+    );
+}
+
+/// Every row's reserved take-profit steps, in row order.
+fn take_profit_levels(conn: &Connection) -> Vec<i64> {
+    conn.prepare("SELECT take_profit_level FROM positions ORDER BY id")
+        .unwrap()
+        .query_map([], |row| row.get(0))
+        .unwrap()
+        .collect::<rusqlite::Result<_>>()
+        .unwrap()
+}
+
+/// The positions store as the release before the take-profit ladder leaves it: the
+/// current layout without `take_profit_level`, its ledger and legacy stamp at version 7.
+const BEFORE_TAKE_PROFIT_LADDER: &str = "
+    ALTER TABLE positions DROP COLUMN take_profit_level;
+    UPDATE store_schema SET version = 7, min_reader_version = 7 WHERE id = 1;
+    UPDATE position_metadata SET value = '7' WHERE key = 'schema_version';
+";
+
+/// Rows of a version 7 store: an open row that took a partial exit, a closed row, and an
+/// open manual row.
+const INSERT_VERSION_7_POSITION: &str = "INSERT INTO positions (id, chain_id, wallet_address, mint, symbol, name, entry_price, entry_time, exit_price, exit_time, position_type, entry_size_native, total_size_native, average_entry_price, price_highest, price_lowest, basis_peak_price, partial_exit_count, remaining_token_amount, total_exited_amount, origin_kind, management) VALUES (?1, 'solana', 'wallet', ?2, 'SYM', 'Token', 1.0, '2026-01-01T00:00:00Z', ?3, ?4, 'buy', 1.0, 1.0, 1.0, ?5, 0.5, ?5, ?6, ?7, ?8, ?9, ?10)";
+
+/// Every column a version 7 store held, as the upgrade must keep them.
+fn version_7_columns(conn: &Connection) -> Vec<Vec<Value>> {
+    let columns = conn
+        .prepare("SELECT name FROM pragma_table_info('positions') WHERE name != 'take_profit_level' ORDER BY name")
+        .unwrap()
+        .query_map([], |row| row.get::<_, String>(0))
+        .unwrap()
+        .collect::<rusqlite::Result<Vec<_>>>()
+        .unwrap();
+    let mut stmt = conn
+        .prepare(&format!(
+            "SELECT {} FROM positions ORDER BY id",
+            columns.join(", ")
+        ))
+        .unwrap();
+    let width = stmt.column_count();
+    stmt.query_map([], |row| {
+        (0..width)
+            .map(|i| row.get::<_, Value>(i))
+            .collect::<rusqlite::Result<Vec<_>>>()
+    })
+    .unwrap()
+    .collect::<rusqlite::Result<_>>()
+    .unwrap()
+}
+
+#[test]
+fn a_store_before_the_take_profit_ladder_gains_it_and_reopens_unchanged() {
+    if std::env::var_os(CHILD).is_some() {
+        return;
+    }
+    let fresh = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(fresh.path().join("data")).unwrap();
+    boot(fresh.path(), true);
+    let fresh_schema = schema(&open(fresh.path()));
+
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(dir.path().join("data")).unwrap();
+    boot(dir.path(), true);
+    let conn = open(dir.path());
+    conn.execute_batch(BEFORE_TAKE_PROFIT_LADDER).unwrap();
+    assert!(!has_column(&conn, "positions", "take_profit_level"));
+    for (id, mint, exit_price, exit_time, peak, partials, remaining, exited, origin, management) in [
+        (
+            1,
+            "mint-partial",
+            None,
+            None,
+            1.4,
+            1,
+            "600",
+            "400",
+            "auto",
+            "auto_trader",
+        ),
+        (
+            2,
+            "mint-closed",
+            Some(1.2),
+            Some("2026-01-02T00:00:00Z"),
+            1.3,
+            0,
+            "0",
+            "1000",
+            "auto",
+            "auto_trader",
+        ),
+        (
+            3,
+            "mint-manual",
+            None,
+            None,
+            1.1,
+            0,
+            "1000",
+            "0",
+            "manual",
+            "user_only",
+        ),
+    ] {
+        conn.execute(
+            INSERT_VERSION_7_POSITION,
+            params![
+                id, mint, exit_price, exit_time, peak, partials, remaining, exited, origin,
+                management
+            ],
+        )
+        .unwrap();
+    }
+    let before = version_7_columns(&conn);
+    drop(conn);
+
+    let case = "version 7 store";
+    boot(dir.path(), true);
+    let conn = open(dir.path());
+    assert_eq!(schema(&conn), fresh_schema, "{case}");
+    assert_checks_pass(&conn, case);
+    assert_eq!(version_7_columns(&conn), before, "{case}: stored data");
+    assert_eq!(take_profit_levels(&conn), [0, 0, 0], "{case}");
+    assert_eq!(
+        conn.query_row(
+            "SELECT version, min_reader_version FROM store_schema WHERE id = 1",
+            [],
+            |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?)),
+        )
+        .unwrap(),
+        (8, 7),
+        "{case}: a version 7 core still reads the store"
     );
 
     let upgraded = (schema(&conn), contents(&conn));

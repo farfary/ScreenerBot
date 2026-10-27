@@ -119,6 +119,7 @@ fn sell(
                 )),
             }),
             exit_rule: rule,
+            take_profit_level: None,
             paper_context: None,
         }),
     }

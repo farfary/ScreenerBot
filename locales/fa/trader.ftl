@@ -5,8 +5,8 @@
 # shown as readable labels) and the reasons written by src/positions and src/trader/stats.rs.
 trader-exit-type-stop-loss = حد ضرر
 trader-exit-type-take-profit = حد سود
-trader-exit-type-roi = هدف ROI
-trader-exit-type-roi-exit = هدف ROI
+trader-exit-type-roi = حد سود
+trader-exit-type-roi-exit = حد سود
 trader-exit-type-trailing-stop = حد ضرر متحرک
 trader-exit-type-time-override = خروج زمانی
 trader-exit-type-time-rule = قانون زمانی
@@ -22,7 +22,7 @@ trader-tab-strategy-control = کنترل استراتژی
 trader-tab-strategies = استراتژی‌ها
 trader-tab-stop-loss = حد ضرر
 trader-tab-trailing-stop = حد ضرر متحرک
-trader-tab-roi = حد سود
+trader-tab-take-profit = حد سود
 trader-tab-time-rules = خروج زمانی
 trader-tab-dca = DCA
 trader-tab-settings = تنظیمات
@@ -239,16 +239,36 @@ trader-trailing-summary-avoided = از <strong>{ $value }</strong> ضرر نسب
 
 ## Take profit
 
-trader-roi-title = حد سود
-trader-roi-subtitle = خروج خودکار از کل پوزیشن وقتی سود به هدف شما برسد
-# $target is the target percentage as typed.
-trader-roi-impact = خروج در +{ $target }% سود
-trader-roi-initial-buy = خرید اولیه
-trader-roi-target-hit = رسیدن به هدف
-trader-roi-full-position = کل پوزیشن
-trader-roi-sold = 100% فروخته شد
-# $target is the target percentage as typed.
-trader-roi-summary = <strong>+{ $target }%</strong> سود قفل شد
+trader-take-profit-title = حد سود
+trader-take-profit-subtitle = پوزیشن را با رسیدن سود به هر سطح، پله‌پله می‌فروشد
+trader-take-profit-initial-buy = خرید اولیه
+# $step is the step's position in the ladder, from 1.
+trader-take-profit-step = پله { $step }
+# $step is the step's position in the ladder, from 1.
+trader-take-profit-profit-label = سطح سود پله { $step }
+# $step is the step's position in the ladder, from 1.
+trader-take-profit-sell-label = سهم فروش پله { $step }
+trader-take-profit-add-step = افزودن پله
+# $step is the step's position in the ladder, from 1.
+trader-take-profit-remove-step = حذف پله { $step }
+# $min and $max are the configured bounds of a profit level.
+trader-take-profit-error-profit-range = هر سطح سود باید بین { $min }% و { $max }% باشد
+# $min and $max are the configured bounds of a share.
+trader-take-profit-error-sell-range = هر سهم باید بین { $min }% و { $max }% باشد
+trader-take-profit-error-order = سطح سود هر پله باید از پله قبلی بالاتر باشد
+# $max is the largest total share, the whole position.
+trader-take-profit-error-total = پله‌ها روی هم حداکثر { $max }% می‌فروشند
+# $runner is the formatted percentage of the position no step sells.
+trader-take-profit-runner = { $runner }% از پوزیشن به‌عنوان باقی‌مانده باز می‌ماند
+trader-take-profit-runner-none = پله آخر باقی‌مانده پوزیشن را می‌فروشد
+trader-take-profit-runner-warning = با خاموش بودن حد ضرر متحرک، خروج زمانی و همه استراتژی‌های خروج، باقی‌مانده فقط با حد ضرر یا به‌صورت دستی بسته می‌شود
+trader-take-profit-info = سهم‌ها از پوزیشن اولیه حساب می‌شوند. اگر قیمت چند سطح را یک‌باره رد کند، در هر بررسی یک پله فروخته می‌شود.
+# $profit is the step's formatted profit level; $share is its formatted share.
+trader-take-profit-example-step = در +{ $profit }%، فروش { $share }%
+trader-take-profit-example-runner = باقی‌مانده
+trader-take-profit-example-runner-detail = به قوانین خروج دیگر سپرده می‌شود
+# $sold is the formatted total share the ladder sells; $profit is its last formatted level.
+trader-take-profit-summary = تا سود +{ $profit }%، <strong>{ $sold }%</strong> را می‌فروشد
 
 ## Time-based exit
 

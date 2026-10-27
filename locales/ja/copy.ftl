@@ -432,6 +432,8 @@ copy-rules-target-max = { $amount } 以下
 copy-rules-target-between = { $min } – { $max } { -sol }
 copy-rules-source-override = タスクで上書き · トレーダー { $value }
 copy-rules-source-default = トレーダーのデフォルト
+# $profit is the step's signed profit level; $share is the share of the position it sells, both formatted.
+copy-rules-take-profit-step = { $profit } で { $share } を売却
 copy-rules-not-used = 使用しません: ウォレットの売却で判断します
 copy-rules-col-rule = ルール
 copy-rules-col-applies = 適用内容
@@ -475,6 +477,7 @@ copy-rule-partial-size = 売却する割合
 copy-rule-trailing-activation = 次の利益で有効化
 copy-rule-trailing-distance = ピークからの下落幅で売却
 copy-rule-take-profit-target = 次の利益で売却
+copy-rule-take-profit-target-hint = ここで目標を設定すると、トレーダーの利確の段階は、ポジション全体を売却する 1 つの段階に置き換わります
 copy-rule-time-duration = 保有後の確認タイミング
 copy-rule-time-threshold = 損益が次の値以下で売却
 copy-preset-inherit = トレーダーのデフォルト

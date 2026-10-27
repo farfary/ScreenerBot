@@ -30,6 +30,11 @@ pub struct TradeDecision {
     /// silently, with nothing to catch a value put in the wrong one. A 50 in `size_native` was
     /// either half a position or 50 SOL depending only on the action.
     pub exit_percentage: Option<f64>,
+    /// The take-profit step a SELL takes (1 is the first step). A partial sell reserves the
+    /// step before its swap is sent, so the ladder never sells one step twice; a full sell
+    /// reserves nothing and fires again while its level holds until the close is booked.
+    /// `None` on every other decision.
+    pub take_profit_level: Option<u32>,
     /// Per-trade slippage override, in percent.
     ///
     /// `None` = follow the configured slippage (`trader.slippage.*`), which is what the
@@ -330,6 +335,7 @@ mod tests {
             size_native: None,
             slippage_pct: None,
             exit_percentage: None,
+            take_profit_level: None,
         }
     }
 
