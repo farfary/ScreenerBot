@@ -92,7 +92,7 @@ export function createWalletRenderers({
     const backup = replacementBackup(row.address);
     if (!backup) return "—";
     const date = Utils.formatTimestamp(new Date(backup.created_at_ms).toISOString(), {
-      includeYear: true,
+      includeYear: false,
       includeSeconds: false,
       fallback: "—",
     });
