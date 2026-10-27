@@ -4,6 +4,7 @@
 //! The paper run card of the Trader Stats tab: when the run began, its starting balance, cash, open cost and unrealized result, and the reset that starts the next run.
 
 import { formatDate, formatSignedSol, formatSol } from "../../core/format.js";
+import { TRADING_MODE_ICONS } from "../../ui/trading_mode.js";
 
 const DASH = "—";
 
@@ -17,7 +18,7 @@ export function paperAccountCard(account, esc) {
   const since = Number.isFinite(account?.started_at)
     ? formatDate(account.started_at, { fallback: DASH })
     : DASH;
-  return `<i class="icon-test-tube-diagonal" aria-hidden="true"></i><span>${esc(
+  return `<i class="${TRADING_MODE_ICONS.paper}" aria-hidden="true"></i><span>${esc(
     I18n.t("trader-paper-run-since", { date: since })
   )}</span><dl>${row(I18n.t("trader-paper-start"), sol(account?.starting_balance_native))}${row(
     I18n.t("trader-paper-cash"),

@@ -3,7 +3,7 @@
 //
 //! The Live / Paper book switch of the Positions table: where each book's rows come from, the one action a paper row offers, and the paper book's empty state.
 
-import { tradingModeLabel } from "../../ui/trading_mode.js";
+import { TRADING_MODE_ICONS, tradingModeLabel } from "../../ui/trading_mode.js";
 
 /** The books the table can show, one at a time; never mixed into one list. */
 export const POSITION_BOOKS = Object.freeze(["live", "paper"]);
@@ -26,7 +26,7 @@ export function bookViews(book, onChange) {
     ariaLabel: I18n.t("positions-book"),
     options: [
       { value: "live", label: tradingModeLabel("live") },
-      { value: "paper", label: tradingModeLabel("paper"), icon: "icon-test-tube-diagonal" },
+      { value: "paper", label: tradingModeLabel("paper"), icon: TRADING_MODE_ICONS.paper },
     ],
     onChange,
   };

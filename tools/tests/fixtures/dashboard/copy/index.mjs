@@ -106,7 +106,7 @@ export const views = [
       { selector: "#copy-ws-panel .copy-chart-plot", min: 1 },
     ],
     empty: [
-      { selector: "#copy-ws-panel .copy-chart-empty", text: "No closed rounds in this range yet" },
+      { selector: "#copy-ws-panel .state-view", text: "No closed rounds in this range yet" },
     ],
     dialogs: [
       { trigger: "#copy-add", dialog: "#copy-editor", close: "#copy-editor .modal-close" },
@@ -136,13 +136,13 @@ export const views = [
     name: "holdings",
     click: [TASK_ROW, "#copy-tab-holdings"],
     populated: [{ selector: "#copy-ws-panel .copy-table tbody tr", min: 3 }],
-    empty: [{ selector: "#copy-ws-panel .copy-panel-message", text: "No open paper holdings" }],
+    empty: [{ selector: "#copy-ws-panel .state-view", text: "No open paper holdings" }],
   },
   {
     name: "activity",
     click: [TASK_ROW, "#copy-tab-activity"],
     populated: [{ selector: "#copy-ws-panel .copy-events .copy-event", min: 6 }],
-    empty: [{ selector: "#copy-ws-panel .copy-panel-message", text: "No decisions yet" }],
+    empty: [{ selector: "#copy-ws-panel .state-view", text: "No decisions yet" }],
   },
   {
     name: "rules",
@@ -154,7 +154,7 @@ export const views = [
     click: [TASK_ROW, "#copy-tab-execution"],
     populated: [{ selector: "#copy-ws-panel .copy-metric", min: 3 }],
     empty: [
-      { selector: "#copy-ws-panel .copy-chart-empty", text: "No arrival samples in this range" },
+      { selector: "#copy-ws-panel .state-view", text: "No arrival samples in this range" },
     ],
   },
   {
@@ -164,6 +164,6 @@ export const views = [
       { selector: "#copy-compare-table tbody tr[data-row-id]", min: 3 },
       { selector: "#copy-compare .copy-chart-plot", min: 1 },
     ],
-    empty: [{ selector: "#copy-compare .copy-chart-empty", text: "No closed rounds to compare" }],
+    empty: [{ selector: "#copy-compare .state-view", text: "No closed rounds to compare" }],
   },
 ];

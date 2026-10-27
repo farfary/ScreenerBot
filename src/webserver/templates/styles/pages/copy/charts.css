@@ -69,13 +69,6 @@
   stroke: var(--error-color);
 }
 
-.copy-chart-empty {
-  padding: var(--spacing-lg);
-  font-size: var(--font-size-sm);
-  text-align: center;
-  color: var(--text-muted);
-}
-
 /* One column set for the whole list, so every track starts at the same x. */
 .copy-bars {
   display: grid;

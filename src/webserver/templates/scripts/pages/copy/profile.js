@@ -15,7 +15,7 @@ import {
   toneClass,
 } from "./format.js";
 import { tradingModeLabel } from "../../ui/trading_mode.js";
-import { panelMessage } from "./overview.js";
+import { renderStateView } from "../../ui/state_view.js";
 import { gateControl } from "../../ui/setup_gate.js";
 
 export function createProfile(page) {
@@ -125,7 +125,10 @@ export function createProfile(page) {
     const copy = $("#copy-profile-copy");
     if (copy) copy.disabled = true;
     const body = $("#copy-profile-body");
-    paint(body, panelMessage(I18n.t("copy-profile-loading"), esc));
+    paint(
+      body,
+      renderStateView({ kind: "loading", message: I18n.t("copy-profile-loading"), compact: true })
+    );
     dialogs.show("copy-profile");
     try {
       const profile = await api.profile(address);

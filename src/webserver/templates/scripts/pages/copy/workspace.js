@@ -11,10 +11,11 @@ import {
   taskName,
   timeAgo,
 } from "./format.js";
-import { tradingModeLabel } from "../../ui/trading_mode.js";
+import { tradingModeMarker } from "../../ui/trading_mode.js";
 import { forgetPaint } from "../../core/dom.js";
 import { attachTabScrollStrip } from "../../ui/tab_bar.js";
-import { panelMessage, renderOverview } from "./overview.js";
+import { renderOverview } from "./overview.js";
+import { renderStateView } from "../../ui/state_view.js";
 import { renderExecution } from "./execution.js";
 import { renderRules } from "./rules.js";
 import { createHoldings } from "./holdings.js";
@@ -189,7 +190,7 @@ export function createWorkspace(page) {
     const task = current() || selectedSummary();
     if (!task) {
       shellFor = null;
-      paint(root, panelMessage(I18n.t("copy-workspace-select"), esc));
+      paint(root, renderStateView({ message: I18n.t("copy-workspace-select"), compact: true }));
       return;
     }
     if (shellFor !== task.id) buildShell(root, task.id);
@@ -203,7 +204,7 @@ export function createWorkspace(page) {
     forgetPaint(root);
     root.innerHTML = `<header class="copy-ws-head">
     <div class="copy-ws-identity">
-        <div class="copy-ws-title"><h2 id="copy-ws-name"></h2><span id="copy-ws-mode"></span></div>
+        <div class="copy-ws-title"><h2 id="copy-ws-name"></h2><div id="copy-ws-mode"></div></div>
         <div class="copy-ws-address" id="copy-ws-address"></div>
         <div class="copy-ws-state" id="copy-ws-state" aria-live="polite"></div>
         <div class="copy-ws-exit-issue" id="copy-ws-exit-issue"></div>
@@ -360,11 +361,7 @@ export function createWorkspace(page) {
   function renderHeader(task) {
     const name = $("#copy-ws-name");
     if (name) name.textContent = taskName(task);
-    const mode = $("#copy-ws-mode");
-    if (mode) {
-      mode.textContent = tradingModeLabel(task.mode);
-      mode.className = `copy-row-mode copy-mode-${task.mode}`;
-    }
+    paint($("#copy-ws-mode"), tradingModeMarker(task.mode, esc));
     paint($("#copy-ws-address"), renderAddress(task.target_address, { explorer: "account" }));
     const stateNode = $("#copy-ws-state");
     if (stateNode) {
@@ -423,8 +420,16 @@ export function createWorkspace(page) {
       paint(
         panel,
         wsError
-          ? panelMessage(I18n.t("copy-workspace-load-failed", { error: wsError }), esc, "is-error")
-          : panelMessage(I18n.t("copy-workspace-loading"), esc)
+          ? renderStateView({
+              kind: "error",
+              message: I18n.t("copy-workspace-load-failed", { error: wsError }),
+              compact: true,
+            })
+          : renderStateView({
+              kind: "loading",
+              message: I18n.t("copy-workspace-loading"),
+              compact: true,
+            })
       );
       return;
     }

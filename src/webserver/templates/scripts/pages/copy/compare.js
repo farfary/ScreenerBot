@@ -19,9 +19,9 @@ import {
   taskName,
   toneClass,
 } from "./format.js";
-import { tradingModeLabel } from "../../ui/trading_mode.js";
+import { tradingModeMarker } from "../../ui/trading_mode.js";
 import { forgetPaint } from "../../core/dom.js";
-import { panelMessage } from "./overview.js";
+import { renderStateView } from "../../ui/state_view.js";
 
 const TABLE_ID = "copy-compare-table";
 
@@ -75,7 +75,7 @@ export function createCompare(page) {
       wrap: false,
       minWidth: "content",
       render: (_value, row) =>
-        `<span class="copy-row-mode copy-mode-${esc(row.mode)}">${esc(tradingModeLabel(row.mode))}</span>${row.enabled ? "" : `<small class="copy-muted"> ${esc(I18n.t("copy-paused-suffix"))}</small>`}`,
+        `${tradingModeMarker(row.mode, esc)}${row.enabled ? "" : `<small class="copy-muted"> ${esc(I18n.t("copy-paused-suffix"))}</small>`}`,
     },
     {
       id: "rounds",
@@ -185,9 +185,18 @@ export function createCompare(page) {
     let body;
     if (!rows)
       body = error
-        ? panelMessage(I18n.t("copy-compare-load-failed", { error }), esc, "is-error")
-        : panelMessage(I18n.t("copy-compare-loading"), esc);
-    else if (!rows.length) body = panelMessage(I18n.t("copy-compare-empty"), esc);
+        ? renderStateView({
+            kind: "error",
+            message: I18n.t("copy-compare-load-failed", { error }),
+            compact: true,
+          })
+        : renderStateView({
+            kind: "loading",
+            message: I18n.t("copy-compare-loading"),
+            compact: true,
+          });
+    else if (!rows.length)
+      body = renderStateView({ message: I18n.t("copy-compare-empty"), compact: true });
     else {
       body = `<section class="copy-card"><h4>${esc(I18n.t("copy-compare-curve-title"))}</h4>${comparisonCurves(
         rows.map((row) => ({

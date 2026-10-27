@@ -28,6 +28,7 @@ import {
 } from "./format.js";
 import { tradingModeLabel } from "../../ui/trading_mode.js";
 import { readinessList } from "../../ui/arm_live_gate.js";
+import { renderStateView } from "../../ui/state_view.js";
 import { ensureIdentities, tokenWithMint } from "./tokens.js";
 
 export function metric(label, value, note, tone, esc) {
@@ -38,17 +39,21 @@ export function rangeHead(title, range, esc) {
   return `<div class="copy-panel-head"><h3>${esc(title)}</h3>${segmented("range", RANGES, range, esc, I18n.attr("copy-range-label", "aria-label"))}</div>`;
 }
 
-export function panelMessage(text, esc, tone = "") {
-  return `<div class="copy-panel-message ${tone}" role="status">${esc(text)}</div>`;
-}
-
 /** Results body shared by the tabs that read insights: data, error or loading. */
 export function insightsBody(insights, error, esc, render) {
   if (insights) return render(insights);
   if (error) {
-    return panelMessage(I18n.t("copy-analytics-load-failed", { error }), esc, "is-error");
+    return renderStateView({
+      kind: "error",
+      message: I18n.t("copy-analytics-load-failed", { error }),
+      compact: true,
+    });
   }
-  return panelMessage(I18n.t("copy-analytics-loading"), esc);
+  return renderStateView({
+    kind: "loading",
+    message: I18n.t("copy-analytics-loading"),
+    compact: true,
+  });
 }
 
 function results(insights, esc) {

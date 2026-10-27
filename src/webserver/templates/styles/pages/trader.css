@@ -477,10 +477,6 @@
   color: var(--text-secondary);
 }
 
-.strategy-control-mode i {
-  color: var(--text-muted);
-}
-
 .strategy-control-mode .btn {
   margin-inline-start: auto;
 }

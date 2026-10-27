@@ -9,7 +9,7 @@
  * that phrase, so the server applies the same gate.
  */
 
-import { tradingModeLabel } from "../../ui/trading_mode.js";
+import { tradingModeMarker } from "../../ui/trading_mode.js";
 import {
   ackList,
   pendingAcks,
@@ -24,7 +24,6 @@ import {
 export function strategyModeRow(strategy, esc) {
   const paper = strategy.mode === "paper";
   const id = esc(String(strategy.id));
-  const glyph = paper ? '<i class="icon-test-tube-diagonal" aria-hidden="true"></i>' : "";
   const action = paper
     ? `<button type="button" class="btn btn-sm btn-secondary" data-arm-strategy="${id}">${esc(
         I18n.t("trader-strategy-mode-arm")
@@ -32,9 +31,7 @@ export function strategyModeRow(strategy, esc) {
     : `<button type="button" class="btn btn-sm btn-ghost" data-paper-strategy="${id}">${esc(
         I18n.t("trader-strategy-mode-return-paper")
       )}</button>`;
-  return `<div class="strategy-control-mode">${glyph}<span>${esc(
-    tradingModeLabel(strategy.mode)
-  )}</span>${action}</div>`;
+  return `<div class="strategy-control-mode">${tradingModeMarker(strategy.mode, esc)}${action}</div>`;
 }
 
 /**

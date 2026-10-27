@@ -7,6 +7,7 @@
 
 import { formatDate, formatSignedSol, formatTimestamp } from "../../core/format.js";
 import { PNL_SOL_DECIMALS, toneClass } from "./format.js";
+import { renderStateView } from "../../ui/state_view.js";
 
 const SERIES_CLASSES = [
   "copy-series-0",
@@ -25,7 +26,7 @@ function scale(domainMin, domainMax, rangeMin, rangeMax) {
 /** Cumulative P&L trend for a task list row. */
 export function sparkline(values, { width = 88, height = 22 } = {}) {
   const points = (values || []).filter((value) => Number.isFinite(value));
-  if (points.length < 2) return '<span class="copy-spark-empty">—</span>';
+  if (points.length < 2) return "";
   const series = [0, ...points];
   const y = scale(Math.min(0, ...series), Math.max(0, ...series), height - 2, 2);
   const x = scale(0, series.length - 1, 1, width - 1);
@@ -76,7 +77,11 @@ export function pnlCurve(points, { escapeHtml = String } = {}) {
     .map((point) => ({ at: new Date(point.at).getTime(), value: Number(point.cumulative_pnl_native) }))
     .filter((point) => Number.isFinite(point.at) && Number.isFinite(point.value));
   if (!data.length) {
-    return `<div class="copy-chart-empty">${escapeHtml(I18n.t("copy-chart-empty-curve"))}</div>`;
+    return renderStateView({
+      icon: "icon-chart-line",
+      message: I18n.t("copy-chart-empty-curve"),
+      compact: true,
+    });
   }
   const series =
     data.length === 1
@@ -99,7 +104,11 @@ export function pnlCurve(points, { escapeHtml = String } = {}) {
 /** Horizontal bars: `[{ label, value, display, tone }]`. */
 export function barList(items, escapeHtml) {
   if (!items?.length) {
-    return `<div class="copy-chart-empty">${escapeHtml(I18n.t("copy-chart-empty-bars"))}</div>`;
+    return renderStateView({
+      icon: "icon-chart-bar",
+      message: I18n.t("copy-chart-empty-bars"),
+      compact: true,
+    });
   }
   // Bars scale to the largest magnitude whatever its unit, so 0.03 SOL fills its track.
   const max = Math.max(...items.map((item) => Math.abs(item.value) || 0));
@@ -116,7 +125,11 @@ export function barList(items, escapeHtml) {
 export function histogram(buckets, escapeHtml) {
   const total = (buckets || []).reduce((sum, bucket) => sum + bucket.count, 0);
   if (!total) {
-    return `<div class="copy-chart-empty">${escapeHtml(I18n.t("copy-chart-empty-histogram"))}</div>`;
+    return renderStateView({
+      icon: "icon-chart-bar",
+      message: I18n.t("copy-chart-empty-histogram"),
+      compact: true,
+    });
   }
   const max = Math.max(...buckets.map((bucket) => bucket.count), 1);
   return `<div class="copy-histogram">${buckets
@@ -142,7 +155,11 @@ export function comparisonCurves(series, { escapeHtml = String } = {}) {
     }))
     .filter((entry) => entry.points.length);
   if (!lines.length) {
-    return `<div class="copy-chart-empty">${escapeHtml(I18n.t("copy-chart-empty-compare"))}</div>`;
+    return renderStateView({
+      icon: "icon-chart-line",
+      message: I18n.t("copy-chart-empty-compare"),
+      compact: true,
+    });
   }
   const all = lines.flatMap((entry) => entry.points);
   const times = all.map((point) => point.at);

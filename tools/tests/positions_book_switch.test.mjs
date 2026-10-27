@@ -25,6 +25,9 @@ installEnglishI18n();
 const { POSITION_BOOKS, bookViews, paperActionCell, paperEmptyState, positionsUrl } = await import(
   new URL("../../src/webserver/templates/scripts/pages/positions/book.js", import.meta.url)
 );
+const { TRADING_MODE_ICONS } = await import(
+  new URL("../../src/webserver/templates/scripts/ui/trading_mode.js", import.meta.url)
+);
 
 const esc = (text) =>
   String(text).replace(/[&<>"']/g, (char) => `&#${char.charCodeAt(0)};`);
@@ -71,7 +74,7 @@ test("the switch names both books, Live first, and Paper carries its bare glyph"
     views.options.map(({ value, label, icon }) => ({ value, label, icon })),
     [
       { value: "live", label: "Live", icon: undefined },
-      { value: "paper", label: "Paper", icon: "icon-test-tube-diagonal" },
+      { value: "paper", label: "Paper", icon: TRADING_MODE_ICONS.paper },
     ]
   );
   views.onChange("paper");

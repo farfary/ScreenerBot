@@ -44,6 +44,9 @@ const PRIVATE_STATES = new RegExp(
       "strategy-list-state",
       "(?:explorer|tree)-empty-state",
       "empty-message",
+      "copy-panel-message",
+      "copy-chart-empty",
+      "copy-spark-empty",
     ].join("|") +
     ")(?![\\w-])"
 );

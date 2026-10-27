@@ -289,23 +289,6 @@
   --ti-address-size: 0.75rem;
 }
 
-.copy-row-mode {
-  flex-shrink: 0;
-  font-size: var(--font-size-xs);
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--text-secondary);
-}
-
-.copy-mode-paper {
-  color: var(--info-color);
-}
-
-.copy-mode-live {
-  color: var(--error-color);
-}
-
 .copy-row-state {
   font-size: var(--font-size-xs);
   color: var(--text-secondary);
@@ -373,10 +356,6 @@
   stroke: var(--error-color);
 }
 
-.copy-spark-empty {
-  color: var(--text-muted);
-}
-
 .copy-chart-zero {
   stroke: var(--border-color);
   stroke-dasharray: 3 3;
@@ -434,22 +413,6 @@
 }
 
 .copy-page .is-negative {
-  color: var(--error-color);
-}
-
-.copy-panel-message {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: center;
-  gap: var(--spacing-md);
-  padding: var(--spacing-xl) var(--spacing-lg);
-  color: var(--text-muted);
-  font-size: var(--font-size-sm);
-  text-align: center;
-}
-
-.copy-panel-message.is-error {
   color: var(--error-color);
 }
 

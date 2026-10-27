@@ -22,7 +22,7 @@ import {
   toneClass,
 } from "./format.js";
 import { ensureIdentities, openTokenDetails, tokenWithMint } from "./tokens.js";
-import { panelMessage } from "./overview.js";
+import { renderStateView } from "../../ui/state_view.js";
 
 const relative = (trigger, entry) =>
   trigger != null && entry > 0 ? (Number(trigger) / Number(entry) - 1) * 100 : null;
@@ -108,12 +108,15 @@ export function createHoldings(page, { rerender, showActivityFor }) {
         rerender();
         return;
       }
+      if (event.target.closest('[data-action="copy-open-positions"]')) {
+        loadPage("positions");
+        return;
+      }
       const button = event.target.closest("[data-holding-action]");
       if (!button) return;
       const { holdingAction: action, mint, openedAt } = button.dataset;
       if (action === "details") openTokenDetails(mint);
       else if (action === "activity") showActivityFor(mint);
-      else if (action === "positions") loadPage("positions");
       else if (action === "close") void close(mint, openedAt);
       else if (action === "reset") void reset(button);
     });
@@ -217,7 +220,7 @@ export function createHoldings(page, { rerender, showActivityFor }) {
 
   function openTable(holdings, ws) {
     if (!holdings.length) {
-      return panelMessage(I18n.t("copy-holdings-empty"), esc);
+      return renderStateView({ message: I18n.t("copy-holdings-empty"), compact: true });
     }
     const rows = holdings
       .map((holding) => {
@@ -272,11 +275,21 @@ export function createHoldings(page, { rerender, showActivityFor }) {
   function closedTable(insights, error) {
     if (!insights) {
       return error
-        ? panelMessage(I18n.t("copy-holdings-closed-load-failed", { error }), esc, "is-error")
-        : panelMessage(I18n.t("copy-holdings-closed-loading"), esc);
+        ? renderStateView({
+            kind: "error",
+            message: I18n.t("copy-holdings-closed-load-failed", { error }),
+            compact: true,
+          })
+        : renderStateView({
+            kind: "loading",
+            message: I18n.t("copy-holdings-closed-loading"),
+            compact: true,
+          });
     }
     const rounds = insights.recent_rounds || [];
-    if (!rounds.length) return panelMessage(I18n.t("copy-holdings-closed-empty"), esc);
+    if (!rounds.length) {
+      return renderStateView({ message: I18n.t("copy-holdings-closed-empty"), compact: true });
+    }
     const rows = rounds
       .map(
         (round) => `<tr>
@@ -323,7 +336,11 @@ export function createHoldings(page, { rerender, showActivityFor }) {
     const head = `<div class="copy-panel-head"><h3>${esc(I18n.t("copy-holdings-title"))}</h3><div class="copy-panel-tools">${segmented("holdings-view", views, view, esc, I18n.t("copy-holdings-view-label"))}${reset}</div></div>`;
     if (view === "closed") return head + closedTable(insights, error);
     if (live) {
-      return `${head}<div class="copy-panel-message">${esc(I18n.t("copy-holdings-live-note"))}<button class="btn btn-secondary btn-sm" type="button" data-holding-action="positions">${esc(I18n.t("copy-holdings-open-positions"))}</button></div>`;
+      return `${head}${renderStateView({
+        message: I18n.t("copy-holdings-live-note"),
+        action: { id: "copy-open-positions", label: I18n.t("copy-holdings-open-positions") },
+        compact: true,
+      })}`;
     }
     return head + openTable(open, ws);
   }

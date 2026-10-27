@@ -76,6 +76,18 @@
   color: var(--text-secondary);
 }
 
+/* The paper or live mode of a task or strategy (`tradingModeMarker`): Paper is a bare
+   glyph inline with its label in the label's colour, Live is the label alone. */
+.mode-marker {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  white-space: nowrap;
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+}
+
 .security-score {
   font-weight: 600;
   color: #64748b;

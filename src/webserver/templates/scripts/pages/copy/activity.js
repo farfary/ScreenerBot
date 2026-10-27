@@ -18,7 +18,7 @@ import {
   sol,
 } from "./format.js";
 import { ensureIdentities, tokenWithMint } from "./tokens.js";
-import { panelMessage } from "./overview.js";
+import { renderStateView } from "../../ui/state_view.js";
 
 const PAGE = 50;
 const GROUP_MIN = 3;
@@ -455,19 +455,28 @@ export function createActivity(page, { rerender }) {
       return (
         head +
         (error
-          ? panelMessage(I18n.t("copy-activity-load-failed", { error }), esc, "is-error")
-          : panelMessage(I18n.t("copy-activity-loading"), esc))
+          ? renderStateView({
+              kind: "error",
+              message: I18n.t("copy-activity-load-failed", { error }),
+              compact: true,
+            })
+          : renderStateView({
+              kind: "loading",
+              message: I18n.t("copy-activity-loading"),
+              compact: true,
+            }))
       );
     }
     if (!rows.length) {
       return (
         head +
-        panelMessage(
-          filter !== "all" || mint
-            ? I18n.t("copy-activity-no-match")
-            : I18n.t("copy-activity-empty"),
-          esc
-        )
+        renderStateView({
+          message:
+            filter !== "all" || mint
+              ? I18n.t("copy-activity-no-match")
+              : I18n.t("copy-activity-empty"),
+          compact: true,
+        })
       );
     }
     const more = nextBefore

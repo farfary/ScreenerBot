@@ -6,8 +6,9 @@
  * Guard: Strategy Control states each strategy's trading mode once, as text, and arming
  * live stays gated.
  *
- * - A paper strategy shows the bare Paper glyph, the Paper label and Arm live; a live
- *   strategy shows the Live label with no glyph and Return to paper.
+ * - A paper strategy shows the shared mode marker (the bare Paper glyph and the Paper
+ *   label) and Arm live; a live strategy shows the Live marker with no glyph and Return to
+ *   paper.
  * - The arm dialog lists the readiness checks and what happens to open paper rounds; while
  *   live trading cannot run it shows why and asks for nothing.
  * - Arm live stays disabled until every acknowledgement is ticked and the exact phrase the
@@ -54,7 +55,11 @@ function dialogRoot(acks, phrase) {
 
 test("a paper strategy shows its bare glyph, its label and Arm live", () => {
   const row = strategyModeRow({ id: "momentum", mode: "paper" }, esc);
-  assert.match(row, /<i class="icon-test-tube-diagonal" aria-hidden="true"><\/i><span>Paper<\/span>/);
+  assert.ok(
+    row.includes(
+      '<span class="mode-marker" data-mode="paper"><i class="icon-test-tube-diagonal" aria-hidden="true"></i><span>Paper</span></span>'
+    )
+  );
   assert.match(row, /data-arm-strategy="momentum">Arm live</);
   assert.doesNotMatch(row, /data-paper-strategy/);
 });
@@ -62,7 +67,7 @@ test("a paper strategy shows its bare glyph, its label and Arm live", () => {
 test("a live strategy shows its label with no glyph and Return to paper", () => {
   const row = strategyModeRow({ id: "momentum", mode: "live" }, esc);
   assert.doesNotMatch(row, /<i /);
-  assert.match(row, /<span>Live<\/span>/);
+  assert.ok(row.includes('<span class="mode-marker" data-mode="live"><span>Live</span></span>'));
   assert.match(row, /data-paper-strategy="momentum">Return to paper</);
   assert.doesNotMatch(row, /data-arm-strategy/);
 });
