@@ -17,6 +17,7 @@
  */
 
 import { dirSign } from "../core/dom.js";
+import { menuBounds } from "../core/menu_manager.js";
 import { pushEscapeHandler } from "../core/escape_stack.js";
 import { escapeHtml, showToast, notifyCopied, notifyCopyFailed } from "../core/utils.js";
 import { POSITION_MANAGEMENT_LABELS } from "./position_management.js";
@@ -766,16 +767,14 @@ class ContextMenuManager {
     const baseTop = submenuEl.offsetTop;
     const parentRect = parentEl.getBoundingClientRect();
     const submenuRect = submenuEl.getBoundingClientRect();
-    const viewportWidth = window.innerWidth;
-    const viewportHeight = window.innerHeight;
-    const padding = 8;
+    const bounds = menuBounds();
 
     // Horizontal: the submenu opens toward the inline end (right in LTR, left in RTL)
     // and flips to the inline start when that side has no room.
     const overflowsEnd =
       dirSign() === 1
-        ? parentRect.right + submenuRect.width > viewportWidth - padding
-        : parentRect.left - submenuRect.width < padding;
+        ? parentRect.right + submenuRect.width > bounds.right
+        : parentRect.left - submenuRect.width < bounds.left;
     if (overflowsEnd) {
       submenuEl.classList.add("flipped");
     }
@@ -783,8 +782,8 @@ class ContextMenuManager {
     // Vertical: clamp the submenu's viewport top so its bottom stays inside the frame,
     // never letting its top go above it. (A submenu taller than the frame is capped by
     // CSS max-height + scroll, so its height is already <= the available space.)
-    const maxTop = viewportHeight - padding - submenuRect.height;
-    const desiredTop = Math.max(padding, Math.min(submenuRect.top, maxTop));
+    const maxTop = bounds.bottom - submenuRect.height;
+    const desiredTop = Math.max(bounds.top, Math.min(submenuRect.top, maxTop));
     const delta = desiredTop - submenuRect.top;
     if (Math.abs(delta) > 0.5) {
       submenuEl.style.top = `${baseTop + delta}px`;
@@ -803,9 +802,7 @@ class ContextMenuManager {
     // Layout size, not the bounding box: the closed menu is scaled down for its
     // entry animation, and a scaled width misplaces an end-anchored menu.
     const rect = { width: this.menuEl.offsetWidth, height: this.menuEl.offsetHeight };
-    const viewportWidth = window.innerWidth;
-    const viewportHeight = window.innerHeight;
-    const padding = 8;
+    const bounds = menuBounds();
 
     const endInLtr = endAnchored && dirSign() === 1;
     let finalX = endInLtr ? x - rect.width : x;
@@ -814,34 +811,35 @@ class ContextMenuManager {
     let originY = "top";
 
     // Adjust horizontal position — flip to the left of the cursor near the right edge.
-    if (!endInLtr && x + rect.width > viewportWidth - padding) {
+    if (!endInLtr && x + rect.width > bounds.right) {
       finalX = x - rect.width;
       originX = "right";
     }
 
     // Adjust vertical position — flip above the cursor near the bottom edge.
-    if (y + rect.height > viewportHeight - padding) {
+    if (y + rect.height > bounds.bottom) {
       finalY = y - rect.height;
       originY = "bottom";
     }
 
     // Final clamp so the menu is ALWAYS within the frame, even when it is larger than
     // the cursor's distance to an edge or taller/wider than the viewport itself.
-    finalX = Math.max(padding, Math.min(finalX, viewportWidth - rect.width - padding));
-    finalY = Math.max(padding, Math.min(finalY, viewportHeight - rect.height - padding));
+    finalX = Math.max(bounds.left, Math.min(finalX, bounds.right - rect.width));
+    finalY = Math.max(bounds.top, Math.min(finalY, bounds.bottom - rect.height));
 
     this.menuEl.style.left = `${finalX}px`;
     this.menuEl.style.top = `${finalY}px`;
     this.menuEl.style.visibility = "";
 
-    // Set transform origin for animation
+    // The entry slide starts at the corner nearest the pointer.
     this.menuEl.style.transformOrigin = `${originY} ${originX}`;
+    this.menuEl.classList.toggle("menu-above", originY === "bottom");
 
     // Mark submenus that must open toward the inline start: near the right edge in
     // LTR (submenus default to the right), near the left edge in RTL (default left).
     const submenuRoomEnd =
       dirSign() === 1
-        ? originX !== "right" && finalX + rect.width <= viewportWidth - 200
+        ? originX !== "right" && finalX + rect.width <= window.innerWidth - 200
         : finalX >= 200;
     if (!submenuRoomEnd) {
       this.menuEl.classList.add("submenus-flipped");

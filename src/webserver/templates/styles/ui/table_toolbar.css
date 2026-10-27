@@ -931,28 +931,24 @@
   display: inline-flex;
 }
 
+/* The one menu look from floating.css, set apart below its trigger. */
 .table-toolbar-menu {
   position: absolute;
-  top: calc(100% - 1px);
+  top: calc(100% + 4px);
   inset-inline-end: 0;
   z-index: var(--z-dropdown);
   min-width: 180px;
-  padding: 0;
-  border: 1px solid var(--border-color);
-  border-start-start-radius: var(--radius-md);
-  border-start-end-radius: 0;
-  border-end-end-radius: var(--radius-md);
-  border-end-start-radius: var(--radius-md);
-  background: var(--bg-card);
+  padding-block: var(--menu-padding-block);
+  border: 1px solid var(--menu-border);
+  border-radius: var(--menu-radius);
+  background: var(--menu-bg);
   font-family: var(--font-sans);
-  box-shadow: var(--shadow-floating-md);
+  box-shadow: var(--menu-shadow);
   opacity: 0;
   pointer-events: none;
-  transform: translateY(-4px) scaleY(0.985);
+  transform: var(--menu-enter);
   transform-origin: calc(50% + var(--dir-sign) * 50%) top;
-  transition:
-    opacity var(--floating-duration) var(--floating-easing),
-    transform var(--floating-duration) var(--floating-easing);
+  transition: var(--menu-transition);
 }
 
 .table-toolbar-menu[hidden] {
@@ -962,38 +958,38 @@
 .table-toolbar-menu.open {
   opacity: 1;
   pointer-events: auto;
-  transform: translateY(0) scaleY(1);
+  transform: none;
 }
 
 .table-toolbar-overflow__trigger.active {
   border-color: var(--primary-color);
-  border-radius: var(--radius-md) var(--radius-md) 0 0;
   background: var(--bg-hover);
 }
 
 .table-toolbar-menu__item {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: var(--menu-item-gap);
   width: 100%;
-  min-height: var(--table-toolbar-control-height);
-  padding: 0.375rem 0.6875rem;
+  min-height: var(--menu-item-min-height);
+  padding: var(--menu-item-padding);
   border: none;
   border-radius: 0;
   background: transparent;
   color: var(--text-primary);
-  font-size: 0.8125rem;
+  font-size: var(--menu-item-font-size);
   text-align: start;
   cursor: pointer;
-  transition: background var(--transition-base);
+  transition: background var(--transition-fast);
 }
 
 .table-toolbar-menu__item[hidden] {
   display: none;
 }
 
-.table-toolbar-menu__item:hover:not(:disabled) {
-  background: var(--bg-hover);
+.table-toolbar-menu__item:hover:not(:disabled),
+.table-toolbar-menu__item:focus-visible {
+  background: var(--menu-item-hover-bg);
 }
 
 .table-toolbar-menu__item:disabled {
@@ -1002,14 +998,19 @@
 }
 
 .table-toolbar-menu__item[data-variant="danger"] {
-  color: var(--danger-color, #f87171);
+  color: var(--error-color);
+}
+
+.table-toolbar-menu__item[data-variant="danger"]:hover:not(:disabled),
+.table-toolbar-menu__item[data-variant="danger"]:focus-visible {
+  background: var(--menu-item-danger-hover-bg);
 }
 
 .table-toolbar-menu__icon {
   display: flex;
   align-items: center;
-  font-size: 0.85em;
-  color: var(--text-tertiary);
+  font-size: var(--menu-item-icon-size);
+  color: var(--menu-item-icon-color);
 }
 
 .table-toolbar-menu__item[data-variant="danger"] .table-toolbar-menu__icon {

@@ -256,7 +256,7 @@ export function createInstructionsTab({ state, _eventCleanups }) {
           if (closeTimer !== null) clearTimeout(closeTimer);
           closeTimer = null;
           if (activeInstructionMenu?.trigger !== trigger) {
-            trigger.classList.remove("active", "menu-above");
+            trigger.classList.remove("active");
           }
           menu.remove();
         };

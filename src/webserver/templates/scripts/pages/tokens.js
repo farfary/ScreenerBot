@@ -1342,32 +1342,32 @@ function createLifecycle() {
       menu.setAttribute("role", "menu");
       menu.innerHTML = `
         <button class="dropdown-item" data-action="dexscreener" type="button" role="menuitem">
-          <i class="icon-chart-bar"></i>
+          <i class="icon-chart-bar" aria-hidden="true"></i>
           <span class="label">${Utils.escapeHtml(I18n.t("links-explorer-dexscreener"))}</span>
         </button>
         <button class="dropdown-item" data-action="gmgn" type="button" role="menuitem">
-          <i class="icon-trending-up"></i>
+          <i class="icon-trending-up" aria-hidden="true"></i>
           <span class="label">${Utils.escapeHtml(I18n.t("links-explorer-gmgn"))}</span>
         </button>
         <button class="dropdown-item" data-action="solscan" type="button" role="menuitem">
-          <i class="icon-search"></i>
+          <i class="icon-search" aria-hidden="true"></i>
           <span class="label">${Utils.escapeHtml(I18n.t("links-explorer-solscan"))}</span>
         </button>
         <button class="dropdown-item" data-action="birdeye" type="button" role="menuitem">
-          <span class="icon"><i class="icon-chart-bar"></i></span>
+          <i class="icon-chart-bar" aria-hidden="true"></i>
           <span class="label">${Utils.escapeHtml(I18n.t("links-explorer-birdeye"))}</span>
         </button>
         <button class="dropdown-item" data-action="rugcheck" type="button" role="menuitem">
-          <span class="icon"><i class="icon-shield"></i></span>
+          <i class="icon-shield" aria-hidden="true"></i>
           <span class="label">${Utils.escapeHtml(I18n.t("links-explorer-rugcheck"))}</span>
         </button>
         <button class="dropdown-item" data-action="pumpfun" type="button" role="menuitem">
-          <span class="icon"><i class="icon-rocket"></i></span>
+          <i class="icon-rocket" aria-hidden="true"></i>
           <span class="label">${Utils.escapeHtml(I18n.t("links-explorer-pumpfun"))}</span>
         </button>
         <div class="dropdown-divider"></div>
         <button class="dropdown-item" data-action="copy" type="button" role="menuitem">
-          <span class="icon"><i class="icon-copy"></i></span>
+          <i class="icon-copy" aria-hidden="true"></i>
           <span class="label">${Utils.escapeHtml(I18n.t("tokens-links-menu-copy-mint"))}</span>
         </button>
       `;
@@ -1399,7 +1399,6 @@ function createLifecycle() {
             closeTimer = null;
             if (activeLinksMenu?.trigger !== trigger) {
               trigger.classList.remove("active");
-              trigger.classList.remove("menu-above");
             }
             menu.remove();
           };

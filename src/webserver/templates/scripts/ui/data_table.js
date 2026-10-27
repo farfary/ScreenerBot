@@ -145,6 +145,7 @@
 
 import * as AppState from "../core/app_state.js";
 import { $, scrollStart } from "../core/dom.js";
+import { menuBounds } from "../core/menu_manager.js";
 import { escapeHtml } from "../core/utils.js";
 import { enhanceAllSelects } from "./custom_select.js";
 import { renderStateView } from "./state_view.js";
@@ -3099,11 +3100,11 @@ export class DataTable {
     document.body.appendChild(menu);
 
     // Position at the cursor, clamped so the menu stays fully on-screen.
-    const rect = menu.getBoundingClientRect();
-    const left = Math.min(x, window.innerWidth - rect.width - 8);
-    const top = Math.min(y, window.innerHeight - rect.height - 8);
-    menu.style.left = `${Math.max(8, left)}px`;
-    menu.style.top = `${Math.max(8, top)}px`;
+    const rect = { width: menu.offsetWidth, height: menu.offsetHeight };
+    const bounds = menuBounds();
+    menu.style.left = `${Math.max(bounds.left, Math.min(x, bounds.right - rect.width))}px`;
+    menu.style.top = `${Math.max(bounds.top, Math.min(y, bounds.bottom - rect.height))}px`;
+    requestAnimationFrame(() => menu.classList.add("open"));
 
     // Wire item clicks.
     menu.querySelectorAll(".dt-col-menu-item").forEach((btn) => {

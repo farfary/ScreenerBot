@@ -46,7 +46,7 @@
   overflow: hidden;
   background: var(--floating-bg);
   border: 1px solid var(--floating-border);
-  border-radius: var(--floating-panel-radius);
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
   transform: translateY(-6px);
   transition: transform var(--floating-duration) var(--floating-easing);
@@ -341,11 +341,11 @@
 }
 
 .search-row:hover {
-  background: var(--floating-item-hover-bg);
+  background: var(--bg-card-hover);
 }
 
 .search-row[aria-selected="true"] {
-  background: var(--floating-item-active-bg);
+  background: var(--primary-alpha-10);
 }
 
 .search-row-logo {

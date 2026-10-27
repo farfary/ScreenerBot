@@ -480,7 +480,7 @@ export function applyEventHandlersMixin(DataTable) {
           activeMenu?.remove();
         }
         activeMenu?.classList.remove("is-portaled", "menu-above");
-        activeTrigger?.classList.remove("active", "menu-above");
+        activeTrigger?.classList.remove("active");
         if (activeMenu) {
           activeMenu.style.display = "none";
           activeMenu.style.position = "";

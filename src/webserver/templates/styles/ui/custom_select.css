@@ -189,12 +189,12 @@ select.cs-enhanced-source {
   right: 0;
   z-index: var(--z-select);
   margin-top: 0;
-  max-height: var(--floating-panel-max-height);
+  max-height: var(--menu-max-height);
   overflow: hidden auto;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
+  background: var(--menu-bg);
+  border: 1px solid var(--menu-border);
   border-top: 0;
-  border-radius: 0 0 var(--radius-md) var(--radius-md);
+  border-radius: 0 0 var(--menu-radius) var(--menu-radius);
   box-shadow: var(--shadow-floating-sm);
   color: var(--text-primary);
   font-family: var(--font-sans);
@@ -202,19 +202,16 @@ select.cs-enhanced-source {
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
-  transform: translateY(-4px) scaleY(0.985);
+  transform: var(--menu-enter);
   transform-origin: top center;
-  transition:
-    opacity var(--floating-duration) var(--floating-easing),
-    transform var(--floating-duration) var(--floating-easing),
-    visibility var(--floating-duration);
+  transition: var(--menu-transition);
 }
 
 .cs-dropdown.cs-portal.is-open {
   opacity: 1;
   visibility: visible;
   pointer-events: auto;
-  transform: translateY(0) scaleY(1);
+  transform: none;
 }
 
 /* Search container. Options are positioned (`.cs-option` is relative), so the sticky
@@ -222,8 +219,8 @@ select.cs-enhanced-source {
    options paint over it. */
 .cs-search-container {
   padding: 8px;
-  border-bottom: 1px solid var(--border-color);
-  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--menu-border);
+  background: var(--menu-bg);
   position: sticky;
   top: 0;
   z-index: 1;
@@ -248,7 +245,7 @@ select.cs-enhanced-source {
 
 /* Options container */
 .cs-options-container {
-  padding: 4px 0;
+  padding-block: var(--menu-padding-block);
 }
 
 /* No results message */
@@ -262,32 +259,33 @@ select.cs-enhanced-source {
 /* A portaled menu cannot match ancestor state, so opening direction lives on
    the menu itself. */
 .cs-dropdown.cs-portal.cs-dropdown--above {
-  border-top: 1px solid var(--border-color);
+  border-top: 1px solid var(--menu-border);
   border-bottom: 0;
-  border-radius: var(--radius-md) var(--radius-md) 0 0;
-  transform: translateY(4px) scaleY(0.985);
+  border-radius: var(--menu-radius) var(--menu-radius) 0 0;
+  transform: var(--menu-enter-above);
   transform-origin: bottom center;
 }
 
 .cs-dropdown.cs-portal.cs-dropdown--above.is-open {
-  transform: translateY(0) scaleY(1);
+  transform: none;
 }
 
 /* A portal exists only while its trigger is opening or closing. Keep its outline
    active for that full lifecycle so the joined control never flashes gray. */
 .cs-dropdown.cs-portal {
   position: fixed;
-  z-index: var(--z-select-portal);
+  z-index: var(--z-menu-portal);
   margin-top: 0;
   border-color: var(--primary-color);
 }
 
-/* A menu wider than its trigger (an option label longer than the trigger can
-   show) floats as its own panel instead of pretending to continue the trigger. */
+/* A menu wider than its trigger (an option label longer than the trigger can show),
+   or one with room on neither side of the trigger, floats as an ordinary menu instead
+   of pretending to continue the trigger. */
 .cs-dropdown.cs-portal.cs-dropdown--detached {
-  border: 1px solid var(--floating-border);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-floating-md);
+  border: 1px solid var(--menu-border);
+  border-radius: var(--menu-radius);
+  box-shadow: var(--menu-shadow);
 }
 
 /* Options are edge-to-edge rows; inset pills would make the menu look unrelated. */
@@ -329,16 +327,14 @@ select.cs-enhanced-source {
 }
 
 .cs-option:hover {
-  background: var(--bg-card-hover);
-  color: var(--text-primary);
+  background: var(--menu-item-hover-bg);
 }
 
 /* Keyboard focused option: the same row highlight as pointer hover. Only the
    selected option carries the accent colour and checkmark, so the two states never
    look identical. */
 .cs-option.focused {
-  background: var(--bg-card-hover);
-  color: var(--text-primary);
+  background: var(--menu-item-hover-bg);
 }
 
 /* Selected option - accent text and checkmark; the row tint follows hover/focus. */
@@ -364,7 +360,7 @@ select.cs-enhanced-source {
 }
 
 .cs-option.selected.focused {
-  background: var(--bg-card-hover);
+  background: var(--menu-item-hover-bg);
 }
 
 /* Disabled option */

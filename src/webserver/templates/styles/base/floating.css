@@ -1,8 +1,8 @@
 /* Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
  * SPDX-License-Identifier: BUSL-1.1
  *
- * Floating UI system - centralized styles for dropdowns, popovers, menus
- * and floating panels. */
+ * Floating UI tokens - the layers, surfaces, shadows and motion that dropdowns, popovers and
+ * menus draw from, and the one look every menu wears. */
 
 /* =============================================================================
    CSS Custom Properties for Floating UI
@@ -62,8 +62,9 @@
      is currently on top. */
   --z-promo-capture: 200000;
 
-  /* Above dialogs/context menus, below toasts, app tooltips, setup and lockscreen. */
-  --z-select-portal: 10008;
+  /* Every menu portaled to the body (select lists, action and row menus): above
+     dialogs and context menus, below toasts, app tooltips, setup and lockscreen. */
+  --z-menu-portal: 10008;
 
   /* ==========================================================================
      Overlay Background
@@ -74,7 +75,6 @@
      Floating Panel Backgrounds
      ========================================================================== */
   --floating-bg: var(--bg-secondary);
-  --floating-bg-blur: rgb(255, 255, 255, 0.95);
   --floating-border: var(--border-color);
 
   /* ==========================================================================
@@ -85,469 +85,53 @@
                         0 0 0 1px rgb(0, 0, 0, 0.05);
   --shadow-floating-lg: 0 12px 48px -12px rgb(0, 0, 0, 0.4),
                         0 8px 24px -4px rgb(0, 0, 0, 0.2);
-  --shadow-floating-macos: 0 10px 40px -10px rgb(0, 0, 0, 0.35),
-                           0 0 0 1px rgb(255, 255, 255, 0.08);
 
   /* ==========================================================================
      Backdrop Blur
      ========================================================================== */
   --floating-blur-sm: blur(8px);
-  --floating-blur-md: blur(12px);
-  --floating-blur-lg: blur(20px);
-  --floating-blur-overlay: blur(4px);
 
   /* ==========================================================================
      Animation Timing
      ========================================================================== */
   --floating-duration: 0.2s;
-  --floating-duration-fast: 0.12s;
-  --floating-duration-slow: 0.25s;
   --floating-easing: cubic-bezier(0.4, 0, 0.2, 1);
   --floating-easing-bounce: cubic-bezier(0.16, 1, 0.3, 1);
   --floating-easing-out: ease-out;
 
   /* ==========================================================================
-     Item Styling
+     Menus: every select list, action menu and context menu is one flat surface
+     with edge-to-edge rows. A select's list continues its field
+     (`ui/custom_select.css`); every other menu floats apart from its trigger.
      ========================================================================== */
-  --floating-item-padding: 10px 14px;
-  --floating-item-padding-sm: 8px 12px;
-  --floating-item-padding-lg: 12px 16px;
-  --floating-item-gap: 10px;
-  --floating-item-radius: var(--radius-md);
-  --floating-item-hover-bg: var(--bg-card-hover);
-  --floating-item-active-bg: var(--primary-alpha-10);
-  --floating-item-selected-bg: var(--primary-alpha-5);
-
-  /* ==========================================================================
-     Panel Styling
-     ========================================================================== */
-  --floating-panel-padding: 4px 0;
-  --floating-panel-radius: var(--radius-lg);
-  --floating-panel-min-width: 200px;
-  --floating-panel-max-width: 300px;
-  --floating-panel-max-height: 320px;
+  --menu-bg: var(--bg-secondary);
+  --menu-border: var(--border-color);
+  --menu-radius: var(--radius-md);
+  --menu-shadow: var(--shadow-floating-md);
+  --menu-padding-block: 4px;
+  --menu-max-height: 400px;
+  --menu-enter: translateY(-4px) scaleY(0.985);
+  --menu-enter-above: translateY(4px) scaleY(0.985);
+  --menu-transition:
+    opacity var(--floating-duration) var(--floating-easing),
+    transform var(--floating-duration) var(--floating-easing),
+    visibility var(--floating-duration);
+  --menu-item-min-height: 32px;
+  --menu-item-padding: 6px 12px;
+  --menu-item-gap: 8px;
+  --menu-item-font-size: 0.8125rem;
+  --menu-item-icon-size: 0.875rem;
+  --menu-item-icon-color: var(--text-secondary);
+  --menu-item-hover-bg: var(--bg-card-hover);
+  --menu-item-danger-hover-bg: var(--danger-alpha-10);
 }
 
 /* Dark Theme Overrides */
 [data-theme="dark"] {
   --floating-overlay-bg: rgb(0, 0, 0, 0.7);
-  --floating-bg-blur: rgb(22, 27, 34, 0.92);
   --shadow-floating-sm: 0 4px 16px rgb(0, 0, 0, 0.3);
   --shadow-floating-md: 0 8px 32px rgb(0, 0, 0, 0.4),
                         0 0 0 1px rgb(255, 255, 255, 0.05);
   --shadow-floating-lg: 0 12px 48px -12px rgb(0, 0, 0, 0.7),
                         0 8px 24px -4px rgb(0, 0, 0, 0.5);
-  --shadow-floating-macos: 0 10px 40px -10px rgb(0, 0, 0, 0.5),
-                           0 0 0 1px rgb(255, 255, 255, 0.05);
-}
-
-/* =============================================================================
-   Base Floating Panel
-   ============================================================================= */
-
-.floating-panel {
-  position: absolute;
-  background: var(--floating-bg);
-  border: 1px solid var(--floating-border);
-  border-radius: var(--floating-panel-radius);
-  box-shadow: var(--shadow-floating-lg);
-  backdrop-filter: var(--floating-blur-md);
-  min-width: var(--floating-panel-min-width);
-  max-width: var(--floating-panel-max-width);
-  padding: var(--floating-panel-padding);
-  z-index: var(--z-dropdown);
-}
-
-[data-theme="dark"] .floating-panel {
-  background: var(--floating-bg-blur);
-}
-
-[data-theme="light"] .floating-panel {
-  background: rgb(255, 255, 255, 0.95);
-}
-
-/* =============================================================================
-   Animation States
-   ============================================================================= */
-
-/* Hidden state - dropdown entrance */
-.floating-hidden {
-  opacity: 0;
-  visibility: hidden;
-  transform: translateY(-8px) scale(0.98);
-  transition:
-    opacity var(--floating-duration) var(--floating-easing),
-    transform var(--floating-duration) var(--floating-easing),
-    visibility var(--floating-duration);
-}
-
-/* Visible state */
-.floating-visible {
-  opacity: 1;
-  visibility: visible;
-  transform: translateY(0) scale(1);
-}
-
-/* Context menu / fast animation */
-.floating-hidden-fast {
-  opacity: 0;
-  transform: scale(0.96);
-  transition:
-    opacity var(--floating-duration-fast) var(--floating-easing-out),
-    transform var(--floating-duration-fast) var(--floating-easing-out);
-}
-
-.floating-visible-fast {
-  opacity: 1;
-  transform: scale(1);
-}
-
-/* Popover entrance (with slight Y offset) */
-.floating-hidden-popover {
-  opacity: 0;
-  transform: scale(0.95) translateY(4px);
-  pointer-events: none;
-  transition:
-    opacity var(--floating-duration) var(--floating-easing-out),
-    transform var(--floating-duration) var(--floating-easing-bounce);
-}
-
-.floating-visible-popover {
-  opacity: 1;
-  transform: scale(1) translateY(0);
-  pointer-events: auto;
-}
-
-/* Dialog entrance (from center) */
-.floating-hidden-dialog {
-  opacity: 0;
-  transform: translateY(-10px) scale(0.98);
-  transition:
-    transform var(--floating-duration) var(--floating-easing),
-    opacity var(--floating-duration) var(--floating-easing);
-}
-
-.floating-visible-dialog {
-  opacity: 1;
-  transform: translateY(0) scale(1);
-}
-
-/* =============================================================================
-   Floating Item Base
-   ============================================================================= */
-
-.floating-item {
-  display: flex;
-  align-items: center;
-  gap: var(--floating-item-gap);
-  width: calc(100% - 8px);
-  padding: var(--floating-item-padding);
-  margin: 2px 4px;
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: var(--text-primary);
-  background: transparent;
-  border: none;
-  border-radius: var(--floating-item-radius);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  user-select: none;
-  text-align: start;
-  font-family: inherit;
-}
-
-.floating-item:hover:not(.disabled) {
-  background: var(--floating-item-hover-bg);
-  color: var(--primary-color);
-}
-
-.floating-item:focus:not(.disabled) {
-  background: var(--floating-item-active-bg);
-  color: var(--primary-color);
-  outline: none;
-}
-
-.floating-item:active:not(.disabled) {
-  background: var(--primary-alpha-20);
-}
-
-.floating-item.selected {
-  background: var(--floating-item-selected-bg);
-  color: var(--primary-color);
-  font-weight: 600;
-}
-
-.floating-item.focused {
-  background: var(--floating-item-active-bg);
-  color: var(--primary-color);
-}
-
-.floating-item.disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  pointer-events: none;
-}
-
-.floating-item.danger {
-  color: var(--error-color);
-}
-
-.floating-item.danger:hover:not(.disabled) {
-  background: rgb(239, 68, 68, 0.08);
-}
-
-.floating-item.success {
-  color: var(--success-color);
-}
-
-.floating-item.success:hover:not(.disabled) {
-  background: rgb(16, 185, 129, 0.08);
-}
-
-/* =============================================================================
-   Floating Item Parts
-   ============================================================================= */
-
-.floating-item-icon {
-  flex-shrink: 0;
-  width: 16px;
-  height: 16px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1rem;
-  color: var(--text-secondary);
-  transition: color var(--transition-fast);
-}
-
-.floating-item:hover .floating-item-icon,
-.floating-item:focus .floating-item-icon {
-  color: inherit;
-}
-
-.floating-item-label {
-  flex: 1;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.floating-item-shortcut {
-  flex-shrink: 0;
-  font-size: 0.6875rem;
-  color: var(--text-muted);
-  margin-inline-start: auto;
-  padding-inline-start: 16px;
-  font-family: inherit;
-}
-
-.floating-item:hover .floating-item-shortcut,
-.floating-item:focus .floating-item-shortcut {
-  color: rgb(255, 255, 255, 0.7);
-}
-
-.floating-item-badge {
-  flex-shrink: 0;
-  font-size: 0.7rem;
-  padding: 2px 6px;
-  border-radius: var(--radius-xl);
-  font-weight: 600;
-  background: var(--bg-card-hover);
-  color: var(--text-secondary);
-}
-
-.floating-item-badge[data-variant="success"] {
-  background: var(--success-color-light);
-  color: var(--success-color-dark);
-}
-
-.floating-item-badge[data-variant="warning"] {
-  background: var(--warning-color-light);
-  color: var(--warning-color-dark);
-}
-
-.floating-item-badge[data-variant="error"] {
-  background: var(--error-color-light);
-  color: var(--error-color-dark);
-}
-
-.floating-item-badge[data-variant="info"] {
-  background: var(--primary-color-light);
-  color: var(--primary-color-dark);
-}
-
-[data-theme="dark"] .floating-item-badge {
-  background: #424242;
-  color: #e0e0e0;
-}
-
-[data-theme="dark"] .floating-item-badge[data-variant="success"] {
-  background: #1b5e20;
-  color: #a5d6a7;
-}
-
-[data-theme="dark"] .floating-item-badge[data-variant="warning"] {
-  background: #e65100;
-  color: #ffcc80;
-}
-
-[data-theme="dark"] .floating-item-badge[data-variant="error"] {
-  background: #b71c1c;
-  color: #ef9a9a;
-}
-
-[data-theme="dark"] .floating-item-badge[data-variant="info"] {
-  background: #0d47a1;
-  color: #90caf9;
-}
-
-/* =============================================================================
-   Floating Divider
-   ============================================================================= */
-
-.floating-divider {
-  height: 1px;
-  background: var(--border-color);
-  margin: 4px 0;
-}
-
-/* =============================================================================
-   Floating Section Header
-   ============================================================================= */
-
-.floating-header {
-  padding-block: 6px 4px;
-  padding-inline: 10px 12px;
-  margin: 0 5px 2px;
-  font-size: 0.6875rem;
-  font-weight: 600;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  cursor: default;
-}
-
-/* =============================================================================
-   Dialog Overlay
-   ============================================================================= */
-
-.floating-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgb(0, 0, 0, 0.6);
-  backdrop-filter: var(--floating-blur-overlay);
-  z-index: var(--z-dialog-overlay);
-  opacity: 0;
-  visibility: hidden;
-  transition:
-    opacity var(--floating-duration) var(--floating-easing),
-    visibility var(--floating-duration);
-}
-
-.floating-overlay.visible {
-  opacity: 1;
-  visibility: visible;
-}
-
-/* Transparent overlay (for context menus) */
-.floating-overlay-transparent {
-  position: fixed;
-  inset: 0;
-  z-index: var(--z-context-menu-overlay);
-  pointer-events: auto;
-  background: transparent;
-}
-
-/* =============================================================================
-   Checkmark for Selected Items
-   ============================================================================= */
-
-.floating-item.selected::after {
-  content: "";
-  position: absolute;
-  inset-inline-end: 14px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 16px;
-  height: 16px;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2358a6ff' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E");
-  background-size: contain;
-  background-repeat: no-repeat;
-}
-
-/* =============================================================================
-   Submenu Arrow
-   ============================================================================= */
-
-.floating-submenu-arrow {
-  width: 12px;
-  height: 12px;
-  margin-inline-start: auto;
-  color: var(--text-muted);
-  transition: color 0.08s ease;
-}
-
-.floating-item:hover > .floating-submenu-arrow,
-.floating-item:focus > .floating-submenu-arrow {
-  color: rgb(255, 255, 255, 0.7);
-}
-
-/* =============================================================================
-   Transform Origins
-   ============================================================================= */
-
-.origin-top-left { transform-origin: top left; /* rtl-ok: physical corner chosen by JS placement */ }
-.origin-top-right { transform-origin: top right; /* rtl-ok: physical corner chosen by JS placement */ }
-.origin-top-center { transform-origin: top center; }
-.origin-bottom-left { transform-origin: bottom left; /* rtl-ok: physical corner chosen by JS placement */ }
-.origin-bottom-right { transform-origin: bottom right; /* rtl-ok: physical corner chosen by JS placement */ }
-.origin-bottom-center { transform-origin: bottom center; }
-
-/* =============================================================================
-   Accessibility & Reduced Motion
-   ============================================================================= */
-
-@media (prefers-reduced-motion: reduce) {
-  .floating-hidden,
-  .floating-hidden-fast,
-  .floating-hidden-popover,
-  .floating-hidden-dialog,
-  .floating-overlay,
-  .floating-item {
-    transition: none !important;
-  }
-}
-
-/* High Contrast */
-@media (prefers-contrast: more) {
-  .floating-panel {
-    border-width: 2px;
-  }
-
-  .floating-item:hover {
-    outline: 2px solid currentcolor;
-    outline-offset: -2px;
-  }
-}
-
-/* =============================================================================
-   Touch Device Optimizations
-   ============================================================================= */
-
-@media (pointer: coarse) {
-  .floating-item {
-    min-height: 44px;
-    padding: 12px 14px;
-  }
-}
-
-/* =============================================================================
-   Print Styles
-   ============================================================================= */
-
-@media print {
-  .floating-panel,
-  .floating-overlay {
-    display: none !important;
-  }
 }

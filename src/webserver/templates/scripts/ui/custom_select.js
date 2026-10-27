@@ -14,10 +14,9 @@
  * - Form submission support via hidden input
  */
 
-import { openMenu, closeMenu } from "../core/menu_manager.js";
+import { openMenu, closeMenu, menuBounds } from "../core/menu_manager.js";
 import { dirSign } from "../core/dom.js";
 
-const MAX_DROPDOWN_HEIGHT = 280;
 const VIEWPORT_MARGIN = 8;
 const CLOSE_ANIMATION_MS = 220;
 const DETACHED_MENU_GAP = 4;
@@ -924,7 +923,8 @@ export class CustomSelect {
     // The menu is the lower/upper half of the control and keeps the trigger's
     // exact width -- unless an option is wider than the trigger. An option label
     // is never clipped to keep the joined look: the menu then widens to its widest
-    // option and detaches into a floating panel below/above the trigger.
+    // option and detaches into a floating panel below/above the trigger. The same
+    // happens when neither side of the trigger can hold the whole list (below).
     const maxWidth = Math.max(0, viewportWidth - VIEWPORT_MARGIN * 2);
     style.setProperty("--cs-control-height", `${triggerRect.height}px`);
     if (this._menuContentWidth == null) {
@@ -935,23 +935,18 @@ export class CustomSelect {
     // control and widens it by that much; a wider one detaches. Either way the menu is
     // at least the trigger's width and never narrower than its widest option, up to
     // the viewport.
-    const detached = this._menuContentWidth > triggerRect.width + DETACH_TOLERANCE_PX;
-    const neededWidth = detached
+    const widthDetached = this._menuContentWidth > triggerRect.width + DETACH_TOLERANCE_PX;
+    const neededWidth = widthDetached
       ? Math.ceil(this._menuContentWidth)
       : Math.max(triggerRect.width, this._menuContentWidth);
     const dropdownWidth = Math.min(neededWidth, maxWidth);
     this._applyDropdownWidth(dropdownWidth);
-    this.el.classList.toggle("dropdown-detached", detached);
-    this.dropdownEl.classList.toggle("cs-dropdown--detached", detached);
-    const offset = detached ? DETACHED_MENU_GAP : -1;
+    const offset = widthDetached ? DETACHED_MENU_GAP : -1;
 
-    // Measure the resolved size after the width constraints are applied.
-    const dropdownRect = this.dropdownEl.getBoundingClientRect();
-    const resolvedDropdownWidth = dropdownRect.width;
-    const dropdownHeight = Math.min(
-      this.dropdownEl.scrollHeight || MAX_DROPDOWN_HEIGHT,
-      MAX_DROPDOWN_HEIGHT
-    );
+    // Measure the resolved size after the width constraints are applied. The list's
+    // full height counts both borders, whichever side it opens on.
+    const resolvedDropdownWidth = this.dropdownEl.getBoundingClientRect().width;
+    const listHeight = Math.min(this.dropdownEl.scrollHeight + 2, this._menuMaxHeight());
 
     // --- HORIZONTAL: align to the trigger, then clamp fully into the viewport. ---
     // The dropdown aligns to the trigger's inline-start edge (left in LTR, right in RTL)
@@ -974,27 +969,52 @@ export class CustomSelect {
     );
     style.left = `${left}px`;
 
-    // --- VERTICAL: open below by default, flip above when there is more room. ---
-    const spaceBelow = Math.max(
-      0,
-      viewportHeight - triggerRect.bottom - VIEWPORT_MARGIN - Math.max(0, offset)
-    );
-    const spaceAbove = Math.max(0, triggerRect.top - VIEWPORT_MARGIN - Math.max(0, offset));
-    const openAbove = spaceBelow < dropdownHeight && spaceAbove > spaceBelow;
-    const availableHeight = openAbove ? spaceAbove : spaceBelow;
-    style.maxHeight = `${Math.max(0, Math.min(MAX_DROPDOWN_HEIGHT, availableHeight))}px`;
+    // --- VERTICAL: every option in view. The list continues the trigger below it, or
+    // above it when only that side holds the whole list. When neither side does, it
+    // floats over the trigger, inside the menu bounds, so no option is ever out of
+    // reach; only a list taller than those bounds or the menu cap scrolls. ---
+    const bounds = menuBounds(VIEWPORT_MARGIN);
+    const gap = Math.max(0, offset);
+    const spaceBelow = Math.max(0, bounds.bottom - triggerRect.bottom - gap);
+    const spaceAbove = Math.max(0, triggerRect.top - bounds.top - gap);
+    const fitsBelow = listHeight <= spaceBelow;
+    const fitsAbove = listHeight <= spaceAbove;
+    const overTrigger = !fitsBelow && !fitsAbove;
+    const openAbove = !fitsBelow && (fitsAbove || spaceAbove > spaceBelow);
+    const detached = widthDetached || overTrigger;
+    this.el.classList.toggle("dropdown-detached", detached);
+    this.dropdownEl.classList.toggle("cs-dropdown--detached", detached);
+    this.el.classList.toggle("dropdown-above", openAbove);
+    this.dropdownEl.classList.toggle("cs-dropdown--above", openAbove);
 
+    if (overTrigger) {
+      const height = Math.min(listHeight, bounds.bottom - bounds.top);
+      const preferredTop = openAbove
+        ? triggerRect.top - DETACHED_MENU_GAP - height
+        : triggerRect.bottom + DETACHED_MENU_GAP;
+      const top = Math.max(bounds.top, Math.min(preferredTop, bounds.bottom - height));
+      style.maxHeight = `${height}px`;
+      style.top = `${top}px`;
+      style.bottom = "auto";
+      return;
+    }
+
+    style.maxHeight = `${listHeight}px`;
     if (openAbove) {
       style.top = "auto";
       style.bottom = `${viewportHeight - triggerRect.top + offset}px`;
-      this.el.classList.add("dropdown-above");
-      this.dropdownEl.classList.add("cs-dropdown--above");
     } else {
       style.top = `${triggerRect.bottom + offset}px`;
       style.bottom = "auto";
-      this.el.classList.remove("dropdown-above");
-      this.dropdownEl.classList.remove("cs-dropdown--above");
     }
+  }
+
+  /** The tallest a list may grow before it scrolls: the menu cap from `floating.css`. */
+  _menuMaxHeight() {
+    const cap = parseFloat(
+      window.getComputedStyle(this.dropdownEl).getPropertyValue("--menu-max-height")
+    );
+    return Number.isFinite(cap) && cap > 0 ? cap : Infinity;
   }
 
   _applyDropdownWidth(width) {

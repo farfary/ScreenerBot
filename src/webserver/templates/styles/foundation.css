@@ -266,7 +266,7 @@
   --z-onboarding: 50000;
   --z-splash: 99000;
   --z-lockscreen: 100000; /* Highest - security lockscreen above everything */
-  --z-select-portal: 10008;
+  --z-menu-portal: 10008;
 
   /* Typography System. --font-sans/--font-mono/--font-data are composed in the
      `:root, [lang]` rule below so each element with a language resolves its own script order.
@@ -299,6 +299,10 @@
   /* Gradient directions along the inline axis; swapped under RTL. */
   --to-inline-end: to right;
   --to-inline-start: to left;
+
+  /* The keyboard focus ring, drawn by the focus rules further down. */
+  --focus-ring-width: 2px;
+  --focus-ring-color: var(--primary-color);
 }
 
 [dir="rtl"] {
@@ -562,11 +566,7 @@ textarea {
    (`theme.js` sets `html[data-input]`). Pointer and touch input never paints one: a
    clicked control keeps no lingering highlight, as in a native desktop app. No component
    stylesheet draws its own ring; the guard `tools/tests/focus_modality.test.mjs` fails
-   on one. */
-:root {
-  --focus-ring-width: 2px;
-  --focus-ring-color: var(--primary-color);
-}
+   on one. The ring's width and colour are tokens of the first `:root` block. */
 
 /* Native outlines never show; the keyboard rule below is the only ring. */
 *:focus,

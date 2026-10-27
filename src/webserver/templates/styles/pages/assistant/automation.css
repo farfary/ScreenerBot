@@ -188,99 +188,89 @@
 .automation-menu-btn.active {
   background: var(--hover-bg);
   color: var(--primary-color);
-  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
-}
-
-.automation-menu-btn.active.menu-above {
-  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
 }
 
 /* Context Menu */
 .automation-context-menu {
   position: fixed;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-top-width: 0;
-  /* rtl-ok: menu corner follows the physical viewport position that core/menu_manager.js writes */
-  border-radius: var(--radius-lg) 0 var(--radius-lg) var(--radius-lg);
-  box-shadow: var(--shadow-floating-sm);
-  padding: 0;
-  z-index: var(--z-dropdown);
   min-width: 150px;
-  overflow: hidden;
+  padding-block: var(--menu-padding-block);
+  background: var(--menu-bg);
+  border: 1px solid var(--menu-border);
+  border-radius: var(--menu-radius);
+  box-shadow: var(--menu-shadow);
+  z-index: var(--z-menu-portal);
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
-  transform: translateY(-4px) scaleY(0.985);
+  transform: var(--menu-enter);
   /* rtl-ok: origin follows the physical corner that JS floating placement selects */
   transform-origin: top right;
-  transition:
-    opacity var(--floating-duration) var(--floating-easing),
-    transform var(--floating-duration) var(--floating-easing),
-    visibility var(--floating-duration);
+  transition: var(--menu-transition);
 }
 
 .automation-context-menu.open {
   opacity: 1;
   visibility: visible;
   pointer-events: auto;
-  transform: translateY(0) scaleY(1);
+  transform: none;
 }
 
 .automation-context-menu.menu-above {
-  border-top-width: 1px;
-  border-bottom-width: 0;
-  /* rtl-ok: menu corner follows the physical viewport position that core/menu_manager.js writes */
-  border-radius: var(--radius-lg) var(--radius-lg) 0 var(--radius-lg);
-  transform: translateY(4px) scaleY(0.985);
+  transform: var(--menu-enter-above);
   /* rtl-ok: origin follows the physical corner that JS floating placement selects */
   transform-origin: bottom right;
 }
 
 .automation-context-menu.menu-above.open {
-  transform: translateY(0) scaleY(1);
+  transform: none;
 }
 
 .automation-context-menu .context-menu-item {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--menu-item-gap);
   width: 100%;
-  min-height: 34px;
-  padding: 8px 12px;
+  min-height: var(--menu-item-min-height);
+  padding: var(--menu-item-padding);
   border: none;
+  border-radius: 0;
   background: transparent;
   color: var(--text-primary);
-  font-size: 13px;
-  border-radius: 0;
-  cursor: pointer;
+  font-family: inherit;
+  font-size: var(--menu-item-font-size);
   text-align: start;
-  font-family: var(--font-mono);
+  cursor: pointer;
+  transition: background var(--transition-fast);
 }
 
 .automation-context-menu .context-menu-item:hover,
 .automation-context-menu .context-menu-item:focus-visible {
-  background: var(--hover-bg);
+  background: var(--menu-item-hover-bg);
 }
 
 .automation-context-menu .context-menu-item.danger {
-  color: var(--danger);
+  color: var(--error-color);
 }
 
 .automation-context-menu .context-menu-item.danger:hover,
 .automation-context-menu .context-menu-item.danger:focus-visible {
-  background: var(--danger-alpha-10);
+  background: var(--menu-item-danger-hover-bg);
 }
 
 .automation-context-menu hr {
   border: none;
-  border-top: 1px solid var(--border-color);
+  border-top: 1px solid var(--menu-border);
   margin: 4px 0;
 }
 
 .automation-context-menu .context-menu-item i {
-  font-size: 14px;
-  opacity: 0.7;
+  font-size: var(--menu-item-icon-size);
+  color: var(--menu-item-icon-color);
+}
+
+.automation-context-menu .context-menu-item.danger i {
+  color: inherit;
 }
 
 /* Recent Runs Section */

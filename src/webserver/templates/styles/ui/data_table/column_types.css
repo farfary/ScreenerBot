@@ -352,44 +352,39 @@
 .dt-actions-dropdown-trigger.active {
   background: var(--bg-hover);
   border-color: var(--primary-color);
-  border-radius: var(--radius-md) var(--radius-md) 0 0;
 }
 
-.dt-actions-dropdown-trigger.active.menu-above {
-  border-radius: 0 0 var(--radius-md) var(--radius-md);
-}
-
-/* Dropdown menu */
+/* Dropdown menu: the one menu look from floating.css. Opening portals it to the body,
+   where core/menu_manager.js places it beside its trigger, above or below it. */
 .dt-actions-dropdown-menu {
   position: absolute;
   top: calc(100% + 4px);
   inset-inline-end: 0;
   min-width: 160px;
-  padding: 0;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  box-shadow: 0 8px 24px rgb(0, 0, 0, 0.15);
-  z-index: var(--z-header);
+  padding-block: var(--menu-padding-block);
+  background: var(--menu-bg);
+  border: 1px solid var(--menu-border);
+  border-radius: var(--menu-radius);
+  box-shadow: var(--menu-shadow);
+  z-index: var(--z-dropdown);
   display: none;
   opacity: 0;
   pointer-events: none;
-  transform: translateY(-4px) scaleY(0.985);
+  transform: var(--menu-enter);
   transform-origin: calc(50% + var(--dir-sign) * 50%) top;
-  transition:
-    opacity 0.12s ease,
-    transform 0.12s ease;
+  transition: var(--menu-transition);
 }
 
 .dt-actions-dropdown-menu.open {
   display: block;
   opacity: 1;
   pointer-events: auto;
-  transform: translateY(0) scaleY(1);
+  transform: none;
 }
 
 .dt-actions-dropdown-menu.menu-start {
   inset-inline: 0 auto;
+  transform-origin: calc(50% - var(--dir-sign) * 50%) top;
 }
 
 .dt-actions-dropdown-menu.is-portaled {
@@ -399,73 +394,43 @@
   right: auto;
   /* rtl-ok: portaled menu positioned by JS in viewport coordinates */
   left: auto;
-  z-index: var(--z-dropdown);
-  border-top-width: 0;
-  border-start-start-radius: var(--radius-md);
-  border-start-end-radius: 0;
-  border-end-end-radius: var(--radius-md);
-  border-end-start-radius: var(--radius-md);
-
-  /* Anchored to the trigger's inline-end edge: right in LTR, left in RTL. */
-  transform-origin: calc(50% + var(--dir-sign) * 50%) top;
-}
-
-.dt-actions-dropdown-menu.is-portaled.menu-start {
-  border-start-start-radius: 0;
-  border-start-end-radius: var(--radius-md);
-  border-end-end-radius: var(--radius-md);
-  border-end-start-radius: var(--radius-md);
-  transform-origin: calc(50% - var(--dir-sign) * 50%) top;
+  z-index: var(--z-menu-portal);
 }
 
 .dt-actions-dropdown-menu.is-portaled.menu-above {
-  border-top-width: 1px;
-  border-bottom-width: 0;
-  border-start-start-radius: var(--radius-md);
-  border-start-end-radius: var(--radius-md);
-  border-end-end-radius: 0;
-  border-end-start-radius: var(--radius-md);
-  transform: translateY(4px) scaleY(0.985);
+  transform: var(--menu-enter-above);
   transform-origin: calc(50% + var(--dir-sign) * 50%) bottom;
 }
 
 .dt-actions-dropdown-menu.is-portaled.menu-start.menu-above {
-  border-start-start-radius: var(--radius-md);
-  border-start-end-radius: var(--radius-md);
-  border-end-end-radius: var(--radius-md);
-  border-end-start-radius: 0;
   transform-origin: calc(50% - var(--dir-sign) * 50%) bottom;
 }
 
 .dt-actions-dropdown-menu.is-portaled.menu-above.open {
-  transform: translateY(0) scaleY(1);
+  transform: none;
 }
 
 /* Dropdown item */
 .dt-actions-dropdown-item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  min-height: 32px;
-  padding: 8px 10px;
+  gap: var(--menu-item-gap);
+  min-height: var(--menu-item-min-height);
+  padding: var(--menu-item-padding);
   border-radius: 0;
-  font-size: 0.8125rem;
+  font-size: var(--menu-item-font-size);
   font-family: var(--font-sans);
   font-weight: 500;
   color: var(--text-primary);
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: background var(--transition-fast);
   white-space: nowrap;
   user-select: none;
 }
 
-.dt-actions-dropdown-item:hover {
-  background: var(--bg-hover);
-  color: var(--primary-color);
-}
-
-.dt-actions-dropdown-item:active {
-  transform: scale(0.98);
+.dt-actions-dropdown-item:hover,
+.dt-actions-dropdown-item:focus-visible {
+  background: var(--menu-item-hover-bg);
 }
 
 .dt-actions-dropdown-item.disabled {
@@ -475,26 +440,31 @@
 }
 
 .dt-actions-dropdown-item.danger {
-  color: var(--error-color, #ef4444);
+  color: var(--error-color);
 }
 
-.dt-actions-dropdown-item.danger:hover {
-  background: rgb(239, 68, 68, 0.1);
-  color: var(--error-color, #ef4444);
+.dt-actions-dropdown-item.danger:hover,
+.dt-actions-dropdown-item.danger:focus-visible {
+  background: var(--menu-item-danger-hover-bg);
 }
 
 /* Dropdown item icon */
 .dt-actions-dropdown-item-icon {
-  font-size: 1rem;
+  font-size: var(--menu-item-icon-size);
   line-height: 1;
   flex-shrink: 0;
+  color: var(--menu-item-icon-color);
+}
+
+.dt-actions-dropdown-item.danger .dt-actions-dropdown-item-icon {
+  color: inherit;
 }
 
 /* Dropdown divider */
 .dt-actions-dropdown-divider {
   height: 1px;
   margin: 4px 0;
-  background: var(--border-color);
+  background: var(--menu-border);
 }
 
 /* Dark theme support */
@@ -504,12 +474,6 @@
 
 [data-theme="dark"] .dt-actions-dropdown-trigger {
   border-color: rgb(255, 255, 255, 0.1);
-}
-
-[data-theme="dark"] .dt-actions-dropdown-menu {
-  background: var(--bg-secondary);
-  border-color: rgb(255, 255, 255, 0.1);
-  box-shadow: 0 8px 24px rgb(0, 0, 0, 0.5);
 }
 
 /* Responsive adjustments */

@@ -580,46 +580,6 @@ body.dt-column-resizing * {
   background: var(--bg-card-hover);
 }
 
-/* Context Menu */
-.dt-context-menu {
-  position: fixed;
-  z-index: var(--z-dialog);
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
-  box-shadow: 0 4px 12px var(--shadow-lg);
-  padding: 4px 0;
-  min-width: 180px;
-  font-size: 0.9rem;
-  color: var(--text-primary);
-}
-
-.dt-context-menu-item {
-  padding: 8px 16px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-  transition: background 0.1s ease;
-}
-
-.dt-context-menu-item:hover {
-  background: var(--bg-card-hover);
-  color: var(--primary-color);
-}
-
-.dt-context-menu-item .icon {
-  width: 16px;
-  text-align: center;
-  font-size: 1rem;
-}
-
-.dt-context-menu-divider {
-  height: 1px;
-  background: var(--border-color);
-  margin: 4px 0;
-}
-
 /* ==================== State Cells (Loading & Empty) ==================== */
 
 /* Loading, error and empty states are sentences, so they leave the cell's data face.
@@ -892,52 +852,60 @@ body.dt-column-resizing * {
 }
 
 /* ==================== Header Right-Click Column Menu ====================
- * Self-contained context menu shown on right-click of a column header. Offers
- * pin/unpin and hide. Appended to document.body and positioned at the cursor by
- * the DataTable, so only layout/appearance live here.
+ * The one menu look from floating.css, shown on right-click of a column header
+ * with pin/unpin and hide. Appended to document.body and positioned at the cursor
+ * by the DataTable, which adds `.open` on the next frame for the entry slide.
  */
 .dt-col-menu {
-  --fade-rise: -4px;
-
   position: fixed;
-  z-index: var(--z-popover, 1000);
+  z-index: var(--z-menu-portal);
   min-width: 172px;
-  padding: 6px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
-  box-shadow: 0 12px 32px rgb(0, 0, 0, 0.28);
-  animation: fadeIn 0.12s ease;
+  padding-block: var(--menu-padding-block);
+  background: var(--menu-bg);
+  border: 1px solid var(--menu-border);
+  border-radius: var(--menu-radius);
+  box-shadow: var(--menu-shadow);
+  opacity: 0;
+  transform: var(--menu-enter);
+  transform-origin: top;
+  transition: var(--menu-transition);
+}
+
+.dt-col-menu.open {
+  opacity: 1;
+  transform: none;
 }
 
 .dt-col-menu-item {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: var(--menu-item-gap);
   width: 100%;
-  padding: 8px 10px;
-  font-size: 0.8125rem;
+  min-height: var(--menu-item-min-height);
+  padding: var(--menu-item-padding);
+  font-size: var(--menu-item-font-size);
   font-weight: 500;
   color: var(--text-primary);
   text-align: start;
   background: transparent;
   border: none;
-  border-radius: var(--radius-md);
+  border-radius: 0;
   cursor: pointer;
   transition: background var(--transition-fast);
 }
 
-.dt-col-menu-item:hover {
-  background: var(--bg-hover);
+.dt-col-menu-item:hover,
+.dt-col-menu-item:focus-visible {
+  background: var(--menu-item-hover-bg);
 }
 
 .dt-col-menu-icon {
-  font-size: 0.9rem;
-  color: var(--text-secondary);
+  font-size: var(--menu-item-icon-size);
+  color: var(--menu-item-icon-color);
 }
 
 @media (prefers-reduced-motion: reduce) {
   .dt-col-menu {
-    animation: none;
+    transition: none;
   }
 }

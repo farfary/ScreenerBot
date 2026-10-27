@@ -71,7 +71,7 @@
   max-width: 360px;
   background: var(--floating-bg);
   border: 1px solid var(--floating-border);
-  border-radius: var(--floating-panel-radius);
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-floating-lg);
   box-sizing: border-box;
   overflow: hidden;

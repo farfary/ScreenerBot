@@ -3,38 +3,29 @@
 
 /* =============================================================================
    Action menu primitives
-   Uses global floating UI system from floating.css. Select menus are owned by
-   custom_select.css; this file owns button-driven action menus only.
+   Button-driven action menus wear the one menu look from floating.css: a flat
+   surface set apart from its trigger, edge-to-edge rows with a neutral hover.
+   Select menus are owned by custom_select.css.
    ============================================================================= */
 
 .dropdown-menu {
   position: absolute;
-  top: calc(100% + 6px);
-  background: var(--floating-bg);
-  border: 1px solid var(--floating-border);
-  border-radius: var(--floating-panel-radius);
-  box-shadow: var(--shadow-floating-lg);
-  min-width: var(--floating-panel-min-width);
-  max-width: var(--floating-panel-max-width);
+  top: calc(100% + 4px);
+  min-width: 200px;
+  max-width: min(300px, calc(100vw - 16px));
+  max-height: min(var(--menu-max-height), calc(100vh - 16px));
+  overflow-y: auto;
+  padding-block: var(--menu-padding-block);
+  background: var(--menu-bg);
+  border: 1px solid var(--menu-border);
+  border-radius: var(--menu-radius);
+  box-shadow: var(--menu-shadow);
   z-index: var(--z-dropdown);
-  padding: var(--floating-panel-padding);
   opacity: 0;
   visibility: hidden;
-  transform: translateY(-8px) scale(0.98);
-  transition:
-    opacity var(--floating-duration) var(--floating-easing),
-    transform var(--floating-duration) var(--floating-easing),
-    visibility var(--floating-duration);
-  backdrop-filter: var(--floating-blur-md);
-}
-
-[data-theme="dark"] .dropdown-menu {
-  background: var(--floating-bg-blur);
-  box-shadow: var(--shadow-floating-md);
-}
-
-[data-theme="light"] .dropdown-menu {
-  background: rgb(255, 255, 255, 0.95);
+  transform: var(--menu-enter);
+  transform-origin: top;
+  transition: var(--menu-transition);
 }
 
 /* Visible from the first frame of opening, so an item can take focus at once; the
@@ -42,7 +33,7 @@
 .dropdown-menu.open {
   opacity: 1;
   visibility: visible;
-  transform: translateY(0) scale(1);
+  transform: none;
   transition:
     opacity var(--floating-duration) var(--floating-easing),
     transform var(--floating-duration) var(--floating-easing),
@@ -57,86 +48,47 @@
   inset-inline-end: 0;
 }
 
-/* Table link actions are portaled to the body. Keep the surface visibly attached
-   to its trigger while retaining the wider action-menu footprint. */
+/* Table link actions are portaled to the body and placed beside their trigger by
+   core/menu_manager.js, above or below it. */
 .links-dropdown-menu {
-  min-width: 200px;
+  z-index: var(--z-menu-portal);
   max-width: min(240px, calc(100vw - 16px));
-  padding: 0;
-  background: var(--bg-secondary);
-  border-color: var(--border-color);
-  border-top-width: 0;
-  border-start-start-radius: 0;
-  border-start-end-radius: var(--radius-lg);
-  border-end-end-radius: var(--radius-lg);
-  border-end-start-radius: var(--radius-lg);
-  box-shadow: var(--shadow-floating-sm);
-  backdrop-filter: none;
-  font-family: var(--font-mono);
-  font-size: 0.8125rem;
-  transform: translateY(-4px) scaleY(0.985);
   transform-origin: calc(50% - var(--dir-sign) * 50%) top;
 }
 
 .links-dropdown-menu.menu-above {
-  border-top-width: 1px;
-  border-bottom-width: 0;
-  border-start-start-radius: var(--radius-lg);
-  border-start-end-radius: var(--radius-lg);
-  border-end-end-radius: var(--radius-lg);
-  border-end-start-radius: 0;
-  transform: translateY(4px) scaleY(0.985);
+  transform: var(--menu-enter-above);
   transform-origin: calc(50% - var(--dir-sign) * 50%) bottom;
 }
 
-.links-dropdown-menu.open,
-.links-dropdown-menu.menu-above.open {
-  transform: translateY(0) scaleY(1);
+.links-dropdown-menu.open {
+  transform: none;
 }
 
-.links-dropdown-menu .dropdown-item {
-  width: 100%;
-  min-height: 34px;
-  margin: 0;
-  border-radius: 0;
-}
-
-/* Dropdown items inherit from floating-item pattern */
 .dropdown-item {
   display: flex;
   align-items: center;
-  gap: var(--floating-item-gap);
-  width: calc(100% - 8px);
-  padding: var(--floating-item-padding);
-  font-size: 0.875rem;
+  gap: var(--menu-item-gap);
+  width: 100%;
+  min-height: var(--menu-item-min-height);
+  padding: var(--menu-item-padding);
+  font-family: inherit;
+  font-size: var(--menu-item-font-size);
   font-weight: 500;
   color: var(--text-primary);
+  text-align: start;
+  text-decoration: none;
   background: transparent;
   border: none;
+  border-radius: 0;
   cursor: pointer;
-  transition: all var(--transition-fast);
   user-select: none;
-  position: relative;
-  margin: 2px 4px;
-  border-radius: var(--floating-item-radius);
-  text-align: start;
-  font-family: inherit;
-  text-decoration: none;
+  transition: background var(--transition-fast);
 }
 
-.dropdown-item:hover:not(.disabled) {
-  background: var(--floating-item-hover-bg);
-  color: var(--primary-color);
-}
-
-.dropdown-item:focus:not(.disabled) {
-  background: var(--floating-item-active-bg);
-  color: var(--primary-color);
-  outline: none;
-}
-
-.dropdown-item:active:not(.disabled) {
-  background: var(--primary-alpha-20);
+.dropdown-item:hover:not(.disabled),
+.dropdown-item:focus-visible:not(.disabled) {
+  background: var(--menu-item-hover-bg);
 }
 
 /* The entry for the page on screen, in a menu of pages. */
@@ -145,11 +97,16 @@
   font-weight: 600;
 }
 
-.dropdown-item .icon {
+.dropdown-item > i {
   flex-shrink: 0;
-  font-size: 1rem;
-  width: 18px;
+  width: 16px;
+  font-size: var(--menu-item-icon-size);
   text-align: center;
+  color: var(--menu-item-icon-color);
+}
+
+.dropdown-item.danger > i {
+  color: inherit;
 }
 
 .dropdown-item .label {
@@ -169,19 +126,15 @@
   color: var(--error-color);
 }
 
-.dropdown-item.danger:hover:not(.disabled) {
-  background: rgb(239, 68, 68, 0.08);
+.dropdown-item.danger:hover:not(.disabled),
+.dropdown-item.danger:focus-visible:not(.disabled) {
+  background: var(--menu-item-danger-hover-bg);
 }
 
 .dropdown-divider {
   height: 1px;
-  background: var(--border-color);
+  background: var(--menu-border);
   margin: 4px 0;
-}
-
-[data-theme="dark"] .links-dropdown-menu,
-[data-theme="light"] .links-dropdown-menu {
-  background: var(--bg-secondary);
 }
 
 /* Reduced motion */

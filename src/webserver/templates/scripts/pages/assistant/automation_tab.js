@@ -798,7 +798,7 @@ export function createAutomationTab({ state, _eventCleanups, addTrackedListener 
           if (closeTimer !== null) clearTimeout(closeTimer);
           closeTimer = null;
           if (activeAutomationMenu?.trigger !== btn) {
-            btn.classList.remove("active", "menu-above");
+            btn.classList.remove("active");
           }
           menu.remove();
         };

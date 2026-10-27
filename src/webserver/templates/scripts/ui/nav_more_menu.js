@@ -92,7 +92,6 @@ export function attachNavMoreMenu(navTabs) {
             item.removeAttribute("id");
             item.hidden = false;
             item.className = "dropdown-item";
-            item.querySelector("i")?.classList.add("icon");
             item.querySelector("span")?.classList.add("label");
             return item;
           })

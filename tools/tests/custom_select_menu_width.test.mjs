@@ -10,6 +10,11 @@
  * rounds: "More menu" in Settings > Navigation measured 70px, rendered 70.1px, and was
  * cut to "More me…" in a menu sized to the rounded figure.
  *
+ * Its height holds every option inside the window, above the status bar that stays on
+ * top of every menu: it continues the field below, or above when only that side has
+ * room, and floats over the field when neither side does. A list capped at 280px once
+ * opened above a mid-screen field with its first option cut off by the window's top.
+ *
  * Run with `npm run test:js`.
  */
 
@@ -50,8 +55,8 @@ function measureOpenMenu(page, triggerSelector) {
   }, triggerSelector);
 }
 
-async function openDashboard(locale, width = 1200) {
-  const context = await browser.newContext({ viewport: { width, height: 800 } });
+async function openDashboard(locale, width = 1200, height = 800) {
+  const context = await browser.newContext({ viewport: { width, height } });
   const api = createApiHandler([home, shell], "populated");
   const host = await serveDashboard(context, { locale, onApi: api.onApi });
   const page = await context.newPage();
@@ -126,3 +131,62 @@ test("a menu wider than the window is clamped to it", async () => {
     await close();
   }
 });
+
+/** Where an eight-option list must open for a field at `top` in a 500px-high window. */
+const PLACEMENTS = [
+  { top: 40, above: false, detached: false },
+  { top: 420, above: true, detached: false },
+  { top: 200, above: false, detached: true },
+];
+
+for (const placement of PLACEMENTS) {
+  test(`every option is in the window for a field at ${placement.top}px`, async () => {
+    const { page, close } = await openDashboard("en", 1200, 500);
+    try {
+      await page.evaluate((top) => {
+        const host = document.createElement("div");
+        host.style.cssText = `position: fixed; inset-block-start: ${top}px; inset-inline-start: 40px; width: 160px;`;
+        const options = Array.from(
+          { length: 8 },
+          (_, i) => `<option value="${i}">Option ${i}</option>`
+        );
+        host.innerHTML = `<select id="probeSelect" data-custom-select>${options.join("")}</select>`;
+        document.body.append(host);
+      }, placement.top);
+      // The header covers a field this high, so the field is opened by its own event.
+      const trigger = "#probeSelect-custom";
+      await page.waitForSelector(trigger);
+      await page.locator(`${trigger} .cs-trigger`).dispatchEvent("click");
+      await page.waitForSelector(".cs-dropdown.cs-portal.is-open");
+      await page.waitForTimeout(300);
+      const open = await page.evaluate(() => {
+        const menu = document.querySelector(".cs-dropdown.cs-portal.is-open");
+        const statusBar = document.getElementById("statusBar").getBoundingClientRect();
+        return {
+          floor: Math.min(window.innerHeight, statusBar.top),
+          scrolls: menu.scrollHeight > menu.clientHeight,
+          above: menu.classList.contains("cs-dropdown--above"),
+          detached: menu.classList.contains("cs-dropdown--detached"),
+          options: [...menu.querySelectorAll(".cs-option")].map((option) => {
+            const { top, bottom } = option.getBoundingClientRect();
+            return { text: option.textContent.trim(), top, bottom };
+          }),
+        };
+      });
+
+      assert.equal(open.options.length, 8);
+      assert.equal(open.scrolls, false, "the list scrolls although the window holds it");
+      for (const option of open.options) {
+        assert.ok(option.top >= VIEWPORT_MARGIN - 0.5, `${option.text} starts at ${option.top}px`);
+        assert.ok(
+          option.bottom <= open.floor - VIEWPORT_MARGIN + 0.5,
+          `${option.text} ends at ${option.bottom}px, the status bar at ${open.floor}px`
+        );
+      }
+      assert.equal(open.above, placement.above, "opens above the field");
+      assert.equal(open.detached, placement.detached, "floats apart from the field");
+    } finally {
+      await close();
+    }
+  });
+}

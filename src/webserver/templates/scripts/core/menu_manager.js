@@ -135,15 +135,35 @@ export function closeAllMenus(reason = "dismiss") {
 }
 
 /**
- * Keep a body-portaled menu attached to a moving trigger. The returned cleanup
- * stops the animation-frame loop. Placement only writes when geometry changes.
+ * The part of the window a menu may cover: the viewport inset by `margin`, ending above
+ * the status bar, which stays on top of every menu. Every menu placement clamps into it.
+ * @param {number} margin
+ * @returns {{ top: number, bottom: number, left: number, right: number }}
+ */
+export function menuBounds(margin = 8) {
+  const statusBar = document.getElementById("statusBar");
+  const floor = statusBar?.getClientRects().length
+    ? Math.min(window.innerHeight, statusBar.getBoundingClientRect().top)
+    : window.innerHeight;
+  return {
+    top: margin,
+    bottom: floor - margin,
+    left: margin,
+    right: window.innerWidth - margin,
+  };
+}
+
+/**
+ * Keep a body-portaled menu beside a moving trigger: below it, or above it when that
+ * side has more room, `gap` pixels apart and clamped into `menuBounds`. The returned
+ * cleanup stops the animation-frame loop. Placement only writes when geometry changes.
  */
 export function trackAnchoredMenu({
   trigger,
   menu,
   align = "start",
   viewportMargin = 8,
-  overlap = 1,
+  gap = 4,
   onDetach,
 }) {
   let animationFrame = null;
@@ -157,27 +177,23 @@ export function trackAnchoredMenu({
     }
 
     const triggerRect = trigger.getBoundingClientRect();
-    menu.style.maxHeight = `${Math.max(0, window.innerHeight - viewportMargin * 2)}px`;
+    const bounds = menuBounds(viewportMargin);
+    menu.style.maxHeight = `${Math.max(0, bounds.bottom - bounds.top)}px`;
     menu.style.overflowY = "auto";
-    const menuRect = menu.getBoundingClientRect();
-    const availableBelow = window.innerHeight - triggerRect.bottom - viewportMargin;
-    const availableAbove = triggerRect.top - viewportMargin;
+    // Layout size, not the bounding box: the entry slide scales the closed menu.
+    const menuRect = { width: menu.offsetWidth, height: menu.offsetHeight };
+    const availableBelow = bounds.bottom - triggerRect.bottom - gap;
+    const availableAbove = triggerRect.top - bounds.top - gap;
     const openAbove = availableBelow < menuRect.height && availableAbove > availableBelow;
     // `align` is an inline edge: "start" is the trigger's left edge in LTR and its right edge
     // in RTL. The clamp below flips the menu inward when that side has no room.
     const alignRight = (align === "end") === (dirSign() === 1);
     const preferredLeft = alignRight ? triggerRect.right - menuRect.width : triggerRect.left;
-    const left = Math.max(
-      viewportMargin,
-      Math.min(preferredLeft, window.innerWidth - menuRect.width - viewportMargin)
-    );
+    const left = Math.max(bounds.left, Math.min(preferredLeft, bounds.right - menuRect.width));
     const preferredTop = openAbove
-      ? triggerRect.top - menuRect.height + overlap
-      : triggerRect.bottom - overlap;
-    const top = Math.max(
-      viewportMargin,
-      Math.min(preferredTop, window.innerHeight - menuRect.height - viewportMargin)
-    );
+      ? triggerRect.top - gap - menuRect.height
+      : triggerRect.bottom + gap;
+    const top = Math.max(bounds.top, Math.min(preferredTop, bounds.bottom - menuRect.height));
     const signature = `${left}:${top}:${menuRect.width}:${menuRect.height}:${openAbove}`;
 
     if (signature !== lastSignature) {
@@ -186,7 +202,6 @@ export function trackAnchoredMenu({
       menu.style.left = `${left}px`;
       menu.style.top = `${top}px`;
       menu.classList.toggle("menu-above", openAbove);
-      trigger.classList.toggle("menu-above", openAbove);
     }
 
     animationFrame = requestAnimationFrame(update);
