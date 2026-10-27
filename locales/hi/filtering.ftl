@@ -69,6 +69,7 @@ filtering-reject-rug-freeze-authority = फ़्रीज़ अथॉरिट
 filtering-reject-rug-top-holder = टॉप होल्डर % बहुत ज़्यादा
 filtering-reject-rug-top3-holders = टॉप 3 होल्डर % बहुत ज़्यादा
 filtering-reject-rug-min-holders = होल्डर पर्याप्त नहीं
+filtering-reject-rug-holders-unknown = होल्डर की संख्या अज्ञात
 filtering-reject-rug-insider-count = इनसाइडर होल्डर बहुत ज़्यादा
 filtering-reject-rug-insider-pct = इनसाइडर % बहुत ज़्यादा
 filtering-reject-rug-creator-pct = क्रिएटर का बैलेंस बहुत ज़्यादा

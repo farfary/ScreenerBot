@@ -72,6 +72,7 @@ filtering-reject-rug-freeze-authority = Є повноваження заморо
 filtering-reject-rug-top-holder = Частка найбільшого холдера занадто висока
 filtering-reject-rug-top3-holders = Частка трьох найбільших холдерів занадто висока
 filtering-reject-rug-min-holders = Недостатньо холдерів
+filtering-reject-rug-holders-unknown = Кількість холдерів невідома
 filtering-reject-rug-insider-count = Занадто багато холдерів-інсайдерів
 filtering-reject-rug-insider-pct = Частка інсайдерів занадто висока
 filtering-reject-rug-creator-pct = Баланс творця занадто високий

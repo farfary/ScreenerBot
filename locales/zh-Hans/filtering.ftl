@@ -72,6 +72,7 @@ filtering-reject-rug-freeze-authority = 存在冻结权限
 filtering-reject-rug-top-holder = 最大持有者占比过高
 filtering-reject-rug-top3-holders = 前 3 大持有者占比过高
 filtering-reject-rug-min-holders = 持有者数量不足
+filtering-reject-rug-holders-unknown = 持有者数量未知
 filtering-reject-rug-insider-count = 内部人持有者过多
 filtering-reject-rug-insider-pct = 内部人占比过高
 filtering-reject-rug-creator-pct = 创建者持仓过高

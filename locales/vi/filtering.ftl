@@ -69,6 +69,7 @@ filtering-reject-rug-freeze-authority = Còn quyền freeze
 filtering-reject-rug-top-holder = % của holder lớn nhất quá cao
 filtering-reject-rug-top3-holders = % của 3 holder lớn nhất quá cao
 filtering-reject-rug-min-holders = Không đủ holder
+filtering-reject-rug-holders-unknown = Không rõ số holder
 filtering-reject-rug-insider-count = Quá nhiều holder là insider
 filtering-reject-rug-insider-pct = % insider quá cao
 filtering-reject-rug-creator-pct = Số dư của người tạo quá cao

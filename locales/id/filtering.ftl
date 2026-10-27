@@ -72,6 +72,7 @@ filtering-reject-rug-freeze-authority = Otoritas freeze masih ada
 filtering-reject-rug-top-holder = % holder teratas terlalu tinggi
 filtering-reject-rug-top3-holders = % 3 holder teratas terlalu tinggi
 filtering-reject-rug-min-holders = Holder tidak cukup
+filtering-reject-rug-holders-unknown = Jumlah holder tidak diketahui
 filtering-reject-rug-insider-count = Terlalu banyak holder insider
 filtering-reject-rug-insider-pct = % insider terlalu tinggi
 filtering-reject-rug-creator-pct = Saldo kreator terlalu tinggi

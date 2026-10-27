@@ -69,6 +69,7 @@ filtering-reject-rug-freeze-authority = Autorité de gel présente
 filtering-reject-rug-top-holder = Part du premier holder trop élevée
 filtering-reject-rug-top3-holders = Part des 3 premiers holders trop élevée
 filtering-reject-rug-min-holders = Pas assez de holders
+filtering-reject-rug-holders-unknown = Nombre de holders inconnu
 filtering-reject-rug-insider-count = Trop de holders initiés
 filtering-reject-rug-insider-pct = Part des initiés trop élevée
 filtering-reject-rug-creator-pct = Solde du créateur trop élevé

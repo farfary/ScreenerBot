@@ -116,6 +116,7 @@ impl FilterRejectionReason {
             | FilterRejectionReason::RugcheckTopHolderTooHigh
             | FilterRejectionReason::RugcheckTop3HoldersTooHigh
             | FilterRejectionReason::RugcheckNotEnoughHolders
+            | FilterRejectionReason::RugcheckHolderCountUnknown
             | FilterRejectionReason::RugcheckInsiderHolderCount
             | FilterRejectionReason::RugcheckInsiderTotalPct
             | FilterRejectionReason::RugcheckCreatorBalanceTooHigh

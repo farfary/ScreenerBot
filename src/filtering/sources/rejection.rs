@@ -141,6 +141,7 @@ rejection_table! {
         RugcheckTopHolderTooHigh => ("rug_top_holder", ids::FILTERING_REJECT_RUG_TOP_HOLDER),
         RugcheckTop3HoldersTooHigh => ("rug_top3_holders", ids::FILTERING_REJECT_RUG_TOP3_HOLDERS),
         RugcheckNotEnoughHolders => ("rug_min_holders", ids::FILTERING_REJECT_RUG_MIN_HOLDERS),
+        RugcheckHolderCountUnknown => ("rug_holders_unknown", ids::FILTERING_REJECT_RUG_HOLDERS_UNKNOWN),
         RugcheckInsiderHolderCount => ("rug_insider_count", ids::FILTERING_REJECT_RUG_INSIDER_COUNT),
         RugcheckInsiderTotalPct => ("rug_insider_pct", ids::FILTERING_REJECT_RUG_INSIDER_PCT),
         RugcheckCreatorBalanceTooHigh => ("rug_creator_pct", ids::FILTERING_REJECT_RUG_CREATOR_PCT),

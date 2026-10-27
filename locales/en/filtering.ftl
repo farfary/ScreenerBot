@@ -72,6 +72,7 @@ filtering-reject-rug-freeze-authority = Freeze authority present
 filtering-reject-rug-top-holder = Top holder % too high
 filtering-reject-rug-top3-holders = Top 3 holders % too high
 filtering-reject-rug-min-holders = Not enough holders
+filtering-reject-rug-holders-unknown = Holder count unknown
 filtering-reject-rug-insider-count = Too many insider holders
 filtering-reject-rug-insider-pct = Insider % too high
 filtering-reject-rug-creator-pct = Creator balance too high

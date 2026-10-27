@@ -72,6 +72,7 @@ filtering-reject-rug-freeze-authority = 동결 권한 존재
 filtering-reject-rug-top-holder = 최대 홀더 비율이 너무 높음
 filtering-reject-rug-top3-holders = 상위 3 홀더 비율이 너무 높음
 filtering-reject-rug-min-holders = 홀더 수 부족
+filtering-reject-rug-holders-unknown = 홀더 수 알 수 없음
 filtering-reject-rug-insider-count = 인사이더 홀더가 너무 많음
 filtering-reject-rug-insider-pct = 인사이더 비율이 너무 높음
 filtering-reject-rug-creator-pct = 생성자 보유량이 너무 높음

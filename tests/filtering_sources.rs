@@ -1267,11 +1267,36 @@ fn rugcheck_holder_distribution_rules() {
     );
 
     let mut token = dex_token();
-    token.total_holders = None;
+    token.total_holders = Some(50);
     assert!(
         rugcheck::evaluate(&token, &config).is_ok(),
-        "an unknown holder count is not treated as too few"
+        "a count at the minimum meets it"
     );
+
+    // No total and the provider's uncounted zero are both unknown, never "too few".
+    for unknown in [None, Some(0)] {
+        let mut token = dex_token();
+        token.total_holders = unknown;
+        assert_eq!(
+            rejection(rugcheck::evaluate(&token, &config)),
+            FilterRejectionReason::RugcheckHolderCountUnknown,
+            "total_holders {unknown:?} is an unknown count"
+        );
+    }
+
+    // With the rule off, neither an unknown nor a short count is judged.
+    let disabled = RugCheckFilters {
+        holder_distribution_enabled: false,
+        ..config.clone()
+    };
+    for total in [None, Some(0), Some(49), Some(50)] {
+        let mut token = dex_token();
+        token.total_holders = total;
+        assert!(
+            rugcheck::evaluate(&token, &disabled).is_ok(),
+            "total_holders {total:?} with the rule off"
+        );
+    }
 
     let mut token = dex_token();
     token.top_holders = vec![

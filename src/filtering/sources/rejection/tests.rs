@@ -22,7 +22,7 @@ fn llm() -> FilterRejectionReason {
 fn every_variant_has_a_catalog_message() {
     let mut all: Vec<FilterRejectionReason> = FilterRejectionReason::UNIT_VARIANTS.to_vec();
     all.push(llm());
-    assert_eq!(all.len(), 82);
+    assert_eq!(all.len(), 83);
     for reason in &all {
         let id = reason.ui_text().id;
         assert!(

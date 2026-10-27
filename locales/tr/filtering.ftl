@@ -69,6 +69,7 @@ filtering-reject-rug-freeze-authority = Dondurma yetkisi mevcut
 filtering-reject-rug-top-holder = En büyük holder % çok yüksek
 filtering-reject-rug-top3-holders = En büyük 3 holder % çok yüksek
 filtering-reject-rug-min-holders = Yeterli holder yok
+filtering-reject-rug-holders-unknown = Holder sayısı bilinmiyor
 filtering-reject-rug-insider-count = Çok fazla içeriden holder
 filtering-reject-rug-insider-pct = İçeridekiler % çok yüksek
 filtering-reject-rug-creator-pct = Oluşturan bakiyesi çok yüksek

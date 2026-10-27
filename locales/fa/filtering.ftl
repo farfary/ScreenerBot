@@ -72,6 +72,7 @@ filtering-reject-rug-freeze-authority = اختیار فریز وجود دارد
 filtering-reject-rug-top-holder = درصد بزرگ‌ترین هولدر بیش از حد زیاد
 filtering-reject-rug-top3-holders = درصد 3 هولدر برتر بیش از حد زیاد
 filtering-reject-rug-min-holders = تعداد هولدرها کافی نیست
+filtering-reject-rug-holders-unknown = تعداد هولدرها نامشخص است
 filtering-reject-rug-insider-count = تعداد هولدرهای اینسایدر بیش از حد زیاد
 filtering-reject-rug-insider-pct = درصد اینسایدرها بیش از حد زیاد
 filtering-reject-rug-creator-pct = موجودی سازنده بیش از حد زیاد

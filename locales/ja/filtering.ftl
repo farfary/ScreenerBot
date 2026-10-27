@@ -72,6 +72,7 @@ filtering-reject-rug-freeze-authority = フリーズ権限が存在します
 filtering-reject-rug-top-holder = 最大ホルダーの割合が高すぎます
 filtering-reject-rug-top3-holders = 上位3ホルダーの割合が高すぎます
 filtering-reject-rug-min-holders = ホルダーが足りません
+filtering-reject-rug-holders-unknown = ホルダー数が不明です
 filtering-reject-rug-insider-count = インサイダーホルダーが多すぎます
 filtering-reject-rug-insider-pct = インサイダーの割合が高すぎます
 filtering-reject-rug-creator-pct = 作成者の残高が多すぎます

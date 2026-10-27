@@ -207,9 +207,15 @@ fn check_holder_distribution(
         return None;
     }
 
-    if let Some(total) = token.total_holders {
-        if total < config.min_unique_holders as i64 {
-            return Some(FilterRejectionReason::RugcheckNotEnoughHolders);
+    // A minimum of zero asks for no holders. Above it, an uncounted report (no total, or the
+    // provider's zero placeholder) cannot show the minimum is met, so it fails on its own reason.
+    if config.min_unique_holders > 0 {
+        match token.holder_count() {
+            None => return Some(FilterRejectionReason::RugcheckHolderCountUnknown),
+            Some(total) if total < i64::from(config.min_unique_holders) => {
+                return Some(FilterRejectionReason::RugcheckNotEnoughHolders);
+            }
+            Some(_) => {}
         }
     }
 

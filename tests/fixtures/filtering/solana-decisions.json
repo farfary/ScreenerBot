@@ -556,7 +556,7 @@
       "source": "rugcheck"
     },
     "So11111111111111111111111111111111111111112": {
-      "reason": "rug_min_holders",
+      "reason": "rug_holders_unknown",
       "source": "rugcheck"
     }
   },
@@ -1003,7 +1003,7 @@
       "source": "rugcheck"
     },
     "So11111111111111111111111111111111111111112": {
-      "reason": "rug_min_holders",
+      "reason": "rug_holders_unknown",
       "source": "rugcheck"
     }
   },
@@ -1450,7 +1450,7 @@
       "source": "rugcheck"
     },
     "So11111111111111111111111111111111111111112": {
-      "reason": "rug_min_holders",
+      "reason": "rug_holders_unknown",
       "source": "rugcheck"
     }
   }

@@ -72,6 +72,7 @@ filtering-reject-rug-freeze-authority = Freeze-Berechtigung vorhanden
 filtering-reject-rug-top-holder = Anteil des größten Holders zu hoch
 filtering-reject-rug-top3-holders = Anteil der Top-3-Holder zu hoch
 filtering-reject-rug-min-holders = Zu wenige Holder
+filtering-reject-rug-holders-unknown = Anzahl der Holder unbekannt
 filtering-reject-rug-insider-count = Zu viele Insider-Holder
 filtering-reject-rug-insider-pct = Insider-Anteil zu hoch
 filtering-reject-rug-creator-pct = Creator-Guthaben zu hoch

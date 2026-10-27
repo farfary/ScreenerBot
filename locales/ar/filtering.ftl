@@ -72,6 +72,7 @@ filtering-reject-rug-freeze-authority = صلاحية التجميد موجودة
 filtering-reject-rug-top-holder = نسبة أكبر حامل مرتفعة جدًا
 filtering-reject-rug-top3-holders = نسبة أكبر 3 حاملين مرتفعة جدًا
 filtering-reject-rug-min-holders = عدد الحاملين غير كافٍ
+filtering-reject-rug-holders-unknown = عدد الحاملين غير معروف
 filtering-reject-rug-insider-count = عدد الحاملين المطّلعين كبير جدًا
 filtering-reject-rug-insider-pct = نسبة المطّلعين مرتفعة جدًا
 filtering-reject-rug-creator-pct = رصيد المنشئ مرتفع جدًا

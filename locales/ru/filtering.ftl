@@ -69,6 +69,7 @@ filtering-reject-rug-freeze-authority = Есть полномочия freeze
 filtering-reject-rug-top-holder = Слишком большая доля топ-холдера, %
 filtering-reject-rug-top3-holders = Слишком большая доля топ-3 холдеров, %
 filtering-reject-rug-min-holders = Недостаточно холдеров
+filtering-reject-rug-holders-unknown = Число холдеров неизвестно
 filtering-reject-rug-insider-count = Слишком много холдеров-инсайдеров
 filtering-reject-rug-insider-pct = Слишком большая доля инсайдеров, %
 filtering-reject-rug-creator-pct = Слишком большой баланс создателя

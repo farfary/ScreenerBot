@@ -72,6 +72,7 @@ filtering-reject-rug-freeze-authority = Autoridad de congelación presente
 filtering-reject-rug-top-holder = % del mayor holder demasiado alto
 filtering-reject-rug-top3-holders = % de los 3 mayores holders demasiado alto
 filtering-reject-rug-min-holders = Holders insuficientes
+filtering-reject-rug-holders-unknown = Número de holders desconocido
 filtering-reject-rug-insider-count = Demasiados holders insiders
 filtering-reject-rug-insider-pct = % de insiders demasiado alto
 filtering-reject-rug-creator-pct = Saldo del creador demasiado alto
