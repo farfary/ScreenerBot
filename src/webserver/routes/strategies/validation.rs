@@ -70,6 +70,10 @@ pub async fn validate_strategy_inline_handler(Json(request): Json<StrategyReques
         }
     };
 
+    if let Err(error) = Strategy::check_priority(request.priority) {
+        return invalid(vec![error.ui_text()]);
+    }
+
     // Parse rules
     let rules: RuleTree = match serde_json::from_value(request.rules) {
         Ok(rules) => rules,

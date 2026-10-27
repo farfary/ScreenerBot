@@ -119,23 +119,7 @@ pub async fn list_strategies(Query(query): Query<StrategyListQuery>) -> Response
         }
     };
 
-    let items: Vec<StrategyItem> = strategies
-        .into_iter()
-        .map(|s| StrategyItem {
-            id: s.id,
-            name: s.name,
-            description: s.description,
-            strategy_type: s.strategy_type.to_string(),
-            enabled: s.enabled,
-            priority: s.priority,
-            created_at: s.created_at.to_rfc3339(),
-            updated_at: s.updated_at.to_rfc3339(),
-            author: s.author,
-            version: s.version,
-            entry_strategy_ids: s.entry_strategy_ids,
-            mode: s.mode,
-        })
-        .collect();
+    let items: Vec<StrategyItem> = strategies.into_iter().map(StrategyItem::from).collect();
 
     let total = items.len();
 

@@ -1,7 +1,7 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! The strategy routes: a new strategy starts on paper and arms live only with the confirmation phrase while the Auto Trader can trade live, an update never changes the mode, a priority outside 1-100 is refused on create, update and import, readiness reads the paper rounds, switching a strategy on applies the validation a save applies, switching one off is always allowed, neither touches the rest of the stored strategy, an exit strategy keeps the entry strategies it manages, and a test reports every rule's verdict, a rule with no data as unknown with the reason, without waiting for candles the OHLCV service cannot read through.
+//! The strategy routes: the overview reads each strategy from the book of its mode and answers stopped and in Explore Mode, a new strategy starts on paper and arms live only with the confirmation phrase while the Auto Trader can trade live, an update never changes the mode, a priority outside 1-100 is refused on create, update, import and inline validation, the roster order is the entry evaluation order, readiness reads the paper rounds, switching a strategy on applies the validation a save applies, switching one off is always allowed, neither touches the rest of the stored strategy, an exit strategy keeps the entry strategies it manages, and a test reports every rule's verdict, a rule with no data as unknown with the reason, without waiting for candles the OHLCV service cannot read through.
 
 use crate::common;
 
@@ -486,6 +486,35 @@ async fn an_imported_priority_outside_one_to_one_hundred_is_refused() {
     }
 }
 
+/// The inline validation of an unsaved strategy applies the range a save applies, so the
+/// editor never reports a strategy valid that the save then refuses.
+#[tokio::test]
+async fn an_inline_validation_refuses_a_priority_outside_one_to_one_hundred() {
+    let _dir = strategy_system().await;
+    for priority in [0, 101] {
+        let request = with_priority(
+            strategy_request("Ranked Entry", "ENTRY", liquidity_at_least(), &[]),
+            priority,
+        );
+        let (status, body) = send("POST", "/api/strategies/validate", request).await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        assert_eq!(body["valid"], false, "priority {priority}: {body}");
+        assert_eq!(
+            body["errors"][0]["id"], "errors-strategies-priority-out-of-range",
+            "priority {priority}: {body}"
+        );
+    }
+    for priority in [1, 100] {
+        let request = with_priority(
+            strategy_request("Ranked Entry", "ENTRY", liquidity_at_least(), &[]),
+            priority,
+        );
+        let (status, body) = send("POST", "/api/strategies/validate", request).await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        assert_eq!(body["valid"], true, "priority {priority}: {body}");
+    }
+}
+
 #[tokio::test]
 async fn a_strategy_without_paper_rounds_reads_as_not_ready() {
     let _dir = strategy_system().await;
@@ -538,6 +567,276 @@ async fn a_strategy_without_paper_rounds_reads_as_not_ready() {
 
     let (status, _) = send("GET", "/api/strategies/missing/readiness", Value::Null).await;
     assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+/// The overview row of strategy `id`.
+fn overview_row<'a>(overview: &'a Value, id: &str) -> &'a Value {
+    overview["strategies"]
+        .as_array()
+        .expect("strategies")
+        .iter()
+        .find(|row| row["item"]["id"] == id)
+        .unwrap_or_else(|| panic!("no overview row for {id}: {overview}"))
+}
+
+/// A live round of `mint` that entry strategy `strategy_id` opened, in memory.
+async fn live_round(mint: &str, strategy_id: &str, pnl: Option<f64>) {
+    let mut position = common::test_position(0.001, 0.1);
+    position.id = None;
+    position.mint = mint.to_owned();
+    position.entry_transaction_signature = Some(format!("entry-{mint}"));
+    position.origin = screenerbot::positions::PositionOrigin::Auto {
+        strategy_id: Some(strategy_id.to_owned()),
+    };
+    match pnl {
+        Some(pnl) => {
+            position.exit_time = Some(chrono::Utc::now());
+            position.exit_transaction_signature = Some(format!("exit-{mint}"));
+            position.transaction_exit_verified = true;
+            position.pnl = Some(pnl);
+            position.pnl_percent = Some(pnl / 0.1 * 100.0);
+        }
+        None => position.unrealized_pnl = Some(0.004),
+    }
+    screenerbot::positions::state::add_position(position).await;
+}
+
+/// A closed live round of `mint` that entry strategy `strategy_id` opened and the live
+/// performance does not count: archived, or with its exit not yet verified on chain.
+async fn uncounted_live_round(mint: &str, strategy_id: &str, archived: bool) {
+    let mut position = common::test_position(0.001, 0.1);
+    position.id = None;
+    position.mint = mint.to_owned();
+    position.entry_transaction_signature = Some(format!("entry-{mint}"));
+    position.origin = screenerbot::positions::PositionOrigin::Auto {
+        strategy_id: Some(strategy_id.to_owned()),
+    };
+    position.exit_time = Some(chrono::Utc::now());
+    position.exit_transaction_signature = Some(format!("exit-{mint}"));
+    position.transaction_exit_verified = archived;
+    position.archived = archived;
+    position.pnl = Some(0.5);
+    position.pnl_percent = Some(500.0);
+    screenerbot::positions::state::add_position(position).await;
+}
+
+#[tokio::test]
+async fn the_overview_without_strategies_states_the_trader_once() {
+    let _dir = strategy_system().await;
+    let (status, body) = send("GET", "/api/strategies/overview", Value::Null).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["strategies"], json!([]), "{body}");
+    assert_eq!(
+        body["counts"],
+        json!({ "entry": { "enabled": 0, "total": 0 }, "exit": { "enabled": 0, "total": 0 } }),
+        "{body}"
+    );
+    let kinds: Vec<&str> = body["rule_exits"]
+        .as_array()
+        .expect("rule exits")
+        .iter()
+        .map(|rule| rule["kind"].as_str().expect("kind"))
+        .collect();
+    assert_eq!(
+        kinds,
+        ["stop_loss", "trailing_stop", "take_profit", "time_exit"],
+        "{body}"
+    );
+    assert!(body["run_state"].is_string(), "{body}");
+}
+
+/// Each row reads the book of its mode: a live entry its live rounds, a paper entry its
+/// paper run, with the open positions of the other book counted apart and never summed in.
+#[tokio::test]
+async fn the_overview_reads_each_strategy_from_the_book_of_its_mode() {
+    let _dir = strategy_system().await;
+    stored(
+        "live-entry",
+        StrategyType::Entry,
+        liquidity_at_least(),
+        true,
+    );
+    stored(
+        "paper-entry",
+        StrategyType::Entry,
+        liquidity_at_least(),
+        true,
+    );
+    screenerbot::strategies::db::set_strategy_mode("paper-entry", TradingMode::Paper)
+        .expect("return to paper");
+    stored("live-exit", StrategyType::Exit, position_profit(), true);
+    stored(
+        "idle-entry",
+        StrategyType::Entry,
+        liquidity_at_least(),
+        false,
+    );
+
+    live_round("LiveOpenMint", "live-entry", None).await;
+    live_round("LiveWonMint", "live-entry", Some(0.02)).await;
+    live_round("LiveLostMint", "live-entry", Some(-0.01)).await;
+    live_round("PaperEntryLiveMint", "paper-entry", None).await;
+    uncounted_live_round("LiveArchivedMint", "live-entry", true).await;
+    uncounted_live_round("LiveUnverifiedMint", "live-entry", false).await;
+
+    let (status, body) = send("GET", "/api/strategies/overview", Value::Null).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(
+        body["counts"]["entry"],
+        json!({ "enabled": 2, "total": 3 }),
+        "{body}"
+    );
+    assert_eq!(
+        body["counts"]["exit"],
+        json!({ "enabled": 1, "total": 1 }),
+        "{body}"
+    );
+
+    let live = overview_row(&body, "live-entry");
+    assert_eq!(live["book"], "live", "{live}");
+    assert_eq!(live["order"], 1, "{live}");
+    assert_eq!(live["open"], 1, "{live}");
+    assert_eq!(live["open_other_book"], 0, "{live}");
+    assert_eq!(live["unpriced"], 0, "{live}");
+    assert_eq!(
+        live["rounds"]["closed"], 2,
+        "archived rounds and rounds with an unverified exit are not counted: {live}"
+    );
+    assert_eq!(live["rounds"]["winners"], 1, "{live}");
+    assert_eq!(live["rounds"]["win_rate_pct"], 50.0, "{live}");
+    assert!(live["readiness"].is_null(), "{live}");
+
+    let paper = overview_row(&body, "paper-entry");
+    assert_eq!(paper["book"], "paper", "{paper}");
+    assert_eq!(paper["order"], 2, "{paper}");
+    assert_eq!(paper["open"], 0, "{paper}");
+    assert_eq!(
+        paper["open_other_book"], 1,
+        "the live position it opened before returning to paper: {paper}"
+    );
+    assert!(
+        paper["unrealized_native"].is_null(),
+        "the live book's P&L is not the paper figure: {paper}"
+    );
+    assert_eq!(paper["rounds"]["closed"], 0, "{paper}");
+    assert!(paper["rounds"]["win_rate_pct"].is_null(), "{paper}");
+    assert_eq!(paper["readiness"]["closed"], 0, "{paper}");
+    assert_eq!(paper["readiness"]["ready"], false, "{paper}");
+    assert_eq!(paper["readiness"]["failing"], "history", "{paper}");
+
+    let exit = overview_row(&body, "live-exit");
+    assert!(exit["order"].is_null(), "{exit}");
+    assert!(exit["open"].is_null(), "{exit}");
+    assert_eq!(
+        exit["watching"], 2,
+        "a live exit judges every open position it manages: {exit}"
+    );
+    assert!(
+        exit["rounds"].is_null(),
+        "live closes are not attributed to exit strategies: {exit}"
+    );
+
+    let idle = overview_row(&body, "idle-entry");
+    assert_eq!(idle["status"], "off", "{idle}");
+    assert!(idle["order"].is_null(), "{idle}");
+}
+
+/// The roster ranks enabled entry strategies in the order the entry monitor evaluates
+/// them, whatever their mode, with ties on priority.
+#[tokio::test]
+async fn the_overview_order_is_the_entry_evaluation_order() {
+    let _dir = strategy_system().await;
+    for (id, priority, enabled, mode) in [
+        ("zeta", 5, true, TradingMode::Live),
+        ("alpha", 5, true, TradingMode::Paper),
+        ("late", 50, true, TradingMode::Live),
+        ("early", 1, true, TradingMode::Paper),
+        ("switched-off", 1, false, TradingMode::Live),
+    ] {
+        let mut strategy = stored(id, StrategyType::Entry, liquidity_at_least(), enabled);
+        strategy.priority = priority;
+        update_strategy(&strategy).expect("set priority");
+        screenerbot::strategies::db::set_strategy_mode(id, mode).expect("set mode");
+    }
+    stored("exit", StrategyType::Exit, position_profit(), true);
+
+    let evaluated: Vec<String> =
+        screenerbot::strategies::db::get_enabled_strategies(StrategyType::Entry)
+            .expect("read the evaluation order")
+            .into_iter()
+            .map(|strategy| strategy.id)
+            .collect();
+    let (status, body) = send("GET", "/api/strategies/overview", Value::Null).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let mut ranked: Vec<(u64, String)> = body["strategies"]
+        .as_array()
+        .expect("strategies")
+        .iter()
+        .filter_map(|row| {
+            row["order"]
+                .as_u64()
+                .map(|order| (order, row["item"]["id"].as_str().expect("id").to_owned()))
+        })
+        .collect();
+    ranked.sort();
+    let ranks: Vec<u64> = ranked.iter().map(|(order, _)| *order).collect();
+    let roster: Vec<String> = ranked.into_iter().map(|(_, id)| id).collect();
+    assert_eq!(roster, evaluated, "{body}");
+    assert_eq!(ranks, [1, 2, 3, 4], "{body}");
+}
+
+#[tokio::test]
+async fn a_stopped_trader_reads_not_running_on_every_enabled_strategy() {
+    let _dir = strategy_system().await;
+    assert!(
+        !screenerbot::config::with_config(|cfg| cfg.trader.enabled),
+        "the Auto Trader starts switched off"
+    );
+    stored("on-entry", StrategyType::Entry, liquidity_at_least(), true);
+    stored("on-exit", StrategyType::Exit, position_profit(), true);
+    stored(
+        "off-entry",
+        StrategyType::Entry,
+        liquidity_at_least(),
+        false,
+    );
+
+    let (status, body) = send("GET", "/api/strategies/overview", Value::Null).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["run_state"], "stopped", "{body}");
+    assert_eq!(body["notice"], "trader_off", "{body}");
+    assert_eq!(overview_row(&body, "on-entry")["status"], "not_running");
+    assert_eq!(overview_row(&body, "on-exit")["status"], "not_running");
+    assert_eq!(overview_row(&body, "off-entry")["status"], "off");
+}
+
+/// Explore Mode has no trader and no paper book: every row reads setup required, with no
+/// figure, and the overview still answers.
+#[tokio::test]
+async fn the_overview_answers_in_explore_mode_without_figures() {
+    let _dir = strategy_system().await;
+    stored(
+        "explore-entry",
+        StrategyType::Entry,
+        liquidity_at_least(),
+        true,
+    );
+    stored("explore-exit", StrategyType::Exit, position_profit(), false);
+    live_round("ExploreMint", "explore-entry", None).await;
+
+    screenerbot::global::set_explore_mode(true);
+    let (status, body) = send("GET", "/api/strategies/overview", Value::Null).await;
+    screenerbot::global::set_explore_mode(false);
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["run_state"], "explore", "{body}");
+    assert_eq!(body["notice"], "setup_required", "{body}");
+    for id in ["explore-entry", "explore-exit"] {
+        let row = overview_row(&body, id);
+        assert_eq!(row["status"], "setup_required", "{row}");
+        for figure in ["open", "open_other_book", "watching", "rounds", "readiness"] {
+            assert!(row[figure].is_null(), "{figure}: {row}");
+        }
+    }
 }
 
 #[test]

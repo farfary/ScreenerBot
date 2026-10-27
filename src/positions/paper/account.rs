@@ -4,10 +4,12 @@
 //! The paper account: the epochs of a paper run and the cash of the current one, derived
 //! from the positions of the epoch and never stored as a running figure.
 
+use std::collections::HashMap;
+
 use chrono::{DateTime, Duration, Utc};
 use serde::Serialize;
 
-use crate::positions::db::PaperEpoch;
+use crate::positions::db::{PaperEpoch, StrategyRound};
 use crate::positions::pnl::calculate_position_total_fees;
 use crate::positions::types::Position;
 use crate::positions::{Error, Result};
@@ -35,6 +37,45 @@ pub fn paper_cash(starting_balance_native: f64, positions: &[Position]) -> f64 {
                 - position.total_size_native
                 - calculate_position_total_fees(position)
         })
+}
+
+/// What the current paper run holds about the strategies: the rounds they took part in and
+/// their failed paper exits in a row. The one evidence the live readiness of every paper
+/// strategy is judged on, read for all strategies at once.
+#[derive(Debug, Clone, Default)]
+pub struct PaperStrategyEvidence {
+    rounds: Vec<StrategyRound>,
+    failed_exit_streaks: HashMap<String, u32>,
+}
+
+impl PaperStrategyEvidence {
+    /// The evidence of the strategy `rounds` of the current run, in entry order, and the
+    /// failed exits in a row of each strategy.
+    pub fn new(rounds: Vec<StrategyRound>, failed_exit_streaks: HashMap<String, u32>) -> Self {
+        Self {
+            rounds,
+            failed_exit_streaks,
+        }
+    }
+
+    /// The rounds of the current run that `strategy_id` took part in, open or closed, in
+    /// entry order.
+    pub fn rounds_of(&self, strategy_id: &str) -> Vec<Position> {
+        self.rounds
+            .iter()
+            .filter(|round| round.involves(strategy_id))
+            .map(|round| round.position.clone())
+            .collect()
+    }
+
+    /// The latest paper exits of the rounds `strategy_id` took part in that found no fill
+    /// in a row.
+    pub fn failed_exit_streak_of(&self, strategy_id: &str) -> u32 {
+        self.failed_exit_streaks
+            .get(strategy_id)
+            .copied()
+            .unwrap_or_default()
+    }
 }
 
 impl PaperBook {
@@ -150,21 +191,15 @@ impl PaperBook {
         Ok(closed)
     }
 
-    /// The rounds of the current epoch of `wallet_address` that strategy `strategy_id`
-    /// took part in, open or closed; none before the first epoch starts.
-    pub async fn strategy_rounds(
-        &self,
-        wallet_address: &str,
-        strategy_id: &str,
-    ) -> Result<Vec<Position>> {
-        match self.db.current_paper_epoch(wallet_address)? {
-            Some(epoch) => self.db.strategy_positions_entered_since(
-                wallet_address,
-                strategy_id,
-                epoch.started_at,
-            ),
-            None => Ok(Vec::new()),
-        }
+    /// The strategy evidence of the current paper run of `wallet_address`; empty before the
+    /// first run starts. Two statements whatever the number of strategies, and unlike
+    /// [`PaperBook::account`] it never starts a run. A synchronous store read: callers on the
+    /// async runtime run it on the blocking pool.
+    pub fn strategy_evidence(&self, wallet_address: &str) -> Result<PaperStrategyEvidence> {
+        Ok(PaperStrategyEvidence::new(
+            self.db.strategy_rounds_of_current_run(wallet_address)?,
+            self.db.failed_strategy_exit_streaks(wallet_address)?,
+        ))
     }
 
     /// The rounds of `wallet_address` that copy task `task_id` opened at or after `since`,

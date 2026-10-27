@@ -502,10 +502,14 @@ async fn the_account_cash_follows_the_rounds_of_its_epoch() {
 async fn a_strategy_counts_the_rounds_it_opened_or_closed_in_the_current_epoch() {
     let (book, _directory) = paper_book().await;
     assert!(book
-        .strategy_rounds(wallet(), "entry-strategy")
-        .await
+        .strategy_evidence(wallet())
         .unwrap()
+        .rounds_of("entry-strategy")
         .is_empty());
+    assert!(
+        book.current_epoch(wallet()).await.unwrap().is_none(),
+        "reading the strategy evidence never starts a paper run"
+    );
     let epoch = book.account(wallet(), 1.0).await.unwrap();
     let at = |seconds| epoch.started_at + Duration::seconds(seconds);
 
@@ -567,33 +571,26 @@ async fn a_strategy_counts_the_rounds_it_opened_or_closed_in_the_current_epoch()
     .await
     .unwrap();
 
+    let evidence = book.strategy_evidence(wallet()).unwrap();
     let mints = |rounds: Vec<Position>| -> Vec<String> {
         rounds.into_iter().map(|round| round.mint).collect()
     };
     assert_eq!(
-        mints(
-            book.strategy_rounds(wallet(), "entry-strategy")
-                .await
-                .unwrap()
-        ),
+        mints(evidence.rounds_of("entry-strategy")),
         ["MintOwn"],
         "a round entered before the epoch or by another strategy is not counted"
     );
     assert_eq!(
-        mints(
-            book.strategy_rounds(wallet(), "exit-strategy")
-                .await
-                .unwrap()
-        ),
+        mints(evidence.rounds_of("exit-strategy")),
         ["MintOther"],
         "an exit strategy counts the rounds its exit leg closed"
     );
-    assert!(book
-        .strategy_rounds(wallet(), "another-entry")
-        .await
-        .unwrap()
+    assert_eq!(mints(evidence.rounds_of("another-entry")), ["MintOther"]);
+    assert!(evidence
+        .rounds_of("another-entry")
         .iter()
         .all(|round| round.exit_time.is_some()));
+    assert!(evidence.rounds_of("unknown-strategy").is_empty());
 }
 
 #[tokio::test]
@@ -808,6 +805,13 @@ async fn a_round_entered_in_the_second_a_run_starts_but_before_it_is_not_counted
         .unwrap()
         .is_empty());
     assert_eq!(next.cash_native, 1.0);
+    assert!(
+        book.strategy_evidence(wallet())
+            .unwrap()
+            .rounds_of("entry-strategy")
+            .is_empty(),
+        "the store compares whole seconds; the exact entry time keeps the round out of the strategy evidence"
+    );
 }
 
 #[tokio::test]
@@ -864,6 +868,15 @@ async fn a_failed_exit_streak_is_read_back_from_the_store_after_a_restart() {
         0,
         "another wallet's rounds are not counted"
     );
+    let evidence = reopened.strategy_evidence(wallet()).unwrap();
+    for strategy_id in ["entry-strategy", "exit-strategy"] {
+        assert_eq!(
+            evidence.failed_exit_streak_of(strategy_id),
+            2,
+            "the batched streak of {strategy_id} is the streak read for it alone"
+        );
+    }
+    assert_eq!(evidence.failed_exit_streak_of("another-strategy"), 0);
     reopened
         .record_exit_attempt(id, Some("exit-strategy"), true)
         .await
@@ -875,6 +888,65 @@ async fn a_failed_exit_streak_is_read_back_from_the_store_after_a_restart() {
             .unwrap(),
         0
     );
+    assert_eq!(
+        reopened
+            .strategy_evidence(wallet())
+            .unwrap()
+            .failed_exit_streak_of("entry-strategy"),
+        0,
+        "a fill ends the batched streak as it ends the single one"
+    );
+}
+
+/// The batched streaks equal the streak read for each strategy alone, whatever mix of
+/// entry and exit strategies took part in the attempts.
+#[tokio::test]
+async fn the_batched_failed_exit_streaks_equal_the_streak_of_each_strategy() {
+    let (book, _directory) = paper_book().await;
+    let mut ids = Vec::new();
+    for (mint, entry) in [("BatchA", "entry-a"), ("BatchB", "entry-b")] {
+        let mut round = opening(mint);
+        round.origin = PositionOrigin::Auto {
+            strategy_id: Some(entry.to_owned()),
+        };
+        ids.push(
+            open_round(
+                &book,
+                wallet(),
+                round,
+                &entry_fill(),
+                &buy_leg(),
+                &terms(&book, 5).await,
+            )
+            .await
+            .unwrap()
+            .id
+            .unwrap(),
+        );
+    }
+    for (position, exit, filled) in [
+        (ids[0], Some("exit-x"), false),
+        (ids[0], Some("exit-x"), true),
+        (ids[0], Some("exit-y"), false),
+        (ids[1], Some("exit-x"), false),
+        (ids[1], None, false),
+        (ids[1], Some("exit-y"), false),
+    ] {
+        book.record_exit_attempt(position, exit, filled)
+            .await
+            .unwrap();
+    }
+    let evidence = book.strategy_evidence(wallet()).unwrap();
+    for strategy_id in ["entry-a", "entry-b", "exit-x", "exit-y", "unknown"] {
+        assert_eq!(
+            evidence.failed_exit_streak_of(strategy_id),
+            book.failed_exit_streak(wallet(), &strategy(strategy_id))
+                .await
+                .unwrap(),
+            "{strategy_id}"
+        );
+    }
+    assert_eq!(evidence.failed_exit_streak_of("entry-b"), 3);
 }
 
 fn strategy(strategy_id: &str) -> PaperExitOwner {

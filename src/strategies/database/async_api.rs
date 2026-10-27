@@ -3,7 +3,7 @@
 
 //! Strategies store async API — async wrappers that run the synchronous SQLite operations on the blocking pool.
 
-use crate::strategies::types::{Strategy, StrategyPerformance, StrategyType};
+use crate::strategies::types::{Strategy, StrategyType};
 use crate::trader::paper::TradingMode;
 
 /// Run one synchronous store operation on the blocking pool, so the runtime worker that
@@ -59,12 +59,4 @@ pub async fn get_enabled_strategies_async(
     strategy_type: StrategyType,
 ) -> crate::Result<Vec<Strategy>> {
     on_blocking_pool(move || super::get_enabled_strategies(strategy_type)).await
-}
-
-/// [`super::get_strategy_performance`] on the blocking pool.
-pub async fn get_strategy_performance_async(
-    strategy_id: &str,
-) -> crate::Result<Option<StrategyPerformance>> {
-    let strategy_id = strategy_id.to_owned();
-    on_blocking_pool(move || super::get_strategy_performance(&strategy_id)).await
 }

@@ -12,15 +12,12 @@ use axum::{
 
 use super::types::{StrategyModeRequest, StrategyReadinessResponse};
 use super::utils::{err, err_cause};
-use crate::config::with_config;
 use crate::i18n::ids;
 use crate::logger::{self, LogTag};
-use crate::positions::db::PaperExitOwner;
-use crate::positions::Position;
 use crate::strategies::{
     self, arm,
     db::get_strategy_async,
-    readiness::{live_block_text, strategy_readiness},
+    readiness::{live_block_text, paper_strategy_evidence, readiness_of},
     types::Strategy,
 };
 use crate::trader::paper::STRATEGY_LIVE_CONFIRMATION;
@@ -97,7 +94,7 @@ pub async fn get_strategy_readiness(Path(id): Path<String>) -> Response {
         Ok(strategy) => strategy,
         Err(response) => return response,
     };
-    let evidence = match paper_evidence(&strategy.id).await {
+    let evidence = match paper_strategy_evidence().await {
         Ok(evidence) => evidence,
         Err(e) => {
             return err_cause(
@@ -107,43 +104,8 @@ pub async fn get_strategy_readiness(Path(id): Path<String>) -> Response {
             );
         }
     };
-    let min_closed_rounds = with_config(|config| config.trader.paper.readiness_min_closed_rounds);
     success_response(StrategyReadinessResponse {
-        readiness: strategy_readiness(
-            strategy.strategy_type,
-            &evidence.rounds,
-            min_closed_rounds,
-            evidence.failed_exit_streak,
-            crate::trader::live_block(),
-        ),
+        readiness: readiness_of(&strategy, &evidence),
         live_confirmation: STRATEGY_LIVE_CONFIRMATION,
-    })
-}
-
-/// What the paper book holds about one strategy.
-#[derive(Default)]
-struct PaperEvidence {
-    /// The paper rounds of the current paper run the strategy took part in.
-    rounds: Vec<Position>,
-    /// The latest paper exits of its rounds in a row that found no fill.
-    failed_exit_streak: u32,
-}
-
-/// The paper evidence of `strategy_id`; empty without a loaded paper book or a wallet.
-async fn paper_evidence(strategy_id: &str) -> crate::positions::Result<PaperEvidence> {
-    let Some(book) = crate::positions::paper::book() else {
-        return Ok(PaperEvidence::default());
-    };
-    let Ok(wallet_address) = crate::utils::get_wallet_address() else {
-        return Ok(PaperEvidence::default());
-    };
-    Ok(PaperEvidence {
-        rounds: book.strategy_rounds(&wallet_address, strategy_id).await?,
-        failed_exit_streak: book
-            .failed_exit_streak(
-                &wallet_address,
-                &PaperExitOwner::Strategy(strategy_id.to_owned()),
-            )
-            .await?,
     })
 }

@@ -5,7 +5,8 @@
 //! paper modules never name a swap, key, send, trade dispatch, live position or
 //! live trade symbol, and never spawn a task (the runtime paper scope does not cross a
 //! spawn). Every reader of the held mints goes through `positions::books`, so
-//! the paper books are priced, charted and retained with the live one.
+//! the paper books are priced, charted and retained with the live one. The polled
+//! strategies overview never names a call that starts a paper run.
 //!
 //! Pure source-text scans: no network, no DB, no compilation.
 
@@ -327,6 +328,42 @@ fn a_paper_copy_entry_takes_no_live_admission_or_reservation() {
     assert!(
         offenders.is_empty(),
         "a paper copy entry is admitted by the paper book alone:\n{}",
+        offenders.join("\n")
+    );
+}
+
+/// The strategies overview, the readiness evidence it shares with the arm dialog and the
+/// entry blocks it reads the paper cash through, relative to `src/`: polled reads that must
+/// never start a paper run.
+const OVERVIEW_READERS: &[&str] = &[
+    "strategies/overview.rs",
+    "strategies/readiness.rs",
+    "webserver/routes/strategies/overview.rs",
+    "trader/controller.rs",
+];
+
+/// Paper book operations, and the paper cash reader built on one, that start a paper run
+/// as a side effect.
+const RUN_STARTING: &[&str] = &[
+    "account",
+    "start_epoch",
+    "start_paper_epoch",
+    "reset_run",
+    "read_paper_cash",
+];
+
+#[test]
+fn the_strategies_overview_never_starts_a_paper_run() {
+    let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    for reader in OVERVIEW_READERS {
+        assert!(src.join(reader).is_file(), "src/{reader} was not found");
+    }
+    let offenders = naming(RUN_STARTING, |relative| {
+        OVERVIEW_READERS.contains(&relative)
+    });
+    assert!(
+        offenders.is_empty(),
+        "the overview reads the current paper run through the strategy evidence, never through a call that starts one:\n{}",
         offenders.join("\n")
     );
 }

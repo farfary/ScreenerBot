@@ -82,6 +82,12 @@ export const endpoints = [
   },
   {
     method: "GET",
+    path: "/api/strategies/overview",
+    fixture: "strategies_overview.json",
+    rust: "src/webserver/routes/strategies/types.rs::StrategiesOverviewResponse",
+  },
+  {
+    method: "GET",
     path: "/api/strategies/conditions/schemas",
     fixture: "strategies_condition_schemas.json",
     rust: "src/webserver/routes/strategies/types.rs::ConditionSchemasResponse",

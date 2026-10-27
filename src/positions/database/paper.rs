@@ -5,6 +5,8 @@
 //! each with its leg evidence in one transaction, the paper exit attempts, plus the paper
 //! account epochs.
 
+use std::collections::HashMap;
+
 use chrono::{DateTime, Utc};
 use rusqlite::{params, Connection, OptionalExtension};
 
@@ -100,6 +102,35 @@ impl PaperExitOwner {
         }
     }
 }
+
+/// A paper round a strategy took part in, with the strategy that decided the exit leg
+/// closing it.
+#[derive(Debug, Clone)]
+pub struct StrategyRound {
+    pub position: Position,
+    /// The strategy of the round's exit leg; none while it is open or when no strategy
+    /// decided its exit.
+    pub exit_strategy_id: Option<String>,
+}
+
+impl StrategyRound {
+    /// True when `strategy_id` took part in the round: it opened it as the entry strategy,
+    /// or decided the exit leg that closed it.
+    pub fn involves(&self, strategy_id: &str) -> bool {
+        self.position.origin.entry_strategy_id() == Some(strategy_id)
+            || self.exit_strategy_id.as_deref() == Some(strategy_id)
+    }
+}
+
+/// The condition on a `positions` row that selects the rounds a strategy took part in:
+/// opened by an entry strategy, or closed by a paper exit leg a strategy decided
+/// ([`StrategyRound::involves`] tells which strategy).
+const STRATEGY_ROUNDS_FILTER: &str =
+    "((positions.origin_kind = 'auto' AND positions.origin_ref IS NOT NULL)
+       OR EXISTS (SELECT 1 FROM paper_legs
+                  WHERE paper_legs.position_id = positions.id
+                    AND paper_legs.leg_kind = 'exit'
+                    AND paper_legs.strategy_id IS NOT NULL))";
 
 /// The condition on a `positions` row, its columns prefixed by `prefix`, that selects
 /// the rounds copy task `?{param}` opened. The origin reference of a copy round is
@@ -221,30 +252,63 @@ impl PositionsDatabase {
         )
     }
 
-    /// The positions of `wallet_address` entered at or after `since` that strategy
-    /// `strategy_id` took part in: opened by it as an entry strategy, or closed by a
-    /// paper exit leg it decided.
-    pub(crate) fn strategy_positions_entered_since(
+    /// The rounds of the current paper run of `wallet_address` that a strategy took part
+    /// in, open or closed, each with the strategy of its exit leg, in entry order; none
+    /// before the first run starts. One statement: the run start is read inside it. SQLite's
+    /// `datetime()` compares whole seconds, so the query narrows to the second and the
+    /// decoded entry time decides, as [`Self::positions_entered_since`] decides it.
+    pub(crate) fn strategy_rounds_of_current_run(
         &self,
         wallet_address: &str,
-        strategy_id: &str,
-        since: DateTime<Utc>,
-    ) -> Result<Vec<Position>> {
-        self.select_positions(
-            "strategy_positions_entered_since",
-            " AND ((origin_kind = 'auto' AND origin_ref = ?4)
-                   OR EXISTS (SELECT 1 FROM paper_legs
-                              WHERE paper_legs.position_id = positions.id
-                                AND paper_legs.leg_kind = 'exit'
-                                AND paper_legs.strategy_id = ?4))",
-            since,
-            params![
-                wallet_address,
-                self.chain.as_str(),
-                since.to_rfc3339(),
-                strategy_id
-            ],
-        )
+    ) -> Result<Vec<StrategyRound>> {
+        let sqlite =
+            |e| DatabaseError::classify_sqlite_failure("strategy_rounds_of_current_run", e);
+        let conn = self.get_connection()?;
+        let mut stmt = conn
+            .prepare(&format!(
+                "WITH run AS (
+                     SELECT started_at AS run_started_at FROM paper_account
+                     WHERE wallet_address = ?1 AND chain_id = ?2
+                     ORDER BY epoch DESC LIMIT 1
+                 )
+                 SELECT {POSITION_SELECT_COLUMNS}, run.run_started_at,
+                        (SELECT paper_legs.strategy_id FROM paper_legs
+                         WHERE paper_legs.position_id = positions.id
+                           AND paper_legs.leg_kind = 'exit'
+                         ORDER BY paper_legs.id DESC LIMIT 1) AS exit_strategy_id
+                 FROM positions JOIN run
+                 WHERE positions.wallet_address = ?1 AND positions.chain_id = ?2
+                   AND datetime(positions.entry_time) >= datetime(run.run_started_at)
+                   AND {STRATEGY_ROUNDS_FILTER}
+                 ORDER BY positions.entry_time"
+            ))
+            .map_err(sqlite)?;
+        let rows = stmt
+            .query_map(params![wallet_address, self.chain.as_str()], |row| {
+                Ok((
+                    self.row_to_position(row)?,
+                    row.get::<_, String>("run_started_at")?,
+                    row.get::<_, Option<String>>("exit_strategy_id")?,
+                ))
+            })
+            .map_err(sqlite)?;
+        let mut rounds = Vec::new();
+        for row in rows {
+            let (position, run_started_at, exit_strategy_id) = row.map_err(sqlite)?;
+            let run_started_at = DateTime::parse_from_rfc3339(&run_started_at)
+                .map(|at| at.with_timezone(&Utc))
+                .map_err(|e| crate::positions::Error::RowDecode {
+                    column: "started_at",
+                    detail: e.to_string(),
+                })?;
+            if position.entry_time >= run_started_at {
+                rounds.push(StrategyRound {
+                    position,
+                    exit_strategy_id,
+                });
+            }
+        }
+        Ok(rounds)
     }
 
     /// The positions of `wallet_address` entered at or after `since` that copy task
@@ -413,6 +477,53 @@ impl PositionsDatabase {
             )
             .map_err(sqlite)?;
         Ok(u32::try_from(streak).unwrap_or(u32::MAX))
+    }
+
+    /// The failed paper exits in a row of every strategy, counted as
+    /// [`Self::failed_paper_exit_streak`] counts them for one, in one statement. A strategy
+    /// takes part in an attempt as the entry strategy of the round or the exit strategy that
+    /// decided the sale; one absent from the map has no failed exit since its last fill.
+    pub(crate) fn failed_strategy_exit_streaks(
+        &self,
+        wallet_address: &str,
+    ) -> Result<HashMap<String, u32>> {
+        let sqlite = |e| DatabaseError::classify_sqlite_failure("failed_strategy_exit_streaks", e);
+        let conn = self.get_connection()?;
+        let mut stmt = conn
+            .prepare(
+                "WITH attempts AS (
+                     SELECT p.origin_ref AS strategy_id, a.id, a.filled
+                     FROM paper_exit_attempts a JOIN positions p ON p.id = a.position_id
+                     WHERE p.wallet_address = ?1 AND p.chain_id = ?2
+                       AND p.origin_kind = 'auto' AND p.origin_ref IS NOT NULL
+                     UNION
+                     SELECT a.strategy_id, a.id, a.filled
+                     FROM paper_exit_attempts a JOIN positions p ON p.id = a.position_id
+                     WHERE p.wallet_address = ?1 AND p.chain_id = ?2
+                       AND a.strategy_id IS NOT NULL
+                 ),
+                 ranked AS (
+                     SELECT strategy_id, id, filled,
+                            MAX(CASE WHEN filled = 1 THEN id END)
+                                OVER (PARTITION BY strategy_id) AS last_fill
+                     FROM attempts
+                 )
+                 SELECT strategy_id, COUNT(*) FROM ranked
+                 WHERE filled = 0 AND id > COALESCE(last_fill, 0)
+                 GROUP BY strategy_id",
+            )
+            .map_err(sqlite)?;
+        let rows = stmt
+            .query_map(params![wallet_address, self.chain.as_str()], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+            })
+            .map_err(sqlite)?;
+        let mut streaks = HashMap::new();
+        for row in rows {
+            let (strategy_id, streak) = row.map_err(sqlite)?;
+            streaks.insert(strategy_id, u32::try_from(streak).unwrap_or(u32::MAX));
+        }
+        Ok(streaks)
     }
 
     /// The current paper epoch of `wallet_address`: the latest one started.

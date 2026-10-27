@@ -4,7 +4,7 @@
 //! The one dispatch point over the live and the paper book, so no caller branches on
 //! the book itself, and the one reader of every mint a book holds.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use super::types::{Book, Position};
 
@@ -17,6 +17,27 @@ pub async fn open_positions(book: Book) -> Vec<Position> {
             None => Vec::new(),
         },
     }
+}
+
+/// The closed rounds of the live book each entry strategy opened, by strategy id: verified,
+/// not archived, of origin `auto` with a strategy, the selection the live performance
+/// queries count. One pass over the positions in memory; no store read. The paper book
+/// keeps its closed rounds in its store only (`PaperBook::strategy_evidence`).
+pub async fn live_auto_rounds() -> HashMap<String, Vec<Position>> {
+    let positions = super::state::POSITIONS.read().await;
+    let mut rounds: HashMap<String, Vec<Position>> = HashMap::new();
+    for position in positions
+        .iter()
+        .filter(|position| !position.archived && position.transaction_exit_verified)
+    {
+        if let Some(strategy_id) = position.origin.entry_strategy_id() {
+            rounds
+                .entry(strategy_id.to_owned())
+                .or_default()
+                .push(position.clone());
+        }
+    }
+    rounds
 }
 
 /// The mints of the open rounds of `book`.

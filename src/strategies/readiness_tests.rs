@@ -6,9 +6,14 @@
 
 use chrono::Utc;
 
+use std::collections::HashMap;
+
 use super::*;
 use crate::i18n::LanguageIdentifier;
+use crate::positions::db::StrategyRound;
 use crate::positions::{Book, Opening, PositionManagement, PositionOrigin};
+use crate::strategies::types::{Condition, RuleTree};
+use crate::trader::paper::TradingMode;
 
 fn round(mint: &str, pnl: Option<f64>, marked: bool) -> Position {
     let mut position = Position::opening(Opening {
@@ -142,4 +147,105 @@ fn a_live_block_fails_the_runtime_check_with_its_wording() {
         assert_eq!(runtime.detail.render_plain(&en), english);
         assert!(!readiness.ready);
     }
+}
+
+fn paper_strategy(id: &str, strategy_type: StrategyType) -> Strategy {
+    Strategy {
+        id: id.to_owned(),
+        name: id.to_owned(),
+        description: None,
+        strategy_type,
+        enabled: true,
+        priority: 10,
+        timeframe: "5m".to_owned(),
+        rules: RuleTree::leaf(Condition {
+            condition_type: "PriceChangePercent".to_owned(),
+            parameters: HashMap::new(),
+        }),
+        parameters: HashMap::new(),
+        created_at: Utc::now(),
+        updated_at: Utc::now(),
+        author: None,
+        version: 1,
+        entry_strategy_ids: Vec::new(),
+        mode: TradingMode::Paper,
+    }
+}
+
+/// A paper round `entry` opened and, once closed with `pnl`, the exit leg of `exit`
+/// closed.
+fn strategy_round(entry: Option<&str>, exit: Option<&str>, pnl: Option<f64>) -> StrategyRound {
+    let mut position = round("MINT", pnl, true);
+    position.origin = PositionOrigin::Auto {
+        strategy_id: entry.map(str::to_owned),
+    };
+    StrategyRound {
+        position,
+        exit_strategy_id: exit.map(str::to_owned),
+    }
+}
+
+/// The overview reads every strategy's readiness from one batch of evidence; the arm
+/// dialog reads one strategy's from the same evidence. Both agree for every strategy, and
+/// each strategy's rounds are those it opened or whose exit leg it decided.
+#[test]
+fn the_batch_and_the_single_strategy_readiness_agree() {
+    crate::config::utils::install_default_config();
+    let evidence = PaperStrategyEvidence::new(
+        vec![
+            strategy_round(Some("entry-a"), Some("exit-x"), Some(0.02)),
+            strategy_round(Some("entry-a"), None, Some(-0.01)),
+            strategy_round(Some("entry-b"), Some("exit-x"), Some(0.01)),
+            strategy_round(Some("entry-b"), None, None),
+            strategy_round(None, Some("exit-y"), Some(-0.02)),
+        ],
+        HashMap::from([("exit-y".to_owned(), 2)]),
+    );
+    let needed = with_config(|config| config.trader.paper.readiness_min_closed_rounds);
+    for (strategy, rounds, closed) in [
+        (paper_strategy("entry-a", StrategyType::Entry), 2, 2),
+        (paper_strategy("entry-b", StrategyType::Entry), 2, 1),
+        (paper_strategy("exit-x", StrategyType::Exit), 2, 2),
+        (paper_strategy("exit-y", StrategyType::Exit), 1, 1),
+        (paper_strategy("unknown", StrategyType::Entry), 0, 0),
+    ] {
+        assert_eq!(
+            evidence.rounds_of(&strategy.id).len(),
+            rounds,
+            "{}",
+            strategy.id
+        );
+        let single = strategy_readiness(
+            strategy.strategy_type,
+            &evidence.rounds_of(&strategy.id),
+            needed,
+            evidence.failed_exit_streak_of(&strategy.id),
+            crate::trader::live_block(),
+        );
+        let shared = readiness_of(&strategy, &evidence);
+        assert_eq!(
+            ids_of(&shared),
+            ids_of(&single),
+            "{}: the shared composition is the single-strategy one",
+            strategy.id
+        );
+        assert_eq!(shared.ready, single.ready, "{}", strategy.id);
+        let progress = readiness_progress(&strategy, &evidence);
+        assert_eq!(
+            progress,
+            ReadinessProgress {
+                closed,
+                needed,
+                ready: single.ready,
+                failing: single
+                    .checks
+                    .iter()
+                    .find(|check| !check.passed)
+                    .map(|check| check.id),
+            },
+            "{}",
+            strategy.id
+        );
+    }
+    assert_eq!(evidence.failed_exit_streak_of("exit-y"), 2);
 }

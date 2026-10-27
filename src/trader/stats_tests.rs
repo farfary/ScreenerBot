@@ -95,3 +95,52 @@ fn a_round_closed_by_a_paper_run_reset_is_not_a_trade() {
         1
     );
 }
+
+/// A recorded set holding every case the counting rule decides: winners, a loser, a
+/// break-even round, a round with an incomplete basis and a round a paper run reset
+/// closed.
+fn recorded_rounds() -> Vec<Position> {
+    let reset = format!("{:?}", crate::trader::types::TradeReason::PaperReset);
+    let mut untrusted = round(Book::Live, 6, Some(0.5), "TakeProfit");
+    untrusted.basis_complete = false;
+    vec![
+        round(Book::Live, 2, Some(0.03), "TakeProfit"),
+        round(Book::Live, 3, Some(-0.01), "StopLoss"),
+        round(Book::Live, 4, Some(0.0), "TimeExit"),
+        round(Book::Live, 5, Some(0.02), "StrategyExit"),
+        untrusted,
+        round(Book::Live, 7, Some(-0.04), &reset),
+    ]
+}
+
+#[test]
+fn round_totals_count_closed_rounds_as_the_stats_tab_counts_them() {
+    let rounds = recorded_rounds();
+    let totals = round_totals(&rounds);
+    // The figures the Stats aggregation produced for this set before the counting rule
+    // was shared.
+    assert_eq!(totals.closed, 4);
+    assert_eq!(totals.winners, 2);
+    assert_eq!(totals.losers, 1);
+    assert_eq!(totals.excluded_untrusted, 1);
+    assert!((totals.realized_native - 0.04).abs() < 1e-12);
+    assert_eq!(totals.win_rate_pct, Some(50.0));
+
+    let stats = trader_stats_from(7, &[], rounds, 5, Utc::now() - Duration::days(7));
+    assert_eq!(stats.total_trades, totals.closed);
+    assert_eq!(stats.winners, totals.winners);
+    assert_eq!(stats.losers, totals.losers);
+    assert_eq!(stats.excluded_untrusted, totals.excluded_untrusted);
+    assert_eq!(stats.total_pnl_native, totals.realized_native);
+    assert_eq!(stats.win_rate_pct, totals.win_rate_pct);
+}
+
+#[test]
+fn round_totals_of_no_counted_round_have_no_win_rate() {
+    let reset = format!("{:?}", crate::trader::types::TradeReason::PaperReset);
+    let totals = round_totals(&[round(Book::Paper, 2, Some(0.01), &reset)]);
+    assert_eq!(totals.closed, 0);
+    assert_eq!(totals.excluded_untrusted, 0);
+    assert_eq!(totals.win_rate_pct, None);
+    assert_eq!(round_totals(&[]).win_rate_pct, None);
+}

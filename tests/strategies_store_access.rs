@@ -89,15 +89,17 @@ const SYNCHRONOUS_STORE_CALLS: &[&str] = &[
     "get_strategy_performance(",
 ];
 
-/// Every strategy route, the arming flow its mode route calls, the entry cycle and the paper
-/// executor's intent check reach the store through the `*_async` wrappers, so none holds a
-/// SQLite connection on a runtime worker.
+/// Every strategy route, the overview and readiness reads behind them, the arming flow its
+/// mode route calls, the entry cycle and the paper executor's intent check reach the store
+/// through the `*_async` wrappers, so none holds a SQLite connection on a runtime worker.
 #[test]
 fn strategy_routes_reach_the_store_only_on_the_blocking_pool() {
     let violations: Vec<String> = source_code()
         .into_iter()
         .filter(|(path, _)| {
             path.starts_with("webserver/routes/strategies")
+                || path.ends_with("strategies/overview.rs")
+                || path.ends_with("strategies/readiness.rs")
                 || path.ends_with("strategies/arm.rs")
                 || path.ends_with("trader/evaluators/entry.rs")
                 || path.ends_with("trader/paper/executor/io.rs")

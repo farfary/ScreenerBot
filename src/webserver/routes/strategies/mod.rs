@@ -15,9 +15,8 @@ use crate::webserver::state::AppState;
 
 // Submodules
 mod crud;
-mod deployment;
 mod mode;
-mod performance;
+mod overview;
 mod schemas;
 mod testing;
 mod types;
@@ -36,6 +35,7 @@ pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
         // Strategy CRUD
         .route("/", get(crud::list_strategies).post(crud::create_strategy))
+        .route("/overview", get(overview::get_strategies_overview))
         // Inline validation (must be before /:id routes to avoid path conflict)
         .route(
             "/validate",
@@ -43,7 +43,6 @@ pub fn routes() -> Router<Arc<AppState>> {
         )
         // Condition schemas
         .route("/conditions/schemas", get(schemas::get_condition_schemas))
-        // Templates
         // Routes with path parameters (must come after static routes)
         .route("/{id}/enabled", patch(crud::set_strategy_enabled_handler))
         .route("/{id}/mode", patch(mode::set_strategy_mode_handler))
@@ -54,17 +53,12 @@ pub fn routes() -> Router<Arc<AppState>> {
                 .put(crud::update_strategy_handler)
                 .delete(crud::delete_strategy_handler),
         )
-        // Performance and testing
-        .route(
-            "/{id}/performance",
-            get(performance::get_strategy_performance_stats),
-        )
+        // Testing
         .route("/{id}/test", post(testing::test_strategy))
-        // Validate / Deploy (by ID)
+        // Validate (by ID)
         .route(
             "/{id}/validate",
             post(validation::validate_strategy_handler),
         )
-        .route("/{id}/deploy", post(deployment::deploy_strategy_handler))
         .route_layer(from_fn_with_state(&catalog::STRATEGIES, store_gate))
 }

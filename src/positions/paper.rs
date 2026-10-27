@@ -10,7 +10,7 @@ mod book;
 mod fills;
 mod leg;
 
-pub use account::{paper_cash, PaperAccount};
+pub use account::{paper_cash, PaperAccount, PaperStrategyEvidence};
 pub use book::{PaperBook, PaperBooked, PaperOpenTerms, PaperOpened, PaperRoundHistory};
 pub use fills::PaperSale;
 pub use leg::{PaperLeg, PAPER_LEG_PREFIX};

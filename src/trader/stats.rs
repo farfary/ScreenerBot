@@ -131,6 +131,78 @@ fn is_paper_reset_close(position: &Position) -> bool {
         == Some(format!("{:?}", crate::trader::types::TradeReason::PaperReset).as_str())
 }
 
+/// The counted closed rounds of a set: how many, how many won and lost, what they realized
+/// and their win rate. The one counting rule shared by the Stats tab and the strategy
+/// overview.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+pub struct RoundTotals {
+    /// Closed rounds counted as trades.
+    pub closed: usize,
+    pub winners: usize,
+    pub losers: usize,
+    /// Closed rounds left out because their cost basis or history is incomplete, so no
+    /// honest P&L exists for them. Surfaced rather than silently dropped.
+    pub excluded_untrusted: usize,
+    /// Realized P&L of the counted rounds in the native asset.
+    pub realized_native: f64,
+    /// `None` while no round is counted.
+    pub win_rate_pct: Option<f64>,
+}
+
+impl RoundTotals {
+    /// The totals of the `counted` rounds, with `excluded_untrusted` left out before.
+    ///
+    /// Realized P&L is the `pnl` each round booked at close, fee-aware and DCA-aware.
+    /// Deriving it as `native_received - entry_size_native` counted every DCA add as pure
+    /// profit, because `entry_size_native` is only the first buy and never grows.
+    fn of(counted: &[&Position], excluded_untrusted: usize) -> Self {
+        let closed = counted.len();
+        let winners = counted
+            .iter()
+            .filter(|p| p.pnl_percent.unwrap_or_default() > 0.0)
+            .count();
+        let losers = counted
+            .iter()
+            .filter(|p| p.pnl_percent.unwrap_or_default() < 0.0)
+            .count();
+        Self {
+            closed,
+            winners,
+            losers,
+            excluded_untrusted,
+            realized_native: counted.iter().filter_map(|p| p.pnl).sum(),
+            win_rate_pct: (closed > 0).then(|| (winners as f64 / closed as f64) * 100.0),
+        }
+    }
+}
+
+/// The totals of the closed `rounds`, counted as [`counted_rounds`] counts them.
+pub fn round_totals<'a>(rounds: impl IntoIterator<Item = &'a Position>) -> RoundTotals {
+    let (counted, excluded_untrusted) = counted_rounds(rounds);
+    RoundTotals::of(&counted, excluded_untrusted)
+}
+
+/// The closed `rounds` counted as trades, in their order, and how many were left out for
+/// an incomplete basis or history. A round a paper run reset closed is not a trade and is
+/// neither counted nor left out. A round whose basis or history is incomplete has no
+/// honest P&L; Overview already refuses to price those, and counting them is what let the
+/// Stats tab disagree with Home on the same wallet.
+fn counted_rounds<'a>(
+    rounds: impl IntoIterator<Item = &'a Position>,
+) -> (Vec<&'a Position>, usize) {
+    let mut excluded_untrusted = 0;
+    let counted = rounds
+        .into_iter()
+        .filter(|p| !is_paper_reset_close(p))
+        .filter(|p| {
+            let trusted = p.has_trustworthy_pnl();
+            excluded_untrusted += usize::from(!trusted);
+            trusted
+        })
+        .collect();
+    (counted, excluded_untrusted)
+}
+
 /// The stats of a book from its `open_positions` and the rounds it closed since
 /// `window_start` (`recent_closed`, newest first). A round a paper run reset closed is
 /// not a trade and is left out of every figure.
@@ -144,30 +216,15 @@ pub fn trader_stats_from(
     let open_positions_count = open_positions.len();
     let locked_native: f64 = open_positions.iter().map(|p| p.total_size_native).sum();
 
-    // A round whose basis or history is incomplete has no honest P&L. Overview
-    // already refuses to price those; counting them here is what let this tab
-    // disagree with Home on the same wallet.
-    let recent_closed: Vec<Position> = recent_closed
-        .into_iter()
-        .filter(|p| !is_paper_reset_close(p))
-        .collect();
-    let fetched = recent_closed.len();
-    let closed: Vec<_> = recent_closed
-        .into_iter()
-        .filter(|p| p.has_trustworthy_pnl())
-        .collect();
-    let excluded_untrusted = fetched - closed.len();
-    let total_trades = closed.len();
-
-    let winners = closed
-        .iter()
-        .filter(|p| p.pnl_percent.unwrap_or_default() > 0.0)
-        .count();
-    let losers = closed
-        .iter()
-        .filter(|p| p.pnl_percent.unwrap_or_default() < 0.0)
-        .count();
-    let win_rate_pct = (total_trades > 0).then(|| (winners as f64 / total_trades as f64) * 100.0);
+    let (closed, excluded_untrusted) = counted_rounds(&recent_closed);
+    let RoundTotals {
+        closed: total_trades,
+        winners,
+        losers,
+        realized_native: total_pnl_native,
+        win_rate_pct,
+        ..
+    } = RoundTotals::of(&closed, excluded_untrusted);
 
     // Hold time. The median is reported alongside the mean because one forgotten
     // bag drags the mean far away from what a typical round actually looked like.
@@ -213,12 +270,8 @@ pub fn trader_stats_from(
     let worst_trade_pct = worst_trade.and_then(|p| p.pnl_percent);
     let worst_trade_token = worst_trade.map(|p| p.symbol.clone());
 
-    // Realized P&L in SOL across the window.
-    //
-    // Uses the `pnl` the position booked at close — fee-aware and DCA-aware. Deriving it
-    // as `native_received - entry_size_native` counted every DCA add as pure profit, because
-    // `entry_size_native` is only the FIRST buy and never grows.
-    let total_pnl_native: f64 = closed.iter().filter_map(|p| p.pnl).sum();
+    // Gross realized P&L in SOL across the window, from the same booked `pnl` the total
+    // is taken on.
     let gross_profit_native: f64 = closed
         .iter()
         .filter_map(|p| p.pnl)

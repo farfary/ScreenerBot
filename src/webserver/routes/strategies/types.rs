@@ -7,8 +7,10 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 use crate::i18n::UiText;
-use crate::strategies::types::RuleOutcome;
+use crate::strategies::overview::{RuleExitState, RunNotice, StrategyCounts, StrategySummary};
+use crate::strategies::types::{RuleOutcome, Strategy};
 use crate::trader::paper::TradingMode;
+use crate::trader::TraderRunState;
 
 // =============================================================================
 // RESPONSE TYPES (Inline with routes as per ScreenerBot patterns)
@@ -40,6 +42,25 @@ pub struct StrategyItem {
     pub mode: TradingMode,
 }
 
+impl From<Strategy> for StrategyItem {
+    fn from(strategy: Strategy) -> Self {
+        Self {
+            id: strategy.id,
+            name: strategy.name,
+            description: strategy.description,
+            strategy_type: strategy.strategy_type.to_string(),
+            enabled: strategy.enabled,
+            priority: strategy.priority,
+            created_at: strategy.created_at.to_rfc3339(),
+            updated_at: strategy.updated_at.to_rfc3339(),
+            author: strategy.author,
+            version: strategy.version,
+            entry_strategy_ids: strategy.entry_strategy_ids,
+            mode: strategy.mode,
+        }
+    }
+}
+
 /// Strategy detail response
 #[derive(Debug, Serialize)]
 pub struct StrategyDetailResponse {
@@ -61,15 +82,24 @@ pub struct StrategyDetailResponse {
     pub mode: TradingMode,
 }
 
-/// Strategy performance response
+/// The strategies overview: the trader-level state once, then each strategy's list item
+/// with its status and figures.
 #[derive(Debug, Serialize)]
-pub struct StrategyPerformanceResponse {
-    pub strategy_id: String,
-    pub total_evaluations: u64,
-    pub successful_signals: u64,
-    pub success_rate: f64,
-    pub avg_execution_time_ms: f64,
-    pub last_evaluation: String,
+pub struct StrategiesOverviewResponse {
+    pub run_state: TraderRunState,
+    pub notice: Option<RunNotice>,
+    pub rule_exits: Vec<RuleExitState>,
+    pub counts: StrategyCounts,
+    pub strategies: Vec<StrategyOverviewItem>,
+    pub timestamp: String,
+}
+
+/// One strategy of the overview: its list item and its summary side by side.
+#[derive(Debug, Serialize)]
+pub struct StrategyOverviewItem {
+    pub item: StrategyItem,
+    #[serde(flatten)]
+    pub summary: StrategySummary,
 }
 
 /// Strategy test request
