@@ -197,7 +197,7 @@
     border-radius: var(--radius-lg);
     border: none;
     background: var(--primary-color);
-    color: white;
+    color: var(--text-on-fill);
     cursor: pointer;
     display: inline-flex;
     align-items: center;

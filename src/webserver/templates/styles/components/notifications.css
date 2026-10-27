@@ -679,7 +679,7 @@ body.notification-drawer-open {
 .back-to-top-btn:hover {
   background: var(--primary-color);
   border-color: var(--primary-color);
-  color: white;
+  color: var(--text-on-fill);
   transform: translateY(-2px);
   box-shadow: 0 4px 12px var(--shadow-md);
 }

@@ -146,7 +146,7 @@
   margin-inline: -0.1rem 0;
   padding: 0 0.2rem;
   background: var(--button-primary-bg);
-  color: #fff;
+  color: var(--text-on-fill);
   font-weight: 700;
   border-radius: 999px;
 }

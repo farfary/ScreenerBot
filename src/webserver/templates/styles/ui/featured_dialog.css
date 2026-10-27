@@ -436,7 +436,7 @@
 }
 
 .feat-card-buy:hover {
-  color: #fff;
+  color: var(--text-on-fill);
   background: var(--success-color);
   border-color: var(--success-color);
 }

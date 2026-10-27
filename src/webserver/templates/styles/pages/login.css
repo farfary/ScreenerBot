@@ -160,7 +160,7 @@
   font-family: var(--font-sans);
   font-size: 0.9375rem;
   font-weight: 600;
-  color: white;
+  color: var(--text-on-fill);
   background: var(--button-primary-bg);
   border: none;
   border-radius: var(--radius-md);

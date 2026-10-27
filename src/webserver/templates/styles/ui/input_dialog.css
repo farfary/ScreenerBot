@@ -166,7 +166,7 @@
 .input-dialog__button--confirm {
   background: var(--button-primary-bg);
   border-color: transparent;
-  color: #fff;
+  color: var(--text-on-fill);
 }
 
 .input-dialog--warning .input-dialog__button--confirm {

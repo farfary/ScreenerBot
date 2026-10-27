@@ -313,7 +313,7 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: white;
+  color: var(--text-on-fill);
   cursor: pointer;
   transition: all var(--transition-fast);
 }

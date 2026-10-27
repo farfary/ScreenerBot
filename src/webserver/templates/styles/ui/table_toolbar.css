@@ -850,13 +850,13 @@
 .table-toolbar-btn--primary {
   background: var(--button-primary-bg);
   border-color: var(--button-primary-bg);
-  color: #fff;
+  color: var(--text-on-fill);
 }
 
 .table-toolbar-btn--primary:hover:not(:disabled) {
   background: var(--button-primary-hover);
   border-color: var(--button-primary-hover);
-  color: #fff;
+  color: var(--text-on-fill);
 }
 
 .table-toolbar-btn--danger {
@@ -913,7 +913,7 @@
 }
 
 .table-toolbar-btn--primary.is-busy::after {
-  color: #fff;
+  color: var(--text-on-fill);
 }
 
 @media (prefers-reduced-motion: reduce) {

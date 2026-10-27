@@ -148,7 +148,7 @@
 
 .btn-primary {
   background: var(--button-primary-bg);
-  color: #fff;
+  color: var(--text-on-fill);
 }
 
 .btn-primary:hover {
@@ -157,7 +157,7 @@
 
 .btn-success {
   background: var(--badge-online);
-  color: #fff;
+  color: var(--text-on-fill);
 }
 
 .btn-success:hover {
@@ -179,7 +179,7 @@
 /* Warning button - amber/orange */
 .btn-warning {
   background: var(--warning-color);
-  color: #fff;
+  color: var(--text-on-fill);
 }
 
 .btn-warning:hover {
@@ -189,7 +189,7 @@
 /* Danger button - red */
 .btn-danger {
   background: var(--error-color);
-  color: #fff;
+  color: var(--text-on-fill);
 }
 
 .btn-danger:hover {
@@ -703,7 +703,7 @@
 
 .copy-btn-small:hover {
   background: var(--link-color);
-  color: #fff;
+  color: var(--text-on-fill);
   border-color: var(--link-color);
 }
 

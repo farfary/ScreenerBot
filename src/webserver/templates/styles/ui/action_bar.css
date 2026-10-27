@@ -149,7 +149,7 @@
 /* Button variants */
 .action-bar-btn--primary {
   background: var(--button-primary-bg);
-  color: #fff;
+  color: var(--text-on-fill);
   border-color: var(--button-primary-bg);
 }
 
@@ -174,7 +174,7 @@
 
 .action-bar-btn--danger {
   background: var(--danger);
-  color: #fff;
+  color: var(--text-on-fill);
   border-color: var(--danger);
 }
 

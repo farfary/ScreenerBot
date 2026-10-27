@@ -212,7 +212,7 @@
 
 .confirmation-dialog__button--confirm {
   background: var(--confirm-color);
-  color: #fff;
+  color: var(--text-on-fill);
 }
 
 /* A confirm gated on input reads as unavailable until the input allows it. */

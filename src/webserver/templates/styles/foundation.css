@@ -98,6 +98,8 @@
   --text-primary: #1f2937;
   --text-secondary: #6b7280;
   --text-muted: #9ca3af;
+  /* Text and marks drawn on a solid accent, success, warning, danger or info fill. */
+  --text-on-fill: #fff;
   --border-color: #d1d5db;
 
   /* Hover tooltip surface — inverted (dark) in light mode so clamped values
@@ -410,6 +412,7 @@ html:is(:lang(ar), :lang(fa), :lang(hi), :lang(zh), :lang(ja), :lang(ko))
   --text-primary: #e6edf3;
   --text-secondary: #8b949e;
   --text-muted: #6e7681;
+  --text-on-fill: #fff;
   --border-color: #30363d;
 
   /* Hover tooltip surface — slightly elevated above the dark page so it reads
