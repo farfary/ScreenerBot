@@ -42,8 +42,7 @@ import { loadStylesheets } from "../lib/dashboard_ui.mjs";
 
 const TAB_ROW_OWNER = "ui/tab_bar.css";
 /** A rule addressing a tab strip: a class that names tabs, a tab list or a tab bar. */
-const TAB_STRIP =
-  /(?:^|[\s>+~,(])\.[\w-]*tabs?(?:-(?:bar|row|list|strip|nav|header))?(?![\w-])/;
+const TAB_STRIP = /(?:^|[\s>+~,(])\.[\w-]*tabs?(?:-(?:bar|row|list|strip|nav|header))?(?![\w-])/;
 const SETS_OVERFLOW = /(?:^|;)\s*overflow(?:-x|-y|-inline|-block)?\s*:/;
 /**
  * Strips that still set their own overflow, with the reason each cannot use the owner
@@ -206,7 +205,15 @@ for (const theme of ["dark", "light"]) {
 test("keyboard focus draws an inset ring in both rows and on the chevrons; a click draws none", async () => {
   // At 800px the Tokens sub-row overflows, so its page chevrons are reachable.
   const { context, page } = await openPage("tokens", { width: 800 });
-  const ring = () => page.evaluate(() => getComputedStyle(document.activeElement).boxShadow);
+  // The ring is the focus owner's outline (`foundation.css`); inside a tab strip it is
+  // inset by a negative offset. A focus that draws nothing reads "none".
+  const ring = () =>
+    page.evaluate(() => {
+      const style = getComputedStyle(document.activeElement);
+      if (style.outlineStyle === "none" && style.boxShadow === "none") return "none";
+      return `${style.outlineStyle} ${style.outlineWidth} offset ${style.outlineOffset}; shadow ${style.boxShadow}`;
+    });
+  const INSET = /^solid [\d.]+px offset -[\d.]+px;/;
   const focused = () =>
     page.evaluate(() => {
       const element = document.activeElement;
@@ -216,18 +223,18 @@ test("keyboard focus draws an inset ring in both rows and on the chevrons; a cli
   await page.focus("#navTabs > a.tab");
   await page.keyboard.press("Tab");
   assert.ok(await page.evaluate(() => document.activeElement.matches("#navTabs > a.tab")));
-  assert.match(await ring(), /inset/, `main tab ${await focused()}`);
+  assert.match(await ring(), INSET, `main tab ${await focused()}`);
 
   await page.focus("#subTabsContainer .sub-tab.active");
   await page.keyboard.press("End");
-  assert.match(await ring(), /inset/, `sub-tab ${await focused()}`);
+  assert.match(await ring(), INSET, `sub-tab ${await focused()}`);
 
   await page.keyboard.press("Tab");
   assert.ok(
     await page.evaluate(() => document.activeElement.matches(".tab-scroll-btn")),
     `Tab after the sub-row reaches a chevron, not ${await focused()}`
   );
-  assert.match(await ring(), /inset/, "chevron");
+  assert.match(await ring(), INSET, "chevron");
 
   await page.click("#subTabsContainer .sub-tab:not(.active)");
   assert.equal(await ring(), "none", "a clicked sub-tab");
@@ -401,7 +408,8 @@ test("no stylesheet but the tab-row owner gives a tab strip its own overflow", a
     if (path === TAB_ROW_OWNER) continue;
     for (const { selector, body, line } of rules) {
       if (!TAB_STRIP.test(selector) || !SETS_OVERFLOW.test(body)) continue;
-      if (!OWN_OVERFLOW_ALLOWLIST.has(`${path} ${selector}`)) found.push(`${path}:${line} ${selector}`);
+      if (!OWN_OVERFLOW_ALLOWLIST.has(`${path} ${selector}`))
+        found.push(`${path}:${line} ${selector}`);
     }
   }
   assert.deepEqual(found, [], "a tab strip scrolls through the tab scroll strip in ui/tab_bar.css");

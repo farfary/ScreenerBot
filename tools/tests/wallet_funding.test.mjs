@@ -29,6 +29,8 @@ import { createApiHandler, loadIndex, FIXTURES_ROOT } from "../lib/dashboard_fix
 const MINT = "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN";
 const NOTICE_TITLE = "Fund the trading wallet to start";
 const ERROR = ".trade-action-error-msg[data-visible='true'] .trade-action-error-text";
+// The network fee reserve the buy-funding route serves; the wallet keeps every account.
+const FEE_RESERVE = 0.002;
 
 const browser = await chromium.launch({ headless: true });
 after(() => browser.close());
@@ -53,6 +55,9 @@ async function open(balance, current) {
     const path = request.url.pathname;
     if (path === "/api/wallets") return { body: JSON.stringify(list) };
     if (path === "/api/wallet/balance") return current;
+    if (path === `/api/wallet/buy-account-rent/${MINT}`) {
+      return { body: JSON.stringify({ rent_sol: 0, fee_reserve_sol: FEE_RESERVE }) };
+    }
     return api.onApi(request);
   };
   const host = await serveDashboard(context, { locale: "en", onApi });
@@ -138,11 +143,19 @@ test("a buy larger than the balance is refused inline with both figures", async 
     await openBuy(page);
     assert.equal(await page.locator(".trade-action-funding").count(), 0);
     await page.locator(".trade-action-input").fill("5");
-    await page.waitForSelector(ERROR);
-    assert.equal(
-      strip(await page.locator(ERROR).textContent()),
-      "The wallet holds 1 SOL; this trade needs 5.002 SOL"
-    );
+    const refusal = "The wallet holds 1 SOL; this trade needs 5.002 SOL";
+    // The dialog re-validates the typed amount once the served reserve arrives.
+    await page
+      .waitForFunction(
+        ([selector, text]) =>
+          document
+            .querySelector(selector)
+            ?.textContent.replace(/[\u2068\u2069]/g, "")
+            .trim() === text,
+        [ERROR, refusal]
+      )
+      .catch(() => {});
+    assert.equal(strip(await page.locator(ERROR).textContent()), refusal);
     assert.equal(
       await page.locator(".trade-action-footer .trade-action-btn-confirm").isDisabled(),
       true

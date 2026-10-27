@@ -8,7 +8,9 @@
  * section master switch, `data-level="root"`. No markup declares another level
  * or a size class, and no stylesheet outside the owner resizes or restyles the
  * track, so a settings section can no longer show three switch sizes side by
- * side.
+ * side. The one exception is the keyboard focus ring, which `foundation.css` owns
+ * (`focus_modality.test.mjs`) and draws on the track because the switch's input is
+ * invisible; that rule may set the outline and nothing else.
  *
  * Run with `npm run test:js`.
  */
@@ -19,6 +21,20 @@ import assert from "node:assert/strict";
 import { loadMarkupSources, loadStylesheets } from "../lib/dashboard_ui.mjs";
 
 const OWNER = "components/form_controls.css";
+const FOCUS_RING_OWNER = "foundation.css";
+
+/** The focus ring owner's keyboard ring on the track: outline declarations only. */
+function isFocusRing(path, selector, body) {
+  if (path !== FOCUS_RING_OWNER || !/:focus-visible/.test(selector)) return false;
+  const declarations = body
+    .split(";")
+    .map((declaration) => declaration.trim())
+    .filter(Boolean);
+  return (
+    declarations.length > 0 &&
+    declarations.every((declaration) => /^outline(?:-offset)?\s*:/.test(declaration))
+  );
+}
 
 test("switch markup declares only the master size", async () => {
   const offenders = [];
@@ -40,7 +56,7 @@ test("only the owner sizes a switch, with exactly two sizes", async () => {
   for (const { path, rules } of sheets) {
     for (const { selector, body, line } of rules) {
       const sizing = /--toggle-(?:width|height|knob-size)\s*:/.test(body);
-      const restyle = /\.toggle-track\b/.test(selector);
+      const restyle = /\.toggle-track\b/.test(selector) && !isFocusRing(path, selector, body);
       if (path !== OWNER) {
         if (sizing || restyle) outside.push(`${path}:${line} ${selector}`);
         continue;

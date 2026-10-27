@@ -175,8 +175,7 @@ test("earlier paper results show the archived book above the legacy estimates, r
   const tables = earlier.locator("table");
   assert.equal(await tables.count(), 2);
   // textContent: the column headers are upper-cased by CSS only.
-  const headers = async (table) =>
-    (await table.locator("thead th").allTextContents()).map(plain);
+  const headers = async (table) => (await table.locator("thead th").allTextContents()).map(plain);
   assert.deepEqual(await headers(tables.nth(0)), [
     "Token",
     "Tokens",
@@ -285,8 +284,9 @@ test("settings save the paper queue and leave the landing delay to the shared pa
   );
   assert.equal(await page.locator("#copy-settings-paper-queue").inputValue(), "24");
 
-  for (const queue of ["256", "1"]) {
-    await open();
+  for (const [index, queue] of ["256", "1"].entries()) {
+    // The first value goes into the dialog opened above; every later one reopens it.
+    if (index > 0) await open();
     await fill(queue);
     await page.locator("#copy-settings-form button[type='submit']").click();
     await page.waitForFunction(() =>
@@ -295,7 +295,11 @@ test("settings save the paper queue and leave the landing delay to the shared pa
     const saved = patches[patches.length - 1];
     assert.equal(saved.paper_queue_capacity, Number(queue));
     assert.equal(saved.max_arrival_distance_ms, 4000, "the arrival limit round-trips unchanged");
-    assert.equal("paper_landing_delay_ms" in saved, false, "copy saves no landing delay of its own");
+    assert.equal(
+      "paper_landing_delay_ms" in saved,
+      false,
+      "copy saves no landing delay of its own"
+    );
   }
 });
 

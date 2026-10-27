@@ -40,7 +40,9 @@ function localizeEmptyElements(html) {
   );
 }
 
-const traderHtml = localizeEmptyElements(await readFile(resolve(PAGES_ROOT, "trader.html"), "utf8"));
+const traderHtml = localizeEmptyElements(
+  await readFile(resolve(PAGES_ROOT, "trader.html"), "utf8")
+);
 const styles = await Promise.all(
   ["foundation.css", "pages/trader/config_components.css"].map((path) =>
     readFile(resolve(STYLES_ROOT, path), "utf8")
@@ -92,6 +94,10 @@ test("Auto Trader compact labels stay on one line across desktop widths and zoom
       </style>
       <main>${longLabelProbe}${traderHtml}</main>
     `);
+    // A field shown only under its switch is measured as it renders once revealed.
+    await page.$$eval(".config-group[hidden]", (groups) =>
+      groups.forEach((group) => group.removeAttribute("hidden"))
+    );
 
     const result = await page
       .locator(".config-label-row > .config-label > span, .config-label-row > .config-badge")

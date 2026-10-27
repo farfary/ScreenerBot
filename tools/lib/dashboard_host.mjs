@@ -289,8 +289,15 @@ function assetFile(pathname) {
  * renders the configured Default Page (`startup_page` in
  * src/webserver/routes/mod.rs). A plain HTTP server keeps asset serving off the
  * DevTools protocol, which is what bounds the suite's runtime.
+ *
+ * `hostname` names the host the page is opened by (a network address or
+ * `localhost`), on the server's port; `origin` then carries that name and its
+ * requests are forwarded to the server through the context.
  */
-export async function serveDashboard(context, { locale, onApi, startupPage = "home" }) {
+export async function serveDashboard(
+  context,
+  { locale, onApi, startupPage = "home", hostname = null }
+) {
   const unserved = [];
   const server = createServer(async (request, response) => {
     const url = new URL(request.url, "http://localhost");
@@ -333,7 +340,8 @@ export async function serveDashboard(context, { locale, onApi, startupPage = "ho
     return send(404, "text/plain", "");
   });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
-  const origin = `http://127.0.0.1:${server.address().port}`;
+  const served = `127.0.0.1:${server.address().port}`;
+  const origin = `http://${hostname ? `${hostname}:${server.address().port}` : served}`;
   await context.route(
     (url) => url.origin !== origin,
     (route) => {
@@ -341,6 +349,22 @@ export async function serveDashboard(context, { locale, onApi, startupPage = "ho
       return route.abort("blockedbyclient");
     }
   );
+  if (hostname) {
+    await context.route(
+      (url) => url.origin === origin,
+      async (route) => {
+        const request = route.request();
+        const url = new URL(request.url());
+        url.host = served;
+        // The browser adds the Fetch Metadata headers after interception, and the
+        // shell is served only to a document request.
+        const headers = request.isNavigationRequest()
+          ? { ...request.headers(), "sec-fetch-dest": "document" }
+          : request.headers();
+        await route.fulfill({ response: await route.fetch({ url: url.href, headers }) });
+      }
+    );
+  }
   return {
     origin,
     unserved,

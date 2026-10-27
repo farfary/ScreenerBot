@@ -52,13 +52,15 @@ const envelope = (data) => ({ body: JSON.stringify({ success: true, data }) });
  * Mounts the account panel on Home. `samePort` serves the page on the server's own
  * port; `opened` is what the server reports for the pages it was asked to open.
  * `hostname` opens the page by that name instead of 127.0.0.1, on the same port; its
- * requests are answered by the test server.
+ * requests are answered by the test server. A failure while mounting closes what was
+ * opened, so a failed test never leaves the server holding the process open.
  */
 async function openPanel({ samePort, opened, hostname = null }) {
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   const fixtures = createApiHandler([home, shell], "populated");
   const host = await serveDashboard(context, {
     locale: "en",
+    hostname,
     onApi: (request) => {
       const path = request.url.pathname;
       if (path === "/api/account/status") return envelope(SIGNED_OUT);
@@ -71,19 +73,20 @@ async function openPanel({ samePort, opened, hostname = null }) {
       return fixtures.onApi(request);
     },
   });
-  let origin = host.origin;
-  if (hostname) {
-    const served = new URL(host.origin);
-    origin = `http://${hostname}:${served.port}`;
-    await context.route(
-      (url) => url.origin === origin,
-      async (route) => {
-        const url = new URL(route.request().url());
-        url.host = served.host;
-        route.fulfill({ response: await route.fetch({ url: url.href }) });
-      }
-    );
+  const close = async () => {
+    await context.close();
+    await host.close();
+  };
+  try {
+    return { ...(await mountPanel(context, host.origin, samePort)), close };
+  } catch (error) {
+    await close();
+    throw error;
   }
+}
+
+/** Opens Home at `origin` and mounts a signed-out account panel above the shell. */
+async function mountPanel(context, origin, samePort) {
   const page = await context.newPage();
   page.setDefaultTimeout(15000);
   await page.goto(`${origin}/home`);
@@ -107,11 +110,7 @@ async function openPanel({ samePort, opened, hostname = null }) {
   const panel = page.locator("#accountPanelProbe .account-panel-signed-out");
   await panel.waitFor();
   const openedPages = () => page.evaluate(() => window.__openedPages);
-  const close = async () => {
-    await context.close();
-    await host.close();
-  };
-  return { page, panel, openedPages, close };
+  return { page, panel, openedPages };
 }
 
 test("behind another port the panel offers the code flow instead of the browser", async () => {
@@ -146,7 +145,11 @@ test("on the server's port opened from another machine the panel offers the code
 });
 
 test("on localhost and the server's port the browser option is offered", async () => {
-  const { panel, close } = await openPanel({ samePort: true, opened: false, hostname: "localhost" });
+  const { panel, close } = await openPanel({
+    samePort: true,
+    opened: false,
+    hostname: "localhost",
+  });
   try {
     assert.equal(await panel.locator('[data-action="browser"]').count(), 1);
   } finally {

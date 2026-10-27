@@ -242,7 +242,12 @@ test("every rule card's worked example is titled How It Works", async () => {
       ))
     );
   }
-  assert.ok(titles.length >= 5, "the rule cards carry worked examples");
+  // The DCA tab edits a ladder of steps and carries no single worked example.
+  assert.deepEqual(
+    [...new Set(titles.map((title) => title.split(":")[0]))],
+    ["stop-loss", "trailing-stop", "take-profit", "time-rules"],
+    "the rule cards carry worked examples"
+  );
   assert.deepEqual(
     titles.filter((title) => !title.endsWith(": How It Works")),
     []

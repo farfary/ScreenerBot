@@ -24,6 +24,8 @@ import { createApiHandler, loadIndex } from "../lib/dashboard_fixtures.mjs";
 
 const MINT = "7GCihgDB8fe6KNjn2MYtkzZcRjQy3t9GHdC8uHYmW2hr";
 const BALANCE = 0.011;
+// Fluent isolates every placeable (U+2068/U+2069); the wording is asserted without them.
+const plain = (text) => text.replace(/[\u2068\u2069]/g, "").trim();
 
 const browser = await chromium.launch({ headless: true });
 after(() => browser.close());
@@ -76,7 +78,7 @@ async function buyRefusal(rentSol, amount, feeReserveSol = 0.002) {
     await page.fill(".trade-action-input", String(amount));
     const error = page.locator('.trade-action-error-msg[data-visible="true"]');
     await error.waitFor();
-    return (await error.textContent()).trim();
+    return plain(await error.textContent());
   } finally {
     await context.close();
     await host.close();

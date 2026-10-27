@@ -102,7 +102,7 @@ export const views = [
     populated: [
       { selector: TASK_ROW, min: 3 },
       { selector: "#copy-figures .copy-figure", min: 6 },
-      { selector: "#copy-ws-panel .copy-check", min: 5 },
+      { selector: "#copy-ws-panel .arm-gate-check", min: 5 },
       { selector: "#copy-ws-panel .copy-chart-plot", min: 1 },
     ],
     empty: [

@@ -16,6 +16,8 @@
  * - the gap outcome table (`("code", Severity::…)` in ohlcvs/gaps.rs) and
  *   `subtype: "code"` announcement fields;
  * - the swap hold outcome table (`=> ("code", …)` in positions/swap_hold/release.rs);
+ * - the exit rule signal table (`("code", crate::events::Severity::…` in
+ *   trader/evaluators/exit.rs);
  * - the `ScheduledTaskOutcome` codes;
  * - a candle feed's `format!("{}_code", feed.label)`, labelled by its shared code.
  *
@@ -68,6 +70,7 @@ const COMPUTED = {
   "ohlcvs/gaps.rs": "the gap outcome table",
   "positions/swap_hold/release.rs": "the hold outcome table",
   "trader/copy/notify.rs": "the announcement's subtype field",
+  "trader/evaluators/exit.rs": "the exit rule signal table",
 };
 
 function rustFiles(dir, out = []) {
@@ -140,6 +143,11 @@ function producedCodes() {
     }
     if (relative === "positions/swap_hold/release.rs") {
       for (const match of source.matchAll(/=>\s*\(\s*"([a-z_]+)",/g)) codes.add(match[1]);
+    }
+    if (relative === "trader/evaluators/exit.rs") {
+      for (const match of source.matchAll(/\(\s*"([a-z_]+)",\s*crate::events::Severity::/g)) {
+        codes.add(match[1]);
+      }
     }
     for (const line of source.split("\n").filter((text) => /\bsubtype:\s*(?:if\b|")/.test(text))) {
       for (const match of line.matchAll(/"([a-z_]+)"/g)) codes.add(match[1]);

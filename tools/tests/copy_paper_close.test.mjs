@@ -391,7 +391,8 @@ test("a restart says the holdings stay in history and reports the rounds it clos
   assert.match(message, /Nothing is deleted/);
   await dialog.locator('[data-action="confirm"]').click();
   await until(() => resets.length > 0);
-  await toast(page, "2 holdings closed").waitFor();
+  // The count is a Fluent argument, so it arrives between bidi isolation marks.
+  await toast(page, /\u2068?2\u2069? holdings closed/).waitFor();
 });
 
 test("the holdings say so when the Auto Trader is stopped and only then", async (t) => {
@@ -401,7 +402,10 @@ test("the holdings say so when the Auto Trader is stopped and only then", async 
   state.workspace.exit_rules_running = false;
   await refresh(page);
   await note.first().waitFor();
-  assert.match(plain(await note.first().innerText()), /only the wallet's sells close these holdings/);
+  assert.match(
+    plain(await note.first().innerText()),
+    /only the wallet's sells close these holdings/
+  );
 });
 
 test("clicking close repeatedly during its confirmation sends one request", async (t) => {

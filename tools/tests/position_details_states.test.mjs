@@ -40,6 +40,8 @@ import { createApiHandler, loadIndex } from "../lib/dashboard_fixtures.mjs";
 
 const ROW_SYMBOL = "#positions-root tr[data-row-id] .ti-row-cell__symbol";
 const BODY_STATE = ".position-details-dialog #pddBodyState";
+// Fluent isolates every placeable (U+2068/U+2069); the wording is asserted without them.
+const plain = (text) => text.replace(/[\u2068\u2069]/g, "").trim();
 
 test("a failed details load offers Retry and recovers", async (t) => {
   const browser = await chromium.launch({ headless: true });
@@ -83,7 +85,10 @@ test("a failed details load offers Retry and recovers", async (t) => {
   await page.waitForSelector(BODY_STATE, { state: "hidden" });
   assert.ok(await page.locator(".position-details-dialog .header-metric").count());
   // The header avatar is the shared token avatar, not a dialog-local one.
-  assert.equal(await page.locator(".position-details-dialog .header-logo > .ti-logo-lg").count(), 1);
+  assert.equal(
+    await page.locator(".position-details-dialog .header-logo > .ti-logo-lg").count(),
+    1
+  );
 });
 
 test("an active favourite is a bare glyph", () => {
@@ -239,7 +244,10 @@ async function assertTradeLock(dialog, locked, reason) {
       `${action} is ${expected ? "locked" : "available"} ${reason}`
     );
     if (!expected) {
-      assert.equal(await button.getAttribute("title"), await button.getAttribute("data-idle-title"));
+      assert.equal(
+        await button.getAttribute("title"),
+        await button.getAttribute("data-idle-title")
+      );
     }
   }
 }
@@ -257,7 +265,7 @@ test("a held partial exit reads as checking the wallet and leaves Close availabl
 
   const pending = dialog.locator(".pdd-pending");
   assert.equal(await pending.count(), 1);
-  assert.equal((await pending.textContent()).trim(), "Selling 25% · checking the wallet");
+  assert.equal(plain(await pending.textContent()), "Selling 25% · checking the wallet");
   assert.match(await pending.getAttribute("title"), /^The sale could not be confirmed\./);
 
   await assertTradeLock(dialog, ["add", "sell"], "while the partial exit is held");
@@ -279,7 +287,7 @@ test("a confirming partial exit locks Add and Sell and leaves Close available", 
   ]);
 
   assert.equal(
-    (await dialog.locator(".pdd-pending").textContent()).trim(),
+    plain(await dialog.locator(".pdd-pending").textContent()),
     "Selling 40% · confirming"
   );
   await assertTradeLock(dialog, ["add", "sell"], "while the partial exit confirms");

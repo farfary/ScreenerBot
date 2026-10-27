@@ -27,14 +27,15 @@ test("Copy Trading carries no release-stage badge or feature-label request", () 
 
 test("every dashboard feature fixture presents copy trading as available", () => {
   const fixtures = new URL("tools/tests/fixtures/dashboard/", root);
-  let checked = 0;
+  const checked = [];
   for (const entry of readdirSync(fixtures, { withFileTypes: true })) {
     if (!entry.isDirectory()) continue;
     const files = readdirSync(new URL(`${entry.name}/`, fixtures));
     if (!files.includes("features.json")) continue;
     const features = JSON.parse(read(`tools/tests/fixtures/dashboard/${entry.name}/features.json`));
     assert.equal(features.trading.copy_wallet, "available", entry.name);
-    checked++;
+    checked.push(entry.name);
   }
-  assert.ok(checked >= 3, "feature fixtures must be covered");
+  for (const owner of ["copy", "trader"])
+    assert.ok(checked.includes(owner), `the ${owner} feature fixture must be covered`);
 });

@@ -12,7 +12,8 @@
  *   drew their own avatar with their own letter fallback. The allowlist holds the
  *   surfaces not yet moved to the owner; it only shrinks.
  * - Every DataTable consumer that shows a token renders it with `renderTokenRowCell`
- *   or `renderTokenCell`.
+ *   or `renderTokenCell`, directly or through a helper that does: a top-level function,
+ *   or an arrow helper declared in the same file.
  * - The row cell's hidden actions sit inside the cell, so the token column never
  *   reports a scroll width wider than itself.
  * - The row cell's action buttons are the shared bare icon button (`.btn-icon`), not a
@@ -67,6 +68,52 @@ function functionBody(source, name) {
 
 const SHARED_CELL = /\b(?:renderTokenRowCell|renderTokenCell)\(/;
 
+/**
+ * Helpers local to one source, `const name = (...) =>` at any depth: name to body, the
+ * declaration line and every following line indented deeper than it.
+ */
+function localArrowHelpers(source) {
+  const lines = source.split("\n");
+  const helpers = new Map();
+  lines.forEach((line, index) => {
+    const head = /^(\s*)const (\w+) = (?:\([^)]*\)|\w+) =>/.exec(line);
+    if (!head) return;
+    let end = index + 1;
+    while (
+      end < lines.length &&
+      (lines[end].trim() === "" || /^\s*/.exec(lines[end])[0].length > head[1].length)
+    )
+      end += 1;
+    helpers.set(head[2], lines.slice(index, end).join("\n"));
+  });
+  return helpers;
+}
+
+/**
+ * Names of the local helpers in `source` that reach the shared cell, directly or through
+ * another helper that does (`sharedHelpers` or a local one), resolved to a fixed point.
+ */
+function localSharedHelpers(source, sharedHelpers) {
+  const helpers = localArrowHelpers(source);
+  const reaching = new Set();
+  let grew = true;
+  while (grew) {
+    grew = false;
+    for (const [name, body] of helpers) {
+      if (reaching.has(name)) continue;
+      const calls = [...body.matchAll(/\b(\w+)\(/g)].map((call) => call[1]);
+      const reaches =
+        SHARED_CELL.test(body) ||
+        calls.some((call) => call !== name && (sharedHelpers.has(call) || reaching.has(call)));
+      if (reaches) {
+        reaching.add(name);
+        grew = true;
+      }
+    }
+  }
+  return reaching;
+}
+
 test("DataTable token columns render through the shared token cell", () => {
   const sources = new Map(scripts.map((file) => [file, readFileSync(file, "utf8")]));
   const sharedHelpers = new Set();
@@ -79,6 +126,7 @@ test("DataTable token columns render through the shared token cell", () => {
   for (const [file, source] of sources) {
     if (!/\bnew DataTable\(|\bbuildColumns\b/.test(source) || file.endsWith("ui/data_table.js"))
       continue;
+    const localHelpers = localSharedHelpers(source, sharedHelpers);
     const lines = source.split("\n");
     lines.forEach((line, index) => {
       const head = /^(\s*)id: "(token|token_mint|mint)",$/.exec(line);
@@ -88,7 +136,8 @@ test("DataTable token columns render through the shared token cell", () => {
       while (end < lines.length && !lines[end].startsWith(close)) end += 1;
       const block = lines.slice(index, end).join("\n");
       const calls = [...block.matchAll(/\b(\w+)\(/g)].map((call) => call[1]);
-      if (!SHARED_CELL.test(block) && !calls.some((call) => sharedHelpers.has(call)))
+      const viaHelper = calls.some((call) => sharedHelpers.has(call) || localHelpers.has(call));
+      if (!SHARED_CELL.test(block) && !viaHelper)
         missing.push(`${repoPath(file)}:${index + 1} ${head[2]}`);
     });
   }
@@ -122,7 +171,11 @@ test("row-cell actions are the shared icon button", () => {
   }
   assert.deepEqual(found, []);
   const css = readFileSync(`${STYLES_ROOT}/ui/token_identity.css`, "utf8");
-  assert.doesNotMatch(css, /\.ti-row-cell__actions\s+\.btn\b(?!-)/, "a reskinned .btn in the row cell");
+  assert.doesNotMatch(
+    css,
+    /\.ti-row-cell__actions\s+\.btn\b(?!-)/,
+    "a reskinned .btn in the row cell"
+  );
 });
 
 test("a token without a symbol is never labelled with a placeholder", () => {

@@ -39,6 +39,10 @@ const ANALYTICS = JSON.parse(
   readFileSync(resolve(FIXTURES_ROOT, "filtering", "filtering_analytics.json"), "utf8")
 );
 
+// Fluent wraps each placeable, the `-rugcheck` term included, in Unicode isolation marks.
+const AWAITING = "Awaiting \u2068RugCheck\u2069 Report";
+const withoutIsolation = (text) => text.replace(/[\u2068\u2069]/g, "");
+
 /**
  * Opens the Filtering status view with the stats fixture, signed in or out, with the
  * RugCheck stage on unless `reportRequired` is false.
@@ -82,7 +86,7 @@ test("signed out, the status panel states the direct report rate and offers sign
   try {
     const notice = session.page.locator(".status-report-notice");
     assert.equal(
-      (await notice.locator(".status-report-notice__text").textContent()).trim(),
+      withoutIsolation(await notice.locator(".status-report-notice__text").textContent()).trim(),
       "RugCheck reports arrive at about 3 a minute. Signed-in installs get them faster."
     );
     await notice.locator("[data-filtering-sign-in]").click();
@@ -107,12 +111,9 @@ test("tokens awaiting their report have their own card, apart from the passed co
   const session = await openStatus(true);
   try {
     const card = session.page.locator(".status-view .metric-card", {
-      hasText: "Awaiting RugCheck Report",
+      hasText: AWAITING,
     });
-    assert.equal(
-      (await card.locator(".metric-value").textContent()).trim(),
-      "2,140"
-    );
+    assert.equal((await card.locator(".metric-value").textContent()).trim(), "2,140");
   } finally {
     await session.close();
   }
@@ -124,7 +125,7 @@ test("with the RugCheck stage off nothing awaits a report and no notice shows", 
     const { page } = session;
     assert.equal(await page.locator(".status-report-notice").count(), 0);
     const awaitingCard = page.locator(".status-view .metric-card", {
-      hasText: "Awaiting RugCheck Report",
+      hasText: AWAITING,
     });
     assert.equal(await awaitingCard.count(), 0);
     const chips = await page.$$eval(".table-toolbar-chip__label", (labels) =>
@@ -186,18 +187,16 @@ test("the Analytics headline shows the awaiting count, and the counts add up", a
   const session = await openAnalytics(true);
   try {
     const counts = await headlineCounts(session.page);
-    assert.equal(counts.get("Awaiting RugCheck Report"), 2140);
+    assert.equal(counts.get(AWAITING), 2140);
     assert.equal(
-      counts.get("Passed Tokens") +
-        counts.get("Rejected Tokens") +
-        counts.get("Awaiting RugCheck Report"),
+      counts.get("Passed Tokens") + counts.get("Rejected Tokens") + counts.get(AWAITING),
       counts.get("Total Scanned")
     );
     const share = session.page.locator(".analytics-view .metric-card", {
-      hasText: "Awaiting RugCheck Report",
+      hasText: AWAITING,
     });
     assert.equal(
-      (await share.locator(".metric-detail").textContent()).trim(),
+      withoutIsolation(await share.locator(".metric-detail").textContent()).trim(),
       "11.6% awaiting their report"
     );
   } finally {
@@ -210,7 +209,7 @@ test("with the RugCheck stage off the Analytics headline has no awaiting card", 
   try {
     const counts = await headlineCounts(session.page);
     assert.equal(counts.size, 3);
-    assert.ok(!counts.has("Awaiting RugCheck Report"));
+    assert.ok(!counts.has(AWAITING));
   } finally {
     await session.close();
   }

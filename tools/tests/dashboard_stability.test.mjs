@@ -174,9 +174,14 @@ async function assertEmpty(page, view) {
     await page
       .waitForFunction(
         ([css, source]) => {
-          const element = [...document.querySelectorAll(css)].find(
-            (candidate) => candidate.offsetParent
-          );
+          // A `display: contents` element has no box of its own; it is on screen when the
+          // nearest ancestor that has one is.
+          const shown = (candidate) => {
+            let box = candidate;
+            while (box && getComputedStyle(box).display === "contents") box = box.parentElement;
+            return Boolean(box?.offsetParent);
+          };
+          const element = [...document.querySelectorAll(css)].find(shown);
           return (
             Boolean(element) && new RegExp(source, "i").test(element.innerText.replace(/\s+/g, " "))
           );

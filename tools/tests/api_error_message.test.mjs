@@ -108,9 +108,12 @@ test("a complete localized statement stands alone without its technical cause", 
 });
 
 test("splits text into the locale's sentences", () => {
-  assert.deepEqual(I18n.sentences("One thing. Another thing"), ["One thing.", "Another thing"]);
-  assert.deepEqual(I18n.sentences("Failed to save settings"), ["Failed to save settings"]);
-  assert.deepEqual(I18n.sentences("  "), []);
+  // Arrays built inside the vm context carry that context's Array prototype, which strict
+  // deepEqual rejects; copy each result into this realm.
+  const sentences = (text) => [...I18n.sentences(text)];
+  assert.deepEqual(sentences("One thing. Another thing"), ["One thing.", "Another thing"]);
+  assert.deepEqual(sentences("Failed to save settings"), ["Failed to save settings"]);
+  assert.deepEqual(sentences("  "), []);
 });
 
 test("empty or non-string details leave the message unframed", () => {

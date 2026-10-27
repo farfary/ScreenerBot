@@ -11,7 +11,9 @@
  * domains left out); the resulting `I18n` is installed as the global the modules read.
  */
 
+import console from "node:console";
 import fs from "node:fs";
+import { URL } from "node:url";
 import vm from "node:vm";
 
 import { readServerOnlyDomains } from "../i18n/catalogs.mjs";

@@ -78,8 +78,7 @@ test("a rule with no stored values follows the Trader's own summary", () => {
   assert.ok(percents(note).includes(40), note);
 });
 
-const esc = (text) =>
-  String(text).replace(/[&<>"']/g, (char) => `&#${char.charCodeAt(0)};`);
+const esc = (text) => String(text).replace(/[&<>"']/g, (char) => `&#${char.charCodeAt(0)};`);
 const LADDER = [
   { profit_pct: 20, sell_pct: 30 },
   { profit_pct: 40, sell_pct: 30 },
@@ -109,7 +108,9 @@ test("an inherited take-profit ladder reads as its steps on the Rules tab", () =
   const backend = { ...workspace.effective_policy, roi };
   assert.equal(targetRow(rulesHtml({ ...context, effective: backend }, esc)), steps);
   assert.equal(
-    targetRow(rulesHtml({ ...context, effective: effectivePolicy(traderDefaults, overrides) }, esc)),
+    targetRow(
+      rulesHtml({ ...context, effective: effectivePolicy(traderDefaults, overrides) }, esc)
+    ),
     steps,
     "the editor's review reads the same steps"
   );
@@ -119,7 +120,11 @@ test("an inherited take-profit ladder reads as its steps on the Rules tab", () =
   assert.equal(
     targetRow(
       rulesHtml(
-        { ...context, task: { ...task, exit_policy_overrides: own }, effective: effectivePolicy(traderDefaults, own) },
+        {
+          ...context,
+          task: { ...task, exit_policy_overrides: own },
+          effective: effectivePolicy(traderDefaults, own),
+        },
         esc
       )
     ),
@@ -143,9 +148,22 @@ test("the rules a task cannot override read as the Trader's values", () => {
   };
   const overrides = workspace.exit_policy_overrides;
   const context = { task: workspace, traderDefaults, managesExits: true };
-  const row = (html, label) =>
-    plain(html).match(
-      new RegExp(`<tr[^>]*><td>${label}</td><td>([^<]*)</td><td class="copy-rules-source">([^<]*)</td>`)
+  // A label can repeat across groups (the trailing stop and the break-even stop both arm at
+  // a gain), so a row is looked up inside its own group's section of the table. Titles and
+  // labels are matched as the table escapes them.
+  const literal = (text) => esc(text).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const section = (html, title) => {
+    const text = plain(html);
+    const start = text.indexOf(`>${esc(title)}</th>`);
+    assert.ok(start >= 0, `${title} has its group row`);
+    const next = text.indexOf('<tr class="copy-rules-group">', start);
+    return text.slice(start, next < 0 ? undefined : next);
+  };
+  const row = (html, title, label) =>
+    section(html, title).match(
+      new RegExp(
+        `<tr[^>]*><td>${literal(label)}</td><td>([^<]*)</td><td class="copy-rules-source">([^<]*)</td>`
+      )
     );
   const expected = {
     trigger_pct: "+15%",
@@ -153,14 +171,17 @@ test("the rules a task cannot override read as the Trader's values", () => {
     band_pct: "±5%",
   };
   for (const effective of [
-    { ...workspace.effective_policy, break_even: traderDefaults.break_even, time_stagnation: traderDefaults.time_stagnation },
+    {
+      ...workspace.effective_policy,
+      break_even: traderDefaults.break_even,
+      time_stagnation: traderDefaults.time_stagnation,
+    },
     effectivePolicy(traderDefaults, overrides),
   ]) {
     const html = rulesHtml({ ...context, effective }, esc);
     for (const rule of INHERITED_RULES) {
-      assert.ok(plain(html).includes(`>${rule.title}</th>`), `${rule.group} has its group row`);
       for (const field of rule.fields) {
-        const found = row(html, field.label);
+        const found = row(html, rule.title, field.label);
         assert.ok(found, `${rule.group}.${field.key} has a row`);
         assert.equal(found[2], "Trader default", `${rule.group}.${field.key} is inherited`);
         assert.notEqual(found[1], "—", `${rule.group}.${field.key} shows a value`);
@@ -175,13 +196,19 @@ test("the break-even stop or the flat position exit alone counts as an exit rule
   const off = { enabled: false };
   const policy = { stop_loss: off, trailing: off, roi: off, time: off };
   const none = exitWarnings({ ...policy, break_even: off, time_stagnation: off }, "buy_only", {});
-  assert.ok(none.map(plain).some((text) => /no exit rule/i.test(text)), none.join(" | "));
+  assert.ok(
+    none.map(plain).some((text) => /no exit rule/i.test(text)),
+    none.join(" | ")
+  );
   for (const group of ["break_even", "time_stagnation"]) {
     const warnings = exitWarnings(
       { ...policy, break_even: off, time_stagnation: off, [group]: { enabled: true } },
       "buy_only",
       {}
     ).map(plain);
-    assert.ok(!warnings.some((text) => /no exit rule/i.test(text)), `${group}: ${warnings.join(" | ")}`);
+    assert.ok(
+      !warnings.some((text) => /no exit rule/i.test(text)),
+      `${group}: ${warnings.join(" | ")}`
+    );
   }
 });
