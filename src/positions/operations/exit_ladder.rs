@@ -305,6 +305,44 @@ mod tests {
         assert_eq!(sent.len(), 3);
     }
 
+    /// A refusal raised before anything was signed (a force stop, a missing
+    /// router, a signing key that did not load, a quote that cannot be executed)
+    /// ends the ladder as a failure that carries its reason, never as unresolved.
+    #[tokio::test(start_paused = true)]
+    async fn a_refusal_before_signing_ends_failed_and_never_unresolved() {
+        let reasons = [
+            NotSubmittedReason::Halted,
+            NotSubmittedReason::RouterUnavailable {
+                detail: "router jupiter is not registered".to_owned(),
+            },
+            NotSubmittedReason::SignerUnavailable {
+                detail: "no wallet is configured".to_owned(),
+            },
+            NotSubmittedReason::QuoteUnusable {
+                detail: "the quote came from another router".to_owned(),
+            },
+        ];
+        for reason in reasons {
+            let (outcome, _) = ladder(|| {
+                crate::Error::Swaps(SwapExecutionError::NotSubmitted {
+                    router: "Jupiter".to_owned(),
+                    reason: reason.clone(),
+                })
+            })
+            .await;
+            assert!(
+                matches!(
+                    outcome,
+                    ExitSwap::Failed {
+                        not_submitted: Some(_),
+                        ..
+                    }
+                ),
+                "{reason}: {outcome:?}"
+            );
+        }
+    }
+
     /// A closed bonding curve is routed around once per rung, and only after
     /// the curve's own failure proved nothing was sold.
     #[tokio::test(start_paused = true)]

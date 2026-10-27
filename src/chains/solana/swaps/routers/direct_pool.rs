@@ -34,7 +34,9 @@ use crate::chains::{adapter_for, ChainId};
 use crate::config::with_config;
 use crate::errors::DataError;
 use crate::logger::{self, LogTag};
-use crate::swaps::error::{NotOfferedReason, QuoteError, QuoteResult};
+use crate::swaps::error::{
+    NotOfferedReason, NotSubmittedReason, QuoteError, QuoteResult, SwapExecutionError,
+};
 use crate::swaps::router::SwapRouter;
 use crate::swaps::types::{Quote, QuoteRequest, SwapResult};
 use crate::tokens::Token;
@@ -322,33 +324,35 @@ impl DirectPoolRouter {
     /// execution runs; refusing below the accepted floor is what keeps that
     /// choice honest.
     async fn fresh_plan(&self, quote: &Quote, owner: Pubkey) -> Result<direct::SwapPlan> {
-        let data: DirectExecutionData =
-            serde_json::from_slice(&quote.execution_data).map_err(|e| {
-                Error::Data(DataError::ParseError {
-                    data_type: "direct pool execution data".to_owned(),
-                    error: e.to_string(),
-                })
-            })?;
+        // Execution data that does not decode is refused before anything is built.
+        let unusable = |detail: String| {
+            Error::Swaps(SwapExecutionError::NotSubmitted {
+                router: self.name().to_owned(),
+                reason: NotSubmittedReason::QuoteUnusable { detail },
+            })
+        };
+        let data: DirectExecutionData = serde_json::from_slice(&quote.execution_data)
+            .map_err(|e| unusable(format!("direct pool execution data does not decode: {e}")))?;
 
         let intent = DirectSwapIntent {
             pool: Pubkey::from_str(&data.pool).map_err(|e| {
-                Error::Data(DataError::ParseError {
-                    data_type: format!("direct pool execution data pool ({})", data.pool),
-                    error: e.to_string(),
-                })
+                unusable(format!(
+                    "direct pool execution data pool ({}) does not decode: {e}",
+                    data.pool
+                ))
             })?,
             owner,
             input_mint: Pubkey::from_str(&quote.input_mint).map_err(|e| {
-                Error::Data(DataError::ParseError {
-                    data_type: format!("quote input mint ({})", quote.input_mint),
-                    error: e.to_string(),
-                })
+                unusable(format!(
+                    "quote input mint ({}) does not decode: {e}",
+                    quote.input_mint
+                ))
             })?,
             output_mint: Pubkey::from_str(&quote.output_mint).map_err(|e| {
-                Error::Data(DataError::ParseError {
-                    data_type: format!("quote output mint ({})", quote.output_mint),
-                    error: e.to_string(),
-                })
+                unusable(format!(
+                    "quote output mint ({}) does not decode: {e}",
+                    quote.output_mint
+                ))
             })?,
             amount_in: data.amount_in,
             slippage_bps: data.slippage_bps,
@@ -484,7 +488,7 @@ impl SwapRouter for DirectPoolRouter {
         self.accept_own_quote(quote)?;
         super::checked_quote_amounts(quote)?;
         let start = Instant::now();
-        let keypair = crate::chains::solana::accounts::configured_keypair()?;
+        let keypair = super::signing_keypair(self.name())?;
         let outcome = self.execute_with_keypair(quote, &keypair).await?;
 
         logger::info(

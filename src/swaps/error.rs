@@ -312,6 +312,21 @@ pub enum NotSubmittedReason {
     /// executes a swap, so nothing was built or sent.
     #[error("swap execution is refused while paper trading")]
     PaperScope,
+    /// Trading is halted by a force stop; no router was asked.
+    #[error("trading is halted by a force stop")]
+    Halted,
+    /// The router registry, or the router that produced the quote, is
+    /// unavailable or disabled, so nothing was built.
+    #[error("the router is unavailable: {detail}")]
+    RouterUnavailable { detail: String },
+    /// The wallet's signing key could not be loaded, so nothing was signed.
+    #[error("the signing key could not be loaded: {detail}")]
+    SignerUnavailable { detail: String },
+    /// The quote cannot be executed as it stands: produced by another router,
+    /// carrying amounts outside the chain's or the caller's range, or holding
+    /// execution data that does not decode.
+    #[error("the quote cannot be executed: {detail}")]
+    QuoteUnusable { detail: String },
 }
 
 impl NotSubmittedReason {
@@ -326,9 +341,12 @@ impl NotSubmittedReason {
             | NotSubmittedReason::RequestRejected { .. }
             | NotSubmittedReason::SimulationFailed { .. }
             | NotSubmittedReason::CostExceeded { .. }
-            | NotSubmittedReason::InsufficientFunds { .. } => 422,
-            NotSubmittedReason::SimulationUnavailable { .. } => 503,
-            NotSubmittedReason::PaperScope => 500,
+            | NotSubmittedReason::InsufficientFunds { .. }
+            | NotSubmittedReason::QuoteUnusable { .. } => 422,
+            NotSubmittedReason::SimulationUnavailable { .. }
+            | NotSubmittedReason::RouterUnavailable { .. } => 503,
+            NotSubmittedReason::PaperScope | NotSubmittedReason::SignerUnavailable { .. } => 500,
+            NotSubmittedReason::Halted => 409,
         }
     }
 }

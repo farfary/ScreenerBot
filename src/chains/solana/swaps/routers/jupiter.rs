@@ -563,7 +563,7 @@ impl SwapRouter for JupiterRouter {
     async fn execute_swap(&self, _token: &Token, quote: &Quote) -> Result<SwapResult> {
         self.accept_own_quote(quote)?;
         super::checked_quote_amounts(quote)?;
-        let keypair = crate::chains::solana::accounts::configured_keypair()?;
+        let keypair = super::signing_keypair(self.name())?;
         self.build_and_submit(quote, &keypair).await
     }
 

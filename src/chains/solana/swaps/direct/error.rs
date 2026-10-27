@@ -356,7 +356,11 @@ impl From<crate::swaps::NotSubmittedReason> for DirectSwapError {
             | NotSubmittedReason::UnsupportedFormat { .. }
             | NotSubmittedReason::CostExceeded { .. }
             | NotSubmittedReason::InsufficientFunds { .. }
-            | NotSubmittedReason::PaperScope) => DirectSwapError::Build {
+            | NotSubmittedReason::PaperScope
+            | NotSubmittedReason::Halted
+            | NotSubmittedReason::RouterUnavailable { .. }
+            | NotSubmittedReason::SignerUnavailable { .. }
+            | NotSubmittedReason::QuoteUnusable { .. }) => DirectSwapError::Build {
                 detail: other.to_string(),
             },
         }

@@ -59,14 +59,22 @@ pub trait SwapRouter: Send + Sync {
     }
 
     /// Refuse a quote produced by a different router. Router-specific
-    /// `execution_data` must never be submitted through another adapter.
+    /// `execution_data` must never be submitted through another adapter. The
+    /// refusal comes before anything is built or signed.
     fn accept_own_quote(&self, quote: &Quote) -> Result<()> {
         if quote.router_id != self.id() {
-            Err(Error::internal_error(format!(
-                "Quote from router '{}' cannot be executed by '{}'",
-                quote.router_id,
-                self.id()
-            )))
+            Err(Error::Swaps(
+                crate::swaps::SwapExecutionError::NotSubmitted {
+                    router: self.name().to_owned(),
+                    reason: crate::swaps::NotSubmittedReason::QuoteUnusable {
+                        detail: format!(
+                            "the quote from router '{}' cannot be executed by '{}'",
+                            quote.router_id,
+                            self.id()
+                        ),
+                    },
+                },
+            ))
         } else {
             Ok(())
         }

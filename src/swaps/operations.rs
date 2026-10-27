@@ -469,16 +469,32 @@ pub async fn execute_swap_with_fallback(
     quote: Quote,
     amount_limit: SwapAmountLimit,
 ) -> Result<SwapResult> {
-    // Block swap execution during force stop
+    // A force stop refuses before any router is asked: nothing is built or sent.
     if crate::global::is_force_stopped() {
-        return Err(Error::internal_error(
-            "Trading halted - Force stop is active",
+        return Err(not_submitted(
+            &quote.router_name,
+            crate::swaps::NotSubmittedReason::Halted,
         ));
     }
-    let registry = get_registry()?;
+    let registry = get_registry().map_err(|error| {
+        not_submitted(
+            &quote.router_name,
+            crate::swaps::NotSubmittedReason::RouterUnavailable {
+                detail: error.to_string(),
+            },
+        )
+    })?;
     execute_with_fallback_on(registry, token, quote, amount_limit)
         .await
         .map(|(_, result)| result)
+}
+
+/// A refusal decided before any transaction was built, signed or sent.
+fn not_submitted(router: &str, reason: crate::swaps::NotSubmittedReason) -> Error {
+    Error::Swaps(crate::swaps::SwapExecutionError::NotSubmitted {
+        router: router.to_owned(),
+        reason,
+    })
 }
 
 /// The main wallet's execution chain: the quote's own router first, a re-quote on
@@ -494,27 +510,41 @@ async fn execute_with_fallback_on(
     // Paper trading never executes a swap: refused before any router, key or
     // balance read.
     if crate::global::in_paper_scope() {
-        return Err(Error::Swaps(
-            crate::swaps::SwapExecutionError::NotSubmitted {
-                router: quote.router_name.clone(),
-                reason: crate::swaps::NotSubmittedReason::PaperScope,
-            },
+        return Err(not_submitted(
+            &quote.router_name,
+            crate::swaps::NotSubmittedReason::PaperScope,
         ));
     }
-    // Get primary router
-    let primary = registry
-        .get_router(&quote.router_id)
-        .ok_or_else(|| Error::internal_error(format!("Router {} not found", quote.router_id)))?;
+    let primary = registry.get_router(&quote.router_id).ok_or_else(|| {
+        not_submitted(
+            &quote.router_name,
+            crate::swaps::NotSubmittedReason::RouterUnavailable {
+                detail: format!("router {} is not registered", quote.router_id),
+            },
+        )
+    })?;
     // The registry answers live: a router disabled between quoting and
     // execution must not still execute the quote it produced.
     if !primary.is_enabled() {
-        return Err(Error::configuration_error(format!(
-            "Router {} was disabled before its quote could be executed",
-            quote.router_name
-        )));
+        return Err(not_submitted(
+            &quote.router_name,
+            crate::swaps::NotSubmittedReason::RouterUnavailable {
+                detail: format!(
+                    "router {} was disabled before its quote could be executed",
+                    quote.router_name
+                ),
+            },
+        ));
     }
 
-    amount_limit.check_quote(&quote).map_err(Error::from)?;
+    amount_limit.check_quote(&quote).map_err(|error| {
+        not_submitted(
+            &quote.router_name,
+            crate::swaps::NotSubmittedReason::QuoteUnusable {
+                detail: error.to_string(),
+            },
+        )
+    })?;
     crate::chains::solana::swaps::funds::check_native_funds(&quote).await?;
 
     logger::info(
@@ -2153,6 +2183,10 @@ mod tests {
             NotSubmittedReason::SimulationUnavailable { .. } => "SimulationUnavailable",
             NotSubmittedReason::InsufficientFunds { .. } => "InsufficientFunds",
             NotSubmittedReason::PaperScope => "PaperScope",
+            NotSubmittedReason::Halted => "Halted",
+            NotSubmittedReason::RouterUnavailable { .. } => "RouterUnavailable",
+            NotSubmittedReason::SignerUnavailable { .. } => "SignerUnavailable",
+            NotSubmittedReason::QuoteUnusable { .. } => "QuoteUnusable",
         }
     }
 
@@ -2293,6 +2327,28 @@ mod tests {
             ),
             // Refused inside a paper scope before any router was asked.
             (not_submitted(NotSubmittedReason::PaperScope), true),
+            // Refused before any router was asked, or before anything was signed:
+            // a force stop, a missing or disabled router, a signing key that did not
+            // load, a quote that cannot be executed as it stands.
+            (not_submitted(NotSubmittedReason::Halted), true),
+            (
+                not_submitted(NotSubmittedReason::RouterUnavailable {
+                    detail: "router jupiter is not registered".to_owned(),
+                }),
+                true,
+            ),
+            (
+                not_submitted(NotSubmittedReason::SignerUnavailable {
+                    detail: "no wallet is configured".to_owned(),
+                }),
+                true,
+            ),
+            (
+                not_submitted(NotSubmittedReason::QuoteUnusable {
+                    detail: "the quote came from another router".to_owned(),
+                }),
+                true,
+            ),
             (
                 Error::Swaps(SwapExecutionError::CompletedAmountOutOfRange {
                     signature: sig(),
@@ -2596,7 +2652,7 @@ mod tests {
 
         let covered: std::collections::BTreeSet<String> =
             rows.iter().map(|(error, _)| row_name(error)).collect();
-        let reasons = 10;
+        let reasons = 14;
         let execution_variants = 5;
         let solana_outside_direct = 12 + execution_variants;
         let direct_variants = 20;
@@ -2804,6 +2860,29 @@ mod tests {
             })
         ));
         assert!(executed.lock().unwrap().is_empty());
+    }
+
+    /// A force stop refuses before any router is asked, as a refusal that sent
+    /// nothing and may be sent again once trading resumes.
+    #[tokio::test]
+    async fn a_force_stop_refuses_execution_as_not_submitted() {
+        crate::global::set_force_stopped(true, Some("test"));
+        let error = execute_swap_with_fallback(
+            &traded_token(),
+            primary_quote(),
+            SwapAmountLimit::Unrestricted,
+        )
+        .await
+        .expect_err("a force stop never executes a swap");
+        crate::global::set_force_stopped(false, None);
+        assert!(matches!(
+            error,
+            Error::Swaps(SwapExecutionError::NotSubmitted {
+                reason: NotSubmittedReason::Halted,
+                ..
+            })
+        ));
+        assert_eq!(failed_swap(&error), FailedSwap::Resendable);
     }
 
     /// A swap with a native-asset leg owes the wrapped-SOL sweep, and a swap
