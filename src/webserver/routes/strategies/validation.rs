@@ -8,7 +8,7 @@ use chrono::Utc;
 
 use crate::{
     logger::{self, LogTag},
-    strategies::{self, db::get_strategy, types::*},
+    strategies::{self, db::get_strategy_async, types::*},
     webserver::utils::success_response,
 };
 
@@ -39,7 +39,7 @@ async fn validation_response(strategy: &Strategy) -> Response {
 
 /// POST /api/strategies/:id/validate - Validate a strategy by id
 pub async fn validate_strategy_handler(Path(id): Path<String>) -> Response {
-    let strategy = match get_strategy(&id) {
+    let strategy = match get_strategy_async(&id).await {
         Ok(Some(s)) => s,
         Ok(None) => return err(ApiErrorCode::NotFound, ids::ERRORS_STRATEGIES_NOT_FOUND),
         Err(e) => {

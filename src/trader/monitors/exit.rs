@@ -114,6 +114,9 @@ pub async fn monitor_positions(
             ),
         );
 
+        // The position-independent exit inputs, read once for the whole cycle
+        let cycle_inputs = Arc::new(evaluators::exit::exit_cycle().await);
+
         // Create semaphore for concurrent position evaluation
         let sell_concurrency = config::get_sell_concurrency().max(1);
         let semaphore = Arc::new(Semaphore::new(sell_concurrency));
@@ -143,6 +146,7 @@ pub async fn monitor_positions(
             let position_mint = position.mint.clone();
             let position_symbol = position.symbol.clone();
             let position_origin = position.origin.kind();
+            let cycle = Arc::clone(&cycle_inputs);
 
             let task = tokio::spawn(async move {
                 // Check shutdown before acquiring semaphore
@@ -159,7 +163,7 @@ pub async fn monitor_positions(
                 }
 
                 // Evaluate position for exit (all exit checks + DCA)
-                match evaluators::evaluate_exit_for_position(position).await {
+                match evaluators::evaluate_exit_for_position(position, &cycle).await {
                     Ok(Some(d)) => Some(PositionEvaluation {
                         mint: position_mint,
                         symbol: position_symbol,

@@ -24,10 +24,48 @@
 
 use crate::positions::price_resolution::get_price_with_api_fallback;
 use crate::positions::Position;
+use crate::strategies::db::get_enabled_strategies_async;
+use crate::strategies::types::{Strategy, StrategyType};
 use crate::trader::evaluators::exit_rules::{self, ExitInputs, ExitRule, RuleOutcome};
 use crate::trader::policy::ExitPolicy;
 use crate::trader::types::{TradeAction, TradeDecision, TradePriority, TradeReason};
 use crate::trader::{evaluators, llm_analysis, safety};
+
+/// What every position of one exit cycle is evaluated against, read once per cycle
+/// rather than once per position: the enabled exit strategies.
+#[derive(Debug, Clone, Default)]
+pub struct ExitCycle {
+    exit_strategies: Vec<Strategy>,
+}
+
+impl ExitCycle {
+    /// The cycle of the enabled `exit_strategies`, in priority order.
+    pub fn new(exit_strategies: Vec<Strategy>) -> Self {
+        Self { exit_strategies }
+    }
+
+    /// The enabled exit strategies of this cycle, in priority order; each one's mode
+    /// decides the books whose positions it judges.
+    pub fn exit_strategies(&self) -> &[Strategy] {
+        &self.exit_strategies
+    }
+}
+
+/// The inputs every position of one exit cycle is evaluated against, read once for the
+/// cycle: the enabled exit strategies, a SQLite read run on the blocking pool. A failed
+/// read leaves the cycle without strategies, so no position of it takes a strategy exit.
+pub async fn exit_cycle() -> ExitCycle {
+    match get_enabled_strategies_async(StrategyType::Exit).await {
+        Ok(strategies) => ExitCycle::new(strategies),
+        Err(error) => {
+            crate::logger::warning(
+                crate::logger::LogTag::Trader,
+                &format!("Enabled exit strategies unavailable: {error}"),
+            );
+            ExitCycle::default()
+        }
+    }
+}
 
 /// Force stop, the price cascade and the fresh position re-read — everything every exit
 /// rule needs before any of them can run. `None` means nothing is evaluable this tick.
@@ -107,6 +145,7 @@ pub(crate) async fn evaluate_safety_exit(
 pub(crate) async fn evaluate_policy_exit(
     position: &Position,
     current_price: f64,
+    cycle: &ExitCycle,
 ) -> crate::trader::Result<Option<TradeDecision>> {
     let policy = crate::trader::policy::resolve_exit_policy(position).await;
     // Resolved once: the LLM and strategy exits read the position's token on its chain.
@@ -278,7 +317,13 @@ pub(crate) async fn evaluate_policy_exit(
             return Ok(None);
         }
     };
-    match evaluators::StrategyEvaluator::check_exit_strategies(chain, position, current_price).await
+    match evaluators::StrategyEvaluator::check_exit_strategies(
+        chain,
+        position,
+        current_price,
+        cycle.exit_strategies(),
+    )
+    .await
     {
         Ok(Some(decision)) => {
             crate::logger::info(
@@ -524,7 +569,7 @@ async fn record_rule_signal(
 ///
 /// Resolves the current price and a fresh position read (see [`resolve_evaluation_input`]),
 /// then runs safety checks (priorities 1-2, see [`evaluate_safety_exit`]) followed by policy
-/// checks (priorities 3-10, see [`evaluate_policy_exit`]).
+/// checks (priorities 3-10, see [`evaluate_policy_exit`]) against the exit `cycle`.
 ///
 /// Returns:
 /// - Ok(Some(TradeDecision)) if exit should be made
@@ -532,6 +577,7 @@ async fn record_rule_signal(
 /// - Err(String) if evaluation failed
 pub async fn evaluate_exit_for_position(
     position: Position,
+    cycle: &ExitCycle,
 ) -> crate::trader::Result<Option<TradeDecision>> {
     let Some((fresh_position, current_price)) = resolve_evaluation_input(&position).await else {
         return Ok(None);
@@ -542,8 +588,55 @@ pub async fn evaluate_exit_for_position(
         }
     }
     if fresh_position.management.allows_policy_exits() {
-        evaluate_policy_exit(&fresh_position, current_price).await
+        evaluate_policy_exit(&fresh_position, current_price, cycle).await
     } else {
         Ok(None)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::strategies::types::{Condition, RuleTree};
+    use crate::trader::paper::TradingMode;
+
+    fn exit_strategy(id: &str, mode: TradingMode) -> Strategy {
+        Strategy {
+            id: id.to_owned(),
+            name: id.to_owned(),
+            description: None,
+            strategy_type: StrategyType::Exit,
+            enabled: true,
+            priority: 10,
+            timeframe: "5m".to_owned(),
+            rules: RuleTree::leaf(Condition {
+                condition_type: "PositionProfit".to_owned(),
+                parameters: Default::default(),
+            }),
+            parameters: Default::default(),
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+            author: None,
+            version: 1,
+            entry_strategy_ids: Vec::new(),
+            mode,
+        }
+    }
+
+    /// The cycle hands every position the exit strategies it was read with, in their
+    /// priority order, so no position reads the strategies store again.
+    #[test]
+    fn the_cycle_carries_its_exit_strategies_to_every_position() {
+        let cycle = ExitCycle::new(vec![
+            exit_strategy("first", TradingMode::Live),
+            exit_strategy("second", TradingMode::Paper),
+        ]);
+        let ids: Vec<&str> = cycle
+            .exit_strategies()
+            .iter()
+            .map(|strategy| strategy.id.as_str())
+            .collect();
+        assert_eq!(ids, ["first", "second"]);
+        assert!(ExitCycle::default().exit_strategies().is_empty());
     }
 }

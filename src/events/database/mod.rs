@@ -178,8 +178,9 @@ impl EventsDatabase {
         Ok(conn.last_insert_rowid())
     }
 
-    /// Insert multiple events in a batch (more efficient)
-    pub async fn insert_events(&self, events: &mut [Event]) -> Result<()> {
+    /// Insert multiple events in one transaction, stamping each with its row id.
+    /// Synchronous: the event writer runs it on the blocking pool.
+    pub fn insert_events(&self, events: &mut [Event]) -> Result<()> {
         if events.is_empty() {
             return Ok(());
         }

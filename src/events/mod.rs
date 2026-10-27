@@ -386,19 +386,38 @@ async fn event_writer_task(mut receiver: mpsc::Receiver<Event>, db: Arc<EventsDa
     logger::info(LogTag::System, "Events writer task stopped");
 }
 
-/// Write a batch of events to database
-async fn write_batch(db: &EventsDatabase, batch: &mut Vec<Event>) {
+/// Write a batch of events to the database in one transaction on the blocking pool, so
+/// the writer task never holds a SQLite connection on a runtime worker.
+async fn write_batch(db: &Arc<EventsDatabase>, batch: &mut Vec<Event>) {
     if batch.is_empty() {
         return;
     }
 
-    if let Err(e) = db.insert_events(batch.as_mut_slice()).await {
-        logger::error(LogTag::System, &format!("Failed to write event batch: {e}"));
-    }
+    let mut events = std::mem::take(batch);
+    let store = Arc::clone(db);
+    let written = tokio::task::spawn_blocking(move || {
+        let outcome = store.insert_events(&mut events);
+        (events, outcome)
+    })
+    .await;
+    let events = match written {
+        Ok((events, outcome)) => {
+            if let Err(e) = outcome {
+                logger::error(LogTag::System, &format!("Failed to write event batch: {e}"));
+            }
+            events
+        }
+        Err(e) => {
+            logger::error(
+                LogTag::System,
+                &format!("Event batch write did not complete: {e}"),
+            );
+            return;
+        }
+    };
 
     // On success (or even if some failed), push to cache and broadcast
-    push_to_cache_and_broadcast(batch).await;
-    batch.clear();
+    push_to_cache_and_broadcast(&events).await;
 }
 
 /// Push newly written events to in-memory cache and broadcast to subscribers

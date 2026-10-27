@@ -5,7 +5,7 @@
 //! trading gate, the stored mode and the evaluation cache, in that order.
 
 use crate::logger::{self, LogTag};
-use crate::strategies::{db::set_strategy_mode, types::Strategy, Error};
+use crate::strategies::{db::set_strategy_mode_async, types::Strategy, Error};
 use crate::trader::paper::{confirm_live, PaperModeError, TradingMode, STRATEGY_LIVE_CONFIRMATION};
 use crate::trader::LiveBlock;
 
@@ -45,7 +45,7 @@ pub async fn set_mode(
         confirmation,
         crate::trader::live_block(),
     )?;
-    set_strategy_mode(&strategy.id, mode)?;
+    set_strategy_mode_async(&strategy.id, mode).await?;
     if let Err(error) = super::clear_evaluation_cache().await {
         logger::warning(
             LogTag::System,

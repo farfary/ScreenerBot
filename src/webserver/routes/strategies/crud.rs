@@ -15,8 +15,8 @@ use crate::{
     strategies::{
         self,
         db::{
-            delete_strategy, get_all_strategies, get_enabled_strategies, get_strategy,
-            insert_strategy, update_strategy,
+            delete_strategy_async, get_all_strategies_async, get_enabled_strategies_async,
+            get_strategy_async, insert_strategy_async, update_strategy_async,
         },
         types::*,
     },
@@ -55,7 +55,7 @@ pub async fn list_strategies(Query(query): Query<StrategyListQuery>) -> Response
 
         if let Some(enabled) = query.enabled {
             if enabled {
-                match get_enabled_strategies(strategy_type) {
+                match get_enabled_strategies_async(strategy_type).await {
                     Ok(list) => list,
                     Err(e) => {
                         return err_cause(
@@ -66,7 +66,7 @@ pub async fn list_strategies(Query(query): Query<StrategyListQuery>) -> Response
                     }
                 }
             } else {
-                match get_all_strategies() {
+                match get_all_strategies_async().await {
                     Ok(list) => list
                         .into_iter()
                         .filter(|s| s.strategy_type == strategy_type && !s.enabled)
@@ -81,7 +81,7 @@ pub async fn list_strategies(Query(query): Query<StrategyListQuery>) -> Response
                 }
             }
         } else {
-            match get_all_strategies() {
+            match get_all_strategies_async().await {
                 Ok(list) => list
                     .into_iter()
                     .filter(|s| s.strategy_type == strategy_type)
@@ -96,7 +96,7 @@ pub async fn list_strategies(Query(query): Query<StrategyListQuery>) -> Response
             }
         }
     } else if let Some(enabled) = query.enabled {
-        match get_all_strategies() {
+        match get_all_strategies_async().await {
             Ok(list) => list.into_iter().filter(|s| s.enabled == enabled).collect(),
             Err(e) => {
                 return err_cause(
@@ -107,7 +107,7 @@ pub async fn list_strategies(Query(query): Query<StrategyListQuery>) -> Response
             }
         }
     } else {
-        match get_all_strategies() {
+        match get_all_strategies_async().await {
             Ok(list) => list,
             Err(e) => {
                 return err_cause(
@@ -152,7 +152,7 @@ pub async fn list_strategies(Query(query): Query<StrategyListQuery>) -> Response
 pub async fn get_strategy_detail(Path(id): Path<String>) -> Response {
     logger::info(LogTag::Webserver, &format!("GET /api/strategies/{id}"));
 
-    let strategy = match get_strategy(&id) {
+    let strategy = match get_strategy_async(&id).await {
         Ok(Some(s)) => s,
         Ok(None) => return err(ApiErrorCode::NotFound, ids::ERRORS_STRATEGIES_NOT_FOUND),
         Err(e) => {
@@ -237,7 +237,7 @@ pub async fn create_strategy(Json(request): Json<StrategyRequest>) -> Response {
         .collect::<String>();
 
     // Check if strategy with this ID already exists
-    if let Ok(Some(_)) = get_strategy(&id) {
+    if let Ok(Some(_)) = get_strategy_async(&id).await {
         return ApiError::new(
             ApiErrorCode::Conflict,
             ids::ERRORS_STRATEGIES_ALREADY_EXISTS,
@@ -279,7 +279,7 @@ pub async fn create_strategy(Json(request): Json<StrategyRequest>) -> Response {
     }
 
     // Insert into database
-    if let Err(e) = insert_strategy(&strategy) {
+    if let Err(e) = insert_strategy_async(&strategy).await {
         return err_cause(
             ApiErrorCode::Internal,
             ids::ERRORS_STRATEGIES_CREATE_FAILED,
@@ -308,7 +308,7 @@ pub async fn update_strategy_handler(
     logger::info(LogTag::Webserver, &format!("PUT /api/strategies/{id}"));
 
     // Check if strategy exists
-    let existing = match get_strategy(&id) {
+    let existing = match get_strategy_async(&id).await {
         Ok(Some(s)) => s,
         Ok(None) => return err(ApiErrorCode::NotFound, ids::ERRORS_STRATEGIES_NOT_FOUND),
         Err(e) => {
@@ -377,7 +377,7 @@ pub async fn update_strategy_handler(
     }
 
     // Update in database
-    if let Err(e) = update_strategy(&strategy) {
+    if let Err(e) = update_strategy_async(&strategy).await {
         return err_cause(
             ApiErrorCode::Internal,
             ids::ERRORS_STRATEGIES_UPDATE_FAILED,
@@ -420,7 +420,7 @@ pub async fn set_strategy_enabled_handler(
         ),
     );
 
-    let mut strategy = match get_strategy(&id) {
+    let mut strategy = match get_strategy_async(&id).await {
         Ok(Some(s)) => s,
         Ok(None) => return err(ApiErrorCode::NotFound, ids::ERRORS_STRATEGIES_NOT_FOUND),
         Err(e) => {
@@ -448,7 +448,7 @@ pub async fn set_strategy_enabled_handler(
     strategy.updated_at = Utc::now();
     strategy.version += 1;
 
-    if let Err(e) = update_strategy(&strategy) {
+    if let Err(e) = update_strategy_async(&strategy).await {
         return err_cause(
             ApiErrorCode::Internal,
             ids::ERRORS_STRATEGIES_UPDATE_ENABLED_FAILED,
@@ -484,7 +484,7 @@ pub async fn delete_strategy_handler(Path(id): Path<String>) -> Response {
     logger::info(LogTag::Webserver, &format!("DELETE /api/strategies/{id}"));
 
     // Check if strategy exists
-    match get_strategy(&id) {
+    match get_strategy_async(&id).await {
         Ok(Some(_)) => {}
         Ok(None) => return err(ApiErrorCode::NotFound, ids::ERRORS_STRATEGIES_NOT_FOUND),
         Err(e) => {
@@ -497,7 +497,7 @@ pub async fn delete_strategy_handler(Path(id): Path<String>) -> Response {
     }
 
     // Delete from database
-    if let Err(e) = delete_strategy(&id) {
+    if let Err(e) = delete_strategy_async(&id).await {
         return err_cause(
             ApiErrorCode::Internal,
             ids::ERRORS_STRATEGIES_DELETE_FAILED,

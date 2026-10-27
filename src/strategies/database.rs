@@ -3,6 +3,10 @@
 
 //! Strategy database — persistence for custom strategy templates.
 
+mod async_api;
+
+pub use async_api::*;
+
 use crate::database;
 use crate::database::schema::{ddl, SchemaContext, StoreSchema};
 use crate::errors::{DatabaseError, Error};
@@ -495,22 +499,6 @@ pub fn get_all_strategies() -> crate::Result<Vec<Strategy>> {
         &format!("SELECT {STRATEGY_COLUMNS} FROM strategies ORDER BY priority ASC, name ASC"),
         [],
     )
-}
-
-/// Check if any enabled strategies of `mode` exist for a given type (lightweight check)
-pub fn has_enabled_strategies(
-    strategy_type: StrategyType,
-    mode: TradingMode,
-) -> crate::Result<bool> {
-    let conn = get_connection()?;
-
-    let count: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM strategies WHERE type = ?1 AND enabled = 1 AND mode = ?2",
-        params![strategy_type.to_string(), mode.as_str()],
-        |row| row.get(0),
-    )?;
-
-    Ok(count > 0)
 }
 
 /// The enabled strategies of each trading mode.

@@ -7,7 +7,7 @@ use axum::{extract::Path, response::Response};
 
 use crate::{
     logger::{self, LogTag},
-    strategies::db::{get_strategy, get_strategy_performance},
+    strategies::db::{get_strategy_async, get_strategy_performance_async},
     webserver::utils::success_response,
 };
 
@@ -24,7 +24,7 @@ pub async fn get_strategy_performance_stats(Path(id): Path<String>) -> Response 
     );
 
     // Check if strategy exists
-    match get_strategy(&id) {
+    match get_strategy_async(&id).await {
         Ok(Some(_)) => {}
         Ok(None) => return err(ApiErrorCode::NotFound, ids::ERRORS_STRATEGIES_NOT_FOUND),
         Err(e) => {
@@ -37,7 +37,7 @@ pub async fn get_strategy_performance_stats(Path(id): Path<String>) -> Response 
     }
 
     // Get performance stats
-    let performance = match get_strategy_performance(&id) {
+    let performance = match get_strategy_performance_async(&id).await {
         Ok(Some(p)) => p,
         Ok(None) => {
             return err(

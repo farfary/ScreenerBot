@@ -12,7 +12,6 @@ use crate::ohlcvs::TimeframeBundle;
 use crate::pools::PriceResult;
 use crate::positions::{Book, Position};
 use crate::strategies;
-use crate::strategies::db::has_enabled_strategies;
 use crate::strategies::types::{
     EvaluationContext, LiquidityPool, MarketData, PositionData, Strategy, StrategyType,
     TransactionCounts,
@@ -266,6 +265,24 @@ pub async fn live_strategy_context(
     }
 }
 
+/// Whether a strategy evaluation failed for lack of data (absent, too short, stale or
+/// unusable) rather than because a strategy's configuration or rules are wrong.
+fn is_data_unavailable(error: &crate::Error) -> bool {
+    matches!(error, crate::Error::Strategies(error) if error.is_data_unavailable())
+}
+
+/// Log a strategy evaluation that failed as a whole: missing data at debug, since the next
+/// cycle may have it, and any other error at warn, since it persists until the strategy or
+/// its configuration changes.
+fn log_strategy_error(subject: &str, error: &crate::Error) {
+    let message = format!("Strategy evaluation error for {subject}: {error}");
+    if is_data_unavailable(error) {
+        logger::debug(LogTag::Trader, &message);
+    } else {
+        logger::warning(LogTag::Trader, &message);
+    }
+}
+
 /// Evaluator for applying strategies to trading decisions
 pub struct StrategyEvaluator;
 
@@ -346,21 +363,18 @@ impl StrategyEvaluator {
             }
             Ok(Ok(None)) => Ok(None),
             Ok(Err(e)) => {
-                logger::warning(
-                    LogTag::Trader,
-                    &format!("Strategy evaluation error for {token_mint}: {e}"),
-                );
+                log_strategy_error(token_mint, &e);
                 Ok(None) // Don't fail trading on strategy errors
             }
             Err(_timeout) => {
                 logger::warning(
-    LogTag::Trader,
-          &format!(
- "STRATEGY_TIMEOUT: Entry evaluation for {} exceeded {}s - Consider increasing timeout or optimizing strategies. This timeout is distinct from 'no signal'case.",
-            token_mint,
-            strategy_timeout.as_secs()
-          ),
-        );
+                    LogTag::Trader,
+                    &format!(
+                        "Entry strategy evaluation for {} timed out after {}s; no entry signal was decided",
+                        token_mint,
+                        strategy_timeout.as_secs()
+                    ),
+                );
 
                 // Record event for metrics tracking
                 crate::events::record_trader_event(
@@ -380,27 +394,20 @@ impl StrategyEvaluator {
         }
     }
 
-    /// Check if a position should be exited based on strategies
+    /// Check if a position should be exited based on the exit cycle's `exit_strategies`
+    /// that judge the position's book.
     pub async fn check_exit_strategies(
         chain: ChainId,
         position: &Position,
         current_price: f64,
+        exit_strategies: &[Strategy],
     ) -> crate::trader::Result<Option<TradeDecision>> {
         // Early check: skip if no exit strategy judges the position's book
-        let mut configured = false;
-        for mode in strategies::exit_strategy_modes(position.book) {
-            match has_enabled_strategies(StrategyType::Exit, *mode) {
-                Ok(found) => configured |= found,
-                Err(e) => {
-                    logger::debug(
-                        LogTag::Trader,
-                        &format!("Failed to check exit strategies: {e}"),
-                    );
-                    return Ok(None);
-                }
-            }
-        }
-        if !configured {
+        let modes = strategies::exit_strategy_modes(position.book);
+        if !exit_strategies
+            .iter()
+            .any(|strategy| modes.contains(&strategy.mode))
+        {
             return Ok(None);
         }
 
@@ -460,6 +467,7 @@ impl StrategyEvaluator {
         let evaluation_result = tokio::time::timeout(
             strategy_timeout,
             strategies::evaluate_exit_strategies(
+                exit_strategies,
                 position.book,
                 &position.mint,
                 current_price,
@@ -491,25 +499,19 @@ impl StrategyEvaluator {
             }
             Ok(Ok(None)) => Ok(None),
             Ok(Err(e)) => {
-                logger::warning(
-                    LogTag::Trader,
-                    &format!(
-                        "Strategy evaluation error for position {:?}: {}",
-                        position.id, e
-                    ),
-                );
+                log_strategy_error(&format!("position {:?}", position.id), &e);
                 Ok(None) // Don't fail trading on strategy errors
             }
             Err(_timeout) => {
                 logger::warning(
-    LogTag::Trader,
-          &format!(
- "STRATEGY_TIMEOUT: Exit evaluation for position {:?} (mint={}) exceeded {}s - Consider increasing timeout or optimizing strategies. This timeout is distinct from 'no signal'case.",
-            position.id,
-            position.mint,
-            strategy_timeout.as_secs()
-          ),
-        );
+                    LogTag::Trader,
+                    &format!(
+                        "Exit strategy evaluation for position {:?} (mint={}) timed out after {}s; no exit signal was decided",
+                        position.id,
+                        position.mint,
+                        strategy_timeout.as_secs()
+                    ),
+                );
 
                 // Record event for metrics tracking
                 crate::events::record_position_event_flexible(
@@ -555,5 +557,33 @@ mod tests {
         assert_eq!(decision.position_id.as_deref(), Some("7"));
         assert_eq!(decision.exit_percentage, None);
         assert_eq!(decision.strategy_id.as_deref(), Some("exit-strategy"));
+    }
+
+    /// A strategy error that says data is missing is told apart from one that says the
+    /// strategy or its configuration is wrong, and from an error outside the strategies.
+    #[test]
+    fn a_strategy_error_is_data_unavailable_only_when_the_strategy_lacked_data() {
+        let missing_data = crate::Error::from(strategies::Error::InsufficientCandles {
+            indicator: "rsi",
+            available: 3,
+            required: 14,
+        });
+        let stale_data = crate::Error::from(strategies::Error::StaleCandleData {
+            timeframe: "5m".to_owned(),
+            age_seconds: 900,
+            max_age_seconds: 600,
+        });
+        let broken_rule = crate::Error::from(strategies::Error::InvalidRuleTree {
+            reason: "empty group",
+        });
+        let missing_parameter =
+            crate::Error::from(strategies::Error::MissingConditionParameter { field: "period" });
+        let engine_down = crate::Error::internal_error("Strategy engine not available");
+
+        assert!(is_data_unavailable(&missing_data));
+        assert!(is_data_unavailable(&stale_data));
+        assert!(!is_data_unavailable(&broken_rule));
+        assert!(!is_data_unavailable(&missing_parameter));
+        assert!(!is_data_unavailable(&engine_down));
     }
 }

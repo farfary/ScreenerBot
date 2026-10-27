@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: BUSL-1.1
 
 //! Events switched on in settings while the app runs: the store starts without a restart, the
-//! first recorded event is persisted, and the service reports healthy.
+//! first recorded event is persisted, and the service reports healthy. The writer inserts each
+//! batch on the blocking pool, never on a runtime worker.
 
 use crate::common;
 
@@ -118,4 +119,33 @@ fn recording_with_events_switched_off_starts_nothing() {
             assert!(events::EVENTS_DB.get().is_none(), "no store was started");
         },
     );
+}
+
+/// The batch insert is synchronous and the event writer runs it inside `spawn_blocking`, so a
+/// slow events store never parks a runtime worker.
+#[test]
+fn the_event_writer_inserts_batches_on_the_blocking_pool() {
+    let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/events");
+    let store = std::fs::read_to_string(src.join("database/mod.rs")).expect("read events store");
+    let writer = std::fs::read_to_string(src.join("mod.rs")).expect("read events writer");
+
+    assert!(
+        store.contains("pub fn insert_events(") && !store.contains("async fn insert_events("),
+        "the batch insert runs SQLite and must be synchronous"
+    );
+    let calls: Vec<usize> = writer
+        .match_indices(".insert_events(")
+        .map(|(at, _)| at)
+        .collect();
+    assert!(!calls.is_empty(), "the event writer inserts its batches");
+    for at in calls {
+        let before = &writer[..at];
+        let blocking = before
+            .rfind("spawn_blocking(")
+            .expect("the batch insert runs inside spawn_blocking");
+        assert!(
+            !before[blocking..].contains("fn "),
+            "the batch insert at byte {at} is outside the spawn_blocking closure"
+        );
+    }
 }

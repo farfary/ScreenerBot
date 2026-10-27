@@ -10,7 +10,7 @@ use crate::{
     logger::{self, LogTag},
     strategies::{
         self,
-        db::{get_strategy, update_strategy},
+        db::{get_strategy_async, update_strategy_async},
     },
     webserver::utils::success_response,
 };
@@ -21,7 +21,7 @@ use crate::webserver::api_error::ApiErrorCode;
 
 /// POST /api/strategies/:id/deploy - Enable a strategy
 pub async fn deploy_strategy_handler(Path(id): Path<String>) -> Response {
-    let mut strategy = match get_strategy(&id) {
+    let mut strategy = match get_strategy_async(&id).await {
         Ok(Some(s)) => s,
         Ok(None) => return err(ApiErrorCode::NotFound, ids::ERRORS_STRATEGIES_NOT_FOUND),
         Err(e) => {
@@ -38,7 +38,7 @@ pub async fn deploy_strategy_handler(Path(id): Path<String>) -> Response {
     strategy.version += 1;
     strategy.updated_at = Utc::now();
 
-    if let Err(e) = update_strategy(&strategy) {
+    if let Err(e) = update_strategy_async(&strategy).await {
         return err_cause(
             ApiErrorCode::Internal,
             ids::ERRORS_STRATEGIES_DEPLOY_FAILED,

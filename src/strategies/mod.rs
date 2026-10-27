@@ -19,11 +19,8 @@ pub use error::{Error, Result};
 use crate::logger::{self, LogTag};
 use crate::ohlcvs::TimeframeBundle;
 use crate::positions::Book;
-use crate::strategies::db::get_enabled_strategies;
 use crate::strategies::engine::{EngineConfig, StrategyEngine};
-use crate::strategies::types::{
-    EvaluationContext, MarketData, PositionData, Strategy, StrategyType,
-};
+use crate::strategies::types::{EvaluationContext, MarketData, PositionData, Strategy};
 use crate::trader::paper::TradingMode;
 use chrono::Utc;
 use std::sync::Arc;
@@ -170,6 +167,7 @@ pub async fn evaluate_entry_strategies(
 /// if any exit strategies signal to close a position.
 ///
 /// # Arguments
+/// * `strategies` - The enabled exit strategies of the exit cycle, in priority order
 /// * `book` - The book of the position: only strategies of the modes
 ///   [`exit_strategy_modes`] gives it are evaluated
 /// * `token_mint` - The token mint address
@@ -185,6 +183,7 @@ pub async fn evaluate_entry_strategies(
 /// * `Ok(None)` - If no strategy signals exit
 /// * `Err(e)` - If evaluation fails
 pub async fn evaluate_exit_strategies(
+    strategies: &[Strategy],
     book: Book,
     token_mint: &str,
     current_price: f64,
@@ -199,20 +198,13 @@ pub async fn evaluate_exit_strategies(
         .as_ref()
         .ok_or_else(|| crate::Error::internal_error("Strategy engine not available"))?;
 
-    // Enabled exit strategies that judge the position's book and manage positions of
-    // this entry strategy
+    // Evaluate, by priority (lower priority first), the exit strategies that judge the
+    // position's book and manage positions of this entry strategy
     let modes = exit_strategy_modes(book);
-    let strategies: Vec<Strategy> = get_enabled_strategies(StrategyType::Exit)?
-        .into_iter()
+    for strategy in strategies
+        .iter()
         .filter(|strategy| modes.contains(&strategy.mode) && strategy.manages(entry_strategy_id))
-        .collect();
-
-    if strategies.is_empty() {
-        return Ok(None);
-    }
-
-    // Evaluate strategies by priority (lower priority first)
-    for strategy in strategies {
+    {
         let context = EvaluationContext {
             token_mint: token_mint.to_string(),
             current_price: Some(current_price),
@@ -223,7 +215,7 @@ pub async fn evaluate_exit_strategies(
             evaluated_at: Utc::now(),
         };
 
-        let result = engine.evaluate_strategy(&strategy, &context).await;
+        let result = engine.evaluate_strategy(strategy, &context).await;
 
         match result {
             Ok(eval_result) => {

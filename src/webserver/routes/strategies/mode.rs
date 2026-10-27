@@ -19,7 +19,7 @@ use crate::positions::db::PaperExitOwner;
 use crate::positions::Position;
 use crate::strategies::{
     self, arm,
-    db::get_strategy,
+    db::get_strategy_async,
     readiness::{live_block_text, strategy_readiness},
     types::Strategy,
 };
@@ -28,8 +28,8 @@ use crate::webserver::api_error::{ApiError, ApiErrorCode};
 use crate::webserver::utils::success_response;
 
 /// The strategy `id`, or the response that explains why it cannot be read.
-fn find_strategy(id: &str) -> Result<Strategy, Response> {
-    match get_strategy(id) {
+async fn find_strategy(id: &str) -> Result<Strategy, Response> {
+    match get_strategy_async(id).await {
         Ok(Some(strategy)) => Ok(strategy),
         Ok(None) => Err(err(
             ApiErrorCode::NotFound,
@@ -58,7 +58,7 @@ pub async fn set_strategy_mode_handler(
         ),
     );
 
-    let strategy = match find_strategy(&id) {
+    let strategy = match find_strategy(&id).await {
         Ok(strategy) => strategy,
         Err(response) => return response,
     };
@@ -93,7 +93,7 @@ pub async fn set_strategy_mode_handler(
 /// rounds it took part in during the current paper run, with the phrase that arms it
 /// live. Without a loaded paper book the strategy has no rounds yet.
 pub async fn get_strategy_readiness(Path(id): Path<String>) -> Response {
-    let strategy = match find_strategy(&id) {
+    let strategy = match find_strategy(&id).await {
         Ok(strategy) => strategy,
         Err(response) => return response,
     };

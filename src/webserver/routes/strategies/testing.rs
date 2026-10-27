@@ -14,7 +14,7 @@ use crate::{
     logger::{self, LogTag},
     ohlcvs::{OhlcvError, Priority, Timeframe},
     strategies::{
-        db::get_strategy,
+        db::get_strategy_async,
         engine::{EngineConfig, StrategyEngine},
         types::*,
     },
@@ -53,7 +53,7 @@ pub async fn test_strategy(
     );
 
     // Get strategy
-    let strategy = match get_strategy(&id) {
+    let strategy = match get_strategy_async(&id).await {
         Ok(Some(s)) => s,
         Ok(None) => return err(ApiErrorCode::NotFound, ids::ERRORS_STRATEGIES_NOT_FOUND),
         Err(e) => {
