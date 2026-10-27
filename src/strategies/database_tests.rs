@@ -108,3 +108,59 @@ fn a_store_with_the_mode_is_too_new_for_a_core_without_it() {
     assert_eq!(ledger::assess(Some(&row), &older_core), Assessment::TooNew);
     assert_eq!(ledger::assess(Some(&row), &SCHEMA), Assessment::Current);
 }
+
+fn evaluation(
+    strategy_id: &str,
+    result: bool,
+    millis: u64,
+    evaluated_at: &str,
+) -> EvaluationRecord {
+    EvaluationRecord {
+        result: EvaluationResult {
+            strategy_id: strategy_id.to_owned(),
+            result,
+            confidence: 1.0,
+            execution_time_ms: millis,
+            details: std::collections::HashMap::new(),
+        },
+        token_mint: "mint".to_owned(),
+        evaluated_at: DateTime::parse_from_rfc3339(evaluated_at)
+            .unwrap()
+            .with_timezone(&Utc),
+    }
+}
+
+/// A batch lands whole, each row stamped when it was evaluated rather than when it was
+/// written, and the performance the route serves is computed from those rows.
+#[test]
+fn a_batch_of_evaluations_answers_the_performance_of_its_strategy() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("strategies.db");
+    open_store(&path);
+    let mut conn = Connection::open(&path).unwrap();
+    insert_row(&conn, "entry-on", "ENTRY", true);
+    insert_row(&conn, "never-run", "ENTRY", true);
+
+    insert_evaluations(
+        &mut conn,
+        &[
+            evaluation("entry-on", true, 4, "2026-01-02T00:00:00Z"),
+            evaluation("entry-on", false, 2, "2026-01-03T00:00:00Z"),
+            evaluation("entry-on", true, 6, "2026-01-01T00:00:00Z"),
+        ],
+    )
+    .unwrap();
+
+    let performance = performance_of(&conn, "entry-on").unwrap().unwrap();
+    assert_eq!(performance.total_evaluations, 3);
+    assert_eq!(performance.successful_signals, 2);
+    assert!((performance.avg_execution_time_ms - 4.0).abs() < f64::EPSILON);
+    assert_eq!(
+        performance.last_evaluation.to_rfc3339(),
+        "2026-01-03T00:00:00+00:00"
+    );
+    assert!(
+        performance_of(&conn, "never-run").unwrap().is_none(),
+        "a strategy without evaluations has no performance, not an error"
+    );
+}

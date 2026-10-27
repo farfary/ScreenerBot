@@ -11,6 +11,7 @@ pub mod database;
 pub use database as db;
 pub mod engine;
 pub mod readiness;
+pub(crate) mod recorder;
 pub mod types;
 
 pub use error::{Error, Result};
@@ -18,7 +19,7 @@ pub use error::{Error, Result};
 use crate::logger::{self, LogTag};
 use crate::ohlcvs::TimeframeBundle;
 use crate::positions::Book;
-use crate::strategies::db::{get_enabled_strategies, record_evaluation};
+use crate::strategies::db::get_enabled_strategies;
 use crate::strategies::engine::{EngineConfig, StrategyEngine};
 use crate::strategies::types::{
     EvaluationContext, MarketData, PositionData, Strategy, StrategyType,
@@ -38,6 +39,7 @@ pub async fn init_strategy_system(config: EngineConfig) -> crate::Result<()> {
     // The engine exists whatever the state of the store, so an evaluation reaches the
     // store's own error instead of an uninitialized engine.
     *STRATEGY_ENGINE.write().await = Some(StrategyEngine::new(config));
+    recorder::start();
 
     db::init_strategies_db()?;
     logger::info(LogTag::System, "Strategy system initialized successfully");
@@ -73,6 +75,7 @@ pub fn exit_strategy_modes(book: Book) -> &'static [TradingMode] {
 /// if any entry strategies signal to open a position for a token.
 ///
 /// # Arguments
+/// * `strategies` - The enabled entry strategies of the entry cycle, in priority order
 /// * `modes` - The modes admitted for this token: only strategies of these modes are
 ///   evaluated, in priority order across the modes
 /// * `token_mint` - The token mint address
@@ -86,6 +89,7 @@ pub fn exit_strategy_modes(book: Book) -> &'static [TradingMode] {
 /// * `Ok(None)` - If no strategy signals entry
 /// * `Err(e)` - If evaluation fails
 pub async fn evaluate_entry_strategies(
+    strategies: &[Strategy],
     modes: &[TradingMode],
     token_mint: &str,
     current_price: f64,
@@ -98,18 +102,11 @@ pub async fn evaluate_entry_strategies(
         .as_ref()
         .ok_or_else(|| crate::Error::internal_error("Strategy engine not available"))?;
 
-    // Enabled entry strategies of the admitted modes
-    let strategies: Vec<Strategy> = get_enabled_strategies(StrategyType::Entry)?
-        .into_iter()
+    // Evaluate the strategies of the admitted modes by priority (lower priority first)
+    for strategy in strategies
+        .iter()
         .filter(|strategy| modes.contains(&strategy.mode))
-        .collect();
-
-    if strategies.is_empty() {
-        return Ok(None);
-    }
-
-    // Evaluate strategies by priority (lower priority first)
-    for strategy in strategies {
+    {
         let context = EvaluationContext {
             token_mint: token_mint.to_string(),
             current_price: Some(current_price),
@@ -120,17 +117,17 @@ pub async fn evaluate_entry_strategies(
             evaluated_at: Utc::now(),
         };
 
-        let result = engine.evaluate_strategy(&strategy, &context).await;
+        let result = engine.evaluate_strategy(strategy, &context).await;
 
         match result {
             Ok(eval_result) => {
-                // Record evaluation
-                if let Err(e) = record_evaluation(&eval_result, token_mint) {
+                let signalled = eval_result.result;
+                if let Err(e) = recorder::record(eval_result, token_mint).await {
                     logger::warning(LogTag::System, &format!("Failed to record evaluation: {e}"));
                 }
 
                 // If strategy signals entry, return it
-                if eval_result.result {
+                if signalled {
                     logger::info(
                         LogTag::System,
                         &format!(
@@ -230,13 +227,13 @@ pub async fn evaluate_exit_strategies(
 
         match result {
             Ok(eval_result) => {
-                // Record evaluation
-                if let Err(e) = record_evaluation(&eval_result, token_mint) {
+                let signalled = eval_result.result;
+                if let Err(e) = recorder::record(eval_result, token_mint).await {
                     logger::warning(LogTag::System, &format!("Failed to record evaluation: {e}"));
                 }
 
                 // If strategy signals exit, return it
-                if eval_result.result {
+                if signalled {
                     logger::info(LogTag::System, &format!("Exit strategy triggered: strategy={}, token={}, price={:.9}, entry_price={:.9}, profit_pct={:.2}%",
                             strategy.name, token_mint, current_price, position_data.entry_price,
                             position_data.unrealized_profit_pct.unwrap_or_default()),

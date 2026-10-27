@@ -271,28 +271,20 @@ pub struct StrategyEvaluator;
 
 impl StrategyEvaluator {
     /// Check if a token meets entry criteria based on the entry strategies of the
-    /// `admitted` modes; the first strategy that signals decides the book.
+    /// `admitted` modes among the entry cycle's `entry_strategies`; the first strategy
+    /// that signals decides the book.
     pub async fn check_entry_strategies(
         chain: ChainId,
         token_mint: &str,
         price_info: &PriceResult,
         admitted: &[TradingMode],
+        entry_strategies: &[Strategy],
     ) -> crate::trader::Result<Option<TradeDecision>> {
         // Early check: skip if no entry strategy of an admitted mode is configured
-        let mut configured = false;
-        for mode in admitted {
-            match has_enabled_strategies(StrategyType::Entry, *mode) {
-                Ok(found) => configured |= found,
-                Err(e) => {
-                    logger::debug(
-                        LogTag::Trader,
-                        &format!("Failed to check entry strategies: {e}"),
-                    );
-                    return Ok(None);
-                }
-            }
-        }
-        if !configured {
+        if !entry_strategies
+            .iter()
+            .any(|strategy| admitted.contains(&strategy.mode))
+        {
             return Ok(None);
         }
 
@@ -322,6 +314,7 @@ impl StrategyEvaluator {
         let evaluation_result = tokio::time::timeout(
             strategy_timeout,
             strategies::evaluate_entry_strategies(
+                entry_strategies,
                 admitted,
                 token_mint,
                 price_info.price_native,

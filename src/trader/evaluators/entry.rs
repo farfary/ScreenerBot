@@ -15,19 +15,19 @@
 
 use crate::chains::{adapter_for, ChainId};
 use crate::pools::PriceResult;
-use crate::strategies::db::has_enabled_strategies;
-use crate::strategies::types::StrategyType;
+use crate::strategies::db::get_enabled_strategies;
+use crate::strategies::types::{Strategy, StrategyType};
 use crate::trader::admission::{admit_modes, EntryBlock, EntryCycle};
 use crate::trader::paper::TradingMode;
 use crate::trader::types::TradeDecision;
 use crate::trader::{evaluators, llm_analysis};
 
-/// The modes an entry is evaluated for: those with an enabled entry strategy, live
+/// The modes an entry is evaluated for: those of the enabled entry `strategies`, live
 /// first. With none, live, so the live admission gauntlet reports as it always has.
-fn wanted_modes() -> Vec<TradingMode> {
+fn wanted_modes(strategies: &[Strategy]) -> Vec<TradingMode> {
     let wanted: Vec<TradingMode> = [TradingMode::Live, TradingMode::Paper]
         .into_iter()
-        .filter(|mode| matches!(has_enabled_strategies(StrategyType::Entry, *mode), Ok(true)))
+        .filter(|mode| strategies.iter().any(|strategy| strategy.mode == *mode))
         .collect();
     if wanted.is_empty() {
         vec![TradingMode::Live]
@@ -36,21 +36,27 @@ fn wanted_modes() -> Vec<TradingMode> {
     }
 }
 
-/// The inputs every token of one entry cycle is admitted against, read once for the
-/// cycle: the wanted modes, a SQLite read run on the blocking pool, and the paper cash
-/// when paper is wanted.
+/// The inputs every token of one entry cycle is admitted and evaluated against, read
+/// once for the cycle: the enabled entry strategies, a SQLite read run on the blocking
+/// pool, the modes they want, and the paper cash when paper is wanted. A failed read
+/// leaves the cycle without strategies, so no token of it signals an entry.
 pub async fn entry_cycle() -> EntryCycle {
-    let wanted = match tokio::task::spawn_blocking(wanted_modes).await {
-        Ok(wanted) => wanted,
-        Err(error) => {
-            crate::logger::warning(
-                crate::logger::LogTag::Trader,
-                &format!("Wanted entry modes unavailable: {error}"),
-            );
-            vec![TradingMode::Live]
-        }
-    };
-    EntryCycle::read(wanted).await
+    let strategies =
+        match tokio::task::spawn_blocking(|| get_enabled_strategies(StrategyType::Entry))
+            .await
+            .map_err(crate::Error::from)
+            .and_then(|read| read)
+        {
+            Ok(strategies) => strategies,
+            Err(error) => {
+                crate::logger::warning(
+                    crate::logger::LogTag::Trader,
+                    &format!("Enabled entry strategies unavailable: {error}"),
+                );
+                Vec::new()
+            }
+        };
+    EntryCycle::read(wanted_modes(&strategies), strategies).await
 }
 
 /// Evaluate entry opportunity for a token
@@ -162,17 +168,78 @@ pub async fn evaluate_entry_for_token(
     }
 
     // 7. Strategy evaluation - check configured entry strategies
-    evaluators::StrategyEvaluator::check_entry_strategies(chain, token_mint, price_info, &admitted)
-        .await
+    evaluators::StrategyEvaluator::check_entry_strategies(
+        chain,
+        token_mint,
+        price_info,
+        &admitted,
+        cycle.entry_strategies(),
+    )
+    .await
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::strategies::types::{Condition, RuleTree};
+
+    fn entry_strategy(id: &str, mode: TradingMode) -> Strategy {
+        Strategy {
+            id: id.to_owned(),
+            name: id.to_owned(),
+            description: None,
+            strategy_type: StrategyType::Entry,
+            enabled: true,
+            priority: 10,
+            timeframe: "5m".to_owned(),
+            rules: RuleTree::leaf(Condition {
+                condition_type: "LiquidityLevel".to_owned(),
+                parameters: Default::default(),
+            }),
+            parameters: Default::default(),
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+            author: None,
+            version: 1,
+            entry_strategy_ids: Vec::new(),
+            mode,
+        }
+    }
+
+    /// The wanted modes come from the strategies the cycle read, live first, and fall
+    /// back to live when no entry strategy is enabled.
+    #[test]
+    fn the_cycle_wants_the_modes_of_its_entry_strategies() {
+        use TradingMode::{Live, Paper};
+        let paper = entry_strategy("paper", Paper);
+        let live = entry_strategy("live", Live);
+        assert_eq!(wanted_modes(&[]), vec![Live]);
+        assert_eq!(wanted_modes(std::slice::from_ref(&paper)), vec![Paper]);
+        assert_eq!(wanted_modes(std::slice::from_ref(&live)), vec![Live]);
+        assert_eq!(wanted_modes(&[paper, live]), vec![Live, Paper]);
+    }
+
+    /// The cycle hands every token the strategies it was read with, in their priority
+    /// order, so no token reads the strategies store again.
+    #[tokio::test]
+    async fn the_cycle_carries_its_entry_strategies_to_every_token() {
+        let strategies = vec![
+            entry_strategy("first", TradingMode::Live),
+            entry_strategy("second", TradingMode::Paper),
+        ];
+        let cycle = EntryCycle::read(vec![TradingMode::Live], strategies).await;
+        let ids: Vec<&str> = cycle
+            .entry_strategies()
+            .iter()
+            .map(|strategy| strategy.id.as_str())
+            .collect();
+        assert_eq!(ids, ["first", "second"]);
+        assert_eq!(cycle.wanted(), [TradingMode::Live]);
+    }
 
     #[tokio::test]
     async fn a_strategy_entry_never_opens_a_quote_asset() {
-        let cycle = EntryCycle::read(vec![TradingMode::Live]).await;
+        let cycle = EntryCycle::read(vec![TradingMode::Live], Vec::new()).await;
         for chain in ChainId::ALL.iter().copied() {
             let adapter = adapter_for(chain);
             let quote_assets = std::iter::once(adapter.native_asset_address())

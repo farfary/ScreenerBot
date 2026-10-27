@@ -10,6 +10,7 @@
 use crate::database::catalog::{StoreSpec, COPY_TRADING, PAPER_POSITIONS, POSITIONS, STRATEGIES};
 use crate::database::health::{self, StoreStatus};
 use crate::positions::{books, Book};
+use crate::strategies::types::Strategy;
 use crate::trader::paper::TradingMode;
 use crate::trader::safety;
 
@@ -482,30 +483,43 @@ pub async fn check_entry_admission(
     Ok(())
 }
 
-/// What every entry of one cycle is admitted against, read once per entry cycle rather
-/// than once per token: the modes entries are wanted on and, when paper is one of them,
-/// the cash of the current paper run. The paper executor checks the cash again when it
-/// books, so a cycle-old figure never spends cash the run no longer has.
+/// What every entry of one cycle is admitted and evaluated against, read once per entry
+/// cycle rather than once per token: the modes entries are wanted on, the enabled entry
+/// strategies that signal them and, when paper is one of the modes, the cash of the
+/// current paper run. The paper executor checks the cash again when it books, so a
+/// cycle-old figure never spends cash the run no longer has.
 #[derive(Debug, Clone)]
 pub struct EntryCycle {
     wanted: Vec<TradingMode>,
+    entry_strategies: Vec<Strategy>,
     paper_cash: Option<Result<f64, EntryBlock>>,
 }
 
 impl EntryCycle {
-    /// The cycle of the `wanted` modes, reading the paper cash when paper is wanted.
-    pub async fn read(wanted: Vec<TradingMode>) -> Self {
+    /// The cycle of the `wanted` modes and the enabled `entry_strategies` in priority
+    /// order, reading the paper cash when paper is wanted.
+    pub async fn read(wanted: Vec<TradingMode>, entry_strategies: Vec<Strategy>) -> Self {
         let paper_cash = if wanted.contains(&TradingMode::Paper) {
             Some(read_paper_cash().await)
         } else {
             None
         };
-        Self { wanted, paper_cash }
+        Self {
+            wanted,
+            entry_strategies,
+            paper_cash,
+        }
     }
 
     /// The modes entries are wanted on this cycle.
     pub fn wanted(&self) -> &[TradingMode] {
         &self.wanted
+    }
+
+    /// The enabled entry strategies of this cycle, in priority order; each one's mode
+    /// decides the book its entry is made on.
+    pub fn entry_strategies(&self) -> &[Strategy] {
+        &self.entry_strategies
     }
 }
 

@@ -558,37 +558,66 @@ pub fn get_enabled_strategies(strategy_type: StrategyType) -> crate::Result<Vec<
 // PERFORMANCE TRACKING
 // =============================================================================
 
-/// Record strategy evaluation result
-pub fn record_evaluation(result: &EvaluationResult, token_mint: &str) -> crate::Result<()> {
-    let conn = get_connection()?;
+/// One strategy evaluation as the store records it, stamped when it was evaluated.
+#[derive(Debug, Clone)]
+pub struct EvaluationRecord {
+    pub result: EvaluationResult,
+    pub token_mint: String,
+    pub evaluated_at: DateTime<Utc>,
+}
 
-    let details_json = serde_json::to_string(&result.details)?;
+/// Write a batch of strategy evaluations in one transaction. Synchronous: callers on the
+/// async runtime queue evaluations through [`crate::strategies::recorder`], which runs
+/// this on the blocking pool.
+pub fn record_evaluations(records: &[EvaluationRecord]) -> crate::Result<()> {
+    let mut conn = get_connection()?;
+    insert_evaluations(&mut conn, records)
+}
 
-    conn.execute(
-        "INSERT INTO strategy_performance (strategy_id, execution_time_ms, result, confidence, details_json, token_mint, execution_timestamp, chain_id)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-        params![
-            result.strategy_id,
-            result.execution_time_ms,
-            result.result,
-            result.confidence,
-            details_json,
-            token_mint,
-            Utc::now().to_rfc3339(),
-            crate::chains::legacy_row_chain().as_str(),
-        ],
-    )?;
-
+fn insert_evaluations(
+    conn: &mut rusqlite::Connection,
+    records: &[EvaluationRecord],
+) -> crate::Result<()> {
+    let chain_id = crate::chains::legacy_row_chain().as_str();
+    let tx = conn.transaction()?;
+    {
+        let mut stmt = tx.prepare_cached(
+            "INSERT INTO strategy_performance (strategy_id, execution_time_ms, result, confidence, details_json, token_mint, execution_timestamp, chain_id)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+        )?;
+        for record in records {
+            let details_json = serde_json::to_string(&record.result.details)?;
+            stmt.execute(params![
+                record.result.strategy_id,
+                record.result.execution_time_ms,
+                record.result.result,
+                record.result.confidence,
+                details_json,
+                record.token_mint,
+                record.evaluated_at.to_rfc3339(),
+                chain_id,
+            ])?;
+        }
+    }
+    tx.commit()?;
     Ok(())
 }
 
 /// Get performance statistics for a strategy
 pub fn get_strategy_performance(strategy_id: &str) -> crate::Result<Option<StrategyPerformance>> {
     let conn = get_connection()?;
+    performance_of(&conn, strategy_id)
+}
 
-    let result = conn
+/// The performance statistics of `strategy_id` over its recorded evaluations, or `None`
+/// when it has none.
+fn performance_of(
+    conn: &rusqlite::Connection,
+    strategy_id: &str,
+) -> crate::Result<Option<StrategyPerformance>> {
+    let (total_evaluations, successful_signals, avg_execution_time_ms, last_evaluation) = conn
         .query_row(
-            "SELECT 
+            "SELECT
                 COUNT(*) as total_evaluations,
                 SUM(CASE WHEN result = 1 THEN 1 ELSE 0 END) as successful_signals,
                 AVG(execution_time_ms) as avg_execution_time_ms,
@@ -597,35 +626,33 @@ pub fn get_strategy_performance(strategy_id: &str) -> crate::Result<Option<Strat
              WHERE strategy_id = ?1",
             params![strategy_id],
             |row| {
-                let total: u64 = row.get(0)?;
-                let successful: u64 = row.get(1)?;
-                let avg_time: f64 = row.get(2)?;
-                let last_eval_str: String = row.get(3)?;
-                Ok((total, successful, avg_time, last_eval_str))
+                Ok((
+                    row.get::<_, u64>(0)?,
+                    row.get::<_, Option<u64>>(1)?,
+                    row.get::<_, Option<f64>>(2)?,
+                    row.get::<_, Option<String>>(3)?,
+                ))
             },
-        )
-        .optional()?;
+        )?;
 
-    match result {
-        Some((total_evaluations, successful_signals, avg_execution_time_ms, last_eval_str)) => {
-            if total_evaluations == 0 {
-                return Ok(None);
-            }
+    // An aggregate over no rows is one row of NULLs: no evaluation recorded.
+    let (Some(successful_signals), Some(avg_execution_time_ms), Some(last_eval_str)) =
+        (successful_signals, avg_execution_time_ms, last_evaluation)
+    else {
+        return Ok(None);
+    };
 
-            let last_evaluation = DateTime::parse_from_rfc3339(&last_eval_str)
-                .map_err(|e| Error::parse_error(format!("Failed to parse timestamp: {e}")))?
-                .with_timezone(&Utc);
+    let last_evaluation = DateTime::parse_from_rfc3339(&last_eval_str)
+        .map_err(|e| Error::parse_error(format!("Failed to parse timestamp: {e}")))?
+        .with_timezone(&Utc);
 
-            Ok(Some(StrategyPerformance {
-                strategy_id: strategy_id.to_string(),
-                total_evaluations,
-                successful_signals,
-                avg_execution_time_ms,
-                last_evaluation,
-            }))
-        }
-        None => Ok(None),
-    }
+    Ok(Some(StrategyPerformance {
+        strategy_id: strategy_id.to_string(),
+        total_evaluations,
+        successful_signals,
+        avg_execution_time_ms,
+        last_evaluation,
+    }))
 }
 
 #[cfg(test)]

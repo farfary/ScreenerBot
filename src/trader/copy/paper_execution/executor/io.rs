@@ -92,7 +92,7 @@ impl PaperEntryIo for ProductionPaperEntryIo {
     }
 
     async fn admission(&self, decision: &TradeDecision) -> Result<(), EntryBlock> {
-        let cycle = EntryCycle::read(vec![TradingMode::Paper]).await;
+        let cycle = EntryCycle::read(vec![TradingMode::Paper], Vec::new()).await;
         crate::trader::admission::check_paper_entry_admission(
             &decision.mint,
             &["rpc"],
