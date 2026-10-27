@@ -17,7 +17,6 @@
 //! 9. /networks/{network}/tokens/multi/{addresses} - Multiple token metadata
 //! 10. /networks/{network}/tokens/{address}/info - Token metadata
 //! 11. /tokens/info_recently_updated - Recent token updates (global)
-//! 12. /networks/{network}/pools/{pool_address}/trades - Recent pool trades
 
 mod endpoints;
 pub mod types;
@@ -26,7 +25,6 @@ pub mod types;
 pub use self::types::{
     GeckoTerminalDexesResponse, GeckoTerminalPool, GeckoTerminalRecentlyUpdatedResponse,
     GeckoTerminalResponse, GeckoTerminalTokenInfoResponse, GeckoTerminalTokensMultiResponse,
-    GeckoTerminalTradesResponse,
 };
 
 use crate::apis::client::RateLimiter;

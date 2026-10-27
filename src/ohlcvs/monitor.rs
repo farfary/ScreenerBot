@@ -947,7 +947,6 @@ impl OhlcvMonitor {
             low_tokens: by_priority.get(&Priority::Low).copied().unwrap_or_default(),
             cache_hit_rate: self.cache.hit_rate(),
             api_calls_per_minute: self.fetcher.calls_per_minute(),
-            queue_size: self.fetcher.queue_size(),
             telemetry: telemetry_snapshot,
             backfills_in_progress,
             open_gap_tokens,

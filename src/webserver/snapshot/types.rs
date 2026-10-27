@@ -172,7 +172,6 @@ pub struct OhlcvStatsSnapshot {
     pub low_tokens: usize,
     pub cache_hit_rate: f64,
     pub api_calls_per_minute: f64,
-    pub queue_size: usize,
     pub telemetry: OhlcvTelemetrySnapshot,
     pub backfills_in_progress: usize,
     pub open_gap_tokens: usize,

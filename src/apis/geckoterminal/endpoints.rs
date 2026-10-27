@@ -6,7 +6,6 @@
 use super::types::{
     GeckoTerminalDexesResponse, GeckoTerminalPool, GeckoTerminalRecentlyUpdatedResponse,
     GeckoTerminalResponse, GeckoTerminalTokenInfoResponse, GeckoTerminalTokensMultiResponse,
-    GeckoTerminalTradesResponse,
 };
 use super::{default_network, MAX_TRENDING_PAGE};
 use super::{GeckoTerminalClient, OhlcvResponse, TokenInfo};
@@ -544,45 +543,6 @@ impl GeckoTerminalClient {
         );
 
         self.get_json(endpoint, builder).await
-    }
-
-    /// Fetch trades for a pool in the last 24 hours
-    pub async fn fetch_pool_trades(
-        &self,
-        network: &str,
-        pool_address: &str,
-        trade_volume_in_usd_greater_than: Option<f64>,
-        token: Option<&str>,
-    ) -> Result<GeckoTerminalTradesResponse, Error> {
-        let endpoint = format!("networks/{network}/pools/{pool_address}/trades");
-        let url = format!("{}/{endpoint}", self.base_url);
-
-        let mut query_params: Vec<(String, String)> = Vec::new();
-        if let Some(min_volume) = trade_volume_in_usd_greater_than {
-            query_params.push((
-                "trade_volume_in_usd_greater_than".to_owned(),
-                min_volume.to_string(),
-            ));
-        }
-        if let Some(tok) = token {
-            query_params.push(("token".to_owned(), tok.to_string()));
-        }
-
-        let builder = if query_params.is_empty() {
-            self.client.get(&url)
-        } else {
-            self.client.get(&url).query(&query_params)
-        };
-
-        logger::debug(
-            LogTag::Api,
-            &format!(
-                "[GECKOTERMINAL] Fetching pool trades: network={}, pool={}, min_volume={:?}",
-                network, pool_address, trade_volume_in_usd_greater_than
-            ),
-        );
-
-        self.get_json(&endpoint, builder).await
     }
 }
 

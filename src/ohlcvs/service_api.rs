@@ -467,7 +467,6 @@ fn combine_monitor_stats(
                 next.lookups,
             ),
             api_calls_per_minute: a.api_calls_per_minute + b.api_calls_per_minute,
-            queue_size: a.queue_size + b.queue_size,
             telemetry: combine_telemetry(a.telemetry, b.telemetry),
             backfills_in_progress: a.backfills_in_progress + b.backfills_in_progress,
             open_gap_tokens: a.open_gap_tokens + b.open_gap_tokens,
@@ -634,7 +633,6 @@ mod tests {
             low_tokens: seed + 4,
             cache_hit_rate: hit_rate,
             api_calls_per_minute: seed as f64,
-            queue_size: seed + 5,
             telemetry: telemetry(1_000 + seed as i64, seed as u64, "e"),
             backfills_in_progress: seed + 6,
             open_gap_tokens: seed + 7,
@@ -735,7 +733,6 @@ mod tests {
         );
         assert_eq!(s.cache_hit_rate, 0.3);
         assert_eq!(s.api_calls_per_minute, 2.0);
-        assert_eq!(s.queue_size, 7);
         assert_eq!(s.backfills_in_progress, 8);
         assert_eq!((s.open_gap_tokens, s.open_gap_total), (9, 10));
         // A single chain keeps the order its own query produced.
@@ -759,7 +756,6 @@ mod tests {
         let s = combine_monitor_stats(Some(first), second).stats;
         assert_eq!(s.total_tokens, 4);
         assert_eq!(s.low_tokens, 12);
-        assert_eq!(s.queue_size, 14);
         assert_eq!(s.open_gap_total, 20);
         assert!((s.cache_hit_rate - 0.875).abs() < 1e-12);
         assert_eq!(s.telemetry.monitor_cycle_total, 14);

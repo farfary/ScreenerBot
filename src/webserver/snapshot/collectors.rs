@@ -264,7 +264,6 @@ pub(super) async fn collect_ohlcv_stats_snapshot() -> Option<OhlcvStatsSnapshot>
                 low_tokens: stats.low_tokens,
                 cache_hit_rate: (stats.cache_hit_rate * 100.0).clamp(0.0, 100.0),
                 api_calls_per_minute: stats.api_calls_per_minute,
-                queue_size: stats.queue_size,
                 telemetry: telemetry_snapshot,
                 backfills_in_progress: stats.backfills_in_progress,
                 open_gap_tokens: stats.open_gap_tokens,

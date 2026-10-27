@@ -14,10 +14,10 @@ use crate::errors::NetworkError;
 use crate::events::{record_ohlcv_event, Severity};
 use crate::ohlcvs::error::{OhlcvError, OhlcvResult};
 use crate::ohlcvs::feeds::CandleFeed;
-use crate::ohlcvs::types::{Candle, Priority, Timeframe};
+use crate::ohlcvs::types::{Candle, Timeframe};
 use serde::Deserialize;
 use serde_json::json;
-use std::collections::{BinaryHeap, VecDeque};
+use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -89,46 +89,10 @@ fn server_state_is_refreshing(state: &str) -> bool {
     matches!(state, "refreshing" | "pending")
 }
 
-#[derive(Clone, Debug)]
-struct FetchRequest {
-    mint: String,
-    pool_address: String,
-    timeframe: Timeframe,
-    priority: Priority,
-    before_timestamp: Option<i64>,
-    limit: usize,
-    requested_at: Instant,
-}
-
-impl PartialEq for FetchRequest {
-    fn eq(&self, other: &Self) -> bool {
-        self.priority == other.priority && self.requested_at == other.requested_at
-    }
-}
-
-impl Eq for FetchRequest {}
-
-impl PartialOrd for FetchRequest {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Ord for FetchRequest {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        // Higher priority first, then earlier requests
-        match self.priority.cmp(&other.priority) {
-            std::cmp::Ordering::Equal => other.requested_at.cmp(&self.requested_at),
-            other => other,
-        }
-    }
-}
-
 pub struct OhlcvFetcher {
     chain: ChainId,
     api_manager: Arc<ApiManager>,
     request_history: Arc<Mutex<VecDeque<Instant>>>,
-    request_queue: Arc<Mutex<BinaryHeap<FetchRequest>>>,
     api_calls_count: Arc<Mutex<u64>>,
     total_latency_ms: Arc<Mutex<u64>>,
 }
@@ -139,7 +103,6 @@ impl OhlcvFetcher {
             chain,
             api_manager: get_api_manager(),
             request_history: Arc::new(Mutex::new(VecDeque::new())),
-            request_queue: Arc::new(Mutex::new(BinaryHeap::new())),
             api_calls_count: Arc::new(Mutex::new(0)),
             total_latency_ms: Arc::new(Mutex::new(0)),
         }
@@ -151,30 +114,6 @@ impl OhlcvFetcher {
         crate::chains::runtime_for(self.chain)
             .map(|runtime| runtime.candle_feeds())
             .unwrap_or_default()
-    }
-
-    /// Fetch OHLCV data for a pool with priority
-    pub async fn fetch_ohlcv(
-        &self,
-        mint: &str,
-        pool_address: &str,
-        timeframe: Timeframe,
-        priority: Priority,
-        before_timestamp: Option<i64>,
-        limit: usize,
-    ) -> OhlcvResult<Vec<Candle>> {
-        // Queue the request
-        self.queue_request(
-            mint.to_string(),
-            pool_address.to_string(),
-            timeframe,
-            priority,
-            before_timestamp,
-            limit,
-        )?;
-
-        // Process queue (this will respect rate limits)
-        self.process_queue().await
     }
 
     /// Fetch `mint`'s candles in `pool_address` from GeckoTerminal with its native
@@ -534,128 +473,6 @@ impl OhlcvFetcher {
         None
     }
 
-    /// Fetch OHLCV data immediately (bypasses queue, use for critical requests only)
-    pub async fn fetch_immediate(
-        &self,
-        mint: &str,
-        pool_address: &str,
-        timeframe: Timeframe,
-        before_timestamp: Option<i64>,
-        limit: usize,
-    ) -> OhlcvResult<Vec<Candle>> {
-        // Record request attempt for local metrics
-        self.record_attempt();
-
-        let start = Instant::now();
-        let limit_clamped = limit.min(MAX_CANDLES_PER_REQUEST) as u32;
-
-        // DEBUG: Record fetch attempt
-        record_ohlcv_event(
-            "fetch_attempt",
-            Severity::Debug,
-            Some(mint),
-            Some(pool_address),
-            json!({
-                "pool_address": pool_address,
-                "timeframe": timeframe.to_string(),
-                "before_timestamp": before_timestamp,
-                "limit": limit_clamped,
-            }),
-        )
-        .await;
-
-        let response = self
-            .api_manager
-            .geckoterminal
-            .fetch_ohlcv(
-                crate::chains::adapter_for(self.chain).market_data_network(),
-                pool_address,
-                mint,
-                timeframe.to_api_param(),
-                None,
-                Some(limit_clamped),
-                Some("token"),
-                before_timestamp,
-            )
-            .await;
-
-        match response {
-            Ok(ohlcv) => {
-                let data_points: Vec<Candle> = ohlcv
-                    .ohlcv_list
-                    .into_iter()
-                    .map(|candle| Candle {
-                        timestamp: candle[0] as i64,
-                        open: candle[1],
-                        high: candle[2],
-                        low: candle[3],
-                        close: candle[4],
-                        volume: candle[5],
-                    })
-                    .collect();
-
-                let latency = start.elapsed().as_millis() as u64;
-                self.record_api_call(latency);
-
-                // DEBUG: Record successful fetch (higher-level events recorded by monitor after storage)
-                record_ohlcv_event(
-                    "fetch_immediate_complete",
-                    Severity::Debug,
-                    Some(mint),
-                    Some(pool_address),
-                    json!({
-                        "pool_address": pool_address,
-                        "timeframe": timeframe.to_string(),
-                        "data_points": data_points.len(),
-                        "latency_ms": latency,
-                        "before_timestamp": before_timestamp,
-                    }),
-                )
-                .await;
-
-                Ok(data_points)
-            }
-            Err(err) => {
-                let is_rate_limited =
-                    matches!(&err, ApiError::Network(NetworkError::RateLimited { .. }));
-                let is_not_found = matches!(&err, ApiError::NotFound { .. })
-                    || matches!(&err, ApiError::Network(NetworkError::HttpStatus { status, .. }) if *status == 404);
-                let error_type = if is_rate_limited {
-                    "rate_limit"
-                } else if is_not_found {
-                    "pool_not_found"
-                } else {
-                    "api_error"
-                };
-                let err_str = err.to_string();
-
-                // ERROR: Record fetch failure
-                record_ohlcv_event(
-                    "fetch_error",
-                    Severity::Error,
-                    Some(mint),
-                    Some(pool_address),
-                    json!({
-                        "pool_address": pool_address,
-                        "timeframe": timeframe.to_string(),
-                        "error_type": error_type,
-                        "error": err_str,
-                        "before_timestamp": before_timestamp,
-                    }),
-                )
-                .await;
-
-                if is_rate_limited {
-                    Err(OhlcvError::RateLimitExceeded)
-                } else if is_not_found {
-                    Err(OhlcvError::PoolNotFound(pool_address.to_string()))
-                } else {
-                    Err(OhlcvError::ApiError(err_str))
-                }
-            }
-        }
-    }
-
     /// Fetch calls recorded so far, the denominator of [`Self::average_latency_ms`].
     pub(super) fn calls_recorded(&self) -> u64 {
         *self
@@ -695,14 +512,6 @@ impl OhlcvFetcher {
         history.len() as f64
     }
 
-    /// Get queue size
-    pub fn queue_size(&self) -> usize {
-        self.request_queue
-            .lock()
-            .map(|queue| queue.len())
-            .unwrap_or_default()
-    }
-
     // ==================== Private Methods ====================
 
     fn prune_history(history: &mut VecDeque<Instant>, now: Instant) {
@@ -712,58 +521,6 @@ impl OhlcvFetcher {
             } else {
                 break;
             }
-        }
-    }
-
-    fn queue_request(
-        &self,
-        mint: String,
-        pool_address: String,
-        timeframe: Timeframe,
-        priority: Priority,
-        before_timestamp: Option<i64>,
-        limit: usize,
-    ) -> OhlcvResult<()> {
-        let mut queue = self
-            .request_queue
-            .lock()
-            .map_err(|e| OhlcvError::ApiError(format!("Lock error: {e}")))?;
-
-        queue.push(FetchRequest {
-            mint,
-            pool_address,
-            timeframe,
-            priority,
-            before_timestamp,
-            limit,
-            requested_at: Instant::now(),
-        });
-
-        Ok(())
-    }
-
-    async fn process_queue(&self) -> OhlcvResult<Vec<Candle>> {
-        // Get next request from queue
-        let request = {
-            let mut queue = self
-                .request_queue
-                .lock()
-                .map_err(|e| OhlcvError::ApiError(format!("Lock error: {e}")))?;
-
-            queue.pop()
-        };
-
-        if let Some(req) = request {
-            self.fetch_immediate(
-                &req.mint,
-                &req.pool_address,
-                req.timeframe,
-                req.before_timestamp,
-                req.limit,
-            )
-            .await
-        } else {
-            Ok(Vec::new())
         }
     }
 

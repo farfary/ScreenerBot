@@ -23,7 +23,6 @@ pub struct PositionDebugResponse {
     pub price_data: Option<PriceData>,
     pub market_data: Option<MarketData>,
     pub pools: Vec<PoolInfo>,
-    pub security: Option<SecurityInfo>,
     pub social: Option<SocialInfo>,
     pub position_debug: Option<PositionDebugDetails>,
 }
@@ -87,28 +86,6 @@ pub struct PoolInfo {
     pub price_sol: f64,
     pub confidence: f32,
     pub last_updated: i64,
-}
-
-#[derive(Debug, Serialize)]
-pub struct SecurityInfo {
-    pub score: i32,
-    pub score_normalised: i32,
-    pub rugged: bool,
-    pub mint_authority: Option<String>,
-    pub freeze_authority: Option<String>,
-    pub creator: Option<String>,
-    pub total_holders: i32,
-    pub top_10_concentration: Option<f64>,
-    pub risks: Vec<RiskInfo>,
-    pub analyzed_at: String,
-}
-
-#[derive(Debug, Serialize)]
-pub struct RiskInfo {
-    pub name: String,
-    pub level: String,
-    pub description: String,
-    pub score: i32,
 }
 
 #[derive(Debug, Serialize)]
@@ -347,10 +324,7 @@ pub async fn get_position_debug_info(Path(mint): Path<String>) -> Json<PositionD
         });
     }
 
-    // 6. Get security info (temporarily unavailable until SecurityProvider integration)
-    let security = None::<SecurityInfo>;
-
-    // 7. Get social info from token database
+    // 6. Get social info from token database
     let social = api_token.as_ref().map(|token| SocialInfo {
         website: token.websites.first().map(|w| w.url.clone()),
         twitter: token
@@ -365,7 +339,7 @@ pub async fn get_position_debug_info(Path(mint): Path<String>) -> Json<PositionD
             .map(|s| s.url.clone()),
     });
 
-    // 8. Get position debug data
+    // 7. Get position debug data
     let position_debug = if let Some(pos) = open_position_record.clone() {
         // Transaction details
         let transaction_details = TransactionDetails {
@@ -462,7 +436,6 @@ pub async fn get_position_debug_info(Path(mint): Path<String>) -> Json<PositionD
         price_data,
         market_data,
         pools: pools_vec,
-        security,
         social,
         position_debug,
     })
