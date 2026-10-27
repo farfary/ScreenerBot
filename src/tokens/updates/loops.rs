@@ -3,8 +3,9 @@
 
 //! Updates orchestrator - State-based priority updates
 //!
-//! Coordinates fetching from all sources (DexScreener, GeckoTerminal, Rugcheck)
-//! with rate limiting and state-based priority scheduling.
+//! Coordinates market data fetching (DexScreener) and security data fetching (Rugcheck)
+//! with rate limiting and state-based priority scheduling. GeckoTerminal market data is
+//! fetched only by on-demand refreshes (`force_update_token`).
 //!
 //! Priority levels (named by token state):
 //! - OpenPosition (100): Tokens with active trading positions → Update every 5s

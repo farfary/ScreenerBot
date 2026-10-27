@@ -4,7 +4,8 @@
 //! GeckoTerminal market data fetching and caching
 //!
 //! Flow: API -> Parse -> Database -> Store cache
-//! Updates: Every 60 seconds for active tokens
+//! Updates: on demand only (`tokens::request_immediate_update`); the scheduled market
+//! update loops read DexScreener alone
 //!
 //! Architecture:
 //! - Uses /networks/{net}/tokens/multi/{addresses} batch endpoint (up to 30 tokens per request)
@@ -21,35 +22,6 @@ use crate::tokens::Error;
 use chrono::Utc;
 use std::collections::HashMap;
 
-/// Fetch GeckoTerminal data for multiple tokens in a single batch API call
-///
-/// Uses /networks/{net}/tokens/multi/{addresses} endpoint which returns
-/// aggregated token data (price, volume, market cap) without pool details.
-///
-/// Flow per token:
-/// 1. Check cache (if fresh, skip API)
-/// 2. Check database (if fresh < 60s, use it)
-/// 3. Fetch from API (batch endpoint)
-/// 4. Store in database + cache
-///
-/// # Arguments
-/// * `mints` - Token mint addresses (up to 30)
-/// * `db` - Database instance
-///
-/// # Returns
-/// HashMap mapping mint -> Option<GeckoTerminalData>
-/// - Some(data) if token has market data
-/// - None if token not listed on any DEX
-///
-/// A token whose answer could not be stored is left out of the map, so the caller
-/// counts it as a failed fetch, never as "not listed".
-pub async fn fetch_geckoterminal_data_batch(
-    mints: &[String],
-    db: &TokenDatabase,
-) -> TokenResult<HashMap<String, Option<GeckoTerminalData>>> {
-    fetch_and_store(mints, db).await.map(|(answers, _)| answers)
-}
-
 /// The answers of one batch fetch, and the error of every token whose answer could not
 /// be stored.
 type BatchOutcome = (
@@ -57,7 +29,24 @@ type BatchOutcome = (
     HashMap<String, Error>,
 );
 
-async fn fetch_and_store(mints: &[String], db: &TokenDatabase) -> TokenResult<BatchOutcome> {
+/// Fetch GeckoTerminal data for up to 30 tokens in one call to
+/// /networks/{net}/tokens/multi/{addresses}, which returns aggregated token data (price,
+/// volume, market cap) without pool details. `lane` is the caller's [`RequestLane`].
+///
+/// Flow per token:
+/// 1. Check cache (if fresh, skip API)
+/// 2. Check database (if fresh < 60s, use it)
+/// 3. Fetch from API (batch endpoint)
+/// 4. Store in database + cache
+///
+/// A token the API answered without data is `None` (not listed). A token whose answer
+/// could not be stored is left out of the answers and reported with its error, so it
+/// counts as a failed fetch, never as "not listed".
+async fn fetch_and_store(
+    mints: &[String],
+    db: &TokenDatabase,
+    lane: RequestLane,
+) -> TokenResult<BatchOutcome> {
     if mints.is_empty() {
         return Ok((HashMap::new(), HashMap::new()));
     }
@@ -116,7 +105,7 @@ async fn fetch_and_store(mints: &[String], db: &TokenDatabase) -> TokenResult<Ba
             &addresses_str,
             None,
             None,
-            RequestLane::Interactive,
+            lane,
         )
         .await
         .map_err(|e| Error::Api {
@@ -222,6 +211,8 @@ async fn fetch_and_store(mints: &[String], db: &TokenDatabase) -> TokenResult<Ba
 /// # Arguments
 /// * `mint` - Token mint address
 /// * `db` - Database instance
+/// * `lane` - The caller's request lane: interactive waits out a rate-limit penalty,
+///   background is deferred by it
 ///
 /// # Returns
 /// GeckoTerminalData if found, None if token not listed; `Err` when the lookup failed or
@@ -229,9 +220,10 @@ async fn fetch_and_store(mints: &[String], db: &TokenDatabase) -> TokenResult<Ba
 pub async fn fetch_geckoterminal_data(
     mint: &str,
     db: &TokenDatabase,
+    lane: RequestLane,
 ) -> TokenResult<Option<GeckoTerminalData>> {
     // Use batch endpoint with single token
-    let (mut answers, mut store_failures) = fetch_and_store(&[mint.to_string()], db).await?;
+    let (mut answers, mut store_failures) = fetch_and_store(&[mint.to_string()], db, lane).await?;
     if let Some(error) = store_failures.remove(mint) {
         return Err(error);
     }

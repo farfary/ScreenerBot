@@ -47,6 +47,7 @@ pub mod types;
 mod types_tests;
 pub mod updates;
 
+use crate::apis::geckoterminal::RequestLane;
 use crate::chains::ChainId;
 
 // Re-export main types for convenience
@@ -162,6 +163,9 @@ pub use favorites::{
 /// # Arguments
 /// * `chain` - The chain the token lives on
 /// * `mint` - Token address to update
+/// * `lane` - Who waits on the GeckoTerminal request: `Interactive` for a dashboard or tool
+///   request, which waits out a rate-limit penalty; `Background` for work that retries on
+///   its own cadence, which is deferred by the penalty
 ///
 /// # Returns
 /// UpdateResult with success/failure details from each data source
@@ -169,14 +173,21 @@ pub use favorites::{
 /// # Example
 /// ```no_run
 /// # async fn example(chain: screenerbot::chains::ChainId) {
-/// match screenerbot::tokens::request_immediate_update(chain, "TokenMintAddress").await {
+/// use screenerbot::apis::geckoterminal::RequestLane;
+/// let update =
+///     screenerbot::tokens::request_immediate_update(chain, "TokenMintAddress", RequestLane::Interactive);
+/// match update.await {
 ///     Ok(result) if result.is_success() => println!("Updated successfully"),
 ///     Ok(result) => println!("Update failed: {:?}", result.failures),
 ///     Err(e) => println!("Error: {e}"),
 /// }
 /// # }
 /// ```
-pub async fn request_immediate_update(chain: ChainId, mint: &str) -> TokenResult<UpdateResult> {
+pub async fn request_immediate_update(
+    chain: ChainId,
+    mint: &str,
+    lane: RequestLane,
+) -> TokenResult<UpdateResult> {
     // Every caller (dashboard refresh, agent tools, position pricing) funnels
     // through here, so a value that is not an address is refused before any
     // external provider sees it.
@@ -191,7 +202,7 @@ pub async fn request_immediate_update(chain: ChainId, mint: &str) -> TokenResult
 
     let db = database::require_database(chain)?;
 
-    updates::force_update_token(mint, db, service::rate_budget(chain)).await
+    updates::force_update_token(mint, db, service::rate_budget(chain), lane).await
 }
 
 /// Ensure a token is available with its market data, fetching it on demand if missing.
@@ -233,8 +244,9 @@ pub async fn ensure_token_available(chain: ChainId, mint: &str) -> TokenResult<T
         .ok();
     let _ = db.upsert_token(mint, None, None, decimals);
 
-    // Best-effort: pull market/security data from APIs (failure is non-fatal).
-    if let Err(e) = request_immediate_update(chain, mint).await {
+    // Best-effort: pull market/security data from APIs (failure is non-fatal). A manual
+    // trade or an opened token view waits on this answer, so it takes the interactive lane.
+    if let Err(e) = request_immediate_update(chain, mint, RequestLane::Interactive).await {
         crate::logger::warning(
             crate::logger::LogTag::Tokens,
             &format!("On-demand market fetch for {mint} failed: {e}"),

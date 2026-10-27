@@ -6,6 +6,7 @@
 use super::blocking::blocking_db;
 use super::helpers::{clear_in_flight, try_mark_in_flight, MarketAnswer, MarketFetchFailure};
 use super::rate_limiter::RateLimitCoordinator;
+use crate::apis::geckoterminal::RequestLane;
 use crate::chains::{adapter_for, ChainId};
 use crate::events::{record_token_event, Severity};
 use crate::logger::{self, LogTag};
@@ -248,8 +249,8 @@ impl PoolPriorityManager {
 /// Note: Security data (Rugcheck) is handled separately in update_security_data()
 /// and is fetched only once per token, not on every update cycle.
 ///
-/// GeckoTerminal is no longer used for market data updates due to strict rate limits (30/min).
-/// It is still used in discovery for finding new tokens.
+/// Scheduled market updates read DexScreener alone: GeckoTerminal's limit (30/min) is kept
+/// for token discovery and for on-demand refreshes ([`force_update_token`]).
 ///
 /// Returns overall success if at least one source succeeds.
 pub async fn update_token(
@@ -376,10 +377,9 @@ impl UpdateResult {
     }
 }
 
-/// Update multiple tokens in batch (DexScreener + GeckoTerminal batch endpoints)
-///
-/// Uses batch API for both DexScreener and GeckoTerminal (up to 30 tokens per request),
-/// individual calls only for Rugcheck (no batch endpoint available).
+/// Update multiple tokens in batch from the DexScreener batch endpoint (up to 30 tokens
+/// per request). Like [`update_token`] it reads market data from DexScreener alone; security
+/// data is handled separately in update_security_data().
 ///
 /// # Arguments
 /// * `mints` - Token addresses to update (up to 30 recommended)
@@ -656,26 +656,6 @@ pub(super) async fn update_security_data(
 // FORCE UPDATE API (for immediate fetching outside scheduled loops)
 // ============================================================================
 
-/// Force immediate update for a single token (bypasses normal scheduling)
-///
-/// This function is designed for on-demand updates when user explicitly
-/// requests fresh data (e.g., viewing token details dialog).
-///
-/// Fetches from ALL sources in parallel:
-/// - DexScreener (market data)
-/// - GeckoTerminal (market data)
-/// - Rugcheck (security data)
-///
-/// Uses the same rate limit coordinator as scheduled updates but executes
-/// immediately without waiting for next loop iteration.
-///
-/// # Arguments
-/// * `mint` - Token address to update
-/// * `db` - Database instance
-/// * `coordinator` - Rate limit coordinator
-///
-/// # Returns
-/// UpdateResult with success/failure details from each source
 /// Max time an on-demand (user-initiated) force update waits for a per-minute
 /// rate-limit permit before proceeding without one. The background loop drains
 /// the shared budget across thousands of tokens, so a blocking `acquire().await`
@@ -712,10 +692,33 @@ where
     }
 }
 
+/// Force immediate update for a single token (bypasses normal scheduling)
+///
+/// This function is designed for on-demand updates: a dashboard or tool request for
+/// fresh data (e.g., viewing token details dialog), or a held position's price fallback.
+///
+/// Fetches from ALL sources in parallel:
+/// - DexScreener (market data)
+/// - GeckoTerminal (market data)
+/// - Rugcheck (security data)
+///
+/// Uses the same rate limit coordinator as scheduled updates but executes
+/// immediately without waiting for next loop iteration.
+///
+/// # Arguments
+/// * `mint` - Token address to update
+/// * `db` - Database instance
+/// * `coordinator` - Rate limit coordinator
+/// * `lane` - The caller's GeckoTerminal request lane: interactive waits out a 429 penalty,
+///   background is deferred by it and the GeckoTerminal arm reports a failure
+///
+/// # Returns
+/// UpdateResult with success/failure details from each source
 pub async fn force_update_token(
     mint: &str,
     db: std::sync::Arc<TokenDatabase>,
     coordinator: std::sync::Arc<RateLimitCoordinator>,
+    lane: RequestLane,
 ) -> TokenResult<UpdateResult> {
     logger::debug(
         LogTag::Tokens,
@@ -769,7 +772,7 @@ pub async fn force_update_token(
             };
             let result = fetch_with_deadline(
                 "GeckoTerminal",
-                geckoterminal::fetch_geckoterminal_data(&mint_str, db_ref),
+                geckoterminal::fetch_geckoterminal_data(&mint_str, db_ref, lane),
             )
             .await;
             if let Some(p) = permit {
@@ -870,7 +873,7 @@ pub async fn force_update_token(
         );
     }
 
-    // Record event for force update (not sampled - user-initiated action)
+    // Record event for force update (not sampled - an on-demand refresh)
     tokio::spawn({
         let mint = mint.to_string();
         let successes = successes.clone();

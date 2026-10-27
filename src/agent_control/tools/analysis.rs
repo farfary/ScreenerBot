@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use super::{Tool, ToolCategory, ToolDefinition, ToolResult};
+use crate::apis::geckoterminal::RequestLane;
 use crate::tokens;
 use crate::tokens::security::SecurityRiskBand;
 
@@ -207,6 +208,7 @@ impl Tool for GetMarketDataTool {
         let _update_result = match tokens::request_immediate_update(
             crate::chains::active_chain(),
             &params.mint_address,
+            RequestLane::Interactive,
         )
         .await
         {
@@ -312,9 +314,12 @@ impl Tool for CheckSecurityTool {
 
         // Refresh first; a provider failure still falls back to the stored row,
         // but a value that is not an address has nothing to fall back to.
-        if let Err(e @ tokens::Error::InvalidMint { .. }) =
-            tokens::request_immediate_update(crate::chains::active_chain(), &params.mint_address)
-                .await
+        if let Err(e @ tokens::Error::InvalidMint { .. }) = tokens::request_immediate_update(
+            crate::chains::active_chain(),
+            &params.mint_address,
+            RequestLane::Interactive,
+        )
+        .await
         {
             return ToolResult::error(e.to_string());
         }

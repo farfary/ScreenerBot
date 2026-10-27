@@ -11,6 +11,7 @@ use axum::{extract::Path, Json};
 
 use super::source_status::{build_source_status, MarketKnowledge};
 use super::types::*;
+use crate::apis::geckoterminal::RequestLane;
 use crate::{
     logger::{self, LogTag},
     native_price::get_native_price,
@@ -1167,7 +1168,13 @@ pub async fn refresh_token_data(
         &format!("Force refresh requested for mint={mint}"),
     );
 
-    match crate::tokens::request_immediate_update(crate::chains::active_chain(), &mint).await {
+    match crate::tokens::request_immediate_update(
+        crate::chains::active_chain(),
+        &mint,
+        RequestLane::Interactive,
+    )
+    .await
+    {
         Ok(result) => {
             if result.is_success() {
                 logger::info(

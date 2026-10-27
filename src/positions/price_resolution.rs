@@ -241,11 +241,18 @@ async fn force_fetch_fresh_price(token_mint: &str) -> Option<crate::tokens::Toke
     }
     FORCE_FETCH_COOLDOWN.insert(token_mint.to_string(), ());
 
-    // Request immediate market data update from tokens system
+    // Request immediate market data update from tokens system. The monitor retries this
+    // fallback on its own cadence and DexScreener answers alongside, so GeckoTerminal is
+    // asked on the background lane: during a rate-limit penalty it is deferred instead of
+    // holding the shared permit past the on-demand deadline.
     let update = match chain_for_address(token_mint) {
-        Ok(chain) => crate::tokens::request_immediate_update(chain, token_mint)
-            .await
-            .map(|result| (chain, result)),
+        Ok(chain) => crate::tokens::request_immediate_update(
+            chain,
+            token_mint,
+            crate::apis::geckoterminal::RequestLane::Background,
+        )
+        .await
+        .map(|result| (chain, result)),
         Err(error) => Err(crate::tokens::Error::from(error)),
     };
     match update {

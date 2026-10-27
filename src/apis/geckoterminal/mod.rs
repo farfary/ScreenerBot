@@ -8,23 +8,18 @@
 //! Endpoints implemented:
 //! 1. /networks/{network}/tokens/{token}/pools - Get all pools for a token (primary)
 //! 2. /networks/{network}/trending_pools - Trending pools per network
-//! 3. /networks/{network}/pools - Top pools per network
-//! 4. /networks/{network}/pools/{address} - Pool details by address
-//! 5. /networks/{network}/pools/multi/{addresses} - Multiple pools at once
-//! 6. /networks/{network}/pools/{pool}/ohlcv/{timeframe} - OHLCV data
-//! 7. /networks/{network}/dexes - Supported DEX list
-//! 8. /networks/{network}/new_pools - Newly listed pools
-//! 9. /networks/{network}/tokens/multi/{addresses} - Multiple token metadata
-//! 10. /networks/{network}/tokens/{address}/info - Token metadata
-//! 11. /tokens/info_recently_updated - Recent token updates (global)
+//! 3. /networks/{network}/pools/{pool}/ohlcv/{timeframe} - OHLCV data
+//! 4. /networks/{network}/new_pools - Newly listed pools
+//! 5. /networks/{network}/tokens/multi/{addresses} - Multiple token metadata
+//! 6. /tokens/info_recently_updated - Recent token updates (global)
 
 mod endpoints;
 pub mod types;
 
 // Re-export types for external use
 pub use self::types::{
-    GeckoTerminalDexesResponse, GeckoTerminalPool, GeckoTerminalRecentlyUpdatedResponse,
-    GeckoTerminalResponse, GeckoTerminalTokenInfoResponse, GeckoTerminalTokensMultiResponse,
+    GeckoTerminalPool, GeckoTerminalRecentlyUpdatedResponse, GeckoTerminalResponse,
+    GeckoTerminalTokensMultiResponse,
 };
 
 use crate::apis::client::RateLimiter;
@@ -469,8 +464,11 @@ mod tests {
         "tokens/search.rs",
         // Featured-token identity answering the Featured page.
         "webserver/routes/featured/identity.rs",
-        // Market data for an on-demand token refresh (`tokens::request_immediate_update`).
-        "tokens/market/geckoterminal.rs",
+        // On-demand token refreshes (`tokens::request_immediate_update`) for a dashboard
+        // request, an agent tool, and a token a manual trade or token view needs stored.
+        "webserver/routes/tokens/detail.rs",
+        "agent_control/tools/analysis.rs",
+        "tokens/mod.rs",
     ];
 
     fn rust_files(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
