@@ -134,13 +134,17 @@ pub const CANONICAL_KEEP_RATIO: f64 = 0.8;
 /// Choose canonical pool address: the highest-liquidity SOL pair (metric, then 24h volume),
 /// except that a native-pair `previous` still in `pools` keeps the role while its metric is at
 /// least `CANONICAL_KEEP_RATIO` of the best metric.
-pub fn choose_canonical_pool(pools: &[TokenPoolInfo], previous: Option<&str>) -> Option<String> {
+pub fn choose_canonical_pool(
+    chain: ChainId,
+    pools: &[TokenPoolInfo],
+    previous: Option<&str>,
+) -> Option<String> {
     let best = pools
         .iter()
         .filter(|pool| pool.is_native_pair)
         .max_by(|a, b| {
-            let metric_a = calculate_pool_metric(a);
-            let metric_b = calculate_pool_metric(b);
+            let metric_a = calculate_pool_metric(chain, a);
+            let metric_b = calculate_pool_metric(chain, b);
             match metric_a.partial_cmp(&metric_b).unwrap_or(Ordering::Equal) {
                 Ordering::Equal => {
                     let vol_a = a.volume_h24.unwrap_or_default();
@@ -157,7 +161,9 @@ pub fn choose_canonical_pool(pools: &[TokenPoolInfo], previous: Option<&str>) ->
             .find(|pool| pool.is_native_pair && pool.pool_address == address)
     });
     if let Some(incumbent) = incumbent {
-        if calculate_pool_metric(incumbent) >= CANONICAL_KEEP_RATIO * calculate_pool_metric(best) {
+        if calculate_pool_metric(chain, incumbent)
+            >= CANONICAL_KEEP_RATIO * calculate_pool_metric(chain, best)
+        {
             return Some(incumbent.pool_address.clone());
         }
     }
@@ -165,12 +171,12 @@ pub fn choose_canonical_pool(pools: &[TokenPoolInfo], previous: Option<&str>) ->
 }
 
 /// Sort pools for snapshot (SOL pairs first, then by liquidity)
-pub fn sort_pools_for_snapshot(pools: &mut [TokenPoolInfo]) {
+pub fn sort_pools_for_snapshot(chain: ChainId, pools: &mut [TokenPoolInfo]) {
     pools.sort_by(|a, b| match (b.is_native_pair, a.is_native_pair) {
         (true, false) => Ordering::Less,
         (false, true) => Ordering::Greater,
-        _ => match calculate_pool_metric(b)
-            .partial_cmp(&calculate_pool_metric(a))
+        _ => match calculate_pool_metric(chain, b)
+            .partial_cmp(&calculate_pool_metric(chain, a))
             .unwrap_or(Ordering::Equal)
         {
             Ordering::Equal => a.pool_address.cmp(&b.pool_address),
@@ -250,12 +256,12 @@ mod tests {
     fn an_incumbent_within_the_keep_ratio_stays_canonical() {
         let pools = [native_pool("pump", 166.2), native_pool("dlmm", 174.0)];
         assert_eq!(
-            choose_canonical_pool(&pools, Some("pump")).as_deref(),
+            choose_canonical_pool(ChainId::Solana, &pools, Some("pump")).as_deref(),
             Some("pump")
         );
         let pools = [native_pool("pump", 175.8), native_pool("dlmm", 174.0)];
         assert_eq!(
-            choose_canonical_pool(&pools, Some("dlmm")).as_deref(),
+            choose_canonical_pool(ChainId::Solana, &pools, Some("dlmm")).as_deref(),
             Some("dlmm")
         );
     }
@@ -264,7 +270,7 @@ mod tests {
     fn a_rival_far_above_the_incumbent_wins() {
         let pools = [native_pool("pump", 166.2), native_pool("dlmm", 166.2 * 1.5)];
         assert_eq!(
-            choose_canonical_pool(&pools, Some("pump")).as_deref(),
+            choose_canonical_pool(ChainId::Solana, &pools, Some("pump")).as_deref(),
             Some("dlmm")
         );
     }
@@ -273,12 +279,12 @@ mod tests {
     fn a_missing_or_non_native_incumbent_yields_the_best_pool() {
         let mut pools = vec![native_pool("pump", 166.2), native_pool("dlmm", 174.0)];
         assert_eq!(
-            choose_canonical_pool(&pools, Some("gone")).as_deref(),
+            choose_canonical_pool(ChainId::Solana, &pools, Some("gone")).as_deref(),
             Some("dlmm")
         );
         pools[0].is_native_pair = false;
         assert_eq!(
-            choose_canonical_pool(&pools, Some("pump")).as_deref(),
+            choose_canonical_pool(ChainId::Solana, &pools, Some("pump")).as_deref(),
             Some("dlmm")
         );
     }
@@ -286,8 +292,11 @@ mod tests {
     #[test]
     fn no_previous_choice_yields_the_best_pool() {
         let pools = [native_pool("pump", 175.8), native_pool("dlmm", 174.0)];
-        assert_eq!(choose_canonical_pool(&pools, None).as_deref(), Some("pump"));
-        assert_eq!(choose_canonical_pool(&[], None), None);
+        assert_eq!(
+            choose_canonical_pool(ChainId::Solana, &pools, None).as_deref(),
+            Some("pump")
+        );
+        assert_eq!(choose_canonical_pool(ChainId::Solana, &[], None), None);
     }
 
     #[test]
@@ -297,7 +306,7 @@ mod tests {
         let mut incumbent = unknown.clone();
         incumbent.pool_address = "pump".to_owned();
         assert_eq!(
-            choose_canonical_pool(&[unknown, incumbent], Some("pump")).as_deref(),
+            choose_canonical_pool(ChainId::Solana, &[unknown, incumbent], Some("pump")).as_deref(),
             Some("pump")
         );
     }

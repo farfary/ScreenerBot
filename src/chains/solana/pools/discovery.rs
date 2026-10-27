@@ -329,8 +329,14 @@ impl PoolDiscovery {
                             .filter(|p| p.is_native_pair && p.pool_address != canonical_address)
                             .collect();
                         sorted_pools.sort_by(|a, b| {
-                            let metric_a = crate::tokens::calculate_pool_metric(a);
-                            let metric_b = crate::tokens::calculate_pool_metric(b);
+                            let metric_a = crate::tokens::calculate_pool_metric(
+                                crate::chains::ChainId::Solana,
+                                a,
+                            );
+                            let metric_b = crate::tokens::calculate_pool_metric(
+                                crate::chains::ChainId::Solana,
+                                b,
+                            );
                             metric_b
                                 .partial_cmp(&metric_a)
                                 .unwrap_or(std::cmp::Ordering::Equal)

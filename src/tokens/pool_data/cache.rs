@@ -486,7 +486,7 @@ async fn refresh_token_pools_and_cache(
     }
 
     let mut pools: Vec<TokenPoolInfo> = pools_map.into_values().collect();
-    sort_pools_for_snapshot(&mut pools);
+    sort_pools_for_snapshot(chain, &mut pools);
     let previous_canonical = get_cached_pool_snapshot_allow_stale(chain, mint_trimmed)
         .and_then(|snapshot| snapshot.canonical_pool_address)
         .or_else(|| {
@@ -494,7 +494,8 @@ async fn refresh_token_pools_and_cache(
                 .as_ref()
                 .and_then(|snapshot| snapshot.canonical_pool_address.clone())
         });
-    let canonical_pool_address = choose_canonical_pool(&pools, previous_canonical.as_deref());
+    let canonical_pool_address =
+        choose_canonical_pool(chain, &pools, previous_canonical.as_deref());
 
     let prev_pool_count = persisted_snapshot
         .as_ref()
@@ -518,7 +519,12 @@ async fn refresh_token_pools_and_cache(
     let (top_pool, top_metric) = snapshot
         .pools
         .first()
-        .map(|pool| (pool.pool_address.clone(), calculate_pool_metric(pool)))
+        .map(|pool| {
+            (
+                pool.pool_address.clone(),
+                calculate_pool_metric(chain, pool),
+            )
+        })
         .unwrap_or_else(|| ("none".to_owned(), 0.0));
     let top_pool_value = if top_pool == "none" {
         serde_json::Value::Null
@@ -780,10 +786,11 @@ async fn server_only_snapshot(chain: ChainId, mint: &str) -> Option<TokenPoolsSn
         super::operations::ingest_pool_entry(&mut pools_map, info);
     }
     let mut pools: Vec<TokenPoolInfo> = pools_map.into_values().collect();
-    sort_pools_for_snapshot(&mut pools);
+    sort_pools_for_snapshot(chain, &mut pools);
     let previous_canonical = get_cached_pool_snapshot_allow_stale(chain, mint)
         .and_then(|snapshot| snapshot.canonical_pool_address);
-    let canonical_pool_address = choose_canonical_pool(&pools, previous_canonical.as_deref());
+    let canonical_pool_address =
+        choose_canonical_pool(chain, &pools, previous_canonical.as_deref());
 
     let snapshot = TokenPoolsSnapshot {
         mint: mint.to_string(),

@@ -3,6 +3,8 @@
 
 //! Utility functions for pool operations.
 
+use crate::chains::ChainId;
+use crate::native_price::get_native_price_for;
 use crate::tokens::types::TokenPoolInfo;
 
 /// Parse f64 from string (handles empty/invalid strings)
@@ -32,8 +34,8 @@ pub fn parse_gecko_token_id(value: &str) -> Option<String> {
 /// `liquidity_usd` → `volume_h24`, so a server-sourced pool that carries only USD liquidity
 /// ($476 scored 476) outranked a DexScreener pool with a real $61k market (3.2 SOL scored 3.2),
 /// became the canonical pool, and the chart charted a pool with almost no trades.
-pub fn calculate_pool_metric(pool: &TokenPoolInfo) -> f64 {
-    native_side_liquidity(pool, crate::apis::native_price::get_native_price())
+pub fn calculate_pool_metric(chain: ChainId, pool: &TokenPoolInfo) -> f64 {
+    native_side_liquidity(pool, get_native_price_for(chain))
 }
 
 /// SOL-side reserve in SOL: `liquidity_native` when a source reports it, else total USD liquidity
@@ -110,6 +112,6 @@ pub fn extract_dex_label(pool: &TokenPoolInfo) -> String {
 /// Liquidity stored on an OHLCV pool row, in the same unit the canonical ranking uses (see
 /// [`calculate_pool_metric`]). It was USD, else SOL, else 24h volume, so the OHLCV series-pool
 /// fallback compared numbers in three different units.
-pub fn extract_pool_liquidity(pool: &TokenPoolInfo) -> f64 {
-    calculate_pool_metric(pool)
+pub fn extract_pool_liquidity(chain: ChainId, pool: &TokenPoolInfo) -> f64 {
+    calculate_pool_metric(chain, pool)
 }

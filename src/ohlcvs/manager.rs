@@ -3,6 +3,7 @@
 
 //! OHLCV manager — coordinates candle fetching, caching, and priority management.
 
+use crate::chains::ChainId;
 use crate::config::with_config;
 use crate::errors::InternalError;
 use crate::events::{record_ohlcv_event, Severity};
@@ -291,6 +292,7 @@ impl PoolManager {
             let mint = mint.to_string();
             let snapshot_pools = snapshot.pools.clone();
             let server_series = server_series.clone();
+            let chain = self.db.chain();
             self.blocking(move |db| {
                 db.write_series_pools(&mint, |registered| {
                     let cooling = Self::cooling_pools(&cooling_until, &mint);
@@ -302,6 +304,7 @@ impl PoolManager {
                         .iter()
                         .map(|pool| {
                             Self::merge_pool_info(
+                                chain,
                                 pool,
                                 stored
                                     .get(pool.pool_address.as_str())
@@ -484,12 +487,13 @@ impl PoolManager {
     /// Merge a snapshot pool into its stored row. A pool in its handover cooldown (`cooling`)
     /// keeps its failure count.
     fn merge_pool_info(
+        chain: ChainId,
         pool: &TokenPoolInfo,
         existing: Option<PoolConfig>,
         cooling: bool,
     ) -> PoolConfig {
         let dex_label = pools::extract_dex_label(pool);
-        let liquidity = pools::extract_pool_liquidity(pool);
+        let liquidity = pools::extract_pool_liquidity(chain, pool);
 
         let was_existing = existing.is_some();
         let mut config = existing.unwrap_or_else(|| {
