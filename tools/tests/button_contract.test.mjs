@@ -41,7 +41,8 @@ function report(violations) {
 test("the audit still sees the dashboard it is auditing", () => {
   assert.ok(model.buttons.length > 400, `only ${model.buttons.length} buttons found`);
   assert.ok(model.skinRules.length > 3000, `only ${model.skinRules.length} skin rules found`);
-  assert.ok(model.stateRules.length > 500, `only ${model.stateRules.length} state rules found`);
+  /* 481 since per-component focus rings gave way to the one in foundation.css. */
+  assert.ok(model.stateRules.length > 450, `only ${model.stateRules.length} state rules found`);
   assert.ok(model.disabledRules.length > 30, `only ${model.disabledRules.length} disabled rules`);
   assert.ok(
     model.buttons.filter((button) => button.disabledInMarkup).length > 30,

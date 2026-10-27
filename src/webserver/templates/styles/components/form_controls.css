@@ -855,6 +855,7 @@ input[type="radio"]:disabled {
 /* Mirrored in a right-to-left page: the suffix at the left, the value against the
    right edge, its characters still in left-to-right order. */
 .number-field:dir(rtl) > input[type="number"] {
+  /* rtl-ok: the input's own direction stays left-to-right, so its end is the left edge */
   text-align: right;
 }
 

@@ -109,12 +109,16 @@ test("only the tab bar owner tracks and styles the strip overflow state", async 
     if (file === OWNER_SCRIPT) continue;
     if (/can-scroll-(?:start|end)/.test(readFileSync(file, "utf8"))) found.push(repoPath(file));
   }
+  /* The focus ring owner (`foundation.css`) insets its ring inside a strip; a
+     `:focus-visible` rule draws focus, not the strip or its overflow state. */
   for (const file of (await walk(STYLES_ROOT)).filter((path) => path.endsWith(".css"))) {
     if (file === OWNER_STYLES) continue;
-    if (
-      /\.can-scroll-(?:start|end)\b|\.tab-scroll-(?:wrapper|btn)\b/.test(readFileSync(file, "utf8"))
-    )
-      found.push(repoPath(file));
+    const strip = rulesIn(readFileSync(file, "utf8")).some(
+      ({ selector }) =>
+        !/:focus-visible$/.test(selector) &&
+        /\.can-scroll-(?:start|end)\b|\.tab-scroll-(?:wrapper|btn)\b/.test(selector)
+    );
+    if (strip) found.push(repoPath(file));
   }
   assert.deepEqual(found, []);
 });

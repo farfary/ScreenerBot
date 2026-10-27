@@ -304,21 +304,22 @@ async function loadWalletBackups() {
 }
 
 // The message of each reason a restart abandons a staged replacement for.
-const ABANDONED_REPLACEMENT_IDS = Object.freeze({
-  open_positions: "wallets-replace-abandoned-open-positions",
-  positions_unreadable: "wallets-replace-abandoned-positions-unreadable",
-  vault_changed: "wallets-replace-abandoned-vault-changed",
+const ABANDONED_REPLACEMENT_MESSAGES = Object.freeze({
+  open_positions: (args) => I18n.t("wallets-replace-abandoned-open-positions", args),
+  positions_unreadable: (args) => I18n.t("wallets-replace-abandoned-positions-unreadable", args),
+  vault_changed: (args) => I18n.t("wallets-replace-abandoned-vault-changed", args),
 });
 
 // A replacement a restart abandoned is shown once; the server then forgets it.
 function showAbandonedReplacement(abandoned) {
   if (!abandoned) return;
-  const id = ABANDONED_REPLACEMENT_IDS[abandoned.reason] || ABANDONED_REPLACEMENT_IDS.vault_changed;
+  const message =
+    ABANDONED_REPLACEMENT_MESSAGES[abandoned.reason] || ABANDONED_REPLACEMENT_MESSAGES.vault_changed;
   Utils.showToast({
     key: "wallets-replace-abandoned",
     type: "warning",
     title: I18n.t("wallets-replace-abandoned-title"),
-    message: I18n.t(id, { count: abandoned.count ?? 0 }),
+    message: message({ count: abandoned.count ?? 0 }),
   });
   fetch("/api/wallets/replacement/dismiss", { method: "POST" }).catch((error) => {
     console.debug("[Wallets] Failed to dismiss the abandoned replacement:", error);

@@ -145,8 +145,8 @@ class ConfirmationDialog {
             : ""
         }
 				<button 
-					class="confirmation-dialog__button confirmation-dialog__button--confirm${
-            this.config.confirmTone ? ` confirmation-dialog__button--${this.config.confirmTone}` : ""
+					class="confirmation-dialog__button confirmation-dialog__button--confirm ${
+            this.config.confirmTone === "primary" ? "confirmation-dialog__button--primary" : ""
           }" 
 					type="button"
 					data-action="confirm"

@@ -37,20 +37,20 @@ const CONFIRM_STEP = `
 const MODES = Object.freeze({
   setup: Object.freeze({
     icon: "icon-key-round",
-    title: "setup-dialog-title",
-    subtitle: "setup-dialog-subtitle",
-    submit: "setup-dialog-submit",
-    saved: "setup-dialog-saved",
+    title: () => I18n.t("setup-dialog-title"),
+    subtitle: () => I18n.t("setup-dialog-subtitle"),
+    submit: () => I18n.t("setup-dialog-submit"),
+    saved: () => I18n.t("setup-dialog-saved"),
     endpoint: "/api/initialization/complete",
     confirm: false,
     rpcOptional: false,
   }),
   replace: Object.freeze({
     icon: "icon-replace",
-    title: "setup-dialog-replace-title",
-    subtitle: "setup-dialog-replace-subtitle",
-    submit: "setup-dialog-replace-submit",
-    saved: "setup-dialog-replace-saved",
+    title: () => I18n.t("setup-dialog-replace-title"),
+    subtitle: () => I18n.t("setup-dialog-replace-subtitle"),
+    submit: () => I18n.t("setup-dialog-replace-submit"),
+    saved: () => I18n.t("setup-dialog-replace-saved"),
     endpoint: "/api/wallets/replace",
     confirm: true,
     // An empty RPC field keeps the configured endpoints.
@@ -101,9 +101,9 @@ class SetupDialog {
         <div>
           <h2 class="setup-dialog-title" id="setup-dialog-title">
             <i class="${this.mode.icon}" aria-hidden="true"></i>
-            <span data-l10n-id="${this.mode.title}"></span>
+            <span></span>
           </h2>
-          <p class="setup-dialog-subtitle" data-l10n-id="${this.mode.subtitle}"></p>
+          <p class="setup-dialog-subtitle"></p>
         </div>
         <button type="button" class="setup-dialog-close" data-action="cancel"
           data-l10n-id="setup-dialog-close">
@@ -121,10 +121,14 @@ class SetupDialog {
       <div class="setup-dialog-footer">
         <button type="button" class="btn btn-secondary" data-action="cancel"
           data-l10n-id="common-action-cancel"></button>
-        <button type="button" class="btn btn-primary" data-action="submit"
-          data-l10n-id="${this.mode.confirm ? "common-action-continue" : this.mode.submit}"></button>
+        <button type="button" class="btn btn-primary" data-action="submit"></button>
       </div>
     `;
+    this.element.querySelector("#setup-dialog-title span").textContent = this.mode.title();
+    this.element.querySelector(".setup-dialog-subtitle").textContent = this.mode.subtitle();
+    this.element.querySelector('[data-action="submit"]').textContent = this.mode.confirm
+      ? I18n.t("common-action-continue")
+      : this.mode.submit();
 
     this.backdrop.appendChild(this.element);
     I18n.localizeTree(this.element);
@@ -158,7 +162,7 @@ class SetupDialog {
     this.confirmed = true;
     this.element.querySelector(".setup-dialog-confirm")?.setAttribute("hidden", "");
     this.element.querySelector(".setup-dialog-fields")?.removeAttribute("hidden");
-    this.submitBtn.textContent = I18n.t(this.mode.submit);
+    this.submitBtn.textContent = this.mode.submit();
     this.fields.walletInput.focus();
   }
 
@@ -181,7 +185,7 @@ class SetupDialog {
       this.submitBtn.disabled = busy;
       this.submitBtn.textContent = busy
         ? label || I18n.t("setup-dialog-working")
-        : I18n.t(this.mode.submit);
+        : this.mode.submit();
     }
   }
 
@@ -244,7 +248,7 @@ class SetupDialog {
       }
 
       this.fields.walletInput.value = "";
-      this.setStatus("success", I18n.t(this.mode.saved));
+      this.setStatus("success", this.mode.saved());
       this.submitBtn.textContent = I18n.t("setup-dialog-restarting");
 
       const waitForRestart = window.waitForScreenerBotRestart;
