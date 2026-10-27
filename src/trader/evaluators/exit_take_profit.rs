@@ -14,6 +14,11 @@ const FULL_EXIT_TOLERANCE_PCT: f64 = 1e-6;
 /// the whole position within this tolerance.
 pub const TAKE_PROFIT_SHARE_SUM_TOLERANCE_PCT: f64 = 1e-9;
 
+/// A profit within this many percentage points below a step's level reaches it: the
+/// profit is derived in floating point, so a price exactly at the level can compute just
+/// under it (1.2 / 1.0 - 1 is 0.19999999999999996) and would wait for another tick.
+const PROFIT_LEVEL_TOLERANCE_PCT: f64 = 1e-9;
+
 /// The take-profit rule on plain numbers, shared by the live evaluator and the paper
 /// copy book. `steps_taken` is how many steps the holding has already reserved, so the
 /// step due is the one at that index; it fires once profit from `entry_price` reaches its
@@ -41,7 +46,7 @@ pub fn take_profit_step(
     let Some(step) = policy.levels.get(index) else {
         return Ok(None);
     };
-    if (current_price / entry_price - 1.0) * 100.0 < step.profit_pct {
+    if (current_price / entry_price - 1.0) * 100.0 + PROFIT_LEVEL_TOLERANCE_PCT < step.profit_pct {
         return Ok(None);
     }
     let sold_before: f64 = policy.levels[..index]

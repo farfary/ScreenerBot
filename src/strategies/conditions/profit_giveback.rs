@@ -19,6 +19,11 @@ use serde_json::json;
 /// of 100% means the price is back at the entry price.
 pub struct ProfitGivebackCondition;
 
+/// Percentage points within which a derived share reaches its threshold. Both shares are
+/// computed in floating point from prices, so a price exactly at a threshold can compute
+/// just under it (an average of 0.8 and a peak of 1.0 is a 24.999999999999993% gain).
+const THRESHOLD_TOLERANCE_PCT: f64 = 1e-9;
+
 /// Validated parameters of a profit giveback condition.
 struct Params {
     arm_after_profit_pct: f64,
@@ -69,12 +74,14 @@ impl ConditionEvaluator for ProfitGivebackCondition {
         let current = get_current_price(context)?;
 
         let peak_profit_pct = (peak - entry) / entry * 100.0;
-        if peak_profit_pct <= 0.0 || peak_profit_pct < params.arm_after_profit_pct {
+        if peak_profit_pct <= 0.0
+            || peak_profit_pct + THRESHOLD_TOLERANCE_PCT < params.arm_after_profit_pct
+        {
             return Ok(false);
         }
         let current_profit_pct = (current - entry) / entry * 100.0;
         let giveback_pct = (peak_profit_pct - current_profit_pct) / peak_profit_pct * 100.0;
-        Ok(giveback_pct >= params.giveback_pct)
+        Ok(giveback_pct + THRESHOLD_TOLERANCE_PCT >= params.giveback_pct)
     }
 
     fn validate(&self, condition: &Condition) -> Result<()> {
