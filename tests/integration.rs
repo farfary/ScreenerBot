@@ -45,6 +45,7 @@ mod positions_holdings;
 mod positions_ledger;
 mod positions_ledger_sync;
 mod positions_lifecycle;
+mod positions_partial_exit_hold;
 mod positions_pnl;
 mod service_health_reporting;
 mod service_startup_readiness;

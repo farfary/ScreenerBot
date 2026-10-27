@@ -86,19 +86,22 @@ pub async fn clear_partial_exit_pending(mint: &str) {
     }
 }
 
-/// Is a partial exit currently in flight (submitted, not yet verified) for this mint?
+/// Is a partial exit of this mint in flight (submitted, not yet verified) or held (its send
+/// failed with no proof either way)?
 ///
-/// This registry is what SERIALIZES exits: the per-mint position lock only covers the
+/// This is what SERIALIZES partial exits: the per-mint position lock only covers the
 /// submit, and is released while verification is still pending for several seconds, so
 /// the lock alone cannot stop a second exit from being sized against a
-/// `remaining_token_amount` that the first exit has not decremented yet.
-///
-/// The counter existed but NOTHING read it — it was write-only, and both
-/// `close_position_direct` and `partial_close_position` believed something else was
-/// serializing them. Nothing was.
+/// `remaining_token_amount` that the first exit has not decremented yet. The counter
+/// counts signed partial exits and the transient mark before a send; a hold stands for an
+/// unproven one until the chain proves its outcome.
 pub async fn is_partial_exit_pending(mint: &str) -> bool {
-    let map = PENDING_PARTIAL_EXITS.read().await;
-    map.get(mint).is_some_and(|count| *count > 0)
+    let counted = PENDING_PARTIAL_EXITS
+        .read()
+        .await
+        .get(mint)
+        .is_some_and(|count| *count > 0);
+    counted || super::swap_hold::holds_partial_exit(mint).await
 }
 
 /// True while a DCA add on `mint` is in flight (sent, not yet verified or proven not to
@@ -300,13 +303,14 @@ pub async fn clear_pending_partial_exit(signature: &str) -> Result<Option<Pendin
     Ok(removed)
 }
 
-/// Drops the pending DCA swaps and partial exits of position `position_id` from memory and
-/// from storage, decrementing the mint's partial-exit count once per partial exit removed.
-/// For a position whose row is deleted: its swaps can no longer be booked on it, and a
-/// marker left behind would hold every later late fill of the mint as unattributable. Memory
-/// is cleared even when persisting fails, and both sets are persisted even when the first
-/// fails; the first error reports that storage still lists them until the next persist of
-/// that set, and the startup sweep drops them then (`rehydrate_pending_*`).
+/// Drops the pending DCA swaps, partial exits and partial-exit holds of position
+/// `position_id` from memory and from storage, decrementing the mint's partial-exit count
+/// once per partial exit removed. For a position whose row is deleted: its swaps can no
+/// longer be booked on it, and a marker left behind would hold every later late fill of the
+/// mint as unattributable. Memory is cleared even when persisting fails, and every set is
+/// persisted even when an earlier one fails; the first error reports that storage still
+/// lists them until the next persist of that set, and the startup sweep drops them then
+/// (`rehydrate_pending_*`, `rehydrate_partial_exit_holds`).
 pub async fn clear_pending_swaps_of_position(position_id: i64) -> Result<()> {
     let dca_removed = {
         let mut map = PENDING_DCA_SWAPS.write().await;
@@ -341,13 +345,14 @@ pub async fn clear_pending_swaps_of_position(position_id: i64) -> Result<()> {
     } else {
         persist_pending_partial_exits().await
     };
-    dca_persisted.and(partials_persisted)
+    let holds_persisted = super::swap_hold::drop_holds_of_position(position_id).await;
+    dca_persisted.and(partials_persisted).and(holds_persisted)
 }
 
 /// Removes from `entries` the pending swaps whose position row no longer exists and returns
 /// how many were removed. Such a swap can never be booked, and its marker would hold every
 /// later late fill of the mint as unattributable. An entry whose row cannot be read is kept.
-async fn drop_swaps_of_deleted_positions<T>(
+pub(super) async fn drop_swaps_of_deleted_positions<T>(
     entries: &mut Vec<T>,
     position_id: impl Fn(&T) -> i64,
     kind: &str,

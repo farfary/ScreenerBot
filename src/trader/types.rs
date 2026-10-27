@@ -243,13 +243,14 @@ pub trait FailedTradeStep {
 
 impl FailedTradeStep for crate::positions::Error {
     /// `QuoteFailed` means no router would price the trade, so nothing was
-    /// built or submitted; `SwapFailed` means it was. Anything else failed
-    /// before either — capacity, sizing, wallet, persistence — and belongs to
-    /// validation.
+    /// built or submitted; `SwapFailed` and `PartialExitHeld` mean it was.
+    /// Anything else failed before either — capacity, sizing, wallet,
+    /// persistence — and belongs to validation.
     fn trade_step(&self) -> TradeStep {
         match self {
             crate::positions::Error::QuoteFailed { .. } => TradeStep::Quote,
-            crate::positions::Error::SwapFailed { .. } => TradeStep::Swap,
+            crate::positions::Error::SwapFailed { .. }
+            | crate::positions::Error::PartialExitHeld { .. } => TradeStep::Swap,
             _ => TradeStep::Validation,
         }
     }

@@ -3990,22 +3990,34 @@ const PANICS: &[&str] = &[
 ];
 
 /// Once a position operation's swap is sent, its signature reaches verification whatever
-/// happens next: from the send to the end of the operation the only early error is the
-/// swap's own failure, which proves nothing landed, and every async helper of the same file
-/// the operation ends in after the send queues the swap for verification with no early
-/// error of its own. Nothing after the send panics, in the operation, in those helpers, or
-/// in the shared helpers of `operations/mod.rs` it calls. An error or a panic there would
-/// drop a signature that may have bought or sold tokens.
+/// happens next: from the send to the end of the operation the only early errors are the
+/// failure arms of the swap itself, which carry no signature, and every async helper of the
+/// same file the operation ends in after the send queues the swap for verification with no
+/// early error of its own. Nothing after the send panics, in the operation, in those
+/// helpers, or in the shared helpers of `operations/mod.rs` it calls. An error or a panic
+/// there would drop a signature that may have bought or sold tokens.
+///
+/// Each operation spells its failure arms exactly as many times as it has them. A partial
+/// exit ends both through `PartialExitFailure`, whose methods end the no-signature arms
+/// rather than a sent swap, so their spelling is outside the helper rule: an unproven send
+/// is held (`.hold(`) and keeps its take-profit step, and a failed one is recorded
+/// (`.record(`).
 #[test]
 fn a_sent_position_swap_is_always_queued_for_verification() {
     const SWAP_FAILED: &str = "return Err(Error::SwapFailed {";
+    const PARTIAL_EXIT_FAILED: &str = "return Err(PartialExitFailure {";
     let operations = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/positions/operations");
     let shared = blank_literals(&strip_comment_text(&production_text(
         &fs::read_to_string(operations.join("mod.rs")).expect("read the operations module"),
     )));
     let mut helpers_seen = 0;
     let mut shared_helpers_seen = 0;
-    for operation in ["open.rs", "close.rs", "dca.rs", "partial_close.rs"] {
+    for (operation, failure, failure_arms) in [
+        ("open.rs", SWAP_FAILED, 1),
+        ("close.rs", SWAP_FAILED, 2),
+        ("dca.rs", SWAP_FAILED, 1),
+        ("partial_close.rs", PARTIAL_EXIT_FAILED, 2),
+    ] {
         let path = operations.join(operation);
         let contents = fs::read_to_string(&path).expect("read operation source");
         let code = blank_literals(&strip_comment_text(&production_text(&contents)));
@@ -4014,11 +4026,30 @@ fn a_sent_position_swap_is_always_queued_for_verification() {
             .unwrap_or_else(|| panic!("{operation}: the operation sends a swap"));
         let tail = rest_of_item(&code, sent);
         assert_eq!(
-            tail.matches(SWAP_FAILED).count(),
-            1,
-            "{operation}: the swap's own failure is the one early error after the send"
+            tail.matches(failure).count(),
+            failure_arms,
+            "{operation}: the swap's own failure arms are the only early errors after the send"
         );
-        let after_send = tail.replacen(SWAP_FAILED, "", 1);
+        if operation == "partial_close.rs" {
+            let arm = |start: &str, end: &str| -> String {
+                let from = tail
+                    .find(start)
+                    .unwrap_or_else(|| panic!("{operation}: no `{start}` arm"));
+                let rest = &tail[from + start.len()..];
+                rest[..rest.find(end).unwrap_or(rest.len())].to_owned()
+            };
+            let unresolved = arm("ExitSwap::Unresolved", "};");
+            assert!(
+                unresolved.contains(".hold(") && !unresolved.contains("release_take_profit_step("),
+                "{operation}: an unproven partial exit is held and keeps its take-profit step"
+            );
+            let failed = arm("ExitSwap::Failed", "ExitSwap::");
+            assert!(
+                failed.contains(".record("),
+                "{operation}: a failed partial exit is recorded"
+            );
+        }
+        let after_send = tail.replace(failure, "");
         assert!(
             !after_send.contains('?') && !after_send.contains("return Err"),
             "{operation}: an error after the swap was sent drops its signature"
@@ -4102,6 +4133,24 @@ fn a_sent_position_swap_is_always_queued_for_verification() {
     assert!(
         shared_helpers_seen >= 1,
         "the guard must see the shared helper an open persists its position with"
+    );
+}
+
+/// A partial-exit hold is registered by the live partial exit alone: paper and copy paths
+/// never sign a swap, so none of them may hold a mint's partial exits.
+#[test]
+fn only_the_live_partial_exit_holds_a_partial_exit() {
+    let mut callers = Vec::new();
+    for (relative, contents) in walk_src() {
+        let code = blank_literals(&strip_comment_text(&production_text(&contents)));
+        if code.contains("hold_partial_exit(") && relative != Path::new("positions/swap_hold.rs") {
+            callers.push(relative);
+        }
+    }
+    assert_eq!(
+        callers,
+        vec![PathBuf::from("positions/operations/partial_close.rs")],
+        "only partial_close.rs registers a partial-exit hold"
     );
 }
 

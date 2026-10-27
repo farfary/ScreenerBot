@@ -310,10 +310,7 @@ pub async fn quote_preview_handler(Query(req): Query<QuotePreviewRequest>) -> Re
                 _ => ExitShare::All,
             };
             match read_exit_sale(&wallet_address, &req.mint, Some(&position), share).await {
-                Ok(ExitSale {
-                    wallet_holding: Some(holding),
-                    ..
-                }) if holding == RawAmount::ZERO => {
+                Ok(ExitSale { wallet_holding, .. }) if wallet_holding == RawAmount::ZERO => {
                     return ApiError::new(
                         ApiErrorCode::IntegrityFailed,
                         ids::ERRORS_TRADE_NO_TOKENS_IN_WALLET,

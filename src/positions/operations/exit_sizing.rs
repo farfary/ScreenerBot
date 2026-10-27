@@ -27,9 +27,8 @@ pub(crate) struct ExitSale {
     pub(crate) amount: RawAmount,
     /// Why a full close sells less than the wallet's sweep, when it does.
     pub(crate) note: Option<String>,
-    /// The wallet's holding of the mint across its token accounts; `None` when a partial
-    /// exit could not read it and sized from the booked remainder.
-    pub(crate) wallet_holding: Option<RawAmount>,
+    /// The wallet's holding of the mint across its token accounts, read for this sale.
+    pub(crate) wallet_holding: RawAmount,
 }
 
 /// What one exit is sized from, as read from the wallet and the positions store.
@@ -43,7 +42,7 @@ enum ExitReadings {
         quote_asset: bool,
     },
     Part {
-        holding: Option<RawAmount>,
+        holding: RawAmount,
         own_remaining: RawAmount,
         percentage: f64,
     },
@@ -54,7 +53,9 @@ enum ExitReadings {
 ///
 /// A full close reads the wallet's holding across its token accounts, the primary
 /// account's balance, the other open positions' holding and whether the mint is a quote
-/// asset; a partial exit reads the wallet's holding. Both read `own`'s booked remainder.
+/// asset; a partial exit reads the wallet's holding. Both read `own`'s booked remainder,
+/// and both fail when the wallet's holding cannot be read: an exit is never sized from the
+/// position's own figures alone.
 /// The full close, the partial exit and the manual sell preview all size through here, so
 /// the preview quotes what execution sells.
 pub(crate) async fn read_exit_sale(
@@ -84,12 +85,10 @@ pub(crate) async fn read_exit_sale(
                 quote_asset: crate::chains::adapter().is_quote_asset(mint),
             }
         }
-        // The read is best-effort: a failed one sizes from the booked remainder.
         ExitShare::Part(percentage) => ExitReadings::Part {
             holding: crate::positions::settle::holding(wallet, mint)
-                .await
-                .ok()
-                .map(|holding| holding.amount),
+                .await?
+                .amount,
             own_remaining,
             percentage,
         },
@@ -112,7 +111,7 @@ fn size_exit(readings: ExitReadings) -> ExitSale {
             ExitSale {
                 amount: RawAmount::from(amount),
                 note,
-                wallet_holding: Some(RawAmount::from(total)),
+                wallet_holding: RawAmount::from(total),
             }
         }
         ExitReadings::Part {
@@ -120,11 +119,7 @@ fn size_exit(readings: ExitReadings) -> ExitSale {
             own_remaining,
             percentage,
         } => ExitSale {
-            amount: partial_exit_amount(
-                own_remaining,
-                holding.map(|holding| u64::try_from(holding.raw()).unwrap_or(u64::MAX)),
-                percentage,
-            ),
+            amount: partial_exit_amount(own_remaining, holding, percentage),
             note: None,
             wallet_holding: holding,
         },
@@ -214,15 +209,10 @@ fn full_exit_amount(
 /// Sizes a partial exit of `percentage` of the position.
 ///
 /// The base is the lower of the position's booked `remaining` and the wallet's `on_chain`
-/// holding: never more than the wallet has, never more than the position owns. An
-/// unreadable or empty chain balance (`None` or zero) falls back to the booked remainder,
-/// so a lookup failure never blocks an exit.
-fn partial_exit_amount(remaining: RawAmount, on_chain: Option<u64>, percentage: f64) -> RawAmount {
-    let base = match on_chain {
-        Some(on_chain) if on_chain > 0 => RawAmount::from(on_chain).min(remaining),
-        _ => remaining,
-    };
-    calculate_partial_amount(base, percentage)
+/// holding: never more than the wallet has, never more than the position owns. An empty
+/// wallet sells nothing.
+fn partial_exit_amount(remaining: RawAmount, on_chain: RawAmount, percentage: f64) -> RawAmount {
+    calculate_partial_amount(on_chain.min(remaining), percentage)
 }
 
 /// The share of `total_amount` for `percentage`, truncated toward zero and never above the
@@ -355,28 +345,26 @@ mod tests {
     #[test]
     fn a_partial_exit_sizes_against_the_lower_of_booked_and_chain() {
         let remaining = RawAmount::new(1_000);
+        let chain = RawAmount::new;
         assert_eq!(
-            partial_exit_amount(remaining, Some(1_000), 50.0),
+            partial_exit_amount(remaining, chain(1_000), 50.0),
             RawAmount::new(500)
         );
         assert_eq!(
-            partial_exit_amount(remaining, Some(600), 50.0),
+            partial_exit_amount(remaining, chain(600), 50.0),
             RawAmount::new(300)
         );
         assert_eq!(
-            partial_exit_amount(remaining, Some(5_000), 50.0),
+            partial_exit_amount(remaining, chain(5_000), 50.0),
             RawAmount::new(500)
         );
+        // An empty wallet sells nothing; the booked remainder is never the base on its own.
         assert_eq!(
-            partial_exit_amount(remaining, Some(0), 50.0),
-            RawAmount::new(500)
+            partial_exit_amount(remaining, RawAmount::ZERO, 50.0),
+            RawAmount::ZERO
         );
         assert_eq!(
-            partial_exit_amount(remaining, None, 50.0),
-            RawAmount::new(500)
-        );
-        assert_eq!(
-            partial_exit_amount(RawAmount::ZERO, Some(1_000), 50.0),
+            partial_exit_amount(RawAmount::ZERO, chain(1_000), 50.0),
             RawAmount::ZERO
         );
     }
@@ -388,12 +376,13 @@ mod tests {
         for remaining in grid {
             for on_chain in grid {
                 for percentage in percentages {
-                    let sold =
-                        partial_exit_amount(RawAmount::from(remaining), Some(on_chain), percentage);
+                    let sold = partial_exit_amount(
+                        RawAmount::from(remaining),
+                        RawAmount::from(on_chain),
+                        percentage,
+                    );
                     assert!(sold <= RawAmount::from(remaining));
-                    if on_chain > 0 {
-                        assert!(sold <= RawAmount::from(on_chain));
-                    }
+                    assert!(sold <= RawAmount::from(on_chain));
                 }
             }
         }
@@ -522,7 +511,7 @@ mod tests {
                                     quote_asset,
                                 },
                                 ExitShare::Part(percentage) => ExitReadings::Part {
-                                    holding: Some(RawAmount::from(total)),
+                                    holding: RawAmount::from(total),
                                     own_remaining,
                                     percentage,
                                 },
@@ -530,7 +519,7 @@ mod tests {
                             let previewed = size_exit(readings);
                             let executed = match percentage {
                                 Some(pct) if pct < 100.0 => {
-                                    partial_exit_amount(own_remaining, Some(total), pct)
+                                    partial_exit_amount(own_remaining, RawAmount::from(total), pct)
                                 }
                                 _ => RawAmount::from(
                                     full_exit_amount(
@@ -584,5 +573,21 @@ mod tests {
                 assert!(!code.contains("get_total_token_balance("), "{file}");
             }
         }
+    }
+
+    /// A partial exit reads the wallet's holding or fails: the read is never optional, so
+    /// a failed one never sizes the sale from the booked remainder alone.
+    #[test]
+    fn a_partial_exit_fails_when_the_wallet_cannot_be_read() {
+        let source = include_str!("exit_sizing.rs");
+        let code = source.split("#[cfg(test)]").next().unwrap();
+        let start = code.find("ExitShare::Part(percentage) =>").unwrap();
+        let arm = &code[start..start + code[start..].find("},").unwrap()];
+        assert!(
+            arm.contains("settle::holding(wallet, mint).await?"),
+            "{arm}"
+        );
+        assert!(!arm.contains(".ok()"), "{arm}");
+        assert!(!arm.contains("unwrap_or"), "{arm}");
     }
 }

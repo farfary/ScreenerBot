@@ -20,10 +20,10 @@ use screenerbot::positions::verifier::{
     check_exit_residual, classify_exit_residual, unsold_own_holding, ExitResidual,
 };
 use screenerbot::positions::{
-    add_to_position, buy_target, db, is_dca_pending, state, ApplyFailureDisposition, BuyTarget,
-    Error, GiveUpReason, PendingDcaSwap, PendingPartialExit, Position, PositionManagement,
-    PositionOrigin, PositionTransition, PriceSource, TradeOrigin, VerificationItem,
-    VerificationKind, FORCE_CLOSED_PREFIX,
+    add_to_position, buy_target, db, is_dca_pending, state, swap_hold, ApplyFailureDisposition,
+    BuyTarget, Error, GiveUpReason, PartialExitHold, PendingDcaSwap, PendingPartialExit, Position,
+    PositionManagement, PositionOrigin, PositionTransition, PriceSource, TradeOrigin,
+    VerificationItem, VerificationKind, FORCE_CLOSED_PREFIX,
 };
 use screenerbot::trader::safety::loss_limit::{
     get_loss_limit_status, initialize_from_history, is_entry_blocked_by_loss_limit,
@@ -3688,9 +3688,10 @@ fn late_fills_on_two_closed_positions_of_a_mint_book_in_send_order() {
     );
 }
 
-/// Deleting a position drops its pending DCA and partial-exit markers, in memory and in
-/// storage: a swap of a row that no longer exists can never be booked, so its marker must not
-/// hold a later late fill of another position of the mint as unattributable.
+/// Deleting a position drops its pending DCA and partial-exit markers and its partial-exit
+/// holds, in memory and in storage: a swap of a row that no longer exists can never be
+/// booked, so its marker must not hold a later late fill of another position of the mint as
+/// unattributable.
 #[test]
 fn deleting_a_position_clears_its_pending_swaps_so_later_late_fills_book() {
     common::run_isolated(
@@ -3742,9 +3743,29 @@ fn deleting_a_position_clears_its_pending_swaps_so_later_late_fills_book() {
                 .expect("register a partial exit");
                 state::mark_partial_exit_pending(common::TEST_MINT).await;
             }
+            swap_hold::hold_partial_exit(PartialExitHold {
+                mint: common::TEST_MINT.to_owned(),
+                position_id: deleted,
+                exit_amount: RawAmount::new(400_000),
+                requested_exit_percentage: 40.0,
+                holding_before: RawAmount::new(HELD),
+                take_profit_level: None,
+                expiry_height: None,
+                created_at: sent - chrono::Duration::seconds(10),
+            })
+            .await;
 
             let status = call_dashboard("DELETE", &format!("/api/positions/{deleted}")).await;
             assert!(status.is_success(), "delete answered {status}");
+            assert!(
+                !swap_hold::holds_partial_exit(common::TEST_MINT).await,
+                "the deleted position's partial exit is still held"
+            );
+            assert_eq!(
+                stored_pending_of("partial_exit_holds", deleted).await,
+                0,
+                "storage still lists the deleted position's hold"
+            );
 
             assert!(
                 !dca_pending().await,

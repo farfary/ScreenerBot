@@ -235,6 +235,21 @@ mod tests {
         assert!(matches!(outcome, ExitSwap::Unresolved { .. }));
     }
 
+    /// A send error that carries no signature and is not a provable refusal is
+    /// the last send too: nothing shows whether the share was sold.
+    #[tokio::test(start_paused = true)]
+    async fn a_send_error_with_no_signature_ends_the_ladder_unresolved_after_one_send() {
+        let (outcome, sent) = ladder(|| {
+            crate::Error::Rpc(crate::rpc::RpcError::Network {
+                message: "broken pipe while sending the transaction".to_owned(),
+                is_timeout: false,
+            })
+        })
+        .await;
+        assert_eq!(sent.len(), 1);
+        assert!(matches!(outcome, ExitSwap::Unresolved { .. }));
+    }
+
     /// A signature that may still land is handed back to be verified, never
     /// sold again.
     #[tokio::test(start_paused = true)]

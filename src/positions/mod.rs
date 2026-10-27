@@ -28,6 +28,7 @@ mod settle;
 pub mod state;
 pub mod state_pending;
 pub mod state_pending_queries;
+pub mod swap_hold;
 pub mod transitions;
 pub mod types;
 pub mod verifier;
@@ -101,8 +102,8 @@ pub use state::PositionLockGuard;
 pub use transitions::PositionTransition;
 pub use types::{
     ApplyFailureDisposition, Book, EntryRecord, EntrySubmission, ExitRecord, GiveUpReason, Opening,
-    PendingDcaSwap, PendingPartialExit, Position, PositionManagement, PositionOrigin, PriceSource,
-    TradeOrigin, VerificationKind, VerificationOutcome,
+    PartialExitHold, PendingDcaSwap, PendingPartialExit, Position, PositionManagement,
+    PositionOrigin, PriceSource, TradeOrigin, VerificationKind, VerificationOutcome,
 };
 
 #[cfg(test)]

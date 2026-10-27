@@ -49,6 +49,10 @@ pub enum Error {
     /// Another open of the token was sent and may still land, so a second is not sent.
     #[error("an open of token {mint} is still pending")]
     OpenPending { mint: String },
+    /// A partial exit of the token is still being confirmed, so a second one is not sized
+    /// against a holding the first may already have sold.
+    #[error("a partial exit of token {mint} is still being confirmed")]
+    PartialExitPending { mint: String },
     /// The store holds several open positions of one mint; the change would leave more than
     /// one of them active.
     #[error("token {mint} has more than one open position ({position_ids:?}); only one of them may be active")]
@@ -126,6 +130,10 @@ pub enum Error {
         detail: String,
         not_submitted: Option<crate::swaps::NotSubmittedReason>,
     },
+    /// The last send of a partial exit failed with no signature, so nothing proves whether
+    /// it sold; the mint's partial exits are held until the wallet shows the outcome.
+    #[error("the partial exit of token {mint} may have sold; further partial exits wait until the wallet shows the outcome: {detail}")]
+    PartialExitHeld { mint: String, detail: String },
     #[error("wallet-history sync failed: {detail}")]
     WalletHistorySync { detail: String },
 
@@ -195,6 +203,7 @@ impl ErrorClass for Error {
             // State conflicts describe the world as it is right now.
             Error::AlreadyOpen { .. }
             | Error::OpenPending { .. }
+            | Error::PartialExitPending { .. }
             | Error::AlreadyClosed { .. }
             | Error::AlreadyStored { .. }
             | Error::DuplicateOpenRound { .. }
@@ -215,7 +224,8 @@ impl ErrorClass for Error {
             | Error::TransitionFailed { .. }
             | Error::AmountOverflow { .. }
             | Error::QuoteFailed { .. }
-            | Error::SwapFailed { .. } => false,
+            | Error::SwapFailed { .. }
+            | Error::PartialExitHeld { .. } => false,
             Error::Maintenance { .. } => false,
             Error::WalletHistorySync { .. } => true,
             // The other swap or entry settles on its own; the holding is read again then.
@@ -253,6 +263,7 @@ impl ErrorClass for Error {
             | Error::TokenNotFound { .. } => Severity::Info,
             Error::AlreadyOpen { .. }
             | Error::OpenPending { .. }
+            | Error::PartialExitPending { .. }
             | Error::AlreadyClosed { .. }
             | Error::EntryLanded { .. }
             | Error::UnverifiedEntryArchive { .. }
@@ -267,7 +278,8 @@ impl ErrorClass for Error {
             | Error::DcaDisabled => Severity::Warning,
             Error::TransitionFailed { .. }
             | Error::AmountOverflow { .. }
-            | Error::SwapFailed { .. } => Severity::Critical,
+            | Error::SwapFailed { .. }
+            | Error::PartialExitHeld { .. } => Severity::Critical,
             // Nothing was submitted, so no money moved and no state is at risk.
             Error::QuoteFailed { .. } => Severity::Warning,
             Error::WalletHistorySync { .. } => Severity::Error,
@@ -293,6 +305,7 @@ impl ErrorClass for Error {
             | Error::TokenNotFound { .. } => 404,
             Error::AlreadyOpen { .. }
             | Error::OpenPending { .. }
+            | Error::PartialExitPending { .. }
             | Error::AlreadyClosed { .. }
             | Error::AlreadyStored { .. }
             | Error::DuplicateOpenRound { .. }
@@ -314,6 +327,7 @@ impl ErrorClass for Error {
             | Error::TransitionFailed { .. }
             | Error::AmountOverflow { .. }
             | Error::SwapFailed { .. }
+            | Error::PartialExitHeld { .. }
             | Error::WalletHistorySync { .. }
             | Error::WalletUnavailable { .. }
             | Error::PaperLegEncode { .. }

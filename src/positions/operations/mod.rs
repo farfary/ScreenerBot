@@ -25,6 +25,7 @@ pub(crate) use exit_sizing::{read_exit_sale, ExitSale, ExitShare};
 pub use force_close::{force_close_position, ForceClosed};
 pub use open::{open_position_direct, open_position_with_size};
 pub use partial_close::partial_close_position;
+pub(crate) use partial_close::release_take_profit_step;
 pub(crate) use slippage::{entry_slippage, exit_slippage_ladder};
 
 use crate::database::catalog::POSITIONS;

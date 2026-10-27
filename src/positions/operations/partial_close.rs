@@ -12,7 +12,7 @@ use crate::positions::state::{
     acquire_position_lock, add_signature_to_index, register_pending_partial_exit,
 };
 use crate::positions::transitions::PositionTransition;
-use crate::positions::types::PendingPartialExit;
+use crate::positions::types::{PartialExitHold, PendingPartialExit};
 use crate::positions::{Error, Result};
 use crate::swaps::{execute_swap_with_fallback, get_best_quote, QuoteRequest, SwapMode};
 use crate::utils::get_wallet_address;
@@ -51,11 +51,11 @@ pub async fn partial_close_position(
     // check a second partial — the exit monitor ticking again, or the user clicking sell
     // — sized its percentage against a remaining amount the first exit had already sold,
     // and the position was oversold.
+    // A held partial exit (sent with no proof either way) counts as in flight until the
+    // chain proves its outcome.
     if crate::positions::state::is_partial_exit_pending(token_mint).await {
-        return Err(Error::TransitionFailed {
-            transition: "partial_exit",
+        return Err(Error::PartialExitPending {
             mint: token_mint.to_owned(),
-            detail: "a partial exit is already in flight for this position".to_owned(),
         });
     }
 
@@ -83,14 +83,16 @@ pub async fn partial_close_position(
 
     // Size against what the WALLET actually holds as well as what the position books
     // (`exit_sizing`): the lower of the two, so a drifted row never sells more than the
-    // wallet has and a wallet never gives up more than the row owns.
+    // wallet has and a wallet never gives up more than the row owns. A wallet that cannot
+    // be read fails the exit; a full close stays available and sizes from the wallet itself.
+    // The holding read here is what a held sale's outcome is proven against.
     let wallet_address = get_wallet_address().map_err(|e| Error::WalletUnavailable {
         detail: e.to_string(),
     })?;
 
     let ExitSale {
         amount: exit_amount,
-        wallet_holding,
+        wallet_holding: holding_before,
         ..
     } = read_exit_sale(
         &wallet_address,
@@ -99,16 +101,14 @@ pub async fn partial_close_position(
         ExitShare::Part(exit_percentage),
     )
     .await?;
-    if let Some(on_chain) = wallet_holding.filter(|on_chain| *on_chain > RawAmount::ZERO) {
-        if on_chain != remaining_amount {
-            logger::warning(
-                LogTag::Positions,
-                &format!(
-                    "Partial exit balance drift for {}: position={} on-chain={} — sizing against the lower",
-                    position.symbol, remaining_amount, on_chain
-                ),
-            );
-        }
+    if holding_before != remaining_amount {
+        logger::warning(
+            LogTag::Positions,
+            &format!(
+                "Partial exit balance drift for {}: position={} on-chain={} — sizing against the lower",
+                position.symbol, remaining_amount, holding_before
+            ),
+        );
     }
 
     if exit_amount == RawAmount::ZERO {
@@ -222,7 +222,9 @@ pub async fn partial_close_position(
             .record(token_mint, detail, not_submitted)
             .await);
         }
-        // Nothing proves the share is still held, so a reserved step stays taken.
+        // Nothing proves whether the share was sold: the partial exit is held until the
+        // chain proves its outcome, and a reserved step stays taken until the hold proves
+        // nothing sold.
         ExitSwap::Unresolved { detail } => {
             return Err(PartialExitFailure {
                 position: &position,
@@ -230,7 +232,7 @@ pub async fn partial_close_position(
                 exit_amount,
                 exit_percentage,
             }
-            .record(token_mint, detail, None)
+            .hold(token_mint, holding_before, take_profit_level, detail)
             .await);
         }
     };
@@ -366,6 +368,54 @@ impl PartialExitFailure<'_> {
             not_submitted,
         }
     }
+
+    /// Holds the partial exit of `token_mint` whose last send failed with no signature,
+    /// then clears its pending mark: the hold is registered first, so the mint never reads
+    /// free of partial exits in between. Records the hold event and returns the error the
+    /// caller reports.
+    async fn hold(
+        self,
+        token_mint: &str,
+        holding_before: RawAmount,
+        take_profit_level: Option<u32>,
+        detail: String,
+    ) -> Error {
+        let hold = PartialExitHold {
+            mint: token_mint.to_owned(),
+            position_id: self.position_id,
+            exit_amount: self.exit_amount,
+            requested_exit_percentage: self.exit_percentage,
+            holding_before,
+            take_profit_level,
+            expiry_height: crate::positions::settle::submission_expiry_bound().await,
+            created_at: Utc::now(),
+        };
+        crate::positions::swap_hold::hold_partial_exit(hold).await;
+        crate::positions::state::clear_partial_exit_pending(token_mint).await;
+        crate::events::record_position_event(
+            &self.position_id.to_string(),
+            token_mint,
+            "partial_exit_held",
+            self.position.entry_transaction_signature.as_deref(),
+            None,
+            0.0,
+            self.exit_amount,
+            None,
+            Some(self.exit_percentage),
+        )
+        .await;
+        logger::warning(
+            LogTag::Positions,
+            &format!(
+                "Partial exit of position {} (mint {token_mint}) is held until the wallet shows whether it sold: {detail}",
+                self.position_id
+            ),
+        );
+        Error::PartialExitHeld {
+            mint: token_mint.to_owned(),
+            detail,
+        }
+    }
 }
 
 /// Takes take-profit step `level` of `position_id` before the swap that sells it is sent,
@@ -390,7 +440,7 @@ async fn reserve_take_profit_step(mint: &str, position_id: i64, level: u32) -> R
 /// Returns take-profit step `level` of `position_id` to the ladder after its sale provably
 /// sold nothing. A failed write keeps the step taken, which can skip it but never sells it
 /// twice.
-async fn release_take_profit_step(mint: &str, position_id: i64, level: u32) {
+pub(crate) async fn release_take_profit_step(mint: &str, position_id: i64, level: u32) {
     if let Err(error) =
         apply_transition(PositionTransition::TakeProfitLevelReleased { position_id, level }).await
     {

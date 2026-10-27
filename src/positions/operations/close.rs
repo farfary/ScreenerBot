@@ -165,7 +165,7 @@ pub async fn close_position_direct(
     let ExitSale {
         amount: sell_amount,
         note: multi_account_note,
-        wallet_holding,
+        wallet_holding: total_token_balance,
     } = read_exit_sale(
         &wallet_address,
         token_mint,
@@ -173,7 +173,6 @@ pub async fn close_position_direct(
         ExitShare::All,
     )
     .await?;
-    let total_token_balance = wallet_holding.unwrap_or_default();
 
     if sell_amount == RawAmount::ZERO {
         return Err(Error::ZeroExitAmount {

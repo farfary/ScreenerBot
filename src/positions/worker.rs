@@ -225,6 +225,18 @@ pub async fn initialize_positions_system() -> Result<()> {
         }
     }
 
+    match super::swap_hold::rehydrate_partial_exit_holds().await {
+        Ok(0) => {}
+        Ok(held) => logger::info(
+            LogTag::Positions,
+            &format!("Restored {held} partial exit holds from metadata"),
+        ),
+        Err(err) => logger::error(
+            LogTag::Positions,
+            &format!("Failed to rehydrate partial exit holds: {err}"),
+        ),
+    }
+
     // Initialize global position semaphore and reconcile with existing open positions
     {
         let max_open_positions = crate::config::with_config(|cfg| cfg.trader.max_open_positions);
@@ -416,6 +428,7 @@ async fn run_verification_cycle(is_first_cycle: bool, last_summary: &mut DateTim
     }
 
     settle_queued_signatures().await;
+    super::swap_hold::settle_partial_exit_holds().await;
 
     let batch = poll_verification_batch(VERIFICATION_BATCH_SIZE).await;
     if batch.is_empty() {
@@ -568,7 +581,7 @@ async fn settle_queued_signatures() {
                 defer_settlement(&item.signature).await;
             }
             Disposition::Apply(transition) => {
-                let Some(_lock) = settlement_lock(&item).await else {
+                let Some(_lock) = settlement_lock(&item.mint).await else {
                     defer_settlement(&item.signature).await;
                     continue;
                 };
@@ -630,7 +643,7 @@ async fn settle_unresolved(items: Vec<VerificationItem>) {
                 enqueue_verification(item.renewed().deferred()).await;
             }
             Disposition::Apply(transition) => {
-                let Some(_lock) = settlement_lock(&item).await else {
+                let Some(_lock) = settlement_lock(&item.mint).await else {
                     enqueue_verification(item.renewed().deferred()).await;
                     continue;
                 };
@@ -640,23 +653,21 @@ async fn settle_unresolved(items: Vec<VerificationItem>) {
     }
 }
 
-/// The mint's position lock for applying a settlement, or `None` when it is not free within
-/// [`SETTLEMENT_LOCK_WAIT`]. Held across the transition, it orders the settlement against a
-/// DCA or partial exit of the mint, which registers its pending swap under the same lock.
-async fn settlement_lock(item: &VerificationItem) -> Option<super::PositionLockGuard> {
+/// The position lock of `mint` for applying a settlement, or `None` when it is not free
+/// within [`SETTLEMENT_LOCK_WAIT`]. Held across the transition, it orders the settlement
+/// against a DCA or partial exit of the mint, which registers its pending swap or its hold
+/// under the same lock.
+pub(super) async fn settlement_lock(mint: &str) -> Option<super::PositionLockGuard> {
     let lock = tokio::time::timeout(
         SETTLEMENT_LOCK_WAIT,
-        super::state::acquire_position_lock(&item.mint),
+        super::state::acquire_position_lock(mint),
     )
     .await
     .ok();
     if lock.is_none() {
         logger::debug(
             LogTag::Positions,
-            &format!(
-                "Settlement of {} deferred: the position lock of {} is held",
-                item.signature, item.mint
-            ),
+            &format!("Settlement on {mint} deferred: its position lock is held"),
         );
     }
     lock

@@ -24,11 +24,11 @@ mod tracking;
 mod types;
 
 // Re-export types
-pub(crate) use types::PENDING_PARTIAL_EXIT_METADATA_KEY;
 pub use types::{
     AutoTradeActivity, DailyTradingStats, PeriodTradingStats, PositionState, PositionStateHistory,
     PositionTracking, PositionsDatabase, PositionsDatabaseStats, TokenSnapshot,
 };
+pub(crate) use types::{PARTIAL_EXIT_HOLD_METADATA_KEY, PENDING_PARTIAL_EXIT_METADATA_KEY};
 
 // Re-export global database functions
 pub use global::{

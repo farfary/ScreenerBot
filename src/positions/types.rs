@@ -264,6 +264,24 @@ pub struct PendingPartialExit {
     pub take_profit_level: Option<u32>,
 }
 
+/// A partial exit whose last send failed with no signature, so nothing proves whether it
+/// sold. It holds the mint's partial exits until the chain proves the outcome.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct PartialExitHold {
+    pub mint: String,
+    pub position_id: i64,
+    pub exit_amount: RawAmount,
+    pub requested_exit_percentage: f64,
+    /// The wallet's holding of the mint read just before the swap.
+    pub holding_before: RawAmount,
+    /// The take-profit step the sale took, reserved on the position before the swap.
+    pub take_profit_level: Option<u32>,
+    /// The bound after which no transaction sent before the hold can still land; assigned
+    /// later when it could not be read at registration.
+    pub expiry_height: Option<u64>,
+    pub created_at: DateTime<Utc>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PendingDcaSwap {
     pub signature: String,
