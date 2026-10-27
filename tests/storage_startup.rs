@@ -465,9 +465,7 @@ fn initialize_startup_stores() {
         screenerbot::actions::init_database()
             .await
             .expect("initialize actions database");
-        screenerbot::events::database::EventsDatabase::new()
-            .await
-            .expect("initialize events database");
+        screenerbot::events::database::EventsDatabase::new().expect("initialize events database");
         screenerbot::positions::initialize_positions_database()
             .await
             .expect("initialize positions database");

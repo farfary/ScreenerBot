@@ -84,8 +84,9 @@ pub struct EventsDatabase {
 }
 
 impl EventsDatabase {
-    /// Open the events store with its writer and reader pools.
-    pub async fn new() -> Result<Self> {
+    /// Open the events store with its writer and reader pools. Synchronous: it runs the
+    /// schema and opens SQLite, so `events::init` calls it on the blocking pool.
+    pub fn new() -> Result<Self> {
         let database_path = crate::paths::get_events_db_path();
         let write_pool = database::open::store(&database::catalog::EVENTS)?;
         let read_pool = database::open::reader(&database::catalog::EVENTS, &database_path)?;

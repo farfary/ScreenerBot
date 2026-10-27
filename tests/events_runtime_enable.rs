@@ -150,9 +150,9 @@ fn the_event_writer_inserts_batches_on_the_blocking_pool() {
     }
 }
 
-/// Every events store operation runs SQLite, so none is an `async fn`: callers reach the store
-/// through `events::on_blocking_pool`, never on a runtime worker. Opening the store is the one
-/// async entry point.
+/// Every events store operation runs SQLite, opening the store included, so none is an
+/// `async fn`: callers reach the store through `events::on_blocking_pool` or, to open it,
+/// `spawn_blocking`, never on a runtime worker.
 #[test]
 fn no_events_store_operation_is_async() {
     let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/events/database");
@@ -168,7 +168,7 @@ fn no_events_store_operation_is_async() {
             if line.starts_with("//") {
                 continue;
             }
-            if line.starts_with("pub async fn ") && !line.starts_with("pub async fn new(") {
+            if line.starts_with("pub async fn ") {
                 violations.push(format!("{}: {line}", path.display()));
             }
         }

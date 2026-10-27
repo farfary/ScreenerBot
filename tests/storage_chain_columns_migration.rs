@@ -345,9 +345,7 @@ fn initialize_shared_stores() {
         screenerbot::actions::init_database()
             .await
             .expect("initialize actions database");
-        screenerbot::events::database::EventsDatabase::new()
-            .await
-            .expect("initialize events database");
+        screenerbot::events::database::EventsDatabase::new().expect("initialize events database");
         screenerbot::strategies::init_strategy_system(
             screenerbot::strategies::engine::EngineConfig::default(),
         )

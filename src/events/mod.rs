@@ -156,7 +156,10 @@ pub async fn init() -> Result<()> {
     }
 
     // Initialize database (fresh schema)
-    let db = Arc::new(EventsDatabase::new().await?);
+    let db = tokio::task::spawn_blocking(EventsDatabase::new)
+        .await
+        .map_err(|error| Error::Internal(crate::errors::InternalError::from(error)))??;
+    let db = Arc::new(db);
     let _ = EVENTS_DB.set(db.clone());
 
     // Initialize broadcaster with larger capacity to reduce lag frequency
