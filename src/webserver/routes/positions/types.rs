@@ -286,9 +286,11 @@ pub struct PositionDetailResponse {
 /// position has booked — the position is the only source for booked figures.
 #[derive(Debug, Serialize)]
 pub struct PendingSwapResponse {
-    /// `dca` (add) or `partial_exit`.
+    /// `dca` (add), `partial_exit`, or `partial_exit_hold` (a partial exit whose send failed
+    /// with no signature, held until the chain proves whether it sold).
     pub kind: String,
-    pub signature: String,
+    /// `None` for a held partial exit, which has no signature.
+    pub signature: Option<String>,
     pub submitted_at: i64,
     /// Set for adds only.
     pub size_sol: Option<f64>,

@@ -268,7 +268,8 @@ export function applyHeaderMixin(PositionDetailsDialog) {
    * total, average entry and DCA count only move when the verifier applies it — seconds
    * later, with no event of its own. Without this the dialog read as broken: the toast said
    * the add went through and every figure still showed the pre-trade state. The amounts here
-   * are what was SENT, never what the position has booked.
+   * are what was SENT, never what the position has booked. A held partial exit (one whose
+   * sale could not be confirmed) reads as checking the wallet rather than confirming.
    */
   proto._buildPendingSwaps = function () {
     const pending = this.fullDetails?.pending_swaps || [];
@@ -289,7 +290,11 @@ export function applyHeaderMixin(PositionDetailsDialog) {
                   }),
                 })
               : I18n.t("positions-pending-selling");
-        return `<span class="pdd-pending" title="${esc(I18n.attr("positions-pending-confirming", "title", { label }))}"><i class="icon-loader spin"></i>${esc(I18n.t("positions-pending-confirming", { label }))}</span>`;
+        const suffix =
+          swap.kind === "partial_exit_hold"
+            ? "positions-pending-checking"
+            : "positions-pending-confirming";
+        return `<span class="pdd-pending" title="${esc(I18n.attr(suffix, "title", { label }))}"><i class="icon-loader spin"></i>${esc(I18n.t(suffix, { label }))}</span>`;
       })
       .join("");
   };

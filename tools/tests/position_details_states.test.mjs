@@ -20,6 +20,8 @@
  *   and the candles drawn are those of the selected timeframe.
  * - Every value the dialog labels has a label (no raw id reaches the screen), and every
  *   time on screen is to the minute.
+ * - A partial exit held until the wallet shows its outcome reads as checking the wallet,
+ *   not confirming, and locks Add and Sell.
  *
  * Run with `npm run test:js`.
  */
@@ -187,4 +189,53 @@ test("the open position dialog at the narrowest desktop window", async (t) => {
   );
   const text = await dialog.evaluate((element) => element.innerText);
   assert.doesNotMatch(text, /\b\d{1,2}:\d{2}:\d{2}\b/, "times on screen are to the minute");
+});
+
+test("a held partial exit reads as checking the wallet and locks Add and Sell", async (t) => {
+  const browser = await chromium.launch({ headless: true });
+  t.after(() => browser.close());
+  const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const api = createApiHandler(
+    [await loadIndex("positions"), await loadIndex("shell")],
+    "populated"
+  );
+  const host = await serveDashboard(context, {
+    locale: "en",
+    onApi: async (request) => {
+      const response = await api.onApi(request);
+      if (!/^\/api\/positions\/[^/]+\/details$/.test(request.url.pathname)) return response;
+      const details = JSON.parse(response.body);
+      details.pending_swaps = [
+        {
+          kind: "partial_exit_hold",
+          signature: null,
+          size_sol: null,
+          exit_percentage: 25,
+          submitted_at: 1759795200,
+        },
+      ];
+      return { ...response, body: JSON.stringify(details) };
+    },
+  });
+  t.after(() => host.close());
+  const page = await context.newPage();
+  page.setDefaultTimeout(15000);
+  await page.goto(`${host.origin}/positions`);
+  await page.waitForSelector(PAGE_READY);
+  await page.locator(ROW_SYMBOL).first().click();
+  const dialog = page.locator(".position-details-dialog");
+
+  const pending = dialog.locator(".pdd-pending");
+  await pending.first().waitFor();
+  assert.equal(await pending.count(), 1);
+  assert.equal((await pending.textContent()).trim(), "Selling 25% · checking the wallet");
+  assert.match(await pending.getAttribute("title"), /^The sale could not be confirmed\./);
+
+  for (const action of ["add", "sell"]) {
+    assert.equal(
+      await dialog.locator(`[data-trade-action="${action}"]`).isDisabled(),
+      true,
+      `${action} is locked while the partial exit is held`
+    );
+  }
 });

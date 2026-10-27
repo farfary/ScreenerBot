@@ -280,6 +280,8 @@ positions-pending-selling-percent = در حال فروش { $percent }
 # $label is the pending swap wording.
 positions-pending-confirming = { $label } · در انتظار تأیید
     .title = ارسال شده و در انتظار تأیید روی زنجیره است. پس از تأیید، ارقام به‌روز می‌شوند.
+positions-pending-checking = { $label } · در حال بررسی کیف پول
+    .title = فروش تأیید نشد. فروش‌های جزئی بعدی منتظر می‌مانند تا کیف پول نشان دهد که انجام شده است یا نه، معمولاً ظرف دو دقیقه.
 
 ## Trade controls
 

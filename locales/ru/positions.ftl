@@ -239,6 +239,8 @@ positions-pending-selling = Продажа
 positions-pending-selling-percent = Продажа: { $percent }
 positions-pending-confirming = { $label } · подтверждается
     .title = Отправлено, ожидает подтверждения в блокчейне. Показатели обновятся после проверки.
+positions-pending-checking = { $label } · проверка кошелька
+    .title = Продажу не удалось подтвердить. Следующие частичные продажи ждут, пока кошелёк не покажет, прошла ли она, обычно в течение двух минут.
 
 positions-trade-add = Докупить
     .title = Докупить позицию

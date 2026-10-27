@@ -285,6 +285,8 @@ positions-pending-selling-percent = Vendiendo { $percent }
 # $label is the pending swap wording.
 positions-pending-confirming = { $label } · confirmando
     .title = Enviado y en espera de confirmación en la cadena. Las cifras se actualizan cuando se verifique.
+positions-pending-checking = { $label } · revisando la billetera
+    .title = No se pudo confirmar la venta. Las siguientes ventas parciales esperan hasta que la billetera muestre si se realizó, normalmente en dos minutos.
 
 ## Trade controls
 

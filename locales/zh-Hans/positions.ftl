@@ -275,6 +275,8 @@ positions-pending-selling-percent = 卖出 { $percent }
 # $label is the pending swap wording.
 positions-pending-confirming = { $label } · 确认中
     .title = 已提交，等待链上确认。验证完成后数据将更新。
+positions-pending-checking = { $label } · 正在检查钱包
+    .title = 无法确认这笔卖出。后续部分卖出将等待钱包显示其是否成交，通常在两分钟内。
 
 ## Trade controls
 

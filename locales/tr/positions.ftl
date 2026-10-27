@@ -229,6 +229,8 @@ positions-pending-selling = Satılıyor
 positions-pending-selling-percent = Satılıyor: { $percent }
 positions-pending-confirming = { $label } · onaylanıyor
     .title = Gönderildi, zincir üstü onay bekleniyor. Doğrulandığında rakamlar güncellenir.
+positions-pending-checking = { $label } · cüzdan kontrol ediliyor
+    .title = Satış onaylanamadı. Sonraki kısmi satışlar, cüzdan satışın gerçekleşip gerçekleşmediğini gösterene kadar bekler, genellikle iki dakika içinde.
 
 positions-trade-add = Ekle
     .title = Pozisyona ekle

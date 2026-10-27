@@ -300,6 +300,8 @@ positions-pending-selling-percent = بيع { $percent }
 # $label is the pending swap wording.
 positions-pending-confirming = { $label } · قيد التأكيد
     .title = تم الإرسال وبانتظار التأكيد على السلسلة. تتحدث الأرقام بعد التحقق.
+positions-pending-checking = { $label } · جارٍ فحص المحفظة
+    .title = تعذّر تأكيد البيع. تنتظر عمليات البيع الجزئي التالية حتى تُظهر المحفظة ما إذا كان قد تم، وعادةً خلال دقيقتين.
 
 ## Trade controls
 

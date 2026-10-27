@@ -230,6 +230,8 @@ positions-pending-selling = बिक्री हो रही है
 positions-pending-selling-percent = { $percent } बिक्री हो रही है
 positions-pending-confirming = { $label } · पुष्टि हो रही है
     .title = सबमिट हो चुका है और ऑन-चेन पुष्टि की प्रतीक्षा में है। सत्यापन के बाद आंकड़े अपडेट होंगे।
+positions-pending-checking = { $label } · वॉलेट की जाँच हो रही है
+    .title = बिक्री की पुष्टि नहीं हो सकी। आगे की आंशिक बिक्री तब तक रुकी रहेगी जब तक वॉलेट यह न दिखाए कि बिक्री हुई या नहीं, आमतौर पर दो मिनट के भीतर।
 
 positions-trade-add = ऐड करें
     .title = पोज़िशन में ऐड करें

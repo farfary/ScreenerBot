@@ -10,6 +10,7 @@ use axum::{
 use chrono::Utc;
 
 use super::list::map_position_to_response_async;
+use super::pending_swaps::load_pending_swaps;
 use super::types::*;
 use crate::chains::adapter;
 use crate::i18n::ids;
@@ -287,48 +288,6 @@ fn peak_since_last_buy(position: &positions::Position) -> Option<f64> {
 /// archived, and its management runs policy exits.
 fn runs_policy_exits(position: &positions::Position) -> bool {
     positions::state::is_position_open(position) && position.management.allows_policy_exits()
-}
-
-/// Swaps this position has submitted but not booked yet.
-///
-/// Filtered by position id, not just mint: the registries are per-mint, and handing one
-/// position the other's in-flight add would misreport both. A position with no id cannot
-/// own a pending swap.
-async fn load_pending_swaps(position: &positions::Position) -> Vec<PendingSwapResponse> {
-    let Some(id) = position.id else {
-        return Vec::new();
-    };
-
-    let mut pending: Vec<PendingSwapResponse> =
-        positions::get_pending_dca_swaps_for_mint(&position.mint)
-            .await
-            .into_iter()
-            .filter(|entry| entry.position_id == id)
-            .map(|entry| PendingSwapResponse {
-                kind: "dca".to_owned(),
-                signature: entry.signature,
-                submitted_at: entry.created_at.timestamp(),
-                size_sol: (entry.size_sol > 0.0).then_some(entry.size_sol),
-                exit_percentage: None,
-            })
-            .collect();
-
-    pending.extend(
-        positions::get_pending_partial_exits_for_mint(&position.mint)
-            .await
-            .into_iter()
-            .filter(|entry| entry.position_id == id)
-            .map(|entry| PendingSwapResponse {
-                kind: "partial_exit".to_owned(),
-                signature: entry.signature,
-                submitted_at: entry.created_at.timestamp(),
-                size_sol: None,
-                exit_percentage: Some(entry.requested_exit_percentage),
-            }),
-    );
-
-    pending.sort_by_key(|entry| entry.submitted_at);
-    pending
 }
 
 /// Load entry and exit history for a position

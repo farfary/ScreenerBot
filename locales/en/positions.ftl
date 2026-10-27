@@ -280,6 +280,8 @@ positions-pending-selling-percent = Selling { $percent }
 # $label is the pending swap wording.
 positions-pending-confirming = { $label } · confirming
     .title = Submitted and waiting for on-chain confirmation. The figures update once it is verified.
+positions-pending-checking = { $label } · checking the wallet
+    .title = The sale could not be confirmed. Further partial sales wait until the wallet shows whether it went through, usually within two minutes.
 
 ## Trade controls
 

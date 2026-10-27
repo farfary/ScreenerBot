@@ -290,6 +290,8 @@ positions-pending-selling-percent = Продаж { $percent }
 # $label is the pending swap wording.
 positions-pending-confirming = { $label } · підтвердження
     .title = Надіслано, очікує ончейн-підтвердження. Показники оновляться після перевірки.
+positions-pending-checking = { $label } · перевірка гаманця
+    .title = Продаж не вдалося підтвердити. Наступні часткові продажі чекають, доки гаманець не покаже, чи він відбувся, зазвичай протягом двох хвилин.
 
 ## Trade controls
 

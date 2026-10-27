@@ -224,6 +224,8 @@ positions-pending-selling = Đang bán
 positions-pending-selling-percent = Đang bán { $percent }
 positions-pending-confirming = { $label } · đang xác nhận
     .title = Đã gửi và đang chờ xác nhận trên chuỗi. Các số liệu sẽ cập nhật sau khi được xác minh.
+positions-pending-checking = { $label } · đang kiểm tra ví
+    .title = Không thể xác nhận lệnh bán. Các lệnh bán một phần tiếp theo sẽ chờ đến khi ví cho thấy lệnh đã khớp hay chưa, thường trong vòng hai phút.
 
 positions-trade-add = Thêm
     .title = Thêm vào vị thế

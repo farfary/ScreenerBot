@@ -22,6 +22,7 @@ mod force_close;
 mod list;
 mod manage;
 mod paper;
+mod pending_swaps;
 pub mod types;
 
 // Re-export handler functions
