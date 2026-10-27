@@ -3,6 +3,7 @@
 
 //! API fetching functions - retrieve pool data from external sources.
 
+use crate::apis::geckoterminal::RequestLane;
 use crate::apis::manager::get_api_manager;
 use crate::chains::ChainId;
 use crate::events::{record_token_event, Severity};
@@ -90,45 +91,51 @@ pub async fn fetch_from_sources(
         }
     };
 
-    let gecko_future =
-        {
-            let api = api.clone();
-            let coordinator = coordinator.clone();
-            let mint = mint_owned.clone();
-            async move {
-                if should_fetch_gecko {
-                    // Use timeout to prevent indefinite blocking on rate limit
-                    match tokio::time::timeout(
-                        RATE_LIMIT_ACQUIRE_TIMEOUT,
-                        coordinator.acquire_geckoterminal(),
-                    )
-                    .await
-                    {
-                        Ok(Ok(permit)) => {
-                            // Got permit, proceed with fetch
-                            let result = api.geckoterminal.fetch_pools(&mint).await.map_err(|e| {
-                                Error::Api {
-                                    provider: "GeckoTerminal".to_owned(),
-                                    message: e.to_string(),
-                                }
-                            });
-                            // Only forget permit if API call succeeded
-                            if result.is_ok() {
-                                permit.forget();
-                            }
-                            result
+    let gecko_future = {
+        let api = api.clone();
+        let coordinator = coordinator.clone();
+        let mint = mint_owned.clone();
+        async move {
+            if should_fetch_gecko {
+                // Use timeout to prevent indefinite blocking on rate limit
+                match tokio::time::timeout(
+                    RATE_LIMIT_ACQUIRE_TIMEOUT,
+                    coordinator.acquire_geckoterminal(),
+                )
+                .await
+                {
+                    Ok(Ok(permit)) => {
+                        // Got permit, proceed with fetch. `Ok(None)`: the client
+                        // deferred the request during its rate-limit penalty.
+                        let result = match api
+                            .geckoterminal
+                            .fetch_pools(&mint, RequestLane::Background)
+                            .await
+                        {
+                            Ok(pools) => Ok(Some(pools)),
+                            Err(crate::apis::Error::Deferred { .. }) => Ok(None),
+                            Err(e) => Err(Error::Api {
+                                provider: "GeckoTerminal".to_owned(),
+                                message: e.to_string(),
+                            }),
+                        };
+                        // Only forget permit if the API answered
+                        if matches!(result, Ok(Some(_))) {
+                            permit.forget();
                         }
-                        Ok(Err(e)) => Err(e),
-                        Err(_) => Err(Error::RateLimit {
-                            provider: "GeckoTerminal".to_owned(),
-                            message: "Rate limit acquisition timed out".to_owned(),
-                        }),
+                        result
                     }
-                } else {
-                    Ok(Vec::new())
+                    Ok(Err(e)) => Err(e),
+                    Err(_) => Err(Error::RateLimit {
+                        provider: "GeckoTerminal".to_owned(),
+                        message: "Rate limit acquisition timed out".to_owned(),
+                    }),
                 }
+            } else {
+                Ok(Some(Vec::new()))
             }
-        };
+        }
+    };
 
     // The self-hosted server is the PRIMARY, central pool registry: fetch it
     // alongside the direct providers and ingest it FIRST so its pools seed the
@@ -213,11 +220,11 @@ pub async fn fetch_from_sources(
     let gecko_result = if gecko_attempted {
         gecko_future.await
     } else {
-        Ok(Vec::new())
+        Ok(Some(Vec::new()))
     };
 
     match gecko_result {
-        Ok(pools) => {
+        Ok(Some(pools)) => {
             if gecko_attempted {
                 success_sources += 1;
             }
@@ -233,6 +240,17 @@ pub async fn fetch_from_sources(
             for info in merged {
                 ingest_pool_entry(&mut pools_map, info);
             }
+        }
+        // No answer this round: counted as a failed source, retried on the next refresh.
+        Ok(None) => {
+            logger::debug(
+                LogTag::Tokens,
+                &format!(
+                    "[TOKEN_POOLS] GeckoTerminal fetch deferred by its rate-limit penalty for mint={}",
+                    mint
+                ),
+            );
+            failures.push("GeckoTerminal→deferred by its rate-limit penalty".to_owned());
         }
         Err(err) => {
             let message = err.to_string();

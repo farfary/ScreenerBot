@@ -48,7 +48,8 @@ fn apis_failure(failed: MessageId, error: &ApisError) -> ApiError {
         | ApisError::RateLimiter { .. }
         | ApisError::CreditsExhausted { .. }
         | ApisError::NotFound { .. }
-        | ApisError::SourcesExhausted { .. } => {
+        | ApisError::SourcesExhausted { .. }
+        | ApisError::Deferred { .. } => {
             ApiError::new(ApiErrorCode::Internal, failed).details(error.to_string())
         }
     }

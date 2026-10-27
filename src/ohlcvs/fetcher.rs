@@ -8,6 +8,7 @@
 //! 1. The chain's candle feeds (`ChainRuntime::candle_feeds`) — by token address
 //! 2. GeckoTerminal — uses pool address, rate-limited 30/min, free
 
+use crate::apis::geckoterminal::RequestLane;
 use crate::apis::{get_api_manager, ApiManager, Error as ApiError};
 use crate::chains::ChainId;
 use crate::errors::NetworkError;
@@ -132,10 +133,10 @@ impl OhlcvFetcher {
     }
 
     /// Fetch `mint`'s candles in `pool_address` from GeckoTerminal with its native
-    /// `aggregate` parameter instead of client-side aggregation. While the client is in its
-    /// 429 penalty window nothing is sent: the fetch answers `OhlcvError::RateLimitExceeded`
-    /// at once, which every caller treats as backpressure, instead of queueing on the
-    /// client's single request permit for the rest of the window.
+    /// `aggregate` parameter instead of client-side aggregation. A background request: while
+    /// the client is in its 429 penalty window nothing is sent and the fetch answers
+    /// `OhlcvError::RateLimitExceeded` at once, which every caller treats as backpressure,
+    /// instead of queueing on the client's single request permit for the rest of the window.
     pub async fn fetch_with_aggregate(
         &self,
         mint: &str,
@@ -146,21 +147,19 @@ impl OhlcvFetcher {
         limit: usize,
     ) -> OhlcvResult<Vec<Candle>> {
         let limit_clamped = limit.min(1000) as u32;
-        if let Some(penalty) = self.api_manager.geckoterminal.penalty_remaining() {
-            record_ohlcv_event(
-                "fetch_aggregate_deferred",
-                Severity::Debug,
-                Some(mint),
-                Some(pool_address),
-                json!({
-                    "pool_address": pool_address,
-                    "api_endpoint": api_endpoint,
-                    "aggregate": aggregate,
-                    "penalty_remaining_ms": u64::try_from(penalty.as_millis()).unwrap_or(u64::MAX),
-                }),
+        if let Err(ApiError::Deferred { retry_after_ms, .. }) = self
+            .api_manager
+            .geckoterminal
+            .admit(RequestLane::Background)
+        {
+            return Err(record_deferral(
+                mint,
+                pool_address,
+                api_endpoint,
+                aggregate,
+                retry_after_ms,
             )
-            .await;
-            return Err(OhlcvError::RateLimitExceeded);
+            .await);
         }
         self.record_attempt();
         let start = Instant::now();
@@ -192,6 +191,7 @@ impl OhlcvFetcher {
                 Some(limit_clamped),
                 Some("token"),
                 before_timestamp,
+                RequestLane::Background,
             )
             .await;
 
@@ -229,6 +229,13 @@ impl OhlcvFetcher {
                 .await;
 
                 Ok(data_points)
+            }
+            // A penalty opened while the request queued for the client's permit.
+            Err(ApiError::Deferred { retry_after_ms, .. }) => {
+                Err(
+                    record_deferral(mint, pool_address, api_endpoint, aggregate, retry_after_ms)
+                        .await,
+                )
             }
             Err(err) => {
                 let is_rate_limited =
@@ -621,6 +628,31 @@ fn feeds_serving(feeds: Vec<CandleFeed>, before: Option<i64>) -> Vec<CandleFeed>
     } else {
         feeds
     }
+}
+
+/// Record a GeckoTerminal candle fetch the client deferred during its 429 penalty window,
+/// at debug: the monitor retries on its own cadence. Answers the backpressure error.
+async fn record_deferral(
+    mint: &str,
+    pool_address: &str,
+    api_endpoint: &str,
+    aggregate: u32,
+    penalty_remaining_ms: u64,
+) -> OhlcvError {
+    record_ohlcv_event(
+        "fetch_aggregate_deferred",
+        Severity::Debug,
+        Some(mint),
+        Some(pool_address),
+        json!({
+            "pool_address": pool_address,
+            "api_endpoint": api_endpoint,
+            "aggregate": aggregate,
+            "penalty_remaining_ms": penalty_remaining_ms,
+        }),
+    )
+    .await;
+    OhlcvError::RateLimitExceeded
 }
 
 #[cfg(test)]

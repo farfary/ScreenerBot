@@ -16,6 +16,7 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 
 use crate::apis::dexscreener::DexScreenerPool;
+use crate::apis::geckoterminal::RequestLane;
 use crate::apis::get_api_manager;
 use crate::chains::{adapter_for, ChainId};
 use crate::logger::{self, LogTag};
@@ -295,7 +296,11 @@ pub async fn search_tokens(
 
         // Try GeckoTerminal as fallback/supplement
         if apis.geckoterminal.is_enabled() {
-            match apis.geckoterminal.fetch_pools(query).await {
+            match apis
+                .geckoterminal
+                .fetch_pools(query, RequestLane::Interactive)
+                .await
+            {
                 Ok(pools) => {
                     if let Some(pool) = pools.first() {
                         // Only add if not already found via DexScreener

@@ -21,6 +21,7 @@
 
 use super::types::FeaturedCard;
 use crate::apis::dexscreener::MAX_TOKENS_PER_REQUEST;
+use crate::apis::geckoterminal::RequestLane;
 use crate::apis::get_api_manager;
 use crate::chains::ChainId;
 use crate::connectivity;
@@ -353,6 +354,7 @@ async fn fetch_geckoterminal_identity(
                 &addresses,
                 None,
                 None,
+                RequestLane::Interactive,
             ),
         )
         .await

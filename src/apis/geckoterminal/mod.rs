@@ -62,6 +62,19 @@ pub const RATE_LIMIT_PER_MINUTE: usize = 30;
 // CLIENT IMPLEMENTATION
 // ============================================================================
 
+/// Who is waiting on a request, which decides what it does while a 429 penalty window is
+/// open. Every caller shares the one request permit, so a request that sleeps out the
+/// penalty holds up every request queued behind it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RequestLane {
+    /// Answers a dashboard or tool request now: waits out the penalty on the permit.
+    Interactive,
+    /// A loop, refresh or prefetch that retries on its own cadence: answers
+    /// [`Error::Deferred`] without sending while the penalty is open, so the permit stays
+    /// free for interactive requests.
+    Background,
+}
+
 /// GeckoTerminal API client with rate limiting and stats tracking
 pub struct GeckoTerminalClient {
     pub(crate) client: Client,
@@ -132,14 +145,25 @@ impl GeckoTerminalClient {
         self.stats.get_stats().await
     }
 
-    /// Time left in the 429 penalty window, `None` when no penalty is active. A caller that
-    /// can defer its request (background candle fallback) checks this instead of queueing
-    /// behind the penalty on the single request permit.
+    /// Time left in the 429 penalty window, `None` when no penalty is active.
     pub fn penalty_remaining(&self) -> Option<Duration> {
         let until = (*self.penalty())?;
         until
             .checked_duration_since(Instant::now())
             .filter(|left| !left.is_zero())
+    }
+
+    /// Whether a request on `lane` may be sent now. A background request is refused with
+    /// [`Error::Deferred`] while the 429 penalty window is open; an interactive request is
+    /// always admitted and waits out the penalty in `execute_request`.
+    pub fn admit(&self, lane: RequestLane) -> Result<(), Error> {
+        match (lane, self.penalty_remaining()) {
+            (RequestLane::Background, Some(left)) => Err(Error::Deferred {
+                provider: "GeckoTerminal".to_owned(),
+                retry_after_ms: u64::try_from(left.as_millis()).unwrap_or(u64::MAX),
+            }),
+            _ => Ok(()),
+        }
     }
 
     /// Open or extend the shared penalty window after a 429: 10 s, 20 s, 40 s, then 60 s for
@@ -180,13 +204,19 @@ impl GeckoTerminalClient {
         &self,
         endpoint: &str,
         builder: reqwest::RequestBuilder,
+        lane: RequestLane,
     ) -> Result<(reqwest::Response, f64), Error> {
         self.ensure_enabled(endpoint)?;
+        self.admit(lane)?;
 
         let guard = self.rate_limiter.acquire().await?;
 
+        // A penalty opened while this request queued for the permit: a background request
+        // gives the permit back instead of sleeping on it.
+        self.admit(lane)?;
+
         // Honor any active 429 penalty BEFORE sending, while still holding the
-        // limiter guard so every caller serializes behind the backoff window.
+        // limiter guard so every interactive caller serializes behind the backoff window.
         if let Some(left) = self.penalty_remaining() {
             tokio::time::sleep(left).await;
         }
@@ -218,13 +248,14 @@ impl GeckoTerminalClient {
 
     pub(crate) async fn get_json<T>(
         &self,
+        lane: RequestLane,
         endpoint: &str,
         builder: reqwest::RequestBuilder,
     ) -> Result<T, Error>
     where
         T: DeserializeOwned,
     {
-        let (response, elapsed) = self.execute_request(endpoint, builder).await?;
+        let (response, elapsed) = self.execute_request(endpoint, builder, lane).await?;
         let status = response.status();
 
         if !status.is_success() {
@@ -355,5 +386,145 @@ mod tests {
             .penalty_remaining()
             .expect("a new 429 opens the window");
         assert!(restarted <= Duration::from_secs(10));
+    }
+
+    /// A client whose requests could never reach a real endpoint.
+    fn unreachable_client() -> GeckoTerminalClient {
+        GeckoTerminalClient::with_base_url(
+            true,
+            RATE_LIMIT_PER_MINUTE,
+            TIMEOUT_SECS,
+            "http://127.0.0.1:9".to_owned(),
+        )
+        .unwrap()
+    }
+
+    #[tokio::test]
+    async fn a_background_request_during_a_penalty_is_deferred_without_sending() {
+        let client = unreachable_client();
+        client.record_rate_limited();
+
+        let started = Instant::now();
+        let answer = client.fetch_pools("mint", RequestLane::Background).await;
+
+        match answer {
+            Err(Error::Deferred {
+                provider,
+                retry_after_ms,
+            }) => {
+                assert_eq!(provider, "GeckoTerminal");
+                assert!(retry_after_ms > 9_000 && retry_after_ms <= 10_000);
+            }
+            other => panic!("expected a deferral, got {other:?}"),
+        }
+        assert!(started.elapsed() < Duration::from_millis(50));
+        assert_eq!(
+            client.get_stats().await.total_requests,
+            0,
+            "nothing was sent"
+        );
+        // The deferral leaves the penalty window as it was.
+        assert!(client.penalty_remaining().is_some());
+    }
+
+    #[tokio::test]
+    async fn an_interactive_request_during_a_penalty_waits_instead_of_deferring() {
+        let client = unreachable_client();
+        assert!(client.admit(RequestLane::Interactive).is_ok());
+        client.record_rate_limited();
+        assert!(client.admit(RequestLane::Interactive).is_ok());
+        assert!(matches!(
+            client.admit(RequestLane::Background),
+            Err(Error::Deferred { .. })
+        ));
+
+        // Still sleeping out the penalty on the permit when the deadline passes: neither
+        // deferred nor sent.
+        let answer = tokio::time::timeout(
+            Duration::from_millis(100),
+            client.fetch_pools("mint", RequestLane::Interactive),
+        )
+        .await;
+        assert!(
+            answer.is_err(),
+            "the interactive request waits out the penalty"
+        );
+        assert_eq!(client.get_stats().await.total_requests, 0);
+    }
+
+    #[test]
+    fn without_a_penalty_every_lane_is_admitted() {
+        let client = unreachable_client();
+        assert!(client.admit(RequestLane::Background).is_ok());
+        assert!(client.admit(RequestLane::Interactive).is_ok());
+    }
+
+    /// Files under `src/` that send GeckoTerminal requests on the interactive lane, which
+    /// waits out a 429 penalty on the shared permit. Every other caller is background.
+    /// Entries are only ever removed.
+    const INTERACTIVE_CALLERS: &[&str] = &[
+        // The lane's owner and its tests.
+        "apis/geckoterminal/mod.rs",
+        // Token search answering the dashboard search box.
+        "tokens/search.rs",
+        // Featured-token identity answering the Featured page.
+        "webserver/routes/featured/identity.rs",
+        // Market data for an on-demand token refresh (`tokens::request_immediate_update`).
+        "tokens/market/geckoterminal.rs",
+    ];
+
+    fn rust_files(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                rust_files(&path, out);
+            } else if path.extension().is_some_and(|ext| ext == "rs") {
+                out.push(path);
+            }
+        }
+    }
+
+    #[test]
+    fn only_listed_callers_use_the_interactive_lane() {
+        let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+        let mut files = Vec::new();
+        rust_files(&src, &mut files);
+        assert!(!files.is_empty(), "no sources found under {src:?}");
+
+        let needle = ["RequestLane::", "Interactive"].concat();
+        let mut users = Vec::new();
+        for path in files {
+            let Ok(text) = std::fs::read_to_string(&path) else {
+                continue;
+            };
+            if text.contains(&needle) {
+                let relative = path
+                    .strip_prefix(&src)
+                    .map(|p| p.to_string_lossy().replace('\\', "/"))
+                    .unwrap_or_default();
+                users.push(relative);
+            }
+        }
+
+        let unlisted: Vec<&String> = users
+            .iter()
+            .filter(|file| !INTERACTIVE_CALLERS.contains(&file.as_str()))
+            .collect();
+        assert!(
+            unlisted.is_empty(),
+            "a GeckoTerminal caller outside the list uses the interactive lane; background work \
+             uses RequestLane::Background: {unlisted:?}"
+        );
+        let stale: Vec<&&str> = INTERACTIVE_CALLERS
+            .iter()
+            .filter(|listed| !users.iter().any(|file| file == *listed))
+            .collect();
+        assert!(
+            stale.is_empty(),
+            "listed files no longer use the interactive lane; remove them: {stale:?}"
+        );
     }
 }

@@ -45,6 +45,13 @@ pub enum Error {
     /// Every source in a fallback cascade failed.
     #[error("all {resource} sources failed: {detail}")]
     SourcesExhausted { resource: String, detail: String },
+    /// A background request was not sent because the provider's rate-limit penalty
+    /// window is open; the caller retries on its own cadence.
+    #[error("{provider} request deferred for {retry_after_ms}ms by its rate-limit penalty")]
+    Deferred {
+        provider: String,
+        retry_after_ms: u64,
+    },
 }
 
 /// Result alias for the API client modules.
@@ -61,6 +68,7 @@ impl ErrorClass for Error {
             Error::RateLimiter { .. } => true,
             Error::NotFound { .. } => false,
             Error::SourcesExhausted { .. } => true,
+            Error::Deferred { .. } => true,
         }
     }
 
@@ -71,6 +79,7 @@ impl ErrorClass for Error {
             Error::Internal(e) => e.retry_after(),
             Error::RateLimiter { .. } => Some(Duration::from_millis(250)),
             Error::SourcesExhausted { .. } => Some(Duration::from_secs(5)),
+            Error::Deferred { retry_after_ms, .. } => Some(Duration::from_millis(*retry_after_ms)),
             _ => None,
         }
     }
@@ -86,6 +95,7 @@ impl ErrorClass for Error {
             Error::CreditsExhausted { .. } => Severity::Warning,
             Error::NotFound { .. } => Severity::Info,
             Error::SourcesExhausted { .. } => Severity::Error,
+            Error::Deferred { .. } => Severity::Info,
         }
     }
 
@@ -100,6 +110,7 @@ impl ErrorClass for Error {
             Error::CreditsExhausted { .. } => 402,
             Error::NotFound { .. } => 404,
             Error::SourcesExhausted { .. } => 502,
+            Error::Deferred { .. } => 429,
         }
     }
 }

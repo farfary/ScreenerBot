@@ -6,8 +6,10 @@
 //! Each function queries a single external API and returns a list of
 //! [`DiscoveryRecord`] candidates. Called from [`super::discovery::run_discovery_once`].
 
+use crate::apis::geckoterminal::RequestLane;
 use crate::apis::ApiManager;
 use crate::chains::{adapter_for, ChainId};
+use crate::logger::{self, LogTag};
 use crate::tokens::updates::RateLimitCoordinator;
 use crate::tokens::Error;
 use std::future::Future;
@@ -17,6 +19,28 @@ use std::sync::Arc;
 use super::discovery::DiscoveryRecord;
 
 // ── helpers ──────────────────────────────────────────────────────────────────
+
+/// A GeckoTerminal answer for one discovery source. `None` when the client deferred the
+/// request during its rate-limit penalty: no answer this round, retried on the next tick.
+fn gecko_answer<T>(
+    source: &str,
+    result: Result<T, crate::apis::Error>,
+) -> crate::tokens::Result<Option<T>> {
+    match result {
+        Ok(answer) => Ok(Some(answer)),
+        Err(deferred @ crate::apis::Error::Deferred { .. }) => {
+            logger::debug(
+                LogTag::Tokens,
+                &format!("[DISCOVERY] Source {source} skipped this tick: {deferred}"),
+            );
+            Ok(None)
+        }
+        Err(e) => Err(Error::Api {
+            provider: "GeckoTerminal".to_owned(),
+            message: e.to_string(),
+        }),
+    }
+}
 
 fn parse_gecko_token_id(value: &str) -> Option<String> {
     let trimmed = value.trim();
@@ -158,14 +182,18 @@ pub(super) async fn fetch_gecko_new_pools(
     chain: ChainId,
 ) -> crate::tokens::Result<Vec<DiscoveryRecord>> {
     let permit = coordinator.acquire_geckoterminal().await?;
-    let pools = api
+    let answer = api
         .geckoterminal
-        .fetch_new_pools_by_network(adapter_for(chain).market_data_network(), None, Some(1))
-        .await
-        .map_err(|e| Error::Api {
-            provider: "GeckoTerminal".to_owned(),
-            message: e.to_string(),
-        })?;
+        .fetch_new_pools_by_network(
+            adapter_for(chain).market_data_network(),
+            None,
+            Some(1),
+            RequestLane::Background,
+        )
+        .await;
+    let Some(pools) = gecko_answer("geckoterminal.new_pools", answer)? else {
+        return Ok(Vec::new());
+    };
     permit.forget();
 
     let mut records = Vec::new();
@@ -189,14 +217,17 @@ pub(super) async fn fetch_gecko_recent_updates(
     chain: ChainId,
 ) -> crate::tokens::Result<Vec<DiscoveryRecord>> {
     let permit = coordinator.acquire_geckoterminal().await?;
-    let response = api
+    let answer = api
         .geckoterminal
-        .fetch_recently_updated_tokens(None, Some(adapter_for(chain).market_data_network()))
-        .await
-        .map_err(|e| Error::Api {
-            provider: "GeckoTerminal".to_owned(),
-            message: e.to_string(),
-        })?;
+        .fetch_recently_updated_tokens(
+            None,
+            Some(adapter_for(chain).market_data_network()),
+            RequestLane::Background,
+        )
+        .await;
+    let Some(response) = gecko_answer("geckoterminal.recently_updated", answer)? else {
+        return Ok(Vec::new());
+    };
     permit.forget();
 
     Ok(response
@@ -217,19 +248,19 @@ pub(super) async fn fetch_gecko_trending(
     chain: ChainId,
 ) -> crate::tokens::Result<Vec<DiscoveryRecord>> {
     let permit = coordinator.acquire_geckoterminal().await?;
-    let pools = api
+    let answer = api
         .geckoterminal
         .fetch_trending_pools_by_network(
             Some(adapter_for(chain).market_data_network()),
             Some(1),
             None,
             None,
+            RequestLane::Background,
         )
-        .await
-        .map_err(|e| Error::Api {
-            provider: "GeckoTerminal".to_owned(),
-            message: e.to_string(),
-        })?;
+        .await;
+    let Some(pools) = gecko_answer("geckoterminal.trending", answer)? else {
+        return Ok(Vec::new());
+    };
     permit.forget();
 
     let mut records = Vec::new();

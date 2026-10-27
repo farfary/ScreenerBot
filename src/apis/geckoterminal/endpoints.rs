@@ -8,7 +8,7 @@ use super::types::{
     GeckoTerminalResponse, GeckoTerminalTokenInfoResponse, GeckoTerminalTokensMultiResponse,
 };
 use super::{default_network, MAX_TRENDING_PAGE};
-use super::{GeckoTerminalClient, OhlcvResponse, TokenInfo};
+use super::{GeckoTerminalClient, OhlcvResponse, RequestLane, TokenInfo};
 use crate::apis::Error;
 use crate::errors::DataError;
 use crate::logger::{self, LogTag};
@@ -42,8 +42,12 @@ struct OhlcvMeta {
 
 impl GeckoTerminalClient {
     /// Fetch all pools for a single token address
-    pub async fn fetch_pools(&self, mint: &str) -> Result<Vec<GeckoTerminalPool>, Error> {
-        self.fetch_pools_on_network(mint, None).await
+    pub async fn fetch_pools(
+        &self,
+        mint: &str,
+        lane: RequestLane,
+    ) -> Result<Vec<GeckoTerminalPool>, Error> {
+        self.fetch_pools_on_network(mint, None, lane).await
     }
 
     /// Fetch pools for a token on a specific network
@@ -51,6 +55,7 @@ impl GeckoTerminalClient {
         &self,
         mint: &str,
         network: Option<&str>,
+        lane: RequestLane,
     ) -> Result<Vec<GeckoTerminalPool>, Error> {
         let network_id = network.unwrap_or_else(|| default_network());
         let endpoint = format!("networks/{network_id}/tokens/{mint}/pools");
@@ -64,8 +69,9 @@ impl GeckoTerminalClient {
             ),
         );
 
-        let api_response: GeckoTerminalResponse =
-            self.get_json(&endpoint, self.client.get(&url)).await?;
+        let api_response: GeckoTerminalResponse = self
+            .get_json(lane, &endpoint, self.client.get(&url))
+            .await?;
 
         Ok(api_response
             .data
@@ -82,6 +88,7 @@ impl GeckoTerminalClient {
         include: Option<&str>,
         page: Option<u32>,
         sort: Option<&str>,
+        lane: RequestLane,
     ) -> Result<Vec<GeckoTerminalPool>, Error> {
         let endpoint = format!("networks/{network}/tokens/{token_address}/pools");
         let url = format!("{}/{endpoint}", self.base_url);
@@ -111,7 +118,7 @@ impl GeckoTerminalClient {
             ),
         );
 
-        let api_response: GeckoTerminalResponse = self.get_json(&endpoint, builder).await?;
+        let api_response: GeckoTerminalResponse = self.get_json(lane, &endpoint, builder).await?;
 
         Ok(api_response
             .data
@@ -127,6 +134,7 @@ impl GeckoTerminalClient {
         page: Option<u32>,
         duration: Option<&str>,
         include: Option<Vec<&str>>,
+        lane: RequestLane,
     ) -> Result<Vec<GeckoTerminalPool>, Error> {
         let network_id = network.unwrap_or_else(|| default_network());
         let endpoint = format!("networks/{network_id}/trending_pools");
@@ -159,7 +167,7 @@ impl GeckoTerminalClient {
             ),
         );
 
-        let api_response: GeckoTerminalResponse = self.get_json(&endpoint, builder).await?;
+        let api_response: GeckoTerminalResponse = self.get_json(lane, &endpoint, builder).await?;
 
         Ok(api_response
             .data
@@ -175,6 +183,7 @@ impl GeckoTerminalClient {
         include: Option<Vec<&str>>,
         page: Option<u32>,
         sort: Option<&str>,
+        lane: RequestLane,
     ) -> Result<Vec<GeckoTerminalPool>, Error> {
         let network_id = network.unwrap_or_else(|| default_network());
         let endpoint = format!("networks/{network_id}/pools");
@@ -208,7 +217,7 @@ impl GeckoTerminalClient {
             ),
         );
 
-        let api_response: GeckoTerminalResponse = self.get_json(&endpoint, builder).await?;
+        let api_response: GeckoTerminalResponse = self.get_json(lane, &endpoint, builder).await?;
 
         Ok(api_response
             .data
@@ -225,6 +234,7 @@ impl GeckoTerminalClient {
         include: Option<Vec<&str>>,
         include_volume_breakdown: bool,
         include_composition: bool,
+        lane: RequestLane,
     ) -> Result<GeckoTerminalPool, Error> {
         let network_id = network.unwrap_or_else(|| default_network());
         let endpoint = format!("networks/{network_id}/pools/{pool_address}");
@@ -257,7 +267,7 @@ impl GeckoTerminalClient {
             ),
         );
 
-        let api_response: GeckoTerminalResponse = self.get_json(&endpoint, builder).await?;
+        let api_response: GeckoTerminalResponse = self.get_json(lane, &endpoint, builder).await?;
 
         api_response
             .data
@@ -278,6 +288,7 @@ impl GeckoTerminalClient {
         include: Option<Vec<&str>>,
         include_volume_breakdown: bool,
         include_composition: bool,
+        lane: RequestLane,
     ) -> Result<Vec<GeckoTerminalPool>, Error> {
         if addresses.is_empty() {
             return Err(DataError::ValidationError {
@@ -329,7 +340,7 @@ impl GeckoTerminalClient {
             ),
         );
 
-        let api_response: GeckoTerminalResponse = self.get_json(&endpoint, builder).await?;
+        let api_response: GeckoTerminalResponse = self.get_json(lane, &endpoint, builder).await?;
 
         Ok(api_response
             .data
@@ -353,6 +364,7 @@ impl GeckoTerminalClient {
         limit: Option<u32>,
         currency: Option<&str>,
         before_timestamp: Option<i64>,
+        lane: RequestLane,
     ) -> Result<OhlcvResponse, Error> {
         let endpoint = format!(
             "networks/{}/pools/{}/ohlcv/{}",
@@ -370,7 +382,7 @@ impl GeckoTerminalClient {
             ),
         );
 
-        let ohlcv_response: OhlcvResponseRaw = self.get_json(&endpoint, builder).await?;
+        let ohlcv_response: OhlcvResponseRaw = self.get_json(lane, &endpoint, builder).await?;
 
         Ok(OhlcvResponse {
             ohlcv_list: ohlcv_response.data.attributes.ohlcv_list,
@@ -384,6 +396,7 @@ impl GeckoTerminalClient {
         &self,
         network: &str,
         page: Option<u32>,
+        lane: RequestLane,
     ) -> Result<Vec<(String, String)>, Error> {
         let endpoint = format!("networks/{network}/dexes");
         let url = format!("{}/{endpoint}", self.base_url);
@@ -404,7 +417,8 @@ impl GeckoTerminalClient {
             ),
         );
 
-        let dex_response: GeckoTerminalDexesResponse = self.get_json(&endpoint, builder).await?;
+        let dex_response: GeckoTerminalDexesResponse =
+            self.get_json(lane, &endpoint, builder).await?;
 
         Ok(dex_response
             .data
@@ -419,6 +433,7 @@ impl GeckoTerminalClient {
         network: &str,
         include: Option<&str>,
         page: Option<u32>,
+        lane: RequestLane,
     ) -> Result<Vec<GeckoTerminalPool>, Error> {
         let endpoint = format!("networks/{network}/new_pools");
         let url = format!("{}/{endpoint}", self.base_url);
@@ -445,7 +460,7 @@ impl GeckoTerminalClient {
             ),
         );
 
-        let api_response: GeckoTerminalResponse = self.get_json(&endpoint, builder).await?;
+        let api_response: GeckoTerminalResponse = self.get_json(lane, &endpoint, builder).await?;
 
         Ok(api_response
             .data
@@ -461,6 +476,7 @@ impl GeckoTerminalClient {
         addresses: &str,
         include: Option<&str>,
         include_composition: Option<bool>,
+        lane: RequestLane,
     ) -> Result<GeckoTerminalTokensMultiResponse, Error> {
         let endpoint = format!("networks/{network}/tokens/multi/{addresses}");
         let url = format!("{}/{endpoint}", self.base_url);
@@ -488,7 +504,7 @@ impl GeckoTerminalClient {
             ),
         );
 
-        self.get_json(&endpoint, builder).await
+        self.get_json(lane, &endpoint, builder).await
     }
 
     /// Fetch token metadata for a single address
@@ -496,6 +512,7 @@ impl GeckoTerminalClient {
         &self,
         network: &str,
         address: &str,
+        lane: RequestLane,
     ) -> Result<GeckoTerminalTokenInfoResponse, Error> {
         let endpoint = format!("networks/{network}/tokens/{address}/info");
         let url = format!("{}/{endpoint}", self.base_url);
@@ -508,7 +525,7 @@ impl GeckoTerminalClient {
             ),
         );
 
-        self.get_json(&endpoint, self.client.get(&url)).await
+        self.get_json(lane, &endpoint, self.client.get(&url)).await
     }
 
     /// Fetch recently updated tokens (global endpoint)
@@ -516,6 +533,7 @@ impl GeckoTerminalClient {
         &self,
         include: Option<&str>,
         network: Option<&str>,
+        lane: RequestLane,
     ) -> Result<GeckoTerminalRecentlyUpdatedResponse, Error> {
         let endpoint = "tokens/info_recently_updated";
         let url = format!("{}/{endpoint}", self.base_url);
@@ -542,7 +560,7 @@ impl GeckoTerminalClient {
             ),
         );
 
-        self.get_json(endpoint, builder).await
+        self.get_json(lane, endpoint, builder).await
     }
 }
 

@@ -11,6 +11,7 @@
 //! - Returns aggregated token data (price, volume, market cap, etc.)
 //! - No pool filtering logic (uses aggregated metrics from API)
 
+use crate::apis::geckoterminal::RequestLane;
 use crate::logger::{self, LogTag};
 use crate::tokens::database::TokenDatabase;
 use crate::tokens::market::persist;
@@ -115,6 +116,7 @@ async fn fetch_and_store(mints: &[String], db: &TokenDatabase) -> TokenResult<Ba
             &addresses_str,
             None,
             None,
+            RequestLane::Interactive,
         )
         .await
         .map_err(|e| Error::Api {
