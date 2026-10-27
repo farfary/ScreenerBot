@@ -47,6 +47,14 @@ export function paperActionCell(row, esc) {
 
 /** The empty state of the paper book per status: title, reason, and where paper starts. */
 export function paperEmptyState(status) {
-  const key = status === "archived" ? "positions-paper-archived-empty" : "positions-paper-empty";
-  return { title: I18n.t(key), message: I18n.attr(key, "message") };
+  if (status === "archived") {
+    return {
+      title: I18n.t("positions-paper-archived-empty"),
+      message: I18n.attr("positions-paper-archived-empty", "message"),
+    };
+  }
+  return {
+    title: I18n.t("positions-paper-empty"),
+    message: I18n.attr("positions-paper-empty", "message"),
+  };
 }

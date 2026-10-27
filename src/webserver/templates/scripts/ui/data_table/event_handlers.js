@@ -435,7 +435,7 @@ export function applyEventHandlersMixin(DataTable) {
     // The empty state's call to action is rendered on every empty paint, so its click
     // is delegated like the row actions.
     const emptyActionHandler = (e) => {
-      const btn = e.target.closest('.state-view-action[data-action="dt-empty-action"]');
+      const btn = e.target.closest('.state-view-action[data-action="table-empty-action"]');
       if (!btn || !this.elements.tbody.contains(btn)) return;
       this.options.emptyAction?.()?.onClick?.(e);
     };

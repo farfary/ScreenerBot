@@ -294,11 +294,14 @@ export function applyHeaderMixin(PositionDetailsDialog) {
                   }),
                 })
               : I18n.t("positions-pending-selling");
-        const suffix =
-          swap.kind === "partial_exit_hold"
-            ? "positions-pending-checking"
-            : "positions-pending-confirming";
-        return `<span class="pdd-pending" title="${esc(I18n.attr(suffix, "title", { label }))}"><i class="icon-loader spin"></i>${esc(I18n.t(suffix, { label }))}</span>`;
+        const held = swap.kind === "partial_exit_hold";
+        const title = held
+          ? I18n.attr("positions-pending-checking", "title", { label })
+          : I18n.attr("positions-pending-confirming", "title", { label });
+        const text = held
+          ? I18n.t("positions-pending-checking", { label })
+          : I18n.t("positions-pending-confirming", { label });
+        return `<span class="pdd-pending" title="${esc(title)}"><i class="icon-loader spin"></i>${esc(text)}</span>`;
       })
       .join("");
   };

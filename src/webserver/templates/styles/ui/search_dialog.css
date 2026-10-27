@@ -475,23 +475,12 @@
   gap: 2px;
 }
 
+/* The shared `.btn-icon`, sized and toned for the dense row. */
 .search-row-action {
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
   width: 26px;
   height: 26px;
-  padding: 0;
-  border: none;
-  background: transparent;
   color: var(--text-muted);
   font-size: 15px;
-  transition: color var(--transition-fast);
-}
-
-.search-row-action:hover {
-  color: var(--text-primary);
 }
 
 .search-row-star[aria-pressed="true"],

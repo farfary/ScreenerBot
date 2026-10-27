@@ -520,11 +520,11 @@ function rowHtml(row, index) {
         </span>
       </span>
       <span class="search-row-actions">
-        <button type="button" class="search-row-action search-row-star" data-action="star" tabindex="-1"
+        <button type="button" class="btn-icon search-row-action search-row-star" data-action="star" tabindex="-1"
           aria-pressed="${starred}" title="${escapeHtml(starLabel)}" aria-label="${escapeHtml(starLabel)}">
           <i class="icon-star" aria-hidden="true"></i>
         </button>
-        <button type="button" class="search-row-action" data-action="more" tabindex="-1"
+        <button type="button" class="btn-icon search-row-action" data-action="more" tabindex="-1"
           title="${escapeHtml(I18n.attr("tokens-search-more", "title"))}" aria-label="${escapeHtml(I18n.attr("tokens-search-more", "aria-label"))}">
           <i class="icon-ellipsis" aria-hidden="true"></i>
         </button>

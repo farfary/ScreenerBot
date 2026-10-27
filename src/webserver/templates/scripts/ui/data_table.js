@@ -1023,7 +1023,7 @@ export class DataTable {
       icon: emptyIcon,
       title: emptyTitle,
       message: emptyMessage,
-      action: emptyAction ? { id: "dt-empty-action", label: emptyAction.label } : null,
+      action: emptyAction ? { id: "table-empty-action", label: emptyAction.label } : null,
       compact: true,
     });
     return `

@@ -26,6 +26,11 @@
   vertical-align: middle;
 }
 
+/* The centring above outranks a component's own [hidden] rule for an icon. */
+.wallets-page i[hidden] {
+  display: none;
+}
+
 /* =============================================================================
    Main Content Area — no padding, panels own their spacing
    ============================================================================= */

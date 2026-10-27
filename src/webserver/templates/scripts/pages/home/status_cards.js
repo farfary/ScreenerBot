@@ -16,9 +16,9 @@ import { paintText } from "../../core/dom.js";
 const ABSENT = "—";
 
 const STATE_LABELS = Object.freeze({
-  running: () => I18n.t("home-status-running"),
-  stopped: () => I18n.t("home-status-stopped"),
-  unavailable: () => I18n.t("home-status-setup-required"),
+  running: "home-status-running",
+  stopped: "home-status-stopped",
+  unavailable: "home-status-setup-required",
 });
 
 function count(value, Utils) {
@@ -26,7 +26,7 @@ function count(value, Utils) {
 }
 
 function stateLabel(state) {
-  return Object.hasOwn(STATE_LABELS, state) ? STATE_LABELS[state]() : ABSENT;
+  return Object.hasOwn(STATE_LABELS, state) ? I18n.label(STATE_LABELS, state) : ABSENT;
 }
 
 /**
