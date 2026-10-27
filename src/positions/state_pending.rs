@@ -310,7 +310,7 @@ pub async fn clear_pending_partial_exit(signature: &str) -> Result<Option<Pendin
 /// mint as unattributable. Memory is cleared even when persisting fails, and every set is
 /// persisted even when an earlier one fails; the first error reports that storage still
 /// lists them until the next persist of that set, and the startup sweep drops them then
-/// (`rehydrate_pending_*`, `rehydrate_partial_exit_holds`).
+/// (`rehydrate_pending_*`, `rehydrate_swap_holds`).
 pub async fn clear_pending_swaps_of_position(position_id: i64) -> Result<()> {
     let dca_removed = {
         let mut map = PENDING_DCA_SWAPS.write().await;

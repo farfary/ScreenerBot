@@ -11,7 +11,7 @@ use chrono::{DateTime, Utc};
 use std::collections::HashMap;
 
 /// True while a DCA add or a partial exit of position `position_id` of `mint` is in flight
-/// (submitted, not yet verified) or a partial exit of it is held unproven. None of them is
+/// (submitted, not yet verified) or a swap of it is held unproven. None of them is
 /// on the position row until its verification or the wallet books it, so these registries
 /// are the only proof a fill may still land on the row.
 pub async fn position_has_pending_swap(mint: &str, position_id: i64) -> bool {
@@ -23,16 +23,15 @@ pub async fn position_has_pending_swap(mint: &str, position_id: i64) -> bool {
             .await
             .iter()
             .any(|entry| entry.position_id == position_id)
-        || super::swap_hold::holds_partial_exit_of(mint, position_id).await
+        || super::swap_hold::holds_swap_of(mint, position_id).await
 }
 
 /// Whether a bot swap of `mint` that is not one of `position_id`'s may still move the
 /// wallet's holding of the mint: a pending DCA or partial exit of another position, a
 /// swap submitted whose pending state is not recorded yet (a partial exit counted on the
-/// mint before its details are registered, or a marked swap), or a held partial exit of the
-/// mint, whose unproven sale may still move the holding until its bound passes. Its tokens
-/// may or may not be in a holding read now, so such a reading cannot be attributed to one
-/// position.
+/// mint before its details are registered, or a marked swap), or a held swap of the mint,
+/// which may still move the holding until its bound passes. Its tokens may or may not be in
+/// a holding read now, so such a reading cannot be attributed to one position.
 ///
 /// Late fills on closed positions are ordered by send: when `signature` is a pending DCA or
 /// partial exit of this position, a pending swap of another closed position sent after it does not
@@ -53,7 +52,7 @@ pub async fn other_swap_in_flight(mint: &str, position_id: i64, signature: Optio
             .unwrap_or_else(|poisoned| poisoned.into_inner())
             .keys()
             .any(|(_, in_flight)| in_flight == mint)
-        || super::swap_hold::holds_partial_exit(mint).await
+        || super::swap_hold::holds_swap(mint).await
     {
         return true;
     }
@@ -99,7 +98,7 @@ async fn position_is_closed(position_id: i64) -> bool {
         .is_some_and(|position| super::round_state::is_closed(&position))
 }
 
-/// Every mint with a swap in flight — a pending partial exit, a held partial exit, a
+/// Every mint with a swap in flight — a pending partial exit, a held swap, a
 /// pending DCA add, a bot swap submitted whose pending state is not recorded yet, or a
 /// position whose memory holds a submitted full exit that is not verified. The last one covers a submission whose row
 /// write failed: the database row shows no exit in flight, and the memory copy is the only

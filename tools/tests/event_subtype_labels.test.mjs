@@ -15,6 +15,7 @@
  * - `record_force_stop_event("Code", …)` rows;
  * - the gap outcome table (`("code", Severity::…)` in ohlcvs/gaps.rs) and
  *   `subtype: "code"` announcement fields;
+ * - the swap hold outcome table (`=> ("code", …)` in positions/swap_hold/release.rs);
  * - the `ScheduledTaskOutcome` codes;
  * - a candle feed's `format!("{}_code", feed.label)`, labelled by its shared code.
  *
@@ -65,6 +66,7 @@ const COMPUTED = {
   "ohlcvs/fetcher.rs": "a candle feed code",
   "ohlcvs/monitor.rs": "a candle feed code",
   "ohlcvs/gaps.rs": "the gap outcome table",
+  "positions/swap_hold/release.rs": "the hold outcome table",
   "trader/copy/notify.rs": "the announcement's subtype field",
 };
 
@@ -135,6 +137,9 @@ function producedCodes() {
     }
     if (relative === "ohlcvs/gaps.rs") {
       for (const match of source.matchAll(/=>\s*\("([a-z_]+)",\s*Severity::/g)) codes.add(match[1]);
+    }
+    if (relative === "positions/swap_hold/release.rs") {
+      for (const match of source.matchAll(/=>\s*\(\s*"([a-z_]+)",/g)) codes.add(match[1]);
     }
     for (const line of source.split("\n").filter((text) => /\bsubtype:\s*(?:if\b|")/.test(text))) {
       for (const match of line.matchAll(/"([a-z_]+)"/g)) codes.add(match[1]);

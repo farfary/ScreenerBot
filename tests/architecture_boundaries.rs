@@ -4136,21 +4136,25 @@ fn a_sent_position_swap_is_always_queued_for_verification() {
     );
 }
 
-/// A partial-exit hold is registered by the live partial exit alone: paper and copy paths
-/// never sign a swap, so none of them may hold a mint's partial exits.
+/// A hold is registered only by the live position operations that sign a swap; paper and
+/// copy paths never sign one.
 #[test]
-fn only_the_live_partial_exit_holds_a_partial_exit() {
+fn only_live_position_operations_hold_a_swap() {
     let mut callers = Vec::new();
     for (relative, contents) in walk_src() {
         let code = blank_literals(&strip_comment_text(&production_text(&contents)));
-        if code.contains("hold_partial_exit(") && relative != Path::new("positions/swap_hold.rs") {
+        if code.contains("hold_swap(")
+            && relative != Path::new("positions/swap_hold.rs")
+            && !relative.starts_with("positions/swap_hold/")
+        {
             callers.push(relative);
         }
     }
+    callers.sort();
     assert_eq!(
         callers,
         vec![PathBuf::from("positions/operations/partial_close.rs")],
-        "only partial_close.rs registers a partial-exit hold"
+        "only the live position operations register a swap hold"
     );
 }
 

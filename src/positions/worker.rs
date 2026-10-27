@@ -225,15 +225,15 @@ pub async fn initialize_positions_system() -> Result<()> {
         }
     }
 
-    match super::swap_hold::rehydrate_partial_exit_holds().await {
+    match super::swap_hold::rehydrate_swap_holds().await {
         Ok(0) => {}
         Ok(held) => logger::info(
             LogTag::Positions,
-            &format!("Restored {held} partial exit holds from metadata"),
+            &format!("Restored {held} swap holds from metadata"),
         ),
         Err(err) => logger::error(
             LogTag::Positions,
-            &format!("Failed to rehydrate partial exit holds: {err}"),
+            &format!("Failed to rehydrate swap holds: {err}"),
         ),
     }
 
@@ -428,7 +428,7 @@ async fn run_verification_cycle(is_first_cycle: bool, last_summary: &mut DateTim
     }
 
     settle_queued_signatures().await;
-    super::swap_hold::settle_partial_exit_holds().await;
+    super::swap_hold::settle_swap_holds().await;
 
     let batch = poll_verification_batch(VERIFICATION_BATCH_SIZE).await;
     if batch.is_empty() {

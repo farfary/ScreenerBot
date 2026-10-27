@@ -44,6 +44,10 @@ const LIVE_IDENTIFIERS: &[&str] = &[
     "add_to_position",
     "close_position_direct",
     "partial_close_position",
+    // Live swap holds and the pending-open mark.
+    "hold_swap",
+    "settle_swap_holds",
+    "hold_pending_open",
     // Live trade and slot machinery.
     "begin_trade",
     "acquire_global_position_permit",

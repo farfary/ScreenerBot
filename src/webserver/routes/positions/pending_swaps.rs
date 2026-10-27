@@ -1,12 +1,13 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! The swaps a position has submitted but not booked yet, and its partial exits held until the chain proves their outcome, for the position details view.
+//! The swaps a position has submitted but not booked yet, and its swaps held until the chain proves their outcome, for the position details view.
 
 use super::types::PendingSwapResponse;
+use crate::positions::swap_hold::{self, HeldSwap, SwapHold};
 use crate::positions::{self, Book};
 
-/// Swaps this position has submitted but not booked yet, and its held partial exits.
+/// Swaps this position has submitted but not booked yet, and its held swaps.
 ///
 /// Filtered by position id, not just mint: the registries are per-mint, and handing one
 /// position the other's in-flight add would misreport both. A position with no id cannot
@@ -49,19 +50,61 @@ pub(super) async fn load_pending_swaps(position: &positions::Position) -> Vec<Pe
     );
 
     pending.extend(
-        positions::swap_hold::partial_exit_holds_for_mint(&position.mint)
+        swap_hold::holds_for_mint(&position.mint)
             .await
             .into_iter()
             .filter(|hold| hold.position_id == id)
-            .map(|hold| PendingSwapResponse {
-                kind: "partial_exit_hold".to_owned(),
-                signature: None,
-                submitted_at: hold.created_at.timestamp(),
-                size_sol: None,
-                exit_percentage: Some(hold.requested_exit_percentage),
-            }),
+            .map(held_row),
     );
 
     pending.sort_by_key(|entry| entry.submitted_at);
     pending
+}
+
+/// The row of a held swap: it has no signature, and its kind says what it was sent to do.
+fn held_row(hold: SwapHold) -> PendingSwapResponse {
+    let submitted_at = hold.created_at.timestamp();
+    match hold.swap {
+        HeldSwap::PartialExit {
+            requested_exit_percentage,
+            ..
+        } => PendingSwapResponse {
+            kind: "partial_exit_hold".to_owned(),
+            signature: None,
+            submitted_at,
+            size_sol: None,
+            exit_percentage: Some(requested_exit_percentage),
+        },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use chrono::{TimeZone, Utc};
+
+    use super::held_row;
+    use crate::chains::RawAmount;
+    use crate::positions::swap_hold::{HeldSwap, SwapHold};
+
+    #[test]
+    fn a_held_partial_exit_is_a_row_without_a_signature() {
+        let created_at = Utc.with_ymd_and_hms(2026, 1, 1, 12, 0, 0).unwrap();
+        let row = held_row(SwapHold {
+            mint: "mint".to_owned(),
+            position_id: 7,
+            holding_before: RawAmount::new(1_000),
+            expiry_height: Some(500),
+            created_at,
+            swap: HeldSwap::PartialExit {
+                exit_amount: RawAmount::new(250),
+                requested_exit_percentage: 25.0,
+                take_profit_level: Some(2),
+            },
+        });
+        assert_eq!(row.kind, "partial_exit_hold");
+        assert_eq!(row.signature, None);
+        assert_eq!(row.submitted_at, created_at.timestamp());
+        assert_eq!(row.size_sol, None);
+        assert_eq!(row.exit_percentage, Some(25.0));
+    }
 }

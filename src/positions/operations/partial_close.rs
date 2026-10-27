@@ -11,8 +11,9 @@ use crate::positions::queue::{enqueue_verification, VerificationItem};
 use crate::positions::state::{
     acquire_position_lock, add_signature_to_index, register_pending_partial_exit,
 };
+use crate::positions::swap_hold::{HeldSwap, SwapHold};
 use crate::positions::transitions::PositionTransition;
-use crate::positions::types::{PartialExitHold, PendingPartialExit};
+use crate::positions::types::PendingPartialExit;
 use crate::positions::{Error, Result};
 use crate::swaps::{execute_swap_with_fallback, get_best_quote, QuoteRequest, SwapMode};
 use crate::utils::get_wallet_address;
@@ -380,17 +381,19 @@ impl PartialExitFailure<'_> {
         take_profit_level: Option<u32>,
         detail: String,
     ) -> Error {
-        let hold = PartialExitHold {
+        let hold = SwapHold {
             mint: token_mint.to_owned(),
             position_id: self.position_id,
-            exit_amount: self.exit_amount,
-            requested_exit_percentage: self.exit_percentage,
             holding_before,
-            take_profit_level,
             expiry_height: crate::positions::settle::submission_expiry_bound().await,
             created_at: Utc::now(),
+            swap: HeldSwap::PartialExit {
+                exit_amount: self.exit_amount,
+                requested_exit_percentage: self.exit_percentage,
+                take_profit_level,
+            },
         };
-        crate::positions::swap_hold::hold_partial_exit(hold).await;
+        crate::positions::swap_hold::hold_swap(hold).await;
         crate::positions::state::clear_partial_exit_pending(token_mint).await;
         crate::events::record_position_event(
             &self.position_id.to_string(),

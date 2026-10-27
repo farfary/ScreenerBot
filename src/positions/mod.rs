@@ -102,8 +102,8 @@ pub use state::PositionLockGuard;
 pub use transitions::PositionTransition;
 pub use types::{
     ApplyFailureDisposition, Book, EntryRecord, EntrySubmission, ExitRecord, GiveUpReason, Opening,
-    PartialExitHold, PendingDcaSwap, PendingPartialExit, Position, PositionManagement,
-    PositionOrigin, PriceSource, TradeOrigin, VerificationKind, VerificationOutcome,
+    PendingDcaSwap, PendingPartialExit, Position, PositionManagement, PositionOrigin, PriceSource,
+    TradeOrigin, VerificationKind, VerificationOutcome,
 };
 
 #[cfg(test)]

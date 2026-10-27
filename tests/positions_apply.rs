@@ -15,13 +15,14 @@ use screenerbot::positions::apply::apply_transition;
 use screenerbot::positions::operations::{force_close_position, mark_exit_submitted};
 use screenerbot::positions::price_updater::update_position_price_and_pnl;
 use screenerbot::positions::round_state::exit_awaiting_verification;
+use screenerbot::positions::swap_hold::{HeldSwap, SwapHold};
 use screenerbot::positions::transitions::NotLandedEvidence;
 use screenerbot::positions::verifier::{
     check_exit_residual, classify_exit_residual, unsold_own_holding, ExitResidual,
 };
 use screenerbot::positions::{
     add_to_position, buy_target, db, is_dca_pending, state, swap_hold, ApplyFailureDisposition,
-    BuyTarget, Error, GiveUpReason, PartialExitHold, PendingDcaSwap, PendingPartialExit, Position,
+    BuyTarget, Error, GiveUpReason, PendingDcaSwap, PendingPartialExit, Position,
     PositionManagement, PositionOrigin, PositionTransition, PriceSource, TradeOrigin,
     VerificationItem, VerificationKind, FORCE_CLOSED_PREFIX,
 };
@@ -3743,15 +3744,17 @@ fn deleting_a_position_clears_its_pending_swaps_so_later_late_fills_book() {
                 .expect("register a partial exit");
                 state::mark_partial_exit_pending(common::TEST_MINT).await;
             }
-            swap_hold::hold_partial_exit(PartialExitHold {
+            swap_hold::hold_swap(SwapHold {
                 mint: common::TEST_MINT.to_owned(),
                 position_id: deleted,
-                exit_amount: RawAmount::new(400_000),
-                requested_exit_percentage: 40.0,
                 holding_before: RawAmount::new(HELD),
-                take_profit_level: None,
                 expiry_height: None,
                 created_at: sent - chrono::Duration::seconds(10),
+                swap: HeldSwap::PartialExit {
+                    exit_amount: RawAmount::new(400_000),
+                    requested_exit_percentage: 40.0,
+                    take_profit_level: None,
+                },
             })
             .await;
 
@@ -3762,7 +3765,7 @@ fn deleting_a_position_clears_its_pending_swaps_so_later_late_fills_book() {
                 "the deleted position's partial exit is still held"
             );
             assert_eq!(
-                stored_pending_of("partial_exit_holds", deleted).await,
+                stored_pending_of("swap_holds", deleted).await,
                 0,
                 "storage still lists the deleted position's hold"
             );

@@ -1,121 +1,41 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Partial-exit holds against a real positions store and a scripted settlement reader: a
-//! held partial exit blocks the mint's partial exits and its reconciliation, and leaves only
-//! on a settled proof or the hold limit, returning its take-profit step only on proof that
-//! nothing was sold.
-
-// See `tests/trader_exits.rs` — the config guard is a `std::sync::Mutex` on purpose, and
-// holding it across an await cannot deadlock in a per-test runtime that nothing else shares.
-#![allow(clippy::await_holding_lock)]
-
-use crate::common;
+//! Partial-exit holds: a held partial exit blocks the mint's partial exits and its
+//! reconciliation, and leaves only on a settled proof or the hold limit, returning its
+//! take-profit step only on proof that nothing was sold.
 
 use chrono::{DateTime, Duration, Utc};
-use screenerbot::chains::{
-    ChainId, Holding, RawAmount, SettlementReader, SignatureCheck, SignatureVerdict,
-};
+use screenerbot::chains::RawAmount;
 use screenerbot::positions::swap_hold::{
-    self, HoldOutcome, PartialExitHold, ReleasedHold, UNPROVEN_HOLD_LIMIT,
+    self, HeldSwap, HoldOutcome, SwapHold, UNPROVEN_HOLD_LIMIT,
 };
-use screenerbot::positions::{books, db, partial_close_position, state, Book, Error, Position};
+use screenerbot::positions::{books, db, partial_close_position, state, Book, Error};
 
-const HELD: u128 = 1_000_000;
+use super::{
+    common, mint_busy, open_position, outcomes, reader, settle, store_position, stored_holds_of,
+    ScriptedReader, BOUND, HELD, STEP,
+};
+
 const EXIT: u128 = 250_000;
-const STEP: u32 = 2;
-const BOUND: u64 = 1_000;
-
-/// A settlement reader whose bound and settled holding are fixed by the test.
-struct ScriptedReader {
-    bound: u64,
-    settled: Option<RawAmount>,
-}
-
-#[async_trait::async_trait]
-impl SettlementReader for ScriptedReader {
-    async fn signature_verdicts(
-        &self,
-        checks: &[SignatureCheck],
-    ) -> screenerbot::chains::Result<Vec<SignatureVerdict>> {
-        Ok(vec![SignatureVerdict::Pending; checks.len()])
-    }
-
-    async fn holding(&self, _owner: &str, _asset: &str) -> screenerbot::chains::Result<Holding> {
-        Err(screenerbot::chains::Error::SettlementRead {
-            chain: ChainId::Solana,
-            detail: "a hold is settled from the settled holding only".to_owned(),
-        })
-    }
-
-    async fn expiry_bound(&self) -> screenerbot::chains::Result<u64> {
-        Ok(self.bound)
-    }
-
-    async fn settled_holding(
-        &self,
-        _owner: &str,
-        _asset: &str,
-        _expiry_bound: u64,
-    ) -> screenerbot::chains::Result<Option<Holding>> {
-        Ok(self.settled.map(|amount| Holding {
-            amount,
-            frozen: false,
-        }))
-    }
-}
-
-fn reader(settled: Option<u128>) -> ScriptedReader {
-    ScriptedReader {
-        bound: BOUND,
-        settled: settled.map(RawAmount::new),
-    }
-}
-
-/// Opens an isolated store and an OPEN position holding [`HELD`] that took take-profit step
-/// [`STEP`], persisted and in memory.
-async fn open_position() -> i64 {
-    screenerbot::paths::ensure_all_directories().expect("create data directories");
-    common::configure_own_wallet();
-    common::seed_decimals(common::TEST_MINT, 6);
-    screenerbot::positions::initialize_positions_database()
-        .await
-        .expect("initialise positions database");
-    store_position(|_| {}).await
-}
-
-/// Persists one more position of the test mint holding [`HELD`] at step [`STEP`] and loads
-/// it into memory.
-async fn store_position(configure: impl FnOnce(&mut Position)) -> i64 {
-    let mut position = common::test_position(1.0, 1.0);
-    position.id = None;
-    position.token_amount = Some(RawAmount::new(HELD));
-    position.remaining_token_amount = Some(RawAmount::new(HELD));
-    position.take_profit_level = STEP;
-    configure(&mut position);
-    let id = db::save_position(&position)
-        .await
-        .expect("persist test position");
-    position.id = Some(id);
-    state::add_position(position).await;
-    id
-}
 
 fn hold(
     position_id: i64,
     created_at: DateTime<Utc>,
     take_profit_level: Option<u32>,
     expiry_height: Option<u64>,
-) -> PartialExitHold {
-    PartialExitHold {
+) -> SwapHold {
+    SwapHold {
         mint: common::TEST_MINT.to_owned(),
         position_id,
-        exit_amount: RawAmount::new(EXIT),
-        requested_exit_percentage: 25.0,
         holding_before: RawAmount::new(HELD),
-        take_profit_level,
         expiry_height,
         created_at,
+        swap: HeldSwap::PartialExit {
+            exit_amount: RawAmount::new(EXIT),
+            requested_exit_percentage: 25.0,
+            take_profit_level,
+        },
     }
 }
 
@@ -134,40 +54,17 @@ async fn step_of(id: i64) -> u32 {
     stored
 }
 
-/// The holds stored for `position_id`, as storage lists them.
-async fn stored_holds_of(position_id: i64) -> Vec<PartialExitHold> {
-    let raw = db::get_metadata("partial_exit_holds")
-        .await
-        .expect("read stored holds")
-        .unwrap_or_default();
-    if raw.is_empty() {
-        return Vec::new();
-    }
-    serde_json::from_str::<Vec<PartialExitHold>>(&raw)
-        .expect("stored holds decode")
-        .into_iter()
-        .filter(|hold| hold.position_id == position_id)
-        .collect()
-}
-
 /// Every reading that treats the mint or the position as busy.
 async fn busy(position_id: i64) -> [bool; 5] {
     let mint = common::TEST_MINT;
+    let [reconciliation, other_swap, own_swap] = mint_busy(position_id).await;
     [
         state::is_partial_exit_pending(mint).await,
-        state::mints_with_pending_swaps().await.contains(mint),
-        state::other_swap_in_flight(mint, position_id, None).await,
-        state::position_has_pending_swap(mint, position_id).await,
+        reconciliation,
+        other_swap,
+        own_swap,
         books::partial_exit_pending(Book::Live, mint).await,
     ]
-}
-
-fn outcomes(released: &[ReleasedHold]) -> Vec<HoldOutcome> {
-    released.iter().map(|released| released.outcome).collect()
-}
-
-async fn settle(reader: &ScriptedReader, now: DateTime<Utc>) -> Vec<ReleasedHold> {
-    swap_hold::settle_partial_exit_holds_on(reader, "wallet", now).await
 }
 
 /// A partial exit whose send failed with no signature is held: every busy reading holds
@@ -184,7 +81,7 @@ fn an_unproven_partial_exit_holds_the_mint_and_refuses_the_next_partial() {
             let _cfg = common::config_guard();
             let id = open_position().await;
 
-            swap_hold::hold_partial_exit(hold(id, Utc::now(), Some(STEP), Some(BOUND))).await;
+            swap_hold::hold_swap(hold(id, Utc::now(), Some(STEP), Some(BOUND))).await;
 
             assert_eq!(busy(id).await, [true; 5]);
             assert!(!books::partial_exit_pending(Book::Paper, common::TEST_MINT).await);
@@ -219,12 +116,12 @@ fn a_sale_found_by_the_settled_holding_releases_the_hold_once_and_keeps_the_step
             let _cfg = common::config_guard();
             common::start_events().await;
             let id = open_position().await;
-            swap_hold::hold_partial_exit(hold(id, Utc::now(), Some(STEP), Some(BOUND))).await;
+            swap_hold::hold_swap(hold(id, Utc::now(), Some(STEP), Some(BOUND))).await;
             let sold = reader(Some(HELD - EXIT));
 
             assert_eq!(
                 outcomes(&settle(&sold, Utc::now()).await),
-                [HoldOutcome::Sold]
+                [HoldOutcome::Landed]
             );
             assert!(
                 settle(&sold, Utc::now()).await.is_empty(),
@@ -254,12 +151,12 @@ fn an_unsent_sale_returns_its_step_and_frees_the_mint() {
             let _cfg = common::config_guard();
             common::start_events().await;
             let id = open_position().await;
-            swap_hold::hold_partial_exit(hold(id, Utc::now(), Some(STEP), Some(BOUND))).await;
+            swap_hold::hold_swap(hold(id, Utc::now(), Some(STEP), Some(BOUND))).await;
             let unsold = reader(Some(HELD));
 
             assert_eq!(
                 outcomes(&settle(&unsold, Utc::now()).await),
-                [HoldOutcome::NotSold]
+                [HoldOutcome::NotLanded]
             );
             assert_eq!(step_of(id).await, STEP - 1, "the step was not returned");
             assert_eq!(busy(id).await, [false; 5]);
@@ -269,10 +166,10 @@ fn an_unsent_sale_returns_its_step_and_frees_the_mint() {
             );
 
             // A stop-loss partial takes no step, so its proof releases none.
-            swap_hold::hold_partial_exit(hold(id, Utc::now(), None, Some(BOUND))).await;
+            swap_hold::hold_swap(hold(id, Utc::now(), None, Some(BOUND))).await;
             assert_eq!(
                 outcomes(&settle(&unsold, Utc::now()).await),
-                [HoldOutcome::NotSold]
+                [HoldOutcome::NotLanded]
             );
             assert_eq!(step_of(id).await, STEP - 1);
         },
@@ -292,7 +189,7 @@ fn a_hold_with_no_proof_is_released_unknown_only_at_the_limit() {
             let id = open_position().await;
             let limit = Duration::from_std(UNPROVEN_HOLD_LIMIT).unwrap();
             let registered = Utc::now();
-            swap_hold::hold_partial_exit(hold(id, registered, Some(STEP), Some(BOUND))).await;
+            swap_hold::hold_swap(hold(id, registered, Some(STEP), Some(BOUND))).await;
             let unread = reader(None);
 
             assert!(settle(&unread, registered + limit - Duration::seconds(1))
@@ -327,15 +224,15 @@ fn holds_survive_a_restart_and_a_missing_bound_is_assigned_once() {
                 position.transaction_exit_verified = true;
             })
             .await;
-            swap_hold::hold_partial_exit(hold(id, Utc::now(), Some(STEP), None)).await;
-            swap_hold::hold_partial_exit(hold(deleted, Utc::now(), None, Some(BOUND))).await;
+            swap_hold::hold_swap(hold(id, Utc::now(), Some(STEP), None)).await;
+            swap_hold::hold_swap(hold(deleted, Utc::now(), None, Some(BOUND))).await;
             assert!(db::delete_position_by_id(deleted)
                 .await
                 .expect("delete the row"));
             state::remove_position_by_id(deleted).await;
 
             assert_eq!(
-                swap_hold::rehydrate_partial_exit_holds()
+                swap_hold::rehydrate_swap_holds()
                     .await
                     .expect("rehydrate holds"),
                 1
@@ -357,7 +254,7 @@ fn holds_survive_a_restart_and_a_missing_bound_is_assigned_once() {
                 "the bound was not stored"
             );
             assert_eq!(
-                swap_hold::partial_exit_holds_for_mint(common::TEST_MINT).await[0].expiry_height,
+                swap_hold::holds_for_mint(common::TEST_MINT).await[0].expiry_height,
                 Some(777)
             );
         },
@@ -383,7 +280,7 @@ fn a_hold_on_a_closed_row_is_released_unknown_without_a_step_write() {
                 position.total_exited_amount = RawAmount::new(HELD);
             })
             .await;
-            swap_hold::hold_partial_exit(hold(closed, Utc::now(), Some(STEP), Some(BOUND))).await;
+            swap_hold::hold_swap(hold(closed, Utc::now(), Some(STEP), Some(BOUND))).await;
 
             assert_eq!(
                 outcomes(&settle(&reader(Some(0)), Utc::now()).await),

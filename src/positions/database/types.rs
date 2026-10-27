@@ -240,7 +240,7 @@ CREATE TABLE IF NOT EXISTS paper_account (
 
 pub(crate) const PENDING_PARTIAL_EXIT_METADATA_KEY: &str = "pending_partial_exits";
 
-pub(crate) const PARTIAL_EXIT_HOLD_METADATA_KEY: &str = "partial_exit_holds";
+pub(crate) const SWAP_HOLD_METADATA_KEY: &str = "swap_holds";
 
 pub(super) const SCHEMA_TOKEN_SNAPSHOTS: &str = r#"
 CREATE TABLE IF NOT EXISTS token_snapshots (
