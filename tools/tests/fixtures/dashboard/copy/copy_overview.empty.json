@@ -9,7 +9,9 @@
     "total_tasks": 1,
     "active_tasks": 1,
     "paper_tasks": 1,
-    "live_tasks": 0
+    "live_tasks": 0,
+    "resumable_tasks": 0,
+    "resumable_live_tasks": 0
   },
   "totals": {
     "realized_pnl_native": 0,
@@ -110,7 +112,9 @@
       "effective_state": "paper",
       "effective_require_filter_pass": true,
       "pnl_trend": [],
+      "net_pnl_native": 0,
       "pause_text": null,
+      "recovery": null,
       "exit_policy_issue": null
     }
   ],

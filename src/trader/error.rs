@@ -6,6 +6,7 @@
 use std::time::Duration;
 
 use crate::errors::{ErrorClass, Severity};
+use crate::i18n::{ids, UiText};
 
 /// Everything that can go wrong running, controlling or copy-trading the trader.
 #[derive(Debug, Clone, thiserror::Error)]
@@ -156,6 +157,28 @@ pub enum Error {
 
 /// Result alias for the trader module.
 pub type Result<T> = std::result::Result<T, Error>;
+
+impl Error {
+    /// The catalog text the copy-trading surfaces show for this error: the copy API's
+    /// error envelope and the per-task result of a bulk resume.
+    pub fn copy_ui_text(&self) -> UiText {
+        UiText::new(match self {
+            Error::CopyTaskNotFound { .. } => ids::ERRORS_COPY_TASK_NOT_FOUND,
+            Error::CopyHoldingNotFound { .. } => ids::ERRORS_COPY_HOLDING_NOT_FOUND,
+            Error::CopyTaskRejected {
+                reason: crate::trader::copy::CopySkip::LiveConfirmationRequired,
+            } => ids::ERRORS_COPY_LIVE_CONFIRMATION_REQUIRED,
+            Error::CopyTaskRejected { .. } => ids::ERRORS_COPY_TASK_INVALID,
+            Error::CopyValidation { .. } => ids::ERRORS_COPY_REQUEST_REJECTED,
+            Error::CopyTaskLimit { .. } => ids::ERRORS_COPY_TASK_LIMIT,
+            Error::CopyWatchRejected { .. } => ids::ERRORS_COPY_WATCH_REJECTED,
+            Error::CopyLiveUnavailable { .. } => ids::ERRORS_COPY_LIVE_UNAVAILABLE,
+            Error::CopyTaskLive { .. } => ids::ERRORS_COPY_TASK_LIVE,
+            Error::CopyTaskOwnsPositions { .. } => ids::ERRORS_COPY_TASK_OWNS_POSITIONS,
+            _ => ids::ERRORS_COPY_REQUEST_FAILED,
+        })
+    }
+}
 
 impl ErrorClass for Error {
     fn is_retryable(&self) -> bool {

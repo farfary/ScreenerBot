@@ -10,8 +10,8 @@ use serde::Serialize;
 use super::super::paper_book::{self, PaperBookView};
 use super::super::{
     arrival_distance_ms, build_task_stats, closed_rounds, pause_text, summarize_arrival_distances,
-    ArrivalDistanceStats, CopyActivityRow, CopyDatabase, CopyOutcome, CopyRound, CopyTask,
-    CopyTaskStats,
+    ArrivalDistanceStats, CopyActivityRow, CopyDatabase, CopyOutcome, CopyRecovery, CopyRound,
+    CopyTask, CopyTaskStats,
 };
 use super::open_database;
 use super::status::{build_status, effective_state, CopyTradingStatus};
@@ -41,8 +41,12 @@ pub struct CopyTaskSummary {
     pub effective_copy_stable_quoted: bool,
     /// Cumulative realized P&L after each of the latest closed rounds.
     pub pnl_trend: Vec<f64>,
+    /// Realized plus unrealized P&L of the task's book; unpriced holdings count as zero.
+    pub net_pnl_native: f64,
     /// Why the task is paused; absent while it is enabled.
     pub pause_text: Option<UiText>,
+    /// How the paused task comes back; absent while it is enabled.
+    pub recovery: Option<CopyRecovery>,
     /// Why the task's stored exit overrides no longer fit the global exit policy, so an
     /// edit of them would be refused; absent while they fit. Its open positions run the
     /// global rule in place of each rule the overrides break
@@ -285,6 +289,7 @@ pub fn summarize(
     spent_native: f64,
 ) -> (CopyTaskSummary, Vec<u64>) {
     let (stats, rounds) = book_stats(&task, activity, rounds);
+    let net_pnl_native = stats.realized_pnl_native + stats.unrealized_pnl_native;
     let mut cumulative = 0.0;
     let mut pnl_trend = rounds
         .iter()
@@ -316,7 +321,9 @@ pub fn summarize(
             effective_require_filter_pass: task.requires_filter_pass(global_filter),
             effective_copy_stable_quoted: task.copies_stable_quoted(global_stable),
             pnl_trend,
+            net_pnl_native,
             pause_text: (!task.enabled).then(|| pause_text(task.pause_reason.as_ref())),
+            recovery: task.recovery(),
             exit_policy_issue: exit_policy_issue(&task, ExitPolicy::from_config()),
             task,
         },

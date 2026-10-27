@@ -45,6 +45,7 @@ pub fn routes() -> Router<Arc<AppState>> {
             "/tasks",
             get(list_tasks).merge(post(create_task).route_layer(from_fn(full_setup_gate))),
         )
+        .route("/tasks/resume", post(resume_tasks))
         .route(
             "/tasks/{id}",
             get(get_task).patch(update_task).delete(delete_task),
@@ -97,6 +98,13 @@ struct CloseHoldingRequest {
     opened_at: DateTime<Utc>,
 }
 
+/// A bulk resume of the paused tasks; live tasks are left paused unless included.
+#[derive(Debug, Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+struct ResumeRequest {
+    include_live: bool,
+}
+
 fn default_limit() -> usize {
     50
 }
@@ -147,6 +155,16 @@ async fn update_task(Path(id): Path<i64>, Json(patch): Json<serde_json::Value>) 
             .await
             .map(|task| TaskResponse { task }),
     )
+}
+
+/// Resume every paused task a single resume would restart; an absent body resumes no
+/// live task.
+async fn resume_tasks(body: Result<Option<Json<ResumeRequest>>, JsonRejection>) -> Response {
+    let request = match body {
+        Ok(body) => body.map(|Json(request)| request).unwrap_or_default(),
+        Err(rejection) => return rejected_body(rejection),
+    };
+    respond(control::resume_paused_tasks(request.include_live).await)
 }
 
 async fn delete_task(Path(id): Path<i64>) -> Response {
@@ -230,14 +248,7 @@ async fn close_holding(
 ) -> Response {
     let request = match body {
         Ok(Json(request)) => request,
-        Err(rejection) => {
-            return ApiError::new(
-                ApiErrorCode::InvalidInput,
-                ids::ERRORS_COPY_REQUEST_REJECTED,
-            )
-            .details(rejection.body_text())
-            .into_response();
-        }
+        Err(rejection) => return rejected_body(rejection),
     };
     respond(workspace::close_paper_holding(id, &mint, request.opened_at).await)
 }
@@ -253,6 +264,17 @@ async fn wallet_profile(Path(address): Path<String>) -> Response {
     respond(workspace::wallet_profile(&address).await)
 }
 
+/// A request body that is not the endpoint's JSON shape, refused before any task is
+/// touched.
+fn rejected_body(rejection: JsonRejection) -> Response {
+    ApiError::new(
+        ApiErrorCode::InvalidInput,
+        ids::ERRORS_COPY_REQUEST_REJECTED,
+    )
+    .details(rejection.body_text())
+    .into_response()
+}
+
 fn respond<T: Serialize>(result: crate::trader::Result<T>) -> Response {
     match result {
         Ok(value) => success_response(value),
@@ -262,53 +284,37 @@ fn respond<T: Serialize>(result: crate::trader::Result<T>) -> Response {
 
 fn copy_error(error: &crate::trader::Error) -> Response {
     use crate::trader::Error;
-    let (code, id) = match error {
-        Error::CopyTaskNotFound { .. } => (ApiErrorCode::NotFound, ids::ERRORS_COPY_TASK_NOT_FOUND),
-        Error::CopyHoldingNotFound { .. } => {
-            (ApiErrorCode::NotFound, ids::ERRORS_COPY_HOLDING_NOT_FOUND)
+    let code = match error {
+        Error::CopyTaskNotFound { .. } | Error::CopyHoldingNotFound { .. } => {
+            ApiErrorCode::NotFound
         }
         Error::CopyTaskRejected {
             reason: CopySkip::LiveConfirmationRequired,
-        } => (
-            ApiErrorCode::LiveConfirmationRequired,
-            ids::ERRORS_COPY_LIVE_CONFIRMATION_REQUIRED,
-        ),
-        Error::CopyTaskRejected { .. } => {
-            (ApiErrorCode::InvalidTask, ids::ERRORS_COPY_TASK_INVALID)
-        }
-        Error::CopyValidation { .. } => (
-            ApiErrorCode::InvalidInput,
-            ids::ERRORS_COPY_REQUEST_REJECTED,
-        ),
-        Error::CopyTaskLimit { .. } => (ApiErrorCode::TaskLimit, ids::ERRORS_COPY_TASK_LIMIT),
-        Error::CopyWatchRejected { .. } => {
-            (ApiErrorCode::WatchRejected, ids::ERRORS_COPY_WATCH_REJECTED)
-        }
-        Error::CopyLiveUnavailable { .. } => (
-            ApiErrorCode::LiveUnavailable,
-            ids::ERRORS_COPY_LIVE_UNAVAILABLE,
-        ),
-        Error::CopyTaskLive { .. } => (ApiErrorCode::TaskLive, ids::ERRORS_COPY_TASK_LIVE),
-        Error::CopyTaskOwnsPositions { .. } => (
-            ApiErrorCode::OpenPositions,
-            ids::ERRORS_COPY_TASK_OWNS_POSITIONS,
-        ),
-        _ => (
-            match error.http_status() {
-                500 => ApiErrorCode::CopyError,
-                status => ApiErrorCode::for_status(status),
-            },
-            ids::ERRORS_COPY_REQUEST_FAILED,
-        ),
+        } => ApiErrorCode::LiveConfirmationRequired,
+        Error::CopyTaskRejected { .. } => ApiErrorCode::InvalidTask,
+        Error::CopyValidation { .. } => ApiErrorCode::InvalidInput,
+        Error::CopyTaskLimit { .. } => ApiErrorCode::TaskLimit,
+        Error::CopyWatchRejected { .. } => ApiErrorCode::WatchRejected,
+        Error::CopyLiveUnavailable { .. } => ApiErrorCode::LiveUnavailable,
+        Error::CopyTaskLive { .. } => ApiErrorCode::TaskLive,
+        Error::CopyTaskOwnsPositions { .. } => ApiErrorCode::OpenPositions,
+        _ => match error.http_status() {
+            500 => ApiErrorCode::CopyError,
+            status => ApiErrorCode::for_status(status),
+        },
     };
-    ApiError::new(code, id)
+    ApiError::with_text(code, error.copy_ui_text())
         .details(error.to_string())
         .into_response()
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{close_holding, CloseHoldingRequest};
+    use super::{close_holding, copy_error, resume_tasks, CloseHoldingRequest, ResumeRequest};
+    use crate::trader::copy::control::CopyLiveBlock;
+    use crate::trader::copy::CopySkip;
+    use crate::trader::Error;
+    use crate::webserver::state::AppState;
     use axum::{
         body::Body,
         http::{header, Request, StatusCode},
@@ -316,6 +322,7 @@ mod tests {
         Router,
     };
     use chrono::{TimeZone, Timelike, Utc};
+    use std::sync::Arc;
     use tower::ServiceExt;
 
     async fn post_close(body: Option<&str>) -> (StatusCode, serde_json::Value) {
@@ -366,5 +373,172 @@ mod tests {
                 .unwrap()
                 .date_naive()
         );
+    }
+
+    async fn send(
+        router: Router,
+        method: &str,
+        uri: &str,
+        body: Option<&str>,
+    ) -> (StatusCode, serde_json::Value) {
+        let mut request = Request::builder().method(method).uri(uri);
+        let payload = match body {
+            Some(text) => {
+                request = request.header(header::CONTENT_TYPE, "application/json");
+                Body::from(text.to_owned())
+            }
+            None => Body::empty(),
+        };
+        let response = router
+            .oneshot(request.body(payload).expect("request"))
+            .await
+            .expect("response");
+        let status = response.status();
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body");
+        (status, serde_json::from_slice(&bytes).unwrap_or_default())
+    }
+
+    /// The bulk resume reaches its own handler, never the task route: an unknown field is
+    /// refused by the resume handler before any store is opened, while a POST to a task id
+    /// falls through to the task route's 405.
+    #[tokio::test]
+    async fn the_bulk_resume_is_not_captured_by_the_task_route() {
+        let router = super::routes().with_state(Arc::new(AppState::new()));
+        let (status, json) = send(
+            router.clone(),
+            "POST",
+            "/tasks/resume",
+            Some(r#"{"includeLive":true}"#),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(json["error"]["code"], "INVALID_INPUT");
+        assert_eq!(json["error"]["text"]["id"], "errors-copy-request-rejected");
+        let (status, _) = send(router, "POST", "/tasks/7", Some("{}")).await;
+        assert_eq!(status, StatusCode::METHOD_NOT_ALLOWED);
+    }
+
+    /// An empty object and an absent field leave live tasks out; only an explicit
+    /// `true` includes them.
+    #[test]
+    fn the_resume_body_defaults_to_leaving_live_tasks_out() {
+        let parse =
+            |text: &str| serde_json::from_str::<ResumeRequest>(text).map(|r| r.include_live);
+        assert!(!ResumeRequest::default().include_live);
+        assert!(!parse("{}").expect("empty object"));
+        assert!(!parse(r#"{"include_live":false}"#).expect("false"));
+        assert!(parse(r#"{"include_live":true}"#).expect("true"));
+    }
+
+    /// A body that is not the resume request is refused before any task is touched, so
+    /// a misspelled or mistyped flag never resumes or skips tasks silently.
+    #[tokio::test]
+    async fn a_malformed_resume_body_is_a_structured_rejection() {
+        for body in [
+            r#"{"includeLive":true}"#,
+            r#"{"include_live":"yes"}"#,
+            r#"{"include_live":null}"#,
+            "true",
+            "[1]",
+            "not json",
+        ] {
+            let router = Router::new().route("/tasks/resume", post(resume_tasks));
+            let (status, json) = send(router, "POST", "/tasks/resume", Some(body)).await;
+            assert_eq!(status, StatusCode::BAD_REQUEST, "body {body}");
+            assert_eq!(json["error"]["code"], "INVALID_INPUT", "body {body}");
+        }
+    }
+
+    /// Every copy error answers with its own API code and catalog message, so the copy
+    /// API and the per-task result of a bulk resume name the same failure.
+    #[tokio::test]
+    async fn every_copy_error_has_its_code_and_message() {
+        let cases = [
+            (
+                Error::CopyTaskNotFound { task_id: 7 },
+                "NOT_FOUND",
+                "errors-copy-task-not-found",
+            ),
+            (
+                Error::CopyHoldingNotFound {
+                    task_id: 7,
+                    mint: "Mint111".to_owned(),
+                },
+                "NOT_FOUND",
+                "errors-copy-holding-not-found",
+            ),
+            (
+                Error::CopyTaskRejected {
+                    reason: CopySkip::LiveConfirmationRequired,
+                },
+                "LIVE_CONFIRMATION_REQUIRED",
+                "errors-copy-live-confirmation-required",
+            ),
+            (
+                Error::CopyTaskRejected {
+                    reason: CopySkip::ModeTransitionRequired,
+                },
+                "INVALID_TASK",
+                "errors-copy-task-invalid",
+            ),
+            (
+                Error::CopyValidation {
+                    detail: "unknown field".to_owned(),
+                },
+                "INVALID_INPUT",
+                "errors-copy-request-rejected",
+            ),
+            (
+                Error::CopyTaskLimit { maximum: 2 },
+                "TASK_LIMIT",
+                "errors-copy-task-limit",
+            ),
+            (
+                Error::CopyWatchRejected {
+                    detail: "refused".to_owned(),
+                },
+                "WATCH_REJECTED",
+                "errors-copy-watch-rejected",
+            ),
+            (
+                Error::CopyLiveUnavailable {
+                    reason: CopyLiveBlock::CopyTradingDisabled,
+                },
+                "LIVE_UNAVAILABLE",
+                "errors-copy-live-unavailable",
+            ),
+            (
+                Error::CopyTaskLive { task_id: 7 },
+                "TASK_LIVE",
+                "errors-copy-task-live",
+            ),
+            (
+                Error::CopyTaskOwnsPositions {
+                    task_id: 7,
+                    open_positions: 1,
+                },
+                "OPEN_POSITIONS",
+                "errors-copy-task-owns-positions",
+            ),
+            (
+                Error::CopyReconciliation {
+                    detail: "rollback failed".to_owned(),
+                },
+                "COPY_ERROR",
+                "errors-copy-request-failed",
+            ),
+        ];
+        for (error, code, message) in cases {
+            assert_eq!(error.copy_ui_text().id, message, "{error:?}");
+            let response = copy_error(&error);
+            let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+                .await
+                .expect("body");
+            let json: serde_json::Value = serde_json::from_slice(&bytes).expect("json");
+            assert_eq!(json["error"]["code"], code, "{error:?}");
+            assert_eq!(json["error"]["text"]["id"], message, "{error:?}");
+        }
     }
 }

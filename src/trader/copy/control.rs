@@ -10,6 +10,7 @@ use super::CopyDatabase;
 use crate::trader::{Error, Result};
 
 mod books;
+mod resume;
 mod status;
 mod tasks;
 #[cfg(test)]
@@ -22,12 +23,13 @@ pub use books::{
     book_stats, list_activity, overview, summarize, task_stats, task_stats_for, CopyTaskSummary,
     CopyTotals, CopyTradingOverview, TaskRounds,
 };
+pub use resume::{resume_paused_tasks, CopyResumeKept, CopyResumeKeptReason, CopyResumeOutcome};
 /// The task state label, reached by the copy module's label tests.
 #[cfg(test)]
 pub(super) use status::effective_state;
 pub use status::{
-    build_status, followed_wallets, live_block_reason, status, stop_copy_trading, CopyLiveBlock,
-    CopyTradingStatus,
+    build_status, followed_wallets, live_block_reason, resumable_counts, status, stop_copy_trading,
+    CopyLiveBlock, CopyTradingStatus,
 };
 pub use tasks::{
     create_task, delete_task, get_task, list_tasks, merge_task_patch, set_task_mode, update_task,

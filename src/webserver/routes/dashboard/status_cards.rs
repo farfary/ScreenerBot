@@ -136,6 +136,8 @@ mod tests {
             active_tasks: active,
             paper_tasks: active,
             live_tasks: 0,
+            resumable_tasks: 0,
+            resumable_live_tasks: 0,
         }
     }
 

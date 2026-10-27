@@ -68,6 +68,33 @@ pub enum CopyPauseReason {
     StorageRestored,
 }
 
+/// How a paused task comes back: a resume, or first a repair of its wallet watch.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CopyRecovery {
+    /// Resuming the task restarts it; nothing else stands in the way.
+    Resume,
+    /// The watch provider or its processing failed; the watch is retried first.
+    RetryWatch,
+    /// The wallet outran its watch budget, so missed activity must be restored first.
+    RestoreWatch,
+}
+
+impl CopyPauseReason {
+    /// The recovery path of a task paused for this reason; the one mapping from a
+    /// pause reason to how the task comes back.
+    pub fn recovery(&self) -> CopyRecovery {
+        match self {
+            Self::User
+            | Self::LatencyKillSwitch { .. }
+            | Self::WatchDetached
+            | Self::StorageRestored => CopyRecovery::Resume,
+            Self::HeliusUnavailable | Self::WatchProcessingFailed => CopyRecovery::RetryWatch,
+            Self::WatchBudgetExceeded { .. } => CopyRecovery::RestoreWatch,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CopyTask {
     pub id: i64,
@@ -113,6 +140,17 @@ impl CopyTask {
     /// Whether wallet buys paid in a stable coin are copied.
     pub fn copies_stable_quoted(&self, global: bool) -> bool {
         self.copy_stable_quoted.unwrap_or(global)
+    }
+
+    /// How the task comes back from its pause; `None` while it is enabled. A pause
+    /// stored without a reason comes back with a resume, as the per-task resume
+    /// restarts it.
+    pub fn recovery(&self) -> Option<CopyRecovery> {
+        (!self.enabled).then(|| {
+            self.pause_reason
+                .as_ref()
+                .map_or(CopyRecovery::Resume, CopyPauseReason::recovery)
+        })
     }
 }
 

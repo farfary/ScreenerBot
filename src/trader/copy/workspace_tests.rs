@@ -69,7 +69,9 @@ pub(super) fn summary_fixture() -> CopyTaskSummary {
         effective_require_filter_pass: false,
         effective_copy_stable_quoted: false,
         pnl_trend: Vec::new(),
+        net_pnl_native: 0.0,
         pause_text: None,
+        recovery: None,
         exit_policy_issue: None,
     }
 }

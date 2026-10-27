@@ -208,7 +208,36 @@ pub async fn update_task(id: i64, patch: serde_json::Value) -> Result<CopyTask> 
         .get_task(id)
         .await?
         .ok_or(Error::CopyTaskNotFound { task_id: id })?;
-    let mut task = patched_task(&original, patch, ExitPolicy::from_config())?;
+    apply_task_update(
+        &db,
+        original,
+        patch,
+        ExitPolicy::from_config(),
+        &|task: CopyTask| async move { sync_task_watch(&task).await },
+        &sync_open_position_management,
+    )
+    .await
+}
+
+/// The update of the stored task `original` (see [`update_task`]), over the watch and
+/// position synchronization it is given. A resume clears the pause and takes an active
+/// slot; a pause records the user as its reason.
+pub(super) async fn apply_task_update<W, WFut, P, PFut>(
+    db: &CopyDatabase,
+    original: CopyTask,
+    patch: serde_json::Value,
+    exit_base: ExitPolicy,
+    sync_watch: &W,
+    sync_positions: &P,
+) -> Result<CopyTask>
+where
+    W: Fn(CopyTask) -> WFut,
+    WFut: Future<Output = Result<()>>,
+    P: Fn(i64, ExitMode) -> PFut,
+    PFut: Future<Output = Result<()>>,
+{
+    let id = original.id;
+    let mut task = patched_task(&original, patch, exit_base)?;
     if task.target_address != original.target_address {
         return Err(Error::CopyValidation {
             detail:
@@ -226,10 +255,10 @@ pub async fn update_task(id: i64, patch: serde_json::Value) -> Result<CopyTask> 
         (original.pause_reason.clone(), original.paused_at)
     };
     if task.enabled && !original.enabled {
-        ensure_active_slot(&db).await?;
+        ensure_active_slot(db).await?;
     }
     let updated = db.update_task(task).await?;
-    if let Err(error) = sync_task_watch(&updated).await {
+    if let Err(error) = sync_watch(updated.clone()).await {
         return Err(match db.update_task(original.clone()).await {
             Ok(_) => error,
             Err(rollback) => Error::CopyReconciliation {
@@ -237,9 +266,9 @@ pub async fn update_task(id: i64, patch: serde_json::Value) -> Result<CopyTask> 
             },
         });
     }
-    if let Err(error) = sync_open_position_management(id, updated.exit_mode).await {
+    if let Err(error) = sync_positions(id, updated.exit_mode).await {
         let rollback = db.update_task(original.clone()).await;
-        let position_rollback = sync_open_position_management(id, original.exit_mode).await;
+        let position_rollback = sync_positions(id, original.exit_mode).await;
         return Err(Error::CopyReconciliation {
             detail: match (rollback, position_rollback) {
                 (Ok(_), Ok(())) => format!(

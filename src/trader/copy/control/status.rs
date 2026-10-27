@@ -6,7 +6,7 @@
 
 use serde::Serialize;
 
-use super::super::CopyTask;
+use super::super::{CopyRecovery, CopyTask};
 use super::open_database;
 use crate::trader::paper::TradingMode;
 use crate::trader::{Error, LiveBlock, Result};
@@ -24,6 +24,10 @@ pub struct CopyTradingStatus {
     pub active_tasks: usize,
     pub paper_tasks: usize,
     pub live_tasks: usize,
+    /// Paused tasks a resume restarts, the ones a bulk resume takes up.
+    pub resumable_tasks: usize,
+    /// The live tasks among `resumable_tasks`.
+    pub resumable_live_tasks: usize,
 }
 
 impl CopyTradingStatus {
@@ -53,6 +57,7 @@ pub fn build_status(tasks: &[CopyTask]) -> CopyTradingStatus {
                 config.copy_trading.block_on_force_stop,
             )
         });
+    let (resumable_tasks, resumable_live_tasks) = resumable_counts(tasks);
     CopyTradingStatus {
         enabled,
         live_available: live_block_reason().is_none(),
@@ -76,7 +81,20 @@ pub fn build_status(tasks: &[CopyTask]) -> CopyTradingStatus {
             .iter()
             .filter(|task| task.enabled && task.mode == TradingMode::Live)
             .count(),
+        resumable_tasks,
+        resumable_live_tasks,
     }
+}
+
+/// The paused tasks a resume restarts, and the live tasks among them: the tasks a bulk
+/// resume takes up.
+pub fn resumable_counts(tasks: &[CopyTask]) -> (usize, usize) {
+    tasks
+        .iter()
+        .filter(|task| task.recovery() == Some(CopyRecovery::Resume))
+        .fold((0, 0), |(all, live), task| {
+            (all + 1, live + usize::from(task.mode == TradingMode::Live))
+        })
 }
 
 /// Why a copy task cannot be armed for live right now.

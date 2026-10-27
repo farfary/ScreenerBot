@@ -9,7 +9,9 @@
     "total_tasks": 3,
     "active_tasks": 2,
     "paper_tasks": 1,
-    "live_tasks": 1
+    "live_tasks": 1,
+    "resumable_tasks": 1,
+    "resumable_live_tasks": 0
   },
   "totals": {
     "realized_pnl_native": 0.6368,
@@ -110,7 +112,9 @@
       "effective_state": "paper",
       "effective_require_filter_pass": true,
       "pnl_trend": [0.031, 0.087, 0.052, 0.121, 0.198, 0.176, 0.262, 0.311, 0.287, 0.402, 0.4825],
+      "net_pnl_native": 0.5437,
       "pause_text": null,
+      "recovery": null,
       "exit_policy_issue": null
     },
     {
@@ -192,7 +196,9 @@
       "effective_state": "live",
       "effective_require_filter_pass": false,
       "pnl_trend": [-0.022, 0.041, 0.09, 0.064, 0.133, 0.171, 0.1934],
+      "net_pnl_native": 0.1716,
       "pause_text": null,
+      "recovery": null,
       "exit_policy_issue": null
     },
     {
@@ -276,9 +282,11 @@
       "effective_state": "paused",
       "effective_require_filter_pass": true,
       "pnl_trend": [0.012, -0.018, -0.0391],
+      "net_pnl_native": -0.0344,
       "pause_text": {
         "id": "copy-pause-user"
       },
+      "recovery": "resume",
       "exit_policy_issue": null
     }
   ],

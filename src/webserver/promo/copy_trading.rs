@@ -40,6 +40,7 @@ fn status(tasks: &[CopyTask]) -> CopyTradingStatus {
             .filter(|task| task.enabled && task.mode == mode)
             .count()
     };
+    let (resumable_tasks, resumable_live_tasks) = control::resumable_counts(tasks);
     CopyTradingStatus {
         enabled: true,
         live_available: true,
@@ -51,6 +52,8 @@ fn status(tasks: &[CopyTask]) -> CopyTradingStatus {
         active_tasks: tasks.iter().filter(|task| task.enabled).count(),
         paper_tasks: running(TradingMode::Paper),
         live_tasks: running(TradingMode::Live),
+        resumable_tasks,
+        resumable_live_tasks,
     }
 }
 

@@ -51,45 +51,47 @@ pub fn pause_text(reason: Option<&CopyPauseReason>) -> UiText {
     )
 }
 
+/// Every variant, listed through an exhaustive match so a new one fails to
+/// compile until it is added here, to the catalog and to `PAUSE_SHORT_LABELS`
+/// (pages/copy/format.js). The one list of pause reasons the copy module's tests
+/// share.
+#[cfg(test)]
+pub(super) fn every_pause_reason() -> Vec<CopyPauseReason> {
+    let listed = |reason: CopyPauseReason| match reason {
+        CopyPauseReason::User
+        | CopyPauseReason::LatencyKillSwitch { .. }
+        | CopyPauseReason::WatchDetached
+        | CopyPauseReason::WatchBudgetExceeded { .. }
+        | CopyPauseReason::HeliusUnavailable
+        | CopyPauseReason::WatchProcessingFailed
+        | CopyPauseReason::StorageRestored => reason,
+    };
+    vec![
+        listed(CopyPauseReason::User),
+        listed(CopyPauseReason::LatencyKillSwitch {
+            average_ms: 4200,
+            threshold_ms: 3000,
+        }),
+        listed(CopyPauseReason::WatchDetached),
+        listed(CopyPauseReason::WatchBudgetExceeded {
+            page_budget: 8,
+            signatures_checked: 800,
+        }),
+        listed(CopyPauseReason::HeliusUnavailable),
+        listed(CopyPauseReason::WatchProcessingFailed),
+        listed(CopyPauseReason::StorageRestored),
+    ]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::i18n::{format_en, LanguageIdentifier};
 
-    /// Every variant, listed through an exhaustive match so a new one fails to
-    /// compile until it is added here, to the catalog and to `PAUSE_SHORT_LABELS`
-    /// (pages/copy/format.js).
-    fn all() -> Vec<CopyPauseReason> {
-        let listed = |reason: CopyPauseReason| match reason {
-            CopyPauseReason::User
-            | CopyPauseReason::LatencyKillSwitch { .. }
-            | CopyPauseReason::WatchDetached
-            | CopyPauseReason::WatchBudgetExceeded { .. }
-            | CopyPauseReason::HeliusUnavailable
-            | CopyPauseReason::WatchProcessingFailed
-            | CopyPauseReason::StorageRestored => reason,
-        };
-        vec![
-            listed(CopyPauseReason::User),
-            listed(CopyPauseReason::LatencyKillSwitch {
-                average_ms: 4200,
-                threshold_ms: 3000,
-            }),
-            listed(CopyPauseReason::WatchDetached),
-            listed(CopyPauseReason::WatchBudgetExceeded {
-                page_budget: 8,
-                signatures_checked: 800,
-            }),
-            listed(CopyPauseReason::HeliusUnavailable),
-            listed(CopyPauseReason::WatchProcessingFailed),
-            listed(CopyPauseReason::StorageRestored),
-        ]
-    }
-
     #[test]
     fn every_pause_reason_has_catalog_text_named_after_its_kind() {
         let en: LanguageIdentifier = "en".parse().unwrap();
-        for reason in all() {
+        for reason in every_pause_reason() {
             let kind = serde_json::to_value(&reason).unwrap()["kind"]
                 .as_str()
                 .unwrap()

@@ -77,7 +77,9 @@
   "effective_state": "paper",
   "effective_require_filter_pass": true,
   "pnl_trend": [],
+  "net_pnl_native": 0,
   "pause_text": null,
+  "recovery": null,
   "exit_policy_issue": null,
   "trader_defaults": {
     "stop_loss": {

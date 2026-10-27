@@ -1,7 +1,8 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Task patch merging, the per-task book stats and the removal of a task.
+//! Task patch merging, the per-task book stats, the pause recovery and the removal of a
+//! task.
 
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
@@ -12,14 +13,16 @@ use super::tasks::{attach_while_stored, delete_task_with};
 use super::{book_stats, followed_wallets, merge_task_patch, CopyTradingStatus, TaskRounds};
 use crate::positions::{Book, Position};
 use crate::trader::copy::paper_execution::PaperExecutionHandle;
-use crate::trader::copy::round_fixtures::{closed, open_round};
+use crate::trader::copy::pause::every_pause_reason;
+use crate::trader::copy::round_fixtures::{closed, marked, open_round};
 use crate::trader::copy::{
-    CopyActivityRow, CopyDatabase, CopyOutcome, CopySkip, CopyTask, ExitMode, SizingMode,
+    CopyActivityRow, CopyDatabase, CopyOutcome, CopyPauseReason, CopyRecovery, CopySkip, CopyTask,
+    ExitMode, SizingMode,
 };
 use crate::trader::paper::TradingMode;
 use crate::trader::types::TradeReason;
 
-fn stored() -> CopyTask {
+pub(super) fn stored() -> CopyTask {
     CopyTask {
         id: 3,
         chain: crate::chains::ChainId::Solana,
@@ -81,7 +84,7 @@ fn stored_with_stale_trail() -> CopyTask {
     task
 }
 
-fn global_policy() -> crate::trader::policy::ExitPolicy {
+pub(super) fn global_policy() -> crate::trader::policy::ExitPolicy {
     crate::trader::policy::ExitPolicy::from_trader_config(&crate::config::TraderConfig::default())
 }
 
@@ -357,6 +360,8 @@ fn copy_status(
         active_tasks,
         paper_tasks: active_tasks,
         live_tasks: 0,
+        resumable_tasks: 0,
+        resumable_live_tasks: 0,
     }
 }
 
@@ -789,4 +794,148 @@ async fn an_attach_never_outlives_the_task_row() {
     .await
     .unwrap();
     assert!(watched.lock().unwrap().is_empty());
+}
+
+pub(super) fn budget_pause() -> CopyPauseReason {
+    CopyPauseReason::WatchBudgetExceeded {
+        page_budget: 5,
+        signatures_checked: 500,
+    }
+}
+
+/// Every pause reason, from the one list of them, comes back the way its kind states:
+/// a resume, a watch retry or a restore of missed activity.
+#[test]
+fn every_pause_reason_maps_to_its_recovery() {
+    let stated = [
+        ("user", CopyRecovery::Resume),
+        ("latency_kill_switch", CopyRecovery::Resume),
+        ("watch_detached", CopyRecovery::Resume),
+        ("storage_restored", CopyRecovery::Resume),
+        ("helius_unavailable", CopyRecovery::RetryWatch),
+        ("watch_processing_failed", CopyRecovery::RetryWatch),
+        ("watch_budget_exceeded", CopyRecovery::RestoreWatch),
+    ];
+    for reason in every_pause_reason() {
+        let kind = serde_json::to_value(&reason).unwrap()["kind"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        let (_, recovery) = stated
+            .iter()
+            .find(|(name, _)| *name == kind)
+            .unwrap_or_else(|| panic!("no recovery stated for {kind}"));
+        assert_eq!(reason.recovery(), *recovery, "{reason:?}");
+        let mut task = stored();
+        task.enabled = false;
+        task.pause_reason = Some(reason.clone());
+        assert_eq!(task.recovery(), Some(*recovery), "{reason:?}");
+    }
+    assert_eq!(
+        serde_json::to_value(CopyRecovery::RestoreWatch).unwrap(),
+        "restore_watch"
+    );
+}
+
+/// An enabled task has no recovery, and a pause stored without a reason comes back
+/// with a resume.
+#[test]
+fn only_a_paused_task_has_a_recovery() {
+    assert_eq!(stored().recovery(), None);
+    let mut unexplained = stored();
+    unexplained.enabled = false;
+    assert_eq!(unexplained.recovery(), Some(CopyRecovery::Resume));
+}
+
+/// The resumable counts take the paused tasks whose recovery is a resume, in either
+/// mode, and never an enabled task or a watch-recovery pause.
+#[test]
+fn the_status_counts_resumable_and_resumable_live_tasks() {
+    crate::config::utils::install_default_config();
+    let task = |id: i64, mode: TradingMode, pause: Option<CopyPauseReason>| CopyTask {
+        id,
+        mode,
+        enabled: pause.is_none(),
+        pause_reason: pause,
+        ..stored()
+    };
+    let tasks = [
+        task(1, TradingMode::Paper, None),
+        task(2, TradingMode::Live, None),
+        task(3, TradingMode::Paper, Some(CopyPauseReason::User)),
+        task(4, TradingMode::Live, Some(CopyPauseReason::WatchDetached)),
+        task(5, TradingMode::Live, Some(CopyPauseReason::StorageRestored)),
+        task(6, TradingMode::Paper, Some(budget_pause())),
+        task(
+            7,
+            TradingMode::Live,
+            Some(CopyPauseReason::HeliusUnavailable),
+        ),
+    ];
+    let status = super::build_status(&tasks);
+    assert_eq!((status.active_tasks, status.live_tasks), (2, 1));
+    assert_eq!(status.resumable_tasks, 3);
+    assert_eq!(status.resumable_live_tasks, 2);
+
+    let none_paused = super::build_status(&tasks[..2]);
+    assert_eq!(
+        (
+            none_paused.resumable_tasks,
+            none_paused.resumable_live_tasks
+        ),
+        (0, 0)
+    );
+}
+
+/// The summary's net P&L is the book's realized plus unrealized P&L, an unpriced
+/// holding counting as zero, and its recovery follows the pause.
+#[test]
+fn the_summary_carries_net_pnl_and_the_recovery() {
+    crate::config::utils::install_default_config();
+    let now = Utc::now();
+    let rounds = TaskRounds {
+        positions: vec![
+            closed(
+                open_round(3, Book::Paper, "won", 0.01, 1.0, 30),
+                0.4,
+                TradeReason::CopySell,
+                now,
+            ),
+            closed(
+                open_round(3, Book::Paper, "lost", 0.01, 1.0, 20),
+                -0.3,
+                TradeReason::StopLoss,
+                now,
+            ),
+            marked(
+                open_round(3, Book::Paper, "priced", 0.01, 1.0, 10),
+                Some(0.012),
+            ),
+            marked(open_round(3, Book::Paper, "unpriced", 0.01, 1.0, 15), None),
+        ],
+        run_start: Some(now - chrono::Duration::hours(1)),
+    };
+    let status = super::build_status(&[stored()]);
+    let (summary, _) = super::summarize(&status, stored(), &[], &rounds, 0.0);
+    assert_eq!(summary.stats.unpriced_positions, 1);
+    assert_eq!(
+        summary.net_pnl_native,
+        summary.stats.realized_pnl_native + summary.stats.unrealized_pnl_native
+    );
+    assert!(
+        (summary.net_pnl_native - 0.3).abs() < 1e-9,
+        "{}",
+        summary.net_pnl_native
+    );
+    assert_eq!(summary.recovery, None);
+
+    let mut paused = stored();
+    paused.enabled = false;
+    paused.pause_reason = Some(budget_pause());
+    let (summary, _) = super::summarize(&status, paused, &[], &rounds, 0.0);
+    assert_eq!(summary.recovery, Some(CopyRecovery::RestoreWatch));
+    assert_eq!(
+        serde_json::to_value(&summary).unwrap()["recovery"],
+        "restore_watch"
+    );
 }

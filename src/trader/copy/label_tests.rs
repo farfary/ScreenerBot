@@ -121,6 +121,8 @@ fn status(enabled: bool, blocked_reason: Option<&'static str>) -> CopyTradingSta
         active_tasks: 1,
         paper_tasks: 1,
         live_tasks: 0,
+        resumable_tasks: 0,
+        resumable_live_tasks: 0,
     }
 }
 
