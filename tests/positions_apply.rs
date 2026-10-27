@@ -20,9 +20,10 @@ use screenerbot::positions::verifier::{
     check_exit_residual, classify_exit_residual, unsold_own_holding, ExitResidual,
 };
 use screenerbot::positions::{
-    buy_target, db, state, ApplyFailureDisposition, BuyTarget, Error, GiveUpReason, PendingDcaSwap,
-    PendingPartialExit, Position, PositionManagement, PositionOrigin, PositionTransition,
-    PriceSource, VerificationItem, VerificationKind, FORCE_CLOSED_PREFIX,
+    add_to_position, buy_target, db, is_dca_pending, state, ApplyFailureDisposition, BuyTarget,
+    Error, GiveUpReason, PendingDcaSwap, PendingPartialExit, Position, PositionManagement,
+    PositionOrigin, PositionTransition, PriceSource, TradeOrigin, VerificationItem,
+    VerificationKind, FORCE_CLOSED_PREFIX,
 };
 use screenerbot::trader::safety::loss_limit::{
     get_loss_limit_status, initialize_from_history, is_entry_blocked_by_loss_limit,
@@ -655,7 +656,8 @@ fn dca_overflow_changes_nothing_and_records_nothing() {
 }
 
 /// The columns the price updater owns.
-const PRICE_COLUMNS: [&str; 7] = [
+const PRICE_COLUMNS: [&str; 8] = [
+    "basis_peak_price",
     "current_price",
     "current_price_updated",
     "price_highest",
@@ -828,12 +830,261 @@ fn a_price_update_writes_only_the_price_and_pnl_columns() {
             }
             assert_eq!(stored_column(id, "current_price"), Value::Real(2.0));
             assert_eq!(stored_column(id, "price_highest"), Value::Real(2.0));
+            assert_eq!(stored_column(id, "basis_peak_price"), Value::Real(2.0));
             let live = memory_position(id).await;
             assert_eq!(
                 stored_column(id, "unrealized_pnl"),
                 live.unrealized_pnl.map_or(Value::Null, Value::Real)
             );
             assert!(live.unrealized_pnl.is_some(), "unrealized P&L computed");
+        },
+    );
+}
+
+/// A verified add of 0.5 tokens for 0.425 SOL: a fill price of 0.85 against the position's
+/// 1 token bought for 1 SOL, which moves the average entry to 0.95.
+fn dca_at_0_85(id: i64) -> PositionTransition {
+    PositionTransition::DcaVerified {
+        position_id: id,
+        tokens_bought: RawAmount::new(500_000),
+        native_spent: 0.425,
+        effective_price: 0.85,
+        fee_raw: 5_000,
+        dca_time: Utc::now(),
+        dca_signature: DCA_SIGNATURE.to_owned(),
+        held_after: None,
+    }
+}
+
+/// An open position that peaked at 1.09 over its 1.00 entry before any add.
+async fn open_position_peaked_at_1_09() -> i64 {
+    open_position(|position| {
+        position.price_highest = 1.09;
+        position.basis_peak_price = 1.09;
+        position.current_price = Some(0.85);
+    })
+    .await
+}
+
+fn assert_close(actual: f64, expected: f64, what: &str) {
+    assert!(
+        (actual - expected).abs() < 1e-9,
+        "{what}: expected {expected}, got {actual}"
+    );
+}
+
+#[test]
+fn a_verified_add_restarts_the_basis_peak_at_its_fill_and_a_replay_keeps_it() {
+    common::run_isolated(
+        module_path!(),
+        "a_verified_add_restarts_the_basis_peak_at_its_fill_and_a_replay_keeps_it",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            let id = open_position_peaked_at_1_09().await;
+            register_dca(id).await;
+
+            apply_transition(dca_at_0_85(id))
+                .await
+                .expect("the add is booked");
+            for position in [memory_position(id).await, stored_position(id).await] {
+                assert_close(position.average_entry_price, 0.95, "average entry");
+                assert_close(position.basis_peak_price, 0.85, "basis peak");
+                assert_close(position.price_highest, 1.09, "round peak");
+            }
+
+            update_position_price_and_pnl(id, common::TEST_MINT, 0.9, PriceSource::Api)
+                .await
+                .expect("price update");
+            assert_close(
+                memory_position(id).await.basis_peak_price,
+                0.9,
+                "raised basis peak",
+            );
+            assert_eq!(stored_column(id, "basis_peak_price"), Value::Real(0.9));
+
+            // A replay of the booked add changes nothing: the peak the price raised stays.
+            apply_transition(dca_at_0_85(id))
+                .await
+                .expect("a replay is a no-op");
+            for position in [memory_position(id).await, stored_position(id).await] {
+                assert_close(
+                    position.average_entry_price,
+                    0.95,
+                    "average entry after replay",
+                );
+                assert_close(position.basis_peak_price, 0.9, "basis peak after replay");
+                assert_eq!(position.dca_count, 1);
+            }
+            assert_eq!(entry_records(id).await, 1);
+        },
+    );
+}
+
+/// Raises the basis peak of `id` in memory only, as a price tick does before its write
+/// reaches storage.
+async fn raise_basis_peak_in_memory(id: i64, peak: f64) {
+    assert!(
+        state::update_position_state_by_id(id, |live| {
+            live.price_highest = peak;
+            live.basis_peak_price = peak;
+        })
+        .await,
+        "position in memory"
+    );
+}
+
+#[test]
+fn a_booking_that_keeps_the_average_keeps_the_live_basis_peak() {
+    common::run_isolated(
+        module_path!(),
+        "a_booking_that_keeps_the_average_keeps_the_live_basis_peak",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            let id = open_position(|_| {}).await;
+            raise_basis_peak_in_memory(id, 2.0).await;
+            register_partial(id).await;
+
+            apply_transition(partial_exit(id))
+                .await
+                .expect("the partial exit is booked");
+            let stored = stored_position(id).await;
+            assert_close(stored.basis_peak_price, 1.0, "stored basis peak");
+            let live = memory_position(id).await;
+            assert_close(live.average_entry_price, 1.0, "average entry");
+            assert_close(
+                live.basis_peak_price,
+                2.0,
+                "the booking reverted the basis peak memory raised",
+            );
+        },
+    );
+}
+
+/// An entry verification moves the average from the quoted price to the effective one
+/// without a new buy, so the peak memory raised in the meantime stands.
+#[test]
+fn an_entry_verification_that_moves_the_average_keeps_the_live_basis_peak() {
+    common::run_isolated(
+        module_path!(),
+        "an_entry_verification_that_moves_the_average_keeps_the_live_basis_peak",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            let id = open_position(|position| {
+                position.transaction_entry_verified = false;
+                position.average_entry_price = 0.98;
+                position.basis_peak_price = 0.98;
+            })
+            .await;
+            raise_basis_peak_in_memory(id, 1.4).await;
+
+            apply_transition(entry_verified(id))
+                .await
+                .expect("the entry commits");
+            let stored = stored_position(id).await;
+            assert_close(stored.average_entry_price, 1.0, "stored average entry");
+            assert_close(stored.basis_peak_price, 0.98, "stored basis peak");
+            let live = memory_position(id).await;
+            assert_close(live.average_entry_price, 1.0, "average entry");
+            assert_close(
+                live.basis_peak_price,
+                1.4,
+                "the entry verification dropped the basis peak memory raised",
+            );
+        },
+    );
+}
+
+#[test]
+fn a_price_write_from_a_snapshot_before_an_add_keeps_the_restarted_peak() {
+    common::run_isolated(
+        module_path!(),
+        "a_price_write_from_a_snapshot_before_an_add_keeps_the_restarted_peak",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            let id = open_position_peaked_at_1_09().await;
+            let before_add = memory_position(id).await;
+            register_dca(id).await;
+            apply_transition(dca_at_0_85(id))
+                .await
+                .expect("the add is booked");
+
+            // A price tick that read the position before the add was published: it still
+            // carries the old average and the round's peak as its basis peak.
+            assert!(
+                state::update_position_state_by_id(id, |live| *live = before_add).await,
+                "position in memory"
+            );
+            update_position_price_and_pnl(id, common::TEST_MINT, 0.86, PriceSource::Api)
+                .await
+                .expect("price update");
+
+            assert_eq!(stored_column(id, "basis_peak_price"), Value::Real(0.85));
+            assert_close(
+                stored_position(id).await.average_entry_price,
+                0.95,
+                "average entry",
+            );
+        },
+    );
+}
+
+#[test]
+fn a_failed_add_releases_the_in_flight_guard() {
+    common::run_isolated(
+        module_path!(),
+        "a_failed_add_releases_the_in_flight_guard",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            let id = open_position(|_| {}).await;
+            register_dca(id).await;
+            assert!(is_dca_pending(common::TEST_MINT).await);
+
+            apply_transition(PositionTransition::DcaFailed {
+                position_id: id,
+                dca_signature: DCA_SIGNATURE.to_owned(),
+                reason: "expired without landing".to_owned(),
+            })
+            .await
+            .expect("the failure is applied");
+            assert!(!is_dca_pending(common::TEST_MINT).await);
+        },
+    );
+}
+
+#[test]
+fn an_automatic_add_is_refused_while_another_add_is_in_flight() {
+    common::run_isolated(
+        module_path!(),
+        "an_automatic_add_is_refused_while_another_add_is_in_flight",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            common::set_config(|cfg| cfg.trader.dca_enabled = true);
+            let id = open_position(|position| position.current_price = Some(0.5)).await;
+            register_dca(id).await;
+            let before = in_storage(id).await;
+
+            let add = tokio::time::timeout(
+                std::time::Duration::from_secs(20),
+                add_to_position(common::TEST_MINT, 0.01, None, TradeOrigin::Auto),
+            )
+            .await
+            .expect("an add beside an add in flight must be refused at once");
+            match add {
+                Err(Error::TransitionFailed {
+                    transition: "dca",
+                    detail,
+                    ..
+                }) => assert!(detail.contains("in flight"), "{detail}"),
+                other => panic!("expected the add to be refused, got {other:?}"),
+            }
+            assert_unchanged(id, &before).await;
+            assert!(dca_pending().await, "the add in flight is still pending");
         },
     );
 }
@@ -4414,6 +4665,56 @@ fn a_late_fill_after_a_new_buy_adds_to_the_open_position() {
                 !state::try_consume_global_position_permit(),
                 "the open position did not take its trading slot back"
             );
+        },
+    );
+}
+
+/// An add whose fill lands late on a closed position and is handed to the open position of
+/// the mint stays in flight until the open position in memory carries it: an automatic add
+/// admitted once the marker clears must read the handed-over add in the open position's add
+/// count and cooldown.
+#[test]
+fn a_late_add_handed_to_the_open_position_stays_in_flight_until_that_position_carries_it() {
+    common::run_isolated(
+        module_path!(),
+        "a_late_add_handed_to_the_open_position_stays_in_flight_until_that_position_carries_it",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            common::start_events().await;
+            let closed = written_off(|_| {}).await;
+            let open = store_position(|_| {}).await;
+            register_dca(closed).await;
+            assert_eq!(memory_position(open).await.dca_count, 0);
+
+            // Reads the open position's add count the first time the marker is seen cleared.
+            let watcher = tokio::spawn(tokio::time::timeout(
+                std::time::Duration::from_secs(20),
+                async move {
+                    while is_dca_pending(common::TEST_MINT).await {
+                        tokio::task::yield_now().await;
+                    }
+                    memory_position(open).await.dca_count
+                },
+            ));
+
+            apply_transition(late_dca(
+                closed,
+                Some(RawAmount::new(HELD + HELD + 500_000)),
+            ))
+            .await
+            .expect("the late DCA is booked");
+
+            let dca_count_at_clear = watcher
+                .await
+                .expect("the watcher completes")
+                .expect("the marker clears after the booking");
+            assert_eq!(
+                dca_count_at_clear, 1,
+                "the marker cleared before the open position carried the add"
+            );
+            assert_eq!(stored_position(open).await.dca_count, 1);
+            assert!(!is_dca_pending(common::TEST_MINT).await);
         },
     );
 }

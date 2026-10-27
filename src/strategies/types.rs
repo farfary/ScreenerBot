@@ -158,7 +158,7 @@ pub struct PositionData {
     pub current_size_sol: f64,
     pub unrealized_profit_pct: Option<f64>,
     pub position_age_hours: f64,
-    /// Highest pool price seen while the position was open.
+    /// Highest pool price since the position's average entry price last changed.
     pub peak_price: Option<f64>,
 }
 

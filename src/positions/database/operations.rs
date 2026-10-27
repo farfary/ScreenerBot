@@ -26,8 +26,10 @@ use super::types::*;
 /// The schema of `positions.db`. Older cores read `position_metadata.schema_version`.
 pub(crate) const SCHEMA: StoreSchema = StoreSchema {
     version: POSITIONS_SCHEMA_VERSION as i64,
+    // Version 7 adds `basis_peak_price NOT NULL` without a default, which no earlier core
+    // writes, so v7 is the oldest version that reads the store.
     min_reader_version: POSITIONS_SCHEMA_VERSION as i64,
-    baseline: POSITIONS_SCHEMA_VERSION as i64,
+    baseline: POSITIONS_LEDGER_BASELINE_VERSION as i64,
     renames: Some(&super::column_names::RENAMES),
     step,
     legacy_stamp: Some(LegacyStamp {
@@ -90,6 +92,9 @@ fn create_schema(tx: &Transaction<'_>, chains: &[ChainId]) -> Result<Vec<String>
         "positions",
         POSITIONS_CHAIN_COLUMNS,
     )?);
+    let basis_peak_added = add_missing_columns(tx, "positions", POSITIONS_BASIS_PEAK_COLUMNS)?;
+    let seeds_basis_peak = !basis_peak_added.is_empty();
+    added.extend(basis_peak_added);
     if !added.is_empty() {
         summary.push(format!("added positions columns {}", added.join(", ")));
     }
@@ -135,6 +140,11 @@ fn create_schema(tx: &Transaction<'_>, chains: &[ChainId]) -> Result<Vec<String>
         ),
     }
 
+    // The seed reads the add counters, so it runs once the counters above are repaired.
+    if seeds_basis_peak {
+        backfill_basis_peak(tx)?;
+    }
+
     for index_sql in POSITIONS_INDEXES {
         tx.execute(index_sql, [])
             .map_err(|e| Error::SchemaMigration {
@@ -158,6 +168,27 @@ fn create_schema(tx: &Transaction<'_>, chains: &[ChainId]) -> Result<Vec<String>
         run_data_migrations(tx, *chain, &mut summary)?;
     }
     Ok(summary)
+}
+
+/// Seeds the basis peak of every row of a store that predates it, in the open that adds the
+/// column. A closed row keeps its running maximum: no stop measures from it again. An open
+/// row without adds whose average is still its first fill has had one average since it
+/// opened, so its running maximum is its basis peak. Any other open row may have peaked
+/// before an add or a buy made elsewhere moved its average, and no price history says when,
+/// so its peak restarts at the average entry price: the trailing stop re-arms only on a gain
+/// made against that average.
+fn backfill_basis_peak(conn: &Connection) -> Result<()> {
+    conn.execute(
+        "UPDATE positions SET basis_peak_price = CASE
+            WHEN exit_time IS NOT NULL THEN price_highest
+            WHEN dca_count = 0 AND average_entry_price = COALESCE(effective_entry_price, entry_price) THEN price_highest
+            ELSE average_entry_price END",
+        [],
+    )
+    .map_err(|e| Error::SchemaMigration {
+        detail: format!("failed to backfill positions.basis_peak_price: {e}"),
+    })?;
+    Ok(())
 }
 
 /// Data migrations for rows written by earlier releases; a failure refuses the open
@@ -315,12 +346,12 @@ impl PositionsDatabase {
         pnl, pnl_percent, unrealized_pnl, unrealized_pnl_percent,
         remaining_token_amount, total_exited_amount, average_exit_price, partial_exit_count,
         dca_count, average_entry_price, last_dca_time, origin_kind, origin_ref, management,
-        round_key, basis_complete, history_complete, holding_state
+        round_key, basis_complete, history_complete, holding_state, basis_peak_price
       ) VALUES (
         ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17,
         ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32, ?33,
         ?34, ?35, ?36, ?37, ?38, ?39, ?40, ?41, ?42, ?43, ?44, ?45, ?46, ?47,
-        ?48, ?49, ?50, ?51
+        ?48, ?49, ?50, ?51, ?52
       ) RETURNING id
       "#,
                 params![
@@ -375,6 +406,7 @@ impl PositionsDatabase {
                     position.basis_complete,
                     position.history_complete,
                     position.holding_state,
+                    position.basis_peak_price,
                 ],
                 |row| row.get::<_, i64>(0),
             )
@@ -419,57 +451,13 @@ impl PositionsDatabase {
         Ok(position_id)
     }
 
-    /// Update only the price-related fields for a position
-    pub async fn update_position_prices(
-        &self,
-        position_id: i64,
-        current_price: Option<f64>,
-        current_price_updated: Option<DateTime<Utc>>,
-        price_highest: f64,
-        price_lowest: f64,
-    ) -> Result<()> {
-        logger::debug(
-            LogTag::Positions,
-            &format!(
-                "Updating price fields for position ID {} (price={:?}, high={:.11}, low={:.11})",
-                position_id, current_price, price_highest, price_lowest
-            ),
-        );
-
-        let conn = self.get_connection()?;
-
-        let rows_affected = conn
-            .execute(
-                r#"
-      UPDATE positions SET
-        current_price = ?2,
-        current_price_updated = ?3,
-        price_highest = ?4,
-        price_lowest = ?5,
-        updated_at = datetime('now')
-      WHERE id = ?1 AND chain_id = ?6
-      "#,
-                params![
-                    position_id,
-                    current_price,
-                    current_price_updated.map(|t| t.to_rfc3339()),
-                    price_highest,
-                    price_lowest,
-                    self.chain.as_str(),
-                ],
-            )
-            .map_err(|e| DatabaseError::classify_sqlite_failure("update_position_prices", e))?;
-
-        if rows_affected == 0 {
-            return Err(Error::NotFoundById { position_id });
-        }
-
-        Ok(())
-    }
-
     /// Update the price fields and the unrealized P&L of a position. No booking column is
     /// written. A row that already carries an exit time keeps its unrealized P&L: the close
     /// booking cleared it, and a price computed before that booking must not restore it.
+    /// The basis peak is written only while the row's average entry price is still
+    /// `average_entry_price`, the one it was raised against: a booking that moved the
+    /// average after the price was read restarted the peak, and a peak from before that
+    /// booking must not restore the old one.
     #[allow(clippy::too_many_arguments)]
     pub async fn update_position_prices_and_pnl(
         &self,
@@ -478,6 +466,8 @@ impl PositionsDatabase {
         current_price_updated: Option<DateTime<Utc>>,
         price_highest: f64,
         price_lowest: f64,
+        basis_peak_price: f64,
+        average_entry_price: f64,
         unrealized_pnl: Option<f64>,
         unrealized_pnl_percent: Option<f64>,
     ) -> Result<()> {
@@ -491,10 +481,11 @@ impl PositionsDatabase {
         current_price_updated = ?3,
         price_highest = ?4,
         price_lowest = ?5,
-        unrealized_pnl = CASE WHEN exit_time IS NULL THEN ?6 ELSE unrealized_pnl END,
-        unrealized_pnl_percent = CASE WHEN exit_time IS NULL THEN ?7 ELSE unrealized_pnl_percent END,
+        basis_peak_price = CASE WHEN average_entry_price = ?6 THEN ?7 ELSE basis_peak_price END,
+        unrealized_pnl = CASE WHEN exit_time IS NULL THEN ?8 ELSE unrealized_pnl END,
+        unrealized_pnl_percent = CASE WHEN exit_time IS NULL THEN ?9 ELSE unrealized_pnl_percent END,
         updated_at = datetime('now')
-      WHERE id = ?1 AND chain_id = ?8
+      WHERE id = ?1 AND chain_id = ?10
       "#,
                 params![
                     position_id,
@@ -502,6 +493,8 @@ impl PositionsDatabase {
                     current_price_updated.map(|t| t.to_rfc3339()),
                     price_highest,
                     price_lowest,
+                    average_entry_price,
+                    basis_peak_price,
                     unrealized_pnl,
                     unrealized_pnl_percent,
                     self.chain.as_str(),
@@ -756,6 +749,8 @@ impl PositionsDatabase {
             total_size_native: row.get("total_size_native")?,
             price_highest: row.get("price_highest")?,
             price_lowest: row.get("price_lowest")?,
+            basis_peak_price: row.get("basis_peak_price")?,
+            basis_peak_restarted: false, // Not persisted
             entry_transaction_signature: row.get("entry_transaction_signature")?,
             exit_transaction_signature: row.get("exit_transaction_signature")?,
             token_amount: row.get("token_amount")?,
@@ -836,13 +831,21 @@ impl PositionsDatabase {
 ///   of the current price, which is never persisted. A booking writes these back as it read
 ///   them, so the in-memory values are the newer ones;
 /// - the archive flag, the management mode and the origin, which [`write_position_row`]
-///   never writes. Their writers store the row, then mirror memory.
+///   never writes. Their writers store the row, then mirror memory;
+/// - the basis peak, unless the booking restarted it: the price updater raises it in memory
+///   ahead of storage, while a restart by a buy that moved the average stands. A booking
+///   that moves the average without restarting the peak, such as an entry verification or
+///   a restatement, keeps the peak memory holds.
 pub(crate) fn carry_columns_not_booked(row: &mut Position, live: &Position) {
     row.current_price = live.current_price;
     row.current_price_updated = live.current_price_updated;
     row.current_price_source = live.current_price_source;
     row.price_highest = live.price_highest;
     row.price_lowest = live.price_lowest;
+    if !row.basis_peak_restarted {
+        row.basis_peak_price = live.basis_peak_price;
+    }
+    row.basis_peak_restarted = false;
     row.archived = live.archived;
     row.archived_at = live.archived_at;
     row.management = live.management;
@@ -874,8 +877,8 @@ pub(super) fn write_position_row(
         remaining_token_amount = ?37, total_exited_amount = ?38, average_exit_price = ?39,
         partial_exit_count = ?40, dca_count = ?41, average_entry_price = ?42, last_dca_time = ?43,
         round_key = ?44, basis_complete = ?45, history_complete = ?46, holding_state = ?47,
-        updated_at = datetime('now')
-      WHERE id = ?1 AND chain_id = ?48
+        basis_peak_price = ?48, updated_at = datetime('now')
+      WHERE id = ?1 AND chain_id = ?49
       "#,
         params![
             position_id,
@@ -925,6 +928,7 @@ pub(super) fn write_position_row(
             position.basis_complete,
             position.history_complete,
             position.holding_state,
+            position.basis_peak_price,
             chain,
         ],
     )
@@ -1035,6 +1039,7 @@ mod tests {
             "basis_complete",
             "history_complete",
             "holding_state",
+            "basis_peak_price",
         ] {
             assert!(
                 schema::table_has_column(connection, "positions", column).unwrap(),
@@ -1195,7 +1200,7 @@ mod tests {
         let connection = database.get_connection().unwrap();
         assert_current_schema(&connection);
         let second_open = connection.execute(
-            "INSERT INTO positions (chain_id, wallet_address, mint, symbol, name, entry_price, entry_time, position_type, entry_size_native, total_size_native, price_highest, price_lowest) VALUES ('solana', 'wallet', 'mint', 'SYM', 'Token', 0.5, '2026-01-04', 'buy', 1.0, 1.0, 0.5, 0.5)",
+            "INSERT INTO positions (chain_id, wallet_address, mint, symbol, name, entry_price, entry_time, position_type, entry_size_native, total_size_native, price_highest, price_lowest, basis_peak_price) VALUES ('solana', 'wallet', 'mint', 'SYM', 'Token', 0.5, '2026-01-04', 'buy', 1.0, 1.0, 0.5, 0.5, 0.5)",
             [],
         );
         assert!(second_open.is_err(), "storage accepted a second open row");
@@ -1206,7 +1211,7 @@ mod tests {
         let (database, _directory) = test_database();
         upgrade(&database).await.unwrap();
         database.get_connection().unwrap().execute(
-            "INSERT INTO positions (id, chain_id, wallet_address, mint, symbol, name, entry_price, entry_time, position_type, entry_size_native, total_size_native, price_highest, price_lowest, archived, archived_at, origin_kind, management) VALUES (41, 'solana', 'wallet', 'mint', 'SYM', 'Token', 0.5, '2026-01-01T00:00:00Z', 'buy', 1.0, 1.0, 0.5, 0.5, 1, '2026-01-02T00:00:00Z', 'manual', 'user_only')",
+            "INSERT INTO positions (id, chain_id, wallet_address, mint, symbol, name, entry_price, entry_time, position_type, entry_size_native, total_size_native, price_highest, price_lowest, basis_peak_price, archived, archived_at, origin_kind, management) VALUES (41, 'solana', 'wallet', 'mint', 'SYM', 'Token', 0.5, '2026-01-01T00:00:00Z', 'buy', 1.0, 1.0, 0.5, 0.5, 0.5, 1, '2026-01-02T00:00:00Z', 'manual', 'user_only')",
             [],
         ).unwrap();
         let archived = || -> (bool, Option<String>) {
@@ -1560,7 +1565,7 @@ mod tests {
         let (database, _directory) = test_database();
         upgrade(&database).await.unwrap();
         database.get_connection().unwrap().execute(
-            "INSERT INTO positions (id, chain_id, wallet_address, mint, symbol, name, entry_price, entry_time, position_type, entry_size_native, total_size_native, price_highest, price_lowest, token_amount, remaining_token_amount, total_exited_amount, origin_kind, management) VALUES (41, 'solana', 'wallet', 'mint', 'SYM', 'Token', 0.5, '2026-01-01T00:00:00Z', 'buy', 1.0, 1.0, 0.5, 0.5, '340282366920938463463374607431768211455', '18446744073709551616', '18446744073709551617', 'manual', 'user_only')",
+            "INSERT INTO positions (id, chain_id, wallet_address, mint, symbol, name, entry_price, entry_time, position_type, entry_size_native, total_size_native, price_highest, price_lowest, basis_peak_price, token_amount, remaining_token_amount, total_exited_amount, origin_kind, management) VALUES (41, 'solana', 'wallet', 'mint', 'SYM', 'Token', 0.5, '2026-01-01T00:00:00Z', 'buy', 1.0, 1.0, 0.5, 0.5, 0.5, '340282366920938463463374607431768211455', '18446744073709551616', '18446744073709551617', 'manual', 'user_only')",
             [],
         ).unwrap();
         let position = {

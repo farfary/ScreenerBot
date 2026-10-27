@@ -156,12 +156,6 @@ fn all_transitions() -> Vec<PositionTransition> {
             signature: "entry-sig".to_owned(),
             evidence: NotLandedEvidence::Expired,
         },
-        PositionTransition::UpdatePriceTracking {
-            mint: "mint".to_owned(),
-            current_price: 0.01,
-            highest: Some(0.02),
-            lowest: Some(0.005),
-        },
         PositionTransition::PartialExitSubmitted {
             position_id: 1,
             exit_signature: "sig".to_owned(),
@@ -228,14 +222,13 @@ fn label(transition: &PositionTransition) -> String {
 }
 
 #[test]
-fn every_position_scoped_transition_carries_its_position_id() {
-    // Only price tracking is keyed by mint; everything else must name the position it
-    // mutates, or `apply_transition` cannot find the row to update.
+fn every_transition_carries_its_position_id() {
+    // Every transition names the position it mutates, or `apply_transition` cannot find
+    // the row to update. Each fixture names position 1.
     for transition in all_transitions() {
-        let expected = !matches!(transition, PositionTransition::UpdatePriceTracking { .. });
         assert_eq!(
-            transition.position_id().is_some(),
-            expected,
+            transition.position_id(),
+            1,
             "{} position_id",
             label(&transition)
         );

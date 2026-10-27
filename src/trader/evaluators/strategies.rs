@@ -262,7 +262,8 @@ impl StrategyEvaluator {
             current_size_sol: position.total_size_native,
             unrealized_profit_pct,
             position_age_hours: (Utc::now() - position.entry_time).num_seconds() as f64 / 3600.0,
-            peak_price: Some(position.price_highest).filter(|peak| peak.is_finite() && *peak > 0.0),
+            peak_price: Some(position.basis_peak_price)
+                .filter(|peak| peak.is_finite() && *peak > 0.0),
         };
 
         // Build market data. Liquidity comes from the same single source the entry path

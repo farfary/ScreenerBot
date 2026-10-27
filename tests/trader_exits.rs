@@ -280,11 +280,69 @@ fn enable_trailing(activation_pct: f64, distance_pct: f64) {
     });
 }
 
-/// A position entered at 1.0 whose price peaked at `peak`.
+/// A position entered at 1.0 whose price peaked at `peak`, with no add since the entry.
 fn peaked_at(peak: f64) -> Position {
     let mut position = test_position(1.0, 1.0);
     position.price_highest = peak;
+    position.basis_peak_price = peak;
     position
+}
+
+/// Entered at 1.00, peaked at 1.09, then averaged down by an add at 0.85 to an average
+/// entry of 0.944, and recovered to `basis_peak` since that add.
+fn averaged_down_after_a_peak(basis_peak: f64) -> Position {
+    let mut position = test_position(1.0, 1.0);
+    position.average_entry_price = 0.944;
+    position.price_highest = 1.09;
+    position.basis_peak_price = basis_peak;
+    position.dca_count = 1;
+    position
+}
+
+#[tokio::test]
+async fn trailing_stop_measures_from_the_peak_since_the_last_add() {
+    // The round peaked at 1.09 before the add: +15.5% over the new 0.944 average, which
+    // would arm a 10% activation and set a 5% trail at 1.0355. A recovery to 0.99 would
+    // then sell near break-even on a profit the averaged position never made. Since the
+    // add the price only reached 0.99 (+4.9%), so the trail is not armed.
+    let _cfg = config_guard();
+    enable_trailing(10.0, 5.0);
+    let policy = ExitPolicy::from_config();
+
+    let position = averaged_down_after_a_peak(0.99);
+    assert!(
+        exit_trailing::check_trailing_stop(&position, 0.98, &policy.trailing)
+            .await
+            .unwrap()
+            .is_none(),
+        "a peak from before the add must not arm the trail"
+    );
+
+    // The same figures with the pre-add peak as the basis do arm and fire: the peak the
+    // trail reads is what decides it.
+    let stale = averaged_down_after_a_peak(1.09);
+    assert!(
+        exit_trailing::check_trailing_stop(&stale, 0.98, &policy.trailing)
+            .await
+            .unwrap()
+            .is_some()
+    );
+}
+
+#[tokio::test]
+async fn trailing_stop_arms_on_a_new_peak_after_the_add() {
+    // Since the add the price ran to 1.10, +16.5% over the 0.944 average: armed, stop at
+    // 1.045, and 1.04 is under it while still in profit.
+    let _cfg = config_guard();
+    enable_trailing(10.0, 5.0);
+    let policy = ExitPolicy::from_config();
+
+    let position = averaged_down_after_a_peak(1.10);
+    let decision = exit_trailing::check_trailing_stop(&position, 1.04, &policy.trailing)
+        .await
+        .unwrap()
+        .expect("a peak reached after the add arms the trail");
+    assert_eq!(decision.reason, TradeReason::TrailingStop);
 }
 
 #[tokio::test]

@@ -10,7 +10,7 @@ use crate::logger::{self, LogTag};
 use crate::positions::price_resolution::get_price_with_api_fallback;
 use crate::positions::queue::{enqueue_verification, VerificationItem};
 use crate::positions::state::{
-    acquire_position_lock, mark_swap_in_flight, register_pending_dca_swap,
+    acquire_position_lock, is_dca_pending, mark_swap_in_flight, register_pending_dca_swap,
 };
 use crate::positions::types::{PendingDcaSwap, TradeOrigin};
 use crate::positions::{Error, Result};
@@ -31,6 +31,18 @@ pub async fn add_to_position(
     super::refuse_until_reconciled("dca", token_mint)?;
     // Serialize per-mint DCA operations
     let _lock = acquire_position_lock(token_mint).await;
+    // One automatic add in flight per mint: the count cap and the cooldown below read only
+    // verified adds, so a second add sent before the first settles would exceed both. An add
+    // sent here registers its pending marker under this lock, and a verification publishes its
+    // booking before it clears the marker, so the position read after this check carries
+    // every add that is no longer pending. A manual add is the user's call and is not held.
+    if origin == TradeOrigin::Auto && is_dca_pending(token_mint).await {
+        return Err(Error::TransitionFailed {
+            transition: "dca",
+            mint: token_mint.to_owned(),
+            detail: "another add of the mint is still in flight".to_owned(),
+        });
+    }
     // The open position of the mint, archived or not: an add on an archived one unarchives
     // it when the add is booked.
     let position = crate::positions::state::get_open_round_by_mint(token_mint)

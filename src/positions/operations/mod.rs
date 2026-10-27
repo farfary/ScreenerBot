@@ -6,8 +6,8 @@
 //! High-level commands for opening, closing, partial-closing, and DCA-ing into
 //! positions. Each swap operation acquires the position lock, executes the swap via
 //! the configured router, and enqueues transaction verification. A force close books
-//! an operator write-off without a swap. Price fetching with API fallback and
-//! position persistence with retry are also handled here.
+//! an operator write-off without a swap. Position persistence with retry is also
+//! handled here.
 
 mod close;
 mod dca;
@@ -26,11 +26,9 @@ pub use partial_close::partial_close_position;
 use crate::database::catalog::POSITIONS;
 use crate::database::health::{self, StoreStatus};
 use crate::logger::{self, LogTag};
-use crate::positions::db::{save_position, update_position_price_fields};
-use crate::positions::state::acquire_position_lock;
+use crate::positions::db::save_position;
 use crate::positions::types::Position;
 use crate::positions::{Error, Result};
-use chrono::Utc;
 use serde_json::json;
 use tokio::time::{sleep, Duration};
 
@@ -199,57 +197,6 @@ async fn persist_position_with_retry(position: &Position) -> Persisted {
             }
         }
     }
-}
-
-// =============================================================================
-// PRICE CALCULATION HELPERS
-// =============================================================================
-
-/// Update position's current price and track high/low for trailing stop
-pub async fn update_position_price(token_mint: &str, current_price: f64) -> Result<()> {
-    if !current_price.is_finite() || current_price <= 0.0 {
-        return Err(Error::InvalidPrice {
-            mint: token_mint.to_owned(),
-            price: current_price,
-        });
-    }
-
-    let _lock = acquire_position_lock(token_mint).await;
-
-    let now = Utc::now();
-    let updated = crate::positions::state::update_position_state(token_mint, |pos| {
-        pos.current_price = Some(current_price);
-        pos.current_price_updated = Some(now);
-        pos.current_price_source = None;
-
-        if current_price > pos.price_highest {
-            pos.price_highest = current_price;
-        }
-
-        if current_price < pos.price_lowest || pos.price_lowest == 0.0 {
-            pos.price_lowest = current_price;
-        }
-    })
-    .await;
-
-    if !updated {
-        return Err(Error::NotFound {
-            mint: token_mint.to_owned(),
-        });
-    }
-
-    let position = crate::positions::state::get_position_by_mint(token_mint).await;
-
-    // Release per-mint lock before hitting the database to reduce contention
-    drop(_lock);
-
-    let position = position.ok_or_else(|| Error::NotFound {
-        mint: token_mint.to_owned(),
-    })?;
-
-    update_position_price_fields(&position).await?;
-
-    Ok(())
 }
 
 #[cfg(test)]

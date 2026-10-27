@@ -54,5 +54,4 @@ pub use convenience::{
     get_token_snapshot, get_token_snapshots, get_trader_swap_legs, load_all_positions,
     record_exit_submission, save_position, save_token_snapshot, set_metadata,
     set_position_archived_db, set_position_management_db, update_position_price_and_pnl_fields,
-    update_position_price_fields,
 };

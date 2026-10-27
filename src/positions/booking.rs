@@ -227,18 +227,39 @@ impl Position {
         {
             return DcaAverage::InvalidState;
         }
+        let bought_whole = bought.to_whole_units(decimals);
         match average_after_acquisition(
             self.average_entry_price,
-            bought.to_whole_units(decimals),
+            bought_whole,
             spent,
             held_after.to_whole_units(decimals),
         ) {
             Some(average) => {
-                self.average_entry_price = average;
+                self.move_average_entry_price(average, spent / bought_whole);
                 DcaAverage::Recomputed
             }
             None => DcaAverage::InvalidNormalization,
         }
+    }
+
+    /// Moves the average entry price to `average` after a buy filled at `fill_price`. The
+    /// basis peak belongs to the average it was measured against, so a new average restarts
+    /// it at the fill price: a peak from before the buy would read as profit against the
+    /// lower average and arm the trailing stop on a gain the position never made. A fill
+    /// price that is not a positive finite number restarts it at the new average. An
+    /// unchanged average keeps the peak, which makes a repeated booking leave it as it is.
+    /// A restart is marked on the row, so memory adopts it in place of its own peak.
+    pub(crate) fn move_average_entry_price(&mut self, average: f64, fill_price: f64) {
+        if average == self.average_entry_price {
+            return;
+        }
+        self.average_entry_price = average;
+        self.basis_peak_price = if fill_price.is_finite() && fill_price > 0.0 {
+            fill_price
+        } else {
+            average
+        };
+        self.basis_peak_restarted = true;
     }
 
     /// Drops the sale that was in flight when the position was written off, once the chain

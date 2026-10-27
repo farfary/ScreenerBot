@@ -40,7 +40,12 @@ fn position_at(current_price: f64) -> Position {
 }
 
 fn evaluate(position: &Position, config: DcaConfigSnapshot) -> DcaEvaluation {
-    DcaEvaluation::evaluate(position, config).expect("evaluation must not fail")
+    DcaEvaluation::evaluate(position, config, false).expect("evaluation must not fail")
+}
+
+/// Evaluates while an add of the position's mint is sent and not yet settled.
+fn evaluate_with_add_in_flight(position: &Position, config: DcaConfigSnapshot) -> DcaEvaluation {
+    DcaEvaluation::evaluate(position, config, true).expect("evaluation must not fail")
 }
 
 // ==================== DROP THRESHOLD ====================
@@ -173,6 +178,56 @@ fn a_position_that_never_dcad_has_no_cooldown_to_serve() {
     let evaluation = evaluate(&position, permissive_config());
     assert!(evaluation.should_trigger);
     assert!(evaluation.calculations.minutes_since_last.is_none());
+}
+
+// ==================== ADD IN FLIGHT ====================
+
+#[test]
+fn an_add_in_flight_blocks_a_second_add_that_would_otherwise_trigger() {
+    // The count and the cooldown only move when the first add verifies; deciding again on
+    // the unmoved figures would buy twice into the same drop.
+    let position = position_at(0.5);
+    assert!(evaluate(&position, permissive_config()).should_trigger);
+    let evaluation = evaluate_with_add_in_flight(&position, permissive_config());
+    assert!(!evaluation.should_trigger);
+    assert!(evaluation
+        .reasons
+        .iter()
+        .any(|r| r.contains("still in flight")));
+}
+
+#[test]
+fn an_add_in_flight_cannot_carry_the_count_past_the_cap() {
+    // One add below the cap is in flight: a second one decided now would verify as the
+    // fourth add against a cap of three.
+    let mut position = position_at(0.5);
+    position.dca_count = 2;
+    assert!(!evaluate_with_add_in_flight(&position, permissive_config()).should_trigger);
+}
+
+#[test]
+fn an_add_in_flight_cannot_bypass_an_expired_cooldown() {
+    // The cooldown is measured from the last VERIFIED add; an unverified one has not
+    // restarted it yet, so only the in-flight gate stands between the two buys.
+    let mut position = position_at(0.5);
+    position.last_dca_time = Some(Utc::now() - Duration::minutes(120));
+    assert!(evaluate(&position, permissive_config()).should_trigger);
+    assert!(!evaluate_with_add_in_flight(&position, permissive_config()).should_trigger);
+}
+
+#[test]
+fn an_add_in_flight_is_reported_with_every_other_blocker() {
+    let mut position = position_at(0.5);
+    position.dca_count = 3;
+    let evaluation = evaluate_with_add_in_flight(&position, permissive_config());
+    assert!(evaluation
+        .reasons
+        .iter()
+        .any(|r| r.contains("DCA count limit reached")));
+    assert!(evaluation
+        .reasons
+        .iter()
+        .any(|r| r.contains("still in flight")));
 }
 
 // ==================== SIZING ====================

@@ -270,6 +270,16 @@ pub struct Position {
     pub total_size_native: f64, // Cumulative SOL invested (includes DCA)
     pub price_highest: f64,
     pub price_lowest: f64,
+    /// Highest price since the average entry price last changed: the peak the trailing stop
+    /// and the peak-relative strategy conditions measure profit from. A buy that moves the
+    /// average restarts it at that buy's price; `price_highest` stays the round's running
+    /// maximum.
+    pub basis_peak_price: f64,
+    /// Set by the booking that restarted `basis_peak_price`, so memory adopts the restart
+    /// instead of the peak it has been raising. Not persisted, and cleared when memory
+    /// adopts the row.
+    #[serde(skip)]
+    pub basis_peak_restarted: bool,
     // Transaction signatures
     pub entry_transaction_signature: Option<String>,
     pub exit_transaction_signature: Option<String>,

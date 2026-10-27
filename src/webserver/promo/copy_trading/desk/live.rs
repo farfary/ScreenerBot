@@ -47,6 +47,7 @@ fn live_position(task: &CopyTask, round: &LiveRound, now: DateTime<Utc>) -> Posi
         .current
         .map(|price| move_pct(price) / 100.0 * round.size);
     let reference = exit_price.or(round.current).unwrap_or(round.entry);
+    let peak = reference.max(round.entry) * 1.03;
     Position {
         id: None,
         mint: round.mint.to_owned(),
@@ -59,8 +60,10 @@ fn live_position(task: &CopyTask, round: &LiveRound, now: DateTime<Utc>) -> Posi
         position_type: "long".to_owned(),
         entry_size_native: round.size,
         total_size_native: round.size,
-        price_highest: reference.max(round.entry) * 1.03,
+        price_highest: peak,
         price_lowest: reference.min(round.entry) * 0.97,
+        basis_peak_price: peak,
+        basis_peak_restarted: false,
         entry_transaction_signature: Some(signature("entry", task.id, 0, round.mint)),
         exit_transaction_signature: exit_time.map(|_| signature("exit", task.id, 0, round.mint)),
         token_amount: Some(tokens),

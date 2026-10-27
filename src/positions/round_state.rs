@@ -569,6 +569,7 @@ mod tests {
             "total_size_native": 0.0,
             "price_highest": 0.001,
             "price_lowest": 0.0006,
+            "basis_peak_price": 0.001,
             "entry_transaction_signature": "entry",
             "exit_transaction_signature": "exit",
             "token_amount": null,

@@ -50,7 +50,7 @@ async fn resolve_evaluation_input(position: &Position) -> Option<(Position, f64)
         None => return None, // No price data from any source
     };
 
-    // Get fresh position with updated price_highest for accurate trailing stop calculation
+    // Get fresh position with updated basis peak for accurate trailing stop calculation
     let fresh_position = match crate::positions::get_position_by_mint(&position.mint).await {
         Some(pos) => pos,
         None => return None, // Position disappeared

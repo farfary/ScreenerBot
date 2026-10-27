@@ -22,6 +22,9 @@ struct AmountTable {
     amounts: &'static [&'static str],
     /// Columns of earlier releases that the rebuild drops.
     legacy_columns: &'static [&'static str],
+    /// Canonical columns an earlier store gained by `ALTER TABLE ... ADD COLUMN` with the
+    /// default (as SQLite reports it) that satisfied NOT NULL; the rebuild drops it.
+    appended_defaults: &'static [(&'static str, &'static str)],
 }
 
 /// Children before their root: the order tables are dropped in a rebuild.
@@ -31,12 +34,14 @@ const TABLES: [AmountTable; 3] = [
         ddl: SCHEMA_POSITION_ENTRIES,
         amounts: &["amount"],
         legacy_columns: &[],
+        appended_defaults: &[],
     },
     AmountTable {
         name: "position_exits",
         ddl: SCHEMA_POSITION_EXITS,
         amounts: &["amount"],
         legacy_columns: &[],
+        appended_defaults: &[],
     },
     AmountTable {
         name: "positions",
@@ -47,6 +52,7 @@ const TABLES: [AmountTable; 3] = [
             "total_exited_amount",
         ],
         legacy_columns: LEGACY_POSITIONS_COLUMNS,
+        appended_defaults: &[("chain_id", "'solana'"), ("basis_peak_price", "0")],
     },
 ];
 
@@ -142,9 +148,18 @@ fn item_column<'a>(item: &str, names: &'a [String]) -> Option<&'a String> {
     names.iter().find(|name| name.eq_ignore_ascii_case(first))
 }
 
+/// The default a canonical column of `table` carries when an earlier store appended it.
+fn appended_default(table: &AmountTable, column: &str) -> Option<&'static str> {
+    table
+        .appended_defaults
+        .iter()
+        .find(|(name, _)| *name == column)
+        .map(|(_, default)| *default)
+}
+
 /// The stored definitions released builds wrote for a canonical column: the canonical
 /// one, an amount column still declared INTEGER (with `DEFAULT 0` for the cumulative
-/// exit amount), and the chain identity appended with its default.
+/// exit amount), and a column appended with its default.
 fn accepted_definitions(table: &AmountTable, column: &str, canonical: &str) -> Vec<String> {
     let mut accepted = vec![canonical.to_owned()];
     if table.amounts.contains(&column) {
@@ -153,8 +168,8 @@ fn accepted_definitions(table: &AmountTable, column: &str, canonical: &str) -> V
         accepted.push(integer.replace("default '0'", "default 0"));
         accepted.push(integer);
     }
-    if table.name == "positions" && column == "chain_id" {
-        accepted.push(format!("{canonical} default 'solana'"));
+    if let Some(default) = appended_default(table, column) {
+        accepted.push(format!("{canonical} default {default}"));
     }
     accepted
 }
@@ -175,12 +190,12 @@ fn accepted_column(table: &AmountTable, stored: &Column, canonical: &Column) -> 
                     && stored.default.as_deref() == Some("0")
                     && canonical.default.as_deref() == Some("'0'")));
     }
-    table.name == "positions"
-        && name == "chain_id"
-        && same_shape
-        && stored.declared == canonical.declared
-        && stored.default.as_deref() == Some("'solana'")
-        && canonical.default.is_none()
+    appended_default(table, name).is_some_and(|default| {
+        same_shape
+            && stored.declared == canonical.declared
+            && stored.default.as_deref() == Some(default)
+            && canonical.default.is_none()
+    })
 }
 
 /// What an open has to do with one amount table.
@@ -813,7 +828,7 @@ mod tests {
     }
 
     const ROWS: [&str; 3] = [
-        "INSERT INTO positions (id, chain_id, wallet_address, mint, symbol, name, entry_price, entry_time, position_type, entry_size_native, total_size_native, price_highest, price_lowest, token_amount, remaining_token_amount, total_exited_amount, origin_kind, management) VALUES (5, 'solana', 'wallet', 'mint', 'SYM', 'Token', 0.5, '2026-01-01T00:00:00Z', 'buy', 1.5, 2.5, 0.75, 0.25, '18446744073709551615', '9223372036854775808', '0', 'manual', 'user_only')",
+        "INSERT INTO positions (id, chain_id, wallet_address, mint, symbol, name, entry_price, entry_time, position_type, entry_size_native, total_size_native, price_highest, price_lowest, basis_peak_price, token_amount, remaining_token_amount, total_exited_amount, origin_kind, management) VALUES (5, 'solana', 'wallet', 'mint', 'SYM', 'Token', 0.5, '2026-01-01T00:00:00Z', 'buy', 1.5, 2.5, 0.75, 0.25, 0.75, '18446744073709551615', '9223372036854775808', '0', 'manual', 'user_only')",
         "INSERT INTO position_entries (id, position_id, wallet_address, timestamp, amount, price, native_spent, transaction_signature, is_dca, fees_raw) VALUES (6, 5, 'wallet', '2026-01-01T00:00:00Z', '18446744073709551615', 0.5, 1.5, 'entry', 0, 11)",
         "INSERT INTO position_exits (id, position_id, wallet_address, timestamp, amount, price, native_received, transaction_signature, is_partial, percentage, fees_raw) VALUES (7, 5, 'wallet', '2026-01-02T00:00:00Z', '9223372036854775807', 0.75, 2.0, 'exit', 1, 25.0, 13)",
     ];

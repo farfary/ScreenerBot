@@ -11,8 +11,8 @@ use crate::strategies::{Error, Result};
 use async_trait::async_trait;
 use serde_json::json;
 
-/// The pool price fell `drop_pct` from the highest price seen since entry, once that peak
-/// stood at least `arm_after_profit_pct` above the entry price
+/// The pool price fell `drop_pct` from the highest price seen since the average entry price
+/// last changed, once that peak stood at least `arm_after_profit_pct` above the entry price
 pub struct DrawdownFromPeakCondition;
 
 /// Validated parameters of a drawdown-from-peak condition.

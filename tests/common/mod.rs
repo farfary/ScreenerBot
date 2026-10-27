@@ -457,6 +457,8 @@ pub fn test_position(entry_price: f64, size_sol: f64) -> Position {
         total_size_native: size_sol,
         price_highest: entry_price,
         price_lowest: entry_price,
+        basis_peak_price: entry_price,
+        basis_peak_restarted: false,
         entry_transaction_signature: Some("entry-sig".to_owned()),
         exit_transaction_signature: None,
         token_amount: None,

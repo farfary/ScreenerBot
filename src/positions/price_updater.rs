@@ -174,6 +174,9 @@ pub async fn update_position_price_and_pnl(
         if current_price > pos.price_highest {
             pos.price_highest = current_price;
         }
+        if current_price > pos.basis_peak_price {
+            pos.basis_peak_price = current_price;
+        }
 
         if current_price < pos.price_lowest || pos.price_lowest == 0.0 {
             pos.price_lowest = current_price;

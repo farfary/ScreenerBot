@@ -13,7 +13,8 @@ use chrono::Utc;
 ///
 /// ARM THE TRAIL OFF THE PEAK, NEVER OFF THE CURRENT PRICE. A trailing stop exists
 /// to protect a profit the position has ALREADY made, so what arms it is how far the
-/// price has run at its best (a persisted running maximum seeded from the entry).
+/// price has run at its best since `entry_price` became the entry it is measured from
+/// (a live position's basis peak, restarted by every buy that moves the average).
 /// Measuring activation against the CURRENT price makes the trail un-arm itself as
 /// the price falls -- exactly when it is supposed to act. With activation 20% and
 /// distance 10%, a position that peaked at +25% and is retracing through +12% is
@@ -66,7 +67,7 @@ pub async fn check_trailing_stop(
     }
     let triggered = trailing_stop_triggered(
         position.average_entry_price,
-        position.price_highest,
+        position.basis_peak_price,
         current_price,
         policy,
     )

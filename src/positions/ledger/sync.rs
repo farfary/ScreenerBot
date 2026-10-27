@@ -1012,6 +1012,12 @@ fn build_position(
         // a brand-new row is not stuck at zero.
         price_highest: existing.map(|p| p.price_highest).unwrap_or(entry_price),
         price_lowest: existing.map(|p| p.price_lowest).unwrap_or(entry_price),
+        // The basis peak belongs to the average it was measured against; a new average
+        // restarts it there, since the round does not say what its newest buy paid.
+        basis_peak_price: existing
+            .filter(|p| p.average_entry_price == entry_price)
+            .map_or(entry_price, |p| p.basis_peak_price),
+        basis_peak_restarted: false,
         entry_transaction_signature: round.entry_signature.clone(),
         exit_transaction_signature: round.exit_signature.clone(),
         token_amount: Some(RawAmount::new(round.total_acquired_raw)),
@@ -1442,9 +1448,9 @@ struct Growth {
 /// recomputed in full on each pass. After a sale, the cost of the tokens sold is no longer
 /// held: the growth since the row's own books is one buy of the newly acquired tokens for the
 /// newly invested SOL, blended into the row's average. The callers adopt only when the part
-/// acquired more than the row carries, so the step is taken once per increase. The leg
-/// counters are not touched: they count the row's own recorded legs, and only the bookings
-/// write them.
+/// acquired more than the row carries, so the step is taken once per increase. A new
+/// average restarts the basis peak at the growth's own price. The leg counters are not
+/// touched: they count the row's own recorded legs, and only the bookings write them.
 fn adopt_external_growth(position: &mut Position, growth: Growth, decimals: u8) {
     let acquired_before = position.acquired_amount().unwrap_or(RawAmount::ZERO);
     let invested_before = position.total_size_native;
@@ -1459,6 +1465,12 @@ fn adopt_external_growth(position: &mut Position, growth: Growth, decimals: u8) 
     };
     position.total_size_native = invested_native;
     let held_whole = growth.held.to_whole_units(decimals);
+    let grown_whole = growth
+        .acquired
+        .checked_sub(acquired_before)
+        .unwrap_or(RawAmount::ZERO)
+        .to_whole_units(decimals);
+    let grown_cost = invested_native - invested_before;
     let average = if growth.exited == RawAmount::ZERO {
         let mut held_cost = HeldCost::new();
         held_cost.acquire(invested_native);
@@ -1466,17 +1478,14 @@ fn adopt_external_growth(position: &mut Position, growth: Growth, decimals: u8) 
     } else {
         average_after_acquisition(
             position.average_entry_price,
-            growth
-                .acquired
-                .checked_sub(acquired_before)
-                .unwrap_or(RawAmount::ZERO)
-                .to_whole_units(decimals),
-            invested_native - invested_before,
+            grown_whole,
+            grown_cost,
             held_whole,
         )
     };
     if let Some(average) = average {
-        position.average_entry_price = average;
+        // The outside acquisitions are one buy at their combined price.
+        position.move_average_entry_price(average, grown_cost / grown_whole);
     }
 }
 

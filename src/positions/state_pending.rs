@@ -101,6 +101,18 @@ pub async fn is_partial_exit_pending(mint: &str) -> bool {
     map.get(mint).is_some_and(|count| *count > 0)
 }
 
+/// True while a DCA add on `mint` is in flight (sent, not yet verified or proven not to
+/// have landed). Its fill moves the average entry price of the mint's open position, a late
+/// add of a closed position included, so no automatic add of the mint is decided or sent
+/// before it settles: the count cap and the cooldown read what verified adds booked.
+pub async fn is_dca_pending(mint: &str) -> bool {
+    PENDING_DCA_SWAPS
+        .read()
+        .await
+        .values()
+        .any(|entry| entry.mint == mint)
+}
+
 /// Drop every pending partial exit recorded for a mint (counter + durable details).
 ///
 /// Used by failure handling, which knows the position but not necessarily the

@@ -1042,6 +1042,21 @@ async fn abandon_after_apply_failure(item: &VerificationItem, reason: GiveUpReas
     .await;
 
     abandon_verification(item.signature.clone()).await;
+    // An abandoned add keeps its pending entry so a restart verifies it again, and that
+    // entry holds every automatic add of the mint until it is resolved.
+    if super::state::get_pending_dca_swaps_for_mint(&item.mint)
+        .await
+        .iter()
+        .any(|entry| entry.signature == item.signature)
+    {
+        logger::warning(
+            LogTag::Positions,
+            &format!(
+                "Automatic adds of mint {} stay blocked: add {} (position {:?}) is still pending after its verification was abandoned ({:?}); they resume once it is verified or proven not to have landed, which a restart retries",
+                item.mint, item.signature, item.position_id, reason
+            ),
+        );
+    }
     crate::actions::settle_verification(
         &item.signature,
         Err(crate::actions::ActionFailure::with_details(

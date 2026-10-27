@@ -56,12 +56,6 @@ pub enum PositionTransition {
         signature: String,
         evidence: NotLandedEvidence,
     },
-    UpdatePriceTracking {
-        mint: String,
-        current_price: f64,
-        highest: Option<f64>,
-        lowest: Option<f64>,
-    },
     // ==================== PARTIAL EXIT TRANSITIONS ====================
     PartialExitSubmitted {
         position_id: i64,
@@ -135,7 +129,7 @@ pub enum PositionTransition {
 }
 
 impl PositionTransition {
-    pub fn position_id(&self) -> Option<i64> {
+    pub fn position_id(&self) -> i64 {
         match self {
             Self::EntryVerified { position_id, .. }
             | Self::ExitVerified { position_id, .. }
@@ -147,8 +141,7 @@ impl PositionTransition {
             | Self::ExitResidualClearForRetry { position_id, .. }
             | Self::DcaSubmitted { position_id, .. }
             | Self::DcaVerified { position_id, .. }
-            | Self::DcaFailed { position_id, .. } => Some(*position_id),
-            Self::UpdatePriceTracking { .. } => None,
+            | Self::DcaFailed { position_id, .. } => *position_id,
         }
     }
 

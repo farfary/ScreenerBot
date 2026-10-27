@@ -290,6 +290,12 @@ fn every_released_layout_upgrades_to_a_fresh_install_and_reopens_unchanged() {
             .unwrap();
             let legacy_manual_flag = has_column(&conn, "positions", "manual_management");
             seed_released_rows(&conn, legacy_manual_flag);
+            // The closed row took two adds; the others never did.
+            conn.execute(
+                "UPDATE positions SET dca_count = 2, average_entry_price = 0.4 WHERE id = 1",
+                [],
+            )
+            .unwrap();
             let released_sequences = sequences(&conn);
             assert_eq!(
                 released_sequences,
@@ -363,6 +369,13 @@ fn every_released_layout_upgrades_to_a_fresh_install_and_reopens_unchanged() {
                 ],
                 "{case}"
             );
+            // The closed row keeps its maximum; the open rows hold a released average of 0,
+            // never their first fill, so their peak starts at that average.
+            assert_eq!(
+                assert_basis_peak_backfilled(&conn, &case),
+                [0.75, 0.0, 0.0],
+                "{case}"
+            );
             assert_eq!(
                 conn.query_row(
                     "SELECT e.amount, e.native_spent, e.fees_raw, x.amount, x.native_received, x.fees_raw FROM position_entries e, position_exits x WHERE e.id = 1 AND x.id = 1",
@@ -396,6 +409,176 @@ fn every_released_layout_upgrades_to_a_fresh_install_and_reopens_unchanged() {
             );
         }
     }
+}
+
+/// Every row's basis peak, as the open that added the column seeded it, read against the
+/// columns the seed reads (none of which the later upgrade steps change on these fixtures):
+/// the running maximum of a closed row and of an open row whose average is still its first
+/// fill without adds, the average entry of any other open row. Returns the basis peaks in
+/// row order.
+fn assert_basis_peak_backfilled(conn: &Connection, case: &str) -> Vec<f64> {
+    let rows: Vec<(i64, bool, i64, f64, f64, f64, f64)> = conn
+        .prepare("SELECT id, exit_time IS NOT NULL, dca_count, COALESCE(effective_entry_price, entry_price), price_highest, average_entry_price, basis_peak_price FROM positions ORDER BY id")
+        .unwrap()
+        .query_map([], |row| {
+            Ok((
+                row.get(0)?,
+                row.get(1)?,
+                row.get(2)?,
+                row.get(3)?,
+                row.get(4)?,
+                row.get(5)?,
+                row.get(6)?,
+            ))
+        })
+        .unwrap()
+        .collect::<rusqlite::Result<_>>()
+        .unwrap();
+    let mut basis_peaks = Vec::with_capacity(rows.len());
+    for (id, closed, dca_count, first_fill, price_highest, average_entry_price, basis_peak_price) in
+        rows
+    {
+        let expected = if closed || (dca_count == 0 && average_entry_price == first_fill) {
+            price_highest
+        } else {
+            average_entry_price
+        };
+        assert_eq!(basis_peak_price, expected, "{case}: row {id}");
+        basis_peaks.push(basis_peak_price);
+    }
+    basis_peaks
+}
+
+/// The positions store as the release before the basis peak leaves it: the current layout
+/// without `basis_peak_price`, its ledger and legacy stamp at version 6.
+const BEFORE_BASIS_PEAK: &str = "
+    ALTER TABLE positions DROP COLUMN basis_peak_price;
+    UPDATE store_schema SET version = 6, min_reader_version = 6 WHERE id = 1;
+    UPDATE position_metadata SET value = '6' WHERE key = 'schema_version';
+";
+
+/// Rows of a version 6 store: an open row never averaged into, a closed row that took two
+/// adds, an open manual row, and an open row a buy made elsewhere averaged down without an
+/// add.
+const INSERT_VERSION_6_POSITION: &str = "INSERT INTO positions (id, chain_id, wallet_address, mint, symbol, name, entry_price, entry_time, exit_price, exit_time, position_type, entry_size_native, total_size_native, average_entry_price, price_highest, price_lowest, dca_count) VALUES (?1, 'solana', 'wallet', ?2, 'SYM', 'Token', 1.0, '2026-01-01T00:00:00Z', ?3, ?4, 'buy', 1.0, ?5, ?6, ?7, 0.5, ?8)";
+
+/// The columns a version 6 store held, as the upgrade must keep them.
+fn version_6_columns(conn: &Connection) -> Vec<Vec<Value>> {
+    let mut stmt = conn
+        .prepare("SELECT id, mint, exit_price, exit_time, total_size_native, average_entry_price, price_highest, price_lowest, dca_count, origin_kind, management FROM positions ORDER BY id")
+        .unwrap();
+    let width = stmt.column_count();
+    stmt.query_map([], |row| {
+        (0..width)
+            .map(|i| row.get::<_, Value>(i))
+            .collect::<rusqlite::Result<Vec<_>>>()
+    })
+    .unwrap()
+    .collect::<rusqlite::Result<_>>()
+    .unwrap()
+}
+
+#[test]
+fn a_store_before_the_basis_peak_backfills_it_and_reopens_unchanged() {
+    if std::env::var_os(CHILD).is_some() {
+        return;
+    }
+    let fresh = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(fresh.path().join("data")).unwrap();
+    boot(fresh.path(), true);
+    let fresh_schema = schema(&open(fresh.path()));
+
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(dir.path().join("data")).unwrap();
+    boot(dir.path(), true);
+    let conn = open(dir.path());
+    conn.execute_batch(BEFORE_BASIS_PEAK).unwrap();
+    assert!(!has_column(&conn, "positions", "basis_peak_price"));
+    conn.execute(
+        INSERT_VERSION_6_POSITION,
+        params![
+            1,
+            "mint-open",
+            None::<f64>,
+            None::<String>,
+            1.0,
+            1.0,
+            1.5,
+            0
+        ],
+    )
+    .unwrap();
+    conn.execute(
+        INSERT_VERSION_6_POSITION,
+        params![
+            2,
+            "mint-averaged",
+            0.9,
+            "2026-01-02T00:00:00Z",
+            2.0,
+            0.8,
+            1.6,
+            2
+        ],
+    )
+    .unwrap();
+    conn.execute(
+        INSERT_VERSION_6_POSITION,
+        params![
+            3,
+            "mint-manual",
+            None::<f64>,
+            None::<String>,
+            1.0,
+            1.0,
+            1.25,
+            0
+        ],
+    )
+    .unwrap();
+    conn.execute(
+        "UPDATE positions SET origin_kind = 'manual', management = 'user_only' WHERE id = 3",
+        [],
+    )
+    .unwrap();
+    conn.execute(
+        INSERT_VERSION_6_POSITION,
+        params![
+            4,
+            "mint-grown",
+            None::<f64>,
+            None::<String>,
+            2.0,
+            0.75,
+            1.4,
+            0
+        ],
+    )
+    .unwrap();
+    let before = version_6_columns(&conn);
+    drop(conn);
+
+    let case = "version 6 store";
+    boot(dir.path(), true);
+    let conn = open(dir.path());
+    assert_eq!(schema(&conn), fresh_schema, "{case}");
+    assert_checks_pass(&conn, case);
+    assert_eq!(version_6_columns(&conn), before, "{case}: stored data");
+    assert_eq!(
+        assert_basis_peak_backfilled(&conn, case),
+        [1.5, 1.6, 1.25, 0.75],
+        "{case}"
+    );
+
+    let upgraded = (schema(&conn), contents(&conn));
+    drop(conn);
+    boot(dir.path(), true);
+    let conn = open(dir.path());
+    assert_eq!(
+        (schema(&conn), contents(&conn)),
+        upgraded,
+        "{case}: second launch"
+    );
 }
 
 #[test]

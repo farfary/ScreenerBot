@@ -892,6 +892,56 @@ fn a_buy_made_elsewhere_grows_the_bot_s_own_position() {
 }
 
 #[test]
+fn a_buy_made_elsewhere_restarts_the_basis_peak_at_its_own_price() {
+    // The outside buys move the average entry; a peak reached before them measured profit
+    // against the old average and must not arm the trailing stop against the new one.
+    let mut bot_row = bot_position(&open_round(MINT, "open-sig:MINT"));
+    bot_row.id = Some(7);
+    bot_row.token_amount = Some(raw(1_000_000));
+    bot_row.remaining_token_amount = Some(raw(1_000_000));
+    // The row's books hold its own leg as the trader booked it, fee included.
+    bot_row.entry_size_native = 2.01;
+    bot_row.total_size_native = 2.01;
+    bot_row.average_entry_price = 2.01;
+    bot_row.price_highest = 3.0;
+    bot_row.basis_peak_price = 3.0;
+
+    let legs = HashMap::from([(
+        7i64,
+        TraderLegs {
+            entry_signatures: HashSet::from(["open-sig".to_owned()]),
+            exit_signatures: HashSet::new(),
+            booked_invested_native: 2.01,
+            booked_acquired: raw(1_000_000),
+            booked_received_native: 0.0,
+        },
+    )]);
+
+    let plan = plan_position_writes(
+        &[grown_round()],
+        &[bot_row],
+        &metadata(MINT, false),
+        &legs,
+        &no_busy(),
+        now(),
+    );
+
+    let grown = &plan.updates[0].position;
+    // 8.01 SOL for the 5 tokens held; the 4 tokens bought elsewhere cost 3.0 + 3.0 SOL,
+    // so the peak restarts at 1.5.
+    assert!(
+        (grown.average_entry_price - 1.602).abs() < 1e-9,
+        "{grown:?}"
+    );
+    assert!(
+        (grown.basis_peak_price - 1.5).abs() < 1e-9,
+        "{:?}",
+        grown.basis_peak_price
+    );
+    assert_eq!(grown.price_highest, 3.0, "the round's peak stays");
+}
+
+#[test]
 fn absorbing_an_outside_buy_is_idempotent() {
     // The second resync must plan no write at all: recomputing booked + external gives
     // the same number, where accumulating the difference would inflate it every pass.

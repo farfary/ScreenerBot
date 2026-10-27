@@ -17,8 +17,8 @@
 
 use super::booking::{CloseFill, DcaAverage, DcaFill, EntryFill, PartialExitFill};
 use super::db::{
-    commit_booking, force_database_sync, get_store_chain, update_position_price_fields, Booking,
-    BookingReads, BookingRecord, Committed,
+    commit_booking, force_database_sync, get_store_chain, Booking, BookingReads, BookingRecord,
+    Committed,
 };
 use super::ledger::is_wallet_history_close_reason;
 use super::pnl::position_pnl;
@@ -31,10 +31,9 @@ use super::{
     loss_detection::process_position_loss_detection,
     state::{
         clear_pending_dca_swap, get_pending_dca_swaps_for_mint, get_position_by_id,
-        get_position_by_mint, other_swap_in_flight, position_has_pending_swap, publish_committed,
-        reclaim_position_slot, release_position_slot, remove_position_by_id,
-        remove_signature_from_index, set_position_archived_in_memory, update_position_state,
-        with_booking_lock,
+        other_swap_in_flight, position_has_pending_swap, publish_committed, reclaim_position_slot,
+        release_position_slot, remove_position_by_id, remove_signature_from_index,
+        set_position_archived_in_memory, with_booking_lock,
     },
     transitions::PositionTransition,
 };
@@ -1086,19 +1085,6 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             effects.db_updated = true;
             let _ = force_database_sync().await;
 
-            // A failed pending clear must not skip the remaining effects of a booking that is
-            // already stored; it is returned last, and a retry clears it on the
-            // already-booked path.
-            let pending_cleared = clear_pending_dca_swap(&dca_signature).await;
-            if let Err(err) = &pending_cleared {
-                logger::error(
-                    LogTag::Positions,
-                    &format!(
-                        "Failed to clear pending DCA {dca_signature} for position {position_id}: {err}"
-                    ),
-                );
-            }
-
             crate::events::record_position_event(
                 &position_id.to_string(),
                 &candidate.mint,
@@ -1149,8 +1135,20 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                 .await;
             }
 
-            // A DCA never consumes a semaphore permit of its own: it is the same position.
-            pending_cleared?;
+            // The marker clears only after every row the add booked is published to memory,
+            // including an open round that took a late fill, so an automatic add admitted
+            // after the clear reads the add in that round's counters. A failed clear is
+            // logged and returned; a retry clears it on the already-booked path. A DCA never
+            // consumes a semaphore permit of its own: it is the same position.
+            if let Err(err) = clear_pending_dca_swap(&dca_signature).await {
+                logger::error(
+                    LogTag::Positions,
+                    &format!(
+                        "Failed to clear pending DCA {dca_signature} for position {position_id}: {err}"
+                    ),
+                );
+                return Err(err);
+            }
         }
 
         PositionTransition::DcaFailed {
@@ -1187,57 +1185,6 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                     ),
                 );
                 return Err(err);
-            }
-        }
-
-        // =================================================================
-        // PRICE TRACKING
-        // =================================================================
-        PositionTransition::UpdatePriceTracking {
-            mint,
-            current_price,
-            highest,
-            lowest,
-        } => {
-            let updated = update_position_state(&mint, |pos| {
-                let now = Utc::now();
-                pos.current_price = Some(current_price);
-                pos.current_price_updated = Some(now);
-                pos.current_price_source = None;
-                if let Some(high) = highest {
-                    pos.price_highest = high;
-                }
-                if let Some(low) = lowest {
-                    pos.price_lowest = low;
-                }
-            })
-            .await;
-
-            if updated {
-                if let Some(position) = get_position_by_mint(&mint).await {
-                    match update_position_price_fields(&position).await {
-                        Ok(_) => {
-                            effects.db_updated = true;
-                        }
-                        Err(err) => {
-                            logger::error(
-                                LogTag::Positions,
-                                &format!(
-                                    "Failed to persist price update for mint {} (id={:?}): {}",
-                                    mint, position.id, err
-                                ),
-                            );
-                        }
-                    }
-                } else {
-                    logger::debug(
-                        LogTag::Positions,
-                        &format!(
-              "Price update transition applied but position missing from state (mint={})",
-              mint
-            ),
-                    );
-                }
             }
         }
     }
@@ -1923,7 +1870,9 @@ async fn after_handover(position: &Position, handed_to: &HandedTo) {
     };
     with_booking_lock(open_round_id, async {
         match super::db::get_position_by_id(open_round_id).await {
-            Ok(Some(row)) => {
+            Ok(Some(mut row)) => {
+                // The stored row does not record that the handover restarted its peak.
+                row.basis_peak_restarted = handed_to.row.basis_peak_restarted;
                 publish_committed(&row).await;
             }
             Ok(None) => log_missing_position(open_round_id, "handover"),

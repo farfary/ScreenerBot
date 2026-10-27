@@ -349,17 +349,6 @@ pub async fn add_position(position: Position) -> usize {
     index
 }
 
-/// Update position in state
-pub async fn update_position_state(mint: &str, updater: impl FnOnce(&mut Position)) -> bool {
-    let mut positions = POSITIONS.write().await;
-    if let Some(position) = positions.iter_mut().find(|p| p.mint == mint) {
-        updater(position);
-        true
-    } else {
-        false
-    }
-}
-
 /// Update position in state by position ID (database ID)
 /// Use this when multiple positions may exist for the same token to ensure
 /// updates target the correct specific position.

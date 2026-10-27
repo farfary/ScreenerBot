@@ -7,7 +7,10 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 // Database schema version
-pub(super) const POSITIONS_SCHEMA_VERSION: u32 = 6;
+pub(super) const POSITIONS_SCHEMA_VERSION: u32 = 7;
+
+/// The version the store held when the schema ledger was adopted.
+pub(super) const POSITIONS_LEDGER_BASELINE_VERSION: u32 = 6;
 
 // =============================================================================
 // DATABASE SCHEMA DEFINITIONS
@@ -33,7 +36,7 @@ pub(super) const POSITION_SELECT_COLUMNS: &str = r#"
   remaining_token_amount, total_exited_amount, average_exit_price, partial_exit_count,
   dca_count, average_entry_price, last_dca_time,
   archived, archived_at, origin_kind, origin_ref, management,
-  round_key, basis_complete, history_complete, holding_state
+  round_key, basis_complete, history_complete, holding_state, basis_peak_price
 "#;
 
 pub(super) const SCHEMA_POSITIONS: &str = r#"
@@ -53,6 +56,7 @@ CREATE TABLE IF NOT EXISTS positions (
   total_size_native REAL NOT NULL, -- Cumulative SOL invested (includes DCA)
   price_highest REAL NOT NULL,
   price_lowest REAL NOT NULL,
+  basis_peak_price REAL NOT NULL, -- Highest price since the average entry price last changed
   -- Real swap tracking
   entry_transaction_signature TEXT,
   exit_transaction_signature TEXT,
@@ -269,6 +273,14 @@ pub(super) const POSITIONS_ARCHIVE_COLUMNS: &[(&str, &str)] = &[
 pub(super) const POSITIONS_CHAIN_COLUMNS: &[(&str, &str)] = &[(
     "chain_id",
     "ALTER TABLE positions ADD COLUMN chain_id TEXT NOT NULL DEFAULT 'solana'",
+)];
+
+/// The basis peak, added to tables created before it. The default only satisfies NOT NULL
+/// while the column is added: the same open backfills every row and the rebuild into the
+/// canonical table drops the default.
+pub(super) const POSITIONS_BASIS_PEAK_COLUMNS: &[(&str, &str)] = &[(
+    "basis_peak_price",
+    "ALTER TABLE positions ADD COLUMN basis_peak_price REAL NOT NULL DEFAULT 0",
 )];
 
 /// Positions columns of earlier releases that the canonical table no longer has.

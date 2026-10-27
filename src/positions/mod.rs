@@ -24,7 +24,6 @@ pub mod round_state;
 mod settle;
 pub mod state;
 pub mod state_pending;
-pub mod tracking;
 pub mod transitions;
 pub mod types;
 pub mod verifier;
@@ -40,7 +39,7 @@ pub const FORCE_CLOSED_PREFIX: &str = "force_closed:";
 // Public API exports
 pub use operations::{
     add_to_position, awaiting_reconciliation, close_position_direct, open_position_direct,
-    open_position_with_size, partial_close_position, update_position_price,
+    open_position_with_size, partial_close_position,
 };
 
 pub use state::{
@@ -48,13 +47,11 @@ pub use state::{
     get_closed_positions, get_open_mints, get_open_positions, get_open_positions_count,
     get_open_round_by_mint, get_pending_dca_swaps_for_mint, get_pending_partial_exits_for_mint,
     get_position_by_id, get_position_by_mint, holds_open_round, init_global_position_semaphore,
-    is_open_position, is_partial_exit_pending, is_token_in_cooldown,
+    is_dca_pending, is_open_position, is_partial_exit_pending, is_token_in_cooldown,
     reconcile_global_position_semaphore, remove_position_by_id, set_position_archived_in_memory,
     set_position_management_in_memory, BuyTarget, MINT_TO_POSITION_INDEX, POSITIONS,
     SIG_TO_MINT_INDEX,
 };
-
-pub use tracking::update_position_tracking;
 
 pub use metrics::get_verification_metrics;
 
@@ -82,9 +79,9 @@ pub use db::{
     get_recent_closed_positions_for_mint, get_swap_records_by_signatures, get_token_snapshot,
     get_token_snapshots, initialize_positions_database, load_all_positions, save_position,
     save_token_snapshot, set_position_archived_db, set_position_management_db,
-    update_position_price_fields, with_positions_database, with_positions_database_async,
-    AutoTradeActivity, DailyTradingStats, PeriodTradingStats, PositionState, PositionStateHistory,
-    PositionTracking, PositionsDatabase, PositionsDatabaseStats, TokenSnapshot,
+    with_positions_database, with_positions_database_async, AutoTradeActivity, DailyTradingStats,
+    PeriodTradingStats, PositionState, PositionStateHistory, PositionTracking, PositionsDatabase,
+    PositionsDatabaseStats, TokenSnapshot,
 };
 
 pub use helpers::{

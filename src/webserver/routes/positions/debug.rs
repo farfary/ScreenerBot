@@ -45,7 +45,10 @@ pub struct PositionSummary {
     pub unrealized_pnl: Option<f64>,
     pub unrealized_pnl_percent: Option<f64>,
     pub phantom_confirmations: u32,
-    pub peak_price: f64,
+    /// The round's running maximum.
+    pub price_highest: f64,
+    /// The peak since the average entry price last moved, which the trailing stop measures.
+    pub basis_peak_price: f64,
 }
 
 #[derive(Debug, Serialize)]
@@ -137,9 +140,15 @@ pub struct ProfitTargets {
 pub struct PriceTracking {
     pub price_highest: f64,
     pub price_lowest: f64,
+    /// The peak since the average entry price last moved, which the trailing stop measures.
+    pub basis_peak_price: f64,
     pub current_price: Option<f64>,
     pub current_price_updated: Option<String>,
+    /// Percent from the round's running maximum.
     pub drawdown_from_high: Option<f64>,
+    /// Percent from the basis peak: the drawdown the trailing stop compares with its
+    /// distance.
+    pub drawdown_from_basis_peak: Option<f64>,
     pub gain_from_low: Option<f64>,
 }
 
@@ -196,7 +205,8 @@ pub async fn get_position_debug_info(Path(mint): Path<String>) -> Json<PositionD
             unrealized_pnl,
             unrealized_pnl_percent,
             phantom_confirmations: p.phantom_confirmations,
-            peak_price: p.price_highest,
+            price_highest: p.price_highest,
+            basis_peak_price: p.basis_peak_price,
         }
     });
 
@@ -379,6 +389,8 @@ pub async fn get_position_debug_info(Path(mint): Path<String>) -> Json<PositionD
         } else {
             None
         };
+        let drawdown_from_basis_peak = (pos.basis_peak_price > 0.0)
+            .then(|| ((current - pos.basis_peak_price) / pos.basis_peak_price) * 100.0);
         let gain_from_low = if pos.price_lowest > 0.0 {
             Some(((current - pos.price_lowest) / pos.price_lowest) * 100.0)
         } else {
@@ -388,9 +400,11 @@ pub async fn get_position_debug_info(Path(mint): Path<String>) -> Json<PositionD
         let price_tracking = PriceTracking {
             price_highest: pos.price_highest,
             price_lowest: pos.price_lowest,
+            basis_peak_price: pos.basis_peak_price,
             current_price: pos.current_price,
             current_price_updated: pos.current_price_updated.map(|dt| dt.to_rfc3339()),
             drawdown_from_high,
+            drawdown_from_basis_peak,
             gain_from_low,
         };
 

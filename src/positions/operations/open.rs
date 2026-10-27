@@ -321,6 +321,8 @@ async fn open_position_impl(
         total_size_native: trade_size_native,
         price_highest: entry_price,
         price_lowest: entry_price,
+        basis_peak_price: entry_price,
+        basis_peak_restarted: false,
         entry_transaction_signature: Some(transaction_signature.clone()),
         exit_transaction_signature: None,
         token_amount: None,

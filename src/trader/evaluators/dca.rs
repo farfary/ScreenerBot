@@ -9,6 +9,7 @@
 //! - DCA count limits
 //! - Cooldown periods
 //! - DCA size percentage
+//! - No add of the mint still in flight
 //!
 //! NOTE: This evaluator uses simple price-threshold logic and does NOT integrate
 //! with the strategy system or OHLCV data. For OHLCV-based DCA decisions, consider
@@ -54,8 +55,14 @@ pub struct DcaEvaluation {
 }
 
 impl DcaEvaluation {
-    /// Evaluate whether DCA should trigger for a position
-    pub fn evaluate(position: &Position, config: DcaConfigSnapshot) -> crate::trader::Result<Self> {
+    /// Evaluate whether DCA should trigger for a position. `add_in_flight` is true while an
+    /// add of the position's mint is sent and not yet settled: the count and the cooldown
+    /// it would move are not booked yet, so no further add is decided on them.
+    pub fn evaluate(
+        position: &Position,
+        config: DcaConfigSnapshot,
+        add_in_flight: bool,
+    ) -> crate::trader::Result<Self> {
         let mut reasons = Vec::new();
         let mut should_trigger = true;
 
@@ -130,6 +137,11 @@ impl DcaEvaluation {
         if !config.enabled {
             should_trigger = false;
             reasons.push("DCA disabled in config".to_owned());
+        }
+
+        if add_in_flight {
+            should_trigger = false;
+            reasons.push("A DCA add of this token is still in flight".to_owned());
         }
 
         if calculations.current_dca_count >= config.max_count {
@@ -251,8 +263,9 @@ pub async fn process_dca_opportunities() -> crate::trader::Result<Vec<TradeDecis
             None => continue,
         };
 
-        // Evaluate DCA opportunity using structured evaluation
-        let evaluation = match DcaEvaluation::evaluate(&position, dca_config.clone()) {
+        let add_in_flight = positions::is_dca_pending(&position.mint).await;
+        let evaluation = match DcaEvaluation::evaluate(&position, dca_config.clone(), add_in_flight)
+        {
             Ok(eval) => eval,
             Err(e) => {
                 logger::error(

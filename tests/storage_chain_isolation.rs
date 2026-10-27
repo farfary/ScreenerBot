@@ -198,8 +198,8 @@ mod positions_store {
         let path = screenerbot::paths::get_positions_db_path();
         let conn = Connection::open(&path).expect("open positions db directly");
         conn.execute(
-            "INSERT INTO positions (chain_id, wallet_address, mint, symbol, name, entry_price, entry_time, position_type, entry_size_native, total_size_native, price_highest, price_lowest)
-             VALUES ('ethereum', ?1, ?2, 'FAKE', 'Fake', 0.002, '2026-01-01T00:00:00Z', 'buy', 2.0, 2.0, 0.002, 0.002)",
+            "INSERT INTO positions (chain_id, wallet_address, mint, symbol, name, entry_price, entry_time, position_type, entry_size_native, total_size_native, price_highest, price_lowest, basis_peak_price)
+             VALUES ('ethereum', ?1, ?2, 'FAKE', 'Fake', 0.002, '2026-01-01T00:00:00Z', 'buy', 2.0, 2.0, 0.002, 0.002, 0.002)",
             rusqlite::params![wallet_address, common::TEST_MINT],
         )
         .expect("insert conceptual foreign-chain position row");

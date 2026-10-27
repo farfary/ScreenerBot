@@ -144,30 +144,6 @@ pub async fn delete_archived_positions() -> Result<Vec<i64>> {
     }
 }
 
-/// Update only the price-related fields for a position using the latest in-memory state
-pub async fn update_position_price_fields(position: &Position) -> Result<()> {
-    let position_id = position.id.ok_or_else(|| Error::TransitionFailed {
-        transition: "update_price_fields",
-        mint: position.mint.clone(),
-        detail: "position has no id".to_owned(),
-    })?;
-
-    let db_guard = GLOBAL_POSITIONS_DB.lock().await;
-    match db_guard.as_ref() {
-        Some(db) => {
-            db.update_position_prices(
-                position_id,
-                position.current_price,
-                position.current_price_updated,
-                position.price_highest,
-                position.price_lowest,
-            )
-            .await
-        }
-        None => Err(Error::NotInitialised),
-    }
-}
-
 /// Update the price fields and the unrealized P&L of a position from the latest in-memory
 /// state. No booking column is written.
 pub async fn update_position_price_and_pnl_fields(position: &Position) -> Result<()> {
@@ -186,6 +162,8 @@ pub async fn update_position_price_and_pnl_fields(position: &Position) -> Result
                 position.current_price_updated,
                 position.price_highest,
                 position.price_lowest,
+                position.basis_peak_price,
+                position.average_entry_price,
                 position.unrealized_pnl,
                 position.unrealized_pnl_percent,
             )
