@@ -4,7 +4,7 @@
 //! The paper account: the epochs of a paper run and the cash of the current one, derived
 //! from the positions of the epoch and never stored as a running figure.
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Duration, Utc};
 use serde::Serialize;
 
 use crate::positions::db::PaperEpoch;
@@ -74,7 +74,8 @@ impl PaperBook {
     /// ([`PaperBook::settle_at_mark`]), so the run that ends is settled and the new one
     /// starts with all its cash. A round whose decimals are unknown stops the reset before
     /// the new epoch starts. The whole reset holds the capacity lock, so no round opens or
-    /// adds between the settled run and the next one.
+    /// adds between the settled run and the next one. The new run starts at `now`, or just
+    /// after the latest round the ending run booked when that is later.
     pub async fn reset_run(
         &self,
         wallet_address: &str,
@@ -87,7 +88,16 @@ impl PaperBook {
         let open = self.open_positions().await;
         self.settle_locked(wallet_address, &open, reason, &decimals_of, now)
             .await?;
-        self.start_epoch(wallet_address, starting_balance_native, now)
+        // `now` is read before the capacity lock is taken, so a round booked while the reset
+        // waited for it can carry the same or a later entry time. That round belongs to the
+        // run that ends; counting it in the new run would charge its fees to that run.
+        let started_at = self
+            .db
+            .positions_entered_since(wallet_address, now)?
+            .iter()
+            .map(|round| round.entry_time + Duration::nanoseconds(1))
+            .fold(now, std::cmp::max);
+        self.start_epoch(wallet_address, starting_balance_native, started_at)
             .await
     }
 

@@ -699,6 +699,44 @@ async fn a_paper_open_within_the_cooldown_is_refused_and_the_live_open_time_is_u
     .unwrap();
 }
 
+/// A reset reads its time before it waits for the capacity lock, so a buy that takes the
+/// lock first can book a round at that instant or after it. The round belongs to the run
+/// that ends: the new run starts after it and keeps its whole starting balance.
+#[tokio::test]
+async fn a_round_booked_at_or_after_the_reset_time_stays_in_the_run_that_ends() {
+    for offset in [Duration::zero(), Duration::milliseconds(5)] {
+        let (book, _directory) = paper_book().await;
+        let terms = terms(&book, 5).await;
+        let reset_at = Utc::now();
+        let round = open_round(
+            &book,
+            wallet(),
+            Opening {
+                entry_time: reset_at + offset,
+                ..opening("LateMint")
+            },
+            &entry_fill(),
+            &buy_leg(),
+            &terms,
+        )
+        .await
+        .unwrap();
+
+        let next = book
+            .reset_run(wallet(), 1.0, "PaperReset", |_| Some(DECIMALS), reset_at)
+            .await
+            .unwrap();
+
+        assert!(next.started_at > round.entry_time, "offset {offset}");
+        assert_eq!(next.cash_native, 1.0, "offset {offset}");
+        assert!(book
+            .db
+            .positions_entered_since(wallet(), next.started_at)
+            .unwrap()
+            .is_empty());
+    }
+}
+
 #[tokio::test]
 async fn a_reset_racing_a_buy_leaves_no_open_round_outside_the_new_run() {
     for buy_first in [true, false] {
