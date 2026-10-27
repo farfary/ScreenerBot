@@ -31,7 +31,7 @@
     </div>
   </header>
 
-  <div class="copy-load-error" id="copy-load-error" role="alert" hidden></div>
+  <div class="copy-notices" id="copy-notices" aria-live="polite" hidden></div>
 
   <section id="copy-setup-gate" hidden></section>
 
@@ -201,16 +201,23 @@
             <span class="copy-field-text">
               <strong data-l10n-id="config-copy-trading-require-filter-pass"></strong>
               <small data-config-hint="config-copy-trading-require-filter-pass"></small>
-              <small
-                class="copy-warning"
-                id="copy-settings-filter-warning"
-                data-l10n-id="copy-settings-filter-warning"
-              ></small>
             </span>
             <span class="toggle"
               ><input id="copy-settings-filter" type="checkbox" /><span class="toggle-track"></span
             ></span>
           </label>
+          <div
+            class="notice"
+            data-variant="warning"
+            role="note"
+            id="copy-settings-filter-warning"
+            hidden
+          >
+            <div class="notice-heading">
+              <i class="notice-icon icon-triangle-alert" aria-hidden="true"></i>
+              <span class="notice-message" data-l10n-id="copy-settings-filter-warning"></span>
+            </div>
+          </div>
           <label class="copy-switch-row">
             <span class="copy-field-text">
               <strong data-l10n-id="config-copy-trading-copy-stable-quoted"></strong>

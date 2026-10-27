@@ -14,6 +14,7 @@ import {
   taskName,
 } from "./format.js";
 import { tradingModeLabel } from "../../ui/trading_mode.js";
+import { renderNotice } from "../../ui/notice.js";
 import { formatList } from "../../core/format.js";
 import {
   ackList,
@@ -86,15 +87,16 @@ export function createArmGate(page) {
       (other) => other.id !== ws.id && other.enabled && other.target_address === ws.target_address
     );
     const shared = siblings.length
-      ? `<p class="copy-warning" role="note"><i class="icon-triangle-alert" aria-hidden="true"></i>${esc(
-          I18n.t("copy-arm-shared", {
+      ? renderNotice({
+          variant: "warning",
+          message: I18n.t("copy-arm-shared", {
             tasks: formatList(
               siblings.map((other) =>
                 I18n.t("copy-task-ref", { name: taskName(other), mode: tradingModeLabel(other.mode) })
               )
             ),
-          })
-        )}</p>`
+          }),
+        })
       : "";
     const acks = runtimeBlocked(ws.readiness)
       ? unavailableNote(I18n.t("copy-arm-unavailable"), esc)

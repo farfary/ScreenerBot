@@ -16,6 +16,7 @@ import {
   taskName,
 } from "./format.js";
 import { tradingModeLabel } from "../../ui/trading_mode.js";
+import { renderNotice } from "../../ui/notice.js";
 import {
   PRESETS,
   RULES,
@@ -129,7 +130,7 @@ function toggleRow(esc, { name, title, help, checked }) {
 }
 
 /** The tasks already copying the draft's wallet: another task copies the same trades again. */
-export function duplicateNote({ draft, mode, source, tasks }, esc) {
+export function duplicateNote({ draft, mode, source, tasks }) {
   const address = mode === "edit" ? null : draft.target_address;
   const others = address
     ? (tasks || []).filter((task) => task.target_address === address && task.id !== source?.id)
@@ -140,7 +141,10 @@ export function duplicateNote({ draft, mode, source, tasks }, esc) {
       I18n.t("copy-task-ref", { name: taskName(task), mode: tradingModeLabel(task.mode) })
     )
   );
-  return `<p class="copy-warning" role="note"><i class="icon-triangle-alert" aria-hidden="true"></i>${esc(I18n.t("copy-editor-duplicate", { tasks: tasksText }))}</p>`;
+  return renderNotice({
+    variant: "warning",
+    message: I18n.t("copy-editor-duplicate", { tasks: tasksText }),
+  });
 }
 
 /** While copy processing is paused for every task, a saved task waits: say so and offer Resume. */
@@ -158,7 +162,7 @@ function walletStep(context, esc) {
           mode === "clone"
             ? I18n.t("copy-editor-address-help-clone")
             : I18n.t("copy-editor-address-help-create")
-        )}</small></label><div id="copy-editor-duplicate">${duplicateNote(context, esc)}</div>`;
+        )}</small></label><div id="copy-editor-duplicate">${duplicateNote(context)}</div>`;
   const note =
     mode === "edit" && source.mode === "live"
       ? I18n.t("copy-editor-note-live")
@@ -261,7 +265,7 @@ function entryStep({ draft, defaults }, esc) {
       esc,
       filterLabel
     )}<small>${esc(I18n.t("copy-editor-filter-help"))}</small></div>
-    ${requires ? `<p class="copy-warning" role="note"><i class="icon-triangle-alert" aria-hidden="true"></i>${esc(I18n.t("copy-editor-filter-warning"))}</p>` : ""}
+    ${requires ? renderNotice({ variant: "warning", message: I18n.t("copy-editor-filter-warning") }) : ""}
     <div class="copy-field"><span>${esc(stableLabel)}</span>${segmented(
       "stable-mode",
       [
@@ -329,16 +333,13 @@ function ruleCard(rule, { draft, defaults }, esc) {
   return `<section class="copy-rule-card"><div class="copy-rule-head"><h4>${esc(rule.title)}</h4>${seg}</div>${body}</section>`;
 }
 
-export function exitWarningsHtml({ draft, defaults }, esc) {
+export function exitWarningsHtml({ draft, defaults }) {
   const policy = effectivePolicy(defaults?.trader_defaults, draft.exit_policy_overrides);
   return exitWarnings(policy, draft.exit_mode, {
     slippagePct: draft.slippage_pct,
     feePct: defaults?.swap_fee_pct,
   })
-    .map(
-      (text) =>
-        `<p class="copy-warning" role="note"><i class="icon-triangle-alert" aria-hidden="true"></i>${esc(text)}</p>`
-    )
+    .map((message) => renderNotice({ variant: "warning", message }))
     .join("");
 }
 
@@ -355,7 +356,7 @@ function exitsStep(context, esc) {
   const mirrorNote = `<p class="copy-note">${esc(I18n.t("copy-editor-mirror-note", { mine: exitModeLabel("buy_only"), both: I18n.t("copy-editor-exit-both") }))}</p>`;
   return `<div class="copy-field"><span>${esc(whoSells)}</span>${segmented("exit-mode", EXIT_MODES, draft.exit_mode, esc, whoSells)}<small>${esc(mode.help)}</small></div>
     <div class="copy-field"><span>${esc(presetLabel)}</span>${segmented("preset", presets, preset, esc, presetLabel)}<small>${esc(I18n.t("copy-editor-preset-help"))}</small></div>
-    <div id="copy-editor-warnings">${exitWarningsHtml(context, esc)}</div>
+    <div id="copy-editor-warnings">${exitWarningsHtml(context)}</div>
     ${draft.exit_mode === "mirror" ? mirrorNote : ""}
     <div class="copy-rule-cards${draft.exit_mode === "mirror" ? " is-inactive" : ""}">${RULES.map((rule) => ruleCard(rule, context, esc)).join("")}</div>`;
 }

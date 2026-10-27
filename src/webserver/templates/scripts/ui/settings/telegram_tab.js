@@ -9,6 +9,7 @@
 import * as Utils from "../../core/utils.js";
 import { enhanceAllSelects } from "../custom_select.js";
 import { renderStateView } from "../state_view.js";
+import { renderNotice } from "../notice.js";
 import { apiErrorMessage } from "../../core/request_manager.js";
 import { populateLanguageOptions } from "./interface_tab.js";
 import { restartApp } from "../../core/restart.js";
@@ -192,9 +193,8 @@ function buildTelegramTab(settings) {
                 <span class="step-number">2</span>
                 <span data-l10n-id="settings-telegram-discovery-step-privacy"></span>
               </div>
-              <div class="discovery-info-box">
-                <i class="icon-info"></i>
-                <div data-l10n-id="settings-telegram-discovery-privacy" data-l10n-markup></div>
+              <div class="discovery-step-detail">
+                ${renderNotice({ messageHtml: I18n.markup("settings-telegram-discovery-privacy") })}
               </div>
               <div class="discovery-step">
                 <span class="step-number">3</span>

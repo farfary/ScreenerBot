@@ -93,7 +93,7 @@ async function openBuy(page) {
 test("Wallets shows funding guidance only while the main wallet holds no SOL", async () => {
   const empty = await open(0, balanceBody(0));
   try {
-    const notice = empty.page.locator("#wallets-funding .funding-notice");
+    const notice = empty.page.locator("#wallets-funding .notice");
     await notice.waitFor();
     assert.match(strip(await notice.textContent()), new RegExp(NOTICE_TITLE));
     assert.ok(strip(await notice.textContent()).includes(main.address));
@@ -117,12 +117,12 @@ test("the Buy dialog at 0 SOL shows the notice and says why it cannot buy", asyn
   const { page, close } = await open(0, balanceBody(0));
   try {
     await openBuy(page);
-    const notice = page.locator(".trade-action-funding .funding-notice");
+    const notice = page.locator(".trade-action-funding .notice");
     await notice.waitFor();
     await page.waitForFunction(
       (address) =>
         document
-          .querySelector(".trade-action-funding .funding-notice")
+          .querySelector(".trade-action-funding .notice")
           ?.textContent.includes(address),
       main.address
     );

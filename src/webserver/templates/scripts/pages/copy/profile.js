@@ -16,6 +16,7 @@ import {
 } from "./format.js";
 import { tradingModeLabel } from "../../ui/trading_mode.js";
 import { renderStateView } from "../../ui/state_view.js";
+import { renderNotice } from "../../ui/notice.js";
 import { gateControl } from "../../ui/setup_gate.js";
 
 export function createProfile(page) {
@@ -86,7 +87,7 @@ export function createProfile(page) {
   function render(profile) {
     const seen = profile.observations || {};
     const own = profile.own_wallet
-      ? `<p class="copy-warning" role="alert"><i class="icon-triangle-alert" aria-hidden="true"></i>${esc(I18n.t("copy-profile-own-wallet"))}</p>`
+      ? renderNotice({ variant: "warning", message: I18n.t("copy-profile-own-wallet") })
       : "";
     const observed = seen.swaps
       ? definitionRows(

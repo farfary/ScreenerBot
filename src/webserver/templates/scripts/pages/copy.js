@@ -22,6 +22,7 @@ import { createArmGate } from "./copy/arm_gate.js";
 import { createSettings } from "./copy/settings.js";
 import { createProfile } from "./copy/profile.js";
 import { gateControl, renderSetupGate, setupRequired } from "../ui/setup_gate.js";
+import { renderNotice } from "../ui/notice.js";
 
 const POLL_MS = 5000;
 
@@ -92,12 +93,17 @@ function createLifecycle() {
 
   function render() {
     renderStrip(page);
-    const error = $("#copy-load-error");
-    if (error) {
-      error.hidden = !state.loadError;
-      error.textContent = state.loadError
-        ? I18n.t("copy-load-failed", { error: state.loadError })
+    const notices = $("#copy-notices");
+    if (notices) {
+      const html = state.loadError
+        ? renderNotice({
+            variant: "error",
+            message: I18n.t("copy-load-failed", { error: state.loadError }),
+            action: { id: "retry", label: I18n.t("common-action-retry") },
+          })
         : "";
+      paintHtml(notices, html);
+      notices.hidden = !html;
     }
     const tasks = state.overview?.tasks || [];
     const onboarding = $("#copy-onboarding");
@@ -229,6 +235,9 @@ function createLifecycle() {
       on($("#copy-onboarding-add"), "click", () => page.editor.openCreate());
       on($("#copy-settings-open"), "click", () => page.settings.open());
       on($("#copy-global-action"), "click", toggleGlobal);
+      on($("#copy-notices"), "click", (event) => {
+        if (event.target.closest('[data-action="retry"]')) void load();
+      });
       on($("#copy-compare-open"), "click", openCompare);
       gateControl($("#copy-add"));
       if (setupRequired()) renderSetupGate($("#copy-setup-gate"), I18n.t("copy-setup-gate-title"));

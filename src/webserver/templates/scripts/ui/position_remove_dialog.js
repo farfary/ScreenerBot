@@ -21,6 +21,7 @@
 import { playClick } from "../core/sounds.js";
 import { pushEscapeHandler } from "../core/escape_stack.js";
 import { renderAddress } from "./token_identity.js";
+import { renderNotice } from "./notice.js";
 
 const escapeHTML = (str) => {
   const div = document.createElement("div");
@@ -77,10 +78,10 @@ class PositionRemoveDialog {
     const sym = escapeHTML(this.config.symbol);
 
     const openWarning = this.config.isOpen
-      ? `<div class="position-remove-open-warning" role="note">
-           <i class="icon-triangle-alert" aria-hidden="true"></i>
-           <div data-l10n-id="positions-remove-open-warning" data-l10n-markup></div>
-         </div>`
+      ? renderNotice({
+          variant: "warning",
+          messageHtml: I18n.markup("positions-remove-open-warning"),
+        })
       : "";
 
     this.element.innerHTML = `

@@ -370,13 +370,13 @@ export function createEditor(page) {
     readStep();
     if (id === "wallet") {
       const note = $("#copy-editor-duplicate");
-      if (note) note.innerHTML = duplicateNote(context(), esc);
+      if (note) note.innerHTML = duplicateNote(context());
     } else if (id === "sizing") {
       const preview = $("#copy-editor-preview");
       if (preview) preview.innerHTML = costPreview(draft);
     } else {
       const warnings = $("#copy-editor-warnings");
-      if (warnings) warnings.innerHTML = exitWarningsHtml(context(), esc);
+      if (warnings) warnings.innerHTML = exitWarningsHtml(context());
     }
   }
 

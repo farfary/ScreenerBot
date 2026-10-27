@@ -70,13 +70,15 @@
   gap: var(--spacing-sm);
 }
 
-.copy-load-error {
-  padding: var(--spacing-sm) var(--spacing-md);
-  border: 1px solid var(--danger-alpha-30);
-  border-radius: var(--radius-md);
-  background: var(--danger-alpha-10);
-  color: var(--error-color);
-  font-size: var(--font-size-sm);
+/* The page notices (ui/notice.js) under the strip: a failed load beside the kept data. */
+.copy-notices {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.copy-notices[hidden] {
+  display: none;
 }
 
 .copy-onboarding {
@@ -432,24 +434,6 @@
 
 .copy-muted {
   color: var(--text-muted);
-}
-
-.copy-warning {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--spacing-sm);
-  margin: 0;
-  padding: var(--spacing-sm) var(--spacing-md);
-  border: 1px solid var(--warning-alpha-30);
-  border-radius: var(--radius-md);
-  background: var(--warning-alpha-10);
-  color: var(--warning-color);
-  font-size: var(--font-size-sm);
-  line-height: 1.45;
-}
-
-.copy-warning i {
-  margin-top: 2px;
 }
 
 .copy-warning-text {

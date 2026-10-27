@@ -87,32 +87,13 @@
 }
 
 /* ============================================
-   OPEN-POSITION WARNING
-   ============================================ */
-
-.position-remove-open-warning {
-  display: flex;
-  gap: 10px;
-  align-items: flex-start;
-  margin-bottom: 16px;
-  padding: 12px 14px;
-  font-size: 12.5px;
-  line-height: 1.5;
-  color: var(--semantic-warning-text);
-  background: var(--warning-alpha-10);
-  border: 1px solid var(--warning-alpha-30);
-  border-radius: var(--radius-lg);
-}
-
-.position-remove-open-warning i {
-  flex-shrink: 0;
-  margin-top: 1px;
-  color: var(--semantic-warning-text);
-}
-
-/* ============================================
    CHOICES
    ============================================ */
+
+/* The open-position notice (ui/notice.js) sits between the header and the choices. */
+.notice + .position-remove-choices {
+  margin-top: 16px;
+}
 
 .position-remove-choices {
   display: flex;

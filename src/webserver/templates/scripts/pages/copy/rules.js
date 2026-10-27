@@ -11,6 +11,7 @@ import {
   settingSol,
 } from "./format.js";
 import { tradingModeLabel } from "../../ui/trading_mode.js";
+import { renderNotice } from "../../ui/notice.js";
 import {
   INHERITED_RULES,
   RULES,
@@ -36,13 +37,8 @@ function targetRange(task) {
   return I18n.t("copy-rules-target-between", { min: settingFixed(min), max: settingFixed(max) });
 }
 
-function warningList(warnings, esc) {
-  return warnings
-    .map(
-      (text) =>
-        `<p class="copy-warning" role="note"><i class="icon-triangle-alert" aria-hidden="true"></i>${esc(text)}</p>`
-    )
-    .join("");
+function warningList(warnings) {
+  return warnings.map((message) => renderNotice({ variant: "warning", message })).join("");
 }
 
 function ruleTable({ task, effective, traderDefaults, managesExits }, esc) {
@@ -173,7 +169,7 @@ export function rulesHtml(context, esc) {
   </div>
   <section class="copy-card copy-rules-exits">
     <h4>${esc(I18n.t("copy-rules-exits"))} <span class="copy-card-sub">${esc(exitModeLabel(task.exit_mode))}</span></h4>
-    ${warningList(exitWarnings(effective, task.exit_mode, { slippagePct: task.slippage_pct, feePct }), esc)}${exitNote}
+    ${warningList(exitWarnings(effective, task.exit_mode, { slippagePct: task.slippage_pct, feePct }))}${exitNote}
     ${ruleTable(context, esc)}
   </section>`;
 }

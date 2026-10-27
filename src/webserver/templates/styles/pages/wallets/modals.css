@@ -1,38 +1,6 @@
 /* Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
  * SPDX-License-Identifier: BUSL-1.1 */
 
-/* Danger Banner */
-.danger-banner {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--spacing-sm);
-  padding: var(--spacing-md);
-  border-radius: var(--radius-md);
-  background: var(--danger-alpha-10);
-  border: 1px solid var(--danger-alpha-30);
-}
-
-.danger-banner i {
-  color: var(--error-color);
-  font-size: 1rem;
-  margin-top: 2px;
-}
-
-.danger-banner strong {
-  display: block;
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin-bottom: 4px;
-}
-
-.danger-banner p {
-  margin: 0;
-  font-size: 0.8rem;
-  line-height: 1.5;
-  color: var(--text-secondary);
-}
-
 /* Form Styles */
 .wallet-form {
   display: flex;

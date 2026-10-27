@@ -433,40 +433,84 @@
   background: var(--bg-card);
 }
 
-/* Funding guidance for a trading wallet without SOL (ui/funding_notice.js): the
-   title, what a trade needs, and the address on a line of its own. */
-.funding-notice {
+/* The one notice (ui/notice.js): guidance, a caution or a failure beside content that
+   still renders. A bare glyph inline with the title, the message under it, at most
+   one action; the variant tones the surface and the glyph, never a bar or a tile. */
+.notice {
+  --notice-tone: var(--semantic-info-text);
+
   display: flex;
   flex-direction: column;
   gap: var(--spacing-xs);
-  padding: var(--spacing-md);
+  min-width: 0;
+  padding: var(--spacing-sm) var(--spacing-md);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-md);
   background: var(--bg-card);
 }
 
-.funding-notice-title {
+.notice[hidden] {
+  display: none;
+}
+
+.notice[data-variant="warning"] {
+  --notice-tone: var(--semantic-warning-text);
+
+  border-color: var(--warning-alpha-30);
+  background: var(--warning-alpha-10);
+}
+
+.notice[data-variant="error"] {
+  --notice-tone: var(--semantic-error-text);
+
+  border-color: var(--danger-alpha-30);
+  background: var(--danger-alpha-10);
+}
+
+.notice[data-variant="success"] {
+  --notice-tone: var(--semantic-success-text);
+
+  border-color: var(--success-alpha-30);
+  background: var(--success-alpha-10);
+}
+
+.notice-heading {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: var(--spacing-sm);
-  margin: 0;
+  min-width: 0;
+}
+
+.notice-icon {
+  flex: none;
+  color: var(--notice-tone, var(--text-secondary));
+}
+
+.notice-icon:has(+ .notice-message) {
+  font-size: var(--font-size-sm);
+}
+
+.notice-title {
   font-weight: 600;
   color: var(--text-primary);
 }
 
-.funding-notice-title i {
-  color: var(--primary-color);
-}
-
-.funding-notice-message {
-  margin: 0;
+.notice-message {
+  min-width: 0;
   font-size: var(--font-size-sm);
   line-height: 1.5;
   color: var(--text-secondary);
 }
 
-.funding-notice-address {
+.notice-extra {
   min-width: 0;
+  margin-top: var(--spacing-xs);
+}
+
+.notice-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
   margin-top: var(--spacing-xs);
 }
 

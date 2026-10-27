@@ -202,11 +202,6 @@
   color: var(--text-muted);
 }
 
-.copy-field-text .copy-warning {
-  margin-top: var(--spacing-xs);
-  font-size: var(--font-size-xs);
-}
-
 .copy-preview {
   padding: var(--spacing-md);
   border: 1px solid var(--border-color);
