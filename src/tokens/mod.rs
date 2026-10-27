@@ -1,21 +1,17 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! New unified token data system with clean architecture
+//! Token data: one per-chain store of token identity, market, security and pool data, and the
+//! services that keep it current.
 //!
-//! Architecture:
-//! - database/: Split database module (10 focused submodules)
-//! - schema.rs: Database schema definition (6 tables, 12 indexes)
-//! - market/: Market data fetchers (DexScreener, GeckoTerminal)
-//! - security/: Security data fetchers (Rugcheck)
-//! - updates.rs: Priority-based background updates with rate limiting
-//! - cleanup.rs: Automatic blacklist management
-//! - store.rs: Centralized storage for filtered token lists
-//! - service.rs: ServiceManager integration
-//! - decimals.rs: Decimals lookup with caching
-//! - types.rs: Core domain types
-//!
-//! Note: API clients in crate::apis module
+//! - Storage: `database` and `schema` own the per-chain SQLite store; `store` and `filtered`
+//!   hold the assembled and filtered views the rest of the app reads.
+//! - Sources: `market` (DexScreener, GeckoTerminal), `security` (Rugcheck) and `pool_data`
+//!   fetch and merge what each provider reports; the API clients live in `crate::apis`.
+//! - Freshness: `updates` schedules refreshes by `priorities` under the provider rate limits,
+//!   `discovery` admits new tokens, and `cleanup` and `retention` bound what is kept.
+//! - Domain: `types` holds the core types, `decimals` the cached decimals lookup, and
+//!   `service` the service-manager integration.
 
 pub mod authority_cache;
 pub mod cleanup;

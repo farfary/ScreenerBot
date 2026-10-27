@@ -256,15 +256,6 @@ impl SolanaTrackerClient {
         self.get_json("ohlcv", &path).await
     }
 
-    /// Fetch token information (pools, events, risk).
-    pub async fn fetch_token_info(
-        &self,
-        token_address: &str,
-    ) -> Result<types::TokenInfoResponse, Error> {
-        let path = format!("/tokens/{}", token_address);
-        self.get_json("token_info", &path).await
-    }
-
     /// Check remaining API credits and cache the result.
     pub async fn fetch_credits(&self) -> Result<types::CreditsResponse, Error> {
         let result: Result<types::CreditsResponse, Error> =

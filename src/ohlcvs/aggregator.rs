@@ -139,22 +139,6 @@ impl OhlcvAggregator {
         })
     }
 
-    /// Calculate expected candle count for a time range
-    pub fn expected_candles(from_timestamp: i64, to_timestamp: i64, timeframe: Timeframe) -> usize {
-        if to_timestamp < from_timestamp {
-            return 0;
-        }
-
-        let duration = to_timestamp - from_timestamp;
-        let candle_duration = timeframe.to_seconds();
-
-        if candle_duration == 0 {
-            return 0;
-        }
-
-        ((duration / candle_duration) as usize).saturating_add(1)
-    }
-
     /// Check if data has gaps
     pub fn detect_gaps(data: &[Candle], timeframe: Timeframe) -> Vec<(i64, i64)> {
         if data.len() < 2 {
@@ -379,34 +363,6 @@ mod tests {
             OhlcvAggregator::aggregate(&[], Timeframe::Minute1, Timeframe::Hour1)
                 .unwrap()
                 .is_empty()
-        );
-    }
-
-    #[test]
-    fn expected_candles_counts_both_ends_of_the_range() {
-        // Used to score data completeness, so an off-by-one here reports healthy series
-        // as gappy (or the reverse) and drives needless refetching.
-        assert_eq!(
-            OhlcvAggregator::expected_candles(BASE, BASE, Timeframe::Minute1),
-            1
-        );
-        assert_eq!(
-            OhlcvAggregator::expected_candles(BASE, BASE + 60, Timeframe::Minute1),
-            2
-        );
-        assert_eq!(
-            OhlcvAggregator::expected_candles(BASE, BASE + 3_600, Timeframe::Minute5),
-            13
-        );
-        // A partial trailing interval is not counted as a whole candle.
-        assert_eq!(
-            OhlcvAggregator::expected_candles(BASE, BASE + 359, Timeframe::Minute5),
-            2
-        );
-        // A reversed range is nonsense, not a negative count.
-        assert_eq!(
-            OhlcvAggregator::expected_candles(BASE + 60, BASE, Timeframe::Minute1),
-            0
         );
     }
 

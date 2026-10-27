@@ -205,16 +205,6 @@ impl Candle {
             volume,
         }
     }
-
-    /// Validates that the OHLCV data is consistent
-    pub fn is_valid(&self) -> bool {
-        self.high >= self.low
-            && self.open >= self.low
-            && self.open <= self.high
-            && self.close >= self.low
-            && self.close <= self.high
-            && self.volume >= 0.0
-    }
 }
 
 // Bundle system constants - hardcoded for performance and simplicity

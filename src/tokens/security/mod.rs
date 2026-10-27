@@ -1,11 +1,7 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Security data fetching from multiple sources
-//!
-//! Each module handles one security analysis source:
-//! - rugcheck: Rugcheck API (comprehensive security analysis)
-//! - risk_band: the low / medium / high bands of the normalised score
+//! Token security data: the Rugcheck fetchers and the normalised risk bands built from them.
 
 pub mod risk_band;
 pub mod rugcheck;

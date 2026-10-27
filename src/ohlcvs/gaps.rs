@@ -19,7 +19,6 @@ use chrono::Utc;
 use serde_json::json;
 use std::sync::Arc;
 use tokio::task::spawn_blocking;
-use tokio::time::Duration;
 
 /// Gap-fill requests one scan may spend across all tokens. The scan runs every
 /// five minutes next to the live monitor, so this keeps it to a few requests
@@ -444,60 +443,6 @@ impl GapManager {
             .collect())
     }
 
-    /// Check data quality and detect potential issues
-    pub async fn check_data_quality(
-        &self,
-        mint: &str,
-        pool_address: &str,
-        timeframe: Timeframe,
-    ) -> OhlcvResult<DataQualityReport> {
-        let (owned_mint, owned_pool) = (mint.to_string(), pool_address.to_string());
-        let mut data = self
-            .blocking(move |db| {
-                db.get_candles(
-                    &owned_mint,
-                    Some(&owned_pool),
-                    Timeframe::Minute1,
-                    None,
-                    None,
-                    Some(10000),
-                )
-            })
-            .await?;
-
-        let total_candles = data.len();
-
-        // Sort to ASC for accurate gap detection
-        data.sort_by_key(|d| d.timestamp);
-
-        let gaps = OhlcvAggregator::detect_gaps(&data, timeframe);
-        let gap_count = gaps.len();
-
-        let invalid_candles = data.iter().filter(|d| !d.is_valid()).count();
-
-        // Calculate expected candles
-        let expected = if let (Some(first), Some(last)) = (data.first(), data.last()) {
-            OhlcvAggregator::expected_candles(first.timestamp, last.timestamp, timeframe)
-        } else {
-            0
-        };
-
-        let completeness = if expected > 0 {
-            ((total_candles as f64) / (expected as f64)) * 100.0
-        } else {
-            100.0
-        };
-
-        Ok(DataQualityReport {
-            total_candles,
-            expected_candles: expected,
-            gap_count,
-            invalid_candles,
-            completeness_percent: completeness,
-            has_issues: gap_count > 0 || invalid_candles > 0,
-        })
-    }
-
     /// Due gap spans of one pool within the retention window, most recent
     /// first, at most `budget` of them.
     pub async fn due_spans(
@@ -642,19 +587,6 @@ impl GapManager {
 
         Ok(fill)
     }
-
-    /// Estimate time to fill all gaps
-    pub async fn estimate_fill_time(&self, mint: &str) -> OhlcvResult<Duration> {
-        let mut total_gaps = 0;
-
-        for timeframe in Timeframe::all() {
-            let gaps = self.get_unfilled_gaps(mint, timeframe).await?;
-            total_gaps += gaps.len();
-        }
-
-        // Estimate: 2 seconds per gap (includes rate limiting)
-        Ok(Duration::from_secs((total_gaps as u64) * 2))
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -665,42 +597,6 @@ pub struct Gap {
     pub start_timestamp: i64,
     pub end_timestamp: i64,
 }
-
-impl Gap {
-    pub fn duration_seconds(&self) -> i64 {
-        self.end_timestamp - self.start_timestamp
-    }
-
-    pub fn candle_count(&self) -> usize {
-        let duration = self.duration_seconds();
-        let candle_duration = self.timeframe.to_seconds();
-
-        if candle_duration == 0 {
-            return 0;
-        }
-
-        (duration / candle_duration) as usize
-    }
-}
-
-#[derive(Debug, Clone, Default)]
-pub struct GapFillStats {
-    pub total_gaps: usize,
-    pub filled_gaps: usize,
-    pub failed_gaps: usize,
-    pub data_points_added: usize,
-}
-
-#[derive(Debug, Clone)]
-pub struct DataQualityReport {
-    pub total_candles: usize,
-    pub expected_candles: usize,
-    pub gap_count: usize,
-    pub invalid_candles: usize,
-    pub completeness_percent: f64,
-    pub has_issues: bool,
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
