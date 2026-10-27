@@ -31,7 +31,7 @@ const UNAVAILABLE_STATUS = {
   enabled: false,
   running: false,
   available: false,
-  unavailable_reason: "setup",
+  unavailable_reason: { id: "paper-live-block-setup-incomplete" },
 };
 const UNAVAILABLE_MONITORS = {
   entry_monitor: { enabled: true, running: false },
@@ -102,7 +102,7 @@ test("an unavailable trader shows no control as on and offers setup", async () =
     const notice = tab.locator("#trader-status-text");
     assert.equal(
       (await notice.textContent()).trim(),
-      "Complete wallet and RPC setup to use Auto Trader"
+      "Finish wallet and RPC setup first"
     );
     assert.equal(await notice.evaluate((el) => getComputedStyle(el).textTransform), "none");
     const colors = await notice.evaluate((el) => {

@@ -9,16 +9,17 @@ use chrono::{DateTime, Utc};
 
 use crate::positions::{PositionManagement, PositionOrigin};
 use crate::trader::admission::EntryBlock;
-use crate::trader::entry::EntryContext;
+use crate::trader::executors::ExecutionContext;
 use crate::trader::types::{TradeAction, TradeDecision, TradePriority, TradeReason, TradeResult};
 use crate::wallets::watch::{ActivityKind, SwapSide, WalletActivity};
 
 use super::risk::precheck;
 use super::sizing::size_for;
 use super::types::{
-    CopyMode, CopyOutcome, CopySkip, CopyTask, CopyTelemetry, ExitMode, LiveDecision,
-    PipelinePolicy, RiskContext, SpendState,
+    CopyOutcome, CopySkip, CopyTask, CopyTelemetry, ExitMode, LiveDecision, PipelinePolicy,
+    RiskContext, SpendState,
 };
+use crate::trader::paper::TradingMode;
 
 #[derive(Debug, Clone)]
 pub struct PreparedLiveEntry {
@@ -27,7 +28,7 @@ pub struct PreparedLiveEntry {
     pub target_size_native: f64,
     pub target_token_amount: f64,
     pub decision: TradeDecision,
-    pub context: EntryContext,
+    pub context: ExecutionContext,
     pub telemetry: CopyTelemetry,
 }
 
@@ -129,7 +130,7 @@ pub fn prepare_live_entry(
     policy: PipelinePolicy,
     decided_at: DateTime<Utc>,
 ) -> Result<PreparedLiveEntry, CopySkip> {
-    if task.mode != CopyMode::Live {
+    if task.mode != TradingMode::Live {
         return Err(CopySkip::ModeTransitionRequired);
     }
     let ActivityKind::Swap {
@@ -161,6 +162,7 @@ pub fn prepare_live_entry(
             action: TradeAction::Buy,
             reason: TradeReason::CopyBuy,
             strategy_id: None,
+            book: crate::positions::Book::Live,
             timestamp: decided_at,
             priority: TradePriority::High,
             price_native: *target_price_native,
@@ -169,7 +171,7 @@ pub fn prepare_live_entry(
             slippage_pct: Some(task.slippage_pct),
             take_profit_level: None,
         },
-        context: EntryContext {
+        context: ExecutionContext {
             origin: PositionOrigin::Copy {
                 task_id: task.id,
                 source_wallet: task.target_address.clone(),
@@ -198,7 +200,7 @@ pub async fn execute_live_with<A, AFut, S, SFut>(
 where
     A: FnOnce(String) -> AFut,
     AFut: Future<Output = Result<(), EntryBlock>>,
-    S: FnOnce(TradeDecision, EntryContext) -> SFut,
+    S: FnOnce(TradeDecision, ExecutionContext) -> SFut,
     SFut: Future<Output = LiveSubmitResult>,
 {
     if let Err(block) = admission(plan.decision.mint.clone()).await {

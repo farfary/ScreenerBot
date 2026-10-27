@@ -4,23 +4,58 @@
 //! Entry evaluation logic with integrated LLM analysis
 //!
 //! Evaluates whether an entry should be made for a token by checking:
-//! 1. Source-independent admission (see `trader::admission::check_entry_admission`):
-//!    force stop, loss limit, entry storage, connectivity, position limits, existing position,
-//!    re-entry cooldown, blacklist
+//! 1. Admission of each mode with enabled entry strategies, on its own book (see
+//!    `trader::admission::admit_modes`): force stop, loss limit (live only), entry storage,
+//!    connectivity, position limits, existing position, re-entry cooldown, paper cash
+//!    (paper only), blacklist
 //! 2. LLM entry analysis (if enabled)
-//! 3. Strategy signals
+//! 3. Strategy signals of the admitted modes
 
 use crate::chains::ChainId;
 use crate::pools::PriceResult;
-use crate::trader::admission::{check_entry_admission, EntryBlock};
+use crate::strategies::db::has_enabled_strategies;
+use crate::strategies::types::StrategyType;
+use crate::trader::admission::{admit_modes, EntryBlock, EntryCycle};
+use crate::trader::paper::TradingMode;
 use crate::trader::types::TradeDecision;
 use crate::trader::{evaluators, llm_analysis};
 
+/// The modes an entry is evaluated for: those with an enabled entry strategy, live
+/// first. With none, live, so the live admission gauntlet reports as it always has.
+fn wanted_modes() -> Vec<TradingMode> {
+    let wanted: Vec<TradingMode> = [TradingMode::Live, TradingMode::Paper]
+        .into_iter()
+        .filter(|mode| matches!(has_enabled_strategies(StrategyType::Entry, *mode), Ok(true)))
+        .collect();
+    if wanted.is_empty() {
+        vec![TradingMode::Live]
+    } else {
+        wanted
+    }
+}
+
+/// The inputs every token of one entry cycle is admitted against, read once for the
+/// cycle: the wanted modes, a SQLite read run on the blocking pool, and the paper cash
+/// when paper is wanted.
+pub async fn entry_cycle() -> EntryCycle {
+    let wanted = match tokio::task::spawn_blocking(wanted_modes).await {
+        Ok(wanted) => wanted,
+        Err(error) => {
+            crate::logger::warning(
+                crate::logger::LogTag::Trader,
+                &format!("Wanted entry modes unavailable: {error}"),
+            );
+            vec![TradingMode::Live]
+        }
+    };
+    EntryCycle::read(wanted).await
+}
+
 /// Evaluate entry opportunity for a token
 ///
-/// Runs the source-independent admission gauntlet first (see
-/// [`crate::trader::admission::check_entry_admission`]), then LLM entry analysis (if
-/// enabled), then strategy evaluation.
+/// Runs the admission gauntlet of each mode `cycle` wants first (see
+/// [`crate::trader::admission::admit_modes`]), then LLM entry analysis (if enabled), then
+/// the strategies of the admitted modes.
 ///
 /// Returns:
 /// - Ok(Some(TradeDecision)) if entry should be made
@@ -30,28 +65,39 @@ pub async fn evaluate_entry_for_token(
     chain: ChainId,
     token_mint: &str,
     price_info: &PriceResult,
+    cycle: &EntryCycle,
 ) -> crate::trader::Result<Option<TradeDecision>> {
-    if let Err(block) = check_entry_admission(token_mint, &["rpc", "dexscreener", "rugcheck"]).await
+    let admitted = match admit_modes(
+        token_mint,
+        &["rpc", "dexscreener", "rugcheck"],
+        cycle,
+        evaluators::strategies::strategy_entry_size_native(),
+    )
+    .await
     {
-        return match block {
-            EntryBlock::Connectivity(unhealthy) => {
-                Err(crate::trader::Error::UnhealthyEndpoints { detail: unhealthy })
+        Ok(admitted) => admitted,
+        Err(block) => {
+            return match block {
+                EntryBlock::Connectivity(unhealthy) => {
+                    Err(crate::trader::Error::UnhealthyEndpoints { detail: unhealthy })
+                }
+                EntryBlock::CheckFailed(e) => Err(crate::trader::Error::StrategyEvaluation {
+                    mint: token_mint.to_owned(),
+                    detail: e,
+                }),
+                EntryBlock::ForceStopped
+                | EntryBlock::LossLimit
+                | EntryBlock::StorageUnavailable(_)
+                | EntryBlock::PositionLimit
+                | EntryBlock::AlreadyOpen
+                | EntryBlock::ReentryCooldown
+                | EntryBlock::OpenCooldown { .. }
+                | EntryBlock::EntryReserved
+                | EntryBlock::PaperBalanceExhausted
+                | EntryBlock::Blacklisted => Ok(None),
             }
-            EntryBlock::CheckFailed(e) => Err(crate::trader::Error::StrategyEvaluation {
-                mint: token_mint.to_owned(),
-                detail: e,
-            }),
-            EntryBlock::ForceStopped
-            | EntryBlock::LossLimit
-            | EntryBlock::StorageUnavailable(_)
-            | EntryBlock::PositionLimit
-            | EntryBlock::AlreadyOpen
-            | EntryBlock::ReentryCooldown
-            | EntryBlock::OpenCooldown { .. }
-            | EntryBlock::EntryReserved
-            | EntryBlock::Blacklisted => Ok(None),
-        };
-    }
+        }
+    };
 
     // 6. LLM entry analysis - check the model-scored entry decision when enabled.
     if llm_analysis::should_analyze_entry() {
@@ -104,5 +150,6 @@ pub async fn evaluate_entry_for_token(
     }
 
     // 7. Strategy evaluation - check configured entry strategies
-    evaluators::StrategyEvaluator::check_entry_strategies(chain, token_mint, price_info).await
+    evaluators::StrategyEvaluator::check_entry_strategies(chain, token_mint, price_info, &admitted)
+        .await
 }

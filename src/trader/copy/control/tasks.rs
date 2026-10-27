@@ -7,12 +7,13 @@
 use chrono::Utc;
 
 use super::super::{
-    confirm_mode_transition, sync_open_position_management, CopyDatabase, CopyMode,
-    CopyPauseReason, CopyTask, CopyTaskInput, ExitMode,
+    confirm_mode_transition, sync_open_position_management, CopyDatabase, CopyPauseReason,
+    CopyTask, CopyTaskInput, ExitMode,
 };
 use super::live_block_reason;
 use super::open_database;
 use crate::positions::PositionOrigin;
+use crate::trader::paper::TradingMode;
 use crate::trader::policy::ExitPolicy;
 use crate::trader::{Error, Result};
 use crate::wallets::watch;
@@ -247,7 +248,7 @@ pub async fn delete_task(id: i64) -> Result<()> {
         .get_task(id)
         .await?
         .ok_or(Error::CopyTaskNotFound { task_id: id })?;
-    if task.enabled && task.mode == CopyMode::Live {
+    if task.enabled && task.mode == TradingMode::Live {
         return Err(Error::CopyTaskLive { task_id: id });
     }
     let open_positions = crate::positions::get_open_positions()
@@ -280,7 +281,7 @@ pub async fn delete_task(id: i64) -> Result<()> {
 /// (`live_block_reason`); returning to paper is always allowed.
 pub async fn set_task_mode(
     id: i64,
-    mode: CopyMode,
+    mode: TradingMode,
     confirmation: Option<String>,
 ) -> Result<CopyTask> {
     let db = open_database().await?;
@@ -288,7 +289,7 @@ pub async fn set_task_mode(
         .get_task(id)
         .await?
         .ok_or(Error::CopyTaskNotFound { task_id: id })?;
-    if mode == CopyMode::Live && current.mode != CopyMode::Live {
+    if mode == TradingMode::Live && current.mode != TradingMode::Live {
         if let Some(reason) = live_block_reason() {
             return Err(Error::CopyLiveUnavailable { reason });
         }

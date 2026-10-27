@@ -48,6 +48,7 @@ copy-entry-block-reentry-cooldown = トークン再エントリーのクール�
 copy-entry-block-open-cooldown = 全体のエントリークールダウン
 copy-entry-block-entry-reserved = 別のエントリーを処理中です
 copy-entry-block-blacklisted = トークンはリスク管理によりブロックされています
+copy-entry-block-paper-balance-exhausted = ペーパー残高が取引に足りません
 copy-entry-block-check-failed = 安全性チェックを完了できませんでした
 
 copy-pause-user = ユーザーが一時停止
@@ -69,17 +70,6 @@ copy-pause-short-storage-restored = データ復元
 copy-state-paused = 一時停止中
 copy-state-paused-reason = 一時停止中 · { $reason }
 
-copy-readiness-history = ペーパー履歴
-copy-readiness-history-met =
-    { $count ->
-       *[other] クローズ済みペーパーラウンド { $count }件（必要数: { $needed }）
-    }
-copy-readiness-history-short = クローズ済みペーパーラウンド { $count }/{ $needed }
-copy-readiness-profit = ペーパーで黒字
-copy-readiness-profit-detail =
-    { $count ->
-       *[other] { $count }ラウンドで { $realized } { -sol } を確定、{ $wins }勝
-    }
 copy-readiness-latency = 取引を時間内に検出
 copy-readiness-latency-detail = p95 到着 { $p95 }秒、上限 { $limit }秒
 copy-readiness-latency-none = 到着サンプルはまだありません
@@ -92,10 +82,7 @@ copy-readiness-priced-missing =
 copy-readiness-runtime = ライブ実行が利用可能
 copy-readiness-runtime-ok = セットアップと安全ゲートによりライブコピーが許可されています
 
-copy-live-block-setup-incomplete = 先にウォレットと RPC のセットアップを完了してください
-copy-live-block-force-stop = 緊急停止が有効です
 copy-live-block-copy-trading-disabled = コピー処理が全体で一時停止されています
-copy-live-block-unavailable = ライブ実行は利用できません
 
 ## Task state, mode and exit labels
 
@@ -104,8 +91,6 @@ copy-state-force-stopped = 強制停止
 copy-state-entries-blocked = エントリーをブロック中
 copy-state-running-live = 実行中
 copy-state-running-paper = 実行中
-copy-mode-paper = ペーパー
-copy-mode-live = ライブ
 copy-exit-mode-buy-only = 自分のエグジットルール
 copy-exit-mode-mirror = ウォレットの売却をミラー
 copy-exit-mode-hybrid = ウォレットの売却と自分のルール
@@ -258,6 +243,7 @@ copy-profile-sub = このボットが確認したウォレットの情報
 copy-settings-title = コピートレード設定
 copy-settings-subtitle = すべてのタスクに適用される全体ポリシー
 copy-settings-filter-warning = デフォルトのフィルタリング設定では、ほぼすべてのトークンが除外されるため、何もコピーされません。ウォレットが取引するトークンをフィルターが通過する場合を除き、オフのままにしてください。
+copy-settings-paper-delay-shared = ペーパー約定は、すべてのペーパーブックで共通のペーパー着地遅延だけ待機します。設定の「ペーパートレード」で変更してください。
 copy-settings-unit-seconds = 秒
 copy-settings-unit-trades = 件
 copy-settings-unit-tasks = 件
@@ -415,8 +401,6 @@ copy-book-skipped = <strong>{ $count }</strong>件をスキップ
 copy-book-failed = <strong>{ $count }</strong>件が失敗
 copy-book-closed = クローズ { $count }件
 copy-book-budget-note = { $mode }の使用額 { $total } · 残り { $remaining }
-copy-check-passed = 合格
-copy-check-not-passed = 不合格
 copy-readiness-title = ライブ開始前の確認
 copy-readiness-live-note = このタスクはライブで取引しています。上部のヘッダーからペーパーに戻せます。
 copy-readiness-all-pass = すべてのチェックに合格しました。

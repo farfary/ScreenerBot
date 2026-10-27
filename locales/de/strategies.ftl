@@ -649,3 +649,13 @@ strategies-error-rule-a-group-needs-at-least-one-condition-switched-on = Eine Gr
 strategies-error-rule-not-operator-cannot-have-a-switched-off-child = Der NOT-Operator darf keinen ausgeschalteten Unterknoten haben
 strategies-error-rule-rules-nest-deeper-than-four-levels = Regeln dürfen höchstens vier Ebenen tief verschachtelt sein
 strategies-error-rule-the-root-group-cannot-be-switched-off = Die oberste Gruppe kann nicht ausgeschaltet werden
+
+strategies-readiness-priced = Jede Position mit Preis
+strategies-readiness-priced-ok = Jede offene Paper-Position hat einen Pool-Preis
+strategies-readiness-priced-missing =
+    { $count ->
+        [one] { $count } offene Paper-Position ohne Pool-Preis
+       *[other] { $count } offene Paper-Positionen ohne Pool-Preis
+    }
+strategies-readiness-runtime = Live-Handel verfügbar
+strategies-readiness-runtime-ok = Einrichtung und Sicherheitsschranken erlauben Live-Trades

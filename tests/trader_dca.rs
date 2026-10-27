@@ -493,6 +493,7 @@ async fn the_executor_refuses_an_add_with_no_size() {
         action: TradeAction::DCA,
         reason: TradeReason::DCAScheduled,
         strategy_id: None,
+        book: screenerbot::positions::Book::Live,
         timestamp: Utc::now(),
         priority: TradePriority::Normal,
         price_native: Some(1.0),
@@ -501,7 +502,8 @@ async fn the_executor_refuses_an_add_with_no_size() {
         slippage_pct: None,
         take_profit_level: None,
     };
-    let error = screenerbot::trader::executors::execute_dca(&decision)
+    let context = screenerbot::trader::executors::ExecutionContext::for_decision(&decision);
+    let error = screenerbot::trader::executors::execute_trade(&decision, context)
         .await
         .expect_err("an add without a size must be refused");
     assert!(

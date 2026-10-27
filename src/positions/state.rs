@@ -668,15 +668,6 @@ fn is_open_pending(mint: &str) -> bool {
     is_pending
 }
 
-/// Get list of open position mints
-pub async fn get_open_mints() -> Vec<String> {
-    get_open_positions()
-        .await
-        .iter()
-        .map(|p| p.mint.clone())
-        .collect()
-}
-
 /// Get position index by mint
 pub async fn get_position_index_by_mint(mint: &str) -> Option<usize> {
     let mint_to_index = MINT_TO_POSITION_INDEX.read().await;

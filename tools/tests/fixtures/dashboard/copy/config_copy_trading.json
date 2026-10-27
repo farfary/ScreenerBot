@@ -10,7 +10,6 @@
     "max_arrival_distance_ms": 4000,
     "latency_window_size": 10,
     "readiness_min_closed_rounds": 10,
-    "paper_landing_delay_ms": 1000,
     "paper_queue_capacity": 32
   },
   "timestamp": "2026-10-07T06:00:00+00:00"

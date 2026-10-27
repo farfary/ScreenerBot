@@ -8,6 +8,7 @@ use crate::database::schema::{ddl, SchemaContext, StoreSchema};
 use crate::errors::{DatabaseError, Error};
 use crate::logger::{self, LogTag};
 use crate::strategies::types::{EvaluationResult, Strategy, StrategyPerformance, StrategyType};
+use crate::trader::paper::TradingMode;
 use chrono::{DateTime, Utc};
 use r2d2::PooledConnection;
 use r2d2_sqlite::SqliteConnectionManager;
@@ -20,11 +21,12 @@ const STRATEGIES_SCHEMA_VERSION: u32 = 1;
 /// nothing read or wrote (an automatic position records its strategy in its origin).
 /// Version 3 adds `strategies.entry_strategy_ids_json`, the entry strategies an exit
 /// strategy manages; its default `'[]'` (every position) is what a v2 core does.
-const STORE_VERSION: i64 = 3;
+/// Version 4 adds `strategies.mode`, paper or live; rows from before it trade live.
+const STORE_VERSION: i64 = 4;
 
-/// The oldest core that reads the store: the v2 drop is breaking, the v3 column is not
-/// (an older core neither reads it nor writes it, and its rows keep the default).
-const MIN_READER_VERSION: i64 = 2;
+/// The oldest core that reads the store. The v4 mode is breaking: a core that ignores
+/// it would trade a paper strategy live, so an older core must refuse the store.
+const MIN_READER_VERSION: i64 = 4;
 
 /// The version the store held when the schema ledger was adopted.
 const LEDGER_BASELINE_VERSION: i64 = 1;
@@ -48,7 +50,8 @@ CREATE TABLE IF NOT EXISTS strategies (
     updated_at TEXT NOT NULL,
     author TEXT,
     version INTEGER NOT NULL DEFAULT 1,
-    entry_strategy_ids_json TEXT NOT NULL DEFAULT '[]' -- exit strategies: the entry strategies managed, empty = all
+    entry_strategy_ids_json TEXT NOT NULL DEFAULT '[]', -- exit strategies: the entry strategies managed, empty = all
+    mode TEXT NOT NULL DEFAULT 'live' CHECK(mode IN ('paper', 'live')) -- the book the strategy trades
 );
 
 CREATE INDEX IF NOT EXISTS idx_strategies_type ON strategies(type);
@@ -193,6 +196,14 @@ fn create_schema(tx: &Transaction<'_>, _: &SchemaContext) -> Result<(), Database
         "entry_strategy_ids_json",
         "TEXT NOT NULL DEFAULT '[]'",
     )?;
+    // Paper or live: a store from before v4 gains the column with the mode every
+    // strategy traded in there.
+    ddl::add_column(
+        tx,
+        "strategies",
+        "mode",
+        "TEXT NOT NULL DEFAULT 'live' CHECK(mode IN ('paper', 'live'))",
+    )?;
     ddl::run_batch(tx, "drop retired strategies tables", DROP_RETIRED_TABLES)
 }
 
@@ -216,7 +227,8 @@ pub fn init_strategies_db() -> crate::Result<()> {
 /// The `strategies` columns every reader selects, in the order [`read_strategy_row`]
 /// reads them.
 const STRATEGY_COLUMNS: &str = "id, name, description, type, enabled, priority, timeframe, \
-     rules_json, parameters_json, created_at, updated_at, author, version, entry_strategy_ids_json";
+     rules_json, parameters_json, created_at, updated_at, author, version, entry_strategy_ids_json, \
+     mode";
 
 /// One `strategies` row as stored, before its JSON and timestamps are parsed.
 struct StrategyRow {
@@ -234,6 +246,7 @@ struct StrategyRow {
     author: Option<String>,
     version: i32,
     entry_strategy_ids_json: String,
+    mode: String,
 }
 
 fn read_strategy_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<StrategyRow> {
@@ -252,6 +265,7 @@ fn read_strategy_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<StrategyRow> {
         author: row.get(11)?,
         version: row.get(12)?,
         entry_strategy_ids_json: row.get(13)?,
+        mode: row.get(14)?,
     })
 }
 
@@ -269,6 +283,8 @@ impl StrategyRow {
                 .map(|time| time.with_timezone(&Utc))
                 .map_err(|e| Error::parse_error(format!("Failed to parse {field} for {id}: {e}")))
         };
+        let mode = TradingMode::parse(&self.mode)
+            .ok_or_else(|| Error::parse_error(format!("Unknown mode '{}' for {id}", self.mode)))?;
         let created_at = parse_time(&self.created_at, "created_at")?;
         let updated_at = parse_time(&self.updated_at, "updated_at")?;
         Ok(Some(Strategy {
@@ -285,6 +301,7 @@ impl StrategyRow {
             author: self.author,
             version: self.version,
             entry_strategy_ids: serde_json::from_str(&self.entry_strategy_ids_json)?,
+            mode,
             id,
         }))
     }
@@ -318,8 +335,8 @@ pub fn insert_strategy(strategy: &Strategy) -> crate::Result<()> {
     let entry_strategy_ids_json = serde_json::to_string(&strategy.entry_strategy_ids)?;
 
     conn.execute(
-        "INSERT INTO strategies (id, name, description, type, enabled, priority, timeframe, rules_json, parameters_json, created_at, updated_at, author, version, entry_strategy_ids_json)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
+        "INSERT INTO strategies (id, name, description, type, enabled, priority, timeframe, rules_json, parameters_json, created_at, updated_at, author, version, entry_strategy_ids_json, mode)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
         params![
             strategy.id,
             strategy.name,
@@ -335,6 +352,7 @@ pub fn insert_strategy(strategy: &Strategy) -> crate::Result<()> {
             strategy.author,
             strategy.version,
             entry_strategy_ids_json,
+            strategy.mode.as_str(),
         ],
     )?;
 
@@ -349,7 +367,8 @@ pub fn insert_strategy(strategy: &Strategy) -> crate::Result<()> {
     Ok(())
 }
 
-/// Update an existing strategy
+/// Update an existing strategy. Its mode is not written: it changes only through
+/// [`set_strategy_mode`].
 pub fn update_strategy(strategy: &Strategy) -> crate::Result<()> {
     let conn = get_connection()?;
 
@@ -395,6 +414,29 @@ pub fn update_strategy(strategy: &Strategy) -> crate::Result<()> {
         ),
     );
 
+    Ok(())
+}
+
+/// Set the paper or live mode of a strategy.
+pub fn set_strategy_mode(strategy_id: &str, mode: TradingMode) -> crate::Result<()> {
+    let conn = get_connection()?;
+    let rows_affected = conn.execute(
+        "UPDATE strategies SET mode = ?2, updated_at = ?3 WHERE id = ?1",
+        params![strategy_id, mode.as_str(), Utc::now().to_rfc3339()],
+    )?;
+    if rows_affected == 0 {
+        return Err(Error::Database(DatabaseError::Query {
+            operation: "set_strategy_mode".to_owned(),
+            message: format!("Strategy not found: {strategy_id}"),
+        }));
+    }
+    logger::info(
+        LogTag::System,
+        &format!(
+            "Strategy mode set: id={strategy_id}, mode={}",
+            mode.as_str()
+        ),
+    );
     Ok(())
 }
 
@@ -455,17 +497,48 @@ pub fn get_all_strategies() -> crate::Result<Vec<Strategy>> {
     )
 }
 
-/// Check if any enabled strategies exist for a given type (lightweight check)
-pub fn has_enabled_strategies(strategy_type: StrategyType) -> crate::Result<bool> {
+/// Check if any enabled strategies of `mode` exist for a given type (lightweight check)
+pub fn has_enabled_strategies(
+    strategy_type: StrategyType,
+    mode: TradingMode,
+) -> crate::Result<bool> {
     let conn = get_connection()?;
 
     let count: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM strategies WHERE type = ?1 AND enabled = 1",
-        params![strategy_type.to_string()],
+        "SELECT COUNT(*) FROM strategies WHERE type = ?1 AND enabled = 1 AND mode = ?2",
+        params![strategy_type.to_string(), mode.as_str()],
         |row| row.get(0),
     )?;
 
     Ok(count > 0)
+}
+
+/// The enabled strategies of each trading mode.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct EnabledStrategyCounts {
+    pub live: usize,
+    pub paper: usize,
+}
+
+/// Count the enabled strategies of each trading mode.
+pub fn enabled_strategy_counts() -> crate::Result<EnabledStrategyCounts> {
+    let conn = get_connection()?;
+    let mut stmt =
+        conn.prepare("SELECT mode, COUNT(*) FROM strategies WHERE enabled = 1 GROUP BY mode")?;
+    let rows = stmt.query_map([], |row| {
+        Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+    })?;
+    let mut counts = EnabledStrategyCounts::default();
+    for row in rows {
+        let (mode, count) = row?;
+        let count = usize::try_from(count).unwrap_or_default();
+        match TradingMode::parse(&mode) {
+            Some(TradingMode::Live) => counts.live = count,
+            Some(TradingMode::Paper) => counts.paper = count,
+            None => return Err(Error::parse_error(format!("Unknown strategy mode: {mode}"))),
+        }
+    }
+    Ok(counts)
 }
 
 /// Get enabled strategies by type
@@ -554,3 +627,7 @@ pub fn get_strategy_performance(strategy_id: &str) -> crate::Result<Option<Strat
         None => Ok(None),
     }
 }
+
+#[cfg(test)]
+#[path = "database_tests.rs"]
+mod tests;

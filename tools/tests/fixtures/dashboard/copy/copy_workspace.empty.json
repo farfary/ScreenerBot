@@ -173,11 +173,11 @@
       {
         "id": "history",
         "text": {
-          "id": "copy-readiness-history"
+          "id": "paper-readiness-history"
         },
         "passed": false,
         "detail": {
-          "id": "copy-readiness-history-short",
+          "id": "paper-readiness-history-short",
           "args": {
             "count": {
               "type": "count",
@@ -193,11 +193,11 @@
       {
         "id": "profit",
         "text": {
-          "id": "copy-readiness-profit"
+          "id": "paper-readiness-profit"
         },
         "passed": false,
         "detail": {
-          "id": "copy-readiness-profit-detail",
+          "id": "paper-readiness-profit-detail",
           "args": {
             "count": {
               "type": "count",

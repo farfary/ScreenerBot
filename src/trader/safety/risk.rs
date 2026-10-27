@@ -37,6 +37,7 @@ pub async fn check_risk_limits(
             action: TradeAction::Sell,
             reason: TradeReason::RiskManagement,
             strategy_id: None,
+            book: position.book,
             timestamp: Utc::now(),
             priority: TradePriority::Emergency,
             price_native: Some(current_price),

@@ -14,7 +14,7 @@ fn exact_paper_buy(
     decimals: u8,
 ) -> CopyOutcome {
     let now = Utc::now();
-    let metadata = crate::trader::copy::types::PaperQuoteMetadata {
+    let metadata = crate::trader::paper::PaperQuoteMetadata {
         router_id: "test-router".to_owned(),
         initial_at: now,
         landing_at: now,
@@ -36,7 +36,7 @@ fn exact_paper_buy(
         target_size_sol: 0.1,
         target_token_amount: raw.to_whole_units(decimals),
         sized_sol: 0.1,
-        fill: crate::trader::copy::types::PaperFill {
+        fill: crate::trader::paper::PaperFill {
             input_sol: 0.1,
             market_price_sol: 0.01,
             priced_from_pool: false,
@@ -46,7 +46,7 @@ fn exact_paper_buy(
             network_fee_sol: 0.000005,
             priority_fee_sol: 0.0,
             total_cost_sol: 0.100005,
-            model: crate::trader::copy::types::PaperModel::Quote,
+            model: crate::trader::paper::PaperModel::Quote,
             quote: Some(metadata),
         },
         telemetry: crate::trader::copy::types::CopyTelemetry {
@@ -93,7 +93,7 @@ fn exact_paper_sell(
             fill_price_sol: Some(0.01),
             backfill: false,
         },
-        paper_fill: Some(crate::trader::copy::types::PaperSellFill {
+        paper_fill: Some(crate::trader::paper::PaperSellFill {
             token_amount: raw.to_whole_units(decimals),
             market_price_sol: 0.01,
             priced_from_pool: false,
@@ -103,8 +103,8 @@ fn exact_paper_sell(
             network_fee_sol: 0.0,
             priority_fee_sol: 0.0,
             net_proceeds_sol: 0.05,
-            model: crate::trader::copy::types::PaperModel::Quote,
-            quote: Some(crate::trader::copy::types::PaperQuoteMetadata {
+            model: crate::trader::paper::PaperModel::Quote,
+            quote: Some(crate::trader::paper::PaperQuoteMetadata {
                 router_id: "test-router".to_owned(),
                 initial_at: now,
                 landing_at: now,
@@ -311,7 +311,7 @@ async fn raw_balance_overflow_and_sell_mismatches_roll_back_the_whole_outcome() 
         activity_before
     );
     assert_eq!(
-        db.task_total_spent(configured.id, CopyMode::Paper)
+        db.task_total_spent(configured.id, TradingMode::Paper)
             .await
             .unwrap(),
         0.100005

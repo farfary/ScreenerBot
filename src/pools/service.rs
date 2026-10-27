@@ -324,11 +324,11 @@ pub fn is_pool_service_running() -> bool {
     SERVICE_RUNNING.load(Ordering::SeqCst)
 }
 
-/// The open positions' mints that `chain` accepts as addresses. Positions
-/// carry no chain yet, so the chain's own address rule selects them.
+/// The held mints of the live and paper books that `chain` accepts as addresses.
+/// Positions carry no chain yet, so the chain's own address rule selects them.
 async fn open_mints_on(chain: ChainId) -> Vec<String> {
     let adapter = adapter_for(chain);
-    crate::positions::get_open_mints()
+    crate::positions::books::held_mints()
         .await
         .into_iter()
         .filter(|mint| adapter.validate_address(mint).is_ok())

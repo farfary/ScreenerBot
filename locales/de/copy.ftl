@@ -48,6 +48,7 @@ copy-entry-block-reentry-cooldown = Abkühlphase für erneuten Token-Einstieg
 copy-entry-block-open-cooldown = Globale Abkühlphase für Einstiege
 copy-entry-block-entry-reserved = Ein anderer Einstieg wird verarbeitet
 copy-entry-block-blacklisted = Token durch Risikokontrollen gesperrt
+copy-entry-block-paper-balance-exhausted = Paper-Guthaben deckt den Trade nicht
 copy-entry-block-check-failed = Eine Sicherheitsprüfung konnte nicht abgeschlossen werden
 
 copy-pause-user = Von Ihnen pausiert
@@ -69,19 +70,6 @@ copy-pause-short-storage-restored = Daten wiederhergestellt
 copy-state-paused = Pausiert
 copy-state-paused-reason = Pausiert · { $reason }
 
-copy-readiness-history = Paper-Verlauf
-copy-readiness-history-met =
-    { $count ->
-        [one] { $count } geschlossene Paper-Runde, { $needed } erforderlich
-       *[other] { $count } geschlossene Paper-Runden, { $needed } erforderlich
-    }
-copy-readiness-history-short = { $count } von { $needed } geschlossenen Paper-Runden
-copy-readiness-profit = Im Paper-Modus profitabel
-copy-readiness-profit-detail =
-    { $count ->
-        [one] { $realized } { -sol } realisiert in { $count } Runde, { $wins } gewonnen
-       *[other] { $realized } { -sol } realisiert in { $count } Runden, { $wins } gewonnen
-    }
 copy-readiness-latency = Trades rechtzeitig erkannt
 copy-readiness-latency-detail = p95-Ankunft { $p95 } s, Limit { $limit } s
 copy-readiness-latency-none = Noch keine Ankunftsstichproben
@@ -95,10 +83,7 @@ copy-readiness-priced-missing =
 copy-readiness-runtime = Live-Ausführung verfügbar
 copy-readiness-runtime-ok = Einrichtung und Sicherheitsschranken erlauben Live-Kopien
 
-copy-live-block-setup-incomplete = Schließen Sie zuerst die Wallet- und RPC-Einrichtung ab
-copy-live-block-force-stop = Der Not-Stopp ist aktiv
 copy-live-block-copy-trading-disabled = Copy-Verarbeitung ist global pausiert
-copy-live-block-unavailable = Live-Ausführung ist nicht verfügbar
 
 ## Task state, mode and exit labels.
 
@@ -107,8 +92,6 @@ copy-state-force-stopped = Sofort gestoppt
 copy-state-entries-blocked = Einstiege blockiert
 copy-state-running-live = Läuft
 copy-state-running-paper = Läuft
-copy-mode-paper = Paper
-copy-mode-live = Live
 copy-exit-mode-buy-only = Meine Ausstiegsregeln
 copy-exit-mode-mirror = Wallet-Verkäufe spiegeln
 copy-exit-mode-hybrid = Wallet-Verkäufe und meine Regeln
@@ -268,6 +251,7 @@ copy-profile-sub = Was dieser Bot von der Wallet gesehen hat
 copy-settings-title = Copy-Trading-Einstellungen
 copy-settings-subtitle = Globale Richtlinie für alle Aufgaben
 copy-settings-filter-warning = Mit der Standard-Filterung lehnt dies fast jeden Token ab, sodass nichts kopiert wird. Lassen Sie es ausgeschaltet, es sei denn, Ihre Filter lassen die Tokens durch, die Ihre Wallets handeln.
+copy-settings-paper-delay-shared = Paper-Ausführungen warten die Paper-Ausführungsverzögerung ab, die alle Paper-Bücher teilen. Ändern Sie sie in der Konfiguration unter Paper-Trading.
 copy-settings-unit-seconds = s
 copy-settings-unit-trades = Trades
 copy-settings-unit-tasks = Aufgaben
@@ -432,8 +416,6 @@ copy-book-skipped = <strong>{ $count }</strong> übersprungen
 copy-book-failed = <strong>{ $count }</strong> fehlgeschlagen
 copy-book-closed = { $count } geschlossen
 copy-book-budget-note = { $mode }-Ausgaben von { $total } · { $remaining } übrig
-copy-check-passed = bestanden
-copy-check-not-passed = nicht bestanden
 copy-readiness-title = Vor dem Live-Gang
 copy-readiness-live-note = Diese Aufgabe handelt live. Setzen Sie sie in der Kopfzeile oben auf Paper zurück.
 copy-readiness-all-pass = Alle Prüfungen bestanden.

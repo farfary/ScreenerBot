@@ -8,6 +8,7 @@ mod convenience;
 mod global;
 mod open_round;
 mod operations;
+mod paper;
 mod provenance;
 mod queries;
 mod raw_migration;
@@ -36,7 +37,9 @@ pub use global::{
 };
 
 pub(crate) use booking::{Booking, BookingReads, BookingRecord, Committed, OtherOpenHeld};
-pub(crate) use operations::{carry_columns_not_booked, SCHEMA};
+pub(crate) use operations::{carry_columns_not_booked, PAPER_SCHEMA, SCHEMA};
+pub use paper::{PaperEpoch, PaperLegRecord};
+pub(crate) use paper::{PaperLegKind, PaperLegRow};
 pub(crate) use queries::{count_open_positions_in_file, open_positions_by_wallet_in_file};
 pub use queries::{MintRow, TraderSwapLeg};
 

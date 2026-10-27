@@ -47,6 +47,7 @@ use screenerbot::strategies::types::{
 };
 use screenerbot::strategies::Error as StrategyError;
 use screenerbot::trader::evaluators::strategies::{strategy_market_data, strategy_position_data};
+use screenerbot::trader::paper::TradingMode;
 use serde_json::json;
 
 const MINUTE: i64 = 60;
@@ -100,6 +101,7 @@ fn strategy(strategy_type: StrategyType, timeframe: &str, rules: RuleTree) -> St
         author: None,
         version: 1,
         entry_strategy_ids: Vec::new(),
+        mode: TradingMode::Live,
     }
 }
 

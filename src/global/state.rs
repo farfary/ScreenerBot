@@ -315,9 +315,52 @@ pub fn are_trades_active() -> bool {
     TRADES_ACTIVE_COUNT.load(std::sync::atomic::Ordering::SeqCst) > 0
 }
 
+tokio::task_local! {
+    static PAPER_SCOPE: ();
+}
+
+/// Run `future` as paper trading. Key access, swap execution and transaction
+/// send refuse to run inside it. The scope is task-local: a task spawned from
+/// inside it runs outside it, so paper code never spawns.
+pub async fn paper_scope<F: std::future::Future>(future: F) -> F::Output {
+    PAPER_SCOPE.scope((), future).await
+}
+
+/// True while the current task runs inside `paper_scope`.
+pub fn in_paper_scope() -> bool {
+    PAPER_SCOPE.try_with(|_| ()).is_ok()
+}
+
 /// Get count of active tools (for diagnostics).
 pub fn active_tools_count() -> u32 {
     TOOLS_ACTIVE_COUNT.load(std::sync::atomic::Ordering::SeqCst)
+}
+
+#[cfg(test)]
+mod paper_scope_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn paper_scope_covers_its_future_and_nothing_else() {
+        assert!(!in_paper_scope());
+        let inside = paper_scope(async {
+            tokio::task::yield_now().await;
+            in_paper_scope()
+        })
+        .await;
+        assert!(inside);
+        assert!(!in_paper_scope());
+        let nested = paper_scope(paper_scope(async { in_paper_scope() })).await;
+        assert!(nested);
+    }
+
+    #[tokio::test]
+    async fn a_spawned_task_leaves_the_paper_scope() {
+        let spawned = paper_scope(async { tokio::spawn(async { in_paper_scope() }).await })
+            .await
+            .unwrap();
+        assert!(!spawned);
+    }
 }
 
 #[cfg(test)]

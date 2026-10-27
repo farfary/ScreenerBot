@@ -30,6 +30,15 @@ struct CachedMainKeypair {
 static MAIN_KEYPAIR_CACHE: LazyLock<RwLock<Option<CachedMainKeypair>>> =
     LazyLock::new(|| RwLock::new(None));
 
+/// Refuse key material inside a paper scope. Every accessor calls this first,
+/// before any key or database read.
+pub(super) fn refuse_in_paper_scope(operation: &'static str) -> Result<()> {
+    if crate::global::in_paper_scope() {
+        return Err(Error::PaperScopeRefused { operation });
+    }
+    Ok(())
+}
+
 fn clone_keypair(keypair: &Keypair) -> Result<Keypair> {
     Keypair::try_from(&keypair.to_bytes()[..]).map_err(|e| Error::InvalidKeypair {
         detail: format!("failed to clone keypair: {e}"),
@@ -40,6 +49,7 @@ fn clone_keypair(keypair: &Keypair) -> Result<Keypair> {
 /// of the process. Every caller gets its own clone; nothing outside this
 /// module ever holds the cached original.
 pub async fn main_keypair() -> Result<Keypair> {
+    refuse_in_paper_scope("main_keypair")?;
     {
         let cache = MAIN_KEYPAIR_CACHE.read().await;
         if let Some(cached) = cache.as_ref() {
@@ -77,6 +87,7 @@ pub async fn cached_main_wallet_id() -> Option<i64> {
 /// signature. Not cached and never used to sign a transaction: only the main
 /// wallet signs swaps and transfers.
 async fn keypair_for_wallet(wallet_id: i64) -> Result<Keypair> {
+    refuse_in_paper_scope("keypair_for_wallet")?;
     let (ciphertext, nonce) = crate::wallets::get_wallet_encrypted_key(wallet_id)
         .await
         .map_err(|e| Error::KeypairUnavailable {
@@ -89,6 +100,7 @@ async fn keypair_for_wallet(wallet_id: i64) -> Result<Keypair> {
 /// bot signs something that is not a transaction: proving wallet ownership
 /// to screenerbot.io during account sign-in.
 pub async fn sign_message_with_main_wallet(message: &str) -> Result<String> {
+    refuse_in_paper_scope("sign_message_with_main_wallet")?;
     let keypair = main_keypair().await?;
     Ok(keypair.sign_message(message.as_bytes()).to_string())
 }
@@ -100,6 +112,7 @@ pub async fn sign_message_with_main_wallet(message: &str) -> Result<String> {
 pub async fn sign_message_for_active_wallets(
     message_for: impl Fn(&str) -> String,
 ) -> Result<Vec<(String, String)>> {
+    refuse_in_paper_scope("sign_message_for_active_wallets")?;
     let wallets =
         crate::wallets::list_active_wallets()
             .await
@@ -139,6 +152,7 @@ pub async fn sign_message_for_active_wallets(
 /// Async form of [`configured_keypair`], for callers already running on an
 /// executor. Prefer this over the sync bridge when the caller is `async fn`.
 pub async fn configured_keypair_async() -> Result<Keypair> {
+    refuse_in_paper_scope("configured_keypair_async")?;
     if crate::wallets::is_initialized().await {
         return main_keypair().await;
     }
@@ -180,6 +194,7 @@ pub async fn configured_address_async() -> Result<String> {
 /// a current-thread caller gets a clear error telling it to use
 /// `configured_keypair_async()` instead — never a hang.
 pub fn configured_keypair() -> Result<Keypair> {
+    refuse_in_paper_scope("configured_keypair")?;
     match tokio::runtime::Handle::try_current() {
         Ok(handle) => match handle.runtime_flavor() {
             tokio::runtime::RuntimeFlavor::MultiThread => tokio::task::block_in_place(|| {
@@ -199,6 +214,7 @@ pub fn configured_keypair() -> Result<Keypair> {
 /// Fallback: decrypt the wallet stored directly in `config.toml`, used only
 /// before the wallet store initializes.
 fn configured_keypair_from_legacy_config() -> Result<Keypair> {
+    refuse_in_paper_scope("configured_keypair_from_legacy_config")?;
     crate::config::with_config(|cfg| {
         if cfg.wallet_encrypted.is_empty() || cfg.wallet_nonce.is_empty() {
             return Err(Error::KeypairUnavailable {
@@ -261,6 +277,51 @@ pub fn configured_address() -> Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn refused(result: Result<impl Sized>, operation: &'static str) {
+        match result {
+            Err(Error::PaperScopeRefused { operation: refused }) => {
+                assert_eq!(refused, operation)
+            }
+            Err(other) => panic!("{operation} reached {other} inside a paper scope"),
+            Ok(_) => panic!("{operation} returned key material inside a paper scope"),
+        }
+    }
+
+    #[tokio::test]
+    async fn paper_scope_refuses_every_key_accessor() {
+        crate::global::paper_scope(async {
+            refused(main_keypair().await, "main_keypair");
+            refused(keypair_for_wallet(1).await, "keypair_for_wallet");
+            refused(
+                sign_message_with_main_wallet("message").await,
+                "sign_message_with_main_wallet",
+            );
+            refused(
+                sign_message_for_active_wallets(|address| address.to_owned()).await,
+                "sign_message_for_active_wallets",
+            );
+            refused(configured_keypair_async().await, "configured_keypair_async");
+            refused(configured_keypair(), "configured_keypair");
+            refused(
+                configured_keypair_from_legacy_config(),
+                "configured_keypair_from_legacy_config",
+            );
+            refused(
+                super::super::keypair::decrypt_to_keypair("ciphertext", "nonce"),
+                "decrypt_to_keypair",
+            );
+            refused(
+                super::super::keypair::export_private_key("ciphertext", "nonce"),
+                "export_private_key",
+            );
+            refused(
+                super::super::keypair::parse_private_key("key"),
+                "parse_private_key",
+            );
+        })
+        .await;
+    }
 
     #[test]
     fn clone_keypair_round_trips_the_public_key() {

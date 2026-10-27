@@ -69,3 +69,9 @@ common-venue-serum = { -serum }
 common-venue-openbook = { -openbook }
 common-venue-phoenix = { -phoenix }
 common-venue-direct-pool = Прямой пул
+
+common-mode-paper = Виртуальный
+common-mode-live = Боевой
+common-check-passed = пройдена
+common-check-not-passed = не пройдена
+common-arm-type-phrase = Введите { $phrase } для подтверждения

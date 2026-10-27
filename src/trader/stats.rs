@@ -1,15 +1,17 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Realized auto-trader performance over a window, plus live exposure. One
+//! Realized auto-trader performance over a window, plus open exposure, of one book. One
 //! aggregation over one row set, shared by the dashboard Stats tab and the agent
-//! tools, so no surface can show a figure the other never computed.
+//! tools, so no surface can show a figure the other never computed. The live and the
+//! paper book are aggregated apart and never mixed.
 
+use chrono::{DateTime, Utc};
 use serde::Serialize;
 use std::collections::HashMap;
 
 use crate::config::with_config;
-use crate::positions;
+use crate::positions::{self, Book, Position};
 
 /// Realized performance over a closed window, plus the live exposure that window
 /// does not cover.
@@ -78,36 +80,77 @@ pub struct ExitBreakdown {
     pub net_pnl_native: f64,
 }
 
-/// Aggregate closed rounds in the last `period_days` (clamped to 1..=365) with
-/// the currently open exposure.
-pub async fn trader_stats(period_days: u32) -> TraderStats {
-    // Live exposure. Not window-bound: what is at risk right now is independent of
+/// Aggregate the closed rounds of `book` in the last `period_days` with its currently
+/// open exposure.
+pub async fn trader_stats(book: Book, period_days: u32) -> TraderStats {
+    // Open exposure. Not window-bound: what is at risk right now is independent of
     // how far back the realized window reaches.
-    let open_positions = positions::get_open_positions().await;
-    let open_positions_count = open_positions.len();
-    let locked_native: f64 = open_positions.iter().map(|p| p.total_size_native).sum();
+    let open_positions = positions::books::open_positions(book).await;
     let max_open_positions = with_config(|cfg| cfg.trader.max_open_positions);
+    let window_start = Utc::now() - chrono::Duration::days(i64::from(period_days));
+    let recent_closed = closed_since(book, window_start).await;
+    trader_stats_from(
+        period_days,
+        &open_positions,
+        recent_closed,
+        max_open_positions,
+        window_start,
+    )
+}
 
-    let window_start = chrono::Utc::now() - chrono::Duration::days(i64::from(period_days));
-    let recent_closed = {
-        let db_ref = positions::db::get_positions_database().await.ok();
-        if let Some(db_arc) = db_ref {
-            let db_guard = db_arc.lock().await;
-            if let Some(db) = db_guard.as_ref() {
-                db.get_closed_positions_since(window_start)
-                    .await
-                    .unwrap_or_default()
+/// The rounds of `book` closed since `since`, newest first; none when its store is not
+/// open.
+async fn closed_since(book: Book, since: DateTime<Utc>) -> Vec<Position> {
+    match book {
+        Book::Live => {
+            let db_ref = positions::db::get_positions_database().await.ok();
+            if let Some(db_arc) = db_ref {
+                let db_guard = db_arc.lock().await;
+                if let Some(db) = db_guard.as_ref() {
+                    db.get_closed_positions_since(since)
+                        .await
+                        .unwrap_or_default()
+                } else {
+                    Vec::new()
+                }
             } else {
                 Vec::new()
             }
-        } else {
-            Vec::new()
         }
-    };
+        Book::Paper => match positions::paper::book() {
+            Some(paper) => paper.closed_since(since).await.unwrap_or_default(),
+            None => Vec::new(),
+        },
+    }
+}
+
+/// True for a round a paper run reset closed at its mark: no exit decision closed it, so
+/// it is not a trade.
+fn is_paper_reset_close(position: &Position) -> bool {
+    position.closed_reason.as_deref()
+        == Some(format!("{:?}", crate::trader::types::TradeReason::PaperReset).as_str())
+}
+
+/// The stats of a book from its `open_positions` and the rounds it closed since
+/// `window_start` (`recent_closed`, newest first). A round a paper run reset closed is
+/// not a trade and is left out of every figure.
+pub fn trader_stats_from(
+    period_days: u32,
+    open_positions: &[Position],
+    recent_closed: Vec<Position>,
+    max_open_positions: usize,
+    window_start: DateTime<Utc>,
+) -> TraderStats {
+    let open_positions_count = open_positions.len();
+    let locked_native: f64 = open_positions.iter().map(|p| p.total_size_native).sum();
 
     // A round whose basis or history is incomplete has no honest P&L. Overview
     // already refuses to price those; counting them here is what let this tab
     // disagree with Home on the same wallet.
+    let recent_closed: Vec<Position> = recent_closed
+        .into_iter()
+        .filter(|p| !is_paper_reset_close(p))
+        .collect();
     let fetched = recent_closed.len();
     let closed: Vec<_> = recent_closed
         .into_iter()
@@ -233,7 +276,7 @@ pub async fn trader_stats(period_days: u32) -> TraderStats {
 
     // Emit every calendar day in the window, including the empty ones, so the curve
     // keeps a true time axis instead of compressing quiet stretches away.
-    let today = chrono::Utc::now().date_naive();
+    let today = Utc::now().date_naive();
     let first_day = window_start.date_naive();
     let mut daily_pnl = Vec::new();
     let mut day = first_day;
@@ -313,3 +356,7 @@ pub async fn trader_stats(period_days: u32) -> TraderStats {
         exit_breakdown,
     }
 }
+
+#[cfg(test)]
+#[path = "stats_tests.rs"]
+mod tests;

@@ -26,6 +26,7 @@ use crate::{
 use super::types::*;
 use super::utils::{err, err_cause};
 use crate::i18n::ids;
+use crate::trader::paper::TradingMode;
 use crate::webserver::api_error::{ApiError, ApiErrorCode};
 use axum::response::IntoResponse as _;
 
@@ -132,6 +133,7 @@ pub async fn list_strategies(Query(query): Query<StrategyListQuery>) -> Response
             author: s.author,
             version: s.version,
             entry_strategy_ids: s.entry_strategy_ids,
+            mode: s.mode,
         })
         .collect();
 
@@ -188,6 +190,7 @@ pub async fn get_strategy_detail(Path(id): Path<String>) -> Response {
         author: strategy.author,
         version: strategy.version,
         entry_strategy_ids: strategy.entry_strategy_ids,
+        mode: strategy.mode,
     };
 
     success_response(response)
@@ -262,6 +265,8 @@ pub async fn create_strategy(Json(request): Json<StrategyRequest>) -> Response {
             strategy_type,
             request.entry_strategy_ids.unwrap_or_default(),
         ),
+        // A new strategy proves itself on paper before it is armed live.
+        mode: TradingMode::Paper,
     };
 
     // Validate strategy before saving
@@ -359,6 +364,7 @@ pub async fn update_strategy_handler(
                 .entry_strategy_ids
                 .unwrap_or_else(|| existing.entry_strategy_ids.clone()),
         ),
+        mode: existing.mode,
     };
 
     // Validate strategy before saving

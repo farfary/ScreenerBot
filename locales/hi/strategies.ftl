@@ -627,3 +627,13 @@ strategies-error-rule-a-group-needs-at-least-one-condition-switched-on = हर 
 strategies-error-rule-not-operator-cannot-have-a-switched-off-child = NOT ऑपरेटर का चाइल्ड बंद नहीं हो सकता
 strategies-error-rule-rules-nest-deeper-than-four-levels = नियम चार स्तर से अधिक गहरे नेस्ट नहीं हो सकते
 strategies-error-rule-the-root-group-cannot-be-switched-off = रूट समूह को बंद नहीं किया जा सकता
+
+strategies-readiness-priced = हर पोज़िशन की कीमत उपलब्ध
+strategies-readiness-priced-ok = हर खुली पेपर पोज़िशन का पूल प्राइस है
+strategies-readiness-priced-missing =
+    { $count ->
+        [one] { $count } खुली पेपर पोज़िशन का पूल प्राइस नहीं है
+       *[other] { $count } खुली पेपर पोज़िशन का पूल प्राइस नहीं है
+    }
+strategies-readiness-runtime = लाइव ट्रेडिंग उपलब्ध
+strategies-readiness-runtime-ok = सेटअप और सुरक्षा गेट लाइव ट्रेड की अनुमति देते हैं

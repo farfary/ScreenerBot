@@ -268,44 +268,6 @@
   color: var(--text-primary);
 }
 
-.copy-checks {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-sm);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.copy-check {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--spacing-sm);
-}
-
-.copy-check > i {
-  margin-top: 2px;
-  font-size: 1rem;
-}
-
-.copy-check.is-passed > i {
-  color: var(--success-color);
-}
-
-.copy-check.is-failed > i {
-  color: var(--error-color);
-}
-
-.copy-check strong {
-  display: block;
-  font-size: var(--font-size-sm);
-}
-
-.copy-check small {
-  font-size: var(--font-size-xs);
-  color: var(--text-muted);
-}
-
 .copy-readiness-foot {
   display: flex;
   flex-wrap: wrap;

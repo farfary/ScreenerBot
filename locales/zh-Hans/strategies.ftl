@@ -657,3 +657,12 @@ strategies-error-rule-a-group-needs-at-least-one-condition-switched-on = 每个�
 strategies-error-rule-not-operator-cannot-have-a-switched-off-child = NOT 运算符的子节点不能被关闭
 strategies-error-rule-rules-nest-deeper-than-four-levels = 规则嵌套不能超过四层
 strategies-error-rule-the-root-group-cannot-be-switched-off = 根分组不能被关闭
+
+strategies-readiness-priced = 所有仓位均有价格
+strategies-readiness-priced-ok = 每个未平仓的模拟仓位都有流动性池价格
+strategies-readiness-priced-missing =
+    { $count ->
+       *[other] { $count } 个未平仓的模拟仓位没有流动性池价格
+    }
+strategies-readiness-runtime = 可进行实盘交易
+strategies-readiness-runtime-ok = 设置和安全检查均允许实盘交易

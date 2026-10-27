@@ -8,7 +8,8 @@
 //! - Filtered-token intersection with available pool tokens
 //! - Concurrency control via semaphore
 //! - Calling evaluators for entry logic
-//! - Delegating to `trader::entry` for reservation and submission
+//! - Delegating to `trader::entry` for reservation and submission: live decisions in the
+//!   cycle, paper decisions afterwards in the monitor's detached paper batch
 //!
 //! Token reservation and the submission pipeline (execute trade, event recording, action
 //! tracking) live in `trader::entry`, shared with any other entry source.
@@ -17,7 +18,11 @@ use crate::chains::{ChainId, ChainScope};
 use crate::i18n::{ids, UiText};
 use crate::logger::{self, LogTag};
 use crate::pools;
+use crate::positions::Book;
+use crate::trader::types::TradeDecision;
 use crate::trader::{config, constants, entry, evaluators};
+
+use super::paper_batch::PaperBatch;
 use std::collections::{HashMap, HashSet};
 use tokio::time::{sleep, Duration, Instant};
 
@@ -47,6 +52,7 @@ pub async fn monitor_entries(
     let semaphore = std::sync::Arc::new(tokio::sync::Semaphore::new(entry_check_concurrency));
 
     let mut was_paused = false; // Track paused state
+    let mut paper_batch = PaperBatch::new("entry");
 
     loop {
         // Check if we should shutdown
@@ -145,12 +151,20 @@ pub async fn monitor_entries(
             );
         }
 
+        // The token-independent admission inputs, read once for the whole cycle
+        let cycle_inputs = if available_tokens.is_empty() {
+            None
+        } else {
+            Some(std::sync::Arc::new(evaluators::entry_cycle().await))
+        };
+
         // Process tokens with concurrency control
         let mut futures = Vec::new();
 
         for (chain, token) in &available_tokens {
-            // Try to reserve token for this cycle - prevents duplicate concurrent entries
-            if !entry::try_reserve_entry(token).await {
+            // Try to reserve token for this cycle - prevents duplicate concurrent entries.
+            // Evaluation may decide a live entry, so it holds the live reservation.
+            if !entry::try_reserve_entry(Book::Live, token).await {
                 logger::debug(
                     LogTag::Trader,
                     &format!(
@@ -169,6 +183,7 @@ pub async fn monitor_entries(
                 let sem_clone = semaphore.clone();
                 let token_clone = token.clone();
                 let chain = *chain;
+                let cycle_inputs = cycle_inputs.clone();
 
                 let future = tokio::spawn(async move {
                     let _permit = match tokio::time::timeout(
@@ -197,9 +212,16 @@ pub async fn monitor_entries(
                         }
                     };
 
+                    let cycle_inputs = cycle_inputs?;
+
                     // Evaluate entry opportunity (all safety checks + strategy evaluation)
-                    match evaluators::evaluate_entry_for_token(chain, &token_clone, &price_info)
-                        .await
+                    match evaluators::evaluate_entry_for_token(
+                        chain,
+                        &token_clone,
+                        &price_info,
+                        &cycle_inputs,
+                    )
+                    .await
                     {
                         Ok(Some(decision)) => Some(decision),
                         Ok(None) => None,
@@ -219,19 +241,27 @@ pub async fn monitor_entries(
             // This prevents race conditions from immediate clearing
         }
 
-        // Collect results and process trade decisions
+        // Collect results and process trade decisions: live ones now, paper ones after
+        let mut paper_decisions = Vec::new();
         for (token, future) in futures {
             match future.await {
+                Ok(Some(decision)) if decision.book == Book::Paper => {
+                    // No live entry follows: the paper entry holds its own reservation
+                    entry::clear_entry_reservation(Book::Live, &token).await;
+                    if entry::try_reserve_entry(Book::Paper, &token).await {
+                        paper_decisions.push(decision);
+                    }
+                }
                 Ok(Some(decision)) => {
                     entry::submit_entry(decision).await;
                 }
                 Ok(None) => {
                     // No entry signal, clear reservation
-                    entry::clear_entry_reservation(&token).await;
+                    entry::clear_entry_reservation(Book::Live, &token).await;
                 }
                 Err(e) => {
                     // Task error, clear reservation
-                    entry::clear_entry_reservation(&token).await;
+                    entry::clear_entry_reservation(Book::Live, &token).await;
                     logger::error(
                         LogTag::Trader,
                         &format!("Entry evaluation task failed for {token}: {e}"),
@@ -239,6 +269,8 @@ pub async fn monitor_entries(
                 }
             }
         }
+
+        launch_paper_entries(&mut paper_batch, paper_decisions).await;
 
         // Calculate wait time for next cycle
         let cycle_duration = cycle_start.elapsed();
@@ -262,4 +294,28 @@ pub async fn monitor_entries(
     }
 
     Ok(())
+}
+
+/// Submits the paper entry `decisions` of a cycle in sequence in the monitor's paper
+/// batch, each releasing its paper reservation when its submission ends. When the
+/// previous batch is still running the decisions are dropped and their reservations
+/// released, to be decided again next cycle.
+async fn launch_paper_entries(batch: &mut PaperBatch, decisions: Vec<TradeDecision>) {
+    if decisions.is_empty() {
+        return;
+    }
+    let mints: Vec<String> = decisions
+        .iter()
+        .map(|decision| decision.mint.clone())
+        .collect();
+    let started = batch.launch(decisions.len(), async move {
+        for decision in decisions {
+            entry::submit_entry(decision).await;
+        }
+    });
+    if !started {
+        for mint in mints {
+            entry::clear_entry_reservation(Book::Paper, &mint).await;
+        }
+    }
 }

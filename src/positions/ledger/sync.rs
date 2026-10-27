@@ -72,7 +72,9 @@ use crate::positions::cost_basis::{average_after_acquisition, HeldCost};
 use crate::positions::db::{Booking, Committed, MintRow, TraderSwapLeg};
 use crate::positions::pnl::realized_pnl;
 use crate::positions::round_state::{attributable_held, is_dust, reopen_missed_holding};
-use crate::positions::types::{Position, PositionManagement, PositionOrigin, HOLDING_STATE_FROZEN};
+use crate::positions::types::{
+    Book, Position, PositionManagement, PositionOrigin, HOLDING_STATE_FROZEN,
+};
 use crate::positions::{EXIT_RETRY_PENDING, PENDING_VERIFICATION_SUFFIX};
 
 /// `closed_reason` for a bot-executed position whose token left the wallet through a
@@ -1037,6 +1039,7 @@ fn build_position(
         current_price: existing.and_then(|p| p.current_price),
         current_price_updated: existing.and_then(|p| p.current_price_updated),
         current_price_source: existing.and_then(|p| p.current_price_source),
+        book: Book::Live,
         phantom_remove: false,
         phantom_confirmations: 0,
         phantom_first_seen: None,

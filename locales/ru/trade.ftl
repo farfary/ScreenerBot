@@ -139,6 +139,7 @@ trade-reason-risk-management = Управление рисками
 trade-reason-blacklisted = В чёрном списке
 trade-reason-force-sell = Принудительная продажа
 trade-reason-copy-sell = Продажа по копированию
+trade-reason-paper-reset = Сброс виртуального прогона
 trade-reason-closed-externally = Закрыта извне
 trade-reason-wallet-history = История кошелька
 trade-reason-exit-retry-pending = Ожидается повтор выхода

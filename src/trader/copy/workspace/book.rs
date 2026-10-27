@@ -9,7 +9,8 @@ use serde::{Deserialize, Serialize};
 use std::future::Future;
 
 use super::super::control::{self, open_database};
-use super::super::{notify, CopyMode, CopyTask, CopyTaskInput, PaperPosition};
+use super::super::{notify, CopyTask, CopyTaskInput, PaperPosition};
+use crate::trader::paper::TradingMode;
 use crate::trader::{Error, Result};
 
 #[derive(Debug, Default, Deserialize)]
@@ -29,7 +30,7 @@ pub struct CloneRequest {
 pub async fn clone_task(id: i64, request: CloneRequest) -> Result<CopyTask> {
     let original = control::get_task(id).await?;
     let mut input = CopyTaskInput::from(&original);
-    input.mode = CopyMode::Paper;
+    input.mode = TradingMode::Paper;
     if let Some(address) = request
         .target_address
         .map(|address| address.trim().to_owned())
@@ -60,7 +61,7 @@ pub async fn reset_paper_book(id: i64) -> Result<ResetResult> {
         .get_task(id)
         .await?
         .ok_or(Error::CopyTaskNotFound { task_id: id })?;
-    if task.mode != CopyMode::Paper {
+    if task.mode != TradingMode::Paper {
         return Err(Error::CopyValidation {
             detail: "return the task to paper before resetting its paper book".to_owned(),
         });
@@ -145,7 +146,7 @@ where
         .get_task(id)
         .await?
         .ok_or(Error::CopyTaskNotFound { task_id: id })?;
-    if task.mode != CopyMode::Paper {
+    if task.mode != TradingMode::Paper {
         return Err(Error::CopyValidation {
             detail: "return the task to paper before closing a paper holding".to_owned(),
         });
@@ -204,7 +205,7 @@ where
                     .get_task(id)
                     .await
                     .map_err(|_| super::super::CopySkip::PaperExecutionUnavailable)?
-                    .filter(|task| task.mode == CopyMode::Paper)
+                    .filter(|task| task.mode == TradingMode::Paper)
                     .ok_or(super::super::CopySkip::TaskDisabled)?;
                 let position = db_job
                     .paper_position(id, &mint_job)
@@ -237,7 +238,7 @@ where
                     .await
                     .map_err(|_| super::super::CopySkip::PaperExecutionUnavailable)?
                     .filter(|task| {
-                        task.mode == CopyMode::Paper
+                        task.mode == TradingMode::Paper
                             && task.slippage_pct == current_task.slippage_pct
                     })
                     .ok_or(super::super::CopySkip::TaskDisabled)?;
@@ -258,7 +259,7 @@ where
                             .raw_token_amount
                             .is_none_or(|expected| current < expected)
                     })
-                    || current_task_after.mode != CopyMode::Paper
+                    || current_task_after.mode != TradingMode::Paper
                 {
                     return Err(super::super::CopySkip::PaperExecutionUnavailable);
                 }

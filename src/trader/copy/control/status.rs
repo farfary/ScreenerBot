@@ -6,9 +6,10 @@
 
 use serde::Serialize;
 
-use super::super::{CopyMode, CopyTask};
+use super::super::CopyTask;
 use super::open_database;
-use crate::trader::{Error, Result};
+use crate::trader::paper::TradingMode;
+use crate::trader::{Error, LiveBlock, Result};
 
 /// System-wide copy-trading state derived from config, safety gates and the task set.
 #[derive(Clone, Serialize)]
@@ -69,24 +70,32 @@ pub fn build_status(tasks: &[CopyTask]) -> CopyTradingStatus {
         active_tasks: tasks.iter().filter(|task| task.enabled).count(),
         paper_tasks: tasks
             .iter()
-            .filter(|task| task.enabled && task.mode == CopyMode::Paper)
+            .filter(|task| task.enabled && task.mode == TradingMode::Paper)
             .count(),
         live_tasks: tasks
             .iter()
-            .filter(|task| task.enabled && task.mode == CopyMode::Live)
+            .filter(|task| task.enabled && task.mode == TradingMode::Live)
             .count(),
     }
 }
 
-/// Why a task cannot be armed for live right now, if it cannot: the one gate
-/// behind both the status flag and the paper-to-live transition.
-pub fn live_block_reason() -> Option<&'static str> {
-    if !crate::global::is_initialization_complete() || crate::global::is_explore_mode() {
-        Some("setup_incomplete")
-    } else if crate::global::is_force_stopped() {
-        Some("force_stop")
+/// Why a copy task cannot be armed for live right now.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CopyLiveBlock {
+    /// The Auto Trader's own live gate: setup or the emergency stop.
+    Trader(LiveBlock),
+    /// Copy Trading is switched off.
+    CopyTradingDisabled,
+}
+
+/// Why a task cannot be armed for live right now, if it cannot: the trader's live
+/// gate, then the Copy Trading switch. The one gate behind both the status flag and
+/// the paper-to-live transition.
+pub fn live_block_reason() -> Option<CopyLiveBlock> {
+    if let Some(block) = crate::trader::live_block() {
+        Some(CopyLiveBlock::Trader(block))
     } else if !crate::config::with_config(|config| config.copy_trading.enabled) {
-        Some("copy_trading_disabled")
+        Some(CopyLiveBlock::CopyTradingDisabled)
     } else {
         None
     }
@@ -118,7 +127,7 @@ pub(in crate::trader::copy) fn effective_state(
         "paused"
     } else if status.blocked_reason.is_some() {
         "entries_blocked"
-    } else if task.mode == CopyMode::Live {
+    } else if task.mode == TradingMode::Live {
         "live"
     } else {
         "paper"

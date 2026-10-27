@@ -627,3 +627,13 @@ strategies-error-rule-a-group-needs-at-least-one-condition-switched-on = Bir gru
 strategies-error-rule-not-operator-cannot-have-a-switched-off-child = NOT operatörünün kapalı bir alt düğümü olamaz
 strategies-error-rule-rules-nest-deeper-than-four-levels = Kurallar dört seviyeden daha derin iç içe geçemez
 strategies-error-rule-the-root-group-cannot-be-switched-off = Kök grup kapatılamaz
+
+strategies-readiness-priced = Her pozisyon fiyatlandı
+strategies-readiness-priced-ok = Her açık sanal pozisyonun havuz fiyatı var
+strategies-readiness-priced-missing =
+    { $count ->
+        [one] Havuz fiyatı olmayan açık sanal pozisyon sayısı: { $count }
+       *[other] Havuz fiyatı olmayan açık sanal pozisyon sayısı: { $count }
+    }
+strategies-readiness-runtime = Canlı işlem kullanılabilir
+strategies-readiness-runtime-ok = Kurulum ve güvenlik kapıları canlı işlemlere izin veriyor

@@ -21,7 +21,10 @@ async fn malformed_paper_epoch_blocks_read_reset_and_settlement_without_writes()
         .await
         .unwrap();
     let activity_before = db.list_task_activity(task.id, 20).await.unwrap();
-    let spent_before = db.task_total_spent(task.id, CopyMode::Paper).await.unwrap();
+    let spent_before = db
+        .task_total_spent(task.id, TradingMode::Paper)
+        .await
+        .unwrap();
     let position_before = db
         .paper_position(task.id, "book-mint")
         .await
@@ -48,7 +51,9 @@ async fn malformed_paper_epoch_blocks_read_reset_and_settlement_without_writes()
         activity_before
     );
     assert_eq!(
-        db.task_total_spent(task.id, CopyMode::Paper).await.unwrap(),
+        db.task_total_spent(task.id, TradingMode::Paper)
+            .await
+            .unwrap(),
         spent_before
     );
     assert_eq!(
@@ -85,7 +90,7 @@ async fn task_and_outcome_round_trip_with_idempotent_spend() {
     db.record_outcome(outcome).await.unwrap();
 
     assert_eq!(
-        db.spend_state(task.id, CopyMode::Paper, "book-mint")
+        db.spend_state(task.id, TradingMode::Paper, "book-mint")
             .await
             .unwrap(),
         SpendState {
@@ -95,11 +100,15 @@ async fn task_and_outcome_round_trip_with_idempotent_spend() {
         }
     );
     assert_eq!(
-        db.task_total_spent(task.id, CopyMode::Paper).await.unwrap(),
+        db.task_total_spent(task.id, TradingMode::Paper)
+            .await
+            .unwrap(),
         0.100005
     );
     assert_eq!(
-        db.task_total_spent(task.id, CopyMode::Live).await.unwrap(),
+        db.task_total_spent(task.id, TradingMode::Live)
+            .await
+            .unwrap(),
         0.0
     );
 }
@@ -117,7 +126,7 @@ async fn sell_activity_is_idempotent_and_never_increments_entry_spend() {
         .await
         .unwrap();
     let spend_before = db
-        .spend_state(configured.id, CopyMode::Paper, "book-mint")
+        .spend_state(configured.id, TradingMode::Paper, "book-mint")
         .await
         .unwrap();
     let mut outcome = paper_sell(&configured, "target-sell", 10.0, 0.2);
@@ -128,7 +137,7 @@ async fn sell_activity_is_idempotent_and_never_increments_entry_spend() {
     db.record_outcome(outcome.clone()).await.unwrap();
     db.record_outcome(outcome).await.unwrap();
     assert_eq!(
-        db.spend_state(configured.id, CopyMode::Paper, "book-mint")
+        db.spend_state(configured.id, TradingMode::Paper, "book-mint")
             .await
             .unwrap(),
         spend_before
@@ -310,14 +319,14 @@ async fn the_paper_book_books_buys_and_partial_then_full_sells_exactly_once() {
     assert!((closed.realized_proceeds_native - closed.realized_cost_native - 0.0).abs() < 1e-9);
 
     assert_eq!(
-        db.spend_state(configured.id, CopyMode::Paper, "book-mint")
+        db.spend_state(configured.id, TradingMode::Paper, "book-mint")
             .await
             .unwrap()
             .token_buy_count,
         2
     );
     assert_eq!(
-        db.spend_state(configured.id, CopyMode::Live, "book-mint")
+        db.spend_state(configured.id, TradingMode::Live, "book-mint")
             .await
             .unwrap(),
         SpendState::default(),
@@ -416,7 +425,7 @@ async fn paper_reset_preserves_legacy_live_data_and_rejects_stale_quote_fills_an
         decided_at: Utc::now(),
         telemetry: None,
         paper: Some(crate::trader::copy::types::PaperContext {
-            model: crate::trader::copy::types::PaperModel::Quote,
+            model: crate::trader::paper::PaperModel::Quote,
             epoch: 0,
         }),
     };
@@ -476,7 +485,7 @@ async fn paper_reset_preserves_legacy_live_data_and_rejects_stale_quote_fills_an
     assert_eq!(db.paper_epoch(configured.id).await.unwrap(), 1);
     assert!(db.paper_positions(configured.id).await.unwrap().is_empty());
     assert_eq!(
-        db.task_total_spent(configured.id, CopyMode::Paper)
+        db.task_total_spent(configured.id, TradingMode::Paper)
             .await
             .unwrap(),
         0.0
@@ -562,7 +571,7 @@ async fn schema_v5_splits_shared_spend_by_mode_and_rebuilds_the_paper_book() {
 
     let db = CopyDatabase::open(&path, crate::chains::active_chain()).unwrap();
     assert_eq!(
-        db.task_total_spent(configured.id, CopyMode::Paper)
+        db.task_total_spent(configured.id, TradingMode::Paper)
             .await
             .unwrap(),
         0.0
@@ -572,7 +581,7 @@ async fn schema_v5_splits_shared_spend_by_mode_and_rebuilds_the_paper_book() {
         0.499995
     );
     assert_eq!(
-        db.task_total_spent(configured.id, CopyMode::Live)
+        db.task_total_spent(configured.id, TradingMode::Live)
             .await
             .unwrap(),
         0.1

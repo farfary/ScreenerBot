@@ -12,7 +12,7 @@ use crate::positions::queue::{enqueue_verification, VerificationItem};
 use crate::positions::state::{
     acquire_position_lock, is_dca_pending, mark_swap_in_flight, register_pending_dca_swap,
 };
-use crate::positions::types::{PendingDcaSwap, TradeOrigin};
+use crate::positions::types::{PendingDcaSwap, Position, TradeOrigin};
 use crate::positions::{Error, Result};
 use crate::swaps::{
     execute_swap_with_fallback, get_best_quote_for_opening, QuoteRequest, SwapMode,
@@ -79,38 +79,7 @@ pub async fn add_to_position(
     // want automatic DCA got "DCA is disabled in configuration" when clicking Add, and
     // a user who did want to average down was told to wait out the BOT's cooldown.
     if origin == TradeOrigin::Auto {
-        let dca_enabled = with_config(|cfg| cfg.trader.dca_enabled);
-        if !dca_enabled {
-            return Err(Error::DcaDisabled);
-        }
-
-        let ladder_steps = crate::trader::config::get_dca_levels().len();
-        if usize::try_from(position.dca_count).map_or(true, |count| count >= ladder_steps) {
-            return Err(Error::TransitionFailed {
-                transition: "dca",
-                mint: token_mint.to_owned(),
-                detail: format!(
-                    "every DCA step is used: {} (steps: {})",
-                    position.dca_count, ladder_steps
-                ),
-            });
-        }
-
-        // Check DCA cooldown
-        if let Some(last_dca) = position.last_dca_time {
-            let cooldown_minutes = with_config(|cfg| cfg.trader.dca_cooldown_minutes);
-            let elapsed = Utc::now().signed_duration_since(last_dca).num_minutes();
-            if elapsed < cooldown_minutes {
-                return Err(Error::TransitionFailed {
-                    transition: "dca",
-                    mint: token_mint.to_owned(),
-                    detail: format!(
-                        "DCA cooldown active: {} minutes remaining",
-                        cooldown_minutes - elapsed
-                    ),
-                });
-            }
-        }
+        check_auto_add(&position, token_mint)?;
     }
 
     logger::info(
@@ -299,4 +268,43 @@ pub async fn add_to_position(
     // CRITICAL: Do NOT consume a new semaphore permit - same position!
 
     Ok(transaction_signature)
+}
+
+/// Refuses an automatic add to `position` that the DCA settings do not allow: DCA off,
+/// every ladder step used, or the cooldown since the last add still running. Both books
+/// apply it to every add the auto-trader decides; a manual add is not bound by it.
+pub(crate) fn check_auto_add(position: &Position, token_mint: &str) -> Result<()> {
+    let dca_enabled = with_config(|cfg| cfg.trader.dca_enabled);
+    if !dca_enabled {
+        return Err(Error::DcaDisabled);
+    }
+
+    let ladder_steps = crate::trader::config::get_dca_levels().len();
+    if usize::try_from(position.dca_count).map_or(true, |count| count >= ladder_steps) {
+        return Err(Error::TransitionFailed {
+            transition: "dca",
+            mint: token_mint.to_owned(),
+            detail: format!(
+                "every DCA step is used: {} (steps: {})",
+                position.dca_count, ladder_steps
+            ),
+        });
+    }
+
+    // Check DCA cooldown
+    if let Some(last_dca) = position.last_dca_time {
+        let cooldown_minutes = with_config(|cfg| cfg.trader.dca_cooldown_minutes);
+        let elapsed = Utc::now().signed_duration_since(last_dca).num_minutes();
+        if elapsed < cooldown_minutes {
+            return Err(Error::TransitionFailed {
+                transition: "dca",
+                mint: token_mint.to_owned(),
+                detail: format!(
+                    "DCA cooldown active: {} minutes remaining",
+                    cooldown_minutes - elapsed
+                ),
+            });
+        }
+    }
+    Ok(())
 }

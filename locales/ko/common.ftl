@@ -69,3 +69,9 @@ common-venue-serum = { -serum }
 common-venue-openbook = { -openbook }
 common-venue-phoenix = { -phoenix }
 common-venue-direct-pool = 직접 풀
+
+common-mode-paper = 모의
+common-mode-live = 실거래
+common-check-passed = 통과
+common-check-not-passed = 미통과
+common-arm-type-phrase = 확인하려면 { $phrase }을(를) 입력하세요

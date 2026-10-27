@@ -48,6 +48,7 @@ copy-entry-block-reentry-cooldown = فترة تهدئة إعادة دخول ال
 copy-entry-block-open-cooldown = فترة تهدئة الدخول العامة
 copy-entry-block-entry-reserved = دخول آخر قيد المعالجة
 copy-entry-block-blacklisted = الرمز محظور بموجب ضوابط المخاطر
+copy-entry-block-paper-balance-exhausted = الرصيد التجريبي لا يغطي الصفقة
 copy-entry-block-check-failed = تعذّر إكمال فحص أمان
 
 copy-pause-user = أوقفتَه مؤقتًا
@@ -69,27 +70,6 @@ copy-pause-short-storage-restored = استعادة البيانات
 copy-state-paused = متوقف مؤقتًا
 copy-state-paused-reason = متوقف مؤقتًا · { $reason }
 
-copy-readiness-history = السجل التجريبي
-copy-readiness-history-met =
-    { $count ->
-        [zero] لا جولات تجريبية مغلقة ({ $count })، المطلوب: { $needed }
-        [one] جولة تجريبية مغلقة واحدة ({ $count })، المطلوب: { $needed }
-        [two] جولتان تجريبيتان مغلقتان ({ $count })، المطلوب: { $needed }
-        [few] { $count } جولات تجريبية مغلقة، المطلوب: { $needed }
-        [many] { $count } جولة تجريبية مغلقة، المطلوب: { $needed }
-       *[other] { $count } جولة تجريبية مغلقة، المطلوب: { $needed }
-    }
-copy-readiness-history-short = الجولات التجريبية المغلقة: { $count } من { $needed }
-copy-readiness-profit = مربحة في التجريبي
-copy-readiness-profit-detail =
-    { $count ->
-        [zero] { $realized } { -sol } محققة خلال { $count } جولة، الرابحة: { $wins }
-        [one] { $realized } { -sol } محققة خلال جولة واحدة ({ $count })، الرابحة: { $wins }
-        [two] { $realized } { -sol } محققة خلال جولتين ({ $count })، الرابحة: { $wins }
-        [few] { $realized } { -sol } محققة خلال { $count } جولات، الرابحة: { $wins }
-        [many] { $realized } { -sol } محققة خلال { $count } جولة، الرابحة: { $wins }
-       *[other] { $realized } { -sol } محققة خلال { $count } جولة، الرابحة: { $wins }
-    }
 copy-readiness-latency = اكتشاف الصفقات في الوقت المناسب
 copy-readiness-latency-detail = وصول p95 ‏{ $p95 } ث، الحد { $limit } ث
 copy-readiness-latency-none = لا توجد عينات وصول بعد
@@ -107,18 +87,13 @@ copy-readiness-priced-missing =
 copy-readiness-runtime = التنفيذ الحي متاح
 copy-readiness-runtime-ok = الإعداد وبوابات الأمان تسمح بالنسخ الحي
 
-copy-live-block-setup-incomplete = أكمل إعداد المحفظة وRPC أولًا
-copy-live-block-force-stop = الإيقاف الطارئ مفعّل
 copy-live-block-copy-trading-disabled = معالجة النسخ متوقفة مؤقتًا على مستوى النظام
-copy-live-block-unavailable = التنفيذ الحي غير متاح
 
 copy-state-system-paused = متوقف مؤقتًا على مستوى النظام
 copy-state-force-stopped = إيقاف قسري
 copy-state-entries-blocked = الدخول محظور
 copy-state-running-live = قيد التشغيل
 copy-state-running-paper = قيد التشغيل
-copy-mode-paper = تجريبي
-copy-mode-live = حي
 copy-exit-mode-buy-only = قواعد الخروج الخاصة بي
 copy-exit-mode-mirror = محاكاة عمليات بيع المحفظة
 copy-exit-mode-hybrid = عمليات بيع المحفظة وقواعدي
@@ -304,6 +279,7 @@ copy-profile-sub = ما رآه هذا البوت من المحفظة
 copy-settings-title = إعدادات نسخ التداول
 copy-settings-subtitle = سياسة عامة لكل المهام
 copy-settings-filter-warning = مع إعداد الترشيح الافتراضي يرفض هذا الخيار تقريبًا كل رمز، فلا يُنسخ شيء. أبقِه معطّلًا ما لم تكن مرشحاتك تُجيز الرموز التي تتداولها محافظك.
+copy-settings-paper-delay-shared = تنتظر الصفقات التجريبية «تأخر التنفيذ التجريبي» الذي تشترك فيه كل الدفاتر التجريبية. غيّره من الإعدادات ضمن «التداول التجريبي».
 copy-settings-unit-seconds = ثانية
 copy-settings-unit-trades = صفقة
 copy-settings-unit-tasks = مهمة
@@ -496,8 +472,6 @@ copy-book-skipped = <strong>{ $count }</strong> تم تخطيها
 copy-book-failed = <strong>{ $count }</strong> فشلت
 copy-book-closed = { $count } أُغلقت
 copy-book-budget-note = إنفاق { $mode } من { $total } · المتبقي { $remaining }
-copy-check-passed = ناجح
-copy-check-not-passed = غير ناجح
 copy-readiness-title = قبل التحول إلى الحي
 copy-readiness-live-note = هذه المهمة تتداول حيًا. أعدها إلى التجريبي من الترويسة أعلاه.
 copy-readiness-all-pass = كل الفحوصات ناجحة.

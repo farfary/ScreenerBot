@@ -6,14 +6,15 @@
 //! Every swap gets its slippage from the config (`trader.slippage.*`). A MANUAL trade
 //! may additionally carry a per-trade override, which the user set in the trade
 //! dialog to force a fill on an illiquid token. The AUTO-TRADER never sets one — it
-//! always passes `None` and stays fully config-driven.
+//! always passes `None` and stays fully config-driven. Paper fills quote with the same
+//! slippage as the live swaps they stand in for.
 
 use crate::config::with_config;
 
 /// Slippage (in percent) for an ENTRY swap (open / DCA).
 ///
 /// `None` → the configured quote default.
-pub(super) fn entry_slippage(override_pct: Option<f64>) -> f64 {
+pub(crate) fn entry_slippage(override_pct: Option<f64>) -> f64 {
     override_pct.unwrap_or_else(|| with_config(|cfg| cfg.trader.slippage.quote_default_pct))
 }
 
@@ -28,7 +29,7 @@ pub(super) fn entry_slippage(override_pct: Option<f64>) -> f64 {
 /// prepending it would leave lower rungs that the user has already rejected. Starting
 /// at the user's floor and escalating only upward honours the override AND keeps the
 /// safety property that an exit eventually goes through.
-pub(super) fn exit_slippage_ladder(override_pct: Option<f64>) -> Vec<f64> {
+pub(crate) fn exit_slippage_ladder(override_pct: Option<f64>) -> Vec<f64> {
     let configured = with_config(|cfg| cfg.trader.slippage.exit_retry_steps_pct.clone());
 
     let Some(pct) = override_pct else {
@@ -43,7 +44,7 @@ pub(super) fn exit_slippage_ladder(override_pct: Option<f64>) -> Vec<f64> {
 #[cfg(test)]
 mod tests {
     //! L0 (pure) unit tests for slippage resolution. Co-located because the functions
-    //! are `pub(super)` and unreachable from the `tests/` integration crates. Config
+    //! are crate-private and unreachable from the `tests/` integration crates. Config
     //! is initialised to defaults in-memory (quote_default_pct = 1.0,
     //! exit_retry_steps_pct = [3, 10, 25]).
     use super::*;

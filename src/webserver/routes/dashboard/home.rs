@@ -441,7 +441,7 @@ pub async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<Home
 
     // The trader owner reports Explore Mode and incomplete setup as unavailable.
     let auto_trader = auto_trader_card(
-        &crate::trader::trader_status(),
+        &crate::trader::trader_status().await,
         position_capacity,
         auto_activity_result.ok(),
     );

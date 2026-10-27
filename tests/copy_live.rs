@@ -13,9 +13,10 @@ use screenerbot::positions::{PositionManagement, PositionOrigin};
 use screenerbot::trader::admission::EntryBlock;
 use screenerbot::trader::copy::{
     confirm_mode_transition, execute_live_with, management_for_exit_mode, prepare_live_entry,
-    CopyMode, CopyOutcome, CopySkip, CopyTask, CopyTaskInput, ExitMode, LiveSubmitResult,
-    PipelinePolicy, RiskContext, SizingMode, SpendState, LIVE_ARM_CONFIRMATION,
+    CopyOutcome, CopySkip, CopyTask, CopyTaskInput, ExitMode, LiveSubmitResult, PipelinePolicy,
+    RiskContext, SizingMode, SpendState,
 };
+use screenerbot::trader::paper::{TradingMode, LIVE_ARM_CONFIRMATION};
 use screenerbot::trader::policy::ExitPolicy;
 use screenerbot::trader::TradeResult;
 use screenerbot::wallets::watch::{ActivityKind, SwapSide, WalletActivity, WatchSource};
@@ -33,7 +34,7 @@ fn task(exit_mode: ExitMode) -> CopyTask {
         target_address: "target-wallet".to_owned(),
         label: None,
         enabled: true,
-        mode: CopyMode::Live,
+        mode: TradingMode::Live,
         sizing: SizingMode::RatioOfTarget { pct: 50.0 },
         exit_mode,
         exit_policy_overrides: Default::default(),
@@ -53,7 +54,7 @@ fn task(exit_mode: ExitMode) -> CopyTask {
     }
 }
 
-fn input(mode: CopyMode) -> CopyTaskInput {
+fn input(mode: TradingMode) -> CopyTaskInput {
     let task = task(ExitMode::BuyOnly);
     CopyTaskInput {
         target_address: task.target_address,
@@ -118,32 +119,36 @@ fn plan(exit_mode: ExitMode) -> screenerbot::trader::copy::PreparedLiveEntry {
 #[test]
 fn live_arming_requires_the_dedicated_confirmation_and_crud_cannot_bypass_it() {
     assert_eq!(
-        confirm_mode_transition(CopyMode::Paper, CopyMode::Live, None),
+        confirm_mode_transition(TradingMode::Paper, TradingMode::Live, None),
         Err(CopySkip::LiveConfirmationRequired)
     );
     assert_eq!(
-        confirm_mode_transition(CopyMode::Paper, CopyMode::Live, Some(LIVE_ARM_CONFIRMATION)),
-        Ok(CopyMode::Live)
+        confirm_mode_transition(
+            TradingMode::Paper,
+            TradingMode::Live,
+            Some(LIVE_ARM_CONFIRMATION)
+        ),
+        Ok(TradingMode::Live)
     );
     assert_eq!(
-        input(CopyMode::Live).into_task(ChainId::Solana, Utc::now(), default_exit_policy()),
+        input(TradingMode::Live).into_task(ChainId::Solana, Utc::now(), default_exit_policy()),
         Err(CopySkip::ModeTransitionRequired)
     );
     assert_eq!(
-        input(CopyMode::Live).into_task_for_update(
+        input(TradingMode::Live).into_task_for_update(
             ChainId::Solana,
             Utc::now(),
-            CopyMode::Paper,
+            TradingMode::Paper,
             &Default::default(),
             default_exit_policy()
         ),
         Err(CopySkip::ModeTransitionRequired)
     );
-    assert!(input(CopyMode::Live)
+    assert!(input(TradingMode::Live)
         .into_task_for_update(
             ChainId::Solana,
             Utc::now(),
-            CopyMode::Live,
+            TradingMode::Live,
             &Default::default(),
             default_exit_policy()
         )

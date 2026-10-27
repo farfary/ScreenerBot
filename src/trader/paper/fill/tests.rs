@@ -3,7 +3,7 @@
 
 #![cfg(test)]
 
-//! Offline quote settlement regression tests.
+//! Offline quote settlement and paper sale sizing regression tests.
 
 use std::collections::VecDeque;
 
@@ -67,7 +67,7 @@ async fn run_buy(
     initial: Quote,
     landing: Quote,
     expected_input: RawAmount,
-) -> Result<PaperFill, CopySkip> {
+) -> Result<PaperFill, PaperFillError> {
     let request = buy_request();
     let mut replies = VecDeque::from([Ok(initial), Ok(landing)]);
     simulate_buy(
@@ -92,7 +92,7 @@ async fn run_sell(
     initial: Quote,
     landing: Quote,
     expected_input: RawAmount,
-) -> Result<PaperSellFill, CopySkip> {
+) -> Result<PaperSellFill, PaperFillError> {
     let request = sell_request();
     let mut replies = VecDeque::from([Ok(initial), Ok(landing)]);
     simulate_sell(
@@ -163,7 +163,7 @@ async fn buy_rejects_output_below_initial_minimum_and_quote_identity_changes() {
         )
         .await
         .unwrap_err(),
-        CopySkip::PaperMinimumOutputNotMet
+        PaperFillError::MinimumOutputNotMet
     );
     let mut wrong_pair = quote(&request, "landing", 100_000_000, 90_000_000, Some(5_000));
     wrong_pair.output_mint = "different-token".to_owned();
@@ -175,7 +175,7 @@ async fn buy_rejects_output_below_initial_minimum_and_quote_identity_changes() {
         )
         .await
         .unwrap_err(),
-        CopySkip::PaperQuoteUnfillable
+        PaperFillError::QuoteUnfillable
     );
 }
 
@@ -217,7 +217,7 @@ async fn sell_rejects_below_minimum_and_changed_quote_identity() {
         )
         .await
         .unwrap_err(),
-        CopySkip::PaperMinimumOutputNotMet
+        PaperFillError::MinimumOutputNotMet
     );
     let mut wrong_pair = quote(&request, "landing", 20_000_000, 18_000_000, Some(5_000));
     wrong_pair.input_mint = "different-token".to_owned();
@@ -229,7 +229,7 @@ async fn sell_rejects_below_minimum_and_changed_quote_identity() {
         )
         .await
         .unwrap_err(),
-        CopySkip::PaperQuoteUnfillable
+        PaperFillError::QuoteUnfillable
     );
 }
 
@@ -244,7 +244,7 @@ async fn buy_and_sell_reject_unknown_network_fees_and_router_failures() {
         )
         .await
         .unwrap_err(),
-        CopySkip::PaperQuoteUnfillable
+        PaperFillError::QuoteUnfillable
     );
     let sell = sell_request();
     assert_eq!(
@@ -255,14 +255,14 @@ async fn buy_and_sell_reject_unknown_network_fees_and_router_failures() {
         )
         .await
         .unwrap_err(),
-        CopySkip::PaperQuoteUnfillable
+        PaperFillError::QuoteUnfillable
     );
 
     let mut replies = VecDeque::from([Err(QuoteError::RouterRejected {
         router: "fixture".to_owned(),
         detail: "offline fixture failure".to_owned(),
     })]);
-    let result = simulate_buy(
+    let result: Result<PaperFill, PaperFillError> = simulate_buy(
         buy,
         6,
         0,
@@ -272,14 +272,14 @@ async fn buy_and_sell_reject_unknown_network_fees_and_router_failures() {
         |_| async { Ok(()) },
     )
     .await;
-    assert_eq!(result.unwrap_err(), CopySkip::PaperQuoteUnavailable);
+    assert_eq!(result.unwrap_err(), PaperFillError::QuoteUnavailable);
 
     let sell = sell_request();
     let mut replies = VecDeque::from([Err(QuoteError::RouterRejected {
         router: "fixture".to_owned(),
         detail: "offline fixture failure".to_owned(),
     })]);
-    let result = simulate_sell(
+    let result: Result<PaperSellFill, PaperFillError> = simulate_sell(
         sell,
         6,
         0,
@@ -289,7 +289,7 @@ async fn buy_and_sell_reject_unknown_network_fees_and_router_failures() {
         |_| async { Ok(()) },
     )
     .await;
-    assert_eq!(result.unwrap_err(), CopySkip::PaperQuoteUnavailable);
+    assert_eq!(result.unwrap_err(), PaperFillError::QuoteUnavailable);
 }
 
 #[tokio::test]
@@ -303,11 +303,11 @@ async fn zero_outputs_and_exact_out_requests_never_settle() {
         )
         .await
         .unwrap_err(),
-        CopySkip::PaperQuoteUnfillable
+        PaperFillError::QuoteUnfillable
     );
     let mut exact_out = buy_request();
     exact_out.swap_mode = SwapMode::ExactOut;
-    let result = simulate_buy(
+    let result: Result<PaperFill, PaperFillError> = simulate_buy(
         exact_out,
         6,
         0,
@@ -317,5 +317,38 @@ async fn zero_outputs_and_exact_out_requests_never_settle() {
         |_| async { Ok(()) },
     )
     .await;
-    assert_eq!(result.unwrap_err(), CopySkip::InvalidSizing);
+    assert_eq!(result.unwrap_err(), PaperFillError::InvalidSize);
+}
+
+#[test]
+fn partial_sell_sizing_preserves_large_and_full_width_raw_balances() {
+    let above_f64_integer = RawAmount::new((1_u128 << 53) + 17);
+    let selected = raw_sell_amount(above_f64_integer, Some(50.0)).unwrap();
+    assert_eq!(selected, RawAmount::new(((1_u128 << 53) + 17) / 2));
+    assert_eq!(
+        raw_sell_amount(RawAmount::MAX, Some(50.0)).unwrap(),
+        RawAmount::new(u128::MAX / 2)
+    );
+    assert_eq!(
+        raw_sell_amount(RawAmount::MAX, None).unwrap(),
+        RawAmount::MAX
+    );
+}
+
+#[test]
+fn sale_sizing_refuses_empty_holdings_and_unrepresentable_shares() {
+    let held = RawAmount::from(15_u64);
+    assert_eq!(
+        raw_sell_amount(RawAmount::ZERO, None),
+        Err(PaperFillError::EmptySell)
+    );
+    for percentage in [f64::NAN, f64::INFINITY, 0.0, -1.0, 1e-9] {
+        assert_eq!(
+            raw_sell_amount(held, Some(percentage)),
+            Err(PaperFillError::InvalidSize),
+            "{percentage}"
+        );
+    }
+    assert_eq!(raw_sell_amount(held, Some(100.0)), Ok(held));
+    assert_eq!(raw_sell_amount(held, Some(250.0)), Ok(held));
 }

@@ -41,12 +41,36 @@ const VERIFICATION_BATCH_SIZE: usize = 10;
 /// in time is deferred to a later read instead of stalling the worker.
 const SETTLEMENT_LOCK_WAIT: Duration = Duration::from_millis(500);
 
+/// Loads the paper book. A paper store that cannot be opened is reported and never
+/// stops the live positions from loading.
+async fn initialize_paper_book() {
+    let wallet_address = match crate::utils::get_wallet_address() {
+        Ok(wallet_address) => wallet_address,
+        Err(error) => {
+            logger::warning(
+                LogTag::Positions,
+                &format!("Paper book not loaded: no wallet address ({error})"),
+            );
+            return;
+        }
+    };
+    if let Err(error) =
+        crate::positions::paper::initialize(crate::chains::active_chain(), &wallet_address).await
+    {
+        logger::warning(
+            LogTag::Positions,
+            &format!("Paper book not loaded: {error}"),
+        );
+    }
+}
+
 /// Initialize positions system
 pub async fn initialize_positions_system() -> Result<()> {
     logger::info(LogTag::Positions, "Initializing positions system");
 
     // Initialize database
     initialize_positions_database().await?;
+    initialize_paper_book().await;
 
     // Load existing positions from database
     match crate::positions::load_all_positions().await {

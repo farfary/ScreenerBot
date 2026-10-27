@@ -112,6 +112,7 @@ async fn sell_forced(
         action: TradeAction::Sell,
         reason: TradeReason::ForceSell,
         strategy_id: None,
+        book: crate::positions::Book::Live,
         timestamp: Utc::now(),
         priority: TradePriority::Emergency,
         price_native: None,
@@ -125,7 +126,10 @@ async fn sell_forced(
     // Execute trade (includes quote + swap)
     let result = match crate::swaps::with_swap_stage_listener(
         action.swap_stage_listener(),
-        executors::execute_trade(&decision),
+        executors::execute_trade(
+            &decision,
+            executors::ExecutionContext::for_decision(&decision),
+        ),
     )
     .await
     {

@@ -21,12 +21,14 @@ mod preview;
 pub mod types;
 
 // Re-export handler functions for use by the router
+pub(in crate::webserver::routes) use control::trader_failure;
 use control::{
     force_stop_handler, force_stop_status_handler, get_trader_status, loss_limit_reset_handler,
     loss_limit_resume_handler, loss_limit_status_handler, monitors_status_handler, resume_handler,
     start_trader_handler, stop_trader_handler, toggle_entry_monitor_handler,
     toggle_exit_monitor_handler,
 };
+pub(in crate::webserver::routes) use manual::trade_response;
 use manual::{manual_add_handler, manual_buy_handler, manual_sell_handler, quote_preview_handler};
 use preview::{apply_template, get_templates, get_time_exits, get_trader_stats};
 

@@ -1,7 +1,8 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Quote-based paper fills with an injected landing wait for deterministic tests.
+//! Quote-based paper fills with an injected landing wait for deterministic tests,
+//! shared by every paper book.
 
 use std::future::Future;
 use std::time::Duration;
@@ -11,7 +12,51 @@ use chrono::{DateTime, Utc};
 use crate::chains::{ChainAdapter, RawAmount};
 use crate::swaps::{Quote, QuoteError, QuoteRequest, SwapMode};
 
-use super::types::{CopySkip, PaperFill, PaperModel, PaperQuoteMetadata, PaperSellFill};
+use super::error::PaperFillError;
+use super::types::{PaperFill, PaperModel, PaperQuoteMetadata, PaperSellFill};
+
+/// Longest wait between the initial and the landing quote any paper book may configure.
+pub const MAX_LANDING_DELAY_MS: u64 = 30_000;
+
+/// Wait between the initial and the landing quote of a paper fill when none is configured.
+pub const DEFAULT_LANDING_DELAY_MS: u64 = 1000;
+
+/// Closed paper rounds a readiness threshold may require.
+pub const READINESS_ROUNDS_RANGE: std::ops::RangeInclusive<usize> = 1..=500;
+
+const EXIT_PERCENT_SCALE: u128 = 10_u128.pow(9);
+const EXIT_PERCENT_DENOMINATOR: u128 = 100 * EXIT_PERCENT_SCALE;
+
+/// Select the exact raw token input of a paper sale of `exit_percentage` of a holding
+/// (`None` sells all of it).
+pub fn raw_sell_amount(
+    held: RawAmount,
+    exit_percentage: Option<f64>,
+) -> Result<RawAmount, PaperFillError> {
+    if held == RawAmount::ZERO {
+        return Err(PaperFillError::EmptySell);
+    }
+    let Some(percentage) = exit_percentage else {
+        return Ok(held);
+    };
+    if !percentage.is_finite() {
+        return Err(PaperFillError::InvalidSize);
+    }
+    if percentage >= 100.0 {
+        return Ok(held);
+    }
+    if percentage <= 0.0 {
+        return Err(PaperFillError::InvalidSize);
+    }
+    let parts = RawAmount::from_integral_f64((percentage * EXIT_PERCENT_SCALE as f64).floor())
+        .filter(|parts| parts.raw() > 0 && parts.raw() < EXIT_PERCENT_DENOMINATOR)
+        .ok_or(PaperFillError::InvalidSize)?;
+    let amount = held
+        .checked_mul_div(parts, RawAmount::new(EXIT_PERCENT_DENOMINATOR))
+        .filter(|amount| *amount > RawAmount::ZERO && *amount <= held)
+        .ok_or(PaperFillError::InvalidSize)?;
+    Ok(amount)
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum SettledPaperQuote {
@@ -19,8 +64,8 @@ pub enum SettledPaperQuote {
     Sell(PaperSellFill),
 }
 
-fn quote_failure(_: QuoteError) -> CopySkip {
-    CopySkip::PaperQuoteUnavailable
+fn quote_failure(_: QuoteError) -> PaperFillError {
+    PaperFillError::QuoteUnavailable
 }
 
 fn quote_matches(request: &QuoteRequest, quote: &Quote) -> bool {
@@ -69,22 +114,22 @@ fn checked_samples(
     request: &QuoteRequest,
     initial: Quote,
     landing: Quote,
-) -> Result<(Quote, Quote), CopySkip> {
+) -> Result<(Quote, Quote), PaperFillError> {
     if !quote_matches(request, &initial) || !quote_matches(request, &landing) {
-        return Err(CopySkip::PaperQuoteUnfillable);
+        return Err(PaperFillError::QuoteUnfillable);
     }
     if initial.estimated_network_fee_lamports.is_none()
         || landing.estimated_network_fee_lamports.is_none()
     {
-        return Err(CopySkip::PaperQuoteUnfillable);
+        return Err(PaperFillError::QuoteUnfillable);
     }
     if landing.output_amount < initial.minimum_output_amount {
-        return Err(CopySkip::PaperMinimumOutputNotMet);
+        return Err(PaperFillError::MinimumOutputNotMet);
     }
     Ok((initial, landing))
 }
 
-async fn quote_twice<Q, QFut, W, WFut>(
+async fn quote_twice<E, Q, QFut, W, WFut>(
     request: &QuoteRequest,
     token_decimals: u8,
     delay_ms: u64,
@@ -92,18 +137,19 @@ async fn quote_twice<Q, QFut, W, WFut>(
     epoch: u64,
     mut quote: Q,
     wait: W,
-) -> Result<(Quote, Quote, PaperQuoteMetadata), CopySkip>
+) -> Result<(Quote, Quote, PaperQuoteMetadata), E>
 where
+    E: From<PaperFillError>,
     Q: FnMut(QuoteRequest) -> QFut,
     QFut: Future<Output = Result<Quote, QuoteError>>,
     W: FnOnce(Duration) -> WFut,
-    WFut: Future<Output = Result<(), CopySkip>>,
+    WFut: Future<Output = Result<(), E>>,
 {
     let queued_duration_start = Utc::now();
     let initial = quote(request.clone()).await.map_err(quote_failure)?;
     let initial_at = Utc::now();
     if !quote_matches(request, &initial) || initial.estimated_network_fee_lamports.is_none() {
-        return Err(CopySkip::PaperQuoteUnfillable);
+        return Err(PaperFillError::QuoteUnfillable.into());
     }
     wait(Duration::from_millis(delay_ms)).await?;
     let landing = quote(request.clone()).await.map_err(quote_failure)?;
@@ -142,15 +188,15 @@ pub fn settle_quote_samples(
     requested_delay_ms: u64,
     queue_duration_ms: u64,
     epoch: u64,
-) -> Result<SettledPaperQuote, CopySkip> {
+) -> Result<SettledPaperQuote, PaperFillError> {
     if request.swap_mode != SwapMode::ExactIn || request.input_amount == RawAmount::ZERO {
-        return Err(CopySkip::InvalidSizing);
+        return Err(PaperFillError::InvalidSize);
     }
     let (initial, landing) = checked_samples(request, initial, landing)?;
     let adapter = crate::chains::adapter_for(request.chain);
     let fee_lamports = landing
         .estimated_network_fee_lamports
-        .ok_or(CopySkip::PaperQuoteUnfillable)?;
+        .ok_or(PaperFillError::QuoteUnfillable)?;
     let network_fee_sol = estimated_network_fee(fee_lamports, adapter);
     let metadata = quote_metadata(
         request,
@@ -165,7 +211,7 @@ pub fn settle_quote_samples(
     );
     if adapter.is_native_asset(&request.input_mint) {
         if adapter.is_native_asset(&request.output_mint) {
-            return Err(CopySkip::PaperQuoteUnfillable);
+            return Err(PaperFillError::QuoteUnfillable);
         }
         let input_sol = request
             .input_amount
@@ -182,7 +228,7 @@ pub fn settle_quote_samples(
             || !total_cost_sol.is_finite()
             || total_cost_sol <= 0.0
         {
-            return Err(CopySkip::PaperQuoteUnfillable);
+            return Err(PaperFillError::QuoteUnfillable);
         }
         let fill = PaperFill {
             input_sol,
@@ -200,7 +246,7 @@ pub fn settle_quote_samples(
         return Ok(SettledPaperQuote::Buy(fill));
     }
     if !adapter.is_native_asset(&request.output_mint) {
-        return Err(CopySkip::PaperQuoteUnfillable);
+        return Err(PaperFillError::QuoteUnfillable);
     }
     let token_amount = request.input_amount.to_whole_units(token_decimals);
     let quoted_net_sol = landing
@@ -217,7 +263,7 @@ pub fn settle_quote_samples(
         || !fill_price_sol.is_finite()
         || fill_price_sol <= 0.0
     {
-        return Err(CopySkip::PaperQuoteUnfillable);
+        return Err(PaperFillError::QuoteUnfillable);
     }
     let fill = PaperSellFill {
         token_amount,
@@ -236,7 +282,7 @@ pub fn settle_quote_samples(
 }
 
 /// Simulate a buy from the initial and landing quote for its exact raw input.
-pub async fn simulate_buy<Q, QFut, W, WFut>(
+pub async fn simulate_buy<E, Q, QFut, W, WFut>(
     request: QuoteRequest,
     token_decimals: u8,
     delay_ms: u64,
@@ -244,21 +290,22 @@ pub async fn simulate_buy<Q, QFut, W, WFut>(
     epoch: u64,
     quote: Q,
     wait: W,
-) -> Result<PaperFill, CopySkip>
+) -> Result<PaperFill, E>
 where
+    E: From<PaperFillError>,
     Q: FnMut(QuoteRequest) -> QFut,
     QFut: Future<Output = Result<Quote, QuoteError>>,
     W: FnOnce(Duration) -> WFut,
-    WFut: Future<Output = Result<(), CopySkip>>,
+    WFut: Future<Output = Result<(), E>>,
 {
     if request.swap_mode != SwapMode::ExactIn || request.input_amount == RawAmount::ZERO {
-        return Err(CopySkip::InvalidSizing);
+        return Err(PaperFillError::InvalidSize.into());
     }
     let adapter = crate::chains::adapter_for(request.chain);
     if !adapter.is_native_asset(&request.input_mint)
         || adapter.is_native_asset(&request.output_mint)
     {
-        return Err(CopySkip::PaperQuoteUnfillable);
+        return Err(PaperFillError::QuoteUnfillable.into());
     }
     let (initial, landing, metadata) = quote_twice(
         &request,
@@ -282,12 +329,12 @@ where
         metadata.epoch,
     )? {
         SettledPaperQuote::Buy(fill) => Ok(fill),
-        SettledPaperQuote::Sell(_) => Err(CopySkip::PaperQuoteUnfillable),
+        SettledPaperQuote::Sell(_) => Err(PaperFillError::QuoteUnfillable.into()),
     }
 }
 
 /// Simulate a sell using the exact raw token amount accepted for quoting.
-pub async fn simulate_sell<Q, QFut, W, WFut>(
+pub async fn simulate_sell<E, Q, QFut, W, WFut>(
     request: QuoteRequest,
     token_decimals: u8,
     delay_ms: u64,
@@ -295,21 +342,22 @@ pub async fn simulate_sell<Q, QFut, W, WFut>(
     epoch: u64,
     quote: Q,
     wait: W,
-) -> Result<PaperSellFill, CopySkip>
+) -> Result<PaperSellFill, E>
 where
+    E: From<PaperFillError>,
     Q: FnMut(QuoteRequest) -> QFut,
     QFut: Future<Output = Result<Quote, QuoteError>>,
     W: FnOnce(Duration) -> WFut,
-    WFut: Future<Output = Result<(), CopySkip>>,
+    WFut: Future<Output = Result<(), E>>,
 {
     if request.swap_mode != SwapMode::ExactIn || request.input_amount == RawAmount::ZERO {
-        return Err(CopySkip::CopyPositionNotFound);
+        return Err(PaperFillError::EmptySell.into());
     }
     let adapter = crate::chains::adapter_for(request.chain);
     if adapter.is_native_asset(&request.input_mint)
         || !adapter.is_native_asset(&request.output_mint)
     {
-        return Err(CopySkip::PaperQuoteUnfillable);
+        return Err(PaperFillError::QuoteUnfillable.into());
     }
     let (initial, landing, metadata) = quote_twice(
         &request,
@@ -333,10 +381,10 @@ where
         metadata.epoch,
     )? {
         SettledPaperQuote::Sell(fill) => Ok(fill),
-        SettledPaperQuote::Buy(_) => Err(CopySkip::PaperQuoteUnfillable),
+        SettledPaperQuote::Buy(_) => Err(PaperFillError::QuoteUnfillable.into()),
     }
 }
 
 #[cfg(test)]
-#[path = "paper/tests.rs"]
+#[path = "fill/tests.rs"]
 mod tests;

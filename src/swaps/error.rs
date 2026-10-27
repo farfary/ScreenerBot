@@ -308,6 +308,10 @@ pub enum NotSubmittedReason {
         required_raw: u64,
         available_raw: u64,
     },
+    /// Swap execution was requested inside a paper scope. Paper trading never
+    /// executes a swap, so nothing was built or sent.
+    #[error("swap execution is refused while paper trading")]
+    PaperScope,
 }
 
 impl NotSubmittedReason {
@@ -324,6 +328,7 @@ impl NotSubmittedReason {
             | NotSubmittedReason::CostExceeded { .. }
             | NotSubmittedReason::InsufficientFunds { .. } => 422,
             NotSubmittedReason::SimulationUnavailable { .. } => 503,
+            NotSubmittedReason::PaperScope => 500,
         }
     }
 }

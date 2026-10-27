@@ -4,7 +4,8 @@
 // The stepped task editor: Wallet → Sizing → Entry filters → Exits → Review.
 // Creating and cloning post a new task; editing patches every field except the
 // wallet, which is a task's identity.
-import { modeLabel, taskName } from "./format.js";
+import { taskName } from "./format.js";
+import { tradingModeLabel } from "../../ui/trading_mode.js";
 import { PRESETS, normalizeOverrides } from "./policy.js";
 import {
   STEPS,
@@ -153,7 +154,7 @@ export function createEditor(page) {
     if (sub) {
       sub.textContent =
         mode === "edit"
-          ? I18n.t("copy-editor-sub-edit", { mode: modeLabel(source.mode) })
+          ? I18n.t("copy-editor-sub-edit", { mode: tradingModeLabel(source.mode) })
           : mode === "clone"
             ? I18n.t("copy-editor-sub-clone")
             : I18n.t("copy-editor-sub-add");

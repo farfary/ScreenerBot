@@ -59,6 +59,7 @@ pub async fn check_blacklist_exit(
             action: TradeAction::Sell,
             reason: TradeReason::Blacklisted,
             strategy_id: None,
+            book: position.book,
             timestamp: Utc::now(),
             priority: TradePriority::Emergency,
             price_native: Some(current_price),

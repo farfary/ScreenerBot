@@ -42,7 +42,6 @@ trader-status-loading = 読み込み中...
 trader-status-running = 実行中
 trader-status-stopped = 停止中
 trader-status-setup-required = セットアップが必要です
-trader-status-unavailable = 自動トレーダーを使うには、ウォレットと RPC のセットアップを完了してください
 trader-setup-action = セットアップを完了
 trader-toggle-on = 有効
 trader-toggle-off = 無効
@@ -102,6 +101,9 @@ trader-toast-strategy-disabled = ストラテジーを無効にしました
     .message = ストラテジーは停止中です
 trader-toast-strategy-failed = 更新失敗
     .message = ストラテジーのステータスを更新できませんでした
+trader-toast-strategy-armed = { $name } はライブで取引中です
+trader-toast-strategy-paper = { $name } はペーパーで取引中です
+trader-toast-strategy-mode-failed = 取引モードを変更できませんでした
 
 ## Stats: realized window and metrics
 
@@ -110,6 +112,19 @@ trader-stats-window =
 trader-stats-window-day = 24H
 trader-stats-window-week = 7D
 trader-stats-window-month = 30D
+trader-stats-book =
+    .aria-label = 取引帳簿
+trader-paper-run-since = { $date } からのペーパー運用
+trader-paper-start = 開始時
+trader-paper-cash = 現金
+trader-paper-open = 建玉
+trader-paper-unrealized = 含み損益
+trader-paper-reset = ペーパー運用をリセット
+trader-paper-reset-title = ペーパー運用をリセットしますか？
+trader-paper-reset-message = 保有中のペーパーポジションはすべて現在価格で決済され、設定された初期残高で新しい運用が始まります。以前の運用は履歴に残ります。
+trader-paper-reset-done = 新しいペーパー運用を開始しました
+trader-paper-reset-failed = ペーパー運用をリセットできませんでした
+trader-paper-account-failed = ペーパー運用を読み込めませんでした
 trader-realized-title = 確定パフォーマンス
 trader-metric-net-pnl = 純損益
 trader-metric-win-rate = 勝率
@@ -364,6 +379,20 @@ trader-strategy-empty = ストラテジーが定義されていません
 trader-strategy-unnamed = 名称未設定のストラテジー
 trader-strategy-priority-auto = 自動
 trader-strategy-priority = 優先度 { $priority }
+trader-strategy-mode-arm = ライブを有効化
+trader-strategy-mode-return-paper = ペーパーに戻す
+trader-strategy-arm-title = 「{ $name }」をライブで有効化
+trader-strategy-arm-lead = 「{ $name }」の新規エントリーは、ご自身の取引用ウォレットからの実際のスワップで行われます。
+trader-strategy-arm-readiness = ペーパー帳簿による準備状況
+trader-strategy-arm-open-paper = 保有中のペーパーポジションはペーパーのまま、ペーパーで決済されます。
+trader-strategy-arm-ack-real-native = 新規エントリーは取引用ウォレットの実際の { -sol } を使います。
+trader-strategy-arm-ack-fees = ライブのスワップでは実際のネットワーク手数料とスリッページが発生します。ペーパーの結果はライブの結果を保証しません。
+trader-strategy-arm-ack-unready = 一部の準備チェックに合格していません。それでもこのストラテジーを有効化します。
+trader-strategy-arm-unavailable = 現在ライブ取引は利用できません。最後のチェックを確認してください。
+trader-strategy-return-title = 「{ $name }」をペーパーに戻す
+trader-strategy-return-message = 新規エントリーは { -sol } を使わずにペーパー帳簿で建てられます。保有中のライブポジションはライブのまま、ライブで決済されます。
+trader-strategy-readiness-failed = ストラテジーの準備状況を読み込めませんでした
+trader-paper-explore-title = ペーパー取引はセットアップ後に始まります
 
 ## Dollar-cost averaging
 

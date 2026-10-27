@@ -17,9 +17,10 @@ use crate::wallets::watch::{ActivityKind, WalletActivity};
 
 use super::paper_execution::{observation_telemetry, skipped, skipped_paper};
 use super::{
-    arrival_distance_ms, control, latency_should_pause, notify, CopyDatabase, CopyMode,
-    CopyPauseReason, CopySkip, CopyTask,
+    arrival_distance_ms, control, latency_should_pause, notify, CopyDatabase, CopyPauseReason,
+    CopySkip, CopyTask,
 };
+use crate::trader::paper::TradingMode;
 
 /// A task edited this recently may still be attaching its watch source, so the
 /// reconciler never judges it detached.
@@ -304,7 +305,7 @@ pub(super) async fn apply_latency_kill_switch(
                 average_ms,
                 threshold_ms,
             };
-            let outcome = if task.mode == CopyMode::Paper {
+            let outcome = if task.mode == TradingMode::Paper {
                 skipped_paper(
                     task.id,
                     activity,
@@ -350,7 +351,7 @@ pub(super) async fn reject_stale_backfill(
         return Ok(false);
     };
     for task in tasks {
-        let outcome = if task.mode == CopyMode::Paper {
+        let outcome = if task.mode == TradingMode::Paper {
             skipped_paper(
                 task.id,
                 activity,
@@ -396,8 +397,9 @@ mod tests {
     };
     use crate::database::health::StoreHealth;
     use crate::trader::copy::{
-        CopyDatabase, CopyMode, CopyPauseReason, CopySkip, CopyTask, ExitMode, SizingMode,
+        CopyDatabase, CopyPauseReason, CopySkip, CopyTask, ExitMode, SizingMode,
     };
+    use crate::trader::paper::TradingMode;
     use crate::wallets::watch::WatchDisableReason;
 
     const THRESHOLD_MS: u64 = 5_000;
@@ -426,7 +428,7 @@ mod tests {
             target_address: target.to_owned(),
             label: None,
             enabled,
-            mode: CopyMode::Paper,
+            mode: TradingMode::Paper,
             sizing: SizingMode::Fixed { sol: 0.1 },
             exit_mode: ExitMode::BuyOnly,
             exit_policy_overrides: Default::default(),

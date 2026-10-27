@@ -60,6 +60,10 @@ pub enum RpcError {
         earlier_attempts: u32,
         refusal: Box<RpcError>,
     },
+
+    /// A transaction send was requested inside a paper scope. Paper trading
+    /// never sends, so the request is refused before the relay or any provider.
+    PaperScopeRefused,
 }
 
 impl RpcError {
@@ -80,6 +84,7 @@ impl RpcError {
             }
             Self::Other(_) => false,
             Self::RefusedAfterDelivery { .. } => false,
+            Self::PaperScopeRefused => false,
         }
     }
 
@@ -98,7 +103,8 @@ impl RpcError {
             | Self::AccountNotFound { .. }
             | Self::Configuration { .. }
             | Self::Other(_)
-            | Self::RefusedAfterDelivery { .. } => false,
+            | Self::RefusedAfterDelivery { .. }
+            | Self::PaperScopeRefused => false,
         }
     }
 
@@ -112,14 +118,15 @@ impl RpcError {
     /// limits, timeouts, open circuits, an empty provider pool and the
     /// retryable server band are not an answer about the request, and neither
     /// is a refusal that followed an attempt which may have delivered it
-    /// ([`Self::RefusedAfterDelivery`]).
+    /// ([`Self::RefusedAfterDelivery`]). A send refused inside a paper scope
+    /// never left the machine, so it is a rejection of the request too.
     pub fn is_request_rejection(&self) -> bool {
         matches!(
             self,
             Self::ProviderError {
                 code: -32700 | -32600 | -32602,
                 ..
-            }
+            } | Self::PaperScopeRefused
         )
     }
 
@@ -293,6 +300,9 @@ impl fmt::Display for RpcError {
                 "{refusal}, after {earlier_attempts} earlier attempt(s) that may have delivered \
                  the transaction"
             ),
+            Self::PaperScopeRefused => {
+                write!(f, "Transaction send is refused while paper trading")
+            }
         }
     }
 }
@@ -464,6 +474,7 @@ mod tests {
             RpcError::Configuration { .. } => "Configuration",
             RpcError::Other(_) => "Other",
             RpcError::RefusedAfterDelivery { .. } => "RefusedAfterDelivery",
+            RpcError::PaperScopeRefused => "PaperScopeRefused",
         }
     }
 
@@ -571,6 +582,7 @@ mod tests {
                 false,
                 false,
             ),
+            (RpcError::PaperScopeRefused, false, false, true),
         ];
 
         let mut covered: Vec<&str> = rows.iter().map(|(error, ..)| variant(error)).collect();
@@ -586,6 +598,7 @@ mod tests {
                 "Network",
                 "NoProvidersAvailable",
                 "Other",
+                "PaperScopeRefused",
                 "ProviderError",
                 "RateLimited",
                 "RefusedAfterDelivery",

@@ -80,7 +80,7 @@ pub async fn test_strategy(
                 .get_condition_registry()
                 .candle_timeframes(&strategy.rules, &strategy.timeframe);
             read_through_candles(chain, &request.token_mint, &timeframes, TEST_CANDLE_WAIT).await;
-            live_strategy_context(chain, &request.token_mint, &strategy).await
+            live_strategy_context(chain, &request.token_mint, &strategy, strategy.mode.book()).await
         }
     };
 

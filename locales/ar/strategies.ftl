@@ -691,3 +691,17 @@ strategies-error-rule-a-group-needs-at-least-one-condition-switched-on = تحت�
 strategies-error-rule-not-operator-cannot-have-a-switched-off-child = لا يمكن أن يكون للعامل NOT عقدة فرعية معطّلة
 strategies-error-rule-rules-nest-deeper-than-four-levels = لا يمكن تداخل القواعد لأكثر من أربعة مستويات
 strategies-error-rule-the-root-group-cannot-be-switched-off = لا يمكن تعطيل المجموعة الجذرية
+
+strategies-readiness-priced = كل المراكز مسعّرة
+strategies-readiness-priced-ok = لكل مركز تجريبي مفتوح سعر مجمع
+strategies-readiness-priced-missing =
+    { $count ->
+        [zero] لا مراكز تجريبية مفتوحة بلا سعر مجمع ({ $count })
+        [one] مركز تجريبي مفتوح واحد بلا سعر مجمع ({ $count })
+        [two] مركزان تجريبيان مفتوحان بلا سعر مجمع ({ $count })
+        [few] { $count } مراكز تجريبية مفتوحة بلا سعر مجمع
+        [many] { $count } مركزًا تجريبيًا مفتوحًا بلا سعر مجمع
+       *[other] { $count } مركز تجريبي مفتوح بلا سعر مجمع
+    }
+strategies-readiness-runtime = التداول الحي متاح
+strategies-readiness-runtime-ok = الإعداد وبوابات الأمان تسمح بالصفقات الحية

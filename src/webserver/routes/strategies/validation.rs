@@ -15,6 +15,7 @@ use crate::{
 use super::types::StrategyRequest;
 use super::utils::{err, err_cause};
 use crate::i18n::{ids, UiArg, UiText};
+use crate::trader::paper::TradingMode;
 use crate::webserver::api_error::ApiErrorCode;
 
 /// Validation outcome: `errors` are catalog texts the dashboard renders.
@@ -97,6 +98,7 @@ pub async fn validate_strategy_inline_handler(Json(request): Json<StrategyReques
             strategy_type,
             request.entry_strategy_ids.unwrap_or_default(),
         ),
+        mode: TradingMode::Paper,
     };
 
     validation_response(&strategy).await

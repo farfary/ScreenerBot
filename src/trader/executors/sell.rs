@@ -9,7 +9,7 @@ use crate::trader::types::{TradeDecision, TradeReason, TradeResult, TradeStep};
 
 /// How much of a position a sell decision actually liquidates.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub(super) enum ExitSize {
+pub(in crate::trader) enum ExitSize {
     /// Sell everything the position still holds.
     Full,
     /// Sell this percentage of the remaining tokens.
@@ -30,7 +30,10 @@ pub(super) enum ExitSize {
 ///   switch can upgrade a requested partial, a user's above all, into a full exit.
 /// * Emergencies (`Blacklisted`, `RiskManagement`) always liquidate the whole
 ///   position, whatever percentage the decision carries.
-pub(super) fn resolve_exit_size(reason: &TradeReason, requested_pct: Option<f64>) -> ExitSize {
+pub(in crate::trader) fn resolve_exit_size(
+    reason: &TradeReason,
+    requested_pct: Option<f64>,
+) -> ExitSize {
     let exit_percentage = requested_pct.unwrap_or(100.0).clamp(1.0, 100.0);
     if is_emergency_exit(reason) || exit_percentage >= 100.0 {
         ExitSize::Full
@@ -62,12 +65,14 @@ fn is_emergency_exit(reason: &TradeReason) -> bool {
         | TradeReason::LlmAnalysisExit
         | TradeReason::ManualExit
         | TradeReason::ForceSell
-        | TradeReason::CopySell => false,
+        | TradeReason::CopySell
+        | TradeReason::PaperReset => false,
     }
 }
 
-/// Execute a sell trade
-pub async fn execute_sell(decision: &TradeDecision) -> crate::trader::Result<TradeResult> {
+/// Execute a live sell trade
+pub(super) async fn execute_sell(decision: &TradeDecision) -> crate::trader::Result<TradeResult> {
+    super::require_live(decision)?;
     let Some(_active_trade) = crate::global::begin_trade() else {
         return Ok(TradeResult::failure_at(
             decision.clone(),
@@ -182,7 +187,7 @@ pub async fn execute_sell(decision: &TradeDecision) -> crate::trader::Result<Tra
 #[cfg(test)]
 mod tests {
     //! Pure unit tests for exit-size routing. Co-located because `resolve_exit_size` is
-    //! `pub(super)` and unreachable from the `tests/` integration crates.
+    //! private to the trader and unreachable from the `tests/` integration crates.
     use super::*;
 
     /// How a reason routes a requested percentage below 100.
@@ -215,7 +220,8 @@ mod tests {
             | TradeReason::LlmAnalysisExit
             | TradeReason::ManualExit
             | TradeReason::ForceSell
-            | TradeReason::CopySell => Routing::ByRequest,
+            | TradeReason::CopySell
+            | TradeReason::PaperReset => Routing::ByRequest,
         }
     }
 

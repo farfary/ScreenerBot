@@ -50,7 +50,7 @@ impl PaperEntryIo for ProductionPaperEntryIo {
             enabled: config.copy_trading.enabled,
             require_filter_pass: config.copy_trading.require_filter_pass,
             engine_trade_size_native: config.trader.trade_size_sol,
-            paper_landing_delay_ms: config.copy_trading.paper_landing_delay_ms,
+            paper_landing_delay_ms: config.trader.paper.landing_delay_ms,
         })
     }
 

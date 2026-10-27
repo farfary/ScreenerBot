@@ -139,6 +139,7 @@ pub(super) const TABLE_SETTINGS_DIALOG_STYLES: &str =
     include_str!("templates/styles/ui/table_settings_dialog.css");
 pub(super) const CONFIRMATION_DIALOG_STYLES: &str =
     include_str!("templates/styles/ui/confirmation_dialog.css");
+pub(super) const ARM_LIVE_GATE_STYLES: &str = include_str!("templates/styles/ui/arm_live_gate.css");
 pub(super) const POSITION_REMOVE_DIALOG_STYLES: &str =
     include_str!("templates/styles/ui/position_remove_dialog.css");
 pub(super) const SETUP_DIALOG_STYLES: &str = include_str!("templates/styles/ui/setup_dialog.css");
@@ -397,6 +398,8 @@ pub const TOKEN_DETAILS_POSITIONS_TAB_UI: &str =
     include_str!("templates/scripts/ui/token_details/positions_tab.js");
 pub const ACTION_STEP_UI: &str = include_str!("templates/scripts/ui/action_step.js");
 pub const TRADE_REASON_UI: &str = include_str!("templates/scripts/ui/trade_reason.js");
+pub const TRADING_MODE_UI: &str = include_str!("templates/scripts/ui/trading_mode.js");
+pub const ARM_LIVE_GATE_UI: &str = include_str!("templates/scripts/ui/arm_live_gate.js");
 pub const STRATEGY_TYPE_UI: &str = include_str!("templates/scripts/ui/strategy_type.js");
 pub const POSITION_MANAGEMENT_UI: &str =
     include_str!("templates/scripts/ui/position_management.js");
@@ -497,6 +500,7 @@ pub const TOKENS_FAVORITES_JS: &str = include_str!("templates/scripts/pages/toke
 pub const POSITIONS_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/positions.js");
 pub const POSITIONS_PENDING_BUYS_JS: &str =
     include_str!("templates/scripts/pages/positions/pending_buys.js");
+pub const POSITIONS_BOOK_JS: &str = include_str!("templates/scripts/pages/positions/book.js");
 pub const FILTERING_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/filtering.js");
 pub const FILTERING_CONFIG_METADATA_JS: &str =
     include_str!("templates/scripts/pages/filtering/config_metadata.js");
@@ -529,6 +533,10 @@ pub const TRADER_LEVEL_LIST_JS: &str = include_str!("templates/scripts/pages/tra
 pub const TRADER_FEATURES_JS: &str = include_str!("templates/scripts/pages/trader/features.js");
 pub const TRADER_TIME_STATUS_JS: &str =
     include_str!("templates/scripts/pages/trader/time_status.js");
+pub const TRADER_STRATEGY_MODE_JS: &str =
+    include_str!("templates/scripts/pages/trader/strategy_mode.js");
+pub const TRADER_PAPER_ACCOUNT_JS: &str =
+    include_str!("templates/scripts/pages/trader/paper_account.js");
 pub const COPY_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/copy.js");
 pub const COPY_API_JS: &str = include_str!("templates/scripts/pages/copy/api.js");
 pub const COPY_FORMAT_JS: &str = include_str!("templates/scripts/pages/copy/format.js");

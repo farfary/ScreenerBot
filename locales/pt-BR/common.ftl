@@ -69,3 +69,9 @@ common-venue-serum = { -serum }
 common-venue-openbook = { -openbook }
 common-venue-phoenix = { -phoenix }
 common-venue-direct-pool = Pool direto
+
+common-mode-paper = Paper
+common-mode-live = Real
+common-check-passed = aprovada
+common-check-not-passed = não aprovada
+common-arm-type-phrase = Digite { $phrase } para confirmar

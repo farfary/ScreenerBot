@@ -69,3 +69,9 @@ common-venue-serum = { -serum }
 common-venue-openbook = { -openbook }
 common-venue-phoenix = { -phoenix }
 common-venue-direct-pool = ダイレクトプール
+
+common-mode-paper = ペーパー
+common-mode-live = ライブ
+common-check-passed = 合格
+common-check-not-passed = 不合格
+common-arm-type-phrase = 確認のため { $phrase } と入力してください

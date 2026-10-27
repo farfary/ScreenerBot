@@ -19,7 +19,8 @@ use crate::database::catalog;
 use crate::errors::ErrorClass;
 use crate::i18n::ids;
 use crate::trader::copy::workspace::{self, ActivityFilter, CloneRequest, RangeQuery};
-use crate::trader::copy::{control, CopyMode, CopySkip, CopyTask, CopyTaskInput};
+use crate::trader::copy::{control, CopySkip, CopyTask, CopyTaskInput};
+use crate::trader::paper::TradingMode;
 use crate::webserver::api_error::{ApiError, ApiErrorCode};
 use crate::webserver::middleware::{full_setup_gate, store_gate};
 use crate::webserver::promo;
@@ -84,7 +85,7 @@ struct ActivityQuery {
 
 #[derive(Deserialize)]
 struct ModeRequest {
-    mode: CopyMode,
+    mode: TradingMode,
     confirmation: Option<String>,
 }
 

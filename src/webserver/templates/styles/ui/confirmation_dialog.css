@@ -84,11 +84,11 @@
 }
 
 .confirmation-dialog--danger .confirmation-dialog__icon {
-  color: #f85149;
+  color: var(--error-color);
 }
 
 .confirmation-dialog--warning .confirmation-dialog__icon {
-  color: #d29922;
+  color: var(--warning-color);
 }
 
 .confirmation-dialog--info .confirmation-dialog__icon {
@@ -117,6 +117,17 @@
   font-size: 14px;
   color: rgb(255, 255, 255, 0.75);
   line-height: 1.6;
+}
+
+/* Caller-supplied content below the message, such as a checklist and a typed phrase. */
+.confirmation-dialog__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+  margin-top: var(--spacing-md);
+  max-height: 50vh;
+  overflow-y: auto;
+  text-align: start;
 }
 
 .confirmation-dialog__checkbox {
@@ -204,12 +215,19 @@
   color: #fff;
 }
 
+/* A confirm gated on input reads as unavailable until the input allows it. */
+.confirmation-dialog__button--confirm:disabled {
+  background: var(--bg-secondary);
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+
 .confirmation-dialog--danger .confirmation-dialog__button--confirm {
-  --confirm-color: #f85149;
+  --confirm-color: var(--error-color);
 }
 
 .confirmation-dialog--warning .confirmation-dialog__button--confirm {
-  --confirm-color: #d29922;
+  --confirm-color: var(--warning-color);
 }
 
 .confirmation-dialog--info .confirmation-dialog__button--confirm {

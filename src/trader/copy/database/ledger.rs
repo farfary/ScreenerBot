@@ -6,8 +6,9 @@
 use chrono::{DateTime, Utc};
 use rusqlite::{params, Connection, OptionalExtension};
 
-use crate::trader::copy::types::{CopyMode, PaperPosition, SpendState};
+use crate::trader::copy::types::{PaperPosition, SpendState};
 use crate::trader::error::Error;
+use crate::trader::paper::TradingMode;
 
 use super::rows::parse_datetime;
 use super::CopyDatabase;
@@ -37,10 +38,10 @@ pub(super) fn read_paper_epoch(
     }
 }
 
-pub(super) fn mode_key(mode: CopyMode) -> &'static str {
+pub(super) fn mode_key(mode: TradingMode) -> &'static str {
     match mode {
-        CopyMode::Paper => "paper",
-        CopyMode::Live => "live",
+        TradingMode::Paper => "paper",
+        TradingMode::Live => "live",
     }
 }
 
@@ -52,7 +53,7 @@ const PAPER_POSITION_COLUMNS: &str = "task_id, mint, token_amount, cost_basis_na
 pub(super) fn spend_state_on(
     connection: &Connection,
     task_id: i64,
-    mode: CopyMode,
+    mode: TradingMode,
     mint: &str,
 ) -> crate::trader::Result<SpendState> {
     let total_spent_native: f64 = connection
@@ -96,7 +97,7 @@ impl CopyDatabase {
     pub async fn spend_state(
         &self,
         task_id: i64,
-        mode: CopyMode,
+        mode: TradingMode,
         mint: &str,
     ) -> crate::trader::Result<SpendState> {
         let db = self.clone();
@@ -111,7 +112,7 @@ impl CopyDatabase {
     pub async fn task_total_spent(
         &self,
         task_id: i64,
-        mode: CopyMode,
+        mode: TradingMode,
     ) -> crate::trader::Result<f64> {
         let db = self.clone();
         tokio::task::spawn_blocking(move || {
@@ -132,7 +133,7 @@ impl CopyDatabase {
     fn spend_state_sync(
         &self,
         task_id: i64,
-        mode: CopyMode,
+        mode: TradingMode,
         mint: &str,
     ) -> crate::trader::Result<SpendState> {
         let connection = self.connection()?;

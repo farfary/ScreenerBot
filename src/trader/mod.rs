@@ -21,6 +21,7 @@
 //! - `executors/`: Trade execution, retry mechanism, decision cache
 //! - `safety/`: Safety checks (limits, blacklist, cooldown, risk)
 //! - `manual/`: Manual trading API (normal + force operations)
+//! - `paper/`: Shared paper fill model, trading mode and readiness evidence
 //! - `constants`: All trader constants consolidated
 //! - `config`: Configuration accessors
 //! - `controller`: Start/stop trader control
@@ -40,6 +41,7 @@ pub mod executors;
 pub mod llm_analysis;
 pub mod manual;
 pub mod monitors;
+pub mod paper;
 pub mod policy;
 pub mod safety;
 pub mod stats;
@@ -49,9 +51,10 @@ mod types;
 // Re-exports for common usage
 pub use constants::*;
 pub use controller::{
-    clear_force_stop, engage_force_stop, is_trader_running, loss_limit_snapshot, monitors_status,
-    set_monitor_enabled, start_trader_checked, stop_trader_checked, stop_trader_gracefully,
-    trader_status, LossLimitSnapshot, Monitor, MonitorState, MonitorsStatus, TraderStatus,
+    clear_force_stop, engage_force_stop, is_trader_running, live_block, loss_limit_snapshot,
+    monitors_status, set_monitor_enabled, start_trader_checked, stop_trader_checked,
+    stop_trader_gracefully, trader_status, LiveBlock, LossLimitSnapshot, Monitor, MonitorState,
+    MonitorsStatus, TraderStatus,
 };
 pub use error::{Error, Result};
 pub use executors::execute_trade;

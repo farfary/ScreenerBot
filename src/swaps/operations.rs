@@ -491,6 +491,16 @@ async fn execute_with_fallback_on(
     quote: Quote,
     amount_limit: SwapAmountLimit,
 ) -> Result<(Quote, SwapResult)> {
+    // Paper trading never executes a swap: refused before any router, key or
+    // balance read.
+    if crate::global::in_paper_scope() {
+        return Err(Error::Swaps(
+            crate::swaps::SwapExecutionError::NotSubmitted {
+                router: quote.router_name.clone(),
+                reason: crate::swaps::NotSubmittedReason::PaperScope,
+            },
+        ));
+    }
     // Get primary router
     let primary = registry
         .get_router(&quote.router_id)
@@ -1113,7 +1123,8 @@ fn solana_fallback_safe(error: &crate::chains::solana::Error) -> bool {
         | Solana::AccountNotFound { .. }
         | Solana::Decode { .. }
         | Solana::InvalidPool { .. }
-        | Solana::InstructionBuild { .. } => false,
+        | Solana::InstructionBuild { .. }
+        | Solana::PaperScopeRefused { .. } => false,
     }
 }
 
@@ -2141,6 +2152,7 @@ mod tests {
             NotSubmittedReason::CostExceeded { .. } => "CostExceeded",
             NotSubmittedReason::SimulationUnavailable { .. } => "SimulationUnavailable",
             NotSubmittedReason::InsufficientFunds { .. } => "InsufficientFunds",
+            NotSubmittedReason::PaperScope => "PaperScope",
         }
     }
 
@@ -2167,6 +2179,7 @@ mod tests {
             Solana::InstructionBuild { .. } => "InstructionBuild",
             Solana::DirectSwap(_) => "DirectSwap",
             Solana::NotSent(_) => "NotSent",
+            Solana::PaperScopeRefused { .. } => "PaperScopeRefused",
         }
     }
 
@@ -2278,6 +2291,8 @@ mod tests {
                 }),
                 true,
             ),
+            // Refused inside a paper scope before any router was asked.
+            (not_submitted(NotSubmittedReason::PaperScope), true),
             (
                 Error::Swaps(SwapExecutionError::CompletedAmountOutOfRange {
                     signature: sig(),
@@ -2396,6 +2411,12 @@ mod tests {
                 Error::Solana(Solana::InstructionBuild {
                     instruction: "swap",
                     detail: "bad".to_owned(),
+                }),
+                false,
+            ),
+            (
+                Error::Solana(Solana::PaperScopeRefused {
+                    operation: "main_keypair",
                 }),
                 false,
             ),
@@ -2575,9 +2596,9 @@ mod tests {
 
         let covered: std::collections::BTreeSet<String> =
             rows.iter().map(|(error, _)| row_name(error)).collect();
-        let reasons = 9;
+        let reasons = 10;
         let execution_variants = 5;
-        let solana_outside_direct = 11 + execution_variants;
+        let solana_outside_direct = 12 + execution_variants;
         let direct_variants = 20;
         let swap_rows = covered
             .iter()
@@ -2761,6 +2782,28 @@ mod tests {
         .expect_err("nothing else may execute");
         assert!(matches!(error, Error::Rpc(_)));
         assert_eq!(*executed.lock().unwrap(), vec!["jupiter"]);
+    }
+
+    /// Inside a paper scope the chain refuses before any router executes.
+    #[tokio::test]
+    async fn paper_scope_refuses_swap_execution() {
+        let (registry, executed) = chain(Execution::Lands);
+        let error = crate::global::paper_scope(execute_with_fallback_on(
+            &registry,
+            &traded_token(),
+            primary_quote(),
+            SwapAmountLimit::Unrestricted,
+        ))
+        .await
+        .expect_err("a paper scope never executes a swap");
+        assert!(matches!(
+            error,
+            Error::Swaps(SwapExecutionError::NotSubmitted {
+                reason: NotSubmittedReason::PaperScope,
+                ..
+            })
+        ));
+        assert!(executed.lock().unwrap().is_empty());
     }
 
     /// A swap with a native-asset leg owes the wrapped-SOL sweep, and a swap

@@ -35,6 +35,10 @@ class ConfirmationDialog {
    * @param {string} [config.confirmTone] - `"primary"` fills the confirm button as the
    *   shared primary button (a save), whatever the variant's colour
    * @param {string} [config.checkbox] - Optional checkbox text (e.g., "Don't ask again")
+   * @param {string} [config.body] - Trusted markup shown below the message; the caller
+   *   escapes every value it interpolates
+   * @param {Function} [config.canConfirm] - `(dialogElement) => boolean`; while it returns
+   *   false the confirm action is disabled. Re-read on every input in the dialog.
    * @returns {Promise<{confirmed: boolean, alternate: boolean, checkboxChecked: boolean}>}
    */
   static async show(config) {
@@ -63,6 +67,8 @@ class ConfirmationDialog {
       variant: config.variant || "warning",
       confirmTone: config.confirmTone === "primary" ? "primary" : null,
       checkbox: config.checkbox || null,
+      body: config.body || "",
+      canConfirm: typeof config.canConfirm === "function" ? config.canConfirm : null,
     };
     this.resolver = resolver;
     this.element = null;
@@ -112,6 +118,7 @@ class ConfirmationDialog {
 				<p class="confirmation-dialog__message" id="confirmation-dialog-message">
 					${escapeHTML(this.config.message)}
 				</p>
+				${this.config.body ? `<div class="confirmation-dialog__body">${this.config.body}</div>` : ""}
 				${
           this.config.checkbox
             ? `
@@ -170,12 +177,12 @@ class ConfirmationDialog {
       this.element.classList.add("confirmation-dialog--visible");
     });
 
-    // Focus confirm button by default
+    // Focus the confirm button, or the first field while confirming is gated on input.
     setTimeout(() => {
-      const confirmBtn = this.element.querySelector('[data-action="confirm"]');
-      if (confirmBtn) {
-        confirmBtn.focus();
-      }
+      const target = this.config.canConfirm
+        ? this.element.querySelector(".confirmation-dialog__body input")
+        : this.element.querySelector('[data-action="confirm"]');
+      target?.focus();
     }, 100);
 
     // Trap focus within dialog
@@ -220,6 +227,13 @@ class ConfirmationDialog {
     this._backdropHandler = () => this._handleCancel();
     this.backdrop.addEventListener("click", this._backdropHandler);
 
+    if (this.config.canConfirm) {
+      this._gateHandler = () => this._syncConfirm();
+      this.element.addEventListener("input", this._gateHandler);
+      this.element.addEventListener("change", this._gateHandler);
+      this._syncConfirm();
+    }
+
     // Checkbox
     const checkbox = this.element.querySelector("#confirmation-dialog-checkbox");
     if (checkbox) {
@@ -241,7 +255,18 @@ class ConfirmationDialog {
     this._releaseEscape = pushEscapeHandler(() => this._handleCancel());
   }
 
+  /** True while the confirm action is allowed. */
+  _confirmAllowed() {
+    return !this.config.canConfirm || Boolean(this.config.canConfirm(this.element));
+  }
+
+  _syncConfirm() {
+    const confirmBtn = this.element?.querySelector('[data-action="confirm"]');
+    if (confirmBtn) confirmBtn.disabled = !this._confirmAllowed();
+  }
+
   _handleConfirm() {
+    if (!this._confirmAllowed()) return;
     this._settle({ confirmed: true, alternate: false });
   }
 
@@ -307,6 +332,12 @@ class ConfirmationDialog {
     if (this._backdropHandler && this.backdrop) {
       this.backdrop.removeEventListener("click", this._backdropHandler);
       this._backdropHandler = null;
+    }
+
+    if (this._gateHandler && this.element) {
+      this.element.removeEventListener("input", this._gateHandler);
+      this.element.removeEventListener("change", this._gateHandler);
+      this._gateHandler = null;
     }
 
     if (this._checkboxHandler) {

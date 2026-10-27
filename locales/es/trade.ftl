@@ -171,6 +171,7 @@ trade-reason-risk-management = Gestión de riesgo
 trade-reason-blacklisted = En lista negra
 trade-reason-force-sell = Venta forzada
 trade-reason-copy-sell = Venta por copia
+trade-reason-paper-reset = Reinicio de la prueba simulada
 trade-reason-closed-externally = Cerrada externamente
 trade-reason-wallet-history = Historial de la billetera
 trade-reason-exit-retry-pending = Reintento de salida pendiente

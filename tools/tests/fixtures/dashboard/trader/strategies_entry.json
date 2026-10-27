@@ -11,7 +11,8 @@
       "updated_at": "2026-10-01T12:15:00+00:00",
       "author": null,
       "version": 1,
-      "entry_strategy_ids": []
+      "entry_strategy_ids": [],
+      "mode": "paper"
     },
     {
       "id": "8f3c2a1e-4b6d-4c7a-9e21-3a5f7b9d1c02",
@@ -24,7 +25,8 @@
       "updated_at": "2026-10-02T12:15:00+00:00",
       "author": null,
       "version": 2,
-      "entry_strategy_ids": []
+      "entry_strategy_ids": [],
+      "mode": "live"
     },
     {
       "id": "8f3c2a1e-4b6d-4c7a-9e21-3a5f7b9d1c03",
@@ -37,7 +39,8 @@
       "updated_at": "2026-10-03T12:15:00+00:00",
       "author": null,
       "version": 1,
-      "entry_strategy_ids": []
+      "entry_strategy_ids": [],
+      "mode": "live"
     }
   ],
   "total": 3,

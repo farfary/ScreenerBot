@@ -9,6 +9,9 @@ use crate::config::metadata::{
 use crate::config::Result;
 use crate::errors::ConfigurationError;
 use crate::field_metadata;
+use crate::trader::paper::fill::{
+    DEFAULT_LANDING_DELAY_MS, MAX_LANDING_DELAY_MS, READINESS_ROUNDS_RANGE,
+};
 use crate::trader::MIN_TRADE_SIZE_NATIVE;
 use serde::{Deserialize, Serialize};
 
@@ -191,6 +194,83 @@ config_struct! {
     }
 }
 
+/// Bounds of the paper account's starting balance, in SOL.
+const PAPER_STARTING_BALANCE_SOL_MIN: f64 = 0.01;
+const PAPER_STARTING_BALANCE_SOL_MAX: f64 = 1000.0;
+
+config_struct! {
+    /// Paper trading of the Auto Trader: the simulated account Paper strategies trade
+    /// against, the simulated landing delay of a paper fill, and the closed paper rounds
+    /// a strategy needs before it reads as ready for live.
+    pub struct PaperTradingConfig {
+        /// SOL the paper account starts each run with.
+        #[metadata(field_metadata! {
+            min: PAPER_STARTING_BALANCE_SOL_MIN,
+            max: PAPER_STARTING_BALANCE_SOL_MAX,
+            step: 0.01,
+            impact: ConfigImpact::Medium,
+            category: ConfigCategory::PaperTrading,
+        })]
+        starting_balance_sol: f64 = 1.0,
+        /// Wait between a paper decision and the quote it fills at, standing in for
+        /// the time a live transaction takes to land.
+        #[metadata(field_metadata! {
+            min: 0,
+            max: MAX_LANDING_DELAY_MS,
+            step: 100,
+            impact: ConfigImpact::Medium,
+            category: ConfigCategory::PaperTrading,
+        })]
+        landing_delay_ms: u64 = DEFAULT_LANDING_DELAY_MS,
+        /// Closed paper rounds a strategy needs before its live readiness passes.
+        #[metadata(field_metadata! {
+            min: *READINESS_ROUNDS_RANGE.start(),
+            max: *READINESS_ROUNDS_RANGE.end(),
+            step: 1,
+            impact: ConfigImpact::Low,
+            category: ConfigCategory::PaperTrading,
+        })]
+        readiness_min_closed_rounds: usize = 10,
+    }
+}
+
+impl PaperTradingConfig {
+    /// Refuse a starting balance, landing delay or readiness threshold outside its
+    /// bounds.
+    fn validate(&self) -> Result<()> {
+        if !self.starting_balance_sol.is_finite()
+            || !(PAPER_STARTING_BALANCE_SOL_MIN..=PAPER_STARTING_BALANCE_SOL_MAX)
+                .contains(&self.starting_balance_sol)
+        {
+            return Err(ConfigurationError::Generic {
+                message: format!(
+                    "trader.paper.starting_balance_sol must be between {PAPER_STARTING_BALANCE_SOL_MIN} and {PAPER_STARTING_BALANCE_SOL_MAX}"
+                ),
+            }
+            .into());
+        }
+        if self.landing_delay_ms > MAX_LANDING_DELAY_MS {
+            return Err(ConfigurationError::Generic {
+                message: format!(
+                    "trader.paper.landing_delay_ms must be between 0 and {MAX_LANDING_DELAY_MS}"
+                ),
+            }
+            .into());
+        }
+        if !READINESS_ROUNDS_RANGE.contains(&self.readiness_min_closed_rounds) {
+            return Err(ConfigurationError::Generic {
+                message: format!(
+                    "trader.paper.readiness_min_closed_rounds must be between {} and {}",
+                    READINESS_ROUNDS_RANGE.start(),
+                    READINESS_ROUNDS_RANGE.end()
+                ),
+            }
+            .into());
+        }
+        Ok(())
+    }
+}
+
 /// The most steps a take-profit ladder holds; the Take Profit tab reads it from the
 /// field metadata.
 pub const TAKE_PROFIT_MAX_STEPS: usize = 4;
@@ -323,6 +403,13 @@ config_struct! {
             category: ConfigCategory::Slippage,
         })]
         slippage: SlippageConfig = SlippageConfig::default(),
+
+        /// The simulated account and thresholds of Paper strategies.
+        #[metadata(field_metadata! {
+            impact: ConfigImpact::Medium,
+            category: ConfigCategory::PaperTrading,
+        })]
+        paper: PaperTradingConfig = PaperTradingConfig::default(),
 
         // ==================== TAKE PROFIT CONFIGURATION ====================
         #[metadata(field_metadata! {
@@ -707,7 +794,9 @@ impl TraderConfig {
     /// Refuse trailing bands the rule cannot follow (see [`Self::validate_trailing_bands`]),
     /// and an exit policy whose rules contradict each other
     /// (`trader::policy::ExitPolicy::validate`, the one owner of those rules).
+    /// Refuse paper trading settings outside their bounds.
     pub fn validate(&self) -> Result<()> {
+        self.paper.validate()?;
         self.validate_dca()?;
         self.validate_trailing_bands()?;
         crate::trader::policy::ExitPolicy::from_trader_config(self)
@@ -956,13 +1045,65 @@ impl TraderConfig {
 #[cfg(test)]
 mod tests {
     use super::{
-        DcaLevel, DcaMeasureFrom, TakeProfitLevel, TimeUnit, TraderConfig, DCA_MAX_STEPS,
-        TAKE_PROFIT_MAX_STEPS,
+        DcaLevel, DcaMeasureFrom, PaperTradingConfig, TakeProfitLevel, TimeUnit, TraderConfig,
+        DCA_MAX_STEPS, TAKE_PROFIT_MAX_STEPS,
     };
+    use crate::trader::paper::fill::{MAX_LANDING_DELAY_MS, READINESS_ROUNDS_RANGE};
 
     #[test]
     fn auto_trading_is_opt_in_by_default() {
         assert!(!TraderConfig::default().enabled);
+    }
+
+    #[test]
+    fn paper_trading_starts_with_one_sol_and_refuses_settings_out_of_bounds() {
+        let defaults = PaperTradingConfig::default();
+        assert_eq!(defaults.starting_balance_sol, 1.0);
+        assert_eq!(defaults.landing_delay_ms, 1000);
+        assert_eq!(defaults.readiness_min_closed_rounds, 10);
+        TraderConfig::default()
+            .validate()
+            .expect("the default paper settings are valid");
+
+        let with = |paper: PaperTradingConfig| TraderConfig {
+            paper,
+            ..TraderConfig::default()
+        };
+        for starting_balance_sol in [0.0, 0.009, 1000.5, f64::NAN, f64::INFINITY] {
+            assert!(
+                with(PaperTradingConfig {
+                    starting_balance_sol,
+                    ..defaults.clone()
+                })
+                .validate()
+                .is_err(),
+                "starting balance {starting_balance_sol} is refused"
+            );
+        }
+        assert!(with(PaperTradingConfig {
+            landing_delay_ms: MAX_LANDING_DELAY_MS + 1,
+            ..defaults.clone()
+        })
+        .validate()
+        .is_err());
+        for readiness_min_closed_rounds in [
+            READINESS_ROUNDS_RANGE.start() - 1,
+            READINESS_ROUNDS_RANGE.end() + 1,
+        ] {
+            assert!(with(PaperTradingConfig {
+                readiness_min_closed_rounds,
+                ..defaults.clone()
+            })
+            .validate()
+            .is_err());
+        }
+        with(PaperTradingConfig {
+            starting_balance_sol: 0.01,
+            landing_delay_ms: MAX_LANDING_DELAY_MS,
+            readiness_min_closed_rounds: *READINESS_ROUNDS_RANGE.end(),
+        })
+        .validate()
+        .expect("every bound is inclusive");
     }
 
     fn ladder(levels: &[f64], sells: &[f64]) -> TraderConfig {

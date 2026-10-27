@@ -8,8 +8,10 @@ use rusqlite::{params, OptionalExtension, Transaction};
 
 use crate::chains::RawAmount;
 use crate::database::WriteTransaction;
-use crate::trader::copy::types::{CopyMode, CopyOutcome, PaperDecision, PaperModel};
+use crate::trader::copy::types::{CopyOutcome, PaperDecision};
 use crate::trader::error::Error;
+use crate::trader::paper::PaperModel;
+use crate::trader::paper::TradingMode;
 
 use super::ledger::{mode_key, read_paper_epoch, spend_state_on};
 use super::rows::task_on;
@@ -230,7 +232,7 @@ fn book_outcome(
             add_spend(
                 transaction,
                 decision.task_id,
-                CopyMode::Paper,
+                TradingMode::Paper,
                 &decision.mint,
                 decision.fill.total_cost_sol,
             )?;
@@ -239,7 +241,7 @@ fn book_outcome(
         CopyOutcome::LiveSubmitted(decision) | CopyOutcome::LiveConfirmed(decision) => add_spend(
             transaction,
             decision.task_id,
-            CopyMode::Live,
+            TradingMode::Live,
             &decision.mint,
             decision.sized_sol,
         ),
@@ -265,7 +267,7 @@ fn book_outcome(
 fn add_spend(
     transaction: &Transaction<'_>,
     task_id: i64,
-    mode: CopyMode,
+    mode: TradingMode,
     mint: &str,
     spent_native: f64,
 ) -> crate::trader::Result<()> {
@@ -298,7 +300,7 @@ fn validate_paper_buy_settlement(
         .ok_or(Error::CopyTaskNotFound {
             task_id: decision.task_id,
         })?;
-    if !task.enabled || task.mode != CopyMode::Paper {
+    if !task.enabled || task.mode != TradingMode::Paper {
         return Err(Error::CopyTaskRejected {
             reason: crate::trader::copy::CopySkip::TaskDisabled,
         });
@@ -338,7 +340,7 @@ fn validate_paper_buy_settlement(
     let spent = spend_state_on(
         transaction,
         decision.task_id,
-        CopyMode::Paper,
+        TradingMode::Paper,
         &decision.mint,
     )?;
     if !spent.total_spent_native.is_finite()

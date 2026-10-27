@@ -15,7 +15,7 @@ use crate::positions::state::{
     mark_swap_in_flight, LAST_OPEN_TIME,
 };
 use crate::positions::types::{
-    EntrySubmission, Position, PositionManagement, PositionOrigin, VerificationKind,
+    Book, EntrySubmission, Opening, Position, PositionManagement, PositionOrigin, VerificationKind,
 };
 use crate::positions::{Error, Result};
 use crate::swaps::{
@@ -309,80 +309,28 @@ async fn open_position_impl(
     // The pool reserves of the price the entry was made at, and the pool they were read
     // from. An API price carries no measured reserves, and a quote-priced entry has no
     // pool reading at all.
-    let (entry_liquidity_native, entry_liquidity_pool) = market_price
+    let entry_liquidity = market_price
         .as_ref()
         .filter(|(price, _)| {
             price.native_reserves.is_finite()
                 && price.native_reserves > 0.0
                 && !price.pool_address.is_empty()
         })
-        .map(|(price, _)| (price.native_reserves, price.pool_address.clone()))
-        .unzip();
+        .map(|(price, _)| (price.native_reserves, price.pool_address.clone()));
 
-    // Create position
-    let position = Position {
-        id: None,
+    let position = Position::opening(Opening {
         mint: api_token.mint.clone(),
         symbol: api_token.symbol.clone(),
         name: api_token.name.clone(),
         entry_price,
         entry_time: Utc::now(),
-        exit_price: None,
-        exit_time: None,
-        position_type: "buy".to_owned(),
-        entry_size_native: trade_size_native,
-        total_size_native: trade_size_native,
-        price_highest: entry_price,
-        price_lowest: entry_price,
-        basis_peak_price: entry_price,
-        basis_peak_restarted: false,
-        entry_transaction_signature: Some(transaction_signature.clone()),
-        exit_transaction_signature: None,
-        token_amount: None,
-        effective_entry_price: None,
-        effective_exit_price: None,
-        native_received: None,
-        profit_target_min: None,
-        profit_target_max: None,
-        liquidity_tier: Some("UNKNOWN".to_owned()),
-        transaction_entry_verified: false,
-        transaction_exit_verified: false,
-        entry_fee_raw: None,
-        exit_fee_raw: None,
-        current_price: Some(entry_price),
-        current_price_updated: Some(Utc::now()),
-        current_price_source: None,
-        phantom_remove: false,
-        phantom_confirmations: 0,
-        phantom_first_seen: None,
-        synthetic_exit: false,
-        closed_reason: None,
-        // P&L fields - initialized as None, will be calculated by positions system
-        pnl: None,
-        pnl_percent: None,
-        unrealized_pnl: None,
-        unrealized_pnl_percent: None,
-        // Initialize partial exit and DCA fields
-        remaining_token_amount: None, // Will be set after entry verification
-        total_exited_amount: Default::default(),
-        average_exit_price: None,
-        partial_exit_count: 0,
-        take_profit_level: 0,
-        entry_liquidity_native,
-        entry_liquidity_pool,
-        dca_count: 0,
-        average_entry_price: entry_price, // Initial entry price
-        last_dca_time: None,
-        // New positions are never archived
-        archived: false,
-        archived_at: None,
+        size_native: trade_size_native,
+        entry_signature: Some(transaction_signature.clone()),
         origin,
         management,
-        round_key: None,
-        basis_complete: true,
-        history_complete: true,
-        holding_state: None,
-    };
+        entry_liquidity,
+        book: Book::Live,
+    });
 
     // Save to database (with retry) and get ID
     let position_id = match super::persist_position_with_retry(&position).await {

@@ -13,13 +13,14 @@ use screenerbot::chains::ChainId;
 use screenerbot::positions::{PositionManagement, PositionOrigin};
 use screenerbot::trader::copy::{
     execute_copy_sell_with, paper_sell_outcome, prepare_copy_sell, proportional_exit_percentage,
-    CopyDatabase, CopyMode, CopyOutcome, CopySellSubmitResult, CopySkip, CopyTask, ExitMode,
-    PaperPosition, SizingMode,
+    CopyDatabase, CopyOutcome, CopySellSubmitResult, CopySkip, CopyTask, ExitMode, PaperPosition,
+    SizingMode,
 };
+use screenerbot::trader::paper::TradingMode;
 use screenerbot::trader::{TradeAction, TradeReason};
 use screenerbot::wallets::watch::{ActivityKind, SwapSide, WalletActivity, WatchSource};
 
-fn task(exit_mode: ExitMode, mode: CopyMode) -> CopyTask {
+fn task(exit_mode: ExitMode, mode: TradingMode) -> CopyTask {
     let now = Utc.timestamp_opt(10, 0).unwrap();
     CopyTask {
         id: 7,
@@ -86,7 +87,7 @@ fn target_sell_selects_only_the_same_tasks_copy_position() {
     assert_eq!(
         prepare_copy_sell(
             &sell_activity(),
-            &task(ExitMode::Mirror, CopyMode::Live),
+            &task(ExitMode::Mirror, TradingMode::Live),
             Some(&strategy_position),
             false,
             100.0,
@@ -98,7 +99,7 @@ fn target_sell_selects_only_the_same_tasks_copy_position() {
 
     let plan = prepare_copy_sell(
         &sell_activity(),
-        &task(ExitMode::Mirror, CopyMode::Live),
+        &task(ExitMode::Mirror, TradingMode::Live),
         Some(&copy_position(PositionManagement::CopyTask)),
         false,
         100.0,
@@ -118,7 +119,7 @@ fn exit_mode_force_stop_and_user_ownership_are_typed_skips() {
     assert_eq!(
         prepare_copy_sell(
             &activity,
-            &task(ExitMode::BuyOnly, CopyMode::Live),
+            &task(ExitMode::BuyOnly, TradingMode::Live),
             Some(&position),
             false,
             100.0,
@@ -130,7 +131,7 @@ fn exit_mode_force_stop_and_user_ownership_are_typed_skips() {
     assert_eq!(
         prepare_copy_sell(
             &activity,
-            &task(ExitMode::Mirror, CopyMode::Live),
+            &task(ExitMode::Mirror, TradingMode::Live),
             Some(&position),
             true,
             100.0,
@@ -142,7 +143,7 @@ fn exit_mode_force_stop_and_user_ownership_are_typed_skips() {
     assert_eq!(
         prepare_copy_sell(
             &activity,
-            &task(ExitMode::Mirror, CopyMode::Live),
+            &task(ExitMode::Mirror, TradingMode::Live),
             Some(&copy_position(PositionManagement::UserOnly)),
             false,
             100.0,
@@ -156,7 +157,7 @@ fn exit_mode_force_stop_and_user_ownership_are_typed_skips() {
     // limit blocks entries, never exits. With force stop false, the same sell proceeds.
     assert!(prepare_copy_sell(
         &activity,
-        &task(ExitMode::Hybrid, CopyMode::Live),
+        &task(ExitMode::Hybrid, TradingMode::Live),
         Some(&copy_position(PositionManagement::Hybrid)),
         false,
         100.0,
@@ -200,7 +201,7 @@ async fn paper_sell_without_a_paper_holding_is_skipped_before_quoting() {
     assert_eq!(
         paper_sell_outcome(
             &sell_activity(),
-            &task(ExitMode::Hybrid, CopyMode::Paper),
+            &task(ExitMode::Hybrid, TradingMode::Paper),
             false,
             100.0,
             &position,
@@ -225,7 +226,7 @@ async fn paper_sell_without_a_paper_holding_is_skipped_before_quoting() {
 async fn submitted_and_failed_copy_sells_are_distinct_activity_outcomes() {
     let plan = prepare_copy_sell(
         &sell_activity(),
-        &task(ExitMode::Mirror, CopyMode::Live),
+        &task(ExitMode::Mirror, TradingMode::Live),
         Some(&copy_position(PositionManagement::CopyTask)),
         false,
         100.0,

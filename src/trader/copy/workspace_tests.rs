@@ -18,7 +18,7 @@ fn task(label: Option<&str>) -> CopyTask {
         target_address: ADDRESS.to_owned(),
         label: label.map(str::to_owned),
         enabled: true,
-        mode: CopyMode::Paper,
+        mode: TradingMode::Paper,
         sizing: SizingMode::Fixed { sol: 0.1 },
         exit_mode: ExitMode::BuyOnly,
         exit_policy_overrides: Default::default(),

@@ -141,6 +141,7 @@ trade-reason-risk-management = Manajemen Risiko
 trade-reason-blacklisted = Masuk Daftar Hitam
 trade-reason-force-sell = Jual Paksa
 trade-reason-copy-sell = Jual Salin
+trade-reason-paper-reset = Reset Uji Paper
 trade-reason-closed-externally = Ditutup dari Luar
 trade-reason-wallet-history = Riwayat Dompet
 trade-reason-exit-retry-pending = Percobaan Ulang Exit Tertunda

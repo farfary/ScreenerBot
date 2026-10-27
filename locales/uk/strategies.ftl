@@ -681,3 +681,15 @@ strategies-error-rule-a-group-needs-at-least-one-condition-switched-on = Гру�
 strategies-error-rule-not-operator-cannot-have-a-switched-off-child = Оператор NOT не може мати вимкнений дочірній вузол
 strategies-error-rule-rules-nest-deeper-than-four-levels = Правила можуть бути вкладені не глибше ніж на чотири рівні
 strategies-error-rule-the-root-group-cannot-be-switched-off = Кореневу групу не можна вимкнути
+
+strategies-readiness-priced = Кожна позиція має ціну
+strategies-readiness-priced-ok = Кожна відкрита віртуальна позиція має ціну пулу
+strategies-readiness-priced-missing =
+    { $count ->
+        [one] { $count } відкрита віртуальна позиція без ціни пулу
+        [few] { $count } відкриті віртуальні позиції без ціни пулу
+        [many] { $count } відкритих віртуальних позицій без ціни пулу
+       *[other] { $count } відкритої віртуальної позиції без ціни пулу
+    }
+strategies-readiness-runtime = Реальна торгівля доступна
+strategies-readiness-runtime-ok = Налаштування й запобіжники дозволяють реальні угоди

@@ -426,6 +426,11 @@ enum RelocationNode {
     Table,
     /// One value, stored under the last segment of `to`, which may rename it.
     Leaf,
+    /// One value merged into a setting another section now shares: stored under the
+    /// last segment of `to` when the destination is absent or still holds `default`, so
+    /// a value changed from its default carries over and a destination changed by hand
+    /// keeps its own.
+    SharedLeaf { default: f64 },
     /// One value that became the single item of a list: stored at `to` as a
     /// one-item list, and `companion` (a sibling list read in step with it) is
     /// written as `[item]` when the list was written and the document lacks it.
@@ -470,7 +475,10 @@ impl RelocationNode {
                 absent_value,
                 ..
             } => node_at(doc, count).map(|_| T::from_f64(absent_value)),
-            RelocationNode::Table | RelocationNode::Leaf | RelocationNode::ListOfOne { .. } => None,
+            RelocationNode::Table
+            | RelocationNode::Leaf
+            | RelocationNode::SharedLeaf { .. }
+            | RelocationNode::ListOfOne { .. } => None,
         }
     }
 }
@@ -578,6 +586,11 @@ const STRICT_NAMES: &[StrictName] = &[
         fallback: DcaMeasureFrom::Average.as_str(),
     },
 ];
+
+/// The paper landing delay copy trading kept for itself, now the one delay every paper
+/// book shares.
+const LEGACY_COPY_LANDING_DELAY: &[&str] = &["copy_trading", "paper_landing_delay_ms"];
+const PAPER_LANDING_DELAY: &[&str] = &["trader", "paper", "landing_delay_ms"];
 
 /// Every legacy node and where it lives now, applied in order. Order matters:
 /// slippage leaves `swaps` before the rest of `swaps` moves.
@@ -705,6 +718,13 @@ const RELOCATIONS: &[Relocation] = &[
         to: None,
         node: RelocationNode::Leaf,
     },
+    Relocation {
+        from: LEGACY_COPY_LANDING_DELAY,
+        to: Some(PAPER_LANDING_DELAY),
+        node: RelocationNode::SharedLeaf {
+            default: crate::trader::paper::fill::DEFAULT_LANDING_DELAY_MS as f64,
+        },
+    },
 ];
 
 /// Every relocation that keeps its node, as (legacy path, canonical path), with
@@ -719,7 +739,10 @@ pub(crate) fn relocation_destinations(
     RELOCATIONS.iter().flat_map(|relocation| {
         let companion = match relocation.node {
             RelocationNode::ListOfOne { companion, .. } => Some(companion),
-            RelocationNode::Table | RelocationNode::Leaf | RelocationNode::Repeated { .. } => None,
+            RelocationNode::Table
+            | RelocationNode::Leaf
+            | RelocationNode::SharedLeaf { .. }
+            | RelocationNode::Repeated { .. } => None,
         };
         relocation
             .to
@@ -917,8 +940,9 @@ pub(crate) fn read_legacy_partial_exit_switch<T: ConfigTree>(doc: &T) -> Result<
 ///   wins, and a legacy leaf fills only what the destination lacks. A leaf row
 ///   moves one value and keeps the canonical one when both exist. A list row
 ///   moves one value as a one-item list and writes its companion list beside
-///   it; a canonical list already present keeps both lists as they are. A row
-///   without a destination drops its node.
+///   it; a canonical list already present keeps both lists as they are. A shared
+///   leaf row moves its value over a destination still at its default and keeps a
+///   destination set to anything else. A row without a destination drops its node.
 /// - The one rule that is not a move: a stop loss sold part of a position only
 ///   while both [`STOP_LOSS_ALLOWANCE`] and [`LEGACY_PARTIAL_SWITCH`] were on
 ///   (an absent switch meant off). A document without
@@ -978,6 +1002,22 @@ pub(crate) fn relocate_legacy_layout<T: ConfigTree>(doc: &mut T) -> Result<bool>
                 if let Some((leaf, section)) = relocation.to.and_then(<[_]>::split_last) {
                     let destination = table_at(&mut working, section, &source)?;
                     if T::get(destination, leaf).is_none() {
+                        T::insert(destination, (*leaf).to_owned(), legacy);
+                    }
+                }
+            }
+            RelocationNode::SharedLeaf { default } => {
+                let source = relocation.from.join(".");
+                if legacy.table().is_some() {
+                    return Err(Error::ParseFailed {
+                        detail: format!("legacy {source} must be a value, not a table"),
+                    });
+                }
+                if let Some((leaf, section)) = relocation.to.and_then(<[_]>::split_last) {
+                    let destination = table_at(&mut working, section, &source)?;
+                    let replaceable = T::get(destination, leaf)
+                        .map_or(true, |current| current.as_f64() == Some(default));
+                    if replaceable {
                         T::insert(destination, (*leaf).to_owned(), legacy);
                     }
                 }
@@ -1710,6 +1750,12 @@ api_key = "sk-ant-secret"
             assert!(!trader.contains_key(leaf), "[trader] {leaf} persisted");
         }
 
+        // A file without a copy landing delay keeps the shared paper default.
+        assert_eq!(
+            config.trader.paper.landing_delay_ms,
+            crate::trader::paper::fill::DEFAULT_LANDING_DELAY_MS
+        );
+
         assert_eq!(config.wallet.min_balance_sol, 0.03);
         assert_eq!(config.telegram.trade_alert_min_sol, 0.25);
         assert_eq!(config.telegram.significant_pnl_threshold, 0.8);
@@ -1717,6 +1763,38 @@ api_key = "sk-ant-secret"
         assert!(config.chains.solana.enabled);
         assert!(!config.chains.show_preview);
         assert!(super::super::utils::validate_config(config).is_ok());
+    }
+
+    #[test]
+    fn a_copy_landing_delay_carries_into_the_shared_delay_only_over_its_default() {
+        let cases = [
+            ("[copy_trading]\npaper_landing_delay_ms = 2500\n", 2500),
+            (
+                "[copy_trading]\npaper_landing_delay_ms = 2500\n\n[trader.paper]\nlanding_delay_ms = 1000\n",
+                2500,
+            ),
+            (
+                "[copy_trading]\npaper_landing_delay_ms = 2500\n\n[trader.paper]\nlanding_delay_ms = 400\n",
+                400,
+            ),
+            (
+                "[copy_trading]\npaper_landing_delay_ms = 1000\n\n[trader.paper]\nlanding_delay_ms = 400\n",
+                400,
+            ),
+            ("[copy_trading]\npaper_landing_delay_ms = 0\n", 0),
+        ];
+        for (raw, expected) in cases {
+            let parsed = parse(raw);
+            assert!(parsed.migrated, "{raw}");
+            assert_eq!(
+                parsed.config.trader.paper.landing_delay_ms, expected,
+                "{raw}"
+            );
+            let written = table(&parsed.config);
+            let copy = written["copy_trading"].as_table().expect("copy table");
+            assert!(!copy.contains_key("paper_landing_delay_ms"), "{raw}");
+            assert!(!parse(&toml::to_string(&parsed.config).expect("serialize")).migrated);
+        }
     }
 
     #[test]

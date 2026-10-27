@@ -7,9 +7,10 @@ use chrono::Utc;
 use screenerbot::chains::ChainId;
 use screenerbot::config::TraderConfig;
 use screenerbot::trader::copy::{
-    precheck, size_for, CopyMode, CopySkip, CopyTask, CopyTaskInput, ExitMode, PipelinePolicy,
-    RiskContext, SizingMode, SpendState,
+    precheck, size_for, CopySkip, CopyTask, CopyTaskInput, ExitMode, PipelinePolicy, RiskContext,
+    SizingMode, SpendState,
 };
+use screenerbot::trader::paper::TradingMode;
 use screenerbot::trader::policy::ExitPolicy;
 use screenerbot::trader::{MAX_MANUAL_SLIPPAGE_PCT, MAX_TRADE_SIZE_MULTIPLIER};
 
@@ -25,7 +26,7 @@ fn task(sizing: SizingMode) -> CopyTask {
         target_address: "target".to_owned(),
         label: None,
         enabled: true,
-        mode: CopyMode::Paper,
+        mode: TradingMode::Paper,
         sizing,
         exit_mode: ExitMode::BuyOnly,
         exit_policy_overrides: Default::default(),
@@ -183,7 +184,7 @@ fn target_filters_buy_once_self_copy_and_slippage_are_enforced() {
 #[test]
 fn live_mode_uses_the_same_risk_precheck_as_paper() {
     let mut live = task(SizingMode::Fixed { sol: 0.1 });
-    live.mode = CopyMode::Live;
+    live.mode = TradingMode::Live;
     assert_eq!(
         precheck(
             &live,
@@ -205,7 +206,7 @@ fn task_input(sizing: SizingMode) -> CopyTaskInput {
         target_address: "target".to_owned(),
         label: None,
         enabled: true,
-        mode: CopyMode::Paper,
+        mode: TradingMode::Paper,
         sizing,
         exit_mode: ExitMode::BuyOnly,
         exit_policy_overrides: Default::default(),
@@ -246,7 +247,7 @@ fn task_input_rejects_invalid_mode_sizing_ranges_and_slippage() {
         Err(CopySkip::InvalidSizing)
     );
     let mut live = task_input(SizingMode::Fixed { sol: 0.1 });
-    live.mode = CopyMode::Live;
+    live.mode = TradingMode::Live;
     assert_eq!(
         live.into_task(ChainId::Solana, Utc::now(), default_exit_policy()),
         Err(CopySkip::ModeTransitionRequired)

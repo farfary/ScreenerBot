@@ -6,8 +6,10 @@
 //! This module handles:
 //! - Monitoring loop and timing
 //! - Concurrent position evaluation with semaphore
-//! - Priority-based trade execution (Emergency → High → Normal)
+//! - Priority-based trade execution (Emergency → High → Normal → Low)
 //! - DCA opportunity processing
+//! - Live decisions in the cycle, paper decisions afterwards in the monitor's detached
+//!   paper batch
 //! - Event recording
 //! - Action tracking for dashboard visibility
 
@@ -15,10 +17,12 @@ use crate::actions::ActionFailure;
 use crate::errors::ErrorClass;
 use crate::i18n::{ids, UiText};
 use crate::logger::{self, LogTag};
-use crate::positions;
+use crate::positions::{self, Book};
 use crate::trader::types::{TradeDecision, TradePriority};
 use crate::trader::{actions, config, constants, evaluators, executors};
 use std::sync::Arc;
+
+use super::paper_batch::{split_by_book, PaperBatch};
 use tokio::sync::Semaphore;
 use tokio::time::{sleep, Duration, Instant};
 
@@ -44,6 +48,7 @@ pub async fn monitor_positions(
     .await;
 
     let mut was_paused = false; // Track paused state
+    let mut paper_batch = PaperBatch::new("exit");
 
     loop {
         // Check if we should shutdown
@@ -83,8 +88,9 @@ pub async fn monitor_positions(
         // Start cycle timing
         let cycle_start = Instant::now();
 
-        // Get all open positions
-        let open_positions = positions::get_open_positions().await;
+        // Get all open positions: the live book's, then the paper book's
+        let mut open_positions = positions::books::open_positions(positions::Book::Live).await;
+        open_positions.extend(positions::books::open_positions(positions::Book::Paper).await);
 
         if open_positions.is_empty() {
             // No positions to monitor, just wait
@@ -195,197 +201,43 @@ pub async fn monitor_positions(
             })
             .collect();
 
-        // Sort by priority (Emergency first, then High, then Normal)
-        evaluations.sort_by(|a, b| {
-            use TradePriority::*;
-            match (&a.priority, &b.priority) {
-                (Emergency, Emergency) => std::cmp::Ordering::Equal,
-                (Emergency, _) => std::cmp::Ordering::Less,
-                (_, Emergency) => std::cmp::Ordering::Greater,
-                (High, High) => std::cmp::Ordering::Equal,
-                (High, _) => std::cmp::Ordering::Less,
-                (_, High) => std::cmp::Ordering::Greater,
-                _ => std::cmp::Ordering::Equal,
-            }
+        // Sort by priority (Emergency first, then High, Normal and Low); the sort is
+        // stable, so equal priorities keep their collection order
+        evaluations.sort_by(|a, b| a.priority.cmp(&b.priority));
+
+        // Live decisions run here; paper decisions run after them in the paper batch
+        let (live_evaluations, paper_evaluations) = split_by_book(evaluations, |evaluation| {
+            evaluation
+                .decision
+                .as_ref()
+                .map_or(Book::Live, |decision| decision.book)
         });
 
         // Track if any rate limit (429) error occurred this cycle
         let mut rate_limit_hit = false;
 
         // Execute trades sequentially in priority order
-        for evaluation in evaluations {
+        for evaluation in live_evaluations {
             // Check shutdown before each execution
             if *shutdown.borrow() {
                 logger::info(LogTag::Trader, "Position monitor shutting down");
                 return Ok(());
             }
 
-            if let Some(decision) = evaluation.decision {
-                // A PARTIAL exit sizes its percentage off `remaining_token_amount`, which a
-                // partial already in flight has not decremented yet — a second one would
-                // oversell, and `partial_close_position` refuses it anyway. Skip it here so we
-                // do not spawn a doomed action every tick while the first confirms.
-                //
-                // A FULL exit is NOT skipped: it is sized from the on-chain balance, so it
-                // cannot double-sell, and it is the path a stop-loss takes. Blocking it here
-                // would suspend the position's stop-loss for as long as the partial takes to
-                // verify — exactly when the price is moving.
-                if decision.exit_percentage.is_some()
-                    && positions::is_partial_exit_pending(&decision.mint).await
-                {
-                    logger::debug(
-                        LogTag::Trader,
-                        &format!(
-                            "Skipping partial exit for {} - a partial exit is still confirming",
-                            evaluation.symbol
-                        ),
-                    );
-                    continue;
-                }
-
-                match executors::execute_tracked_exit(
-                    &decision,
-                    Some(&evaluation.symbol),
-                    evaluation.origin,
-                )
-                .await
-                {
-                    Ok(result) => {
-                        if result.success {
-                            logger::info(
-                                LogTag::Trader,
-                                &format!(
-                                    "Exit executed for {}: tx={}",
-                                    evaluation.symbol,
-                                    result.tx_signature.as_deref().unwrap_or("unknown")
-                                ),
-                            );
-                        } else {
-                            let error_msg = result.error.clone().unwrap_or_default();
-                            logger::error(
-                                LogTag::Trader,
-                                &format!("Exit failed for {}: {}", evaluation.symbol, error_msg),
-                            );
-                        }
-                    }
-                    Err(e) => {
-                        // Ask the error whether we were throttled instead of
-                        // searching its message for "429": the message is
-                        // written by whichever provider failed, and a rewording
-                        // there would silently switch the back-off off.
-                        if e.is_rate_limited() {
-                            logger::warning(
-                                LogTag::Trader,
-                                &format!(
-                                    "Rate limited during exit for {}, will back off",
-                                    evaluation.symbol
-                                ),
-                            );
-                            rate_limit_hit = true;
-                        }
-
-                        logger::error(
-                            LogTag::Trader,
-                            &format!("Failed to execute exit for {}: {}", evaluation.symbol, e),
-                        );
-                    }
-                }
-            }
+            rate_limit_hit |= execute_exit(evaluation).await;
         }
 
-        // Check for DCA opportunities (separate from exits)
-        match evaluators::dca::process_dca_opportunities().await {
-            Ok(dca_decisions) => {
-                for decision in dca_decisions {
-                    // Get symbol for action
-                    let symbol = match crate::chains::chain_for_address(&decision.mint) {
-                        Ok(chain) => crate::tokens::get_full_token_async(chain, &decision.mint)
-                            .await
-                            .ok()
-                            .flatten(),
-                        Err(_) => None,
-                    }
-                    .map(|t| t.symbol);
+        // Check for DCA opportunities of the live book (separate from exits)
+        process_dca(Book::Live).await;
 
-                    // Create DCA action for dashboard visibility
-                    let action = actions::AutoDcaAction::new(
-                        &decision.mint,
-                        symbol.as_deref(),
-                        decision.position_id.as_deref(),
-                        0, // We don't have dca_count here, it's tracked in position
-                    )
-                    .await
-                    .ok();
-
-                    // Mark evaluation complete
-                    if let Some(ref a) = action {
-                        a.complete_evaluation().await;
-                        a.start_quote().await;
-                    }
-
-                    logger::info(
-                        LogTag::Trader,
-                        &format!(
-                            "DCA opportunity for position {}",
-                            decision.position_id.as_deref().unwrap_or("unknown")
-                        ),
-                    );
-
-                    match executors::execute_trade(&decision).await {
-                        Ok(result) => {
-                            if result.success {
-                                // Complete action successfully
-                                if let Some(ref a) = action {
-                                    a.complete_quote().await;
-                                    a.start_swap().await;
-                                    let sig = result.tx_signature.as_deref().unwrap_or("unknown");
-                                    a.complete_swap(sig).await;
-                                    a.complete(result.tx_signature.as_deref(), None).await;
-                                }
-
-                                logger::info(
-                                    LogTag::Trader,
-                                    &format!("DCA executed for {}", decision.mint),
-                                );
-                            } else {
-                                // Fail action
-                                let error_msg = result.error.clone().unwrap_or_default();
-                                if let Some(ref a) = action {
-                                    a.fail(ActionFailure::with_details(
-                                        ids::ACTIONS_FAILURE_DCA,
-                                        error_msg.as_str(),
-                                    ))
-                                    .await;
-                                }
-
-                                logger::error(
-                                    LogTag::Trader,
-                                    &format!("DCA failed for {}: {}", decision.mint, error_msg),
-                                );
-                            }
-                        }
-                        Err(e) => {
-                            // Fail action
-                            if let Some(ref a) = action {
-                                a.fail(ActionFailure::with_details(
-                                    ids::ACTIONS_FAILURE_DCA,
-                                    e.to_string(),
-                                ))
-                                .await;
-                            }
-
-                            logger::error(LogTag::Trader, &format!("Failed to execute DCA: {e}"));
-                        }
-                    }
-                }
+        // The paper exits and adds of the cycle, after every live one
+        let paper_count = paper_evaluations.len();
+        paper_batch.launch(paper_count, async move {
+            for evaluation in paper_evaluations {
+                execute_exit(evaluation).await;
             }
-            Err(e) => {
-                logger::error(
-                    LogTag::Trader,
-                    &format!("Error processing DCA opportunities: {e}"),
-                );
-            }
-        }
+            process_dca(Book::Paper).await;
+        });
 
         // If rate limited, back off 30 seconds before next cycle to avoid hammering Jupiter
         if rate_limit_hit {
@@ -416,6 +268,198 @@ pub async fn monitor_positions(
     }
 
     Ok(())
+}
+
+/// Logs `message` about an unsuccessful trade of `book`: an error for a live trade, and
+/// at `paper_level` for a paper one, whose refusals are expected outcomes of the
+/// simulation.
+fn log_unsuccessful(book: Book, paper_level: fn(LogTag, &str), message: &str) {
+    match book {
+        Book::Live => logger::error(LogTag::Trader, message),
+        Book::Paper => paper_level(LogTag::Trader, message),
+    }
+}
+
+/// Executes the exit decided in `evaluation`. Returns whether a provider rate-limited it.
+async fn execute_exit(evaluation: PositionEvaluation) -> bool {
+    let Some(decision) = evaluation.decision else {
+        return false;
+    };
+    // A PARTIAL exit sizes its percentage off `remaining_token_amount`, which a
+    // partial already in flight has not decremented yet — a second one would
+    // oversell, and `partial_close_position` refuses it anyway. Skip it here so we
+    // do not spawn a doomed action every tick while the first confirms.
+    //
+    // A FULL exit is NOT skipped: it is sized from the on-chain balance, so it
+    // cannot double-sell, and it is the path a stop-loss takes. Blocking it here
+    // would suspend the position's stop-loss for as long as the partial takes to
+    // verify — exactly when the price is moving.
+    if decision.exit_percentage.is_some()
+        && positions::books::partial_exit_pending(decision.book, &decision.mint).await
+    {
+        logger::debug(
+            LogTag::Trader,
+            &format!(
+                "Skipping partial exit for {} - a partial exit is still confirming",
+                evaluation.symbol
+            ),
+        );
+        return false;
+    }
+
+    match executors::execute_tracked_exit(&decision, Some(&evaluation.symbol), evaluation.origin)
+        .await
+    {
+        Ok(result) => {
+            if result.success {
+                logger::info(
+                    LogTag::Trader,
+                    &format!(
+                        "Exit executed for {}: tx={}",
+                        evaluation.symbol,
+                        result.tx_signature.as_deref().unwrap_or("unknown")
+                    ),
+                );
+            } else {
+                let error_msg = result.error.clone().unwrap_or_default();
+                log_unsuccessful(
+                    decision.book,
+                    logger::info,
+                    &format!("Exit failed for {}: {}", evaluation.symbol, error_msg),
+                );
+            }
+            false
+        }
+        Err(e) => {
+            // Ask the error whether we were throttled instead of
+            // searching its message for "429": the message is
+            // written by whichever provider failed, and a rewording
+            // there would silently switch the back-off off.
+            let rate_limited = e.is_rate_limited();
+            if rate_limited {
+                logger::warning(
+                    LogTag::Trader,
+                    &format!(
+                        "Rate limited during exit for {}, will back off",
+                        evaluation.symbol
+                    ),
+                );
+            }
+
+            log_unsuccessful(
+                decision.book,
+                logger::warning,
+                &format!("Failed to execute exit for {}: {}", evaluation.symbol, e),
+            );
+            rate_limited
+        }
+    }
+}
+
+/// Finds and executes the DCA opportunities of `book`, separate from its exits.
+async fn process_dca(book: Book) {
+    let dca_decisions = match evaluators::dca::process_dca_opportunities(book).await {
+        Ok(dca_decisions) => dca_decisions,
+        Err(e) => {
+            log_unsuccessful(
+                book,
+                logger::warning,
+                &format!("Error processing DCA opportunities: {e}"),
+            );
+            return;
+        }
+    };
+    for decision in dca_decisions {
+        // Get symbol for action
+        let symbol = match crate::chains::chain_for_address(&decision.mint) {
+            Ok(chain) => crate::tokens::get_full_token_async(chain, &decision.mint)
+                .await
+                .ok()
+                .flatten(),
+            Err(_) => None,
+        }
+        .map(|t| t.symbol);
+
+        // Create DCA action for dashboard visibility; a paper add sends no swap
+        let action = match decision.book {
+            Book::Live => actions::AutoDcaAction::new(
+                &decision.mint,
+                symbol.as_deref(),
+                decision.position_id.as_deref(),
+                0, // We don't have dca_count here, it's tracked in position
+            )
+            .await
+            .ok(),
+            Book::Paper => None,
+        };
+
+        // Mark evaluation complete
+        if let Some(ref a) = action {
+            a.complete_evaluation().await;
+            a.start_quote().await;
+        }
+
+        logger::info(
+            LogTag::Trader,
+            &format!(
+                "DCA opportunity for position {}",
+                decision.position_id.as_deref().unwrap_or("unknown")
+            ),
+        );
+
+        let context = executors::ExecutionContext::for_decision(&decision);
+        match executors::execute_trade(&decision, context).await {
+            Ok(result) => {
+                if result.success {
+                    // Complete action successfully
+                    if let Some(ref a) = action {
+                        a.complete_quote().await;
+                        a.start_swap().await;
+                        let sig = result.tx_signature.as_deref().unwrap_or("unknown");
+                        a.complete_swap(sig).await;
+                        a.complete(result.tx_signature.as_deref(), None).await;
+                    }
+
+                    logger::info(
+                        LogTag::Trader,
+                        &format!("DCA executed for {}", decision.mint),
+                    );
+                } else {
+                    // Fail action
+                    let error_msg = result.error.clone().unwrap_or_default();
+                    if let Some(ref a) = action {
+                        a.fail(ActionFailure::with_details(
+                            ids::ACTIONS_FAILURE_DCA,
+                            error_msg.as_str(),
+                        ))
+                        .await;
+                    }
+
+                    log_unsuccessful(
+                        decision.book,
+                        logger::info,
+                        &format!("DCA failed for {}: {}", decision.mint, error_msg),
+                    );
+                }
+            }
+            Err(e) => {
+                // Fail action
+                if let Some(ref a) = action {
+                    a.fail(ActionFailure::with_details(
+                        ids::ACTIONS_FAILURE_DCA,
+                        e.to_string(),
+                    ))
+                    .await;
+                }
+
+                log_unsuccessful(
+                    decision.book,
+                    logger::warning,
+                    &format!("Failed to execute DCA: {e}"),
+                );
+            }
+        }
+    }
 }
 
 /// Result of position evaluation for exit

@@ -69,3 +69,9 @@ common-venue-serum = { -serum }
 common-venue-openbook = { -openbook }
 common-venue-phoenix = { -phoenix }
 common-venue-direct-pool = Pool langsung
+
+common-mode-paper = Paper
+common-mode-live = Live
+common-check-passed = lolos
+common-check-not-passed = belum lolos
+common-arm-type-phrase = Ketik { $phrase } untuk mengonfirmasi

@@ -23,7 +23,7 @@ fn task() -> CopyTask {
         target_address: "target".to_owned(),
         label: None,
         enabled: true,
-        mode: CopyMode::Paper,
+        mode: TradingMode::Paper,
         sizing: super::super::types::SizingMode::Fixed { sol: 0.1 },
         exit_mode: super::super::types::ExitMode::Hybrid,
         exit_policy_overrides: Default::default(),
@@ -79,21 +79,6 @@ fn policy_and_mirror_close_planning_keep_exact_raw_inputs() {
         ),
         Err(CopySkip::InvalidSizing)
     ));
-}
-
-#[test]
-fn partial_sell_sizing_preserves_large_and_full_width_raw_balances() {
-    let above_f64_integer = RawAmount::new((1_u128 << 53) + 17);
-    let selected = raw_sell_amount(above_f64_integer, Some(50.0)).unwrap();
-    assert_eq!(selected, RawAmount::new(((1_u128 << 53) + 17) / 2));
-    assert_eq!(
-        raw_sell_amount(RawAmount::MAX, Some(50.0)).unwrap(),
-        RawAmount::new(u128::MAX / 2)
-    );
-    assert_eq!(
-        raw_sell_amount(RawAmount::MAX, None).unwrap(),
-        RawAmount::MAX
-    );
 }
 
 fn policy() -> ExitPolicy {

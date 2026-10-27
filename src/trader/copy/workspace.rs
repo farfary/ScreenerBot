@@ -14,10 +14,12 @@ use super::control::{self, open_database, CopyTaskSummary, TASK_ACTIVITY_WINDOW}
 use super::insights::CurvePoint;
 use super::{
     build_insights, closed_rounds, management_for_exit_mode, ActivityQuery, CopyActivityRow,
-    CopyBook, CopyInsights, CopyMode, CopyTask, InsightRange, PaperPosition, LIVE_ARM_CONFIRMATION,
+    CopyBook, CopyInsights, CopyTask, InsightRange, PaperPosition,
 };
 use crate::config::{with_config, TakeProfitLevel};
 use crate::positions::{Position, PositionManagement};
+use crate::trader::paper::readiness::Readiness;
+use crate::trader::paper::{TradingMode, LIVE_ARM_CONFIRMATION};
 use crate::trader::policy::{
     BreakEvenPolicy, ExitPolicy, StopLossPolicy, TimePolicy, TimeStagnationPolicy, TrailingPolicy,
 };
@@ -31,7 +33,6 @@ pub use book::{
     clone_task, close_paper_holding, reset_paper_book, CloneRequest, ClosedHolding, ResetResult,
 };
 pub use profile::{wallet_profile, WalletProfile, WalletWatch};
-pub use readiness::{Readiness, ReadinessCheck};
 
 /// Newest decisions shipped with the workspace; the Activity tab pages the rest.
 const WORKSPACE_ACTIVITY: usize = 20;
@@ -99,8 +100,8 @@ fn policy_manages_exits(task: &CopyTask) -> bool {
 /// the real positions it opened while live.
 pub fn book_of(task: &CopyTask) -> CopyBook {
     match task.mode {
-        CopyMode::Paper => CopyBook::Paper,
-        CopyMode::Live => CopyBook::Live,
+        TradingMode::Paper => CopyBook::Paper,
+        TradingMode::Live => CopyBook::Live,
     }
 }
 
@@ -331,7 +332,7 @@ pub async fn task_workspace(id: i64) -> Result<CopyTaskWorkspace> {
     let legacy_paper_book = db.legacy_paper_positions(id).await?;
     let legacy_paper_spent = db.legacy_task_total_spent(id).await?;
     let spent_native = db.task_total_spent(id, task.mode).await?;
-    let live_spent_native = db.task_total_spent(id, CopyMode::Live).await?;
+    let live_spent_native = db.task_total_spent(id, TradingMode::Live).await?;
     let chain = task.chain;
     let mark = |position: &PaperPosition| control::paper_mark(chain, position);
     let (summary, _) = control::summarize(
@@ -377,7 +378,7 @@ pub fn build_workspace(
     legacy_paper_book: &[PaperPosition],
     legacy_paper_spent: f64,
     mark: impl Fn(&PaperPosition) -> Option<f64>,
-    block: Option<&'static str>,
+    block: Option<control::CopyLiveBlock>,
     now: DateTime<Utc>,
 ) -> CopyTaskWorkspace {
     let policy = task_policy(&summary.task);
@@ -403,7 +404,7 @@ pub fn build_workspace(
         legacy_paper,
         paper_execution: PaperExecutionSettings {
             model: "quote",
-            landing_delay_ms: config.paper_landing_delay_ms,
+            landing_delay_ms: with_config(|config| config.trader.paper.landing_delay_ms),
             queue_capacity: config.paper_queue_capacity,
         },
         readiness,
@@ -552,7 +553,7 @@ pub struct TaskComparison {
     pub task_id: i64,
     pub label: Option<String>,
     pub target_address: String,
-    pub mode: CopyMode,
+    pub mode: TradingMode,
     pub enabled: bool,
     pub rounds: usize,
     pub wins: usize,
@@ -652,7 +653,7 @@ pub fn defaults() -> CopyDefaults {
         max_arrival_distance_ms: config.max_arrival_distance_ms,
         latency_window_size: config.latency_window_size,
         readiness_min_closed_rounds: config.readiness_min_closed_rounds,
-        paper_landing_delay_ms: config.paper_landing_delay_ms,
+        paper_landing_delay_ms: with_config(|config| config.trader.paper.landing_delay_ms),
         paper_queue_capacity: config.paper_queue_capacity,
         live_confirmation: LIVE_ARM_CONFIRMATION,
     }

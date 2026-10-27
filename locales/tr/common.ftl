@@ -69,3 +69,9 @@ common-venue-serum = { -serum }
 common-venue-openbook = { -openbook }
 common-venue-phoenix = { -phoenix }
 common-venue-direct-pool = Doğrudan havuz
+
+common-mode-paper = Sanal
+common-mode-live = Canlı
+common-check-passed = geçti
+common-check-not-passed = geçmedi
+common-arm-type-phrase = Onaylamak için { $phrase } yazın

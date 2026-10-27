@@ -9,11 +9,13 @@ use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::{params, Connection, OptionalExtension, Transaction};
 
 use crate::chains::ChainId;
-use crate::database::schema::{self, table_has_column, LegacyStamp, SchemaContext, StoreSchema};
+use crate::database::schema::{
+    self, table_has_column, LegacyStamp, SchemaContext, StoreRenames, StoreSchema,
+};
 use crate::database::{self, catalog, WriteTransaction};
 use crate::errors::DatabaseError;
 use crate::logger::{self, LogTag};
-use crate::positions::types::{Position, PositionManagement, PositionOrigin};
+use crate::positions::types::{Book, Position, PositionManagement, PositionOrigin};
 use crate::positions::{Error, Result};
 
 use super::open_round::{install_open_round_index, query_open_round_id, OPEN_ROUND_INDEX_NAME};
@@ -37,19 +39,82 @@ pub(crate) const SCHEMA: StoreSchema = StoreSchema {
     }),
 };
 
+/// The schema of `paper_positions.db`: the positions schema at the same version, with
+/// the paper tables. No core older than the paper book reads this store, so it has no
+/// legacy stamp.
+pub(crate) const PAPER_SCHEMA: StoreSchema = StoreSchema {
+    version: POSITIONS_SCHEMA_VERSION as i64,
+    min_reader_version: POSITIONS_MIN_READER_VERSION as i64,
+    baseline: PAPER_LEDGER_BASELINE_VERSION as i64,
+    renames: Some(&super::column_names::PAPER_RENAMES),
+    step: paper_step,
+    legacy_stamp: None,
+};
+
 fn step(tx: &Transaction<'_>, context: &SchemaContext) -> std::result::Result<(), DatabaseError> {
-    let summary = create_schema(tx, &context.chains).map_err(|error| match error {
-        Error::Database(error) => error,
-        other => DatabaseError::Migration {
-            store: "positions.db".to_owned(),
-            detail: other.to_string(),
-        },
-    })?;
+    upgrade_store(tx, context, &super::column_names::RENAMES, &[])
+}
+
+fn paper_step(
+    tx: &Transaction<'_>,
+    context: &SchemaContext,
+) -> std::result::Result<(), DatabaseError> {
+    upgrade_store(
+        tx,
+        context,
+        &super::column_names::PAPER_RENAMES,
+        PAPER_TABLES,
+    )
+}
+
+/// The tables only the paper store holds.
+const PAPER_TABLES: &[(&str, &str)] = &[
+    ("paper_legs", SCHEMA_PAPER_LEGS),
+    ("paper_account", SCHEMA_PAPER_ACCOUNT),
+    ("paper_exit_attempts", SCHEMA_PAPER_EXIT_ATTEMPTS),
+];
+
+/// Runs the positions schema step on the store `renames` declares, then creates
+/// `extra_tables`; logs and errors name the store as its renames do.
+fn upgrade_store(
+    tx: &Transaction<'_>,
+    context: &SchemaContext,
+    renames: &StoreRenames,
+    extra_tables: &[(&str, &str)],
+) -> std::result::Result<(), DatabaseError> {
+    let store = renames.store;
+    let summary = create_schema(tx, &context.chains, renames)
+        .and_then(|summary| create_tables(tx, extra_tables).map(|()| summary))
+        .map_err(|error| match error {
+            Error::Database(error) => error,
+            other => DatabaseError::Migration {
+                store: store.to_owned(),
+                detail: other.to_string(),
+            },
+        })?;
     if !summary.is_empty() {
         logger::info(
             LogTag::Positions,
-            &format!("Positions database upgraded: {}", summary.join("; ")),
+            &format!("{store} upgraded: {}", summary.join("; ")),
         );
+    }
+    Ok(())
+}
+
+/// The store that holds `book`.
+fn store_of(book: Book) -> &'static catalog::StoreSpec {
+    match book {
+        Book::Live => &catalog::POSITIONS,
+        Book::Paper => &catalog::PAPER_POSITIONS,
+    }
+}
+
+/// Creates each table of `tables` that does not exist yet.
+fn create_tables(tx: &Transaction<'_>, tables: &[(&str, &str)]) -> Result<()> {
+    for (table, ddl) in tables {
+        tx.execute_batch(ddl).map_err(|e| Error::SchemaMigration {
+            detail: format!("failed to create {table} table: {e}"),
+        })?;
     }
     Ok(())
 }
@@ -59,22 +124,25 @@ fn step(tx: &Transaction<'_>, context: &SchemaContext) -> std::result::Result<()
 /// counter repairs, indexes and the data migrations, in dependency order. Foreign keys are off because a
 /// rebuilt root table is dropped before its replacement takes its name; the rebuild
 /// checks them before commit.
-fn create_schema(tx: &Transaction<'_>, chains: &[ChainId]) -> Result<Vec<String>> {
+fn create_schema(
+    tx: &Transaction<'_>,
+    chains: &[ChainId],
+    renames: &StoreRenames,
+) -> Result<Vec<String>> {
     let mut summary = Vec::new();
 
-    for (table, ddl) in [
-        ("positions", SCHEMA_POSITIONS),
-        ("position_states", SCHEMA_POSITION_STATES),
-        ("position_exits", SCHEMA_POSITION_EXITS),
-        ("position_entries", SCHEMA_POSITION_ENTRIES),
-        ("position_tracking", SCHEMA_POSITION_TRACKING),
-        ("position_metadata", SCHEMA_POSITION_METADATA),
-        ("token_snapshots", SCHEMA_TOKEN_SNAPSHOTS),
-    ] {
-        tx.execute(ddl, []).map_err(|e| Error::SchemaMigration {
-            detail: format!("failed to create {table} table: {e}"),
-        })?;
-    }
+    create_tables(
+        tx,
+        &[
+            ("positions", SCHEMA_POSITIONS),
+            ("position_states", SCHEMA_POSITION_STATES),
+            ("position_exits", SCHEMA_POSITION_EXITS),
+            ("position_entries", SCHEMA_POSITION_ENTRIES),
+            ("position_tracking", SCHEMA_POSITION_TRACKING),
+            ("position_metadata", SCHEMA_POSITION_METADATA),
+            ("token_snapshots", SCHEMA_TOKEN_SNAPSHOTS),
+        ],
+    )?;
 
     // Historical columns are appended in the order releases introduced them;
     // provenance backfills from columns the earlier steps guarantee.
@@ -107,7 +175,7 @@ fn create_schema(tx: &Transaction<'_>, chains: &[ChainId]) -> Result<Vec<String>
         summary.push(format!("added positions columns {}", added.join(", ")));
     }
 
-    match schema::renames::rename(tx, &super::column_names::RENAMES)? {
+    match schema::renames::rename(tx, renames)? {
         0 => {}
         renamed => summary.push(format!("renamed {renamed} unit columns")),
     }
@@ -248,35 +316,160 @@ fn run_data_migrations(conn: &Connection, chain: ChainId, summary: &mut Vec<Stri
     Ok(())
 }
 
+/// Inserts `position` as a new row of `wallet_address` on `chain` inside `tx` and returns
+/// its id. An open position is refused with [`Error::AlreadyOpen`] while its mint already
+/// has an open row in this chain and wallet, archived or not.
+pub(super) fn insert_position_row(
+    tx: &Connection,
+    chain: ChainId,
+    wallet_address: &str,
+    position: &Position,
+) -> Result<i64> {
+    if position.exit_time.is_none() {
+        if let Some(open_id) =
+            query_open_round_id(tx, chain.as_str(), wallet_address, &position.mint, None)?
+        {
+            logger::warning(
+            LogTag::Positions,
+            &format!(
+                "Refused a second open position for mint {}: position {open_id} is its open position",
+                position.mint
+            ),
+        );
+            return Err(Error::AlreadyOpen {
+                mint: position.mint.clone(),
+                open_position_id: open_id,
+            });
+        }
+    }
+    let position_id = tx
+        .query_row(
+            r#"
+            INSERT INTO positions (
+                chain_id, wallet_address, mint, symbol, name, entry_price, entry_time, exit_price, exit_time,
+                position_type, entry_size_native, total_size_native, price_highest, price_lowest,
+                entry_transaction_signature, exit_transaction_signature, token_amount,
+                effective_entry_price, effective_exit_price, native_received,
+                profit_target_min, profit_target_max, liquidity_tier,
+                transaction_entry_verified, transaction_exit_verified,
+                entry_fee_raw, exit_fee_raw, current_price, current_price_updated,
+                phantom_confirmations, phantom_first_seen, synthetic_exit, closed_reason,
+                pnl, pnl_percent, unrealized_pnl, unrealized_pnl_percent,
+                remaining_token_amount, total_exited_amount, average_exit_price, partial_exit_count,
+                dca_count, average_entry_price, last_dca_time, origin_kind, origin_ref, management,
+                round_key, basis_complete, history_complete, holding_state, basis_peak_price,
+                take_profit_level, entry_liquidity_native, entry_liquidity_pool
+            ) VALUES (
+                ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17,
+                ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32, ?33,
+                ?34, ?35, ?36, ?37, ?38, ?39, ?40, ?41, ?42, ?43, ?44, ?45, ?46, ?47,
+                ?48, ?49, ?50, ?51, ?52, ?53, ?54, ?55
+            ) RETURNING id
+      "#,
+        params![
+            chain.as_str(),
+            wallet_address,
+            position.mint,
+            position.symbol,
+            position.name,
+            position.entry_price,
+            position.entry_time.to_rfc3339(),
+            position.exit_price,
+            position.exit_time.map(|t| t.to_rfc3339()),
+            position.position_type,
+            position.entry_size_native,
+            position.total_size_native,
+            position.price_highest,
+            position.price_lowest,
+            position.entry_transaction_signature,
+            position.exit_transaction_signature,
+            position.token_amount,
+            position.effective_entry_price,
+            position.effective_exit_price,
+            position.native_received,
+            position.profit_target_min,
+            position.profit_target_max,
+            position.liquidity_tier,
+            position.transaction_entry_verified,
+            position.transaction_exit_verified,
+            position.entry_fee_raw.map(|f| f as i64),
+            position.exit_fee_raw.map(|f| f as i64),
+            position.current_price,
+            position.current_price_updated.map(|t| t.to_rfc3339()),
+            position.phantom_confirmations as i64,
+            position.phantom_first_seen.map(|t| t.to_rfc3339()),
+            position.synthetic_exit,
+            position.closed_reason,
+            position.pnl,
+            position.pnl_percent,
+            position.unrealized_pnl,
+            position.unrealized_pnl_percent,
+            position.remaining_token_amount,
+            position.total_exited_amount,
+            position.average_exit_price,
+            position.partial_exit_count as i64,
+            position.dca_count as i64,
+            position.average_entry_price,
+            position.last_dca_time.map(|t| t.to_rfc3339()),
+            position.origin.kind(),
+            position.origin.reference(),
+            position.management.as_str(),
+            position.round_key,
+            position.basis_complete,
+            position.history_complete,
+            position.holding_state,
+            position.basis_peak_price,
+            i64::from(position.take_profit_level),
+            position.entry_liquidity_native,
+            position.entry_liquidity_pool,
+        ],
+        |row| row.get::<_, i64>(0),
+    )
+    .map_err(|e| DatabaseError::Query {
+        operation: "insert_position".to_owned(),
+        message: e.to_string(),
+    })?;
+    Ok(position_id)
+}
+
 impl PositionsDatabase {
-    /// The positions database of `chain`, opened by the storage phase.
-    pub async fn new(chain: ChainId) -> Result<Self> {
-        let pool = database::open::store(&catalog::POSITIONS)?;
-        Ok(Self::with_pool(pool, catalog::POSITIONS.path(chain), chain))
+    /// The store of `book` on `chain`, opened by the storage phase.
+    pub async fn open(book: Book, chain: ChainId) -> Result<Self> {
+        let spec = store_of(book);
+        let pool = database::open::store(spec)?;
+        Ok(Self::with_pool(pool, spec.path(chain), chain, book))
     }
 
-    /// Open a positions database at an explicit path, upgrading its schema.
+    /// Open the store of `book` at an explicit path, upgrading its schema.
     #[cfg(test)]
-    async fn new_with_path(
+    pub(crate) async fn open_at(
+        book: Book,
         database_path: impl AsRef<std::path::Path>,
         chain: ChainId,
     ) -> Result<Self> {
         let path = database_path.as_ref().to_path_buf();
-        let pool = database::open::pool_at(&catalog::POSITIONS, &path, vec![chain])?;
-        Ok(Self::with_pool(pool, path, chain))
+        let pool = database::open::pool_at(store_of(book), &path, vec![chain])?;
+        Ok(Self::with_pool(pool, path, chain, book))
     }
 
     fn with_pool(
         pool: Pool<SqliteConnectionManager>,
         path: std::path::PathBuf,
         chain: ChainId,
+        book: Book,
     ) -> Self {
         PositionsDatabase {
             pool,
             database_path: path.to_string_lossy().into_owned(),
             schema_version: POSITIONS_SCHEMA_VERSION,
             chain,
+            book,
         }
+    }
+
+    /// The book this store holds.
+    pub fn book(&self) -> Book {
+        self.book
     }
 
     /// The chain whose positions this store holds.
@@ -318,114 +511,7 @@ impl PositionsDatabase {
         // before the state history is recorded across an await.
         let position_id = {
             let tx = conn.write_tx().map_err(sqlite)?;
-            if position.exit_time.is_none() {
-                if let Some(open_id) = query_open_round_id(
-                    &tx,
-                    self.chain.as_str(),
-                    &wallet_address,
-                    &position.mint,
-                    None,
-                )? {
-                    logger::warning(
-                    LogTag::Positions,
-                    &format!(
-                        "Refused a second open position for mint {}: position {open_id} is its open position",
-                        position.mint
-                    ),
-                );
-                    return Err(Error::AlreadyOpen {
-                        mint: position.mint.clone(),
-                        open_position_id: open_id,
-                    });
-                }
-            }
-            let position_id = tx
-            .query_row(
-                r#"
-      INSERT INTO positions (
-        chain_id, wallet_address, mint, symbol, name, entry_price, entry_time, exit_price, exit_time,
-        position_type, entry_size_native, total_size_native, price_highest, price_lowest,
-        entry_transaction_signature, exit_transaction_signature, token_amount,
-        effective_entry_price, effective_exit_price, native_received,
-        profit_target_min, profit_target_max, liquidity_tier,
-        transaction_entry_verified, transaction_exit_verified,
-        entry_fee_raw, exit_fee_raw, current_price, current_price_updated,
-        phantom_confirmations, phantom_first_seen, synthetic_exit, closed_reason,
-        pnl, pnl_percent, unrealized_pnl, unrealized_pnl_percent,
-        remaining_token_amount, total_exited_amount, average_exit_price, partial_exit_count,
-        dca_count, average_entry_price, last_dca_time, origin_kind, origin_ref, management,
-        round_key, basis_complete, history_complete, holding_state, basis_peak_price,
-        take_profit_level, entry_liquidity_native, entry_liquidity_pool
-      ) VALUES (
-        ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17,
-        ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32, ?33,
-        ?34, ?35, ?36, ?37, ?38, ?39, ?40, ?41, ?42, ?43, ?44, ?45, ?46, ?47,
-        ?48, ?49, ?50, ?51, ?52, ?53, ?54, ?55
-      ) RETURNING id
-      "#,
-                params![
-                    self.chain.as_str(),
-                    wallet_address,
-                    position.mint,
-                    position.symbol,
-                    position.name,
-                    position.entry_price,
-                    position.entry_time.to_rfc3339(),
-                    position.exit_price,
-                    position.exit_time.map(|t| t.to_rfc3339()),
-                    position.position_type,
-                    position.entry_size_native,
-                    position.total_size_native,
-                    position.price_highest,
-                    position.price_lowest,
-                    position.entry_transaction_signature,
-                    position.exit_transaction_signature,
-                    position.token_amount,
-                    position.effective_entry_price,
-                    position.effective_exit_price,
-                    position.native_received,
-                    position.profit_target_min,
-                    position.profit_target_max,
-                    position.liquidity_tier,
-                    position.transaction_entry_verified,
-                    position.transaction_exit_verified,
-                    position.entry_fee_raw.map(|f| f as i64),
-                    position.exit_fee_raw.map(|f| f as i64),
-                    position.current_price,
-                    position.current_price_updated.map(|t| t.to_rfc3339()),
-                    position.phantom_confirmations as i64,
-                    position.phantom_first_seen.map(|t| t.to_rfc3339()),
-                    position.synthetic_exit,
-                    position.closed_reason,
-                    position.pnl,
-                    position.pnl_percent,
-                    position.unrealized_pnl,
-                    position.unrealized_pnl_percent,
-                    position.remaining_token_amount,
-                    position.total_exited_amount,
-                    position.average_exit_price,
-                    position.partial_exit_count as i64,
-                    position.dca_count as i64,
-                    position.average_entry_price,
-                    position.last_dca_time.map(|t| t.to_rfc3339()),
-                    position.origin.kind(),
-                    position.origin.reference(),
-                    position.management.as_str(),
-                    position.round_key,
-                    position.basis_complete,
-                    position.history_complete,
-                    position.holding_state,
-                    position.basis_peak_price,
-                    i64::from(position.take_profit_level),
-                    position.entry_liquidity_native,
-                    position.entry_liquidity_pool,
-                ],
-                |row| row.get::<_, i64>(0),
-            )
-            .map_err(|e| DatabaseError::Query {
-                operation: "insert_position".to_owned(),
-                message: e.to_string(),
-            })?;
+            let position_id = insert_position_row(&tx, self.chain, &wallet_address, position)?;
             tx.commit().map_err(sqlite)?;
             position_id
         };
@@ -781,7 +867,8 @@ impl PositionsDatabase {
             current_price: row.get("current_price")?,
             current_price_updated,
             current_price_source: None, // Not persisted
-            phantom_remove: false,      // This is not persisted
+            book: self.book,
+            phantom_remove: false, // This is not persisted
             phantom_confirmations: row.get::<_, i64>("phantom_confirmations")? as u32,
             phantom_first_seen,
             synthetic_exit: row.get("synthetic_exit")?,
@@ -981,30 +1068,32 @@ pub(super) fn add_missing_columns(
 mod tests {
     use r2d2::Pool;
     use r2d2_sqlite::SqliteConnectionManager;
-    use rusqlite::{params, Connection};
+    use rusqlite::{params, Connection, OptionalExtension};
 
     use crate::chains::RawAmount;
     use crate::database::schema;
 
     use super::super::booking::Booking;
     use super::super::open_round::OPEN_ROUND_INDEX_NAME;
-    use super::{PositionsDatabase, POSITIONS_INDEXES, POSITIONS_SCHEMA_VERSION};
-    use crate::database::{catalog, open};
+    use super::{Book, PositionsDatabase, POSITIONS_INDEXES, POSITIONS_SCHEMA_VERSION};
+    use crate::database::open;
 
     /// Runs the store's whole open on the test database's file, as the storage phase
     /// does.
     async fn upgrade(database: &PositionsDatabase) -> crate::positions::Result<()> {
         open::pool_at(
-            &catalog::POSITIONS,
+            super::store_of(database.book),
             std::path::Path::new(&database.database_path),
             vec![database.chain],
         )?;
         Ok(())
     }
 
-    fn test_database() -> (PositionsDatabase, tempfile::TempDir) {
+    fn test_database(book: Book) -> (PositionsDatabase, tempfile::TempDir) {
         let directory = tempfile::tempdir().unwrap();
-        let path = directory.path().join("positions.db");
+        let path = directory
+            .path()
+            .join(format!("{}.db", super::store_of(book).id));
         let manager = SqliteConnectionManager::file(&path);
         // No connection is made before the store opener runs: an empty file left by an
         // eager pool is a store that is not a database. `build_unchecked` alone still
@@ -1019,6 +1108,7 @@ mod tests {
                 database_path: path.to_string_lossy().into_owned(),
                 schema_version: POSITIONS_SCHEMA_VERSION,
                 chain: crate::chains::ChainId::Solana,
+                book,
             },
             directory,
         )
@@ -1029,12 +1119,12 @@ mod tests {
     /// moves to quarantine as not a database, leaving the pool on the moved file.
     #[test]
     fn the_test_pool_creates_no_store_file_before_its_first_connection() {
-        let (database, _directory) = test_database();
+        let (database, _directory) = test_database(Book::Live);
         std::thread::sleep(std::time::Duration::from_millis(200));
         assert!(!std::path::Path::new(&database.database_path).exists());
     }
 
-    fn assert_current_schema(connection: &Connection) {
+    fn assert_current_schema(connection: &Connection, book: Book) {
         for table in [
             "positions",
             "position_states",
@@ -1088,16 +1178,32 @@ mod tests {
             "missing index {OPEN_ROUND_INDEX_NAME}"
         );
         assert_store_is_sound(connection);
-        assert_eq!(
-            connection
-                .query_row(
-                    "SELECT value FROM position_metadata WHERE key = 'schema_version'",
-                    [],
-                    |row| row.get::<_, String>(0),
-                )
-                .unwrap(),
-            POSITIONS_SCHEMA_VERSION.to_string()
-        );
+        let ledger: i64 = connection
+            .query_row("SELECT version FROM store_schema WHERE id = 1", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(ledger, i64::from(POSITIONS_SCHEMA_VERSION));
+        let legacy_stamp = connection
+            .query_row(
+                "SELECT value FROM position_metadata WHERE key = 'schema_version'",
+                [],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()
+            .unwrap();
+        let paper_tables = ["paper_legs", "paper_account", "paper_exit_attempts"]
+            .map(|table| schema::table_exists(connection, table).unwrap());
+        match book {
+            Book::Live => {
+                assert_eq!(legacy_stamp, Some(POSITIONS_SCHEMA_VERSION.to_string()));
+                assert_eq!(paper_tables, [false, false, false]);
+            }
+            Book::Paper => {
+                assert_eq!(legacy_stamp, None);
+                assert_eq!(paper_tables, [true, true, true]);
+            }
+        }
     }
 
     fn has_open_round_index(connection: &Connection) -> bool {
@@ -1154,7 +1260,7 @@ mod tests {
 
     #[tokio::test]
     async fn full_schema_initialization_leaves_duplicate_open_rows_untouched_until_one_closes() {
-        let (database, _directory) = test_database();
+        let (database, _directory) = test_database(Book::Live);
         {
             let legacy = database.get_connection().unwrap();
             legacy
@@ -1220,7 +1326,7 @@ mod tests {
         upgrade(&database).await.unwrap();
 
         let connection = database.get_connection().unwrap();
-        assert_current_schema(&connection);
+        assert_current_schema(&connection, Book::Live);
         let second_open = connection.execute(
             "INSERT INTO positions (chain_id, wallet_address, mint, symbol, name, entry_price, entry_time, position_type, entry_size_native, total_size_native, price_highest, price_lowest, basis_peak_price) VALUES ('solana', 'wallet', 'mint', 'SYM', 'Token', 0.5, '2026-01-04', 'buy', 1.0, 1.0, 0.5, 0.5, 0.5)",
             [],
@@ -1230,7 +1336,7 @@ mod tests {
 
     #[tokio::test]
     async fn a_booking_that_unarchives_its_row_clears_the_stored_archive_flag() {
-        let (database, _directory) = test_database();
+        let (database, _directory) = test_database(Book::Live);
         upgrade(&database).await.unwrap();
         database.get_connection().unwrap().execute(
             "INSERT INTO positions (id, chain_id, wallet_address, mint, symbol, name, entry_price, entry_time, position_type, entry_size_native, total_size_native, price_highest, price_lowest, basis_peak_price, archived, archived_at, origin_kind, management) VALUES (41, 'solana', 'wallet', 'mint', 'SYM', 'Token', 0.5, '2026-01-01T00:00:00Z', 'buy', 1.0, 1.0, 0.5, 0.5, 0.5, 1, '2026-01-02T00:00:00Z', 'manual', 'user_only')",
@@ -1270,32 +1376,36 @@ mod tests {
 
     #[tokio::test]
     async fn full_schema_initialization_creates_and_reopens_fresh_database_files() {
-        let directory = tempfile::tempdir().unwrap();
+        for book in Book::ALL {
+            let directory = tempfile::tempdir().unwrap();
 
-        for file_name in ["missing.db", "placeholder.db"] {
-            let path = directory.path().join(file_name);
-            if file_name == "placeholder.db" {
-                std::fs::File::create(&path).unwrap();
-            } else {
-                assert!(!path.exists());
+            for file_name in ["missing.db", "placeholder.db"] {
+                let path = directory.path().join(file_name);
+                if file_name == "placeholder.db" {
+                    std::fs::File::create(&path).unwrap();
+                } else {
+                    assert!(!path.exists());
+                }
+
+                let database =
+                    PositionsDatabase::open_at(book, &path, crate::chains::ChainId::Solana)
+                        .await
+                        .unwrap();
+                drop(database);
+                let database =
+                    PositionsDatabase::open_at(book, &path, crate::chains::ChainId::Solana)
+                        .await
+                        .unwrap();
+
+                let connection = database.get_connection().unwrap();
+                assert_current_schema(&connection, book);
             }
-
-            let database = PositionsDatabase::new_with_path(&path, crate::chains::ChainId::Solana)
-                .await
-                .unwrap();
-            drop(database);
-            let database = PositionsDatabase::new_with_path(&path, crate::chains::ChainId::Solana)
-                .await
-                .unwrap();
-
-            let connection = database.get_connection().unwrap();
-            assert_current_schema(&connection);
         }
     }
 
     #[tokio::test]
     async fn full_schema_initialization_preserves_released_provenance_and_is_idempotent() {
-        let (database, _directory) = test_database();
+        let (database, _directory) = test_database(Book::Live);
         {
             let legacy = database.get_connection().unwrap();
             legacy
@@ -1321,7 +1431,7 @@ mod tests {
         upgrade(&database).await.unwrap();
 
         let connection = database.get_connection().unwrap();
-        assert_current_schema(&connection);
+        assert_current_schema(&connection, Book::Live);
         assert_eq!(
             connection
                 .query_row(
@@ -1391,7 +1501,7 @@ mod tests {
 
     #[tokio::test]
     async fn appended_legacy_columns_are_rebuilt_by_name_keeping_rows_children_and_sequences() {
-        let (database, _directory) = test_database();
+        let (database, _directory) = test_database(Book::Live);
         {
             let legacy = database.get_connection().unwrap();
             legacy.execute_batch(&appended_column_storage()).unwrap();
@@ -1434,13 +1544,13 @@ mod tests {
         );
 
         let connection = database.get_connection().unwrap();
-        assert_current_schema(&connection);
+        assert_current_schema(&connection, Book::Live);
         assert_eq!(
             table_sql(&connection),
             upgraded,
             "second open changed the schema"
         );
-        let (fresh, _fresh_directory) = test_database();
+        let (fresh, _fresh_directory) = test_database(Book::Live);
         upgrade(&fresh).await.unwrap();
         assert_eq!(upgraded, table_sql(&fresh.get_connection().unwrap()));
         assert_eq!(sequences(&connection), before);
@@ -1473,7 +1583,7 @@ mod tests {
 
     #[tokio::test]
     async fn a_refused_upgrade_leaves_every_earlier_step_uncommitted() {
-        let (database, _directory) = test_database();
+        let (database, _directory) = test_database(Book::Live);
         let legacy = appended_column_storage().replacen(
             "  manual_management BOOLEAN NOT NULL DEFAULT 0,\n",
             "  manual_management BOOLEAN NOT NULL DEFAULT 0,\n  unrecognized_flag INTEGER,\n",
@@ -1511,51 +1621,55 @@ mod tests {
     /// anything is written, and neither its ledger nor its legacy stamp is lowered.
     #[tokio::test]
     async fn a_newer_store_is_refused_unchanged() {
-        let (database, _directory) = test_database();
-        upgrade(&database).await.unwrap();
-        let newer = i64::from(POSITIONS_SCHEMA_VERSION) + 1;
-        database
-            .get_connection()
-            .unwrap()
-            .execute(
-                "UPDATE store_schema SET version = ?1, min_reader_version = ?1 WHERE id = 1",
-                [newer],
-            )
-            .unwrap();
-        let before = table_sql(&database.get_connection().unwrap());
+        for book in Book::ALL {
+            let (database, _directory) = test_database(book);
+            upgrade(&database).await.unwrap();
+            let newer = i64::from(POSITIONS_SCHEMA_VERSION) + 1;
+            database
+                .get_connection()
+                .unwrap()
+                .execute(
+                    "UPDATE store_schema SET version = ?1, min_reader_version = ?1 WHERE id = 1",
+                    [newer],
+                )
+                .unwrap();
+            let before = table_sql(&database.get_connection().unwrap());
 
-        let error = upgrade(&database).await.unwrap_err();
+            let error = upgrade(&database).await.unwrap_err();
 
-        assert!(
-            matches!(
-                &error,
-                crate::positions::Error::Database(crate::errors::DatabaseError::StoreTooNew {
-                    version,
-                    supported_version,
-                    ..
-                }) if *version == newer && *supported_version == i64::from(POSITIONS_SCHEMA_VERSION)
-            ),
-            "{error}"
-        );
-        let connection = database.get_connection().unwrap();
-        assert_eq!(table_sql(&connection), before);
-        assert_eq!(
-            stored_version(&connection),
-            POSITIONS_SCHEMA_VERSION.to_string()
-        );
-        let ledger: i64 = connection
-            .query_row("SELECT version FROM store_schema WHERE id = 1", [], |row| {
-                row.get(0)
-            })
-            .unwrap();
-        assert_eq!(ledger, newer);
+            assert!(
+                matches!(
+                    &error,
+                    crate::positions::Error::Database(crate::errors::DatabaseError::StoreTooNew {
+                        version,
+                        supported_version,
+                        ..
+                    }) if *version == newer && *supported_version == i64::from(POSITIONS_SCHEMA_VERSION)
+                ),
+                "{error}"
+            );
+            let connection = database.get_connection().unwrap();
+            assert_eq!(table_sql(&connection), before);
+            if book == Book::Live {
+                assert_eq!(
+                    stored_version(&connection),
+                    POSITIONS_SCHEMA_VERSION.to_string()
+                );
+            }
+            let ledger: i64 = connection
+                .query_row("SELECT version FROM store_schema WHERE id = 1", [], |row| {
+                    row.get(0)
+                })
+                .unwrap();
+            assert_eq!(ledger, newer);
+        }
     }
 
     /// A store at an older recorded version is backed up with that version and then
     /// raised to this build's.
     #[tokio::test]
     async fn an_older_store_is_backed_up_and_raised_to_the_current_version() {
-        let (database, _directory) = test_database();
+        let (database, _directory) = test_database(Book::Live);
         upgrade(&database).await.unwrap();
         let older = POSITIONS_SCHEMA_VERSION - 1;
         database
@@ -1586,7 +1700,7 @@ mod tests {
     /// that does not touch them, and written back as a pair.
     #[tokio::test]
     async fn the_entry_liquidity_reading_keeps_its_pool_through_the_row_codec_and_writer() {
-        let (database, _directory) = test_database();
+        let (database, _directory) = test_database(Book::Live);
         upgrade(&database).await.unwrap();
         database.get_connection().unwrap().execute(
             "INSERT INTO positions (id, chain_id, wallet_address, mint, symbol, name, entry_price, entry_time, position_type, entry_size_native, total_size_native, price_highest, price_lowest, basis_peak_price, entry_liquidity_native, entry_liquidity_pool, origin_kind, management) VALUES (41, 'solana', 'wallet', 'mint', 'SYM', 'Token', 0.5, '2026-01-01T00:00:00Z', 'buy', 1.0, 1.0, 0.5, 0.5, 0.5, 64.0, 'entry-pool', 'auto', 'auto_trader')",
@@ -1640,7 +1754,7 @@ mod tests {
 
     #[tokio::test]
     async fn wide_position_amounts_round_trip_through_the_row_codec_and_writer() {
-        let (database, _directory) = test_database();
+        let (database, _directory) = test_database(Book::Live);
         upgrade(&database).await.unwrap();
         database.get_connection().unwrap().execute(
             "INSERT INTO positions (id, chain_id, wallet_address, mint, symbol, name, entry_price, entry_time, position_type, entry_size_native, total_size_native, price_highest, price_lowest, basis_peak_price, token_amount, remaining_token_amount, total_exited_amount, origin_kind, management) VALUES (41, 'solana', 'wallet', 'mint', 'SYM', 'Token', 0.5, '2026-01-01T00:00:00Z', 'buy', 1.0, 1.0, 0.5, 0.5, 0.5, '340282366920938463463374607431768211455', '18446744073709551616', '18446744073709551617', 'manual', 'user_only')",

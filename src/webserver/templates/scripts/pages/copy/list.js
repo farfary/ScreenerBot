@@ -8,7 +8,6 @@ import { renderAddress } from "../../ui/token_identity.js";
 import { sparkline } from "./charts.js";
 import {
   exitPolicyIssueHtml,
-  modeLabel,
   pauseReasonShort,
   segmented,
   signedSol,
@@ -17,6 +16,7 @@ import {
   taskName,
   toneClass,
 } from "./format.js";
+import { tradingModeLabel } from "../../ui/trading_mode.js";
 
 const SORTS = [
   {
@@ -94,7 +94,7 @@ export function createTaskList(page) {
     return `<button type="button" class="copy-row${selected ? " is-selected" : ""}" data-task-id="${task.id}" aria-pressed="${selected}">
       <span class="copy-row-line">
         <span class="copy-row-name">${esc(taskName(task))}</span>
-        <span class="copy-row-mode copy-mode-${esc(task.mode)}">${esc(modeLabel(task.mode))}</span>
+        <span class="copy-row-mode copy-mode-${esc(task.mode)}">${esc(tradingModeLabel(task.mode))}</span>
       </span>${
         // An unnamed task is told apart by its wallet, in full on a line of its own;
         // the row is the action, so the address is plain.

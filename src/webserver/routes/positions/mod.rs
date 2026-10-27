@@ -1,7 +1,8 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Position management routes (list, detail, debug views, force-close, archive/delete).
+//! Position management routes (list, detail, debug views, force-close, archive/delete), and
+//! the paper book's routes under `/positions/paper`.
 use axum::{
     middleware::from_fn_with_state,
     routing::{delete, get, post},
@@ -20,6 +21,7 @@ mod detail;
 mod force_close;
 mod list;
 mod manage;
+mod paper;
 pub mod types;
 
 // Re-export handler functions
@@ -60,4 +62,5 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/positions/{position_id}/management", post(set_management))
         .route("/positions/{position_id}", delete(delete_position))
         .route_layer(from_fn_with_state(&catalog::POSITIONS, store_gate))
+        .merge(paper::routes())
 }

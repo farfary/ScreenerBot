@@ -10,12 +10,12 @@ import { renderAddress } from "../../ui/token_identity.js";
 import {
   SOLANA_ADDRESS_RE,
   exitModeLabel,
-  modeLabel,
   segmented,
   settingPct,
   settingSol,
   taskName,
 } from "./format.js";
+import { tradingModeLabel } from "../../ui/trading_mode.js";
 import {
   PRESETS,
   RULES,
@@ -137,7 +137,7 @@ export function duplicateNote({ draft, mode, source, tasks }, esc) {
   if (!others.length) return "";
   const tasksText = formatList(
     others.map((task) =>
-      I18n.t("copy-task-ref", { name: taskName(task), mode: modeLabel(task.mode) })
+      I18n.t("copy-task-ref", { name: taskName(task), mode: tradingModeLabel(task.mode) })
     )
   );
   return `<p class="copy-warning" role="note"><i class="icon-triangle-alert" aria-hidden="true"></i>${esc(I18n.t("copy-editor-duplicate", { tasks: tasksText }))}</p>`;
@@ -371,7 +371,7 @@ function reviewStep(context, esc) {
   const head = `<div class="copy-review-head">${renderAddress(task.target_address, { explorer: "account" })}<p>${esc(
     I18n.t("copy-editor-review-head", {
       name: draft.label || I18n.t("copy-task-unnamed"),
-      mode: modeLabel(mode === "edit" && source.mode === "live" ? "live" : "paper"),
+      mode: tradingModeLabel(mode === "edit" && source.mode === "live" ? "live" : "paper"),
       status: !draft.enabled
         ? I18n.t("copy-editor-review-paused")
         : processingPaused

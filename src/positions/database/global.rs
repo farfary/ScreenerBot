@@ -26,7 +26,11 @@ pub async fn initialize_positions_database() -> Result<()> {
         return Ok(()); // Already initialized
     }
 
-    let db = PositionsDatabase::new(crate::chains::active_chain()).await?;
+    let db = PositionsDatabase::open(
+        crate::positions::types::Book::Live,
+        crate::chains::active_chain(),
+    )
+    .await?;
     *db_lock = Some(db);
 
     logger::info(

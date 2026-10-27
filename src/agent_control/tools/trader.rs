@@ -93,7 +93,7 @@ impl Tool for GetTraderStatusTool {
             })
         });
         ToolResult::success(json!({
-            "trader": trader::trader_status(),
+            "trader": trader::trader_status().await,
             "force_stop": crate::global::get_force_stop_status(),
             "monitors": trader::monitors_status().await,
             "loss_limit": trader::loss_limit_snapshot(),
@@ -147,7 +147,9 @@ impl Tool for GetTraderStatsTool {
             Ok(p) => p,
             Err(e) => return e,
         };
-        let mut stats = trader::stats::trader_stats(params.days.unwrap_or(30)).await;
+        let mut stats =
+            trader::stats::trader_stats(crate::positions::Book::Live, params.days.unwrap_or(30))
+                .await;
         if !params.include_daily {
             stats.daily_pnl.clear();
         }
@@ -202,7 +204,9 @@ impl Tool for SetTraderEnabledTool {
             Ok(status) => ToolResult::success(json!({ "trader": status, "changed": true })),
             // Already in the requested state: the outcome the caller asked for holds.
             Err(trader::Error::AlreadyRunning | trader::Error::AlreadyStopped) => {
-                ToolResult::success(json!({ "trader": trader::trader_status(), "changed": false }))
+                ToolResult::success(
+                    json!({ "trader": trader::trader_status().await, "changed": false }),
+                )
             }
             Err(e) => ToolResult::error(e.to_string()),
         }

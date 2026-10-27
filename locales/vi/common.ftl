@@ -69,3 +69,9 @@ common-venue-serum = { -serum }
 common-venue-openbook = { -openbook }
 common-venue-phoenix = { -phoenix }
 common-venue-direct-pool = Pool trực tiếp
+
+common-mode-paper = Thử nghiệm
+common-mode-live = Live
+common-check-passed = đạt
+common-check-not-passed = chưa đạt
+common-arm-type-phrase = Nhập { $phrase } để xác nhận

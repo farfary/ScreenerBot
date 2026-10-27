@@ -42,7 +42,6 @@ trader-status-loading = در حال بارگذاری...
 trader-status-running = در حال اجرا
 trader-status-stopped = متوقف
 trader-status-setup-required = نیازمند راه‌اندازی
-trader-status-unavailable = برای استفاده از معامله‌گر خودکار، راه‌اندازی کیف پول و RPC را کامل کنید
 trader-setup-action = تکمیل راه‌اندازی
 trader-toggle-on = فعال
 trader-toggle-off = غیرفعال
@@ -102,6 +101,9 @@ trader-toast-strategy-disabled = استراتژی غیرفعال شد
     .message = استراتژی غیرفعال است
 trader-toast-strategy-failed = به‌روزرسانی ناموفق بود
     .message = به‌روزرسانی وضعیت استراتژی ناموفق بود
+trader-toast-strategy-armed = «{ $name }» اکنون زنده معامله می‌کند
+trader-toast-strategy-paper = «{ $name }» اکنون آزمایشی معامله می‌کند
+trader-toast-strategy-mode-failed = تغییر حالت معامله ممکن نشد
 
 ## Stats: realized window and metrics
 
@@ -110,6 +112,19 @@ trader-stats-window =
 trader-stats-window-day = 24H
 trader-stats-window-week = 7D
 trader-stats-window-month = 30D
+trader-stats-book =
+    .aria-label = دفتر معاملات
+trader-paper-run-since = دوره آزمایشی از { $date }
+trader-paper-start = شروع
+trader-paper-cash = نقد
+trader-paper-open = باز
+trader-paper-unrealized = تحقق‌نیافته
+trader-paper-reset = بازنشانی دوره آزمایشی
+trader-paper-reset-title = دوره آزمایشی بازنشانی شود؟
+trader-paper-reset-message = هر پوزیشن آزمایشی باز با قیمت فعلی‌اش بسته می‌شود و دوره‌ای تازه با موجودی اولیه تنظیم‌شده آغاز می‌شود. دوره‌های قبلی در تاریخچه می‌مانند.
+trader-paper-reset-done = دوره آزمایشی تازه‌ای آغاز شد
+trader-paper-reset-failed = بازنشانی دوره آزمایشی ممکن نشد
+trader-paper-account-failed = بارگذاری دوره آزمایشی ممکن نشد
 trader-realized-title = عملکرد تحقق‌یافته
 trader-metric-net-pnl = سود و زیان خالص
 trader-metric-win-rate = نرخ برد
@@ -375,6 +390,20 @@ trader-strategy-empty = استراتژی‌ای تعریف نشده است
 trader-strategy-unnamed = استراتژی بدون نام
 trader-strategy-priority-auto = خودکار
 trader-strategy-priority = اولویت { $priority }
+trader-strategy-mode-arm = فعال‌سازی زنده
+trader-strategy-mode-return-paper = بازگشت به آزمایشی
+trader-strategy-arm-title = فعال‌سازی زنده «{ $name }»
+trader-strategy-arm-lead = ورودهای جدید «{ $name }» با سواپ واقعی از کیف پول معاملاتی شما انجام می‌شوند.
+trader-strategy-arm-readiness = آمادگی بر اساس دفتر آزمایشی
+trader-strategy-arm-open-paper = پوزیشن‌های آزمایشی باز، آزمایشی می‌مانند و به‌صورت آزمایشی بسته می‌شوند.
+trader-strategy-arm-ack-real-native = ورودهای جدید { -sol } واقعی از کیف پول معاملاتی شما خرج می‌کنند.
+trader-strategy-arm-ack-fees = سواپ‌های زنده کارمزد شبکه و اسلیپیج واقعی می‌پردازند؛ نتایج آزمایشی نتایج زنده را تضمین نمی‌کنند.
+trader-strategy-arm-ack-unready = برخی بررسی‌های آمادگی قبول نشده‌اند. با این حال این استراتژی را فعال می‌کنم.
+trader-strategy-arm-unavailable = معامله زنده اکنون در دسترس نیست؛ آخرین بررسی را ببینید.
+trader-strategy-return-title = بازگرداندن «{ $name }» به آزمایشی
+trader-strategy-return-message = ورودهای جدید بدون خرج کردن { -sol } در دفتر آزمایشی باز می‌شوند. پوزیشن‌های زنده باز، زنده می‌مانند و زنده بسته می‌شوند.
+trader-strategy-readiness-failed = خواندن آمادگی استراتژی ممکن نشد
+trader-paper-explore-title = معامله آزمایشی پس از راه‌اندازی شروع می‌شود
 
 ## Dollar-cost averaging
 

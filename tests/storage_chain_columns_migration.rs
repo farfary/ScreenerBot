@@ -225,8 +225,8 @@ fn v0_2_13_fixtures_gain_chain_scope_and_survive_a_second_boot() {
     }
 
     // `strategy_assignments`, which nothing read or wrote, is dropped from the v0.2.13
-    // store, and the drop makes version 2 the store's oldest reader; version 3 only adds
-    // a column, which a version 2 core still reads.
+    // store; version 3 only adds a column. Version 4 adds the paper or live mode, which
+    // a core that ignores it would trade live, so version 4 is the oldest reader.
     let strategies = open_database(fixture_dir.path(), "strategies.db");
     let retired: i64 = strategies
         .query_row(
@@ -246,7 +246,7 @@ fn v0_2_13_fixtures_gain_chain_scope_and_survive_a_second_boot() {
             |row| Ok((row.get(0)?, row.get(1)?)),
         )
         .expect("read the strategies store ledger");
-    assert_eq!(ledger, (3, 2), "strategies.db: store ledger");
+    assert_eq!(ledger, (4, 4), "strategies.db: store ledger");
 
     // The exit-strategy binding is appended with the default that manages every
     // position, which is what a strategy did before the column existed, and the fresh
@@ -262,11 +262,28 @@ fn v0_2_13_fixtures_gain_chain_scope_and_survive_a_second_boot() {
         binding, "[]",
         "strategies.db: a migrated strategy manages every position"
     );
+    // A migrated strategy keeps trading live, as it did before the mode existed.
+    let mode: String = strategies
+        .query_row(
+            "SELECT mode FROM strategies WHERE id = 'sentinel-strategy'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("read the sentinel strategy's mode");
+    assert_eq!(
+        mode, "live",
+        "strategies.db: a migrated strategy stays live"
+    );
     let migrated_columns = column_names(&strategies, "strategies");
     assert_eq!(
-        migrated_columns.last().map(String::as_str),
-        Some("entry_strategy_ids_json"),
-        "strategies.db: the binding column is appended"
+        migrated_columns
+            .iter()
+            .rev()
+            .take(2)
+            .map(String::as_str)
+            .collect::<Vec<_>>(),
+        ["mode", "entry_strategy_ids_json"],
+        "strategies.db: the binding and mode columns are appended in release order"
     );
     assert_eq!(
         migrated_columns,

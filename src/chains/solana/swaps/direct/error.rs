@@ -355,7 +355,8 @@ impl From<crate::swaps::NotSubmittedReason> for DirectSwapError {
             | NotSubmittedReason::BuildUnusable { .. }
             | NotSubmittedReason::UnsupportedFormat { .. }
             | NotSubmittedReason::CostExceeded { .. }
-            | NotSubmittedReason::InsufficientFunds { .. }) => DirectSwapError::Build {
+            | NotSubmittedReason::InsufficientFunds { .. }
+            | NotSubmittedReason::PaperScope) => DirectSwapError::Build {
                 detail: other.to_string(),
             },
         }

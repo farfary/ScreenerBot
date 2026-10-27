@@ -4,7 +4,8 @@
 //! Task, mode, global, force-stop, slippage, and epoch guards across quote boundaries.
 
 use super::support::{execute, raw_sol, setup, task, FakeIo, Mutation, TaskEdit, MINT};
-use crate::trader::copy::{CopyMode, CopyOutcome, CopySkip, SpendState};
+use crate::trader::copy::{CopyOutcome, CopySkip, SpendState};
+use crate::trader::paper::TradingMode;
 
 async fn assert_rejected_without_spend(
     mutation: Mutation,
@@ -24,7 +25,7 @@ async fn assert_rejected_without_spend(
     );
     assert_eq!(
         database
-            .spend_state(configured.id, CopyMode::Paper, MINT)
+            .spend_state(configured.id, TradingMode::Paper, MINT)
             .await
             .unwrap(),
         SpendState::default()
@@ -69,7 +70,7 @@ async fn force_stop_before_execution_prevents_any_quote_request() {
     assert!(super::support::record(&database, outcome).await);
     assert_eq!(
         database
-            .spend_state(configured.id, CopyMode::Paper, MINT)
+            .spend_state(configured.id, TradingMode::Paper, MINT)
             .await
             .unwrap(),
         SpendState::default()
@@ -95,7 +96,7 @@ async fn lowered_total_token_and_trade_caps_reject_the_landed_quote_by_current_c
         assert!(super::support::record(&database, outcome).await);
         assert_eq!(
             database
-                .spend_state(configured.id, CopyMode::Paper, MINT)
+                .spend_state(configured.id, TradingMode::Paper, MINT)
                 .await
                 .unwrap(),
             SpendState::default()
@@ -124,7 +125,7 @@ async fn reset_after_landing_quote_is_rejected_by_executor_and_ledger_epoch_gate
     assert!(!super::support::record(&database, outcome).await);
     assert_eq!(
         database
-            .spend_state(configured.id, CopyMode::Paper, MINT)
+            .spend_state(configured.id, TradingMode::Paper, MINT)
             .await
             .unwrap(),
         SpendState::default()
@@ -150,7 +151,7 @@ async fn reset_after_executor_result_before_ledger_settlement_drops_the_stale_fi
     assert!(!super::support::record(&database, outcome).await);
     assert_eq!(
         database
-            .spend_state(configured.id, CopyMode::Paper, MINT)
+            .spend_state(configured.id, TradingMode::Paper, MINT)
             .await
             .unwrap(),
         SpendState::default()

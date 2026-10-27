@@ -7,15 +7,14 @@ use chrono::Utc;
 
 use super::{admit_stable_quoted, record_uncopyable};
 use crate::chains::ChainId;
-use crate::trader::copy::{
-    CopyDatabase, CopyMode, CopyOutcome, CopySkip, CopyTask, ExitMode, SizingMode,
-};
+use crate::trader::copy::{CopyDatabase, CopyOutcome, CopySkip, CopyTask, ExitMode, SizingMode};
+use crate::trader::paper::TradingMode;
 use crate::wallets::watch::{ActivityKind, SwapSide, WalletActivity, WatchSource};
 
 const TARGET: &str = "target-wallet";
 const MINT: &str = "traded-mint";
 
-fn task(enabled: bool, mode: CopyMode, copy_stable_quoted: Option<bool>) -> CopyTask {
+fn task(enabled: bool, mode: TradingMode, copy_stable_quoted: Option<bool>) -> CopyTask {
     CopyTask {
         id: 0,
         chain: ChainId::Solana,
@@ -104,19 +103,19 @@ async fn skips(
 async fn only_consenting_tasks_copy_a_stable_quoted_buy() {
     let (_dir, database) = database().await;
     let inherits = database
-        .insert_task(task(true, CopyMode::Paper, None))
+        .insert_task(task(true, TradingMode::Paper, None))
         .await
         .unwrap();
     let opted_in = database
-        .insert_task(task(true, CopyMode::Paper, Some(true)))
+        .insert_task(task(true, TradingMode::Paper, Some(true)))
         .await
         .unwrap();
     // A live task only arrives through a confirmed mode change; its skip carries
     // no paper book.
     let opted_out = CopyTask {
-        mode: CopyMode::Live,
+        mode: TradingMode::Live,
         ..database
-            .insert_task(task(true, CopyMode::Paper, Some(false)))
+            .insert_task(task(true, TradingMode::Paper, Some(false)))
             .await
             .unwrap()
     };
@@ -160,11 +159,11 @@ async fn only_consenting_tasks_copy_a_stable_quoted_buy() {
 async fn an_uncopyable_trade_is_shown_in_every_enabled_watching_task() {
     let (_dir, database) = database().await;
     let enabled = database
-        .insert_task(task(true, CopyMode::Paper, None))
+        .insert_task(task(true, TradingMode::Paper, None))
         .await
         .unwrap();
     let paused = database
-        .insert_task(task(false, CopyMode::Paper, None))
+        .insert_task(task(false, TradingMode::Paper, None))
         .await
         .unwrap();
     let observed = activity(

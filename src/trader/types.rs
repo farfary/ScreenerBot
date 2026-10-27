@@ -4,7 +4,7 @@
 //! Core trader types and structures.
 
 use crate::i18n::{ids, MessageId, UiArg, UiText};
-use crate::positions::FORCE_CLOSED_PREFIX;
+use crate::positions::{Book, FORCE_CLOSED_PREFIX};
 use chrono::{DateTime, Utc};
 
 /// Represents a decision to trade
@@ -15,6 +15,9 @@ pub struct TradeDecision {
     pub action: TradeAction,
     pub reason: TradeReason,
     pub strategy_id: Option<String>,
+    /// The book the decision trades on. Required with no default, so every producer
+    /// chooses: a paper decision is executed only by the paper executor.
+    pub book: Book,
     pub timestamp: DateTime<Utc>,
     pub priority: TradePriority,
     pub price_native: Option<f64>,
@@ -73,6 +76,8 @@ pub enum TradeReason {
     Blacklisted,
     ForceSell,
     CopySell,
+    /// A paper round closed at its mark when a new paper run starts.
+    PaperReset,
 }
 
 /// `closed_reason` values written outside the trade-reason path
@@ -92,7 +97,7 @@ const WRITTEN_REASON_LABELS: [(&str, MessageId); 4] = [
 
 impl TradeReason {
     /// Every reason; the `Debug` name of each is its persisted id.
-    pub const ALL: [TradeReason; 18] = [
+    pub const ALL: [TradeReason; 19] = [
         TradeReason::StrategySignal,
         TradeReason::ManualEntry,
         TradeReason::ForceBuy,
@@ -111,6 +116,7 @@ impl TradeReason {
         TradeReason::Blacklisted,
         TradeReason::ForceSell,
         TradeReason::CopySell,
+        TradeReason::PaperReset,
     ];
 }
 
@@ -137,6 +143,7 @@ pub fn trade_reason_text(reason: &TradeReason) -> UiText {
         TradeReason::Blacklisted => ids::TRADE_REASON_BLACKLISTED,
         TradeReason::ForceSell => ids::TRADE_REASON_FORCE_SELL,
         TradeReason::CopySell => ids::TRADE_REASON_COPY_SELL,
+        TradeReason::PaperReset => ids::TRADE_REASON_PAPER_RESET,
     })
 }
 
@@ -287,6 +294,25 @@ impl TradeResult {
         }
     }
 
+    /// A paper fill booked onto the paper book: a success that sent no transaction, so
+    /// it carries no signature.
+    pub fn paper(
+        decision: TradeDecision,
+        executed_price_native: Option<f64>,
+        executed_size_native: Option<f64>,
+        position_id: Option<String>,
+    ) -> Self {
+        let mut result = Self::success(
+            decision,
+            String::new(),
+            executed_price_native,
+            executed_size_native,
+            position_id,
+        );
+        result.tx_signature = None;
+        result
+    }
+
     /// Create a failed trade result, naming the step that failed.
     pub fn failure_at(
         decision: TradeDecision,
@@ -335,6 +361,7 @@ mod tests {
             action: TradeAction::Buy,
             reason: TradeReason::ManualEntry,
             strategy_id: None,
+            book: Book::Live,
             timestamp: Utc::now(),
             priority: TradePriority::Normal,
             price_native: None,
@@ -424,7 +451,7 @@ mod tests {
     }
 
     /// The number of `TradeReason` variants.
-    const TRADE_REASON_COUNT: usize = 18;
+    const TRADE_REASON_COUNT: usize = 19;
 
     /// The declaration position of each reason. Exhaustive, so a new variant fails
     /// to compile until it is numbered here, and the test below then fails until
@@ -449,6 +476,7 @@ mod tests {
             TradeReason::Blacklisted => 15,
             TradeReason::ForceSell => 16,
             TradeReason::CopySell => 17,
+            TradeReason::PaperReset => 18,
         }
     }
 

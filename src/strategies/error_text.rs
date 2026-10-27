@@ -1,7 +1,7 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Catalog text for strategy validation and evaluation errors.
+//! Catalog text for strategy validation, evaluation and arming errors.
 //!
 //! `Display` on [`Error`] stays English for logs. The dashboard receives the
 //! [`UiText`] built here (`strategies-error-*` in `locales/en/strategies.ftl`).
@@ -360,6 +360,10 @@ impl Error {
                 UiText::new(ids::STRATEGIES_ERROR_EVALUATION_TIMEOUT)
                     .arg("timeout", UiArg::Text(timeout_ms.to_string()))
             }
+            Error::LiveConfirmationRequired => {
+                UiText::new(ids::ERRORS_STRATEGIES_LIVE_CONFIRMATION_REQUIRED)
+            }
+            Error::LiveUnavailable { reason } => super::readiness::live_block_text(*reason),
         }
     }
 }
@@ -387,7 +391,9 @@ mod tests {
             | Error::UnusableData { .. }
             | Error::InvalidRuleTree { .. }
             | Error::ConditionNotApplicable { .. }
-            | Error::EvaluationTimeout { .. } => error,
+            | Error::EvaluationTimeout { .. }
+            | Error::LiveConfirmationRequired
+            | Error::LiveUnavailable { .. } => error,
         };
         vec![
             listed(Error::MissingConditionParameter { field: "period" }),
@@ -437,6 +443,13 @@ mod tests {
                 strategy_type: StrategyType::Entry,
             }),
             listed(Error::EvaluationTimeout { timeout_ms: 250 }),
+            listed(Error::LiveConfirmationRequired),
+            listed(Error::LiveUnavailable {
+                reason: crate::trader::LiveBlock::SetupIncomplete,
+            }),
+            listed(Error::LiveUnavailable {
+                reason: crate::trader::LiveBlock::ForceStop,
+            }),
         ]
     }
 

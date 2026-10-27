@@ -33,6 +33,7 @@ pub async fn start_price_updater(mut shutdown: tokio::sync::watch::Receiver<bool
         tokio::select! {
           _ = sleep(Duration::from_secs(UPDATE_INTERVAL_SECS)) => {
             update_all_position_prices().await;
+            update_paper_prices().await;
           }
           _ = shutdown.changed() => {
             if *shutdown.borrow() {
@@ -143,6 +144,34 @@ async fn update_all_position_prices() {
     }
 }
 
+/// Marks the open rounds of the paper book with the price the live rounds are marked
+/// with. Nothing runs while the book is not loaded or the network is offline.
+async fn update_paper_prices() {
+    let Some(paper) = crate::positions::paper::book() else {
+        return;
+    };
+    if crate::connectivity::is_network_offline() {
+        return;
+    }
+    for position in paper.open_positions().await {
+        let Some(position_id) = position.id else {
+            continue;
+        };
+        let Some((price, source)) = get_current_price(&position.mint).await else {
+            continue;
+        };
+        if let Err(error) = paper
+            .mark(position_id, price, source.system(), chrono::Utc::now())
+            .await
+        {
+            logger::warning(
+                LogTag::Positions,
+                &format!("[PRICE_UPD] Failed paper mark {}: {error}", position.symbol),
+            );
+        }
+    }
+}
+
 /// Update a position's price and unrealized PnL in memory, then write only those columns.
 /// Uses position_id to target the specific position (critical when multiple
 /// positions share the same token mint — e.g. re-entry after closing). No booking column
@@ -167,20 +196,7 @@ pub async fn update_position_price_and_pnl(
 
     // Update by position ID to avoid updating a closed position with the same mint
     let updated = crate::positions::state::update_position_state_by_id(position_id, |pos| {
-        pos.current_price = Some(current_price);
-        pos.current_price_updated = Some(now);
-        pos.current_price_source = Some(source);
-
-        if current_price > pos.price_highest {
-            pos.price_highest = current_price;
-        }
-        if current_price > pos.basis_peak_price {
-            pos.basis_peak_price = current_price;
-        }
-
-        if current_price < pos.price_lowest || pos.price_lowest == 0.0 {
-            pos.price_lowest = current_price;
-        }
+        crate::positions::marks::apply_mark(pos, current_price, source, now);
     })
     .await;
 

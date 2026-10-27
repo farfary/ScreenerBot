@@ -16,6 +16,7 @@ use crate::webserver::state::AppState;
 // Submodules
 mod crud;
 mod deployment;
+mod mode;
 mod performance;
 mod schemas;
 mod testing;
@@ -45,6 +46,8 @@ pub fn routes() -> Router<Arc<AppState>> {
         // Templates
         // Routes with path parameters (must come after static routes)
         .route("/{id}/enabled", patch(crud::set_strategy_enabled_handler))
+        .route("/{id}/mode", patch(mode::set_strategy_mode_handler))
+        .route("/{id}/readiness", get(mode::get_strategy_readiness))
         .route(
             "/{id}",
             get(crud::get_strategy_detail)

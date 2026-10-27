@@ -670,3 +670,14 @@ strategies-error-rule-a-group-needs-at-least-one-condition-switched-on = Un grup
 strategies-error-rule-not-operator-cannot-have-a-switched-off-child = El operador NOT no puede tener un hijo desactivado
 strategies-error-rule-rules-nest-deeper-than-four-levels = Las reglas no pueden anidarse más de cuatro niveles
 strategies-error-rule-the-root-group-cannot-be-switched-off = El grupo raíz no se puede desactivar
+
+strategies-readiness-priced = Todas las posiciones con precio
+strategies-readiness-priced-ok = Todas las posiciones simuladas abiertas tienen precio de pool
+strategies-readiness-priced-missing =
+    { $count ->
+        [one] { $count } posición simulada abierta sin precio de pool
+        [many] { $count } posiciones simuladas abiertas sin precio de pool
+       *[other] { $count } posiciones simuladas abiertas sin precio de pool
+    }
+strategies-readiness-runtime = Trading en vivo disponible
+strategies-readiness-runtime-ok = La configuración y los controles de seguridad permiten operaciones en vivo

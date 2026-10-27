@@ -24,7 +24,7 @@ fn paper_task() -> super::super::CopyTask {
         target_address: "target".to_owned(),
         label: None,
         enabled: true,
-        mode: super::super::CopyMode::Paper,
+        mode: crate::trader::paper::TradingMode::Paper,
         sizing: super::super::SizingMode::Fixed { sol: 0.1 },
         exit_mode: super::super::ExitMode::BuyOnly,
         exit_policy_overrides: Default::default(),
@@ -498,7 +498,7 @@ fn newly_recorded_paper_guard_skips_keep_quote_context() {
         outcome,
         CopyOutcome::Skipped {
             paper: Some(super::super::types::PaperContext {
-                model: super::super::types::PaperModel::Quote,
+                model: crate::trader::paper::PaperModel::Quote,
                 epoch: 4
             }),
             ..

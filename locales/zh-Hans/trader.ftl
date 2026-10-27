@@ -42,7 +42,6 @@ trader-status-loading = 正在加载...
 trader-status-running = 运行中
 trader-status-stopped = 已停止
 trader-status-setup-required = 需要设置
-trader-status-unavailable = 请先完成钱包和 RPC 设置以使用自动交易
 trader-setup-action = 完成设置
 trader-toggle-on = 已启用
 trader-toggle-off = 已停用
@@ -102,6 +101,9 @@ trader-toast-strategy-disabled = 策略已停用
     .message = 策略未生效
 trader-toast-strategy-failed = 更新失败
     .message = 更新策略状态失败
+trader-toast-strategy-armed = { $name } 现已实盘交易
+trader-toast-strategy-paper = { $name } 现已模拟交易
+trader-toast-strategy-mode-failed = 无法更改交易模式
 
 ## Stats: realized window and metrics
 
@@ -110,6 +112,19 @@ trader-stats-window =
 trader-stats-window-day = 24H
 trader-stats-window-week = 7D
 trader-stats-window-month = 30D
+trader-stats-book =
+    .aria-label = 交易账本
+trader-paper-run-since = 自 { $date } 起的模拟周期
+trader-paper-start = 初始
+trader-paper-cash = 现金
+trader-paper-open = 持仓
+trader-paper-unrealized = 未实现
+trader-paper-reset = 重置模拟周期
+trader-paper-reset-title = 重置模拟周期？
+trader-paper-reset-message = 所有未平仓的模拟仓位将按当前价格平仓，并以设定的初始余额开始新的周期。之前的周期保留在历史中。
+trader-paper-reset-done = 已开始新的模拟周期
+trader-paper-reset-failed = 无法重置模拟周期
+trader-paper-account-failed = 无法加载模拟周期
 trader-realized-title = 已实现表现
 trader-metric-net-pnl = 净盈亏
 trader-metric-win-rate = 胜率
@@ -364,6 +379,20 @@ trader-strategy-empty = 尚未定义策略
 trader-strategy-unnamed = 未命名策略
 trader-strategy-priority-auto = 自动
 trader-strategy-priority = 优先级 { $priority }
+trader-strategy-mode-arm = 启用实盘
+trader-strategy-mode-return-paper = 改回模拟
+trader-strategy-arm-title = 为“{ $name }”启用实盘
+trader-strategy-arm-lead = “{ $name }”的新开仓将使用您交易钱包的真实兑换进行交易。
+trader-strategy-arm-readiness = 模拟账本的就绪情况
+trader-strategy-arm-open-paper = 未平仓的模拟仓位仍为模拟，并以模拟方式平仓。
+trader-strategy-arm-ack-real-native = 新开仓将花费您交易钱包中的真实 { -sol }。
+trader-strategy-arm-ack-fees = 实盘兑换需支付真实的网络费用并承担滑点；模拟结果不代表实盘结果。
+trader-strategy-arm-ack-unready = 部分就绪检查尚未通过。仍要启用此策略。
+trader-strategy-arm-unavailable = 目前无法进行实盘交易；请查看最近一次检查。
+trader-strategy-return-title = 将“{ $name }”改回模拟
+trader-strategy-return-message = 新开仓将在模拟账本中进行，不花费 { -sol }。未平仓的实盘仓位仍为实盘，并以实盘方式平仓。
+trader-strategy-readiness-failed = 无法读取策略的就绪情况
+trader-paper-explore-title = 完成设置后即可开始模拟交易
 
 ## Dollar-cost averaging
 

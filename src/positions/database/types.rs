@@ -19,6 +19,9 @@ pub(super) const POSITIONS_MIN_READER_VERSION: u32 = 7;
 /// The version the store held when the schema ledger was adopted.
 pub(super) const POSITIONS_LEDGER_BASELINE_VERSION: u32 = 6;
 
+/// The version the paper store held when it was created, already on the schema ledger.
+pub(super) const PAPER_LEDGER_BASELINE_VERSION: u32 = 9;
+
 // =============================================================================
 // DATABASE SCHEMA DEFINITIONS
 // =============================================================================
@@ -188,6 +191,50 @@ CREATE TABLE IF NOT EXISTS position_metadata (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL,
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+"#;
+
+/// One simulated fill of the paper book: the quote evidence behind the entry or exit
+/// record whose `transaction_signature` is `leg_ref`.
+pub(super) const SCHEMA_PAPER_LEGS: &str = r#"
+CREATE TABLE IF NOT EXISTS paper_legs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  position_id INTEGER NOT NULL,
+  leg_kind TEXT NOT NULL CHECK(leg_kind IN ('entry', 'dca', 'partial', 'exit')),
+  leg_ref TEXT NOT NULL UNIQUE,
+  strategy_id TEXT,
+  quote_json TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (position_id) REFERENCES positions(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_paper_legs_position_id ON paper_legs(position_id);
+"#;
+
+/// One paper exit attempt and whether any rung of the exit slippage ladder filled it. An
+/// attempt is kept whatever its outcome, so the latest exits of a strategy's rounds read
+/// the same after a restart. `strategy_id` is the exit strategy that decided the sale.
+pub(super) const SCHEMA_PAPER_EXIT_ATTEMPTS: &str = r#"
+CREATE TABLE IF NOT EXISTS paper_exit_attempts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  position_id INTEGER NOT NULL,
+  strategy_id TEXT,
+  filled INTEGER NOT NULL CHECK(filled IN (0, 1)),
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (position_id) REFERENCES positions(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_paper_exit_attempts_position_id ON paper_exit_attempts(position_id);
+"#;
+
+/// One paper run of a wallet on a chain: the starting balance captured when the epoch
+/// began. Cash is derived from the positions of the epoch, never stored.
+pub(super) const SCHEMA_PAPER_ACCOUNT: &str = r#"
+CREATE TABLE IF NOT EXISTS paper_account (
+  wallet_address TEXT NOT NULL,
+  chain_id TEXT NOT NULL,
+  epoch INTEGER NOT NULL,
+  starting_balance_native REAL NOT NULL,
+  started_at TEXT NOT NULL,
+  PRIMARY KEY (wallet_address, chain_id, epoch)
 );
 "#;
 
@@ -558,6 +605,8 @@ pub struct PositionsDatabase {
     pub(super) database_path: String,
     pub(super) schema_version: u32,
     pub(super) chain: crate::chains::ChainId,
+    /// The book this store holds; every row it loads carries it.
+    pub(super) book: crate::positions::types::Book,
 }
 
 #[cfg(test)]

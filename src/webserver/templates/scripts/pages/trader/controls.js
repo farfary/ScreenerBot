@@ -62,11 +62,11 @@ export function createTraderControls({
     const isRunning = status?.running === true;
     const isAvailable = status?.available !== false && status !== undefined && status !== null;
     traderAvailable = isAvailable;
-    // The status carries a reason only when the backend knows why the trader cannot
-    // run; without one the generic setup message stands in.
+    // The status carries the catalog text of why the trader cannot run; without one
+    // the generic setup message stands in.
     const statusText = !isAvailable
       ? status?.unavailable_reason
-        ? I18n.t("trader-status-unavailable")
+        ? I18n.text(status.unavailable_reason)
         : I18n.t("trader-status-setup-required")
       : isRunning
         ? I18n.t("trader-status-running")

@@ -8,6 +8,7 @@ use std::collections::HashMap;
 
 use crate::i18n::UiText;
 use crate::strategies::types::RuleOutcome;
+use crate::trader::paper::TradingMode;
 
 // =============================================================================
 // RESPONSE TYPES (Inline with routes as per ScreenerBot patterns)
@@ -36,6 +37,7 @@ pub struct StrategyItem {
     pub version: i32,
     /// Exit strategies: the entry strategies whose positions it manages; empty = all.
     pub entry_strategy_ids: Vec<String>,
+    pub mode: TradingMode,
 }
 
 /// Strategy detail response
@@ -56,6 +58,7 @@ pub struct StrategyDetailResponse {
     pub version: i32,
     /// Exit strategies: the entry strategies whose positions it manages; empty = all.
     pub entry_strategy_ids: Vec<String>,
+    pub mode: TradingMode,
 }
 
 /// Strategy performance response
@@ -152,6 +155,22 @@ pub struct StrategyRequest {
 #[derive(Debug, Deserialize)]
 pub struct StrategyEnabledRequest {
     pub enabled: bool,
+}
+
+/// Strategy trading-mode change. Arming live carries the exact confirmation phrase.
+#[derive(Debug, Deserialize)]
+pub struct StrategyModeRequest {
+    pub mode: TradingMode,
+    #[serde(default)]
+    pub confirmation: Option<String>,
+}
+
+/// A strategy's live readiness and the phrase that arms it live.
+#[derive(Debug, Serialize)]
+pub struct StrategyReadinessResponse {
+    #[serde(flatten)]
+    pub readiness: crate::trader::paper::readiness::Readiness,
+    pub live_confirmation: &'static str,
 }
 
 fn default_enabled() -> bool {

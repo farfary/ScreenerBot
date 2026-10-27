@@ -657,3 +657,12 @@ strategies-error-rule-a-group-needs-at-least-one-condition-switched-on = グル�
 strategies-error-rule-not-operator-cannot-have-a-switched-off-child = NOT 演算子の子ノードを無効にすることはできません
 strategies-error-rule-rules-nest-deeper-than-four-levels = ルールのネストは 4 階層までです
 strategies-error-rule-the-root-group-cannot-be-switched-off = ルートグループは無効にできません
+
+strategies-readiness-priced = すべてのポジションに価格あり
+strategies-readiness-priced-ok = オープン中のペーパーポジションすべてにプール価格があります
+strategies-readiness-priced-missing =
+    { $count ->
+       *[other] プール価格のないオープン中のペーパーポジションが { $count }件あります
+    }
+strategies-readiness-runtime = ライブ取引が利用可能
+strategies-readiness-runtime-ok = セットアップと安全ゲートによりライブ取引が許可されています

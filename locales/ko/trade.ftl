@@ -171,6 +171,7 @@ trade-reason-risk-management = 위험 관리
 trade-reason-blacklisted = 블랙리스트
 trade-reason-force-sell = 강제 매도
 trade-reason-copy-sell = 카피 매도
+trade-reason-paper-reset = 모의 운용 초기화
 trade-reason-closed-externally = 외부에서 종료됨
 trade-reason-wallet-history = 지갑 내역
 trade-reason-exit-retry-pending = 청산 재시도 대기

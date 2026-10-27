@@ -63,46 +63,96 @@ pub async fn stop_trader_gracefully() -> Result<(), Error> {
     Ok(())
 }
 
-/// Whether the auto trader can run at all, and whether it does.
+/// Whether the auto trader can run at all, and whether it does, with the enabled
+/// strategies of each trading mode.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct TraderStatus {
     pub enabled: bool,
     pub running: bool,
     pub available: bool,
+    /// Why the trader cannot run, while it is unavailable.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub unavailable_reason: Option<&'static str>,
+    pub unavailable_reason: Option<crate::i18n::UiText>,
+    /// Enabled strategies that trade live.
+    pub live_strategies: usize,
+    /// Enabled strategies that trade on the paper book.
+    pub paper_strategies: usize,
+}
+
+/// Why the Auto Trader cannot trade live right now.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LiveBlock {
+    /// Wallet and RPC setup is unfinished, or the app runs in Explore Mode.
+    SetupIncomplete,
+    /// The emergency stop is engaged.
+    ForceStop,
 }
 
 fn is_available() -> bool {
     crate::global::is_initialization_complete() && !crate::global::is_explore_mode()
 }
 
-pub fn trader_status() -> TraderStatus {
+/// The gate in front of live trading: the setup gate, then the emergency stop.
+pub fn live_block() -> Option<LiveBlock> {
+    if !is_available() {
+        Some(LiveBlock::SetupIncomplete)
+    } else if crate::global::is_force_stopped() {
+        Some(LiveBlock::ForceStop)
+    } else {
+        None
+    }
+}
+
+/// The trader's status. The enabled-strategy counts are a SQLite read, so they run on
+/// the blocking pool rather than on the async worker that polls the status.
+pub async fn trader_status() -> TraderStatus {
     let available = is_available();
+    let counts = if available {
+        match tokio::task::spawn_blocking(crate::strategies::db::enabled_strategy_counts).await {
+            Ok(Ok(counts)) => counts,
+            Ok(Err(error)) => {
+                logger::warning(
+                    LogTag::Trader,
+                    &format!("Enabled strategy counts unavailable: {error}"),
+                );
+                Default::default()
+            }
+            Err(error) => {
+                logger::warning(
+                    LogTag::Trader,
+                    &format!("Enabled strategy count task failed: {error}"),
+                );
+                Default::default()
+            }
+        }
+    } else {
+        Default::default()
+    };
     TraderStatus {
         enabled: available && crate::config::with_config(|cfg| cfg.trader.enabled),
         running: available && is_trader_running(),
         available,
         unavailable_reason: (!available)
-            .then_some("Complete wallet and RPC setup to use Auto Trader"),
+            .then(|| crate::strategies::readiness::live_block_text(LiveBlock::SetupIncomplete)),
+        live_strategies: counts.live,
+        paper_strategies: counts.paper,
     }
 }
 
 /// Start the trader after the setup and emergency-stop gates every caller needs.
 pub async fn start_trader_checked() -> Result<TraderStatus, Error> {
-    if !is_available() {
-        return Err(Error::TraderUnavailable);
-    }
-    if crate::global::is_force_stopped() {
-        return Err(Error::ForceStopActive);
+    match live_block() {
+        Some(LiveBlock::SetupIncomplete) => return Err(Error::TraderUnavailable),
+        Some(LiveBlock::ForceStop) => return Err(Error::ForceStopActive),
+        None => {}
     }
     start_trader().await?;
-    Ok(trader_status())
+    Ok(trader_status().await)
 }
 
 pub async fn stop_trader_checked() -> Result<TraderStatus, Error> {
     stop_trader_gracefully().await?;
-    Ok(trader_status())
+    Ok(trader_status().await)
 }
 
 #[derive(Debug, Clone, serde::Serialize)]

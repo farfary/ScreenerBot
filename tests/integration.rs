@@ -39,6 +39,7 @@ mod filtering_sources;
 mod filtering_surface_perf;
 mod money_path_swaps;
 mod ohlcv;
+mod paper_isolation;
 mod positions_apply;
 mod positions_holdings;
 mod positions_ledger;

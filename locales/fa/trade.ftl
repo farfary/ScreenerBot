@@ -171,6 +171,7 @@ trade-reason-risk-management = مدیریت ریسک
 trade-reason-blacklisted = در فهرست سیاه
 trade-reason-force-sell = فروش اجباری
 trade-reason-copy-sell = فروش کپی
+trade-reason-paper-reset = بازنشانی اجرای آزمایشی
 trade-reason-closed-externally = بسته‌شده از بیرون
 trade-reason-wallet-history = تاریخچه کیف پول
 trade-reason-exit-retry-pending = تلاش دوباره خروج در انتظار

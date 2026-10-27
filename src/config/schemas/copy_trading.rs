@@ -7,6 +7,7 @@ use crate::config::metadata::{ConfigCategory, ConfigImpact};
 use crate::config::{Error, Result};
 use crate::errors::ConfigurationError;
 use crate::field_metadata;
+use crate::trader::paper::fill::READINESS_ROUNDS_RANGE;
 
 config_struct! {
     pub struct CopyTradingConfig {
@@ -34,10 +35,8 @@ config_struct! {
         max_arrival_distance_ms: u64 = 4000,
         #[metadata(field_metadata! { min: 3, max: 100, step: 1, impact: ConfigImpact::Medium, category: ConfigCategory::CopyTrading, })]
         latency_window_size: usize = 10,
-        #[metadata(field_metadata! { min: 1, max: 500, step: 1, impact: ConfigImpact::Low, category: ConfigCategory::CopyTrading, })]
+        #[metadata(field_metadata! { min: *READINESS_ROUNDS_RANGE.start(), max: *READINESS_ROUNDS_RANGE.end(), step: 1, impact: ConfigImpact::Low, category: ConfigCategory::CopyTrading, })]
         readiness_min_closed_rounds: usize = 10,
-        #[metadata(field_metadata! { min: 0, max: 30000, step: 100, impact: ConfigImpact::High, category: ConfigCategory::CopyTrading, })]
-        paper_landing_delay_ms: u64 = 1000,
         #[metadata(field_metadata! { min: 1, max: 256, step: 1, impact: ConfigImpact::Medium, category: ConfigCategory::CopyTrading, })]
         paper_queue_capacity: usize = 32,
     }
@@ -89,15 +88,13 @@ impl CopyTradingConfig {
             }
             .into());
         }
-        if !(1..=500).contains(&self.readiness_min_closed_rounds) {
+        if !READINESS_ROUNDS_RANGE.contains(&self.readiness_min_closed_rounds) {
             return Err(ConfigurationError::Generic {
-                message: "Live readiness rounds must be between 1 and 500".to_owned(),
-            }
-            .into());
-        }
-        if self.paper_landing_delay_ms > 30_000 {
-            return Err(ConfigurationError::Generic {
-                message: "Paper quote delay must be between 0 and 30000 ms".to_owned(),
+                message: format!(
+                    "Live readiness rounds must be between {} and {}",
+                    READINESS_ROUNDS_RANGE.start(),
+                    READINESS_ROUNDS_RANGE.end()
+                ),
             }
             .into());
         }
@@ -155,23 +152,16 @@ mod tests {
     #[test]
     fn paper_queue_defaults_and_bounds_are_validated() {
         let defaults = CopyTradingConfig::default();
-        assert_eq!(defaults.paper_landing_delay_ms, 1000);
         assert_eq!(defaults.paper_queue_capacity, 32);
         assert!(defaults.validate().is_ok());
 
         let mut minimums = defaults.clone();
-        minimums.paper_landing_delay_ms = 0;
         minimums.paper_queue_capacity = 1;
         assert!(minimums.validate().is_ok());
 
         let mut maximums = defaults.clone();
-        maximums.paper_landing_delay_ms = 30_000;
         maximums.paper_queue_capacity = 256;
         assert!(maximums.validate().is_ok());
-
-        let mut delay_over = defaults.clone();
-        delay_over.paper_landing_delay_ms = 30_001;
-        assert!(delay_over.validate().is_err());
 
         let mut capacity_under = defaults.clone();
         capacity_under.paper_queue_capacity = 0;

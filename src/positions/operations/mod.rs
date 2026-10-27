@@ -19,9 +19,11 @@ mod slippage;
 
 pub use close::{close_position_direct, mark_exit_submitted};
 pub use dca::add_to_position;
+pub(crate) use dca::check_auto_add;
 pub use force_close::{force_close_position, ForceClosed};
 pub use open::{open_position_direct, open_position_with_size};
 pub use partial_close::partial_close_position;
+pub(crate) use slippage::{entry_slippage, exit_slippage_ladder};
 
 use crate::database::catalog::POSITIONS;
 use crate::database::health::{self, StoreStatus};

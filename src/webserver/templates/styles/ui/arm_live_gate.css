@@ -1,0 +1,99 @@
+/* Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+ * SPDX-License-Identifier: BUSL-1.1 */
+
+/* The gate in front of arming paper work live - see scripts/ui/arm_live_gate.js: the
+   readiness checklist, the acknowledgements and the confirmation phrase field. */
+
+.arm-gate-checks {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.arm-gate-check {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-sm);
+}
+
+.arm-gate-check > i {
+  margin-top: 2px;
+  font-size: 1rem;
+}
+
+.arm-gate-check.is-passed > i {
+  color: var(--success-color);
+}
+
+.arm-gate-check.is-failed > i {
+  color: var(--error-color);
+}
+
+.arm-gate-check strong {
+  display: block;
+  font-size: var(--font-size-sm);
+}
+
+.arm-gate-check small {
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+}
+
+.arm-gate-acks {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.arm-gate-ack {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-sm);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+}
+
+.arm-gate-phrase {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  font-size: var(--font-size-sm);
+}
+
+.arm-gate-phrase input {
+  font-family: var(--font-data);
+}
+
+.arm-gate-title {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.arm-gate-note {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+}
+
+.arm-gate-unavailable {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-sm);
+  margin: 0;
+  padding: var(--spacing-sm) var(--spacing-md);
+  border: 1px solid var(--warning-alpha-30);
+  border-radius: var(--radius-md);
+  background: var(--warning-alpha-10);
+  color: var(--warning-color);
+  font-size: var(--font-size-sm);
+  line-height: 1.45;
+}
+
+.arm-gate-unavailable i {
+  margin-top: 2px;
+}

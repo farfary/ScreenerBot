@@ -48,6 +48,7 @@ copy-entry-block-reentry-cooldown = Token yeniden giriş bekleme süresi
 copy-entry-block-open-cooldown = Genel giriş bekleme süresi
 copy-entry-block-entry-reserved = Başka bir giriş işleniyor
 copy-entry-block-blacklisted = Token risk kontrolleri tarafından engellendi
+copy-entry-block-paper-balance-exhausted = Sanal bakiye işlemi karşılamıyor
 copy-entry-block-check-failed = Bir güvenlik kontrolü tamamlanamadı
 
 copy-pause-user = Sizin tarafınızdan duraklatıldı
@@ -69,19 +70,6 @@ copy-pause-short-storage-restored = veriler geri yüklendi
 copy-state-paused = Duraklatıldı
 copy-state-paused-reason = Duraklatıldı · { $reason }
 
-copy-readiness-history = Sanal geçmiş
-copy-readiness-history-met =
-    { $count ->
-        [one] { $count } kapanmış sanal tur, { $needed } gerekli
-       *[other] { $count } kapanmış sanal tur, { $needed } gerekli
-    }
-copy-readiness-history-short = { $needed } kapanmış sanal turdan { $count } tanesi
-copy-readiness-profit = Sanalda kârlı
-copy-readiness-profit-detail =
-    { $count ->
-        [one] { $count } turda { $realized } { -sol } gerçekleşti, { $wins } tanesi kazanıldı
-       *[other] { $count } turda { $realized } { -sol } gerçekleşti, { $wins } tanesi kazanıldı
-    }
 copy-readiness-latency = İşlemler zamanında algılandı
 copy-readiness-latency-detail = p95 geliş süresi { $p95 } sn, sınır { $limit } sn
 copy-readiness-latency-none = Henüz geliş örneği yok
@@ -95,18 +83,13 @@ copy-readiness-priced-missing =
 copy-readiness-runtime = Canlı yürütme kullanılabilir
 copy-readiness-runtime-ok = Kurulum ve güvenlik kapıları canlı kopyalara izin veriyor
 
-copy-live-block-setup-incomplete = Önce cüzdan ve RPC kurulumunu tamamlayın
-copy-live-block-force-stop = Acil durdurma devrede
 copy-live-block-copy-trading-disabled = Kopya işleme genel olarak duraklatıldı
-copy-live-block-unavailable = Canlı yürütme kullanılamıyor
 
 copy-state-system-paused = Genel olarak duraklatıldı
 copy-state-force-stopped = Zorla durduruldu
 copy-state-entries-blocked = Girişler engellendi
 copy-state-running-live = Çalışıyor
 copy-state-running-paper = Çalışıyor
-copy-mode-paper = Sanal
-copy-mode-live = Canlı
 copy-exit-mode-buy-only = Benim çıkış kurallarım
 copy-exit-mode-mirror = Cüzdan satışlarını yansıt
 copy-exit-mode-hybrid = Cüzdan satışları ve kurallarım
@@ -252,6 +235,7 @@ copy-profile-sub = Bu botun cüzdanda gördükleri
 copy-settings-title = Kopya işlem ayarları
 copy-settings-subtitle = Tüm görevler için genel politika
 copy-settings-filter-warning = Varsayılan Filtreleme kurulumuyla bu neredeyse her tokenı reddeder, bu yüzden hiçbir şey kopyalanmaz. Filtreleriniz cüzdanlarınızın işlem yaptığı tokenları geçirmiyorsa kapalı bırakın.
+copy-settings-paper-delay-shared = Sanal işlemler, tüm sanal defterlerin paylaştığı Sanal Ağa Ulaşma Gecikmesi kadar bekler. Bunu Yapılandırma'da Sanal İşlem altında değiştirin.
 copy-settings-unit-seconds = sn
 copy-settings-unit-trades = işlem
 copy-settings-unit-tasks = görev
@@ -400,8 +384,6 @@ copy-book-skipped = <strong>{ $count }</strong> atlandı
 copy-book-failed = <strong>{ $count }</strong> başarısız
 copy-book-closed = { $count } kapandı
 copy-book-budget-note = { $mode } harcaması: { $total } · { $remaining } kaldı
-copy-check-passed = geçti
-copy-check-not-passed = geçmedi
 copy-readiness-title = Canlıya geçmeden önce
 copy-readiness-live-note = Bu görev canlı işlem yapıyor. Yukarıdaki başlıktan Sanala döndürün.
 copy-readiness-all-pass = Tüm kontroller geçiyor.

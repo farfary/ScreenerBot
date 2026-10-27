@@ -131,6 +131,8 @@ pub enum ConfigCategory {
     OllamaSettings,
     #[serde(rename = "optimization")]
     Optimization,
+    #[serde(rename = "paper-trading")]
+    PaperTrading,
     #[serde(rename = "performance")]
     Performance,
     #[serde(rename = "pool-metrics")]
@@ -217,7 +219,7 @@ pub enum ConfigCategory {
 
 impl ConfigCategory {
     /// Every category, in declaration order.
-    pub const ALL: [ConfigCategory; 91] = [
+    pub const ALL: [ConfigCategory; 92] = [
         ConfigCategory::Activity,
         ConfigCategory::Age,
         ConfigCategory::Api,
@@ -268,6 +270,7 @@ impl ConfigCategory {
         ConfigCategory::Notifications,
         ConfigCategory::OllamaSettings,
         ConfigCategory::Optimization,
+        ConfigCategory::PaperTrading,
         ConfigCategory::Performance,
         ConfigCategory::PoolMetrics,
         ConfigCategory::PriceChange,
@@ -364,6 +367,7 @@ impl ConfigCategory {
             ConfigCategory::Notifications => "notifications",
             ConfigCategory::OllamaSettings => "ollama-settings",
             ConfigCategory::Optimization => "optimization",
+            ConfigCategory::PaperTrading => "paper-trading",
             ConfigCategory::Performance => "performance",
             ConfigCategory::PoolMetrics => "pool-metrics",
             ConfigCategory::PriceChange => "price-change",
@@ -462,6 +466,7 @@ impl ConfigCategory {
             | ConfigCategory::Monitoring
             | ConfigCategory::OllamaSettings
             | ConfigCategory::Optimization
+            | ConfigCategory::PaperTrading
             | ConfigCategory::Performance
             | ConfigCategory::PoolMetrics
             | ConfigCategory::PriceChange

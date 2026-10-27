@@ -6,7 +6,8 @@
 use chrono::Utc;
 
 use super::{book_stats, followed_wallets, merge_task_patch, CopyTradingStatus};
-use crate::trader::copy::{CopyActivityRow, CopyMode, CopyOutcome, CopyTask, ExitMode, SizingMode};
+use crate::trader::copy::{CopyActivityRow, CopyOutcome, CopyTask, ExitMode, SizingMode};
+use crate::trader::paper::TradingMode;
 
 fn stored() -> CopyTask {
     CopyTask {
@@ -15,7 +16,7 @@ fn stored() -> CopyTask {
         target_address: "target".to_owned(),
         label: Some("Kept".to_owned()),
         enabled: true,
-        mode: CopyMode::Paper,
+        mode: TradingMode::Paper,
         sizing: SizingMode::Fixed { sol: 0.1 },
         exit_mode: ExitMode::Mirror,
         exit_policy_overrides: Default::default(),
@@ -144,10 +145,8 @@ fn a_task_whose_overrides_no_longer_fit_is_flagged_with_the_rule_they_break() {
 }
 
 fn paper_row(id: i64, mint: &str, at: chrono::DateTime<Utc>, sell: Option<f64>) -> CopyActivityRow {
-    use crate::trader::copy::{
-        CopyOutcome, CopySellDecision, CopyTelemetry, PaperDecision, PaperFill, PaperQuoteMetadata,
-        PaperSellFill,
-    };
+    use crate::trader::copy::{CopyOutcome, CopySellDecision, CopyTelemetry, PaperDecision};
+    use crate::trader::paper::{PaperFill, PaperQuoteMetadata, PaperSellFill};
     let quote = |output_amount, input_amount| PaperQuoteMetadata {
         router_id: "fixture".to_owned(),
         initial_at: at,
@@ -194,7 +193,7 @@ fn paper_row(id: i64, mint: &str, at: chrono::DateTime<Utc>, sell: Option<f64>) 
                     network_fee_sol: 0.0,
                     priority_fee_sol: 0.0,
                     total_cost_sol: 1.0,
-                    model: crate::trader::copy::PaperModel::Quote,
+                    model: crate::trader::paper::PaperModel::Quote,
                     quote: Some(quote(
                         crate::chains::RawAmount::from(100_000_000_u64),
                         crate::chains::RawAmount::from(1_000_000_000_u64),
@@ -226,7 +225,7 @@ fn paper_row(id: i64, mint: &str, at: chrono::DateTime<Utc>, sell: Option<f64>) 
                     network_fee_sol: 0.0,
                     priority_fee_sol: 0.0,
                     net_proceeds_sol: proceeds,
-                    model: crate::trader::copy::PaperModel::Quote,
+                    model: crate::trader::paper::PaperModel::Quote,
                     quote: Some(quote(
                         crate::chains::RawAmount::from((proceeds * 1_000_000_000.0) as u64),
                         crate::chains::RawAmount::from(100_000_000_u64),
@@ -269,13 +268,13 @@ fn legacy_paper_rows_do_not_enter_current_task_totals() {
     let now = Utc::now();
     let mut buy = paper_row(1, "legacy", now, None);
     if let CopyOutcome::PaperFilled(decision) = &mut buy.outcome {
-        decision.fill.model = super::super::PaperModel::Legacy;
+        decision.fill.model = crate::trader::paper::PaperModel::Legacy;
         decision.fill.quote = None;
     }
     let mut sell = paper_row(2, "legacy", now, Some(2.0));
     if let CopyOutcome::PaperSellObserved(decision) = &mut sell.outcome {
         let fill = decision.paper_fill.as_mut().unwrap();
-        fill.model = super::super::PaperModel::Legacy;
+        fill.model = crate::trader::paper::PaperModel::Legacy;
         fill.quote = None;
     }
     let activity = [buy, sell];

@@ -4,6 +4,7 @@
 //! Position lifecycle management — opening, tracking, closing, and DCA operations.
 pub mod apply;
 mod booking;
+pub mod books;
 mod cost_basis;
 pub mod database;
 pub use database as db;
@@ -13,8 +14,10 @@ pub use error::{Error, Result};
 pub mod helpers;
 pub mod ledger;
 pub mod loss_detection;
+pub mod marks;
 pub mod metrics;
 pub mod operations;
+pub mod paper;
 pub mod pnl;
 pub mod price_resolution;
 pub mod price_updater;
@@ -44,10 +47,10 @@ pub use operations::{
 
 pub use state::{
     acquire_position_lock, buy_target, get_active_frozen_cooldowns, get_archived_positions,
-    get_closed_positions, get_open_mints, get_open_positions, get_open_positions_count,
-    get_open_round_by_mint, get_pending_dca_swaps_for_mint, get_pending_partial_exits_for_mint,
-    get_position_by_id, get_position_by_mint, holds_open_round, init_global_position_semaphore,
-    is_dca_pending, is_open_position, is_partial_exit_pending, is_token_in_cooldown,
+    get_closed_positions, get_open_positions, get_open_positions_count, get_open_round_by_mint,
+    get_pending_dca_swaps_for_mint, get_pending_partial_exits_for_mint, get_position_by_id,
+    get_position_by_mint, holds_open_round, init_global_position_semaphore, is_dca_pending,
+    is_open_position, is_partial_exit_pending, is_token_in_cooldown,
     reconcile_global_position_semaphore, remove_position_by_id, set_position_archived_in_memory,
     set_position_management_in_memory, BuyTarget, MINT_TO_POSITION_INDEX, POSITIONS,
     SIG_TO_MINT_INDEX,
@@ -96,7 +99,7 @@ pub use queue::{enqueue_verification, VerificationItem, MAX_VERIFICATION_AGE_HOU
 pub use state::PositionLockGuard;
 pub use transitions::PositionTransition;
 pub use types::{
-    ApplyFailureDisposition, EntryRecord, EntrySubmission, ExitRecord, GiveUpReason,
+    ApplyFailureDisposition, Book, EntryRecord, EntrySubmission, ExitRecord, GiveUpReason, Opening,
     PendingDcaSwap, PendingPartialExit, Position, PositionManagement, PositionOrigin, PriceSource,
     TradeOrigin, VerificationKind, VerificationOutcome,
 };

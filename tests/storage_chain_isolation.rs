@@ -171,6 +171,7 @@ mod tokens_store {
 mod positions_store {
     use super::*;
     use screenerbot::positions::database::PositionsDatabase;
+    use screenerbot::positions::Book;
 
     /// A real position written through the public API must be the only one
     /// `get_open_positions` ever returns, even when a raw row for the SAME wallet
@@ -185,7 +186,7 @@ mod positions_store {
         // random keypair `subject.address()` resolves to at write time.
         let _cfg = common::config_guard();
         let wallet_address = common::configure_own_wallet();
-        let db = PositionsDatabase::new(ChainId::Solana)
+        let db = PositionsDatabase::open(Book::Live, ChainId::Solana)
             .await
             .expect("open positions database");
 

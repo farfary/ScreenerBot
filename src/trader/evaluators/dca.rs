@@ -18,7 +18,7 @@
 use crate::config::{DcaLevel, DcaMeasureFrom};
 use crate::logger::{self, LogTag};
 use crate::positions;
-use crate::positions::Position;
+use crate::positions::{Book, Position};
 use crate::trader::constants::{DCA_PRICE_MAX_AGE_SECS, MIN_TRADE_SIZE_NATIVE};
 use crate::trader::policy::ExitPolicy;
 use crate::trader::types::{TradeAction, TradeDecision, TradePriority, TradeReason};
@@ -288,8 +288,8 @@ impl DcaEvaluation {
     }
 }
 
-/// Process DCA opportunities for eligible positions
-pub async fn process_dca_opportunities() -> crate::trader::Result<Vec<TradeDecision>> {
+/// Process DCA opportunities for the eligible open positions of `book`
+pub async fn process_dca_opportunities(book: Book) -> crate::trader::Result<Vec<TradeDecision>> {
     // Build config snapshot (batch read)
     let dca_config = ExitPolicy::from_config().dca;
 
@@ -298,7 +298,7 @@ pub async fn process_dca_opportunities() -> crate::trader::Result<Vec<TradeDecis
         return Ok(Vec::new());
     }
 
-    if positions::awaiting_reconciliation() {
+    if positions::books::awaiting_reconciliation(book) {
         logger::debug(
             LogTag::Trader,
             "DCA evaluation skipped: the positions store is not reconciled",
@@ -306,14 +306,16 @@ pub async fn process_dca_opportunities() -> crate::trader::Result<Vec<TradeDecis
         return Ok(Vec::new());
     }
 
-    // Get all open positions
-    let open_positions = positions::get_open_positions().await;
+    // Get all open positions of the book
+    let open_positions = positions::books::open_positions(book).await;
     if open_positions.is_empty() {
         return Ok(Vec::new());
     }
 
-    // The same gate entry admission applies, read once for the whole cycle.
-    let entries_blocked = crate::trader::safety::loss_limit::is_entry_blocked_by_loss_limit();
+    // The same gate entry admission applies, read once for the whole cycle. The loss
+    // limiter protects real funds and never pauses paper.
+    let entries_blocked =
+        book == Book::Live && crate::trader::safety::loss_limit::is_entry_blocked_by_loss_limit();
     let mut dca_decisions = Vec::new();
 
     for position in open_positions {
@@ -328,7 +330,7 @@ pub async fn process_dca_opportunities() -> crate::trader::Result<Vec<TradeDecis
         };
 
         let context = DcaContext {
-            add_in_flight: positions::is_dca_pending(&position.mint).await,
+            add_in_flight: positions::books::dca_pending(book, &position.mint).await,
             entries_blocked,
             now: Utc::now(),
         };
@@ -365,6 +367,7 @@ pub async fn process_dca_opportunities() -> crate::trader::Result<Vec<TradeDecis
                     action: TradeAction::DCA,
                     reason: TradeReason::DCAScheduled,
                     strategy_id: None,
+                    book: position.book,
                     timestamp: Utc::now(),
                     priority: TradePriority::Normal,
                     price_native: Some(price),

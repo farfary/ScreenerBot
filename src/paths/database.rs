@@ -17,6 +17,14 @@ pub fn get_positions_db_path() -> PathBuf {
     get_data_directory().join("positions.db")
 }
 
+/// The file of the paper positions database, as its path, its logs and its errors name it.
+pub const PAPER_POSITIONS_FILE: &str = "paper_positions.db";
+
+/// Returns the paper positions database path: the simulated fills of the paper book.
+pub fn get_paper_positions_db_path() -> PathBuf {
+    get_data_directory().join(PAPER_POSITIONS_FILE)
+}
+
 /// Returns the wallet database path (balance monitor: snapshots, worth history).
 pub fn get_wallet_db_path() -> PathBuf {
     get_data_directory().join("wallet.db")

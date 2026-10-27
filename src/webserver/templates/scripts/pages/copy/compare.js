@@ -10,7 +10,6 @@ import {
   RANGES,
   duration,
   fixed,
-  modeLabel,
   pct,
   rangeQuery,
   seconds,
@@ -20,6 +19,7 @@ import {
   taskName,
   toneClass,
 } from "./format.js";
+import { tradingModeLabel } from "../../ui/trading_mode.js";
 import { forgetPaint } from "../../core/dom.js";
 import { panelMessage } from "./overview.js";
 
@@ -75,7 +75,7 @@ export function createCompare(page) {
       wrap: false,
       minWidth: "content",
       render: (_value, row) =>
-        `<span class="copy-row-mode copy-mode-${esc(row.mode)}">${esc(modeLabel(row.mode))}</span>${row.enabled ? "" : `<small class="copy-muted"> ${esc(I18n.t("copy-paused-suffix"))}</small>`}`,
+        `<span class="copy-row-mode copy-mode-${esc(row.mode)}">${esc(tradingModeLabel(row.mode))}</span>${row.enabled ? "" : `<small class="copy-muted"> ${esc(I18n.t("copy-paused-suffix"))}</small>`}`,
     },
     {
       id: "rounds",

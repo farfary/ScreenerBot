@@ -87,8 +87,10 @@ pub enum Error {
     CopyTaskOwnsPositions { task_id: i64, open_positions: usize },
     /// Arming live is refused while live copies could not run: setup incomplete,
     /// copy trading disabled, or the emergency stop engaged.
-    #[error("live copy trading is unavailable: {reason}")]
-    CopyLiveUnavailable { reason: &'static str },
+    #[error("live copy trading is unavailable: {reason:?}")]
+    CopyLiveUnavailable {
+        reason: crate::trader::copy::control::CopyLiveBlock,
+    },
     /// Registering the trade's action entry failed. The actions module's own typed
     /// error is kept as the source rather than flattened into text, so callers keep
     /// its classification.
@@ -131,6 +133,21 @@ pub enum Error {
         dependency: &'static str,
         detail: String,
     },
+    /// A paper decision reached a live executor. The dispatcher sends every paper
+    /// decision to the paper executor, so this refusal runs before anything else and
+    /// only a defect can trigger it.
+    #[error("a paper decision for {mint} reached a live executor")]
+    PaperDecisionOnLivePath { mint: String },
+    /// The paper book is not loaded, so no paper fill can be booked.
+    #[error("the paper book is not loaded")]
+    PaperBookUnavailable,
+    /// A paper fill did not settle from its router quotes.
+    #[error(transparent)]
+    PaperFill(#[from] crate::trader::paper::PaperFillError),
+    /// A paper fill was abandoned during its landing wait: the trader stopped, the
+    /// emergency stop engaged, the strategy left paper mode or the app is shutting down.
+    #[error("the paper fill for {mint} was abandoned before it landed")]
+    PaperFillAborted { mint: String },
 }
 
 /// Result alias for the trader module.
@@ -174,6 +191,10 @@ impl ErrorClass for Error {
             Error::TokenDataMissing { .. } => true,
             Error::UnhealthyEndpoints { .. } => true,
             Error::Dependency { .. } => true,
+            Error::PaperDecisionOnLivePath { .. } => false,
+            Error::PaperBookUnavailable => true,
+            Error::PaperFill(e) => e.is_retryable(),
+            Error::PaperFillAborted { .. } => false,
         }
     }
 
@@ -233,6 +254,10 @@ impl ErrorClass for Error {
             Error::TokenDataMissing { .. } => Severity::Warning,
             Error::UnhealthyEndpoints { .. } => Severity::Error,
             Error::Dependency { .. } => Severity::Error,
+            Error::PaperDecisionOnLivePath { .. } => Severity::Critical,
+            Error::PaperBookUnavailable => Severity::Warning,
+            Error::PaperFill(e) => e.severity(),
+            Error::PaperFillAborted { .. } => Severity::Info,
         }
     }
 
@@ -273,6 +298,10 @@ impl ErrorClass for Error {
             Error::TokenDataMissing { .. } => 503,
             Error::UnhealthyEndpoints { .. } => 503,
             Error::Dependency { .. } => 503,
+            Error::PaperDecisionOnLivePath { .. } => 500,
+            Error::PaperBookUnavailable => 503,
+            Error::PaperFill(e) => e.http_status(),
+            Error::PaperFillAborted { .. } => 409,
         }
     }
 }

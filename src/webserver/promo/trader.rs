@@ -34,6 +34,8 @@ pub fn get_promo_trader_status() -> TraderStatus {
         running: true,
         available: true,
         unavailable_reason: None,
+        live_strategies: 0,
+        paper_strategies: 0,
     }
 }
 

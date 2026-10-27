@@ -207,7 +207,6 @@ const CONFIG = {
   max_arrival_distance_ms: 4000,
   latency_window_size: 10,
   readiness_min_closed_rounds: 10,
-  paper_landing_delay_ms: 2500,
   paper_queue_capacity: 24,
 };
 
@@ -233,83 +232,54 @@ async function openSettings(t, config = CONFIG) {
     await page.locator("#copy-settings-open").click();
     await page.waitForSelector("#copy-settings-paper-queue:not(:disabled)");
   };
-  const fill = async (delay, queue) => {
-    await page.locator("#copy-settings-paper-delay").fill(delay);
+  const fill = async (queue) => {
     await page.locator("#copy-settings-paper-queue").fill(queue);
   };
   return { page, patches, open, fill };
 }
 
-test("settings show stored milliseconds as seconds and save them back exactly", async (t) => {
+test("settings save the paper queue and leave the landing delay to the shared paper setting", async (t) => {
   const { page, patches, open, fill } = await openSettings(t);
   await open();
-  assert.equal(await page.locator("#copy-settings-paper-delay").inputValue(), "2.5");
+  assert.equal(await page.locator("#copy-settings-paper-delay").count(), 0);
+  assert.equal(
+    await page.locator("#copy-settings-paper-delay-shared").getAttribute("data-l10n-id"),
+    "copy-settings-paper-delay-shared"
+  );
   assert.equal(await page.locator("#copy-settings-paper-queue").inputValue(), "24");
 
-  await fill("0.3", "256");
-  await page.locator("#copy-settings-form button[type='submit']").click();
-  await page.waitForFunction(() =>
-    document.querySelector("#copy-settings")?.classList.contains("hidden")
-  );
-  assert.equal(patches.length, 1);
-  assert.equal(patches[0].paper_landing_delay_ms, 300);
-  assert.equal(patches[0].paper_queue_capacity, 256);
-  assert.equal(patches[0].max_arrival_distance_ms, 4000, "the arrival limit round-trips unchanged");
-
-  for (const [delay, queue, expectedDelay] of [
-    ["0", "1", 0],
-    ["30", "100", 30_000],
-  ]) {
+  for (const queue of ["256", "1"]) {
     await open();
-    await fill(delay, queue);
+    await fill(queue);
     await page.locator("#copy-settings-form button[type='submit']").click();
     await page.waitForFunction(() =>
       document.querySelector("#copy-settings")?.classList.contains("hidden")
     );
     const saved = patches[patches.length - 1];
-    assert.equal(saved.paper_landing_delay_ms, expectedDelay);
     assert.equal(saved.paper_queue_capacity, Number(queue));
+    assert.equal(saved.max_arrival_distance_ms, 4000, "the arrival limit round-trips unchanged");
+    assert.equal("paper_landing_delay_ms" in saved, false, "copy saves no landing delay of its own");
   }
 });
 
-test("settings accept every stored millisecond and round-trip it unchanged", async (t) => {
-  for (const [stored, shown] of [
-    [1234, "1.234"],
-    [10_001, "10.001"],
-    [1, "0.001"],
-  ]) {
-    const { page, patches, open } = await openSettings(t, {
-      ...CONFIG,
-      paper_landing_delay_ms: stored,
-    });
-    await open();
-    assert.equal(await page.locator("#copy-settings-paper-delay").inputValue(), shown);
-    await page.locator("#copy-settings-form button[type='submit']").click();
-    await page.waitForFunction(() =>
-      document.querySelector("#copy-settings")?.classList.contains("hidden")
-    );
-    assert.equal(patches.length, 1, `${stored} ms passes the form's own step check`);
-    assert.equal(patches[0].paper_landing_delay_ms, stored);
-  }
-});
-
-test("settings refuse a delay outside 0..30 s and a non-integer or out-of-range queue", async (t) => {
+test("settings refuse a non-integer or out-of-range queue", async (t) => {
   const { page, patches, open, fill } = await openSettings(t);
   await open();
   const invalid = [
-    ["-0.1", "24", "#copy-settings-paper-delay", "rangeUnderflow"],
-    ["30.1", "24", "#copy-settings-paper-delay", "rangeOverflow"],
-    ["", "24", "#copy-settings-paper-delay", "valueMissing"],
-    ["1", "2.5", "#copy-settings-paper-queue", "stepMismatch"],
-    ["1", "0", "#copy-settings-paper-queue", "rangeUnderflow"],
-    ["1", "257", "#copy-settings-paper-queue", "rangeOverflow"],
-    ["1", "", "#copy-settings-paper-queue", "valueMissing"],
+    ["2.5", "stepMismatch"],
+    ["0", "rangeUnderflow"],
+    ["257", "rangeOverflow"],
+    ["", "valueMissing"],
   ];
-  for (const [delay, queue, selector, reason] of invalid) {
-    await fill(delay, queue);
+  for (const [queue, reason] of invalid) {
+    await fill(queue);
     await page.locator("#copy-settings-form button[type='submit']").click();
-    const state = await page.$eval(selector, (input, name) => input.validity[name], reason);
-    assert.equal(state, true, `${selector} with "${delay}"/"${queue}" is ${reason}`);
+    const state = await page.$eval(
+      "#copy-settings-paper-queue",
+      (input, name) => input.validity[name],
+      reason
+    );
+    assert.equal(state, true, `queue "${queue}" is ${reason}`);
     assert.equal(patches.length, 0, `nothing is saved for ${reason}`);
     assert.equal(
       await page.evaluate(() =>

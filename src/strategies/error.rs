@@ -1,7 +1,7 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Errors produced by the strategies module.
+//! Errors produced by the strategies module: validation, evaluation and arming.
 
 use std::time::Duration;
 
@@ -100,6 +100,15 @@ pub enum Error {
     /// Evaluation did not complete before its configured deadline.
     #[error("strategy evaluation timed out after {timeout_ms}ms")]
     EvaluationTimeout { timeout_ms: u64 },
+
+    /// Arming a strategy live needs the exact confirmation phrase.
+    #[error("arming a strategy live needs the exact confirmation phrase")]
+    LiveConfirmationRequired,
+
+    /// Arming a strategy live is refused while the Auto Trader cannot trade live: setup
+    /// incomplete, Explore Mode, or the emergency stop engaged.
+    #[error("live trading is unavailable: {reason:?}")]
+    LiveUnavailable { reason: crate::trader::LiveBlock },
 }
 
 /// Result alias for the strategies module.
@@ -123,7 +132,9 @@ impl Error {
             | Error::InvalidConditionValue { .. }
             | Error::InvalidRuleTree { .. }
             | Error::ConditionNotApplicable { .. }
-            | Error::EvaluationTimeout { .. } => false,
+            | Error::EvaluationTimeout { .. }
+            | Error::LiveConfirmationRequired
+            | Error::LiveUnavailable { .. } => false,
         }
     }
 }
@@ -146,7 +157,9 @@ impl ErrorClass for Error {
             | Error::ConditionParameterType { .. }
             | Error::InvalidConditionValue { .. }
             | Error::InvalidRuleTree { .. }
-            | Error::ConditionNotApplicable { .. } => Severity::Warning,
+            | Error::ConditionNotApplicable { .. }
+            | Error::LiveConfirmationRequired
+            | Error::LiveUnavailable { .. } => Severity::Warning,
             Error::MissingContextData { .. }
             | Error::NoCandleData { .. }
             | Error::InsufficientCandles { .. }
@@ -164,7 +177,9 @@ impl ErrorClass for Error {
             | Error::ConditionParameterType { .. }
             | Error::InvalidConditionValue { .. }
             | Error::InvalidRuleTree { .. }
-            | Error::ConditionNotApplicable { .. } => 400,
+            | Error::ConditionNotApplicable { .. }
+            | Error::LiveConfirmationRequired => 400,
+            Error::LiveUnavailable { .. } => 409,
             Error::MissingContextData { .. }
             | Error::NoCandleData { .. }
             | Error::InsufficientCandles { .. }

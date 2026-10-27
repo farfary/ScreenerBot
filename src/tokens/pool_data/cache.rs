@@ -650,7 +650,7 @@ pub async fn prefetch(chain: ChainId, mints: &[String]) {
     }
 
     let now = Instant::now();
-    let open_position_mints: HashSet<String> = crate::positions::get_open_mints()
+    let open_position_mints: HashSet<String> = crate::positions::books::held_mints()
         .await
         .into_iter()
         .collect();

@@ -48,6 +48,7 @@ copy-entry-block-reentry-cooldown = Пауза перед повторним в�
 copy-entry-block-open-cooldown = Загальна пауза між входами
 copy-entry-block-entry-reserved = Обробляється інший вхід
 copy-entry-block-blacklisted = Токен заблоковано контролем ризиків
+copy-entry-block-paper-balance-exhausted = Віртуального балансу недостатньо для угоди
 copy-entry-block-check-failed = Перевірку безпеки не вдалося завершити
 
 copy-pause-user = Призупинено вами
@@ -69,17 +70,6 @@ copy-pause-short-storage-restored = дані відновлено
 copy-state-paused = Призупинено
 copy-state-paused-reason = Призупинено · { $reason }
 
-copy-readiness-history = Віртуальна історія
-copy-readiness-history-met =
-    { $count ->
-        [one] { $count } закритий віртуальний раунд, потрібно { $needed }
-        [few] { $count } закриті віртуальні раунди, потрібно { $needed }
-        [many] { $count } закритих віртуальних раундів, потрібно { $needed }
-       *[other] { $count } закритого віртуального раунду, потрібно { $needed }
-    }
-copy-readiness-history-short = Закритих віртуальних раундів: { $count } із { $needed }
-copy-readiness-profit = Прибутковість у віртуальному режимі
-copy-readiness-profit-detail = Реалізовано { $realized } { -sol } за раундів: { $count }, виграно: { $wins }
 copy-readiness-latency = Угоди виявляються вчасно
 copy-readiness-latency-detail = Надходження p95: { $p95 } с, ліміт: { $limit } с
 copy-readiness-latency-none = Зразків надходження ще немає
@@ -95,10 +85,7 @@ copy-readiness-priced-missing =
 copy-readiness-runtime = Реальне виконання доступне
 copy-readiness-runtime-ok = Налаштування й запобіжники дозволяють реальні копії
 
-copy-live-block-setup-incomplete = Спершу завершіть налаштування гаманця та RPC
-copy-live-block-force-stop = Активна екстрена зупинка
 copy-live-block-copy-trading-disabled = Обробку копіювання призупинено глобально
-copy-live-block-unavailable = Реальне виконання недоступне
 
 ## Task state, mode and exit labels.
 
@@ -107,8 +94,6 @@ copy-state-force-stopped = Примусово зупинено
 copy-state-entries-blocked = Входи заблоковано
 copy-state-running-live = Працює
 copy-state-running-paper = Працює
-copy-mode-paper = Віртуальний
-copy-mode-live = Реальний
 copy-exit-mode-buy-only = Мої правила виходу
 copy-exit-mode-mirror = Дзеркалити продажі гаманця
 copy-exit-mode-hybrid = Продажі гаманця та мої правила
@@ -282,6 +267,7 @@ copy-profile-sub = Що цей бот бачив про гаманець
 copy-settings-title = Налаштування копітрейдингу
 copy-settings-subtitle = Глобальна політика для кожного завдання
 copy-settings-filter-warning = За стандартного налаштування фільтрації це відхиляє майже кожен токен, тож нічого не копіюється. Залиште вимкненим, доки ваші фільтри не пропускатимуть токени, якими торгують ваші гаманці.
+copy-settings-paper-delay-shared = Віртуальні угоди чекають затримку виконання у віртуальному режимі, спільну для всіх віртуальних книг. Змініть її в налаштуваннях, у розділі «Віртуальна торгівля».
 copy-settings-unit-seconds = с
 copy-settings-unit-trades = угод
 copy-settings-unit-tasks = завдань
@@ -460,8 +446,6 @@ copy-book-skipped = <strong>{ $count }</strong> пропущено
 copy-book-failed = <strong>{ $count }</strong> невдало
 copy-book-closed = закрито: { $count }
 copy-book-budget-note = { $mode }: витрачено з { $total } · залишилось { $remaining }
-copy-check-passed = пройдено
-copy-check-not-passed = не пройдено
 copy-readiness-title = Перед переходом у реальний режим
 copy-readiness-live-note = Це завдання торгує в реальному режимі. Поверніть його у віртуальний режим із заголовка вище.
 copy-readiness-all-pass = Усі перевірки пройдено.

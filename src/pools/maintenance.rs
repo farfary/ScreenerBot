@@ -94,7 +94,7 @@ async fn run_tick(tick: u64) {
         // Open positions carry no chain yet, so one set protects their mints
         // on every chain. A superset only keeps a history longer than needed;
         // exact per-chain protection needs positions to carry their chain.
-        let open: HashSet<String> = crate::positions::get_open_mints()
+        let open: HashSet<String> = crate::positions::books::held_mints()
             .await
             .into_iter()
             .collect();

@@ -3598,7 +3598,6 @@ fn only_the_partial_exit_reserves_a_take_profit_step() {
 const TRADE_RUNNERS: &[&str] = &[
     "execute_trade",
     "execute_buy",
-    "execute_buy_managed",
     "execute_sell",
     "open_position_with_size",
     "open_position_direct",
@@ -3733,6 +3732,72 @@ fn every_trade_runs_where_no_caller_can_cancel_it() {
         violations.is_empty(),
         "a trade runner is awaited outside its owners and outside a spawned task; \
          call trader::manual, which runs detached:\n{}",
+        violations.join("\n")
+    );
+}
+
+/// A live executor named through its module path, called directly or imported in a
+/// `use` group. A bare `execute_sell` is not matched: the Telegram module has executors
+/// of its own under that name.
+fn live_executor_pattern() -> regex::Regex {
+    regex::Regex::new(r"\b(?:executors|buy|sell)::(?:\{[^}]*?\b)?(execute_(?:buy|dca|sell))\b")
+        .expect("the executor pattern is valid")
+}
+
+#[test]
+fn the_live_executor_pattern_catches_calls_and_grouped_imports() {
+    let pattern = live_executor_pattern();
+    for named in [
+        "executors::execute_buy(&decision).await",
+        "use crate::trader::executors::{ExecutionContext, execute_sell};",
+        "use crate::trader::executors::{\n    execute_dca,\n    ExecutionContext,\n};",
+        "sell::execute_sell(&decision, context)",
+    ] {
+        assert!(pattern.is_match(named), "missed: {named}");
+    }
+    for clean in [
+        "executors::execute_trade(&decision, context)",
+        "telegram::commands::execute_sell(chat, mint)",
+        "use crate::trader::executors::{execute_buyback_report};",
+    ] {
+        assert!(!pattern.is_match(clean), "false positive: {clean}");
+    }
+}
+
+/// A trade reaches a live executor only through `executors::execute_trade`, which
+/// routes on the decision's book, so no caller can send a paper decision down the live
+/// path. Outside `trader/executors/` no source or test names a live executor.
+#[test]
+fn only_the_dispatcher_names_live_executors() {
+    let live_executor = live_executor_pattern();
+    let tests_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests");
+    let tests = fs::read_dir(&tests_root)
+        .expect("read_dir(tests) must succeed")
+        .flatten()
+        .map(|entry| entry.path())
+        .filter(|path| path.extension().is_some_and(|ext| ext == "rs"))
+        .map(|path| {
+            let contents = fs::read_to_string(&path).expect("read test file");
+            (
+                PathBuf::from("../tests").join(path.file_name().unwrap()),
+                contents,
+            )
+        });
+    let mut violations = Vec::new();
+    for (relative, contents) in walk_src().into_iter().chain(tests) {
+        if relative.starts_with("trader/executors") {
+            continue;
+        }
+        let code = blank_literals(&strip_comment_text(&contents));
+        for found in live_executor.captures_iter(&code) {
+            let at = found.get(0).expect("the match exists").start();
+            let line = code[..at].lines().count();
+            violations.push(format!("src/{}:{line}: {}", relative.display(), &found[1]));
+        }
+    }
+    assert!(
+        violations.is_empty(),
+        "a live executor is named outside the dispatcher; call executors::execute_trade:\n{}",
         violations.join("\n")
     );
 }

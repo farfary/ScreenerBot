@@ -28,6 +28,9 @@ import {
   handleFeatureRestrictedTab,
 } from "./trader/features.js";
 import { createLifecycle as createStrategiesLifecycle } from "./strategies.js";
+import { createStrategyMode, strategyModeRow } from "./trader/strategy_mode.js";
+import { createPaperAccount } from "./trader/paper_account.js";
+import { gateControl, renderSetupGate, setupRequired } from "../ui/setup_gate.js";
 
 // Snake-case exit_type ids written by src/trader/stats.rs. Every other stored
 // closed_reason resolves through `closeReasonText` (ui/trade_reason.js).
@@ -78,6 +81,9 @@ function createLifecycle() {
   // Realized window for the Stats tab, in days. Owned here and sent to the API —
   // the tab never labels a window it did not ask for.
   let statsPeriodDays = 30;
+  // The book the Stats tab reads: the live book by default, the paper book on request.
+  // The two are never summed into one figure.
+  let statsBook = "live";
 
   // Hash guards — a 5s poll must not rewrite innerHTML that has not changed, or it
   // destroys the user's text selection on every tick.
@@ -119,6 +125,14 @@ function createLifecycle() {
     playToggleOff,
     playError,
     eventCleanups,
+  });
+
+  const strategyMode = createStrategyMode({ requestManager, ConfirmationDialog, Utils });
+  const paperAccount = createPaperAccount({
+    requestManager,
+    ConfirmationDialog,
+    Utils,
+    onReset: () => void loadStats(),
   });
 
   // Embedded Strategies subtab — drives the strategies page module's lifecycle.
@@ -502,9 +516,11 @@ function createLifecycle() {
    */
   async function loadStats() {
     try {
-      const data = await requestManager.fetch(`/api/trader/stats?days=${statsPeriodDays}`, {
-        priority: "normal",
-      });
+      const data = await requestManager.fetch(
+        `/api/trader/stats?days=${statsPeriodDays}&book=${statsBook}`,
+        { priority: "normal" }
+      );
+      if (statsBook === "paper") void paperAccount.load($("#stats-paper-account"));
 
       const pct = (value, decimals = 1) =>
         Utils.formatPercentValue(value, { decimals, fallback: "—" });
@@ -706,6 +722,23 @@ function createLifecycle() {
     statsPeriodDays = days;
     for (const btn of $$("#stats-period .stats-period-btn")) {
       btn.classList.toggle("active", Number(btn.dataset.days) === days);
+    }
+    _lastDailyKey = null;
+    _lastExitKey = null;
+    void loadStats();
+  }
+
+  /** Switch the book the Stats tab reads; the paper book also shows its run card. */
+  function setStatsBook(book) {
+    if (book === statsBook) return;
+    statsBook = book;
+    for (const btn of $$("#stats-book .stats-period-btn")) {
+      btn.classList.toggle("active", btn.dataset.book === book);
+    }
+    const card = $("#stats-paper-account");
+    if (card) {
+      card.hidden = book !== "paper";
+      if (book !== "paper") card.replaceChildren();
     }
     _lastDailyKey = null;
     _lastExitKey = null;
@@ -923,6 +956,7 @@ function createLifecycle() {
       cleanupStrategyListListeners();
       renderStrategiesList("#entry-strategies", entryStrategies, "ENTRY");
       renderStrategiesList("#exit-strategies", exitStrategies, "EXIT");
+      renderPaperSetupNotice();
     } catch (error) {
       console.error("[Trader] Failed to load strategies:", error);
       renderStrategiesError();
@@ -996,8 +1030,19 @@ function createLifecycle() {
   }
 
   /**
-   * Render strategies list
+   * In Explore Mode no paper or live trade runs: the tab says so above the strategies
+   * and offers the setup that enables paper trading.
    */
+  function renderPaperSetupNotice() {
+    const notice = $("#strategy-paper-setup");
+    if (!notice) return;
+    const explore = setupRequired();
+    notice.hidden = !explore;
+    if (explore && !notice.firstChild) {
+      renderSetupGate(notice, I18n.t("trader-paper-explore-title"));
+    }
+  }
+
   /** Show the embedded editor with `request` (`{ strategyId }` or `{ create }`) acted on. */
   function openStrategiesEditor(request) {
     strategiesRequest = request;
@@ -1072,6 +1117,7 @@ function createLifecycle() {
               <span>${Utils.escapeHtml(I18n.t("common-action-edit"))}</span>
             </button>
           </div>
+          ${strategyModeRow(strategy, Utils.escapeHtml)}
         </div>
       `;
       })
@@ -1083,6 +1129,28 @@ function createLifecycle() {
       button.addEventListener("click", handler);
       strategyListCleanups.push(() => button.removeEventListener("click", handler));
     });
+
+    // The mode actions: arming live is gated behind its dialog, and Explore Mode runs no
+    // trades, so there the actions stay disabled and name the setup they need.
+    const modeActions = [
+      ["[data-arm-strategy]", "armStrategy", strategyMode.armLive],
+      ["[data-paper-strategy]", "paperStrategy", strategyMode.returnToPaper],
+    ];
+    for (const [selector, key, act] of modeActions) {
+      container.querySelectorAll(selector).forEach((button) => {
+        gateControl(button);
+        const strategy = strategies.find((item) => String(item.id) === button.dataset[key]);
+        if (!strategy) return;
+        const handler = async () => {
+          button.disabled = true;
+          const changed = await act(strategy);
+          if (changed) await loadStrategies();
+          else button.disabled = false;
+        };
+        button.addEventListener("click", handler);
+        strategyListCleanups.push(() => button.removeEventListener("click", handler));
+      });
+    }
 
     // Attach event listeners for toggle switches
     container.querySelectorAll('input[type="checkbox"]').forEach((checkbox) => {
@@ -1333,6 +1401,9 @@ function createLifecycle() {
     // Realized-window segmented control
     for (const btn of $$("#stats-period .stats-period-btn")) {
       addTrackedListener(btn, "click", () => setStatsPeriod(Number(btn.dataset.days)));
+    }
+    for (const btn of $$("#stats-book .stats-period-btn")) {
+      addTrackedListener(btn, "click", () => setStatsBook(btn.dataset.book));
     }
   }
 

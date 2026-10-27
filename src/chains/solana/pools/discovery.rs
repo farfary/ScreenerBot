@@ -167,33 +167,28 @@ impl PoolDiscovery {
                 .collect()
         };
 
-        // Always include tokens with open positions for price monitoring
-        let open_position_mints: Vec<String> = on_solana(crate::positions::get_open_mints().await);
+        // Always include the tokens the live and paper books hold, copy-trading paper
+        // holdings among them: they are marked and exited at the pool price.
+        let open_position_mints: Vec<String> =
+            on_solana(crate::positions::books::held_mints().await);
         // ...and everything the wallet actually holds. A token the bot never traded (an
         // airdrop, a buy made elsewhere) would otherwise never be priced, so it would
         // count as zero in the wallet's worth — silently understating the headline.
         // These are the mints whose price the reported worth depends on, so they rank
         // with position tokens, not with the discovery tail.
         let held_mints: Vec<String> = on_solana(crate::wallet::get_held_mints());
-        // Paper copy holdings are marked and exited at the pool price, so they rank here too.
-        let paper_mints: Vec<String> = on_solana(crate::trader::copy::held_paper_mints());
         // Mints the wallet owns or marks: position, held and paper-held tokens. Their price is
         // what the P&L and the reported worth depend on.
         let owned_mints: HashSet<String> = open_position_mints
             .iter()
             .chain(held_mints.iter())
-            .chain(paper_mints.iter())
             .cloned()
             .collect();
         let initial_count = tokens.len();
 
         let mut token_set: HashSet<String> = tokens.iter().cloned().collect();
 
-        for mint in open_position_mints
-            .iter()
-            .chain(held_mints.iter())
-            .chain(paper_mints.iter())
-        {
+        for mint in open_position_mints.iter().chain(held_mints.iter()) {
             if !is_stablecoin_mint(mint) && !token_set.contains(mint) {
                 token_set.insert(mint.clone());
                 tokens.push(mint.clone());

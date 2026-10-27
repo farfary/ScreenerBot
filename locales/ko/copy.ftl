@@ -48,6 +48,7 @@ copy-entry-block-reentry-cooldown = 토큰 재진입 쿨다운
 copy-entry-block-open-cooldown = 전체 진입 쿨다운
 copy-entry-block-entry-reserved = 다른 진입을 처리 중입니다
 copy-entry-block-blacklisted = 위험 관리 정책으로 차단된 토큰입니다
+copy-entry-block-paper-balance-exhausted = 모의 잔액이 거래 금액에 부족합니다
 copy-entry-block-check-failed = 안전 점검을 완료하지 못했습니다
 
 copy-pause-user = 사용자가 일시 중지함
@@ -69,17 +70,6 @@ copy-pause-short-storage-restored = 데이터 복원
 copy-state-paused = 일시 중지됨
 copy-state-paused-reason = 일시 중지됨 · { $reason }
 
-copy-readiness-history = 모의 거래 기록
-copy-readiness-history-met =
-    { $count ->
-       *[other] 종료된 모의 라운드 { $count }개, 필요 { $needed }개
-    }
-copy-readiness-history-short = 종료된 모의 라운드 { $needed }개 중 { $count }개
-copy-readiness-profit = 모의 거래 수익
-copy-readiness-profit-detail =
-    { $count ->
-       *[other] { $count }개 라운드에서 { $realized } { -sol } 실현, { $wins }개 수익
-    }
 copy-readiness-latency = 거래 제때 감지
 copy-readiness-latency-detail = p95 도착 { $p95 }초, 한도 { $limit }초
 copy-readiness-latency-none = 아직 도착 샘플 없음
@@ -92,10 +82,7 @@ copy-readiness-priced-missing =
 copy-readiness-runtime = 실거래 실행 가능
 copy-readiness-runtime-ok = 설정과 안전 게이트가 실거래 카피를 허용합니다
 
-copy-live-block-setup-incomplete = 먼저 지갑과 RPC 설정을 완료하세요
-copy-live-block-force-stop = 긴급 중지가 작동 중입니다
 copy-live-block-copy-trading-disabled = 카피 처리가 전역으로 일시 중지되었습니다
-copy-live-block-unavailable = 실거래 실행을 사용할 수 없습니다
 
 ## Task state, mode and exit labels. Ids come from effective_state
 ## (src/trader/copy/control.rs), CopyMode, ExitMode and PaperExitRule
@@ -106,8 +93,6 @@ copy-state-force-stopped = 강제 중지됨
 copy-state-entries-blocked = 진입 차단됨
 copy-state-running-live = 실행 중
 copy-state-running-paper = 실행 중
-copy-mode-paper = 모의
-copy-mode-live = 실거래
 copy-exit-mode-buy-only = 내 청산 규칙
 copy-exit-mode-mirror = 지갑 매도 따라가기
 copy-exit-mode-hybrid = 지갑 매도 및 내 규칙
@@ -261,6 +246,7 @@ copy-profile-sub = 이 봇이 관찰한 지갑 정보
 copy-settings-title = 카피 트레이딩 설정
 copy-settings-subtitle = 모든 작업에 적용되는 전역 정책
 copy-settings-filter-warning = 기본 필터링 설정에서는 거의 모든 토큰이 제외되어 아무것도 카피되지 않습니다. 지갑이 거래하는 토큰을 필터가 통과시키는 경우가 아니라면 꺼 두세요.
+copy-settings-paper-delay-shared = 모의 체결은 모든 모의 장부가 함께 쓰는 모의 착지 지연만큼 기다립니다. 설정의 모의 거래에서 변경하세요.
 copy-settings-unit-seconds = 초
 copy-settings-unit-trades = 건
 copy-settings-unit-tasks = 개
@@ -418,8 +404,6 @@ copy-book-skipped = 건너뜀 <strong>{ $count }</strong>건
 copy-book-failed = 실패 <strong>{ $count }</strong>건
 copy-book-closed = 종료 { $count }건
 copy-book-budget-note = { $mode } 지출 (총 { $total }) · 잔여 { $remaining }
-copy-check-passed = 통과
-copy-check-not-passed = 미통과
 copy-readiness-title = 실거래 전 점검
 copy-readiness-live-note = 이 작업은 실거래 중입니다. 위 헤더에서 모의로 전환할 수 있습니다.
 copy-readiness-all-pass = 모든 점검을 통과했습니다.

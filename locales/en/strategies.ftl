@@ -671,3 +671,16 @@ strategies-error-rule-a-group-needs-at-least-one-condition-switched-on = A group
 strategies-error-rule-not-operator-cannot-have-a-switched-off-child = NOT operator cannot have a switched-off child
 strategies-error-rule-rules-nest-deeper-than-four-levels = Rules nest deeper than four levels
 strategies-error-rule-the-root-group-cannot-be-switched-off = The root group cannot be switched off
+
+## Live readiness of a paper strategy. Ids come from src/strategies/readiness.rs;
+## the shared checks are in paper.ftl.
+
+strategies-readiness-priced = Every position priced
+strategies-readiness-priced-ok = Every open paper position has a pool price
+strategies-readiness-priced-missing =
+    { $count ->
+        [one] { $count } open paper position without a pool price
+       *[other] { $count } open paper positions without a pool price
+    }
+strategies-readiness-runtime = Live trading available
+strategies-readiness-runtime-ok = Setup and safety gates allow live trades

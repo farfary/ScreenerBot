@@ -171,6 +171,7 @@ trade-reason-risk-management = 风险管理
 trade-reason-blacklisted = 已列入黑名单
 trade-reason-force-sell = 强制卖出
 trade-reason-copy-sell = 跟单卖出
+trade-reason-paper-reset = 模拟运行重置
 trade-reason-closed-externally = 外部平仓
 trade-reason-wallet-history = 钱包历史
 trade-reason-exit-retry-pending = 出场重试待处理

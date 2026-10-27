@@ -18,6 +18,7 @@ use screenerbot::strategies::types::{
     RuleVerdict, Strategy, StrategyType, TransactionCounts, WindowCounts,
 };
 use screenerbot::strategies::Error as StrategyError;
+use screenerbot::trader::paper::TradingMode;
 use serde_json::json;
 
 /// A liquidity condition — deterministic, needs no OHLCV, and its truth is controlled
@@ -66,6 +67,7 @@ fn strategy_of(strategy_type: StrategyType, rules: RuleTree) -> Strategy {
         author: None,
         version: 1,
         entry_strategy_ids: Vec::new(),
+        mode: TradingMode::Live,
     }
 }
 

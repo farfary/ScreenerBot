@@ -4,10 +4,11 @@
 //! Paper fill planning, quote settlement, and recorded skip construction.
 
 use super::super::{
-    CopyDatabase, CopyMode, CopyOutcome, CopySkip, CopyTelemetry, PaperContext, PaperDecision,
-    PaperEntryPlan, PaperModel,
+    CopyDatabase, CopyOutcome, CopySkip, CopyTelemetry, PaperContext, PaperDecision, PaperEntryPlan,
 };
-use crate::trader::copy::{paper, risk, sizing, types};
+use crate::trader::copy::{risk, sizing, types};
+use crate::trader::paper::TradingMode;
+use crate::trader::paper::{fill, PaperModel};
 use crate::wallets::watch::{ActivityKind, WalletActivity};
 use chrono::Utc;
 
@@ -55,7 +56,7 @@ async fn execute_paper_entry_with(
         return reject(CopySkip::TaskDisabled);
     };
     let task = match database.get_task(task_id).await {
-        Ok(Some(task)) if task.enabled && task.mode == CopyMode::Paper => task,
+        Ok(Some(task)) if task.enabled && task.mode == TradingMode::Paper => task,
         _ => return reject(CopySkip::TaskDisabled),
     };
     if !matches!(database.paper_epoch(task_id).await, Ok(current) if current == epoch) {
@@ -73,7 +74,7 @@ async fn execute_paper_entry_with(
         Err(reason) => return reject(reason),
     };
     let spend = match database
-        .spend_state(task_id, CopyMode::Paper, &plan.mint)
+        .spend_state(task_id, TradingMode::Paper, &plan.mint)
         .await
     {
         Ok(spend) => spend,
@@ -116,7 +117,7 @@ async fn execute_paper_entry_with(
     let delay_ms = settings.paper_landing_delay_ms;
     let late_guard_mint = plan.mint.clone();
     let late_guard_task = task.clone();
-    let fill = match paper::simulate_buy(
+    let fill = match crate::global::paper_scope(fill::simulate_buy(
         request,
         decimals,
         delay_ms,
@@ -135,7 +136,7 @@ async fn execute_paper_entry_with(
             )
             .await
         },
-    )
+    ))
     .await
     {
         Ok(fill) => fill,
@@ -152,7 +153,7 @@ async fn execute_paper_entry_with(
         return reject(CopySkip::PaperExecutionUnavailable);
     }
     let current = match database.get_task(task_id).await {
-        Ok(Some(current)) if current.enabled && current.mode == CopyMode::Paper => current,
+        Ok(Some(current)) if current.enabled && current.mode == TradingMode::Paper => current,
         _ => return reject(CopySkip::TaskDisabled),
     };
     if current.slippage_pct != task.slippage_pct {
@@ -170,7 +171,7 @@ async fn execute_paper_entry_with(
         Err(reason) => return reject(reason),
     };
     let current_spend = match database
-        .spend_state(task_id, CopyMode::Paper, &plan.mint)
+        .spend_state(task_id, TradingMode::Paper, &plan.mint)
         .await
     {
         Ok(spend) => spend,
@@ -251,7 +252,7 @@ async fn late_wait_guard(
         return Err(CopySkip::PaperExecutionUnavailable);
     }
     match database.get_task(task_id).await {
-        Ok(Some(current)) if current.enabled && current.mode == CopyMode::Paper => {
+        Ok(Some(current)) if current.enabled && current.mode == TradingMode::Paper => {
             if current.slippage_pct != original_task.slippage_pct {
                 return Err(CopySkip::PaperExecutionUnavailable);
             }

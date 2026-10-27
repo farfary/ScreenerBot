@@ -31,12 +31,6 @@ const STATE_LABELS = Object.freeze({
   paper: "copy-state-running-paper",
 });
 
-// Execution modes serialized by `CopyMode` (src/trader/copy/types.rs).
-const MODE_LABELS = Object.freeze({
-  paper: "copy-mode-paper",
-  live: "copy-mode-live",
-});
-
 // Exit modes serialized by `ExitMode` (src/trader/copy/types.rs).
 const EXIT_MODE_LABELS = Object.freeze({
   buy_only: "copy-exit-mode-buy-only",
@@ -58,8 +52,6 @@ const EXIT_LABELS = Object.freeze({
 
 export const stateLabel = (state) =>
   Object.hasOwn(STATE_LABELS, state) ? I18n.label(STATE_LABELS, state) : I18n.t("format-unknown");
-
-export const modeLabel = (mode) => I18n.label(MODE_LABELS, mode);
 
 export const exitModeLabel = (mode) => I18n.label(EXIT_MODE_LABELS, mode);
 
@@ -122,6 +114,7 @@ const ENTRY_BLOCK_LABELS = Object.freeze({
   open_cooldown: "copy-entry-block-open-cooldown",
   entry_reserved: "copy-entry-block-entry-reserved",
   blacklisted: "copy-entry-block-blacklisted",
+  paper_balance_exhausted: "copy-entry-block-paper-balance-exhausted",
   check_failed: "copy-entry-block-check-failed",
 });
 

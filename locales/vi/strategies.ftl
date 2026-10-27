@@ -613,3 +613,12 @@ strategies-error-rule-a-group-needs-at-least-one-condition-switched-on = Mỗi n
 strategies-error-rule-not-operator-cannot-have-a-switched-off-child = Toán tử NOT không được có nút con đã tắt
 strategies-error-rule-rules-nest-deeper-than-four-levels = Các quy tắc không được lồng sâu hơn bốn cấp
 strategies-error-rule-the-root-group-cannot-be-switched-off = Nhóm gốc không thể bị tắt
+
+strategies-readiness-priced = Mọi vị thế đều có giá
+strategies-readiness-priced-ok = Mọi vị thế thử nghiệm đang mở đều có giá pool
+strategies-readiness-priced-missing =
+    { $count ->
+       *[other] { $count } vị thế thử nghiệm đang mở không có giá pool
+    }
+strategies-readiness-runtime = Có thể giao dịch live
+strategies-readiness-runtime-ok = Thiết lập và các chốt an toàn cho phép giao dịch live

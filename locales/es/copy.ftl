@@ -48,6 +48,7 @@ copy-entry-block-reentry-cooldown = Enfriamiento de reentrada del token
 copy-entry-block-open-cooldown = Enfriamiento global de entradas
 copy-entry-block-entry-reserved = Se está procesando otra entrada
 copy-entry-block-blacklisted = El token está bloqueado por los controles de riesgo
+copy-entry-block-paper-balance-exhausted = El saldo simulado no cubre la operación
 copy-entry-block-check-failed = No se pudo completar una comprobación de seguridad
 
 copy-pause-user = Pausada por ti
@@ -69,21 +70,6 @@ copy-pause-short-storage-restored = datos restaurados
 copy-state-paused = En pausa
 copy-state-paused-reason = En pausa · { $reason }
 
-copy-readiness-history = Historial simulado
-copy-readiness-history-met =
-    { $count ->
-        [one] { $count } ronda simulada cerrada, se necesitan { $needed }
-        [many] { $count } rondas simuladas cerradas, se necesitan { $needed }
-       *[other] { $count } rondas simuladas cerradas, se necesitan { $needed }
-    }
-copy-readiness-history-short = { $count } de { $needed } rondas simuladas cerradas
-copy-readiness-profit = Rentable en simulación
-copy-readiness-profit-detail =
-    { $count ->
-        [one] { $realized } { -sol } realizados en { $count } ronda, { $wins } ganadas
-        [many] { $realized } { -sol } realizados en { $count } rondas, { $wins } ganadas
-       *[other] { $realized } { -sol } realizados en { $count } rondas, { $wins } ganadas
-    }
 copy-readiness-latency = Operaciones detectadas a tiempo
 copy-readiness-latency-detail = llegada p95 { $p95 } s, límite { $limit } s
 copy-readiness-latency-none = Aún no hay muestras de llegada
@@ -98,10 +84,7 @@ copy-readiness-priced-missing =
 copy-readiness-runtime = Ejecución en vivo disponible
 copy-readiness-runtime-ok = La configuración y los controles de seguridad permiten copias en vivo
 
-copy-live-block-setup-incomplete = Termina primero la configuración de la billetera y del RPC
-copy-live-block-force-stop = La parada de emergencia está activada
 copy-live-block-copy-trading-disabled = El procesamiento de copias está en pausa global
-copy-live-block-unavailable = La ejecución en vivo no está disponible
 
 ## Task state, mode and exit labels.
 
@@ -110,8 +93,6 @@ copy-state-force-stopped = Detención forzada
 copy-state-entries-blocked = Entradas bloqueadas
 copy-state-running-live = En ejecución
 copy-state-running-paper = En ejecución
-copy-mode-paper = Simulado
-copy-mode-live = En vivo
 copy-exit-mode-buy-only = Mis reglas de salida
 copy-exit-mode-mirror = Replicar ventas de la billetera
 copy-exit-mode-hybrid = Ventas de la billetera y mis reglas
@@ -278,6 +259,7 @@ copy-profile-sub = Lo que este bot ha visto de la billetera
 copy-settings-title = Configuración de copy trading
 copy-settings-subtitle = Política global para todas las tareas
 copy-settings-filter-warning = Con la configuración de filtrado predeterminada, esto rechaza casi todos los tokens, así que no se copia nada. Déjalo desactivado salvo que tus filtros aprueben los tokens que operan tus billeteras.
+copy-settings-paper-delay-shared = Las ejecuciones simuladas esperan el Retraso de aterrizaje simulado que comparten todos los libros simulados. Cámbialo en Configuración, en Trading simulado.
 copy-settings-unit-seconds = s
 copy-settings-unit-trades = trades
 copy-settings-unit-tasks = tareas
@@ -449,8 +431,6 @@ copy-book-skipped = <strong>{ $count }</strong> omitidas
 copy-book-failed = <strong>{ $count }</strong> fallidas
 copy-book-closed = { $count } cerradas
 copy-book-budget-note = Gasto { $mode } de { $total } · { $remaining } restantes
-copy-check-passed = superada
-copy-check-not-passed = no superada
 copy-readiness-title = Antes de pasar a vivo
 copy-readiness-live-note = Esta tarea opera en vivo. Devuélvela a simulación desde la cabecera de arriba.
 copy-readiness-all-pass = Se superan todas las comprobaciones.

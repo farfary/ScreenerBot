@@ -77,7 +77,10 @@ pub fn copy_trading_card(
 /// Read the Copy Trading card: the task set, the status built from it and the newest
 /// copied fill, through the copy owners. Nothing is read while setup is incomplete.
 pub async fn read_copy_trading_card() -> CopyTradingCard {
-    let setup_incomplete = control::live_block_reason() == Some("setup_incomplete");
+    let setup_incomplete = control::live_block_reason()
+        == Some(control::CopyLiveBlock::Trader(
+            crate::trader::LiveBlock::SetupIncomplete,
+        ));
     if setup_incomplete {
         return copy_trading_card(true, None, None, None);
     }
@@ -111,6 +114,8 @@ mod tests {
             running,
             available,
             unavailable_reason: None,
+            live_strategies: 0,
+            paper_strategies: 0,
         }
     }
 

@@ -69,3 +69,9 @@ common-venue-serum = { -serum }
 common-venue-openbook = { -openbook }
 common-venue-phoenix = { -phoenix }
 common-venue-direct-pool = 直接流动性池
+
+common-mode-paper = 模拟
+common-mode-live = 实盘
+common-check-passed = 已通过
+common-check-not-passed = 未通过
+common-arm-type-phrase = 输入 { $phrase } 以确认

@@ -131,6 +131,62 @@ fn open_positions_file_read_only(
 }
 
 impl PositionsDatabase {
+    /// The entries of position `position_id` in `wallet_address`, in chronological order.
+    pub fn entry_history(
+        &self,
+        wallet_address: &str,
+        position_id: i64,
+    ) -> Result<Vec<EntryRecord>> {
+        let conn = self.get_connection()?;
+        let mut stmt = conn
+            .prepare(&format!(
+                "SELECT {ENTRY_RECORD_COLUMNS} FROM position_entries
+                 WHERE position_id = ?1 AND wallet_address = ?2 ORDER BY timestamp ASC"
+            ))
+            .map_err(|e| DatabaseError::Query {
+                operation: "prepare statement".to_owned(),
+                message: e.to_string(),
+            })?;
+        let records = stmt
+            .query_map(params![position_id, wallet_address], entry_record_from_row)
+            .map_err(|e| DatabaseError::Query {
+                operation: "query entry records".to_owned(),
+                message: e.to_string(),
+            })?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(|e| DatabaseError::Query {
+                operation: "collect entry records".to_owned(),
+                message: e.to_string(),
+            })?;
+        Ok(records)
+    }
+
+    /// The exits of position `position_id` in `wallet_address`, in chronological order.
+    pub fn exit_history(&self, wallet_address: &str, position_id: i64) -> Result<Vec<ExitRecord>> {
+        let conn = self.get_connection()?;
+        let mut stmt = conn
+            .prepare(&format!(
+                "SELECT {EXIT_RECORD_COLUMNS} FROM position_exits
+                 WHERE position_id = ?1 AND wallet_address = ?2 ORDER BY timestamp ASC"
+            ))
+            .map_err(|e| DatabaseError::Query {
+                operation: "prepare statement".to_owned(),
+                message: e.to_string(),
+            })?;
+        let records = stmt
+            .query_map(params![position_id, wallet_address], exit_record_from_row)
+            .map_err(|e| DatabaseError::Query {
+                operation: "query exit records".to_owned(),
+                message: e.to_string(),
+            })?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(|e| DatabaseError::Query {
+                operation: "collect exit records".to_owned(),
+                message: e.to_string(),
+            })?;
+        Ok(records)
+    }
+
     /// Get position by ID
     pub async fn get_position_by_id(&self, id: i64) -> Result<Option<Position>> {
         let conn = self.get_connection()?;
@@ -337,12 +393,16 @@ impl PositionsDatabase {
 
     /// Get the open positions of the current wallet (`OPEN_POSITION_FILTER`).
     pub async fn get_open_positions(&self) -> Result<Vec<Position>> {
-        let conn = self.get_connection()?;
         let wallet_address =
             crate::utils::get_wallet_address().map_err(|e| Error::WalletUnavailable {
                 detail: e.to_string(),
             })?;
+        self.open_positions_of(&wallet_address)
+    }
 
+    /// The open positions of `wallet_address` (`OPEN_POSITION_FILTER`), newest first.
+    pub(crate) fn open_positions_of(&self, wallet_address: &str) -> Result<Vec<Position>> {
+        let conn = self.get_connection()?;
         let query = format!(
       "SELECT {POSITION_SELECT_COLUMNS} FROM positions WHERE wallet_address = ?1 AND chain_id = ?2 AND {OPEN_POSITION_FILTER} ORDER BY entry_time DESC"
     );

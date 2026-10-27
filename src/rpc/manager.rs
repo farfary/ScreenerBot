@@ -355,6 +355,7 @@ impl RpcManager {
         method: &str,
         params: serde_json::Value,
     ) -> Result<serde_json::Value, RpcError> {
+        refuse_send_in_paper_scope(method)?;
         // A signed-in account may relay transaction SUBMISSION through
         // screenerbot.io for free. Tried first and never depended on: any
         // failure returns None and the request continues down the normal
@@ -386,6 +387,7 @@ impl RpcManager {
         method: &str,
         params: serde_json::Value,
     ) -> Result<serde_json::Value, RpcError> {
+        refuse_send_in_paper_scope(method)?;
         self.execute_raw_restricted(method, params, Some(provider_kind), 0)
             .await
     }
@@ -743,9 +745,22 @@ fn provider_matches_required_kind(
     required_kind.is_none_or(|kind| provider.kind == kind)
 }
 
+/// Paper trading never sends a transaction: the send is refused before the
+/// relay or any provider is asked. Every other method is unaffected.
+fn refuse_send_in_paper_scope(method: &str) -> Result<(), RpcError> {
+    if crate::global::in_paper_scope()
+        && matches!(RpcMethod::from_str(method), RpcMethod::SendTransaction)
+    {
+        return Err(RpcError::PaperScopeRefused);
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{provider_matches_required_kind, refusal_answers_for_call};
+    use super::{
+        provider_matches_required_kind, refusal_answers_for_call, refuse_send_in_paper_scope,
+    };
     use crate::rpc::types::RpcMethod;
     use crate::rpc::{ProviderConfig, ProviderKind, RpcError};
 
@@ -811,6 +826,25 @@ mod tests {
         assert!(!returned.is_request_rejection());
         assert!(!returned.is_send_refusal());
         assert!(!returned.is_retryable());
+    }
+
+    #[tokio::test]
+    async fn paper_scope_refuses_transaction_send() {
+        assert!(refuse_send_in_paper_scope("sendTransaction").is_ok());
+        crate::global::paper_scope(async {
+            assert!(matches!(
+                refuse_send_in_paper_scope("sendTransaction"),
+                Err(RpcError::PaperScopeRefused)
+            ));
+            for read in ["getBalance", "simulateTransaction", "getLatestBlockhash"] {
+                assert!(refuse_send_in_paper_scope(read).is_ok(), "{read}");
+            }
+        })
+        .await;
+        let refused = RpcError::PaperScopeRefused;
+        assert!(refused.is_request_rejection());
+        assert!(!refused.is_retryable());
+        assert!(!refused.is_provider_health_failure());
     }
 
     #[test]

@@ -42,7 +42,6 @@ trader-status-loading = Завантаження...
 trader-status-running = Працює
 trader-status-stopped = Зупинено
 trader-status-setup-required = Потрібне налаштування
-trader-status-unavailable = Завершіть налаштування гаманця та RPC, щоб користуватися автотрейдером
 trader-setup-action = Завершити налаштування
 trader-toggle-on = УВІМКНЕНО
 trader-toggle-off = ВИМКНЕНО
@@ -102,6 +101,9 @@ trader-toast-strategy-disabled = Стратегію вимкнено
     .message = Стратегія неактивна
 trader-toast-strategy-failed = Помилка оновлення
     .message = Не вдалося оновити статус стратегії
+trader-toast-strategy-armed = { $name } тепер торгує реально
+trader-toast-strategy-paper = { $name } тепер торгує віртуально
+trader-toast-strategy-mode-failed = Не вдалося змінити режим торгівлі
 
 ## Stats: realized window and metrics
 
@@ -110,6 +112,19 @@ trader-stats-window =
 trader-stats-window-day = 24 год
 trader-stats-window-week = 7 д
 trader-stats-window-month = 30 д
+trader-stats-book =
+    .aria-label = Торговий портфель
+trader-paper-run-since = Віртуальний прогін з { $date }
+trader-paper-start = Старт
+trader-paper-cash = Вільно
+trader-paper-open = У позиціях
+trader-paper-unrealized = Нереалізований
+trader-paper-reset = Скинути віртуальний прогін
+trader-paper-reset-title = Скинути віртуальний прогін?
+trader-paper-reset-message = Кожна відкрита віртуальна позиція закриється за поточною ціною, і почнеться новий прогін із заданим стартовим балансом. Попередні прогони залишаться в історії.
+trader-paper-reset-done = Почався новий віртуальний прогін
+trader-paper-reset-failed = Не вдалося скинути віртуальний прогін
+trader-paper-account-failed = Не вдалося завантажити віртуальний прогін
 trader-realized-title = Реалізована результативність
 trader-metric-net-pnl = Чистий прибуток/збиток
 trader-metric-win-rate = Відсоток виграшних угод
@@ -397,6 +412,20 @@ trader-strategy-empty = Стратегій не визначено
 trader-strategy-unnamed = Стратегія без назви
 trader-strategy-priority-auto = Авто
 trader-strategy-priority = Пріоритет { $priority }
+trader-strategy-mode-arm = Активувати реальну торгівлю
+trader-strategy-mode-return-paper = Повернути у віртуальний режим
+trader-strategy-arm-title = Активувати реальну торгівлю для «{ $name }»
+trader-strategy-arm-lead = Нові входи «{ $name }» здійснюватимуться реальними свопами з вашого торгового гаманця.
+trader-strategy-arm-readiness = Готовність за віртуальним портфелем
+trader-strategy-arm-open-paper = Відкриті віртуальні позиції залишаються віртуальними й закриваються віртуально.
+trader-strategy-arm-ack-real-native = Нові входи витрачають реальні { -sol } з вашого торгового гаманця.
+trader-strategy-arm-ack-fees = Реальні свопи сплачують справжні мережеві комісії та проковзування; віртуальні результати не гарантують реальних.
+trader-strategy-arm-ack-unready = Деякі перевірки готовності не пройдено. Усе одно активувати цю стратегію.
+trader-strategy-arm-unavailable = Реальна торгівля зараз недоступна; див. останню перевірку.
+trader-strategy-return-title = Повернути «{ $name }» у віртуальний режим
+trader-strategy-return-message = Нові входи відкриваються у віртуальному портфелі без витрати { -sol }. Відкриті реальні позиції залишаються реальними й закриваються реально.
+trader-strategy-readiness-failed = Не вдалося отримати готовність стратегії
+trader-paper-explore-title = Віртуальна торгівля почнеться після налаштування
 
 ## Dollar-cost averaging
 

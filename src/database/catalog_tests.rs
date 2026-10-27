@@ -110,6 +110,10 @@ fn wallet_scoped_stores_name_their_metadata_tables() {
     let sources = [
         (&POSITIONS, include_str!("../positions/database/types.rs")),
         (
+            &PAPER_POSITIONS,
+            include_str!("../positions/database/types.rs"),
+        ),
+        (
             &TRANSACTIONS,
             include_str!("../transactions/database/schema.rs"),
         ),
@@ -119,7 +123,10 @@ fn wallet_scoped_stores_name_their_metadata_tables() {
         ),
     ];
     let scoped: Vec<&str> = wallet_scoped_stores().map(|(store, _)| store.id).collect();
-    assert_eq!(scoped, vec!["positions", "transactions", "wallet"]);
+    assert_eq!(
+        scoped,
+        vec!["positions", "paper_positions", "transactions", "wallet"]
+    );
     for (store, source) in sources {
         let scope = store.wallet_scope.expect("wallet-scoped store");
         assert!(

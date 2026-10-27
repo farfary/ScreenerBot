@@ -8,13 +8,14 @@ use serde::Serialize;
 
 use super::super::{
     apply_paper_book, arrival_distance_ms, build_task_stats, closed_rounds, pause_text,
-    summarize_arrival_distances, ArrivalDistanceStats, CopyActivityRow, CopyDatabase, CopyMode,
-    CopyOutcome, CopyRound, CopyTask, CopyTaskStats, PaperPosition,
+    summarize_arrival_distances, ArrivalDistanceStats, CopyActivityRow, CopyDatabase, CopyOutcome,
+    CopyRound, CopyTask, CopyTaskStats, PaperPosition,
 };
 use super::open_database;
 use super::status::{build_status, effective_state, CopyTradingStatus};
 use crate::i18n::{ids, UiArg, UiText};
 use crate::positions::Position;
+use crate::trader::paper::TradingMode;
 use crate::trader::policy::ExitPolicy;
 use crate::trader::{Error, Result};
 
@@ -143,18 +144,18 @@ pub fn book_stats(
     let current_activity = activity
         .iter()
         .filter(|row| match (&row.outcome, task.mode) {
-            (CopyOutcome::PaperFilled(decision), CopyMode::Paper) => {
+            (CopyOutcome::PaperFilled(decision), TradingMode::Paper) => {
                 decision.fill.has_quote_provenance()
             }
-            (CopyOutcome::PaperSellObserved(decision), CopyMode::Paper) => decision
+            (CopyOutcome::PaperSellObserved(decision), TradingMode::Paper) => decision
                 .paper_fill
                 .as_ref()
                 .is_some_and(|fill| fill.has_quote_provenance()),
-            (CopyOutcome::Skipped { paper, .. }, CopyMode::Paper) => paper
+            (CopyOutcome::Skipped { paper, .. }, TradingMode::Paper) => paper
                 .as_ref()
-                .is_some_and(|context| context.model == super::super::PaperModel::Quote),
-            (CopyOutcome::Skipped { paper, .. }, CopyMode::Live) => paper.is_none(),
-            (_, CopyMode::Live) => !matches!(
+                .is_some_and(|context| context.model == crate::trader::paper::PaperModel::Quote),
+            (CopyOutcome::Skipped { paper, .. }, TradingMode::Live) => paper.is_none(),
+            (_, TradingMode::Live) => !matches!(
                 row.outcome,
                 CopyOutcome::PaperFilled(_) | CopyOutcome::PaperSellObserved(_)
             ),
@@ -163,7 +164,7 @@ pub fn book_stats(
         .cloned()
         .collect::<Vec<_>>();
     let mut stats = build_task_stats(task.id, &current_activity, positions);
-    if task.mode == CopyMode::Paper {
+    if task.mode == TradingMode::Paper {
         apply_paper_book(&mut stats, paper_book, mark);
     }
     let rounds = closed_rounds(task.id, stats.book, &current_activity, positions);
@@ -174,7 +175,7 @@ pub fn book_stats(
 
 /// The paper ledger a task's stats read; a live task's figures never come from it.
 async fn stats_book(db: &CopyDatabase, task: &CopyTask) -> Result<Vec<PaperPosition>> {
-    if task.mode == CopyMode::Paper {
+    if task.mode == TradingMode::Paper {
         db.paper_positions(task.id).await
     } else {
         Ok(Vec::new())

@@ -376,6 +376,28 @@ pub const POSITIONS: StoreSpec = shared(
 )
 .wallet_scoped("position_metadata", "Positions")
 .pooled(5, Some(1));
+pub const PAPER_POSITIONS: StoreSpec = shared(
+    "paper_positions",
+    paths::get_paper_positions_db_path,
+    configure::POSITIONS_DB,
+    StoreClass::Ledger,
+    crate::positions::database::PAPER_SCHEMA,
+    &[],
+    &[
+        keep("positions", Ledger),
+        keep("position_entries", Ledger),
+        keep("position_exits", Ledger),
+        keep("position_states", Ledger),
+        keep("position_tracking", Ledger),
+        keep("token_snapshots", Ledger),
+        keep("paper_legs", Ledger),
+        keep("paper_account", UserDecision),
+        keep("paper_exit_attempts", Ledger),
+        keep("position_metadata", Schema),
+    ],
+)
+.wallet_scoped("position_metadata", "Paper positions")
+.pooled(5, Some(1));
 pub const COPY_TRADING: StoreSpec = shared(
     "copy_trading",
     paths::get_copy_trading_db_path,
@@ -580,9 +602,10 @@ pub const ATA_CLEANUP: StoreSpec = shared(
 .pooled(3, Some(1));
 
 /// Every app-owned store, vault first and caches last.
-pub const STORES: [&StoreSpec; 16] = [
+pub const STORES: [&StoreSpec; 17] = [
     &WALLETS,
     &POSITIONS,
+    &PAPER_POSITIONS,
     &COPY_TRADING,
     &STRATEGIES,
     &AGENT_CONTROL,

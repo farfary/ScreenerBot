@@ -8,9 +8,11 @@ use chrono::{DateTime, Duration, Utc};
 use crate::chains::{adapter_for, RawAmount};
 use crate::swaps::{Quote, QuoteRequest, SwapMode};
 use crate::trader::copy::{
-    settle_quote_samples, CopyOutcome, CopySellDecision, CopyTask, PaperDecision, PaperExitRule,
-    PaperFill, PaperPosition, SettledPaperQuote, SizingMode,
+    CopyOutcome, CopySellDecision, CopyTask, PaperDecision, PaperExitRule, PaperPosition,
+    SizingMode,
 };
+use crate::trader::paper::fill::{settle_quote_samples, SettledPaperQuote};
+use crate::trader::paper::PaperFill;
 use crate::trader::policy::{
     ExitPolicyOverrides, RoiPolicyOverrides, StopLossPolicyOverrides, TimePolicyOverrides,
     TrailingPolicyOverrides,
@@ -193,7 +195,7 @@ fn paper_sell_fixture(
     buy: &PaperFill,
     exit_price: f64,
     initial_at: DateTime<Utc>,
-) -> Option<crate::trader::copy::PaperSellFill> {
+) -> Option<crate::trader::paper::PaperSellFill> {
     let adapter = adapter_for(task.chain);
     let input_amount = buy.quote.as_ref()?.final_output_amount;
     let fee_fraction = f64::from(adapter.platform_swap_fee_bps()) / 10_000.0;

@@ -25,7 +25,8 @@ use super::types::*;
 // MANUAL TRADING HANDLERS
 // =============================================================================
 
-fn trade_response(
+/// The answer to a manual trade: its typed refusal, or the fill it made.
+pub(in crate::webserver::routes) fn trade_response(
     result: Result<crate::trader::TradeResult, crate::trader::Error>,
     mint: String,
 ) -> Response {
@@ -500,6 +501,7 @@ mod tests {
             action: crate::trader::TradeAction::Buy,
             reason: crate::trader::TradeReason::ManualEntry,
             strategy_id: None,
+            book: crate::positions::Book::Live,
             timestamp: chrono::Utc::now(),
             priority: crate::trader::TradePriority::High,
             price_native: None,

@@ -14,6 +14,20 @@ use crate::positions::{Error, Result};
 use super::open_round::refuse_second_active_open_round;
 use super::types::*;
 
+/// Appends a state-history row for `position_id`.
+pub(super) fn insert_state_row(
+    conn: &rusqlite::Connection,
+    position_id: i64,
+    state: &PositionState,
+    changed_at: &str,
+    reason: Option<&str>,
+) -> rusqlite::Result<usize> {
+    conn.execute(
+        "INSERT INTO position_states (position_id, state, changed_at, reason) VALUES (?1, ?2, ?3, ?4)",
+        params![position_id, state.to_string(), changed_at, reason],
+    )
+}
+
 impl PositionsDatabase {
     /// Delete position by ID
     pub async fn delete_position(&self, id: i64) -> Result<bool> {
@@ -214,11 +228,12 @@ impl PositionsDatabase {
 
         let conn = self.get_connection()?;
 
-        conn.execute(
-      "INSERT INTO position_states (position_id, state, changed_at, reason) VALUES (?1, ?2, ?3, ?4)",
-      params![position_id, state.to_string(), changed_at, reason],
-    )
-    .map_err(|e| DatabaseError::Query { operation: "record state change".to_owned(), message: e.to_string() })?;
+        insert_state_row(&conn, position_id, &state, &changed_at, reason).map_err(|e| {
+            DatabaseError::Query {
+                operation: "record state change".to_owned(),
+                message: e.to_string(),
+            }
+        })?;
 
         logger::debug(
             LogTag::Positions,

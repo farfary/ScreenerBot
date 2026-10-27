@@ -5,7 +5,8 @@
 
 use super::support::{execute, raw_sol, setup, task, FakeIo, QuoteShape, MINT};
 use crate::chains::RawAmount;
-use crate::trader::copy::{CopyMode, CopyOutcome, CopySkip};
+use crate::trader::copy::{CopyOutcome, CopySkip};
+use crate::trader::paper::TradingMode;
 
 #[tokio::test]
 async fn queued_entries_resize_from_recorded_spend_and_reject_landing_network_cost() {
@@ -46,7 +47,7 @@ async fn queued_entries_resize_from_recorded_spend_and_reject_landing_network_co
     assert!(super::support::record(&database, second).await);
 
     let spend = database
-        .spend_state(configured.id, CopyMode::Paper, MINT)
+        .spend_state(configured.id, TradingMode::Paper, MINT)
         .await
         .unwrap();
     assert!((spend.total_spent_native - 0.100005).abs() < 1e-12);
@@ -82,7 +83,7 @@ async fn successful_executor_entry_records_exact_input_and_one_network_fee() {
 
     assert!(super::support::record(&database, outcome).await);
     let spend = database
-        .spend_state(configured.id, CopyMode::Paper, MINT)
+        .spend_state(configured.id, TradingMode::Paper, MINT)
         .await
         .unwrap();
     assert!((spend.total_spent_native - 0.100005).abs() < 1e-12);

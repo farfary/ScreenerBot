@@ -279,20 +279,6 @@
   color: var(--text-primary);
 }
 
-.copy-acks {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-sm);
-}
-
-.copy-ack {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--spacing-sm);
-  font-size: var(--font-size-sm);
-  cursor: pointer;
-}
-
 /* The form spans body and footer so Save stays pinned below the scrolling fields. */
 .copy-settings-form {
   display: flex;

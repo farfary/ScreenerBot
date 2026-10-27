@@ -52,6 +52,7 @@ copy-entry-block-reentry-cooldown = Token re-entry cooldown
 copy-entry-block-open-cooldown = Global entry cooldown
 copy-entry-block-entry-reserved = Another entry is processing
 copy-entry-block-blacklisted = Token is blocked by risk controls
+copy-entry-block-paper-balance-exhausted = Paper balance cannot cover the trade
 copy-entry-block-check-failed = A safety check could not complete
 
 # Why a task stopped copying. Ids come from CopyPauseReason in
@@ -78,21 +79,8 @@ copy-pause-short-storage-restored = data restored
 copy-state-paused = Paused
 copy-state-paused-reason = Paused · { $reason }
 
-# Live-readiness checklist: a title and a detail per check. Ids come from
-# ReadinessCheck in src/trader/copy/workspace/readiness.rs. $realized is a signed SOL figure.
-copy-readiness-history = Paper history
-copy-readiness-history-met =
-    { $count ->
-        [one] { $count } closed paper round, { $needed } needed
-       *[other] { $count } closed paper rounds, { $needed } needed
-    }
-copy-readiness-history-short = { $count } of { $needed } closed paper rounds
-copy-readiness-profit = Profitable in paper
-copy-readiness-profit-detail =
-    { $count ->
-        [one] { $realized } { -sol } realized over { $count } round, { $wins } won
-       *[other] { $realized } { -sol } realized over { $count } rounds, { $wins } won
-    }
+# Copy's own live-readiness checks: a title and a detail per check. Ids come from
+# src/trader/copy/workspace/readiness.rs; the shared checks are in paper.ftl.
 copy-readiness-latency = Trades detected in time
 copy-readiness-latency-detail = p95 arrival { $p95 }s, limit { $limit }s
 copy-readiness-latency-none = No arrival samples yet
@@ -106,11 +94,9 @@ copy-readiness-priced-missing =
 copy-readiness-runtime = Live execution available
 copy-readiness-runtime-ok = Setup and safety gates allow live copies
 
-# Why live execution is unavailable. Reasons come from control::live_block_reason.
-copy-live-block-setup-incomplete = Finish wallet and RPC setup first
-copy-live-block-force-stop = The emergency stop is engaged
+# Why live execution is unavailable. Reasons come from control::live_block_reason;
+# the reasons shared with strategies are in paper.ftl.
 copy-live-block-copy-trading-disabled = Copy processing is paused globally
-copy-live-block-unavailable = Live execution is unavailable
 
 ## Task state, mode and exit labels. Ids come from effective_state
 ## (src/trader/copy/control.rs), CopyMode, ExitMode and PaperExitRule
@@ -121,8 +107,6 @@ copy-state-force-stopped = Force stopped
 copy-state-entries-blocked = Entries blocked
 copy-state-running-live = Running
 copy-state-running-paper = Running
-copy-mode-paper = Paper
-copy-mode-live = Live
 copy-exit-mode-buy-only = My exit rules
 copy-exit-mode-mirror = Mirror wallet sells
 copy-exit-mode-hybrid = Wallet sells and my rules
@@ -287,6 +271,7 @@ copy-profile-sub = What this bot has seen of the wallet
 copy-settings-title = Copy trading settings
 copy-settings-subtitle = Global policy for every task
 copy-settings-filter-warning = With the default Filtering setup this rejects almost every token, so nothing is copied. Leave it off unless your filters pass the tokens your wallets trade.
+copy-settings-paper-delay-shared = Paper fills wait for the Paper Landing Delay that every paper book shares. Change it in Config under Paper Trading.
 copy-settings-unit-seconds = s
 copy-settings-unit-trades = trades
 copy-settings-unit-tasks = tasks
@@ -465,8 +450,6 @@ copy-book-failed = <strong>{ $count }</strong> failed
 copy-book-closed = { $count } closed
 # $mode is the execution mode label; $total and $remaining are decimal SOL amounts.
 copy-book-budget-note = { $mode } spend of { $total } · { $remaining } left
-copy-check-passed = passed
-copy-check-not-passed = not passed
 copy-readiness-title = Before going live
 copy-readiness-live-note = This task trades live. Return it to Paper from the header above.
 copy-readiness-all-pass = Every check passes.

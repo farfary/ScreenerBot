@@ -23,7 +23,7 @@ use super::types::*;
 /// from the error value (`http_status`); the message is the catalog entry for
 /// the variant with its domain values as arguments, and the error's own text
 /// goes to `details`.
-pub(super) fn trader_failure(error: &trader::Error) -> Response {
+pub(in crate::webserver::routes) fn trader_failure(error: &trader::Error) -> Response {
     use trader::Error;
     let code = ApiErrorCode::for_status(error.http_status());
     let text = match error {
@@ -117,6 +117,16 @@ pub(super) fn trader_failure(error: &trader::Error) -> Response {
             ApiError::new(code, ids::ERRORS_TRADE_DEPENDENCY_FAILED)
                 .text_arg("dependency", *dependency)
         }
+        Error::PaperDecisionOnLivePath { mint } => {
+            ApiError::new(code, ids::ERRORS_TRADE_PAPER_ON_LIVE_PATH).text_arg("mint", mint.clone())
+        }
+        Error::PaperBookUnavailable => {
+            ApiError::new(code, ids::ERRORS_TRADE_PAPER_BOOK_UNAVAILABLE)
+        }
+        Error::PaperFill(_) => ApiError::new(code, ids::ERRORS_TRADE_PAPER_FILL_FAILED),
+        Error::PaperFillAborted { mint } => {
+            ApiError::new(code, ids::ERRORS_TRADE_PAPER_FILL_ABORTED).text_arg("mint", mint.clone())
+        }
     };
     text.details(error.to_string()).into_response()
 }
@@ -130,7 +140,7 @@ pub async fn get_trader_status() -> Response {
     if crate::webserver::promo::are_promo_fixtures_enabled() {
         return success_response(crate::webserver::promo::get_promo_trader_status());
     }
-    success_response(trader::trader_status())
+    success_response(trader::trader_status().await)
 }
 
 /// POST /api/trader/start - Start the trader

@@ -130,6 +130,7 @@ async fn buy(
         action: TradeAction::Buy,
         reason: TradeReason::ManualEntry,
         strategy_id: None,
+        book: crate::positions::Book::Live,
         timestamp: Utc::now(),
         priority: TradePriority::High,
         price_native: None,
@@ -140,11 +141,14 @@ async fn buy(
         take_profit_level: None,
     };
 
-    // Execute trade (includes quote + swap). A manual buy is always a Buy, so route
-    // straight to the buy executor with the explicit ownership choice.
+    // Execute trade (includes quote + swap) with the explicit ownership choice.
+    let context = executors::ExecutionContext {
+        origin: positions::PositionOrigin::Manual,
+        management,
+    };
     let result = match crate::swaps::with_swap_stage_listener(
         action.swap_stage_listener(),
-        executors::execute_buy_managed(&decision, positions::PositionOrigin::Manual, management),
+        executors::execute_trade(&decision, context),
     )
     .await
     {
@@ -283,6 +287,7 @@ async fn sell(
         action: TradeAction::Sell,
         reason: TradeReason::ManualExit,
         strategy_id: None,
+        book: crate::positions::Book::Live,
         timestamp: Utc::now(),
         priority: TradePriority::High,
         price_native: None,
@@ -296,7 +301,10 @@ async fn sell(
     // Execute trade (includes quote + swap)
     let result = match crate::swaps::with_swap_stage_listener(
         action.swap_stage_listener(),
-        executors::execute_trade(&decision),
+        executors::execute_trade(
+            &decision,
+            executors::ExecutionContext::for_decision(&decision),
+        ),
     )
     .await
     {
@@ -453,6 +461,7 @@ async fn add(
         action: TradeAction::DCA,
         reason: TradeReason::ManualEntry,
         strategy_id: None,
+        book: crate::positions::Book::Live,
         timestamp: Utc::now(),
         priority: TradePriority::High,
         price_native: None,
@@ -466,7 +475,10 @@ async fn add(
     // Execute trade (includes quote + swap)
     let result = match crate::swaps::with_swap_stage_listener(
         action.swap_stage_listener(),
-        executors::execute_trade(&decision),
+        executors::execute_trade(
+            &decision,
+            executors::ExecutionContext::for_decision(&decision),
+        ),
     )
     .await
     {

@@ -42,7 +42,6 @@ trader-status-loading = Cargando...
 trader-status-running = En ejecución
 trader-status-stopped = Detenido
 trader-status-setup-required = Configuración requerida
-trader-status-unavailable = Completa la configuración de billetera y RPC para usar Auto Trader
 trader-setup-action = Completar configuración
 trader-toggle-on = ACTIVADO
 trader-toggle-off = DESACTIVADO
@@ -102,6 +101,9 @@ trader-toast-strategy-disabled = Estrategia desactivada
     .message = La estrategia está inactiva
 trader-toast-strategy-failed = Error al actualizar
     .message = No se pudo actualizar el estado de la estrategia
+trader-toast-strategy-armed = { $name } ahora opera en vivo
+trader-toast-strategy-paper = { $name } ahora opera en simulación
+trader-toast-strategy-mode-failed = No se pudo cambiar el modo de trading
 
 ## Stats: realized window and metrics
 
@@ -110,6 +112,19 @@ trader-stats-window =
 trader-stats-window-day = 24H
 trader-stats-window-week = 7D
 trader-stats-window-month = 30D
+trader-stats-book =
+    .aria-label = Cartera de trading
+trader-paper-run-since = Sesión simulada desde { $date }
+trader-paper-start = Inicio
+trader-paper-cash = Efectivo
+trader-paper-open = Abierto
+trader-paper-unrealized = No realizado
+trader-paper-reset = Reiniciar sesión simulada
+trader-paper-reset-title = ¿Reiniciar la sesión simulada?
+trader-paper-reset-message = Cada posición simulada abierta se cierra a su precio actual y empieza una nueva sesión con el saldo inicial configurado. Las sesiones anteriores quedan en el historial.
+trader-paper-reset-done = Empezó una nueva sesión simulada
+trader-paper-reset-failed = No se pudo reiniciar la sesión simulada
+trader-paper-account-failed = No se pudo cargar la sesión simulada
 trader-realized-title = Rendimiento realizado
 trader-metric-net-pnl = P&L neto
 trader-metric-win-rate = Tasa de aciertos
@@ -386,6 +401,20 @@ trader-strategy-empty = No hay estrategias definidas
 trader-strategy-unnamed = Estrategia sin nombre
 trader-strategy-priority-auto = Auto
 trader-strategy-priority = Prioridad { $priority }
+trader-strategy-mode-arm = Activar en vivo
+trader-strategy-mode-return-paper = Volver a simulación
+trader-strategy-arm-title = Activar “{ $name }” en vivo
+trader-strategy-arm-lead = Las nuevas entradas de “{ $name }” operarán con swaps reales desde tu billetera de trading.
+trader-strategy-arm-readiness = Preparación según la cartera simulada
+trader-strategy-arm-open-paper = Las posiciones simuladas abiertas siguen siendo simuladas y se cierran en simulación.
+trader-strategy-arm-ack-real-native = Las nuevas entradas gastan { -sol } real de tu billetera de trading.
+trader-strategy-arm-ack-fees = Los swaps en vivo pagan comisiones de red y deslizamiento reales; los resultados simulados no garantizan resultados en vivo.
+trader-strategy-arm-ack-unready = Algunas comprobaciones de preparación no se han superado. Activar esta estrategia de todos modos.
+trader-strategy-arm-unavailable = El trading en vivo no está disponible ahora; consulta la última comprobación.
+trader-strategy-return-title = Volver “{ $name }” a simulación
+trader-strategy-return-message = Las nuevas entradas se abren en la cartera simulada sin gastar { -sol }. Las posiciones en vivo abiertas siguen en vivo y se cierran en vivo.
+trader-strategy-readiness-failed = No se pudo leer la preparación de la estrategia
+trader-paper-explore-title = El trading simulado empieza tras la configuración
 
 ## Dollar-cost averaging
 

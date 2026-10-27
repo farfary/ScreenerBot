@@ -50,7 +50,16 @@ pub async fn load_positions_with_filters(
                 .collect()
         }
     };
+    position_responses(positions, limit, mint_filter).await
+}
 
+/// The rows of `positions` whose mint contains `mint_filter`, newest activity first and
+/// cut to `limit` when it is set, each with its stored logo and decimals.
+pub(super) async fn position_responses(
+    positions: Vec<positions::Position>,
+    limit: usize,
+    mint_filter: Option<&str>,
+) -> Vec<PositionResponse> {
     let mut filtered_positions: Vec<_> = if let Some(mint) = mint_filter {
         positions
             .into_iter()
@@ -215,7 +224,14 @@ pub async fn get_positions_stats() -> Json<PositionsStatsResponse> {
 
     let open_positions = positions::get_open_positions().await;
     let closed_positions = positions::get_closed_positions().await;
+    Json(positions_stats(&open_positions, &closed_positions))
+}
 
+/// The counts, capital at work and realized P&L of one book's open and closed rounds.
+pub(super) fn positions_stats(
+    open_positions: &[positions::Position],
+    closed_positions: &[positions::Position],
+) -> PositionsStatsResponse {
     let total = open_positions.len() + closed_positions.len();
     let open = open_positions.len();
     let closed = closed_positions.len();
@@ -242,13 +258,13 @@ pub async fn get_positions_stats() -> Json<PositionsStatsResponse> {
         .filter_map(|p| p.pnl)
         .sum();
 
-    Json(PositionsStatsResponse {
+    PositionsStatsResponse {
         total,
         open,
         closed,
         total_invested_native,
         total_pnl,
-    })
+    }
 }
 
 #[cfg(test)]

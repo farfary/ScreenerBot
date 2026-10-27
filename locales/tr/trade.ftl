@@ -139,6 +139,7 @@ trade-reason-risk-management = Risk yönetimi
 trade-reason-blacklisted = Kara listede
 trade-reason-force-sell = Zorla satım
 trade-reason-copy-sell = Kopya satım
+trade-reason-paper-reset = Sanal çalışma sıfırlandı
 trade-reason-closed-externally = Dışarıdan kapatıldı
 trade-reason-wallet-history = Cüzdan geçmişi
 trade-reason-exit-retry-pending = Çıkış yeniden denemesi bekliyor

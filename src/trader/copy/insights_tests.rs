@@ -6,9 +6,8 @@
 use chrono::{Duration, Utc};
 
 use super::*;
-use crate::trader::copy::types::{
-    CopySellDecision, CopyTelemetry, PaperDecision, PaperFill, PaperQuoteMetadata, PaperSellFill,
-};
+use crate::trader::copy::types::{CopySellDecision, CopyTelemetry, PaperDecision};
+use crate::trader::paper::{PaperFill, PaperQuoteMetadata, PaperSellFill};
 
 fn quote_provenance(at: DateTime<Utc>, output: u64, input: u64) -> PaperQuoteMetadata {
     PaperQuoteMetadata {
@@ -65,7 +64,7 @@ fn buy(id: i64, mint: &str, tokens: f64, cost: f64, at: DateTime<Utc>) -> CopyAc
                 network_fee_sol: 0.0,
                 priority_fee_sol: 0.0,
                 total_cost_sol: cost,
-                model: super::super::types::PaperModel::Quote,
+                model: crate::trader::paper::PaperModel::Quote,
                 quote: Some(quote_provenance(
                     at,
                     (tokens * 1_000_000.0).round() as u64,
@@ -111,7 +110,7 @@ fn sell(
                 network_fee_sol: 0.0,
                 priority_fee_sol: 0.0,
                 net_proceeds_sol: proceeds,
-                model: super::super::types::PaperModel::Quote,
+                model: crate::trader::paper::PaperModel::Quote,
                 quote: Some(quote_provenance(
                     at,
                     (proceeds * 1_000_000_000.0).round() as u64,

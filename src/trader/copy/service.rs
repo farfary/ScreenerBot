@@ -21,10 +21,11 @@ use crate::wallets::watch::{
 
 use super::{
     execute_copy_sell_with, execute_live_with, matching_tasks, notify, paper_sell_outcome,
-    plan_paper_entries, prepare_copy_sell, prepare_live_entry, CopyDatabase, CopyMode, CopyOutcome,
+    plan_paper_entries, prepare_copy_sell, prepare_live_entry, CopyDatabase, CopyOutcome,
     CopySellSubmitResult, CopySkip, ExitMode, LiveSubmitResult, PaperPosition, PipelinePolicy,
     RiskContext,
 };
+use crate::trader::paper::TradingMode;
 
 pub async fn run(shutdown: Arc<Notify>, database: CopyDatabase) {
     let (paper_runtime, stop_execution, execution) = super::paper_execution::install();
@@ -296,7 +297,7 @@ async fn process_activity(
     };
     let paper_tasks = tasks
         .iter()
-        .filter(|task| task.mode == CopyMode::Paper)
+        .filter(|task| task.mode == TradingMode::Paper)
         .cloned()
         .collect::<Vec<_>>();
     if !paper_tasks.is_empty() {
@@ -385,7 +386,7 @@ async fn process_activity(
         }
     }
 
-    for task in tasks.iter().filter(|task| task.mode == CopyMode::Live) {
+    for task in tasks.iter().filter(|task| task.mode == TradingMode::Live) {
         let decided_at = Utc::now();
         let plan = match prepare_live_entry(
             activity,
@@ -412,7 +413,12 @@ async fn process_activity(
             |entry_mint| async move {
                 crate::trader::admission::check_entry_admission(&entry_mint, &["rpc"]).await?;
                 crate::trader::admission::check_open_cooldown().await?;
-                if !crate::trader::entry::try_reserve_entry(&entry_mint).await {
+                if !crate::trader::entry::try_reserve_entry(
+                    crate::positions::Book::Live,
+                    &entry_mint,
+                )
+                .await
+                {
                     return Err(crate::trader::admission::EntryBlock::EntryReserved);
                 }
                 Ok(())
@@ -465,8 +471,8 @@ async fn record_skip(
 ) -> crate::trader::Result<()> {
     let outcome = skipped_activity(task.id, activity, mint, reason);
     let outcome = match task.mode {
-        CopyMode::Paper => in_paper_epoch(outcome, database.paper_epoch(task.id).await?),
-        CopyMode::Live => outcome,
+        TradingMode::Paper => in_paper_epoch(outcome, database.paper_epoch(task.id).await?),
+        TradingMode::Live => outcome,
     };
     notify::record(database, outcome).await?;
     Ok(())
@@ -530,7 +536,7 @@ async fn process_sell_activity(
     mint: &str,
     target_holdings_before: &HashMap<i64, f64>,
 ) -> crate::trader::Result<()> {
-    for task in tasks.iter().filter(|task| task.mode == CopyMode::Paper) {
+    for task in tasks.iter().filter(|task| task.mode == TradingMode::Paper) {
         let target_holding = target_holdings_before
             .get(&task.id)
             .copied()
@@ -567,7 +573,7 @@ async fn process_sell_activity(
                 }
                 let current_task = job_db.get_task(task_id).await
                     .map_err(|_| CopySkip::PaperExecutionUnavailable)?
-                    .filter(|current| current.mode == CopyMode::Paper && current.exit_mode != ExitMode::BuyOnly)
+                    .filter(|current| current.mode == TradingMode::Paper && current.exit_mode != ExitMode::BuyOnly)
                     .ok_or(CopySkip::TaskDisabled)?;
                 let current_position = job_db.paper_position(task_id, &target_mint).await
                     .map_err(|_| CopySkip::PaperExecutionUnavailable)?
@@ -599,7 +605,7 @@ async fn process_sell_activity(
                 }
                 let latest_task = job_db.get_task(task_id).await
                     .map_err(|_| CopySkip::PaperExecutionUnavailable)?
-                    .filter(|current| current.mode == CopyMode::Paper && current.exit_mode != ExitMode::BuyOnly
+                    .filter(|current| current.mode == TradingMode::Paper && current.exit_mode != ExitMode::BuyOnly
                         && current.slippage_pct == current_task.slippage_pct)
                     .ok_or(CopySkip::TaskDisabled)?;
                 let latest_position = job_db.paper_position(task_id, &target_mint).await
@@ -610,7 +616,7 @@ async fn process_sell_activity(
                 if latest_position.raw_token_amount.is_none_or(|latest| {
                     current_position.raw_token_amount.is_none_or(|current| latest < current)
                 })
-                    || latest_task.mode != CopyMode::Paper
+                    || latest_task.mode != TradingMode::Paper
                 {
                     return Err(CopySkip::PaperExecutionUnavailable);
                 }
@@ -630,7 +636,7 @@ async fn process_sell_activity(
         }
     }
 
-    for task in tasks.iter().filter(|task| task.mode == CopyMode::Live) {
+    for task in tasks.iter().filter(|task| task.mode == TradingMode::Live) {
         let target_holding = target_holdings_before
             .get(&task.id)
             .copied()

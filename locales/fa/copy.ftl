@@ -48,6 +48,7 @@ copy-entry-block-reentry-cooldown = زمان انتظار ورود مجدد تو
 copy-entry-block-open-cooldown = زمان انتظار سراسری ورود
 copy-entry-block-entry-reserved = ورود دیگری در حال پردازش است
 copy-entry-block-blacklisted = توکن توسط کنترل‌های ریسک مسدود شده است
+copy-entry-block-paper-balance-exhausted = موجودی آزمایشی برای این معامله کافی نیست
 copy-entry-block-check-failed = یک بررسی ایمنی کامل نشد
 
 copy-pause-user = توسط شما متوقف شد
@@ -69,19 +70,6 @@ copy-pause-short-storage-restored = بازیابی داده
 copy-state-paused = متوقف
 copy-state-paused-reason = متوقف · { $reason }
 
-copy-readiness-history = تاریخچه آزمایشی
-copy-readiness-history-met =
-    { $count ->
-        [one] { $count } دور آزمایشی بسته، { $needed } لازم است
-       *[other] { $count } دور آزمایشی بسته، { $needed } لازم است
-    }
-copy-readiness-history-short = { $count } از { $needed } دور آزمایشی بسته
-copy-readiness-profit = سودآور در حالت آزمایشی
-copy-readiness-profit-detail =
-    { $count ->
-        [one] { $realized } { -sol } تحقق‌یافته در { $count } دور، { $wins } برد
-       *[other] { $realized } { -sol } تحقق‌یافته در { $count } دور، { $wins } برد
-    }
 copy-readiness-latency = معاملات به‌موقع شناسایی شدند
 copy-readiness-latency-detail = رسیدن p95: { $p95 } ثانیه، حد: { $limit } ثانیه
 copy-readiness-latency-none = هنوز نمونه رسیدنی وجود ندارد
@@ -95,10 +83,7 @@ copy-readiness-priced-missing =
 copy-readiness-runtime = اجرای زنده در دسترس است
 copy-readiness-runtime-ok = راه‌اندازی و دروازه‌های ایمنی کپی زنده را مجاز می‌کنند
 
-copy-live-block-setup-incomplete = ابتدا راه‌اندازی کیف پول و RPC را کامل کنید
-copy-live-block-force-stop = توقف اضطراری فعال است
 copy-live-block-copy-trading-disabled = پردازش کپی به‌طور سراسری متوقف است
-copy-live-block-unavailable = اجرای زنده در دسترس نیست
 
 ## Task state, mode and exit labels
 
@@ -107,8 +92,6 @@ copy-state-force-stopped = توقف اجباری
 copy-state-entries-blocked = ورودها مسدود
 copy-state-running-live = در حال اجرا
 copy-state-running-paper = در حال اجرا
-copy-mode-paper = آزمایشی
-copy-mode-live = زنده
 copy-exit-mode-buy-only = قوانین خروج من
 copy-exit-mode-mirror = تقلید فروش‌های کیف پول
 copy-exit-mode-hybrid = فروش‌های کیف پول و قوانین من
@@ -268,6 +251,7 @@ copy-profile-sub = آنچه این ربات از کیف پول دیده است
 copy-settings-title = تنظیمات کپی‌تریدینگ
 copy-settings-subtitle = سیاست سراسری برای همه وظایف
 copy-settings-filter-warning = با تنظیمات پیش‌فرض فیلترینگ، تقریباً همه توکن‌ها رد می‌شوند و چیزی کپی نمی‌شود. مگر اینکه فیلترهای شما توکن‌های معامله‌شده توسط کیف پول‌هایتان را عبور دهند، آن را خاموش نگه دارید.
+copy-settings-paper-delay-shared = اجراهای آزمایشی منتظر «تأخیر اجرای آزمایشی» می‌مانند که همه دفترهای آزمایشی از آن استفاده می‌کنند. آن را در تنظیمات، بخش «معاملات آزمایشی» تغییر دهید.
 copy-settings-unit-seconds = ثانیه
 copy-settings-unit-trades = معامله
 copy-settings-unit-tasks = وظیفه
@@ -432,8 +416,6 @@ copy-book-skipped = <strong>{ $count }</strong> نادیده‌گرفته‌شد
 copy-book-failed = <strong>{ $count }</strong> ناموفق
 copy-book-closed = { $count } بسته‌شده
 copy-book-budget-note = مصرف { $mode } از { $total } · { $remaining } باقی‌مانده
-copy-check-passed = قبول
-copy-check-not-passed = مردود
 copy-readiness-title = پیش از رفتن به حالت زنده
 copy-readiness-live-note = این وظیفه زنده معامله می‌کند. آن را از سربرگ بالا به حالت آزمایشی برگردانید.
 copy-readiness-all-pass = همه بررسی‌ها قبول شده‌اند.

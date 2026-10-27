@@ -8,9 +8,9 @@ use std::collections::HashMap;
 use chrono::{TimeZone, Utc};
 use screenerbot::chains::ChainId;
 use screenerbot::trader::copy::{
-    plan_paper_entries, CopyMode, CopyTask, ExitMode, PipelinePolicy, RiskContext, SizingMode,
-    SpendState,
+    plan_paper_entries, CopyTask, ExitMode, PipelinePolicy, RiskContext, SizingMode, SpendState,
 };
+use screenerbot::trader::paper::TradingMode;
 use screenerbot::wallets::watch::{ActivityKind, SwapSide, WalletActivity, WatchSource};
 
 #[test]
@@ -23,7 +23,7 @@ fn observed_buy_is_prechecked_and_sized_before_quote_execution() {
         target_address: "target".to_owned(),
         label: Some("Paper target".to_owned()),
         enabled: true,
-        mode: CopyMode::Paper,
+        mode: TradingMode::Paper,
         sizing: SizingMode::RatioOfTarget { pct: 50.0 },
         exit_mode: ExitMode::BuyOnly,
         exit_policy_overrides: Default::default(),

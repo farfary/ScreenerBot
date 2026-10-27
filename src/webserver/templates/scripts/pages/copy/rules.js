@@ -6,11 +6,11 @@
 import {
   definitionRows,
   exitModeLabel,
-  modeLabel,
   settingFixed,
   settingPct,
   settingSol,
 } from "./format.js";
+import { tradingModeLabel } from "../../ui/trading_mode.js";
 import {
   INHERITED_RULES,
   RULES,
@@ -108,7 +108,7 @@ export function rulesHtml(context, esc) {
   const budgetNote = Number.isFinite(Number(task.spent_native))
     ? I18n.t("copy-rules-budget-note", {
         spent: settingFixed(task.spent_native),
-        mode: modeLabel(task.mode),
+        mode: tradingModeLabel(task.mode),
         remaining: settingFixed(task.remaining_budget_native),
       })
     : "";

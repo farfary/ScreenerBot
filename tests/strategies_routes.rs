@@ -1,10 +1,11 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! The strategy routes: switching a strategy on applies the validation a save applies, switching one off is always allowed, neither touches the rest of the stored strategy, an exit strategy keeps the entry strategies it manages, and a test reports every rule's verdict, a rule with no data as unknown with the reason, without waiting for candles the OHLCV service cannot read through.
+//! The strategy routes: a new strategy starts on paper and arms live only with the confirmation phrase while the Auto Trader can trade live, an update never changes the mode, readiness reads the paper rounds, switching a strategy on applies the validation a save applies, switching one off is always allowed, neither touches the rest of the stored strategy, an exit strategy keeps the entry strategies it manages, and a test reports every rule's verdict, a rule with no data as unknown with the reason, without waiting for candles the OHLCV service cannot read through.
 
 use crate::common;
 
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
 use axum::body::{to_bytes, Body};
@@ -13,6 +14,7 @@ use common::condition;
 use screenerbot::strategies::db::{get_strategy, insert_strategy, update_strategy};
 use screenerbot::strategies::engine::EngineConfig;
 use screenerbot::strategies::types::{Condition, RuleTree, Strategy, StrategyType};
+use screenerbot::trader::paper::TradingMode;
 use screenerbot::webserver::routes;
 use screenerbot::webserver::state::AppState;
 use serde_json::{json, Value};
@@ -47,6 +49,7 @@ fn stored(id: &str, strategy_type: StrategyType, rule: Condition, enabled: bool)
         author: None,
         version: 1,
         entry_strategy_ids: Vec::new(),
+        mode: TradingMode::Live,
     };
     insert_strategy(&strategy).expect("insert strategy");
     strategy
@@ -255,6 +258,179 @@ async fn switching_an_exit_strategy_on_keeps_its_binding() {
     assert_eq!(reload("bound-off").entry_strategy_ids, ["dip-buyer"]);
 }
 
+#[tokio::test]
+async fn a_new_strategy_starts_on_paper_and_arms_live_only_with_the_phrase() {
+    let _dir = strategy_system().await;
+    let request = strategy_request("Paper Entry", "ENTRY", liquidity_at_least(), &[]);
+    let (status, body) = send("POST", "/api/strategies", request).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(reload("paper-entry").mode, TradingMode::Paper);
+    let (_, detail) = send("GET", "/api/strategies/paper-entry", Value::Null).await;
+    assert_eq!(detail["mode"], "paper", "{detail}");
+
+    for confirmation in [Value::Null, json!(""), json!("arm live strategy")] {
+        let (status, body) = send(
+            "PATCH",
+            "/api/strategies/paper-entry/mode",
+            json!({ "mode": "live", "confirmation": confirmation }),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+        assert_eq!(
+            body["error"]["text"]["id"], "errors-strategies-live-confirmation-required",
+            "{body}"
+        );
+        assert_eq!(reload("paper-entry").mode, TradingMode::Paper);
+    }
+
+    screenerbot::global::INITIALIZATION_COMPLETE.store(true, Ordering::SeqCst);
+    let (status, body) = send(
+        "PATCH",
+        "/api/strategies/paper-entry/mode",
+        json!({
+            "mode": "live",
+            "confirmation": screenerbot::trader::paper::STRATEGY_LIVE_CONFIRMATION,
+        }),
+    )
+    .await;
+    screenerbot::global::INITIALIZATION_COMPLETE.store(false, Ordering::SeqCst);
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["mode"], "live", "{body}");
+    let armed = reload("paper-entry");
+    assert_eq!(armed.mode, TradingMode::Live);
+    assert_eq!(armed.version, 1, "the mode is not a rule edit");
+
+    let (status, body) = send(
+        "PATCH",
+        "/api/strategies/paper-entry/mode",
+        json!({ "mode": "paper" }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(reload("paper-entry").mode, TradingMode::Paper);
+
+    let (status, _) = send(
+        "PATCH",
+        "/api/strategies/missing/mode",
+        json!({ "mode": "paper" }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+/// Arming live goes through the live trading gate: an unfinished setup or the emergency
+/// stop refuses it with the reason, and returning to paper stays allowed.
+#[tokio::test]
+async fn a_strategy_arms_live_only_while_the_auto_trader_can_trade_live() {
+    let _dir = strategy_system().await;
+    let request = strategy_request("Gated Entry", "ENTRY", liquidity_at_least(), &[]);
+    let (status, body) = send("POST", "/api/strategies", request).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let arm = json!({
+        "mode": "live",
+        "confirmation": screenerbot::trader::paper::STRATEGY_LIVE_CONFIRMATION,
+    });
+
+    screenerbot::global::INITIALIZATION_COMPLETE.store(false, Ordering::SeqCst);
+    let (status, body) = send("PATCH", "/api/strategies/gated-entry/mode", arm.clone()).await;
+    assert_eq!(status, StatusCode::CONFLICT, "{body}");
+    assert_eq!(
+        body["error"]["text"]["id"], "paper-live-block-setup-incomplete",
+        "{body}"
+    );
+    assert_eq!(reload("gated-entry").mode, TradingMode::Paper);
+
+    screenerbot::global::INITIALIZATION_COMPLETE.store(true, Ordering::SeqCst);
+    screenerbot::global::set_force_stopped(true, Some("test"));
+    let (status, body) = send("PATCH", "/api/strategies/gated-entry/mode", arm).await;
+    assert_eq!(status, StatusCode::CONFLICT, "{body}");
+    assert_eq!(
+        body["error"]["text"]["id"], "paper-live-block-force-stop",
+        "{body}"
+    );
+    assert_eq!(reload("gated-entry").mode, TradingMode::Paper);
+
+    let (status, body) = send(
+        "PATCH",
+        "/api/strategies/gated-entry/mode",
+        json!({ "mode": "paper" }),
+    )
+    .await;
+    screenerbot::global::set_force_stopped(false, None);
+    screenerbot::global::INITIALIZATION_COMPLETE.store(false, Ordering::SeqCst);
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(reload("gated-entry").mode, TradingMode::Paper);
+}
+
+#[tokio::test]
+async fn an_update_never_changes_the_mode() {
+    let _dir = strategy_system().await;
+    stored(
+        "armed-entry",
+        StrategyType::Entry,
+        liquidity_at_least(),
+        false,
+    );
+    let update = strategy_request("Armed Entry", "ENTRY", liquidity_at_least(), &[]);
+    let (status, body) = send("PUT", "/api/strategies/armed-entry", update).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(reload("armed-entry").mode, TradingMode::Live);
+}
+
+#[tokio::test]
+async fn a_strategy_without_paper_rounds_reads_as_not_ready() {
+    let _dir = strategy_system().await;
+    stored(
+        "fresh-entry",
+        StrategyType::Entry,
+        liquidity_at_least(),
+        false,
+    );
+    stored("fresh-exit", StrategyType::Exit, position_profit(), false);
+
+    let (status, body) = send("GET", "/api/strategies/fresh-entry/readiness", Value::Null).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["ready"], false, "{body}");
+    let ids: Vec<&str> = body["checks"]
+        .as_array()
+        .expect("checks")
+        .iter()
+        .map(|check| check["id"].as_str().expect("check id"))
+        .collect();
+    assert_eq!(
+        ids,
+        ["history", "profit", "priced", "exits", "runtime"],
+        "{body}"
+    );
+    assert_eq!(body["checks"][0]["passed"], false, "{body}");
+    assert_eq!(
+        body["checks"][3]["passed"], true,
+        "a strategy without failed paper exits reads as filling: {body}"
+    );
+    assert_eq!(
+        body["checks"][4]["passed"], false,
+        "an unfinished setup blocks live trading: {body}"
+    );
+    assert_eq!(
+        body["live_confirmation"],
+        screenerbot::trader::paper::STRATEGY_LIVE_CONFIRMATION,
+        "{body}"
+    );
+
+    let (status, body) = send("GET", "/api/strategies/fresh-exit/readiness", Value::Null).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let ids: Vec<&str> = body["checks"]
+        .as_array()
+        .expect("checks")
+        .iter()
+        .map(|check| check["id"].as_str().expect("check id"))
+        .collect();
+    assert_eq!(ids, ["history", "priced", "exits", "runtime"], "{body}");
+
+    let (status, _) = send("GET", "/api/strategies/missing/readiness", Value::Null).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
 #[test]
 fn an_exit_strategy_manages_its_bound_entry_strategies_or_every_position() {
     let mut exit = Strategy {
@@ -272,6 +448,7 @@ fn an_exit_strategy_manages_its_bound_entry_strategies_or_every_position() {
         author: None,
         version: 1,
         entry_strategy_ids: Vec::new(),
+        mode: TradingMode::Live,
     };
     assert!(exit.manages(Some("dip-buyer")));
     assert!(

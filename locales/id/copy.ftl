@@ -48,6 +48,7 @@ copy-entry-block-reentry-cooldown = Cooldown entry ulang token
 copy-entry-block-open-cooldown = Cooldown entry global
 copy-entry-block-entry-reserved = Entry lain sedang diproses
 copy-entry-block-blacklisted = Token diblokir oleh kontrol risiko
+copy-entry-block-paper-balance-exhausted = Saldo paper tidak cukup untuk transaksi ini
 copy-entry-block-check-failed = Pemeriksaan keamanan tidak dapat diselesaikan
 
 copy-pause-user = Dijeda oleh Anda
@@ -69,17 +70,6 @@ copy-pause-short-storage-restored = data dipulihkan
 copy-state-paused = Dijeda
 copy-state-paused-reason = Dijeda · { $reason }
 
-copy-readiness-history = Riwayat paper
-copy-readiness-history-met =
-    { $count ->
-       *[other] { $count } putaran paper tertutup, dibutuhkan { $needed }
-    }
-copy-readiness-history-short = { $count } dari { $needed } putaran paper tertutup
-copy-readiness-profit = Menguntungkan di paper
-copy-readiness-profit-detail =
-    { $count ->
-       *[other] { $realized } { -sol } terealisasi dalam { $count } putaran, { $wins } menang
-    }
 copy-readiness-latency = Trade terdeteksi tepat waktu
 copy-readiness-latency-detail = kedatangan p95 { $p95 }d, batas { $limit }d
 copy-readiness-latency-none = Belum ada sampel kedatangan
@@ -92,10 +82,7 @@ copy-readiness-priced-missing =
 copy-readiness-runtime = Eksekusi live tersedia
 copy-readiness-runtime-ok = Penyiapan dan gerbang keamanan mengizinkan salinan live
 
-copy-live-block-setup-incomplete = Selesaikan penyiapan dompet dan RPC terlebih dahulu
-copy-live-block-force-stop = Penghentian darurat sedang aktif
 copy-live-block-copy-trading-disabled = Pemrosesan salinan dijeda secara global
-copy-live-block-unavailable = Eksekusi live tidak tersedia
 
 ## Task state, mode and exit labels.
 
@@ -104,8 +91,6 @@ copy-state-force-stopped = Dihentikan paksa
 copy-state-entries-blocked = Entry diblokir
 copy-state-running-live = Berjalan
 copy-state-running-paper = Berjalan
-copy-mode-paper = Paper
-copy-mode-live = Live
 copy-exit-mode-buy-only = Aturan exit saya
 copy-exit-mode-mirror = Tiru penjualan dompet
 copy-exit-mode-hybrid = Penjualan dompet dan aturan saya
@@ -258,6 +243,7 @@ copy-profile-sub = Yang telah dilihat bot ini dari dompet tersebut
 copy-settings-title = Pengaturan copy trading
 copy-settings-subtitle = Kebijakan global untuk setiap tugas
 copy-settings-filter-warning = Dengan pengaturan Pemfilteran default, ini menolak hampir semua token sehingga tidak ada yang disalin. Biarkan nonaktif kecuali filter Anda meloloskan token yang diperdagangkan dompet Anda.
+copy-settings-paper-delay-shared = Eksekusi paper menunggu Jeda Pendaratan Paper yang dipakai bersama oleh semua buku paper. Ubah di Konfigurasi pada bagian Trading Paper.
 copy-settings-unit-seconds = dtk
 copy-settings-unit-trades = trade
 copy-settings-unit-tasks = tugas
@@ -415,8 +401,6 @@ copy-book-skipped = <strong>{ $count }</strong> dilewati
 copy-book-failed = <strong>{ $count }</strong> gagal
 copy-book-closed = { $count } ditutup
 copy-book-budget-note = Pengeluaran { $mode } dari { $total } · sisa { $remaining }
-copy-check-passed = lolos
-copy-check-not-passed = belum lolos
 copy-readiness-title = Sebelum live
 copy-readiness-live-note = Tugas ini trading live. Kembalikan ke Paper dari header di atas.
 copy-readiness-all-pass = Semua pemeriksaan lolos.

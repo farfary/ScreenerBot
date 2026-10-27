@@ -11,6 +11,7 @@
 
 mod entry;
 mod exit;
+mod paper_batch;
 
 pub use entry::monitor_entries;
 pub use exit::monitor_positions;

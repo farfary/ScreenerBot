@@ -15,45 +15,14 @@ use crate::logger::{self, LogTag};
 use crate::positions::PositionManagement;
 use crate::swaps::{QuoteRequest, SwapMode};
 use crate::trader::evaluators::exit_rules::{self, ExitInputs, ExitRule};
+use crate::trader::paper::{fill, PaperModel};
 use crate::trader::policy::ExitPolicy;
 
 use super::{
-    management_for_exit_mode, CopyDatabase, CopyMode, CopyOutcome, CopySellDecision, CopySkip,
-    CopyTask, CopyTelemetry, PaperExitRule, PaperPosition,
+    management_for_exit_mode, CopyDatabase, CopyOutcome, CopySellDecision, CopySkip, CopyTask,
+    CopyTelemetry, PaperExitRule, PaperPosition,
 };
-
-const EXIT_PERCENT_SCALE: u128 = 10_u128.pow(9);
-const EXIT_PERCENT_DENOMINATOR: u128 = 100 * EXIT_PERCENT_SCALE;
-
-/// Select the exact raw token input shared by policy, mirror, and manual paper exits.
-pub(super) fn raw_sell_amount(
-    held: RawAmount,
-    exit_percentage: Option<f64>,
-) -> Result<RawAmount, CopySkip> {
-    if held == RawAmount::ZERO {
-        return Err(CopySkip::CopyPositionNotFound);
-    }
-    let Some(percentage) = exit_percentage else {
-        return Ok(held);
-    };
-    if !percentage.is_finite() {
-        return Err(CopySkip::InvalidSizing);
-    }
-    if percentage >= 100.0 {
-        return Ok(held);
-    }
-    if percentage <= 0.0 {
-        return Err(CopySkip::InvalidSizing);
-    }
-    let parts = RawAmount::from_integral_f64((percentage * EXIT_PERCENT_SCALE as f64).floor())
-        .filter(|parts| parts.raw() > 0 && parts.raw() < EXIT_PERCENT_DENOMINATOR)
-        .ok_or(CopySkip::InvalidSizing)?;
-    let amount = held
-        .checked_mul_div(parts, RawAmount::new(EXIT_PERCENT_DENOMINATOR))
-        .filter(|amount| *amount > RawAmount::ZERO && *amount <= held)
-        .ok_or(CopySkip::InvalidSizing)?;
-    Ok(amount)
-}
+use crate::trader::paper::TradingMode;
 
 /// Build the exact request consumed by both policy and mirrored paper close paths.
 pub(super) fn paper_sell_request(
@@ -68,7 +37,7 @@ pub(super) fn paper_sell_request(
         chain: task.chain,
         input_mint: mint.to_owned(),
         output_mint: adapter.native_asset_address().to_owned(),
-        input_amount: raw_sell_amount(held, exit_percentage)?,
+        input_amount: fill::raw_sell_amount(held, exit_percentage)?,
         wallet_address,
         slippage_pct: task.slippage_pct,
         swap_mode: SwapMode::ExactIn,
@@ -182,8 +151,8 @@ where
         wallet_address,
     )?;
     let raw = request.input_amount;
-    let delay_ms = crate::config::with_config(|config| config.copy_trading.paper_landing_delay_ms);
-    let fill = super::paper::simulate_sell(
+    let delay_ms = crate::config::with_config(|config| config.trader.paper.landing_delay_ms);
+    let fill = crate::global::paper_scope(fill::simulate_sell(
         request,
         decimals,
         delay_ms,
@@ -197,7 +166,7 @@ where
             }
             match database.get_task(task.id).await {
                 Ok(Some(current))
-                    if current.mode == CopyMode::Paper
+                    if current.mode == TradingMode::Paper
                         && current.slippage_pct == task.slippage_pct => {}
                 _ => return Err(CopySkip::TaskDisabled),
             }
@@ -225,7 +194,7 @@ where
             }
             Ok(())
         },
-    )
+    ))
     .await?;
     Ok(CopyOutcome::PaperSellObserved(CopySellDecision {
         task_id: task.id,
@@ -252,7 +221,7 @@ where
         exit_rule: Some(exit.rule),
         take_profit_level: exit.take_profit_level,
         paper_context: Some(super::types::PaperContext {
-            model: super::types::PaperModel::Quote,
+            model: PaperModel::Quote,
             epoch,
         }),
     }))
@@ -289,7 +258,7 @@ pub fn held_paper_mints() -> Vec<String> {
 pub async fn sweep(database: &CopyDatabase) -> crate::trader::Result<()> {
     let tasks = database.list_tasks().await?;
     let mut books = Vec::new();
-    for task in tasks.iter().filter(|task| task.mode == CopyMode::Paper) {
+    for task in tasks.iter().filter(|task| task.mode == TradingMode::Paper) {
         let holdings = database.paper_positions(task.id).await?;
         if holdings.iter().any(PaperPosition::is_open) {
             books.push((task, holdings));
@@ -383,7 +352,7 @@ pub async fn sweep(database: &CopyDatabase) -> crate::trader::Result<()> {
                         .await
                         .map_err(|_| CopySkip::PaperExecutionUnavailable)?
                         .filter(|task| {
-                            task.mode == CopyMode::Paper
+                            task.mode == TradingMode::Paper
                                 && management_for_exit_mode(task.exit_mode)
                                     != PositionManagement::CopyTask
                         })
@@ -437,7 +406,7 @@ pub async fn sweep(database: &CopyDatabase) -> crate::trader::Result<()> {
                         .await
                         .map_err(|_| CopySkip::PaperExecutionUnavailable)?
                         .filter(|task| {
-                            task.mode == CopyMode::Paper
+                            task.mode == TradingMode::Paper
                                 && management_for_exit_mode(task.exit_mode)
                                     != PositionManagement::CopyTask
                                 && task.slippage_pct == current_task.slippage_pct

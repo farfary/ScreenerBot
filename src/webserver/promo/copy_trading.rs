@@ -20,8 +20,9 @@ use crate::trader::copy::workspace::{
     WalletWatch,
 };
 use crate::trader::copy::{
-    build_insights, CopyActivityRow, CopyInsights, CopyMode, CopyTask, CopyTaskStats, InsightRange,
+    build_insights, CopyActivityRow, CopyInsights, CopyTask, CopyTaskStats, InsightRange,
 };
+use crate::trader::paper::TradingMode;
 use crate::trader::{Error, Result};
 use crate::webserver::routes::header::CopyHeaderInfo;
 
@@ -33,7 +34,7 @@ pub(super) use desk::{position_owner, PROMO_COPY_WALLETS};
 /// Copy processing on, nothing blocking it, live execution available: the
 /// state a capture shows.
 fn status(tasks: &[CopyTask]) -> CopyTradingStatus {
-    let running = |mode: CopyMode| {
+    let running = |mode: TradingMode| {
         tasks
             .iter()
             .filter(|task| task.enabled && task.mode == mode)
@@ -48,8 +49,8 @@ fn status(tasks: &[CopyTask]) -> CopyTradingStatus {
         force_stop_blocks: true,
         total_tasks: tasks.len(),
         active_tasks: tasks.iter().filter(|task| task.enabled).count(),
-        paper_tasks: running(CopyMode::Paper),
-        live_tasks: running(CopyMode::Live),
+        paper_tasks: running(TradingMode::Paper),
+        live_tasks: running(TradingMode::Live),
     }
 }
 
@@ -150,8 +151,8 @@ pub fn get_promo_copy_workspace(id: i64) -> Result<CopyTaskWorkspace> {
     );
     // Nothing blocks live execution in a capture, as `status` reports.
     let live_spent_sol = match task.mode {
-        crate::trader::copy::CopyMode::Live => desk.spent_sol(id),
-        crate::trader::copy::CopyMode::Paper => 0.0,
+        TradingMode::Live => desk.spent_sol(id),
+        TradingMode::Paper => 0.0,
     };
     Ok(workspace::build_workspace(
         summary,
@@ -267,7 +268,7 @@ mod tests {
 
     fn assert_paper_timeline(
         telemetry: &crate::trader::copy::CopyTelemetry,
-        quote: &crate::trader::copy::PaperQuoteMetadata,
+        quote: &crate::trader::paper::PaperQuoteMetadata,
     ) {
         if let Some(target_block_time) = telemetry.target_block_time {
             let target_block =
@@ -436,7 +437,7 @@ mod tests {
             let quote = fill.quote.as_ref().expect("buy quote provenance");
             assert_paper_timeline(&decision.telemetry, quote);
             assert_eq!(decision.telemetry.decided_at, quote.landing_at);
-            assert_eq!(fill.model, crate::trader::copy::PaperModel::Quote);
+            assert_eq!(fill.model, crate::trader::paper::PaperModel::Quote);
             assert_eq!(quote.router_id, "promo-fixture");
             assert_eq!(quote.token_decimals, Some(6));
             assert!(quote.platform_fee_included_in_output);
@@ -493,7 +494,7 @@ mod tests {
 
         for fill in &sells {
             let quote = fill.quote.as_ref().expect("sell quote provenance");
-            assert_eq!(fill.model, crate::trader::copy::PaperModel::Quote);
+            assert_eq!(fill.model, crate::trader::paper::PaperModel::Quote);
             assert_eq!(quote.router_id, "promo-fixture");
             assert_eq!(quote.token_decimals, Some(6));
             assert!(quote.platform_fee_included_in_output);

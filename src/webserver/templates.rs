@@ -202,6 +202,7 @@ pub fn base_template(active_tab: &str, content: &str, locale: &LanguageIdentifie
         STATE_VIEW_STYLES,
         TABLE_SETTINGS_DIALOG_STYLES,
         CONFIRMATION_DIALOG_STYLES,
+        ARM_LIVE_GATE_STYLES,
         POSITION_REMOVE_DIALOG_STYLES,
         SETUP_DIALOG_STYLES,
         CONTEXT_MENU_STYLES,

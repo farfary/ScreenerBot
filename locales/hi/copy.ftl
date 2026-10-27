@@ -50,6 +50,7 @@ copy-entry-block-reentry-cooldown = टोकन री-एंट्री क�
 copy-entry-block-open-cooldown = ग्लोबल एंट्री कूलडाउन
 copy-entry-block-entry-reserved = दूसरी एंट्री प्रोसेस हो रही है
 copy-entry-block-blacklisted = टोकन रिस्क कंट्रोल द्वारा ब्लॉक है
+copy-entry-block-paper-balance-exhausted = पेपर बैलेंस इस ट्रेड के लिए पर्याप्त नहीं है
 copy-entry-block-check-failed = एक सुरक्षा जाँच पूरी नहीं हो सकी
 
 copy-pause-user = आपके द्वारा रोका गया
@@ -71,19 +72,6 @@ copy-pause-short-storage-restored = डेटा पुनर्स्थाप�
 copy-state-paused = रोका गया
 copy-state-paused-reason = रोका गया · { $reason }
 
-copy-readiness-history = पेपर हिस्ट्री
-copy-readiness-history-met =
-    { $count ->
-        [one] { $count } बंद पेपर राउंड, { $needed } ज़रूरी
-       *[other] { $count } बंद पेपर राउंड, { $needed } ज़रूरी
-    }
-copy-readiness-history-short = { $needed } में से { $count } बंद पेपर राउंड
-copy-readiness-profit = पेपर में लाभदायक
-copy-readiness-profit-detail =
-    { $count ->
-        [one] { $count } राउंड में { $realized } { -sol } वास्तविक, { $wins } जीत
-       *[other] { $count } राउंड में { $realized } { -sol } वास्तविक, { $wins } जीत
-    }
 copy-readiness-latency = ट्रेड समय पर पहचाने गए
 copy-readiness-latency-detail = p95 आगमन { $p95 } सेकंड, सीमा { $limit } सेकंड
 copy-readiness-latency-none = अभी कोई आगमन सैंपल नहीं
@@ -97,18 +85,13 @@ copy-readiness-priced-missing =
 copy-readiness-runtime = लाइव एक्ज़ीक्यूशन उपलब्ध
 copy-readiness-runtime-ok = सेटअप और सुरक्षा गेट लाइव कॉपी की अनुमति देते हैं
 
-copy-live-block-setup-incomplete = पहले वॉलेट और RPC सेटअप पूरा करें
-copy-live-block-force-stop = इमरजेंसी स्टॉप चालू है
 copy-live-block-copy-trading-disabled = कॉपी प्रोसेसिंग ग्लोबली रुकी हुई है
-copy-live-block-unavailable = लाइव एक्ज़ीक्यूशन उपलब्ध नहीं है
 
 copy-state-system-paused = ग्लोबली रोका गया
 copy-state-force-stopped = ज़बरन रोका गया
 copy-state-entries-blocked = एंट्री ब्लॉक
 copy-state-running-live = चल रहा है
 copy-state-running-paper = चल रहा है
-copy-mode-paper = पेपर
-copy-mode-live = लाइव
 copy-exit-mode-buy-only = मेरे एग्ज़िट नियम
 copy-exit-mode-mirror = वॉलेट के सेल की नकल
 copy-exit-mode-hybrid = वॉलेट के सेल और मेरे नियम
@@ -254,6 +237,7 @@ copy-profile-sub = इस बॉट ने वॉलेट के बारे �
 copy-settings-title = कॉपी ट्रेडिंग सेटिंग्स
 copy-settings-subtitle = हर टास्क के लिए ग्लोबल नीति
 copy-settings-filter-warning = डिफ़ॉल्ट फ़िल्टरिंग सेटअप के साथ यह लगभग हर टोकन को अस्वीकार कर देता है, इसलिए कुछ भी कॉपी नहीं होता। जब तक आपके फ़िल्टर वे टोकन पास न करें जिन्हें आपके वॉलेट ट्रेड करते हैं, इसे बंद रखें।
+copy-settings-paper-delay-shared = पेपर फ़िल उस पेपर लैंडिंग देरी का इंतज़ार करते हैं जिसे हर पेपर बुक साझा करती है। इसे कॉन्फ़िग में पेपर ट्रेडिंग के अंतर्गत बदलें।
 copy-settings-unit-seconds = से
 copy-settings-unit-trades = ट्रेड
 copy-settings-unit-tasks = कार्य
@@ -414,8 +398,6 @@ copy-book-skipped = <strong>{ $count }</strong> स्किप
 copy-book-failed = <strong>{ $count }</strong> विफल
 copy-book-closed = { $count } बंद
 copy-book-budget-note = { $mode } खर्च { $total } में से · { $remaining } शेष
-copy-check-passed = पास
-copy-check-not-passed = पास नहीं
 copy-readiness-title = लाइव जाने से पहले
 copy-readiness-live-note = यह टास्क लाइव ट्रेड करता है। ऊपर हेडर से इसे पेपर पर लौटाएँ।
 copy-readiness-all-pass = हर जाँच पास है।

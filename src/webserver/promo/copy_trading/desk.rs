@@ -15,9 +15,10 @@ use chrono::{DateTime, Duration, Utc};
 use crate::chains::active_chain;
 use crate::positions::{Position, PositionManagement, PositionOrigin};
 use crate::trader::copy::{
-    management_for_exit_mode, CopyActivityRow, CopyMode, CopyOutcome, CopySkip, CopyTask,
-    CopyTelemetry, ExitMode, PaperPosition, SizingMode, TargetObservations,
+    management_for_exit_mode, CopyActivityRow, CopyOutcome, CopySkip, CopyTask, CopyTelemetry,
+    ExitMode, PaperPosition, SizingMode, TargetObservations,
 };
+use crate::trader::paper::TradingMode;
 use crate::trader::policy::ExitPolicyOverrides;
 
 use super::super::data::{PROMO_CLOSED_TOKENS, PROMO_OPEN_TOKENS};
@@ -54,7 +55,7 @@ fn base_task(wallet: (i64, &str, &str, i64), now: DateTime<Utc>) -> CopyTask {
         target_address: wallet.2.to_owned(),
         label: Some(wallet.1.to_owned()),
         enabled: true,
-        mode: CopyMode::Paper,
+        mode: TradingMode::Paper,
         sizing: SizingMode::Fixed { sol: 0.1 },
         exit_mode: ExitMode::Hybrid,
         exit_policy_overrides: ExitPolicyOverrides::default(),
@@ -81,7 +82,7 @@ pub(super) fn tasks(now: DateTime<Utc>) -> Vec<CopyTask> {
     let [whale, scout, momentum] = PROMO_COPY_WALLETS;
     vec![
         CopyTask {
-            mode: CopyMode::Live,
+            mode: TradingMode::Live,
             sizing: SizingMode::RatioOfTarget { pct: 2.5 },
             max_native_per_trade: 0.25,
             max_native_per_token: 0.5,
@@ -96,7 +97,7 @@ pub(super) fn tasks(now: DateTime<Utc>) -> Vec<CopyTask> {
             ..base_task(scout, now)
         },
         CopyTask {
-            mode: CopyMode::Live,
+            mode: TradingMode::Live,
             sizing: SizingMode::Fixed { sol: 0.15 },
             exit_mode: ExitMode::BuyOnly,
             max_native_per_trade: 0.15,
@@ -351,8 +352,8 @@ impl Desk {
         let mut spend = Vec::with_capacity(tasks.len());
         for task in &tasks {
             let spent = match task.mode {
-                CopyMode::Live => live::live_desk(task, now, &mut decisions, &mut positions),
-                CopyMode::Paper => paper::paper_desk(task, now, &mut decisions, &mut paper_book),
+                TradingMode::Live => live::live_desk(task, now, &mut decisions, &mut positions),
+                TradingMode::Paper => paper::paper_desk(task, now, &mut decisions, &mut paper_book),
             };
             spend.push((task.id, spent));
         }

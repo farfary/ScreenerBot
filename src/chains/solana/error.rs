@@ -70,6 +70,10 @@ pub enum Error {
     /// refused before or at its send, so nothing it carries can land.
     #[error("the transaction was not sent: {0}")]
     NotSent(crate::swaps::NotSubmittedReason),
+    /// Key material was requested inside a paper scope. Paper trading never
+    /// signs, so the request is refused before any key or database read.
+    #[error("{operation} is refused while paper trading")]
+    PaperScopeRefused { operation: &'static str },
 }
 
 /// Result alias for the Solana chain adapter.
@@ -109,6 +113,7 @@ impl ErrorClass for Error {
             // The caller rebuilds and re-signs a refused transaction; it is
             // never sent again from here.
             Error::NotSent(_) => false,
+            Error::PaperScopeRefused { .. } => false,
         }
     }
 
@@ -136,6 +141,8 @@ impl ErrorClass for Error {
             Error::DirectSwap(_) => Severity::Error,
             // Nothing was sent, so nothing moved.
             Error::NotSent(_) => Severity::Warning,
+            // Nothing was signed, but a paper path reached key material.
+            Error::PaperScopeRefused { .. } => Severity::Critical,
         }
     }
 
@@ -152,6 +159,7 @@ impl ErrorClass for Error {
             Error::InvalidPool { .. } => 422,
             Error::DirectSwap(_) => 502,
             Error::NotSent(reason) => reason.http_status(),
+            Error::PaperScopeRefused { .. } => 500,
         }
     }
 }

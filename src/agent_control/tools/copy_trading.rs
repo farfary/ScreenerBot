@@ -12,9 +12,8 @@ use serde_json::json;
 use super::{Tool, ToolCategory, ToolDefinition, ToolResult};
 use crate::config::with_config;
 use crate::trader::copy::workspace::{self, ActivityFilter};
-use crate::trader::copy::{
-    control, CopyMode, CopyTaskInput, ExitMode, SizingMode, LIVE_ARM_CONFIRMATION,
-};
+use crate::trader::copy::{control, CopyTaskInput, ExitMode, SizingMode};
+use crate::trader::paper::{TradingMode, LIVE_ARM_CONFIRMATION};
 use crate::trader::policy::ExitPolicyOverrides;
 
 fn parse<T: for<'de> Deserialize<'de>>(params: serde_json::Value) -> Result<T, ToolResult> {
@@ -307,7 +306,7 @@ impl Tool for CreateCopyTaskTool {
             target_address: p.target_address,
             label: p.label,
             enabled: p.enabled,
-            mode: CopyMode::Paper,
+            mode: TradingMode::Paper,
             sizing: p.sizing,
             exit_mode: p.exit_mode,
             exit_policy_overrides: p.exit_policy_overrides,
@@ -446,7 +445,7 @@ pub struct SetCopyTaskModeTool;
 #[derive(Deserialize)]
 struct ModeParams {
     task_id: i64,
-    mode: CopyMode,
+    mode: TradingMode,
     #[serde(default)]
     confirmation: Option<String>,
 }

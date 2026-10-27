@@ -6,7 +6,7 @@
 use chrono::{DateTime, Duration, Utc};
 
 use crate::chains::RawAmount;
-use crate::positions::{Position, PositionOrigin, PriceSource};
+use crate::positions::{Book, Position, PositionOrigin, PriceSource};
 use crate::trader::copy::{management_for_exit_mode, CopyOutcome, CopyTask, LiveDecision};
 
 use super::super::super::aggregates::{closed_exit_offset_hours, closed_hold_minutes};
@@ -80,6 +80,7 @@ fn live_position(task: &CopyTask, round: &LiveRound, now: DateTime<Utc>) -> Posi
         current_price: round.current,
         current_price_updated: round.current.map(|_| now),
         current_price_source: round.current.map(|_| PriceSource::Pool),
+        book: Book::Live,
         phantom_remove: false,
         phantom_confirmations: 0,
         phantom_first_seen: None,

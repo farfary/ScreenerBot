@@ -139,6 +139,7 @@ trade-reason-risk-management = रिस्क मैनेजमेंट
 trade-reason-blacklisted = ब्लैकलिस्टेड
 trade-reason-force-sell = फ़ोर्स सेल
 trade-reason-copy-sell = कॉपी सेल
+trade-reason-paper-reset = पेपर रन रीसेट
 trade-reason-closed-externally = बाहर से बंद
 trade-reason-wallet-history = वॉलेट इतिहास
 trade-reason-exit-retry-pending = एग्ज़िट रीट्राई लंबित

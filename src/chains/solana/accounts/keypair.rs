@@ -12,6 +12,8 @@ use crate::chains::solana::{Error, Result};
 
 use crate::secure_storage::{decrypt_private_key, EncryptedData};
 
+use super::signing::refuse_in_paper_scope;
+
 // =============================================================================
 // IMPORT / EXPORT
 // =============================================================================
@@ -22,6 +24,7 @@ use crate::secure_storage::{decrypt_private_key, EncryptedData};
 /// - Base58 encoded (standard Solana format)
 /// - JSON array format: [1,2,3,...]
 pub fn parse_private_key(private_key: &str) -> Result<Keypair> {
+    refuse_in_paper_scope("parse_private_key")?;
     let trimmed = private_key.trim();
 
     // Check for JSON array format
@@ -78,6 +81,7 @@ fn parse_base58_format(private_key: &str) -> Result<Keypair> {
 
 /// Export a wallet's private key in base58 format
 pub fn export_private_key(encrypted_key: &str, nonce: &str) -> Result<String> {
+    refuse_in_paper_scope("export_private_key")?;
     let encrypted = EncryptedData {
         ciphertext: encrypted_key.to_string(),
         nonce: nonce.to_string(),
@@ -88,6 +92,7 @@ pub fn export_private_key(encrypted_key: &str, nonce: &str) -> Result<String> {
 
 /// Decrypt encrypted key and return keypair
 pub fn decrypt_to_keypair(encrypted_key: &str, nonce: &str) -> Result<Keypair> {
+    refuse_in_paper_scope("decrypt_to_keypair")?;
     let private_key = export_private_key(encrypted_key, nonce)?;
     parse_private_key(&private_key)
 }

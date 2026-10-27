@@ -11,6 +11,7 @@ use crate::i18n::UiText;
 // Import unified types from OHLCV module
 use crate::ohlcvs::TimeframeBundle;
 use crate::tokens::Token;
+use crate::trader::paper::TradingMode;
 
 /// Strategy type classification
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -66,6 +67,8 @@ pub struct Strategy {
     /// Empty manages every position, including those no entry strategy opened.
     #[serde(default)]
     pub entry_strategy_ids: Vec<String>,
+    /// Paper strategies trade the paper book; only live ones open or close real trades.
+    pub mode: TradingMode,
 }
 
 impl Strategy {

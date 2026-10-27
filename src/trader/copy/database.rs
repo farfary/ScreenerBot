@@ -15,8 +15,9 @@ use crate::database;
 use crate::trader::error::Error;
 
 use super::types::{
-    confirm_mode_transition, CopyActivityRow, CopyMode, CopyOutcome, CopyPauseReason, CopyTask,
+    confirm_mode_transition, CopyActivityRow, CopyOutcome, CopyPauseReason, CopyTask,
 };
+use crate::trader::paper::TradingMode;
 
 #[path = "database/claims.rs"]
 mod claims;
@@ -113,7 +114,7 @@ impl CopyDatabase {
                 detail: "task chain does not match this repository".to_owned(),
             });
         }
-        if task.mode != CopyMode::Paper {
+        if task.mode != TradingMode::Paper {
             return Err(Error::CopyValidation {
                 detail:
                     "new copy tasks must start in paper mode; use the confirmed mode transition"
@@ -251,7 +252,7 @@ impl CopyDatabase {
             .optional()
             .map_err(crate::errors::DatabaseError::from)?
             .ok_or_else(|| Error::CopyTaskNotFound { task_id: task.id })?;
-        let current_mode: CopyMode =
+        let current_mode: TradingMode =
             serde_json::from_str(&current_mode).map_err(|e| Error::CopyTaskDecode {
                 task_id: task.id,
                 field: "mode",
@@ -309,7 +310,7 @@ impl CopyDatabase {
     pub async fn set_task_mode(
         &self,
         id: i64,
-        mode: CopyMode,
+        mode: TradingMode,
         confirmation: Option<String>,
     ) -> crate::trader::Result<CopyTask> {
         let db = self.clone();
@@ -325,7 +326,7 @@ impl CopyDatabase {
     fn set_task_mode_sync(
         &self,
         id: i64,
-        requested: CopyMode,
+        requested: TradingMode,
         confirmation: Option<&str>,
     ) -> crate::trader::Result<CopyTask> {
         let connection = self.connection()?;
@@ -338,7 +339,7 @@ impl CopyDatabase {
             .optional()
             .map_err(crate::errors::DatabaseError::from)?
             .ok_or_else(|| Error::CopyTaskNotFound { task_id: id })?;
-        let current: CopyMode =
+        let current: TradingMode =
             serde_json::from_str(&current_json).map_err(|e| Error::CopyTaskDecode {
                 task_id: id,
                 field: "mode",

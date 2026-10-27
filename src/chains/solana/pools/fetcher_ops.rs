@@ -96,11 +96,10 @@ impl AccountFetcher {
         };
 
         // Collect open position mints once (async call) to avoid per-pool await cost
-        let open_mints: std::collections::HashSet<String> =
-            crate::positions::state::get_open_mints()
-                .await
-                .into_iter()
-                .collect();
+        let open_mints: std::collections::HashSet<String> = crate::positions::books::held_mints()
+            .await
+            .into_iter()
+            .collect();
 
         // Pre-compute pool ID strings to avoid allocations in async closures
         let pool_ids: Vec<(usize, String)> = pools

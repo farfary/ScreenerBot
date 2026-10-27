@@ -139,6 +139,31 @@ pub enum Error {
     /// above: this is neither a per-mint conflict nor a validation failure).
     #[error("no free position slot ({remaining} remaining)")]
     SlotUnavailable { remaining: usize },
+
+    /// The quote evidence of a paper leg could not be encoded for the paper store.
+    #[error("could not encode the paper leg evidence: {detail}")]
+    PaperLegEncode { detail: String },
+
+    /// A paper fill lacks the quote evidence or the amounts its booking needs.
+    #[error("the paper fill for {mint} cannot be booked: {detail}")]
+    PaperFillUnbookable { mint: String, detail: String },
+
+    /// The cash of the current paper run does not cover a paper buy of `mint`.
+    #[error("the paper balance does not cover the buy of {mint}: {cash_native} SOL available, {needed_native} SOL needed")]
+    PaperCashShort {
+        mint: String,
+        cash_native: f64,
+        needed_native: f64,
+    },
+
+    /// A paper round was opened less than the open cooldown ago.
+    #[error("the paper open cooldown is active: wait {wait_secs}s")]
+    PaperOpenCooldown { wait_secs: u64 },
+
+    /// The paper run a buy of `mint` was priced in has ended; the buy is not booked into
+    /// the next one.
+    #[error("the paper run the buy of {mint} was priced in has ended")]
+    PaperRunEnded { mint: String },
 }
 
 impl Error {
@@ -197,6 +222,10 @@ impl ErrorClass for Error {
             Error::HoldingUnattributable { .. } => true,
             Error::WalletUnavailable { .. } => false,
             Error::SlotUnavailable { .. } => true,
+            Error::PaperLegEncode { .. } => false,
+            Error::PaperFillUnbookable { .. } => false,
+            Error::PaperCashShort { .. } | Error::PaperRunEnded { .. } => false,
+            Error::PaperOpenCooldown { .. } => true,
         }
     }
 
@@ -206,6 +235,7 @@ impl ErrorClass for Error {
             Error::Database(e) => e.retry_after(),
             Error::Chain(e) => e.retry_after(),
             Error::WalletHistorySync { .. } => Some(Duration::from_secs(2)),
+            Error::PaperOpenCooldown { wait_secs } => Some(Duration::from_secs(*wait_secs)),
             _ => None,
         }
     }
@@ -243,6 +273,12 @@ impl ErrorClass for Error {
             Error::WalletHistorySync { .. } => Severity::Error,
             Error::WalletUnavailable { .. } => Severity::Critical,
             Error::SlotUnavailable { .. } => Severity::Info,
+            Error::PaperLegEncode { .. } => Severity::Error,
+            Error::PaperFillUnbookable { .. } => Severity::Error,
+            // Expected outcomes of a simulated book: no money and no live state is involved.
+            Error::PaperCashShort { .. }
+            | Error::PaperOpenCooldown { .. }
+            | Error::PaperRunEnded { .. } => Severity::Info,
         }
     }
 
@@ -279,8 +315,13 @@ impl ErrorClass for Error {
             | Error::AmountOverflow { .. }
             | Error::SwapFailed { .. }
             | Error::WalletHistorySync { .. }
-            | Error::WalletUnavailable { .. } => 500,
+            | Error::WalletUnavailable { .. }
+            | Error::PaperLegEncode { .. }
+            | Error::PaperFillUnbookable { .. } => 500,
             Error::SlotUnavailable { .. } => 503,
+            Error::PaperCashShort { .. }
+            | Error::PaperOpenCooldown { .. }
+            | Error::PaperRunEnded { .. } => 409,
         }
     }
 }

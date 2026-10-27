@@ -32,6 +32,7 @@ export const TRADE_REASON_LABELS = Object.freeze({
   Blacklisted: "trade-reason-blacklisted",
   ForceSell: "trade-reason-force-sell",
   CopySell: "trade-reason-copy-sell",
+  PaperReset: "trade-reason-paper-reset",
   closed_externally: "trade-reason-closed-externally",
   wallet_history: "trade-reason-wallet-history",
   exit_retry_pending: "trade-reason-exit-retry-pending",

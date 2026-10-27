@@ -5,7 +5,8 @@
 
 use super::support::{execute, raw_sol, setup, task, FakeIo, Mutation, MINT};
 use crate::trader::admission::EntryBlock;
-use crate::trader::copy::{CopyMode, CopySkip, SpendState};
+use crate::trader::copy::{CopySkip, SpendState};
+use crate::trader::paper::TradingMode;
 
 #[tokio::test]
 async fn admission_is_rechecked_after_wait_before_the_landing_quote() {
@@ -24,7 +25,7 @@ async fn admission_is_rechecked_after_wait_before_the_landing_quote() {
     assert!(super::support::record(&database, outcome).await);
     assert_eq!(
         database
-            .spend_state(configured.id, CopyMode::Paper, MINT)
+            .spend_state(configured.id, TradingMode::Paper, MINT)
             .await
             .unwrap(),
         SpendState::default()
@@ -51,7 +52,7 @@ async fn refreshed_self_wallet_blacklist_and_required_filter_risk_reject_landing
         assert!(super::support::record(&database, outcome).await);
         assert_eq!(
             database
-                .spend_state(configured.id, CopyMode::Paper, MINT)
+                .spend_state(configured.id, TradingMode::Paper, MINT)
                 .await
                 .unwrap(),
             SpendState::default()

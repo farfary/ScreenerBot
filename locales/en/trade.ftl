@@ -171,6 +171,7 @@ trade-reason-risk-management = Risk Management
 trade-reason-blacklisted = Blacklisted
 trade-reason-force-sell = Force Sell
 trade-reason-copy-sell = Copy Sell
+trade-reason-paper-reset = Paper Run Reset
 trade-reason-closed-externally = Closed Externally
 trade-reason-wallet-history = Wallet History
 trade-reason-exit-retry-pending = Exit Retry Pending

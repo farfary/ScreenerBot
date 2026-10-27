@@ -312,11 +312,11 @@
       {
         "id": "history",
         "text": {
-          "id": "copy-readiness-history"
+          "id": "paper-readiness-history"
         },
         "passed": true,
         "detail": {
-          "id": "copy-readiness-history-met",
+          "id": "paper-readiness-history-met",
           "args": {
             "count": {
               "type": "count",
@@ -332,11 +332,11 @@
       {
         "id": "profit",
         "text": {
-          "id": "copy-readiness-profit"
+          "id": "paper-readiness-profit"
         },
         "passed": true,
         "detail": {
-          "id": "copy-readiness-profit-detail",
+          "id": "paper-readiness-profit-detail",
           "args": {
             "count": {
               "type": "count",

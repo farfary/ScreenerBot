@@ -13,6 +13,8 @@ import { DataTable } from "../ui/data_table.js";
 import { TabBar, TabBarManager } from "../ui/tab_bar.js";
 import { stepShortLabel } from "../ui/action_step.js";
 import { buyHasLoadedPosition, rememberEntries } from "./positions/pending_buys.js";
+import { bookViews, paperActionCell, paperEmptyState, positionsUrl } from "./positions/book.js";
+import { loadPage } from "../core/router.js";
 import { POSITION_EMPTY_LABELS, POSITION_STATUS_LABELS } from "../ui/position_status.js";
 import { manualTrade } from "../ui/manual_trade.js";
 import { PositionDetailsDialog } from "../ui/position_details_dialog.js";
@@ -129,7 +131,9 @@ function createLifecycle() {
   let liveDebounce = null;
 
   const state = {
-    view: "open", // 'open' | 'closed'
+    view: "open", // 'open' | 'closed' | 'archived'
+    // The book the table shows: live by default, or paper. Never both in one list.
+    book: "live",
     total: 0,
     // Most recent server-side rows (already token-mapped) for the active view.
     // Live action updates re-merge against this without a network round-trip.
@@ -225,6 +229,13 @@ function createLifecycle() {
       actions,
       actionCount,
     });
+
+  // The token cell with the row actions of the shown book: a paper row offers only its
+  // paper close, never the live add, sell or archive.
+  const bookTokenCell = (row, liveActions, liveCount) =>
+    state.book === "paper"
+      ? tokenCell(row, paperActionCell(row, esc), 1)
+      : tokenCell(row, liveActions(row), liveCount);
 
   // Significant digits in the cell, padded to the digits of the row's other price so
   // the two read side by side; the exact price on hover.
@@ -325,7 +336,7 @@ function createLifecycle() {
       floating: true,
       minWidth: 200,
       wrap: false,
-      render: (_v, r) => tokenCell(r, archivedActionCell(r), 2),
+      render: (_v, r) => bookTokenCell(r, archivedActionCell, 2),
     },
     {
       id: "archived_at",
@@ -398,7 +409,7 @@ function createLifecycle() {
           floating: true,
           minWidth: 200,
           wrap: false,
-          render: (_v, r) => tokenCell(r, openActionCell(r), 3),
+          render: (_v, r) => bookTokenCell(r, openActionCell, 3),
         },
         {
           id: "entry_time",
@@ -485,7 +496,7 @@ function createLifecycle() {
           floating: true,
           minWidth: 200,
           wrap: false,
-          render: (_v, r) => tokenCell(r, removeActionCell(r), 1),
+          render: (_v, r) => bookTokenCell(r, removeActionCell, 1),
         },
         {
           id: "exit_time",
@@ -741,7 +752,7 @@ function createLifecycle() {
   // Re-merge live state into the cached server rows and push to the table with no
   // network call. Driven by notification-stream events between poll ticks.
   const applyLiveUpdate = () => {
-    if (!table || state.view !== "open") return;
+    if (!table || state.view !== "open" || state.book !== "live") return;
     const merged = mergeLiveIntoRows(state.lastServerRows);
     state.total = merged.length;
     table.setData(merged, { preserveScroll: true });
@@ -757,24 +768,22 @@ function createLifecycle() {
   };
 
   const loadPositionsPage = async ({ reason, signal }) => {
-    const status = state.view;
+    const book = state.book;
     // limit=0 is the whole tab. A capped page would quietly hide the oldest rounds of a
     // wallet with a long history, and this table is the record of that history.
-    const url = `/api/positions?status=${encodeURIComponent(status)}&limit=0`;
+    const url = positionsUrl(book, state.view);
     try {
-      const rows = await requestManager.fetch(url, {
-        priority: "normal",
-        signal,
-      });
+      const rows = url ? await requestManager.fetch(url, { priority: "normal", signal }) : [];
 
       const mapped = (Array.isArray(rows) ? rows : []).map((row) => ({
         ...row,
         token: `${row.symbol} ${row.mint}`,
       }));
       state.lastServerRows = mapped;
-      rememberEntries(state.latestEntryMsByMint, mapped);
+      // In-flight actions and pending buys belong to the live book only.
+      if (book === "live") rememberEntries(state.latestEntryMsByMint, mapped);
 
-      const finalRows = mergeLiveIntoRows(mapped);
+      const finalRows = book === "live" ? mergeLiveIntoRows(mapped) : mapped;
       state.total = finalRows.length;
 
       return {
@@ -798,6 +807,33 @@ function createLifecycle() {
         }
       }
       throw err;
+    }
+  };
+
+  // Close an open paper round in full at a paper fill. No swap is sent.
+  const closePaperPosition = async (row, btn) => {
+    if (!row || row.id == null) {
+      Utils.showToast(I18n.t("positions-toast-not-found"), "error");
+      return;
+    }
+    const choice = await ConfirmationDialog.show({
+      title: I18n.t("positions-paper-close-title"),
+      message: I18n.t("positions-paper-close-message", { symbol: row.symbol || "?" }),
+      confirmLabel: I18n.t("positions-paper-close-confirm"),
+      variant: "warning",
+    });
+    if (!choice?.confirmed) return;
+    if (btn) btn.disabled = true;
+    try {
+      await requestManager.fetch(`/api/positions/paper/${encodeURIComponent(row.id)}/close`, {
+        method: "POST",
+        priority: "high",
+      });
+      Utils.showToast(I18n.t("positions-toast-paper-closed"), "success");
+      table.refresh({ reason: "manual", preserveScroll: true });
+    } catch (err) {
+      if (btn) btn.disabled = false;
+      Utils.showToast(err?.message || I18n.t("positions-paper-close-failed"), "error");
     }
   };
 
@@ -887,7 +923,23 @@ function createLifecycle() {
   // "Delete all" only applies to the Archived view — the toolbar owns the item's
   // visibility, so no page-level markup or selector is involved.
   const syncArchivedTools = () => {
-    table?.setToolbarItem("delete-all-archived", { hidden: state.view !== "archived" });
+    table?.setToolbarItem("delete-all-archived", {
+      hidden: state.view !== "archived" || state.book !== "live",
+    });
+  };
+
+  // Show the other book's rows in the same view; the previous book's rows are dropped
+  // first so the two never share the list.
+  const switchBook = (book) => {
+    if (book === state.book) return;
+    state.book = book;
+    state.lastServerRows = [];
+    if (table) {
+      table.setData([], { preserveScroll: false });
+      table.reload({ reason: "view-change", resetScroll: true }).catch(() => {});
+    }
+    updateToolbar();
+    syncArchivedTools();
   };
 
   const switchView = (view) => {
@@ -953,8 +1005,22 @@ function createLifecycle() {
         // so keying rows by mint caused duplicate rows and cross-sub-tab row mixing.
         rowIdField: "id",
         stateKey: getPositionsTableStateKey(state.view),
-        emptyTitle: () => I18n.label(POSITION_EMPTY_LABELS, state.view),
-        emptyMessage: () => I18n.labelAttr(POSITION_EMPTY_LABELS, state.view, "message"),
+        emptyTitle: () =>
+          state.book === "paper"
+            ? paperEmptyState(state.view).title
+            : I18n.label(POSITION_EMPTY_LABELS, state.view),
+        emptyMessage: () =>
+          state.book === "paper"
+            ? paperEmptyState(state.view).message
+            : I18n.labelAttr(POSITION_EMPTY_LABELS, state.view, "message"),
+        // Paper rounds come from strategies set to Paper: the empty paper book points there.
+        emptyAction: () =>
+          state.book === "paper" && state.view !== "archived"
+            ? {
+                label: I18n.t("positions-paper-empty-action"),
+                onClick: () => loadPage("trader", { hash: "strategy-control" }),
+              }
+            : null,
         enableLogging: false,
         sorting: {
           mode: "client",
@@ -1001,6 +1067,7 @@ function createLifecycle() {
               variant: "secondary",
             },
           ],
+          views: bookViews(state.book, (book) => switchBook(book)),
           search: {
             enabled: true,
             mode: "client",
@@ -1045,6 +1112,13 @@ function createLifecycle() {
         const action = btn.getAttribute("data-action");
         const mint = btn.getAttribute("data-mint");
         if (!action) return;
+
+        if (action === "paper-close") {
+          const id = btn.getAttribute("data-id");
+          const target = table.getData().find((r) => String(r.id) === id);
+          await closePaperPosition(target, btn);
+          return;
+        }
 
         // ID-based lifecycle actions (mint is not unique — a token can have many
         // positions, so these must target the exact row by id).
@@ -1109,8 +1183,9 @@ function createLifecycle() {
           // data-row-id is now the unique position id (see rowIdField above).
           const rowId = row.dataset.rowId;
           const position = table?.getData()?.find((p) => String(p.id) === rowId);
-          // Pending (in-flight buy) rows have no real position record yet.
-          if (position && !position._pending && positionDetailsDialog) {
+          // Pending (in-flight buy) rows have no real position record yet. The details
+          // dialog reads the live book; a paper round's id names a different round there.
+          if (state.book === "live" && position && !position._pending && positionDetailsDialog) {
             positionDetailsDialog.show(position);
           }
         };
@@ -1197,6 +1272,7 @@ function createLifecycle() {
       tabBar = null;
       TabBarManager.unregister("positions");
       state.view = "open";
+      state.book = "live";
       state.total = 0;
       state.lastServerRows = [];
     },

@@ -33,7 +33,7 @@ pub use dca::{
     default_add_size_native, process_dca_opportunities, DcaCalculations, DcaConfigSnapshot,
     DcaContext, DcaEvaluation,
 };
-pub use entry::evaluate_entry_for_token;
+pub use entry::{entry_cycle, evaluate_entry_for_token};
 pub use exit::evaluate_exit_for_position;
 pub use strategies::StrategyEvaluator;
 
@@ -45,7 +45,7 @@ mod tests {
     /// coordinator gates the partial it acts on.
     #[test]
     fn position_sized_evaluators_check_reconciliation() {
-        let gate = "awaiting_reconciliation()";
+        let gate = "awaiting_reconciliation(";
         assert!(include_str!("dca.rs").contains(gate));
         assert!(include_str!("exit.rs").contains(gate));
         for (file, source) in [

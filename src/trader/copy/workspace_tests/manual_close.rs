@@ -9,10 +9,11 @@
 use super::task;
 use crate::trader::copy::paper_execution::PaperExecutionHandle;
 use crate::trader::copy::{
-    CopyDatabase, CopyMode, CopyOutcome, CopySellDecision, CopySkip, CopyTask, CopyTelemetry,
-    PaperDecision, PaperExitRule, PaperFill, PaperModel, PaperPosition, PaperQuoteMetadata,
-    PaperSellFill,
+    CopyDatabase, CopyOutcome, CopySellDecision, CopySkip, CopyTask, CopyTelemetry, PaperDecision,
+    PaperExitRule, PaperPosition,
 };
+use crate::trader::paper::TradingMode;
+use crate::trader::paper::{PaperFill, PaperModel, PaperQuoteMetadata, PaperSellFill};
 use chrono::Utc;
 use std::sync::{Arc, Mutex};
 use tokio::sync::oneshot;
@@ -544,7 +545,7 @@ async fn manual_close_rejects_a_stale_confirmed_round_before_queueing() {
     assert!(reopened_before.is_open());
     assert_ne!(reopened_before.opened_at, first_round.opened_at);
     let spent_before = database
-        .task_total_spent(task_id, CopyMode::Paper)
+        .task_total_spent(task_id, TradingMode::Paper)
         .await
         .unwrap();
     let activity_before = database.list_task_activity(task_id, 100).await.unwrap();
@@ -583,7 +584,7 @@ async fn manual_close_rejects_a_stale_confirmed_round_before_queueing() {
         .unwrap();
     assert_eq!(reopened_after, reopened_before);
     let spent_after = database
-        .task_total_spent(task_id, CopyMode::Paper)
+        .task_total_spent(task_id, TradingMode::Paper)
         .await
         .unwrap();
     let activity_after = database.list_task_activity(task_id, 100).await.unwrap();

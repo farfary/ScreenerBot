@@ -48,6 +48,7 @@ copy-entry-block-reentry-cooldown = Пауза до повторного вхо�
 copy-entry-block-open-cooldown = Общая пауза между входами
 copy-entry-block-entry-reserved = Обрабатывается другой вход
 copy-entry-block-blacklisted = Токен заблокирован контролем рисков
+copy-entry-block-paper-balance-exhausted = Виртуального баланса недостаточно для сделки
 copy-entry-block-check-failed = Не удалось завершить проверку безопасности
 
 copy-pause-user = Приостановлено вами
@@ -69,23 +70,6 @@ copy-pause-short-storage-restored = данные восстановлены
 copy-state-paused = Пауза
 copy-state-paused-reason = Пауза · { $reason }
 
-copy-readiness-history = Виртуальная история
-copy-readiness-history-met =
-    { $count ->
-        [one] { $count } закрытый виртуальный раунд, нужно { $needed }
-        [few] { $count } закрытых виртуальных раунда, нужно { $needed }
-        [many] { $count } закрытых виртуальных раундов, нужно { $needed }
-       *[other] { $count } закрытого виртуального раунда, нужно { $needed }
-    }
-copy-readiness-history-short = { $count } из { $needed } закрытых виртуальных раундов
-copy-readiness-profit = Прибыльность в виртуальном режиме
-copy-readiness-profit-detail =
-    { $count ->
-        [one] { $realized } { -sol } реализовано за { $count } раунд, выиграно: { $wins }
-        [few] { $realized } { -sol } реализовано за { $count } раунда, выиграно: { $wins }
-        [many] { $realized } { -sol } реализовано за { $count } раундов, выиграно: { $wins }
-       *[other] { $realized } { -sol } реализовано за { $count } раунда, выиграно: { $wins }
-    }
 copy-readiness-latency = Сделки обнаруживаются вовремя
 copy-readiness-latency-detail = Поступление p95: { $p95 } с, лимит { $limit } с
 copy-readiness-latency-none = Замеров поступления пока нет
@@ -101,10 +85,7 @@ copy-readiness-priced-missing =
 copy-readiness-runtime = Боевое исполнение доступно
 copy-readiness-runtime-ok = Настройка и защитные условия допускают боевые копии
 
-copy-live-block-setup-incomplete = Сначала завершите настройку кошелька и RPC
-copy-live-block-force-stop = Включена экстренная остановка
 copy-live-block-copy-trading-disabled = Обработка копирования приостановлена глобально
-copy-live-block-unavailable = Боевое исполнение недоступно
 
 ## Task state, mode and exit labels
 
@@ -113,8 +94,6 @@ copy-state-force-stopped = Принудительно остановлено
 copy-state-entries-blocked = Входы заблокированы
 copy-state-running-live = Работает
 copy-state-running-paper = Работает
-copy-mode-paper = Виртуальный
-copy-mode-live = Боевой
 copy-exit-mode-buy-only = Мои правила выхода
 copy-exit-mode-mirror = Повторять продажи кошелька
 copy-exit-mode-hybrid = Продажи кошелька и мои правила
@@ -288,6 +267,7 @@ copy-profile-sub = Что этот бот видел по кошельку
 copy-settings-title = Настройки копитрейдинга
 copy-settings-subtitle = Общая политика для всех задач
 copy-settings-filter-warning = При стандартной настройке фильтрации это отклоняет почти все токены, поэтому ничего не копируется. Оставьте выключенным, если ваши фильтры не пропускают токены, которыми торгуют ваши кошельки.
+copy-settings-paper-delay-shared = Виртуальные сделки ждут задержку исполнения в виртуальном режиме, общую для всех виртуальных книг. Измените её в настройках, в разделе «Виртуальная торговля».
 copy-settings-unit-seconds = с
 copy-settings-unit-trades = сделок
 copy-settings-unit-tasks = задач
@@ -466,8 +446,6 @@ copy-book-skipped = <strong>{ $count }</strong> пропущено
 copy-book-failed = <strong>{ $count }</strong> с ошибкой
 copy-book-closed = { $count } закрыто
 copy-book-budget-note = { $mode }: потрачено из { $total } · осталось { $remaining }
-copy-check-passed = пройдена
-copy-check-not-passed = не пройдена
 copy-readiness-title = Перед боевым режимом
 copy-readiness-live-note = Эта задача торгует в боевом режиме. Верните её в виртуальный режим в заголовке выше.
 copy-readiness-all-pass = Все проверки пройдены.

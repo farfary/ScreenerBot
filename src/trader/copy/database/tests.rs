@@ -6,7 +6,8 @@
 use chrono::Utc;
 
 use super::*;
-use crate::trader::copy::{CopyMode, ExitMode, SizingMode, SpendState};
+use crate::trader::copy::{ExitMode, SizingMode, SpendState};
+use crate::trader::paper::TradingMode;
 
 #[path = "tests/paper.rs"]
 mod paper;
@@ -22,7 +23,7 @@ fn task() -> CopyTask {
         target_address: "target".to_owned(),
         label: Some("Paper".to_owned()),
         enabled: true,
-        mode: CopyMode::Paper,
+        mode: TradingMode::Paper,
         sizing: SizingMode::Fixed { sol: 0.1 },
         exit_mode: ExitMode::BuyOnly,
         exit_policy_overrides: Default::default(),
@@ -85,8 +86,8 @@ async fn live_submission_consumes_spend_once_and_confirmation_only_upgrades_stat
     let configured = db
         .set_task_mode(
             configured.id,
-            CopyMode::Live,
-            Some(super::super::types::LIVE_ARM_CONFIRMATION.to_owned()),
+            TradingMode::Live,
+            Some(crate::trader::paper::LIVE_ARM_CONFIRMATION.to_owned()),
         )
         .await
         .unwrap();
@@ -109,7 +110,7 @@ async fn live_submission_consumes_spend_once_and_confirmation_only_upgrades_stat
         .unwrap();
 
     assert_eq!(
-        db.spend_state(configured.id, CopyMode::Live, "live-mint")
+        db.spend_state(configured.id, TradingMode::Live, "live-mint")
             .await
             .unwrap(),
         SpendState {
@@ -139,10 +140,10 @@ async fn generic_task_update_cannot_change_mode() {
     .unwrap();
     let mut configured = db.insert_task(task()).await.unwrap();
     assert!(db
-        .set_task_mode(configured.id, CopyMode::Live, None)
+        .set_task_mode(configured.id, TradingMode::Live, None)
         .await
         .is_err());
-    configured.mode = CopyMode::Live;
+    configured.mode = TradingMode::Live;
     assert!(db.update_task(configured).await.is_err());
 }
 
@@ -444,9 +445,9 @@ async fn chain_migration_preserves_legacy_task_children_and_allows_chain_qualifi
 fn paper_quote_metadata(
     epoch: u64,
     output_amount: crate::chains::RawAmount,
-) -> super::super::types::PaperQuoteMetadata {
+) -> crate::trader::paper::PaperQuoteMetadata {
     let now = Utc::now();
-    super::super::types::PaperQuoteMetadata {
+    crate::trader::paper::PaperQuoteMetadata {
         router_id: "test-router".to_owned(),
         initial_at: now,
         landing_at: now,
@@ -476,7 +477,7 @@ fn paper_buy(task: &CopyTask, signature: &str, tokens: f64, cost: f64) -> CopyOu
         target_size_sol: 0.2,
         target_token_amount: 20.0,
         sized_sol: input_sol,
-        fill: super::super::types::PaperFill {
+        fill: crate::trader::paper::PaperFill {
             input_sol,
             market_price_sol: 0.01,
             priced_from_pool: false,
@@ -486,7 +487,7 @@ fn paper_buy(task: &CopyTask, signature: &str, tokens: f64, cost: f64) -> CopyOu
             network_fee_sol: 0.000005,
             priority_fee_sol: 0.0,
             total_cost_sol: cost,
-            model: super::super::types::PaperModel::Quote,
+            model: crate::trader::paper::PaperModel::Quote,
             quote: Some({
                 let mut metadata = paper_quote_metadata(
                     0,
@@ -531,7 +532,7 @@ fn paper_sell(task: &CopyTask, signature: &str, tokens: f64, proceeds: f64) -> C
         error: None,
         exit_rule: None,
         take_profit_level: None,
-        paper_fill: Some(super::super::types::PaperSellFill {
+        paper_fill: Some(crate::trader::paper::PaperSellFill {
             token_amount: tokens,
             market_price_sol: 0.012,
             priced_from_pool: false,
@@ -541,7 +542,7 @@ fn paper_sell(task: &CopyTask, signature: &str, tokens: f64, proceeds: f64) -> C
             network_fee_sol: 0.0,
             priority_fee_sol: 0.0,
             net_proceeds_sol: proceeds,
-            model: super::super::types::PaperModel::Quote,
+            model: crate::trader::paper::PaperModel::Quote,
             quote: Some(quote),
         }),
         paper_context: None,

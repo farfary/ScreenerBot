@@ -10,6 +10,7 @@ use axum::{
 };
 
 use crate::i18n::ids;
+use crate::positions::Book;
 use crate::webserver::api_error::{ApiError, ApiErrorCode};
 use crate::webserver::utils::success_response;
 
@@ -20,13 +21,15 @@ use super::types::*;
 // TRADER STATS HANDLER
 // =============================================================================
 
-/// GET /api/trader/stats - realized trading performance over a selectable window.
+/// GET /api/trader/stats - realized trading performance of one book (`book=live`, the
+/// default, or `book=paper`) over a selectable window. The books are never mixed.
 pub async fn get_trader_stats(Query(query): Query<TraderStatsQuery>) -> Response {
+    let book = query.book.unwrap_or_default();
     // Return promotional fixtures only for owner-initiated media capture.
-    if crate::webserver::promo::are_promo_fixtures_enabled() {
+    if crate::webserver::promo::are_promo_fixtures_enabled() && book == Book::Live {
         return success_response(crate::webserver::promo::get_promo_trader_stats());
     }
-    success_response(crate::trader::stats::trader_stats(query.days.unwrap_or(30)).await)
+    success_response(crate::trader::stats::trader_stats(book, query.days.unwrap_or(30)).await)
 }
 
 // =============================================================================

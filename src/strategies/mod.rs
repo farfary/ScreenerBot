@@ -5,21 +5,25 @@
 mod error;
 mod error_text;
 
+pub mod arm;
 pub mod conditions;
 pub mod database;
 pub use database as db;
 pub mod engine;
+pub mod readiness;
 pub mod types;
 
 pub use error::{Error, Result};
 
 use crate::logger::{self, LogTag};
 use crate::ohlcvs::TimeframeBundle;
+use crate::positions::Book;
 use crate::strategies::db::{get_enabled_strategies, record_evaluation};
 use crate::strategies::engine::{EngineConfig, StrategyEngine};
 use crate::strategies::types::{
     EvaluationContext, MarketData, PositionData, Strategy, StrategyType,
 };
+use crate::trader::paper::TradingMode;
 use chrono::Utc;
 use std::sync::Arc;
 use std::sync::LazyLock;
@@ -53,35 +57,52 @@ async fn get_engine() -> crate::Result<Arc<RwLock<Option<StrategyEngine>>>> {
     Ok(STRATEGY_ENGINE.clone())
 }
 
+/// The modes of the exit strategies that judge a position on `book`. A live exit strategy
+/// judges both books, so a paper position faces every rule a live one would; a paper exit
+/// strategy judges paper positions only.
+pub fn exit_strategy_modes(book: Book) -> &'static [TradingMode] {
+    match book {
+        Book::Live => &[TradingMode::Live],
+        Book::Paper => &[TradingMode::Live, TradingMode::Paper],
+    }
+}
+
 /// Evaluate entry strategies for a token
 ///
 /// This function is the main entry point for the trader module to check
 /// if any entry strategies signal to open a position for a token.
 ///
 /// # Arguments
+/// * `modes` - The modes admitted for this token: only strategies of these modes are
+///   evaluated, in priority order across the modes
 /// * `token_mint` - The token mint address
 /// * `current_price` - Current token price in SOL
 /// * `market_data` - Optional market data (liquidity, transaction counts)
 /// * `timeframe_bundle` - Optional multi-timeframe OHLCV bundle
 ///
 /// # Returns
-/// * `Ok(Some(strategy_id))` - If a strategy signals entry
+/// * `Ok(Some((strategy_id, mode)))` - The first strategy that signals entry and its mode,
+///   which decides the book the entry is made on
 /// * `Ok(None)` - If no strategy signals entry
 /// * `Err(e)` - If evaluation fails
 pub async fn evaluate_entry_strategies(
+    modes: &[TradingMode],
     token_mint: &str,
     current_price: f64,
     market_data: Option<MarketData>,
     timeframe_bundle: Option<TimeframeBundle>,
-) -> crate::Result<Option<String>> {
+) -> crate::Result<Option<(String, TradingMode)>> {
     let engine_lock = get_engine().await?;
     let engine_guard = engine_lock.read().await;
     let engine = engine_guard
         .as_ref()
         .ok_or_else(|| crate::Error::internal_error("Strategy engine not available"))?;
 
-    // Get enabled entry strategies
-    let strategies = get_enabled_strategies(StrategyType::Entry)?;
+    // Enabled entry strategies of the admitted modes
+    let strategies: Vec<Strategy> = get_enabled_strategies(StrategyType::Entry)?
+        .into_iter()
+        .filter(|strategy| modes.contains(&strategy.mode))
+        .collect();
 
     if strategies.is_empty() {
         return Ok(None);
@@ -117,7 +138,7 @@ pub async fn evaluate_entry_strategies(
                             strategy.name, token_mint, current_price
                         ),
                     );
-                    return Ok(Some(strategy.id.clone()));
+                    return Ok(Some((strategy.id.clone(), strategy.mode)));
                 }
             }
             // A token without the data a condition needs (a fresh token short of
@@ -152,6 +173,8 @@ pub async fn evaluate_entry_strategies(
 /// if any exit strategies signal to close a position.
 ///
 /// # Arguments
+/// * `book` - The book of the position: only strategies of the modes
+///   [`exit_strategy_modes`] gives it are evaluated
 /// * `token_mint` - The token mint address
 /// * `current_price` - Current token price in SOL
 /// * `position_data` - Position data (entry price, age, etc.)
@@ -165,6 +188,7 @@ pub async fn evaluate_entry_strategies(
 /// * `Ok(None)` - If no strategy signals exit
 /// * `Err(e)` - If evaluation fails
 pub async fn evaluate_exit_strategies(
+    book: Book,
     token_mint: &str,
     current_price: f64,
     position_data: PositionData,
@@ -178,10 +202,12 @@ pub async fn evaluate_exit_strategies(
         .as_ref()
         .ok_or_else(|| crate::Error::internal_error("Strategy engine not available"))?;
 
-    // Enabled exit strategies that manage positions of this entry strategy
+    // Enabled exit strategies that judge the position's book and manage positions of
+    // this entry strategy
+    let modes = exit_strategy_modes(book);
     let strategies: Vec<Strategy> = get_enabled_strategies(StrategyType::Exit)?
         .into_iter()
-        .filter(|strategy| strategy.manages(entry_strategy_id))
+        .filter(|strategy| modes.contains(&strategy.mode) && strategy.manages(entry_strategy_id))
         .collect();
 
     if strategies.is_empty() {
@@ -282,3 +308,23 @@ pub use types::{
     Condition, LogicalOperator, Parameter, ParameterConstraints, RiskLevel, RuleTree,
     StrategyPerformance, StrategyTemplate,
 };
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_live_exit_strategy_judges_both_books_and_a_paper_one_only_paper() {
+        for book in Book::ALL {
+            assert!(
+                exit_strategy_modes(book).contains(&TradingMode::Live),
+                "{book:?}"
+            );
+            assert_eq!(
+                exit_strategy_modes(book).contains(&TradingMode::Paper),
+                book == Book::Paper,
+                "{book:?}"
+            );
+        }
+    }
+}

@@ -14,7 +14,6 @@ mod label_tests;
 mod live;
 mod matcher;
 mod notify;
-mod paper;
 mod paper_execution;
 mod paper_exits;
 mod pause;
@@ -44,7 +43,6 @@ pub use live::{
 };
 pub use matcher::matching_tasks;
 pub use notify::{recent_notices, task_arg, CopyNotice};
-pub use paper::{settle_quote_samples, simulate_buy, simulate_sell, SettledPaperQuote};
 pub use paper_exits::held_paper_mints;
 pub use pause::pause_text;
 pub use pipeline::{plan_paper_entries, PaperEntryPlan};

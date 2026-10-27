@@ -160,6 +160,7 @@ fn rpc_variant(error: &RpcError) -> &'static str {
         RpcError::Configuration { .. } => "Configuration",
         RpcError::Other(_) => "Other",
         RpcError::RefusedAfterDelivery { .. } => "RefusedAfterDelivery",
+        RpcError::PaperScopeRefused => "PaperScopeRefused",
     }
 }
 
@@ -270,11 +271,13 @@ fn only_a_node_that_answered_refuses_a_transaction() {
             },
             Answer::Unanswered,
         ),
+        // Refused inside a paper scope before it left the machine.
+        (RpcError::PaperScopeRefused, Answer::Rejected),
     ];
     let mut covered: Vec<&str> = rows.iter().map(|(error, _)| rpc_variant(error)).collect();
     covered.sort_unstable();
     covered.dedup();
-    assert_eq!(covered.len(), 11, "every RpcError variant needs a row");
+    assert_eq!(covered.len(), 12, "every RpcError variant needs a row");
 
     for (error, answer) in rows {
         let label = error.to_string();

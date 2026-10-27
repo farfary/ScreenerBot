@@ -10,7 +10,7 @@ use crate::chains::ChainId;
 use crate::logger::{self, LogTag};
 use crate::ohlcvs::TimeframeBundle;
 use crate::pools::PriceResult;
-use crate::positions::Position;
+use crate::positions::{Book, Position};
 use crate::strategies;
 use crate::strategies::db::has_enabled_strategies;
 use crate::strategies::types::{
@@ -19,6 +19,7 @@ use crate::strategies::types::{
 };
 use crate::tokens::Token;
 use crate::trader::constants::STRATEGY_EVALUATION_TIMEOUT_SECS;
+use crate::trader::paper::TradingMode;
 use crate::trader::types::{TradeAction, TradeDecision, TradePriority, TradeReason};
 use chrono::{DateTime, Utc};
 use std::time::Duration;
@@ -45,18 +46,28 @@ fn liquidity_pool(chain: ChainId, price: &PriceResult) -> Option<LiquidityPool> 
     })
 }
 
-/// The buy an entry strategy signal decides: the configured trade size.
-fn entry_decision(mint: &str, strategy_id: String, price_native: f64) -> TradeDecision {
+/// The size a strategy entry decision carries: none, so it buys the configured trade size.
+const STRATEGY_ENTRY_SIZE: Option<f64> = None;
+
+/// The size a strategy entry buys, as the executor sizes it.
+pub fn strategy_entry_size_native() -> f64 {
+    crate::trader::executors::entry_size_of(STRATEGY_ENTRY_SIZE)
+}
+
+/// The buy an entry strategy signal decides on `book`, the book of the strategy's mode:
+/// the configured trade size.
+fn entry_decision(mint: &str, strategy_id: String, price_native: f64, book: Book) -> TradeDecision {
     TradeDecision {
         position_id: None,
         mint: mint.to_owned(),
         action: TradeAction::Buy,
         reason: TradeReason::StrategySignal,
         strategy_id: Some(strategy_id),
+        book,
         timestamp: Utc::now(),
         priority: TradePriority::Normal,
         price_native: Some(price_native),
-        size_native: None,
+        size_native: STRATEGY_ENTRY_SIZE,
         exit_percentage: None,
         // Auto-trader slippage always follows config.
         slippage_pct: None,
@@ -72,6 +83,7 @@ fn exit_decision(
     mint: &str,
     strategy_id: String,
     price_native: f64,
+    book: Book,
 ) -> TradeDecision {
     TradeDecision {
         position_id: position_id.map(|id| id.to_string()),
@@ -79,6 +91,7 @@ fn exit_decision(
         action: TradeAction::Sell,
         reason: TradeReason::StrategyExit,
         strategy_id: Some(strategy_id),
+        book,
         timestamp: Utc::now(),
         priority: TradePriority::Normal,
         price_native: Some(price_native),
@@ -201,12 +214,13 @@ pub async fn strategy_candles(chain: ChainId, mint: &str) -> Option<TimeframeBun
 
 /// The context the trader would evaluate `strategy` in for `mint` now: the live pool price
 /// and its liquidity, the token snapshot, the candles and, for an exit strategy, the
-/// mint's open position. An entry strategy reads the configured trade size. A value whose
-/// source is absent stays absent, and the rules that read it answer unknown.
+/// mint's open round on `book`. An entry strategy reads the configured trade size. A value
+/// whose source is absent stays absent, and the rules that read it answer unknown.
 pub async fn live_strategy_context(
     chain: ChainId,
     mint: &str,
     strategy: &Strategy,
+    book: Book,
 ) -> EvaluationContext {
     let live_pool = crate::positions::price_resolution::live_pool_price(mint);
     let pool_price = live_pool.as_ref().map(|price| price.price_native);
@@ -214,7 +228,7 @@ pub async fn live_strategy_context(
     let (position_data, reference_size_native) = match strategy.strategy_type {
         StrategyType::Entry => (None, Some(crate::trader::config::get_trade_size_native())),
         StrategyType::Exit => {
-            let position = crate::positions::get_position_by_mint(mint).await;
+            let position = crate::positions::books::open_round(book, mint).await;
             let position_data = position.as_ref().and_then(|position| {
                 pool_price.or(position.current_price).map(|current_price| {
                     strategy_position_data(
@@ -254,23 +268,30 @@ pub async fn live_strategy_context(
 pub struct StrategyEvaluator;
 
 impl StrategyEvaluator {
-    /// Check if a token meets entry criteria based on strategies
+    /// Check if a token meets entry criteria based on the entry strategies of the
+    /// `admitted` modes; the first strategy that signals decides the book.
     pub async fn check_entry_strategies(
         chain: ChainId,
         token_mint: &str,
         price_info: &PriceResult,
+        admitted: &[TradingMode],
     ) -> crate::trader::Result<Option<TradeDecision>> {
-        // Early check: skip if no entry strategies configured
-        match has_enabled_strategies(StrategyType::Entry) {
-            Ok(false) => return Ok(None),
-            Err(e) => {
-                logger::debug(
-                    LogTag::Trader,
-                    &format!("Failed to check entry strategies: {e}"),
-                );
-                return Ok(None);
+        // Early check: skip if no entry strategy of an admitted mode is configured
+        let mut configured = false;
+        for mode in admitted {
+            match has_enabled_strategies(StrategyType::Entry, *mode) {
+                Ok(found) => configured |= found,
+                Err(e) => {
+                    logger::debug(
+                        LogTag::Trader,
+                        &format!("Failed to check entry strategies: {e}"),
+                    );
+                    return Ok(None);
+                }
             }
-            Ok(true) => {} // Continue with evaluation
+        }
+        if !configured {
+            return Ok(None);
         }
 
         // NOTE: Connectivity is already verified by the caller (entry.rs)
@@ -299,6 +320,7 @@ impl StrategyEvaluator {
         let evaluation_result = tokio::time::timeout(
             strategy_timeout,
             strategies::evaluate_entry_strategies(
+                admitted,
                 token_mint,
                 price_info.price_native,
                 Some(market_data),
@@ -308,12 +330,15 @@ impl StrategyEvaluator {
         .await;
 
         match evaluation_result {
-            Ok(Ok(Some(strategy_id))) => {
+            Ok(Ok(Some((strategy_id, mode)))) => {
                 logger::info(
                     LogTag::Trader,
                     &format!(
-                        "Entry strategy signal: token={}, strategy={}, price={:.9} SOL",
-                        token_mint, strategy_id, price_info.price_native
+                        "Entry strategy signal: token={}, strategy={}, mode={}, price={:.9} SOL",
+                        token_mint,
+                        strategy_id,
+                        mode.as_str(),
+                        price_info.price_native
                     ),
                 );
 
@@ -321,6 +346,7 @@ impl StrategyEvaluator {
                     token_mint,
                     strategy_id,
                     price_info.price_native,
+                    mode.book(),
                 )))
             }
             Ok(Ok(None)) => Ok(None),
@@ -365,17 +391,22 @@ impl StrategyEvaluator {
         position: &Position,
         current_price: f64,
     ) -> crate::trader::Result<Option<TradeDecision>> {
-        // Early check: skip if no exit strategies configured
-        match has_enabled_strategies(StrategyType::Exit) {
-            Ok(false) => return Ok(None),
-            Err(e) => {
-                logger::debug(
-                    LogTag::Trader,
-                    &format!("Failed to check exit strategies: {e}"),
-                );
-                return Ok(None);
+        // Early check: skip if no exit strategy judges the position's book
+        let mut configured = false;
+        for mode in strategies::exit_strategy_modes(position.book) {
+            match has_enabled_strategies(StrategyType::Exit, *mode) {
+                Ok(found) => configured |= found,
+                Err(e) => {
+                    logger::debug(
+                        LogTag::Trader,
+                        &format!("Failed to check exit strategies: {e}"),
+                    );
+                    return Ok(None);
+                }
             }
-            Ok(true) => {} // Continue with evaluation
+        }
+        if !configured {
+            return Ok(None);
         }
 
         // NOTE: Exit strategy evaluation is called after other exit checks (blacklist, risk, trailing, take profit, time)
@@ -434,6 +465,7 @@ impl StrategyEvaluator {
         let evaluation_result = tokio::time::timeout(
             strategy_timeout,
             strategies::evaluate_exit_strategies(
+                position.book,
                 &position.mint,
                 current_price,
                 position_data,
@@ -459,6 +491,7 @@ impl StrategyEvaluator {
                     &position.mint,
                     strategy_id,
                     current_price,
+                    position.book,
                 )))
             }
             Ok(Ok(None)) => Ok(None),
@@ -509,8 +542,9 @@ mod tests {
 
     #[test]
     fn an_entry_signal_buys_as_a_strategy_signal() {
-        let decision = entry_decision("mint", "entry-strategy".to_owned(), 0.5);
+        let decision = entry_decision("mint", "entry-strategy".to_owned(), 0.5, Book::Paper);
         assert_eq!(decision.action, TradeAction::Buy);
+        assert_eq!(decision.book, Book::Paper);
         assert_eq!(decision.reason, TradeReason::StrategySignal);
         assert_eq!(decision.strategy_id.as_deref(), Some("entry-strategy"));
     }
@@ -519,7 +553,8 @@ mod tests {
     fn an_exit_signal_sells_the_whole_position_as_a_strategy_exit() {
         // Recorded as the entry reason, a strategy exit was labelled and counted in the
         // exit breakdown as "Strategy Signal".
-        let decision = exit_decision(Some(7), "mint", "exit-strategy".to_owned(), 0.5);
+        let decision = exit_decision(Some(7), "mint", "exit-strategy".to_owned(), 0.5, Book::Live);
+        assert_eq!(decision.book, Book::Live);
         assert_eq!(decision.action, TradeAction::Sell);
         assert_eq!(decision.reason, TradeReason::StrategyExit);
         assert_eq!(decision.position_id.as_deref(), Some("7"));

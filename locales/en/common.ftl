@@ -79,3 +79,11 @@ common-venue-openbook = { -openbook }
 common-venue-phoenix = { -phoenix }
 # A route that swaps straight against a pool, not a named venue: translated.
 common-venue-direct-pool = Direct Pool
+
+# The paper or live mode of a copy task or a strategy. Ids come from TradingMode in
+# src/trader/paper/mode.rs.
+common-mode-paper = Paper
+common-mode-live = Live
+common-check-passed = passed
+common-check-not-passed = not passed
+common-arm-type-phrase = Type { $phrase } to confirm

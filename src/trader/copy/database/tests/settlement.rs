@@ -43,7 +43,7 @@ async fn assert_rejected_without_writes(
     let before_counts = counts(db, task.id).await;
     let before_activity = db.list_task_activity(task.id, 100).await.unwrap();
     let before_spend = db
-        .spend_state(task.id, CopyMode::Paper, "book-mint")
+        .spend_state(task.id, TradingMode::Paper, "book-mint")
         .await
         .unwrap();
     let before_positions = db.paper_positions(task.id).await.unwrap();
@@ -57,7 +57,7 @@ async fn assert_rejected_without_writes(
         before_activity
     );
     assert_eq!(
-        db.spend_state(task.id, CopyMode::Paper, "book-mint")
+        db.spend_state(task.id, TradingMode::Paper, "book-mint")
             .await
             .unwrap(),
         before_spend
@@ -86,7 +86,7 @@ async fn task_edits_and_cumulative_caps_are_rechecked_inside_buy_settlement() {
                 .await
                 .unwrap();
             let spent = db
-                .spend_state(task.id, CopyMode::Paper, "book-mint")
+                .spend_state(task.id, TradingMode::Paper, "book-mint")
                 .await
                 .unwrap();
             assert!((spent.total_spent_native - 0.100005).abs() < 1e-12);
@@ -101,8 +101,8 @@ async fn task_edits_and_cumulative_caps_are_rechecked_inside_buy_settlement() {
             "live" => {
                 db.set_task_mode(
                     task.id,
-                    CopyMode::Live,
-                    Some(super::super::super::types::LIVE_ARM_CONFIRMATION.to_owned()),
+                    TradingMode::Live,
+                    Some(crate::trader::paper::LIVE_ARM_CONFIRMATION.to_owned()),
                 )
                 .await
                 .unwrap();
@@ -169,7 +169,7 @@ async fn duplicate_buy_replay_stays_idempotent_after_the_task_is_disabled() {
     assert!(!db.record_outcome(outcome).await.unwrap());
     assert_eq!(counts(&db, task.id).await, (1, 1, 1));
     let spend = db
-        .spend_state(task.id, CopyMode::Paper, "book-mint")
+        .spend_state(task.id, TradingMode::Paper, "book-mint")
         .await
         .unwrap();
     assert!((spend.total_spent_native - 0.100005).abs() < 1e-12);

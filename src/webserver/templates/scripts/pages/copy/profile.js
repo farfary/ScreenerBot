@@ -7,7 +7,6 @@ import { renderAddress } from "../../ui/token_identity.js";
 import {
   dateTime,
   definitionRows,
-  modeLabel,
   pct,
   seconds,
   signedSolCell,
@@ -15,6 +14,7 @@ import {
   timeAgo,
   toneClass,
 } from "./format.js";
+import { tradingModeLabel } from "../../ui/trading_mode.js";
 import { panelMessage } from "./overview.js";
 import { gateControl } from "../../ui/setup_gate.js";
 
@@ -72,7 +72,7 @@ export function createProfile(page) {
       .map(
         (task) => `<tr>
           <td><button class="copy-token-link" type="button" data-profile-task="${task.task_id}">${esc(taskName(task))}</button></td>
-          <td>${esc(task.enabled ? modeLabel(task.mode) : I18n.t("copy-mode-paused", { mode: modeLabel(task.mode) }))}</td>
+          <td>${esc(task.enabled ? tradingModeLabel(task.mode) : I18n.t("copy-mode-paused", { mode: tradingModeLabel(task.mode) }))}</td>
           <td class="num">${task.rounds}</td>
           <td class="num">${esc(task.rounds ? pct(task.win_rate_pct, 0) : "—")}</td>
           <td class="num ${toneClass(task.realized_pnl_native)}">${esc(signedSolCell(task.realized_pnl_native))}</td>

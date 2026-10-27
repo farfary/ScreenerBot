@@ -6,12 +6,12 @@
 import { renderAddress } from "../../ui/token_identity.js";
 import {
   exitPolicyIssueHtml,
-  modeLabel,
   rangeQuery,
   stateLabel,
   taskName,
   timeAgo,
 } from "./format.js";
+import { tradingModeLabel } from "../../ui/trading_mode.js";
 import { forgetPaint } from "../../core/dom.js";
 import { attachTabScrollStrip } from "../../ui/tab_bar.js";
 import { panelMessage, renderOverview } from "./overview.js";
@@ -362,7 +362,7 @@ export function createWorkspace(page) {
     if (name) name.textContent = taskName(task);
     const mode = $("#copy-ws-mode");
     if (mode) {
-      mode.textContent = modeLabel(task.mode);
+      mode.textContent = tradingModeLabel(task.mode);
       mode.className = `copy-row-mode copy-mode-${task.mode}`;
     }
     paint($("#copy-ws-address"), renderAddress(task.target_address, { explorer: "account" }));

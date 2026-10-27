@@ -48,6 +48,7 @@ copy-entry-block-reentry-cooldown = Thời gian chờ vào lại token
 copy-entry-block-open-cooldown = Thời gian chờ vào lệnh chung
 copy-entry-block-entry-reserved = Một lệnh vào khác đang được xử lý
 copy-entry-block-blacklisted = Token bị chặn bởi kiểm soát rủi ro
+copy-entry-block-paper-balance-exhausted = Số dư thử nghiệm không đủ cho giao dịch
 copy-entry-block-check-failed = Không thể hoàn tất một bước kiểm tra an toàn
 
 copy-pause-user = Bạn đã tạm dừng
@@ -69,17 +70,6 @@ copy-pause-short-storage-restored = dữ liệu đã khôi phục
 copy-state-paused = Đã tạm dừng
 copy-state-paused-reason = Đã tạm dừng · { $reason }
 
-copy-readiness-history = Lịch sử thử nghiệm
-copy-readiness-history-met =
-    { $count ->
-       *[other] { $count } vòng thử nghiệm đã đóng, cần { $needed }
-    }
-copy-readiness-history-short = { $count }/{ $needed } vòng thử nghiệm đã đóng
-copy-readiness-profit = Có lãi khi thử nghiệm
-copy-readiness-profit-detail =
-    { $count ->
-       *[other] Đã chốt { $realized } { -sol } qua { $count } vòng, thắng { $wins } vòng
-    }
 copy-readiness-latency = Giao dịch được phát hiện kịp thời
 copy-readiness-latency-detail = Độ trễ p95 { $p95 } giây, giới hạn { $limit } giây
 copy-readiness-latency-none = Chưa có mẫu thời gian đến
@@ -92,18 +82,13 @@ copy-readiness-priced-missing =
 copy-readiness-runtime = Có thể thực thi live
 copy-readiness-runtime-ok = Thiết lập và các chốt an toàn cho phép copy live
 
-copy-live-block-setup-incomplete = Hãy hoàn tất thiết lập ví và RPC trước
-copy-live-block-force-stop = Dừng khẩn cấp đang được bật
 copy-live-block-copy-trading-disabled = Xử lý copy đang bị tạm dừng toàn cục
-copy-live-block-unavailable = Không thể thực thi live
 
 copy-state-system-paused = Đã tạm dừng toàn cục
 copy-state-force-stopped = Đã dừng cưỡng chế
 copy-state-entries-blocked = Lệnh vào bị chặn
 copy-state-running-live = Đang chạy
 copy-state-running-paper = Đang chạy
-copy-mode-paper = Thử nghiệm
-copy-mode-live = Live
 copy-exit-mode-buy-only = Quy tắc thoát của tôi
 copy-exit-mode-mirror = Sao chép lệnh bán của ví
 copy-exit-mode-hybrid = Lệnh bán của ví và quy tắc của tôi
@@ -242,6 +227,7 @@ copy-profile-sub = Những gì bot này đã thấy về ví
 copy-settings-title = Cài đặt copy trading
 copy-settings-subtitle = Chính sách chung cho mọi tác vụ
 copy-settings-filter-warning = Với thiết lập Lọc mặc định, tùy chọn này loại gần như mọi token nên sẽ không copy gì cả. Hãy để tắt trừ khi bộ lọc của bạn cho qua các token mà ví giao dịch.
+copy-settings-paper-delay-shared = Lệnh thử nghiệm chờ theo Độ trễ khớp thử nghiệm dùng chung cho mọi sổ thử nghiệm. Thay đổi trong Cấu hình, mục Giao dịch thử nghiệm.
 copy-settings-unit-seconds = giây
 copy-settings-unit-trades = lệnh
 copy-settings-unit-tasks = tác vụ
@@ -395,8 +381,6 @@ copy-book-skipped = <strong>{ $count }</strong> bỏ qua
 copy-book-failed = <strong>{ $count }</strong> thất bại
 copy-book-closed = { $count } đã đóng
 copy-book-budget-note = Chi { $mode } { $total } · còn { $remaining }
-copy-check-passed = đạt
-copy-check-not-passed = chưa đạt
 copy-readiness-title = Trước khi chạy live
 copy-readiness-live-note = Tác vụ này đang giao dịch live. Hãy đưa nó về thử nghiệm từ phần đầu trang ở trên.
 copy-readiness-all-pass = Mọi bước kiểm tra đều đạt.

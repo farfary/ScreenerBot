@@ -9,14 +9,14 @@ use crate::chains::RawAmount;
 use chrono::{DateTime, Utc};
 
 use crate::positions::{Position, PositionManagement, PositionOrigin};
+use crate::trader::paper::{fill, PaperModel};
 use crate::trader::types::{TradeAction, TradeDecision, TradePriority, TradeReason, TradeResult};
 use crate::wallets::watch::{ActivityKind, SwapSide, WalletActivity};
 
-use super::paper::simulate_sell;
 use super::types::{
-    CopyMode, CopyOutcome, CopySellDecision, CopySkip, CopyTask, CopyTelemetry, ExitMode,
-    PaperPosition,
+    CopyOutcome, CopySellDecision, CopySkip, CopyTask, CopyTelemetry, ExitMode, PaperPosition,
 };
+use crate::trader::paper::TradingMode;
 
 #[derive(Debug, Clone)]
 pub struct PreparedCopySell {
@@ -108,8 +108,8 @@ where
         wallet_address,
     )?;
     let raw = request.input_amount;
-    let delay_ms = crate::config::with_config(|config| config.copy_trading.paper_landing_delay_ms);
-    let fill = simulate_sell(
+    let delay_ms = crate::config::with_config(|config| config.trader.paper.landing_delay_ms);
+    let fill = crate::global::paper_scope(fill::simulate_sell(
         request,
         decimals,
         delay_ms,
@@ -123,7 +123,7 @@ where
             }
             match database.get_task(task.id).await {
                 Ok(Some(current))
-                    if current.mode == super::CopyMode::Paper
+                    if current.mode == TradingMode::Paper
                         && current.exit_mode != ExitMode::BuyOnly
                         && current.slippage_pct == task.slippage_pct => {}
                 _ => return Err(CopySkip::TaskDisabled),
@@ -152,7 +152,7 @@ where
             }
             Ok(())
         },
-    )
+    ))
     .await?;
     let mut telemetry = telemetry(activity, target_price_native, decided_at);
     telemetry.fill_price_sol = Some(fill.fill_price_sol);
@@ -167,7 +167,7 @@ where
     );
     decision.paper_fill = Some(fill);
     decision.paper_context = Some(super::types::PaperContext {
-        model: super::types::PaperModel::Quote,
+        model: PaperModel::Quote,
         epoch,
     });
     Ok(CopyOutcome::PaperSellObserved(decision))
@@ -181,7 +181,7 @@ pub fn prepare_copy_sell(
     target_holding_before_sell: f64,
     decided_at: DateTime<Utc>,
 ) -> Result<PreparedCopySell, CopySkip> {
-    if task.mode != CopyMode::Live {
+    if task.mode != TradingMode::Live {
         return Err(CopySkip::ModeTransitionRequired);
     }
     if task.exit_mode == ExitMode::BuyOnly {
@@ -216,6 +216,7 @@ pub fn prepare_copy_sell(
             action: TradeAction::Sell,
             reason: TradeReason::CopySell,
             strategy_id: None,
+            book: position.book,
             timestamp: decided_at,
             priority: TradePriority::High,
             price_native: target_price_native,

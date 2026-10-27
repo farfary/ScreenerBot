@@ -30,6 +30,28 @@ pub enum TradeOrigin {
     Manual,
 }
 
+/// The book a position belongs to: the live book holds real swaps in the wallet, the
+/// paper book holds simulated fills in `paper_positions.db`. Not persisted: the store a
+/// row is loaded from decides it, so a position cannot claim another book.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Book {
+    #[default]
+    Live,
+    Paper,
+}
+
+impl Book {
+    pub const ALL: [Book; 2] = [Book::Live, Book::Paper];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Book::Live => "live",
+            Book::Paper => "paper",
+        }
+    }
+}
+
 /// Durable provenance for a position. This records why the position exists and
 /// is independent from who is currently allowed to manage it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -317,6 +339,9 @@ pub struct Position {
     /// price updater next marks the position, and whenever the source is unknown.
     #[serde(default)]
     pub current_price_source: Option<PriceSource>,
+    /// The book of the store this row was loaded from. Not persisted.
+    #[serde(default)]
+    pub book: Book,
     // Phantom position handling
     pub phantom_remove: bool,
     pub phantom_confirmations: u32, // How many times we confirmed zero wallet balance while still open
@@ -399,7 +424,107 @@ fn default_true() -> bool {
     true
 }
 
+/// What a new round is opened with, before any fill is booked onto it.
+#[derive(Debug, Clone)]
+pub struct Opening {
+    pub mint: String,
+    pub symbol: String,
+    pub name: String,
+    /// The market price the entry was made at.
+    pub entry_price: f64,
+    pub entry_time: DateTime<Utc>,
+    pub size_native: f64,
+    /// The entry swap's signature; a paper round has none.
+    pub entry_signature: Option<String>,
+    pub origin: PositionOrigin,
+    pub management: PositionManagement,
+    /// The native reserves of the pool the entry price was read from, and that pool.
+    pub entry_liquidity: Option<(f64, String)>,
+    pub book: Book,
+}
+
 impl Position {
+    /// A new open round at its entry price, unverified, with nothing booked onto it: the
+    /// entry fill is booked by the verifier on the live book and by the paper book at once.
+    pub fn opening(opening: Opening) -> Position {
+        let Opening {
+            mint,
+            symbol,
+            name,
+            entry_price,
+            entry_time,
+            size_native,
+            entry_signature,
+            origin,
+            management,
+            entry_liquidity,
+            book,
+        } = opening;
+        let (entry_liquidity_native, entry_liquidity_pool) = entry_liquidity.unzip();
+        Position {
+            id: None,
+            mint,
+            symbol,
+            name,
+            entry_price,
+            entry_time,
+            exit_price: None,
+            exit_time: None,
+            position_type: "buy".to_owned(),
+            entry_size_native: size_native,
+            total_size_native: size_native,
+            price_highest: entry_price,
+            price_lowest: entry_price,
+            basis_peak_price: entry_price,
+            basis_peak_restarted: false,
+            entry_transaction_signature: entry_signature,
+            exit_transaction_signature: None,
+            token_amount: None,
+            effective_entry_price: None,
+            effective_exit_price: None,
+            native_received: None,
+            profit_target_min: None,
+            profit_target_max: None,
+            liquidity_tier: Some("UNKNOWN".to_owned()),
+            transaction_entry_verified: false,
+            transaction_exit_verified: false,
+            entry_fee_raw: None,
+            exit_fee_raw: None,
+            current_price: Some(entry_price),
+            current_price_updated: Some(entry_time),
+            current_price_source: None,
+            book,
+            phantom_remove: false,
+            phantom_confirmations: 0,
+            phantom_first_seen: None,
+            synthetic_exit: false,
+            closed_reason: None,
+            pnl: None,
+            pnl_percent: None,
+            unrealized_pnl: None,
+            unrealized_pnl_percent: None,
+            // Set when the entry fill is booked.
+            remaining_token_amount: None,
+            total_exited_amount: Default::default(),
+            average_exit_price: None,
+            partial_exit_count: 0,
+            take_profit_level: 0,
+            entry_liquidity_native,
+            entry_liquidity_pool,
+            dca_count: 0,
+            average_entry_price: entry_price,
+            last_dca_time: None,
+            archived: false,
+            archived_at: None,
+            origin,
+            management,
+            round_key: None,
+            basis_complete: true,
+            history_complete: true,
+            holding_state: None,
+        }
+    }
+
     /// True when this row was DERIVED from wallet history rather than executed by us.
     ///
     /// Such a position holds no global position slot (it never consumed a permit), must

@@ -42,7 +42,6 @@ trader-status-loading = Carregando...
 trader-status-running = Em execução
 trader-status-stopped = Parado
 trader-status-setup-required = Configuração necessária
-trader-status-unavailable = Conclua a configuração de carteira e RPC para usar o Trader automático
 trader-setup-action = Concluir configuração
 trader-toggle-on = ATIVADO
 trader-toggle-off = DESATIVADO
@@ -102,6 +101,9 @@ trader-toast-strategy-disabled = Estratégia desativada
     .message = A estratégia está inativa
 trader-toast-strategy-failed = Falha na atualização
     .message = Falha ao atualizar o status da estratégia
+trader-toast-strategy-armed = { $name } agora opera no modo real
+trader-toast-strategy-paper = { $name } agora opera em Paper
+trader-toast-strategy-mode-failed = Não foi possível alterar o modo de trading
 
 ## Stats: realized window and metrics
 
@@ -110,6 +112,19 @@ trader-stats-window =
 trader-stats-window-day = 24H
 trader-stats-window-week = 7D
 trader-stats-window-month = 30D
+trader-stats-book =
+    .aria-label = Livro de trading
+trader-paper-run-since = Rodada em Paper desde { $date }
+trader-paper-start = Início
+trader-paper-cash = Caixa
+trader-paper-open = Aberto
+trader-paper-unrealized = Não realizado
+trader-paper-reset = Reiniciar rodada em Paper
+trader-paper-reset-title = Reiniciar a rodada em Paper?
+trader-paper-reset-message = Cada posição em Paper aberta fecha pelo preço atual e uma nova rodada começa com o saldo inicial configurado. As rodadas anteriores ficam no histórico.
+trader-paper-reset-done = Uma nova rodada em Paper começou
+trader-paper-reset-failed = Não foi possível reiniciar a rodada em Paper
+trader-paper-account-failed = Não foi possível carregar a rodada em Paper
 trader-realized-title = Desempenho realizado
 trader-metric-net-pnl = P&L líquido
 trader-metric-win-rate = Taxa de acerto
@@ -386,6 +401,20 @@ trader-strategy-empty = Nenhuma estratégia definida
 trader-strategy-unnamed = Estratégia sem nome
 trader-strategy-priority-auto = Auto
 trader-strategy-priority = Prioridade { $priority }
+trader-strategy-mode-arm = Armar modo real
+trader-strategy-mode-return-paper = Voltar ao Paper
+trader-strategy-arm-title = Armar “{ $name }” no modo real
+trader-strategy-arm-lead = As novas entradas de “{ $name }” vão operar com swaps reais da sua carteira de trading.
+trader-strategy-arm-readiness = Prontidão segundo o livro de Paper
+trader-strategy-arm-open-paper = As posições em Paper abertas continuam em Paper e terminam em Paper.
+trader-strategy-arm-ack-real-native = As novas entradas gastam { -sol } real da sua carteira de trading.
+trader-strategy-arm-ack-fees = Os swaps reais pagam taxas de rede e slippage de verdade; os resultados em Paper não garantem resultados reais.
+trader-strategy-arm-ack-unready = Algumas verificações de prontidão não foram aprovadas. Armar esta estratégia mesmo assim.
+trader-strategy-arm-unavailable = O trading real está indisponível no momento; veja a última verificação.
+trader-strategy-return-title = Voltar “{ $name }” ao Paper
+trader-strategy-return-message = As novas entradas abrem no livro de Paper sem gastar { -sol }. As posições reais abertas continuam reais e terminam no modo real.
+trader-strategy-readiness-failed = Não foi possível ler a prontidão da estratégia
+trader-paper-explore-title = O trading em Paper começa após a configuração
 
 ## Dollar-cost averaging
 

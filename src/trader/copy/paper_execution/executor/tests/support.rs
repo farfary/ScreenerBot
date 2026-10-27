@@ -19,9 +19,10 @@ use crate::trader::copy::paper_execution::executor::{
     io::{EntrySettings, PaperEntryIo},
 };
 use crate::trader::copy::{
-    CopyDatabase, CopyMode, CopyOutcome, CopySkip, CopyTask, ExitMode, PaperEntryPlan, RiskContext,
-    SizingMode, LIVE_ARM_CONFIRMATION,
+    CopyDatabase, CopyOutcome, CopySkip, CopyTask, ExitMode, PaperEntryPlan, RiskContext,
+    SizingMode,
 };
+use crate::trader::paper::{TradingMode, LIVE_ARM_CONFIRMATION};
 use crate::wallets::watch::{ActivityKind, SwapSide, WalletActivity, WatchSource};
 
 pub(super) const MINT: &str = "paper-entry-mint";
@@ -177,7 +178,7 @@ impl FakeIo {
                 self.database
                     .set_task_mode(
                         self.task_id,
-                        CopyMode::Live,
+                        TradingMode::Live,
                         Some(LIVE_ARM_CONFIRMATION.to_owned()),
                     )
                     .await
@@ -311,7 +312,7 @@ pub(super) fn task() -> CopyTask {
         target_address: "target-wallet".to_owned(),
         label: Some("offline executor test".to_owned()),
         enabled: true,
-        mode: CopyMode::Paper,
+        mode: TradingMode::Paper,
         sizing: SizingMode::Fixed { sol: 0.1 },
         exit_mode: ExitMode::BuyOnly,
         exit_policy_overrides: Default::default(),

@@ -13,7 +13,6 @@ import {
   exitLabel,
   finite,
   fixed,
-  modeLabel,
   price,
   pct,
   seconds,
@@ -27,6 +26,8 @@ import {
   toneClass,
   unrealizedFigure,
 } from "./format.js";
+import { tradingModeLabel } from "../../ui/trading_mode.js";
+import { readinessList } from "../../ui/arm_live_gate.js";
 import { ensureIdentities, tokenWithMint } from "./tokens.js";
 
 export function metric(label, value, note, tone, esc) {
@@ -48,17 +49,6 @@ export function insightsBody(insights, error, esc, render) {
     return panelMessage(I18n.t("copy-analytics-load-failed", { error }), esc, "is-error");
   }
   return panelMessage(I18n.t("copy-analytics-loading"), esc);
-}
-
-/** The readiness checklist of a task: one row per check with its pass state. */
-export function readinessChecks(ws, esc) {
-  const items = (ws.readiness?.checks || [])
-    .map(
-      (check) =>
-        `<li class="copy-check ${check.passed ? "is-passed" : "is-failed"}"><i class="${check.passed ? "icon-circle-check" : "icon-circle-x"}" aria-hidden="true"></i><span><strong>${esc(I18n.text(check.text))}</strong><small>${esc(I18n.text(check.detail))}</small></span><span class="sr-only">${esc(check.passed ? I18n.t("copy-check-passed") : I18n.t("copy-check-not-passed"))}</span></li>`
-    )
-    .join("");
-  return `<ul class="copy-checks">${items}</ul>`;
 }
 
 function results(insights, esc) {
@@ -167,7 +157,7 @@ function book(ws, esc) {
         I18n.t("copy-metric-budget-spent"),
         sol(ws.spent_native, 3),
         I18n.t("copy-book-budget-note", {
-          mode: modeLabel(ws.mode),
+          mode: tradingModeLabel(ws.mode),
           total: solNumber(ws.total_budget_native, 3),
           remaining: solNumber(ws.remaining_budget_native, 3),
         }),
@@ -184,7 +174,7 @@ function readiness(ws, esc) {
     ws.mode === "live"
       ? `<p class="copy-note">${esc(I18n.t("copy-readiness-live-note"))}</p>`
       : `<div class="copy-readiness-foot"><span>${esc(ws.readiness?.ready ? I18n.t("copy-readiness-all-pass") : I18n.t("copy-readiness-needs-review"))}</span><button class="btn btn-outline btn-sm" type="button" data-ws-action="arm">${esc(I18n.t("copy-readiness-arm"))}</button></div>`;
-  return `<section class="copy-card"><h4>${esc(I18n.t("copy-readiness-title"))}</h4>${readinessChecks(ws, esc)}${footer}</section>`;
+  return `<section class="copy-card"><h4>${esc(I18n.t("copy-readiness-title"))}</h4>${readinessList(ws.readiness?.checks, esc)}${footer}</section>`;
 }
 
 /**

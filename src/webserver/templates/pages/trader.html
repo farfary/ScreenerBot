@@ -140,32 +140,47 @@
                   <i class="icon-chart-column"></i>
                   <span data-l10n-id="trader-realized-title"></span>
                 </h3>
-                <div
-                  class="stats-period-seg"
-                  id="stats-period"
-                  role="group"
-                  data-l10n-id="trader-stats-window"
-                >
-                  <button
-                    type="button"
-                    class="stats-period-btn"
-                    data-days="1"
-                    data-l10n-id="trader-stats-window-day"
-                  ></button>
-                  <button
-                    type="button"
-                    class="stats-period-btn"
-                    data-days="7"
-                    data-l10n-id="trader-stats-window-week"
-                  ></button>
-                  <button
-                    type="button"
-                    class="stats-period-btn active"
-                    data-days="30"
-                    data-l10n-id="trader-stats-window-month"
-                  ></button>
+                <div class="stats-header-controls">
+                  <div class="stats-period-seg" id="stats-book" role="group" data-l10n-id="trader-stats-book">
+                    <button
+                      type="button"
+                      class="stats-period-btn active"
+                      data-book="live"
+                      data-l10n-id="common-mode-live"
+                    ></button>
+                    <button type="button" class="stats-period-btn" data-book="paper">
+                      <i class="icon-test-tube-diagonal" aria-hidden="true"></i>
+                      <span data-l10n-id="common-mode-paper"></span>
+                    </button>
+                  </div>
+                  <div
+                    class="stats-period-seg"
+                    id="stats-period"
+                    role="group"
+                    data-l10n-id="trader-stats-window"
+                  >
+                    <button
+                      type="button"
+                      class="stats-period-btn"
+                      data-days="1"
+                      data-l10n-id="trader-stats-window-day"
+                    ></button>
+                    <button
+                      type="button"
+                      class="stats-period-btn"
+                      data-days="7"
+                      data-l10n-id="trader-stats-window-week"
+                    ></button>
+                    <button
+                      type="button"
+                      class="stats-period-btn active"
+                      data-days="30"
+                      data-l10n-id="trader-stats-window-month"
+                    ></button>
+                  </div>
                 </div>
               </div>
+              <div class="stats-paper-account" id="stats-paper-account" hidden></div>
               <div class="metrics-grid">
                 <div class="metric-card metric-card--with-icon">
                   <div class="metric-icon">
@@ -920,6 +935,7 @@
     <!-- Strategy Control Tab -->
     <div id="strategy-control-tab" class="trader-tab-content" style="display: none">
       <div class="config-section strategy-control-section">
+        <div id="strategy-paper-setup" hidden></div>
         <div class="strategy-control-grid">
           <div class="config-card strategy-lane-card strategy-lane-card-entry">
             <div class="card-header">

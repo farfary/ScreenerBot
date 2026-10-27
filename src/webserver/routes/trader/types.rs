@@ -85,6 +85,9 @@ pub struct ManualTradeSuccess {
 pub struct TraderStatsQuery {
     #[serde(default)]
     pub days: Option<u32>,
+    /// The book the stats are of; live when absent.
+    #[serde(default)]
+    pub book: Option<crate::positions::Book>,
 }
 
 // =============================================================================

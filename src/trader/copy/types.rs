@@ -9,23 +9,12 @@ use serde::{Deserialize, Serialize};
 use crate::chains::ChainId;
 use crate::trader::policy::{ExitPolicy, ExitPolicyOverrides};
 
-mod paper;
-pub use paper::{
-    PaperContext, PaperDecision, PaperExitRule, PaperFill, PaperModel, PaperPosition,
-    PaperQuoteMetadata, PaperSellFill,
+use crate::trader::paper::{
+    confirm_live, PaperFillError, PaperModeError, PaperSellFill, TradingMode, LIVE_ARM_CONFIRMATION,
 };
 
-/// Execution mode. Entering `Live` requires the dedicated confirmation-gated mode
-/// transition before the runtime can submit a trade.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum CopyMode {
-    Paper,
-    Live,
-}
-
-/// Explicit acknowledgement required by the dedicated mode-transition endpoint.
-pub const LIVE_ARM_CONFIRMATION: &str = "ARM LIVE COPY TRADING";
+mod paper;
+pub use paper::{PaperContext, PaperDecision, PaperExitRule, PaperPosition};
 
 /// The lowest slippage a task or the copy default may run with; the one bound
 /// behind task validation, the pipeline's precheck and the config section.
@@ -84,7 +73,7 @@ pub struct CopyTask {
     pub target_address: String,
     pub label: Option<String>,
     pub enabled: bool,
-    pub mode: CopyMode,
+    pub mode: TradingMode,
     pub sizing: SizingMode,
     pub exit_mode: ExitMode,
     pub exit_policy_overrides: ExitPolicyOverrides,
@@ -127,7 +116,7 @@ pub struct CopyTaskInput {
     pub target_address: String,
     pub label: Option<String>,
     pub enabled: bool,
-    pub mode: CopyMode,
+    pub mode: TradingMode,
     pub sizing: SizingMode,
     pub exit_mode: ExitMode,
     #[serde(default)]
@@ -154,10 +143,10 @@ impl CopyTaskInput {
         now: DateTime<Utc>,
         exit_base: ExitPolicy,
     ) -> Result<CopyTask, CopySkip> {
-        if self.mode != CopyMode::Paper {
+        if self.mode != TradingMode::Paper {
             return Err(CopySkip::ModeTransitionRequired);
         }
-        self.into_task_with_mode(chain, now, CopyMode::Paper, Some(exit_base))
+        self.into_task_with_mode(chain, now, TradingMode::Paper, Some(exit_base))
     }
 
     /// Validate an update of a stored task. The exit overrides are checked over
@@ -168,7 +157,7 @@ impl CopyTaskInput {
         self,
         chain: ChainId,
         now: DateTime<Utc>,
-        current_mode: CopyMode,
+        current_mode: TradingMode,
         stored_overrides: &ExitPolicyOverrides,
         exit_base: ExitPolicy,
     ) -> Result<CopyTask, CopySkip> {
@@ -183,7 +172,7 @@ impl CopyTaskInput {
         self,
         chain: ChainId,
         now: DateTime<Utc>,
-        mode: CopyMode,
+        mode: TradingMode,
         exit_base: Option<ExitPolicy>,
     ) -> Result<CopyTask, CopySkip> {
         if self.target_address.trim().is_empty()
@@ -303,18 +292,17 @@ impl From<&CopyTask> for CopyTaskInput {
     }
 }
 
+/// The copy task's mode transition: the shared live-arming gate with the copy phrase.
 pub fn confirm_mode_transition(
-    current: CopyMode,
-    requested: CopyMode,
+    current: TradingMode,
+    requested: TradingMode,
     confirmation: Option<&str>,
-) -> Result<CopyMode, CopySkip> {
-    if current == requested || requested == CopyMode::Paper {
-        return Ok(requested);
-    }
-    if confirmation != Some(LIVE_ARM_CONFIRMATION) {
-        return Err(CopySkip::LiveConfirmationRequired);
-    }
-    Ok(CopyMode::Live)
+) -> Result<TradingMode, CopySkip> {
+    confirm_live(current, requested, confirmation, LIVE_ARM_CONFIRMATION).map_err(|error| {
+        match error {
+            PaperModeError::LiveConfirmationRequired => CopySkip::LiveConfirmationRequired,
+        }
+    })
 }
 
 /// Persisted spend state used by risk and sizing. Values are cumulative and must be
@@ -406,6 +394,19 @@ pub enum CopySkip {
     SwapMultipleTokens,
     /// The wallet's trade amounts could not be read from the transaction.
     SwapUnreadable,
+}
+
+/// A fill-model refusal keeps the skip code copy has always persisted for it.
+impl From<PaperFillError> for CopySkip {
+    fn from(error: PaperFillError) -> Self {
+        match error {
+            PaperFillError::InvalidSize => Self::InvalidSizing,
+            PaperFillError::EmptySell => Self::CopyPositionNotFound,
+            PaperFillError::QuoteUnavailable => Self::PaperQuoteUnavailable,
+            PaperFillError::QuoteUnfillable => Self::PaperQuoteUnfillable,
+            PaperFillError::MinimumOutputNotMet => Self::PaperMinimumOutputNotMet,
+        }
+    }
 }
 
 impl From<crate::wallets::watch::UnresolvedSwapReason> for CopySkip {

@@ -42,7 +42,6 @@ trader-status-loading = Loading...
 trader-status-running = Running
 trader-status-stopped = Stopped
 trader-status-setup-required = Setup required
-trader-status-unavailable = Complete wallet and RPC setup to use Auto Trader
 trader-setup-action = Complete setup
 trader-toggle-on = ON
 trader-toggle-off = OFF
@@ -102,6 +101,9 @@ trader-toast-strategy-disabled = Strategy Disabled
     .message = Strategy is inactive
 trader-toast-strategy-failed = Update Failed
     .message = Failed to update strategy status
+trader-toast-strategy-armed = { $name } now trades live
+trader-toast-strategy-paper = { $name } now trades on paper
+trader-toast-strategy-mode-failed = Could not change the trading mode
 
 ## Stats: realized window and metrics
 
@@ -110,6 +112,19 @@ trader-stats-window =
 trader-stats-window-day = 24H
 trader-stats-window-week = 7D
 trader-stats-window-month = 30D
+trader-stats-book =
+    .aria-label = Trading book
+trader-paper-run-since = Paper run since { $date }
+trader-paper-start = Start
+trader-paper-cash = Cash
+trader-paper-open = Open
+trader-paper-unrealized = Unrealized
+trader-paper-reset = Reset paper run
+trader-paper-reset-title = Reset the paper run?
+trader-paper-reset-message = Every open paper position closes at its current price and a new run starts at the configured starting balance. Earlier runs stay in the history.
+trader-paper-reset-done = A new paper run started
+trader-paper-reset-failed = Could not reset the paper run
+trader-paper-account-failed = Could not load the paper run
 trader-realized-title = Realized Performance
 trader-metric-net-pnl = Net P&L
 trader-metric-win-rate = Win Rate
@@ -375,6 +390,20 @@ trader-strategy-empty = No strategies defined
 trader-strategy-unnamed = Unnamed strategy
 trader-strategy-priority-auto = Auto
 trader-strategy-priority = Priority { $priority }
+trader-strategy-mode-arm = Arm live
+trader-strategy-mode-return-paper = Return to paper
+trader-strategy-arm-title = Arm “{ $name }” live
+trader-strategy-arm-lead = New entries of “{ $name }” will trade with real swaps from your trading wallet.
+trader-strategy-arm-readiness = Readiness from the paper book
+trader-strategy-arm-open-paper = Open paper positions stay paper and finish on paper.
+trader-strategy-arm-ack-real-native = New entries spend real { -sol } from your trading wallet.
+trader-strategy-arm-ack-fees = Live swaps pay real network fees and slippage; paper results do not promise live results.
+trader-strategy-arm-ack-unready = Some readiness checks have not passed. Arm this strategy anyway.
+trader-strategy-arm-unavailable = Live trading is unavailable right now; see the last check.
+trader-strategy-return-title = Return “{ $name }” to paper
+trader-strategy-return-message = New entries open on the paper book without spending { -sol }. Open live positions stay live and finish live.
+trader-strategy-readiness-failed = Could not read the strategy's readiness
+trader-paper-explore-title = Paper trading starts after setup
 
 ## Dollar-cost averaging
 

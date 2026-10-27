@@ -1,61 +1,29 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Live-readiness evidence from the paper book. Every check carries catalog
-//! text for its title and its detail; the figures are arguments.
-
-use serde::Serialize;
+//! Live-readiness evidence from a copy task's paper book: the shared paper
+//! checks composed with the copy latency check.
 
 use super::PaperHolding;
 use crate::config::with_config;
 use crate::i18n::{ids, UiArg, UiText};
-use crate::trader::copy::control::CopyTaskSummary;
+use crate::trader::copy::control::{CopyLiveBlock, CopyTaskSummary};
 use crate::trader::copy::CopyRound;
-
-#[derive(Debug, Serialize)]
-pub struct ReadinessCheck {
-    pub id: &'static str,
-    pub text: UiText,
-    pub passed: bool,
-    pub detail: UiText,
-}
-
-/// Advisory evidence from the paper book before arming live. Arming still
-/// needs the explicit confirmation; this is what the confirmation is about.
-#[derive(Debug, Serialize)]
-pub struct Readiness {
-    pub ready: bool,
-    pub checks: Vec<ReadinessCheck>,
-}
-
-/// A signed SOL figure as the dashboard writes one, with a true minus sign.
-fn signed_native(value: f64) -> String {
-    let sign = if value > 0.0 {
-        "+"
-    } else if value < 0.0 {
-        "\u{2212}"
-    } else {
-        ""
-    };
-    format!("{sign}{:.4}", value.abs())
-}
+use crate::trader::paper::readiness::{self, CheckText, Readiness, ReadinessCheck};
 
 /// Seconds with one decimal, the figure the latency wording shows.
 fn tenths_of_seconds(ms: u64) -> String {
     format!("{:.1}", ms as f64 / 1000.0)
 }
 
-pub(super) fn live_block_text(reason: &str) -> UiText {
-    UiText::new(match reason {
-        "setup_incomplete" => ids::COPY_LIVE_BLOCK_SETUP_INCOMPLETE,
-        "force_stop" => ids::COPY_LIVE_BLOCK_FORCE_STOP,
-        "copy_trading_disabled" => ids::COPY_LIVE_BLOCK_COPY_TRADING_DISABLED,
-        _ => ids::COPY_LIVE_BLOCK_UNAVAILABLE,
-    })
-}
-
-fn count(value: usize) -> UiArg {
-    UiArg::Count(i64::try_from(value).unwrap_or(i64::MAX))
+/// The wording of why a copy task cannot run live.
+pub(super) fn live_block_text(block: CopyLiveBlock) -> UiText {
+    match block {
+        CopyLiveBlock::Trader(block) => crate::strategies::readiness::live_block_text(block),
+        CopyLiveBlock::CopyTradingDisabled => {
+            UiText::new(ids::COPY_LIVE_BLOCK_COPY_TRADING_DISABLED)
+        }
+    }
 }
 
 /// `block` is why live execution is unavailable right now, if it is.
@@ -63,7 +31,7 @@ pub(super) fn readiness(
     summary: &CopyTaskSummary,
     rounds: &[CopyRound],
     holdings: &[PaperHolding],
-    block: Option<&'static str>,
+    block: Option<CopyLiveBlock>,
 ) -> Readiness {
     let (min_rounds, max_arrival_ms) = with_config(|config| {
         (
@@ -79,27 +47,8 @@ pub(super) fn readiness(
         .filter(|holding| holding.open && holding.mark_price_native.is_none())
         .count();
     let checks = vec![
-        ReadinessCheck {
-            id: "history",
-            text: UiText::new(ids::COPY_READINESS_HISTORY),
-            passed: rounds.len() >= min_rounds,
-            detail: UiText::new(if rounds.len() >= min_rounds {
-                ids::COPY_READINESS_HISTORY_MET
-            } else {
-                ids::COPY_READINESS_HISTORY_SHORT
-            })
-            .arg("count", count(rounds.len()))
-            .arg("needed", count(min_rounds)),
-        },
-        ReadinessCheck {
-            id: "profit",
-            text: UiText::new(ids::COPY_READINESS_PROFIT),
-            passed: realized > 0.0,
-            detail: UiText::new(ids::COPY_READINESS_PROFIT_DETAIL)
-                .arg("realized", UiArg::Text(signed_native(realized)))
-                .arg("count", count(rounds.len()))
-                .arg("wins", count(wins)),
-        },
+        readiness::history(rounds.len(), min_rounds),
+        readiness::profit(realized, rounds.len(), wins),
         ReadinessCheck {
             id: "latency",
             text: UiText::new(ids::COPY_READINESS_LATENCY),
@@ -111,29 +60,21 @@ pub(super) fn readiness(
                 None => UiText::new(ids::COPY_READINESS_LATENCY_NONE),
             },
         },
-        ReadinessCheck {
-            id: "priced",
-            text: UiText::new(ids::COPY_READINESS_PRICED),
-            passed: unpriced == 0,
-            detail: if unpriced == 0 {
-                UiText::new(ids::COPY_READINESS_PRICED_OK)
-            } else {
-                UiText::new(ids::COPY_READINESS_PRICED_MISSING).arg("count", count(unpriced))
+        readiness::priced(
+            unpriced,
+            CheckText {
+                title: ids::COPY_READINESS_PRICED,
+                passed: ids::COPY_READINESS_PRICED_OK,
+                failed: ids::COPY_READINESS_PRICED_MISSING,
             },
-        },
-        ReadinessCheck {
-            id: "runtime",
-            text: UiText::new(ids::COPY_READINESS_RUNTIME),
-            passed: block.is_none(),
-            detail: block
-                .map(live_block_text)
-                .unwrap_or_else(|| UiText::new(ids::COPY_READINESS_RUNTIME_OK)),
-        },
+        ),
+        readiness::runtime(
+            block.map(live_block_text),
+            ids::COPY_READINESS_RUNTIME,
+            ids::COPY_READINESS_RUNTIME_OK,
+        ),
     ];
-    Readiness {
-        ready: checks.iter().all(|check| check.passed),
-        checks,
-    }
+    Readiness::from_checks(checks)
 }
 
 #[cfg(test)]
@@ -144,41 +85,38 @@ mod tests {
     #[test]
     fn live_block_reasons_render_their_wording() {
         let en: LanguageIdentifier = "en".parse().unwrap();
-        for (reason, english) in [
-            ("setup_incomplete", "Finish wallet and RPC setup first"),
-            ("force_stop", "The emergency stop is engaged"),
+        for (block, english) in [
             (
-                "copy_trading_disabled",
+                CopyLiveBlock::Trader(crate::trader::LiveBlock::SetupIncomplete),
+                "Finish wallet and RPC setup first",
+            ),
+            (
+                CopyLiveBlock::Trader(crate::trader::LiveBlock::ForceStop),
+                "The emergency stop is engaged",
+            ),
+            (
+                CopyLiveBlock::CopyTradingDisabled,
                 "Copy processing is paused globally",
             ),
-            ("anything_else", "Live execution is unavailable"),
         ] {
-            assert_eq!(live_block_text(reason).render_plain(&en), english);
+            assert_eq!(live_block_text(block).render_plain(&en), english);
         }
     }
 
     #[test]
-    fn readiness_details_keep_their_figures_and_plurals() {
+    fn copy_priced_check_keeps_its_holding_wording() {
         let en: LanguageIdentifier = "en".parse().unwrap();
-        let profit = UiText::new(ids::COPY_READINESS_PROFIT_DETAIL)
-            .arg("realized", UiArg::Text(signed_native(-0.12345)))
-            .arg("count", count(1))
-            .arg("wins", count(0));
-        assert_eq!(
-            profit.render_plain(&en),
-            "\u{2212}0.1235 SOL realized over 1 round, 0 won"
+        let missing = readiness::priced(
+            3,
+            CheckText {
+                title: ids::COPY_READINESS_PRICED,
+                passed: ids::COPY_READINESS_PRICED_OK,
+                failed: ids::COPY_READINESS_PRICED_MISSING,
+            },
         );
-        let short = UiText::new(ids::COPY_READINESS_HISTORY_SHORT)
-            .arg("count", count(2))
-            .arg("needed", count(5));
-        assert_eq!(short.render_plain(&en), "2 of 5 closed paper rounds");
-        let met = UiText::new(ids::COPY_READINESS_HISTORY_MET)
-            .arg("count", count(1))
-            .arg("needed", count(1));
-        assert_eq!(met.render_plain(&en), "1 closed paper round, 1 needed");
-        let missing = UiText::new(ids::COPY_READINESS_PRICED_MISSING).arg("count", count(3));
+        assert!(!missing.passed);
         assert_eq!(
-            missing.render_plain(&en),
+            missing.detail.render_plain(&en),
             "3 open holdings without a pool price"
         );
     }

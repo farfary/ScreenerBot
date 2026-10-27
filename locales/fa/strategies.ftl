@@ -671,3 +671,13 @@ strategies-error-rule-a-group-needs-at-least-one-condition-switched-on = هر گ
 strategies-error-rule-not-operator-cannot-have-a-switched-off-child = عملگر NOT نمی‌تواند فرزند خاموش داشته باشد
 strategies-error-rule-rules-nest-deeper-than-four-levels = قوانین نمی‌توانند بیش از چهار سطح تودرتو باشند
 strategies-error-rule-the-root-group-cannot-be-switched-off = گروه ریشه را نمی‌توان خاموش کرد
+
+strategies-readiness-priced = همه پوزیشن‌ها قیمت‌دار هستند
+strategies-readiness-priced-ok = همه پوزیشن‌های آزمایشی باز قیمت استخر دارند
+strategies-readiness-priced-missing =
+    { $count ->
+        [one] { $count } پوزیشن آزمایشی باز بدون قیمت استخر
+       *[other] { $count } پوزیشن آزمایشی باز بدون قیمت استخر
+    }
+strategies-readiness-runtime = معامله زنده در دسترس است
+strategies-readiness-runtime-ok = راه‌اندازی و دروازه‌های ایمنی معاملات زنده را مجاز می‌کنند

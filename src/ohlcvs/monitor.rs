@@ -2304,16 +2304,13 @@ impl OhlcvMonitor {
             let chain = self.db.chain();
             let available_mints: Vec<String> = crate::pools::get_available_tokens(chain);
 
-            // Open positions raise priority only when the position store holds this
-            // monitor's chain.
+            // Held mints of the live and paper books raise priority only when the position
+            // store holds this monitor's chain: exit strategies read their candles.
             let open_positions = match crate::positions::db::get_store_chain().await {
-                Ok(store_chain) if store_chain == chain => {
-                    crate::positions::state::get_open_positions()
-                        .await
-                        .into_iter()
-                        .map(|p| p.mint)
-                        .collect::<std::collections::HashSet<_>>()
-                }
+                Ok(store_chain) if store_chain == chain => crate::positions::books::held_mints()
+                    .await
+                    .into_iter()
+                    .collect::<std::collections::HashSet<_>>(),
                 Ok(_) => std::collections::HashSet::new(),
                 Err(e) => {
                     logger::debug(

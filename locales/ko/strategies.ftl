@@ -657,3 +657,12 @@ strategies-error-rule-a-group-needs-at-least-one-condition-switched-on = 그룹�
 strategies-error-rule-not-operator-cannot-have-a-switched-off-child = NOT 연산자의 자식 노드는 꺼져 있을 수 없습니다
 strategies-error-rule-rules-nest-deeper-than-four-levels = 규칙은 4단계보다 깊게 중첩할 수 없습니다
 strategies-error-rule-the-root-group-cannot-be-switched-off = 루트 그룹은 끌 수 없습니다
+
+strategies-readiness-priced = 모든 포지션 가격 확인
+strategies-readiness-priced-ok = 열린 모든 모의 포지션에 풀 가격이 있습니다
+strategies-readiness-priced-missing =
+    { $count ->
+       *[other] 풀 가격이 없는 열린 모의 포지션 { $count }건
+    }
+strategies-readiness-runtime = 실거래 가능
+strategies-readiness-runtime-ok = 설정과 안전 게이트가 실거래를 허용합니다

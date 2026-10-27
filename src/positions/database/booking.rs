@@ -307,7 +307,8 @@ impl PositionsDatabase {
         book: impl FnOnce(&mut Position, &BookingReads<'_>) -> Result<Booking<T>>,
     ) -> Result<Committed<T>> {
         let mut conn = self.get_connection()?;
-        let committed = self.run_booking(&mut conn, position_id, wallet_address, book)?;
+        let committed =
+            self.run_booking(&mut conn, position_id, wallet_address, book, |_, _| Ok(()))?;
 
         if let Committed::Written { .. } | Committed::Deleted { .. } = committed {
             if let Ok(mut stmt) = conn.prepare("PRAGMA wal_checkpoint(PASSIVE);") {
@@ -317,12 +318,16 @@ impl PositionsDatabase {
         Ok(committed)
     }
 
-    fn run_booking<T>(
+    /// [`Self::commit_booking`] on `conn`. `also_write` runs inside the transaction after
+    /// a written row and its record, with the row as written, and its failure rolls the
+    /// booking back.
+    pub(super) fn run_booking<T>(
         &self,
         conn: &mut Connection,
         position_id: i64,
         wallet_address: Result<&str>,
         book: impl FnOnce(&mut Position, &BookingReads<'_>) -> Result<Booking<T>>,
+        also_write: impl FnOnce(&Connection, &Position) -> Result<()>,
     ) -> Result<Committed<T>> {
         let chain = self.chain.as_str();
         let sqlite = |e| DatabaseError::classify_sqlite_failure("commit_booking", e);
@@ -364,6 +369,7 @@ impl PositionsDatabase {
             }
             .map_err(sqlite)?;
         }
+        also_write(&tx, &row)?;
         tx.commit().map_err(sqlite)?;
 
         if let Some(record) = &record {
@@ -403,7 +409,7 @@ fn write_unarchived(conn: &Connection, chain: &str, position_id: i64) -> rusqlit
 
 /// Inserts an exit record unless one already exists for its position and signature: one
 /// on-chain swap is one exit record.
-fn insert_exit_record(
+pub(super) fn insert_exit_record(
     conn: &Connection,
     wallet_address: &str,
     record: &ExitRecord,
@@ -432,7 +438,7 @@ fn insert_exit_record(
 
 /// Inserts an entry record unless one already exists for its position and signature: one
 /// on-chain swap is one entry record.
-fn insert_entry_record(
+pub(super) fn insert_entry_record(
     conn: &Connection,
     wallet_address: &str,
     record: &EntryRecord,
@@ -458,7 +464,7 @@ fn insert_entry_record(
   )
 }
 
-fn log_saved_record(record: &BookingRecord) {
+pub(super) fn log_saved_record(record: &BookingRecord) {
     let message = match record {
         BookingRecord::Exit(record) => format!(
             "Saved exit record: position={} amount={} partial={} tx={}",

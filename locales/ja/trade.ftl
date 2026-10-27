@@ -171,6 +171,7 @@ trade-reason-risk-management = リスク管理
 trade-reason-blacklisted = ブラックリスト入り
 trade-reason-force-sell = 強制売却
 trade-reason-copy-sell = コピー売却
+trade-reason-paper-reset = ペーパー運用のリセット
 trade-reason-closed-externally = 外部でクローズ
 trade-reason-wallet-history = ウォレット履歴
 trade-reason-exit-retry-pending = エグジット再試行待ち

@@ -69,3 +69,9 @@ common-venue-serum = { -serum }
 common-venue-openbook = { -openbook }
 common-venue-phoenix = { -phoenix }
 common-venue-direct-pool = استخر مستقیم
+
+common-mode-paper = آزمایشی
+common-mode-live = زنده
+common-check-passed = قبول
+common-check-not-passed = مردود
+common-arm-type-phrase = برای تأیید { $phrase } را بنویسید

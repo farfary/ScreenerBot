@@ -7,8 +7,10 @@ mod api;
 mod detach;
 mod force;
 pub mod guard;
+mod paper;
 mod tracking;
 
 pub use api::{manual_add, manual_buy, manual_sell};
 pub use force::force_sell;
+pub use paper::manual_paper_close;
 pub use tracking::{get_manual_trade_history, record_manual_trade};

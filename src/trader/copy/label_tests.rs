@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: BUSL-1.1
 
 //! Every id the dashboard renders through a frozen label map has catalog text
-//! named after it. The maps are `STATE_LABELS`, `MODE_LABELS`, `EXIT_MODE_LABELS`
-//! and `EXIT_LABELS` (pages/copy/format.js), `STATE_DETAIL_LABELS`
+//! named after it. The maps are `STATE_LABELS`, `EXIT_MODE_LABELS` and `EXIT_LABELS`
+//! (pages/copy/format.js), `STATE_DETAIL_LABELS`
 //! (pages/copy/workspace.js) and `OUTCOME_LABELS` (pages/copy/activity.js).
 
 use std::collections::BTreeSet;
@@ -16,6 +16,7 @@ use super::control::{effective_state, CopyTradingStatus};
 use super::insights::exit_label;
 use super::*;
 use crate::i18n::format_en;
+use crate::trader::paper::TradingMode;
 
 fn assert_text(key: &str) {
     assert_ne!(format_en(key, None), key, "missing catalog text {key}");
@@ -30,18 +31,6 @@ fn serialized(value: &impl Serialize, tag: &str) -> String {
     match value {
         serde_json::Value::String(id) => id,
         other => other[tag].as_str().unwrap().to_owned(),
-    }
-}
-
-#[test]
-fn every_execution_mode_has_a_label() {
-    let id = |mode: CopyMode| match mode {
-        CopyMode::Paper => "paper",
-        CopyMode::Live => "live",
-    };
-    for mode in [CopyMode::Paper, CopyMode::Live] {
-        assert_eq!(serialized(&mode, ""), id(mode));
-        assert_text(&format!("copy-mode-{}", id(mode)));
     }
 }
 
@@ -91,7 +80,7 @@ fn every_exit_bucket_has_a_label() {
     }
 }
 
-fn task(enabled: bool, mode: CopyMode) -> CopyTask {
+fn task(enabled: bool, mode: TradingMode) -> CopyTask {
     CopyTask {
         id: 1,
         chain: crate::chains::ChainId::Solana,
@@ -136,18 +125,18 @@ fn status(enabled: bool, blocked_reason: Option<&'static str>) -> CopyTradingSta
 #[test]
 fn every_effective_state_has_a_label_and_a_running_sentence() {
     let states: BTreeSet<&str> = [
-        effective_state(&status(false, None), &task(true, CopyMode::Paper)),
+        effective_state(&status(false, None), &task(true, TradingMode::Paper)),
         effective_state(
             &status(true, Some("force_stop")),
-            &task(true, CopyMode::Paper),
+            &task(true, TradingMode::Paper),
         ),
-        effective_state(&status(true, None), &task(false, CopyMode::Paper)),
+        effective_state(&status(true, None), &task(false, TradingMode::Paper)),
         effective_state(
             &status(true, Some("loss_limit")),
-            &task(true, CopyMode::Paper),
+            &task(true, TradingMode::Paper),
         ),
-        effective_state(&status(true, None), &task(true, CopyMode::Live)),
-        effective_state(&status(true, None), &task(true, CopyMode::Paper)),
+        effective_state(&status(true, None), &task(true, TradingMode::Live)),
+        effective_state(&status(true, None), &task(true, TradingMode::Paper)),
     ]
     .into_iter()
     .collect();

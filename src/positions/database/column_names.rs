@@ -1,7 +1,8 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! The renamed columns of `positions.db` and the rule that reconciles each one held under both names.
+//! The renamed columns of `positions.db` and of the paper store, which shares its schema, and
+//! the rule that reconciles each one held under both names.
 
 use crate::database::schema::{ColumnReconcile, ColumnRename, StoreRenames};
 
@@ -66,3 +67,22 @@ pub(crate) const RENAMES: StoreRenames = StoreRenames {
         },
     ],
 };
+
+/// The renames of the paper store: the same tables and columns, named as its own file.
+pub(crate) const PAPER_RENAMES: StoreRenames = StoreRenames {
+    store: crate::paths::PAPER_POSITIONS_FILE,
+    ..RENAMES
+};
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_paper_store_shares_the_renames_under_its_own_file_name() {
+        assert_eq!(PAPER_RENAMES.store, "paper_positions.db");
+        assert_ne!(PAPER_RENAMES.store, RENAMES.store);
+        assert_eq!(PAPER_RENAMES.columns.len(), RENAMES.columns.len());
+        assert_eq!(PAPER_RENAMES.tables.len(), RENAMES.tables.len());
+    }
+}

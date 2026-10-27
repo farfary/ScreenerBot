@@ -69,3 +69,9 @@ common-venue-serum = { -serum }
 common-venue-openbook = { -openbook }
 common-venue-phoenix = { -phoenix }
 common-venue-direct-pool = مجمع سيولة مباشر
+
+common-mode-paper = تجريبي
+common-mode-live = حي
+common-check-passed = ناجح
+common-check-not-passed = غير ناجح
+common-arm-type-phrase = اكتب { $phrase } للتأكيد

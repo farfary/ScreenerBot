@@ -42,7 +42,6 @@ trader-status-loading = 불러오는 중...
 trader-status-running = 실행 중
 trader-status-stopped = 중지됨
 trader-status-setup-required = 설정 필요
-trader-status-unavailable = 자동 트레이더를 사용하려면 지갑과 RPC 설정을 완료하세요
 trader-setup-action = 설정 완료
 trader-toggle-on = 사용
 trader-toggle-off = 사용 안 함
@@ -102,6 +101,9 @@ trader-toast-strategy-disabled = 전략 사용 안 함
     .message = 전략이 비활성 상태입니다
 trader-toast-strategy-failed = 업데이트 실패
     .message = 전략 상태를 업데이트하지 못했습니다
+trader-toast-strategy-armed = { $name } 전략이 이제 실거래로 거래합니다
+trader-toast-strategy-paper = { $name } 전략이 이제 모의로 거래합니다
+trader-toast-strategy-mode-failed = 거래 모드를 변경하지 못했습니다
 
 ## Stats: realized window and metrics
 
@@ -110,6 +112,19 @@ trader-stats-window =
 trader-stats-window-day = 24H
 trader-stats-window-week = 7D
 trader-stats-window-month = 30D
+trader-stats-book =
+    .aria-label = 거래 장부
+trader-paper-run-since = { $date }부터의 모의 운용
+trader-paper-start = 시작
+trader-paper-cash = 현금
+trader-paper-open = 보유 중
+trader-paper-unrealized = 미실현
+trader-paper-reset = 모의 운용 초기화
+trader-paper-reset-title = 모의 운용을 초기화할까요?
+trader-paper-reset-message = 열린 모의 포지션은 모두 현재 가격으로 종료되고, 설정된 시작 잔액으로 새 운용이 시작됩니다. 이전 운용은 기록에 남습니다.
+trader-paper-reset-done = 새 모의 운용이 시작되었습니다
+trader-paper-reset-failed = 모의 운용을 초기화하지 못했습니다
+trader-paper-account-failed = 모의 운용을 불러오지 못했습니다
 trader-realized-title = 실현 성과
 trader-metric-net-pnl = 순손익
 trader-metric-win-rate = 승률
@@ -363,6 +378,20 @@ trader-strategy-empty = 정의된 전략이 없습니다
 trader-strategy-unnamed = 이름 없는 전략
 trader-strategy-priority-auto = 자동
 trader-strategy-priority = 우선순위 { $priority }
+trader-strategy-mode-arm = 실거래 활성화
+trader-strategy-mode-return-paper = 모의로 되돌리기
+trader-strategy-arm-title = "{ $name }" 실거래 활성화
+trader-strategy-arm-lead = "{ $name }"의 새 진입은 내 거래 지갑의 실제 스왑으로 거래됩니다.
+trader-strategy-arm-readiness = 모의 장부 기준 준비 상태
+trader-strategy-arm-open-paper = 열린 모의 포지션은 모의로 유지되며 모의로 종료됩니다.
+trader-strategy-arm-ack-real-native = 새 진입은 내 거래 지갑의 실제 { -sol }를 사용합니다.
+trader-strategy-arm-ack-fees = 실거래 스왑에는 실제 네트워크 수수료와 슬리피지가 발생하며, 모의 결과가 실거래 결과를 보장하지 않습니다.
+trader-strategy-arm-ack-unready = 일부 준비 상태 점검을 통과하지 못했습니다. 그래도 이 전략을 활성화합니다.
+trader-strategy-arm-unavailable = 현재 실거래를 사용할 수 없습니다. 마지막 점검 결과를 확인하세요.
+trader-strategy-return-title = "{ $name }"을(를) 모의로 되돌리기
+trader-strategy-return-message = 새 진입은 { -sol }를 쓰지 않고 모의 장부에서 열립니다. 열린 실거래 포지션은 실거래로 유지되며 실거래로 종료됩니다.
+trader-strategy-readiness-failed = 전략의 준비 상태를 읽지 못했습니다
+trader-paper-explore-title = 모의 거래는 설정을 마친 후 시작됩니다
 
 ## Dollar-cost averaging
 

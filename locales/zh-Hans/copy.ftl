@@ -48,6 +48,7 @@ copy-entry-block-reentry-cooldown = 代币再入场冷却时间
 copy-entry-block-open-cooldown = 全局入场冷却时间
 copy-entry-block-entry-reserved = 另一笔入场正在处理
 copy-entry-block-blacklisted = 代币被风控拦截
+copy-entry-block-paper-balance-exhausted = 模拟余额不足以完成此交易
 copy-entry-block-check-failed = 安全检查未能完成
 
 copy-pause-user = 已由您暂停
@@ -69,17 +70,6 @@ copy-pause-short-storage-restored = 数据已恢复
 copy-state-paused = 已暂停
 copy-state-paused-reason = 已暂停 · { $reason }
 
-copy-readiness-history = 模拟交易历史
-copy-readiness-history-met =
-    { $count ->
-       *[other] 已有 { $count } 个已平仓的模拟轮次，需要 { $needed } 个
-    }
-copy-readiness-history-short = { $count } / { $needed } 个已平仓模拟轮次
-copy-readiness-profit = 模拟交易盈利
-copy-readiness-profit-detail =
-    { $count ->
-       *[other] { $count } 个轮次共实现 { $realized } { -sol }，盈利 { $wins } 次
-    }
 copy-readiness-latency = 交易检测及时
 copy-readiness-latency-detail = p95 到达时间 { $p95 } 秒，上限 { $limit } 秒
 copy-readiness-latency-none = 暂无到达时间样本
@@ -92,10 +82,7 @@ copy-readiness-priced-missing =
 copy-readiness-runtime = 可执行实盘
 copy-readiness-runtime-ok = 设置和安全检查均允许实盘跟单
 
-copy-live-block-setup-incomplete = 请先完成钱包和 RPC 设置
-copy-live-block-force-stop = 紧急停止已启用
 copy-live-block-copy-trading-disabled = 跟单处理已全局暂停
-copy-live-block-unavailable = 无法执行实盘
 
 ## Task state, mode and exit labels.
 
@@ -104,8 +91,6 @@ copy-state-force-stopped = 已强制停止
 copy-state-entries-blocked = 入场已被拦截
 copy-state-running-live = 运行中
 copy-state-running-paper = 运行中
-copy-mode-paper = 模拟
-copy-mode-live = 实盘
 copy-exit-mode-buy-only = 我的出场规则
 copy-exit-mode-mirror = 镜像钱包卖出
 copy-exit-mode-hybrid = 钱包卖出与我的规则
@@ -258,6 +243,7 @@ copy-profile-sub = 此机器人观察到的该钱包情况
 copy-settings-title = 跟单交易设置
 copy-settings-subtitle = 适用于所有任务的全局策略
 copy-settings-filter-warning = 在默认的过滤设置下，这几乎会拒绝所有代币，导致不会跟单。除非您的过滤器能放行钱包所交易的代币，否则请保持关闭。
+copy-settings-paper-delay-shared = 模拟成交会等待所有模拟账本共用的模拟落地延迟。请在配置的“模拟交易”中修改。
 copy-settings-unit-seconds = 秒
 copy-settings-unit-trades = 笔
 copy-settings-unit-tasks = 个
@@ -415,8 +401,6 @@ copy-book-skipped = <strong>{ $count }</strong> 笔已跳过
 copy-book-failed = <strong>{ $count }</strong> 笔失败
 copy-book-closed = { $count } 笔已平仓
 copy-book-budget-note = { $mode }已用 { $total } · 剩余 { $remaining }
-copy-check-passed = 已通过
-copy-check-not-passed = 未通过
 copy-readiness-title = 上实盘前
 copy-readiness-live-note = 此任务正在实盘交易。可在上方标题处将其切回模拟。
 copy-readiness-all-pass = 所有检查均已通过。

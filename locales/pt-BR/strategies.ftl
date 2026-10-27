@@ -676,3 +676,14 @@ strategies-error-rule-a-group-needs-at-least-one-condition-switched-on = Um grup
 strategies-error-rule-not-operator-cannot-have-a-switched-off-child = O operador NOT não pode ter um filho desativado
 strategies-error-rule-rules-nest-deeper-than-four-levels = As regras não podem se aninhar em mais de quatro níveis
 strategies-error-rule-the-root-group-cannot-be-switched-off = O grupo raiz não pode ser desativado
+
+strategies-readiness-priced = Todas as posições com preço
+strategies-readiness-priced-ok = Toda posição aberta em Paper tem preço de pool
+strategies-readiness-priced-missing =
+    { $count ->
+        [one] { $count } posição aberta em Paper sem preço de pool
+        [many] { $count } posições abertas em Paper sem preço de pool
+       *[other] { $count } posições abertas em Paper sem preço de pool
+    }
+strategies-readiness-runtime = Trading real disponível
+strategies-readiness-runtime-ok = A configuração e as travas de segurança permitem operações reais

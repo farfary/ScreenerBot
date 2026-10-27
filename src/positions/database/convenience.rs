@@ -4,7 +4,6 @@
 //! Position database convenience functions — simplified wrappers for common queries.
 
 use chrono::{DateTime, Utc};
-use rusqlite::params;
 
 use crate::errors::DatabaseError;
 use crate::logger::{self, LogTag};
@@ -15,8 +14,7 @@ use super::booking::{query_other_open_held, Booking, BookingReads, Committed, Ot
 use super::global::GLOBAL_POSITIONS_DB;
 use super::open_round::{query_open_round_id, refuse_second_active_open_round};
 use super::queries::{
-    entry_record_from_row, exit_record_from_row, query_records_by_signatures,
-    query_trader_swap_legs, SwapLegScope, TraderSwapLeg, ENTRY_RECORD_COLUMNS, EXIT_RECORD_COLUMNS,
+    query_records_by_signatures, query_trader_swap_legs, SwapLegScope, TraderSwapLeg,
 };
 use super::types::{AutoTradeActivity, DailyTradingStats, PeriodTradingStats, TokenSnapshot};
 
@@ -432,85 +430,28 @@ pub(crate) async fn commit_booking<T>(
     }
 }
 
-/// Get exit history for a position
 /// Exits in CHRONOLOGICAL order, matching `get_entry_history`. Callers number
 /// them by index ("Exit 1", "Exit 2"), so a DESC order silently labelled the
 /// newest partial exit as the first one on the position chart.
 pub async fn get_exit_history(position_id: i64) -> Result<Vec<ExitRecord>> {
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;
     let db = db_guard.as_ref().ok_or(Error::NotInitialised)?;
-
-    let conn = db.pool.get().map_err(|e| DatabaseError::Connection {
-        message: e.to_string(),
-    })?;
-
     let wallet_address =
         crate::utils::get_wallet_address().map_err(|e| Error::WalletUnavailable {
             detail: e.to_string(),
         })?;
-
-    let mut stmt = conn
-        .prepare(&format!(
-            "SELECT {EXIT_RECORD_COLUMNS} FROM position_exits
-             WHERE position_id = ?1 AND wallet_address = ?2 ORDER BY timestamp ASC"
-        ))
-        .map_err(|e| DatabaseError::Query {
-            operation: "prepare statement".to_owned(),
-            message: e.to_string(),
-        })?;
-
-    let records = stmt
-        .query_map(params![position_id, wallet_address], exit_record_from_row)
-        .map_err(|e| DatabaseError::Query {
-            operation: "query exit records".to_owned(),
-            message: e.to_string(),
-        })?
-        .collect::<std::result::Result<Vec<_>, _>>()
-        .map_err(|e| DatabaseError::Query {
-            operation: "collect exit records".to_owned(),
-            message: e.to_string(),
-        })?;
-
-    Ok(records)
+    db.exit_history(&wallet_address, position_id)
 }
 
-/// Get entry history for a position
+/// The entries of a position in chronological order.
 pub async fn get_entry_history(position_id: i64) -> Result<Vec<EntryRecord>> {
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;
     let db = db_guard.as_ref().ok_or(Error::NotInitialised)?;
-
-    let conn = db.pool.get().map_err(|e| DatabaseError::Connection {
-        message: e.to_string(),
-    })?;
-
     let wallet_address =
         crate::utils::get_wallet_address().map_err(|e| Error::WalletUnavailable {
             detail: e.to_string(),
         })?;
-
-    let mut stmt = conn
-        .prepare(&format!(
-            "SELECT {ENTRY_RECORD_COLUMNS} FROM position_entries
-             WHERE position_id = ?1 AND wallet_address = ?2 ORDER BY timestamp ASC"
-        ))
-        .map_err(|e| DatabaseError::Query {
-            operation: "prepare statement".to_owned(),
-            message: e.to_string(),
-        })?;
-
-    let records = stmt
-        .query_map(params![position_id, wallet_address], entry_record_from_row)
-        .map_err(|e| DatabaseError::Query {
-            operation: "query entry records".to_owned(),
-            message: e.to_string(),
-        })?
-        .collect::<std::result::Result<Vec<_>, _>>()
-        .map_err(|e| DatabaseError::Query {
-            operation: "collect entry records".to_owned(),
-            message: e.to_string(),
-        })?;
-
-    Ok(records)
+    db.entry_history(&wallet_address, position_id)
 }
 
 /// The entry and exit records the active wallet booked under any of `signatures`, in one

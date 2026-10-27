@@ -57,8 +57,9 @@ async fn resolve_evaluation_input(position: &Position) -> Option<(Position, f64)
         None => return None, // No price data from any source
     };
 
-    // Get fresh position with updated basis peak for accurate trailing stop calculation
-    let fresh_position = match crate::positions::get_position_by_mint(&position.mint).await {
+    // Get fresh position of its own book with updated basis peak for accurate trailing
+    // stop calculation
+    let fresh_position = match crate::positions::books::fresh(position).await {
         Some(pos) => pos,
         None => return None, // Position disappeared
     };
@@ -142,6 +143,7 @@ pub(crate) async fn evaluate_policy_exit(
                                 action: TradeAction::Sell,
                                 reason: TradeReason::LlmAnalysisExit,
                                 strategy_id: Some("llm_analysis_exit".to_owned()),
+                                book: position.book,
                                 timestamp: chrono::Utc::now(),
                                 priority: match result.urgency {
                                     llm_analysis::ExitUrgency::Immediate => {
@@ -216,16 +218,17 @@ pub(crate) async fn evaluate_policy_exit(
     }
 
     // Priorities 4-9: the built-in rules, in the one order `exit_rules` owns. A partial
-    // outcome is passed over while the positions store awaits reconciliation, and a partial
+    // outcome is passed over while the position's store awaits reconciliation, and a partial
     // take-profit step while another partial exit of the mint is confirming (the next step
     // sells only after the previous one settles), so the rules after it still run this tick.
     let inputs = live_exit_inputs(position, current_price, chrono::Utc::now());
-    let partial_pending = crate::positions::is_partial_exit_pending(&position.mint).await;
+    let partial_pending =
+        crate::positions::books::partial_exit_pending(position.book, &position.mint).await;
     let admit = |outcome: &RuleOutcome| {
         if outcome.exit_percentage.is_none() {
             return true;
         }
-        let refusal = if crate::positions::awaiting_reconciliation() {
+        let refusal = if crate::positions::books::awaiting_reconciliation(position.book) {
             "the positions store is not reconciled"
         } else if partial_pending && matches!(outcome.rule, ExitRule::TakeProfit { .. }) {
             "a partial exit is still confirming"
@@ -338,7 +341,7 @@ pub fn live_exit_inputs(
     }
 }
 
-/// The sell a fired built-in rule asks of the live book. Stop loss, trailing stop,
+/// The sell a fired built-in rule asks of the position's book. Stop loss, trailing stop,
 /// break-even stop and the time override sell at high priority; a take-profit step at
 /// normal priority, carrying the step it takes, and the stagnation exit at normal
 /// priority, since a flat holding is not at risk.
@@ -369,6 +372,7 @@ pub fn rule_decision(
         action: TradeAction::Sell,
         reason,
         strategy_id: None,
+        book: position.book,
         timestamp: chrono::Utc::now(),
         priority,
         price_native: Some(current_price),

@@ -8,14 +8,20 @@ import {
   definitionRows,
   duration,
   exitModeLabel,
-  modeLabel,
   pct,
   sol,
   solNumber,
   taskName,
 } from "./format.js";
+import { tradingModeLabel } from "../../ui/trading_mode.js";
 import { formatList } from "../../core/format.js";
-import { readinessChecks } from "./overview.js";
+import {
+  ackList,
+  pendingAcks,
+  readinessList,
+  runtimeBlocked,
+  unavailableNote,
+} from "../../ui/arm_live_gate.js";
 import { RULES, ruleSummary } from "./policy.js";
 
 export function createArmGate(page) {
@@ -28,19 +34,16 @@ export function createArmGate(page) {
     on($("#copy-arm-confirm"), "click", arm);
   }
 
-  const runtimeBlocked = () =>
-    task?.readiness?.checks?.some((check) => check.id === "runtime" && !check.passed) ?? true;
-
   function sync() {
-    const acks = [...($("#copy-arm-body")?.querySelectorAll("[data-ack]") || [])];
-    const pending = acks.filter((ack) => !ack.checked).length;
+    const pending = pendingAcks($("#copy-arm-body"));
+    const blocked = runtimeBlocked(task?.readiness);
     const confirm = $("#copy-arm-confirm");
-    if (confirm) confirm.disabled = runtimeBlocked() || pending > 0;
+    if (confirm) confirm.disabled = blocked || pending > 0;
     // The acknowledgements sit below the fold; say why Arm live is still disabled.
     const hint = $("#copy-arm-hint");
     if (hint) {
       hint.textContent =
-        !runtimeBlocked() && pending ? I18n.t("copy-arm-acks-left", { count: pending }) : "";
+        !blocked && pending ? I18n.t("copy-arm-acks-left", { count: pending }) : "";
     }
   }
 
@@ -87,30 +90,29 @@ export function createArmGate(page) {
           I18n.t("copy-arm-shared", {
             tasks: formatList(
               siblings.map((other) =>
-                I18n.t("copy-task-ref", { name: taskName(other), mode: modeLabel(other.mode) })
+                I18n.t("copy-task-ref", { name: taskName(other), mode: tradingModeLabel(other.mode) })
               )
             ),
           })
         )}</p>`
       : "";
-    const ack = (text) =>
-      `<label class="copy-ack"><input type="checkbox" data-ack /><span>${esc(text)}</span></label>`;
-    const acks = runtimeBlocked()
-      ? `<p class="copy-warning" role="alert"><i class="icon-triangle-alert" aria-hidden="true"></i>${esc(I18n.t("copy-arm-unavailable"))}</p>`
-      : [
-          ack(
+    const acks = runtimeBlocked(ws.readiness)
+      ? unavailableNote(I18n.t("copy-arm-unavailable"), esc)
+      : ackList(
+          [
             I18n.t("copy-arm-ack-real-native", {
               budget: solNumber(ws.live_remaining_budget_native, 3),
               trade: solNumber(ws.max_native_per_trade, 3),
-            })
-          ),
-          ack(I18n.t("copy-arm-ack-fees")),
-          ws.readiness?.ready ? "" : ack(I18n.t("copy-arm-ack-unready")),
-        ].join("");
+            }),
+            I18n.t("copy-arm-ack-fees"),
+            ws.readiness?.ready ? "" : I18n.t("copy-arm-ack-unready"),
+          ],
+          esc
+        );
     return `<p class="copy-arm-lead">${esc(I18n.t("copy-arm-lead", { name: taskName(ws) }))}</p>
-      <h4>${esc(I18n.t("copy-arm-readiness-title"))}</h4>${readinessChecks(ws, esc)}
+      <h4>${esc(I18n.t("copy-arm-readiness-title"))}</h4>${readinessList(ws.readiness?.checks, esc)}
       <h4>${esc(I18n.t("copy-arm-exposure-title"))}</h4><dl class="copy-defs">${exposure}</dl>${shared}
-      <div class="copy-acks">${acks}</div>`;
+      ${acks}`;
   }
 
   function open(ws) {

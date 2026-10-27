@@ -17,8 +17,8 @@ use crate::positions::{Position, PositionOrigin};
 use super::analytics::{arrival_distance_ms, summarize_arrival_distances};
 use super::types::{
     ArrivalDistanceStats, CopyActivityRow, CopyBook, CopyOutcome, CopySkip, PaperExitRule,
-    PaperModel,
 };
+use crate::trader::paper::PaperModel;
 
 /// Pre-raw historical quote records are replayed in their saved display units.
 /// Newest closed rounds kept in the response.

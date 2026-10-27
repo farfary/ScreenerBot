@@ -68,10 +68,7 @@ pub async fn protected_mints() -> Result<ProtectedMints, ProtectedMintsUnavailab
         return Err(ProtectedMintsUnavailable::PositionsNotReady);
     }
     let mut protected = ProtectedMints::default();
-    for mint in crate::positions::get_open_mints().await {
-        protected.insert(mint, Protection::OpenPosition);
-    }
-    for mint in crate::trader::copy::held_paper_mints() {
+    for mint in crate::positions::books::held_mints().await {
         protected.insert(mint, Protection::OpenPosition);
     }
     for mint in crate::wallet::get_held_mints() {

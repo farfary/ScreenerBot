@@ -7,8 +7,9 @@ use chrono::{DateTime, Utc};
 use rusqlite::{params, OptionalExtension, Transaction};
 
 use crate::chains::RawAmount;
-use crate::trader::copy::types::{PaperDecision, PaperModel, PaperSellFill};
+use crate::trader::copy::types::PaperDecision;
 use crate::trader::error::Error;
+use crate::trader::paper::{PaperModel, PaperSellFill};
 
 /// Book a paper fill: the tokens and their full cost (input plus fees) join the
 /// position, reopening it when an earlier round was sold out. Every buy moves the

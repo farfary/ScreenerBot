@@ -637,3 +637,15 @@ strategies-error-rule-a-group-needs-at-least-one-condition-switched-on = Гру�
 strategies-error-rule-not-operator-cannot-have-a-switched-off-child = Оператор NOT не может иметь отключённый дочерний узел
 strategies-error-rule-rules-nest-deeper-than-four-levels = Правила могут быть вложены не глубже четырёх уровней
 strategies-error-rule-the-root-group-cannot-be-switched-off = Корневую группу нельзя отключить
+
+strategies-readiness-priced = У каждой позиции есть цена
+strategies-readiness-priced-ok = У каждой открытой виртуальной позиции есть цена пула
+strategies-readiness-priced-missing =
+    { $count ->
+        [one] { $count } открытая виртуальная позиция без цены пула
+        [few] { $count } открытые виртуальные позиции без цены пула
+        [many] { $count } открытых виртуальных позиций без цены пула
+       *[other] { $count } открытой виртуальной позиции без цены пула
+    }
+strategies-readiness-runtime = Боевая торговля доступна
+strategies-readiness-runtime-ok = Настройка и защитные условия допускают боевые сделки

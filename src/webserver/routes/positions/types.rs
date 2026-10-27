@@ -119,6 +119,46 @@ pub struct PositionsStatsResponse {
     pub total_pnl: f64,
 }
 
+/// The paper account of the current run: its starting balance and cash, and the cost
+/// and unrealized P&L of the rounds still open.
+#[derive(Debug, Serialize)]
+pub struct PaperAccountResponse {
+    pub epoch: i64,
+    pub started_at: i64,
+    pub starting_balance_native: f64,
+    pub cash_native: f64,
+    pub open_rounds: usize,
+    pub open_cost_native: f64,
+    /// `None` while any open round has no unrealized P&L yet.
+    pub open_unrealized_pnl_native: Option<f64>,
+}
+
+/// One fill of a paper round: the entry, add, partial or exit record it booked, with the
+/// strategy that decided it and the quotes it filled at. A paper fill sends no
+/// transaction, so it carries no signature.
+#[derive(Debug, Serialize)]
+pub struct PaperFillResponse {
+    pub kind: String,
+    pub timestamp: i64,
+    #[serde(serialize_with = "raw_amount_number")]
+    pub amount: RawAmount,
+    pub price: f64,
+    /// SOL spent by a buy or received by a sale.
+    pub native_amount: f64,
+    /// The share of the round a sale sold.
+    pub percentage: Option<f64>,
+    pub fees_native: Option<f64>,
+    pub strategy_id: Option<String>,
+    pub quote: Option<serde_json::Value>,
+}
+
+/// A paper round with every fill it booked, oldest first.
+#[derive(Debug, Serialize)]
+pub struct PaperPositionDetailResponse {
+    pub position: PositionResponse,
+    pub fills: Vec<PaperFillResponse>,
+}
+
 #[derive(Debug, Serialize)]
 pub struct EntryRecordResponse {
     pub id: Option<i64>,

@@ -139,6 +139,7 @@ trade-reason-risk-management = Quản lý rủi ro
 trade-reason-blacklisted = Trong danh sách đen
 trade-reason-force-sell = Bán cưỡng chế
 trade-reason-copy-sell = Bán theo copy
+trade-reason-paper-reset = Đặt lại phiên thử nghiệm
 trade-reason-closed-externally = Đóng từ bên ngoài
 trade-reason-wallet-history = Lịch sử ví
 trade-reason-exit-retry-pending = Đang chờ thử lại thoát lệnh

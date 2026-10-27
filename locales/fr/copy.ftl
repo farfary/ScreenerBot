@@ -50,6 +50,7 @@ copy-entry-block-reentry-cooldown = Délai avant nouvelle entrée sur le token
 copy-entry-block-open-cooldown = Délai global entre entrées
 copy-entry-block-entry-reserved = Une autre entrée est en cours de traitement
 copy-entry-block-blacklisted = Token bloqué par les contrôles de risque
+copy-entry-block-paper-balance-exhausted = Le solde simulé ne couvre pas la transaction
 copy-entry-block-check-failed = Un contrôle de sécurité n'a pas pu aboutir
 
 copy-pause-user = Mise en pause par vous
@@ -71,21 +72,6 @@ copy-pause-short-storage-restored = données restaurées
 copy-state-paused = En pause
 copy-state-paused-reason = En pause · { $reason }
 
-copy-readiness-history = Historique simulé
-copy-readiness-history-met =
-    { $count ->
-        [one] { $count } cycle simulé clôturé, { $needed } requis
-        [many] { $count } cycles simulés clôturés, { $needed } requis
-       *[other] { $count } cycles simulés clôturés, { $needed } requis
-    }
-copy-readiness-history-short = { $count } cycles simulés clôturés sur { $needed }
-copy-readiness-profit = Rentable en simulé
-copy-readiness-profit-detail =
-    { $count ->
-        [one] { $realized } { -sol } réalisés sur { $count } cycle, { $wins } gagné
-        [many] { $realized } { -sol } réalisés sur { $count } cycles, { $wins } gagnés
-       *[other] { $realized } { -sol } réalisés sur { $count } cycles, { $wins } gagnés
-    }
 copy-readiness-latency = Trades détectés à temps
 copy-readiness-latency-detail = arrivée p95 { $p95 } s, limite { $limit } s
 copy-readiness-latency-none = Aucun échantillon d'arrivée pour l'instant
@@ -100,10 +86,7 @@ copy-readiness-priced-missing =
 copy-readiness-runtime = Exécution réelle disponible
 copy-readiness-runtime-ok = La configuration et les garde-fous autorisent les copies réelles
 
-copy-live-block-setup-incomplete = Terminez d'abord la configuration du portefeuille et du RPC
-copy-live-block-force-stop = L'arrêt d'urgence est activé
 copy-live-block-copy-trading-disabled = Le traitement des copies est en pause globale
-copy-live-block-unavailable = L'exécution réelle est indisponible
 
 ## Task state, mode and exit labels. Ids come from effective_state
 ## (src/trader/copy/control.rs), CopyMode, ExitMode and PaperExitRule
@@ -114,8 +97,6 @@ copy-state-force-stopped = Arrêt forcé
 copy-state-entries-blocked = Entrées bloquées
 copy-state-running-live = Actif
 copy-state-running-paper = Actif
-copy-mode-paper = Simulé
-copy-mode-live = Réel
 copy-exit-mode-buy-only = Mes règles de sortie
 copy-exit-mode-mirror = Répliquer les ventes du portefeuille
 copy-exit-mode-hybrid = Ventes du portefeuille et mes règles
@@ -283,6 +264,7 @@ copy-profile-sub = Ce que ce bot a observé du portefeuille
 copy-settings-title = Paramètres du copy trading
 copy-settings-subtitle = Politique globale pour toutes les tâches
 copy-settings-filter-warning = Avec la configuration de filtrage par défaut, cette option rejette presque tous les tokens, donc rien n'est copié. Laissez-la désactivée sauf si vos filtres valident les tokens échangés par vos portefeuilles.
+copy-settings-paper-delay-shared = Les exécutions simulées attendent le Délai d'atterrissage simulé partagé par tous les carnets simulés. Modifiez-le dans la Configuration, sous Trading simulé.
 copy-settings-unit-seconds = s
 copy-settings-unit-trades = trades
 copy-settings-unit-tasks = tâches
@@ -454,8 +436,6 @@ copy-book-skipped = <strong>{ $count }</strong> ignorés
 copy-book-failed = <strong>{ $count }</strong> échoués
 copy-book-closed = { $count } clôturés
 copy-book-budget-note = Dépenses { $mode } sur { $total } · { $remaining } restants
-copy-check-passed = validé
-copy-check-not-passed = non validé
 copy-readiness-title = Avant de passer en réel
 copy-readiness-live-note = Cette tâche trade en réel. Repassez-la en simulé depuis l'en-tête ci-dessus.
 copy-readiness-all-pass = Tous les contrôles sont validés.

@@ -615,3 +615,12 @@ strategies-error-rule-a-group-needs-at-least-one-condition-switched-on = Grup me
 strategies-error-rule-not-operator-cannot-have-a-switched-off-child = Operator NOT tidak boleh memiliki anak yang dimatikan
 strategies-error-rule-rules-nest-deeper-than-four-levels = Aturan tidak boleh bersarang lebih dari empat tingkat
 strategies-error-rule-the-root-group-cannot-be-switched-off = Grup akar tidak dapat dimatikan
+
+strategies-readiness-priced = Setiap posisi memiliki harga
+strategies-readiness-priced-ok = Setiap posisi paper yang terbuka memiliki harga pool
+strategies-readiness-priced-missing =
+    { $count ->
+       *[other] { $count } posisi paper terbuka tanpa harga pool
+    }
+strategies-readiness-runtime = Trading live tersedia
+strategies-readiness-runtime-ok = Penyiapan dan gerbang keamanan mengizinkan trading live

@@ -247,8 +247,10 @@ pub async fn compute_snapshot(
     let priced_set: HashSet<String> = crate::pools::get_available_tokens(chain)
         .into_iter()
         .collect();
-    let open_position_set: HashSet<String> =
-        positions::get_open_mints().await.into_iter().collect();
+    let open_position_set: HashSet<String> = positions::books::open_mints(positions::Book::Live)
+        .await
+        .into_iter()
+        .collect();
 
     let ohlcv_set: HashSet<String> =
         match crate::ohlcvs::get_mints_with_data(chain, &candidate_mints).await {
