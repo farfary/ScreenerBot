@@ -3,6 +3,7 @@
 
 //! Open position operations — new position entry with swap execution and verification.
 
+use crate::apis::geckoterminal::RequestLane;
 use crate::chains::adapter;
 use crate::chains::RawAmount;
 use crate::config::with_config;
@@ -64,6 +65,18 @@ pub async fn open_position_with_size(
     .await
 }
 
+/// Lane for the on-demand token fetch of a trade in a round of `origin`: a manual trade has a
+/// person waiting on the answer, every other origin is automated or derived and yields to them.
+/// Real and paper trades share it, so a paper round fetches as its real twin would.
+pub(crate) fn token_fetch_lane(origin: &PositionOrigin) -> RequestLane {
+    match origin {
+        PositionOrigin::Manual => RequestLane::Interactive,
+        PositionOrigin::Auto { .. } | PositionOrigin::Copy { .. } | PositionOrigin::External => {
+            RequestLane::Background
+        }
+    }
+}
+
 /// Internal helper to open a new position with an explicit SOL size
 async fn open_position_impl(
     token_mint: &str,
@@ -75,12 +88,15 @@ async fn open_position_impl(
     // Ensure the token exists in the local DB. For manual/force buys this lets the user
     // trade tokens that were never tracked by the pool service or that failed filtering
     // (decimals fetched from chain + metadata fetched from APIs on demand).
-    let api_token =
-        crate::tokens::ensure_token_available(crate::chains::active_chain(), token_mint)
-            .await
-            .map_err(|_| Error::TokenNotFound {
-                mint: token_mint.to_owned(),
-            })?;
+    let api_token = crate::tokens::ensure_token_available(
+        crate::chains::active_chain(),
+        token_mint,
+        token_fetch_lane(&origin),
+    )
+    .await
+    .map_err(|_| Error::TokenNotFound {
+        mint: token_mint.to_owned(),
+    })?;
 
     // The market price seeds the position's entry, peak and low until verification books
     // the executed price. A token the pool service does not watch yet has only the API
@@ -532,6 +548,31 @@ fn effective_entry_price_native(
     let price = input_native / token_amount;
     (input_native.is_finite() && input_native > 0.0 && price.is_finite() && price > 0.0)
         .then_some(price)
+}
+
+#[cfg(test)]
+mod token_fetch_lane_tests {
+    use super::token_fetch_lane;
+    use crate::apis::geckoterminal::RequestLane;
+    use crate::positions::types::PositionOrigin;
+
+    #[test]
+    fn only_a_manual_open_fetches_on_the_interactive_lane() {
+        assert!(matches!(
+            token_fetch_lane(&PositionOrigin::Manual),
+            RequestLane::Interactive
+        ));
+        for origin in [
+            PositionOrigin::Auto { strategy_id: None },
+            PositionOrigin::Copy {
+                task_id: 1,
+                source_wallet: "wallet".to_owned(),
+            },
+            PositionOrigin::External,
+        ] {
+            assert!(matches!(token_fetch_lane(&origin), RequestLane::Background));
+        }
+    }
 }
 
 #[cfg(test)]

@@ -397,7 +397,7 @@ async fn buy(
         Ok(epoch) => epoch,
         Err(result) => return Ok(result),
     };
-    let Some(token) = io.token(&decision.mint).await else {
+    let Some(token) = io.token(&decision.mint, &context.origin).await else {
         return Ok(refused(
             decision,
             TradeStep::Validation,
@@ -539,7 +539,7 @@ async fn add(
         Err(result) => return Ok(result),
     };
     let Some(decimals) = io
-        .token(&decision.mint)
+        .token(&decision.mint, &position.origin)
         .await
         .and_then(|token| token.decimals)
     else {
@@ -665,7 +665,7 @@ async fn sell(
         ));
     }
     let Some(decimals) = io
-        .token(&decision.mint)
+        .token(&decision.mint, &position.origin)
         .await
         .and_then(|token| token.decimals)
     else {

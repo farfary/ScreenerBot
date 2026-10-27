@@ -87,7 +87,11 @@ const ON_DEMAND_TOKEN_TIMEOUT: std::time::Duration = std::time::Duration::from_s
 /// store holds none yet ([`crate::tokens::ensure_token_available`]). `None` when no
 /// source lists it or the fetch did not finish in time.
 async fn token_with_market_data(mint: &str) -> Option<crate::tokens::Token> {
-    let fetch = crate::tokens::ensure_token_available(crate::chains::active_chain(), mint);
+    let fetch = crate::tokens::ensure_token_available(
+        crate::chains::active_chain(),
+        mint,
+        RequestLane::Interactive,
+    );
     match tokio::time::timeout(ON_DEMAND_TOKEN_TIMEOUT, fetch).await {
         Ok(Ok(token)) => Some(token),
         Ok(Err(e)) => {

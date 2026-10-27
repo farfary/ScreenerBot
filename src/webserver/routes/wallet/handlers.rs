@@ -309,9 +309,13 @@ async fn enrich_token_holdings(
                 LogTag::Wallet,
                 &format!("Bootstrapping metadata for {} held token(s)", unknown.len()),
             );
-            let fetches = unknown
-                .iter()
-                .map(|mint| crate::tokens::ensure_token_available(chain, mint));
+            let fetches = unknown.iter().map(|mint| {
+                crate::tokens::ensure_token_available(
+                    chain,
+                    mint,
+                    crate::apis::geckoterminal::RequestLane::Interactive,
+                )
+            });
             // Failures are non-fatal (no market data yet) — the row is still stamped.
             let _ = futures::future::join_all(fetches).await;
         }

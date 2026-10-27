@@ -91,7 +91,7 @@ impl PaperTradeIo for FakeIo {
         self.wanted.load(Ordering::SeqCst)
     }
 
-    async fn token(&self, _: &str) -> Option<PaperToken> {
+    async fn token(&self, _: &str, _: &PositionOrigin) -> Option<PaperToken> {
         Some(PaperToken {
             symbol: "PAPER".to_owned(),
             name: "Paper".to_owned(),

@@ -23,6 +23,7 @@ pub use dca::add_to_position;
 pub(crate) use dca::check_auto_add;
 pub(crate) use exit_sizing::{read_exit_sale, ExitSale, ExitShare};
 pub use force_close::{force_close_position, ForceClosed};
+pub(crate) use open::token_fetch_lane;
 pub use open::{open_position_direct, open_position_with_size};
 pub use partial_close::partial_close_position;
 pub(crate) use partial_close::release_take_profit_step;

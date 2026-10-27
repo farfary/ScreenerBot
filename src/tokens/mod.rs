@@ -208,11 +208,17 @@ pub async fn request_immediate_update(
 /// search result opened right after boot). A token with market data resolves at once.
 /// Otherwise this stamps the token row (decimals fetched from chain), runs an immediate
 /// fetch from every source, which stores their market rows, and assembles it again.
+/// `lane` is the caller's [`RequestLane`] for that fetch: interactive when a person waits on
+/// the answer, background for automated callers.
 ///
 /// Returns the assembled [`Token`] or an error if the token still has no market data
 /// (in which case it cannot be priced or swapped anyway). A value that is not an
 /// address is refused before anything is stored.
-pub async fn ensure_token_available(chain: ChainId, mint: &str) -> TokenResult<Token> {
+pub async fn ensure_token_available(
+    chain: ChainId,
+    mint: &str,
+    lane: RequestLane,
+) -> TokenResult<Token> {
     if crate::chains::adapter_for(chain)
         .validate_address(mint)
         .is_err()
@@ -240,9 +246,8 @@ pub async fn ensure_token_available(chain: ChainId, mint: &str) -> TokenResult<T
         .ok();
     let _ = db.upsert_token(mint, None, None, decimals);
 
-    // Best-effort: pull market/security data from APIs (failure is non-fatal). A manual
-    // trade or an opened token view waits on this answer, so it takes the interactive lane.
-    if let Err(e) = request_immediate_update(chain, mint, RequestLane::Interactive).await {
+    // Best-effort: pull market/security data from APIs (failure is non-fatal).
+    if let Err(e) = request_immediate_update(chain, mint, lane).await {
         crate::logger::warning(
             crate::logger::LogTag::Tokens,
             &format!("On-demand market fetch for {mint} failed: {e}"),

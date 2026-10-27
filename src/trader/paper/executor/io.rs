@@ -47,7 +47,8 @@ pub(super) trait PaperTradeIo: Sync {
     /// Paper mode, and a trade of a copy round its copy task still wants
     /// (`trader::copy::paper_trade_wanted`).
     async fn still_wanted(&self, decision: &TradeDecision, origin: &PositionOrigin) -> bool;
-    async fn token(&self, mint: &str) -> Option<PaperToken>;
+    /// The token of the trade, fetched on demand on the lane a real trade of `origin` uses.
+    async fn token(&self, mint: &str, origin: &PositionOrigin) -> Option<PaperToken>;
     async fn market_price(&self, mint: &str) -> Option<PaperMarket>;
     async fn quote(&self, request: QuoteRequest) -> Result<Quote, QuoteError>;
     async fn wait(&self, duration: Duration);
@@ -105,15 +106,19 @@ impl PaperTradeIo for ProductionPaperTradeIo {
         }
     }
 
-    async fn token(&self, mint: &str) -> Option<PaperToken> {
-        crate::tokens::ensure_token_available(crate::chains::active_chain(), mint)
-            .await
-            .ok()
-            .map(|token| PaperToken {
-                symbol: token.symbol,
-                name: token.name,
-                decimals: token.decimals,
-            })
+    async fn token(&self, mint: &str, origin: &PositionOrigin) -> Option<PaperToken> {
+        crate::tokens::ensure_token_available(
+            crate::chains::active_chain(),
+            mint,
+            crate::positions::operations::token_fetch_lane(origin),
+        )
+        .await
+        .ok()
+        .map(|token| PaperToken {
+            symbol: token.symbol,
+            name: token.name,
+            decimals: token.decimals,
+        })
     }
 
     async fn market_price(&self, mint: &str) -> Option<PaperMarket> {

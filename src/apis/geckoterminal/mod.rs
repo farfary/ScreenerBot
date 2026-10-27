@@ -464,10 +464,13 @@ mod tests {
         "tokens/search.rs",
         // Featured-token identity answering the Featured page.
         "webserver/routes/featured/identity.rs",
-        // On-demand token refreshes (`tokens::request_immediate_update`) for a dashboard
-        // request, an agent tool, and a token a manual trade or token view needs stored.
+        // On-demand token refreshes (`tokens::request_immediate_update`,
+        // `tokens::ensure_token_available`) for a dashboard request, an agent tool, the wallet
+        // bootstrap and a manual buy.
         "webserver/routes/tokens/detail.rs",
+        "webserver/routes/wallet/handlers.rs",
         "agent_control/tools/analysis.rs",
+        "positions/operations/open.rs",
         "tokens/mod.rs",
     ];
 
