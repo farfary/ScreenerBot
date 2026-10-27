@@ -92,6 +92,7 @@ errors-copy-request-failed = Yêu cầu copy trading thất bại
 
 errors-strategies-not-found = Không tìm thấy chiến lược
 errors-strategies-invalid-type = Loại chiến lược không hợp lệ. Phải là ENTRY hoặc EXIT
+errors-strategies-priority-out-of-range = Mức ưu tiên { $priority } nằm ngoài phạm vi. Hãy dùng số từ { $min } đến { $max }
 errors-strategies-list-failed = Không lấy được danh sách chiến lược
 errors-strategies-get-failed = Không lấy được chiến lược
 errors-strategies-serialize-rules-failed = Không tuần tự hóa được các quy tắc

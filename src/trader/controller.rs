@@ -3,6 +3,8 @@
 
 //! Trader controller for starting/stopping trading.
 
+use super::admission::{self, EntryBlock};
+use super::paper::TradingMode;
 use crate::config::update_config_section;
 use crate::logger::{self, LogTag};
 use crate::trader::error::Error;
@@ -100,6 +102,125 @@ pub fn live_block() -> Option<LiveBlock> {
         Some(LiveBlock::ForceStop)
     } else {
         None
+    }
+}
+
+/// What the Auto Trader is doing right now, in the order the checks decide it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TraderRunState {
+    /// Explore Mode: the app has no trader.
+    Explore,
+    /// The emergency stop is engaged.
+    ForceStopped,
+    /// The trader is switched off.
+    Stopped,
+    /// The trader is on and waits for the core services.
+    Waiting,
+    /// The trader is on with both monitors switched off.
+    Idle,
+    /// The entry monitor is on and the loss limit pauses live entries.
+    EntryPaused,
+    /// The trader runs at least one monitor.
+    Running,
+}
+
+/// The in-memory flags the run state is decided from.
+#[derive(Debug, Clone, Copy, Default)]
+struct RunFlags {
+    explore: bool,
+    force_stopped: bool,
+    trader_enabled: bool,
+    core_services_ready: bool,
+    entry_monitor_enabled: bool,
+    exit_monitor_enabled: bool,
+    live_entries_loss_limited: bool,
+}
+
+impl RunFlags {
+    fn read() -> Self {
+        let (trader_enabled, entry_monitor_enabled, exit_monitor_enabled) =
+            crate::config::with_config(|cfg| {
+                (
+                    cfg.trader.enabled,
+                    cfg.trader.entry_monitor_enabled,
+                    cfg.trader.exit_monitor_enabled,
+                )
+            });
+        Self {
+            explore: crate::global::is_explore_mode(),
+            force_stopped: crate::global::is_force_stopped(),
+            trader_enabled,
+            core_services_ready: crate::global::are_core_services_ready(),
+            entry_monitor_enabled,
+            exit_monitor_enabled,
+            live_entries_loss_limited: super::safety::loss_limit::is_entry_blocked_by_loss_limit(),
+        }
+    }
+
+    fn run_state(self) -> TraderRunState {
+        if self.explore {
+            TraderRunState::Explore
+        } else if self.force_stopped {
+            TraderRunState::ForceStopped
+        } else if !self.trader_enabled {
+            TraderRunState::Stopped
+        } else if !self.core_services_ready {
+            TraderRunState::Waiting
+        } else if !self.entry_monitor_enabled && !self.exit_monitor_enabled {
+            TraderRunState::Idle
+        } else if self.entry_monitor_enabled && self.live_entries_loss_limited {
+            TraderRunState::EntryPaused
+        } else {
+            TraderRunState::Running
+        }
+    }
+}
+
+/// The trader's run state, read from in-memory flags and config only.
+pub fn run_state() -> TraderRunState {
+    RunFlags::read().run_state()
+}
+
+/// The trader-wide halt in front of entries on `mode`: the emergency stop, then the loss
+/// limit, which protects real funds and so pauses live entries only, never paper.
+fn entry_halt_of(mode: TradingMode, force_stopped: bool, loss_limited: bool) -> Option<EntryBlock> {
+    if force_stopped {
+        Some(EntryBlock::ForceStopped)
+    } else if mode == TradingMode::Live && loss_limited {
+        Some(EntryBlock::LossLimit)
+    } else {
+        None
+    }
+}
+
+/// The trader-wide halt in front of entries on `mode`, read from the emergency stop and
+/// the loss limit state.
+pub fn entry_halt(mode: TradingMode) -> Option<EntryBlock> {
+    entry_halt_of(
+        mode,
+        crate::global::is_force_stopped(),
+        mode == TradingMode::Live && super::safety::loss_limit::is_entry_blocked_by_loss_limit(),
+    )
+}
+
+/// The token-independent part of entry admission on `mode`: what refuses every entry on
+/// that mode right now, whatever the token. Live: emergency stop, loss limit, position
+/// limit. Paper: emergency stop, paper position limit, paper cash short of one default
+/// entry. The paper cash is read on the blocking pool and never starts a paper run.
+pub async fn entry_blocks(mode: TradingMode) -> Option<EntryBlock> {
+    if let Some(block) = entry_halt(mode) {
+        return Some(block);
+    }
+    if let Err(block) = admission::check_slots(mode).await {
+        return Some(block);
+    }
+    match mode {
+        TradingMode::Live => None,
+        TradingMode::Paper => {
+            let cash = admission::standing_paper_cash().await;
+            admission::paper_cash_covers(Some(&cash), super::executors::entry_size_of(None)).err()
+        }
     }
 }
 
@@ -340,8 +461,142 @@ async fn record_force_stop_event(subtype: &str, payload: serde_json::Value) {
 
 #[cfg(test)]
 mod tests {
-    use super::anything_to_halt;
+    use super::{anything_to_halt, entry_halt_of, RunFlags, TraderRunState};
+    use crate::trader::admission::EntryBlock;
     use crate::trader::copy::control::CopyTradingStatus;
+    use crate::trader::paper::TradingMode;
+
+    /// A trader that is on, with core services ready and both monitors running.
+    fn running() -> RunFlags {
+        RunFlags {
+            trader_enabled: true,
+            core_services_ready: true,
+            entry_monitor_enabled: true,
+            exit_monitor_enabled: true,
+            ..RunFlags::default()
+        }
+    }
+
+    #[test]
+    fn each_run_state_is_decided_in_order() {
+        let cases = [
+            (
+                RunFlags {
+                    explore: true,
+                    force_stopped: true,
+                    ..running()
+                },
+                TraderRunState::Explore,
+            ),
+            (
+                RunFlags {
+                    force_stopped: true,
+                    live_entries_loss_limited: true,
+                    ..running()
+                },
+                TraderRunState::ForceStopped,
+            ),
+            (
+                RunFlags {
+                    trader_enabled: false,
+                    core_services_ready: false,
+                    ..running()
+                },
+                TraderRunState::Stopped,
+            ),
+            (
+                RunFlags {
+                    core_services_ready: false,
+                    entry_monitor_enabled: false,
+                    exit_monitor_enabled: false,
+                    ..running()
+                },
+                TraderRunState::Waiting,
+            ),
+            (
+                RunFlags {
+                    entry_monitor_enabled: false,
+                    exit_monitor_enabled: false,
+                    live_entries_loss_limited: true,
+                    ..running()
+                },
+                TraderRunState::Idle,
+            ),
+            (
+                RunFlags {
+                    live_entries_loss_limited: true,
+                    ..running()
+                },
+                TraderRunState::EntryPaused,
+            ),
+            (
+                RunFlags {
+                    entry_monitor_enabled: false,
+                    live_entries_loss_limited: true,
+                    ..running()
+                },
+                TraderRunState::Running,
+            ),
+            (running(), TraderRunState::Running),
+            (
+                RunFlags {
+                    entry_monitor_enabled: false,
+                    ..running()
+                },
+                TraderRunState::Running,
+            ),
+            (
+                RunFlags {
+                    exit_monitor_enabled: false,
+                    ..running()
+                },
+                TraderRunState::Running,
+            ),
+        ];
+        for (flags, expected) in cases {
+            assert_eq!(flags.run_state(), expected, "{flags:?}");
+        }
+    }
+
+    /// The header and every other reader receive these exact wire values.
+    #[test]
+    fn run_states_serialize_as_their_snake_case_wire_values() {
+        for (state, wire) in [
+            (TraderRunState::Explore, "explore"),
+            (TraderRunState::ForceStopped, "force_stopped"),
+            (TraderRunState::Stopped, "stopped"),
+            (TraderRunState::Waiting, "waiting"),
+            (TraderRunState::Idle, "idle"),
+            (TraderRunState::EntryPaused, "entry_paused"),
+            (TraderRunState::Running, "running"),
+        ] {
+            assert_eq!(serde_json::to_value(state).unwrap(), wire);
+        }
+    }
+
+    #[test]
+    fn the_loss_limit_blocks_live_entries_but_never_paper() {
+        assert_eq!(
+            entry_halt_of(TradingMode::Live, false, true),
+            Some(EntryBlock::LossLimit)
+        );
+        assert_eq!(entry_halt_of(TradingMode::Paper, false, true), None);
+        assert_eq!(entry_halt_of(TradingMode::Live, false, false), None);
+        assert_eq!(entry_halt_of(TradingMode::Paper, false, false), None);
+    }
+
+    #[test]
+    fn the_emergency_stop_blocks_entries_on_every_mode_ahead_of_the_loss_limit() {
+        for mode in [TradingMode::Live, TradingMode::Paper] {
+            for loss_limited in [false, true] {
+                assert_eq!(
+                    entry_halt_of(mode, true, loss_limited),
+                    Some(EntryBlock::ForceStopped),
+                    "{mode:?}"
+                );
+            }
+        }
+    }
 
     fn copy(enabled: bool, force_stop_blocks: bool, active_tasks: usize) -> CopyTradingStatus {
         CopyTradingStatus {

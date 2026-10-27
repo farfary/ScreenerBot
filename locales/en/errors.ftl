@@ -111,6 +111,7 @@ errors-copy-request-failed = Copy trading request failed
 # Strategies
 errors-strategies-not-found = Strategy not found
 errors-strategies-invalid-type = Invalid strategy type. Must be ENTRY or EXIT
+errors-strategies-priority-out-of-range = Priority { $priority } is out of range. Use a number from { $min } to { $max }
 errors-strategies-list-failed = Failed to get strategies
 errors-strategies-get-failed = Failed to get strategy
 errors-strategies-serialize-rules-failed = Failed to serialize rules

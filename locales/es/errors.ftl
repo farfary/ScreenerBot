@@ -92,6 +92,7 @@ errors-copy-request-failed = Error en la solicitud de copy trading
 
 errors-strategies-not-found = Estrategia no encontrada
 errors-strategies-invalid-type = Tipo de estrategia no válido. Debe ser ENTRY o EXIT
+errors-strategies-priority-out-of-range = La prioridad { $priority } está fuera del rango permitido. Usa un número de { $min } a { $max }
 errors-strategies-list-failed = Error al obtener las estrategias
 errors-strategies-get-failed = Error al obtener la estrategia
 errors-strategies-serialize-rules-failed = Error al serializar las reglas

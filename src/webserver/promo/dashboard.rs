@@ -12,6 +12,7 @@ use crate::positions::AutoTradeActivity;
 use crate::trader::copy::control::followed_wallets;
 use crate::trader::copy::workspace::ActivityFilter;
 use crate::trader::safety::PositionCapacity;
+use crate::trader::TraderRunState;
 use crate::webserver::routes::dashboard::{
     auto_trader_card, copy_trading_card, BlacklistInfo, CalendarDay, DashboardOverview,
     HomeDashboardResponse, MonitoringInfo, OpenPositionDetail, PortfolioCalendarResponse,
@@ -131,9 +132,10 @@ pub fn get_promo_home_dashboard() -> HomeDashboardResponse {
     };
 
     // The cards are built by the same functions as the live route, over the promo trader
-    // status, the trader stats' capacity and the promo copy desk.
+    // run state the promo header shows, the trader stats' capacity and the promo copy desk.
     let auto_trader = auto_trader_card(
-        &super::get_promo_trader_status(),
+        TraderRunState::Running,
+        !super::get_promo_trader_status().available,
         PositionCapacity {
             used: open.count,
             limit: open.count.max(1),

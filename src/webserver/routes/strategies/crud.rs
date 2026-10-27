@@ -215,6 +215,10 @@ pub async fn create_strategy(Json(request): Json<StrategyRequest>) -> Response {
         }
     };
 
+    if let Err(error) = Strategy::check_priority(request.priority) {
+        return ApiError::with_text(ApiErrorCode::InvalidInput, error.ui_text()).into_response();
+    }
+
     // Parse rules
     let rules: RuleTree = match serde_json::from_value(request.rules) {
         Ok(rules) => rules,
@@ -331,6 +335,10 @@ pub async fn update_strategy_handler(
             );
         }
     };
+
+    if let Err(error) = Strategy::check_priority(request.priority) {
+        return ApiError::with_text(ApiErrorCode::InvalidInput, error.ui_text()).into_response();
+    }
 
     // Parse rules
     let rules: RuleTree = match serde_json::from_value(request.rules) {

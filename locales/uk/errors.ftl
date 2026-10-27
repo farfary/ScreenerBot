@@ -92,6 +92,7 @@ errors-copy-request-failed = Запит копітрейдингу не вдав
 
 errors-strategies-not-found = Стратегію не знайдено
 errors-strategies-invalid-type = Недійсний тип стратегії. Має бути ENTRY або EXIT
+errors-strategies-priority-out-of-range = Пріоритет { $priority } поза допустимим діапазоном. Вкажіть число від { $min } до { $max }
 errors-strategies-list-failed = Не вдалося отримати стратегії
 errors-strategies-get-failed = Не вдалося отримати стратегію
 errors-strategies-serialize-rules-failed = Не вдалося серіалізувати правила

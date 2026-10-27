@@ -1,7 +1,7 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! The strategy routes: a new strategy starts on paper and arms live only with the confirmation phrase while the Auto Trader can trade live, an update never changes the mode, readiness reads the paper rounds, switching a strategy on applies the validation a save applies, switching one off is always allowed, neither touches the rest of the stored strategy, an exit strategy keeps the entry strategies it manages, and a test reports every rule's verdict, a rule with no data as unknown with the reason, without waiting for candles the OHLCV service cannot read through.
+//! The strategy routes: a new strategy starts on paper and arms live only with the confirmation phrase while the Auto Trader can trade live, an update never changes the mode, a priority outside 1-100 is refused on create, update and import, readiness reads the paper rounds, switching a strategy on applies the validation a save applies, switching one off is always allowed, neither touches the rest of the stored strategy, an exit strategy keeps the entry strategies it manages, and a test reports every rule's verdict, a rule with no data as unknown with the reason, without waiting for candles the OHLCV service cannot read through.
 
 use crate::common;
 
@@ -376,6 +376,114 @@ async fn an_update_never_changes_the_mode() {
     let (status, body) = send("PUT", "/api/strategies/armed-entry", update).await;
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(reload("armed-entry").mode, TradingMode::Live);
+}
+
+/// A strategy request carrying `priority`.
+fn with_priority(mut request: Value, priority: i64) -> Value {
+    request["priority"] = json!(priority);
+    request
+}
+
+/// A refused priority answers 400 with the range message.
+fn assert_priority_refused(status: StatusCode, body: &Value) {
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+    assert_eq!(body["error"]["code"], "INVALID_INPUT", "{body}");
+    assert_eq!(
+        body["error"]["text"]["id"], "errors-strategies-priority-out-of-range",
+        "{body}"
+    );
+}
+
+#[tokio::test]
+async fn a_priority_outside_one_to_one_hundred_is_refused_on_create() {
+    let _dir = strategy_system().await;
+    for priority in [0, 101, -5, i64::from(i32::MAX)] {
+        let request = with_priority(
+            strategy_request("Ranked Entry", "ENTRY", liquidity_at_least(), &[]),
+            priority,
+        );
+        let (status, body) = send("POST", "/api/strategies", request).await;
+        assert_priority_refused(status, &body);
+        assert!(
+            get_strategy("ranked-entry")
+                .expect("read strategy")
+                .is_none(),
+            "priority {priority} was stored"
+        );
+    }
+    for priority in [1, 100] {
+        let name = format!("Ranked {priority}");
+        let request = with_priority(
+            strategy_request(&name, "ENTRY", liquidity_at_least(), &[]),
+            priority,
+        );
+        let (status, body) = send("POST", "/api/strategies", request).await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        assert_eq!(
+            reload(&format!("ranked-{priority}")).priority,
+            priority as i32
+        );
+    }
+}
+
+#[tokio::test]
+async fn a_priority_outside_one_to_one_hundred_is_refused_on_update() {
+    let _dir = strategy_system().await;
+    stored("ranked", StrategyType::Entry, liquidity_at_least(), false);
+    for priority in [0, 101] {
+        let update = with_priority(
+            strategy_request("Ranked", "ENTRY", liquidity_at_least(), &[]),
+            priority,
+        );
+        let (status, body) = send("PUT", "/api/strategies/ranked", update).await;
+        assert_priority_refused(status, &body);
+        let kept = reload("ranked");
+        assert_eq!(kept.priority, 7, "the stored priority is kept");
+        assert_eq!(kept.version, 1, "a refused update writes nothing");
+    }
+    for priority in [1, 100] {
+        let update = with_priority(
+            strategy_request("Ranked", "ENTRY", liquidity_at_least(), &[]),
+            priority,
+        );
+        let (status, body) = send("PUT", "/api/strategies/ranked", update).await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        assert_eq!(reload("ranked").priority, priority as i32);
+    }
+}
+
+/// A strategy file is read in the dashboard and saved through the create route as a
+/// switched-off strategy, so an imported priority meets the same range.
+#[tokio::test]
+async fn an_imported_priority_outside_one_to_one_hundred_is_refused() {
+    let _dir = strategy_system().await;
+    let imported = |name: &str, priority: i64| {
+        json!({
+            "name": name,
+            "description": null,
+            "strategy_type": "ENTRY",
+            "enabled": false,
+            "priority": priority,
+            "timeframe": "5m",
+            "rules": serde_json::to_value(RuleTree::leaf(liquidity_at_least()))
+                .expect("serialize rules"),
+            "parameters": {},
+            "entry_strategy_ids": [],
+        })
+    };
+    for priority in [0, 101] {
+        let (status, body) = send("POST", "/api/strategies", imported("Imported", priority)).await;
+        assert_priority_refused(status, &body);
+        assert!(get_strategy("imported").expect("read strategy").is_none());
+    }
+    for priority in [1, 100] {
+        let name = format!("Imported {priority}");
+        let (status, body) = send("POST", "/api/strategies", imported(&name, priority)).await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        let saved = reload(&format!("imported-{priority}"));
+        assert_eq!(saved.priority, priority as i32);
+        assert!(!saved.enabled);
+    }
 }
 
 #[tokio::test]

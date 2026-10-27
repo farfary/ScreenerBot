@@ -1,11 +1,12 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Response types for the header metrics endpoint - HeaderMetricsResponse, TraderHeaderState and the per-card info structs.
+//! Response types for the header metrics endpoint - HeaderMetricsResponse and the per-card info structs.
 
 use serde::Serialize;
 
 use crate::filtering::SnapshotState;
+use crate::trader::TraderRunState;
 
 #[derive(Debug, Serialize)]
 pub struct HeaderMetricsResponse {
@@ -41,23 +42,11 @@ pub struct SolHeaderInfo {
 #[derive(Debug, Serialize)]
 pub struct TraderHeaderInfo {
     pub enabled: bool,
-    pub state: TraderHeaderState,
+    pub state: TraderRunState,
     /// `None` when today's P&L is unknown: no trader (Explore Mode) or no stats yet.
     pub today_pnl_native: Option<f64>,
     /// `None` when the P&L or the start-of-day balance it is measured against is unknown.
     pub today_pnl_percent: Option<f64>,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum TraderHeaderState {
-    Explore,
-    ForceStopped,
-    Stopped,
-    Waiting,
-    Idle,
-    EntryPaused,
-    Running,
 }
 
 /// The header's wallet card. `total_equity_native` is the headline and MUST be the same

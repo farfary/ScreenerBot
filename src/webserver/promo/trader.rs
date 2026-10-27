@@ -204,14 +204,14 @@ pub fn get_promo_trader_stats() -> TraderStats {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::trader::TraderRunState;
     use crate::webserver::promo::get_promo_header_metrics;
-    use crate::webserver::routes::header::TraderHeaderState;
 
     #[test]
     fn trader_status_and_monitors_agree_with_the_header() {
         crate::config::utils::install_default_config();
         let header = get_promo_header_metrics().trader;
-        let header_running = matches!(header.state, TraderHeaderState::Running);
+        let header_running = matches!(header.state, TraderRunState::Running);
 
         let status = get_promo_trader_status();
         assert!(status.available);

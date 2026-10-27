@@ -95,6 +95,7 @@ errors-copy-request-failed = Permintaan copy trading gagal
 
 errors-strategies-not-found = Strategi tidak ditemukan
 errors-strategies-invalid-type = Jenis strategi tidak valid. Harus ENTRY atau EXIT
+errors-strategies-priority-out-of-range = Prioritas { $priority } di luar rentang. Gunakan angka dari { $min } hingga { $max }
 errors-strategies-list-failed = Gagal mengambil strategi
 errors-strategies-get-failed = Gagal mengambil strategi
 errors-strategies-serialize-rules-failed = Gagal melakukan serialisasi aturan

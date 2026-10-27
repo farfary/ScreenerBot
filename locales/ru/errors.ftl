@@ -92,6 +92,7 @@ errors-copy-request-failed = Не удалось выполнить запрос
 
 errors-strategies-not-found = Стратегия не найдена
 errors-strategies-invalid-type = Недопустимый тип стратегии. Допустимо: ENTRY или EXIT
+errors-strategies-priority-out-of-range = Приоритет { $priority } вне допустимого диапазона. Укажите число от { $min } до { $max }
 errors-strategies-list-failed = Не удалось получить стратегии
 errors-strategies-get-failed = Не удалось получить стратегию
 errors-strategies-serialize-rules-failed = Не удалось сериализовать правила

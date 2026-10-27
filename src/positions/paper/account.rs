@@ -185,6 +185,16 @@ impl PaperBook {
         self.db.current_paper_epoch(wallet_address)
     }
 
+    /// The account of the current paper run of `wallet_address`, or none before the first
+    /// run starts. Unlike [`PaperBook::account`] it never starts a run. A synchronous store
+    /// read: callers on the async runtime run it on the blocking pool.
+    pub fn current_account(&self, wallet_address: &str) -> Result<Option<PaperAccount>> {
+        self.db
+            .current_paper_epoch(wallet_address)?
+            .map(|epoch| self.account_in(wallet_address, epoch))
+            .transpose()
+    }
+
     /// The account of the current paper run of `wallet_address` when its cash covers a
     /// buy of `mint` costing `needed_native`. Refused with `PaperRunEnded` before any run
     /// started or when the current run is not `priced_in`, the run the buy was priced in,

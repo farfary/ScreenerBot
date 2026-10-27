@@ -101,6 +101,14 @@ pub enum Error {
     #[error("strategy evaluation timed out after {timeout_ms}ms")]
     EvaluationTimeout { timeout_ms: u64 },
 
+    /// A strategy priority outside the range strategies are ordered in.
+    #[error(
+        "priority {priority} is outside {min}-{max}",
+        min = crate::strategies::types::MIN_PRIORITY,
+        max = crate::strategies::types::MAX_PRIORITY
+    )]
+    PriorityOutOfRange { priority: i32 },
+
     /// Arming a strategy live needs the exact confirmation phrase.
     #[error("arming a strategy live needs the exact confirmation phrase")]
     LiveConfirmationRequired,
@@ -133,6 +141,7 @@ impl Error {
             | Error::InvalidRuleTree { .. }
             | Error::ConditionNotApplicable { .. }
             | Error::EvaluationTimeout { .. }
+            | Error::PriorityOutOfRange { .. }
             | Error::LiveConfirmationRequired
             | Error::LiveUnavailable { .. } => false,
         }
@@ -158,6 +167,7 @@ impl ErrorClass for Error {
             | Error::InvalidConditionValue { .. }
             | Error::InvalidRuleTree { .. }
             | Error::ConditionNotApplicable { .. }
+            | Error::PriorityOutOfRange { .. }
             | Error::LiveConfirmationRequired
             | Error::LiveUnavailable { .. } => Severity::Warning,
             Error::MissingContextData { .. }
@@ -178,6 +188,7 @@ impl ErrorClass for Error {
             | Error::InvalidConditionValue { .. }
             | Error::InvalidRuleTree { .. }
             | Error::ConditionNotApplicable { .. }
+            | Error::PriorityOutOfRange { .. }
             | Error::LiveConfirmationRequired => 400,
             Error::LiveUnavailable { .. } => 409,
             Error::MissingContextData { .. }

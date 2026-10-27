@@ -108,6 +108,7 @@ errors-copy-request-failed = 跟单交易请求失败
 # Strategies
 errors-strategies-not-found = 未找到策略
 errors-strategies-invalid-type = 策略类型无效。必须为 ENTRY 或 EXIT
+errors-strategies-priority-out-of-range = 优先级 { $priority } 超出范围。请使用 { $min } 到 { $max } 之间的数字
 errors-strategies-list-failed = 获取策略失败
 errors-strategies-get-failed = 获取策略失败
 errors-strategies-serialize-rules-failed = 序列化规则失败

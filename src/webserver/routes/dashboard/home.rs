@@ -439,9 +439,10 @@ pub async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<Home
         found_all_time: total_in_database,
     };
 
-    // The trader owner reports Explore Mode and incomplete setup as unavailable.
+    // The trader owner's run state, with Explore Mode and incomplete setup unavailable.
     let auto_trader = auto_trader_card(
-        &crate::trader::trader_status().await,
+        crate::trader::run_state(),
+        crate::trader::live_block() == Some(crate::trader::LiveBlock::SetupIncomplete),
         position_capacity,
         auto_activity_result.ok(),
     );

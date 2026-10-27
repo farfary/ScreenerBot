@@ -360,6 +360,12 @@ impl Error {
                 UiText::new(ids::STRATEGIES_ERROR_EVALUATION_TIMEOUT)
                     .arg("timeout", UiArg::Text(timeout_ms.to_string()))
             }
+            Error::PriorityOutOfRange { priority } => {
+                UiText::new(ids::ERRORS_STRATEGIES_PRIORITY_OUT_OF_RANGE)
+                    .arg("priority", UiArg::Count(i64::from(*priority)))
+                    .arg("min", UiArg::Count(i64::from(super::types::MIN_PRIORITY)))
+                    .arg("max", UiArg::Count(i64::from(super::types::MAX_PRIORITY)))
+            }
             Error::LiveConfirmationRequired => {
                 UiText::new(ids::ERRORS_STRATEGIES_LIVE_CONFIRMATION_REQUIRED)
             }
@@ -392,6 +398,7 @@ mod tests {
             | Error::InvalidRuleTree { .. }
             | Error::ConditionNotApplicable { .. }
             | Error::EvaluationTimeout { .. }
+            | Error::PriorityOutOfRange { .. }
             | Error::LiveConfirmationRequired
             | Error::LiveUnavailable { .. } => error,
         };
@@ -443,6 +450,7 @@ mod tests {
                 strategy_type: StrategyType::Entry,
             }),
             listed(Error::EvaluationTimeout { timeout_ms: 250 }),
+            listed(Error::PriorityOutOfRange { priority: 0 }),
             listed(Error::LiveConfirmationRequired),
             listed(Error::LiveUnavailable {
                 reason: crate::trader::LiveBlock::SetupIncomplete,

@@ -6,9 +6,10 @@
 use chrono::Utc;
 
 use crate::filtering::SnapshotState;
+use crate::trader::TraderRunState;
 use crate::webserver::routes::header::{
     FilteringHeaderInfo, HeaderMetricsResponse, RpcHeaderInfo, SolHeaderInfo, SystemHeaderInfo,
-    TraderHeaderInfo, TraderHeaderState, WalletHeaderInfo,
+    TraderHeaderInfo, WalletHeaderInfo,
 };
 
 use super::aggregates;
@@ -42,7 +43,7 @@ pub fn get_promo_header_metrics() -> HeaderMetricsResponse {
     let today_pnl_percent = today.net_pnl_sol / PROMO_START_BALANCE * 100.0;
     let trader = TraderHeaderInfo {
         enabled: true,
-        state: TraderHeaderState::Running,
+        state: TraderRunState::Running,
         today_pnl_native: Some(today.net_pnl_sol),
         today_pnl_percent: Some(today_pnl_percent),
     };

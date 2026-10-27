@@ -51,10 +51,10 @@ mod types;
 // Re-exports for common usage
 pub use constants::*;
 pub use controller::{
-    clear_force_stop, engage_force_stop, is_trader_running, live_block, loss_limit_snapshot,
-    monitors_status, set_monitor_enabled, start_trader_checked, stop_trader_checked,
-    stop_trader_gracefully, trader_status, LiveBlock, LossLimitSnapshot, Monitor, MonitorState,
-    MonitorsStatus, TraderStatus,
+    clear_force_stop, engage_force_stop, entry_blocks, is_trader_running, live_block,
+    loss_limit_snapshot, monitors_status, run_state, set_monitor_enabled, start_trader_checked,
+    stop_trader_checked, stop_trader_gracefully, trader_status, LiveBlock, LossLimitSnapshot,
+    Monitor, MonitorState, MonitorsStatus, TraderRunState, TraderStatus,
 };
 pub use error::{Error, Result};
 pub use executors::execute_trade;

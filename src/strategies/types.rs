@@ -47,6 +47,11 @@ pub enum ConditionData {
     Clock,
 }
 
+/// The lowest priority a strategy takes; strategies are evaluated lowest priority first.
+pub const MIN_PRIORITY: i32 = 1;
+/// The highest priority a strategy takes.
+pub const MAX_PRIORITY: i32 = 100;
+
 /// Strategy definition with rule tree and metadata
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Strategy {
@@ -87,6 +92,15 @@ impl Strategy {
             }
         }
         binding
+    }
+
+    /// Refuse a `priority` outside [`MIN_PRIORITY`]..=[`MAX_PRIORITY`].
+    pub fn check_priority(priority: i32) -> super::Result<()> {
+        if (MIN_PRIORITY..=MAX_PRIORITY).contains(&priority) {
+            Ok(())
+        } else {
+            Err(super::Error::PriorityOutOfRange { priority })
+        }
     }
 
     /// Whether this exit strategy manages a position opened by `entry_strategy_id`

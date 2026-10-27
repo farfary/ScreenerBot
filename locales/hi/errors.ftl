@@ -92,6 +92,7 @@ errors-copy-request-failed = कॉपी ट्रेडिंग अनुर�
 
 errors-strategies-not-found = स्ट्रैटेजी नहीं मिली
 errors-strategies-invalid-type = स्ट्रैटेजी का प्रकार अमान्य है। यह ENTRY या EXIT होना चाहिए
+errors-strategies-priority-out-of-range = प्राथमिकता { $priority } मान्य सीमा से बाहर है। { $min } से { $max } तक की कोई संख्या दें
 errors-strategies-list-failed = स्ट्रैटेजी प्राप्त करने में विफल
 errors-strategies-get-failed = स्ट्रैटेजी प्राप्त करने में विफल
 errors-strategies-serialize-rules-failed = नियम सीरियलाइज़ करने में विफल

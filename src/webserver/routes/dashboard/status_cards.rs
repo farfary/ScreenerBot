@@ -9,20 +9,32 @@ use crate::positions::AutoTradeActivity;
 use crate::trader::copy::control::{self, CopyTradingStatus};
 use crate::trader::copy::workspace::{self, ActivityFilter};
 use crate::trader::safety::PositionCapacity;
-use crate::trader::TraderStatus;
+use crate::trader::TraderRunState;
 
 use super::types::{AutoTraderCard, CopyTradingCard, FeatureState};
 
-/// The Auto Trader card from the trader's status, its position capacity and the positions
-/// it opened and closed today (`None` when they could not be read).
+/// The Auto Trader card from the trader's run state, its position capacity and the
+/// positions it opened and closed today (`None` when they could not be read).
+/// `setup_incomplete` is the trader's live gate answer; Explore Mode reads as unavailable
+/// too.
 pub fn auto_trader_card(
-    status: &TraderStatus,
+    run_state: TraderRunState,
+    setup_incomplete: bool,
     capacity: PositionCapacity,
     activity_today: Option<AutoTradeActivity>,
 ) -> AutoTraderCard {
-    if !status.available {
+    let state = match run_state {
+        _ if setup_incomplete => FeatureState::Unavailable,
+        TraderRunState::Explore => FeatureState::Unavailable,
+        TraderRunState::ForceStopped | TraderRunState::Stopped => FeatureState::Stopped,
+        TraderRunState::Waiting
+        | TraderRunState::Idle
+        | TraderRunState::EntryPaused
+        | TraderRunState::Running => FeatureState::Running,
+    };
+    if state == FeatureState::Unavailable {
         return AutoTraderCard {
-            state: FeatureState::Unavailable,
+            state,
             open_positions: None,
             max_open_positions: None,
             entries_today: None,
@@ -30,11 +42,7 @@ pub fn auto_trader_card(
         };
     }
     AutoTraderCard {
-        state: if status.running {
-            FeatureState::Running
-        } else {
-            FeatureState::Stopped
-        },
+        state,
         open_positions: Some(capacity.used),
         max_open_positions: Some(capacity.limit),
         entries_today: activity_today.map(|activity| activity.opened),
@@ -108,17 +116,6 @@ pub async fn read_copy_trading_card() -> CopyTradingCard {
 mod tests {
     use super::*;
 
-    fn trader(available: bool, running: bool) -> TraderStatus {
-        TraderStatus {
-            enabled: available && running,
-            running,
-            available,
-            unavailable_reason: None,
-            live_strategies: 0,
-            paper_strategies: 0,
-        }
-    }
-
     fn today(opened: i64, closed: i64) -> AutoTradeActivity {
         AutoTradeActivity { opened, closed }
     }
@@ -146,7 +143,7 @@ mod tests {
 
     #[test]
     fn a_running_trader_reports_capacity_and_the_day() {
-        let card = auto_trader_card(&trader(true, true), CAPACITY, Some(today(3, 1)));
+        let card = auto_trader_card(TraderRunState::Running, false, CAPACITY, Some(today(3, 1)));
         assert_eq!(card.state, FeatureState::Running);
         assert_eq!(card.open_positions, Some(2));
         assert_eq!(card.max_open_positions, Some(5));
@@ -156,7 +153,7 @@ mod tests {
 
     #[test]
     fn a_stopped_trader_with_unreadable_stats_reports_them_absent() {
-        let card = auto_trader_card(&trader(true, false), CAPACITY, None);
+        let card = auto_trader_card(TraderRunState::Stopped, false, CAPACITY, None);
         assert_eq!(card.state, FeatureState::Stopped);
         assert_eq!(card.open_positions, Some(2));
         assert_eq!(card.entries_today, None);
@@ -165,11 +162,35 @@ mod tests {
 
     #[test]
     fn an_unavailable_trader_reports_no_figures() {
-        let card = auto_trader_card(&trader(false, false), CAPACITY, Some(today(3, 1)));
-        assert_eq!(card.state, FeatureState::Unavailable);
-        assert_eq!(card.open_positions, None);
-        assert_eq!(card.max_open_positions, None);
-        assert_eq!(card.entries_today, None);
+        for (run_state, setup_incomplete) in [
+            (TraderRunState::Stopped, true),
+            (TraderRunState::Running, true),
+            (TraderRunState::Explore, false),
+        ] {
+            let card = auto_trader_card(run_state, setup_incomplete, CAPACITY, Some(today(3, 1)));
+            assert_eq!(card.state, FeatureState::Unavailable, "{run_state:?}");
+            assert_eq!(card.open_positions, None);
+            assert_eq!(card.max_open_positions, None);
+            assert_eq!(card.entries_today, None);
+        }
+    }
+
+    /// The card reads the trader's one run state: an enabled trader runs whatever its
+    /// monitors or the loss limit do, and the emergency stop stops it.
+    #[test]
+    fn the_card_state_follows_the_trader_run_state() {
+        for (run_state, expected) in [
+            (TraderRunState::ForceStopped, FeatureState::Stopped),
+            (TraderRunState::Stopped, FeatureState::Stopped),
+            (TraderRunState::Waiting, FeatureState::Running),
+            (TraderRunState::Idle, FeatureState::Running),
+            (TraderRunState::EntryPaused, FeatureState::Running),
+            (TraderRunState::Running, FeatureState::Running),
+        ] {
+            let card = auto_trader_card(run_state, false, CAPACITY, None);
+            assert_eq!(card.state, expected, "{run_state:?}");
+            assert_eq!(card.open_positions, Some(2), "{run_state:?}");
+        }
     }
 
     #[test]
@@ -209,8 +230,13 @@ mod tests {
     /// The serialized card keeps every absent figure as null, so the page renders "—".
     #[test]
     fn absent_figures_serialize_as_null() {
-        let card =
-            serde_json::to_value(auto_trader_card(&trader(true, false), CAPACITY, None)).unwrap();
+        let card = serde_json::to_value(auto_trader_card(
+            TraderRunState::Stopped,
+            false,
+            CAPACITY,
+            None,
+        ))
+        .unwrap();
         assert_eq!(card["state"], "stopped");
         assert!(card["entries_today"].is_null());
         let card = serde_json::to_value(copy_trading_card(false, None, None, None)).unwrap();

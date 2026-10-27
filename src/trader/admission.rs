@@ -364,28 +364,21 @@ pub async fn check_entry_admission(
     mint: &str,
     required_endpoints: &[&str],
 ) -> Result<(), EntryBlock> {
-    // Early exit: Force stop is active
-    if crate::global::is_force_stopped() {
-        crate::logger::debug(
-            crate::logger::LogTag::Trader,
-            &format!(
-                "[ENTRY-EVAL] {}: blocked by force_stop",
-                &mint[..8.min(mint.len())]
-            ),
-        );
-        return Err(EntryBlock::ForceStopped);
-    }
-
-    // Early exit: Loss limit reached
-    if crate::trader::safety::loss_limit::is_entry_blocked_by_loss_limit() {
-        crate::logger::info(
-            crate::logger::LogTag::Trader,
-            &format!(
-                "[ENTRY-EVAL] {}: blocked by loss_limit",
-                &mint[..8.min(mint.len())]
-            ),
-        );
-        return Err(EntryBlock::LossLimit);
+    // Early exit: force stop, then the loss limit
+    if let Some(block) = crate::trader::controller::entry_halt(TradingMode::Live) {
+        let short_mint = &mint[..8.min(mint.len())];
+        if block == EntryBlock::LossLimit {
+            crate::logger::info(
+                crate::logger::LogTag::Trader,
+                &format!("[ENTRY-EVAL] {short_mint}: blocked by loss_limit"),
+            );
+        } else {
+            crate::logger::debug(
+                crate::logger::LogTag::Trader,
+                &format!("[ENTRY-EVAL] {short_mint}: blocked by force_stop"),
+            );
+        }
+        return Err(block);
     }
 
     // Entry stores open and reconciled: a restored or recreated ledger would size and
@@ -421,9 +414,8 @@ pub async fn check_entry_admission(
     }
 
     // 2. Position limits - check if we can open more positions
-    match safety::check_position_limits().await {
-        Ok(true) => {}
-        Ok(false) => {
+    if let Err(block) = check_slots(TradingMode::Live).await {
+        if block == EntryBlock::PositionLimit {
             crate::logger::debug(
                 crate::logger::LogTag::Trader,
                 &format!(
@@ -431,9 +423,8 @@ pub async fn check_entry_admission(
                     &mint[..8.min(mint.len())]
                 ),
             );
-            return Err(EntryBlock::PositionLimit);
         }
-        Err(e) => return Err(EntryBlock::CheckFailed(e.to_string())),
+        return Err(block);
     }
 
     // 3. Existing position check - prevent duplicate entries
@@ -541,9 +532,44 @@ async fn read_paper_cash() -> Result<f64, EntryBlock> {
         .map_err(|e| EntryBlock::CheckFailed(e.to_string()))
 }
 
+/// The cash of the current paper run of the active wallet without starting a run: before
+/// the first run it is the configured starting balance that run starts with. The paper
+/// store is read on the blocking pool.
+pub(in crate::trader) async fn standing_paper_cash() -> Result<f64, EntryBlock> {
+    let paper = crate::positions::paper::book().ok_or_else(paper_book_not_loaded)?;
+    let wallet =
+        crate::utils::get_wallet_address().map_err(|e| EntryBlock::CheckFailed(e.to_string()))?;
+    let starting_balance =
+        crate::config::with_config(|config| config.trader.paper.starting_balance_sol);
+    tokio::task::spawn_blocking(move || paper.current_account(&wallet))
+        .await
+        .map_err(|e| EntryBlock::CheckFailed(e.to_string()))?
+        .map(|account| account.map_or(starting_balance, |account| account.cash_native))
+        .map_err(|e| EntryBlock::CheckFailed(e.to_string()))
+}
+
+/// Refuse an entry on `mode` while that mode's book holds as many open positions as the
+/// configured limit allows: the live position limit, or the paper book's own slots.
+pub(in crate::trader) async fn check_slots(mode: TradingMode) -> Result<(), EntryBlock> {
+    let has_room = match mode {
+        TradingMode::Live => safety::check_position_limits()
+            .await
+            .map_err(|e| EntryBlock::CheckFailed(e.to_string()))?,
+        TradingMode::Paper => {
+            let paper = crate::positions::paper::book().ok_or_else(paper_book_not_loaded)?;
+            paper.open_positions().await.len() < crate::trader::config::get_max_open_positions()
+        }
+    };
+    if has_room {
+        Ok(())
+    } else {
+        Err(EntryBlock::PositionLimit)
+    }
+}
+
 /// Refuse a paper entry costing `needed_native` that the paper `cash` read for the cycle
 /// does not cover, on the terms the paper executor checks at booking.
-fn paper_cash_covers(
+pub(in crate::trader) fn paper_cash_covers(
     cash: Option<&Result<f64, EntryBlock>>,
     needed_native: f64,
 ) -> Result<(), EntryBlock> {
@@ -571,17 +597,15 @@ pub async fn check_paper_entry_admission(
     cycle: &EntryCycle,
     entry_size_native: f64,
 ) -> Result<(), EntryBlock> {
-    if crate::global::is_force_stopped() {
-        return Err(EntryBlock::ForceStopped);
+    if let Some(block) = crate::trader::controller::entry_halt(TradingMode::Paper) {
+        return Err(block);
     }
     check_storage(&PAPER_ENTRY_STORES)?;
     if let Some(unhealthy) = crate::connectivity::check_endpoints_usable(required_endpoints).await {
         return Err(EntryBlock::Connectivity(unhealthy));
     }
+    check_slots(TradingMode::Paper).await?;
     let paper = crate::positions::paper::book().ok_or_else(paper_book_not_loaded)?;
-    if paper.open_positions().await.len() >= crate::trader::config::get_max_open_positions() {
-        return Err(EntryBlock::PositionLimit);
-    }
     let cooldown_secs = crate::config::with_config(|config| {
         config.positions.position_open_cooldown_secs.max(0) as u64
     });

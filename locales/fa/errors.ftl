@@ -110,6 +110,7 @@ errors-copy-request-failed = درخواست کپی‌تریدینگ ناموفق
 # Strategies
 errors-strategies-not-found = استراتژی پیدا نشد
 errors-strategies-invalid-type = نوع استراتژی نامعتبر است. باید ENTRY یا EXIT باشد
+errors-strategies-priority-out-of-range = اولویت { $priority } خارج از محدوده مجاز است. عددی از { $min } تا { $max } وارد کنید
 errors-strategies-list-failed = دریافت استراتژی‌ها ناموفق بود
 errors-strategies-get-failed = دریافت استراتژی ناموفق بود
 errors-strategies-serialize-rules-failed = سریال‌سازی قوانین ناموفق بود

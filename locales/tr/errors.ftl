@@ -105,6 +105,7 @@ errors-copy-request-failed = Kopya işlem isteği başarısız oldu
 # Strategies
 errors-strategies-not-found = Strateji bulunamadı
 errors-strategies-invalid-type = Strateji türü geçersiz. ENTRY veya EXIT olmalı
+errors-strategies-priority-out-of-range = Öncelik { $priority } izin verilen aralığın dışında. { $min } ile { $max } arasında bir sayı kullanın
 errors-strategies-list-failed = Stratejiler alınamadı
 errors-strategies-get-failed = Strateji alınamadı
 errors-strategies-serialize-rules-failed = Kurallar serileştirilemedi

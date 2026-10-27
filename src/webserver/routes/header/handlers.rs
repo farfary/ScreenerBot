@@ -55,28 +55,8 @@ pub(super) async fn get_header_metrics() -> Json<HeaderMetricsResponse> {
     let worth = get_wallet_worth();
 
     let explore = crate::global::is_explore_mode();
-    let (trader_enabled, entry_enabled, exit_enabled) = with_config(|cfg| {
-        (
-            cfg.trader.enabled,
-            cfg.trader.entry_monitor_enabled,
-            cfg.trader.exit_monitor_enabled,
-        )
-    });
-    let trader_state = if explore {
-        TraderHeaderState::Explore
-    } else if crate::global::is_force_stopped() {
-        TraderHeaderState::ForceStopped
-    } else if !trader_enabled {
-        TraderHeaderState::Stopped
-    } else if !are_core_services_ready() {
-        TraderHeaderState::Waiting
-    } else if !entry_enabled && !exit_enabled {
-        TraderHeaderState::Idle
-    } else if entry_enabled && crate::trader::safety::loss_limit::is_entry_blocked_by_loss_limit() {
-        TraderHeaderState::EntryPaused
-    } else {
-        TraderHeaderState::Running
-    };
+    let trader_enabled = with_config(|cfg| cfg.trader.enabled);
+    let trader_state = crate::trader::run_state();
 
     let start_balance = start_balance.ok().flatten();
     // Explore Mode has no trader, so its P&L is unknown rather than flat.
@@ -370,7 +350,7 @@ mod tests {
         let (today_pnl_native, today_pnl_percent) = today_pnl(None, None);
         let trader = serde_json::to_value(TraderHeaderInfo {
             enabled: false,
-            state: TraderHeaderState::Explore,
+            state: crate::trader::TraderRunState::Explore,
             today_pnl_native,
             today_pnl_percent,
         })
