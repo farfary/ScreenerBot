@@ -39,6 +39,10 @@ const BUSY_LABELS = Object.freeze({
   closing: "positions-busy-closing",
 });
 
+// Position controls a trade lock can hold; the token action never locks.
+const ALL_TRADE_ACTIONS = Object.freeze(["add", "sell", "close"]);
+const PARTIAL_SELL_LOCKED_ACTIONS = Object.freeze(["add", "sell"]);
+
 export function applyHeaderMixin(PositionDetailsDialog) {
   const proto = PositionDetailsDialog.prototype;
 
@@ -318,35 +322,53 @@ export function applyHeaderMixin(PositionDetailsDialog) {
   };
 
   /**
-   * Whether a trade is processing for this position. Mirrors the positions list: an exit
-   * pending verification ("closing"), or a live buy/sell action in flight for this mint.
-   * @returns {"buying"|"selling"|"closing"|null}
+   * The trade lock in force for this position: the state the locked controls name and which
+   * controls it locks. Mirrors the positions list: an exit pending verification ("closing"), a
+   * live buy/sell action in flight for this mint, or a swap submitted but not yet booked.
+   *
+   * A partial sell confirming or held for proof locks Add and Sell only. A full close is sized
+   * from the wallet balance, so it cannot sell again what the partial already sold, and the
+   * whole position must stay exitable while that verification runs. A quote-asset position
+   * (`quote_asset`) is the exception: its close is sized from the booked remainder, so the
+   * backend refuses it until the partial is booked, and Close locks with Add and Sell.
+   * @returns {{state: "buying"|"selling"|"closing", actions: readonly string[]}|null}
    */
-  proto._inFlightTradeState = function () {
+  proto._tradeLock = function () {
     const pos = this._position();
     if (!pos) return null;
-    if (pos.exit_transaction_signature && !pos.transaction_exit_verified) return "closing";
+    if (pos.exit_transaction_signature && !pos.transaction_exit_verified) {
+      return { state: "closing", actions: ALL_TRADE_ACTIONS };
+    }
 
     const live = notificationManager.getInFlightTradeForMint(pos.mint);
-    if (live) return live;
+    if (live) return { state: live, actions: ALL_TRADE_ACTIONS };
 
     // An action reports "completed" the moment its swap is SUBMITTED, so it stops covering
     // the position well before the position changes. A pending swap keeps the controls locked
     // for the rest of that window, which is exactly when a second add would be fired on top
     // of one still confirming.
-    const pending = this.fullDetails?.pending_swaps?.[0];
-    if (pending) return pending.kind === "dca" ? "buying" : "selling";
+    const pending = this.fullDetails?.pending_swaps || [];
+    if (pending.some((swap) => swap.kind === "dca")) {
+      return { state: "buying", actions: ALL_TRADE_ACTIONS };
+    }
+    if (pending.length > 0) {
+      return {
+        state: "selling",
+        actions: pos.quote_asset ? ALL_TRADE_ACTIONS : PARTIAL_SELL_LOCKED_ACTIONS,
+      };
+    }
     return null;
   };
 
   /** Lock the trade controls while a trade is in flight, so it cannot be double-fired. */
   proto._updateTradeButtonsState = function () {
-    const busy = this._inFlightTradeState();
+    const lock = this._tradeLock();
     this.dialogEl
       ?.querySelectorAll('[data-trade-action]:not([data-trade-action="token"])')
       .forEach((btn) => {
-        btn.disabled = busy !== null;
-        btn.title = busy ? I18n.label(BUSY_LABELS, busy) : btn.dataset.idleTitle || "";
+        const locked = lock !== null && lock.actions.includes(btn.dataset.tradeAction);
+        btn.disabled = locked;
+        btn.title = locked ? I18n.label(BUSY_LABELS, lock.state) : btn.dataset.idleTitle || "";
       });
   };
 

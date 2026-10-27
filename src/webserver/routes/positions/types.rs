@@ -318,6 +318,10 @@ pub struct PositionDetail {
     /// ladder step's multiple of the first buy, or the first buy once every step is
     /// used. Absent on a closed position and on one with no first buy to size from.
     pub default_add_size_native: Option<f64>,
+    /// The token is the chain's native coin or a stablecoin. Its close is sized from the
+    /// booked remainder rather than the wallet balance, so the close waits while a partial
+    /// exit of it confirms (`positions::operations::close`).
+    pub quote_asset: bool,
     /// Every exit rule the exit monitor applies to this position at a price or a time,
     /// from the policy it resolves; absent where it evaluates no policy exit.
     pub exit_plan: Option<ExitPlanResponse>,

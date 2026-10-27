@@ -61,6 +61,7 @@
     "trailing_stop_active": true,
     "break_even_active": false,
     "default_add_size_native": 0.25,
+    "quote_asset": false,
     "exit_plan": {
       "stop_loss_pct": 50,
       "take_profit_steps": [

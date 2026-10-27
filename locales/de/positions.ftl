@@ -232,7 +232,7 @@ positions-pending-selling-percent = { $percent } verkaufen
 positions-pending-confirming = { $label } · wird bestätigt
     .title = Gesendet und wartet auf On-Chain-Bestätigung. Die Werte werden nach der Verifizierung aktualisiert.
 positions-pending-checking = { $label } · Wallet wird geprüft
-    .title = Der Verkauf konnte nicht bestätigt werden. Weitere Teilverkäufe warten, bis die Wallet zeigt, ob er durchgeführt wurde, meist innerhalb von zwei Minuten.
+    .title = Der Verkauf konnte nicht bestätigt werden. Weitere Teilverkäufe warten, bis die Wallet zeigt, ob er durchgeführt wurde, meist innerhalb von zwei Minuten; das Schließen der Position bleibt möglich.
 
 positions-trade-add = Hinzufügen
     .title = Zur Position hinzufügen

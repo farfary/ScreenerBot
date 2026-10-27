@@ -276,7 +276,7 @@ positions-pending-selling-percent = { $percent } 매도 중
 positions-pending-confirming = { $label } · 확인 중
     .title = 제출되었으며 온체인 확인을 기다리는 중입니다. 검증되면 수치가 갱신됩니다.
 positions-pending-checking = { $label } · 지갑 확인 중
-    .title = 매도를 확인할 수 없습니다. 지갑에서 체결 여부가 확인될 때까지 다음 부분 매도는 대기하며, 보통 2분 이내에 확인됩니다.
+    .title = 매도를 확인할 수 없습니다. 지갑에서 체결 여부가 확인될 때까지 다음 부분 매도는 대기하며, 보통 2분 이내에 확인됩니다. 포지션 종료는 계속 가능합니다.
 
 ## Trade controls
 

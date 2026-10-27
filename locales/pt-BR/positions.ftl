@@ -286,7 +286,7 @@ positions-pending-selling-percent = Vendendo { $percent }
 positions-pending-confirming = { $label } · confirmando
     .title = Enviado e aguardando confirmação on-chain. Os valores são atualizados assim que for verificado.
 positions-pending-checking = { $label } · verificando a carteira
-    .title = Não foi possível confirmar a venda. As próximas vendas parciais aguardam até que a carteira mostre se ela foi concluída, normalmente em até dois minutos.
+    .title = Não foi possível confirmar a venda. As próximas vendas parciais aguardam até que a carteira mostre se ela foi concluída, normalmente em até dois minutos; fechar a posição continua disponível.
 
 ## Trade controls
 

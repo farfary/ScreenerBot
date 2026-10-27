@@ -61,6 +61,7 @@
     "trailing_stop_active": false,
     "break_even_active": false,
     "default_add_size_native": null,
+    "quote_asset": false,
     "exit_plan": null
   },
   "entries": [

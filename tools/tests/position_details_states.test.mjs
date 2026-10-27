@@ -21,7 +21,9 @@
  * - Every value the dialog labels has a label (no raw id reaches the screen), and every
  *   time on screen is to the minute.
  * - A partial exit held until the wallet shows its outcome reads as checking the wallet,
- *   not confirming, and locks Add and Sell.
+ *   not confirming. A partial exit confirming or held locks Add and Sell and leaves Close
+ *   available, except on a quote-asset position, whose close waits for the partial; a
+ *   confirming add locks every trade control.
  *
  * Run with `npm run test:js`.
  */
@@ -191,7 +193,12 @@ test("the open position dialog at the narrowest desktop window", async (t) => {
   assert.doesNotMatch(text, /\b\d{1,2}:\d{2}:\d{2}\b/, "times on screen are to the minute");
 });
 
-test("a held partial exit reads as checking the wallet and locks Add and Sell", async (t) => {
+/**
+ * Opens the first position's dialog with `pendingSwaps` as its unbooked swaps and
+ * `position` merged into its position.
+ * @returns {Promise<import("playwright").Locator>} the dialog
+ */
+async function openWithPendingSwaps(t, pendingSwaps, position = {}) {
   const browser = await chromium.launch({ headless: true });
   t.after(() => browser.close());
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
@@ -205,15 +212,8 @@ test("a held partial exit reads as checking the wallet and locks Add and Sell", 
       const response = await api.onApi(request);
       if (!/^\/api\/positions\/[^/]+\/details$/.test(request.url.pathname)) return response;
       const details = JSON.parse(response.body);
-      details.pending_swaps = [
-        {
-          kind: "partial_exit_hold",
-          signature: null,
-          size_sol: null,
-          exit_percentage: 25,
-          submitted_at: 1759795200,
-        },
-      ];
+      details.pending_swaps = pendingSwaps;
+      Object.assign(details.position, position);
       return { ...response, body: JSON.stringify(details) };
     },
   });
@@ -224,18 +224,95 @@ test("a held partial exit reads as checking the wallet and locks Add and Sell", 
   await page.waitForSelector(PAGE_READY);
   await page.locator(ROW_SYMBOL).first().click();
   const dialog = page.locator(".position-details-dialog");
+  await dialog.locator(".pdd-pending").first().waitFor();
+  return dialog;
+}
+
+/** Asserts which trade controls are locked, and that Close keeps its idle title when free. */
+async function assertTradeLock(dialog, locked, reason) {
+  for (const action of ["add", "sell", "close"]) {
+    const button = dialog.locator(`[data-trade-action="${action}"]`);
+    const expected = locked.includes(action);
+    assert.equal(
+      await button.isDisabled(),
+      expected,
+      `${action} is ${expected ? "locked" : "available"} ${reason}`
+    );
+    if (!expected) {
+      assert.equal(await button.getAttribute("title"), await button.getAttribute("data-idle-title"));
+    }
+  }
+}
+
+test("a held partial exit reads as checking the wallet and leaves Close available", async (t) => {
+  const dialog = await openWithPendingSwaps(t, [
+    {
+      kind: "partial_exit_hold",
+      signature: null,
+      size_sol: null,
+      exit_percentage: 25,
+      submitted_at: 1759795200,
+    },
+  ]);
 
   const pending = dialog.locator(".pdd-pending");
-  await pending.first().waitFor();
   assert.equal(await pending.count(), 1);
   assert.equal((await pending.textContent()).trim(), "Selling 25% · checking the wallet");
   assert.match(await pending.getAttribute("title"), /^The sale could not be confirmed\./);
 
-  for (const action of ["add", "sell"]) {
-    assert.equal(
-      await dialog.locator(`[data-trade-action="${action}"]`).isDisabled(),
-      true,
-      `${action} is locked while the partial exit is held`
-    );
-  }
+  await assertTradeLock(dialog, ["add", "sell"], "while the partial exit is held");
+  assert.equal(
+    await dialog.locator('[data-trade-action="close"]').getAttribute("title"),
+    "Sell everything and close"
+  );
+});
+
+test("a confirming partial exit locks Add and Sell and leaves Close available", async (t) => {
+  const dialog = await openWithPendingSwaps(t, [
+    {
+      kind: "partial_exit",
+      signature: "5partialExitSignature",
+      size_sol: null,
+      exit_percentage: 40,
+      submitted_at: 1759795200,
+    },
+  ]);
+
+  assert.equal(
+    (await dialog.locator(".pdd-pending").textContent()).trim(),
+    "Selling 40% · confirming"
+  );
+  await assertTradeLock(dialog, ["add", "sell"], "while the partial exit confirms");
+});
+
+test("a confirming add locks every trade control", async (t) => {
+  const dialog = await openWithPendingSwaps(t, [
+    {
+      kind: "dca",
+      signature: "5dcaSignature",
+      size_sol: 0.5,
+      exit_percentage: null,
+      submitted_at: 1759795200,
+    },
+  ]);
+
+  await assertTradeLock(dialog, ["add", "sell", "close"], "while the add confirms");
+});
+
+test("a confirming partial exit of a quote-asset position locks Close as well", async (t) => {
+  const dialog = await openWithPendingSwaps(
+    t,
+    [
+      {
+        kind: "partial_exit",
+        signature: "5partialExitSignature",
+        size_sol: null,
+        exit_percentage: 40,
+        submitted_at: 1759795200,
+      },
+    ],
+    { quote_asset: true }
+  );
+
+  await assertTradeLock(dialog, ["add", "sell", "close"], "while the quote-asset partial confirms");
 });

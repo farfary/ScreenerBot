@@ -227,7 +227,7 @@ positions-pending-selling-percent = Menjual { $percent }
 positions-pending-confirming = { $label } · mengonfirmasi
     .title = Terkirim dan menunggu konfirmasi on-chain. Angka diperbarui setelah terverifikasi.
 positions-pending-checking = { $label } · memeriksa dompet
-    .title = Penjualan tidak dapat dikonfirmasi. Penjualan sebagian berikutnya menunggu hingga dompet menunjukkan apakah penjualan berhasil, biasanya dalam dua menit.
+    .title = Penjualan tidak dapat dikonfirmasi. Penjualan sebagian berikutnya menunggu hingga dompet menunjukkan apakah penjualan berhasil, biasanya dalam dua menit; menutup posisi tetap tersedia.
 
 positions-trade-add = Tambah
     .title = Tambah ke posisi

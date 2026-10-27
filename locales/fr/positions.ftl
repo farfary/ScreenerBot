@@ -235,7 +235,7 @@ positions-pending-selling-percent = Vente de { $percent }
 positions-pending-confirming = { $label } · confirmation
     .title = Envoyée, en attente de confirmation on-chain. Les chiffres se mettent à jour une fois la transaction vérifiée.
 positions-pending-checking = { $label } · vérification du portefeuille
-    .title = La vente n’a pas pu être confirmée. Les ventes partielles suivantes attendent que le portefeuille indique si elle a eu lieu, généralement sous deux minutes.
+    .title = La vente n’a pas pu être confirmée. Les ventes partielles suivantes attendent que le portefeuille indique si elle a eu lieu, généralement sous deux minutes ; la clôture de la position reste disponible.
 
 positions-trade-add = Renforcer
     .title = Renforcer la position

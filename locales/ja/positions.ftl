@@ -276,7 +276,7 @@ positions-pending-selling-percent = { $percent } を売却中
 positions-pending-confirming = { $label } · 確認中
     .title = 送信済みで、オンチェーンでの確認待ちです。検証が完了すると数値が更新されます。
 positions-pending-checking = { $label } · ウォレットを確認中
-    .title = 売却を確認できませんでした。売却が成立したかウォレットで確認できるまで、以降の部分売却は待機します（通常 2 分以内）。
+    .title = 売却を確認できませんでした。売却が成立したかウォレットで確認できるまで、以降の部分売却は待機します（通常 2 分以内）。ポジションのクローズは引き続き可能です。
 
 ## Trade controls
 

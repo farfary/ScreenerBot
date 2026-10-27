@@ -203,6 +203,7 @@ async fn map_position_to_detail(position: &positions::Position) -> PositionDetai
         trailing_stop_active,
         break_even_active,
         default_add_size_native: default_add_size_native(position),
+        quote_asset: crate::chains::adapter().is_quote_asset(&position.mint),
         exit_plan,
     }
 }
