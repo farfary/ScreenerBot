@@ -4,12 +4,14 @@
 //! The per-task books: each task's stats, summary and closed rounds from the book of
 //! the mode it runs in, the totals across tasks, and the overview the dashboard polls.
 
+use chrono::{DateTime, Utc};
 use serde::Serialize;
 
+use super::super::paper_book::{self, PaperBookView};
 use super::super::{
-    apply_paper_book, arrival_distance_ms, build_task_stats, closed_rounds, pause_text,
-    summarize_arrival_distances, ArrivalDistanceStats, CopyActivityRow, CopyDatabase, CopyOutcome,
-    CopyRound, CopyTask, CopyTaskStats, PaperPosition,
+    arrival_distance_ms, build_task_stats, closed_rounds, pause_text, summarize_arrival_distances,
+    ArrivalDistanceStats, CopyActivityRow, CopyDatabase, CopyOutcome, CopyRound, CopyTask,
+    CopyTaskStats,
 };
 use super::open_database;
 use super::status::{build_status, effective_state, CopyTradingStatus};
@@ -117,31 +119,93 @@ pub(in crate::trader::copy) async fn all_positions() -> Vec<Position> {
     positions
 }
 
-/// The price a paper holding is marked at: the live pool price only, the same
-/// price its exits trade on. Without one the holding counts as unpriced; the last
-/// observed trade price is usually its own entry and would hide the real move.
-/// `chain` is the chain of the task that holds the position.
-pub(in crate::trader::copy) fn paper_mark(
-    chain: crate::chains::ChainId,
-    position: &PaperPosition,
-) -> Option<f64> {
-    crate::pools::get_pool_price(chain, &position.mint).map(|price| price.price_native)
+/// The rounds a task's figures read: the live positions it opened, or its rounds of
+/// the current paper run with the instant that run starts.
+#[derive(Debug, Clone, Default)]
+pub struct TaskRounds {
+    pub positions: Vec<Position>,
+    /// Where a paper task's current run starts; absent for a live task.
+    pub run_start: Option<DateTime<Utc>>,
 }
 
-/// A task's stats and the closed rounds of its book, from what was already read.
-/// Decision counts and latency come from the task's activity; position and P&L
-/// figures come from the book of the mode it runs in -- its paper ledger while in
-/// paper mode, the real positions it opened while live -- and wins and losses are
-/// that book's closed rounds. Every path that reports a task's stats goes through
-/// here, so no endpoint reports a partial set.
-pub fn book_stats(
+impl TaskRounds {
+    /// What the task spent in its book: its live spend ledger, or the copy buys of
+    /// its current paper run.
+    pub(in crate::trader::copy) async fn spent_native(
+        &self,
+        db: &CopyDatabase,
+        task: &CopyTask,
+    ) -> Result<f64> {
+        match task.mode {
+            TradingMode::Live => db.live_total_spent(task.id).await,
+            TradingMode::Paper => {
+                Ok(paper_book::paper_spend(&self.positions, "").total_spent_native)
+            }
+        }
+    }
+}
+
+/// The rounds of `task` in the book of its mode. `live` is every live position (see
+/// [`all_positions`]); `paper` is the shared paper book, read once for every task,
+/// and a paper task reads no rounds without it.
+pub(in crate::trader::copy) async fn task_rounds(
+    task: &CopyTask,
+    live: &[Position],
+    paper: Option<&PaperBookView>,
+) -> Result<TaskRounds> {
+    match task.mode {
+        TradingMode::Live => Ok(TaskRounds {
+            positions: live
+                .iter()
+                .filter(|position| {
+                    matches!(
+                        position.origin,
+                        crate::positions::PositionOrigin::Copy { task_id, .. } if task_id == task.id
+                    )
+                })
+                .cloned()
+                .collect(),
+            run_start: None,
+        }),
+        TradingMode::Paper => match paper {
+            Some(view) => {
+                let run = view.task_run(task).await?;
+                Ok(TaskRounds {
+                    positions: run.rounds,
+                    run_start: Some(run.start),
+                })
+            }
+            None => Ok(TaskRounds::default()),
+        },
+    }
+}
+
+/// The shared paper book when any of `tasks` runs in paper. A book that cannot be read
+/// leaves the paper tasks without rounds rather than failing every task's figures.
+pub(in crate::trader::copy) async fn paper_view(tasks: &[CopyTask]) -> Option<PaperBookView> {
+    if !tasks.iter().any(|task| task.mode == TradingMode::Paper) {
+        return None;
+    }
+    match PaperBookView::load().await {
+        Ok(view) => Some(view),
+        Err(error) => {
+            crate::logger::debug(
+                crate::logger::LogTag::Trader,
+                &format!("Copy paper figures read no rounds: {error}"),
+            );
+            None
+        }
+    }
+}
+
+/// The decisions of `activity` in the book of `task`, and for a paper task only
+/// those of its current run, the run that starts at `run_start`.
+pub(in crate::trader::copy) fn current_activity(
     task: &CopyTask,
     activity: &[CopyActivityRow],
-    positions: &[Position],
-    paper_book: &[PaperPosition],
-    mark: impl Fn(&PaperPosition) -> Option<f64>,
-) -> (CopyTaskStats, Vec<CopyRound>) {
-    let current_activity = activity
+    run_start: Option<DateTime<Utc>>,
+) -> Vec<CopyActivityRow> {
+    activity
         .iter()
         .filter(|row| match (&row.outcome, task.mode) {
             (CopyOutcome::PaperFilled(decision), TradingMode::Paper) => {
@@ -161,38 +225,43 @@ pub fn book_stats(
             ),
             _ => false,
         })
+        .filter(|row| run_start.is_none_or(|start| paper_book::in_current_run(&row.outcome, start)))
         .cloned()
-        .collect::<Vec<_>>();
-    let mut stats = build_task_stats(task.id, &current_activity, positions);
-    if task.mode == TradingMode::Paper {
-        apply_paper_book(&mut stats, paper_book, mark);
-    }
-    let rounds = closed_rounds(task.id, stats.book, &current_activity, positions);
-    stats.wins = rounds.iter().filter(|round| round.pnl_native > 0.0).count();
-    stats.losses = rounds.len() - stats.wins;
-    (stats, rounds)
+        .collect()
 }
 
-/// The paper ledger a task's stats read; a live task's figures never come from it.
-async fn stats_book(db: &CopyDatabase, task: &CopyTask) -> Result<Vec<PaperPosition>> {
-    if task.mode == TradingMode::Paper {
-        db.paper_positions(task.id).await
-    } else {
-        Ok(Vec::new())
-    }
+/// A task's stats and the closed rounds of its book, from what was already read.
+/// Decision counts and latency come from the task's activity of its current run;
+/// position and P&L figures come from `rounds`, the rounds of the book of the mode it
+/// runs in -- its paper rounds in the shared paper book while in paper mode, the real
+/// positions it opened while live -- and wins and losses are that book's closed
+/// rounds. Every path that reports a task's stats goes through here, so no endpoint
+/// reports a partial set.
+pub fn book_stats(
+    task: &CopyTask,
+    activity: &[CopyActivityRow],
+    rounds: &TaskRounds,
+) -> (CopyTaskStats, Vec<CopyRound>) {
+    let current = current_activity(task, activity, rounds.run_start);
+    let mut stats = build_task_stats(
+        task.id,
+        super::super::workspace::book_of(task),
+        &current,
+        &rounds.positions,
+    );
+    let closed = closed_rounds(task.id, stats.book, &rounds.positions);
+    stats.wins = closed.iter().filter(|round| round.pnl_native > 0.0).count();
+    stats.losses = closed.len() - stats.wins;
+    (stats, closed)
 }
 
 pub async fn task_stats_for(
     db: &CopyDatabase,
     task: &CopyTask,
-    positions: &[Position],
+    rounds: &TaskRounds,
 ) -> Result<CopyTaskStats> {
     let activity = db.list_task_activity(task.id, TASK_ACTIVITY_WINDOW).await?;
-    let book = stats_book(db, task).await?;
-    Ok(book_stats(task, &activity, positions, &book, |position| {
-        paper_mark(task.chain, position)
-    })
-    .0)
+    Ok(book_stats(task, &activity, rounds).0)
 }
 
 pub async fn task_stats(id: i64) -> Result<CopyTaskStats> {
@@ -201,7 +270,9 @@ pub async fn task_stats(id: i64) -> Result<CopyTaskStats> {
         .get_task(id)
         .await?
         .ok_or(Error::CopyTaskNotFound { task_id: id })?;
-    task_stats_for(&db, &task, &all_positions().await).await
+    let paper = paper_view(std::slice::from_ref(&task)).await;
+    let rounds = task_rounds(&task, &all_positions().await, paper.as_ref()).await?;
+    task_stats_for(&db, &task, &rounds).await
 }
 
 /// One task's summary from what was already read, with the live-stream arrival
@@ -210,12 +281,10 @@ pub fn summarize(
     status: &CopyTradingStatus,
     task: CopyTask,
     activity: &[CopyActivityRow],
-    positions: &[Position],
-    paper_book: &[PaperPosition],
+    rounds: &TaskRounds,
     spent_native: f64,
-    mark: impl Fn(&PaperPosition) -> Option<f64>,
 ) -> (CopyTaskSummary, Vec<u64>) {
-    let (stats, rounds) = book_stats(&task, activity, positions, paper_book, mark);
+    let (stats, rounds) = book_stats(&task, activity, rounds);
     let mut cumulative = 0.0;
     let mut pnl_trend = rounds
         .iter()
@@ -258,35 +327,32 @@ pub fn summarize(
 pub async fn overview(activity_limit: usize) -> Result<CopyTradingOverview> {
     let db = open_database().await?;
     let tasks = db.list_tasks().await?;
-    let activity = db.list_activity(activity_limit).await?;
+    let mut activity = db.list_activity(activity_limit).await?;
     let positions = all_positions().await;
+    let paper = paper_view(&tasks).await;
+    paper_book::flag_earlier_runs(&mut activity, &tasks, paper.as_ref());
     let status = build_status(&tasks);
     // Each task's reads are independent of every other task's; the pool serves
     // them concurrently instead of one task after another on every poll.
     let reads = futures::future::try_join_all(tasks.iter().map(|task| {
         let db = &db;
+        let positions = &positions;
+        let paper = paper.as_ref();
         async move {
+            let rounds = task_rounds(task, positions, paper).await?;
+            let spent_native = rounds.spent_native(db, task).await?;
             Ok::<_, Error>((
                 db.list_task_activity(task.id, TASK_ACTIVITY_WINDOW).await?,
-                stats_book(db, task).await?,
-                db.task_total_spent(task.id, task.mode).await?,
+                rounds,
+                spent_native,
             ))
         }
     }))
     .await?;
     let mut active_samples = Vec::new();
     let mut summaries = Vec::with_capacity(tasks.len());
-    for (task, (task_activity, book, spent_native)) in tasks.into_iter().zip(reads) {
-        let chain = task.chain;
-        let (summary, samples) = summarize(
-            &status,
-            task,
-            &task_activity,
-            &positions,
-            &book,
-            spent_native,
-            |position| paper_mark(chain, position),
-        );
+    for (task, (task_activity, rounds, spent_native)) in tasks.into_iter().zip(reads) {
+        let (summary, samples) = summarize(&status, task, &task_activity, &rounds, spent_native);
         if summary.task.enabled {
             active_samples.extend(samples);
         }
@@ -302,8 +368,12 @@ pub async fn overview(activity_limit: usize) -> Result<CopyTradingOverview> {
 
 pub async fn list_activity(task_id: Option<i64>, limit: usize) -> Result<Vec<CopyActivityRow>> {
     let db = open_database().await?;
-    match task_id {
-        Some(id) => db.list_task_activity(id, limit).await,
-        None => db.list_activity(limit).await,
-    }
+    let mut activity = match task_id {
+        Some(id) => db.list_task_activity(id, limit).await?,
+        None => db.list_activity(limit).await?,
+    };
+    let tasks = db.list_tasks().await?;
+    let paper = paper_view(&tasks).await;
+    paper_book::flag_earlier_runs(&mut activity, &tasks, paper.as_ref());
+    Ok(activity)
 }

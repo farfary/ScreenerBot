@@ -74,10 +74,10 @@ copy-readiness-latency = Trade terdeteksi tepat waktu
 copy-readiness-latency-detail = kedatangan p95 { $p95 }d, batas { $limit }d
 copy-readiness-latency-none = Belum ada sampel kedatangan
 copy-readiness-priced = Setiap kepemilikan memiliki harga
-copy-readiness-priced-ok = Setiap kepemilikan paper yang terbuka memiliki harga pool
-copy-readiness-priced-missing =
+copy-readiness-marked-ok = Setiap kepemilikan paper terbuka punya harga
+copy-readiness-marked-missing =
     { $count ->
-       *[other] { $count } kepemilikan terbuka tanpa harga pool
+       *[other] { $count } kepemilikan terbuka tanpa harga
     }
 copy-readiness-runtime = Eksekusi live tersedia
 copy-readiness-runtime-ok = Penyiapan dan gerbang keamanan mengizinkan salinan live
@@ -94,7 +94,6 @@ copy-state-running-paper = Berjalan
 copy-exit-mode-buy-only = Aturan exit saya
 copy-exit-mode-mirror = Tiru penjualan dompet
 copy-exit-mode-hybrid = Penjualan dompet dan aturan saya
-copy-exit-target-sell = Dompet menjual
 copy-exit-stop-loss = Stop loss
 copy-exit-trailing-stop = Trailing stop
 copy-exit-break-even = Stop impas
@@ -271,6 +270,12 @@ copy-paper-legacy-col-cost = Sisa biaya ({ -sol })
 copy-paper-legacy-col-realized = Estimasi terealisasi ({ -sol })
 copy-paper-legacy-col-price = Harga tersimpan terakhir ({ -sol })
 copy-paper-legacy-col-remaining = Sisa P&L pada harga tersimpan ({ -sol })
+copy-paper-earlier-title = Hasil paper sebelumnya
+copy-paper-archived-title = Buku salinan berbasis kuotasi
+copy-paper-archived-note = Hasil hanya-baca yang dicatat salinan paper tugas ini sebelum menjadi putaran buku paper. Hasil ini bukan bagian dari pengeluaran atau kepemilikan putaran saat ini dan tidak menyediakan tindakan. Jumlah yang tersisa dinilai pada harga terakhir yang tersimpan untuk setiap token, bukan pada harga pasar saat ini.
+copy-paper-archived-spent = Pengeluaran sebelumnya
+copy-paper-archived-realized = P&L terealisasi sebelumnya
+copy-paper-archived-col-realized = Terealisasi ({ -sol })
 
 ## Workspace
 
@@ -355,7 +360,7 @@ copy-return-paper-cancel = Tetap live
 copy-task-returned-paper = Tugas dikembalikan ke Paper
 copy-mode-change-failed = Mode eksekusi tidak dapat diubah
 copy-delete-title = Hapus tugas salin
-copy-delete-message = Hapus “{ $name }”? Keputusan dan hasil paper-nya dihapus dan dompet tidak lagi dipantau untuk tugas ini.
+copy-delete-settle-message = Hapus “{ $name }”? Kepemilikan paper yang terbuka ditutup pada harga terakhirnya dan tetap ada di riwayat paper bersama putaran yang ditutup. Keputusannya dihapus dan dompet tidak lagi dipantau untuk tugas ini.
 copy-delete-confirm = Hapus tugas
 copy-delete-cancel = Simpan tugas
 copy-task-deleted = Tugas salin dihapus
@@ -366,9 +371,9 @@ copy-task-delete-failed = Tugas salin tidak dapat dihapus
 copy-overview-results = Hasil
 copy-analytics-load-failed = Analitik tidak dapat dimuat: { $error }
 copy-analytics-loading = Memuat analitik…
-copy-exit-bucket =
+copy-exit-bucket-rounds =
     { $count ->
-       *[other] { $count } penjualan · { $pnl }
+       *[other] { $count } putaran · { $pnl }
     }
 copy-overview-average-win = Rata-rata menang
 copy-overview-average-loss = Rata-rata kalah { $amount }
@@ -388,9 +393,9 @@ copy-book-buys =
     <strong>{ $count }</strong> { $count ->
        *[other] pembelian
     }
-copy-book-policy-exits =
+copy-book-rule-closes =
     <strong>{ $count }</strong> { $count ->
-       *[other] exit sesuai aturan Anda
+       *[other] putaran ditutup oleh aturan Anda
     }
 copy-book-wallet-sells =
     <strong>{ $count }</strong> { $count ->
@@ -629,12 +634,12 @@ copy-holdings-title = Kepemilikan
 copy-holdings-view-label = Tampilan kepemilikan
 copy-holdings-view-open = Terbuka ({ $count })
 copy-holdings-view-closed = Putaran tertutup ({ $count })
-copy-holdings-reset = Atur ulang buku paper
+copy-holdings-restart = Mulai putaran paper baru
 copy-holdings-live-note = Salinan live adalah posisi sungguhan.
 copy-holdings-open-positions = Posisi Terbuka
 copy-holdings-token-details = Buka detail token
 copy-holdings-opened = Dibuka { $time }
-copy-holdings-no-pool-price = Tidak ada harga pool
+copy-holdings-no-price = Tidak ada harga
 copy-holdings-close = Tutup
 copy-holdings-close-pending = Penutupan tertunda
 copy-holdings-activity = Aktivitas
@@ -665,10 +670,12 @@ copy-holdings-col-invested = Diinvestasikan ({ -sol })
 copy-holdings-col-proceeds = Hasil ({ -sol })
 copy-holdings-col-exit = Exit
 copy-holdings-col-closed = Ditutup
-copy-holdings-marks-note = Harga dalam { -sol } per token. Penilaian dan level exit menggunakan harga pool, yang juga memicu aturan exit; fill yang dicatat menggunakan kuotasi router. Entry mencakup estimasi biaya jaringan pembelian; puncak dan level exit relatif terhadapnya, sehingga kepemilikan dibuka dengan puncak di bawah entry. Arahkan kursor ke salah satunya untuk melihat harga pool-nya.
+copy-holdings-round-note = Harga dalam { -sol } per token. Setiap baris adalah satu putaran buku paper. Nilai tanda adalah harga terakhir putaran, dari pool atau data pasar, dan aturan exit bertindak berdasarkan nilai itu; fill yang tercatat memakai kuotasi router. Entri adalah harga entri rata-rata putaran; puncak dan level exit relatif terhadapnya. Arahkan kursor untuk melihat harganya.
 copy-holdings-paused-rules = Dijeda: tidak ada salinan baru. Aturan exit Anda tetap menutup kepemilikan ini.
 copy-holdings-paused-mirror = Dijeda: tidak ada salinan baru. Penjualan dompet tetap menutup kepemilikan ini.
 copy-holdings-paused-hybrid = Dijeda: tidak ada salinan baru. Penjualan dompet dan aturan exit Anda tetap menutup kepemilikan ini.
+copy-holdings-trader-stopped-rules = Auto Trader dihentikan, jadi tidak ada exit yang menutup kepemilikan ini sampai berjalan lagi.
+copy-holdings-trader-stopped-wallet = Auto Trader dihentikan, jadi hanya penjualan dompet yang menutup kepemilikan ini sampai berjalan lagi.
 copy-holdings-closed-load-failed = Putaran tertutup tidak dapat dimuat: { $error }
 copy-holdings-closed-loading = Memuat putaran tertutup…
 copy-holdings-closed-empty = Belum ada putaran tertutup.
@@ -684,14 +691,14 @@ copy-holdings-close-pending-detail = Penutupan sedang diantrekan atau berjalan. 
 copy-holdings-close-unconfirmed = Hasil penutupan belum dikonfirmasi
 copy-holdings-close-unconfirmed-detail = Koneksi terputus sebelum hasil diterima dan Aktivitas belum memiliki hasil. Periksa Aktivitas sebelum menutup lagi.
 copy-holdings-closed-check-activity = Kepemilikan sudah ditutup. Fill yang dicatat ada di Aktivitas.
-copy-holdings-reset-quote-message = Mulai ulang “{ $name }”: kepemilikan paper saat ini, pengeluaran, fill, exit, dan trade yang dilewati dihapus dan buku baru berbasis kuotasi dimulai. Estimasi lama dan riwayat live tetap ada. Aturan dan dompet tetap ada.
-copy-holdings-reset-cancel = Simpan riwayat
-copy-holdings-reset-done = Buku paper diatur ulang
-copy-holdings-reset-detail =
+copy-holdings-restart-message = Mulai ulang “{ $name }”: kepemilikan paper yang terbuka ditutup pada harga terakhirnya dan angkanya hanya menghitung yang terjadi mulai sekarang. Tidak ada yang dihapus: putaran yang ditutup tetap ada di riwayat paper dan keputusan sebelumnya tetap ada di Aktivitas, ditandai sebagai putaran sebelumnya. Aturan dan dompet tetap ada.
+copy-holdings-restart-cancel = Pertahankan putaran ini
+copy-holdings-restart-done = Putaran paper baru dimulai
+copy-holdings-restart-detail =
     { $count ->
-       *[other] { $count } keputusan dihapus
+       *[other] { $count } kepemilikan ditutup
     }
-copy-holdings-reset-failed = Buku paper tidak dapat diatur ulang
+copy-holdings-restart-failed = Putaran paper baru tidak dapat dimulai
 
 ## Activity tab
 
@@ -708,6 +715,8 @@ copy-outcome-skipped = Dilewati
 copy-activity-decision = Keputusan
 copy-activity-paper-exit-quote = Exit paper berbasis kuotasi · { $rule }
 copy-activity-paper-exit-legacy = Estimasi exit paper lama · { $rule }
+copy-activity-earlier-run = Putaran sebelumnya
+    .title = Diputuskan sebelum putaran paper tugas ini saat ini, jadi tidak termasuk dalam angkanya saat ini.
 copy-activity-filled = { $input } di { $price } · dompet membeli { $target }
 copy-activity-filled-target-difference = { $input } di { $price } · dompet membeli { $target } · selisih harga terhadap target { $difference }
 copy-activity-filled-slippage = { $input } di { $price } · dompet membeli { $target } · slippage { $slippage }

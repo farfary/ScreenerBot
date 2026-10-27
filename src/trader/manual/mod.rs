@@ -11,6 +11,7 @@ mod paper;
 mod tracking;
 
 pub use api::{manual_add, manual_buy, manual_sell};
+pub(in crate::trader) use detach::detached;
 pub use force::force_sell;
 pub use paper::manual_paper_close;
 pub use tracking::{get_manual_trade_history, record_manual_trade};

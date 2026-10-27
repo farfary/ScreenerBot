@@ -387,6 +387,12 @@ export function createActivity(page, { rerender }) {
     ].join("");
   }
 
+  /** A row decided before its paper task's current run, which its figures leave out. */
+  function earlierRun(row) {
+    if (!row.earlier_run) return "";
+    return `<span class="copy-muted" title="${esc(I18n.attr("copy-activity-earlier-run", "title"))}">${esc(I18n.t("copy-activity-earlier-run"))}</span>`;
+  }
+
   function rowHtml(row) {
     const outcome = row.outcome || {};
     const at = outcome.telemetry?.decided_at || outcome.decided_at || row.created_at;
@@ -400,7 +406,7 @@ export function createActivity(page, { rerender }) {
     return `<li class="copy-event ${TONES[outcome.outcome] || ""}">
       <time datetime="${esc(String(at || ""))}">${esc(dateTime(at))}</time>
       <div class="copy-event-main">
-        <div class="copy-event-line"><strong>${esc(outcomeTitle(outcome))}</strong>${token}</div>
+        <div class="copy-event-line"><strong>${esc(outcomeTitle(outcome))}</strong>${token}${earlierRun(row)}</div>
         <div class="copy-event-detail">${esc(outcomeDetail(outcome))}</div>
         <div class="copy-event-meta">${arrival ? `<span>${esc(arrival)}</span>` : ""}${notes}${links(outcome)}</div>
       </div>

@@ -1,8 +1,8 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 //
-// The Holdings tab: open paper holdings marked at the pool price with where each
-// exit rule acts, closed rounds with their result, and the paper-book actions.
+// The Holdings tab: the task's open paper rounds marked at their latest price with where
+// each exit rule acts, closed rounds with their result, and the paper-run actions.
 import { loadPage } from "../../core/router.js";
 import { getIdentity } from "../../ui/token_identity.js";
 import {
@@ -226,7 +226,7 @@ export function createHoldings(page, { rerender, showActivityFor }) {
           holding.close_pending || closing.has(roundKey(ws.id, holding.mint, holding.opened_at));
         const pnl = priced
           ? `<span class="${toneClass(holding.unrealized_pnl_native)}">${esc(signedSolCell(holding.unrealized_pnl_native))}</span><small>${esc(signedPct(holding.unrealized_pnl_pct))}</small>`
-          : `<span class="copy-warning-text">${esc(I18n.t("copy-holdings-no-pool-price"))}</span>`;
+          : `<span class="copy-warning-text">${esc(I18n.t("copy-holdings-no-price"))}</span>`;
         return `<tr>
           <td>${tokenCell(holding.mint)}</td>
           <td class="num">${esc(solCell(holding.cost_basis_native))}</td>
@@ -244,7 +244,17 @@ export function createHoldings(page, { rerender, showActivityFor }) {
       })
       .join("");
     return `<div class="copy-table-wrap"><table class="copy-table"><thead><tr><th scope="col">${esc(I18n.t("copy-holdings-col-token"))}</th><th scope="col" class="num">${esc(I18n.t("copy-holdings-col-cost"))}</th><th scope="col" class="num">${esc(I18n.t("copy-holdings-col-entry"))}</th><th scope="col" class="num">${esc(I18n.t("copy-holdings-col-mark"))}</th><th scope="col" class="num">${esc(I18n.t("copy-holdings-col-peak"))}</th><th scope="col" class="num">${esc(I18n.t("copy-holdings-col-pnl"))}</th><th scope="col">${esc(I18n.t("copy-holdings-col-exit-rules"))}</th><th scope="col" class="num">${esc(I18n.t("copy-holdings-col-held"))}</th><th scope="col"><span class="sr-only">${esc(I18n.t("copy-holdings-col-actions"))}</span></th></tr></thead><tbody>${rows}</tbody></table></div>
-    ${pausedNote(ws)}<p class="copy-note">${esc(I18n.t("copy-holdings-marks-note"))}</p>`;
+    ${pausedNote(ws)}${exitMonitorNote(ws)}<p class="copy-note">${esc(I18n.t("copy-holdings-round-note"))}</p>`;
+  }
+
+  /** Exits of paper rounds run in the Auto Trader's exit monitor; say when it is stopped. */
+  function exitMonitorNote(ws) {
+    if (ws.exit_rules_running !== false) return "";
+    const note =
+      ws.exit_mode === "buy_only"
+        ? I18n.t("copy-holdings-trader-stopped-rules")
+        : I18n.t("copy-holdings-trader-stopped-wallet");
+    return `<p class="copy-note copy-warning-text">${esc(note)}</p>`;
   }
 
   /** A paused task still closes what it holds; say by what. */
@@ -309,7 +319,7 @@ export function createHoldings(page, { rerender, showActivityFor }) {
     ];
     const reset = live
       ? ""
-      : `<button class="btn btn-ghost btn-sm copy-danger-action" type="button" data-holding-action="reset"><i class="icon-rotate-ccw" aria-hidden="true"></i> ${esc(I18n.t("copy-holdings-reset"))}</button>`;
+      : `<button class="btn btn-ghost btn-sm copy-danger-action" type="button" data-holding-action="reset"><i class="icon-rotate-ccw" aria-hidden="true"></i> ${esc(I18n.t("copy-holdings-restart"))}</button>`;
     const head = `<div class="copy-panel-head"><h3>${esc(I18n.t("copy-holdings-title"))}</h3><div class="copy-panel-tools">${segmented("holdings-view", views, view, esc, I18n.t("copy-holdings-view-label"))}${reset}</div></div>`;
     if (view === "closed") return head + closedTable(insights, error);
     if (live) {
@@ -501,10 +511,10 @@ export function createHoldings(page, { rerender, showActivityFor }) {
     let result;
     try {
       result = await confirm({
-        title: I18n.t("copy-holdings-reset"),
-        message: I18n.t("copy-holdings-reset-quote-message", { name: taskName(ws) }),
-        confirmLabel: I18n.t("copy-holdings-reset"),
-        cancelLabel: I18n.t("copy-holdings-reset-cancel"),
+        title: I18n.t("copy-holdings-restart"),
+        message: I18n.t("copy-holdings-restart-message", { name: taskName(ws) }),
+        confirmLabel: I18n.t("copy-holdings-restart"),
+        cancelLabel: I18n.t("copy-holdings-restart-cancel"),
         variant: "danger",
       });
     } finally {
@@ -516,12 +526,12 @@ export function createHoldings(page, { rerender, showActivityFor }) {
       const outcome = await api.reset(id);
       notify(
         "success",
-        I18n.t("copy-holdings-reset-done"),
-        I18n.t("copy-holdings-reset-detail", { count: outcome.removed_decisions })
+        I18n.t("copy-holdings-restart-done"),
+        I18n.t("copy-holdings-restart-detail", { count: outcome.closed_rounds })
       );
       await page.reload();
     } catch (error) {
-      notify("error", I18n.t("copy-holdings-reset-failed"), error.detail);
+      notify("error", I18n.t("copy-holdings-restart-failed"), error.detail);
       if (button.isConnected) button.disabled = false;
     }
   }

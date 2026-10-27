@@ -11,8 +11,13 @@ use chrono::{DateTime, Utc};
 use tokio::sync::{Mutex, OwnedMutexGuard, RwLock};
 
 use crate::positions::booking::{CloseFill, DcaFill, EntryFill, PartialExitFill};
-use crate::positions::db::{Booking, BookingRecord, Committed, PaperLegKind, PaperLegRecord};
-use crate::positions::types::{Book, EntryRecord, ExitRecord, Opening, Position, PriceSource};
+use crate::positions::db::{
+    Booking, BookingRecord, Committed, PaperExitOwner, PaperLegKind, PaperLegRecord,
+    PaperRoundInsert,
+};
+use crate::positions::types::{
+    Book, EntryRecord, ExitRecord, Opening, Position, PositionManagement, PriceSource,
+};
 use crate::positions::{marks, Error, PositionsDatabase, Result};
 
 use super::leg::PaperLeg;
@@ -29,6 +34,16 @@ pub enum PaperBooked {
     /// The take-profit step the sale takes is not the round's next one; nothing was
     /// written.
     StepTaken,
+}
+
+/// What opening a paper round did.
+#[derive(Debug, Clone)]
+pub enum PaperOpened {
+    /// The round was opened; the round as written.
+    Opened(Position),
+    /// The entry leg was already booked; the round it opened, as stored, and nothing was
+    /// written.
+    AlreadyBooked(Position),
 }
 
 /// What a paper round booked: its entry and exit records and the leg evidence of each.
@@ -167,11 +182,49 @@ impl PaperBook {
             .insert_paper_exit_attempt(position_id, strategy_id, filled, Utc::now())
     }
 
-    /// The latest paper exits of the rounds of `wallet_address` that `strategy_id` took
-    /// part in that found no fill in a row.
-    pub async fn failed_exit_streak(&self, wallet_address: &str, strategy_id: &str) -> Result<u32> {
-        self.db
-            .failed_paper_exit_streak(wallet_address, strategy_id)
+    /// The latest paper exits of the rounds of `wallet_address` that `owner` took part in
+    /// that found no fill in a row.
+    pub async fn failed_exit_streak(
+        &self,
+        wallet_address: &str,
+        owner: &PaperExitOwner,
+    ) -> Result<u32> {
+        self.db.failed_paper_exit_streak(wallet_address, owner)
+    }
+
+    /// The stored paper leg `leg_ref` and the round it was booked onto.
+    pub async fn paper_leg(&self, leg_ref: &str) -> Result<Option<(i64, PaperLegRecord)>> {
+        self.db.paper_leg(leg_ref)
+    }
+
+    /// Sets who manages the open round `position_id`, in the store and in memory, under
+    /// the round's lock. Returns false when no open round has that id.
+    pub async fn set_management(
+        &self,
+        position_id: i64,
+        management: PositionManagement,
+    ) -> Result<bool> {
+        let _round = self.lock_round(position_id).await;
+        if self.position(position_id).await.is_none() {
+            return Ok(false);
+        }
+        if !self
+            .db
+            .set_position_management(position_id, management)
+            .await?
+        {
+            return Ok(false);
+        }
+        if let Some(open) = self
+            .open
+            .write()
+            .await
+            .iter_mut()
+            .find(|p| p.id == Some(position_id))
+        {
+            open.management = management;
+        }
+        Ok(true)
     }
 
     /// Opens a paper round of `wallet_address` from `opening` with its entry `fill`
@@ -181,6 +234,8 @@ impl PaperBook {
     /// the run's cash does not cover the fill, and `AlreadyOpen` while the mint has an open
     /// round. Every check and the insert hold the book's capacity lock, so concurrent opens
     /// never exceed `max_open`, the cooldown or the cash, and a run reset never interleaves.
+    /// A leg already booked opens nothing and returns the round it opened, before any
+    /// check, so a replayed buy is never refused for the capacity its own round takes.
     pub(crate) async fn open(
         &self,
         wallet_address: &str,
@@ -188,8 +243,11 @@ impl PaperBook {
         fill: &EntryFill,
         leg: &PaperLeg,
         terms: &PaperOpenTerms,
-    ) -> Result<Position> {
+    ) -> Result<PaperOpened> {
         let _capacity = self.capacity.lock().await;
+        if let Some((position_id, _)) = self.db.paper_leg(&leg.leg_ref)? {
+            return self.booked_round(position_id).await;
+        }
         if self.open.read().await.len() >= terms.max_open {
             return Err(Error::SlotUnavailable { remaining: 0 });
         }
@@ -226,16 +284,32 @@ impl PaperBook {
             fees_raw: Some(fill.fee_raw),
         };
         let row = leg.row(PaperLegKind::Entry);
-        let position_id = self
-            .db
-            .insert_paper_round(wallet_address, &position, entry, &row)?;
+        let position_id =
+            match self
+                .db
+                .insert_paper_round(wallet_address, &position, entry, &row)?
+            {
+                PaperRoundInsert::Inserted(position_id) => position_id,
+                PaperRoundInsert::AlreadyBooked(position_id) => {
+                    return self.booked_round(position_id).await;
+                }
+            };
         position.id = Some(position_id);
         self.open.write().await.push(position.clone());
         *self
             .last_open
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(now);
-        Ok(position)
+        Ok(PaperOpened::Opened(position))
+    }
+
+    /// The round `position_id` an already booked entry leg opened, as stored.
+    async fn booked_round(&self, position_id: i64) -> Result<PaperOpened> {
+        self.db
+            .get_position_by_id(position_id)
+            .await?
+            .map(PaperOpened::AlreadyBooked)
+            .ok_or(Error::NotFoundById { position_id })
     }
 
     /// Books a paper DCA buy filled at `fill_price` onto `position_id`, blending the

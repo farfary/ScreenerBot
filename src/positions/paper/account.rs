@@ -12,7 +12,7 @@ use crate::positions::pnl::calculate_position_total_fees;
 use crate::positions::types::Position;
 use crate::positions::{Error, Result};
 
-use super::book::PaperBook;
+use super::book::{PaperBook, PaperBooked};
 
 /// The paper account of a wallet in its current epoch.
 #[derive(Debug, Clone, Serialize)]
@@ -70,9 +70,9 @@ impl PaperBook {
     }
 
     /// Starts a new paper run of `wallet_address` with `starting_balance_native`. Every
-    /// round still open is first closed at its last mark for `reason`, so the run that
-    /// ends is settled and the new one starts with all its cash. `decimals_of` gives the
-    /// token decimals of a mint; a round whose decimals are unknown stops the reset before
+    /// round still open is first closed at its last mark for `reason`
+    /// ([`PaperBook::settle_at_mark`]), so the run that ends is settled and the new one
+    /// starts with all its cash. A round whose decimals are unknown stops the reset before
     /// the new epoch starts. The whole reset holds the capacity lock, so no round opens or
     /// adds between the settled run and the next one.
     pub async fn reset_run(
@@ -84,7 +84,42 @@ impl PaperBook {
         now: DateTime<Utc>,
     ) -> Result<PaperAccount> {
         let _capacity = self.capacity.lock().await;
-        for position in self.open_positions().await {
+        let open = self.open_positions().await;
+        self.settle_locked(wallet_address, &open, reason, &decimals_of, now)
+            .await?;
+        self.start_epoch(wallet_address, starting_balance_native, now)
+            .await
+    }
+
+    /// Closes each of `rounds` still open at its last mark (its entry price before the
+    /// first mark) for `reason`, with no quote and no fee; their value returns to the run's
+    /// cash. `decimals_of` gives the token decimals of a mint; a round whose decimals are
+    /// unknown stops the settlement there. Rounds already closed are left as they are.
+    /// Returns how many rounds this call closed. Holds the capacity lock, so no round opens
+    /// or adds while the rounds settle.
+    pub async fn settle_at_mark(
+        &self,
+        wallet_address: &str,
+        rounds: &[Position],
+        reason: &str,
+        decimals_of: impl Fn(&str) -> Option<u8>,
+        now: DateTime<Utc>,
+    ) -> Result<usize> {
+        let _capacity = self.capacity.lock().await;
+        self.settle_locked(wallet_address, rounds, reason, &decimals_of, now)
+            .await
+    }
+
+    async fn settle_locked(
+        &self,
+        wallet_address: &str,
+        rounds: &[Position],
+        reason: &str,
+        decimals_of: &impl Fn(&str) -> Option<u8>,
+        now: DateTime<Utc>,
+    ) -> Result<usize> {
+        let mut closed = 0;
+        for position in rounds {
             let Some(decimals) = decimals_of(&position.mint) else {
                 return Err(Error::PaperFillUnbookable {
                     mint: position.mint.clone(),
@@ -95,11 +130,14 @@ impl PaperBook {
                 .current_price
                 .filter(|price| price.is_finite() && *price > 0.0)
                 .unwrap_or(position.average_entry_price);
-            self.close_at_mark(wallet_address, &position, mark, decimals, reason, now)
-                .await?;
+            if let PaperBooked::Booked(_) = self
+                .close_at_mark(wallet_address, position, mark, decimals, reason, now)
+                .await?
+            {
+                closed += 1;
+            }
         }
-        self.start_epoch(wallet_address, starting_balance_native, now)
-            .await
+        Ok(closed)
     }
 
     /// The rounds of the current epoch of `wallet_address` that strategy `strategy_id`
@@ -117,6 +155,24 @@ impl PaperBook {
             ),
             None => Ok(Vec::new()),
         }
+    }
+
+    /// The rounds of `wallet_address` that copy task `task_id` opened at or after `since`,
+    /// open or closed.
+    pub async fn copy_task_rounds(
+        &self,
+        wallet_address: &str,
+        task_id: i64,
+        since: DateTime<Utc>,
+    ) -> Result<Vec<Position>> {
+        self.db
+            .copy_task_positions_entered_since(wallet_address, task_id, since)
+    }
+
+    /// The current paper epoch of `wallet_address`, without reading its cash; none before
+    /// the first epoch starts.
+    pub async fn current_epoch(&self, wallet_address: &str) -> Result<Option<PaperEpoch>> {
+        self.db.current_paper_epoch(wallet_address)
     }
 
     /// The account of the current paper run of `wallet_address` when its cash covers a

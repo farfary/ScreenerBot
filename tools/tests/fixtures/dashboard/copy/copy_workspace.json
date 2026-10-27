@@ -153,19 +153,19 @@
   },
   "live_remaining_budget_native": 5,
   "policy_manages_exits": true,
+  "exit_rules_running": true,
   "global_require_filter_pass": true,
   "paper_holdings": [
     {
+      "position_id": 1001,
       "mint": "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm",
       "open": true,
-      "token_amount": 12.638,
       "cost_basis_native": 0.100105,
       "invested_native": 0.100105,
       "realized_proceeds_native": 0,
       "realized_pnl_native": 0,
       "entry_price_native": 0.007920952682386453,
       "mark_price_native": 0.00821,
-      "market_value_native": 0.103758,
       "unrealized_pnl_native": 0.003653,
       "unrealized_pnl_pct": 3.65,
       "buys": 1,
@@ -193,16 +193,15 @@
       }
     },
     {
+      "position_id": 1002,
       "mint": "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263",
       "open": true,
-      "token_amount": 1041000,
       "cost_basis_native": 0.100605,
       "invested_native": 0.100605,
       "realized_proceeds_native": 0,
       "realized_pnl_native": 0,
       "entry_price_native": 9.664265129682997e-8,
       "mark_price_native": 1.022e-7,
-      "market_value_native": 0.10639,
       "unrealized_pnl_native": 0.005785,
       "unrealized_pnl_pct": 5.75,
       "buys": 1,
@@ -230,16 +229,15 @@
       }
     },
     {
+      "position_id": 1003,
       "mint": "7GCihgDB8fe6KNjn2MYtkzZcRjQy3t9GHdC8uHYmW2hr",
       "open": true,
-      "token_amount": 241.7,
       "cost_basis_native": 0.100605,
       "invested_native": 0.100605,
       "realized_proceeds_native": 0,
       "realized_pnl_native": 0,
       "entry_price_native": 0.0004162391394290443,
       "mark_price_native": 0.000398,
-      "market_value_native": 0.096197,
       "unrealized_pnl_native": -0.004408,
       "unrealized_pnl_pct": -4.38,
       "buys": 1,
@@ -267,6 +265,27 @@
       }
     }
   ],
+  "archived_paper": {
+    "spent_native": 0.2012,
+    "realized_proceeds_native": 0.1288,
+    "realized_cost_native": 0.1006,
+    "realized_pnl_native": 0.0282,
+    "holdings": [
+      {
+        "mint": "4kArchivedQuoteCCC333333333333333333333333",
+        "token_amount": 0,
+        "remaining_cost_basis_native": 0,
+        "realized_proceeds_native": 0.1288,
+        "realized_cost_native": 0.1006,
+        "realized_pnl_native": 0.0282,
+        "last_recorded_price_native": 0.00031,
+        "last_recorded_price_at": "2026-10-20T10:12:40.000Z",
+        "remaining_pnl_at_last_recorded_price_native": null,
+        "opened_at": "2026-10-19T08:00:00.000Z",
+        "closed_at": "2026-10-20T10:12:40.000Z"
+      }
+    ]
+  },
   "legacy_paper": {
     "spent_native": 0.8036,
     "realized_proceeds_native": 0.5412,
@@ -380,7 +399,7 @@
         },
         "passed": true,
         "detail": {
-          "id": "copy-readiness-priced-ok"
+          "id": "copy-readiness-marked-ok"
         }
       },
       {
@@ -450,7 +469,8 @@
         },
         "exit_rule": "stop_loss"
       },
-      "created_at": "2026-10-07T03:40:11.600Z"
+      "created_at": "2026-10-07T03:40:11.600Z",
+      "earlier_run": false
     },
     {
       "id": 313,
@@ -503,7 +523,8 @@
           "backfill": false
         }
       },
-      "created_at": "2026-10-07T02:14:08.300Z"
+      "created_at": "2026-10-07T02:14:08.300Z",
+      "earlier_run": false
     },
     {
       "id": 312,
@@ -541,7 +562,8 @@
           "backfill": false
         }
       },
-      "created_at": "2026-10-06T21:44:12.420Z"
+      "created_at": "2026-10-06T21:44:12.420Z",
+      "earlier_run": false
     },
     {
       "id": 311,
@@ -582,7 +604,8 @@
         },
         "exit_rule": null
       },
-      "created_at": "2026-10-06T20:10:04.010Z"
+      "created_at": "2026-10-06T20:10:04.010Z",
+      "earlier_run": false
     },
     {
       "id": 310,
@@ -610,7 +633,8 @@
           "backfill": false
         }
       },
-      "created_at": "2026-10-06T19:52:40.520Z"
+      "created_at": "2026-10-06T19:52:40.520Z",
+      "earlier_run": false
     },
     {
       "id": 309,
@@ -637,7 +661,8 @@
           "backfill": false
         }
       },
-      "created_at": "2026-10-06T18:31:02.130Z"
+      "created_at": "2026-10-06T18:31:02.130Z",
+      "earlier_run": false
     },
     {
       "id": 308,
@@ -678,7 +703,8 @@
         },
         "exit_rule": "take_profit"
       },
-      "created_at": "2026-10-06T16:05:30.090Z"
+      "created_at": "2026-10-06T16:05:30.090Z",
+      "earlier_run": false
     },
     {
       "id": 307,
@@ -716,7 +742,8 @@
           "backfill": false
         }
       },
-      "created_at": "2026-10-06T14:22:18.810Z"
+      "created_at": "2026-10-06T14:22:18.810Z",
+      "earlier_run": false
     }
   ]
 }

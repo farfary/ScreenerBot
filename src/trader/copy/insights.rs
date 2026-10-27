@@ -1,10 +1,10 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Pure performance analytics for one task. Closed rounds are replayed from the
-//! recorded paper decisions -- the same arithmetic the paper ledger books -- or
-//! read from the real positions a live task opened; every breakdown is built on
-//! those rounds and on the decision telemetry.
+//! Pure performance analytics for one task. Closed rounds are the positions the
+//! task opened in the book of its mode -- its paper rounds in the shared paper book,
+//! the real positions it opened while live; every breakdown is built on those rounds
+//! and on the decision telemetry.
 
 use std::collections::{BTreeMap, HashMap};
 
@@ -12,7 +12,7 @@ use chrono::{DateTime, Utc};
 use serde::Serialize;
 
 use crate::i18n::{ids, UiText};
-use crate::positions::{Position, PositionOrigin};
+use crate::positions::{Book, Position, PositionOrigin};
 
 use super::analytics::{arrival_distance_ms, summarize_arrival_distances};
 use super::types::{
@@ -52,7 +52,7 @@ pub struct CopyRound {
     pub pnl_native: f64,
     pub pnl_pct: Option<f64>,
     pub hold_seconds: i64,
-    /// What closed it: `target_sell`, an exit rule, or the live close reason.
+    /// What closed it: the round's close reason (`closed_reason`).
     pub exit: String,
 }
 
@@ -128,24 +128,9 @@ pub struct CopyInsights {
     pub recent_rounds: Vec<CopyRound>,
 }
 
-/// The label an exit leg is grouped under.
-pub fn exit_label(rule: Option<PaperExitRule>) -> String {
-    match rule {
-        None => "target_sell",
-        Some(PaperExitRule::StopLoss) => "stop_loss",
-        Some(PaperExitRule::TrailingStop) => "trailing_stop",
-        Some(PaperExitRule::BreakEven) => "break_even",
-        Some(PaperExitRule::TakeProfit) => "take_profit",
-        Some(PaperExitRule::TimeOverride) => "time_override",
-        Some(PaperExitRule::TimeStagnation) => "time_stagnation",
-        Some(PaperExitRule::Manual) => "manual",
-    }
-    .to_owned()
-}
-
 impl PaperExitRule {
-    /// Catalog text `copy-exit-<label>` for the rule, the same wording the
-    /// dashboard maps in `EXIT_LABELS` (pages/copy/format.js).
+    /// Catalog text `copy-exit-<label>` for the rule a stored copy decision names, the
+    /// same wording the dashboard maps in `EXIT_LABELS` (pages/copy/format.js).
     pub fn label_text(self) -> UiText {
         UiText::new(match self {
             Self::StopLoss => ids::COPY_EXIT_STOP_LOSS,
@@ -159,165 +144,23 @@ impl PaperExitRule {
     }
 }
 
-#[derive(Default)]
-struct OpenRound {
-    opened_at: Option<DateTime<Utc>>,
-    tokens: f64,
-    raw_tokens: Option<crate::chains::RawAmount>,
-    token_decimals: Option<u8>,
-    cost: f64,
-    realized_cost: f64,
-    proceeds: f64,
-}
-
-/// A sell leg with its realized result, for the exit breakdown.
-struct ExitLeg {
-    at: DateTime<Utc>,
-    exit: String,
-    pnl_native: f64,
-}
-
-/// Replay the paper book from its decisions, oldest first.
-fn replay_paper(rows: &[&CopyActivityRow]) -> (Vec<CopyRound>, Vec<ExitLeg>) {
-    let mut open: HashMap<&str, OpenRound> = HashMap::new();
-    let mut rounds = Vec::new();
-    let mut legs = Vec::new();
-    for row in rows {
-        match &row.outcome {
-            CopyOutcome::PaperFilled(decision) if decision.fill.has_quote_provenance() => {
-                let round = open.entry(decision.mint.as_str()).or_default();
-                round.opened_at.get_or_insert(decision.telemetry.decided_at);
-                if round.raw_tokens.is_none() && round.tokens > 0.0 {
-                    round.tokens += decision.fill.token_amount;
-                } else if let Some(quote) = &decision.fill.quote {
-                    if let Some(decimals) = quote.token_decimals {
-                        let next_raw = round
-                            .raw_tokens
-                            .unwrap_or(crate::chains::RawAmount::ZERO)
-                            .checked_add(quote.final_output_amount);
-                        if round.token_decimals.is_none_or(|held| held == decimals) {
-                            round.raw_tokens = next_raw;
-                            round.token_decimals = Some(decimals);
-                            round.tokens = next_raw
-                                .map(|raw| raw.to_whole_units(decimals))
-                                .unwrap_or(round.tokens + decision.fill.token_amount);
-                        } else {
-                            round.raw_tokens = None;
-                            round.token_decimals = None;
-                            round.tokens += decision.fill.token_amount;
-                        }
-                    } else {
-                        round.tokens += decision.fill.token_amount;
-                    }
-                } else {
-                    round.tokens += decision.fill.token_amount;
-                }
-                round.cost += decision.fill.total_cost_sol;
-            }
-            CopyOutcome::PaperSellObserved(decision)
-                if decision
-                    .paper_fill
-                    .as_ref()
-                    .is_some_and(|fill| fill.has_quote_provenance()) =>
-            {
-                let Some(fill) = &decision.paper_fill else {
-                    continue;
-                };
-                let Some(round) = open.get_mut(decision.mint.as_str()) else {
-                    continue;
-                };
-                if round.tokens <= 0.0 {
-                    continue;
-                }
-                let held = round.tokens;
-                let exact_sold = fill
-                    .quote
-                    .as_ref()
-                    .and_then(|quote| quote.input_amount.zip(quote.token_decimals));
-                let (sold, raw_remainder, raw_share) =
-                    match (round.raw_tokens, round.token_decimals, exact_sold) {
-                        (Some(raw_held), Some(decimals), Some((raw_sold, quote_decimals)))
-                            if decimals == quote_decimals && raw_sold <= raw_held =>
-                        {
-                            match raw_held.checked_sub(raw_sold) {
-                                Some(remainder) => (
-                                    raw_sold.to_whole_units(decimals),
-                                    Some((remainder, decimals)),
-                                    Some(raw_sold.raw() as f64 / raw_held.raw() as f64),
-                                ),
-                                None => (fill.token_amount.min(held), None, None),
-                            }
-                        }
-                        _ => (fill.token_amount.min(held), None, None),
-                    };
-                let closes_exactly = raw_remainder
-                    .is_some_and(|(remainder, _)| remainder == crate::chains::RawAmount::ZERO)
-                    || (raw_remainder.is_none() && sold >= held);
-                let cost_sold = if closes_exactly {
-                    round.cost
-                } else {
-                    round.cost * raw_share.unwrap_or(sold / held)
-                };
-                if let Some((remainder, decimals)) = raw_remainder {
-                    round.raw_tokens = Some(remainder);
-                    round.tokens = remainder.to_whole_units(decimals);
-                } else {
-                    round.raw_tokens = None;
-                    round.token_decimals = None;
-                    round.tokens -= sold;
-                }
-                round.cost -= cost_sold;
-                round.realized_cost += cost_sold;
-                round.proceeds += fill.net_proceeds_sol;
-                let exit = exit_label(decision.exit_rule);
-                let at = decision.telemetry.decided_at;
-                legs.push(ExitLeg {
-                    at,
-                    exit: exit.clone(),
-                    pnl_native: fill.net_proceeds_sol - cost_sold,
-                });
-                let exactly_closed =
-                    round.raw_tokens == Some(crate::chains::RawAmount::ZERO) || sold >= held;
-                if exactly_closed {
-                    if let Some(closed) = open.remove(decision.mint.as_str()) {
-                        let opened_at = closed.opened_at.unwrap_or(at);
-                        let pnl = closed.proceeds - closed.realized_cost;
-                        rounds.push(CopyRound {
-                            mint: decision.mint.clone(),
-                            book: CopyBook::Paper,
-                            opened_at,
-                            closed_at: at,
-                            invested_native: closed.realized_cost,
-                            proceeds_native: closed.proceeds,
-                            pnl_native: pnl,
-                            pnl_pct: (closed.realized_cost > 0.0)
-                                .then(|| pnl / closed.realized_cost * 100.0),
-                            hold_seconds: (at - opened_at).num_seconds(),
-                            exit,
-                        });
-                    }
-                }
-            }
-            _ => {}
-        }
-    }
-    (rounds, legs)
-}
-
-/// Closed real positions this task opened.
-fn live_rounds(task_id: i64, positions: &[Position]) -> Vec<CopyRound> {
+/// The closed rounds this task opened in `book`: a live round once its exit is
+/// verified, a paper round once it is closed.
+fn position_rounds(task_id: i64, book: CopyBook, positions: &[Position]) -> Vec<CopyRound> {
+    let store = book.store();
     positions
         .iter()
         .filter(|position| {
             matches!(position.origin, PositionOrigin::Copy { task_id: origin, .. } if origin == task_id)
-                && position.transaction_exit_verified
+                && position.book == store
+                && (store == Book::Paper || position.transaction_exit_verified)
         })
         .filter_map(|position| {
             let closed_at = position.exit_time?;
             let pnl = position.pnl.unwrap_or_default();
             Some(CopyRound {
                 mint: position.mint.clone(),
-                book: CopyBook::Live,
+                book,
                 opened_at: position.entry_time,
                 closed_at,
                 invested_native: position.total_size_native,
@@ -334,18 +177,9 @@ fn live_rounds(task_id: i64, positions: &[Position]) -> Vec<CopyRound> {
         .collect()
 }
 
-/// Every closed round of a task in the given book, oldest close first. The
-/// activity may come in any order.
-pub fn closed_rounds(
-    task_id: i64,
-    book: CopyBook,
-    activity: &[CopyActivityRow],
-    positions: &[Position],
-) -> Vec<CopyRound> {
-    let mut rounds = match book {
-        CopyBook::Paper => replay_paper(&ordered(task_id, activity)).0,
-        CopyBook::Live => live_rounds(task_id, positions),
-    };
+/// Every closed round of a task in the given book, oldest close first.
+pub fn closed_rounds(task_id: i64, book: CopyBook, positions: &[Position]) -> Vec<CopyRound> {
+    let mut rounds = position_rounds(task_id, book, positions);
     rounds.sort_by_key(|round| round.closed_at);
     rounds
 }
@@ -463,11 +297,7 @@ pub fn build_insights(
     arrival_limit_ms: Option<u64>,
 ) -> CopyInsights {
     let rows = ordered(task_id, activity);
-    let (paper_rounds, legs) = replay_paper(&rows);
-    let mut rounds = match book {
-        CopyBook::Paper => paper_rounds,
-        CopyBook::Live => live_rounds(task_id, positions),
-    };
+    let mut rounds = position_rounds(task_id, book, positions);
     rounds.retain(|round| range.contains(round.closed_at));
     rounds.sort_by_key(|round| round.closed_at);
 
@@ -516,21 +346,10 @@ pub fn build_insights(
         .collect();
 
     let mut exits: BTreeMap<String, ExitBucket> = BTreeMap::new();
-    match book {
-        CopyBook::Paper => {
-            for leg in legs.iter().filter(|leg| range.contains(leg.at)) {
-                let bucket = exits.entry(leg.exit.clone()).or_default();
-                bucket.legs += 1;
-                bucket.pnl_native += leg.pnl_native;
-            }
-        }
-        CopyBook::Live => {
-            for round in &rounds {
-                let bucket = exits.entry(round.exit.clone()).or_default();
-                bucket.legs += 1;
-                bucket.pnl_native += round.pnl_native;
-            }
-        }
+    for round in &rounds {
+        let bucket = exits.entry(round.exit.clone()).or_default();
+        bucket.legs += 1;
+        bucket.pnl_native += round.pnl_native;
     }
     insights.exit_breakdown = exits
         .into_iter()

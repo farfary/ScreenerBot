@@ -306,8 +306,8 @@ fn a_v8_store_keeps_its_quote_paper_book_and_gains_new_task_columns() {
 }
 
 /// A store a v9 core wrote holds the position-link table, which nothing reads or
-/// writes. The upgrade drops it and keeps every other table and row, and the ledger
-/// makes v10 the oldest reader, since a drop is a breaking change.
+/// writes. The upgrade drops it and keeps every other table and row; the ledger names
+/// the current oldest reader, v13, which moved paper copies to the shared paper book.
 #[test]
 fn a_v9_store_drops_the_position_link_table_and_keeps_its_rows() {
     let dir = tempfile::tempdir().unwrap();
@@ -352,7 +352,7 @@ fn a_v9_store_drops_the_position_link_table_and_keeps_its_rows() {
             |row| Ok((row.get(0)?, row.get(1)?)),
         )
         .unwrap();
-    assert_eq!(ledger, (12, 10));
+    assert_eq!(ledger, (13, 13));
     let fk_violations = conn
         .prepare("PRAGMA foreign_key_check")
         .unwrap()
@@ -425,7 +425,7 @@ fn a_released_partial_stop_loss_override_is_turned_off_once() {
             |row| Ok((row.get(0)?, row.get(1)?)),
         )
         .unwrap();
-    assert_eq!(ledger, (12, 10));
+    assert_eq!(ledger, (13, 13));
     let integrity: String = conn
         .query_row("PRAGMA integrity_check", [], |row| row.get(0))
         .unwrap();
@@ -682,8 +682,8 @@ fn paper_peaks_from_both_builds_merge_on_open() {
 
 /// A v11 store gains each paper round's take-profit steps and partial sales. An open
 /// round's partial sales start from its `sells`, so its stop loss keeps exiting fully
-/// after a sale exactly as before; a closed round starts at zero. The ledger keeps v10
-/// as the oldest reader, since only columns with defaults are added.
+/// after a sale exactly as before; a closed round starts at zero. The ledger names the
+/// current oldest reader, v13, which moved paper copies to the shared paper book.
 #[test]
 fn a_v11_store_gains_the_paper_round_exit_state() {
     let dir = tempfile::tempdir().unwrap();
@@ -749,7 +749,7 @@ fn a_v11_store_gains_the_paper_round_exit_state() {
             |row| Ok((row.get(0)?, row.get(1)?)),
         )
         .unwrap();
-    assert_eq!(ledger, (12, 10));
+    assert_eq!(ledger, (13, 13));
     let integrity: String = conn
         .query_row("PRAGMA integrity_check", [], |row| row.get(0))
         .unwrap();

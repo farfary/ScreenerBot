@@ -376,6 +376,7 @@ pub async fn process_dca_opportunities(book: Book) -> crate::trader::Result<Vec<
                     // Auto-trader slippage always follows config.
                     slippage_pct: None,
                     take_profit_level: None,
+                    paper_leg_key: None,
                 });
             }
             _ if calculations.below_minimum_trade => logger::warning(

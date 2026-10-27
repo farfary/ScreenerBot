@@ -3,11 +3,11 @@
 
 //! Pure copy-trading analytics and latency policy.
 
-use crate::positions::{Position, PositionOrigin};
+use crate::positions::{Book, Position, PositionOrigin};
+use crate::trader::types::TradeReason;
 
 use super::types::{
     ArrivalDistanceStats, CopyActivityRow, CopyBook, CopyOutcome, CopyTaskStats, CopyTelemetry,
-    PaperExitRule, PaperPosition,
 };
 
 pub fn arrival_distance_ms(telemetry: &CopyTelemetry) -> Option<u64> {
@@ -48,13 +48,61 @@ pub fn latency_should_pause(samples: &[u64], window_size: usize, threshold_ms: u
     average > u128::from(threshold_ms)
 }
 
+/// How a closed round of a copy task closed, from its stored close reason.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RoundClose {
+    /// An exit rule of the exit monitor sold it.
+    Policy,
+    /// It was closed by hand.
+    Manual,
+    /// A mirrored target sell, a paper run reset or a reconciliation closed it.
+    Other,
+}
+
+/// The kind of close a stored `closed_reason` names; a reason a pending verification
+/// or a forced close decorates keeps its kind.
+fn round_close(closed_reason: Option<&str>) -> RoundClose {
+    let Some(reason) = closed_reason else {
+        return RoundClose::Other;
+    };
+    let reason = reason.trim_end_matches("_pending_verification");
+    let is = |trade: TradeReason| reason == format!("{trade:?}");
+    if is(TradeReason::ManualExit) || is(TradeReason::ForceSell) {
+        RoundClose::Manual
+    } else if [
+        TradeReason::TakeProfit,
+        TradeReason::StopLoss,
+        TradeReason::TrailingStop,
+        TradeReason::BreakEvenStop,
+        TradeReason::TimeOverride,
+        TradeReason::TimeStagnation,
+        TradeReason::StrategyExit,
+        TradeReason::LlmAnalysisExit,
+        TradeReason::RiskManagement,
+        TradeReason::Blacklisted,
+    ]
+    .into_iter()
+    .any(is)
+    {
+        RoundClose::Policy
+    } else {
+        RoundClose::Other
+    }
+}
+
+/// A task's figures in `book`: decision counts and arrival from its `activity`, and
+/// the rounds it opened in that book from `positions`. A live round counts closed
+/// once its exit is verified; a paper round once it closes, and an open paper round
+/// without a mark is counted as unpriced rather than at zero.
 pub fn build_task_stats(
     task_id: i64,
+    book: CopyBook,
     activity: &[CopyActivityRow],
     positions: &[Position],
 ) -> CopyTaskStats {
     let mut stats = CopyTaskStats {
         task_id,
+        book,
         ..CopyTaskStats::default()
     };
     let mut arrival = Vec::new();
@@ -85,10 +133,8 @@ pub fn build_task_stats(
                     .as_ref()
                     .is_some_and(|fill| fill.has_quote_provenance()) =>
             {
-                match decision.exit_rule {
-                    None => stats.target_sells += 1,
-                    Some(PaperExitRule::Manual) => stats.manual_closes += 1,
-                    Some(_) => stats.policy_exits += 1,
+                if decision.exit_rule.is_none() {
+                    stats.target_sells += 1;
                 }
                 Some(&decision.telemetry)
             }
@@ -117,100 +163,39 @@ pub fn build_task_stats(
         }
     }
 
+    let store = book.store();
     for position in positions.iter().filter(|position| {
         matches!(position.origin, PositionOrigin::Copy { task_id: origin, .. } if origin == task_id)
+            && position.book == store
     }) {
-        if position.transaction_exit_verified {
+        let closed = match store {
+            Book::Live => position.transaction_exit_verified,
+            Book::Paper => position.exit_time.is_some(),
+        };
+        if closed {
             stats.closed_positions += 1;
             stats.realized_pnl_native += position.pnl.unwrap_or_default();
+            match round_close(position.closed_reason.as_deref()) {
+                RoundClose::Policy => stats.policy_exits += 1,
+                RoundClose::Manual => stats.manual_closes += 1,
+                RoundClose::Other => {}
+            }
         } else if !position.archived {
             stats.open_positions += 1;
-            stats.unrealized_pnl_native += position.unrealized_pnl.unwrap_or_default();
+            let priced = position
+                .current_price
+                .is_some_and(|price| price.is_finite() && price > 0.0);
+            if store == Book::Paper && !priced {
+                stats.unpriced_positions += 1;
+            } else {
+                stats.unrealized_pnl_native += position.unrealized_pnl.unwrap_or_default();
+            }
         }
     }
     stats.arrival_distance = summarize_arrival_distances(arrival);
     stats
 }
 
-/// Replace the live-position figures with the task's paper book. `mark` prices an
-/// open position; one it cannot price is counted as unpriced rather than as zero.
-pub fn apply_paper_book(
-    stats: &mut CopyTaskStats,
-    positions: &[PaperPosition],
-    mark: impl Fn(&PaperPosition) -> Option<f64>,
-) {
-    stats.book = CopyBook::Paper;
-    stats.open_positions = 0;
-    stats.closed_positions = 0;
-    stats.realized_pnl_native = 0.0;
-    stats.unrealized_pnl_native = 0.0;
-    stats.unpriced_positions = 0;
-    for position in positions {
-        stats.realized_pnl_native +=
-            position.realized_proceeds_native - position.realized_cost_native;
-        if !position.is_open() {
-            stats.closed_positions += 1;
-            continue;
-        }
-        stats.open_positions += 1;
-        match mark(position).filter(|price| price.is_finite() && *price > 0.0) {
-            Some(price) => {
-                stats.unrealized_pnl_native +=
-                    position.token_amount * price - position.cost_basis_native
-            }
-            None => stats.unpriced_positions += 1,
-        }
-    }
-}
-
 #[cfg(test)]
-mod tests {
-    use chrono::Utc;
-
-    use super::*;
-
-    fn position(
-        mint: &str,
-        tokens: f64,
-        cost: f64,
-        proceeds: f64,
-        realized_cost: f64,
-    ) -> PaperPosition {
-        PaperPosition {
-            task_id: 1,
-            mint: mint.to_owned(),
-            token_amount: tokens,
-            raw_token_amount: Some(crate::chains::RawAmount::from_integral_f64(tokens).unwrap()),
-            token_decimals: Some(0),
-            cost_basis_native: cost,
-            invested_native: cost + realized_cost,
-            realized_proceeds_native: proceeds,
-            realized_cost_native: realized_cost,
-            buys: 1,
-            sells: u64::from(proceeds > 0.0),
-            last_price_native: None,
-            last_price_at: None,
-            opened_at: Utc::now(),
-            closed_at: (tokens == 0.0).then(Utc::now),
-            peak_price_native: None,
-            take_profit_level: 0,
-            round_partial_exits: 0,
-        }
-    }
-
-    #[test]
-    fn the_paper_book_marks_open_positions_and_counts_unpriced_ones() {
-        let mut stats = CopyTaskStats::default();
-        let book = [
-            position("priced", 100.0, 1.0, 0.5, 0.4),
-            position("unpriced", 50.0, 0.5, 0.0, 0.0),
-            position("closed", 0.0, 0.0, 2.0, 1.5),
-        ];
-        apply_paper_book(&mut stats, &book, |p| (p.mint == "priced").then_some(0.012));
-        assert_eq!(stats.book, CopyBook::Paper);
-        assert_eq!((stats.open_positions, stats.closed_positions), (2, 1));
-        assert_eq!(stats.unpriced_positions, 1);
-        assert!((stats.realized_pnl_native - 0.6).abs() < 1e-12);
-        assert!((stats.unrealized_pnl_native - 0.2).abs() < 1e-12);
-    }
-}
+#[path = "analytics_tests.rs"]
+mod tests;

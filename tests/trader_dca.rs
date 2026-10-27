@@ -501,6 +501,7 @@ async fn the_executor_refuses_an_add_with_no_size() {
         exit_percentage: None,
         slippage_pct: None,
         take_profit_level: None,
+        paper_leg_key: None,
     };
     let context = screenerbot::trader::executors::ExecutionContext::for_decision(&decision);
     let error = screenerbot::trader::executors::execute_trade(&decision, context)

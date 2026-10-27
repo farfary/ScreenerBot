@@ -509,6 +509,7 @@ mod tests {
             exit_percentage: None,
             slippage_pct: None,
             take_profit_level: None,
+            paper_leg_key: None,
         };
         let mut result = crate::trader::TradeResult::failure_at(
             decision,

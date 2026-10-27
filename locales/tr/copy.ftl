@@ -74,11 +74,11 @@ copy-readiness-latency = İşlemler zamanında algılandı
 copy-readiness-latency-detail = p95 geliş süresi { $p95 } sn, sınır { $limit } sn
 copy-readiness-latency-none = Henüz geliş örneği yok
 copy-readiness-priced = Her varlık fiyatlandı
-copy-readiness-priced-ok = Her açık sanal varlığın havuz fiyatı var
-copy-readiness-priced-missing =
+copy-readiness-marked-ok = Her açık sanal varlığın bir fiyatı var
+copy-readiness-marked-missing =
     { $count ->
-        [one] Havuz fiyatı olmayan açık varlık sayısı: { $count }
-       *[other] Havuz fiyatı olmayan açık varlık sayısı: { $count }
+        [one] Fiyatı olmayan açık varlık sayısı: { $count }
+       *[other] Fiyatı olmayan açık varlık sayısı: { $count }
     }
 copy-readiness-runtime = Canlı yürütme kullanılabilir
 copy-readiness-runtime-ok = Kurulum ve güvenlik kapıları canlı kopyalara izin veriyor
@@ -93,7 +93,6 @@ copy-state-running-paper = Çalışıyor
 copy-exit-mode-buy-only = Benim çıkış kurallarım
 copy-exit-mode-mirror = Cüzdan satışlarını yansıt
 copy-exit-mode-hybrid = Cüzdan satışları ve kurallarım
-copy-exit-target-sell = Cüzdan sattı
 copy-exit-stop-loss = Zarar durdur
 copy-exit-trailing-stop = İz süren stop
 copy-exit-break-even = Başa baş stop
@@ -263,6 +262,12 @@ copy-paper-legacy-col-cost = Kalan maliyet ({ -sol })
 copy-paper-legacy-col-realized = Gerçekleşen tahmin ({ -sol })
 copy-paper-legacy-col-price = Kaydedilen son fiyat ({ -sol })
 copy-paper-legacy-col-remaining = Kaydedilen fiyattan kalan K/Z ({ -sol })
+copy-paper-earlier-title = Önceki sanal sonuçlar
+copy-paper-archived-title = Fiyat teklifine dayalı kopya defteri
+copy-paper-archived-note = Bu görevin sanal kopyalarının, sanal defterin turları olmadan önce kaydettiği salt okunur sonuçlar. Geçerli dönemin harcamasının veya varlıklarının parçası değildir ve eylem sunmaz. Kalan miktarlar her token için kaydedilen son fiyattan değerlenir, hiçbir zaman güncel piyasa fiyatından değil.
+copy-paper-archived-spent = Önceki harcama
+copy-paper-archived-realized = Önceki gerçekleşmiş K/Z
+copy-paper-archived-col-realized = Gerçekleşen ({ -sol })
 
 copy-tab-overview = Genel Bakış
 copy-tab-holdings = Varlıklar
@@ -348,7 +353,7 @@ copy-return-paper-cancel = Canlıda kal
 copy-task-returned-paper = Görev Sanala döndürüldü
 copy-mode-change-failed = Yürütme modu değiştirilemedi
 copy-delete-title = Kopya görevini sil
-copy-delete-message = “{ $name }” silinsin mi? Kararları ve sanal sonuçları kaldırılır ve cüzdan bu görev için artık izlenmez.
+copy-delete-settle-message = “{ $name }” silinsin mi? Açık sanal varlıkları son fiyatından kapanır ve kapanmış turlarıyla birlikte sanal geçmişte kalır. Kararları kaldırılır ve cüzdan bu görev için artık izlenmez.
 copy-delete-confirm = Görevi sil
 copy-delete-cancel = Görevi koru
 copy-task-deleted = Kopya görevi silindi
@@ -357,10 +362,10 @@ copy-task-delete-failed = Kopya görevi silinemedi
 copy-overview-results = Sonuçlar
 copy-analytics-load-failed = Analizler yüklenemedi: { $error }
 copy-analytics-loading = Analizler yükleniyor…
-copy-exit-bucket =
+copy-exit-bucket-rounds =
     { $count ->
-        [one] { $count } satış · { $pnl }
-       *[other] { $count } satış · { $pnl }
+        [one] { $count } tur · { $pnl }
+       *[other] { $count } tur · { $pnl }
     }
 copy-overview-average-win = Ortalama kazanç
 copy-overview-average-loss = Ortalama kayıp { $amount }
@@ -377,7 +382,11 @@ copy-book-title-live = Canlı defter
 copy-book-title-paper = Sanal defter
 copy-book-all-time = Tüm zamanlar
 copy-book-buys = <strong>{ $count }</strong> alım
-copy-book-policy-exits = <strong>{ $count }</strong> kurallarınıza göre çıkış
+copy-book-rule-closes =
+    <strong>{ $count }</strong> { $count ->
+        [one] tur kurallarınızla kapandı
+       *[other] tur kurallarınızla kapandı
+    }
 copy-book-wallet-sells = <strong>{ $count }</strong> cüzdan satışı
 copy-book-manual-closes = <strong>{ $count }</strong> elle kapatıldı
 copy-book-skipped = <strong>{ $count }</strong> atlandı
@@ -602,12 +611,12 @@ copy-holdings-title = Varlıklar
 copy-holdings-view-label = Varlık görünümü
 copy-holdings-view-open = Açık ({ $count })
 copy-holdings-view-closed = Kapanmış turlar ({ $count })
-copy-holdings-reset = Sanal defteri sıfırla
+copy-holdings-restart = Yeni sanal dönem başlat
 copy-holdings-live-note = Canlı kopyalar gerçek pozisyonlardır.
 copy-holdings-open-positions = Açık Pozisyonlar
 copy-holdings-token-details = Token ayrıntılarını aç
 copy-holdings-opened = Açılış: { $time }
-copy-holdings-no-pool-price = Havuz fiyatı yok
+copy-holdings-no-price = Fiyat yok
 copy-holdings-close = Kapat
 copy-holdings-close-pending = Kapatma beklemede
 copy-holdings-activity = Etkinlik
@@ -638,10 +647,12 @@ copy-holdings-col-invested = Yatırılan ({ -sol })
 copy-holdings-col-proceeds = Hasılat ({ -sol })
 copy-holdings-col-exit = Çıkış
 copy-holdings-col-closed = Kapanış
-copy-holdings-marks-note = Fiyatlar token başına { -sol } cinsindendir. Değerleme ve çıkış seviyeleri, çıkış kurallarını da tetikleyen havuz fiyatını kullanır; kaydedilen dolumlar yönlendirici fiyat tekliflerini kullanır. Giriş, alımın tahmini ağ ücretini içerir; zirve ve çıkış seviyeleri ona göre hesaplanır, bu yüzden bir varlık zirvesi girişin altında olacak şekilde açılır. Havuz fiyatı için üzerine gelin.
+copy-holdings-round-note = Fiyatlar token başına { -sol } cinsindendir. Her satır sanal defterin bir turudur. Değerleme, turun havuzdan veya piyasa verisinden gelen son fiyatıdır ve çıkış kuralları buna göre çalışır; kaydedilen dolumlar yönlendirici tekliflerini kullanır. Giriş, turun ortalama giriş fiyatıdır; zirve ve çıkış seviyeleri buna görelidir. Fiyatını görmek için üzerine gelin.
 copy-holdings-paused-rules = Duraklatıldı: yeni kopya yok. Çıkış kurallarınız bu varlıkları hâlâ kapatır.
 copy-holdings-paused-mirror = Duraklatıldı: yeni kopya yok. Cüzdanın satışları bu varlıkları hâlâ kapatır.
 copy-holdings-paused-hybrid = Duraklatıldı: yeni kopya yok. Cüzdanın satışları ve çıkış kurallarınız bu varlıkları hâlâ kapatır.
+copy-holdings-trader-stopped-rules = Otomatik Trader durduruldu; yeniden çalışana kadar hiçbir çıkış bu varlıkları kapatmaz.
+copy-holdings-trader-stopped-wallet = Otomatik Trader durduruldu; yeniden çalışana kadar bu varlıkları yalnızca cüzdanın satışları kapatır.
 copy-holdings-closed-load-failed = Kapanmış turlar yüklenemedi: { $error }
 copy-holdings-closed-loading = Kapanmış turlar yükleniyor…
 copy-holdings-closed-empty = Henüz kapanmış tur yok.
@@ -657,15 +668,15 @@ copy-holdings-close-pending-detail = Kapatma kuyrukta veya çalışıyor. Sonucu
 copy-holdings-close-unconfirmed = Kapatma sonucu doğrulanmadı
 copy-holdings-close-unconfirmed-detail = Sonuç alınmadan bağlantı koptu ve Etkinlik bölümünde henüz sonuç yok. Yeniden kapatmadan önce Etkinlik bölümünü kontrol edin.
 copy-holdings-closed-check-activity = Varlık kapatıldı. Kaydedilen dolum Etkinlik bölümünde.
-copy-holdings-reset-quote-message = Baştan başlat: “{ $name }”. Geçerli sanal varlıklar, harcama, dolumlar, çıkışlar ve atlananlar temizlenir ve fiyat teklifine dayalı yeni bir defter başlar. Eski tahminler ve canlı geçmiş kalır. Kurallar ve cüzdan kalır.
-copy-holdings-reset-cancel = Geçmişi koru
-copy-holdings-reset-done = Sanal defter sıfırlandı
-copy-holdings-reset-detail =
+copy-holdings-restart-message = Baştan başlat: “{ $name }”. Açık sanal varlıkları son fiyatından kapanır ve rakamları yalnızca bundan sonra olanları sayar. Hiçbir şey silinmez: kapanmış turlar sanal geçmişte, önceki kararlar da önceki dönem olarak işaretlenip Etkinlik bölümünde kalır. Kurallar ve cüzdan kalır.
+copy-holdings-restart-cancel = Bu dönemi koru
+copy-holdings-restart-done = Yeni bir sanal dönem başladı
+copy-holdings-restart-detail =
     { $count ->
-        [one] { $count } karar kaldırıldı
-       *[other] { $count } karar kaldırıldı
+        [one] { $count } varlık kapandı
+       *[other] { $count } varlık kapandı
     }
-copy-holdings-reset-failed = Sanal defter sıfırlanamadı
+copy-holdings-restart-failed = Yeni sanal dönem başlatılamadı
 
 copy-activity-title = Etkinlik
 copy-activity-filter-label = Etkinlik filtresi
@@ -680,6 +691,8 @@ copy-outcome-skipped = Atlandı
 copy-activity-decision = Karar
 copy-activity-paper-exit-quote = Fiyat teklifine dayalı sanal çıkış · { $rule }
 copy-activity-paper-exit-legacy = Eski sanal çıkış tahmini · { $rule }
+copy-activity-earlier-run = Önceki dönem
+    .title = Bu görevin geçerli sanal döneminden önce karara bağlandı, bu yüzden geçerli rakamlarına dahil değil.
 copy-activity-filled = { $price } fiyatından { $input } · cüzdan { $target } aldı
 copy-activity-filled-target-difference = { $price } fiyatından { $input } · cüzdan { $target } aldı · hedef fiyat farkı { $difference }
 copy-activity-filled-slippage = { $price } fiyatından { $input } · cüzdan { $target } aldı · kayma { $slippage }

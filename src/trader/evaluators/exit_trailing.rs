@@ -5,8 +5,8 @@
 
 use crate::trader::policy::TrailingPolicy;
 
-/// The trailing-stop rule on plain numbers, shared by the live evaluator and the
-/// paper copy book. `Err` carries the detail of an impossible configuration.
+/// The trailing-stop rule on plain numbers, read through `exit_rules` for the rounds of
+/// both books. `Err` carries the detail of an impossible configuration.
 ///
 /// ARM THE TRAIL OFF THE PEAK, NEVER OFF THE CURRENT PRICE. A trailing stop exists
 /// to protect a profit the position has ALREADY made, so what arms it is how far the

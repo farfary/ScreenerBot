@@ -74,11 +74,11 @@ copy-readiness-latency = معاملات به‌موقع شناسایی شدند
 copy-readiness-latency-detail = رسیدن p95: { $p95 } ثانیه، حد: { $limit } ثانیه
 copy-readiness-latency-none = هنوز نمونه رسیدنی وجود ندارد
 copy-readiness-priced = همه دارایی‌ها قیمت‌دار هستند
-copy-readiness-priced-ok = همه دارایی‌های آزمایشی باز قیمت استخر دارند
-copy-readiness-priced-missing =
+copy-readiness-marked-ok = هر دارایی آزمایشی باز قیمت دارد
+copy-readiness-marked-missing =
     { $count ->
-        [one] { $count } دارایی باز بدون قیمت استخر
-       *[other] { $count } دارایی باز بدون قیمت استخر
+        [one] { $count } دارایی باز بدون قیمت
+       *[other] { $count } دارایی باز بدون قیمت
     }
 copy-readiness-runtime = اجرای زنده در دسترس است
 copy-readiness-runtime-ok = راه‌اندازی و دروازه‌های ایمنی کپی زنده را مجاز می‌کنند
@@ -95,7 +95,6 @@ copy-state-running-paper = در حال اجرا
 copy-exit-mode-buy-only = قوانین خروج من
 copy-exit-mode-mirror = تقلید فروش‌های کیف پول
 copy-exit-mode-hybrid = فروش‌های کیف پول و قوانین من
-copy-exit-target-sell = کیف پول فروخت
 copy-exit-stop-loss = حد ضرر
 copy-exit-trailing-stop = حد ضرر متحرک
 copy-exit-break-even = حد ضرر سربه‌سر
@@ -279,6 +278,12 @@ copy-paper-legacy-col-cost = هزینه باقی‌مانده ({ -sol })
 copy-paper-legacy-col-realized = تخمین تحقق‌یافته ({ -sol })
 copy-paper-legacy-col-price = آخرین قیمت ذخیره‌شده ({ -sol })
 copy-paper-legacy-col-remaining = سود و زیان باقی‌مانده با قیمت ذخیره‌شده ({ -sol })
+copy-paper-earlier-title = نتایج آزمایشی پیشین
+copy-paper-archived-title = دفتر کپی مبتنی بر قیمت پیشنهادی
+copy-paper-archived-note = نتایج فقط‌خواندنی که کپی‌های آزمایشی این وظیفه پیش از تبدیل شدن به دورهای دفتر آزمایشی ثبت کرده‌اند. آن‌ها بخشی از مصرف یا دارایی‌های دوره‌ی فعلی نیستند و هیچ اقدامی ارائه نمی‌دهند. مقادیر باقی‌مانده با آخرین قیمت ذخیره‌شده‌ی هر توکن ارزش‌گذاری می‌شوند، نه با قیمت فعلی بازار.
+copy-paper-archived-spent = مصرف پیشین
+copy-paper-archived-realized = سود و زیان تحقق‌یافته‌ی پیشین
+copy-paper-archived-col-realized = تحقق‌یافته ({ -sol })
 
 ## Workspace
 
@@ -366,7 +371,7 @@ copy-return-paper-cancel = ماندن در زنده
 copy-task-returned-paper = وظیفه به حالت آزمایشی بازگشت
 copy-mode-change-failed = تغییر حالت اجرا ممکن نشد
 copy-delete-title = حذف وظیفه کپی
-copy-delete-message = «{ $name }» حذف شود؟ تصمیم‌ها و نتایج آزمایشی آن پاک می‌شوند و کیف پول دیگر برای این وظیفه پایش نمی‌شود.
+copy-delete-settle-message = «{ $name }» حذف شود؟ دارایی‌های آزمایشی باز آن با آخرین قیمتشان بسته می‌شوند و همراه دورهای بسته‌اش در تاریخچه‌ی آزمایشی می‌مانند. تصمیم‌های آن پاک می‌شوند و کیف پول دیگر برای این وظیفه پایش نمی‌شود.
 copy-delete-confirm = حذف وظیفه
 copy-delete-cancel = نگه داشتن وظیفه
 copy-task-deleted = وظیفه کپی حذف شد
@@ -377,10 +382,10 @@ copy-task-delete-failed = حذف وظیفه کپی ممکن نشد
 copy-overview-results = نتایج
 copy-analytics-load-failed = بارگذاری تحلیل‌ها ممکن نشد: { $error }
 copy-analytics-loading = در حال بارگذاری تحلیل‌ها…
-copy-exit-bucket =
+copy-exit-bucket-rounds =
     { $count ->
-        [one] { $count } فروش · { $pnl }
-       *[other] { $count } فروش · { $pnl }
+        [one] { $count } دور · { $pnl }
+       *[other] { $count } دور · { $pnl }
     }
 copy-overview-average-win = میانگین برد
 copy-overview-average-loss = میانگین باخت { $amount }
@@ -401,10 +406,10 @@ copy-book-buys =
         [one] خرید
        *[other] خرید
     }
-copy-book-policy-exits =
+copy-book-rule-closes =
     <strong>{ $count }</strong> { $count ->
-        [one] خروج طبق قوانین شما
-       *[other] خروج طبق قوانین شما
+        [one] دور با قوانین شما بسته شد
+       *[other] دور با قوانین شما بسته شد
     }
 copy-book-wallet-sells =
     <strong>{ $count }</strong> { $count ->
@@ -650,12 +655,12 @@ copy-holdings-title = دارایی‌ها
 copy-holdings-view-label = نمای دارایی‌ها
 copy-holdings-view-open = باز ({ $count })
 copy-holdings-view-closed = دورهای بسته ({ $count })
-copy-holdings-reset = بازنشانی دفتر آزمایشی
+copy-holdings-restart = شروع دوره‌ی آزمایشی تازه
 copy-holdings-live-note = کپی‌های زنده پوزیشن‌های واقعی هستند.
 copy-holdings-open-positions = پوزیشن‌های باز
 copy-holdings-token-details = باز کردن جزئیات توکن
 copy-holdings-opened = باز شده در { $time }
-copy-holdings-no-pool-price = بدون قیمت استخر
+copy-holdings-no-price = بدون قیمت
 copy-holdings-close = بستن
 copy-holdings-close-pending = بستن در انتظار
 copy-holdings-activity = فعالیت
@@ -686,10 +691,12 @@ copy-holdings-col-invested = سرمایه‌گذاری‌شده ({ -sol })
 copy-holdings-col-proceeds = عواید ({ -sol })
 copy-holdings-col-exit = خروج
 copy-holdings-col-closed = بسته‌شده
-copy-holdings-marks-note = قیمت‌ها به { -sol } برای هر توکن هستند. ارزش‌گذاری و سطوح خروج از قیمت استخر استفاده می‌کنند که قوانین خروج را هم فعال می‌کند؛ اجراهای ثبت‌شده از قیمت‌های پیشنهادی روتر استفاده می‌کنند. ورود شامل کارمزد شبکه‌ی تخمینی خرید است؛ اوج و سطوح خروج نسبت به آن سنجیده می‌شوند، پس یک دارایی با اوجی پایین‌تر از ورود باز می‌شود. برای دیدن قیمت استخر، نشانگر را روی هر مورد نگه دارید.
+copy-holdings-round-note = قیمت‌ها به { -sol } برای هر توکن است. هر ردیف یک دور از دفتر آزمایشی است. قیمت ارزش‌گذاری آخرین قیمت دور است که از استخر یا داده‌ی بازار می‌آید و قوانین خروج بر اساس آن عمل می‌کنند؛ اجراهای ثبت‌شده از قیمت پیشنهادی مسیریاب استفاده می‌کنند. ورود، میانگین قیمت ورود دور است؛ اوج و سطوح خروج نسبت به آن هستند. برای دیدن قیمت، نشانگر را روی آن نگه دارید.
 copy-holdings-paused-rules = متوقف: کپی جدیدی انجام نمی‌شود. قوانین خروج شما همچنان این دارایی‌ها را می‌بندند.
 copy-holdings-paused-mirror = متوقف: کپی جدیدی انجام نمی‌شود. فروش‌های کیف پول همچنان این دارایی‌ها را می‌بندند.
 copy-holdings-paused-hybrid = متوقف: کپی جدیدی انجام نمی‌شود. فروش‌های کیف پول و قوانین خروج شما همچنان این دارایی‌ها را می‌بندند.
+copy-holdings-trader-stopped-rules = معامله‌گر خودکار متوقف است، پس تا دوباره اجرا نشود هیچ خروجی این دارایی‌ها را نمی‌بندد.
+copy-holdings-trader-stopped-wallet = معامله‌گر خودکار متوقف است، پس تا دوباره اجرا نشود فقط فروش‌های کیف پول این دارایی‌ها را می‌بندند.
 copy-holdings-closed-load-failed = بارگذاری دورهای بسته ممکن نشد: { $error }
 copy-holdings-closed-loading = در حال بارگذاری دورهای بسته…
 copy-holdings-closed-empty = هنوز دور بسته‌ای نیست.
@@ -705,15 +712,15 @@ copy-holdings-close-pending-detail = بستن در صف است یا در حال 
 copy-holdings-close-unconfirmed = نتیجه‌ی بستن تأیید نشد
 copy-holdings-close-unconfirmed-detail = اتصال پیش از دریافت نتیجه قطع شد و فعالیت هنوز نتیجه‌ای ندارد. پیش از بستن دوباره، فعالیت را بررسی کنید.
 copy-holdings-closed-check-activity = دارایی بسته شد. اجرای ثبت‌شده در فعالیت است.
-copy-holdings-reset-quote-message = «{ $name }» را از نو شروع کنید: دارایی‌ها، مصرف، اجراها، خروج‌ها و موارد نادیده‌ی آزمایشیِ فعلی آن پاک می‌شوند و دفتر جدیدی مبتنی بر قیمت پیشنهادی آغاز می‌شود. تخمین‌های قدیمی و تاریخچه‌ی زنده باقی می‌مانند. قوانین و کیف پول هم باقی می‌مانند.
-copy-holdings-reset-cancel = نگه داشتن تاریخچه
-copy-holdings-reset-done = دفتر آزمایشی بازنشانی شد
-copy-holdings-reset-detail =
+copy-holdings-restart-message = «{ $name }» را از نو شروع کنید: دارایی‌های آزمایشی باز آن با آخرین قیمتشان بسته می‌شوند و ارقامش فقط آنچه را از این پس رخ می‌دهد می‌شمارند. هیچ چیز پاک نمی‌شود: دورهای بسته در تاریخچه‌ی آزمایشی می‌مانند و تصمیم‌های پیشین با نشان دوره‌ی قبلی در فعالیت می‌مانند. قوانین و کیف پول هم باقی می‌مانند.
+copy-holdings-restart-cancel = نگه داشتن این دوره
+copy-holdings-restart-done = دوره‌ی آزمایشی تازه‌ای آغاز شد
+copy-holdings-restart-detail =
     { $count ->
-        [one] { $count } تصمیم پاک شد
-       *[other] { $count } تصمیم پاک شد
+        [one] { $count } دارایی بسته شد
+       *[other] { $count } دارایی بسته شد
     }
-copy-holdings-reset-failed = بازنشانی دفتر آزمایشی ممکن نشد
+copy-holdings-restart-failed = دوره‌ی آزمایشی تازه آغاز نشد
 
 ## Activity tab
 
@@ -730,6 +737,8 @@ copy-outcome-skipped = نادیده گرفته شد
 copy-activity-decision = تصمیم
 copy-activity-paper-exit-quote = خروج آزمایشی مبتنی بر قیمت پیشنهادی · { $rule }
 copy-activity-paper-exit-legacy = تخمین خروج آزمایشی قدیمی · { $rule }
+copy-activity-earlier-run = دوره‌ی قبلی
+    .title = پیش از دوره‌ی آزمایشی فعلی این وظیفه تصمیم گرفته شده، پس در ارقام فعلی آن حساب نمی‌شود.
 copy-activity-filled = { $input } با قیمت { $price } · کیف پول { $target } خرید
 copy-activity-filled-target-difference = { $input } با قیمت { $price } · کیف پول { $target } خرید · تفاوت قیمت با هدف { $difference }
 copy-activity-filled-slippage = { $input } با قیمت { $price } · کیف پول { $target } خرید · اسلیپیج { $slippage }

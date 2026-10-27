@@ -74,12 +74,12 @@ copy-readiness-latency = Trades detectados a tempo
 copy-readiness-latency-detail = chegada p95 de { $p95 }s, limite de { $limit }s
 copy-readiness-latency-none = Ainda sem amostras de chegada
 copy-readiness-priced = Todas as posses com preço
-copy-readiness-priced-ok = Toda posse aberta em Paper tem preço de pool
-copy-readiness-priced-missing =
+copy-readiness-marked-ok = Toda posse em Paper aberta tem um preço
+copy-readiness-marked-missing =
     { $count ->
-        [one] { $count } posse aberta sem preço de pool
-        [many] { $count } posses abertas sem preço de pool
-       *[other] { $count } posses abertas sem preço de pool
+        [one] { $count } posse aberta sem preço
+        [many] { $count } posses abertas sem preço
+       *[other] { $count } posses abertas sem preço
     }
 copy-readiness-runtime = Execução real disponível
 copy-readiness-runtime-ok = A configuração e as travas de segurança permitem cópias reais
@@ -94,7 +94,6 @@ copy-state-running-paper = Em execução
 copy-exit-mode-buy-only = Minhas regras de saída
 copy-exit-mode-mirror = Espelhar vendas da carteira
 copy-exit-mode-hybrid = Vendas da carteira e minhas regras
-copy-exit-target-sell = Carteira vendeu
 copy-exit-stop-loss = Stop loss
 copy-exit-trailing-stop = Trailing stop
 copy-exit-break-even = Stop no ponto de equilíbrio
@@ -271,6 +270,12 @@ copy-paper-legacy-col-cost = Custo restante ({ -sol })
 copy-paper-legacy-col-realized = Estimativa realizada ({ -sol })
 copy-paper-legacy-col-price = Último preço salvo ({ -sol })
 copy-paper-legacy-col-remaining = P&L restante ao preço salvo ({ -sol })
+copy-paper-earlier-title = Resultados anteriores em Paper
+copy-paper-archived-title = Livro de cópia por cotação
+copy-paper-archived-note = Resultados somente leitura que as cópias em Paper desta tarefa registraram antes de se tornarem rodadas do livro de Paper. Eles não fazem parte do gasto nem das posses da rodada atual e não oferecem ações. Os valores restantes são avaliados ao último preço salvo de cada token, nunca a um preço de mercado atual.
+copy-paper-archived-spent = Gasto anterior
+copy-paper-archived-realized = P&L realizado anterior
+copy-paper-archived-col-realized = Realizado ({ -sol })
 
 copy-tab-overview = Visão geral
 copy-tab-holdings = Posses
@@ -359,7 +364,7 @@ copy-return-paper-cancel = Manter modo real
 copy-task-returned-paper = Tarefa devolvida ao Paper
 copy-mode-change-failed = Não foi possível alterar o modo de execução
 copy-delete-title = Excluir tarefa de cópia
-copy-delete-message = Excluir “{ $name }”? As decisões e os resultados em Paper dela serão removidos e a carteira deixará de ser monitorada para esta tarefa.
+copy-delete-settle-message = Excluir “{ $name }”? As posses em Paper abertas fecham pelo último preço e ficam no histórico de Paper com as rodadas fechadas. As decisões dela serão removidas e a carteira deixará de ser monitorada para esta tarefa.
 copy-delete-confirm = Excluir tarefa
 copy-delete-cancel = Manter tarefa
 copy-task-deleted = Tarefa de cópia excluída
@@ -368,11 +373,11 @@ copy-task-delete-failed = Não foi possível excluir a tarefa de cópia
 copy-overview-results = Resultados
 copy-analytics-load-failed = Não foi possível carregar as análises: { $error }
 copy-analytics-loading = Carregando análises…
-copy-exit-bucket =
+copy-exit-bucket-rounds =
     { $count ->
-        [one] { $count } venda · { $pnl }
-        [many] { $count } vendas · { $pnl }
-       *[other] { $count } vendas · { $pnl }
+        [one] { $count } rodada · { $pnl }
+        [many] { $count } rodadas · { $pnl }
+       *[other] { $count } rodadas · { $pnl }
     }
 copy-overview-average-win = Ganho médio
 copy-overview-average-loss = Perda média { $amount }
@@ -394,11 +399,11 @@ copy-book-buys =
         [many] compras
        *[other] compras
     }
-copy-book-policy-exits =
+copy-book-rule-closes =
     <strong>{ $count }</strong> { $count ->
-        [one] saída pelas suas regras
-        [many] saídas pelas suas regras
-       *[other] saídas pelas suas regras
+        [one] rodada fechada pelas suas regras
+        [many] rodadas fechadas pelas suas regras
+       *[other] rodadas fechadas pelas suas regras
     }
 copy-book-wallet-sells =
     <strong>{ $count }</strong> { $count ->
@@ -635,12 +640,12 @@ copy-holdings-title = Posses
 copy-holdings-view-label = Visão das posses
 copy-holdings-view-open = Abertas ({ $count })
 copy-holdings-view-closed = Rodadas fechadas ({ $count })
-copy-holdings-reset = Redefinir livro de Paper
+copy-holdings-restart = Iniciar nova rodada de Paper
 copy-holdings-live-note = As cópias reais são posições reais.
 copy-holdings-open-positions = Posições abertas
 copy-holdings-token-details = Abrir detalhes do token
 copy-holdings-opened = Aberta { $time }
-copy-holdings-no-pool-price = Sem preço de pool
+copy-holdings-no-price = Sem preço
 copy-holdings-close = Fechar
 copy-holdings-close-pending = Fechamento pendente
 copy-holdings-activity = Atividade
@@ -671,10 +676,12 @@ copy-holdings-col-invested = Investido ({ -sol })
 copy-holdings-col-proceeds = Recebido ({ -sol })
 copy-holdings-col-exit = Saída
 copy-holdings-col-closed = Fechada
-copy-holdings-marks-note = Os preços são em { -sol } por token. A avaliação e os níveis de saída usam o preço do pool, que também aciona as regras de saída; as execuções registradas usam cotações de roteador. A entrada inclui a taxa de rede estimada da compra; o pico e os níveis de saída são relativos a ela, então uma posse abre com o pico abaixo da entrada. Passe o mouse sobre um valor para ver o preço do pool.
+copy-holdings-round-note = Os preços estão em { -sol } por token. Cada linha é uma rodada do livro de Paper. A marcação é o último preço da rodada, do pool ou de dados de mercado, e as regras de saída agem sobre ela; as execuções registradas usam cotações do roteador. A entrada é o preço médio de entrada da rodada; o pico e os níveis de saída são relativos a ela. Passe o cursor sobre um valor para ver o preço.
 copy-holdings-paused-rules = Pausada: sem novas cópias. Suas regras de saída ainda fecham estas posses.
 copy-holdings-paused-mirror = Pausada: sem novas cópias. As vendas da carteira ainda fecham estas posses.
 copy-holdings-paused-hybrid = Pausada: sem novas cópias. As vendas da carteira e suas regras de saída ainda fecham estas posses.
+copy-holdings-trader-stopped-rules = O Trader automático está parado, então nenhuma saída fecha estas posses até ele voltar a rodar.
+copy-holdings-trader-stopped-wallet = O Trader automático está parado, então só as vendas da carteira fecham estas posses até ele voltar a rodar.
 copy-holdings-closed-load-failed = Não foi possível carregar as rodadas fechadas: { $error }
 copy-holdings-closed-loading = Carregando rodadas fechadas…
 copy-holdings-closed-empty = Nenhuma rodada fechada ainda.
@@ -690,16 +697,16 @@ copy-holdings-close-pending-detail = O fechamento está na fila ou em andamento.
 copy-holdings-close-unconfirmed = Resultado do fechamento não confirmado
 copy-holdings-close-unconfirmed-detail = A conexão terminou antes de o resultado chegar e Atividade ainda não tem resultado. Confira Atividade antes de fechar de novo.
 copy-holdings-closed-check-activity = A posse está fechada. Atividade tem a execução registrada.
-copy-holdings-reset-quote-message = Recomeçar “{ $name }”: as posses em Paper atuais, o gasto, as execuções, as saídas e as ignoradas serão apagados e um novo livro baseado em cotações começa. As estimativas legadas e o histórico real permanecem. As regras e a carteira permanecem.
-copy-holdings-reset-cancel = Manter histórico
-copy-holdings-reset-done = Livro de Paper redefinido
-copy-holdings-reset-detail =
+copy-holdings-restart-message = Recomeçar “{ $name }”: as posses em Paper abertas fecham pelo último preço e os números passam a contar só o que acontecer daqui em diante. Nada é apagado: as rodadas fechadas ficam no histórico de Paper e as decisões anteriores ficam em Atividade, marcadas como rodada anterior. As regras e a carteira permanecem.
+copy-holdings-restart-cancel = Manter esta rodada
+copy-holdings-restart-done = Uma nova rodada de Paper começou
+copy-holdings-restart-detail =
     { $count ->
-        [one] { $count } decisão removida
-        [many] { $count } decisões removidas
-       *[other] { $count } decisões removidas
+        [one] { $count } posse fechada
+        [many] { $count } posses fechadas
+       *[other] { $count } posses fechadas
     }
-copy-holdings-reset-failed = Não foi possível redefinir o livro de Paper
+copy-holdings-restart-failed = Não foi possível iniciar uma nova rodada de Paper
 
 copy-activity-title = Atividade
 copy-activity-filter-label = Filtro de atividade
@@ -714,6 +721,8 @@ copy-outcome-skipped = Ignorada
 copy-activity-decision = Decisão
 copy-activity-paper-exit-quote = Saída em Paper por cotação · { $rule }
 copy-activity-paper-exit-legacy = Estimativa de saída em Paper legada · { $rule }
+copy-activity-earlier-run = Rodada anterior
+    .title = Decidido antes da rodada de Paper atual desta tarefa, por isso fica fora dos números atuais.
 copy-activity-filled = { $input } a { $price } · a carteira comprou { $target }
 copy-activity-filled-target-difference = { $input } a { $price } · a carteira comprou { $target } · diferença de preço em relação ao alvo { $difference }
 copy-activity-filled-slippage = { $input } a { $price } · a carteira comprou { $target } · slippage { $slippage }

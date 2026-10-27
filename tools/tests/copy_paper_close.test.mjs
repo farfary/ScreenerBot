@@ -55,7 +55,7 @@ async function openHoldings(t) {
         "**/api/copy-trading/tasks/*/reset",
         (route) => {
           resets.push(route.request().url());
-          return route.fulfill({ json: { removed_decisions: 0 } });
+          return route.fulfill({ json: state.reset ?? { task_id: 1, closed_rounds: 0 } });
         },
       ],
       [
@@ -305,16 +305,15 @@ test("a refusal from the backend is a failed close and leaves the holding open",
   assert.ok(await (await idleCloseButton(page)).isEnabled());
 });
 
-test("a holding without a pool mark can still be closed by quote", async (t) => {
+test("a holding without a mark can still be closed by quote", async (t) => {
   const { page, state } = await openHoldings(t);
   Object.assign(state.workspace.paper_holdings[0], {
     mark_price_native: null,
-    market_value_native: null,
     unrealized_pnl_native: null,
     unrealized_pnl_pct: null,
   });
   await refresh(page);
-  await page.getByText("No pool price").first().waitFor();
+  await page.getByText("No price", { exact: true }).first().waitFor();
   assert.ok(await closeButton(page).isEnabled());
   assert.equal(await page.getByRole("button", { name: /write off/i }).count(), 0);
   const message = await confirmClose(page);
@@ -379,6 +378,30 @@ test("a reset confirmed after another task was selected resets the captured task
   await until(() => resets.length > 0);
   assert.equal(resets.length, 1);
   assert.match(resets[0], /\/tasks\/1\/reset$/, "the task shown at the click is reset");
+});
+
+test("a restart says the holdings stay in history and reports the rounds it closed", async (t) => {
+  const { page, state, resets } = await openHoldings(t);
+  state.reset = { task_id: 1, closed_rounds: 2 };
+  await page.locator('[data-holding-action="reset"]').click();
+  const dialog = dialogOf(page);
+  await dialog.waitFor();
+  const message = plain(await dialog.innerText());
+  assert.match(message, /close at their last price/);
+  assert.match(message, /Nothing is deleted/);
+  await dialog.locator('[data-action="confirm"]').click();
+  await until(() => resets.length > 0);
+  await toast(page, "2 holdings closed").waitFor();
+});
+
+test("the holdings say so when the Auto Trader is stopped and only then", async (t) => {
+  const { page, state } = await openHoldings(t);
+  const note = page.locator("#copy-ws-panel .copy-note", { hasText: /Auto Trader is stopped/ });
+  assert.equal(await note.count(), 0, "a running Auto Trader needs no note");
+  state.workspace.exit_rules_running = false;
+  await refresh(page);
+  await note.first().waitFor();
+  assert.match(plain(await note.first().innerText()), /only the wallet's sells close these holdings/);
 });
 
 test("clicking close repeatedly during its confirmation sends one request", async (t) => {

@@ -1,7 +1,8 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! SQLite repository for copy tasks, spend, outcomes, activity, and position links.
+//! SQLite repository for copy tasks, live spend, outcomes, activity and the archived
+//! copy paper book.
 
 use std::path::Path;
 use std::sync::OnceLock;
@@ -27,8 +28,6 @@ pub(crate) mod column_names;
 mod ledger;
 #[path = "database/maintenance.rs"]
 mod maintenance;
-#[path = "database/paper_book.rs"]
-mod paper_book;
 #[path = "database/recording.rs"]
 mod recording;
 
@@ -491,6 +490,7 @@ impl CopyDatabase {
                     kind: row.get(2)?,
                     outcome: serde_json::from_str(&json).map_err(json_error)?,
                     created_at: parse_datetime(&created, 4)?,
+                    earlier_run: false,
                 })
             })
             .map_err(crate::errors::DatabaseError::from)?
@@ -517,6 +517,7 @@ impl CopyDatabase {
                     kind: row.get(2)?,
                     outcome: serde_json::from_str(&json).map_err(json_error)?,
                     created_at: parse_datetime(&created, 4)?,
+                    earlier_run: false,
                 })
             })
             .map_err(crate::errors::DatabaseError::from)?

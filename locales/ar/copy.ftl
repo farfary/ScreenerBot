@@ -74,15 +74,15 @@ copy-readiness-latency = اكتشاف الصفقات في الوقت المنا�
 copy-readiness-latency-detail = وصول p95 ‏{ $p95 } ث، الحد { $limit } ث
 copy-readiness-latency-none = لا توجد عينات وصول بعد
 copy-readiness-priced = كل الحيازات مسعّرة
-copy-readiness-priced-ok = لكل حيازة تجريبية مفتوحة سعر مجمع
-copy-readiness-priced-missing =
+copy-readiness-marked-ok = لكل حيازة تجريبية مفتوحة سعر
+copy-readiness-marked-missing =
     { $count ->
-        [zero] لا حيازات مفتوحة بلا سعر مجمع ({ $count })
-        [one] حيازة مفتوحة واحدة بلا سعر مجمع ({ $count })
-        [two] حيازتان مفتوحتان بلا سعر مجمع ({ $count })
-        [few] { $count } حيازات مفتوحة بلا سعر مجمع
-        [many] { $count } حيازة مفتوحة بلا سعر مجمع
-       *[other] { $count } حيازة مفتوحة بلا سعر مجمع
+        [zero] لا حيازات مفتوحة بلا سعر ({ $count })
+        [one] حيازة مفتوحة واحدة بلا سعر ({ $count })
+        [two] حيازتان مفتوحتان بلا سعر ({ $count })
+        [few] { $count } حيازات مفتوحة بلا سعر
+        [many] { $count } حيازة مفتوحة بلا سعر
+       *[other] { $count } حيازة مفتوحة بلا سعر
     }
 copy-readiness-runtime = التنفيذ الحي متاح
 copy-readiness-runtime-ok = الإعداد وبوابات الأمان تسمح بالنسخ الحي
@@ -97,7 +97,6 @@ copy-state-running-paper = قيد التشغيل
 copy-exit-mode-buy-only = قواعد الخروج الخاصة بي
 copy-exit-mode-mirror = محاكاة عمليات بيع المحفظة
 copy-exit-mode-hybrid = عمليات بيع المحفظة وقواعدي
-copy-exit-target-sell = باعت المحفظة
 copy-exit-stop-loss = وقف الخسارة
 copy-exit-trailing-stop = وقف متحرك
 copy-exit-break-even = وقف عند التعادل
@@ -307,6 +306,12 @@ copy-paper-legacy-col-cost = التكلفة المتبقية ({ -sol })
 copy-paper-legacy-col-realized = التقدير المحقق ({ -sol })
 copy-paper-legacy-col-price = آخر سعر محفوظ ({ -sol })
 copy-paper-legacy-col-remaining = الأرباح والخسائر المتبقية بالسعر المحفوظ ({ -sol })
+copy-paper-earlier-title = نتائج تجريبية سابقة
+copy-paper-archived-title = سجل النسخ القائم على عروض الأسعار
+copy-paper-archived-note = نتائج للقراءة فقط سجّلتها النسخ التجريبية لهذه المهمة قبل أن تصبح جولات في السجل التجريبي. ليست جزءًا من إنفاق الدورة الحالية أو حيازاتها ولا تتيح أي إجراءات. تُقيَّم المبالغ المتبقية بآخر سعر محفوظ لكل رمز، ولا تُقيَّم أبدًا بسعر السوق الحالي.
+copy-paper-archived-spent = الإنفاق السابق
+copy-paper-archived-realized = الأرباح والخسائر المحققة السابقة
+copy-paper-archived-col-realized = المحقق ({ -sol })
 
 ## Workspace
 
@@ -406,7 +411,7 @@ copy-return-paper-cancel = البقاء في الحي
 copy-task-returned-paper = عادت المهمة إلى التجريبي
 copy-mode-change-failed = تعذّر تغيير وضع التنفيذ
 copy-delete-title = حذف مهمة النسخ
-copy-delete-message = هل تريد حذف «{ $name }»؟ ستُزال قراراتها ونتائجها التجريبية ولن تُراقَب المحفظة لهذه المهمة بعد الآن.
+copy-delete-settle-message = هل تريد حذف «{ $name }»؟ تُغلق حيازاتها التجريبية المفتوحة بآخر سعر لها وتبقى في السجل التجريبي مع جولاتها المغلقة. ستُزال قراراتها ولن تُراقَب المحفظة لهذه المهمة بعد الآن.
 copy-delete-confirm = حذف المهمة
 copy-delete-cancel = إبقاء المهمة
 copy-task-deleted = تم حذف مهمة النسخ
@@ -417,14 +422,14 @@ copy-task-delete-failed = تعذّر حذف مهمة النسخ
 copy-overview-results = النتائج
 copy-analytics-load-failed = تعذّر تحميل التحليلات: { $error }
 copy-analytics-loading = جارٍ تحميل التحليلات…
-copy-exit-bucket =
+copy-exit-bucket-rounds =
     { $count ->
-        [zero] { $count } عملية بيع · { $pnl }
-        [one] { $count } عملية بيع · { $pnl }
-        [two] { $count } عمليتا بيع · { $pnl }
-        [few] { $count } عمليات بيع · { $pnl }
-        [many] { $count } عملية بيع · { $pnl }
-       *[other] { $count } عملية بيع · { $pnl }
+        [zero] { $count } جولة · { $pnl }
+        [one] جولة واحدة ({ $count }) · { $pnl }
+        [two] جولتان ({ $count }) · { $pnl }
+        [few] { $count } جولات · { $pnl }
+        [many] { $count } جولة · { $pnl }
+       *[other] { $count } جولة · { $pnl }
     }
 copy-overview-average-win = متوسط الربح
 copy-overview-average-loss = متوسط الخسارة { $amount }
@@ -449,14 +454,14 @@ copy-book-buys =
         [many] عملية شراء
        *[other] عملية شراء
     }
-copy-book-policy-exits =
+copy-book-rule-closes =
     <strong>{ $count }</strong> { $count ->
-        [zero] خروج بقواعدك
-        [one] خروج بقواعدك
-        [two] خروجان بقواعدك
-        [few] عمليات خروج بقواعدك
-        [many] خروجًا بقواعدك
-       *[other] خروج بقواعدك
+        [zero] جولة أُغلقت بقواعدك
+        [one] جولة أُغلقت بقواعدك
+        [two] جولتان أُغلقتا بقواعدك
+        [few] جولات أُغلقت بقواعدك
+        [many] جولة أُغلقت بقواعدك
+       *[other] جولة أُغلقت بقواعدك
     }
 copy-book-wallet-sells =
     <strong>{ $count }</strong> { $count ->
@@ -730,12 +735,12 @@ copy-holdings-title = الحيازات
 copy-holdings-view-label = عرض الحيازات
 copy-holdings-view-open = المفتوحة ({ $count })
 copy-holdings-view-closed = الجولات المغلقة ({ $count })
-copy-holdings-reset = إعادة تعيين السجل التجريبي
+copy-holdings-restart = بدء دورة تجريبية جديدة
 copy-holdings-live-note = النسخ الحي مراكز حقيقية.
 copy-holdings-open-positions = المراكز المفتوحة
 copy-holdings-token-details = فتح تفاصيل الرمز
 copy-holdings-opened = فُتح { $time }
-copy-holdings-no-pool-price = لا يوجد سعر مجمع
+copy-holdings-no-price = لا يوجد سعر
 copy-holdings-close = إغلاق
 copy-holdings-close-pending = الإغلاق قيد الانتظار
 copy-holdings-activity = النشاط
@@ -766,10 +771,12 @@ copy-holdings-col-invested = المستثمر ({ -sol })
 copy-holdings-col-proceeds = العائد ({ -sol })
 copy-holdings-col-exit = الخروج
 copy-holdings-col-closed = الإغلاق
-copy-holdings-marks-note = الأسعار بوحدة { -sol } لكل رمز. يستخدم التقييم ومستويات الخروج سعر المجمع، وهو ما يشغّل قواعد الخروج أيضًا؛ وتستخدم عمليات التنفيذ المسجلة عروض أسعار الموجّه. يشمل سعر الدخول رسوم الشبكة المقدرة للشراء؛ والذروة ومستويات الخروج نسبة إليه، لذا تُفتح الحيازة وذروتها دون سعر الدخول. مرّر المؤشر فوق أي منها لرؤية سعر مجمعها.
+copy-holdings-round-note = الأسعار بوحدة { -sol } لكل رمز. كل صف جولة واحدة من السجل التجريبي. سعر التقييم هو آخر سعر للجولة، من المجمع أو من بيانات السوق، وعليه تعمل قواعد الخروج؛ وتستخدم عمليات التنفيذ المسجلة عروض أسعار الموجّه. الدخول هو متوسط سعر دخول الجولة؛ والذروة ومستويات الخروج نسبية إليه. مرّر المؤشر فوق قيمة لرؤية سعرها.
 copy-holdings-paused-rules = متوقف مؤقتًا: لا نسخ جديد. قواعد الخروج الخاصة بك ما زالت تغلق هذه الحيازات.
 copy-holdings-paused-mirror = متوقف مؤقتًا: لا نسخ جديد. عمليات بيع المحفظة ما زالت تغلق هذه الحيازات.
 copy-holdings-paused-hybrid = متوقف مؤقتًا: لا نسخ جديد. عمليات بيع المحفظة وقواعد الخروج الخاصة بك ما زالت تغلق هذه الحيازات.
+copy-holdings-trader-stopped-rules = المتداول الآلي متوقف، لذا لا يغلق أي خروج هذه الحيازات حتى يعمل من جديد.
+copy-holdings-trader-stopped-wallet = المتداول الآلي متوقف، لذا لا تغلق هذه الحيازات سوى عمليات بيع المحفظة حتى يعمل من جديد.
 copy-holdings-closed-load-failed = تعذّر تحميل الجولات المغلقة: { $error }
 copy-holdings-closed-loading = جارٍ تحميل الجولات المغلقة…
 copy-holdings-closed-empty = لا توجد جولات مغلقة بعد.
@@ -785,19 +792,19 @@ copy-holdings-close-pending-detail = الإغلاق في الطابور أو ق�
 copy-holdings-close-unconfirmed = نتيجة الإغلاق غير مؤكدة
 copy-holdings-close-unconfirmed-detail = انتهى الاتصال قبل استلام النتيجة ولا توجد نتيجة بعد في النشاط. تحقق من النشاط قبل الإغلاق مرة أخرى.
 copy-holdings-closed-check-activity = الحيازة مغلقة. التنفيذ المسجل موجود في النشاط.
-copy-holdings-reset-quote-message = ابدأ «{ $name }» من جديد: ستُمسح حيازاتها التجريبية الحالية وإنفاقها وعمليات التنفيذ والخروج والتخطي ويبدأ سجل جديد قائم على عروض الأسعار. تبقى التقديرات القديمة وسجل التداول الحي. تبقى القواعد والمحفظة.
-copy-holdings-reset-cancel = إبقاء السجل
-copy-holdings-reset-done = تمت إعادة تعيين السجل التجريبي
-copy-holdings-reset-detail =
+copy-holdings-restart-message = ابدأ «{ $name }» من جديد: تُغلق حيازاتها التجريبية المفتوحة بآخر سعر لها ولا تحتسب أرقامها إلا ما يحدث من الآن. لا يُحذف شيء: تبقى الجولات المغلقة في السجل التجريبي وتبقى القرارات السابقة في النشاط موسومة بأنها من دورة سابقة. تبقى القواعد والمحفظة.
+copy-holdings-restart-cancel = إبقاء هذه الدورة
+copy-holdings-restart-done = بدأت دورة تجريبية جديدة
+copy-holdings-restart-detail =
     { $count ->
-        [zero] لم تُزل قرارات ({ $count })
-        [one] أُزيل قرار واحد ({ $count })
-        [two] أُزيل قراران ({ $count })
-        [few] أُزيلت { $count } قرارات
-        [many] أُزيل { $count } قرارًا
-       *[other] أُزيل { $count } قرار
+        [zero] لم تُغلق حيازات ({ $count })
+        [one] أُغلقت حيازة واحدة ({ $count })
+        [two] أُغلقت حيازتان ({ $count })
+        [few] أُغلقت { $count } حيازات
+        [many] أُغلقت { $count } حيازة
+       *[other] أُغلقت { $count } حيازة
     }
-copy-holdings-reset-failed = تعذّرت إعادة تعيين السجل التجريبي
+copy-holdings-restart-failed = تعذّر بدء دورة تجريبية جديدة
 
 ## Activity tab
 
@@ -814,6 +821,8 @@ copy-outcome-skipped = تم التخطي
 copy-activity-decision = القرار
 copy-activity-paper-exit-quote = خروج تجريبي قائم على عرض السعر · { $rule }
 copy-activity-paper-exit-legacy = تقدير خروج تجريبي قديم · { $rule }
+copy-activity-earlier-run = دورة سابقة
+    .title = اتُّخذ القرار قبل الدورة التجريبية الحالية لهذه المهمة، لذا لا تشمله أرقامها الحالية.
 copy-activity-filled = { $input } بسعر { $price } · اشترت المحفظة { $target }
 copy-activity-filled-target-difference = { $input } بسعر { $price } · اشترت المحفظة { $target } · فرق السعر عن الهدف { $difference }
 copy-activity-filled-slippage = { $input } بسعر { $price } · اشترت المحفظة { $target } · الانزلاق السعري { $slippage }

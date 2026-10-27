@@ -58,7 +58,7 @@ export function createPaperAccount({ requestManager, ConfirmationDialog, Utils, 
   async function reset(container) {
     const choice = await ConfirmationDialog.show({
       title: I18n.t("trader-paper-reset-title"),
-      message: I18n.t("trader-paper-reset-message"),
+      message: I18n.t("trader-paper-reset-run-message"),
       confirmLabel: I18n.t("trader-paper-reset"),
       variant: "warning",
     });

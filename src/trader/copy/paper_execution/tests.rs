@@ -41,6 +41,7 @@ fn paper_task() -> super::super::CopyTask {
         copy_stable_quoted: None,
         pause_reason: None,
         paused_at: None,
+        paper_started_at: None,
     }
 }
 
@@ -50,7 +51,6 @@ fn outcome(task_id: i64, signature: &str) -> CopyOutcome {
         signature.to_owned(),
         "mint",
         super::super::CopySkip::PaperExecutionUnavailable,
-        0,
     )
 }
 
@@ -261,7 +261,7 @@ async fn duplicate_intents_are_rejected_before_queue_capacity_and_manual_state_t
     let receiver = handle
         .enqueue_manual(
             9,
-            "manual:mint:round:0".into(),
+            manual_close_key(41),
             "mint".into(),
             database.clone(),
             async move {
@@ -271,13 +271,13 @@ async fn duplicate_intents_are_rejected_before_queue_capacity_and_manual_state_t
             },
         )
         .unwrap();
-    assert!(handle.manual_close_pending(9, "mint", 0));
-    assert!(!handle.manual_close_pending(9, "mint", 1));
+    assert!(handle.manual_close_pending(9, 41));
+    assert!(!handle.manual_close_pending(9, 42));
     assert_eq!(
         handle
             .enqueue_manual(
                 9,
-                "manual:mint:round:0".into(),
+                manual_close_key(41),
                 "mint".into(),
                 database.clone(),
                 async { outcome(9, "duplicate") }
@@ -286,15 +286,15 @@ async fn duplicate_intents_are_rejected_before_queue_capacity_and_manual_state_t
         EnqueueError::Duplicate
     );
     started_rx.await.unwrap();
-    assert!(handle.manual_close_pending(9, "mint", 0));
-    assert!(!handle.manual_close_pending(9, "mint", 1));
+    assert!(handle.manual_close_pending(9, 41));
+    assert!(!handle.manual_close_pending(9, 42));
     let _ = release.send(());
     let (settled, inserted) = receiver.await.unwrap().unwrap();
     assert!(inserted);
     assert!(matches!(settled, CopyOutcome::Skipped { .. }));
     let _ = stop.send(true);
     join.await.unwrap();
-    assert!(!handle.manual_close_pending(9, "mint", 0));
+    assert!(!handle.manual_close_pending(9, 41));
     assert_eq!(settlements.load(Ordering::SeqCst), 1);
 }
 
@@ -309,22 +309,22 @@ async fn shutdown_cancels_quote_stage_releases_manual_pending_and_joins_settleme
     handle
         .enqueue_inner(
             3,
-            "manual:mint:round:0".into(),
+            manual_close_key(41),
             database,
             Some("mint".into()),
             Box::pin(async move {
                 let _ = started.send(());
                 let _ = release_rx.await;
-                outcome(3, "cancelled")
+                Some(outcome(3, "cancelled"))
             }),
             Some(completion),
         )
         .unwrap();
     started_rx.await.unwrap();
-    assert!(handle.manual_close_pending(3, "mint", 0));
+    assert!(handle.manual_close_pending(3, 41));
     let _ = stop.send(true);
     join.await.unwrap();
-    assert!(!handle.manual_close_pending(3, "mint", 0));
+    assert!(!handle.manual_close_pending(3, 41));
     assert_eq!(settlements.load(Ordering::SeqCst), 0);
     assert!(completion_rx.await.unwrap().is_err());
 }
@@ -419,7 +419,7 @@ async fn shutdown_waits_for_a_settlement_that_has_started() {
             "settlement".into(),
             database,
             None,
-            Box::pin(async { outcome(5, "settlement") }),
+            Box::pin(async { Some(outcome(5, "settlement")) }),
             Some(completion),
         )
         .unwrap();
@@ -442,7 +442,7 @@ async fn dispatcher_uses_the_production_record_owner_and_reports_inserted_result
     let receiver = handle
         .enqueue_manual(
             task.id,
-            "manual:mint:round:0".into(),
+            manual_close_key(41),
             "mint".into(),
             database.clone(),
             async move { outcome(task.id, "dispatcher-recorded") },
@@ -466,7 +466,7 @@ async fn dispatcher_uses_the_production_record_owner_and_reports_inserted_result
 async fn install_publishes_the_scheduler_before_service_work_can_be_accepted() {
     let (handle, stop, join) = install();
     assert!(active().is_some());
-    assert!(!handle.manual_close_pending(99, "mint", 0));
+    assert!(!handle.manual_close_pending(99, 41));
     let _ = stop.send(true);
     join.await.unwrap();
     assert!(active().is_none());
@@ -492,16 +492,76 @@ fn newly_recorded_paper_guard_skips_keep_quote_context() {
         &activity,
         "mint",
         super::super::CopySkip::PaperExecutionUnavailable,
-        4,
     );
     assert!(matches!(
         outcome,
         CopyOutcome::Skipped {
             paper: Some(super::super::types::PaperContext {
                 model: crate::trader::paper::PaperModel::Quote,
-                epoch: 4
             }),
             ..
         }
     ));
+}
+
+#[tokio::test]
+async fn a_step_runs_in_its_task_order_returns_its_result_and_records_nothing() {
+    let (_directory, database) = database();
+    let settlements = Arc::new(AtomicUsize::new(0));
+    let (handle, stop, join) = runner(immediate_settlement(settlements.clone()));
+    let (release, release_rx) = oneshot::channel::<()>();
+    let (order, mut order_rx) = mpsc::unbounded_channel();
+    let first = order.clone();
+    handle
+        .enqueue(
+            6,
+            activity_key("entry"),
+            database.clone(),
+            None,
+            async move {
+                let _ = release_rx.await;
+                let _ = first.send("entry");
+                outcome(6, "entry")
+            },
+        )
+        .unwrap();
+    let step = handle
+        .enqueue_step(6, "reset".into(), database.clone(), async move {
+            let _ = order.send("step");
+            Ok(3_usize)
+        })
+        .unwrap();
+    let _ = release.send(());
+    assert_eq!(step.await.unwrap().unwrap(), 3);
+    assert_eq!(order_rx.recv().await, Some("entry"));
+    assert_eq!(order_rx.recv().await, Some("step"));
+    let _ = stop.send(true);
+    join.await.unwrap();
+    assert_eq!(settlements.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
+async fn a_step_queued_when_the_dispatcher_stops_never_runs() {
+    let (_directory, database) = database();
+    let settlements = Arc::new(AtomicUsize::new(0));
+    let (handle, stop, join) = runner(immediate_settlement(settlements));
+    let _ = stop.send(true);
+    join.await.unwrap();
+    let ran = Arc::new(AtomicUsize::new(0));
+    let counter = ran.clone();
+    if let Ok(step) = handle.enqueue_step(8, "reset".into(), database, async move {
+        counter.fetch_add(1, Ordering::SeqCst);
+        Ok(())
+    }) {
+        assert!(step.await.is_err());
+    }
+    assert_eq!(ran.load(Ordering::SeqCst), 0);
+}
+
+#[test]
+fn admission_keys_name_the_activity_the_round_and_the_reset_only() {
+    assert_eq!(activity_key("sig"), "activity:sig");
+    assert_eq!(manual_close_key(12), "manual:12");
+    assert_eq!(reset_key(), "reset");
+    assert_ne!(reset_key(), activity_key("reset"));
 }

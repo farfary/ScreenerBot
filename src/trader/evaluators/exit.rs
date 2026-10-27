@@ -20,8 +20,7 @@
 //! 9. Stagnation exit (normal priority - held flat inside the band)
 //! 10. Strategy exit (normal priority)
 //!
-//! Priorities 4-9 are the built-in rules; their order is owned by `exit_rules`, which the
-//! paper copy book shares.
+//! Priorities 4-9 are the built-in rules; their order is owned by `exit_rules`.
 
 use crate::positions::price_resolution::get_price_with_api_fallback;
 use crate::positions::Position;
@@ -158,6 +157,7 @@ pub(crate) async fn evaluate_policy_exit(
                                 // Auto-trader slippage always follows config.
                                 slippage_pct: None,
                                 take_profit_level: None,
+                                paper_leg_key: None,
                             };
 
                             // Record the LLM-analysis exit signal event.
@@ -221,7 +221,7 @@ pub(crate) async fn evaluate_policy_exit(
     // outcome is passed over while the position's store awaits reconciliation, and a partial
     // take-profit step while another partial exit of the mint is confirming (the next step
     // sells only after the previous one settles), so the rules after it still run this tick.
-    let inputs = live_exit_inputs(position, current_price, chrono::Utc::now());
+    let inputs = position_exit_inputs(position, current_price, chrono::Utc::now());
     let partial_pending =
         crate::positions::books::partial_exit_pending(position.book, &position.mint).await;
     let admit = |outcome: &RuleOutcome| {
@@ -323,10 +323,10 @@ pub(crate) async fn evaluate_policy_exit(
     Ok(None)
 }
 
-/// What the live book gives the built-in exit rules: the position's average entry and
+/// What a position of either book gives the built-in exit rules: its average entry and
 /// basis peak, the resolved price, its age at `now`, whether it already booked a partial
 /// exit, and the take-profit steps it reserved.
-pub fn live_exit_inputs(
+pub fn position_exit_inputs(
     position: &Position,
     current_price: f64,
     now: chrono::DateTime<chrono::Utc>,
@@ -381,6 +381,7 @@ pub fn rule_decision(
         // Auto-trader slippage always follows config.
         slippage_pct: None,
         take_profit_level,
+        paper_leg_key: None,
     }
 }
 

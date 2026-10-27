@@ -19,5 +19,8 @@ mod types;
 
 pub use error::{PaperFillError, PaperModeError};
 pub use mode::{confirm_live, TradingMode, LIVE_ARM_CONFIRMATION, STRATEGY_LIVE_CONFIRMATION};
-pub use run::{paper_account, reset_paper_run};
-pub use types::{PaperFill, PaperModel, PaperQuoteMetadata, PaperSellFill};
+pub use run::{paper_account, reset_paper_run, settle_rounds};
+pub use types::{
+    PaperExecution, PaperFill, PaperLegEvidence, PaperLegFill, PaperModel, PaperQuoteMetadata,
+    PaperRefusal, PaperSellFill,
+};

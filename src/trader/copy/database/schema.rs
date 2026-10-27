@@ -1,21 +1,24 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Schema and migrations for the copy-trading database - copy_tasks, copy_spend and copy_paper_positions tables plus the mode-scoped spend rebuild.
+//! Schema and migrations for the copy-trading database: tasks, the live spend ledger,
+//! decisions and activity, and the archived copy paper book that paper copies kept
+//! before they moved to the shared paper book.
 
 use rusqlite::{params, OptionalExtension, Transaction};
 
 use crate::database::schema::{ddl, SchemaContext, StoreSchema};
 use crate::errors::DatabaseError;
-use crate::trader::copy::types::CopyOutcome;
+use crate::trader::copy::types::{CopyOutcome, PaperDecision};
 use crate::trader::error::Error;
 use crate::trader::policy::ExitPolicyOverrides;
 
-const SCHEMA_VERSION: i64 = 12;
+const SCHEMA_VERSION: i64 = 13;
 
-/// Version 10 drops the position-link table, which nothing read or wrote. A drop is
-/// a breaking change, so v10 is the oldest version that reads the store.
-const MIN_READER_VERSION: i64 = 10;
+/// Version 13 moves paper copies to the shared paper book. An older core would keep
+/// booking paper copies into the archived copy book and split a task's results across
+/// two books, so v13 is the oldest version that reads the store.
+const MIN_READER_VERSION: i64 = 13;
 
 /// The version the store held when the schema ledger was adopted.
 const LEDGER_BASELINE_VERSION: i64 = 8;
@@ -23,6 +26,11 @@ const LEDGER_BASELINE_VERSION: i64 = 8;
 /// The version whose open archived the estimate-model paper book. Pinned, not
 /// `SCHEMA_VERSION`: a later version must never archive the quote-model book again.
 const QUOTE_PAPER_BOOK_VERSION: i64 = 8;
+
+/// The version whose open archived the quote-model copy paper book: paper copies are
+/// rounds of the shared paper book from then on. Pinned, not `SCHEMA_VERSION`: a later
+/// version must never archive or stamp the start of a paper run again.
+const SHARED_PAPER_BOOK_VERSION: i64 = 13;
 
 /// The version whose open retired the stop-loss partial overrides that the
 /// auto-trader partial-exit switch used to hold back. Pinned, not
@@ -97,7 +105,8 @@ CREATE TABLE IF NOT EXISTS copy_tasks (
     require_filter_pass INTEGER,
     pause_reason_json TEXT,
     paused_at TEXT,
-    copy_stable_quoted INTEGER
+    copy_stable_quoted INTEGER,
+    paper_started_at TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_copy_tasks_target_enabled
     ON copy_tasks(target_address, enabled);
@@ -111,6 +120,8 @@ CREATE TABLE IF NOT EXISTS copy_spend (
     PRIMARY KEY (task_id, mode, mint),
     FOREIGN KEY (task_id) REFERENCES copy_tasks(id) ON DELETE CASCADE
 );
+-- The archived copy paper book: one aggregate row per task and token, written by
+-- releases before paper copies moved to the shared paper book. Read-only history.
 CREATE TABLE IF NOT EXISTS copy_paper_positions (
     task_id INTEGER NOT NULL,
     mint TEXT NOT NULL,
@@ -299,7 +310,55 @@ fn migrate(connection: &Transaction<'_>) -> crate::trader::Result<()> {
         "INTEGER",
     )?;
     add_paper_round_exit_state(connection)?;
-    validate_active_paper_amounts(connection)?;
+    let stored_version = stored_schema_version(connection)?;
+    if stored_version < SHARED_PAPER_BOOK_VERSION {
+        validate_active_paper_amounts(connection)?;
+    }
+    // v13: the start of each task's paper run.
+    ddl::add_column(connection, "copy_tasks", "paper_started_at", "TEXT")?;
+    if stored_version < SHARED_PAPER_BOOK_VERSION {
+        archive_copy_paper_book(connection, chrono::Utc::now())?;
+    }
+    Ok(())
+}
+
+/// v13: paper copies are rounds of the shared paper book. The copy paper book stays
+/// where it is as read-only history: `copy_paper_positions` cannot be dropped or
+/// renamed, since the historical steps above and older releases name it. Its paper
+/// spend moves to `paper_archive`, merged so a re-run after an older build wrote paper
+/// spend again never refuses the open; the per-task run counters retire; and every task
+/// starts its paper run at `now`, so its figures count only what the shared book holds
+/// from this open on. Decisions and activity are left exactly as they are.
+fn archive_copy_paper_book(
+    transaction: &Transaction<'_>,
+    now: chrono::DateTime<chrono::Utc>,
+) -> crate::trader::Result<()> {
+    transaction
+        .execute(
+            "INSERT INTO copy_spend (task_id, mode, mint, spent_native, buy_count, updated_at) \
+             SELECT task_id, 'paper_archive', mint, spent_native, buy_count, updated_at \
+             FROM copy_spend WHERE mode = 'paper' \
+             ON CONFLICT(task_id, mode, mint) DO UPDATE SET \
+             spent_native = spent_native + excluded.spent_native, \
+             buy_count = buy_count + excluded.buy_count, updated_at = excluded.updated_at",
+            [],
+        )
+        .map_err(crate::errors::DatabaseError::from)?;
+    transaction
+        .execute("DELETE FROM copy_spend WHERE mode = 'paper'", [])
+        .map_err(crate::errors::DatabaseError::from)?;
+    transaction
+        .execute(
+            "UPDATE copy_tasks SET paper_started_at = ?1 WHERE paper_started_at IS NULL",
+            params![now.to_rfc3339()],
+        )
+        .map_err(crate::errors::DatabaseError::from)?;
+    transaction
+        .execute(
+            "DELETE FROM copy_metadata WHERE key LIKE 'paper_epoch:%'",
+            [],
+        )
+        .map_err(crate::errors::DatabaseError::from)?;
     Ok(())
 }
 
@@ -331,7 +390,10 @@ fn add_paper_round_exit_state(transaction: &Transaction<'_>) -> crate::trader::R
     Ok(())
 }
 
-/// Active rows may only contain validated raw balances; archived estimates stay float-only.
+/// Rows of the copy paper book while it was still the active book may only hold
+/// validated raw balances; archived estimates stay float-only. Runs only on the open
+/// that archives the book (a store below [`SHARED_PAPER_BOOK_VERSION`]): from then on
+/// the table is history and an archived row never refuses an open.
 fn validate_active_paper_amounts(transaction: &Transaction<'_>) -> crate::trader::Result<()> {
     let invalid = transaction
         .query_row(
@@ -578,8 +640,31 @@ fn migrate_mode_scoped_spend(transaction: &Transaction<'_>) -> crate::trader::Re
     };
     for json in fills {
         if let Ok(CopyOutcome::PaperFilled(decision)) = serde_json::from_str(&json) {
-            super::paper_book::apply_historical_paper_buy(transaction, &decision)?;
+            apply_historical_paper_buy(transaction, &decision)?;
         }
     }
+    Ok(())
+}
+
+/// Replays one pre-v8 float-based paper fill into the copy paper book, before the raw
+/// columns exist; only the v5 spend rebuild calls it.
+fn apply_historical_paper_buy(
+    transaction: &Transaction<'_>,
+    decision: &PaperDecision,
+) -> crate::trader::Result<()> {
+    let at = decision.telemetry.decided_at.to_rfc3339();
+    transaction.execute(
+        "INSERT INTO copy_paper_positions (task_id, mint, token_amount, cost_basis_native, invested_native, \
+         buys, last_price_native, last_price_at, opened_at, updated_at, peak_price_native) \
+         VALUES (?1, ?2, ?3, ?4, ?4, 1, ?5, ?6, ?6, ?6, ?5) \
+         ON CONFLICT(task_id, mint) DO UPDATE SET token_amount=token_amount+excluded.token_amount, \
+         cost_basis_native=cost_basis_native+excluded.cost_basis_native, \
+         invested_native=invested_native+excluded.invested_native, buys=buys+1, \
+         last_price_native=excluded.last_price_native, last_price_at=excluded.last_price_at, \
+         opened_at=CASE WHEN closed_at IS NULL THEN opened_at ELSE excluded.opened_at END, \
+         peak_price_native=excluded.peak_price_native, closed_at=NULL, updated_at=excluded.updated_at",
+        params![decision.task_id, decision.mint, decision.fill.token_amount,
+            decision.fill.total_cost_sol, decision.fill.market_price_sol, at],
+    ).map_err(crate::errors::DatabaseError::from)?;
     Ok(())
 }

@@ -1,7 +1,8 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! The one order of the built-in exit rules, shared by the live exit monitor and the paper copy book.
+//! The one order of the built-in exit rules, read by the exit monitor for the rounds of
+//! both books.
 
 use crate::trader::evaluators::{
     exit_break_even, exit_stop_loss, exit_take_profit, exit_time, exit_time_stagnation,
@@ -9,9 +10,8 @@ use crate::trader::evaluators::{
 };
 use crate::trader::policy::ExitPolicy;
 
-/// What the built-in exit rules read from a holding, on plain numbers. Each book fills it
-/// from its own records: the live exit monitor from a `Position`, the paper copy book from
-/// a `PaperPosition` and its pool mark.
+/// What the built-in exit rules read from a holding, on plain numbers, filled from a
+/// `Position` of either book and its mark (`evaluators::exit::position_exit_inputs`).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ExitInputs {
     /// Average cost of one token: the entry every rule measures from.

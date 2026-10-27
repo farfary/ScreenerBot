@@ -5,8 +5,8 @@
 
 use crate::trader::policy::TimePolicy;
 
-/// The time-override rule on plain numbers, shared by the live evaluator and the
-/// paper copy book: exit a position held at least `duration_seconds` whose P&L is
+/// The time-override rule on plain numbers, read through `exit_rules` for the rounds of
+/// both books and by the time watch: exit a position held at least `duration_seconds` whose P&L is
 /// at or below `loss_threshold_pct` (negative, e.g. -40 = a 40% loss or worse).
 /// `Err` carries the detail of an invalid configuration.
 pub fn time_override_triggered(

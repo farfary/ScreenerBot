@@ -3,7 +3,8 @@
 
 //! The paper executor on an isolated paper store with offline quotes: a round trip from
 //! the entry through a take-profit step to the close, every quote taken inside the paper
-//! scope, the refusals that book nothing, and the failed-exit streak.
+//! scope, the typed refusals that book nothing, a keyed decision booked once however often
+//! it is replayed, and the failed-exit streak.
 
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::Duration;
@@ -15,8 +16,10 @@ use super::*;
 use crate::chains::ChainId;
 use crate::config::schemas::Config;
 use crate::config::utils::CONFIG;
+use crate::positions::db::PaperExitOwner;
 use crate::positions::{PositionManagement, PositionsDatabase};
 use crate::swaps::{Quote, QuoteError};
+use crate::trader::paper::PaperFillError;
 use crate::trader::types::TradePriority;
 
 const MINT: &str = "PaperExecutorMint11111111111111111111111111";
@@ -30,6 +33,10 @@ struct FakeIo {
     abort_at_wait: AtomicBool,
     quotes: AtomicUsize,
     quotes_outside_scope: AtomicUsize,
+    waits: AtomicUsize,
+    max_open: AtomicUsize,
+    /// 0 answers every quote, 1 refuses every quote, 2 answers without a network fee.
+    quote_mode: AtomicUsize,
 }
 
 impl FakeIo {
@@ -50,6 +57,9 @@ impl FakeIo {
             abort_at_wait: AtomicBool::new(false),
             quotes: AtomicUsize::new(0),
             quotes_outside_scope: AtomicUsize::new(0),
+            waits: AtomicUsize::new(0),
+            max_open: AtomicUsize::new(5),
+            quote_mode: AtomicUsize::new(0),
         };
         (io, directory)
     }
@@ -68,7 +78,7 @@ impl PaperTradeIo for FakeIo {
         PaperSettings {
             landing_delay_ms: 0,
             starting_balance_native: self.starting_balance_native,
-            max_open: 5,
+            max_open: self.max_open.load(Ordering::SeqCst),
             open_cooldown_secs: 0,
         }
     }
@@ -103,6 +113,13 @@ impl PaperTradeIo for FakeIo {
         if !crate::global::in_paper_scope() {
             self.quotes_outside_scope.fetch_add(1, Ordering::SeqCst);
         }
+        let mode = self.quote_mode.load(Ordering::SeqCst);
+        if mode == 1 {
+            return Err(QuoteError::NoRoute {
+                router: "fixture".to_owned(),
+                detail: "offline fixture refuses".to_owned(),
+            });
+        }
         let buying = crate::chains::adapter_for(request.chain).is_native_asset(&request.input_mint);
         let input = request.input_amount.raw();
         let output = if buying { input * 10 } else { input * 12 / 100 };
@@ -117,7 +134,7 @@ impl PaperTradeIo for FakeIo {
             minimum_output_amount: RawAmount::new(output * 9 / 10),
             price_impact_pct: 0.0,
             platform_fee_lamports: None,
-            estimated_network_fee_lamports: Some(5_000),
+            estimated_network_fee_lamports: (mode != 2).then_some(5_000),
             slippage_bps: 100,
             route_plan: "offline fixture".to_owned(),
             swap_mode: request.swap_mode,
@@ -129,6 +146,7 @@ impl PaperTradeIo for FakeIo {
 
     async fn wait(&self, duration: Duration) {
         assert_eq!(duration, Duration::ZERO);
+        self.waits.fetch_add(1, Ordering::SeqCst);
         if self.abort_at_wait.load(Ordering::SeqCst) {
             self.wanted.store(false, Ordering::SeqCst);
         }
@@ -150,6 +168,7 @@ fn decision(action: TradeAction, reason: TradeReason) -> TradeDecision {
         exit_percentage: None,
         slippage_pct: None,
         take_profit_level: None,
+        paper_leg_key: None,
     }
 }
 
@@ -238,6 +257,7 @@ async fn a_buy_the_paper_cash_cannot_cover_takes_no_quote_and_books_nothing() {
     let result = execute_with(&entry, &context(&entry), &io).await.unwrap();
     assert!(!result.success);
     assert_eq!(result.failed_step, Some(TradeStep::Validation));
+    assert_eq!(refusal(&result), Some(PaperRefusal::BalanceExhausted));
     assert_eq!(io.quotes.load(Ordering::SeqCst), 0);
     assert!(io.book.open_positions().await.is_empty());
 }
@@ -250,6 +270,7 @@ async fn a_buy_no_longer_wanted_after_the_landing_wait_books_nothing() {
     let result = execute_with(&entry, &context(&entry), &io).await.unwrap();
     assert!(!result.success);
     assert_eq!(result.failed_step, Some(TradeStep::Validation));
+    assert_eq!(refusal(&result), Some(PaperRefusal::NotWanted));
     assert!(io.book.open_positions().await.is_empty());
 }
 
@@ -285,7 +306,7 @@ async fn a_failed_exit_streak_is_kept_in_the_paper_store_per_strategy_and_a_fill
     for strategy_id in [entry_strategy, exit_strategy] {
         assert_eq!(
             io.book
-                .failed_exit_streak(WALLET, strategy_id)
+                .failed_exit_streak(WALLET, &strategy(strategy_id))
                 .await
                 .unwrap(),
             2,
@@ -294,7 +315,7 @@ async fn a_failed_exit_streak_is_kept_in_the_paper_store_per_strategy_and_a_fill
     }
     assert_eq!(
         io.book
-            .failed_exit_streak(WALLET, "another-strategy")
+            .failed_exit_streak(WALLET, &strategy("another-strategy"))
             .await
             .unwrap(),
         0
@@ -304,7 +325,7 @@ async fn a_failed_exit_streak_is_kept_in_the_paper_store_per_strategy_and_a_fill
     for strategy_id in [entry_strategy, exit_strategy] {
         assert_eq!(
             io.book
-                .failed_exit_streak(WALLET, strategy_id)
+                .failed_exit_streak(WALLET, &strategy(strategy_id))
                 .await
                 .unwrap(),
             0,
@@ -312,4 +333,142 @@ async fn a_failed_exit_streak_is_kept_in_the_paper_store_per_strategy_and_a_fill
         );
     }
     assert_eq!(record(false).await.unwrap(), 1, "a fill ends the run");
+}
+
+fn strategy(strategy_id: &str) -> PaperExitOwner {
+    PaperExitOwner::Strategy(strategy_id.to_owned())
+}
+
+fn refusal(result: &TradeResult) -> Option<PaperRefusal> {
+    result.paper.as_ref().and_then(PaperExecution::refusal)
+}
+
+fn evidence(result: &TradeResult) -> PaperLegEvidence {
+    result
+        .paper
+        .as_ref()
+        .and_then(PaperExecution::filled)
+        .cloned()
+        .unwrap_or_else(|| panic!("no paper leg booked: {:?}", result.paper))
+}
+
+#[tokio::test]
+async fn a_success_carries_the_leg_its_record_is_booked_under() {
+    let (io, _directory) = FakeIo::new(1.0).await;
+    let entry = decision(TradeAction::Buy, TradeReason::StrategySignal);
+    let bought = execute_with(&entry, &context(&entry), &io).await.unwrap();
+    let booked = evidence(&bought);
+    assert!(!booked.replayed);
+    assert!(matches!(booked.fill, PaperLegFill::Buy(_)));
+    let mut stop = decision(TradeAction::Sell, TradeReason::StopLoss);
+    stop.position_id = Some(booked.position_id.to_string());
+    let sold = execute_with(&stop, &context(&stop), &io).await.unwrap();
+    let sale = evidence(&sold);
+    assert!(matches!(sale.fill, PaperLegFill::Sell(_)));
+
+    let history = io
+        .book
+        .round_history(WALLET, booked.position_id)
+        .await
+        .unwrap();
+    assert_eq!(history.entries[0].transaction_signature, booked.leg_ref);
+    assert_eq!(history.exits[0].transaction_signature, sale.leg_ref);
+}
+
+#[tokio::test]
+async fn a_replayed_keyed_decision_returns_the_stored_leg_without_a_quote_or_a_wait() {
+    let (io, _directory) = FakeIo::new(1.0).await;
+    let mut entry = decision(TradeAction::Buy, TradeReason::CopyBuy);
+    entry.paper_leg_key = Some("copy-1-buy-signature".to_owned());
+    let first = execute_with(&entry, &context(&entry), &io).await.unwrap();
+    let booked = evidence(&first);
+    let quotes = io.quotes.load(Ordering::SeqCst);
+    let waits = io.waits.load(Ordering::SeqCst);
+
+    let replay = execute_with(&entry, &context(&entry), &io).await.unwrap();
+    assert!(replay.success);
+    let replayed = evidence(&replay);
+    assert!(replayed.replayed);
+    assert_eq!(replayed.leg_ref, booked.leg_ref);
+    assert_eq!(replayed.position_id, booked.position_id);
+    assert_eq!(replayed.fill, booked.fill);
+    assert_eq!(io.quotes.load(Ordering::SeqCst), quotes);
+    assert_eq!(io.waits.load(Ordering::SeqCst), waits);
+    assert_eq!(io.book.open_positions().await.len(), 1);
+
+    let mut sale = decision(TradeAction::Sell, TradeReason::CopySell);
+    sale.exit_percentage = Some(50.0);
+    sale.paper_leg_key = Some("copy-1-sell-signature".to_owned());
+    let sold = execute_with(&sale, &context(&sale), &io).await.unwrap();
+    let sold_leg = evidence(&sold);
+    let quotes = io.quotes.load(Ordering::SeqCst);
+    let again = execute_with(&sale, &context(&sale), &io).await.unwrap();
+    let again_leg = evidence(&again);
+    assert!(again_leg.replayed);
+    assert_eq!(again_leg.leg_ref, sold_leg.leg_ref);
+    assert_eq!(io.quotes.load(Ordering::SeqCst), quotes);
+    assert_eq!(
+        io.book
+            .position(booked.position_id)
+            .await
+            .unwrap()
+            .partial_exit_count,
+        1
+    );
+}
+
+#[tokio::test]
+async fn a_buy_refused_by_the_book_carries_its_typed_refusal() {
+    let (io, _directory) = FakeIo::new(5.0).await;
+    let entry = decision(TradeAction::Buy, TradeReason::StrategySignal);
+    let first = execute_with(&entry, &context(&entry), &io).await.unwrap();
+    assert!(first.success, "{:?}", first.error);
+    let held = execute_with(&entry, &context(&entry), &io).await.unwrap();
+    assert_eq!(refusal(&held), Some(PaperRefusal::AlreadyOpen));
+
+    io.max_open.store(1, Ordering::SeqCst);
+    let mut other = decision(TradeAction::Buy, TradeReason::StrategySignal);
+    other.mint = "PaperExecutorOtherMint111111111111111111111".to_owned();
+    let full = execute_with(&other, &context(&other), &io).await.unwrap();
+    assert_eq!(refusal(&full), Some(PaperRefusal::PositionLimit));
+    assert_eq!(full.capacity_guard_remaining, Some(0));
+    assert_eq!(io.book.open_positions().await.len(), 1);
+}
+
+#[tokio::test]
+async fn a_fill_that_does_not_settle_carries_its_fill_error() {
+    for (mode, expected) in [
+        (1, PaperFillError::QuoteUnavailable),
+        (2, PaperFillError::QuoteUnfillable),
+    ] {
+        let (io, _directory) = FakeIo::new(1.0).await;
+        io.quote_mode.store(mode, Ordering::SeqCst);
+        let entry = decision(TradeAction::Buy, TradeReason::StrategySignal);
+        let result = execute_with(&entry, &context(&entry), &io).await.unwrap();
+        assert_eq!(
+            refusal(&result),
+            Some(PaperRefusal::Fill(expected)),
+            "{mode}"
+        );
+        assert!(io.book.open_positions().await.is_empty());
+    }
+}
+
+#[tokio::test]
+async fn a_buy_of_no_size_and_a_sale_of_no_round_are_refused_by_type() {
+    let (io, _directory) = FakeIo::new(1.0).await;
+    let mut empty = decision(TradeAction::Buy, TradeReason::StrategySignal);
+    empty.size_native = Some(0.0);
+    let result = execute_with(&empty, &context(&empty), &io).await.unwrap();
+    assert_eq!(refusal(&result), Some(PaperRefusal::InvalidSize));
+
+    let sale = decision(TradeAction::Sell, TradeReason::StopLoss);
+    let result = execute_with(&sale, &context(&sale), &io).await.unwrap();
+    assert_eq!(refusal(&result), Some(PaperRefusal::NoOpenRound));
+
+    io.wanted.store(false, Ordering::SeqCst);
+    let entry = decision(TradeAction::Buy, TradeReason::StrategySignal);
+    let result = execute_with(&entry, &context(&entry), &io).await.unwrap();
+    assert_eq!(refusal(&result), Some(PaperRefusal::NotWanted));
+    assert_eq!(io.quotes.load(Ordering::SeqCst), 0);
 }

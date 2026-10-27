@@ -222,16 +222,23 @@ fn paper_modules_name_no_live_execution_symbol() {
     );
 }
 
-/// Files that may name the copy-trading paper holdings: their owner and its module face,
-/// and the one reader that merges them into the held mints. Shrink only.
-const HELD_PAPER_MINTS_NAMERS: &[&str] = &[
-    "positions/books.rs",
-    "trader/copy/mod.rs",
-    "trader/copy/paper_exits.rs",
+/// Files that may name a paper holdings store beside the shared paper book. Shrink only:
+/// every paper holding is a round of the shared book, read through `positions::books`.
+const HELD_PAPER_MINTS_NAMERS: &[&str] = &[];
+
+/// Symbols that simulate, mark or exit a paper holding. Only the shared paper executor
+/// and its fill model under `trader/paper` may name them; the retired copy-owned paper
+/// exit monitor named the last two.
+const PAPER_BOOK_PRIVATE: &[&str] = &[
+    "simulate_buy",
+    "simulate_sell",
+    "evaluate_paper_exit",
+    "raise_paper_peak",
 ];
 
-#[test]
-fn held_mints_are_read_only_through_the_books() {
+/// The `(file, line, symbol)` of every line of a source file under `src/` that names
+/// one of `symbols`, for the files `scanned` keeps.
+fn naming(symbols: &[&str], scanned: impl Fn(&str) -> bool) -> Vec<String> {
     let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
     let mut files = Vec::new();
     rust_files(&src, &mut files);
@@ -241,27 +248,81 @@ fn held_mints_are_read_only_through_the_books() {
             .strip_prefix(&src)
             .map(|p| p.to_string_lossy().replace('\\', "/"))
             .unwrap_or_default();
+        if !scanned(&relative) {
+            continue;
+        }
         let source = fs::read_to_string(&path).expect("read source");
         for (index, line) in source.lines().enumerate() {
             let code = code_of(line);
-            let names = |symbol: &str| {
-                code.split(|c: char| !is_ident_char(c))
-                    .any(|ident| ident == symbol)
-            };
-            if names("get_open_mints") {
-                offenders.push(format!("src/{relative}:{} names get_open_mints", index + 1));
-            }
-            if names("held_paper_mints") && !HELD_PAPER_MINTS_NAMERS.contains(&relative.as_str()) {
-                offenders.push(format!(
-                    "src/{relative}:{} names held_paper_mints",
-                    index + 1
-                ));
+            for symbol in symbols {
+                if code
+                    .split(|c: char| !is_ident_char(c))
+                    .any(|ident| ident == *symbol)
+                {
+                    offenders.push(format!("src/{relative}:{} names {symbol}", index + 1));
+                }
             }
         }
     }
+    offenders
+}
+
+#[test]
+fn held_mints_are_read_only_through_the_books() {
+    let mut offenders = naming(&["get_open_mints"], |_| true);
+    offenders.extend(naming(&["held_paper_mints"], |relative| {
+        !HELD_PAPER_MINTS_NAMERS.contains(&relative)
+    }));
     assert!(
         offenders.is_empty(),
         "held mints are read through positions::books::held_mints:\n{}",
+        offenders.join("\n")
+    );
+}
+
+#[test]
+fn only_the_shared_paper_executor_simulates_marks_or_exits_a_paper_holding() {
+    let offenders = naming(PAPER_BOOK_PRIVATE, |relative| {
+        !relative.starts_with("trader/paper/")
+    });
+    assert!(
+        offenders.is_empty(),
+        "paper fills, marks and exits belong to the shared paper book under trader/paper:\n{}",
+        offenders.join("\n")
+    );
+}
+
+/// The copy paper entry path, relative to `src/`. A directory covers every file below it.
+const COPY_PAPER_ENTRY: &[&str] = &[
+    "trader/copy/paper_execution",
+    "trader/copy/paper_execution.rs",
+    "trader/copy/entries.rs",
+];
+
+/// Live admission, reservation and capacity a paper copy entry must never take: a paper
+/// copy is admitted by the paper book's gauntlet alone, so live slots, a live open round
+/// or the live loss limit never block it and it never holds a live reservation.
+const LIVE_ENTRY_ADMISSION: &[&str] = &[
+    "check_entry_admission",
+    "check_open_cooldown",
+    "try_reserve_entry",
+    "clear_entry_reservation",
+    "submit_entry",
+    "submit_entry_with_context",
+    "acquire_global_position_permit",
+    "execute_live_with",
+];
+
+#[test]
+fn a_paper_copy_entry_takes_no_live_admission_or_reservation() {
+    let offenders = naming(LIVE_ENTRY_ADMISSION, |relative| {
+        COPY_PAPER_ENTRY
+            .iter()
+            .any(|scope| relative == *scope || relative.starts_with(&format!("{scope}/")))
+    });
+    assert!(
+        offenders.is_empty(),
+        "a paper copy entry is admitted by the paper book alone:\n{}",
         offenders.join("\n")
     );
 }

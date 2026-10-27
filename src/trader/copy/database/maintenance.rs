@@ -1,39 +1,19 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Paged activity reads, target observations and paper-book resets for the task
-//! workspace.
+//! Paged activity reads, target observations and the start of a task's paper run for
+//! the task workspace.
 
 use chrono::{DateTime, Utc};
 use rusqlite::types::Value;
 use rusqlite::{params, params_from_iter};
 use serde::Serialize;
 
-use crate::database::WriteTransaction;
 use crate::trader::copy::types::CopyActivityRow;
 use crate::trader::error::Error;
 
 use super::rows::{json_error, parse_datetime};
 use super::CopyDatabase;
-
-/// Current quote-model decisions and skips removed by a reset. Legacy JSON is
-/// intentionally left byte-for-byte intact.
-const CURRENT_PAPER_DECISIONS: &str = "(
-    (json_extract(outcome_json, '$.outcome') = 'paper_filled'
-        AND json_extract(outcome_json, '$.fill.model') = 'quote')
-    OR (json_extract(outcome_json, '$.outcome') = 'paper_sell_observed'
-        AND json_extract(outcome_json, '$.paper_fill.model') = 'quote')
-    OR (json_extract(outcome_json, '$.outcome') = 'skipped'
-        AND json_extract(outcome_json, '$.paper.model') = 'quote')
-)";
-const CURRENT_PAPER_ACTIVITY: &str = "(
-    (json_extract(details_json, '$.outcome') = 'paper_filled'
-        AND json_extract(details_json, '$.fill.model') = 'quote')
-    OR (json_extract(details_json, '$.outcome') = 'paper_sell_observed'
-        AND json_extract(details_json, '$.paper_fill.model') = 'quote')
-    OR (json_extract(details_json, '$.outcome') = 'skipped'
-        AND json_extract(details_json, '$.paper.model') = 'quote')
-)";
 
 /// One page of decisions, newest first. Every filter is optional.
 #[derive(Debug, Clone, Default)]
@@ -124,6 +104,7 @@ impl CopyDatabase {
                     kind: row.get(2)?,
                     outcome: serde_json::from_str(&json).map_err(json_error)?,
                     created_at: parse_datetime(&created, 4)?,
+                    earlier_run: false,
                 })
             })
             .map_err(crate::errors::DatabaseError::from)?
@@ -190,55 +171,24 @@ impl CopyDatabase {
         })?
     }
 
-    /// Start a task's paper evaluation over: its paper book, paper spend and the
-    /// paper decisions and skips that built them are removed in one transaction.
-    /// Live decisions, live spend and the target inventory are kept. Returns the
-    /// number of activity rows removed.
-    pub async fn reset_paper_book(&self, task_id: i64) -> crate::trader::Result<usize> {
+    /// Starts a new paper run of task `task_id` at `at`: its paper figures count only
+    /// what happens from then on. Nothing is deleted; earlier rounds and decisions stay
+    /// as history. `false` when no such task exists.
+    pub async fn start_paper_run(
+        &self,
+        task_id: i64,
+        at: DateTime<Utc>,
+    ) -> crate::trader::Result<bool> {
         let db = self.clone();
         tokio::task::spawn_blocking(move || {
-            let mut connection = db.connection()?;
-            let transaction = connection
-                .write_tx()
-                .map_err(crate::errors::DatabaseError::from)?;
-            let epoch_key = format!("paper_epoch:{task_id}");
-            let epoch = super::ledger::read_paper_epoch(&transaction, task_id)?
-                .checked_add(1)
-                .ok_or_else(|| crate::trader::Error::CopyValidation {
-                    detail: "paper reset epoch overflow".to_owned(),
-                })?;
-            transaction
+            db.connection()?
                 .execute(
-                    "INSERT INTO copy_metadata (key, value) VALUES (?1, ?2) \
-                     ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-                    params![epoch_key, epoch.to_string()],
+                    "UPDATE copy_tasks SET paper_started_at = ?2, updated_at = ?2 \
+                     WHERE id = ?1 AND chain_id = ?3",
+                    params![task_id, at.to_rfc3339(), db.chain.as_str()],
                 )
-                .map_err(crate::errors::DatabaseError::from)?;
-            let execute = |sql: &str| {
-                transaction
-                    .execute(sql, params![task_id])
-                    .map_err(crate::errors::DatabaseError::from)
-            };
-            execute("DELETE FROM copy_paper_positions WHERE task_id = ?1")?;
-            execute("DELETE FROM copy_spend WHERE task_id = ?1 AND mode = 'paper'")?;
-            execute(&format!(
-                "DELETE FROM copy_decisions WHERE task_id = ?1 \
-                 AND {CURRENT_PAPER_DECISIONS}"
-            ))?;
-            let removed = execute(&format!(
-                "DELETE FROM copy_activity WHERE task_id = ?1 \
-                 AND {CURRENT_PAPER_ACTIVITY}"
-            ))?;
-            transaction
-                .execute(
-                    "UPDATE copy_tasks SET updated_at = ?2 WHERE id = ?1",
-                    params![task_id, Utc::now().to_rfc3339()],
-                )
-                .map_err(crate::errors::DatabaseError::from)?;
-            transaction
-                .commit()
-                .map_err(crate::errors::DatabaseError::from)?;
-            Ok(removed)
+                .map(|affected| affected > 0)
+                .map_err(|e| Error::from(crate::errors::DatabaseError::from(e)))
         })
         .await
         .map_err(|e| Error::CopyDatabaseUnavailable {

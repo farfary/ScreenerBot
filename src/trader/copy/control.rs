@@ -15,10 +15,12 @@ mod tasks;
 #[cfg(test)]
 mod tests;
 
-pub(super) use books::{all_positions, paper_mark, TASK_ACTIVITY_WINDOW};
+pub(super) use books::{
+    all_positions, current_activity, paper_view, task_rounds, TASK_ACTIVITY_WINDOW,
+};
 pub use books::{
     book_stats, list_activity, overview, summarize, task_stats, task_stats_for, CopyTaskSummary,
-    CopyTotals, CopyTradingOverview,
+    CopyTotals, CopyTradingOverview, TaskRounds,
 };
 /// The task state label, reached by the copy module's label tests.
 #[cfg(test)]

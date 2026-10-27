@@ -56,6 +56,7 @@ mod solana_transactions_decode;
 mod storage_chain_columns_migration;
 mod storage_chain_isolation;
 mod storage_copy_columns_migration;
+mod storage_copy_paper_archive_migration;
 mod storage_eviction_realdata;
 mod storage_market_columns_migration;
 mod storage_positions_raw_migration;

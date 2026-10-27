@@ -74,10 +74,10 @@ copy-readiness-latency = 取引を時間内に検出
 copy-readiness-latency-detail = p95 到着 { $p95 }秒、上限 { $limit }秒
 copy-readiness-latency-none = 到着サンプルはまだありません
 copy-readiness-priced = すべての保有に価格あり
-copy-readiness-priced-ok = オープン中のペーパー保有すべてにプール価格があります
-copy-readiness-priced-missing =
+copy-readiness-marked-ok = すべてのオープンなペーパー保有に価格があります
+copy-readiness-marked-missing =
     { $count ->
-       *[other] プール価格のないオープン保有が { $count }件あります
+       *[other] 価格のないオープン保有が { $count }件あります
     }
 copy-readiness-runtime = ライブ実行が利用可能
 copy-readiness-runtime-ok = セットアップと安全ゲートによりライブコピーが許可されています
@@ -94,7 +94,6 @@ copy-state-running-paper = 実行中
 copy-exit-mode-buy-only = 自分のエグジットルール
 copy-exit-mode-mirror = ウォレットの売却をミラー
 copy-exit-mode-hybrid = ウォレットの売却と自分のルール
-copy-exit-target-sell = ウォレットが売却
 copy-exit-stop-loss = 損切り
 copy-exit-trailing-stop = トレーリングストップ
 copy-exit-break-even = 建値ストップ
@@ -271,6 +270,12 @@ copy-paper-legacy-col-cost = 残りコスト（{ -sol }）
 copy-paper-legacy-col-realized = 実現推定（{ -sol }）
 copy-paper-legacy-col-price = 最後に保存した価格（{ -sol }）
 copy-paper-legacy-col-remaining = 保存価格での残り損益（{ -sol }）
+copy-paper-earlier-title = 以前のペーパー結果
+copy-paper-archived-title = 見積もりベースのコピー帳簿
+copy-paper-archived-note = このタスクのペーパーコピーがペーパー帳簿のラウンドになる前に記録した読み取り専用の結果です。現在の運用の使用額や保有には含まれず、操作もできません。残りの数量は各トークンの最後に保存された価格で評価され、現在の市場価格では評価されません。
+copy-paper-archived-spent = 以前の使用額
+copy-paper-archived-realized = 以前の確定損益
+copy-paper-archived-col-realized = 確定（{ -sol }）
 
 ## Workspace
 
@@ -355,7 +360,7 @@ copy-return-paper-cancel = ライブのまま
 copy-task-returned-paper = タスクをペーパーに戻しました
 copy-mode-change-failed = 実行モードを変更できませんでした
 copy-delete-title = コピータスクを削除
-copy-delete-message = 「{ $name }」を削除しますか？判断履歴とペーパーの結果は削除され、このタスクではウォレットのウォッチが行われなくなります。
+copy-delete-settle-message = 「{ $name }」を削除しますか？オープンなペーパー保有は最後の価格でクローズされ、クローズ済みラウンドとともにペーパー履歴に残ります。判断履歴は削除され、このタスクではウォレットのウォッチが行われなくなります。
 copy-delete-confirm = タスクを削除
 copy-delete-cancel = タスクを残す
 copy-task-deleted = コピータスクを削除しました
@@ -366,9 +371,9 @@ copy-task-delete-failed = コピータスクを削除できませんでした
 copy-overview-results = 結果
 copy-analytics-load-failed = 分析を読み込めませんでした: { $error }
 copy-analytics-loading = 分析を読み込み中…
-copy-exit-bucket =
+copy-exit-bucket-rounds =
     { $count ->
-       *[other] 売却 { $count }件 · { $pnl }
+       *[other] { $count }ラウンド · { $pnl }
     }
 copy-overview-average-win = 平均利益
 copy-overview-average-loss = 平均損失 { $amount }
@@ -388,9 +393,9 @@ copy-book-buys =
     <strong>{ $count }</strong>{ $count ->
        *[other] 件の購入
     }
-copy-book-policy-exits =
+copy-book-rule-closes =
     <strong>{ $count }</strong>{ $count ->
-       *[other] 件がルールによるエグジット
+       *[other] ラウンドがルールでクローズ
     }
 copy-book-wallet-sells =
     <strong>{ $count }</strong>{ $count ->
@@ -629,12 +634,12 @@ copy-holdings-title = 保有
 copy-holdings-view-label = 保有の表示
 copy-holdings-view-open = オープン（{ $count }）
 copy-holdings-view-closed = クローズ済みラウンド（{ $count }）
-copy-holdings-reset = ペーパー帳簿をリセット
+copy-holdings-restart = 新しいペーパー運用を開始
 copy-holdings-live-note = ライブコピーは実際のポジションです。
 copy-holdings-open-positions = オープンポジション
 copy-holdings-token-details = トークンの詳細を開く
 copy-holdings-opened = { $time } にオープン
-copy-holdings-no-pool-price = プール価格なし
+copy-holdings-no-price = 価格なし
 copy-holdings-close = クローズ
 copy-holdings-close-pending = クローズ待ち
 copy-holdings-activity = アクティビティ
@@ -665,10 +670,12 @@ copy-holdings-col-invested = 投資額（{ -sol }）
 copy-holdings-col-proceeds = 売却代金（{ -sol }）
 copy-holdings-col-exit = エグジット
 copy-holdings-col-closed = クローズ
-copy-holdings-marks-note = 価格は 1 トークンあたりの { -sol } です。評価とエグジット水準にはプール価格を使い、これはエグジットルールの発動にも使われます。記録された約定にはルーター見積もりを使います。エントリーには購入時の推定ネットワーク手数料が含まれます。ピークとエグジット水準はこれを基準とするため、保有はピークがエントリーを下回った状態で始まります。カーソルを合わせるとプール価格を確認できます。
+copy-holdings-round-note = 価格はトークンあたりの { -sol } です。各行はペーパー帳簿の1ラウンドです。評価価格はラウンドの最新価格で、プールまたは市場データから取得し、エグジットルールはこれに基づいて動作します。記録された約定はルーターの見積もりを使用します。エントリーはラウンドの平均エントリー価格で、ピークとエグジット水準はこれに対する相対値です。カーソルを合わせると価格が表示されます。
 copy-holdings-paused-rules = 一時停止中: 新規コピーは行われません。エグジットルールにより、これらの保有は引き続きクローズされます。
 copy-holdings-paused-mirror = 一時停止中: 新規コピーは行われません。ウォレットの売却により、これらの保有は引き続きクローズされます。
 copy-holdings-paused-hybrid = 一時停止中: 新規コピーは行われません。ウォレットの売却とエグジットルールにより、これらの保有は引き続きクローズされます。
+copy-holdings-trader-stopped-rules = 自動トレーダーが停止しているため、再び動作するまでどのエグジットもこれらの保有をクローズしません。
+copy-holdings-trader-stopped-wallet = 自動トレーダーが停止しているため、再び動作するまでこれらの保有をクローズするのはウォレットの売却だけです。
 copy-holdings-closed-load-failed = クローズ済みラウンドを読み込めませんでした: { $error }
 copy-holdings-closed-loading = クローズ済みラウンドを読み込み中…
 copy-holdings-closed-empty = クローズ済みラウンドはまだありません。
@@ -684,14 +691,14 @@ copy-holdings-close-pending-detail = クローズは待機中または実行中�
 copy-holdings-close-unconfirmed = クローズ結果を確認できません
 copy-holdings-close-unconfirmed-detail = 結果を受信する前に接続が終了し、アクティビティにもまだ結果がありません。もう一度クローズする前にアクティビティを確認してください。
 copy-holdings-closed-check-activity = 保有はクローズされました。記録された約定はアクティビティにあります。
-copy-holdings-reset-quote-message = 「{ $name }」をやり直します。現在のペーパー保有、使用額、約定、エグジット、スキップはクリアされ、見積もりベースの新しい帳簿が始まります。旧推定とライブ履歴は残ります。ルールとウォレットも残ります。
-copy-holdings-reset-cancel = 履歴を残す
-copy-holdings-reset-done = ペーパー帳簿をリセットしました
-copy-holdings-reset-detail =
+copy-holdings-restart-message = 「{ $name }」をやり直します。オープンなペーパー保有は最後の価格でクローズされ、数値はこれ以降の出来事だけを集計します。何も削除されません。クローズ済みラウンドはペーパー履歴に残り、以前の判断は以前の運用として印を付けてアクティビティに残ります。ルールとウォレットも残ります。
+copy-holdings-restart-cancel = この運用を続ける
+copy-holdings-restart-done = 新しいペーパー運用を開始しました
+copy-holdings-restart-detail =
     { $count ->
-       *[other] 判断 { $count }件を削除しました
+       *[other] 保有 { $count }件をクローズしました
     }
-copy-holdings-reset-failed = ペーパー帳簿をリセットできませんでした
+copy-holdings-restart-failed = 新しいペーパー運用を開始できませんでした
 
 ## Activity tab
 
@@ -708,6 +715,8 @@ copy-outcome-skipped = スキップ
 copy-activity-decision = 判断
 copy-activity-paper-exit-quote = 見積もりベースのペーパーエグジット · { $rule }
 copy-activity-paper-exit-legacy = 旧ペーパーエグジット推定 · { $rule }
+copy-activity-earlier-run = 以前の運用
+    .title = このタスクの現在のペーパー運用より前に判断されたため、現在の数値には含まれません。
 copy-activity-filled = { $input }（{ $price }）· ウォレットの購入 { $target }
 copy-activity-filled-target-difference = { $input }（{ $price }）· ウォレットの購入 { $target } · 対象価格との差 { $difference }
 copy-activity-filled-slippage = { $input }（{ $price }）· ウォレットの購入 { $target } · スリッページ { $slippage }

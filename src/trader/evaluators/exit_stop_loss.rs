@@ -10,8 +10,8 @@ use crate::logger::{self, LogTag};
 use crate::positions::Position;
 use crate::trader::policy::StopLossPolicy;
 
-/// The stop-loss rule on plain numbers, shared by the live evaluator and the
-/// paper copy book. Returns `Some(exit_percentage)` when it fires, where the
+/// The stop-loss rule on plain numbers, read through `exit_rules` for the rounds of
+/// both books. Returns `Some(exit_percentage)` when it fires, where the
 /// inner `None` is a full exit.
 ///
 /// Loss is measured from entry: ((entry_price - current_price) / entry_price) * 100.

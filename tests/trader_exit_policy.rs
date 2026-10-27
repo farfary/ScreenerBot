@@ -24,6 +24,8 @@ use common::config_guard;
 use screenerbot::config::{
     DcaLevel, DcaMeasureFrom, TakeProfitLevel, TimeUnit, TraderConfig, TrailingStopBand,
 };
+use screenerbot::positions::PositionManagement;
+use screenerbot::trader::copy::{management_for_exit_mode, ExitMode};
 use screenerbot::trader::evaluators::DcaConfigSnapshot;
 use screenerbot::trader::policy::{
     BreakEvenPolicy, ExitPolicy, ExitPolicyFault, ExitPolicyOverrides, StopLossPolicy,
@@ -284,6 +286,46 @@ fn task_override_changes_only_set_fields_and_unset_fields_inherit() {
     assert_eq!(resolved.take_profit, inherited.take_profit);
     assert_eq!(resolved.time, inherited.time);
     assert_eq!(resolved.dca.enabled, inherited.dca.enabled);
+}
+
+/// A copy round is evaluated by the shared exit monitor in either book: the management
+/// its task's exit mode gives the round decides which exits run, and the policy those
+/// exits use is the global policy with the task's overrides on top.
+#[test]
+fn a_copy_rounds_exit_mode_decides_its_exits_and_its_task_overrides_its_policy() {
+    let _cfg = config_guard();
+    for (exit_mode, policy_exits, copy_sells) in [
+        (ExitMode::BuyOnly, true, false),
+        (ExitMode::Hybrid, true, true),
+        (ExitMode::Mirror, false, true),
+    ] {
+        let management = management_for_exit_mode(exit_mode);
+        assert!(
+            management.allows_safety_exits(),
+            "{exit_mode:?}: safety exits always run"
+        );
+        assert_eq!(
+            management.allows_policy_exits(),
+            policy_exits,
+            "{exit_mode:?}: the task's exit rules run only when the bot manages the exits"
+        );
+        assert_eq!(management.allows_copy_sell(), copy_sells, "{exit_mode:?}");
+    }
+    assert_eq!(
+        management_for_exit_mode(ExitMode::Mirror),
+        PositionManagement::CopyTask
+    );
+
+    common::set_config(|cfg| {
+        cfg.trader.stop_loss_enabled = true;
+        cfg.trader.stop_loss_threshold_pct = 40.0;
+    });
+    let mut task_policy = ExitPolicy::from_config();
+    let mut overrides = ExitPolicyOverrides::default();
+    overrides.stop_loss.threshold_pct = Some(12.0);
+    task_policy.apply_overrides(&overrides);
+    assert_eq!(task_policy.stop_loss.threshold_pct, 12.0);
+    assert_eq!(ExitPolicy::from_config().stop_loss.threshold_pct, 40.0);
 }
 
 fn band(profit_pct: f64, distance_pct: f64) -> TrailingStopBand {

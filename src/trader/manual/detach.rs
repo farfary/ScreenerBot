@@ -1,7 +1,7 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Runs a manual trade on its own task so no caller can cancel it mid-flight.
+//! Runs a trade on its own task so no caller can cancel it mid-flight.
 
 use crate::trader::Error;
 
@@ -12,8 +12,9 @@ use crate::trader::Error;
 /// assistant tool under a deadline, a Telegram callback. A trade awaited
 /// inline would then be cancelled after its swap was sent and before its
 /// signature, position or exit was recorded. Spawned, the trade always
-/// finishes and records; the caller only waits for its answer.
-pub(super) async fn detached<T: Send + 'static>(
+/// finishes and records; the caller only waits for its answer. The copy
+/// service's paper work runs through here too, on a queue a stop can cancel.
+pub(in crate::trader) async fn detached<T: Send + 'static>(
     trade: impl std::future::Future<Output = Result<T, Error>> + Send + 'static,
 ) -> Result<T, Error> {
     answer(tokio::spawn(trade).await)

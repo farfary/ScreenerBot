@@ -74,13 +74,13 @@ copy-readiness-latency = Угоди виявляються вчасно
 copy-readiness-latency-detail = Надходження p95: { $p95 } с, ліміт: { $limit } с
 copy-readiness-latency-none = Зразків надходження ще немає
 copy-readiness-priced = Усі утримувані токени мають ціну
-copy-readiness-priced-ok = Кожен відкритий віртуальний утримуваний токен має ціну пулу
-copy-readiness-priced-missing =
+copy-readiness-marked-ok = Кожен відкритий віртуальний утримуваний токен має ціну
+copy-readiness-marked-missing =
     { $count ->
-        [one] { $count } відкритий утримуваний токен без ціни пулу
-        [few] { $count } відкриті утримувані токени без ціни пулу
-        [many] { $count } відкритих утримуваних токенів без ціни пулу
-       *[other] { $count } відкритого утримуваного токена без ціни пулу
+        [one] { $count } відкритий утримуваний токен без ціни
+        [few] { $count } відкриті утримувані токени без ціни
+        [many] { $count } відкритих утримуваних токенів без ціни
+       *[other] { $count } відкритого утримуваного токена без ціни
     }
 copy-readiness-runtime = Реальне виконання доступне
 copy-readiness-runtime-ok = Налаштування й запобіжники дозволяють реальні копії
@@ -97,7 +97,6 @@ copy-state-running-paper = Працює
 copy-exit-mode-buy-only = Мої правила виходу
 copy-exit-mode-mirror = Дзеркалити продажі гаманця
 copy-exit-mode-hybrid = Продажі гаманця та мої правила
-copy-exit-target-sell = Гаманець продав
 copy-exit-stop-loss = Стоп-лос
 copy-exit-trailing-stop = Трейлінг-стоп
 copy-exit-break-even = Стоп у беззбиток
@@ -295,6 +294,12 @@ copy-paper-legacy-col-cost = Залишкова вартість ({ -sol })
 copy-paper-legacy-col-realized = Реалізована оцінка ({ -sol })
 copy-paper-legacy-col-price = Остання збережена ціна ({ -sol })
 copy-paper-legacy-col-remaining = Залишковий P&L за збереженою ціною ({ -sol })
+copy-paper-earlier-title = Попередні віртуальні результати
+copy-paper-archived-title = Портфель копій на котируваннях
+copy-paper-archived-note = Результати лише для читання, які віртуальні копії цього завдання записали до того, як стали раундами віртуального портфеля. Вони не входять до витрат і утримуваних токенів поточного прогону й не пропонують дій. Залишки оцінюються за останньою збереженою ціною кожного токена, а не за поточною ринковою ціною.
+copy-paper-archived-spent = Попередні витрати
+copy-paper-archived-realized = Попередній реалізований прибуток/збиток
+copy-paper-archived-col-realized = Реалізовано ({ -sol })
 
 ## Workspace
 
@@ -388,7 +393,7 @@ copy-return-paper-cancel = Залишити реальний режим
 copy-task-returned-paper = Завдання повернено у віртуальний режим
 copy-mode-change-failed = Не вдалося змінити режим виконання
 copy-delete-title = Видалення завдання копіювання
-copy-delete-message = Видалити «{ $name }»? Його рішення та віртуальні результати буде видалено, а за гаманцем більше не стежитимуть для цього завдання.
+copy-delete-settle-message = Видалити «{ $name }»? Його відкриті віртуальні утримувані токени закриються за останньою ціною й залишаться у віртуальній історії разом із закритими раундами. Його рішення буде видалено, а за гаманцем більше не стежитимуть для цього завдання.
 copy-delete-confirm = Видалити завдання
 copy-delete-cancel = Залишити завдання
 copy-task-deleted = Завдання копіювання видалено
@@ -399,12 +404,12 @@ copy-task-delete-failed = Не вдалося видалити завдання 
 copy-overview-results = Результати
 copy-analytics-load-failed = Не вдалося завантажити аналітику: { $error }
 copy-analytics-loading = Завантаження аналітики…
-copy-exit-bucket =
+copy-exit-bucket-rounds =
     { $count ->
-        [one] { $count } продаж · { $pnl }
-        [few] { $count } продажі · { $pnl }
-        [many] { $count } продажів · { $pnl }
-       *[other] { $count } продажу · { $pnl }
+        [one] { $count } раунд · { $pnl }
+        [few] { $count } раунди · { $pnl }
+        [many] { $count } раундів · { $pnl }
+       *[other] { $count } раунду · { $pnl }
     }
 copy-overview-average-win = Середній виграш
 copy-overview-average-loss = Середній програш { $amount }
@@ -427,12 +432,12 @@ copy-book-buys =
         [many] купівель
        *[other] купівлі
     }
-copy-book-policy-exits =
+copy-book-rule-closes =
     <strong>{ $count }</strong> { $count ->
-        [one] вихід за вашими правилами
-        [few] виходи за вашими правилами
-        [many] виходів за вашими правилами
-       *[other] виходу за вашими правилами
+        [one] раунд закрито за вашими правилами
+        [few] раунди закрито за вашими правилами
+        [many] раундів закрито за вашими правилами
+       *[other] раунду закрито за вашими правилами
     }
 copy-book-wallet-sells =
     <strong>{ $count }</strong> { $count ->
@@ -686,12 +691,12 @@ copy-holdings-title = Утримувані токени
 copy-holdings-view-label = Подання утримуваних токенів
 copy-holdings-view-open = Відкриті ({ $count })
 copy-holdings-view-closed = Закриті раунди ({ $count })
-copy-holdings-reset = Скинути віртуальний портфель
+copy-holdings-restart = Почати новий віртуальний прогін
 copy-holdings-live-note = Реальні копії — це справжні позиції.
 copy-holdings-open-positions = Відкриті позиції
 copy-holdings-token-details = Відкрити деталі токена
 copy-holdings-opened = Відкрито { $time }
-copy-holdings-no-pool-price = Немає ціни пулу
+copy-holdings-no-price = Немає ціни
 copy-holdings-close = Закрити
 copy-holdings-close-pending = Закриття очікується
 copy-holdings-activity = Активність
@@ -722,10 +727,12 @@ copy-holdings-col-invested = Інвестовано ({ -sol })
 copy-holdings-col-proceeds = Виручка ({ -sol })
 copy-holdings-col-exit = Вихід
 copy-holdings-col-closed = Закрито
-copy-holdings-marks-note = Ціни вказано в { -sol } за токен. Оцінка й рівні виходу використовують ціну пулу, яка також запускає правила виходу; записані виконання використовують котирування роутера. Вхід включає оціночну мережеву комісію купівлі; пік і рівні виходу рахуються відносно нього, тож утримуваний токен відкривається з піком нижче входу. Наведіть курсор, щоб побачити ціну пулу.
+copy-holdings-round-note = Ціни вказано в { -sol } за токен. Кожен рядок — один раунд віртуального портфеля. Оцінка — остання ціна раунду з пулу або ринкових даних, за нею спрацьовують правила виходу; записані виконання використовують котирування роутера. Вхід — середня ціна входу раунду; пік і рівні виходу вказано відносно неї. Наведіть курсор, щоб побачити ціну.
 copy-holdings-paused-rules = Призупинено: нових копій немає. Ваші правила виходу й далі закривають ці утримувані токени.
 copy-holdings-paused-mirror = Призупинено: нових копій немає. Продажі гаманця й далі закривають ці утримувані токени.
 copy-holdings-paused-hybrid = Призупинено: нових копій немає. Продажі гаманця та ваші правила виходу й далі закривають ці утримувані токени.
+copy-holdings-trader-stopped-rules = Автотрейдер зупинено, тож жоден вихід не закриє ці утримувані токени, доки він знову не запрацює.
+copy-holdings-trader-stopped-wallet = Автотрейдер зупинено, тож ці утримувані токени закривають лише продажі гаманця, доки він знову не запрацює.
 copy-holdings-closed-load-failed = Не вдалося завантажити закриті раунди: { $error }
 copy-holdings-closed-loading = Завантаження закритих раундів…
 copy-holdings-closed-empty = Закритих раундів ще немає.
@@ -741,17 +748,17 @@ copy-holdings-close-pending-detail = Закриття в черзі або ви�
 copy-holdings-close-unconfirmed = Результат закриття не підтверджено
 copy-holdings-close-unconfirmed-detail = З’єднання перервалося до отримання результату, а в розділі «Активність» його ще немає. Перевірте «Активність», перш ніж закривати знову.
 copy-holdings-closed-check-activity = Утримуваний токен закрито. Записане виконання є в розділі «Активність».
-copy-holdings-reset-quote-message = Почати «{ $name }» спочатку: його поточні віртуальні утримувані токени, витрати, виконання, виходи й пропуски буде очищено, і почнеться новий портфель на основі котирувань. Попередні оцінки та реальна історія залишаться. Правила та гаманець залишаться.
-copy-holdings-reset-cancel = Залишити історію
-copy-holdings-reset-done = Віртуальний портфель скинуто
-copy-holdings-reset-detail =
+copy-holdings-restart-message = Почати «{ $name }» спочатку: його відкриті віртуальні утримувані токени закриються за останньою ціною, а показники враховуватимуть лише те, що станеться відтепер. Нічого не видаляється: закриті раунди залишаться у віртуальній історії, а попередні рішення — у розділі «Активність» із позначкою попереднього прогону. Правила та гаманець залишаться.
+copy-holdings-restart-cancel = Залишити цей прогін
+copy-holdings-restart-done = Почався новий віртуальний прогін
+copy-holdings-restart-detail =
     { $count ->
-        [one] { $count } рішення видалено
-        [few] { $count } рішення видалено
-        [many] { $count } рішень видалено
-       *[other] { $count } рішення видалено
+        [one] Закрито { $count } утримуваний токен
+        [few] Закрито { $count } утримувані токени
+        [many] Закрито { $count } утримуваних токенів
+       *[other] Закрито { $count } утримуваного токена
     }
-copy-holdings-reset-failed = Не вдалося скинути віртуальний портфель
+copy-holdings-restart-failed = Не вдалося почати новий віртуальний прогін
 
 ## Activity tab
 
@@ -768,6 +775,8 @@ copy-outcome-skipped = Пропущено
 copy-activity-decision = Рішення
 copy-activity-paper-exit-quote = Віртуальний вихід за котируванням · { $rule }
 copy-activity-paper-exit-legacy = Попередня віртуальна оцінка виходу · { $rule }
+copy-activity-earlier-run = Попередній прогін
+    .title = Рішення ухвалено до поточного віртуального прогону завдання, тож його поточні показники його не враховують.
 copy-activity-filled = { $input } за { $price } · гаманець купив { $target }
 copy-activity-filled-target-difference = { $input } за { $price } · гаманець купив { $target } · різниця з ціною цілі { $difference }
 copy-activity-filled-slippage = { $input } за { $price } · гаманець купив { $target } · проковзування { $slippage }

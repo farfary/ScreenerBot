@@ -9,12 +9,14 @@ use serde::{Deserialize, Serialize};
 use crate::chains::ChainId;
 use crate::trader::policy::{ExitPolicy, ExitPolicyOverrides};
 
+use crate::trader::admission::EntryBlock;
 use crate::trader::paper::{
-    confirm_live, PaperFillError, PaperModeError, PaperSellFill, TradingMode, LIVE_ARM_CONFIRMATION,
+    confirm_live, PaperFillError, PaperModeError, PaperRefusal, PaperSellFill, TradingMode,
+    LIVE_ARM_CONFIRMATION,
 };
 
 mod paper;
-pub use paper::{PaperContext, PaperDecision, PaperExitRule, PaperPosition};
+pub use paper::{ArchivedPaperPosition, PaperContext, PaperDecision, PaperExitRule};
 
 /// The lowest slippage a task or the copy default may run with; the one bound
 /// behind task validation, the pipeline's precheck and the config section.
@@ -96,6 +98,11 @@ pub struct CopyTask {
     pub pause_reason: Option<CopyPauseReason>,
     #[serde(default)]
     pub paused_at: Option<DateTime<Utc>>,
+    /// When the task's current paper run started: set by a reset of its paper book.
+    /// Its paper figures count only rounds and decisions from this moment or from the
+    /// start of the shared paper run, whichever is later (`copy::paper_book`).
+    #[serde(default)]
+    pub paper_started_at: Option<DateTime<Utc>>,
 }
 
 impl CopyTask {
@@ -263,6 +270,7 @@ impl CopyTaskInput {
             copy_stable_quoted: self.copy_stable_quoted,
             pause_reason: (!self.enabled).then_some(CopyPauseReason::User),
             paused_at: (!self.enabled).then_some(now),
+            paper_started_at: None,
         })
     }
 }
@@ -409,6 +417,40 @@ impl From<PaperFillError> for CopySkip {
     }
 }
 
+/// A paper executor refusal as the skip a copy decision records: the paper book's own
+/// capacity limits block the entry as they would any paper entry, a fill refusal keeps
+/// its fill-model code, and a decision the executor no longer wanted or could not book
+/// is a paper execution that did not happen.
+impl From<PaperRefusal> for CopySkip {
+    fn from(refusal: PaperRefusal) -> Self {
+        match refusal {
+            PaperRefusal::BalanceExhausted => Self::EntryBlocked {
+                block: EntryBlock::PaperBalanceExhausted,
+            },
+            PaperRefusal::PositionLimit => Self::EntryBlocked {
+                block: EntryBlock::PositionLimit,
+            },
+            PaperRefusal::OpenCooldown { wait_secs } => Self::EntryBlocked {
+                block: EntryBlock::OpenCooldown { wait_secs },
+            },
+            PaperRefusal::AlreadyOpen => Self::EntryBlocked {
+                block: EntryBlock::AlreadyOpen,
+            },
+            PaperRefusal::Fill(error) => Self::from(error),
+            PaperRefusal::TokenUnavailable | PaperRefusal::DecimalsUnknown => {
+                Self::PaperQuoteUnfillable
+            }
+            PaperRefusal::InvalidSize => Self::InvalidSizing,
+            PaperRefusal::NoOpenRound | PaperRefusal::AlreadyClosed | PaperRefusal::StepTaken => {
+                Self::CopyPositionNotFound
+            }
+            PaperRefusal::NotWanted | PaperRefusal::BookingFailed => {
+                Self::PaperExecutionUnavailable
+            }
+        }
+    }
+}
+
 impl From<crate::wallets::watch::UnresolvedSwapReason> for CopySkip {
     fn from(reason: crate::wallets::watch::UnresolvedSwapReason) -> Self {
         use crate::wallets::watch::UnresolvedSwapReason;
@@ -467,19 +509,18 @@ pub struct CopySellDecision {
     /// The simulated sell a paper task booked. `None` on live sells.
     #[serde(default)]
     pub paper_fill: Option<PaperSellFill>,
-    /// Set when the task's own exit policy closed a paper holding rather than a
-    /// mirrored target sell.
+    /// `Manual` when a paper holding was closed by hand rather than by a mirrored
+    /// target sell. Rows recorded before the shared paper book also name the exit rule
+    /// that sold the holding.
     #[serde(default)]
     pub exit_rule: Option<PaperExitRule>,
-    /// The take-profit step a policy sale of a paper holding takes.
+    /// The take-profit step a rule sale of the archived copy paper book took; only rows
+    /// recorded before the shared paper book carry it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub take_profit_level: Option<u32>,
     #[serde(default)]
     pub paper_context: Option<PaperContext>,
 }
-
-/// The exit-policy rule that sold a paper holding, mirroring the live exit
-/// monitor's reasons.
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "outcome", rename_all = "snake_case")]
@@ -518,6 +559,20 @@ impl CopyOutcome {
         }
     }
 
+    /// When the decision was made.
+    pub fn decided_at(&self) -> DateTime<Utc> {
+        match self {
+            Self::Skipped { decided_at, .. } => *decided_at,
+            Self::PaperFilled(decision) => decision.telemetry.decided_at,
+            Self::LiveSubmitted(decision)
+            | Self::LiveConfirmed(decision)
+            | Self::LiveFailed(decision) => decision.telemetry.decided_at,
+            Self::PaperSellObserved(decision)
+            | Self::LiveSellSubmitted(decision)
+            | Self::LiveSellFailed(decision) => decision.telemetry.decided_at,
+        }
+    }
+
     pub fn telemetry(&self) -> Option<&CopyTelemetry> {
         match self {
             Self::PaperFilled(decision) => Some(&decision.telemetry),
@@ -539,6 +594,10 @@ pub struct CopyActivityRow {
     pub kind: String,
     pub outcome: CopyOutcome,
     pub created_at: DateTime<Utc>,
+    /// The row belongs to a paper task's earlier run: decided before the run its paper
+    /// figures cover. Set when the row is read for display, never stored.
+    #[serde(default)]
+    pub earlier_run: bool,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
@@ -551,14 +610,25 @@ pub struct ArrivalDistanceStats {
     pub average_ms: Option<u64>,
 }
 
-/// Which book a task's position and P&L figures come from: its paper ledger while
-/// it runs in paper mode, the real positions it opened while live.
+/// Which book a task's position and P&L figures come from: the rounds it opened in the
+/// shared paper book while it runs in paper mode, the real positions it opened while
+/// live.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CopyBook {
     Paper,
     #[default]
     Live,
+}
+
+impl CopyBook {
+    /// The positions book this copy book's rounds are rows of.
+    pub fn store(self) -> crate::positions::Book {
+        match self {
+            CopyBook::Paper => crate::positions::Book::Paper,
+            CopyBook::Live => crate::positions::Book::Live,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
@@ -568,9 +638,9 @@ pub struct CopyTaskStats {
     pub filled_buys: usize,
     /// Sells mirrored from the target wallet.
     pub target_sells: usize,
-    /// Paper sells made by the task's own exit policy.
+    /// Closed rounds an exit rule of the exit monitor closed.
     pub policy_exits: usize,
-    /// Paper holdings closed by hand.
+    /// Closed rounds closed by hand.
     pub manual_closes: usize,
     /// Closed rounds with a positive / non-positive realized result.
     pub wins: usize,

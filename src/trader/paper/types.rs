@@ -6,6 +6,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
+use super::PaperFillError;
 use crate::chains::RawAmount;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -96,6 +97,85 @@ pub struct PaperQuoteMetadata {
     pub epoch: u64,
     pub network_fee_estimated: bool,
     pub platform_fee_included_in_output: bool,
+}
+
+/// What the paper executor did with a decision, carried on its `TradeResult` so a
+/// caller reads the outcome from its type, never from the error text.
+#[derive(Debug, Clone, PartialEq)]
+pub enum PaperExecution {
+    /// A leg was booked, now or by an earlier call under the same leg key.
+    Filled(PaperLegEvidence),
+    /// Nothing was booked.
+    Refused(PaperRefusal),
+}
+
+impl PaperExecution {
+    /// The booked leg, when the decision filled.
+    pub fn filled(&self) -> Option<&PaperLegEvidence> {
+        match self {
+            PaperExecution::Filled(evidence) => Some(evidence),
+            PaperExecution::Refused(_) => None,
+        }
+    }
+
+    /// The refusal, when nothing was booked.
+    pub fn refusal(&self) -> Option<PaperRefusal> {
+        match self {
+            PaperExecution::Filled(_) => None,
+            PaperExecution::Refused(refusal) => Some(*refusal),
+        }
+    }
+}
+
+/// The paper leg a decision booked.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PaperLegEvidence {
+    /// The leg reference, also the signature of the round's entry or exit record.
+    pub leg_ref: String,
+    pub position_id: i64,
+    pub fill: PaperLegFill,
+    /// True when the leg was booked by an earlier call under the same key and
+    /// this call booked nothing.
+    pub replayed: bool,
+}
+
+/// The fill of a booked paper leg.
+#[derive(Debug, Clone, PartialEq)]
+pub enum PaperLegFill {
+    Buy(PaperFill),
+    Sell(PaperSellFill),
+}
+
+/// Why the paper executor booked nothing for a decision.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PaperRefusal {
+    /// The decision's owner no longer wants it (trader, strategy or task changed,
+    /// force stop), checked before the fill and again after the landing wait.
+    NotWanted,
+    /// The paper balance does not cover the trade.
+    BalanceExhausted,
+    /// Every paper slot is taken.
+    PositionLimit,
+    /// The latest paper open was less than the open cooldown ago.
+    OpenCooldown { wait_secs: u64 },
+    /// The wallet already holds an open paper round of the mint.
+    AlreadyOpen,
+    /// The token's metadata is not available.
+    TokenUnavailable,
+    /// The token's decimals are not known.
+    DecimalsUnknown,
+    /// The decision carries no positive size.
+    InvalidSize,
+    /// The quote-based fill did not settle.
+    Fill(PaperFillError),
+    /// The decision names no open paper round.
+    NoOpenRound,
+    /// The round closed before the leg was booked.
+    AlreadyClosed,
+    /// The take-profit step was already taken.
+    StepTaken,
+    /// The paper store refused the booking.
+    BookingFailed,
 }
 
 #[cfg(test)]

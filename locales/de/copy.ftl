@@ -74,11 +74,11 @@ copy-readiness-latency = Trades rechtzeitig erkannt
 copy-readiness-latency-detail = p95-Ankunft { $p95 } s, Limit { $limit } s
 copy-readiness-latency-none = Noch keine Ankunftsstichproben
 copy-readiness-priced = Jeder Bestand mit Preis
-copy-readiness-priced-ok = Jeder offene Paper-Bestand hat einen Pool-Preis
-copy-readiness-priced-missing =
+copy-readiness-marked-ok = Jeder offene Paper-Bestand hat einen Preis
+copy-readiness-marked-missing =
     { $count ->
-        [one] { $count } offener Bestand ohne Pool-Preis
-       *[other] { $count } offene Bestände ohne Pool-Preis
+        [one] { $count } offener Bestand ohne Preis
+       *[other] { $count } offene Bestände ohne Preis
     }
 copy-readiness-runtime = Live-Ausführung verfügbar
 copy-readiness-runtime-ok = Einrichtung und Sicherheitsschranken erlauben Live-Kopien
@@ -95,7 +95,6 @@ copy-state-running-paper = Läuft
 copy-exit-mode-buy-only = Meine Ausstiegsregeln
 copy-exit-mode-mirror = Wallet-Verkäufe spiegeln
 copy-exit-mode-hybrid = Wallet-Verkäufe und meine Regeln
-copy-exit-target-sell = Wallet hat verkauft
 copy-exit-stop-loss = Stop-Loss
 copy-exit-trailing-stop = Trailing-Stop
 copy-exit-break-even = Break-Even-Stop
@@ -279,6 +278,12 @@ copy-paper-legacy-col-cost = Restkosten ({ -sol })
 copy-paper-legacy-col-realized = Realisierte Schätzung ({ -sol })
 copy-paper-legacy-col-price = Zuletzt gespeicherter Preis ({ -sol })
 copy-paper-legacy-col-remaining = Rest-GuV zum gespeicherten Preis ({ -sol })
+copy-paper-earlier-title = Frühere Paper-Ergebnisse
+copy-paper-archived-title = Quotenbasiertes Kopierbuch
+copy-paper-archived-note = Schreibgeschützte Ergebnisse, die die Paper-Kopien dieser Aufgabe gebucht haben, bevor sie Runden des Paper-Buchs wurden. Sie zählen nicht zu den Ausgaben oder Beständen des aktuellen Laufs und bieten keine Aktionen. Restmengen werden mit dem zuletzt gespeicherten Preis je Token bewertet, nie mit einem aktuellen Marktpreis.
+copy-paper-archived-spent = Frühere Ausgaben
+copy-paper-archived-realized = Frühere realisierte GuV
+copy-paper-archived-col-realized = Realisiert ({ -sol })
 
 ## Workspace
 
@@ -366,7 +371,7 @@ copy-return-paper-cancel = Live beibehalten
 copy-task-returned-paper = Aufgabe zurück im Paper-Modus
 copy-mode-change-failed = Ausführungsmodus konnte nicht geändert werden
 copy-delete-title = Copy-Aufgabe löschen
-copy-delete-message = „{ $name }“ löschen? Ihre Entscheidungen und Paper-Ergebnisse werden entfernt, und die Wallet wird für diese Aufgabe nicht mehr beobachtet.
+copy-delete-settle-message = „{ $name }“ löschen? Die offenen Paper-Bestände werden zum letzten Preis geschlossen und bleiben mit den geschlossenen Runden im Paper-Verlauf. Die Entscheidungen werden entfernt, und die Wallet wird für diese Aufgabe nicht mehr beobachtet.
 copy-delete-confirm = Aufgabe löschen
 copy-delete-cancel = Aufgabe behalten
 copy-task-deleted = Copy-Aufgabe gelöscht
@@ -377,10 +382,10 @@ copy-task-delete-failed = Copy-Aufgabe konnte nicht gelöscht werden
 copy-overview-results = Ergebnisse
 copy-analytics-load-failed = Analysen konnten nicht geladen werden: { $error }
 copy-analytics-loading = Analysen werden geladen…
-copy-exit-bucket =
+copy-exit-bucket-rounds =
     { $count ->
-        [one] { $count } Verkauf · { $pnl }
-       *[other] { $count } Verkäufe · { $pnl }
+        [one] { $count } Runde · { $pnl }
+       *[other] { $count } Runden · { $pnl }
     }
 copy-overview-average-win = Durchschnittsgewinn
 copy-overview-average-loss = Durchschnittsverlust { $amount }
@@ -401,10 +406,10 @@ copy-book-buys =
         [one] Kauf
        *[other] Käufe
     }
-copy-book-policy-exits =
+copy-book-rule-closes =
     <strong>{ $count }</strong> { $count ->
-        [one] Ausstieg nach Ihren Regeln
-       *[other] Ausstiege nach Ihren Regeln
+        [one] Runde nach Ihren Regeln geschlossen
+       *[other] Runden nach Ihren Regeln geschlossen
     }
 copy-book-wallet-sells =
     <strong>{ $count }</strong> { $count ->
@@ -650,12 +655,12 @@ copy-holdings-title = Bestände
 copy-holdings-view-label = Bestandsansicht
 copy-holdings-view-open = Offen ({ $count })
 copy-holdings-view-closed = Geschlossene Runden ({ $count })
-copy-holdings-reset = Paper-Buch zurücksetzen
+copy-holdings-restart = Neuen Paper-Lauf starten
 copy-holdings-live-note = Live-Kopien sind echte Positionen.
 copy-holdings-open-positions = Offene Positionen
 copy-holdings-token-details = Token-Details öffnen
 copy-holdings-opened = Eröffnet { $time }
-copy-holdings-no-pool-price = Kein Pool-Preis
+copy-holdings-no-price = Kein Preis
 copy-holdings-close = Schließen
 copy-holdings-close-pending = Schließen ausstehend
 copy-holdings-activity = Aktivität
@@ -686,10 +691,12 @@ copy-holdings-col-invested = Investiert ({ -sol })
 copy-holdings-col-proceeds = Erlös ({ -sol })
 copy-holdings-col-exit = Ausstieg
 copy-holdings-col-closed = Geschlossen
-copy-holdings-marks-note = Preise sind in { -sol } pro Token angegeben. Bewertung und Ausstiegsniveaus nutzen den Pool-Preis, der auch Ausstiegsregeln auslöst; festgehaltene Ausführungen nutzen Router-Quoten. Der Einstieg enthält die geschätzte Netzwerkgebühr des Kaufs; Höchststand und Ausstiegsniveaus beziehen sich darauf, sodass ein Bestand mit einem Höchststand unter dem Einstieg eröffnet wird. Fahren Sie mit der Maus über einen Wert, um den Pool-Preis zu sehen.
+copy-holdings-round-note = Preise sind { -sol } je Token. Jede Zeile ist eine Runde des Paper-Buchs. Der Marktwert ist der letzte Preis der Runde, aus dem Pool oder aus Marktdaten, und die Ausstiegsregeln richten sich nach ihm; festgehaltene Ausführungen nutzen Router-Quotes. Einstieg ist der durchschnittliche Einstiegspreis der Runde; der Höchststand und die Ausstiegsstufen sind relativ dazu. Für den Preis mit der Maus darüberfahren.
 copy-holdings-paused-rules = Pausiert: keine neuen Kopien. Ihre Ausstiegsregeln schließen diese Bestände weiterhin.
 copy-holdings-paused-mirror = Pausiert: keine neuen Kopien. Die Verkäufe der Wallet schließen diese Bestände weiterhin.
 copy-holdings-paused-hybrid = Pausiert: keine neuen Kopien. Die Verkäufe der Wallet und Ihre Ausstiegsregeln schließen diese Bestände weiterhin.
+copy-holdings-trader-stopped-rules = Der Auto-Trader ist gestoppt, daher schließt kein Ausstieg diese Bestände, bis er wieder läuft.
+copy-holdings-trader-stopped-wallet = Der Auto-Trader ist gestoppt, daher schließen nur die Verkäufe der Wallet diese Bestände, bis er wieder läuft.
 copy-holdings-closed-load-failed = Geschlossene Runden konnten nicht geladen werden: { $error }
 copy-holdings-closed-loading = Geschlossene Runden werden geladen…
 copy-holdings-closed-empty = Noch keine geschlossenen Runden.
@@ -705,15 +712,15 @@ copy-holdings-close-pending-detail = Das Schließen ist eingereiht oder läuft. 
 copy-holdings-close-unconfirmed = Ergebnis des Schließens nicht bestätigt
 copy-holdings-close-unconfirmed-detail = Die Verbindung endete, bevor das Ergebnis eintraf, und unter Aktivität liegt noch kein Ergebnis vor. Prüfen Sie die Aktivität, bevor Sie erneut schließen.
 copy-holdings-closed-check-activity = Der Bestand ist geschlossen. Die festgehaltene Ausführung steht unter Aktivität.
-copy-holdings-reset-quote-message = „{ $name }“ neu starten: Die aktuellen Paper-Bestände, Ausgaben, Ausführungen, Ausstiege und übersprungenen Trades werden gelöscht und ein neues quotenbasiertes Buch beginnt. Alte Schätzungen und der Live-Verlauf bleiben. Die Regeln und die Wallet bleiben.
-copy-holdings-reset-cancel = Verlauf behalten
-copy-holdings-reset-done = Paper-Buch zurückgesetzt
-copy-holdings-reset-detail =
+copy-holdings-restart-message = „{ $name }“ neu starten: Die offenen Paper-Bestände werden zum letzten Preis geschlossen, und die Kennzahlen zählen nur noch, was ab jetzt geschieht. Nichts wird gelöscht: Geschlossene Runden bleiben im Paper-Verlauf, und frühere Entscheidungen bleiben unter Aktivität, als früherer Lauf markiert. Die Regeln und die Wallet bleiben.
+copy-holdings-restart-cancel = Diesen Lauf behalten
+copy-holdings-restart-done = Ein neuer Paper-Lauf hat begonnen
+copy-holdings-restart-detail =
     { $count ->
-        [one] { $count } Entscheidung entfernt
-       *[other] { $count } Entscheidungen entfernt
+        [one] { $count } Bestand geschlossen
+       *[other] { $count } Bestände geschlossen
     }
-copy-holdings-reset-failed = Paper-Buch konnte nicht zurückgesetzt werden
+copy-holdings-restart-failed = Neuer Paper-Lauf konnte nicht gestartet werden
 
 ## Activity tab
 
@@ -730,6 +737,8 @@ copy-outcome-skipped = Übersprungen
 copy-activity-decision = Entscheidung
 copy-activity-paper-exit-quote = Paper-Ausstieg auf Quote-Basis · { $rule }
 copy-activity-paper-exit-legacy = Alte Paper-Ausstiegsschätzung · { $rule }
+copy-activity-earlier-run = Früherer Lauf
+    .title = Vor dem aktuellen Paper-Lauf dieser Aufgabe entschieden, daher nicht in ihren aktuellen Kennzahlen enthalten.
 copy-activity-filled = { $input } zu { $price } · Wallet kaufte { $target }
 copy-activity-filled-target-difference = { $input } zu { $price } · Wallet kaufte { $target } · Preisdifferenz zur Ziel-Wallet { $difference }
 copy-activity-filled-slippage = { $input } zu { $price } · Wallet kaufte { $target } · Slippage { $slippage }

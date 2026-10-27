@@ -613,7 +613,7 @@ export function createWorkspace(page) {
     } else if (action === "delete") {
       const result = await confirm({
         title: I18n.t("copy-delete-title"),
-        message: I18n.t("copy-delete-message", { name: taskName(task) }),
+        message: I18n.t("copy-delete-settle-message", { name: taskName(task) }),
         confirmLabel: I18n.t("copy-delete-confirm"),
         cancelLabel: I18n.t("copy-delete-cancel"),
         variant: "danger",

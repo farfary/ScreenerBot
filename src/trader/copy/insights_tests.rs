@@ -1,13 +1,17 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Tests copy-trading insight aggregation - paper round replay with partial exits, range filtering, slippage sampling, and latency histogram bucket edges.
+//! Copy-trading insight aggregation: rounds of the task's book, range filtering, slippage
+//! sampling, and latency histogram bucket edges.
 
 use chrono::{Duration, Utc};
 
 use super::*;
+use crate::positions::Book;
+use crate::trader::copy::round_fixtures::{closed, open_round};
 use crate::trader::copy::types::{CopySellDecision, CopyTelemetry, PaperDecision};
 use crate::trader::paper::{PaperFill, PaperQuoteMetadata, PaperSellFill};
+use crate::trader::types::TradeReason;
 
 fn quote_provenance(at: DateTime<Utc>, output: u64, input: u64) -> PaperQuoteMetadata {
     PaperQuoteMetadata {
@@ -46,6 +50,7 @@ fn buy(id: i64, mint: &str, tokens: f64, cost: f64, at: DateTime<Utc>) -> CopyAc
         task_id: 1,
         kind: "paper_filled".to_owned(),
         created_at: at,
+        earlier_run: false,
         outcome: CopyOutcome::PaperFilled(PaperDecision {
             task_id: 1,
             target_address: "target".to_owned(),
@@ -89,6 +94,7 @@ fn sell(
         task_id: 1,
         kind: "paper_sell_observed".to_owned(),
         created_at: at,
+        earlier_run: false,
         outcome: CopyOutcome::PaperSellObserved(CopySellDecision {
             task_id: 1,
             target_address: "target".to_owned(),
@@ -125,77 +131,100 @@ fn sell(
 }
 
 #[test]
-fn paper_rounds_replay_partial_exits_into_one_closed_round() {
+fn paper_rounds_are_the_task_rounds_of_the_paper_book_with_their_close_reasons() {
     let t0 = Utc::now() - Duration::hours(3);
-    let activity = vec![
-        buy(1, "a", 100.0, 1.0, t0),
-        sell(
-            2,
-            "a",
-            50.0,
-            0.8,
-            Some(PaperExitRule::StopLoss),
-            t0 + Duration::minutes(10),
+    let positions = vec![
+        closed(
+            open_round(1, Book::Paper, "a", 0.01, 1.0, 180),
+            0.7,
+            TradeReason::StopLoss,
+            t0 + Duration::minutes(30),
         ),
-        sell(3, "a", 50.0, 0.9, None, t0 + Duration::minutes(30)),
-        buy(4, "b", 10.0, 1.0, t0 + Duration::hours(1)),
-        sell(
-            5,
-            "b",
-            10.0,
-            0.4,
-            Some(PaperExitRule::Manual),
+        closed(
+            open_round(1, Book::Paper, "b", 0.01, 1.0, 120),
+            -0.6,
+            TradeReason::ManualExit,
             t0 + Duration::hours(2),
         ),
-        buy(6, "c", 10.0, 1.0, t0 + Duration::hours(2)),
+        open_round(1, Book::Paper, "c", 0.01, 1.0, 60),
+        // Another task's round and this task's live round are not this book's.
+        closed(
+            open_round(2, Book::Paper, "d", 0.01, 1.0, 100),
+            5.0,
+            TradeReason::TakeProfit,
+            t0 + Duration::hours(1),
+        ),
+        closed(
+            open_round(1, Book::Live, "e", 0.01, 1.0, 100),
+            5.0,
+            TradeReason::TakeProfit,
+            t0 + Duration::hours(1),
+        ),
+    ];
+    let activity = vec![
+        buy(1, "a", 100.0, 1.0, t0),
+        sell(2, "a", 50.0, 0.8, None, t0 + Duration::minutes(10)),
+        buy(3, "b", 10.0, 1.0, t0 + Duration::hours(1)),
     ];
     let insights = build_insights(
         1,
         CopyBook::Paper,
         &activity,
-        &[],
+        &positions,
         InsightRange::default(),
         None,
     );
     assert_eq!(insights.rounds, 2, "the open round in c is not closed");
     assert_eq!((insights.wins, insights.losses), (1, 1));
     assert!((insights.realized_pnl_native - 0.1).abs() < 1e-9);
-    assert_eq!(insights.recent_rounds[0].exit, "manual");
-    assert_eq!(insights.recent_rounds[1].hold_seconds, 30 * 60);
+    assert_eq!(insights.recent_rounds[0].exit, "ManualExit");
+    assert_eq!(insights.recent_rounds[0].book, CopyBook::Paper);
     let stop = insights
         .exit_breakdown
         .iter()
-        .find(|bucket| bucket.exit == "stop_loss")
+        .find(|bucket| bucket.exit == "StopLoss")
         .unwrap();
-    assert!((stop.pnl_native - 0.3).abs() < 1e-9);
+    assert_eq!(stop.legs, 1);
+    assert!((stop.pnl_native - 0.7).abs() < 1e-9);
     assert_eq!(insights.pnl_curve.len(), 2);
     assert!((insights.pnl_curve[1].cumulative_pnl_native - 0.1).abs() < 1e-9);
-    assert_eq!(insights.decisions.fills, 3);
-    assert_eq!(insights.slippage.samples, 3);
-    assert!((insights.slippage.median_pct.unwrap() - 1.0).abs() < 1e-6);
+    assert_eq!(insights.decisions.fills, 2);
+    assert_eq!(insights.decisions.exits, 1);
+    assert_eq!(
+        closed_rounds(1, CopyBook::Paper, &positions)
+            .iter()
+            .map(|round| round.mint.as_str())
+            .collect::<Vec<_>>(),
+        ["a", "b"]
+    );
 }
 
 #[test]
 fn a_range_keeps_rounds_that_closed_inside_it() {
     let t0 = Utc::now() - Duration::days(2);
-    let activity = vec![
-        buy(1, "a", 10.0, 1.0, t0),
-        sell(2, "a", 10.0, 2.0, None, t0 + Duration::hours(1)),
-        buy(3, "b", 10.0, 1.0, t0 + Duration::days(1)),
-        sell(
-            4,
-            "b",
-            10.0,
-            0.5,
-            None,
+    let positions = vec![
+        closed(
+            open_round(1, Book::Paper, "a", 0.01, 1.0, 3_000),
+            1.0,
+            TradeReason::CopySell,
+            t0 + Duration::hours(1),
+        ),
+        closed(
+            open_round(1, Book::Paper, "b", 0.01, 1.0, 1_500),
+            -0.5,
+            TradeReason::CopySell,
             t0 + Duration::days(1) + Duration::hours(1),
         ),
+    ];
+    let activity = vec![
+        buy(1, "a", 10.0, 1.0, t0),
+        buy(3, "b", 10.0, 1.0, t0 + Duration::days(1)),
     ];
     let range = InsightRange {
         from: Some(t0 + Duration::hours(12)),
         to: None,
     };
-    let insights = build_insights(1, CopyBook::Paper, &activity, &[], range, None);
+    let insights = build_insights(1, CopyBook::Paper, &activity, &positions, range, None);
     assert_eq!(insights.rounds, 1);
     assert!((insights.realized_pnl_native + 0.5).abs() < 1e-9);
     assert_eq!(insights.decisions.fills, 1);

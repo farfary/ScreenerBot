@@ -56,7 +56,7 @@ function results(insights, esc) {
   const exits = (insights.exit_breakdown || []).map((bucket) => ({
     label: exitLabel(bucket.exit),
     value: bucket.pnl_sol,
-    display: I18n.t("copy-exit-bucket", {
+    display: I18n.t("copy-exit-bucket-rounds", {
       count: bucket.legs,
       pnl: signedSol(bucket.pnl_sol),
     }),
@@ -124,7 +124,7 @@ function book(ws, esc) {
     stats.book === "live" ? I18n.t("copy-book-title-live") : I18n.t("copy-book-title-paper");
   const split = [
     ["copy-book-buys", stats.filled_buys],
-    ["copy-book-policy-exits", stats.policy_exits],
+    ["copy-book-rule-closes", stats.policy_exits],
     ["copy-book-wallet-sells", stats.target_sells],
     ["copy-book-manual-closes", stats.manual_closes],
     ["copy-book-skipped", stats.skipped],
@@ -194,17 +194,21 @@ export function paperModelCard(ws, defaults, esc, extraNote = "") {
   return `<section class="copy-card"><h4>${esc(I18n.t("copy-paper-model"))}</h4><p class="copy-note">${esc(I18n.t("copy-paper-model-note"))}</p>${extra}<dl class="copy-defs">${definitionRows(rows, esc)}</dl></section>`;
 }
 
-/** Read-only legacy estimates: labeled columns, values at the last saved price, no actions. */
-function legacyCard(ws, esc) {
-  const legacy = ws.legacy_paper || {};
-  const holdings = legacy.holdings || [];
-  if (ws.mode === "live" || (!holdings.length && !(legacy.spent_native > 0))) return "";
+/** Whether an earlier copy paper book holds anything to show. */
+const hasBook = (book) => (book.holdings || []).length > 0 || book.spent_native > 0;
+
+/**
+ * One earlier copy paper book, read-only: labeled columns, values at the last saved price,
+ * no actions. `text` holds the book's title, note, totals and realized column labels.
+ */
+function earlierBook(book, text, esc) {
+  const holdings = book.holdings || [];
   ensureIdentities(holdings.map((holding) => holding.mint));
   const head = [
     ["", I18n.t("copy-holdings-col-token")],
     ["num", I18n.t("copy-paper-legacy-col-tokens")],
     ["num", I18n.t("copy-paper-legacy-col-cost")],
-    ["num", I18n.t("copy-paper-legacy-col-realized")],
+    ["num", text.realizedColumn],
     ["num", I18n.t("copy-paper-legacy-col-price")],
     ["num", I18n.t("copy-paper-legacy-col-remaining")],
   ]
@@ -232,19 +236,59 @@ function legacyCard(ws, esc) {
   const table = holdings.length
     ? `<div class="copy-table-wrap"><table class="copy-table"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table></div>`
     : "";
-  return `<section class="copy-card"><h4>${esc(I18n.t("copy-paper-legacy-title"))}</h4><p class="copy-note">${esc(I18n.t("copy-paper-legacy-note"))}</p><div class="copy-metrics copy-metrics--compact">${[
-    metric(I18n.t("copy-paper-legacy-spent"), sol(legacy.spent_native, 3), "", "", esc),
+  return `<h5>${esc(text.title)}</h5><p class="copy-note">${esc(text.note)}</p><div class="copy-metrics copy-metrics--compact">${[
+    metric(text.spent, sol(book.spent_native, 3), "", "", esc),
     metric(
-      I18n.t("copy-paper-legacy-realized"),
-      signedSol(legacy.realized_pnl_native),
+      text.realized,
+      signedSol(book.realized_pnl_native),
       "",
-      toneClass(legacy.realized_pnl_native),
+      toneClass(book.realized_pnl_native),
       esc
     ),
-  ].join("")}</div>${table}</section>`;
+  ].join("")}</div>${table}`;
+}
+
+/**
+ * The copy paper results this task kept before its paper copies became rounds of the paper
+ * book: the archived quote-based book, then the legacy estimates beneath it.
+ */
+function earlierCard(ws, esc) {
+  if (ws.mode === "live") return "";
+  const archived = ws.archived_paper || {};
+  const legacy = ws.legacy_paper || {};
+  const books = [
+    hasBook(archived)
+      ? earlierBook(
+          archived,
+          {
+            title: I18n.t("copy-paper-archived-title"),
+            note: I18n.t("copy-paper-archived-note"),
+            spent: I18n.t("copy-paper-archived-spent"),
+            realized: I18n.t("copy-paper-archived-realized"),
+            realizedColumn: I18n.t("copy-paper-archived-col-realized"),
+          },
+          esc
+        )
+      : "",
+    hasBook(legacy)
+      ? earlierBook(
+          legacy,
+          {
+            title: I18n.t("copy-paper-legacy-title"),
+            note: I18n.t("copy-paper-legacy-note"),
+            spent: I18n.t("copy-paper-legacy-spent"),
+            realized: I18n.t("copy-paper-legacy-realized"),
+            realizedColumn: I18n.t("copy-paper-legacy-col-realized"),
+          },
+          esc
+        )
+      : "",
+  ].join("");
+  if (!books) return "";
+  return `<section class="copy-card"><h4>${esc(I18n.t("copy-paper-earlier-title"))}</h4>${books}</section>`;
 }
 
 export function renderOverview({ ws, insights, error, range, defaults }, esc) {
   return `${rangeHead(I18n.t("copy-overview-results"), range, esc)}${insightsBody(insights, error, esc, (data) => results(data, esc))}
-    ${paperModelCard(ws, defaults, esc)}${legacyCard(ws, esc)}<div class="copy-split">${book(ws, esc)}${readiness(ws, esc)}</div>`;
+    ${paperModelCard(ws, defaults, esc)}${earlierCard(ws, esc)}<div class="copy-split">${book(ws, esc)}${readiness(ws, esc)}</div>`;
 }

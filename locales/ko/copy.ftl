@@ -74,10 +74,10 @@ copy-readiness-latency = 거래 제때 감지
 copy-readiness-latency-detail = p95 도착 { $p95 }초, 한도 { $limit }초
 copy-readiness-latency-none = 아직 도착 샘플 없음
 copy-readiness-priced = 모든 보유 수량 가격 확인
-copy-readiness-priced-ok = 보유 중인 모든 모의 수량에 풀 가격이 있습니다
-copy-readiness-priced-missing =
+copy-readiness-marked-ok = 열린 모든 모의 보유 수량에 가격이 있습니다
+copy-readiness-marked-missing =
     { $count ->
-       *[other] 풀 가격이 없는 보유 수량 { $count }건
+       *[other] 가격이 없는 보유 수량 { $count }건
     }
 copy-readiness-runtime = 실거래 실행 가능
 copy-readiness-runtime-ok = 설정과 안전 게이트가 실거래 카피를 허용합니다
@@ -96,7 +96,6 @@ copy-state-running-paper = 실행 중
 copy-exit-mode-buy-only = 내 청산 규칙
 copy-exit-mode-mirror = 지갑 매도 따라가기
 copy-exit-mode-hybrid = 지갑 매도 및 내 규칙
-copy-exit-target-sell = 지갑 매도
 copy-exit-stop-loss = 손절
 copy-exit-trailing-stop = 트레일링 스톱
 copy-exit-break-even = 본전 스톱
@@ -274,6 +273,12 @@ copy-paper-legacy-col-cost = 남은 비용 ({ -sol })
 copy-paper-legacy-col-realized = 실현 추정 ({ -sol })
 copy-paper-legacy-col-price = 마지막 저장 가격 ({ -sol })
 copy-paper-legacy-col-remaining = 저장 가격 기준 남은 손익 ({ -sol })
+copy-paper-earlier-title = 이전 모의 결과
+copy-paper-archived-title = 견적 기반 카피 장부
+copy-paper-archived-note = 이 작업의 모의 카피가 모의 장부의 라운드가 되기 전에 기록한 읽기 전용 결과입니다. 현재 운용의 지출이나 보유 수량에는 포함되지 않으며 어떤 작업도 제공하지 않습니다. 남은 수량은 각 토큰의 마지막으로 저장된 가격으로 평가되며, 현재 시장 가격으로는 평가되지 않습니다.
+copy-paper-archived-spent = 이전 지출
+copy-paper-archived-realized = 이전 실현 손익
+copy-paper-archived-col-realized = 실현 ({ -sol })
 
 ## Workspace (pages/copy/workspace.js)
 
@@ -358,7 +363,7 @@ copy-return-paper-cancel = 실거래 유지
 copy-task-returned-paper = 작업을 모의로 전환했습니다
 copy-mode-change-failed = 실행 모드를 변경하지 못했습니다
 copy-delete-title = 카피 작업 삭제
-copy-delete-message = "{ $name }" 작업을 삭제하시겠습니까? 작업의 결정과 모의 결과가 삭제되며 이 작업을 위한 지갑 감시도 중단됩니다.
+copy-delete-settle-message = "{ $name }" 작업을 삭제하시겠습니까? 열린 모의 보유 수량은 마지막 가격으로 종료되며 종료된 라운드와 함께 모의 기록에 남습니다. 작업의 결정은 삭제되며 이 작업을 위한 지갑 감시도 중단됩니다.
 copy-delete-confirm = 작업 삭제
 copy-delete-cancel = 작업 유지
 copy-task-deleted = 카피 작업을 삭제했습니다
@@ -369,9 +374,9 @@ copy-task-delete-failed = 카피 작업을 삭제하지 못했습니다
 copy-overview-results = 결과
 copy-analytics-load-failed = 분석을 불러오지 못했습니다: { $error }
 copy-analytics-loading = 분석 불러오는 중…
-copy-exit-bucket =
+copy-exit-bucket-rounds =
     { $count ->
-       *[other] 매도 { $count }건 · { $pnl }
+       *[other] 라운드 { $count }건 · { $pnl }
     }
 copy-overview-average-win = 평균 수익
 copy-overview-average-loss = 평균 손실 { $amount }
@@ -391,9 +396,9 @@ copy-book-buys =
     { $count ->
        *[other] 매수 <strong>{ $count }</strong>건
     }
-copy-book-policy-exits =
+copy-book-rule-closes =
     { $count ->
-       *[other] 내 규칙에 따른 청산 <strong>{ $count }</strong>건
+       *[other] 내 규칙으로 종료된 라운드 <strong>{ $count }</strong>건
     }
 copy-book-wallet-sells =
     { $count ->
@@ -632,12 +637,12 @@ copy-holdings-title = 보유 수량
 copy-holdings-view-label = 보유 수량 보기
 copy-holdings-view-open = 보유 중 ({ $count })
 copy-holdings-view-closed = 종료된 라운드 ({ $count })
-copy-holdings-reset = 모의 장부 초기화
+copy-holdings-restart = 새 모의 운용 시작
 copy-holdings-live-note = 실거래 카피는 실제 포지션입니다.
 copy-holdings-open-positions = 보유 포지션
 copy-holdings-token-details = 토큰 상세 열기
 copy-holdings-opened = 진입 { $time }
-copy-holdings-no-pool-price = 풀 가격 없음
+copy-holdings-no-price = 가격 없음
 copy-holdings-close = 종료
 copy-holdings-close-pending = 종료 대기 중
 copy-holdings-activity = 활동
@@ -668,10 +673,12 @@ copy-holdings-col-invested = 투자금 ({ -sol })
 copy-holdings-col-proceeds = 회수액 ({ -sol })
 copy-holdings-col-exit = 청산
 copy-holdings-col-closed = 종료
-copy-holdings-marks-note = 가격은 토큰당 { -sol }입니다. 평가와 청산 기준에는 청산 규칙도 발동시키는 풀 가격을 사용하며, 기록된 체결에는 라우터 견적을 사용합니다. 진입가에는 매수 시 예상 네트워크 수수료가 포함되며, 고점과 청산 기준은 진입가를 기준으로 하므로 보유 수량은 고점이 진입가보다 낮은 상태로 시작합니다. 마우스를 올리면 풀 가격을 볼 수 있습니다.
+copy-holdings-round-note = 가격은 토큰당 { -sol } 기준입니다. 각 행은 모의 장부의 라운드 하나입니다. 평가 가격은 풀 또는 시장 데이터에서 가져온 라운드의 최신 가격이며 청산 규칙은 이 가격으로 작동합니다. 기록된 체결은 라우터 견적을 사용합니다. 진입가는 라운드의 평균 진입 가격이며 최고가와 청산 수준은 이를 기준으로 한 상대값입니다. 마우스를 올리면 가격이 표시됩니다.
 copy-holdings-paused-rules = 일시 중지됨: 신규 카피 없음. 내 청산 규칙은 이 보유 수량을 계속 종료합니다.
 copy-holdings-paused-mirror = 일시 중지됨: 신규 카피 없음. 지갑의 매도는 이 보유 수량을 계속 종료합니다.
 copy-holdings-paused-hybrid = 일시 중지됨: 신규 카피 없음. 지갑의 매도와 내 청산 규칙은 이 보유 수량을 계속 종료합니다.
+copy-holdings-trader-stopped-rules = 자동 트레이더가 중지되어 다시 실행될 때까지 어떤 청산도 이 보유 수량을 종료하지 않습니다.
+copy-holdings-trader-stopped-wallet = 자동 트레이더가 중지되어 다시 실행될 때까지 지갑의 매도만 이 보유 수량을 종료합니다.
 copy-holdings-closed-load-failed = 종료된 라운드를 불러오지 못했습니다: { $error }
 copy-holdings-closed-loading = 종료된 라운드 불러오는 중…
 copy-holdings-closed-empty = 종료된 라운드가 아직 없습니다.
@@ -687,14 +694,14 @@ copy-holdings-close-pending-detail = 종료가 대기 중이거나 실행 중입
 copy-holdings-close-unconfirmed = 종료 결과를 확인하지 못했습니다
 copy-holdings-close-unconfirmed-detail = 결과를 받기 전에 연결이 끊겼고 활동에도 아직 결과가 없습니다. 다시 종료하기 전에 활동을 확인하세요.
 copy-holdings-closed-check-activity = 보유 수량이 종료되었습니다. 기록된 체결은 활동에서 확인할 수 있습니다.
-copy-holdings-reset-quote-message = "{ $name }" 작업을 처음부터 다시 시작합니다. 현재 모의 보유 수량, 지출, 체결, 청산, 건너뜀 기록이 지워지고 견적 기반의 새 장부가 시작됩니다. 이전 추정과 실거래 기록은 유지됩니다. 규칙과 지갑도 유지됩니다.
-copy-holdings-reset-cancel = 기록 유지
-copy-holdings-reset-done = 모의 장부를 초기화했습니다
-copy-holdings-reset-detail =
+copy-holdings-restart-message = "{ $name }" 작업을 처음부터 다시 시작합니다. 열린 모의 보유 수량은 마지막 가격으로 종료되고, 수치는 지금부터 일어나는 일만 집계합니다. 아무것도 삭제되지 않습니다. 종료된 라운드는 모의 기록에 남고, 이전 결정은 이전 운용으로 표시되어 활동에 남습니다. 규칙과 지갑도 유지됩니다.
+copy-holdings-restart-cancel = 이 운용 유지
+copy-holdings-restart-done = 새 모의 운용이 시작되었습니다
+copy-holdings-restart-detail =
     { $count ->
-       *[other] 결정 { $count }건 삭제됨
+       *[other] 보유 수량 { $count }건 종료됨
     }
-copy-holdings-reset-failed = 모의 장부를 초기화하지 못했습니다
+copy-holdings-restart-failed = 새 모의 운용을 시작할 수 없습니다
 
 ## Activity tab (pages/copy/activity.js). Ids come from CopyOutcome
 ## (src/trader/copy/types.rs).
@@ -712,6 +719,8 @@ copy-outcome-skipped = 건너뜀
 copy-activity-decision = 결정
 copy-activity-paper-exit-quote = 견적 기반 모의 청산 · { $rule }
 copy-activity-paper-exit-legacy = 이전 모의 청산 추정 · { $rule }
+copy-activity-earlier-run = 이전 운용
+    .title = 이 작업의 현재 모의 운용 이전에 결정되어 현재 수치에는 포함되지 않습니다.
 copy-activity-filled = { $input }, 가격 { $price } · 지갑 매수 { $target }
 copy-activity-filled-target-difference = { $input }, 가격 { $price } · 지갑 매수 { $target } · 대상 가격과의 차이 { $difference }
 copy-activity-filled-slippage = { $input }, 가격 { $price } · 지갑 매수 { $target } · 슬리피지 { $slippage }

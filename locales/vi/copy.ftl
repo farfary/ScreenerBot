@@ -74,10 +74,10 @@ copy-readiness-latency = Giao dịch được phát hiện kịp thời
 copy-readiness-latency-detail = Độ trễ p95 { $p95 } giây, giới hạn { $limit } giây
 copy-readiness-latency-none = Chưa có mẫu thời gian đến
 copy-readiness-priced = Mọi khoản nắm giữ đều có giá
-copy-readiness-priced-ok = Mọi khoản nắm giữ thử nghiệm đang mở đều có giá pool
-copy-readiness-priced-missing =
+copy-readiness-marked-ok = Mọi khoản nắm giữ thử nghiệm đang mở đều có giá
+copy-readiness-marked-missing =
     { $count ->
-       *[other] { $count } khoản nắm giữ đang mở không có giá pool
+       *[other] { $count } khoản nắm giữ đang mở không có giá
     }
 copy-readiness-runtime = Có thể thực thi live
 copy-readiness-runtime-ok = Thiết lập và các chốt an toàn cho phép copy live
@@ -92,7 +92,6 @@ copy-state-running-paper = Đang chạy
 copy-exit-mode-buy-only = Quy tắc thoát của tôi
 copy-exit-mode-mirror = Sao chép lệnh bán của ví
 copy-exit-mode-hybrid = Lệnh bán của ví và quy tắc của tôi
-copy-exit-target-sell = Ví đã bán
 copy-exit-stop-loss = Stop loss
 copy-exit-trailing-stop = Trailing stop
 copy-exit-break-even = Dừng lỗ hòa vốn
@@ -255,6 +254,12 @@ copy-paper-legacy-col-cost = Chi phí còn lại ({ -sol })
 copy-paper-legacy-col-realized = Ước tính đã thực hiện ({ -sol })
 copy-paper-legacy-col-price = Giá đã lưu gần nhất ({ -sol })
 copy-paper-legacy-col-remaining = P&L còn lại theo giá đã lưu ({ -sol })
+copy-paper-earlier-title = Kết quả thử nghiệm trước đây
+copy-paper-archived-title = Sổ copy theo báo giá
+copy-paper-archived-note = Kết quả chỉ đọc mà các lệnh copy thử nghiệm của tác vụ này đã ghi trước khi trở thành các vòng của sổ thử nghiệm. Chúng không thuộc chi tiêu hay các khoản nắm giữ của đợt hiện tại và không có thao tác nào. Số còn lại được định giá theo giá đã lưu gần nhất của từng token, không bao giờ theo giá thị trường hiện tại.
+copy-paper-archived-spent = Chi tiêu trước đây
+copy-paper-archived-realized = P&L đã chốt trước đây
+copy-paper-archived-col-realized = Đã chốt ({ -sol })
 
 copy-tab-overview = Tổng quan
 copy-tab-holdings = Nắm giữ
@@ -337,7 +342,7 @@ copy-return-paper-cancel = Giữ live
 copy-task-returned-paper = Tác vụ đã quay lại thử nghiệm
 copy-mode-change-failed = Không thể thay đổi chế độ thực thi
 copy-delete-title = Xóa tác vụ copy
-copy-delete-message = Xóa “{ $name }”? Các quyết định và kết quả thử nghiệm của nó sẽ bị xóa và ví sẽ không còn được theo dõi cho tác vụ này.
+copy-delete-settle-message = Xóa “{ $name }”? Các khoản nắm giữ thử nghiệm đang mở sẽ đóng theo giá gần nhất và vẫn nằm trong lịch sử thử nghiệm cùng các vòng đã đóng. Các quyết định của nó sẽ bị xóa và ví sẽ không còn được theo dõi cho tác vụ này.
 copy-delete-confirm = Xóa tác vụ
 copy-delete-cancel = Giữ tác vụ
 copy-task-deleted = Đã xóa tác vụ copy
@@ -346,9 +351,9 @@ copy-task-delete-failed = Không thể xóa tác vụ copy
 copy-overview-results = Kết quả
 copy-analytics-load-failed = Không thể tải phân tích: { $error }
 copy-analytics-loading = Đang tải phân tích…
-copy-exit-bucket =
+copy-exit-bucket-rounds =
     { $count ->
-       *[other] { $count } lệnh bán · { $pnl }
+       *[other] { $count } vòng · { $pnl }
     }
 copy-overview-average-win = Lãi trung bình
 copy-overview-average-loss = Lỗ trung bình { $amount }
@@ -368,9 +373,9 @@ copy-book-buys =
     <strong>{ $count }</strong> { $count ->
        *[other] lệnh mua
     }
-copy-book-policy-exits =
+copy-book-rule-closes =
     <strong>{ $count }</strong> { $count ->
-       *[other] lệnh thoát theo quy tắc của bạn
+       *[other] vòng đóng theo quy tắc của bạn
     }
 copy-book-wallet-sells =
     <strong>{ $count }</strong> { $count ->
@@ -593,12 +598,12 @@ copy-holdings-title = Nắm giữ
 copy-holdings-view-label = Chế độ xem nắm giữ
 copy-holdings-view-open = Đang mở ({ $count })
 copy-holdings-view-closed = Vòng đã đóng ({ $count })
-copy-holdings-reset = Đặt lại sổ thử nghiệm
+copy-holdings-restart = Bắt đầu đợt thử nghiệm mới
 copy-holdings-live-note = Các lệnh copy live là vị thế thật.
 copy-holdings-open-positions = Vị thế đang mở
 copy-holdings-token-details = Mở chi tiết token
 copy-holdings-opened = Đã mở { $time }
-copy-holdings-no-pool-price = Không có giá pool
+copy-holdings-no-price = Không có giá
 copy-holdings-close = Đóng
 copy-holdings-close-pending = Đang chờ đóng
 copy-holdings-activity = Hoạt động
@@ -629,10 +634,12 @@ copy-holdings-col-invested = Đã đầu tư ({ -sol })
 copy-holdings-col-proceeds = Số tiền thu về ({ -sol })
 copy-holdings-col-exit = Thoát
 copy-holdings-col-closed = Đã đóng
-copy-holdings-marks-note = Giá tính bằng { -sol } trên mỗi token. Định giá và các mức thoát dùng giá pool, cũng là giá kích hoạt quy tắc thoát; các lệnh khớp được ghi dùng báo giá của router. Điểm vào đã gồm phí mạng ước tính của lệnh mua; đỉnh và các mức thoát được tính tương đối so với đó, nên một khoản nắm giữ mở ra với đỉnh thấp hơn điểm vào. Di chuột qua một mục để xem giá pool của nó.
+copy-holdings-round-note = Giá tính bằng { -sol } mỗi token. Mỗi dòng là một vòng của sổ thử nghiệm. Giá đánh dấu là giá mới nhất của vòng, lấy từ pool hoặc dữ liệu thị trường, và các quy tắc thoát dựa vào giá này; lệnh khớp đã ghi dùng báo giá của router. Giá vào là giá vào trung bình của vòng; đỉnh và các mức thoát được tính tương đối với nó. Di chuột lên một mục để xem giá.
 copy-holdings-paused-rules = Đã tạm dừng: không có lệnh copy mới. Quy tắc thoát của bạn vẫn đóng các khoản nắm giữ này.
 copy-holdings-paused-mirror = Đã tạm dừng: không có lệnh copy mới. Lệnh bán của ví vẫn đóng các khoản nắm giữ này.
 copy-holdings-paused-hybrid = Đã tạm dừng: không có lệnh copy mới. Lệnh bán của ví và quy tắc thoát của bạn vẫn đóng các khoản nắm giữ này.
+copy-holdings-trader-stopped-rules = Trader tự động đang dừng, nên không lệnh thoát nào đóng các khoản nắm giữ này cho đến khi nó chạy lại.
+copy-holdings-trader-stopped-wallet = Trader tự động đang dừng, nên chỉ lệnh bán của ví đóng các khoản nắm giữ này cho đến khi nó chạy lại.
 copy-holdings-closed-load-failed = Không thể tải các vòng đã đóng: { $error }
 copy-holdings-closed-loading = Đang tải các vòng đã đóng…
 copy-holdings-closed-empty = Chưa có vòng nào đã đóng.
@@ -648,14 +655,14 @@ copy-holdings-close-pending-detail = Lệnh đóng đang chờ hoặc đang ch�
 copy-holdings-close-unconfirmed = Chưa xác nhận kết quả đóng
 copy-holdings-close-unconfirmed-detail = Kết nối đã dừng trước khi nhận được kết quả và Hoạt động chưa có kết quả. Hãy kiểm tra Hoạt động trước khi đóng lại.
 copy-holdings-closed-check-activity = Khoản nắm giữ đã đóng. Lệnh khớp đã ghi nằm trong Hoạt động.
-copy-holdings-reset-quote-message = Làm lại “{ $name }” từ đầu: các khoản nắm giữ thử nghiệm hiện tại, chi tiêu, lệnh khớp, lệnh thoát và lệnh bỏ qua sẽ bị xóa và một sổ mới theo báo giá bắt đầu. Các ước tính cũ và lịch sử chạy thật được giữ lại. Quy tắc và ví được giữ lại.
-copy-holdings-reset-cancel = Giữ lịch sử
-copy-holdings-reset-done = Đã đặt lại sổ thử nghiệm
-copy-holdings-reset-detail =
+copy-holdings-restart-message = Làm lại “{ $name }” từ đầu: các khoản nắm giữ thử nghiệm đang mở sẽ đóng theo giá gần nhất và số liệu chỉ tính những gì xảy ra từ bây giờ. Không có gì bị xóa: các vòng đã đóng vẫn nằm trong lịch sử thử nghiệm và các quyết định trước đó vẫn nằm trong Hoạt động, được đánh dấu là đợt trước. Quy tắc và ví được giữ lại.
+copy-holdings-restart-cancel = Giữ đợt này
+copy-holdings-restart-done = Đã bắt đầu đợt thử nghiệm mới
+copy-holdings-restart-detail =
     { $count ->
-       *[other] Đã xóa { $count } quyết định
+       *[other] Đã đóng { $count } khoản nắm giữ
     }
-copy-holdings-reset-failed = Không thể đặt lại sổ thử nghiệm
+copy-holdings-restart-failed = Không thể bắt đầu đợt thử nghiệm mới
 
 copy-activity-title = Hoạt động
 copy-activity-filter-label = Bộ lọc hoạt động
@@ -670,6 +677,8 @@ copy-outcome-skipped = Đã bỏ qua
 copy-activity-decision = Quyết định
 copy-activity-paper-exit-quote = Thoát thử nghiệm theo báo giá · { $rule }
 copy-activity-paper-exit-legacy = Ước tính thoát thử nghiệm cũ · { $rule }
+copy-activity-earlier-run = Đợt trước
+    .title = Được quyết định trước đợt thử nghiệm hiện tại của tác vụ này, nên không nằm trong số liệu hiện tại.
 copy-activity-filled = { $input } tại { $price } · ví đã mua { $target }
 copy-activity-filled-target-difference = { $input } tại { $price } · ví đã mua { $target } · chênh lệch giá so với mục tiêu { $difference }
 copy-activity-filled-slippage = { $input } tại { $price } · ví đã mua { $target } · trượt giá { $slippage }

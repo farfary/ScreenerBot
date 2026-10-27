@@ -10,8 +10,11 @@ use chrono::Utc;
 
 use crate::chains::RawAmount;
 use crate::logger::{self, LogTag};
+use crate::positions::db::{PaperExitOwner, PaperLegRecord};
 use crate::positions::operations::{check_auto_add, entry_slippage, exit_slippage_ladder};
-use crate::positions::paper::{PaperBook, PaperBooked, PaperOpenTerms, PaperSale};
+use crate::positions::paper::{
+    PaperBook, PaperBooked, PaperLeg, PaperOpenTerms, PaperOpened, PaperSale,
+};
 use crate::positions::{Book, Opening, Position, PositionOrigin};
 use crate::swaps::{QuoteRequest, SwapMode};
 use crate::trader::executors::{resolve_exit_size, ExecutionContext, ExitSize};
@@ -19,7 +22,9 @@ use crate::trader::types::{TradeAction, TradeDecision, TradeReason, TradeResult,
 use crate::trader::{Error, Result};
 
 use super::fill;
-use super::{PaperFill, PaperSellFill};
+use super::{
+    PaperExecution, PaperFill, PaperLegEvidence, PaperLegFill, PaperRefusal, PaperSellFill,
+};
 
 mod io;
 use io::{PaperTradeIo, ProductionPaperTradeIo};
@@ -29,8 +34,8 @@ mod tests;
 
 /// Records in the paper store whether the sale of round `position_id` filled. For a sale
 /// that found no fill, returns the longest run of unfilled exits after it among the
-/// strategies the sale belongs to: the entry strategy of the round and the exit strategy
-/// that decided the sale. A filled exit ends the run.
+/// owners the sale belongs to: the owner of the round (its entry strategy or copy task)
+/// and the exit strategy that decided the sale. A filled exit ends the run.
 async fn record_exit_outcome(
     book: &PaperBook,
     wallet: &str,
@@ -43,14 +48,12 @@ async fn record_exit_outcome(
         .await?;
     let mut longest = 0;
     if !filled {
-        for strategy_id in [
-            position.origin.entry_strategy_id(),
-            decision.strategy_id.as_deref(),
-        ]
-        .into_iter()
-        .flatten()
-        {
-            longest = longest.max(book.failed_exit_streak(wallet, strategy_id).await?);
+        let owners = [
+            PaperExitOwner::of_round(&position.origin),
+            decision.strategy_id.clone().map(PaperExitOwner::Strategy),
+        ];
+        for owner in owners.iter().flatten() {
+            longest = longest.max(book.failed_exit_streak(wallet, owner).await?);
         }
     }
     Ok(longest)
@@ -86,6 +89,9 @@ async fn execute_with(
     crate::global::paper_scope(async {
         let book = io.book().ok_or(Error::PaperBookUnavailable)?;
         let wallet = io.wallet_address().ok_or(Error::PaperBookUnavailable)?;
+        if let Some(result) = replayed(decision, book).await {
+            return Ok(result);
+        }
         match decision.action {
             TradeAction::Buy => buy(decision, context, io, book, &wallet).await,
             TradeAction::DCA => add(decision, io, book, &wallet).await,
@@ -95,7 +101,12 @@ async fn execute_with(
     .await
 }
 
-fn refused(decision: &TradeDecision, step: TradeStep, error: String) -> TradeResult {
+fn refused(
+    decision: &TradeDecision,
+    step: TradeStep,
+    refusal: PaperRefusal,
+    error: String,
+) -> TradeResult {
     logger::info(
         LogTag::Trader,
         &format!(
@@ -103,7 +114,9 @@ fn refused(decision: &TradeDecision, step: TradeStep, error: String) -> TradeRes
             decision.action, decision.mint
         ),
     );
-    TradeResult::failure_at(decision.clone(), step, error, 0)
+    let mut result = TradeResult::failure_at(decision.clone(), step, error, 0);
+    result.paper = Some(PaperExecution::Refused(refusal));
+    result
 }
 
 fn booking_failed(decision: &TradeDecision, error: &crate::positions::Error) -> TradeResult {
@@ -112,7 +125,128 @@ fn booking_failed(decision: &TradeDecision, error: &crate::positions::Error) -> 
         LogTag::Trader,
         &format!("{message} (mint {})", decision.mint),
     );
-    TradeResult::failure_from(decision.clone(), error, message)
+    let mut result = TradeResult::failure_from(decision.clone(), error, message);
+    result.paper = Some(PaperExecution::Refused(PaperRefusal::BookingFailed));
+    result
+}
+
+/// The refusal of a booking the paper book declined to write.
+fn not_booked(decision: &TradeDecision, booked: &PaperBooked) -> TradeResult {
+    let refusal = match booked {
+        PaperBooked::StepTaken => PaperRefusal::StepTaken,
+        PaperBooked::Booked(_) | PaperBooked::AlreadyClosed | PaperBooked::AlreadyBooked => {
+            PaperRefusal::AlreadyClosed
+        }
+    };
+    refused(
+        decision,
+        TradeStep::Validation,
+        refusal,
+        format!("paper {:?} not booked: {booked:?}", decision.action),
+    )
+}
+
+/// The fill a stored paper leg booked, decoded from its quote evidence.
+fn stored_fill(record: &PaperLegRecord) -> Option<PaperLegFill> {
+    match record.kind.as_str() {
+        "entry" | "dca" => serde_json::from_str(&record.quote_json)
+            .ok()
+            .map(PaperLegFill::Buy),
+        "partial" | "exit" => serde_json::from_str(&record.quote_json)
+            .ok()
+            .map(PaperLegFill::Sell),
+        _ => None,
+    }
+}
+
+/// The result of a keyed decision whose leg is already booked: the stored leg's
+/// evidence, before any quote, cash read or wait. `None` when the decision carries no
+/// key or its leg is not booked yet. A stored leg that cannot be read refuses the
+/// decision rather than booking it twice.
+async fn replayed(decision: &TradeDecision, book: &PaperBook) -> Option<TradeResult> {
+    let key = decision.paper_leg_key.as_deref()?;
+    let (position_id, record) = match book.paper_leg(&PaperLeg::reference(key)).await {
+        Ok(stored) => stored?,
+        Err(error) => return Some(booking_failed(decision, &error)),
+    };
+    let Some(fill) = stored_fill(&record) else {
+        return Some(booking_failed(
+            decision,
+            &crate::positions::Error::PaperFillUnbookable {
+                mint: decision.mint.clone(),
+                detail: format!("the stored paper leg {} cannot be decoded", record.leg_ref),
+            },
+        ));
+    };
+    logger::info(
+        LogTag::Trader,
+        &format!(
+            "Paper {:?} for {} already booked as {} on position {position_id}",
+            decision.action, decision.mint, record.leg_ref
+        ),
+    );
+    Some(TradeResult::paper(
+        decision.clone(),
+        PaperLegEvidence {
+            leg_ref: record.leg_ref,
+            position_id,
+            fill,
+            replayed: true,
+        },
+    ))
+}
+
+/// The result of a booking that found its leg already stored: the stored leg's evidence.
+async fn already_booked(decision: &TradeDecision, book: &PaperBook) -> TradeResult {
+    match replayed(decision, book).await {
+        Some(result) => result,
+        None => refused(
+            decision,
+            TradeStep::Validation,
+            PaperRefusal::BookingFailed,
+            "paper leg already booked under a reference the decision does not carry".to_owned(),
+        ),
+    }
+}
+
+/// The leg `fill` of `decision` is booked as.
+fn buy_leg(
+    decision: &TradeDecision,
+    fill: &PaperFill,
+) -> std::result::Result<PaperLeg, TradeResult> {
+    PaperLeg::buy(
+        fill,
+        decision.strategy_id.clone(),
+        Utc::now(),
+        decision.paper_leg_key.as_deref(),
+    )
+    .map_err(|error| booking_failed(decision, &error))
+}
+
+/// The refusal a failed quote-based fill maps to.
+fn fill_refusal(error: &Error) -> PaperRefusal {
+    match error {
+        Error::PaperFillAborted { .. } => PaperRefusal::NotWanted,
+        Error::PaperFill(error) => PaperRefusal::Fill(*error),
+        _ => PaperRefusal::BookingFailed,
+    }
+}
+
+/// The refusal of an open the paper book declined, when it is one; `None` for a store
+/// failure.
+fn open_refusal(error: &crate::positions::Error) -> Option<PaperRefusal> {
+    match error {
+        crate::positions::Error::SlotUnavailable { .. } => Some(PaperRefusal::PositionLimit),
+        crate::positions::Error::PaperOpenCooldown { wait_secs } => {
+            Some(PaperRefusal::OpenCooldown {
+                wait_secs: *wait_secs,
+            })
+        }
+        crate::positions::Error::PaperCashShort { .. } => Some(PaperRefusal::BalanceExhausted),
+        crate::positions::Error::PaperRunEnded { .. } => Some(PaperRefusal::NotWanted),
+        crate::positions::Error::AlreadyOpen { .. } => Some(PaperRefusal::AlreadyOpen),
+        _ => None,
+    }
 }
 
 /// The open paper round a decision acts on: the round it names, else the open round of
@@ -149,6 +283,7 @@ async fn cash_covering(
         return Err(refused(
             decision,
             TradeStep::Validation,
+            PaperRefusal::BalanceExhausted,
             format!(
                 "paper balance exhausted: {:.6} SOL available, {needed:.6} SOL needed",
                 account.cash_native
@@ -173,6 +308,7 @@ fn buy_request(
         return Err(refused(
             decision,
             TradeStep::Validation,
+            PaperRefusal::InvalidSize,
             format!("paper buy size {size_native} SOL is not a positive amount"),
         ));
     };
@@ -208,7 +344,14 @@ async fn fill_buy(
         |delay| landing_wait(decision, origin, io, delay),
     )
     .await;
-    filled.map_err(|error| refused(decision, fill_step(&error), error.to_string()))
+    filled.map_err(|error| {
+        refused(
+            decision,
+            fill_step(&error),
+            fill_refusal(&error),
+            error.to_string(),
+        )
+    })
 }
 
 async fn landing_wait(
@@ -245,6 +388,7 @@ async fn buy(
         return Ok(refused(
             decision,
             TradeStep::Validation,
+            PaperRefusal::NotWanted,
             "paper buy is no longer wanted".to_owned(),
         ));
     }
@@ -257,6 +401,7 @@ async fn buy(
         return Ok(refused(
             decision,
             TradeStep::Validation,
+            PaperRefusal::TokenUnavailable,
             "token metadata unavailable".to_owned(),
         ));
     };
@@ -264,6 +409,7 @@ async fn buy(
         return Ok(refused(
             decision,
             TradeStep::Validation,
+            PaperRefusal::DecimalsUnknown,
             "token decimals unknown".to_owned(),
         ));
     };
@@ -302,40 +448,49 @@ async fn buy(
         open_cooldown_secs: settings.open_cooldown_secs,
         epoch,
     };
-    match book
-        .book_buy(wallet, opening, &fill, decision.strategy_id.clone(), &terms)
-        .await
-    {
-        Ok(position) => {
+    let leg = match buy_leg(decision, &fill) {
+        Ok(leg) => leg,
+        Err(result) => return Ok(result),
+    };
+    match book.book_buy(wallet, opening, &fill, &leg, &terms).await {
+        Ok(PaperOpened::Opened(position)) => {
+            let Some(position_id) = position.id else {
+                return Ok(refused(
+                    decision,
+                    TradeStep::Validation,
+                    PaperRefusal::BookingFailed,
+                    "the opened paper round has no id".to_owned(),
+                ));
+            };
             logger::info(
                 LogTag::Trader,
                 &format!(
-                    "Paper buy filled: {} | {:.6} SOL at {:.12} | position {:?}",
-                    decision.mint, fill.input_sol, fill.fill_price_sol, position.id
+                    "Paper buy filled: {} | {:.6} SOL at {:.12} | position {position_id}",
+                    decision.mint, fill.input_sol, fill.fill_price_sol
                 ),
             );
             Ok(TradeResult::paper(
                 decision.clone(),
-                Some(fill.fill_price_sol),
-                Some(fill.input_sol),
-                position.id.map(|id| id.to_string()),
+                PaperLegEvidence {
+                    leg_ref: leg.leg_ref,
+                    position_id,
+                    fill: PaperLegFill::Buy(fill),
+                    replayed: false,
+                },
             ))
         }
-        Err(crate::positions::Error::SlotUnavailable { remaining }) => {
-            let mut result = refused(
-                decision,
-                TradeStep::Validation,
-                format!("paper position limit reached (remaining permits: {remaining})"),
-            );
-            result.capacity_guard_remaining = Some(remaining);
-            Ok(result)
-        }
-        Err(
-            error @ (crate::positions::Error::PaperCashShort { .. }
-            | crate::positions::Error::PaperOpenCooldown { .. }
-            | crate::positions::Error::PaperRunEnded { .. }),
-        ) => Ok(refused(decision, TradeStep::Validation, error.to_string())),
-        Err(error) => Ok(booking_failed(decision, &error)),
+        Ok(PaperOpened::AlreadyBooked(_)) => Ok(already_booked(decision, book).await),
+        Err(error) => match open_refusal(&error) {
+            Some(refusal) => {
+                let mut result =
+                    refused(decision, TradeStep::Validation, refusal, error.to_string());
+                if let crate::positions::Error::SlotUnavailable { remaining } = error {
+                    result.capacity_guard_remaining = Some(remaining);
+                }
+                Ok(result)
+            }
+            None => Ok(booking_failed(decision, &error)),
+        },
     }
 }
 
@@ -354,6 +509,7 @@ async fn add(
         return Ok(refused(
             decision,
             TradeStep::Validation,
+            PaperRefusal::NoOpenRound,
             "no open paper round to add to".to_owned(),
         ));
     };
@@ -361,6 +517,7 @@ async fn add(
         return Ok(refused(
             decision,
             TradeStep::Validation,
+            PaperRefusal::NoOpenRound,
             "the paper round has no id".to_owned(),
         ));
     };
@@ -368,6 +525,7 @@ async fn add(
         return Ok(refused(
             decision,
             TradeStep::Validation,
+            PaperRefusal::NotWanted,
             "paper add is no longer wanted".to_owned(),
         ));
     }
@@ -388,6 +546,7 @@ async fn add(
         return Ok(refused(
             decision,
             TradeStep::Validation,
+            PaperRefusal::DecimalsUnknown,
             "token decimals unknown".to_owned(),
         ));
     };
@@ -402,30 +561,31 @@ async fn add(
     if let Err(result) = cash_covering(decision, io, book, wallet, fill.total_cost_sol).await {
         return Ok(result);
     }
+    let leg = match buy_leg(decision, &fill) {
+        Ok(leg) => leg,
+        Err(result) => return Ok(result),
+    };
     match book
-        .book_add(
-            wallet,
-            position_id,
-            &decision.mint,
-            &fill,
-            decision.strategy_id.clone(),
-        )
+        .book_add(wallet, position_id, &decision.mint, &fill, &leg)
         .await
     {
         Ok(PaperBooked::Booked(_)) => Ok(TradeResult::paper(
             decision.clone(),
-            Some(fill.fill_price_sol),
-            Some(fill.input_sol),
-            Some(position_id.to_string()),
+            PaperLegEvidence {
+                leg_ref: leg.leg_ref,
+                position_id,
+                fill: PaperLegFill::Buy(fill),
+                replayed: false,
+            },
         )),
-        Ok(other) => Ok(refused(
+        Ok(PaperBooked::AlreadyBooked) => Ok(already_booked(decision, book).await),
+        Ok(other) => Ok(not_booked(decision, &other)),
+        Err(error @ crate::positions::Error::PaperCashShort { .. }) => Ok(refused(
             decision,
             TradeStep::Validation,
-            format!("paper add not booked: {other:?}"),
+            PaperRefusal::BalanceExhausted,
+            error.to_string(),
         )),
-        Err(error @ crate::positions::Error::PaperCashShort { .. }) => {
-            Ok(refused(decision, TradeStep::Validation, error.to_string()))
-        }
         Err(error) => Ok(booking_failed(decision, &error)),
     }
 }
@@ -484,6 +644,7 @@ async fn sell(
         return Ok(refused(
             decision,
             TradeStep::Validation,
+            PaperRefusal::NoOpenRound,
             "no open paper round to sell".to_owned(),
         ));
     };
@@ -491,6 +652,7 @@ async fn sell(
         return Ok(refused(
             decision,
             TradeStep::Validation,
+            PaperRefusal::NoOpenRound,
             "the paper round has no id".to_owned(),
         ));
     };
@@ -498,6 +660,7 @@ async fn sell(
         return Ok(refused(
             decision,
             TradeStep::Validation,
+            PaperRefusal::NotWanted,
             "paper sale is no longer wanted".to_owned(),
         ));
     }
@@ -509,6 +672,7 @@ async fn sell(
         return Ok(refused(
             decision,
             TradeStep::Validation,
+            PaperRefusal::DecimalsUnknown,
             "token decimals unknown".to_owned(),
         ));
     };
@@ -520,7 +684,14 @@ async fn sell(
     let amount = match fill::raw_sell_amount(position.held_amount().unwrap_or_default(), percentage)
     {
         Ok(amount) => amount,
-        Err(error) => return Ok(refused(decision, TradeStep::Validation, error.to_string())),
+        Err(error) => {
+            return Ok(refused(
+                decision,
+                TradeStep::Validation,
+                PaperRefusal::Fill(error),
+                error.to_string(),
+            ))
+        }
     };
     let epoch = match book
         .account(wallet, io.settings().starting_balance_native)
@@ -533,7 +704,12 @@ async fn sell(
     let fill = match fill_sale(decision, &position, io, wallet, amount, decimals, epoch).await {
         Ok(fill) => fill,
         Err(error @ Error::PaperFillAborted { .. }) => {
-            return Ok(refused(decision, TradeStep::Validation, error.to_string()));
+            return Ok(refused(
+                decision,
+                TradeStep::Validation,
+                PaperRefusal::NotWanted,
+                error.to_string(),
+            ));
         }
         Err(error) => {
             let streak = match record_exit_outcome(
@@ -571,7 +747,12 @@ async fn sell(
                 }),
             )
             .await;
-            return Ok(refused(decision, TradeStep::Quote, error.to_string()));
+            return Ok(refused(
+                decision,
+                TradeStep::Quote,
+                fill_refusal(&error),
+                error.to_string(),
+            ));
         }
     };
 
@@ -589,15 +770,17 @@ async fn sell(
             reason: &exit_reason,
         },
     };
+    let leg = match PaperLeg::sell(
+        &fill,
+        decision.strategy_id.clone(),
+        Utc::now(),
+        decision.paper_leg_key.as_deref(),
+    ) {
+        Ok(leg) => leg,
+        Err(error) => return Ok(booking_failed(decision, &error)),
+    };
     match book
-        .book_sale(
-            wallet,
-            position_id,
-            &decision.mint,
-            &fill,
-            sale,
-            decision.strategy_id.clone(),
-        )
+        .book_sale(wallet, position_id, &decision.mint, &fill, sale, &leg)
         .await
     {
         Ok(PaperBooked::Booked(_)) => {
@@ -620,16 +803,16 @@ async fn sell(
             );
             Ok(TradeResult::paper(
                 decision.clone(),
-                Some(fill.fill_price_sol),
-                Some(fill.net_proceeds_sol),
-                Some(position_id.to_string()),
+                PaperLegEvidence {
+                    leg_ref: leg.leg_ref,
+                    position_id,
+                    fill: PaperLegFill::Sell(fill),
+                    replayed: false,
+                },
             ))
         }
-        Ok(other) => Ok(refused(
-            decision,
-            TradeStep::Validation,
-            format!("paper sale not booked: {other:?}"),
-        )),
+        Ok(PaperBooked::AlreadyBooked) => Ok(already_booked(decision, book).await),
+        Ok(other) => Ok(not_booked(decision, &other)),
         Err(error) => Ok(booking_failed(decision, &error)),
     }
 }

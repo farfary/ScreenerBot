@@ -76,11 +76,11 @@ copy-readiness-latency = ट्रेड समय पर पहचाने ग
 copy-readiness-latency-detail = p95 आगमन { $p95 } सेकंड, सीमा { $limit } सेकंड
 copy-readiness-latency-none = अभी कोई आगमन सैंपल नहीं
 copy-readiness-priced = हर होल्डिंग की कीमत उपलब्ध
-copy-readiness-priced-ok = हर खुली पेपर होल्डिंग का पूल प्राइस है
-copy-readiness-priced-missing =
+copy-readiness-marked-ok = हर खुली पेपर होल्डिंग का प्राइस है
+copy-readiness-marked-missing =
     { $count ->
-        [one] { $count } खुली होल्डिंग का पूल प्राइस नहीं है
-       *[other] { $count } खुली होल्डिंग का पूल प्राइस नहीं है
+        [one] { $count } खुली होल्डिंग का प्राइस नहीं है
+       *[other] { $count } खुली होल्डिंग का प्राइस नहीं है
     }
 copy-readiness-runtime = लाइव एक्ज़ीक्यूशन उपलब्ध
 copy-readiness-runtime-ok = सेटअप और सुरक्षा गेट लाइव कॉपी की अनुमति देते हैं
@@ -95,7 +95,6 @@ copy-state-running-paper = चल रहा है
 copy-exit-mode-buy-only = मेरे एग्ज़िट नियम
 copy-exit-mode-mirror = वॉलेट के सेल की नकल
 copy-exit-mode-hybrid = वॉलेट के सेल और मेरे नियम
-copy-exit-target-sell = वॉलेट ने बेचा
 copy-exit-stop-loss = स्टॉप लॉस
 copy-exit-trailing-stop = ट्रेलिंग स्टॉप
 copy-exit-break-even = ब्रेक-ईवन स्टॉप
@@ -265,6 +264,12 @@ copy-paper-legacy-col-cost = शेष लागत ({ -sol })
 copy-paper-legacy-col-realized = प्राप्त अनुमान ({ -sol })
 copy-paper-legacy-col-price = आखिरी सहेजी कीमत ({ -sol })
 copy-paper-legacy-col-remaining = सहेजी कीमत पर शेष लाभ-हानि ({ -sol })
+copy-paper-earlier-title = पिछले पेपर नतीजे
+copy-paper-archived-title = कोट-आधारित कॉपी बुक
+copy-paper-archived-note = इस टास्क की पेपर कॉपी ने पेपर बुक के राउंड बनने से पहले जो नतीजे दर्ज किए, वे केवल पढ़ने के लिए हैं। ये मौजूदा रन के खर्च या होल्डिंग का हिस्सा नहीं हैं और कोई कार्रवाई नहीं देते। शेष मात्रा हर टोकन की आखिरी सहेजी कीमत पर आँकी जाती है, कभी मौजूदा बाज़ार भाव पर नहीं।
+copy-paper-archived-spent = पिछला खर्च
+copy-paper-archived-realized = पिछला वास्तविक लाभ-हानि
+copy-paper-archived-col-realized = वास्तविक ({ -sol })
 
 copy-tab-overview = अवलोकन
 copy-tab-holdings = होल्डिंग
@@ -350,7 +355,7 @@ copy-return-paper-cancel = लाइव रहने दें
 copy-task-returned-paper = टास्क पेपर पर लौटा
 copy-mode-change-failed = एक्ज़ीक्यूशन मोड बदला नहीं जा सका
 copy-delete-title = कॉपी टास्क हटाएँ
-copy-delete-message = टास्क “{ $name }” हटाएँ? इसके निर्णय और पेपर नतीजे हटा दिए जाएँगे और इस टास्क के लिए वॉलेट वॉच नहीं होगा।
+copy-delete-settle-message = टास्क “{ $name }” हटाएँ? इसकी खुली पेपर होल्डिंग अपने आखिरी भाव पर बंद होंगी और बंद राउंड के साथ पेपर इतिहास में रहेंगी। इसके निर्णय हटा दिए जाएँगे और इस टास्क के लिए वॉलेट वॉच नहीं होगा।
 copy-delete-confirm = टास्क हटाएँ
 copy-delete-cancel = टास्क रखें
 copy-task-deleted = कॉपी टास्क हटाया गया
@@ -359,10 +364,10 @@ copy-task-delete-failed = कॉपी टास्क हटाया नही
 copy-overview-results = नतीजे
 copy-analytics-load-failed = एनालिटिक्स लोड नहीं हो सका: { $error }
 copy-analytics-loading = एनालिटिक्स लोड हो रहा है…
-copy-exit-bucket =
+copy-exit-bucket-rounds =
     { $count ->
-        [one] { $count } सेल · { $pnl }
-       *[other] { $count } सेल · { $pnl }
+        [one] { $count } राउंड · { $pnl }
+       *[other] { $count } राउंड · { $pnl }
     }
 copy-overview-average-win = औसत जीत
 copy-overview-average-loss = औसत घाटा { $amount }
@@ -383,10 +388,10 @@ copy-book-buys =
         [one] खरीद
        *[other] खरीद
     }
-copy-book-policy-exits =
+copy-book-rule-closes =
     <strong>{ $count }</strong> { $count ->
-        [one] एग्ज़िट आपके नियमों से
-       *[other] एग्ज़िट आपके नियमों से
+        [one] राउंड आपके नियमों से बंद
+       *[other] राउंड आपके नियमों से बंद
     }
 copy-book-wallet-sells =
     <strong>{ $count }</strong> { $count ->
@@ -616,12 +621,12 @@ copy-holdings-title = होल्डिंग
 copy-holdings-view-label = होल्डिंग व्यू
 copy-holdings-view-open = खुली ({ $count })
 copy-holdings-view-closed = बंद राउंड ({ $count })
-copy-holdings-reset = पेपर बुक रीसेट करें
+copy-holdings-restart = नया पेपर रन शुरू करें
 copy-holdings-live-note = लाइव कॉपी असली पोज़िशन होती हैं।
 copy-holdings-open-positions = खुली पोज़िशन
 copy-holdings-token-details = टोकन विवरण खोलें
 copy-holdings-opened = खुली: { $time }
-copy-holdings-no-pool-price = पूल प्राइस नहीं
+copy-holdings-no-price = कोई प्राइस नहीं
 copy-holdings-close = बंद करें
 copy-holdings-close-pending = बंद होना बाकी
 copy-holdings-activity = गतिविधि
@@ -652,10 +657,12 @@ copy-holdings-col-invested = निवेशित ({ -sol })
 copy-holdings-col-proceeds = प्राप्ति ({ -sol })
 copy-holdings-col-exit = एग्ज़िट
 copy-holdings-col-closed = बंद
-copy-holdings-marks-note = कीमतें प्रति टोकन { -sol } में हैं। मार्क और एग्ज़िट स्तर पूल प्राइस का उपयोग करते हैं, जो एग्ज़िट नियम भी चलाता है; दर्ज फ़िल राउटर कोट का उपयोग करते हैं। एंट्री में खरीद की अनुमानित नेटवर्क फ़ीस शामिल है; पीक और एग्ज़िट स्तर इसी के सापेक्ष हैं, इसलिए होल्डिंग का पीक खुलते समय एंट्री से नीचे होता है। किसी पर होवर करके उसका पूल प्राइस देखें।
+copy-holdings-round-note = कीमतें प्रति टोकन { -sol } में हैं। हर पंक्ति पेपर बुक का एक राउंड है। मार्क राउंड का ताज़ा भाव है, जो पूल या मार्केट डेटा से आता है, और एग्ज़िट नियम इसी पर काम करते हैं; दर्ज फ़िल राउटर कोट इस्तेमाल करते हैं। एंट्री राउंड का औसत एंट्री भाव है; पीक और एग्ज़िट स्तर इसी के सापेक्ष हैं। भाव देखने के लिए किसी पर होवर करें।
 copy-holdings-paused-rules = रुका हुआ: कोई नई कॉपी नहीं। आपके एग्ज़िट नियम अब भी इन होल्डिंग को बंद करते हैं।
 copy-holdings-paused-mirror = रुका हुआ: कोई नई कॉपी नहीं। वॉलेट के सेल अब भी इन होल्डिंग को बंद करते हैं।
 copy-holdings-paused-hybrid = रुका हुआ: कोई नई कॉपी नहीं। वॉलेट के सेल और आपके एग्ज़िट नियम अब भी इन होल्डिंग को बंद करते हैं।
+copy-holdings-trader-stopped-rules = ऑटो ट्रेडर रुका हुआ है, इसलिए दोबारा चलने तक कोई एग्ज़िट इन होल्डिंग को बंद नहीं करेगा।
+copy-holdings-trader-stopped-wallet = ऑटो ट्रेडर रुका हुआ है, इसलिए दोबारा चलने तक सिर्फ़ वॉलेट के सेल इन होल्डिंग को बंद करेंगे।
 copy-holdings-closed-load-failed = बंद राउंड लोड नहीं हो सके: { $error }
 copy-holdings-closed-loading = बंद राउंड लोड हो रहे हैं…
 copy-holdings-closed-empty = अभी कोई बंद राउंड नहीं।
@@ -671,15 +678,15 @@ copy-holdings-close-pending-detail = क्लोज़ कतार में �
 copy-holdings-close-unconfirmed = क्लोज़ का नतीजा पुष्ट नहीं
 copy-holdings-close-unconfirmed-detail = नतीजा मिलने से पहले कनेक्शन समाप्त हो गया और गतिविधि में अभी कोई नतीजा नहीं है। दोबारा बंद करने से पहले गतिविधि देखें।
 copy-holdings-closed-check-activity = होल्डिंग बंद हो गई है। दर्ज फ़िल गतिविधि में है।
-copy-holdings-reset-quote-message = टास्क “{ $name }” को नए सिरे से शुरू करें: इसकी मौजूदा पेपर होल्डिंग, खर्च, फ़िल, एग्ज़िट और स्किप साफ़ हो जाएँगे और कोट-आधारित नई बुक शुरू होगी। पुराने अनुमान और लाइव इतिहास बने रहेंगे। नियम और वॉलेट बने रहेंगे।
-copy-holdings-reset-cancel = हिस्ट्री रखें
-copy-holdings-reset-done = पेपर बुक रीसेट हुई
-copy-holdings-reset-detail =
+copy-holdings-restart-message = टास्क “{ $name }” को नए सिरे से शुरू करें: इसकी खुली पेपर होल्डिंग अपने आखिरी भाव पर बंद होंगी और इसके आँकड़े अब से होने वाली चीज़ें ही गिनेंगे। कुछ नहीं हटाया जाता: बंद राउंड पेपर इतिहास में रहते हैं और पिछले निर्णय पिछले रन के निशान के साथ गतिविधि में रहते हैं। नियम और वॉलेट बने रहेंगे।
+copy-holdings-restart-cancel = यह रन रखें
+copy-holdings-restart-done = नया पेपर रन शुरू हुआ
+copy-holdings-restart-detail =
     { $count ->
-        [one] { $count } निर्णय हटाया गया
-       *[other] { $count } निर्णय हटाए गए
+        [one] { $count } होल्डिंग बंद हुई
+       *[other] { $count } होल्डिंग बंद हुईं
     }
-copy-holdings-reset-failed = पेपर बुक रीसेट नहीं हो सकी
+copy-holdings-restart-failed = नया पेपर रन शुरू नहीं हो सका
 
 copy-activity-title = गतिविधि
 copy-activity-filter-label = गतिविधि फ़िल्टर
@@ -694,6 +701,8 @@ copy-outcome-skipped = स्किप
 copy-activity-decision = निर्णय
 copy-activity-paper-exit-quote = कोट-आधारित पेपर एग्ज़िट · { $rule }
 copy-activity-paper-exit-legacy = पुराना पेपर एग्ज़िट अनुमान · { $rule }
+copy-activity-earlier-run = पिछला रन
+    .title = इस टास्क के मौजूदा पेपर रन से पहले लिया गया निर्णय, इसलिए इसके मौजूदा आँकड़ों में शामिल नहीं।
 copy-activity-filled = { $input } { $price } पर · वॉलेट ने { $target } खरीदा
 copy-activity-filled-target-difference = { $input } { $price } पर · वॉलेट ने { $target } खरीदा · टारगेट प्राइस से अंतर { $difference }
 copy-activity-filled-slippage = { $input } { $price } पर · वॉलेट ने { $target } खरीदा · स्लिपेज { $slippage }

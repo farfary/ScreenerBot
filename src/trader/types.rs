@@ -5,6 +5,7 @@
 
 use crate::i18n::{ids, MessageId, UiArg, UiText};
 use crate::positions::{Book, FORCE_CLOSED_PREFIX};
+use crate::trader::paper::{PaperExecution, PaperLegEvidence, PaperLegFill};
 use chrono::{DateTime, Utc};
 
 /// Represents a decision to trade
@@ -44,6 +45,10 @@ pub struct TradeDecision {
     /// AUTO-TRADER always does — it must stay config-driven. Manual and explicitly
     /// configured copy tasks may set a bounded override.
     pub slippage_pct: Option<f64>,
+    /// The key a paper fill of this decision is booked under, so the decision books once
+    /// however often it is replayed. Set only on paper decisions whose producer can replay
+    /// them; `None` books under a fresh reference.
+    pub paper_leg_key: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -203,6 +208,9 @@ pub struct TradeResult {
     /// Why the swap stopped before its transaction was sent, when it did, so
     /// a caller can explain the failure from its type rather than its text.
     pub not_submitted: Option<crate::swaps::NotSubmittedReason>,
+    /// What the paper executor booked or why it refused, on every result of a paper
+    /// decision; `None` on a live one.
+    pub paper: Option<PaperExecution>,
 }
 
 /// The stages a trade passes through, in order.
@@ -291,25 +299,27 @@ impl TradeResult {
             capacity_guard_remaining: None,
             failed_step: None,
             not_submitted: None,
+            paper: None,
         }
     }
 
-    /// A paper fill booked onto the paper book: a success that sent no transaction, so
-    /// it carries no signature.
-    pub fn paper(
-        decision: TradeDecision,
-        executed_price_native: Option<f64>,
-        executed_size_native: Option<f64>,
-        position_id: Option<String>,
-    ) -> Self {
+    /// A paper leg booked onto the paper book: a success that sent no transaction, so it
+    /// carries no signature. The price and size are the leg's fill price and its SOL in
+    /// (a buy) or net proceeds (a sale).
+    pub fn paper(decision: TradeDecision, evidence: PaperLegEvidence) -> Self {
+        let (price, size) = match &evidence.fill {
+            PaperLegFill::Buy(fill) => (fill.fill_price_sol, fill.input_sol),
+            PaperLegFill::Sell(fill) => (fill.fill_price_sol, fill.net_proceeds_sol),
+        };
         let mut result = Self::success(
             decision,
             String::new(),
-            executed_price_native,
-            executed_size_native,
-            position_id,
+            Some(price),
+            Some(size),
+            Some(evidence.position_id.to_string()),
         );
         result.tx_signature = None;
+        result.paper = Some(PaperExecution::Filled(evidence));
         result
     }
 
@@ -334,6 +344,7 @@ impl TradeResult {
             capacity_guard_remaining: None,
             failed_step: Some(step),
             not_submitted: None,
+            paper: None,
         }
     }
 
@@ -369,6 +380,7 @@ mod tests {
             slippage_pct: None,
             exit_percentage: None,
             take_profit_level: None,
+            paper_leg_key: None,
         }
     }
 

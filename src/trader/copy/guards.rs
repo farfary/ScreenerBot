@@ -167,21 +167,9 @@ pub(super) async fn sync_paused_watches(database: &CopyDatabase) -> crate::trade
                     continue;
                 }
             };
-        let wants_watch = match control::wants_watch(database, &task).await {
-            Ok(wants_watch) => wants_watch,
-            Err(error) => {
-                logger::warning(
-                    LogTag::Trader,
-                    &format!(
-                        "Copy task {} watch requirement could not be read: {error}",
-                        task.id
-                    ),
-                );
-                continue;
-            }
-        };
+        let wants_watch = control::wants_watch(&task).await;
         if attached != wants_watch {
-            if let Err(error) = control::sync_task_watch(database, &task).await {
+            if let Err(error) = control::sync_task_watch(&task).await {
                 logger::warning(
                     LogTag::Trader,
                     &format!(
@@ -295,7 +283,7 @@ pub(super) async fn apply_latency_kill_switch(
                     enabled: false,
                     ..task.clone()
                 };
-                control::sync_task_watch(database, &paused).await?;
+                control::sync_task_watch(&paused).await?;
             }
             let mint = match &activity.kind {
                 ActivityKind::Swap { mint, .. } => mint.clone(),
@@ -306,13 +294,7 @@ pub(super) async fn apply_latency_kill_switch(
                 threshold_ms,
             };
             let outcome = if task.mode == TradingMode::Paper {
-                skipped_paper(
-                    task.id,
-                    activity,
-                    &mint,
-                    reason,
-                    database.paper_epoch(task.id).await?,
-                )
+                skipped_paper(task.id, activity, &mint, reason)
             } else {
                 skipped(task.id, activity, &mint, reason)
             };
@@ -352,13 +334,7 @@ pub(super) async fn reject_stale_backfill(
     };
     for task in tasks {
         let outcome = if task.mode == TradingMode::Paper {
-            skipped_paper(
-                task.id,
-                activity,
-                mint,
-                reason.clone(),
-                database.paper_epoch(task.id).await?,
-            )
+            skipped_paper(task.id, activity, mint, reason.clone())
         } else {
             skipped(task.id, activity, mint, reason.clone())
         };
@@ -445,6 +421,7 @@ mod tests {
             copy_stable_quoted: None,
             pause_reason: (!enabled).then_some(CopyPauseReason::User),
             paused_at: (!enabled).then(Utc::now),
+            paper_started_at: None,
         }
     }
 

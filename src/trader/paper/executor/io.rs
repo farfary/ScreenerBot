@@ -43,8 +43,9 @@ pub(super) trait PaperTradeIo: Sync {
     /// The size of an entry, from the sizing owner the live buy uses.
     fn entry_size(&self, decision: &TradeDecision) -> f64;
     /// Whether the decision may still fill: nothing force-stopped, an automatic trade
-    /// with the auto-trader running, and a strategy buy from a strategy still enabled
-    /// in Paper mode.
+    /// with the auto-trader running, a strategy buy from a strategy still enabled in
+    /// Paper mode, and a trade of a copy round its copy task still wants
+    /// (`trader::copy::paper_trade_wanted`).
     async fn still_wanted(&self, decision: &TradeDecision, origin: &PositionOrigin) -> bool;
     async fn token(&self, mint: &str) -> Option<PaperToken>;
     async fn market_price(&self, mint: &str) -> Option<PaperMarket>;
@@ -83,9 +84,13 @@ impl PaperTradeIo for ProductionPaperTradeIo {
         if super::is_manual(&decision.reason) {
             return true;
         }
-        let PositionOrigin::Auto { .. } = origin else {
-            return true;
-        };
+        match origin {
+            PositionOrigin::Auto { .. } => {}
+            PositionOrigin::Copy { task_id, .. } => {
+                return crate::trader::copy::paper_trade_wanted(*task_id, decision).await;
+            }
+            PositionOrigin::Manual | PositionOrigin::External => return true,
+        }
         if !crate::trader::config::is_trader_enabled() {
             return false;
         }

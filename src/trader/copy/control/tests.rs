@@ -5,9 +5,12 @@
 
 use chrono::Utc;
 
-use super::{book_stats, followed_wallets, merge_task_patch, CopyTradingStatus};
+use super::{book_stats, followed_wallets, merge_task_patch, CopyTradingStatus, TaskRounds};
+use crate::positions::Book;
+use crate::trader::copy::round_fixtures::{closed, open_round};
 use crate::trader::copy::{CopyActivityRow, CopyOutcome, CopyTask, ExitMode, SizingMode};
 use crate::trader::paper::TradingMode;
+use crate::trader::types::TradeReason;
 
 fn stored() -> CopyTask {
     CopyTask {
@@ -33,6 +36,7 @@ fn stored() -> CopyTask {
         copy_stable_quoted: None,
         pause_reason: None,
         paused_at: None,
+        paper_started_at: None,
     }
 }
 
@@ -243,6 +247,7 @@ fn paper_row(id: i64, mint: &str, at: chrono::DateTime<Utc>, sell: Option<f64>) 
         kind: kind.to_owned(),
         outcome,
         created_at: at,
+        earlier_run: false,
     }
 }
 
@@ -256,11 +261,47 @@ fn book_stats_count_wins_and_losses_from_the_closed_rounds() {
         paper_row(4, "lost", now, Some(0.7)),
         paper_row(5, "open", now, None),
     ];
-    let (stats, rounds) = book_stats(&stored(), &activity, &[], &[], |_| None);
-    assert_eq!(rounds.len(), 2);
+    let rounds = TaskRounds {
+        positions: vec![
+            closed(
+                open_round(3, Book::Paper, "won", 0.01, 1.0, 30),
+                0.4,
+                TradeReason::CopySell,
+                now,
+            ),
+            closed(
+                open_round(3, Book::Paper, "lost", 0.01, 1.0, 20),
+                -0.3,
+                TradeReason::StopLoss,
+                now,
+            ),
+            open_round(3, Book::Paper, "open", 0.01, 1.0, 10),
+        ],
+        run_start: Some(now - chrono::Duration::hours(1)),
+    };
+    let (stats, closed_rounds) = book_stats(&stored(), &activity, &rounds);
+    assert_eq!(closed_rounds.len(), 2);
     assert_eq!((stats.wins, stats.losses), (1, 1));
     assert_eq!(stats.filled_buys, 3);
     assert_eq!(stats.target_sells, 2);
+    assert_eq!((stats.open_positions, stats.policy_exits), (1, 1));
+}
+
+#[test]
+fn decisions_before_the_current_paper_run_do_not_count() {
+    let now = Utc::now();
+    let start = now - chrono::Duration::minutes(5);
+    let activity = [
+        paper_row(1, "earlier", start - chrono::Duration::minutes(1), None),
+        paper_row(2, "current", now, None),
+    ];
+    let rounds = TaskRounds {
+        positions: Vec::new(),
+        run_start: Some(start),
+    };
+    let (stats, _) = book_stats(&stored(), &activity, &rounds);
+    assert_eq!(stats.filled_buys, 1);
+    assert_eq!(stats.decisions, 1);
 }
 
 #[test]
@@ -279,7 +320,7 @@ fn legacy_paper_rows_do_not_enter_current_task_totals() {
     }
     let activity = [buy, sell];
 
-    let (stats, rounds) = book_stats(&stored(), &activity, &[], &[], |_| None);
+    let (stats, rounds) = book_stats(&stored(), &activity, &TaskRounds::default());
     assert!(rounds.is_empty());
     assert_eq!(stats.decisions, 0);
     assert_eq!(stats.filled_buys, 0);

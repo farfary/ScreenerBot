@@ -1,10 +1,9 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Live-readiness evidence from a copy task's paper book: the shared paper
-//! checks composed with the copy latency check.
+//! Live-readiness evidence from a copy task's rounds of the shared paper book: the
+//! shared paper checks composed with the copy latency check.
 
-use super::PaperHolding;
 use crate::config::with_config;
 use crate::i18n::{ids, UiArg, UiText};
 use crate::trader::copy::control::{CopyLiveBlock, CopyTaskSummary};
@@ -26,11 +25,14 @@ pub(super) fn live_block_text(block: CopyLiveBlock) -> UiText {
     }
 }
 
-/// `block` is why live execution is unavailable right now, if it is.
+/// `rounds` are the task's closed paper rounds of its current run, `unpriced` its open
+/// rounds without a price, `failed_exits` the paper exits of its rounds that found no
+/// fill in a row, and `block` why live execution is unavailable right now, if it is.
 pub(super) fn readiness(
     summary: &CopyTaskSummary,
     rounds: &[CopyRound],
-    holdings: &[PaperHolding],
+    unpriced: usize,
+    failed_exits: u32,
     block: Option<CopyLiveBlock>,
 ) -> Readiness {
     let (min_rounds, max_arrival_ms) = with_config(|config| {
@@ -42,10 +44,6 @@ pub(super) fn readiness(
     let realized: f64 = rounds.iter().map(|round| round.pnl_native).sum();
     let wins = rounds.iter().filter(|round| round.pnl_native > 0.0).count();
     let p95 = summary.stats.arrival_distance.p95_ms;
-    let unpriced = holdings
-        .iter()
-        .filter(|holding| holding.open && holding.mark_price_native.is_none())
-        .count();
     let checks = vec![
         readiness::history(rounds.len(), min_rounds),
         readiness::profit(realized, rounds.len(), wins),
@@ -64,10 +62,11 @@ pub(super) fn readiness(
             unpriced,
             CheckText {
                 title: ids::COPY_READINESS_PRICED,
-                passed: ids::COPY_READINESS_PRICED_OK,
-                failed: ids::COPY_READINESS_PRICED_MISSING,
+                passed: ids::COPY_READINESS_MARKED_OK,
+                failed: ids::COPY_READINESS_MARKED_MISSING,
             },
         ),
+        readiness::exits_filled(failed_exits),
         readiness::runtime(
             block.map(live_block_text),
             ids::COPY_READINESS_RUNTIME,
@@ -110,14 +109,30 @@ mod tests {
             3,
             CheckText {
                 title: ids::COPY_READINESS_PRICED,
-                passed: ids::COPY_READINESS_PRICED_OK,
-                failed: ids::COPY_READINESS_PRICED_MISSING,
+                passed: ids::COPY_READINESS_MARKED_OK,
+                failed: ids::COPY_READINESS_MARKED_MISSING,
             },
         );
         assert!(!missing.passed);
         assert_eq!(
             missing.detail.render_plain(&en),
-            "3 open holdings without a pool price"
+            "3 open holdings without a price"
         );
+    }
+
+    #[test]
+    fn a_run_of_unfilled_paper_exits_fails_the_copy_readiness() {
+        crate::config::utils::install_default_config();
+        let summary = crate::trader::copy::workspace::tests::summary_fixture();
+        let check = |failed_exits| {
+            readiness(&summary, &[], 0, failed_exits, None)
+                .checks
+                .into_iter()
+                .find(|check| check.id == "exits")
+                .expect("copy readiness carries the exits check")
+        };
+        assert!(check(0).passed);
+        assert!(check(readiness::FAILED_EXIT_LIMIT - 1).passed);
+        assert!(!check(readiness::FAILED_EXIT_LIMIT).passed);
     }
 }

@@ -1,36 +1,20 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Live-copy planning and orchestration with injectable admission/submission seams.
+//! Live-copy orchestration with injectable admission/submission seams, and the
+//! management of a task's open rounds in both books.
 
 use std::future::Future;
 
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 
 use crate::positions::{PositionManagement, PositionOrigin};
 use crate::trader::admission::EntryBlock;
 use crate::trader::executors::ExecutionContext;
-use crate::trader::types::{TradeAction, TradeDecision, TradePriority, TradeReason, TradeResult};
-use crate::wallets::watch::{ActivityKind, SwapSide, WalletActivity};
+use crate::trader::types::{TradeDecision, TradeResult};
 
-use super::risk::precheck;
-use super::sizing::size_for;
-use super::types::{
-    CopyOutcome, CopySkip, CopyTask, CopyTelemetry, ExitMode, LiveDecision, PipelinePolicy,
-    RiskContext, SpendState,
-};
-use crate::trader::paper::TradingMode;
-
-#[derive(Debug, Clone)]
-pub struct PreparedLiveEntry {
-    pub task: CopyTask,
-    pub target_signature: String,
-    pub target_size_native: f64,
-    pub target_token_amount: f64,
-    pub decision: TradeDecision,
-    pub context: ExecutionContext,
-    pub telemetry: CopyTelemetry,
-}
+use super::entries::PreparedEntry;
+use super::types::{CopyOutcome, CopySkip, ExitMode, LiveDecision};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum LiveSubmitResult {
@@ -90,23 +74,42 @@ pub fn management_for_exit_mode(mode: ExitMode) -> PositionManagement {
     }
 }
 
-/// Keep already-open positions aligned when a task changes between BuyOnly,
-/// Mirror, and Hybrid. Provenance is the selector; no same-mint foreign position
-/// is ever modified.
+fn opened_by(position: &crate::positions::Position, task_id: i64) -> bool {
+    matches!(
+        position.origin,
+        PositionOrigin::Copy {
+            task_id: origin_task_id,
+            ..
+        } if origin_task_id == task_id
+    )
+}
+
+/// Keep already-open rounds aligned when a task changes between BuyOnly, Mirror, and
+/// Hybrid, in the live book and the paper book. Provenance is the selector; no
+/// same-mint foreign round is ever modified.
 pub async fn sync_open_position_management(
     task_id: i64,
     mode: ExitMode,
 ) -> crate::trader::Result<()> {
     let management = management_for_exit_mode(mode);
+    if let Some(book) = crate::positions::paper::book() {
+        for position in book.open_positions().await {
+            if !opened_by(&position, task_id) {
+                continue;
+            }
+            let position_id = position
+                .id
+                .ok_or_else(|| crate::trader::Error::CopyValidation {
+                    detail: format!("open copy paper round {} has no database id", position.mint),
+                })?;
+            if !book.set_management(position_id, management).await? {
+                return Err(crate::positions::Error::NotFoundById { position_id }.into());
+            }
+        }
+    }
     let positions = crate::positions::get_open_positions().await;
     for position in positions {
-        if !matches!(
-            position.origin,
-            PositionOrigin::Copy {
-                task_id: origin_task_id,
-                ..
-            } if origin_task_id == task_id
-        ) {
+        if !opened_by(&position, task_id) {
             continue;
         }
         let position_id = position
@@ -122,78 +125,8 @@ pub async fn sync_open_position_management(
     Ok(())
 }
 
-pub fn prepare_live_entry(
-    activity: &WalletActivity,
-    task: &CopyTask,
-    spend: SpendState,
-    risk: RiskContext,
-    policy: PipelinePolicy,
-    decided_at: DateTime<Utc>,
-) -> Result<PreparedLiveEntry, CopySkip> {
-    if task.mode != TradingMode::Live {
-        return Err(CopySkip::ModeTransitionRequired);
-    }
-    let ActivityKind::Swap {
-        mint,
-        side: SwapSide::Buy,
-        native_amount: target_size_native,
-        token_amount: target_token_amount,
-        price_native: target_price_native,
-        ..
-    } = &activity.kind
-    else {
-        return Err(CopySkip::NotBuySwap);
-    };
-    precheck(task, *target_size_native, spend, risk, policy)?;
-    let sized_native = size_for(
-        task,
-        *target_size_native,
-        spend,
-        policy.engine_trade_size_native,
-    )?;
-    Ok(PreparedLiveEntry {
-        task: task.clone(),
-        target_signature: activity.signature.clone(),
-        target_size_native: *target_size_native,
-        target_token_amount: *target_token_amount,
-        decision: TradeDecision {
-            position_id: None,
-            mint: mint.clone(),
-            action: TradeAction::Buy,
-            reason: TradeReason::CopyBuy,
-            strategy_id: None,
-            book: crate::positions::Book::Live,
-            timestamp: decided_at,
-            priority: TradePriority::High,
-            price_native: *target_price_native,
-            size_native: Some(sized_native),
-            exit_percentage: None,
-            slippage_pct: Some(task.slippage_pct),
-            take_profit_level: None,
-        },
-        context: ExecutionContext {
-            origin: PositionOrigin::Copy {
-                task_id: task.id,
-                source_wallet: task.target_address.clone(),
-            },
-            management: management_for_exit_mode(task.exit_mode),
-        },
-        telemetry: CopyTelemetry {
-            target_block_time: activity.block_time,
-            detected_at: activity.detected_at,
-            decoded_at: activity.decoded_at,
-            decided_at,
-            submitted_at: None,
-            confirmed_at: None,
-            target_price_sol: *target_price_native,
-            fill_price_sol: None,
-            backfill: activity.backfill,
-        },
-    })
-}
-
 pub async fn execute_live_with<A, AFut, S, SFut>(
-    plan: PreparedLiveEntry,
+    plan: PreparedEntry,
     admission: A,
     submit: S,
 ) -> CopyOutcome
@@ -237,7 +170,7 @@ where
     }
 }
 
-fn live_decision(plan: &PreparedLiveEntry) -> LiveDecision {
+fn live_decision(plan: &PreparedEntry) -> LiveDecision {
     LiveDecision {
         task_id: plan.task.id,
         target_address: plan.task.target_address.clone(),
@@ -252,7 +185,7 @@ fn live_decision(plan: &PreparedLiveEntry) -> LiveDecision {
     }
 }
 
-fn skipped_from_plan(plan: PreparedLiveEntry, reason: CopySkip) -> CopyOutcome {
+fn skipped_from_plan(plan: PreparedEntry, reason: CopySkip) -> CopyOutcome {
     CopyOutcome::Skipped {
         task_id: plan.task.id,
         signature: plan.target_signature,

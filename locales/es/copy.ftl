@@ -74,12 +74,12 @@ copy-readiness-latency = Operaciones detectadas a tiempo
 copy-readiness-latency-detail = llegada p95 { $p95 } s, límite { $limit } s
 copy-readiness-latency-none = Aún no hay muestras de llegada
 copy-readiness-priced = Todas las tenencias con precio
-copy-readiness-priced-ok = Todas las tenencias simuladas abiertas tienen precio de pool
-copy-readiness-priced-missing =
+copy-readiness-marked-ok = Cada tenencia simulada abierta tiene un precio
+copy-readiness-marked-missing =
     { $count ->
-        [one] { $count } tenencia abierta sin precio de pool
-        [many] { $count } tenencias abiertas sin precio de pool
-       *[other] { $count } tenencias abiertas sin precio de pool
+        [one] { $count } tenencia abierta sin precio
+        [many] { $count } tenencias abiertas sin precio
+       *[other] { $count } tenencias abiertas sin precio
     }
 copy-readiness-runtime = Ejecución en vivo disponible
 copy-readiness-runtime-ok = La configuración y los controles de seguridad permiten copias en vivo
@@ -96,7 +96,6 @@ copy-state-running-paper = En ejecución
 copy-exit-mode-buy-only = Mis reglas de salida
 copy-exit-mode-mirror = Replicar ventas de la billetera
 copy-exit-mode-hybrid = Ventas de la billetera y mis reglas
-copy-exit-target-sell = Vendió la billetera
 copy-exit-stop-loss = Stop loss
 copy-exit-trailing-stop = Trailing stop
 copy-exit-break-even = Stop en punto de equilibrio
@@ -287,6 +286,12 @@ copy-paper-legacy-col-cost = Coste restante ({ -sol })
 copy-paper-legacy-col-realized = Estimación realizada ({ -sol })
 copy-paper-legacy-col-price = Último precio guardado ({ -sol })
 copy-paper-legacy-col-remaining = P&L restante al precio guardado ({ -sol })
+copy-paper-earlier-title = Resultados simulados anteriores
+copy-paper-archived-title = Cartera de copia por cotización
+copy-paper-archived-note = Resultados de solo lectura que registraron las copias simuladas de esta tarea antes de convertirse en rondas de la cartera simulada. No forman parte del gasto ni de las tenencias de la sesión actual y no ofrecen acciones. Los importes restantes se valoran al último precio guardado de cada token, nunca a un precio de mercado actual.
+copy-paper-archived-spent = Gasto anterior
+copy-paper-archived-realized = P&L realizado anterior
+copy-paper-archived-col-realized = Realizado ({ -sol })
 
 ## Workspace
 
@@ -377,7 +382,7 @@ copy-return-paper-cancel = Mantener en vivo
 copy-task-returned-paper = La tarea volvió a simulación
 copy-mode-change-failed = No se pudo cambiar el modo de ejecución
 copy-delete-title = Eliminar tarea de copia
-copy-delete-message = ¿Eliminar “{ $name }”? Se borran sus decisiones y resultados simulados, y la billetera deja de seguirse para esta tarea.
+copy-delete-settle-message = ¿Eliminar “{ $name }”? Sus tenencias simuladas abiertas se cierran a su último precio y quedan en el historial simulado con sus rondas cerradas. Se borran sus decisiones y la billetera deja de seguirse para esta tarea.
 copy-delete-confirm = Eliminar tarea
 copy-delete-cancel = Conservar tarea
 copy-task-deleted = Tarea de copia eliminada
@@ -388,11 +393,11 @@ copy-task-delete-failed = No se pudo eliminar la tarea de copia
 copy-overview-results = Resultados
 copy-analytics-load-failed = No se pudieron cargar las analíticas: { $error }
 copy-analytics-loading = Cargando analíticas…
-copy-exit-bucket =
+copy-exit-bucket-rounds =
     { $count ->
-        [one] { $count } venta · { $pnl }
-        [many] { $count } ventas · { $pnl }
-       *[other] { $count } ventas · { $pnl }
+        [one] { $count } ronda · { $pnl }
+        [many] { $count } rondas · { $pnl }
+       *[other] { $count } rondas · { $pnl }
     }
 copy-overview-average-win = Ganancia promedio
 copy-overview-average-loss = Pérdida promedio { $amount }
@@ -414,11 +419,11 @@ copy-book-buys =
         [many] compras
        *[other] compras
     }
-copy-book-policy-exits =
+copy-book-rule-closes =
     <strong>{ $count }</strong> { $count ->
-        [one] salida por tus reglas
-        [many] salidas por tus reglas
-       *[other] salidas por tus reglas
+        [one] ronda cerrada por tus reglas
+        [many] rondas cerradas por tus reglas
+       *[other] rondas cerradas por tus reglas
     }
 copy-book-wallet-sells =
     <strong>{ $count }</strong> { $count ->
@@ -671,12 +676,12 @@ copy-holdings-title = Tenencias
 copy-holdings-view-label = Vista de tenencias
 copy-holdings-view-open = Abiertas ({ $count })
 copy-holdings-view-closed = Rondas cerradas ({ $count })
-copy-holdings-reset = Restablecer cartera simulada
+copy-holdings-restart = Iniciar una nueva sesión simulada
 copy-holdings-live-note = Las copias en vivo son posiciones reales.
 copy-holdings-open-positions = Posiciones abiertas
 copy-holdings-token-details = Abrir detalles del token
 copy-holdings-opened = Abierta { $time }
-copy-holdings-no-pool-price = Sin precio de pool
+copy-holdings-no-price = Sin precio
 copy-holdings-close = Cerrar
 copy-holdings-close-pending = Cierre pendiente
 copy-holdings-activity = Actividad
@@ -707,10 +712,12 @@ copy-holdings-col-invested = Invertido ({ -sol })
 copy-holdings-col-proceeds = Ingresos ({ -sol })
 copy-holdings-col-exit = Salida
 copy-holdings-col-closed = Cerrada
-copy-holdings-marks-note = Los precios son { -sol } por token. La valoración y los niveles de salida usan el precio de pool, que también activa las reglas de salida; las ejecuciones registradas usan cotizaciones de router. La entrada incluye la comisión de red estimada de la compra; el máximo y los niveles de salida son relativos a ella, así que una tenencia se abre con su máximo por debajo de la entrada. Pasa el cursor por uno para ver su precio de pool.
+copy-holdings-round-note = Los precios están en { -sol } por token. Cada fila es una ronda de la cartera simulada. La marca es el último precio de la ronda, del pool o de datos de mercado, y las reglas de salida actúan sobre ella; las ejecuciones registradas usan cotizaciones del enrutador. La entrada es el precio de entrada medio de la ronda; el pico y los niveles de salida son relativos a ella. Pasa el cursor sobre uno para ver su precio.
 copy-holdings-paused-rules = En pausa: sin copias nuevas. Tus reglas de salida siguen cerrando estas tenencias.
 copy-holdings-paused-mirror = En pausa: sin copias nuevas. Las ventas de la billetera siguen cerrando estas tenencias.
 copy-holdings-paused-hybrid = En pausa: sin copias nuevas. Las ventas de la billetera y tus reglas de salida siguen cerrando estas tenencias.
+copy-holdings-trader-stopped-rules = El Trader automático está detenido, así que ninguna salida cierra estas tenencias hasta que vuelva a funcionar.
+copy-holdings-trader-stopped-wallet = El Trader automático está detenido, así que solo las ventas de la billetera cierran estas tenencias hasta que vuelva a funcionar.
 copy-holdings-closed-load-failed = No se pudieron cargar las rondas cerradas: { $error }
 copy-holdings-closed-loading = Cargando rondas cerradas…
 copy-holdings-closed-empty = Aún no hay rondas cerradas.
@@ -726,16 +733,16 @@ copy-holdings-close-pending-detail = El cierre está en cola o en curso. Su resu
 copy-holdings-close-unconfirmed = Resultado del cierre sin confirmar
 copy-holdings-close-unconfirmed-detail = La conexión terminó antes de recibir el resultado y Actividad aún no tiene ninguno. Revisa Actividad antes de volver a cerrar.
 copy-holdings-closed-check-activity = La tenencia está cerrada. Actividad tiene la ejecución registrada.
-copy-holdings-reset-quote-message = Empezar de nuevo “{ $name }”: se borran sus tenencias simuladas actuales, gasto, ejecuciones, salidas y omisiones, y empieza una nueva cartera basada en cotizaciones. Las estimaciones heredadas y el historial en vivo se conservan. Las reglas y la billetera se conservan.
-copy-holdings-reset-cancel = Conservar historial
-copy-holdings-reset-done = Cartera simulada restablecida
-copy-holdings-reset-detail =
+copy-holdings-restart-message = Empezar de nuevo “{ $name }”: sus tenencias simuladas abiertas se cierran a su último precio y sus cifras solo cuentan lo que ocurra desde ahora. No se borra nada: las rondas cerradas quedan en el historial simulado y las decisiones anteriores quedan en Actividad, marcadas como sesión anterior. Las reglas y la billetera se conservan.
+copy-holdings-restart-cancel = Mantener esta sesión
+copy-holdings-restart-done = Empezó una nueva sesión simulada
+copy-holdings-restart-detail =
     { $count ->
-        [one] { $count } decisión eliminada
-        [many] { $count } decisiones eliminadas
-       *[other] { $count } decisiones eliminadas
+        [one] { $count } tenencia cerrada
+        [many] { $count } tenencias cerradas
+       *[other] { $count } tenencias cerradas
     }
-copy-holdings-reset-failed = No se pudo restablecer la cartera simulada
+copy-holdings-restart-failed = No se pudo iniciar una nueva sesión simulada
 
 ## Activity tab
 
@@ -752,6 +759,8 @@ copy-outcome-skipped = Omitida
 copy-activity-decision = Decisión
 copy-activity-paper-exit-quote = Salida simulada por cotización · { $rule }
 copy-activity-paper-exit-legacy = Estimación de salida simulada heredada · { $rule }
+copy-activity-earlier-run = Sesión anterior
+    .title = Decidido antes de la sesión simulada actual de esta tarea, por eso sus cifras actuales no lo incluyen.
 copy-activity-filled = { $input } a { $price } · la billetera compró { $target }
 copy-activity-filled-target-difference = { $input } a { $price } · la billetera compró { $target } · diferencia de precio con el objetivo { $difference }
 copy-activity-filled-slippage = { $input } a { $price } · la billetera compró { $target } · deslizamiento { $slippage }

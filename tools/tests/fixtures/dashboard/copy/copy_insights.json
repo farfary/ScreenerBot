@@ -88,22 +88,22 @@
   ],
   "exit_breakdown": [
     {
-      "exit": "target_sell",
+      "exit": "CopySell",
       "legs": 6,
       "pnl_sol": 0.2513
     },
     {
-      "exit": "take_profit",
+      "exit": "TakeProfit",
       "legs": 2,
       "pnl_sol": 0.1955
     },
     {
-      "exit": "trailing_stop",
+      "exit": "TrailingStop",
       "legs": 2,
       "pnl_sol": 0.0712
     },
     {
-      "exit": "stop_loss",
+      "exit": "StopLoss",
       "legs": 1,
       "pnl_sol": -0.0355
     }
@@ -174,7 +174,7 @@
       "pnl_sol": 0.0345,
       "pnl_pct": 34.25,
       "hold_seconds": 77404,
-      "exit": "target_sell"
+      "exit": "CopySell"
     },
     {
       "mint": "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN",
@@ -186,7 +186,7 @@
       "pnl_sol": 0.0366,
       "pnl_pct": 36.4,
       "hold_seconds": 24810,
-      "exit": "take_profit"
+      "exit": "TakeProfit"
     },
     {
       "mint": "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263",
@@ -198,7 +198,7 @@
       "pnl_sol": -0.024,
       "pnl_pct": -23.86,
       "hold_seconds": 29580,
-      "exit": "stop_loss"
+      "exit": "StopLoss"
     },
     {
       "mint": "7GCihgDB8fe6KNjn2MYtkzZcRjQy3t9GHdC8uHYmW2hr",
@@ -210,7 +210,7 @@
       "pnl_sol": 0.049,
       "pnl_pct": 48.71,
       "hold_seconds": 45000,
-      "exit": "trailing_stop"
+      "exit": "TrailingStop"
     }
   ]
 }

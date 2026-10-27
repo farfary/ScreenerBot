@@ -62,14 +62,16 @@ impl Tool for GetCopyInsightsTool {
         ToolDefinition {
             name: "get_copy_insights".to_owned(),
             description: "Copy-trading performance analytics. With task_id: that task's closed \
-                          rounds (paper rounds replayed from its decisions, or its real \
-                          positions when live), win rate, average win/loss, profit factor, \
-                          average hold, cumulative P&L curve, P&L by exit (target_sell, \
-                          stop_loss, trailing_stop, break_even, take_profit, time_override, \
-                          time_stagnation, manual), skip \
-                          reasons, arrival-latency histogram and the fill's price \
-                          difference against the target's price; legacy estimates are \
-                          excluded from current paper performance. Without task_id: every task side by side."
+                          rounds (its rounds of the shared paper book in the current paper \
+                          run, or its real positions when live), win rate, average win/loss, \
+                          profit factor, average hold, cumulative P&L curve, P&L by the \
+                          reason each round closed (CopySell for a mirrored wallet sell, \
+                          StopLoss, TrailingStop, BreakEvenStop, TakeProfit, TimeOverride, \
+                          TimeStagnation, ManualExit, PaperReset and the other trade \
+                          reasons), skip reasons, arrival-latency histogram and the fill's \
+                          price difference against the target's price; the archived copy \
+                          paper book and legacy estimates are excluded from current paper \
+                          performance. Without task_id: every task side by side."
                 .to_owned(),
             category: ToolCategory::Portfolio,
             parameters: json!({
@@ -210,11 +212,12 @@ impl Tool for ResetCopyPaperBookTool {
     fn definition(&self) -> ToolDefinition {
         ToolDefinition {
             name: "reset_copy_paper_book".to_owned(),
-            description: "Start a paper task's evaluation over under the quote model: removes \
-                          its current paper holdings, paper spend and the quote fills, sells \
-                          and skips that built them, while legacy estimates and live data are \
-                          preserved. Refused for a live task. Use after changing a task's \
-                          rules so the results measure the new rules only."
+            description: "Start a paper task's run over: closes its open paper rounds at their \
+                          last price (they stay in the paper history and their value returns \
+                          to the paper balance) and counts its figures, spend and readiness \
+                          only from now on. Nothing is deleted: earlier decisions stay in its \
+                          Activity. Returns closed_rounds. Refused for a live task. Use after \
+                          changing a task's rules so the results measure the new rules only."
                 .to_owned(),
             category: ToolCategory::Trading,
             parameters: task_id_schema("Paper task to reset"),

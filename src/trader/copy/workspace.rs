@@ -1,23 +1,26 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! The per-task workspace behind the Copy Trading page: detail with a marked
-//! paper book and the rules each holding is under, paged activity, analytics,
-//! readiness for live, the wallet profile, and paper-book maintenance (close a
-//! holding, reset the book, clone the task). Routes and agent tools are both
-//! transports over these functions.
+//! The per-task workspace behind the Copy Trading page: detail with the task's rounds
+//! of the shared paper book and the rules each holding is under, the archived copy
+//! paper results, paged activity, analytics, readiness for live, the wallet profile,
+//! and paper maintenance (close a holding, reset the run, clone the task). Routes and
+//! agent tools are both transports over these functions.
 
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 
-use super::control::{self, open_database, CopyTaskSummary, TASK_ACTIVITY_WINDOW};
+use super::control::{self, open_database, CopyTaskSummary, TaskRounds, TASK_ACTIVITY_WINDOW};
 use super::insights::CurvePoint;
+use super::paper_book::flag_earlier_runs;
 use super::{
-    build_insights, closed_rounds, management_for_exit_mode, ActivityQuery, CopyActivityRow,
-    CopyBook, CopyInsights, CopyTask, InsightRange, PaperPosition,
+    build_insights, closed_rounds, management_for_exit_mode, ActivityQuery, ArchivedPaperPosition,
+    CopyActivityRow, CopyBook, CopyDatabase, CopyInsights, CopyTask, InsightRange,
 };
 use crate::config::{with_config, TakeProfitLevel};
-use crate::positions::{Position, PositionManagement};
+use crate::positions::{Book, Position, PositionManagement};
+use crate::trader::evaluators::exit::position_exit_inputs;
+use crate::trader::evaluators::exit_rules::ExitInputs;
 use crate::trader::paper::readiness::Readiness;
 use crate::trader::paper::{TradingMode, LIVE_ARM_CONFIRMATION};
 use crate::trader::policy::{
@@ -96,8 +99,8 @@ fn policy_manages_exits(task: &CopyTask) -> bool {
     management_for_exit_mode(task.exit_mode) != PositionManagement::CopyTask
 }
 
-/// The book a task's results come from: its paper ledger while in paper mode,
-/// the real positions it opened while live.
+/// The book a task's results come from: its rounds in the shared paper book while in
+/// paper mode, the real positions it opened while live.
 pub fn book_of(task: &CopyTask) -> CopyBook {
     match task.mode {
         TradingMode::Paper => CopyBook::Paper,
@@ -105,7 +108,7 @@ pub fn book_of(task: &CopyTask) -> CopyBook {
     }
 }
 
-/// Where the task's exit rules act on a holding, from its entry price and peak.
+/// Where the task's exit rules act on a holding, from its average entry and basis peak.
 #[derive(Debug, Clone, Serialize)]
 pub struct HoldingExitWatch {
     pub stop_loss_price_native: Option<f64>,
@@ -132,7 +135,16 @@ pub struct HoldingExitWatch {
     pub stagnation_band_high_price_native: Option<f64>,
 }
 
-fn exit_watch(position: &PaperPosition, entry: f64, policy: &ExitPolicy) -> HoldingExitWatch {
+/// The watch of a round opened at `opened_at` whose exit inputs are `inputs`, read the
+/// way the exit rules read them: from the average entry, the basis peak and the
+/// take-profit steps the round already took.
+fn exit_watch(
+    inputs: &ExitInputs,
+    opened_at: DateTime<Utc>,
+    policy: &ExitPolicy,
+) -> HoldingExitWatch {
+    let entry = inputs.average_entry_price;
+    let peak = Some(inputs.basis_peak_price).filter(|peak| peak.is_finite() && *peak > 0.0);
     let stop = &policy.stop_loss;
     let trailing = &policy.trailing;
     let time = &policy.time;
@@ -141,9 +153,7 @@ fn exit_watch(position: &PaperPosition, entry: f64, policy: &ExitPolicy) -> Hold
     let activation = trailing
         .enabled
         .then(|| entry * (1.0 + trailing.activation_pct / 100.0));
-    let armed_peak = position
-        .peak_price_native
-        .filter(|peak| activation.is_some_and(|activation| *peak >= activation));
+    let armed_peak = peak.filter(|peak| activation.is_some_and(|activation| *peak >= activation));
     let break_even_activation = break_even
         .enabled
         .then(|| entry * (1.0 + break_even.trigger_pct / 100.0));
@@ -157,13 +167,12 @@ fn exit_watch(position: &PaperPosition, entry: f64, policy: &ExitPolicy) -> Hold
             .enabled
             .then(|| entry * (1.0 - stop.threshold_pct / 100.0)),
         stop_loss_armed_at: (stop.enabled && stop.min_hold_seconds > 0).then(|| {
-            position.opened_at
-                + Duration::seconds(stop.min_hold_seconds.min(i64::MAX as u64) as i64)
+            opened_at + Duration::seconds(stop.min_hold_seconds.min(i64::MAX as u64) as i64)
         }),
         take_profit_price_native: policy
             .take_profit
             .levels
-            .get(position.take_profit_level as usize)
+            .get(inputs.take_profit_levels_taken as usize)
             .filter(|_| policy.take_profit.enabled)
             .map(|step| entry * (1.0 + step.profit_pct / 100.0)),
         trailing_activation_price_native: activation,
@@ -173,55 +182,59 @@ fn exit_watch(position: &PaperPosition, entry: f64, policy: &ExitPolicy) -> Hold
             peak * (1.0 - distance_pct / 100.0)
         }),
         break_even_activation_price_native: break_even_activation,
-        break_even_armed: position
-            .peak_price_native
+        break_even_armed: peak
             .is_some_and(|peak| break_even_activation.is_some_and(|activation| peak >= activation)),
         break_even_floor_price_native: break_even
             .enabled
             .then(|| entry * (1.0 + break_even.offset_pct / 100.0)),
-        time_rule_from: time.enabled.then(|| {
-            position.opened_at + Duration::milliseconds((time.duration_seconds * 1000.0) as i64)
-        }),
+        time_rule_from: time
+            .enabled
+            .then(|| opened_at + Duration::milliseconds((time.duration_seconds * 1000.0) as i64)),
         time_rule_price_native: time
             .enabled
             .then(|| entry * (1.0 + time.loss_threshold_pct / 100.0)),
         stagnation_from: stagnation.enabled.then(|| {
-            position.opened_at
-                + Duration::milliseconds((stagnation.duration_seconds * 1000.0) as i64)
+            opened_at + Duration::milliseconds((stagnation.duration_seconds * 1000.0) as i64)
         }),
         stagnation_band_low_price_native: stagnation_band(-1.0),
         stagnation_band_high_price_native: stagnation_band(1.0),
     }
 }
 
-/// One paper-ledger holding marked at the same price the task stats use.
+/// One round of a paper task in the shared paper book, marked at the round's latest
+/// price, which is also the price the task stats and the exit rules use.
 #[derive(Debug, Serialize)]
 pub struct PaperHolding {
+    /// The paper round; a manual close names it.
+    pub position_id: i64,
     pub mint: String,
     pub open: bool,
-    pub token_amount: f64,
+    /// What the round cost, every buy of it included.
     pub cost_basis_native: f64,
     pub invested_native: f64,
     pub realized_proceeds_native: f64,
     pub realized_pnl_native: f64,
+    /// The round's average entry price, while it is open.
     pub entry_price_native: Option<f64>,
     pub mark_price_native: Option<f64>,
-    pub market_value_native: Option<f64>,
     pub unrealized_pnl_native: Option<f64>,
     pub unrealized_pnl_pct: Option<f64>,
-    pub buys: u64,
-    pub sells: u64,
+    pub buys: u32,
+    pub sells: u32,
     pub opened_at: DateTime<Utc>,
     pub closed_at: Option<DateTime<Utc>>,
     pub held_seconds: i64,
-    /// Highest pool price of the open round; what arms the paper trailing stop.
+    /// Highest price since the average entry last moved; what arms the trailing stop
+    /// and the break-even stop.
     pub peak_price_native: Option<f64>,
-    /// True while a manual quote close is queued or executing.
+    /// True while a manual close of the round is queued or executing.
     pub close_pending: bool,
     /// `None` when the policy does not manage this task's exits.
     pub exit_watch: Option<HoldingExitWatch>,
 }
 
+/// A holding of the archived copy paper book or of the frozen estimates before it,
+/// valued at the last price saved for it.
 #[derive(Debug, Serialize)]
 pub struct LegacyPaperHolding {
     pub mint: String,
@@ -237,6 +250,7 @@ pub struct LegacyPaperHolding {
     pub closed_at: Option<DateTime<Utc>>,
 }
 
+/// Read-only totals and holdings of an earlier copy paper book.
 #[derive(Debug, Default, Serialize)]
 pub struct LegacyPaperSummary {
     pub spent_native: f64,
@@ -246,45 +260,50 @@ pub struct LegacyPaperSummary {
     pub holdings: Vec<LegacyPaperHolding>,
 }
 
-/// `mark` is the holding's pool price; a closed holding is never marked, and a
-/// price the stats would not mark at is no mark here either.
+/// The holding of the paper round `position`. A closed round is never marked; an open
+/// round without a usable price has no mark and no unrealized result.
 fn paper_holding(
-    position: &PaperPosition,
+    position: &Position,
     policy: Option<&ExitPolicy>,
-    mark: Option<f64>,
     now: DateTime<Utc>,
 ) -> PaperHolding {
-    let open = position.is_open();
-    let mark = mark.filter(|price| open && price.is_finite() && *price > 0.0);
-    let entry = (open && position.token_amount > 0.0)
-        .then(|| position.cost_basis_native / position.token_amount);
-    let market_value = mark.map(|price| position.token_amount * price);
-    let unrealized = market_value.map(|value| value - position.cost_basis_native);
+    let open = position.exit_time.is_none();
+    let mark = position
+        .current_price
+        .filter(|price| open && price.is_finite() && *price > 0.0);
+    let entry = Some(position.average_entry_price)
+        .filter(|entry| open && entry.is_finite() && *entry > 0.0);
     PaperHolding {
+        position_id: position.id.unwrap_or_default(),
         mint: position.mint.clone(),
         open,
-        token_amount: position.token_amount,
-        cost_basis_native: position.cost_basis_native,
-        invested_native: position.invested_native,
-        realized_proceeds_native: position.realized_proceeds_native,
-        realized_pnl_native: position.realized_proceeds_native - position.realized_cost_native,
+        cost_basis_native: position.total_size_native,
+        invested_native: position.total_size_native,
+        realized_proceeds_native: position.native_received.unwrap_or_default(),
+        realized_pnl_native: if open {
+            0.0
+        } else {
+            position.pnl.unwrap_or_default()
+        },
         entry_price_native: entry,
         mark_price_native: mark,
-        market_value_native: market_value,
-        unrealized_pnl_native: unrealized,
-        unrealized_pnl_pct: unrealized
-            .filter(|_| position.cost_basis_native > 0.0)
-            .map(|pnl| pnl / position.cost_basis_native * 100.0),
-        buys: position.buys,
-        sells: position.sells,
-        opened_at: position.opened_at,
-        closed_at: position.closed_at,
-        held_seconds: (position.closed_at.unwrap_or(now) - position.opened_at).num_seconds(),
-        peak_price_native: position.peak_price_native.filter(|_| open),
+        unrealized_pnl_native: mark.and(position.unrealized_pnl),
+        unrealized_pnl_pct: mark.and(position.unrealized_pnl_percent),
+        buys: 1 + position.dca_count,
+        sells: position.partial_exit_count,
+        opened_at: position.entry_time,
+        closed_at: position.exit_time,
+        held_seconds: (position.exit_time.unwrap_or(now) - position.entry_time).num_seconds(),
+        peak_price_native: Some(position.basis_peak_price)
+            .filter(|peak| open && peak.is_finite() && *peak > 0.0),
         close_pending: false,
-        exit_watch: entry
-            .zip(policy)
-            .map(|(entry, policy)| exit_watch(position, entry, policy)),
+        exit_watch: entry.zip(policy).map(|(entry, policy)| {
+            exit_watch(
+                &position_exit_inputs(position, mark.unwrap_or(entry), now),
+                position.entry_time,
+                policy,
+            )
+        }),
     }
 }
 
@@ -301,9 +320,16 @@ pub struct CopyTaskWorkspace {
     /// ledgers, so this is the budget less live spend only, whatever paper spent.
     pub live_remaining_budget_native: f64,
     pub policy_manages_exits: bool,
+    /// True while the Auto Trader runs: its exit monitor is what closes paper rounds by
+    /// the exit rules and the safety exits.
+    pub exit_rules_running: bool,
     pub global_require_filter_pass: bool,
     pub global_copy_stable_quoted: bool,
+    /// The task's rounds of its current paper run; empty while the task runs live.
     pub paper_holdings: Vec<PaperHolding>,
+    /// The archived copy paper book, kept read-only from before paper copies were
+    /// rounds of the shared paper book, valued at its last saved prices.
+    pub archived_paper: LegacyPaperSummary,
     pub legacy_paper: LegacyPaperSummary,
     pub paper_execution: PaperExecutionSettings,
     pub readiness: Readiness,
@@ -325,72 +351,94 @@ pub async fn task_workspace(id: i64) -> Result<CopyTaskWorkspace> {
         .into_iter()
         .find(|task| task.id == id)
         .ok_or(Error::CopyTaskNotFound { task_id: id })?;
-    let positions = control::all_positions().await;
-    let activity = db.list_task_activity(id, TASK_ACTIVITY_WINDOW).await?;
-    let paper_book = db.paper_positions(id).await?;
-    let paper_epoch = db.paper_epoch(id).await?;
-    let legacy_paper_book = db.legacy_paper_positions(id).await?;
-    let legacy_paper_spent = db.legacy_task_total_spent(id).await?;
-    let spent_native = db.task_total_spent(id, task.mode).await?;
-    let live_spent_native = db.task_total_spent(id, TradingMode::Live).await?;
-    let chain = task.chain;
-    let mark = |position: &PaperPosition| control::paper_mark(chain, position);
-    let (summary, _) = control::summarize(
-        &status,
-        task,
-        &activity,
-        &positions,
-        &paper_book,
-        spent_native,
-        mark,
-    );
+    let paper = control::paper_view(std::slice::from_ref(&task)).await;
+    let live = match task.mode {
+        TradingMode::Live => control::all_positions().await,
+        TradingMode::Paper => Vec::new(),
+    };
+    let rounds = control::task_rounds(&task, &live, paper.as_ref()).await?;
+    let failed_exits = match (&paper, task.mode) {
+        (Some(view), TradingMode::Paper) => view.failed_exits(id).await?,
+        _ => 0,
+    };
+    let mut activity = db.list_task_activity(id, TASK_ACTIVITY_WINDOW).await?;
+    flag_earlier_runs(&mut activity, std::slice::from_ref(&task), paper.as_ref());
+    let earlier = EarlierPaper::read(&db, id).await?;
+    let spent_native = rounds.spent_native(&db, &task).await?;
+    let live_spent_native = db.live_total_spent(id).await?;
+    let (summary, _) = control::summarize(&status, task, &activity, &rounds, spent_native);
     let mut workspace = build_workspace(
         summary,
         live_spent_native,
         &activity,
-        &positions,
-        &paper_book,
-        &legacy_paper_book,
-        legacy_paper_spent,
-        mark,
+        &rounds,
+        earlier,
+        failed_exits,
         control::live_block_reason(),
         Utc::now(),
     );
     if let Some(runtime) = super::paper_execution::active() {
         for holding in &mut workspace.paper_holdings {
-            holding.close_pending = runtime.manual_close_pending(id, &holding.mint, paper_epoch);
+            holding.close_pending = runtime.manual_close_pending(id, holding.position_id);
         }
     }
     Ok(workspace)
 }
 
+/// The copy paper books from before the shared paper book, read-only: the archived
+/// quote-model book and the estimates before it.
+#[derive(Debug, Default)]
+pub struct EarlierPaper {
+    pub archived: Vec<ArchivedPaperPosition>,
+    pub archived_spent_native: f64,
+    pub legacy: Vec<ArchivedPaperPosition>,
+    pub legacy_spent_native: f64,
+}
+
+impl EarlierPaper {
+    pub async fn read(db: &CopyDatabase, task_id: i64) -> Result<Self> {
+        Ok(Self {
+            archived: db.archived_paper_positions(task_id).await?,
+            archived_spent_native: db.archived_paper_spent(task_id).await?,
+            legacy: db.legacy_paper_positions(task_id).await?,
+            legacy_spent_native: db.legacy_task_total_spent(task_id).await?,
+        })
+    }
+}
+
 /// The workspace from what was already read: the task's `live_spent_native`,
-/// `activity` newest first, the task's paper ledger (read in either mode; a live
-/// task can still hold paper history), `mark` pricing a paper holding and `block`
-/// why live execution is unavailable.
+/// `activity` newest first, `rounds` of the book it runs in, its `earlier` paper books,
+/// the paper exits of its rounds that found no fill in a row (`failed_exits`) and
+/// `block`, why live execution is unavailable.
 #[allow(clippy::too_many_arguments)]
 pub fn build_workspace(
     summary: CopyTaskSummary,
     live_spent_native: f64,
     activity: &[CopyActivityRow],
-    positions: &[Position],
-    paper_book: &[PaperPosition],
-    legacy_paper_book: &[PaperPosition],
-    legacy_paper_spent: f64,
-    mark: impl Fn(&PaperPosition) -> Option<f64>,
+    rounds: &TaskRounds,
+    earlier: EarlierPaper,
+    failed_exits: u32,
     block: Option<control::CopyLiveBlock>,
     now: DateTime<Utc>,
 ) -> CopyTaskWorkspace {
     let policy = task_policy(&summary.task);
     let manages = policy_manages_exits(&summary.task);
-    let paper_holdings = paper_book
+    let paper_rounds = rounds
+        .positions
         .iter()
-        .map(|position| paper_holding(position, manages.then_some(&policy), mark(position), now))
+        .filter(|position| summary.task.mode == TradingMode::Paper && position.book == Book::Paper)
         .collect::<Vec<_>>();
-    let legacy_paper = legacy_paper_summary(legacy_paper_book, legacy_paper_spent);
+    let paper_holdings = paper_rounds
+        .iter()
+        .map(|position| paper_holding(position, manages.then_some(&policy), now))
+        .collect::<Vec<_>>();
     let config = with_config(|config| config.copy_trading.clone());
-    let paper_rounds = closed_rounds(summary.task.id, CopyBook::Paper, activity, positions);
-    let readiness = readiness::readiness(&summary, &paper_rounds, &paper_holdings, block);
+    let closed = closed_rounds(summary.task.id, CopyBook::Paper, &rounds.positions);
+    let unpriced = paper_rounds
+        .iter()
+        .filter(|position| position.exit_time.is_none() && position.current_price.is_none())
+        .count();
+    let readiness = readiness::readiness(&summary, &closed, unpriced, failed_exits, block);
     CopyTaskWorkspace {
         live_remaining_budget_native: (summary.task.total_budget_native - live_spent_native)
             .max(0.0),
@@ -398,10 +446,12 @@ pub fn build_workspace(
         trader_defaults: (&ExitPolicy::from_config()).into(),
         effective_policy: (&policy).into(),
         policy_manages_exits: manages,
+        exit_rules_running: crate::trader::controller::is_trader_running(),
         global_require_filter_pass: with_config(|config| config.copy_trading.require_filter_pass),
         global_copy_stable_quoted: with_config(|config| config.copy_trading.copy_stable_quoted),
         paper_holdings,
-        legacy_paper,
+        archived_paper: legacy_paper_summary(&earlier.archived, earlier.archived_spent_native),
+        legacy_paper: legacy_paper_summary(&earlier.legacy, earlier.legacy_spent_native),
         paper_execution: PaperExecutionSettings {
             model: "quote",
             landing_delay_ms: with_config(|config| config.trader.paper.landing_delay_ms),
@@ -412,7 +462,7 @@ pub fn build_workspace(
     }
 }
 
-fn legacy_paper_summary(book: &[PaperPosition], spent_native: f64) -> LegacyPaperSummary {
+fn legacy_paper_summary(book: &[ArchivedPaperPosition], spent_native: f64) -> LegacyPaperSummary {
     let mut summary = LegacyPaperSummary {
         spent_native,
         ..LegacyPaperSummary::default()
@@ -477,7 +527,11 @@ impl ActivityPage {
 pub async fn activity_page(task_id: Option<i64>, filter: ActivityFilter) -> Result<ActivityPage> {
     let query = activity_query(task_id, filter)?;
     let limit = query.limit;
-    let activity = open_database().await?.activity_page(query).await?;
+    let db = open_database().await?;
+    let mut activity = db.activity_page(query).await?;
+    let tasks = db.list_tasks().await?;
+    let paper = control::paper_view(&tasks).await;
+    flag_earlier_runs(&mut activity, &tasks, paper.as_ref());
     Ok(ActivityPage::new(activity, limit))
 }
 
@@ -531,11 +585,13 @@ pub async fn task_insights(id: i64, range: InsightRange) -> Result<CopyInsights>
         .ok_or(Error::CopyTaskNotFound { task_id: id })?;
     let activity = db.list_task_activity(id, TASK_ACTIVITY_WINDOW).await?;
     let positions = control::all_positions().await;
+    let paper = control::paper_view(std::slice::from_ref(&task)).await;
+    let rounds = control::task_rounds(&task, &positions, paper.as_ref()).await?;
     Ok(build_insights(
         id,
         book_of(&task),
-        &activity,
-        &positions,
+        &control::current_activity(&task, &activity, rounds.run_start),
+        &rounds.positions,
         range,
         Some(arrival_limit_ms()),
     ))
@@ -592,18 +648,31 @@ pub fn comparison(task: &CopyTask, insights: CopyInsights) -> TaskComparison {
 async fn compare(tasks: &[CopyTask], range: InsightRange) -> Result<Vec<TaskComparison>> {
     let db = open_database().await?;
     let positions = control::all_positions().await;
-    let activities = futures::future::try_join_all(
-        tasks
-            .iter()
-            .map(|task| db.list_task_activity(task.id, TASK_ACTIVITY_WINDOW)),
-    )
+    let paper = control::paper_view(tasks).await;
+    let reads = futures::future::try_join_all(tasks.iter().map(|task| {
+        let db = &db;
+        let positions = &positions;
+        let paper = paper.as_ref();
+        async move {
+            Ok::<_, Error>((
+                db.list_task_activity(task.id, TASK_ACTIVITY_WINDOW).await?,
+                control::task_rounds(task, positions, paper).await?,
+            ))
+        }
+    }))
     .await?;
     Ok(tasks
         .iter()
-        .zip(activities)
-        .map(|(task, activity)| {
-            let insights =
-                build_insights(task.id, book_of(task), &activity, &positions, range, None);
+        .zip(reads)
+        .map(|(task, (activity, rounds))| {
+            let insights = build_insights(
+                task.id,
+                book_of(task),
+                &control::current_activity(task, &activity, rounds.run_start),
+                &rounds.positions,
+                range,
+                None,
+            );
             comparison(task, insights)
         })
         .collect())

@@ -45,6 +45,7 @@ fn paper_close_decision(position: &Position) -> TradeDecision {
         exit_percentage: Some(100.0),
         slippage_pct: None,
         take_profit_level: None,
+        paper_leg_key: None,
     }
 }
 

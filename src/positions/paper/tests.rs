@@ -12,6 +12,7 @@ use rusqlite::params;
 use super::*;
 use crate::chains::{ChainId, RawAmount};
 use crate::positions::booking::{CloseFill, DcaFill, EntryFill, PartialExitFill};
+use crate::positions::db::PaperExitOwner;
 use crate::positions::types::{Opening, Position, PositionManagement, PositionOrigin};
 use crate::positions::Error;
 use crate::trader::paper::{PaperFill, PaperModel, PaperSellFill};
@@ -72,7 +73,7 @@ fn buy_leg() -> PaperLeg {
         model: PaperModel::Quote,
         quote: None,
     };
-    PaperLeg::buy(&fill, Some("entry-strategy".to_owned()), Utc::now()).unwrap()
+    PaperLeg::buy(&fill, Some("entry-strategy".to_owned()), Utc::now(), None).unwrap()
 }
 
 fn sell_leg(tokens: f64) -> PaperLeg {
@@ -89,7 +90,7 @@ fn sell_leg(tokens: f64) -> PaperLeg {
         model: PaperModel::Quote,
         quote: None,
     };
-    PaperLeg::sell(&fill, Some("exit-strategy".to_owned()), Utc::now()).unwrap()
+    PaperLeg::sell(&fill, Some("exit-strategy".to_owned()), Utc::now(), None).unwrap()
 }
 
 /// Open terms within the current run of `WALLET`, starting it with ten SOL when none
@@ -100,6 +101,23 @@ async fn terms(book: &PaperBook, max_open: usize) -> PaperOpenTerms {
         max_open,
         open_cooldown_secs: 0,
         epoch,
+    }
+}
+
+/// Opens a round through [`PaperBook::open`], expecting a new round rather than a replay.
+async fn open_round(
+    book: &PaperBook,
+    wallet_address: &str,
+    opening: Opening,
+    fill: &EntryFill,
+    leg: &PaperLeg,
+    terms: &PaperOpenTerms,
+) -> crate::positions::Result<Position> {
+    match book.open(wallet_address, opening, fill, leg, terms).await? {
+        PaperOpened::Opened(position) => Ok(position),
+        PaperOpened::AlreadyBooked(position) => {
+            panic!("expected a new round, the leg had opened {:?}", position.id)
+        }
     }
 }
 
@@ -114,16 +132,16 @@ fn count(book: &PaperBook, sql: &str) -> i64 {
 #[tokio::test]
 async fn a_paper_round_is_booked_leg_by_leg_with_its_evidence() {
     let (book, _directory) = paper_book().await;
-    let opened = book
-        .open(
-            WALLET,
-            opening("MintA"),
-            &entry_fill(),
-            &buy_leg(),
-            &terms(&book, 5).await,
-        )
-        .await
-        .unwrap();
+    let opened = open_round(
+        &book,
+        WALLET,
+        opening("MintA"),
+        &entry_fill(),
+        &buy_leg(),
+        &terms(&book, 5).await,
+    )
+    .await
+    .unwrap();
     let id = opened.id.unwrap();
     assert_eq!(opened.book, Book::Paper);
     assert_eq!(opened.entry_transaction_signature, None);
@@ -239,18 +257,18 @@ async fn a_paper_round_is_booked_leg_by_leg_with_its_evidence() {
 #[tokio::test]
 async fn a_repeated_or_late_booking_writes_nothing() {
     let (book, _directory) = paper_book().await;
-    let id = book
-        .open(
-            WALLET,
-            opening("MintB"),
-            &entry_fill(),
-            &buy_leg(),
-            &terms(&book, 5).await,
-        )
-        .await
-        .unwrap()
-        .id
-        .unwrap();
+    let id = open_round(
+        &book,
+        WALLET,
+        opening("MintB"),
+        &entry_fill(),
+        &buy_leg(),
+        &terms(&book, 5).await,
+    )
+    .await
+    .unwrap()
+    .id
+    .unwrap();
     let dca = DcaFill {
         tokens_bought: RawAmount::new(10_000_000),
         native_spent: 0.01,
@@ -312,7 +330,7 @@ async fn concurrent_opens_never_exceed_the_capacity() {
         mints
             .iter()
             .zip(&legs)
-            .map(|(mint, leg)| book.open(WALLET, opening(mint), &fill, leg, &terms)),
+            .map(|(mint, leg)| open_round(&book, WALLET, opening(mint), &fill, leg, &terms)),
     )
     .await;
     let opened = results.iter().filter(|result| result.is_ok()).count();
@@ -329,7 +347,8 @@ async fn concurrent_opens_never_exceed_the_capacity() {
 #[tokio::test]
 async fn a_second_round_of_a_held_mint_is_refused() {
     let (book, _directory) = paper_book().await;
-    book.open(
+    open_round(
+        &book,
         WALLET,
         opening("MintC"),
         &entry_fill(),
@@ -338,16 +357,16 @@ async fn a_second_round_of_a_held_mint_is_refused() {
     )
     .await
     .unwrap();
-    let error = book
-        .open(
-            WALLET,
-            opening("MintC"),
-            &entry_fill(),
-            &buy_leg(),
-            &terms(&book, 5).await,
-        )
-        .await
-        .unwrap_err();
+    let error = open_round(
+        &book,
+        WALLET,
+        opening("MintC"),
+        &entry_fill(),
+        &buy_leg(),
+        &terms(&book, 5).await,
+    )
+    .await
+    .unwrap_err();
     assert!(matches!(error, Error::AlreadyOpen { .. }), "{error}");
     assert_eq!(count(&book, "SELECT COUNT(*) FROM paper_legs"), 1);
 }
@@ -355,18 +374,18 @@ async fn a_second_round_of_a_held_mint_is_refused() {
 #[tokio::test]
 async fn a_take_profit_step_is_booked_once_and_only_in_order() {
     let (book, _directory) = paper_book().await;
-    let id = book
-        .open(
-            WALLET,
-            opening("MintS"),
-            &entry_fill(),
-            &buy_leg(),
-            &terms(&book, 5).await,
-        )
-        .await
-        .unwrap()
-        .id
-        .unwrap();
+    let id = open_round(
+        &book,
+        WALLET,
+        opening("MintS"),
+        &entry_fill(),
+        &buy_leg(),
+        &terms(&book, 5).await,
+    )
+    .await
+    .unwrap()
+    .id
+    .unwrap();
     let partial = PartialExitFill {
         exit_amount: RawAmount::new(25_000_000),
         native_received: 0.05,
@@ -407,18 +426,18 @@ async fn a_reset_settles_open_rounds_at_their_mark_before_the_next_run() {
     let first = book.account(WALLET, 1.0).await.unwrap();
     let mut entered = opening("MintR");
     entered.entry_time = first.started_at + Duration::seconds(1);
-    let id = book
-        .open(
-            WALLET,
-            entered,
-            &entry_fill(),
-            &buy_leg(),
-            &terms(&book, 5).await,
-        )
-        .await
-        .unwrap()
-        .id
-        .unwrap();
+    let id = open_round(
+        &book,
+        WALLET,
+        entered,
+        &entry_fill(),
+        &buy_leg(),
+        &terms(&book, 5).await,
+    )
+    .await
+    .unwrap()
+    .id
+    .unwrap();
     let later = first.started_at + Duration::seconds(2);
 
     let refused = book
@@ -450,7 +469,8 @@ async fn the_account_cash_follows_the_rounds_of_its_epoch() {
 
     let mut entered = opening("MintD");
     entered.entry_time = first.started_at + Duration::seconds(1);
-    book.open(
+    open_round(
+        &book,
         WALLET,
         entered,
         &entry_fill(),
@@ -485,7 +505,8 @@ async fn a_strategy_counts_the_rounds_it_opened_or_closed_in_the_current_epoch()
 
     let mut before = opening("MintBefore");
     before.entry_time = epoch.started_at - Duration::seconds(5);
-    book.open(
+    open_round(
+        &book,
         WALLET,
         before,
         &entry_fill(),
@@ -496,7 +517,8 @@ async fn a_strategy_counts_the_rounds_it_opened_or_closed_in_the_current_epoch()
     .unwrap();
     let mut own = opening("MintOwn");
     own.entry_time = at(1);
-    book.open(
+    open_round(
+        &book,
         WALLET,
         own,
         &entry_fill(),
@@ -510,18 +532,18 @@ async fn a_strategy_counts_the_rounds_it_opened_or_closed_in_the_current_epoch()
     other.origin = PositionOrigin::Auto {
         strategy_id: Some("another-entry".to_owned()),
     };
-    let other_id = book
-        .open(
-            WALLET,
-            other,
-            &entry_fill(),
-            &buy_leg(),
-            &terms(&book, 5).await,
-        )
-        .await
-        .unwrap()
-        .id
-        .unwrap();
+    let other_id = open_round(
+        &book,
+        WALLET,
+        other,
+        &entry_fill(),
+        &buy_leg(),
+        &terms(&book, 5).await,
+    )
+    .await
+    .unwrap()
+    .id
+    .unwrap();
     let close = CloseFill {
         effective_exit_price: 0.002,
         native_received: 0.2,
@@ -580,7 +602,7 @@ async fn concurrent_buys_never_spend_more_than_the_run_cash() {
         mints
             .iter()
             .zip(&legs)
-            .map(|(mint, leg)| book.open(WALLET, opening(mint), &fill, leg, &terms)),
+            .map(|(mint, leg)| open_round(&book, WALLET, opening(mint), &fill, leg, &terms)),
     )
     .await;
     assert_eq!(results.iter().filter(|result| result.is_ok()).count(), 2);
@@ -618,7 +640,8 @@ async fn a_paper_open_within_the_cooldown_is_refused_and_the_live_open_time_is_u
         epoch,
     };
     assert_eq!(book.last_open(), None);
-    book.open(
+    open_round(
+        &book,
         WALLET,
         opening("CoolA"),
         &entry_fill(),
@@ -628,15 +651,15 @@ async fn a_paper_open_within_the_cooldown_is_refused_and_the_live_open_time_is_u
     .await
     .unwrap();
     assert!(book.last_open().is_some());
-    match book
-        .open(
-            WALLET,
-            opening("CoolB"),
-            &entry_fill(),
-            &buy_leg(),
-            &cooling,
-        )
-        .await
+    match open_round(
+        &book,
+        WALLET,
+        opening("CoolB"),
+        &entry_fill(),
+        &buy_leg(),
+        &cooling,
+    )
+    .await
     {
         Err(Error::PaperOpenCooldown { wait_secs }) => {
             assert!((59..=60).contains(&wait_secs), "{wait_secs}")
@@ -654,9 +677,16 @@ async fn a_paper_open_within_the_cooldown_is_refused_and_the_live_open_time_is_u
         open_cooldown_secs: 0,
         ..cooling
     };
-    book.open(WALLET, opening("CoolB"), &entry_fill(), &buy_leg(), &cooled)
-        .await
-        .unwrap();
+    open_round(
+        &book,
+        WALLET,
+        opening("CoolB"),
+        &entry_fill(),
+        &buy_leg(),
+        &cooled,
+    )
+    .await
+    .unwrap();
 }
 
 #[tokio::test]
@@ -671,7 +701,7 @@ async fn a_reset_racing_a_buy_leaves_no_open_round_outside_the_new_run() {
         };
         let leg = buy_leg();
         let fill = entry_fill();
-        let buy = book.open(WALLET, opening("RaceMint"), &fill, &leg, &terms);
+        let buy = open_round(&book, WALLET, opening("RaceMint"), &fill, &leg, &terms);
         let reset = book.reset_run(WALLET, 1.0, "PaperReset", |_| Some(DECIMALS), Utc::now());
         let (bought, next) = if buy_first {
             tokio::join!(buy, reset)
@@ -713,7 +743,8 @@ async fn a_round_entered_in_the_second_a_run_starts_but_before_it_is_not_counted
     let at = |millis| chrono::DateTime::from_timestamp_millis(second * 1_000 + millis).unwrap();
     let mut entered = opening("SameSecondMint");
     entered.entry_time = at(400);
-    book.open(
+    open_round(
+        &book,
         WALLET,
         entered,
         &entry_fill(),
@@ -734,18 +765,18 @@ async fn a_round_entered_in_the_second_a_run_starts_but_before_it_is_not_counted
 #[tokio::test]
 async fn a_failed_exit_streak_is_read_back_from_the_store_after_a_restart() {
     let (book, directory) = paper_book().await;
-    let id = book
-        .open(
-            WALLET,
-            opening("StreakMint"),
-            &entry_fill(),
-            &buy_leg(),
-            &terms(&book, 5).await,
-        )
-        .await
-        .unwrap()
-        .id
-        .unwrap();
+    let id = open_round(
+        &book,
+        WALLET,
+        opening("StreakMint"),
+        &entry_fill(),
+        &buy_leg(),
+        &terms(&book, 5).await,
+    )
+    .await
+    .unwrap()
+    .id
+    .unwrap();
     book.record_exit_attempt(id, Some("exit-strategy"), false)
         .await
         .unwrap();
@@ -767,7 +798,7 @@ async fn a_failed_exit_streak_is_read_back_from_the_store_after_a_restart() {
     for strategy_id in ["entry-strategy", "exit-strategy"] {
         assert_eq!(
             reopened
-                .failed_exit_streak(WALLET, strategy_id)
+                .failed_exit_streak(WALLET, &strategy(strategy_id))
                 .await
                 .unwrap(),
             2,
@@ -778,7 +809,7 @@ async fn a_failed_exit_streak_is_read_back_from_the_store_after_a_restart() {
         reopened
             .failed_exit_streak(
                 "AnotherWa11et11111111111111111111111111111",
-                "exit-strategy"
+                &strategy("exit-strategy")
             )
             .await
             .unwrap(),
@@ -791,11 +822,15 @@ async fn a_failed_exit_streak_is_read_back_from_the_store_after_a_restart() {
         .unwrap();
     assert_eq!(
         reopened
-            .failed_exit_streak(WALLET, "entry-strategy")
+            .failed_exit_streak(WALLET, &strategy("entry-strategy"))
             .await
             .unwrap(),
         0
     );
+}
+
+fn strategy(strategy_id: &str) -> PaperExitOwner {
+    PaperExitOwner::Strategy(strategy_id.to_owned())
 }
 
 #[test]
@@ -810,4 +845,421 @@ fn paper_cash_takes_every_buy_sale_and_fee_on_realized_terms() {
     assert!((paper_cash(1.0, &[round.clone()]) - (1.0 + realized)).abs() < 1e-12);
     assert!((paper_cash(1.0, &[round]) - (1.0 + 0.2 - fees)).abs() < 1e-12);
     assert_eq!(paper_cash(1.0, &[]), 1.0);
+}
+
+fn copy_opening(mint: &str, task_id: i64) -> Opening {
+    Opening {
+        origin: PositionOrigin::Copy {
+            task_id,
+            source_wallet: "SourceWa11et111111111111111111111111111111".to_owned(),
+        },
+        management: PositionManagement::CopyTask,
+        ..opening(mint)
+    }
+}
+
+fn keyed_buy_leg(key: &str) -> PaperLeg {
+    let fill = PaperFill {
+        input_sol: 0.1,
+        market_price_sol: 0.001,
+        priced_from_pool: true,
+        fill_price_sol: 0.001,
+        token_amount: 100.0,
+        referral_fee_sol: 0.0,
+        network_fee_sol: 0.000005,
+        priority_fee_sol: 0.0,
+        total_cost_sol: 0.100005,
+        model: PaperModel::Quote,
+        quote: None,
+    };
+    PaperLeg::buy(&fill, None, Utc::now(), Some(key)).unwrap()
+}
+
+fn keyed_sell_leg(key: &str, tokens: f64) -> PaperLeg {
+    let fill = PaperSellFill {
+        token_amount: tokens,
+        market_price_sol: 0.002,
+        priced_from_pool: true,
+        fill_price_sol: 0.002,
+        gross_sol: tokens * 0.002,
+        referral_fee_sol: 0.0,
+        network_fee_sol: 0.000005,
+        priority_fee_sol: 0.0,
+        net_proceeds_sol: tokens * 0.002,
+        model: PaperModel::Quote,
+        quote: None,
+    };
+    PaperLeg::sell(&fill, None, Utc::now(), Some(key)).unwrap()
+}
+
+#[tokio::test]
+async fn a_buy_booked_twice_under_one_key_opens_one_round() {
+    let (book, _directory) = paper_book().await;
+    let terms = terms(&book, 5).await;
+    let first = open_round(
+        &book,
+        WALLET,
+        copy_opening("KeyMint", 7),
+        &entry_fill(),
+        &keyed_buy_leg("copy-7-sig"),
+        &terms,
+    )
+    .await
+    .unwrap();
+    let replay = book
+        .open(
+            WALLET,
+            copy_opening("KeyMint", 7),
+            &entry_fill(),
+            &keyed_buy_leg("copy-7-sig"),
+            &terms,
+        )
+        .await
+        .unwrap();
+    let PaperOpened::AlreadyBooked(stored) = replay else {
+        panic!("a replayed keyed buy opened a second round");
+    };
+    assert_eq!(stored.id, first.id);
+    assert_eq!(count(&book, "SELECT COUNT(*) FROM positions"), 1);
+    assert_eq!(count(&book, "SELECT COUNT(*) FROM paper_legs"), 1);
+    assert_eq!(count(&book, "SELECT COUNT(*) FROM position_entries"), 1);
+    let (position_id, leg) = book
+        .paper_leg(&PaperLeg::reference("copy-7-sig"))
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(Some(position_id), first.id);
+    assert_eq!(leg.kind, "entry");
+}
+
+#[tokio::test]
+async fn a_replayed_keyed_buy_is_answered_before_the_capacity_checks() {
+    let (book, _directory) = paper_book().await;
+    let terms = terms(&book, 1).await;
+    open_round(
+        &book,
+        WALLET,
+        copy_opening("FullMint", 7),
+        &entry_fill(),
+        &keyed_buy_leg("copy-7-full"),
+        &terms,
+    )
+    .await
+    .unwrap();
+    let replay = book
+        .open(
+            WALLET,
+            copy_opening("FullMint", 7),
+            &entry_fill(),
+            &keyed_buy_leg("copy-7-full"),
+            &terms,
+        )
+        .await
+        .unwrap();
+    assert!(matches!(replay, PaperOpened::AlreadyBooked(_)));
+}
+
+#[tokio::test]
+async fn a_sale_booked_twice_under_one_key_books_one_exit() {
+    let (book, _directory) = paper_book().await;
+    let id = open_round(
+        &book,
+        WALLET,
+        copy_opening("SaleMint", 3),
+        &entry_fill(),
+        &keyed_buy_leg("copy-3-buy"),
+        &terms(&book, 5).await,
+    )
+    .await
+    .unwrap()
+    .id
+    .unwrap();
+    let partial = PartialExitFill {
+        exit_amount: RawAmount::new(50_000_000),
+        native_received: 0.1,
+        effective_exit_price: 0.002,
+        unrealized_pnl: None,
+        fee_raw: 5_000,
+    };
+    let leg = keyed_sell_leg("copy-3-sell", 50.0);
+    assert!(matches!(
+        book.partial(WALLET, id, &partial, 50.0, None, &leg)
+            .await
+            .unwrap(),
+        PaperBooked::Booked(_)
+    ));
+    let replayed = keyed_sell_leg("copy-3-sell", 50.0);
+    assert!(matches!(
+        book.partial(WALLET, id, &partial, 50.0, None, &replayed)
+            .await
+            .unwrap(),
+        PaperBooked::AlreadyBooked
+    ));
+    assert_eq!(count(&book, "SELECT COUNT(*) FROM position_exits"), 1);
+    assert_eq!(book.position(id).await.unwrap().partial_exit_count, 1);
+
+    let other = keyed_sell_leg("copy-3-other", 25.0);
+    assert!(matches!(
+        book.partial(WALLET, id, &partial, 50.0, None, &other)
+            .await
+            .unwrap(),
+        PaperBooked::Booked(_)
+    ));
+    assert_eq!(count(&book, "SELECT COUNT(*) FROM position_exits"), 2);
+    assert_ne!(leg.leg_ref, other.leg_ref);
+}
+
+#[tokio::test]
+async fn copy_task_rounds_are_only_that_tasks_rounds_since_the_start() {
+    let (book, _directory) = paper_book().await;
+    let terms = terms(&book, 10).await;
+    let before = open_round(
+        &book,
+        WALLET,
+        copy_opening("EarlyMint", 4),
+        &entry_fill(),
+        &buy_leg(),
+        &terms,
+    )
+    .await
+    .unwrap();
+    tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    let start = Utc::now();
+    let own = open_round(
+        &book,
+        WALLET,
+        copy_opening("OwnMint", 4),
+        &entry_fill(),
+        &buy_leg(),
+        &terms,
+    )
+    .await
+    .unwrap();
+    open_round(
+        &book,
+        WALLET,
+        copy_opening("OtherTaskMint", 40),
+        &entry_fill(),
+        &buy_leg(),
+        &terms,
+    )
+    .await
+    .unwrap();
+    open_round(
+        &book,
+        WALLET,
+        opening("StrategyMint"),
+        &entry_fill(),
+        &buy_leg(),
+        &terms,
+    )
+    .await
+    .unwrap();
+    let closed = open_round(
+        &book,
+        WALLET,
+        copy_opening("ClosedMint", 4),
+        &entry_fill(),
+        &buy_leg(),
+        &terms,
+    )
+    .await
+    .unwrap();
+    let close = CloseFill {
+        effective_exit_price: 0.001,
+        native_received: 0.1,
+        fee_raw: 5_000,
+        exit_time: Utc::now(),
+    };
+    book.close(
+        WALLET,
+        closed.id.unwrap(),
+        &close,
+        0.001,
+        "stop_loss",
+        &sell_leg(100.0),
+    )
+    .await
+    .unwrap();
+
+    let rounds = book.copy_task_rounds(WALLET, 4, start).await.unwrap();
+    let ids: Vec<_> = rounds.iter().map(|round| round.id).collect();
+    assert_eq!(ids, vec![own.id, closed.id]);
+    assert!(!ids.contains(&before.id));
+    assert!(book
+        .copy_task_rounds(WALLET, 5, start)
+        .await
+        .unwrap()
+        .is_empty());
+}
+
+#[tokio::test]
+async fn settling_a_subset_leaves_the_other_rounds_open() {
+    let (book, _directory) = paper_book().await;
+    let terms = terms(&book, 10).await;
+    let settled = open_round(
+        &book,
+        WALLET,
+        copy_opening("SettleA", 9),
+        &entry_fill(),
+        &buy_leg(),
+        &terms,
+    )
+    .await
+    .unwrap();
+    let kept = open_round(
+        &book,
+        WALLET,
+        opening("SettleB"),
+        &entry_fill(),
+        &buy_leg(),
+        &terms,
+    )
+    .await
+    .unwrap();
+    let positions_before = count(&book, "SELECT COUNT(*) FROM positions");
+    let closed = book
+        .settle_at_mark(
+            WALLET,
+            &[settled.clone()],
+            "PaperReset",
+            |_| Some(DECIMALS),
+            Utc::now(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(closed, 1);
+    assert_eq!(
+        book.open_positions()
+            .await
+            .iter()
+            .map(|round| round.id)
+            .collect::<Vec<_>>(),
+        vec![kept.id]
+    );
+    let stored = book.stored(settled.id.unwrap()).await.unwrap().unwrap();
+    assert_eq!(stored.closed_reason.as_deref(), Some("PaperReset"));
+    assert_eq!(
+        count(&book, "SELECT COUNT(*) FROM positions"),
+        positions_before
+    );
+    let again = book
+        .settle_at_mark(
+            WALLET,
+            &[settled],
+            "PaperReset",
+            |_| Some(DECIMALS),
+            Utc::now(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(again, 0, "a round already closed is not settled twice");
+}
+
+#[tokio::test]
+async fn set_management_changes_the_store_and_the_open_round() {
+    let (book, _directory) = paper_book().await;
+    let id = open_round(
+        &book,
+        WALLET,
+        copy_opening("ManagedMint", 2),
+        &entry_fill(),
+        &buy_leg(),
+        &terms(&book, 5).await,
+    )
+    .await
+    .unwrap()
+    .id
+    .unwrap();
+    assert!(book
+        .set_management(id, PositionManagement::Hybrid)
+        .await
+        .unwrap());
+    assert_eq!(
+        book.position(id).await.unwrap().management,
+        PositionManagement::Hybrid
+    );
+    assert_eq!(
+        book.stored(id).await.unwrap().unwrap().management,
+        PositionManagement::Hybrid
+    );
+    assert!(!book
+        .set_management(id + 100, PositionManagement::Hybrid)
+        .await
+        .unwrap());
+}
+
+#[tokio::test]
+async fn a_copy_tasks_failed_exits_are_counted_for_that_task_only() {
+    let (book, _directory) = paper_book().await;
+    let terms = terms(&book, 5).await;
+    let own = open_round(
+        &book,
+        WALLET,
+        copy_opening("TaskStreakA", 11),
+        &entry_fill(),
+        &buy_leg(),
+        &terms,
+    )
+    .await
+    .unwrap()
+    .id
+    .unwrap();
+    let other = open_round(
+        &book,
+        WALLET,
+        copy_opening("TaskStreakB", 111),
+        &entry_fill(),
+        &buy_leg(),
+        &terms,
+    )
+    .await
+    .unwrap()
+    .id
+    .unwrap();
+    book.record_exit_attempt(own, None, false).await.unwrap();
+    book.record_exit_attempt(own, None, false).await.unwrap();
+    book.record_exit_attempt(other, None, false).await.unwrap();
+    assert_eq!(
+        book.failed_exit_streak(WALLET, &PaperExitOwner::CopyTask(11))
+            .await
+            .unwrap(),
+        2
+    );
+    assert_eq!(
+        book.failed_exit_streak(WALLET, &PaperExitOwner::CopyTask(111))
+            .await
+            .unwrap(),
+        1
+    );
+    assert_eq!(
+        book.failed_exit_streak(WALLET, &PaperExitOwner::CopyTask(1))
+            .await
+            .unwrap(),
+        0,
+        "task 1 does not match the rounds of task 11 or 111"
+    );
+    book.record_exit_attempt(own, None, true).await.unwrap();
+    assert_eq!(
+        book.failed_exit_streak(WALLET, &PaperExitOwner::CopyTask(11))
+            .await
+            .unwrap(),
+        0
+    );
+}
+
+#[test]
+fn the_exit_owner_of_a_round_is_its_strategy_or_its_copy_task() {
+    assert_eq!(
+        PaperExitOwner::of_round(&PositionOrigin::Auto {
+            strategy_id: Some("s".to_owned())
+        }),
+        Some(PaperExitOwner::Strategy("s".to_owned()))
+    );
+    assert_eq!(
+        PaperExitOwner::of_round(&copy_opening("M", 5).origin),
+        Some(PaperExitOwner::CopyTask(5))
+    );
+    assert_eq!(PaperExitOwner::of_round(&PositionOrigin::Manual), None);
+    assert_eq!(PaperExitOwner::of_round(&PositionOrigin::External), None);
 }

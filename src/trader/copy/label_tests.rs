@@ -13,7 +13,6 @@ use serde::Serialize;
 use serde_json::json;
 
 use super::control::{effective_state, CopyTradingStatus};
-use super::insights::exit_label;
 use super::*;
 use crate::i18n::format_en;
 use crate::trader::paper::TradingMode;
@@ -48,7 +47,7 @@ fn every_exit_mode_has_a_label() {
 }
 
 #[test]
-fn every_exit_bucket_has_a_label() {
+fn every_exit_rule_of_a_copy_decision_has_a_label() {
     let listed = |rule: PaperExitRule| match rule {
         PaperExitRule::StopLoss
         | PaperExitRule::TrailingStop
@@ -67,14 +66,16 @@ fn every_exit_bucket_has_a_label() {
         PaperExitRule::TimeStagnation,
         PaperExitRule::Manual,
     ];
-    let mut ids = vec![exit_label(None)];
-    ids.extend(rules.into_iter().filter_map(listed).map(|rule| {
-        let id = exit_label(Some(rule));
-        assert_eq!(id, serialized(&rule, ""));
-        assert_eq!(rule.label_text().id, format!("copy-exit-{}", kebab(&id)));
-        id
-    }));
-    assert_eq!(ids.len(), 8);
+    let ids = rules
+        .into_iter()
+        .filter_map(listed)
+        .map(|rule| {
+            let id = serialized(&rule, "");
+            assert_eq!(rule.label_text().id, format!("copy-exit-{}", kebab(&id)));
+            id
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(ids.len(), 7);
     for id in ids {
         assert_text(&format!("copy-exit-{}", kebab(&id)));
     }
@@ -104,6 +105,7 @@ fn task(enabled: bool, mode: TradingMode) -> CopyTask {
         copy_stable_quoted: None,
         pause_reason: None,
         paused_at: None,
+        paper_started_at: None,
     }
 }
 

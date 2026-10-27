@@ -10,7 +10,7 @@ use rusqlite::{params, Connection, OptionalExtension};
 
 use crate::database::WriteTransaction;
 use crate::errors::DatabaseError;
-use crate::positions::types::{EntryRecord, Position};
+use crate::positions::types::{EntryRecord, Position, PositionOrigin};
 use crate::positions::Result;
 
 use super::booking::{
@@ -71,6 +71,53 @@ pub struct PaperEpoch {
     pub started_at: DateTime<Utc>,
 }
 
+/// What [`PositionsDatabase::insert_paper_round`] did.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum PaperRoundInsert {
+    /// The round was opened under this id.
+    Inserted(i64),
+    /// The leg was already booked; it opened the round with this id and nothing was
+    /// written.
+    AlreadyBooked(i64),
+}
+
+/// Whose paper exits a run of failed exits is counted for: the strategy that opened or
+/// sold a round, or the copy task that opened it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PaperExitOwner {
+    Strategy(String),
+    CopyTask(i64),
+}
+
+impl PaperExitOwner {
+    /// The owner of the rounds `origin` opens: its entry strategy or its copy task; none
+    /// for a manual or external round, or an automatic one without a strategy.
+    pub fn of_round(origin: &PositionOrigin) -> Option<Self> {
+        match origin {
+            PositionOrigin::Auto { strategy_id } => strategy_id.clone().map(Self::Strategy),
+            PositionOrigin::Copy { task_id, .. } => Some(Self::CopyTask(*task_id)),
+            PositionOrigin::Manual | PositionOrigin::External => None,
+        }
+    }
+}
+
+/// The condition on a `positions` row, its columns prefixed by `prefix`, that selects
+/// the rounds copy task `?{param}` opened. The origin reference of a copy round is
+/// `{task_id}:{source_wallet}` (`PositionOrigin::reference`).
+fn copy_task_rounds_filter(prefix: &str, param: u8) -> String {
+    format!("{prefix}origin_kind = 'copy' AND {prefix}origin_ref LIKE ?{param} || ':%'")
+}
+
+/// The round the paper leg `leg_ref` was booked onto, when it is stored.
+fn leg_position(conn: &Connection, leg_ref: &str) -> rusqlite::Result<Option<i64>> {
+    conn.query_row(
+        "SELECT position_id FROM paper_legs WHERE leg_ref = ?1",
+        params![leg_ref],
+        |row| row.get(0),
+    )
+    .optional()
+}
+
 fn insert_paper_leg(
     conn: &Connection,
     position_id: i64,
@@ -93,17 +140,22 @@ fn insert_paper_leg(
 impl PositionsDatabase {
     /// Opens a paper round in one transaction: the row of `position`, its entry record,
     /// the entry leg and the opening state. Refused with `AlreadyOpen` while the mint has
-    /// an open round in this wallet. Returns the new position id.
+    /// an open round in this wallet. A leg reference already stored writes nothing and
+    /// returns the round that leg opened, so a keyed buy opens its round once however
+    /// often it is booked.
     pub(crate) fn insert_paper_round(
         &self,
         wallet_address: &str,
         position: &Position,
         mut entry: EntryRecord,
         leg: &PaperLegRow<'_>,
-    ) -> Result<i64> {
+    ) -> Result<PaperRoundInsert> {
         let sqlite = |e| DatabaseError::classify_sqlite_failure("insert_paper_round", e);
         let mut conn = self.get_connection()?;
         let tx = conn.write_tx().map_err(sqlite)?;
+        if let Some(position_id) = leg_position(&tx, leg.leg_ref).map_err(sqlite)? {
+            return Ok(PaperRoundInsert::AlreadyBooked(position_id));
+        }
         let position_id = insert_position_row(&tx, self.chain, wallet_address, position)?;
         entry.position_id = position_id;
         insert_entry_record(&tx, wallet_address, &entry).map_err(sqlite)?;
@@ -118,7 +170,7 @@ impl PositionsDatabase {
         .map_err(sqlite)?;
         tx.commit().map_err(sqlite)?;
         log_saved_record(&BookingRecord::Entry(entry));
-        Ok(position_id)
+        Ok(PaperRoundInsert::Inserted(position_id))
     }
 
     /// Books a paper fill onto `position_id` as [`Self::commit_booking`] does, and writes
@@ -195,6 +247,27 @@ impl PositionsDatabase {
         )
     }
 
+    /// The positions of `wallet_address` entered at or after `since` that copy task
+    /// `task_id` opened, open or closed.
+    pub(crate) fn copy_task_positions_entered_since(
+        &self,
+        wallet_address: &str,
+        task_id: i64,
+        since: DateTime<Utc>,
+    ) -> Result<Vec<Position>> {
+        self.select_positions(
+            "copy_task_positions_entered_since",
+            &format!(" AND {}", copy_task_rounds_filter("", 4)),
+            since,
+            params![
+                wallet_address,
+                self.chain.as_str(),
+                since.to_rfc3339(),
+                task_id.to_string()
+            ],
+        )
+    }
+
     /// The positions of wallet `?1` on chain `?2` entered at or after `since` (`?3`),
     /// narrowed by `filter`, in entry order. SQLite's `datetime()` compares whole seconds,
     /// so the query narrows to the second and the decoded entry time decides: a round
@@ -257,6 +330,32 @@ impl PositionsDatabase {
         Ok(legs)
     }
 
+    /// The stored paper leg `leg_ref` and the round it was booked onto.
+    pub(crate) fn paper_leg(&self, leg_ref: &str) -> Result<Option<(i64, PaperLegRecord)>> {
+        let sqlite = |e| DatabaseError::classify_sqlite_failure("paper_leg", e);
+        let conn = self.get_connection()?;
+        Ok(conn
+            .query_row(
+                "SELECT position_id, leg_kind, leg_ref, strategy_id, quote_json, created_at
+             FROM paper_legs WHERE leg_ref = ?1",
+                params![leg_ref],
+                |row| {
+                    Ok((
+                        row.get(0)?,
+                        PaperLegRecord {
+                            kind: row.get(1)?,
+                            leg_ref: row.get(2)?,
+                            strategy_id: row.get(3)?,
+                            quote_json: row.get(4)?,
+                            created_at: row.get(5)?,
+                        },
+                    ))
+                },
+            )
+            .optional()
+            .map_err(sqlite)?)
+    }
+
     /// Records a paper exit attempt of `position_id` decided by `strategy_id`, and
     /// whether it filled.
     pub(crate) fn insert_paper_exit_attempt(
@@ -277,28 +376,39 @@ impl PositionsDatabase {
         Ok(())
     }
 
-    /// The latest paper exit attempts of `wallet_address`'s rounds that `strategy_id`
-    /// took part in, as the entry strategy of the round or the exit strategy that decided
-    /// the sale, that found no fill since the last one that filled.
+    /// The latest paper exit attempts of `wallet_address`'s rounds that `owner` took part
+    /// in that found no fill since the last one that filled. A strategy takes part as the
+    /// entry strategy of the round or the exit strategy that decided the sale; a copy task
+    /// as the task that opened the round.
     pub(crate) fn failed_paper_exit_streak(
         &self,
         wallet_address: &str,
-        strategy_id: &str,
+        owner: &PaperExitOwner,
     ) -> Result<u32> {
         let sqlite = |e| DatabaseError::classify_sqlite_failure("failed_paper_exit_streak", e);
+        let (filter, key) = match owner {
+            PaperExitOwner::Strategy(strategy_id) => (
+                "(p.origin_kind = 'auto' AND p.origin_ref = ?3) OR a.strategy_id = ?3".to_owned(),
+                strategy_id.clone(),
+            ),
+            PaperExitOwner::CopyTask(task_id) => {
+                (copy_task_rounds_filter("p.", 3), task_id.to_string())
+            }
+        };
         let conn = self.get_connection()?;
         let streak: i64 = conn
             .query_row(
-                "WITH attempts AS (
-                     SELECT a.id, a.filled FROM paper_exit_attempts a
-                     JOIN positions p ON p.id = a.position_id
-                     WHERE p.wallet_address = ?1 AND p.chain_id = ?2
-                       AND ((p.origin_kind = 'auto' AND p.origin_ref = ?3) OR a.strategy_id = ?3)
-                 )
-                 SELECT COUNT(*) FROM attempts
-                 WHERE filled = 0
-                   AND id > COALESCE((SELECT MAX(id) FROM attempts WHERE filled = 1), 0)",
-                params![wallet_address, self.chain.as_str(), strategy_id],
+                &format!(
+                    "WITH attempts AS (
+                         SELECT a.id, a.filled FROM paper_exit_attempts a
+                         JOIN positions p ON p.id = a.position_id
+                         WHERE p.wallet_address = ?1 AND p.chain_id = ?2 AND ({filter})
+                     )
+                     SELECT COUNT(*) FROM attempts
+                     WHERE filled = 0
+                       AND id > COALESCE((SELECT MAX(id) FROM attempts WHERE filled = 1), 0)"
+                ),
+                params![wallet_address, self.chain.as_str(), key],
                 |row| row.get(0),
             )
             .map_err(sqlite)?;

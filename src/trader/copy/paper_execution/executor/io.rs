@@ -1,44 +1,48 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Production inputs for the paper-entry executor and its deterministic test seam.
+//! Production inputs for the paper-entry job and its deterministic test seam.
 
-use std::time::Duration;
+use crate::trader::admission::{EntryBlock, EntryCycle};
+use crate::trader::copy::{
+    paper_book, CopySkip, CopyTask, PipelinePolicy, RiskContext, SpendState,
+};
+use crate::trader::executors::ExecutionContext;
+use crate::trader::paper::TradingMode;
+use crate::trader::types::{TradeDecision, TradeResult};
 
-use crate::chains::ChainId;
-use crate::swaps::{Quote, QuoteError, QuoteRequest};
-use crate::trader::admission::EntryBlock;
-use crate::trader::copy::{CopySkip, CopyTask, PipelinePolicy, RiskContext};
+use super::super::PaperDispatch;
 
 #[derive(Clone, Copy)]
 pub(super) struct EntrySettings {
     pub enabled: bool,
     pub require_filter_pass: bool,
     pub engine_trade_size_native: f64,
-    pub paper_landing_delay_ms: u64,
 }
 
 pub(super) trait PaperEntryIo: Sync {
     fn force_stopped(&self) -> bool;
     fn settings(&self) -> EntrySettings;
-    async fn check_entry_admission(
-        &self,
-        mint: &str,
-        required_endpoints: &[&str],
-    ) -> Result<(), EntryBlock>;
     async fn risk_context(
         &self,
         task: &CopyTask,
         mint: &str,
         require_filter_pass: bool,
     ) -> Result<RiskContext, CopySkip>;
-    async fn token_decimals(&self, chain: ChainId, mint: &str) -> Option<u8>;
-    async fn wallet_address(&self) -> Result<String, ()>;
-    async fn quote(&self, request: QuoteRequest) -> Result<Quote, QuoteError>;
-    async fn wait(&self, duration: Duration) -> Result<(), CopySkip>;
+    /// What the task spent in its current paper run, in total and on `mint`.
+    async fn spend(&self, task: &CopyTask, mint: &str) -> Result<SpendState, CopySkip>;
+    /// The paper admission of `decision` at the size the paper executor will buy.
+    async fn admission(&self, decision: &TradeDecision) -> Result<(), EntryBlock>;
+    async fn dispatch(
+        &self,
+        decision: TradeDecision,
+        context: ExecutionContext,
+    ) -> crate::trader::Result<TradeResult>;
 }
 
-pub(super) struct ProductionPaperEntryIo;
+pub(super) struct ProductionPaperEntryIo {
+    pub dispatch: PaperDispatch,
+}
 
 impl PaperEntryIo for ProductionPaperEntryIo {
     fn force_stopped(&self) -> bool {
@@ -50,16 +54,7 @@ impl PaperEntryIo for ProductionPaperEntryIo {
             enabled: config.copy_trading.enabled,
             require_filter_pass: config.copy_trading.require_filter_pass,
             engine_trade_size_native: config.trader.trade_size_sol,
-            paper_landing_delay_ms: config.trader.paper.landing_delay_ms,
         })
-    }
-
-    async fn check_entry_admission(
-        &self,
-        mint: &str,
-        required_endpoints: &[&str],
-    ) -> Result<(), EntryBlock> {
-        crate::trader::admission::check_entry_admission(mint, required_endpoints).await
     }
 
     async fn risk_context(
@@ -89,21 +84,30 @@ impl PaperEntryIo for ProductionPaperEntryIo {
         })
     }
 
-    async fn token_decimals(&self, chain: ChainId, mint: &str) -> Option<u8> {
-        crate::tokens::decimals::get(chain, mint).await
+    async fn spend(&self, task: &CopyTask, mint: &str) -> Result<SpendState, CopySkip> {
+        paper_book::task_run(task)
+            .await
+            .map(|run| paper_book::paper_spend(&run.rounds, mint))
+            .map_err(|_| CopySkip::PaperExecutionUnavailable)
     }
 
-    async fn wallet_address(&self) -> Result<String, ()> {
-        crate::wallets::get_main_address().await.map_err(|_| ())
+    async fn admission(&self, decision: &TradeDecision) -> Result<(), EntryBlock> {
+        let cycle = EntryCycle::read(vec![TradingMode::Paper]).await;
+        crate::trader::admission::check_paper_entry_admission(
+            &decision.mint,
+            &["rpc"],
+            &cycle,
+            crate::trader::executors::entry_size_native(decision),
+        )
+        .await
     }
 
-    async fn quote(&self, request: QuoteRequest) -> Result<Quote, QuoteError> {
-        crate::swaps::try_get_best_quote(request).await
-    }
-
-    async fn wait(&self, duration: Duration) -> Result<(), CopySkip> {
-        tokio::time::sleep(duration).await;
-        Ok(())
+    async fn dispatch(
+        &self,
+        decision: TradeDecision,
+        context: ExecutionContext,
+    ) -> crate::trader::Result<TradeResult> {
+        (self.dispatch)(decision, context).await
     }
 }
 

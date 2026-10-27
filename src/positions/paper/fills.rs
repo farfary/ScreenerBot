@@ -13,7 +13,7 @@ use crate::positions::types::{Opening, Position};
 use crate::positions::{Error, Result};
 use crate::trader::paper::{PaperFill, PaperModel, PaperSellFill};
 
-use super::book::{PaperBook, PaperBooked, PaperOpenTerms};
+use super::book::{PaperBook, PaperBooked, PaperOpenTerms, PaperOpened};
 use super::leg::PaperLeg;
 
 /// How a paper sale leaves its round.
@@ -62,16 +62,16 @@ impl PaperBook {
         crate::chains::adapter_for(self.db.chain()).native_to_raw(network_fee_native)
     }
 
-    /// Opens a paper round from the quote-settled buy `fill` within `terms` (see
-    /// [`PaperBook::open`]).
+    /// Opens a paper round from the quote-settled buy `fill`, booked as `leg`, within
+    /// `terms` (see [`PaperBook::open`]).
     pub(crate) async fn book_buy(
         &self,
         wallet_address: &str,
         opening: Opening,
         fill: &PaperFill,
-        strategy_id: Option<String>,
+        leg: &PaperLeg,
         terms: &PaperOpenTerms,
-    ) -> Result<Position> {
+    ) -> Result<PaperOpened> {
         let (token_amount, _) = quoted_amount(&opening.mint, fill.quote.as_ref(), false)?;
         let entry = EntryFill {
             effective_entry_price: fill.fill_price_sol,
@@ -79,42 +79,39 @@ impl PaperBook {
             fee_raw: self.fee_raw(fill.network_fee_sol),
             native_size: fill.input_sol,
         };
-        let leg = PaperLeg::buy(fill, strategy_id, Utc::now())?;
-        self.open(wallet_address, opening, &entry, &leg, terms)
-            .await
+        self.open(wallet_address, opening, &entry, leg, terms).await
     }
 
-    /// Books the quote-settled add `fill` onto the open round `position_id`.
+    /// Books the quote-settled add `fill`, booked as `leg`, onto the open round
+    /// `position_id`.
     pub(crate) async fn book_add(
         &self,
         wallet_address: &str,
         position_id: i64,
         mint: &str,
         fill: &PaperFill,
-        strategy_id: Option<String>,
+        leg: &PaperLeg,
     ) -> Result<PaperBooked> {
         let (tokens_bought, decimals) = quoted_amount(mint, fill.quote.as_ref(), false)?;
-        let now = Utc::now();
         let add = DcaFill {
             tokens_bought,
             native_spent: fill.input_sol,
             fee_raw: self.fee_raw(fill.network_fee_sol),
-            dca_time: now,
+            dca_time: leg.at,
         };
-        let leg = PaperLeg::buy(fill, strategy_id, now)?;
         self.dca(
             wallet_address,
             position_id,
             &add,
             fill.fill_price_sol,
             decimals,
-            &leg,
+            leg,
         )
         .await
     }
 
-    /// Books the quote-settled sale `fill` onto the open round `position_id`, as a partial
-    /// exit or as the close of the round.
+    /// Books the quote-settled sale `fill`, booked as `leg`, onto the open round
+    /// `position_id`, as a partial exit or as the close of the round.
     pub(crate) async fn book_sale(
         &self,
         wallet_address: &str,
@@ -122,12 +119,11 @@ impl PaperBook {
         mint: &str,
         fill: &PaperSellFill,
         sale: PaperSale<'_>,
-        strategy_id: Option<String>,
+        leg: &PaperLeg,
     ) -> Result<PaperBooked> {
         let (sold, _) = quoted_amount(mint, fill.quote.as_ref(), true)?;
-        let now = Utc::now();
+        let now = leg.at;
         let fee_raw = self.fee_raw(fill.network_fee_sol);
-        let leg = PaperLeg::sell(fill, strategy_id, now)?;
         match sale {
             PaperSale::Partial {
                 percentage,
@@ -146,7 +142,7 @@ impl PaperBook {
                     &partial,
                     percentage,
                     take_profit_level,
-                    &leg,
+                    leg,
                 )
                 .await
             }
@@ -157,15 +153,8 @@ impl PaperBook {
                     fee_raw,
                     exit_time: now,
                 };
-                self.close(
-                    wallet_address,
-                    position_id,
-                    &close,
-                    exit_price,
-                    reason,
-                    &leg,
-                )
-                .await
+                self.close(wallet_address, position_id, &close, exit_price, reason, leg)
+                    .await
             }
         }
     }
@@ -211,7 +200,7 @@ impl PaperBook {
             model: PaperModel::Mark,
             quote: None,
         };
-        let leg = PaperLeg::sell(&sale, None, now)?;
+        let leg = PaperLeg::sell(&sale, None, now, None)?;
         let close = CloseFill {
             effective_exit_price: mark,
             native_received: value,

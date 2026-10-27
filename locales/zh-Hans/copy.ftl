@@ -74,10 +74,10 @@ copy-readiness-latency = 交易检测及时
 copy-readiness-latency-detail = p95 到达时间 { $p95 } 秒，上限 { $limit } 秒
 copy-readiness-latency-none = 暂无到达时间样本
 copy-readiness-priced = 所有持仓均有价格
-copy-readiness-priced-ok = 每个模拟持仓都有流动性池价格
-copy-readiness-priced-missing =
+copy-readiness-marked-ok = 每个未平仓的模拟持仓都有价格
+copy-readiness-marked-missing =
     { $count ->
-       *[other] { $count } 个持仓没有流动性池价格
+       *[other] { $count } 个持仓没有价格
     }
 copy-readiness-runtime = 可执行实盘
 copy-readiness-runtime-ok = 设置和安全检查均允许实盘跟单
@@ -94,7 +94,6 @@ copy-state-running-paper = 运行中
 copy-exit-mode-buy-only = 我的出场规则
 copy-exit-mode-mirror = 镜像钱包卖出
 copy-exit-mode-hybrid = 钱包卖出与我的规则
-copy-exit-target-sell = 钱包已卖出
 copy-exit-stop-loss = 止损
 copy-exit-trailing-stop = 追踪止损
 copy-exit-break-even = 保本止损
@@ -271,6 +270,12 @@ copy-paper-legacy-col-cost = 剩余成本（{ -sol }）
 copy-paper-legacy-col-realized = 已实现估算（{ -sol }）
 copy-paper-legacy-col-price = 最后保存的价格（{ -sol }）
 copy-paper-legacy-col-remaining = 按保存价格的剩余盈亏（{ -sol }）
+copy-paper-earlier-title = 之前的模拟结果
+copy-paper-archived-title = 基于报价的跟单账本
+copy-paper-archived-note = 此任务的模拟跟单在成为模拟账本轮次之前记录的只读结果。它们不计入当前周期的花费或持仓，也不提供任何操作。剩余数量按每个代币最后保存的价格估值，绝不按当前市场价格估值。
+copy-paper-archived-spent = 之前的花费
+copy-paper-archived-realized = 之前的已实现盈亏
+copy-paper-archived-col-realized = 已实现（{ -sol }）
 
 ## Workspace
 
@@ -355,7 +360,7 @@ copy-return-paper-cancel = 保持实盘
 copy-task-returned-paper = 任务已切回模拟
 copy-mode-change-failed = 无法更改执行模式
 copy-delete-title = 删除跟单任务
-copy-delete-message = 删除“{ $name }”？其决策记录和模拟结果将被移除，且此任务不再监控该钱包。
+copy-delete-settle-message = 删除“{ $name }”？其未平仓的模拟持仓将按最后价格平仓，并与已平仓的轮次一起保留在模拟历史中。其决策记录将被移除，且此任务不再监控该钱包。
 copy-delete-confirm = 删除任务
 copy-delete-cancel = 保留任务
 copy-task-deleted = 跟单任务已删除
@@ -366,9 +371,9 @@ copy-task-delete-failed = 无法删除跟单任务
 copy-overview-results = 结果
 copy-analytics-load-failed = 无法加载分析数据：{ $error }
 copy-analytics-loading = 正在加载分析数据…
-copy-exit-bucket =
+copy-exit-bucket-rounds =
     { $count ->
-       *[other] { $count } 笔卖出 · { $pnl }
+       *[other] { $count } 个轮次 · { $pnl }
     }
 copy-overview-average-win = 平均盈利
 copy-overview-average-loss = 平均亏损 { $amount }
@@ -388,9 +393,9 @@ copy-book-buys =
     <strong>{ $count }</strong> { $count ->
        *[other] 笔买入
     }
-copy-book-policy-exits =
+copy-book-rule-closes =
     <strong>{ $count }</strong> { $count ->
-       *[other] 笔按您的规则出场
+       *[other] 个轮次按您的规则平仓
     }
 copy-book-wallet-sells =
     <strong>{ $count }</strong> { $count ->
@@ -629,12 +634,12 @@ copy-holdings-title = 持仓
 copy-holdings-view-label = 持仓视图
 copy-holdings-view-open = 持仓中（{ $count }）
 copy-holdings-view-closed = 已平仓轮次（{ $count }）
-copy-holdings-reset = 重置模拟账本
+copy-holdings-restart = 开始新的模拟周期
 copy-holdings-live-note = 实盘跟单是真实仓位。
 copy-holdings-open-positions = 持仓中的仓位
 copy-holdings-token-details = 打开代币详情
 copy-holdings-opened = 开仓于 { $time }
-copy-holdings-no-pool-price = 无流动性池价格
+copy-holdings-no-price = 无价格
 copy-holdings-close = 平仓
 copy-holdings-close-pending = 等待平仓
 copy-holdings-activity = 活动
@@ -665,10 +670,12 @@ copy-holdings-col-invested = 投入（{ -sol }）
 copy-holdings-col-proceeds = 所得（{ -sol }）
 copy-holdings-col-exit = 出场价
 copy-holdings-col-closed = 平仓时间
-copy-holdings-marks-note = 价格以每个代币的 { -sol } 计。估值和出场水平使用流动性池价格，该价格同时触发出场规则；记录的成交使用路由报价。入场价已包含买入的预估网络费；峰值和出场水平均相对于入场价，因此持仓建立时其峰值低于入场价。将鼠标悬停在某项上可查看其流动性池价格。
+copy-holdings-round-note = 价格以每个代币的 { -sol } 计。每一行是模拟账本中的一个轮次。标记价格是该轮次的最新价格，来自流动性池或市场数据，出场规则依据它触发；记录的成交使用路由报价。入场价是该轮次的平均入场价；峰值和出场价位都相对于它。悬停可查看价格。
 copy-holdings-paused-rules = 已暂停：不会新增跟单。您的出场规则仍会平掉这些持仓。
 copy-holdings-paused-mirror = 已暂停：不会新增跟单。钱包的卖出仍会平掉这些持仓。
 copy-holdings-paused-hybrid = 已暂停：不会新增跟单。钱包的卖出和您的出场规则仍会平掉这些持仓。
+copy-holdings-trader-stopped-rules = 自动交易已停止，在它重新运行之前，没有任何出场会平掉这些持仓。
+copy-holdings-trader-stopped-wallet = 自动交易已停止，在它重新运行之前，只有钱包的卖出会平掉这些持仓。
 copy-holdings-closed-load-failed = 无法加载已平仓轮次：{ $error }
 copy-holdings-closed-loading = 正在加载已平仓轮次…
 copy-holdings-closed-empty = 暂无已平仓轮次。
@@ -684,14 +691,14 @@ copy-holdings-close-pending-detail = 平仓正在排队或执行中。结果会�
 copy-holdings-close-unconfirmed = 平仓结果未确认
 copy-holdings-close-unconfirmed-detail = 连接在收到结果前已中断，“活动”中也还没有结果。再次平仓前请先查看“活动”。
 copy-holdings-closed-check-activity = 持仓已平仓。记录的成交见“活动”。
-copy-holdings-reset-quote-message = 重新开始“{ $name }”：其当前的模拟持仓、花费、成交、出场和跳过记录将被清除，并开始新的基于报价的账本。旧版估算和实盘历史保留，规则和钱包也保留。
-copy-holdings-reset-cancel = 保留历史
-copy-holdings-reset-done = 模拟账本已重置
-copy-holdings-reset-detail =
+copy-holdings-restart-message = 重新开始“{ $name }”：其未平仓的模拟持仓将按最后价格平仓，其数据只统计从现在起发生的事。不会删除任何内容：已平仓的轮次保留在模拟历史中，之前的决策保留在“活动”中并标记为之前的周期。规则和钱包保留。
+copy-holdings-restart-cancel = 保留当前周期
+copy-holdings-restart-done = 新的模拟周期已开始
+copy-holdings-restart-detail =
     { $count ->
-       *[other] 已移除 { $count } 条决策
+       *[other] 已平仓 { $count } 个持仓
     }
-copy-holdings-reset-failed = 无法重置模拟账本
+copy-holdings-restart-failed = 无法开始新的模拟周期
 
 ## Activity tab
 
@@ -708,6 +715,8 @@ copy-outcome-skipped = 已跳过
 copy-activity-decision = 决策
 copy-activity-paper-exit-quote = 基于报价的模拟出场 · { $rule }
 copy-activity-paper-exit-legacy = 旧版模拟出场估算 · { $rule }
+copy-activity-earlier-run = 之前的周期
+    .title = 在此任务当前模拟周期之前作出的决策，因此不计入其当前数据。
 copy-activity-filled = { $input }，价格 { $price } · 钱包买入 { $target }
 copy-activity-filled-target-difference = { $input }，价格 { $price } · 钱包买入 { $target } · 与目标价格的差异 { $difference }
 copy-activity-filled-slippage = { $input }，价格 { $price } · 钱包买入 { $target } · 滑点 { $slippage }

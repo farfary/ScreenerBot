@@ -101,15 +101,11 @@ pub async fn latest_by_mint(book: Book, mint: &str) -> super::Result<Option<Posi
     }
 }
 
-/// Every mint a book holds: the live and the paper open rounds and the copy-trading
-/// paper holdings, once each. These are the tokens whose prices, pools and charts the
-/// open positions are marked and exited on.
+/// Every mint a book holds: the live and the paper open rounds, copy-trading paper
+/// rounds among them, once each. These are the tokens whose prices, pools and charts
+/// the open positions are marked and exited on.
 pub async fn held_mints() -> Vec<String> {
-    merge_mints([
-        open_mints(Book::Live).await,
-        open_mints(Book::Paper).await,
-        crate::trader::copy::held_paper_mints(),
-    ])
+    merge_mints([open_mints(Book::Live).await, open_mints(Book::Paper).await])
 }
 
 /// The mints of `sources` in order, each once.
@@ -129,9 +125,10 @@ mod tests {
     #[test]
     fn held_mints_cover_live_and_paper_books_once_each() {
         let live = vec!["A".to_owned(), "B".to_owned()];
-        let paper = vec!["B".to_owned(), "C".to_owned()];
-        let copy = vec!["D".to_owned(), "A".to_owned()];
-        assert_eq!(merge_mints([live, paper, copy]), vec!["A", "B", "C", "D"]);
-        assert!(merge_mints([Vec::new(), Vec::new(), Vec::new()]).is_empty());
+        // A copy task's paper round is a round of the paper book: its mint arrives
+        // once, through the paper book, whatever else holds it.
+        let paper = vec!["B".to_owned(), "C".to_owned(), "D".to_owned()];
+        assert_eq!(merge_mints([live, paper]), vec!["A", "B", "C", "D"]);
+        assert!(merge_mints([Vec::new(), Vec::new()]).is_empty());
     }
 }

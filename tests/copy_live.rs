@@ -9,12 +9,12 @@ use std::sync::Arc;
 use chrono::{TimeZone, Utc};
 use screenerbot::chains::ChainId;
 use screenerbot::config::TraderConfig;
-use screenerbot::positions::{PositionManagement, PositionOrigin};
+use screenerbot::positions::{Book, PositionManagement, PositionOrigin};
 use screenerbot::trader::admission::EntryBlock;
 use screenerbot::trader::copy::{
-    confirm_mode_transition, execute_live_with, management_for_exit_mode, prepare_live_entry,
+    confirm_mode_transition, execute_live_with, management_for_exit_mode, prepare_entry,
     CopyOutcome, CopySkip, CopyTask, CopyTaskInput, ExitMode, LiveSubmitResult, PipelinePolicy,
-    RiskContext, SizingMode, SpendState,
+    PreparedEntry, RiskContext, SizingMode, SpendState,
 };
 use screenerbot::trader::paper::{TradingMode, LIVE_ARM_CONFIRMATION};
 use screenerbot::trader::policy::ExitPolicy;
@@ -51,6 +51,7 @@ fn task(exit_mode: ExitMode) -> CopyTask {
         copy_stable_quoted: None,
         pause_reason: None,
         paused_at: None,
+        paper_started_at: None,
     }
 }
 
@@ -98,10 +99,14 @@ fn activity() -> WalletActivity {
     }
 }
 
-fn plan(exit_mode: ExitMode) -> screenerbot::trader::copy::PreparedLiveEntry {
-    prepare_live_entry(
+fn plan(exit_mode: ExitMode) -> PreparedEntry {
+    plan_in(task(exit_mode))
+}
+
+fn plan_in(task: CopyTask) -> PreparedEntry {
+    prepare_entry(
         &activity(),
-        &task(exit_mode),
+        &task,
         SpendState::default(),
         RiskContext {
             filter_passed: true,
@@ -174,6 +179,39 @@ fn exit_mode_maps_to_typed_position_ownership_and_copy_origin() {
         );
         assert_eq!(plan.decision.size_native, Some(0.2));
     }
+}
+
+#[test]
+fn a_live_decision_matches_the_paper_decision_but_for_its_book_and_leg_key() {
+    let live = plan(ExitMode::Hybrid);
+    let paper = plan_in(CopyTask {
+        mode: TradingMode::Paper,
+        ..task(ExitMode::Hybrid)
+    });
+    assert_eq!(live.decision.book, Book::Live);
+    assert_eq!(
+        live.decision.paper_leg_key, None,
+        "a live buy books no paper leg"
+    );
+    assert_eq!(paper.decision.book, Book::Paper);
+    assert!(paper.decision.paper_leg_key.is_some());
+    let shape = |decision: &screenerbot::trader::TradeDecision| {
+        (
+            decision.mint.clone(),
+            decision.action.clone(),
+            decision.reason.clone(),
+            decision.strategy_id.clone(),
+            decision.timestamp,
+            decision.price_native,
+            decision.size_native,
+            decision.exit_percentage,
+            decision.slippage_pct,
+            decision.position_id.clone(),
+        )
+    };
+    assert_eq!(shape(&paper.decision), shape(&live.decision));
+    assert_eq!(paper.context, live.context);
+    assert_eq!(paper.telemetry, live.telemetry);
 }
 
 #[test]

@@ -1937,7 +1937,6 @@ const BARE_STRING_KEYED_STATICS: &[&str] = &[
     "positions/state_pending.rs::PENDING_PARTIAL_EXIT_DETAILS",
     "positions/verifier.rs::LAST_TOKEN_ACCOUNTS_CHECK",
     "swaps/operations.rs::NO_ROUTE_STRIKES",
-    "trader/copy/paper_exits.rs::HELD_PAPER_MINTS",
     "trader/entry.rs::ENTRY_CYCLE_RESERVATIONS",
     "transactions/utils.rs::GLOBAL_KNOWN_SIGNATURES",
     "transactions/utils.rs::GLOBAL_PENDING_TRANSACTIONS",

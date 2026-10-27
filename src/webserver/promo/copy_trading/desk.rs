@@ -12,11 +12,13 @@ use std::collections::HashSet;
 
 use chrono::{DateTime, Duration, Utc};
 
-use crate::chains::active_chain;
-use crate::positions::{Position, PositionManagement, PositionOrigin};
+use crate::chains::{active_chain, RawAmount};
+use crate::positions::{Book, Position, PositionManagement, PositionOrigin, PriceSource};
+use crate::trader::copy::control::TaskRounds;
+use crate::trader::copy::paper_book::{effective_start, paper_spend};
 use crate::trader::copy::{
     management_for_exit_mode, CopyActivityRow, CopyOutcome, CopySkip, CopyTask, CopyTelemetry,
-    ExitMode, PaperPosition, SizingMode, TargetObservations,
+    ExitMode, SizingMode, TargetObservations,
 };
 use crate::trader::paper::TradingMode;
 use crate::trader::policy::ExitPolicyOverrides;
@@ -72,6 +74,7 @@ fn base_task(wallet: (i64, &str, &str, i64), now: DateTime<Utc>) -> CopyTask {
         copy_stable_quoted: None,
         pause_reason: None,
         paused_at: None,
+        paper_started_at: None,
     }
 }
 
@@ -147,21 +150,6 @@ fn observed(
     }
 }
 
-/// Telemetry of an exit the task's own rules made: there is no target trade.
-fn rule_exit(at: DateTime<Utc>, fill_price: f64) -> CopyTelemetry {
-    CopyTelemetry {
-        target_block_time: None,
-        detected_at: at,
-        decoded_at: at,
-        decided_at: at,
-        submitted_at: None,
-        confirmed_at: None,
-        target_price_sol: None,
-        fill_price_sol: Some(fill_price),
-        backfill: false,
-    }
-}
-
 fn signature(kind: &str, task_id: i64, n: usize, mint: &str) -> String {
     format!("promo-{kind}-{task_id}-{n}-{}", &mint[..mint.len().min(8)])
 }
@@ -196,12 +184,111 @@ pub(super) fn outcome_mint(outcome: &CopyOutcome) -> Option<&str> {
     }
 }
 
-/// The pool price a paper holding is marked at: the session's current price.
-pub(super) fn mark(position: &PaperPosition) -> Option<f64> {
-    PROMO_OPEN_TOKENS
-        .iter()
-        .find(|token| token.2 == position.mint)
-        .map(|token| token.5)
+/// A round a promo task opened, in the book of its mode.
+struct Round<'a> {
+    /// The paper round's id; a live row is numbered by the positions store.
+    id: Option<i64>,
+    mint: &'a str,
+    symbol: &'a str,
+    name: &'a str,
+    entry: f64,
+    size: f64,
+    entry_time: DateTime<Utc>,
+    /// (exit price, exit time, closed reason) once it has closed.
+    close: Option<(f64, DateTime<Utc>, String)>,
+    /// The current price while it is open.
+    current: Option<f64>,
+    /// The basis peak; three percent above the latest price when absent.
+    peak: Option<f64>,
+}
+
+/// The round as the positions store of `book` holds it; a live row's figures match
+/// the Positions page's row for the same token.
+fn round_position(task: &CopyTask, round: &Round, book: Book, now: DateTime<Utc>) -> Position {
+    let tokens =
+        RawAmount::from_integral_f64((round.size / round.entry * 1e9).trunc()).unwrap_or_default();
+    let exit_price = round.close.as_ref().map(|(price, ..)| *price);
+    let exit_time = round.close.as_ref().map(|(_, at, _)| *at);
+    let move_pct = |price: f64| (price - round.entry) / round.entry * 100.0;
+    let pnl = exit_price.map(|price| move_pct(price) / 100.0 * round.size);
+    let unrealized = round
+        .current
+        .map(|price| move_pct(price) / 100.0 * round.size);
+    let reference = exit_price.or(round.current).unwrap_or(round.entry);
+    let peak = round
+        .peak
+        .unwrap_or_else(|| reference.max(round.entry) * 1.03);
+    let live = book == Book::Live;
+    Position {
+        id: round.id,
+        mint: round.mint.to_owned(),
+        symbol: round.symbol.to_owned(),
+        name: round.name.to_owned(),
+        entry_price: round.entry,
+        entry_time: round.entry_time,
+        exit_price,
+        exit_time,
+        position_type: "long".to_owned(),
+        entry_size_native: round.size,
+        total_size_native: round.size,
+        price_highest: peak,
+        price_lowest: reference.min(round.entry) * 0.97,
+        basis_peak_price: peak,
+        basis_peak_restarted: false,
+        entry_transaction_signature: live.then(|| signature("entry", task.id, 0, round.mint)),
+        exit_transaction_signature: exit_time
+            .filter(|_| live)
+            .map(|_| signature("exit", task.id, 0, round.mint)),
+        token_amount: Some(tokens),
+        effective_entry_price: Some(round.entry),
+        effective_exit_price: exit_price,
+        native_received: pnl.map(|pnl| round.size + pnl),
+        profit_target_min: Some(15.0),
+        profit_target_max: Some(50.0),
+        liquidity_tier: Some("high".to_owned()),
+        transaction_entry_verified: true,
+        transaction_exit_verified: exit_time.is_some(),
+        entry_fee_raw: Some(5000),
+        exit_fee_raw: exit_time.map(|_| 5000),
+        current_price: round.current,
+        current_price_updated: round.current.map(|_| now),
+        current_price_source: round.current.map(|_| PriceSource::Pool),
+        book,
+        phantom_remove: false,
+        phantom_confirmations: 0,
+        phantom_first_seen: None,
+        synthetic_exit: false,
+        closed_reason: round.close.as_ref().map(|(.., reason)| reason.clone()),
+        pnl,
+        pnl_percent: exit_price.map(move_pct),
+        unrealized_pnl: unrealized,
+        unrealized_pnl_percent: round.current.map(move_pct),
+        remaining_token_amount: round.current.map(|_| tokens),
+        total_exited_amount: if exit_time.is_some() {
+            tokens
+        } else {
+            RawAmount::ZERO
+        },
+        average_exit_price: exit_price,
+        partial_exit_count: 0,
+        take_profit_level: 0,
+        entry_liquidity_native: None,
+        entry_liquidity_pool: None,
+        dca_count: 0,
+        average_entry_price: round.entry,
+        last_dca_time: None,
+        archived: false,
+        archived_at: None,
+        origin: PositionOrigin::Copy {
+            task_id: task.id,
+            source_wallet: task.target_address.clone(),
+        },
+        management: management_for_exit_mode(task.exit_mode),
+        round_key: None,
+        basis_complete: true,
+        history_complete: true,
+        holding_state: None,
+    }
 }
 
 /// Who owns a promo position: the live copy task that opened it, if one did,
@@ -337,9 +424,10 @@ pub(super) struct Desk {
     pub(super) tasks: Vec<CopyTask>,
     /// Newest first, as the store reads it.
     pub(super) activity: Vec<CopyActivityRow>,
+    /// The rounds every task opened: live positions and paper rounds.
     pub(super) positions: Vec<Position>,
-    paper_book: Vec<PaperPosition>,
-    spend: Vec<(i64, f64)>,
+    /// What each live task spent.
+    live_spend: Vec<(i64, f64)>,
 }
 
 impl Desk {
@@ -348,18 +436,18 @@ impl Desk {
         let tasks = tasks(now);
         let mut decisions = Vec::new();
         let mut positions = Vec::new();
-        let mut paper_book = Vec::new();
-        let mut spend = Vec::with_capacity(tasks.len());
+        let mut live_spend = Vec::with_capacity(tasks.len());
         for task in &tasks {
-            let spent = match task.mode {
-                TradingMode::Live => live::live_desk(task, now, &mut decisions, &mut positions),
-                TradingMode::Paper => paper::paper_desk(task, now, &mut decisions, &mut paper_book),
-            };
-            spend.push((task.id, spent));
+            match task.mode {
+                TradingMode::Live => live_spend.push((
+                    task.id,
+                    live::live_desk(task, now, &mut decisions, &mut positions),
+                )),
+                TradingMode::Paper => paper::paper_desk(task, now, &mut decisions, &mut positions),
+            }
         }
         skips(&tasks, now, &mut decisions);
-        // The store numbers decisions in the order they were recorded; the paper
-        // replay depends on it.
+        // The store numbers decisions in the order they were recorded.
         decisions.sort_by_key(|(at, _)| *at);
         let mut activity = decisions
             .into_iter()
@@ -370,6 +458,7 @@ impl Desk {
                 kind: kind(&outcome),
                 outcome,
                 created_at,
+                earlier_run: false,
             })
             .collect::<Vec<_>>();
         activity.reverse();
@@ -377,8 +466,7 @@ impl Desk {
             tasks,
             activity,
             positions,
-            paper_book,
-            spend,
+            live_spend,
         }
     }
 
@@ -394,19 +482,38 @@ impl Desk {
             .collect()
     }
 
-    pub(super) fn paper_book(&self, id: i64) -> Vec<PaperPosition> {
-        self.paper_book
-            .iter()
-            .filter(|position| position.task_id == id)
-            .cloned()
-            .collect()
+    /// The rounds `task` opened in the book of its mode, as the product reads them.
+    pub(super) fn task_rounds(&self, task: &CopyTask) -> TaskRounds {
+        let book = task.mode.book();
+        TaskRounds {
+            positions: self
+                .positions
+                .iter()
+                .filter(|position| {
+                    position.book == book
+                        && matches!(
+                            position.origin,
+                            PositionOrigin::Copy { task_id, .. } if task_id == task.id
+                        )
+                })
+                .cloned()
+                .collect(),
+            run_start: (task.mode == TradingMode::Paper).then(|| effective_start(task, None)),
+        }
     }
 
-    pub(super) fn spent_sol(&self, id: i64) -> f64 {
-        self.spend
-            .iter()
-            .find(|(task_id, _)| *task_id == id)
-            .map_or(0.0, |(_, spent)| *spent)
+    /// What `task` spent in its book: its live spend, or the copy buys of its paper run.
+    pub(super) fn spent_native(&self, task: &CopyTask) -> f64 {
+        match task.mode {
+            TradingMode::Live => self
+                .live_spend
+                .iter()
+                .find(|(task_id, _)| *task_id == task.id)
+                .map_or(0.0, |(_, spent)| *spent),
+            TradingMode::Paper => {
+                paper_spend(&self.task_rounds(task).positions, "").total_spent_native
+            }
+        }
     }
 
     /// The target trades the given tasks observed: every buy they copied or

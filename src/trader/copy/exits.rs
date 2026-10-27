@@ -5,18 +5,15 @@
 
 use std::future::Future;
 
-use crate::chains::RawAmount;
 use chrono::{DateTime, Utc};
 
-use crate::positions::{Position, PositionManagement, PositionOrigin};
-use crate::trader::paper::{fill, PaperModel};
+use crate::positions::{Book, Position, PositionManagement, PositionOrigin};
+use crate::trader::paper::{PaperExecution, PaperLegFill, PaperRefusal, PaperSellFill};
 use crate::trader::types::{TradeAction, TradeDecision, TradePriority, TradeReason, TradeResult};
 use crate::wallets::watch::{ActivityKind, SwapSide, WalletActivity};
 
-use super::types::{
-    CopyOutcome, CopySellDecision, CopySkip, CopyTask, CopyTelemetry, ExitMode, PaperPosition,
-};
-use crate::trader::paper::TradingMode;
+use super::entries::{leg_key, quote_context};
+use super::types::{CopyOutcome, CopySellDecision, CopySkip, CopyTask, CopyTelemetry, ExitMode};
 
 #[derive(Debug, Clone)]
 pub struct PreparedCopySell {
@@ -30,12 +27,39 @@ pub struct PreparedCopySell {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum CopySellSubmitResult {
-    Submitted { transaction_signature: String },
-    Failed { error: String },
+    Submitted {
+        transaction_signature: String,
+    },
+    /// The paper executor booked the sale on the task's paper round.
+    PaperFilled {
+        fill: PaperSellFill,
+    },
+    /// The paper executor booked nothing.
+    PaperRefused {
+        refusal: PaperRefusal,
+    },
+    Failed {
+        error: String,
+    },
 }
 
 impl CopySellSubmitResult {
     pub fn from_trade_result(result: crate::trader::Result<TradeResult>) -> Self {
+        if let Ok(TradeResult {
+            paper: Some(execution),
+            ..
+        }) = &result
+        {
+            return match execution {
+                PaperExecution::Filled(evidence) => match &evidence.fill {
+                    PaperLegFill::Sell(fill) => Self::PaperFilled { fill: fill.clone() },
+                    PaperLegFill::Buy(_) => Self::Failed {
+                        error: "a copy sell booked a paper buy".to_owned(),
+                    },
+                },
+                PaperExecution::Refused(refusal) => Self::PaperRefused { refusal: *refusal },
+            };
+        }
         match result {
             Ok(result) if result.success => match result.tx_signature {
                 Some(transaction_signature) => Self::Submitted {
@@ -57,122 +81,6 @@ impl CopySellSubmitResult {
     }
 }
 
-/// Mirror a target sell against the task's paper book: sell the same fraction of
-/// the paper holding the target sold of its own, at the decision-time price, so
-/// paper mode books the realized result a live copy sell would.
-#[allow(clippy::too_many_arguments)]
-pub async fn paper_sell_outcome<Q, QFut, W, WFut>(
-    activity: &WalletActivity,
-    task: &CopyTask,
-    force_stopped: bool,
-    target_holding_before_sell: f64,
-    paper_position: &PaperPosition,
-    database: &super::CopyDatabase,
-    epoch: u64,
-    decided_at: DateTime<Utc>,
-    quote: Q,
-    wait: W,
-) -> Result<CopyOutcome, CopySkip>
-where
-    Q: FnMut(crate::swaps::QuoteRequest) -> QFut,
-    QFut: Future<Output = Result<crate::swaps::Quote, crate::swaps::QuoteError>>,
-    W: FnOnce(std::time::Duration) -> WFut,
-    WFut: Future<Output = Result<(), CopySkip>>,
-{
-    if task.exit_mode == ExitMode::BuyOnly {
-        return Err(CopySkip::ExitModeDisabled);
-    }
-    if force_stopped {
-        return Err(CopySkip::ForceStopped);
-    }
-    let (mint, target_token_amount, target_native_amount, target_price_native) =
-        sell_activity(activity)?;
-    let exit_percentage =
-        proportional_exit_percentage(target_token_amount, target_holding_before_sell);
-    let held_raw = paper_position
-        .raw_token_amount
-        .filter(|amount| *amount > RawAmount::ZERO)
-        .ok_or(CopySkip::CopyPositionNotFound)?;
-    let stored_decimals = paper_position
-        .token_decimals
-        .ok_or(CopySkip::PaperQuoteUnfillable)?;
-    let decimals = stored_decimals;
-    let wallet_address = crate::wallets::get_main_address()
-        .await
-        .map_err(|_| CopySkip::PaperQuoteUnfillable)?;
-    let request = super::paper_exits::paper_sell_request(
-        task,
-        mint,
-        held_raw,
-        exit_percentage,
-        wallet_address,
-    )?;
-    let raw = request.input_amount;
-    let delay_ms = crate::config::with_config(|config| config.trader.paper.landing_delay_ms);
-    let fill = crate::global::paper_scope(fill::simulate_sell(
-        request,
-        decimals,
-        delay_ms,
-        decided_at,
-        epoch,
-        quote,
-        |delay| async move {
-            wait(delay).await?;
-            if crate::global::is_force_stopped() {
-                return Err(CopySkip::ForceStopped);
-            }
-            match database.get_task(task.id).await {
-                Ok(Some(current))
-                    if current.mode == TradingMode::Paper
-                        && current.exit_mode != ExitMode::BuyOnly
-                        && current.slippage_pct == task.slippage_pct => {}
-                _ => return Err(CopySkip::TaskDisabled),
-            }
-            let current = database
-                .paper_position(task.id, mint)
-                .await
-                .map_err(|_| CopySkip::PaperExecutionUnavailable)?;
-            if current
-                .filter(super::PaperPosition::is_open)
-                .is_none_or(|current| {
-                    current.opened_at != paper_position.opened_at
-                        || current.sells != paper_position.sells
-                        || current.raw_token_amount.is_none_or(|held| held < raw)
-                })
-            {
-                return Err(CopySkip::PaperExecutionUnavailable);
-            }
-            if database
-                .paper_epoch(task.id)
-                .await
-                .map_err(|_| CopySkip::PaperExecutionUnavailable)?
-                != epoch
-            {
-                return Err(CopySkip::PaperExecutionUnavailable);
-            }
-            Ok(())
-        },
-    ))
-    .await?;
-    let mut telemetry = telemetry(activity, target_price_native, decided_at);
-    telemetry.fill_price_sol = Some(fill.fill_price_sol);
-    let mut decision = sell_decision(
-        task,
-        &activity.signature,
-        mint,
-        target_token_amount,
-        target_native_amount,
-        exit_percentage,
-        telemetry,
-    );
-    decision.paper_fill = Some(fill);
-    decision.paper_context = Some(super::types::PaperContext {
-        model: PaperModel::Quote,
-        epoch,
-    });
-    Ok(CopyOutcome::PaperSellObserved(decision))
-}
-
 pub fn prepare_copy_sell(
     activity: &WalletActivity,
     task: &CopyTask,
@@ -181,9 +89,6 @@ pub fn prepare_copy_sell(
     target_holding_before_sell: f64,
     decided_at: DateTime<Utc>,
 ) -> Result<PreparedCopySell, CopySkip> {
-    if task.mode != TradingMode::Live {
-        return Err(CopySkip::ModeTransitionRequired);
-    }
     if task.exit_mode == ExitMode::BuyOnly {
         return Err(CopySkip::ExitModeDisabled);
     }
@@ -195,6 +100,9 @@ pub fn prepare_copy_sell(
     let position = position
         .filter(|position| owns_copy_position(position, task))
         .ok_or(CopySkip::CopyPositionNotFound)?;
+    if position.book != task.mode.book() {
+        return Err(CopySkip::ModeTransitionRequired);
+    }
     if position.management == PositionManagement::UserOnly {
         return Err(CopySkip::PositionUserOnly);
     }
@@ -224,6 +132,8 @@ pub fn prepare_copy_sell(
             exit_percentage,
             slippage_pct: Some(task.slippage_pct),
             take_profit_level: None,
+            paper_leg_key: (position.book == Book::Paper)
+                .then(|| leg_key(task.id, &activity.signature)),
         },
         telemetry,
     })
@@ -254,16 +164,38 @@ where
         plan.decision.exit_percentage,
         plan.telemetry.clone(),
     );
-    match submit(plan.decision).await {
+    let paper = plan.decision.book == Book::Paper;
+    let skip = |reason| CopyOutcome::Skipped {
+        task_id: plan.task.id,
+        signature: plan.target_signature.clone(),
+        mint: Some(plan.decision.mint.clone()),
+        reason,
+        decided_at: plan.telemetry.decided_at,
+        telemetry: Some(plan.telemetry.clone()),
+        paper: Some(quote_context()),
+    };
+    match submit(plan.decision.clone()).await {
         CopySellSubmitResult::Submitted {
             transaction_signature,
-        } => {
+        } if !paper => {
             decision.transaction_signature = Some(transaction_signature);
             decision.telemetry.submitted_at = Some(Utc::now());
             CopyOutcome::LiveSellSubmitted(decision)
         }
-        CopySellSubmitResult::Failed { error } => {
+        CopySellSubmitResult::PaperFilled { fill } if paper => {
+            decision.telemetry.fill_price_sol = Some(fill.fill_price_sol);
+            decision.paper_fill = Some(fill);
+            decision.paper_context = Some(quote_context());
+            CopyOutcome::PaperSellObserved(decision)
+        }
+        CopySellSubmitResult::PaperRefused { refusal } if paper => skip(CopySkip::from(refusal)),
+        CopySellSubmitResult::Failed { error } if !paper => {
             decision.error = Some(error);
+            CopyOutcome::LiveSellFailed(decision)
+        }
+        _ if paper => skip(CopySkip::PaperExecutionUnavailable),
+        _ => {
+            decision.error = Some("a live copy sell returned a paper result".to_owned());
             CopyOutcome::LiveSellFailed(decision)
         }
     }
@@ -283,7 +215,8 @@ fn sell_activity(activity: &WalletActivity) -> Result<(&str, f64, f64, Option<f6
     }
 }
 
-fn sell_decision(
+/// The Activity record of a copy sell of `mint` before it is executed.
+pub(super) fn sell_decision(
     task: &CopyTask,
     target_signature: &str,
     mint: &str,

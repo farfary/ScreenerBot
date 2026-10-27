@@ -67,10 +67,8 @@ fn summarize(
         status,
         task.clone(),
         &desk.task_activity(task.id),
-        &desk.positions,
-        &desk.paper_book(task.id),
-        desk.spent_sol(task.id),
-        desk::mark,
+        &desk.task_rounds(task),
+        desk.spent_native(task),
     )
 }
 
@@ -79,7 +77,7 @@ fn insights(desk: &Desk, task: &CopyTask, range: InsightRange) -> CopyInsights {
         task.id,
         workspace::book_of(task),
         &desk.task_activity(task.id),
-        &desk.positions,
+        &desk.task_rounds(task).positions,
         range,
         Some(workspace::arrival_limit_ms()),
     )
@@ -124,14 +122,7 @@ pub fn get_promo_copy_task(id: i64) -> Result<CopyTask> {
 pub fn get_promo_copy_task_stats(id: i64) -> Result<CopyTaskStats> {
     let desk = Desk::build();
     let task = find(&desk, id)?;
-    Ok(control::book_stats(
-        task,
-        &desk.task_activity(id),
-        &desk.positions,
-        &desk.paper_book(id),
-        desk::mark,
-    )
-    .0)
+    Ok(control::book_stats(task, &desk.task_activity(id), &desk.task_rounds(task)).0)
 }
 
 pub fn get_promo_copy_workspace(id: i64) -> Result<CopyTaskWorkspace> {
@@ -139,30 +130,22 @@ pub fn get_promo_copy_workspace(id: i64) -> Result<CopyTaskWorkspace> {
     let status = status(&desk.tasks);
     let task = find(&desk, id)?;
     let activity = desk.task_activity(id);
-    let paper_book = desk.paper_book(id);
-    let (summary, _) = control::summarize(
-        &status,
-        task.clone(),
-        &activity,
-        &desk.positions,
-        &paper_book,
-        desk.spent_sol(id),
-        desk::mark,
-    );
-    // Nothing blocks live execution in a capture, as `status` reports.
-    let live_spent_sol = match task.mode {
-        TradingMode::Live => desk.spent_sol(id),
+    let rounds = desk.task_rounds(task);
+    let spent_native = desk.spent_native(task);
+    let (summary, _) = control::summarize(&status, task.clone(), &activity, &rounds, spent_native);
+    let live_spent_native = match task.mode {
+        TradingMode::Live => spent_native,
         TradingMode::Paper => 0.0,
     };
+    // Nothing blocks live execution in a capture, as `status` reports, and a capture
+    // has no paper book from before the shared one.
     Ok(workspace::build_workspace(
         summary,
-        live_spent_sol,
+        live_spent_native,
         &activity,
-        &desk.positions,
-        &paper_book,
-        &[],
-        0.0,
-        desk::mark,
+        &rounds,
+        workspace::EarlierPaper::default(),
+        0,
         None,
         Utc::now(),
     ))
@@ -364,10 +347,10 @@ mod tests {
             filter: Some("exits".to_owned()),
             mint: None,
             before,
-            limit: Some(5),
+            limit: Some(3),
         };
         let first = get_promo_copy_activity(Some(2), filter(None)).unwrap();
-        assert_eq!(first.activity.len(), 5);
+        assert_eq!(first.activity.len(), 3);
         assert!(first.activity.iter().all(
             |row| row.task_id == 2 && matches!(row.outcome, CopyOutcome::PaperSellObserved(_))
         ));
@@ -428,9 +411,12 @@ mod tests {
         assert!(!buys.is_empty());
         assert!(!sells.is_empty());
         assert_eq!(buys.len(), 15);
-        assert_eq!(sells.len(), 12);
-        let booked = desk.paper_book(task.id);
+        assert_eq!(sells.len(), 4, "only mirrored wallet sells are decisions");
+        let booked = desk.task_rounds(task).positions;
         assert_eq!(booked.len(), buys.len());
+        assert!(booked
+            .iter()
+            .all(|position| position.book == crate::positions::Book::Paper));
 
         for decision in &buys {
             let fill = &decision.fill;
@@ -475,8 +461,9 @@ mod tests {
                 .iter()
                 .find(|position| position.mint == decision.mint)
                 .expect("each paper buy has a book row");
-            assert_eq!(position.opened_at, decision.telemetry.decided_at);
-            assert_eq!(position.opened_at, quote.landing_at);
+            assert_eq!(position.entry_time, decision.telemetry.decided_at);
+            assert_eq!(position.entry_time, quote.landing_at);
+            assert_eq!(position.entry_size_native, fill.input_sol);
         }
 
         for decision in &sell_decisions {
@@ -488,8 +475,9 @@ mod tests {
                 .iter()
                 .find(|position| position.mint == decision.mint)
                 .expect("each paper sell has a book row");
-            assert_eq!(position.closed_at, Some(decision.telemetry.decided_at));
-            assert_eq!(position.closed_at, Some(quote.landing_at));
+            assert_eq!(position.exit_time, Some(decision.telemetry.decided_at));
+            assert_eq!(position.exit_time, Some(quote.landing_at));
+            assert_eq!(position.closed_reason.as_deref(), Some("CopySell"));
         }
 
         for fill in &sells {
@@ -520,18 +508,20 @@ mod tests {
             );
         }
 
-        let ledger_invested: f64 = booked.iter().map(|position| position.invested_native).sum();
-        let quoted_cost: f64 = buys
+        let invested: f64 = booked
             .iter()
-            .map(|decision| decision.fill.total_cost_sol)
+            .map(|position| position.entry_size_native)
             .sum();
-        let ledger_proceeds: f64 = booked
+        let quoted_input: f64 = buys.iter().map(|decision| decision.fill.input_sol).sum();
+        assert!((invested - quoted_input).abs() < 1e-12);
+        assert!((desk.spent_native(task) - quoted_input).abs() < 1e-12);
+        let rule_closes = booked
             .iter()
-            .map(|position| position.realized_proceeds_native)
-            .sum();
-        let quoted_proceeds: f64 = sells.iter().map(|fill| fill.net_proceeds_sol).sum();
-        assert!((ledger_invested - quoted_cost).abs() < 1e-12);
-        assert!((desk.spent_sol(task.id) - quoted_cost).abs() < 1e-12);
-        assert!((ledger_proceeds - quoted_proceeds).abs() < 1e-12);
+            .filter(|position| {
+                position.exit_time.is_some()
+                    && position.closed_reason.as_deref() != Some("CopySell")
+            })
+            .count();
+        assert_eq!(rule_closes, 8, "rule exits close rounds without a decision");
     }
 }

@@ -153,8 +153,16 @@
   },
   "live_remaining_budget_native": 5,
   "policy_manages_exits": true,
+  "exit_rules_running": true,
   "global_require_filter_pass": true,
   "paper_holdings": [],
+  "archived_paper": {
+    "spent_native": 0,
+    "realized_proceeds_native": 0,
+    "realized_cost_native": 0,
+    "realized_pnl_native": 0,
+    "holdings": []
+  },
   "legacy_paper": {
     "spent_native": 0,
     "realized_proceeds_native": 0,
@@ -231,7 +239,7 @@
         },
         "passed": true,
         "detail": {
-          "id": "copy-readiness-priced-ok"
+          "id": "copy-readiness-marked-ok"
         }
       },
       {

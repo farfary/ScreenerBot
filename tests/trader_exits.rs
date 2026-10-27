@@ -30,7 +30,7 @@ use chrono::{Duration, Utc};
 use common::{aged, config_guard, set_config, test_position};
 use screenerbot::config::TimeUnit;
 use screenerbot::positions::{Position, PositionManagement, PositionOrigin};
-use screenerbot::trader::evaluators::exit::{live_exit_inputs, rule_decision};
+use screenerbot::trader::evaluators::exit::{position_exit_inputs, rule_decision};
 use screenerbot::trader::evaluators::exit_rules::{self, Decision, ExitRule};
 use screenerbot::trader::evaluators::exit_time_watch::{
     time_exit_watch, TimeExitRule, TimeExitWatch,
@@ -53,7 +53,10 @@ fn only(rule: ExitRule) -> ExitPolicy {
 
 /// What the ordered rules find for `position` at `price` now, with only `rule` enabled.
 fn evaluate(position: &Position, price: f64, rule: ExitRule) -> Decision {
-    exit_rules::decide(&live_exit_inputs(position, price, Utc::now()), &only(rule))
+    exit_rules::decide(
+        &position_exit_inputs(position, price, Utc::now()),
+        &only(rule),
+    )
 }
 
 /// The sell the exit evaluator asks for `position` at `price` when only `rule` may fire;
@@ -852,7 +855,7 @@ fn break_even_catches_what_the_trail_leaves_below_the_entry() {
         policy.stop_loss.enabled = false;
         policy.take_profit.enabled = false;
         policy.time.enabled = false;
-        exit_rules::decide(&live_exit_inputs(&position, price, Utc::now()), &policy)
+        exit_rules::decide(&position_exit_inputs(&position, price, Utc::now()), &policy)
             .outcome
             .map(|outcome| outcome.rule)
     };

@@ -26,6 +26,7 @@ fn decision(action: TradeAction, reason: TradeReason, book: Book) -> TradeDecisi
         exit_percentage: None,
         slippage_pct: None,
         take_profit_level: None,
+        paper_leg_key: None,
     }
 }
 

@@ -10,8 +10,9 @@
  *   target-price difference, the recorded router, quote times, waits and fee assumption,
  *   while a legacy row keeps its historical wording.
  * - Overview and Execution show the model card for a paper task only, from the
- *   workspace's own settings, and Overview lists legacy estimates read-only with labeled
- *   columns and a saved-price time.
+ *   workspace's own settings, and Overview lists the earlier paper results (the archived
+ *   copy book above the legacy estimates) read-only with labeled columns and a saved-price
+ *   time; Activity tags each row decided before the task's current paper run.
  * - Settings load the stored milliseconds as seconds, save them back exactly, and refuse
  *   a delay outside 0..30 s or a queue size that is not an integer in 1..256.
  *
@@ -162,13 +163,30 @@ test("configured waits with millisecond precision are shown exactly", async (t) 
   assert.match(meta, /Assumed wait 1\.234s · queued 10\.001s/);
 });
 
-test("legacy estimates are labeled, dated and read-only", async (t) => {
+test("earlier paper results show the archived book above the legacy estimates, read-only", async (t) => {
   const page = await openCopy(t);
-  const legacy = await card(page, "Legacy paper estimates");
-  assert.ok(legacy, "the populated book has legacy history");
+  const earlier = await card(page, "Earlier paper results");
+  assert.ok(earlier, "the populated task has earlier paper results");
+  assert.deepEqual(
+    (await earlier.locator("h5").allTextContents()).map(plain),
+    ["Quote-based copy book", "Legacy paper estimates"],
+    "the archived book comes first, the legacy estimates beneath it"
+  );
+  const tables = earlier.locator("table");
+  assert.equal(await tables.count(), 2);
   // textContent: the column headers are upper-cased by CSS only.
-  const headers = (await legacy.locator("thead th").allTextContents()).map(plain);
-  assert.deepEqual(headers, [
+  const headers = async (table) =>
+    (await table.locator("thead th").allTextContents()).map(plain);
+  assert.deepEqual(await headers(tables.nth(0)), [
+    "Token",
+    "Tokens",
+    "Remaining cost (SOL)",
+    "Realized (SOL)",
+    "Last saved price (SOL)",
+    "Remaining P&L at saved price (SOL)",
+  ]);
+  const legacy = tables.nth(1);
+  assert.deepEqual(await headers(legacy), [
     "Token",
     "Tokens",
     "Remaining cost (SOL)",
@@ -190,10 +208,29 @@ test("legacy estimates are labeled, dated and read-only", async (t) => {
     "a closed holding is never valued at its saved price"
   );
   assert.match(
-    plain(await legacy.textContent()),
-    /not part of the current book's spend or holdings/
+    plain(await earlier.textContent()),
+    /not part of the current run's spend or holdings/
   );
-  assert.equal(await legacy.locator("button").count(), 0, "the archive offers no action");
+  assert.equal(await earlier.locator("button").count(), 0, "earlier results offer no action");
+});
+
+test("a task without earlier paper results shows no earlier card", async (t) => {
+  const workspace = fixture("copy_workspace.json");
+  workspace.archived_paper = { ...workspace.archived_paper, spent_native: 0, holdings: [] };
+  workspace.legacy_paper = { ...workspace.legacy_paper, spent_native: 0, holdings: [] };
+  const page = await openCopy(t, { workspace });
+  assert.equal(await card(page, "Earlier paper results"), null);
+});
+
+test("an activity row decided before the current paper run carries the earlier-run tag", async (t) => {
+  const page = await openCopy(t);
+  await page.locator("#copy-tab-activity").click();
+  await page.waitForSelector("#copy-ws-panel .copy-event");
+  const tags = page.locator("#copy-ws-panel .copy-event-line .copy-muted", {
+    hasText: /^Earlier run$/,
+  });
+  assert.equal(await tags.count(), 1, "only the row the server flagged is tagged");
+  assert.match(await tags.first().getAttribute("title"), /current paper run/);
 });
 
 const CONFIG = {

@@ -72,6 +72,7 @@ fn entry_decision(mint: &str, strategy_id: String, price_native: f64, book: Book
         // Auto-trader slippage always follows config.
         slippage_pct: None,
         take_profit_level: None,
+        paper_leg_key: None,
     }
 }
 
@@ -100,6 +101,7 @@ fn exit_decision(
         // Auto-trader slippage always follows config.
         slippage_pct: None,
         take_profit_level: None,
+        paper_leg_key: None,
     }
 }
 

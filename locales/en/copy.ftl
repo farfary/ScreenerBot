@@ -85,11 +85,11 @@ copy-readiness-latency = Trades detected in time
 copy-readiness-latency-detail = p95 arrival { $p95 }s, limit { $limit }s
 copy-readiness-latency-none = No arrival samples yet
 copy-readiness-priced = Every holding priced
-copy-readiness-priced-ok = Every open paper holding has a pool price
-copy-readiness-priced-missing =
+copy-readiness-marked-ok = Every open paper holding has a price
+copy-readiness-marked-missing =
     { $count ->
-        [one] { $count } open holding without a pool price
-       *[other] { $count } open holdings without a pool price
+        [one] { $count } open holding without a price
+       *[other] { $count } open holdings without a price
     }
 copy-readiness-runtime = Live execution available
 copy-readiness-runtime-ok = Setup and safety gates allow live copies
@@ -110,7 +110,6 @@ copy-state-running-paper = Running
 copy-exit-mode-buy-only = My exit rules
 copy-exit-mode-mirror = Mirror wallet sells
 copy-exit-mode-hybrid = Wallet sells and my rules
-copy-exit-target-sell = Wallet sold
 copy-exit-stop-loss = Stop loss
 copy-exit-trailing-stop = Trailing stop
 copy-exit-break-even = Break-even stop
@@ -299,6 +298,12 @@ copy-paper-legacy-col-cost = Remaining cost ({ -sol })
 copy-paper-legacy-col-realized = Realized estimate ({ -sol })
 copy-paper-legacy-col-price = Last saved price ({ -sol })
 copy-paper-legacy-col-remaining = Remaining P&L at saved price ({ -sol })
+copy-paper-earlier-title = Earlier paper results
+copy-paper-archived-title = Quote-based copy book
+copy-paper-archived-note = Read-only results this task's paper copies booked before they became rounds of the paper book. They are not part of the current run's spend or holdings and offer no actions. Remaining amounts are valued at the last price saved for each token, never at a current market price.
+copy-paper-archived-spent = Earlier spend
+copy-paper-archived-realized = Earlier realized P&L
+copy-paper-archived-col-realized = Realized ({ -sol })
 
 ## Workspace (pages/copy/workspace.js)
 
@@ -396,7 +401,7 @@ copy-task-returned-paper = Task returned to Paper
 copy-mode-change-failed = Execution mode could not be changed
 copy-delete-title = Delete copy task
 # $name is the task name.
-copy-delete-message = Delete “{ $name }”? Its decisions and paper results are removed and the wallet is no longer watched for this task.
+copy-delete-settle-message = Delete “{ $name }”? Its open paper holdings close at their last price and stay in the paper history with its closed rounds. Its decisions are removed and the wallet is no longer watched for this task.
 copy-delete-confirm = Delete task
 copy-delete-cancel = Keep task
 copy-task-deleted = Copy task deleted
@@ -408,10 +413,10 @@ copy-overview-results = Results
 # $error is the failure detail.
 copy-analytics-load-failed = Analytics could not be loaded: { $error }
 copy-analytics-loading = Loading analytics…
-copy-exit-bucket =
+copy-exit-bucket-rounds =
     { $count ->
-        [one] { $count } sell · { $pnl }
-       *[other] { $count } sells · { $pnl }
+        [one] { $count } round · { $pnl }
+       *[other] { $count } rounds · { $pnl }
     }
 copy-overview-average-win = Average win
 # $amount is a signed SOL amount.
@@ -434,10 +439,10 @@ copy-book-buys =
         [one] buy
        *[other] buys
     }
-copy-book-policy-exits =
+copy-book-rule-closes =
     <strong>{ $count }</strong> { $count ->
-        [one] exit by your rules
-       *[other] exits by your rules
+        [one] round closed by your rules
+       *[other] rounds closed by your rules
     }
 copy-book-wallet-sells =
     <strong>{ $count }</strong> { $count ->
@@ -704,13 +709,13 @@ copy-holdings-view-label = Holdings view
 copy-holdings-view-open = Open ({ $count })
 # $count is the number of closed rounds, or an ellipsis while loading.
 copy-holdings-view-closed = Closed rounds ({ $count })
-copy-holdings-reset = Reset paper book
+copy-holdings-restart = Start a new paper run
 copy-holdings-live-note = Live copies are real positions.
 copy-holdings-open-positions = Open Positions
 copy-holdings-token-details = Open token details
 # $time is a formatted date and time.
 copy-holdings-opened = Opened { $time }
-copy-holdings-no-pool-price = No pool price
+copy-holdings-no-price = No price
 copy-holdings-close = Close
 copy-holdings-close-pending = Close pending
 copy-holdings-activity = Activity
@@ -742,10 +747,12 @@ copy-holdings-col-invested = Invested ({ -sol })
 copy-holdings-col-proceeds = Proceeds ({ -sol })
 copy-holdings-col-exit = Exit
 copy-holdings-col-closed = Closed
-copy-holdings-marks-note = Prices are { -sol } per token. The mark and the exit levels use the pool price, which also triggers exit rules; recorded fills use router quotes. Entry includes the buy's estimated network fee; the peak and the exit levels are relative to it, so a holding opens with its peak below entry. Hover one for its pool price.
+copy-holdings-round-note = Prices are { -sol } per token. Each row is one round of the paper book. The mark is the round's latest price, from the pool or market data, and the exit rules act on it; recorded fills use router quotes. Entry is the round's average entry price; the peak and the exit levels are relative to it. Hover one for its price.
 copy-holdings-paused-rules = Paused: no new copies. Your exit rules still close these holdings.
 copy-holdings-paused-mirror = Paused: no new copies. The wallet's sells still close these holdings.
 copy-holdings-paused-hybrid = Paused: no new copies. The wallet's sells and your exit rules still close these holdings.
+copy-holdings-trader-stopped-rules = The Auto Trader is stopped, so no exit closes these holdings until it runs again.
+copy-holdings-trader-stopped-wallet = The Auto Trader is stopped, so only the wallet's sells close these holdings until it runs again.
 # $error is the failure detail.
 copy-holdings-closed-load-failed = Closed rounds could not be loaded: { $error }
 copy-holdings-closed-loading = Loading closed rounds…
@@ -765,15 +772,15 @@ copy-holdings-close-unconfirmed = Close result not confirmed
 copy-holdings-close-unconfirmed-detail = The connection ended before the result was received and Activity has no result yet. Check Activity before closing again.
 copy-holdings-closed-check-activity = The holding is closed. Activity has the recorded fill.
 # $name is the task name.
-copy-holdings-reset-quote-message = Start “{ $name }” over: its current paper holdings, spend, fills, exits and skips are cleared and a new quote-based book begins. Legacy estimates and live history stay. The rules and the wallet stay.
-copy-holdings-reset-cancel = Keep history
-copy-holdings-reset-done = Paper book reset
-copy-holdings-reset-detail =
+copy-holdings-restart-message = Start “{ $name }” over: its open paper holdings close at their last price and its figures count only what happens from now on. Nothing is deleted: closed rounds stay in the paper history and earlier decisions stay in Activity, tagged as an earlier run. The rules and the wallet stay.
+copy-holdings-restart-cancel = Keep this run
+copy-holdings-restart-done = A new paper run started
+copy-holdings-restart-detail =
     { $count ->
-        [one] { $count } decision removed
-       *[other] { $count } decisions removed
+        [one] { $count } holding closed
+       *[other] { $count } holdings closed
     }
-copy-holdings-reset-failed = Paper book could not be reset
+copy-holdings-restart-failed = Could not start a new paper run
 
 ## Activity tab (pages/copy/activity.js). Ids come from CopyOutcome
 ## (src/trader/copy/types.rs).
@@ -792,6 +799,8 @@ copy-activity-decision = Decision
 # $rule is the exit rule label.
 copy-activity-paper-exit-quote = Quote-based paper exit · { $rule }
 copy-activity-paper-exit-legacy = Legacy paper exit estimate · { $rule }
+copy-activity-earlier-run = Earlier run
+    .title = Decided before this task's current paper run, so its current figures leave it out.
 # $input, $price and $target are formatted values; $slippage and $difference signed percentages.
 copy-activity-filled = { $input } at { $price } · wallet bought { $target }
 copy-activity-filled-target-difference = { $input } at { $price } · wallet bought { $target } · target price difference { $difference }

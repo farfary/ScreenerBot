@@ -43,6 +43,7 @@ fn task(sizing: SizingMode) -> CopyTask {
         copy_stable_quoted: None,
         pause_reason: None,
         paused_at: None,
+        paper_started_at: None,
     }
 }
 

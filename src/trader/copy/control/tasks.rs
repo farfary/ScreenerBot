@@ -12,7 +12,7 @@ use super::super::{
 };
 use super::live_block_reason;
 use super::open_database;
-use crate::positions::PositionOrigin;
+use crate::positions::{books, Book, Position, PositionOrigin};
 use crate::trader::paper::TradingMode;
 use crate::trader::policy::ExitPolicy;
 use crate::trader::{Error, Result};
@@ -45,48 +45,30 @@ async fn ensure_active_slot(db: &CopyDatabase) -> Result<()> {
 }
 
 /// Whether the task still holds an open copy of `mint` (of any token when `None`)
-/// in either book: its paper ledger, or a real position it opened while live.
+/// in either book: a paper round or a real position it opened.
 pub(in crate::trader::copy) async fn holds_open_copies(
-    db: &CopyDatabase,
     task: &CopyTask,
     mint: Option<&str>,
-) -> Result<bool> {
-    let wanted = |held: &str| mint.is_none_or(|mint| mint == held);
-    if db
-        .paper_positions(task.id)
-        .await?
-        .iter()
-        .any(|position| position.is_open() && wanted(&position.mint))
-    {
-        return Ok(true);
-    }
-    Ok(crate::positions::get_open_positions()
-        .await
-        .iter()
-        .any(|position| {
-            wanted(&position.mint)
-                && matches!(position.origin, PositionOrigin::Copy { task_id, .. } if task_id == task.id)
-        }))
+) -> bool {
+    let owned = |position: &Position| {
+        mint.is_none_or(|mint| mint == position.mint)
+            && matches!(position.origin, PositionOrigin::Copy { task_id, .. } if task_id == task.id)
+    };
+    books::open_positions(Book::Paper).await.iter().any(owned)
+        || books::open_positions(Book::Live).await.iter().any(owned)
 }
 
 /// A task watches its wallet while it copies, and while paused for as long as the
 /// wallet's sells still close something it holds: pausing stops new copies, never
 /// the exits of what is already held.
-pub(in crate::trader::copy) async fn wants_watch(
-    db: &CopyDatabase,
-    task: &CopyTask,
-) -> Result<bool> {
-    Ok(task.enabled
-        || (task.exit_mode != ExitMode::BuyOnly && holds_open_copies(db, task, None).await?))
+pub(in crate::trader::copy) async fn wants_watch(task: &CopyTask) -> bool {
+    task.enabled || (task.exit_mode != ExitMode::BuyOnly && holds_open_copies(task, None).await)
 }
 
 /// Attach or release the task's watch source so it matches `wants_watch`. Both
 /// directions are idempotent.
-pub(in crate::trader::copy) async fn sync_task_watch(
-    db: &CopyDatabase,
-    task: &CopyTask,
-) -> Result<()> {
-    if wants_watch(db, task).await? {
+pub(in crate::trader::copy) async fn sync_task_watch(task: &CopyTask) -> Result<()> {
+    if wants_watch(task).await {
         watch::add_copy_source(task.id, &task.target_address, task.label.as_deref())
             .await
             .map(|_| ())
@@ -213,7 +195,7 @@ pub async fn update_task(id: i64, patch: serde_json::Value) -> Result<CopyTask> 
         ensure_active_slot(&db).await?;
     }
     let updated = db.update_task(task).await?;
-    if let Err(error) = sync_task_watch(&db, &updated).await {
+    if let Err(error) = sync_task_watch(&updated).await {
         return Err(match db.update_task(original.clone()).await {
             Ok(_) => error,
             Err(rollback) => Error::CopyReconciliation {
@@ -238,10 +220,11 @@ pub async fn update_task(id: i64, patch: serde_json::Value) -> Result<CopyTask> 
     Ok(updated)
 }
 
-/// Delete a task and detach its watch source. Its decisions, spend and paper book
-/// go with it (foreign-key cascade). Refused while it could still move money: an
-/// enabled live task must be paused first, and a task whose live positions are
-/// still open keeps them until they are closed.
+/// Delete a task and detach its watch source. Its open paper rounds close at their
+/// last price first and stay in the paper history; its decisions, spend and archived
+/// copy paper book go with it (foreign-key cascade). Refused while it could still move
+/// money: an enabled live task must be paused first, and a task whose live positions
+/// are still open keeps them until they are closed.
 pub async fn delete_task(id: i64) -> Result<()> {
     let db = open_database().await?;
     let task = db
@@ -264,6 +247,14 @@ pub async fn delete_task(id: i64) -> Result<()> {
             open_positions,
         });
     }
+    let paper_rounds = books::open_positions(Book::Paper)
+        .await
+        .into_iter()
+        .filter(|position| {
+            matches!(position.origin, PositionOrigin::Copy { task_id, .. } if task_id == id)
+        })
+        .collect::<Vec<_>>();
+    crate::trader::paper::settle_rounds(paper_rounds).await?;
     watch::remove_copy_source(id, &task.target_address)
         .await
         .map_err(|e| Error::CopyReconciliation {

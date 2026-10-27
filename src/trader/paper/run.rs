@@ -1,12 +1,13 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! The paper run of the strategies' paper book: its account, and the reset that settles
-//! the rounds still open and starts the next run.
+//! The paper run of the shared paper book: its account, the reset that settles the rounds
+//! still open and starts the next run, and the settlement of chosen open rounds.
 
 use chrono::Utc;
 
 use crate::positions::paper::PaperAccount;
+use crate::positions::Position;
 use crate::trader::types::TradeReason;
 use crate::trader::{Error, Result};
 
@@ -45,4 +46,29 @@ pub async fn reset_paper_run() -> Result<PaperAccount> {
         ),
     );
     Ok(account)
+}
+
+/// Closes each of `rounds` still open at its last mark as a paper run reset, returning
+/// their value to the paper cash; the run goes on. Returns how many rounds closed.
+pub async fn settle_rounds(rounds: Vec<Position>) -> Result<usize> {
+    if rounds.is_empty() {
+        return Ok(0);
+    }
+    let book = crate::positions::paper::book().ok_or(Error::PaperBookUnavailable)?;
+    let wallet = crate::utils::get_wallet_address().map_err(|_| Error::PaperBookUnavailable)?;
+    let chain = crate::chains::active_chain();
+    let reason = format!("{:?}", TradeReason::PaperReset);
+    let closed = crate::global::paper_scope(book.settle_at_mark(
+        &wallet,
+        &rounds,
+        &reason,
+        |mint| crate::tokens::get_cached_decimals(chain, mint),
+        Utc::now(),
+    ))
+    .await?;
+    crate::logger::info(
+        crate::logger::LogTag::Trader,
+        &format!("Paper rounds settled at their mark: {closed}"),
+    );
+    Ok(closed)
 }

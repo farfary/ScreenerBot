@@ -11,24 +11,46 @@ use tokio::sync::broadcast::error::RecvError;
 use tokio::sync::Notify;
 
 use super::paper_execution::{
-    execute_paper_entry, in_paper_epoch, skipped, skipped_activity, skipped_paper,
+    activity_key, as_paper, execute_paper_entry, skipped, skipped_activity, skipped_paper,
+    EnqueueError, PaperDispatch, PaperExecutionHandle,
 };
 use crate::config::with_config;
 use crate::logger::{self, LogTag};
+use crate::positions::Book;
 use crate::wallets::watch::{
     subscribe_activity, ActivityKind, SwapSide, WalletActivity, WatchSource,
 };
 
 use super::{
-    execute_copy_sell_with, execute_live_with, matching_tasks, notify, paper_sell_outcome,
-    plan_paper_entries, prepare_copy_sell, prepare_live_entry, CopyDatabase, CopyOutcome,
-    CopySellSubmitResult, CopySkip, ExitMode, LiveSubmitResult, PaperPosition, PipelinePolicy,
-    RiskContext,
+    execute_copy_sell_with, execute_live_with, matching_tasks, notify, prepare_copy_sell,
+    prepare_entry, CopyDatabase, CopyOutcome, CopySellSubmitResult, CopySkip, CopyTask, ExitMode,
+    LiveSubmitResult, PipelinePolicy, RiskContext,
 };
 use crate::trader::paper::TradingMode;
 
+/// The paper side of the copy service: the per-task FIFO and the dispatch of paper
+/// decisions to the shared paper executor.
+pub(super) struct PaperRuntime {
+    pub handle: PaperExecutionHandle,
+    pub dispatch: PaperDispatch,
+}
+
+/// The dispatch of a copy task's paper decision: the shared trade dispatcher, run on its
+/// own task so a stop of the FIFO never cancels a fill half booked.
+pub(super) fn paper_dispatch() -> PaperDispatch {
+    Arc::new(|decision, context| {
+        Box::pin(crate::trader::manual::detached(async move {
+            crate::trader::executors::execute_trade(&decision, context).await
+        }))
+    })
+}
+
 pub async fn run(shutdown: Arc<Notify>, database: CopyDatabase) {
-    let (paper_runtime, stop_execution, execution) = super::paper_execution::install();
+    let (handle, stop_execution, execution) = super::paper_execution::install();
+    let paper_runtime = PaperRuntime {
+        handle,
+        dispatch: paper_dispatch(),
+    };
     let mut receiver = subscribe_activity();
     let mut watch_changes = crate::wallets::watch::subscribe_target_changes();
     if let Err(error) = reconcile_runtime_state(&database).await {
@@ -40,10 +62,6 @@ pub async fn run(shutdown: Arc<Notify>, database: CopyDatabase) {
     let mut reconciliation = tokio::time::interval(std::time::Duration::from_secs(60));
     reconciliation.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     reconciliation.reset();
-    let mut paper_exits = tokio::time::interval(std::time::Duration::from_secs(
-        crate::trader::POSITION_MONITOR_INTERVAL_SECS,
-    ));
-    paper_exits.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     loop {
         tokio::select! {
             _ = shutdown.notified() => break,
@@ -60,11 +78,6 @@ pub async fn run(shutdown: Arc<Notify>, database: CopyDatabase) {
                 }
                 Err(RecvError::Closed) => break,
             },
-            _ = paper_exits.tick() => {
-                if let Err(error) = super::paper_exits::sweep(&database).await {
-                    logger::warning(LogTag::Trader, &format!("Paper exit sweep failed: {error}"));
-                }
-            }
             received = receiver.recv() => match received {
                 Ok(activity) => {
                     if let Err(error) = process_activity(
@@ -130,7 +143,7 @@ async fn reconcile_runtime_state(database: &CopyDatabase) -> crate::trader::Resu
 
 async fn process_activity(
     database: &CopyDatabase,
-    paper_runtime: Option<&super::paper_execution::PaperExecutionHandle>,
+    paper_runtime: Option<&PaperRuntime>,
     observed: &WalletActivity,
 ) -> crate::trader::Result<()> {
     let (copy_enabled, require_filter_pass, global_stable_quoted) = with_config(|config| {
@@ -209,7 +222,7 @@ async fn process_activity(
         let acts = if selling {
             task.exit_mode != ExitMode::BuyOnly
                 && ((task.enabled && copy_enabled)
-                    || super::control::holds_open_copies(database, &task, Some(mint)).await?)
+                    || super::control::holds_open_copies(&task, Some(mint)).await)
         } else {
             task.enabled
         };
@@ -233,8 +246,40 @@ async fn process_activity(
         return Ok(());
     }
     if selling {
-        return process_sell_activity(database, activity, &tasks, mint, &target_holdings_before)
-            .await;
+        return process_sell_activity(
+            database,
+            paper_runtime,
+            activity,
+            &tasks,
+            mint,
+            &target_holdings_before,
+        )
+        .await;
+    }
+    for task in tasks.iter().filter(|task| task.mode == TradingMode::Paper) {
+        let job_database = database.clone();
+        let job_activity = activity.clone();
+        let job_mint = mint.clone();
+        let task_id = task.id;
+        enqueue_paper(
+            database,
+            paper_runtime,
+            task_id,
+            activity,
+            mint,
+            |dispatch| async move {
+                execute_paper_entry(&job_database, &job_activity, task_id, &job_mint, dispatch)
+                    .await
+            },
+        )
+        .await?;
+    }
+    let tasks = tasks
+        .into_iter()
+        .filter(|task| task.mode == TradingMode::Live)
+        .collect::<Vec<_>>();
+    if tasks.is_empty() {
+        return Ok(());
     }
     // The filter check is fetched once per chain of the tasks that require it;
     // a task that does not require it sees a pass.
@@ -273,10 +318,7 @@ async fn process_activity(
         .map(|wallet| wallet.address)
         .collect::<Vec<_>>();
     for task in &tasks {
-        spend.insert(
-            task.id,
-            database.spend_state(task.id, task.mode, mint).await?,
-        );
+        spend.insert(task.id, database.live_spend_state(task.id, mint).await?);
         risk.insert(
             task.id,
             RiskContext {
@@ -295,100 +337,9 @@ async fn process_activity(
         require_filter_pass: any_requires_filter,
         engine_trade_size_native: trade_size_native,
     };
-    let paper_tasks = tasks
-        .iter()
-        .filter(|task| task.mode == TradingMode::Paper)
-        .cloned()
-        .collect::<Vec<_>>();
-    if !paper_tasks.is_empty() {
-        let chain = paper_tasks[0].chain;
-        debug_assert!(
-            paper_tasks.iter().all(|task| task.chain == chain),
-            "tasks of one wallet activity share a chain"
-        );
-        let paper_outcomes = if let Err(block) =
-            crate::trader::admission::check_entry_admission(mint, &["rpc"]).await
-        {
-            paper_tasks
-                .iter()
-                .map(|task| {
-                    Err((
-                        task.clone(),
-                        CopySkip::EntryBlocked {
-                            block: block.clone(),
-                        },
-                    ))
-                })
-                .collect()
-        } else {
-            plan_paper_entries(activity, &paper_tasks, &spend, &risk, policy)
-        };
-        for planned in paper_outcomes {
-            match planned {
-                Ok(plan) => {
-                    let epoch = database.paper_epoch(plan.task.id).await?;
-                    let queued_at = Utc::now();
-                    let task_id = plan.task.id;
-                    let activity_copy = activity.clone();
-                    let Some(runtime) = paper_runtime else {
-                        notify::record(
-                            database,
-                            skipped_paper(
-                                task_id,
-                                activity,
-                                mint,
-                                CopySkip::PaperExecutionUnavailable,
-                                epoch,
-                            ),
-                        )
-                        .await?;
-                        continue;
-                    };
-                    let db = database.clone();
-                    let job_db = db.clone();
-                    let fallback_activity = activity.clone();
-                    if let Err(error) = runtime.enqueue(
-                        task_id,
-                        format!("activity:{}:{}", activity_copy.signature, epoch),
-                        db,
-                        Some(mint.to_owned()),
-                        async move {
-                            execute_paper_entry(&job_db, &activity_copy, plan, epoch, queued_at)
-                                .await
-                        },
-                    ) {
-                        if error == super::paper_execution::EnqueueError::Duplicate {
-                            continue;
-                        }
-                        let reason = match error {
-                            super::paper_execution::EnqueueError::Full => CopySkip::PaperQueueFull,
-                            super::paper_execution::EnqueueError::Duplicate => unreachable!(),
-                            super::paper_execution::EnqueueError::Unavailable => {
-                                CopySkip::PaperExecutionUnavailable
-                            }
-                        };
-                        notify::record(
-                            database,
-                            skipped_paper(task_id, &fallback_activity, mint, reason, epoch),
-                        )
-                        .await?;
-                    }
-                }
-                Err((task, reason)) => {
-                    let epoch = database.paper_epoch(task.id).await?;
-                    notify::record(
-                        database,
-                        skipped_paper(task.id, activity, mint, reason, epoch),
-                    )
-                    .await?;
-                }
-            }
-        }
-    }
-
-    for task in tasks.iter().filter(|task| task.mode == TradingMode::Live) {
+    for task in &tasks {
         let decided_at = Utc::now();
-        let plan = match prepare_live_entry(
+        let plan = match prepare_entry(
             activity,
             task,
             spend.get(&task.id).copied().unwrap_or_default(),
@@ -471,7 +422,7 @@ async fn record_skip(
 ) -> crate::trader::Result<()> {
     let outcome = skipped_activity(task.id, activity, mint, reason);
     let outcome = match task.mode {
-        TradingMode::Paper => in_paper_epoch(outcome, database.paper_epoch(task.id).await?),
+        TradingMode::Paper => as_paper(outcome),
         TradingMode::Live => outcome,
     };
     notify::record(database, outcome).await?;
@@ -529,10 +480,44 @@ async fn observe_target_inventory(
     Ok(before)
 }
 
+/// Queues the paper work `job` of task `task_id` for the target transaction of
+/// `activity` on the task's FIFO, recording why when it cannot be queued. A
+/// transaction already queued for the task is not queued twice.
+async fn enqueue_paper<J, JFut>(
+    database: &CopyDatabase,
+    paper_runtime: Option<&PaperRuntime>,
+    task_id: i64,
+    activity: &WalletActivity,
+    mint: &str,
+    job: J,
+) -> crate::trader::Result<()>
+where
+    J: FnOnce(PaperDispatch) -> JFut,
+    JFut: std::future::Future<Output = CopyOutcome> + Send + 'static,
+{
+    let reason = match paper_runtime {
+        Some(runtime) => match runtime.handle.enqueue(
+            task_id,
+            activity_key(&activity.signature),
+            database.clone(),
+            Some(mint.to_owned()),
+            job(runtime.dispatch.clone()),
+        ) {
+            Ok(()) | Err(EnqueueError::Duplicate) => return Ok(()),
+            Err(EnqueueError::Full) => CopySkip::PaperQueueFull,
+            Err(EnqueueError::Unavailable) => CopySkip::PaperExecutionUnavailable,
+        },
+        None => CopySkip::PaperExecutionUnavailable,
+    };
+    notify::record(database, skipped_paper(task_id, activity, mint, reason)).await?;
+    Ok(())
+}
+
 async fn process_sell_activity(
     database: &CopyDatabase,
+    paper_runtime: Option<&PaperRuntime>,
     activity: &WalletActivity,
-    tasks: &[super::CopyTask],
+    tasks: &[CopyTask],
     mint: &str,
     target_holdings_before: &HashMap<i64, f64>,
 ) -> crate::trader::Result<()> {
@@ -541,99 +526,28 @@ async fn process_sell_activity(
             .get(&task.id)
             .copied()
             .unwrap_or_default();
-        let epoch = database.paper_epoch(task.id).await?;
-        let activity_copy = activity.clone();
-        let fallback_activity = activity.clone();
-        let database = database.clone();
-        let runtime = super::paper_execution::active();
-        let queued_at = Utc::now();
-        let Some(runtime) = runtime else {
-            notify::record(
-                &database,
-                skipped_paper(
-                    task.id,
-                    &fallback_activity,
-                    mint,
-                    CopySkip::PaperExecutionUnavailable,
-                    epoch,
-                ),
-            )
-            .await?;
-            continue;
-        };
+        let job_database = database.clone();
+        let job_activity = activity.clone();
+        let job_mint = mint.to_owned();
         let task_id = task.id;
-        let fallback_db = database.clone();
-        let job_db = database.clone();
-        let fallback_mint = mint.to_owned();
-        let target_mint = mint.to_owned();
-        if let Err(error) = runtime.enqueue(task_id, format!("activity:{}:{}", activity_copy.signature, epoch), database.clone(), Some(target_mint.clone()), async move {
-            let outcome = async {
-                if crate::global::is_force_stopped() {
-                    return Err(CopySkip::ForceStopped);
-                }
-                let current_task = job_db.get_task(task_id).await
-                    .map_err(|_| CopySkip::PaperExecutionUnavailable)?
-                    .filter(|current| current.mode == TradingMode::Paper && current.exit_mode != ExitMode::BuyOnly)
-                    .ok_or(CopySkip::TaskDisabled)?;
-                let current_position = job_db.paper_position(task_id, &target_mint).await
-                    .map_err(|_| CopySkip::PaperExecutionUnavailable)?
-                    .filter(PaperPosition::is_open)
-                    .ok_or(CopySkip::CopyPositionNotFound)?;
-                if !matches!(job_db.paper_epoch(task_id).await, Ok(current) if current == epoch) {
-                    return Err(CopySkip::PaperExecutionUnavailable);
-                }
-                let sell_outcome = paper_sell_outcome(
-                    &activity_copy,
-                    &current_task,
-                    false,
+        enqueue_paper(
+            database,
+            paper_runtime,
+            task_id,
+            activity,
+            mint,
+            |_| async move {
+                paper_copy_sell(
+                    &job_database,
+                    &job_activity,
+                    task_id,
+                    &job_mint,
                     target_holding,
-                    &current_position,
-                    &job_db,
-                    epoch,
-                    queued_at,
-                    crate::swaps::try_get_best_quote,
-                    |delay| async move {
-                        tokio::time::sleep(delay).await;
-                        if crate::global::is_force_stopped() { return Err(CopySkip::ForceStopped); }
-                        Ok(())
-                    },
-                ).await?;
-                if crate::global::is_force_stopped()
-                    || !matches!(job_db.paper_epoch(task_id).await, Ok(current) if current == epoch)
-                {
-                    return Err(CopySkip::PaperExecutionUnavailable);
-                }
-                let latest_task = job_db.get_task(task_id).await
-                    .map_err(|_| CopySkip::PaperExecutionUnavailable)?
-                    .filter(|current| current.mode == TradingMode::Paper && current.exit_mode != ExitMode::BuyOnly
-                        && current.slippage_pct == current_task.slippage_pct)
-                    .ok_or(CopySkip::TaskDisabled)?;
-                let latest_position = job_db.paper_position(task_id, &target_mint).await
-                    .map_err(|_| CopySkip::PaperExecutionUnavailable)?
-                    .filter(PaperPosition::is_open)
-                    .filter(|current| current.opened_at == current_position.opened_at && current.sells == current_position.sells)
-                    .ok_or(CopySkip::PaperExecutionUnavailable)?;
-                if latest_position.raw_token_amount.is_none_or(|latest| {
-                    current_position.raw_token_amount.is_none_or(|current| latest < current)
-                })
-                    || latest_task.mode != TradingMode::Paper
-                {
-                    return Err(CopySkip::PaperExecutionUnavailable);
-                }
-                Ok(sell_outcome)
-            }.await;
-            outcome.unwrap_or_else(|reason| {
-                skipped_paper(task_id, &activity_copy, &fallback_mint, reason, epoch)
-            })
-        }) {
-            if error == super::paper_execution::EnqueueError::Duplicate { continue; }
-            let reason = match error {
-                super::paper_execution::EnqueueError::Full => CopySkip::PaperQueueFull,
-                super::paper_execution::EnqueueError::Duplicate => unreachable!(),
-                super::paper_execution::EnqueueError::Unavailable => CopySkip::PaperExecutionUnavailable,
-            };
-            notify::record(&fallback_db, skipped_paper(task_id, &fallback_activity, mint, reason, epoch)).await?;
-        }
+                )
+                .await
+            },
+        )
+        .await?;
     }
 
     for task in tasks.iter().filter(|task| task.mode == TradingMode::Live) {
@@ -662,25 +576,62 @@ async fn process_sell_activity(
                 continue;
             }
         };
-        let symbol = position.as_ref().map(|position| position.symbol.clone());
-        // A planned copy sell always sells this task's own copy position.
-        let origin = position
-            .as_ref()
-            .map_or("copy", |position| position.origin.kind());
-        let outcome = execute_copy_sell_with(plan, |decision| async move {
-            CopySellSubmitResult::from_trade_result(
-                crate::trader::executors::execute_tracked_exit(
-                    &decision,
-                    symbol.as_deref(),
-                    origin,
-                )
-                .await,
-            )
-        })
-        .await;
+        let outcome = sell_through_exit_pipeline(plan, position.as_ref()).await;
         notify::record(database, outcome).await?;
     }
     Ok(())
+}
+
+/// Mirrors a target sell on the task's open paper round of `mint`: the sale the live
+/// copy sell would make, booked by the shared paper executor. Runs on the task's FIFO.
+async fn paper_copy_sell(
+    database: &CopyDatabase,
+    activity: &WalletActivity,
+    task_id: i64,
+    mint: &str,
+    target_holding: f64,
+) -> CopyOutcome {
+    let task = match database.get_task(task_id).await {
+        Ok(Some(task)) if task.mode == TradingMode::Paper => task,
+        Ok(_) => return skipped_paper(task_id, activity, mint, CopySkip::TaskDisabled),
+        Err(_) => {
+            return skipped_paper(task_id, activity, mint, CopySkip::PaperExecutionUnavailable)
+        }
+    };
+    let position = crate::positions::books::open_round(Book::Paper, mint).await;
+    let plan = match prepare_copy_sell(
+        activity,
+        &task,
+        position.as_ref(),
+        crate::global::is_force_stopped(),
+        target_holding,
+        Utc::now(),
+    ) {
+        Ok(plan) => plan,
+        Err(reason) => return skipped_paper(task_id, activity, mint, reason),
+    };
+    sell_through_exit_pipeline(plan, position.as_ref()).await
+}
+
+/// Runs a planned copy sell through the shared exit pipeline, on its own task so no
+/// stop or dropped caller cancels the sale half booked.
+async fn sell_through_exit_pipeline(
+    plan: super::PreparedCopySell,
+    position: Option<&crate::positions::Position>,
+) -> CopyOutcome {
+    let symbol = position.map(|position| position.symbol.clone());
+    // A planned copy sell always sells this task's own copy position.
+    let origin = position.map_or("copy", |position| position.origin.kind());
+    execute_copy_sell_with(plan, |decision| async move {
+        CopySellSubmitResult::from_trade_result(
+            crate::trader::manual::detached(async move {
+                crate::trader::executors::execute_tracked_exit(&decision, symbol.as_deref(), origin)
+                    .await
+            })
+            .await,
+        )
+    })
+    .await
 }
 
 #[cfg(test)]

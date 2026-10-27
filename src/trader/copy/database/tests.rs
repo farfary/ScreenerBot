@@ -11,10 +11,6 @@ use crate::trader::paper::TradingMode;
 
 #[path = "tests/paper.rs"]
 mod paper;
-#[path = "tests/raw.rs"]
-mod raw;
-#[path = "tests/settlement.rs"]
-mod settlement;
 
 fn task() -> CopyTask {
     CopyTask {
@@ -40,6 +36,7 @@ fn task() -> CopyTask {
         copy_stable_quoted: None,
         pause_reason: None,
         paused_at: None,
+        paper_started_at: None,
     }
 }
 
@@ -110,7 +107,7 @@ async fn live_submission_consumes_spend_once_and_confirmation_only_upgrades_stat
         .unwrap();
 
     assert_eq!(
-        db.spend_state(configured.id, TradingMode::Live, "live-mint")
+        db.live_spend_state(configured.id, "live-mint")
             .await
             .unwrap(),
         SpendState {

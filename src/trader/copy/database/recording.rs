@@ -1,25 +1,21 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Atomic outcome recording and settlement of copy spend and paper-book mutations.
+//! Atomic outcome recording with the live spend it settles.
 
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use rusqlite::{params, OptionalExtension, Transaction};
 
-use crate::chains::RawAmount;
 use crate::database::WriteTransaction;
-use crate::trader::copy::types::{CopyOutcome, PaperDecision};
+use crate::trader::copy::types::CopyOutcome;
 use crate::trader::error::Error;
-use crate::trader::paper::PaperModel;
-use crate::trader::paper::TradingMode;
 
-use super::ledger::{mode_key, read_paper_epoch, spend_state_on};
-use super::rows::task_on;
+use super::ledger::LIVE_SPEND;
 use super::CopyDatabase;
 
 impl CopyDatabase {
-    /// Persist one outcome and, in the same transaction, commit its spend and its
-    /// paper-book effect -- exactly once per decision, never on a status upgrade.
+    /// Persist one outcome and, in the same transaction, commit its live spend --
+    /// exactly once per decision, never on a status upgrade.
     /// `true` when the outcome is new (a first decision or a confirmation upgrade).
     pub async fn record_outcome(&self, outcome: CopyOutcome) -> crate::trader::Result<bool> {
         let db = self.clone();
@@ -35,49 +31,6 @@ impl CopyDatabase {
         let transaction = connection
             .write_tx()
             .map_err(crate::errors::DatabaseError::from)?;
-        let paper_epoch = match &outcome {
-            CopyOutcome::PaperFilled(decision) => {
-                let metadata = decision
-                    .fill
-                    .quote
-                    .as_ref()
-                    .filter(|_| decision.fill.has_quote_provenance());
-                let Some(metadata) = metadata else {
-                    return Err(Error::CopyValidation {
-                        detail: "runtime paper fills require quote provenance".to_owned(),
-                    });
-                };
-                Some((decision.task_id, metadata.epoch))
-            }
-            CopyOutcome::PaperSellObserved(decision) => {
-                let Some(metadata) = decision
-                    .paper_fill
-                    .as_ref()
-                    .filter(|fill| fill.has_quote_provenance())
-                    .and_then(|fill| fill.quote.as_ref())
-                else {
-                    return Err(Error::CopyValidation {
-                        detail: "runtime paper sells require quote provenance".to_owned(),
-                    });
-                };
-                Some((decision.task_id, metadata.epoch))
-            }
-            CopyOutcome::Skipped {
-                task_id,
-                paper: Some(context),
-                ..
-            } if context.model == PaperModel::Quote => Some((*task_id, context.epoch)),
-            _ => None,
-        };
-        if let Some((task_id, queued_epoch)) = paper_epoch {
-            let current_epoch = read_paper_epoch(&transaction, task_id)?;
-            if current_epoch != queued_epoch {
-                transaction
-                    .commit()
-                    .map_err(crate::errors::DatabaseError::from)?;
-                return Ok(false);
-            }
-        }
         let (task_id, signature, mint, decided_at, kind) = match &outcome {
             CopyOutcome::PaperFilled(decision) => (
                 decision.task_id,
@@ -183,11 +136,6 @@ impl CopyDatabase {
                 )
                 .map_err(crate::errors::DatabaseError::from)?;
         }
-        if inserted {
-            if let CopyOutcome::PaperFilled(decision) = &outcome {
-                validate_paper_buy_settlement(&transaction, self.chain, decision)?;
-            }
-        }
         if inserted || confirmation_upgrade {
             transaction
                 .execute(
@@ -197,7 +145,7 @@ impl CopyDatabase {
                 )
                 .map_err(crate::errors::DatabaseError::from)?;
             if inserted {
-                book_outcome(&transaction, &outcome, decided_at)?;
+                book_outcome(&transaction, &outcome)?;
             }
         }
         let claim_state = match &outcome {
@@ -221,53 +169,26 @@ impl CopyDatabase {
     }
 }
 
-/// Apply a newly recorded decision to the spend ledger and the paper book.
-fn book_outcome(
-    transaction: &Transaction<'_>,
-    outcome: &CopyOutcome,
-    decided_at: DateTime<Utc>,
-) -> crate::trader::Result<()> {
+/// Apply a newly recorded decision to the live spend ledger. A paper decision books
+/// nothing here: its round is already in the shared paper book, which its spend is read
+/// from.
+fn book_outcome(transaction: &Transaction<'_>, outcome: &CopyOutcome) -> crate::trader::Result<()> {
     match outcome {
-        CopyOutcome::PaperFilled(decision) => {
-            add_spend(
-                transaction,
-                decision.task_id,
-                TradingMode::Paper,
-                &decision.mint,
-                decision.fill.total_cost_sol,
-            )?;
-            super::paper_book::apply_paper_buy(transaction, decision)
-        }
-        CopyOutcome::LiveSubmitted(decision) | CopyOutcome::LiveConfirmed(decision) => add_spend(
-            transaction,
-            decision.task_id,
-            TradingMode::Live,
-            &decision.mint,
-            decision.sized_sol,
-        ),
-        CopyOutcome::PaperSellObserved(decision) => {
-            let Some(fill) = &decision.paper_fill else {
-                return Err(Error::CopyValidation {
-                    detail: "runtime paper sells require quote provenance".to_owned(),
-                });
-            };
-            super::paper_book::apply_paper_sell(
+        CopyOutcome::LiveSubmitted(decision) | CopyOutcome::LiveConfirmed(decision) => {
+            add_live_spend(
                 transaction,
                 decision.task_id,
                 &decision.mint,
-                fill,
-                decision.take_profit_level,
-                decided_at,
+                decision.sized_sol,
             )
         }
         _ => Ok(()),
     }
 }
 
-fn add_spend(
+fn add_live_spend(
     transaction: &Transaction<'_>,
     task_id: i64,
-    mode: TradingMode,
     mint: &str,
     spent_native: f64,
 ) -> crate::trader::Result<()> {
@@ -280,87 +201,12 @@ fn add_spend(
              buy_count = buy_count + 1, updated_at = excluded.updated_at",
             params![
                 task_id,
-                mode_key(mode),
+                LIVE_SPEND,
                 mint,
                 spent_native,
                 Utc::now().to_rfc3339()
             ],
         )
         .map_err(crate::errors::DatabaseError::from)?;
-    Ok(())
-}
-
-fn validate_paper_buy_settlement(
-    transaction: &rusqlite::Transaction<'_>,
-    chain: crate::chains::ChainId,
-    decision: &PaperDecision,
-) -> crate::trader::Result<()> {
-    let task = task_on(transaction, decision.task_id, chain.as_str())
-        .map_err(crate::errors::DatabaseError::from)?
-        .ok_or(Error::CopyTaskNotFound {
-            task_id: decision.task_id,
-        })?;
-    if !task.enabled || task.mode != TradingMode::Paper {
-        return Err(Error::CopyTaskRejected {
-            reason: crate::trader::copy::CopySkip::TaskDisabled,
-        });
-    }
-
-    let fill = &decision.fill;
-    let metadata = fill
-        .quote
-        .as_ref()
-        .filter(|_| fill.has_quote_provenance())
-        .ok_or_else(|| Error::CopyValidation {
-            detail: "runtime paper fills require quote provenance".to_owned(),
-        })?;
-    if !fill.input_sol.is_finite()
-        || fill.input_sol <= 0.0
-        || !fill.total_cost_sol.is_finite()
-        || fill.total_cost_sol <= 0.0
-    {
-        return Err(Error::CopyValidation {
-            detail: "paper buy input and full cost must be finite and positive".to_owned(),
-        });
-    }
-    let raw_input = metadata
-        .input_amount
-        .filter(|amount| *amount != RawAmount::ZERO)
-        .ok_or_else(|| Error::CopyValidation {
-            detail: "paper buy quote has no positive raw native input".to_owned(),
-        })?;
-    let adapter = crate::chains::adapter_for(chain);
-    let quote_input = raw_input.to_whole_units(adapter.native_asset_decimals());
-    if !quote_input.is_finite() || (quote_input - fill.input_sol).abs() > f64::EPSILON {
-        return Err(Error::CopyValidation {
-            detail: "paper buy input does not match quote provenance".to_owned(),
-        });
-    }
-
-    let spent = spend_state_on(
-        transaction,
-        decision.task_id,
-        TradingMode::Paper,
-        &decision.mint,
-    )?;
-    if !spent.total_spent_native.is_finite()
-        || spent.total_spent_native + fill.total_cost_sol > task.total_budget_native
-    {
-        return Err(Error::CopyTaskRejected {
-            reason: crate::trader::copy::CopySkip::BudgetExhausted,
-        });
-    }
-    if !spent.token_spent_native.is_finite()
-        || spent.token_spent_native + fill.total_cost_sol > task.max_native_per_token
-    {
-        return Err(Error::CopyTaskRejected {
-            reason: crate::trader::copy::CopySkip::TokenCapReached,
-        });
-    }
-    if quote_input > task.max_native_per_trade {
-        return Err(Error::CopyTaskRejected {
-            reason: crate::trader::copy::CopySkip::PaperExecutionUnavailable,
-        });
-    }
     Ok(())
 }

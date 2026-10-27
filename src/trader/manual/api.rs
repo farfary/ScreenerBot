@@ -139,6 +139,7 @@ async fn buy(
         // Manual trade: honour the user's slippage override (None = config).
         slippage_pct,
         take_profit_level: None,
+        paper_leg_key: None,
     };
 
     // Execute trade (includes quote + swap) with the explicit ownership choice.
@@ -296,6 +297,7 @@ async fn sell(
         // Manual trade: honour the user's slippage override (None = config).
         slippage_pct,
         take_profit_level: None,
+        paper_leg_key: None,
     };
 
     // Execute trade (includes quote + swap)
@@ -470,6 +472,7 @@ async fn add(
         // Manual trade: honour the user's slippage override (None = config).
         slippage_pct,
         take_profit_level: None,
+        paper_leg_key: None,
     };
 
     // Execute trade (includes quote + swap)

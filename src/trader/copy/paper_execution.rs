@@ -1,7 +1,8 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Service-owned bounded FIFO dispatcher for paper outcomes.
+//! Service-owned bounded FIFO dispatcher for the paper work of copy tasks: entries,
+//! mirror sells, closes and resets of one task run one at a time, in arrival order.
 
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::future::Future;
@@ -12,12 +13,23 @@ use tokio::sync::{mpsc, oneshot, watch};
 use tokio::task::JoinSet;
 
 use super::{CopyDatabase, CopyOutcome};
+use crate::trader::executors::ExecutionContext;
+use crate::trader::types::{TradeDecision, TradeResult};
 mod error;
 pub(super) use error::EnqueueError;
 
-type Job = Pin<Box<dyn Future<Output = CopyOutcome> + Send + 'static>>;
+/// A queued job; the outcome it returns, if any, is settled into the copy store.
+type Job = Pin<Box<dyn Future<Output = Option<CopyOutcome>> + Send + 'static>>;
 type SettleFuture = Pin<Box<dyn Future<Output = crate::trader::Result<bool>> + Send + 'static>>;
 type Settlement = Arc<dyn Fn(CopyDatabase, CopyOutcome) -> SettleFuture + Send + Sync>;
+
+/// Runs a paper trade decision of a copy task on the shared paper executor, where no
+/// stop of the FIFO can cancel it half booked.
+pub type PaperDispatch = Arc<
+    dyn Fn(TradeDecision, ExecutionContext) -> Pin<Box<dyn Future<Output = crate::trader::Result<TradeResult>> + Send>>
+        + Send
+        + Sync,
+>;
 
 #[derive(Default)]
 struct AdmissionState {
@@ -112,7 +124,43 @@ impl PaperExecutionHandle {
     where
         F: Future<Output = CopyOutcome> + Send + 'static,
     {
-        self.enqueue_inner(task_id, key, database, mint, Box::pin(future), None)
+        self.enqueue_inner(
+            task_id,
+            key,
+            database,
+            mint,
+            Box::pin(async move { Some(future.await) }),
+            None,
+        )
+    }
+
+    /// Enqueue a step of the task's paper work that records no outcome, and receive
+    /// its result. The receiver closes without a value when the dispatcher stops
+    /// before the step runs.
+    pub fn enqueue_step<F, T>(
+        &self,
+        task_id: i64,
+        key: String,
+        database: CopyDatabase,
+        future: F,
+    ) -> Result<oneshot::Receiver<crate::trader::Result<T>>, EnqueueError>
+    where
+        F: Future<Output = crate::trader::Result<T>> + Send + 'static,
+        T: Send + 'static,
+    {
+        let (sender, receiver) = oneshot::channel();
+        self.enqueue_inner(
+            task_id,
+            key,
+            database,
+            None,
+            Box::pin(async move {
+                let _ = sender.send(future.await);
+                None
+            }),
+            None,
+        )?;
+        Ok(receiver)
     }
 
     pub fn enqueue_manual<F>(
@@ -132,7 +180,7 @@ impl PaperExecutionHandle {
             key,
             database,
             Some(mint),
-            Box::pin(future),
+            Box::pin(async move { Some(future.await) }),
             Some(sender),
         )?;
         Ok(receiver)
@@ -185,15 +233,30 @@ impl PaperExecutionHandle {
             .map_err(|_| EnqueueError::Unavailable)
     }
 
-    pub fn manual_close_pending(&self, task_id: i64, mint: &str, epoch: u64) -> bool {
+    /// Whether a close of paper round `position_id` of task `task_id` is queued or
+    /// running.
+    pub fn manual_close_pending(&self, task_id: i64, position_id: i64) -> bool {
         self.0.admission.lock().is_ok_and(|state| {
-            state.keys.iter().any(|(task, key)| {
-                *task == task_id
-                    && key.starts_with(&format!("manual:{mint}:"))
-                    && key.ends_with(&format!(":{epoch}"))
-            })
+            state
+                .keys
+                .contains(&(task_id, manual_close_key(position_id)))
         })
     }
+}
+
+/// The admission key of a copy activity's paper work, one per target transaction.
+pub fn activity_key(signature: &str) -> String {
+    format!("activity:{signature}")
+}
+
+/// The admission key of a close of paper round `position_id`.
+pub fn manual_close_key(position_id: i64) -> String {
+    format!("manual:{position_id}")
+}
+
+/// The admission key of a reset of a task's paper run; one reset of a task at a time.
+pub fn reset_key() -> String {
+    "reset".to_owned()
 }
 
 static ACTIVE: LazyLock<Mutex<Option<PaperExecutionHandle>>> = LazyLock::new(|| Mutex::new(None));
@@ -344,7 +407,7 @@ fn launch(
                 let _ = changed;
                 None
             },
-            outcome = &mut queued.job => Some(outcome),
+            outcome = &mut queued.job => outcome,
         };
         if let Some(mut outcome) = outcome {
             if *stop.borrow() {
@@ -396,10 +459,12 @@ fn reject_completion(
 }
 
 mod executor;
+mod wanted;
 pub(super) use executor::{
-    execute_paper_entry, in_paper_epoch, observation_telemetry, skipped, skipped_activity,
+    as_paper, execute_paper_entry, observation_telemetry, skipped, skipped_activity,
     skipped_paper, skipped_paper_intent,
 };
+pub use wanted::paper_trade_wanted;
 
 #[cfg(test)]
 mod tests;

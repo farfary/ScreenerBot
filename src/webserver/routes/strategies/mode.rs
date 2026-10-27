@@ -15,6 +15,7 @@ use super::utils::{err, err_cause};
 use crate::config::with_config;
 use crate::i18n::ids;
 use crate::logger::{self, LogTag};
+use crate::positions::db::PaperExitOwner;
 use crate::positions::Position;
 use crate::strategies::{
     self, arm,
@@ -139,7 +140,10 @@ async fn paper_evidence(strategy_id: &str) -> crate::positions::Result<PaperEvid
     Ok(PaperEvidence {
         rounds: book.strategy_rounds(&wallet_address, strategy_id).await?,
         failed_exit_streak: book
-            .failed_exit_streak(&wallet_address, strategy_id)
+            .failed_exit_streak(
+                &wallet_address,
+                &PaperExitOwner::Strategy(strategy_id.to_owned()),
+            )
             .await?,
     })
 }

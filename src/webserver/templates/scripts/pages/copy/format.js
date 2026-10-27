@@ -38,9 +38,9 @@ const EXIT_MODE_LABELS = Object.freeze({
   hybrid: "copy-exit-mode-hybrid",
 });
 
-// What closed a round: `target_sell` or a `PaperExitRule` (src/trader/copy/insights.rs).
+// The `PaperExitRule` a sale of the archived copy paper book recorded
+// (src/trader/copy/types/paper.rs).
 const EXIT_LABELS = Object.freeze({
-  target_sell: "copy-exit-target-sell",
   stop_loss: "copy-exit-stop-loss",
   trailing_stop: "copy-exit-trailing-stop",
   break_even: "copy-exit-break-even",
@@ -55,7 +55,7 @@ export const stateLabel = (state) =>
 
 export const exitModeLabel = (mode) => I18n.label(EXIT_MODE_LABELS, mode);
 
-/** A closed live round carries the trade's close reason instead of a copy exit id. */
+/** A closed round carries its trade close reason; an archived sale names its exit rule. */
 export const exitLabel = (exit) =>
   Object.hasOwn(EXIT_LABELS, exit) ? I18n.label(EXIT_LABELS, exit) : closeReasonText(exit);
 

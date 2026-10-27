@@ -236,6 +236,14 @@
   color: var(--text-primary);
 }
 
+/* One earlier book inside the card that groups a task's earlier paper results. */
+.copy-card h5 {
+  margin-block: var(--spacing-sm) 0;
+  margin-inline: 0;
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+}
+
 .copy-card-sub {
   margin-inline-start: var(--spacing-xs);
   font-size: var(--font-size-xs);

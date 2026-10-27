@@ -76,12 +76,12 @@ copy-readiness-latency = Trades détectés à temps
 copy-readiness-latency-detail = arrivée p95 { $p95 } s, limite { $limit } s
 copy-readiness-latency-none = Aucun échantillon d'arrivée pour l'instant
 copy-readiness-priced = Toutes les détentions valorisées
-copy-readiness-priced-ok = Chaque détention simulée ouverte a un prix de pool
-copy-readiness-priced-missing =
+copy-readiness-marked-ok = Chaque détention simulée ouverte a un prix
+copy-readiness-marked-missing =
     { $count ->
-        [one] { $count } détention ouverte sans prix de pool
-        [many] { $count } détentions ouvertes sans prix de pool
-       *[other] { $count } détentions ouvertes sans prix de pool
+        [one] { $count } détention ouverte sans prix
+        [many] { $count } détentions ouvertes sans prix
+       *[other] { $count } détentions ouvertes sans prix
     }
 copy-readiness-runtime = Exécution réelle disponible
 copy-readiness-runtime-ok = La configuration et les garde-fous autorisent les copies réelles
@@ -100,7 +100,6 @@ copy-state-running-paper = Actif
 copy-exit-mode-buy-only = Mes règles de sortie
 copy-exit-mode-mirror = Répliquer les ventes du portefeuille
 copy-exit-mode-hybrid = Ventes du portefeuille et mes règles
-copy-exit-target-sell = Vendu par le portefeuille
 copy-exit-stop-loss = Stop loss
 copy-exit-trailing-stop = Trailing stop
 copy-exit-break-even = Stop au point mort
@@ -292,6 +291,12 @@ copy-paper-legacy-col-cost = Coût restant ({ -sol })
 copy-paper-legacy-col-realized = Estimation réalisée ({ -sol })
 copy-paper-legacy-col-price = Dernier prix enregistré ({ -sol })
 copy-paper-legacy-col-remaining = P&L restant au prix enregistré ({ -sol })
+copy-paper-earlier-title = Résultats simulés antérieurs
+copy-paper-archived-title = Registre de copie par cotation
+copy-paper-archived-note = Résultats en lecture seule enregistrés par les copies simulées de cette tâche avant qu'elles ne deviennent des cycles du registre simulé. Ils ne font pas partie des dépenses ni des détentions de la session actuelle et n'offrent aucune action. Les montants restants sont valorisés au dernier prix enregistré de chaque token, jamais à un prix de marché actuel.
+copy-paper-archived-spent = Dépenses antérieures
+copy-paper-archived-realized = P&L réalisé antérieur
+copy-paper-archived-col-realized = Réalisé ({ -sol })
 
 ## Workspace (pages/copy/workspace.js)
 
@@ -382,7 +387,7 @@ copy-return-paper-cancel = Rester en réel
 copy-task-returned-paper = Tâche repassée en simulé
 copy-mode-change-failed = Le mode d'exécution n'a pas pu être modifié
 copy-delete-title = Supprimer la tâche de copie
-copy-delete-message = Supprimer « { $name } » ? Ses décisions et ses résultats simulés sont effacés, et le portefeuille n'est plus surveillé pour cette tâche.
+copy-delete-settle-message = Supprimer « { $name } » ? Ses détentions simulées ouvertes sont clôturées à leur dernier prix et restent dans l'historique simulé avec ses cycles clôturés. Ses décisions sont effacées et le portefeuille n'est plus surveillé pour cette tâche.
 copy-delete-confirm = Supprimer la tâche
 copy-delete-cancel = Conserver la tâche
 copy-task-deleted = Tâche de copie supprimée
@@ -393,11 +398,11 @@ copy-task-delete-failed = La tâche de copie n'a pas pu être supprimée
 copy-overview-results = Résultats
 copy-analytics-load-failed = Les statistiques n'ont pas pu être chargées : { $error }
 copy-analytics-loading = Chargement des statistiques…
-copy-exit-bucket =
+copy-exit-bucket-rounds =
     { $count ->
-        [one] { $count } vente · { $pnl }
-        [many] { $count } ventes · { $pnl }
-       *[other] { $count } ventes · { $pnl }
+        [one] { $count } cycle · { $pnl }
+        [many] { $count } cycles · { $pnl }
+       *[other] { $count } cycles · { $pnl }
     }
 copy-overview-average-win = Gain moyen
 copy-overview-average-loss = Perte moyenne { $amount }
@@ -419,11 +424,11 @@ copy-book-buys =
         [many] achats
        *[other] achats
     }
-copy-book-policy-exits =
+copy-book-rule-closes =
     <strong>{ $count }</strong> { $count ->
-        [one] sortie selon vos règles
-        [many] sorties selon vos règles
-       *[other] sorties selon vos règles
+        [one] cycle clôturé par vos règles
+        [many] cycles clôturés par vos règles
+       *[other] cycles clôturés par vos règles
     }
 copy-book-wallet-sells =
     <strong>{ $count }</strong> { $count ->
@@ -676,12 +681,12 @@ copy-holdings-title = Détentions
 copy-holdings-view-label = Vue des détentions
 copy-holdings-view-open = Ouvertes ({ $count })
 copy-holdings-view-closed = Cycles clôturés ({ $count })
-copy-holdings-reset = Réinitialiser le registre simulé
+copy-holdings-restart = Démarrer une nouvelle session simulée
 copy-holdings-live-note = Les copies réelles sont de vraies positions.
 copy-holdings-open-positions = Positions ouvertes
 copy-holdings-token-details = Ouvrir les détails du token
 copy-holdings-opened = Ouverte le { $time }
-copy-holdings-no-pool-price = Aucun prix de pool
+copy-holdings-no-price = Aucun prix
 copy-holdings-close = Clôturer
 copy-holdings-close-pending = Clôture en attente
 copy-holdings-activity = Activité
@@ -712,10 +717,12 @@ copy-holdings-col-invested = Investi ({ -sol })
 copy-holdings-col-proceeds = Produit ({ -sol })
 copy-holdings-col-exit = Sortie
 copy-holdings-col-closed = Clôturé
-copy-holdings-marks-note = Les prix sont en { -sol } par token. La valorisation et les niveaux de sortie utilisent le prix de pool, qui déclenche aussi les règles de sortie ; les exécutions enregistrées utilisent des cotations de routeur. L'entrée inclut les frais réseau estimés de l'achat ; le pic et les niveaux de sortie sont relatifs à celle-ci, une détention s'ouvre donc avec son pic sous l'entrée. Survolez une valeur pour voir son prix de pool.
+copy-holdings-round-note = Les prix sont en { -sol } par token. Chaque ligne est un cycle du registre simulé. La valorisation est le dernier prix du cycle, issu du pool ou des données de marché, et les règles de sortie agissent sur elle ; les exécutions enregistrées utilisent des cotations de routeur. L'entrée est le prix d'entrée moyen du cycle ; le pic et les niveaux de sortie sont relatifs à elle. Survolez une valeur pour voir son prix.
 copy-holdings-paused-rules = En pause : aucune nouvelle copie. Vos règles de sortie clôturent toujours ces détentions.
 copy-holdings-paused-mirror = En pause : aucune nouvelle copie. Les ventes du portefeuille clôturent toujours ces détentions.
 copy-holdings-paused-hybrid = En pause : aucune nouvelle copie. Les ventes du portefeuille et vos règles de sortie clôturent toujours ces détentions.
+copy-holdings-trader-stopped-rules = Le Trader automatique est arrêté : aucune sortie ne clôture ces détentions tant qu'il ne tourne pas.
+copy-holdings-trader-stopped-wallet = Le Trader automatique est arrêté : seules les ventes du portefeuille clôturent ces détentions tant qu'il ne tourne pas.
 copy-holdings-closed-load-failed = Les cycles clôturés n'ont pas pu être chargés : { $error }
 copy-holdings-closed-loading = Chargement des cycles clôturés…
 copy-holdings-closed-empty = Aucun cycle clôturé pour l'instant.
@@ -731,16 +738,16 @@ copy-holdings-close-pending-detail = La clôture est en file d'attente ou en cou
 copy-holdings-close-unconfirmed = Résultat de la clôture non confirmé
 copy-holdings-close-unconfirmed-detail = La connexion s'est interrompue avant la réception du résultat et Activité n'en contient pas encore. Vérifiez Activité avant de clôturer à nouveau.
 copy-holdings-closed-check-activity = La détention est clôturée. Activité contient l'exécution enregistrée.
-copy-holdings-reset-quote-message = Repartir de zéro pour « { $name } » : ses détentions simulées actuelles, dépenses, exécutions, sorties et trades ignorés sont effacés et un nouveau registre par cotation commence. Les estimations héritées et l'historique réel sont conservés. Les règles et le portefeuille sont conservés.
-copy-holdings-reset-cancel = Conserver l'historique
-copy-holdings-reset-done = Registre simulé réinitialisé
-copy-holdings-reset-detail =
+copy-holdings-restart-message = Repartir de zéro pour « { $name } » : ses détentions simulées ouvertes sont clôturées à leur dernier prix et ses chiffres ne comptent plus que ce qui se passe à partir de maintenant. Rien n'est supprimé : les cycles clôturés restent dans l'historique simulé et les décisions antérieures restent dans Activité, marquées comme session précédente. Les règles et le portefeuille sont conservés.
+copy-holdings-restart-cancel = Garder cette session
+copy-holdings-restart-done = Une nouvelle session simulée a démarré
+copy-holdings-restart-detail =
     { $count ->
-        [one] { $count } décision supprimée
-        [many] { $count } décisions supprimées
-       *[other] { $count } décisions supprimées
+        [one] { $count } détention clôturée
+        [many] { $count } détentions clôturées
+       *[other] { $count } détentions clôturées
     }
-copy-holdings-reset-failed = Le registre simulé n'a pas pu être réinitialisé
+copy-holdings-restart-failed = Impossible de démarrer une nouvelle session simulée
 
 ## Activity tab (pages/copy/activity.js). Ids come from CopyOutcome
 ## (src/trader/copy/types.rs).
@@ -758,6 +765,8 @@ copy-outcome-skipped = Ignoré
 copy-activity-decision = Décision
 copy-activity-paper-exit-quote = Sortie simulée par cotation · { $rule }
 copy-activity-paper-exit-legacy = Estimation de sortie simulée héritée · { $rule }
+copy-activity-earlier-run = Session précédente
+    .title = Décidé avant la session simulée actuelle de cette tâche, donc exclu de ses chiffres actuels.
 copy-activity-filled = { $input } à { $price } · le portefeuille a acheté { $target }
 copy-activity-filled-target-difference = { $input } à { $price } · le portefeuille a acheté { $target } · écart de prix par rapport à la cible { $difference }
 copy-activity-filled-slippage = { $input } à { $price } · le portefeuille a acheté { $target } · slippage { $slippage }

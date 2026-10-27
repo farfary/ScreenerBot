@@ -38,6 +38,7 @@ fn task(enabled: bool, mode: TradingMode, copy_stable_quoted: Option<bool>) -> C
         copy_stable_quoted,
         pause_reason: None,
         paused_at: None,
+        paper_started_at: None,
     }
 }
 
