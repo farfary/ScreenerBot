@@ -11,11 +11,13 @@ mod gaps;
 mod maintenance;
 mod migrations;
 pub mod retention;
+mod retired;
 pub mod types;
 
 #[cfg(test)]
 mod retention_tests;
 
+pub use retired::RetiredPurge;
 pub use types::{
     ClearAllResult, DatabaseStats, DeleteResult, GapRecord, OhlcvTokenStatus, SeriesPoolPlan,
     SeriesPoolReset, SeriesPoolWrite, StoredBucket, TimeframeSummary,
@@ -58,6 +60,41 @@ fn step(tx: &Transaction<'_>, context: &SchemaContext) -> Result<(), DatabaseErr
     })
 }
 
+/// The candle table: every native timeframe of every series pool in one table.
+const CREATE_CANDLES: &str = "CREATE TABLE IF NOT EXISTS ohlcv_candles (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    chain_id TEXT NOT NULL,
+    mint TEXT NOT NULL,
+    pool_address TEXT NOT NULL,
+    timeframe TEXT NOT NULL,
+    timestamp INTEGER NOT NULL,
+    open REAL NOT NULL,
+    high REAL NOT NULL,
+    low REAL NOT NULL,
+    close REAL NOT NULL,
+    volume REAL NOT NULL,
+    source TEXT NOT NULL DEFAULT 'api',
+    fetched_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(chain_id, mint, pool_address, timeframe, timestamp)
+)";
+
+/// Gap tracking, per timeframe.
+const CREATE_GAPS: &str = "CREATE TABLE IF NOT EXISTS ohlcv_gaps (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    chain_id TEXT NOT NULL,
+    mint TEXT NOT NULL,
+    pool_address TEXT NOT NULL,
+    timeframe TEXT NOT NULL,
+    start_timestamp INTEGER NOT NULL,
+    end_timestamp INTEGER NOT NULL,
+    attempts INTEGER NOT NULL DEFAULT 0,
+    last_attempt TEXT,
+    filled INTEGER NOT NULL DEFAULT 0,
+    error_message TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(chain_id, mint, pool_address, timeframe, start_timestamp, end_timestamp)
+)";
+
 fn create_tables(tx: &Transaction<'_>, chain: ChainId) -> OhlcvResult<()> {
     tx.execute_batch(
         r#"
@@ -80,42 +117,6 @@ fn create_tables(tx: &Transaction<'_>, chain: ChainId) -> OhlcvResult<()> {
             failure_count INTEGER NOT NULL DEFAULT 0,
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             UNIQUE(chain_id, mint, pool_address)
-        );
-
-        -- UNIFIED CANDLES TABLE (stores ALL native timeframes from API)
-        -- Replaces ohlcv_1m and ohlcv_aggregated with single storage
-        CREATE TABLE IF NOT EXISTS ohlcv_candles (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            chain_id TEXT NOT NULL,
-            mint TEXT NOT NULL,
-            pool_address TEXT NOT NULL,
-            timeframe TEXT NOT NULL,
-            timestamp INTEGER NOT NULL,
-            open REAL NOT NULL,
-            high REAL NOT NULL,
-            low REAL NOT NULL,
-            close REAL NOT NULL,
-            volume REAL NOT NULL,
-            source TEXT NOT NULL DEFAULT 'api',
-            fetched_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE(chain_id, mint, pool_address, timeframe, timestamp)
-        );
-
-        -- Gap tracking (per timeframe)
-        CREATE TABLE IF NOT EXISTS ohlcv_gaps (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            chain_id TEXT NOT NULL,
-            mint TEXT NOT NULL,
-            pool_address TEXT NOT NULL,
-            timeframe TEXT NOT NULL,
-            start_timestamp INTEGER NOT NULL,
-            end_timestamp INTEGER NOT NULL,
-            attempts INTEGER NOT NULL DEFAULT 0,
-            last_attempt TEXT,
-            filled INTEGER NOT NULL DEFAULT 0,
-            error_message TEXT,
-            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE(chain_id, mint, pool_address, timeframe, start_timestamp, end_timestamp)
         );
 
         -- Token monitoring configuration (with backfill tracking)
@@ -147,6 +148,9 @@ fn create_tables(tx: &Transaction<'_>, chain: ChainId) -> OhlcvResult<()> {
         "#,
     )
     .map_err(|e| DatabaseError::classify_sqlite_failure("create OHLCV tables", e))?;
+    tx.execute_batch(CREATE_CANDLES)
+        .and_then(|()| tx.execute_batch(CREATE_GAPS))
+        .map_err(|e| DatabaseError::classify_sqlite_failure("create OHLCV candle tables", e))?;
 
     // Migration: add the pair column to pre-existing ohlcv_pools tables (CREATE
     // IF NOT EXISTS above won't add a column to a table that already exists).
@@ -214,8 +218,7 @@ impl OhlcvDatabase {
 
     /// Clear ALL cached OHLCV candles and gaps and reset every token's backfill
     /// progress so monitored tokens re-fetch from scratch. Pools and the
-    /// monitoring list are preserved. Backs both the manual "Clear OHLCV Cache"
-    /// action and the automatic data-version wipe.
+    /// monitoring list are preserved. Backs the manual "Clear OHLCV Cache" action.
     pub fn clear_all_ohlcv_data(&self) -> OhlcvResult<ClearAllResult> {
         let conn = self.conn()?;
         wipe_candle_data(&conn, self.chain_id()).map_err(|e| {
@@ -569,10 +572,10 @@ fn deep_history_reset() -> String {
 }
 
 /// Delete all candles + gaps and reset every monitor row's backfill progress so
-/// the token re-backfills from scratch on the next scheduler pass. Operates on an
-/// already-locked connection so it can be shared by both the constructor's
-/// version wipe and the public `clear_all_ohlcv_data` (which locks first).
-pub(super) fn wipe_candle_data(conn: &Connection, chain_id: &str) -> SqliteResult<ClearAllResult> {
+/// the token re-backfills from scratch on the next scheduler pass. Backs the
+/// manual "Clear OHLCV Cache" action; a data-version change retires the tables
+/// instead (`retired`), so the open never deletes in proportion to the store.
+fn wipe_candle_data(conn: &Connection, chain_id: &str) -> SqliteResult<ClearAllResult> {
     let candles_deleted = conn.execute(
         "DELETE FROM ohlcv_candles WHERE chain_id = ?1",
         params![chain_id],
@@ -581,10 +584,20 @@ pub(super) fn wipe_candle_data(conn: &Connection, chain_id: &str) -> SqliteResul
         "DELETE FROM ohlcv_gaps WHERE chain_id = ?1",
         params![chain_id],
     )?;
-    // Reset backfill progress + activity counters so every monitored token is
-    // treated as never-fetched and re-pulls its full series. The monitor rows
-    // themselves (and pools) stay so we still know which tokens to watch.
-    let tokens_reset = conn.execute(
+    let tokens_reset = reset_backfill_progress(conn, chain_id)?;
+    Ok(ClearAllResult {
+        candles_deleted,
+        gaps_deleted,
+        tokens_reset,
+    })
+}
+
+/// Reset backfill progress + activity counters so every monitored token of
+/// `chain_id` is treated as never-fetched and re-pulls its full series. The
+/// monitor rows themselves (and pools) stay so we still know which tokens to
+/// watch. Returns the number of monitor rows reset.
+pub(super) fn reset_backfill_progress(conn: &Connection, chain_id: &str) -> SqliteResult<usize> {
+    conn.execute(
         &format!(
             "UPDATE ohlcv_monitor_config SET
                 backfill_1m_complete = 0,
@@ -604,12 +617,7 @@ pub(super) fn wipe_candle_data(conn: &Connection, chain_id: &str) -> SqliteResul
             deep_history_reset()
         ),
         params![chain_id],
-    )?;
-    Ok(ClearAllResult {
-        candles_deleted,
-        gaps_deleted,
-        tokens_reset,
-    })
+    )
 }
 
 #[cfg(test)]

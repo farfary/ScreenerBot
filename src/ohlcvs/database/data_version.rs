@@ -4,10 +4,13 @@
 //! Chain-qualified OHLCV candle-data version ownership.
 //!
 //! Cached candles are only trustworthy for the chain whose ingest rules produced
-//! them. A stale version therefore wipes that chain's candle/gap rows only.
-//! The historical singleton row (`id = 1`) is migrated losslessly onto Solana.
+//! them. A stale version therefore retires that chain's candle/gap rows only
+//! (`retired`): they leave the live tables at the open and are purged in batches
+//! afterwards. The historical singleton row (`id = 1`) is migrated losslessly onto
+//! Solana.
 
-use super::wipe_candle_data;
+use super::reset_backfill_progress;
+use super::retired::retire_chain_tables;
 use crate::chains::ChainId;
 use crate::database::schema::ddl::{has_column, has_table};
 use crate::errors::DatabaseError;
@@ -17,10 +20,11 @@ use rusqlite::{params, Connection, OptionalExtension};
 /// Version of the OHLCV candle data logic. Bump this whenever a change to how
 /// candles are fetched/stored (locally or by the data server) means the existing
 /// cached candles are no longer trustworthy and should be re-fetched. On startup
-/// a stored version that differs from this constant triggers a one-time wipe of
-/// the owning chain's local candle/gap data so every monitored token re-backfills
-/// with the current logic — self-healing across app restarts for every user, no
-/// manual cache clearing required.
+/// a stored version that differs from this constant retires the owning chain's
+/// local candle/gap data once, so every monitored token re-backfills with the
+/// current logic — self-healing across app restarts for every user, no manual
+/// cache clearing required. The open does work bounded by the schema, never by
+/// the store's size; the retired rows are deleted in batches by the monitor.
 ///
 /// Pool rows and the monitoring list (which tokens to watch) are preserved; only
 /// the candle data and gap tracking are cleared and backfill progress is reset.
@@ -62,8 +66,8 @@ const CREATE_CHAIN_VERSIONS: &str = "CREATE TABLE IF NOT EXISTS ohlcv_data_versi
 )";
 
 /// Ensure the data-version table is chain-keyed and that `chain_id`'s stored
-/// version matches `OHLCV_DATA_VERSION`. A stale or missing version wipes only
-/// that chain. The historical global `id = 1` row is copied onto Solana without
+/// version matches `OHLCV_DATA_VERSION`. A stale or missing version retires only
+/// that chain's candles and gaps and resets its backfill progress. The historical global `id = 1` row is copied onto Solana without
 /// changing its version meaning.
 pub(super) fn ensure_data_version(conn: &Connection, chain_id: &str) -> OhlcvResult<()> {
     migrate_global_data_version_table(conn)?;
@@ -98,9 +102,10 @@ pub(super) fn ensure_data_version(conn: &Connection, chain_id: &str) -> OhlcvRes
         return Ok(());
     }
 
-    wipe_candle_data(conn, chain_id).map_err(|e| {
+    retire_chain_tables(conn, chain_id)?;
+    reset_backfill_progress(conn, chain_id).map_err(|e| {
         OhlcvError::Database(DatabaseError::classify_sqlite_failure(
-            "wipe candle data",
+            "reset OHLCV backfill progress",
             e,
         ))
     })?;

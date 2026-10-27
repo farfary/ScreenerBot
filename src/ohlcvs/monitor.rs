@@ -9,7 +9,7 @@ use crate::i18n::{ids, UiArg, UiText};
 use crate::logger::{self, LogTag};
 use crate::ohlcvs::aggregator::OhlcvAggregator;
 use crate::ohlcvs::cache::OhlcvCache;
-use crate::ohlcvs::database::{OhlcvDatabase, StoredBucket};
+use crate::ohlcvs::database::{OhlcvDatabase, RetiredPurge, StoredBucket};
 use crate::ohlcvs::error::{OhlcvError, OhlcvResult};
 use crate::ohlcvs::feeds::CandleFeed;
 use crate::ohlcvs::fetcher::{CandleSource, FetchResponse, OhlcvFetcher, MAX_CANDLES_PER_REQUEST};
@@ -69,6 +69,14 @@ const REFRESHING_REFETCH_MAX_DELAY_SECS: i64 = 300;
 /// egress is rate-limited, so a short window would keep a partial closed
 /// bucket in place.
 const MAX_REFRESHING_REFETCHES: u32 = 10;
+
+/// Rows one retired-table purge step deletes: each step is a short write, so live candle
+/// writes interleave with the purge.
+const RETIRED_PURGE_BATCH: usize = 5_000;
+
+/// Pause between purge steps, and the wait before retrying a failed step.
+const RETIRED_PURGE_PAUSE: Duration = Duration::from_millis(200);
+const RETIRED_PURGE_RETRY: Duration = Duration::from_secs(60);
 
 /// Delay of the next re-fetch of a series the Data Server reports as
 /// refreshing, after `refetches_so_far` re-fetches have been scheduled:
@@ -654,6 +662,7 @@ impl OhlcvMonitor {
         tokio::spawn(self.clone().monitor_loop());
         tokio::spawn(self.clone().gap_fill_loop());
         tokio::spawn(self.clone().cleanup_loop());
+        tokio::spawn(self.clone().retired_purge_loop());
         tokio::spawn(self.clone().cache_maintenance_loop());
         tokio::spawn(self.clone().sync_pool_service_tokens());
 
@@ -3386,6 +3395,50 @@ impl OhlcvMonitor {
                     .entry((mint.to_string(), pool_address.to_string(), timeframe))
                     .or_default(),
             );
+        }
+    }
+
+    /// Delete the candle and gap tables a data-version change retired, one bounded batch at
+    /// a time, until none remains. Retired rows are never read, so the purge only frees
+    /// space and may take as long as the store needs.
+    async fn retired_purge_loop(self: Arc<Self>) {
+        let mut deleted_steps: u64 = 0;
+        loop {
+            if *self.shutdown_signal.read().await {
+                break;
+            }
+            let db = Arc::clone(&self.db);
+            match spawn_blocking(move || db.purge_retired_batch(RETIRED_PURGE_BATCH)).await {
+                Ok(Ok(RetiredPurge::Pending)) => {
+                    deleted_steps += 1;
+                    sleep(RETIRED_PURGE_PAUSE).await;
+                }
+                Ok(Ok(RetiredPurge::Done)) => {
+                    if deleted_steps > 0 {
+                        logger::info(
+                            LogTag::Ohlcv,
+                            &format!(
+                                "Purged the candle data of the previous data version in {deleted_steps} steps"
+                            ),
+                        );
+                    }
+                    break;
+                }
+                Ok(Err(e)) => {
+                    logger::warning(
+                        LogTag::Ohlcv,
+                        &format!("Retired candle purge step failed, retrying: {e}"),
+                    );
+                    sleep(RETIRED_PURGE_RETRY).await;
+                }
+                Err(e) => {
+                    logger::warning(
+                        LogTag::Ohlcv,
+                        &format!("Retired candle purge task failed, retrying: {e}"),
+                    );
+                    sleep(RETIRED_PURGE_RETRY).await;
+                }
+            }
         }
     }
 
