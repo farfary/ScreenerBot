@@ -15,7 +15,7 @@ use super::EventsDatabase;
 
 impl EventsDatabase {
     /// Get events with ID greater than cursor (keyset forward)
-    pub async fn get_events_since(
+    pub fn get_events_since(
         &self,
         after_id: i64,
         limit: usize,
@@ -91,7 +91,7 @@ impl EventsDatabase {
     }
 
     /// Get events with ID less than cursor (keyset backward)
-    pub async fn get_events_before(
+    pub fn get_events_before(
         &self,
         before_id: i64,
         limit: usize,
@@ -167,7 +167,7 @@ impl EventsDatabase {
     }
 
     /// Get latest N events and return also the max id
-    pub async fn get_events_head(
+    pub fn get_events_head(
         &self,
         limit: usize,
         category: Option<EventCategory>,
@@ -290,7 +290,7 @@ impl EventsDatabase {
     }
 
     /// Count total events matching filters
-    pub async fn count_events_filtered(
+    pub fn count_events_filtered(
         &self,
         category: Option<EventCategory>,
         severity: Option<Severity>,

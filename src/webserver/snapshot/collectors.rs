@@ -387,7 +387,7 @@ pub(super) async fn collect_events_snapshot() -> Option<EventsStatusSnapshot> {
     };
 
     // Get database stats
-    let db_stats = match db.get_stats().await {
+    let db_stats = match crate::events::on_blocking_pool(db, |store| store.get_stats()).await {
         Ok(stats) => stats,
         Err(e) => {
             logger::warning(

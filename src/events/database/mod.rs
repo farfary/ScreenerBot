@@ -119,65 +119,6 @@ impl EventsDatabase {
         })
     }
 
-    /// Insert a single event
-    pub async fn insert_event(&self, event: &Event) -> Result<i64> {
-        let conn = self.get_write_connection()?;
-
-        let event_time_str = event.event_time.to_rfc3339();
-        let category_str = event.category.to_string();
-        let severity_str = event.severity.to_string();
-        let chain_id = crate::chains::legacy_row_chain().as_str();
-        let payload_str = serde_json::to_string(&event.payload).map_err(|e| {
-            Error::Data(DataError::ParseError {
-                data_type: "event payload".to_owned(),
-                error: e.to_string(),
-            })
-        })?;
-        let message_short: Option<String> = event
-            .payload
-            .get("message")
-            .and_then(|v| v.as_str())
-            .map(|s| {
-                if s.len() > 240 {
-                    // Find a valid UTF-8 boundary at or before 240 bytes
-                    let mut end = 240;
-                    while end > 0 && !s.is_char_boundary(end) {
-                        end -= 1;
-                    }
-                    s[..end].to_string()
-                } else {
-                    s.to_string()
-                }
-            });
-
-        let _id = conn
-            .execute(
-                "INSERT INTO events (
-                    event_time, category, subtype, severity,
-                    mint, reference_id, message_short, json_payload, chain_id
-                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
-                params![
-                    event_time_str,
-                    category_str,
-                    event.subtype,
-                    severity_str,
-                    event.mint,
-                    event.reference_id,
-                    message_short,
-                    payload_str,
-                    chain_id
-                ],
-            )
-            .map_err(|e| {
-                Error::Database(DatabaseError::Query {
-                    operation: "insert event".to_owned(),
-                    message: e.to_string(),
-                })
-            })?;
-
-        Ok(conn.last_insert_rowid())
-    }
-
     /// Insert multiple events in one transaction, stamping each with its row id.
     /// Synchronous: the event writer runs it on the blocking pool.
     pub fn insert_events(&self, events: &mut [Event]) -> Result<()> {
@@ -274,7 +215,7 @@ impl EventsDatabase {
     }
 
     /// Get recent events, optionally filtered by category
-    pub async fn get_recent_events(
+    pub fn get_recent_events(
         &self,
         category: Option<EventCategory>,
         limit: usize,
@@ -360,11 +301,7 @@ impl EventsDatabase {
     }
 
     /// Get events by reference ID (tx signature, pool address, etc.)
-    pub async fn get_events_by_reference(
-        &self,
-        reference_id: &str,
-        limit: usize,
-    ) -> Result<Vec<Event>> {
+    pub fn get_events_by_reference(&self, reference_id: &str, limit: usize) -> Result<Vec<Event>> {
         let conn = self.get_read_connection()?;
 
         let mut stmt = conn
@@ -427,7 +364,7 @@ impl EventsDatabase {
     }
 
     /// Get events by token mint
-    pub async fn get_events_by_mint(&self, mint: &str, limit: usize) -> Result<Vec<Event>> {
+    pub fn get_events_by_mint(&self, mint: &str, limit: usize) -> Result<Vec<Event>> {
         let conn = self.get_read_connection()?;
 
         let mut stmt = conn
@@ -490,10 +427,7 @@ impl EventsDatabase {
     }
 
     /// Get event counts by category for the last N hours
-    pub async fn get_event_counts_by_category(
-        &self,
-        since_hours: u64,
-    ) -> Result<HashMap<String, u64>> {
+    pub fn get_event_counts_by_category(&self, since_hours: u64) -> Result<HashMap<String, u64>> {
         let conn = self.get_read_connection()?;
 
         let cutoff_time = Utc::now() - chrono::Duration::hours(since_hours as i64);
@@ -537,7 +471,7 @@ impl EventsDatabase {
     }
 
     /// Delete events older than `maintenance.events_retention_days`.
-    pub async fn cleanup_old_events(&self) -> Result<usize> {
+    pub fn cleanup_old_events(&self) -> Result<usize> {
         let conn = self.get_write_connection()?;
 
         let retention_days =
@@ -568,7 +502,7 @@ impl EventsDatabase {
     }
 
     /// Get database statistics
-    pub async fn get_stats(&self) -> Result<HashMap<String, i64>> {
+    pub fn get_stats(&self) -> Result<HashMap<String, i64>> {
         let conn = self.get_read_connection()?;
 
         let mut stats = HashMap::new();

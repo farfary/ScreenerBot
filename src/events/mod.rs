@@ -117,6 +117,20 @@ pub(crate) fn database() -> Result<&'static Arc<EventsDatabase>> {
     }
 }
 
+/// Run one synchronous events store operation on the blocking pool, so the runtime worker
+/// that awaits it never holds a SQLite connection.
+pub(crate) async fn on_blocking_pool<T, F>(db: &Arc<EventsDatabase>, operation: F) -> Result<T>
+where
+    F: FnOnce(&EventsDatabase) -> Result<T> + Send + 'static,
+    T: Send + 'static,
+{
+    let store = Arc::clone(db);
+    tokio::task::spawn_blocking(move || operation(&store))
+        .await
+        .map_err(|error| Error::Internal(crate::errors::InternalError::from(error)))
+        .and_then(|result| result)
+}
+
 /// Global broadcaster for real-time event delivery
 static EVENTS_BROADCAST_TX: OnceLock<broadcast::Sender<Event>> = OnceLock::new();
 
@@ -255,37 +269,48 @@ pub async fn record_safe(event: Event) {
 /// Get recent events by category
 pub async fn recent(category: EventCategory, limit: usize) -> Result<Vec<Event>> {
     let db = database()?;
-    db.get_recent_events(Some(category), limit).await
+    on_blocking_pool(db, move |store| {
+        store.get_recent_events(Some(category), limit)
+    })
+    .await
 }
 
 /// Get recent events across all categories
 pub async fn recent_all(limit: usize) -> Result<Vec<Event>> {
     let db = database()?;
-    db.get_recent_events(None, limit).await
+    on_blocking_pool(db, move |store| store.get_recent_events(None, limit)).await
 }
 
 /// Get event counts by category for the last N hours
 pub async fn count_by_category(since_hours: u64) -> Result<HashMap<String, u64>> {
     let db = database()?;
-    db.get_event_counts_by_category(since_hours).await
+    on_blocking_pool(db, move |store| {
+        store.get_event_counts_by_category(since_hours)
+    })
+    .await
 }
 
 /// Get events for a specific reference ID (e.g., transaction signature, pool address)
 pub async fn by_reference(reference_id: &str, limit: usize) -> Result<Vec<Event>> {
     let db = database()?;
-    db.get_events_by_reference(reference_id, limit).await
+    let reference_id = reference_id.to_owned();
+    on_blocking_pool(db, move |store| {
+        store.get_events_by_reference(&reference_id, limit)
+    })
+    .await
 }
 
 /// Get events for a specific token mint
 pub async fn by_mint(mint: &str, limit: usize) -> Result<Vec<Event>> {
     let db = database()?;
-    db.get_events_by_mint(mint, limit).await
+    let mint = mint.to_owned();
+    on_blocking_pool(db, move |store| store.get_events_by_mint(&mint, limit)).await
 }
 
 /// Force cleanup of old events (normally handled automatically)
 pub async fn cleanup_old_events() -> Result<usize> {
     let db = database()?;
-    db.cleanup_old_events().await
+    on_blocking_pool(db, EventsDatabase::cleanup_old_events).await
 }
 
 // =============================================================================

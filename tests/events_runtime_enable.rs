@@ -149,3 +149,32 @@ fn the_event_writer_inserts_batches_on_the_blocking_pool() {
         );
     }
 }
+
+/// Every events store operation runs SQLite, so none is an `async fn`: callers reach the store
+/// through `events::on_blocking_pool`, never on a runtime worker. Opening the store is the one
+/// async entry point.
+#[test]
+fn no_events_store_operation_is_async() {
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/events/database");
+    let mut violations = Vec::new();
+    for entry in std::fs::read_dir(&dir).expect("read events store directory") {
+        let path = entry.expect("directory entry").path();
+        if path.extension().is_none_or(|ext| ext != "rs") {
+            continue;
+        }
+        let code = std::fs::read_to_string(&path).expect("read events store file");
+        for line in code.lines() {
+            let line = line.trim_start();
+            if line.starts_with("//") {
+                continue;
+            }
+            if line.starts_with("pub async fn ") && !line.starts_with("pub async fn new(") {
+                violations.push(format!("{}: {line}", path.display()));
+            }
+        }
+    }
+    assert!(
+        violations.is_empty(),
+        "events store operations must be synchronous and run on the blocking pool: {violations:?}"
+    );
+}

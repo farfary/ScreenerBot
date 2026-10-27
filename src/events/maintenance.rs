@@ -6,7 +6,8 @@
 //! Maintenance tasks and configuration checks for the events system.
 //! Event recording functions live in the sibling `recorders` module.
 use crate::config;
-use crate::events::{Event, EventCategory, Result, Severity};
+use crate::events::database::EventsDatabase;
+use crate::events::{on_blocking_pool, Event, EventCategory, Result, Severity};
 use crate::logger::{self, LogTag};
 use serde_json::json;
 use std::collections::HashMap;
@@ -80,7 +81,7 @@ async fn perform_maintenance() -> Result<()> {
     let db = crate::events::database()?.clone();
 
     // Cleanup old events
-    let deleted_count = db.cleanup_old_events().await?;
+    let deleted_count = on_blocking_pool(&db, EventsDatabase::cleanup_old_events).await?;
     if deleted_count > 0 {
         logger::info(
             LogTag::System,
@@ -89,7 +90,7 @@ async fn perform_maintenance() -> Result<()> {
     }
 
     // Get database stats for monitoring
-    let stats = db.get_stats().await?;
+    let stats = on_blocking_pool(&db, EventsDatabase::get_stats).await?;
     let total_events = stats.get("total_events").unwrap_or(&0);
     let events_24h = stats.get("events_24h").unwrap_or(&0);
     let db_size_mb = stats
@@ -117,14 +118,14 @@ pub async fn get_events_summary(hours: u64) -> Result<HashMap<String, serde_json
     let db = crate::events::database()?.clone();
 
     // Get counts by category
-    let counts = db.get_event_counts_by_category(hours).await?;
+    let counts =
+        on_blocking_pool(&db, move |store| store.get_event_counts_by_category(hours)).await?;
 
     // Get database stats
-    let stats = db.get_stats().await?;
+    let stats = on_blocking_pool(&db, EventsDatabase::get_stats).await?;
 
     // Get recent errors
-    let recent_errors = db
-        .get_recent_events(None, 50)
+    let recent_errors = on_blocking_pool(&db, |store| store.get_recent_events(None, 50))
         .await?
         .into_iter()
         .filter(|e| matches!(e.severity, Severity::Error))
@@ -160,13 +161,24 @@ pub async fn search_events(
     let db = crate::events::database()?.clone();
 
     if let Some(ref_id) = reference_id {
-        return db.get_events_by_reference(ref_id, limit).await;
+        let ref_id = ref_id.to_owned();
+        return on_blocking_pool(&db, move |store| {
+            store.get_events_by_reference(&ref_id, limit)
+        })
+        .await;
     }
 
     if let Some(mint_addr) = mint {
-        return db.get_events_by_mint(mint_addr, limit).await;
+        let mint_addr = mint_addr.to_owned();
+        return on_blocking_pool(&db, move |store| {
+            store.get_events_by_mint(&mint_addr, limit)
+        })
+        .await;
     }
 
     let category_enum = category.map(EventCategory::from_string);
-    db.get_recent_events(category_enum, limit).await
+    on_blocking_pool(&db, move |store| {
+        store.get_recent_events(category_enum, limit)
+    })
+    .await
 }
