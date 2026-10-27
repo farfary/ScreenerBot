@@ -243,7 +243,9 @@ test("Sell Part First shows its part field and a two-step stop-loss example", as
     const group = page.locator("#stop-loss-partial-pct-group");
     const part = page.locator("#stop-loss-partial-pct");
     const text = async (selector) => plain(await page.locator(selector).textContent());
-    await page.waitForFunction(() => document.querySelector("#stop-loss-partial-pct").value === "40");
+    await page.waitForFunction(
+      () => document.querySelector("#stop-loss-partial-pct").value === "40"
+    );
     assert.equal(await group.isVisible(), true);
     assert.deepEqual(
       await part.evaluate((el) => ({
@@ -264,7 +266,8 @@ test("Sell Part First shows its part field and a two-step stop-loss example", as
     await part.fill("25");
     const [request] = await Promise.all([
       page.waitForRequest(
-        (candidate) => candidate.method() === "PATCH" && candidate.url().endsWith("/api/config/trader")
+        (candidate) =>
+          candidate.method() === "PATCH" && candidate.url().endsWith("/api/config/trader")
       ),
       page.locator(".config-card:has(#stop-loss-partial-pct) .config-card-save").click(),
     ]);
@@ -320,7 +323,10 @@ test("the take-profit ladder adds steps up to its limit and saves only a valid l
     assert.equal(await save.isDisabled(), true);
 
     await rows.nth(1).locator(".level-list-profit").fill("20");
-    assert.equal(plain(await error.textContent()), "Each step needs a higher profit level than the one before it");
+    assert.equal(
+      plain(await error.textContent()),
+      "Each step needs a higher profit level than the one before it"
+    );
 
     await rows.nth(3).locator(".level-list-remove").click();
     await rows.nth(1).locator(".level-list-profit").fill("60");
@@ -330,7 +336,8 @@ test("the take-profit ladder adds steps up to its limit and saves only a valid l
 
     const [request] = await Promise.all([
       page.waitForRequest(
-        (candidate) => candidate.method() === "PATCH" && candidate.url().endsWith("/api/config/trader")
+        (candidate) =>
+          candidate.method() === "PATCH" && candidate.url().endsWith("/api/config/trader")
       ),
       save.click(),
     ]);
@@ -485,6 +492,33 @@ test("the trailing stop states the minimum it locks and warns when it locks none
   }
 });
 
+test("the trailing stop's computed lines follow the typed activation and distance", async () => {
+  const { page, close } = await openTrader("trailing-stop", {
+    trailing_stop_activation_pct: 10,
+    trailing_stop_distance_pct: 5,
+  });
+  try {
+    const activation = page.locator("#activation-impact");
+    const distance = page.locator("#distance-impact");
+    await activation.filter({ hasText: "+10%" }).waitFor();
+    assert.equal(plain(await distance.textContent()), "Exits at -5% from peak");
+
+    await page.locator("#trail-activation").fill("25");
+    await page.locator("#trail-distance").fill("8");
+    await activation.filter({ hasText: "+25%" }).waitFor();
+    await distance.filter({ hasText: "-8%" }).waitFor();
+    assert.equal(plain(await activation.textContent()), "Starts trailing at +25% profit");
+    assert.equal(plain(await distance.textContent()), "Exits at -8% from peak");
+
+    await page.locator("#trail-activation").fill("");
+    await page.locator("#trail-distance").fill("");
+    await activation.filter({ hasText: "—" }).waitFor();
+    await distance.filter({ hasText: "—" }).waitFor();
+  } finally {
+    await close();
+  }
+});
+
 test("the break-even stop states its rule and saves its two levels", async () => {
   const { page, close } = await openTrader("trailing-stop", {
     break_even_trigger_pct: 15,
@@ -506,7 +540,8 @@ test("the break-even stop states its rule and saves its two levels", async () =>
     );
     const [request] = await Promise.all([
       page.waitForRequest(
-        (candidate) => candidate.method() === "PATCH" && candidate.url().endsWith("/api/config/trader")
+        (candidate) =>
+          candidate.method() === "PATCH" && candidate.url().endsWith("/api/config/trader")
       ),
       page.locator(".config-card:has(#break-even-offset) .config-card-save").click(),
     ]);
@@ -559,7 +594,8 @@ test("the flat-position exit takes its bounds from the metadata and saves its fi
     );
     const [request] = await Promise.all([
       page.waitForRequest(
-        (candidate) => candidate.method() === "PATCH" && candidate.url().endsWith("/api/config/trader")
+        (candidate) =>
+          candidate.method() === "PATCH" && candidate.url().endsWith("/api/config/trader")
       ),
       page.locator(".config-card:has(#time-stagnation-minutes) .config-card-save").click(),
     ]);

@@ -432,8 +432,23 @@ export function createExampleUpdaters({
 
     if (!activationInput || !distanceInput) return;
 
-    const activation = parseFloat(activationInput.value) || 15;
-    const distance = parseFloat(distanceInput.value) || 5;
+    const typedActivation = parseFloat(activationInput.value);
+    const typedDistance = parseFloat(distanceInput.value);
+    const activationImpact = $("#activation-impact");
+    if (activationImpact) {
+      activationImpact.textContent = Number.isFinite(typedActivation)
+        ? I18n.t("trader-trailing-activation-impact", { value: examplePercent(typedActivation) })
+        : "—";
+    }
+    const distanceImpact = $("#distance-impact");
+    if (distanceImpact) {
+      distanceImpact.textContent = Number.isFinite(typedDistance)
+        ? I18n.t("trader-trailing-distance-impact", { value: examplePercent(typedDistance) })
+        : "—";
+    }
+
+    const activation = typedActivation || 15;
+    const distance = typedDistance || 5;
 
     // The example position is one buy at the configured trade size.
     const entryValue = Number(tradeSize?.());
