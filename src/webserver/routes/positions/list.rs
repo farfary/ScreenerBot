@@ -144,6 +144,7 @@ fn map_position_to_response_with_logo(
         total_size_native: p.total_size_native,
         price_highest: p.price_highest,
         price_lowest: p.price_lowest,
+        basis_peak_price: p.basis_peak_price,
         entry_transaction_signature: p.entry_transaction_signature.clone(),
         exit_transaction_signature: p.exit_transaction_signature.clone(),
         token_amount: p.token_amount,

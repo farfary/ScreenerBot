@@ -337,7 +337,7 @@ strategies-condition-position-profit-param-threshold-pct = Seuil de profit %
     .description = Profit latent en pourcentage du prix d'entrée ; les valeurs négatives sont des pertes
 
 strategies-condition-drawdown-from-peak = Repli depuis le sommet
-    .description = Se déclenche lorsque le prix du pool a reculé d'un pourcentage par rapport au prix le plus haut atteint depuis l'entrée, une fois ce sommet suffisamment au-dessus du prix d'entrée.
+    .description = Se déclenche lorsque le prix du pool a reculé d'un pourcentage par rapport au prix le plus haut atteint depuis le dernier achat, une fois ce sommet suffisamment au-dessus du prix d'entrée.
 strategies-condition-drawdown-from-peak-param-drop-pct = Repli depuis le sommet %
     .description = De combien le prix actuel doit être sous le sommet
 strategies-condition-drawdown-from-peak-param-arm-after-profit-pct = Armement après profit %

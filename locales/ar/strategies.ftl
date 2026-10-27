@@ -379,7 +379,7 @@ strategies-condition-position-profit-param-threshold-pct = حد الربح %
     .description = الربح غير المحقق كنسبة مئوية من سعر الدخول؛ القيم السالبة خسائر
 
 strategies-condition-drawdown-from-peak = التراجع عن القمة
-    .description = يعمل عندما ينخفض سعر مجمع السيولة بنسبة مئوية عن أعلى سعر شوهد منذ الدخول، بعد أن كانت تلك القمة أعلى من سعر الدخول بما يكفي.
+    .description = يعمل عندما ينخفض سعر مجمع السيولة بنسبة مئوية عن أعلى سعر شوهد منذ آخر شراء، بعد أن كانت تلك القمة أعلى من سعر الدخول بما يكفي.
 strategies-condition-drawdown-from-peak-param-drop-pct = التراجع عن القمة %
     .description = كم يجب أن يكون السعر الحالي أدنى من القمة
 strategies-condition-drawdown-from-peak-param-arm-after-profit-pct = التفعيل بعد ربح %

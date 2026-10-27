@@ -66,6 +66,7 @@ tokens-positions-fact-closed-reason = 종료 사유
 tokens-positions-fact-target-min = 목표 수익 최소
 tokens-positions-fact-target-max = 목표 수익 최대
 tokens-positions-fact-highest = 최고가
+tokens-positions-fact-basis-peak = 마지막 매수 이후 고점
 tokens-positions-fact-lowest = 최저가
 tokens-positions-section-range = 목표 및 범위
 tokens-positions-section-market = 시장 및 보유 수량

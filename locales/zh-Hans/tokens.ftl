@@ -66,6 +66,7 @@ tokens-positions-fact-closed-reason = 平仓原因
 tokens-positions-fact-target-min = 最低盈利目标
 tokens-positions-fact-target-max = 最高盈利目标
 tokens-positions-fact-highest = 最高价
+tokens-positions-fact-basis-peak = 上次买入后的峰值
 tokens-positions-fact-lowest = 最低价
 tokens-positions-section-range = 目标与区间
 tokens-positions-section-market = 市场与持仓

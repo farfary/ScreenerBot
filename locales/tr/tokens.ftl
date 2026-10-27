@@ -62,6 +62,7 @@ tokens-positions-fact-closed-reason = Kapanış Nedeni
 tokens-positions-fact-target-min = Kâr Hedefi Min.
 tokens-positions-fact-target-max = Kâr Hedefi Maks.
 tokens-positions-fact-highest = En Yüksek Fiyat
+tokens-positions-fact-basis-peak = Son Alımdan Beri Tepe
 tokens-positions-fact-lowest = En Düşük Fiyat
 tokens-positions-section-range = Hedefler { "&" } aralık
 tokens-positions-section-market = Piyasa { "&" } varlıklar

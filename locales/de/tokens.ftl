@@ -54,6 +54,7 @@ tokens-positions-fact-closed-reason = Schließgrund
 tokens-positions-fact-target-min = Gewinnziel min.
 tokens-positions-fact-target-max = Gewinnziel max.
 tokens-positions-fact-highest = Höchstpreis
+tokens-positions-fact-basis-peak = Hoch seit letztem Kauf
 tokens-positions-fact-lowest = Tiefstpreis
 tokens-positions-section-range = Ziele & Spanne
 tokens-positions-section-market = Markt & Bestände

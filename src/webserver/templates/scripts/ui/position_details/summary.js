@@ -150,12 +150,16 @@ export function applySummaryMixin(PositionDetailsDialog) {
 
   /**
    * Where the entry and the current (or exit) price sit inside the range the position lived
-   * through, drawn to scale, followed by the numbers behind it.
+   * through, drawn to scale, followed by the numbers behind it. After a buy moved the
+   * average entry, the peak since that buy is listed too, as the route reports it; it is
+   * marked as the trailing stop's reference only where the route reports a trailing stop
+   * running for the position.
    */
   proto._buildPricePathSection = function (pos) {
-    const entry = pos.average_entry_price || pos.entry_price;
+    const entry = pos.average_entry_price;
     const peak = pos.price_highest;
     const low = pos.price_lowest;
+    const basisPeak = pos.peak_since_last_buy;
     if (!entry || !peak || !low) return "";
 
     const settled = this._isSettled();
@@ -172,6 +176,11 @@ export function applySummaryMixin(PositionDetailsDialog) {
 
     const rows = [
       fact(I18n.t("positions-range-peak"), withSolUnit(this._formatPrice(peak)), { sub: vsEntry(peak) }),
+      basisPeak != null
+        ? fact(I18n.t("positions-range-basis-peak"), withSolUnit(this._formatPrice(basisPeak)), {
+            sub: pos.trailing_stop_active ? I18n.t("positions-fact-basis-peak-meaning") : "",
+          })
+        : "",
       fact(I18n.t("positions-range-low"), withSolUnit(this._formatPrice(low)), { sub: vsEntry(low) }),
       fromPeak !== null
         ? fact(

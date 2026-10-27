@@ -28,6 +28,7 @@ fn closed_externally_round() -> Position {
         "total_size_native": 0.01304544,
         "price_highest": 0.00602,
         "price_lowest": 0.00235,
+        "basis_peak_price": 0.00602,
         "entry_transaction_signature": "entry-signature",
         "exit_transaction_signature": "exit-signature",
         "token_amount": "2167137",

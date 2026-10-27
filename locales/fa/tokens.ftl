@@ -69,6 +69,7 @@ tokens-positions-fact-closed-reason = دلیل بسته شدن
 tokens-positions-fact-target-min = حداقل هدف سود
 tokens-positions-fact-target-max = حداکثر هدف سود
 tokens-positions-fact-highest = بالاترین قیمت
+tokens-positions-fact-basis-peak = اوج از آخرین خرید
 tokens-positions-fact-lowest = پایین‌ترین قیمت
 tokens-positions-section-range = اهداف و بازه
 tokens-positions-section-market = بازار و دارایی‌ها

@@ -342,7 +342,7 @@ strategies-condition-position-profit-param-threshold-pct = Порог прибы
     .description = Нереализованная прибыль в процентах от цены входа; отрицательные значения означают убыток
 
 strategies-condition-drawdown-from-peak = Просадка от пика
-    .description = Срабатывает, когда цена пула упала на заданный процент от максимальной цены с момента входа, при условии что этот пик был достаточно выше цены входа.
+    .description = Срабатывает, когда цена пула упала на заданный процент от максимальной цены после последней покупки, при условии что этот пик был достаточно выше цены входа.
 strategies-condition-drawdown-from-peak-param-drop-pct = Просадка от пика, %
     .description = Насколько текущая цена должна быть ниже пика
 strategies-condition-drawdown-from-peak-param-arm-after-profit-pct = Включать после прибыли, %

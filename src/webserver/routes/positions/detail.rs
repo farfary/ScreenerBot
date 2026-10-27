@@ -186,11 +186,34 @@ pub(super) async fn resolve_position_by_key(
 }
 
 async fn map_position_to_detail(position: &positions::Position) -> PositionDetail {
+    let trailing_stop_active = runs_policy_exits(position)
+        && crate::trader::policy::resolve_exit_policy(position)
+            .await
+            .trailing
+            .enabled;
     PositionDetail {
         summary: map_position_to_response_async(position).await,
         phantom_remove: position.phantom_remove,
         phantom_first_seen: position.phantom_first_seen.map(|dt| dt.timestamp()),
+        peak_since_last_buy: peak_since_last_buy(position),
+        trailing_stop_active,
     }
+}
+
+/// The basis peak of `position` as the peak since its last buy, when a buy restarted it
+/// and it differs from the round's peak. A wallet-derived round restarts it at the round's
+/// average, which no buy paid, so it has none.
+fn peak_since_last_buy(position: &positions::Position) -> Option<f64> {
+    (!position.is_wallet_derived()
+        && position.basis_peak_price > 0.0
+        && position.basis_peak_price != position.price_highest)
+        .then_some(position.basis_peak_price)
+}
+
+/// Whether the exit monitor evaluates the exit policy of `position`: it is open and not
+/// archived, and its management runs policy exits.
+fn runs_policy_exits(position: &positions::Position) -> bool {
+    positions::state::is_position_open(position) && position.management.allows_policy_exits()
 }
 
 /// Swaps this position has submitted but not booked yet.
@@ -293,4 +316,112 @@ async fn load_entry_exit_history(
     };
 
     (entries, exits)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{peak_since_last_buy, runs_policy_exits};
+    use crate::positions::{Position, PositionManagement, PositionOrigin};
+
+    /// An open bot position that took an add: its basis peak restarted below the round's
+    /// peak.
+    fn averaged_position() -> Position {
+        serde_json::from_str(
+            r#"{
+            "id": 7,
+            "mint": "So11111111111111111111111111111111111111112",
+            "symbol": "TEST",
+            "name": "Test",
+            "entry_price": 1.0,
+            "entry_time": "2026-10-01T00:00:00Z",
+            "exit_price": null,
+            "exit_time": null,
+            "position_type": "buy",
+            "entry_size_native": 1.0,
+            "total_size_native": 2.0,
+            "price_highest": 1.4,
+            "price_lowest": 0.8,
+            "basis_peak_price": 0.95,
+            "entry_transaction_signature": "entry",
+            "exit_transaction_signature": null,
+            "token_amount": "2000000",
+            "effective_entry_price": 1.0,
+            "effective_exit_price": null,
+            "native_received": null,
+            "profit_target_min": null,
+            "profit_target_max": null,
+            "liquidity_tier": null,
+            "transaction_entry_verified": true,
+            "transaction_exit_verified": false,
+            "entry_fee_raw": null,
+            "exit_fee_raw": null,
+            "current_price": 0.9,
+            "current_price_updated": null,
+            "phantom_remove": false,
+            "phantom_confirmations": 0,
+            "phantom_first_seen": null,
+            "synthetic_exit": false,
+            "closed_reason": null,
+            "pnl": null,
+            "pnl_percent": null,
+            "unrealized_pnl": null,
+            "unrealized_pnl_percent": null,
+            "remaining_token_amount": "2000000",
+            "total_exited_amount": "0",
+            "average_exit_price": null,
+            "partial_exit_count": 0,
+            "dca_count": 1,
+            "average_entry_price": 0.9,
+            "last_dca_time": null,
+            "origin": { "kind": "auto", "strategy_id": null },
+            "management": "auto_trader"
+        }"#,
+        )
+        .expect("position fixture deserializes")
+    }
+
+    #[test]
+    fn the_peak_since_the_last_buy_is_reported_only_where_a_buy_restarted_it() {
+        let averaged = averaged_position();
+        assert_eq!(peak_since_last_buy(&averaged), Some(0.95));
+
+        let mut never_averaged = averaged_position();
+        never_averaged.basis_peak_price = never_averaged.price_highest;
+        assert_eq!(peak_since_last_buy(&never_averaged), None);
+
+        let mut unseeded = averaged_position();
+        unseeded.basis_peak_price = 0.0;
+        assert_eq!(peak_since_last_buy(&unseeded), None);
+
+        let mut derived = averaged_position();
+        derived.origin = PositionOrigin::External;
+        assert_eq!(
+            peak_since_last_buy(&derived),
+            None,
+            "a wallet-derived round restarts its peak at the round's average, not at a buy"
+        );
+    }
+
+    #[test]
+    fn policy_exits_run_only_on_open_positions_whose_management_runs_them() {
+        for (management, runs) in [
+            (PositionManagement::AutoTrader, true),
+            (PositionManagement::Hybrid, true),
+            (PositionManagement::UserOnly, false),
+            (PositionManagement::CopyTask, false),
+        ] {
+            let mut position = averaged_position();
+            position.management = management;
+            assert_eq!(runs_policy_exits(&position), runs, "{management:?}");
+        }
+
+        let mut closed = averaged_position();
+        closed.exit_time = Some(closed.entry_time);
+        closed.transaction_exit_verified = true;
+        assert!(!runs_policy_exits(&closed), "a closed position");
+
+        let mut archived = averaged_position();
+        archived.archived = true;
+        assert!(!runs_policy_exits(&archived), "an archived position");
+    }
 }

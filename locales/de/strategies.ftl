@@ -348,7 +348,7 @@ strategies-condition-position-profit-param-threshold-pct = Gewinnschwelle %
     .description = Nicht realisierter Gewinn in Prozent des Einstiegspreises; negative Werte sind Verluste
 
 strategies-condition-drawdown-from-peak = Rückgang vom Höchststand
-    .description = Wird ausgelöst, wenn der Poolpreis um einen Prozentwert unter den höchsten Preis seit dem Einstieg gefallen ist und dieser Höchststand weit genug über dem Einstiegspreis lag.
+    .description = Wird ausgelöst, wenn der Poolpreis um einen Prozentwert unter den höchsten Preis seit dem letzten Kauf gefallen ist und dieser Höchststand weit genug über dem Einstiegspreis lag.
 strategies-condition-drawdown-from-peak-param-drop-pct = Rückgang vom Höchststand %
     .description = Wie weit der aktuelle Preis unter dem Höchststand liegen muss
 strategies-condition-drawdown-from-peak-param-arm-after-profit-pct = Aktivierung nach Gewinn %

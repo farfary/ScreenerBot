@@ -358,7 +358,7 @@ strategies-condition-position-profit-param-threshold-pct = Umbral de beneficio %
     .description = Beneficio no realizado como porcentaje del precio de entrada; los valores negativos son pérdidas
 
 strategies-condition-drawdown-from-peak = Caída desde el máximo
-    .description = Se activa cuando el precio del pool ha caído un porcentaje desde el precio más alto visto desde la entrada, una vez que ese máximo estuvo lo bastante por encima del precio de entrada.
+    .description = Se activa cuando el precio del pool ha caído un porcentaje desde el precio más alto visto desde la última compra, una vez que ese máximo estuvo lo bastante por encima del precio de entrada.
 strategies-condition-drawdown-from-peak-param-drop-pct = Caída desde el máximo %
     .description = Cuánto por debajo del máximo debe estar el precio actual
 strategies-condition-drawdown-from-peak-param-arm-after-profit-pct = Activar tras beneficio %

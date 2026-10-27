@@ -54,6 +54,7 @@ tokens-positions-fact-closed-reason = बंद करने का कारण
 tokens-positions-fact-target-min = न्यूनतम प्रॉफ़िट टारगेट
 tokens-positions-fact-target-max = अधिकतम प्रॉफ़िट टारगेट
 tokens-positions-fact-highest = सर्वोच्च कीमत
+tokens-positions-fact-basis-peak = अंतिम खरीद के बाद का पीक
 tokens-positions-fact-lowest = न्यूनतम कीमत
 tokens-positions-section-range = टारगेट और रेंज
 tokens-positions-section-market = मार्केट और होल्डिंग

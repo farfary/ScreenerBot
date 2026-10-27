@@ -318,7 +318,7 @@ strategies-condition-position-profit-param-threshold-pct = Ngưỡng lợi nhu�
     .description = Lợi nhuận chưa thực hiện theo phần trăm giá vào lệnh; giá trị âm là lỗ
 
 strategies-condition-drawdown-from-peak = Sụt giảm từ đỉnh
-    .description = Kích hoạt khi giá pool giảm một tỷ lệ phần trăm so với giá cao nhất kể từ lúc vào lệnh, sau khi đỉnh đó đã đủ cao hơn giá vào lệnh.
+    .description = Kích hoạt khi giá pool giảm một tỷ lệ phần trăm so với giá cao nhất kể từ lần mua cuối, sau khi đỉnh đó đã đủ cao hơn giá vào lệnh.
 strategies-condition-drawdown-from-peak-param-drop-pct = Sụt giảm từ đỉnh %
     .description = Giá hiện tại phải thấp hơn đỉnh bao nhiêu
 strategies-condition-drawdown-from-peak-param-arm-after-profit-pct = Kích hoạt sau lợi nhuận %

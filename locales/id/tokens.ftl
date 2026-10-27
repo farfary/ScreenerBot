@@ -58,6 +58,7 @@ tokens-positions-fact-closed-reason = Alasan Ditutup
 tokens-positions-fact-target-min = Target Profit Min
 tokens-positions-fact-target-max = Target Profit Maks
 tokens-positions-fact-highest = Harga Tertinggi
+tokens-positions-fact-basis-peak = Puncak Sejak Pembelian Terakhir
 tokens-positions-fact-lowest = Harga Terendah
 tokens-positions-section-range = Target & rentang
 tokens-positions-section-market = Pasar & kepemilikan

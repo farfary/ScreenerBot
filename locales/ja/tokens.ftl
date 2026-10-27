@@ -58,6 +58,7 @@ tokens-positions-fact-closed-reason = クローズ理由
 tokens-positions-fact-target-min = 利益目標（最小）
 tokens-positions-fact-target-max = 利益目標（最大）
 tokens-positions-fact-highest = 最高値
+tokens-positions-fact-basis-peak = 最終購入後の高値
 tokens-positions-fact-lowest = 最安値
 tokens-positions-section-range = 目標とレンジ
 tokens-positions-section-market = マーケットと保有

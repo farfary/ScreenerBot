@@ -332,7 +332,7 @@ strategies-condition-position-profit-param-threshold-pct = Kâr eşiği %
     .description = Giriş fiyatının yüzdesi olarak gerçekleşmemiş kâr; negatif değerler zarardır
 
 strategies-condition-drawdown-from-peak = Zirveden düşüş
-    .description = Havuz fiyatı, girişten bu yana görülen en yüksek fiyattan bir yüzde kadar düştüğünde ve bu zirve giriş fiyatının yeterince üzerinde olduğunda tetiklenir.
+    .description = Havuz fiyatı, son alımdan bu yana görülen en yüksek fiyattan bir yüzde kadar düştüğünde ve bu zirve giriş fiyatının yeterince üzerinde olduğunda tetiklenir.
 strategies-condition-drawdown-from-peak-param-drop-pct = Zirveden düşüş %
     .description = Güncel fiyatın zirvenin ne kadar altında olması gerektiği
 strategies-condition-drawdown-from-peak-param-arm-after-profit-pct = Kârdan sonra devreye al %

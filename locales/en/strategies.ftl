@@ -359,7 +359,7 @@ strategies-condition-position-profit-param-threshold-pct = Profit Threshold %
     .description = Unrealized profit as a percentage of the entry price; negative values are losses
 
 strategies-condition-drawdown-from-peak = Drawdown From Peak
-    .description = Fires when the pool price has fallen by a percentage from the highest price seen since entry, once that peak stood far enough above the entry price.
+    .description = Fires when the pool price has fallen by a percentage from the highest price seen since the last buy, once that peak stood far enough above the entry price.
 strategies-condition-drawdown-from-peak-param-drop-pct = Drop From Peak %
     .description = How far below the peak the current price must be
 strategies-condition-drawdown-from-peak-param-arm-after-profit-pct = Arm After Profit %

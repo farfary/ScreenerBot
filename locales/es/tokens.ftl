@@ -54,6 +54,7 @@ tokens-positions-fact-closed-reason = Motivo de cierre
 tokens-positions-fact-target-min = Objetivo de ganancia mín.
 tokens-positions-fact-target-max = Objetivo de ganancia máx.
 tokens-positions-fact-highest = Precio más alto
+tokens-positions-fact-basis-peak = Máximo desde la última compra
 tokens-positions-fact-lowest = Precio más bajo
 tokens-positions-section-range = Objetivos y rango
 tokens-positions-section-market = Mercado y tenencias

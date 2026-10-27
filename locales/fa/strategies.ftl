@@ -359,7 +359,7 @@ strategies-condition-position-profit-param-threshold-pct = آستانه سود %
     .description = سود تحقق‌نیافته به‌صورت درصدی از قیمت ورود؛ مقادیر منفی زیان هستند
 
 strategies-condition-drawdown-from-peak = افت از اوج
-    .description = وقتی فعال می‌شود که قیمت استخر به‌اندازه یک درصد از بالاترین قیمت دیده‌شده از زمان ورود افت کرده باشد، به شرط آنکه آن اوج به‌اندازه کافی بالای قیمت ورود بوده باشد.
+    .description = وقتی فعال می‌شود که قیمت استخر به‌اندازه یک درصد از بالاترین قیمت دیده‌شده از آخرین خرید افت کرده باشد، به شرط آنکه آن اوج به‌اندازه کافی بالای قیمت ورود بوده باشد.
 strategies-condition-drawdown-from-peak-param-drop-pct = افت از اوج %
     .description = قیمت فعلی چقدر باید پایین‌تر از اوج باشد
 strategies-condition-drawdown-from-peak-param-arm-after-profit-pct = فعال‌سازی پس از سود %

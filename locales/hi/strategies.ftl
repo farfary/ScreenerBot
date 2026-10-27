@@ -332,7 +332,7 @@ strategies-condition-position-profit-param-threshold-pct = मुनाफ़ा
     .description = एंट्री प्राइस के प्रतिशत के रूप में अवास्तविक मुनाफ़ा; नकारात्मक मान घाटा हैं
 
 strategies-condition-drawdown-from-peak = पीक से गिरावट
-    .description = तब ट्रिगर होता है जब पूल प्राइस एंट्री के बाद देखे गए सबसे ऊँचे प्राइस से किसी प्रतिशत गिर जाए, बशर्ते वह पीक एंट्री प्राइस से पर्याप्त ऊपर रहा हो।
+    .description = तब ट्रिगर होता है जब पूल प्राइस अंतिम खरीद के बाद देखे गए सबसे ऊँचे प्राइस से किसी प्रतिशत गिर जाए, बशर्ते वह पीक एंट्री प्राइस से पर्याप्त ऊपर रहा हो।
 strategies-condition-drawdown-from-peak-param-drop-pct = पीक से गिरावट %
     .description = मौजूदा प्राइस पीक से कितना नीचे होना चाहिए
 strategies-condition-drawdown-from-peak-param-arm-after-profit-pct = मुनाफ़े के बाद सक्रिय %

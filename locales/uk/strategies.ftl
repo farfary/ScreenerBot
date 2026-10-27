@@ -369,7 +369,7 @@ strategies-condition-position-profit-param-threshold-pct = Поріг прибу
     .description = Нереалізований прибуток у відсотках від ціни входу; від'ємні значення означають збиток
 
 strategies-condition-drawdown-from-peak = Просадка від піку
-    .description = Спрацьовує, коли ціна пулу впала на заданий відсоток від найвищої ціни з моменту входу, якщо цей пік був достатньо вищим за ціну входу.
+    .description = Спрацьовує, коли ціна пулу впала на заданий відсоток від найвищої ціни після останньої покупки, якщо цей пік був достатньо вищим за ціну входу.
 strategies-condition-drawdown-from-peak-param-drop-pct = Просадка від піку, %
     .description = Наскільки поточна ціна має бути нижчою за пік
 strategies-condition-drawdown-from-peak-param-arm-after-profit-pct = Вмикати після прибутку, %

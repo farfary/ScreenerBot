@@ -345,7 +345,7 @@ strategies-condition-position-profit-param-threshold-pct = 利益しきい値 %
     .description = エントリー価格に対する含み益の割合。負の値は損失です
 
 strategies-condition-drawdown-from-peak = 高値からの下落
-    .description = エントリー以降の最高価格から指定した割合だけプール価格が下落すると発動します。その最高価格がエントリー価格より十分高かった場合に限ります。
+    .description = 最後の購入以降の最高価格から指定した割合だけプール価格が下落すると発動します。その最高価格がエントリー価格より十分高かった場合に限ります。
 strategies-condition-drawdown-from-peak-param-drop-pct = 高値からの下落 %
     .description = 現在価格が最高価格よりどれだけ低い必要があるか
 strategies-condition-drawdown-from-peak-param-arm-after-profit-pct = 利益後に有効化 %

@@ -203,6 +203,11 @@ function renderPositionSummary(position) {
           ${renderPositionFact(I18n.t("tokens-positions-fact-target-min"), fmtPct(position.profit_target_min))}
           ${renderPositionFact(I18n.t("tokens-positions-fact-target-max"), fmtPct(position.profit_target_max))}
           ${renderPositionFact(I18n.t("tokens-positions-fact-highest"), fmtPrice(position.price_highest))}
+          ${
+            position.peak_since_last_buy != null
+              ? renderPositionFact(I18n.t("tokens-positions-fact-basis-peak"), fmtPrice(position.peak_since_last_buy))
+              : ""
+          }
           ${renderPositionFact(I18n.t("tokens-positions-fact-lowest"), fmtPrice(position.price_lowest))}
         </div>
       </section>`

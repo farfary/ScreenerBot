@@ -15,6 +15,7 @@
     "total_size_native": 0.3,
     "price_highest": 0.005879999999999999,
     "price_lowest": 0.0036119999999999998,
+    "basis_peak_price": 0.005879999999999999,
     "entry_transaction_signature": "5SynthF5HM5Xuw7T9mPm1qq3VdqFjDVfFwHD5DjMFDRF97d5yuFuqZPT1s1mVBzf7mhudjT1s71fuRummP3qmRs7",
     "exit_transaction_signature": "5SynthBbb9Pwsw1dKMX5Xy7PwwqjRKmDdwX3ZKMFjsu9FmZ7hXmoo7uod7ZV73VoM1Tms5Ruhd17qdfqwdubBVRD",
     "token_amount": 71428571,
@@ -57,7 +58,9 @@
     "history_complete": true,
     "holding_state": null,
     "phantom_remove": false,
-    "phantom_first_seen": null
+    "phantom_first_seen": null,
+    "peak_since_last_buy": null,
+    "trailing_stop_active": false
   },
   "entries": [
     {

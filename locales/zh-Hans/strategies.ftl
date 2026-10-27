@@ -345,7 +345,7 @@ strategies-condition-position-profit-param-threshold-pct = 盈利阈值 %
     .description = 未实现盈利占入场价格的百分比；负值表示亏损
 
 strategies-condition-drawdown-from-peak = 从高点回撤
-    .description = 当流动性池价格从入场以来的最高价下跌指定百分比，且该高点已足够高于入场价格时触发。
+    .description = 当流动性池价格从上次买入以来的最高价下跌指定百分比，且该高点已足够高于入场价格时触发。
 strategies-condition-drawdown-from-peak-param-drop-pct = 从高点回撤 %
     .description = 当前价格必须比高点低多少
 strategies-condition-drawdown-from-peak-param-arm-after-profit-pct = 盈利后启用 %

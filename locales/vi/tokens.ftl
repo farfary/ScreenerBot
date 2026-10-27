@@ -54,6 +54,7 @@ tokens-positions-fact-closed-reason = Lý do đóng
 tokens-positions-fact-target-min = Mục tiêu lợi nhuận tối thiểu
 tokens-positions-fact-target-max = Mục tiêu lợi nhuận tối đa
 tokens-positions-fact-highest = Giá cao nhất
+tokens-positions-fact-basis-peak = Đỉnh kể từ lần mua cuối
 tokens-positions-fact-lowest = Giá thấp nhất
 tokens-positions-section-range = Mục tiêu và biên độ
 tokens-positions-section-market = Thị trường và số token nắm giữ

@@ -69,6 +69,7 @@ tokens-positions-fact-closed-reason = سبب الإغلاق
 tokens-positions-fact-target-min = الحد الأدنى لهدف الربح
 tokens-positions-fact-target-max = الحد الأقصى لهدف الربح
 tokens-positions-fact-highest = أعلى سعر
+tokens-positions-fact-basis-peak = القمة منذ آخر شراء
 tokens-positions-fact-lowest = أدنى سعر
 tokens-positions-section-range = الأهداف والنطاق
 tokens-positions-section-market = السوق والحيازات

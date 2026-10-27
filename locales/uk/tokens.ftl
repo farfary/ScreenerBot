@@ -54,6 +54,7 @@ tokens-positions-fact-closed-reason = Причина закриття
 tokens-positions-fact-target-min = Мін. ціль прибутку
 tokens-positions-fact-target-max = Макс. ціль прибутку
 tokens-positions-fact-highest = Найвища ціна
+tokens-positions-fact-basis-peak = Пік після останньої покупки
 tokens-positions-fact-lowest = Найнижча ціна
 tokens-positions-section-range = Цілі та діапазон
 tokens-positions-section-market = Ринок і активи

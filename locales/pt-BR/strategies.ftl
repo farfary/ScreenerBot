@@ -364,7 +364,7 @@ strategies-condition-position-profit-param-threshold-pct = Limite de lucro %
     .description = Lucro não realizado como porcentagem do preço de entrada; valores negativos são prejuízos
 
 strategies-condition-drawdown-from-peak = Queda desde o pico
-    .description = Dispara quando o preço do pool caiu uma porcentagem desde o maior preço visto após a entrada, depois que esse pico esteve alto o bastante acima do preço de entrada.
+    .description = Dispara quando o preço do pool caiu uma porcentagem desde o maior preço visto após a última compra, depois que esse pico esteve alto o bastante acima do preço de entrada.
 strategies-condition-drawdown-from-peak-param-drop-pct = Queda desde o pico %
     .description = Quanto abaixo do pico o preço atual precisa estar
 strategies-condition-drawdown-from-peak-param-arm-after-profit-pct = Armar após lucro %

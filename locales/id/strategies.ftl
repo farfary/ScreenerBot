@@ -320,7 +320,7 @@ strategies-condition-position-profit-param-threshold-pct = Ambang Profit %
     .description = Profit belum terealisasi sebagai persentase dari harga entry; nilai negatif berarti rugi
 
 strategies-condition-drawdown-from-peak = Penurunan dari Puncak
-    .description = Terpicu saat harga pool turun sebesar persentase tertentu dari harga tertinggi sejak entry, setelah puncak itu cukup jauh di atas harga entry.
+    .description = Terpicu saat harga pool turun sebesar persentase tertentu dari harga tertinggi sejak pembelian terakhir, setelah puncak itu cukup jauh di atas harga entry.
 strategies-condition-drawdown-from-peak-param-drop-pct = Penurunan dari Puncak %
     .description = Seberapa jauh harga saat ini harus di bawah puncak
 strategies-condition-drawdown-from-peak-param-arm-after-profit-pct = Aktif Setelah Profit %

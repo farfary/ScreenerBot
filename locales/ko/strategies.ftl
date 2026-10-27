@@ -345,7 +345,7 @@ strategies-condition-position-profit-param-threshold-pct = 수익 임계값 %
     .description = 진입 가격 대비 미실현 수익 비율. 음수는 손실입니다
 
 strategies-condition-drawdown-from-peak = 고점 대비 하락
-    .description = 진입 이후 최고 가격에서 지정한 비율만큼 풀 가격이 하락하면 발동합니다. 단, 그 고점이 진입 가격보다 충분히 높았어야 합니다.
+    .description = 마지막 매수 이후 최고 가격에서 지정한 비율만큼 풀 가격이 하락하면 발동합니다. 단, 그 고점이 진입 가격보다 충분히 높았어야 합니다.
 strategies-condition-drawdown-from-peak-param-drop-pct = 고점 대비 하락 %
     .description = 현재 가격이 고점보다 얼마나 낮아야 하는지
 strategies-condition-drawdown-from-peak-param-arm-after-profit-pct = 수익 후 활성화 %

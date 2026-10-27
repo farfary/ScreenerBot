@@ -58,6 +58,7 @@ pub struct PositionResponse {
     pub total_size_native: f64,
     pub price_highest: f64,
     pub price_lowest: f64,
+    pub basis_peak_price: f64,
     pub entry_transaction_signature: Option<String>,
     pub exit_transaction_signature: Option<String>,
     #[serde(serialize_with = "optional_raw_amount_number")]
@@ -262,6 +263,13 @@ pub struct PositionDetail {
     pub summary: PositionResponse,
     pub phantom_remove: bool,
     pub phantom_first_seen: Option<i64>,
+    /// The peak since a buy last moved the average entry price, when it differs from the
+    /// round's peak. Absent on a position derived from the wallet history, whose peak
+    /// restarts at the round's average rather than at a buy's price.
+    pub peak_since_last_buy: Option<f64>,
+    /// The trailing stop is evaluated for this position: it is open, its exits run the exit
+    /// policy, and that policy enables the trailing stop.
+    pub trailing_stop_active: bool,
 }
 
 #[derive(Debug, Serialize)]

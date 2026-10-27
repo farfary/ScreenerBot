@@ -54,6 +54,7 @@ tokens-positions-fact-closed-reason = Motif de clôture
 tokens-positions-fact-target-min = Objectif de profit min.
 tokens-positions-fact-target-max = Objectif de profit max.
 tokens-positions-fact-highest = Prix le plus haut
+tokens-positions-fact-basis-peak = Pic depuis le dernier achat
 tokens-positions-fact-lowest = Prix le plus bas
 tokens-positions-section-range = Objectifs et fourchette
 tokens-positions-section-market = Marché et détention
