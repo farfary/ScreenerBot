@@ -35,8 +35,8 @@ pub(crate) use database::column_names;
 pub use database::{ActivityQuery, CopyDatabase, TargetObservations};
 pub use entries::{execute_paper_with, leg_key, prepare_entry, PreparedEntry};
 pub use exits::{
-    execute_copy_sell_with, prepare_copy_sell, proportional_exit_percentage,
-    CopySellSubmitResult, PreparedCopySell,
+    execute_copy_sell_with, prepare_copy_sell, proportional_exit_percentage, CopySellSubmitResult,
+    PreparedCopySell,
 };
 pub use insights::{build_insights, closed_rounds, CopyInsights, CopyRound, InsightRange};
 pub use live::{
