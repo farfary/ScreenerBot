@@ -5,6 +5,7 @@
 
 use crate::logger::{self, LogTag};
 use crate::positions;
+use crate::trader::constants::{MAX_EXIT_SHARE_PCT, MIN_EXIT_SHARE_PCT};
 use crate::trader::types::{TradeDecision, TradeReason, TradeResult, TradeStep};
 
 /// How much of a position a sell decision actually liquidates.
@@ -22,8 +23,10 @@ pub(in crate::trader) enum ExitSize {
 /// rule that decides how many of the user's tokens leave the wallet.
 ///
 /// * `requested_pct` is `TradeDecision::exit_percentage`; `None` means a full exit. It
-///   is clamped to `[1, 100]` because `execute_sell` clamps below 1% and
-///   `partial_close_position` refuses anything outside `(0, 100)`.
+///   is clamped to [`MIN_EXIT_SHARE_PCT`, `MAX_EXIT_SHARE_PCT`]: below the minimum the
+///   token amount rounds to zero on many balances, and `partial_close_position` refuses
+///   anything outside `(0, 100)`. Every manual entry point refuses a share outside the
+///   same bounds through `validate_percentage`, so only an automatic producer is clamped.
 /// * Every reason honours the percentage its producer requested. Whether an automatic
 ///   rule may sell part of a position is that rule's own setting (the stop loss asks
 ///   for a share only while `trader.stop_loss_allow_partial` is on), so no global
@@ -34,8 +37,10 @@ pub(in crate::trader) fn resolve_exit_size(
     reason: &TradeReason,
     requested_pct: Option<f64>,
 ) -> ExitSize {
-    let exit_percentage = requested_pct.unwrap_or(100.0).clamp(1.0, 100.0);
-    if is_emergency_exit(reason) || exit_percentage >= 100.0 {
+    let exit_percentage = requested_pct
+        .unwrap_or(MAX_EXIT_SHARE_PCT)
+        .clamp(MIN_EXIT_SHARE_PCT, MAX_EXIT_SHARE_PCT);
+    if is_emergency_exit(reason) || exit_percentage >= MAX_EXIT_SHARE_PCT {
         ExitSize::Full
     } else {
         ExitSize::Partial(exit_percentage)
@@ -332,17 +337,40 @@ mod tests {
         );
     }
 
+    /// The validator and the executor share one range: a share the validator accepts is
+    /// sold as named, and a share the executor would raise is refused before it.
+    #[test]
+    fn every_share_the_validator_accepts_is_sold_as_named() {
+        use crate::trader::manual::guard::validate_percentage;
+
+        for pct in [MIN_EXIT_SHARE_PCT, 1.5, 25.0, 99.9] {
+            let accepted = validate_percentage(pct).expect("a share inside the range");
+            assert_eq!(
+                resolve_exit_size(&TradeReason::ManualExit, Some(accepted)),
+                ExitSize::Partial(pct)
+            );
+        }
+        let whole = validate_percentage(MAX_EXIT_SHARE_PCT).expect("the whole position");
+        assert_eq!(
+            resolve_exit_size(&TradeReason::ManualExit, Some(whole)),
+            ExitSize::Full
+        );
+        for pct in [0.0, 0.5, MIN_EXIT_SHARE_PCT - 0.01] {
+            assert!(validate_percentage(pct).is_err(), "{pct} is refused");
+        }
+    }
+
     #[test]
     fn the_percentage_is_clamped_into_a_submittable_range() {
         // Below 1% would round to a zero token amount on many balances, and above 100%
         // cannot be sold at all. `partial_close_position` refuses both outright.
         assert_eq!(
             resolve_exit_size(&TradeReason::ManualExit, Some(0.4)),
-            ExitSize::Partial(1.0)
+            ExitSize::Partial(MIN_EXIT_SHARE_PCT)
         );
         assert_eq!(
             resolve_exit_size(&TradeReason::ManualExit, Some(-5.0)),
-            ExitSize::Partial(1.0)
+            ExitSize::Partial(MIN_EXIT_SHARE_PCT)
         );
         assert_eq!(
             resolve_exit_size(&TradeReason::ManualExit, Some(250.0)),

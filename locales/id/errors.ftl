@@ -295,7 +295,7 @@ errors-trade-storage-unavailable = data trading tidak tersedia atau sedang dipul
 errors-trade-mint-invalid = alamat mint token tidak valid { $mint }
 errors-trade-blacklisted = token { $mint } masuk daftar hitam
 errors-trade-slippage-invalid = slippage { $slippage }% harus antara { $minimum }% dan { $maximum }%
-errors-trade-percentage-invalid = persentase jual { $percentage } harus dalam rentang (0, 100]
+errors-trade-percentage-invalid = persentase jual { $percentage }% harus antara { $minimum }% dan { $maximum }%
 errors-trade-percentage-required = penjualan parsial memerlukan persentase posisi yang akan dijual
 errors-trade-add-size-required = penambahan ke posisi { $mint } memerlukan ukuran dalam { -sol }
 errors-trade-record-failed = tidak dapat mencatat trade manual
@@ -323,7 +323,6 @@ errors-trade-insufficient-funds = Dompet memiliki { $available } SOL; transaksi 
 errors-trade-wallet-not-configured = Dompet belum dikonfigurasi
 errors-trade-amount-sol-invalid = amount_sol wajib untuk pembelian dan harus positif
 errors-trade-no-tokens-in-wallet = Tidak ada token ditemukan di dompet untuk posisi ini. Saldo token 0; posisi tidak dapat ditutup lewat swap.
-errors-trade-percentage-range = percentage harus dalam rentang (0, 100]
 errors-trade-amount-tokens-invalid = amount_tokens harus positif
 errors-trade-sell-amount-zero = Jumlah jual yang dihitung adalah nol
 

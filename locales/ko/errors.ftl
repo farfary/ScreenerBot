@@ -322,7 +322,7 @@ errors-trade-storage-unavailable = 거래 데이터를 사용할 수 없거나 �
 errors-trade-mint-invalid = 토큰 민트 주소가 올바르지 않습니다: { $mint }
 errors-trade-blacklisted = 블랙리스트에 등록된 토큰입니다: { $mint }
 errors-trade-slippage-invalid = 슬리피지 { $slippage }%는 { $minimum }%에서 { $maximum }% 사이여야 합니다
-errors-trade-percentage-invalid = 매도 비율({ $percentage })은 (0, 100] 범위여야 합니다
+errors-trade-percentage-invalid = 매도 비율 { $percentage }%는 { $minimum }%에서 { $maximum }% 사이여야 합니다
 errors-trade-percentage-required = 부분 매도에는 매도할 포지션 비율이 필요합니다
 errors-trade-add-size-required = { $mint } 포지션에 추가하려면 { -sol } 수량이 필요합니다
 errors-trade-record-failed = 수동 거래를 기록할 수 없습니다
@@ -350,7 +350,6 @@ errors-trade-insufficient-funds = 지갑에 { $available } SOL이 있지만 이 
 errors-trade-wallet-not-configured = 지갑이 설정되지 않았습니다
 errors-trade-amount-sol-invalid = 매수에는 amount_sol이 필요하며 양수여야 합니다
 errors-trade-no-tokens-in-wallet = 이 포지션의 토큰이 지갑에 없습니다. 토큰 잔액이 0이므로 스왑으로 포지션을 종료할 수 없습니다.
-errors-trade-percentage-range = percentage는 (0, 100] 범위여야 합니다
 errors-trade-amount-tokens-invalid = amount_tokens는 양수여야 합니다
 errors-trade-sell-amount-zero = 계산된 매도 수량이 0입니다
 

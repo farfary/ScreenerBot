@@ -319,7 +319,7 @@ errors-trade-storage-unavailable = İşlem verileri kullanılamıyor veya geri y
 errors-trade-mint-invalid = Token mint adresi geçersiz: { $mint }
 errors-trade-blacklisted = Token kara listede: { $mint }
 errors-trade-slippage-invalid = Kayma %{ $slippage } değeri %{ $minimum } ile %{ $maximum } arasında olmalı
-errors-trade-percentage-invalid = Satış yüzdesi { $percentage } değeri (0, 100] aralığında olmalı
+errors-trade-percentage-invalid = Satış yüzdesi %{ $percentage } değeri %{ $minimum } ile %{ $maximum } arasında olmalı
 errors-trade-percentage-required = Kısmi satış için satılacak pozisyon yüzdesi gerekir
 errors-trade-add-size-required = { $mint } pozisyonuna ekleme için { -sol } cinsinden bir miktar gerekir
 errors-trade-record-failed = Manuel işlem kaydedilemedi
@@ -347,7 +347,6 @@ errors-trade-insufficient-funds = Cüzdanda { $available } SOL var; bu işlem { 
 errors-trade-wallet-not-configured = Cüzdan yapılandırılmamış
 errors-trade-amount-sol-invalid = Alım için amount_sol gerekli ve pozitif olmalı
 errors-trade-no-tokens-in-wallet = Bu pozisyon için cüzdanda token bulunamadı. Token bakiyesi 0; pozisyon takasla kapatılamaz.
-errors-trade-percentage-range = percentage (0, 100] aralığında olmalı
 errors-trade-amount-tokens-invalid = amount_tokens pozitif olmalı
 errors-trade-sell-amount-zero = Hesaplanan satış miktarı sıfır
 

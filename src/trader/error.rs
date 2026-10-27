@@ -39,8 +39,12 @@ pub enum Error {
         minimum_pct: f64,
         maximum_pct: f64,
     },
-    #[error("sell percentage {percentage} must be in (0, 100]")]
-    InvalidPercentage { percentage: f64 },
+    #[error("sell percentage {percentage}% must be between {minimum_pct}% and {maximum_pct}%")]
+    InvalidPercentage {
+        percentage: f64,
+        minimum_pct: f64,
+        maximum_pct: f64,
+    },
     #[error("a partial sell needs a percentage of the position")]
     PercentageRequired,
     #[error("an add to the position of {mint} needs a size")]

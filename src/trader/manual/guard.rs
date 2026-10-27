@@ -8,7 +8,9 @@
 //! it shows in the dashboard like any other attempt.
 
 use crate::trader::admission::{check_entry_storage, EntryBlock};
-use crate::trader::constants::{MAX_MANUAL_SLIPPAGE_PCT, MIN_MANUAL_SLIPPAGE_PCT};
+use crate::trader::constants::{
+    MAX_EXIT_SHARE_PCT, MAX_MANUAL_SLIPPAGE_PCT, MIN_EXIT_SHARE_PCT, MIN_MANUAL_SLIPPAGE_PCT,
+};
 use crate::trader::Error;
 
 /// Which manual operation is being gated; selects the failed-action recorder.
@@ -139,10 +141,16 @@ pub fn validate_slippage(slippage_pct: Option<f64>) -> Result<Option<f64>, Error
     }
 }
 
-/// Validate a partial-sell percentage: finite and within (0, 100].
+/// Validate a sell percentage: finite and within [MIN_EXIT_SHARE_PCT, MAX_EXIT_SHARE_PCT].
+/// A share below the minimum is refused, never rounded up to what the executor would sell.
 pub fn validate_percentage(percentage: f64) -> Result<f64, Error> {
-    if !percentage.is_finite() || percentage <= 0.0 || percentage > 100.0 {
-        return Err(Error::InvalidPercentage { percentage });
+    if !percentage.is_finite() || percentage < MIN_EXIT_SHARE_PCT || percentage > MAX_EXIT_SHARE_PCT
+    {
+        return Err(Error::InvalidPercentage {
+            percentage,
+            minimum_pct: MIN_EXIT_SHARE_PCT,
+            maximum_pct: MAX_EXIT_SHARE_PCT,
+        });
     }
     Ok(percentage)
 }
@@ -256,10 +264,83 @@ mod tests {
 
     #[test]
     fn sell_percentage_is_bounded() {
-        assert!(validate_percentage(100.0).is_ok());
-        assert!(validate_percentage(0.5).is_ok());
+        assert_eq!(validate_percentage(1.0).unwrap(), 1.0);
+        assert_eq!(validate_percentage(100.0).unwrap(), 100.0);
         assert!(validate_percentage(0.0).is_err());
         assert!(validate_percentage(101.0).is_err());
+        assert!(validate_percentage(f64::NAN).is_err());
+    }
+
+    /// A share the executor would raise to its minimum is refused with the range error,
+    /// so what the user named is what is sold.
+    #[test]
+    fn a_share_below_the_executor_minimum_is_refused() {
+        let refused = validate_percentage(0.5).unwrap_err();
+        assert!(
+            matches!(
+                refused,
+                Error::InvalidPercentage { percentage, minimum_pct, maximum_pct }
+                    if percentage == 0.5
+                        && minimum_pct == MIN_EXIT_SHARE_PCT
+                        && maximum_pct == MAX_EXIT_SHARE_PCT
+            ),
+            "{refused:?}"
+        );
+        assert!(validate_percentage(MIN_EXIT_SHARE_PCT).is_ok());
+        assert!(validate_percentage(MAX_EXIT_SHARE_PCT).is_ok());
+    }
+
+    /// The exit-share bounds have one owner, `trader::constants`: no entry point or the
+    /// executor restates the range, so the validator, the quote preview and the executor
+    /// cannot drift apart.
+    #[test]
+    fn the_exit_share_bounds_are_written_only_here() {
+        // Each source with the owned item it must use in place of its own bounds.
+        let sources = [
+            (
+                "trader/executors/sell.rs",
+                include_str!("../executors/sell.rs"),
+                "MIN_EXIT_SHARE_PCT",
+            ),
+            (
+                "webserver/routes/trader/manual.rs",
+                include_str!("../../webserver/routes/trader/manual.rs"),
+                "validate_percentage",
+            ),
+            (
+                "agent_control/tools/trading.rs",
+                include_str!("../../agent_control/tools/trading.rs"),
+                "validate_percentage",
+            ),
+            (
+                "telegram/commands/callback_positions.rs",
+                include_str!("../../telegram/commands/callback_positions.rs"),
+                "validate_percentage",
+            ),
+        ];
+        let restated = [
+            "clamp(1.0, 100.0)",
+            "pct <= 0.0",
+            "pct < 1.0",
+            "pct > 100.0",
+            "pct < 100.0",
+            "percentage <= 0.0",
+            "percentage < 1.0",
+            "percentage > 100.0",
+        ];
+        for (path, source, owner_item) in sources {
+            let code = source.split("#[cfg(test)]").next().unwrap_or(source);
+            for literal in restated {
+                assert!(
+                    !code.contains(literal),
+                    "{path} restates the exit-share bound `{literal}`"
+                );
+            }
+            assert!(
+                code.contains(owner_item),
+                "{path} must take the exit-share range from `{owner_item}`"
+            );
+        }
     }
 
     #[test]

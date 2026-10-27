@@ -292,7 +292,7 @@ errors-trade-storage-unavailable = Торговые данные недосту�
 errors-trade-mint-invalid = Недопустимый адрес минта токена { $mint }
 errors-trade-blacklisted = Токен { $mint } в чёрном списке
 errors-trade-slippage-invalid = Проскальзывание { $slippage }% должно быть в диапазоне от { $minimum }% до { $maximum }%
-errors-trade-percentage-invalid = Процент продажи { $percentage } должен быть в диапазоне (0, 100]
+errors-trade-percentage-invalid = Процент продажи { $percentage }% должен быть в диапазоне от { $minimum }% до { $maximum }%
 errors-trade-percentage-required = Для частичной продажи нужен процент позиции, который требуется продать
 errors-trade-add-size-required = Для докупки в позицию { $mint } нужен размер в { -sol }
 errors-trade-record-failed = Не удалось записать ручную сделку
@@ -320,7 +320,6 @@ errors-trade-insufficient-funds = В кошельке { $available } SOL; для
 errors-trade-wallet-not-configured = Кошелёк не настроен
 errors-trade-amount-sol-invalid = Для покупки требуется amount_sol, и оно должно быть положительным
 errors-trade-no-tokens-in-wallet = В кошельке нет токенов этой позиции. Баланс токена равен 0; позицию нельзя закрыть через своп.
-errors-trade-percentage-range = percentage должен быть в диапазоне (0, 100]
 errors-trade-amount-tokens-invalid = amount_tokens должно быть положительным
 errors-trade-sell-amount-zero = Рассчитанная сумма продажи равна нулю
 

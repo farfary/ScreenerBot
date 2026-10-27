@@ -40,6 +40,13 @@ pub const MAX_MANUAL_SLIPPAGE_PCT: f64 = 50.0;
 /// smallest slippage every router can express.
 pub const MIN_MANUAL_SLIPPAGE_PCT: f64 = 0.01;
 
+/// The smallest share of a position one sell may name, in percent. Below it the token
+/// amount rounds to zero on many balances, so the executor never sells less.
+pub const MIN_EXIT_SHARE_PCT: f64 = 1.0;
+
+/// The largest share of a position one sell may name, in percent: the whole position.
+pub const MAX_EXIT_SHARE_PCT: f64 = 100.0;
+
 // History limits
 pub const MANUAL_TRADE_HISTORY_LIMIT: usize = 1000;
 

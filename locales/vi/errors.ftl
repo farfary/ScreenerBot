@@ -292,7 +292,7 @@ errors-trade-storage-unavailable = Dữ liệu giao dịch không khả dụng h
 errors-trade-mint-invalid = Địa chỉ mint của token không hợp lệ { $mint }
 errors-trade-blacklisted = Token { $mint } nằm trong danh sách đen
 errors-trade-slippage-invalid = Trượt giá { $slippage }% phải nằm trong khoảng từ { $minimum }% đến { $maximum }%
-errors-trade-percentage-invalid = Phần trăm bán { $percentage } phải nằm trong (0, 100]
+errors-trade-percentage-invalid = Phần trăm bán { $percentage }% phải nằm trong khoảng từ { $minimum }% đến { $maximum }%
 errors-trade-percentage-required = Bán một phần cần có phần trăm vị thế cần bán
 errors-trade-add-size-required = Thêm vào vị thế { $mint } cần có số lượng bằng { -sol }
 errors-trade-record-failed = Không ghi nhận được giao dịch thủ công
@@ -320,7 +320,6 @@ errors-trade-insufficient-funds = Ví có { $available } SOL; giao dịch này c
 errors-trade-wallet-not-configured = Chưa cấu hình ví
 errors-trade-amount-sol-invalid = amount_sol là bắt buộc khi mua và phải là số dương
 errors-trade-no-tokens-in-wallet = Không tìm thấy token nào trong ví cho vị thế này. Số dư token là 0; không thể đóng vị thế qua swap.
-errors-trade-percentage-range = percentage phải nằm trong (0, 100]
 errors-trade-amount-tokens-invalid = amount_tokens phải là số dương
 errors-trade-sell-amount-zero = Số lượng bán tính được bằng 0
 

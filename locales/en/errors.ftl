@@ -327,7 +327,7 @@ errors-trade-storage-unavailable = trading data is unavailable or being restored
 errors-trade-mint-invalid = invalid token mint address { $mint }
 errors-trade-blacklisted = token { $mint } is blacklisted
 errors-trade-slippage-invalid = slippage { $slippage }% must be between { $minimum }% and { $maximum }%
-errors-trade-percentage-invalid = sell percentage { $percentage } must be in (0, 100]
+errors-trade-percentage-invalid = sell percentage { $percentage }% must be between { $minimum }% and { $maximum }%
 errors-trade-percentage-required = a partial sell needs the percentage of the position to sell
 errors-trade-add-size-required = an add to the position of { $mint } needs a size in { -sol }
 errors-trade-record-failed = could not record manual trade
@@ -356,7 +356,6 @@ errors-trade-insufficient-funds = The wallet holds { $available } SOL; this trad
 errors-trade-wallet-not-configured = Wallet not configured
 errors-trade-amount-sol-invalid = amount_sol is required for buy and must be positive
 errors-trade-no-tokens-in-wallet = No tokens found in wallet for this position. Token balance is 0; the position cannot be closed via swap.
-errors-trade-percentage-range = percentage must be in (0, 100]
 errors-trade-amount-tokens-invalid = amount_tokens must be positive
 errors-trade-sell-amount-zero = Computed sell amount is zero
 

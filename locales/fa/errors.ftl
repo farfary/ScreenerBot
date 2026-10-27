@@ -325,7 +325,7 @@ errors-trade-storage-unavailable = داده‌های معامله در دستر�
 errors-trade-mint-invalid = آدرس مینت توکن { $mint } نامعتبر است
 errors-trade-blacklisted = توکن { $mint } در فهرست سیاه است
 errors-trade-slippage-invalid = اسلیپیج { $slippage }% باید بین { $minimum }% و { $maximum }% باشد
-errors-trade-percentage-invalid = درصد فروش { $percentage } باید در بازه ⁨(0, 100]⁩ باشد
+errors-trade-percentage-invalid = درصد فروش { $percentage }% باید بین { $minimum }% و { $maximum }% باشد
 errors-trade-percentage-required = فروش جزئی به درصدی از پوزیشن که باید فروخته شود نیاز دارد
 errors-trade-add-size-required = افزودن به پوزیشن { $mint } به مقداری به { -sol } نیاز دارد
 errors-trade-record-failed = ثبت معامله دستی ممکن نشد
@@ -354,7 +354,6 @@ errors-trade-insufficient-funds = کیف پول { $available } SOL دارد؛ ا
 errors-trade-wallet-not-configured = کیف پول پیکربندی نشده است
 errors-trade-amount-sol-invalid = amount_sol برای خرید الزامی و باید مثبت باشد
 errors-trade-no-tokens-in-wallet = توکنی برای این پوزیشن در کیف پول پیدا نشد. موجودی توکن 0 است؛ پوزیشن را نمی‌توان با سواپ بست.
-errors-trade-percentage-range = درصد باید در بازه ⁨(0, 100]⁩ باشد
 errors-trade-amount-tokens-invalid = amount_tokens باید مثبت باشد
 errors-trade-sell-amount-zero = مقدار محاسبه‌شده برای فروش صفر است
 

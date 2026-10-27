@@ -322,7 +322,7 @@ errors-trade-storage-unavailable = 交易数据不可用或正在恢复：{ $det
 errors-trade-mint-invalid = 代币铸造地址无效：{ $mint }
 errors-trade-blacklisted = 代币 { $mint } 已加入黑名单
 errors-trade-slippage-invalid = 滑点 { $slippage }% 必须在 { $minimum }% 到 { $maximum }% 之间
-errors-trade-percentage-invalid = 卖出比例 { $percentage } 必须在 (0, 100] 范围内
+errors-trade-percentage-invalid = 卖出比例 { $percentage }% 必须在 { $minimum }% 到 { $maximum }% 之间
 errors-trade-percentage-required = 部分卖出需要指定要卖出的仓位比例
 errors-trade-add-size-required = 向 { $mint } 的仓位加仓需要指定 { -sol } 数量
 errors-trade-record-failed = 无法记录手动交易
@@ -350,7 +350,6 @@ errors-trade-insufficient-funds = 钱包持有 { $available } SOL；此交易需
 errors-trade-wallet-not-configured = 未配置钱包
 errors-trade-amount-sol-invalid = 买入时必须提供 amount_sol，且必须为正数
 errors-trade-no-tokens-in-wallet = 钱包中未找到此仓位的代币。代币余额为 0，无法通过兑换平仓。
-errors-trade-percentage-range = percentage 必须在 (0, 100] 范围内
 errors-trade-amount-tokens-invalid = amount_tokens 必须为正数
 errors-trade-sell-amount-zero = 计算出的卖出数量为零
 

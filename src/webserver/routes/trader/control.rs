@@ -59,10 +59,14 @@ pub(in crate::webserver::routes) fn trader_failure(error: &trader::Error) -> Res
             .arg("slippage", UiArg::Number(*slippage_pct))
             .arg("minimum", UiArg::Number(*minimum_pct))
             .arg("maximum", UiArg::Number(*maximum_pct)),
-        Error::InvalidPercentage { percentage } => {
-            ApiError::new(code, ids::ERRORS_TRADE_PERCENTAGE_INVALID)
-                .arg("percentage", UiArg::Number(*percentage))
-        }
+        Error::InvalidPercentage {
+            percentage,
+            minimum_pct,
+            maximum_pct,
+        } => ApiError::new(code, ids::ERRORS_TRADE_PERCENTAGE_INVALID)
+            .arg("percentage", UiArg::Number(*percentage))
+            .arg("minimum", UiArg::Number(*minimum_pct))
+            .arg("maximum", UiArg::Number(*maximum_pct)),
         Error::PercentageRequired => ApiError::new(code, ids::ERRORS_TRADE_PERCENTAGE_REQUIRED),
         Error::AddSizeRequired { mint } => {
             ApiError::new(code, ids::ERRORS_TRADE_ADD_SIZE_REQUIRED).text_arg("mint", mint.clone())

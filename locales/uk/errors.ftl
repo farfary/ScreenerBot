@@ -292,7 +292,7 @@ errors-trade-storage-unavailable = торгові дані недоступні 
 errors-trade-mint-invalid = недійсна адреса мінта токена { $mint }
 errors-trade-blacklisted = токен { $mint } у чорному списку
 errors-trade-slippage-invalid = проковзування { $slippage }% має бути в межах від { $minimum }% до { $maximum }%
-errors-trade-percentage-invalid = відсоток продажу { $percentage } має бути в межах (0, 100]
+errors-trade-percentage-invalid = відсоток продажу { $percentage }% має бути в межах від { $minimum }% до { $maximum }%
 errors-trade-percentage-required = частковий продаж потребує відсотка позиції, який треба продати
 errors-trade-add-size-required = докупівля в позицію { $mint } потребує розміру в { -sol }
 errors-trade-record-failed = не вдалося записати ручну угоду
@@ -320,7 +320,6 @@ errors-trade-insufficient-funds = У гаманці { $available } SOL; для �
 errors-trade-wallet-not-configured = Гаманець не налаштовано
 errors-trade-amount-sol-invalid = для купівлі потрібен amount_sol, і він має бути додатним
 errors-trade-no-tokens-in-wallet = У гаманці не знайдено токенів для цієї позиції. Баланс токена — 0; позицію не можна закрити свопом.
-errors-trade-percentage-range = percentage має бути в межах (0, 100]
 errors-trade-amount-tokens-invalid = amount_tokens має бути додатним
 errors-trade-sell-amount-zero = Обчислена сума продажу дорівнює нулю
 

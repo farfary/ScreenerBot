@@ -16,7 +16,10 @@ use super::{Tool, ToolCategory, ToolDefinition, ToolResult};
 use crate::config::with_config;
 use crate::positions::{self, PositionManagement};
 use crate::trader::manual::{self, guard};
-use crate::trader::{TradeResult, MAX_MANUAL_SLIPPAGE_PCT, MIN_MANUAL_SLIPPAGE_PCT};
+use crate::trader::{
+    TradeResult, MAX_EXIT_SHARE_PCT, MAX_MANUAL_SLIPPAGE_PCT, MIN_EXIT_SHARE_PCT,
+    MIN_MANUAL_SLIPPAGE_PCT,
+};
 
 #[derive(Serialize)]
 struct TradeResponse {
@@ -320,7 +323,7 @@ async fn sell(mint: String, percentage: Option<f64>, slippage_pct: Option<f64>) 
     }
     let result = manual::manual_sell(&mint, percentage, slippage).await;
     let message = match percentage {
-        Some(pct) if pct < 100.0 => format!("Sold {pct}% of the position"),
+        Some(pct) if pct < MAX_EXIT_SHARE_PCT => format!("Sold {pct}% of the position"),
         _ => "Closed the full position".to_owned(),
     };
     finish(result, mint, message)
@@ -340,9 +343,14 @@ impl Tool for SellTokenTool {
                     "mint_address": { "type": "string", "description": "Mint of the open position" },
                     "percentage": {
                         "type": "number",
-                        "description": "Percent of the position to sell, (0, 100]; 100 closes the whole position.",
-                        "exclusiveMinimum": 0,
-                        "maximum": 100
+                        "description": format!(
+                            "Percent of the position to sell, [{}, {}]; {} closes the whole position.",
+                            MIN_EXIT_SHARE_PCT,
+                            MAX_EXIT_SHARE_PCT,
+                            MAX_EXIT_SHARE_PCT
+                        ),
+                        "minimum": MIN_EXIT_SHARE_PCT,
+                        "maximum": MAX_EXIT_SHARE_PCT
                     },
                     "slippage_pct": slippage_schema()
                 },

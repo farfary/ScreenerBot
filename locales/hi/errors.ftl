@@ -292,7 +292,7 @@ errors-trade-storage-unavailable = ट्रेडिंग डेटा उप�
 errors-trade-mint-invalid = टोकन मिंट एड्रेस { $mint } अमान्य है
 errors-trade-blacklisted = टोकन { $mint } ब्लैकलिस्ट है
 errors-trade-slippage-invalid = स्लिपेज { $slippage }% { $minimum }% और { $maximum }% के बीच होना चाहिए
-errors-trade-percentage-invalid = बिक्री प्रतिशत { $percentage } (0, 100] के भीतर होना चाहिए
+errors-trade-percentage-invalid = बिक्री प्रतिशत { $percentage }% { $minimum }% और { $maximum }% के बीच होना चाहिए
 errors-trade-percentage-required = आंशिक बिक्री के लिए बेचे जाने वाले पोज़िशन का प्रतिशत ज़रूरी है
 errors-trade-add-size-required = { $mint } की पोज़िशन में जोड़ने के लिए { -sol } में राशि ज़रूरी है
 errors-trade-record-failed = मैन्युअल ट्रेड दर्ज नहीं हो सका
@@ -320,7 +320,6 @@ errors-trade-insufficient-funds = वॉलेट में { $available } SOL �
 errors-trade-wallet-not-configured = वॉलेट कॉन्फ़िगर नहीं है
 errors-trade-amount-sol-invalid = खरीद के लिए amount_sol आवश्यक है और धनात्मक होना चाहिए
 errors-trade-no-tokens-in-wallet = इस पोज़िशन के लिए वॉलेट में कोई टोकन नहीं मिला। टोकन बैलेंस 0 है; पोज़िशन स्वैप से बंद नहीं की जा सकती।
-errors-trade-percentage-range = percentage (0, 100] के भीतर होना चाहिए
 errors-trade-amount-tokens-invalid = amount_tokens धनात्मक होना चाहिए
 errors-trade-sell-amount-zero = गणना की गई बिक्री राशि शून्य है
 

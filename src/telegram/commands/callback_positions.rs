@@ -293,18 +293,19 @@ pub(super) async fn execute_sell(
                 .parse_mode(ParseMode::Html)
                 .await;
 
-            // A sell passes the gates every manual sell passes; a blacklisted token can
-            // always be left.
-            let sold = match guard::preflight(
-                guard::ManualTradeKind::Sell,
-                &pos.mint,
-                guard::BlacklistPolicy::Ignore,
-            )
-            .await
-            {
-                Ok(()) => manual_sell(&pos.mint, Some(percent as f64), None).await,
-                Err(e) => Err(e),
-            };
+            // A sell passes the gates every manual sell passes, its share included; a
+            // blacklisted token can always be left.
+            let sold = async {
+                let percentage = guard::validate_percentage(f64::from(percent))?;
+                guard::preflight(
+                    guard::ManualTradeKind::Sell,
+                    &pos.mint,
+                    guard::BlacklistPolicy::Ignore,
+                )
+                .await?;
+                manual_sell(&pos.mint, Some(percentage), None).await
+            }
+            .await;
             // A trade the bot refused comes back as a result that did not succeed, not as
             // an error, and must be reported as the failure it is.
             let sold = sold

@@ -243,6 +243,16 @@ pub async fn quote_preview_handler(Query(req): Query<QuotePreviewRequest>) -> Re
         "buy"
     };
 
+    // A sell share outside the range a sell accepts is refused before any read, so the
+    // preview never quotes a share the executor would not sell as named.
+    if direction == "sell" {
+        if let Some(pct) = req.percentage {
+            if let Err(error) = guard::validate_percentage(pct) {
+                return trader_failure(&error);
+            }
+        }
+    }
+
     // A token the database has not seen yet (a launch minutes old) still has
     // its decimals on chain; guessing would misstate the amounts by orders of
     // magnitude.
@@ -288,17 +298,7 @@ pub async fn quote_preview_handler(Query(req): Query<QuotePreviewRequest>) -> Re
             amount_sol,
         )
     } else {
-        // SELL: Token → SOL. A percentage outside (0, 100] is refused before any read.
-        if let Some(pct) = req.percentage {
-            if !pct.is_finite() || pct <= 0.0 || pct > 100.0 {
-                return ApiError::new(
-                    ApiErrorCode::InvalidInput,
-                    ids::ERRORS_TRADE_PERCENTAGE_RANGE,
-                )
-                .into_response();
-            }
-        }
-
+        // SELL: Token → SOL.
         // The open round of the mint is sized exactly as execution sizes its sale: a
         // percentage below 100 as a partial exit, anything else as the full close, both
         // through `read_exit_sale`. The preview then quotes what the sell will sell.
@@ -306,7 +306,7 @@ pub async fn quote_preview_handler(Query(req): Query<QuotePreviewRequest>) -> Re
             crate::positions::state::get_open_round_by_mint(&req.mint).await
         {
             let share = match req.percentage {
-                Some(pct) if pct < 100.0 => ExitShare::Part(pct),
+                Some(pct) if pct < crate::trader::MAX_EXIT_SHARE_PCT => ExitShare::Part(pct),
                 _ => ExitShare::All,
             };
             match read_exit_sale(&wallet_address, &req.mint, Some(&position), share).await {
@@ -598,6 +598,30 @@ mod tests {
         assert_eq!(
             envelope["error"]["text"]["id"],
             "errors-trade-token-data-missing"
+        );
+    }
+
+    /// A sell preview of a share the executor would raise to its minimum is refused
+    /// before any read, so it never quotes a share other than the one sold.
+    #[tokio::test]
+    async fn a_sell_preview_below_the_minimum_share_is_refused() {
+        let response = quote_preview_handler(Query(QuotePreviewRequest {
+            mint: "Gta9mPvjzLKCbHyyJiqay3VkmcmGoATf3ZSXFK9Kpump".to_owned(),
+            amount_sol: None,
+            amount_tokens: None,
+            percentage: Some(0.5),
+            slippage_pct: None,
+            direction: "sell".to_owned(),
+        }))
+        .await;
+        assert_eq!(response.status(), axum::http::StatusCode::BAD_REQUEST);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body");
+        let envelope: serde_json::Value = serde_json::from_slice(&body).expect("JSON envelope");
+        assert_eq!(
+            envelope["error"]["text"]["id"],
+            "errors-trade-percentage-invalid"
         );
     }
 

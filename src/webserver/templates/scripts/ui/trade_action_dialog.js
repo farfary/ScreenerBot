@@ -1813,8 +1813,9 @@ export class TradeActionDialog {
     }
 
     if (action === "sell") {
-      // The floor is 1, not 0: the executor clamps the exit percentage to [1, 100], so
-      // anything below 1 would be silently rounded UP and sell more than asked.
+      // The floor is 1, not 0: the trader's exit-share range is [1, 100]
+      // (`MIN_EXIT_SHARE_PCT`, `MAX_EXIT_SHARE_PCT`), and the backend refuses a share
+      // outside it, so the dialog names the range before anything is sent.
       if (value < 1 || value > 100) {
         return I18n.t("trade-error-percentage-range");
       }

@@ -295,7 +295,7 @@ errors-trade-storage-unavailable = 取引データが利用できないか、復
 errors-trade-mint-invalid = トークンのミントアドレス { $mint } が無効です
 errors-trade-blacklisted = トークン { $mint } はブラックリストに登録されています
 errors-trade-slippage-invalid = スリッページ { $slippage }% は { $minimum }% から { $maximum }% の範囲で指定してください
-errors-trade-percentage-invalid = 売却割合 { $percentage } は (0, 100] の範囲で指定してください
+errors-trade-percentage-invalid = 売却割合 { $percentage }% は { $minimum }% から { $maximum }% の範囲で指定してください
 errors-trade-percentage-required = 部分売却には売却するポジションの割合を指定してください
 errors-trade-add-size-required = { $mint } のポジションへの追加には { -sol } での数量を指定してください
 errors-trade-record-failed = 手動取引を記録できませんでした
@@ -323,7 +323,6 @@ errors-trade-insufficient-funds = ウォレットの残高は { $available } SOL
 errors-trade-wallet-not-configured = ウォレットが設定されていません
 errors-trade-amount-sol-invalid = 購入には amount_sol が必須で、正の値である必要があります
 errors-trade-no-tokens-in-wallet = このポジションのトークンがウォレットに見つかりません。トークン残高は0のため、スワップでポジションをクローズできません。
-errors-trade-percentage-range = percentage は (0, 100] の範囲で指定してください
 errors-trade-amount-tokens-invalid = amount_tokens は正の値である必要があります
 errors-trade-sell-amount-zero = 計算された売却数量がゼロです
 

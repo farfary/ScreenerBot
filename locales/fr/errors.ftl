@@ -319,7 +319,7 @@ errors-trade-storage-unavailable = Les données de trading sont indisponibles ou
 errors-trade-mint-invalid = Adresse de mint de token invalide { $mint }
 errors-trade-blacklisted = Le token { $mint } est sur liste noire
 errors-trade-slippage-invalid = Le slippage de { $slippage }{ " " }% doit être compris entre { $minimum }{ " " }% et { $maximum }{ " " }%
-errors-trade-percentage-invalid = Le pourcentage de vente { $percentage } doit être dans l'intervalle ]0, 100]
+errors-trade-percentage-invalid = Le pourcentage de vente de { $percentage }{ " " }% doit être compris entre { $minimum }{ " " }% et { $maximum }{ " " }%
 errors-trade-percentage-required = Une vente partielle doit indiquer le pourcentage de la position à vendre
 errors-trade-add-size-required = Un ajout à la position de { $mint } doit indiquer un montant en { -sol }
 errors-trade-record-failed = Impossible d'enregistrer le trade manuel
@@ -347,7 +347,6 @@ errors-trade-insufficient-funds = Le portefeuille contient { $available } SOL ; 
 errors-trade-wallet-not-configured = Portefeuille non configuré
 errors-trade-amount-sol-invalid = amount_sol est requis pour un achat et doit être positif
 errors-trade-no-tokens-in-wallet = Aucun token trouvé dans le portefeuille pour cette position. Le solde du token est de 0 ; la position ne peut pas être clôturée par swap.
-errors-trade-percentage-range = Le pourcentage doit être dans l'intervalle ]0, 100]
 errors-trade-amount-tokens-invalid = amount_tokens doit être positif
 errors-trade-sell-amount-zero = Le montant de vente calculé est nul
 

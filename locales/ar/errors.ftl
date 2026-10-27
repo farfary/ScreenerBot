@@ -325,7 +325,7 @@ errors-trade-storage-unavailable = بيانات التداول غير متاحة
 errors-trade-mint-invalid = عنوان إصدار الرمز { $mint } غير صالح
 errors-trade-blacklisted = الرمز { $mint } في القائمة السوداء
 errors-trade-slippage-invalid = يجب أن يكون الانزلاق السعري { $slippage }% بين { $minimum }% و{ $maximum }%
-errors-trade-percentage-invalid = يجب أن تكون نسبة البيع { $percentage } ضمن ⁨(0, 100]⁩
+errors-trade-percentage-invalid = يجب أن تكون نسبة البيع { $percentage }% بين { $minimum }% و{ $maximum }%
 errors-trade-percentage-required = يحتاج البيع الجزئي إلى نسبة المركز المراد بيعها
 errors-trade-add-size-required = تحتاج الإضافة إلى مركز { $mint } إلى حجم بعملة { -sol }
 errors-trade-record-failed = تعذّر تسجيل الصفقة اليدوية
@@ -354,7 +354,6 @@ errors-trade-insufficient-funds = تحتوي المحفظة على { $available 
 errors-trade-wallet-not-configured = المحفظة غير مهيأة
 errors-trade-amount-sol-invalid = amount_sol مطلوب للشراء ويجب أن يكون موجبًا
 errors-trade-no-tokens-in-wallet = لم يتم العثور على رموز في المحفظة لهذا المركز. رصيد الرمز 0؛ لا يمكن إغلاق المركز عبر المبادلة.
-errors-trade-percentage-range = يجب أن تكون النسبة ضمن ⁨(0, 100]⁩
 errors-trade-amount-tokens-invalid = يجب أن يكون amount_tokens موجبًا
 errors-trade-sell-amount-zero = كمية البيع المحسوبة تساوي صفرًا
 
