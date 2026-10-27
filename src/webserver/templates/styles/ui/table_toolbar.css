@@ -156,12 +156,12 @@
 
 .table-toolbar-identity__tag[data-variant="success"] {
   background: rgb(34, 197, 94, 0.14);
-  color: var(--success-color, #16a34a);
+  color: var(--success-color);
 }
 
 .table-toolbar-identity__tag[data-variant="warning"] {
   background: rgb(250, 204, 21, 0.16);
-  color: var(--warning-color, #ca8a04);
+  color: var(--warning-color);
 }
 
 .table-toolbar-identity__tag[data-variant="muted"] {

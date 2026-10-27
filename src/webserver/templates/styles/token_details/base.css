@@ -784,11 +784,11 @@
 }
 
 .source-issue--unavailable {
-  color: var(--warning, #d29922);
+  color: var(--warning);
 }
 
 .source-issue--unavailable i {
-  color: var(--warning, #d29922);
+  color: var(--warning);
 }
 
 /* =============================================================================

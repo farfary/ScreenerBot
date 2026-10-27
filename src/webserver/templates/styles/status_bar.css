@@ -20,7 +20,7 @@
   padding: 0 var(--spacing-md, 16px);
   font-family: var(--font-mono, "JetBrains Mono", monospace);
   font-size: 10.5px;
-  color: var(--text-muted, #8b949e);
+  color: var(--text-muted);
   font-feature-settings:
     "tnum" 1,
     "zero" 1;
@@ -60,7 +60,7 @@
 }
 
 .status-label {
-  color: var(--text-muted, #8b949e);
+  color: var(--text-muted);
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -68,13 +68,13 @@
 }
 
 .status-value {
-  color: var(--text-secondary, #c9d1d9);
+  color: var(--text-secondary);
   font-weight: 600;
   letter-spacing: 0.01em;
 }
 
 .status-separator {
-  color: var(--border-color, #30363d);
+  color: var(--border-color);
   margin: 0 6px;
   opacity: 0.5;
   user-select: none;
@@ -82,7 +82,7 @@
 
 /* Health indicator colors */
 .status-health[data-health="good"] .status-value {
-  color: var(--success, #3fb950);
+  color: var(--success);
 }
 
 .status-health[data-health="warning"] .status-value {
@@ -94,17 +94,17 @@
 }
 
 .status-health[data-health="unknown"] .status-value {
-  color: var(--text-muted, #8b949e);
+  color: var(--text-muted);
 }
 
 /* Trading status indicator */
 .status-trading[data-active="true"] {
-  color: var(--success, #3fb950);
+  color: var(--success);
   font-weight: 600;
 }
 
 .status-trading[data-active="false"] {
-  color: var(--text-muted, #8b949e);
+  color: var(--text-muted);
 }
 
 /* A narrow window keeps the values and drops the words and dividers, then the

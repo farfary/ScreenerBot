@@ -233,8 +233,8 @@
   line-height: 1;
 }
 
-.row-metric.pos { color: var(--success-color, #10b981); }
-.row-metric.neg { color: var(--error-color, #ef4444); }
+.row-metric.pos { color: var(--success-color); }
+.row-metric.neg { color: var(--error-color); }
 
 /* Active boost count, in place of the market metric an organic card shows. */
 .featured-row-boost {

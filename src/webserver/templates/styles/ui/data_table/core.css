@@ -159,7 +159,7 @@
 }
 
 .data-table-blocking-state--error .data-table-blocking-state__icon {
-  color: var(--badge-error, #d32f2f);
+  color: var(--badge-error);
 }
 
 /* Floating "Loading more…" indicator — pinned to the bottom of the scroll viewport

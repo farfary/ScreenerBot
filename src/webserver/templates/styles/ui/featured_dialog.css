@@ -505,7 +505,7 @@
 }
 
 .feat-card-security.medium {
-  color: var(--warning-color, #d29922);
+  color: var(--warning-color);
   background: var(--warning-alpha-10, rgb(210, 153, 34, 0.12));
 }
 

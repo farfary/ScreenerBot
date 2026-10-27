@@ -210,9 +210,9 @@
   max-height: calc(100vh - 16px);
   overflow: hidden;
   padding: 8px 10px;
-  background: var(--bg-tooltip, #1f2937);
-  color: var(--text-tooltip, #f9fafb);
-  border: 1px solid var(--border-tooltip, #374151);
+  background: var(--bg-tooltip);
+  color: var(--text-tooltip);
+  border: 1px solid var(--border-tooltip);
   border-radius: var(--radius-md, 6px);
   box-shadow: var(--shadow-floating-md, 0 8px 24px rgb(0, 0, 0, 0.35));
   font-family: var(--font-data, var(--font-mono));

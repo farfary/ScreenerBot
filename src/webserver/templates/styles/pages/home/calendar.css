@@ -318,9 +318,9 @@
   z-index: var(--z-app-tooltip, 10090);
   min-width: 12rem;
   max-width: min(16rem, calc(100vw - 16px));
-  background: var(--bg-card, #161b22);
-  color: var(--text-primary, #e6edf3);
-  border: 1px solid var(--border-color, #30363d);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
   border-radius: var(--radius-lg, 8px);
   box-shadow: var(--shadow-floating-md, 0 8px 24px rgb(0 0 0 / 0.35));
   font-family: var(--font-data, var(--font-mono));
@@ -343,13 +343,13 @@
   justify-content: space-between;
   gap: 0.5rem;
   padding: 0.5rem 0.7rem;
-  border-bottom: 1px solid var(--border-color, #30363d);
+  border-bottom: 1px solid var(--border-color);
 }
 
 .cal-pop-date {
   font-size: 0.72rem;
   font-weight: 700;
-  color: var(--text-primary, #e6edf3);
+  color: var(--text-primary);
 }
 
 .cal-pop-year {
@@ -373,7 +373,7 @@
 }
 
 .cal-pop-label {
-  color: var(--text-secondary, #8b949e);
+  color: var(--text-secondary);
   opacity: 0.85;
   font-size: 0.58rem;
   font-weight: 600;
@@ -393,9 +393,9 @@
 /* Popover now follows the theme surface (--bg-card), so use the semantic P&L
    tokens which flip readable in both light and dark. */
 .cal-pop-val.profit {
-  color: var(--badge-online, #3fb950);
+  color: var(--badge-online);
 }
 
 .cal-pop-val.loss {
-  color: var(--badge-error, #f85149);
+  color: var(--badge-error);
 }

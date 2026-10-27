@@ -102,7 +102,7 @@
 .onboarding-version {
   font-family: var(--font-mono, "JetBrains Mono", monospace);
   font-size: 0.65rem;
-  color: var(--text-muted, #8b949e);
+  color: var(--text-muted);
   background: var(--bg-tertiary);
   padding: 0.2rem 0.5rem;
   border-radius: var(--radius-sm);

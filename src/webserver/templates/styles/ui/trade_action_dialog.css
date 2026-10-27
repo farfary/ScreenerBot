@@ -35,9 +35,9 @@ body.trade-action-dialog-open {
   max-height: 90vh;
   display: flex;
   flex-direction: column;
-  background: var(--bg-secondary, #161b22);
-  color: var(--text-primary, #e6edf3);
-  border: 1px solid var(--border-color, #30363d);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
   border-radius: var(--radius-xl, 12px);
   box-shadow:
     0 0 0 1px rgb(255, 255, 255, 0.05),
@@ -82,7 +82,7 @@ body.trade-action-dialog-open {
   justify-content: space-between;
   padding: 12px 18px;
   gap: 12px;
-  border-bottom: 1px solid var(--border-color, #30363d);
+  border-bottom: 1px solid var(--border-color);
 }
 
 .trade-action-header-content {
@@ -103,13 +103,13 @@ body.trade-action-dialog-open {
   font-weight: 700;
   line-height: 1.25;
   letter-spacing: 0.01em;
-  color: var(--text-primary, #e6edf3);
+  color: var(--text-primary);
 }
 
 .trade-action-subtitle {
   margin: 0;
   font-size: 0.72rem;
-  color: var(--text-secondary, #8b949e);
+  color: var(--text-secondary);
   font-weight: 400;
 }
 
@@ -156,7 +156,7 @@ body.trade-action-dialog-open {
 /* Context Information */
 .trade-action-context {
   background: rgb(0, 0, 0, 0.2);
-  border: 1px solid var(--border-color, #30363d);
+  border: 1px solid var(--border-color);
   border-radius: var(--radius-lg, 8px);
   overflow: hidden;
 }
@@ -168,7 +168,7 @@ body.trade-action-dialog-open {
   align-items: center;
   gap: 10px;
   padding: 10px 12px;
-  border-bottom: 1px solid var(--border-color, #30363d);
+  border-bottom: 1px solid var(--border-color);
 }
 
 .trade-action-token-logo {
@@ -179,7 +179,7 @@ body.trade-action-dialog-open {
   height: 36px;
   flex-shrink: 0;
   border-radius: var(--token-logo-radius, 3px);
-  border: 1px solid var(--border-color, #30363d);
+  border: 1px solid var(--border-color);
   background: var(--bg-card-hover);
   overflow: hidden;
 }
@@ -254,8 +254,8 @@ body.trade-action-dialog-open {
   flex-direction: column;
   gap: 4px;
   padding: 14px 16px;
-  border-inline-end: 1px solid var(--border-color, #30363d);
-  border-bottom: 1px solid var(--border-color, #30363d);
+  border-inline-end: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color);
 }
 
 .trade-action-context-item:last-child {
@@ -277,13 +277,13 @@ body.trade-action-dialog-open {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: var(--text-secondary, #8b949e);
+  color: var(--text-secondary);
 }
 
 .trade-action-context-value {
   font-size: 0.9375rem;
   font-weight: 600;
-  color: var(--text-primary, #e6edf3);
+  color: var(--text-primary);
   font-family: var(--font-data, monospace);
   font-feature-settings:
     "tnum" 1,
@@ -300,13 +300,13 @@ body.trade-action-dialog-open {
 }
 
 .trade-action-balance-unit {
-  color: var(--text-secondary, #8b949e);
+  color: var(--text-secondary);
   font-size: 0.8125rem;
   margin-inline-start: 4px;
 }
 
 .trade-action-context-value.low-balance .trade-action-balance-amount {
-  color: var(--warning-color, #f59e0b);
+  color: var(--warning-color);
 }
 
 /* Preset Buttons Section */
@@ -327,7 +327,7 @@ body.trade-action-dialog-open {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: var(--text-secondary, #8b949e);
+  color: var(--text-secondary);
 }
 
 .trade-action-preset-grid {
@@ -338,13 +338,13 @@ body.trade-action-dialog-open {
 
 .trade-action-preset-btn {
   padding: 14px 12px;
-  border: 1px solid var(--border-color, #30363d);
+  border: 1px solid var(--border-color);
 
   /* A recessed surface on the card, resolved per-theme — was a hardcoded black
      wash that only read as "recessed" in dark mode and needed a separate
      [data-theme="light"] override to not look muddy on a white card. */
   background: var(--bg-primary);
-  color: var(--text-secondary, #8b949e);
+  color: var(--text-secondary);
   border-radius: var(--radius-md, 6px);
   cursor: pointer;
   font-size: 0.875rem;
@@ -363,13 +363,13 @@ body.trade-action-dialog-open {
 .trade-action-preset-btn .preset-label {
   font-size: 1rem;
   font-weight: 700;
-  color: var(--text-primary, #e6edf3);
+  color: var(--text-primary);
 }
 
 .trade-action-preset-btn .preset-sublabel {
   font-size: 0.6875rem;
   font-weight: 500;
-  color: var(--text-secondary, #8b949e);
+  color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.03em;
 }
@@ -420,7 +420,7 @@ body.trade-action-dialog-open {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: var(--text-secondary, #8b949e);
+  color: var(--text-secondary);
 }
 
 .trade-action-input-wrapper {
@@ -434,9 +434,9 @@ body.trade-action-dialog-open {
   padding: 14px 16px;
   padding-inline-end: 104px;
   background: rgb(0, 0, 0, 0.3);
-  border: 1px solid var(--border-color, #30363d);
+  border: 1px solid var(--border-color);
   border-radius: var(--radius-md, 6px);
-  color: var(--text-primary, #e6edf3);
+  color: var(--text-primary);
   font-size: 1rem;
   font-weight: 600;
   font-family: var(--font-data, monospace);
@@ -444,7 +444,7 @@ body.trade-action-dialog-open {
 }
 
 .trade-action-input::placeholder {
-  color: var(--text-muted, #6e7681);
+  color: var(--text-muted);
   font-weight: 400;
 }
 
@@ -456,7 +456,7 @@ body.trade-action-dialog-open {
 }
 
 .trade-action-input.error {
-  border-color: var(--error-color, #ef4444);
+  border-color: var(--error-color);
   background: rgb(239, 68, 68, 0.05);
 }
 
@@ -470,14 +470,14 @@ body.trade-action-dialog-open {
   inset-inline-end: 62px;
   font-size: 0.8125rem;
   font-weight: 600;
-  color: var(--text-secondary, #8b949e);
+  color: var(--text-secondary);
   pointer-events: none;
   font-family: var(--font-data, monospace);
 }
 
 .trade-action-input-hint {
   font-size: 0.75rem;
-  color: var(--text-muted, #6e7681);
+  color: var(--text-muted);
 }
 
 .trade-action-error-msg {
@@ -488,7 +488,7 @@ body.trade-action-dialog-open {
   background: rgb(239, 68, 68, 0.1);
   border: 1px solid rgb(239, 68, 68, 0.3);
   border-radius: var(--radius-md, 6px);
-  color: var(--error-color, #ef4444);
+  color: var(--error-color);
   font-size: 0.8125rem;
   font-weight: 500;
   animation: trade-error-shake 300ms ease;
@@ -553,7 +553,7 @@ body.trade-action-dialog-open {
   gap: 12px;
   padding: 16px 24px 20px;
   background: linear-gradient(0deg, rgb(255, 255, 255, 0.02) 0%, transparent 100%);
-  border-top: 1px solid var(--border-color, #30363d);
+  border-top: 1px solid var(--border-color);
 }
 
 .trade-action-btn {
@@ -578,8 +578,8 @@ body.trade-action-dialog-open {
    state (a white border at 15% alpha) all but disappeared. */
 .trade-action-btn-cancel {
   background: var(--bg-card);
-  color: var(--text-primary, #e6edf3);
-  border-color: var(--border-color, #30363d);
+  color: var(--text-primary);
+  border-color: var(--border-color);
 }
 
 .trade-action-btn-cancel:hover:not(:disabled) {
@@ -615,8 +615,8 @@ body.trade-action-dialog-open {
 
 /* Loading state */
 .trade-action-btn-confirm.loading {
-  background: var(--text-secondary, #8b949e);
-  border-color: var(--text-secondary, #8b949e);
+  background: var(--text-secondary);
+  border-color: var(--text-secondary);
   pointer-events: none;
 }
 
@@ -1105,19 +1105,19 @@ body.trade-action-dialog-open {
 
 /* Light mode adjustments */
 [data-theme="light"] .trade-action-dialog {
-  background: var(--bg-card, #fff);
-  border-color: var(--border-color, #d1d5db);
+  background: var(--bg-card);
+  border-color: var(--border-color);
   box-shadow:
     0 0 0 1px rgb(0, 0, 0, 0.05),
     0 24px 48px -12px rgb(0, 0, 0, 0.15);
 }
 
 [data-theme="light"] .trade-action-context {
-  background: var(--bg-card-hover, #f0f2f6);
+  background: var(--bg-card-hover);
 }
 
 [data-theme="light"] .trade-action-input {
-  background: var(--bg-card-hover, #f0f2f6);
+  background: var(--bg-card-hover);
 }
 
 /* Slippage Warning Dialog */
@@ -1141,7 +1141,7 @@ body.trade-action-dialog-open {
 
   width: min(380px, 90vw);
   padding: 24px;
-  background: var(--bg-secondary, #161b22);
+  background: var(--bg-secondary);
 
   /* --danger-alpha-30 (not -40): the only one of the pair with a real dark-theme
      value — -40 is only ever declared once, in the light :root block, so it was
@@ -1170,7 +1170,7 @@ body.trade-action-dialog-open {
 
 .slippage-warning-text {
   font-size: 0.875rem;
-  color: var(--text-secondary, #8b949e);
+  color: var(--text-secondary);
   line-height: 1.5;
   margin-bottom: 20px;
 }
@@ -1201,8 +1201,8 @@ body.trade-action-dialog-open {
    feedback in light mode. */
 .slippage-warning-btn.cancel {
   background: var(--bg-card-hover);
-  color: var(--text-primary, #e6edf3);
-  border-color: var(--border-color, #30363d);
+  color: var(--text-primary);
+  border-color: var(--border-color);
 }
 
 .slippage-warning-btn.cancel:hover {
@@ -1313,7 +1313,7 @@ body.trade-action-dialog-open {
   appearance: none;
   width: 18px;
   height: 18px;
-  border: 3px solid var(--bg-secondary, #161b22);
+  border: 3px solid var(--bg-secondary);
   border-radius: 50%;
   background: var(--action-color, #10b981);
   box-shadow: 0 1px 4px rgb(0, 0, 0, 0.4);
@@ -1326,7 +1326,7 @@ body.trade-action-dialog-open {
 .trade-action-slider::-moz-range-thumb {
   width: 18px;
   height: 18px;
-  border: 3px solid var(--bg-secondary, #161b22);
+  border: 3px solid var(--bg-secondary);
   border-radius: 50%;
   background: var(--action-color, #10b981);
   cursor: pointer;

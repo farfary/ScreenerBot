@@ -29,7 +29,7 @@ body.events-dialog-open {
   display: flex;
   flex-direction: column;
   background: var(--bg-surface, #111827);
-  color: var(--text-primary, #f9fafb);
+  color: var(--text-primary);
   border: 1px solid var(--border-color, rgb(148, 163, 184, 0.25));
   border-radius: var(--radius-2xl);
   box-shadow: 0 20px 45px rgb(15, 23, 42, 0.45);
@@ -148,7 +148,7 @@ body.events-dialog-open {
   margin: 0;
   font-size: 0.95rem;
   font-weight: 600;
-  color: var(--text-secondary, #cbd5f5);
+  color: var(--text-secondary);
 }
 
 .events-dialog-payload-code {
@@ -161,7 +161,7 @@ body.events-dialog-open {
   border: 1px solid rgb(148, 163, 184, 0.25);
   font-size: 0.85rem;
   line-height: 1.5;
-  color: var(--text-primary, #f9fafb);
+  color: var(--text-primary);
 }
 
 .events-dialog-footer {
