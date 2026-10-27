@@ -243,7 +243,7 @@
 }
 
 .page-load-error h2 .icon-triangle-alert {
-  color: var(--color-error, #f85149);
+  color: var(--error-color);
   margin-inline-end: 0.4rem;
 }
 

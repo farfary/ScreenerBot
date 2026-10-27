@@ -287,14 +287,6 @@
   --font-size-xl: 1.25rem; /* 20px */
   --font-size-2xl: 1.5rem; /* 24px */
 
-  /* Additional Semantic Aliases */
-  --color-primary: var(--primary-color);
-  --color-success: var(--success-color);
-  --color-warning: var(--warning-color);
-  --color-danger: var(--error-color);
-  --color-error: var(--error-color);
-  --color-info: var(--link-color);
-
   /* Sign of the inline direction: scales horizontal offsets that must mirror in RTL. */
   --dir-sign: 1;
 
@@ -513,14 +505,6 @@ html:is(:lang(ar), :lang(fa), :lang(hi), :lang(zh), :lang(ja), :lang(ko))
 
   /* Form Control Overrides */
   --select-arrow: var(--select-arrow-dark);
-
-  /* Additional Semantic Aliases */
-  --color-primary: var(--primary-color);
-  --color-success: var(--success-color);
-  --color-warning: var(--warning-color);
-  --color-danger: var(--error-color);
-  --color-error: var(--error-color);
-  --color-info: var(--link-color);
 }
 
 :root[data-token-logo-shape="rounded-square"] {
