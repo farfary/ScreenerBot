@@ -4,6 +4,7 @@
 //! Position state management — in-memory tracking of active positions, locking, and lifecycle.
 
 pub use super::state_pending::*;
+pub use super::state_pending_queries::*;
 
 use super::db::carry_columns_not_booked;
 use super::types::Position;

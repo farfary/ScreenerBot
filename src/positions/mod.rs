@@ -27,6 +27,7 @@ pub mod round_state;
 mod settle;
 pub mod state;
 pub mod state_pending;
+pub mod state_pending_queries;
 pub mod transitions;
 pub mod types;
 pub mod verifier;
