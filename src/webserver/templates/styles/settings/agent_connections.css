@@ -23,9 +23,8 @@
   display: none;
 }
 
-/* Permission grid — one preset track plus one segmented control per category.
-   Three fixed choices per row read as a single track, never three loose
-   buttons; the radios themselves are visually replaced by their labels. */
+/* Permission grid — one preset track plus one shared segmented control per
+   category (`scripts/ui/segmented.js`). */
 .agent-connections .agent-perm-grid {
   display: flex;
   flex-direction: column;
@@ -109,71 +108,8 @@
   line-height: 1.35;
 }
 
-.agent-connections .agent-perm-choices {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  flex: 0 0 auto;
-  padding: 2px;
-  background: var(--bg-primary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-}
-
-.agent-connections .agent-perm-choice {
-  position: relative;
-  display: inline-flex;
-  cursor: pointer;
-}
-
-/* The radio stays focusable for keyboard and assistive tech, but the label
-   paints the segment: the control is stretched invisibly over its own segment
-   so the whole segment is the hit target. */
-.agent-connections .agent-perm-choice input {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
-  cursor: pointer;
-}
-
-.agent-connections .agent-perm-choice span {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 52px;
-  padding: 4px 10px;
-  color: var(--text-secondary);
-  font-size: 0.74rem;
-  font-weight: 600;
-  border-radius: var(--radius-sm);
-  transition:
-    color var(--transition-fast),
-    background var(--transition-fast);
-}
-
-.agent-connections .agent-perm-choice:hover span {
-  color: var(--text-primary);
-  background: var(--bg-card-hover);
-}
-
-.agent-connections .agent-perm-choice input:checked + span {
-  color: var(--primary-color);
-  background: var(--primary-alpha-10);
-}
-
-/* An enabled money-moving or refused category must not read as neutral. */
-.agent-connections
-  .agent-perm-row:has(input[data-perm-key="trading"]:checked[value="allow"])
-  .agent-perm-choice
-  input[value="allow"]:checked
-  + span {
-  color: var(--semantic-warning-text);
-  background: var(--warning-alpha-10);
-}
-
-.agent-connections .agent-perm-choice input[value="deny"]:checked + span {
-  color: var(--semantic-error-text);
-  background: var(--danger-alpha-10);
+.agent-connections .agent-perm-row > .segmented {
+  flex: none;
 }
 
 /* Per-connection editor, revealed under its row. */
@@ -495,16 +431,8 @@
     gap: 8px;
   }
 
-  .agent-connections .agent-perm-choices {
-    justify-content: space-between;
-  }
-
-  .agent-connections .agent-perm-choice {
-    flex: 1 1 0;
-  }
-
-  .agent-connections .agent-perm-choice span {
-    width: 100%;
+  .agent-connections .agent-perm-row > .segmented {
+    align-self: flex-start;
   }
 
   .agent-connections .agent-pair-actions {

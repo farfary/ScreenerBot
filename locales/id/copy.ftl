@@ -146,12 +146,6 @@ copy-unrealized-unpriced =
     { $count ->
        *[other] { $count } kepemilikan tanpa harga
     }
-copy-range-24h = 24j
-copy-range-7d = 7h
-copy-range-30d = 30h
-copy-range-all = Semua
-copy-range-label =
-    .aria-label = Rentang tanggal
 
 ## Page strip
 

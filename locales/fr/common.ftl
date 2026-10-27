@@ -74,6 +74,12 @@ common-venue-direct-pool = Pool direct
 
 common-mode-paper = Simulé
 common-mode-live = Réel
+common-range-24h = 24 h
+common-range-7d = 7 j
+common-range-30d = 30 j
+common-range-all = Tout
+common-range-label =
+    .aria-label = Période
 common-check-passed = validé
 common-check-not-passed = non validé
 common-arm-type-phrase = Saisissez { $phrase } pour confirmer

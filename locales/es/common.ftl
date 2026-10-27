@@ -72,6 +72,12 @@ common-venue-direct-pool = Pool directo
 
 common-mode-paper = Simulado
 common-mode-live = En vivo
+common-range-24h = 24 h
+common-range-7d = 7 d
+common-range-30d = 30 d
+common-range-all = Todo
+common-range-label =
+    .aria-label = Rango de fechas
 common-check-passed = superada
 common-check-not-passed = no superada
 common-arm-type-phrase = Escribe { $phrase } para confirmar

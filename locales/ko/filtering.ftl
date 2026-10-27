@@ -133,9 +133,6 @@ filtering-source-llm-analysis = LLM 분석
 
 filtering-range-1h = 1H
 filtering-range-6h = 6H
-filtering-range-24h = 24H
-filtering-range-7d = 7D
-filtering-range-all = 전체
 filtering-range-all-time = 전체 기간
 filtering-range-custom = 직접 설정
 filtering-range-now = 현재

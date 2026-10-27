@@ -807,26 +807,28 @@ export function applyEventHandlersMixin(DataTable) {
    * a view switch usually changes the query, which the page must drive itself.
    */
   proto._attachToolbarSegmentedEvents = function (toolbarRoot) {
-    const segments = toolbarRoot?.querySelectorAll(".table-toolbar-seg") || [];
+    const segments = toolbarRoot?.querySelectorAll("[data-item-id] > .segmented") || [];
     segments.forEach((seg) => {
-      const segId = seg.dataset.segId;
+      const segId = seg.dataset.seg;
       if (!segId) {
         return;
       }
-      seg.querySelectorAll(".table-toolbar-seg__btn").forEach((btn) => {
-        const handler = () => {
-          const value = btn.dataset.segValue;
-          const config = this.toolbarView?.getItem(segId);
-          if (config?.value === value) {
-            return;
-          }
-          this.setToolbarSegmentValue(segId, value);
-          if (typeof config?.onChange === "function") {
-            config.onChange(value, btn, this);
-          }
-        };
-        this._addEventListener(btn, "click", handler);
-      });
+      const handler = (event) => {
+        const input = event.target.closest("input[data-seg-value]");
+        if (!input) {
+          return;
+        }
+        const value = input.value;
+        const config = this.toolbarView?.getItem(segId);
+        if (config?.value === value) {
+          return;
+        }
+        this.setToolbarSegmentValue(segId, value);
+        if (typeof config?.onChange === "function") {
+          config.onChange(value, input, this);
+        }
+      };
+      this._addEventListener(seg, "change", handler);
     });
   };
 

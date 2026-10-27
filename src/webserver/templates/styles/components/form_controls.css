@@ -747,6 +747,109 @@ input[type="radio"]:disabled {
 }
 
 /* =============================================================================
+   Segmented Control
+   =============================================================================
+   A small fixed one-of-many choice (`scripts/ui/segmented.js`): one track of native
+   radios, each stretched invisibly over its option so the whole option is the hit
+   target, painted on the label beside it. The checked option takes the primary
+   accent; a toned option takes its warning or danger colour instead. A context
+   retunes the control only through `--segmented-height`, the track's outer height
+   (the 1px border and 2px padding on each side take 6px of it). */
+.segmented {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-primary);
+  max-width: 100%;
+}
+
+.segmented[data-compact] {
+  --segmented-height: 26px;
+}
+
+.segmented[hidden] {
+  display: none;
+}
+
+.segmented-option {
+  position: relative;
+  display: inline-flex;
+}
+
+.segmented-option > input {
+  position: absolute;
+  inset: 0;
+  inline-size: 100%;
+  block-size: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.segmented-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  min-block-size: calc(var(--segmented-height, 32px) - 6px);
+  padding-inline: 10px;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  color: var(--text-secondary);
+  transition:
+    color var(--transition-fast),
+    background var(--transition-fast);
+}
+
+.segmented-option:hover > input:not(:checked) + .segmented-label {
+  color: var(--text-primary);
+  background: var(--bg-card-hover);
+}
+
+.segmented-option > input:checked + .segmented-label {
+  color: var(--primary-color);
+  background: var(--primary-alpha-10);
+}
+
+.segmented-option[data-tone="warning"] > input:checked + .segmented-label {
+  color: var(--semantic-warning-text);
+  background: var(--warning-alpha-10);
+}
+
+.segmented-option[data-tone="danger"] > input:checked + .segmented-label {
+  color: var(--semantic-error-text);
+  background: var(--danger-alpha-10);
+}
+
+.segmented-icon {
+  font-size: 0.875rem;
+}
+
+.segmented-count {
+  font-family: var(--font-data);
+  font-size: 0.6875rem;
+  font-feature-settings: "tnum" 1;
+  color: var(--text-tertiary);
+}
+
+.segmented-option > input:checked + .segmented-label .segmented-count {
+  color: inherit;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .segmented-label {
+    transition: none;
+  }
+}
+
+/* =============================================================================
    Search Input Wrapper
    ============================================================================= */
 

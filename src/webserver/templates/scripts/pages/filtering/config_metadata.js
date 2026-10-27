@@ -44,9 +44,9 @@ export const REJECTION_SOURCE_LABELS = Object.freeze({
 export const TIME_RANGE_LABELS = Object.freeze({
   "1h": "filtering-range-1h",
   "6h": "filtering-range-6h",
-  "24h": "filtering-range-24h",
-  "7d": "filtering-range-7d",
-  all: "filtering-range-all",
+  "24h": "common-range-24h",
+  "7d": "common-range-7d",
+  all: "common-range-all",
 });
 
 /** The sub-tabs, each with its localized name. */

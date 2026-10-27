@@ -7,13 +7,11 @@ import { DataTable } from "../../ui/data_table.js";
 import { addressFloorWidth, renderNamedAddress } from "../../ui/token_identity.js";
 import { comparisonCurves } from "./charts.js";
 import {
-  RANGES,
   duration,
   fixed,
   pct,
   rangeQuery,
   seconds,
-  segmented,
   signedPct,
   signedSolCell,
   taskName,
@@ -22,6 +20,7 @@ import {
 import { tradingModeMarker } from "../../ui/trading_mode.js";
 import { forgetPaint } from "../../core/dom.js";
 import { renderStateView } from "../../ui/state_view.js";
+import { RANGE_OPTIONS, renderSegmented } from "../../ui/segmented.js";
 
 const TABLE_ID = "copy-compare-table";
 
@@ -32,14 +31,14 @@ export function createCompare(page) {
   const errors = new Map();
 
   function setup() {
+    on($("#copy-compare"), "change", (event) => {
+      const range = event.target.closest('[data-seg="compare-range"] input[data-seg-value]');
+      if (!range) return;
+      state.range = range.value;
+      render();
+      void refresh();
+    });
     on($("#copy-compare"), "click", (event) => {
-      const range = event.target.closest('[data-seg="compare-range"] [data-seg-value]');
-      if (range) {
-        state.range = range.dataset.segValue;
-        render();
-        void refresh();
-        return;
-      }
       if (event.target.closest("[data-compare-close]")) page.openCompare();
     });
   }
@@ -181,7 +180,7 @@ export function createCompare(page) {
     if (workspace) workspace.hidden = true;
     const rows = data.get(state.range);
     const error = errors.get(state.range);
-    const head = `<div class="copy-panel-head"><h2>${esc(I18n.t("copy-compare-title"))}</h2><div class="copy-panel-tools">${segmented("compare-range", RANGES, state.range, esc, I18n.attr("copy-range-label", "aria-label"))}<button class="btn btn-ghost btn-sm" type="button" data-compare-close>${esc(I18n.t("copy-compare-back"))}</button></div></div>`;
+    const head = `<div class="copy-panel-head"><h2>${esc(I18n.t("copy-compare-title"))}</h2><div class="copy-panel-tools">${renderSegmented({ name: "compare-range", options: RANGE_OPTIONS, value: state.range, ariaLabel: I18n.attr("common-range-label", "aria-label") }, esc)}<button class="btn btn-ghost btn-sm" type="button" data-compare-close>${esc(I18n.t("copy-compare-back"))}</button></div></div>`;
     let body;
     if (!rows)
       body = error

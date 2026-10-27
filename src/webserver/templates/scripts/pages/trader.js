@@ -31,6 +31,8 @@ import { createLifecycle as createStrategiesLifecycle } from "./strategies.js";
 import { createStrategyMode, strategyModeRow } from "./trader/strategy_mode.js";
 import { createPaperAccount } from "./trader/paper_account.js";
 import { gateControl, renderSetupGate, setupRequired } from "../ui/setup_gate.js";
+import { RANGE_OPTIONS, renderSegmented } from "../ui/segmented.js";
+import { TRADING_MODE_ICONS, tradingModeLabel } from "../ui/trading_mode.js";
 
 // Snake-case exit_type ids written by src/trader/stats.rs. Every other stored
 // closed_reason resolves through `closeReasonText` (ui/trade_reason.js).
@@ -712,21 +714,49 @@ function createLifecycle() {
   function setStatsPeriod(range) {
     if (range === statsWindow) return;
     statsWindow = range;
-    for (const btn of $$("#stats-period .stats-period-btn")) {
-      btn.classList.toggle("active", btn.dataset.window === range);
-    }
     _lastDailyKey = null;
     _lastExitKey = null;
     void loadStats();
+  }
+
+  /** Paint the Stats tab's book and window switches at the current selection. */
+  function renderStatsControls() {
+    const book = $("#stats-book");
+    if (book) {
+      book.innerHTML = renderSegmented(
+        {
+          name: "stats-book",
+          options: ["live", "paper"].map((mode) => ({
+            value: mode,
+            label: tradingModeLabel(mode),
+            icon: TRADING_MODE_ICONS[mode],
+          })),
+          value: statsBook,
+          ariaLabel: I18n.attr("trader-stats-book", "aria-label"),
+          compact: true,
+        },
+        Utils.escapeHtml
+      );
+    }
+    const period = $("#stats-period");
+    if (period) {
+      period.innerHTML = renderSegmented(
+        {
+          name: "stats-period",
+          options: RANGE_OPTIONS,
+          value: statsWindow,
+          ariaLabel: I18n.attr("trader-stats-window", "aria-label"),
+          compact: true,
+        },
+        Utils.escapeHtml
+      );
+    }
   }
 
   /** Switch the book the Stats tab reads; the paper book also shows its run card. */
   function setStatsBook(book) {
     if (book === statsBook) return;
     statsBook = book;
-    for (const btn of $$("#stats-book .stats-period-btn")) {
-      btn.classList.toggle("active", btn.dataset.book === book);
-    }
     const card = $("#stats-paper-account");
     if (card) {
       card.hidden = book !== "paper";
@@ -1418,13 +1448,10 @@ function createLifecycle() {
     // Trailing bands must sit above the activation: the band list re-checks on its change.
     addTrackedListener($("#trail-activation"), "input", () => refreshLevels($("#trailing-bands")));
 
-    // Realized-window segmented control
-    for (const btn of $$("#stats-period .stats-period-btn")) {
-      addTrackedListener(btn, "click", () => setStatsPeriod(btn.dataset.window));
-    }
-    for (const btn of $$("#stats-book .stats-period-btn")) {
-      addTrackedListener(btn, "click", () => setStatsBook(btn.dataset.book));
-    }
+    // The Stats tab's book and realized-window switches
+    renderStatsControls();
+    addTrackedListener($("#stats-book"), "change", (event) => setStatsBook(event.target.value));
+    addTrackedListener($("#stats-period"), "change", (event) => setStatsPeriod(event.target.value));
   }
 
   /**

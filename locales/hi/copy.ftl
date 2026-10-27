@@ -149,12 +149,6 @@ copy-unrealized-unpriced =
         [one] { $count } बिना कीमत की होल्डिंग
        *[other] { $count } बिना कीमत की होल्डिंग
     }
-copy-range-24h = 24h
-copy-range-7d = 7d
-copy-range-30d = 30d
-copy-range-all = सभी
-copy-range-label =
-    .aria-label = तारीख़ सीमा
 
 copy-page-title = कॉपी ट्रेडिंग
 copy-strip-loading = लोड हो रहा है

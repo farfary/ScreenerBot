@@ -147,12 +147,6 @@ copy-unrealized-unpriced =
         [one] { $count } fiyatsız varlık
        *[other] { $count } fiyatsız varlık
     }
-copy-range-24h = 24s
-copy-range-7d = 7g
-copy-range-30d = 30g
-copy-range-all = Tümü
-copy-range-label =
-    .aria-label = Tarih aralığı
 
 copy-page-title = Kopya İşlem
 copy-strip-loading = Yükleniyor

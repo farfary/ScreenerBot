@@ -133,9 +133,6 @@ filtering-source-llm-analysis = Аналіз LLM
 
 filtering-range-1h = 1 год
 filtering-range-6h = 6 год
-filtering-range-24h = 24 год
-filtering-range-7d = 7 д
-filtering-range-all = Усі
 filtering-range-all-time = За весь час
 filtering-range-custom = Власний
 filtering-range-now = Зараз

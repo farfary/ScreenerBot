@@ -167,12 +167,6 @@ copy-unrealized-unpriced =
         [many] { $count } حيازة بلا سعر
        *[other] { $count } حيازة بلا سعر
     }
-copy-range-24h = 24h
-copy-range-7d = 7d
-copy-range-30d = 30d
-copy-range-all = الكل
-copy-range-label =
-    .aria-label = النطاق الزمني
 
 ## Page strip
 

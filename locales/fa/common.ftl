@@ -72,6 +72,12 @@ common-venue-direct-pool = استخر مستقیم
 
 common-mode-paper = آزمایشی
 common-mode-live = زنده
+common-range-24h = 24 ساعت
+common-range-7d = 7 روز
+common-range-30d = 30 روز
+common-range-all = همه
+common-range-label =
+    .aria-label = بازه تاریخ
 common-check-passed = قبول
 common-check-not-passed = مردود
 common-arm-type-phrase = برای تأیید { $phrase } را بنویسید

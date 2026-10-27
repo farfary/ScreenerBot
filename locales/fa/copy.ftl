@@ -151,12 +151,6 @@ copy-unrealized-unpriced =
         [one] { $count } دارایی بدون قیمت
        *[other] { $count } دارایی بدون قیمت
     }
-copy-range-24h = 24h
-copy-range-7d = 7d
-copy-range-30d = 30d
-copy-range-all = همه
-copy-range-label =
-    .aria-label = بازه تاریخ
 
 ## Page strip
 

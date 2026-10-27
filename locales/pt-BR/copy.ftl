@@ -152,12 +152,6 @@ copy-unrealized-unpriced =
         [many] { $count } posses sem preço
        *[other] { $count } posses sem preço
     }
-copy-range-24h = 24h
-copy-range-7d = 7d
-copy-range-30d = 30d
-copy-range-all = Tudo
-copy-range-label =
-    .aria-label = Intervalo de datas
 
 copy-page-title = Copy Trading
 copy-strip-loading = Carregando

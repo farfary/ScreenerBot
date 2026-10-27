@@ -18,6 +18,7 @@ import {
   withSolUnit,
 } from "../../core/format.js";
 import { closeReasonText } from "../../ui/trade_reason.js";
+import { RANGE_OPTIONS } from "../../ui/segmented.js";
 
 export const SOLANA_ADDRESS_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
@@ -323,54 +324,11 @@ export function taskName(task) {
   return task?.label || I18n.t("copy-task-unnamed");
 }
 
-/** Range presets for analytics, as `from` timestamps. */
-export const RANGES = [
-  {
-    id: "24h",
-    hours: 24,
-    get label() {
-      return I18n.t("copy-range-24h");
-    },
-  },
-  {
-    id: "7d",
-    hours: 24 * 7,
-    get label() {
-      return I18n.t("copy-range-7d");
-    },
-  },
-  {
-    id: "30d",
-    hours: 24 * 30,
-    get label() {
-      return I18n.t("copy-range-30d");
-    },
-  },
-  {
-    id: "all",
-    hours: null,
-    get label() {
-      return I18n.t("copy-range-all");
-    },
-  },
-];
-
+/** The `from` timestamp of a range from `RANGE_OPTIONS`; the whole history sends none. */
 export function rangeQuery(rangeId) {
-  const range = RANGES.find((item) => item.id === rangeId);
+  const range = RANGE_OPTIONS.find((item) => item.value === rangeId);
   if (!range?.hours) return {};
   return { from: new Date(Date.now() - range.hours * 3_600_000).toISOString() };
-}
-
-/** A `.copy-seg` segmented choice: native radios, one painted segment each. */
-export function segmented(name, options, value, escapeHtml, ariaLabel) {
-  const group = escapeHtml(name);
-  return `<div class="copy-seg" role="radiogroup" aria-label="${escapeHtml(ariaLabel)}" data-seg="${group}">${options
-    .map((option) => {
-      const id = escapeHtml(option.id);
-      const checked = option.id === value;
-      return `<label class="copy-seg-btn${checked ? " is-active" : ""}"><input type="radio" name="copy-seg-${group}" value="${id}" data-seg-value="${id}"${checked ? " checked" : ""} /><span>${escapeHtml(option.label)}</span></label>`;
-    })
-    .join("")}</div>`;
 }
 
 export function definitionRows(rows, escapeHtml) {

@@ -91,9 +91,6 @@ trader-toast-strategy-mode-failed = Không thể đổi chế độ giao dịch
 
 trader-stats-window =
     .aria-label = Khoảng thống kê
-trader-stats-window-day = 24H
-trader-stats-window-week = 7D
-trader-stats-window-month = 30D
 trader-stats-book =
     .aria-label = Sổ giao dịch
 trader-paper-run-since = Đợt thử nghiệm từ { $date }

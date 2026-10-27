@@ -109,9 +109,6 @@ trader-toast-strategy-mode-failed = 取引モードを変更できませんで�
 
 trader-stats-window =
     .aria-label = 統計期間
-trader-stats-window-day = 24H
-trader-stats-window-week = 7D
-trader-stats-window-month = 30D
 trader-stats-book =
     .aria-label = 取引帳簿
 trader-paper-run-since = { $date } からのペーパー運用

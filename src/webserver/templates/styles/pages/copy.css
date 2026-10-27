@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: BUSL-1.1 */
 
 /* Copy Trading page: frame, status strip, onboarding, totals, wallet list and the
-   shared primitives (segmented control, tones, meters, notes) its panels use. */
+   shared primitives (tones, meters, notes) its panels use. */
 
 .copy-page {
   display: flex;
@@ -338,53 +338,6 @@
 .copy-chart-zero {
   stroke: var(--border-color);
   stroke-dasharray: 3 3;
-}
-
-/* Segmented control: a small fixed choice set, never a row of pills. */
-.copy-seg {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 2px;
-  padding: 2px;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  background: var(--bg-primary);
-  max-width: 100%;
-}
-
-.copy-seg-btn {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  padding: 4px 10px;
-  border-radius: var(--radius-sm);
-  color: var(--text-secondary);
-  font-family: var(--font-sans);
-  font-size: 0.75rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition:
-    background var(--transition-fast),
-    color var(--transition-fast);
-}
-
-/* The radio covers its segment as the hit target; the segment is the paint. */
-.copy-seg-btn > input {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
-  cursor: pointer;
-}
-
-.copy-seg-btn:hover {
-  color: var(--text-primary);
-}
-
-/* The chosen segment reads at a glance: the accent colour on its tint, as the trade
-   dialog's slippage presets mark theirs. */
-.copy-seg-btn.is-active {
-  background: var(--primary-alpha-10);
-  color: var(--primary-color);
 }
 
 .copy-page .is-positive {

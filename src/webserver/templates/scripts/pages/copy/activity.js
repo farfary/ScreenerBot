@@ -11,7 +11,6 @@ import {
   pct,
   price,
   seconds,
-  segmented,
   signedPct,
   skipKey,
   skipLabel,
@@ -19,36 +18,37 @@ import {
 } from "./format.js";
 import { ensureIdentities, tokenWithMint } from "./tokens.js";
 import { renderStateView } from "../../ui/state_view.js";
+import { renderSegmented } from "../../ui/segmented.js";
 
 const PAGE = 50;
 const GROUP_MIN = 3;
 const FILTERS = [
   {
-    id: "all",
+    value: "all",
     get label() {
       return I18n.t("copy-filter-all");
     },
   },
   {
-    id: "fills",
+    value: "fills",
     get label() {
       return I18n.t("copy-kind-fills");
     },
   },
   {
-    id: "exits",
+    value: "exits",
     get label() {
       return I18n.t("copy-kind-exits");
     },
   },
   {
-    id: "skips",
+    value: "skips",
     get label() {
       return I18n.t("copy-kind-skips");
     },
   },
   {
-    id: "errors",
+    value: "errors",
     get label() {
       return I18n.t("copy-kind-errors");
     },
@@ -292,13 +292,13 @@ export function createActivity(page, { rerender }) {
   }
 
   function setup(root) {
+    on(root, "change", (event) => {
+      const input = event.target.closest('[data-seg="activity-filter"] input[data-seg-value]');
+      if (!input) return;
+      filter = input.value;
+      requery();
+    });
     on(root, "click", (event) => {
-      const seg = event.target.closest('[data-seg="activity-filter"] [data-seg-value]');
-      if (seg) {
-        filter = seg.dataset.segValue;
-        requery();
-        return;
-      }
       const token = event.target.closest("[data-activity-mint]");
       if (token) {
         setMint(token.dataset.activityMint);
@@ -450,7 +450,7 @@ export function createActivity(page, { rerender }) {
       rerender
     );
     const search = `<form class="copy-activity-search" data-activity-mint-form role="search"><input dir="ltr" type="search" name="mint" value="${esc(mint)}" placeholder="${esc(I18n.attr("copy-activity-mint-filter", "placeholder"))}" aria-label="${esc(I18n.attr("copy-activity-mint-filter", "aria-label"))}" spellcheck="false" autocomplete="off" />${mint ? `<button class="btn btn-ghost btn-sm" type="button" data-activity-clear>${esc(I18n.t("copy-activity-clear"))}</button>` : ""}</form>`;
-    const head = `<div class="copy-panel-head"><h3>${esc(I18n.t("copy-activity-title"))}</h3><div class="copy-panel-tools">${segmented("activity-filter", FILTERS, filter, esc, I18n.t("copy-activity-filter-label"))}${search}</div></div>`;
+    const head = `<div class="copy-panel-head"><h3>${esc(I18n.t("copy-activity-title"))}</h3><div class="copy-panel-tools">${renderSegmented({ name: "activity-filter", options: FILTERS, value: filter, ariaLabel: I18n.t("copy-activity-filter-label") }, esc)}${search}</div></div>`;
     if (!loaded) {
       return (
         head +

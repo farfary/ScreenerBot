@@ -109,9 +109,6 @@ trader-toast-strategy-mode-failed = 无法更改交易模式
 
 trader-stats-window =
     .aria-label = 统计时间窗口
-trader-stats-window-day = 24H
-trader-stats-window-week = 7D
-trader-stats-window-month = 30D
 trader-stats-book =
     .aria-label = 交易账本
 trader-paper-run-since = 自 { $date } 起的模拟周期

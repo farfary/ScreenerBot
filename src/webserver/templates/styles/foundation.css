@@ -613,8 +613,7 @@ html[data-input="keyboard"] .toggle > input:focus-visible + .toggle-track {
   outline-offset: var(--focus-ring-width);
 }
 
-html[data-input="keyboard"] .agent-perm-choice input:focus-visible + span,
-html[data-input="keyboard"] .copy-seg-btn:has(> input:focus-visible) {
+html[data-input="keyboard"] .segmented-option > input:focus-visible + .segmented-label {
   outline: var(--focus-ring-width) solid var(--focus-ring-color);
   outline-offset: calc(-1 * var(--focus-ring-width));
 }

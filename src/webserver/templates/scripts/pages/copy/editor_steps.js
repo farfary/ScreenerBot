@@ -7,16 +7,10 @@
 import { escapeHtml } from "../../core/utils.js";
 import { formatList } from "../../core/format.js";
 import { renderAddress } from "../../ui/token_identity.js";
-import {
-  SOLANA_ADDRESS_RE,
-  exitModeLabel,
-  segmented,
-  settingPct,
-  settingSol,
-  taskName,
-} from "./format.js";
+import { SOLANA_ADDRESS_RE, exitModeLabel, settingPct, settingSol, taskName } from "./format.js";
 import { tradingModeLabel } from "../../ui/trading_mode.js";
 import { renderNotice } from "../../ui/notice.js";
+import { renderSegmented } from "../../ui/segmented.js";
 import {
   PRESETS,
   RULES,
@@ -213,15 +207,17 @@ function sizingStep({ draft, defaults }, esc) {
   const minSol = defaults?.min_trade_size_native ?? 0;
   const solUnit = I18n.t("copy-unit-native");
   const copySize = I18n.t("copy-editor-copy-size");
-  return `<div class="copy-field"><span>${esc(copySize)}</span>${segmented(
-    "sizing-kind",
-    [
-      { id: "fixed", label: I18n.t("copy-editor-sizing-fixed") },
-      { id: "ratio_of_target", label: I18n.t("copy-editor-sizing-ratio") },
-    ],
-    draft.sizing.kind,
-    esc,
-    copySize
+  return `<div class="copy-field"><span>${esc(copySize)}</span>${renderSegmented(
+    {
+      name: "sizing-kind",
+      options: [
+        { value: "fixed", label: I18n.t("copy-editor-sizing-fixed") },
+        { value: "ratio_of_target", label: I18n.t("copy-editor-sizing-ratio") },
+      ],
+      value: draft.sizing.kind,
+      ariaLabel: copySize,
+    },
+    esc
   )}</div>
     <div class="copy-fields">
       ${numberInput(esc, { attr: "data-field", name: "sizing_amount", label: fixedKind ? I18n.t("copy-editor-amount-fixed") : I18n.t("copy-editor-amount-ratio"), unit: fixedKind ? solUnit : "%", value: valueAttr(fixedKind ? draft.sizing.sol : draft.sizing.pct), min: fixedKind ? minSol : 0, required: true, help: fixedKind ? I18n.t("copy-editor-amount-help-fixed", { minimum: settingSol(minSol) }) : I18n.t("copy-editor-amount-help-ratio") })}
@@ -249,38 +245,42 @@ function entryStep({ draft, defaults }, esc) {
       ${numberInput(esc, { attr: "data-field", name: "max_target_trade_native", label: I18n.t("copy-editor-target-max"), unit: solUnit, value: valueAttr(draft.max_target_trade_native), min: 0, placeholder: I18n.t("copy-editor-any"), help: I18n.t("copy-editor-target-max-help") })}
     </div>
     ${toggleRow(esc, { name: "buy_once_per_token", title: I18n.t("copy-editor-buy-once-title"), help: I18n.t("copy-editor-buy-once-help"), checked: draft.buy_once_per_token })}
-    <div class="copy-field"><span>${esc(filterLabel)}</span>${segmented(
-      "filter-mode",
-      [
-        {
-          id: "inherit",
-          label: global
-            ? I18n.t("copy-filter-copy-setting-required")
-            : I18n.t("copy-filter-copy-setting-not-required"),
-        },
-        { id: "require", label: I18n.t("copy-editor-filter-require") },
-        { id: "skip", label: I18n.t("copy-editor-filter-skip") },
-      ],
-      filterMode,
-      esc,
-      filterLabel
+    <div class="copy-field"><span>${esc(filterLabel)}</span>${renderSegmented(
+      {
+        name: "filter-mode",
+        options: [
+          {
+            value: "inherit",
+            label: global
+              ? I18n.t("copy-filter-copy-setting-required")
+              : I18n.t("copy-filter-copy-setting-not-required"),
+          },
+          { value: "require", label: I18n.t("copy-editor-filter-require") },
+          { value: "skip", label: I18n.t("copy-editor-filter-skip") },
+        ],
+        value: filterMode,
+        ariaLabel: filterLabel,
+      },
+      esc
     )}<small>${esc(I18n.t("copy-editor-filter-help"))}</small></div>
     ${requires ? renderNotice({ variant: "warning", message: I18n.t("copy-editor-filter-warning") }) : ""}
-    <div class="copy-field"><span>${esc(stableLabel)}</span>${segmented(
-      "stable-mode",
-      [
-        {
-          id: "inherit",
-          label: globalStable
-            ? I18n.t("copy-stable-copy-setting-on")
-            : I18n.t("copy-stable-copy-setting-off"),
-        },
-        { id: "on", label: I18n.t("copy-rule-on") },
-        { id: "off", label: I18n.t("copy-rule-off") },
-      ],
-      stableMode,
-      esc,
-      stableLabel
+    <div class="copy-field"><span>${esc(stableLabel)}</span>${renderSegmented(
+      {
+        name: "stable-mode",
+        options: [
+          {
+            value: "inherit",
+            label: globalStable
+              ? I18n.t("copy-stable-copy-setting-on")
+              : I18n.t("copy-stable-copy-setting-off"),
+          },
+          { value: "on", label: I18n.t("copy-rule-on") },
+          { value: "off", label: I18n.t("copy-rule-off") },
+        ],
+        value: stableMode,
+        ariaLabel: stableLabel,
+      },
+      esc
     )}<small>${esc(I18n.t("copy-editor-stable-help"))}</small></div>`;
 }
 
@@ -290,16 +290,18 @@ function ruleCard(rule, { draft, defaults }, esc) {
   const state = overrides.enabled === null ? "inherit" : overrides.enabled ? "on" : "off";
   // The inherited switch state is spelled out in the note under the choice, so the
   // segment never repeats "On" or "Off" beside the explicit ones.
-  const seg = segmented(
-    `rule-${rule.group}`,
-    [
-      { id: "inherit", label: I18n.t("copy-editor-rule-inherit") },
-      { id: "on", label: I18n.t("copy-rule-on") },
-      { id: "off", label: I18n.t("copy-rule-off") },
-    ],
-    state,
-    esc,
-    I18n.t("copy-editor-rule-aria", { rule: rule.title })
+  const seg = renderSegmented(
+    {
+      name: `rule-${rule.group}`,
+      options: [
+        { value: "inherit", label: I18n.t("copy-editor-rule-inherit") },
+        { value: "on", label: I18n.t("copy-rule-on") },
+        { value: "off", label: I18n.t("copy-rule-off") },
+      ],
+      value: state,
+      ariaLabel: I18n.t("copy-editor-rule-aria", { rule: rule.title }),
+    },
+    esc
   );
   let body;
   if (state === "on") {
@@ -348,14 +350,15 @@ function exitsStep(context, esc) {
   const mode = EXIT_MODES.find((item) => item.id === draft.exit_mode) || EXIT_MODES[0];
   const preset = matchPreset(draft.exit_policy_overrides);
   const presets = [
-    ...PRESETS.map(({ id, label }) => ({ id, label })),
-    ...(preset === "custom" ? [{ id: "custom", label: I18n.t("copy-preset-custom") }] : []),
+    ...PRESETS.map(({ id, label }) => ({ value: id, label })),
+    ...(preset === "custom" ? [{ value: "custom", label: I18n.t("copy-preset-custom") }] : []),
   ];
+  const exitModes = EXIT_MODES.map(({ id, label }) => ({ value: id, label }));
   const whoSells = I18n.t("copy-editor-who-sells");
   const presetLabel = I18n.t("copy-editor-preset");
   const mirrorNote = `<p class="copy-note">${esc(I18n.t("copy-editor-mirror-note", { mine: exitModeLabel("buy_only"), both: I18n.t("copy-editor-exit-both") }))}</p>`;
-  return `<div class="copy-field"><span>${esc(whoSells)}</span>${segmented("exit-mode", EXIT_MODES, draft.exit_mode, esc, whoSells)}<small>${esc(mode.help)}</small></div>
-    <div class="copy-field"><span>${esc(presetLabel)}</span>${segmented("preset", presets, preset, esc, presetLabel)}<small>${esc(I18n.t("copy-editor-preset-help"))}</small></div>
+  return `<div class="copy-field"><span>${esc(whoSells)}</span>${renderSegmented({ name: "exit-mode", options: exitModes, value: draft.exit_mode, ariaLabel: whoSells }, esc)}<small>${esc(mode.help)}</small></div>
+    <div class="copy-field"><span>${esc(presetLabel)}</span>${renderSegmented({ name: "preset", options: presets, value: preset, ariaLabel: presetLabel }, esc)}<small>${esc(I18n.t("copy-editor-preset-help"))}</small></div>
     <div id="copy-editor-warnings">${exitWarningsHtml(context)}</div>
     ${draft.exit_mode === "mirror" ? mirrorNote : ""}
     <div class="copy-rule-cards${draft.exit_mode === "mirror" ? " is-inactive" : ""}">${RULES.map((rule) => ruleCard(rule, context, esc)).join("")}</div>`;

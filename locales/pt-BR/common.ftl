@@ -72,6 +72,12 @@ common-venue-direct-pool = Pool direto
 
 common-mode-paper = Paper
 common-mode-live = Real
+common-range-24h = 24 h
+common-range-7d = 7 d
+common-range-30d = 30 d
+common-range-all = Tudo
+common-range-label =
+    .aria-label = Intervalo de datas
 common-check-passed = aprovada
 common-check-not-passed = não aprovada
 common-arm-type-phrase = Digite { $phrase } para confirmar

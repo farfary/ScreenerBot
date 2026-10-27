@@ -42,6 +42,7 @@
  */
 import { apiErrorMessage } from "../../core/request_manager.js";
 import { formatList } from "../../core/format.js";
+import { renderSegmented, setSegmentedValue } from "../segmented.js";
 
 const LIST_URL = "/api/agent-control/pairings";
 const pairingUrl = (clientId) => `${LIST_URL}/${encodeURIComponent(clientId)}`;
@@ -460,40 +461,41 @@ let Utils = null;
 let renderStateView = null;
 
 /**
- * One category's three-way choice, as a segmented track. A fixed choice set of
- * three gets a segmented control, not three separate buttons or a dropdown.
- * `name` scopes the radios so the create form and each row editor stay
+ * One category's three-way choice, as the shared segmented control. An allowed
+ * money-moving category and every refusal are toned, so neither reads as neutral.
+ * Each render numbers its radios, so the create form and each row editor stay
  * independent when several are on screen.
  */
-function permissionRow(category, level, name) {
-  const options = LEVELS.map(
-    (option) => `
-      <label class="agent-perm-choice" title="${Utils.escapeHtml(
-        I18n.label(LEVEL_HINT_LABELS, option.value)
-      )}">
-        <input type="radio" name="${Utils.escapeHtml(name)}-${category.key}"
-               value="${option.value}" data-perm-key="${category.key}"${
-                 option.value === level ? " checked" : ""
-               }>
-        <span>${Utils.escapeHtml(I18n.label(LEVEL_LABELS, option.value))}</span>
-      </label>`
-  ).join("");
+function permissionRow(category, level) {
+  const categoryLabel = I18n.label(CATEGORY_LABELS, category.key);
+  const options = LEVELS.map((option) => ({
+    value: option.value,
+    label: I18n.label(LEVEL_LABELS, option.value),
+    tooltip: I18n.label(LEVEL_HINT_LABELS, option.value),
+    tone:
+      option.value === "deny"
+        ? "danger"
+        : option.value === "allow" && category.key === "trading"
+          ? "warning"
+          : undefined,
+  }));
   return `
     <div class="agent-perm-row">
       <div class="agent-perm-info">
-        <span class="agent-perm-label">${Utils.escapeHtml(
-          I18n.label(CATEGORY_LABELS, category.key)
-        )}</span>
+        <span class="agent-perm-label">${Utils.escapeHtml(categoryLabel)}</span>
         <span class="agent-perm-desc">${Utils.escapeHtml(
           I18n.label(CATEGORY_DESCRIPTION_LABELS, category.key)
         )}</span>
       </div>
-      <div class="agent-perm-choices" role="radiogroup"
-           aria-label="${Utils.escapeHtml(
-             I18n.t("settings-agent-permission-group", {
-               category: I18n.label(CATEGORY_LABELS, category.key),
-             })
-           )}">${options}</div>
+      ${renderSegmented(
+        {
+          name: category.key,
+          options,
+          value: level,
+          ariaLabel: I18n.t("settings-agent-permission-group", { category: categoryLabel }),
+        },
+        Utils.escapeHtml
+      )}
     </div>`;
 }
 
@@ -517,9 +519,7 @@ function permissionGrid(permissions, name) {
           active === "custom" ? "" : " hidden"
         } data-l10n-id="settings-agent-preset-custom"></span>
       </div>
-      ${CATEGORIES.map((category) => permissionRow(category, normalized[category.key], name)).join(
-        ""
-      )}
+      ${CATEGORIES.map((category) => permissionRow(category, normalized[category.key])).join("")}
     </div>`;
 }
 
@@ -527,7 +527,7 @@ function permissionGrid(permissions, name) {
 function readPermissionGrid(grid) {
   const permissions = {};
   for (const { key } of CATEGORIES) {
-    const checked = grid.querySelector(`input[data-perm-key="${key}"]:checked`);
+    const checked = grid.querySelector(`[data-seg="${key}"] input:checked`);
     if (checked) permissions[key] = checked.value;
   }
   return normalizePermissions(permissions);
@@ -537,8 +537,7 @@ function readPermissionGrid(grid) {
 function writePermissionGrid(grid, permissions) {
   const normalized = normalizePermissions(permissions);
   for (const { key } of CATEGORIES) {
-    const input = grid.querySelector(`input[data-perm-key="${key}"][value="${normalized[key]}"]`);
-    if (input) input.checked = true;
+    setSegmentedValue(grid.querySelector(`[data-seg="${key}"]`), normalized[key]);
   }
   syncPresetState(grid);
 }
@@ -1047,9 +1046,8 @@ export async function loadAgentConnectionsTab(_dialog, content) {
   content.addEventListener(
     "change",
     (e) => {
-      const input = e.target.closest("input[data-perm-key]");
-      if (!input) return;
-      const grid = input.closest("[data-perm-grid]");
+      const input = e.target.closest("input[data-seg-value]");
+      const grid = input?.closest("[data-perm-grid]");
       if (grid) syncPresetState(grid);
     },
     listenerOptions

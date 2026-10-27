@@ -101,10 +101,12 @@ export function createWorkspace(page) {
     on(root, "click", (event) => {
       const tab = event.target.closest("[data-tab]");
       if (tab) return switchTab(tab.dataset.tab);
-      const range = event.target.closest('[data-seg="range"] [data-seg-value]');
-      if (range) return setRange(range.dataset.segValue);
       const action = event.target.closest("[data-ws-action]");
       if (action) void runAction(action.dataset.wsAction, action);
+    });
+    on(root, "change", (event) => {
+      const range = event.target.closest('[data-seg="range"] input[data-seg-value]');
+      if (range) setRange(range.value);
     });
     const updateRecovery = (event) => {
       if (event.target.matches("[data-watch-page-budget], [data-watch-resume-ack]")) {

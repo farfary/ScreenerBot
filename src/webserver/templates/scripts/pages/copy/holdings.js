@@ -12,7 +12,6 @@ import {
   price,
   priceSol,
   seconds,
-  segmented,
   signedPct,
   signedSolCell,
   skipKey,
@@ -23,6 +22,7 @@ import {
 } from "./format.js";
 import { ensureIdentities, openTokenDetails, tokenWithMint } from "./tokens.js";
 import { renderStateView } from "../../ui/state_view.js";
+import { renderSegmented } from "../../ui/segmented.js";
 
 const relative = (trigger, entry) =>
   trigger != null && entry > 0 ? (Number(trigger) / Number(entry) - 1) * 100 : null;
@@ -101,13 +101,13 @@ export function createHoldings(page, { rerender, showActivityFor }) {
   const confirming = new Set();
 
   function setup(root) {
+    on(root, "change", (event) => {
+      const input = event.target.closest('[data-seg="holdings-view"] input[data-seg-value]');
+      if (!input) return;
+      view = input.value;
+      rerender();
+    });
     on(root, "click", (event) => {
-      const seg = event.target.closest('[data-seg="holdings-view"] [data-seg-value]');
-      if (seg) {
-        view = seg.dataset.segValue;
-        rerender();
-        return;
-      }
       if (event.target.closest('[data-action="copy-open-positions"]')) {
         loadPage("positions");
         return;
@@ -320,20 +320,20 @@ export function createHoldings(page, { rerender, showActivityFor }) {
     );
     const views = [
       {
-        id: "open",
+        value: "open",
         label: I18n.t("copy-holdings-view-open", {
           count: live ? (ws.stats?.open_positions ?? 0) : open.length,
         }),
       },
       {
-        id: "closed",
+        value: "closed",
         label: I18n.t("copy-holdings-view-closed", { count: insights ? insights.rounds : "…" }),
       },
     ];
     const reset = live
       ? ""
       : `<button class="btn btn-ghost btn-sm copy-danger-action" type="button" data-holding-action="reset"><i class="icon-rotate-ccw" aria-hidden="true"></i> ${esc(I18n.t("copy-holdings-restart"))}</button>`;
-    const head = `<div class="copy-panel-head"><h3>${esc(I18n.t("copy-holdings-title"))}</h3><div class="copy-panel-tools">${segmented("holdings-view", views, view, esc, I18n.t("copy-holdings-view-label"))}${reset}</div></div>`;
+    const head = `<div class="copy-panel-head"><h3>${esc(I18n.t("copy-holdings-title"))}</h3><div class="copy-panel-tools">${renderSegmented({ name: "holdings-view", options: views, value: view, ariaLabel: I18n.t("copy-holdings-view-label") }, esc)}${reset}</div></div>`;
     if (view === "closed") return head + closedTable(insights, error);
     if (live) {
       return `${head}${renderStateView({

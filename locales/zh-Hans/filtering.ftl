@@ -133,9 +133,6 @@ filtering-source-llm-analysis = LLM 分析
 
 filtering-range-1h = 1H
 filtering-range-6h = 6H
-filtering-range-24h = 24H
-filtering-range-7d = 7D
-filtering-range-all = 全部
 filtering-range-all-time = 全部时间
 filtering-range-custom = 自定义
 filtering-range-now = 现在

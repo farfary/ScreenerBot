@@ -72,6 +72,12 @@ common-venue-direct-pool = Pool trực tiếp
 
 common-mode-paper = Thử nghiệm
 common-mode-live = Live
+common-range-24h = 24 giờ
+common-range-7d = 7 ngày
+common-range-30d = 30 ngày
+common-range-all = Tất cả
+common-range-label =
+    .aria-label = Khoảng ngày
 common-check-passed = đạt
 common-check-not-passed = chưa đạt
 common-arm-type-phrase = Nhập { $phrase } để xác nhận

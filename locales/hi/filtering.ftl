@@ -122,9 +122,6 @@ filtering-source-llm-analysis = LLM विश्लेषण
 
 filtering-range-1h = 1H
 filtering-range-6h = 6H
-filtering-range-24h = 24H
-filtering-range-7d = 7D
-filtering-range-all = सभी
 filtering-range-all-time = पूरा समय
 filtering-range-custom = कस्टम
 filtering-range-now = अभी

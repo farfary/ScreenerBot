@@ -9,7 +9,6 @@ import { sparkline } from "./charts.js";
 import {
   exitPolicyIssueHtml,
   pauseReasonShort,
-  segmented,
   signedSol,
   solNumber,
   stateLabel,
@@ -17,22 +16,23 @@ import {
   toneClass,
 } from "./format.js";
 import { tradingModeMarker } from "../../ui/trading_mode.js";
+import { renderSegmented } from "../../ui/segmented.js";
 
 const SORTS = [
   {
-    id: "pnl",
+    value: "pnl",
     get label() {
       return I18n.t("copy-sort-pnl");
     },
   },
   {
-    id: "state",
+    value: "state",
     get label() {
       return I18n.t("copy-sort-state");
     },
   },
   {
-    id: "name",
+    value: "name",
     get label() {
       return I18n.t("copy-sort-name");
     },
@@ -76,10 +76,10 @@ export function createTaskList(page) {
       const row = event.target.closest("[data-task-id]");
       if (row) page.select(Number(row.dataset.taskId));
     });
-    on($("#copy-list-sort"), "click", (event) => {
-      const button = event.target.closest("[data-seg-value]");
-      if (!button) return;
-      state.sort = button.dataset.segValue;
+    on($("#copy-list-sort"), "change", (event) => {
+      const input = event.target.closest("input[data-seg-value]");
+      if (!input) return;
+      state.sort = input.value;
       render();
     });
   }
@@ -123,7 +123,15 @@ export function createTaskList(page) {
     if (count) count.textContent = I18n.t("copy-list-count", { active, total: tasks.length });
     const sort = $("#copy-list-sort");
     if (sort)
-      sort.innerHTML = segmented("sort", SORTS, state.sort, esc, I18n.t("copy-list-sort-label"));
+      sort.innerHTML = renderSegmented(
+        {
+          name: "sort",
+          options: SORTS,
+          value: state.sort,
+          ariaLabel: I18n.t("copy-list-sort-label"),
+        },
+        esc
+      );
     const rows = $("#copy-list-rows");
     if (rows) rows.innerHTML = sorted(tasks, state.sort).map(row).join("");
     const compare = $("#copy-compare-open");

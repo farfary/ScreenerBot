@@ -146,12 +146,6 @@ copy-unrealized-unpriced =
     { $count ->
        *[other] 価格なしの保有 { $count }件
     }
-copy-range-24h = 24h
-copy-range-7d = 7d
-copy-range-30d = 30d
-copy-range-all = すべて
-copy-range-label =
-    .aria-label = 期間
 
 ## Page strip
 

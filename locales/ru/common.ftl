@@ -72,6 +72,12 @@ common-venue-direct-pool = Прямой пул
 
 common-mode-paper = Виртуальный
 common-mode-live = Боевой
+common-range-24h = 24 ч
+common-range-7d = 7 д
+common-range-30d = 30 д
+common-range-all = Все
+common-range-label =
+    .aria-label = Период
 common-check-passed = пройдена
 common-check-not-passed = не пройдена
 common-arm-type-phrase = Введите { $phrase } для подтверждения

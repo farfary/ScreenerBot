@@ -84,6 +84,14 @@ common-venue-direct-pool = Direct Pool
 # src/trader/paper/mode.rs.
 common-mode-paper = Paper
 common-mode-live = Live
+# The performance ranges every range choice offers, shortest first; ids come from
+# RANGE_OPTIONS in scripts/ui/segmented.js.
+common-range-24h = 24H
+common-range-7d = 7D
+common-range-30d = 30D
+common-range-all = All
+common-range-label =
+    .aria-label = Date range
 common-check-passed = passed
 common-check-not-passed = not passed
 common-arm-type-phrase = Type { $phrase } to confirm

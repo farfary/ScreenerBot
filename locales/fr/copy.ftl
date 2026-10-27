@@ -160,12 +160,6 @@ copy-unrealized-unpriced =
         [many] { $count } détentions sans prix
        *[other] { $count } détentions sans prix
     }
-copy-range-24h = 24 h
-copy-range-7d = 7 j
-copy-range-30d = 30 j
-copy-range-all = Tout
-copy-range-label =
-    .aria-label = Période
 
 ## Page strip (pages/copy.html, pages/copy/summary.js)
 

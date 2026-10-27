@@ -10,6 +10,9 @@
 import * as AppState from "../../core/app_state.js";
 import { escapeHtml } from "../../core/utils.js";
 import { formatNumber } from "../../core/format.js";
+import { renderSegmented, setSegmentedValue } from "../segmented.js";
+
+const PAGINATION_MODE_SEGMENT = "pagination-mode";
 
 export function applyServerPaginationMixin(DataTable) {
   const proto = DataTable.prototype;
@@ -58,73 +61,65 @@ export function applyServerPaginationMixin(DataTable) {
     }
 
     const modes = this._pagination.modes;
-    const scrollActive = this._serverPaginationMode === "scroll" ? "active" : "";
-    const pagesActive = this._serverPaginationMode === "pages" ? "active" : "";
-
-    const buttons = [];
-
+    const options = [];
     if (modes.includes("scroll")) {
-      buttons.push(`
-        <button type="button" class="dt-pagination-mode-btn ${scrollActive}" 
-                data-mode="scroll" title="${escapeHtml(I18n.t("table-pagination-mode-scroll-title"))}">
-          <i class="icon-arrow-down" aria-hidden="true"></i>
-          <span>${escapeHtml(I18n.t("table-pagination-mode-scroll"))}</span>
-        </button>
-      `);
+      options.push({
+        value: "scroll",
+        label: I18n.t("table-pagination-mode-scroll"),
+        icon: "icon-arrow-down",
+        tooltip: I18n.t("table-pagination-mode-scroll-title"),
+      });
     }
-
     if (modes.includes("pages")) {
-      buttons.push(`
-        <button type="button" class="dt-pagination-mode-btn ${pagesActive}" 
-                data-mode="pages" title="${escapeHtml(I18n.t("table-pagination-mode-pages-title"))}">
-          <i class="icon-layout-grid" aria-hidden="true"></i>
-          <span>${escapeHtml(I18n.t("table-pagination-mode-pages"))}</span>
-        </button>
-      `);
+      options.push({
+        value: "pages",
+        label: I18n.t("table-pagination-mode-pages"),
+        icon: "icon-layout-grid",
+        tooltip: I18n.t("table-pagination-mode-pages-title"),
+      });
     }
 
-    return `
-      <div class="dt-pagination-mode-toggle" role="group" aria-label="${escapeHtml(I18n.t("table-pagination-mode-group"))}">
-        ${buttons.join("")}
-      </div>
-    `;
+    return renderSegmented(
+      {
+        name: PAGINATION_MODE_SEGMENT,
+        options,
+        value: this._serverPaginationMode,
+        ariaLabel: I18n.t("table-pagination-mode-group"),
+      },
+      escapeHtml
+    );
+  };
+
+  /** The mode toggle in the toolbar, when the table offers both modes. */
+  proto._paginationModeToggle = function () {
+    return this.elements.toolbar?.querySelector(
+      `.segmented[data-seg="${PAGINATION_MODE_SEGMENT}"]`
+    );
   };
 
   /**
    * Attach event handlers for the pagination mode toggle
    */
   proto._attachModeToggleEvents = function () {
-    const toggle = this.elements.toolbar?.querySelector(".dt-pagination-mode-toggle");
+    const toggle = this._paginationModeToggle();
     if (!toggle) {
       return;
     }
 
-    const buttons = toggle.querySelectorAll(".dt-pagination-mode-btn");
-    buttons.forEach((btn) => {
-      const handler = (e) => {
-        const newMode = e.currentTarget.dataset.mode;
-        if (newMode && newMode !== this._serverPaginationMode) {
-          this._switchPaginationMode(newMode);
-        }
-      };
-      this._addEventListener(btn, "click", handler);
-    });
+    const handler = (event) => {
+      const newMode = event.target.closest("input[data-seg-value]")?.value;
+      if (newMode && newMode !== this._serverPaginationMode) {
+        this._switchPaginationMode(newMode);
+      }
+    };
+    this._addEventListener(toggle, "change", handler);
   };
 
   /**
-   * Update the mode toggle button UI states
+   * Update the mode toggle to the current mode
    */
   proto._updateModeToggleUI = function () {
-    const toggle = this.elements.toolbar?.querySelector(".dt-pagination-mode-toggle");
-    if (!toggle) {
-      return;
-    }
-
-    const buttons = toggle.querySelectorAll(".dt-pagination-mode-btn");
-    buttons.forEach((btn) => {
-      const mode = btn.dataset.mode;
-      btn.classList.toggle("active", mode === this._serverPaginationMode);
-    });
+    setSegmentedValue(this._paginationModeToggle(), this._serverPaginationMode);
   };
 
   /**

@@ -93,9 +93,6 @@ trader-toast-strategy-mode-failed = Mode trading tidak dapat diubah
 
 trader-stats-window =
     .aria-label = Jendela statistik
-trader-stats-window-day = 24H
-trader-stats-window-week = 7D
-trader-stats-window-month = 30D
 trader-stats-book =
     .aria-label = Buku trading
 trader-paper-run-since = Putaran paper sejak { $date }

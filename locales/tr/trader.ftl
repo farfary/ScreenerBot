@@ -91,9 +91,6 @@ trader-toast-strategy-mode-failed = İşlem modu değiştirilemedi
 
 trader-stats-window =
     .aria-label = İstatistik aralığı
-trader-stats-window-day = 24sa
-trader-stats-window-week = 7g
-trader-stats-window-month = 30g
 trader-stats-book =
     .aria-label = İşlem defteri
 trader-paper-run-since = { $date } tarihinden beri sanal dönem

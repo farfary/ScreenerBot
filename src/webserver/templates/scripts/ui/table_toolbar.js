@@ -41,6 +41,8 @@
  *             stat · text · group · divider · spacer · slot · custom
  */
 
+import { renderSegmented, setSegmentedCounts, setSegmentedValue } from "./segmented.js";
+
 function escapeHtml(value) {
   if (value === null || value === undefined) {
     return "";
@@ -467,39 +469,24 @@ function renderInput(item, stateControls = {}) {
   `;
 }
 
-function renderSegmented(item) {
-  const current = item.value ?? item.defaultValue ?? item.options?.[0]?.value;
-  const buttons = (item.options || [])
-    .map((opt) => {
-      const active = opt.value === current;
-      const icon = renderIconMarkup(opt.icon, "table-toolbar-seg__icon");
-      const label = opt.label
-        ? `<span class="table-toolbar-seg__label">${escapeHtml(opt.label)}</span>`
-        : "";
-      const tooltip = opt.tooltip || (!opt.label ? opt.value : "");
-      const titleAttr = tooltip ? ` title="${escapeHtml(tooltip)}"` : "";
-      const count =
-        opt.count !== undefined && opt.count !== null
-          ? `<span class="table-toolbar-seg__count">${escapeHtml(opt.count)}</span>`
-          : "";
-      return `<button type="button" class="table-toolbar-seg__btn${active ? " active" : ""}" data-seg-value="${escapeHtml(
-        opt.value
-      )}" aria-pressed="${active ? "true" : "false"}"${titleAttr}>${icon}${label}${count}</button>`;
-    })
-    .join("");
-
-  const label = item.label
-    ? `<span class="table-toolbar-field__label">${escapeHtml(item.label)}</span>`
-    : "";
-
-  return `
-    <div class="table-toolbar-seg-wrap" ${commonAttrs(item)}>
-      ${label}
-      <div class="table-toolbar-seg" role="group" data-seg-id="${escapeHtml(item.id)}"${
-        item.ariaLabel ? ` aria-label="${escapeHtml(item.ariaLabel)}"` : ""
-      }>${buttons}</div>
-    </div>
-  `;
+/** A `views` switch: the shared segmented control, addressable by the item id. */
+function renderSegmentedItem(item) {
+  const options = (item.options || []).map((opt) => ({
+    value: opt.value,
+    label: opt.label,
+    icon: resolveIconClass(opt.icon),
+    count: opt.count,
+    tooltip: opt.tooltip || (!opt.label ? String(opt.value) : ""),
+  }));
+  return `<div class="table-toolbar-field" ${commonAttrs(item)}>${renderSegmented(
+    {
+      name: item.id,
+      options,
+      value: item.value ?? item.defaultValue ?? item.options?.[0]?.value,
+      ariaLabel: item.ariaLabel || item.label || "",
+    },
+    escapeHtml
+  )}</div>`;
 }
 
 function buttonClassList(item, extra = []) {
@@ -622,7 +609,7 @@ function renderItem(item, state) {
     case "input":
       return renderInput(item, state.customControls || {});
     case "segmented":
-      return renderSegmented(item);
+      return renderSegmentedItem(item);
     case "button":
       return renderButton(item);
     case "link":
@@ -899,36 +886,15 @@ export class TableToolbarView {
 
   static setSegmentValue(root, segId, value) {
     if (!root || !segId) return;
-    const seg = root.querySelector(`.table-toolbar-seg[data-seg-id="${escapeSelector(segId)}"]`);
-    if (!seg) return;
-    seg.querySelectorAll(".table-toolbar-seg__btn").forEach((btn) => {
-      const active = btn.dataset.segValue === String(value);
-      btn.classList.toggle("active", active);
-      btn.setAttribute("aria-pressed", active ? "true" : "false");
-    });
+    setSegmentedValue(root.querySelector(`.segmented[data-seg="${escapeSelector(segId)}"]`), value);
   }
 
   static setSegmentCounts(root, segId, counts = {}) {
     if (!root || !segId) return;
-    const seg = root.querySelector(`.table-toolbar-seg[data-seg-id="${escapeSelector(segId)}"]`);
-    if (!seg) return;
-    Object.entries(counts).forEach(([value, count]) => {
-      const btn = seg.querySelector(
-        `.table-toolbar-seg__btn[data-seg-value="${escapeSelector(value)}"]`
-      );
-      if (!btn) return;
-      let countEl = btn.querySelector(".table-toolbar-seg__count");
-      if (count === null || count === undefined) {
-        countEl?.remove();
-        return;
-      }
-      if (!countEl) {
-        countEl = document.createElement("span");
-        countEl.className = "table-toolbar-seg__count";
-        btn.appendChild(countEl);
-      }
-      countEl.textContent = String(count);
-    });
+    setSegmentedCounts(
+      root.querySelector(`.segmented[data-seg="${escapeSelector(segId)}"]`),
+      counts
+    );
   }
 
   static updateIdentity(root, identity = {}) {

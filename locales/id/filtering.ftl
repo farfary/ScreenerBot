@@ -127,9 +127,6 @@ filtering-source-llm-analysis = Analisis LLM
 
 filtering-range-1h = 1H
 filtering-range-6h = 6H
-filtering-range-24h = 24H
-filtering-range-7d = 7D
-filtering-range-all = Semua
 filtering-range-all-time = Sepanjang Waktu
 filtering-range-custom = Kustom
 filtering-range-now = Sekarang

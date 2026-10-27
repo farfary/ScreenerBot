@@ -72,6 +72,12 @@ common-venue-direct-pool = Doğrudan havuz
 
 common-mode-paper = Sanal
 common-mode-live = Canlı
+common-range-24h = 24 sa
+common-range-7d = 7 g
+common-range-30d = 30 g
+common-range-all = Tümü
+common-range-label =
+    .aria-label = Tarih aralığı
 common-check-passed = geçti
 common-check-not-passed = geçmedi
 common-arm-type-phrase = Onaylamak için { $phrase } yazın

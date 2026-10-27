@@ -373,6 +373,7 @@ pub const EXPAND_TOGGLE_UI: &str = include_str!("templates/scripts/ui/expand_tog
 pub const STATE_VIEW_UI: &str = include_str!("templates/scripts/ui/state_view.js");
 pub const NOTICE_UI: &str = include_str!("templates/scripts/ui/notice.js");
 pub const METRIC_CARD_UI: &str = include_str!("templates/scripts/ui/metric_card.js");
+pub const SEGMENTED_UI: &str = include_str!("templates/scripts/ui/segmented.js");
 pub const TABLE_SETTINGS_DIALOG_UI: &str =
     include_str!("templates/scripts/ui/table_settings_dialog.js");
 pub const TOKEN_DETAILS_DIALOG_UI: &str =

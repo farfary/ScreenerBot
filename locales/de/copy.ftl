@@ -151,12 +151,6 @@ copy-unrealized-unpriced =
         [one] { $count } Bestand ohne Preis
        *[other] { $count } Bestände ohne Preis
     }
-copy-range-24h = 24 Std.
-copy-range-7d = 7 T.
-copy-range-30d = 30 T.
-copy-range-all = Alle
-copy-range-label =
-    .aria-label = Zeitraum
 
 ## Page strip
 

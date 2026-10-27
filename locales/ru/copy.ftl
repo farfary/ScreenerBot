@@ -161,12 +161,6 @@ copy-unrealized-unpriced =
         [many] { $count } активов без цены
        *[other] { $count } актива без цены
     }
-copy-range-24h = 24 ч
-copy-range-7d = 7 д
-copy-range-30d = 30 д
-copy-range-all = Все
-copy-range-label =
-    .aria-label = Период
 
 ## Page strip
 

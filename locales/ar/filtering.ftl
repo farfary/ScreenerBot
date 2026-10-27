@@ -133,9 +133,6 @@ filtering-source-llm-analysis = تحليل LLM
 
 filtering-range-1h = 1H
 filtering-range-6h = 6H
-filtering-range-24h = 24H
-filtering-range-7d = 7D
-filtering-range-all = الكل
 filtering-range-all-time = كل الأوقات
 filtering-range-custom = مخصص
 filtering-range-now = الآن

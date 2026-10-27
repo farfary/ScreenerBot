@@ -156,12 +156,6 @@ copy-unrealized-unpriced =
         [many] { $count } tenencias sin precio
        *[other] { $count } tenencias sin precio
     }
-copy-range-24h = 24 h
-copy-range-7d = 7 d
-copy-range-30d = 30 d
-copy-range-all = Todo
-copy-range-label =
-    .aria-label = Rango de fechas
 
 ## Page strip
 

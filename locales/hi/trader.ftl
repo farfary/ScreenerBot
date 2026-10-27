@@ -91,9 +91,6 @@ trader-toast-strategy-mode-failed = ट्रेडिंग मोड नही
 
 trader-stats-window =
     .aria-label = आंकड़ों की अवधि
-trader-stats-window-day = 24H
-trader-stats-window-week = 7D
-trader-stats-window-month = 30D
 trader-stats-book =
     .aria-label = ट्रेडिंग बुक
 trader-paper-run-since = { $date } से पेपर रन

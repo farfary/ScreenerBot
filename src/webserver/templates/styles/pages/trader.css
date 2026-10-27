@@ -295,56 +295,12 @@
   border: 1px solid var(--primary-alpha-20);
 }
 
-/* The realized window is a fixed choice set, so it reads as one segmented track
-   rather than a row of competing buttons. */
-.stats-period-seg {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  padding: 2px;
-  background: var(--bg-primary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  flex-shrink: 0;
-}
-
-.stats-period-btn {
-  padding: 0.25rem 0.625rem;
-  background: transparent;
-  border: none;
-  border-radius: var(--radius-sm);
-  color: var(--text-secondary);
-  font-family: var(--font-data);
-  font-size: 0.7rem;
-  font-weight: 600;
-  letter-spacing: 0.03em;
-  cursor: pointer;
-  transition:
-    color var(--transition-fast),
-    background var(--transition-fast);
-}
-
-.stats-period-btn:hover {
-  color: var(--text-primary);
-  background: var(--bg-card-hover);
-}
-
-.stats-period-btn.active {
-  color: var(--text-primary);
-  background: var(--bg-secondary);
-}
-
 /* The book switch and the window switch share the section header row. */
 .stats-header-controls {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--spacing-sm);
-}
-
-.stats-period-btn i {
-  margin-inline-end: 0.25rem;
-  vertical-align: -0.1em;
 }
 
 /* The paper run the Paper book's figures come from, with its reset. */
@@ -828,7 +784,6 @@
     align-items: flex-start;
   }
 
-  .stats-period-seg,
   .stats-header-controls {
     align-self: flex-start;
   }

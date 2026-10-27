@@ -55,7 +55,7 @@ export function createEditor(page) {
       const button = event.target.closest("[data-editor-step]");
       if (button) goTo(Number(button.dataset.editorStep));
     });
-    on(body(), "click", onSegment);
+    on(body(), "change", onSegment);
     on(body(), "click", onResume);
     on(body(), "input", onInput);
     on(body(), "change", onInput);
@@ -322,11 +322,11 @@ export function createEditor(page) {
   }
 
   function onSegment(event) {
-    const button = event.target.closest("[data-seg-value]");
-    const group = button?.closest("[data-seg]");
-    if (!button || !group) return;
+    const input = event.target.closest("input[data-seg-value]");
+    const group = input?.closest("[data-seg]");
+    if (!input || !group) return;
     readStep();
-    const value = button.dataset.segValue;
+    const value = input.value;
     const name = group.dataset.seg;
     if (name === "sizing-kind" && value !== draft.sizing.kind) {
       sizingMemory[draft.sizing.kind] =

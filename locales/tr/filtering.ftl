@@ -122,9 +122,6 @@ filtering-source-llm-analysis = LLM analizi
 
 filtering-range-1h = 1sa
 filtering-range-6h = 6sa
-filtering-range-24h = 24sa
-filtering-range-7d = 7g
-filtering-range-all = Tümü
 filtering-range-all-time = Tüm zamanlar
 filtering-range-custom = Özel
 filtering-range-now = Şimdi

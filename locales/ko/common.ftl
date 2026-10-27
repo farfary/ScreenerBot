@@ -72,6 +72,12 @@ common-venue-direct-pool = 직접 풀
 
 common-mode-paper = 모의
 common-mode-live = 실거래
+common-range-24h = 24시간
+common-range-7d = 7일
+common-range-30d = 30일
+common-range-all = 전체
+common-range-label =
+    .aria-label = 기간
 common-check-passed = 통과
 common-check-not-passed = 미통과
 common-arm-type-phrase = 확인하려면 { $phrase }을(를) 입력하세요

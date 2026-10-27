@@ -6,7 +6,6 @@
 import { formatNumber } from "../../core/format.js";
 import { barList, pnlCurve } from "./charts.js";
 import {
-  RANGES,
   dateTime,
   definitionRows,
   duration,
@@ -17,7 +16,6 @@ import {
   pct,
   pnlTone,
   seconds,
-  segmented,
   signedSol,
   signedSolCell,
   skipLabel,
@@ -31,10 +29,11 @@ import { metricCard } from "../../ui/metric_card.js";
 import { tradingModeLabel } from "../../ui/trading_mode.js";
 import { readinessList } from "../../ui/arm_live_gate.js";
 import { renderStateView } from "../../ui/state_view.js";
+import { RANGE_OPTIONS, renderSegmented } from "../../ui/segmented.js";
 import { ensureIdentities, tokenWithMint } from "./tokens.js";
 
 export function rangeHead(title, range, esc) {
-  return `<div class="copy-panel-head"><h3>${esc(title)}</h3>${segmented("range", RANGES, range, esc, I18n.attr("copy-range-label", "aria-label"))}</div>`;
+  return `<div class="copy-panel-head"><h3>${esc(title)}</h3>${renderSegmented({ name: "range", options: RANGE_OPTIONS, value: range, ariaLabel: I18n.attr("common-range-label", "aria-label") }, esc)}</div>`;
 }
 
 /** Results body shared by the tabs that read insights: data, error or loading. */

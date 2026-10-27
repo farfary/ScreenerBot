@@ -133,9 +133,6 @@ filtering-source-llm-analysis = Análise por LLM
 
 filtering-range-1h = 1H
 filtering-range-6h = 6H
-filtering-range-24h = 24H
-filtering-range-7d = 7D
-filtering-range-all = Tudo
 filtering-range-all-time = Todo o período
 filtering-range-custom = Personalizado
 filtering-range-now = Agora

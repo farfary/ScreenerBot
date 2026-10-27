@@ -72,6 +72,12 @@ common-venue-direct-pool = Прямий пул
 
 common-mode-paper = Віртуальний
 common-mode-live = Реальний
+common-range-24h = 24 год
+common-range-7d = 7 д
+common-range-30d = 30 д
+common-range-all = Усі
+common-range-label =
+    .aria-label = Діапазон дат
 common-check-passed = пройдено
 common-check-not-passed = не пройдено
 common-arm-type-phrase = Введіть { $phrase } для підтвердження

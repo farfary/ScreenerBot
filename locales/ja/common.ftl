@@ -72,6 +72,12 @@ common-venue-direct-pool = ダイレクトプール
 
 common-mode-paper = ペーパー
 common-mode-live = ライブ
+common-range-24h = 24時間
+common-range-7d = 7日
+common-range-30d = 30日
+common-range-all = すべて
+common-range-label =
+    .aria-label = 期間
 common-check-passed = 合格
 common-check-not-passed = 不合格
 common-arm-type-phrase = 確認のため { $phrase } と入力してください

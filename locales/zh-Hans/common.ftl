@@ -72,6 +72,12 @@ common-venue-direct-pool = 直接流动性池
 
 common-mode-paper = 模拟
 common-mode-live = 实盘
+common-range-24h = 24小时
+common-range-7d = 7天
+common-range-30d = 30天
+common-range-all = 全部
+common-range-label =
+    .aria-label = 日期范围
 common-check-passed = 已通过
 common-check-not-passed = 未通过
 common-arm-type-phrase = 输入 { $phrase } 以确认

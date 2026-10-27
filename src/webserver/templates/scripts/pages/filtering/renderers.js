@@ -13,6 +13,7 @@ import { impactLabel } from "../config/field_text.js";
 import { metricCard } from "../../ui/metric_card.js";
 import { renderStateView } from "../../ui/state_view.js";
 import { renderTokenLogo } from "../../ui/token_identity.js";
+import { renderSegmented } from "../../ui/segmented.js";
 import {
   buildConfigGroups,
   formatTimestampForInput,
@@ -32,6 +33,9 @@ import {
 
 let reasonClickBound = false;
 let signInClickBound = false;
+let timeRangeChangeBound = false;
+
+const TIME_RANGE_SEGMENT = "filtering-range";
 
 /**
  * Create filtering renderers with access to state and dependencies
@@ -63,6 +67,18 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
       void import("../../ui/settings_dialog.js").then(({ showSettingsDialog }) =>
         showSettingsDialog({ tab: "account" })
       );
+    });
+  }
+
+  // The analytics time range preset. Bound once per document, like the reason rows.
+  if (!timeRangeChangeBound) {
+    timeRangeChangeBound = true;
+    document.addEventListener("change", (event) => {
+      const input =
+        event.target instanceof Element
+          ? event.target.closest(`[data-seg="${TIME_RANGE_SEGMENT}"] input[data-seg-value]`)
+          : null;
+      if (input) window.filteringPage.setTimeRangePreset(input.value);
     });
   }
 
@@ -346,14 +362,18 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
     // Time range filter (no title header — data only)
     const headerHtml = `
     <div class="time-range-filter">
-      <div class="time-range-presets">
-        ${Object.keys(TIME_RANGE_PRESETS)
-          .map(
-            (preset) =>
-              `<button class="time-preset-btn ${state.timeRange.preset === preset ? "active" : ""}" onclick="window.filteringPage.setTimeRangePreset('${preset}')">${Utils.escapeHtml(I18n.label(TIME_RANGE_LABELS, preset))}</button>`
-          )
-          .join("")}
-      </div>
+      ${renderSegmented(
+        {
+          name: TIME_RANGE_SEGMENT,
+          options: Object.keys(TIME_RANGE_PRESETS).map((preset) => ({
+            value: preset,
+            label: I18n.label(TIME_RANGE_LABELS, preset),
+          })),
+          value: state.timeRange.preset,
+          ariaLabel: I18n.attr("common-range-label", "aria-label"),
+        },
+        Utils.escapeHtml
+      )}
       <div class="time-range-custom">
         <div class="custom-range-toggle ${state.timeRange.preset === "custom" ? "active" : ""}" onclick="window.filteringPage.toggleCustomRange()">
           <i class="icon-calendar"></i> ${Utils.escapeHtml(I18n.t("filtering-range-custom"))}

@@ -157,7 +157,7 @@
   color: var(--text-muted);
 }
 
-.copy-field > .copy-seg {
+.copy-field > .segmented {
   align-self: flex-start;
 }
 

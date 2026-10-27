@@ -109,9 +109,6 @@ trader-toast-strategy-mode-failed = تغییر حالت معامله ممکن ن
 
 trader-stats-window =
     .aria-label = بازه آمار
-trader-stats-window-day = 24H
-trader-stats-window-week = 7D
-trader-stats-window-month = 30D
 trader-stats-book =
     .aria-label = دفتر معاملات
 trader-paper-run-since = دوره آزمایشی از { $date }

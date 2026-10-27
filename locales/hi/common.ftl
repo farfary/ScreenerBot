@@ -74,6 +74,12 @@ common-venue-direct-pool = डायरेक्ट पूल
 
 common-mode-paper = पेपर
 common-mode-live = लाइव
+common-range-24h = 24 घंटे
+common-range-7d = 7 दिन
+common-range-30d = 30 दिन
+common-range-all = सभी
+common-range-label =
+    .aria-label = तारीख़ सीमा
 common-check-passed = पास
 common-check-not-passed = पास नहीं
 common-arm-type-phrase = पुष्टि के लिए { $phrase } टाइप करें

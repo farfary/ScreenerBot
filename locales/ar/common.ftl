@@ -72,6 +72,12 @@ common-venue-direct-pool = مجمع سيولة مباشر
 
 common-mode-paper = تجريبي
 common-mode-live = حي
+common-range-24h = 24 ساعة
+common-range-7d = 7 أيام
+common-range-30d = 30 يومًا
+common-range-all = الكل
+common-range-label =
+    .aria-label = النطاق الزمني
 common-check-passed = ناجح
 common-check-not-passed = غير ناجح
 common-arm-type-phrase = اكتب { $phrase } للتأكيد

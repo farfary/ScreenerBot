@@ -72,6 +72,12 @@ common-venue-direct-pool = Direkter Pool
 
 common-mode-paper = Paper
 common-mode-live = Live
+common-range-24h = 24 Std.
+common-range-7d = 7 T.
+common-range-30d = 30 T.
+common-range-all = Alle
+common-range-label =
+    .aria-label = Zeitraum
 common-check-passed = bestanden
 common-check-not-passed = nicht bestanden
 common-arm-type-phrase = Zum Bestätigen { $phrase } eingeben

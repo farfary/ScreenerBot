@@ -169,12 +169,6 @@ copy-unrealized-unpriced =
         [one] { $count } holding without a price
        *[other] { $count } holdings without a price
     }
-copy-range-24h = 24h
-copy-range-7d = 7d
-copy-range-30d = 30d
-copy-range-all = All
-copy-range-label =
-    .aria-label = Date range
 
 ## Page strip (pages/copy.html, pages/copy/summary.js)
 

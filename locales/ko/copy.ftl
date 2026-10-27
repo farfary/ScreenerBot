@@ -148,12 +148,6 @@ copy-unrealized-unpriced =
     { $count ->
        *[other] 가격 없는 보유 수량 { $count }건
     }
-copy-range-24h = 24h
-copy-range-7d = 7d
-copy-range-30d = 30d
-copy-range-all = 전체
-copy-range-label =
-    .aria-label = 기간
 
 ## Page strip (pages/copy.html, pages/copy/summary.js)
 

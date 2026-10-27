@@ -18,7 +18,7 @@
  * - A number field's unit sits inside the field's box, in the value's data face.
  * - The shared prose surfaces (select trigger, menu and search, table search and
  *   menus, row action items, every table cell, the strategy condition summary, the
- *   position header's sub-lines, the Copy Trading segmented choices) declare the UI face. A table cell reaches a data
+ *   position header's sub-lines, the segmented control's options) declare the UI face. A table cell reaches a data
  *   face only through its numeric column type or a machine-value class.
  *
  * Run with `npm run test:js`.
@@ -98,7 +98,7 @@ test("shared prose surfaces declare the UI face", () => {
     "ui/data_table/core.css": [".data-table td"],
     "pages/strategies/condition_cards.css": [".summary-content"],
     "ui/position_details/header.css": [".position-details-dialog .header-metric-sub"],
-    "pages/copy.css": [".copy-seg-btn"],
+    "components/form_controls.css": [".segmented-label"],
   };
   const found = [];
   for (const [path, selectors] of Object.entries(owners)) {

@@ -109,9 +109,6 @@ trader-toast-strategy-mode-failed = Could not change the trading mode
 
 trader-stats-window =
     .aria-label = Statistics window
-trader-stats-window-day = 24H
-trader-stats-window-week = 7D
-trader-stats-window-month = 30D
 trader-stats-book =
     .aria-label = Trading book
 trader-paper-run-since = Paper run since { $date }

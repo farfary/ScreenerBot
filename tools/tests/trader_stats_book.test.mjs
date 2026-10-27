@@ -9,7 +9,8 @@
  *   balance, cash, open cost and unrealized result, with the bare Paper glyph inline.
  * - A figure the account does not carry reads as a dash, never as a zero.
  * - The card offers the reset of the paper run.
- * - The Stats tab asks for the book it shows and switches it from the page's own control.
+ * - The Stats tab asks for the book and window it shows, and switches both from the shared
+ *   segmented control.
  *
  * Run with `npm run test:js`.
  */
@@ -76,12 +77,21 @@ test("a figure the account does not carry reads as a dash", () => {
   assert.deepEqual(Object.values(empty), ["—", "—", "—", "—"]);
 });
 
-test("the Stats tab asks for the book it shows", () => {
+test("the Stats tab asks for the book and window its switches show", () => {
   const page = read("scripts/pages/trader.js");
   assert.match(page, /\/api\/trader\/stats\?window=\$\{statsWindow\}&book=\$\{statsBook\}/);
   assert.match(page, /let statsBook = "live";/);
+  assert.match(page, /let statsWindow = "30d";/);
+  // Both switches are the shared segmented control, painted by the page into empty
+  // placeholders: the book options name each mode with its glyph, the window options
+  // are the one range set.
   const markup = read("pages/trader.html");
-  const seg = markup.slice(markup.indexOf('id="stats-book"'), markup.indexOf('id="stats-period"'));
-  assert.match(seg, /data-book="live"[\s\S]*class="stats-period-btn active"|class="stats-period-btn active"\s+data-book="live"/);
-  assert.match(seg, /data-book="paper">\s*<i class="icon-test-tube-diagonal" aria-hidden="true"><\/i>/);
+  assert.match(markup, /<div id="stats-book"><\/div>/);
+  assert.match(markup, /<div id="stats-period"><\/div>/);
+  const paint = page.slice(page.indexOf("function renderStatsControls()"));
+  assert.match(paint, /\$\("#stats-book"\)[\s\S]*?renderSegmented\(/);
+  assert.match(paint, /label: tradingModeLabel\(mode\),\s*icon: TRADING_MODE_ICONS\[mode\]/);
+  assert.match(paint, /\$\("#stats-period"\)[\s\S]*?options: RANGE_OPTIONS/);
+  assert.match(page, /\$\("#stats-book"\), "change"/);
+  assert.match(page, /\$\("#stats-period"\), "change"/);
 });

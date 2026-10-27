@@ -72,6 +72,12 @@ common-venue-direct-pool = Pool langsung
 
 common-mode-paper = Paper
 common-mode-live = Live
+common-range-24h = 24 jam
+common-range-7d = 7 hari
+common-range-30d = 30 hari
+common-range-all = Semua
+common-range-label =
+    .aria-label = Rentang tanggal
 common-check-passed = lolos
 common-check-not-passed = belum lolos
 common-arm-type-phrase = Ketik { $phrase } untuk mengonfirmasi

@@ -91,9 +91,6 @@ trader-toast-strategy-mode-failed = Не удалось изменить реж�
 
 trader-stats-window =
     .aria-label = Период статистики
-trader-stats-window-day = 24 ч
-trader-stats-window-week = 7 д
-trader-stats-window-month = 30 д
 trader-stats-book =
     .aria-label = Торговый портфель
 trader-paper-run-since = Виртуальный прогон с { $date }

@@ -161,12 +161,6 @@ copy-unrealized-unpriced =
         [many] { $count } утримуваних токенів без ціни
        *[other] { $count } утримуваного токена без ціни
     }
-copy-range-24h = 24 год
-copy-range-7d = 7 д
-copy-range-30d = 30 д
-copy-range-all = Усе
-copy-range-label =
-    .aria-label = Діапазон дат
 
 ## Page strip
 
