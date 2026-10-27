@@ -20,7 +20,7 @@
  *   one strip does not mix "+10%" with "+32.0%" or print "1.0000 SOL".
  * - A config card never draws more columns than it has field groups, so two lists
  *   (How DCA Works, Risk Warnings) share the width instead of leaving a third empty.
- * - A field's control (a number input or a switch such as Allow Partial Exit) sits
+ * - A field's control (a number input or a switch such as Sell Part First) sits
  *   under its hint in the control row, never in the title row beside the label, so a
  *   switch field leaves no empty track under its hint.
  * - Every rule card's worked example carries the one section title, "How It Works".
@@ -28,7 +28,7 @@
  *   locale, and its duration field says what the duration does.
  * - Every sub-tab but the full-bleed strategy editor keeps the Stats tab's side gutter,
  *   and a newly chosen sub-tab opens at its top.
- * - A switch field (Allow Partial Exit) sits in the same frame as the number fields
+ * - A switch field (Sell Part First) sits in the same frame as the number fields
  *   beside it.
  * - A best or worst trade that is not known reads as one dash, never "— —".
  * - Each config card has its own title glyph, and no field borrows another card's
@@ -309,7 +309,7 @@ test("a newly chosen sub-tab opens at its top", async () => {
   assert.equal(await page.$eval("#trader-content", (el) => el.scrollTop), 0);
 });
 
-test("Allow Partial Exit sits in the frame of the number fields beside it", async () => {
+test("Sell Part First sits in the frame of the number fields beside it", async () => {
   await page.click('#subTabsContainer [data-tab-id="stop-loss"]');
   await page.locator("#stop-loss-tab").waitFor();
   const frame = (selector) =>

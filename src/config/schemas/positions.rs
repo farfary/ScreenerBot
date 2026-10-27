@@ -48,59 +48,5 @@ config_struct! {
             category: ConfigCategory::LossDetection,
         })]
         loss_blacklist_copy_origins: bool = false,
-
-        // ==================== PARTIAL EXIT CONFIGURATION ====================
-        #[metadata(field_metadata! {
-            impact: ConfigImpact::High,
-            category: ConfigCategory::PartialExit,
-        })]
-        partial_exit_enabled: bool = false,
-        #[metadata(field_metadata! {
-            min: 10,
-            max: 90,
-            step: 5,
-            impact: ConfigImpact::Medium,
-            category: ConfigCategory::PartialExit,
-        })]
-        partial_exit_default_pct: f64 = 50.0,
-        #[metadata(field_metadata! {
-            min: 1,
-            max: 50,
-            step: 1,
-            impact: ConfigImpact::Low,
-            category: ConfigCategory::PartialExit,
-        })]
-        partial_exit_min_pct: f64 = 10.0,
-        #[metadata(field_metadata! {
-            min: 50,
-            max: 99,
-            step: 1,
-            impact: ConfigImpact::Low,
-            category: ConfigCategory::PartialExit,
-        })]
-        partial_exit_max_pct: f64 = 90.0,
-
-        // ==================== TRAILING STOP CONFIGURATION ====================
-        #[metadata(field_metadata! {
-            impact: ConfigImpact::High,
-            category: ConfigCategory::TrailingStop,
-        })]
-        trailing_stop_enabled: bool = false,
-        #[metadata(field_metadata! {
-            min: 0,
-            max: 100,
-            step: 1,
-            impact: ConfigImpact::High,
-            category: ConfigCategory::TrailingStop,
-        })]
-        trailing_stop_activation_pct: f64 = 10.0,
-        #[metadata(field_metadata! {
-            min: 1,
-            max: 50,
-            step: 1,
-            impact: ConfigImpact::Critical,
-            category: ConfigCategory::TrailingStop,
-        })]
-        trailing_stop_distance_pct: f64 = 5.0,
     }
 }

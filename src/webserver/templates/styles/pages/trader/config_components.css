@@ -359,6 +359,13 @@
   margin: 0 0.125rem;
 }
 
+/* A field or example step that depends on a switch leaves the layout while the
+   switch is off; these rules outrank the grid and flex displays above. */
+.config-card > .config-group[hidden],
+.timeline-step[hidden] {
+  display: none;
+}
+
 .example-summary {
   display: flex;
   gap: 0.5rem;

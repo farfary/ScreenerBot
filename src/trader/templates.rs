@@ -32,7 +32,7 @@ pub struct TemplateConfig {
     pub time_override_loss_threshold_pct: f64,
 }
 
-/// Apply a template to the positions and trader config and persist it.
+/// Apply a template to the trader config and persist it.
 pub fn apply_template(template_id: &str) -> Result<Template> {
     let template = all_templates()
         .into_iter()
@@ -43,9 +43,9 @@ pub fn apply_template(template_id: &str) -> Result<Template> {
     let cfg = template.config.clone();
     update_config_section(
         |config| {
-            config.positions.trailing_stop_enabled = cfg.trailing_stop_enabled;
-            config.positions.trailing_stop_activation_pct = cfg.trailing_stop_activation_pct;
-            config.positions.trailing_stop_distance_pct = cfg.trailing_stop_distance_pct;
+            config.trader.trailing_stop_enabled = cfg.trailing_stop_enabled;
+            config.trader.trailing_stop_activation_pct = cfg.trailing_stop_activation_pct;
+            config.trader.trailing_stop_distance_pct = cfg.trailing_stop_distance_pct;
             config.trader.roi_exit_enabled = cfg.roi_exit_enabled;
             config.trader.roi_target_percent = cfg.roi_target_pct;
             config.trader.time_override_enabled = cfg.time_override_enabled;

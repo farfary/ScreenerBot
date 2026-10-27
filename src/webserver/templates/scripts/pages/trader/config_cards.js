@@ -28,7 +28,7 @@ export function displayValue(type, stored) {
 
 // Declarative spec: which DOM fields belong to which card, their config section
 // and key, and how to coerce the input value into the saved payload. Keys/types
-// mirror the backend config schema (trader / positions sections). `hint` gives this
+// mirror the backend config schema (trader section). `hint` gives this
 // page's own hint for a field shown differently from the Configuration page.
 const CARD_SPECS = [
   {
@@ -37,11 +37,12 @@ const CARD_SPECS = [
       { id: "stop-loss-enabled", key: "stop_loss_enabled", type: "bool", autoSave: true },
       { id: "stop-loss-threshold", key: "stop_loss_threshold_pct", type: "float" },
       { id: "stop-loss-allow-partial", key: "stop_loss_allow_partial", type: "bool" },
+      { id: "stop-loss-partial-pct", key: "stop_loss_partial_pct", type: "float" },
       { id: "stop-loss-min-hold", key: "stop_loss_min_hold_seconds", type: "int" },
     ],
   },
   {
-    section: "positions",
+    section: "trader",
     fields: [
       { id: "trailing-enabled", key: "trailing_stop_enabled", type: "bool", autoSave: true },
       { id: "trail-activation", key: "trailing_stop_activation_pct", type: "float" },

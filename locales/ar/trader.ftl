@@ -239,7 +239,11 @@ trader-stop-loss-hold-immediate = فوري
 trader-stop-loss-hold-delay = تأخير { $span }
 trader-stop-loss-price-falls = هبوط السعر
 trader-stop-loss-threshold-reached = تم بلوغ الحد
-trader-stop-loss-partial = الخروج الجزئي مسموح
+# $part is a formatted percentage of the position.
+trader-stop-loss-sell-part = بيع { $part }
+trader-stop-loss-part-of-position = جزء من المركز
+trader-stop-loss-sell-rest = بيع الباقي
+trader-stop-loss-still-below = لا يزال دون مستوى الوقف
 # $loss is the loss percentage with its sign.
 trader-stop-loss-summary = تم حصر الخسارة عند <strong>{ $loss }</strong>
 trader-stop-loss-note = <strong>ملاحظة:</strong> يحميك وقف الخسارة من الخسائر الأكبر عبر الخروج المبكر

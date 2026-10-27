@@ -775,31 +775,12 @@ config-positions-loss-blacklist-enabled = हानि पर ब्लैकल
 config-positions-loss-blacklist-threshold-pct = हानि ब्लैकलिस्ट सीमा
     .hint = जिन टोकन में घाटा इस % से ज़्यादा हो उन्हें ब्लैकलिस्ट करें (-15 = 15%+ गिरने पर ब्लैकलिस्ट)
     .unit = %
-config-positions-partial-exit-default-pct = डिफ़ॉल्ट आंशिक एग्ज़िट
-    .hint = आंशिक एग्ज़िट पर बेचने का डिफ़ॉल्ट प्रतिशत
-    .unit = %
-config-positions-partial-exit-enabled = आंशिक एग्ज़िट चालू करें
-    .hint = पूरी या कुछ नहीं के बजाय पोज़िशन का कुछ हिस्सा बेचने दें
-config-positions-partial-exit-max-pct = अधिकतम आंशिक एग्ज़िट
-    .hint = आंशिक एग्ज़िट के लिए अनुमत अधिकतम प्रतिशत
-    .unit = %
-config-positions-partial-exit-min-pct = न्यूनतम आंशिक एग्ज़िट
-    .hint = आंशिक एग्ज़िट के लिए अनुमत न्यूनतम प्रतिशत
-    .unit = %
 config-positions-position-open-cooldown-secs = पोज़िशन खोलने का कूलडाउन
     .hint = कोई भी पोज़िशन खोलने के बीच सेकंड (तेज़ बर्स्ट रोकता है)
     .unit = से
 config-positions-profit-extra-needed-sol = लाभ अतिरिक्त बफ़र
     .hint = लाभ गणना के लिए अतिरिक्त SOL (प्रायोरिटी फ़ीस)
     .unit = SOL
-config-positions-trailing-stop-activation-pct = ट्रेलिंग स्टॉप सक्रियण
-    .hint = इतने लाभ % के बाद ट्रेलिंग स्टॉप सक्रिय करें (10 = +10% पर सक्रिय)
-    .unit = %
-config-positions-trailing-stop-distance-pct = ट्रेलिंग स्टॉप दूरी
-    .hint = पीक से कितना नीचे ट्रेल करें (5 = कीमत पीक से 5% गिरे तो एग्ज़िट)
-    .unit = %
-config-positions-trailing-stop-enabled = ट्रेलिंग स्टॉप चालू करें
-    .hint = लाभ सीमा के बाद ट्रेलिंग स्टॉप-लॉस चालू करें
 
 config-referral-code = रेफ़रल कोड
     .hint = वैकल्पिक। यदि किसी ने आपको { -brand } से परिचित कराया है, तो उनका कोड उन्हें आपकी दी गई फ़ीस का एक हिस्सा दिलाता है — आपको कोई अतिरिक्त लागत नहीं। खाली छोड़ें तो इस मशीन से कुछ भी नहीं भेजा जाता।
@@ -1073,13 +1054,16 @@ config-trader-slippage-exit-retry-steps-pct = एग्ज़िट रीट्
 config-trader-slippage-quote-default-pct = डिफ़ॉल्ट स्लिपेज
     .hint = 1% सख़्त, अस्थिर टोकन के लिए 3-5%
     .unit = %
-config-trader-stop-loss-allow-partial = आंशिक एग्ज़िट की अनुमति
-    .hint = स्टॉप लॉस पर पूरी पोज़िशन बंद करने के बजाय आंशिक एग्ज़िट की अनुमति दें
+config-trader-stop-loss-allow-partial = पहले हिस्सा बेचें
+    .hint = स्टॉप लॉस ट्रिगर होने पर पहले पोज़िशन का एक हिस्सा बेचें, फिर कीमत अब भी स्टॉप से नीचे हो तो बाकी बेचें
 config-trader-stop-loss-enabled = स्टॉप लॉस चालू करें
     .hint = घाटा सीमा से ऊपर जाने पर अपने आप एग्ज़िट चालू करें (समय एग्ज़िट के विपरीत, तुरंत एग्ज़िट करता है)
 config-trader-stop-loss-min-hold-seconds = न्यूनतम होल्ड टाइम
     .hint = स्टॉप लॉस ट्रिगर होने से पहले होल्ड करने के न्यूनतम सेकंड (0 = तुरंत)
     .unit = से
+config-trader-stop-loss-partial-pct = बेचने वाला हिस्सा
+    .hint = पहली स्टॉप लॉस बिक्री में बेचा जाने वाला पोज़िशन का हिस्सा
+    .unit = %
 config-trader-stop-loss-threshold-pct = स्टॉप लॉस सीमा
     .hint = घाटा इस % से ऊपर जाने पर एग्ज़िट करें (50 = -50% पर एग्ज़िट)
     .unit = %
@@ -1095,6 +1079,14 @@ config-trader-time-override-unit = समय एग्ज़िट इकाई
 config-trader-trade-size-sol = ट्रेड साइज़
     .hint = प्रति पोज़िशन SOL
     .unit = SOL
+config-trader-trailing-stop-activation-pct = ट्रेलिंग स्टॉप सक्रियण
+    .hint = इतने लाभ % के बाद ट्रेलिंग स्टॉप सक्रिय करें (10 = +10% पर सक्रिय)
+    .unit = %
+config-trader-trailing-stop-distance-pct = ट्रेलिंग स्टॉप दूरी
+    .hint = पीक से कितना नीचे ट्रेल करें (5 = कीमत पीक से 5% गिरे तो एग्ज़िट)
+    .unit = %
+config-trader-trailing-stop-enabled = ट्रेलिंग स्टॉप चालू करें
+    .hint = लाभ सीमा के बाद ट्रेलिंग स्टॉप-लॉस चालू करें
 
 config-updates-auto-check = अपडेट जाँचें
     .hint = समय-समय पर screenerbot.io से पूछें कि कोई नया रिलीज़ प्रकाशित हुआ है या नहीं
@@ -1259,7 +1251,6 @@ config-category-monitoring = मॉनिटरिंग
 config-category-notifications = नोटिफ़िकेशन
 config-category-ollama-settings = { -ollama } सेटिंग्स
 config-category-optimization = ऑप्टिमाइज़ेशन
-config-category-partial-exit = आंशिक एग्ज़िट
 config-category-performance = परफ़ॉर्मेंस
 config-category-pool-metrics = पूल मेट्रिक्स
 config-category-price-change = प्राइस बदलाव

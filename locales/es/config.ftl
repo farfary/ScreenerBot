@@ -808,31 +808,12 @@ config-positions-loss-blacklist-enabled = Activar lista negra por pérdidas
 config-positions-loss-blacklist-threshold-pct = Umbral de la lista negra por pérdidas
     .hint = Añade a la lista negra los tokens con pérdidas superiores a este % (-15 = lista negra si cae un 15 % o más)
     .unit = %
-config-positions-partial-exit-default-pct = Salida parcial predeterminada
-    .hint = Porcentaje predeterminado que se vende en las salidas parciales
-    .unit = %
-config-positions-partial-exit-enabled = Activar salidas parciales
-    .hint = Permite vender partes de una posición en lugar de todo o nada
-config-positions-partial-exit-max-pct = Salida parcial máxima
-    .hint = Porcentaje máximo permitido en las salidas parciales
-    .unit = %
-config-positions-partial-exit-min-pct = Salida parcial mínima
-    .hint = Porcentaje mínimo permitido en las salidas parciales
-    .unit = %
 config-positions-position-open-cooldown-secs = Enfriamiento de apertura de posición
     .hint = Segundos entre la apertura de cualquier posición (evita ráfagas rápidas)
     .unit = s
 config-positions-profit-extra-needed-sol = Margen extra de beneficio
     .hint = SOL extra necesarios para los cálculos de beneficio (comisiones de prioridad)
     .unit = SOL
-config-positions-trailing-stop-activation-pct = Activación del trailing stop
-    .hint = Activa el trailing stop tras este % de beneficio (10 = se activa con +10 %)
-    .unit = %
-config-positions-trailing-stop-distance-pct = Distancia del trailing stop
-    .hint = Cuánto por debajo del máximo se sigue (5 = sale si el precio cae un 5 % desde el máximo)
-    .unit = %
-config-positions-trailing-stop-enabled = Activar trailing stop
-    .hint = Activa el stop loss móvil tras superar el umbral de beneficio
 
 ## referral
 
@@ -1119,13 +1100,16 @@ config-trader-slippage-exit-retry-steps-pct = Pasos de reintento de salida
 config-trader-slippage-quote-default-pct = Deslizamiento predeterminado
     .hint = 1 % ajustado, 3-5 % para activos volátiles
     .unit = %
-config-trader-stop-loss-allow-partial = Permitir salida parcial
-    .hint = Permite salidas parciales en el stop loss en lugar de cerrar toda la posición
+config-trader-stop-loss-allow-partial = Vender una parte primero
+    .hint = Cuando se activa el stop loss, vende primero una parte de la posición y luego el resto si el precio sigue por debajo del stop
 config-trader-stop-loss-enabled = Activar stop loss
     .hint = Activa la salida automática cuando la pérdida supera el umbral (sale de inmediato, a diferencia de la salida por tiempo)
 config-trader-stop-loss-min-hold-seconds = Tiempo mínimo de tenencia
     .hint = Segundos mínimos de tenencia antes de que el stop loss pueda activarse (0 = inmediato)
     .unit = s
+config-trader-stop-loss-partial-pct = Parte a vender
+    .hint = Parte de la posición que se vende en la primera venta del stop loss
+    .unit = %
 config-trader-stop-loss-threshold-pct = Umbral del stop loss
     .hint = Sale cuando la pérdida supera este % (50 = sale con -50 %)
     .unit = %
@@ -1141,6 +1125,14 @@ config-trader-time-override-unit = Unidad de la salida por tiempo
 config-trader-trade-size-sol = Tamaño de operación
     .hint = SOL por posición
     .unit = SOL
+config-trader-trailing-stop-activation-pct = Activación del trailing stop
+    .hint = Activa el trailing stop tras este % de beneficio (10 = se activa con +10 %)
+    .unit = %
+config-trader-trailing-stop-distance-pct = Distancia del trailing stop
+    .hint = Cuánto por debajo del máximo se sigue (5 = sale si el precio cae un 5 % desde el máximo)
+    .unit = %
+config-trader-trailing-stop-enabled = Activar trailing stop
+    .hint = Activa el stop loss móvil tras superar el umbral de beneficio
 
 ## updates
 
@@ -1315,7 +1307,6 @@ config-category-monitoring = Monitorización
 config-category-notifications = Notificaciones
 config-category-ollama-settings = Ajustes de { -ollama }
 config-category-optimization = Optimización
-config-category-partial-exit = Salida parcial
 config-category-performance = Rendimiento
 config-category-pool-metrics = Métricas de pools
 config-category-price-change = Variación de precio

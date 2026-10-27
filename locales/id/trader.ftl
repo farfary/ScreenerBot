@@ -169,7 +169,10 @@ trader-stop-loss-hold-immediate = Segera
 trader-stop-loss-hold-delay = Jeda { $span }
 trader-stop-loss-price-falls = Harga Turun
 trader-stop-loss-threshold-reached = Ambang tercapai
-trader-stop-loss-partial = Exit parsial diizinkan
+trader-stop-loss-sell-part = Jual { $part }
+trader-stop-loss-part-of-position = Sebagian posisi
+trader-stop-loss-sell-rest = Jual Sisanya
+trader-stop-loss-still-below = Masih di bawah stop
 trader-stop-loss-summary = Kerugian dibatasi hingga <strong>{ $loss }</strong>
 trader-stop-loss-note = <strong>Catatan:</strong> Stop loss melindungi dari kerugian lebih besar dengan exit lebih awal
 

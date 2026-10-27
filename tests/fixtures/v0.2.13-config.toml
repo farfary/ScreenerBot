@@ -7,9 +7,17 @@ max_open_positions = 4
 trade_size_sol = 0.02
 entry_sizes = [0.01, 0.03]
 loss_limit_sol = 0.4
+stop_loss_allow_partial = true
 
 [positions]
 profit_extra_needed_sol = 0.0005
+partial_exit_enabled = false
+partial_exit_default_pct = 35.0
+partial_exit_min_pct = 15.0
+partial_exit_max_pct = 85.0
+trailing_stop_enabled = true
+trailing_stop_activation_pct = 12.0
+trailing_stop_distance_pct = 4.0
 
 [wallet]
 min_balance_sol = 0.03

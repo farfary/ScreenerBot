@@ -27,6 +27,49 @@ fn usable_liquidity(native_reserves: f64) -> Option<f64> {
     (native_reserves.is_finite() && native_reserves > 0.0).then_some(native_reserves)
 }
 
+/// The buy an entry strategy signal decides: the configured trade size.
+fn entry_decision(mint: &str, strategy_id: String, price_native: f64) -> TradeDecision {
+    TradeDecision {
+        position_id: None,
+        mint: mint.to_owned(),
+        action: TradeAction::Buy,
+        reason: TradeReason::StrategySignal,
+        strategy_id: Some(strategy_id),
+        timestamp: Utc::now(),
+        priority: TradePriority::Normal,
+        price_native: Some(price_native),
+        size_native: None,
+        exit_percentage: None,
+        // Auto-trader slippage always follows config.
+        slippage_pct: None,
+    }
+}
+
+/// The sale an exit strategy signal decides: the whole position, recorded as a
+/// strategy exit so closed-reason labels and the exit breakdown tell it apart
+/// from the entry signal.
+fn exit_decision(
+    position_id: Option<i64>,
+    mint: &str,
+    strategy_id: String,
+    price_native: f64,
+) -> TradeDecision {
+    TradeDecision {
+        position_id: position_id.map(|id| id.to_string()),
+        mint: mint.to_owned(),
+        action: TradeAction::Sell,
+        reason: TradeReason::StrategyExit,
+        strategy_id: Some(strategy_id),
+        timestamp: Utc::now(),
+        priority: TradePriority::Normal,
+        price_native: Some(price_native),
+        size_native: None,
+        exit_percentage: None,
+        // Auto-trader slippage always follows config.
+        slippage_pct: None,
+    }
+}
+
 /// Transaction counts of the cached token snapshot; `None` when the token is not cached.
 fn cached_transactions(chain: ChainId, mint: &str) -> Option<TransactionCounts> {
     crate::tokens::get_cached_token(chain, mint).map(|token| TransactionCounts::from_token(&token))
@@ -155,20 +198,11 @@ impl StrategyEvaluator {
                     ),
                 );
 
-                Ok(Some(TradeDecision {
-                    position_id: None,
-                    mint: token_mint.to_string(),
-                    action: TradeAction::Buy,
-                    reason: TradeReason::StrategySignal,
-                    strategy_id: Some(strategy_id),
-                    timestamp: Utc::now(),
-                    priority: TradePriority::Normal,
-                    price_native: Some(price_info.price_native),
-                    size_native: None, // Will use config default
-                    exit_percentage: None,
-                    // Auto-trader slippage always follows config.
-                    slippage_pct: None,
-                }))
+                Ok(Some(entry_decision(
+                    token_mint,
+                    strategy_id,
+                    price_info.price_native,
+                )))
             }
             Ok(Ok(None)) => Ok(None),
             Ok(Err(e)) => {
@@ -357,20 +391,12 @@ impl StrategyEvaluator {
                     ),
                 );
 
-                Ok(Some(TradeDecision {
-                    position_id: position.id.map(|id| id.to_string()),
-                    mint: position.mint.clone(),
-                    action: TradeAction::Sell,
-                    reason: TradeReason::StrategySignal,
-                    strategy_id: Some(strategy_id),
-                    timestamp: Utc::now(),
-                    priority: TradePriority::Normal,
-                    price_native: Some(current_price),
-                    size_native: None, // Will sell full position or use config
-                    exit_percentage: None,
-                    // Auto-trader slippage always follows config.
-                    slippage_pct: None,
-                }))
+                Ok(Some(exit_decision(
+                    position.id,
+                    &position.mint,
+                    strategy_id,
+                    current_price,
+                )))
             }
             Ok(Ok(None)) => Ok(None),
             Ok(Err(e)) => {
@@ -411,5 +437,30 @@ impl StrategyEvaluator {
                 Ok(None) // Skip this position on timeout
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn an_entry_signal_buys_as_a_strategy_signal() {
+        let decision = entry_decision("mint", "entry-strategy".to_owned(), 0.5);
+        assert_eq!(decision.action, TradeAction::Buy);
+        assert_eq!(decision.reason, TradeReason::StrategySignal);
+        assert_eq!(decision.strategy_id.as_deref(), Some("entry-strategy"));
+    }
+
+    #[test]
+    fn an_exit_signal_sells_the_whole_position_as_a_strategy_exit() {
+        // Recorded as the entry reason, a strategy exit was labelled and counted in the
+        // exit breakdown as "Strategy Signal".
+        let decision = exit_decision(Some(7), "mint", "exit-strategy".to_owned(), 0.5);
+        assert_eq!(decision.action, TradeAction::Sell);
+        assert_eq!(decision.reason, TradeReason::StrategyExit);
+        assert_eq!(decision.position_id.as_deref(), Some("7"));
+        assert_eq!(decision.exit_percentage, None);
+        assert_eq!(decision.strategy_id.as_deref(), Some("exit-strategy"));
     }
 }

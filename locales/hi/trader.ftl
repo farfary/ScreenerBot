@@ -174,7 +174,10 @@ trader-stop-loss-hold-immediate = तुरंत
 trader-stop-loss-hold-delay = { $span } देरी
 trader-stop-loss-price-falls = प्राइस गिरता है
 trader-stop-loss-threshold-reached = सीमा पूरी हुई
-trader-stop-loss-partial = आंशिक एग्ज़िट की अनुमति
+trader-stop-loss-sell-part = { $part } बेचें
+trader-stop-loss-part-of-position = पोज़िशन का एक हिस्सा
+trader-stop-loss-sell-rest = बाकी बेचें
+trader-stop-loss-still-below = अब भी स्टॉप से नीचे
 trader-stop-loss-summary = नुकसान <strong>{ $loss }</strong> तक सीमित
 trader-stop-loss-note = <strong>नोट:</strong> स्टॉप लॉस जल्दी एग्ज़िट करके बड़े नुकसान से बचाता है
 

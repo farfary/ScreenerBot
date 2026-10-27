@@ -38,7 +38,7 @@
         "category": "dca",
         "visibility": "primary",
         "min": 10,
-        "max": 200,
+        "max": 100,
         "step": 10,
         "default": 50
       },
@@ -270,6 +270,17 @@
         "step": 1,
         "default": 0
       },
+      "stop_loss_partial_pct": {
+        "type": "number",
+        "key": "config-trader-stop-loss-partial-pct",
+        "impact": "medium",
+        "category": "stop-loss",
+        "visibility": "secondary",
+        "min": 10,
+        "max": 90,
+        "step": 5,
+        "default": 50
+      },
       "stop_loss_threshold_pct": {
         "type": "number",
         "key": "config-trader-stop-loss-threshold-pct",
@@ -329,6 +340,36 @@
         "max": 10,
         "step": 0.001,
         "default": 0.005
+      },
+      "trailing_stop_activation_pct": {
+        "type": "number",
+        "key": "config-trader-trailing-stop-activation-pct",
+        "impact": "high",
+        "category": "trailing-stop",
+        "visibility": "primary",
+        "min": 0.1,
+        "max": 100,
+        "step": 0.1,
+        "default": 10
+      },
+      "trailing_stop_distance_pct": {
+        "type": "number",
+        "key": "config-trader-trailing-stop-distance-pct",
+        "impact": "critical",
+        "category": "trailing-stop",
+        "visibility": "primary",
+        "min": 1,
+        "max": 50,
+        "step": 1,
+        "default": 5
+      },
+      "trailing_stop_enabled": {
+        "type": "boolean",
+        "key": "config-trader-trailing-stop-enabled",
+        "impact": "high",
+        "category": "trailing-stop",
+        "visibility": "primary",
+        "default": false
       }
     },
     "positions": {
@@ -359,47 +400,6 @@
         "step": 1,
         "default": -15
       },
-      "partial_exit_default_pct": {
-        "type": "number",
-        "key": "config-positions-partial-exit-default-pct",
-        "impact": "medium",
-        "category": "partial-exit",
-        "visibility": "primary",
-        "min": 10,
-        "max": 90,
-        "step": 5,
-        "default": 50
-      },
-      "partial_exit_enabled": {
-        "type": "boolean",
-        "key": "config-positions-partial-exit-enabled",
-        "impact": "high",
-        "category": "partial-exit",
-        "visibility": "primary",
-        "default": false
-      },
-      "partial_exit_max_pct": {
-        "type": "number",
-        "key": "config-positions-partial-exit-max-pct",
-        "impact": "low",
-        "category": "partial-exit",
-        "visibility": "primary",
-        "min": 50,
-        "max": 99,
-        "step": 1,
-        "default": 90
-      },
-      "partial_exit_min_pct": {
-        "type": "number",
-        "key": "config-positions-partial-exit-min-pct",
-        "impact": "low",
-        "category": "partial-exit",
-        "visibility": "primary",
-        "min": 1,
-        "max": 50,
-        "step": 1,
-        "default": 10
-      },
       "position_open_cooldown_secs": {
         "type": "integer",
         "key": "config-positions-position-open-cooldown-secs",
@@ -421,36 +421,6 @@
         "max": 0.01,
         "step": 0.0001,
         "default": 0.0002
-      },
-      "trailing_stop_activation_pct": {
-        "type": "number",
-        "key": "config-positions-trailing-stop-activation-pct",
-        "impact": "high",
-        "category": "trailing-stop",
-        "visibility": "primary",
-        "min": 0,
-        "max": 100,
-        "step": 1,
-        "default": 10
-      },
-      "trailing_stop_distance_pct": {
-        "type": "number",
-        "key": "config-positions-trailing-stop-distance-pct",
-        "impact": "critical",
-        "category": "trailing-stop",
-        "visibility": "primary",
-        "min": 1,
-        "max": 50,
-        "step": 1,
-        "default": 5
-      },
-      "trailing_stop_enabled": {
-        "type": "boolean",
-        "key": "config-positions-trailing-stop-enabled",
-        "impact": "high",
-        "category": "trailing-stop",
-        "visibility": "primary",
-        "default": false
       }
     }
   },

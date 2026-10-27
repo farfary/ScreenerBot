@@ -808,31 +808,12 @@ config-positions-loss-blacklist-enabled = 손실 블랙리스트 사용
 config-positions-loss-blacklist-threshold-pct = 손실 블랙리스트 기준
     .hint = 손실이 이 비율(%)을 넘으면 토큰을 블랙리스트에 추가합니다 (-15 = 15% 이상 하락 시 추가)
     .unit = %
-config-positions-partial-exit-default-pct = 기본 부분 청산
-    .hint = 부분 청산 시 매도하는 기본 비율
-    .unit = %
-config-positions-partial-exit-enabled = 부분 청산 사용
-    .hint = 전량 청산 대신 포지션의 일부만 매도할 수 있습니다
-config-positions-partial-exit-max-pct = 최대 부분 청산
-    .hint = 부분 청산에 허용되는 최대 비율
-    .unit = %
-config-positions-partial-exit-min-pct = 최소 부분 청산
-    .hint = 부분 청산에 허용되는 최소 비율
-    .unit = %
 config-positions-position-open-cooldown-secs = 포지션 진입 쿨다운
     .hint = 포지션을 연속으로 여는 사이의 간격(초) (급격한 연속 진입 방지)
     .unit = 초
 config-positions-profit-extra-needed-sol = 수익 추가 버퍼
     .hint = 수익 계산에 필요한 추가 SOL (우선 수수료)
     .unit = SOL
-config-positions-trailing-stop-activation-pct = 트레일링 스톱 활성화
-    .hint = 이 수익률(%) 이후 트레일링 스톱을 활성화합니다 (10 = +10%에서 활성화)
-    .unit = %
-config-positions-trailing-stop-distance-pct = 트레일링 스톱 거리
-    .hint = 고점 대비 얼마나 아래에서 추적할지 정합니다 (5 = 고점에서 5% 하락하면 청산)
-    .unit = %
-config-positions-trailing-stop-enabled = 트레일링 스톱 사용
-    .hint = 수익 기준 도달 후 트레일링 스톱로스를 사용합니다
 
 ## referral
 
@@ -1119,13 +1100,16 @@ config-trader-slippage-exit-retry-steps-pct = 청산 재시도 단계
 config-trader-slippage-quote-default-pct = 기본 슬리피지
     .hint = 1%는 촘촘한 설정, 변동성이 큰 토큰은 3-5%
     .unit = %
-config-trader-stop-loss-allow-partial = 부분 청산 허용
-    .hint = 손절 시 전량 종료 대신 부분 청산을 허용합니다
+config-trader-stop-loss-allow-partial = 먼저 일부 매도
+    .hint = 손절이 발동하면 먼저 포지션 일부를 매도하고, 가격이 여전히 손절가 아래이면 나머지를 매도합니다
 config-trader-stop-loss-enabled = 손절 사용
     .hint = 손실이 기준을 넘으면 자동으로 청산합니다 (시간 청산과 달리 즉시 청산)
 config-trader-stop-loss-min-hold-seconds = 최소 보유 시간
     .hint = 손절이 작동하기 전까지 보유해야 하는 최소 시간(초) (0 = 즉시)
     .unit = 초
+config-trader-stop-loss-partial-pct = 매도할 비율
+    .hint = 첫 번째 손절 매도에서 파는 포지션 비율
+    .unit = %
 config-trader-stop-loss-threshold-pct = 손절 기준
     .hint = 손실이 이 비율(%)을 넘으면 청산합니다 (50 = -50%에서 청산)
     .unit = %
@@ -1141,6 +1125,14 @@ config-trader-time-override-unit = 시간 청산 단위
 config-trader-trade-size-sol = 거래 규모
     .hint = 포지션당 SOL
     .unit = SOL
+config-trader-trailing-stop-activation-pct = 트레일링 스톱 활성화
+    .hint = 이 수익률(%) 이후 트레일링 스톱을 활성화합니다 (10 = +10%에서 활성화)
+    .unit = %
+config-trader-trailing-stop-distance-pct = 트레일링 스톱 거리
+    .hint = 고점 대비 얼마나 아래에서 추적할지 정합니다 (5 = 고점에서 5% 하락하면 청산)
+    .unit = %
+config-trader-trailing-stop-enabled = 트레일링 스톱 사용
+    .hint = 수익 기준 도달 후 트레일링 스톱로스를 사용합니다
 
 ## updates
 
@@ -1315,7 +1307,6 @@ config-category-monitoring = 모니터링
 config-category-notifications = 알림
 config-category-ollama-settings = { -ollama } 설정
 config-category-optimization = 최적화
-config-category-partial-exit = 부분 청산
 config-category-performance = 성능
 config-category-pool-metrics = 풀 지표
 config-category-price-change = 가격 변동

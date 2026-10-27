@@ -352,7 +352,7 @@ fn a_v9_store_drops_the_position_link_table_and_keeps_its_rows() {
             |row| Ok((row.get(0)?, row.get(1)?)),
         )
         .unwrap();
-    assert_eq!(ledger, (10, 10));
+    assert_eq!(ledger, (11, 10));
     let fk_violations = conn
         .prepare("PRAGMA foreign_key_check")
         .unwrap()
@@ -369,6 +369,87 @@ fn a_v9_store_drops_the_position_link_table_and_keeps_its_rows() {
         upgraded,
         "a second open is a no-op"
     );
+}
+
+/// The partial stop-loss override a released task carried in its exit policy, read from
+/// the row as written.
+fn stored_allow_partial(conn: &Connection, task_id: i64) -> (Option<bool>, String) {
+    let (json, updated_at): (String, String) = conn
+        .query_row(
+            "SELECT exit_policy_json, updated_at FROM copy_tasks WHERE id = ?1",
+            [task_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .unwrap();
+    let policy: serde_json::Value = serde_json::from_str(&json).unwrap();
+    (policy["stop_loss"]["allow_partial"].as_bool(), updated_at)
+}
+
+/// A released task whose rules allowed a partial stop loss sold the whole position, since
+/// the auto-trader partial-exit switch was off. The upgrade turns that override off, once,
+/// without touching the rest of the policy or the task's edit time; an override saved
+/// afterwards is a deliberate choice and survives every later open.
+#[test]
+fn a_released_partial_stop_loss_override_is_turned_off_once() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("copy_trading.db");
+    released(&path);
+    Connection::open(&path)
+        .unwrap()
+        .execute(
+            "UPDATE copy_tasks SET exit_policy_json = \
+             '{\"stop_loss\":{\"allow_partial\":true,\"threshold_pct\":30.0}}' WHERE id = 7",
+            [],
+        )
+        .unwrap();
+
+    drop(CopyDatabase::open(&path, ChainId::Solana).unwrap());
+    let conn = Connection::open(&path).unwrap();
+    assert_eq!(
+        stored_allow_partial(&conn, 7),
+        (Some(false), "2026-01-01T00:00:00Z".to_owned())
+    );
+    let threshold: f64 = conn
+        .query_row(
+            "SELECT json_extract(exit_policy_json, '$.stop_loss.threshold_pct') \
+             FROM copy_tasks WHERE id = 7",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(threshold, 30.0);
+    let ledger: (i64, i64) = conn
+        .query_row(
+            "SELECT version, min_reader_version FROM store_schema WHERE id = 1",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .unwrap();
+    assert_eq!(ledger, (11, 10));
+    let integrity: String = conn
+        .query_row("PRAGMA integrity_check", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(integrity, "ok");
+    let fk_violations = conn
+        .prepare("PRAGMA foreign_key_check")
+        .unwrap()
+        .query_map([], |_| Ok(()))
+        .unwrap()
+        .count();
+    assert_eq!(fk_violations, 0);
+
+    conn.execute(
+        "UPDATE copy_tasks SET exit_policy_json = '{\"stop_loss\":{\"allow_partial\":true}}' \
+         WHERE id = 7",
+        [],
+    )
+    .unwrap();
+    let upgraded = schema(&conn);
+    drop(conn);
+    drop(CopyDatabase::open(&path, ChainId::Solana).unwrap());
+    let conn = Connection::open(&path).unwrap();
+    assert_eq!(schema(&conn), upgraded, "a second open is a no-op");
+    assert_eq!(stored_allow_partial(&conn, 7).0, Some(true));
 }
 
 #[test]

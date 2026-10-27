@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 
 /// Who initiated a trade.
 ///
-/// The auto-trader's config (`trader.dca_*`, `positions.partial_exit_enabled`) is
+/// The auto-trader's config (`trader.dca_*`, `trader.stop_loss_allow_partial`) is
 /// POLICY: it decides what the bot is allowed to do ON ITS OWN. It is not a
 /// capability switch for the user. A `Manual` trade is the user overriding the bot
 /// from the dashboard, so those policy gates do not apply to it — turning auto-DCA

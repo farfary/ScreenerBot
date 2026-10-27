@@ -475,7 +475,7 @@ async fn merge_import_of_a_v0_2_13_export_lands_every_moved_value_at_its_new_pat
     init_config();
     let _writes = CONFIG_WRITES.lock().await;
     post_import(serde_json::json!({
-        "config": v0_2_13_export(&["rpc", "swaps", "sol_price", "trader"]),
+        "config": v0_2_13_export(&["rpc", "swaps", "sol_price", "trader", "positions"]),
         "merge": true,
         "save_to_disk": false,
     }))
@@ -501,6 +501,12 @@ async fn merge_import_of_a_v0_2_13_export_lands_every_moved_value_at_its_new_pat
         assert_eq!(cfg.trader.slippage.exit_retry_steps_pct, [5.0, 12.0, 30.0]);
         assert_eq!(cfg.trader.trade_size_sol, 0.02);
         assert_eq!(cfg.trader.max_open_positions, 4);
+        assert!(cfg.trader.trailing_stop_enabled);
+        assert_eq!(cfg.trader.trailing_stop_activation_pct, 12.0);
+        assert_eq!(cfg.trader.trailing_stop_distance_pct, 4.0);
+        assert_eq!(cfg.trader.stop_loss_partial_pct, 35.0);
+        assert!(!cfg.trader.stop_loss_allow_partial);
+        assert_eq!(cfg.positions.profit_extra_needed_sol, 0.0005);
     });
 }
 
@@ -640,5 +646,135 @@ async fn replace_import_of_a_partial_legacy_export_keeps_the_sections_it_lacks()
         assert_eq!(cfg.chains.solana.swaps.direct.max_price_impact_pct, 4.5);
         assert_eq!(cfg.chains.solana.swaps.raptor.max_hops, 2);
         assert!(!cfg.chains.solana.swaps.cost_guard.enabled);
+    });
+}
+
+/// The sections an import response lists as imported.
+fn imported_sections(body: &Value) -> BTreeSet<&str> {
+    body["imported_sections"]
+        .as_array()
+        .expect("import lists its sections")
+        .iter()
+        .filter_map(Value::as_str)
+        .collect()
+}
+
+/// A legacy export holding only `positions` builds a `trader` section that carries
+/// just the exit-rule leaves; importing it with merge unchecked lands them under
+/// `trader` and keeps every other trader value.
+#[tokio::test]
+async fn replace_import_of_a_legacy_positions_export_moves_the_exit_leaves_into_trader() {
+    init_config();
+    let _writes = CONFIG_WRITES.lock().await;
+    update_config_section(
+        |cfg| {
+            cfg.trader.max_open_positions = 7;
+            cfg.trader.trade_size_sol = 0.042;
+            cfg.trader.trailing_stop_enabled = false;
+        },
+        false,
+    )
+    .expect("seed trader settings");
+
+    let body = post_import(serde_json::json!({
+        "config": v0_2_13_export(&["positions"]),
+        "merge": false,
+        "save_to_disk": false,
+    }))
+    .await;
+    assert_eq!(
+        imported_sections(&body),
+        BTreeSet::from(["positions", "trader"])
+    );
+
+    with_config(|cfg| {
+        assert!(cfg.trader.trailing_stop_enabled);
+        assert_eq!(cfg.trader.trailing_stop_activation_pct, 12.0);
+        assert_eq!(cfg.trader.trailing_stop_distance_pct, 4.0);
+        assert_eq!(cfg.trader.stop_loss_partial_pct, 35.0);
+        assert_eq!(cfg.trader.max_open_positions, 7);
+        assert_eq!(cfg.trader.trade_size_sol, 0.042);
+        assert_eq!(cfg.positions.profit_extra_needed_sol, 0.0005);
+    });
+}
+
+/// A legacy export carried the trailing stop and the partial stop-loss share in
+/// `positions` and the slippage in `swaps`, never in `trader`. Replacing `trader`
+/// from it keeps the current values of every field that moved into `trader`
+/// instead of resetting them to defaults.
+#[tokio::test]
+async fn replace_import_of_a_legacy_trader_export_keeps_the_values_that_moved_into_trader() {
+    init_config();
+    let _writes = CONFIG_WRITES.lock().await;
+    update_config_section(
+        |cfg| {
+            cfg.trader.max_open_positions = 7;
+            cfg.trader.trailing_stop_enabled = true;
+            cfg.trader.trailing_stop_activation_pct = 20.0;
+            cfg.trader.trailing_stop_distance_pct = 5.0;
+            cfg.trader.stop_loss_partial_pct = 45.0;
+            cfg.trader.slippage.quote_default_pct = 1.25;
+        },
+        false,
+    )
+    .expect("seed trader settings");
+
+    let body = post_import(serde_json::json!({
+        "config": v0_2_13_export(&["trader"]),
+        "merge": false,
+        "save_to_disk": false,
+    }))
+    .await;
+    assert_eq!(imported_sections(&body), BTreeSet::from(["trader"]));
+
+    with_config(|cfg| {
+        assert_eq!(cfg.trader.max_open_positions, 4);
+        assert_eq!(cfg.trader.trade_size_sol, 0.02);
+        assert!(cfg.trader.trailing_stop_enabled);
+        assert_eq!(cfg.trader.trailing_stop_activation_pct, 20.0);
+        assert_eq!(cfg.trader.trailing_stop_distance_pct, 5.0);
+        assert_eq!(cfg.trader.stop_loss_partial_pct, 45.0);
+        assert_eq!(cfg.trader.slippage.quote_default_pct, 1.25);
+    });
+}
+
+/// Selecting `positions` alone from a legacy export that also carries `trader`
+/// imports the exit-rule leaves `positions` held, at their new paths, merged into
+/// the current trader values; the rest of the exported `trader` stays out.
+#[tokio::test]
+async fn a_selected_legacy_section_imports_the_values_it_fed_into_other_sections() {
+    init_config();
+    let _writes = CONFIG_WRITES.lock().await;
+    update_config_section(
+        |cfg| {
+            cfg.trader.max_open_positions = 7;
+            cfg.trader.stop_loss_allow_partial = true;
+            cfg.trader.stop_loss_partial_pct = 50.0;
+            cfg.trader.trailing_stop_enabled = false;
+        },
+        false,
+    )
+    .expect("seed trader settings");
+
+    let body = post_import(serde_json::json!({
+        "config": v0_2_13_export(&["trader", "positions"]),
+        "sections": ["positions"],
+        "merge": false,
+        "save_to_disk": false,
+    }))
+    .await;
+    assert_eq!(
+        imported_sections(&body),
+        BTreeSet::from(["positions", "trader"])
+    );
+
+    with_config(|cfg| {
+        assert!(cfg.trader.trailing_stop_enabled);
+        assert_eq!(cfg.trader.trailing_stop_activation_pct, 12.0);
+        assert_eq!(cfg.trader.trailing_stop_distance_pct, 4.0);
+        assert_eq!(cfg.trader.stop_loss_partial_pct, 35.0);
+        assert_eq!(cfg.trader.max_open_positions, 7);
+        assert!(cfg.trader.stop_loss_allow_partial);
+        assert_eq!(cfg.positions.profit_extra_needed_sol, 0.0005);
     });
 }

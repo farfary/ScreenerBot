@@ -63,6 +63,7 @@ pub(super) fn trader_failure(error: &trader::Error) -> Response {
             ApiError::new(code, ids::ERRORS_TRADE_PERCENTAGE_INVALID)
                 .arg("percentage", UiArg::Number(*percentage))
         }
+        Error::PercentageRequired => ApiError::new(code, ids::ERRORS_TRADE_PERCENTAGE_REQUIRED),
         Error::Database(_) | Error::Positions(_) | Error::Transactions(_) => {
             ApiError::new(code, ids::ERRORS_TRADE_STORAGE_FAILED)
         }

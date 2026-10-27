@@ -174,7 +174,10 @@ trader-stop-loss-hold-immediate = Anında
 trader-stop-loss-hold-delay = Gecikme: { $span }
 trader-stop-loss-price-falls = Fiyat düşer
 trader-stop-loss-threshold-reached = Eşiğe ulaşıldı
-trader-stop-loss-partial = Kısmi çıkışlara izin verilir
+trader-stop-loss-sell-part = { $part } Sat
+trader-stop-loss-part-of-position = Pozisyonun bir kısmı
+trader-stop-loss-sell-rest = Kalanı Sat
+trader-stop-loss-still-below = Hâlâ stop seviyesinin altında
 trader-stop-loss-summary = Zarar şununla sınırlandı: <strong>{ $loss }</strong>
 trader-stop-loss-note = <strong>Not:</strong> Zarar durdur, erken çıkarak daha büyük zararlara karşı korur
 

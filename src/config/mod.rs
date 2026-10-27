@@ -97,9 +97,10 @@ mod merge;
 pub(crate) use merge::merge_document;
 
 // One-time migration of legacy [ai] / [agents] TOML into the canonical sections,
-// and relocation of legacy global Solana sections under [chains.solana]
+// relocation of legacy global Solana sections under [chains.solana], and of the
+// exit-rule leaves of [positions] into [trader]
 mod migrate;
-pub(crate) use migrate::{has_legacy_chain_sections, relocate_legacy_chain_sections};
+pub(crate) use migrate::{relocate_legacy_layout, relocation_destinations};
 
 // Wallet management (keypair loading, pubkey access)
 pub mod wallet;
@@ -123,9 +124,9 @@ pub use schemas::{
 };
 
 pub use utils::{
-    get_config_clone, is_config_initialized, load_config, load_config_from_path,
-    persist_pending_config_migration, reload_config, reload_config_from_path, save_config,
-    try_with_config, validate_config, with_config, CONFIG,
+    get_config_clone, is_config_initialized, legacy_partial_exit_switch, load_config,
+    load_config_from_path, persist_pending_config_migration, reload_config,
+    reload_config_from_path, save_config, try_with_config, validate_config, with_config, CONFIG,
 };
 
 pub use wallet::get_wallet_pubkey_string;

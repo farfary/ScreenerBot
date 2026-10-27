@@ -71,7 +71,11 @@ pub fn load_config_from_path(path: &str) -> Result<()> {
         None
     };
 
-    let ParsedConfig { config, migrated } = match &raw {
+    let ParsedConfig {
+        config,
+        migrated,
+        legacy_partial_exit_switch,
+    } = match &raw {
         Some(contents) => parse_config_document(contents).map_err(|e| match e {
             Error::ParseFailed { detail } => Error::ParseFailed {
                 detail: format!("Failed to parse config file '{path}': {detail}"),
@@ -81,6 +85,7 @@ pub fn load_config_from_path(path: &str) -> Result<()> {
         None => ParsedConfig {
             config: Config::default(),
             migrated: false,
+            legacy_partial_exit_switch: None,
         },
     };
 
@@ -100,6 +105,9 @@ pub fn load_config_from_path(path: &str) -> Result<()> {
         .map_err(|_| ConfigurationError::Generic {
             message: "Config already initialized".to_owned(),
         })?;
+    // Set once, by the load that set CONFIG; a hot reload reads a file this
+    // release wrote or migrated with the same rule, so it never sets it.
+    let _ = LEGACY_PARTIAL_EXIT_SWITCH.set(legacy_partial_exit_switch);
 
     // A migrated layout is written only once startup completes, so a core that
     // fails before then leaves the file as the previous release wrote it.
@@ -120,6 +128,19 @@ pub fn load_config_from_path(path: &str) -> Result<()> {
 /// to be written; set by `load_config_from_path`, taken by
 /// `persist_pending_config_migration`.
 static PENDING_MIGRATION_WRITE: Mutex<Option<String>> = Mutex::new(None);
+
+/// The retired `positions.partial_exit_enabled` switch as the config file held
+/// it at load, before the migration dropped it; set once by
+/// `load_config_from_path`.
+static LEGACY_PARTIAL_EXIT_SWITCH: OnceLock<Option<bool>> = OnceLock::new();
+
+/// The retired auto-trader partial-exit switch as the config file loaded by this
+/// process held it: `None` when the file did not carry it or no config was
+/// loaded. Store migrations that must keep the stop-loss behaviour an upgraded
+/// install ran with read it; the config itself no longer has the switch.
+pub fn legacy_partial_exit_switch() -> Option<bool> {
+    LEGACY_PARTIAL_EXIT_SWITCH.get().copied().flatten()
+}
 
 /// Write the config migrated at load back to its file. Called once startup has
 /// completed; a no-op when the load found nothing to migrate. A failed write is
@@ -203,9 +224,12 @@ pub struct ParsedConfig {
     /// earlier default was written in; persisting `config` makes the migration
     /// permanent.
     pub migrated: bool,
+    /// The retired auto-trader partial-exit switch as `raw` carried it, read
+    /// before the migration drops it.
+    pub legacy_partial_exit_switch: Option<bool>,
 }
 
-/// Parse `raw` TOML: relocate legacy chain sections, typed parse, backfill
+/// Parse `raw` TOML: relocate the legacy layout, typed parse, backfill
 /// legacy [ai]/[agents], keep the values implied by omitted keys whose default
 /// changed, normalize navigation tabs. The single parse used by load, reload
 /// and the disk/memory diff.
@@ -216,21 +240,21 @@ pub fn parse_config_document(raw: &str) -> Result<ParsedConfig> {
     let implied = super::migrate::ImpliedDefaults::of(&table);
     let mut document = toml::Value::Table(table);
 
-    // Documents without a legacy section take the typed TOML parse, which
+    let legacy_partial_exit_switch = super::migrate::read_legacy_partial_exit_switch(&document)?;
+    let relocated = super::relocate_legacy_layout(&mut document)?;
+
+    // Documents without a legacy layout take the typed TOML parse, which
     // keeps line numbers in its error messages.
-    let (mut config, relocated) = if super::has_legacy_chain_sections(&document) {
-        let relocated = super::relocate_legacy_chain_sections(&mut document)?;
-        let config = document
+    let mut config = if relocated {
+        document
             .try_into::<Config>()
             .map_err(|e| Error::ParseFailed {
                 detail: e.to_string(),
-            })?;
-        (config, relocated)
+            })?
     } else {
-        let config = toml::from_str::<Config>(raw).map_err(|e| Error::ParseFailed {
+        toml::from_str::<Config>(raw).map_err(|e| Error::ParseFailed {
             detail: e.to_string(),
-        })?;
-        (config, false)
+        })?
     };
 
     let legacy_ai = super::migrate::migrate_legacy_sections(raw, &mut config)?;
@@ -244,6 +268,7 @@ pub fn parse_config_document(raw: &str) -> Result<ParsedConfig> {
     Ok(ParsedConfig {
         config,
         migrated: relocated || legacy_ai || implied,
+        legacy_partial_exit_switch,
     })
 }
 
@@ -499,48 +524,43 @@ pub fn validate_config(config: &Config) -> Result<()> {
         .into());
     }
 
-    // Partial exit validation
-    if config.positions.partial_exit_enabled {
-        if config.positions.partial_exit_default_pct < 10.0
-            || config.positions.partial_exit_default_pct > 90.0
-        {
-            return Err(ConfigurationError::Generic {
-                message: "positions.partial_exit_default_pct must be between 10 and 90".to_owned(),
-            }
-            .into());
+    // Partial stop-loss share, checked only while the stop loss may sell part first
+    if config.trader.stop_loss_allow_partial
+        && !(10.0..=90.0).contains(&config.trader.stop_loss_partial_pct)
+    {
+        return Err(ConfigurationError::Generic {
+            message: "trader.stop_loss_partial_pct must be between 10 and 90".to_owned(),
         }
+        .into());
     }
 
     // Trailing stop validation
-    if config.positions.trailing_stop_enabled {
-        if config.positions.trailing_stop_activation_pct <= 0.0
-            || config.positions.trailing_stop_activation_pct > 100.0
+    if config.trader.trailing_stop_enabled {
+        if config.trader.trailing_stop_activation_pct <= 0.0
+            || config.trader.trailing_stop_activation_pct > 100.0
         {
             return Err(ConfigurationError::Generic {
                 message:
-                    "positions.trailing_stop_activation_pct must be between 0 and 100 (exclusive)"
+                    "trader.trailing_stop_activation_pct must be between 0 and 100 (exclusive)"
                         .to_owned(),
             }
             .into());
         }
-        if config.positions.trailing_stop_distance_pct <= 0.0
-            || config.positions.trailing_stop_distance_pct > 100.0
+        if config.trader.trailing_stop_distance_pct <= 0.0
+            || config.trader.trailing_stop_distance_pct > 100.0
         {
             return Err(ConfigurationError::Generic {
-                message:
-                    "positions.trailing_stop_distance_pct must be between 0 and 100 (exclusive)"
-                        .to_owned(),
+                message: "trader.trailing_stop_distance_pct must be between 0 and 100 (exclusive)"
+                    .to_owned(),
             }
             .into());
         }
-        if config.positions.trailing_stop_distance_pct
-            >= config.positions.trailing_stop_activation_pct
-        {
+        if config.trader.trailing_stop_distance_pct >= config.trader.trailing_stop_activation_pct {
             return Err(ConfigurationError::Generic {
                 message: format!(
-                    "positions.trailing_stop_distance_pct ({:.1}%) must be less than trailing_stop_activation_pct ({:.1}%)",
-                    config.positions.trailing_stop_distance_pct,
-                    config.positions.trailing_stop_activation_pct
+                    "trader.trailing_stop_distance_pct ({:.1}%) must be less than trailing_stop_activation_pct ({:.1}%)",
+                    config.trader.trailing_stop_distance_pct,
+                    config.trader.trailing_stop_activation_pct
                 ),
             }
             .into());
@@ -664,6 +684,7 @@ pub fn reload_config_from_path(path: &str) -> Result<()> {
     let ParsedConfig {
         config: new_config,
         migrated,
+        ..
     } = parse_config_document(&contents).map_err(|e| match e {
         Error::ParseFailed { detail } => Error::ParseFailed {
             detail: format!("Failed to parse config file '{path}': {detail}"),

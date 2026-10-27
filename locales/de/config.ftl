@@ -808,31 +808,12 @@ config-positions-loss-blacklist-enabled = Verlust-Blacklist aktivieren
 config-positions-loss-blacklist-threshold-pct = Schwellenwert für Verlust-Blacklist
     .hint = Tokens mit Verlusten über diesem Wert in % auf die Blacklist setzen (-15 = bei 15 %+ Minus)
     .unit = %
-config-positions-partial-exit-default-pct = Standard-Teilausstieg
-    .hint = Standardanteil in %, der bei Teilausstiegen verkauft wird
-    .unit = %
-config-positions-partial-exit-enabled = Teilausstiege aktivieren
-    .hint = Den Verkauf von Teilen einer Position statt Alles-oder-nichts erlauben
-config-positions-partial-exit-max-pct = Max. Teilausstieg
-    .hint = Maximal erlaubter Anteil in % bei Teilausstiegen
-    .unit = %
-config-positions-partial-exit-min-pct = Min. Teilausstieg
-    .hint = Minimal erlaubter Anteil in % bei Teilausstiegen
-    .unit = %
 config-positions-position-open-cooldown-secs = Abkühlphase für Positionseröffnung
     .hint = Sekunden zwischen dem Eröffnen beliebiger Positionen (verhindert schnelle Serien)
     .unit = s
 config-positions-profit-extra-needed-sol = Gewinn-Zusatzpuffer
     .hint = Zusätzliche SOL für Gewinnberechnungen (Prioritätsgebühren)
     .unit = SOL
-config-positions-trailing-stop-activation-pct = Trailing-Stop-Aktivierung
-    .hint = Trailing-Stop ab diesem Gewinn in % aktivieren (10 = Aktivierung bei +10 %)
-    .unit = %
-config-positions-trailing-stop-distance-pct = Trailing-Stop-Abstand
-    .hint = Wie weit unter dem Höchststand nachgezogen wird (5 = Ausstieg, wenn der Preis 5 % vom Höchststand fällt)
-    .unit = %
-config-positions-trailing-stop-enabled = Trailing-Stop aktivieren
-    .hint = Trailing-Stop-Loss nach Erreichen der Gewinnschwelle aktivieren
 
 ## referral
 
@@ -1119,13 +1100,16 @@ config-trader-slippage-exit-retry-steps-pct = Wiederholungsstufen beim Ausstieg
 config-trader-slippage-quote-default-pct = Standard-Slippage
     .hint = 1 % eng, 3-5 % bei volatilen Tokens
     .unit = %
-config-trader-stop-loss-allow-partial = Teilausstieg erlauben
-    .hint = Teilausstiege beim Stop-Loss statt vollständigem Schließen der Position erlauben
+config-trader-stop-loss-allow-partial = Zuerst Teil verkaufen
+    .hint = Wenn der Stop-Loss auslöst, zuerst einen Teil der Position verkaufen, dann den Rest, falls der Preis weiter unter dem Stop liegt
 config-trader-stop-loss-enabled = Stop-Loss aktivieren
     .hint = Automatischen Ausstieg aktivieren, wenn der Verlust den Schwellenwert überschreitet (Ausstieg sofort, anders als beim Zeitausstieg)
 config-trader-stop-loss-min-hold-seconds = Min. Haltedauer
     .hint = Minimale Sekunden, die gehalten wird, bevor der Stop-Loss auslösen kann (0 = sofort)
     .unit = s
+config-trader-stop-loss-partial-pct = Zu verkaufender Anteil
+    .hint = Anteil der Position, den der erste Stop-Loss-Verkauf verkauft
+    .unit = %
 config-trader-stop-loss-threshold-pct = Stop-Loss-Schwelle
     .hint = Ausstieg, wenn der Verlust diesen Wert in % überschreitet (50 = Ausstieg bei -50 %)
     .unit = %
@@ -1141,6 +1125,14 @@ config-trader-time-override-unit = Einheit des Zeitausstiegs
 config-trader-trade-size-sol = Trade-Größe
     .hint = SOL pro Position
     .unit = SOL
+config-trader-trailing-stop-activation-pct = Trailing-Stop-Aktivierung
+    .hint = Trailing-Stop ab diesem Gewinn in % aktivieren (10 = Aktivierung bei +10 %)
+    .unit = %
+config-trader-trailing-stop-distance-pct = Trailing-Stop-Abstand
+    .hint = Wie weit unter dem Höchststand nachgezogen wird (5 = Ausstieg, wenn der Preis 5 % vom Höchststand fällt)
+    .unit = %
+config-trader-trailing-stop-enabled = Trailing-Stop aktivieren
+    .hint = Trailing-Stop-Loss nach Erreichen der Gewinnschwelle aktivieren
 
 ## updates
 
@@ -1315,7 +1307,6 @@ config-category-monitoring = Überwachung
 config-category-notifications = Benachrichtigungen
 config-category-ollama-settings = { -ollama }-Einstellungen
 config-category-optimization = Optimierung
-config-category-partial-exit = Teilausstieg
 config-category-performance = Performance
 config-category-pool-metrics = Pool-Kennzahlen
 config-category-price-change = Preisänderung

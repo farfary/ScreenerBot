@@ -182,7 +182,10 @@ trader-stop-loss-hold-immediate = Sofort
 trader-stop-loss-hold-delay = { $span } Verzögerung
 trader-stop-loss-price-falls = Preis fällt
 trader-stop-loss-threshold-reached = Schwelle erreicht
-trader-stop-loss-partial = Teilausstiege erlaubt
+trader-stop-loss-sell-part = { $part } verkaufen
+trader-stop-loss-part-of-position = Teil der Position
+trader-stop-loss-sell-rest = Rest verkaufen
+trader-stop-loss-still-below = Weiter unter dem Stop
 trader-stop-loss-summary = Verlust begrenzt auf <strong>{ $loss }</strong>
 trader-stop-loss-note = <strong>Hinweis:</strong> Der Stop-Loss schützt durch frühen Ausstieg vor größeren Verlusten
 

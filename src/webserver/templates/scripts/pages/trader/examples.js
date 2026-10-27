@@ -166,12 +166,16 @@ export function createExampleUpdaters({ $, Utils: _Utils, tradeSize }) {
     const thresholdInput = $("#stop-loss-threshold");
     const minHoldInput = $("#stop-loss-min-hold");
     const allowPartialInput = $("#stop-loss-allow-partial");
+    const partialPctInput = $("#stop-loss-partial-pct");
 
     if (!thresholdInput) return;
 
     const threshold = parseFloat(thresholdInput.value) || 50;
     const minHold = parseInt(minHoldInput?.value || "0", 10);
-    const allowPartial = allowPartialInput?.checked || false;
+    const allowPartial = allowPartialInput?.checked === true;
+    // The share the first stop-loss sale sells, as loaded from `trader.stop_loss_partial_pct`
+    // or as edited; the second sale sells the rest.
+    const partialPct = Number(partialPctInput?.value);
 
     // Update impact text
     const impactText = $("#stop-loss-impact");
@@ -192,7 +196,9 @@ export function createExampleUpdaters({ $, Utils: _Utils, tradeSize }) {
     if (exampleEntry) exampleEntry.textContent = exampleSol(entry);
     const lossPercent = I18n.t("trader-value-percent", { value: `-${threshold}` });
     if (exampleTrigger) exampleTrigger.textContent = lossPercent;
-    if (exampleExit) exampleExit.textContent = exampleSol(exit);
+    if (exampleExit) {
+      exampleExit.textContent = exampleSol(allowPartial ? exit * (partialPct / 100) : exit);
+    }
     if (exampleLoss) {
       exampleLoss.innerHTML = I18n.markup("trader-stop-loss-summary", { loss: lossPercent });
     }
@@ -213,13 +219,28 @@ export function createExampleUpdaters({ $, Utils: _Utils, tradeSize }) {
       }
     }
 
-    // Update partial exit indicator
-    const partialIndicator = $("#stop-loss-partial-indicator");
-    if (partialIndicator) {
-      partialIndicator.textContent = allowPartial
-        ? I18n.t("trader-stop-loss-partial")
+    // With "Sell Part First" on, the threshold sells the configured part and a price still
+    // below the stop sells the rest; with it off, the threshold sells everything at once.
+    const exitTitle = $("#stop-loss-exit-title");
+    if (exitTitle) {
+      exitTitle.textContent = allowPartial
+        ? I18n.t("trader-stop-loss-sell-part", {
+            part: formatPercentValue(partialPct, { decimals: 1, includeSign: false, trim: true }),
+          })
+        : I18n.t("trader-step-auto-exit");
+    }
+    const exitDetail = $("#stop-loss-exit-detail");
+    if (exitDetail) {
+      exitDetail.textContent = allowPartial
+        ? I18n.t("trader-stop-loss-part-of-position")
         : I18n.t("trader-step-full-exit");
     }
+    const restArrow = $("#stop-loss-rest-arrow");
+    const restStep = $("#stop-loss-rest-step");
+    if (restArrow) restArrow.hidden = !allowPartial;
+    if (restStep) restStep.hidden = !allowPartial;
+    const exampleRest = $("#stop-loss-example-rest");
+    if (exampleRest) exampleRest.textContent = exampleSol(exit * (1 - partialPct / 100));
   }
 
   /** A percent figure in an example strip: one decimal at most, no trailing zero. */

@@ -167,7 +167,10 @@ trader-stop-loss-hold-immediate = Ngay lập tức
 trader-stop-loss-hold-delay = Trễ { $span }
 trader-stop-loss-price-falls = Giá giảm
 trader-stop-loss-threshold-reached = Đạt ngưỡng
-trader-stop-loss-partial = Cho phép thoát một phần
+trader-stop-loss-sell-part = Bán { $part }
+trader-stop-loss-part-of-position = Một phần vị thế
+trader-stop-loss-sell-rest = Bán phần còn lại
+trader-stop-loss-still-below = Vẫn dưới mức stop
 trader-stop-loss-summary = Lỗ được giới hạn ở <strong>{ $loss }</strong>
 trader-stop-loss-note = <strong>Lưu ý:</strong> Stop loss bảo vệ bạn khỏi các khoản lỗ lớn hơn bằng cách thoát sớm
 

@@ -811,31 +811,12 @@ config-positions-loss-blacklist-enabled = Enable Loss Blacklisting
 config-positions-loss-blacklist-threshold-pct = Loss Blacklist Threshold
     .hint = Blacklist tokens with losses exceeding this % (-15 = blacklist if down 15%+)
     .unit = %
-config-positions-partial-exit-default-pct = Default Partial Exit
-    .hint = Default percentage to sell on partial exits
-    .unit = %
-config-positions-partial-exit-enabled = Enable Partial Exits
-    .hint = Allow selling portions of a position instead of all-or-nothing
-config-positions-partial-exit-max-pct = Max Partial Exit
-    .hint = Maximum percentage allowed for partial exits
-    .unit = %
-config-positions-partial-exit-min-pct = Min Partial Exit
-    .hint = Minimum percentage allowed for partial exits
-    .unit = %
 config-positions-position-open-cooldown-secs = Position Open Cooldown
     .hint = Seconds between opening any positions (prevents rapid bursts)
     .unit = s
 config-positions-profit-extra-needed-sol = Profit Extra Buffer
     .hint = Extra SOL needed for profit calculations (priority fees)
     .unit = SOL
-config-positions-trailing-stop-activation-pct = Trailing Stop Activation
-    .hint = Activate trailing stop after this profit % (10 = activate at +10%)
-    .unit = %
-config-positions-trailing-stop-distance-pct = Trailing Stop Distance
-    .hint = How far to trail below peak (5 = exit if price drops 5% from peak)
-    .unit = %
-config-positions-trailing-stop-enabled = Enable Trailing Stop
-    .hint = Enable trailing stop-loss after profit threshold
 
 ## referral
 
@@ -1122,13 +1103,16 @@ config-trader-slippage-exit-retry-steps-pct = Exit Retry Steps
 config-trader-slippage-quote-default-pct = Default Slippage
     .hint = 1% tight, 3-5% for volatile
     .unit = %
-config-trader-stop-loss-allow-partial = Allow Partial Exit
-    .hint = Allow partial exits for stop loss instead of full position close
+config-trader-stop-loss-allow-partial = Sell Part First
+    .hint = When the stop loss triggers, sell part of the position first, then the rest if the price is still below the stop
 config-trader-stop-loss-enabled = Enable Stop Loss
     .hint = Enable automatic exit when loss exceeds threshold (exits immediately, unlike the time exit)
 config-trader-stop-loss-min-hold-seconds = Min Hold Time
     .hint = Minimum seconds to hold before stop loss can trigger (0 = immediate)
     .unit = s
+config-trader-stop-loss-partial-pct = Part to Sell
+    .hint = Share of the position the first stop-loss sale sells
+    .unit = %
 config-trader-stop-loss-threshold-pct = Stop Loss Threshold
     .hint = Exit when loss exceeds this % (50 = exit at -50%)
     .unit = %
@@ -1144,6 +1128,14 @@ config-trader-time-override-unit = Time Exit Unit
 config-trader-trade-size-sol = Trade Size
     .hint = SOL spent on each new position
     .unit = SOL
+config-trader-trailing-stop-activation-pct = Trailing Stop Activation
+    .hint = Activate trailing stop after this profit % (10 = activate at +10%)
+    .unit = %
+config-trader-trailing-stop-distance-pct = Trailing Stop Distance
+    .hint = How far to trail below peak (5 = exit if price drops 5% from peak)
+    .unit = %
+config-trader-trailing-stop-enabled = Enable Trailing Stop
+    .hint = Enable trailing stop-loss after profit threshold
 
 ## updates
 
@@ -1318,7 +1310,6 @@ config-category-monitoring = Monitoring
 config-category-notifications = Notifications
 config-category-ollama-settings = { -ollama } Settings
 config-category-optimization = Optimization
-config-category-partial-exit = Partial Exit
 config-category-performance = Performance
 config-category-pool-metrics = Pool Metrics
 config-category-price-change = Price Change

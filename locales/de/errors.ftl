@@ -289,6 +289,7 @@ errors-trade-mint-invalid = Ungültige Token-Mint-Adresse { $mint }
 errors-trade-blacklisted = Token { $mint } steht auf der Blacklist
 errors-trade-slippage-invalid = Slippage { $slippage }% muss zwischen { $minimum }% und { $maximum }% liegen
 errors-trade-percentage-invalid = Verkaufsanteil { $percentage } muss in (0, 100] liegen
+errors-trade-percentage-required = Ein Teilverkauf braucht den Anteil der Position, der verkauft werden soll
 errors-trade-record-failed = Der manuelle Trade konnte nicht erfasst werden
 errors-trade-task-cancelled = Der manuelle Trade wurde vor seiner Antwort beendet, weil die App herunterfährt; die Position zeigt sein Ergebnis
 errors-trade-no-open-position = Keine offene Position für Token { $mint }

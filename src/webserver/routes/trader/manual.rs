@@ -167,12 +167,13 @@ pub async fn manual_add_handler(Json(req): Json<ManualAddRequest>) -> Response {
 }
 
 pub async fn manual_sell_handler(Json(req): Json<ManualSellRequest>) -> Response {
+    // A partial sell names its own share: no auto-trader setting sizes a manual sell.
     let pct = if req.close_all.unwrap_or_default() {
         None // Full exit (100%)
     } else {
-        let requested = req
-            .percentage
-            .unwrap_or_else(|| with_config(|cfg| cfg.positions.partial_exit_default_pct));
+        let Some(requested) = req.percentage else {
+            return trader_failure(&crate::trader::Error::PercentageRequired);
+        };
         match guard::validate_percentage(requested) {
             Ok(pct) => Some(pct),
             Err(error) => return trader_failure(&error),
@@ -642,6 +643,29 @@ mod tests {
         assert_eq!(
             quote_failure_code(&no_route),
             ApiErrorCode::for_status(no_route.http_status())
+        );
+    }
+
+    /// A partial manual sell names its own share; without one the route refuses before
+    /// any trade starts, and no auto-trader setting fills it in.
+    #[tokio::test]
+    async fn a_partial_sell_without_a_percentage_is_refused() {
+        let response = manual_sell_handler(Json(ManualSellRequest {
+            mint: "TokenMint111111111111111111111111111111111".to_owned(),
+            percentage: None,
+            close_all: None,
+            force: None,
+            slippage_pct: None,
+        }))
+        .await;
+        assert_eq!(response.status(), axum::http::StatusCode::BAD_REQUEST);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body");
+        let envelope: serde_json::Value = serde_json::from_slice(&body).expect("JSON envelope");
+        assert_eq!(
+            envelope["error"]["text"]["id"],
+            "errors-trade-percentage-required"
         );
     }
 }

@@ -194,7 +194,7 @@ async fn a_partial_stop_loss_may_be_taken_exactly_once() {
     enable_stop_loss(20.0);
     set_config(|cfg| {
         cfg.trader.stop_loss_allow_partial = true;
-        cfg.positions.partial_exit_default_pct = 25.0;
+        cfg.trader.stop_loss_partial_pct = 25.0;
     });
     let policy = ExitPolicy::from_config();
 
@@ -274,9 +274,9 @@ async fn stop_loss_rejects_an_unusable_entry_price() {
 
 fn enable_trailing(activation_pct: f64, distance_pct: f64) {
     set_config(|cfg| {
-        cfg.positions.trailing_stop_enabled = true;
-        cfg.positions.trailing_stop_activation_pct = activation_pct;
-        cfg.positions.trailing_stop_distance_pct = distance_pct;
+        cfg.trader.trailing_stop_enabled = true;
+        cfg.trader.trailing_stop_activation_pct = activation_pct;
+        cfg.trader.trailing_stop_distance_pct = distance_pct;
     });
 }
 
@@ -480,7 +480,7 @@ async fn trailing_stop_rejects_a_config_whose_distance_swallows_the_activation()
 #[tokio::test]
 async fn trailing_stop_is_off_when_disabled() {
     let _cfg = config_guard();
-    set_config(|cfg| cfg.positions.trailing_stop_enabled = false);
+    set_config(|cfg| cfg.trader.trailing_stop_enabled = false);
     let policy = ExitPolicy::from_config();
 
     let position = peaked_at(2.0);

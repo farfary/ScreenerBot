@@ -19,6 +19,12 @@
 //! are dropped by the first persist. A canonical leaf present in the document
 //! always wins over its legacy counterpart.
 //!
+//! The exit-rule leaves of `[positions]` (trailing stop and the partial
+//! stop-loss share) move into `[trader]` the same way, and the auto-trader
+//! partial-exit switch is retired while the stop-loss behaviour the document
+//! ran with is kept. Every move is one row of [`RELOCATIONS`], applied by
+//! [`relocate_legacy_layout`] to the TOML file and to a JSON import alike.
+//!
 //! A file that omits a key ran with that key's default at the time. When a
 //! default changes, [`ImpliedDefaults`] writes the earlier default into a
 //! document that omits the key, so an upgrade keeps the behaviour the file
@@ -403,45 +409,119 @@ pub(super) fn migrate_legacy_sections(raw: &str, config: &mut Config) -> Result<
     Ok(true)
 }
 
-/// One relocation of a legacy subtree. `to` names the destination table,
-/// created when absent; `None` drops the subtree.
+/// What a relocation row moves.
+#[derive(Clone, Copy)]
+enum RelocationNode {
+    /// A subtree, merged leaf by leaf into the destination table.
+    Table,
+    /// One value, stored under the last segment of `to`, which may rename it.
+    Leaf,
+}
+
+/// One relocation of a legacy node. `to` names the destination, created when
+/// absent; `None` drops the node.
 struct Relocation {
     from: &'static [&'static str],
     to: Option<&'static [&'static str]>,
+    node: RelocationNode,
 }
 
 /// The `[chains.<id>]` table key that receives the legacy global sections.
 const LEGACY_CHAIN_KEY: &str = crate::chains::PRE_CHAINS_LAYOUT_CHAIN.as_str();
 
-/// Order matters: slippage leaves `swaps` before the rest of `swaps` moves.
-const CHAIN_RELOCATIONS: &[Relocation] = &[
+/// The retired auto-trader switch that once had to be on, beside
+/// [`STOP_LOSS_ALLOWANCE`], for a stop loss to sell part of a position.
+const LEGACY_PARTIAL_SWITCH: &[&str] = &["positions", "partial_exit_enabled"];
+
+/// The share of a position a partial stop loss sells; every canonical document
+/// carries it, so its absence marks a document written before it existed.
+const STOP_LOSS_PARTIAL_SHARE: &[&str] = &["trader", "stop_loss_partial_pct"];
+
+/// The switch that lets a stop loss sell part of a position.
+const STOP_LOSS_ALLOWANCE: &[&str] = &["trader", "stop_loss_allow_partial"];
+
+/// Every legacy node and where it lives now, applied in order. Order matters:
+/// slippage leaves `swaps` before the rest of `swaps` moves.
+const RELOCATIONS: &[Relocation] = &[
     Relocation {
         from: &["swaps", "slippage"],
         to: Some(&["trader", "slippage"]),
+        node: RelocationNode::Table,
     },
     Relocation {
         from: &["swaps"],
         to: Some(&["chains", LEGACY_CHAIN_KEY, "swaps"]),
+        node: RelocationNode::Table,
     },
     Relocation {
         from: &["rpc"],
         to: Some(&["chains", LEGACY_CHAIN_KEY, "rpc"]),
+        node: RelocationNode::Table,
     },
     Relocation {
         from: &["connectivity", "endpoints", "jupiter"],
         to: Some(&["chains", LEGACY_CHAIN_KEY, "connectivity", "jupiter"]),
+        node: RelocationNode::Table,
     },
     Relocation {
         from: &["connectivity", "endpoints", "raptor"],
         to: Some(&["chains", LEGACY_CHAIN_KEY, "connectivity", "raptor"]),
+        node: RelocationNode::Table,
     },
     Relocation {
         from: &["sol_price"],
         to: None,
+        node: RelocationNode::Table,
+    },
+    Relocation {
+        from: &["positions", "partial_exit_default_pct"],
+        to: Some(STOP_LOSS_PARTIAL_SHARE),
+        node: RelocationNode::Leaf,
+    },
+    Relocation {
+        from: &["positions", "trailing_stop_enabled"],
+        to: Some(&["trader", "trailing_stop_enabled"]),
+        node: RelocationNode::Leaf,
+    },
+    Relocation {
+        from: &["positions", "trailing_stop_activation_pct"],
+        to: Some(&["trader", "trailing_stop_activation_pct"]),
+        node: RelocationNode::Leaf,
+    },
+    Relocation {
+        from: &["positions", "trailing_stop_distance_pct"],
+        to: Some(&["trader", "trailing_stop_distance_pct"]),
+        node: RelocationNode::Leaf,
+    },
+    Relocation {
+        from: LEGACY_PARTIAL_SWITCH,
+        to: None,
+        node: RelocationNode::Leaf,
+    },
+    Relocation {
+        from: &["positions", "partial_exit_min_pct"],
+        to: None,
+        node: RelocationNode::Leaf,
+    },
+    Relocation {
+        from: &["positions", "partial_exit_max_pct"],
+        to: None,
+        node: RelocationNode::Leaf,
     },
 ];
 
-/// An untyped config document the chain relocation rewrites: the TOML file at
+/// Every relocation that keeps its node, as (legacy path, canonical path). A
+/// config import uses it to keep the current value of a destination an older
+/// export does not carry, and to follow a selected legacy section to the
+/// sections its values feed.
+pub(crate) fn relocation_destinations(
+) -> impl Iterator<Item = (&'static [&'static str], &'static [&'static str])> {
+    RELOCATIONS
+        .iter()
+        .filter_map(|relocation| Some((relocation.from, relocation.to?)))
+}
+
+/// An untyped config document the relocation rewrites: the TOML file at
 /// load, and a JSON import at the config route. The file is relocated as TOML
 /// because JSON has no `inf` or `nan`; a float holding one would not survive a
 /// round trip through JSON and the typed parse would refuse the file.
@@ -458,6 +538,8 @@ pub(crate) trait ConfigTree: Clone + Sized {
     fn insert(table: &mut Self::Table, key: String, value: Self);
     /// The child at `key`, inserting an empty table when it is absent.
     fn child<'a>(table: &'a mut Self::Table, key: &str) -> &'a mut Self;
+    fn as_bool(&self) -> Option<bool>;
+    fn from_bool(value: bool) -> Self;
 }
 
 impl ConfigTree for toml::Value {
@@ -494,6 +576,12 @@ impl ConfigTree for toml::Value {
         table
             .entry(key.to_owned())
             .or_insert_with(Self::empty_table)
+    }
+    fn as_bool(&self) -> Option<bool> {
+        toml::Value::as_bool(self)
+    }
+    fn from_bool(value: bool) -> Self {
+        toml::Value::Boolean(value)
     }
 }
 
@@ -532,6 +620,12 @@ impl ConfigTree for Value {
             .entry(key.to_owned())
             .or_insert_with(Self::empty_table)
     }
+    fn as_bool(&self) -> Option<bool> {
+        Value::as_bool(self)
+    }
+    fn from_bool(value: bool) -> Self {
+        Value::Bool(value)
+    }
 }
 
 /// The node at `path`, or `None` when a segment is absent or a parent on the
@@ -546,35 +640,82 @@ fn table_name(path: &[&str]) -> String {
     format!("[{}]", path.join("."))
 }
 
-/// True when the document still carries a section that moved under
-/// `[chains.<id>]` or `[trader.slippage]`.
-pub(crate) fn has_legacy_chain_sections<T: ConfigTree>(doc: &T) -> bool {
-    CHAIN_RELOCATIONS
-        .iter()
-        .any(|relocation| node_at(doc, relocation.from).is_some())
+/// The retired auto-trader partial-exit switch as `doc` holds it: `None` when
+/// the document does not carry it. Fails when it is not a boolean.
+pub(crate) fn read_legacy_partial_exit_switch<T: ConfigTree>(doc: &T) -> Result<Option<bool>> {
+    node_at(doc, LEGACY_PARTIAL_SWITCH)
+        .map(|node| {
+            node.as_bool().ok_or_else(|| Error::ParseFailed {
+                detail: format!("{} must be a boolean", LEGACY_PARTIAL_SWITCH.join(".")),
+            })
+        })
+        .transpose()
 }
 
-/// Move every legacy subtree in `doc` to its canonical path, leaf by leaf.
-/// A leaf already present at the destination wins; a legacy leaf fills only
-/// what the destination lacks. Returns `true` when anything moved or was
-/// dropped. Fails without modifying `doc` when a legacy subtree or a
-/// destination table has the wrong shape.
-pub(crate) fn relocate_legacy_chain_sections<T: ConfigTree>(doc: &mut T) -> Result<bool> {
+/// Move every legacy node of `doc` to its canonical path ([`RELOCATIONS`], in
+/// order) and keep the stop-loss behaviour the document ran with. Returns
+/// `true` when `doc` changed; the caller persists the canonical config, which
+/// drops what moved. Fails without modifying `doc` when a legacy node, the
+/// retired switch or a destination table has the wrong shape.
+///
+/// - A table row merges leaf by leaf: a leaf already present at the destination
+///   wins, and a legacy leaf fills only what the destination lacks. A leaf row
+///   moves one value and keeps the canonical one when both exist. A row
+///   without a destination drops its node.
+/// - The one rule that is not a move: a stop loss sold part of a position only
+///   while both [`STOP_LOSS_ALLOWANCE`] and [`LEGACY_PARTIAL_SWITCH`] were on
+///   (an absent switch meant off). A document without
+///   [`STOP_LOSS_PARTIAL_SHARE`], with the allowance on and the switch off or
+///   absent, has its allowance turned off, so it keeps selling the whole
+///   position. The rule reads the document before any row moves the share or
+///   drops the switch, and fires for a document with no legacy node at all.
+///   Once persisted, the document carries the share and the rule never fires
+///   again.
+pub(crate) fn relocate_legacy_layout<T: ConfigTree>(doc: &mut T) -> Result<bool> {
+    let keep_full_stop_loss = node_at(doc, STOP_LOSS_PARTIAL_SHARE).is_none()
+        && node_at(doc, STOP_LOSS_ALLOWANCE).and_then(T::as_bool) == Some(true)
+        && read_legacy_partial_exit_switch(doc)? != Some(true);
+
     let mut working = doc.clone();
     let mut changed = false;
-    for relocation in CHAIN_RELOCATIONS {
+    if keep_full_stop_loss {
+        if let Some((leaf, section)) = STOP_LOSS_ALLOWANCE.split_last() {
+            let destination = table_at(&mut working, section, &STOP_LOSS_ALLOWANCE.join("."))?;
+            T::insert(destination, (*leaf).to_owned(), T::from_bool(false));
+            changed = true;
+        }
+    }
+    for relocation in RELOCATIONS {
         let Some(legacy) = take_node(&mut working, relocation.from) else {
             continue;
         };
-        let source = table_name(relocation.from);
-        let Some(legacy) = legacy.into_table() else {
-            return Err(Error::ParseFailed {
-                detail: format!("legacy {source} must be a table"),
-            });
-        };
-        if let Some(to) = relocation.to {
-            let destination = table_at(&mut working, to, &source)?;
-            merge_missing_leaves::<T>(destination, legacy);
+        match relocation.node {
+            RelocationNode::Table => {
+                let source = table_name(relocation.from);
+                let Some(legacy) = legacy.into_table() else {
+                    return Err(Error::ParseFailed {
+                        detail: format!("legacy {source} must be a table"),
+                    });
+                };
+                if let Some(to) = relocation.to {
+                    let destination = table_at(&mut working, to, &source)?;
+                    merge_missing_leaves::<T>(destination, legacy);
+                }
+            }
+            RelocationNode::Leaf => {
+                let source = relocation.from.join(".");
+                if legacy.table().is_some() {
+                    return Err(Error::ParseFailed {
+                        detail: format!("legacy {source} must be a value, not a table"),
+                    });
+                }
+                if let Some((leaf, section)) = relocation.to.and_then(<[_]>::split_last) {
+                    let destination = table_at(&mut working, section, &source)?;
+                    if T::get(destination, leaf).is_none() {
+                        T::insert(destination, (*leaf).to_owned(), legacy);
+                    }
+                }
+            }
         }
         changed = true;
     }
@@ -1063,6 +1204,23 @@ api_key = "sk-ant-secret"
         assert_eq!(config.trader.entry_sizes, vec![0.01, 0.03]);
         assert_eq!(config.trader.loss_limit_sol, 0.4);
         assert_eq!(config.positions.profit_extra_needed_sol, 0.0005);
+
+        // Exit-rule leaves of [positions] land in [trader]; the allowance the
+        // retired switch held back is turned off.
+        assert!(config.trader.trailing_stop_enabled);
+        assert_eq!(config.trader.trailing_stop_activation_pct, 12.0);
+        assert_eq!(config.trader.trailing_stop_distance_pct, 4.0);
+        assert_eq!(config.trader.stop_loss_partial_pct, 35.0);
+        assert!(!config.trader.stop_loss_allow_partial);
+        let positions = written["positions"].as_table().expect("positions table");
+        for leaf in legacy_position_leaves() {
+            assert!(
+                !positions.contains_key(leaf),
+                "[positions] {leaf} persisted"
+            );
+        }
+        assert_eq!(parsed.legacy_partial_exit_switch, Some(false));
+
         assert_eq!(config.wallet.min_balance_sol, 0.03);
         assert_eq!(config.telegram.trade_alert_min_sol, 0.25);
         assert_eq!(config.telegram.significant_pnl_threshold, 0.8);
@@ -1107,6 +1265,9 @@ api_key = "sk-ant-secret"
         let second = parse(&serialized);
         assert!(!second.migrated);
         assert_eq!(json(&second.config), json(&first.config));
+        assert!(!second.config.trader.stop_loss_allow_partial);
+        assert_eq!(second.config.trader.stop_loss_partial_pct, 35.0);
+        assert_eq!(second.legacy_partial_exit_switch, None);
     }
 
     #[test]
@@ -1209,7 +1370,7 @@ max_retries = 9
             let table: toml::Table = toml::from_str(raw).expect("toml");
             let original = serde_json::to_value(&table).expect("json");
             let mut document = original.clone();
-            let err = relocate_legacy_chain_sections(&mut document).unwrap_err();
+            let err = relocate_legacy_layout(&mut document).unwrap_err();
             assert!(
                 matches!(err, Error::ParseFailed { .. }),
                 "expected ParseFailed for {raw:?}"
@@ -1265,7 +1426,7 @@ urls = ["https://canonical.fixture.invalid/"]
             },
             "sol_price": {}
         });
-        assert!(relocate_legacy_chain_sections(&mut document).expect("relocate"));
+        assert!(relocate_legacy_layout(&mut document).expect("relocate"));
         assert_eq!(
             document,
             serde_json::json!({
@@ -1322,5 +1483,248 @@ urls = ["https://canonical.fixture.invalid/"]
             assert!(!second.config.trader.stop_loss_enabled);
         }
         assert!(!parse(V0_2_13_CONFIG).config.trader.stop_loss_enabled);
+    }
+
+    // ------------------------------------------------------------------
+    // Exit-rule leaves of [positions] moving into [trader]
+    // ------------------------------------------------------------------
+
+    /// Every `[positions]` leaf a relocation row moves or drops.
+    fn legacy_position_leaves() -> impl Iterator<Item = &'static str> {
+        RELOCATIONS
+            .iter()
+            .filter(|relocation| relocation.from[0] == "positions")
+            .map(|relocation| relocation.from[1])
+    }
+
+    /// The `[trader]` and `[positions]` tables `config` persists as.
+    fn exit_tables(config: &Config) -> (toml::Table, toml::Table) {
+        let written = table(config);
+        let section = |name: &str| {
+            written[name]
+                .as_table()
+                .unwrap_or_else(|| panic!("[{name}] table"))
+                .clone()
+        };
+        (section("trader"), section("positions"))
+    }
+
+    #[test]
+    fn an_allowance_without_the_legacy_switch_keeps_selling_the_whole_position() {
+        for switch in ["partial_exit_enabled = false\n", ""] {
+            let raw = format!(
+                "[trader]\nstop_loss_enabled = true\nstop_loss_allow_partial = true\n\n[positions]\n{switch}"
+            );
+            let parsed = parse(&raw);
+            assert!(parsed.migrated, "{switch:?}");
+            assert!(!parsed.config.trader.stop_loss_allow_partial, "{switch:?}");
+        }
+    }
+
+    #[test]
+    fn an_allowance_with_the_legacy_switch_on_keeps_selling_part() {
+        let parsed = parse(
+            "[trader]\nstop_loss_enabled = true\nstop_loss_allow_partial = true\n\n\
+             [positions]\npartial_exit_enabled = true\npartial_exit_default_pct = 30.0\n",
+        );
+        assert!(parsed.migrated);
+        assert!(parsed.config.trader.stop_loss_allow_partial);
+        assert_eq!(parsed.config.trader.stop_loss_partial_pct, 30.0);
+    }
+
+    #[test]
+    fn an_allowance_off_stays_off_whatever_the_legacy_switch() {
+        for switch in ["true", "false"] {
+            let parsed = parse(&format!(
+                "[trader]\nstop_loss_enabled = true\nstop_loss_allow_partial = false\n\n\
+                 [positions]\npartial_exit_enabled = {switch}\n"
+            ));
+            assert!(parsed.migrated, "switch {switch}");
+            assert!(
+                !parsed.config.trader.stop_loss_allow_partial,
+                "switch {switch}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_document_with_the_partial_share_never_has_its_allowance_changed() {
+        let parsed = parse(
+            "[trader]\nstop_loss_enabled = true\nstop_loss_allow_partial = true\n\
+             stop_loss_partial_pct = 40.0\n\n[positions]\npartial_exit_enabled = false\n",
+        );
+        assert!(parsed.migrated, "the retired switch is still dropped");
+        assert!(parsed.config.trader.stop_loss_allow_partial);
+        assert_eq!(parsed.config.trader.stop_loss_partial_pct, 40.0);
+    }
+
+    #[test]
+    fn the_partial_share_and_trailing_stop_move_with_their_values() {
+        let parsed = parse(
+            "[trader]\nstop_loss_enabled = true\n\n[positions]\n\
+             partial_exit_enabled = true\npartial_exit_default_pct = 35.0\n\
+             partial_exit_min_pct = 10.0\npartial_exit_max_pct = 80.0\n\
+             trailing_stop_enabled = true\ntrailing_stop_activation_pct = 0.5\n\
+             trailing_stop_distance_pct = 7.0\nposition_open_cooldown_secs = 9\n",
+        );
+        assert!(parsed.migrated);
+        let trader = &parsed.config.trader;
+        assert_eq!(trader.stop_loss_partial_pct, 35.0);
+        assert!(trader.trailing_stop_enabled);
+        assert_eq!(trader.trailing_stop_activation_pct, 0.5);
+        assert_eq!(trader.trailing_stop_distance_pct, 7.0);
+        assert_eq!(parsed.config.positions.position_open_cooldown_secs, 9);
+
+        let (trader, positions) = exit_tables(&parsed.config);
+        for leaf in [
+            "stop_loss_partial_pct",
+            "trailing_stop_enabled",
+            "trailing_stop_activation_pct",
+            "trailing_stop_distance_pct",
+        ] {
+            assert!(trader.contains_key(leaf), "[trader] {leaf}");
+        }
+        for legacy in legacy_position_leaves() {
+            assert!(!positions.contains_key(legacy), "[positions] {legacy}");
+        }
+    }
+
+    #[test]
+    fn a_canonical_exit_leaf_wins_over_its_legacy_twin() {
+        let parsed = parse(
+            "[trader]\nstop_loss_enabled = true\nstop_loss_partial_pct = 60.0\n\
+             trailing_stop_distance_pct = 12.0\n\n[positions]\n\
+             partial_exit_default_pct = 20.0\ntrailing_stop_distance_pct = 3.0\n\
+             trailing_stop_activation_pct = 4.0\n",
+        );
+        assert!(parsed.migrated);
+        let trader = &parsed.config.trader;
+        assert_eq!(trader.stop_loss_partial_pct, 60.0);
+        assert_eq!(trader.trailing_stop_distance_pct, 12.0);
+        assert_eq!(trader.trailing_stop_activation_pct, 4.0);
+    }
+
+    #[test]
+    fn the_exit_migration_fires_once() {
+        let raw = "[trader]\nstop_loss_enabled = true\nstop_loss_allow_partial = true\n\n\
+                   [positions]\npartial_exit_enabled = false\ntrailing_stop_enabled = true\n";
+        let first = parse(raw);
+        assert!(first.migrated);
+        assert!(!first.config.trader.stop_loss_allow_partial);
+
+        let written = toml::to_string(&first.config).expect("serialize");
+        let second = parse(&written);
+        assert!(!second.migrated);
+        assert_eq!(json(&second.config), json(&first.config));
+
+        let mut document = toml::Value::Table(toml::from_str(&written).expect("toml"));
+        assert!(!relocate_legacy_layout(&mut document).expect("migrate"));
+    }
+
+    #[test]
+    fn a_json_import_migrates_like_the_config_file() {
+        let mut document = serde_json::json!({
+            "trader": { "stop_loss_allow_partial": true },
+            "positions": {
+                "partial_exit_enabled": false,
+                "partial_exit_default_pct": 25.0,
+                "partial_exit_max_pct": 90.0,
+                "trailing_stop_enabled": true,
+                "trailing_stop_distance_pct": 6.0,
+                "position_open_cooldown_secs": 4
+            }
+        });
+        assert!(relocate_legacy_layout(&mut document).expect("migrate"));
+        assert_eq!(
+            document,
+            serde_json::json!({
+                "trader": {
+                    "stop_loss_allow_partial": false,
+                    "stop_loss_partial_pct": 25.0,
+                    "trailing_stop_enabled": true,
+                    "trailing_stop_distance_pct": 6.0
+                },
+                "positions": { "position_open_cooldown_secs": 4 }
+            })
+        );
+        assert!(!relocate_legacy_layout(&mut document).expect("second pass"));
+    }
+
+    #[test]
+    fn a_json_import_without_exit_leaves_is_untouched() {
+        let original = serde_json::json!({
+            "trader": { "stop_loss_allow_partial": false },
+            "positions": { "position_open_cooldown_secs": 4 }
+        });
+        let mut document = original.clone();
+        assert!(!relocate_legacy_layout(&mut document).expect("migrate"));
+        assert_eq!(document, original);
+    }
+
+    #[test]
+    fn a_misshapen_legacy_switch_is_refused_without_touching_the_document() {
+        let original = serde_json::json!({
+            "trader": { "stop_loss_allow_partial": true },
+            "positions": { "partial_exit_enabled": "yes", "trailing_stop_enabled": true }
+        });
+        let mut document = original.clone();
+        let err = relocate_legacy_layout(&mut document).unwrap_err();
+        assert!(matches!(err, Error::ParseFailed { .. }));
+        assert_eq!(document, original);
+        assert!(matches!(
+            super::super::utils::parse_config_document(
+                "[positions]\npartial_exit_enabled = \"yes\"\n"
+            ),
+            Err(Error::ParseFailed { .. })
+        ));
+    }
+
+    #[test]
+    fn a_legacy_table_where_a_leaf_moves_is_refused_without_touching_the_document() {
+        for raw in [
+            "[positions.trailing_stop_enabled]\nvalue = true\n",
+            "[positions.partial_exit_min_pct]\nvalue = 10.0\n",
+        ] {
+            let table: toml::Table = toml::from_str(raw).expect("toml");
+            let original = serde_json::to_value(&table).expect("json");
+            let mut document = original.clone();
+            let err = relocate_legacy_layout(&mut document).unwrap_err();
+            assert!(
+                matches!(err, Error::ParseFailed { .. }),
+                "expected ParseFailed for {raw:?}"
+            );
+            assert_eq!(document, original, "document modified for {raw:?}");
+            assert!(matches!(
+                super::super::utils::parse_config_document(raw),
+                Err(Error::ParseFailed { .. })
+            ));
+        }
+    }
+
+    #[test]
+    fn a_leaf_row_lands_under_the_last_segment_of_its_destination() {
+        for relocation in RELOCATIONS {
+            let (RelocationNode::Leaf, Some(to)) = (relocation.node, relocation.to) else {
+                continue;
+            };
+            let mut document = serde_json::Value::Object(serde_json::Map::new());
+            let value = serde_json::json!(17.0);
+            let (leaf, parents) = relocation.from.split_last().expect("leaf path");
+            let mut node = &mut document;
+            for segment in parents {
+                node = node
+                    .as_object_mut()
+                    .expect("object")
+                    .entry(*segment)
+                    .or_insert_with(|| serde_json::json!({}));
+            }
+            node.as_object_mut()
+                .expect("object")
+                .insert((*leaf).to_owned(), value.clone());
+
+            assert!(relocate_legacy_layout(&mut document).expect("relocate"));
+            assert_eq!(node_at(&document, to), Some(&value), "{}", to.join("."));
+            assert_eq!(node_at(&document, relocation.from), None);
+        }
     }
 }

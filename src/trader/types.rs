@@ -411,6 +411,41 @@ mod tests {
         );
     }
 
+    /// The number of `TradeReason` variants.
+    const TRADE_REASON_COUNT: usize = 16;
+
+    /// The declaration position of each reason. Exhaustive, so a new variant fails
+    /// to compile until it is numbered here, and the test below then fails until
+    /// `TradeReason::ALL` lists it.
+    fn ordinal(reason: &TradeReason) -> usize {
+        match reason {
+            TradeReason::StrategySignal => 0,
+            TradeReason::ManualEntry => 1,
+            TradeReason::ForceBuy => 2,
+            TradeReason::CopyBuy => 3,
+            TradeReason::DCAScheduled => 4,
+            TradeReason::TakeProfit => 5,
+            TradeReason::StopLoss => 6,
+            TradeReason::TrailingStop => 7,
+            TradeReason::TimeOverride => 8,
+            TradeReason::StrategyExit => 9,
+            TradeReason::LlmAnalysisExit => 10,
+            TradeReason::ManualExit => 11,
+            TradeReason::RiskManagement => 12,
+            TradeReason::Blacklisted => 13,
+            TradeReason::ForceSell => 14,
+            TradeReason::CopySell => 15,
+        }
+    }
+
+    #[test]
+    fn the_reason_list_holds_every_reason_once() {
+        assert_eq!(TradeReason::ALL.len(), TRADE_REASON_COUNT);
+        let mut ordinals: Vec<usize> = TradeReason::ALL.iter().map(ordinal).collect();
+        ordinals.sort_unstable();
+        assert_eq!(ordinals, (0..TRADE_REASON_COUNT).collect::<Vec<_>>());
+    }
+
     /// `StopLoss` -> `stop-loss`, `DCAScheduled` -> `dca-scheduled`.
     fn kebab(id: &str) -> String {
         let chars: Vec<char> = id.chars().collect();

@@ -289,6 +289,7 @@ errors-trade-mint-invalid = Недопустимый адрес минта то�
 errors-trade-blacklisted = Токен { $mint } в чёрном списке
 errors-trade-slippage-invalid = Проскальзывание { $slippage }% должно быть в диапазоне от { $minimum }% до { $maximum }%
 errors-trade-percentage-invalid = Процент продажи { $percentage } должен быть в диапазоне (0, 100]
+errors-trade-percentage-required = Для частичной продажи нужен процент позиции, который требуется продать
 errors-trade-record-failed = Не удалось записать ручную сделку
 errors-trade-task-cancelled = Ручная сделка остановилась до ответа, так как приложение завершает работу; её результат отражён в позиции
 errors-trade-no-open-position = Нет открытой позиции по токену { $mint }

@@ -225,7 +225,11 @@ trader-stop-loss-hold-immediate = Негайно
 trader-stop-loss-hold-delay = затримка { $span }
 trader-stop-loss-price-falls = Ціна падає
 trader-stop-loss-threshold-reached = Поріг досягнуто
-trader-stop-loss-partial = Дозволено часткові виходи
+# $part is a formatted percentage of the position.
+trader-stop-loss-sell-part = Продати { $part }
+trader-stop-loss-part-of-position = Частина позиції
+trader-stop-loss-sell-rest = Продати решту
+trader-stop-loss-still-below = Досі нижче за стоп
 # $loss is the loss percentage with its sign.
 trader-stop-loss-summary = Збиток обмежено до <strong>{ $loss }</strong>
 trader-stop-loss-note = <strong>Примітка:</strong> стоп-лос захищає від більших збитків завдяки раннім виходам

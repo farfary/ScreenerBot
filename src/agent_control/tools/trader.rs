@@ -57,9 +57,9 @@ impl Tool for GetTraderStatusTool {
                     "threshold_pct": cfg.trader.stop_loss_threshold_pct,
                 },
                 "trailing_stop": {
-                    "enabled": cfg.positions.trailing_stop_enabled,
-                    "activation_pct": cfg.positions.trailing_stop_activation_pct,
-                    "distance_pct": cfg.positions.trailing_stop_distance_pct,
+                    "enabled": cfg.trader.trailing_stop_enabled,
+                    "activation_pct": cfg.trader.trailing_stop_activation_pct,
+                    "distance_pct": cfg.trader.trailing_stop_distance_pct,
                 },
                 "roi_exit": {
                     "enabled": cfg.trader.roi_exit_enabled,

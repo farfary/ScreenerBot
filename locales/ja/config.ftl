@@ -808,31 +808,12 @@ config-positions-loss-blacklist-enabled = 損失によるブラックリスト�
 config-positions-loss-blacklist-threshold-pct = 損失ブラックリストのしきい値
     .hint = 損失がこの % を超えたトークンをブラックリストに追加します（-15 = 15% 以上下落した場合にブラックリスト入り）
     .unit = %
-config-positions-partial-exit-default-pct = デフォルトの部分エグジット
-    .hint = 部分エグジットで売却するデフォルトの割合
-    .unit = %
-config-positions-partial-exit-enabled = 部分エグジットを有効化
-    .hint = 全量か何もしないかではなく、ポジションの一部を売却できるようにします
-config-positions-partial-exit-max-pct = 部分エグジットの最大
-    .hint = 部分エグジットで許可される最大の割合
-    .unit = %
-config-positions-partial-exit-min-pct = 部分エグジットの最小
-    .hint = 部分エグジットで許可される最小の割合
-    .unit = %
 config-positions-position-open-cooldown-secs = ポジションオープンのクールダウン
     .hint = ポジションを開く間隔（秒）（連続した急なオープンを防ぎます）
     .unit = 秒
 config-positions-profit-extra-needed-sol = 利益計算の追加バッファ
     .hint = 利益計算に必要な追加の SOL（優先手数料分）
     .unit = SOL
-config-positions-trailing-stop-activation-pct = トレーリングストップの有効化
-    .hint = この利益率に達したらトレーリングストップを有効にします（10 = +10% で有効化）
-    .unit = %
-config-positions-trailing-stop-distance-pct = トレーリングストップの下落幅
-    .hint = ピークからどれだけ下でトレールするか（5 = ピークから 5% 下落したらエグジット）
-    .unit = %
-config-positions-trailing-stop-enabled = トレーリングストップを有効化
-    .hint = 利益のしきい値に達した後のトレーリングストップロスを有効にします
 
 ## referral
 
@@ -1119,13 +1100,16 @@ config-trader-slippage-exit-retry-steps-pct = エグジットのリトライ段�
 config-trader-slippage-quote-default-pct = デフォルトのスリッページ
     .hint = 1% はタイト、変動が大きい場合は 3-5%
     .unit = %
-config-trader-stop-loss-allow-partial = 部分エグジットを許可
-    .hint = 損切りで、ポジション全体のクローズではなく部分エグジットを許可します
+config-trader-stop-loss-allow-partial = 先に一部を売却
+    .hint = 損切りが発動したら、まずポジションの一部を売却し、価格がまだストップを下回っていれば残りを売却します
 config-trader-stop-loss-enabled = 損切りを有効化
     .hint = 損失がしきい値を超えたら自動的にエグジットします（時間エグジットとは異なり、即座にエグジット）
 config-trader-stop-loss-min-hold-seconds = 最小保有時間
     .hint = 損切りが発動できるようになるまでの最小保有秒数（0 = 即時）
     .unit = 秒
+config-trader-stop-loss-partial-pct = 売却する割合
+    .hint = 最初の損切り売却で売るポジションの割合
+    .unit = %
 config-trader-stop-loss-threshold-pct = 損切りのしきい値
     .hint = 損失がこの % を超えたらエグジットします（50 = -50% でエグジット）
     .unit = %
@@ -1141,6 +1125,14 @@ config-trader-time-override-unit = 時間エグジットの単位
 config-trader-trade-size-sol = 取引サイズ
     .hint = 1 ポジションあたりの SOL
     .unit = SOL
+config-trader-trailing-stop-activation-pct = トレーリングストップの有効化
+    .hint = この利益率に達したらトレーリングストップを有効にします（10 = +10% で有効化）
+    .unit = %
+config-trader-trailing-stop-distance-pct = トレーリングストップの下落幅
+    .hint = ピークからどれだけ下でトレールするか（5 = ピークから 5% 下落したらエグジット）
+    .unit = %
+config-trader-trailing-stop-enabled = トレーリングストップを有効化
+    .hint = 利益のしきい値に達した後のトレーリングストップロスを有効にします
 
 ## updates
 
@@ -1315,7 +1307,6 @@ config-category-monitoring = 監視
 config-category-notifications = 通知
 config-category-ollama-settings = { -ollama } 設定
 config-category-optimization = 最適化
-config-category-partial-exit = 部分エグジット
 config-category-performance = パフォーマンス
 config-category-pool-metrics = プール指標
 config-category-price-change = 価格変動

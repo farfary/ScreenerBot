@@ -808,31 +808,12 @@ config-positions-loss-blacklist-enabled = 启用亏损拉黑
 config-positions-loss-blacklist-threshold-pct = 亏损拉黑阈值
     .hint = 亏损超过此 % 的代币加入黑名单（-15 = 下跌 15% 以上即拉黑）
     .unit = %
-config-positions-partial-exit-default-pct = 默认部分出场
-    .hint = 部分出场时默认卖出的百分比
-    .unit = %
-config-positions-partial-exit-enabled = 启用部分出场
-    .hint = 允许卖出仓位的一部分，而不是全有或全无
-config-positions-partial-exit-max-pct = 最大部分出场
-    .hint = 部分出场允许的最大百分比
-    .unit = %
-config-positions-partial-exit-min-pct = 最小部分出场
-    .hint = 部分出场允许的最小百分比
-    .unit = %
 config-positions-position-open-cooldown-secs = 开仓冷却时间
     .hint = 开立任意两个仓位之间的间隔秒数（防止短时间内连续开仓）
     .unit = 秒
 config-positions-profit-extra-needed-sol = 盈利额外缓冲
     .hint = 盈利计算所需的额外 SOL（优先费）
     .unit = SOL
-config-positions-trailing-stop-activation-pct = 追踪止损启动
-    .hint = 盈利达到此 % 后启动追踪止损（10 = 在 +10% 时启动）
-    .unit = %
-config-positions-trailing-stop-distance-pct = 追踪止损距离
-    .hint = 在峰值下方追踪的距离（5 = 价格较峰值下跌 5% 时出场）
-    .unit = %
-config-positions-trailing-stop-enabled = 启用追踪止损
-    .hint = 盈利达到阈值后启用追踪止损
 
 ## referral
 
@@ -1119,13 +1100,16 @@ config-trader-slippage-exit-retry-steps-pct = 出场重试阶梯
 config-trader-slippage-quote-default-pct = 默认滑点
     .hint = 1% 较严格，波动大的行情用 3-5%
     .unit = %
-config-trader-stop-loss-allow-partial = 允许部分出场
-    .hint = 止损时允许部分出场，而不是整个仓位平仓
+config-trader-stop-loss-allow-partial = 先卖出一部分
+    .hint = 止损触发时，先卖出部分仓位，若价格仍低于止损位再卖出剩余部分
 config-trader-stop-loss-enabled = 启用止损
     .hint = 亏损超过阈值时自动出场（立即出场，与时间出场不同）
 config-trader-stop-loss-min-hold-seconds = 最短持仓时间
     .hint = 止损可触发前至少持仓的秒数（0 = 立即）
     .unit = 秒
+config-trader-stop-loss-partial-pct = 卖出比例
+    .hint = 首次止损卖出的仓位比例
+    .unit = %
 config-trader-stop-loss-threshold-pct = 止损阈值
     .hint = 亏损超过此 % 时出场（50 = 在 -50% 时出场）
     .unit = %
@@ -1141,6 +1125,14 @@ config-trader-time-override-unit = 时间出场单位
 config-trader-trade-size-sol = 交易规模
     .hint = 每个仓位的 SOL 数量
     .unit = SOL
+config-trader-trailing-stop-activation-pct = 追踪止损启动
+    .hint = 盈利达到此 % 后启动追踪止损（10 = 在 +10% 时启动）
+    .unit = %
+config-trader-trailing-stop-distance-pct = 追踪止损距离
+    .hint = 在峰值下方追踪的距离（5 = 价格较峰值下跌 5% 时出场）
+    .unit = %
+config-trader-trailing-stop-enabled = 启用追踪止损
+    .hint = 盈利达到阈值后启用追踪止损
 
 ## updates
 
@@ -1315,7 +1307,6 @@ config-category-monitoring = 监控
 config-category-notifications = 通知
 config-category-ollama-settings = { -ollama } 设置
 config-category-optimization = 优化
-config-category-partial-exit = 部分出场
 config-category-performance = 性能
 config-category-pool-metrics = 流动性池指标
 config-category-price-change = 涨跌幅

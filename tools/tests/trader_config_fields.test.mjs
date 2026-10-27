@@ -13,6 +13,9 @@
  *   loss, DCA threshold) while the config keeps its own sign: Stop Loss stores a
  *   positive percent, the other two a negative one. Load, display, edit and save
  *   round-trip at both bounds of each field.
+ * - Sell Part First shows its Part to Sell field only while on; the field takes its bounds
+ *   and unit from the metadata, saves through its card, and the stop-loss example sells
+ *   that part at the threshold and the rest if the price stays below the stop.
  *
  * The config served here uses a trade size other than the default, so a figure that
  * follows the default instead of the loaded config fails.
@@ -196,3 +199,50 @@ for (const { tab, id, key, bounds } of LOSS_FIELDS) {
     });
   }
 }
+
+test("Sell Part First shows its part field and a two-step stop-loss example", async () => {
+  const { page, close } = await openTrader("stop-loss", {
+    stop_loss_allow_partial: true,
+    stop_loss_partial_pct: 40,
+  });
+  try {
+    const group = page.locator("#stop-loss-partial-pct-group");
+    const part = page.locator("#stop-loss-partial-pct");
+    const text = async (selector) => plain(await page.locator(selector).textContent());
+    await page.waitForFunction(() => document.querySelector("#stop-loss-partial-pct").value === "40");
+    assert.equal(await group.isVisible(), true);
+    assert.deepEqual(
+      await part.evaluate((el) => ({
+        min: el.min,
+        max: el.max,
+        unit: el.closest(".config-group").querySelector(".input-unit").textContent,
+      })),
+      { min: "10", max: "90", unit: "%" }
+    );
+
+    await page.locator("#stop-loss-example-exit", { hasText: "SOL" }).waitFor();
+    assert.equal(await text("#stop-loss-exit-title"), "Sell 40%");
+    assert.equal(await text("#stop-loss-exit-detail"), "Part of the position");
+    assert.equal(await text("#stop-loss-example-exit"), "0.004 SOL");
+    assert.equal(await page.locator("#stop-loss-rest-step").isVisible(), true);
+    assert.equal(await text("#stop-loss-example-rest"), "0.006 SOL");
+
+    await part.fill("25");
+    const [request] = await Promise.all([
+      page.waitForRequest(
+        (candidate) => candidate.method() === "PATCH" && candidate.url().endsWith("/api/config/trader")
+      ),
+      page.locator(".config-card:has(#stop-loss-partial-pct) .config-card-save").click(),
+    ]);
+    assert.equal(request.postDataJSON().stop_loss_partial_pct, 25);
+
+    await page.locator('label[for="stop-loss-allow-partial"]').click();
+    assert.equal(await group.isVisible(), false);
+    assert.equal(await page.locator("#stop-loss-rest-step").isVisible(), false);
+    assert.equal(await text("#stop-loss-exit-title"), "Auto Exit");
+    assert.equal(await text("#stop-loss-exit-detail"), "Full position exit");
+    assert.equal(await text("#stop-loss-example-exit"), "0.01 SOL");
+  } finally {
+    await close();
+  }
+});

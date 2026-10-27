@@ -322,6 +322,7 @@ errors-trade-mint-invalid = عنوان إصدار الرمز { $mint } غير ص
 errors-trade-blacklisted = الرمز { $mint } في القائمة السوداء
 errors-trade-slippage-invalid = يجب أن يكون الانزلاق السعري { $slippage }% بين { $minimum }% و{ $maximum }%
 errors-trade-percentage-invalid = يجب أن تكون نسبة البيع { $percentage } ضمن ⁨(0, 100]⁩
+errors-trade-percentage-required = يحتاج البيع الجزئي إلى نسبة المركز المراد بيعها
 errors-trade-record-failed = تعذّر تسجيل الصفقة اليدوية
 errors-trade-task-cancelled = توقفت الصفقة اليدوية قبل أن تُرجع نتيجتها لأن التطبيق يُغلق؛ المركز يحمل نتيجتها
 errors-trade-no-open-position = لا يوجد مركز مفتوح للرمز { $mint }

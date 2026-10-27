@@ -808,31 +808,12 @@ config-positions-loss-blacklist-enabled = فعال‌سازی فهرست سیا�
 config-positions-loss-blacklist-threshold-pct = آستانه فهرست سیاه ضرر
     .hint = توکن‌هایی با ضرر بیشتر از این درصد در فهرست سیاه قرار می‌گیرند (-15 = در صورت افت 15% یا بیشتر)
     .unit = %
-config-positions-partial-exit-default-pct = پیش‌فرض خروج جزئی
-    .hint = درصد پیش‌فرض فروش در خروج‌های جزئی
-    .unit = %
-config-positions-partial-exit-enabled = فعال‌سازی خروج جزئی
-    .hint = امکان فروش بخشی از پوزیشن به‌جای همه یا هیچ
-config-positions-partial-exit-max-pct = حداکثر خروج جزئی
-    .hint = حداکثر درصد مجاز برای خروج‌های جزئی
-    .unit = %
-config-positions-partial-exit-min-pct = حداقل خروج جزئی
-    .hint = حداقل درصد مجاز برای خروج‌های جزئی
-    .unit = %
 config-positions-position-open-cooldown-secs = زمان انتظار باز کردن پوزیشن
     .hint = ثانیه‌های فاصله میان باز کردن هر پوزیشن (از ورود سریع پیاپی جلوگیری می‌کند)
     .unit = ثانیه
 config-positions-profit-extra-needed-sol = حاشیه اضافی سود
     .hint = SOL اضافه موردنیاز برای محاسبه سود (کارمزد اولویت)
     .unit = SOL
-config-positions-trailing-stop-activation-pct = فعال‌سازی حد ضرر متحرک
-    .hint = حد ضرر متحرک پس از رسیدن به این درصد سود فعال می‌شود (10 = فعال‌سازی در +10%)
-    .unit = %
-config-positions-trailing-stop-distance-pct = فاصله حد ضرر متحرک
-    .hint = فاصله دنبال‌کردن زیر اوج (5 = خروج اگر قیمت 5% از اوج افت کند)
-    .unit = %
-config-positions-trailing-stop-enabled = فعال‌سازی حد ضرر متحرک
-    .hint = حد ضرر متحرک را پس از رسیدن به آستانه سود فعال می‌کند
 
 ## referral
 
@@ -1119,13 +1100,16 @@ config-trader-slippage-exit-retry-steps-pct = گام‌های تلاش مجدد 
 config-trader-slippage-quote-default-pct = اسلیپیج پیش‌فرض
     .hint = 1% محدود، 3 تا 5% برای بازار پرنوسان
     .unit = %
-config-trader-stop-loss-allow-partial = مجاز بودن خروج جزئی
-    .hint = برای حد ضرر، به‌جای بستن کامل پوزیشن، خروج جزئی مجاز است
+config-trader-stop-loss-allow-partial = اول بخشی را بفروش
+    .hint = وقتی حد ضرر فعال شد، ابتدا بخشی از پوزیشن را بفروش و اگر قیمت همچنان زیر حد ضرر بود، باقی را بفروش
 config-trader-stop-loss-enabled = فعال‌سازی حد ضرر
     .hint = وقتی ضرر از آستانه بگذرد خروج خودکار انجام می‌شود (بلافاصله خارج می‌شود، برخلاف خروج زمانی)
 config-trader-stop-loss-min-hold-seconds = حداقل مدت نگهداری
     .hint = حداقل ثانیه‌های نگهداری پیش از آنکه حد ضرر بتواند فعال شود (0 = فوری)
     .unit = ثانیه
+config-trader-stop-loss-partial-pct = بخش فروش
+    .hint = سهمی از پوزیشن که اولین فروش حد ضرر می‌فروشد
+    .unit = %
 config-trader-stop-loss-threshold-pct = آستانه حد ضرر
     .hint = وقتی ضرر از این درصد بگذرد خروج انجام می‌شود (50 = خروج در -50%)
     .unit = %
@@ -1141,6 +1125,14 @@ config-trader-time-override-unit = واحد خروج زمانی
 config-trader-trade-size-sol = اندازه معامله
     .hint = SOL برای هر پوزیشن
     .unit = SOL
+config-trader-trailing-stop-activation-pct = فعال‌سازی حد ضرر متحرک
+    .hint = حد ضرر متحرک پس از رسیدن به این درصد سود فعال می‌شود (10 = فعال‌سازی در +10%)
+    .unit = %
+config-trader-trailing-stop-distance-pct = فاصله حد ضرر متحرک
+    .hint = فاصله دنبال‌کردن زیر اوج (5 = خروج اگر قیمت 5% از اوج افت کند)
+    .unit = %
+config-trader-trailing-stop-enabled = فعال‌سازی حد ضرر متحرک
+    .hint = حد ضرر متحرک را پس از رسیدن به آستانه سود فعال می‌کند
 
 ## updates
 
@@ -1315,7 +1307,6 @@ config-category-monitoring = پایش
 config-category-notifications = اعلان‌ها
 config-category-ollama-settings = تنظیمات { -ollama }
 config-category-optimization = بهینه‌سازی
-config-category-partial-exit = خروج جزئی
 config-category-performance = عملکرد
 config-category-pool-metrics = شاخص‌های استخر
 config-category-price-change = تغییر قیمت

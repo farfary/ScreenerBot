@@ -332,6 +332,13 @@ function createLifecycle() {
     }
   }
 
+  /** "Part to Sell" is shown only while the stop loss may sell part of the position first. */
+  function syncStopLossPartialField() {
+    const group = $("#stop-loss-partial-pct-group");
+    const allowPartial = $("#stop-loss-allow-partial");
+    if (group && allowPartial) group.hidden = !allowPartial.checked;
+  }
+
   /**
    * Update form fields from config state
    */
@@ -339,38 +346,42 @@ function createLifecycle() {
     if (!state.config) return;
 
     const trader = state.config.trader || {};
-    const positions = state.config.positions || {};
 
-    // Stop Loss (from trader config)
+    // Stop Loss
     const stopLossEnabled = $("#stop-loss-enabled");
     const stopLossThreshold = $("#stop-loss-threshold");
     const stopLossAllowPartial = $("#stop-loss-allow-partial");
+    const stopLossPartialPct = $("#stop-loss-partial-pct");
     const stopLossMinHold = $("#stop-loss-min-hold");
     if (stopLossEnabled) {
-      stopLossEnabled.checked = trader.stop_loss_enabled || false;
+      stopLossEnabled.checked = trader.stop_loss_enabled === true;
     }
     if (stopLossThreshold) {
-      stopLossThreshold.value = trader.stop_loss_threshold_pct || 50.0;
+      stopLossThreshold.value = trader.stop_loss_threshold_pct;
     }
     if (stopLossAllowPartial) {
-      stopLossAllowPartial.checked = trader.stop_loss_allow_partial || false;
+      stopLossAllowPartial.checked = trader.stop_loss_allow_partial === true;
+    }
+    if (stopLossPartialPct) {
+      stopLossPartialPct.value = trader.stop_loss_partial_pct;
     }
     if (stopLossMinHold) {
-      stopLossMinHold.value = trader.stop_loss_min_hold_seconds || 0;
+      stopLossMinHold.value = trader.stop_loss_min_hold_seconds;
     }
+    syncStopLossPartialField();
 
-    // Trailing Stop (from positions config)
+    // Trailing Stop
     const trailingEnabled = $("#trailing-enabled");
     const trailActivation = $("#trail-activation");
     const trailDistance = $("#trail-distance");
     if (trailingEnabled) {
-      trailingEnabled.checked = positions.trailing_stop_enabled || false;
+      trailingEnabled.checked = trader.trailing_stop_enabled === true;
     }
     if (trailActivation) {
-      trailActivation.value = positions.trailing_stop_activation_pct || 10.0;
+      trailActivation.value = trader.trailing_stop_activation_pct;
     }
     if (trailDistance) {
-      trailDistance.value = positions.trailing_stop_distance_pct || 5.0;
+      trailDistance.value = trader.trailing_stop_distance_pct;
     }
 
     // ROI
@@ -1167,10 +1178,18 @@ function createLifecycle() {
       });
     }
 
-    // Stop loss allow partial toggle listener
+    // "Sell Part First" toggle: `input` also fires when a card Reset restores it.
     const stopLossAllowPartial = $("#stop-loss-allow-partial");
     if (stopLossAllowPartial) {
-      addTrackedListener(stopLossAllowPartial, "change", () => {
+      addTrackedListener(stopLossAllowPartial, "input", () => {
+        syncStopLossPartialField();
+        examples.updateStopLossExample();
+      });
+    }
+
+    const stopLossPartialPct = $("#stop-loss-partial-pct");
+    if (stopLossPartialPct) {
+      addTrackedListener(stopLossPartialPct, "input", () => {
         examples.updateStopLossExample();
       });
     }

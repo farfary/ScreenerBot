@@ -204,7 +204,11 @@ trader-stop-loss-hold-immediate = 立即
 trader-stop-loss-hold-delay = 延迟 { $span }
 trader-stop-loss-price-falls = 价格下跌
 trader-stop-loss-threshold-reached = 达到阈值
-trader-stop-loss-partial = 允许部分出场
+# $part is a formatted percentage of the position.
+trader-stop-loss-sell-part = 卖出 { $part }
+trader-stop-loss-part-of-position = 部分仓位
+trader-stop-loss-sell-rest = 卖出剩余部分
+trader-stop-loss-still-below = 仍低于止损位
 # $loss is the loss percentage with its sign.
 trader-stop-loss-summary = 亏损限制在 <strong>{ $loss }</strong>
 trader-stop-loss-note = <strong>注意：</strong>止损通过提前出场来防范更大的亏损

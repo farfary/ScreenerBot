@@ -336,28 +336,15 @@
             <p class="config-hint"></p>
             <div class="input-group-enhanced">
               <span class="input-prefix" aria-hidden="true">−</span>
-              <input
-                type="number"
-                id="stop-loss-threshold"
-                min="1"
-                max="100"
-                step="1"
-                value="50"
-                class="input-large"
-              />
+              <input type="number" id="stop-loss-threshold" class="input-large" />
               <span class="input-unit">%</span>
             </div>
             <div class="config-impact">
-              <span
-                class="impact-text"
-                id="stop-loss-impact"
-                data-l10n-id="trader-stop-loss-impact"
-                data-l10n-args='{"threshold":"50"}'
-              ></span>
+              <span class="impact-text" id="stop-loss-impact"></span>
             </div>
           </div>
 
-          <!-- Allow Partial Exits -->
+          <!-- Sell Part First -->
           <div class="config-group">
             <div class="config-label-row">
               <label for="stop-loss-allow-partial" class="config-label">
@@ -373,6 +360,21 @@
                   <span class="toggle-track"></span>
                 </label>
               </span>
+            </div>
+          </div>
+
+          <!-- Part to Sell: shown while Sell Part First is on; bounds and unit come from the field metadata -->
+          <div class="config-group" id="stop-loss-partial-pct-group" hidden>
+            <div class="config-label-row">
+              <label for="stop-loss-partial-pct" class="config-label">
+                <i class="icon-chart-pie"></i>
+                <span data-l10n-id="config-trader-stop-loss-partial-pct"></span>
+              </label>
+            </div>
+            <p class="config-hint"></p>
+            <div class="input-group-enhanced">
+              <input type="number" id="stop-loss-partial-pct" class="input-large" />
+              <span class="input-unit"></span>
             </div>
           </div>
 
@@ -439,13 +441,22 @@
                   <i class="icon-log-out"></i>
                 </div>
                 <div class="step-content">
-                  <div class="step-title" data-l10n-id="trader-step-auto-exit"></div>
+                  <div class="step-title" id="stop-loss-exit-title" data-l10n-id="trader-step-auto-exit"></div>
                   <div class="step-value" id="stop-loss-example-exit">—</div>
-                  <div
-                    class="step-detail"
-                    id="stop-loss-partial-indicator"
-                    data-l10n-id="trader-step-full-exit"
-                  ></div>
+                  <div class="step-detail" id="stop-loss-exit-detail" data-l10n-id="trader-step-full-exit"></div>
+                </div>
+              </div>
+              <div class="timeline-arrow" id="stop-loss-rest-arrow" hidden>
+                <i class="icon-chevron-right"></i>
+              </div>
+              <div class="timeline-step" id="stop-loss-rest-step" hidden>
+                <div class="step-icon step-icon-exit">
+                  <i class="icon-log-out"></i>
+                </div>
+                <div class="step-content">
+                  <div class="step-title" data-l10n-id="trader-stop-loss-sell-rest"></div>
+                  <div class="step-value" id="stop-loss-example-rest">—</div>
+                  <div class="step-detail" data-l10n-id="trader-stop-loss-still-below"></div>
                 </div>
               </div>
             </div>
@@ -492,7 +503,7 @@
             <div class="config-label-row">
               <label for="trail-activation" class="config-label">
                 <i class="icon-trending-up"></i>
-                <span data-l10n-id="config-positions-trailing-stop-activation-pct"></span>
+                <span data-l10n-id="config-trader-trailing-stop-activation-pct"></span>
               </label>
             </div>
             <p class="config-hint"></p>
@@ -523,7 +534,7 @@
             <div class="config-label-row">
               <label for="trail-distance" class="config-label">
                 <i class="icon-arrow-down"></i>
-                <span data-l10n-id="config-positions-trailing-stop-distance-pct"></span>
+                <span data-l10n-id="config-trader-trailing-stop-distance-pct"></span>
               </label>
             </div>
             <p class="config-hint"></p>

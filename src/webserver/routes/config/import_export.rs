@@ -173,24 +173,33 @@ fn section_value(cfg: &config::Config, section: &str) -> Option<serde_json::Valu
     }
 }
 
-/// Move the sections an older export still carries at their legacy paths
-/// (`rpc`, `swaps`, `sol_price`) to their canonical sections before any
-/// section is chosen. A malformed legacy section refuses the whole import.
-///
-/// Returns the top-level sections the relocation created: they hold only the
-/// moved fields, never a whole section, so they always merge into the current
-/// values whatever the requested mode.
+/// What the legacy relocation of an import did.
+#[derive(Default)]
+struct LegacyRelocation {
+    /// The top-level sections the relocation created: they hold only the moved
+    /// fields, never a whole section, so they always merge into the current
+    /// values whatever the requested mode.
+    created_sections: Vec<String>,
+    /// Every relocation whose legacy node the import carried, as (legacy path,
+    /// canonical path).
+    moved: Vec<(&'static [&'static str], &'static [&'static str])>,
+}
+
+/// Move what an older export still carries at its legacy paths (the `rpc`,
+/// `swaps` and `sol_price` sections, the exit-rule leaves of `positions`) to
+/// its canonical place before any section is chosen. A malformed legacy value
+/// refuses the whole import.
 fn relocate_legacy_sections(
     imported: &mut serde_json::Value,
-) -> std::result::Result<Vec<String>, Response> {
-    if !config::has_legacy_chain_sections(imported) {
-        return Ok(Vec::new());
-    }
+) -> std::result::Result<LegacyRelocation, Response> {
     let sections_before: Vec<String> = imported
         .as_object()
         .map(|obj| obj.keys().cloned().collect())
         .unwrap_or_default();
-    config::relocate_legacy_chain_sections(imported).map_err(|e| {
+    let moved: Vec<_> = config::relocation_destinations()
+        .filter(|(from, _)| json_node_at(imported, from).is_some())
+        .collect();
+    let relocated = config::relocate_legacy_layout(imported).map_err(|e| {
         ApiError::new(
             ApiErrorCode::InvalidInput,
             ids::ERRORS_CONFIG_IMPORT_VALIDATION_FAILED,
@@ -198,7 +207,10 @@ fn relocate_legacy_sections(
         .details(e.to_string())
         .into_response()
     })?;
-    Ok(imported
+    if !relocated {
+        return Ok(LegacyRelocation::default());
+    }
+    let created_sections = imported
         .as_object()
         .map(|obj| {
             obj.keys()
@@ -206,26 +218,111 @@ fn relocate_legacy_sections(
                 .cloned()
                 .collect()
         })
-        .unwrap_or_default())
+        .unwrap_or_default();
+    Ok(LegacyRelocation {
+        created_sections,
+        moved,
+    })
+}
+
+/// The node of `value` at `path`; `None` when a segment is absent.
+fn json_node_at<'a>(value: &'a serde_json::Value, path: &[&str]) -> Option<&'a serde_json::Value> {
+    path.iter()
+        .try_fold(value, |node, segment| node.as_object()?.get(*segment))
+}
+
+/// Store `node` in `value` at `path`, creating every missing object on the way;
+/// a non-object on the way leaves `value` unchanged.
+fn insert_json_node(value: &mut serde_json::Value, path: &[&str], node: serde_json::Value) {
+    let Some((leaf, parents)) = path.split_last() else {
+        return;
+    };
+    let mut current = value;
+    for segment in parents {
+        let Some(object) = current.as_object_mut() else {
+            return;
+        };
+        current = object
+            .entry(*segment)
+            .or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()));
+    }
+    if let Some(object) = current.as_object_mut() {
+        object.insert((*leaf).to_owned(), node);
+    }
+}
+
+/// A replaced section keeps the current value of every relocation destination
+/// the imported value lacks: an export older than the relocation carried that
+/// value at its legacy path, if at all, and the section's defaults must not
+/// overwrite what the current config holds.
+fn keep_absent_relocation_destinations(
+    current: &serde_json::Value,
+    section: &str,
+    imported: &mut serde_json::Value,
+) {
+    for (_, to) in config::relocation_destinations() {
+        let Some((_, path)) = to.split_first().filter(|(head, _)| **head == section) else {
+            continue;
+        };
+        if json_node_at(imported, path).is_some() {
+            continue;
+        }
+        if let Some(kept) = json_node_at(current, path) {
+            insert_json_node(imported, path, kept.clone());
+        }
+    }
+}
+
+/// The values a selected legacy section of an older export feeds into
+/// sections the selection leaves out, keyed by destination section. Selecting
+/// the section that carried a value imports it at its canonical path, merged
+/// into the current values.
+fn legacy_selection_values(
+    selected: &[String],
+    imported: &serde_json::Value,
+    relocation: &LegacyRelocation,
+    sections_to_import: &[String],
+) -> Vec<(String, serde_json::Value)> {
+    let mut fed = serde_json::Map::new();
+    for (from, to) in &relocation.moved {
+        let Some((section, path)) = to.split_first() else {
+            continue;
+        };
+        if !selected.iter().any(|name| name == from[0])
+            || sections_to_import.iter().any(|name| name == section)
+            || !CONFIG_SECTIONS.contains(section)
+        {
+            continue;
+        }
+        let Some(node) = json_node_at(imported, to) else {
+            continue;
+        };
+        let target = fed
+            .entry(*section)
+            .or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()));
+        insert_json_node(target, path, node.clone());
+    }
+    fed.into_iter().collect()
 }
 
 /// The value an import writes for `section`: the imported value over the
-/// current one when merging, the imported value alone when replacing.
+/// current one when merging, the imported value alone when replacing, with
+/// the relocation destinations it lacks kept from the current config.
 fn section_import_value(
     cfg: &config::Config,
     section: &str,
-    imported: serde_json::Value,
+    mut imported: serde_json::Value,
     merge: bool,
 ) -> serde_json::Value {
-    if !merge {
+    let Some(mut current) = section_value(cfg, section) else {
         return imported;
-    }
-    match section_value(cfg, section) {
-        Some(mut current) => {
-            config::merge_document(&mut current, &imported);
-            current
-        }
-        None => imported,
+    };
+    if merge {
+        config::merge_document(&mut current, &imported);
+        current
+    } else {
+        keep_absent_relocation_destinations(&current, section, &mut imported);
+        imported
     }
 }
 
@@ -403,7 +500,7 @@ pub async fn export_config(Json(request): Json<ExportConfigRequest>) -> Response
 pub async fn import_config_preview(Json(request): Json<ImportConfigPreviewRequest>) -> Response {
     let mut imported = request.config;
     let relocated_sections = match relocate_legacy_sections(&mut imported) {
-        Ok(sections) => sections,
+        Ok(relocation) => relocation.created_sections,
         Err(response) => return response,
     };
     let mut sections = Vec::new();
@@ -519,8 +616,8 @@ pub async fn import_config_preview(Json(request): Json<ImportConfigPreviewReques
 /// POST /api/config/import - Import configuration
 pub async fn import_config(Json(request): Json<ImportConfigRequest>) -> Response {
     let mut imported = request.config;
-    let relocated_sections = match relocate_legacy_sections(&mut imported) {
-        Ok(sections) => sections,
+    let relocation = match relocate_legacy_sections(&mut imported) {
+        Ok(relocation) => relocation,
         Err(response) => return response,
     };
 
@@ -551,7 +648,26 @@ pub async fn import_config(Json(request): Json<ImportConfigRequest>) -> Response
             .collect(),
     };
 
-    if sections_to_import.is_empty() {
+    // Sections chosen by name import as a whole; the values a selected legacy
+    // section feeds into a section left out merge into the current values.
+    let mut section_values: Vec<(String, serde_json::Value, bool)> = sections_to_import
+        .iter()
+        .filter_map(|section| {
+            let merge = request.merge || relocation.created_sections.contains(section);
+            imported_obj
+                .get(section)
+                .map(|value| (section.clone(), value.clone(), merge))
+        })
+        .collect();
+    if let Some(selected) = request.sections.as_deref().filter(|s| !s.is_empty()) {
+        section_values.extend(
+            legacy_selection_values(selected, &imported, &relocation, &sections_to_import)
+                .into_iter()
+                .map(|(section, value)| (section, value, true)),
+        );
+    }
+
+    if section_values.is_empty() {
         return ApiError::new(
             ApiErrorCode::InvalidInput,
             ids::ERRORS_CONFIG_IMPORT_NO_SECTIONS,
@@ -565,21 +681,15 @@ pub async fn import_config(Json(request): Json<ImportConfigRequest>) -> Response
     let mut imported_sections = Vec::new();
     let mut errors = Vec::new();
 
-    for section in &sections_to_import {
-        let value = match imported_obj.get(section) {
-            Some(v) => v.clone(),
-            None => continue,
-        };
-
+    for (section, value, merge) in section_values {
         // Imported values override current ones when merging
-        let merge = request.merge || relocated_sections.contains(section);
-        let final_value = section_import_value(&candidate_config, section, value, merge);
+        let final_value = section_import_value(&candidate_config, &section, value, merge);
 
         // Apply to candidate config
-        if let Err(e) = apply_section_to_config(&mut candidate_config, section, final_value) {
+        if let Err(e) = apply_section_to_config(&mut candidate_config, &section, final_value) {
             errors.push(format!("{section}: {e}"));
         } else {
-            imported_sections.push(section.clone());
+            imported_sections.push(section);
         }
     }
 

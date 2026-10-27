@@ -218,7 +218,11 @@ trader-stop-loss-hold-immediate = Inmediato
 trader-stop-loss-hold-delay = Retraso de { $span }
 trader-stop-loss-price-falls = El precio cae
 trader-stop-loss-threshold-reached = Umbral alcanzado
-trader-stop-loss-partial = Salidas parciales permitidas
+# $part is a formatted percentage of the position.
+trader-stop-loss-sell-part = Vender { $part }
+trader-stop-loss-part-of-position = Parte de la posición
+trader-stop-loss-sell-rest = Vender el resto
+trader-stop-loss-still-below = Sigue por debajo del stop
 # $loss is the loss percentage with its sign.
 trader-stop-loss-summary = Pérdida limitada a <strong>{ $loss }</strong>
 trader-stop-loss-note = <strong>Nota:</strong> el stop loss protege de pérdidas mayores saliendo antes

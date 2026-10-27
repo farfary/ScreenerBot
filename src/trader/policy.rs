@@ -14,15 +14,16 @@ use serde::{Deserialize, Serialize};
 use crate::positions::{Position, PositionOrigin};
 use crate::trader::config;
 use crate::trader::evaluators::dca::DcaConfigSnapshot;
-use crate::trader::evaluators::exit_stop_loss;
 
-/// The four config values `exit_stop_loss::check_stop_loss` reads today.
+/// The stop-loss rule `exit_stop_loss::check_stop_loss` applies: its switch, threshold,
+/// minimum hold and the partial first sale.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct StopLossPolicy {
     pub enabled: bool,
     pub threshold_pct: f64,
     pub min_hold_seconds: u64,
     pub allow_partial: bool,
+    /// Share of the position a partial stop loss sells, from `trader.stop_loss_partial_pct`.
     pub partial_exit_default_pct: f64,
 }
 
@@ -108,11 +109,11 @@ impl ExitPolicy {
     pub fn from_config() -> Self {
         Self {
             stop_loss: StopLossPolicy {
-                enabled: exit_stop_loss::is_stop_loss_enabled(),
-                threshold_pct: exit_stop_loss::get_stop_loss_threshold_pct(),
-                min_hold_seconds: exit_stop_loss::get_stop_loss_min_hold_seconds(),
-                allow_partial: exit_stop_loss::get_stop_loss_allow_partial(),
-                partial_exit_default_pct: config::get_partial_exit_default_pct(),
+                enabled: config::is_stop_loss_enabled(),
+                threshold_pct: config::get_stop_loss_threshold_pct(),
+                min_hold_seconds: config::get_stop_loss_min_hold_seconds(),
+                allow_partial: config::get_stop_loss_allow_partial(),
+                partial_exit_default_pct: config::get_stop_loss_partial_pct(),
             },
             trailing: TrailingPolicy {
                 enabled: config::is_trailing_stop_enabled(),

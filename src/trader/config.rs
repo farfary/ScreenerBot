@@ -50,29 +50,44 @@ pub fn get_dca_cooldown_minutes() -> i64 {
     with_config(|cfg| cfg.trader.dca_cooldown_minutes)
 }
 
+/// Check if stop loss is enabled
+pub fn is_stop_loss_enabled() -> bool {
+    with_config(|cfg| cfg.trader.stop_loss_enabled)
+}
+
+/// Get stop loss threshold percentage
+pub fn get_stop_loss_threshold_pct() -> f64 {
+    with_config(|cfg| cfg.trader.stop_loss_threshold_pct)
+}
+
+/// Get stop loss minimum hold seconds
+pub fn get_stop_loss_min_hold_seconds() -> u64 {
+    with_config(|cfg| cfg.trader.stop_loss_min_hold_seconds)
+}
+
+/// Check if partial exits are allowed for stop loss
+pub fn get_stop_loss_allow_partial() -> bool {
+    with_config(|cfg| cfg.trader.stop_loss_allow_partial)
+}
+
+/// Get the share of the position a partial stop loss sells, in percent
+pub fn get_stop_loss_partial_pct() -> f64 {
+    with_config(|cfg| cfg.trader.stop_loss_partial_pct)
+}
+
 /// Check if trailing stop is enabled
 pub fn is_trailing_stop_enabled() -> bool {
-    with_config(|cfg| cfg.positions.trailing_stop_enabled)
+    with_config(|cfg| cfg.trader.trailing_stop_enabled)
 }
 
 /// Get trailing stop activation percentage
 pub fn get_trailing_stop_activation_pct() -> f64 {
-    with_config(|cfg| cfg.positions.trailing_stop_activation_pct)
+    with_config(|cfg| cfg.trader.trailing_stop_activation_pct)
 }
 
 /// Get trailing stop distance percentage
 pub fn get_trailing_stop_distance_pct() -> f64 {
-    with_config(|cfg| cfg.positions.trailing_stop_distance_pct)
-}
-
-/// Check if partial exits are enabled
-pub fn is_partial_exit_enabled() -> bool {
-    with_config(|cfg| cfg.positions.partial_exit_enabled)
-}
-
-/// Get default partial exit percentage
-pub fn get_partial_exit_default_pct() -> f64 {
-    with_config(|cfg| cfg.positions.partial_exit_default_pct)
+    with_config(|cfg| cfg.trader.trailing_stop_distance_pct)
 }
 
 /// Check if ROI-based exit is enabled

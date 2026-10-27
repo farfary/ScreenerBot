@@ -250,6 +250,144 @@ async fn schema_v1_backfills_explicit_empty_exit_policy_overrides() {
     );
 }
 
+/// A task whose stop loss carries `allow_partial`, and nothing else overridden.
+fn task_with_partial_override(allow_partial: Option<bool>) -> CopyTask {
+    let mut task = task();
+    task.exit_policy_overrides.stop_loss.allow_partial = allow_partial;
+    task
+}
+
+/// Every task's stored partial stop-loss override and `updated_at`, read from the
+/// rows as written, by task id.
+fn stored_partial_overrides(path: &std::path::Path) -> Vec<(i64, Option<bool>, String)> {
+    let connection = rusqlite::Connection::open(path).unwrap();
+    let mut statement = connection
+        .prepare("SELECT id, exit_policy_json, updated_at FROM copy_tasks ORDER BY id")
+        .unwrap();
+    let rows = statement
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+            ))
+        })
+        .unwrap()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    rows.into_iter()
+        .map(|(id, json, updated_at)| {
+            let overrides: crate::trader::policy::ExitPolicyOverrides =
+                serde_json::from_str(&json).unwrap();
+            (id, overrides.stop_loss.allow_partial, updated_at)
+        })
+        .collect()
+}
+
+#[tokio::test]
+async fn a_v10_store_retires_partial_stop_loss_overrides_unless_the_switch_was_on() {
+    for switch in [None, Some(false), Some(true)] {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("copy_trading.db");
+        let db = CopyDatabase::open(&path, crate::chains::ChainId::Solana).unwrap();
+        let live = db
+            .insert_task(task_with_partial_override(Some(true)))
+            .await
+            .unwrap();
+        let other_chain = db
+            .insert_task(task_with_partial_override(Some(true)))
+            .await
+            .unwrap();
+        let off = db
+            .insert_task(task_with_partial_override(Some(false)))
+            .await
+            .unwrap();
+        let inherited = db
+            .insert_task(task_with_partial_override(None))
+            .await
+            .unwrap();
+        drop(db);
+        {
+            let connection = rusqlite::Connection::open(&path).unwrap();
+            connection
+                .execute(
+                    "UPDATE copy_tasks SET mode_json = '\"live\"' WHERE id = ?1",
+                    [live.id],
+                )
+                .unwrap();
+            connection
+                .execute(
+                    "UPDATE copy_tasks SET chain_id = 'future-chain' WHERE id = ?1",
+                    [other_chain.id],
+                )
+                .unwrap();
+            connection
+                .execute(
+                    "UPDATE copy_metadata SET value = '10' WHERE key = 'schema_version'",
+                    [],
+                )
+                .unwrap();
+        }
+        let before = stored_partial_overrides(&path);
+        assert_eq!(
+            before.iter().map(|row| row.1).collect::<Vec<_>>(),
+            vec![Some(true), Some(true), Some(false), None]
+        );
+
+        let mut connection = rusqlite::Connection::open(&path).unwrap();
+        let transaction = connection.transaction().unwrap();
+        schema::retire_stop_loss_partial_overrides(&transaction, switch).unwrap();
+        transaction.commit().unwrap();
+        drop(connection);
+
+        let partial = if switch == Some(true) {
+            Some(true)
+        } else {
+            Some(false)
+        };
+        let updated_at = |index: usize| before[index].2.clone();
+        assert_eq!(
+            stored_partial_overrides(&path),
+            vec![
+                (live.id, partial, updated_at(0)),
+                (other_chain.id, partial, updated_at(1)),
+                (off.id, Some(false), updated_at(2)),
+                (inherited.id, None, updated_at(3)),
+            ],
+            "switch {switch:?}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn a_partial_stop_loss_override_saved_after_the_upgrade_is_kept_on_reopen() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("copy_trading.db");
+    let db = CopyDatabase::open(&path, crate::chains::ChainId::Solana).unwrap();
+    let saved = db
+        .insert_task(task_with_partial_override(Some(true)))
+        .await
+        .unwrap();
+    drop(db);
+
+    let mut connection = rusqlite::Connection::open(&path).unwrap();
+    let transaction = connection.transaction().unwrap();
+    schema::retire_stop_loss_partial_overrides(&transaction, None).unwrap();
+    transaction.commit().unwrap();
+    drop(connection);
+    let db = CopyDatabase::open(&path, crate::chains::ChainId::Solana).unwrap();
+    assert_eq!(
+        db.get_task(saved.id)
+            .await
+            .unwrap()
+            .unwrap()
+            .exit_policy_overrides
+            .stop_loss
+            .allow_partial,
+        Some(true)
+    );
+}
+
 #[tokio::test]
 async fn chain_migration_preserves_legacy_task_children_and_allows_chain_qualified_identity() {
     let dir = tempfile::tempdir().unwrap();

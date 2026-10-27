@@ -3,7 +3,6 @@
 
 //! Sell operation execution.
 
-use crate::config::with_config;
 use crate::logger::{self, LogTag};
 use crate::positions;
 use crate::trader::types::{TradeDecision, TradeReason, TradeResult, TradeStep};
@@ -19,47 +18,49 @@ pub(super) enum ExitSize {
 
 /// Decide whether a sell is a partial or a full exit.
 ///
-/// Extracted from [`execute_sell`] so the routing can be tested on its own — it is the
-/// rule that decides how many of the user's tokens leave the wallet, and it has been
-/// wrong before in the most destructive way possible (see the ManualExit case below).
+/// Extracted from [`execute_sell`] so the routing can be tested on its own: it is the
+/// rule that decides how many of the user's tokens leave the wallet.
 ///
 /// * `requested_pct` is `TradeDecision::exit_percentage`; `None` means a full exit. It
 ///   is clamped to `[1, 100]` because `execute_sell` clamps below 1% and
 ///   `partial_close_position` refuses anything outside `(0, 100)`.
-/// * `partial_exit_enabled` is `positions.partial_exit_enabled` — an AUTO-TRADER policy
-///   switch, never a capability switch for the user.
-pub(super) fn resolve_exit_size(
-    reason: &TradeReason,
-    requested_pct: Option<f64>,
-    partial_exit_enabled: bool,
-) -> ExitSize {
+/// * Every reason honours the percentage its producer requested. Whether an automatic
+///   rule may sell part of a position is that rule's own setting (the stop loss asks
+///   for a share only while `trader.stop_loss_allow_partial` is on), so no global
+///   switch can upgrade a requested partial, a user's above all, into a full exit.
+/// * Emergencies (`Blacklisted`, `RiskManagement`) always liquidate the whole
+///   position, whatever percentage the decision carries.
+pub(super) fn resolve_exit_size(reason: &TradeReason, requested_pct: Option<f64>) -> ExitSize {
     let exit_percentage = requested_pct.unwrap_or(100.0).clamp(1.0, 100.0);
-
-    // A USER-initiated exit already carries an explicit percentage: the user picked it
-    // in the trade dialog. `positions.partial_exit_enabled` decides whether the
-    // AUTO-TRADER may take partial profits on its own — it must never be allowed to
-    // silently upgrade the user's 25% take-profit into a FULL exit, which sells the
-    // entire position without asking. That is exactly what this did before, with no
-    // error and no warning: turning off auto partial exits made manual take-profit
-    // impossible, in the most destructive way possible.
-    let is_user_exit = matches!(
-        reason,
-        TradeReason::ManualExit | TradeReason::ForceSell | TradeReason::CopySell
-    );
-
-    // Emergencies must fully liquidate regardless of any percentage.
-    // Note: StopLoss is NOT an emergency exit - it respects stop_loss_allow_partial config.
-    // ForceSell is NOT one either: it means "bypass the safety checks", not "sell
-    // everything" — a force sell with a percentage is still a partial exit.
-    let is_emergency_exit = matches!(
-        reason,
-        TradeReason::Blacklisted | TradeReason::RiskManagement
-    );
-
-    if (partial_exit_enabled || is_user_exit) && !is_emergency_exit && exit_percentage < 100.0 {
-        ExitSize::Partial(exit_percentage)
-    } else {
+    if is_emergency_exit(reason) || exit_percentage >= 100.0 {
         ExitSize::Full
+    } else {
+        ExitSize::Partial(exit_percentage)
+    }
+}
+
+/// Whether `reason` must sell the whole position. Exhaustive on purpose: a new
+/// reason fails to compile until it is classified here.
+///
+/// A stop loss is not an emergency: it sells the share its rule requested. A force
+/// sell is not one either: it bypasses the safety checks, it does not widen the size.
+fn is_emergency_exit(reason: &TradeReason) -> bool {
+    match reason {
+        TradeReason::Blacklisted | TradeReason::RiskManagement => true,
+        TradeReason::StrategySignal
+        | TradeReason::ManualEntry
+        | TradeReason::ForceBuy
+        | TradeReason::CopyBuy
+        | TradeReason::DCAScheduled
+        | TradeReason::TakeProfit
+        | TradeReason::StopLoss
+        | TradeReason::TrailingStop
+        | TradeReason::TimeOverride
+        | TradeReason::StrategyExit
+        | TradeReason::LlmAnalysisExit
+        | TradeReason::ManualExit
+        | TradeReason::ForceSell
+        | TradeReason::CopySell => false,
     }
 }
 
@@ -104,13 +105,7 @@ pub async fn execute_sell(decision: &TradeDecision) -> crate::trader::Result<Tra
         ),
     );
 
-    // Determine exit type based on configuration and reason
-    let partial_exit_enabled = with_config(|cfg| cfg.positions.partial_exit_enabled);
-    let exit_size = resolve_exit_size(
-        &decision.reason,
-        decision.exit_percentage,
-        partial_exit_enabled,
-    );
+    let exit_size = resolve_exit_size(&decision.reason, decision.exit_percentage);
 
     let exit_reason = format!("{:?}", decision.reason);
 
@@ -147,7 +142,7 @@ pub async fn execute_sell(decision: &TradeDecision) -> crate::trader::Result<Tra
             }
         }
     } else {
-        // Full exit (either disabled, emergency exit, or 100%)
+        // Full exit: an emergency, no requested percentage, or 100%
         match positions::close_position_direct(
             &decision.mint,
             exit_reason.clone(),
@@ -187,10 +182,77 @@ mod tests {
     //! `pub(super)` and unreachable from the `tests/` integration crates.
     use super::*;
 
+    /// How a reason routes a requested percentage below 100.
+    #[derive(Debug, PartialEq)]
+    enum Routing {
+        /// Always the whole position.
+        Emergency,
+        /// The requested percentage.
+        ByRequest,
+    }
+
+    /// The expected routing of every reason, written independently of
+    /// `is_emergency_exit`. Exhaustive: a new reason fails to compile here until it
+    /// is classified.
+    fn expected_routing(reason: &TradeReason) -> Routing {
+        match reason {
+            TradeReason::Blacklisted | TradeReason::RiskManagement => Routing::Emergency,
+            TradeReason::StrategySignal
+            | TradeReason::ManualEntry
+            | TradeReason::ForceBuy
+            | TradeReason::CopyBuy
+            | TradeReason::DCAScheduled
+            | TradeReason::TakeProfit
+            | TradeReason::StopLoss
+            | TradeReason::TrailingStop
+            | TradeReason::TimeOverride
+            | TradeReason::StrategyExit
+            | TradeReason::LlmAnalysisExit
+            | TradeReason::ManualExit
+            | TradeReason::ForceSell
+            | TradeReason::CopySell => Routing::ByRequest,
+        }
+    }
+
+    #[test]
+    fn every_reason_routes_by_its_requested_percentage() {
+        for reason in TradeReason::ALL {
+            let expected = match expected_routing(&reason) {
+                Routing::Emergency => ExitSize::Full,
+                Routing::ByRequest => ExitSize::Partial(40.0),
+            };
+            assert_eq!(
+                resolve_exit_size(&reason, Some(40.0)),
+                expected,
+                "{reason:?} with 40% requested"
+            );
+            assert_eq!(
+                resolve_exit_size(&reason, None),
+                ExitSize::Full,
+                "{reason:?} with no percentage"
+            );
+            assert_eq!(
+                resolve_exit_size(&reason, Some(100.0)),
+                ExitSize::Full,
+                "{reason:?} with 100% requested"
+            );
+        }
+    }
+
+    #[test]
+    fn the_reason_list_has_no_duplicates() {
+        // `ALL` drives the table above; its completeness is guarded beside `TradeReason`.
+        let names: std::collections::BTreeSet<String> = TradeReason::ALL
+            .iter()
+            .map(|reason| format!("{reason:?}"))
+            .collect();
+        assert_eq!(names.len(), TradeReason::ALL.len());
+    }
+
     #[test]
     fn no_percentage_means_sell_everything() {
         assert_eq!(
-            resolve_exit_size(&TradeReason::TakeProfit, None, true),
+            resolve_exit_size(&TradeReason::TakeProfit, None),
             ExitSize::Full
         );
     }
@@ -198,46 +260,28 @@ mod tests {
     #[test]
     fn an_explicit_hundred_percent_is_a_full_exit() {
         // 100% must take the FULL-close path, which sizes off the on-chain balance and
-        // leaves no dust — not the partial path, which sizes off a percentage.
+        // leaves no dust, not the partial path, which sizes off a percentage.
         assert_eq!(
-            resolve_exit_size(&TradeReason::ManualExit, Some(100.0), true),
+            resolve_exit_size(&TradeReason::ManualExit, Some(100.0)),
             ExitSize::Full
         );
     }
 
     #[test]
-    fn the_auto_trader_takes_partials_only_when_they_are_enabled() {
-        assert_eq!(
-            resolve_exit_size(&TradeReason::StopLoss, Some(25.0), true),
-            ExitSize::Partial(25.0)
-        );
-        assert_eq!(
-            resolve_exit_size(&TradeReason::StopLoss, Some(25.0), false),
-            ExitSize::Full
-        );
-    }
-
-    #[test]
-    fn a_manual_partial_survives_the_auto_partial_switch_being_off() {
-        // The destructive bug this guards: `partial_exit_enabled` is an AUTO-TRADER
-        // policy switch. With it off, a user's manual 25% take-profit was silently
-        // upgraded to a FULL exit — the whole position sold, no error, no warning.
-        assert_eq!(
-            resolve_exit_size(&TradeReason::ManualExit, Some(25.0), false),
-            ExitSize::Partial(25.0)
-        );
-        assert_eq!(
-            resolve_exit_size(&TradeReason::ForceSell, Some(25.0), false),
-            ExitSize::Partial(25.0)
-        );
-    }
-
-    #[test]
-    fn a_copy_partial_survives_the_auto_partial_switch_being_off() {
-        assert_eq!(
-            resolve_exit_size(&TradeReason::CopySell, Some(30.0), false),
-            ExitSize::Partial(30.0)
-        );
+    fn a_manual_partial_is_never_upgraded_to_a_full_exit() {
+        // A user's 25% take-profit was once silently upgraded to a FULL exit by an
+        // auto-trader switch: the whole position sold, no error, no warning.
+        for reason in [
+            TradeReason::ManualExit,
+            TradeReason::ForceSell,
+            TradeReason::CopySell,
+        ] {
+            assert_eq!(
+                resolve_exit_size(&reason, Some(25.0)),
+                ExitSize::Partial(25.0),
+                "{reason:?}"
+            );
+        }
     }
 
     #[test]
@@ -246,7 +290,7 @@ mod tests {
         // entirely, whatever percentage the decision happens to carry.
         for reason in [TradeReason::Blacklisted, TradeReason::RiskManagement] {
             assert_eq!(
-                resolve_exit_size(&reason, Some(10.0), true),
+                resolve_exit_size(&reason, Some(10.0)),
                 ExitSize::Full,
                 "{reason:?} must fully liquidate"
             );
@@ -258,18 +302,22 @@ mod tests {
         // Force means "bypass the safety checks", not "sell everything". Treating it
         // as an emergency silently ignored the percentage it was given.
         assert_eq!(
-            resolve_exit_size(&TradeReason::ForceSell, Some(30.0), true),
+            resolve_exit_size(&TradeReason::ForceSell, Some(30.0)),
             ExitSize::Partial(30.0)
         );
     }
 
     #[test]
-    fn a_stop_loss_is_not_an_emergency_either() {
-        // Stop loss respects `stop_loss_allow_partial`, which reaches here as an
-        // explicit percentage on the decision.
+    fn a_stop_loss_sells_the_share_its_rule_requested() {
+        // The stop loss requests a share only while `stop_loss_allow_partial` is on;
+        // the request alone decides the size.
         assert_eq!(
-            resolve_exit_size(&TradeReason::StopLoss, Some(50.0), true),
+            resolve_exit_size(&TradeReason::StopLoss, Some(50.0)),
             ExitSize::Partial(50.0)
+        );
+        assert_eq!(
+            resolve_exit_size(&TradeReason::StopLoss, None),
+            ExitSize::Full
         );
     }
 
@@ -278,42 +326,16 @@ mod tests {
         // Below 1% would round to a zero token amount on many balances, and above 100%
         // cannot be sold at all. `partial_close_position` refuses both outright.
         assert_eq!(
-            resolve_exit_size(&TradeReason::ManualExit, Some(0.4), true),
+            resolve_exit_size(&TradeReason::ManualExit, Some(0.4)),
             ExitSize::Partial(1.0)
         );
         assert_eq!(
-            resolve_exit_size(&TradeReason::ManualExit, Some(-5.0), true),
+            resolve_exit_size(&TradeReason::ManualExit, Some(-5.0)),
             ExitSize::Partial(1.0)
         );
         assert_eq!(
-            resolve_exit_size(&TradeReason::ManualExit, Some(250.0), true),
+            resolve_exit_size(&TradeReason::ManualExit, Some(250.0)),
             ExitSize::Full
         );
-    }
-
-    #[test]
-    fn every_automatic_exit_reason_routes_by_config_alone() {
-        // None of these are user-initiated, so with auto partials off they must all
-        // become full exits — and with it on, all honour their percentage.
-        let automatic = [
-            TradeReason::TakeProfit,
-            TradeReason::StopLoss,
-            TradeReason::TrailingStop,
-            TradeReason::TimeOverride,
-            TradeReason::StrategyExit,
-            TradeReason::LlmAnalysisExit,
-        ];
-        for reason in automatic {
-            assert_eq!(
-                resolve_exit_size(&reason, Some(40.0), false),
-                ExitSize::Full,
-                "{reason:?} with auto partials off"
-            );
-            assert_eq!(
-                resolve_exit_size(&reason, Some(40.0), true),
-                ExitSize::Partial(40.0),
-                "{reason:?} with auto partials on"
-            );
-        }
     }
 }

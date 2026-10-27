@@ -6,32 +6,11 @@
 //! Triggers exit when position loss exceeds configured threshold from entry price.
 //! Unlike trailing stop (which tracks from peak), this is measured from entry.
 
-use crate::config::with_config;
 use crate::logger::{self, LogTag};
 use crate::positions::Position;
 use crate::trader::policy::StopLossPolicy;
 use crate::trader::types::{TradeAction, TradeDecision, TradePriority, TradeReason};
 use chrono::Utc;
-
-/// Check if stop loss is enabled
-pub fn is_stop_loss_enabled() -> bool {
-    with_config(|cfg| cfg.trader.stop_loss_enabled)
-}
-
-/// Get stop loss threshold percentage
-pub fn get_stop_loss_threshold_pct() -> f64 {
-    with_config(|cfg| cfg.trader.stop_loss_threshold_pct)
-}
-
-/// Get stop loss minimum hold seconds
-pub fn get_stop_loss_min_hold_seconds() -> u64 {
-    with_config(|cfg| cfg.trader.stop_loss_min_hold_seconds)
-}
-
-/// Check if partial exits are allowed for stop loss
-pub fn get_stop_loss_allow_partial() -> bool {
-    with_config(|cfg| cfg.trader.stop_loss_allow_partial)
-}
 
 /// The stop-loss rule on plain numbers, shared by the live evaluator and the
 /// paper copy book. Returns `Some(exit_percentage)` when it fires, where the
@@ -41,7 +20,7 @@ pub fn get_stop_loss_allow_partial() -> bool {
 ///
 /// A partial stop-loss may be taken ONCE. Selling moves neither the entry price nor
 /// the current price, so once a position is below the stop this fires again on every
-/// cycle: it sold partial_exit_default_pct, then that share of the remainder, and so
+/// cycle: it sold the configured partial share, then that share of the remainder, and so
 /// on, bleeding the position out in a geometric series and paying fees plus slippage
 /// on every leg instead of exiting. If the price is STILL under the stop after
 /// exposure was already cut once, the thesis is done -- exit fully.

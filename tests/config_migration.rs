@@ -7,6 +7,9 @@
 //! canonical `[chains.solana]` layout. A hot reload of a legacy file applies and
 //! rewrites it at once. Keys set while that migration is pending change only themselves
 //! in the file, which keeps the loaded layout until startup completes.
+//! The exit-rule leaves of `[positions]` (trailing stop, partial stop-loss share and the
+//! retired partial-exit switch) follow the same load, persist and reload path into `[trader]`;
+//! the switch the loaded file held stays readable for the store migrations.
 //!
 //! It runs in a process of its own (nextest isolates every test) because `load_config_from_path`
 //! initialises the global CONFIG (`OnceLock::set`). The steps share that global,
@@ -155,6 +158,104 @@ fn keys_set_while_a_migration_is_pending_leave_the_loaded_layout_on_disk() {
             let tables = top_level_tables(&migrated);
             assert!(!tables.contains_key("rpc"), "[rpc] still on disk");
             assert_eq!(tables["wallet_encrypted"].as_str(), Some("ciphertext"));
+        },
+    );
+}
+
+#[test]
+fn exit_rule_leaves_move_into_trader_on_load_and_on_hot_reload() {
+    crate::common::run_isolated(
+        module_path!(),
+        "exit_rule_leaves_move_into_trader_on_load_and_on_hot_reload",
+        || async {
+            let dir = tempfile::tempdir().expect("temp dir");
+            std::env::set_var("SCREENERBOT_DATA_DIR", dir.path());
+            let path = dir.path().join("config.toml");
+            let path_str = path.to_str().expect("utf-8 temp path").to_owned();
+            let legacy = "[trader]\nstop_loss_enabled = true\nstop_loss_allow_partial = true\n\n\
+                          [positions]\npartial_exit_enabled = false\n\
+                          partial_exit_default_pct = 30.0\npartial_exit_min_pct = 10.0\n\
+                          trailing_stop_enabled = true\ntrailing_stop_activation_pct = 0.5\n\
+                          trailing_stop_distance_pct = 6.0\n";
+            std::fs::write(&path, legacy).expect("write fixture");
+
+            // Load: values in [trader] in memory, file bytes unchanged.
+            load_config_from_path(&path_str).expect("legacy exit leaves load");
+            assert_eq!(
+                screenerbot::config::legacy_partial_exit_switch(),
+                Some(false),
+                "the load hands the retired switch to the store migrations"
+            );
+            assert_eq!(
+                std::fs::read_to_string(&path).expect("read config"),
+                legacy,
+                "the load itself must not rewrite the file"
+            );
+            with_config(|cfg| {
+                assert!(!cfg.trader.stop_loss_allow_partial);
+                assert_eq!(cfg.trader.stop_loss_partial_pct, 30.0);
+                assert!(cfg.trader.trailing_stop_enabled);
+                assert_eq!(cfg.trader.trailing_stop_activation_pct, 0.5);
+                assert_eq!(cfg.trader.trailing_stop_distance_pct, 6.0);
+            });
+
+            // Startup completed: the canonical layout reaches disk, once.
+            persist_pending_config_migration();
+            let written = std::fs::read_to_string(&path).expect("read migrated config");
+            let tables = top_level_tables(&written);
+            let positions = tables["positions"].as_table().expect("[positions]");
+            for leaf in [
+                "partial_exit_enabled",
+                "partial_exit_default_pct",
+                "partial_exit_min_pct",
+                "trailing_stop_enabled",
+                "trailing_stop_activation_pct",
+                "trailing_stop_distance_pct",
+            ] {
+                assert!(
+                    !positions.contains_key(leaf),
+                    "[positions] {leaf} still on disk"
+                );
+            }
+            assert_eq!(
+                tables["trader"]["stop_loss_allow_partial"].as_bool(),
+                Some(false)
+            );
+            assert_eq!(
+                tables["trader"]["stop_loss_partial_pct"].as_float(),
+                Some(30.0)
+            );
+            assert!(!parse_config_document(&written).expect("parses").migrated);
+
+            // Hot reload of another legacy file: applied and rewritten at once.
+            let reload_path = dir.path().join("reload.toml");
+            let reload_str = reload_path.to_str().expect("utf-8 temp path").to_owned();
+            std::fs::write(
+                &reload_path,
+                "[trader]\nstop_loss_enabled = true\nstop_loss_allow_partial = true\n\n\
+                 [positions]\npartial_exit_enabled = true\npartial_exit_default_pct = 40.0\n\
+                 trailing_stop_distance_pct = 9.0\n",
+            )
+            .expect("write reload fixture");
+            reload_config_from_path(&reload_str).expect("legacy exit leaves reload");
+            assert_eq!(
+                screenerbot::config::legacy_partial_exit_switch(),
+                Some(false),
+                "a hot reload keeps the switch the process loaded with"
+            );
+            with_config(|cfg| {
+                assert!(cfg.trader.stop_loss_allow_partial);
+                assert_eq!(cfg.trader.stop_loss_partial_pct, 40.0);
+                assert_eq!(cfg.trader.trailing_stop_distance_pct, 9.0);
+            });
+            let rewritten = std::fs::read_to_string(&reload_path).expect("read reloaded config");
+            let positions = top_level_tables(&rewritten)["positions"]
+                .as_table()
+                .expect("[positions]")
+                .clone();
+            assert!(!positions.contains_key("partial_exit_enabled"));
+            assert!(!positions.contains_key("trailing_stop_distance_pct"));
+            assert!(!parse_config_document(&rewritten).expect("parses").migrated);
         },
     );
 }

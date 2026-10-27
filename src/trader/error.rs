@@ -41,6 +41,8 @@ pub enum Error {
     },
     #[error("sell percentage {percentage} must be in (0, 100]")]
     InvalidPercentage { percentage: f64 },
+    #[error("a partial sell needs a percentage of the position")]
+    PercentageRequired,
     #[error(transparent)]
     Database(#[from] crate::errors::DatabaseError),
     #[error(transparent)]
@@ -143,7 +145,8 @@ impl ErrorClass for Error {
             Error::InvalidMint { .. }
             | Error::Blacklisted { .. }
             | Error::InvalidSlippage { .. }
-            | Error::InvalidPercentage { .. } => false,
+            | Error::InvalidPercentage { .. }
+            | Error::PercentageRequired => false,
             Error::CopyTaskRejected { .. }
             | Error::CopyTaskLimit { .. }
             | Error::CopyWatchRejected { .. }
@@ -199,7 +202,8 @@ impl ErrorClass for Error {
             Error::InvalidMint { .. }
             | Error::Blacklisted { .. }
             | Error::InvalidSlippage { .. }
-            | Error::InvalidPercentage { .. } => Severity::Warning,
+            | Error::InvalidPercentage { .. }
+            | Error::PercentageRequired => Severity::Warning,
             Error::CopyTaskRejected { .. }
             | Error::CopyTaskLimit { .. }
             | Error::CopyWatchRejected { .. }
@@ -238,7 +242,8 @@ impl ErrorClass for Error {
             Error::CoreServicesNotReady { .. } | Error::StorageUnavailable { .. } => 503,
             Error::InvalidMint { .. }
             | Error::InvalidSlippage { .. }
-            | Error::InvalidPercentage { .. } => 400,
+            | Error::InvalidPercentage { .. }
+            | Error::PercentageRequired => 400,
             Error::CopyTaskRejected { .. }
             | Error::CopyTaskLimit { .. }
             | Error::CopyWatchRejected { .. } => 400,

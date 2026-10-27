@@ -211,7 +211,11 @@ trader-stop-loss-hold-immediate = فوری
 trader-stop-loss-hold-delay = { $span } تأخیر
 trader-stop-loss-price-falls = افت قیمت
 trader-stop-loss-threshold-reached = رسیدن به آستانه
-trader-stop-loss-partial = خروج جزئی مجاز است
+# $part is a formatted percentage of the position.
+trader-stop-loss-sell-part = فروش { $part }
+trader-stop-loss-part-of-position = بخشی از پوزیشن
+trader-stop-loss-sell-rest = فروش باقی‌مانده
+trader-stop-loss-still-below = همچنان زیر حد ضرر
 # $loss is the loss percentage with its sign.
 trader-stop-loss-summary = ضرر محدود به <strong>{ $loss }</strong>
 trader-stop-loss-note = <strong>نکته:</strong> حد ضرر با خروج زودهنگام، از ضررهای بزرگ‌تر جلوگیری می‌کند

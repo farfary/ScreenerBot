@@ -773,31 +773,12 @@ config-positions-loss-blacklist-enabled = Bật danh sách đen theo lỗ
 config-positions-loss-blacklist-threshold-pct = Ngưỡng lỗ đưa vào danh sách đen
     .hint = Đưa vào danh sách đen các token có mức lỗ vượt % này (-15 = đưa vào danh sách đen nếu giảm từ 15% trở lên)
     .unit = %
-config-positions-partial-exit-default-pct = Thoát một phần mặc định
-    .hint = Tỷ lệ phần trăm bán mặc định khi thoát một phần
-    .unit = %
-config-positions-partial-exit-enabled = Bật thoát một phần
-    .hint = Cho phép bán một phần vị thế thay vì tất cả hoặc không gì cả
-config-positions-partial-exit-max-pct = Thoát một phần tối đa
-    .hint = Tỷ lệ phần trăm tối đa được phép khi thoát một phần
-    .unit = %
-config-positions-partial-exit-min-pct = Thoát một phần tối thiểu
-    .hint = Tỷ lệ phần trăm tối thiểu được phép khi thoát một phần
-    .unit = %
 config-positions-position-open-cooldown-secs = Thời gian chờ mở vị thế
     .hint = Số giây giữa hai lần mở vị thế bất kỳ (tránh mở dồn dập)
     .unit = giây
 config-positions-profit-extra-needed-sol = Đệm lợi nhuận bổ sung
     .hint = Lượng SOL bổ sung cần cho tính toán lợi nhuận (phí ưu tiên)
     .unit = SOL
-config-positions-trailing-stop-activation-pct = Ngưỡng kích hoạt trailing stop
-    .hint = Kích hoạt trailing stop sau khi đạt mức lãi % này (10 = kích hoạt ở +10%)
-    .unit = %
-config-positions-trailing-stop-distance-pct = Khoảng cách trailing stop
-    .hint = Bám theo dưới đỉnh bao xa (5 = thoát nếu giá giảm 5% từ đỉnh)
-    .unit = %
-config-positions-trailing-stop-enabled = Bật trailing stop
-    .hint = Bật trailing stop loss sau khi đạt ngưỡng lãi
 
 config-referral-code = Mã giới thiệu
     .hint = Tùy chọn. Nếu có người giới thiệu bạn đến với { -brand }, mã của họ sẽ giúp họ nhận một phần phí bạn trả cho chúng tôi — bạn không phải trả thêm gì. Để trống thì không có gì được gửi đi từ máy này.
@@ -1071,13 +1052,16 @@ config-trader-slippage-exit-retry-steps-pct = Các bước thử lại khi thoá
 config-trader-slippage-quote-default-pct = Trượt giá mặc định
     .hint = 1% là chặt, 3-5% cho token biến động mạnh
     .unit = %
-config-trader-stop-loss-allow-partial = Cho phép thoát một phần
-    .hint = Cho phép thoát một phần khi stop loss thay vì đóng toàn bộ vị thế
+config-trader-stop-loss-allow-partial = Bán một phần trước
+    .hint = Khi stop loss kích hoạt, bán một phần vị thế trước, rồi bán phần còn lại nếu giá vẫn dưới mức stop
 config-trader-stop-loss-enabled = Bật stop loss
     .hint = Bật tự động thoát khi mức lỗ vượt ngưỡng (thoát ngay lập tức, không như thoát theo thời gian)
 config-trader-stop-loss-min-hold-seconds = Thời gian nắm giữ tối thiểu
     .hint = Số giây tối thiểu phải nắm giữ trước khi stop loss có thể kích hoạt (0 = ngay lập tức)
     .unit = giây
+config-trader-stop-loss-partial-pct = Phần cần bán
+    .hint = Tỷ lệ vị thế được bán trong lần bán stop loss đầu tiên
+    .unit = %
 config-trader-stop-loss-threshold-pct = Ngưỡng stop loss
     .hint = Thoát khi mức lỗ vượt % này (50 = thoát ở -50%)
     .unit = %
@@ -1093,6 +1077,14 @@ config-trader-time-override-unit = Đơn vị thoát theo thời gian
 config-trader-trade-size-sol = Quy mô giao dịch
     .hint = SOL cho mỗi vị thế
     .unit = SOL
+config-trader-trailing-stop-activation-pct = Ngưỡng kích hoạt trailing stop
+    .hint = Kích hoạt trailing stop sau khi đạt mức lãi % này (10 = kích hoạt ở +10%)
+    .unit = %
+config-trader-trailing-stop-distance-pct = Khoảng cách trailing stop
+    .hint = Bám theo dưới đỉnh bao xa (5 = thoát nếu giá giảm 5% từ đỉnh)
+    .unit = %
+config-trader-trailing-stop-enabled = Bật trailing stop
+    .hint = Bật trailing stop loss sau khi đạt ngưỡng lãi
 
 config-updates-auto-check = Kiểm tra cập nhật
     .hint = Định kỳ hỏi screenerbot.io xem có bản phát hành mới hơn không
@@ -1257,7 +1249,6 @@ config-category-monitoring = Giám sát
 config-category-notifications = Thông báo
 config-category-ollama-settings = Cài đặt { -ollama }
 config-category-optimization = Tối ưu hóa
-config-category-partial-exit = Thoát một phần
 config-category-performance = Hiệu năng
 config-category-pool-metrics = Chỉ số pool
 config-category-price-change = Biến động giá

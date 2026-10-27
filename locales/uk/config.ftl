@@ -808,31 +808,12 @@ config-positions-loss-blacklist-enabled = Увімкнути чорний спи
 config-positions-loss-blacklist-threshold-pct = Поріг чорного списку за збитками,
     .hint = Додавати до чорного списку токени зі збитками, що перевищують цей % (-15 = додати, якщо падіння 15%+)
     .unit = %
-config-positions-partial-exit-default-pct = Частковий вихід за замовчуванням,
-    .hint = Відсоток продажу за замовчуванням під час часткових виходів
-    .unit = %
-config-positions-partial-exit-enabled = Увімкнути часткові виходи
-    .hint = Дозволити продавати частину позиції замість «все або нічого»
-config-positions-partial-exit-max-pct = Макс. частковий вихід,
-    .hint = Максимально допустимий відсоток для часткових виходів
-    .unit = %
-config-positions-partial-exit-min-pct = Мін. частковий вихід,
-    .hint = Мінімально допустимий відсоток для часткових виходів
-    .unit = %
 config-positions-position-open-cooldown-secs = Пауза після відкриття позиції
     .hint = Секунд між відкриттям будь-яких позицій (запобігає швидким серіям)
     .unit = с
 config-positions-profit-extra-needed-sol = Додатковий запас для прибутку
     .hint = Додаткові SOL, потрібні для розрахунків прибутку (пріоритетні комісії)
     .unit = SOL
-config-positions-trailing-stop-activation-pct = Активація трейлінг-стопу,
-    .hint = Активувати трейлінг-стоп після цього % прибутку (10 = активувати за +10%)
-    .unit = %
-config-positions-trailing-stop-distance-pct = Відстань трейлінг-стопу,
-    .hint = Наскільки нижче піку тягнути стоп (5 = вихід, якщо ціна впала на 5% від піку)
-    .unit = %
-config-positions-trailing-stop-enabled = Увімкнути трейлінг-стоп
-    .hint = Увімкнути трейлінг-стоп-лос після досягнення порога прибутку
 
 ## referral
 
@@ -1119,13 +1100,16 @@ config-trader-slippage-exit-retry-steps-pct = Кроки повтору вихо
 config-trader-slippage-quote-default-pct = Проковзування за замовчуванням
     .hint = 1% — вузько, 3–5% — для волатильних
     .unit = %
-config-trader-stop-loss-allow-partial = Дозволити частковий вихід
-    .hint = Дозволити часткові виходи для стоп-лосу замість повного закриття позиції
+config-trader-stop-loss-allow-partial = Спершу продати частину
+    .hint = Коли спрацьовує стоп-лос, спершу продати частину позиції, потім решту, якщо ціна все ще нижча за стоп
 config-trader-stop-loss-enabled = Увімкнути стоп-лос
     .hint = Увімкнути автоматичний вихід, коли збиток перевищує поріг (виходить негайно, на відміну від виходу за часом)
 config-trader-stop-loss-min-hold-seconds = Мін. час утримання
     .hint = Мінімум секунд утримання, до яких стоп-лос не може спрацювати (0 = негайно)
     .unit = с
+config-trader-stop-loss-partial-pct = Частка для продажу
+    .hint = Частка позиції, яку продає перший продаж за стоп-лосом
+    .unit = %
 config-trader-stop-loss-threshold-pct = Поріг стоп-лосу,
     .hint = Вихід, коли збиток перевищує цей % (50 = вихід за -50%)
     .unit = %
@@ -1141,6 +1125,14 @@ config-trader-time-override-unit = Одиниця виходу за часом
 config-trader-trade-size-sol = Розмір угоди
     .hint = SOL на позицію
     .unit = SOL
+config-trader-trailing-stop-activation-pct = Активація трейлінг-стопу,
+    .hint = Активувати трейлінг-стоп після цього % прибутку (10 = активувати за +10%)
+    .unit = %
+config-trader-trailing-stop-distance-pct = Відстань трейлінг-стопу,
+    .hint = Наскільки нижче піку тягнути стоп (5 = вихід, якщо ціна впала на 5% від піку)
+    .unit = %
+config-trader-trailing-stop-enabled = Увімкнути трейлінг-стоп
+    .hint = Увімкнути трейлінг-стоп-лос після досягнення порога прибутку
 
 ## updates
 
@@ -1315,7 +1307,6 @@ config-category-monitoring = Моніторинг
 config-category-notifications = Сповіщення
 config-category-ollama-settings = Налаштування { -ollama }
 config-category-optimization = Оптимізація
-config-category-partial-exit = Частковий вихід
 config-category-performance = Продуктивність
 config-category-pool-metrics = Метрики пулів
 config-category-price-change = Зміна ціни

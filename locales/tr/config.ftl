@@ -808,31 +808,12 @@ config-positions-loss-blacklist-enabled = Zarar Kara Listesini Etkinleştir
 config-positions-loss-blacklist-threshold-pct = Zarar Kara Liste Eşiği
     .hint = Zararı bu %'yi aşan tokenları kara listeye alın (-15 = %15+ düştüyse kara listeye al)
     .unit = %
-config-positions-partial-exit-default-pct = Varsayılan Kısmi Çıkış
-    .hint = Kısmi çıkışlarda satılacak varsayılan yüzde
-    .unit = %
-config-positions-partial-exit-enabled = Kısmi Çıkışları Etkinleştir
-    .hint = Ya hep ya hiç yerine pozisyonun bir kısmını satmaya izin verin
-config-positions-partial-exit-max-pct = Maks. Kısmi Çıkış
-    .hint = Kısmi çıkışlar için izin verilen maksimum yüzde
-    .unit = %
-config-positions-partial-exit-min-pct = Min. Kısmi Çıkış
-    .hint = Kısmi çıkışlar için izin verilen minimum yüzde
-    .unit = %
 config-positions-position-open-cooldown-secs = Pozisyon Açma Bekleme Süresi
     .hint = Herhangi iki pozisyon açma arasındaki saniye (hızlı ardışık açılışları önler)
     .unit = sn
 config-positions-profit-extra-needed-sol = Kâr Ek Tamponu
     .hint = Kâr hesaplamaları için gereken ek SOL (öncelik ücretleri)
     .unit = SOL
-config-positions-trailing-stop-activation-pct = İz Süren Stop Devreye Girme
-    .hint = İz süren stopu bu kâr %'sinden sonra etkinleştirin (10 = +%10'da etkinleştir)
-    .unit = %
-config-positions-trailing-stop-distance-pct = İz Süren Stop Mesafesi
-    .hint = Zirvenin ne kadar altından izleneceği (5 = fiyat zirveden %5 düşerse çık)
-    .unit = %
-config-positions-trailing-stop-enabled = İz Süren Stopu Etkinleştir
-    .hint = Kâr eşiğinden sonra iz süren zarar durdurmayı etkinleştirin
 
 ## referral
 
@@ -1119,13 +1100,16 @@ config-trader-slippage-exit-retry-steps-pct = Çıkış Yeniden Deneme Adımlar�
 config-trader-slippage-quote-default-pct = Varsayılan Kayma
     .hint = %1 sıkı, oynak tokenlar için %3-5
     .unit = %
-config-trader-stop-loss-allow-partial = Kısmi Çıkışa İzin Ver
-    .hint = Zarar durdur için tam pozisyon kapatma yerine kısmi çıkışlara izin verin
+config-trader-stop-loss-allow-partial = Önce Bir Kısmını Sat
+    .hint = Zarar durdur tetiklendiğinde önce pozisyonun bir kısmını satın, fiyat hâlâ stop seviyesinin altındaysa kalanını satın
 config-trader-stop-loss-enabled = Zarar Durdur'u Etkinleştir
     .hint = Zarar eşiği aşıldığında otomatik çıkışı etkinleştirin (zaman çıkışının aksine hemen çıkar)
 config-trader-stop-loss-min-hold-seconds = Min. Tutma Süresi
     .hint = Zarar durdurun tetiklenebilmesi için tutulacak minimum saniye (0 = anında)
     .unit = sn
+config-trader-stop-loss-partial-pct = Satılacak Kısım
+    .hint = İlk zarar durdur satışında satılan pozisyon payı
+    .unit = %
 config-trader-stop-loss-threshold-pct = Zarar Durdur Eşiği
     .hint = Zarar bu %'yi aştığında çıkın (50 = -%50'de çık)
     .unit = %
@@ -1141,6 +1125,14 @@ config-trader-time-override-unit = Zaman Çıkışı Birimi
 config-trader-trade-size-sol = İşlem Boyutu
     .hint = Pozisyon başına SOL
     .unit = SOL
+config-trader-trailing-stop-activation-pct = İz Süren Stop Devreye Girme
+    .hint = İz süren stopu bu kâr %'sinden sonra etkinleştirin (10 = +%10'da etkinleştir)
+    .unit = %
+config-trader-trailing-stop-distance-pct = İz Süren Stop Mesafesi
+    .hint = Zirvenin ne kadar altından izleneceği (5 = fiyat zirveden %5 düşerse çık)
+    .unit = %
+config-trader-trailing-stop-enabled = İz Süren Stopu Etkinleştir
+    .hint = Kâr eşiğinden sonra iz süren zarar durdurmayı etkinleştirin
 
 ## updates
 
@@ -1315,7 +1307,6 @@ config-category-monitoring = İzleme
 config-category-notifications = Bildirimler
 config-category-ollama-settings = { -ollama } Ayarları
 config-category-optimization = Optimizasyon
-config-category-partial-exit = Kısmi Çıkış
 config-category-performance = Performans
 config-category-pool-metrics = Havuz Metrikleri
 config-category-price-change = Fiyat Değişimi

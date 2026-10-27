@@ -192,6 +192,16 @@ config_struct! {
             category: ConfigCategory::StopLoss,
         })]
         stop_loss_allow_partial: bool = false,
+        /// Share of the position the first stop-loss sale sells while
+        /// `stop_loss_allow_partial` is on; a later trigger sells the rest.
+        #[metadata(field_metadata! {
+            min: 10,
+            max: 90,
+            step: 5,
+            impact: ConfigImpact::Medium,
+            category: ConfigCategory::StopLoss,
+        })]
+        stop_loss_partial_pct: f64 = 50.0,
         #[metadata(field_metadata! {
             min: 0,
             max: 86400,
@@ -200,6 +210,29 @@ config_struct! {
             category: ConfigCategory::StopLoss,
         })]
         stop_loss_min_hold_seconds: u64 = 0,
+
+        // ==================== TRAILING STOP CONFIGURATION ====================
+        #[metadata(field_metadata! {
+            impact: ConfigImpact::High,
+            category: ConfigCategory::TrailingStop,
+        })]
+        trailing_stop_enabled: bool = false,
+        #[metadata(field_metadata! {
+            min: 0.1,
+            max: 100,
+            step: 0.1,
+            impact: ConfigImpact::High,
+            category: ConfigCategory::TrailingStop,
+        })]
+        trailing_stop_activation_pct: f64 = 10.0,
+        #[metadata(field_metadata! {
+            min: 1,
+            max: 50,
+            step: 1,
+            impact: ConfigImpact::Critical,
+            category: ConfigCategory::TrailingStop,
+        })]
+        trailing_stop_distance_pct: f64 = 5.0,
 
         // Position timing
         #[metadata(field_metadata! {
@@ -255,7 +288,7 @@ config_struct! {
         dca_max_count: usize = 2,
         #[metadata(field_metadata! {
             min: 10,
-            max: 200,
+            max: 100,
             step: 10,
             impact: ConfigImpact::High,
             category: ConfigCategory::Dca,

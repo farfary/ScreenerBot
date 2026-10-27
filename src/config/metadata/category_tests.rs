@@ -60,7 +60,6 @@ fn visibility_mapping_is_pinned() {
         (ConfigCategory::Notifications, "primary"),
         (ConfigCategory::OllamaSettings, "secondary"),
         (ConfigCategory::Optimization, "secondary"),
-        (ConfigCategory::PartialExit, "primary"),
         (ConfigCategory::Performance, "secondary"),
         (ConfigCategory::PoolMetrics, "secondary"),
         (ConfigCategory::PriceChange, "secondary"),

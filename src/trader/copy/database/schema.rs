@@ -9,8 +9,9 @@ use crate::database::schema::{ddl, SchemaContext, StoreSchema};
 use crate::errors::DatabaseError;
 use crate::trader::copy::types::CopyOutcome;
 use crate::trader::error::Error;
+use crate::trader::policy::ExitPolicyOverrides;
 
-const SCHEMA_VERSION: i64 = 10;
+const SCHEMA_VERSION: i64 = 11;
 
 /// Version 10 drops the position-link table, which nothing read or wrote. A drop is
 /// a breaking change, so v10 is the oldest version that reads the store.
@@ -22,6 +23,13 @@ const LEDGER_BASELINE_VERSION: i64 = 8;
 /// The version whose open archived the estimate-model paper book. Pinned, not
 /// `SCHEMA_VERSION`: a later version must never archive the quote-model book again.
 const QUOTE_PAPER_BOOK_VERSION: i64 = 8;
+
+/// The version whose open retired the stop-loss partial overrides that the
+/// auto-trader partial-exit switch used to hold back. Pinned, not
+/// `SCHEMA_VERSION`: an override saved after this version is a deliberate
+/// choice and must never be rewritten again. A data-only change, so v10 readers
+/// still open the store.
+const PARTIAL_OVERRIDE_RETIREMENT_VERSION: i64 = 11;
 
 /// The schema of `copy_trading.db`.
 pub(crate) const SCHEMA: StoreSchema = StoreSchema {
@@ -275,6 +283,7 @@ fn migrate(connection: &Transaction<'_>) -> crate::trader::Result<()> {
     // historical shape it was written for.
     crate::database::schema::renames::rename(connection, &super::column_names::RENAMES)?;
     migrate_legacy_paper_archive(connection)?;
+    retire_stop_loss_partial_overrides(connection, crate::config::legacy_partial_exit_switch())?;
     ddl::add_column(
         connection,
         "copy_paper_positions",
@@ -345,9 +354,9 @@ fn validate_active_paper_amounts(transaction: &Transaction<'_>) -> crate::trader
     Ok(())
 }
 
-/// Freeze the v7 estimates after all historical spend and fill replays have run.
-/// Archive writes and the current-book clear share the schema migration transaction.
-fn migrate_legacy_paper_archive(transaction: &Transaction<'_>) -> crate::trader::Result<()> {
+/// The schema version `copy_metadata` recorded before this open; 0 for a store
+/// that never recorded one. A malformed value refuses the open.
+fn stored_schema_version(transaction: &Transaction<'_>) -> crate::trader::Result<i64> {
     let raw_version = transaction
         .query_row(
             "SELECT value FROM copy_metadata WHERE key = 'schema_version'",
@@ -367,7 +376,13 @@ fn migrate_legacy_paper_archive(transaction: &Transaction<'_>) -> crate::trader:
             detail: "copy schema version is malformed".to_owned(),
         });
     }
-    if version >= QUOTE_PAPER_BOOK_VERSION {
+    Ok(version)
+}
+
+/// Freeze the v7 estimates after all historical spend and fill replays have run.
+/// Archive writes and the current-book clear share the schema migration transaction.
+fn migrate_legacy_paper_archive(transaction: &Transaction<'_>) -> crate::trader::Result<()> {
+    if stored_schema_version(transaction)? >= QUOTE_PAPER_BOOK_VERSION {
         return Ok(());
     }
 
@@ -392,6 +407,80 @@ fn migrate_legacy_paper_archive(transaction: &Transaction<'_>) -> crate::trader:
     transaction
         .execute("DELETE FROM copy_paper_positions", [])
         .map_err(crate::errors::DatabaseError::from)?;
+    Ok(())
+}
+
+/// v11: a stop loss sold part of a position only while a task's
+/// `stop_loss.allow_partial` and the auto-trader partial-exit switch
+/// (`positions.partial_exit_enabled`, off when absent) were both on. The switch
+/// is retired, so an override of `Some(true)` would now sell part of a position
+/// where the task sold all of it. Unless the switch was on, every such override
+/// becomes `Some(false)`, on every task of every chain, paper and live alike;
+/// `updated_at` is left alone, since no one edited the task.
+///
+/// `legacy_switch` is the switch the config file held at load. The config loads
+/// before any store opens, and this store opens during service startup, before
+/// the migrated config is written back, so the value is the one the install
+/// ran with. One case cannot see it: the switch was on, and a run persisted the
+/// migrated config without opening this store. The next open then sees no
+/// switch and turns the override off, which never sells more of a position than
+/// before. Runs once, on the open that brings the store to
+/// [`PARTIAL_OVERRIDE_RETIREMENT_VERSION`].
+pub(super) fn retire_stop_loss_partial_overrides(
+    transaction: &Transaction<'_>,
+    legacy_switch: Option<bool>,
+) -> crate::trader::Result<()> {
+    if legacy_switch == Some(true)
+        || stored_schema_version(transaction)? >= PARTIAL_OVERRIDE_RETIREMENT_VERSION
+    {
+        return Ok(());
+    }
+    let tasks = {
+        let mut statement = transaction
+            .prepare("SELECT id, exit_policy_json FROM copy_tasks")
+            .map_err(crate::errors::DatabaseError::from)?;
+        let rows = statement
+            .query_map([], |row| {
+                Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+            })
+            .map_err(crate::errors::DatabaseError::from)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(crate::errors::DatabaseError::from)?;
+        rows
+    };
+    let mut retired = 0_usize;
+    for (task_id, json) in tasks {
+        let mut overrides: ExitPolicyOverrides =
+            serde_json::from_str(&json).map_err(|e| Error::CopyTaskDecode {
+                task_id,
+                field: "exit_policy",
+                detail: e.to_string(),
+            })?;
+        if overrides.stop_loss.allow_partial != Some(true) {
+            continue;
+        }
+        overrides.stop_loss.allow_partial = Some(false);
+        let json = serde_json::to_string(&overrides).map_err(|e| Error::CopySerialize {
+            field: "exit_policy",
+            detail: e.to_string(),
+        })?;
+        transaction
+            .execute(
+                "UPDATE copy_tasks SET exit_policy_json = ?1 WHERE id = ?2",
+                params![json, task_id],
+            )
+            .map_err(crate::errors::DatabaseError::from)?;
+        retired += 1;
+    }
+    if retired > 0 {
+        crate::logger::info(
+            crate::logger::LogTag::Trader,
+            &format!(
+                "copy_trading.db: {retired} copy task(s) keep a full stop-loss exit; \
+                 their partial stop-loss override was turned off with the retired partial-exit switch"
+            ),
+        );
+    }
     Ok(())
 }
 

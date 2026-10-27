@@ -322,6 +322,7 @@ errors-trade-mint-invalid = آدرس مینت توکن { $mint } نامعتبر 
 errors-trade-blacklisted = توکن { $mint } در فهرست سیاه است
 errors-trade-slippage-invalid = اسلیپیج { $slippage }% باید بین { $minimum }% و { $maximum }% باشد
 errors-trade-percentage-invalid = درصد فروش { $percentage } باید در بازه ⁨(0, 100]⁩ باشد
+errors-trade-percentage-required = فروش جزئی به درصدی از پوزیشن که باید فروخته شود نیاز دارد
 errors-trade-record-failed = ثبت معامله دستی ممکن نشد
 errors-trade-task-cancelled = معامله دستی پیش از پاسخ متوقف شد چون برنامه در حال بسته شدن است؛ نتیجه آن در پوزیشن ثبت است
 errors-trade-no-open-position = پوزیشن بازی برای توکن { $mint } وجود ندارد

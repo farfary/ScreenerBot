@@ -773,31 +773,12 @@ config-positions-loss-blacklist-enabled = Ativar lista negra por perdas
 config-positions-loss-blacklist-threshold-pct = Limite de perda para lista negra
     .hint = Adiciona à lista negra tokens com perdas acima deste % (-15 = lista negra se cair 15%+)
     .unit = %
-config-positions-partial-exit-default-pct = Saída parcial padrão
-    .hint = Percentual padrão a vender nas saídas parciais
-    .unit = %
-config-positions-partial-exit-enabled = Ativar saídas parciais
-    .hint = Permite vender partes de uma posição em vez de tudo ou nada
-config-positions-partial-exit-max-pct = Saída parcial máxima
-    .hint = Percentual máximo permitido nas saídas parciais
-    .unit = %
-config-positions-partial-exit-min-pct = Saída parcial mínima
-    .hint = Percentual mínimo permitido nas saídas parciais
-    .unit = %
 config-positions-position-open-cooldown-secs = Cooldown de abertura de posição
     .hint = Segundos entre a abertura de quaisquer posições (evita rajadas rápidas)
     .unit = s
 config-positions-profit-extra-needed-sol = Margem extra de lucro
     .hint = SOL extra necessário nos cálculos de lucro (taxas de prioridade)
     .unit = SOL
-config-positions-trailing-stop-activation-pct = Ativação do trailing stop
-    .hint = Ativa o trailing stop após este % de lucro (10 = ativa em +10%)
-    .unit = %
-config-positions-trailing-stop-distance-pct = Distância do trailing stop
-    .hint = Distância a acompanhar abaixo do pico (5 = sai se o preço cair 5% do pico)
-    .unit = %
-config-positions-trailing-stop-enabled = Ativar trailing stop
-    .hint = Ativa o trailing stop loss após o limite de lucro
 
 config-referral-code = Código de indicação
     .hint = Opcional. Se alguém apresentou o { -brand } a você, o código dessa pessoa a credita com uma parte das taxas que você nos paga, sem custo extra para você. Deixe vazio e nada é enviado desta máquina.
@@ -1071,13 +1052,16 @@ config-trader-slippage-exit-retry-steps-pct = Etapas de nova tentativa de saída
 config-trader-slippage-quote-default-pct = Slippage padrão
     .hint = 1% apertado, 3-5% para tokens voláteis
     .unit = %
-config-trader-stop-loss-allow-partial = Permitir saída parcial
-    .hint = Permite saídas parciais no stop loss em vez de fechar a posição inteira
+config-trader-stop-loss-allow-partial = Vender uma parte primeiro
+    .hint = Quando o stop loss dispara, vende primeiro uma parte da posição e depois o restante se o preço continuar abaixo do stop
 config-trader-stop-loss-enabled = Ativar stop loss
     .hint = Ativa a saída automática quando a perda excede o limite (sai imediatamente, ao contrário da saída por tempo)
 config-trader-stop-loss-min-hold-seconds = Tempo mínimo de posse
     .hint = Mínimo de segundos de posse antes de o stop loss poder disparar (0 = imediato)
     .unit = s
+config-trader-stop-loss-partial-pct = Parte a vender
+    .hint = Parte da posição vendida na primeira venda do stop loss
+    .unit = %
 config-trader-stop-loss-threshold-pct = Limite do stop loss
     .hint = Sai quando a perda excede este % (50 = sai em -50%)
     .unit = %
@@ -1093,6 +1077,14 @@ config-trader-time-override-unit = Unidade da saída por tempo
 config-trader-trade-size-sol = Tamanho do trade
     .hint = SOL por posição
     .unit = SOL
+config-trader-trailing-stop-activation-pct = Ativação do trailing stop
+    .hint = Ativa o trailing stop após este % de lucro (10 = ativa em +10%)
+    .unit = %
+config-trader-trailing-stop-distance-pct = Distância do trailing stop
+    .hint = Distância a acompanhar abaixo do pico (5 = sai se o preço cair 5% do pico)
+    .unit = %
+config-trader-trailing-stop-enabled = Ativar trailing stop
+    .hint = Ativa o trailing stop loss após o limite de lucro
 
 config-updates-auto-check = Verificar atualizações
     .hint = Consulta periodicamente o screenerbot.io para saber se há uma versão mais nova publicada
@@ -1257,7 +1249,6 @@ config-category-monitoring = Monitoramento
 config-category-notifications = Notificações
 config-category-ollama-settings = Configurações do { -ollama }
 config-category-optimization = Otimização
-config-category-partial-exit = Saída parcial
 config-category-performance = Desempenho
 config-category-pool-metrics = Métricas de pools
 config-category-price-change = Variação de preço

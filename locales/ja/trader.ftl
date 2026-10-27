@@ -204,7 +204,11 @@ trader-stop-loss-hold-immediate = 即時
 trader-stop-loss-hold-delay = { $span }の遅延
 trader-stop-loss-price-falls = 価格が下落
 trader-stop-loss-threshold-reached = しきい値に到達
-trader-stop-loss-partial = 部分エグジットを許可
+# $part is a formatted percentage of the position.
+trader-stop-loss-sell-part = { $part } を売却
+trader-stop-loss-part-of-position = ポジションの一部
+trader-stop-loss-sell-rest = 残りを売却
+trader-stop-loss-still-below = まだストップを下回っている
 # $loss is the loss percentage with its sign.
 trader-stop-loss-summary = 損失を <strong>{ $loss }</strong> に限定
 trader-stop-loss-note = <strong>注意:</strong> 損切りは早めにエグジットすることで、より大きな損失を防ぎます

@@ -188,7 +188,10 @@ trader-stop-loss-hold-immediate = Сразу
 trader-stop-loss-hold-delay = задержка { $span }
 trader-stop-loss-price-falls = Цена падает
 trader-stop-loss-threshold-reached = Порог достигнут
-trader-stop-loss-partial = Частичные выходы разрешены
+trader-stop-loss-sell-part = Продать { $part }
+trader-stop-loss-part-of-position = Часть позиции
+trader-stop-loss-sell-rest = Продать остаток
+trader-stop-loss-still-below = Всё ещё ниже стопа
 trader-stop-loss-summary = Убыток ограничен: <strong>{ $loss }</strong>
 trader-stop-loss-note = <strong>Примечание:</strong> стоп-лосс защищает от более крупных убытков, выходя из позиции раньше
 

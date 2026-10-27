@@ -73,7 +73,11 @@
     "stop_loss_enabled": false,
     "stop_loss_threshold_pct": 50,
     "stop_loss_allow_partial": false,
+    "stop_loss_partial_pct": 50,
     "stop_loss_min_hold_seconds": 0,
+    "trailing_stop_enabled": false,
+    "trailing_stop_activation_pct": 10,
+    "trailing_stop_distance_pct": 5,
     "position_close_cooldown_minutes": 15,
     "entry_check_concurrency": 10,
     "sell_concurrency": 5,
@@ -106,14 +110,7 @@
     "position_open_cooldown_secs": 5,
     "loss_blacklist_enabled": true,
     "loss_blacklist_threshold_pct": -15,
-    "loss_blacklist_copy_origins": false,
-    "partial_exit_enabled": false,
-    "partial_exit_default_pct": 50,
-    "partial_exit_min_pct": 10,
-    "partial_exit_max_pct": 90,
-    "trailing_stop_enabled": false,
-    "trailing_stop_activation_pct": 10,
-    "trailing_stop_distance_pct": 5
+    "loss_blacklist_copy_origins": false
   },
   "filtering": {
     "cooldown_enabled": true,

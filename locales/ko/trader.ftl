@@ -204,7 +204,11 @@ trader-stop-loss-hold-immediate = 즉시
 trader-stop-loss-hold-delay = { $span } 지연
 trader-stop-loss-price-falls = 가격 하락
 trader-stop-loss-threshold-reached = 임계값 도달
-trader-stop-loss-partial = 부분 청산 허용
+# $part is a formatted percentage of the position.
+trader-stop-loss-sell-part = { $part } 매도
+trader-stop-loss-part-of-position = 포지션의 일부
+trader-stop-loss-sell-rest = 나머지 매도
+trader-stop-loss-still-below = 여전히 손절가 아래
 # $loss is the loss percentage with its sign.
 trader-stop-loss-summary = 손실이 <strong>{ $loss }</strong>로 제한됨
 trader-stop-loss-note = <strong>참고:</strong> 손절은 조기에 청산하여 더 큰 손실을 방지합니다

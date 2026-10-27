@@ -805,31 +805,12 @@ config-positions-loss-blacklist-enabled = تفعيل القائمة السودا
 config-positions-loss-blacklist-threshold-pct = حد الخسارة للقائمة السوداء
     .hint = إضافة الرموز التي تتجاوز خسائرها هذه النسبة إلى القائمة السوداء (-15 = القائمة السوداء عند الهبوط 15% فأكثر)
     .unit = %
-config-positions-partial-exit-default-pct = نسبة الخروج الجزئي الافتراضية
-    .hint = النسبة الافتراضية للبيع عند الخروج الجزئي
-    .unit = %
-config-positions-partial-exit-enabled = تفعيل الخروج الجزئي
-    .hint = السماح ببيع أجزاء من المركز بدلًا من البيع الكلي أو عدمه
-config-positions-partial-exit-max-pct = أقصى نسبة للخروج الجزئي
-    .hint = أقصى نسبة مسموح بها للخروج الجزئي
-    .unit = %
-config-positions-partial-exit-min-pct = أدنى نسبة للخروج الجزئي
-    .hint = أدنى نسبة مسموح بها للخروج الجزئي
-    .unit = %
 config-positions-position-open-cooldown-secs = فترة تهدئة فتح المركز
     .hint = الثواني الفاصلة بين فتح أي مراكز (تمنع الدفعات السريعة)
     .unit = ثانية
 config-positions-profit-extra-needed-sol = هامش الربح الإضافي
     .hint = مقدار { -sol } الإضافي المطلوب لحسابات الربح (رسوم الأولوية)
     .unit = SOL
-config-positions-trailing-stop-activation-pct = تفعيل الوقف المتحرك
-    .hint = تفعيل الوقف المتحرك بعد هذه النسبة من الربح (10 = التفعيل عند +10%)
-    .unit = %
-config-positions-trailing-stop-distance-pct = مسافة الوقف المتحرك
-    .hint = مدى التتبع أسفل الذروة (5 = الخروج إذا هبط السعر 5% عن الذروة)
-    .unit = %
-config-positions-trailing-stop-enabled = تفعيل الوقف المتحرك
-    .hint = تفعيل وقف الخسارة المتحرك بعد بلوغ حد الربح
 
 ## referral
 
@@ -1113,13 +1094,16 @@ config-trader-slippage-exit-retry-steps-pct = خطوات إعادة محاولة
 config-trader-slippage-quote-default-pct = الانزلاق السعري الافتراضي
     .hint = 1% ضيق، و3-5% للتقلب
     .unit = %
-config-trader-stop-loss-allow-partial = السماح بالخروج الجزئي
-    .hint = السماح بالخروج الجزئي عند وقف الخسارة بدلًا من إغلاق المركز كاملًا
+config-trader-stop-loss-allow-partial = بيع جزء أولًا
+    .hint = عند تفعيل وقف الخسارة، بِع جزءًا من المركز أولًا، ثم الباقي إذا ظل السعر دون مستوى الوقف
 config-trader-stop-loss-enabled = تفعيل وقف الخسارة
     .hint = تفعيل الخروج التلقائي عندما تتجاوز الخسارة الحد (يخرج فورًا، بخلاف الخروج الزمني)
 config-trader-stop-loss-min-hold-seconds = أدنى مدة احتفاظ
     .hint = أدنى عدد من الثواني للاحتفاظ قبل أن يُطلق وقف الخسارة (0 = فورًا)
     .unit = ثانية
+config-trader-stop-loss-partial-pct = الجزء المراد بيعه
+    .hint = حصة المركز التي يبيعها أول بيع لوقف الخسارة
+    .unit = %
 config-trader-stop-loss-threshold-pct = حد وقف الخسارة
     .hint = الخروج عندما تتجاوز الخسارة هذه النسبة (50 = الخروج عند -50%)
     .unit = %
@@ -1135,6 +1119,14 @@ config-trader-time-override-unit = وحدة الخروج الزمني
 config-trader-trade-size-sol = حجم الصفقة
     .hint = مقدار { -sol } لكل مركز
     .unit = SOL
+config-trader-trailing-stop-activation-pct = تفعيل الوقف المتحرك
+    .hint = تفعيل الوقف المتحرك بعد هذه النسبة من الربح (10 = التفعيل عند +10%)
+    .unit = %
+config-trader-trailing-stop-distance-pct = مسافة الوقف المتحرك
+    .hint = مدى التتبع أسفل الذروة (5 = الخروج إذا هبط السعر 5% عن الذروة)
+    .unit = %
+config-trader-trailing-stop-enabled = تفعيل الوقف المتحرك
+    .hint = تفعيل وقف الخسارة المتحرك بعد بلوغ حد الربح
 
 ## updates
 
@@ -1309,7 +1301,6 @@ config-category-monitoring = المراقبة
 config-category-notifications = الإشعارات
 config-category-ollama-settings = إعدادات { -ollama }
 config-category-optimization = التحسين
-config-category-partial-exit = الخروج الجزئي
 config-category-performance = الأداء
 config-category-pool-metrics = مقاييس المجمعات
 config-category-price-change = تغيّر السعر

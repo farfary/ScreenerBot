@@ -808,31 +808,12 @@ config-positions-loss-blacklist-enabled = Aktifkan Daftar Hitam Kerugian
 config-positions-loss-blacklist-threshold-pct = Ambang Daftar Hitam Kerugian
     .hint = Masukkan ke daftar hitam token dengan kerugian melebihi % ini (-15 = daftar hitam jika turun 15%+)
     .unit = %
-config-positions-partial-exit-default-pct = Exit Parsial Default
-    .hint = Persentase default yang dijual pada exit parsial
-    .unit = %
-config-positions-partial-exit-enabled = Aktifkan Exit Parsial
-    .hint = Izinkan menjual sebagian posisi alih-alih semua atau tidak sama sekali
-config-positions-partial-exit-max-pct = Maks Exit Parsial
-    .hint = Persentase maksimum yang diizinkan untuk exit parsial
-    .unit = %
-config-positions-partial-exit-min-pct = Min Exit Parsial
-    .hint = Persentase minimum yang diizinkan untuk exit parsial
-    .unit = %
 config-positions-position-open-cooldown-secs = Cooldown Pembukaan Posisi
     .hint = Detik antara pembukaan posisi apa pun (mencegah lonjakan beruntun)
     .unit = dtk
 config-positions-profit-extra-needed-sol = Buffer Ekstra Profit
     .hint = SOL ekstra yang dibutuhkan untuk perhitungan profit (biaya prioritas)
     .unit = SOL
-config-positions-trailing-stop-activation-pct = Aktivasi Trailing Stop
-    .hint = Aktifkan trailing stop setelah profit sebesar % ini (10 = aktif pada +10%)
-    .unit = %
-config-positions-trailing-stop-distance-pct = Jarak Trailing Stop
-    .hint = Seberapa jauh mengikuti di bawah puncak (5 = exit jika harga turun 5% dari puncak)
-    .unit = %
-config-positions-trailing-stop-enabled = Aktifkan Trailing Stop
-    .hint = Aktifkan trailing stop-loss setelah ambang profit
 
 ## referral
 
@@ -1119,13 +1100,16 @@ config-trader-slippage-exit-retry-steps-pct = Langkah Percobaan Ulang Exit
 config-trader-slippage-quote-default-pct = Slippage Default
     .hint = 1% ketat, 3-5% untuk yang volatil
     .unit = %
-config-trader-stop-loss-allow-partial = Izinkan Exit Parsial
-    .hint = Izinkan exit parsial untuk stop loss alih-alih menutup seluruh posisi
+config-trader-stop-loss-allow-partial = Jual Sebagian Dulu
+    .hint = Saat stop loss terpicu, jual sebagian posisi dulu, lalu sisanya jika harga masih di bawah stop
 config-trader-stop-loss-enabled = Aktifkan Stop Loss
     .hint = Aktifkan exit otomatis saat kerugian melebihi ambang (exit seketika, tidak seperti exit waktu)
 config-trader-stop-loss-min-hold-seconds = Min Durasi Hold
     .hint = Detik minimum untuk menahan sebelum stop loss dapat terpicu (0 = seketika)
     .unit = dtk
+config-trader-stop-loss-partial-pct = Bagian yang Dijual
+    .hint = Porsi posisi yang dijual pada penjualan stop loss pertama
+    .unit = %
 config-trader-stop-loss-threshold-pct = Ambang Stop Loss
     .hint = Exit saat kerugian melebihi % ini (50 = exit pada -50%)
     .unit = %
@@ -1141,6 +1125,14 @@ config-trader-time-override-unit = Satuan Exit Waktu
 config-trader-trade-size-sol = Ukuran Trade
     .hint = SOL per posisi
     .unit = SOL
+config-trader-trailing-stop-activation-pct = Aktivasi Trailing Stop
+    .hint = Aktifkan trailing stop setelah profit sebesar % ini (10 = aktif pada +10%)
+    .unit = %
+config-trader-trailing-stop-distance-pct = Jarak Trailing Stop
+    .hint = Seberapa jauh mengikuti di bawah puncak (5 = exit jika harga turun 5% dari puncak)
+    .unit = %
+config-trader-trailing-stop-enabled = Aktifkan Trailing Stop
+    .hint = Aktifkan trailing stop-loss setelah ambang profit
 
 ## updates
 
@@ -1315,7 +1307,6 @@ config-category-monitoring = Pemantauan
 config-category-notifications = Notifikasi
 config-category-ollama-settings = Pengaturan { -ollama }
 config-category-optimization = Optimasi
-config-category-partial-exit = Exit Parsial
 config-category-performance = Performa
 config-category-pool-metrics = Metrik Pool
 config-category-price-change = Perubahan Harga

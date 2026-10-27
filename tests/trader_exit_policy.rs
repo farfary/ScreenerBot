@@ -33,7 +33,7 @@ fn stop_loss_policy_carries_exactly_its_five_config_fields() {
         cfg.trader.stop_loss_threshold_pct = 33.0; // default: 50.0
         cfg.trader.stop_loss_min_hold_seconds = 120; // default: 0
         cfg.trader.stop_loss_allow_partial = true; // default: false
-        cfg.positions.partial_exit_default_pct = 17.5; // default: 50.0
+        cfg.trader.stop_loss_partial_pct = 17.5; // default: 50.0
     });
 
     let policy = ExitPolicy::from_config();
@@ -54,9 +54,9 @@ fn stop_loss_policy_carries_exactly_its_five_config_fields() {
 fn trailing_policy_carries_exactly_its_three_config_fields() {
     let _cfg = config_guard();
     common::set_config(|cfg| {
-        cfg.positions.trailing_stop_enabled = true; // default: false
-        cfg.positions.trailing_stop_activation_pct = 22.0; // default: 10.0
-        cfg.positions.trailing_stop_distance_pct = 8.0; // default: 5.0
+        cfg.trader.trailing_stop_enabled = true; // default: false
+        cfg.trader.trailing_stop_activation_pct = 22.0; // default: 10.0
+        cfg.trader.trailing_stop_distance_pct = 8.0; // default: 5.0
     });
 
     let policy = ExitPolicy::from_config();
@@ -148,7 +148,7 @@ fn task_override_changes_only_set_fields_and_unset_fields_inherit() {
     common::set_config(|cfg| {
         cfg.trader.stop_loss_enabled = true;
         cfg.trader.stop_loss_threshold_pct = 40.0;
-        cfg.positions.trailing_stop_distance_pct = 5.0;
+        cfg.trader.trailing_stop_distance_pct = 5.0;
         cfg.trader.roi_target_percent = 20.0;
     });
     let inherited = ExitPolicy::from_config();

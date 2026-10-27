@@ -289,6 +289,7 @@ errors-trade-mint-invalid = Địa chỉ mint của token không hợp lệ { $m
 errors-trade-blacklisted = Token { $mint } nằm trong danh sách đen
 errors-trade-slippage-invalid = Trượt giá { $slippage }% phải nằm trong khoảng từ { $minimum }% đến { $maximum }%
 errors-trade-percentage-invalid = Phần trăm bán { $percentage } phải nằm trong (0, 100]
+errors-trade-percentage-required = Bán một phần cần có phần trăm vị thế cần bán
 errors-trade-record-failed = Không ghi nhận được giao dịch thủ công
 errors-trade-task-cancelled = Giao dịch thủ công đã dừng trước khi phản hồi vì ứng dụng đang tắt; kết quả nằm trong vị thế
 errors-trade-no-open-position = Không có vị thế đang mở cho token { $mint }

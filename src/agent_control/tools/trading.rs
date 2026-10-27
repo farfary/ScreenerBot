@@ -282,8 +282,7 @@ pub struct SellTokenTool;
 #[derive(Deserialize)]
 struct SellTokenParams {
     mint_address: String,
-    #[serde(default)]
-    percentage: Option<f64>,
+    percentage: f64,
     #[serde(default)]
     slippage_pct: Option<f64>,
 }
@@ -328,13 +327,13 @@ impl Tool for SellTokenTool {
                     "mint_address": { "type": "string", "description": "Mint of the open position" },
                     "percentage": {
                         "type": "number",
-                        "description": "Percent of the position to sell, (0, 100]. Defaults to positions.partial_exit_default_pct.",
+                        "description": "Percent of the position to sell, (0, 100]; 100 closes the whole position.",
                         "exclusiveMinimum": 0,
                         "maximum": 100
                     },
                     "slippage_pct": slippage_schema()
                 },
-                "required": ["mint_address"]
+                "required": ["mint_address", "percentage"]
             }),
             mutating: true,
             requires_confirmation: true,
@@ -346,10 +345,12 @@ impl Tool for SellTokenTool {
             Ok(p) => p,
             Err(e) => return ToolResult::error(format!("Invalid parameters: {e}")),
         };
-        let percentage = params
-            .percentage
-            .unwrap_or_else(|| with_config(|cfg| cfg.positions.partial_exit_default_pct));
-        sell(params.mint_address, Some(percentage), params.slippage_pct).await
+        sell(
+            params.mint_address,
+            Some(params.percentage),
+            params.slippage_pct,
+        )
+        .await
     }
     fn sends_transaction(&self) -> bool {
         true
@@ -409,7 +410,9 @@ impl Tool for ClosePositionTool {
 
 #[cfg(test)]
 mod tests {
-    use super::{buy_message, AddToPositionParams, BuyTokenParams};
+    use super::{
+        buy_message, AddToPositionParams, BuyTokenParams, SellTokenParams, SellTokenTool, Tool,
+    };
     use crate::positions::BuyTarget;
     use serde_json::json;
 
@@ -459,5 +462,28 @@ mod tests {
             serde_json::from_value(json!({ "mint_address": mint, "amount_native": 0.5 }))
                 .expect("buy params");
         assert_eq!(buy.amount_native, Some(0.5));
+    }
+
+    /// A sell names its own share: no auto-trader setting sizes it.
+    #[test]
+    fn a_sell_requires_its_percentage() {
+        let mint = "So11111111111111111111111111111111111111112";
+        assert!(
+            serde_json::from_value::<SellTokenParams>(json!({ "mint_address": mint })).is_err()
+        );
+        let sell: SellTokenParams =
+            serde_json::from_value(json!({ "mint_address": mint, "percentage": 25.0 }))
+                .expect("sell params");
+        assert_eq!(sell.percentage, 25.0);
+
+        let schema = SellTokenTool.definition().parameters;
+        assert_eq!(schema["required"], json!(["mint_address", "percentage"]));
+        let description = schema["properties"]["percentage"]["description"]
+            .as_str()
+            .expect("percentage description");
+        assert!(
+            !description.contains("partial_exit"),
+            "the percentage names no config key: {description}"
+        );
     }
 }
