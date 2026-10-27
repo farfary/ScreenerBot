@@ -17,7 +17,13 @@ use crate::positions::types::{Opening, Position, PositionManagement, PositionOri
 use crate::positions::Error;
 use crate::trader::paper::{PaperFill, PaperModel, PaperSellFill};
 
-const WALLET: &str = "PaperWa11et1111111111111111111111111111111";
+/// The configured trading wallet. A stored round is read back under the configured
+/// wallet's address, so every round is booked under it.
+fn wallet() -> &'static str {
+    static WALLET: std::sync::LazyLock<String> =
+        std::sync::LazyLock::new(crate::chains::solana::accounts::configure_test_trading_wallet);
+    &WALLET
+}
 const DECIMALS: u8 = 6;
 
 async fn paper_book() -> (PaperBook, tempfile::TempDir) {
@@ -93,10 +99,10 @@ fn sell_leg(tokens: f64) -> PaperLeg {
     PaperLeg::sell(&fill, Some("exit-strategy".to_owned()), Utc::now(), None).unwrap()
 }
 
-/// Open terms within the current run of `WALLET`, starting it with ten SOL when none
+/// Open terms within the current run of `wallet()`, starting it with ten SOL when none
 /// has started, with no open cooldown.
 async fn terms(book: &PaperBook, max_open: usize) -> PaperOpenTerms {
-    let epoch = book.account(WALLET, 10.0).await.unwrap().epoch;
+    let epoch = book.account(wallet(), 10.0).await.unwrap().epoch;
     PaperOpenTerms {
         max_open,
         open_cooldown_secs: 0,
@@ -134,7 +140,7 @@ async fn a_paper_round_is_booked_leg_by_leg_with_its_evidence() {
     let (book, _directory) = paper_book().await;
     let opened = open_round(
         &book,
-        WALLET,
+        wallet(),
         opening("MintA"),
         &entry_fill(),
         &buy_leg(),
@@ -158,7 +164,7 @@ async fn a_paper_round_is_booked_leg_by_leg_with_its_evidence() {
         dca_time: Utc::now(),
     };
     let PaperBooked::Booked(after_dca) = book
-        .dca(WALLET, id, &dca, 0.0005, DECIMALS, &buy_leg())
+        .dca(wallet(), id, &dca, 0.0005, DECIMALS, &buy_leg())
         .await
         .unwrap()
     else {
@@ -175,7 +181,7 @@ async fn a_paper_round_is_booked_leg_by_leg_with_its_evidence() {
         fee_raw: 5_000,
     };
     let PaperBooked::Booked(after_partial) = book
-        .partial(WALLET, id, &partial, 50.0, Some(1), &sell_leg(75.0))
+        .partial(wallet(), id, &partial, 50.0, Some(1), &sell_leg(75.0))
         .await
         .unwrap()
     else {
@@ -192,7 +198,7 @@ async fn a_paper_round_is_booked_leg_by_leg_with_its_evidence() {
         exit_time: Utc::now(),
     };
     let PaperBooked::Booked(closed) = book
-        .close(WALLET, id, &close, 0.002, "take_profit", &sell_leg(75.0))
+        .close(wallet(), id, &close, 0.002, "take_profit", &sell_leg(75.0))
         .await
         .unwrap()
     else {
@@ -244,7 +250,7 @@ async fn a_paper_round_is_booked_leg_by_leg_with_its_evidence() {
 
     let reloaded = book
         .db
-        .positions_entered_since(WALLET, Utc::now() - Duration::days(1))
+        .positions_entered_since(wallet(), Utc::now() - Duration::days(1))
         .unwrap();
     assert_eq!(reloaded.len(), 1);
     assert_eq!(
@@ -259,7 +265,7 @@ async fn a_repeated_or_late_booking_writes_nothing() {
     let (book, _directory) = paper_book().await;
     let id = open_round(
         &book,
-        WALLET,
+        wallet(),
         opening("MintB"),
         &entry_fill(),
         &buy_leg(),
@@ -277,13 +283,13 @@ async fn a_repeated_or_late_booking_writes_nothing() {
     };
     let leg = buy_leg();
     assert!(matches!(
-        book.dca(WALLET, id, &dca, 0.001, DECIMALS, &leg)
+        book.dca(wallet(), id, &dca, 0.001, DECIMALS, &leg)
             .await
             .unwrap(),
         PaperBooked::Booked(_)
     ));
     assert!(matches!(
-        book.dca(WALLET, id, &dca, 0.001, DECIMALS, &leg)
+        book.dca(wallet(), id, &dca, 0.001, DECIMALS, &leg)
             .await
             .unwrap(),
         PaperBooked::AlreadyBooked
@@ -297,20 +303,20 @@ async fn a_repeated_or_late_booking_writes_nothing() {
         exit_time: Utc::now(),
     };
     assert!(matches!(
-        book.close(WALLET, id, &close, 0.001, "stop_loss", &sell_leg(110.0))
+        book.close(wallet(), id, &close, 0.001, "stop_loss", &sell_leg(110.0))
             .await
             .unwrap(),
         PaperBooked::Booked(_)
     ));
     let legs = count(&book, "SELECT COUNT(*) FROM paper_legs");
     assert!(matches!(
-        book.close(WALLET, id, &close, 0.001, "stop_loss", &sell_leg(110.0))
+        book.close(wallet(), id, &close, 0.001, "stop_loss", &sell_leg(110.0))
             .await
             .unwrap(),
         PaperBooked::AlreadyClosed
     ));
     assert!(matches!(
-        book.dca(WALLET, id, &dca, 0.001, DECIMALS, &buy_leg())
+        book.dca(wallet(), id, &dca, 0.001, DECIMALS, &buy_leg())
             .await
             .unwrap(),
         PaperBooked::AlreadyClosed
@@ -330,7 +336,7 @@ async fn concurrent_opens_never_exceed_the_capacity() {
         mints
             .iter()
             .zip(&legs)
-            .map(|(mint, leg)| open_round(&book, WALLET, opening(mint), &fill, leg, &terms)),
+            .map(|(mint, leg)| open_round(&book, wallet(), opening(mint), &fill, leg, &terms)),
     )
     .await;
     let opened = results.iter().filter(|result| result.is_ok()).count();
@@ -349,7 +355,7 @@ async fn a_second_round_of_a_held_mint_is_refused() {
     let (book, _directory) = paper_book().await;
     open_round(
         &book,
-        WALLET,
+        wallet(),
         opening("MintC"),
         &entry_fill(),
         &buy_leg(),
@@ -359,7 +365,7 @@ async fn a_second_round_of_a_held_mint_is_refused() {
     .unwrap();
     let error = open_round(
         &book,
-        WALLET,
+        wallet(),
         opening("MintC"),
         &entry_fill(),
         &buy_leg(),
@@ -376,7 +382,7 @@ async fn a_take_profit_step_is_booked_once_and_only_in_order() {
     let (book, _directory) = paper_book().await;
     let id = open_round(
         &book,
-        WALLET,
+        wallet(),
         opening("MintS"),
         &entry_fill(),
         &buy_leg(),
@@ -394,19 +400,19 @@ async fn a_take_profit_step_is_booked_once_and_only_in_order() {
         fee_raw: 5_000,
     };
     assert!(matches!(
-        book.partial(WALLET, id, &partial, 25.0, Some(2), &sell_leg(25.0))
+        book.partial(wallet(), id, &partial, 25.0, Some(2), &sell_leg(25.0))
             .await
             .unwrap(),
         PaperBooked::StepTaken
     ));
     assert!(matches!(
-        book.partial(WALLET, id, &partial, 25.0, Some(1), &sell_leg(25.0))
+        book.partial(wallet(), id, &partial, 25.0, Some(1), &sell_leg(25.0))
             .await
             .unwrap(),
         PaperBooked::Booked(_)
     ));
     assert!(matches!(
-        book.partial(WALLET, id, &partial, 25.0, Some(1), &sell_leg(25.0))
+        book.partial(wallet(), id, &partial, 25.0, Some(1), &sell_leg(25.0))
             .await
             .unwrap(),
         PaperBooked::StepTaken
@@ -420,15 +426,15 @@ async fn a_take_profit_step_is_booked_once_and_only_in_order() {
     );
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn a_reset_settles_open_rounds_at_their_mark_before_the_next_run() {
     let (book, _directory) = paper_book().await;
-    let first = book.account(WALLET, 1.0).await.unwrap();
+    let first = book.account(wallet(), 1.0).await.unwrap();
     let mut entered = opening("MintR");
     entered.entry_time = first.started_at + Duration::seconds(1);
     let id = open_round(
         &book,
-        WALLET,
+        wallet(),
         entered,
         &entry_fill(),
         &buy_leg(),
@@ -441,14 +447,14 @@ async fn a_reset_settles_open_rounds_at_their_mark_before_the_next_run() {
     let later = first.started_at + Duration::seconds(2);
 
     let refused = book
-        .reset_run(WALLET, 2.0, "PaperReset", |_| None, later)
+        .reset_run(wallet(), 2.0, "PaperReset", |_| None, later)
         .await;
     assert!(matches!(refused, Err(Error::PaperFillUnbookable { .. })));
     assert_eq!(book.open_positions().await.len(), 1);
-    assert_eq!(book.account(WALLET, 2.0).await.unwrap().epoch, 1);
+    assert_eq!(book.account(wallet(), 2.0).await.unwrap().epoch, 1);
 
     let next = book
-        .reset_run(WALLET, 2.0, "PaperReset", |_| Some(DECIMALS), later)
+        .reset_run(wallet(), 2.0, "PaperReset", |_| Some(DECIMALS), later)
         .await
         .unwrap();
     assert_eq!(next.epoch, 2);
@@ -463,7 +469,7 @@ async fn a_reset_settles_open_rounds_at_their_mark_before_the_next_run() {
 #[tokio::test]
 async fn the_account_cash_follows_the_rounds_of_its_epoch() {
     let (book, _directory) = paper_book().await;
-    let first = book.account(WALLET, 1.0).await.unwrap();
+    let first = book.account(wallet(), 1.0).await.unwrap();
     assert_eq!(first.epoch, 1);
     assert_eq!(first.cash_native, 1.0);
 
@@ -471,7 +477,7 @@ async fn the_account_cash_follows_the_rounds_of_its_epoch() {
     entered.entry_time = first.started_at + Duration::seconds(1);
     open_round(
         &book,
-        WALLET,
+        wallet(),
         entered,
         &entry_fill(),
         &buy_leg(),
@@ -480,12 +486,12 @@ async fn the_account_cash_follows_the_rounds_of_its_epoch() {
     .await
     .unwrap();
     let fee = crate::positions::pnl::calculate_position_total_fees(&book.open_positions().await[0]);
-    let after_open = book.account(WALLET, 5.0).await.unwrap();
+    let after_open = book.account(wallet(), 5.0).await.unwrap();
     assert_eq!(after_open.epoch, 1, "an existing epoch keeps its balance");
     assert!((after_open.cash_native - (1.0 - 0.1 - fee)).abs() < 1e-12);
 
     let next = book
-        .start_epoch(WALLET, 2.0, first.started_at + Duration::seconds(2))
+        .start_epoch(wallet(), 2.0, first.started_at + Duration::seconds(2))
         .await
         .unwrap();
     assert_eq!(next.epoch, 2);
@@ -496,18 +502,18 @@ async fn the_account_cash_follows_the_rounds_of_its_epoch() {
 async fn a_strategy_counts_the_rounds_it_opened_or_closed_in_the_current_epoch() {
     let (book, _directory) = paper_book().await;
     assert!(book
-        .strategy_rounds(WALLET, "entry-strategy")
+        .strategy_rounds(wallet(), "entry-strategy")
         .await
         .unwrap()
         .is_empty());
-    let epoch = book.account(WALLET, 1.0).await.unwrap();
+    let epoch = book.account(wallet(), 1.0).await.unwrap();
     let at = |seconds| epoch.started_at + Duration::seconds(seconds);
 
     let mut before = opening("MintBefore");
     before.entry_time = epoch.started_at - Duration::seconds(5);
     open_round(
         &book,
-        WALLET,
+        wallet(),
         before,
         &entry_fill(),
         &buy_leg(),
@@ -519,7 +525,7 @@ async fn a_strategy_counts_the_rounds_it_opened_or_closed_in_the_current_epoch()
     own.entry_time = at(1);
     open_round(
         &book,
-        WALLET,
+        wallet(),
         own,
         &entry_fill(),
         &buy_leg(),
@@ -534,7 +540,7 @@ async fn a_strategy_counts_the_rounds_it_opened_or_closed_in_the_current_epoch()
     };
     let other_id = open_round(
         &book,
-        WALLET,
+        wallet(),
         other,
         &entry_fill(),
         &buy_leg(),
@@ -551,7 +557,7 @@ async fn a_strategy_counts_the_rounds_it_opened_or_closed_in_the_current_epoch()
         exit_time: at(3),
     };
     book.close(
-        WALLET,
+        wallet(),
         other_id,
         &close,
         0.002,
@@ -566,7 +572,7 @@ async fn a_strategy_counts_the_rounds_it_opened_or_closed_in_the_current_epoch()
     };
     assert_eq!(
         mints(
-            book.strategy_rounds(WALLET, "entry-strategy")
+            book.strategy_rounds(wallet(), "entry-strategy")
                 .await
                 .unwrap()
         ),
@@ -574,12 +580,16 @@ async fn a_strategy_counts_the_rounds_it_opened_or_closed_in_the_current_epoch()
         "a round entered before the epoch or by another strategy is not counted"
     );
     assert_eq!(
-        mints(book.strategy_rounds(WALLET, "exit-strategy").await.unwrap()),
+        mints(
+            book.strategy_rounds(wallet(), "exit-strategy")
+                .await
+                .unwrap()
+        ),
         ["MintOther"],
         "an exit strategy counts the rounds its exit leg closed"
     );
     assert!(book
-        .strategy_rounds(WALLET, "another-entry")
+        .strategy_rounds(wallet(), "another-entry")
         .await
         .unwrap()
         .iter()
@@ -589,7 +599,7 @@ async fn a_strategy_counts_the_rounds_it_opened_or_closed_in_the_current_epoch()
 #[tokio::test]
 async fn concurrent_buys_never_spend_more_than_the_run_cash() {
     let (book, _directory) = paper_book().await;
-    let epoch = book.account(WALLET, 0.25).await.unwrap().epoch;
+    let epoch = book.account(wallet(), 0.25).await.unwrap().epoch;
     let terms = PaperOpenTerms {
         max_open: 5,
         open_cooldown_secs: 0,
@@ -602,7 +612,7 @@ async fn concurrent_buys_never_spend_more_than_the_run_cash() {
         mints
             .iter()
             .zip(&legs)
-            .map(|(mint, leg)| open_round(&book, WALLET, opening(mint), &fill, leg, &terms)),
+            .map(|(mint, leg)| open_round(&book, wallet(), opening(mint), &fill, leg, &terms)),
     )
     .await;
     assert_eq!(results.iter().filter(|result| result.is_ok()).count(), 2);
@@ -610,7 +620,7 @@ async fn concurrent_buys_never_spend_more_than_the_run_cash() {
         .iter()
         .filter_map(|result| result.as_ref().err())
         .all(|error| matches!(error, Error::PaperCashShort { .. })));
-    assert!(book.account(WALLET, 0.25).await.unwrap().cash_native >= 0.0);
+    assert!(book.account(wallet(), 0.25).await.unwrap().cash_native >= 0.0);
 
     let id = book.open_positions().await[0].id.unwrap();
     let add = DcaFill {
@@ -620,7 +630,7 @@ async fn concurrent_buys_never_spend_more_than_the_run_cash() {
         dca_time: Utc::now(),
     };
     let refused = book
-        .dca(WALLET, id, &add, 0.001, DECIMALS, &buy_leg())
+        .dca(wallet(), id, &add, 0.001, DECIMALS, &buy_leg())
         .await;
     assert!(
         matches!(refused, Err(Error::PaperCashShort { .. })),
@@ -633,7 +643,7 @@ async fn concurrent_buys_never_spend_more_than_the_run_cash() {
 async fn a_paper_open_within_the_cooldown_is_refused_and_the_live_open_time_is_untouched() {
     let (book, _directory) = paper_book().await;
     let live_before = *crate::positions::state::LAST_OPEN_TIME.read().await;
-    let epoch = book.account(WALLET, 10.0).await.unwrap().epoch;
+    let epoch = book.account(wallet(), 10.0).await.unwrap().epoch;
     let cooling = PaperOpenTerms {
         max_open: 5,
         open_cooldown_secs: 60,
@@ -642,7 +652,7 @@ async fn a_paper_open_within_the_cooldown_is_refused_and_the_live_open_time_is_u
     assert_eq!(book.last_open(), None);
     open_round(
         &book,
-        WALLET,
+        wallet(),
         opening("CoolA"),
         &entry_fill(),
         &buy_leg(),
@@ -653,7 +663,7 @@ async fn a_paper_open_within_the_cooldown_is_refused_and_the_live_open_time_is_u
     assert!(book.last_open().is_some());
     match open_round(
         &book,
-        WALLET,
+        wallet(),
         opening("CoolB"),
         &entry_fill(),
         &buy_leg(),
@@ -679,7 +689,7 @@ async fn a_paper_open_within_the_cooldown_is_refused_and_the_live_open_time_is_u
     };
     open_round(
         &book,
-        WALLET,
+        wallet(),
         opening("CoolB"),
         &entry_fill(),
         &buy_leg(),
@@ -693,7 +703,7 @@ async fn a_paper_open_within_the_cooldown_is_refused_and_the_live_open_time_is_u
 async fn a_reset_racing_a_buy_leaves_no_open_round_outside_the_new_run() {
     for buy_first in [true, false] {
         let (book, _directory) = paper_book().await;
-        let epoch = book.account(WALLET, 1.0).await.unwrap().epoch;
+        let epoch = book.account(wallet(), 1.0).await.unwrap().epoch;
         let terms = PaperOpenTerms {
             max_open: 5,
             open_cooldown_secs: 0,
@@ -701,8 +711,8 @@ async fn a_reset_racing_a_buy_leaves_no_open_round_outside_the_new_run() {
         };
         let leg = buy_leg();
         let fill = entry_fill();
-        let buy = open_round(&book, WALLET, opening("RaceMint"), &fill, &leg, &terms);
-        let reset = book.reset_run(WALLET, 1.0, "PaperReset", |_| Some(DECIMALS), Utc::now());
+        let buy = open_round(&book, wallet(), opening("RaceMint"), &fill, &leg, &terms);
+        let reset = book.reset_run(wallet(), 1.0, "PaperReset", |_| Some(DECIMALS), Utc::now());
         let (bought, next) = if buy_first {
             tokio::join!(buy, reset)
         } else {
@@ -724,28 +734,28 @@ async fn a_reset_racing_a_buy_leaves_no_open_round_outside_the_new_run() {
         }
         let counted = book
             .db
-            .positions_entered_since(WALLET, next.started_at)
+            .positions_entered_since(wallet(), next.started_at)
             .unwrap();
         assert!(
-            (book.account(WALLET, 1.0).await.unwrap().cash_native - paper_cash(1.0, &counted))
+            (book.account(wallet(), 1.0).await.unwrap().cash_native - paper_cash(1.0, &counted))
                 .abs()
                 < 1e-12
         );
-        assert_eq!(book.account(WALLET, 1.0).await.unwrap().cash_native, 1.0);
+        assert_eq!(book.account(wallet(), 1.0).await.unwrap().cash_native, 1.0);
     }
 }
 
 #[tokio::test]
 async fn a_round_entered_in_the_second_a_run_starts_but_before_it_is_not_counted_in_it() {
     let (book, _directory) = paper_book().await;
-    let first = book.account(WALLET, 1.0).await.unwrap();
+    let first = book.account(wallet(), 1.0).await.unwrap();
     let second = first.started_at.timestamp() + 2;
     let at = |millis| chrono::DateTime::from_timestamp_millis(second * 1_000 + millis).unwrap();
     let mut entered = opening("SameSecondMint");
     entered.entry_time = at(400);
     open_round(
         &book,
-        WALLET,
+        wallet(),
         entered,
         &entry_fill(),
         &buy_leg(),
@@ -753,10 +763,10 @@ async fn a_round_entered_in_the_second_a_run_starts_but_before_it_is_not_counted
     )
     .await
     .unwrap();
-    let next = book.start_epoch(WALLET, 1.0, at(900)).await.unwrap();
+    let next = book.start_epoch(wallet(), 1.0, at(900)).await.unwrap();
     assert!(book
         .db
-        .positions_entered_since(WALLET, next.started_at)
+        .positions_entered_since(wallet(), next.started_at)
         .unwrap()
         .is_empty());
     assert_eq!(next.cash_native, 1.0);
@@ -767,7 +777,7 @@ async fn a_failed_exit_streak_is_read_back_from_the_store_after_a_restart() {
     let (book, directory) = paper_book().await;
     let id = open_round(
         &book,
-        WALLET,
+        wallet(),
         opening("StreakMint"),
         &entry_fill(),
         &buy_leg(),
@@ -798,7 +808,7 @@ async fn a_failed_exit_streak_is_read_back_from_the_store_after_a_restart() {
     for strategy_id in ["entry-strategy", "exit-strategy"] {
         assert_eq!(
             reopened
-                .failed_exit_streak(WALLET, &strategy(strategy_id))
+                .failed_exit_streak(wallet(), &strategy(strategy_id))
                 .await
                 .unwrap(),
             2,
@@ -822,7 +832,7 @@ async fn a_failed_exit_streak_is_read_back_from_the_store_after_a_restart() {
         .unwrap();
     assert_eq!(
         reopened
-            .failed_exit_streak(WALLET, &strategy("entry-strategy"))
+            .failed_exit_streak(wallet(), &strategy("entry-strategy"))
             .await
             .unwrap(),
         0
@@ -892,13 +902,13 @@ fn keyed_sell_leg(key: &str, tokens: f64) -> PaperLeg {
     PaperLeg::sell(&fill, None, Utc::now(), Some(key)).unwrap()
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn a_buy_booked_twice_under_one_key_opens_one_round() {
     let (book, _directory) = paper_book().await;
     let terms = terms(&book, 5).await;
     let first = open_round(
         &book,
-        WALLET,
+        wallet(),
         copy_opening("KeyMint", 7),
         &entry_fill(),
         &keyed_buy_leg("copy-7-sig"),
@@ -908,7 +918,7 @@ async fn a_buy_booked_twice_under_one_key_opens_one_round() {
     .unwrap();
     let replay = book
         .open(
-            WALLET,
+            wallet(),
             copy_opening("KeyMint", 7),
             &entry_fill(),
             &keyed_buy_leg("copy-7-sig"),
@@ -932,13 +942,13 @@ async fn a_buy_booked_twice_under_one_key_opens_one_round() {
     assert_eq!(leg.kind, "entry");
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn a_replayed_keyed_buy_is_answered_before_the_capacity_checks() {
     let (book, _directory) = paper_book().await;
     let terms = terms(&book, 1).await;
     open_round(
         &book,
-        WALLET,
+        wallet(),
         copy_opening("FullMint", 7),
         &entry_fill(),
         &keyed_buy_leg("copy-7-full"),
@@ -948,7 +958,7 @@ async fn a_replayed_keyed_buy_is_answered_before_the_capacity_checks() {
     .unwrap();
     let replay = book
         .open(
-            WALLET,
+            wallet(),
             copy_opening("FullMint", 7),
             &entry_fill(),
             &keyed_buy_leg("copy-7-full"),
@@ -964,7 +974,7 @@ async fn a_sale_booked_twice_under_one_key_books_one_exit() {
     let (book, _directory) = paper_book().await;
     let id = open_round(
         &book,
-        WALLET,
+        wallet(),
         copy_opening("SaleMint", 3),
         &entry_fill(),
         &keyed_buy_leg("copy-3-buy"),
@@ -983,14 +993,14 @@ async fn a_sale_booked_twice_under_one_key_books_one_exit() {
     };
     let leg = keyed_sell_leg("copy-3-sell", 50.0);
     assert!(matches!(
-        book.partial(WALLET, id, &partial, 50.0, None, &leg)
+        book.partial(wallet(), id, &partial, 50.0, None, &leg)
             .await
             .unwrap(),
         PaperBooked::Booked(_)
     ));
     let replayed = keyed_sell_leg("copy-3-sell", 50.0);
     assert!(matches!(
-        book.partial(WALLET, id, &partial, 50.0, None, &replayed)
+        book.partial(wallet(), id, &partial, 50.0, None, &replayed)
             .await
             .unwrap(),
         PaperBooked::AlreadyBooked
@@ -1000,7 +1010,7 @@ async fn a_sale_booked_twice_under_one_key_books_one_exit() {
 
     let other = keyed_sell_leg("copy-3-other", 25.0);
     assert!(matches!(
-        book.partial(WALLET, id, &partial, 50.0, None, &other)
+        book.partial(wallet(), id, &partial, 50.0, None, &other)
             .await
             .unwrap(),
         PaperBooked::Booked(_)
@@ -1015,7 +1025,7 @@ async fn copy_task_rounds_are_only_that_tasks_rounds_since_the_start() {
     let terms = terms(&book, 10).await;
     let before = open_round(
         &book,
-        WALLET,
+        wallet(),
         copy_opening("EarlyMint", 4),
         &entry_fill(),
         &buy_leg(),
@@ -1027,7 +1037,7 @@ async fn copy_task_rounds_are_only_that_tasks_rounds_since_the_start() {
     let start = Utc::now();
     let own = open_round(
         &book,
-        WALLET,
+        wallet(),
         copy_opening("OwnMint", 4),
         &entry_fill(),
         &buy_leg(),
@@ -1037,7 +1047,7 @@ async fn copy_task_rounds_are_only_that_tasks_rounds_since_the_start() {
     .unwrap();
     open_round(
         &book,
-        WALLET,
+        wallet(),
         copy_opening("OtherTaskMint", 40),
         &entry_fill(),
         &buy_leg(),
@@ -1047,7 +1057,7 @@ async fn copy_task_rounds_are_only_that_tasks_rounds_since_the_start() {
     .unwrap();
     open_round(
         &book,
-        WALLET,
+        wallet(),
         opening("StrategyMint"),
         &entry_fill(),
         &buy_leg(),
@@ -1057,7 +1067,7 @@ async fn copy_task_rounds_are_only_that_tasks_rounds_since_the_start() {
     .unwrap();
     let closed = open_round(
         &book,
-        WALLET,
+        wallet(),
         copy_opening("ClosedMint", 4),
         &entry_fill(),
         &buy_leg(),
@@ -1072,7 +1082,7 @@ async fn copy_task_rounds_are_only_that_tasks_rounds_since_the_start() {
         exit_time: Utc::now(),
     };
     book.close(
-        WALLET,
+        wallet(),
         closed.id.unwrap(),
         &close,
         0.001,
@@ -1082,24 +1092,24 @@ async fn copy_task_rounds_are_only_that_tasks_rounds_since_the_start() {
     .await
     .unwrap();
 
-    let rounds = book.copy_task_rounds(WALLET, 4, start).await.unwrap();
+    let rounds = book.copy_task_rounds(wallet(), 4, start).await.unwrap();
     let ids: Vec<_> = rounds.iter().map(|round| round.id).collect();
     assert_eq!(ids, vec![own.id, closed.id]);
     assert!(!ids.contains(&before.id));
     assert!(book
-        .copy_task_rounds(WALLET, 5, start)
+        .copy_task_rounds(wallet(), 5, start)
         .await
         .unwrap()
         .is_empty());
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn settling_a_subset_leaves_the_other_rounds_open() {
     let (book, _directory) = paper_book().await;
     let terms = terms(&book, 10).await;
     let settled = open_round(
         &book,
-        WALLET,
+        wallet(),
         copy_opening("SettleA", 9),
         &entry_fill(),
         &buy_leg(),
@@ -1109,7 +1119,7 @@ async fn settling_a_subset_leaves_the_other_rounds_open() {
     .unwrap();
     let kept = open_round(
         &book,
-        WALLET,
+        wallet(),
         opening("SettleB"),
         &entry_fill(),
         &buy_leg(),
@@ -1120,7 +1130,7 @@ async fn settling_a_subset_leaves_the_other_rounds_open() {
     let positions_before = count(&book, "SELECT COUNT(*) FROM positions");
     let closed = book
         .settle_at_mark(
-            WALLET,
+            wallet(),
             &[settled.clone()],
             "PaperReset",
             |_| Some(DECIMALS),
@@ -1145,7 +1155,7 @@ async fn settling_a_subset_leaves_the_other_rounds_open() {
     );
     let again = book
         .settle_at_mark(
-            WALLET,
+            wallet(),
             &[settled],
             "PaperReset",
             |_| Some(DECIMALS),
@@ -1156,12 +1166,12 @@ async fn settling_a_subset_leaves_the_other_rounds_open() {
     assert_eq!(again, 0, "a round already closed is not settled twice");
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn set_management_changes_the_store_and_the_open_round() {
     let (book, _directory) = paper_book().await;
     let id = open_round(
         &book,
-        WALLET,
+        wallet(),
         copy_opening("ManagedMint", 2),
         &entry_fill(),
         &buy_leg(),
@@ -1195,7 +1205,7 @@ async fn a_copy_tasks_failed_exits_are_counted_for_that_task_only() {
     let terms = terms(&book, 5).await;
     let own = open_round(
         &book,
-        WALLET,
+        wallet(),
         copy_opening("TaskStreakA", 11),
         &entry_fill(),
         &buy_leg(),
@@ -1207,7 +1217,7 @@ async fn a_copy_tasks_failed_exits_are_counted_for_that_task_only() {
     .unwrap();
     let other = open_round(
         &book,
-        WALLET,
+        wallet(),
         copy_opening("TaskStreakB", 111),
         &entry_fill(),
         &buy_leg(),
@@ -1221,19 +1231,19 @@ async fn a_copy_tasks_failed_exits_are_counted_for_that_task_only() {
     book.record_exit_attempt(own, None, false).await.unwrap();
     book.record_exit_attempt(other, None, false).await.unwrap();
     assert_eq!(
-        book.failed_exit_streak(WALLET, &PaperExitOwner::CopyTask(11))
+        book.failed_exit_streak(wallet(), &PaperExitOwner::CopyTask(11))
             .await
             .unwrap(),
         2
     );
     assert_eq!(
-        book.failed_exit_streak(WALLET, &PaperExitOwner::CopyTask(111))
+        book.failed_exit_streak(wallet(), &PaperExitOwner::CopyTask(111))
             .await
             .unwrap(),
         1
     );
     assert_eq!(
-        book.failed_exit_streak(WALLET, &PaperExitOwner::CopyTask(1))
+        book.failed_exit_streak(wallet(), &PaperExitOwner::CopyTask(1))
             .await
             .unwrap(),
         0,
@@ -1241,7 +1251,7 @@ async fn a_copy_tasks_failed_exits_are_counted_for_that_task_only() {
     );
     book.record_exit_attempt(own, None, true).await.unwrap();
     assert_eq!(
-        book.failed_exit_streak(WALLET, &PaperExitOwner::CopyTask(11))
+        book.failed_exit_streak(wallet(), &PaperExitOwner::CopyTask(11))
             .await
             .unwrap(),
         0

@@ -23,7 +23,13 @@ use crate::trader::paper::PaperFillError;
 use crate::trader::types::TradePriority;
 
 const MINT: &str = "PaperExecutorMint11111111111111111111111111";
-const WALLET: &str = "PaperExecutorWa11et111111111111111111111111";
+/// The configured trading wallet. A stored round is read back under the configured
+/// wallet's address, so every round is booked under it.
+fn wallet() -> &'static str {
+    static WALLET: std::sync::LazyLock<String> =
+        std::sync::LazyLock::new(crate::chains::solana::accounts::configure_test_trading_wallet);
+    &WALLET
+}
 const DECIMALS: u8 = 6;
 
 struct FakeIo {
@@ -71,7 +77,7 @@ impl PaperTradeIo for FakeIo {
     }
 
     fn wallet_address(&self) -> Option<String> {
-        Some(WALLET.to_owned())
+        Some(wallet().to_owned())
     }
 
     fn settings(&self) -> PaperSettings {
@@ -176,7 +182,7 @@ fn context(decision: &TradeDecision) -> ExecutionContext {
     ExecutionContext::for_decision(decision)
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn a_paper_round_trip_books_entry_take_profit_and_close_without_a_signature() {
     let (io, _directory) = FakeIo::new(1.0).await;
 
@@ -228,7 +234,7 @@ async fn a_paper_round_trip_books_entry_take_profit_and_close_without_a_signatur
     assert!(stored.exit_time.is_some());
     assert_eq!(stored.closed_reason.as_deref(), Some("StopLoss"));
 
-    let account = io.book.account(WALLET, 1.0).await.unwrap();
+    let account = io.book.account(wallet(), 1.0).await.unwrap();
     assert!(
         account.cash_native > 1.0,
         "a round sold above its entry leaves more cash than it started with: {}",
@@ -300,13 +306,13 @@ async fn a_failed_exit_streak_is_kept_in_the_paper_store_per_strategy_and_a_fill
     sale.strategy_id = Some(exit_strategy.to_owned());
 
     let record =
-        |filled| record_exit_outcome(&io.book, WALLET, &position, position_id, &sale, filled);
+        |filled| record_exit_outcome(&io.book, wallet(), &position, position_id, &sale, filled);
     assert_eq!(record(false).await.unwrap(), 1);
     assert_eq!(record(false).await.unwrap(), 2);
     for strategy_id in [entry_strategy, exit_strategy] {
         assert_eq!(
             io.book
-                .failed_exit_streak(WALLET, &strategy(strategy_id))
+                .failed_exit_streak(wallet(), &strategy(strategy_id))
                 .await
                 .unwrap(),
             2,
@@ -315,7 +321,7 @@ async fn a_failed_exit_streak_is_kept_in_the_paper_store_per_strategy_and_a_fill
     }
     assert_eq!(
         io.book
-            .failed_exit_streak(WALLET, &strategy("another-strategy"))
+            .failed_exit_streak(wallet(), &strategy("another-strategy"))
             .await
             .unwrap(),
         0
@@ -325,7 +331,7 @@ async fn a_failed_exit_streak_is_kept_in_the_paper_store_per_strategy_and_a_fill
     for strategy_id in [entry_strategy, exit_strategy] {
         assert_eq!(
             io.book
-                .failed_exit_streak(WALLET, &strategy(strategy_id))
+                .failed_exit_streak(wallet(), &strategy(strategy_id))
                 .await
                 .unwrap(),
             0,
@@ -368,7 +374,7 @@ async fn a_success_carries_the_leg_its_record_is_booked_under() {
 
     let history = io
         .book
-        .round_history(WALLET, booked.position_id)
+        .round_history(wallet(), booked.position_id)
         .await
         .unwrap();
     assert_eq!(history.entries[0].transaction_signature, booked.leg_ref);

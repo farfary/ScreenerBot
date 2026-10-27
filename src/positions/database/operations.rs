@@ -1241,9 +1241,12 @@ mod tests {
             let mut statement = connection
                 .prepare(&format!("SELECT * FROM {table} ORDER BY id"))
                 .unwrap();
-            let width = statement.column_count();
             let rows = statement
                 .query_map([], |row| {
+                    // Counted per row: a connection opened before an upgrade prepares
+                    // against the old schema, and SQLite re-prepares the statement on
+                    // its first step, so a count taken before stepping is stale.
+                    let width = row.as_ref().column_count();
                     let mut values = Vec::with_capacity(width);
                     for index in 0..width {
                         values.push(format!("{:?}", row.get_ref(index)?));

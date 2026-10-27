@@ -2253,7 +2253,10 @@ urls = ["https://canonical.fixture.invalid/"]
             let mut document = toml::Value::Table(toml::from_str(&written).expect("toml"));
             assert!(!relocate_legacy_layout(&mut document).expect("second pass"));
         }
-        let canonical = parse("[trader]\ntime_override_unit = \"days\"\n");
+        // The stop-loss switch is written out: a file without it implies an older default
+        // and is migrated for that reason alone.
+        let canonical =
+            parse("[trader]\nstop_loss_enabled = true\ntime_override_unit = \"days\"\n");
         assert!(!canonical.migrated, "a canonical name is no migration");
     }
 

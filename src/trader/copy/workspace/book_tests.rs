@@ -24,13 +24,20 @@ async fn store(mode: TradingMode) -> (tempfile::TempDir, CopyDatabase, CopyTask)
         crate::chains::ChainId::Solana,
     )
     .unwrap();
-    let task = database
-        .insert_task(CopyTask {
-            mode,
-            ..task(Some("Paper maintenance"))
-        })
+    let mut task = database
+        .insert_task(task(Some("Paper maintenance")))
         .await
         .unwrap();
+    if mode == TradingMode::Live {
+        task = database
+            .set_task_mode(
+                task.id,
+                TradingMode::Live,
+                Some(crate::trader::paper::LIVE_ARM_CONFIRMATION.to_owned()),
+            )
+            .await
+            .unwrap();
+    }
     (directory, database, task)
 }
 

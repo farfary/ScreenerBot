@@ -296,7 +296,7 @@ mod tests {
     fn atr_is_the_wilder_smoothed_true_range() {
         let highs = [10.0, 12.0, 13.0, 15.0, 14.0];
         let lows = [9.0, 10.0, 11.0, 12.0, 11.0];
-        let closes = [9.5, 11.0, 12.5, 14.0, 12.0];
+        let closes = [9.0, 11.0, 12.5, 14.0, 12.0];
         let ranges = [3.0, 2.0, 3.0, 3.0];
         for (index, expected) in ranges.iter().enumerate() {
             let at = index + 1;

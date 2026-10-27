@@ -748,7 +748,10 @@ fn time_override_rejects_a_positive_loss_threshold() {
 
     let position = aged(test_position(1.0, 1.0), Duration::hours(25));
     let err = rule_error(&position, 0.5, ExitRule::TimeLoss);
-    assert!(err.to_string().contains("must be <= 0"), "got: {err}");
+    assert!(
+        err.to_string().contains("must be between -100 and 0"),
+        "got: {err}"
+    );
 }
 
 #[test]
@@ -757,7 +760,11 @@ fn time_override_rejects_a_non_positive_duration() {
     enable_time_override(0.0, -40.0);
 
     let position = aged(test_position(1.0, 1.0), Duration::hours(25));
-    assert!(fires_nothing(&position, 0.5, ExitRule::TimeLoss));
+    let err = rule_error(&position, 0.5, ExitRule::TimeLoss);
+    assert!(
+        err.to_string().contains("duration must be greater than 0"),
+        "got: {err}"
+    );
 }
 
 #[test]

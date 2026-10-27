@@ -4983,8 +4983,11 @@ fn a_position_written_off_after_the_plan_is_neither_closed_nor_announced_by_the_
 /// must never plan a second open row for a mint.
 #[test]
 fn a_holding_round_never_reopens_a_closed_row_beside_the_open_bot_row_of_the_mint() {
+    // Any traded token: a quote asset such as the stablecoin `OTHER_MINT` never opens a
+    // holding round, so it cannot exercise the synthetic round.
+    const HELD_MINT: &str = "HeLdMint1111111111111111111111111111111111";
     let history_row = {
-        let closed_round = round(OTHER_MINT, &format!("genesis:{OTHER_MINT}"));
+        let closed_round = round(HELD_MINT, &format!("genesis:{HELD_MINT}"));
         materialise(std::slice::from_ref(&closed_round), &no_metadata()).remove(0)
     };
     assert_eq!(history_row.id, Some(1));
@@ -4992,7 +4995,7 @@ fn a_holding_round_never_reopens_a_closed_row_beside_the_open_bot_row_of_the_min
     assert!(history_row.is_wallet_derived());
 
     let bot_row = {
-        let mut row = bot_position(&open_round(OTHER_MINT, "bot-buy:mint"));
+        let mut row = bot_position(&open_round(HELD_MINT, "bot-buy:mint"));
         row.id = Some(2);
         row
     };
@@ -5002,14 +5005,14 @@ fn a_holding_round_never_reopens_a_closed_row_beside_the_open_bot_row_of_the_min
     screenerbot::positions::ledger::reconcile_with_wallet(
         &mut rounds,
         &[screenerbot::positions::ledger::WalletHolding {
-            mint: OTHER_MINT.to_owned(),
+            mint: HELD_MINT.to_owned(),
             amount_raw: 423_386,
             decimals: 6,
         }],
         None,
     );
     assert_eq!(rounds.len(), 1, "the held mint has no reduced round");
-    assert_eq!(rounds[0].round_key, format!("genesis:{OTHER_MINT}"));
+    assert_eq!(rounds[0].round_key, format!("genesis:{HELD_MINT}"));
 
     let existing = vec![history_row, bot_row];
     let plan = plan_position_writes(
@@ -5029,12 +5032,12 @@ fn a_holding_round_never_reopens_a_closed_row_beside_the_open_bot_row_of_the_min
                 .find(|update| update.position.id == row.id)
                 .map_or(row, |update| &update.position)
         })
-        .filter(|row| row.mint == OTHER_MINT && row.exit_time.is_none())
+        .filter(|row| row.mint == HELD_MINT && row.exit_time.is_none())
         .count()
         + plan
             .inserts
             .iter()
-            .filter(|row| row.mint == OTHER_MINT && row.exit_time.is_none())
+            .filter(|row| row.mint == HELD_MINT && row.exit_time.is_none())
             .count();
     assert!(
         open_rows <= 1,

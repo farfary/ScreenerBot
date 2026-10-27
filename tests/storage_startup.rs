@@ -426,10 +426,12 @@ fn assert_every_store_is_clean(directory: &std::path::Path, launches: &str) {
     }
 }
 
+/// Every `.db` filename the paths module joins, whether written at the join or as a
+/// named `&str` constant beside it.
 fn database_filenames(source: &str) -> BTreeSet<String> {
-    source
-        .split("join(\"")
-        .skip(1)
+    ["join(\"", "&str = \""]
+        .into_iter()
+        .flat_map(|opening| source.split(opening).skip(1))
         .filter_map(|tail| tail.split('"').next())
         .filter(|name| name.ends_with(".db"))
         .map(str::to_owned)

@@ -25,12 +25,34 @@ fn insert_row(conn: &Connection, id: &str, kind: &str, enabled: bool) {
     .unwrap();
 }
 
-/// A store as a version 3 core left it: no mode column, ledger at version 3.
+/// A store as a version 3 core left it: the strategies table as that core created it,
+/// with no mode column, and the ledger at version 3. The table is recreated from its
+/// version 3 definition rather than altered, so it carries exactly the shape a user's
+/// store has.
 fn version_3_store(path: &std::path::Path) {
     open_store(path);
     let conn = Connection::open(path).unwrap();
     conn.execute_batch(
-        "ALTER TABLE strategies DROP COLUMN mode;
+        "DROP TABLE strategies;
+         CREATE TABLE strategies (
+             id TEXT PRIMARY KEY,
+             name TEXT NOT NULL,
+             description TEXT,
+             type TEXT NOT NULL, -- 'ENTRY' or 'EXIT'
+             enabled INTEGER NOT NULL DEFAULT 1,
+             priority INTEGER NOT NULL DEFAULT 10,
+             timeframe TEXT NOT NULL DEFAULT '5m', -- Which timeframe to use for OHLCV conditions
+             rules_json TEXT NOT NULL,
+             parameters_json TEXT,
+             created_at TEXT NOT NULL,
+             updated_at TEXT NOT NULL,
+             author TEXT,
+             version INTEGER NOT NULL DEFAULT 1,
+             entry_strategy_ids_json TEXT NOT NULL DEFAULT '[]' -- exit strategies: the entry strategies managed, empty = all
+         );
+         CREATE INDEX idx_strategies_type ON strategies(type);
+         CREATE INDEX idx_strategies_enabled ON strategies(enabled);
+         CREATE INDEX idx_strategies_priority ON strategies(priority);
          UPDATE store_schema SET version = 3, min_reader_version = 2 WHERE id = 1;",
     )
     .unwrap();

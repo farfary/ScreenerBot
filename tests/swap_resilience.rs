@@ -279,7 +279,15 @@ async fn uninitialized_execution_returns_a_domain_error() {
     )
     .await
     .expect_err("execute without a factory");
-    assert_registry_uninitialized(err);
+    // An execution refused before signing is a typed "not submitted" failure whose detail
+    // names the uninitialized registry.
+    match err {
+        screenerbot::Error::Swaps(screenerbot::swaps::SwapExecutionError::NotSubmitted {
+            reason: screenerbot::swaps::NotSubmittedReason::RouterUnavailable { detail },
+            ..
+        }) => assert!(detail.contains("swaps.registry"), "{detail}"),
+        other => panic!("expected an unsubmitted swap naming swaps.registry, got {other}"),
+    }
 }
 
 /// A direct swap that LANDED SUCCESSFULLY must never read as "never submitted".

@@ -47,10 +47,20 @@ fn service_names_exist_in_the_catalog() {
         let mut rest = source.as_str();
         while let Some(at) = rest.find("fn name(&self) -> &'static str") {
             rest = &rest[at..];
-            let open = rest.find('"').expect("service name literal");
-            let close = rest[open + 1..].find('"').expect("closing quote") + open + 1;
-            names.push(rest[open + 1..close].to_owned());
-            rest = &rest[close..];
+            let body = &rest[rest.find('{').expect("name body") + 1..];
+            let body = body[..body.find('}').expect("end of name body")].trim();
+            names.push(match body.strip_prefix('"') {
+                Some(literal) => literal.trim_end_matches('"').to_owned(),
+                // A service that names itself through a constant: read that constant's literal.
+                None => {
+                    let declaration = format!("const {body}: &str = \"");
+                    let start = source.find(&declaration).expect("service name constant")
+                        + declaration.len();
+                    let end = source[start..].find('"').expect("closing quote") + start;
+                    source[start..end].to_owned()
+                }
+            });
+            rest = &rest[1..];
         }
     }
     assert!(

@@ -4,6 +4,7 @@
 //! Tests of the replacement refusals, the apply classification, the create-only marker, the interrupted-stage text and the abandoned-replacement record.
 
 use super::*;
+use chrono::TimeZone;
 
 const OLD: &str = "OldWalletAddress11111111111111111111111111";
 const NEW: &str = "NewWalletAddress11111111111111111111111111";
@@ -25,7 +26,7 @@ fn marker() -> Marker {
         previous_address: OLD.to_owned(),
         new_address: NEW.to_owned(),
         backup_directory: "wallet-reset-20261026T120000Z-OldWalle".to_owned(),
-        requested_at: Utc::now(),
+        requested_at: Utc.with_ymd_and_hms(2026, 10, 26, 12, 0, 0).unwrap(),
     }
 }
 

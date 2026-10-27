@@ -281,13 +281,22 @@ fn a_staged_replacement_applies_at_the_next_boot() {
             assert_eq!(applied.new_wallet, scenario.new);
             assert_applied(&scenario).await;
 
-            screenerbot::database::open::open_all();
             let check = WalletValidator::validate_wallet_consistency()
                 .await
                 .expect("check the wallet");
             assert!(
                 matches!(check, WalletValidationResult::FirstRun),
                 "the new wallet starts clean: {check:?}"
+            );
+
+            // The stores the boot opens record the new wallet, never the replaced one.
+            screenerbot::database::open::open_all();
+            let check = WalletValidator::validate_wallet_consistency()
+                .await
+                .expect("check the wallet");
+            assert!(
+                matches!(check, WalletValidationResult::Valid),
+                "the reopened stores belong to the new wallet: {check:?}"
             );
         },
     );

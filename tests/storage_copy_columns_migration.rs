@@ -329,7 +329,7 @@ fn a_v9_store_drops_the_position_link_table_and_keeps_its_rows() {
     let kept_before: Vec<String> = schema(&conn)
         .into_iter()
         .map(|(name, _)| name)
-        .filter(|name| name != "copy_position_links")
+        .filter(|name| !name.contains("copy_position_links"))
         .collect();
     drop(conn);
 
@@ -599,8 +599,11 @@ fn malformed_schema_version_rolls_back_archive_renames_and_history_changes() {
     );
 }
 
+/// The open that archives the copy paper book (a store below v13) refuses a
+/// noncanonical raw balance in the then-active book and leaves storage untouched. Once
+/// archived, the book is history: the same row never refuses an open.
 #[test]
-fn invalid_raw_row_in_v8_refuses_open_without_modifying_storage() {
+fn an_invalid_raw_row_refuses_only_the_archiving_open() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("copy_trading.db");
     released(&path);
@@ -612,20 +615,49 @@ fn invalid_raw_row_in_v8_refuses_open_without_modifying_storage() {
         [],
     )
     .unwrap();
-    let before = schema(&conn);
-    let row_before: (String, i64) = conn
-        .query_row("SELECT token_amount_raw, token_decimals FROM copy_paper_positions WHERE mint='invalid'", [], |row| Ok((row.get(0)?, row.get(1)?)))
-        .unwrap();
+    let row = |conn: &Connection| -> (String, i64) {
+        conn.query_row("SELECT token_amount_raw, token_decimals FROM copy_paper_positions WHERE mint='invalid'", [], |row| Ok((row.get(0)?, row.get(1)?)))
+            .unwrap()
+    };
+    let archived_schema = schema(&conn);
+    let archived_row = row(&conn);
+    conn.execute_batch(
+        "UPDATE copy_metadata SET value = '12' WHERE key = 'schema_version';
+         UPDATE store_schema SET version = 12, min_reader_version = 12 WHERE id = 1;",
+    )
+    .unwrap();
+    let ledger = |conn: &Connection| -> (String, i64) {
+        conn.query_row(
+            "SELECT (SELECT value FROM copy_metadata WHERE key = 'schema_version'), \
+                 (SELECT version FROM store_schema WHERE id = 1)",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .unwrap()
+    };
     drop(conn);
 
     assert!(CopyDatabase::open(&path, ChainId::Solana).is_err());
 
     let conn = Connection::open(&path).unwrap();
-    assert_eq!(schema(&conn), before);
-    let row_after: (String, i64) = conn
-        .query_row("SELECT token_amount_raw, token_decimals FROM copy_paper_positions WHERE mint='invalid'", [], |row| Ok((row.get(0)?, row.get(1)?)))
-        .unwrap();
-    assert_eq!(row_after, row_before);
+    assert_eq!(schema(&conn), archived_schema);
+    assert_eq!(row(&conn), archived_row);
+    assert_eq!(
+        ledger(&conn),
+        ("12".to_owned(), 12),
+        "the version is not advanced"
+    );
+    conn.execute_batch(
+        "UPDATE copy_metadata SET value = '13' WHERE key = 'schema_version';
+         UPDATE store_schema SET version = 13, min_reader_version = 13 WHERE id = 1;",
+    )
+    .unwrap();
+    drop(conn);
+
+    drop(
+        CopyDatabase::open(&path, ChainId::Solana).expect("an archived row never refuses an open"),
+    );
+    assert_eq!(row(&Connection::open(&path).unwrap()), archived_row);
 }
 
 /// An older build re-adds `peak_price_sol` to a migrated store and writes only that

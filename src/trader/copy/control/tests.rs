@@ -393,7 +393,9 @@ struct Removal {
     attached: usize,
 }
 
-/// A copy store holding `task`, as stored with the id the store gives it.
+/// A copy store holding `task`, as stored with the id the store gives it. A task starts
+/// in paper mode; a live one is armed through the confirmed transition, as the user arms
+/// it.
 async fn store_with(task: CopyTask) -> (tempfile::TempDir, CopyDatabase, CopyTask) {
     crate::config::utils::install_default_config();
     let directory = tempfile::tempdir().unwrap();
@@ -402,7 +404,24 @@ async fn store_with(task: CopyTask) -> (tempfile::TempDir, CopyDatabase, CopyTas
         crate::chains::ChainId::Solana,
     )
     .unwrap();
-    let task = database.insert_task(task).await.unwrap();
+    let mode = task.mode;
+    let mut task = database
+        .insert_task(CopyTask {
+            mode: TradingMode::Paper,
+            ..task
+        })
+        .await
+        .unwrap();
+    if mode == TradingMode::Live {
+        task = database
+            .set_task_mode(
+                task.id,
+                TradingMode::Live,
+                Some(crate::trader::paper::LIVE_ARM_CONFIRMATION.to_owned()),
+            )
+            .await
+            .unwrap();
+    }
     (directory, database, task)
 }
 
