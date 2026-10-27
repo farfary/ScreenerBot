@@ -228,6 +228,9 @@ trader-trailing-subtitle = محافظت خودکار از سود با دنبال
 trader-trailing-activation-impact = دنبال کردن از +{ $value }% سود شروع می‌شود
 # $value is the trail distance percentage as typed.
 trader-trailing-distance-impact = خروج در -{ $value }% از اوج
+# $value is a formatted signed percentage.
+trader-trailing-locked-minimum = حداقل سود قفل‌شده هنگام فعال‌شدن: { $value }
+trader-trailing-locked-minimum-warning = حد ضرر هنگام فعال‌شدن روی قیمت ورود یا زیر آن قرار می‌گیرد و فقط در سود می‌فروشد. برای داشتن کف، حد ضرر سربه‌سر را روشن کنید.
 trader-trailing-activation = فعال‌سازی
 trader-trailing-peak = اوج
 # $value is a formatted percentage.
@@ -236,6 +239,13 @@ trader-trailing-final = +{ $value }% نهایی
 trader-trailing-summary-protected = <strong>{ $value }</strong> سود حفظ شد
 # $value is a formatted percentage.
 trader-trailing-summary-avoided = از <strong>{ $value }</strong> ضرر نسبت به اوج جلوگیری شد
+
+## Break-even stop
+
+trader-break-even-title = حد ضرر سربه‌سر
+trader-break-even-subtitle = وقتی پوزیشن وارد سود شد، پیش از آنکه به ضرر برگردد همه را بفروشید
+# $trigger and $offset are formatted signed percentages.
+trader-break-even-summary = وقتی بهترین قیمت از آخرین خرید به { $trigger } برسد، بازگشت به { $offset } همه را می‌فروشد.
 
 ## Take profit
 
@@ -263,7 +273,7 @@ trader-take-profit-error-total = پله‌ها روی هم حداکثر { $max }
 # $runner is the formatted percentage of the position no step sells.
 trader-take-profit-runner = { $runner }% از پوزیشن به‌عنوان باقی‌مانده باز می‌ماند
 trader-take-profit-runner-none = پله آخر باقی‌مانده پوزیشن را می‌فروشد
-trader-take-profit-runner-warning = با خاموش بودن حد ضرر متحرک، خروج زمانی و همه استراتژی‌های خروج، باقی‌مانده فقط با حد ضرر یا به‌صورت دستی بسته می‌شود
+trader-take-profit-runner-warning = با خاموش بودن حد ضرر متحرک، حد ضرر سربه‌سر، هر دو خروج زمانی و همه استراتژی‌های خروج، باقی‌مانده فقط با حد ضرر یا به‌صورت دستی بسته می‌شود
 trader-take-profit-info = سهم‌ها از پوزیشن اولیه حساب می‌شوند. اگر قیمت چند سطح را یک‌باره رد کند، در هر بررسی یک پله فروخته می‌شود.
 # $profit is the step's formatted profit level; $share is its formatted share.
 trader-take-profit-example-step = در +{ $profit }%، فروش { $share }%
@@ -274,8 +284,12 @@ trader-take-profit-summary = تا سود +{ $profit }%، <strong>{ $sold }%</str
 
 ## Time-based exit
 
-trader-time-title = خروج زمانی
+trader-time-loss-title = بستن پوزیشن‌های در ضرر
 trader-time-subtitle = خروج خودکار از پوزیشن‌ها پس از حداکثر مدت نگهداری، در صورتی که ضرر از آستانه فراتر رفته باشد
+trader-time-flat-title = بستن پوزیشن‌های راکد
+trader-time-flat-subtitle = آزادکردن سرمایهٔ پوزیشن‌هایی که نه بالا می‌روند و نه پایین
+# $span is a formatted duration; $band is a formatted percentage.
+trader-time-flat-summary = پوزیشنی که { $span } یا بیشتر نگه داشته شود و سود و زیانش در محدودهٔ ±{ $band } بماند، بسته می‌شود.
 trader-time-unit-seconds = ثانیه
 trader-time-unit-minutes = دقیقه
 trader-time-unit-hours = ساعت
@@ -321,6 +335,16 @@ trader-time-positions-empty-message = پوزیشن‌های باز با مدت �
 trader-time-positions-token = توکن
 trader-time-positions-hold = مدت نگهداری
 trader-time-positions-roi = ROI
+trader-time-positions-rule = خروج زمانی
+trader-time-status-off = خروج‌های زمانی خاموش هستند
+trader-time-status-none = اکنون هیچ خروج زمانی اعمال نمی‌شود
+trader-time-status-not-managed = توسط معامله‌گر خودکار مدیریت نمی‌شود
+# $pnl is a formatted signed percentage; $remaining is a formatted duration.
+trader-time-status-losing = در ضرر { $pnl }؛ بسته شدن تا { $remaining } دیگر
+trader-time-status-losing-due = در ضرر { $pnl }؛ در بررسی بعدی بسته می‌شود
+# $held and $remaining are formatted durations.
+trader-time-status-flat = راکد از { $held } پیش؛ بسته شدن تا { $remaining } دیگر
+trader-time-status-flat-due = راکد از { $held } پیش؛ در بررسی بعدی بسته می‌شود
 
 ## Strategy control
 

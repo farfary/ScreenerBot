@@ -129,8 +129,10 @@ copy-exit-mode-hybrid = Wallet sells and my rules
 copy-exit-target-sell = Wallet sold
 copy-exit-stop-loss = Stop loss
 copy-exit-trailing-stop = Trailing stop
+copy-exit-break-even = Break-even stop
 copy-exit-take-profit = Take profit
 copy-exit-time-override = Time Exit
+copy-exit-time-stagnation = Flat position exit
 copy-exit-manual = Closed by hand
 
 ## Shared wording
@@ -536,6 +538,12 @@ copy-rule-take-profit-target = Sells at a Gain of
 copy-rule-take-profit-target-hint = A target here replaces the Trader's take-profit steps with one step that sells the whole position
 copy-rule-time-duration = Checks After Holding
 copy-rule-time-threshold = Sells While P&L Is at or Below
+copy-rule-break-even-trigger = Arms at a Gain of
+copy-rule-break-even-offset = Keeps Above Entry by
+copy-rule-time-stagnation-duration = Closes After Holding
+copy-rule-time-stagnation-band = While P&L Stays Within
+# $band is a formatted percentage.
+copy-rule-within-band = ±{ $band }
 copy-preset-inherit = Trader Defaults
 copy-preset-conservative = Conservative
 copy-preset-balanced = Balanced
@@ -720,6 +728,10 @@ copy-holdings-watch-trail = Trail { $level }
 copy-holdings-watch-trail-arms = Trail arms { $level }
 copy-holdings-watch-time = Time ≤ { $level }
 copy-holdings-watch-time-until = Time ≤ { $level } in { $span }
+copy-holdings-watch-floor = Floor { $level }
+copy-holdings-watch-floor-arms = Floor { $level } arms { $arms }
+copy-holdings-watch-flat = Flat { $low } to { $high }
+copy-holdings-watch-flat-until = Flat { $low } to { $high } in { $span }
 copy-holdings-watch-wallet-sells = Wallet sells
 copy-holdings-empty = No open paper holdings. Buys copied from the wallet appear here.
 copy-holdings-col-token = Token

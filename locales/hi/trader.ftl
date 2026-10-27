@@ -185,11 +185,21 @@ trader-trailing-title = ट्रेलिंग स्टॉप
 trader-trailing-subtitle = प्राइस बढ़ने के साथ उसका पीछा करके प्रॉफ़िट अपने आप सुरक्षित करें
 trader-trailing-activation-impact = +{ $value }% प्रॉफ़िट पर ट्रेलिंग शुरू होती है
 trader-trailing-distance-impact = पीक से -{ $value }% पर एग्ज़िट
+# $value is a formatted signed percentage.
+trader-trailing-locked-minimum = सक्रिय होने पर लॉक न्यूनतम: { $value }
+trader-trailing-locked-minimum-warning = सक्रिय होने पर स्टॉप एंट्री पर या उससे नीचे रहता है; यह केवल मुनाफ़े में बेचता है। न्यूनतम सीमा के लिए ब्रेक-ईवन स्टॉप चालू करें।
 trader-trailing-activation = सक्रियण
 trader-trailing-peak = पीक
 trader-trailing-final = अंतिम +{ $value }%
 trader-trailing-summary-protected = <strong>{ $value }</strong> प्रॉफ़िट सुरक्षित रहा
 trader-trailing-summary-avoided = पीक से <strong>{ $value }</strong> नुकसान से बचाव
+
+## Break-even stop
+
+trader-break-even-title = ब्रेक-ईवन स्टॉप
+trader-break-even-subtitle = पोज़ीशन मुनाफ़े में आने के बाद, नुकसान में बदलने से पहले सब बेच दें
+# $trigger and $offset are formatted signed percentages.
+trader-break-even-summary = पिछली खरीद के बाद का सबसे अच्छा भाव { $trigger } होते ही, { $offset } तक वापस गिरने पर सब बिक जाता है।
 
 trader-take-profit-title = टेक प्रॉफ़िट
 trader-take-profit-subtitle = मुनाफ़ा हर स्तर पर पहुँचने पर पोज़िशन को चरणों में बेचता है
@@ -215,7 +225,7 @@ trader-take-profit-error-total = सभी चरण मिलकर अधि�
 # $runner is the formatted percentage of the position no step sells.
 trader-take-profit-runner = पोज़िशन का { $runner }% रनर के रूप में खुला रहता है
 trader-take-profit-runner-none = आख़िरी चरण पोज़िशन का बाकी हिस्सा बेचता है
-trader-take-profit-runner-warning = ट्रेलिंग स्टॉप, समय एग्ज़िट और सभी एग्ज़िट स्ट्रैटेजी बंद होने पर रनर केवल स्टॉप लॉस से या हाथ से बंद होता है
+trader-take-profit-runner-warning = ट्रेलिंग स्टॉप, ब्रेक-ईवन स्टॉप, दोनों समय एग्ज़िट और सभी एग्ज़िट स्ट्रैटेजी बंद होने पर रनर केवल स्टॉप लॉस से या हाथ से बंद होता है
 trader-take-profit-info = हिस्से शुरुआती पोज़िशन से गिने जाते हैं। अगर कीमत एक साथ कई स्तर पार करे, तो हर जाँच में एक चरण बिकता है।
 # $profit is the step's formatted profit level; $share is its formatted share.
 trader-take-profit-example-step = +{ $profit }% पर { $share }% बेचें
@@ -224,8 +234,12 @@ trader-take-profit-example-runner-detail = बाकी एग्ज़िट �
 # $sold is the formatted total share the ladder sells; $profit is its last formatted level.
 trader-take-profit-summary = +{ $profit }% मुनाफ़े तक <strong>{ $sold }%</strong> बेचता है
 
-trader-time-title = समय एग्ज़िट
+trader-time-loss-title = नुकसान वाली पोज़ीशन बंद करें
 trader-time-subtitle = नुकसान सीमा से ज़्यादा हो तो अधिकतम होल्ड समय के बाद पोज़िशन से अपने आप एग्ज़िट करें
+trader-time-flat-title = स्थिर पोज़ीशन बंद करें
+trader-time-flat-subtitle = उन पोज़ीशन की पूंजी मुक्त करें जो न ऊपर जाती हैं न नीचे
+# $span is a formatted duration; $band is a formatted percentage.
+trader-time-flat-summary = { $span } या उससे अधिक रखी गई पोज़ीशन, जिसका P&L ±{ $band } के भीतर हो, बंद हो जाती है।
 trader-time-unit-seconds = सेकंड
 trader-time-unit-minutes = मिनट
 trader-time-unit-hours = घंटे
@@ -267,6 +281,16 @@ trader-time-positions-empty-message = खुली पोज़िशन यह�
 trader-time-positions-token = टोकन
 trader-time-positions-hold = होल्ड टाइम
 trader-time-positions-roi = ROI
+trader-time-positions-rule = समय एग्ज़िट
+trader-time-status-off = समय एग्ज़िट बंद हैं
+trader-time-status-none = अभी कोई समय एग्ज़िट लागू नहीं
+trader-time-status-not-managed = ऑटो ट्रेडर द्वारा प्रबंधित नहीं
+# $pnl is a formatted signed percentage; $remaining is a formatted duration.
+trader-time-status-losing = नुकसान { $pnl }; { $remaining } में बंद होगी
+trader-time-status-losing-due = नुकसान { $pnl }; अगली जाँच पर बंद होगी
+# $held and $remaining are formatted durations.
+trader-time-status-flat = { $held } से स्थिर; { $remaining } में बंद होगी
+trader-time-status-flat-due = { $held } से स्थिर; अगली जाँच पर बंद होगी
 
 trader-strategy-entry-title = एंट्री स्ट्रैटेजी
 trader-strategy-entry-subtitle = ऐसे सिग्नल जो नई पोज़िशन खोल सकते हैं।

@@ -1,13 +1,14 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 //
-// Trader example panels - live calculation previews for stop loss, trailing stop and take-profit settings.
+// Trader example panels - live calculation previews for stop loss, trailing stop, break-even, take-profit and time exit settings.
 
 import {
   formatFixed,
   formatPercentValue,
   formatSol,
   formatTimeSpan,
+  formatUptime,
 } from "../../core/format.js";
 import { levelError, readLevels, runnerShare } from "./level_list.js";
 
@@ -196,7 +197,9 @@ export function createExampleUpdaters({
       // user: a switch not drawn yet or a strategy list not loaded yet warns of nothing.
       const otherExitsOff =
         $("#trailing-enabled")?.checked === false &&
+        $("#break-even-enabled")?.checked === false &&
         $("#time-override-enabled")?.checked === false &&
+        $("#time-stagnation-enabled")?.checked === false &&
         exitStrategiesOn?.() === false;
       runnerWarning.hidden = !(runner !== null && runner > 0 && otherExitsOff);
     }
@@ -362,10 +365,68 @@ export function createExampleUpdaters({
   /** A percent figure in an example strip: one decimal at most, no trailing zero. */
   const examplePercent = (value) => formatFixed(value, { decimals: 1, trim: true });
 
+  /** A signed percent in a computed line: one decimal at most, no trailing zero. */
+  const signedPercent = (value) => formatPercentValue(value, { decimals: 1, trim: true });
+
+  /**
+   * The trailing stop's locked minimum: the profit its stop keeps on the first price that
+   * arms it, `(1 + activation)(1 − distance) − 1`. At or below zero the stop sits at or
+   * below the entry when it arms, so the line warns instead and points to the break-even
+   * stop.
+   */
+  function updateTrailingLockedMinimum() {
+    const lineEl = $("#trail-locked-minimum");
+    if (!lineEl) return;
+    const activation = parseFloat($("#trail-activation")?.value);
+    const distance = parseFloat($("#trail-distance")?.value);
+    const locked = ((1 + activation / 100) * (1 - distance / 100) - 1) * 100;
+    if (!Number.isFinite(locked)) {
+      lineEl.classList.remove("is-warning");
+      lineEl.textContent = "—";
+      return;
+    }
+    const warn = locked <= 0;
+    lineEl.classList.toggle("is-warning", warn);
+    lineEl.textContent = warn
+      ? I18n.t("trader-trailing-locked-minimum-warning")
+      : I18n.t("trader-trailing-locked-minimum", { value: signedPercent(locked) });
+  }
+
+  /** The break-even card's line: what arms the stop and where it sells. */
+  function updateBreakEvenExample() {
+    const lineEl = $("#break-even-summary");
+    if (!lineEl) return;
+    const trigger = parseFloat($("#break-even-trigger")?.value);
+    const offset = parseFloat($("#break-even-offset")?.value);
+    lineEl.textContent =
+      Number.isFinite(trigger) && Number.isFinite(offset)
+        ? I18n.t("trader-break-even-summary", {
+            trigger: signedPercent(trigger),
+            offset: signedPercent(offset),
+          })
+        : "—";
+  }
+
+  /** The flat-position card's line: how long a position must sit inside its band. */
+  function updateStagnationExample() {
+    const lineEl = $("#time-stagnation-summary");
+    if (!lineEl) return;
+    const minutes = parseFloat($("#time-stagnation-minutes")?.value);
+    const band = parseFloat($("#time-stagnation-band")?.value);
+    lineEl.textContent =
+      Number.isFinite(minutes) && minutes > 0 && Number.isFinite(band)
+        ? I18n.t("trader-time-flat-summary", {
+            span: formatUptime(minutes * 60, { style: "trimmed" }),
+            band: formatPercentValue(band, { decimals: 1, includeSign: false, trim: true }),
+          })
+        : "—";
+  }
+
   /**
    * Update trailing stop visual example calculations
    */
   function updateTrailingStopExample() {
+    updateTrailingLockedMinimum();
     const activationInput = $("#trail-activation");
     const distanceInput = $("#trail-distance");
 
@@ -483,7 +544,9 @@ export function createExampleUpdaters({
 
   // Return public API
   return {
+    updateBreakEvenExample,
     updateDcaExample,
+    updateStagnationExample,
     updateTakeProfitExample,
     updateStopLossExample,
     updateTrailingStopExample,

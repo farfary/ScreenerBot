@@ -192,11 +192,21 @@ trader-trailing-title = Trailing stop
 trader-trailing-subtitle = Protégez automatiquement vos profits en suivant le prix à la hausse
 trader-trailing-activation-impact = Début du suivi à +{ $value } % de profit
 trader-trailing-distance-impact = Sortie à -{ $value } % depuis le pic
+# $value is a formatted signed percentage.
+trader-trailing-locked-minimum = Minimum verrouillé à l’activation : { $value }
+trader-trailing-locked-minimum-warning = Le stop se place au prix d’entrée ou en dessous à l’activation ; il ne vend qu’en gain. Activez le stop au point mort pour garder un plancher.
 trader-trailing-activation = Activation
 trader-trailing-peak = Pic
 trader-trailing-final = +{ $value } % final
 trader-trailing-summary-protected = Profit de <strong>{ $value }</strong> protégé
 trader-trailing-summary-avoided = Perte de <strong>{ $value }</strong> évitée depuis le pic
+
+## Break-even stop
+
+trader-break-even-title = Stop au point mort
+trader-break-even-subtitle = Une fois la position en gain, tout vendre avant qu’elle ne passe en perte
+# $trigger and $offset are formatted signed percentages.
+trader-break-even-summary = Dès que le meilleur prix depuis le dernier achat atteint { $trigger }, un retour à { $offset } vend tout.
 
 trader-take-profit-title = Take profit
 trader-take-profit-subtitle = Vend la position par paliers à mesure que le gain atteint chaque niveau
@@ -222,7 +232,7 @@ trader-take-profit-error-total = Les paliers peuvent vendre au total { $max }% a
 # $runner is the formatted percentage of the position no step sells.
 trader-take-profit-runner = { $runner }% de la position restent ouverts comme runner
 trader-take-profit-runner-none = Le dernier palier vend le reste de la position
-trader-take-profit-runner-warning = Avec le trailing stop, la sortie temporelle et toutes les stratégies de sortie désactivés, le runner ne se ferme que par le stop loss ou à la main
+trader-take-profit-runner-warning = Avec le trailing stop, le stop au point mort, les deux sorties temporelles et toutes les stratégies de sortie désactivés, le runner ne se ferme que par le stop loss ou à la main
 trader-take-profit-info = Les parts portent sur la position initiale. Si le prix franchit plusieurs niveaux d'un coup, un palier est vendu par vérification.
 # $profit is the step's formatted profit level; $share is its formatted share.
 trader-take-profit-example-step = À +{ $profit }%, vendre { $share }%
@@ -231,8 +241,12 @@ trader-take-profit-example-runner-detail = Laissé aux autres règles de sortie
 # $sold is the formatted total share the ladder sells; $profit is its last formatted level.
 trader-take-profit-summary = Vend <strong>{ $sold }%</strong> d'ici +{ $profit }% de gain
 
-trader-time-title = Sortie temporelle
+trader-time-loss-title = Fermer les positions en perte
 trader-time-subtitle = Sortez automatiquement des positions après une durée de détention maximale si la perte dépasse le seuil
+trader-time-flat-title = Fermer les positions stagnantes
+trader-time-flat-subtitle = Libérer le capital des positions qui ne bougent ni à la hausse ni à la baisse
+# $span is a formatted duration; $band is a formatted percentage.
+trader-time-flat-summary = Une position détenue { $span } ou plus avec un P&L compris dans ±{ $band } est fermée.
 trader-time-unit-seconds = secondes
 trader-time-unit-minutes = minutes
 trader-time-unit-hours = heures
@@ -278,6 +292,16 @@ trader-time-positions-empty-message = Les positions ouvertes apparaissent ici av
 trader-time-positions-token = Token
 trader-time-positions-hold = Durée de détention
 trader-time-positions-roi = ROI
+trader-time-positions-rule = Sortie temporelle
+trader-time-status-off = Les sorties temporelles sont désactivées
+trader-time-status-none = Aucune sortie temporelle ne s’applique pour l’instant
+trader-time-status-not-managed = Non gérée par Auto Trader
+# $pnl is a formatted signed percentage; $remaining is a formatted duration.
+trader-time-status-losing = En perte de { $pnl } ; fermeture dans { $remaining }
+trader-time-status-losing-due = En perte de { $pnl } ; fermeture au prochain contrôle
+# $held and $remaining are formatted durations.
+trader-time-status-flat = Stagnante depuis { $held } ; fermeture dans { $remaining }
+trader-time-status-flat-due = Stagnante depuis { $held } ; fermeture au prochain contrôle
 
 trader-strategy-entry-title = Stratégies d'entrée
 trader-strategy-entry-subtitle = Signaux pouvant ouvrir une nouvelle position.

@@ -27,7 +27,12 @@
  * - A caption row names the profit and share columns over the inputs, hidden from
  *   assistive technology, since each input carries its own name.
  * - A ladder that keeps a runner warns that only the stop loss or the user can close it
- *   while the trailing stop, the time exit and every exit strategy are off.
+ *   while the trailing stop, the break-even stop, both time exits and every exit
+ *   strategy are off.
+ * - The trailing stop states the minimum it locks when it arms, and warns when that
+ *   stop sits at or below the entry.
+ * - The break-even stop and the flat-position exit state their rule in one line, take
+ *   their bounds and units from the metadata, and save through their cards.
  *
  * The config served here uses a trade size other than the default, so a figure that
  * follows the default instead of the loaded config fails.
@@ -433,7 +438,9 @@ test("a ladder that keeps a runner warns while no other rule can close it", asyn
       take_profit_levels_pct: [25, 60],
       take_profit_sell_pct: [40, 30],
       trailing_stop_enabled: false,
+      break_even_enabled: false,
       time_override_enabled: false,
+      time_exit_stagnation_enabled: false,
     },
     { exitStrategiesOff: true }
   );
@@ -442,7 +449,7 @@ test("a ladder that keeps a runner warns while no other rule can close it", asyn
     await warning.waitFor();
     assert.equal(
       plain(await warning.textContent()),
-      "With the trailing stop, the time exit and every exit strategy off, the runner closes only by the stop loss or by hand"
+      "With the trailing stop, the break-even stop, both time exits and every exit strategy off, the runner closes only by the stop loss or by hand"
     );
 
     await page.locator("#trailing-enabled").evaluate((toggle) => {
@@ -450,6 +457,115 @@ test("a ladder that keeps a runner warns while no other rule can close it", asyn
       toggle.dispatchEvent(new Event("change", { bubbles: true }));
     });
     assert.equal(await warning.isVisible(), false, "the trailing stop can close the runner");
+  } finally {
+    await close();
+  }
+});
+
+test("the trailing stop states the minimum it locks and warns when it locks none", async () => {
+  const { page, close } = await openTrader("trailing-stop", {
+    trailing_stop_activation_pct: 10,
+    trailing_stop_distance_pct: 5,
+  });
+  try {
+    const locked = page.locator("#trail-locked-minimum");
+    await locked.filter({ hasText: "Locked minimum" }).waitFor();
+    assert.equal(plain(await locked.textContent()), "Locked minimum when it arms: +4.5%");
+    assert.equal(await locked.evaluate((el) => el.classList.contains("is-warning")), false);
+
+    await page.locator("#trail-activation").fill("5");
+    await locked.filter({ hasText: "The stop sits" }).waitFor();
+    assert.equal(
+      plain(await locked.textContent()),
+      "The stop sits at or below entry when it arms; it sells only while in profit. Turn on the break-even stop for a floor."
+    );
+    assert.equal(await locked.evaluate((el) => el.classList.contains("is-warning")), true);
+  } finally {
+    await close();
+  }
+});
+
+test("the break-even stop states its rule and saves its two levels", async () => {
+  const { page, close } = await openTrader("trailing-stop", {
+    break_even_trigger_pct: 15,
+    break_even_offset_pct: 1,
+  });
+  try {
+    const summary = page.locator("#break-even-summary");
+    await summary.filter({ hasText: "sells everything" }).waitFor();
+    assert.equal(
+      plain(await summary.textContent()),
+      "Once the best price since the last buy is +15%, a fall back to +1% sells everything."
+    );
+
+    await page.locator("#break-even-offset").fill("2");
+    await summary.filter({ hasText: "+2%" }).waitFor();
+    assert.equal(
+      plain(await summary.textContent()),
+      "Once the best price since the last buy is +15%, a fall back to +2% sells everything."
+    );
+    const [request] = await Promise.all([
+      page.waitForRequest(
+        (candidate) => candidate.method() === "PATCH" && candidate.url().endsWith("/api/config/trader")
+      ),
+      page.locator(".config-card:has(#break-even-offset) .config-card-save").click(),
+    ]);
+    assert.equal(request.postDataJSON().break_even_offset_pct, 2);
+  } finally {
+    await close();
+  }
+});
+
+test("the flat-position exit takes its bounds from the metadata and saves its fields", async () => {
+  const { page, close } = await openTrader("time-rules", {
+    time_exit_stagnation_minutes: 240,
+    time_exit_stagnation_band_pct: 5,
+  });
+  try {
+    const summary = page.locator("#time-stagnation-summary");
+    await summary.filter({ hasText: "closes" }).waitFor();
+    assert.equal(
+      plain(await summary.textContent()),
+      "A position held 4h or longer with its P&L within ±5% closes."
+    );
+    const bounds = (id) =>
+      page.locator(`#${id}`).evaluate((el) => {
+        const group = el.closest(".config-group");
+        return {
+          min: el.min,
+          max: el.max,
+          prefix: group.querySelector(".input-prefix")?.textContent ?? null,
+          unit: group.querySelector(".input-unit").textContent,
+        };
+      });
+    assert.deepEqual(await bounds("time-stagnation-minutes"), {
+      min: "5",
+      max: "43200",
+      prefix: null,
+      unit: "min",
+    });
+    assert.deepEqual(await bounds("time-stagnation-band"), {
+      min: "0.5",
+      max: "50",
+      prefix: "±",
+      unit: "%",
+    });
+
+    await page.locator("#time-stagnation-minutes").fill("90");
+    await page.locator("#time-stagnation-band").fill("3");
+    assert.equal(
+      plain(await summary.textContent()),
+      "A position held 1h 30m or longer with its P&L within ±3% closes."
+    );
+    const [request] = await Promise.all([
+      page.waitForRequest(
+        (candidate) => candidate.method() === "PATCH" && candidate.url().endsWith("/api/config/trader")
+      ),
+      page.locator(".config-card:has(#time-stagnation-minutes) .config-card-save").click(),
+    ]);
+    const body = request.postDataJSON();
+    assert.equal(body.time_exit_stagnation_minutes, 90);
+    assert.equal(body.time_exit_stagnation_band_pct, 3);
   } finally {
     await close();
   }

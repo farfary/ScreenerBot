@@ -115,8 +115,10 @@ copy-exit-mode-hybrid = فروش‌های کیف پول و قوانین من
 copy-exit-target-sell = کیف پول فروخت
 copy-exit-stop-loss = حد ضرر
 copy-exit-trailing-stop = حد ضرر متحرک
+copy-exit-break-even = حد ضرر سربه‌سر
 copy-exit-take-profit = حد سود
 copy-exit-time-override = خروج زمانی
+copy-exit-time-stagnation = خروج در رکود
 copy-exit-manual = بسته‌شده دستی
 
 ## Shared wording
@@ -498,6 +500,12 @@ copy-rule-take-profit-target = فروش در سود
 copy-rule-take-profit-target-hint = هدف در اینجا پله‌های حد سود معامله‌گر را با یک پله جایگزین می‌کند که کل پوزیشن را می‌فروشد
 copy-rule-time-duration = بررسی پس از نگهداری
 copy-rule-time-threshold = فروش وقتی سود و زیان برابر یا کمتر از
+copy-rule-break-even-trigger = فعال در سود
+copy-rule-break-even-offset = حفظ بالای ورود به اندازهٔ
+copy-rule-time-stagnation-duration = بستن پس از نگهداری
+copy-rule-time-stagnation-band = تا وقتی سود و زیان در محدودهٔ
+# $band is a formatted percentage.
+copy-rule-within-band = ±{ $band }
 copy-preset-inherit = پیش‌فرض‌های معامله‌گر
 copy-preset-conservative = محافظه‌کارانه
 copy-preset-balanced = متعادل
@@ -665,6 +673,10 @@ copy-holdings-watch-trail = حد ضرر متحرک { $level }
 copy-holdings-watch-trail-arms = فعال‌سازی حد ضرر متحرک { $level }
 copy-holdings-watch-time = زمان ≤ { $level }
 copy-holdings-watch-time-until = زمان ≤ { $level } تا { $span } دیگر
+copy-holdings-watch-floor = کف { $level }
+copy-holdings-watch-floor-arms = کف { $level } فعال در { $arms }
+copy-holdings-watch-flat = بی‌تحرک { $low } تا { $high }
+copy-holdings-watch-flat-until = بی‌تحرک { $low } تا { $high } تا { $span } دیگر
 copy-holdings-watch-wallet-sells = فروش‌های کیف پول
 copy-holdings-empty = دارایی آزمایشی بازی وجود ندارد. خریدهای کپی‌شده از کیف پول اینجا ظاهر می‌شوند.
 copy-holdings-col-token = توکن

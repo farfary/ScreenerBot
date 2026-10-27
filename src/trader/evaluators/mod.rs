@@ -9,17 +9,22 @@
 //! - DCA evaluation (dollar cost averaging logic)
 //! - Strategy evaluation (user-configured trading strategies)
 //!
-//! Built-in exit rules (stop loss, trailing stop, take profit, time override) are in separate files,
+//! Built-in exit rules (stop loss, trailing stop, break-even stop, take profit, time override,
+//! stagnation) are in separate files,
 //! and `exit_rules` owns the order they are checked in for the live and the paper books.
+//! `exit_time_watch` reports which time rule watches an open position and when it is due.
 //! These are NOT strategy-system strategies - they're hardcoded rules with config toggles.
 
 pub mod dca;
 pub mod entry;
 pub mod exit;
+pub mod exit_break_even;
 pub mod exit_rules;
 pub mod exit_stop_loss;
 pub mod exit_take_profit;
 pub mod exit_time;
+pub mod exit_time_stagnation;
+pub mod exit_time_watch;
 pub mod exit_trailing;
 pub mod strategies;
 
@@ -42,9 +47,15 @@ mod tests {
         assert!(include_str!("exit.rs").contains(gate));
         for (file, source) in [
             ("exit_rules.rs", include_str!("exit_rules.rs")),
+            ("exit_break_even.rs", include_str!("exit_break_even.rs")),
             ("exit_stop_loss.rs", include_str!("exit_stop_loss.rs")),
             ("exit_take_profit.rs", include_str!("exit_take_profit.rs")),
             ("exit_time.rs", include_str!("exit_time.rs")),
+            (
+                "exit_time_stagnation.rs",
+                include_str!("exit_time_stagnation.rs"),
+            ),
+            ("exit_time_watch.rs", include_str!("exit_time_watch.rs")),
             ("exit_trailing.rs", include_str!("exit_trailing.rs")),
         ] {
             assert!(

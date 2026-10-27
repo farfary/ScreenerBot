@@ -1,6 +1,36 @@
 {
   "data": {
     "trader": {
+      "break_even_enabled": {
+        "type": "boolean",
+        "key": "config-trader-break-even-enabled",
+        "impact": "high",
+        "category": "trailing-stop",
+        "visibility": "primary",
+        "default": false
+      },
+      "break_even_offset_pct": {
+        "type": "number",
+        "key": "config-trader-break-even-offset-pct",
+        "impact": "high",
+        "category": "trailing-stop",
+        "visibility": "primary",
+        "min": 0,
+        "max": 50,
+        "step": 0.5,
+        "default": 1
+      },
+      "break_even_trigger_pct": {
+        "type": "number",
+        "key": "config-trader-break-even-trigger-pct",
+        "impact": "high",
+        "category": "trailing-stop",
+        "visibility": "primary",
+        "min": 0.5,
+        "max": 1000,
+        "step": 0.5,
+        "default": 15
+      },
       "dca_cooldown_minutes": {
         "type": "integer",
         "key": "config-trader-dca-cooldown-minutes",
@@ -306,6 +336,36 @@
         "step": 1,
         "max_items": 4,
         "default": [100]
+      },
+      "time_exit_stagnation_band_pct": {
+        "type": "number",
+        "key": "config-trader-time-exit-stagnation-band-pct",
+        "impact": "high",
+        "category": "time-override",
+        "visibility": "secondary",
+        "min": 0.5,
+        "max": 50,
+        "step": 0.5,
+        "default": 5
+      },
+      "time_exit_stagnation_enabled": {
+        "type": "boolean",
+        "key": "config-trader-time-exit-stagnation-enabled",
+        "impact": "high",
+        "category": "time-override",
+        "visibility": "secondary",
+        "default": false
+      },
+      "time_exit_stagnation_minutes": {
+        "type": "number",
+        "key": "config-trader-time-exit-stagnation-minutes",
+        "impact": "high",
+        "category": "time-override",
+        "visibility": "secondary",
+        "min": 5,
+        "max": 43200,
+        "step": 5,
+        "default": 240
       },
       "time_override_duration": {
         "type": "number",

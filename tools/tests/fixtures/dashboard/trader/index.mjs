@@ -95,6 +95,13 @@ export const endpoints = [
     rust: "src/webserver/routes/positions/types.rs::PositionResponse",
     record: "/api/positions?status=open&limit=0",
   },
+  {
+    method: "GET",
+    path: "/api/trader/time-exits",
+    fixture: "trader_time_exits.json",
+    empty: "trader_time_exits.empty.json",
+    rust: "src/webserver/routes/trader/types.rs::PositionTimeExit",
+  },
 ];
 
 const tab = (id) => `#subTabsContainer [data-tab-id="${id}"]`;

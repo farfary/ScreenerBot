@@ -114,8 +114,10 @@ copy-exit-mode-hybrid = 지갑 매도 및 내 규칙
 copy-exit-target-sell = 지갑 매도
 copy-exit-stop-loss = 손절
 copy-exit-trailing-stop = 트레일링 스톱
+copy-exit-break-even = 본전 스톱
 copy-exit-take-profit = 익절
 copy-exit-time-override = 시간 청산
+copy-exit-time-stagnation = 횡보 청산
 copy-exit-manual = 수동 종료
 
 ## Shared wording
@@ -483,6 +485,12 @@ copy-rule-take-profit-target = 매도 수익률
 copy-rule-take-profit-target-hint = 여기서 목표를 정하면 트레이더의 익절 단계가 포지션 전체를 매도하는 한 단계로 바뀝니다
 copy-rule-time-duration = 보유 후 확인 시점
 copy-rule-time-threshold = 손익이 다음 이하일 때 매도
+copy-rule-break-even-trigger = 활성화 수익
+copy-rule-break-even-offset = 진입가 위로 지킬 폭
+copy-rule-time-stagnation-duration = 청산까지 보유 시간
+copy-rule-time-stagnation-band = 손익이 머무는 범위
+# $band is a formatted percentage.
+copy-rule-within-band = ±{ $band }
 copy-preset-inherit = 트레이더 기본값
 copy-preset-conservative = 보수적
 copy-preset-balanced = 균형
@@ -645,6 +653,10 @@ copy-holdings-watch-trail = 트레일링 { $level }
 copy-holdings-watch-trail-arms = 트레일링 활성화 { $level }
 copy-holdings-watch-time = 시간 ≤ { $level }
 copy-holdings-watch-time-until = 시간 ≤ { $level } ({ $span } 후)
+copy-holdings-watch-floor = 하한 { $level }
+copy-holdings-watch-floor-arms = 하한 { $level } ({ $arms }에서 활성화)
+copy-holdings-watch-flat = 횡보 { $low }~{ $high }
+copy-holdings-watch-flat-until = 횡보 { $low }~{ $high } ({ $span } 후)
 copy-holdings-watch-wallet-sells = 지갑 매도
 copy-holdings-empty = 보유 중인 모의 수량이 없습니다. 지갑에서 카피한 매수가 여기에 표시됩니다.
 copy-holdings-col-token = 토큰

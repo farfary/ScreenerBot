@@ -3,7 +3,10 @@
 
 //! The one order of the built-in exit rules, shared by the live exit monitor and the paper copy book.
 
-use crate::trader::evaluators::{exit_stop_loss, exit_take_profit, exit_time, exit_trailing};
+use crate::trader::evaluators::{
+    exit_break_even, exit_stop_loss, exit_take_profit, exit_time, exit_time_stagnation,
+    exit_trailing,
+};
 use crate::trader::policy::ExitPolicy;
 
 /// What the built-in exit rules read from a holding, on plain numbers. Each book fills it
@@ -15,7 +18,8 @@ pub struct ExitInputs {
     pub average_entry_price: f64,
     /// The price the holding is marked at this evaluation.
     pub current_price: f64,
-    /// Highest price since the average entry last changed; arms the trailing stop.
+    /// Highest price since the average entry last changed; arms the trailing stop and the
+    /// break-even stop.
     pub basis_peak_price: f64,
     /// Seconds since the holding was opened.
     pub held_seconds: i64,
@@ -33,11 +37,16 @@ pub enum ExitRule {
     StopLoss,
     /// The price fell the trailing distance from an armed basis peak while still in profit.
     Trailing,
+    /// The price fell back to the kept margin above the average entry after the basis
+    /// peak reached the break-even arming profit; fires below the entry too.
+    BreakEven,
     /// Profit from the average entry reached the level of take-profit step `level`
     /// (1 is the first step). A partial sale of it reserves that step.
     TakeProfit { level: u32 },
     /// Held past the time limit at or below the loss threshold.
     TimeLoss,
+    /// Held past the stagnation time with profit or loss inside the flat band.
+    TimeStagnation,
 }
 
 /// One rule on its own: the rule as it would fire for these inputs, and
@@ -45,7 +54,21 @@ pub enum ExitRule {
 type Check = fn(&ExitInputs, &ExitPolicy) -> (ExitRule, crate::trader::Result<Option<Option<f64>>>);
 
 /// The order the rules are checked in; the first that fires wins.
-const ORDER: [Check; 4] = [stop_loss, trailing, take_profit, time_loss];
+///
+/// Stop loss leads: the loss cap and its partial first sale apply whatever else fires.
+/// When the trailing stop and the break-even stop both fire, the trailing stop names the
+/// sale; the break-even stop catches a fall to its floor that the trail has not caught.
+/// Both run before take profit so a retracement sells everything rather than one ladder
+/// step. The time rules come last: they act only
+/// on holdings no price rule wanted, the loss rule before the flat one.
+const ORDER: [Check; 6] = [
+    stop_loss,
+    trailing,
+    break_even,
+    take_profit,
+    time_loss,
+    time_stagnation,
+];
 
 /// The rule that fired and how much of the holding it sells: `Some(pct)` is a partial
 /// exit of that share, `None` sells everything.
@@ -66,7 +89,7 @@ pub struct Decision {
 }
 
 /// The first rule that fires for `inputs` under `policy`, checked in the order stop loss,
-/// trailing stop, take profit, time loss.
+/// trailing stop, break-even stop, take profit, time loss, stagnation.
 ///
 /// A rule whose configuration is impossible does not fire; the rules after it still
 /// run, so one broken setting never disables the others, and its error is reported in
@@ -139,6 +162,20 @@ fn trailing(
     (ExitRule::Trailing, fired)
 }
 
+fn break_even(
+    inputs: &ExitInputs,
+    policy: &ExitPolicy,
+) -> (ExitRule, crate::trader::Result<Option<Option<f64>>>) {
+    let fired = exit_break_even::break_even_triggered(
+        inputs.average_entry_price,
+        inputs.basis_peak_price,
+        inputs.current_price,
+        &policy.break_even,
+    )
+    .map(|triggered| triggered.then_some(None));
+    (ExitRule::BreakEven, fired)
+}
+
 fn take_profit(
     inputs: &ExitInputs,
     policy: &ExitPolicy,
@@ -160,11 +197,25 @@ fn time_loss(
     let fired = exit_time::time_override_triggered(
         inputs.average_entry_price,
         inputs.current_price,
-        inputs.held_seconds as f64,
+        inputs.held_seconds,
         &policy.time,
     )
     .map(|triggered| triggered.then_some(None));
     (ExitRule::TimeLoss, fired)
+}
+
+fn time_stagnation(
+    inputs: &ExitInputs,
+    policy: &ExitPolicy,
+) -> (ExitRule, crate::trader::Result<Option<Option<f64>>>) {
+    let fired = exit_time_stagnation::stagnation_triggered(
+        inputs.average_entry_price,
+        inputs.current_price,
+        inputs.held_seconds,
+        &policy.time_stagnation,
+    )
+    .map(|triggered| triggered.then_some(None));
+    (ExitRule::TimeStagnation, fired)
 }
 
 #[cfg(test)]
@@ -172,10 +223,15 @@ mod tests {
     use super::*;
     use crate::config::TakeProfitLevel;
     use crate::trader::evaluators::dca::DcaConfigSnapshot;
-    use crate::trader::policy::{StopLossPolicy, TakeProfitPolicy, TimePolicy, TrailingPolicy};
+    use crate::trader::policy::{
+        BreakEvenPolicy, StopLossPolicy, TakeProfitPolicy, TimePolicy, TimeStagnationPolicy,
+        TrailingPolicy,
+    };
 
-    /// Every rule enabled: stop at -30% (partial 50%), trail 10% once +20%, take profit at
-    /// +100%, time loss after an hour at -10% or worse.
+    /// Every original rule enabled: stop at -30% (partial 50%), trail 10% once +20%, take
+    /// profit at +100%, time loss after an hour at -10% or worse. The break-even stop
+    /// (+15% / +1%) and the stagnation exit (two hours inside ±5%) are configured but off;
+    /// [`with_break_even_and_stagnation`] turns them on.
     fn policy() -> ExitPolicy {
         ExitPolicy {
             stop_loss: StopLossPolicy {
@@ -190,6 +246,11 @@ mod tests {
                 activation_pct: 20.0,
                 distance_pct: 10.0,
             },
+            break_even: BreakEvenPolicy {
+                enabled: false,
+                trigger_pct: 15.0,
+                offset_pct: 1.0,
+            },
             take_profit: TakeProfitPolicy {
                 enabled: true,
                 levels: vec![TakeProfitLevel::sell_all_at(100.0)],
@@ -198,6 +259,11 @@ mod tests {
                 enabled: true,
                 loss_threshold_pct: -10.0,
                 duration_seconds: 3600.0,
+            },
+            time_stagnation: TimeStagnationPolicy {
+                enabled: false,
+                duration_seconds: 7200.0,
+                band_pct: 5.0,
             },
             dca: DcaConfigSnapshot {
                 enabled: false,
@@ -470,5 +536,126 @@ mod tests {
             decide_admitting(&after_steps(1.2, 0), &policy, refuse_ladder).outcome,
             None
         );
+    }
+
+    fn with_break_even_and_stagnation() -> ExitPolicy {
+        let mut policy = policy();
+        policy.break_even.enabled = true;
+        policy.time_stagnation.enabled = true;
+        policy
+    }
+
+    #[test]
+    fn the_break_even_stop_fires_on_its_own_and_below_the_entry() {
+        let mut policy = with_break_even_and_stagnation();
+        policy.trailing.enabled = false;
+        policy.stop_loss.enabled = false;
+        // Peaked at +18%, back at +1%: the kept margin.
+        assert_eq!(
+            decide(&inputs(1.01, 1.18, 60, false), &policy).outcome,
+            outcome(ExitRule::BreakEven, None)
+        );
+        // Gapped through the floor into a loss: still sells.
+        assert_eq!(
+            decide(&inputs(0.9, 1.18, 60, false), &policy).outcome,
+            outcome(ExitRule::BreakEven, None)
+        );
+        // Peaked at +14%: never armed.
+        assert_eq!(decide(&inputs(1.0, 1.14, 60, false), &policy).outcome, None);
+    }
+
+    #[test]
+    fn the_trail_names_a_sale_in_profit_and_the_break_even_stop_the_one_below() {
+        let mut policy = with_break_even_and_stagnation();
+        policy.trailing.activation_pct = 10.0;
+        policy.trailing.distance_pct = 5.0;
+        // Peak +20%: trail stop at 1.14. A mark at +0.5% is under both stops while still
+        // in profit; the trail is first.
+        assert_eq!(
+            decide(&inputs(1.005, 1.2, 60, false), &policy).outcome,
+            outcome(ExitRule::Trailing, None)
+        );
+        // At -2% the trail is silent (it never sells at a loss) and the break-even stop
+        // sells everything.
+        assert_eq!(
+            decide(&inputs(0.98, 1.2, 60, false), &policy).outcome,
+            outcome(ExitRule::BreakEven, None)
+        );
+        // Deep enough for the stop loss: it wins, partial first.
+        assert_eq!(
+            decide(&inputs(0.6, 1.2, 60, false), &policy).outcome,
+            outcome(ExitRule::StopLoss, Some(50.0))
+        );
+    }
+
+    #[test]
+    fn a_wide_trail_leaves_the_fall_to_the_floor_to_the_break_even_stop() {
+        let mut policy = with_break_even_and_stagnation();
+        policy.trailing.activation_pct = 15.0;
+        policy.trailing.distance_pct = 14.0;
+        // Peak +16%: the trail stop sits at 0.9976, under the +1% floor. At +0.5%, still
+        // in profit, the trail has not fired and the break-even stop has.
+        let decision = decide(&inputs(1.005, 1.16, 60, false), &policy);
+        assert_eq!(decision.outcome, outcome(ExitRule::BreakEven, None));
+        assert!(
+            decision.rule_errors.is_empty(),
+            "{:?}",
+            decision.rule_errors
+        );
+    }
+
+    #[test]
+    fn the_break_even_stop_sells_before_a_ladder_step() {
+        let mut policy = with_break_even_and_stagnation();
+        policy.trailing.enabled = false;
+        policy.take_profit.levels = vec![TakeProfitLevel::sell_all_at(0.5)];
+        // +1% is past a +0.5% ladder step and on the break-even margin: the floor sells.
+        assert_eq!(
+            decide(&inputs(1.01, 1.2, 60, false), &policy).outcome,
+            outcome(ExitRule::BreakEven, None)
+        );
+    }
+
+    #[test]
+    fn the_stagnation_exit_fires_last_and_only_inside_its_band() {
+        let policy = with_break_even_and_stagnation();
+        // Two hours flat at +2%.
+        assert_eq!(
+            decide(&inputs(1.02, 1.02, 7200, false), &policy).outcome,
+            outcome(ExitRule::TimeStagnation, None)
+        );
+        // On both band edges.
+        for edge in [1.05, 0.95] {
+            assert_eq!(
+                decide(&inputs(edge, edge, 7200, false), &policy).outcome,
+                outcome(ExitRule::TimeStagnation, None),
+                "{edge}"
+            );
+        }
+        // Too young.
+        assert_eq!(
+            decide(&inputs(1.02, 1.02, 7199, false), &policy).outcome,
+            None
+        );
+        // At -15% after two hours inside a ±20% band both time rules fire: the loss rule
+        // is first.
+        let mut wide = policy.clone();
+        wide.time_stagnation.band_pct = 20.0;
+        assert_eq!(
+            decide(&inputs(0.85, 1.0, 7200, false), &wide).outcome,
+            outcome(ExitRule::TimeLoss, None)
+        );
+    }
+
+    #[test]
+    fn a_broken_break_even_stop_never_disables_the_rules_after_it() {
+        let mut broken = with_break_even_and_stagnation();
+        broken.break_even.offset_pct = 15.0;
+        let decision = decide(&inputs(1.02, 1.02, 7200, false), &broken);
+        assert_eq!(decision.outcome, outcome(ExitRule::TimeStagnation, None));
+        assert!(matches!(
+            decision.rule_errors.as_slice(),
+            [(ExitRule::BreakEven, _)]
+        ));
     }
 }

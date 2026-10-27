@@ -221,6 +221,9 @@ trader-trailing-subtitle = 가격이 오르는 동안 따라가며 수익을 자
 trader-trailing-activation-impact = 수익 +{ $value }%에서 추적 시작
 # $value is the trail distance percentage as typed.
 trader-trailing-distance-impact = 고점 대비 -{ $value }%에서 청산
+# $value is a formatted signed percentage.
+trader-trailing-locked-minimum = 활성화 시 확보되는 최소 수익: { $value }
+trader-trailing-locked-minimum-warning = 활성화 시 스톱이 진입가 이하에 놓이며, 수익 중일 때만 매도합니다. 하한선이 필요하면 본전 스톱을 켜세요.
 trader-trailing-activation = 활성화
 trader-trailing-peak = 고점
 # $value is a formatted percentage.
@@ -229,6 +232,13 @@ trader-trailing-final = 최종 +{ $value }%
 trader-trailing-summary-protected = 수익 <strong>{ $value }</strong> 보호됨
 # $value is a formatted percentage.
 trader-trailing-summary-avoided = 고점 대비 손실 <strong>{ $value }</strong> 회피
+
+## Break-even stop
+
+trader-break-even-title = 본전 스톱
+trader-break-even-subtitle = 포지션이 수익에 들어선 뒤 손실로 바뀌기 전에 전량 매도합니다
+# $trigger and $offset are formatted signed percentages.
+trader-break-even-summary = 마지막 매수 이후 최고가가 { $trigger }에 도달하면, { $offset }까지 되돌아올 때 전량 매도합니다.
 ## Take profit
 
 trader-take-profit-title = 익절
@@ -255,7 +265,7 @@ trader-take-profit-error-total = 모든 단계를 합쳐 최대 { $max }%까지 
 # $runner is the formatted percentage of the position no step sells.
 trader-take-profit-runner = 포지션의 { $runner }%는 러너로 계속 보유합니다
 trader-take-profit-runner-none = 마지막 단계가 포지션의 나머지를 매도합니다
-trader-take-profit-runner-warning = 트레일링 스톱, 시간 청산, 모든 청산 전략이 꺼져 있으면 러너는 손절이나 수동으로만 청산됩니다
+trader-take-profit-runner-warning = 트레일링 스톱, 본전 스톱, 두 시간 청산, 모든 청산 전략이 꺼져 있으면 러너는 손절이나 수동으로만 청산됩니다
 trader-take-profit-info = 비중은 최초 포지션 기준입니다. 가격이 한 번에 여러 수준을 넘으면 확인할 때마다 한 단계씩 매도합니다.
 # $profit is the step's formatted profit level; $share is its formatted share.
 trader-take-profit-example-step = +{ $profit }%에서 { $share }% 매도
@@ -266,8 +276,12 @@ trader-take-profit-summary = +{ $profit }% 수익까지 <strong>{ $sold }%</stro
 
 ## Time-based exit
 
-trader-time-title = 시간 청산
+trader-time-loss-title = 손실 포지션 청산
 trader-time-subtitle = 최대 보유 시간이 지난 뒤 손실이 임계값을 넘으면 포지션을 자동으로 청산합니다
+trader-time-flat-title = 횡보 포지션 청산
+trader-time-flat-subtitle = 오르지도 내리지도 않는 포지션의 자금을 회수합니다
+# $span is a formatted duration; $band is a formatted percentage.
+trader-time-flat-summary = { $span } 이상 보유하고 손익이 ±{ $band } 이내인 포지션을 청산합니다.
 trader-time-unit-seconds = 초
 trader-time-unit-minutes = 분
 trader-time-unit-hours = 시간
@@ -309,6 +323,16 @@ trader-time-positions-empty-message = 보유 중인 포지션이 보유 시간�
 trader-time-positions-token = 토큰
 trader-time-positions-hold = 보유 시간
 trader-time-positions-roi = ROI
+trader-time-positions-rule = 시간 청산
+trader-time-status-off = 시간 청산이 꺼져 있습니다
+trader-time-status-none = 지금 적용되는 시간 청산이 없습니다
+trader-time-status-not-managed = 자동 트레이더가 관리하지 않음
+# $pnl is a formatted signed percentage; $remaining is a formatted duration.
+trader-time-status-losing = 손실 { $pnl }; { $remaining } 후 청산
+trader-time-status-losing-due = 손실 { $pnl }; 다음 점검 때 청산
+# $held and $remaining are formatted durations.
+trader-time-status-flat = { $held } 동안 횡보; { $remaining } 후 청산
+trader-time-status-flat-due = { $held } 동안 횡보; 다음 점검 때 청산
 
 ## Strategy control
 

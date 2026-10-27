@@ -5,12 +5,12 @@
 /**
  * Guard: the time-based exit has one name across the Auto Trader and Configuration.
  *
- * The Auto Trader tab is titled Time Exit, and the Configuration page groups the same
+ * The Auto Trader tab is titled Time Exit, and the Configuration page groups its
  * fields under their config category and labels them from the config metadata. In
  * every locale that category reads as the tab title, as do the close reason, the
  * exit-type label of a position it closed and the copy-trading exit label, and in the
- * source locale each field label
- * names the Time Exit, so no surface calls the rule something else.
+ * source locale each field label of the losing-position rule names the Time Exit, so
+ * no surface calls the rule something else.
  *
  * Run with `npm run test:js`.
  */
@@ -55,7 +55,7 @@ function values(locale, file) {
 
 test("every locale names the Configuration group after the Time Exit tab", () => {
   for (const locale of LOCALES) {
-    const title = values(locale, "trader.ftl").get("trader-time-title");
+    const title = values(locale, "trader.ftl").get("trader-tab-time-rules");
     const category = values(locale, "config.ftl").get("config-category-time-override");
     assert.ok(title && category, `${locale}: both labels exist`);
     assert.equal(
@@ -68,7 +68,7 @@ test("every locale names the Configuration group after the Time Exit tab", () =>
 
 test("every locale names a time-based close after the Time Exit tab", () => {
   for (const locale of LOCALES) {
-    const title = values(locale, "trader.ftl").get("trader-time-title");
+    const title = values(locale, "trader.ftl").get("trader-tab-time-rules");
     const labels = [
       values(locale, "trade.ftl").get("trade-reason-time-override"),
       values(locale, "trader.ftl").get("trader-exit-type-time-override"),
@@ -82,7 +82,7 @@ test("every locale names a time-based close after the Time Exit tab", () => {
 
 test("the Time Exit fields carry the Time Exit name", () => {
   const config = values("en", "config.ftl");
-  const title = values("en", "trader.ftl").get("trader-time-title");
+  const title = values("en", "trader.ftl").get("trader-tab-time-rules");
   for (const id of FIELDS) {
     assert.ok(config.get(id).includes(title), `${id} reads "${config.get(id)}"`);
   }

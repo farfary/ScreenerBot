@@ -49,8 +49,10 @@ const EXIT_LABELS = Object.freeze({
   target_sell: "copy-exit-target-sell",
   stop_loss: "copy-exit-stop-loss",
   trailing_stop: "copy-exit-trailing-stop",
+  break_even: "copy-exit-break-even",
   take_profit: "copy-exit-take-profit",
   time_override: "copy-exit-time-override",
+  time_stagnation: "copy-exit-time-stagnation",
   manual: "copy-exit-manual",
 });
 

@@ -3,26 +3,29 @@
 
 //! Trading system configuration.
 
-use crate::config::metadata::{ConfigCategory, ConfigImpact};
+use crate::config::metadata::{
+    ConfigCategory, ConfigImpact, FieldType, FieldTypeInfo, NestedMetadata,
+};
 use crate::config::Result;
 use crate::errors::ConfigurationError;
 use crate::field_metadata;
 use serde::{Deserialize, Serialize};
 
-/// Time unit for duration configuration
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+/// Unit of the time-override duration, stored as its lowercase name. Every write is
+/// strict: a name that is neither a unit nor one of its short aliases is refused. A
+/// config file that holds such a name still loads, because the load-time migration
+/// (`config/migrate.rs`) rewrites it to hours before the typed parse.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum TimeUnit {
     Seconds,
     Minutes,
+    #[default]
     Hours,
     Days,
 }
 
-impl Default for TimeUnit {
-    fn default() -> Self {
-        TimeUnit::Hours
-    }
-}
+/// Every canonical unit name, in the order the units grow.
+const TIME_UNIT_NAMES: &[&str] = &["seconds", "minutes", "hours", "days"];
 
 impl TimeUnit {
     /// Convert duration to seconds
@@ -35,9 +38,20 @@ impl TimeUnit {
         }
     }
 
-    /// Convert from string
-    pub fn from_str(s: &str) -> Option<Self> {
-        match s.to_lowercase().as_str() {
+    /// The canonical lowercase name the unit is stored and sent as.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            TimeUnit::Seconds => "seconds",
+            TimeUnit::Minutes => "minutes",
+            TimeUnit::Hours => "hours",
+            TimeUnit::Days => "days",
+        }
+    }
+
+    /// The unit `name` names, case-insensitively and with its short aliases; `None` for
+    /// a name that matches no unit.
+    pub fn from_name(name: &str) -> Option<Self> {
+        match name.to_lowercase().as_str() {
             "seconds" | "s" | "sec" => Some(TimeUnit::Seconds),
             "minutes" | "m" | "min" => Some(TimeUnit::Minutes),
             "hours" | "h" | "hr" => Some(TimeUnit::Hours),
@@ -45,17 +59,35 @@ impl TimeUnit {
             _ => None,
         }
     }
+}
 
-    /// Convert to string
-    pub fn to_string(&self) -> String {
-        match self {
-            TimeUnit::Seconds => "seconds".to_owned(),
-            TimeUnit::Minutes => "minutes".to_owned(),
-            TimeUnit::Hours => "hours".to_owned(),
-            TimeUnit::Days => "days".to_owned(),
-        }
+impl Serialize for TimeUnit {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(self.as_str())
     }
 }
+
+impl<'de> Deserialize<'de> for TimeUnit {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let name = String::deserialize(deserializer)?;
+        Self::from_name(&name)
+            .ok_or_else(|| serde::de::Error::unknown_variant(&name, TIME_UNIT_NAMES))
+    }
+}
+
+impl FieldTypeInfo for TimeUnit {
+    fn field_type() -> FieldType {
+        FieldType::String
+    }
+}
+
+impl NestedMetadata for TimeUnit {}
 
 config_struct! {
     /// Slippage configuration
@@ -102,6 +134,19 @@ pub const TAKE_PROFIT_PROFIT_PCT_MAX: f64 = 1000.0;
 /// The maximum is the whole position, which a single-step ladder sells.
 const TAKE_PROFIT_SELL_PCT_MIN: f64 = 5.0;
 pub const TAKE_PROFIT_SELL_PCT_MAX: f64 = 100.0;
+
+/// Bounds of the break-even stop's arming profit and its kept margin, in percent from
+/// the average entry.
+const BREAK_EVEN_TRIGGER_PCT_MIN: f64 = 0.5;
+const BREAK_EVEN_TRIGGER_PCT_MAX: f64 = 1000.0;
+const BREAK_EVEN_OFFSET_PCT_MIN: f64 = 0.0;
+const BREAK_EVEN_OFFSET_PCT_MAX: f64 = 50.0;
+/// Bounds of the stagnation exit's holding time, in minutes, and of its flat band, in
+/// percent of profit or loss either side of the average entry.
+const TIME_EXIT_STAGNATION_MINUTES_MIN: f64 = 5.0;
+const TIME_EXIT_STAGNATION_MINUTES_MAX: f64 = 43200.0;
+const TIME_EXIT_STAGNATION_BAND_PCT_MIN: f64 = 0.5;
+const TIME_EXIT_STAGNATION_BAND_PCT_MAX: f64 = 50.0;
 
 /// One step of the take-profit ladder: once profit from the average entry reaches
 /// `profit_pct`, sell `sell_pct` of the position as it was opened.
@@ -208,7 +253,7 @@ config_struct! {
             impact: ConfigImpact::Critical,
             category: ConfigCategory::TimeOverride,
         })]
-        time_override_unit: String = "hours".to_owned(),
+        time_override_unit: TimeUnit = TimeUnit::Hours,
         #[metadata(field_metadata! {
             min: -100,
             max: 0,
@@ -217,6 +262,29 @@ config_struct! {
             category: ConfigCategory::TimeOverride,
         })]
         time_override_loss_threshold_percent: f64 = -40.0,
+        /// Close a position whose profit or loss has stayed inside a narrow band for a
+        /// set time, whatever its direction.
+        #[metadata(field_metadata! {
+            impact: ConfigImpact::High,
+            category: ConfigCategory::TimeOverride,
+        })]
+        time_exit_stagnation_enabled: bool = false,
+        #[metadata(field_metadata! {
+            min: TIME_EXIT_STAGNATION_MINUTES_MIN,
+            max: TIME_EXIT_STAGNATION_MINUTES_MAX,
+            step: 5,
+            impact: ConfigImpact::High,
+            category: ConfigCategory::TimeOverride,
+        })]
+        time_exit_stagnation_minutes: f64 = 240.0,
+        #[metadata(field_metadata! {
+            min: TIME_EXIT_STAGNATION_BAND_PCT_MIN,
+            max: TIME_EXIT_STAGNATION_BAND_PCT_MAX,
+            step: 0.5,
+            impact: ConfigImpact::High,
+            category: ConfigCategory::TimeOverride,
+        })]
+        time_exit_stagnation_band_pct: f64 = 5.0,
 
         // ==================== STOP LOSS CONFIGURATION ====================
         #[metadata(field_metadata! {
@@ -278,6 +346,30 @@ config_struct! {
             category: ConfigCategory::TrailingStop,
         })]
         trailing_stop_distance_pct: f64 = 5.0,
+        /// Once the best price since the last buy reaches `break_even_trigger_pct` above
+        /// the average entry, sell everything when the price falls back to
+        /// `break_even_offset_pct` above it.
+        #[metadata(field_metadata! {
+            impact: ConfigImpact::High,
+            category: ConfigCategory::TrailingStop,
+        })]
+        break_even_enabled: bool = false,
+        #[metadata(field_metadata! {
+            min: BREAK_EVEN_TRIGGER_PCT_MIN,
+            max: BREAK_EVEN_TRIGGER_PCT_MAX,
+            step: 0.5,
+            impact: ConfigImpact::High,
+            category: ConfigCategory::TrailingStop,
+        })]
+        break_even_trigger_pct: f64 = 15.0,
+        #[metadata(field_metadata! {
+            min: BREAK_EVEN_OFFSET_PCT_MIN,
+            max: BREAK_EVEN_OFFSET_PCT_MAX,
+            step: 0.5,
+            impact: ConfigImpact::High,
+            category: ConfigCategory::TrailingStop,
+        })]
+        break_even_offset_pct: f64 = 1.0,
 
         // Position timing
         #[metadata(field_metadata! {
@@ -430,6 +522,8 @@ impl TraderConfig {
     /// Refuse a take-profit ladder the exit rule cannot follow: one to
     /// [`TAKE_PROFIT_MAX_STEPS`] steps with a sell share for every level, each value
     /// inside its bounds, levels strictly ascending, and shares adding up to at most 100.
+    /// Refuse a break-even stop or stagnation exit outside its bounds, and a break-even
+    /// margin that is not below its arming profit.
     pub fn validate(&self) -> Result<()> {
         let steps = self.take_profit_levels_pct.len();
         if !(1..=TAKE_PROFIT_MAX_STEPS).contains(&steps) {
@@ -496,13 +590,53 @@ impl TraderConfig {
             }
             .into());
         }
+        for (field, value, min, max) in [
+            (
+                "break_even_trigger_pct",
+                self.break_even_trigger_pct,
+                BREAK_EVEN_TRIGGER_PCT_MIN,
+                BREAK_EVEN_TRIGGER_PCT_MAX,
+            ),
+            (
+                "break_even_offset_pct",
+                self.break_even_offset_pct,
+                BREAK_EVEN_OFFSET_PCT_MIN,
+                BREAK_EVEN_OFFSET_PCT_MAX,
+            ),
+            (
+                "time_exit_stagnation_minutes",
+                self.time_exit_stagnation_minutes,
+                TIME_EXIT_STAGNATION_MINUTES_MIN,
+                TIME_EXIT_STAGNATION_MINUTES_MAX,
+            ),
+            (
+                "time_exit_stagnation_band_pct",
+                self.time_exit_stagnation_band_pct,
+                TIME_EXIT_STAGNATION_BAND_PCT_MIN,
+                TIME_EXIT_STAGNATION_BAND_PCT_MAX,
+            ),
+        ] {
+            if !in_range(value, min, max) {
+                return Err(ConfigurationError::Generic {
+                    message: format!("trader.{field} must be between {min} and {max}"),
+                }
+                .into());
+            }
+        }
+        if self.break_even_offset_pct >= self.break_even_trigger_pct {
+            return Err(ConfigurationError::Generic {
+                message: "trader.break_even_offset_pct must be below trader.break_even_trigger_pct"
+                    .to_owned(),
+            }
+            .into());
+        }
         Ok(())
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{TakeProfitLevel, TraderConfig, TAKE_PROFIT_MAX_STEPS};
+    use super::{TakeProfitLevel, TimeUnit, TraderConfig, TAKE_PROFIT_MAX_STEPS};
 
     #[test]
     fn auto_trading_is_opt_in_by_default() {
@@ -587,5 +721,132 @@ mod tests {
         ] {
             assert!(config.validate().is_err(), "{case} must be refused");
         }
+    }
+
+    #[test]
+    fn break_even_and_stagnation_are_off_by_default_and_valid() {
+        let config = TraderConfig::default();
+        assert!(!config.break_even_enabled);
+        assert_eq!(config.break_even_trigger_pct, 15.0);
+        assert_eq!(config.break_even_offset_pct, 1.0);
+        assert!(!config.time_exit_stagnation_enabled);
+        assert_eq!(config.time_exit_stagnation_minutes, 240.0);
+        assert_eq!(config.time_exit_stagnation_band_pct, 5.0);
+        config.validate().expect("the defaults are valid");
+    }
+
+    #[test]
+    fn break_even_and_stagnation_bounds_are_enforced() {
+        let with = |edit: fn(&mut TraderConfig)| {
+            let mut config = TraderConfig::default();
+            edit(&mut config);
+            config
+        };
+        for (case, config) in [
+            (
+                "trigger under its bound",
+                with(|c| {
+                    c.break_even_trigger_pct = 0.4;
+                    c.break_even_offset_pct = 0.0;
+                }),
+            ),
+            (
+                "trigger over its bound",
+                with(|c| c.break_even_trigger_pct = 1000.5),
+            ),
+            ("offset negative", with(|c| c.break_even_offset_pct = -1.0)),
+            (
+                "offset over its bound",
+                with(|c| {
+                    c.break_even_trigger_pct = 100.0;
+                    c.break_even_offset_pct = 51.0;
+                }),
+            ),
+            (
+                "offset equal to trigger",
+                with(|c| c.break_even_offset_pct = 15.0),
+            ),
+            (
+                "offset above trigger",
+                with(|c| c.break_even_offset_pct = 20.0),
+            ),
+            (
+                "trigger not finite",
+                with(|c| c.break_even_trigger_pct = f64::NAN),
+            ),
+            (
+                "minutes under its bound",
+                with(|c| c.time_exit_stagnation_minutes = 4.0),
+            ),
+            (
+                "minutes over its bound",
+                with(|c| c.time_exit_stagnation_minutes = 43201.0),
+            ),
+            (
+                "band under its bound",
+                with(|c| c.time_exit_stagnation_band_pct = 0.4),
+            ),
+            (
+                "band over its bound",
+                with(|c| c.time_exit_stagnation_band_pct = 50.5),
+            ),
+            (
+                "band not finite",
+                with(|c| c.time_exit_stagnation_band_pct = f64::INFINITY),
+            ),
+        ] {
+            assert!(config.validate().is_err(), "{case} must be refused");
+        }
+        with(|c| {
+            c.break_even_trigger_pct = 0.5;
+            c.break_even_offset_pct = 0.0;
+            c.time_exit_stagnation_minutes = 5.0;
+            c.time_exit_stagnation_band_pct = 50.0;
+        })
+        .validate()
+        .expect("values on their bounds are valid");
+    }
+
+    #[test]
+    fn the_time_unit_round_trips_under_its_stored_names() {
+        for (unit, name) in [
+            (TimeUnit::Seconds, "seconds"),
+            (TimeUnit::Minutes, "minutes"),
+            (TimeUnit::Hours, "hours"),
+            (TimeUnit::Days, "days"),
+        ] {
+            assert_eq!(unit.as_str(), name);
+            let stored = serde_json::to_value(unit).expect("a unit serializes");
+            assert_eq!(stored, serde_json::json!(name));
+            let loaded: TimeUnit = serde_json::from_value(stored).expect("a unit loads");
+            assert_eq!(loaded, unit);
+        }
+        for (alias, unit) in [
+            ("MIN", TimeUnit::Minutes),
+            ("s", TimeUnit::Seconds),
+            ("Day", TimeUnit::Days),
+            ("hr", TimeUnit::Hours),
+        ] {
+            let loaded: TimeUnit =
+                serde_json::from_value(serde_json::json!(alias)).expect("an alias loads");
+            assert_eq!(loaded, unit, "{alias}");
+        }
+    }
+
+    #[test]
+    fn a_name_that_matches_no_unit_is_refused() {
+        for name in ["weeks", "fortnights", "", "hourss"] {
+            let refused = serde_json::from_value::<TimeUnit>(serde_json::json!(name))
+                .expect_err("an unknown unit is refused");
+            assert!(
+                refused.to_string().contains("unknown variant"),
+                "{name}: {refused}"
+            );
+        }
+        let section = toml::from_str::<TraderConfig>("time_override_unit = \"weeks\"\n");
+        assert!(
+            section.is_err(),
+            "a typed trader section refuses an unknown unit"
+        );
     }
 }

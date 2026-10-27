@@ -180,11 +180,21 @@ trader-trailing-title = Trailing Stop
 trader-trailing-subtitle = Lindungi keuntungan secara otomatis dengan mengikuti harga saat naik
 trader-trailing-activation-impact = Mulai mengikuti pada untung +{ $value }%
 trader-trailing-distance-impact = Exit pada -{ $value }% dari puncak
+# $value is a formatted signed percentage.
+trader-trailing-locked-minimum = Minimum terkunci saat aktif: { $value }
+trader-trailing-locked-minimum-warning = Stop berada di harga masuk atau di bawahnya saat aktif; stop hanya menjual saat untung. Aktifkan stop impas untuk batas bawah.
 trader-trailing-activation = Aktivasi
 trader-trailing-peak = Puncak
 trader-trailing-final = +{ $value }% akhir
 trader-trailing-summary-protected = Melindungi untung <strong>{ $value }</strong>
 trader-trailing-summary-avoided = Menghindari rugi <strong>{ $value }</strong> dari puncak
+
+## Break-even stop
+
+trader-break-even-title = Stop Impas
+trader-break-even-subtitle = Setelah posisi masuk untung, jual semuanya sebelum berubah menjadi rugi
+# $trigger and $offset are formatted signed percentages.
+trader-break-even-summary = Begitu harga terbaik sejak pembelian terakhir mencapai { $trigger }, turun kembali ke { $offset } menjual semuanya.
 
 trader-take-profit-title = Take Profit
 trader-take-profit-subtitle = Menjual posisi secara bertahap saat profit mencapai setiap level
@@ -210,7 +220,7 @@ trader-take-profit-error-total = Semua tahap bersama-sama dapat menjual paling b
 # $runner is the formatted percentage of the position no step sells.
 trader-take-profit-runner = { $runner }% posisi tetap terbuka sebagai runner
 trader-take-profit-runner-none = Tahap terakhir menjual sisa posisi
-trader-take-profit-runner-warning = Dengan trailing stop, exit waktu, dan semua strategi exit nonaktif, runner hanya ditutup oleh stop loss atau secara manual
+trader-take-profit-runner-warning = Dengan trailing stop, stop impas, kedua exit waktu, dan semua strategi exit nonaktif, runner hanya ditutup oleh stop loss atau secara manual
 trader-take-profit-info = Porsi dihitung dari posisi awal. Jika harga melewati beberapa level sekaligus, satu tahap dijual per pemeriksaan.
 # $profit is the step's formatted profit level; $share is its formatted share.
 trader-take-profit-example-step = Pada +{ $profit }%, jual { $share }%
@@ -219,8 +229,12 @@ trader-take-profit-example-runner-detail = Diserahkan ke aturan keluar lainnya
 # $sold is the formatted total share the ladder sells; $profit is its last formatted level.
 trader-take-profit-summary = Menjual <strong>{ $sold }%</strong> hingga profit +{ $profit }%
 
-trader-time-title = Exit Waktu
+trader-time-loss-title = Tutup Posisi Rugi
 trader-time-subtitle = Exit posisi secara otomatis setelah durasi hold maksimum jika kerugian melebihi ambang
+trader-time-flat-title = Tutup Posisi Stagnan
+trader-time-flat-subtitle = Bebaskan modal dari posisi yang tidak bergerak naik maupun turun
+# $span is a formatted duration; $band is a formatted percentage.
+trader-time-flat-summary = Posisi yang ditahan { $span } atau lebih dengan P&L dalam ±{ $band } ditutup.
 trader-time-unit-seconds = detik
 trader-time-unit-minutes = menit
 trader-time-unit-hours = jam
@@ -258,6 +272,16 @@ trader-time-positions-empty-message = Posisi terbuka muncul di sini dengan waktu
 trader-time-positions-token = Token
 trader-time-positions-hold = Durasi Hold
 trader-time-positions-roi = ROI
+trader-time-positions-rule = Exit Waktu
+trader-time-status-off = Exit waktu nonaktif
+trader-time-status-none = Saat ini tidak ada exit waktu yang berlaku
+trader-time-status-not-managed = Tidak dikelola Auto Trader
+# $pnl is a formatted signed percentage; $remaining is a formatted duration.
+trader-time-status-losing = Rugi { $pnl }; ditutup dalam { $remaining }
+trader-time-status-losing-due = Rugi { $pnl }; ditutup pada pemeriksaan berikutnya
+# $held and $remaining are formatted durations.
+trader-time-status-flat = Stagnan selama { $held }; ditutup dalam { $remaining }
+trader-time-status-flat-due = Stagnan selama { $held }; ditutup pada pemeriksaan berikutnya
 
 trader-strategy-entry-title = Strategi Entry
 trader-strategy-entry-subtitle = Sinyal yang dapat membuka posisi baru.

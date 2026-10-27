@@ -1035,6 +1035,14 @@ config-tokens-update-intervals-security-seconds = Intervalo de seguridad
 
 ## trader
 
+config-trader-break-even-enabled = Activar stop en punto de equilibrio
+    .hint = Vende todo cuando una posición que alcanzó la ganancia de activación vuelve al margen mantenido sobre la entrada
+config-trader-break-even-offset-pct = Mantener sobre la entrada
+    .hint = Precio sobre la entrada media, en porcentaje, al que vende el stop activado; 0 vende en la entrada
+    .unit = %
+config-trader-break-even-trigger-pct = Activar con ganancia
+    .hint = Ganancia del mejor precio desde la última compra que activa el stop
+    .unit = %
 config-trader-dca-cooldown-minutes = Enfriamiento de DCA
     .hint = Minutos mínimos entre entradas de DCA
     .unit = min
@@ -1116,6 +1124,14 @@ config-trader-take-profit-levels-pct = Niveles de take profit
 config-trader-take-profit-sell-pct = Porcentajes de take profit
     .hint = Parte de la posición inicial que vende cada tramo; en total como máximo 100%
     .unit = %
+config-trader-time-exit-stagnation-band-pct = Estancada dentro de
+    .hint = Rango de P&L alrededor de la entrada, al alza o a la baja, dentro del cual una posición cuenta como estancada
+    .unit = %
+config-trader-time-exit-stagnation-enabled = Activar salida de posiciones estancadas
+    .hint = Cierra las posiciones mantenidas mucho tiempo cuyo P&L se queda cerca de cero
+config-trader-time-exit-stagnation-minutes = Cerrar estancada tras
+    .hint = Cuánto tiempo se mantiene una posición antes de que la salida por estancamiento revise su P&L
+    .unit = min
 config-trader-time-override-duration = Duración de la salida por tiempo
     .hint = Cuánto tiempo se mantiene una posición antes de que la salida por tiempo revise su pérdida; se cierra si la pérdida alcanzó el umbral
 config-trader-time-override-enabled = Activar salida por tiempo

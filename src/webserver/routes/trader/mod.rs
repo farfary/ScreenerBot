@@ -3,7 +3,8 @@
 
 //! Trader Module API Routes
 //!
-//! Endpoints for trader control, stats, manual trading, templates, and quote previews.
+//! Endpoints for trader control, stats, the time-exit watch, manual trading, templates, and
+//! quote previews.
 
 use axum::{
     routing::{get, post},
@@ -27,7 +28,7 @@ use control::{
     toggle_exit_monitor_handler,
 };
 use manual::{manual_add_handler, manual_buy_handler, manual_sell_handler, quote_preview_handler};
-use preview::{apply_template, get_templates, get_trader_stats};
+use preview::{apply_template, get_templates, get_time_exits, get_trader_stats};
 
 // ============================================================================
 // ROUTES
@@ -37,6 +38,7 @@ pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
         .route("/status", get(get_trader_status))
         .route("/stats", get(get_trader_stats))
+        .route("/time-exits", get(get_time_exits))
         .route("/templates", get(get_templates))
         .route("/apply-template", post(apply_template))
         .route("/start", post(start_trader_handler))

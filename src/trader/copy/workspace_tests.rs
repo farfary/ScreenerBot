@@ -99,3 +99,142 @@ fn copy_defaults_fee_rate_uses_the_chain_adapter_policy() {
         f64::from(crate::chains::platform_swap_fee_bps()) / 100.0
     );
 }
+
+/// Every exit rule a copy task can run shows on its holdings: with only that rule on, the
+/// holding's exit watch names at least one price or moment. A new `ExitRule` variant fails
+/// to compile here until it says what its watch shows.
+#[test]
+fn every_exit_rule_alone_shows_on_the_holding_watch() {
+    use crate::trader::evaluators::exit_rules::ExitRule;
+
+    crate::config::utils::install_default_config();
+    let now = Utc::now();
+    let position = PaperPosition {
+        task_id: 7,
+        mint: "watch-mint".to_owned(),
+        token_amount: 10.0,
+        raw_token_amount: None,
+        token_decimals: None,
+        cost_basis_native: 1.0,
+        invested_native: 1.0,
+        realized_proceeds_native: 0.0,
+        realized_cost_native: 0.0,
+        buys: 1,
+        sells: 0,
+        last_price_native: Some(0.1),
+        last_price_at: Some(now),
+        opened_at: now,
+        closed_at: None,
+        peak_price_native: Some(0.1),
+        take_profit_level: 0,
+        round_partial_exits: 0,
+    };
+    let mut none = ExitPolicy::from_config();
+    none.stop_loss.enabled = false;
+    none.trailing.enabled = false;
+    none.break_even.enabled = false;
+    none.take_profit.enabled = false;
+    none.time.enabled = false;
+    none.time_stagnation.enabled = false;
+    let shows_something = |policy: &ExitPolicy| {
+        let watch = serde_json::to_value(exit_watch(&position, 0.1, policy)).expect("serializes");
+        watch
+            .as_object()
+            .expect("an object")
+            .values()
+            .any(|value| !value.is_null() && *value != serde_json::Value::Bool(false))
+    };
+    assert!(!shows_something(&none), "an all-off policy shows nothing");
+
+    for rule in [
+        ExitRule::StopLoss,
+        ExitRule::Trailing,
+        ExitRule::BreakEven,
+        ExitRule::TakeProfit { level: 1 },
+        ExitRule::TimeLoss,
+        ExitRule::TimeStagnation,
+    ] {
+        let mut policy = none.clone();
+        match rule {
+            ExitRule::StopLoss => {
+                policy.stop_loss.enabled = true;
+                policy.stop_loss.threshold_pct = 20.0;
+            }
+            ExitRule::Trailing => {
+                policy.trailing.enabled = true;
+                policy.trailing.activation_pct = 15.0;
+                policy.trailing.distance_pct = 5.0;
+            }
+            ExitRule::BreakEven => {
+                policy.break_even.enabled = true;
+                policy.break_even.trigger_pct = 15.0;
+                policy.break_even.offset_pct = 1.0;
+            }
+            ExitRule::TakeProfit { .. } => {
+                policy.take_profit.enabled = true;
+                policy.take_profit.levels = vec![TakeProfitLevel::sell_all_at(30.0)];
+            }
+            ExitRule::TimeLoss => {
+                policy.time.enabled = true;
+                policy.time.duration_seconds = 3600.0;
+                policy.time.loss_threshold_pct = -10.0;
+            }
+            ExitRule::TimeStagnation => {
+                policy.time_stagnation.enabled = true;
+                policy.time_stagnation.duration_seconds = 3600.0;
+                policy.time_stagnation.band_pct = 5.0;
+            }
+        }
+        assert!(shows_something(&policy), "{rule:?} alone shows nothing");
+    }
+}
+
+#[test]
+fn the_holding_watch_places_the_break_even_floor_and_the_flat_band() {
+    crate::config::utils::install_default_config();
+    let now = Utc::now();
+    let position = PaperPosition {
+        task_id: 7,
+        mint: "watch-mint".to_owned(),
+        token_amount: 10.0,
+        raw_token_amount: None,
+        token_decimals: None,
+        cost_basis_native: 1.0,
+        invested_native: 1.0,
+        realized_proceeds_native: 0.0,
+        realized_cost_native: 0.0,
+        buys: 1,
+        sells: 0,
+        last_price_native: Some(1.0),
+        last_price_at: Some(now),
+        opened_at: now,
+        closed_at: None,
+        peak_price_native: Some(1.2),
+        take_profit_level: 0,
+        round_partial_exits: 0,
+    };
+    let mut policy = ExitPolicy::from_config();
+    policy.break_even.enabled = true;
+    policy.break_even.trigger_pct = 15.0;
+    policy.break_even.offset_pct = 1.0;
+    policy.time_stagnation.enabled = true;
+    policy.time_stagnation.duration_seconds = 4.0 * 3600.0;
+    policy.time_stagnation.band_pct = 5.0;
+
+    let watch = exit_watch(&position, 1.0, &policy);
+    let close = |value: Option<f64>, expected: f64| {
+        value.is_some_and(|value| (value - expected).abs() < 1e-9)
+    };
+    assert!(close(watch.break_even_activation_price_native, 1.15));
+    assert!(watch.break_even_armed, "a peak of +20% arms a +15% trigger");
+    assert!(close(watch.break_even_floor_price_native, 1.01));
+    assert_eq!(watch.stagnation_from, Some(now + Duration::hours(4)));
+    assert!(close(watch.stagnation_band_low_price_native, 0.95));
+    assert!(close(watch.stagnation_band_high_price_native, 1.05));
+
+    let unarmed = PaperPosition {
+        peak_price_native: Some(1.1),
+        ..position
+    };
+    assert!(!exit_watch(&unarmed, 1.0, &policy).break_even_armed);
+}

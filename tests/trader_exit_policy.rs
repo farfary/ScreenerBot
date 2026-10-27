@@ -20,10 +20,11 @@
 use crate::common;
 
 use common::config_guard;
-use screenerbot::config::TakeProfitLevel;
+use screenerbot::config::{TakeProfitLevel, TimeUnit};
 use screenerbot::trader::evaluators::DcaConfigSnapshot;
 use screenerbot::trader::policy::{
-    ExitPolicy, ExitPolicyOverrides, StopLossPolicy, TakeProfitPolicy, TimePolicy, TrailingPolicy,
+    BreakEvenPolicy, ExitPolicy, ExitPolicyOverrides, StopLossPolicy, TakeProfitPolicy, TimePolicy,
+    TimeStagnationPolicy, TrailingPolicy,
 };
 
 #[test]
@@ -141,7 +142,7 @@ fn time_policy_carries_exactly_its_three_config_fields() {
                                                                  // 7 minutes, not the default 168 hours — proves the unit conversion is read too,
                                                                  // not just the raw duration number.
         cfg.trader.time_override_duration = 7.0;
-        cfg.trader.time_override_unit = "minutes".to_owned();
+        cfg.trader.time_override_unit = TimeUnit::Minutes;
     });
 
     let policy = ExitPolicy::from_config();
@@ -154,6 +155,66 @@ fn time_policy_carries_exactly_its_three_config_fields() {
             duration_seconds: 420.0, // 7 minutes
         }
     );
+}
+
+#[test]
+fn break_even_policy_carries_exactly_its_three_config_fields() {
+    let _cfg = config_guard();
+    common::set_config(|cfg| {
+        cfg.trader.break_even_enabled = true; // default: false
+        cfg.trader.break_even_trigger_pct = 22.5; // default: 15.0
+        cfg.trader.break_even_offset_pct = 2.5; // default: 1.0
+    });
+
+    let policy = ExitPolicy::from_config();
+
+    assert_eq!(
+        policy.break_even,
+        BreakEvenPolicy {
+            enabled: true,
+            trigger_pct: 22.5,
+            offset_pct: 2.5,
+        }
+    );
+}
+
+#[test]
+fn time_stagnation_policy_carries_exactly_its_three_config_fields() {
+    let _cfg = config_guard();
+    common::set_config(|cfg| {
+        cfg.trader.time_exit_stagnation_enabled = true; // default: false
+        cfg.trader.time_exit_stagnation_minutes = 95.0; // default: 240.0
+        cfg.trader.time_exit_stagnation_band_pct = 3.5; // default: 5.0
+    });
+
+    let policy = ExitPolicy::from_config();
+
+    assert_eq!(
+        policy.time_stagnation,
+        TimeStagnationPolicy {
+            enabled: true,
+            duration_seconds: 5700.0, // 95 minutes
+            band_pct: 3.5,
+        }
+    );
+}
+
+#[test]
+fn task_overrides_leave_the_break_even_stop_and_the_stagnation_exit_inherited() {
+    let _cfg = config_guard();
+    common::set_config(|cfg| {
+        cfg.trader.break_even_enabled = true;
+        cfg.trader.time_exit_stagnation_enabled = true;
+    });
+    let inherited = ExitPolicy::from_config();
+    let mut overridden = inherited.clone();
+    let mut overrides = ExitPolicyOverrides::default();
+    overrides.trailing.enabled = Some(false);
+    overrides.time.enabled = Some(false);
+    overridden.apply_overrides(&overrides);
+
+    assert_eq!(overridden.break_even, inherited.break_even);
+    assert_eq!(overridden.time_stagnation, inherited.time_stagnation);
 }
 
 #[test]

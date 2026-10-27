@@ -123,7 +123,11 @@ pub fn evaluate_paper_exit(
         exit_percentage: outcome.exit_percentage,
         take_profit_level: match outcome.rule {
             ExitRule::TakeProfit { level } => Some(level),
-            ExitRule::StopLoss | ExitRule::Trailing | ExitRule::TimeLoss => None,
+            ExitRule::StopLoss
+            | ExitRule::Trailing
+            | ExitRule::BreakEven
+            | ExitRule::TimeLoss
+            | ExitRule::TimeStagnation => None,
         },
     })
 }
@@ -133,8 +137,10 @@ fn paper_exit_rule(rule: ExitRule) -> PaperExitRule {
     match rule {
         ExitRule::StopLoss => PaperExitRule::StopLoss,
         ExitRule::Trailing => PaperExitRule::TrailingStop,
+        ExitRule::BreakEven => PaperExitRule::BreakEven,
         ExitRule::TakeProfit { .. } => PaperExitRule::TakeProfit,
         ExitRule::TimeLoss => PaperExitRule::TimeOverride,
+        ExitRule::TimeStagnation => PaperExitRule::TimeStagnation,
     }
 }
 

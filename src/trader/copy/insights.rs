@@ -134,8 +134,10 @@ pub fn exit_label(rule: Option<PaperExitRule>) -> String {
         None => "target_sell",
         Some(PaperExitRule::StopLoss) => "stop_loss",
         Some(PaperExitRule::TrailingStop) => "trailing_stop",
+        Some(PaperExitRule::BreakEven) => "break_even",
         Some(PaperExitRule::TakeProfit) => "take_profit",
         Some(PaperExitRule::TimeOverride) => "time_override",
+        Some(PaperExitRule::TimeStagnation) => "time_stagnation",
         Some(PaperExitRule::Manual) => "manual",
     }
     .to_owned()
@@ -148,8 +150,10 @@ impl PaperExitRule {
         UiText::new(match self {
             Self::StopLoss => ids::COPY_EXIT_STOP_LOSS,
             Self::TrailingStop => ids::COPY_EXIT_TRAILING_STOP,
+            Self::BreakEven => ids::COPY_EXIT_BREAK_EVEN,
             Self::TakeProfit => ids::COPY_EXIT_TAKE_PROFIT,
             Self::TimeOverride => ids::COPY_EXIT_TIME_OVERRIDE,
+            Self::TimeStagnation => ids::COPY_EXIT_TIME_STAGNATION,
             Self::Manual => ids::COPY_EXIT_MANUAL,
         })
     }

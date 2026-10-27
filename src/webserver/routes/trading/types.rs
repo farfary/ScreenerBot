@@ -30,6 +30,16 @@ pub struct RiskManagement {
     pub stop_loss_percent: f64,
     pub time_override_loss_threshold_percent: f64,
     pub time_override_duration_hours: f64,
+    /// Profit from the average entry that arms the break-even stop; `None` while it is off.
+    pub break_even_trigger_percent: Option<f64>,
+    /// Margin above the average entry the armed break-even stop sells at; `None` while
+    /// it is off.
+    pub break_even_offset_percent: Option<f64>,
+    /// Hours a position must stay flat before the stagnation exit closes it; `None` while
+    /// it is off.
+    pub time_stagnation_duration_hours: Option<f64>,
+    /// Profit-or-loss band the stagnation exit counts as flat; `None` while it is off.
+    pub time_stagnation_band_percent: Option<f64>,
 }
 
 #[derive(Debug, Serialize)]

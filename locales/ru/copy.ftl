@@ -121,8 +121,10 @@ copy-exit-mode-hybrid = Продажи кошелька и мои правила
 copy-exit-target-sell = Продал кошелёк
 copy-exit-stop-loss = Стоп-лосс
 copy-exit-trailing-stop = Трейлинг-стоп
+copy-exit-break-even = Стоп в безубыток
 copy-exit-take-profit = Тейк-профит
 copy-exit-time-override = Выход по времени
+copy-exit-time-stagnation = Выход при стагнации
 copy-exit-manual = Закрыто вручную
 
 ## Shared wording
@@ -534,6 +536,12 @@ copy-rule-take-profit-target = Продаёт при росте на
 copy-rule-take-profit-target-hint = Цель здесь заменяет ступени тейк-профита трейдера одной ступенью, которая продаёт всю позицию
 copy-rule-time-duration = Проверка после удержания
 copy-rule-time-threshold = Продаёт, пока P&L не выше
+copy-rule-break-even-trigger = Активируется при прибыли
+copy-rule-break-even-offset = Держит выше входа на
+copy-rule-time-stagnation-duration = Закрывает после удержания
+copy-rule-time-stagnation-band = Пока P&L в пределах
+# $band is a formatted percentage.
+copy-rule-within-band = ±{ $band }
 copy-preset-inherit = По умолчанию трейдера
 copy-preset-conservative = Консервативный
 copy-preset-balanced = Сбалансированный
@@ -711,6 +719,10 @@ copy-holdings-watch-trail = Трейлинг { $level }
 copy-holdings-watch-trail-arms = Трейлинг включается { $level }
 copy-holdings-watch-time = Время ≤ { $level }
 copy-holdings-watch-time-until = Время ≤ { $level } через { $span }
+copy-holdings-watch-floor = Порог { $level }
+copy-holdings-watch-floor-arms = Порог { $level } включается { $arms }
+copy-holdings-watch-flat = Флэт { $low } – { $high }
+copy-holdings-watch-flat-until = Флэт { $low } – { $high } через { $span }
 copy-holdings-watch-wallet-sells = Продажи кошелька
 copy-holdings-empty = Открытых виртуальных активов нет. Покупки, скопированные с кошелька, появятся здесь.
 copy-holdings-col-token = Токен

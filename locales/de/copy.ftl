@@ -115,8 +115,10 @@ copy-exit-mode-hybrid = Wallet-Verkäufe und meine Regeln
 copy-exit-target-sell = Wallet hat verkauft
 copy-exit-stop-loss = Stop-Loss
 copy-exit-trailing-stop = Trailing-Stop
+copy-exit-break-even = Break-Even-Stop
 copy-exit-take-profit = Take Profit
 copy-exit-time-override = Zeitausstieg
+copy-exit-time-stagnation = Ausstieg bei Seitwärtslage
 copy-exit-manual = Manuell geschlossen
 
 ## Shared wording
@@ -498,6 +500,12 @@ copy-rule-take-profit-target = Verkauft bei einem Gewinn von
 copy-rule-take-profit-target-hint = Ein Ziel hier ersetzt die Take-Profit-Stufen des Traders durch eine Stufe, die die ganze Position verkauft
 copy-rule-time-duration = Prüft nach einer Haltedauer von
 copy-rule-time-threshold = Verkauft, solange die GuV höchstens beträgt
+copy-rule-break-even-trigger = Aktiviert bei einem Gewinn von
+copy-rule-break-even-offset = Hält über dem Einstieg um
+copy-rule-time-stagnation-duration = Schließt nach einer Haltedauer von
+copy-rule-time-stagnation-band = Solange die GuV innerhalb bleibt von
+# $band is a formatted percentage.
+copy-rule-within-band = ±{ $band }
 copy-preset-inherit = Trader-Standards
 copy-preset-conservative = Konservativ
 copy-preset-balanced = Ausgewogen
@@ -665,6 +673,10 @@ copy-holdings-watch-trail = Trail { $level }
 copy-holdings-watch-trail-arms = Trail aktiviert bei { $level }
 copy-holdings-watch-time = Zeit ≤ { $level }
 copy-holdings-watch-time-until = Zeit ≤ { $level } in { $span }
+copy-holdings-watch-floor = Untergrenze { $level }
+copy-holdings-watch-floor-arms = Untergrenze { $level } aktiviert bei { $arms }
+copy-holdings-watch-flat = Seitwärts { $low } bis { $high }
+copy-holdings-watch-flat-until = Seitwärts { $low } bis { $high } in { $span }
 copy-holdings-watch-wallet-sells = Wallet-Verkäufe
 copy-holdings-empty = Keine offenen Paper-Bestände. Von der Wallet kopierte Käufe erscheinen hier.
 copy-holdings-col-token = Token

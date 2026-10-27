@@ -100,7 +100,7 @@ pub(crate) use merge::merge_document;
 // relocation of legacy global Solana sections under [chains.solana], and of the
 // exit-rule leaves of [positions] into [trader]
 mod migrate;
-pub(crate) use migrate::{relocate_legacy_layout, relocation_destinations};
+pub(crate) use migrate::{relocate_legacy_layout, relocation_destinations, TIME_OVERRIDE_UNIT};
 
 // Wallet management (keypair loading, pubkey access)
 pub mod wallet;

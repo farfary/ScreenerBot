@@ -19,6 +19,7 @@ use crate::pools;
 use crate::positions;
 use crate::tokens;
 use crate::tokens::security::SecurityRiskBand;
+use crate::trader::policy::ExitPolicy;
 use crate::webserver::api_error::{ApiError, ApiErrorCode};
 use crate::webserver::utils::success_response;
 
@@ -186,18 +187,29 @@ pub(super) async fn resolve_position_by_key(
 }
 
 async fn map_position_to_detail(position: &positions::Position) -> PositionDetail {
-    let trailing_stop_active = runs_policy_exits(position)
-        && crate::trader::policy::resolve_exit_policy(position)
-            .await
-            .trailing
-            .enabled;
+    let policy = if runs_policy_exits(position) {
+        Some(crate::trader::policy::resolve_exit_policy(position).await)
+    } else {
+        None
+    };
+    let (trailing_stop_active, break_even_active) = peak_stops_active(policy.as_ref());
     PositionDetail {
         summary: map_position_to_response_async(position).await,
         phantom_remove: position.phantom_remove,
         phantom_first_seen: position.phantom_first_seen.map(|dt| dt.timestamp()),
         peak_since_last_buy: peak_since_last_buy(position),
         trailing_stop_active,
+        break_even_active,
     }
+}
+
+/// Which stops measured from the basis peak the exit monitor evaluates, as
+/// `(trailing stop, break-even stop)`, under the policy it resolves for the position;
+/// `None` when it evaluates no policy exit for it.
+fn peak_stops_active(policy: Option<&ExitPolicy>) -> (bool, bool) {
+    policy.map_or((false, false), |policy| {
+        (policy.trailing.enabled, policy.break_even.enabled)
+    })
 }
 
 /// The basis peak of `position` as the peak since its last buy, when a buy restarted it
@@ -320,8 +332,9 @@ async fn load_entry_exit_history(
 
 #[cfg(test)]
 mod tests {
-    use super::{peak_since_last_buy, runs_policy_exits};
+    use super::{peak_since_last_buy, peak_stops_active, runs_policy_exits};
     use crate::positions::{Position, PositionManagement, PositionOrigin};
+    use crate::trader::policy::ExitPolicy;
 
     /// An open bot position that took an add: its basis peak restarted below the round's
     /// peak.
@@ -423,5 +436,29 @@ mod tests {
         let mut archived = averaged_position();
         archived.archived = true;
         assert!(!runs_policy_exits(&archived), "an archived position");
+    }
+
+    #[test]
+    fn each_peak_stop_is_active_only_where_its_own_rule_is_on() {
+        crate::config::utils::install_default_config();
+        let mut break_even_only = ExitPolicy::from_config();
+        break_even_only.trailing.enabled = false;
+        break_even_only.break_even.enabled = true;
+        assert_eq!(peak_stops_active(Some(&break_even_only)), (false, true));
+
+        let mut trailing_only = break_even_only.clone();
+        trailing_only.trailing.enabled = true;
+        trailing_only.break_even.enabled = false;
+        assert_eq!(peak_stops_active(Some(&trailing_only)), (true, false));
+
+        let mut both = trailing_only.clone();
+        both.break_even.enabled = true;
+        assert_eq!(peak_stops_active(Some(&both)), (true, true));
+
+        assert_eq!(
+            peak_stops_active(None),
+            (false, false),
+            "no stop is active where the exit monitor runs no policy exit"
+        );
     }
 }

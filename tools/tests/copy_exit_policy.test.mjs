@@ -10,6 +10,9 @@
  * read the resolved policy; neither may fall back to the Trader default alone.
  * An inherited take-profit ladder reads as its steps on the Rules tab, never as the target
  * of its first step alone, and the editor says that a target override is one full exit.
+ * The break-even stop and the flat position exit, which a task cannot override, read as
+ * the Trader's values on the Rules tab and in the editor's review, and never enter a
+ * task's overrides.
  *
  * Run with `npm run test:js`.
  */
@@ -20,7 +23,9 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
+  INHERITED_RULES,
   RULES,
+  blankOverrides,
   effectivePolicy,
   exitWarnings,
   inheritNote,
@@ -128,4 +133,55 @@ test("the take-profit target field says an override replaces the ladder with one
     plain(target.hint),
     "A target here replaces the Trader's take-profit steps with one step that sells the whole position"
   );
+});
+
+test("the rules a task cannot override read as the Trader's values", () => {
+  const traderDefaults = {
+    ...workspace.trader_defaults,
+    break_even: { enabled: true, trigger_pct: 15, offset_pct: 1 },
+    time_stagnation: { enabled: true, duration_seconds: 14400, band_pct: 5 },
+  };
+  const overrides = workspace.exit_policy_overrides;
+  const context = { task: workspace, traderDefaults, managesExits: true };
+  const row = (html, label) =>
+    plain(html).match(
+      new RegExp(`<tr[^>]*><td>${label}</td><td>([^<]*)</td><td class="copy-rules-source">([^<]*)</td>`)
+    );
+  const expected = {
+    trigger_pct: "+15%",
+    offset_pct: "+1%",
+    band_pct: "±5%",
+  };
+  for (const effective of [
+    { ...workspace.effective_policy, break_even: traderDefaults.break_even, time_stagnation: traderDefaults.time_stagnation },
+    effectivePolicy(traderDefaults, overrides),
+  ]) {
+    const html = rulesHtml({ ...context, effective }, esc);
+    for (const rule of INHERITED_RULES) {
+      assert.ok(plain(html).includes(`>${rule.title}</th>`), `${rule.group} has its group row`);
+      for (const field of rule.fields) {
+        const found = row(html, field.label);
+        assert.ok(found, `${rule.group}.${field.key} has a row`);
+        assert.equal(found[2], "Trader default", `${rule.group}.${field.key} is inherited`);
+        assert.notEqual(found[1], "—", `${rule.group}.${field.key} shows a value`);
+        if (expected[field.key]) assert.equal(found[1], expected[field.key], field.key);
+      }
+    }
+  }
+  assert.deepEqual(Object.keys(blankOverrides()), ["stop_loss", "trailing", "roi", "time"]);
+});
+
+test("the break-even stop or the flat position exit alone counts as an exit rule", () => {
+  const off = { enabled: false };
+  const policy = { stop_loss: off, trailing: off, roi: off, time: off };
+  const none = exitWarnings({ ...policy, break_even: off, time_stagnation: off }, "buy_only", {});
+  assert.ok(none.map(plain).some((text) => /no exit rule/i.test(text)), none.join(" | "));
+  for (const group of ["break_even", "time_stagnation"]) {
+    const warnings = exitWarnings(
+      { ...policy, break_even: off, time_stagnation: off, [group]: { enabled: true } },
+      "buy_only",
+      {}
+    ).map(plain);
+    assert.ok(!warnings.some((text) => /no exit rule/i.test(text)), `${group}: ${warnings.join(" | ")}`);
+  }
 });

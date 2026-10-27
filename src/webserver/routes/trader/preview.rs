@@ -1,7 +1,7 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Trader statistics and exit templates.
+//! Trader statistics, exit templates and the time exit watching each open position.
 
 use axum::{
     extract::Query,
@@ -53,4 +53,28 @@ pub async fn apply_template(Json(request): Json<ApplyTemplateRequest>) -> Respon
         .details(error.to_string())
         .into_response(),
     }
+}
+
+// =============================================================================
+// TIME EXIT WATCH
+// =============================================================================
+
+/// GET /api/trader/time-exits - for each open position, the time exit that applies to it
+/// under the exit policy the exit monitor resolves for it, and when that exit is due.
+pub async fn get_time_exits() -> Response {
+    let now = chrono::Utc::now();
+    let mut watches = Vec::new();
+    for position in crate::positions::get_open_positions().await {
+        let Some(position_id) = position.id else {
+            continue;
+        };
+        let policy = crate::trader::policy::resolve_exit_policy(&position).await;
+        watches.push(PositionTimeExit {
+            position_id,
+            time_exit: crate::trader::evaluators::exit_time_watch::time_exit_watch(
+                &position, &policy, now,
+            ),
+        });
+    }
+    success_response(watches)
 }

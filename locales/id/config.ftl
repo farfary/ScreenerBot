@@ -1035,6 +1035,14 @@ config-tokens-update-intervals-security-seconds = Interval Keamanan
 
 ## trader
 
+config-trader-break-even-enabled = Aktifkan Stop Impas
+    .hint = Jual semuanya saat posisi yang mencapai untung pengaktifan turun kembali ke margin yang dijaga di atas harga masuk
+config-trader-break-even-offset-pct = Jaga di Atas Harga Masuk
+    .hint = Harga di atas rata-rata harga masuk, dalam persen, tempat stop aktif menjual; 0 menjual di harga masuk
+    .unit = %
+config-trader-break-even-trigger-pct = Aktif pada Untung
+    .hint = Untung dari harga terbaik sejak pembelian terakhir yang mengaktifkan stop
+    .unit = %
 config-trader-dca-cooldown-minutes = Cooldown DCA
     .hint = Menit minimum antar entry DCA
     .unit = mnt
@@ -1116,6 +1124,14 @@ config-trader-take-profit-levels-pct = Level Take Profit
 config-trader-take-profit-sell-pct = Porsi Take Profit
     .hint = Porsi posisi awal yang dijual setiap tahap; total paling banyak 100%
     .unit = %
+config-trader-time-exit-stagnation-band-pct = Stagnan dalam
+    .hint = Rentang P&L di sekitar harga masuk, naik atau turun, tempat posisi dianggap stagnan
+    .unit = %
+config-trader-time-exit-stagnation-enabled = Aktifkan Exit Posisi Stagnan
+    .hint = Tutup posisi yang lama ditahan dengan P&L yang tetap mendekati nol
+config-trader-time-exit-stagnation-minutes = Tutup Stagnan Setelah
+    .hint = Berapa lama posisi ditahan sebelum exit stagnan memeriksa P&L-nya
+    .unit = mnt
 config-trader-time-override-duration = Durasi Exit Waktu
     .hint = Berapa lama posisi ditahan sebelum exit waktu memeriksa kerugiannya; posisi ditutup jika kerugian sudah mencapai ambang
 config-trader-time-override-enabled = Aktifkan Exit Waktu

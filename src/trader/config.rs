@@ -90,6 +90,21 @@ pub fn get_trailing_stop_distance_pct() -> f64 {
     with_config(|cfg| cfg.trader.trailing_stop_distance_pct)
 }
 
+/// Check if the break-even stop is enabled
+pub fn is_break_even_enabled() -> bool {
+    with_config(|cfg| cfg.trader.break_even_enabled)
+}
+
+/// Get the profit from the average entry that arms the break-even stop, in percent
+pub fn get_break_even_trigger_pct() -> f64 {
+    with_config(|cfg| cfg.trader.break_even_trigger_pct)
+}
+
+/// Get the margin above the average entry the break-even stop keeps, in percent
+pub fn get_break_even_offset_pct() -> f64 {
+    with_config(|cfg| cfg.trader.break_even_offset_pct)
+}
+
 /// Check if the take-profit ladder is enabled
 pub fn is_take_profit_enabled() -> bool {
     with_config(|cfg| cfg.trader.take_profit_enabled)
@@ -108,20 +123,25 @@ pub fn is_time_override_enabled() -> bool {
 /// Get time override duration in seconds (converted from configured unit)
 pub fn get_time_override_duration_seconds() -> f64 {
     with_config(|cfg| {
-        use crate::config::TimeUnit;
-        let unit = TimeUnit::from_str(&cfg.trader.time_override_unit).unwrap_or(TimeUnit::Hours);
-        unit.to_seconds(cfg.trader.time_override_duration)
+        cfg.trader
+            .time_override_unit
+            .to_seconds(cfg.trader.time_override_duration)
     })
 }
 
-/// Get time override duration (raw value)
-pub fn get_time_override_duration() -> f64 {
-    with_config(|cfg| cfg.trader.time_override_duration)
+/// Check if the stagnation exit is enabled
+pub fn is_time_exit_stagnation_enabled() -> bool {
+    with_config(|cfg| cfg.trader.time_exit_stagnation_enabled)
 }
 
-/// Get time override unit
-pub fn get_time_override_unit() -> String {
-    with_config(|cfg| cfg.trader.time_override_unit.clone())
+/// Get how long a position stays flat before the stagnation exit closes it, in minutes
+pub fn get_time_exit_stagnation_minutes() -> f64 {
+    with_config(|cfg| cfg.trader.time_exit_stagnation_minutes)
+}
+
+/// Get the profit-or-loss band the stagnation exit counts as flat, in percent
+pub fn get_time_exit_stagnation_band_pct() -> f64 {
+    with_config(|cfg| cfg.trader.time_exit_stagnation_band_pct)
 }
 
 /// Get time override loss threshold percentage

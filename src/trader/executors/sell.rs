@@ -55,7 +55,9 @@ fn is_emergency_exit(reason: &TradeReason) -> bool {
         | TradeReason::TakeProfit
         | TradeReason::StopLoss
         | TradeReason::TrailingStop
+        | TradeReason::BreakEvenStop
         | TradeReason::TimeOverride
+        | TradeReason::TimeStagnation
         | TradeReason::StrategyExit
         | TradeReason::LlmAnalysisExit
         | TradeReason::ManualExit
@@ -206,7 +208,9 @@ mod tests {
             | TradeReason::TakeProfit
             | TradeReason::StopLoss
             | TradeReason::TrailingStop
+            | TradeReason::BreakEvenStop
             | TradeReason::TimeOverride
+            | TradeReason::TimeStagnation
             | TradeReason::StrategyExit
             | TradeReason::LlmAnalysisExit
             | TradeReason::ManualExit

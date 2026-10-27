@@ -143,7 +143,7 @@ impl Tool for BuyTokenTool {
                     "management": {
                         "type": "string",
                         "enum": ["auto_trader", "user_only"],
-                        "description": "auto_trader (default): the auto trader's exit policy (stop loss, trailing, take profit, time) manages the position. user_only: only manual sells close it."
+                        "description": "auto_trader (default): the auto trader's exit policy (stop loss, trailing, break-even, take profit, time, stagnation) manages the position. user_only: only manual sells close it."
                     },
                     "slippage_pct": slippage_schema()
                 },

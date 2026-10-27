@@ -221,6 +221,9 @@ trader-trailing-subtitle = 价格上涨时跟随价格自动保护利润
 trader-trailing-activation-impact = 盈利达到 +{ $value }% 时开始追踪
 # $value is the trail distance percentage as typed.
 trader-trailing-distance-impact = 较峰值回落 -{ $value }% 时出场
+# $value is a formatted signed percentage.
+trader-trailing-locked-minimum = 启动时锁定的最低收益：{ $value }
+trader-trailing-locked-minimum-warning = 启动时止损位于入场价或以下；它只在盈利时卖出。打开保本止损以设定底线。
 trader-trailing-activation = 启动
 trader-trailing-peak = 峰值
 # $value is a formatted percentage.
@@ -229,6 +232,13 @@ trader-trailing-final = 最终 +{ $value }%
 trader-trailing-summary-protected = 保住了 <strong>{ $value }</strong> 的利润
 # $value is a formatted percentage.
 trader-trailing-summary-avoided = 避免了较峰值 <strong>{ $value }</strong> 的亏损
+
+## Break-even stop
+
+trader-break-even-title = 保本止损
+trader-break-even-subtitle = 持仓进入盈利后，在转为亏损前全部卖出
+# $trigger and $offset are formatted signed percentages.
+trader-break-even-summary = 自上次买入以来的最高价达到 { $trigger } 后，回落到 { $offset } 时全部卖出。
 
 ## Take profit
 
@@ -256,7 +266,7 @@ trader-take-profit-error-total = 所有步骤合计最多卖出 { $max }%
 # $runner is the formatted percentage of the position no step sells.
 trader-take-profit-runner = 仓位的 { $runner }% 作为留仓继续持有
 trader-take-profit-runner-none = 最后一步卖出仓位的剩余部分
-trader-take-profit-runner-warning = 追踪止损、时间出场和所有出场策略均已关闭，留仓只能通过止损或手动平仓
+trader-take-profit-runner-warning = 追踪止损、保本止损、两种时间出场和所有出场策略均已关闭，留仓只能通过止损或手动平仓
 trader-take-profit-info = 比例按初始仓位计算。价格一次越过多个水平时，每次检查只卖出一步。
 # $profit is the step's formatted profit level; $share is its formatted share.
 trader-take-profit-example-step = 在 +{ $profit }% 时卖出 { $share }%
@@ -267,8 +277,12 @@ trader-take-profit-summary = 到 +{ $profit }% 利润时卖出 <strong>{ $sold }
 
 ## Time-based exit
 
-trader-time-title = 时间出场
+trader-time-loss-title = 平掉亏损持仓
 trader-time-subtitle = 超过最长持仓时间且亏损超过阈值时自动出场
+trader-time-flat-title = 平掉横盘持仓
+trader-time-flat-subtitle = 释放既不上涨也不下跌的持仓所占用的资金
+# $span is a formatted duration; $band is a formatted percentage.
+trader-time-flat-summary = 持有 { $span } 或更久且盈亏在 ±{ $band } 以内的持仓将被平仓。
 trader-time-unit-seconds = 秒
 trader-time-unit-minutes = 分钟
 trader-time-unit-hours = 小时
@@ -310,6 +324,16 @@ trader-time-positions-empty-message = 持仓中的仓位会在此显示其持有
 trader-time-positions-token = 代币
 trader-time-positions-hold = 持仓时间
 trader-time-positions-roi = ROI
+trader-time-positions-rule = 时间出场
+trader-time-status-off = 时间出场已关闭
+trader-time-status-none = 当前没有适用的时间出场
+trader-time-status-not-managed = 不由自动交易管理
+# $pnl is a formatted signed percentage; $remaining is a formatted duration.
+trader-time-status-losing = 亏损 { $pnl }；{ $remaining } 后平仓
+trader-time-status-losing-due = 亏损 { $pnl }；下次检查时平仓
+# $held and $remaining are formatted durations.
+trader-time-status-flat = 横盘 { $held }；{ $remaining } 后平仓
+trader-time-status-flat-due = 横盘 { $held }；下次检查时平仓
 
 ## Strategy control
 

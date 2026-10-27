@@ -185,11 +185,21 @@ trader-trailing-title = İz süren stop
 trader-trailing-subtitle = Fiyat yükselirken onu takip ederek kârı otomatik olarak koruyun
 trader-trailing-activation-impact = +%{ $value } kârda izlemeye başlar
 trader-trailing-distance-impact = Tepeden -%{ $value } düşüşte çıkar
+# $value is a formatted signed percentage.
+trader-trailing-locked-minimum = Devreye girdiğinde kilitlenen asgari kâr: { $value }
+trader-trailing-locked-minimum-warning = Stop devreye girdiğinde giriş fiyatında veya altında kalır; yalnızca kârdayken satar. Bir taban için başa baş stopu açın.
 trader-trailing-activation = Etkinleşme
 trader-trailing-peak = Tepe
 trader-trailing-final = Nihai +%{ $value }
 trader-trailing-summary-protected = Korunan kâr: <strong>{ $value }</strong>
 trader-trailing-summary-avoided = Tepeden kaçınılan zarar: <strong>{ $value }</strong>
+
+## Break-even stop
+
+trader-break-even-title = Başa baş stop
+trader-break-even-subtitle = Pozisyon kâra geçtikten sonra zarara dönmeden önce tamamını sat
+# $trigger and $offset are formatted signed percentages.
+trader-break-even-summary = Son alımdan bu yana en iyi fiyat { $trigger } olduğunda, { $offset } seviyesine geri düşüş tamamını satar.
 
 trader-take-profit-title = Kâr al
 trader-take-profit-subtitle = Kâr her seviyeye ulaştıkça pozisyonu kademeli olarak satar
@@ -215,7 +225,7 @@ trader-take-profit-error-total = Kademeler birlikte en fazla %{ $max } satabilir
 # $runner is the formatted percentage of the position no step sells.
 trader-take-profit-runner = Pozisyonun %{ $runner } kadarı runner olarak açık kalır
 trader-take-profit-runner-none = Son kademe pozisyonun kalanını satar
-trader-take-profit-runner-warning = İz süren stop, zaman çıkışı ve tüm çıkış stratejileri kapalıyken runner yalnızca zarar durdur ile ya da elle kapanır
+trader-take-profit-runner-warning = İz süren stop, başa baş stop, iki zaman çıkışı ve tüm çıkış stratejileri kapalıyken runner yalnızca zarar durdur ile ya da elle kapanır
 trader-take-profit-info = Paylar ilk pozisyona göredir. Fiyat aynı anda birkaç seviyeyi geçerse her kontrolde bir kademe satılır.
 # $profit is the step's formatted profit level; $share is its formatted share.
 trader-take-profit-example-step = +%{ $profit } kârda %{ $share } sat
@@ -224,8 +234,12 @@ trader-take-profit-example-runner-detail = Diğer çıkış kurallarına bırak�
 # $sold is the formatted total share the ladder sells; $profit is its last formatted level.
 trader-take-profit-summary = +%{ $profit } kâra kadar <strong>%{ $sold }</strong> satar
 
-trader-time-title = Zaman çıkışı
+trader-time-loss-title = Zarardaki pozisyonları kapat
 trader-time-subtitle = Zarar eşiği aşılırsa, azami tutma süresinden sonra pozisyonlardan otomatik olarak çıkın
+trader-time-flat-title = Durgun pozisyonları kapat
+trader-time-flat-subtitle = Ne yükselen ne düşen pozisyonlardaki sermayeyi serbest bırak
+# $span is a formatted duration; $band is a formatted percentage.
+trader-time-flat-summary = { $span } veya daha uzun tutulan ve K/Z değeri ±{ $band } içinde kalan pozisyon kapatılır.
 trader-time-unit-seconds = saniye
 trader-time-unit-minutes = dakika
 trader-time-unit-hours = saat
@@ -267,6 +281,16 @@ trader-time-positions-empty-message = Açık pozisyonlar, tutma süreleri ve zam
 trader-time-positions-token = Token
 trader-time-positions-hold = Tutma süresi
 trader-time-positions-roi = ROI
+trader-time-positions-rule = Zaman çıkışı
+trader-time-status-off = Zaman çıkışları kapalı
+trader-time-status-none = Şu anda geçerli bir zaman çıkışı yok
+trader-time-status-not-managed = Auto Trader tarafından yönetilmiyor
+# $pnl is a formatted signed percentage; $remaining is a formatted duration.
+trader-time-status-losing = Zararda { $pnl }; { $remaining } içinde kapanır
+trader-time-status-losing-due = Zararda { $pnl }; bir sonraki kontrolde kapanır
+# $held and $remaining are formatted durations.
+trader-time-status-flat = { $held } süredir durgun; { $remaining } içinde kapanır
+trader-time-status-flat-due = { $held } süredir durgun; bir sonraki kontrolde kapanır
 
 trader-strategy-entry-title = Giriş stratejileri
 trader-strategy-entry-subtitle = Yeni bir pozisyon açabilen sinyaller.

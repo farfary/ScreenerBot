@@ -2,11 +2,13 @@
 // SPDX-License-Identifier: BUSL-1.1
 
 //! Preset exit templates for the auto trader: named bundles of trailing-stop,
-//! take-profit and time-override settings applied to config in one step.
+//! take-profit and time-override settings applied to config in one step. A preset
+//! writes only those rules; every other trader setting, the break-even stop and the
+//! stagnation exit among them, keeps the value the user set.
 
 use serde::{Deserialize, Serialize};
 
-use crate::config::{update_config_section, TakeProfitLevel};
+use crate::config::{update_config_section, TakeProfitLevel, TimeUnit, TraderConfig};
 use crate::logger::{self, LogTag};
 use crate::trader::{Error, Result};
 
@@ -28,8 +30,32 @@ pub struct TemplateConfig {
     pub take_profit_levels: Vec<TakeProfitLevel>,
     pub time_override_enabled: bool,
     pub time_override_duration: f64,
-    pub time_override_unit: String,
+    pub time_override_unit: TimeUnit,
     pub time_override_loss_threshold_pct: f64,
+}
+
+impl TemplateConfig {
+    /// Write the rules this preset sets into `trader`, leaving every other field as it is.
+    fn apply_to(&self, trader: &mut TraderConfig) {
+        trader.trailing_stop_enabled = self.trailing_stop_enabled;
+        trader.trailing_stop_activation_pct = self.trailing_stop_activation_pct;
+        trader.trailing_stop_distance_pct = self.trailing_stop_distance_pct;
+        trader.take_profit_enabled = self.take_profit_enabled;
+        trader.take_profit_levels_pct = self
+            .take_profit_levels
+            .iter()
+            .map(|level| level.profit_pct)
+            .collect();
+        trader.take_profit_sell_pct = self
+            .take_profit_levels
+            .iter()
+            .map(|level| level.sell_pct)
+            .collect();
+        trader.time_override_enabled = self.time_override_enabled;
+        trader.time_override_duration = self.time_override_duration;
+        trader.time_override_unit = self.time_override_unit;
+        trader.time_override_loss_threshold_percent = self.time_override_loss_threshold_pct;
+    }
 }
 
 /// Apply a template to the trader config and persist it.
@@ -40,34 +66,11 @@ pub fn apply_template(template_id: &str) -> Result<Template> {
         .ok_or_else(|| Error::TemplateNotFound {
             template_id: template_id.to_owned(),
         })?;
-    let cfg = template.config.clone();
-    update_config_section(
-        |config| {
-            config.trader.trailing_stop_enabled = cfg.trailing_stop_enabled;
-            config.trader.trailing_stop_activation_pct = cfg.trailing_stop_activation_pct;
-            config.trader.trailing_stop_distance_pct = cfg.trailing_stop_distance_pct;
-            config.trader.take_profit_enabled = cfg.take_profit_enabled;
-            config.trader.take_profit_levels_pct = cfg
-                .take_profit_levels
-                .iter()
-                .map(|level| level.profit_pct)
-                .collect();
-            config.trader.take_profit_sell_pct = cfg
-                .take_profit_levels
-                .iter()
-                .map(|level| level.sell_pct)
-                .collect();
-            config.trader.time_override_enabled = cfg.time_override_enabled;
-            config.trader.time_override_duration = cfg.time_override_duration;
-            config.trader.time_override_unit = cfg.time_override_unit.clone();
-            config.trader.time_override_loss_threshold_percent =
-                cfg.time_override_loss_threshold_pct;
+    update_config_section(|config| template.config.apply_to(&mut config.trader), true).map_err(
+        |e| Error::ConfigUpdate {
+            detail: e.to_string(),
         },
-        true,
-    )
-    .map_err(|e| Error::ConfigUpdate {
-        detail: e.to_string(),
-    })?;
+    )?;
     logger::info(
         LogTag::Trader,
         &format!("Applied template '{}' ({})", template.name, template.id),
@@ -90,7 +93,7 @@ pub fn all_templates() -> Vec<Template> {
                 take_profit_levels: vec![TakeProfitLevel::sell_all_at(10.0)],
                 time_override_enabled: true,
                 time_override_duration: 3.0,
-                time_override_unit: "days".to_owned(),
+                time_override_unit: TimeUnit::Days,
                 time_override_loss_threshold_pct: -20.0,
             },
         },
@@ -107,7 +110,7 @@ pub fn all_templates() -> Vec<Template> {
                 take_profit_levels: vec![TakeProfitLevel::sell_all_at(20.0)],
                 time_override_enabled: true,
                 time_override_duration: 7.0,
-                time_override_unit: "days".to_owned(),
+                time_override_unit: TimeUnit::Days,
                 time_override_loss_threshold_pct: -40.0,
             },
         },
@@ -124,7 +127,7 @@ pub fn all_templates() -> Vec<Template> {
                 take_profit_levels: vec![TakeProfitLevel::sell_all_at(50.0)],
                 time_override_enabled: true,
                 time_override_duration: 14.0,
-                time_override_unit: "days".to_owned(),
+                time_override_unit: TimeUnit::Days,
                 time_override_loss_threshold_pct: -60.0,
             },
         },
@@ -141,9 +144,45 @@ pub fn all_templates() -> Vec<Template> {
                 take_profit_levels: vec![TakeProfitLevel::sell_all_at(5.0)],
                 time_override_enabled: true,
                 time_override_duration: 4.0,
-                time_override_unit: "hours".to_owned(),
+                time_override_unit: TimeUnit::Hours,
                 time_override_loss_threshold_pct: -15.0,
             },
         },
     ]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_preset_leaves_the_break_even_stop_and_the_stagnation_exit_as_set() {
+        let mut configured = TraderConfig::default();
+        configured.break_even_enabled = true;
+        configured.break_even_trigger_pct = 22.0;
+        configured.break_even_offset_pct = 3.5;
+        configured.time_exit_stagnation_enabled = true;
+        configured.time_exit_stagnation_minutes = 95.0;
+        configured.time_exit_stagnation_band_pct = 2.5;
+        let rules = |trader: &TraderConfig| {
+            (
+                trader.break_even_enabled,
+                trader.break_even_trigger_pct,
+                trader.break_even_offset_pct,
+                trader.time_exit_stagnation_enabled,
+                trader.time_exit_stagnation_minutes,
+                trader.time_exit_stagnation_band_pct,
+            )
+        };
+        for template in all_templates() {
+            let mut trader = configured.clone();
+            template.config.apply_to(&mut trader);
+            assert_eq!(rules(&trader), rules(&configured), "{}", template.id);
+            assert_eq!(
+                trader.time_override_duration, template.config.time_override_duration,
+                "{} writes its own rules",
+                template.id
+            );
+        }
+    }
 }

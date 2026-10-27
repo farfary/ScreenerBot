@@ -65,7 +65,8 @@ impl Tool for GetCopyInsightsTool {
                           rounds (paper rounds replayed from its decisions, or its real \
                           positions when live), win rate, average win/loss, profit factor, \
                           average hold, cumulative P&L curve, P&L by exit (target_sell, \
-                          stop_loss, trailing_stop, take_profit, time_override, manual), skip \
+                          stop_loss, trailing_stop, break_even, take_profit, time_override, \
+                          time_stagnation, manual), skip \
                           reasons, arrival-latency histogram and the fill's price \
                           difference against the target's price; legacy estimates are \
                           excluded from current paper performance. Without task_id: every task side by side."

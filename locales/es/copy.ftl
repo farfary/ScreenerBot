@@ -118,8 +118,10 @@ copy-exit-mode-hybrid = Ventas de la billetera y mis reglas
 copy-exit-target-sell = Vendió la billetera
 copy-exit-stop-loss = Stop loss
 copy-exit-trailing-stop = Trailing stop
+copy-exit-break-even = Stop en punto de equilibrio
 copy-exit-take-profit = Take profit
 copy-exit-time-override = Salida por tiempo
+copy-exit-time-stagnation = Salida por estancamiento
 copy-exit-manual = Cerrada a mano
 
 ## Shared wording
@@ -516,6 +518,12 @@ copy-rule-take-profit-target = Vende con una ganancia de
 copy-rule-take-profit-target-hint = Un objetivo aquí sustituye los tramos de take profit del Trader por un solo tramo que vende toda la posición
 copy-rule-time-duration = Comprueba tras mantener
 copy-rule-time-threshold = Vende mientras el P&L esté en o por debajo de
+copy-rule-break-even-trigger = Se activa con una ganancia de
+copy-rule-break-even-offset = Mantiene sobre la entrada
+copy-rule-time-stagnation-duration = Cierra tras mantener
+copy-rule-time-stagnation-band = Mientras el P&L se mantenga dentro de
+# $band is a formatted percentage.
+copy-rule-within-band = ±{ $band }
 copy-preset-inherit = Valores del Trader
 copy-preset-conservative = Conservador
 copy-preset-balanced = Equilibrado
@@ -688,6 +696,10 @@ copy-holdings-watch-trail = Trail { $level }
 copy-holdings-watch-trail-arms = El trail se activa en { $level }
 copy-holdings-watch-time = Tiempo ≤ { $level }
 copy-holdings-watch-time-until = Tiempo ≤ { $level } en { $span }
+copy-holdings-watch-floor = Suelo { $level }
+copy-holdings-watch-floor-arms = Suelo { $level } se activa en { $arms }
+copy-holdings-watch-flat = Plano { $low } a { $high }
+copy-holdings-watch-flat-until = Plano { $low } a { $high } en { $span }
 copy-holdings-watch-wallet-sells = Ventas de la billetera
 copy-holdings-empty = No hay tenencias simuladas abiertas. Las compras copiadas de la billetera aparecen aquí.
 copy-holdings-col-token = Token

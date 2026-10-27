@@ -60,7 +60,8 @@
     "phantom_remove": false,
     "phantom_first_seen": null,
     "peak_since_last_buy": null,
-    "trailing_stop_active": false
+    "trailing_stop_active": false,
+    "break_even_active": false
   },
   "entries": [
     {

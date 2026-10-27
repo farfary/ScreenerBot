@@ -1035,6 +1035,14 @@ config-tokens-update-intervals-security-seconds = 安全数据间隔
 
 ## trader
 
+config-trader-break-even-enabled = 启用保本止损
+    .hint = 达到启动收益的持仓回落到入场价上方保留幅度时全部卖出
+config-trader-break-even-offset-pct = 高于入场价保留
+    .hint = 已启动的止损卖出时高于平均入场价的百分比；0 表示在入场价卖出
+    .unit = %
+config-trader-break-even-trigger-pct = 启动收益
+    .hint = 自上次买入以来最高价达到此收益时启动止损
+    .unit = %
 config-trader-dca-cooldown-minutes = DCA 冷却时间
     .hint = 两次 DCA 入场之间的最短分钟数
     .unit = 分钟
@@ -1116,6 +1124,14 @@ config-trader-take-profit-levels-pct = 止盈水平
 config-trader-take-profit-sell-pct = 止盈卖出比例
     .hint = 每一步卖出的初始仓位比例；合计最多 100%
     .unit = %
+config-trader-time-exit-stagnation-band-pct = 横盘范围
+    .hint = 入场价上下的盈亏范围，持仓在此范围内视为横盘
+    .unit = %
+config-trader-time-exit-stagnation-enabled = 启用横盘持仓出场
+    .hint = 平掉长期持有且盈亏接近零的持仓
+config-trader-time-exit-stagnation-minutes = 横盘平仓时长
+    .hint = 横盘出场检查盈亏前的持仓时长
+    .unit = 分钟
 config-trader-time-override-duration = 时间出场时长
     .hint = 时间出场检查亏损前持有仓位的时长；若亏损已达到阈值即平仓
 config-trader-time-override-enabled = 启用时间出场

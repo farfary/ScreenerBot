@@ -199,11 +199,21 @@ trader-trailing-title = Трейлинг-стоп
 trader-trailing-subtitle = Автоматически защищать прибыль, следуя за ценой по мере её роста
 trader-trailing-activation-impact = Слежение начинается при +{ $value }% прибыли
 trader-trailing-distance-impact = Выход при -{ $value }% от пика
+# $value is a formatted signed percentage.
+trader-trailing-locked-minimum = Зафиксированный минимум при срабатывании: { $value }
+trader-trailing-locked-minimum-warning = При активации стоп оказывается на цене входа или ниже; он продаёт только в прибыли. Включите стоп в безубыток, чтобы задать нижнюю границу.
 trader-trailing-activation = Активация
 trader-trailing-peak = Пик
 trader-trailing-final = итог +{ $value }%
 trader-trailing-summary-protected = Прибыль защищена: <strong>{ $value }</strong>
 trader-trailing-summary-avoided = Избегнут убыток от пика: <strong>{ $value }</strong>
+
+## Break-even stop
+
+trader-break-even-title = Стоп в безубыток
+trader-break-even-subtitle = Когда позиция ушла в прибыль, продать всё, пока она не стала убыточной
+# $trigger and $offset are formatted signed percentages.
+trader-break-even-summary = Как только лучшая цена с последней покупки достигнет { $trigger }, откат до { $offset } продаст всё.
 
 trader-take-profit-title = Тейк-профит
 trader-take-profit-subtitle = Продаёт позицию ступенями по мере достижения каждого уровня прибыли
@@ -229,7 +239,7 @@ trader-take-profit-error-total = Все ступени вместе могут �
 # $runner is the formatted percentage of the position no step sells.
 trader-take-profit-runner = { $runner }% позиции остаётся открытыми как раннер
 trader-take-profit-runner-none = Последняя ступень продаёт остаток позиции
-trader-take-profit-runner-warning = Когда трейлинг-стоп, выход по времени и все стратегии выхода выключены, раннер закрывается только стоп-лоссом или вручную
+trader-take-profit-runner-warning = Когда трейлинг-стоп, стоп в безубыток, оба выхода по времени и все стратегии выхода выключены, раннер закрывается только стоп-лоссом или вручную
 trader-take-profit-info = Доли считаются от исходной позиции. Если цена проходит несколько уровней сразу, за одну проверку продаётся одна ступень.
 # $profit is the step's formatted profit level; $share is its formatted share.
 trader-take-profit-example-step = При +{ $profit }% продать { $share }%
@@ -238,8 +248,12 @@ trader-take-profit-example-runner-detail = Остаётся на другие п
 # $sold is the formatted total share the ladder sells; $profit is its last formatted level.
 trader-take-profit-summary = Продаёт <strong>{ $sold }%</strong> к +{ $profit }% прибыли
 
-trader-time-title = Выход по времени
+trader-time-loss-title = Закрывать убыточные позиции
 trader-time-subtitle = Автоматически выходить из позиций по истечении максимального времени удержания, если убыток превышает порог
+trader-time-flat-title = Закрывать позиции без движения
+trader-time-flat-subtitle = Освобождает капитал из позиций, которые не растут и не падают
+# $span is a formatted duration; $band is a formatted percentage.
+trader-time-flat-summary = Позиция, удерживаемая { $span } или дольше с P&L в пределах ±{ $band }, закрывается.
 trader-time-unit-seconds = секунды
 trader-time-unit-minutes = минуты
 trader-time-unit-hours = часы
@@ -289,6 +303,16 @@ trader-time-positions-empty-message = Здесь отображаются отк
 trader-time-positions-token = Токен
 trader-time-positions-hold = Время удержания
 trader-time-positions-roi = ROI
+trader-time-positions-rule = Выход по времени
+trader-time-status-off = Выходы по времени выключены
+trader-time-status-none = Сейчас не действует ни один выход по времени
+trader-time-status-not-managed = Не управляется автотрейдером
+# $pnl is a formatted signed percentage; $remaining is a formatted duration.
+trader-time-status-losing = В убытке { $pnl }; закроется через { $remaining }
+trader-time-status-losing-due = В убытке { $pnl }; закроется при следующей проверке
+# $held and $remaining are formatted durations.
+trader-time-status-flat = Без движения { $held }; закроется через { $remaining }
+trader-time-status-flat-due = Без движения { $held }; закроется при следующей проверке
 
 trader-strategy-entry-title = Стратегии входа
 trader-strategy-entry-subtitle = Сигналы, которые могут открыть новую позицию.

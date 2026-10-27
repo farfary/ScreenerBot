@@ -422,22 +422,16 @@ pub fn validate_config(config: &Config) -> Result<()> {
             .into());
         }
 
-        // Validate unit
-        use crate::config::TimeUnit;
-        let unit = TimeUnit::from_str(&config.trader.time_override_unit).ok_or_else(|| {
-            ConfigurationError::Generic {
-                message: format!("Invalid time_override_unit: '{}'. Must be 'seconds', 'minutes', 'hours', or 'days'", config.trader.time_override_unit),
-            }
-        })?;
-
         // Validate duration based on unit (max 30 days in any unit)
         let max_seconds = 30.0 * 86400.0; // 30 days
-        let duration_seconds = unit.to_seconds(config.trader.time_override_duration);
+        let duration = config.trader.time_override_duration;
+        let unit = config.trader.time_override_unit;
+        let duration_seconds = unit.to_seconds(duration);
         if duration_seconds > max_seconds {
             return Err(ConfigurationError::Generic {
                 message: format!(
-                    "trader.time_override_duration ({} {}) exceeds maximum of 30 days",
-                    config.trader.time_override_duration, config.trader.time_override_unit
+                    "trader.time_override_duration ({duration} {}, {duration_seconds} seconds) exceeds maximum of 30 days",
+                    unit.as_str()
                 ),
             }
             .into());
@@ -970,6 +964,33 @@ mod atomic_write_tests {
         assert!(
             !has_temp_file(dir.path()),
             "a concurrent writer leaked its temp"
+        );
+    }
+}
+
+#[cfg(test)]
+mod trader_validation_tests {
+    use super::*;
+    use crate::config::TimeUnit;
+
+    /// A time-override duration past 30 days is refused with the value and unit that
+    /// were entered and the seconds they come to.
+    #[test]
+    fn an_overlong_time_override_names_the_entered_duration() {
+        let mut config = Config::default();
+        config.trader.time_override_enabled = true;
+        config.trader.time_override_duration = 31.0;
+        config.trader.time_override_unit = TimeUnit::Days;
+        let message = validate_config(&config)
+            .expect_err("31 days is over the maximum")
+            .to_string();
+        assert!(message.contains("31 days"), "{message}");
+        assert!(message.contains("2678400 seconds"), "{message}");
+
+        config.trader.time_override_duration = 30.0;
+        assert!(
+            validate_config(&config).is_ok(),
+            "30 days is on the maximum"
         );
     }
 }

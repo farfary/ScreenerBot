@@ -1038,6 +1038,14 @@ config-tokens-update-intervals-security-seconds = Security Interval
 
 ## trader
 
+config-trader-break-even-enabled = Enable Break-Even Stop
+    .hint = Sell everything when a position that reached the arming profit falls back to the kept margin above entry
+config-trader-break-even-offset-pct = Keep Above Entry by
+    .hint = Price above the average entry, in percent, at which the armed stop sells; 0 sells at the entry
+    .unit = %
+config-trader-break-even-trigger-pct = Arm at Profit
+    .hint = Profit of the best price since the last buy that arms the stop
+    .unit = %
 config-trader-dca-cooldown-minutes = DCA Cooldown
     .hint = Minimum minutes between DCA entries
     .unit = min
@@ -1119,6 +1127,14 @@ config-trader-take-profit-levels-pct = Take-Profit Levels
 config-trader-take-profit-sell-pct = Take-Profit Shares
     .hint = Share of the position as opened that each step sells; together at most 100%
     .unit = %
+config-trader-time-exit-stagnation-band-pct = Flat Within
+    .hint = P&L range around the entry, up or down, inside which a position counts as flat
+    .unit = %
+config-trader-time-exit-stagnation-enabled = Enable Flat Position Exit
+    .hint = Close positions held a long time whose P&L stays near zero
+config-trader-time-exit-stagnation-minutes = Close Flat After
+    .hint = How long a position is held before the flat exit checks its P&L
+    .unit = min
 config-trader-time-override-duration = Time Exit Duration
     .hint = How long a position is held before the time exit checks its loss; it exits if the loss has reached the threshold
 config-trader-time-override-enabled = Enable Time Exit

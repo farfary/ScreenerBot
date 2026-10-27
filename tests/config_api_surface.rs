@@ -19,10 +19,14 @@
 //! global CONFIG via `load_config_from_path` (`OnceLock::set`).
 
 use axum::Json;
+use screenerbot::agent_control::config_access;
 use screenerbot::config::metadata::collect_config_metadata;
 use screenerbot::config::schemas::{Config, GuiConfig, TraderConfig};
 use screenerbot::config::updates::update_config_section;
-use screenerbot::config::utils::{load_config_from_path, save_config_to_file, with_config};
+use screenerbot::config::utils::{
+    load_config_from_path, parse_config_document, save_config_to_file, with_config,
+};
+use screenerbot::config::TimeUnit;
 use screenerbot::webserver::routes::config::getters::{get_full_config, patch_any_config};
 use screenerbot::webserver::routes::config::import_export::{
     export_config, import_config, import_config_preview,
@@ -362,6 +366,125 @@ async fn patch_that_fails_validation_is_refused_and_changes_nothing() {
         .expect_err("a non-finite trade size must be refused");
     assert!(err.to_string().contains("trade_size_sol"), "{err}");
     assert!(with_config(|cfg| cfg.trader.trade_size_sol.is_finite()));
+}
+
+/// A break-even margin at or above its arming profit can never fire as a floor, so the
+/// trader PATCH refuses it and keeps the stored values.
+#[tokio::test]
+async fn patch_of_a_break_even_margin_at_its_trigger_is_refused() {
+    init_config();
+    let _writes = CONFIG_WRITES.lock().await;
+    let before = with_config(|cfg| {
+        (
+            cfg.trader.break_even_trigger_pct,
+            cfg.trader.break_even_offset_pct,
+        )
+    });
+
+    let response = patch_any_config::<TraderConfig>(Json(serde_json::json!({
+        "break_even_trigger_pct": 10.0,
+        "break_even_offset_pct": 10.0,
+    })))
+    .await;
+    assert!(
+        !response.status().is_success(),
+        "a break-even margin equal to its trigger was accepted: {}",
+        response.status()
+    );
+    assert_eq!(
+        with_config(|cfg| (
+            cfg.trader.break_even_trigger_pct,
+            cfg.trader.break_even_offset_pct
+        )),
+        before
+    );
+}
+
+/// A config writer the time-override unit can arrive through.
+#[derive(Debug, Clone, Copy)]
+enum UnitWriter {
+    Patch,
+    AgentConfigWrite,
+    Import,
+}
+
+impl UnitWriter {
+    /// Send `unit` through this writer; true when the writer accepted it.
+    async fn write(self, unit: &str) -> bool {
+        match self {
+            UnitWriter::Patch => patch_any_config::<TraderConfig>(Json(serde_json::json!({
+                "time_override_unit": unit,
+            })))
+            .await
+            .status()
+            .is_success(),
+            UnitWriter::AgentConfigWrite => {
+                config_access::set_one("trader.time_override_unit", serde_json::json!(unit)).is_ok()
+            }
+            UnitWriter::Import => {
+                let request = serde_json::from_value(serde_json::json!({
+                    "config": { "trader": { "time_override_unit": unit } },
+                    "merge": true,
+                    "save_to_disk": false,
+                }))
+                .expect("valid import request");
+                import_config(Json(request)).await.status().is_success()
+            }
+        }
+    }
+}
+
+/// Every writer refuses a time-override unit the schema does not name, leaving the
+/// stored unit as it was, and lands a unit name or a short alias as its unit. Only a
+/// stored config file is read with tolerance: an unknown name loads as hours and an
+/// alias as its unit, both reported as a migration that a second load no longer sees.
+#[tokio::test]
+async fn every_config_writer_refuses_a_time_unit_the_schema_does_not_name() {
+    init_config();
+    let _writes = CONFIG_WRITES.lock().await;
+    let before = with_config(|cfg| cfg.trader.time_override_unit);
+
+    for writer in [
+        UnitWriter::Patch,
+        UnitWriter::AgentConfigWrite,
+        UnitWriter::Import,
+    ] {
+        for (sent, landed) in [
+            ("weeks", None),
+            ("minutes", Some(TimeUnit::Minutes)),
+            ("h", Some(TimeUnit::Hours)),
+        ] {
+            update_config_section(
+                |cfg| cfg.trader.time_override_unit = TimeUnit::Seconds,
+                false,
+            )
+            .expect("seed the time unit");
+            assert_eq!(
+                writer.write(sent).await,
+                landed.is_some(),
+                "{writer:?} answers {sent}"
+            );
+            assert_eq!(
+                with_config(|cfg| cfg.trader.time_override_unit),
+                landed.unwrap_or(TimeUnit::Seconds),
+                "{writer:?} stores {sent}"
+            );
+        }
+    }
+
+    for (stored, loaded) in [("weeks", TimeUnit::Hours), ("MINUTES", TimeUnit::Minutes)] {
+        let first =
+            parse_config_document(&format!("[trader]\ntime_override_unit = \"{stored}\"\n"))
+                .expect("a stored unit loads");
+        assert!(first.migrated, "{stored} is migrated");
+        assert_eq!(first.config.trader.time_override_unit, loaded, "{stored}");
+        let written = toml::to_string(&first.config).expect("serialize");
+        let second = parse_config_document(&written).expect("the migrated file loads");
+        assert!(!second.migrated, "{stored}: a second load migrates nothing");
+    }
+
+    update_config_section(|cfg| cfg.trader.time_override_unit = before, false)
+        .expect("restore the time unit");
 }
 
 /// The config layout written by v0.2.13, as a TOML document.

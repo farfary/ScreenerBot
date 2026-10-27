@@ -10,15 +10,17 @@
 //! 1. Blacklist (emergency - sync)
 //! 2. Risk limits (>90% loss - emergency)
 //!
-//! Policy (3-8, only when the auto-trader owns this position's exits):
+//! Policy (3-10, only when the auto-trader owns this position's exits):
 //! 3. LLM exit analysis (emergency, high or normal priority by the analysis' urgency - if enabled)
 //! 4. Stop loss (high priority - fixed threshold from entry)
 //! 5. Trailing stop (high priority - from the basis peak)
-//! 6. Take profit (normal priority - one ladder step per evaluation)
-//! 7. Time override (high priority)
-//! 8. Strategy exit (normal priority)
+//! 6. Break-even stop (high priority - armed by the basis peak, fires below entry too)
+//! 7. Take profit (normal priority - one ladder step per evaluation)
+//! 8. Time override (high priority)
+//! 9. Stagnation exit (normal priority - held flat inside the band)
+//! 10. Strategy exit (normal priority)
 //!
-//! Priorities 4-7 are the built-in rules; their order is owned by `exit_rules`, which the
+//! Priorities 4-9 are the built-in rules; their order is owned by `exit_rules`, which the
 //! paper copy book shares.
 
 use crate::positions::price_resolution::get_price_with_api_fallback;
@@ -98,7 +100,8 @@ pub(crate) async fn evaluate_safety_exit(
     Ok(None)
 }
 
-/// Priorities 3-8: LLM analysis, stop loss, trailing stop, take profit, time override, strategy exit.
+/// Priorities 3-10: LLM analysis, stop loss, trailing stop, break-even stop, take profit, time
+/// override, stagnation exit, strategy exit.
 /// These are POLICY — opinions about when to take a trade off — and only run when the
 /// auto-trader owns this position's exits.
 pub(crate) async fn evaluate_policy_exit(
@@ -212,7 +215,7 @@ pub(crate) async fn evaluate_policy_exit(
         }
     }
 
-    // Priorities 4-7: the built-in rules, in the one order `exit_rules` owns. A partial
+    // Priorities 4-9: the built-in rules, in the one order `exit_rules` owns. A partial
     // outcome is passed over while the positions store awaits reconciliation, and a partial
     // take-profit step while another partial exit of the mint is confirming (the next step
     // sells only after the previous one settles), so the rules after it still run this tick.
@@ -243,8 +246,10 @@ pub(crate) async fn evaluate_policy_exit(
         let check = match rule {
             ExitRule::StopLoss => "stop loss",
             ExitRule::Trailing => "trailing stop",
+            ExitRule::BreakEven => "break-even stop",
             ExitRule::TakeProfit { .. } => "take profit",
             ExitRule::TimeLoss => "time override",
+            ExitRule::TimeStagnation => "stagnation exit",
         };
         crate::logger::warning(
             crate::logger::LogTag::Trader,
@@ -256,7 +261,7 @@ pub(crate) async fn evaluate_policy_exit(
         return Ok(Some(rule_decision(position, current_price, &outcome)));
     }
 
-    // Priority 8: Strategy exit (normal priority)
+    // Priority 10: Strategy exit (normal priority)
     let chain = match chain {
         Ok(chain) => chain,
         Err(e) => {
@@ -333,9 +338,10 @@ pub fn live_exit_inputs(
     }
 }
 
-/// The sell a fired built-in rule asks of the live book. Stop loss, trailing stop and
-/// the time override sell at high priority; a take-profit step at normal priority,
-/// carrying the step it takes.
+/// The sell a fired built-in rule asks of the live book. Stop loss, trailing stop,
+/// break-even stop and the time override sell at high priority; a take-profit step at
+/// normal priority, carrying the step it takes, and the stagnation exit at normal
+/// priority, since a flat holding is not at risk.
 pub fn rule_decision(
     position: &Position,
     current_price: f64,
@@ -344,12 +350,18 @@ pub fn rule_decision(
     let (reason, priority) = match outcome.rule {
         ExitRule::StopLoss => (TradeReason::StopLoss, TradePriority::High),
         ExitRule::Trailing => (TradeReason::TrailingStop, TradePriority::High),
+        ExitRule::BreakEven => (TradeReason::BreakEvenStop, TradePriority::High),
         ExitRule::TakeProfit { .. } => (TradeReason::TakeProfit, TradePriority::Normal),
         ExitRule::TimeLoss => (TradeReason::TimeOverride, TradePriority::High),
+        ExitRule::TimeStagnation => (TradeReason::TimeStagnation, TradePriority::Normal),
     };
     let take_profit_level = match outcome.rule {
         ExitRule::TakeProfit { level } => Some(level),
-        ExitRule::StopLoss | ExitRule::Trailing | ExitRule::TimeLoss => None,
+        ExitRule::StopLoss
+        | ExitRule::Trailing
+        | ExitRule::BreakEven
+        | ExitRule::TimeLoss
+        | ExitRule::TimeStagnation => None,
     };
     TradeDecision {
         position_id: position.id.map(|id| id.to_string()),
@@ -412,6 +424,27 @@ async fn record_rule_signal(
                 }),
             )
         }
+        ExitRule::BreakEven => {
+            crate::logger::info(
+                crate::logger::LogTag::Trader,
+                &format!(
+                    "Break-even stop triggered for {} ({:.1}% armed, {:.1}% kept)",
+                    position.symbol, policy.break_even.trigger_pct, policy.break_even.offset_pct
+                ),
+            );
+            (
+                "exit_signal_break_even",
+                crate::events::Severity::Info,
+                serde_json::json!({
+                  "exit_type": "break_even",
+                  "mint": position.mint,
+                  "symbol": position.symbol,
+                  "entry_price": position.average_entry_price,
+                  "basis_peak_price": position.basis_peak_price,
+                  "current_price": current_price,
+                }),
+            )
+        }
         ExitRule::TakeProfit { level } => {
             crate::logger::info(
                 crate::logger::LogTag::Trader,
@@ -454,6 +487,28 @@ async fn record_rule_signal(
                 }),
             )
         }
+        ExitRule::TimeStagnation => {
+            crate::logger::info(
+                crate::logger::LogTag::Trader,
+                &format!(
+                    "Stagnation exit triggered for {} (flat within {:.1}% for {:.0} min)",
+                    position.symbol,
+                    policy.time_stagnation.band_pct,
+                    policy.time_stagnation.duration_seconds / 60.0
+                ),
+            );
+            (
+                "exit_signal_time_stagnation",
+                crate::events::Severity::Info,
+                serde_json::json!({
+                  "exit_type": "time_stagnation",
+                  "mint": position.mint,
+                  "symbol": position.symbol,
+                  "entry_price": position.average_entry_price,
+                  "current_price": current_price,
+                }),
+            )
+        }
     };
     crate::events::record_trader_event(event, severity, Some(&position.mint), None, payload).await;
 }
@@ -464,7 +519,7 @@ async fn record_rule_signal(
 ///
 /// Resolves the current price and a fresh position read (see [`resolve_evaluation_input`]),
 /// then runs safety checks (priorities 1-2, see [`evaluate_safety_exit`]) followed by policy
-/// checks (priorities 3-8, see [`evaluate_policy_exit`]).
+/// checks (priorities 3-10, see [`evaluate_policy_exit`]).
 ///
 /// Returns:
 /// - Ok(Some(TradeDecision)) if exit should be made

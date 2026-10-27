@@ -256,6 +256,9 @@ trader-trailing-subtitle = حماية الأرباح تلقائيًا بتتبع
 trader-trailing-activation-impact = يبدأ التتبع عند ربح +{ $value }%
 # $value is the trail distance percentage as typed.
 trader-trailing-distance-impact = الخروج عند -{ $value }% من القمة
+# $value is a formatted signed percentage.
+trader-trailing-locked-minimum = الحد الأدنى المضمون عند التفعيل: { $value }
+trader-trailing-locked-minimum-warning = يقع الوقف عند سعر الدخول أو دونه عند تفعيله؛ ولا يبيع إلا في الربح. فعّل الوقف عند التعادل لوضع حد أدنى.
 trader-trailing-activation = التفعيل
 trader-trailing-peak = القمة
 # $value is a formatted percentage.
@@ -264,6 +267,13 @@ trader-trailing-final = +{ $value }% نهائي
 trader-trailing-summary-protected = تمت حماية ربح <strong>{ $value }</strong>
 # $value is a formatted percentage.
 trader-trailing-summary-avoided = تم تفادي خسارة <strong>{ $value }</strong> من القمة
+
+## Break-even stop
+
+trader-break-even-title = وقف عند التعادل
+trader-break-even-subtitle = بعد أن يدخل المركز في الربح، بِع كل شيء قبل أن يتحول إلى خسارة
+# $trigger and $offset are formatted signed percentages.
+trader-break-even-summary = بمجرد أن يبلغ أفضل سعر منذ آخر شراء { $trigger }، فإن التراجع إلى { $offset } يبيع كل شيء.
 
 ## Take profit
 
@@ -291,7 +301,7 @@ trader-take-profit-error-total = يمكن للمراحل مجتمعة بيع { $
 # $runner is the formatted percentage of the position no step sells.
 trader-take-profit-runner = يبقى { $runner }% من المركز مفتوحًا كجزء متبقٍّ
 trader-take-profit-runner-none = تبيع المرحلة الأخيرة ما تبقى من المركز
-trader-take-profit-runner-warning = مع إيقاف الوقف المتحرك والخروج الزمني وكل استراتيجيات الخروج، لا يُغلق الجزء المتبقي إلا بوقف الخسارة أو يدويًا
+trader-take-profit-runner-warning = مع إيقاف الوقف المتحرك والوقف عند التعادل وكلا الخروجين الزمنيين وكل استراتيجيات الخروج، لا يُغلق الجزء المتبقي إلا بوقف الخسارة أو يدويًا
 trader-take-profit-info = تُحسب الحصص من المركز الأصلي. إذا تجاوز السعر عدة مستويات دفعة واحدة، تُباع مرحلة واحدة في كل فحص.
 # $profit is the step's formatted profit level; $share is its formatted share.
 trader-take-profit-example-step = عند +{ $profit }%، بيع { $share }%
@@ -302,8 +312,12 @@ trader-take-profit-summary = يبيع <strong>{ $sold }%</strong> حتى ربح 
 
 ## Time-based exit
 
-trader-time-title = الخروج الزمني
+trader-time-loss-title = إغلاق المراكز الخاسرة
 trader-time-subtitle = الخروج تلقائيًا من المراكز بعد أقصى مدة احتفاظ إذا تجاوزت الخسارة الحد
+trader-time-flat-title = إغلاق المراكز الراكدة
+trader-time-flat-subtitle = حرّر رأس المال المحتجز في مراكز لا تتحرك صعودًا ولا هبوطًا
+# $span is a formatted duration; $band is a formatted percentage.
+trader-time-flat-summary = يُغلق المركز المحتفظ به { $span } أو أكثر عندما يبقى الربح والخسارة ضمن ±{ $band }.
 trader-time-unit-seconds = ثوانٍ
 trader-time-unit-minutes = دقائق
 trader-time-unit-hours = ساعات
@@ -365,6 +379,16 @@ trader-time-positions-empty-message = تظهر هنا المراكز المفت�
 trader-time-positions-token = الرمز
 trader-time-positions-hold = مدة الاحتفاظ
 trader-time-positions-roi = العائد
+trader-time-positions-rule = الخروج الزمني
+trader-time-status-off = الخروج الزمني متوقف
+trader-time-status-none = لا ينطبق أي خروج زمني الآن
+trader-time-status-not-managed = لا يديره المتداول الآلي
+# $pnl is a formatted signed percentage; $remaining is a formatted duration.
+trader-time-status-losing = خاسر { $pnl }؛ يُغلق بعد { $remaining }
+trader-time-status-losing-due = خاسر { $pnl }؛ يُغلق عند الفحص التالي
+# $held and $remaining are formatted durations.
+trader-time-status-flat = راكد منذ { $held }؛ يُغلق بعد { $remaining }
+trader-time-status-flat-due = راكد منذ { $held }؛ يُغلق عند الفحص التالي
 
 ## Strategy control
 

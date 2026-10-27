@@ -63,7 +63,9 @@ pub enum TradeReason {
     TakeProfit,
     StopLoss,
     TrailingStop,
+    BreakEvenStop,
     TimeOverride,
+    TimeStagnation,
     StrategyExit,
     LlmAnalysisExit, // Model-scored exit recommendation
     ManualExit,
@@ -90,7 +92,7 @@ const WRITTEN_REASON_LABELS: [(&str, MessageId); 4] = [
 
 impl TradeReason {
     /// Every reason; the `Debug` name of each is its persisted id.
-    pub const ALL: [TradeReason; 16] = [
+    pub const ALL: [TradeReason; 18] = [
         TradeReason::StrategySignal,
         TradeReason::ManualEntry,
         TradeReason::ForceBuy,
@@ -99,7 +101,9 @@ impl TradeReason {
         TradeReason::TakeProfit,
         TradeReason::StopLoss,
         TradeReason::TrailingStop,
+        TradeReason::BreakEvenStop,
         TradeReason::TimeOverride,
+        TradeReason::TimeStagnation,
         TradeReason::StrategyExit,
         TradeReason::LlmAnalysisExit,
         TradeReason::ManualExit,
@@ -123,7 +127,9 @@ pub fn trade_reason_text(reason: &TradeReason) -> UiText {
         TradeReason::TakeProfit => ids::TRADE_REASON_TAKE_PROFIT,
         TradeReason::StopLoss => ids::TRADE_REASON_STOP_LOSS,
         TradeReason::TrailingStop => ids::TRADE_REASON_TRAILING_STOP,
+        TradeReason::BreakEvenStop => ids::TRADE_REASON_BREAK_EVEN_STOP,
         TradeReason::TimeOverride => ids::TRADE_REASON_TIME_OVERRIDE,
+        TradeReason::TimeStagnation => ids::TRADE_REASON_TIME_STAGNATION,
         TradeReason::StrategyExit => ids::TRADE_REASON_STRATEGY_EXIT,
         TradeReason::LlmAnalysisExit => ids::TRADE_REASON_LLM_ANALYSIS_EXIT,
         TradeReason::ManualExit => ids::TRADE_REASON_MANUAL_EXIT,
@@ -418,7 +424,7 @@ mod tests {
     }
 
     /// The number of `TradeReason` variants.
-    const TRADE_REASON_COUNT: usize = 16;
+    const TRADE_REASON_COUNT: usize = 18;
 
     /// The declaration position of each reason. Exhaustive, so a new variant fails
     /// to compile until it is numbered here, and the test below then fails until
@@ -433,14 +439,16 @@ mod tests {
             TradeReason::TakeProfit => 5,
             TradeReason::StopLoss => 6,
             TradeReason::TrailingStop => 7,
-            TradeReason::TimeOverride => 8,
-            TradeReason::StrategyExit => 9,
-            TradeReason::LlmAnalysisExit => 10,
-            TradeReason::ManualExit => 11,
-            TradeReason::RiskManagement => 12,
-            TradeReason::Blacklisted => 13,
-            TradeReason::ForceSell => 14,
-            TradeReason::CopySell => 15,
+            TradeReason::BreakEvenStop => 8,
+            TradeReason::TimeOverride => 9,
+            TradeReason::TimeStagnation => 10,
+            TradeReason::StrategyExit => 11,
+            TradeReason::LlmAnalysisExit => 12,
+            TradeReason::ManualExit => 13,
+            TradeReason::RiskManagement => 14,
+            TradeReason::Blacklisted => 15,
+            TradeReason::ForceSell => 16,
+            TradeReason::CopySell => 17,
         }
     }
 
@@ -524,6 +532,21 @@ mod tests {
             "Force closed: stuck swap"
         );
         assert_eq!(en(closed_reason_text("exit")), "exit");
+    }
+
+    #[test]
+    fn the_break_even_and_stagnation_reasons_read_by_their_stored_ids() {
+        let en = |text: UiText| text.render_source_plain();
+        assert_eq!(format!("{:?}", TradeReason::BreakEvenStop), "BreakEvenStop");
+        assert_eq!(
+            format!("{:?}", TradeReason::TimeStagnation),
+            "TimeStagnation"
+        );
+        assert_eq!(en(closed_reason_text("BreakEvenStop")), "Break-Even Stop");
+        assert_eq!(
+            en(closed_reason_text("TimeStagnation")),
+            "Flat Position Exit"
+        );
     }
 
     #[test]

@@ -235,6 +235,9 @@ trader-trailing-subtitle = Protege automáticamente las ganancias siguiendo el p
 trader-trailing-activation-impact = Empieza a seguir con +{ $value }% de ganancia
 # $value is the trail distance percentage as typed.
 trader-trailing-distance-impact = Sale a -{ $value }% desde el máximo
+# $value is a formatted signed percentage.
+trader-trailing-locked-minimum = Mínimo asegurado al activarse: { $value }
+trader-trailing-locked-minimum-warning = El stop queda en la entrada o por debajo al activarse; solo vende con ganancia. Activa el stop en punto de equilibrio para tener un piso.
 trader-trailing-activation = Activación
 trader-trailing-peak = Máximo
 # $value is a formatted percentage.
@@ -243,6 +246,13 @@ trader-trailing-final = +{ $value }% final
 trader-trailing-summary-protected = Ganancia protegida de <strong>{ $value }</strong>
 # $value is a formatted percentage.
 trader-trailing-summary-avoided = Pérdida evitada de <strong>{ $value }</strong> desde el máximo
+
+## Break-even stop
+
+trader-break-even-title = Stop en punto de equilibrio
+trader-break-even-subtitle = Cuando una posición ya entró en ganancia, véndela entera antes de que pase a pérdida
+# $trigger and $offset are formatted signed percentages.
+trader-break-even-summary = Cuando el mejor precio desde la última compra llega a { $trigger }, una caída de vuelta a { $offset } lo vende todo.
 
 ## Take profit
 
@@ -270,7 +280,7 @@ trader-take-profit-error-total = Los tramos juntos pueden vender como máximo { 
 # $runner is the formatted percentage of the position no step sells.
 trader-take-profit-runner = El { $runner }% de la posición queda abierto como runner
 trader-take-profit-runner-none = El último tramo vende el resto de la posición
-trader-take-profit-runner-warning = Con el trailing stop, la salida por tiempo y todas las estrategias de salida desactivados, el runner solo se cierra por el stop loss o a mano
+trader-take-profit-runner-warning = Con el trailing stop, el stop en punto de equilibrio, ambas salidas por tiempo y todas las estrategias de salida desactivados, el runner solo se cierra por el stop loss o a mano
 trader-take-profit-info = Las partes se refieren a la posición inicial. Si el precio supera varios niveles a la vez, se vende un tramo por comprobación.
 # $profit is the step's formatted profit level; $share is its formatted share.
 trader-take-profit-example-step = A +{ $profit }%, vender { $share }%
@@ -281,8 +291,12 @@ trader-take-profit-summary = Vende <strong>{ $sold }%</strong> hasta +{ $profit 
 
 ## Time-based exit
 
-trader-time-title = Salida por tiempo
+trader-time-loss-title = Cerrar posiciones en pérdida
 trader-time-subtitle = Sale automáticamente de las posiciones tras un tiempo máximo de tenencia si la pérdida supera el umbral
+trader-time-flat-title = Cerrar posiciones estancadas
+trader-time-flat-subtitle = Libera el capital de posiciones que no se mueven, ni al alza ni a la baja
+# $span is a formatted duration; $band is a formatted percentage.
+trader-time-flat-summary = Una posición mantenida { $span } o más con su P&L dentro de ±{ $band } se cierra.
 trader-time-unit-seconds = segundos
 trader-time-unit-minutes = minutos
 trader-time-unit-hours = horas
@@ -332,6 +346,16 @@ trader-time-positions-empty-message = Las posiciones abiertas aparecen aquí con
 trader-time-positions-token = Token
 trader-time-positions-hold = Tiempo de tenencia
 trader-time-positions-roi = ROI
+trader-time-positions-rule = Salida por tiempo
+trader-time-status-off = Las salidas por tiempo están desactivadas
+trader-time-status-none = Ahora no aplica ninguna salida por tiempo
+trader-time-status-not-managed = No gestionada por Auto Trader
+# $pnl is a formatted signed percentage; $remaining is a formatted duration.
+trader-time-status-losing = En pérdida { $pnl }; se cierra en { $remaining }
+trader-time-status-losing-due = En pérdida { $pnl }; se cierra en la próxima revisión
+# $held and $remaining are formatted durations.
+trader-time-status-flat = Estancada desde hace { $held }; se cierra en { $remaining }
+trader-time-status-flat-due = Estancada desde hace { $held }; se cierra en la próxima revisión
 
 ## Strategy control
 

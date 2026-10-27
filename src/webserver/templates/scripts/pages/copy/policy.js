@@ -1,8 +1,8 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 //
-// The four exit rules as the editor and the Rules tab present them: field specs,
-// the policy a task runs under after its overrides, presets, and validation.
+// The exit rules as the editor and the Rules tab present them: field specs, the
+// policy a task runs under after its overrides, presets, and validation.
 import { formatList } from "../../core/format.js";
 import { duration, finite, settingPct, settingSignedPct } from "./format.js";
 
@@ -139,6 +139,59 @@ export const RULES = [
   },
 ];
 
+/**
+ * The Trader's exit rules a task inherits and cannot override: the Rules tab shows them
+ * read-only with their Trader values, and they never enter a task's overrides.
+ */
+export const INHERITED_RULES = [
+  {
+    group: "break_even",
+    get title() {
+      return I18n.t("copy-exit-break-even");
+    },
+    fields: [
+      status,
+      {
+        key: "trigger_pct",
+        get label() {
+          return I18n.t("copy-rule-break-even-trigger");
+        },
+        text: (v) => settingSignedPct(v),
+      },
+      {
+        key: "offset_pct",
+        get label() {
+          return I18n.t("copy-rule-break-even-offset");
+        },
+        text: (v) => settingSignedPct(v),
+      },
+    ],
+  },
+  {
+    group: "time_stagnation",
+    get title() {
+      return I18n.t("copy-exit-time-stagnation");
+    },
+    fields: [
+      status,
+      {
+        key: "duration_seconds",
+        get label() {
+          return I18n.t("copy-rule-time-stagnation-duration");
+        },
+        text: (v) => duration(v),
+      },
+      {
+        key: "band_pct",
+        get label() {
+          return I18n.t("copy-rule-time-stagnation-band");
+        },
+        text: (v) => I18n.t("copy-rule-within-band", { band: settingPct(v) }),
+      },
+    ],
+  },
+];
+
 export function blankOverrides() {
   return Object.fromEntries(
     RULES.map((rule) => [
@@ -177,6 +230,9 @@ export function effectivePolicy(traderDefaults, overrides) {
   policy.roi.levels = isOverridden(overrides, "roi", "target_profit_pct")
     ? null
     : (traderDefaults?.roi?.levels ?? null);
+  INHERITED_RULES.forEach((rule) => {
+    policy[rule.group] = traderDefaults?.[rule.group] ?? null;
+  });
   return policy;
 }
 
@@ -349,7 +405,7 @@ export function exitWarnings(policy, exitMode, { slippagePct = null, feePct = nu
     warnings.push(I18n.t("copy-warning-mirror"));
     return warnings;
   }
-  const anyRule = ["stop_loss", "trailing", "roi", "time"].some(
+  const anyRule = ["stop_loss", "trailing", "break_even", "roi", "time", "time_stagnation"].some(
     (group) => policy?.[group]?.enabled
   );
   if (exitMode === "buy_only" && !anyRule) {

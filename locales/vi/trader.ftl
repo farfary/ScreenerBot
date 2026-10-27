@@ -178,11 +178,21 @@ trader-trailing-title = Trailing stop
 trader-trailing-subtitle = Tự động bảo vệ lợi nhuận bằng cách bám theo giá khi giá tăng
 trader-trailing-activation-impact = Bắt đầu bám theo khi lãi +{ $value }%
 trader-trailing-distance-impact = Thoát khi giảm -{ $value }% so với đỉnh
+# $value is a formatted signed percentage.
+trader-trailing-locked-minimum = Mức tối thiểu được khóa khi kích hoạt: { $value }
+trader-trailing-locked-minimum-warning = Khi kích hoạt, mức dừng nằm tại hoặc dưới giá vào; nó chỉ bán khi đang có lời. Hãy bật dừng lỗ hòa vốn để có mức sàn.
 trader-trailing-activation = Kích hoạt
 trader-trailing-peak = Đỉnh
 trader-trailing-final = Cuối cùng +{ $value }%
 trader-trailing-summary-protected = Đã bảo vệ <strong>{ $value }</strong> lợi nhuận
 trader-trailing-summary-avoided = Đã tránh <strong>{ $value }</strong> lỗ tính từ đỉnh
+
+## Break-even stop
+
+trader-break-even-title = Dừng lỗ hòa vốn
+trader-break-even-subtitle = Khi vị thế đã có lời, bán toàn bộ trước khi chuyển thành lỗ
+# $trigger and $offset are formatted signed percentages.
+trader-break-even-summary = Khi giá tốt nhất kể từ lần mua gần nhất đạt { $trigger }, giá quay về { $offset } sẽ bán toàn bộ.
 
 trader-take-profit-title = Take profit
 trader-take-profit-subtitle = Bán vị thế theo từng bậc khi lợi nhuận chạm mỗi mức
@@ -208,7 +218,7 @@ trader-take-profit-error-total = Tổng các bậc chỉ được bán tối đa
 # $runner is the formatted percentage of the position no step sells.
 trader-take-profit-runner = { $runner }% vị thế vẫn mở như phần runner
 trader-take-profit-runner-none = Bậc cuối bán phần còn lại của vị thế
-trader-take-profit-runner-warning = Khi trailing stop, thoát theo thời gian và mọi chiến lược thoát lệnh đều tắt, phần runner chỉ đóng bằng stop loss hoặc thủ công
+trader-take-profit-runner-warning = Khi trailing stop, dừng lỗ hòa vốn, cả hai quy tắc thoát theo thời gian và mọi chiến lược thoát lệnh đều tắt, phần runner chỉ đóng bằng stop loss hoặc thủ công
 trader-take-profit-info = Phần bán tính theo vị thế ban đầu. Khi giá vượt nhiều mức cùng lúc, mỗi lần kiểm tra chỉ bán một bậc.
 # $profit is the step's formatted profit level; $share is its formatted share.
 trader-take-profit-example-step = Tại +{ $profit }%, bán { $share }%
@@ -217,8 +227,12 @@ trader-take-profit-example-runner-detail = Để các quy tắc thoát khác x�
 # $sold is the formatted total share the ladder sells; $profit is its last formatted level.
 trader-take-profit-summary = Bán <strong>{ $sold }%</strong> đến mức lợi nhuận +{ $profit }%
 
-trader-time-title = Thoát theo thời gian
+trader-time-loss-title = Đóng vị thế đang lỗ
 trader-time-subtitle = Tự động thoát vị thế sau thời gian nắm giữ tối đa nếu mức lỗ vượt ngưỡng
+trader-time-flat-title = Đóng vị thế đi ngang
+trader-time-flat-subtitle = Giải phóng vốn khỏi các vị thế không tăng cũng không giảm
+# $span is a formatted duration; $band is a formatted percentage.
+trader-time-flat-summary = Vị thế giữ { $span } trở lên với lãi/lỗ trong khoảng ±{ $band } sẽ được đóng.
 trader-time-unit-seconds = giây
 trader-time-unit-minutes = phút
 trader-time-unit-hours = giờ
@@ -256,6 +270,16 @@ trader-time-positions-empty-message = Các vị thế đang mở hiển thị t�
 trader-time-positions-token = Token
 trader-time-positions-hold = Thời gian nắm giữ
 trader-time-positions-roi = ROI
+trader-time-positions-rule = Thoát theo thời gian
+trader-time-status-off = Thoát theo thời gian đang tắt
+trader-time-status-none = Hiện không có quy tắc thoát theo thời gian nào áp dụng
+trader-time-status-not-managed = Không do Auto Trader quản lý
+# $pnl is a formatted signed percentage; $remaining is a formatted duration.
+trader-time-status-losing = Đang lỗ { $pnl }; đóng sau { $remaining }
+trader-time-status-losing-due = Đang lỗ { $pnl }; đóng ở lần kiểm tra tới
+# $held and $remaining are formatted durations.
+trader-time-status-flat = Đi ngang { $held }; đóng sau { $remaining }
+trader-time-status-flat-due = Đi ngang { $held }; đóng ở lần kiểm tra tới
 
 trader-strategy-entry-title = Chiến lược vào lệnh
 trader-strategy-entry-subtitle = Các tín hiệu có thể mở vị thế mới.

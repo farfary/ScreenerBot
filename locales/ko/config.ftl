@@ -1035,6 +1035,14 @@ config-tokens-update-intervals-security-seconds = 보안 주기
 
 ## trader
 
+config-trader-break-even-enabled = 본전 스톱 사용
+    .hint = 활성화 수익에 도달한 포지션이 진입가 위로 지킬 폭까지 되돌아오면 전량 매도합니다
+config-trader-break-even-offset-pct = 진입가 위로 지킬 폭
+    .hint = 활성화된 스톱이 매도하는, 평균 진입가 대비 가격(%)입니다. 0이면 진입가에서 매도합니다
+    .unit = %
+config-trader-break-even-trigger-pct = 활성화 수익
+    .hint = 스톱을 활성화하는 마지막 매수 이후 최고가의 수익
+    .unit = %
 config-trader-dca-cooldown-minutes = DCA 쿨다운
     .hint = DCA 진입 사이의 최소 간격(분)
     .unit = 분
@@ -1116,6 +1124,14 @@ config-trader-take-profit-levels-pct = 익절 수준
 config-trader-take-profit-sell-pct = 익절 매도 비중
     .hint = 각 단계가 매도하는 최초 포지션의 비중, 합계 최대 100%
     .unit = %
+config-trader-time-exit-stagnation-band-pct = 횡보 범위
+    .hint = 포지션을 횡보로 보는 진입가 기준 위아래 손익 범위
+    .unit = %
+config-trader-time-exit-stagnation-enabled = 횡보 포지션 청산 사용
+    .hint = 손익이 0 근처에 머문 채 오래 보유한 포지션을 청산합니다
+config-trader-time-exit-stagnation-minutes = 횡보 청산 시간
+    .hint = 횡보 청산이 손익을 확인하기 전까지의 포지션 보유 시간
+    .unit = 분
 config-trader-time-override-duration = 시간 청산 기간
     .hint = 시간 청산이 손실을 확인하기 전까지 포지션을 보유하는 시간입니다. 손실이 임계값에 도달했으면 청산합니다
 config-trader-time-override-enabled = 시간 청산 사용

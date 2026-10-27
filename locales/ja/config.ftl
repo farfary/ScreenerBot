@@ -1035,6 +1035,14 @@ config-tokens-update-intervals-security-seconds = セキュリティの間隔
 
 ## trader
 
+config-trader-break-even-enabled = 建値ストップを有効化
+    .hint = 有効化利益に達したポジションが建値上の確保幅まで戻ったらすべて売却します
+config-trader-break-even-offset-pct = 建値からの確保幅
+    .hint = 有効化されたストップが売却する、平均取得価格からの上乗せ率。0 で建値で売却します
+    .unit = %
+config-trader-break-even-trigger-pct = 有効化する利益
+    .hint = ストップを有効化する、前回の買い以降の最高値の利益
+    .unit = %
 config-trader-dca-cooldown-minutes = DCA クールダウン
     .hint = DCA エントリー間の最小間隔（分）
     .unit = 分
@@ -1116,6 +1124,14 @@ config-trader-take-profit-levels-pct = 利確水準
 config-trader-take-profit-sell-pct = 利確の売却割合
     .hint = 各段階が売却する当初ポジションの割合。合計で最大 100%
     .unit = %
+config-trader-time-exit-stagnation-band-pct = 横ばいとみなす範囲
+    .hint = ポジションを横ばいとみなす、建値を中心とした上下の損益の範囲
+    .unit = %
+config-trader-time-exit-stagnation-enabled = 横ばいポジションの決済を有効化
+    .hint = 損益がゼロ付近のまま長く保有しているポジションを決済します
+config-trader-time-exit-stagnation-minutes = 横ばい決済までの時間
+    .hint = 横ばい決済が損益を確認するまでのポジション保有時間
+    .unit = 分
 config-trader-time-override-duration = 時間エグジットの期間
     .hint = 時間エグジットが損失を確認するまでポジションを保有する時間。損失がしきい値に達していれば決済します
 config-trader-time-override-enabled = 時間エグジットを有効化

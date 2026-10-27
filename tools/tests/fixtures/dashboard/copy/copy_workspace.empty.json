@@ -91,6 +91,11 @@
       "activation_pct": 30,
       "distance_pct": 15
     },
+    "break_even": {
+      "enabled": false,
+      "trigger_pct": 15,
+      "offset_pct": 1
+    },
     "roi": {
       "enabled": false,
       "target_profit_pct": 100,
@@ -102,6 +107,11 @@
       "enabled": false,
       "loss_threshold_pct": -10,
       "duration_seconds": 86400
+    },
+    "time_stagnation": {
+      "enabled": false,
+      "duration_seconds": 14400,
+      "band_pct": 5
     }
   },
   "effective_policy": {
@@ -117,6 +127,11 @@
       "activation_pct": 30,
       "distance_pct": 15
     },
+    "break_even": {
+      "enabled": false,
+      "trigger_pct": 15,
+      "offset_pct": 1
+    },
     "roi": {
       "enabled": false,
       "target_profit_pct": 100,
@@ -128,6 +143,11 @@
       "enabled": false,
       "loss_threshold_pct": -10,
       "duration_seconds": 86400
+    },
+    "time_stagnation": {
+      "enabled": false,
+      "duration_seconds": 14400,
+      "band_pct": 5
     }
   },
   "live_remaining_budget_native": 5,

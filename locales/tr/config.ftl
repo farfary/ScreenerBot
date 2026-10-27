@@ -1035,6 +1035,14 @@ config-tokens-update-intervals-security-seconds = Güvenlik Aralığı
 
 ## trader
 
+config-trader-break-even-enabled = Başa baş stopu etkinleştir
+    .hint = Devreye girme kârına ulaşan pozisyon girişin üzerindeki korunan marja geri düştüğünde tamamını sat
+config-trader-break-even-offset-pct = Girişin üzerinde tut
+    .hint = Devreye giren stopun sattığı, ortalama girişin yüzde olarak üzerindeki fiyat; 0 giriş fiyatında satar
+    .unit = %
+config-trader-break-even-trigger-pct = Devreye girme kârı
+    .hint = Son alımdan bu yana en iyi fiyatın stopu devreye sokan kârı
+    .unit = %
 config-trader-dca-cooldown-minutes = DCA Bekleme Süresi
     .hint = DCA girişleri arasındaki minimum dakika
     .unit = dk
@@ -1116,6 +1124,14 @@ config-trader-take-profit-levels-pct = Kâr Al seviyeleri
 config-trader-take-profit-sell-pct = Kâr Al payları
     .hint = Her kademenin sattığı ilk pozisyon payı; toplamda en fazla %100
     .unit = %
+config-trader-time-exit-stagnation-band-pct = Durgun aralığı
+    .hint = Girişin çevresinde, yukarı veya aşağı, pozisyonun durgun sayıldığı K/Z aralığı
+    .unit = %
+config-trader-time-exit-stagnation-enabled = Durgun pozisyon çıkışını etkinleştir
+    .hint = K/Z değeri sıfıra yakın kalan ve uzun süre tutulan pozisyonları kapat
+config-trader-time-exit-stagnation-minutes = Durgunu şu süre sonra kapat
+    .hint = Durgun çıkışı K/Z değerini kontrol etmeden önce pozisyonun ne kadar tutulduğu
+    .unit = dk
 config-trader-time-override-duration = Zaman Çıkışı Süresi
     .hint = Zaman çıkışı zararı kontrol etmeden önce pozisyonun ne kadar tutulacağı; zarar eşiğe ulaştıysa pozisyon kapatılır
 config-trader-time-override-enabled = Zaman Çıkışını Etkinleştir

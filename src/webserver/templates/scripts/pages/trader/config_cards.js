@@ -61,6 +61,14 @@ const CARD_SPECS = [
   {
     section: "trader",
     fields: [
+      { id: "break-even-enabled", key: "break_even_enabled", type: "bool", autoSave: true },
+      { id: "break-even-trigger", key: "break_even_trigger_pct", type: "float" },
+      { id: "break-even-offset", key: "break_even_offset_pct", type: "float" },
+    ],
+  },
+  {
+    section: "trader",
+    fields: [
       { id: "take-profit-enabled", key: "take_profit_enabled", type: "bool", autoSave: true },
       {
         id: "take-profit-levels",
@@ -82,6 +90,19 @@ const CARD_SPECS = [
         type: LOSS_MAGNITUDE,
         hint: () => I18n.t("trader-time-loss-hint"),
       },
+    ],
+  },
+  {
+    section: "trader",
+    fields: [
+      {
+        id: "time-stagnation-enabled",
+        key: "time_exit_stagnation_enabled",
+        type: "bool",
+        autoSave: true,
+      },
+      { id: "time-stagnation-minutes", key: "time_exit_stagnation_minutes", type: "float" },
+      { id: "time-stagnation-band", key: "time_exit_stagnation_band_pct", type: "float" },
     ],
   },
   {

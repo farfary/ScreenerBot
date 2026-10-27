@@ -1038,6 +1038,14 @@ config-tokens-update-intervals-security-seconds = Intervalle de sécurité
 
 ## trader
 
+config-trader-break-even-enabled = Activer le stop au point mort
+    .hint = Tout vendre quand une position ayant atteint le gain d’activation revient à la marge conservée au-dessus de l’entrée
+config-trader-break-even-offset-pct = Garder au-dessus de l’entrée de
+    .hint = Prix au-dessus de l’entrée moyenne, en pourcentage, auquel le stop activé vend ; 0 vend à l’entrée
+    .unit = %
+config-trader-break-even-trigger-pct = Activer à un gain de
+    .hint = Gain du meilleur prix depuis le dernier achat qui active le stop
+    .unit = %
 config-trader-dca-cooldown-minutes = Délai entre DCA
     .hint = Nombre minimal de minutes entre deux entrées DCA
     .unit = min
@@ -1119,6 +1127,14 @@ config-trader-take-profit-levels-pct = Niveaux de take profit
 config-trader-take-profit-sell-pct = Parts de take profit
     .hint = Part de la position initiale vendue par chaque palier ; au total 100% au maximum
     .unit = %
+config-trader-time-exit-stagnation-band-pct = Stagnante dans
+    .hint = Plage de P&L autour de l’entrée, à la hausse ou à la baisse, dans laquelle une position est considérée comme stagnante
+    .unit = %
+config-trader-time-exit-stagnation-enabled = Activer la sortie des positions stagnantes
+    .hint = Fermer les positions détenues longtemps dont le P&L reste proche de zéro
+config-trader-time-exit-stagnation-minutes = Fermer la stagnante après
+    .hint = Durée de détention d’une position avant que la sortie de stagnation vérifie son P&L
+    .unit = min
 config-trader-time-override-duration = Durée de la sortie temporelle
     .hint = Durée de détention d’une position avant que la sortie temporelle vérifie sa perte ; elle est clôturée si la perte a atteint le seuil
 config-trader-time-override-enabled = Activer la sortie temporelle

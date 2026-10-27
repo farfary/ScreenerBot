@@ -228,6 +228,9 @@ trader-trailing-subtitle = Automatically protect profits by trailing the price a
 trader-trailing-activation-impact = Starts trailing at +{ $value }% profit
 # $value is the trail distance percentage as typed.
 trader-trailing-distance-impact = Exits at -{ $value }% from peak
+# $value is a formatted signed percentage.
+trader-trailing-locked-minimum = Locked minimum when it arms: { $value }
+trader-trailing-locked-minimum-warning = The stop sits at or below entry when it arms; it sells only while in profit. Turn on the break-even stop for a floor.
 trader-trailing-activation = Activation
 trader-trailing-peak = Peak
 # $value is a formatted percentage.
@@ -236,6 +239,13 @@ trader-trailing-final = +{ $value }% final
 trader-trailing-summary-protected = Protected <strong>{ $value }</strong> profit
 # $value is a formatted percentage.
 trader-trailing-summary-avoided = Avoided <strong>{ $value }</strong> loss from peak
+
+## Break-even stop
+
+trader-break-even-title = Break-Even Stop
+trader-break-even-subtitle = Once a position has run into profit, sell everything before it turns into a loss
+# $trigger and $offset are formatted signed percentages.
+trader-break-even-summary = Once the best price since the last buy is { $trigger }, a fall back to { $offset } sells everything.
 
 ## Take profit
 
@@ -263,7 +273,7 @@ trader-take-profit-error-total = The steps together can sell at most { $max }%
 # $runner is the formatted percentage of the position no step sells.
 trader-take-profit-runner = { $runner }% of the position stays open as a runner
 trader-take-profit-runner-none = The last step sells the rest of the position
-trader-take-profit-runner-warning = With the trailing stop, the time exit and every exit strategy off, the runner closes only by the stop loss or by hand
+trader-take-profit-runner-warning = With the trailing stop, the break-even stop, both time exits and every exit strategy off, the runner closes only by the stop loss or by hand
 trader-take-profit-info = Shares are of the position as opened. When the price passes several levels at once, one step sells per check.
 # $profit is the step's formatted profit level; $share is its formatted share.
 trader-take-profit-example-step = At +{ $profit }%, sell { $share }%
@@ -274,8 +284,12 @@ trader-take-profit-summary = Sells <strong>{ $sold }%</strong> by +{ $profit }% 
 
 ## Time exit
 
-trader-time-title = Time Exit
+trader-time-loss-title = Close Losing Positions
 trader-time-subtitle = Automatically exit positions after a maximum hold time if loss exceeds the threshold
+trader-time-flat-title = Close Flat Positions
+trader-time-flat-subtitle = Free the capital held in positions that go nowhere, up or down
+# $span is a formatted duration; $band is a formatted percentage.
+trader-time-flat-summary = A position held { $span } or longer with its P&L within ±{ $band } closes.
 trader-time-unit-seconds = seconds
 trader-time-unit-minutes = minutes
 trader-time-unit-hours = hours
@@ -321,6 +335,16 @@ trader-time-positions-empty-message = Open positions appear here with their hold
 trader-time-positions-token = Token
 trader-time-positions-hold = Hold Time
 trader-time-positions-roi = ROI
+trader-time-positions-rule = Time Exit
+trader-time-status-off = Time exits are off
+trader-time-status-none = No time exit applies now
+trader-time-status-not-managed = Not managed by Auto Trader
+# $pnl is a formatted signed percentage; $remaining is a formatted duration.
+trader-time-status-losing = Losing { $pnl }; closes in { $remaining }
+trader-time-status-losing-due = Losing { $pnl }; closes on the next check
+# $held and $remaining are formatted durations.
+trader-time-status-flat = Flat for { $held }; closes in { $remaining }
+trader-time-status-flat-due = Flat for { $held }; closes on the next check
 
 ## Strategy control
 

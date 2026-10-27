@@ -50,6 +50,14 @@ function timeText(level, from) {
     : I18n.t("copy-holdings-watch-time", { level });
 }
 
+/** The stagnation exit's flat band, with its wait when it does not act yet. */
+function flatText(low, high, from) {
+  const span = untilSpan(from);
+  return span
+    ? I18n.t("copy-holdings-watch-flat-until", { low, high, span })
+    : I18n.t("copy-holdings-watch-flat", { low, high });
+}
+
 /**
  * One round of one task's holding. `opened_at` is kept as the opaque string the backend
  * sent: a reopened position of the same mint is a different round with a different value.
@@ -164,10 +172,35 @@ export function createHoldings(page, { rerender, showActivityFor }) {
         watch.trailing_activation_price_native,
       ]);
     }
+    if (watch.break_even_floor_price_native != null) {
+      const level = signedPct(relative(watch.break_even_floor_price_native, entry));
+      items.push([
+        watch.break_even_armed || watch.break_even_activation_price_native == null
+          ? I18n.t("copy-holdings-watch-floor", { level })
+          : I18n.t("copy-holdings-watch-floor-arms", {
+              level,
+              arms: signedPct(relative(watch.break_even_activation_price_native, entry)),
+            }),
+        watch.break_even_floor_price_native,
+      ]);
+    }
     if (watch.time_rule_price_native != null) {
       items.push([
         timeText(signedPct(relative(watch.time_rule_price_native, entry)), watch.time_rule_from),
         watch.time_rule_price_native,
+      ]);
+    }
+    if (
+      watch.stagnation_band_low_price_native != null &&
+      watch.stagnation_band_high_price_native != null
+    ) {
+      items.push([
+        flatText(
+          signedPct(relative(watch.stagnation_band_low_price_native, entry)),
+          signedPct(relative(watch.stagnation_band_high_price_native, entry)),
+          watch.stagnation_from
+        ),
+        null,
       ]);
     }
     if (ws.exit_mode === "hybrid") items.push([I18n.t("copy-holdings-watch-wallet-sells"), null]);

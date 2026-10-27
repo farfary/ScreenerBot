@@ -112,8 +112,10 @@ copy-exit-mode-hybrid = ウォレットの売却と自分のルール
 copy-exit-target-sell = ウォレットが売却
 copy-exit-stop-loss = 損切り
 copy-exit-trailing-stop = トレーリングストップ
+copy-exit-break-even = 建値ストップ
 copy-exit-take-profit = 利確
 copy-exit-time-override = 時間エグジット
+copy-exit-time-stagnation = 横ばいエグジット
 copy-exit-manual = 手動でクローズ
 
 ## Shared wording
@@ -480,6 +482,12 @@ copy-rule-take-profit-target = 次の利益で売却
 copy-rule-take-profit-target-hint = ここで目標を設定すると、トレーダーの利確の段階は、ポジション全体を売却する 1 つの段階に置き換わります
 copy-rule-time-duration = 保有後の確認タイミング
 copy-rule-time-threshold = 損益が次の値以下で売却
+copy-rule-break-even-trigger = 有効化する利益
+copy-rule-break-even-offset = 建値からの確保幅
+copy-rule-time-stagnation-duration = 決済までの保有時間
+copy-rule-time-stagnation-band = 損益がこの範囲内の間
+# $band is a formatted percentage.
+copy-rule-within-band = ±{ $band }
 copy-preset-inherit = トレーダーのデフォルト
 copy-preset-conservative = 保守的
 copy-preset-balanced = バランス
@@ -642,6 +650,10 @@ copy-holdings-watch-trail = トレール { $level }
 copy-holdings-watch-trail-arms = トレール有効化 { $level }
 copy-holdings-watch-time = 時間 ≤ { $level }
 copy-holdings-watch-time-until = { $span }後に時間 ≤ { $level }
+copy-holdings-watch-floor = 下限 { $level }
+copy-holdings-watch-floor-arms = 下限 { $level }（{ $arms } で有効化）
+copy-holdings-watch-flat = 横ばい { $low }〜{ $high }
+copy-holdings-watch-flat-until = { $span }後に横ばい { $low }〜{ $high }
 copy-holdings-watch-wallet-sells = ウォレットの売却
 copy-holdings-empty = オープン中のペーパー保有はありません。ウォレットからコピーした購入がここに表示されます。
 copy-holdings-col-token = トークン

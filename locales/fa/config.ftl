@@ -1035,6 +1035,14 @@ config-tokens-update-intervals-security-seconds = فاصله امنیتی
 
 ## trader
 
+config-trader-break-even-enabled = فعال‌سازی حد ضرر سربه‌سر
+    .hint = وقتی پوزیشنی که به سود فعال‌سازی رسیده به حاشیهٔ حفظ‌شده بالای قیمت ورود برگردد، همه فروخته می‌شود
+config-trader-break-even-offset-pct = حفظ بالای ورود به اندازهٔ
+    .hint = قیمت بالای میانگین ورود، به درصد، که حد ضرر فعال در آن می‌فروشد؛ 0 در قیمت ورود می‌فروشد
+    .unit = %
+config-trader-break-even-trigger-pct = فعال‌سازی در سود
+    .hint = سود بهترین قیمت از آخرین خرید که حد ضرر را فعال می‌کند
+    .unit = %
 config-trader-dca-cooldown-minutes = زمان انتظار DCA
     .hint = حداقل دقیقه‌های فاصله میان ورودهای DCA
     .unit = دقیقه
@@ -1116,6 +1124,14 @@ config-trader-take-profit-levels-pct = سطوح حد سود
 config-trader-take-profit-sell-pct = سهم‌های حد سود
     .hint = سهمی از پوزیشن اولیه که هر پله می‌فروشد؛ روی هم حداکثر 100%
     .unit = %
+config-trader-time-exit-stagnation-band-pct = راکد در محدودهٔ
+    .hint = بازهٔ سود و زیان پیرامون قیمت ورود، بالا یا پایین، که پوزیشن درون آن راکد به‌شمار می‌آید
+    .unit = %
+config-trader-time-exit-stagnation-enabled = فعال‌سازی خروج پوزیشن راکد
+    .hint = بستن پوزیشن‌هایی که مدت طولانی نگه داشته شده‌اند و سود و زیانشان نزدیک صفر می‌ماند
+config-trader-time-exit-stagnation-minutes = بستن راکد پس از
+    .hint = مدت نگهداری پوزیشن پیش از آنکه خروج راکد سود و زیانش را بررسی کند
+    .unit = دقیقه
 config-trader-time-override-duration = مدت خروج زمانی
     .hint = مدت نگهداری پوزیشن پیش از آنکه خروج زمانی زیان آن را بررسی کند؛ اگر زیان به آستانه رسیده باشد، بسته می‌شود
 config-trader-time-override-enabled = فعال‌سازی خروج زمانی

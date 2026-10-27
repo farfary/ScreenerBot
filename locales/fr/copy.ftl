@@ -122,8 +122,10 @@ copy-exit-mode-hybrid = Ventes du portefeuille et mes règles
 copy-exit-target-sell = Vendu par le portefeuille
 copy-exit-stop-loss = Stop loss
 copy-exit-trailing-stop = Trailing stop
+copy-exit-break-even = Stop au point mort
 copy-exit-take-profit = Take profit
 copy-exit-time-override = Sortie temporelle
+copy-exit-time-stagnation = Sortie sur stagnation
 copy-exit-manual = Clôturé manuellement
 
 ## Shared wording
@@ -521,6 +523,12 @@ copy-rule-take-profit-target = Vend à un gain de
 copy-rule-take-profit-target-hint = Un objectif ici remplace les paliers de take profit du Trader par un seul palier qui vend toute la position
 copy-rule-time-duration = Vérifie après une détention de
 copy-rule-time-threshold = Vend tant que le P&L est inférieur ou égal à
+copy-rule-break-even-trigger = S’active à un gain de
+copy-rule-break-even-offset = Garde au-dessus de l’entrée de
+copy-rule-time-stagnation-duration = Ferme après une détention de
+copy-rule-time-stagnation-band = Tant que le P&L reste dans
+# $band is a formatted percentage.
+copy-rule-within-band = ±{ $band }
 copy-preset-inherit = Valeurs par défaut du Trader
 copy-preset-conservative = Prudent
 copy-preset-balanced = Équilibré
@@ -693,6 +701,10 @@ copy-holdings-watch-trail = Trail { $level }
 copy-holdings-watch-trail-arms = Trail armé à { $level }
 copy-holdings-watch-time = Durée ≤ { $level }
 copy-holdings-watch-time-until = Durée ≤ { $level } dans { $span }
+copy-holdings-watch-floor = Plancher { $level }
+copy-holdings-watch-floor-arms = Plancher { $level } armé à { $arms }
+copy-holdings-watch-flat = Stable { $low } à { $high }
+copy-holdings-watch-flat-until = Stable { $low } à { $high } dans { $span }
 copy-holdings-watch-wallet-sells = Ventes du portefeuille
 copy-holdings-empty = Aucune détention simulée ouverte. Les achats copiés depuis le portefeuille apparaissent ici.
 copy-holdings-col-token = Token

@@ -242,6 +242,9 @@ trader-trailing-subtitle = Автоматичний захист прибутк�
 trader-trailing-activation-impact = Трейлінг починається при прибутку +{ $value }%
 # $value is the trail distance percentage as typed.
 trader-trailing-distance-impact = Вихід на -{ $value }% від піку
+# $value is a formatted signed percentage.
+trader-trailing-locked-minimum = Зафіксований мінімум під час спрацювання: { $value }
+trader-trailing-locked-minimum-warning = Під час активації стоп опиняється на ціні входу або нижче; він продає лише в прибутку. Увімкніть стоп у беззбиток, щоб мати нижню межу.
 trader-trailing-activation = Активація
 trader-trailing-peak = Пік
 # $value is a formatted percentage.
@@ -250,6 +253,13 @@ trader-trailing-final = +{ $value }% підсумок
 trader-trailing-summary-protected = Захищено прибуток <strong>{ $value }</strong>
 # $value is a formatted percentage.
 trader-trailing-summary-avoided = Уникнуто збитку <strong>{ $value }</strong> від піку
+
+## Break-even stop
+
+trader-break-even-title = Стоп у беззбиток
+trader-break-even-subtitle = Коли позиція вийшла в прибуток, продати все, доки вона не стала збитковою
+# $trigger and $offset are formatted signed percentages.
+trader-break-even-summary = Щойно найкраща ціна з останньої покупки сягне { $trigger }, повернення до { $offset } продасть усе.
 
 ## Take profit
 
@@ -277,7 +287,7 @@ trader-take-profit-error-total = Усі сходинки разом можуть
 # $runner is the formatted percentage of the position no step sells.
 trader-take-profit-runner = { $runner }% позиції залишається відкритими як ранер
 trader-take-profit-runner-none = Остання сходинка продає залишок позиції
-trader-take-profit-runner-warning = Коли трейлінг-стоп, вихід за часом і всі стратегії виходу вимкнені, ранер закривається лише стоп-лосом або вручну
+trader-take-profit-runner-warning = Коли трейлінг-стоп, стоп у беззбиток, обидва виходи за часом і всі стратегії виходу вимкнені, ранер закривається лише стоп-лосом або вручну
 trader-take-profit-info = Частки рахуються від початкової позиції. Якщо ціна проходить кілька рівнів одразу, за одну перевірку продається одна сходинка.
 # $profit is the step's formatted profit level; $share is its formatted share.
 trader-take-profit-example-step = При +{ $profit }% продати { $share }%
@@ -288,8 +298,12 @@ trader-take-profit-summary = Продає <strong>{ $sold }%</strong> до +{ $p
 
 ## Time-based exit
 
-trader-time-title = Вихід за часом
+trader-time-loss-title = Закривати збиткові позиції
 trader-time-subtitle = Автоматичний вихід із позицій після максимального часу утримання, якщо збиток перевищує поріг
+trader-time-flat-title = Закривати позиції без руху
+trader-time-flat-subtitle = Звільняє капітал із позицій, які не ростуть і не падають
+# $span is a formatted duration; $band is a formatted percentage.
+trader-time-flat-summary = Позиція, утримувана { $span } або довше з P&L у межах ±{ $band }, закривається.
 trader-time-unit-seconds = с
 trader-time-unit-minutes = хв
 trader-time-unit-hours = год
@@ -343,6 +357,16 @@ trader-time-positions-empty-message = Тут відображаються від
 trader-time-positions-token = Токен
 trader-time-positions-hold = Час утримання
 trader-time-positions-roi = ROI
+trader-time-positions-rule = Вихід за часом
+trader-time-status-off = Виходи за часом вимкнені
+trader-time-status-none = Зараз не діє жоден вихід за часом
+trader-time-status-not-managed = Не керується автотрейдером
+# $pnl is a formatted signed percentage; $remaining is a formatted duration.
+trader-time-status-losing = У збитку { $pnl }; закриється через { $remaining }
+trader-time-status-losing-due = У збитку { $pnl }; закриється під час наступної перевірки
+# $held and $remaining are formatted durations.
+trader-time-status-flat = Без руху { $held }; закриється через { $remaining }
+trader-time-status-flat-due = Без руху { $held }; закриється під час наступної перевірки
 
 ## Strategy control
 

@@ -163,8 +163,10 @@ pub struct PaperDecision {
 pub enum PaperExitRule {
     StopLoss,
     TrailingStop,
+    BreakEven,
     TakeProfit,
     TimeOverride,
+    TimeStagnation,
     /// Closed by hand from the dashboard or an agent tool.
     Manual,
 }

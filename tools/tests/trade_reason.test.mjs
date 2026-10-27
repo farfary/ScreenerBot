@@ -22,6 +22,12 @@ test("known reasons use the single Title Case label", () => {
   assert.equal(closeReasonText("closed_externally"), "Closed Externally");
 });
 
+test("the break-even stop and the flat position exit have their own labels", () => {
+  assert.equal(closeReasonText("BreakEvenStop"), "Break-Even Stop");
+  assert.equal(closeReasonText("TimeStagnation"), "Flat Position Exit");
+  assert.match(closeReasonText("BreakEvenStop_pending_verification"), /Break-Even Stop.* \(pending verification\)/);
+});
+
 test("the pending verification suffix wraps the base label", () => {
   assert.match(closeReasonText("StopLoss_pending_verification"), /Stop Loss.* \(pending verification\)/);
 });

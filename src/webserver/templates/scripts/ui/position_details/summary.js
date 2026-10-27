@@ -35,6 +35,16 @@ const closeReasonLabel = (reason) => Utils.escapeHtml(closeReasonText(reason));
 
 const isWebUrl = (url) => typeof url === "string" && /^https?:\/\//i.test(url);
 
+/** What the basis peak drives: the stops measured from it that are active for the position. */
+function basisPeakMeaning(pos) {
+  if (pos.trailing_stop_active && pos.break_even_active) {
+    return I18n.t("positions-fact-basis-peak-meaning-both");
+  }
+  if (pos.trailing_stop_active) return I18n.t("positions-fact-basis-peak-meaning");
+  if (pos.break_even_active) return I18n.t("positions-fact-basis-peak-meaning-break-even");
+  return "";
+}
+
 export function applySummaryMixin(PositionDetailsDialog) {
   const proto = PositionDetailsDialog.prototype;
 
@@ -178,7 +188,7 @@ export function applySummaryMixin(PositionDetailsDialog) {
       fact(I18n.t("positions-range-peak"), withSolUnit(this._formatPrice(peak)), { sub: vsEntry(peak) }),
       basisPeak != null
         ? fact(I18n.t("positions-range-basis-peak"), withSolUnit(this._formatPrice(basisPeak)), {
-            sub: pos.trailing_stop_active ? I18n.t("positions-fact-basis-peak-meaning") : "",
+            sub: basisPeakMeaning(pos),
           })
         : "",
       fact(I18n.t("positions-range-low"), withSolUnit(this._formatPrice(low)), { sub: vsEntry(low) }),

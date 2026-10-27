@@ -1029,6 +1029,14 @@ config-tokens-update-intervals-security-seconds = فترة الأمان
 
 ## trader
 
+config-trader-break-even-enabled = تفعيل الوقف عند التعادل
+    .hint = بيع كل شيء عندما يتراجع مركز بلغ ربح التفعيل إلى الهامش المحفوظ فوق سعر الدخول
+config-trader-break-even-offset-pct = الإبقاء فوق الدخول بنسبة
+    .hint = السعر فوق متوسط الدخول، بالنسبة المئوية، الذي يبيع عنده الوقف المفعّل؛ 0 يبيع عند سعر الدخول
+    .unit = %
+config-trader-break-even-trigger-pct = التفعيل عند ربح
+    .hint = ربح أفضل سعر منذ آخر شراء الذي يفعّل الوقف
+    .unit = %
 config-trader-dca-cooldown-minutes = فترة تهدئة DCA
     .hint = أدنى عدد من الدقائق بين عمليات دخول DCA
     .unit = دقيقة
@@ -1110,6 +1118,14 @@ config-trader-take-profit-levels-pct = مستويات جني الأرباح
 config-trader-take-profit-sell-pct = حصص جني الأرباح
     .hint = حصة المركز الأصلي التي تبيعها كل مرحلة؛ بمجموع 100% كحد أقصى
     .unit = %
+config-trader-time-exit-stagnation-band-pct = راكد ضمن
+    .hint = نطاق الربح والخسارة حول سعر الدخول، صعودًا أو هبوطًا، الذي يُعدّ المركز ضمنه راكدًا
+    .unit = %
+config-trader-time-exit-stagnation-enabled = تفعيل خروج المراكز الراكدة
+    .hint = إغلاق المراكز المحتفظ بها طويلًا التي يبقى ربحها وخسارتها قرب الصفر
+config-trader-time-exit-stagnation-minutes = إغلاق الراكد بعد
+    .hint = مدة الاحتفاظ بالمركز قبل أن يفحص خروج الركود ربحه وخسارته
+    .unit = دقيقة
 config-trader-time-override-duration = مدة الخروج الزمني
     .hint = المدة التي يُحتفظ فيها بالمركز قبل أن يفحص الخروج الزمني خسارته؛ يخرج إذا بلغت الخسارة الحد
 config-trader-time-override-enabled = تفعيل الخروج الزمني

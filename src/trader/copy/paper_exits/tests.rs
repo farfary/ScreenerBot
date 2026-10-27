@@ -11,7 +11,10 @@ use chrono::Duration;
 
 use crate::config::TakeProfitLevel;
 use crate::trader::evaluators::dca::DcaConfigSnapshot;
-use crate::trader::policy::{StopLossPolicy, TakeProfitPolicy, TimePolicy, TrailingPolicy};
+use crate::trader::policy::{
+    BreakEvenPolicy, StopLossPolicy, TakeProfitPolicy, TimePolicy, TimeStagnationPolicy,
+    TrailingPolicy,
+};
 
 fn task() -> CopyTask {
     CopyTask {
@@ -107,6 +110,11 @@ fn policy() -> ExitPolicy {
             activation_pct: 20.0,
             distance_pct: 10.0,
         },
+        break_even: BreakEvenPolicy {
+            enabled: false,
+            trigger_pct: 15.0,
+            offset_pct: 1.0,
+        },
         take_profit: TakeProfitPolicy {
             enabled: true,
             levels: vec![TakeProfitLevel::sell_all_at(100.0)],
@@ -115,6 +123,11 @@ fn policy() -> ExitPolicy {
             enabled: true,
             loss_threshold_pct: -10.0,
             duration_seconds: 3600.0,
+        },
+        time_stagnation: TimeStagnationPolicy {
+            enabled: false,
+            duration_seconds: 7200.0,
+            band_pct: 5.0,
         },
         dca: DcaConfigSnapshot {
             enabled: false,
@@ -561,5 +574,139 @@ fn live_and_paper_books_climb_the_same_take_profit_ladder() {
                 }
             }
         }
+    }
+}
+
+/// With the break-even stop (+15% / +1%) and the stagnation exit (two hours inside ±5%)
+/// on beside the other rules, the live exit monitor and the paper book pick the same
+/// rule: the break-even stop armed or not, in profit and below the entry, behind the
+/// trailing stop, and the stagnation exit just inside and just outside its band.
+#[test]
+fn live_and_paper_books_agree_on_the_break_even_stop_and_the_stagnation_exit() {
+    use crate::trader::evaluators::{exit, exit_rules};
+    use crate::trader::TradeReason;
+
+    let mut policy = policy();
+    policy.break_even.enabled = true;
+    policy.time_stagnation.enabled = true;
+    let now = Utc::now();
+    let young = Duration::seconds(60);
+    let flat_long_enough = Duration::hours(2);
+    let not_long_enough = Duration::hours(2) - Duration::seconds(1);
+    let break_even = Some((TradeReason::BreakEvenStop, PaperExitRule::BreakEven));
+    let trailing = Some((TradeReason::TrailingStop, PaperExitRule::TrailingStop));
+    let stagnation = Some((TradeReason::TimeStagnation, PaperExitRule::TimeStagnation));
+    // Entry 0.01. (case, mark, peak, age, expected rules); every sale is a full exit.
+    let cases = [
+        (
+            "break-even armed at +18%, back under +1%",
+            0.01005,
+            0.0118,
+            young,
+            break_even.clone(),
+        ),
+        (
+            "break-even armed, gapped below the entry",
+            0.0095,
+            0.0118,
+            young,
+            break_even.clone(),
+        ),
+        ("break-even not armed at +14%", 0.0095, 0.0114, young, None),
+        (
+            "break-even armed, still above the margin",
+            0.0103,
+            0.0118,
+            young,
+            None,
+        ),
+        (
+            "trailing first while in profit",
+            0.01005,
+            0.0125,
+            young,
+            trailing.clone(),
+        ),
+        (
+            "break-even when the trail is silent below the entry",
+            0.0098,
+            0.0125,
+            young,
+            break_even.clone(),
+        ),
+        (
+            "flat at +2% for two hours",
+            0.0102,
+            0.0102,
+            flat_long_enough,
+            stagnation.clone(),
+        ),
+        (
+            "just inside the upper band edge",
+            0.01049,
+            0.01049,
+            flat_long_enough,
+            stagnation.clone(),
+        ),
+        (
+            "just outside the upper band edge",
+            0.01051,
+            0.01051,
+            flat_long_enough,
+            None,
+        ),
+        (
+            "just inside the lower band edge",
+            0.00951,
+            0.01,
+            flat_long_enough,
+            stagnation.clone(),
+        ),
+        (
+            "just outside the lower band edge",
+            0.00949,
+            0.01,
+            flat_long_enough,
+            None,
+        ),
+        (
+            "flat a second short of two hours",
+            0.0102,
+            0.0102,
+            not_long_enough,
+            None,
+        ),
+        (
+            "break-even before stagnation",
+            0.01,
+            0.0118,
+            flat_long_enough,
+            break_even.clone(),
+        ),
+    ];
+    for (case, mark, peak, age, expected) in cases {
+        let live_position = live_position(peak, age, 0, now);
+        let live = exit_rules::decide(&exit::live_exit_inputs(&live_position, mark, now), &policy)
+            .outcome
+            .map(|outcome| {
+                let decision = exit::rule_decision(&live_position, mark, &outcome);
+                (decision.reason, decision.exit_percentage)
+            });
+
+        let mut paper_position = holding(0, age);
+        paper_position.opened_at = now - age;
+        let paper = evaluate_paper_exit(1, &paper_position, mark, peak, &policy, now)
+            .map(|exit| (exit.rule, exit.exit_percentage));
+
+        assert_eq!(
+            live,
+            expected.clone().map(|(reason, _)| (reason, None)),
+            "{case}: live"
+        );
+        assert_eq!(
+            paper,
+            expected.map(|(_, rule)| (rule, None)),
+            "{case}: paper"
+        );
     }
 }

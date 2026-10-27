@@ -193,11 +193,21 @@ trader-trailing-title = Trailing-Stop
 trader-trailing-subtitle = Gewinne automatisch sichern, indem der Stop dem steigenden Preis folgt
 trader-trailing-activation-impact = Beginnt bei +{ $value } % Gewinn nachzuziehen
 trader-trailing-distance-impact = Ausstieg bei -{ $value } % vom Hoch
+# $value is a formatted signed percentage.
+trader-trailing-locked-minimum = Gesicherter Mindestgewinn beim Aktivieren: { $value }
+trader-trailing-locked-minimum-warning = Der Stop liegt beim Aktivieren auf oder unter dem Einstieg; er verkauft nur im Gewinn. Schalte den Break-Even-Stop für eine Untergrenze ein.
 trader-trailing-activation = Aktivierung
 trader-trailing-peak = Hoch
 trader-trailing-final = +{ $value } % am Ende
 trader-trailing-summary-protected = <strong>{ $value }</strong> Gewinn gesichert
 trader-trailing-summary-avoided = <strong>{ $value }</strong> Verlust vom Hoch vermieden
+
+## Break-even stop
+
+trader-break-even-title = Break-Even-Stop
+trader-break-even-subtitle = Hat eine Position Gewinn gemacht, alles verkaufen, bevor daraus ein Verlust wird
+# $trigger and $offset are formatted signed percentages.
+trader-break-even-summary = Sobald der beste Preis seit dem letzten Kauf { $trigger } erreicht, verkauft ein Rückfall auf { $offset } alles.
 
 trader-take-profit-title = Take Profit
 trader-take-profit-subtitle = Verkauft die Position in Stufen, sobald der Gewinn jede Schwelle erreicht
@@ -223,7 +233,7 @@ trader-take-profit-error-total = Die Stufen können zusammen höchstens { $max }
 # $runner is the formatted percentage of the position no step sells.
 trader-take-profit-runner = { $runner }% der Position bleiben als Runner offen
 trader-take-profit-runner-none = Die letzte Stufe verkauft den Rest der Position
-trader-take-profit-runner-warning = Sind Trailing-Stop, Zeitausstieg und alle Ausstiegsstrategien aus, schließt der Runner nur per Stop-Loss oder von Hand
+trader-take-profit-runner-warning = Sind Trailing-Stop, Break-Even-Stop, beide Zeitausstiege und alle Ausstiegsstrategien aus, schließt der Runner nur per Stop-Loss oder von Hand
 trader-take-profit-info = Anteile beziehen sich auf die ursprüngliche Position. Überschreitet der Preis mehrere Schwellen auf einmal, verkauft pro Prüfung eine Stufe.
 # $profit is the step's formatted profit level; $share is its formatted share.
 trader-take-profit-example-step = Bei +{ $profit }% { $share }% verkaufen
@@ -232,8 +242,12 @@ trader-take-profit-example-runner-detail = Den anderen Ausstiegsregeln überlass
 # $sold is the formatted total share the ladder sells; $profit is its last formatted level.
 trader-take-profit-summary = Verkauft <strong>{ $sold }%</strong> bis +{ $profit }% Gewinn
 
-trader-time-title = Zeitausstieg
+trader-time-loss-title = Verlustpositionen schließen
 trader-time-subtitle = Positionen nach einer maximalen Haltedauer automatisch verlassen, wenn der Verlust die Schwelle überschreitet
+trader-time-flat-title = Seitwärtspositionen schließen
+trader-time-flat-subtitle = Kapital aus Positionen freigeben, die sich weder nach oben noch nach unten bewegen
+# $span is a formatted duration; $band is a formatted percentage.
+trader-time-flat-summary = Eine Position, die { $span } oder länger gehalten wird und deren GuV innerhalb von ±{ $band } liegt, wird geschlossen.
 trader-time-unit-seconds = Sekunden
 trader-time-unit-minutes = Minuten
 trader-time-unit-hours = Stunden
@@ -275,6 +289,16 @@ trader-time-positions-empty-message = Offene Positionen erscheinen hier mit Halt
 trader-time-positions-token = Token
 trader-time-positions-hold = Haltedauer
 trader-time-positions-roi = ROI
+trader-time-positions-rule = Zeitausstieg
+trader-time-status-off = Zeitausstiege sind aus
+trader-time-status-none = Derzeit greift kein Zeitausstieg
+trader-time-status-not-managed = Nicht vom Auto-Trader verwaltet
+# $pnl is a formatted signed percentage; $remaining is a formatted duration.
+trader-time-status-losing = Im Verlust { $pnl }; schließt in { $remaining }
+trader-time-status-losing-due = Im Verlust { $pnl }; schließt bei der nächsten Prüfung
+# $held and $remaining are formatted durations.
+trader-time-status-flat = Seitwärts seit { $held }; schließt in { $remaining }
+trader-time-status-flat-due = Seitwärts seit { $held }; schließt bei der nächsten Prüfung
 
 trader-strategy-entry-title = Einstiegsstrategien
 trader-strategy-entry-subtitle = Signale, die eine neue Position eröffnen können.

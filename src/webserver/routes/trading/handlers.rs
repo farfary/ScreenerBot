@@ -25,12 +25,27 @@ pub(super) async fn get_trading_config() -> Response {
                 0.0
             },
             time_override_loss_threshold_percent: cfg.trader.time_override_loss_threshold_percent,
-            time_override_duration_hours: {
-                use crate::config::TimeUnit;
-                let unit =
-                    TimeUnit::from_str(&cfg.trader.time_override_unit).unwrap_or(TimeUnit::Hours);
-                unit.to_seconds(cfg.trader.time_override_duration) / 3600.0
-            },
+            time_override_duration_hours: cfg
+                .trader
+                .time_override_unit
+                .to_seconds(cfg.trader.time_override_duration)
+                / 3600.0,
+            break_even_trigger_percent: cfg
+                .trader
+                .break_even_enabled
+                .then_some(cfg.trader.break_even_trigger_pct),
+            break_even_offset_percent: cfg
+                .trader
+                .break_even_enabled
+                .then_some(cfg.trader.break_even_offset_pct),
+            time_stagnation_duration_hours: cfg
+                .trader
+                .time_exit_stagnation_enabled
+                .then_some(cfg.trader.time_exit_stagnation_minutes / 60.0),
+            time_stagnation_band_percent: cfg
+                .trader
+                .time_exit_stagnation_enabled
+                .then_some(cfg.trader.time_exit_stagnation_band_pct),
         },
         profit_targets: ProfitTargets {
             take_profit_enabled: cfg.trader.take_profit_enabled,

@@ -36,6 +36,15 @@ pub struct TrailingPolicy {
     pub distance_pct: f64,
 }
 
+/// The break-even stop's switch, arming profit and kept margin, both in percent from the
+/// average entry, read by `exit_rules`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct BreakEvenPolicy {
+    pub enabled: bool,
+    pub trigger_pct: f64,
+    pub offset_pct: f64,
+}
+
 /// The take-profit ladder's switch and steps, read by `exit_rules`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TakeProfitPolicy {
@@ -52,12 +61,25 @@ pub struct TimePolicy {
     pub duration_seconds: f64,
 }
 
+/// The stagnation exit's switch, holding time and flat band (percent of profit or loss
+/// either side of the average entry), read by `exit_rules`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TimeStagnationPolicy {
+    pub enabled: bool,
+    pub duration_seconds: f64,
+    pub band_pct: f64,
+}
+
+/// Copy tasks inherit `break_even` and `time_stagnation` from the trader config; no
+/// task-level override exists for either.
 #[derive(Debug, Clone)]
 pub struct ExitPolicy {
     pub stop_loss: StopLossPolicy,
     pub trailing: TrailingPolicy,
+    pub break_even: BreakEvenPolicy,
     pub take_profit: TakeProfitPolicy,
     pub time: TimePolicy,
+    pub time_stagnation: TimeStagnationPolicy,
     pub dca: DcaConfigSnapshot,
 }
 
@@ -124,6 +146,11 @@ impl ExitPolicy {
                 activation_pct: config::get_trailing_stop_activation_pct(),
                 distance_pct: config::get_trailing_stop_distance_pct(),
             },
+            break_even: BreakEvenPolicy {
+                enabled: config::is_break_even_enabled(),
+                trigger_pct: config::get_break_even_trigger_pct(),
+                offset_pct: config::get_break_even_offset_pct(),
+            },
             take_profit: TakeProfitPolicy {
                 enabled: config::is_take_profit_enabled(),
                 levels: config::get_take_profit_levels(),
@@ -132,6 +159,11 @@ impl ExitPolicy {
                 enabled: config::is_time_override_enabled(),
                 loss_threshold_pct: config::get_time_override_loss_threshold_pct(),
                 duration_seconds: config::get_time_override_duration_seconds(),
+            },
+            time_stagnation: TimeStagnationPolicy {
+                enabled: config::is_time_exit_stagnation_enabled(),
+                duration_seconds: config::get_time_exit_stagnation_minutes() * 60.0,
+                band_pct: config::get_time_exit_stagnation_band_pct(),
             },
             dca: DcaConfigSnapshot {
                 enabled: config::is_dca_enabled(),

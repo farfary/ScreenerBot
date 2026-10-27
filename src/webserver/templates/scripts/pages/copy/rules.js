@@ -11,7 +11,14 @@ import {
   settingPct,
   settingSol,
 } from "./format.js";
-import { RULES, exitWarnings, fieldText, isOverridden, ladderText } from "./policy.js";
+import {
+  INHERITED_RULES,
+  RULES,
+  exitWarnings,
+  fieldText,
+  isOverridden,
+  ladderText,
+} from "./policy.js";
 
 function sizeText(task) {
   if (task.sizing?.kind === "ratio_of_target") {
@@ -67,7 +74,23 @@ function ruleTable({ task, effective, traderDefaults, managesExits }, esc) {
       .join("");
     return `<tr class="copy-rules-group"><th colspan="3" scope="rowgroup">${esc(rule.title)}</th></tr>${fields}`;
   }).join("");
-  return `<div class="copy-table-wrap"><table class="copy-rules"><thead><tr><th scope="col">${esc(I18n.t("copy-rules-col-rule"))}</th><th scope="col">${esc(I18n.t("copy-rules-col-applies"))}</th><th scope="col">${esc(I18n.t("copy-rules-col-source"))}</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  // The rules a task cannot override read as the Trader's values, never as an override.
+  const inherited = INHERITED_RULES.map((rule) => {
+    const values = effective?.[rule.group];
+    const enabled = Boolean(values?.enabled);
+    const fields = rule.fields
+      .map((field) => {
+        const inactive = !managesExits || (field.key !== "enabled" && !enabled);
+        const applies =
+          !managesExits && field.key === "enabled"
+            ? I18n.t("copy-rules-not-used")
+            : fieldText(field, values?.[field.key]);
+        return `<tr class="${inactive ? "is-inactive" : ""}"><td>${esc(field.label)}</td><td>${esc(applies)}</td><td class="copy-rules-source">${esc(I18n.t("copy-rules-source-default"))}</td></tr>`;
+      })
+      .join("");
+    return `<tr class="copy-rules-group"><th colspan="3" scope="rowgroup">${esc(rule.title)}</th></tr>${fields}`;
+  }).join("");
+  return `<div class="copy-table-wrap"><table class="copy-rules"><thead><tr><th scope="col">${esc(I18n.t("copy-rules-col-rule"))}</th><th scope="col">${esc(I18n.t("copy-rules-col-applies"))}</th><th scope="col">${esc(I18n.t("copy-rules-col-source"))}</th></tr></thead><tbody>${rows}${inherited}</tbody></table></div>`;
 }
 
 /** Sizing, entry and exit sections for a task-shaped object. */

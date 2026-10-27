@@ -270,6 +270,9 @@ pub struct PositionDetail {
     /// The trailing stop is evaluated for this position: it is open, its exits run the exit
     /// policy, and that policy enables the trailing stop.
     pub trailing_stop_active: bool,
+    /// The break-even stop is evaluated for this position: it is open, its exits run the
+    /// exit policy, and that policy enables the break-even stop.
+    pub break_even_active: bool,
 }
 
 #[derive(Debug, Serialize)]

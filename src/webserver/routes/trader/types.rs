@@ -161,3 +161,14 @@ pub struct TemplateListResponse {
 pub struct ApplyTemplateRequest {
     pub template_id: String,
 }
+
+// =============================================================================
+// TIME EXIT TYPES
+// =============================================================================
+
+/// The time exit watching one open position, keyed by its id.
+#[derive(Debug, Serialize)]
+pub struct PositionTimeExit {
+    pub position_id: i64,
+    pub time_exit: crate::trader::evaluators::exit_time_watch::TimeExitWatch,
+}

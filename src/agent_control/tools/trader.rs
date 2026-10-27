@@ -36,7 +36,8 @@ impl Tool for GetTraderStatusTool {
             description: "Full auto-trader state in one call: running/available, emergency stop, \
                           entry/exit monitors, loss limit progress, open-slot usage and the \
                           effective sizing and exit settings (stop loss, trailing stop, \
-                          take-profit ladder, time override, DCA)."
+                          break-even stop, take-profit ladder, time override, stagnation \
+                          exit, DCA)."
                 .to_owned(),
             category: ToolCategory::System,
             parameters: no_params(),
@@ -61,6 +62,11 @@ impl Tool for GetTraderStatusTool {
                     "activation_pct": cfg.trader.trailing_stop_activation_pct,
                     "distance_pct": cfg.trader.trailing_stop_distance_pct,
                 },
+                "break_even": {
+                    "enabled": cfg.trader.break_even_enabled,
+                    "trigger_pct": cfg.trader.break_even_trigger_pct,
+                    "offset_pct": cfg.trader.break_even_offset_pct,
+                },
                 "take_profit": {
                     "enabled": cfg.trader.take_profit_enabled,
                     "levels": cfg.trader.take_profit_levels(),
@@ -70,6 +76,11 @@ impl Tool for GetTraderStatusTool {
                     "duration": cfg.trader.time_override_duration,
                     "unit": cfg.trader.time_override_unit,
                     "loss_threshold_pct": cfg.trader.time_override_loss_threshold_percent,
+                },
+                "time_stagnation": {
+                    "enabled": cfg.trader.time_exit_stagnation_enabled,
+                    "minutes": cfg.trader.time_exit_stagnation_minutes,
+                    "band_pct": cfg.trader.time_exit_stagnation_band_pct,
                 },
                 "dca": {
                     "enabled": cfg.trader.dca_enabled,

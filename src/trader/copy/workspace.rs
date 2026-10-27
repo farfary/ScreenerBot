@@ -18,7 +18,9 @@ use super::{
 };
 use crate::config::{with_config, TakeProfitLevel};
 use crate::positions::{Position, PositionManagement};
-use crate::trader::policy::{ExitPolicy, StopLossPolicy, TimePolicy, TrailingPolicy};
+use crate::trader::policy::{
+    BreakEvenPolicy, ExitPolicy, StopLossPolicy, TimePolicy, TimeStagnationPolicy, TrailingPolicy,
+};
 use crate::trader::{Error, Result};
 
 mod book;
@@ -36,14 +38,18 @@ const WORKSPACE_ACTIVITY: usize = 20;
 const DEFAULT_PAGE: usize = 50;
 const MAX_PAGE: usize = 500;
 
-/// The four exit rules as they apply, serializable for the editor and the Rules tab.
-/// The take-profit rule sits under `roi`, the group a task's overrides name it by.
+/// The exit rules as they apply, serializable for the editor and the Rules tab. The
+/// take-profit rule sits under `roi`, the group a task's overrides name it by;
+/// `break_even` and `time_stagnation` always carry the trader's values, since a task
+/// cannot override them.
 #[derive(Debug, Clone, Serialize)]
 pub struct EffectiveExitPolicy {
     pub stop_loss: StopLossPolicy,
     pub trailing: TrailingPolicy,
+    pub break_even: BreakEvenPolicy,
     pub roi: EffectiveTakeProfit,
     pub time: TimePolicy,
+    pub time_stagnation: TimeStagnationPolicy,
 }
 
 /// The take-profit rule as a task sees it: its switch, the profit of the ladder's first
@@ -61,6 +67,7 @@ impl From<&ExitPolicy> for EffectiveExitPolicy {
         Self {
             stop_loss: policy.stop_loss.clone(),
             trailing: policy.trailing.clone(),
+            break_even: policy.break_even.clone(),
             roi: EffectiveTakeProfit {
                 enabled: policy.take_profit.enabled,
                 target_profit_pct: policy
@@ -71,6 +78,7 @@ impl From<&ExitPolicy> for EffectiveExitPolicy {
                 levels: policy.take_profit.levels.clone(),
             },
             time: policy.time.clone(),
+            time_stagnation: policy.time_stagnation.clone(),
         }
     }
 }
@@ -107,22 +115,42 @@ pub struct HoldingExitWatch {
     pub trailing_activation_price_native: Option<f64>,
     pub trailing_armed: bool,
     pub trailing_stop_price_native: Option<f64>,
+    /// The peak that arms the break-even stop.
+    pub break_even_activation_price_native: Option<f64>,
+    pub break_even_armed: bool,
+    /// Once armed, the break-even stop sells at or below this price.
+    pub break_even_floor_price_native: Option<f64>,
     /// From this moment the time rule sells while the price is at or below
     /// `time_rule_price_native`.
     pub time_rule_from: Option<DateTime<Utc>>,
     pub time_rule_price_native: Option<f64>,
+    /// From this moment the stagnation exit sells while the price stays between
+    /// `stagnation_band_low_price_native` and `stagnation_band_high_price_native`.
+    pub stagnation_from: Option<DateTime<Utc>>,
+    pub stagnation_band_low_price_native: Option<f64>,
+    pub stagnation_band_high_price_native: Option<f64>,
 }
 
 fn exit_watch(position: &PaperPosition, entry: f64, policy: &ExitPolicy) -> HoldingExitWatch {
     let stop = &policy.stop_loss;
     let trailing = &policy.trailing;
     let time = &policy.time;
+    let break_even = &policy.break_even;
+    let stagnation = &policy.time_stagnation;
     let activation = trailing
         .enabled
         .then(|| entry * (1.0 + trailing.activation_pct / 100.0));
     let armed_peak = position
         .peak_price_native
         .filter(|peak| activation.is_some_and(|activation| *peak >= activation));
+    let break_even_activation = break_even
+        .enabled
+        .then(|| entry * (1.0 + break_even.trigger_pct / 100.0));
+    let stagnation_band = |sign: f64| {
+        stagnation
+            .enabled
+            .then(|| entry * (1.0 + sign * stagnation.band_pct / 100.0))
+    };
     HoldingExitWatch {
         stop_loss_price_native: stop
             .enabled
@@ -141,12 +169,25 @@ fn exit_watch(position: &PaperPosition, entry: f64, policy: &ExitPolicy) -> Hold
         trailing_armed: armed_peak.is_some(),
         trailing_stop_price_native: armed_peak
             .map(|peak| peak * (1.0 - trailing.distance_pct / 100.0)),
+        break_even_activation_price_native: break_even_activation,
+        break_even_armed: position
+            .peak_price_native
+            .is_some_and(|peak| break_even_activation.is_some_and(|activation| peak >= activation)),
+        break_even_floor_price_native: break_even
+            .enabled
+            .then(|| entry * (1.0 + break_even.offset_pct / 100.0)),
         time_rule_from: time.enabled.then(|| {
             position.opened_at + Duration::milliseconds((time.duration_seconds * 1000.0) as i64)
         }),
         time_rule_price_native: time
             .enabled
             .then(|| entry * (1.0 + time.loss_threshold_pct / 100.0)),
+        stagnation_from: stagnation.enabled.then(|| {
+            position.opened_at
+                + Duration::milliseconds((stagnation.duration_seconds * 1000.0) as i64)
+        }),
+        stagnation_band_low_price_native: stagnation_band(-1.0),
+        stagnation_band_high_price_native: stagnation_band(1.0),
     }
 }
 

@@ -27,6 +27,12 @@
 //! one row of [`RELOCATIONS`], applied by [`relocate_legacy_layout`] to the TOML
 //! file and to a JSON import alike.
 //!
+//! The same pass rewrites the stored time-override unit to its canonical name: an alias
+//! or another letter case becomes the lowercase unit name, and a name that matches no
+//! unit becomes hours, the unit the exit monitor has always read it as. The typed
+//! schema refuses such a name on every write, so only a stored document reaches this
+//! tolerance.
+//!
 //! A file that omits a key ran with that key's default at the time. When a
 //! default changes, [`ImpliedDefaults`] writes the earlier default into a
 //! document that omits the key, so an upgrade keeps the behaviour the file
@@ -35,7 +41,7 @@
 use serde::Deserialize;
 use serde_json::{Map, Value};
 
-use super::schemas::Config;
+use super::schemas::{Config, TimeUnit};
 use super::{Error, Result};
 
 /// Legacy `[ai]` section. Every field is optional so an absent key never
@@ -452,6 +458,10 @@ const STOP_LOSS_PARTIAL_SHARE: &[&str] = &["trader", "stop_loss_partial_pct"];
 /// The switch that lets a stop loss sell part of a position.
 const STOP_LOSS_ALLOWANCE: &[&str] = &["trader", "stop_loss_allow_partial"];
 
+/// Where the time-override unit is stored; [`relocate_legacy_layout`] rewrites it to
+/// its canonical name.
+pub(crate) const TIME_OVERRIDE_UNIT: &[&str] = &["trader", "time_override_unit"];
+
 /// Every legacy node and where it lives now, applied in order. Order matters:
 /// slippage leaves `swaps` before the rest of `swaps` moves.
 const RELOCATIONS: &[Relocation] = &[
@@ -580,6 +590,8 @@ pub(crate) trait ConfigTree: Clone + Sized {
     fn from_bool(value: bool) -> Self;
     fn as_f64(&self) -> Option<f64>;
     fn from_f64(value: f64) -> Self;
+    fn as_str(&self) -> Option<&str>;
+    fn from_string(value: String) -> Self;
     fn list_of(items: Vec<Self>) -> Self;
 }
 
@@ -634,6 +646,12 @@ impl ConfigTree for toml::Value {
     fn from_f64(value: f64) -> Self {
         toml::Value::Float(value)
     }
+    fn as_str(&self) -> Option<&str> {
+        toml::Value::as_str(self)
+    }
+    fn from_string(value: String) -> Self {
+        toml::Value::String(value)
+    }
     fn list_of(items: Vec<Self>) -> Self {
         toml::Value::Array(items)
     }
@@ -686,6 +704,12 @@ impl ConfigTree for Value {
     fn from_f64(value: f64) -> Self {
         serde_json::Number::from_f64(value).map_or(Value::Null, Value::Number)
     }
+    fn as_str(&self) -> Option<&str> {
+        Value::as_str(self)
+    }
+    fn from_string(value: String) -> Self {
+        Value::String(value)
+    }
     fn list_of(items: Vec<Self>) -> Self {
         Value::Array(items)
     }
@@ -736,6 +760,8 @@ pub(crate) fn read_legacy_partial_exit_switch<T: ConfigTree>(doc: &T) -> Result<
 ///   drops the switch, and fires for a document with no legacy node at all.
 ///   Once persisted, the document carries the share and the rule never fires
 ///   again.
+/// - The stored time-override unit is rewritten to its canonical name, hours for a
+///   name that matches no unit ([`canonical_time_unit`]).
 pub(crate) fn relocate_legacy_layout<T: ConfigTree>(doc: &mut T) -> Result<bool> {
     let keep_full_stop_loss = node_at(doc, STOP_LOSS_PARTIAL_SHARE).is_none()
         && node_at(doc, STOP_LOSS_ALLOWANCE).and_then(T::as_bool) == Some(true)
@@ -813,10 +839,63 @@ pub(crate) fn relocate_legacy_layout<T: ConfigTree>(doc: &mut T) -> Result<bool>
         }
         changed = true;
     }
+    if canonical_time_unit(&mut working) {
+        changed = true;
+    }
     if changed {
         *doc = working;
     }
     Ok(changed)
+}
+
+/// Rewrite the time-override unit of `doc` to its canonical lowercase name: an alias or
+/// another letter case names its unit, and a name that matches no unit becomes hours,
+/// with a warning naming the stored value. Returns `true` when the stored name changed.
+/// A value that is not a string is left for the typed load to refuse.
+fn canonical_time_unit<T: ConfigTree>(doc: &mut T) -> bool {
+    let Some(stored) = node_at(doc, TIME_OVERRIDE_UNIT)
+        .and_then(T::as_str)
+        .map(str::to_owned)
+    else {
+        return false;
+    };
+    let unit = TimeUnit::from_name(&stored).unwrap_or_else(|| {
+        let fallback = TimeUnit::default();
+        crate::logger::warning(
+            crate::logger::LogTag::System,
+            &format!(
+                "{} = \"{stored}\" names no time unit; migrated as {}",
+                TIME_OVERRIDE_UNIT.join("."),
+                fallback.as_str()
+            ),
+        );
+        fallback
+    });
+    if stored == unit.as_str() {
+        return false;
+    }
+    let Some((leaf, section)) = TIME_OVERRIDE_UNIT.split_last() else {
+        return false;
+    };
+    let Some(table) = node_at_mut(doc, section).and_then(T::table_mut) else {
+        return false;
+    };
+    T::insert(
+        table,
+        (*leaf).to_owned(),
+        T::from_string(unit.as_str().to_owned()),
+    );
+    true
+}
+
+/// The node at `path`, mutable; `None` when a segment is absent or a parent on the way
+/// is not a table.
+fn node_at_mut<'a, T: ConfigTree>(doc: &'a mut T, path: &[&str]) -> Option<&'a mut T> {
+    let mut node = doc;
+    for segment in path {
+        node = T::get_mut(node.table_mut()?, segment)?;
+    }
+    Some(node)
 }
 
 /// `value` clamped into `(min, max)`, with a warning naming `source` when it
@@ -840,11 +919,7 @@ fn clamped_into<T: ConfigTree>(value: T, (min, max): (f64, f64), source: &str) -
 /// Remove and return the node at `path`; `None` when it is absent.
 fn take_node<T: ConfigTree>(doc: &mut T, path: &[&str]) -> Option<T> {
     let (last, parents) = path.split_last()?;
-    let mut node = doc;
-    for segment in parents {
-        node = T::get_mut(node.table_mut()?, segment)?;
-    }
-    T::remove(node.table_mut()?, last)
+    T::remove(node_at_mut(doc, parents)?.table_mut()?, last)
 }
 
 /// The table at `path`, creating every missing table on the way. A node on the
@@ -1783,6 +1858,52 @@ urls = ["https://canonical.fixture.invalid/"]
         let mut document = original.clone();
         assert!(!relocate_legacy_layout(&mut document).expect("migrate"));
         assert_eq!(document, original);
+    }
+
+    #[test]
+    fn a_stored_time_unit_loads_under_its_canonical_name_once() {
+        for (stored, unit) in [
+            ("weeks", TimeUnit::Hours),
+            ("MINUTES", TimeUnit::Minutes),
+            ("h", TimeUnit::Hours),
+            ("Day", TimeUnit::Days),
+        ] {
+            let first = parse(&format!(
+                "[trader]\ntime_override_unit = \"{stored}\"\ntime_override_duration = 2.0\n"
+            ));
+            assert!(first.migrated, "{stored} is rewritten");
+            assert_eq!(first.config.trader.time_override_unit, unit, "{stored}");
+            assert_eq!(first.config.trader.time_override_duration, 2.0);
+
+            let written = toml::to_string(&first.config).expect("serialize");
+            let second = parse(&written);
+            assert!(!second.migrated, "{stored}: the canonical name stays");
+            assert_eq!(second.config.trader.time_override_unit, unit);
+
+            let mut document = toml::Value::Table(toml::from_str(&written).expect("toml"));
+            assert!(!relocate_legacy_layout(&mut document).expect("second pass"));
+        }
+        let canonical = parse("[trader]\ntime_override_unit = \"days\"\n");
+        assert!(!canonical.migrated, "a canonical name is no migration");
+    }
+
+    #[test]
+    fn a_json_document_takes_the_canonical_time_unit() {
+        let mut document = serde_json::json!({ "trader": { "time_override_unit": "fortnights" } });
+        assert!(relocate_legacy_layout(&mut document).expect("migrate"));
+        assert_eq!(
+            document,
+            serde_json::json!({ "trader": { "time_override_unit": "hours" } })
+        );
+        assert!(!relocate_legacy_layout(&mut document).expect("second pass"));
+
+        let original = serde_json::json!({ "trader": { "time_override_unit": 3 } });
+        let mut document = original.clone();
+        assert!(!relocate_legacy_layout(&mut document).expect("migrate"));
+        assert_eq!(
+            document, original,
+            "a value that is not a name is left to the typed load"
+        );
     }
 
     #[test]

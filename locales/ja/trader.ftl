@@ -221,6 +221,9 @@ trader-trailing-subtitle = 価格の上昇に追従して、利益を自動で�
 trader-trailing-activation-impact = +{ $value }% の利益で追従を開始
 # $value is the trail distance percentage as typed.
 trader-trailing-distance-impact = 高値から -{ $value }% でエグジット
+# $value is a formatted signed percentage.
+trader-trailing-locked-minimum = 有効化時に確保される最低利益: { $value }
+trader-trailing-locked-minimum-warning = 有効化時のストップは建値以下になります。利益が出ているときにしか売却しません。下限が必要なら建値ストップをオンにしてください。
 trader-trailing-activation = 発動
 trader-trailing-peak = 高値
 # $value is a formatted percentage.
@@ -229,6 +232,13 @@ trader-trailing-final = 最終 +{ $value }%
 trader-trailing-summary-protected = 利益 <strong>{ $value }</strong> を確保
 # $value is a formatted percentage.
 trader-trailing-summary-avoided = 高値からの損失 <strong>{ $value }</strong> を回避
+
+## Break-even stop
+
+trader-break-even-title = 建値ストップ
+trader-break-even-subtitle = 含み益になったポジションを、損失に転じる前にすべて売却します
+# $trigger and $offset are formatted signed percentages.
+trader-break-even-summary = 前回の買い以降の最高値が { $trigger } に達した後、{ $offset } まで戻るとすべて売却します。
 
 ## Take profit
 
@@ -256,7 +266,7 @@ trader-take-profit-error-total = 全段階の合計で売却できるのは最�
 # $runner is the formatted percentage of the position no step sells.
 trader-take-profit-runner = ポジションの { $runner }% はランナーとして保有を続けます
 trader-take-profit-runner-none = 最後の段階でポジションの残りを売却します
-trader-take-profit-runner-warning = トレーリングストップ、時間エグジット、すべてのエグジットストラテジーがオフのため、ランナーは損切りか手動でのみ決済されます
+trader-take-profit-runner-warning = トレーリングストップ、建値ストップ、両方の時間エグジット、すべてのエグジットストラテジーがオフのため、ランナーは損切りか手動でのみ決済されます
 trader-take-profit-info = 割合は当初ポジションに対するものです。価格が一度に複数の水準を超えた場合、1 回のチェックで 1 段階ずつ売却します。
 # $profit is the step's formatted profit level; $share is its formatted share.
 trader-take-profit-example-step = +{ $profit }% で { $share }% を売却
@@ -267,8 +277,12 @@ trader-take-profit-summary = +{ $profit }% の利益までに <strong>{ $sold }%
 
 ## Time-based exit
 
-trader-time-title = 時間エグジット
+trader-time-loss-title = 損失ポジションを決済
 trader-time-subtitle = 損失がしきい値を超えている場合、最大保有時間の経過後にポジションを自動でエグジットします
+trader-time-flat-title = 横ばいポジションを決済
+trader-time-flat-subtitle = 上にも下にも動かないポジションの資金を解放します
+# $span is a formatted duration; $band is a formatted percentage.
+trader-time-flat-summary = { $span } 以上保有し、損益が ±{ $band } 以内のポジションを決済します。
 trader-time-unit-seconds = 秒
 trader-time-unit-minutes = 分
 trader-time-unit-hours = 時間
@@ -310,6 +324,16 @@ trader-time-positions-empty-message = オープンポジションは、保有時
 trader-time-positions-token = トークン
 trader-time-positions-hold = 保有時間
 trader-time-positions-roi = ROI
+trader-time-positions-rule = 時間エグジット
+trader-time-status-off = 時間エグジットはオフです
+trader-time-status-none = 現在適用される時間エグジットはありません
+trader-time-status-not-managed = 自動トレーダーの管理対象外
+# $pnl is a formatted signed percentage; $remaining is a formatted duration.
+trader-time-status-losing = 損失 { $pnl }、{ $remaining } 後に決済
+trader-time-status-losing-due = 損失 { $pnl }、次回のチェックで決済
+# $held and $remaining are formatted durations.
+trader-time-status-flat = { $held } 横ばい、{ $remaining } 後に決済
+trader-time-status-flat-due = { $held } 横ばい、次回のチェックで決済
 
 ## Strategy control
 

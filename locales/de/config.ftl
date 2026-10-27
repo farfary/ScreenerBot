@@ -1035,6 +1035,14 @@ config-tokens-update-intervals-security-seconds = Sicherheitsintervall
 
 ## trader
 
+config-trader-break-even-enabled = Break-Even-Stop aktivieren
+    .hint = Alles verkaufen, wenn eine Position, die den Aktivierungsgewinn erreicht hat, auf die gehaltene Marge über dem Einstieg zurückfällt
+config-trader-break-even-offset-pct = Über Einstieg halten um
+    .hint = Preis über dem durchschnittlichen Einstieg in Prozent, bei dem der aktive Stop verkauft; 0 verkauft zum Einstieg
+    .unit = %
+config-trader-break-even-trigger-pct = Aktivieren bei Gewinn
+    .hint = Gewinn des besten Preises seit dem letzten Kauf, der den Stop aktiviert
+    .unit = %
 config-trader-dca-cooldown-minutes = DCA-Abkühlphase
     .hint = Minimale Minuten zwischen DCA-Einstiegen
     .unit = Min.
@@ -1116,6 +1124,14 @@ config-trader-take-profit-levels-pct = Take-Profit-Stufen
 config-trader-take-profit-sell-pct = Take-Profit-Anteile
     .hint = Anteil der ursprünglichen Position, den jede Stufe verkauft; zusammen höchstens 100%
     .unit = %
+config-trader-time-exit-stagnation-band-pct = Seitwärts innerhalb
+    .hint = GuV-Spanne um den Einstieg, nach oben oder unten, in der eine Position als seitwärts gilt
+    .unit = %
+config-trader-time-exit-stagnation-enabled = Seitwärts-Ausstieg aktivieren
+    .hint = Lange gehaltene Positionen schließen, deren GuV nahe null bleibt
+config-trader-time-exit-stagnation-minutes = Seitwärts schließen nach
+    .hint = Wie lange eine Position gehalten wird, bevor der Seitwärts-Ausstieg ihre GuV prüft
+    .unit = Min.
 config-trader-time-override-duration = Dauer des Zeitausstiegs
     .hint = Wie lange eine Position gehalten wird, bevor der Zeitausstieg ihren Verlust prüft; hat der Verlust die Schwelle erreicht, wird verkauft
 config-trader-time-override-enabled = Zeitausstieg aktivieren

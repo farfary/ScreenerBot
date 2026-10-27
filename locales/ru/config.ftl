@@ -1035,6 +1035,14 @@ config-tokens-update-intervals-security-seconds = Интервал безопа�
 
 ## trader
 
+config-trader-break-even-enabled = Включить стоп в безубыток
+    .hint = Продать всё, когда позиция, достигшая прибыли активации, откатывается к сохраняемому запасу над входом
+config-trader-break-even-offset-pct = Держать выше входа на
+    .hint = Цена выше средней цены входа в процентах, по которой продаёт активный стоп; 0 продаёт по цене входа
+    .unit = %
+config-trader-break-even-trigger-pct = Активировать при прибыли
+    .hint = Прибыль лучшей цены с последней покупки, которая активирует стоп
+    .unit = %
 config-trader-dca-cooldown-minutes = Пауза DCA
     .hint = Минимум минут между входами DCA
     .unit = мин
@@ -1116,6 +1124,14 @@ config-trader-take-profit-levels-pct = Уровни тейк-профита
 config-trader-take-profit-sell-pct = Доли тейк-профита
     .hint = Доля исходной позиции, которую продаёт каждая ступень; в сумме не более 100%
     .unit = %
+config-trader-time-exit-stagnation-band-pct = Без движения в пределах
+    .hint = Диапазон P&L вокруг входа вверх или вниз, в котором позиция считается без движения
+    .unit = %
+config-trader-time-exit-stagnation-enabled = Включить выход из позиций без движения
+    .hint = Закрывать долго удерживаемые позиции, P&L которых остаётся около нуля
+config-trader-time-exit-stagnation-minutes = Закрыть без движения через
+    .hint = Сколько позиция удерживается, прежде чем выход без движения проверит её P&L
+    .unit = мин
 config-trader-time-override-duration = Длительность выхода по времени
     .hint = Сколько позиция удерживается, прежде чем выход по времени проверит её убыток; если убыток достиг порога, позиция закрывается
 config-trader-time-override-enabled = Включить выход по времени

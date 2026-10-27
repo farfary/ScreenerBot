@@ -112,8 +112,10 @@ copy-exit-mode-hybrid = 钱包卖出与我的规则
 copy-exit-target-sell = 钱包已卖出
 copy-exit-stop-loss = 止损
 copy-exit-trailing-stop = 追踪止损
+copy-exit-break-even = 保本止损
 copy-exit-take-profit = 止盈
 copy-exit-time-override = 时间出场
+copy-exit-time-stagnation = 横盘出场
 copy-exit-manual = 手动平仓
 
 ## Shared wording
@@ -480,6 +482,12 @@ copy-rule-take-profit-target = 盈利达到以下幅度时卖出
 copy-rule-take-profit-target-hint = 在此设置目标会将交易引擎的止盈各步替换为卖出全部仓位的一步
 copy-rule-time-duration = 持仓达到以下时长后检查
 copy-rule-time-threshold = 盈亏不高于以下值时卖出
+copy-rule-break-even-trigger = 启动收益
+copy-rule-break-even-offset = 高于入场价保留
+copy-rule-time-stagnation-duration = 持有后平仓
+copy-rule-time-stagnation-band = 盈亏保持在以下范围内时
+# $band is a formatted percentage.
+copy-rule-within-band = ±{ $band }
 copy-preset-inherit = 交易引擎默认值
 copy-preset-conservative = 保守
 copy-preset-balanced = 均衡
@@ -642,6 +650,10 @@ copy-holdings-watch-trail = 追踪 { $level }
 copy-holdings-watch-trail-arms = 追踪于 { $level } 启动
 copy-holdings-watch-time = 时间 ≤ { $level }
 copy-holdings-watch-time-until = { $span }后时间 ≤ { $level }
+copy-holdings-watch-floor = 底线 { $level }
+copy-holdings-watch-floor-arms = 底线 { $level }，于 { $arms } 启动
+copy-holdings-watch-flat = 横盘 { $low } 至 { $high }
+copy-holdings-watch-flat-until = { $span }后横盘 { $low } 至 { $high }
 copy-holdings-watch-wallet-sells = 钱包卖出
 copy-holdings-empty = 暂无模拟持仓。从钱包跟单的买入会显示在这里。
 copy-holdings-col-token = 代币

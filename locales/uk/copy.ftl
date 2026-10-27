@@ -115,8 +115,10 @@ copy-exit-mode-hybrid = Продажі гаманця та мої правила
 copy-exit-target-sell = Гаманець продав
 copy-exit-stop-loss = Стоп-лос
 copy-exit-trailing-stop = Трейлінг-стоп
+copy-exit-break-even = Стоп у беззбиток
 copy-exit-take-profit = Тейк-профіт
 copy-exit-time-override = Вихід за часом
+copy-exit-time-stagnation = Вихід при стагнації
 copy-exit-manual = Закрито вручну
 
 ## Shared wording
@@ -528,6 +530,12 @@ copy-rule-take-profit-target = Продає за зростання
 copy-rule-take-profit-target-hint = Ціль тут замінює сходинки тейк-профіту трейдера однією сходинкою, що продає всю позицію
 copy-rule-time-duration = Перевіряє після утримання
 copy-rule-time-threshold = Продає, поки прибуток/збиток на рівні або нижче
+copy-rule-break-even-trigger = Активується при прибутку
+copy-rule-break-even-offset = Тримає вище входу на
+copy-rule-time-stagnation-duration = Закриває після утримання
+copy-rule-time-stagnation-band = Поки P&L у межах
+# $band is a formatted percentage.
+copy-rule-within-band = ±{ $band }
 copy-preset-inherit = Стандарти трейдера
 copy-preset-conservative = Консервативний
 copy-preset-balanced = Збалансований
@@ -699,6 +707,10 @@ copy-holdings-watch-trail = Трейлінг { $level }
 copy-holdings-watch-trail-arms = Трейлінг активується { $level }
 copy-holdings-watch-time = Час ≤ { $level }
 copy-holdings-watch-time-until = Час ≤ { $level } через { $span }
+copy-holdings-watch-floor = Поріг { $level }
+copy-holdings-watch-floor-arms = Поріг { $level } активується { $arms }
+copy-holdings-watch-flat = Флет { $low } – { $high }
+copy-holdings-watch-flat-until = Флет { $low } – { $high } через { $span }
 copy-holdings-watch-wallet-sells = Продажі гаманця
 copy-holdings-empty = Відкритих віртуальних утримуваних токенів немає. Купівлі, скопійовані з гаманця, з’являться тут.
 copy-holdings-col-token = Токен

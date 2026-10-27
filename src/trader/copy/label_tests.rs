@@ -63,15 +63,19 @@ fn every_exit_bucket_has_a_label() {
     let listed = |rule: PaperExitRule| match rule {
         PaperExitRule::StopLoss
         | PaperExitRule::TrailingStop
+        | PaperExitRule::BreakEven
         | PaperExitRule::TakeProfit
         | PaperExitRule::TimeOverride
+        | PaperExitRule::TimeStagnation
         | PaperExitRule::Manual => Some(rule),
     };
     let rules = [
         PaperExitRule::StopLoss,
         PaperExitRule::TrailingStop,
+        PaperExitRule::BreakEven,
         PaperExitRule::TakeProfit,
         PaperExitRule::TimeOverride,
+        PaperExitRule::TimeStagnation,
         PaperExitRule::Manual,
     ];
     let mut ids = vec![exit_label(None)];
@@ -81,7 +85,7 @@ fn every_exit_bucket_has_a_label() {
         assert_eq!(rule.label_text().id, format!("copy-exit-{}", kebab(&id)));
         id
     }));
-    assert_eq!(ids.len(), 6);
+    assert_eq!(ids.len(), 8);
     for id in ids {
         assert_text(&format!("copy-exit-{}", kebab(&id)));
     }

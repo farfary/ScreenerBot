@@ -525,6 +525,8 @@ pub const TRADER_CONFIG_CARDS_JS: &str =
     include_str!("templates/scripts/pages/trader/config_cards.js");
 pub const TRADER_LEVEL_LIST_JS: &str = include_str!("templates/scripts/pages/trader/level_list.js");
 pub const TRADER_FEATURES_JS: &str = include_str!("templates/scripts/pages/trader/features.js");
+pub const TRADER_TIME_STATUS_JS: &str =
+    include_str!("templates/scripts/pages/trader/time_status.js");
 pub const COPY_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/copy.js");
 pub const COPY_API_JS: &str = include_str!("templates/scripts/pages/copy/api.js");
 pub const COPY_FORMAT_JS: &str = include_str!("templates/scripts/pages/copy/format.js");

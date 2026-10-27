@@ -112,8 +112,10 @@ copy-exit-mode-hybrid = Penjualan dompet dan aturan saya
 copy-exit-target-sell = Dompet menjual
 copy-exit-stop-loss = Stop loss
 copy-exit-trailing-stop = Trailing stop
+copy-exit-break-even = Stop impas
 copy-exit-take-profit = Take profit
 copy-exit-time-override = Exit Waktu
+copy-exit-time-stagnation = Exit stagnan
 copy-exit-manual = Ditutup manual
 
 ## Shared wording
@@ -480,6 +482,12 @@ copy-rule-take-profit-target = Menjual saat untung sebesar
 copy-rule-take-profit-target-hint = Target di sini mengganti tahap take profit Trader dengan satu tahap yang menjual seluruh posisi
 copy-rule-time-duration = Memeriksa setelah ditahan selama
 copy-rule-time-threshold = Menjual selama P&L sama dengan atau di bawah
+copy-rule-break-even-trigger = Aktif pada Untung
+copy-rule-break-even-offset = Menjaga di Atas Harga Masuk
+copy-rule-time-stagnation-duration = Menutup Setelah Ditahan
+copy-rule-time-stagnation-band = Selama P&L Tetap dalam
+# $band is a formatted percentage.
+copy-rule-within-band = ±{ $band }
 copy-preset-inherit = Default Trader
 copy-preset-conservative = Konservatif
 copy-preset-balanced = Seimbang
@@ -642,6 +650,10 @@ copy-holdings-watch-trail = Trail { $level }
 copy-holdings-watch-trail-arms = Trail aktif { $level }
 copy-holdings-watch-time = Waktu ≤ { $level }
 copy-holdings-watch-time-until = Waktu ≤ { $level } dalam { $span }
+copy-holdings-watch-floor = Batas bawah { $level }
+copy-holdings-watch-floor-arms = Batas bawah { $level } aktif { $arms }
+copy-holdings-watch-flat = Datar { $low } hingga { $high }
+copy-holdings-watch-flat-until = Datar { $low } hingga { $high } dalam { $span }
 copy-holdings-watch-wallet-sells = Dompet menjual
 copy-holdings-empty = Tidak ada kepemilikan paper yang terbuka. Pembelian yang disalin dari dompet muncul di sini.
 copy-holdings-col-token = Token

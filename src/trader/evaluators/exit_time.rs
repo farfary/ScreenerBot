@@ -12,7 +12,7 @@ use crate::trader::policy::TimePolicy;
 pub fn time_override_triggered(
     entry_price: f64,
     current_price: f64,
-    held_seconds: f64,
+    held_seconds: i64,
     policy: &TimePolicy,
 ) -> crate::trader::Result<bool> {
     if !policy.enabled {
@@ -38,7 +38,7 @@ pub fn time_override_triggered(
             ),
         });
     }
-    if held_seconds < duration_seconds || entry_price <= 0.0 || !entry_price.is_finite() {
+    if (held_seconds as f64) < duration_seconds || entry_price <= 0.0 || !entry_price.is_finite() {
         return Ok(false);
     }
     let pnl_pct = ((current_price - entry_price) / entry_price) * 100.0;

@@ -560,6 +560,18 @@
             </div>
           </div>
 
+          <!-- Locked Minimum -->
+          <div class="config-group config-group-full">
+            <div class="config-impact">
+              <span
+                class="impact-text"
+                id="trail-locked-minimum"
+                data-l10n-id="trader-trailing-locked-minimum"
+                data-l10n-args='{"value":"+4.5%"}'
+              ></span>
+            </div>
+          </div>
+
           <!-- Visual Example -->
           <div class="visual-example">
             <h4>
@@ -647,6 +659,64 @@
             </div>
           </div>
         </div>
+
+        <div class="config-card">
+          <div class="card-header">
+            <div class="card-header-text">
+              <h3>
+                <i class="icon-shield-check"></i>
+                <span data-l10n-id="trader-break-even-title"></span>
+              </h3>
+              <p class="card-subtitle" data-l10n-id="trader-break-even-subtitle"></p>
+            </div>
+            <label class="toggle">
+              <input type="checkbox" id="break-even-enabled" />
+              <span class="toggle-track"></span>
+            </label>
+          </div>
+
+          <!-- Arm at Profit -->
+          <div class="config-group">
+            <div class="config-label-row">
+              <label for="break-even-trigger" class="config-label">
+                <i class="icon-flag"></i>
+                <span data-l10n-id="config-trader-break-even-trigger-pct"></span>
+              </label>
+            </div>
+            <p class="config-hint"></p>
+            <div class="input-group-enhanced">
+              <input type="number" id="break-even-trigger" class="input-large" />
+              <span class="input-unit"></span>
+            </div>
+          </div>
+
+          <!-- Keep Above Entry by -->
+          <div class="config-group">
+            <div class="config-label-row">
+              <label for="break-even-offset" class="config-label">
+                <i class="icon-arrow-down-to-line"></i>
+                <span data-l10n-id="config-trader-break-even-offset-pct"></span>
+              </label>
+            </div>
+            <p class="config-hint"></p>
+            <div class="input-group-enhanced">
+              <input type="number" id="break-even-offset" class="input-large" />
+              <span class="input-unit"></span>
+            </div>
+          </div>
+
+          <!-- What the stop does -->
+          <div class="config-group config-group-full">
+            <div class="config-impact">
+              <span
+                class="impact-text"
+                id="break-even-summary"
+                data-l10n-id="trader-break-even-summary"
+                data-l10n-args='{"trigger":"+15%","offset":"+1%"}'
+              ></span>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
     <!-- #trailing-stop-tab -->
@@ -719,7 +789,7 @@
           <div class="card-header">
             <div class="card-header-text">
               <h3>
-                <i class="icon-timer"></i> <span data-l10n-id="trader-time-title"></span>
+                <i class="icon-timer"></i> <span data-l10n-id="trader-time-loss-title"></span>
               </h3>
               <p class="card-subtitle" data-l10n-id="trader-time-subtitle"></p>
             </div>
@@ -862,6 +932,65 @@
             </div>
             <div id="time-positions-status" class="status-list">
               <div class="loading" data-l10n-id="trader-time-positions-loading"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="config-card">
+          <div class="card-header">
+            <div class="card-header-text">
+              <h3>
+                <i class="icon-move-horizontal"></i>
+                <span data-l10n-id="trader-time-flat-title"></span>
+              </h3>
+              <p class="card-subtitle" data-l10n-id="trader-time-flat-subtitle"></p>
+            </div>
+            <label class="toggle">
+              <input type="checkbox" id="time-stagnation-enabled" />
+              <span class="toggle-track"></span>
+            </label>
+          </div>
+
+          <!-- Close Flat After -->
+          <div class="config-group">
+            <div class="config-label-row">
+              <label for="time-stagnation-minutes" class="config-label">
+                <i class="icon-clock-fading"></i>
+                <span data-l10n-id="config-trader-time-exit-stagnation-minutes"></span>
+              </label>
+            </div>
+            <p class="config-hint"></p>
+            <div class="input-group-enhanced">
+              <input type="number" id="time-stagnation-minutes" class="input-large" />
+              <span class="input-unit"></span>
+            </div>
+          </div>
+
+          <!-- Flat Within -->
+          <div class="config-group">
+            <div class="config-label-row">
+              <label for="time-stagnation-band" class="config-label">
+                <i class="icon-equal-approximately"></i>
+                <span data-l10n-id="config-trader-time-exit-stagnation-band-pct"></span>
+              </label>
+            </div>
+            <p class="config-hint"></p>
+            <div class="input-group-enhanced">
+              <span class="input-prefix" aria-hidden="true">±</span>
+              <input type="number" id="time-stagnation-band" class="input-large" />
+              <span class="input-unit"></span>
+            </div>
+          </div>
+
+          <!-- What the rule does -->
+          <div class="config-group config-group-full">
+            <div class="config-impact">
+              <span
+                class="impact-text"
+                id="time-stagnation-summary"
+                data-l10n-id="trader-time-flat-summary"
+                data-l10n-args='{"span":"4h","band":"5%"}'
+              ></span>
             </div>
           </div>
         </div>

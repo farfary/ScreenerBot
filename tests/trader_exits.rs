@@ -1,8 +1,9 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Pure: the five built-in exit rules — stop loss, trailing stop, take-profit ladder,
-//! time override, and the emergency risk limit.
+//! Pure: the built-in exit rules — stop loss, trailing stop, break-even stop, take-profit
+//! ladder, time override, stagnation exit, and the emergency risk limit — and the time-exit
+//! watch the Auto Trader page reads for each open position.
 //!
 //! These are the rules that decide when to sell. Getting one wrong is expensive in both
 //! directions: too eager and it dumps a healthy position, too reluctant and it rides a
@@ -27,10 +28,14 @@ use crate::common;
 
 use chrono::{Duration, Utc};
 use common::{aged, config_guard, set_config, test_position};
-use screenerbot::positions::{Position, PositionManagement};
+use screenerbot::config::TimeUnit;
+use screenerbot::positions::{Position, PositionManagement, PositionOrigin};
 use screenerbot::trader::evaluators::exit::{live_exit_inputs, rule_decision};
 use screenerbot::trader::evaluators::exit_rules::{self, Decision, ExitRule};
-use screenerbot::trader::policy::ExitPolicy;
+use screenerbot::trader::evaluators::exit_time_watch::{
+    time_exit_watch, TimeExitRule, TimeExitWatch,
+};
+use screenerbot::trader::policy::{ExitPolicy, ExitPolicyOverrides};
 use screenerbot::trader::safety::check_risk_limits;
 use screenerbot::trader::{TradeAction, TradeDecision, TradePriority, TradeReason};
 
@@ -39,8 +44,10 @@ fn only(rule: ExitRule) -> ExitPolicy {
     let mut policy = ExitPolicy::from_config();
     policy.stop_loss.enabled &= rule == ExitRule::StopLoss;
     policy.trailing.enabled &= rule == ExitRule::Trailing;
+    policy.break_even.enabled &= rule == ExitRule::BreakEven;
     policy.take_profit.enabled &= matches!(rule, ExitRule::TakeProfit { .. });
     policy.time.enabled &= rule == ExitRule::TimeLoss;
+    policy.time_stagnation.enabled &= rule == ExitRule::TimeStagnation;
     policy
 }
 
@@ -637,7 +644,7 @@ fn enable_time_override(duration_hours: f64, loss_threshold_pct: f64) {
     set_config(|cfg| {
         cfg.trader.time_override_enabled = true;
         cfg.trader.time_override_duration = duration_hours;
-        cfg.trader.time_override_unit = "hours".to_owned();
+        cfg.trader.time_override_unit = TimeUnit::Hours;
         cfg.trader.time_override_loss_threshold_percent = loss_threshold_pct;
     });
 }
@@ -720,6 +727,145 @@ fn time_override_is_off_when_disabled() {
     assert!(sell(&position, 0.01, ExitRule::TimeLoss).is_none());
 }
 
+// ==================== BREAK-EVEN STOP ====================
+
+fn enable_break_even(trigger_pct: f64, offset_pct: f64) {
+    set_config(|cfg| {
+        cfg.trader.break_even_enabled = true;
+        cfg.trader.break_even_trigger_pct = trigger_pct;
+        cfg.trader.break_even_offset_pct = offset_pct;
+    });
+}
+
+#[test]
+fn break_even_arms_on_the_peak_and_sells_at_the_kept_margin() {
+    // Armed at +15%, it keeps +1%: a position that peaked at +18% and fell back to +1%
+    // sells everything at high priority.
+    let _cfg = config_guard();
+    enable_break_even(15.0, 1.0);
+
+    let position = peaked_at(1.18);
+    let decision = sell(&position, 1.01, ExitRule::BreakEven).expect("the break-even stop fires");
+    assert_eq!(decision.reason, TradeReason::BreakEvenStop);
+    assert_eq!(decision.priority, TradePriority::High);
+    assert!(decision.exit_percentage.is_none());
+    assert!(
+        sell(&position, 1.02, ExitRule::BreakEven).is_none(),
+        "above the kept margin it holds"
+    );
+}
+
+#[test]
+fn break_even_sells_a_gap_below_the_entry() {
+    // Unlike the trailing stop it sells at a loss: the floor is what it promises.
+    let _cfg = config_guard();
+    enable_break_even(15.0, 1.0);
+
+    assert!(sell(&peaked_at(1.18), 0.9, ExitRule::BreakEven).is_some());
+}
+
+#[test]
+fn break_even_never_arms_below_its_trigger() {
+    let _cfg = config_guard();
+    enable_break_even(15.0, 1.0);
+
+    assert!(sell(&peaked_at(1.14), 0.9, ExitRule::BreakEven).is_none());
+}
+
+#[test]
+fn break_even_arms_on_the_peak_since_the_last_add() {
+    // The round peaked at 1.09 before an add moved the average to 0.944: +15.5% on the
+    // new average from the old peak, but only +4.9% from the peak since the add.
+    let _cfg = config_guard();
+    enable_break_even(15.0, 1.0);
+
+    assert!(sell(&averaged_down_after_a_peak(0.99), 0.95, ExitRule::BreakEven).is_none());
+    assert!(sell(&averaged_down_after_a_peak(1.09), 0.95, ExitRule::BreakEven).is_some());
+}
+
+#[test]
+fn break_even_rejects_a_margin_at_or_above_its_trigger() {
+    let _cfg = config_guard();
+    enable_break_even(15.0, 15.0);
+
+    let err = rule_error(&peaked_at(1.2), 0.9, ExitRule::BreakEven);
+    assert!(err.contains("break-even"), "got: {err}");
+}
+
+#[test]
+fn break_even_is_off_by_default() {
+    let _cfg = config_guard();
+
+    assert!(sell(&peaked_at(2.0), 0.5, ExitRule::BreakEven).is_none());
+}
+
+#[test]
+fn break_even_catches_what_the_trail_leaves_below_the_entry() {
+    // Trailing 10/5 and break-even 15/1 together, peak +20%: the trail stop sits at
+    // 1.14. In profit the trail names the sale; below the entry the trail is silent and
+    // the break-even stop sells.
+    let _cfg = config_guard();
+    enable_trailing(10.0, 5.0);
+    enable_break_even(15.0, 1.0);
+    let position = peaked_at(1.2);
+    let both = |price: f64| {
+        let mut policy = ExitPolicy::from_config();
+        policy.stop_loss.enabled = false;
+        policy.take_profit.enabled = false;
+        policy.time.enabled = false;
+        exit_rules::decide(&live_exit_inputs(&position, price, Utc::now()), &policy)
+            .outcome
+            .map(|outcome| outcome.rule)
+    };
+    assert_eq!(both(1.005), Some(ExitRule::Trailing));
+    assert_eq!(both(0.98), Some(ExitRule::BreakEven));
+    assert_eq!(both(1.15), None);
+}
+
+// ==================== STAGNATION EXIT ====================
+
+fn enable_stagnation(minutes: f64, band_pct: f64) {
+    set_config(|cfg| {
+        cfg.trader.time_exit_stagnation_enabled = true;
+        cfg.trader.time_exit_stagnation_minutes = minutes;
+        cfg.trader.time_exit_stagnation_band_pct = band_pct;
+    });
+}
+
+#[test]
+fn stagnation_closes_a_flat_position_after_its_time() {
+    let _cfg = config_guard();
+    enable_stagnation(240.0, 5.0);
+
+    let position = aged(test_position(1.0, 1.0), Duration::minutes(240));
+    let decision =
+        sell(&position, 1.05, ExitRule::TimeStagnation).expect("flat at the band edge for 4h");
+    assert_eq!(decision.reason, TradeReason::TimeStagnation);
+    assert_eq!(decision.priority, TradePriority::Normal);
+    assert!(decision.exit_percentage.is_none());
+    assert!(sell(&position, 0.95, ExitRule::TimeStagnation).is_some());
+}
+
+#[test]
+fn stagnation_leaves_a_moving_or_young_position_alone() {
+    let _cfg = config_guard();
+    enable_stagnation(240.0, 5.0);
+
+    let old = aged(test_position(1.0, 1.0), Duration::minutes(300));
+    assert!(sell(&old, 1.0501, ExitRule::TimeStagnation).is_none());
+    assert!(sell(&old, 0.9499, ExitRule::TimeStagnation).is_none());
+    let young = aged(test_position(1.0, 1.0), Duration::minutes(239));
+    assert!(sell(&young, 1.0, ExitRule::TimeStagnation).is_none());
+}
+
+#[test]
+fn stagnation_is_off_by_default() {
+    let _cfg = config_guard();
+
+    let position = aged(test_position(1.0, 1.0), Duration::days(30));
+    assert!(sell(&position, 1.0, ExitRule::TimeStagnation).is_none());
+}
+
 // ==================== EMERGENCY RISK LIMIT ====================
 
 #[tokio::test]
@@ -773,4 +919,141 @@ async fn the_risk_limit_skips_a_position_with_a_broken_entry_price() {
             "entry price {bad} must not emergency-exit"
         );
     }
+}
+
+// ==================== TIME EXIT WATCH ====================
+
+/// The configured policy with only the time rules on: the loss rule after 24 hours at -2%
+/// or worse, the flat rule after 240 minutes inside ±5%.
+fn time_rules_only() -> ExitPolicy {
+    let mut policy = only(ExitRule::TimeLoss);
+    policy.time.enabled = true;
+    policy.time.duration_seconds = 24.0 * 3600.0;
+    policy.time.loss_threshold_pct = -2.0;
+    policy.time_stagnation.enabled = true;
+    policy.time_stagnation.duration_seconds = 240.0 * 60.0;
+    policy.time_stagnation.band_pct = 5.0;
+    policy
+}
+
+/// Held five hours at -3%: inside both the loss rule and the flat band, with the flat rule
+/// already due and the loss rule due at 24 hours.
+fn overlapping(management: PositionManagement) -> Position {
+    let mut position = aged(test_position(1.0, 1.0), Duration::hours(5));
+    position.current_price = Some(0.97);
+    position.management = management;
+    if matches!(
+        management,
+        PositionManagement::CopyTask | PositionManagement::Hybrid
+    ) {
+        position.origin = PositionOrigin::Copy {
+            task_id: 7,
+            source_wallet: "CopySource1111111111111111111111111111111111".to_owned(),
+        };
+    }
+    position
+}
+
+/// The rule and its due moment, in seconds after the entry, from a `Due` watch.
+fn due_after_entry(watch: TimeExitWatch, position: &Position) -> (TimeExitRule, i64) {
+    let TimeExitWatch::Due {
+        rule,
+        due_at,
+        pnl_pct,
+    } = watch
+    else {
+        panic!("a time rule is due: {watch:?}");
+    };
+    assert!((pnl_pct + 3.0).abs() < 1e-9, "{pnl_pct}");
+    (rule, due_at - position.entry_time.timestamp())
+}
+
+#[test]
+fn the_time_exit_watch_follows_management_the_earlier_rule_and_task_overrides() {
+    let _cfg = config_guard();
+    let now = Utc::now();
+    let inherited = ExitPolicyOverrides::default();
+    let mut shorter_loss = ExitPolicyOverrides::default();
+    shorter_loss.time.duration_seconds = Some(3600.0);
+    let mut tied_loss = ExitPolicyOverrides::default();
+    tied_loss.time.duration_seconds = Some(240.0 * 60.0);
+
+    for management in [
+        PositionManagement::AutoTrader,
+        PositionManagement::Hybrid,
+        PositionManagement::UserOnly,
+        PositionManagement::CopyTask,
+    ] {
+        for (overrides, expected) in [
+            (&inherited, (TimeExitRule::TimeStagnation, 4 * 3600)),
+            (&shorter_loss, (TimeExitRule::TimeLoss, 3600)),
+            (&tied_loss, (TimeExitRule::TimeLoss, 4 * 3600)),
+        ] {
+            let position = overlapping(management);
+            let mut policy = time_rules_only();
+            policy.apply_overrides(overrides);
+            let watch = time_exit_watch(&position, &policy, now);
+            if management.allows_policy_exits() {
+                assert_eq!(
+                    due_after_entry(watch, &position),
+                    expected,
+                    "{management:?} {overrides:?}"
+                );
+            } else {
+                assert_eq!(
+                    watch,
+                    TimeExitWatch::NotManaged { management },
+                    "{management:?} {overrides:?}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn the_time_exit_watch_tells_off_clear_and_unpriced_apart() {
+    let _cfg = config_guard();
+    let now = Utc::now();
+    let position = overlapping(PositionManagement::AutoTrader);
+
+    let mut off = time_rules_only();
+    off.time.enabled = false;
+    off.time_stagnation.enabled = false;
+    assert_eq!(time_exit_watch(&position, &off, now), TimeExitWatch::Off);
+
+    let mut winning = position.clone();
+    winning.current_price = Some(1.10);
+    assert_eq!(
+        time_exit_watch(&winning, &time_rules_only(), now),
+        TimeExitWatch::Clear,
+        "+10% is above the loss threshold and outside the flat band"
+    );
+
+    let mut unpriced = position.clone();
+    unpriced.current_price = None;
+    assert_eq!(
+        time_exit_watch(&unpriced, &time_rules_only(), now),
+        TimeExitWatch::Unpriced
+    );
+
+    let mut broken = time_rules_only();
+    broken.time_stagnation.enabled = false;
+    broken.time.loss_threshold_pct = 5.0;
+    assert_eq!(
+        time_exit_watch(&position, &broken, now),
+        TimeExitWatch::Clear,
+        "a rule whose configuration is impossible never applies"
+    );
+}
+
+#[test]
+fn the_time_exit_watch_reports_a_due_rule_once_its_time_has_passed() {
+    let _cfg = config_guard();
+    let now = Utc::now();
+    let position = overlapping(PositionManagement::AutoTrader);
+    let watch = time_exit_watch(&position, &time_rules_only(), now);
+    let TimeExitWatch::Due { due_at, .. } = watch else {
+        panic!("the flat rule is due: {watch:?}");
+    };
+    assert!(due_at <= now.timestamp(), "four hours in, five hours held");
 }

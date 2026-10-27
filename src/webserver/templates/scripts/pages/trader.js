@@ -19,6 +19,7 @@ import { LOSS_MAGNITUDE, createTraderConfigCards, displayValue } from "./trader/
 import { playToggleOn, playToggleOff, playError } from "../core/sounds.js";
 import { createExampleUpdaters } from "./trader/examples.js";
 import { renderLevels } from "./trader/level_list.js";
+import { timeExitStatus } from "./trader/time_status.js";
 import { createTraderControls } from "./trader/controls.js";
 import {
   fetchFeatureStatus,
@@ -331,6 +332,8 @@ function createLifecycle() {
       examples.updateTakeProfitExample();
       examples.updateTimeLossExample();
       examples.updateTrailingStopExample();
+      examples.updateBreakEvenExample();
+      examples.updateStagnationExample();
       examples.updateDcaExample();
     } catch (error) {
       console.error("[Trader] Failed to load config:", error);
@@ -394,6 +397,20 @@ function createLifecycle() {
       trailDistance.value = trader.trailing_stop_distance_pct;
     }
 
+    // Break-even Stop
+    const breakEvenEnabled = $("#break-even-enabled");
+    const breakEvenTrigger = $("#break-even-trigger");
+    const breakEvenOffset = $("#break-even-offset");
+    if (breakEvenEnabled) {
+      breakEvenEnabled.checked = trader.break_even_enabled === true;
+    }
+    if (breakEvenTrigger) {
+      breakEvenTrigger.value = trader.break_even_trigger_pct;
+    }
+    if (breakEvenOffset) {
+      breakEvenOffset.value = trader.break_even_offset_pct;
+    }
+
     // Take profit
     const takeProfitEnabled = $("#take-profit-enabled");
     const takeProfitLevels = $("#take-profit-levels");
@@ -428,6 +445,20 @@ function createLifecycle() {
 
     // Update time conversion hint
     examples.updateTimeConversionHint();
+
+    // Close Flat Positions
+    const stagnationEnabled = $("#time-stagnation-enabled");
+    const stagnationMinutes = $("#time-stagnation-minutes");
+    const stagnationBand = $("#time-stagnation-band");
+    if (stagnationEnabled) {
+      stagnationEnabled.checked = trader.time_exit_stagnation_enabled === true;
+    }
+    if (stagnationMinutes) {
+      stagnationMinutes.value = trader.time_exit_stagnation_minutes;
+    }
+    if (stagnationBand) {
+      stagnationBand.value = trader.time_exit_stagnation_band_pct;
+    }
 
     // General Settings
     const maxPositions = $("#max-positions");
@@ -1133,6 +1164,12 @@ function createLifecycle() {
             render: (value) =>
               Utils.formatPercent(value, { style: "pnl", decimals: 2, fallback: "—" }),
           },
+          {
+            id: "time_exit",
+            label: I18n.t("trader-time-positions-rule"),
+            sortable: false,
+            render: (value) => Utils.escapeHtml(value),
+          },
         ],
         rowIdField: "id",
         stateKey: "trader.time-positions",
@@ -1147,19 +1184,31 @@ function createLifecycle() {
     return timePositions;
   }
 
-  /** Refresh the Time Rules open-position table with each position's hold time. */
+  /**
+   * Refresh the Time Rules open-position table with each position's hold time and the
+   * time exit that applies to it.
+   */
   async function updateTimeRulesStatus() {
     try {
-      const open = await requestManager.fetch("/api/positions?status=open&limit=0", {
-        priority: "normal",
-      });
+      // One table: each open position joined to the time exit the route computed for it.
+      const [open, watches] = await Promise.all([
+        requestManager.fetch("/api/positions?status=open&limit=0", { priority: "normal" }),
+        requestManager.fetch("/api/trader/time-exits", { priority: "normal" }),
+      ]);
       const container = $("#time-positions-status");
       if (!container) return;
       const now = Date.now() / 1000;
-      const rows = (Array.isArray(open) ? open : []).map((position) => ({
-        ...position,
-        hold_seconds: position.entry_time ? Math.max(0, now - position.entry_time) : null,
-      }));
+      const watchById = new Map(
+        (Array.isArray(watches) ? watches : []).map((entry) => [entry.position_id, entry.time_exit])
+      );
+      const rows = (Array.isArray(open) ? open : []).map((position) => {
+        const holdSeconds = position.entry_time ? Math.max(0, now - position.entry_time) : null;
+        return {
+          ...position,
+          hold_seconds: holdSeconds,
+          time_exit: timeExitStatus(watchById.get(position.id), holdSeconds, now),
+        };
+      });
       timePositionsTable(container).setData(rows);
     } catch (error) {
       console.error("[Trader] Failed to update time rules status:", error);
@@ -1232,8 +1281,23 @@ function createLifecycle() {
     }
 
     // The other exits that can close a take-profit runner: the runner warning follows them.
-    for (const id of ["#trailing-enabled", "#time-override-enabled"]) {
+    for (const id of [
+      "#trailing-enabled",
+      "#break-even-enabled",
+      "#time-override-enabled",
+      "#time-stagnation-enabled",
+    ]) {
       addTrackedListener($(id), "change", () => examples.updateTakeProfitExample());
+    }
+
+    // Break-even fields: the card's computed line
+    for (const id of ["#break-even-trigger", "#break-even-offset"]) {
+      addTrackedListener($(id), "input", () => examples.updateBreakEvenExample());
+    }
+
+    // Flat-position fields: the card's computed line
+    for (const id of ["#time-stagnation-minutes", "#time-stagnation-band"]) {
+      addTrackedListener($(id), "input", () => examples.updateStagnationExample());
     }
 
     // Time loss threshold input listener
@@ -1328,6 +1392,8 @@ function createLifecycle() {
         examples.updateStopLossExample();
         examples.updateTakeProfitExample();
         examples.updateTimeLossExample();
+        examples.updateBreakEvenExample();
+        examples.updateStagnationExample();
         examples.updateDcaExample();
       }
     } catch (error) {

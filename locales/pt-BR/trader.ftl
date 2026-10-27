@@ -235,6 +235,9 @@ trader-trailing-subtitle = Protege lucros automaticamente acompanhando o preço 
 trader-trailing-activation-impact = Começa a acompanhar com +{ $value }% de lucro
 # $value is the trail distance percentage as typed.
 trader-trailing-distance-impact = Sai a -{ $value }% do pico
+# $value is a formatted signed percentage.
+trader-trailing-locked-minimum = Mínimo garantido ao ativar: { $value }
+trader-trailing-locked-minimum-warning = O stop fica no preço de entrada ou abaixo ao ativar; ele só vende no lucro. Ative o stop no ponto de equilíbrio para ter um piso.
 trader-trailing-activation = Ativação
 trader-trailing-peak = Pico
 # $value is a formatted percentage.
@@ -243,6 +246,13 @@ trader-trailing-final = +{ $value }% final
 trader-trailing-summary-protected = <strong>{ $value }</strong> de lucro protegido
 # $value is a formatted percentage.
 trader-trailing-summary-avoided = <strong>{ $value }</strong> de perda evitada desde o pico
+
+## Break-even stop
+
+trader-break-even-title = Stop no ponto de equilíbrio
+trader-break-even-subtitle = Depois que a posição entra no lucro, venda tudo antes que vire prejuízo
+# $trigger and $offset are formatted signed percentages.
+trader-break-even-summary = Assim que o melhor preço desde a última compra chega a { $trigger }, uma volta a { $offset } vende tudo.
 
 ## Take profit
 
@@ -270,7 +280,7 @@ trader-take-profit-error-total = As etapas juntas podem vender no máximo { $max
 # $runner is the formatted percentage of the position no step sells.
 trader-take-profit-runner = { $runner }% da posição ficam abertos como runner
 trader-take-profit-runner-none = A última etapa vende o restante da posição
-trader-take-profit-runner-warning = Com o trailing stop, a saída por tempo e todas as estratégias de saída desligados, o runner só fecha pelo stop loss ou manualmente
+trader-take-profit-runner-warning = Com o trailing stop, o stop no ponto de equilíbrio, as duas saídas por tempo e todas as estratégias de saída desligados, o runner só fecha pelo stop loss ou manualmente
 trader-take-profit-info = As partes se referem à posição inicial. Se o preço passar vários níveis de uma vez, uma etapa é vendida por verificação.
 # $profit is the step's formatted profit level; $share is its formatted share.
 trader-take-profit-example-step = Em +{ $profit }%, vender { $share }%
@@ -281,8 +291,12 @@ trader-take-profit-summary = Vende <strong>{ $sold }%</strong> até +{ $profit }
 
 ## Time-based exit
 
-trader-time-title = Saída por tempo
+trader-time-loss-title = Fechar posições no prejuízo
 trader-time-subtitle = Sai automaticamente das posições após um tempo máximo de posse se a perda passar do limite
+trader-time-flat-title = Fechar posições estagnadas
+trader-time-flat-subtitle = Libere o capital de posições que não sobem nem descem
+# $span is a formatted duration; $band is a formatted percentage.
+trader-time-flat-summary = Uma posição mantida por { $span } ou mais com P&L dentro de ±{ $band } é fechada.
 trader-time-unit-seconds = segundos
 trader-time-unit-minutes = minutos
 trader-time-unit-hours = horas
@@ -332,6 +346,16 @@ trader-time-positions-empty-message = As posições abertas aparecem aqui com o 
 trader-time-positions-token = Token
 trader-time-positions-hold = Tempo de posse
 trader-time-positions-roi = ROI
+trader-time-positions-rule = Saída por tempo
+trader-time-status-off = As saídas por tempo estão desligadas
+trader-time-status-none = Nenhuma saída por tempo se aplica agora
+trader-time-status-not-managed = Não gerenciada pelo Trader automático
+# $pnl is a formatted signed percentage; $remaining is a formatted duration.
+trader-time-status-losing = No prejuízo { $pnl }; fecha em { $remaining }
+trader-time-status-losing-due = No prejuízo { $pnl }; fecha na próxima verificação
+# $held and $remaining are formatted durations.
+trader-time-status-flat = Estagnada há { $held }; fecha em { $remaining }
+trader-time-status-flat-due = Estagnada há { $held }; fecha na próxima verificação
 
 ## Strategy control
 
