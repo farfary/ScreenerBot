@@ -55,6 +55,21 @@ pub struct FetchResponse {
     pub series_pool: Option<String>,
 }
 
+impl FetchResponse {
+    /// The Data Server is fetching the series and has nothing to serve yet: no candles, and a
+    /// `refreshing` or `pending` state. Not an empty series, only an answer that is not ready.
+    pub(super) fn is_pending(&self) -> bool {
+        self.candles.is_empty() && self.server_refreshing
+    }
+}
+
+/// Whether a Data Server page is the answer of a fetch: it carries candles, or it is pending
+/// (`FetchResponse::is_pending`), so the providers are not asked while the Data Server fills
+/// the series. An empty `ready` or `empty` page falls back.
+fn data_server_settles(page: &FetchResponse) -> bool {
+    !page.candles.is_empty() || page.is_pending()
+}
+
 /// `GET /v1/ohlcv?stateful=true` body.
 #[derive(Debug, Deserialize)]
 struct StatefulOhlcv {
@@ -117,7 +132,10 @@ impl OhlcvFetcher {
     }
 
     /// Fetch `mint`'s candles in `pool_address` from GeckoTerminal with its native
-    /// `aggregate` parameter instead of client-side aggregation.
+    /// `aggregate` parameter instead of client-side aggregation. While the client is in its
+    /// 429 penalty window nothing is sent: the fetch answers `OhlcvError::RateLimitExceeded`
+    /// at once, which every caller treats as backpressure, instead of queueing on the
+    /// client's single request permit for the rest of the window.
     pub async fn fetch_with_aggregate(
         &self,
         mint: &str,
@@ -127,11 +145,26 @@ impl OhlcvFetcher {
         before_timestamp: Option<i64>,
         limit: usize,
     ) -> OhlcvResult<Vec<Candle>> {
+        let limit_clamped = limit.min(1000) as u32;
+        if let Some(penalty) = self.api_manager.geckoterminal.penalty_remaining() {
+            record_ohlcv_event(
+                "fetch_aggregate_deferred",
+                Severity::Debug,
+                Some(mint),
+                Some(pool_address),
+                json!({
+                    "pool_address": pool_address,
+                    "api_endpoint": api_endpoint,
+                    "aggregate": aggregate,
+                    "penalty_remaining_ms": u64::try_from(penalty.as_millis()).unwrap_or(u64::MAX),
+                }),
+            )
+            .await;
+            return Err(OhlcvError::RateLimitExceeded);
+        }
         self.record_attempt();
         let start = Instant::now();
-        let limit_clamped = limit.min(1000) as u32;
 
-        // DEBUG: Record fetch attempt with aggregate
         record_ohlcv_event(
             "fetch_aggregate_attempt",
             Severity::Debug,
@@ -180,7 +213,6 @@ impl OhlcvFetcher {
                 let latency = start.elapsed().as_millis() as u64;
                 self.record_api_call(latency);
 
-                // DEBUG: Record successful fetch (higher-level fetch_success recorded by monitor after storage)
                 record_ohlcv_event(
                     "fetch_aggregate_complete",
                     Severity::Debug,
@@ -352,11 +384,15 @@ impl OhlcvFetcher {
     }
 
     /// Fetch one timeframe with multi-source fallback: the Data Server, then, for a
-    /// native-quoted pool only, the chain's candle feeds in order and GeckoTerminal.
-    /// Returns the newest `limit` candles ending now, or with `before`
+    /// native-quoted pool only, the chain's candle feeds in order and GeckoTerminal
+    /// (`fetch_fallback`). Returns the newest `limit` candles ending now, or with `before`
     /// (unix secs, exclusive) the newest `limit` candles strictly older than it.
-    /// A candle feed serves only the newest candles, so a `before` request skips
-    /// the feeds.
+    ///
+    /// A Data Server page with candles, or a pending one (`FetchResponse::is_pending`), is
+    /// the answer: the server is filling that series, and asking the providers meanwhile
+    /// spends their shared budget on a series about to arrive. No answer (switched off,
+    /// signed out, refused, timed out, `unavailable`) and an empty `ready` or `empty` page
+    /// fall back.
     pub async fn fetch_multi_source(
         &self,
         mint: &str,
@@ -367,11 +403,7 @@ impl OhlcvFetcher {
         pool_is_native: bool,
         before: Option<i64>,
     ) -> OhlcvResult<FetchResponse> {
-        // Try the self-hosted ScreenerBot OHLCV server first: it serves a shared
-        // cache fast and warms itself, sparing the external providers' budgets. On
-        // any miss/timeout/error we fall straight through to the providers below,
-        // so this is purely an accelerator — never a hard dependency.
-        if let Some(response) = self
+        if let Some(page) = self
             .fetch_from_screenerbot_server(
                 mint,
                 pool_address,
@@ -381,12 +413,36 @@ impl OhlcvFetcher {
                 before,
             )
             .await
+            .filter(data_server_settles)
         {
-            if !response.candles.is_empty() {
-                return Ok(response);
-            }
+            return Ok(page);
         }
+        self.fetch_fallback(
+            mint,
+            pool_address,
+            api_endpoint,
+            aggregate,
+            limit,
+            pool_is_native,
+            before,
+        )
+        .await
+    }
 
+    /// The providers behind the Data Server: for a native-quoted pool only, the chain's
+    /// candle feeds in order, then GeckoTerminal. A candle feed serves only the newest
+    /// candles, so a `before` request skips the feeds. A non-native pool gets an empty
+    /// answer from no source.
+    pub(super) async fn fetch_fallback(
+        &self,
+        mint: &str,
+        pool_address: &str,
+        api_endpoint: &str,
+        aggregate: u32,
+        limit: usize,
+        pool_is_native: bool,
+        before: Option<i64>,
+    ) -> OhlcvResult<FetchResponse> {
         let Some(feeds) = fallback_feeds(pool_is_native, || self.candle_feeds(), before) else {
             record_ohlcv_event(
                 "fallback_skipped_non_native_pool",
@@ -624,6 +680,73 @@ mod tests {
         let _ = crate::config::utils::CONFIG
             .get_or_init(|| std::sync::RwLock::new(crate::config::Config::default()));
         OhlcvFetcher::new(ChainId::Solana)
+    }
+
+    fn page(candles: usize, state: &str) -> FetchResponse {
+        StatefulOhlcv {
+            candles: (0..candles)
+                .map(|i| Candle {
+                    timestamp: 60 * (i as i64 + 1),
+                    open: 1.0,
+                    high: 1.0,
+                    low: 1.0,
+                    close: 1.0,
+                    volume: 1.0,
+                })
+                .collect(),
+            state: state.to_string(),
+            pool: None,
+        }
+        .into_response()
+        .expect("only an unavailable body is no answer")
+    }
+
+    #[test]
+    fn a_pending_data_server_page_is_the_answer() {
+        let settles = |page: Option<FetchResponse>| page.filter(data_server_settles).is_some();
+        // (case, answer, the answer settles the fetch, the answer is pending)
+        let cases = [
+            ("no answer", None, false, false),
+            ("ready, empty", Some(page(0, "ready")), false, false),
+            ("empty state", Some(page(0, "empty")), false, false),
+            ("pending, empty", Some(page(0, "pending")), true, true),
+            ("refreshing, empty", Some(page(0, "refreshing")), true, true),
+            (
+                "refreshing with candles",
+                Some(page(2, "refreshing")),
+                true,
+                false,
+            ),
+            ("ready with candles", Some(page(2, "ready")), true, false),
+        ];
+        for (case, answer, settled, pending) in cases {
+            assert_eq!(
+                answer.as_ref().is_some_and(FetchResponse::is_pending),
+                pending,
+                "{case}"
+            );
+            assert_eq!(settles(answer), settled, "{case}");
+        }
+    }
+
+    #[tokio::test]
+    async fn a_gecko_penalty_defers_the_fallback_without_a_request() {
+        let fetcher = test_fetcher();
+        fetcher.api_manager.geckoterminal.record_rate_limited();
+        assert!(fetcher
+            .api_manager
+            .geckoterminal
+            .penalty_remaining()
+            .is_some());
+
+        let started = Instant::now();
+        let answer = fetcher
+            .fetch_with_aggregate("mint", "pool", "minute", 5, None, 10)
+            .await;
+
+        assert!(matches!(answer, Err(OhlcvError::RateLimitExceeded)));
+        assert!(started.elapsed() < Duration::from_millis(50));
+        assert_eq!(fetcher.calls_per_minute(), 0.0, "no request was sent");
     }
 
     #[test]

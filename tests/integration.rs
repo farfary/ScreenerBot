@@ -15,6 +15,7 @@ mod agent_control_store;
 mod apis;
 mod architecture_boundaries;
 mod authority_blocking;
+mod chart_load_perf;
 mod common;
 mod config;
 mod config_api_surface;

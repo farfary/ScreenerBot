@@ -55,6 +55,19 @@ const READ_THROUGH_POOL_WAIT: Duration = Duration::from_secs(2);
 /// Spacing of the series pool reads while a read-through waits for discovery.
 const READ_THROUGH_POOL_POLL: Duration = Duration::from_millis(100);
 
+/// Spacing of a read-through's requests while the Data Server answers the viewed timeframe
+/// `pending`. The server fills a cold series on the request after a failed instant fetch, so
+/// a viewed timeframe asks again this soon; background paths keep `NATIVE_RETRY_DELAY_SECS`.
+pub(super) const READ_THROUGH_PENDING_RETRY: Duration = Duration::from_secs(2);
+
+/// Shortest time left before a read-through's deadline worth starting a request in.
+const READ_THROUGH_MIN_ATTEMPT: Duration = Duration::from_secs(1);
+
+/// How long the Data Server may answer a series `pending` before the background paths collect
+/// it from the providers (`OhlcvFetcher::fetch_fallback`), so a degraded Data Server never
+/// leaves a native pool without candles.
+const DATA_SERVER_PENDING_FALLBACK_SECS: i64 = 120;
+
 /// Delay of the first re-fetch after the Data Server reports it is refreshing
 /// a series. Each further re-fetch doubles the delay up to
 /// `REFRESHING_REFETCH_MAX_DELAY_SECS`.
@@ -195,6 +208,9 @@ struct NativeSeriesState {
     /// fetch that returns identical values leaves the row's `fetched_at`
     /// untouched, so this is what stops the settle rule from firing again.
     settled_bucket: Option<i64>,
+    /// Unix secs of the first page of the current run of Data Server pages that were
+    /// refreshing and brought nothing storable (the server is still fetching the series).
+    pending_since: Option<i64>,
 }
 
 impl NativeSeriesState {
@@ -204,6 +220,11 @@ impl NativeSeriesState {
 
     /// Record a native page. `stored_newest` is the native newest before the page
     /// was written; `fetched_newest` is the newest storable bucket in the page.
+    ///
+    /// A pending page (refreshing, nothing storable) says nothing about newer candles, so it
+    /// leaves the no-newer streak alone: two of them must not make an empty series read as
+    /// caught up. It also keeps a scheduled re-fetch that is still in the future, so short
+    /// re-asks of a viewed timeframe do not spend the background backoff budget.
     fn record_page(
         &mut self,
         now: i64,
@@ -213,6 +234,15 @@ impl NativeSeriesState {
     ) {
         self.last_fetch_at = Some(now);
         self.last_page_refreshing = server_refreshing;
+
+        if server_refreshing && fetched_newest.is_none() {
+            self.pending_since.get_or_insert(now);
+            if !self.refetch_at.is_some_and(|at| at > now) {
+                self.schedule_refetch(now);
+            }
+            return;
+        }
+        self.pending_since = None;
 
         let newer = match (fetched_newest, stored_newest) {
             (Some(fetched), Some(stored)) => fetched > stored,
@@ -236,10 +266,17 @@ impl NativeSeriesState {
             }
         }
 
-        if !server_refreshing {
+        if server_refreshing {
+            self.schedule_refetch(now);
+        } else {
             self.refetches = 0;
             self.refetch_at = None;
-        } else if let Some(delay) = refreshing_refetch_delay_secs(self.refetches) {
+        }
+    }
+
+    /// Schedule the next re-fetch after a refreshing page, or none once the budget is spent.
+    fn schedule_refetch(&mut self, now: i64) {
+        if let Some(delay) = refreshing_refetch_delay_secs(self.refetches) {
             self.refetches += 1;
             self.refetch_at = Some(now + delay);
         } else {
@@ -292,6 +329,39 @@ impl NativeSeriesState {
             self.no_newer_holds(newest),
         )
     }
+}
+
+/// Whether a series the Data Server keeps answering `pending` is collected from the providers:
+/// the current pending run began at least `DATA_SERVER_PENDING_FALLBACK_SECS` ago.
+fn pending_fallback_due(state: &NativeSeriesState, now: i64) -> bool {
+    state
+        .pending_since
+        .is_some_and(|since| now - since >= DATA_SERVER_PENDING_FALLBACK_SECS)
+}
+
+/// Unix secs from which a chart read-through may ask the Data Server for a series again, `None`
+/// when the series was never attempted (ask now). A pending series is asked again after
+/// `READ_THROUGH_PENDING_RETRY`; any other attempt holds it for `NATIVE_RETRY_DELAY_SECS`.
+fn read_through_next_ask(state: &NativeSeriesState) -> Option<i64> {
+    let last = state.last_fetch_at?;
+    let spacing = if state.pending_since.is_some() {
+        READ_THROUGH_PENDING_RETRY.as_secs() as i64
+    } else {
+        NATIVE_RETRY_DELAY_SECS
+    };
+    Some(last + spacing)
+}
+
+/// Whether a backfill pass fetches a series that is not backfilled: not while a chart
+/// read-through holds it, not while a scheduled re-fetch after a refreshing page is still in
+/// the future, and at most once per `NATIVE_RETRY_DELAY_SECS`, which is also the spacing the
+/// no-newer rule needs.
+fn backfill_fetch_due(state: &NativeSeriesState, now: i64, read_through_active: bool) -> bool {
+    !read_through_active
+        && !state.refetch_at.is_some_and(|at| at > now)
+        && !state
+            .last_fetch_at
+            .is_some_and(|at| now - at < NATIVE_RETRY_DELAY_SECS)
 }
 
 /// Buckets between the bucket holding `newest` and the current bucket.
@@ -719,53 +789,10 @@ impl OhlcvMonitor {
             self.spawn_pool_discovery(&mint);
         }
 
-        // Trigger multi-timeframe backfill for new token.
-        // Guard with try_start_backfill so repeated add_token calls for the same
-        // mint (every token-detail dialog open calls add_token_monitoring, plus
-        // the monitor/sync loops) do NOT spawn concurrent full backfills of all 7
-        // timeframes — that previously hammered GeckoTerminal far past its limit
-        // and produced bursts of "Rate limit exceeded" warnings for the same
-        // mint+timeframe within the same second.
+        // Every token-detail dialog open and the monitor/sync loops call this; the token's
+        // backfill slot (`spawn_backfill`) keeps them to one backfill of the token at a time.
         if let Some(pool) = PoolConfig::series_pool(&pools) {
-            if self.try_start_backfill(&mint) {
-                let runner = self.clone();
-                let mint_owned = mint.clone();
-                let pool_owned = pool.address.clone();
-                let priority_owned = priority;
-
-                tokio::spawn(async move {
-                    logger::debug(
-                        LogTag::Ohlcv,
-                        &format!(
-                            "Triggering 30-day backfill for new token mint={} pool={} priority={:?}",
-                            mint_owned, pool_owned, priority_owned
-                        ),
-                    );
-
-                    match runner
-                        .backfill_all_timeframes(&mint_owned, &pool_owned, priority_owned)
-                        .await
-                    {
-                        Ok(total) => {
-                            logger::debug(
-                                LogTag::Ohlcv,
-                                &format!(
-                                    "Backfill completed for mint={} total_candles={}",
-                                    mint_owned, total
-                                ),
-                            );
-                        }
-                        Err(e) => {
-                            logger::warning(
-                                LogTag::Ohlcv,
-                                &format!("Backfill failed for mint={mint_owned}: {e}"),
-                            );
-                        }
-                    }
-
-                    runner.finish_backfill(&mint_owned);
-                });
-            }
+            self.spawn_backfill(&mint, &pool.address, priority);
         } else {
             logger::warning(
                 LogTag::Ohlcv,
@@ -1318,27 +1345,38 @@ impl OhlcvMonitor {
                 .get_latest_native_timestamp(mint, &pool_address, Timeframe::Minute1)?;
         let batch_size = catch_up_limit(minute_newest, Utc::now().timestamp(), Timeframe::Minute1);
         let data = self
-            .fetcher
-            .fetch_multi_source(
+            .fetch_series_page(
                 mint,
                 &pool_address,
-                "minute",
-                1,
+                Timeframe::Minute1,
                 batch_size,
                 pool_is_native,
-                None,
             )
             .await;
         let fetch_succeeded = data.is_ok();
 
         match data {
             Ok(response) => {
+                // A pending page is the Data Server still fetching the series: neither an
+                // empty fetch, which throttles and finally pauses the token, nor a success.
+                let pending = response.is_pending();
                 let (page_pool, stored_points) = self
                     .store_minute_page(mint, &pool_address, response)
                     .await?;
                 pool_address = page_pool;
-                if stored_points.is_empty() {
-                    // Mark empty fetch
+                if pending {
+                    let updated_config = {
+                        let mut active = self.active_tokens.write().await;
+                        active.get_mut(mint).map(|config| {
+                            config.mark_fetch();
+                            config.clone()
+                        })
+                    };
+
+                    if let Some(config) = updated_config {
+                        self.db.upsert_monitor_config(&config)?;
+                    }
+                } else if stored_points.is_empty() {
                     let updated_config = {
                         let mut active = self.active_tokens.write().await;
                         active.get_mut(mint).map(|config| {
@@ -1942,8 +1980,8 @@ impl OhlcvMonitor {
                 .unwrap_or(Priority::Medium)
         };
 
-        if self.are_all_timeframes_backfill_ready(mint, pool_address)?
-            || !self.try_start_backfill(mint)
+        if !self.backfill_wanted(mint, pool_address)?
+            || !self.spawn_backfill(mint, pool_address, priority)
         {
             return Ok(());
         }
@@ -1967,46 +2005,63 @@ impl OhlcvMonitor {
         )
         .await;
 
-        let runner = self.clone();
-        let mint_owned = mint.to_string();
-        let pool_owned = pool_address.to_string();
-
         logger::info(
             LogTag::Ohlcv,
             &format!(
-                "Scheduling multi-timeframe backfill for {} via {} (retention: {} days)",
-                mint_owned, pool_owned, retention_days
+                "Scheduled multi-timeframe backfill for {} via {} (retention: {} days)",
+                mint, pool_address, retention_days
             ),
         );
 
-        tokio::spawn(async move {
-            match runner
-                .backfill_all_timeframes(&mint_owned, &pool_owned, priority)
-                .await
-            {
-                Ok(points) => {
-                    logger::info(
-                        LogTag::Ohlcv,
-                        &format!(
-                            "Multi-timeframe backfill for {} via {} completed (total candles: {})",
-                            mint_owned, pool_owned, points
-                        ),
-                    );
-                }
-                Err(e) => {
-                    logger::warning(
-                        LogTag::Ohlcv,
-                        &format!(
-                            "Multi-timeframe backfill failed for {} via {}: {}",
-                            mint_owned, pool_owned, e
-                        ),
-                    );
-                }
-            }
-            runner.finish_backfill(&mint_owned);
-        });
-
         Ok(())
+    }
+
+    /// Whether a backfill pass would fetch anything: a timeframe is not backfilled and its
+    /// series is due a backfill fetch (`backfill_fetch_due`). The in-memory rule is read first,
+    /// so a token with nothing due costs no database read.
+    fn backfill_wanted(&self, mint: &str, pool_address: &str) -> OhlcvResult<bool> {
+        let now = Utc::now().timestamp();
+        for timeframe in Timeframe::all() {
+            let state = self.native_series_state(mint, pool_address, timeframe);
+            if backfill_fetch_due(&state, now, self.read_through_active(mint, timeframe))
+                && !self.is_timeframe_backfill_ready(mint, pool_address, timeframe)?
+            {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+
+    /// Start the token's backfill (`backfill_all_timeframes`) as a background task holding its
+    /// backfill slot, the one owner of that start. Returns false when the slot is taken by a
+    /// running backfill or native refresh of the token, and nothing is started.
+    fn spawn_backfill(&self, mint: &str, pool_address: &str, priority: Priority) -> bool {
+        if !self.try_start_backfill(mint) {
+            return false;
+        }
+        let runner = self.clone();
+        let mint = mint.to_string();
+        let pool = pool_address.to_string();
+        tokio::spawn(async move {
+            logger::debug(
+                LogTag::Ohlcv,
+                &format!("Starting backfill for mint={mint} pool={pool} priority={priority:?}"),
+            );
+            match runner.backfill_all_timeframes(&mint, &pool, priority).await {
+                Ok(total) => logger::debug(
+                    LogTag::Ohlcv,
+                    &format!(
+                        "Backfill completed for mint={mint} pool={pool} total_candles={total}"
+                    ),
+                ),
+                Err(e) => logger::warning(
+                    LogTag::Ohlcv,
+                    &format!("Backfill failed for mint={mint} pool={pool}: {e}"),
+                ),
+            }
+            runner.finish_backfill(&mint);
+        });
+        true
     }
 
     /// Kick off network pool discovery for `mint` in the background so callers
@@ -2543,13 +2598,12 @@ impl OhlcvMonitor {
                 continue;
             }
 
-            // An incomplete timeframe is re-requested at most once per retry delay,
-            // which is also the spacing the no-newer rule needs.
-            let last_fetch_at = self
-                .native_series_state(mint, pool_address, timeframe)
-                .last_fetch_at;
-            if last_fetch_at.is_some_and(|at| Utc::now().timestamp() - at < NATIVE_RETRY_DELAY_SECS)
-            {
+            let state = self.native_series_state(mint, pool_address, timeframe);
+            if !backfill_fetch_due(
+                &state,
+                Utc::now().timestamp(),
+                self.read_through_active(mint, timeframe),
+            ) {
                 continue;
             }
 
@@ -2873,20 +2927,11 @@ impl OhlcvMonitor {
     async fn refresh_native_timeframes(&self, mint: &str, pool_address: &str, priority: Priority) {
         let pool_is_native = self.pool_is_native(mint, pool_address);
         let refresh_fetch = |timeframe: Timeframe, limit: usize| {
-            let fetcher = Arc::clone(&self.fetcher);
+            let monitor = self.clone();
             let (mint, pool) = (mint.to_string(), pool_address.to_string());
             async move {
-                let (api_endpoint, aggregate) = timeframe.to_api_params();
-                fetcher
-                    .fetch_multi_source(
-                        &mint,
-                        &pool,
-                        api_endpoint,
-                        aggregate,
-                        limit,
-                        pool_is_native,
-                        None,
-                    )
+                monitor
+                    .fetch_series_page(&mint, &pool, timeframe, limit, pool_is_native)
                     .await
             }
         };
@@ -2942,6 +2987,10 @@ impl OhlcvMonitor {
         let now = Utc::now().timestamp();
         let mut due = Vec::with_capacity(AGGREGATED_TIMEFRAMES.len());
         for timeframe in AGGREGATED_TIMEFRAMES {
+            // A chart read-through is asking the Data Server for this series right now.
+            if self.read_through_active(mint, timeframe) {
+                continue;
+            }
             let newest = match self
                 .db
                 .get_latest_native_timestamp(mint, pool_address, timeframe)
@@ -3080,6 +3129,26 @@ impl OhlcvMonitor {
         let pool_is_native = self.pool_is_native(mint, pool_address);
 
         let fetched = self
+            .fetch_series_page(mint, pool_address, timeframe, limit, pool_is_native)
+            .await;
+        self.store_fetched_page(mint, pool_address, timeframe, fetched)
+            .await
+    }
+
+    /// The newest `limit` candles of one series for a background path
+    /// (`OhlcvFetcher::fetch_multi_source`). While the Data Server keeps answering the series
+    /// `pending` past `DATA_SERVER_PENDING_FALLBACK_SECS` (`pending_fallback_due`), a native
+    /// pool's page comes from the providers instead (`OhlcvFetcher::fetch_fallback`).
+    async fn fetch_series_page(
+        &self,
+        mint: &str,
+        pool_address: &str,
+        timeframe: Timeframe,
+        limit: usize,
+        pool_is_native: bool,
+    ) -> OhlcvResult<FetchResponse> {
+        let (api_endpoint, aggregate) = timeframe.to_api_params();
+        let page = self
             .fetcher
             .fetch_multi_source(
                 mint,
@@ -3090,9 +3159,26 @@ impl OhlcvMonitor {
                 pool_is_native,
                 None,
             )
-            .await;
-        self.store_fetched_page(mint, pool_address, timeframe, fetched)
-            .await
+            .await?;
+        let state = self.native_series_state(mint, pool_address, timeframe);
+        if pool_is_native
+            && page.is_pending()
+            && pending_fallback_due(&state, Utc::now().timestamp())
+        {
+            return self
+                .fetcher
+                .fetch_fallback(
+                    mint,
+                    pool_address,
+                    api_endpoint,
+                    aggregate,
+                    limit,
+                    pool_is_native,
+                    None,
+                )
+                .await;
+        }
+        Ok(page)
     }
 
     /// Store the outcome of one native page fetch of `timeframe`: a page through
@@ -3190,8 +3276,13 @@ impl OhlcvMonitor {
     /// backfill: wait up to `READ_THROUGH_POOL_WAIT` for the token's series pool, then fetch
     /// that one timeframe's backfill page through `fetch` and store it (`store_native_page`).
     /// Concurrent calls for one `(mint, timeframe)` share one fetch: a later caller waits for
-    /// the running one and then finds the stored candles or the recent attempt. A timeframe
-    /// attempted within `NATIVE_RETRY_DELAY_SECS` is not fetched again. Everything ends by
+    /// the running one and then finds the stored candles or the recent attempt.
+    ///
+    /// The series is asked again when `read_through_next_ask` allows: a `pending` answer after
+    /// `READ_THROUGH_PENDING_RETRY`, any other attempt after `NATIVE_RETRY_DELAY_SECS`. Stored
+    /// rows are re-checked before every ask, since the backfill may have stored them. A request
+    /// that has to wait for its turn, and every request after the call's first, starts only
+    /// while at least `READ_THROUGH_MIN_ATTEMPT` is left before `deadline`; everything ends by
     /// `deadline`. Returns whether the timeframe holds native candles afterwards.
     pub(super) async fn read_through_timeframe<F, Fut>(
         &self,
@@ -3201,10 +3292,10 @@ impl OhlcvMonitor {
         fetch: F,
     ) -> OhlcvResult<bool>
     where
-        F: FnOnce(String, usize) -> Fut,
+        F: Fn(String, usize) -> Fut,
         Fut: std::future::Future<Output = Option<FetchResponse>>,
     {
-        let Some(pool) = self
+        let Some(mut pool) = self
             .wait_for_series_pool(mint, deadline.min(Instant::now() + READ_THROUGH_POOL_WAIT))
             .await?
         else {
@@ -3219,55 +3310,76 @@ impl OhlcvMonitor {
         let Ok(_turn) = tokio::time::timeout_at(deadline, flight.lock()).await else {
             return Ok(false);
         };
-        if native_newest(&pool)?.is_some() {
-            return Ok(true);
-        }
-        let now = Utc::now().timestamp();
-        let attempted_recently = self
-            .native_series_state(mint, &pool, timeframe)
-            .last_fetch_at
-            .is_some_and(|at| now - at < NATIVE_RETRY_DELAY_SECS);
-        if attempted_recently {
-            return Ok(false);
-        }
+        let mut first_ask = true;
+        loop {
+            if native_newest(&pool)?.is_some() {
+                return Ok(true);
+            }
+            let state = self.native_series_state(mint, &pool, timeframe);
+            let wait_ms = read_through_next_ask(&state).map_or(0, |at| {
+                at.saturating_mul(1_000) - Utc::now().timestamp_millis()
+            });
+            let ask_at =
+                Instant::now() + Duration::from_millis(u64::try_from(wait_ms).unwrap_or(0));
+            if (wait_ms > 0 || !first_ask) && ask_at + READ_THROUGH_MIN_ATTEMPT > deadline {
+                return Ok(false);
+            }
+            if wait_ms > 0 {
+                sleep_until(ask_at).await;
+                continue;
+            }
 
-        let response = tokio::time::timeout_at(
-            deadline,
-            fetch(pool.clone(), timeframe.max_backfill_candles()),
-        )
-        .await
-        .ok()
-        .flatten();
-        let Some(response) = response else {
-            self.update_native_series(mint, &pool, timeframe, |state| state.record_failure(now));
+            first_ask = false;
+            let attempt_start = Instant::now();
+            let now = Utc::now().timestamp();
+            let request = fetch(pool.clone(), timeframe.max_backfill_candles());
+            let response = tokio::time::timeout_at(deadline, request)
+                .await
+                .ok()
+                .flatten();
+            let Some(response) = response else {
+                self.update_native_series(mint, &pool, timeframe, |state| {
+                    state.record_failure(now)
+                });
+                logger::debug(
+                    LogTag::Ohlcv,
+                    &format!(
+                        "Read-through of mint={} timeframe={} pool={} got no Data Server answer",
+                        mint,
+                        timeframe.as_str(),
+                        pool
+                    ),
+                );
+                return Ok(false);
+            };
+            let pending = response.is_pending();
+            let changed = self
+                .store_native_page(mint, &pool, timeframe, response)
+                .await?;
             logger::debug(
                 LogTag::Ohlcv,
                 &format!(
-                    "Read-through of mint={} timeframe={} pool={} got no Data Server answer",
+                    "Read-through of mint={} timeframe={} stored {} candles (pending={})",
                     mint,
                     timeframe.as_str(),
-                    pool
+                    changed,
+                    pending
                 ),
             );
-            return Ok(false);
-        };
-        let changed = self
-            .store_native_page(mint, &pool, timeframe, response)
-            .await?;
-        logger::debug(
-            LogTag::Ohlcv,
-            &format!(
-                "Read-through of mint={} timeframe={} stored {} candles",
-                mint,
-                timeframe.as_str(),
-                changed
-            ),
-        );
-        let series = self.pool_manager.series_pool(mint).await?;
-        Ok(match series {
-            Some(series) => native_newest(&series.address)?.is_some(),
-            None => false,
-        })
+            let series = self.pool_manager.series_pool(mint).await?;
+            if !pending {
+                return Ok(match series {
+                    Some(series) => native_newest(&series.address)?.is_some(),
+                    None => false,
+                });
+            }
+            let Some(series) = series else {
+                return Ok(false);
+            };
+            // A pending page may have moved the series pool (`page_series_pool`).
+            pool = series.address;
+            sleep_until((attempt_start + READ_THROUGH_PENDING_RETRY).min(deadline)).await;
+        }
     }
 
     /// The token's series pool, polled until `until` while discovery has not registered one.
@@ -3286,6 +3398,16 @@ impl OhlcvMonitor {
             }
             sleep_until(next).await;
         }
+    }
+
+    /// Whether a chart read-through of `(mint, timeframe)` is running or waiting. A lookup of
+    /// the existing flight lock only; it never creates an entry.
+    fn read_through_active(&self, mint: &str, timeframe: Timeframe) -> bool {
+        self.read_through_flights
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .get(&(mint.to_string(), timeframe))
+            .is_some_and(|flight| Arc::strong_count(flight) > 1)
     }
 
     /// The lock that orders read-through fetches of one `(mint, timeframe)`. An entry no
@@ -3889,6 +4011,151 @@ mod tests {
             },
             before
         );
+    }
+
+    #[test]
+    fn a_pending_page_never_confirms_no_newer() {
+        let tf = Timeframe::Hour1;
+        let mut empty = NativeSeriesState::default();
+        empty.record_page(NOW, None, None, true);
+        empty.record_page(NOW + NATIVE_RETRY_DELAY_SECS, None, None, true);
+        assert!(!empty.no_newer_holds(None));
+        assert!(!empty.is_caught_up(None, NOW + NATIVE_RETRY_DELAY_SECS, tf));
+        assert_eq!(empty.pending_since, Some(NOW));
+        assert_eq!(empty.last_fetch_at, Some(NOW + NATIVE_RETRY_DELAY_SECS));
+
+        // Any page that is not pending ends the pending run.
+        empty.record_page(NOW + 30, None, None, false);
+        assert_eq!(empty.pending_since, None);
+
+        // A pending page inside a no-newer streak leaves the streak as it was.
+        let old = Some(CURRENT - 50 * HOUR);
+        let mut streak = NativeSeriesState::default();
+        streak.record_page(NOW, old, old, false);
+        let before = (streak.no_newer_since, streak.no_newer_confirmed);
+        streak.record_page(NOW + 5, old, None, true);
+        assert_eq!((streak.no_newer_since, streak.no_newer_confirmed), before);
+        streak.record_page(NOW + NATIVE_RETRY_DELAY_SECS, old, old, false);
+        assert!(streak.no_newer_holds(old));
+
+        // A refreshing page that carries candles is not pending.
+        let recent = Some(CURRENT);
+        let mut refreshing = NativeSeriesState::default();
+        refreshing.record_page(NOW, None, recent, true);
+        assert_eq!(refreshing.pending_since, None);
+    }
+
+    #[test]
+    fn pending_pages_inside_a_scheduled_refetch_keep_the_schedule() {
+        let mut state = NativeSeriesState::default();
+        state.record_page(NOW, None, None, true);
+        assert_eq!(state.refetch_at, Some(NOW + 15));
+        assert_eq!(state.refetches, 1);
+
+        // Short re-asks of a viewed timeframe before the re-fetch is due.
+        state.record_page(NOW + 2, None, None, true);
+        state.record_page(NOW + 4, None, None, true);
+        assert_eq!(state.refetch_at, Some(NOW + 15));
+        assert_eq!(state.refetches, 1);
+        assert_eq!(state.last_fetch_at, Some(NOW + 4));
+
+        // Once due, the next pending page backs off as any refreshing page does.
+        state.record_page(NOW + 15, None, None, true);
+        assert_eq!(state.refetch_at, Some(NOW + 15 + 30));
+        assert_eq!(state.refetches, 2);
+    }
+
+    #[test]
+    fn the_providers_are_asked_only_after_the_pending_grace() {
+        let mut state = NativeSeriesState::default();
+        assert!(!pending_fallback_due(&state, NOW));
+
+        state.record_page(NOW, None, None, true);
+        assert!(!pending_fallback_due(&state, NOW));
+        // Further pending pages keep the start of the run.
+        state.record_page(NOW + 60, None, None, true);
+        assert!(!pending_fallback_due(&state, NOW + 119));
+        assert!(pending_fallback_due(&state, NOW + 120));
+
+        // A page with candles ends the run.
+        state.record_page(NOW + 121, None, Some(CURRENT), false);
+        assert!(!pending_fallback_due(&state, NOW + 500));
+    }
+
+    #[test]
+    fn a_pending_answer_is_asked_again_after_the_short_spacing() {
+        let pending_at = |at: i64| {
+            let mut state = NativeSeriesState::default();
+            state.record_page(at, None, None, true);
+            state
+        };
+        let failed_at = |at: i64| {
+            let mut state = NativeSeriesState::default();
+            state.record_failure(at);
+            state
+        };
+        let empty_ready_at = |at: i64| {
+            let mut state = NativeSeriesState::default();
+            state.record_page(at, None, None, false);
+            state
+        };
+        // (case, state, the read-through may ask at NOW)
+        let cases = [
+            ("never attempted", NativeSeriesState::default(), true),
+            ("pending 1 s ago", pending_at(NOW - 1), false),
+            ("pending 2 s ago", pending_at(NOW - 2), true),
+            ("failed 5 s ago", failed_at(NOW - 5), false),
+            ("failed 15 s ago", failed_at(NOW - 15), true),
+            ("empty ready page 5 s ago", empty_ready_at(NOW - 5), false),
+        ];
+        for (case, state, may_ask) in cases {
+            let next = read_through_next_ask(&state);
+            assert_eq!(next.is_none_or(|at| at <= NOW), may_ask, "{case}");
+        }
+        assert_eq!(read_through_next_ask(&pending_at(NOW)), Some(NOW + 2));
+        assert_eq!(
+            read_through_next_ask(&failed_at(NOW)),
+            Some(NOW + NATIVE_RETRY_DELAY_SECS)
+        );
+    }
+
+    #[test]
+    fn a_backfill_skips_a_series_being_read_through_or_in_backoff() {
+        let fetched_at = |at: i64| NativeSeriesState {
+            last_fetch_at: Some(at),
+            ..NativeSeriesState::default()
+        };
+        let refetch_at = |at: i64| NativeSeriesState {
+            last_fetch_at: Some(NOW - 20),
+            refetch_at: Some(at),
+            ..NativeSeriesState::default()
+        };
+        // (case, state, read-through active, a backfill fetch is due)
+        let cases = [
+            ("never fetched", NativeSeriesState::default(), false, true),
+            (
+                "being read through",
+                NativeSeriesState::default(),
+                true,
+                false,
+            ),
+            ("fetched 5 s ago", fetched_at(NOW - 5), false, false),
+            ("fetched 15 s ago", fetched_at(NOW - 15), false, true),
+            (
+                "re-fetch scheduled later",
+                refetch_at(NOW + 10),
+                false,
+                false,
+            ),
+            ("re-fetch due", refetch_at(NOW), false, true),
+        ];
+        for (case, state, read_through_active, due) in cases {
+            assert_eq!(
+                backfill_fetch_due(&state, NOW, read_through_active),
+                due,
+                "{case}"
+            );
+        }
     }
 
     #[test]

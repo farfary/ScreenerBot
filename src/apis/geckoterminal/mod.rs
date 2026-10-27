@@ -35,7 +35,7 @@ use reqwest::Client;
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
 use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 // ============================================================================
@@ -74,11 +74,9 @@ pub struct GeckoTerminalClient {
     consecutive_429s: AtomicU32,
     /// When set, no request may be SENT before this instant. Set on a 429 and
     /// enforced inside `execute_request` while holding the rate-limiter guard, so
-    /// the backoff actually slows the outbound rate for ALL callers (the old
-    /// inline sleep only paused the single caller after the guard was released,
-    /// so concurrent backfills kept firing every min_interval and the 429s never
-    /// subsided).
-    penalty_until: Arc<tokio::sync::Mutex<Option<Instant>>>,
+    /// the backoff slows the outbound rate for every caller rather than only the
+    /// one that saw the 429. A plain mutex: it is never held across an await.
+    penalty_until: Mutex<Option<Instant>>,
 }
 
 impl GeckoTerminalClient {
@@ -122,7 +120,7 @@ impl GeckoTerminalClient {
             timeout: Duration::from_secs(timeout_seconds),
             enabled,
             consecutive_429s: AtomicU32::new(0),
-            penalty_until: Arc::new(tokio::sync::Mutex::new(None)),
+            penalty_until: Mutex::new(None),
         })
     }
 
@@ -132,6 +130,40 @@ impl GeckoTerminalClient {
 
     pub async fn get_stats(&self) -> crate::apis::stats::ApiStats {
         self.stats.get_stats().await
+    }
+
+    /// Time left in the 429 penalty window, `None` when no penalty is active. A caller that
+    /// can defer its request (background candle fallback) checks this instead of queueing
+    /// behind the penalty on the single request permit.
+    pub fn penalty_remaining(&self) -> Option<Duration> {
+        let until = (*self.penalty())?;
+        until
+            .checked_duration_since(Instant::now())
+            .filter(|left| !left.is_zero())
+    }
+
+    /// Open or extend the shared penalty window after a 429: 10 s, 20 s, 40 s, then 60 s for
+    /// consecutive 429s. An active window is never shortened.
+    pub(crate) fn record_rate_limited(&self) {
+        let count = self.consecutive_429s.fetch_add(1, Ordering::Relaxed) + 1;
+        let backoff_secs = (10u64 * (1u64 << (count - 1).min(3))).min(60);
+        let until = Instant::now() + Duration::from_secs(backoff_secs);
+        let mut penalty = self.penalty();
+        if penalty.map_or(true, |existing| until > existing) {
+            *penalty = Some(until);
+        }
+    }
+
+    /// Close the penalty window and reset the 429 streak after a successful answer.
+    fn record_success(&self) {
+        self.consecutive_429s.store(0, Ordering::Relaxed);
+        *self.penalty() = None;
+    }
+
+    fn penalty(&self) -> std::sync::MutexGuard<'_, Option<Instant>> {
+        self.penalty_until
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
     fn ensure_enabled(&self, _endpoint: &str) -> Result<(), Error> {
@@ -155,14 +187,8 @@ impl GeckoTerminalClient {
 
         // Honor any active 429 penalty BEFORE sending, while still holding the
         // limiter guard so every caller serializes behind the backoff window.
-        {
-            let penalty = *self.penalty_until.lock().await;
-            if let Some(until) = penalty {
-                let now = Instant::now();
-                if until > now {
-                    tokio::time::sleep(until - now).await;
-                }
-            }
+        if let Some(left) = self.penalty_remaining() {
+            tokio::time::sleep(left).await;
         }
 
         let start = Instant::now();
@@ -214,20 +240,10 @@ impl GeckoTerminalClient {
                     ),
                 )
                 .await;
-            // Exponential backoff on 429: 10s, 20s, 40s, 60s max. Record it as a
-            // shared penalty window (enforced in execute_request) rather than
-            // sleeping only this caller — otherwise concurrent requests keep
-            // firing every min_interval and the rate limit never recovers.
+            // A 429 opens the shared penalty window enforced in `execute_request`, so
+            // concurrent callers stop firing every min_interval until the limit recovers.
             if status.as_u16() == 429 {
-                let count = self.consecutive_429s.fetch_add(1, Ordering::Relaxed) + 1;
-                let backoff_secs = (10u64 * (1u64 << (count - 1).min(3))).min(60);
-                let until = Instant::now() + Duration::from_secs(backoff_secs);
-                let mut penalty = self.penalty_until.lock().await;
-                if penalty.map_or(true, |existing| until > existing) {
-                    *penalty = Some(until);
-                }
-            }
-            if status.as_u16() == 429 {
+                self.record_rate_limited();
                 return Err(NetworkError::RateLimited {
                     endpoint: endpoint.to_owned(),
                     retry_after_ms: None,
@@ -245,8 +261,7 @@ impl GeckoTerminalClient {
         match response.json::<T>().await {
             Ok(value) => {
                 self.stats.record_request(true, elapsed).await;
-                self.consecutive_429s.store(0, Ordering::Relaxed);
-                *self.penalty_until.lock().await = None;
+                self.record_success();
                 Ok(value)
             }
             Err(err) => {
@@ -311,5 +326,34 @@ impl OhlcvResponse {
 
     pub fn volumes(&self) -> Vec<f64> {
         self.ohlcv_list.iter().map(|c| c[5]).collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_429_opens_a_penalty_window_and_a_success_closes_it() {
+        let client = GeckoTerminalClient::new(true, RATE_LIMIT_PER_MINUTE, TIMEOUT_SECS).unwrap();
+        assert_eq!(client.penalty_remaining(), None);
+
+        client.record_rate_limited();
+        let first = client.penalty_remaining().expect("a 429 opens the window");
+        assert!(first > Duration::from_secs(9) && first <= Duration::from_secs(10));
+
+        // A second 429 in a row doubles the window; it is never shortened.
+        client.record_rate_limited();
+        let second = client.penalty_remaining().expect("the window stays open");
+        assert!(second > Duration::from_secs(19) && second <= Duration::from_secs(20));
+
+        client.record_success();
+        assert_eq!(client.penalty_remaining(), None);
+        // The streak restarts: the next 429 opens the shortest window again.
+        client.record_rate_limited();
+        let restarted = client
+            .penalty_remaining()
+            .expect("a new 429 opens the window");
+        assert!(restarted <= Duration::from_secs(10));
     }
 }

@@ -32,9 +32,10 @@ const BUNDLE_CACHE_MAX_SIZE: usize = 150;
 const PARALLEL_FETCH_LIMIT: usize = 10;
 const BUNDLE_REFRESH_INTERVAL_SECONDS: u64 = 5;
 
-/// Longest a chart read waits for a read-through of its timeframe (pool discovery, one Data
-/// Server request, which the server bounds to 3.5 s on a cold series, and the store).
-const CHART_READ_THROUGH_DEADLINE: Duration = Duration::from_secs(5);
+/// Longest a chart read waits for a read-through of its timeframe: pool discovery, and two Data
+/// Server requests of up to the 4 s client timeout when the first answers `pending`, with the
+/// store. Below the dashboard's 10 s request timeout.
+const CHART_READ_THROUGH_DEADLINE: Duration = Duration::from_secs(8);
 
 /// One OHLCV runtime per enabled chain, built on first use.
 static SERVICES: PerChain<OnceCell<Arc<OhlcvServiceImpl>>> = PerChain::new(empty_service_slot);
@@ -156,18 +157,21 @@ impl OhlcvServiceImpl {
         let fetcher = Arc::clone(&self.fetcher);
         let data_server = data_server_usable().then(|| {
             let mint = mint.to_string();
-            move |pool: String, limit: usize| async move {
-                let (api_endpoint, aggregate) = timeframe.to_api_params();
-                fetcher
-                    .fetch_from_screenerbot_server(
-                        &mint,
-                        &pool,
-                        api_endpoint,
-                        aggregate,
-                        limit,
-                        None,
-                    )
-                    .await
+            move |pool: String, limit: usize| {
+                let (fetcher, mint) = (Arc::clone(&fetcher), mint.clone());
+                async move {
+                    let (api_endpoint, aggregate) = timeframe.to_api_params();
+                    fetcher
+                        .fetch_from_screenerbot_server(
+                            &mint,
+                            &pool,
+                            api_endpoint,
+                            aggregate,
+                            limit,
+                            None,
+                        )
+                        .await
+                }
             }
         });
         self.chart_candles(
@@ -196,7 +200,7 @@ impl OhlcvServiceImpl {
         wait: Duration,
     ) -> OhlcvResult<Vec<Candle>>
     where
-        F: FnOnce(String, usize) -> Fut + Send + 'static,
+        F: Fn(String, usize) -> Fut + Send + 'static,
         Fut: std::future::Future<Output = Option<FetchResponse>> + Send + 'static,
     {
         let Some(fetch) = data_server else {
@@ -1037,10 +1041,13 @@ mod tests {
         let read = |calls: Arc<AtomicUsize>| {
             let service = Arc::clone(&h.service);
             async move {
-                let fetch = move |_pool: String, _limit: usize| async move {
-                    calls.fetch_add(1, Ordering::SeqCst);
-                    tokio::time::sleep(Duration::from_millis(100)).await;
-                    Some(server_page())
+                let fetch = move |_pool: String, _limit: usize| {
+                    let calls = Arc::clone(&calls);
+                    async move {
+                        calls.fetch_add(1, Ordering::SeqCst);
+                        tokio::time::sleep(Duration::from_millis(100)).await;
+                        Some(server_page())
+                    }
                 };
                 service
                     .chart_candles("mint", Timeframe::Day1, 0, Some(fetch), WAIT)
@@ -1056,6 +1063,73 @@ mod tests {
         for candles in answers {
             assert_eq!(timestamps(&candles), timestamps(&server_days()));
         }
+    }
+
+    /// The Data Server's empty `pending` answer for a cold series.
+    fn pending_page() -> FetchResponse {
+        FetchResponse {
+            candles: Vec::new(),
+            server_refreshing: true,
+            source: Some(CandleSource::DataServer),
+            series_pool: Some("pool".to_string()),
+        }
+    }
+
+    /// A cold timeframe the Data Server answers `pending` is asked again after the short
+    /// spacing and drawn from that second answer within the chart wait.
+    #[tokio::test]
+    async fn a_pending_cold_timeframe_is_served_on_the_next_answer_within_the_wait() {
+        let h = Harness::open("pending-served");
+        let calls = Arc::new(AtomicUsize::new(0));
+        let counted = Arc::clone(&calls);
+        let fetch = move |_pool: String, _limit: usize| {
+            let first = counted.fetch_add(1, Ordering::SeqCst) == 0;
+            async move { Some(if first { pending_page() } else { server_page() }) }
+        };
+
+        let started = Instant::now();
+        let candles = h
+            .service
+            .chart_candles("mint", Timeframe::Day1, 0, Some(fetch), WAIT)
+            .await
+            .unwrap();
+        let elapsed = started.elapsed();
+
+        assert_eq!(timestamps(&candles), timestamps(&server_days()));
+        assert_eq!(calls.load(Ordering::SeqCst), 2);
+        let retry = crate::ohlcvs::monitor::READ_THROUGH_PENDING_RETRY;
+        assert!(elapsed >= retry - Duration::from_millis(100), "{elapsed:?}");
+        assert!(elapsed < retry + Duration::from_secs(1), "{elapsed:?}");
+    }
+
+    /// A series still pending when the wait runs out answers what is stored on time, after
+    /// one re-ask, and never starts a request it has no time left to finish.
+    #[tokio::test]
+    async fn a_series_still_pending_at_the_deadline_answers_empty_on_time() {
+        let h = Harness::open("pending-deadline");
+        let calls = Arc::new(AtomicUsize::new(0));
+        let counted = Arc::clone(&calls);
+        let fetch = move |_pool: String, _limit: usize| {
+            counted.fetch_add(1, Ordering::SeqCst);
+            async { Some(pending_page()) }
+        };
+
+        let started = Instant::now();
+        let candles = h
+            .service
+            .chart_candles(
+                "mint",
+                Timeframe::Day1,
+                0,
+                Some(fetch),
+                Duration::from_millis(3_500),
+            )
+            .await
+            .unwrap();
+
+        assert!(started.elapsed() < Duration::from_millis(3_700));
+        assert!(candles.is_empty());
+        assert_eq!(calls.load(Ordering::SeqCst), 2);
     }
 
     /// The chart wait bounds the whole read-through: a read-through that blocks its thread
