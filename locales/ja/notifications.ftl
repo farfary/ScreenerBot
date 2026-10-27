@@ -28,6 +28,7 @@ actions-failure-quote = 見積もりに失敗しました
 actions-failure-swap = スワップに失敗しました
 actions-failure-trade = 取引に失敗しました
 actions-failure-entry = エントリーに失敗しました
+actions-failure-entry-withdrawn = エントリーを取り下げました
 actions-failure-exit = エグジットに失敗しました
 actions-failure-dca = DCA に失敗しました
 actions-failure-verification-expired = 確認の期限が切れました: トランザクションは反映されませんでした

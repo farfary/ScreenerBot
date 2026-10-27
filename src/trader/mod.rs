@@ -60,7 +60,7 @@ pub use error::{Error, Result};
 pub use executors::execute_trade;
 pub use types::{
     closed_reason_text, trade_reason_text, FailedTradeStep, TradeAction, TradeDecision,
-    TradePriority, TradeReason, TradeResult, TradeStep,
+    TradePriority, TradeReason, TradeResult, TradeStep, Withdrawal,
 };
 
 use crate::logger::{self, LogTag};

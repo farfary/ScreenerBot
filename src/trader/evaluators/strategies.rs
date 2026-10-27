@@ -19,7 +19,9 @@ use crate::strategies::types::{
 use crate::tokens::Token;
 use crate::trader::constants::STRATEGY_EVALUATION_TIMEOUT_SECS;
 use crate::trader::paper::TradingMode;
-use crate::trader::types::{TradeAction, TradeDecision, TradePriority, TradeReason};
+use crate::trader::types::{
+    EntryDecisions, TradeAction, TradeDecision, TradePriority, TradeReason,
+};
 use chrono::{DateTime, Utc};
 use std::time::Duration;
 
@@ -283,26 +285,58 @@ fn log_strategy_error(subject: &str, error: &crate::Error) {
     }
 }
 
+/// The outcome of each book's entry `pass`, live first whatever the order of `books`, all
+/// under the one `deadline`. A pass still running at the deadline is abandoned, and a pass
+/// whose turn comes after the deadline never starts; both read `None`. A pass that
+/// finished keeps its outcome whatever a later pass does. The passes run one after the
+/// other: they are CPU-bound on one task, so running them together gains nothing and loses
+/// the fixed order.
+async fn decide_books<T, F, Fut>(
+    books: &[TradingMode],
+    deadline: tokio::time::Instant,
+    mut pass: F,
+) -> Vec<(TradingMode, Option<T>)>
+where
+    F: FnMut(TradingMode) -> Fut,
+    Fut: std::future::Future<Output = T>,
+{
+    let mut outcomes = Vec::with_capacity(books.len());
+    for mode in [TradingMode::Live, TradingMode::Paper] {
+        if !books.contains(&mode) {
+            continue;
+        }
+        let outcome = if tokio::time::Instant::now() >= deadline {
+            None
+        } else {
+            tokio::time::timeout_at(deadline, pass(mode)).await.ok()
+        };
+        outcomes.push((mode, outcome));
+    }
+    outcomes
+}
+
 /// Evaluator for applying strategies to trading decisions
 pub struct StrategyEvaluator;
 
 impl StrategyEvaluator {
-    /// Check if a token meets entry criteria based on the entry strategies of the
-    /// `admitted` modes among the entry cycle's `entry_strategies`; the first strategy
-    /// that signals decides the book.
+    /// The entry decision of each book in `books` for a token, from the entry cycle's
+    /// `entry_strategies`: each book runs its own pass over the strategies of its mode and
+    /// stops at its own first signal, so a strategy of one book never takes a token from
+    /// the other. The live pass runs first and both share one deadline of
+    /// `STRATEGY_EVALUATION_TIMEOUT_SECS`, so a paper stall never drops a live signal.
     pub async fn check_entry_strategies(
         chain: ChainId,
         token_mint: &str,
         price_info: &PriceResult,
-        admitted: &[TradingMode],
+        books: &[TradingMode],
         entry_strategies: &[Strategy],
-    ) -> crate::trader::Result<Option<TradeDecision>> {
-        // Early check: skip if no entry strategy of an admitted mode is configured
+    ) -> crate::trader::Result<EntryDecisions> {
+        // Early check: skip if no entry strategy of a requested book is configured
         if !entry_strategies
             .iter()
-            .any(|strategy| admitted.contains(&strategy.mode))
+            .any(|strategy| books.contains(&strategy.mode))
         {
-            return Ok(None);
+            return Ok(EntryDecisions::default());
         }
 
         // NOTE: Connectivity is already verified by the caller (entry.rs)
@@ -326,72 +360,80 @@ impl StrategyEvaluator {
 
         let timeframe_bundle = strategy_candles(chain, token_mint).await;
 
-        // Call strategies module for evaluation with timeout
+        // One deadline shared by every book's pass, so the worst case stays one timeout
         let strategy_timeout = Duration::from_secs(STRATEGY_EVALUATION_TIMEOUT_SECS);
-        let evaluation_result = tokio::time::timeout(
-            strategy_timeout,
+        let deadline = tokio::time::Instant::now() + strategy_timeout;
+        let outcomes = decide_books(books, deadline, |mode| {
             strategies::evaluate_entry_strategies(
                 entry_strategies,
-                admitted,
+                mode,
                 token_mint,
                 price_info.price_native,
-                Some(market_data),
-                timeframe_bundle,
-            ),
-        )
+                Some(&market_data),
+                timeframe_bundle.as_ref(),
+            )
+        })
         .await;
 
-        match evaluation_result {
-            Ok(Ok(Some((strategy_id, mode)))) => {
-                logger::info(
-                    LogTag::Trader,
-                    &format!(
-                        "Entry strategy signal: token={}, strategy={}, mode={}, price={:.9} SOL",
+        let mut decisions = EntryDecisions::default();
+        let mut undecided = Vec::new();
+        for (mode, outcome) in outcomes {
+            match outcome {
+                Some(Ok(Some(strategy_id))) => {
+                    logger::info(
+                        LogTag::Trader,
+                        &format!(
+                            "Entry strategy signal: token={}, strategy={}, mode={}, price={:.9} SOL",
+                            token_mint,
+                            strategy_id,
+                            mode.as_str(),
+                            price_info.price_native
+                        ),
+                    );
+                    decisions.insert(entry_decision(
                         token_mint,
                         strategy_id,
-                        mode.as_str(),
-                        price_info.price_native
-                    ),
-                );
-
-                Ok(Some(entry_decision(
-                    token_mint,
-                    strategy_id,
-                    price_info.price_native,
-                    mode.book(),
-                )))
-            }
-            Ok(Ok(None)) => Ok(None),
-            Ok(Err(e)) => {
-                log_strategy_error(token_mint, &e);
-                Ok(None) // Don't fail trading on strategy errors
-            }
-            Err(_timeout) => {
-                logger::warning(
-                    LogTag::Trader,
-                    &format!(
-                        "Entry strategy evaluation for {} timed out after {}s; no entry signal was decided",
-                        token_mint,
-                        strategy_timeout.as_secs()
-                    ),
-                );
-
-                // Record event for metrics tracking
-                crate::events::record_trader_event(
-                    "strategy_evaluation_timeout",
-                    crate::events::Severity::Warn,
-                    Some(token_mint),
-                    None,
-                    serde_json::json!({
-                      "timeout_seconds": strategy_timeout.as_secs(),
-                      "evaluation_type": "entry",
-                    }),
-                )
-                .await;
-
-                Ok(None) // Skip this token on timeout
+                        price_info.price_native,
+                        mode.book(),
+                    ));
+                }
+                Some(Ok(None)) => {}
+                Some(Err(e)) => {
+                    // Don't fail trading on strategy errors
+                    log_strategy_error(token_mint, &e);
+                }
+                None => undecided.push(mode.as_str()),
             }
         }
+
+        // One stall is one record: a pass abandoned at the deadline and a pass that never
+        // started because of it are named together.
+        if !undecided.is_empty() {
+            logger::warning(
+                LogTag::Trader,
+                &format!(
+                    "Entry strategy evaluation for {} ran out of its {}s deadline; no entry signal was decided for the {} book(s)",
+                    token_mint,
+                    strategy_timeout.as_secs(),
+                    undecided.join(", ")
+                ),
+            );
+
+            // Record event for metrics tracking
+            crate::events::record_trader_event(
+                "strategy_evaluation_timeout",
+                crate::events::Severity::Warn,
+                Some(token_mint),
+                None,
+                serde_json::json!({
+                  "timeout_seconds": strategy_timeout.as_secs(),
+                  "evaluation_type": "entry",
+                  "books": undecided,
+                }),
+            )
+            .await;
+        }
+        Ok(decisions)
     }
 
     /// Check if a position should be exited based on the exit cycle's `exit_strategies`
@@ -471,9 +513,9 @@ impl StrategyEvaluator {
                 position.book,
                 &position.mint,
                 current_price,
-                position_data,
-                Some(market_data),
-                timeframe_bundle,
+                &position_data,
+                Some(&market_data),
+                timeframe_bundle.as_ref(),
                 position.origin.entry_strategy_id(),
             ),
         )
@@ -523,6 +565,7 @@ impl StrategyEvaluator {
                       "timeout_seconds": strategy_timeout.as_secs(),
                       "evaluation_type": "exit",
                       "position_id": position.id,
+                      "book": position.book.as_str(),
                     }),
                 )
                 .await;
@@ -557,6 +600,77 @@ mod tests {
         assert_eq!(decision.position_id.as_deref(), Some("7"));
         assert_eq!(decision.exit_percentage, None);
         assert_eq!(decision.strategy_id.as_deref(), Some("exit-strategy"));
+    }
+
+    /// A paper pass that stalls is abandoned at the shared deadline and the live signal
+    /// found before it is kept; the live pass runs first even when paper is listed first,
+    /// and the whole evaluation never outlasts one timeout.
+    #[tokio::test(start_paused = true)]
+    async fn a_stalled_paper_pass_keeps_the_live_signal() {
+        let start = tokio::time::Instant::now();
+        let deadline = start + Duration::from_secs(STRATEGY_EVALUATION_TIMEOUT_SECS);
+        let mut started = Vec::new();
+        let outcomes = decide_books(&[TradingMode::Paper, TradingMode::Live], deadline, |mode| {
+            started.push(mode);
+            async move {
+                if mode == TradingMode::Paper {
+                    std::future::pending::<()>().await;
+                }
+                "live-signal"
+            }
+        })
+        .await;
+        assert_eq!(started, [TradingMode::Live, TradingMode::Paper]);
+        assert_eq!(
+            outcomes,
+            [
+                (TradingMode::Live, Some("live-signal")),
+                (TradingMode::Paper, None)
+            ]
+        );
+        assert_eq!(
+            tokio::time::Instant::now() - start,
+            Duration::from_secs(STRATEGY_EVALUATION_TIMEOUT_SECS)
+        );
+    }
+
+    /// A live pass that runs out the shared deadline leaves the paper pass no time: the
+    /// paper pass never starts and the evaluation still ends at the one deadline.
+    #[tokio::test(start_paused = true)]
+    async fn a_stalled_live_pass_leaves_the_paper_pass_no_time() {
+        let start = tokio::time::Instant::now();
+        let deadline = start + Duration::from_secs(STRATEGY_EVALUATION_TIMEOUT_SECS);
+        let mut started = Vec::new();
+        let outcomes = decide_books(&[TradingMode::Live, TradingMode::Paper], deadline, |mode| {
+            started.push(mode);
+            async move {
+                if mode == TradingMode::Live {
+                    std::future::pending::<()>().await;
+                }
+                "paper-signal"
+            }
+        })
+        .await;
+        assert_eq!(started, [TradingMode::Live], "the paper pass started late");
+        assert_eq!(
+            outcomes,
+            [(TradingMode::Live, None), (TradingMode::Paper, None)]
+        );
+        assert_eq!(
+            tokio::time::Instant::now() - start,
+            Duration::from_secs(STRATEGY_EVALUATION_TIMEOUT_SECS)
+        );
+    }
+
+    /// A book that was not requested runs no pass.
+    #[tokio::test(start_paused = true)]
+    async fn only_the_requested_books_run_a_pass() {
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(1);
+        let outcomes =
+            decide_books(&[TradingMode::Paper], deadline, |mode| async move { mode }).await;
+        assert_eq!(outcomes, [(TradingMode::Paper, Some(TradingMode::Paper))]);
+        let outcomes = decide_books(&[], deadline, |mode| async move { mode }).await;
+        assert!(outcomes.is_empty());
     }
 
     /// A strategy error that says data is missing is told apart from one that says the

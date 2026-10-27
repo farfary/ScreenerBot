@@ -28,6 +28,7 @@ actions-failure-quote = Falló la cotización
 actions-failure-swap = Falló el swap
 actions-failure-trade = Falló la operación
 actions-failure-entry = Falló la entrada
+actions-failure-entry-withdrawn = Entrada retirada
 actions-failure-exit = Falló la salida
 actions-failure-dca = Falló el DCA
 actions-failure-verification-expired = Verificación caducada: la transacción nunca se confirmó

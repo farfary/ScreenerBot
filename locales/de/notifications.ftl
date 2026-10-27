@@ -28,6 +28,7 @@ actions-failure-quote = Angebot fehlgeschlagen
 actions-failure-swap = Swap fehlgeschlagen
 actions-failure-trade = Trade fehlgeschlagen
 actions-failure-entry = Einstieg fehlgeschlagen
+actions-failure-entry-withdrawn = Einstieg zurückgezogen
 actions-failure-exit = Ausstieg fehlgeschlagen
 actions-failure-dca = DCA fehlgeschlagen
 actions-failure-verification-expired = Überprüfung abgelaufen: Die Transaktion wurde nie bestätigt

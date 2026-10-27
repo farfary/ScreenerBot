@@ -13,7 +13,10 @@ pub const POSITION_CYCLE_MIN_WAIT_MS: u64 = 200;
 
 // Timeouts and limits
 pub const ENTRY_CHECK_ACQUIRE_TIMEOUT_SECS: u64 = 30;
-pub const ENTRY_RESERVATION_TIMEOUT_SECS: u64 = 120; // 2 minutes for slow evaluations
+/// How long an entry reservation lives unreleased. Every entry path releases its own
+/// reservation, so the expiry is only the backstop for a holder that panicked or was
+/// aborted before releasing it.
+pub const ENTRY_RESERVATION_TIMEOUT_SECS: u64 = 120;
 pub const STRATEGY_EVALUATION_TIMEOUT_SECS: u64 = 5;
 
 // Safety thresholds

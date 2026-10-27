@@ -28,6 +28,7 @@ actions-failure-quote = Fiyat teklifi alınamadı
 actions-failure-swap = Takas başarısız
 actions-failure-trade = İşlem başarısız
 actions-failure-entry = Giriş başarısız
+actions-failure-entry-withdrawn = Giriş geri çekildi
 actions-failure-exit = Çıkış başarısız
 actions-failure-dca = DCA başarısız
 actions-failure-verification-expired = Doğrulama süresi doldu: işlem zincire hiç ulaşmadı

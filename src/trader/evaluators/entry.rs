@@ -3,15 +3,16 @@
 
 //! Entry evaluation logic with integrated LLM analysis
 //!
-//! Evaluates whether an entry should be made for a token by checking:
+//! Evaluates whether an entry should be made for a token on each book it is evaluated
+//! on, by checking:
 //! 0. The token is not one of the chain's quote assets (native coin or stablecoin):
 //!    strategies never open a position in what denominates trades
-//! 1. Admission of each mode with enabled entry strategies, on its own book (see
-//!    `trader::admission::admit_modes`): force stop, loss limit (live only), entry storage,
-//!    connectivity, position limits, existing position, re-entry cooldown, paper cash
-//!    (paper only), blacklist
-//! 2. LLM entry analysis (if enabled)
-//! 3. Strategy signals of the admitted modes
+//! 1. Admission of each requested book on its own (see `trader::admission::admit_modes`):
+//!    force stop, loss limit (live only), entry storage, connectivity, position limits,
+//!    existing position, re-entry cooldown, paper cash (paper only), blacklist
+//! 2. LLM entry analysis (if enabled), once for the token whatever the books
+//! 3. Each admitted book's own strategy pass, live first, each stopping at its own first
+//!    signal
 
 use crate::chains::{adapter_for, ChainId};
 use crate::pools::PriceResult;
@@ -19,21 +20,16 @@ use crate::strategies::db::get_enabled_strategies_async;
 use crate::strategies::types::{Strategy, StrategyType};
 use crate::trader::admission::{admit_modes, EntryBlock, EntryCycle};
 use crate::trader::paper::TradingMode;
-use crate::trader::types::TradeDecision;
+use crate::trader::types::EntryDecisions;
 use crate::trader::{evaluators, llm_analysis};
 
 /// The modes an entry is evaluated for: those of the enabled entry `strategies`, live
-/// first. With none, live, so the live admission gauntlet reports as it always has.
+/// first. With none, none: no book can be entered, so none is reserved or admitted.
 fn wanted_modes(strategies: &[Strategy]) -> Vec<TradingMode> {
-    let wanted: Vec<TradingMode> = [TradingMode::Live, TradingMode::Paper]
+    [TradingMode::Live, TradingMode::Paper]
         .into_iter()
         .filter(|mode| strategies.iter().any(|strategy| strategy.mode == *mode))
-        .collect();
-    if wanted.is_empty() {
-        vec![TradingMode::Live]
-    } else {
-        wanted
-    }
+        .collect()
 }
 
 /// The inputs every token of one entry cycle is admitted and evaluated against, read
@@ -54,36 +50,38 @@ pub async fn entry_cycle() -> EntryCycle {
     EntryCycle::read(wanted_modes(&strategies), strategies).await
 }
 
-/// Evaluate entry opportunity for a token
+/// Evaluate entry opportunity for a token on the `books` it is evaluated on
 ///
 /// Refuses the chain's quote assets before anything else: a strategy entry never opens
 /// the native coin or a stablecoin. Manual, Telegram, agent and copy entries do not pass
-/// through here. Then runs the admission gauntlet of each mode `cycle` wants (see
+/// through here. Then runs the admission gauntlet of each of `books` (see
 /// [`crate::trader::admission::admit_modes`]), then LLM entry analysis (if enabled), then
-/// the strategies of the admitted modes.
+/// each admitted book's own strategy pass.
 ///
 /// Returns:
-/// - Ok(Some(TradeDecision)) if entry should be made
-/// - Ok(None) if no entry signal or admission check failed
-/// - Err(String) if evaluation failed due to connectivity or other errors
+/// - Ok(decisions) with at most one entry decision per book; empty when no book signalled
+///   or no book was admitted
+/// - Err if evaluation failed due to connectivity or other errors
 pub async fn evaluate_entry_for_token(
     chain: ChainId,
     token_mint: &str,
     price_info: &PriceResult,
     cycle: &EntryCycle,
-) -> crate::trader::Result<Option<TradeDecision>> {
+    books: &[TradingMode],
+) -> crate::trader::Result<EntryDecisions> {
     if adapter_for(chain).is_quote_asset(token_mint) {
         crate::logger::debug(
             crate::logger::LogTag::Trader,
             &format!("Entry skipped for {token_mint}: a quote asset of {chain} is never a strategy entry"),
         );
-        return Ok(None);
+        return Ok(EntryDecisions::default());
     }
 
     let admitted = match admit_modes(
         token_mint,
         &["rpc", "dexscreener", "rugcheck"],
         cycle,
+        books,
         evaluators::strategies::strategy_entry_size_native(),
     )
     .await
@@ -107,7 +105,7 @@ pub async fn evaluate_entry_for_token(
                 | EntryBlock::OpenCooldown { .. }
                 | EntryBlock::EntryReserved
                 | EntryBlock::PaperBalanceExhausted
-                | EntryBlock::Blacklisted => Ok(None),
+                | EntryBlock::Blacklisted => Ok(EntryDecisions::default()),
             }
         }
     };
@@ -127,7 +125,7 @@ pub async fn evaluate_entry_for_token(
                                     token.symbol, result.confidence, result.reasoning
                                 ),
                             );
-                            return Ok(None);
+                            return Ok(EntryDecisions::default());
                         } else {
                             crate::logger::info(
                                 crate::logger::LogTag::Trader,
@@ -201,14 +199,14 @@ mod tests {
         }
     }
 
-    /// The wanted modes come from the strategies the cycle read, live first, and fall
-    /// back to live when no entry strategy is enabled.
+    /// The wanted modes come from the strategies the cycle read, live first, and with no
+    /// enabled entry strategy the cycle wants no mode, so no book is reserved.
     #[test]
     fn the_cycle_wants_the_modes_of_its_entry_strategies() {
         use TradingMode::{Live, Paper};
         let paper = entry_strategy("paper", Paper);
         let live = entry_strategy("live", Live);
-        assert_eq!(wanted_modes(&[]), vec![Live]);
+        assert!(wanted_modes(&[]).is_empty());
         assert_eq!(wanted_modes(std::slice::from_ref(&paper)), vec![Paper]);
         assert_eq!(wanted_modes(std::slice::from_ref(&live)), vec![Live]);
         assert_eq!(wanted_modes(&[paper, live]), vec![Live, Paper]);
@@ -244,10 +242,12 @@ mod tests {
                     mint: mint.to_owned(),
                     ..PriceResult::default()
                 };
-                let decision = evaluate_entry_for_token(chain, mint, &price, &cycle)
-                    .await
-                    .expect("a quote asset is refused before any check that can fail");
-                assert!(decision.is_none(), "{chain:?} {mint}");
+                let decisions =
+                    evaluate_entry_for_token(chain, mint, &price, &cycle, &[TradingMode::Live])
+                        .await
+                        .expect("a quote asset is refused before any check that can fail");
+                let (live, paper) = decisions.into_books();
+                assert!(live.is_none() && paper.is_none(), "{chain:?} {mint}");
             }
         }
     }

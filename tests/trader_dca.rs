@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: BUSL-1.1
 
 //! The DCA ladder decision (`DcaEvaluation::evaluate`, pure), the size every add takes,
-//! automatic and manual, and the executor's refusal of an add that carries no size.
+//! automatic and manual, and the live executor's refusals: an add that carries no size,
+//! and a strategy buy whose decision no longer stands because the trader was switched off
+//! or its strategy stopped trading live.
 //!
 //! DCA is the only auto-trader path that SPENDS MORE SOL on a position that is already
 //! losing, so every gate it has is a spend limiter: the ladder's length, each step's drop,
@@ -510,6 +512,152 @@ async fn the_executor_refuses_an_add_with_no_size() {
     assert!(
         matches!(error, screenerbot::trader::Error::AddSizeRequired { ref mint } if mint == common::TEST_MINT),
         "{error:?}"
+    );
+}
+
+/// A live buy decided by `strategy_id`, as the live entry pass builds it.
+fn live_strategy_buy(strategy_id: &str) -> TradeDecision {
+    TradeDecision {
+        position_id: None,
+        mint: common::TEST_MINT.to_owned(),
+        action: TradeAction::Buy,
+        reason: TradeReason::StrategySignal,
+        strategy_id: Some(strategy_id.to_owned()),
+        book: screenerbot::positions::Book::Live,
+        timestamp: Utc::now(),
+        priority: TradePriority::Normal,
+        price_native: Some(1.0),
+        size_native: None,
+        exit_percentage: None,
+        slippage_pct: None,
+        take_profit_level: None,
+        paper_leg_key: None,
+    }
+}
+
+/// An enabled live entry strategy stored under the id `id`.
+fn stored_live_entry(id: &str) -> screenerbot::strategies::types::Strategy {
+    use screenerbot::strategies::types::{RuleTree, Strategy, StrategyType};
+    let strategy = Strategy {
+        id: id.to_owned(),
+        name: id.to_owned(),
+        description: None,
+        strategy_type: StrategyType::Entry,
+        enabled: true,
+        priority: 1,
+        timeframe: "5m".to_owned(),
+        rules: RuleTree::leaf(common::condition(
+            "LiquidityLevel",
+            &[
+                ("threshold", serde_json::json!(10.0)),
+                ("comparison", serde_json::json!("GREATER_EQUAL")),
+            ],
+        )),
+        parameters: Default::default(),
+        created_at: Utc::now(),
+        updated_at: Utc::now(),
+        author: None,
+        version: 1,
+        entry_strategy_ids: Vec::new(),
+        mode: screenerbot::trader::paper::TradingMode::Live,
+    };
+    screenerbot::strategies::db::insert_strategy(&strategy).expect("insert strategy");
+    strategy
+}
+
+/// Switches the trader on or off, as its controls do.
+fn set_trader_enabled(enabled: bool) {
+    screenerbot::config::update_config_section(|cfg| cfg.trader.enabled = enabled, false)
+        .expect("switch the trader");
+}
+
+/// Executes `decision` on the live path with the context it implies.
+async fn execute(decision: &TradeDecision) -> screenerbot::trader::TradeResult {
+    let context = screenerbot::trader::executors::ExecutionContext::for_decision(decision);
+    screenerbot::trader::executors::execute_trade(decision, context)
+        .await
+        .expect("a refusal is a failed result, not an error")
+}
+
+/// A live buy whose strategy was switched off, returned to paper or removed after the
+/// decision is withdrawn at validation, before the trade guard, the connectivity check, a
+/// quote or a send: it carries no signature and names the strategy.
+#[tokio::test]
+async fn a_live_buy_whose_strategy_left_live_is_refused_and_sends_nothing() {
+    let _dir = common::isolated_env();
+    screenerbot::strategies::db::init_strategies_db().expect("open the strategies store");
+    set_trader_enabled(true);
+
+    let switched_off = stored_live_entry("switched-off");
+    stored_live_entry("returned-to-paper");
+    stored_live_entry("removed");
+    let decisions: Vec<_> = ["switched-off", "returned-to-paper", "removed"]
+        .into_iter()
+        .map(live_strategy_buy)
+        .collect();
+
+    // The decisions above were taken while each strategy traded live; each then leaves.
+    screenerbot::strategies::db::update_strategy(&screenerbot::strategies::types::Strategy {
+        enabled: false,
+        ..switched_off
+    })
+    .expect("switch the strategy off");
+    screenerbot::strategies::db::set_strategy_mode(
+        "returned-to-paper",
+        screenerbot::trader::paper::TradingMode::Paper,
+    )
+    .expect("return the strategy to paper");
+    screenerbot::strategies::db::delete_strategy("removed").expect("remove the strategy");
+
+    for decision in decisions {
+        let strategy_id = decision.strategy_id.clone().expect("a strategy decision");
+        let result = execute(&decision).await;
+        assert!(!result.success, "{strategy_id}");
+        assert_eq!(result.tx_signature, None, "{strategy_id}");
+        assert_eq!(
+            result.failed_step,
+            Some(screenerbot::trader::TradeStep::Validation),
+            "{strategy_id}"
+        );
+        assert_eq!(
+            result.withdrawn,
+            Some(screenerbot::trader::Withdrawal::StrategyStoppedTrading),
+            "{strategy_id}"
+        );
+        let error = result.error.unwrap_or_default();
+        assert!(
+            error.contains(&strategy_id) && error.contains("after the entry was decided"),
+            "{strategy_id} was not refused by its strategy check: {error}"
+        );
+    }
+}
+
+/// A live strategy buy whose strategy still trades live is withdrawn once the trader is
+/// switched off after the decision, before anything is quoted or sent.
+#[tokio::test]
+async fn a_live_strategy_buy_is_withdrawn_once_the_trader_is_switched_off() {
+    let _dir = common::isolated_env();
+    screenerbot::strategies::db::init_strategies_db().expect("open the strategies store");
+    set_trader_enabled(true);
+    stored_live_entry("still-live");
+    let decision = live_strategy_buy("still-live");
+
+    set_trader_enabled(false);
+    let result = execute(&decision).await;
+    assert!(!result.success);
+    assert_eq!(result.tx_signature, None);
+    assert_eq!(
+        result.failed_step,
+        Some(screenerbot::trader::TradeStep::Validation)
+    );
+    assert_eq!(
+        result.withdrawn,
+        Some(screenerbot::trader::Withdrawal::TraderStopped)
+    );
+    let error = result.error.unwrap_or_default();
+    assert!(
+        error.contains("trader was switched off") && error.contains("still-live"),
+        "the buy was not refused by the trader check: {error}"
     );
 }
 

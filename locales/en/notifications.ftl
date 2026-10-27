@@ -34,6 +34,7 @@ actions-failure-quote = Quote failed
 actions-failure-swap = Swap failed
 actions-failure-trade = Trade failed
 actions-failure-entry = Entry failed
+actions-failure-entry-withdrawn = Entry withdrawn
 actions-failure-exit = Exit failed
 actions-failure-dca = DCA failed
 actions-failure-verification-expired = Verification expired: the transaction never landed

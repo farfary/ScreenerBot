@@ -28,6 +28,7 @@ actions-failure-quote = Kuotasi gagal
 actions-failure-swap = Swap gagal
 actions-failure-trade = Trade gagal
 actions-failure-entry = Entry gagal
+actions-failure-entry-withdrawn = Entry ditarik
 actions-failure-exit = Exit gagal
 actions-failure-dca = DCA gagal
 actions-failure-verification-expired = Verifikasi kedaluwarsa: transaksi tidak pernah terkonfirmasi

@@ -28,6 +28,7 @@ actions-failure-quote = Не удалось получить котировку
 actions-failure-swap = Ошибка свопа
 actions-failure-trade = Ошибка сделки
 actions-failure-entry = Ошибка входа
+actions-failure-entry-withdrawn = Вход отозван
 actions-failure-exit = Ошибка выхода
 actions-failure-dca = Ошибка DCA
 actions-failure-verification-expired = Время верификации истекло: транзакция так и не была записана в блокчейн

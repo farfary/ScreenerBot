@@ -30,6 +30,7 @@ actions-failure-quote = Échec de la cotation
 actions-failure-swap = Échec du swap
 actions-failure-trade = Échec du trade
 actions-failure-entry = Échec de l'entrée
+actions-failure-entry-withdrawn = Entrée retirée
 actions-failure-exit = Échec de la sortie
 actions-failure-dca = Échec du DCA
 actions-failure-verification-expired = Vérification expirée : la transaction n'a jamais abouti

@@ -113,7 +113,8 @@ mod tests {
     use std::path::PathBuf;
 
     use super::{
-        admitted_modes, open_cooldown_wait_secs, paper_cash_covers, storage_block, EntryBlock,
+        admit_each, admitted_modes, open_cooldown_wait_secs, paper_cash_covers, storage_block,
+        EntryBlock,
     };
     use crate::database::health::{StoreHealth, StoreStatus};
     use crate::database::recovery::RecoveryAction;
@@ -249,6 +250,34 @@ mod tests {
             admitted_modes(Vec::new()),
             Err(EntryBlock::CheckFailed(_))
         ));
+    }
+
+    /// Only the requested modes run a gauntlet and can be admitted: a token evaluated on
+    /// paper alone never takes the live gauntlet, and no requested mode admits nothing.
+    #[tokio::test]
+    async fn admit_modes_admits_only_the_requested_modes() {
+        for requested in [
+            vec![TradingMode::Paper],
+            vec![TradingMode::Live],
+            vec![TradingMode::Live, TradingMode::Paper],
+        ] {
+            let mut checked = Vec::new();
+            let admitted = admit_each(&requested, |mode| {
+                checked.push(mode);
+                async { Ok(()) }
+            })
+            .await;
+            assert_eq!(checked, requested);
+            assert_eq!(admitted, Ok(requested.clone()));
+        }
+        let mut checked = Vec::new();
+        let admitted = admit_each(&[], |mode| {
+            checked.push(mode);
+            async { Ok(()) }
+        })
+        .await;
+        assert!(checked.is_empty());
+        assert!(matches!(admitted, Err(EntryBlock::CheckFailed(_))));
     }
 
     fn entry(size_native: Option<f64>) -> crate::trader::types::TradeDecision {
@@ -629,25 +658,42 @@ pub async fn check_paper_entry_admission(
     Ok(())
 }
 
-/// The modes the `cycle` wants that an entry of `mint` of `entry_size_native` is admitted
-/// on, each through its own book's gauntlet. When none is admitted, the block reported is
-/// the live one when live was wanted, so a live refusal is never hidden behind a paper one.
+/// The modes among `modes`, the books `mint` is evaluated on, that an entry of `mint` of
+/// `entry_size_native` is admitted on, each through its own book's gauntlet against the
+/// inputs of its `cycle`. When none is admitted, the block reported is the live one when
+/// live was requested, so a live refusal is never hidden behind a paper one.
 pub async fn admit_modes(
     mint: &str,
     required_endpoints: &[&str],
     cycle: &EntryCycle,
+    modes: &[TradingMode],
     entry_size_native: f64,
 ) -> Result<Vec<TradingMode>, EntryBlock> {
-    let mut outcomes = Vec::with_capacity(cycle.wanted.len());
-    for mode in &cycle.wanted {
-        let outcome = match mode {
+    admit_each(modes, |mode| async move {
+        match mode {
             TradingMode::Live => check_entry_admission(mint, required_endpoints).await,
             TradingMode::Paper => {
                 check_paper_entry_admission(mint, required_endpoints, cycle, entry_size_native)
                     .await
             }
-        };
-        outcomes.push((*mode, outcome));
+        }
+    })
+    .await
+}
+
+/// Runs `gauntlet` for each of `modes` and nothing else, in order, and reads the outcomes
+/// through [`admitted_modes`].
+async fn admit_each<F, Fut>(
+    modes: &[TradingMode],
+    mut gauntlet: F,
+) -> Result<Vec<TradingMode>, EntryBlock>
+where
+    F: FnMut(TradingMode) -> Fut,
+    Fut: std::future::Future<Output = Result<(), EntryBlock>>,
+{
+    let mut outcomes = Vec::with_capacity(modes.len());
+    for mode in modes {
+        outcomes.push((*mode, gauntlet(*mode).await));
     }
     admitted_modes(outcomes)
 }

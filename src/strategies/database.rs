@@ -234,6 +234,11 @@ const STRATEGY_COLUMNS: &str = "id, name, description, type, enabled, priority, 
      rules_json, parameters_json, created_at, updated_at, author, version, entry_strategy_ids_json, \
      mode";
 
+/// The order strategies are listed in: lowest priority first, the name breaking a tie. It
+/// is the entry evaluation order of each book, so the trader and the strategies overview
+/// read the one order this constant defines.
+const STRATEGY_ORDER: &str = "ORDER BY priority ASC, name ASC";
+
 /// One `strategies` row as stored, before its JSON and timestamps are parsed.
 struct StrategyRow {
     id: String,
@@ -494,9 +499,14 @@ pub fn get_strategy(strategy_id: &str) -> crate::Result<Option<Strategy>> {
 /// Get all strategies
 pub fn get_all_strategies() -> crate::Result<Vec<Strategy>> {
     let conn = get_connection()?;
+    all_strategies(&conn)
+}
+
+/// Every strategy in `conn`, in [`STRATEGY_ORDER`].
+fn all_strategies(conn: &rusqlite::Connection) -> crate::Result<Vec<Strategy>> {
     read_strategies(
-        &conn,
-        &format!("SELECT {STRATEGY_COLUMNS} FROM strategies ORDER BY priority ASC, name ASC"),
+        conn,
+        &format!("SELECT {STRATEGY_COLUMNS} FROM strategies {STRATEGY_ORDER}"),
         [],
     )
 }
@@ -532,11 +542,19 @@ pub fn enabled_strategy_counts() -> crate::Result<EnabledStrategyCounts> {
 /// Get enabled strategies by type
 pub fn get_enabled_strategies(strategy_type: StrategyType) -> crate::Result<Vec<Strategy>> {
     let conn = get_connection()?;
+    enabled_strategies(&conn, strategy_type)
+}
+
+/// The enabled strategies of `strategy_type` in `conn`, in [`STRATEGY_ORDER`].
+fn enabled_strategies(
+    conn: &rusqlite::Connection,
+    strategy_type: StrategyType,
+) -> crate::Result<Vec<Strategy>> {
     read_strategies(
-        &conn,
+        conn,
         &format!(
             "SELECT {STRATEGY_COLUMNS} FROM strategies WHERE type = ?1 AND enabled = 1 \
-             ORDER BY priority ASC, name ASC"
+             {STRATEGY_ORDER}"
         ),
         params![strategy_type.to_string()],
     )

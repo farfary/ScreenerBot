@@ -28,6 +28,7 @@ actions-failure-quote = 报价失败
 actions-failure-swap = 兑换失败
 actions-failure-trade = 交易失败
 actions-failure-entry = 入场失败
+actions-failure-entry-withdrawn = 入场已撤回
 actions-failure-exit = 出场失败
 actions-failure-dca = DCA 失败
 actions-failure-verification-expired = 验证已过期：交易从未上链

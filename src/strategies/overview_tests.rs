@@ -88,6 +88,37 @@ fn the_order_ranks_enabled_entries_in_the_order_the_store_lists_them() {
     );
 }
 
+/// Each book runs its own pass, so the rank restarts at 1 within each mode while keeping
+/// the listed order inside it.
+#[test]
+fn the_order_restarts_at_one_within_each_mode() {
+    let live = |id: &str, priority: i32, enabled: bool| Strategy {
+        mode: TradingMode::Live,
+        ..strategy(id, StrategyType::Entry, priority, enabled)
+    };
+    let strategies = [
+        strategy("paper-1", StrategyType::Entry, 1, true),
+        live("live-1", 2, true),
+        live("live-off", 3, false),
+        live("live-2", 4, true),
+        strategy("paper-2", StrategyType::Entry, 5, true),
+    ];
+    let order = entry_order(&strategies);
+    assert_eq!(order.get("paper-1"), Some(&1));
+    assert_eq!(
+        order.get("live-1"),
+        Some(&1),
+        "a paper rank pushed a live one"
+    );
+    assert_eq!(order.get("live-2"), Some(&2));
+    assert_eq!(
+        order.get("paper-2"),
+        Some(&2),
+        "a live rank pushed a paper one"
+    );
+    assert_eq!(order.get("live-off"), None);
+}
+
 #[test]
 fn explore_reads_setup_required_whatever_the_strategy() {
     for enabled in [true, false] {

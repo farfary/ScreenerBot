@@ -51,6 +51,30 @@ pub struct TradeDecision {
     pub paper_leg_key: Option<String>,
 }
 
+/// The entry decisions of one token in one entry cycle: at most one per book. A decision
+/// is filed only by its own `book`, so the slot that holds it is always the book it trades
+/// on and a live decision can never be routed as a paper one, or the reverse.
+#[derive(Debug, Default)]
+pub struct EntryDecisions {
+    live: Option<TradeDecision>,
+    paper: Option<TradeDecision>,
+}
+
+impl EntryDecisions {
+    /// Files `decision` under its own book, replacing an earlier decision of that book.
+    pub fn insert(&mut self, decision: TradeDecision) {
+        match decision.book {
+            Book::Live => self.live = Some(decision),
+            Book::Paper => self.paper = Some(decision),
+        }
+    }
+
+    /// The live and the paper decision, in that order.
+    pub fn into_books(self) -> (Option<TradeDecision>, Option<TradeDecision>) {
+        (self.live, self.paper)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TradeAction {
     Buy,
@@ -202,6 +226,10 @@ pub struct TradeResult {
     /// (`positions::Error::SlotUnavailable`) rather than an execution failure, so
     /// callers can react to it structurally instead of pattern-matching `error`.
     pub capacity_guard_remaining: Option<usize>,
+    /// Set when the decision was withdrawn before anything was quoted or sent, because
+    /// what decided it no longer trades, so callers record a deliberate stop rather than
+    /// an execution failure.
+    pub withdrawn: Option<Withdrawal>,
     /// Which step of the trade actually failed, set by the executor that was
     /// running it. `None` on success.
     pub failed_step: Option<TradeStep>,
@@ -211,6 +239,17 @@ pub struct TradeResult {
     /// What the paper executor booked or why it refused, on every result of a paper
     /// decision; `None` on a live one.
     pub paper: Option<PaperExecution>,
+}
+
+/// Why a decision was withdrawn before its trade started.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Withdrawal {
+    /// The trader was switched off after the decision was taken.
+    TraderStopped,
+    /// The deciding strategy was switched off, moved to the other book or removed after
+    /// the decision was taken.
+    StrategyStoppedTrading,
 }
 
 /// The stages a trade passes through, in order.
@@ -298,6 +337,7 @@ impl TradeResult {
             retry_count: 0,
             confirmation_pending: false,
             capacity_guard_remaining: None,
+            withdrawn: None,
             failed_step: None,
             not_submitted: None,
             paper: None,
@@ -343,6 +383,7 @@ impl TradeResult {
             retry_count,
             confirmation_pending: false,
             capacity_guard_remaining: None,
+            withdrawn: None,
             failed_step: Some(step),
             not_submitted: None,
             paper: None,
@@ -383,6 +424,38 @@ mod tests {
             take_profit_level: None,
             paper_leg_key: None,
         }
+    }
+
+    /// Each book's entry decision is filed under that book whatever the order it arrives
+    /// in, and a later decision of a book replaces the earlier one.
+    #[test]
+    fn each_entry_decision_is_filed_under_its_own_book() {
+        let of = |book: Book, strategy: &str| TradeDecision {
+            book,
+            strategy_id: Some(strategy.to_owned()),
+            ..decision()
+        };
+        let mut decisions = EntryDecisions::default();
+        decisions.insert(of(Book::Paper, "paper"));
+        decisions.insert(of(Book::Live, "live"));
+        let (live, paper) = decisions.into_books();
+        let live = live.expect("the live decision");
+        let paper = paper.expect("the paper decision");
+        assert_eq!(
+            (live.book, live.strategy_id.as_deref()),
+            (Book::Live, Some("live"))
+        );
+        assert_eq!(
+            (paper.book, paper.strategy_id.as_deref()),
+            (Book::Paper, Some("paper"))
+        );
+
+        let mut paper_only = EntryDecisions::default();
+        paper_only.insert(of(Book::Paper, "first"));
+        paper_only.insert(of(Book::Paper, "second"));
+        let (live, paper) = paper_only.into_books();
+        assert!(live.is_none(), "a paper decision reached the live slot");
+        assert_eq!(paper.and_then(|d| d.strategy_id).as_deref(), Some("second"));
     }
 
     /// A fill price or size that is zero, non-finite or unknown is never stored as a value.

@@ -67,50 +67,48 @@ pub fn exit_strategy_modes(book: Book) -> &'static [TradingMode] {
     }
 }
 
-/// Evaluate entry strategies for a token
+/// Evaluate the entry strategies of one book for a token
 ///
 /// This function is the main entry point for the trader module to check
-/// if any entry strategies signal to open a position for a token.
+/// if an entry strategy of `mode` signals to open a position for a token. Each book runs
+/// its own pass, so a strategy of one book never takes a token from the other.
 ///
 /// # Arguments
 /// * `strategies` - The enabled entry strategies of the entry cycle, in priority order
-/// * `modes` - The modes admitted for this token: only strategies of these modes are
-///   evaluated, in priority order across the modes
+/// * `mode` - The mode of the book this pass decides for: only strategies of this mode are
+///   evaluated, in the order of `strategies`
 /// * `token_mint` - The token mint address
 /// * `current_price` - Current token price in SOL
 /// * `market_data` - Optional market data (liquidity, transaction counts)
 /// * `timeframe_bundle` - Optional multi-timeframe OHLCV bundle
 ///
 /// # Returns
-/// * `Ok(Some((strategy_id, mode)))` - The first strategy that signals entry and its mode,
-///   which decides the book the entry is made on
-/// * `Ok(None)` - If no strategy signals entry
+/// * `Ok(Some(strategy_id))` - The first strategy of `mode` that signals entry; no
+///   strategy after it is evaluated
+/// * `Ok(None)` - If no strategy of `mode` signals entry
 /// * `Err(e)` - If evaluation fails
 pub async fn evaluate_entry_strategies(
     strategies: &[Strategy],
-    modes: &[TradingMode],
+    mode: TradingMode,
     token_mint: &str,
     current_price: f64,
-    market_data: Option<MarketData>,
-    timeframe_bundle: Option<TimeframeBundle>,
-) -> crate::Result<Option<(String, TradingMode)>> {
+    market_data: Option<&MarketData>,
+    timeframe_bundle: Option<&TimeframeBundle>,
+) -> crate::Result<Option<String>> {
     let engine_lock = get_engine().await?;
     let engine_guard = engine_lock.read().await;
     let engine = engine_guard
         .as_ref()
         .ok_or_else(|| crate::Error::internal_error("Strategy engine not available"))?;
 
-    // Evaluate the strategies of the admitted modes by priority (lower priority first)
-    for strategy in strategies
-        .iter()
-        .filter(|strategy| modes.contains(&strategy.mode))
-    {
+    // Evaluate the strategies of this book by priority (lower priority first)
+    for strategy in strategies.iter().filter(|strategy| strategy.mode == mode) {
         let context = EvaluationContext {
             token_mint: token_mint.to_string(),
             current_price: Some(current_price),
             position_data: None,
-            market_data: market_data.clone(),
-            timeframe_bundle: timeframe_bundle.clone(),
+            market_data: market_data.cloned(),
+            timeframe_bundle: timeframe_bundle.cloned(),
             strategy_timeframe: strategy.timeframe.clone(),
             evaluated_at: Utc::now(),
         };
@@ -129,11 +127,14 @@ pub async fn evaluate_entry_strategies(
                     logger::info(
                         LogTag::System,
                         &format!(
-                            "Entry strategy triggered: strategy={}, token={}, price={:.9}",
-                            strategy.name, token_mint, current_price
+                            "Entry strategy triggered: strategy={}, mode={}, token={}, price={:.9}",
+                            strategy.name,
+                            mode.as_str(),
+                            token_mint,
+                            current_price
                         ),
                     );
-                    return Ok(Some((strategy.id.clone(), strategy.mode)));
+                    return Ok(Some(strategy.id.clone()));
                 }
             }
             // A token without the data a condition needs (a fresh token short of
@@ -188,9 +189,9 @@ pub async fn evaluate_exit_strategies(
     book: Book,
     token_mint: &str,
     current_price: f64,
-    position_data: PositionData,
-    market_data: Option<MarketData>,
-    timeframe_bundle: Option<TimeframeBundle>,
+    position_data: &PositionData,
+    market_data: Option<&MarketData>,
+    timeframe_bundle: Option<&TimeframeBundle>,
     entry_strategy_id: Option<&str>,
 ) -> crate::Result<Option<String>> {
     let engine_lock = get_engine().await?;
@@ -210,8 +211,8 @@ pub async fn evaluate_exit_strategies(
             token_mint: token_mint.to_string(),
             current_price: Some(current_price),
             position_data: Some(position_data.clone()),
-            market_data: market_data.clone(),
-            timeframe_bundle: timeframe_bundle.clone(),
+            market_data: market_data.cloned(),
+            timeframe_bundle: timeframe_bundle.cloned(),
             strategy_timeframe: strategy.timeframe.clone(),
             evaluated_at: Utc::now(),
         };

@@ -28,6 +28,7 @@ actions-failure-quote = 견적 조회에 실패했습니다
 actions-failure-swap = 스왑에 실패했습니다
 actions-failure-trade = 거래에 실패했습니다
 actions-failure-entry = 진입에 실패했습니다
+actions-failure-entry-withdrawn = 진입이 철회되었습니다
 actions-failure-exit = 청산에 실패했습니다
 actions-failure-dca = DCA에 실패했습니다
 actions-failure-verification-expired = 확인 시간이 만료되었습니다. 트랜잭션이 반영되지 않았습니다

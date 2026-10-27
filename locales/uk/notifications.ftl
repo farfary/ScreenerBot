@@ -28,6 +28,7 @@ actions-failure-quote = Не вдалося отримати котируван�
 actions-failure-swap = Своп не вдався
 actions-failure-trade = Угода не вдалася
 actions-failure-entry = Вхід не вдався
+actions-failure-entry-withdrawn = Вхід відкликано
 actions-failure-exit = Вихід не вдався
 actions-failure-dca = DCA не вдалося
 actions-failure-verification-expired = Час підтвердження минув: транзакція так і не потрапила в блок

@@ -4,9 +4,11 @@
 //! Buy operation execution.
 
 use crate::logger::{self, LogTag};
-use crate::positions::{self, TradeOrigin};
+use crate::positions::{self, PositionOrigin, TradeOrigin};
+use crate::strategies::types::Strategy;
 use crate::trader::config;
-use crate::trader::types::{TradeDecision, TradeReason, TradeResult, TradeStep};
+use crate::trader::paper::TradingMode;
+use crate::trader::types::{TradeDecision, TradeReason, TradeResult, TradeStep, Withdrawal};
 
 use super::ExecutionContext;
 
@@ -25,13 +27,74 @@ pub(in crate::trader) fn entry_size_of(size_native: Option<f64>) -> f64 {
         .min(configured * crate::trader::constants::MAX_TRADE_SIZE_MULTIPLIER)
 }
 
+/// The entry strategy that decided a buy opened with `context`, when one did.
+pub(super) fn deciding_strategy(context: &ExecutionContext) -> Option<&str> {
+    match &context.origin {
+        PositionOrigin::Auto { strategy_id } => strategy_id.as_deref(),
+        _ => None,
+    }
+}
+
+/// Whether the deciding strategy, as read from the store just before a live buy, still
+/// trades live: it exists and [`Strategy::trades_on`] the live book. A strategy switched
+/// off, returned to paper or removed after the decision, or a store that cannot answer,
+/// refuses the buy.
+pub(super) fn still_trades_live(strategy: &crate::Result<Option<Strategy>>) -> bool {
+    matches!(strategy, Ok(Some(strategy)) if strategy.trades_on(TradingMode::Live))
+}
+
+/// The refusal of a live strategy buy whose decision no longer stands, read just before
+/// the buy, or `None` when it still does. The rule is the paper executor's for a paper
+/// strategy buy: the trader must still be enabled and the deciding strategy must still
+/// trade on the decision's book. A trader switched off or a strategy that left the live
+/// book withdraws the decision; a store that cannot answer fails it.
+async fn strategy_buy_refusal(decision: &TradeDecision, strategy_id: &str) -> Option<TradeResult> {
+    let refused = |error: String, withdrawn: Option<Withdrawal>| {
+        let mut result = TradeResult::failure_at(decision.clone(), TradeStep::Validation, error, 0);
+        result.withdrawn = withdrawn;
+        Some(result)
+    };
+    if !config::is_trader_enabled() {
+        return refused(
+            format!(
+                "Cannot execute buy - the trader was switched off after strategy {strategy_id} decided the entry"
+            ),
+            Some(Withdrawal::TraderStopped),
+        );
+    }
+    let strategy = crate::strategies::db::get_strategy_async(strategy_id).await;
+    if still_trades_live(&strategy) {
+        return None;
+    }
+    match strategy {
+        Err(e) => refused(
+            format!(
+                "Cannot execute buy - strategy {strategy_id} could not be read to confirm it still trades live: {e}"
+            ),
+            None,
+        ),
+        Ok(_) => refused(
+            format!(
+                "Cannot execute buy - strategy {strategy_id} was switched off, returned to paper or removed after the entry was decided"
+            ),
+            Some(Withdrawal::StrategyStoppedTrading),
+        ),
+    }
+}
+
 /// Executes a live buy, opening its round with the provenance and ownership in
-/// `context`, persisted independently.
+/// `context`, persisted independently. A strategy buy is refused before anything is
+/// quoted or sent when the trader was switched off or its strategy no longer trades live.
 pub(super) async fn execute_buy(
     decision: &TradeDecision,
     context: ExecutionContext,
 ) -> crate::trader::Result<TradeResult> {
     super::require_live(decision)?;
+    if let Some(strategy_id) = deciding_strategy(&context) {
+        if let Some(refusal) = strategy_buy_refusal(decision, strategy_id).await {
+            return Ok(refusal);
+        }
+    }
     let Some(_active_trade) = crate::global::begin_trade() else {
         return Ok(TradeResult::failure_at(
             decision.clone(),

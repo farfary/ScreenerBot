@@ -8,7 +8,8 @@
 //! that combines its children wrongly (the strategy fires on the opposite market), and a
 //! cached result reused for a context it was not computed for (the bot trades on a stale
 //! answer). Both are covered below, with the order enabled entry strategies are evaluated
-//! in: lowest priority first, then by name, and the first signal ends the evaluation.
+//! in: each book on its own, lowest priority first, then by name, and the book's first
+//! signal ends its evaluation.
 
 use crate::common;
 
@@ -1432,19 +1433,66 @@ fn a_strategy_reads_the_candle_timeframes_of_its_switched_on_candle_rules() {
 
 // ==================== EVALUATION ORDER ====================
 
-/// An enabled paper entry strategy with `priority` whose rule needs `threshold` SOL of
-/// liquidity, stored under the id `name`.
+/// A paper entry strategy with `priority` whose rule needs `threshold` SOL of liquidity,
+/// stored under the id `name`.
 fn stored_entry(name: &str, priority: i32, threshold: f64, enabled: bool) -> Strategy {
+    stored_entry_of(TradingMode::Paper, name, priority, threshold, enabled)
+}
+
+/// An entry strategy of `mode` with `priority` whose rule needs `threshold` SOL of
+/// liquidity, stored under the id `name`.
+fn stored_entry_of(
+    mode: TradingMode,
+    name: &str,
+    priority: i32,
+    threshold: f64,
+    enabled: bool,
+) -> Strategy {
     let strategy = Strategy {
         id: name.to_owned(),
         name: name.to_owned(),
         priority,
         enabled,
-        mode: TradingMode::Paper,
+        mode,
         ..strategy(leaf(liquidity_at_least(threshold)))
     };
     screenerbot::strategies::db::insert_strategy(&strategy).expect("insert strategy");
     strategy
+}
+
+async fn init_strategy_system() {
+    screenerbot::strategies::init_strategy_system(EngineConfig {
+        evaluation_timeout_ms: 5_000,
+        cache_ttl_seconds: 0,
+        max_concurrent_evaluations: 10,
+    })
+    .await
+    .expect("initialise the strategy system");
+}
+
+/// Waits until every evaluation recorded before `sentinel` is stored: evaluations are
+/// recorded in order through one queue, so once the disabled `sentinel` evaluated after
+/// them is stored, every evaluation before it is stored too.
+async fn flush_evaluations(sentinel: Strategy) {
+    let id = sentinel.id.clone();
+    screenerbot::strategies::evaluate_entry_strategies(
+        &[sentinel],
+        TradingMode::Paper,
+        TEST_MINT,
+        1.0,
+        Some(&liquidity(50.0)),
+        None,
+    )
+    .await
+    .expect("evaluate the sentinel");
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    while recorded(&id).is_none() {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "the sentinel evaluation was never recorded"
+        );
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
 }
 
 fn liquidity(liquidity_sol: f64) -> MarketData {
@@ -1471,18 +1519,12 @@ fn recorded(strategy_id: &str) -> Option<(u64, u64)> {
 }
 
 /// The enabled entry strategies are read lowest priority first with the name breaking a
-/// tie, the first one that signals decides the entry, and no strategy after it is
-/// evaluated for that token.
+/// tie, the first one of the book that signals decides that book's entry, and no strategy
+/// of the book after it is evaluated for that token.
 #[tokio::test]
 async fn entry_strategies_run_lowest_priority_first_and_stop_at_the_first_signal() {
     let _dir = common::isolated_env();
-    screenerbot::strategies::init_strategy_system(EngineConfig {
-        evaluation_timeout_ms: 5_000,
-        cache_ttl_seconds: 0,
-        max_concurrent_evaluations: 10,
-    })
-    .await
-    .expect("initialise the strategy system");
+    init_strategy_system().await;
 
     // Stored in the reverse of the expected order, so only the read's ordering can sort them.
     stored_entry("late", 9, 10.0, true);
@@ -1499,37 +1541,17 @@ async fn entry_strategies_run_lowest_priority_first_and_stop_at_the_first_signal
 
     let decided = screenerbot::strategies::evaluate_entry_strategies(
         &strategies,
-        &[TradingMode::Paper],
+        TradingMode::Paper,
         TEST_MINT,
         1.0,
-        Some(liquidity(50.0)),
+        Some(&liquidity(50.0)),
         None,
     )
     .await
     .expect("evaluate the entry strategies");
-    assert_eq!(decided, Some(("alpha".to_owned(), TradingMode::Paper)));
+    assert_eq!(decided, Some("alpha".to_owned()));
 
-    // Evaluations are recorded in order through one queue: once the sentinel evaluated
-    // after them is stored, every evaluation of the run above is stored too.
-    screenerbot::strategies::evaluate_entry_strategies(
-        &[sentinel],
-        &[TradingMode::Paper],
-        TEST_MINT,
-        1.0,
-        Some(liquidity(50.0)),
-        None,
-    )
-    .await
-    .expect("evaluate the sentinel");
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
-    while recorded("sentinel").is_none() {
-        assert!(
-            std::time::Instant::now() < deadline,
-            "the sentinel evaluation was never recorded"
-        );
-        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
-    }
-
+    flush_evaluations(sentinel).await;
     assert_eq!(recorded("first"), Some((1, 0)));
     assert_eq!(recorded("early"), Some((1, 0)));
     assert_eq!(recorded("alpha"), Some((1, 1)));
@@ -1542,5 +1564,63 @@ async fn entry_strategies_run_lowest_priority_first_and_stop_at_the_first_signal
         recorded("late"),
         None,
         "a strategy after the signal was evaluated"
+    );
+}
+
+/// Each book runs its own pass and stops at its own first signal: a paper strategy ranked
+/// above every live one never takes the token from the live pass, a live strategy never
+/// takes it from the paper pass, and a live strategy above the paper signal that does not
+/// signal stops nothing.
+#[tokio::test]
+async fn each_book_stops_at_its_own_first_signal() {
+    let _dir = common::isolated_env();
+    init_strategy_system().await;
+
+    stored_entry_of(TradingMode::Live, "l0", 0, 1_000_000.0, true);
+    stored_entry_of(TradingMode::Paper, "p1", 1, 10.0, true);
+    stored_entry_of(TradingMode::Live, "l1", 2, 10.0, true);
+    stored_entry_of(TradingMode::Live, "l2", 3, 10.0, true);
+    stored_entry_of(TradingMode::Paper, "p2", 4, 10.0, true);
+    let sentinel = stored_entry("sentinel", 50, 10.0, false);
+
+    let strategies =
+        screenerbot::strategies::db::get_enabled_strategies(StrategyType::Entry).expect("read");
+    let market = liquidity(50.0);
+    let decide = |mode| {
+        screenerbot::strategies::evaluate_entry_strategies(
+            &strategies,
+            mode,
+            TEST_MINT,
+            1.0,
+            Some(&market),
+            None,
+        )
+    };
+    let live = decide(TradingMode::Live).await.expect("live pass");
+    let paper = decide(TradingMode::Paper).await.expect("paper pass");
+    assert_eq!(
+        live,
+        Some("l1".to_owned()),
+        "the paper signal took the live pass"
+    );
+    assert_eq!(
+        paper,
+        Some("p1".to_owned()),
+        "a live signal took the paper pass"
+    );
+
+    flush_evaluations(sentinel).await;
+    assert_eq!(recorded("l0"), Some((1, 0)));
+    assert_eq!(recorded("p1"), Some((1, 1)));
+    assert_eq!(recorded("l1"), Some((1, 1)));
+    assert_eq!(
+        recorded("l2"),
+        None,
+        "a live strategy after the live signal was evaluated"
+    );
+    assert_eq!(
+        recorded("p2"),
+        None,
+        "a paper strategy after the paper signal was evaluated"
     );
 }

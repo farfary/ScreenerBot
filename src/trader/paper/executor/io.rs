@@ -99,7 +99,7 @@ impl PaperTradeIo for ProductionPaperTradeIo {
             (TradeAction::Buy | TradeAction::DCA, Some(strategy_id)) => {
                 matches!(
                     crate::strategies::db::get_strategy_async(strategy_id).await,
-                    Ok(Some(strategy)) if strategy.enabled && strategy.mode == TradingMode::Paper
+                    Ok(Some(strategy)) if strategy.trades_on(TradingMode::Paper)
                 )
             }
             _ => true,

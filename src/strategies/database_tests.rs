@@ -1,8 +1,9 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Tests of the strategies store schema: the paper or live mode a store gains, and the
-//! refusal an older core meets on a store that carries it.
+//! Tests of the strategies store: the paper or live mode a store gains and the refusal an
+//! older core meets on a store that carries it, the performance a batch of evaluations
+//! answers, and the one order every strategy listing reads.
 
 use rusqlite::{params, Connection};
 
@@ -185,4 +186,47 @@ fn a_batch_of_evaluations_answers_the_performance_of_its_strategy() {
         performance_of(&conn, "never-run").unwrap().is_none(),
         "a strategy without evaluations has no performance, not an error"
     );
+}
+
+/// The trader's enabled entries are the full listing filtered to enabled entries, element
+/// by element, so the evaluation order of each book is the order the strategies overview
+/// ranks: lowest priority first, the name breaking a tie whatever order the rows were
+/// written in.
+#[test]
+fn the_enabled_entries_are_the_full_listing_filtered() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("strategies.db");
+    open_store(&path);
+    let conn = Connection::open(&path).unwrap();
+    // Written out of name order, with ids that sort differently from the names.
+    for (id, name, kind, enabled, priority, mode) in [
+        ("a", "zeta", "ENTRY", true, 1, "live"),
+        ("b", "delta", "ENTRY", true, 1, "paper"),
+        ("c", "alpha", "EXIT", true, 1, "live"),
+        ("d", "beta", "ENTRY", false, 1, "live"),
+        ("e", "omega", "ENTRY", true, 2, "live"),
+        ("f", "epsilon", "ENTRY", true, 1, "live"),
+        ("g", "gamma", "ENTRY", true, 2, "paper"),
+    ] {
+        conn.execute(
+            "INSERT INTO strategies (id, name, type, enabled, priority, rules_json, \
+             parameters_json, created_at, updated_at, mode)
+             VALUES (?1, ?2, ?3, ?4, ?5, '{}', '{}', '2026-01-01T00:00:00Z', \
+             '2026-01-01T00:00:00Z', ?6)",
+            params![id, name, kind, enabled, priority, mode],
+        )
+        .unwrap();
+    }
+
+    let ids = |strategies: Vec<Strategy>| -> Vec<String> {
+        strategies.into_iter().map(|strategy| strategy.id).collect()
+    };
+    let enabled = ids(enabled_strategies(&conn, StrategyType::Entry).unwrap());
+    let listed = ids(all_strategies(&conn)
+        .unwrap()
+        .into_iter()
+        .filter(|strategy| strategy.enabled && strategy.strategy_type == StrategyType::Entry)
+        .collect());
+    assert_eq!(enabled, listed);
+    assert_eq!(enabled, ["b", "f", "a", "g", "e"]);
 }

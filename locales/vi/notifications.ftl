@@ -28,6 +28,7 @@ actions-failure-quote = Lấy báo giá thất bại
 actions-failure-swap = Swap thất bại
 actions-failure-trade = Giao dịch thất bại
 actions-failure-entry = Vào lệnh thất bại
+actions-failure-entry-withdrawn = Đã rút lệnh vào
 actions-failure-exit = Thoát lệnh thất bại
 actions-failure-dca = DCA thất bại
 actions-failure-verification-expired = Xác minh hết hạn: giao dịch chưa bao giờ được ghi nhận

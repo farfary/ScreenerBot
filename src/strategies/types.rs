@@ -103,6 +103,14 @@ impl Strategy {
         }
     }
 
+    /// Whether this strategy still trades on the book of `mode`: it is enabled and its mode
+    /// is `mode`. Each executor asks it of the deciding strategy, read again just before
+    /// the trade, so a strategy switched off or moved to the other book after its decision
+    /// trades nothing more on the book it left.
+    pub fn trades_on(&self, mode: TradingMode) -> bool {
+        self.enabled && self.mode == mode
+    }
+
     /// Whether this exit strategy manages a position opened by `entry_strategy_id`
     /// (`None` for a position no entry strategy opened).
     pub fn manages(&self, entry_strategy_id: Option<&str>) -> bool {

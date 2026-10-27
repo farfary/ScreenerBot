@@ -28,6 +28,7 @@ actions-failure-quote = دریافت قیمت پیشنهادی ناموفق بو
 actions-failure-swap = سواپ ناموفق بود
 actions-failure-trade = معامله ناموفق بود
 actions-failure-entry = ورود ناموفق بود
+actions-failure-entry-withdrawn = ورود پس گرفته شد
 actions-failure-exit = خروج ناموفق بود
 actions-failure-dca = DCA ناموفق بود
 actions-failure-verification-expired = مهلت تأیید به پایان رسید: تراکنش هرگز ثبت نشد

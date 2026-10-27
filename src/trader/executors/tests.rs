@@ -1,13 +1,14 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! The live executors refuse every decision that is not for the live book before they
-//! touch a wallet, a quote or a transaction, and the execution context a decision
-//! implies.
+//! The live executors refuse every decision that is not for the live book, and a live
+//! strategy buy whose strategy no longer trades live, before they touch a wallet, a quote
+//! or a transaction; and the execution context a decision implies.
 
 use chrono::Utc;
 
 use super::*;
+use crate::strategies::types::Strategy;
 use crate::trader::types::TradePriority;
 use crate::trader::Error;
 
@@ -90,4 +91,85 @@ fn a_strategy_buy_belongs_to_its_strategy() {
         }
     );
     assert_eq!(context.management, PositionManagement::AutoTrader);
+}
+
+fn stored_strategy(enabled: bool, mode: crate::trader::paper::TradingMode) -> Strategy {
+    use crate::strategies::types::{Condition, RuleTree, StrategyType};
+    Strategy {
+        id: "strategy".to_owned(),
+        name: "strategy".to_owned(),
+        description: None,
+        strategy_type: StrategyType::Entry,
+        enabled,
+        priority: 1,
+        timeframe: "5m".to_owned(),
+        rules: RuleTree::leaf(Condition {
+            condition_type: "LiquidityLevel".to_owned(),
+            parameters: Default::default(),
+        }),
+        parameters: Default::default(),
+        created_at: Utc::now(),
+        updated_at: Utc::now(),
+        author: None,
+        version: 1,
+        entry_strategy_ids: Vec::new(),
+        mode,
+    }
+}
+
+/// A live strategy buy goes ahead only while its strategy is enabled and live: one switched
+/// off, returned to paper or removed after the decision, or a store that cannot answer,
+/// refuses it.
+#[test]
+fn a_live_strategy_buy_needs_its_strategy_still_enabled_and_live() {
+    use crate::trader::paper::TradingMode::{Live, Paper};
+    assert!(buy::still_trades_live(&Ok(Some(stored_strategy(
+        true, Live
+    )))));
+    assert!(!buy::still_trades_live(&Ok(Some(stored_strategy(
+        false, Live
+    )))));
+    assert!(!buy::still_trades_live(&Ok(Some(stored_strategy(
+        true, Paper
+    )))));
+    assert!(!buy::still_trades_live(&Ok(None)));
+    assert!(!buy::still_trades_live(&Err(crate::Error::internal_error(
+        "store unavailable"
+    ))));
+}
+
+/// Only a buy an entry strategy decided is checked against its strategy: a manual buy, an
+/// automatic buy without a strategy and a copy buy, even one whose decision names a
+/// strategy, are not.
+#[test]
+fn only_a_strategy_buy_names_its_deciding_strategy() {
+    let strategy = ExecutionContext::for_decision(&decision(
+        TradeAction::Buy,
+        TradeReason::StrategySignal,
+        Book::Live,
+    ));
+    assert_eq!(buy::deciding_strategy(&strategy), Some("strategy"));
+
+    let manual = ExecutionContext::for_decision(&decision(
+        TradeAction::Buy,
+        TradeReason::ManualEntry,
+        Book::Live,
+    ));
+    assert_eq!(buy::deciding_strategy(&manual), None);
+
+    let mut unattributed = decision(TradeAction::Buy, TradeReason::StrategySignal, Book::Live);
+    unattributed.strategy_id = None;
+    assert_eq!(
+        buy::deciding_strategy(&ExecutionContext::for_decision(&unattributed)),
+        None
+    );
+
+    let copy = ExecutionContext {
+        origin: PositionOrigin::Copy {
+            task_id: 3,
+            source_wallet: "SourceWallet".to_owned(),
+        },
+        management: PositionManagement::CopyTask,
+    };
+    assert_eq!(buy::deciding_strategy(&copy), None);
 }

@@ -36,7 +36,7 @@ pub struct StrategiesOverview {
     /// on.
     pub rule_exits: Vec<RuleExitState>,
     pub counts: StrategyCounts,
-    /// In the order the store lists them, which is the entry evaluation order.
+    /// In the order the store lists them, which is the entry evaluation order of each book.
     pub strategies: Vec<StrategySummary>,
 }
 
@@ -114,8 +114,8 @@ pub struct StrategySummary {
     #[serde(skip)]
     pub strategy: Strategy,
     pub status: StrategyRunStatus,
-    /// Rank among the enabled entry strategies in evaluation order, from 1; `None` for an
-    /// exit strategy and for one that is off.
+    /// Rank among the enabled entry strategies of the same mode in evaluation order, from
+    /// 1; `None` for an exit strategy and for one that is off.
     pub order: Option<u32>,
     /// The book the figures read: the one the strategy's mode trades on.
     pub book: Book,
@@ -258,9 +258,7 @@ async fn entry_block_if_needed(
     let needed = trader_runs
         && monitors.entry
         && strategies.iter().any(|strategy| {
-            strategy.enabled
-                && strategy.strategy_type == StrategyType::Entry
-                && strategy.mode == mode
+            strategy.strategy_type == StrategyType::Entry && strategy.trades_on(mode)
         });
     if needed {
         crate::trader::entry_blocks(mode).await
@@ -315,15 +313,23 @@ fn status_of(
     }
 }
 
-/// The rank of each enabled entry strategy, from 1, in the order of `strategies`. The store
-/// lists strategies in the order the entry monitor evaluates them, so the roster takes that
-/// order from the store rather than deciding one of its own.
+/// The rank of each enabled entry strategy within its own mode, from 1, in the order of
+/// `strategies`. Each book runs its own pass over the strategies of its mode, in the order
+/// the store lists them, so the roster takes that order from the store and restarts it
+/// for each book rather than deciding one of its own.
 fn entry_order(strategies: &[Strategy]) -> HashMap<String, u32> {
+    let (mut live, mut paper) = (0, 0);
     strategies
         .iter()
         .filter(|strategy| strategy.enabled && strategy.strategy_type == StrategyType::Entry)
-        .zip(1..)
-        .map(|(strategy, rank)| (strategy.id.clone(), rank))
+        .map(|strategy| {
+            let rank = match strategy.mode {
+                TradingMode::Live => &mut live,
+                TradingMode::Paper => &mut paper,
+            };
+            *rank += 1;
+            (strategy.id.clone(), *rank)
+        })
         .collect()
 }
 

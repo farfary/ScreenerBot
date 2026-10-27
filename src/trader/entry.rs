@@ -177,14 +177,36 @@ pub async fn submit_entry_with_context(
 
                 // Fail action
                 if let Some(ref a) = action {
-                    a.fail(ActionFailure::with_details(
-                        ids::ACTIONS_FAILURE_ENTRY,
-                        error_msg.as_str(),
-                    ))
-                    .await;
+                    let message = if result.withdrawn.is_some() {
+                        ids::ACTIONS_FAILURE_ENTRY_WITHDRAWN
+                    } else {
+                        ids::ACTIONS_FAILURE_ENTRY
+                    };
+                    a.fail(ActionFailure::with_details(message, error_msg.as_str()))
+                        .await;
                 }
 
-                if let Some(remaining) = result.capacity_guard_remaining {
+                if let Some(withdrawal) = result.withdrawn {
+                    logger::info(
+                        LogTag::Trader,
+                        &format!("Entry withdrawn for {}: {}", decision.mint, error_msg),
+                    );
+
+                    crate::events::record_trader_event(
+                        "entry_withdrawn",
+                        crate::events::Severity::Info,
+                        Some(&decision.mint),
+                        None,
+                        serde_json::json!({
+                            "mint": decision.mint,
+                            "strategy_id": decision.strategy_id,
+                            "withdrawal": withdrawal,
+                            "reason": error_msg,
+                            "book": decision.book.as_str(),
+                        }),
+                    )
+                    .await;
+                } else if let Some(remaining) = result.capacity_guard_remaining {
                     logger::info(
                         LogTag::Trader,
                         &format!(

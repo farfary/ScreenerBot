@@ -28,6 +28,7 @@ actions-failure-quote = Falha na cotação
 actions-failure-swap = Falha no swap
 actions-failure-trade = Falha no trade
 actions-failure-entry = Falha na entrada
+actions-failure-entry-withdrawn = Entrada retirada
 actions-failure-exit = Falha na saída
 actions-failure-dca = Falha no DCA
 actions-failure-verification-expired = Verificação expirada: a transação nunca foi confirmada

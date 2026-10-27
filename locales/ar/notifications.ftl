@@ -28,6 +28,7 @@ actions-failure-quote = فشل الحصول على عرض السعر
 actions-failure-swap = فشلت المبادلة
 actions-failure-trade = فشلت الصفقة
 actions-failure-entry = فشل الدخول
+actions-failure-entry-withdrawn = تم سحب الدخول
 actions-failure-exit = فشل الخروج
 actions-failure-dca = فشل DCA
 actions-failure-verification-expired = انتهت صلاحية التحقق: لم تصل المعاملة إلى الشبكة

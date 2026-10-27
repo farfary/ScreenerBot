@@ -30,6 +30,7 @@ actions-failure-quote = कोट विफल
 actions-failure-swap = स्वैप विफल
 actions-failure-trade = ट्रेड विफल
 actions-failure-entry = एंट्री विफल
+actions-failure-entry-withdrawn = एंट्री वापस ली गई
 actions-failure-exit = एग्ज़िट विफल
 actions-failure-dca = DCA विफल
 actions-failure-verification-expired = पुष्टि की समय-सीमा समाप्त: ट्रांज़ैक्शन कभी लैंड नहीं हुआ
