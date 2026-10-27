@@ -43,10 +43,10 @@ pub struct PoolManager {
     db: Arc<OhlcvDatabase>,
     cache: Arc<OhlcvCache>,
     /// When each unhealthy pool may be fetched again in this run (see `fetch_due`).
-    retry_at: Mutex<HashMap<PoolKey, Instant>>,
+    retry_at: Arc<Mutex<HashMap<PoolKey, Instant>>>,
     /// Until when each pool the series was handed away from stays out of the series choice
     /// (see `SERIES_HANDOVER_COOLDOWN`).
-    cooling_until: Mutex<HashMap<PoolKey, Instant>>,
+    cooling_until: Arc<Mutex<HashMap<PoolKey, Instant>>>,
 }
 
 impl PoolManager {
@@ -54,19 +54,29 @@ impl PoolManager {
         Self {
             db,
             cache,
-            retry_at: Mutex::new(HashMap::new()),
-            cooling_until: Mutex::new(HashMap::new()),
+            retry_at: Arc::new(Mutex::new(HashMap::new())),
+            cooling_until: Arc::new(Mutex::new(HashMap::new())),
         }
+    }
+
+    /// Run `op` against the candle database on the blocking pool, off the async runtime.
+    /// Series writes run their plan inside the write transaction, so the plan runs there too.
+    async fn blocking<T, F>(&self, op: F) -> OhlcvResult<T>
+    where
+        T: Send + 'static,
+        F: FnOnce(&OhlcvDatabase) -> OhlcvResult<T> + Send + 'static,
+    {
+        let db = Arc::clone(&self.db);
+        spawn_blocking(move || op(&db))
+            .await
+            .map_err(|e| OhlcvError::Internal(InternalError::from(e)))?
     }
 
     /// The token's stored pool rows, read off the async runtime: every chart and status read
     /// resolves its pool through here.
     pub async fn get_pools(&self, mint: &str) -> OhlcvResult<Vec<PoolConfig>> {
-        let db = Arc::clone(&self.db);
         let mint = mint.to_string();
-        spawn_blocking(move || db.get_pools(&mint))
-            .await
-            .map_err(|e| OhlcvError::Internal(InternalError::from(e)))?
+        self.blocking(move |db| db.get_pools(&mint)).await
     }
 
     /// The token's series pool from its stored pool rows (see [`PoolConfig::series_pool`]).
@@ -106,28 +116,36 @@ impl PoolManager {
         server_usable: bool,
     ) -> OhlcvResult<()> {
         let failover = !server_usable && with_config(|cfg| cfg.ohlcv.pool_failover_enabled);
-        let write = self
-            .db
-            .mark_pool_failure(mint, pool_address, |pools, holds_candles| {
-                let now = Instant::now();
-                let delay = pools
-                    .iter()
-                    .find(|p| p.address == pool_address)
-                    .and_then(PoolConfig::fetch_retry_delay);
-                if let (Some(delay), Ok(mut retry_at)) = (delay, self.retry_at.lock()) {
-                    retry_at.insert(pool_key(mint, pool_address), now + delay);
-                }
-                let plan = failover
-                    .then(|| plan_failure_handover(pools, pool_address, holds_candles))
-                    .flatten()?;
-                // Recorded inside the transaction, so a discovery that runs right after the
-                // commit already sees the cooldown.
-                if let Ok(mut cooling_until) = self.cooling_until.lock() {
-                    cooling_until
-                        .insert(pool_key(mint, pool_address), now + SERIES_HANDOVER_COOLDOWN);
-                }
-                Some(plan)
-            })?;
+        let write = {
+            let retry_at = Arc::clone(&self.retry_at);
+            let cooling_until = Arc::clone(&self.cooling_until);
+            let (mint, pool_address) = (mint.to_string(), pool_address.to_string());
+            self.blocking(move |db| {
+                db.mark_pool_failure(&mint, &pool_address, |pools, holds_candles| {
+                    let now = Instant::now();
+                    let delay = pools
+                        .iter()
+                        .find(|p| p.address == pool_address)
+                        .and_then(PoolConfig::fetch_retry_delay);
+                    if let (Some(delay), Ok(mut retry_at)) = (delay, retry_at.lock()) {
+                        retry_at.insert(pool_key(&mint, &pool_address), now + delay);
+                    }
+                    let plan = failover
+                        .then(|| plan_failure_handover(pools, &pool_address, holds_candles))
+                        .flatten()?;
+                    // Recorded inside the transaction, so a discovery that runs right after
+                    // the commit already sees the cooldown.
+                    if let Ok(mut cooling_until) = cooling_until.lock() {
+                        cooling_until.insert(
+                            pool_key(&mint, &pool_address),
+                            now + SERIES_HANDOVER_COOLDOWN,
+                        );
+                    }
+                    Some(plan)
+                })
+            })
+            .await?
+        };
 
         // WARN: Record pool failure
         record_ohlcv_event(
@@ -157,13 +175,18 @@ impl PoolManager {
         if let Ok(mut retry_at) = self.retry_at.lock() {
             retry_at.remove(&pool_key(mint, pool_address));
         }
-        self.db.mark_pool_success(mint, pool_address)
+        let (mint, pool_address) = (mint.to_string(), pool_address.to_string());
+        self.blocking(move |db| db.mark_pool_success(&mint, &pool_address))
+            .await
     }
 
-    /// The pools of `mint` still in their handover cooldown. Expired entries of every mint are
-    /// dropped on the way.
-    fn cooling_pools(&self, mint: &str) -> HashSet<String> {
-        let Ok(mut cooling_until) = self.cooling_until.lock() else {
+    /// The pools of `mint` still in their handover cooldown (`cooling_until`). Expired entries
+    /// of every mint are dropped on the way.
+    fn cooling_pools(
+        cooling_until: &Mutex<HashMap<PoolKey, Instant>>,
+        mint: &str,
+    ) -> HashSet<String> {
+        let Ok(mut cooling_until) = cooling_until.lock() else {
             return HashSet::new();
         };
         let now = Instant::now();
@@ -256,41 +279,49 @@ impl PoolManager {
         snapshot: &TokenPoolsSnapshot,
         server_usable: bool,
     ) -> OhlcvResult<Vec<PoolConfig>> {
-        let server_series = snapshot.series_pool_address.as_deref().filter(|address| {
+        let server_series = snapshot.series_pool_address.clone().filter(|address| {
             snapshot
                 .pools
                 .iter()
                 .any(|pool| pool.pool_address == *address)
         });
 
-        let write = self.db.write_series_pools(mint, |registered| {
-            let cooling = self.cooling_pools(mint);
-            let stored: HashMap<&str, &PoolConfig> = registered
-                .iter()
-                .map(|cfg| (cfg.address.as_str(), cfg))
-                .collect();
-            let merged: Vec<PoolConfig> = snapshot
-                .pools
-                .iter()
-                .map(|pool| {
-                    Self::merge_pool_info(
-                        pool,
-                        stored
-                            .get(pool.pool_address.as_str())
-                            .map(|&cfg| cfg.clone()),
-                        cooling.contains(&pool.pool_address),
+        let write = {
+            let cooling_until = Arc::clone(&self.cooling_until);
+            let mint = mint.to_string();
+            let snapshot_pools = snapshot.pools.clone();
+            let server_series = server_series.clone();
+            self.blocking(move |db| {
+                db.write_series_pools(&mint, |registered| {
+                    let cooling = Self::cooling_pools(&cooling_until, &mint);
+                    let stored: HashMap<&str, &PoolConfig> = registered
+                        .iter()
+                        .map(|cfg| (cfg.address.as_str(), cfg))
+                        .collect();
+                    let merged: Vec<PoolConfig> = snapshot_pools
+                        .iter()
+                        .map(|pool| {
+                            Self::merge_pool_info(
+                                pool,
+                                stored
+                                    .get(pool.pool_address.as_str())
+                                    .map(|&cfg| cfg.clone()),
+                                cooling.contains(&pool.pool_address),
+                            )
+                        })
+                        .collect();
+                    let previous_default = registered.iter().find(|p| p.is_default);
+                    plan_series_pools(
+                        merged,
+                        server_series.as_deref(),
+                        previous_default,
+                        &cooling,
+                        server_usable,
                     )
                 })
-                .collect();
-            let previous_default = registered.iter().find(|p| p.is_default);
-            plan_series_pools(
-                merged,
-                server_series,
-                previous_default,
-                &cooling,
-                server_usable,
-            )
-        })?;
+            })
+            .await?
+        };
 
         let Some(write) = write else {
             record_ohlcv_event(
@@ -377,9 +408,15 @@ impl PoolManager {
     /// default nothing is written, so repeated reports never reset the series again. Returns
     /// whether the default moved.
     pub async fn adopt_server_series(&self, mint: &str, server_pool: &str) -> OhlcvResult<bool> {
-        let write = self.db.write_series_pools(mint, |registered| {
-            plan_server_series(registered, server_pool)
-        })?;
+        let write = {
+            let (mint, server_pool) = (mint.to_string(), server_pool.to_string());
+            self.blocking(move |db| {
+                db.write_series_pools(&mint, |registered| {
+                    plan_server_series(registered, &server_pool)
+                })
+            })
+            .await?
+        };
         let Some(reset) = write.and_then(|write| write.reset) else {
             return Ok(false);
         };

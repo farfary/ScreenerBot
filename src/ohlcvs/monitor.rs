@@ -977,17 +977,46 @@ impl OhlcvMonitor {
 
     // ==================== Private Methods ====================
 
-    /// Persist a token's monitor config row off the async runtime: the activity, chart and
-    /// fetch paths all write it.
-    async fn persist_config(&self, config: TokenOhlcvConfig) -> OhlcvResult<()> {
-        let db = Arc::clone(&self.db);
-        spawn_blocking(move || db.upsert_monitor_config(&config))
+    /// Run `op` on the blocking pool with a handle of this monitor (every field is shared),
+    /// so SQLite work, and the synchronous helpers that wrap it, never park a runtime worker.
+    async fn blocking<T, F>(&self, op: F) -> OhlcvResult<T>
+    where
+        T: Send + 'static,
+        F: FnOnce(&OhlcvMonitor) -> OhlcvResult<T> + Send + 'static,
+    {
+        let monitor = self.clone();
+        spawn_blocking(move || op(&monitor))
             .await
             .map_err(|e| OhlcvError::Internal(InternalError::from(e)))?
     }
 
+    /// Newest stored native bucket of the `timeframe` series on `pool_address`.
+    async fn latest_native_timestamp(
+        &self,
+        mint: &str,
+        pool_address: &str,
+        timeframe: Timeframe,
+    ) -> OhlcvResult<Option<i64>> {
+        let (mint, pool) = (mint.to_string(), pool_address.to_string());
+        self.blocking(move |monitor| {
+            monitor
+                .db
+                .get_latest_native_timestamp(&mint, &pool, timeframe)
+        })
+        .await
+    }
+
+    /// Persist a token's monitor config row off the async runtime: the activity, chart and
+    /// fetch paths all write it.
+    async fn persist_config(&self, config: TokenOhlcvConfig) -> OhlcvResult<()> {
+        self.blocking(move |monitor| monitor.db.upsert_monitor_config(&config))
+            .await
+    }
+
     async fn load_active_tokens(&self) -> OhlcvResult<()> {
-        let configs = self.db.get_all_active_configs()?;
+        let configs = self
+            .blocking(|monitor| monitor.db.get_all_active_configs())
+            .await?;
 
         let mut active = self.active_tokens.write().await;
         for config in configs {
@@ -1342,9 +1371,9 @@ impl OhlcvMonitor {
 
         // Fetch 1-minute data (base timeframe) with multi-source fallback, sized to
         // reach back to the newest stored 1m candle.
-        let minute_newest =
-            self.db
-                .get_latest_native_timestamp(mint, &pool_address, Timeframe::Minute1)?;
+        let minute_newest = self
+            .latest_native_timestamp(mint, &pool_address, Timeframe::Minute1)
+            .await?;
         let batch_size = catch_up_limit(minute_newest, Utc::now().timestamp(), Timeframe::Minute1);
         let data = self
             .fetch_series_page(
@@ -1451,7 +1480,14 @@ impl OhlcvMonitor {
                     }
 
                     if !stored_points.is_empty() {
-                        match self.refresh_derived_timeframes_from_1m(mint, &pool_address) {
+                        let derived = {
+                            let (mint, pool) = (mint.to_string(), pool_address.clone());
+                            self.blocking(move |monitor| {
+                                monitor.refresh_derived_timeframes_from_1m(&mint, &pool)
+                            })
+                            .await
+                        };
+                        match derived {
                             Ok(derived_points) if derived_points > 0 => {
                                 logger::debug(
                                     LogTag::Ohlcv,
@@ -1620,7 +1656,7 @@ impl OhlcvMonitor {
                 .await;
             match data {
                 Ok(candles) if !candles.is_empty() => {
-                    return self.store_feed_candles(feed, mint, &candles).await;
+                    return self.store_feed_candles(feed, mint, candles).await;
                 }
                 Ok(_) => {}
                 Err(e) => {
@@ -1657,28 +1693,38 @@ impl OhlcvMonitor {
         &self,
         feed: &CandleFeed,
         mint: &str,
-        candles: &[Candle],
+        candles: Vec<Candle>,
     ) -> OhlcvResult<()> {
-        // Store in DB (use mint as pool placeholder since we don't have one)
-        let stored_count = self.db.insert_candles_batch(
-            mint,
-            mint, // Use mint as pool_address for feed-sourced data
-            Timeframe::Minute1,
-            candles,
-            feed.label,
-        )?;
+        let fetched_count = candles.len();
+        let label = feed.label;
+        let owned_mint = mint.to_string();
+        let stored_count = self
+            .blocking(move |monitor| {
+                let mint = owned_mint.as_str();
+                // Store in DB (use mint as pool placeholder since we don't have one)
+                let stored_count = monitor.db.insert_candles_batch(
+                    mint,
+                    mint, // Use mint as pool_address for feed-sourced data
+                    Timeframe::Minute1,
+                    &candles,
+                    label,
+                )?;
+                if stored_count > 0 {
+                    if let Err(e) = monitor.refresh_derived_timeframes_from_1m(mint, mint) {
+                        logger::warning(
+                            LogTag::Ohlcv,
+                            &format!(
+                                "Higher-timeframe derivation failed for {} via {}: {}",
+                                mint, label, e
+                            ),
+                        );
+                    }
+                }
+                Ok(stored_count)
+            })
+            .await?;
 
         if stored_count > 0 {
-            if let Err(e) = self.refresh_derived_timeframes_from_1m(mint, mint) {
-                logger::warning(
-                    LogTag::Ohlcv,
-                    &format!(
-                        "Higher-timeframe derivation failed for {} via {}: {}",
-                        mint, feed.label, e
-                    ),
-                );
-            }
-
             // Partial batch fetch; the DB holds the full series.
             // Invalidate rather than cache the slice (see persist_chunk).
             self.cache
@@ -1699,7 +1745,7 @@ impl OhlcvMonitor {
                 None,
                 json!({
                     "source": feed.label,
-                    "candles_fetched": candles.len(),
+                    "candles_fetched": fetched_count,
                     "candles_stored": stored_count,
                 }),
             )
@@ -1794,9 +1840,9 @@ impl OhlcvMonitor {
             .page_series_pool(mint, pool_address, response.series_pool.as_deref())
             .await?
             .to_string();
-        let stored_newest =
-            self.db
-                .get_latest_native_timestamp(mint, &pool_address, Timeframe::Minute1)?;
+        let stored_newest = self
+            .latest_native_timestamp(mint, &pool_address, Timeframe::Minute1)
+            .await?;
         let fetched_newest = newest_storable_bucket(&response.candles, Timeframe::Minute1);
         let now = Utc::now().timestamp();
         self.update_native_series(mint, &pool_address, Timeframe::Minute1, |state| {
@@ -1807,7 +1853,12 @@ impl OhlcvMonitor {
                 response.server_refreshing,
             )
         });
-        let stored = self.persist_chunk(mint, &pool_address, response.candles)?;
+        let stored = {
+            let (mint, pool) = (mint.to_string(), pool_address.clone());
+            let candles = response.candles;
+            self.blocking(move |monitor| monitor.persist_chunk(&mint, &pool, candles))
+                .await?
+        };
         Ok((pool_address, stored))
     }
 
@@ -1979,9 +2030,12 @@ impl OhlcvMonitor {
                 .unwrap_or(Priority::Medium)
         };
 
-        if !self.backfill_wanted(mint, pool_address)?
-            || !self.spawn_backfill(mint, pool_address, priority)
-        {
+        let wanted = {
+            let (mint, pool) = (mint.to_string(), pool_address.to_string());
+            self.blocking(move |monitor| monitor.backfill_wanted(&mint, &pool))
+                .await?
+        };
+        if !wanted || !self.spawn_backfill(mint, pool_address, priority) {
             return Ok(());
         }
 
@@ -2268,7 +2322,14 @@ impl OhlcvMonitor {
         self.finish_backfill(mint);
 
         if let Some((from, to)) = minute_range {
-            if let Err(e) = self.refresh_derived_timeframes_between(mint, &pool.address, from, to) {
+            let derived = {
+                let (mint, pool) = (mint.to_string(), pool.address.clone());
+                self.blocking(move |monitor| {
+                    monitor.refresh_derived_timeframes_between(&mint, &pool, from, to)
+                })
+                .await
+            };
+            if let Err(e) = derived {
                 logger::warning(
                     LogTag::Ohlcv,
                     &format!(
@@ -2572,7 +2633,14 @@ impl OhlcvMonitor {
             }
 
             // Check if already complete and backed by stored candles.
-            if self.is_timeframe_backfill_ready(mint, pool_address, timeframe)? {
+            let ready = {
+                let (mint, pool) = (mint.to_string(), pool_address.to_string());
+                self.blocking(move |monitor| {
+                    monitor.is_timeframe_backfill_ready(&mint, &pool, timeframe)
+                })
+                .await?
+            };
+            if ready {
                 logger::debug(
                     LogTag::Ohlcv,
                     &format!(
@@ -2587,10 +2655,19 @@ impl OhlcvMonitor {
             // The first native page of any series is full size (`catch_up_limit`
             // of an empty series is the backfill size), so stored native candles
             // mean the depth is fetched and only coverage decides completion.
-            let (newest, caught_up) = self.native_coverage(mint, pool_address, timeframe)?;
-            if newest.is_some() && caught_up {
-                self.db
-                    .mark_backfill_complete(mint, pool_address, timeframe)?;
+            let complete = {
+                let (mint, pool) = (mint.to_string(), pool_address.to_string());
+                self.blocking(move |monitor| {
+                    let (newest, caught_up) = monitor.native_coverage(&mint, &pool, timeframe)?;
+                    let complete = newest.is_some() && caught_up;
+                    if complete {
+                        monitor.db.mark_backfill_complete(&mint, &pool, timeframe)?;
+                    }
+                    Ok(complete)
+                })
+                .await?
+            };
+            if complete {
                 continue;
             }
 
@@ -2614,11 +2691,24 @@ impl OhlcvMonitor {
             {
                 Ok(count) => {
                     total_fetched += count;
-                    let (newest, caught_up) =
-                        self.native_coverage(mint, pool_address, timeframe)?;
+                    let (newest, caught_up) = {
+                        let (mint, pool) = (mint.to_string(), pool_address.to_string());
+                        self.blocking(move |monitor| {
+                            let coverage = monitor.native_coverage(&mint, &pool, timeframe)?;
+                            match coverage {
+                                (Some(_), true) => {
+                                    monitor.db.mark_backfill_complete(&mint, &pool, timeframe)?
+                                }
+                                (None, _) => {
+                                    monitor.db.mark_backfill_incomplete(&mint, timeframe)?
+                                }
+                                _ => {}
+                            }
+                            Ok(coverage)
+                        })
+                        .await?
+                    };
                     if newest.is_some() && caught_up {
-                        self.db
-                            .mark_backfill_complete(mint, pool_address, timeframe)?;
                         logger::debug(
                             LogTag::Ohlcv,
                             &format!(
@@ -2629,7 +2719,6 @@ impl OhlcvMonitor {
                             ),
                         );
                     } else if newest.is_none() {
-                        self.db.mark_backfill_incomplete(mint, timeframe)?;
                         logger::warning(
                             LogTag::Ohlcv,
                             &format!(
@@ -2652,7 +2741,13 @@ impl OhlcvMonitor {
                 }
                 Err(e @ OhlcvError::SeriesPoolMoved { .. }) => return Err(e),
                 Err(e) => {
-                    self.db.mark_backfill_incomplete(mint, timeframe)?;
+                    {
+                        let mint = mint.to_string();
+                        self.blocking(move |monitor| {
+                            monitor.db.mark_backfill_incomplete(&mint, timeframe)
+                        })
+                        .await?;
+                    }
                     logger::warning(
                         LogTag::Ohlcv,
                         &format!(
@@ -2671,8 +2766,15 @@ impl OhlcvMonitor {
             sleep(inter_fetch_delay(priority)).await;
         }
 
-        if self.are_all_timeframes_backfill_ready(mint, pool_address)? {
-            self.db.mark_all_backfills_complete(mint, pool_address)?;
+        {
+            let (mint, pool) = (mint.to_string(), pool_address.to_string());
+            self.blocking(move |monitor| {
+                if monitor.are_all_timeframes_backfill_ready(&mint, &pool)? {
+                    monitor.db.mark_all_backfills_complete(&mint, &pool)?;
+                }
+                Ok(())
+            })
+            .await?;
         }
 
         logger::debug(
@@ -2755,21 +2857,37 @@ impl OhlcvMonitor {
         let mut changed_total = 0;
         let mut still_filling = false;
         let mut paged = false;
-        let open = self
-            .db
-            .deep_history_open(mint, Utc::now().timestamp() - DEEP_HISTORY_RECHECK_SECS)?;
+        let open = {
+            let mint = mint.to_string();
+            self.blocking(move |monitor| {
+                monitor
+                    .db
+                    .deep_history_open(&mint, Utc::now().timestamp() - DEEP_HISTORY_RECHECK_SECS)
+            })
+            .await?
+        };
         for timeframe in open {
-            if !self.is_timeframe_backfill_ready(mint, pool_address, timeframe)? {
+            let ready = {
+                let (mint, pool) = (mint.to_string(), pool_address.to_string());
+                self.blocking(move |monitor| {
+                    monitor.is_timeframe_backfill_ready(&mint, &pool, timeframe)
+                })
+                .await?
+            };
+            if !ready {
                 continue;
             }
             let cap = timeframe.max_history_candles();
             loop {
-                let (stored, earliest) = self.db.get_series_depth(mint, pool_address, timeframe)?;
+                let (stored, earliest) = self.series_depth(mint, pool_address, timeframe).await?;
                 let Some(earliest) = earliest else {
                     break;
                 };
                 let Some(limit) = deep_page_limit(stored, cap) else {
-                    if !self.complete_deep_timeframe(mint, pool_address, timeframe, stored)? {
+                    if !self
+                        .complete_deep_timeframe(mint, pool_address, timeframe, stored)
+                        .await?
+                    {
                         return Ok(changed_total);
                     }
                     break;
@@ -2803,7 +2921,10 @@ impl OhlcvMonitor {
                     return Ok(changed_total);
                 };
                 if response.candles.is_empty() && !response.server_refreshing {
-                    if !self.complete_deep_timeframe(mint, pool_address, timeframe, stored)? {
+                    if !self
+                        .complete_deep_timeframe(mint, pool_address, timeframe, stored)
+                        .await?
+                    {
                         return Ok(changed_total);
                     }
                     break;
@@ -2815,12 +2936,21 @@ impl OhlcvMonitor {
                 if page_pool != pool_address {
                     return Ok(changed_total);
                 }
-                match self.insert_native_candles(mint, pool_address, timeframe, &response.candles) {
+                let server_refreshing = response.server_refreshing;
+                let inserted = {
+                    let (mint, pool) = (mint.to_string(), pool_address.to_string());
+                    let candles = response.candles;
+                    self.blocking(move |monitor| {
+                        monitor.insert_native_candles(&mint, &pool, timeframe, &candles)
+                    })
+                    .await
+                };
+                match inserted {
                     Ok(changed) => changed_total += changed,
                     Err(OhlcvError::SeriesPoolMoved { .. }) => return Ok(changed_total),
                     Err(e) => return Err(e),
                 }
-                if response.server_refreshing {
+                if server_refreshing {
                     logger::debug(
                         LogTag::Ohlcv,
                         &format!(
@@ -2834,7 +2964,7 @@ impl OhlcvMonitor {
                 }
                 paged = true;
 
-                let (stored, deeper) = self.db.get_series_depth(mint, pool_address, timeframe)?;
+                let (stored, deeper) = self.series_depth(mint, pool_address, timeframe).await?;
                 logger::debug(
                     LogTag::Ohlcv,
                     &format!(
@@ -2848,7 +2978,10 @@ impl OhlcvMonitor {
                     ),
                 );
                 if deeper.map_or(true, |deeper| deeper >= earliest) {
-                    if !self.complete_deep_timeframe(mint, pool_address, timeframe, stored)? {
+                    if !self
+                        .complete_deep_timeframe(mint, pool_address, timeframe, stored)
+                        .await?
+                    {
                         return Ok(changed_total);
                     }
                     break;
@@ -2876,21 +3009,40 @@ impl OhlcvMonitor {
         changed
     }
 
+    /// Stored row count and earliest bucket of the `timeframe` series on `pool_address`.
+    async fn series_depth(
+        &self,
+        mint: &str,
+        pool_address: &str,
+        timeframe: Timeframe,
+    ) -> OhlcvResult<(usize, Option<i64>)> {
+        let (mint, pool) = (mint.to_string(), pool_address.to_string());
+        self.blocking(move |monitor| monitor.db.get_series_depth(&mint, &pool, timeframe))
+            .await
+    }
+
     /// Mark a deep-history timeframe complete on `pool_address`. Returns false, writing
     /// nothing, when the series pool moved meanwhile.
-    fn complete_deep_timeframe(
+    async fn complete_deep_timeframe(
         &self,
         mint: &str,
         pool_address: &str,
         timeframe: Timeframe,
         stored: usize,
     ) -> OhlcvResult<bool> {
-        match self.db.mark_deep_history_complete(
-            mint,
-            pool_address,
-            timeframe,
-            Utc::now().timestamp(),
-        ) {
+        let marked = {
+            let (mint, pool) = (mint.to_string(), pool_address.to_string());
+            self.blocking(move |monitor| {
+                monitor.db.mark_deep_history_complete(
+                    &mint,
+                    &pool,
+                    timeframe,
+                    Utc::now().timestamp(),
+                )
+            })
+            .await
+        };
+        match marked {
             Ok(()) => {
                 logger::info(
                     LogTag::Ohlcv,
@@ -2921,7 +3073,7 @@ impl OhlcvMonitor {
     /// Data Server while it is usable and a pass is due (`deep_history_due`), so a deep pass
     /// never costs a cycle its refresh.
     async fn refresh_native_timeframes(&self, mint: &str, pool_address: &str, priority: Priority) {
-        let pool_is_native = self.pool_is_native(mint, pool_address);
+        let pool_is_native = self.pool_is_native(mint, pool_address).await;
         let refresh_fetch = |timeframe: Timeframe, limit: usize| {
             let monitor = self.clone();
             let (mint, pool) = (mint.to_string(), pool_address.to_string());
@@ -2981,42 +3133,59 @@ impl OhlcvMonitor {
         }
 
         let now = Utc::now().timestamp();
-        let mut due = Vec::with_capacity(AGGREGATED_TIMEFRAMES.len());
-        for timeframe in AGGREGATED_TIMEFRAMES {
-            // A chart read-through is asking the Data Server for this series right now.
-            if self.read_through_active(mint, timeframe) {
-                continue;
-            }
-            let newest = match self
-                .db
-                .get_latest_native_timestamp(mint, pool_address, timeframe)
-            {
-                Ok(newest) => newest,
-                Err(e) => {
-                    logger::warning(
-                        LogTag::Ohlcv,
-                        &format!(
-                            "Native refresh skipped for mint={} timeframe={}: {}",
-                            mint,
-                            timeframe.as_str(),
-                            e
-                        ),
-                    );
-                    continue;
+        let selected = {
+            let (mint, pool) = (mint.to_string(), pool_address.to_string());
+            self.blocking(move |monitor| {
+                let mut due = Vec::with_capacity(AGGREGATED_TIMEFRAMES.len());
+                for timeframe in AGGREGATED_TIMEFRAMES {
+                    // A chart read-through is asking the Data Server for this series right now.
+                    if monitor.read_through_active(&mint, timeframe) {
+                        continue;
+                    }
+                    let newest = match monitor
+                        .db
+                        .get_latest_native_timestamp(&mint, &pool, timeframe)
+                    {
+                        Ok(newest) => newest,
+                        Err(e) => {
+                            logger::warning(
+                                LogTag::Ohlcv,
+                                &format!(
+                                    "Native refresh skipped for mint={} timeframe={}: {}",
+                                    mint,
+                                    timeframe.as_str(),
+                                    e
+                                ),
+                            );
+                            continue;
+                        }
+                    };
+                    let state = monitor.native_series_state(&mint, &pool, timeframe);
+                    if native_refresh_due(&state, newest, now, timeframe, priority)
+                        || fallback_refresh_due(&state, now, data_server_usable)
+                        || monitor.settle_due(&mint, &pool, timeframe, &state, newest, now)
+                    {
+                        due.push(DueTimeframe {
+                            timeframe,
+                            newest,
+                            last_fetch_at: state.last_fetch_at,
+                        });
+                    }
                 }
-            };
-            let state = self.native_series_state(mint, pool_address, timeframe);
-            if native_refresh_due(&state, newest, now, timeframe, priority)
-                || fallback_refresh_due(&state, now, data_server_usable)
-                || self.settle_due(mint, pool_address, timeframe, &state, newest, now)
-            {
-                due.push(DueTimeframe {
-                    timeframe,
-                    newest,
-                    last_fetch_at: state.last_fetch_at,
-                });
+                Ok(due)
+            })
+            .await
+        };
+        let mut due = match selected {
+            Ok(due) => due,
+            Err(e) => {
+                logger::warning(
+                    LogTag::Ohlcv,
+                    &format!("Native refresh skipped for mint={}: {}", mint, e),
+                );
+                Vec::new()
             }
-        }
+        };
         order_by_overdue(&mut due, now, priority);
 
         for DueTimeframe {
@@ -3069,7 +3238,12 @@ impl OhlcvMonitor {
         }
 
         if deep_history_wanted(priority) && data_server_usable {
-            let deep = match self.deep_history_due(mint) {
+            let deep_due = {
+                let mint = mint.to_string();
+                self.blocking(move |monitor| monitor.deep_history_due(&mint))
+                    .await
+            };
+            let deep = match deep_due {
                 Ok(true) => Some(
                     self.deepen_history(mint, pool_address, priority, deep_fetch)
                         .await,
@@ -3122,7 +3296,7 @@ impl OhlcvMonitor {
             ),
         );
 
-        let pool_is_native = self.pool_is_native(mint, pool_address);
+        let pool_is_native = self.pool_is_native(mint, pool_address).await;
 
         let fetched = self
             .fetch_series_page(mint, pool_address, timeframe, limit, pool_is_native)
@@ -3217,14 +3391,20 @@ impl OhlcvMonitor {
             .page_series_pool(mint, pool_address, response.series_pool.as_deref())
             .await?;
 
-        let stored_newest = self
-            .db
-            .get_latest_native_timestamp(mint, pool_address, timeframe)?;
-
-        let changed =
-            self.insert_native_candles(mint, pool_address, timeframe, &response.candles)?;
-
         let fetched_newest = newest_storable_bucket(&response.candles, timeframe);
+        let (stored_newest, changed) = {
+            let (mint, pool) = (mint.to_string(), pool_address.to_string());
+            let candles = response.candles;
+            self.blocking(move |monitor| {
+                let stored_newest = monitor
+                    .db
+                    .get_latest_native_timestamp(&mint, &pool, timeframe)?;
+                let changed = monitor.insert_native_candles(&mint, &pool, timeframe, &candles)?;
+                Ok((stored_newest, changed))
+            })
+            .await?
+        };
+
         let now = Utc::now().timestamp();
         self.update_native_series(mint, pool_address, timeframe, |state| {
             state.record_page(
@@ -3297,8 +3477,11 @@ impl OhlcvMonitor {
         else {
             return Ok(false);
         };
-        let native_newest = |pool: &str| self.db.get_latest_native_timestamp(mint, pool, timeframe);
-        if native_newest(&pool)?.is_some() {
+        if self
+            .latest_native_timestamp(mint, &pool, timeframe)
+            .await?
+            .is_some()
+        {
             return Ok(true);
         }
 
@@ -3308,7 +3491,11 @@ impl OhlcvMonitor {
         };
         let mut first_ask = true;
         loop {
-            if native_newest(&pool)?.is_some() {
+            if self
+                .latest_native_timestamp(mint, &pool, timeframe)
+                .await?
+                .is_some()
+            {
                 return Ok(true);
             }
             let state = self.native_series_state(mint, &pool, timeframe);
@@ -3365,7 +3552,10 @@ impl OhlcvMonitor {
             let series = self.pool_manager.series_pool(mint).await?;
             if !pending {
                 return Ok(match series {
-                    Some(series) => native_newest(&series.address)?.is_some(),
+                    Some(series) => self
+                        .latest_native_timestamp(mint, &series.address, timeframe)
+                        .await?
+                        .is_some(),
                     None => false,
                 });
             }
@@ -3459,9 +3649,10 @@ impl OhlcvMonitor {
 
     /// The pool's denomination, so a non-native pool is served by the data server only
     /// (see `fetch_multi_source`). See `registered_pool_is_native`.
-    fn pool_is_native(&self, mint: &str, pool_address: &str) -> bool {
-        self.db
+    async fn pool_is_native(&self, mint: &str, pool_address: &str) -> bool {
+        self.pool_manager
             .get_pools(mint)
+            .await
             .map(|pools| registered_pool_is_native(&pools, pool_address))
             .unwrap_or(false)
     }
@@ -3575,7 +3766,10 @@ impl OhlcvMonitor {
             // Only cleanup filled gap tracking records to manage database size.
             // Unfilled gaps are kept for retry purposes.
             if retention_days > 0 {
-                match self.db.cleanup_filled_gaps(retention_days) {
+                let cleaned = self
+                    .blocking(move |monitor| monitor.db.cleanup_filled_gaps(retention_days))
+                    .await;
+                match cleaned {
                     Ok(deleted) => {
                         if deleted > 0 {
                             logger::debug(
