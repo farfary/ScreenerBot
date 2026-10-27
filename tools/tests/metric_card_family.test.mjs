@@ -11,10 +11,16 @@
  * zero or absent still showed green or red.
  *
  * - Within one row of stat cards, every label and every value starts on the same line
- *   (Home strip, Auto Trader Stats, Filtering Status and Analytics).
+ *   (Home strip, Auto Trader Stats, Filtering Status and Analytics, the Copy Trading
+ *   figures and task rows).
  * - Filtering Analytics uses the shared `.metric-card`.
  * - Only a state class tints a stat card border; peers otherwise share one border.
  * - A zero or absent pipeline count carries no tone.
+ * - No stat card carries a glyph, and only `ui/metric_card.js` builds stat card markup
+ *   in a script.
+ * - Only a signed amount is toned, by its sign; a ratio (win rate, profit factor) is not.
+ * - A flat sheet grid's column count divides its cell count, so no empty track shows
+ *   the hairline colour.
  *
  * Run with `npm run test:js`.
  */
@@ -27,7 +33,8 @@ import { chromium } from "playwright";
 
 import { serveDashboard, PAGE_READY } from "../lib/dashboard_host.mjs";
 import { createApiHandler, loadIndex } from "../lib/dashboard_fixtures.mjs";
-import { SCRIPTS_ROOT, walk } from "../lib/dashboard_ui.mjs";
+import { PAGES_ROOT, SCRIPTS_ROOT, walk } from "../lib/dashboard_ui.mjs";
+import { metricCard } from "../../src/webserver/templates/scripts/ui/metric_card.js";
 
 const tab = (id) => `#subTabsContainer [data-tab-id="${id}"]`;
 
@@ -36,8 +43,8 @@ after(() => browser.close());
 
 const shell = await loadIndex("shell");
 
-async function openPage(t, name, variant = "populated") {
-  const context = await browser.newContext({ viewport: { width: 1200, height: 900 } });
+async function openPage(t, name, variant = "populated", width = 1200) {
+  const context = await browser.newContext({ viewport: { width, height: 900 } });
   const api = createApiHandler([await loadIndex(name), shell], variant);
   const host = await serveDashboard(context, { locale: "en", onApi: api.onApi });
   t.after(async () => {
@@ -97,13 +104,13 @@ test("Auto Trader Stats cards align and only a state tints a border", async (t) 
   const page = await openPage(t, "trader");
   await page.click(tab("stats"));
   await page.waitForFunction(() => document.querySelector("#net-pnl")?.textContent !== "—");
-  const rows = await rowTops(page, ".metrics-grid .metric-card", {
+  const rows = await rowTops(page, "#stats-tab .metric-grid .metric-card", {
     label: ".metric-label",
     value: ".metric-value",
   });
   assertAligned(rows, "Auto Trader Stats");
 
-  const borders = await page.$$eval(".metrics-grid .metric-card", (cards) =>
+  const borders = await page.$$eval("#stats-tab .metric-grid .metric-card", (cards) =>
     cards
       .filter((card) => card.offsetParent !== null)
       .map((card) => ({
@@ -166,4 +173,160 @@ test("no source draws a decorative stat card or a second card owner", async () =
     }
   }
   assert.deepEqual(found, []);
+});
+
+/** The Copy Trading page with the first task's sheet open on `sheetTab`. */
+async function openCopyTask(t, sheetTab = "overview", width = 1200) {
+  const page = await openPage(t, "copy", "populated", width);
+  await page.click("#copy-list-rows .copy-row");
+  await page.click(`#copy-tab-${sheetTab}`);
+  await page.waitForSelector(`#copy-ws-panel[aria-labelledby="copy-tab-${sheetTab}"] .metric-card`);
+  await page.waitForSelector("#copy-figures .metric-card");
+  return page;
+}
+
+/** Label text and value tone of every stat card under `root`. */
+async function cardTones(page, root) {
+  return page.$$eval(`${root} .metric-card`, (cards) =>
+    cards.map((card) => {
+      const value = card.querySelector(".metric-value");
+      return {
+        label: card.querySelector(".metric-label").textContent.trim(),
+        positive: value.classList.contains("positive"),
+        negative: value.classList.contains("negative"),
+      };
+    })
+  );
+}
+
+const toned = (card) => card.positive || card.negative;
+
+test("Copy page and task rows align", async (t) => {
+  const page = await openCopyTask(t);
+  const parts = { label: ".metric-label", value: ".metric-value" };
+  assertAligned(await rowTops(page, "#copy-figures .metric-card", parts), "Copy figures");
+  assertAligned(await rowTops(page, "#copy-ws-panel .metric-card", parts), "Copy task results");
+});
+
+for (const width of [1440, 1200, 820]) {
+  test(`a sheet grid shows no empty track at ${width}px`, async (t) => {
+    const page = await openCopyTask(t, "overview", width);
+    const grids = [];
+    for (const sheetTab of ["overview", "execution"]) {
+      await page.click(`#copy-tab-${sheetTab}`);
+      await page.waitForSelector(
+        `#copy-ws-panel[aria-labelledby="copy-tab-${sheetTab}"] .metric-card`
+      );
+      grids.push(
+        ...(await page.$$eval('.metric-grid[data-surface="sheet"]', (nodes) =>
+          nodes
+            .filter((node) => node.offsetParent !== null)
+            .map((node) => ({
+              columns: getComputedStyle(node).gridTemplateColumns.split(" ").filter(Boolean).length,
+              cells: node.children.length,
+            }))
+        ))
+      );
+    }
+    assert.ok(grids.length >= 2, "the Overview and Execution tabs render sheet grids");
+    for (const grid of grids) {
+      assert.equal(
+        grid.cells % grid.columns,
+        0,
+        `${grid.cells} cells in ${grid.columns} columns leave an empty track`
+      );
+    }
+  });
+}
+
+test("a ratio never carries a sign tone and a signed SOL figure does", async (t) => {
+  const trader = await openPage(t, "trader");
+  await trader.click(tab("stats"));
+  await trader.waitForFunction(() => document.querySelector("#net-pnl")?.textContent !== "—");
+  const tones = await trader.$$eval("#net-pnl, #win-rate, #profit-factor", (els) =>
+    Object.fromEntries(els.map((el) => [el.id, el.className]))
+  );
+  assert.match(tones["net-pnl"], /\bpositive\b/, "a gain in Net P&L is toned");
+  for (const id of ["win-rate", "profit-factor"]) {
+    assert.doesNotMatch(tones[id], /\b(positive|negative)\b/, `${id} stays neutral`);
+  }
+
+  const copy = await openCopyTask(t);
+  const cards = [
+    ...(await cardTones(copy, "#copy-figures")),
+    ...(await cardTones(copy, "#copy-ws-panel")),
+  ];
+  const ratios = cards.filter((card) => /^(Win rate|Profit factor)$/.test(card.label));
+  assert.ok(ratios.length >= 3, "the Copy figures and results show their ratios");
+  assert.deepEqual(ratios.filter(toned), [], "a ratio stays neutral");
+  const realized = cards.filter((card) => card.label === "Realized P&L");
+  assert.ok(realized.length >= 2, "the Copy figures and results show Realized P&L");
+  for (const card of realized) assert.ok(card.positive, "a realized gain is toned");
+});
+
+test("no stat card carries a glyph", async (t) => {
+  const found = [];
+  const scripts = (await walk(SCRIPTS_ROOT)).filter((path) => path.endsWith(".js"));
+  const pages = (await walk(PAGES_ROOT)).filter((path) => path.endsWith(".html"));
+  for (const file of [...scripts, ...pages]) {
+    const source = readFileSync(file, "utf8");
+    const at = (index) => `${file}:${source.slice(0, index).split("\n").length}`;
+    for (const match of source.matchAll(
+      /metric-icon|metric-card--with-icon|metric-content|data-accent/g
+    )) {
+      found.push(`${at(match.index)} ${match[0]}`);
+    }
+    if (file.endsWith(".js") && !file.endsWith("/ui/metric_card.js")) {
+      for (const match of source.matchAll(/class="metric-card\b/g)) {
+        found.push(`${at(match.index)} stat card markup outside ui/metric_card.js`);
+      }
+    }
+    if (file.endsWith(".html")) {
+      for (const match of source.matchAll(/<div class="metric-card\b[^>]*>/g)) {
+        // The card's own block: up to the </div> that closes it.
+        let depth = 1;
+        const tags = /<(\/?)div\b[^>]*>|<i\b/g;
+        tags.lastIndex = match.index + match[0].length;
+        let tag;
+        while (depth > 0 && (tag = tags.exec(source))) {
+          if (tag[0] === "<i") found.push(`${at(tag.index)} glyph inside a stat card`);
+          else depth += tag[1] ? -1 : 1;
+        }
+      }
+    }
+  }
+  assert.deepEqual(found, []);
+
+  const rendered = [];
+  const trader = await openPage(t, "trader");
+  await trader.click(tab("stats"));
+  rendered.push(...(await trader.$$eval(".metric-card i", (els) => els.map(() => "trader"))));
+  const filtering = await openPage(t, "filtering");
+  for (const view of ["status", "analytics"]) {
+    await filtering.click(tab(view));
+    await filtering.waitForSelector(`.${view}-view .metric-card`);
+    rendered.push(...(await filtering.$$eval(".metric-card i", (els) => els.map(() => view))));
+  }
+  const copy = await openCopyTask(t);
+  rendered.push(...(await copy.$$eval(".metric-card i", (els) => els.map(() => "copy"))));
+  assert.deepEqual(rendered, [], "no rendered stat card holds a glyph");
+});
+
+test("the stat card markup takes a colour only from a sign tone", () => {
+  const esc = (text) => String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+  const card = (fields) => metricCard({ label: "Figure", value: "1", ...fields }, esc);
+  assert.equal(
+    card({ value: "+0.0412 SOL", detail: "12 closed rounds", tone: "positive" }),
+    '<div class="metric-card"><div class="metric-label">Figure</div><div class="metric-value positive">+0.0412 SOL</div><div class="metric-detail">12 closed rounds</div></div>'
+  );
+  assert.match(card({ tone: "negative" }), /class="metric-value negative"/);
+  for (const tone of ["neutral", null, "success", "is-positive"]) {
+    assert.match(card({ tone }), /class="metric-value">/, `${tone} adds no class`);
+  }
+  assert.match(
+    card({ value: "2.54 / 8 SOL", fit: true }),
+    /class="metric-value metric-value-fit" style="--metric-value-chars:12">/
+  );
+  assert.match(card({ value: null }), /class="metric-value">—</, "an absent figure prints a dash");
+  assert.match(card({ label: "<b>" }), /&lt;b>/, "the label is escaped");
 });

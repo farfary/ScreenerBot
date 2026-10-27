@@ -10,6 +10,7 @@
  */
 
 import { impactLabel } from "../config/field_text.js";
+import { metricCard } from "../../ui/metric_card.js";
 import { renderStateView } from "../../ui/state_view.js";
 import { renderTokenLogo } from "../../ui/token_identity.js";
 import {
@@ -215,54 +216,75 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
         ? I18n.t("filtering-status-refresh-building")
         : I18n.t("filtering-status-refresh-none");
 
-    const metricsHtml = `
-      <div class="status-view">
-        <div class="metric-card">
-          <span class="metric-label">${Utils.escapeHtml(I18n.t("filtering-status-total"))}</span>
-          <span class="metric-value">${Utils.formatNumber(total_tokens, 0)}</span>
-          <span class="metric-detail">${Utils.escapeHtml(cacheDetail)}</span>
-        </div>
-        <div class="metric-card">
-          <span class="metric-label">${Utils.escapeHtml(I18n.t("filtering-status-pool-priced"))}</span>
-          <span class="metric-value">${Utils.formatNumber(with_pool_price, 0)}</span>
-          <span class="metric-detail">${Utils.escapeHtml(I18n.t("filtering-status-pool-priced-detail", { share: shareText(priceRate) }))}</span>
-        </div>
-        <div class="metric-card">
-          <span class="metric-label">${Utils.escapeHtml(I18n.t("filtering-status-passed"))}</span>
-          <span class="metric-value">${Utils.formatNumber(passed_filtering, 0)}</span>
-          <span class="metric-detail">${Utils.escapeHtml(I18n.t("filtering-status-passed-detail", { share: shareText(passedRate) }))}</span>
-        </div>
-        ${
-          rugcheck_report_required
-            ? `<div class="metric-card">
-          <span class="metric-label">${Utils.escapeHtml(I18n.t("filtering-status-awaiting"))}</span>
-          <span class="metric-value">${Utils.formatNumber(awaiting_rugcheck_report, 0)}</span>
-          <span class="metric-detail">${Utils.escapeHtml(I18n.t("filtering-status-awaiting-earlier-passed"))}</span>
-        </div>`
-            : ""
-        }
-        <div class="metric-card">
-          <span class="metric-label">${Utils.escapeHtml(I18n.t("filtering-status-positions"))}</span>
-          <span class="metric-value">${Utils.formatNumber(open_positions, 0)}</span>
-          <span class="metric-detail">${Utils.escapeHtml(I18n.t("filtering-status-positions-detail"))}</span>
-        </div>
-        <div class="metric-card">
-          <span class="metric-label">${Utils.escapeHtml(I18n.t("filtering-status-blacklisted"))}</span>
-          <span class="metric-value">${Utils.formatNumber(blacklisted, 0)}</span>
-          <span class="metric-detail">${Utils.escapeHtml(I18n.t("filtering-status-blacklisted-detail"))}</span>
-        </div>
-        <div class="metric-card">
-          <span class="metric-label">${Utils.escapeHtml(I18n.t("filtering-status-ohlcv"))}</span>
-          <span class="metric-value">${Utils.formatNumber(with_ohlcv, 0)}</span>
-          <span class="metric-detail">${Utils.escapeHtml(I18n.t("filtering-status-ohlcv-detail"))}</span>
-        </div>
-        <div class="metric-card">
-          <span class="metric-label">${Utils.escapeHtml(I18n.t("filtering-status-refresh"))}</span>
-          <span class="metric-value">${Utils.escapeHtml(refreshedLabel(updated_at))}</span>
-          <span class="metric-detail">${Utils.escapeHtml(refreshDetail)}</span>
-        </div>
-      </div>
-    `;
+    const esc = Utils.escapeHtml;
+    const metricsHtml = `<div class="status-view">${[
+      metricCard(
+        {
+          label: I18n.t("filtering-status-total"),
+          value: Utils.formatNumber(total_tokens, 0),
+          detail: cacheDetail,
+        },
+        esc
+      ),
+      metricCard(
+        {
+          label: I18n.t("filtering-status-pool-priced"),
+          value: Utils.formatNumber(with_pool_price, 0),
+          detail: I18n.t("filtering-status-pool-priced-detail", { share: shareText(priceRate) }),
+        },
+        esc
+      ),
+      metricCard(
+        {
+          label: I18n.t("filtering-status-passed"),
+          value: Utils.formatNumber(passed_filtering, 0),
+          detail: I18n.t("filtering-status-passed-detail", { share: shareText(passedRate) }),
+        },
+        esc
+      ),
+      rugcheck_report_required
+        ? metricCard(
+            {
+              label: I18n.t("filtering-status-awaiting"),
+              value: Utils.formatNumber(awaiting_rugcheck_report, 0),
+              detail: I18n.t("filtering-status-awaiting-earlier-passed"),
+            },
+            esc
+          )
+        : "",
+      metricCard(
+        {
+          label: I18n.t("filtering-status-positions"),
+          value: Utils.formatNumber(open_positions, 0),
+          detail: I18n.t("filtering-status-positions-detail"),
+        },
+        esc
+      ),
+      metricCard(
+        {
+          label: I18n.t("filtering-status-blacklisted"),
+          value: Utils.formatNumber(blacklisted, 0),
+          detail: I18n.t("filtering-status-blacklisted-detail"),
+        },
+        esc
+      ),
+      metricCard(
+        {
+          label: I18n.t("filtering-status-ohlcv"),
+          value: Utils.formatNumber(with_ohlcv, 0),
+          detail: I18n.t("filtering-status-ohlcv-detail"),
+        },
+        esc
+      ),
+      metricCard(
+        {
+          label: I18n.t("filtering-status-refresh"),
+          value: refreshedLabel(updated_at),
+          detail: refreshDetail,
+        },
+        esc
+      ),
+    ].join("")}</div>`;
 
     let rejectionHtml = `<div class="status-rejection-empty">${Utils.escapeHtml(I18n.t("filtering-status-no-rejections"))}</div>`;
 
@@ -350,53 +372,57 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
     </div>
   `;
 
-    // Headline figures in the shared metric card. A count and its share take their
-    // colour only when they are above zero.
-    const headlineHtml = `
-    <div class="metric-grid">
-      <div class="metric-card metric-card--with-icon">
-        <div class="metric-icon"><i class="icon-database" aria-hidden="true"></i></div>
-        <div class="metric-content">
-          <div class="metric-label">${Utils.escapeHtml(I18n.t("filtering-analytics-scanned"))}</div>
-          <div class="metric-value">${Utils.formatNumber(data.total_tokens, 0)}</div>
-          <div class="metric-detail">${Utils.escapeHtml(I18n.t("filtering-analytics-updated", { time: refreshedLabel(data.last_updated, data.snapshot_state) }))}</div>
-        </div>
-      </div>
-      <div class="metric-card metric-card--with-icon">
-        <div class="metric-icon"><i class="icon-circle-check" aria-hidden="true"></i></div>
-        <div class="metric-content">
-          <div class="metric-label">${Utils.escapeHtml(I18n.t("filtering-analytics-passed"))}</div>
-          <div class="metric-value ${Utils.countTone(data.total_passed, "positive")}">${Utils.formatNumber(data.total_passed, 0)}</div>
-          <div class="metric-detail share-rate ${Utils.countTone(data.pass_rate, "share-rate--success")}">${I18n.markup("filtering-analytics-pass-rate", { share: shareText(data.pass_rate) })}</div>
-          <div class="pass-rate-visual">
-            <div class="pass-rate-segment passed" style="width: ${Number.isFinite(data.pass_rate) ? data.pass_rate : 0}%"></div>
-          </div>
-        </div>
-      </div>
-      <div class="metric-card metric-card--with-icon">
-        <div class="metric-icon"><i class="icon-circle-x" aria-hidden="true"></i></div>
-        <div class="metric-content">
-          <div class="metric-label">${Utils.escapeHtml(I18n.t("filtering-analytics-rejected"))}</div>
-          <div class="metric-value ${Utils.countTone(data.total_rejected, "negative")}">${Utils.formatNumber(data.total_rejected, 0)}</div>
-          <div class="metric-detail share-rate ${Utils.countTone(data.rejection_rate, "share-rate--error")}">${I18n.markup("filtering-analytics-rejection-rate", { share: shareText(data.rejection_rate) })}</div>
-        </div>
-      </div>
-      ${
-        // Tokens awaiting their RugCheck report are neither passed nor rejected; with the
-        // stage off none exist and the card is not shown.
-        data.rugcheck_report_required
-          ? `<div class="metric-card metric-card--with-icon">
-        <div class="metric-icon"><i class="icon-clock" aria-hidden="true"></i></div>
-        <div class="metric-content">
-          <div class="metric-label">${Utils.escapeHtml(I18n.t("filtering-status-awaiting"))}</div>
-          <div class="metric-value">${Utils.formatNumber(data.total_awaiting_rugcheck_report, 0)}</div>
-          <div class="metric-detail share-rate">${I18n.markup("filtering-analytics-awaiting-rate", { share: shareText(data.awaiting_rugcheck_report_rate) })}</div>
-        </div>
-      </div>`
-          : ""
-      }
-    </div>
-  `;
+    // Headline figures in the shared stat card. Counts and shares are not signed
+    // amounts, so they stay neutral.
+    const esc = Utils.escapeHtml;
+    const passRate = Number.isFinite(data.pass_rate) ? data.pass_rate : 0;
+    const headlineHtml = `<div class="metric-grid">${[
+      metricCard(
+        {
+          label: I18n.t("filtering-analytics-scanned"),
+          value: Utils.formatNumber(data.total_tokens, 0),
+          detail: I18n.t("filtering-analytics-updated", {
+            time: refreshedLabel(data.last_updated, data.snapshot_state),
+          }),
+        },
+        esc
+      ),
+      metricCard(
+        {
+          label: I18n.t("filtering-analytics-passed"),
+          value: Utils.formatNumber(data.total_passed, 0),
+          detailHtml: I18n.markup("filtering-analytics-pass-rate", {
+            share: shareText(data.pass_rate),
+          }),
+          extraHtml: `<div class="pass-rate-visual"><div class="pass-rate-segment passed" style="width: ${passRate}%"></div></div>`,
+        },
+        esc
+      ),
+      metricCard(
+        {
+          label: I18n.t("filtering-analytics-rejected"),
+          value: Utils.formatNumber(data.total_rejected, 0),
+          detailHtml: I18n.markup("filtering-analytics-rejection-rate", {
+            share: shareText(data.rejection_rate),
+          }),
+        },
+        esc
+      ),
+      // Tokens awaiting their RugCheck report are neither passed nor rejected; with the
+      // stage off none exist and the card is not shown.
+      data.rugcheck_report_required
+        ? metricCard(
+            {
+              label: I18n.t("filtering-status-awaiting"),
+              value: Utils.formatNumber(data.total_awaiting_rugcheck_report, 0),
+              detailHtml: I18n.markup("filtering-analytics-awaiting-rate", {
+                share: shareText(data.awaiting_rugcheck_report_rate),
+              }),
+            },
+            esc
+          )
+        : "",
+    ].join("")}</div>`;
 
     // The headline cards always describe the current snapshot; the breakdowns below count
     // rejections that started in the selected period (once per token and reason), or one

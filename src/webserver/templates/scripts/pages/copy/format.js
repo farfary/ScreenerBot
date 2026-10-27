@@ -260,11 +260,16 @@ export function unrealizedFigure(pnlSol, openHoldings, unpricedHoldings) {
   };
 }
 
+/** Sign of a SOL P&L as `signedSol` prints it (`signedTone`), the tone of a stat card's figure. */
+export function pnlTone(value) {
+  return signedTone(finite(value), PNL_SOL_DECIMALS);
+}
+
 const TONE_CLASSES = { positive: "is-positive", negative: "is-negative", neutral: "" };
 
 /** Tone class of a SOL P&L as `signedSol` prints it; "" when it reads as zero or is absent. */
 export function toneClass(value) {
-  return TONE_CLASSES[signedTone(finite(value), PNL_SOL_DECIMALS)];
+  return TONE_CLASSES[pnlTone(value)];
 }
 
 /** A pool price in SOL at a fixed count of significant digits, the price rule of every

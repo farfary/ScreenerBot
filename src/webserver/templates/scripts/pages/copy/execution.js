@@ -5,7 +5,8 @@
 // copies fill from the target's own price.
 import { histogram } from "./charts.js";
 import { definitionRows, seconds, signedPct } from "./format.js";
-import { insightsBody, metric, paperModelCard, rangeHead } from "./overview.js";
+import { insightsBody, paperModelCard, rangeHead } from "./overview.js";
+import { metricCard } from "../../ui/metric_card.js";
 
 function bucketLabel(bucket, index, buckets) {
   if (bucket.upper_ms != null) {
@@ -35,29 +36,37 @@ function body(insights, defaults, esc) {
     count: bucket.count,
     tone: limitMs != null && (all[index - 1]?.upper_ms ?? 0) >= limitMs ? "is-late" : "",
   }));
-  return `<div class="copy-metrics">${[
-    metric(
-      I18n.t("copy-metric-median-arrival"),
-      seconds(arrival.median_ms),
-      I18n.t("copy-execution-arrival-samples", { count: arrival.samples || 0 }),
-      "",
+  return `<div class="metric-grid" data-surface="sheet">${[
+    metricCard(
+      {
+        label: I18n.t("copy-metric-median-arrival"),
+        value: seconds(arrival.median_ms),
+        detail: I18n.t("copy-execution-arrival-samples", { count: arrival.samples || 0 }),
+      },
       esc
     ),
-    metric(I18n.t("copy-execution-p95"), seconds(arrival.p95_ms), limit, "", esc),
-    metric(
-      I18n.t("copy-execution-target-price-difference"),
-      signedPct(slippage.median_pct, 2),
-      I18n.t("copy-execution-target-difference-samples", { count: slippage.samples || 0 }),
-      "",
+    metricCard(
+      { label: I18n.t("copy-execution-p95"), value: seconds(arrival.p95_ms), detail: limit },
       esc
     ),
-    metric(
-      I18n.t("copy-execution-target-difference-worst"),
-      signedPct(slippage.worst_pct, 2),
-      I18n.t("copy-execution-target-difference-average", {
-        amount: signedPct(slippage.average_pct, 2),
-      }),
-      "",
+    metricCard(
+      {
+        label: I18n.t("copy-execution-target-price-difference"),
+        value: signedPct(slippage.median_pct, 2),
+        detail: I18n.t("copy-execution-target-difference-samples", {
+          count: slippage.samples || 0,
+        }),
+      },
+      esc
+    ),
+    metricCard(
+      {
+        label: I18n.t("copy-execution-target-difference-worst"),
+        value: signedPct(slippage.worst_pct, 2),
+        detail: I18n.t("copy-execution-target-difference-average", {
+          amount: signedPct(slippage.average_pct, 2),
+        }),
+      },
       esc
     ),
   ].join("")}</div>

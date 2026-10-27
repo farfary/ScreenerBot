@@ -211,11 +211,8 @@
    Key Metrics
    ============================================================================ */
 
-.metrics-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
-  gap: 0.85rem;
-  margin-bottom: 1.25rem;
+.assistant-page .metric-grid {
+  margin-block-end: 1.25rem;
 }
 
 /* ============================================================================

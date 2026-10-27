@@ -251,13 +251,6 @@
 
 /* .btn-sm is now in components.css */
 
-/* Metrics Grid */
-.metrics-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-  gap: 0.5rem;
-}
-
 /* Loss limit recovery actions — shown only once the limit has actually tripped. */
 .loss-limit-actions {
   display: flex;

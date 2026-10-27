@@ -241,6 +241,7 @@ pub async fn get_ui_script(Path(file): Path<String>) -> Response {
         "expand_toggle.js" => Some(embeds::EXPAND_TOGGLE_UI),
         "state_view.js" => Some(embeds::STATE_VIEW_UI),
         "notice.js" => Some(embeds::NOTICE_UI),
+        "metric_card.js" => Some(embeds::METRIC_CARD_UI),
         "table_settings_dialog.js" => Some(embeds::TABLE_SETTINGS_DIALOG_UI),
         "token_details_dialog.js" => Some(embeds::TOKEN_DETAILS_DIALOG_UI),
         "image_lightbox.js" => Some(embeds::IMAGE_LIGHTBOX_UI),

@@ -100,7 +100,7 @@ test("the paper model card shows the workspace's own settings, for a paper task 
   assert.match(text, /counted once/);
 
   await page.locator("#copy-tab-execution").click();
-  await page.waitForSelector("#copy-ws-panel .copy-metric");
+  await page.waitForSelector("#copy-ws-panel .metric-card");
   const execution = await card(page, "Paper execution model");
   assert.ok(execution, "the Execution tab discloses the same assumptions");
   const detail = plain(await execution.textContent());

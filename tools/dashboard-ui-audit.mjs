@@ -19,12 +19,13 @@ import {
 } from "./lib/dashboard_ui.mjs";
 
 const canonicalOwners = new Map([
+  [".metric-grid", "components.css"],
   [".metric-card", "components.css"],
-  [".metric-icon", "components.css"],
-  [".metric-content", "components.css"],
   [".metric-label", "components.css"],
   [".metric-value", "components.css"],
   [".metric-detail", "components.css"],
+  [".notice", "components.css"],
+  [".mode-marker", "components.css"],
   [".state-view", "ui/state_view.css"],
   [".state-view-heading", "ui/state_view.css"],
   [".state-view-title", "ui/state_view.css"],

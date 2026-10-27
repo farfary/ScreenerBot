@@ -320,7 +320,6 @@
     padding: 16px;
   }
 
-  .metrics-grid,
   .templates-grid {
     grid-template-columns: 1fr;
   }
@@ -352,10 +351,6 @@
 }
 
 @media (width <= 768px) {
-  .metrics-grid {
-    grid-template-columns: 1fr;
-  }
-
   .provider-item {
     flex-wrap: wrap;
     padding: 12px 16px;

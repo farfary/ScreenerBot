@@ -121,48 +121,25 @@
   flex-direction: column;
   gap: var(--spacing-md);
   min-width: 0;
+  container: copy-main / inline-size;
 }
 
-.copy-figures {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-  gap: var(--spacing-sm);
+/* The all-tasks figures: six cells in one row, else three or two, so no row is ever
+   half empty. */
+#copy-figures {
+  --metric-grid-template: repeat(2, minmax(0, 1fr));
 }
 
-.copy-figure {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: var(--spacing-md);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  background: var(--bg-card);
-  min-width: 0;
-  container-type: inline-size;
+@container copy-main (width >= 560px) {
+  #copy-figures {
+    --metric-grid-template: repeat(3, minmax(0, 1fr));
+  }
 }
 
-.copy-figure-label,
-.copy-metric-label {
-  font-size: var(--font-size-xs);
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-}
-
-/* A figure stays on one line: in a narrow card the value scales down with the card
-   width (its container) instead of wrapping the unit under the amount. */
-.copy-figure-value {
-  font-family: var(--font-data);
-  font-size: clamp(var(--font-size-sm), 10.5cqi, var(--font-size-lg));
-  color: var(--text-primary);
-  white-space: nowrap;
-}
-
-.copy-figure-note,
-.copy-metric-note {
-  font-size: var(--font-size-xs);
-  color: var(--text-muted);
+@container copy-main (width >= 1000px) {
+  #copy-figures {
+    --metric-grid-template: repeat(6, minmax(0, 1fr));
+  }
 }
 
 .copy-meter {

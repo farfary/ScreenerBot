@@ -15,6 +15,7 @@ import {
   fixed,
   price,
   pct,
+  pnlTone,
   seconds,
   segmented,
   signedSol,
@@ -26,14 +27,11 @@ import {
   toneClass,
   unrealizedFigure,
 } from "./format.js";
+import { metricCard } from "../../ui/metric_card.js";
 import { tradingModeLabel } from "../../ui/trading_mode.js";
 import { readinessList } from "../../ui/arm_live_gate.js";
 import { renderStateView } from "../../ui/state_view.js";
 import { ensureIdentities, tokenWithMint } from "./tokens.js";
-
-export function metric(label, value, note, tone, esc) {
-  return `<div class="copy-metric"><span class="copy-metric-label">${esc(label)}</span><strong class="copy-metric-value ${tone || ""}">${esc(value)}</strong><span class="copy-metric-note">${esc(note || "")}</span></div>`;
-}
 
 export function rangeHead(title, range, esc) {
   return `<div class="copy-panel-head"><h3>${esc(title)}</h3>${segmented("range", RANGES, range, esc, I18n.attr("copy-range-label", "aria-label"))}</div>`;
@@ -72,47 +70,60 @@ function results(insights, esc) {
     value: bucket.count,
     display: String(bucket.count),
   }));
-  return `<div class="copy-metrics">${[
-    metric(
-      I18n.t("copy-metric-realized-pnl"),
-      signedSol(insights.realized_pnl_native),
-      I18n.t("copy-count-closed-rounds", { count: rounds }),
-      toneClass(insights.realized_pnl_native),
+  return `<div class="metric-grid" data-surface="sheet">${[
+    metricCard(
+      {
+        label: I18n.t("copy-metric-realized-pnl"),
+        value: signedSol(insights.realized_pnl_native),
+        detail: I18n.t("copy-count-closed-rounds", { count: rounds }),
+        tone: pnlTone(insights.realized_pnl_native),
+      },
       esc
     ),
-    metric(
-      I18n.t("copy-metric-win-rate"),
-      rounds ? pct(insights.win_rate_pct, 0) : "—",
-      I18n.t("copy-record-won-lost", { won: insights.wins, lost: insights.losses }),
-      "",
+    metricCard(
+      {
+        label: I18n.t("copy-metric-win-rate"),
+        value: rounds ? pct(insights.win_rate_pct, 0) : "—",
+        detail: I18n.t("copy-record-won-lost", { won: insights.wins, lost: insights.losses }),
+      },
       esc
     ),
-    metric(
-      I18n.t("copy-overview-average-win"),
-      signedSol(insights.average_win_native),
-      I18n.t("copy-overview-average-loss", { amount: signedSol(insights.average_loss_native) }),
-      toneClass(insights.average_win_native),
+    metricCard(
+      {
+        label: I18n.t("copy-overview-average-win"),
+        value: signedSol(insights.average_win_native),
+        detail: I18n.t("copy-overview-average-loss", {
+          amount: signedSol(insights.average_loss_native),
+        }),
+        tone: pnlTone(insights.average_win_native),
+      },
       esc
     ),
-    metric(
-      I18n.t("copy-overview-profit-factor"),
-      fixed(insights.profit_factor, 2),
-      I18n.t("copy-overview-profit-factor-note"),
-      "",
+    metricCard(
+      {
+        label: I18n.t("copy-overview-profit-factor"),
+        value: fixed(insights.profit_factor, 2),
+        detail: I18n.t("copy-overview-profit-factor-note"),
+      },
       esc
     ),
-    metric(
-      I18n.t("copy-overview-average-hold"),
-      duration(insights.average_hold_seconds),
-      I18n.t("copy-overview-average-hold-note"),
-      "",
+    metricCard(
+      {
+        label: I18n.t("copy-overview-average-hold"),
+        value: duration(insights.average_hold_seconds),
+        detail: I18n.t("copy-overview-average-hold-note"),
+      },
       esc
     ),
-    metric(
-      I18n.t("copy-overview-best-round"),
-      signedSol(insights.best_round_native),
-      I18n.t("copy-overview-worst-round", { amount: signedSol(insights.worst_round_native) }),
-      toneClass(insights.best_round_native),
+    metricCard(
+      {
+        label: I18n.t("copy-overview-best-round"),
+        value: signedSol(insights.best_round_native),
+        detail: I18n.t("copy-overview-worst-round", {
+          amount: signedSol(insights.worst_round_native),
+        }),
+        tone: pnlTone(insights.best_round_native),
+      },
       esc
     ),
   ].join("")}</div>
@@ -143,30 +154,36 @@ function book(ws, esc) {
     stats.unpriced_positions
   );
   return `<section class="copy-card"><h4>${esc(title)} <span class="copy-card-sub">${esc(I18n.t("copy-book-all-time"))}</span></h4>
-    <div class="copy-metrics copy-metrics--compact">${[
-      metric(
-        I18n.t("copy-metric-unrealized-pnl"),
-        signedSol(marked.value),
-        marked.note || I18n.t("copy-count-open-holdings", { count: stats.open_positions ?? 0 }),
-        toneClass(marked.value),
+    <div class="metric-grid" data-surface="sheet">${[
+      metricCard(
+        {
+          label: I18n.t("copy-metric-unrealized-pnl"),
+          value: signedSol(marked.value),
+          detail:
+            marked.note || I18n.t("copy-count-open-holdings", { count: stats.open_positions ?? 0 }),
+          tone: pnlTone(marked.value),
+        },
         esc
       ),
-      metric(
-        I18n.t("copy-metric-realized-pnl"),
-        signedSol(stats.realized_pnl_native),
-        I18n.t("copy-book-closed", { count: stats.closed_positions ?? 0 }),
-        toneClass(stats.realized_pnl_native),
+      metricCard(
+        {
+          label: I18n.t("copy-metric-realized-pnl"),
+          value: signedSol(stats.realized_pnl_native),
+          detail: I18n.t("copy-book-closed", { count: stats.closed_positions ?? 0 }),
+          tone: pnlTone(stats.realized_pnl_native),
+        },
         esc
       ),
-      metric(
-        I18n.t("copy-metric-budget-spent"),
-        sol(ws.spent_native, 3),
-        I18n.t("copy-book-budget-note", {
-          mode: tradingModeLabel(ws.mode),
-          total: solNumber(ws.total_budget_native, 3),
-          remaining: solNumber(ws.remaining_budget_native, 3),
-        }),
-        "",
+      metricCard(
+        {
+          label: I18n.t("copy-metric-budget-spent"),
+          value: sol(ws.spent_native, 3),
+          detail: I18n.t("copy-book-budget-note", {
+            mode: tradingModeLabel(ws.mode),
+            total: solNumber(ws.total_budget_native, 3),
+            remaining: solNumber(ws.remaining_budget_native, 3),
+          }),
+        },
         esc
       ),
     ].join("")}</div>
@@ -241,13 +258,14 @@ function earlierBook(book, text, esc) {
   const table = holdings.length
     ? `<div class="copy-table-wrap"><table class="copy-table"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table></div>`
     : "";
-  return `<h5>${esc(text.title)}</h5><p class="copy-note">${esc(text.note)}</p><div class="copy-metrics copy-metrics--compact">${[
-    metric(text.spent, sol(book.spent_native, 3), "", "", esc),
-    metric(
-      text.realized,
-      signedSol(book.realized_pnl_native),
-      "",
-      toneClass(book.realized_pnl_native),
+  return `<h5>${esc(text.title)}</h5><p class="copy-note">${esc(text.note)}</p><div class="metric-grid" data-surface="sheet">${[
+    metricCard({ label: text.spent, value: sol(book.spent_native, 3) }, esc),
+    metricCard(
+      {
+        label: text.realized,
+        value: signedSol(book.realized_pnl_native),
+        tone: pnlTone(book.realized_pnl_native),
+      },
       esc
     ),
   ].join("")}</div>${table}`;

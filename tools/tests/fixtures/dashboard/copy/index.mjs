@@ -101,7 +101,7 @@ export const views = [
     click: [TASK_ROW, "#copy-tab-overview"],
     populated: [
       { selector: TASK_ROW, min: 3 },
-      { selector: "#copy-figures .copy-figure", min: 6 },
+      { selector: "#copy-figures .metric-card", min: 6 },
       { selector: "#copy-ws-panel .arm-gate-check", min: 5 },
       { selector: "#copy-ws-panel .copy-chart-plot", min: 1 },
     ],
@@ -152,7 +152,7 @@ export const views = [
   {
     name: "execution",
     click: [TASK_ROW, "#copy-tab-execution"],
-    populated: [{ selector: "#copy-ws-panel .copy-metric", min: 3 }],
+    populated: [{ selector: "#copy-ws-panel .metric-card", min: 3 }],
     empty: [
       { selector: "#copy-ws-panel .state-view", text: "No arrival samples in this range" },
     ],

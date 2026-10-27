@@ -874,28 +874,6 @@
   background: var(--bg-card-hover);
 }
 
-.metric-card--with-icon {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--spacing-md);
-  text-align: start;
-}
-
-.metric-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 auto;
-  color: var(--primary-color);
-  font-size: 1.1rem;
-}
-
-.metric-content {
-  flex: 1;
-  min-width: 0;
-}
-
-.metric-card-label,
 .metric-label {
   font-size: var(--font-size-xs);
   color: var(--text-secondary);
@@ -905,7 +883,6 @@
   font-weight: 600;
 }
 
-.metric-card-value,
 .metric-value {
   font-size: var(--font-size-lg);
   font-weight: 600;
@@ -918,16 +895,16 @@
 }
 
 /* A value that reads as one figure (a pair such as "+3.5% / -24.4%") never wraps:
-   split across two lines it reads as two numbers. Its card's content box is a
-   size container, so 100cqi is the width the grid track gives the value, and the
-   font is that width over the glyph count the script sets in
+   split across two lines it reads as two numbers. Its card is a size container, so
+   100cqi is the width the grid track gives the value, and the font is that width
+   over the glyph count the script sets in
    `--metric-value-chars`, between a 10px floor (a German "+150,0 % / -45,2 %" in
    the narrowest stats track) and the card's value size. The data font advances
    0.6em per glyph. A renderer without subpixel text positioning (Chromium on
    Linux) hints at a whole-pixel size and snaps every advance to a whole pixel,
    which makes a glyph up to 0.8px wider (0.6 x 0.5px size rounding plus 0.5px
    advance rounding), so each glyph reserves 0.8px before the font is sized. */
-.metric-content:has(> .metric-value-fit) {
+.metric-card:has(> .metric-value-fit) {
   container-type: inline-size;
 }
 
@@ -951,33 +928,40 @@
   text-wrap: pretty;
 }
 
-.metric-value.positive,
-.metric-card[data-accent="success"] .metric-icon {
+/* Only a signed amount takes a colour, by its sign as shown (`signedTone`). */
+.metric-value.positive {
   color: var(--success-color);
 }
 
-.metric-value.negative,
-.metric-highlight-danger .metric-icon {
+.metric-value.negative {
   color: var(--error-color);
-}
-
-.metric-card[data-accent="info"] .metric-icon {
-  color: var(--semantic-info-text);
-}
-
-.metric-card[data-accent="warning"] .metric-icon {
-  color: var(--semantic-warning-text);
 }
 
 .metric-highlight-danger {
   border-color: var(--danger-alpha-30);
 }
 
-/* Metric Card Grid Layout Helper */
+/* The row of stat cards. A page that needs a fixed column count sets
+   `--metric-grid-template: repeat(N, minmax(0, 1fr))` on its own container. */
 .metric-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: var(--spacing-md);
+  grid-template-columns: var(--metric-grid-template, repeat(auto-fit, minmax(190px, 1fr)));
+  gap: var(--spacing-sm);
+}
+
+/* A stat row inside a sheet: flat cells whose hairlines are the grid gap showing the
+   border colour, between cells only. The page picks a column count that divides its
+   cell count, because an empty track would show as a block of that colour. */
+.metric-grid[data-surface="sheet"] {
+  gap: 1px;
+  background: var(--border-color);
+}
+
+.metric-grid[data-surface="sheet"] > .metric-card,
+.metric-grid[data-surface="sheet"] > .metric-card:hover {
+  border: 0;
+  border-radius: 0;
+  background: var(--bg-card);
 }
 
 /* Image Lightbox -------------------------------------------------- */

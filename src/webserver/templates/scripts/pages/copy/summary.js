@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: BUSL-1.1
 //
 // The status strip and the totals row above the wallet list.
-import { pct, seconds, signedSol, solNumber, toneClass, unrealizedFigure } from "./format.js";
+import { pct, pnlTone, seconds, signedSol, solNumber, unrealizedFigure } from "./format.js";
+import { metricCard } from "../../ui/metric_card.js";
 import { gateControl, setupRequired } from "../../ui/setup_gate.js";
 
 export function renderStrip(page) {
@@ -68,10 +69,6 @@ export function renderStrip(page) {
   button.disabled = status.enabled ? !copying : !status.total_tasks;
 }
 
-function figure(label, value, { tone = "", note = "", extra = "" } = {}, escapeHtml) {
-  return `<div class="copy-figure"><span class="copy-figure-label">${escapeHtml(label)}</span><strong class="copy-figure-value ${tone}">${escapeHtml(value)}</strong>${extra}<span class="copy-figure-note">${escapeHtml(note)}</span></div>`;
-}
-
 export function renderFigures(page) {
   const { $, Utils, state } = page;
   const root = $("#copy-figures");
@@ -81,7 +78,6 @@ export function renderFigures(page) {
   const rounds = totals.wins + totals.losses;
   const budget = Number(totals.active_budget_native) || 0;
   const spent = Number(totals.active_spent_native) || 0;
-  const budgetPct = budget > 0 ? Math.min(100, (spent / budget) * 100) : 0;
   const arrival = totals.active_arrival || {};
   const marked = unrealizedFigure(
     totals.unrealized_pnl_native,
@@ -89,53 +85,58 @@ export function renderFigures(page) {
     totals.unpriced_holdings
   );
   root.innerHTML = [
-    figure(
-      I18n.t("copy-metric-realized-pnl"),
-      signedSol(totals.realized_pnl_native),
+    metricCard(
       {
-        tone: toneClass(totals.realized_pnl_native),
-        note: I18n.t("copy-count-closed-rounds", { count: rounds }),
+        label: I18n.t("copy-metric-realized-pnl"),
+        value: signedSol(totals.realized_pnl_native),
+        detail: I18n.t("copy-count-closed-rounds", { count: rounds }),
+        tone: pnlTone(totals.realized_pnl_native),
       },
       esc
     ),
-    figure(
-      I18n.t("copy-metric-unrealized-pnl"),
-      signedSol(marked.value),
+    metricCard(
       {
-        tone: toneClass(marked.value),
-        note: marked.note || I18n.t("copy-figure-marked-at-pool"),
+        label: I18n.t("copy-metric-unrealized-pnl"),
+        value: signedSol(marked.value),
+        detail: marked.note || I18n.t("copy-figure-marked-at-pool"),
+        tone: pnlTone(marked.value),
       },
       esc
     ),
-    figure(
-      I18n.t("copy-metric-win-rate"),
-      rounds ? pct(totals.win_rate_pct, 0) : "—",
-      { note: I18n.t("copy-record-won-lost", { won: totals.wins, lost: totals.losses }) },
-      esc
-    ),
-    figure(
-      I18n.t("copy-metric-open-holdings"),
-      String(totals.open_holdings),
-      { note: I18n.t("copy-figure-across-tasks") },
-      esc
-    ),
-    figure(
-      I18n.t("copy-metric-budget-spent"),
-      budget > 0
-        ? I18n.t("copy-budget-of", { spent: solNumber(spent, 2), budget: solNumber(budget, 2) })
-        : "—",
+    metricCard(
       {
-        note:
+        label: I18n.t("copy-metric-win-rate"),
+        value: rounds ? pct(totals.win_rate_pct, 0) : "—",
+        detail: I18n.t("copy-record-won-lost", { won: totals.wins, lost: totals.losses }),
+      },
+      esc
+    ),
+    metricCard(
+      {
+        label: I18n.t("copy-metric-open-holdings"),
+        value: String(totals.open_holdings),
+        detail: I18n.t("copy-figure-across-tasks"),
+      },
+      esc
+    ),
+    metricCard(
+      {
+        label: I18n.t("copy-metric-budget-spent"),
+        value:
+          budget > 0
+            ? I18n.t("copy-budget-of", { spent: solNumber(spent, 2), budget: solNumber(budget, 2) })
+            : "—",
+        detail:
           budget > 0 ? I18n.t("copy-figure-budget-lifetime") : I18n.t("copy-figure-budget-none"),
-        extra: `<span class="copy-meter" aria-hidden="true"><span style="width:${budgetPct.toFixed(1)}%"></span></span>`,
+        fit: true,
       },
       esc
     ),
-    figure(
-      I18n.t("copy-metric-median-arrival"),
-      seconds(arrival.median_ms),
+    metricCard(
       {
-        note: arrival.samples
+        label: I18n.t("copy-metric-median-arrival"),
+        value: seconds(arrival.median_ms),
+        detail: arrival.samples
           ? I18n.t("copy-figure-arrival-samples", {
               p95: seconds(arrival.p95_ms),
               count: arrival.samples,

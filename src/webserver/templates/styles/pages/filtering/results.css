@@ -40,17 +40,10 @@
    not); this file owns the cards and charts inside it.
    ============================================ */
 
-/* Share line of a headline metric card: the share takes the tone only above zero. */
-.share-rate strong {
+/* Share line of a headline stat card: the share is marked in the catalog text but
+   reads at the detail line's weight and colour, since a share is not a signed amount. */
+.analytics-view .metric-detail strong {
   font-weight: inherit;
-}
-
-.share-rate--success strong {
-  color: var(--success-color);
-}
-
-.share-rate--error strong {
-  color: var(--error-color);
 }
 
 /* Scope of the breakdowns under the headline cards. */

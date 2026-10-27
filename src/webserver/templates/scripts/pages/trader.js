@@ -540,6 +540,7 @@ function createLifecycle() {
         if (el) el.textContent = text;
       };
       // Tone of a SOL amount as shown (4 decimals): a value that rounds to zero is untoned.
+      // Only signed amounts take a tone; a ratio (win rate, profit factor) stays neutral.
       const tone = (value) => {
         const shown = Utils.signedTone(value, 4);
         return shown === "neutral" ? null : shown;
@@ -573,8 +574,7 @@ function createLifecycle() {
           decimals: 1,
           fallback: "—",
           includeSign: false,
-        }),
-        Number.isFinite(data.win_rate_pct) && data.win_rate_pct >= 50 ? "positive" : null
+        })
       );
       // Counts are facts even in an empty window: 0 wins · 0 losses, never a dash.
       setDetail(
@@ -593,15 +593,7 @@ function createLifecycle() {
           : I18n.t("trader-stats-empty")
       );
 
-      setValue(
-        "profit-factor",
-        formatFixed(data.profit_factor),
-        Number.isFinite(data.profit_factor)
-          ? data.profit_factor >= 1
-            ? "positive"
-            : "negative"
-          : null
-      );
+      setValue("profit-factor", formatFixed(data.profit_factor));
       setDetail(
         "profit-factor-detail",
         !hasTrades

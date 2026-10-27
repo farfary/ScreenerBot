@@ -47,9 +47,9 @@ for (const [width, locale] of VIEWS) {
     });
     const page = await context.newPage();
     await page.goto(`${host.origin}/copy`);
-    await page.waitForSelector("#copy-figures .copy-figure");
+    await page.waitForSelector("#copy-figures .metric-card");
     const values = await page.$$eval(
-      "#copy-figures .copy-figure-value, .copy-row-budget > span:last-child",
+      "#copy-figures .metric-card .metric-value, .copy-row-budget > span:last-child",
       (nodes) =>
         nodes.map((node) => {
           const style = getComputedStyle(node);
@@ -87,10 +87,12 @@ test("every copy P&L figure has one SOL precision", async (t) => {
   const page = await context.newPage();
   await page.goto(`${host.origin}/copy`);
   await page.waitForSelector(".copy-row-pnl");
-  await page.waitForSelector("#copy-figures .copy-figure");
-  const figures = await page.$$eval(".copy-row-pnl, #copy-figures .copy-figure-value", (nodes) =>
-    // Signed figures are the P&L ones; a budget ("2.54 / 8 SOL") is not a P&L.
-    nodes.map((node) => node.textContent.trim()).filter((text) => /^[+\-−].*SOL/.test(text))
+  await page.waitForSelector("#copy-figures .metric-card");
+  const figures = await page.$$eval(
+    ".copy-row-pnl, #copy-figures .metric-card .metric-value",
+    (nodes) =>
+      // Signed figures are the P&L ones; a budget ("2.54 / 8 SOL") is not a P&L.
+      nodes.map((node) => node.textContent.trim()).filter((text) => /^[+\-−].*SOL/.test(text))
   );
   const decimals = new Set(figures.map((text) => /[.,](\d+)\s*SOL/.exec(text)?.[1].length ?? 0));
   assert.ok(

@@ -168,6 +168,7 @@
   flex-direction: column;
   gap: var(--spacing-md);
   min-width: 0;
+  container: copy-sheet / inline-size;
 }
 
 .copy-panel-head {
@@ -191,31 +192,25 @@
   gap: var(--spacing-sm);
 }
 
-.copy-metrics {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: var(--spacing-sm);
+/* A stat row in the sheet takes a column count that divides its cell count, so the
+   hairline colour never shows in an empty track: two columns by default, three for
+   three cells, and on a wide sheet four for four cells and three for six. */
+.copy-ws-panel .metric-grid[data-surface="sheet"] {
+  --metric-grid-template: repeat(2, minmax(0, 1fr));
 }
 
-.copy-metrics--compact {
-  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+.copy-ws-panel .metric-grid[data-surface="sheet"]:has(> .metric-card:nth-child(3):last-child) {
+  --metric-grid-template: repeat(3, minmax(0, 1fr));
 }
 
-.copy-metric {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: var(--spacing-sm) var(--spacing-md);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  background: var(--bg-secondary);
-  min-width: 0;
-}
+@container copy-sheet (width >= 640px) {
+  .copy-ws-panel .metric-grid[data-surface="sheet"]:has(> .metric-card:nth-child(4):last-child) {
+    --metric-grid-template: repeat(4, minmax(0, 1fr));
+  }
 
-.copy-metric-value {
-  font-family: var(--font-data);
-  font-size: var(--font-size-base);
-  color: var(--text-primary);
+  .copy-ws-panel .metric-grid[data-surface="sheet"]:has(> .metric-card:nth-child(6):last-child) {
+    --metric-grid-template: repeat(3, minmax(0, 1fr));
+  }
 }
 
 .copy-card {
