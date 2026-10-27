@@ -410,10 +410,18 @@
   font-weight: 500;
 }
 
-.run-detail-value.status-success { color: var(--success); }
-.run-detail-value.status-failed { color: var(--danger); }
-.run-detail-value.status-timeout { color: var(--warning); }
-.run-detail-value.status-running { color: var(--info); }
+.run-detail-value.status-success {
+  color: var(--success);
+}
+.run-detail-value.status-failed {
+  color: var(--danger);
+}
+.run-detail-value.status-timeout {
+  color: var(--warning);
+}
+.run-detail-value.status-running {
+  color: var(--info);
+}
 
 .run-error-box {
   background: var(--danger-alpha-10);
