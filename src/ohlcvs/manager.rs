@@ -4,6 +4,7 @@
 //! OHLCV manager — coordinates candle fetching, caching, and priority management.
 
 use crate::config::with_config;
+use crate::errors::InternalError;
 use crate::events::{record_ohlcv_event, Severity};
 use crate::logger::{self, LogTag};
 use crate::ohlcvs::cache::OhlcvCache;
@@ -19,6 +20,7 @@ use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
+use tokio::task::spawn_blocking;
 
 /// While the Data Server is unusable, a native pool replaces the current series pool only at
 /// this multiple of its liquidity. The Data Server applies the same factor before it moves a
@@ -57,14 +59,19 @@ impl PoolManager {
         }
     }
 
-    /// Get all pools for a token
+    /// The token's stored pool rows, read off the async runtime: every chart and status read
+    /// resolves its pool through here.
     pub async fn get_pools(&self, mint: &str) -> OhlcvResult<Vec<PoolConfig>> {
-        self.db.get_pools(mint)
+        let db = Arc::clone(&self.db);
+        let mint = mint.to_string();
+        spawn_blocking(move || db.get_pools(&mint))
+            .await
+            .map_err(|e| OhlcvError::Internal(InternalError::from(e)))?
     }
 
     /// The token's series pool from its stored pool rows (see [`PoolConfig::series_pool`]).
     pub async fn series_pool(&self, mint: &str) -> OhlcvResult<Option<PoolConfig>> {
-        let pools = self.db.get_pools(mint)?;
+        let pools = self.get_pools(mint).await?;
         Ok(PoolConfig::series_pool(&pools).cloned())
     }
 

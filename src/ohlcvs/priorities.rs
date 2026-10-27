@@ -186,6 +186,16 @@ pub enum ActivityType {
     DataRequested,
 }
 
+impl ActivityType {
+    /// Whether this activity needs the token's data now. The monitor fetches such a token at
+    /// once, and only such an activity clears its empty-fetch backoff, because that fetch
+    /// re-tests the token. Every other activity (a view, a chart poll, a closed position)
+    /// refreshes the activity time and priority and leaves the backoff to the fetches.
+    pub fn fetches_now(self) -> bool {
+        matches!(self, Self::PositionOpened | Self::DataRequested)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum RecommendedAction {
     FetchNow,

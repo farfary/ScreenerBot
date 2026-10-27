@@ -4,6 +4,7 @@
 //! OHLCV data types — candles, timeframes, priorities, and fetch configuration.
 
 use crate::config::with_config;
+use crate::ohlcvs::priorities::ActivityType;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -451,8 +452,22 @@ impl TokenOhlcvConfig {
         self.last_fetch = Some(Utc::now());
     }
 
-    pub fn mark_activity(&mut self) {
+    /// Record `activity` on the token: the activity time is refreshed, and the empty-fetch
+    /// backoff is cleared only by an activity that fetches now ([`ActivityType::fetches_now`]),
+    /// so a polled chart never undoes the backoff of a token that keeps returning nothing.
+    pub fn mark_activity(&mut self, activity: ActivityType) {
         self.last_activity = Utc::now();
+        if activity.fetches_now() {
+            self.consecutive_empty_fetches = 0;
+        }
+    }
+
+    /// Record a fetch that stored candles: fetch and activity time now, empty-fetch backoff
+    /// cleared.
+    pub fn mark_fetch_success(&mut self) {
+        let now = Utc::now();
+        self.last_fetch = Some(now);
+        self.last_activity = now;
         self.consecutive_empty_fetches = 0;
     }
 
@@ -746,9 +761,56 @@ impl ChartTail {
 #[cfg(test)]
 mod tests {
     use super::{
-        Candle, ChartTail, Duration, PoolConfig, Priority, Timeframe, DEEP_HISTORY_TIMEFRAMES,
-        UNHEALTHY_POOL_RETRY_BASE, UNHEALTHY_POOL_RETRY_MAX,
+        ActivityType, Candle, ChartTail, Duration, PoolConfig, Priority, Timeframe,
+        TokenOhlcvConfig, DEEP_HISTORY_TIMEFRAMES, UNHEALTHY_POOL_RETRY_BASE,
+        UNHEALTHY_POOL_RETRY_MAX,
     };
+
+    /// Every activity type. The match fails to compile when a variant is added, so the
+    /// activity tests below cover it.
+    fn every_activity() -> [ActivityType; 5] {
+        let every = [
+            ActivityType::PositionOpened,
+            ActivityType::PositionClosed,
+            ActivityType::TokenViewed,
+            ActivityType::ChartViewed,
+            ActivityType::DataRequested,
+        ];
+        for activity in every {
+            match activity {
+                ActivityType::PositionOpened
+                | ActivityType::PositionClosed
+                | ActivityType::TokenViewed
+                | ActivityType::ChartViewed
+                | ActivityType::DataRequested => {}
+            }
+        }
+        every
+    }
+
+    /// Only an activity that fetches now clears the empty-fetch backoff; every other activity,
+    /// a polled chart included, refreshes the activity time and leaves the backoff as it was.
+    #[test]
+    fn only_an_activity_that_fetches_now_clears_the_empty_fetch_backoff() {
+        let fetching: Vec<ActivityType> = every_activity()
+            .into_iter()
+            .filter(|activity| activity.fetches_now())
+            .collect();
+        assert_eq!(
+            fetching,
+            vec![ActivityType::PositionOpened, ActivityType::DataRequested]
+        );
+        for activity in every_activity() {
+            let mut config = TokenOhlcvConfig::new("mint".to_string(), Priority::Medium);
+            config.consecutive_empty_fetches = 4;
+            config.last_activity -= chrono::Duration::hours(2);
+            let before = config.last_activity;
+            config.mark_activity(activity);
+            let expected = if activity.fetches_now() { 0 } else { 4 };
+            assert_eq!(config.consecutive_empty_fetches, expected, "{activity:?}");
+            assert!(config.last_activity > before, "{activity:?}");
+        }
+    }
 
     /// The deep-history set is exactly the timeframes kept past the backfill page, and no
     /// timeframe keeps less than that page.

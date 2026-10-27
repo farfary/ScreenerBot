@@ -4,6 +4,7 @@
 //! OHLCV monitor service — background worker that fetches candles on schedule.
 
 use crate::config::with_config;
+use crate::errors::InternalError;
 use crate::events::{record_ohlcv_event, Severity};
 use crate::i18n::{ids, UiArg, UiText};
 use crate::logger::{self, LogTag};
@@ -767,13 +768,13 @@ impl OhlcvMonitor {
         };
         if let Some(raised) = raised {
             if let Some(config) = raised {
-                self.db.upsert_monitor_config(&config)?;
+                self.persist_config(config).await?;
             }
             return Ok(());
         }
 
-        self.db
-            .upsert_monitor_config(&TokenOhlcvConfig::new(mint.clone(), priority))?;
+        self.persist_config(TokenOhlcvConfig::new(mint.clone(), priority))
+            .await?;
 
         // Pools are re-resolved in the background, never awaited here: `discover_pools` is a
         // rate-limited DexScreener/GeckoTerminal fetch that can stall for tens of seconds, and
@@ -814,7 +815,7 @@ impl OhlcvMonitor {
         };
 
         if let Some(config) = removed_config {
-            self.db.upsert_monitor_config(&config)?;
+            self.persist_config(config).await?;
         }
 
         if let Ok(mut series) = self.native_series.lock() {
@@ -836,7 +837,7 @@ impl OhlcvMonitor {
         };
 
         if let Some(config) = updated_config {
-            self.db.upsert_monitor_config(&config)?;
+            self.persist_config(config).await?;
         }
 
         Ok(())
@@ -866,7 +867,7 @@ impl OhlcvMonitor {
         let (updated_config, should_trigger_fetch) = {
             let mut active = self.active_tokens.write().await;
             active.get_mut(mint).map_or((None, false), |config| {
-                config.mark_activity();
+                config.mark_activity(activity_type);
 
                 // Update priority based on activity
                 let new_priority =
@@ -874,19 +875,14 @@ impl OhlcvMonitor {
                 config.priority = new_priority;
                 config.fetch_frequency = new_priority.base_interval();
 
-                let trigger = matches!(
-                    activity_type,
-                    ActivityType::PositionOpened | ActivityType::DataRequested
-                );
-
-                (Some(config.clone()), trigger)
+                (Some(config.clone()), activity_type.fetches_now())
             })
         };
 
         let Some(config) = updated_config else {
             return Ok(false);
         };
-        self.db.upsert_monitor_config(&config)?;
+        self.persist_config(config).await?;
         Ok(should_trigger_fetch)
     }
 
@@ -980,6 +976,15 @@ impl OhlcvMonitor {
     }
 
     // ==================== Private Methods ====================
+
+    /// Persist a token's monitor config row off the async runtime: the activity, chart and
+    /// fetch paths all write it.
+    async fn persist_config(&self, config: TokenOhlcvConfig) -> OhlcvResult<()> {
+        let db = Arc::clone(&self.db);
+        spawn_blocking(move || db.upsert_monitor_config(&config))
+            .await
+            .map_err(|e| OhlcvError::Internal(InternalError::from(e)))?
+    }
 
     async fn load_active_tokens(&self) -> OhlcvResult<()> {
         let configs = self.db.get_all_active_configs()?;
@@ -1213,7 +1218,7 @@ impl OhlcvMonitor {
                     };
 
                     if let Some((previous_failures, config)) = updated_config {
-                        self.db.upsert_monitor_config(&config)?;
+                        self.persist_config(config).await?;
 
                         logger::debug(
                             LogTag::Ohlcv,
@@ -1253,7 +1258,7 @@ impl OhlcvMonitor {
                     };
 
                     if let Some((was_failure_count, config)) = update_result {
-                        self.db.upsert_monitor_config(&config)?;
+                        self.persist_config(config.clone()).await?;
 
                         // Log with appropriate frequency (only first 3 attempts, then once at 5, 10, etc.)
                         let should_log = was_failure_count < 3 || was_failure_count % 5 == 0;
@@ -1371,7 +1376,7 @@ impl OhlcvMonitor {
                     };
 
                     if let Some(config) = updated_config {
-                        self.db.upsert_monitor_config(&config)?;
+                        self.persist_config(config).await?;
                     }
                 } else if stored_points.is_empty() {
                     let updated_config = {
@@ -1384,7 +1389,7 @@ impl OhlcvMonitor {
                     };
 
                     if let Some(config) = updated_config {
-                        self.db.upsert_monitor_config(&config)?;
+                        self.persist_config(config).await?;
                     }
 
                     record_ohlcv_event(
@@ -1410,15 +1415,13 @@ impl OhlcvMonitor {
                     let updated_config = {
                         let mut active = self.active_tokens.write().await;
                         active.get_mut(mint).map(|config| {
-                            config.consecutive_empty_fetches = 0;
-                            config.mark_fetch();
-                            config.mark_activity();
+                            config.mark_fetch_success();
                             config.clone()
                         })
                     };
 
                     if let Some(config) = updated_config {
-                        self.db.upsert_monitor_config(&config)?;
+                        self.persist_config(config).await?;
                     }
 
                     // Ensure retention window remains populated (best-effort for gap coverage)
@@ -1685,8 +1688,7 @@ impl OhlcvMonitor {
             {
                 let mut active = self.active_tokens.write().await;
                 if let Some(config) = active.get_mut(mint) {
-                    config.mark_fetch();
-                    config.mark_activity();
+                    config.mark_fetch_success();
                 }
             }
 
