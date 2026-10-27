@@ -19,8 +19,10 @@ import { Poller } from "../../core/poller.js";
 import * as Utils from "../../core/utils.js";
 import { renderStateView } from "../state_view.js";
 import {
+  CHART_POLLS_BEFORE_BACKOFF,
   CHART_TIMEFRAMES,
   barForTimestamp,
+  chartPollMs,
   fetchOhlcvStatus,
   loadCandles,
   renderOhlcvStatus,
@@ -30,16 +32,10 @@ import {
   triggerRefresh,
 } from "../chart_data.js";
 
-// The chart polls candles on its OWN cadence. It used to ride the dialog's details poll, and a
-// closed or archived position has no details poll — so a token opened before its candles were
-// collected said "No chart data" forever while the backend filled it within seconds.
-const WAITING_POLL_MS = 3000;
-// A token that stays empty this many polls is probably not getting data soon; stop asking
-// every 3s but keep asking.
-const WAITING_POLLS_BEFORE_BACKOFF = 6;
-const EMPTY_POLL_MS = 15000;
-// Candles move far slower than position figures, and every read pulls the full history.
-const OPEN_POLL_MS = 10000;
+// The chart polls candles on its OWN cadence (`chartPollMs`). It used to ride the dialog's
+// details poll, and a closed or archived position has no details poll — so a token opened
+// before its candles were collected said "No chart data" forever while the backend filled it
+// within seconds. A settled position's candles stop moving, so its drawn chart polls slower.
 const SETTLED_POLL_MS = 30000;
 
 const CHART_TYPE_LABELS = Object.freeze({
@@ -297,7 +293,7 @@ export function applyChartMixin(PositionDetailsDialog) {
         // position on a timeframe whose stored history began after it closed. Wait a few polls
         // for the counts, then draw the guess rather than nothing.
         this._pddStatusMisses = (this._pddStatusMisses || 0) + 1;
-        if (this._pddStatusMisses < WAITING_POLLS_BEFORE_BACKOFF) return;
+        if (this._pddStatusMisses < CHART_POLLS_BEFORE_BACKOFF) return;
       }
       if (this._pddTfAuto && !this._pddChartData?.length && spanCounted) {
         const { from, to } = this._positionSpan();
@@ -379,12 +375,9 @@ export function applyChartMixin(PositionDetailsDialog) {
 
   /** Cadence the chart warrants now: fast while waiting, slow once drawn or long empty. */
   proto._positionChartPollMs = function () {
-    if (!this._pddChartData?.length) {
-      return (this._pddEmptyPolls || 0) >= WAITING_POLLS_BEFORE_BACKOFF
-        ? EMPTY_POLL_MS
-        : WAITING_POLL_MS;
-    }
-    return this._isSettled() ? SETTLED_POLL_MS : OPEN_POLL_MS;
+    const drawn = Boolean(this._pddChartData?.length);
+    if (drawn && this._isSettled()) return SETTLED_POLL_MS;
+    return chartPollMs({ drawn, emptyPolls: this._pddEmptyPolls });
   };
 
   proto._startPositionChartPoller = function (mint) {

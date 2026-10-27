@@ -460,6 +460,17 @@ impl TokenOhlcvConfig {
         self.consecutive_empty_fetches += 1;
     }
 
+    /// Raise the priority (and its fetch interval) to `priority` when that is higher; a lower or
+    /// equal one leaves the config as it is. Returns whether anything changed.
+    pub fn raise_priority(&mut self, priority: Priority) -> bool {
+        if priority <= self.priority {
+            return false;
+        }
+        self.priority = priority;
+        self.fetch_frequency = priority.base_interval();
+        true
+    }
+
     pub fn calculate_adjusted_interval(&self) -> Duration {
         let base = self.priority.base_interval();
         let hours_inactive = (Utc::now() - self.last_activity).num_hours().max(0) as f64;

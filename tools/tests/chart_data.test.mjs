@@ -6,15 +6,18 @@
  * Tests for the shared chart data rules (`ui/chart_data.js`).
  *
  * Covers the pure helpers the chart dialogs rely on: which stored timeframe can show a
- * position, which candle an event belongs to, and how a polled tail merges into a held series. Both were bugs on real positions — a
- * weeks-old position opened on a timeframe whose capped history started after it closed, and
- * an event on an illiquid token snapped to a candle days before it happened.
+ * position, which candle an event belongs to, how a polled tail merges into a held series, and
+ * the candle poll cadence both chart dialogs take from this module. The first two were bugs on
+ * real positions — a weeks-old position opened on a timeframe whose capped history started
+ * after it closed, and an event on an illiquid token snapped to a candle days before it
+ * happened.
  *
  * Run with `npm run test:js`.
  */
 
 import test from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
 
 import "./fixtures/i18n_global.mjs";
 
@@ -196,4 +199,37 @@ test("mergeCandleTail learns the pool when the held series has none yet", async 
   const tail = { pool: "pool", count: 1, first: 60, candles: [candle(60, 2)] };
 
   assert.equal(mergeCandleTail(held, tail, 60).pool, "pool");
+});
+
+test("chartPollMs waits fast, slows once drawn, and backs off after a run of empty polls", async () => {
+  const { chartPollMs, CHART_POLL_MS, CHART_POLLS_BEFORE_BACKOFF } = await mod();
+  assert.deepEqual({ ...CHART_POLL_MS }, { waiting: 3000, drawn: 10000, backedOff: 15000 });
+  assert.equal(CHART_POLLS_BEFORE_BACKOFF, 6);
+
+  assert.equal(chartPollMs({ drawn: false, emptyPolls: 0 }), 3000);
+  assert.equal(chartPollMs({ drawn: false, emptyPolls: undefined }), 3000);
+  assert.equal(chartPollMs({ drawn: false, emptyPolls: 5 }), 3000);
+  assert.equal(chartPollMs({ drawn: false, emptyPolls: 6 }), 15000);
+  assert.equal(chartPollMs({ drawn: false, emptyPolls: 40 }), 15000);
+  // Drawn candles win over an empty streak left from before they arrived.
+  assert.equal(chartPollMs({ drawn: true, emptyPolls: 0 }), 10000);
+  assert.equal(chartPollMs({ drawn: true, emptyPolls: 9 }), 10000);
+});
+
+test("both chart dialogs take their candle poll cadence from chart_data.js", () => {
+  const read = (rel) =>
+    fs.readFileSync(
+      new URL(`../../src/webserver/templates/scripts/ui/${rel}`, import.meta.url),
+      "utf8"
+    );
+  for (const rel of ["token_details_dialog.js", "position_details/chart.js"]) {
+    const source = read(rel);
+    assert.match(
+      source,
+      /import\s*\{[^}]*\bchartPollMs\b[^}]*\}\s*from\s*"(\.\.\/|\.\/)chart_data\.js"/,
+      `${rel} must read the poll cadence from chart_data.js`
+    );
+    assert.doesNotMatch(source, /\b(WAITING|EMPTY|OPEN)_POLL_MS\b/, `${rel} keeps its own cadence`);
+    assert.doesNotMatch(source, /\binterval\s*=\s*\d/, `${rel} keeps its own cadence`);
+  }
 });

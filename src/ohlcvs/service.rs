@@ -456,23 +456,41 @@ impl OhlcvServiceImpl {
         // never shows. No pool yet => no data (empty summary), which is the correct
         // "collecting" state.
         let selected_pool = self.pool_manager.series_pool(mint).await?;
-        let (summary, last_new_by_tf, range_by_tf) = match selected_pool.as_ref() {
-            Some(pool) => (
-                self.db.get_timeframe_summary(mint, &pool.address)?,
-                self.db
-                    .get_timeframe_last_new_data(mint, &pool.address)
-                    .unwrap_or_default(),
-                match range {
-                    Some((from, to)) => {
-                        self.db
-                            .count_candles_in_range(mint, &pool.address, from, to)?
-                    }
-                    None => Vec::new(),
-                },
-            ),
-            None => (Vec::new(), Vec::new(), Vec::new()),
-        };
-        let last_checked_at = self.db.get_last_checked_at(mint).unwrap_or(None);
+        // The stored figures are SQLite reads, run off the async runtime: every open chart
+        // dialog polls this route.
+        let db = Arc::clone(&self.db);
+        let mint_owned = mint.to_string();
+        let (summary, last_new_by_tf, range_by_tf, last_checked_at, backfilled) =
+            tokio::task::spawn_blocking(move || -> OhlcvResult<_> {
+                let (summary, last_new_by_tf, range_by_tf) = match selected_pool {
+                    Some(pool) => (
+                        db.get_timeframe_summary(&mint_owned, &pool.address)?,
+                        db.get_timeframe_last_new_data(&mint_owned, &pool.address)
+                            .unwrap_or_default(),
+                        match range {
+                            Some((from, to)) => {
+                                db.count_candles_in_range(&mint_owned, &pool.address, from, to)?
+                            }
+                            None => Vec::new(),
+                        },
+                    ),
+                    None => (Vec::new(), Vec::new(), Vec::new()),
+                };
+                let last_checked_at = db.get_last_checked_at(&mint_owned).unwrap_or(None);
+                let backfilled: Vec<bool> = Timeframe::all()
+                    .into_iter()
+                    .map(|tf| db.is_backfill_complete(&mint_owned, tf).unwrap_or(false))
+                    .collect();
+                Ok((
+                    summary,
+                    last_new_by_tf,
+                    range_by_tf,
+                    last_checked_at,
+                    backfilled,
+                ))
+            })
+            .await
+            .map_err(|e| OhlcvError::Internal(InternalError::from(e)))??;
         let monitored = self.monitor.is_monitored(mint).await;
 
         let mut total_candles = 0i64;
@@ -483,7 +501,7 @@ impl OhlcvServiceImpl {
 
         // Timeframe::all() is finest→coarsest, so the first one with candles is
         // the finest available — the chart's preferred default target.
-        for tf in Timeframe::all() {
+        for (tf, backfill_complete) in Timeframe::all().into_iter().zip(backfilled) {
             let tf_str = tf.as_str().to_string();
             let (candles, earliest, latest) = summary
                 .iter()
@@ -497,7 +515,6 @@ impl OhlcvServiceImpl {
                     .map_or(0, |(_, count)| *count)
             });
 
-            let backfill_complete = self.db.is_backfill_complete(mint, tf).unwrap_or(false);
             if !backfill_complete {
                 all_backfilled = false;
             }

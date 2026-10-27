@@ -70,8 +70,8 @@ pub async fn get_token_ohlcv(
         ),
     );
 
-    // Add token to OHLCV monitoring with appropriate priority
-    // This ensures data collection starts when a user views the chart
+    // A viewed chart is monitored at least at chart-view priority. Idempotent per poll: a token
+    // already monitored keeps its fetch state and only has its priority raised (`add_token`).
     let is_open_position = positions::is_open_position(&mint).await;
     let priority = if is_open_position {
         crate::ohlcvs::Priority::Critical

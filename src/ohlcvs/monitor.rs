@@ -22,7 +22,7 @@ use crate::ohlcvs::types::{
 };
 use chrono::{DateTime, Utc};
 use serde_json::json;
-use std::collections::{HashMap, HashSet};
+use std::collections::{hash_map::Entry, HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 use tokio::sync::{Mutex as AsyncMutex, RwLock};
 use tokio::task::spawn_blocking;
@@ -745,52 +745,49 @@ impl OhlcvMonitor {
         *shutdown = true;
     }
 
-    /// Add a token to monitoring
+    /// Add a token to monitoring at `priority`. A token already monitored keeps its fetch and
+    /// backoff state (`last_fetch`, `consecutive_empty_fetches`) and only has its priority raised,
+    /// persisted when it changed; its backfill stays with the monitor loop
+    /// (`ensure_retention_window`). Every chart read calls this, so it must stay idempotent.
     pub async fn add_token(&self, mint: String, priority: Priority) -> OhlcvResult<()> {
-        let config = TokenOhlcvConfig::new(mint.clone(), priority);
-
-        // Load existing pools from the database (fast, local). If none are stored
-        // yet, do NOT block this call on network pool discovery: `discover_pools`
-        // performs a rate-limited DexScreener/GeckoTerminal fetch that can stall
-        // for tens of seconds when the provider budget is exhausted. Because
-        // `add_token` is awaited inline by the `GET /tokens/:mint/ohlcv` handler
-        // (every chart-dialog open, polled ~1s), a blocking discovery here wedged
-        // the chart endpoint AND — via shared OHLCV DB contention — the token
-        // detail endpoint's `has_data` check, leaving the dialog stuck on a
-        // loading spinner. Instead, proceed immediately with whatever pools exist
-        // and kick discovery off in the background; the discovered pools are
-        // persisted to the DB, so the next poll (or the monitor loop) picks them
-        // up and backfill starts then. Mirrors the pre-existing "discovery failed
-        // -> empty pools -> retry later" path, just without the stall.
-        let pools = match self.pool_manager.get_pools(&mint).await {
-            Ok(pools) if !pools.is_empty() => pools,
-            _ => {
-                self.spawn_pool_discovery(&mint);
-                Vec::new()
+        // One lock decides between the two paths, so two first reads of a token racing each
+        // other (the detail and chart routes of one dialog open) create it once.
+        let raised = {
+            let mut active = self.active_tokens.write().await;
+            match active.entry(mint.clone()) {
+                Entry::Occupied(mut monitored) => {
+                    let config = monitored.get_mut();
+                    Some(config.raise_priority(priority).then(|| config.clone()))
+                }
+                Entry::Vacant(slot) => {
+                    slot.insert(TokenOhlcvConfig::new(mint.clone(), priority));
+                    None
+                }
             }
         };
-
-        let has_stored_pools = !pools.is_empty();
-
-        // Store in database
-        self.db.upsert_monitor_config(&config)?;
-
-        // Add to active tokens
-        let newly_active = {
-            let mut active = self.active_tokens.write().await;
-            active.insert(mint.clone(), config.clone()).is_none()
-        };
-
-        // Stored pool rows (liquidity, the canonical default) are a snapshot from the last
-        // discovery, and discovery otherwise only runs for a token with NO pools — so a default
-        // chosen by a since-fixed ranking, or a market that moved, never healed. Re-resolve in the
-        // background when a token starts being monitored; the series pool follows on the next read.
-        if newly_active && has_stored_pools {
-            self.spawn_pool_discovery(&mint);
+        if let Some(raised) = raised {
+            if let Some(config) = raised {
+                self.db.upsert_monitor_config(&config)?;
+            }
+            return Ok(());
         }
 
-        // Every token-detail dialog open and the monitor/sync loops call this; the token's
-        // backfill slot (`spawn_backfill`) keeps them to one backfill of the token at a time.
+        self.db
+            .upsert_monitor_config(&TokenOhlcvConfig::new(mint.clone(), priority))?;
+
+        // Pools are re-resolved in the background, never awaited here: `discover_pools` is a
+        // rate-limited DexScreener/GeckoTerminal fetch that can stall for tens of seconds, and
+        // the chart and token detail routes await this call. A token without stored pools is
+        // discovered for the first time; stored pool rows (liquidity, the canonical default) are
+        // a snapshot of the last discovery, which otherwise only runs for a token with NO pools,
+        // so a default chosen by a since-fixed ranking, or a market that moved, never healed. The
+        // series pool follows on the next read, and the monitor loop starts a backfill deferred
+        // here once the pool is known.
+        self.spawn_pool_discovery(&mint);
+        let pools = self.pool_manager.get_pools(&mint).await.unwrap_or_default();
+
+        // The token's backfill slot (`spawn_backfill`) keeps this and the monitor loop to one
+        // backfill of the token at a time.
         if let Some(pool) = PoolConfig::series_pool(&pools) {
             self.spawn_backfill(&mint, &pool.address, priority);
         } else {
@@ -4503,6 +4500,99 @@ mod tests {
         .unwrap();
         assert!(!monitor.pool_rediscovery_due("mint", true).await.unwrap());
         assert!(monitor.pool_rediscovery_due("mint", false).await.unwrap());
+
+        drop(monitor);
+        drop(db);
+        let _ = std::fs::remove_file(path);
+    }
+
+    /// Adding a monitored token again (every chart read does) keeps its fetch and backoff state
+    /// and leaves its finished backfill alone; only a higher priority is taken, and persisted.
+    #[tokio::test]
+    async fn adding_a_monitored_token_again_keeps_its_state_and_only_raises_priority() {
+        use crate::chains::ChainId;
+        use crate::ohlcvs::database::SeriesPoolPlan;
+        crate::config::utils::install_default_config();
+        let path = std::env::temp_dir().join(format!(
+            "screenerbot-ohlcv-monitor-add-again-{}.db",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_file(&path);
+        let db = Arc::new(OhlcvDatabase::new(&path, ChainId::Solana).unwrap());
+        let fetcher = Arc::new(OhlcvFetcher::new(ChainId::Solana));
+        let cache = Arc::new(OhlcvCache::new(ChainId::Solana));
+        let pool_manager = Arc::new(PoolManager::new(Arc::clone(&db), Arc::clone(&cache)));
+        let gap_manager = Arc::new(GapManager::new(
+            Arc::clone(&db),
+            Arc::clone(&fetcher),
+            Arc::clone(&cache),
+            Arc::clone(&pool_manager),
+        ));
+        let monitor = OhlcvMonitor::new(Arc::clone(&db), fetcher, cache, pool_manager, gap_manager);
+        db.write_series_pools("mint", |_| {
+            Some(SeriesPoolPlan {
+                pools: vec![PoolConfig::new("pool".to_string(), "dex".to_string(), 1.0)],
+                series: "pool".to_string(),
+            })
+        })
+        .unwrap();
+        db.mark_all_backfills_complete("mint", "pool").unwrap();
+        let last_fetch = Utc::now() - chrono::Duration::minutes(3);
+        let mut monitored = TokenOhlcvConfig::new("mint".to_string(), Priority::Low);
+        monitored.last_fetch = Some(last_fetch);
+        monitored.consecutive_empty_fetches = 4;
+        db.upsert_monitor_config(&monitored).unwrap();
+        monitor
+            .active_tokens
+            .write()
+            .await
+            .insert("mint".to_string(), monitored);
+        let held = || async {
+            monitor
+                .active_tokens
+                .read()
+                .await
+                .get("mint")
+                .cloned()
+                .unwrap()
+        };
+        let stored = || db.get_monitor_config("mint").unwrap().unwrap();
+
+        monitor
+            .add_token("mint".to_string(), Priority::High)
+            .await
+            .unwrap();
+
+        let config = held().await;
+        assert_eq!(config.priority, Priority::High);
+        assert_eq!(config.fetch_frequency, Priority::High.base_interval());
+        assert_eq!(config.last_fetch, Some(last_fetch));
+        assert_eq!(config.consecutive_empty_fetches, 4);
+        let row = stored();
+        assert_eq!(row.priority, Priority::High);
+        assert_eq!(
+            row.last_fetch.map(|at| at.timestamp()),
+            Some(last_fetch.timestamp())
+        );
+        assert_eq!(row.consecutive_empty_fetches, 4);
+        assert!(!monitor
+            .backfill_in_progress
+            .lock()
+            .unwrap()
+            .contains("mint"));
+
+        // A lower priority changes nothing, in memory or stored.
+        monitor
+            .add_token("mint".to_string(), Priority::Medium)
+            .await
+            .unwrap();
+        assert_eq!(held().await.priority, Priority::High);
+        assert_eq!(stored().priority, Priority::High);
+        assert!(!monitor
+            .backfill_in_progress
+            .lock()
+            .unwrap()
+            .contains("mint"));
 
         drop(monitor);
         drop(db);

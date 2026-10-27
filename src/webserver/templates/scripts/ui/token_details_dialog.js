@@ -26,7 +26,12 @@ import { renderPoolsTab, renderLinksTab } from "./token_details/pools_links_tab.
 import { applyTradeActionsMixin } from "./token_details/trade_actions.js";
 import { applyTransactionsTabMixin } from "./token_details/transactions_tab.js";
 import { applyChartTabMixin } from "./token_details/chart_tab.js";
-import { loadCandles, triggerRefresh } from "./chart_data.js";
+import {
+  CHART_POLLS_BEFORE_BACKOFF,
+  chartPollMs,
+  loadCandles,
+  triggerRefresh,
+} from "./chart_data.js";
 import { applyUtilitiesMixin } from "./token_details/utilities.js";
 import { applyStateHandlingMixin } from "./token_details/state_handling.js";
 import { renderStateView } from "./state_view.js";
@@ -192,7 +197,6 @@ export class TokenDetailsDialog {
       // Reset chart data state for new token
       this.chartDataLoaded = false;
       this._chartEmptyCount = 0;
-      this._chartPollBackedOff = false;
       // Grace window before the "no data" row may appear, so we never flash
       // source failures while the very first fetch/refresh is still in flight.
       this._issuesSettleAt = Date.now() + INITIAL_LOAD_GRACE_MS;
@@ -581,15 +585,12 @@ export class TokenDetailsDialog {
 
   _startChartPolling() {
     this._stopChartPolling();
-    // 10s once data is loaded; 3s while actively waiting; but back off to 15s once
-    // it's clear the token simply has no OHLCV yet, so we don't hammer the OHLCV
-    // endpoint every 3s for the whole time the dialog stays open on a dead chart.
-    let interval = 3000;
-    if (this.chartDataLoaded) {
-      interval = 10000;
-    } else if (this._chartPollBackedOff) {
-      interval = 15000;
-    }
+    // `chartPollMs` backs a dead chart off, so the OHLCV endpoint is not polled at the
+    // waiting cadence for the whole time the dialog stays open on it.
+    const interval = chartPollMs({
+      drawn: this.chartDataLoaded,
+      emptyPolls: this._chartEmptyCount,
+    });
     this.chartPoller = new Poller(
       () => {
         this._refreshChartData();
@@ -672,12 +673,12 @@ export class TokenDetailsDialog {
       if (!chartData.length) {
         // No data yet. After a streak of empty responses, switch to a clearer
         // message (an unchanging "Waiting…" spinner reads as "broken") and back
-        // off the 3s poll so a token that simply has no OHLCV stops hammering the
+        // off the waiting poll so a token that simply has no OHLCV stops hammering the
         // endpoint. We keep polling (slower) because data may still arrive.
         this._chartEmptyCount = (this._chartEmptyCount || 0) + 1;
         if (loadingText) {
           loadingText.textContent =
-            this._chartEmptyCount >= 6
+            this._chartEmptyCount >= CHART_POLLS_BEFORE_BACKOFF
               ? I18n.t("tokens-dialog-chart-still-checking")
               : I18n.t("chart-waiting");
         }
@@ -685,8 +686,7 @@ export class TokenDetailsDialog {
           loadingOverlay.classList.remove("hidden");
         }
         this.chartDataLoaded = false;
-        if (this._chartEmptyCount === 6 && !this._chartPollBackedOff) {
-          this._chartPollBackedOff = true;
+        if (this._chartEmptyCount === CHART_POLLS_BEFORE_BACKOFF) {
           this._startChartPolling();
         }
         return;
@@ -701,7 +701,6 @@ export class TokenDetailsDialog {
       this.chartDataLoaded = true;
       this._chartErrorCount = 0; // Reset error counter on success
       this._chartEmptyCount = 0;
-      this._chartPollBackedOff = false;
 
       // Update OHLCV status to success
       this._updateDataSourceStatus("ohlcv", DATA_SOURCE_STATUS.SUCCESS);
@@ -921,7 +920,6 @@ export class TokenDetailsDialog {
       this._retryCount = 0;
       this._chartErrorCount = 0;
       this._chartEmptyCount = 0;
-      this._chartPollBackedOff = false;
       this._connectionState = "online";
       this._consecutiveFailures = 0;
       this.positionsData = null;

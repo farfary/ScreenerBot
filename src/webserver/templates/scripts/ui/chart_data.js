@@ -46,6 +46,30 @@ export const CHART_CANDLE_LIMIT = 0;
 /** Every timeframe the backend serves, finest first. */
 export const CHART_TIMEFRAMES = ["1m", "5m", "15m", "1h", "4h", "12h", "1d"];
 
+/**
+ * Candle poll intervals of a chart, in ms. Fast while the first candles are awaited, slower
+ * once candles are drawn (they move far slower than prices, and every full read pulls the whole
+ * history), and backed off once a token has stayed empty long enough that data is not coming
+ * soon — still polled, so a series the backend fills later is drawn.
+ */
+export const CHART_POLL_MS = Object.freeze({ waiting: 3000, drawn: 10000, backedOff: 15000 });
+
+/** Consecutive empty polls after which a waiting chart backs off. */
+export const CHART_POLLS_BEFORE_BACKOFF = 6;
+
+/**
+ * The candle poll interval a chart warrants now.
+ * @param {{ drawn: boolean, emptyPolls: number }} state - whether candles are on screen, and
+ *   how many polls in a row came back empty
+ * @returns {number} ms
+ */
+export function chartPollMs({ drawn, emptyPolls }) {
+  if (drawn) return CHART_POLL_MS.drawn;
+  return (emptyPolls || 0) >= CHART_POLLS_BEFORE_BACKOFF
+    ? CHART_POLL_MS.backedOff
+    : CHART_POLL_MS.waiting;
+}
+
 const TIMEFRAME_SECONDS = {
   "1m": 60,
   "5m": 300,
