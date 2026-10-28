@@ -48,7 +48,7 @@ function footerState(page) {
 }
 
 const panelHeight = (page) =>
-  page.$eval(".copy-editor-panel", (panel) => panel.getBoundingClientRect().height);
+  page.$eval(".copy-editor-panel", (panel) => panel.offsetHeight);
 
 test("the wizard marks the invalid field and keeps its footer on one row", async (t) => {
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });

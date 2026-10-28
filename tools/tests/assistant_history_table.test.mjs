@@ -68,6 +68,10 @@ test("History lists each decision as a table row and does not scroll the page", 
       "created_at",
     ]);
 
+    // The panel fades in from a small offset, which adds to its scroll height until it ends.
+    await page
+      .locator("#history-panel")
+      .evaluate((node) => Promise.all(node.getAnimations().map((animation) => animation.finished)));
     const overflow = await page.evaluate(() => {
       const panel = document.querySelector(".assistant-main-panel");
       return {

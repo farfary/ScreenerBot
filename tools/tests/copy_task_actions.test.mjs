@@ -271,7 +271,7 @@ test("at a laptop height the arm gate sets readiness beside exposure, unscrolled
     );
     return {
       overflows: body.scrollHeight > body.clientHeight + 1,
-      width: document.querySelector(".copy-arm-panel").getBoundingClientRect().width,
+      width: document.querySelector(".copy-arm-panel").offsetWidth,
       sideBySide: Math.abs(readiness.top - exposure.top) < 1 && readiness.right <= exposure.left,
       exposure: body.querySelectorAll(".copy-split .copy-def").length,
       subtitle: document.querySelector("#copy-arm-sub").textContent,
@@ -303,7 +303,7 @@ test("the settings lay three fields a row on the wide panel", async (t) => {
     const fields = body.querySelector(".copy-fields").getBoundingClientRect();
     return {
       overflows: body.scrollHeight > body.clientHeight + 1,
-      width: document.querySelector(".copy-settings-panel").getBoundingClientRect().width,
+      width: document.querySelector(".copy-settings-panel").offsetWidth,
       rows: [...new Set(tops)].length,
       noteSpans: Math.abs(note.width - fields.width) < 1,
     };

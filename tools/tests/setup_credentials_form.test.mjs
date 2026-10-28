@@ -111,6 +111,12 @@ test("onboarding and the Explore Mode dialog render the same credential form", a
     assert.equal(icon.border, "none");
     assert.equal(icon.parentBackground, "rgba(0, 0, 0, 0)");
 
+    // The dialog scales in; the gap is compared with unscaled padding once that ends.
+    await page
+      .locator(".setup-dialog")
+      .evaluate((node) =>
+        Promise.all(node.getAnimations({ subtree: true }).map((animation) => animation.finished))
+      );
     const band = await page.evaluate(() => {
       const body = document.querySelector(".setup-dialog-body");
       const fields = document.querySelector(".setup-dialog-fields").getBoundingClientRect();

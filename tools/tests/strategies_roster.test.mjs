@@ -316,7 +316,7 @@ const dialogBody = (page) =>
 test("at a laptop height the arm dialog shows every check and acknowledgement unscrolled", async (t) => {
   const page = await openArmDialog(t, { width: 1280, height: 660 });
   assert.deepEqual(await dialogBody(page), { overflows: false, top: 0 });
-  const width = await page.$eval(".confirmation-dialog", (dialog) => dialog.getBoundingClientRect().width);
+  const width = await page.$eval(".confirmation-dialog", (dialog) => dialog.offsetWidth);
   assert.ok(width > 600, `the dialog grows sideways before it scrolls, got ${width}px`);
   const columns = await page.$$eval(".arm-gate-check", (checks) =>
     new Set(checks.map((check) => Math.round(check.getBoundingClientRect().left))).size
