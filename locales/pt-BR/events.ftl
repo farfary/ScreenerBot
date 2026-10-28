@@ -39,6 +39,7 @@ events-subtype-entry-capacity-guard = Entrada retida pelo limite de capacidade
 events-subtype-entry-executed = Entrada executada
 events-subtype-entry-execution-error = Erro na execução da entrada
 events-subtype-entry-failed = Entrada falhou
+events-subtype-entry-withdrawn = Entrada retirada
 events-subtype-entry-submitted-unconfirmed = Entrada enviada, sem confirmação
 events-subtype-entry-verified = Entrada verificada
 events-subtype-entry-not-landed = A entrada não chegou à rede

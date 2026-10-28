@@ -18,12 +18,14 @@ use crate::trader::paper::readiness::{self, CheckText, HistoryText, Readiness};
 use crate::trader::LiveBlock;
 
 /// The paper evidence of every strategy in the current paper run, read on the blocking
-/// pool; empty without a loaded paper book or a wallet. Never starts a paper run.
+/// pool; empty without a loaded paper book or a wallet. Never starts a paper run. The
+/// wallet address is awaited: the synchronous read refuses on a current-thread runtime,
+/// which would read as no evidence at all.
 pub async fn paper_strategy_evidence() -> crate::Result<PaperStrategyEvidence> {
     let Some(book) = crate::positions::paper::book() else {
         return Ok(PaperStrategyEvidence::default());
     };
-    let Ok(wallet_address) = crate::utils::get_wallet_address() else {
+    let Ok(wallet_address) = crate::config::get_wallet_pubkey_string_async().await else {
         return Ok(PaperStrategyEvidence::default());
     };
     Ok(tokio::task::spawn_blocking(move || book.strategy_evidence(&wallet_address)).await??)

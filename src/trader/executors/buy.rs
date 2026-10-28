@@ -5,7 +5,7 @@
 
 use crate::logger::{self, LogTag};
 use crate::positions::{self, PositionOrigin, TradeOrigin};
-use crate::strategies::types::Strategy;
+use crate::strategies::types::{DecisionLapse, Strategy};
 use crate::trader::config;
 use crate::trader::paper::TradingMode;
 use crate::trader::types::{TradeDecision, TradeReason, TradeResult, TradeStep, Withdrawal};
@@ -35,56 +35,74 @@ pub(super) fn deciding_strategy(context: &ExecutionContext) -> Option<&str> {
     }
 }
 
-/// Whether the deciding strategy, as read from the store just before a live buy, still
-/// trades live: it exists and [`Strategy::trades_on`] the live book. A strategy switched
-/// off, returned to paper or removed after the decision, or a store that cannot answer,
-/// refuses the buy.
-pub(super) fn still_trades_live(strategy: &crate::Result<Option<Strategy>>) -> bool {
-    matches!(strategy, Ok(Some(strategy)) if strategy.trades_on(TradingMode::Live))
+/// Why a live buy decided at `decided_at` no longer stands, judged by the deciding
+/// strategy as read from the store just before the buy, or `None` while it does: the
+/// strategy's own rule ([`Strategy::decision_lapse`] on the live book, for a decision that
+/// opens a round), with a removed strategy counted as one that left the book.
+pub(super) fn live_buy_lapse(
+    strategy: Option<&Strategy>,
+    decided_at: chrono::DateTime<chrono::Utc>,
+) -> Option<DecisionLapse> {
+    match strategy {
+        Some(strategy) => strategy.decision_lapse(TradingMode::Live, true, decided_at),
+        None => Some(DecisionLapse::LeftBook),
+    }
 }
 
 /// The refusal of a live strategy buy whose decision no longer stands, read just before
 /// the buy, or `None` when it still does. The rule is the paper executor's for a paper
-/// strategy buy: the trader must still be enabled and the deciding strategy must still
-/// trade on the decision's book. A trader switched off or a strategy that left the live
-/// book withdraws the decision; a store that cannot answer fails it.
+/// strategy buy: automatic entries must still be on ([`config::is_entry_monitor_enabled`],
+/// the trader and its entry switch) and the deciding strategy's decision must still stand
+/// on the live book ([`live_buy_lapse`]). Entries switched off, a strategy that left the
+/// live book or a rules change after the decision withdraws it; a store that cannot answer
+/// fails it.
 async fn strategy_buy_refusal(decision: &TradeDecision, strategy_id: &str) -> Option<TradeResult> {
     let refused = |error: String, withdrawn: Option<Withdrawal>| {
         let mut result = TradeResult::failure_at(decision.clone(), TradeStep::Validation, error, 0);
         result.withdrawn = withdrawn;
         Some(result)
     };
-    if !config::is_trader_enabled() {
+    if !config::is_entry_monitor_enabled() {
         return refused(
             format!(
-                "Cannot execute buy - the trader was switched off after strategy {strategy_id} decided the entry"
+                "Cannot execute buy - the trader was switched off, or its automatic entries were, after strategy {strategy_id} decided the entry"
             ),
             Some(Withdrawal::TraderStopped),
         );
     }
-    let strategy = crate::strategies::db::get_strategy_async(strategy_id).await;
-    if still_trades_live(&strategy) {
+    let strategy = match crate::strategies::db::get_strategy_async(strategy_id).await {
+        Ok(strategy) => strategy,
+        Err(e) => {
+            return refused(
+                format!(
+                    "Cannot execute buy - strategy {strategy_id} could not be read to confirm it still trades live: {e}"
+                ),
+                None,
+            )
+        }
+    };
+    let Some(lapse) = live_buy_lapse(strategy.as_ref(), decision.timestamp) else {
         return None;
-    }
-    match strategy {
-        Err(e) => refused(
-            format!(
-                "Cannot execute buy - strategy {strategy_id} could not be read to confirm it still trades live: {e}"
-            ),
-            None,
-        ),
-        Ok(_) => refused(
+    };
+    match lapse {
+        DecisionLapse::LeftBook => refused(
             format!(
                 "Cannot execute buy - strategy {strategy_id} was switched off, returned to paper or removed after the entry was decided"
             ),
             Some(Withdrawal::StrategyStoppedTrading),
+        ),
+        DecisionLapse::RulesChanged => refused(
+            format!(
+                "Cannot execute buy - the rules of strategy {strategy_id} changed after the entry was decided"
+            ),
+            Some(Withdrawal::RulesChanged),
         ),
     }
 }
 
 /// Executes a live buy, opening its round with the provenance and ownership in
 /// `context`, persisted independently. A strategy buy is refused before anything is
-/// quoted or sent when the trader was switched off or its strategy no longer trades live.
+/// quoted or sent when its decision no longer stands ([`strategy_buy_refusal`]).
 pub(super) async fn execute_buy(
     decision: &TradeDecision,
     context: ExecutionContext,

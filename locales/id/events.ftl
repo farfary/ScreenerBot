@@ -36,6 +36,7 @@ events-subtype-entry-capacity-guard = Entri ditahan oleh batas kapasitas
 events-subtype-entry-executed = Entri dieksekusi
 events-subtype-entry-execution-error = Kesalahan eksekusi entri
 events-subtype-entry-failed = Entri gagal
+events-subtype-entry-withdrawn = Entri ditarik
 events-subtype-entry-submitted-unconfirmed = Entri dikirim, belum dikonfirmasi
 events-subtype-entry-verified = Entri terverifikasi
 events-subtype-entry-not-landed = Entri tidak masuk ke chain

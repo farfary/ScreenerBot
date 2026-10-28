@@ -39,6 +39,7 @@ events-subtype-entry-capacity-guard = دخول معلّق بسبب حد السع
 events-subtype-entry-executed = تم تنفيذ الدخول
 events-subtype-entry-execution-error = خطأ في تنفيذ الدخول
 events-subtype-entry-failed = فشل الدخول
+events-subtype-entry-withdrawn = تم سحب الدخول
 events-subtype-entry-submitted-unconfirmed = أُرسل الدخول دون تأكيد
 events-subtype-entry-verified = تم التحقق من الدخول
 events-subtype-entry-not-landed = لم يصل الدخول إلى الشبكة

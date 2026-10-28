@@ -33,6 +33,7 @@ events-subtype-entry-capacity-guard = Vào lệnh bị giữ do giới hạn s�
 events-subtype-entry-executed = Đã thực hiện vào lệnh
 events-subtype-entry-execution-error = Lỗi thực hiện vào lệnh
 events-subtype-entry-failed = Vào lệnh thất bại
+events-subtype-entry-withdrawn = Đã rút lệnh vào
 events-subtype-entry-submitted-unconfirmed = Đã gửi vào lệnh, chưa xác nhận
 events-subtype-entry-verified = Đã xác minh vào lệnh
 events-subtype-entry-not-landed = Vào lệnh không lên chuỗi

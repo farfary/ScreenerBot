@@ -7,8 +7,8 @@ use std::time::Duration;
 
 use crate::positions::paper::PaperBook;
 use crate::positions::PositionOrigin;
-use crate::strategies::types::Strategy;
 use crate::swaps::{Quote, QuoteError, QuoteRequest};
+use crate::trader::config::{is_entry_monitor_enabled, is_exit_monitor_enabled, is_trader_enabled};
 use crate::trader::paper::TradingMode;
 use crate::trader::types::{TradeAction, TradeDecision};
 
@@ -94,14 +94,20 @@ impl PaperTradeIo for ProductionPaperTradeIo {
             }
             PositionOrigin::Manual | PositionOrigin::External => return true,
         }
-        if !crate::trader::config::is_trader_enabled() {
+        if !automatic_switch_on(&decision.action) {
             return false;
         }
         match (&decision.action, decision.strategy_id.as_deref()) {
             (TradeAction::Buy | TradeAction::DCA, Some(strategy_id)) => {
                 matches!(
                     crate::strategies::db::get_strategy_async(strategy_id).await,
-                    Ok(Some(strategy)) if strategy_still_wants(&strategy, decision)
+                    Ok(Some(strategy)) if strategy
+                        .decision_lapse(
+                            TradingMode::Paper,
+                            decision.action == TradeAction::Buy,
+                            decision.timestamp,
+                        )
+                        .is_none()
                 )
             }
             _ => true,
@@ -148,12 +154,14 @@ impl PaperTradeIo for ProductionPaperTradeIo {
     }
 }
 
-/// `strategy` still wants the paper `decision` it signalled: it trades on the paper book,
-/// and a buy was decided under its current rules. A buy decided before the rules changed
-/// would open a round under rules the strategy no longer has. An add extends a round the
-/// readiness window already judges by its entry time, so only the book is checked.
-pub(super) fn strategy_still_wants(strategy: &Strategy, decision: &TradeDecision) -> bool {
-    strategy.trades_on(TradingMode::Paper)
-        && (decision.action != TradeAction::Buy
-            || strategy.decided_under_current_rules(decision.timestamp))
+/// Whether the switch that runs the automatic paper `action` is still on: an entry stops
+/// with automatic entries ([`is_entry_monitor_enabled`], the trader and its entry switch),
+/// an add with the exit monitor that runs the add cycle ([`is_exit_monitor_enabled`]), and
+/// a sale with the trader.
+pub(super) fn automatic_switch_on(action: &TradeAction) -> bool {
+    match action {
+        TradeAction::Buy => is_entry_monitor_enabled(),
+        TradeAction::DCA => is_exit_monitor_enabled(),
+        TradeAction::Sell => is_trader_enabled(),
+    }
 }

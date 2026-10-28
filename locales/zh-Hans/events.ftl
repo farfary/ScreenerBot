@@ -39,6 +39,7 @@ events-subtype-entry-capacity-guard = 入场因容量上限暂缓
 events-subtype-entry-executed = 入场已执行
 events-subtype-entry-execution-error = 入场执行出错
 events-subtype-entry-failed = 入场失败
+events-subtype-entry-withdrawn = 入场已撤回
 events-subtype-entry-submitted-unconfirmed = 入场已提交，未确认
 events-subtype-entry-verified = 入场已验证
 events-subtype-entry-not-landed = 入场未上链

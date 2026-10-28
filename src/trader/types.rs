@@ -248,11 +248,15 @@ pub struct TradeResult {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Withdrawal {
-    /// The trader was switched off after the decision was taken.
+    /// The trader, or its automatic entries, were switched off after the decision was
+    /// taken.
     TraderStopped,
     /// The deciding strategy was switched off, moved to the other book or removed after
     /// the decision was taken.
     StrategyStoppedTrading,
+    /// The deciding strategy's rules changed after the entry was decided, so the round it
+    /// would open was decided under rules the strategy no longer has.
+    RulesChanged,
 }
 
 /// The stages a trade passes through, in order.

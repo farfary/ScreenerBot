@@ -34,6 +34,7 @@ events-subtype-entry-capacity-guard = Einstieg durch Kapazitätsgrenze zurückge
 events-subtype-entry-executed = Einstieg ausgeführt
 events-subtype-entry-execution-error = Fehler bei der Einstiegsausführung
 events-subtype-entry-failed = Einstieg fehlgeschlagen
+events-subtype-entry-withdrawn = Einstieg zurückgezogen
 events-subtype-entry-submitted-unconfirmed = Einstieg gesendet, unbestätigt
 events-subtype-entry-verified = Einstieg verifiziert
 events-subtype-entry-not-landed = Einstieg nicht angekommen

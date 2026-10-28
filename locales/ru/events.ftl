@@ -33,6 +33,7 @@ events-subtype-entry-capacity-guard = Вход задержан лимитом �
 events-subtype-entry-executed = Вход исполнен
 events-subtype-entry-execution-error = Ошибка исполнения входа
 events-subtype-entry-failed = Вход не удался
+events-subtype-entry-withdrawn = Вход отозван
 events-subtype-entry-submitted-unconfirmed = Вход отправлен, не подтверждён
 events-subtype-entry-verified = Вход проверен
 events-subtype-entry-not-landed = Вход не попал в сеть

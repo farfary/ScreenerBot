@@ -241,11 +241,17 @@ impl StrategyEngine {
             });
         }
 
-        // Check cache first (safe-scoped to a fingerprint of the evaluation context)
+        // Check cache first, scoped to the rules the strategy holds (`rules_changed_at`
+        // moves with every rules change, so an evaluation that finishes under old rules
+        // after an edit cleared the cache is never served to a cycle that read the new
+        // ones) and to a fingerprint of the evaluation context.
         let cache_enabled = self.config.cache_ttl_seconds > 0;
         let cache_key = if cache_enabled {
             let fp = context_fingerprint(context);
-            Some(format!("{}:{}:{}", strategy.id, context.token_mint, fp))
+            Some(format!(
+                "{}:{}:{}:{}",
+                strategy.id, strategy.rules_changed_at, context.token_mint, fp
+            ))
         } else {
             None
         };
@@ -733,6 +739,7 @@ fn hash_window(window: Option<WindowCounts>, hasher: &mut impl Hasher) {
 mod tests {
     use super::*;
     use crate::ohlcvs::TimeframeBundle;
+    use crate::strategies::types::Parameter;
     use chrono::{DateTime, Duration, Utc};
 
     /// A minute boundary, so seconds can be added without leaving the minute.
@@ -801,6 +808,86 @@ mod tests {
     /// never served for a context it was not computed for. With the exhaustive
     /// destructuring in `context_fingerprint`, a new field fails to compile there and
     /// earns a line here.
+    /// An entry strategy holding `rules`, whose rules last changed at `rules_changed_at`.
+    fn strategy_with(rules: RuleTree, rules_changed_at: DateTime<Utc>) -> Strategy {
+        Strategy {
+            id: "cached".to_owned(),
+            name: "Cached".to_owned(),
+            description: None,
+            strategy_type: StrategyType::Entry,
+            enabled: true,
+            priority: 1,
+            timeframe: "5m".to_owned(),
+            rules,
+            parameters: HashMap::new(),
+            created_at: minute_start(),
+            updated_at: minute_start(),
+            author: None,
+            version: 1,
+            entry_strategy_ids: Vec::new(),
+            mode: crate::trader::paper::TradingMode::Paper,
+            rules_changed_at,
+        }
+    }
+
+    /// A rule that holds while the liquidity is at least `threshold` SOL.
+    fn liquidity_at_least(threshold: f64) -> RuleTree {
+        let parameter = |value: serde_json::Value| Parameter {
+            default: value.clone(),
+            value,
+            constraints: None,
+        };
+        RuleTree::leaf(Condition {
+            condition_type: "LiquidityLevel".to_owned(),
+            parameters: [
+                (
+                    "threshold".to_owned(),
+                    parameter(serde_json::json!(threshold)),
+                ),
+                (
+                    "comparison".to_owned(),
+                    parameter(serde_json::json!("GREATER_EQUAL")),
+                ),
+            ]
+            .into_iter()
+            .collect(),
+        })
+    }
+
+    /// A cached result belongs to the rules it was evaluated under: once the rules change,
+    /// the same context is evaluated again under the new rules even though nothing cleared
+    /// the cache.
+    #[tokio::test]
+    async fn a_cached_result_never_outlives_the_rules_it_was_evaluated_under() {
+        let engine = StrategyEngine::new(EngineConfig {
+            evaluation_timeout_ms: 1_000,
+            cache_ttl_seconds: 60,
+            max_concurrent_evaluations: 1,
+        });
+        let context = full_context();
+        let rules_a = strategy_with(liquidity_at_least(100.0), minute_start());
+        assert!(
+            engine
+                .evaluate_strategy(&rules_a, &context)
+                .await
+                .unwrap()
+                .result
+        );
+
+        let rules_b = strategy_with(
+            liquidity_at_least(200.0),
+            minute_start() + Duration::seconds(1),
+        );
+        assert!(
+            !engine
+                .evaluate_strategy(&rules_b, &context)
+                .await
+                .unwrap()
+                .result,
+            "the result followed the rules the strategy held before the change"
+        );
+    }
+
     #[test]
     fn every_context_field_changes_the_fingerprint() {
         type Change = fn(&mut EvaluationContext);

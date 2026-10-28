@@ -258,3 +258,39 @@ fn a_decision_counts_as_under_the_current_rules_from_the_change_on() {
     assert!(strategy.decided_under_current_rules(changed_at + Duration::milliseconds(1)));
     assert!(!strategy.decided_under_current_rules(changed_at - Duration::milliseconds(1)));
 }
+
+/// A decision stands while the strategy still trades on its book; a decision that opens a
+/// round also needs the rules it was decided under, an add does not.
+#[test]
+fn a_decision_stands_on_its_book_and_a_round_opening_one_under_the_current_rules() {
+    let strategy = golden();
+    let changed_at = strategy.rules_changed_at;
+    let before = changed_at - Duration::milliseconds(1);
+
+    assert_eq!(
+        strategy.decision_lapse(TradingMode::Paper, true, changed_at),
+        None
+    );
+    assert_eq!(
+        strategy.decision_lapse(TradingMode::Paper, true, before),
+        Some(DecisionLapse::RulesChanged)
+    );
+    assert_eq!(
+        strategy.decision_lapse(TradingMode::Paper, false, before),
+        None,
+        "an add is not refused by a rules change"
+    );
+    assert_eq!(
+        strategy.decision_lapse(TradingMode::Live, false, changed_at),
+        Some(DecisionLapse::LeftBook)
+    );
+    let switched_off = Strategy {
+        enabled: false,
+        ..golden()
+    };
+    assert_eq!(
+        switched_off.decision_lapse(TradingMode::Paper, true, before),
+        Some(DecisionLapse::LeftBook),
+        "leaving the book is reported ahead of a rules change"
+    );
+}

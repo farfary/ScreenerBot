@@ -18,3 +18,12 @@ pub fn get_wallet_pubkey_string() -> super::Result<String> {
     crate::chains::solana::accounts::configured_address()
         .map_err(|source| super::Error::WalletAddress { source })
 }
+
+/// [`get_wallet_pubkey_string`] for async callers. The synchronous form refuses on a
+/// current-thread runtime rather than block it; this one awaits the same resolution on
+/// any runtime.
+pub async fn get_wallet_pubkey_string_async() -> super::Result<String> {
+    crate::chains::solana::accounts::configured_address_async()
+        .await
+        .map_err(|source| super::Error::WalletAddress { source })
+}

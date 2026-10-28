@@ -83,6 +83,15 @@ pub struct Strategy {
     pub rules_changed_at: DateTime<Utc>,
 }
 
+/// Why a strategy's decision no longer stands on the book it was decided for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DecisionLapse {
+    /// The strategy was switched off or moved to the other book after the decision.
+    LeftBook,
+    /// The decision opens a round and was taken before the strategy's rules last changed.
+    RulesChanged,
+}
+
 impl Strategy {
     /// The binding a strategy of `strategy_type` keeps from the requested entry strategy
     /// ids: each id once, in the order given, for an exit strategy; none for an entry
@@ -154,6 +163,29 @@ impl Strategy {
     /// this strategy holds now: its rules did not change after that moment.
     pub fn decided_under_current_rules(&self, decided_at: DateTime<Utc>) -> bool {
         self.rules_changed_at <= decided_at
+    }
+
+    /// Why a decision of this strategy, taken on inputs read at `decided_at`, no longer
+    /// stands on the book of `mode`, or `None` while it does. Each executor asks it of the
+    /// deciding strategy, read again just before the trade. The strategy must still trade on
+    /// that book ([`Self::trades_on`]). A decision that opens a round must also have been
+    /// taken under the rules the strategy holds now ([`Self::decided_under_current_rules`]):
+    /// a buy decided before the rules changed would open a round under rules the strategy
+    /// no longer has. An add extends a round its readiness window already judges by the
+    /// round's entry time, so only the book is checked for it.
+    pub fn decision_lapse(
+        &self,
+        mode: TradingMode,
+        opens_round: bool,
+        decided_at: DateTime<Utc>,
+    ) -> Option<DecisionLapse> {
+        if !self.trades_on(mode) {
+            Some(DecisionLapse::LeftBook)
+        } else if opens_round && !self.decided_under_current_rules(decided_at) {
+            Some(DecisionLapse::RulesChanged)
+        } else {
+            None
+        }
     }
 
     /// Whether this exit strategy manages a position opened by `entry_strategy_id`

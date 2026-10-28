@@ -33,6 +33,7 @@ events-subtype-entry-capacity-guard = Giriş kapasite sınırıyla bekletildi
 events-subtype-entry-executed = Giriş yürütüldü
 events-subtype-entry-execution-error = Giriş yürütme hatası
 events-subtype-entry-failed = Giriş başarısız
+events-subtype-entry-withdrawn = Giriş geri çekildi
 events-subtype-entry-submitted-unconfirmed = Giriş gönderildi, onaylanmadı
 events-subtype-entry-verified = Giriş doğrulandı
 events-subtype-entry-not-landed = Giriş zincire ulaşmadı

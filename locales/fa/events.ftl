@@ -39,6 +39,7 @@ events-subtype-entry-capacity-guard = ورود به‌دلیل سقف ظرفیت
 events-subtype-entry-executed = ورود اجرا شد
 events-subtype-entry-execution-error = خطای اجرای ورود
 events-subtype-entry-failed = ورود ناموفق بود
+events-subtype-entry-withdrawn = ورود پس گرفته شد
 events-subtype-entry-submitted-unconfirmed = ورود ارسال شد، تأییدنشده
 events-subtype-entry-verified = ورود تأیید شد
 events-subtype-entry-not-landed = ورود به شبکه نرسید

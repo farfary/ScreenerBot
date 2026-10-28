@@ -69,11 +69,26 @@ mod tests {
     }
 
     /// Automatic adds stop while the loss limit blocks entries: the DCA cycle reads the
-    /// same gate entry admission reads, never a copy of its rule.
+    /// same gate entry admission reads, never a copy of its rule. Admission reads it
+    /// through the trader's entry halt, which the controller owns.
     #[test]
     fn the_dca_cycle_reads_the_entry_loss_limit_gate() {
         let gate = "loss_limit::is_entry_blocked_by_loss_limit()";
         assert!(include_str!("dca.rs").contains(gate));
-        assert!(include_str!("../admission.rs").contains(gate));
+        let controller = include_str!("../controller.rs");
+        let halt = &controller[controller
+            .find("pub fn entry_halt(")
+            .expect("the controller owns the entry halt")..];
+        let halt = &halt[..halt.find("\n}\n").expect("the entry halt ends")];
+        assert!(
+            halt.contains(gate),
+            "the entry halt reads the loss limit gate"
+        );
+        let admission = include_str!("../admission.rs");
+        assert!(admission.contains("controller::entry_halt(TradingMode::Live)"));
+        assert!(
+            !admission.contains(gate),
+            "admission reads the gate only through the entry halt"
+        );
     }
 }

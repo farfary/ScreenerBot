@@ -39,6 +39,7 @@ events-subtype-entry-capacity-guard = 容量上限でエントリー保留
 events-subtype-entry-executed = エントリー実行
 events-subtype-entry-execution-error = エントリー実行エラー
 events-subtype-entry-failed = エントリー失敗
+events-subtype-entry-withdrawn = エントリー取り下げ
 events-subtype-entry-submitted-unconfirmed = エントリー送信済み・未確認
 events-subtype-entry-verified = エントリー検証済み
 events-subtype-entry-not-landed = エントリーがチェーンに未着

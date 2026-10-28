@@ -39,6 +39,7 @@ events-subtype-entry-capacity-guard = Entry held by capacity limit
 events-subtype-entry-executed = Entry executed
 events-subtype-entry-execution-error = Entry execution error
 events-subtype-entry-failed = Entry failed
+events-subtype-entry-withdrawn = Entry withdrawn
 events-subtype-entry-submitted-unconfirmed = Entry submitted, unconfirmed
 events-subtype-entry-verified = Entry verified
 events-subtype-entry-not-landed = Entry did not land

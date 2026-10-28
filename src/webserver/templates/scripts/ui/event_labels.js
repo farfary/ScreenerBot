@@ -72,6 +72,7 @@ export const EVENT_SUBTYPE_LABELS = Object.freeze({
   entry_executed: "events-subtype-entry-executed",
   entry_execution_error: "events-subtype-entry-execution-error",
   entry_failed: "events-subtype-entry-failed",
+  entry_withdrawn: "events-subtype-entry-withdrawn",
   entry_submitted_unconfirmed: "events-subtype-entry-submitted-unconfirmed",
   entry_verified: "events-subtype-entry-verified",
   entry_not_landed: "events-subtype-entry-not-landed",

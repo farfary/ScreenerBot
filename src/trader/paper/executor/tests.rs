@@ -3,8 +3,8 @@
 
 //! The paper executor on an isolated paper store with offline quotes: a round trip from
 //! the entry through a take-profit step to the close, every quote taken inside the paper
-//! scope, the typed refusals that book nothing, a strategy buy decided under rules that
-//! have since changed, a keyed decision booked once however often it is replayed, and the
+//! scope, the typed refusals that book nothing, the switches that stop automatic paper
+//! trades, a keyed decision booked once however often it is replayed, and the
 //! failed-exit streak.
 
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -12,16 +12,15 @@ use std::time::Duration;
 
 use chrono::Utc;
 
-use super::io::{strategy_still_wants, PaperMarket, PaperSettings, PaperToken};
+use super::io::{automatic_switch_on, PaperMarket, PaperSettings, PaperToken};
 use super::*;
 use crate::chains::ChainId;
 use crate::config::schemas::Config;
 use crate::config::utils::CONFIG;
 use crate::positions::db::PaperExitOwner;
 use crate::positions::{PositionManagement, PositionsDatabase};
-use crate::strategies::types::Strategy;
 use crate::swaps::{Quote, QuoteError};
-use crate::trader::paper::{PaperFillError, TradingMode};
+use crate::trader::paper::PaperFillError;
 use crate::trader::types::TradePriority;
 
 const MINT: &str = "PaperExecutorMint11111111111111111111111111";
@@ -308,59 +307,36 @@ async fn a_buy_no_longer_wanted_after_the_landing_quote_books_nothing() {
     assert!(io.book.open_positions().await.is_empty());
 }
 
-/// A strategy buy decided before the strategy's rules last changed is no longer wanted:
-/// the round would be opened under rules the strategy no longer has. An add, a buy decided
-/// at or after the change, and a strategy no longer on the paper book are judged as before.
+/// Automatic paper entries stop with the entry switch while adds and sales go on: the
+/// add cycle belongs to the exit monitor, and a sale to the trader.
 #[test]
-fn a_strategy_buy_decided_under_older_rules_is_no_longer_wanted() {
-    let changed_at = Utc::now();
-    let strategy = Strategy {
-        id: "paper-entry".to_owned(),
-        name: "Paper entry".to_owned(),
-        description: None,
-        strategy_type: crate::strategies::types::StrategyType::Entry,
-        enabled: true,
-        priority: 10,
-        timeframe: "5m".to_owned(),
-        rules: crate::strategies::types::RuleTree::leaf(crate::strategies::types::Condition {
-            condition_type: "LiquidityLevel".to_owned(),
-            parameters: Default::default(),
-        }),
-        parameters: Default::default(),
-        created_at: changed_at,
-        updated_at: changed_at,
-        author: None,
-        version: 1,
-        entry_strategy_ids: Vec::new(),
-        mode: TradingMode::Paper,
-        rules_changed_at: changed_at,
+fn a_paper_entry_is_no_longer_wanted_once_automatic_entries_are_switched_off() {
+    let _ = CONFIG.get_or_init(|| std::sync::RwLock::new(Config::default()));
+    let switches = |entries: bool, exits: bool| {
+        crate::config::update_config_section(
+            |config| {
+                config.trader.enabled = true;
+                config.trader.entry_monitor_enabled = entries;
+                config.trader.exit_monitor_enabled = exits;
+            },
+            false,
+        )
+        .unwrap();
     };
-    let decided = |action, timestamp| TradeDecision {
-        timestamp,
-        ..decision(action, TradeReason::StrategySignal)
-    };
-    let before = changed_at - chrono::Duration::milliseconds(1);
 
-    assert!(!strategy_still_wants(
-        &strategy,
-        &decided(TradeAction::Buy, before)
-    ));
-    assert!(strategy_still_wants(
-        &strategy,
-        &decided(TradeAction::Buy, changed_at)
-    ));
-    assert!(strategy_still_wants(
-        &strategy,
-        &decided(TradeAction::DCA, before)
-    ));
-    let live = Strategy {
-        mode: TradingMode::Live,
-        ..strategy
-    };
-    assert!(!strategy_still_wants(
-        &live,
-        &decided(TradeAction::DCA, changed_at)
-    ));
+    switches(true, true);
+    assert!(automatic_switch_on(&TradeAction::Buy));
+    assert!(automatic_switch_on(&TradeAction::DCA));
+    assert!(automatic_switch_on(&TradeAction::Sell));
+
+    switches(false, true);
+    assert!(!automatic_switch_on(&TradeAction::Buy));
+    assert!(automatic_switch_on(&TradeAction::DCA));
+    assert!(automatic_switch_on(&TradeAction::Sell));
+
+    switches(true, false);
+    assert!(automatic_switch_on(&TradeAction::Buy));
+    assert!(!automatic_switch_on(&TradeAction::DCA));
 }
 
 #[tokio::test]

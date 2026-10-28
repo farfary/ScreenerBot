@@ -39,6 +39,7 @@ events-subtype-entry-capacity-guard = 용량 한도로 진입 보류
 events-subtype-entry-executed = 진입 실행됨
 events-subtype-entry-execution-error = 진입 실행 오류
 events-subtype-entry-failed = 진입 실패
+events-subtype-entry-withdrawn = 진입 철회됨
 events-subtype-entry-submitted-unconfirmed = 진입 전송됨, 미확인
 events-subtype-entry-verified = 진입 검증됨
 events-subtype-entry-not-landed = 진입이 체인에 도달하지 않음

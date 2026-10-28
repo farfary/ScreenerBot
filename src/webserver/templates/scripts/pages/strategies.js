@@ -631,7 +631,7 @@ export function createLifecycle() {
 
   /**
    * Before a stored strategy is saved, ask the server whether the save changes the rules
-   * it trades on; the editor never compares rules itself. New rules on a live strategy
+   * it trades on and which book it is stored on; the editor never compares rules itself. New rules on a live strategy
    * trade real funds from the next check and restart its paper evidence, so they are
    * confirmed first. Resolves `{ confirmedLive }` to go on, or null to save nothing.
    */
@@ -656,7 +656,9 @@ export function createLifecycle() {
       announce("error", I18n.t("strategies-toast-invalid"), Utils.formatList(reasons, { type: "unit" }));
       return null;
     }
-    const mode = roster?.row(saved.id)?.mode ?? saved.mode;
+    // The server answers the book the store holds the strategy on; the polled roster can
+    // lag a switch made elsewhere.
+    const mode = data.mode ?? roster?.row(saved.id)?.mode ?? saved.mode;
     if (!data.rules_changed || mode !== "live") return { confirmedLive: false };
     const args = { name: saved.name };
     const { confirmed } = await ConfirmationDialog.show({

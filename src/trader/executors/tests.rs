@@ -118,25 +118,32 @@ fn stored_strategy(enabled: bool, mode: crate::trader::paper::TradingMode) -> St
     }
 }
 
-/// A live strategy buy goes ahead only while its strategy is enabled and live: one switched
-/// off, returned to paper or removed after the decision, or a store that cannot answer,
-/// refuses it.
+/// A live strategy buy goes ahead only while its strategy is enabled, live and holds the
+/// rules the buy was decided under: one switched off, returned to paper or removed after
+/// the decision left the book, and one whose rules changed after it lapsed by that change.
 #[test]
-fn a_live_strategy_buy_needs_its_strategy_still_enabled_and_live() {
+fn a_live_strategy_buy_needs_its_strategy_still_live_under_the_same_rules() {
+    use crate::strategies::types::DecisionLapse;
     use crate::trader::paper::TradingMode::{Live, Paper};
-    assert!(buy::still_trades_live(&Ok(Some(stored_strategy(
-        true, Live
-    )))));
-    assert!(!buy::still_trades_live(&Ok(Some(stored_strategy(
-        false, Live
-    )))));
-    assert!(!buy::still_trades_live(&Ok(Some(stored_strategy(
-        true, Paper
-    )))));
-    assert!(!buy::still_trades_live(&Ok(None)));
-    assert!(!buy::still_trades_live(&Err(crate::Error::internal_error(
-        "store unavailable"
-    ))));
+    let live = stored_strategy(true, Live);
+    let decided_at = live.rules_changed_at;
+    assert_eq!(buy::live_buy_lapse(Some(&live), decided_at), None);
+    assert_eq!(
+        buy::live_buy_lapse(Some(&stored_strategy(false, Live)), decided_at),
+        Some(DecisionLapse::LeftBook)
+    );
+    assert_eq!(
+        buy::live_buy_lapse(Some(&stored_strategy(true, Paper)), decided_at),
+        Some(DecisionLapse::LeftBook)
+    );
+    assert_eq!(
+        buy::live_buy_lapse(None, decided_at),
+        Some(DecisionLapse::LeftBook)
+    );
+    assert_eq!(
+        buy::live_buy_lapse(Some(&live), decided_at - chrono::Duration::milliseconds(1)),
+        Some(DecisionLapse::RulesChanged)
+    );
 }
 
 /// Only a buy an entry strategy decided is checked against its strategy: a manual buy, an

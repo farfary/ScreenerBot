@@ -33,6 +33,7 @@ events-subtype-entry-capacity-guard = क्षमता सीमा के क
 events-subtype-entry-executed = एंट्री निष्पादित
 events-subtype-entry-execution-error = एंट्री निष्पादन त्रुटि
 events-subtype-entry-failed = एंट्री विफल
+events-subtype-entry-withdrawn = एंट्री वापस ली गई
 events-subtype-entry-submitted-unconfirmed = एंट्री भेजी गई, अपुष्ट
 events-subtype-entry-verified = एंट्री सत्यापित
 events-subtype-entry-not-landed = एंट्री चेन पर नहीं पहुँची

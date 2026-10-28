@@ -609,6 +609,39 @@ async fn a_validation_of_a_stored_strategy_answers_whether_the_save_changes_its_
     assert_eq!(status, StatusCode::NOT_FOUND, "{body}");
 }
 
+/// A draft of a stored strategy is answered with the book the store holds it on, so the
+/// editor confirms new live rules even when the list it polled still shows paper. A draft
+/// without an id answers no book.
+#[tokio::test]
+async fn a_validation_of_a_stored_strategy_answers_its_stored_mode() {
+    let _dir = strategy_system().await;
+    for (id, mode, expected) in [
+        ("stored-live", TradingMode::Live, "live"),
+        ("stored-paper", TradingMode::Paper, "paper"),
+    ] {
+        stored(id, StrategyType::Entry, liquidity_at_least(), false);
+        screenerbot::strategies::db::set_strategy_mode(id, mode).expect("set mode");
+        let (status, body) = send(
+            "POST",
+            &format!("/api/strategies/validate?id={id}"),
+            unchanged_entry_request(id),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{id}: {body}");
+        assert_eq!(body["valid"], true, "{id}: {body}");
+        assert_eq!(body["mode"], expected, "{id}: {body}");
+    }
+
+    let (status, body) = send(
+        "POST",
+        "/api/strategies/validate",
+        unchanged_entry_request("unsaved"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert!(body.get("mode").is_none(), "{body}");
+}
+
 #[tokio::test]
 async fn a_strategy_without_paper_rounds_reads_as_not_ready() {
     let _dir = strategy_system().await;
@@ -888,7 +921,10 @@ async fn the_overview_reads_each_strategy_from_the_book_of_its_mode() {
 
     let paper = overview_row(&body, "paper-entry");
     assert_eq!(paper["book"], "paper", "{paper}");
-    assert_eq!(paper["order"], 2, "{paper}");
+    assert_eq!(
+        paper["order"], 1,
+        "each book ranks its own enabled entry strategies: {paper}"
+    );
     assert_eq!(paper["open"], 0, "{paper}");
     assert_eq!(
         paper["open_other_book"], 1,
@@ -911,10 +947,11 @@ async fn the_overview_reads_each_strategy_from_the_book_of_its_mode() {
         exit["watching"], 2,
         "a live exit judges every open position it manages: {exit}"
     );
-    assert!(
-        exit["rounds"].is_null(),
-        "live closes are not attributed to exit strategies: {exit}"
+    assert_eq!(
+        exit["rounds"]["closed"], 0,
+        "a live exit counts only the rounds it closed, and none closed here: {exit}"
     );
+    assert!(exit["rounds"]["win_rate_pct"].is_null(), "{exit}");
 
     let idle = overview_row(&body, "idle-entry");
     assert_eq!(idle["status"], "off", "{idle}");
@@ -982,8 +1019,9 @@ async fn the_overview_reads_the_last_times_from_the_evaluation_totals() {
     assert!(never["last_signal_at"].is_null(), "{never}");
 }
 
-/// The roster ranks enabled entry strategies in the order the entry monitor evaluates
-/// them, whatever their mode, with ties on priority.
+/// The roster ranks each book's enabled entry strategies in the order that book's entry
+/// pass evaluates them (the store order, ties on priority broken by name), whatever the
+/// other book holds.
 #[tokio::test]
 async fn the_overview_order_is_the_entry_evaluation_order() {
     let _dir = strategy_system().await;
@@ -1001,29 +1039,38 @@ async fn the_overview_order_is_the_entry_evaluation_order() {
     }
     stored("exit", StrategyType::Exit, position_profit(), true);
 
-    let evaluated: Vec<String> =
-        screenerbot::strategies::db::get_enabled_strategies(StrategyType::Entry)
-            .expect("read the evaluation order")
-            .into_iter()
-            .map(|strategy| strategy.id)
-            .collect();
+    let enabled = screenerbot::strategies::db::get_enabled_strategies(StrategyType::Entry)
+        .expect("read the evaluation order");
     let (status, body) = send("GET", "/api/strategies/overview", Value::Null).await;
     assert_eq!(status, StatusCode::OK, "{body}");
-    let mut ranked: Vec<(u64, String)> = body["strategies"]
-        .as_array()
-        .expect("strategies")
-        .iter()
-        .filter_map(|row| {
-            row["order"]
-                .as_u64()
-                .map(|order| (order, row["item"]["id"].as_str().expect("id").to_owned()))
-        })
-        .collect();
-    ranked.sort();
-    let ranks: Vec<u64> = ranked.iter().map(|(order, _)| *order).collect();
-    let roster: Vec<String> = ranked.into_iter().map(|(_, id)| id).collect();
-    assert_eq!(roster, evaluated, "{body}");
-    assert_eq!(ranks, [1, 2, 3, 4], "{body}");
+    for (mode, expected) in [
+        (TradingMode::Live, ["zeta", "late"]),
+        (TradingMode::Paper, ["early", "alpha"]),
+    ] {
+        let evaluated: Vec<String> = enabled
+            .iter()
+            .filter(|strategy| strategy.mode == mode)
+            .map(|strategy| strategy.id.clone())
+            .collect();
+        assert_eq!(evaluated, expected, "{mode:?} evaluation order");
+        let wire = serde_json::to_value(mode).expect("mode wire value");
+        let mut ranked: Vec<(u64, String)> = body["strategies"]
+            .as_array()
+            .expect("strategies")
+            .iter()
+            .filter(|row| row["item"]["mode"] == wire)
+            .filter_map(|row| {
+                row["order"]
+                    .as_u64()
+                    .map(|order| (order, row["item"]["id"].as_str().expect("id").to_owned()))
+            })
+            .collect();
+        ranked.sort();
+        let ranks: Vec<u64> = ranked.iter().map(|(order, _)| *order).collect();
+        let roster: Vec<String> = ranked.into_iter().map(|(_, id)| id).collect();
+        assert_eq!(roster, evaluated, "{mode:?}: {body}");
+        assert_eq!(ranks, [1, 2], "{mode:?}: {body}");
+    }
 }
 
 #[tokio::test]

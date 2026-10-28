@@ -662,6 +662,73 @@ async fn a_live_strategy_buy_is_withdrawn_once_the_trader_is_switched_off() {
     );
 }
 
+/// A live strategy buy decided before the strategy's rules changed is withdrawn for that
+/// change, before anything is quoted or sent: the round would open under rules the
+/// strategy no longer has.
+#[tokio::test]
+async fn a_live_strategy_buy_decided_before_a_rules_change_is_withdrawn_and_sends_nothing() {
+    let _dir = common::isolated_env();
+    screenerbot::strategies::db::init_strategies_db().expect("open the strategies store");
+    set_trader_enabled(true);
+    let stored = stored_live_entry("rules-edited");
+    let decision = live_strategy_buy("rules-edited");
+
+    let rules_changed =
+        screenerbot::strategies::db::update_strategy(&screenerbot::strategies::types::Strategy {
+            rules: screenerbot::strategies::types::RuleTree::leaf(common::condition(
+                "LiquidityLevel",
+                &[
+                    ("threshold", serde_json::json!(20.0)),
+                    ("comparison", serde_json::json!("GREATER_EQUAL")),
+                ],
+            )),
+            ..stored
+        })
+        .expect("edit the strategy's rules");
+    assert!(rules_changed);
+
+    let result = execute(&decision).await;
+    assert!(!result.success);
+    assert_eq!(result.tx_signature, None);
+    assert_eq!(
+        result.failed_step,
+        Some(screenerbot::trader::TradeStep::Validation)
+    );
+    assert_eq!(
+        result.withdrawn,
+        Some(screenerbot::trader::Withdrawal::RulesChanged)
+    );
+    let error = result.error.unwrap_or_default();
+    assert!(
+        error.contains("rules-edited") && error.contains("rules"),
+        "the buy was not refused by the rules check: {error}"
+    );
+}
+
+/// A live strategy buy is withdrawn once automatic entries alone are switched off after
+/// the decision, the trader itself still running.
+#[tokio::test]
+async fn a_live_strategy_buy_is_withdrawn_once_automatic_entries_are_switched_off() {
+    let _dir = common::isolated_env();
+    screenerbot::strategies::db::init_strategies_db().expect("open the strategies store");
+    set_trader_enabled(true);
+    stored_live_entry("entries-off");
+    let decision = live_strategy_buy("entries-off");
+
+    screenerbot::config::update_config_section(
+        |cfg| cfg.trader.entry_monitor_enabled = false,
+        false,
+    )
+    .expect("switch automatic entries off");
+    let result = execute(&decision).await;
+    assert!(!result.success);
+    assert_eq!(result.tx_signature, None);
+    assert_eq!(
+        result.withdrawn,
+        Some(screenerbot::trader::Withdrawal::TraderStopped)
+    );
+}
+
 // ==================== MIGRATED LADDER == UNIFORM RULE ====================
 
 /// The retired uniform DCA settings: one drop, one size and a count of adds.

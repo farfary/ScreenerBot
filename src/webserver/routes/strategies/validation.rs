@@ -30,14 +30,18 @@ fn invalid(errors: Vec<UiText>) -> Response {
 
 /// Run the engine validation and map its result to the response. A rule
 /// problem is a validation result; any other failure is an API error. A valid draft of a
-/// stored strategy also answers whether saving it would change the rules that strategy
-/// trades on, by the store's own fingerprint comparison.
-async fn validation_response(strategy: &Strategy, stored: bool) -> Response {
+/// stored strategy, whose stored book is `stored_mode`, also answers whether saving it
+/// would change the rules that strategy trades on, by the store's own fingerprint
+/// comparison, and that stored book, so the editor decides on the server's mode rather
+/// than on a list it polled earlier.
+async fn validation_response(strategy: &Strategy, stored_mode: Option<TradingMode>) -> Response {
     match strategies::validate_strategy(strategy).await {
-        Ok(_) if stored => match rules_would_change_async(strategy).await {
-            Ok(Some(rules_changed)) => {
-                success_response(serde_json::json!({"valid": true, "rules_changed": rules_changed}))
-            }
+        Ok(_) if stored_mode.is_some() => match rules_would_change_async(strategy).await {
+            Ok(Some(rules_changed)) => success_response(serde_json::json!({
+                "valid": true,
+                "rules_changed": rules_changed,
+                "mode": stored_mode,
+            })),
             Ok(None) => err(ApiErrorCode::NotFound, ids::ERRORS_STRATEGIES_NOT_FOUND),
             Err(e) => err_cause(
                 ApiErrorCode::Internal,
@@ -109,7 +113,7 @@ pub async fn validate_strategy_inline_handler(
 
     if let Some(existing) = existing {
         let strategy = edited_strategy(&existing, request, strategy_type, rules);
-        return validation_response(&strategy, true).await;
+        return validation_response(&strategy, Some(existing.mode)).await;
     }
 
     let now = Utc::now();
@@ -135,5 +139,5 @@ pub async fn validate_strategy_inline_handler(
         rules_changed_at: now,
     };
 
-    validation_response(&strategy, false).await
+    validation_response(&strategy, None).await
 }

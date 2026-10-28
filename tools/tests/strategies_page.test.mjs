@@ -164,8 +164,11 @@ const EXPORTED = {
 
 /** Holds the answer of a strategy test until a test case releases it. */
 const testGate = { open: Promise.resolve() };
-/** What the server answers about a save: whether it changes the stored strategy's rules. */
-const answers = { validateRulesChanged: false, saveRulesChanged: false };
+/**
+ * What the server answers about a save: whether it changes the stored strategy's rules,
+ * and the book the validation reports the strategy stored on (omitted while null).
+ */
+const answers = { validateRulesChanged: false, saveRulesChanged: false, validateMode: null };
 
 const browser = await chromium.launch({ headless: true });
 after(() => browser.close());
@@ -185,6 +188,7 @@ const host = await serveDashboard(context, {
           valid: true,
           errors: [],
           ...(stored ? { rules_changed: answers.validateRulesChanged } : {}),
+          ...(stored && answers.validateMode ? { mode: answers.validateMode } : {}),
         }),
       };
     }
@@ -782,7 +786,7 @@ test("new rules on a paper strategy save at once and say its paper evidence rest
     ]);
     assert.equal(put.postDataJSON().priority, 9);
     await page
-      .getByText(/The rules of .Momentum breakout. changed; its paper evidence restarts from now/)
+      .getByText(/The rules of [“\u2068]+Momentum breakout[\u2069”]+ changed; its paper evidence restarts from now/)
       .first()
       .waitFor();
     assert.equal(
@@ -796,6 +800,41 @@ test("new rules on a paper strategy save at once and say its paper evidence rest
   }
 });
 
+test("new rules are confirmed when the server stores the strategy live though the roster shows paper", async () => {
+  await openStrategy(ID, STORED.name);
+  answers.validateRulesChanged = true;
+  answers.validateMode = "live";
+  const puts = [];
+  const record = (request) => {
+    if (isSave(request, "PUT", ID)) puts.push(request);
+  };
+  page.on("request", record);
+  try {
+    await page.fill("#strategy-priority", "13");
+    await page.waitForSelector("#editor-header.dirty");
+    await page.click("#save-strategy");
+    const dialog = page.locator(".confirmation-dialog");
+    await dialog.getByText(/Change the rules of live/).waitFor();
+    await dialog.locator('[data-action="cancel"]').click();
+    await dialog.waitFor({ state: "hidden" });
+    assert.deepEqual(puts, [], "the unconfirmed save sends nothing");
+    assert.equal(await page.locator("#editor-header.dirty").count(), 1, "the edit stays unsaved");
+
+    await Promise.all([
+      page.waitForRequest((candidate) => isSave(candidate, "PUT", ID)),
+      (async () => {
+        await page.click("#save-strategy");
+        await dialog.getByRole("button", { name: "Save and trade live" }).click();
+      })(),
+    ]);
+    await page.waitForSelector("#editor-header:not(.dirty)");
+  } finally {
+    page.off("request", record);
+    answers.validateRulesChanged = false;
+    answers.validateMode = null;
+  }
+});
+
 test("a save the server calls unchanged in rules says only that it saved", async () => {
   await openStrategy(ID, STORED.name);
   await page.fill("#strategy-priority", "11");
@@ -804,7 +843,7 @@ test("a save the server calls unchanged in rules says only that it saved", async
     page.waitForRequest((candidate) => isSave(candidate, "PUT", ID)),
     page.click("#save-strategy"),
   ]);
-  await page.getByText(/.Momentum breakout. saved successfully/).first().waitFor();
+  await page.getByText(/["\u2068]+Momentum breakout[\u2069"]+ saved successfully/).first().waitFor();
 });
 
 test("with no strategy the roster offers New Strategy", async () => {
