@@ -102,6 +102,27 @@ export function renderSegmented(
   }>${items}</div>`;
 }
 
+/**
+ * Run `repaint`, which may replace the segmented groups inside `root`. When focus was on an
+ * option of a group in `root` before and that option is gone after, focus moves to the
+ * checked option of the group with the same `data-seg` name, so arrow keys keep moving
+ * through a control whose `change` handler repaints it. Returns what `repaint` returns.
+ */
+export function keepSegmentFocus(root, repaint) {
+  const active = root ? root.ownerDocument.activeElement : null;
+  const group = active?.closest?.("[data-seg]");
+  const name = group && root.contains(group) ? group.dataset.seg : null;
+  const result = repaint();
+  if (name && !active.isConnected) {
+    const groups = root.querySelectorAll("[data-seg]");
+    const next = [...groups]
+      .find((node) => node.dataset.seg === name)
+      ?.querySelector("input[data-seg-value]:checked");
+    next?.focus({ preventScroll: true });
+  }
+  return result;
+}
+
 /** Check the option of `root` (a `.segmented` group) whose value is `value`, without a change event. */
 export function setSegmentedValue(root, value) {
   const current = String(value);

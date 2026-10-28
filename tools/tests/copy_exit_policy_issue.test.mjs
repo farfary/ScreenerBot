@@ -5,9 +5,11 @@
 /**
  * Guard: a copy task whose stored exit overrides no longer fit the Trader's exit
  * rules carries a warning with the broken rule on its row in the wallet list, and a
- * task whose overrides fit carries none.
+ * task whose overrides fit carries none. The selected task's sheet repeats it as a
+ * warning notice under the tab row whose Edit rules action opens the editor at its
+ * exits step.
  *
- * The warning is the backend `exit_policy_issue` UiText; the row renders it as is.
+ * The warning is the backend `exit_policy_issue` UiText; the page renders it as is.
  *
  * Run with `npm run test:js`.
  */
@@ -47,6 +49,12 @@ test("a task whose exit overrides no longer fit is flagged on its row", async (t
     },
   };
   for (const task of others) delete task.exit_policy_issue;
+  const workspace = JSON.parse(
+    await readFile(join(FIXTURES_ROOT, "copy/copy_workspace.json"), "utf8")
+  );
+  const sheet = workspace.data ?? workspace;
+  sheet.id = flagged.id;
+  sheet.exit_policy_issue = flagged.exit_policy_issue;
 
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   const api = createApiHandler([await loadIndex("copy"), await loadIndex("shell")], "populated");
@@ -55,6 +63,9 @@ test("a task whose exit overrides no longer fit is flagged on its row", async (t
     onApi: (request) => {
       if (request.url.pathname === "/api/copy-trading/overview") {
         return { body: JSON.stringify(raw) };
+      }
+      if (request.url.pathname === `/api/copy-trading/tasks/${flagged.id}/workspace`) {
+        return { body: JSON.stringify(workspace) };
       }
       return api.onApi(request);
     },
@@ -83,4 +94,14 @@ test("a task whose exit overrides no longer fit is flagged on its row", async (t
       `task ${task.id} fits the Trader's rules`
     );
   }
+
+  const notice = page.locator('#copy-ws-notices .notice[data-variant="warning"]');
+  await notice.waitFor();
+  assert.match(strip(await notice.textContent()), /Trailing distance 12% must be below/);
+  const edit = notice.locator('[data-action="edit-rules"]');
+  assert.equal(strip(await edit.textContent()), "Edit rules");
+  await edit.click();
+  const current = page.locator('#copy-editor:not([hidden]) .copy-step[aria-current="step"]');
+  await current.waitFor();
+  assert.match(strip(await current.textContent()), /Exits$/);
 });

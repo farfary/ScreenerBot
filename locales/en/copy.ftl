@@ -170,31 +170,57 @@ copy-unrealized-unpriced =
        *[other] { $count } holdings without a price
     }
 
-## Page strip (pages/copy.html, pages/copy/summary.js)
+## Page toolbar and figures (pages/copy.html, pages/copy/summary.js)
 
-copy-page-title = Copy Trading
-copy-strip-loading = Loading
-copy-strip-unavailable = Unavailable
-copy-strip-setup-required = Setup required · copy trading needs a wallet and RPC
-copy-strip-pause-all = Pause all
-copy-strip-resume = Resume processing
-copy-strip-settings = Settings
-copy-strip-add-wallet = Add wallet
-copy-strip-paused-globally = Paused globally · no new copies, exits still run
-copy-strip-force-stopped = Force stopped · nothing is copied
-copy-strip-loss-limit = Loss limit · new entries blocked, exits still run
-copy-strip-idle-paused =
+copy-toolbar-settings = Settings
+copy-toolbar-add-wallet = Add wallet
+copy-toolbar-status = Status
+copy-toolbar-active = Active
+copy-toolbar-active-value = { $active } of { $total }
+copy-status-loading = Loading
+copy-status-unavailable = Unavailable
+copy-status-setup-required = Setup required
+copy-status-paused = Paused
+copy-status-force-stopped = Force stopped
+copy-status-loss-limit = Loss limit
+copy-status-all-paused = All tasks paused
+copy-status-processing = Processing
+copy-toolbar-pause = Pause copying
+copy-toolbar-resume = Resume copying
+copy-toolbar-resume-tasks = Resume all tasks
+copy-notice-paused-title = Copy processing is paused
+copy-notice-paused-message = No new copies are made. Exits of open holdings still run.
+copy-notice-force-stopped-title = Trading is force stopped
+copy-notice-force-stopped-message = Nothing is copied while the force stop is active.
+copy-notice-loss-limit-title = Loss limit reached
+copy-notice-loss-limit-message = New entries are blocked. Exits of open holdings still run.
+copy-figures-scope = All tasks
+copy-figure-budget-left = { $remaining } { -sol } left
+copy-resume-tasks-title = Resume all tasks
+copy-resume-tasks-live-message =
     { $count ->
-        [one] Idle · { $count } task paused
-       *[other] Idle · { $count } tasks paused
+        [one] One live task will submit real swaps from your wallet when its wallet trades again.
+       *[other] { $count } live tasks will submit real swaps from your wallet when their wallets trade again.
     }
-copy-strip-idle-empty = Idle · no tasks yet
-copy-strip-processing = Processing · { $paper } paper
-copy-strip-processing-live = Processing · { $live } live · { $paper } paper
-copy-figures-label =
-    .aria-label = Copy trading totals
+copy-resume-tasks-confirm = Resume all
+copy-toast-tasks-resumed =
+    { $count ->
+        [one] { $count } task resumed
+       *[other] { $count } tasks resumed
+    }
+copy-toast-tasks-kept-paused =
+    { $count ->
+        [one] { $count } task kept paused.
+       *[other] { $count } tasks kept paused.
+    }
+copy-resume-kept-limit = Over the limit of { $maximum } active tasks: { $count }.
+copy-resume-kept-watch = Wallet watch needs restoring: { $count }.
+copy-resume-kept-live = Live, not included: { $count }.
+copy-resume-kept-failed = Could not be resumed: { $count }.
+copy-toast-tasks-resume-failed = Tasks could not be resumed
+copy-watch-target-missing = The wallet watch for this wallet could not be found
+copy-watch-not-restored = The wallet watch has not been restored yet
 copy-figure-marked-at-pool = Marked at the pool price
-copy-figure-across-tasks = Across all tasks
 copy-figure-budget-lifetime = Lifetime spend of enabled tasks
 copy-figure-budget-none = No enabled tasks
 copy-figure-arrival-samples =
@@ -425,30 +451,6 @@ copy-overview-worst-round = Worst { $amount }
 copy-overview-curve-title = Cumulative P&L
 copy-overview-exits-title = Sells by exit
 copy-overview-skips-title = Why trades were skipped
-copy-book-title-live = Live book
-copy-book-title-paper = Paper book
-copy-book-all-time = All time
-copy-book-buys =
-    <strong>{ $count }</strong> { $count ->
-        [one] buy
-       *[other] buys
-    }
-copy-book-rule-closes =
-    <strong>{ $count }</strong> { $count ->
-        [one] round closed by your rules
-       *[other] rounds closed by your rules
-    }
-copy-book-wallet-sells =
-    <strong>{ $count }</strong> { $count ->
-        [one] wallet sell
-       *[other] wallet sells
-    }
-copy-book-manual-closes = <strong>{ $count }</strong> closed by hand
-copy-book-skipped = <strong>{ $count }</strong> skipped
-copy-book-failed = <strong>{ $count }</strong> failed
-copy-book-closed = { $count } closed
-# $mode is the execution mode label; $total and $remaining are decimal SOL amounts.
-copy-book-budget-note = { $mode } spend of { $total } · { $remaining } left
 copy-readiness-title = Before going live
 copy-readiness-live-note = This task trades live. Return it to Paper from the header above.
 copy-readiness-all-pass = Every check passes.

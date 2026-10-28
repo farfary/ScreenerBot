@@ -148,29 +148,55 @@ copy-unrealized-unpriced =
        *[other] { $count } fiyatsız varlık
     }
 
-copy-page-title = Kopya İşlem
-copy-strip-loading = Yükleniyor
-copy-strip-unavailable = Kullanılamıyor
-copy-strip-setup-required = Kurulum gerekli · kopya işlem cüzdan ve RPC gerektirir
-copy-strip-pause-all = Tümünü duraklat
-copy-strip-resume = İşlemeyi sürdür
-copy-strip-settings = Ayarlar
-copy-strip-add-wallet = Cüzdan ekle
-copy-strip-paused-globally = Genel olarak duraklatıldı · yeni kopya yok, çıkışlar çalışmaya devam eder
-copy-strip-force-stopped = Zorla durduruldu · hiçbir şey kopyalanmıyor
-copy-strip-loss-limit = Zarar limiti · yeni girişler engellendi, çıkışlar çalışmaya devam eder
-copy-strip-idle-paused =
+copy-toolbar-settings = Ayarlar
+copy-toolbar-add-wallet = Cüzdan ekle
+copy-toolbar-status = Durum
+copy-toolbar-active = Etkin
+copy-toolbar-active-value = { $active } / { $total }
+copy-status-loading = Yükleniyor
+copy-status-unavailable = Kullanılamıyor
+copy-status-setup-required = Kurulum gerekli
+copy-status-paused = Duraklatıldı
+copy-status-force-stopped = Zorla durduruldu
+copy-status-loss-limit = Zarar limiti
+copy-status-all-paused = Tüm görevler duraklatıldı
+copy-status-processing = İşleniyor
+copy-toolbar-pause = Kopyalamayı duraklat
+copy-toolbar-resume = Kopyalamayı sürdür
+copy-toolbar-resume-tasks = Tüm görevleri sürdür
+copy-notice-paused-title = Kopya işleme duraklatıldı
+copy-notice-paused-message = Yeni kopya yapılmaz. Açık varlıkların çıkışları çalışmaya devam eder.
+copy-notice-force-stopped-title = İşlemler zorla durduruldu
+copy-notice-force-stopped-message = Zorla durdurma etkin olduğu sürece hiçbir şey kopyalanmaz.
+copy-notice-loss-limit-title = Zarar limitine ulaşıldı
+copy-notice-loss-limit-message = Yeni girişler engellendi. Açık varlıkların çıkışları çalışmaya devam eder.
+copy-figures-scope = Tüm görevler
+copy-figure-budget-left = { $remaining } { -sol } kaldı
+copy-resume-tasks-title = Tüm görevleri sürdür
+copy-resume-tasks-live-message =
     { $count ->
-        [one] Boşta · { $count } görev duraklatıldı
-       *[other] Boşta · { $count } görev duraklatıldı
+        [one] Canlı görev sayısı: { $count }. Cüzdanları yeniden işlem yaptığında gerçek takaslar gönderecek.
+       *[other] Canlı görev sayısı: { $count }. Cüzdanları yeniden işlem yaptığında gerçek takaslar gönderecek.
     }
-copy-strip-idle-empty = Boşta · henüz görev yok
-copy-strip-processing = İşleniyor · { $paper } sanal
-copy-strip-processing-live = İşleniyor · { $live } canlı · { $paper } sanal
-copy-figures-label =
-    .aria-label = Kopya işlem toplamları
+copy-resume-tasks-confirm = Tümünü sürdür
+copy-toast-tasks-resumed =
+    { $count ->
+        [one] { $count } görev sürdürüldü
+       *[other] { $count } görev sürdürüldü
+    }
+copy-toast-tasks-kept-paused =
+    { $count ->
+        [one] { $count } görev duraklatılmış kaldı.
+       *[other] { $count } görev duraklatılmış kaldı.
+    }
+copy-resume-kept-limit = { $maximum } etkin görev limitinin üzerinde: { $count }.
+copy-resume-kept-watch = Cüzdan izlemesinin geri yüklenmesi gerekiyor: { $count }.
+copy-resume-kept-live = Canlı, dahil edilmedi: { $count }.
+copy-resume-kept-failed = Sürdürülemedi: { $count }.
+copy-toast-tasks-resume-failed = Görevler sürdürülemedi
+copy-watch-target-missing = Bu cüzdanın izlemesi bulunamadı
+copy-watch-not-restored = Cüzdan izlemesi henüz geri yüklenmedi
 copy-figure-marked-at-pool = Havuz fiyatından değerlendirildi
-copy-figure-across-tasks = Tüm görevlerde
 copy-figure-budget-lifetime = Etkin görevlerin toplam harcaması
 copy-figure-budget-none = Etkin görev yok
 copy-figure-arrival-samples =
@@ -372,21 +398,6 @@ copy-overview-worst-round = En kötü { $amount }
 copy-overview-curve-title = Kümülatif K/Z
 copy-overview-exits-title = Çıkışa göre satışlar
 copy-overview-skips-title = İşlemler neden atlandı
-copy-book-title-live = Canlı defter
-copy-book-title-paper = Sanal defter
-copy-book-all-time = Tüm zamanlar
-copy-book-buys = <strong>{ $count }</strong> alım
-copy-book-rule-closes =
-    <strong>{ $count }</strong> { $count ->
-        [one] tur kurallarınızla kapandı
-       *[other] tur kurallarınızla kapandı
-    }
-copy-book-wallet-sells = <strong>{ $count }</strong> cüzdan satışı
-copy-book-manual-closes = <strong>{ $count }</strong> elle kapatıldı
-copy-book-skipped = <strong>{ $count }</strong> atlandı
-copy-book-failed = <strong>{ $count }</strong> başarısız
-copy-book-closed = { $count } kapandı
-copy-book-budget-note = { $mode } harcaması: { $total } · { $remaining } kaldı
 copy-readiness-title = Canlıya geçmeden önce
 copy-readiness-live-note = Bu görev canlı işlem yapıyor. Yukarıdaki başlıktan Sanala döndürün.
 copy-readiness-all-pass = Tüm kontroller geçiyor.

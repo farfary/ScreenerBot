@@ -12,6 +12,7 @@ import {
   pct,
   rangeQuery,
   seconds,
+  section,
   signedPct,
   signedSolCell,
   taskName,
@@ -20,7 +21,7 @@ import {
 import { tradingModeMarker } from "../../ui/trading_mode.js";
 import { forgetPaint } from "../../core/dom.js";
 import { renderStateView } from "../../ui/state_view.js";
-import { RANGE_OPTIONS, renderSegmented } from "../../ui/segmented.js";
+import { RANGE_OPTIONS, keepSegmentFocus, renderSegmented } from "../../ui/segmented.js";
 
 const TABLE_ID = "copy-compare-table";
 
@@ -197,21 +198,26 @@ export function createCompare(page) {
     else if (!rows.length)
       body = renderStateView({ message: I18n.t("copy-compare-empty"), compact: true });
     else {
-      body = `<section class="copy-card"><h4>${esc(I18n.t("copy-compare-curve-title"))}</h4>${comparisonCurves(
-        rows.map((row) => ({
-          // The table's name for the task; its wallet is the entry's tooltip.
-          nameHtml: `<span title="${esc(row.target_address)}">${esc(taskName(row))}</span>`,
-          points: row.pnl_curve,
-        })),
-        { escapeHtml: esc }
-      )}</section>`;
+      body = section(
+        I18n.t("copy-compare-curve-title"),
+        comparisonCurves(
+          rows.map((row) => ({
+            // The table's name for the task; its wallet is the entry's tooltip.
+            nameHtml: `<span title="${esc(row.target_address)}">${esc(taskName(row))}</span>`,
+            points: row.pnl_curve,
+          })),
+          { escapeHtml: esc }
+        ),
+        esc
+      );
     }
     if (!root.querySelector(`#${TABLE_ID}`)) {
       dropTable();
       forgetPaint(root);
       root.innerHTML = `<div data-compare-view></div><div class="copy-compare-table" id="${TABLE_ID}"></div>`;
     }
-    paint(root.querySelector("[data-compare-view]"), head + body);
+    const view = root.querySelector("[data-compare-view]");
+    keepSegmentFocus(view, () => paint(view, head + body));
     const slot = root.querySelector(`#${TABLE_ID}`);
     slot.hidden = !rows?.length;
     if (rows?.length) showTable(slot, rows);

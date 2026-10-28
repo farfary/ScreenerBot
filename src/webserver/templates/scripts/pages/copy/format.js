@@ -152,6 +152,17 @@ export function pauseReasonShort(reason) {
     : "";
 }
 
+/** A task's state in a few words: its effective state, or why it is paused. */
+export function stateText(task) {
+  if (!task.enabled) {
+    const short = pauseReasonShort(task.pause_reason);
+    return short
+      ? I18n.t("copy-state-paused-reason", { reason: short })
+      : I18n.t("copy-state-paused");
+  }
+  return stateLabel(task.effective_state);
+}
+
 /**
  * The warning a task carries while its stored exit overrides no longer fit the
  * Trader's exit rules (`exit_policy_issue`, a backend UiText naming the broken rule);
@@ -329,6 +340,22 @@ export function rangeQuery(rangeId) {
   const range = RANGE_OPTIONS.find((item) => item.value === rangeId);
   if (!range?.hours) return {};
   return { from: new Date(Date.now() - range.hours * 3_600_000).toISOString() };
+}
+
+/** A section of the task sheet with its heading; the sheet draws the hairline between sections. */
+export function section(title, body, esc, className = "") {
+  return `<section class="copy-section${className ? ` ${className}` : ""}"><h3 class="copy-section-title">${esc(title)}</h3>${body}</section>`;
+}
+
+/**
+ * Two parts of the sheet side by side on a wide sheet, stacked on a narrow one; each part is
+ * `[title, bodyHtml]`.
+ */
+export function splitSection(parts, esc) {
+  const html = parts
+    .map(([title, body]) => `<section><h3 class="copy-section-title">${esc(title)}</h3>${body}</section>`)
+    .join("");
+  return `<div class="copy-section copy-section-split">${html}</div>`;
 }
 
 export function definitionRows(rows, escapeHtml) {

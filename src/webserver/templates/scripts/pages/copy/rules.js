@@ -6,9 +6,11 @@
 import {
   definitionRows,
   exitModeLabel,
+  section,
   settingFixed,
   settingPct,
   settingSol,
+  splitSection,
 } from "./format.js";
 import { tradingModeLabel } from "../../ui/trading_mode.js";
 import { renderNotice } from "../../ui/notice.js";
@@ -163,19 +165,21 @@ export function rulesHtml(context, esc) {
   const exitNote = managesExits
     ? ""
     : `<p class="copy-note">${esc(I18n.t("copy-rules-exits-inactive"))}</p>`;
-  return `<div class="copy-rules-grid">
-    <section class="copy-card"><h4>${esc(I18n.t("copy-rules-sizing"))}</h4><dl class="copy-defs">${sizing}</dl></section>
-    <section class="copy-card"><h4>${esc(I18n.t("copy-rules-entry-filters"))}</h4><dl class="copy-defs">${entry}</dl></section>
-  </div>
-  <section class="copy-card copy-rules-exits">
-    <h4>${esc(I18n.t("copy-rules-exits"))} <span class="copy-card-sub">${esc(exitModeLabel(task.exit_mode))}</span></h4>
-    ${warningList(exitWarnings(effective, task.exit_mode, { slippagePct: task.slippage_pct, feePct }))}${exitNote}
-    ${ruleTable(context, esc)}
-  </section>`;
+  return `${splitSection(
+    [
+      [I18n.t("copy-rules-sizing"), `<dl class="copy-defs">${sizing}</dl>`],
+      [I18n.t("copy-rules-entry-filters"), `<dl class="copy-defs">${entry}</dl>`],
+    ],
+    esc
+  )}${section(
+    I18n.t("copy-rules-exits"),
+    `<p class="copy-section-sub">${esc(exitModeLabel(task.exit_mode))}</p>${warningList(exitWarnings(effective, task.exit_mode, { slippagePct: task.slippage_pct, feePct }))}${exitNote}${ruleTable(context, esc)}`,
+    esc
+  )}`;
 }
 
 export function renderRules({ ws, defaults }, esc) {
-  return `<div class="copy-panel-head"><h3>${esc(I18n.t("copy-rules-title"))}</h3><button class="btn btn-secondary btn-sm" type="button" data-ws-action="edit" data-step="exits"><i class="icon-pencil" aria-hidden="true"></i> ${esc(I18n.t("copy-action-edit-rules"))}</button></div>${rulesHtml(
+  return `<div class="copy-panel-head"><h3 class="copy-section-title">${esc(I18n.t("copy-rules-title"))}</h3><button class="btn btn-secondary btn-sm" type="button" data-ws-action="edit" data-step="exits"><i class="icon-pencil" aria-hidden="true"></i> ${esc(I18n.t("copy-action-edit-rules"))}</button></div>${rulesHtml(
     {
       task: ws,
       effective: ws.effective_policy,

@@ -3,20 +3,24 @@
 //
 
 /**
- * Guard: a Copy Trading task's action row speaks one button style. Every action is an
- * outline button; only the action that resumes copying may be the primary button, and
- * Delete differs by its danger colour alone, never by a bare or filled shape.
+ * Guard: the Copy Trading actions speak one language.
  *
- * A watch paused over its signature limit offers two ways out of one decision: catch up
- * from saved progress, or skip and resume from now. Both sit in the recovery panel as real
- * button variants, and the action row offers neither.
+ * A task's action row uses one button style: every action is an outline button, only the
+ * action that resumes copying may be the primary button, and Delete differs by its danger
+ * colour alone.
  *
- * The recovery panel takes a full-width row under the title and the actions, which keep
- * their place top-right as on every other task.
+ * A watch paused over its signature limit is restored from the notice under the tab row:
+ * its Restore wallet watch action opens one dialog with both ways back (catch up from saved
+ * progress, or skip ahead and resume from now), and the action row offers neither.
  *
- * The strip's bulk action follows the task states: Pause all only while a task copies,
- * Resume while any task exists, and no bulk action at all without a task. With no task
- * the strip reads idle, never paused, whatever the global switch says.
+ * The toolbar shows at most one bulk action, chosen by the processing switch and the task
+ * states: Pause copying while a task copies, Resume copying while processing is off, and
+ * Resume all tasks while processing is on, no task copies and a paused task can be resumed.
+ * Resume all tasks asks first only while a live task would resume. Add wallet is the one
+ * primary button, and a page without a task has no toolbar action but Settings.
+ *
+ * The wallet list marks the selected task as the current item without a border, and an
+ * unnamed task shows its short address in the name slot.
  *
  * Run with `npm run test:js`.
  */
@@ -34,19 +38,33 @@ import { createApiHandler, FIXTURES_ROOT, loadIndex } from "../lib/dashboard_fix
 const browser = await chromium.launch({ headless: true });
 after(() => browser.close());
 
-test("the task action row uses one button style", async (t) => {
-  const context = await browser.newContext({
-    viewport: { width: 1440, height: 900 },
-    locale: "en",
-  });
+const fixture = (name) => JSON.parse(readFileSync(`${FIXTURES_ROOT}/copy/${name}`, "utf8"));
+const strip = (text) => text.replace(/[⁨⁩]/g, "").trim();
+const isResume = (request) => request.url().endsWith("/api/copy-trading/tasks/resume");
+
+/** A dashboard on the Copy page whose API answers `answers` by path before the fixtures. */
+async function openCopy(t, answers = {}) {
+  const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   const api = createApiHandler([await loadIndex("copy"), await loadIndex("shell")], "populated");
-  const host = await serveDashboard(context, { locale: "en", onApi: api.onApi });
+  const host = await serveDashboard(context, {
+    locale: "en",
+    onApi: (request) => {
+      const answer = answers[request.url.pathname];
+      if (typeof answer === "function") return answer(request);
+      return answer ? { body: answer } : api.onApi(request);
+    },
+  });
   t.after(async () => {
     await context.close();
     await host.close();
   });
   const page = await context.newPage();
-  await page.goto(`${host.origin}/copy`);
+  return { page, origin: host.origin };
+}
+
+test("the task action row uses one button style", async (t) => {
+  const { page, origin } = await openCopy(t);
+  await page.goto(`${origin}/copy`);
   await page.waitForSelector("#copy-ws-actions [data-ws-action='delete']");
   const buttons = await page.$$eval("#copy-ws-actions .btn", (nodes) =>
     nodes.map((node) => {
@@ -63,7 +81,7 @@ test("the task action row uses one button style", async (t) => {
   assert.ok(buttons.length >= 4, JSON.stringify(buttons));
   for (const button of buttons) {
     if (button.primary) {
-      assert.match(button.action, /^(resume|retry-watch)$/, button.action);
+      assert.equal(button.action, "resume", button.action);
       continue;
     }
     assert.ok(button.outline && button.border, `${button.action} is an outline button`);
@@ -71,41 +89,40 @@ test("the task action row uses one button style", async (t) => {
   }
 });
 
-test("a watch over its limit offers both ways out inside the recovery panel", async (t) => {
-  const fixture = (name) => JSON.parse(readFileSync(`${FIXTURES_ROOT}/copy/${name}`, "utf8"));
+test("a watch over its limit is restored from the notice under the tab row", async (t) => {
   const task = fixture("copy_workspace.json");
   task.enabled = false;
+  task.recovery = "restore_watch";
   task.pause_reason = { kind: "watch_budget_exceeded", page_budget: 5, signatures_checked: 500 };
   const watch = fixture("wallets_watch_status.json");
   watch.target.enabled = false;
   watch.catch_up_options = [{ provider: "helius", available: true }];
-  const answers = {
+  const { page, origin } = await openCopy(t, {
     [`/api/copy-trading/tasks/${task.id}/workspace`]: JSON.stringify(task),
     [`/api/wallets/watch/${watch.target.id}/status`]: JSON.stringify(watch),
-  };
-  const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
-  const api = createApiHandler([await loadIndex("copy"), await loadIndex("shell")], "populated");
-  const host = await serveDashboard(context, {
-    locale: "en",
-    onApi: (request) => {
-      const body = answers[request.url.pathname];
-      return body ? { body } : api.onApi(request);
-    },
   });
-  t.after(async () => {
-    await context.close();
-    await host.close();
-  });
-  const page = await context.newPage();
-  await page.goto(`${host.origin}/copy`);
-  const panel = page.locator("#copy-ws-watch-recovery");
-  await panel.locator("[data-ws-action='approve-helius']").waitFor();
+  await page.goto(`${origin}/copy`);
 
-  const choices = await panel.locator("[data-ws-action]").evaluateAll((nodes) =>
+  const notice = page.locator("#copy-ws-notices .notice");
+  const restore = notice.locator("[data-action='restore-watch']");
+  await restore.waitFor();
+  assert.equal(strip(await restore.textContent()), "Restore wallet watch");
+  assert.equal(await page.locator("#copy-ws-actions [data-ws-action='resume']").count(), 0);
+  assert.equal(await page.locator("#copy-ws-actions [data-ws-action='resume-budget']").count(), 0);
+  const layout = await page.evaluate(() => {
+    const box = (selector) => document.querySelector(selector).getBoundingClientRect();
+    return { tabs: box("#copy-ws-tabs"), notices: box("#copy-ws-notices") };
+  });
+  assert.ok(layout.tabs.bottom <= layout.notices.top, "the notice sits below the tab row");
+
+  await restore.click();
+  const dialog = page.locator("#copy-watch-restore:not([hidden])");
+  await dialog.locator("[data-restore-action='approve-helius']").waitFor();
+  const choices = await dialog.locator("[data-restore-action]").evaluateAll((nodes) =>
     nodes.map((node) => {
       const style = getComputedStyle(node);
       return {
-        action: node.dataset.wsAction,
+        action: node.dataset.restoreAction,
         variant: ["btn-primary", "btn-outline"].find((name) => node.classList.contains(name)),
         legible: style.color !== style.backgroundColor,
       };
@@ -116,83 +133,120 @@ test("a watch over its limit offers both ways out inside the recovery panel", as
     ["approve-helius:btn-primary", "resume-budget:btn-outline"]
   );
   for (const choice of choices) assert.ok(choice.legible, `${choice.action} is legible`);
-  assert.equal(await page.locator("#copy-ws-actions [data-ws-action='resume-budget']").count(), 0);
 
-  const layout = await page.evaluate(() => {
-    const box = (selector) => document.querySelector(selector).getBoundingClientRect();
-    const head = box(".copy-ws-head");
-    const actions = box("#copy-ws-actions");
-    const recovery = box("#copy-ws-watch-recovery");
-    return { head, actions, recovery };
-  });
-  assert.ok(
-    layout.actions.bottom <= layout.recovery.top,
-    "the actions stay on the title row, above the recovery panel"
-  );
-  assert.ok(
-    Math.abs(layout.actions.right - layout.head.right) < 1,
-    "the actions stay right-aligned"
-  );
-  assert.ok(
-    Math.abs(layout.recovery.width - layout.head.width) < 1,
-    "the recovery panel spans the header"
-  );
-
-  const resume = panel.locator("[data-ws-action='resume-budget']");
+  const resume = dialog.locator("[data-restore-action='resume-budget']");
   assert.ok(await resume.isDisabled(), "resuming from now waits for the acknowledgement");
-  await panel.locator("[data-watch-resume-ack]").check();
+  await dialog.locator("[data-watch-resume-ack]").check();
   assert.ok(await resume.isEnabled(), "the acknowledgement enables resuming from now");
 });
 
-test("Pause all is offered only while a task copies", async (t) => {
-  const overview = JSON.parse(readFileSync(`${FIXTURES_ROOT}/copy/copy_overview.json`, "utf8"));
+test("the toolbar offers one bulk action that follows the task states", async (t) => {
+  const overview = fixture("copy_overview.json");
   const status = (overview.data ?? overview).status;
-  const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
-  const api = createApiHandler([await loadIndex("copy"), await loadIndex("shell")], "populated");
-  const host = await serveDashboard(context, {
-    locale: "en",
-    onApi: (request) =>
-      request.url.pathname === "/api/copy-trading/overview"
-        ? { body: JSON.stringify(overview) }
-        : api.onApi(request),
+  const posts = [];
+  const { page, origin } = await openCopy(t, {
+    "/api/copy-trading/overview": () => ({ body: JSON.stringify(overview) }),
+    "/api/copy-trading/tasks/resume": () => ({
+      body: JSON.stringify({ resumed: [3], kept_paused: [] }),
+    }),
   });
-  t.after(async () => {
-    await context.close();
-    await host.close();
+  page.on("request", (request) => {
+    if (isResume(request)) posts.push(request.postDataJSON());
   });
-  const page = await context.newPage();
-  const action = page.locator("#copy-global-action");
+  const global = page.locator("#copy-global-action");
+  const resumeTasks = page.locator("#copy-resume-tasks");
+  const statusChip = page.locator('#copy-summary [data-summary-id="status"]');
+
   const states = [
-    [{ enabled: true, active_tasks: 0, paper_tasks: 0, live_tasks: 0 }, "Pause all", true],
-    [{ enabled: true, active_tasks: 1, paper_tasks: 1, live_tasks: 0 }, "Pause all", false],
-    [
-      { enabled: false, active_tasks: 0, paper_tasks: 0, live_tasks: 0 },
-      "Resume processing",
-      false,
-    ],
+    [{ enabled: true, active_tasks: 2 }, "Pause copying", "Processing"],
+    [{ enabled: false, active_tasks: 0 }, "Resume copying", "Paused"],
   ];
-  for (const [patch, label, disabled] of states) {
+  for (const [patch, label, chip] of states) {
     Object.assign(status, patch);
-    await page.goto(`${host.origin}/copy`);
-    await page.waitForSelector("#copy-system-state[data-state]:not([data-state='unknown'])");
-    assert.equal((await action.textContent()).trim(), label);
-    assert.equal(await action.isDisabled(), disabled, JSON.stringify(patch));
+    await page.goto(`${origin}/copy`);
+    await statusChip.waitFor();
+    assert.match(strip(await statusChip.textContent()), new RegExp(chip));
+    assert.equal(strip(await global.textContent()), label);
+    assert.equal(await global.isVisible(), true, JSON.stringify(patch));
+    assert.equal(await resumeTasks.isVisible(), false, JSON.stringify(patch));
   }
 
+  Object.assign(status, {
+    enabled: true,
+    active_tasks: 0,
+    resumable_tasks: 1,
+    resumable_live_tasks: 0,
+  });
+  await page.goto(`${origin}/copy`);
+  await resumeTasks.waitFor();
+  assert.match(strip(await statusChip.textContent()), /All tasks paused/);
+  assert.equal(strip(await resumeTasks.textContent()), "Resume all tasks");
+  assert.equal(await global.isVisible(), false, "one bulk action at a time");
+  await Promise.all([page.waitForRequest(isResume), resumeTasks.click()]);
+  assert.deepEqual(posts, [{ include_live: false }], "paper tasks resume without asking");
+  assert.equal(await page.locator(".confirmation-dialog").count(), 0);
+
+  Object.assign(status, { resumable_tasks: 2, resumable_live_tasks: 1 });
+  await page.goto(`${origin}/copy`);
+  await resumeTasks.waitFor();
+  await resumeTasks.click();
+  const dialog = page.locator(".confirmation-dialog");
+  await dialog.waitFor();
+  assert.match(
+    strip(await dialog.locator(".confirmation-dialog__message").textContent()),
+    /live task will submit real swaps/
+  );
+  await Promise.all([
+    page.waitForRequest(isResume),
+    dialog.locator('[data-action="confirm"]').click(),
+  ]);
+  assert.deepEqual(posts.at(-1), { include_live: true }, "a confirmed resume includes live");
+
+  Object.assign(status, { resumable_tasks: 0, resumable_live_tasks: 0 });
+  await page.goto(`${origin}/copy`);
+  await statusChip.waitFor();
+  assert.equal(await resumeTasks.isVisible(), false, "nothing to resume, no bulk action");
+  assert.equal(await global.isVisible(), false);
+
   (overview.data ?? overview).tasks = [];
+  Object.assign(status, { total_tasks: 0, active_tasks: 0, paper_tasks: 0, live_tasks: 0 });
   for (const enabled of [true, false]) {
-    Object.assign(status, {
-      enabled,
-      total_tasks: 0,
-      active_tasks: 0,
-      paper_tasks: 0,
-      live_tasks: 0,
-    });
-    await page.goto(`${host.origin}/copy`);
-    const state = page.locator("#copy-system-state[data-state]:not([data-state='unknown'])");
-    await state.waitFor();
-    assert.equal(await state.getAttribute("data-state"), "idle", `enabled: ${enabled}`);
-    assert.equal((await state.textContent()).trim(), "Idle · no tasks yet");
-    assert.equal(await action.isVisible(), false, "no bulk action without a task");
+    status.enabled = enabled;
+    await page.goto(`${origin}/copy`);
+    await page.locator("#copy-settings-open").waitFor();
+    assert.equal(await statusChip.count(), 0, `no chips without a task, enabled: ${enabled}`);
+    assert.equal(await global.isVisible(), false, "no bulk action without a task");
+    assert.equal(await page.locator("#copy-add").isVisible(), false);
   }
+});
+
+test("Add wallet is the one primary, and the list marks its current task plainly", async (t) => {
+  const overview = fixture("copy_overview.json");
+  const unnamed = (overview.data ?? overview).tasks.find((task) => !task.label);
+  assert.ok(unnamed, "the fixture keeps an unnamed task");
+  const { page, origin } = await openCopy(t);
+  await page.goto(`${origin}/copy`);
+  await page.waitForSelector('.copy-row[aria-current="true"]');
+
+  const primaries = await page.$$eval(".copy-toolbar .btn-primary", (nodes) =>
+    nodes.filter((node) => !node.hidden).map((node) => node.id)
+  );
+  assert.deepEqual(primaries, ["copy-add"]);
+
+  assert.equal(await page.locator(".copy-row[aria-pressed]").count(), 0);
+  assert.equal(await page.locator('.copy-row[aria-current="true"]').count(), 1);
+  const selected = await page.$eval('.copy-row[aria-current="true"]', (node) => {
+    const style = getComputedStyle(node);
+    return { border: parseFloat(style.borderTopWidth), background: style.backgroundColor };
+  });
+  assert.equal(selected.border, 0, "the selected row has no border");
+  assert.notEqual(selected.background, "rgba(0, 0, 0, 0)", "the selected row is tinted");
+
+  const name = strip(
+    await page.locator(`.copy-row[data-task-id="${unnamed.id}"] .copy-row-name`).textContent()
+  );
+  const address = unnamed.target_address;
+  assert.ok(name.startsWith(address.slice(0, 4)), name);
+  assert.ok(name.endsWith(address.slice(-4)), name);
+  assert.ok(name.length < address.length, "the name slot shows the short address");
 });

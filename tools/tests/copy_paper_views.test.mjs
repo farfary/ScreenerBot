@@ -9,10 +9,10 @@
  *   pool flag: a quote fill with `priced_from_pool: false` still shows its price, its
  *   target-price difference, the recorded router, quote times, waits and fee assumption,
  *   while a legacy row keeps its historical wording.
- * - Overview and Execution show the model card for a paper task only, from the
- *   workspace's own settings, and Overview lists the earlier paper results (the archived
- *   copy book above the legacy estimates) read-only with labeled columns and a saved-price
- *   time; Activity tags each row decided before the task's current paper run.
+ * - Execution shows the paper model section for a paper task only, from the workspace's
+ *   own settings, and Overview lists the earlier paper results (the archived copy book
+ *   above the legacy estimates) read-only with labeled columns and a saved-price time;
+ *   Activity tags each row decided before the task's current paper run.
  * - Settings load the stored milliseconds as seconds, save them back exactly, and refuse
  *   a delay outside 0..30 s or a queue size that is not an integer in 1..256.
  *
@@ -39,14 +39,14 @@ async function openCopy(t, { workspace = null, routes = [] } = {}) {
   return openCopyPage(browser, t, { routes: served });
 }
 
-/** The card of the open panel whose heading is `title`, or null. */
-async function card(page, title) {
-  // The panel shows a loading message until the workspace is read; a card means it is.
-  await page.locator("#copy-ws-panel .copy-card").first().waitFor();
-  const cards = page.locator("#copy-ws-panel .copy-card", {
-    has: page.locator("h4", { hasText: new RegExp(`^${title}$`) }),
+/** The section of the open sheet panel whose heading is `title`, or null. */
+async function section(page, title) {
+  // The panel shows a loading message until the workspace is read; a section means it is.
+  await page.locator("#copy-ws-panel .copy-section").first().waitFor();
+  const headings = page.locator("#copy-ws-panel section > h3.copy-section-title", {
+    hasText: new RegExp(`^${title}$`),
   });
-  return (await cards.count()) ? cards.first() : null;
+  return (await headings.count()) ? headings.first().locator("xpath=..") : null;
 }
 
 test("activity names each fill's model from its record, not from the pool flag", async (t) => {
@@ -87,38 +87,45 @@ test("activity names each fill's model from its record, not from the pool flag",
   assert.ok(rows.some((row) => row.title === "Legacy paper exit estimate"));
 });
 
-test("the paper model card shows the workspace's own settings, for a paper task only", async (t) => {
+/** Opens the Execution tab and waits for its sections once the range is read. */
+async function openExecution(page) {
+  await page.locator("#copy-tab-execution").click();
+  await page
+    .locator("#copy-ws-panel section > h3.copy-section-title", { hasText: "Decisions in range" })
+    .waitFor();
+}
+
+test("the paper model section shows the workspace's own settings, for a paper task only", async (t) => {
   const workspace = fixture("copy_workspace.json");
   workspace.paper_execution = { model: "quote", landing_delay_ms: 2500, queue_capacity: 48 };
   const page = await openCopy(t, { workspace });
-
-  const model = await card(page, "Paper execution model");
-  assert.ok(model, "a paper task shows the model card");
-  const text = plain(await model.textContent());
-  assert.match(text, /Assumed landing wait\s*2\.5s/);
-  assert.match(text, /Queue size per task\s*48/);
-  assert.match(text, /counted once/);
-
-  await page.locator("#copy-tab-execution").click();
-  await page.waitForSelector("#copy-ws-panel .metric-card");
-  const execution = await card(page, "Paper execution model");
-  assert.ok(execution, "the Execution tab discloses the same assumptions");
-  const detail = plain(await execution.textContent());
-  assert.match(detail, /Assumed landing wait\s*2\.5s/);
-  assert.match(detail, /Detection delay is measured from the wallet's block/);
-  const difference = plain(
-    await page
-      .locator("#copy-ws-panel .copy-card", { hasText: "Target price difference" })
-      .first()
-      .textContent()
+  assert.equal(
+    await section(page, "Paper execution model"),
+    null,
+    "the model is told once, on the Execution tab"
   );
+
+  await openExecution(page);
+  const model = await section(page, "Paper execution model");
+  assert.ok(model, "a paper task's Execution tab discloses its assumptions");
+  const detail = plain(await model.textContent());
+  assert.match(detail, /Assumed landing wait\s*2\.5s/);
+  assert.match(detail, /Queue size per task\s*48/);
+  assert.match(detail, /counted once/);
+  assert.match(detail, /Detection delay is measured from the wallet's block/);
+  const order = await page.$$eval("#copy-ws-panel > .copy-section", (nodes) =>
+    nodes.map((node) => node.querySelector(":scope > h3")?.textContent ?? "")
+  );
+  assert.equal(plain(order.at(-1)), "Paper execution model", "the model comes last");
+  const difference = plain(await (await section(page, "Target price difference")).textContent());
   assert.match(difference, /not the task's slippage tolerance/);
   assert.doesNotMatch(difference, /excluded/);
 
   const live = { ...workspace, mode: "live", effective_state: "live" };
   const livePage = await openCopy(t, { workspace: live });
-  assert.equal(await card(livePage, "Paper execution model"), null);
-  assert.equal(await card(livePage, "Legacy paper estimates"), null);
+  assert.equal(await section(livePage, "Earlier paper results"), null);
+  await openExecution(livePage);
+  assert.equal(await section(livePage, "Paper execution model"), null);
 });
 
 test("configured waits with millisecond precision are shown exactly", async (t) => {
@@ -131,7 +138,8 @@ test("configured waits with millisecond precision are shown exactly", async (t) 
     const workspace = fixture("copy_workspace.json");
     workspace.paper_execution = { model: "quote", landing_delay_ms: delay, queue_capacity: 32 };
     const page = await openCopy(t, { workspace });
-    const model = await card(page, "Paper execution model");
+    await openExecution(page);
+    const model = await section(page, "Paper execution model");
     assert.match(plain(await model.textContent()), new RegExp(`Assumed landing wait\\s*${shown}`));
 
     await page.locator("#copy-tab-holdings").click();
@@ -165,10 +173,10 @@ test("configured waits with millisecond precision are shown exactly", async (t) 
 
 test("earlier paper results show the archived book above the legacy estimates, read-only", async (t) => {
   const page = await openCopy(t);
-  const earlier = await card(page, "Earlier paper results");
+  const earlier = await section(page, "Earlier paper results");
   assert.ok(earlier, "the populated task has earlier paper results");
   assert.deepEqual(
-    (await earlier.locator("h5").allTextContents()).map(plain),
+    (await earlier.locator("h4.copy-section-subtitle").allTextContents()).map(plain),
     ["Quote-based copy book", "Legacy paper estimates"],
     "the archived book comes first, the legacy estimates beneath it"
   );
@@ -213,12 +221,12 @@ test("earlier paper results show the archived book above the legacy estimates, r
   assert.equal(await earlier.locator("button").count(), 0, "earlier results offer no action");
 });
 
-test("a task without earlier paper results shows no earlier card", async (t) => {
+test("a task without earlier paper results shows no earlier section", async (t) => {
   const workspace = fixture("copy_workspace.json");
   workspace.archived_paper = { ...workspace.archived_paper, spent_native: 0, holdings: [] };
   workspace.legacy_paper = { ...workspace.legacy_paper, spent_native: 0, holdings: [] };
   const page = await openCopy(t, { workspace });
-  assert.equal(await card(page, "Earlier paper results"), null);
+  assert.equal(await section(page, "Earlier paper results"), null);
 });
 
 test("an activity row decided before the current paper run carries the earlier-run tag", async (t) => {
@@ -290,7 +298,7 @@ test("settings save the paper queue and leave the landing delay to the shared pa
     await fill(queue);
     await page.locator("#copy-settings-form button[type='submit']").click();
     await page.waitForFunction(() =>
-      document.querySelector("#copy-settings")?.classList.contains("hidden")
+      document.querySelector("#copy-settings")?.hidden
     );
     const saved = patches[patches.length - 1];
     assert.equal(saved.paper_queue_capacity, Number(queue));
@@ -324,7 +332,7 @@ test("settings refuse a non-integer or out-of-range queue", async (t) => {
     assert.equal(patches.length, 0, `nothing is saved for ${reason}`);
     assert.equal(
       await page.evaluate(() =>
-        document.querySelector("#copy-settings")?.classList.contains("hidden")
+        document.querySelector("#copy-settings")?.hidden
       ),
       false,
       "the dialog stays open on invalid input"

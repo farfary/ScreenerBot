@@ -36,20 +36,25 @@ test("a watch-budget pause names the limit rather than latency or lost watch", (
   assert.doesNotMatch(text, /late|no longer watched/);
 });
 
-test("watch recovery keeps the copy task paused until a separate resume", async () => {
-  const workspace = await readFile(
-    new URL("../../src/webserver/templates/scripts/pages/copy/workspace.js", import.meta.url),
+const copySource = (name) =>
+  readFile(
+    new URL(`../../src/webserver/templates/scripts/pages/copy/${name}`, import.meta.url),
     "utf8"
   );
+
+test("watch recovery keeps the copy task paused until a separate resume", async () => {
+  const workspace = await copySource("workspace.js");
+  const restore = await copySource("watch_restore.js");
   const watched = await readFile(
     new URL("../../src/webserver/templates/scripts/pages/wallets/watched.js", import.meta.url),
     "utf8"
   );
 
-  assert.match(workspace, /"helius_unavailable", "watch_processing_failed"/);
+  // The server's recovery decides which way back a paused task offers; the page derives none.
+  assert.match(workspace, /retry_watch: \{ id: "retry-watch", label: "copy-action-retry-watch" \}/);
   assert.match(englishI18n.t("copy-action-retry-watch"), /Retry wallet watch/);
-  assert.match(workspace, /"copy-action-retry-watch"/);
-  assert.match(workspace, /\/api\/wallets\/watch\/\$\{target\.id\}\/enabled/);
+  assert.match(workspace, /postWatch\(requestManager, target\.id, "enabled", \{ enabled: true \}\)/);
+  assert.match(restore, /\/api\/wallets\/watch\/\$\{targetId\}\/\$\{action\}/);
   const wording = [
     "copy-action-retry-watch",
     "copy-watch-retry-started",
@@ -58,7 +63,10 @@ test("watch recovery keeps the copy task paused until a separate resume", async 
   ]
     .map((id) => englishI18n.t(id))
     .join("\n");
-  assert.doesNotMatch(workspace, /Retry watch and resume|Wallet watch and copy task resumed/);
+  assert.doesNotMatch(
+    workspace + restore,
+    /Retry watch and resume|Wallet watch and copy task resumed/
+  );
   assert.doesNotMatch(wording, /Retry watch and resume|Wallet watch and copy task resumed/);
   assert.match(englishI18n.t("copy-watch-retry-started"), /copy task remains paused/);
   assert.match(watched, /"wallets-watched-action-retry"/);
@@ -67,23 +75,21 @@ test("watch recovery keeps the copy task paused until a separate resume", async 
 });
 
 test("Helius catch-up is offered only for a capable watch and requires per-wallet confirmation", async () => {
-  const workspace = await readFile(
-    new URL("../../src/webserver/templates/scripts/pages/copy/workspace.js", import.meta.url),
-    "utf8"
-  );
+  const restore = await copySource("watch_restore.js");
   const watched = await readFile(
     new URL("../../src/webserver/templates/scripts/pages/wallets/watched.js", import.meta.url),
     "utf8"
   );
 
-  assert.match(workspace, /data-ws-action="approve-helius"/);
-  assert.match(workspace, /option\.provider === "helius" && option\.available/);
+  assert.match(restore, /data-restore-action="approve-helius"/);
+  assert.match(restore, /option\.provider === "helius" && option\.available/);
   assert.match(
     englishI18n.t("copy-watch-approve-message"),
     /10 credits per 100 full transactions returned/
   );
-  assert.match(workspace, /acknowledge_provider_usage: true/);
-  assert.match(workspace, /The wallet watch has not been restored/);
+  assert.match(restore, /acknowledge_provider_usage: true/);
+  assert.match(restore, /watchError\("copy-watch-not-restored"\)/);
+  assert.match(englishI18n.t("copy-watch-not-restored"), /The wallet watch has not been restored/);
   assert.match(watched, /option\.provider === "helius"/);
   assert.doesNotMatch(watched, /Disable Helius|Use Helius/);
   assert.match(watched, /"wallets-watch-helius-allow-message"/);

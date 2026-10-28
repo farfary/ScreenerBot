@@ -162,33 +162,63 @@ copy-unrealized-unpriced =
        *[other] { $count } актива без цены
     }
 
-## Page strip
+## Page toolbar and figures (pages/copy.html, pages/copy/summary.js)
 
-copy-page-title = Копитрейдинг
-copy-strip-loading = Загрузка
-copy-strip-unavailable = Недоступно
-copy-strip-setup-required = Требуется настройка · для копи-трейдинга нужны кошелёк и RPC
-copy-strip-pause-all = Приостановить все
-copy-strip-resume = Возобновить обработку
-copy-strip-settings = Настройки
-copy-strip-add-wallet = Добавить кошелёк
-copy-strip-paused-globally = Приостановлено глобально · новых копий нет, выходы продолжают работать
-copy-strip-force-stopped = Принудительно остановлено · ничего не копируется
-copy-strip-loss-limit = Лимит убытков · новые входы заблокированы, выходы продолжают работать
-copy-strip-idle-paused =
+copy-toolbar-settings = Настройки
+copy-toolbar-add-wallet = Добавить кошелёк
+copy-toolbar-status = Статус
+copy-toolbar-active = Активные
+copy-toolbar-active-value = { $active } из { $total }
+copy-status-loading = Загрузка
+copy-status-unavailable = Недоступно
+copy-status-setup-required = Требуется настройка
+copy-status-paused = На паузе
+copy-status-force-stopped = Принудительно остановлено
+copy-status-loss-limit = Лимит убытков
+copy-status-all-paused = Все задачи на паузе
+copy-status-processing = Обработка идёт
+copy-toolbar-pause = Приостановить копирование
+copy-toolbar-resume = Возобновить копирование
+copy-toolbar-resume-tasks = Возобновить все задачи
+copy-notice-paused-title = Обработка копирования приостановлена
+copy-notice-paused-message = Новые копии не создаются. Выходы из открытых активов продолжают работать.
+copy-notice-force-stopped-title = Торговля принудительно остановлена
+copy-notice-force-stopped-message = Пока действует принудительная остановка, ничего не копируется.
+copy-notice-loss-limit-title = Достигнут лимит убытков
+copy-notice-loss-limit-message = Новые входы заблокированы. Выходы из открытых активов продолжают работать.
+copy-figures-scope = Все задачи
+copy-figure-budget-left = Осталось { $remaining } { -sol }
+copy-resume-tasks-title = Возобновить все задачи
+copy-resume-tasks-live-message =
     { $count ->
-        [one] Простой · на паузе: { $count } задача
-        [few] Простой · на паузе: { $count } задачи
-        [many] Простой · на паузе: { $count } задач
-       *[other] Простой · на паузе: { $count } задачи
+        [one] { $count } боевая задача будет отправлять реальные свопы, когда её кошелёк снова совершит сделку.
+        [few] { $count } боевые задачи будут отправлять реальные свопы, когда их кошельки снова совершат сделки.
+        [many] { $count } боевых задач будут отправлять реальные свопы, когда их кошельки снова совершат сделки.
+       *[other] { $count } боевой задачи будут отправлять реальные свопы, когда их кошельки снова совершат сделки.
     }
-copy-strip-idle-empty = Простой · задач пока нет
-copy-strip-processing = Обработка · виртуальных: { $paper }
-copy-strip-processing-live = Обработка · боевых: { $live } · виртуальных: { $paper }
-copy-figures-label =
-    .aria-label = Итоги копитрейдинга
+copy-resume-tasks-confirm = Возобновить все
+copy-toast-tasks-resumed =
+    { $count ->
+        [one] Возобновлена { $count } задача
+        [few] Возобновлено { $count } задачи
+        [many] Возобновлено { $count } задач
+       *[other] Возобновлено { $count } задачи
+    }
+copy-toast-tasks-kept-paused =
+    { $count ->
+        [one] { $count } задача осталась на паузе.
+        [few] { $count } задачи остались на паузе.
+        [many] { $count } задач остались на паузе.
+       *[other] { $count } задачи остались на паузе.
+    }
+copy-resume-kept-limit = Сверх лимита в { $maximum } активных задач: { $count }.
+copy-resume-kept-watch = Нужно восстановить наблюдение за кошельком: { $count }.
+copy-resume-kept-live = Боевые, не включены: { $count }.
+copy-resume-kept-failed = Не удалось возобновить: { $count }.
+copy-toast-tasks-resume-failed = Не удалось возобновить задачи
+copy-watch-target-missing = Наблюдение за этим кошельком не найдено
+copy-watch-not-restored = Наблюдение за кошельком ещё не восстановлено
 copy-figure-marked-at-pool = Оценено по цене пула
-copy-figure-across-tasks = По всем задачам
 copy-figure-budget-lifetime = Расходы включённых задач за всё время
 copy-figure-budget-none = Нет включённых задач
 copy-figure-arrival-samples =
@@ -416,35 +446,6 @@ copy-overview-worst-round = Худший { $amount }
 copy-overview-curve-title = Накопленный P&L
 copy-overview-exits-title = Продажи по типам выхода
 copy-overview-skips-title = Почему сделки были пропущены
-copy-book-title-live = Боевой портфель
-copy-book-title-paper = Виртуальный портфель
-copy-book-all-time = За всё время
-copy-book-buys =
-    <strong>{ $count }</strong> { $count ->
-        [one] покупка
-        [few] покупки
-        [many] покупок
-       *[other] покупки
-    }
-copy-book-rule-closes =
-    <strong>{ $count }</strong> { $count ->
-        [one] раунд закрыт по вашим правилам
-        [few] раунда закрыто по вашим правилам
-        [many] раундов закрыто по вашим правилам
-       *[other] раунда закрыто по вашим правилам
-    }
-copy-book-wallet-sells =
-    <strong>{ $count }</strong> { $count ->
-        [one] продажа кошелька
-        [few] продажи кошелька
-        [many] продаж кошелька
-       *[other] продажи кошелька
-    }
-copy-book-manual-closes = <strong>{ $count }</strong> закрыто вручную
-copy-book-skipped = <strong>{ $count }</strong> пропущено
-copy-book-failed = <strong>{ $count }</strong> с ошибкой
-copy-book-closed = { $count } закрыто
-copy-book-budget-note = { $mode }: потрачено из { $total } · осталось { $remaining }
 copy-readiness-title = Перед боевым режимом
 copy-readiness-live-note = Эта задача торгует в боевом режиме. Верните её в виртуальный режим в заголовке выше.
 copy-readiness-all-pass = Все проверки пройдены.

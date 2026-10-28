@@ -152,31 +152,57 @@ copy-unrealized-unpriced =
        *[other] { $count } Bestände ohne Preis
     }
 
-## Page strip
+## Page toolbar and figures (pages/copy.html, pages/copy/summary.js)
 
-copy-page-title = Copy-Trading
-copy-strip-loading = Wird geladen
-copy-strip-unavailable = Nicht verfügbar
-copy-strip-setup-required = Einrichtung erforderlich · Copy-Trading benötigt Wallet und RPC
-copy-strip-pause-all = Alle pausieren
-copy-strip-resume = Verarbeitung fortsetzen
-copy-strip-settings = Einstellungen
-copy-strip-add-wallet = Wallet hinzufügen
-copy-strip-paused-globally = Global pausiert · keine neuen Kopien, Ausstiege laufen weiter
-copy-strip-force-stopped = Sofort gestoppt · nichts wird kopiert
-copy-strip-loss-limit = Verlustlimit · neue Einstiege blockiert, Ausstiege laufen weiter
-copy-strip-idle-paused =
+copy-toolbar-settings = Einstellungen
+copy-toolbar-add-wallet = Wallet hinzufügen
+copy-toolbar-status = Status
+copy-toolbar-active = Aktiv
+copy-toolbar-active-value = { $active } von { $total }
+copy-status-loading = Wird geladen
+copy-status-unavailable = Nicht verfügbar
+copy-status-setup-required = Einrichtung erforderlich
+copy-status-paused = Pausiert
+copy-status-force-stopped = Sofort gestoppt
+copy-status-loss-limit = Verlustlimit
+copy-status-all-paused = Alle Aufgaben pausiert
+copy-status-processing = Verarbeitung läuft
+copy-toolbar-pause = Kopieren pausieren
+copy-toolbar-resume = Kopieren fortsetzen
+copy-toolbar-resume-tasks = Alle Aufgaben fortsetzen
+copy-notice-paused-title = Die Copy-Verarbeitung ist pausiert
+copy-notice-paused-message = Es werden keine neuen Kopien erstellt. Ausstiege offener Bestände laufen weiter.
+copy-notice-force-stopped-title = Der Handel ist sofort gestoppt
+copy-notice-force-stopped-message = Solange der Sofortstopp aktiv ist, wird nichts kopiert.
+copy-notice-loss-limit-title = Verlustlimit erreicht
+copy-notice-loss-limit-message = Neue Einstiege sind blockiert. Ausstiege offener Bestände laufen weiter.
+copy-figures-scope = Alle Aufgaben
+copy-figure-budget-left = { $remaining } { -sol } übrig
+copy-resume-tasks-title = Alle Aufgaben fortsetzen
+copy-resume-tasks-live-message =
     { $count ->
-        [one] Inaktiv · { $count } Aufgabe pausiert
-       *[other] Inaktiv · { $count } Aufgaben pausiert
+        [one] { $count } Live-Aufgabe übermittelt echte Swaps, sobald ihre Wallet wieder handelt.
+       *[other] { $count } Live-Aufgaben übermitteln echte Swaps, sobald ihre Wallets wieder handeln.
     }
-copy-strip-idle-empty = Inaktiv · noch keine Aufgaben
-copy-strip-processing = Verarbeitung · { $paper } Paper
-copy-strip-processing-live = Verarbeitung · { $live } Live · { $paper } Paper
-copy-figures-label =
-    .aria-label = Copy-Trading-Summen
+copy-resume-tasks-confirm = Alle fortsetzen
+copy-toast-tasks-resumed =
+    { $count ->
+        [one] { $count } Aufgabe fortgesetzt
+       *[other] { $count } Aufgaben fortgesetzt
+    }
+copy-toast-tasks-kept-paused =
+    { $count ->
+        [one] { $count } Aufgabe bleibt pausiert.
+       *[other] { $count } Aufgaben bleiben pausiert.
+    }
+copy-resume-kept-limit = Über dem Limit von { $maximum } aktiven Aufgaben: { $count }.
+copy-resume-kept-watch = Wallet-Beobachtung muss wiederhergestellt werden: { $count }.
+copy-resume-kept-live = Live, nicht einbezogen: { $count }.
+copy-resume-kept-failed = Konnte nicht fortgesetzt werden: { $count }.
+copy-toast-tasks-resume-failed = Aufgaben konnten nicht fortgesetzt werden
+copy-watch-target-missing = Die Wallet-Beobachtung für diese Wallet wurde nicht gefunden
+copy-watch-not-restored = Die Wallet-Beobachtung ist noch nicht wiederhergestellt
 copy-figure-marked-at-pool = Bewertet zum Pool-Preis
-copy-figure-across-tasks = Über alle Aufgaben
 copy-figure-budget-lifetime = Gesamtausgaben aktivierter Aufgaben
 copy-figure-budget-none = Keine aktivierten Aufgaben
 copy-figure-arrival-samples =
@@ -392,29 +418,6 @@ copy-overview-worst-round = Schlechteste { $amount }
 copy-overview-curve-title = Kumulierte GuV
 copy-overview-exits-title = Verkäufe nach Ausstieg
 copy-overview-skips-title = Warum Trades übersprungen wurden
-copy-book-title-live = Live-Buch
-copy-book-title-paper = Paper-Buch
-copy-book-all-time = Gesamtzeitraum
-copy-book-buys =
-    <strong>{ $count }</strong> { $count ->
-        [one] Kauf
-       *[other] Käufe
-    }
-copy-book-rule-closes =
-    <strong>{ $count }</strong> { $count ->
-        [one] Runde nach Ihren Regeln geschlossen
-       *[other] Runden nach Ihren Regeln geschlossen
-    }
-copy-book-wallet-sells =
-    <strong>{ $count }</strong> { $count ->
-        [one] Wallet-Verkauf
-       *[other] Wallet-Verkäufe
-    }
-copy-book-manual-closes = <strong>{ $count }</strong> manuell geschlossen
-copy-book-skipped = <strong>{ $count }</strong> übersprungen
-copy-book-failed = <strong>{ $count }</strong> fehlgeschlagen
-copy-book-closed = { $count } geschlossen
-copy-book-budget-note = { $mode }-Ausgaben von { $total } · { $remaining } übrig
 copy-readiness-title = Vor dem Live-Gang
 copy-readiness-live-note = Diese Aufgabe handelt live. Setzen Sie sie in der Kopfzeile oben auf Paper zurück.
 copy-readiness-all-pass = Alle Prüfungen bestanden.

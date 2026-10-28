@@ -147,30 +147,54 @@ copy-unrealized-unpriced =
        *[other] { $count } kepemilikan tanpa harga
     }
 
-## Page strip
+## Page toolbar and figures (pages/copy.html, pages/copy/summary.js)
 
-copy-page-title = Copy Trading
-copy-strip-loading = Memuat
-copy-strip-unavailable = Tidak tersedia
-copy-strip-setup-required = Penyiapan diperlukan · copy trading memerlukan dompet dan RPC
-copy-strip-pause-all = Jeda semua
-copy-strip-resume = Lanjutkan pemrosesan
-copy-strip-settings = Pengaturan
-copy-strip-add-wallet = Tambah dompet
-copy-strip-paused-globally = Dijeda global · tidak ada salinan baru, exit tetap berjalan
-copy-strip-force-stopped = Dihentikan paksa · tidak ada yang disalin
-copy-strip-loss-limit = Batas kerugian · entry baru diblokir, exit tetap berjalan
-copy-strip-idle-paused =
+copy-toolbar-settings = Pengaturan
+copy-toolbar-add-wallet = Tambah dompet
+copy-toolbar-status = Status
+copy-toolbar-active = Aktif
+copy-toolbar-active-value = { $active } dari { $total }
+copy-status-loading = Memuat
+copy-status-unavailable = Tidak tersedia
+copy-status-setup-required = Perlu penyiapan
+copy-status-paused = Dijeda
+copy-status-force-stopped = Dihentikan paksa
+copy-status-loss-limit = Batas kerugian
+copy-status-all-paused = Semua tugas dijeda
+copy-status-processing = Memproses
+copy-toolbar-pause = Jeda penyalinan
+copy-toolbar-resume = Lanjutkan penyalinan
+copy-toolbar-resume-tasks = Lanjutkan semua tugas
+copy-notice-paused-title = Pemrosesan salinan dijeda
+copy-notice-paused-message = Tidak ada salinan baru. Exit kepemilikan terbuka tetap berjalan.
+copy-notice-force-stopped-title = Trading dihentikan paksa
+copy-notice-force-stopped-message = Tidak ada yang disalin selama penghentian paksa aktif.
+copy-notice-loss-limit-title = Batas kerugian tercapai
+copy-notice-loss-limit-message = Entri baru diblokir. Exit kepemilikan terbuka tetap berjalan.
+copy-figures-scope = Semua tugas
+copy-figure-budget-left = Sisa { $remaining } { -sol }
+copy-resume-tasks-title = Lanjutkan semua tugas
+copy-resume-tasks-live-message =
     { $count ->
-       *[other] Idle · { $count } tugas dijeda
+       *[other] { $count } tugas live akan mengirim swap sungguhan saat dompetnya bertransaksi lagi.
     }
-copy-strip-idle-empty = Idle · belum ada tugas
-copy-strip-processing = Memproses · { $paper } paper
-copy-strip-processing-live = Memproses · { $live } live · { $paper } paper
-copy-figures-label =
-    .aria-label = Total copy trading
+copy-resume-tasks-confirm = Lanjutkan semua
+copy-toast-tasks-resumed =
+    { $count ->
+       *[other] { $count } tugas dilanjutkan
+    }
+copy-toast-tasks-kept-paused =
+    { $count ->
+       *[other] { $count } tugas tetap dijeda.
+    }
+copy-resume-kept-limit = Melebihi batas { $maximum } tugas aktif: { $count }.
+copy-resume-kept-watch = Pemantauan dompet perlu dipulihkan: { $count }.
+copy-resume-kept-live = Live, tidak disertakan: { $count }.
+copy-resume-kept-failed = Tidak dapat dilanjutkan: { $count }.
+copy-toast-tasks-resume-failed = Tugas tidak dapat dilanjutkan
+copy-watch-target-missing = Pemantauan untuk dompet ini tidak ditemukan
+copy-watch-not-restored = Pemantauan dompet belum dipulihkan
 copy-figure-marked-at-pool = Dinilai pada harga pool
-copy-figure-across-tasks = Di semua tugas
 copy-figure-budget-lifetime = Total pengeluaran tugas aktif
 copy-figure-budget-none = Tidak ada tugas aktif
 copy-figure-arrival-samples =
@@ -380,26 +404,6 @@ copy-overview-worst-round = Terburuk { $amount }
 copy-overview-curve-title = P&L kumulatif
 copy-overview-exits-title = Penjualan per exit
 copy-overview-skips-title = Alasan trade dilewati
-copy-book-title-live = Buku live
-copy-book-title-paper = Buku paper
-copy-book-all-time = Sepanjang waktu
-copy-book-buys =
-    <strong>{ $count }</strong> { $count ->
-       *[other] pembelian
-    }
-copy-book-rule-closes =
-    <strong>{ $count }</strong> { $count ->
-       *[other] putaran ditutup oleh aturan Anda
-    }
-copy-book-wallet-sells =
-    <strong>{ $count }</strong> { $count ->
-       *[other] penjualan dompet
-    }
-copy-book-manual-closes = <strong>{ $count }</strong> ditutup manual
-copy-book-skipped = <strong>{ $count }</strong> dilewati
-copy-book-failed = <strong>{ $count }</strong> gagal
-copy-book-closed = { $count } ditutup
-copy-book-budget-note = Pengeluaran { $mode } dari { $total } · sisa { $remaining }
 copy-readiness-title = Sebelum live
 copy-readiness-live-note = Tugas ini trading live. Kembalikan ke Paper dari header di atas.
 copy-readiness-all-pass = Semua pemeriksaan lolos.

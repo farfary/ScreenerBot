@@ -1,8 +1,9 @@
 /* Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
  * SPDX-License-Identifier: BUSL-1.1 */
 
-/* Copy Trading task workspace and compare view: header, tabs, metrics, cards,
-   tables and the activity list. */
+/* Copy Trading task sheet and compare view: header, tabs, notices, sections, metrics,
+   tables and the activity list. The sheet is the only frame; sections inside it are
+   separated by hairlines, never boxed. */
 
 .copy-workspace,
 .copy-compare {
@@ -22,11 +23,6 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: var(--spacing-md);
-}
-
-.copy-ws-recovery {
-  flex: 1 0 100%;
-  order: 1;
 }
 
 .copy-ws-identity {
@@ -60,32 +56,15 @@
 }
 
 .copy-ws-state[data-state="running"] {
-  color: var(--success-color);
+  color: var(--semantic-success-text);
 }
 
 .copy-ws-state[data-state="paused"] {
-  color: var(--warning-color);
+  color: var(--semantic-warning-text);
 }
 
 .copy-ws-state[data-state="blocked"] {
-  color: var(--error-color);
-}
-
-.copy-ws-warning {
-  display: flex;
-  gap: var(--spacing-xs);
-  align-items: baseline;
-  max-width: 60ch;
-  font-size: var(--font-size-sm);
-  color: var(--warning-color);
-}
-
-.copy-ws-state small {
-  display: block;
-  max-width: 60ch;
-  margin-top: 2px;
-  font-size: var(--font-size-xs);
-  color: var(--text-muted);
+  color: var(--semantic-error-text);
 }
 
 .copy-ws-watch-status {
@@ -93,63 +72,6 @@
   font-size: var(--font-size-xs);
   line-height: 1.45;
   color: var(--text-muted);
-}
-
-.copy-watch-resume {
-  display: grid;
-  justify-items: start;
-  gap: var(--spacing-xs);
-  padding: var(--spacing-md);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  background: var(--bg-secondary);
-  color: var(--text-secondary);
-}
-
-.copy-watch-resume h3 {
-  margin: 0;
-  font-size: var(--font-size-sm);
-  color: var(--text-primary);
-}
-
-.copy-watch-resume p {
-  margin: 0 0 var(--spacing-sm);
-  font-size: var(--font-size-sm);
-  line-height: 1.5;
-}
-
-.copy-watch-resume .copy-watch-budget-field {
-  font-size: var(--font-size-sm);
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.copy-watch-resume input[type="number"] {
-  width: 9rem;
-  max-width: 100%;
-}
-
-.copy-watch-resume small {
-  color: var(--text-muted);
-}
-
-/* One way out of the paused watch: its control, its consequence and its action stay together. */
-.copy-watch-choice {
-  display: grid;
-  justify-items: start;
-  gap: var(--spacing-xs);
-  width: 100%;
-}
-
-.copy-watch-choice + .copy-watch-choice {
-  margin-top: var(--spacing-sm);
-  padding-top: var(--spacing-sm);
-  border-top: 1px solid var(--border-color);
-}
-
-.copy-watch-resume .copy-watch-ack {
-  margin: var(--spacing-xs) 0;
-  color: var(--text-secondary);
 }
 
 .copy-ws-actions {
@@ -161,6 +83,18 @@
 /* The tab row's edge fade runs on in the workspace card's surface. */
 .copy-ws-tab-strip {
   --tab-scroll-bg: var(--bg-card);
+}
+
+/* The task notices (ui/notice.js) under the tab row, so the tabs stay at the top of the
+   sheet whatever a notice holds. */
+.copy-ws-notices {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.copy-ws-notices[hidden] {
+  display: none;
 }
 
 .copy-ws-panel {
@@ -213,62 +147,79 @@
   }
 }
 
-.copy-card {
+.copy-section {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-sm);
-  padding: var(--spacing-md);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  background: var(--bg-secondary);
   min-width: 0;
 }
 
-.copy-card h4,
+.copy-section + .copy-section {
+  padding-block-start: var(--spacing-md);
+  border-block-start: 1px solid var(--border-color);
+}
+
+.copy-section-title {
+  margin: 0;
+  font-size: var(--font-size-base);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* The line under a section heading that qualifies it, such as the exit mode. */
+.copy-section-sub {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+}
+
+/* One part inside a section, such as one earlier paper book. */
+.copy-section-subtitle {
+  margin-block: var(--spacing-sm) 0;
+  margin-inline: 0;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+}
+
 .copy-dialog h4 {
   margin: 0;
   font-size: var(--font-size-sm);
   color: var(--text-primary);
 }
 
-/* One earlier book inside the card that groups a task's earlier paper results. */
-.copy-card h5 {
-  margin-block: var(--spacing-sm) 0;
-  margin-inline: 0;
-  font-size: var(--font-size-xs);
-  color: var(--text-secondary);
-}
-
-.copy-card-sub {
-  margin-inline-start: var(--spacing-xs);
-  font-size: var(--font-size-xs);
-  font-weight: 400;
-  color: var(--text-muted);
-}
-
-.copy-split,
-.copy-rules-grid {
+/* Two parts of a section side by side once the sheet is wide enough, divided by one
+   hairline; the query names no container, so the editor review, which sits in none,
+   keeps them stacked. */
+.copy-section-split {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--spacing-md);
 }
 
-.copy-split {
-  align-items: start;
-}
-
-.copy-decision-split {
+.copy-section-split > section {
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--spacing-xs) var(--spacing-md);
-  margin: 0;
-  font-size: var(--font-size-sm);
-  color: var(--text-muted);
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  min-width: 0;
 }
 
-.copy-decision-split strong {
-  font-family: var(--font-data);
-  color: var(--text-primary);
+@container (width >= 900px) {
+  .copy-section-split {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .copy-section-split > section + section {
+    padding-inline-start: var(--spacing-md);
+    border-inline-start: 1px solid var(--border-color);
+  }
+}
+
+/* The wallet profile's two columns. */
+.copy-split {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: var(--spacing-md);
 }
 
 .copy-readiness-foot {
@@ -498,8 +449,7 @@
 }
 
 @media (width <= 900px) {
-  .copy-split,
-  .copy-rules-grid {
+  .copy-split {
     grid-template-columns: minmax(0, 1fr);
   }
 

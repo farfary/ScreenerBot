@@ -5,6 +5,7 @@
 // Creating and cloning post a new task; editing patches every field except the
 // wallet, which is a task's identity.
 import { taskName } from "./format.js";
+import { keepSegmentFocus } from "../../ui/segmented.js";
 import { tradingModeLabel } from "../../ui/trading_mode.js";
 import { PRESETS, normalizeOverrides } from "./policy.js";
 import {
@@ -355,7 +356,8 @@ export function createEditor(page) {
     } else {
       return;
     }
-    render();
+    // The step repaints whole; focus returns to the group the choice was made in.
+    keepSegmentFocus(body(), render);
   }
 
   function onInput(event) {

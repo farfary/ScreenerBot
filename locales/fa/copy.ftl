@@ -152,31 +152,57 @@ copy-unrealized-unpriced =
        *[other] { $count } دارایی بدون قیمت
     }
 
-## Page strip
+## Page toolbar and figures (pages/copy.html, pages/copy/summary.js)
 
-copy-page-title = کپی‌تریدینگ
-copy-strip-loading = در حال بارگذاری
-copy-strip-unavailable = در دسترس نیست
-copy-strip-setup-required = راه‌اندازی لازم است · کپی ترید به کیف پول و RPC نیاز دارد
-copy-strip-pause-all = توقف همه
-copy-strip-resume = ازسرگیری پردازش
-copy-strip-settings = تنظیمات
-copy-strip-add-wallet = افزودن کیف پول
-copy-strip-paused-globally = متوقف‌شده سراسری · کپی جدیدی انجام نمی‌شود، خروج‌ها همچنان اجرا می‌شوند
-copy-strip-force-stopped = توقف اجباری · چیزی کپی نمی‌شود
-copy-strip-loss-limit = محدودیت ضرر · ورودهای جدید مسدود است، خروج‌ها همچنان اجرا می‌شوند
-copy-strip-idle-paused =
+copy-toolbar-settings = تنظیمات
+copy-toolbar-add-wallet = افزودن کیف پول
+copy-toolbar-status = وضعیت
+copy-toolbar-active = فعال
+copy-toolbar-active-value = { $active } از { $total }
+copy-status-loading = در حال بارگذاری
+copy-status-unavailable = در دسترس نیست
+copy-status-setup-required = نیاز به راه‌اندازی
+copy-status-paused = متوقف
+copy-status-force-stopped = توقف اجباری
+copy-status-loss-limit = حد زیان
+copy-status-all-paused = همه وظایف متوقف‌اند
+copy-status-processing = در حال پردازش
+copy-toolbar-pause = توقف کپی
+copy-toolbar-resume = ازسرگیری کپی
+copy-toolbar-resume-tasks = ازسرگیری همه وظایف
+copy-notice-paused-title = پردازش کپی متوقف است
+copy-notice-paused-message = کپی جدیدی ساخته نمی‌شود. خروج از دارایی‌های باز همچنان اجرا می‌شود.
+copy-notice-force-stopped-title = معاملات به‌صورت اجباری متوقف است
+copy-notice-force-stopped-message = تا وقتی توقف اجباری فعال است، چیزی کپی نمی‌شود.
+copy-notice-loss-limit-title = حد زیان رسید
+copy-notice-loss-limit-message = ورودهای جدید مسدود است. خروج از دارایی‌های باز همچنان اجرا می‌شود.
+copy-figures-scope = همه وظایف
+copy-figure-budget-left = { $remaining } { -sol } باقی مانده
+copy-resume-tasks-title = ازسرگیری همه وظایف
+copy-resume-tasks-live-message =
     { $count ->
-        [one] بیکار · { $count } وظیفه متوقف
-       *[other] بیکار · { $count } وظیفه متوقف
+        [one] { $count } وظیفه زنده وقتی کیف پولش دوباره معامله کند، سواپ واقعی ارسال می‌کند.
+       *[other] { $count } وظیفه زنده وقتی کیف پول‌هایشان دوباره معامله کنند، سواپ واقعی ارسال می‌کنند.
     }
-copy-strip-idle-empty = بیکار · هنوز وظیفه‌ای نیست
-copy-strip-processing = در حال پردازش · { $paper } آزمایشی
-copy-strip-processing-live = در حال پردازش · { $live } زنده · { $paper } آزمایشی
-copy-figures-label =
-    .aria-label = جمع کل کپی‌تریدینگ
+copy-resume-tasks-confirm = ازسرگیری همه
+copy-toast-tasks-resumed =
+    { $count ->
+        [one] { $count } وظیفه از سر گرفته شد
+       *[other] { $count } وظیفه از سر گرفته شد
+    }
+copy-toast-tasks-kept-paused =
+    { $count ->
+        [one] { $count } وظیفه متوقف ماند.
+       *[other] { $count } وظیفه متوقف ماندند.
+    }
+copy-resume-kept-limit = بیش از حد { $maximum } وظیفه فعال: { $count }.
+copy-resume-kept-watch = نیاز به بازیابی پایش کیف پول: { $count }.
+copy-resume-kept-live = زنده، شامل نشد: { $count }.
+copy-resume-kept-failed = از سر گرفته نشد: { $count }.
+copy-toast-tasks-resume-failed = وظایف از سر گرفته نشدند
+copy-watch-target-missing = پایش این کیف پول پیدا نشد
+copy-watch-not-restored = پایش کیف پول هنوز بازیابی نشده است
 copy-figure-marked-at-pool = ارزش‌گذاری‌شده با قیمت استخر
-copy-figure-across-tasks = در همه وظایف
 copy-figure-budget-lifetime = مصرف کل وظایف فعال
 copy-figure-budget-none = وظیفه فعالی وجود ندارد
 copy-figure-arrival-samples =
@@ -392,29 +418,6 @@ copy-overview-worst-round = بدترین { $amount }
 copy-overview-curve-title = سود و زیان تجمعی
 copy-overview-exits-title = فروش‌ها بر اساس خروج
 copy-overview-skips-title = چرا معاملات نادیده گرفته شدند
-copy-book-title-live = دفتر زنده
-copy-book-title-paper = دفتر آزمایشی
-copy-book-all-time = کل زمان
-copy-book-buys =
-    <strong>{ $count }</strong> { $count ->
-        [one] خرید
-       *[other] خرید
-    }
-copy-book-rule-closes =
-    <strong>{ $count }</strong> { $count ->
-        [one] دور با قوانین شما بسته شد
-       *[other] دور با قوانین شما بسته شد
-    }
-copy-book-wallet-sells =
-    <strong>{ $count }</strong> { $count ->
-        [one] فروش کیف پول
-       *[other] فروش کیف پول
-    }
-copy-book-manual-closes = <strong>{ $count }</strong> بسته‌شده دستی
-copy-book-skipped = <strong>{ $count }</strong> نادیده‌گرفته‌شده
-copy-book-failed = <strong>{ $count }</strong> ناموفق
-copy-book-closed = { $count } بسته‌شده
-copy-book-budget-note = مصرف { $mode } از { $total } · { $remaining } باقی‌مانده
 copy-readiness-title = پیش از رفتن به حالت زنده
 copy-readiness-live-note = این وظیفه زنده معامله می‌کند. آن را از سربرگ بالا به حالت آزمایشی برگردانید.
 copy-readiness-all-pass = همه بررسی‌ها قبول شده‌اند.

@@ -1,8 +1,8 @@
 /* Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
  * SPDX-License-Identifier: BUSL-1.1 */
 
-/* Copy Trading dialogs: the stepped editor, the live-arming gate, global settings
-   and the wallet profile. */
+/* Copy Trading dialogs: the stepped editor, the live-arming gate, global settings,
+   the wallet profile and the wallet watch restore. */
 
 /* The editor is as tall as its step, up to the window, and hangs from a fixed top edge
    so the step bar stays put while a step grows or shrinks; a step taller than the
@@ -24,6 +24,29 @@
 
 .copy-dialog .copy-profile-panel {
   max-width: 740px;
+}
+
+.copy-dialog .copy-watch-restore-panel {
+  max-width: 620px;
+}
+
+/* One way to restore the wallet watch: its control, its consequence and its action stay
+   together, and one hairline divides the two ways. */
+.copy-watch-option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--spacing-xs);
+}
+
+.copy-watch-option + .copy-watch-option {
+  padding-block-start: var(--spacing-md);
+  border-block-start: 1px solid var(--border-color);
+}
+
+.copy-watch-option small {
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
 }
 
 .copy-dialog .modal-body {

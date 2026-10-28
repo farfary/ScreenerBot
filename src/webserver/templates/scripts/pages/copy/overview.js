@@ -1,39 +1,38 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 //
-// The Overview tab: results over a date range, the P&L curve, how rounds ended
-// and why trades were skipped, the all-time book, and readiness for live.
+// The Overview tab, as sections of the task sheet: results over a date range (with the
+// task's current holdings and budget), the P&L curve, how rounds ended and why trades were
+// skipped, readiness for live, and a paper task's earlier paper results.
 import { formatNumber } from "../../core/format.js";
 import { barList, pnlCurve } from "./charts.js";
 import {
   dateTime,
-  definitionRows,
   duration,
   exitLabel,
-  finite,
   fixed,
   price,
   pct,
   pnlTone,
-  seconds,
+  section,
   signedSol,
   signedSolCell,
   skipLabel,
   sol,
   solCell,
   solNumber,
+  splitSection,
   toneClass,
   unrealizedFigure,
 } from "./format.js";
 import { metricCard } from "../../ui/metric_card.js";
-import { tradingModeLabel } from "../../ui/trading_mode.js";
 import { readinessList } from "../../ui/arm_live_gate.js";
 import { renderStateView } from "../../ui/state_view.js";
 import { RANGE_OPTIONS, renderSegmented } from "../../ui/segmented.js";
 import { ensureIdentities, tokenWithMint } from "./tokens.js";
 
 export function rangeHead(title, range, esc) {
-  return `<div class="copy-panel-head"><h3>${esc(title)}</h3>${renderSegmented({ name: "range", options: RANGE_OPTIONS, value: range, ariaLabel: I18n.attr("common-range-label", "aria-label") }, esc)}</div>`;
+  return `<div class="copy-panel-head"><h3 class="copy-section-title">${esc(title)}</h3>${renderSegmented({ name: "range", options: RANGE_OPTIONS, value: range, ariaLabel: I18n.attr("common-range-label", "aria-label") }, esc)}</div>`;
 }
 
 /** Results body shared by the tabs that read insights: data, error or loading. */
@@ -53,22 +52,19 @@ export function insightsBody(insights, error, esc, render) {
   });
 }
 
-function results(insights, esc) {
+/**
+ * The results row: range figures from the insights, and two "now" cells from the workspace
+ * (unrealized P&L and budget spent) whose detail lines state the current amount.
+ */
+function resultsGrid(insights, ws, esc) {
   const rounds = insights.rounds;
-  const exits = (insights.exit_breakdown || []).map((bucket) => ({
-    label: exitLabel(bucket.exit),
-    value: bucket.pnl_sol,
-    display: I18n.t("copy-exit-bucket-rounds", {
-      count: bucket.legs,
-      pnl: signedSol(bucket.pnl_sol),
-    }),
-    tone: toneClass(bucket.pnl_sol),
-  }));
-  const skips = (insights.skip_breakdown || []).map((bucket) => ({
-    label: skipLabel(bucket.key),
-    value: bucket.count,
-    display: String(bucket.count),
-  }));
+  const stats = ws.stats || {};
+  const marked = unrealizedFigure(
+    stats.unrealized_pnl_native,
+    stats.open_positions,
+    stats.unpriced_positions
+  );
+  const budget = Number(ws.total_budget_native) || 0;
   return `<div class="metric-grid" data-surface="sheet">${[
     metricCard(
       {
@@ -76,6 +72,33 @@ function results(insights, esc) {
         value: signedSol(insights.realized_pnl_native),
         detail: I18n.t("copy-count-closed-rounds", { count: rounds }),
         tone: pnlTone(insights.realized_pnl_native),
+      },
+      esc
+    ),
+    metricCard(
+      {
+        label: I18n.t("copy-metric-unrealized-pnl"),
+        value: signedSol(marked.value),
+        detail:
+          marked.note || I18n.t("copy-count-open-holdings", { count: stats.open_positions ?? 0 }),
+        tone: pnlTone(marked.value),
+      },
+      esc
+    ),
+    metricCard(
+      {
+        label: I18n.t("copy-metric-budget-spent"),
+        value:
+          budget > 0
+            ? I18n.t("copy-budget-of", {
+                spent: solNumber(ws.spent_native, 2),
+                budget: solNumber(budget, 2),
+              })
+            : "—",
+        detail: I18n.t("copy-figure-budget-left", {
+          remaining: solNumber(ws.remaining_budget_native, 2),
+        }),
+        fit: true,
       },
       esc
     ),
@@ -108,14 +131,6 @@ function results(insights, esc) {
     ),
     metricCard(
       {
-        label: I18n.t("copy-overview-average-hold"),
-        value: duration(insights.average_hold_seconds),
-        detail: I18n.t("copy-overview-average-hold-note"),
-      },
-      esc
-    ),
-    metricCard(
-      {
         label: I18n.t("copy-overview-best-round"),
         value: signedSol(insights.best_round_native),
         detail: I18n.t("copy-overview-worst-round", {
@@ -125,69 +140,40 @@ function results(insights, esc) {
       },
       esc
     ),
-  ].join("")}</div>
-  <section class="copy-card"><h4>${esc(I18n.t("copy-overview-curve-title"))}</h4>${pnlCurve(insights.pnl_curve, { escapeHtml: esc })}</section>
-  <div class="copy-split">
-    <section class="copy-card"><h4>${esc(I18n.t("copy-overview-exits-title"))}</h4>${barList(exits, esc)}</section>
-    <section class="copy-card"><h4>${esc(I18n.t("copy-overview-skips-title"))}</h4>${barList(skips, esc)}</section>
-  </div>`;
+    metricCard(
+      {
+        label: I18n.t("copy-overview-average-hold"),
+        value: duration(insights.average_hold_seconds),
+        detail: I18n.t("copy-overview-average-hold-note"),
+      },
+      esc
+    ),
+  ].join("")}</div>`;
 }
 
-function book(ws, esc) {
-  const stats = ws.stats || {};
-  const title =
-    stats.book === "live" ? I18n.t("copy-book-title-live") : I18n.t("copy-book-title-paper");
-  const split = [
-    ["copy-book-buys", stats.filled_buys],
-    ["copy-book-rule-closes", stats.policy_exits],
-    ["copy-book-wallet-sells", stats.target_sells],
-    ["copy-book-manual-closes", stats.manual_closes],
-    ["copy-book-skipped", stats.skipped],
-    ["copy-book-failed", stats.failed],
-  ]
-    .map(([id, count]) => `<span>${I18n.markup(id, { count: count ?? 0 })}</span>`)
-    .join("");
-  const marked = unrealizedFigure(
-    stats.unrealized_pnl_native,
-    stats.open_positions,
-    stats.unpriced_positions
-  );
-  return `<section class="copy-card"><h4>${esc(title)} <span class="copy-card-sub">${esc(I18n.t("copy-book-all-time"))}</span></h4>
-    <div class="metric-grid" data-surface="sheet">${[
-      metricCard(
-        {
-          label: I18n.t("copy-metric-unrealized-pnl"),
-          value: signedSol(marked.value),
-          detail:
-            marked.note || I18n.t("copy-count-open-holdings", { count: stats.open_positions ?? 0 }),
-          tone: pnlTone(marked.value),
-        },
-        esc
-      ),
-      metricCard(
-        {
-          label: I18n.t("copy-metric-realized-pnl"),
-          value: signedSol(stats.realized_pnl_native),
-          detail: I18n.t("copy-book-closed", { count: stats.closed_positions ?? 0 }),
-          tone: pnlTone(stats.realized_pnl_native),
-        },
-        esc
-      ),
-      metricCard(
-        {
-          label: I18n.t("copy-metric-budget-spent"),
-          value: sol(ws.spent_native, 3),
-          detail: I18n.t("copy-book-budget-note", {
-            mode: tradingModeLabel(ws.mode),
-            total: solNumber(ws.total_budget_native, 3),
-            remaining: solNumber(ws.remaining_budget_native, 3),
-          }),
-        },
-        esc
-      ),
-    ].join("")}</div>
-    <p class="copy-decision-split">${split}</p>
-  </section>`;
+/** The P&L curve, then how rounds ended beside why trades were skipped. */
+function breakdowns(insights, esc) {
+  const exits = (insights.exit_breakdown || []).map((bucket) => ({
+    label: exitLabel(bucket.exit),
+    value: bucket.pnl_sol,
+    display: I18n.t("copy-exit-bucket-rounds", {
+      count: bucket.legs,
+      pnl: signedSol(bucket.pnl_sol),
+    }),
+    tone: toneClass(bucket.pnl_sol),
+  }));
+  const skips = (insights.skip_breakdown || []).map((bucket) => ({
+    label: skipLabel(bucket.key),
+    value: bucket.count,
+    display: String(bucket.count),
+  }));
+  return `${section(I18n.t("copy-overview-curve-title"), pnlCurve(insights.pnl_curve, { escapeHtml: esc }), esc)}${splitSection(
+    [
+      [I18n.t("copy-overview-exits-title"), barList(exits, esc)],
+      [I18n.t("copy-overview-skips-title"), barList(skips, esc)],
+    ],
+    esc
+  )}`;
 }
 
 function readiness(ws, esc) {
@@ -195,24 +181,11 @@ function readiness(ws, esc) {
     ws.mode === "live"
       ? `<p class="copy-note">${esc(I18n.t("copy-readiness-live-note"))}</p>`
       : `<div class="copy-readiness-foot"><span>${esc(ws.readiness?.ready ? I18n.t("copy-readiness-all-pass") : I18n.t("copy-readiness-needs-review"))}</span><button class="btn btn-outline btn-sm" type="button" data-ws-action="arm">${esc(I18n.t("copy-readiness-arm"))}</button></div>`;
-  return `<section class="copy-card"><h4>${esc(I18n.t("copy-readiness-title"))}</h4>${readinessList(ws.readiness?.checks, esc)}${footer}</section>`;
-}
-
-/**
- * The paper model as configured now, for a paper task only: the workspace's own settings,
- * then the defaults. A live task's figures are not produced by this model.
- */
-export function paperModelCard(ws, defaults, esc, extraNote = "") {
-  if (ws.mode === "live") return "";
-  const execution = ws.paper_execution || {};
-  const delay = finite(execution.landing_delay_ms ?? defaults?.paper_landing_delay_ms);
-  const capacity = finite(execution.queue_capacity ?? defaults?.paper_queue_capacity);
-  const rows = [
-    delay === null ? null : [I18n.t("copy-paper-wait-label"), seconds(delay, { precise: true })],
-    capacity === null ? null : [I18n.t("copy-paper-queue-label"), String(capacity)],
-  ];
-  const extra = extraNote ? `<p class="copy-note">${esc(extraNote)}</p>` : "";
-  return `<section class="copy-card"><h4>${esc(I18n.t("copy-paper-model"))}</h4><p class="copy-note">${esc(I18n.t("copy-paper-model-note"))}</p>${extra}<dl class="copy-defs">${definitionRows(rows, esc)}</dl></section>`;
+  return section(
+    I18n.t("copy-readiness-title"),
+    `${readinessList(ws.readiness?.checks, esc)}${footer}`,
+    esc
+  );
 }
 
 /** Whether an earlier copy paper book holds anything to show. */
@@ -257,7 +230,7 @@ function earlierBook(book, text, esc) {
   const table = holdings.length
     ? `<div class="copy-table-wrap"><table class="copy-table"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table></div>`
     : "";
-  return `<h5>${esc(text.title)}</h5><p class="copy-note">${esc(text.note)}</p><div class="metric-grid" data-surface="sheet">${[
+  return `<h4 class="copy-section-subtitle">${esc(text.title)}</h4><p class="copy-note">${esc(text.note)}</p><div class="metric-grid" data-surface="sheet">${[
     metricCard({ label: text.spent, value: sol(book.spent_native, 3) }, esc),
     metricCard(
       {
@@ -307,10 +280,10 @@ function earlierCard(ws, esc) {
       : "",
   ].join("");
   if (!books) return "";
-  return `<section class="copy-card"><h4>${esc(I18n.t("copy-paper-earlier-title"))}</h4>${books}</section>`;
+  return section(I18n.t("copy-paper-earlier-title"), books, esc);
 }
 
-export function renderOverview({ ws, insights, error, range, defaults }, esc) {
-  return `${rangeHead(I18n.t("copy-overview-results"), range, esc)}${insightsBody(insights, error, esc, (data) => results(data, esc))}
-    ${paperModelCard(ws, defaults, esc)}${earlierCard(ws, esc)}<div class="copy-split">${book(ws, esc)}${readiness(ws, esc)}</div>`;
+export function renderOverview({ ws, insights, error, range }, esc) {
+  const results = `<section class="copy-section">${rangeHead(I18n.t("copy-overview-results"), range, esc)}${insightsBody(insights, error, esc, (data) => resultsGrid(data, ws, esc))}</section>`;
+  return `${results}${insights ? breakdowns(insights, esc) : ""}${readiness(ws, esc)}${earlierCard(ws, esc)}`;
 }

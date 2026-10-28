@@ -1,35 +1,27 @@
 <!-- Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
      SPDX-License-Identifier: BUSL-1.1
 
-     Copy-trading page - wallet list and figures strip with editor, settings and arm dialogs for managing copy tasks. -->
+     Copy-trading page - toolbar, all-tasks figures, wallet list and task sheet, with the editor, arm, settings, profile and wallet watch dialogs. -->
 
 <div class="copy-page" id="copy-page">
-  <header class="copy-strip">
-    <div class="copy-strip-title">
-      <h1><i class="icon-copy"></i><span data-l10n-id="copy-page-title"></span></h1>
-      <span
-        class="copy-strip-state"
-        id="copy-system-state"
-        aria-live="polite"
-        data-l10n-id="copy-strip-loading"
-      ></span>
-    </div>
-    <div class="copy-strip-actions">
-      <button
-        class="btn btn-outline btn-sm"
-        id="copy-global-action"
-        type="button"
-        data-l10n-id="copy-strip-pause-all"
-        disabled
-      ></button>
+  <div class="copy-toolbar">
+    <div class="table-toolbar-summary" id="copy-summary" aria-live="polite"></div>
+    <div class="copy-toolbar-actions">
+      <button class="btn btn-ghost btn-sm" id="copy-global-action" type="button" hidden></button>
+      <button class="btn btn-ghost btn-sm" id="copy-resume-tasks" type="button" hidden>
+        <i class="icon-play" aria-hidden="true"></i>
+        <span data-l10n-id="copy-toolbar-resume-tasks"></span>
+      </button>
       <button class="btn btn-ghost btn-sm" id="copy-settings-open" type="button">
-        <i class="icon-settings"></i> <span data-l10n-id="copy-strip-settings"></span>
+        <i class="icon-settings" aria-hidden="true"></i>
+        <span data-l10n-id="copy-toolbar-settings"></span>
       </button>
       <button class="btn btn-primary btn-sm" id="copy-add" type="button" hidden>
-        <i class="icon-plus"></i> <span data-l10n-id="copy-strip-add-wallet"></span>
+        <i class="icon-plus" aria-hidden="true"></i>
+        <span data-l10n-id="copy-toolbar-add-wallet"></span>
       </button>
     </div>
-  </header>
+  </div>
 
   <div class="copy-notices" id="copy-notices" aria-live="polite" hidden></div>
 
@@ -60,7 +52,10 @@
   </section>
 
   <div class="copy-main" id="copy-main" hidden>
-    <section class="metric-grid" id="copy-figures" data-l10n-id="copy-figures-label"></section>
+    <section class="copy-figures" aria-labelledby="copy-figures-scope">
+      <h2 class="copy-figures-scope" id="copy-figures-scope" data-l10n-id="copy-figures-scope"></h2>
+      <div class="metric-grid" id="copy-figures"></div>
+    </section>
     <div class="copy-body">
       <aside class="copy-list" data-l10n-id="copy-list-label">
         <div class="copy-list-head">
@@ -85,7 +80,7 @@
     </div>
   </div>
 
-  <div class="modal-overlay hidden copy-dialog" id="copy-editor">
+  <div class="modal-overlay copy-dialog" id="copy-editor" hidden>
     <div
       class="modal-dialog copy-editor-panel"
       role="dialog"
@@ -132,7 +127,7 @@
     </div>
   </div>
 
-  <div class="modal-overlay hidden copy-dialog" id="copy-arm">
+  <div class="modal-overlay copy-dialog" id="copy-arm" hidden>
     <div
       class="modal-dialog copy-arm-panel"
       role="dialog"
@@ -174,7 +169,7 @@
     </div>
   </div>
 
-  <div class="modal-overlay hidden copy-dialog" id="copy-settings">
+  <div class="modal-overlay copy-dialog" id="copy-settings" hidden>
     <div
       class="modal-dialog copy-settings-panel"
       role="dialog"
@@ -347,7 +342,7 @@
     </div>
   </div>
 
-  <div class="modal-overlay hidden copy-dialog" id="copy-profile">
+  <div class="modal-overlay copy-dialog" id="copy-profile" hidden>
     <div
       class="modal-dialog copy-profile-panel"
       role="dialog"
@@ -382,6 +377,38 @@
           type="button"
           id="copy-profile-copy"
           data-l10n-id="copy-profile-copy"
+        ></button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay copy-dialog" id="copy-watch-restore" hidden>
+    <div
+      class="modal-dialog copy-watch-restore-panel"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="copy-watch-restore-title"
+    >
+      <div class="modal-header">
+        <div class="copy-dialog-title">
+          <h2 id="copy-watch-restore-title" data-l10n-id="copy-watch-recovery-title"></h2>
+        </div>
+        <button
+          class="modal-close"
+          type="button"
+          data-dialog-close
+          data-l10n-id="copy-dialog-close"
+        >
+          <i class="icon-x"></i>
+        </button>
+      </div>
+      <div class="modal-body" id="copy-watch-restore-body"></div>
+      <div class="copy-dialog-footer">
+        <button
+          class="btn btn-secondary"
+          type="button"
+          data-dialog-close
+          data-l10n-id="common-action-cancel"
         ></button>
       </div>
     </div>

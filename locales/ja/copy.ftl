@@ -147,30 +147,54 @@ copy-unrealized-unpriced =
        *[other] 価格なしの保有 { $count }件
     }
 
-## Page strip
+## Page toolbar and figures (pages/copy.html, pages/copy/summary.js)
 
-copy-page-title = コピートレード
-copy-strip-loading = 読み込み中
-copy-strip-unavailable = 利用不可
-copy-strip-setup-required = セットアップが必要 · コピートレードにはウォレットと RPC が必要です
-copy-strip-pause-all = すべて一時停止
-copy-strip-resume = 処理を再開
-copy-strip-settings = 設定
-copy-strip-add-wallet = ウォレットを追加
-copy-strip-paused-globally = 全体で一時停止中 · 新規コピーなし、エグジットは実行
-copy-strip-force-stopped = 強制停止 · コピーは行われません
-copy-strip-loss-limit = 損失上限 · 新規エントリーをブロック、エグジットは実行
-copy-strip-idle-paused =
+copy-toolbar-settings = 設定
+copy-toolbar-add-wallet = ウォレットを追加
+copy-toolbar-status = 状態
+copy-toolbar-active = 稼働中
+copy-toolbar-active-value = { $total } 件中 { $active } 件
+copy-status-loading = 読み込み中
+copy-status-unavailable = 利用不可
+copy-status-setup-required = セットアップが必要
+copy-status-paused = 一時停止中
+copy-status-force-stopped = 強制停止
+copy-status-loss-limit = 損失上限
+copy-status-all-paused = 全タスク一時停止中
+copy-status-processing = 処理中
+copy-toolbar-pause = コピーを一時停止
+copy-toolbar-resume = コピーを再開
+copy-toolbar-resume-tasks = すべてのタスクを再開
+copy-notice-paused-title = コピー処理は一時停止中です
+copy-notice-paused-message = 新しいコピーは行われません。保有中のポジションのエグジットは引き続き実行されます。
+copy-notice-force-stopped-title = 取引は強制停止中です
+copy-notice-force-stopped-message = 強制停止が有効な間は何もコピーされません。
+copy-notice-loss-limit-title = 損失上限に達しました
+copy-notice-loss-limit-message = 新規エントリーはブロックされています。保有中のポジションのエグジットは引き続き実行されます。
+copy-figures-scope = すべてのタスク
+copy-figure-budget-left = 残り { $remaining } { -sol }
+copy-resume-tasks-title = すべてのタスクを再開
+copy-resume-tasks-live-message =
     { $count ->
-       *[other] 待機中 · 一時停止中のタスク { $count }件
+       *[other] ライブタスク { $count }件は、ウォレットが再び取引すると実際のスワップを送信します。
     }
-copy-strip-idle-empty = 待機中 · タスクはまだありません
-copy-strip-processing = 処理中 · ペーパー { $paper }件
-copy-strip-processing-live = 処理中 · ライブ { $live }件 · ペーパー { $paper }件
-copy-figures-label =
-    .aria-label = コピートレードの合計
+copy-resume-tasks-confirm = すべて再開
+copy-toast-tasks-resumed =
+    { $count ->
+       *[other] { $count }件のタスクを再開しました
+    }
+copy-toast-tasks-kept-paused =
+    { $count ->
+       *[other] { $count }件のタスクは一時停止のままです。
+    }
+copy-resume-kept-limit = アクティブタスク上限 { $maximum } 件を超過: { $count }件。
+copy-resume-kept-watch = ウォレットウォッチの復旧が必要: { $count }件。
+copy-resume-kept-live = ライブのため対象外: { $count }件。
+copy-resume-kept-failed = 再開できませんでした: { $count }件。
+copy-toast-tasks-resume-failed = タスクを再開できませんでした
+copy-watch-target-missing = このウォレットのウォッチが見つかりません
+copy-watch-not-restored = ウォレットウォッチはまだ復旧していません
 copy-figure-marked-at-pool = プール価格で評価
-copy-figure-across-tasks = 全タスクの合計
 copy-figure-budget-lifetime = 有効なタスクの累計使用額
 copy-figure-budget-none = 有効なタスクはありません
 copy-figure-arrival-samples =
@@ -380,26 +404,6 @@ copy-overview-worst-round = 最悪のラウンド { $amount }
 copy-overview-curve-title = 累積損益
 copy-overview-exits-title = エグジット別の売却
 copy-overview-skips-title = 取引がスキップされた理由
-copy-book-title-live = ライブ帳簿
-copy-book-title-paper = ペーパー帳簿
-copy-book-all-time = 全期間
-copy-book-buys =
-    <strong>{ $count }</strong>{ $count ->
-       *[other] 件の購入
-    }
-copy-book-rule-closes =
-    <strong>{ $count }</strong>{ $count ->
-       *[other] ラウンドがルールでクローズ
-    }
-copy-book-wallet-sells =
-    <strong>{ $count }</strong>{ $count ->
-       *[other] 件のウォレット売却
-    }
-copy-book-manual-closes = <strong>{ $count }</strong>件を手動でクローズ
-copy-book-skipped = <strong>{ $count }</strong>件をスキップ
-copy-book-failed = <strong>{ $count }</strong>件が失敗
-copy-book-closed = クローズ { $count }件
-copy-book-budget-note = { $mode }の使用額 { $total } · 残り { $remaining }
 copy-readiness-title = ライブ開始前の確認
 copy-readiness-live-note = このタスクはライブで取引しています。上部のヘッダーからペーパーに戻せます。
 copy-readiness-all-pass = すべてのチェックに合格しました。

@@ -150,29 +150,55 @@ copy-unrealized-unpriced =
        *[other] { $count } बिना कीमत की होल्डिंग
     }
 
-copy-page-title = कॉपी ट्रेडिंग
-copy-strip-loading = लोड हो रहा है
-copy-strip-unavailable = उपलब्ध नहीं
-copy-strip-setup-required = सेटअप ज़रूरी · कॉपी ट्रेडिंग के लिए वॉलेट और RPC चाहिए
-copy-strip-pause-all = सभी रोकें
-copy-strip-resume = प्रोसेसिंग फिर शुरू करें
-copy-strip-settings = सेटिंग्स
-copy-strip-add-wallet = वॉलेट जोड़ें
-copy-strip-paused-globally = ग्लोबली रोका गया · कोई नई कॉपी नहीं, एग्ज़िट फिर भी चलते हैं
-copy-strip-force-stopped = ज़बरन रोका गया · कुछ भी कॉपी नहीं होता
-copy-strip-loss-limit = लॉस लिमिट · नई एंट्री ब्लॉक, एग्ज़िट फिर भी चलते हैं
-copy-strip-idle-paused =
+copy-toolbar-settings = सेटिंग्स
+copy-toolbar-add-wallet = वॉलेट जोड़ें
+copy-toolbar-status = स्थिति
+copy-toolbar-active = सक्रिय
+copy-toolbar-active-value = { $total } में से { $active }
+copy-status-loading = लोड हो रहा है
+copy-status-unavailable = उपलब्ध नहीं
+copy-status-setup-required = सेटअप ज़रूरी
+copy-status-paused = रुका हुआ
+copy-status-force-stopped = ज़बरन रोका गया
+copy-status-loss-limit = नुकसान सीमा
+copy-status-all-paused = सभी टास्क रुके हुए
+copy-status-processing = प्रोसेसिंग जारी
+copy-toolbar-pause = कॉपी करना रोकें
+copy-toolbar-resume = कॉपी करना फिर शुरू करें
+copy-toolbar-resume-tasks = सभी टास्क फिर शुरू करें
+copy-notice-paused-title = कॉपी प्रोसेसिंग रुकी हुई है
+copy-notice-paused-message = कोई नई कॉपी नहीं बनती। खुली होल्डिंग्स के एग्ज़िट चलते रहते हैं।
+copy-notice-force-stopped-title = ट्रेडिंग ज़बरन रोकी गई है
+copy-notice-force-stopped-message = ज़बरन रोक सक्रिय रहने तक कुछ भी कॉपी नहीं होता।
+copy-notice-loss-limit-title = नुकसान सीमा पूरी हुई
+copy-notice-loss-limit-message = नई एंट्री रोकी गई हैं। खुली होल्डिंग्स के एग्ज़िट चलते रहते हैं।
+copy-figures-scope = सभी टास्क
+copy-figure-budget-left = { $remaining } { -sol } बाकी
+copy-resume-tasks-title = सभी टास्क फिर शुरू करें
+copy-resume-tasks-live-message =
     { $count ->
-        [one] निष्क्रिय · { $count } टास्क रुका
-       *[other] निष्क्रिय · { $count } टास्क रुके
+        [one] { $count } लाइव टास्क अपने वॉलेट के दोबारा ट्रेड करने पर असली स्वैप सबमिट करेगा।
+       *[other] { $count } लाइव टास्क अपने वॉलेट के दोबारा ट्रेड करने पर असली स्वैप सबमिट करेंगे।
     }
-copy-strip-idle-empty = निष्क्रिय · अभी कोई टास्क नहीं
-copy-strip-processing = प्रोसेसिंग · पेपर { $paper }
-copy-strip-processing-live = प्रोसेसिंग · लाइव { $live } · पेपर { $paper }
-copy-figures-label =
-    .aria-label = कॉपी ट्रेडिंग कुल
+copy-resume-tasks-confirm = सभी फिर शुरू करें
+copy-toast-tasks-resumed =
+    { $count ->
+        [one] { $count } टास्क फिर शुरू हुआ
+       *[other] { $count } टास्क फिर शुरू हुए
+    }
+copy-toast-tasks-kept-paused =
+    { $count ->
+        [one] { $count } टास्क रुका रहा।
+       *[other] { $count } टास्क रुके रहे।
+    }
+copy-resume-kept-limit = { $maximum } सक्रिय टास्क की सीमा से ऊपर: { $count }।
+copy-resume-kept-watch = वॉलेट वॉच बहाल करनी होगी: { $count }।
+copy-resume-kept-live = लाइव, शामिल नहीं: { $count }।
+copy-resume-kept-failed = फिर शुरू नहीं हो सके: { $count }।
+copy-toast-tasks-resume-failed = टास्क फिर शुरू नहीं हो सके
+copy-watch-target-missing = इस वॉलेट की वॉच नहीं मिली
+copy-watch-not-restored = वॉलेट वॉच अभी बहाल नहीं हुई है
 copy-figure-marked-at-pool = पूल प्राइस पर मार्क किया गया
-copy-figure-across-tasks = सभी टास्क में
 copy-figure-budget-lifetime = चालू टास्क का कुल खर्च
 copy-figure-budget-none = कोई चालू टास्क नहीं
 copy-figure-arrival-samples =
@@ -374,29 +400,6 @@ copy-overview-worst-round = सबसे खराब { $amount }
 copy-overview-curve-title = संचयी लाभ-हानि
 copy-overview-exits-title = एग्ज़िट के अनुसार सेल
 copy-overview-skips-title = ट्रेड क्यों स्किप हुए
-copy-book-title-live = लाइव बुक
-copy-book-title-paper = पेपर बुक
-copy-book-all-time = सर्वकालिक
-copy-book-buys =
-    <strong>{ $count }</strong> { $count ->
-        [one] खरीद
-       *[other] खरीद
-    }
-copy-book-rule-closes =
-    <strong>{ $count }</strong> { $count ->
-        [one] राउंड आपके नियमों से बंद
-       *[other] राउंड आपके नियमों से बंद
-    }
-copy-book-wallet-sells =
-    <strong>{ $count }</strong> { $count ->
-        [one] वॉलेट सेल
-       *[other] वॉलेट सेल
-    }
-copy-book-manual-closes = <strong>{ $count }</strong> हाथ से बंद
-copy-book-skipped = <strong>{ $count }</strong> स्किप
-copy-book-failed = <strong>{ $count }</strong> विफल
-copy-book-closed = { $count } बंद
-copy-book-budget-note = { $mode } खर्च { $total } में से · { $remaining } शेष
 copy-readiness-title = लाइव जाने से पहले
 copy-readiness-live-note = यह टास्क लाइव ट्रेड करता है। ऊपर हेडर से इसे पेपर पर लौटाएँ।
 copy-readiness-all-pass = हर जाँच पास है।

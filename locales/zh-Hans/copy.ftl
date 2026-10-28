@@ -147,30 +147,54 @@ copy-unrealized-unpriced =
        *[other] { $count } 个持仓无价格
     }
 
-## Page strip
+## Page toolbar and figures (pages/copy.html, pages/copy/summary.js)
 
-copy-page-title = 跟单交易
-copy-strip-loading = 加载中
-copy-strip-unavailable = 不可用
-copy-strip-setup-required = 需要设置 · 跟单交易需要钱包和 RPC
-copy-strip-pause-all = 全部暂停
-copy-strip-resume = 恢复处理
-copy-strip-settings = 设置
-copy-strip-add-wallet = 添加钱包
-copy-strip-paused-globally = 已全局暂停 · 不会新增跟单，出场仍会执行
-copy-strip-force-stopped = 已强制停止 · 不会跟单
-copy-strip-loss-limit = 亏损限额 · 新入场已被拦截，出场仍会执行
-copy-strip-idle-paused =
+copy-toolbar-settings = 设置
+copy-toolbar-add-wallet = 添加钱包
+copy-toolbar-status = 状态
+copy-toolbar-active = 运行中
+copy-toolbar-active-value = { $active } / { $total }
+copy-status-loading = 加载中
+copy-status-unavailable = 不可用
+copy-status-setup-required = 需要设置
+copy-status-paused = 已暂停
+copy-status-force-stopped = 强制停止
+copy-status-loss-limit = 亏损上限
+copy-status-all-paused = 所有任务已暂停
+copy-status-processing = 处理中
+copy-toolbar-pause = 暂停跟单
+copy-toolbar-resume = 恢复跟单
+copy-toolbar-resume-tasks = 恢复所有任务
+copy-notice-paused-title = 跟单处理已暂停
+copy-notice-paused-message = 不会产生新的跟单。持仓的退出仍会执行。
+copy-notice-force-stopped-title = 交易已强制停止
+copy-notice-force-stopped-message = 强制停止生效期间不会跟单任何交易。
+copy-notice-loss-limit-title = 已达亏损上限
+copy-notice-loss-limit-message = 新的入场已被阻止。持仓的退出仍会执行。
+copy-figures-scope = 所有任务
+copy-figure-budget-left = 剩余 { $remaining } { -sol }
+copy-resume-tasks-title = 恢复所有任务
+copy-resume-tasks-live-message =
     { $count ->
-       *[other] 空闲 · { $count } 个任务已暂停
+       *[other] 当钱包再次交易时，{ $count } 个实盘任务将提交真实兑换。
     }
-copy-strip-idle-empty = 空闲 · 暂无任务
-copy-strip-processing = 处理中 · 模拟 { $paper } 个
-copy-strip-processing-live = 处理中 · 实盘 { $live } 个 · 模拟 { $paper } 个
-copy-figures-label =
-    .aria-label = 跟单交易汇总
+copy-resume-tasks-confirm = 全部恢复
+copy-toast-tasks-resumed =
+    { $count ->
+       *[other] 已恢复 { $count } 个任务
+    }
+copy-toast-tasks-kept-paused =
+    { $count ->
+       *[other] { $count } 个任务仍保持暂停。
+    }
+copy-resume-kept-limit = 超出 { $maximum } 个活跃任务上限：{ $count } 个。
+copy-resume-kept-watch = 需要恢复钱包监控：{ $count } 个。
+copy-resume-kept-live = 实盘任务，未包含：{ $count } 个。
+copy-resume-kept-failed = 无法恢复：{ $count } 个。
+copy-toast-tasks-resume-failed = 无法恢复任务
+copy-watch-target-missing = 找不到此钱包的监控
+copy-watch-not-restored = 钱包监控尚未恢复
 copy-figure-marked-at-pool = 按流动性池价格标记
-copy-figure-across-tasks = 所有任务合计
 copy-figure-budget-lifetime = 已启用任务的累计支出
 copy-figure-budget-none = 没有已启用的任务
 copy-figure-arrival-samples =
@@ -380,26 +404,6 @@ copy-overview-worst-round = 最差 { $amount }
 copy-overview-curve-title = 累计盈亏
 copy-overview-exits-title = 按出场方式统计的卖出
 copy-overview-skips-title = 交易被跳过的原因
-copy-book-title-live = 实盘账本
-copy-book-title-paper = 模拟账本
-copy-book-all-time = 全部时间
-copy-book-buys =
-    <strong>{ $count }</strong> { $count ->
-       *[other] 笔买入
-    }
-copy-book-rule-closes =
-    <strong>{ $count }</strong> { $count ->
-       *[other] 个轮次按您的规则平仓
-    }
-copy-book-wallet-sells =
-    <strong>{ $count }</strong> { $count ->
-       *[other] 笔钱包卖出
-    }
-copy-book-manual-closes = <strong>{ $count }</strong> 笔手动平仓
-copy-book-skipped = <strong>{ $count }</strong> 笔已跳过
-copy-book-failed = <strong>{ $count }</strong> 笔失败
-copy-book-closed = { $count } 笔已平仓
-copy-book-budget-note = { $mode }已用 { $total } · 剩余 { $remaining }
 copy-readiness-title = 上实盘前
 copy-readiness-live-note = 此任务正在实盘交易。可在上方标题处将其切回模拟。
 copy-readiness-all-pass = 所有检查均已通过。

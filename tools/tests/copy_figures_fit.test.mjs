@@ -5,7 +5,7 @@
 /**
  * Guard: a Copy Trading summary figure is one line. A value with its unit
  * ("2.54 / 8 SOL") never wraps the unit under the amount and never runs out of its
- * card, at the narrowest desktop window and wider, in left-to-right and right-to-left
+ * card, from a stacked 820 px window to wide ones, in left-to-right and right-to-left
  * locales. The task list's budget line follows the same rule.
  *
  * A free-standing SOL amount follows the one trim rule of core/format.js: a budget beside a
@@ -25,7 +25,9 @@ import { SCRIPTS_ROOT } from "../lib/dashboard_ui.mjs";
 import { serveDashboard } from "../lib/dashboard_host.mjs";
 import { createApiHandler, loadIndex } from "../lib/dashboard_fixtures.mjs";
 
+// 820 px is a stacked page: the list above the sheet and the figure row in three columns.
 const VIEWS = [
+  [820, "en"],
   [1200, "en"],
   [1440, "en"],
   [1200, "de"],

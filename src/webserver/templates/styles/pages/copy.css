@@ -1,7 +1,7 @@
 /* Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
  * SPDX-License-Identifier: BUSL-1.1 */
 
-/* Copy Trading page: frame, status strip, onboarding, totals, wallet list and the
+/* Copy Trading page: frame, toolbar, onboarding, all-tasks figures, wallet list and the
    shared primitives (tones, meters, notes) its panels use. */
 
 .copy-page {
@@ -18,7 +18,9 @@
   display: none;
 }
 
-.copy-strip {
+/* Chips at the inline start, actions at the inline end; when the row runs out of space
+   the actions wrap under the chips, still at the end. */
+.copy-toolbar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -26,51 +28,16 @@
   gap: var(--spacing-sm) var(--spacing-md);
 }
 
-.copy-strip-title {
+.copy-toolbar-actions {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
-  gap: var(--spacing-xs) var(--spacing-md);
-  min-width: 0;
-}
-
-.copy-strip-title h1 {
-  display: inline-flex;
-  align-items: center;
+  justify-content: flex-end;
   gap: var(--spacing-sm);
-  margin: 0;
-  font-size: var(--font-size-lg);
-  color: var(--text-primary);
+  margin-inline-start: auto;
 }
 
-.copy-strip-title h1 i {
-  color: var(--primary-color);
-}
-
-.copy-strip-state {
-  font-size: var(--font-size-sm);
-  color: var(--text-muted);
-}
-
-.copy-strip-state[data-state="running"] {
-  color: var(--success-color);
-}
-
-.copy-strip-state[data-state="paused"] {
-  color: var(--warning-color);
-}
-
-.copy-strip-state[data-state="blocked"] {
-  color: var(--error-color);
-}
-
-.copy-strip-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--spacing-sm);
-}
-
-/* The page notices (ui/notice.js) under the strip: a failed load beside the kept data. */
+/* The page notices (ui/notice.js) under the toolbar: a failed load beside the kept data, and
+   the state that stops copying. */
 .copy-notices {
   display: flex;
   flex-direction: column;
@@ -122,6 +89,23 @@
   gap: var(--spacing-md);
   min-width: 0;
   container: copy-main / inline-size;
+}
+
+.copy-figures {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  min-width: 0;
+}
+
+/* The scope caption of the figure row. */
+.copy-figures-scope {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
 }
 
 /* The all-tasks figures: six cells in one row, else three or two, so no row is ever
@@ -229,7 +213,7 @@
   gap: 4px;
   width: 100%;
   padding: var(--spacing-sm) var(--spacing-md);
-  border: 1px solid transparent;
+  border: 0;
   border-radius: var(--radius-md);
   background: transparent;
   color: inherit;
@@ -242,8 +226,8 @@
   background: var(--bg-hover);
 }
 
-.copy-row.is-selected {
-  border-color: var(--primary-alpha-30);
+/* The selected task, as the settings navigation marks its current item. */
+.copy-row[aria-current="true"] {
   background: var(--primary-alpha-10);
 }
 
@@ -261,11 +245,8 @@
   overflow-wrap: anywhere;
 }
 
-/* An unnamed task's wallet, in full on its own line under the name and mode. */
-.copy-row-address {
-  justify-content: flex-start;
-
-  --ti-address-size: 0.75rem;
+.copy-row[aria-current="true"] .copy-row-name {
+  color: var(--primary-color);
 }
 
 .copy-row-state {
@@ -275,24 +256,24 @@
 
 .copy-row-state.is-paper,
 .copy-row-state.is-live {
-  color: var(--success-color);
+  color: var(--semantic-success-text);
 }
 
 .copy-row-state.is-paused,
 .copy-row-state.is-system_paused,
 .copy-row-state.is-entries_blocked {
-  color: var(--warning-color);
+  color: var(--semantic-warning-text);
 }
 
 .copy-row-state.is-force_stopped {
-  color: var(--error-color);
+  color: var(--semantic-error-text);
 }
 
 .copy-row-warning {
   justify-content: flex-start;
   gap: var(--spacing-xs);
   font-size: var(--font-size-xs);
-  color: var(--warning-color);
+  color: var(--semantic-warning-text);
   text-align: start;
 }
 
@@ -341,11 +322,11 @@
 }
 
 .copy-page .is-positive {
-  color: var(--success-color);
+  color: var(--semantic-success-text);
 }
 
 .copy-page .is-negative {
-  color: var(--error-color);
+  color: var(--semantic-error-text);
 }
 
 .copy-note {
@@ -367,7 +348,7 @@
 }
 
 .copy-warning-text {
-  color: var(--warning-color);
+  color: var(--semantic-warning-text);
 }
 
 .copy-danger-action,
@@ -415,8 +396,10 @@
     grid-template-columns: minmax(0, 1fr);
   }
 
+  /* Stacked above the sheet, the list stays short enough for the sheet to start on the
+     first screen; its rows scroll inside. */
   .copy-list-rows {
-    max-height: 320px;
+    max-height: 18rem;
   }
 }
 

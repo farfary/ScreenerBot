@@ -168,35 +168,53 @@ copy-unrealized-unpriced =
        *[other] { $count } حيازة بلا سعر
     }
 
-## Page strip
+## Page toolbar and figures (pages/copy.html, pages/copy/summary.js)
 
-copy-page-title = نسخ التداول
-copy-strip-loading = جارٍ التحميل
-copy-strip-unavailable = غير متاح
-copy-strip-setup-required = الإعداد مطلوب · نسخ التداول يتطلب محفظة وRPC
-copy-strip-pause-all = إيقاف الكل مؤقتًا
-copy-strip-resume = استئناف المعالجة
-copy-strip-settings = الإعدادات
-copy-strip-add-wallet = إضافة محفظة
-copy-strip-paused-globally = متوقف مؤقتًا على مستوى النظام · لا نسخ جديد، وعمليات الخروج تعمل
-copy-strip-force-stopped = إيقاف قسري · لا يُنسخ شيء
-copy-strip-loss-limit = حد الخسارة · عمليات الدخول الجديدة محظورة، وعمليات الخروج تعمل
-copy-strip-idle-paused =
+copy-toolbar-settings = الإعدادات
+copy-toolbar-add-wallet = إضافة محفظة
+copy-toolbar-status = الحالة
+copy-toolbar-active = النشطة
+copy-toolbar-active-value = { $active } من { $total }
+copy-status-loading = جارٍ التحميل
+copy-status-unavailable = غير متاح
+copy-status-setup-required = الإعداد مطلوب
+copy-status-paused = متوقف مؤقتًا
+copy-status-force-stopped = إيقاف قسري
+copy-status-loss-limit = حد الخسارة
+copy-status-all-paused = كل المهام متوقفة مؤقتًا
+copy-status-processing = قيد المعالجة
+copy-toolbar-pause = إيقاف النسخ مؤقتًا
+copy-toolbar-resume = استئناف النسخ
+copy-toolbar-resume-tasks = استئناف كل المهام
+copy-notice-paused-title = معالجة النسخ متوقفة مؤقتًا
+copy-notice-paused-message = لا يُنشأ نسخ جديد. عمليات الخروج من الحيازات المفتوحة مستمرة.
+copy-notice-force-stopped-title = التداول متوقف قسريًا
+copy-notice-force-stopped-message = لا يُنسخ شيء ما دام الإيقاف القسري نشطًا.
+copy-notice-loss-limit-title = تم بلوغ حد الخسارة
+copy-notice-loss-limit-message = عمليات الدخول الجديدة محظورة. عمليات الخروج من الحيازات المفتوحة مستمرة.
+copy-figures-scope = كل المهام
+copy-figure-budget-left = المتبقي { $remaining } { -sol }
+copy-resume-tasks-title = استئناف كل المهام
+copy-resume-tasks-live-message =
     { $count ->
-        [zero] خامل · { $count } مهمة متوقفة مؤقتًا
-        [one] خامل · { $count } مهمة متوقفة مؤقتًا
-        [two] خامل · { $count } مهمتان متوقفتان مؤقتًا
-        [few] خامل · { $count } مهام متوقفة مؤقتًا
-        [many] خامل · { $count } مهمة متوقفة مؤقتًا
-       *[other] خامل · { $count } مهمة متوقفة مؤقتًا
+        [zero] لا مهام حية ({ $count }) سترسل مبادلات حقيقية عندما تتداول محافظها مجددًا.
+        [one] مهمة حية واحدة ({ $count }) سترسل مبادلات حقيقية عندما تتداول محفظتها مجددًا.
+        [two] مهمتان حيتان ({ $count }) سترسلان مبادلات حقيقية عندما تتداول محفظتاهما مجددًا.
+        [few] { $count } مهام حية سترسل مبادلات حقيقية عندما تتداول محافظها مجددًا.
+        [many] { $count } مهمة حية سترسل مبادلات حقيقية عندما تتداول محافظها مجددًا.
+       *[other] { $count } مهمة حية سترسل مبادلات حقيقية عندما تتداول محافظها مجددًا.
     }
-copy-strip-idle-empty = خامل · لا مهام بعد
-copy-strip-processing = قيد المعالجة · تجريبي: { $paper }
-copy-strip-processing-live = قيد المعالجة · حي: { $live } · تجريبي: { $paper }
-copy-figures-label =
-    .aria-label = إجماليات نسخ التداول
+copy-resume-tasks-confirm = استئناف الكل
+copy-toast-tasks-resumed = المهام المستأنفة: { $count }
+copy-toast-tasks-kept-paused = المهام التي بقيت متوقفة: { $count }.
+copy-resume-kept-limit = تتجاوز حد { $maximum } من المهام النشطة: { $count }.
+copy-resume-kept-watch = تحتاج إلى استعادة مراقبة المحفظة: { $count }.
+copy-resume-kept-live = حية ولم تُشمل: { $count }.
+copy-resume-kept-failed = تعذّر استئنافها: { $count }.
+copy-toast-tasks-resume-failed = تعذّر استئناف المهام
+copy-watch-target-missing = تعذّر العثور على مراقبة هذه المحفظة
+copy-watch-not-restored = لم تُستعد مراقبة المحفظة بعد
 copy-figure-marked-at-pool = مسعّر بسعر المجمع
-copy-figure-across-tasks = عبر جميع المهام
 copy-figure-budget-lifetime = الإنفاق التراكمي للمهام المفعّلة
 copy-figure-budget-none = لا توجد مهام مفعّلة
 copy-figure-arrival-samples =
@@ -436,41 +454,6 @@ copy-overview-worst-round = الأسوأ { $amount }
 copy-overview-curve-title = الأرباح والخسائر التراكمية
 copy-overview-exits-title = عمليات البيع حسب الخروج
 copy-overview-skips-title = أسباب تخطي الصفقات
-copy-book-title-live = السجل الحي
-copy-book-title-paper = السجل التجريبي
-copy-book-all-time = كل الأوقات
-copy-book-buys =
-    <strong>{ $count }</strong> { $count ->
-        [zero] عملية شراء
-        [one] عملية شراء
-        [two] عمليتا شراء
-        [few] عمليات شراء
-        [many] عملية شراء
-       *[other] عملية شراء
-    }
-copy-book-rule-closes =
-    <strong>{ $count }</strong> { $count ->
-        [zero] جولة أُغلقت بقواعدك
-        [one] جولة أُغلقت بقواعدك
-        [two] جولتان أُغلقتا بقواعدك
-        [few] جولات أُغلقت بقواعدك
-        [many] جولة أُغلقت بقواعدك
-       *[other] جولة أُغلقت بقواعدك
-    }
-copy-book-wallet-sells =
-    <strong>{ $count }</strong> { $count ->
-        [zero] عملية بيع للمحفظة
-        [one] عملية بيع للمحفظة
-        [two] عمليتا بيع للمحفظة
-        [few] عمليات بيع للمحفظة
-        [many] عملية بيع للمحفظة
-       *[other] عملية بيع للمحفظة
-    }
-copy-book-manual-closes = <strong>{ $count }</strong> أُغلقت يدويًا
-copy-book-skipped = <strong>{ $count }</strong> تم تخطيها
-copy-book-failed = <strong>{ $count }</strong> فشلت
-copy-book-closed = { $count } أُغلقت
-copy-book-budget-note = إنفاق { $mode } من { $total } · المتبقي { $remaining }
 copy-readiness-title = قبل التحول إلى الحي
 copy-readiness-live-note = هذه المهمة تتداول حيًا. أعدها إلى التجريبي من الترويسة أعلاه.
 copy-readiness-all-pass = كل الفحوصات ناجحة.

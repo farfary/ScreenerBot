@@ -23,13 +23,13 @@ export function createDialogs($, on) {
         closing: false,
       });
     }
-    overlay.classList.remove("hidden");
+    overlay.hidden = false;
     return overlay;
   }
 
   function hide(id) {
     const overlay = $(`#${id}`);
-    overlay?.classList.add("hidden");
+    if (overlay) overlay.hidden = true;
     const entry = open.get(id);
     if (!entry) return;
     open.delete(id);

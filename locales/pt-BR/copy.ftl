@@ -153,30 +153,58 @@ copy-unrealized-unpriced =
        *[other] { $count } posses sem preço
     }
 
-copy-page-title = Copy Trading
-copy-strip-loading = Carregando
-copy-strip-unavailable = Indisponível
-copy-strip-setup-required = Configuração necessária · o copy trading precisa de carteira e RPC
-copy-strip-pause-all = Pausar tudo
-copy-strip-resume = Retomar processamento
-copy-strip-settings = Configurações
-copy-strip-add-wallet = Adicionar carteira
-copy-strip-paused-globally = Pausado globalmente · sem novas cópias, as saídas continuam
-copy-strip-force-stopped = Parada forçada · nada é copiado
-copy-strip-loss-limit = Limite de perda · novas entradas bloqueadas, as saídas continuam
-copy-strip-idle-paused =
+copy-toolbar-settings = Configurações
+copy-toolbar-add-wallet = Adicionar carteira
+copy-toolbar-status = Status
+copy-toolbar-active = Ativas
+copy-toolbar-active-value = { $active } de { $total }
+copy-status-loading = Carregando
+copy-status-unavailable = Indisponível
+copy-status-setup-required = Configuração necessária
+copy-status-paused = Pausado
+copy-status-force-stopped = Parada forçada
+copy-status-loss-limit = Limite de perdas
+copy-status-all-paused = Todas as tarefas pausadas
+copy-status-processing = Processando
+copy-toolbar-pause = Pausar cópia
+copy-toolbar-resume = Retomar cópia
+copy-toolbar-resume-tasks = Retomar todas as tarefas
+copy-notice-paused-title = O processamento de cópias está pausado
+copy-notice-paused-message = Nenhuma cópia nova é feita. As saídas das posses abertas continuam.
+copy-notice-force-stopped-title = O trading está em parada forçada
+copy-notice-force-stopped-message = Nada é copiado enquanto a parada forçada estiver ativa.
+copy-notice-loss-limit-title = Limite de perdas atingido
+copy-notice-loss-limit-message = Novas entradas estão bloqueadas. As saídas das posses abertas continuam.
+copy-figures-scope = Todas as tarefas
+copy-figure-budget-left = Restam { $remaining } { -sol }
+copy-resume-tasks-title = Retomar todas as tarefas
+copy-resume-tasks-live-message =
     { $count ->
-        [one] Ocioso · { $count } tarefa pausada
-        [many] Ocioso · { $count } tarefas pausadas
-       *[other] Ocioso · { $count } tarefas pausadas
+        [one] { $count } tarefa real enviará swaps reais quando a carteira dela operar novamente.
+        [many] { $count } tarefas reais enviarão swaps reais quando as carteiras delas operarem novamente.
+       *[other] { $count } tarefas reais enviarão swaps reais quando as carteiras delas operarem novamente.
     }
-copy-strip-idle-empty = Ocioso · nenhuma tarefa ainda
-copy-strip-processing = Processando · { $paper } em Paper
-copy-strip-processing-live = Processando · { $live } reais · { $paper } em Paper
-copy-figures-label =
-    .aria-label = Totais do copy trading
+copy-resume-tasks-confirm = Retomar todas
+copy-toast-tasks-resumed =
+    { $count ->
+        [one] { $count } tarefa retomada
+        [many] { $count } tarefas retomadas
+       *[other] { $count } tarefas retomadas
+    }
+copy-toast-tasks-kept-paused =
+    { $count ->
+        [one] { $count } tarefa continua pausada.
+        [many] { $count } tarefas continuam pausadas.
+       *[other] { $count } tarefas continuam pausadas.
+    }
+copy-resume-kept-limit = Acima do limite de { $maximum } tarefas ativas: { $count }.
+copy-resume-kept-watch = O monitoramento da carteira precisa ser restaurado: { $count }.
+copy-resume-kept-live = Reais, não incluídas: { $count }.
+copy-resume-kept-failed = Não foi possível retomar: { $count }.
+copy-toast-tasks-resume-failed = Não foi possível retomar as tarefas
+copy-watch-target-missing = O monitoramento desta carteira não foi encontrado
+copy-watch-not-restored = O monitoramento da carteira ainda não foi restaurado
 copy-figure-marked-at-pool = Avaliado ao preço do pool
-copy-figure-across-tasks = Em todas as tarefas
 copy-figure-budget-lifetime = Gasto acumulado das tarefas ativas
 copy-figure-budget-none = Nenhuma tarefa ativa
 copy-figure-arrival-samples =
@@ -384,32 +412,6 @@ copy-overview-worst-round = Pior { $amount }
 copy-overview-curve-title = P&L acumulado
 copy-overview-exits-title = Vendas por saída
 copy-overview-skips-title = Por que os trades foram ignorados
-copy-book-title-live = Livro real
-copy-book-title-paper = Livro de Paper
-copy-book-all-time = Todo o período
-copy-book-buys =
-    <strong>{ $count }</strong> { $count ->
-        [one] compra
-        [many] compras
-       *[other] compras
-    }
-copy-book-rule-closes =
-    <strong>{ $count }</strong> { $count ->
-        [one] rodada fechada pelas suas regras
-        [many] rodadas fechadas pelas suas regras
-       *[other] rodadas fechadas pelas suas regras
-    }
-copy-book-wallet-sells =
-    <strong>{ $count }</strong> { $count ->
-        [one] venda da carteira
-        [many] vendas da carteira
-       *[other] vendas da carteira
-    }
-copy-book-manual-closes = <strong>{ $count }</strong> fechadas manualmente
-copy-book-skipped = <strong>{ $count }</strong> ignoradas
-copy-book-failed = <strong>{ $count }</strong> com falha
-copy-book-closed = { $count } fechadas
-copy-book-budget-note = Gasto { $mode } de { $total } · { $remaining } restantes
 copy-readiness-title = Antes de ir para o modo real
 copy-readiness-live-note = Esta tarefa opera em modo real. Volte para Paper pelo cabeçalho acima.
 copy-readiness-all-pass = Todas as verificações foram aprovadas.

@@ -149,30 +149,54 @@ copy-unrealized-unpriced =
        *[other] 가격 없는 보유 수량 { $count }건
     }
 
-## Page strip (pages/copy.html, pages/copy/summary.js)
+## Page toolbar and figures (pages/copy.html, pages/copy/summary.js)
 
-copy-page-title = 카피 트레이딩
-copy-strip-loading = 불러오는 중
-copy-strip-unavailable = 사용할 수 없음
-copy-strip-setup-required = 설정 필요 · 카피 트레이딩에는 지갑과 RPC가 필요합니다
-copy-strip-pause-all = 모두 일시 중지
-copy-strip-resume = 처리 재개
-copy-strip-settings = 설정
-copy-strip-add-wallet = 지갑 추가
-copy-strip-paused-globally = 전역 일시 중지 · 신규 카피 없음, 청산은 계속 실행
-copy-strip-force-stopped = 강제 중지됨 · 카피하지 않음
-copy-strip-loss-limit = 손실 한도 · 신규 진입 차단, 청산은 계속 실행
-copy-strip-idle-paused =
+copy-toolbar-settings = 설정
+copy-toolbar-add-wallet = 지갑 추가
+copy-toolbar-status = 상태
+copy-toolbar-active = 활성
+copy-toolbar-active-value = { $total }개 중 { $active }개
+copy-status-loading = 불러오는 중
+copy-status-unavailable = 사용 불가
+copy-status-setup-required = 설정 필요
+copy-status-paused = 일시 중지됨
+copy-status-force-stopped = 강제 중지
+copy-status-loss-limit = 손실 한도
+copy-status-all-paused = 모든 작업 일시 중지됨
+copy-status-processing = 처리 중
+copy-toolbar-pause = 복사 일시 중지
+copy-toolbar-resume = 복사 재개
+copy-toolbar-resume-tasks = 모든 작업 재개
+copy-notice-paused-title = 카피 처리가 일시 중지되었습니다
+copy-notice-paused-message = 새 복사는 만들어지지 않습니다. 보유 중인 포지션의 청산은 계속 실행됩니다.
+copy-notice-force-stopped-title = 거래가 강제 중지되었습니다
+copy-notice-force-stopped-message = 강제 중지가 활성화된 동안에는 아무것도 복사되지 않습니다.
+copy-notice-loss-limit-title = 손실 한도에 도달했습니다
+copy-notice-loss-limit-message = 새 진입이 차단되었습니다. 보유 중인 포지션의 청산은 계속 실행됩니다.
+copy-figures-scope = 모든 작업
+copy-figure-budget-left = { $remaining } { -sol } 남음
+copy-resume-tasks-title = 모든 작업 재개
+copy-resume-tasks-live-message =
     { $count ->
-       *[other] 대기 중 · 일시 중지된 작업 { $count }개
+       *[other] 실거래 작업 { $count }개는 지갑이 다시 거래하면 실제 스왑을 제출합니다.
     }
-copy-strip-idle-empty = 대기 중 · 아직 작업 없음
-copy-strip-processing = 처리 중 · 모의 { $paper }
-copy-strip-processing-live = 처리 중 · 실거래 { $live } · 모의 { $paper }
-copy-figures-label =
-    .aria-label = 카피 트레이딩 합계
+copy-resume-tasks-confirm = 모두 재개
+copy-toast-tasks-resumed =
+    { $count ->
+       *[other] 작업 { $count }개를 재개했습니다
+    }
+copy-toast-tasks-kept-paused =
+    { $count ->
+       *[other] 작업 { $count }개는 일시 중지 상태로 남았습니다.
+    }
+copy-resume-kept-limit = 활성 작업 한도 { $maximum }개 초과: { $count }개.
+copy-resume-kept-watch = 지갑 감시 복원 필요: { $count }개.
+copy-resume-kept-live = 실거래라 제외됨: { $count }개.
+copy-resume-kept-failed = 재개할 수 없음: { $count }개.
+copy-toast-tasks-resume-failed = 작업을 재개할 수 없습니다
+copy-watch-target-missing = 이 지갑의 감시를 찾을 수 없습니다
+copy-watch-not-restored = 지갑 감시가 아직 복원되지 않았습니다
 copy-figure-marked-at-pool = 풀 가격 기준 평가
-copy-figure-across-tasks = 모든 작업 합계
 copy-figure-budget-lifetime = 사용 중인 작업의 누적 지출
 copy-figure-budget-none = 사용 중인 작업 없음
 copy-figure-arrival-samples =
@@ -383,26 +407,6 @@ copy-overview-worst-round = 최저 { $amount }
 copy-overview-curve-title = 누적 손익
 copy-overview-exits-title = 청산 유형별 매도
 copy-overview-skips-title = 거래를 건너뛴 이유
-copy-book-title-live = 실거래 장부
-copy-book-title-paper = 모의 장부
-copy-book-all-time = 전체 기간
-copy-book-buys =
-    { $count ->
-       *[other] 매수 <strong>{ $count }</strong>건
-    }
-copy-book-rule-closes =
-    { $count ->
-       *[other] 내 규칙으로 종료된 라운드 <strong>{ $count }</strong>건
-    }
-copy-book-wallet-sells =
-    { $count ->
-       *[other] 지갑 매도 <strong>{ $count }</strong>건
-    }
-copy-book-manual-closes = 수동 종료 <strong>{ $count }</strong>건
-copy-book-skipped = 건너뜀 <strong>{ $count }</strong>건
-copy-book-failed = 실패 <strong>{ $count }</strong>건
-copy-book-closed = 종료 { $count }건
-copy-book-budget-note = { $mode } 지출 (총 { $total }) · 잔여 { $remaining }
 copy-readiness-title = 실거래 전 점검
 copy-readiness-live-note = 이 작업은 실거래 중입니다. 위 헤더에서 모의로 전환할 수 있습니다.
 copy-readiness-all-pass = 모든 점검을 통과했습니다.

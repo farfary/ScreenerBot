@@ -561,6 +561,8 @@ pub const COPY_EDITOR_STEPS_JS: &str = include_str!("templates/scripts/pages/cop
 pub const COPY_ARM_GATE_JS: &str = include_str!("templates/scripts/pages/copy/arm_gate.js");
 pub const COPY_SETTINGS_JS: &str = include_str!("templates/scripts/pages/copy/settings.js");
 pub const COPY_PROFILE_JS: &str = include_str!("templates/scripts/pages/copy/profile.js");
+pub const COPY_WATCH_RESTORE_JS: &str =
+    include_str!("templates/scripts/pages/copy/watch_restore.js");
 pub const WALLETS_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/wallets.js");
 pub const WALLETS_RENDERERS_JS: &str = include_str!("templates/scripts/pages/wallets/renderers.js");
 pub const WALLETS_WATCHED_JS: &str = include_str!("templates/scripts/pages/wallets/watched.js");

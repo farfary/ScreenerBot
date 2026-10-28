@@ -144,7 +144,7 @@ export function duplicateNote({ draft, mode, source, tasks }) {
 /** While copy processing is paused for every task, a saved task waits: say so and offer Resume. */
 function pausedNote({ processingPaused }, esc) {
   if (!processingPaused) return "";
-  return `<div class="copy-paused-note" role="note"><p class="copy-note">${esc(I18n.t("copy-editor-processing-paused"))}</p><button class="btn btn-secondary btn-sm" type="button" data-copy-resume>${esc(I18n.t("copy-strip-resume"))}</button></div>`;
+  return `<div class="copy-paused-note" role="note"><p class="copy-note">${esc(I18n.t("copy-editor-processing-paused"))}</p><button class="btn btn-secondary btn-sm" type="button" data-copy-resume>${esc(I18n.t("copy-toolbar-resume"))}</button></div>`;
 }
 
 function walletStep(context, esc) {

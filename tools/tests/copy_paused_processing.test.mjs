@@ -64,11 +64,11 @@ test("a paused book says so in the wizard and resumes from it", async (t) => {
   await page.waitForSelector(PAGE_READY);
   await page.waitForSelector("#copy-main:not([hidden])");
   await page.locator("#copy-add").click();
-  await page.waitForSelector("#copy-editor:not(.hidden) [data-field='target_address']");
+  await page.waitForSelector("#copy-editor:not([hidden]) [data-field='target_address']");
 
   const walletNote = page.locator(NOTE);
   assert.match(strip(await walletNote.textContent()), /copies nothing until it resumes/);
-  assert.equal(strip(await walletNote.locator("button").textContent()), "Resume processing");
+  assert.equal(strip(await walletNote.locator("button").textContent()), "Resume copying");
 
   await page.locator("[data-field='target_address']").fill(VALID_ADDRESS);
   const next = page.locator("#copy-editor-next");

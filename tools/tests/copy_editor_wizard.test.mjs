@@ -63,7 +63,7 @@ test("the wizard marks the invalid field and keeps its footer on one row", async
   await page.goto(`${host.origin}/copy`);
   await page.waitForSelector(PAGE_READY);
   await page.locator("#copy-add").click();
-  await page.waitForSelector("#copy-editor:not(.hidden) [data-field='target_address']");
+  await page.waitForSelector("#copy-editor:not([hidden]) [data-field='target_address']");
 
   const address = page.locator("[data-field='target_address']");
   await address.fill("not-an-address");

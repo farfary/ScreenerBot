@@ -67,6 +67,10 @@ export function createApi(requestManager) {
     create: (task) => call("/tasks", { method: "POST", body: task }),
     update: (id, patch) => call(`/tasks/${id}`, { method: "PATCH", body: patch }),
     remove: (id) => call(`/tasks/${id}`, { method: "DELETE" }),
+    // The server resumes every paused task a single resume would restart and reports the
+    // rest with the reason; live tasks only when `includeLive` follows a confirmation.
+    resumeTasks: (includeLive) =>
+      call("/tasks/resume", { method: "POST", body: { include_live: includeLive } }),
     setMode: (id, mode, confirmation) =>
       call(`/tasks/${id}/mode`, {
         method: "POST",

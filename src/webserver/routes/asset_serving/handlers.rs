@@ -182,6 +182,7 @@ pub async fn get_page_script(Path(file): Path<String>) -> Response {
         "copy/arm_gate.js" => Some(embeds::COPY_ARM_GATE_JS),
         "copy/settings.js" => Some(embeds::COPY_SETTINGS_JS),
         "copy/profile.js" => Some(embeds::COPY_PROFILE_JS),
+        "copy/watch_restore.js" => Some(embeds::COPY_WATCH_RESTORE_JS),
         "trader.js" => Some(embeds::TRADER_PAGE_SCRIPT),
         "trader/examples.js" => Some(embeds::TRADER_EXAMPLES_JS),
         "trader/controls.js" => Some(embeds::TRADER_CONTROLS_JS),

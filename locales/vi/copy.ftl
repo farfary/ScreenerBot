@@ -143,28 +143,52 @@ copy-unrealized-unpriced =
        *[other] { $count } khoản nắm giữ không có giá
     }
 
-copy-page-title = Copy trading
-copy-strip-loading = Đang tải
-copy-strip-unavailable = Không khả dụng
-copy-strip-setup-required = Cần thiết lập · giao dịch sao chép cần ví và RPC
-copy-strip-pause-all = Tạm dừng tất cả
-copy-strip-resume = Tiếp tục xử lý
-copy-strip-settings = Cài đặt
-copy-strip-add-wallet = Thêm ví
-copy-strip-paused-globally = Đã tạm dừng toàn cục · không có lệnh copy mới, lệnh thoát vẫn chạy
-copy-strip-force-stopped = Đã dừng cưỡng chế · không copy gì cả
-copy-strip-loss-limit = Giới hạn lỗ · lệnh vào mới bị chặn, lệnh thoát vẫn chạy
-copy-strip-idle-paused =
+copy-toolbar-settings = Cài đặt
+copy-toolbar-add-wallet = Thêm ví
+copy-toolbar-status = Trạng thái
+copy-toolbar-active = Đang chạy
+copy-toolbar-active-value = { $active } / { $total }
+copy-status-loading = Đang tải
+copy-status-unavailable = Không khả dụng
+copy-status-setup-required = Cần thiết lập
+copy-status-paused = Đã tạm dừng
+copy-status-force-stopped = Dừng cưỡng bức
+copy-status-loss-limit = Giới hạn lỗ
+copy-status-all-paused = Mọi tác vụ đã tạm dừng
+copy-status-processing = Đang xử lý
+copy-toolbar-pause = Tạm dừng sao chép
+copy-toolbar-resume = Tiếp tục sao chép
+copy-toolbar-resume-tasks = Tiếp tục mọi tác vụ
+copy-notice-paused-title = Xử lý copy đang tạm dừng
+copy-notice-paused-message = Không tạo bản sao mới. Lệnh thoát của các khoản nắm giữ đang mở vẫn chạy.
+copy-notice-force-stopped-title = Giao dịch đang bị dừng cưỡng bức
+copy-notice-force-stopped-message = Không sao chép gì trong khi dừng cưỡng bức còn hiệu lực.
+copy-notice-loss-limit-title = Đã chạm giới hạn lỗ
+copy-notice-loss-limit-message = Lệnh vào mới bị chặn. Lệnh thoát của các khoản nắm giữ đang mở vẫn chạy.
+copy-figures-scope = Mọi tác vụ
+copy-figure-budget-left = Còn { $remaining } { -sol }
+copy-resume-tasks-title = Tiếp tục mọi tác vụ
+copy-resume-tasks-live-message =
     { $count ->
-       *[other] Chờ · { $count } tác vụ đã tạm dừng
+       *[other] { $count } tác vụ live sẽ gửi swap thật khi ví của chúng giao dịch lần nữa.
     }
-copy-strip-idle-empty = Chờ · chưa có tác vụ nào
-copy-strip-processing = Đang xử lý · { $paper } thử nghiệm
-copy-strip-processing-live = Đang xử lý · { $live } live · { $paper } thử nghiệm
-copy-figures-label =
-    .aria-label = Tổng số copy trading
+copy-resume-tasks-confirm = Tiếp tục tất cả
+copy-toast-tasks-resumed =
+    { $count ->
+       *[other] Đã tiếp tục { $count } tác vụ
+    }
+copy-toast-tasks-kept-paused =
+    { $count ->
+       *[other] { $count } tác vụ vẫn tạm dừng.
+    }
+copy-resume-kept-limit = Vượt giới hạn { $maximum } tác vụ đang chạy: { $count }.
+copy-resume-kept-watch = Cần khôi phục theo dõi ví: { $count }.
+copy-resume-kept-live = Live, không bao gồm: { $count }.
+copy-resume-kept-failed = Không thể tiếp tục: { $count }.
+copy-toast-tasks-resume-failed = Không thể tiếp tục các tác vụ
+copy-watch-target-missing = Không tìm thấy theo dõi của ví này
+copy-watch-not-restored = Theo dõi ví chưa được khôi phục
 copy-figure-marked-at-pool = Định giá theo giá pool
-copy-figure-across-tasks = Trên tất cả tác vụ
 copy-figure-budget-lifetime = Tổng chi tiêu của các tác vụ đang bật
 copy-figure-budget-none = Không có tác vụ nào đang bật
 copy-figure-arrival-samples =
@@ -360,26 +384,6 @@ copy-overview-worst-round = Kém nhất { $amount }
 copy-overview-curve-title = P&L lũy kế
 copy-overview-exits-title = Lệnh bán theo cách thoát
 copy-overview-skips-title = Lý do bỏ qua giao dịch
-copy-book-title-live = Sổ live
-copy-book-title-paper = Sổ thử nghiệm
-copy-book-all-time = Từ trước đến nay
-copy-book-buys =
-    <strong>{ $count }</strong> { $count ->
-       *[other] lệnh mua
-    }
-copy-book-rule-closes =
-    <strong>{ $count }</strong> { $count ->
-       *[other] vòng đóng theo quy tắc của bạn
-    }
-copy-book-wallet-sells =
-    <strong>{ $count }</strong> { $count ->
-       *[other] lệnh bán của ví
-    }
-copy-book-manual-closes = <strong>{ $count }</strong> đóng thủ công
-copy-book-skipped = <strong>{ $count }</strong> bỏ qua
-copy-book-failed = <strong>{ $count }</strong> thất bại
-copy-book-closed = { $count } đã đóng
-copy-book-budget-note = Chi { $mode } { $total } · còn { $remaining }
 copy-readiness-title = Trước khi chạy live
 copy-readiness-live-note = Tác vụ này đang giao dịch live. Hãy đưa nó về thử nghiệm từ phần đầu trang ở trên.
 copy-readiness-all-pass = Mọi bước kiểm tra đều đạt.

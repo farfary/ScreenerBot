@@ -161,32 +161,60 @@ copy-unrealized-unpriced =
        *[other] { $count } détentions sans prix
     }
 
-## Page strip (pages/copy.html, pages/copy/summary.js)
+## Page toolbar and figures (pages/copy.html, pages/copy/summary.js)
 
-copy-page-title = Copy trading
-copy-strip-loading = Chargement
-copy-strip-unavailable = Indisponible
-copy-strip-setup-required = Configuration requise · le copy trading nécessite un portefeuille et un RPC
-copy-strip-pause-all = Tout mettre en pause
-copy-strip-resume = Reprendre le traitement
-copy-strip-settings = Paramètres
-copy-strip-add-wallet = Ajouter un portefeuille
-copy-strip-paused-globally = En pause globale · aucune nouvelle copie, les sorties continuent
-copy-strip-force-stopped = Arrêt forcé · rien n'est copié
-copy-strip-loss-limit = Limite de perte · nouvelles entrées bloquées, les sorties continuent
-copy-strip-idle-paused =
+copy-toolbar-settings = Paramètres
+copy-toolbar-add-wallet = Ajouter un portefeuille
+copy-toolbar-status = État
+copy-toolbar-active = Actives
+copy-toolbar-active-value = { $active } sur { $total }
+copy-status-loading = Chargement
+copy-status-unavailable = Indisponible
+copy-status-setup-required = Configuration requise
+copy-status-paused = En pause
+copy-status-force-stopped = Arrêt forcé
+copy-status-loss-limit = Limite de pertes
+copy-status-all-paused = Toutes les tâches en pause
+copy-status-processing = Traitement en cours
+copy-toolbar-pause = Mettre la copie en pause
+copy-toolbar-resume = Reprendre la copie
+copy-toolbar-resume-tasks = Reprendre toutes les tâches
+copy-notice-paused-title = Le traitement des copies est en pause
+copy-notice-paused-message = Aucune nouvelle copie n'est faite. Les sorties des détentions ouvertes continuent.
+copy-notice-force-stopped-title = Le trading est en arrêt forcé
+copy-notice-force-stopped-message = Rien n'est copié tant que l'arrêt forcé est actif.
+copy-notice-loss-limit-title = Limite de pertes atteinte
+copy-notice-loss-limit-message = Les nouvelles entrées sont bloquées. Les sorties des détentions ouvertes continuent.
+copy-figures-scope = Toutes les tâches
+copy-figure-budget-left = { $remaining } { -sol } restants
+copy-resume-tasks-title = Reprendre toutes les tâches
+copy-resume-tasks-live-message =
     { $count ->
-        [one] Inactif · { $count } tâche en pause
-        [many] Inactif · { $count } tâches en pause
-       *[other] Inactif · { $count } tâches en pause
+        [one] { $count } tâche réelle enverra de vrais swaps dès que son portefeuille tradera à nouveau.
+        [many] { $count } tâches réelles enverront de vrais swaps dès que leurs portefeuilles traderont à nouveau.
+       *[other] { $count } tâches réelles enverront de vrais swaps dès que leurs portefeuilles traderont à nouveau.
     }
-copy-strip-idle-empty = Inactif · aucune tâche pour l'instant
-copy-strip-processing = Traitement · { $paper } en simulé
-copy-strip-processing-live = Traitement · { $live } en réel · { $paper } en simulé
-copy-figures-label =
-    .aria-label = Totaux du copy trading
+copy-resume-tasks-confirm = Tout reprendre
+copy-toast-tasks-resumed =
+    { $count ->
+        [one] { $count } tâche reprise
+        [many] { $count } tâches reprises
+       *[other] { $count } tâches reprises
+    }
+copy-toast-tasks-kept-paused =
+    { $count ->
+        [one] { $count } tâche reste en pause.
+        [many] { $count } tâches restent en pause.
+       *[other] { $count } tâches restent en pause.
+    }
+copy-resume-kept-limit = Au-delà de la limite de { $maximum } tâches actives : { $count }.
+copy-resume-kept-watch = Surveillance du portefeuille à restaurer : { $count }.
+copy-resume-kept-live = Réelles, non incluses : { $count }.
+copy-resume-kept-failed = Reprise impossible : { $count }.
+copy-toast-tasks-resume-failed = Les tâches n'ont pas pu être reprises
+copy-watch-target-missing = La surveillance de ce portefeuille est introuvable
+copy-watch-not-restored = La surveillance du portefeuille n'est pas encore restaurée
 copy-figure-marked-at-pool = Valorisé au prix du pool
-copy-figure-across-tasks = Toutes tâches confondues
 copy-figure-budget-lifetime = Dépenses cumulées des tâches activées
 copy-figure-budget-none = Aucune tâche activée
 copy-figure-arrival-samples =
@@ -409,32 +437,6 @@ copy-overview-worst-round = Pire { $amount }
 copy-overview-curve-title = P&L cumulé
 copy-overview-exits-title = Ventes par type de sortie
 copy-overview-skips-title = Pourquoi des trades ont été ignorés
-copy-book-title-live = Registre réel
-copy-book-title-paper = Registre simulé
-copy-book-all-time = Depuis le début
-copy-book-buys =
-    <strong>{ $count }</strong> { $count ->
-        [one] achat
-        [many] achats
-       *[other] achats
-    }
-copy-book-rule-closes =
-    <strong>{ $count }</strong> { $count ->
-        [one] cycle clôturé par vos règles
-        [many] cycles clôturés par vos règles
-       *[other] cycles clôturés par vos règles
-    }
-copy-book-wallet-sells =
-    <strong>{ $count }</strong> { $count ->
-        [one] vente du portefeuille
-        [many] ventes du portefeuille
-       *[other] ventes du portefeuille
-    }
-copy-book-manual-closes = <strong>{ $count }</strong> clôturés manuellement
-copy-book-skipped = <strong>{ $count }</strong> ignorés
-copy-book-failed = <strong>{ $count }</strong> échoués
-copy-book-closed = { $count } clôturés
-copy-book-budget-note = Dépenses { $mode } sur { $total } · { $remaining } restants
 copy-readiness-title = Avant de passer en réel
 copy-readiness-live-note = Cette tâche trade en réel. Repassez-la en simulé depuis l'en-tête ci-dessus.
 copy-readiness-all-pass = Tous les contrôles sont validés.
