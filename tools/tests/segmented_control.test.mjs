@@ -55,6 +55,7 @@ const RETIRED = [
   "copy-seg-btn",
   "dt-pagination-mode-btn",
   "dt-pagination-mode-toggle",
+  "filter-tab",
   "pdd-act-filter",
   "pdd-act-filters",
   "stats-period-btn",
@@ -71,7 +72,7 @@ const RETIRED = [
 ];
 
 /** One-of-many choices still drawn privately; each moves to the owner, and the list only shrinks. */
-const PRIVATE_CONTROLS = ["filter-tab"];
+const PRIVATE_CONTROLS = [];
 
 /** Rules outside the owner that may name a part of the control, with the reason. */
 const PART_RULES = {

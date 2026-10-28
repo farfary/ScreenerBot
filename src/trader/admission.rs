@@ -518,12 +518,6 @@ pub struct EntryCycle {
 
 impl EntryCycle {
     /// The cycle of the `wanted` modes and the enabled `entry_strategies` in priority
-    /// order, read now, reading the paper cash when paper is wanted.
-    pub async fn read(wanted: Vec<TradingMode>, entry_strategies: Vec<Strategy>) -> Self {
-        Self::read_at(chrono::Utc::now(), wanted, entry_strategies).await
-    }
-
-    /// The cycle of the `wanted` modes and the enabled `entry_strategies` in priority
     /// order, as read from the store at `strategies_read_at`, reading the paper cash when
     /// paper is wanted. The time is taken before the store read: a rules change committed
     /// after it is never taken as one the strategies were read under.

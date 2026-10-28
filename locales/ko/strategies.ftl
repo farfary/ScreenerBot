@@ -8,9 +8,6 @@
 
 ## Strategy list
 
-strategies-filter-all = 전체
-strategies-filter-entry = 진입
-strategies-filter-exit = 청산
 strategies-type-entry = 진입
 strategies-type-exit = 청산
 strategies-list-empty-title = 아직 전략이 없습니다
@@ -19,10 +16,6 @@ strategies-new = 새 전략
 strategies-import =
     .title = 전략 가져오기
     .aria-label = 전략 가져오기
-strategies-item-enable =
-    .title = 사용
-strategies-item-disable =
-    .title = 사용 안 함
 
 # Name given to a strategy before it is saved.
 strategies-new-name = 새 전략
@@ -34,7 +27,6 @@ strategies-editor-name =
 strategies-editor-dirty =
     .title = 저장되지 않은 변경 사항
 strategies-action-validate = 검증
-strategies-editor-empty = 편집할 전략을 선택하거나 새로 만드세요
 strategies-conditions-empty-title = 아직 조건이 없습니다
 strategies-conditions-empty-hint = "{ strategies-add-condition }"을 눌러 구성을 시작하세요
 strategies-add-condition = 조건 추가
@@ -96,10 +88,10 @@ strategies-catalog-search-clear =
 strategies-catalog-no-description = 설명이 없습니다
 
 # Editor header: the timeframe is the default for candle conditions that leave theirs unset.
-strategies-editor-active = 활성
+strategies-editor-active = 켜짐
 strategies-editor-timeframe = 기본 타임프레임
     .title = 자체 타임프레임이 없는 조건이 사용하는 캔들 타임프레임
-strategies-editor-priority = 우선순위
+strategies-editor-order = 순서
     .title = 1부터 100까지의 평가 순서이며, 작은 숫자가 먼저 평가됩니다
 strategies-editor-description = 설명
 strategies-editor-description-field =
@@ -186,6 +178,8 @@ strategies-unsaved-confirm = 저장하지 않은 변경 사항을 버릴까요?
     .message = "{ $name }"에 저장되지 않은 변경 사항이 있습니다.
 strategies-unsaved-discard = 버리기
 strategies-import-error-json = 파일이 올바른 JSON이 아닙니다
+# $min and $max are the bounds of the evaluation order.
+strategies-import-error-priority = 파일의 우선순위는 { $min }부터 { $max }까지의 정수여야 합니다
 strategies-import-error-shape = 파일이 전략을 설명하지 않습니다
 # $type is the condition type id, $name the condition name.
 strategies-import-error-unknown-condition = 파일이 이 버전에 없는 조건을 사용합니다: { $type }
@@ -228,8 +222,6 @@ strategies-toast-test-failed = 테스트 실패
 strategies-toast-valid = 전략이 유효합니다
 strategies-toast-invalid = 전략에 오류가 있습니다
 strategies-toast-validation-failed = 검증에 실패했습니다
-strategies-toast-item-enabled = 전략을 사용 설정했습니다
-strategies-toast-item-disabled = 전략을 사용 안 함으로 설정했습니다
 strategies-toast-item-toggle-failed = 전략을 전환하지 못했습니다
 strategies-toast-deleted = 전략 삭제됨
     .message = "{ $name }" 삭제 완료
@@ -671,3 +663,89 @@ strategies-readiness-priced-missing =
     }
 strategies-readiness-runtime = 실거래 가능
 strategies-readiness-runtime-ok = 설정과 안전 게이트가 실거래를 허용합니다
+
+## Roster: the strategy list, one view per kind. Status and notice ids come from
+## src/strategies/overview.rs.
+
+strategies-back = 모든 전략
+strategies-view-kind = 전략 종류
+strategies-unnamed = 이름 없는 전략
+strategies-col-on = 켜짐
+strategies-col-strategy = 전략
+strategies-col-order = 순서
+    .title = 같은 모드의 활성 진입 전략 사이의 평가 순서이며, 먼저 신호를 낸 전략이 토큰을 가져갑니다
+strategies-col-mode = 모드
+strategies-col-status = 상태
+strategies-col-open = 보유
+strategies-col-watching = 감시 중
+strategies-col-rounds = 라운드
+strategies-col-closed = 종료
+strategies-col-win-rate = 승률
+strategies-col-realized = 실현 { -sol }
+strategies-col-manages = 관리 대상
+strategies-col-last-signal = 마지막 신호
+strategies-status-running = 실행 중
+strategies-status-not-running = 실행 안 됨
+strategies-status-off = 꺼짐
+strategies-status-setup-required = 설정 필요
+strategies-status-live-paused = 실거래 진입 일시 중지
+strategies-status-paper-cash = 모의 자금 부족
+strategies-status-slots-full = 슬롯 가득 참
+strategies-status-entry-monitor-off = 진입 모니터 꺼짐
+strategies-status-exit-monitor-off = 청산 모니터 꺼짐
+strategies-notice-setup-required = 모의 거래는 설정을 마친 후 시작됩니다
+strategies-notice-force-stopped = 긴급 정지 중
+strategies-notice-trader-off = Auto Trader가 꺼져 있습니다
+strategies-notice-waiting = 핵심 서비스 대기 중
+strategies-notice-monitors-off = 진입 및 청산 모니터가 꺼져 있습니다
+strategies-notice-start = Auto Trader 시작
+# $closed and $needed count closed paper rounds; $changed is a formatted date.
+strategies-readiness-progress = 모의 라운드 { $closed }/{ $needed }
+strategies-readiness-ready = 실거래 전환 가능
+strategies-readiness-since = 규칙 변경 { $changed }
+# $book is the trading mode of the other book; $count its open positions.
+strategies-open-other-book =
+    { $count ->
+       *[other] { $book }: 포지션 { $count }개
+    }
+strategies-manages-all = 모든 진입 전략
+# $first is the first managed entry strategy; $more the count of the others.
+strategies-manages-some =
+    { $more ->
+       *[other] { $first } 외 { $more }개
+    }
+strategies-exit-before = 먼저 확인
+strategies-exit-hint = 이 청산 규칙은 모든 포지션에서 어떤 청산 전략보다 먼저 확인됩니다
+strategies-action-edit = { $name } 편집
+strategies-action-delete = { $name } 삭제
+strategies-roster-stale = 마지막 업데이트
+
+## Saving new rules: the server answers whether a save changed the rules a strategy trades on.
+
+strategies-live-rules-confirm = 실거래 중인 "{ $name }"의 규칙 변경
+    .message = 새 규칙은 다음 확인부터 실제 { -sol }(으)로 거래하며, 이 전략의 모의 근거는 이번 저장부터 다시 시작됩니다.
+strategies-live-rules-save = 저장하고 실거래
+strategies-toast-evidence-restarted = 전략 저장됨
+    .message = "{ $name }"의 규칙이 바뀌었습니다. 모의 근거는 지금부터 다시 시작됩니다
+
+## Trading mode: arming a paper strategy live and returning it to paper.
+
+strategies-mode-arm = 실거래 활성화
+strategies-mode-return-paper = 모의로 되돌리기
+strategies-mode-arm-title = "{ $name }" 실거래 활성화
+strategies-mode-arm-lead = "{ $name }"의 새 진입은 내 거래 지갑의 실제 스왑으로 거래됩니다.
+strategies-mode-arm-lead-exit = "{ $name }"은(는) 신호가 나면 트레이딩 지갑에서 실제 스왑으로 실거래 포지션을 매도합니다.
+strategies-mode-arm-readiness = 모의 장부 기준 준비 상태
+strategies-mode-arm-open-paper = 열린 모의 포지션은 모의로 유지되며 모의로 종료됩니다.
+strategies-mode-arm-ack-real-native = 새 진입은 내 거래 지갑의 실제 { -sol }를 사용합니다.
+strategies-mode-arm-ack-real-native-exit = 관리하는 실거래 포지션은 실제 스왑으로 매도됩니다.
+strategies-mode-arm-ack-fees = 실거래 스왑에는 실제 네트워크 수수료와 슬리피지가 발생하며, 모의 결과가 실거래 결과를 보장하지 않습니다.
+strategies-mode-arm-ack-unready = 일부 준비 상태 점검을 통과하지 못했습니다. 그래도 이 전략을 활성화합니다.
+strategies-mode-arm-unavailable = 현재 실거래를 사용할 수 없습니다. 마지막 점검 결과를 확인하세요.
+strategies-mode-return-title = "{ $name }"을(를) 모의로 되돌리기
+strategies-mode-return-message = 새 진입은 { -sol }를 쓰지 않고 모의 장부에서 열립니다. 열린 실거래 포지션은 실거래로 유지되며 실거래로 종료됩니다.
+strategies-mode-return-message-exit = 실거래 포지션 판단을 멈추며, 해당 포지션은 규칙 청산을 유지합니다.
+strategies-mode-readiness-failed = 전략의 준비 상태를 읽지 못했습니다
+strategies-mode-toast-armed = { $name } 전략이 이제 실거래로 거래합니다
+strategies-mode-toast-paper = { $name } 전략이 이제 모의로 거래합니다
+strategies-mode-toast-failed = 거래 모드를 변경하지 못했습니다

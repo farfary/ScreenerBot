@@ -6,8 +6,8 @@
  * Guard: a strategy's kind has one colour pair on every surface. Entry is the
  * primary blue and Exit the warning amber, declared once as the
  * `--strategy-kind-*` properties; no kind selector picks a success or error
- * colour of its own, so an Exit strategy never reads as a failure. The Auto Trader
- * Strategy Control lanes take the same pair on their header icon and count chip.
+ * colour of its own, so an Exit strategy never reads as a failure. The Entry and Exit
+ * views of the strategies roster take the same pair on their bare glyph.
  *
  * Run with `npm run test:js`.
  */
@@ -25,7 +25,7 @@ import { STYLES_ROOT, repoPath, rulesIn, walk } from "../lib/dashboard_ui.mjs";
 const browser = await chromium.launch({ headless: true });
 after(() => browser.close());
 
-const KIND_SELECTOR = /\.(?:entry|exit)\b|data-type="(?:ENTRY|EXIT)"/;
+const KIND_SELECTOR = /\.(?:entry|exit)\b|data-type="(?:ENTRY|EXIT)"|data-seg-value="(?:entry|exit)"/;
 const SEMANTIC_COLOUR = /--(?:success|error|danger)-|rgb\(/;
 
 test("strategy kinds take one blue and amber pair", async () => {
@@ -52,7 +52,7 @@ test("strategy kinds take one blue and amber pair", async () => {
   ]);
 });
 
-test("each Strategy Control lane takes its kind colour on its icon and count", async (t) => {
+test("each roster view takes its kind colour on its bare glyph", async (t) => {
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   const api = createApiHandler([await loadIndex("trader"), await loadIndex("shell")], "populated");
   const host = await serveDashboard(context, { locale: "en", onApi: api.onApi });
@@ -62,9 +62,9 @@ test("each Strategy Control lane takes its kind colour on its icon and count", a
   });
   const page = await context.newPage();
   await page.goto(`${host.origin}/trader`);
-  await page.click('#subTabsContainer [data-tab-id="strategy-control"]');
-  await page.waitForSelector("#exit-strategies .strategy-control-item");
-  const lanes = await page.evaluate(() => {
+  await page.click('#subTabsContainer [data-tab-id="strategies"]');
+  await page.waitForSelector("#strategies-roster tbody tr[data-row-id]");
+  const views = await page.evaluate(() => {
     const doc = globalThis.document;
     const probe = (variable) => {
       const node = doc.createElement("span");
@@ -74,20 +74,28 @@ test("each Strategy Control lane takes its kind colour on its icon and count", a
       node.remove();
       return color;
     };
-    const lane = (kind) => {
-      const card = doc.querySelector(`.strategy-lane-card-${kind}`);
+    const view = (kind) => {
+      const option = doc
+        .querySelector(`#strategies-roster input[data-seg-value="${kind}"]`)
+        .closest(".segmented-option");
+      const glyph = option.querySelector(".segmented-icon");
+      const style = getComputedStyle(glyph);
       return {
-        icon: getComputedStyle(card.querySelector(".card-header h3 i")).color,
-        count: getComputedStyle(card.querySelector(".strategy-lane-count")).color,
+        color: style.color,
+        bare:
+          style.backgroundColor === "rgba(0, 0, 0, 0)" &&
+          style.borderStyle === "none" &&
+          style.boxShadow === "none",
+        inline: glyph.parentElement === option.querySelector(".segmented-label"),
       };
     };
     return {
-      entry: lane("entry"),
-      exit: lane("exit"),
+      entry: view("entry"),
+      exit: view("exit"),
       blue: probe("--primary-color"),
       amber: probe("--warning-color"),
     };
   });
-  assert.deepEqual(lanes.entry, { icon: lanes.blue, count: lanes.blue });
-  assert.deepEqual(lanes.exit, { icon: lanes.amber, count: lanes.amber });
+  assert.deepEqual(views.entry, { color: views.blue, bare: true, inline: true });
+  assert.deepEqual(views.exit, { color: views.amber, bare: true, inline: true });
 });

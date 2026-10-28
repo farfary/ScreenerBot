@@ -3,12 +3,12 @@
 
 /* Strategies Page Layout - Focused Stack Design
 
-   Page layout, the sidebar and the strategy list. The editor is split by concern
-   (registered in templates.rs):
+   Page layout: the roster and the editor a roster row opens, one at a time. The editor is
+   split by concern (registered in templates.rs):
    - strategies/editor.css           - editor toolbar, settings line, rules, test marks, footer
    - strategies/condition_cards.css  - rule groups, condition rows, parameter fields
    - strategies/modals.css           - condition catalog dialog
-   - strategies/ui_components.css    - filter tabs, kind colours, type badge, create dialog */
+   - strategies/ui_components.css    - kind colours, type badge, create dialog */
 
 #page-strategies {
   overflow: hidden !important;
@@ -25,146 +25,73 @@
 }
 
 /* ==========================================================================
-   Left Sidebar
+   Roster
    ========================================================================== */
-.strategies-sidebar {
-  width: 280px;
+/* The roster fills the sub-tab and is a size container, so its cells drop the
+   description line against the table's own width, not the window's. */
+.strategies-roster {
+  container: strategies-roster / inline-size;
+  flex: 1;
   display: flex;
   flex-direction: column;
-  background: var(--surface-color);
-  border-inline-end: 1px solid var(--border-color);
-  flex-shrink: 0;
-  z-index: 10;
+  min-width: 0;
+  padding: var(--spacing-md);
 }
 
-.sidebar-content {
-  flex: 1;
-  overflow-y: auto;
-  padding: 0.5rem;
+.strategies-roster[hidden] {
+  display: none;
 }
 
-.sidebar-footer {
-  padding: 0.75rem 1rem;
-  border-top: 1px solid var(--border-color);
-  background: var(--surface-color);
-}
-
-.sidebar-footer-row {
-  display: flex;
-  gap: 0.5rem;
-  align-items: center;
-}
-
-.sidebar-footer-row .flex-1 {
-  flex: 1;
-}
-
-.sidebar-footer-row .btn-icon {
-  flex-shrink: 0;
-  width: 36px;
-  height: 36px;
-}
-
-/* Strategy List */
-.strategy-list {
-  flex: 1;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-/* Strategy list items — flat, compact, no cards */
-.strategy-item {
-  padding: 7px 10px;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  transition: background var(--transition-fast);
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  position: relative;
-  border: 1px solid transparent;
-}
-
-.strategy-item:hover {
-  background: var(--bg-card-hover);
-}
-
-.strategy-item.active {
-  background: var(--primary-alpha-10);
-  border-color: var(--primary-alpha-20);
-}
-
-.strategy-item-name {
-  font-size: 0.82rem;
+.strategy-roster-name {
+  display: block;
   font-weight: 600;
   color: var(--text-primary);
-  white-space: nowrap;
+}
+
+/* A second line under a cell's value: a description, readiness or the other book. */
+.strategy-roster-description,
+.strategy-roster-detail {
+  display: block;
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+}
+
+.strategy-roster-description {
   overflow: hidden;
   text-overflow: ellipsis;
-  line-height: 1.3;
-}
-
-.strategy-item.active .strategy-item-name {
-  color: var(--primary-color);
-}
-
-.strategy-item-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-}
-
-.strategy-item-tags {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  min-width: 0;
-  flex: 1;
-}
-
-.strategy-type-tag {
-  font-size: 0.6rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  padding: 1px 5px;
-  border-radius: var(--radius-sm);
-  flex-shrink: 0;
-  background: var(--strategy-kind-tint);
-  color: var(--strategy-kind-color);
-}
-
-.strategy-state-tag {
-  font-size: 0.7rem;
-  color: var(--text-muted);
   white-space: nowrap;
 }
 
-.strategy-state-tag.enabled {
-  color: var(--success-color);
+@container strategies-roster (width < 900px) {
+  .strategy-roster-description {
+    display: none;
+  }
 }
 
-.strategy-item-btns {
-  display: flex;
-  gap: 2px;
-  flex-shrink: 0;
-  opacity: 0;
-  transition: opacity var(--transition-fast);
+.strategy-roster-status {
+  color: var(--text-secondary);
+  white-space: nowrap;
 }
 
-.strategy-item:hover .strategy-item-btns,
-.strategy-item.active .strategy-item-btns {
-  opacity: 1;
+.strategy-roster-status[data-status="running"] {
+  color: var(--semantic-success-text);
+}
+
+.strategy-roster-status:is(
+    [data-status="live_paused"],
+    [data-status="paper_cash_short"],
+    [data-status="slots_full"],
+    [data-status="entry_monitor_off"],
+    [data-status="exit_monitor_off"],
+    [data-status="setup_required"]
+  ) {
+  color: var(--semantic-warning-text);
 }
 
 /* ==========================================================================
    Main Editor Area
    ========================================================================== */
-/* The editor is a size container: its toolbar collapses against the editor's width, which
-   the sidebar and the window share. */
+/* The editor is a size container: its toolbar collapses against the editor's width. */
 .strategy-editor {
   container: strategy-editor / inline-size;
   flex: 1;
@@ -174,16 +101,6 @@
   background: var(--background-color);
 }
 
-/* Holds the editor's empty state, filling the editor while no strategy is selected */
-.editor-placeholder {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  pointer-events: none;
-}
-
-/* The placeholder is inert except for its call to action (New Strategy while the list
-   is empty). */
-.editor-placeholder .state-view-action {
-  pointer-events: auto;
+.strategy-editor[hidden] {
+  display: none;
 }

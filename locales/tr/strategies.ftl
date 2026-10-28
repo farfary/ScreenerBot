@@ -1,6 +1,3 @@
-strategies-filter-all = Tümü
-strategies-filter-entry = Giriş
-strategies-filter-exit = Çıkış
 strategies-type-entry = Giriş
 strategies-type-exit = Çıkış
 strategies-list-empty-title = Henüz strateji yok
@@ -9,10 +6,6 @@ strategies-new = Yeni strateji
 strategies-import =
     .title = Stratejiyi içe aktar
     .aria-label = Stratejiyi içe aktar
-strategies-item-enable =
-    .title = Etkinleştir
-strategies-item-disable =
-    .title = Devre dışı bırak
 
 strategies-new-name = Yeni strateji
 
@@ -21,7 +14,6 @@ strategies-editor-name =
 strategies-editor-dirty =
     .title = Kaydedilmemiş değişiklikler
 strategies-action-validate = Doğrula
-strategies-editor-empty = Düzenlemek için bir strateji seçin veya yeni bir tane oluşturun
 strategies-conditions-empty-title = Henüz koşul yok
 strategies-conditions-empty-hint = Oluşturmaya başlamak için "{ strategies-add-condition }" seçeneğini kullanın
 strategies-add-condition = Koşul ekle
@@ -80,10 +72,10 @@ strategies-catalog-search-clear =
 strategies-catalog-no-description = Açıklama yok
 
 # Editor header: the timeframe is the default for candle conditions that leave theirs unset.
-strategies-editor-active = Etkin
+strategies-editor-active = Açık
 strategies-editor-timeframe = Varsayılan zaman dilimi
     .title = Kendi zaman dilimini belirlemeyen koşullar için mum zaman dilimi
-strategies-editor-priority = Öncelik
+strategies-editor-order = Sıra
     .title = 1 ile 100 arasında değerlendirme sırası; küçük sayılar önce değerlendirilir
 strategies-editor-description = Açıklama
 strategies-editor-description-field =
@@ -182,6 +174,8 @@ strategies-unsaved-confirm = Kaydedilmemiş değişiklikler silinsin mi?
     .message = "{ $name }" kaydedilmemiş değişiklikler içeriyor.
 strategies-unsaved-discard = Değişiklikleri sil
 strategies-import-error-json = Dosya geçerli bir JSON değil
+# $min and $max are the bounds of the evaluation order.
+strategies-import-error-priority = Dosyadaki öncelik { $min } ile { $max } arasında bir tam sayı olmalıdır
 strategies-import-error-shape = Dosya bir strateji tanımlamıyor
 # $type is the condition type id, $name the condition name.
 strategies-import-error-unknown-condition = Dosya bu sürümde bulunmayan bir koşul kullanıyor: { $type }
@@ -217,8 +211,6 @@ strategies-toast-test-failed = Test başarısız
 strategies-toast-valid = Strateji geçerli
 strategies-toast-invalid = Stratejide hatalar var
 strategies-toast-validation-failed = Doğrulama başarısız
-strategies-toast-item-enabled = Strateji etkinleştirildi
-strategies-toast-item-disabled = Strateji devre dışı bırakıldı
 strategies-toast-item-toggle-failed = Strateji değiştirilemedi
 strategies-toast-deleted = Strateji silindi
     .message = "{ $name }" başarıyla kaldırıldı
@@ -643,3 +635,91 @@ strategies-readiness-priced-missing =
     }
 strategies-readiness-runtime = Canlı işlem kullanılabilir
 strategies-readiness-runtime-ok = Kurulum ve güvenlik kapıları canlı işlemlere izin veriyor
+
+## Roster: the strategy list, one view per kind. Status and notice ids come from
+## src/strategies/overview.rs.
+
+strategies-back = Tüm stratejiler
+strategies-view-kind = Strateji türü
+strategies-unnamed = Adsız strateji
+strategies-col-on = Açık
+strategies-col-strategy = Strateji
+strategies-col-order = Sıra
+    .title = Bir moddaki etkin giriş stratejileri arasındaki değerlendirme sırası; ilk sinyal veren token'ı alır
+strategies-col-mode = Mod
+strategies-col-status = Durum
+strategies-col-open = Açık
+strategies-col-watching = İzlenen
+strategies-col-rounds = Turlar
+strategies-col-closed = Kapanan
+strategies-col-win-rate = Kazanma oranı
+strategies-col-realized = Gerçekleşen { -sol }
+strategies-col-manages = Yönettikleri
+strategies-col-last-signal = Son sinyal
+strategies-status-running = Çalışıyor
+strategies-status-not-running = Çalışmıyor
+strategies-status-off = Kapalı
+strategies-status-setup-required = Kurulum gerekli
+strategies-status-live-paused = Canlı girişler duraklatıldı
+strategies-status-paper-cash = Sanal bakiye yetersiz
+strategies-status-slots-full = Yuvalar dolu
+strategies-status-entry-monitor-off = Giriş izleyicisi kapalı
+strategies-status-exit-monitor-off = Çıkış izleyicisi kapalı
+strategies-notice-setup-required = Sanal işlem kurulumdan sonra başlar
+strategies-notice-force-stopped = Acil durdurma devrede
+strategies-notice-trader-off = Auto Trader kapalı
+strategies-notice-waiting = Çekirdek servisler bekleniyor
+strategies-notice-monitors-off = Giriş ve çıkış izleyicileri kapalı
+strategies-notice-start = Auto Trader'ı başlat
+# $closed and $needed count closed paper rounds; $changed is a formatted date.
+strategies-readiness-progress = Sanal turlar { $closed }/{ $needed }
+strategies-readiness-ready = Canlıya geçmeye hazır
+strategies-readiness-since = Kurallar değişti { $changed }
+# $book is the trading mode of the other book; $count its open positions.
+strategies-open-other-book =
+    { $count ->
+        [one] { $book }: { $count } pozisyon
+       *[other] { $book }: { $count } pozisyon
+    }
+strategies-manages-all = Tüm giriş stratejileri
+# $first is the first managed entry strategy; $more the count of the others.
+strategies-manages-some =
+    { $more ->
+        [one] { $first } ve { $more } diğer
+       *[other] { $first } ve { $more } diğer
+    }
+strategies-exit-before = Önce kontrol edilir
+strategies-exit-hint = Bu çıkış kuralları her pozisyonda tüm çıkış stratejilerinden önce kontrol edilir
+strategies-action-edit = { $name } düzenle
+strategies-action-delete = { $name } sil
+strategies-roster-stale = Son güncelleme
+
+## Saving new rules: the server answers whether a save changed the rules a strategy trades on.
+
+strategies-live-rules-confirm = Canlı "{ $name }" stratejisinin kurallarını değiştir
+    .message = Yeni kurallar bir sonraki kontrolden itibaren gerçek { -sol } ile işlem yapar ve bu stratejinin sanal kanıtı bu kayıttan itibaren yeniden başlar.
+strategies-live-rules-save = Kaydet ve canlı işlem yap
+strategies-toast-evidence-restarted = Strateji kaydedildi
+    .message = "{ $name }" kuralları değişti; sanal kanıtı şu andan itibaren yeniden başlar
+
+## Trading mode: arming a paper strategy live and returning it to paper.
+
+strategies-mode-arm = Canlıyı etkinleştir
+strategies-mode-return-paper = Sanala dön
+strategies-mode-arm-title = “{ $name }” için canlıyı etkinleştir
+strategies-mode-arm-lead = “{ $name }” stratejisinin yeni girişleri, işlem cüzdanınızdan gerçek takaslarla yapılacak.
+strategies-mode-arm-lead-exit = "{ $name }" sinyal verdiğinde canlı pozisyonları işlem cüzdanınızdan gerçek takaslarla satar.
+strategies-mode-arm-readiness = Sanal defterden hazırlık durumu
+strategies-mode-arm-open-paper = Açık sanal pozisyonlar sanal kalır ve sanal olarak kapanır.
+strategies-mode-arm-ack-real-native = Yeni girişler işlem cüzdanınızdan gerçek { -sol } harcar.
+strategies-mode-arm-ack-real-native-exit = Yönettiği canlı pozisyonlar gerçek takaslarla satılır.
+strategies-mode-arm-ack-fees = Canlı takaslar gerçek ağ ücretleri ve kayma öder; sanal sonuçlar canlı sonuçların garantisi değildir.
+strategies-mode-arm-ack-unready = Bazı hazırlık kontrolleri geçmedi. Yine de bu stratejiyi etkinleştir.
+strategies-mode-arm-unavailable = Canlı işlem şu anda kullanılamıyor; son kontrole bakın.
+strategies-mode-return-title = “{ $name }” stratejisini sanala döndür
+strategies-mode-return-message = Yeni girişler { -sol } harcamadan sanal defterde açılır. Açık canlı pozisyonlar canlı kalır ve canlı olarak kapanır.
+strategies-mode-return-message-exit = Canlı pozisyonları değerlendirmeyi bırakır; bu pozisyonlar kural çıkışlarını korur.
+strategies-mode-readiness-failed = Stratejinin hazırlık durumu okunamadı
+strategies-mode-toast-armed = { $name } artık canlı işlem yapıyor
+strategies-mode-toast-paper = { $name } artık sanal işlem yapıyor
+strategies-mode-toast-failed = İşlem modu değiştirilemedi

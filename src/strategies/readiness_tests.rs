@@ -396,12 +396,14 @@ fn the_history_names_the_rules_change_only_when_it_falls_inside_the_run() {
             at(100).to_rfc3339()
         )
     );
-    let met = readiness::history_since(
+    let met = readiness::history(
         1,
         1,
-        at(100),
-        ids::STRATEGIES_READINESS_HISTORY_SINCE_MET,
-        ids::STRATEGIES_READINESS_HISTORY_SINCE_SHORT,
+        readiness::HistoryText {
+            met: ids::STRATEGIES_READINESS_HISTORY_SINCE_MET,
+            short: ids::STRATEGIES_READINESS_HISTORY_SINCE_SHORT,
+            since: Some(at(100)),
+        },
     );
     assert!(met.passed);
     assert_eq!(
@@ -418,7 +420,7 @@ fn the_history_names_the_rules_change_only_when_it_falls_inside_the_run() {
         assert!(!rendered.contains("since"), "{rendered}");
         assert_eq!(
             whole_run.detail.render_plain(&en),
-            readiness::history(2, min_closed_rounds())
+            readiness::history(2, min_closed_rounds(), readiness::HistoryText::RUN)
                 .detail
                 .render_plain(&en)
         );

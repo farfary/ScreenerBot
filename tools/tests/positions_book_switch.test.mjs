@@ -86,7 +86,7 @@ test("the empty paper book says where paper rounds come from", () => {
   assert.equal(open.title, "No paper positions");
   assert.equal(
     plain(open.message),
-    "Set a strategy to Paper on Strategy Control to test it without spending SOL."
+    "Set a strategy to Paper on the Strategies tab to test it without spending SOL."
   );
   assert.deepEqual(paperEmptyState("closed"), open);
   assert.equal(paperEmptyState("archived").title, "No archived paper positions");

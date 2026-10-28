@@ -18,7 +18,6 @@ trader-exit-type-unknown = 不明
 ## Sub-tabs. Ids are the tab ids of the trader page.
 
 trader-tab-stats = 統計
-trader-tab-strategy-control = ストラテジー制御
 trader-tab-strategies = ストラテジー
 trader-tab-stop-loss = 損切り
 trader-tab-trailing-stop = トレーリングストップ
@@ -95,15 +94,6 @@ trader-toast-save-failed = 保存失敗
 trader-toast-feature-enabled = 機能を有効にしました
 trader-toast-feature-disabled = 機能を無効にしました
 trader-toast-feature-applied = 自動トレーダーの設定を適用しました
-trader-toast-strategy-enabled = ストラテジーを有効にしました
-    .message = ストラテジーは稼働中です
-trader-toast-strategy-disabled = ストラテジーを無効にしました
-    .message = ストラテジーは停止中です
-trader-toast-strategy-failed = 更新失敗
-    .message = ストラテジーのステータスを更新できませんでした
-trader-toast-strategy-armed = { $name } はライブで取引中です
-trader-toast-strategy-paper = { $name } はペーパーで取引中です
-trader-toast-strategy-mode-failed = 取引モードを変更できませんでした
 
 ## Stats: realized window and metrics
 
@@ -365,35 +355,6 @@ trader-time-status-losing-due = 損失 { $pnl }、次回のチェックで決済
 # $held and $remaining are formatted durations.
 trader-time-status-flat = { $held } 横ばい、{ $remaining } 後に決済
 trader-time-status-flat-due = { $held } 横ばい、次回のチェックで決済
-
-## Strategy control
-
-trader-strategy-entry-title = エントリーストラテジー
-trader-strategy-entry-subtitle = 新規ポジションを開くシグナルです。
-trader-strategy-exit-title = エグジットストラテジー
-trader-strategy-exit-subtitle = オープンポジションをクローズまたは保護するシグナルです。
-trader-strategy-active-unknown = -- 稼働中
-trader-strategy-active = { $enabled }/{ $total } 稼働中
-trader-strategy-loading = ストラテジーを読み込み中...
-trader-strategy-load-failed = ストラテジーを読み込めませんでした
-trader-strategy-empty = ストラテジーが定義されていません
-trader-strategy-unnamed = 名称未設定のストラテジー
-trader-strategy-priority-auto = 自動
-trader-strategy-priority = 優先度 { $priority }
-trader-strategy-mode-arm = ライブを有効化
-trader-strategy-mode-return-paper = ペーパーに戻す
-trader-strategy-arm-title = 「{ $name }」をライブで有効化
-trader-strategy-arm-lead = 「{ $name }」の新規エントリーは、ご自身の取引用ウォレットからの実際のスワップで行われます。
-trader-strategy-arm-readiness = ペーパー帳簿による準備状況
-trader-strategy-arm-open-paper = 保有中のペーパーポジションはペーパーのまま、ペーパーで決済されます。
-trader-strategy-arm-ack-real-native = 新規エントリーは取引用ウォレットの実際の { -sol } を使います。
-trader-strategy-arm-ack-fees = ライブのスワップでは実際のネットワーク手数料とスリッページが発生します。ペーパーの結果はライブの結果を保証しません。
-trader-strategy-arm-ack-unready = 一部の準備チェックに合格していません。それでもこのストラテジーを有効化します。
-trader-strategy-arm-unavailable = 現在ライブ取引は利用できません。最後のチェックを確認してください。
-trader-strategy-return-title = 「{ $name }」をペーパーに戻す
-trader-strategy-return-message = 新規エントリーは { -sol } を使わずにペーパー帳簿で建てられます。保有中のライブポジションはライブのまま、ライブで決済されます。
-trader-strategy-readiness-failed = ストラテジーの準備状況を読み込めませんでした
-trader-paper-explore-title = ペーパー取引はセットアップ後に始まります
 
 ## Dollar-cost averaging
 

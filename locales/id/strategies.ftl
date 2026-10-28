@@ -1,8 +1,5 @@
 # Strategies page: the strategy list, the condition editor and the condition catalog.
 
-strategies-filter-all = Semua
-strategies-filter-entry = Entry
-strategies-filter-exit = Exit
 strategies-type-entry = Entry
 strategies-type-exit = Exit
 strategies-list-empty-title = Belum ada strategi
@@ -11,10 +8,6 @@ strategies-new = Strategi Baru
 strategies-import =
     .title = Impor Strategi
     .aria-label = Impor Strategi
-strategies-item-enable =
-    .title = Aktifkan
-strategies-item-disable =
-    .title = Nonaktifkan
 
 strategies-new-name = Strategi Baru
 
@@ -23,7 +16,6 @@ strategies-editor-name =
 strategies-editor-dirty =
     .title = Perubahan belum disimpan
 strategies-action-validate = Validasi
-strategies-editor-empty = Pilih strategi untuk diedit, atau buat yang baru
 strategies-conditions-empty-title = Belum ada kondisi
 strategies-conditions-empty-hint = Gunakan "{ strategies-add-condition }" untuk mulai menyusun
 strategies-add-condition = Tambah Kondisi
@@ -83,7 +75,7 @@ strategies-catalog-no-description = Tidak ada deskripsi
 strategies-editor-active = Aktif
 strategies-editor-timeframe = Timeframe default
     .title = Timeframe candle untuk kondisi yang tidak menetapkan sendiri
-strategies-editor-priority = Prioritas
+strategies-editor-order = Urutan
     .title = Urutan evaluasi dari 1 sampai 100; angka lebih kecil dievaluasi lebih dulu
 strategies-editor-description = Deskripsi
 strategies-editor-description-field =
@@ -170,6 +162,8 @@ strategies-unsaved-confirm = Buang perubahan yang belum disimpan?
     .message = "{ $name }" memiliki perubahan yang belum disimpan.
 strategies-unsaved-discard = Buang
 strategies-import-error-json = File bukan JSON yang valid
+# $min and $max are the bounds of the evaluation order.
+strategies-import-error-priority = Prioritas dalam file harus bilangan bulat dari { $min } sampai { $max }
 strategies-import-error-shape = File tidak menjelaskan sebuah strategi
 # $type is the condition type id, $name the condition name.
 strategies-import-error-unknown-condition = File memakai kondisi yang tidak ada di versi ini: { $type }
@@ -205,8 +199,6 @@ strategies-toast-test-failed = Pengujian gagal
 strategies-toast-valid = Strategi valid
 strategies-toast-invalid = Strategi memiliki kesalahan
 strategies-toast-validation-failed = Validasi gagal
-strategies-toast-item-enabled = Strategi diaktifkan
-strategies-toast-item-disabled = Strategi dinonaktifkan
 strategies-toast-item-toggle-failed = Gagal mengalihkan strategi
 strategies-toast-deleted = Strategi Dihapus
     .message = "{ $name }" berhasil dihapus
@@ -629,3 +621,89 @@ strategies-readiness-priced-missing =
     }
 strategies-readiness-runtime = Trading live tersedia
 strategies-readiness-runtime-ok = Penyiapan dan gerbang keamanan mengizinkan trading live
+
+## Roster: the strategy list, one view per kind. Status and notice ids come from
+## src/strategies/overview.rs.
+
+strategies-back = Semua strategi
+strategies-view-kind = Jenis strategi
+strategies-unnamed = Strategi tanpa nama
+strategies-col-on = Aktif
+strategies-col-strategy = Strategi
+strategies-col-order = Urutan
+    .title = Urutan evaluasi di antara strategi entry aktif dalam satu mode; yang pertama memberi sinyal mengambil token
+strategies-col-mode = Mode
+strategies-col-status = Status
+strategies-col-open = Terbuka
+strategies-col-watching = Dipantau
+strategies-col-rounds = Putaran
+strategies-col-closed = Ditutup
+strategies-col-win-rate = Rasio menang
+strategies-col-realized = Terealisasi { -sol }
+strategies-col-manages = Mengelola
+strategies-col-last-signal = Sinyal terakhir
+strategies-status-running = Berjalan
+strategies-status-not-running = Tidak berjalan
+strategies-status-off = Mati
+strategies-status-setup-required = Perlu penyiapan
+strategies-status-live-paused = Entry live dijeda
+strategies-status-paper-cash = Kas paper kurang
+strategies-status-slots-full = Slot penuh
+strategies-status-entry-monitor-off = Monitor entry mati
+strategies-status-exit-monitor-off = Monitor exit mati
+strategies-notice-setup-required = Trading paper dimulai setelah penyiapan
+strategies-notice-force-stopped = Penghentian darurat aktif
+strategies-notice-trader-off = Auto Trader mati
+strategies-notice-waiting = Menunggu layanan inti
+strategies-notice-monitors-off = Monitor entry dan exit mati
+strategies-notice-start = Mulai Auto Trader
+# $closed and $needed count closed paper rounds; $changed is a formatted date.
+strategies-readiness-progress = Putaran paper { $closed }/{ $needed }
+strategies-readiness-ready = Siap untuk live
+strategies-readiness-since = Aturan diubah { $changed }
+# $book is the trading mode of the other book; $count its open positions.
+strategies-open-other-book =
+    { $count ->
+       *[other] { $book }: { $count } posisi
+    }
+strategies-manages-all = Semua strategi entry
+# $first is the first managed entry strategy; $more the count of the others.
+strategies-manages-some =
+    { $more ->
+       *[other] { $first } dan { $more } lainnya
+    }
+strategies-exit-before = Diperiksa lebih dulu
+strategies-exit-hint = Aturan exit ini diperiksa pada setiap posisi sebelum strategi exit mana pun
+strategies-action-edit = Edit { $name }
+strategies-action-delete = Hapus { $name }
+strategies-roster-stale = Pembaruan terakhir
+
+## Saving new rules: the server answers whether a save changed the rules a strategy trades on.
+
+strategies-live-rules-confirm = Ubah aturan “{ $name }” yang live
+    .message = Aturan baru berdagang dengan { -sol } sungguhan mulai pemeriksaan berikutnya, dan bukti paper strategi ini dimulai ulang dari penyimpanan ini.
+strategies-live-rules-save = Simpan dan trading live
+strategies-toast-evidence-restarted = Strategi Disimpan
+    .message = Aturan “{ $name }” berubah; bukti paper-nya dimulai ulang dari sekarang
+
+## Trading mode: arming a paper strategy live and returning it to paper.
+
+strategies-mode-arm = Aktifkan live
+strategies-mode-return-paper = Kembali ke Paper
+strategies-mode-arm-title = Aktifkan “{ $name }” secara live
+strategies-mode-arm-lead = Entri baru “{ $name }” akan bertransaksi dengan swap sungguhan dari dompet trading Anda.
+strategies-mode-arm-lead-exit = “{ $name }” akan menjual posisi live dengan swap sungguhan dari wallet trading Anda saat memberi sinyal.
+strategies-mode-arm-readiness = Kesiapan dari buku paper
+strategies-mode-arm-open-paper = Posisi paper yang terbuka tetap paper dan selesai di paper.
+strategies-mode-arm-ack-real-native = Entri baru membelanjakan { -sol } sungguhan dari dompet trading Anda.
+strategies-mode-arm-ack-real-native-exit = Posisi live yang dikelolanya dijual dengan swap sungguhan.
+strategies-mode-arm-ack-fees = Swap live membayar biaya jaringan dan slippage yang nyata; hasil paper tidak menjamin hasil live.
+strategies-mode-arm-ack-unready = Beberapa pemeriksaan kesiapan belum lolos. Tetap aktifkan strategi ini.
+strategies-mode-arm-unavailable = Trading live tidak tersedia saat ini; lihat pemeriksaan terakhir.
+strategies-mode-return-title = Kembalikan “{ $name }” ke Paper
+strategies-mode-return-message = Entri baru dibuka di buku paper tanpa membelanjakan { -sol }. Posisi live yang terbuka tetap live dan selesai secara live.
+strategies-mode-return-message-exit = Strategi ini berhenti menilai posisi live; posisi tersebut tetap memakai aturan exit-nya.
+strategies-mode-readiness-failed = Kesiapan strategi tidak dapat dibaca
+strategies-mode-toast-armed = { $name } sekarang trading live
+strategies-mode-toast-paper = { $name } sekarang trading di Paper
+strategies-mode-toast-failed = Mode trading tidak dapat diubah

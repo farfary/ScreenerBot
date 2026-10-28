@@ -31,6 +31,7 @@ export function strategyFromDetail(data) {
     updated_at: data.updated_at,
     author: data.author || null,
     version: data.version,
+    mode: data.mode,
     entry_strategy_ids: data.entry_strategy_ids,
   };
 }
@@ -95,7 +96,8 @@ export function exportFileName(name) {
 /**
  * Read an import file: an export, or a bare strategy object with `strategy_type` or `type`.
  * Returns `{ strategy }` for the editor (no id, rules as saved) or `{ error }` with a
- * `code` of `json`, `shape`, `unknown-condition` or `not-applicable` and its `args`.
+ * `code` of `json`, `shape`, `priority`, `unknown-condition` or `not-applicable` and its
+ * `args`. A file without a priority takes the default; one outside the range is refused.
  * @param {string} text File content.
  * @param {object} schemas Condition schemas by type.
  * @param {string|null} defaultTimeframe Timeframe of a file that names none.
@@ -118,6 +120,10 @@ export function parseImport(text, schemas, defaultTimeframe) {
   }
   const rules = body.rules ?? null;
   if (rules !== null && !isObject(rules)) return { error: { code: "shape", args: {} } };
+  const priority = body.priority ?? DEFAULT_PRIORITY;
+  if (!isValidPriority(priority)) {
+    return { error: { code: "priority", args: { min: MIN_PRIORITY, max: MAX_PRIORITY } } };
+  }
 
   const problems = problemsOf(parseRules(rules, schemas), schemas, type);
   const refused = problems.find(
@@ -134,7 +140,7 @@ export function parseImport(text, schemas, defaultTimeframe) {
       description: body.description || null,
       type,
       enabled: false,
-      priority: Number.isInteger(body.priority) ? body.priority : DEFAULT_PRIORITY,
+      priority,
       timeframe: typeof body.timeframe === "string" ? body.timeframe : defaultTimeframe,
       rules,
       parameters: isObject(body.parameters) ? body.parameters : {},

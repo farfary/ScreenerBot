@@ -1,7 +1,7 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 //
-// Recorded API responses and view assertions for the trader dashboard page, including its embedded strategies editor.
+// Recorded API responses and view assertions for the trader dashboard page, including its embedded strategies roster and editor.
 
 export const endpoints = [
   {
@@ -57,33 +57,9 @@ export const endpoints = [
   },
   {
     method: "GET",
-    path: "/api/strategies",
-    query: { type: "ENTRY" },
-    fixture: "strategies_entry.json",
-    empty: "strategies.empty.json",
-    rust: "src/webserver/routes/strategies/types.rs::StrategyListResponse",
-    record: "/api/strategies?type=ENTRY",
-  },
-  {
-    method: "GET",
-    path: "/api/strategies",
-    query: { type: "EXIT" },
-    fixture: "strategies_exit.json",
-    empty: "strategies.empty.json",
-    rust: "src/webserver/routes/strategies/types.rs::StrategyListResponse",
-    record: "/api/strategies?type=EXIT",
-  },
-  {
-    method: "GET",
-    path: "/api/strategies",
-    fixture: "strategies_all.json",
-    empty: "strategies.empty.json",
-    rust: "src/webserver/routes/strategies/types.rs::StrategyListResponse",
-  },
-  {
-    method: "GET",
     path: "/api/strategies/overview",
     fixture: "strategies_overview.json",
+    empty: "strategies_overview.empty.json",
     rust: "src/webserver/routes/strategies/types.rs::StrategiesOverviewResponse",
   },
   {
@@ -147,28 +123,13 @@ export const views = [
     ],
   },
   {
-    name: "strategy control",
-    click: [tab("strategy-control")],
-    populated: [
-      { selector: "#entry-strategies .strategy-control-item", min: 3 },
-      { selector: "#exit-strategies .strategy-control-item", min: 2 },
-    ],
-    empty: [
-      {
-        selector: "#entry-strategies .state-view-empty",
-        text: "No strategies defined",
-      },
-      { selector: "#exit-strategies .state-view-empty", text: "No strategies defined" },
-    ],
-  },
-  {
-    name: "strategies editor",
+    name: "strategies",
     click: [tab("strategies")],
-    populated: [{ selector: "#strategy-list .strategy-item", min: 5 }],
-    empty: [{ selector: "#strategy-list .state-view-empty", text: "No strategies yet" }],
+    populated: [{ selector: "#strategies-roster tbody tr[data-row-id]", min: 3 }],
+    empty: [{ selector: "#strategies-roster .state-view-empty", text: "No strategies yet" }],
     dialogs: [
       {
-        trigger: "#create-strategy",
+        trigger: '#strategies-roster [data-btn-id="create-strategy"]',
         dialog: "#create-strategy-modal",
         close: "#create-strategy-close",
       },

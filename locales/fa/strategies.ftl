@@ -8,9 +8,6 @@
 
 ## Strategy list
 
-strategies-filter-all = همه
-strategies-filter-entry = ورود
-strategies-filter-exit = خروج
 strategies-type-entry = ورود
 strategies-type-exit = خروج
 strategies-list-empty-title = هنوز استراتژی‌ای وجود ندارد
@@ -19,10 +16,6 @@ strategies-new = استراتژی جدید
 strategies-import =
     .title = وارد کردن استراتژی
     .aria-label = وارد کردن استراتژی
-strategies-item-enable =
-    .title = فعال‌سازی
-strategies-item-disable =
-    .title = غیرفعال‌سازی
 
 # Name given to a strategy before it is saved.
 strategies-new-name = استراتژی جدید
@@ -34,7 +27,6 @@ strategies-editor-name =
 strategies-editor-dirty =
     .title = تغییرات ذخیره‌نشده
 strategies-action-validate = اعتبارسنجی
-strategies-editor-empty = استراتژی‌ای برای ویرایش انتخاب کنید یا استراتژی جدیدی بسازید
 strategies-conditions-empty-title = هنوز شرطی وجود ندارد
 strategies-conditions-empty-hint = برای شروع ساخت، «{ strategies-add-condition }» را بزنید
 strategies-add-condition = افزودن شرط
@@ -98,10 +90,10 @@ strategies-catalog-search-clear =
 strategies-catalog-no-description = توضیحی موجود نیست
 
 # Editor header: the timeframe is the default for candle conditions that leave theirs unset.
-strategies-editor-active = فعال
+strategies-editor-active = روشن
 strategies-editor-timeframe = بازه زمانی پیش‌فرض
     .title = بازه زمانی کندل برای شرط‌هایی که بازه زمانی خودشان را تعیین نمی‌کنند
-strategies-editor-priority = اولویت
+strategies-editor-order = ترتیب
     .title = ترتیب ارزیابی از 1 تا 100؛ عدد کوچک‌تر زودتر ارزیابی می‌شود
 strategies-editor-description = توضیحات
 strategies-editor-description-field =
@@ -200,6 +192,8 @@ strategies-unsaved-confirm = تغییرات ذخیره‌نشده کنار گذ�
     .message = «{ $name }» تغییرات ذخیره‌نشده دارد.
 strategies-unsaved-discard = کنار گذاشتن
 strategies-import-error-json = فایل JSON معتبر نیست
+# $min and $max are the bounds of the evaluation order.
+strategies-import-error-priority = اولویت در فایل باید عددی صحیح از { $min } تا { $max } باشد
 strategies-import-error-shape = فایل هیچ استراتژی‌ای را توصیف نمی‌کند
 # $type is the condition type id, $name the condition name.
 strategies-import-error-unknown-condition = فایل از شرطی استفاده می‌کند که در این نسخه وجود ندارد: { $type }
@@ -242,8 +236,6 @@ strategies-toast-test-failed = آزمایش ناموفق بود
 strategies-toast-valid = استراتژی معتبر است
 strategies-toast-invalid = استراتژی خطا دارد
 strategies-toast-validation-failed = اعتبارسنجی ناموفق بود
-strategies-toast-item-enabled = استراتژی فعال شد
-strategies-toast-item-disabled = استراتژی غیرفعال شد
 strategies-toast-item-toggle-failed = تغییر وضعیت استراتژی ناموفق بود
 strategies-toast-deleted = استراتژی حذف شد
     .message = «{ $name }» با موفقیت حذف شد
@@ -687,3 +679,91 @@ strategies-readiness-priced-missing =
     }
 strategies-readiness-runtime = معامله زنده در دسترس است
 strategies-readiness-runtime-ok = راه‌اندازی و دروازه‌های ایمنی معاملات زنده را مجاز می‌کنند
+
+## Roster: the strategy list, one view per kind. Status and notice ids come from
+## src/strategies/overview.rs.
+
+strategies-back = همه استراتژی‌ها
+strategies-view-kind = نوع استراتژی
+strategies-unnamed = استراتژی بدون نام
+strategies-col-on = روشن
+strategies-col-strategy = استراتژی
+strategies-col-order = ترتیب
+    .title = ترتیب ارزیابی میان استراتژی‌های ورود فعال یک حالت؛ نخستین استراتژی‌ای که سیگنال دهد توکن را می‌گیرد
+strategies-col-mode = حالت
+strategies-col-status = وضعیت
+strategies-col-open = باز
+strategies-col-watching = زیر نظر
+strategies-col-rounds = دورها
+strategies-col-closed = بسته‌شده
+strategies-col-win-rate = نرخ برد
+strategies-col-realized = محقق‌شده { -sol }
+strategies-col-manages = مدیریت می‌کند
+strategies-col-last-signal = آخرین سیگنال
+strategies-status-running = در حال اجرا
+strategies-status-not-running = اجرا نمی‌شود
+strategies-status-off = خاموش
+strategies-status-setup-required = راه‌اندازی لازم است
+strategies-status-live-paused = ورودهای واقعی متوقف شده‌اند
+strategies-status-paper-cash = موجودی آزمایشی کافی نیست
+strategies-status-slots-full = جایگاه‌ها پر است
+strategies-status-entry-monitor-off = پایشگر ورود خاموش است
+strategies-status-exit-monitor-off = پایشگر خروج خاموش است
+strategies-notice-setup-required = معامله آزمایشی پس از راه‌اندازی شروع می‌شود
+strategies-notice-force-stopped = توقف اضطراری فعال است
+strategies-notice-trader-off = Auto Trader خاموش است
+strategies-notice-waiting = در انتظار سرویس‌های اصلی
+strategies-notice-monitors-off = پایشگرهای ورود و خروج خاموش‌اند
+strategies-notice-start = روشن کردن Auto Trader
+# $closed and $needed count closed paper rounds; $changed is a formatted date.
+strategies-readiness-progress = دورهای آزمایشی { $closed }/{ $needed }
+strategies-readiness-ready = آماده معامله واقعی
+strategies-readiness-since = قوانین تغییر کرد { $changed }
+# $book is the trading mode of the other book; $count its open positions.
+strategies-open-other-book =
+    { $count ->
+        [one] { $book }: { $count } پوزیشن
+       *[other] { $book }: { $count } پوزیشن
+    }
+strategies-manages-all = همه استراتژی‌های ورود
+# $first is the first managed entry strategy; $more the count of the others.
+strategies-manages-some =
+    { $more ->
+        [one] { $first } و { $more } مورد دیگر
+       *[other] { $first } و { $more } مورد دیگر
+    }
+strategies-exit-before = ابتدا بررسی می‌شوند
+strategies-exit-hint = این قوانین خروج در هر پوزیشن پیش از هر استراتژی خروج بررسی می‌شوند
+strategies-action-edit = ویرایش { $name }
+strategies-action-delete = حذف { $name }
+strategies-roster-stale = آخرین به‌روزرسانی
+
+## Saving new rules: the server answers whether a save changed the rules a strategy trades on.
+
+strategies-live-rules-confirm = تغییر قوانین «{ $name }» واقعی
+    .message = قوانین جدید از بررسی بعدی با { -sol } واقعی معامله می‌کنند و شواهد آزمایشی این استراتژی از همین ذخیره از نو آغاز می‌شود.
+strategies-live-rules-save = ذخیره و معامله واقعی
+strategies-toast-evidence-restarted = استراتژی ذخیره شد
+    .message = قوانین «{ $name }» تغییر کرد؛ شواهد آزمایشی آن از اکنون از نو آغاز می‌شود
+
+## Trading mode: arming a paper strategy live and returning it to paper.
+
+strategies-mode-arm = فعال‌سازی زنده
+strategies-mode-return-paper = بازگشت به آزمایشی
+strategies-mode-arm-title = فعال‌سازی زنده «{ $name }»
+strategies-mode-arm-lead = ورودهای جدید «{ $name }» با سواپ واقعی از کیف پول معاملاتی شما انجام می‌شوند.
+strategies-mode-arm-lead-exit = «{ $name }» هنگام سیگنال، پوزیشن‌های زنده را با سواپ واقعی از کیف پول معاملاتی شما می‌فروشد.
+strategies-mode-arm-readiness = آمادگی بر اساس دفتر آزمایشی
+strategies-mode-arm-open-paper = پوزیشن‌های آزمایشی باز، آزمایشی می‌مانند و به‌صورت آزمایشی بسته می‌شوند.
+strategies-mode-arm-ack-real-native = ورودهای جدید { -sol } واقعی از کیف پول معاملاتی شما خرج می‌کنند.
+strategies-mode-arm-ack-real-native-exit = پوزیشن‌های زنده‌ای که مدیریت می‌کند با سواپ واقعی فروخته می‌شوند.
+strategies-mode-arm-ack-fees = سواپ‌های زنده کارمزد شبکه و اسلیپیج واقعی می‌پردازند؛ نتایج آزمایشی نتایج زنده را تضمین نمی‌کنند.
+strategies-mode-arm-ack-unready = برخی بررسی‌های آمادگی قبول نشده‌اند. با این حال این استراتژی را فعال می‌کنم.
+strategies-mode-arm-unavailable = معامله زنده اکنون در دسترس نیست؛ آخرین بررسی را ببینید.
+strategies-mode-return-title = بازگرداندن «{ $name }» به آزمایشی
+strategies-mode-return-message = ورودهای جدید بدون خرج کردن { -sol } در دفتر آزمایشی باز می‌شوند. پوزیشن‌های زنده باز، زنده می‌مانند و زنده بسته می‌شوند.
+strategies-mode-return-message-exit = دیگر پوزیشن‌های زنده را ارزیابی نمی‌کند؛ قوانین خروج آن‌ها باقی می‌ماند.
+strategies-mode-readiness-failed = خواندن آمادگی استراتژی ممکن نشد
+strategies-mode-toast-armed = «{ $name }» اکنون زنده معامله می‌کند
+strategies-mode-toast-paper = «{ $name }» اکنون آزمایشی معامله می‌کند
+strategies-mode-toast-failed = تغییر حالت معامله ممکن نشد

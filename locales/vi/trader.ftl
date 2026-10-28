@@ -11,7 +11,6 @@ trader-exit-type-dca = DCA
 trader-exit-type-unknown = Không rõ
 
 trader-tab-stats = Thống kê
-trader-tab-strategy-control = Điều khiển chiến lược
 trader-tab-strategies = Chiến lược
 trader-tab-stop-loss = Stop loss
 trader-tab-trailing-stop = Trailing stop
@@ -79,15 +78,6 @@ trader-toast-save-failed = Lưu thất bại
 trader-toast-feature-enabled = Đã bật tính năng
 trader-toast-feature-disabled = Đã tắt tính năng
 trader-toast-feature-applied = Đã áp dụng cài đặt Auto Trader
-trader-toast-strategy-enabled = Đã bật chiến lược
-    .message = Chiến lược đang hoạt động
-trader-toast-strategy-disabled = Đã tắt chiến lược
-    .message = Chiến lược không hoạt động
-trader-toast-strategy-failed = Cập nhật thất bại
-    .message = Không thể cập nhật trạng thái chiến lược
-trader-toast-strategy-armed = { $name } hiện giao dịch live
-trader-toast-strategy-paper = { $name } hiện giao dịch thử nghiệm
-trader-toast-strategy-mode-failed = Không thể đổi chế độ giao dịch
 
 trader-stats-window =
     .aria-label = Khoảng thống kê
@@ -312,33 +302,6 @@ trader-time-status-losing-due = Đang lỗ { $pnl }; đóng ở lần kiểm tra
 # $held and $remaining are formatted durations.
 trader-time-status-flat = Đi ngang { $held }; đóng sau { $remaining }
 trader-time-status-flat-due = Đi ngang { $held }; đóng ở lần kiểm tra tới
-
-trader-strategy-entry-title = Chiến lược vào lệnh
-trader-strategy-entry-subtitle = Các tín hiệu có thể mở vị thế mới.
-trader-strategy-exit-title = Chiến lược thoát lệnh
-trader-strategy-exit-subtitle = Các tín hiệu có thể đóng hoặc bảo vệ vị thế đang mở.
-trader-strategy-active-unknown = -- đang hoạt động
-trader-strategy-active = { $enabled }/{ $total } đang hoạt động
-trader-strategy-loading = Đang tải chiến lược...
-trader-strategy-load-failed = Không thể tải chiến lược
-trader-strategy-empty = Chưa có chiến lược nào
-trader-strategy-unnamed = Chiến lược chưa đặt tên
-trader-strategy-priority-auto = Tự động
-trader-strategy-priority = Ưu tiên { $priority }
-trader-strategy-mode-arm = Kích hoạt chạy thật
-trader-strategy-mode-return-paper = Quay lại thử nghiệm
-trader-strategy-arm-title = Kích hoạt chạy thật cho “{ $name }”
-trader-strategy-arm-lead = Các lệnh vào mới của “{ $name }” sẽ giao dịch bằng swap thật từ ví giao dịch của bạn.
-trader-strategy-arm-readiness = Mức sẵn sàng từ sổ thử nghiệm
-trader-strategy-arm-open-paper = Các vị thế thử nghiệm đang mở vẫn là thử nghiệm và kết thúc trên sổ thử nghiệm.
-trader-strategy-arm-ack-real-native = Các lệnh vào mới dùng { -sol } thật từ ví giao dịch của bạn.
-trader-strategy-arm-ack-fees = Các swap live phải trả phí mạng và trượt giá thật; kết quả thử nghiệm không đảm bảo kết quả live.
-trader-strategy-arm-ack-unready = Một số bước kiểm tra sẵn sàng chưa đạt. Vẫn kích hoạt chiến lược này.
-trader-strategy-arm-unavailable = Hiện không thể giao dịch live; xem lần kiểm tra gần nhất.
-trader-strategy-return-title = Đưa “{ $name }” về thử nghiệm
-trader-strategy-return-message = Các lệnh vào mới mở trên sổ thử nghiệm mà không dùng { -sol }. Các vị thế live đang mở vẫn live và kết thúc live.
-trader-strategy-readiness-failed = Không thể đọc mức sẵn sàng của chiến lược
-trader-paper-explore-title = Giao dịch thử nghiệm bắt đầu sau khi thiết lập
 
 trader-dca-title = DCA (trung bình giá)
 trader-dca-subtitle = Tự động thêm vào các vị thế đang lỗ để hạ giá vào trung bình

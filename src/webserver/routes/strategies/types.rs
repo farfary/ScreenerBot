@@ -181,6 +181,13 @@ pub struct StrategyRequest {
     pub entry_strategy_ids: Option<Vec<String>>,
 }
 
+/// Strategy validation query: `id` names the stored strategy the draft edits.
+#[derive(Debug, Deserialize)]
+pub struct StrategyValidateQuery {
+    #[serde(default)]
+    pub id: Option<String>,
+}
+
 /// Strategy enabled-state update request.
 #[derive(Debug, Deserialize)]
 pub struct StrategyEnabledRequest {

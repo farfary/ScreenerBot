@@ -18,7 +18,6 @@ trader-exit-type-unknown = Невідомо
 ## Sub-tabs. Ids are the tab ids of the trader page.
 
 trader-tab-stats = Статистика
-trader-tab-strategy-control = Керування стратегіями
 trader-tab-strategies = Стратегії
 trader-tab-stop-loss = Стоп-лос
 trader-tab-trailing-stop = Трейлінг-стоп
@@ -95,15 +94,6 @@ trader-toast-save-failed = Помилка збереження
 trader-toast-feature-enabled = Функцію увімкнено
 trader-toast-feature-disabled = Функцію вимкнено
 trader-toast-feature-applied = Налаштування автотрейдера застосовано
-trader-toast-strategy-enabled = Стратегію увімкнено
-    .message = Стратегія активна
-trader-toast-strategy-disabled = Стратегію вимкнено
-    .message = Стратегія неактивна
-trader-toast-strategy-failed = Помилка оновлення
-    .message = Не вдалося оновити статус стратегії
-trader-toast-strategy-armed = { $name } тепер торгує реально
-trader-toast-strategy-paper = { $name } тепер торгує віртуально
-trader-toast-strategy-mode-failed = Не вдалося змінити режим торгівлі
 
 ## Stats: realized window and metrics
 
@@ -398,35 +388,6 @@ trader-time-status-losing-due = У збитку { $pnl }; закриється �
 # $held and $remaining are formatted durations.
 trader-time-status-flat = Без руху { $held }; закриється через { $remaining }
 trader-time-status-flat-due = Без руху { $held }; закриється під час наступної перевірки
-
-## Strategy control
-
-trader-strategy-entry-title = Стратегії входу
-trader-strategy-entry-subtitle = Сигнали, що можуть відкрити нову позицію.
-trader-strategy-exit-title = Стратегії виходу
-trader-strategy-exit-subtitle = Сигнали, що можуть закрити або захистити відкриту позицію.
-trader-strategy-active-unknown = -- активні
-trader-strategy-active = Активні: { $enabled }/{ $total }
-trader-strategy-loading = Завантаження стратегій...
-trader-strategy-load-failed = Не вдалося завантажити стратегії
-trader-strategy-empty = Стратегій не визначено
-trader-strategy-unnamed = Стратегія без назви
-trader-strategy-priority-auto = Авто
-trader-strategy-priority = Пріоритет { $priority }
-trader-strategy-mode-arm = Активувати реальну торгівлю
-trader-strategy-mode-return-paper = Повернути у віртуальний режим
-trader-strategy-arm-title = Активувати реальну торгівлю для «{ $name }»
-trader-strategy-arm-lead = Нові входи «{ $name }» здійснюватимуться реальними свопами з вашого торгового гаманця.
-trader-strategy-arm-readiness = Готовність за віртуальним портфелем
-trader-strategy-arm-open-paper = Відкриті віртуальні позиції залишаються віртуальними й закриваються віртуально.
-trader-strategy-arm-ack-real-native = Нові входи витрачають реальні { -sol } з вашого торгового гаманця.
-trader-strategy-arm-ack-fees = Реальні свопи сплачують справжні мережеві комісії та проковзування; віртуальні результати не гарантують реальних.
-trader-strategy-arm-ack-unready = Деякі перевірки готовності не пройдено. Усе одно активувати цю стратегію.
-trader-strategy-arm-unavailable = Реальна торгівля зараз недоступна; див. останню перевірку.
-trader-strategy-return-title = Повернути «{ $name }» у віртуальний режим
-trader-strategy-return-message = Нові входи відкриваються у віртуальному портфелі без витрати { -sol }. Відкриті реальні позиції залишаються реальними й закриваються реально.
-trader-strategy-readiness-failed = Не вдалося отримати готовність стратегії
-trader-paper-explore-title = Віртуальна торгівля почнеться після налаштування
 
 ## Dollar-cost averaging
 

@@ -11,7 +11,6 @@ trader-exit-type-dca = DCA
 trader-exit-type-unknown = Неизвестно
 
 trader-tab-stats = Статистика
-trader-tab-strategy-control = Управление стратегиями
 trader-tab-strategies = Стратегии
 trader-tab-stop-loss = Стоп-лосс
 trader-tab-trailing-stop = Трейлинг-стоп
@@ -79,15 +78,6 @@ trader-toast-save-failed = Ошибка сохранения
 trader-toast-feature-enabled = Функция включена
 trader-toast-feature-disabled = Функция отключена
 trader-toast-feature-applied = Настройка автотрейдера применена
-trader-toast-strategy-enabled = Стратегия включена
-    .message = Стратегия активна
-trader-toast-strategy-disabled = Стратегия отключена
-    .message = Стратегия неактивна
-trader-toast-strategy-failed = Ошибка обновления
-    .message = Не удалось обновить статус стратегии
-trader-toast-strategy-armed = { $name } теперь торгует в боевом режиме
-trader-toast-strategy-paper = { $name } теперь торгует виртуально
-trader-toast-strategy-mode-failed = Не удалось изменить режим торговли
 
 trader-stats-window =
     .aria-label = Период статистики
@@ -345,33 +335,6 @@ trader-time-status-losing-due = В убытке { $pnl }; закроется п�
 # $held and $remaining are formatted durations.
 trader-time-status-flat = Без движения { $held }; закроется через { $remaining }
 trader-time-status-flat-due = Без движения { $held }; закроется при следующей проверке
-
-trader-strategy-entry-title = Стратегии входа
-trader-strategy-entry-subtitle = Сигналы, которые могут открыть новую позицию.
-trader-strategy-exit-title = Стратегии выхода
-trader-strategy-exit-subtitle = Сигналы, которые могут закрыть или защитить открытую позицию.
-trader-strategy-active-unknown = -- активно
-trader-strategy-active = активно: { $enabled }/{ $total }
-trader-strategy-loading = Загрузка стратегий...
-trader-strategy-load-failed = Не удалось загрузить стратегии
-trader-strategy-empty = Стратегии не заданы
-trader-strategy-unnamed = Стратегия без названия
-trader-strategy-priority-auto = Авто
-trader-strategy-priority = Приоритет { $priority }
-trader-strategy-mode-arm = Включить боевой режим
-trader-strategy-mode-return-paper = Вернуть в виртуальный режим
-trader-strategy-arm-title = Включить боевой режим для «{ $name }»
-trader-strategy-arm-lead = Новые входы «{ $name }» будут совершаться реальными свопами с вашего торгового кошелька.
-trader-strategy-arm-readiness = Готовность по виртуальному портфелю
-trader-strategy-arm-open-paper = Открытые виртуальные позиции остаются виртуальными и закрываются виртуально.
-trader-strategy-arm-ack-real-native = Новые входы тратят реальные { -sol } с вашего торгового кошелька.
-trader-strategy-arm-ack-fees = Боевые свопы оплачивают реальные сетевые комиссии и проскальзывание; виртуальные результаты не гарантируют боевых.
-trader-strategy-arm-ack-unready = Часть проверок готовности не пройдена. Всё равно включить боевой режим для этой стратегии.
-trader-strategy-arm-unavailable = Боевая торговля сейчас недоступна; см. последнюю проверку.
-trader-strategy-return-title = Вернуть «{ $name }» в виртуальный режим
-trader-strategy-return-message = Новые входы открываются в виртуальном портфеле без расхода { -sol }. Открытые боевые позиции остаются боевыми и закрываются в боевом режиме.
-trader-strategy-readiness-failed = Не удалось получить готовность стратегии
-trader-paper-explore-title = Виртуальная торговля начнётся после настройки
 
 trader-dca-title = Усреднение (DCA)
 trader-dca-subtitle = Автоматически докупать убыточные позиции, чтобы снизить среднюю цену входа

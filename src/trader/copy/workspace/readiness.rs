@@ -8,7 +8,7 @@ use crate::config::with_config;
 use crate::i18n::{ids, UiArg, UiText};
 use crate::trader::copy::control::{CopyLiveBlock, CopyTaskSummary};
 use crate::trader::copy::CopyRound;
-use crate::trader::paper::readiness::{self, CheckText, Readiness, ReadinessCheck};
+use crate::trader::paper::readiness::{self, CheckText, HistoryText, Readiness, ReadinessCheck};
 
 /// Seconds with one decimal, the figure the latency wording shows.
 fn tenths_of_seconds(ms: u64) -> String {
@@ -45,7 +45,7 @@ pub(super) fn readiness(
     let wins = rounds.iter().filter(|round| round.pnl_native > 0.0).count();
     let p95 = summary.stats.arrival_distance.p95_ms;
     let checks = vec![
-        readiness::history(rounds.len(), min_rounds),
+        readiness::history(rounds.len(), min_rounds, HistoryText::RUN),
         readiness::profit(realized, rounds.len(), wins),
         ReadinessCheck {
             id: "latency",

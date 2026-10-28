@@ -8,9 +8,6 @@
 
 ## Strategy list
 
-strategies-filter-all = Усі
-strategies-filter-entry = Входу
-strategies-filter-exit = Виходу
 strategies-type-entry = Входу
 strategies-type-exit = Виходу
 strategies-list-empty-title = Стратегій ще немає
@@ -19,10 +16,6 @@ strategies-new = Нова стратегія
 strategies-import =
     .title = Імпортувати стратегію
     .aria-label = Імпортувати стратегію
-strategies-item-enable =
-    .title = Увімкнути
-strategies-item-disable =
-    .title = Вимкнути
 
 # Name given to a strategy before it is saved.
 strategies-new-name = Нова стратегія
@@ -34,7 +27,6 @@ strategies-editor-name =
 strategies-editor-dirty =
     .title = Незбережені зміни
 strategies-action-validate = Перевірити
-strategies-editor-empty = Виберіть стратегію для редагування або створіть нову
 strategies-conditions-empty-title = Умов ще немає
 strategies-conditions-empty-hint = Натисніть «{ strategies-add-condition }», щоб почати
 strategies-add-condition = Додати умову
@@ -102,10 +94,10 @@ strategies-catalog-search-clear =
 strategies-catalog-no-description = Опис недоступний
 
 # Editor header: the timeframe is the default for candle conditions that leave theirs unset.
-strategies-editor-active = Активна
+strategies-editor-active = Увімк.
 strategies-editor-timeframe = Таймфрейм за замовчуванням
     .title = Таймфрейм свічок для умов, які не задають власного
-strategies-editor-priority = Пріоритет
+strategies-editor-order = Порядок
     .title = Порядок обчислення від 1 до 100; менші числа обчислюються першими
 strategies-editor-description = Опис
 strategies-editor-description-field =
@@ -210,6 +202,8 @@ strategies-unsaved-confirm = Відхилити незбережені змін�
     .message = У «{ $name }» є незбережені зміни.
 strategies-unsaved-discard = Відхилити зміни
 strategies-import-error-json = Файл не є коректним JSON
+# $min and $max are the bounds of the evaluation order.
+strategies-import-error-priority = Пріоритет у файлі має бути цілим числом від { $min } до { $max }
 strategies-import-error-shape = Файл не описує стратегію
 # $type is the condition type id, $name the condition name.
 strategies-import-error-unknown-condition = Файл використовує умову, якої немає в цій версії: { $type }
@@ -252,8 +246,6 @@ strategies-toast-test-failed = Перевірка не вдалася
 strategies-toast-valid = Стратегія дійсна
 strategies-toast-invalid = Стратегія має помилки
 strategies-toast-validation-failed = Помилка перевірки
-strategies-toast-item-enabled = Стратегію увімкнено
-strategies-toast-item-disabled = Стратегію вимкнено
 strategies-toast-item-toggle-failed = Не вдалося перемкнути стратегію
 strategies-toast-deleted = Стратегію видалено
     .message = «{ $name }» успішно видалено
@@ -701,3 +693,95 @@ strategies-readiness-priced-missing =
     }
 strategies-readiness-runtime = Реальна торгівля доступна
 strategies-readiness-runtime-ok = Налаштування й запобіжники дозволяють реальні угоди
+
+## Roster: the strategy list, one view per kind. Status and notice ids come from
+## src/strategies/overview.rs.
+
+strategies-back = Усі стратегії
+strategies-view-kind = Тип стратегії
+strategies-unnamed = Стратегія без назви
+strategies-col-on = Увімк.
+strategies-col-strategy = Стратегія
+strategies-col-order = Порядок
+    .title = Порядок обчислення серед увімкнених стратегій входу одного режиму; перша із сигналом забирає токен
+strategies-col-mode = Режим
+strategies-col-status = Статус
+strategies-col-open = Відкрито
+strategies-col-watching = Під наглядом
+strategies-col-rounds = Раунди
+strategies-col-closed = Закрито
+strategies-col-win-rate = Частка прибуткових
+strategies-col-realized = Реалізовано { -sol }
+strategies-col-manages = Керує
+strategies-col-last-signal = Останній сигнал
+strategies-status-running = Працює
+strategies-status-not-running = Не працює
+strategies-status-off = Вимкнена
+strategies-status-setup-required = Потрібне налаштування
+strategies-status-live-paused = Реальні входи призупинено
+strategies-status-paper-cash = Бракує віртуальних коштів
+strategies-status-slots-full = Усі слоти зайняті
+strategies-status-entry-monitor-off = Монітор входів вимкнено
+strategies-status-exit-monitor-off = Монітор виходів вимкнено
+strategies-notice-setup-required = Віртуальна торгівля почнеться після налаштування
+strategies-notice-force-stopped = Увімкнено аварійну зупинку
+strategies-notice-trader-off = Auto Trader вимкнено
+strategies-notice-waiting = Очікування основних сервісів
+strategies-notice-monitors-off = Монітори входів і виходів вимкнено
+strategies-notice-start = Запустити Auto Trader
+# $closed and $needed count closed paper rounds; $changed is a formatted date.
+strategies-readiness-progress = Віртуальні раунди { $closed }/{ $needed }
+strategies-readiness-ready = Готова до реальної торгівлі
+strategies-readiness-since = Правила змінено { $changed }
+# $book is the trading mode of the other book; $count its open positions.
+strategies-open-other-book =
+    { $count ->
+        [one] { $book }: { $count } позиція
+        [few] { $book }: { $count } позиції
+        [many] { $book }: { $count } позицій
+       *[other] { $book }: { $count } позиції
+    }
+strategies-manages-all = Усі стратегії входу
+# $first is the first managed entry strategy; $more the count of the others.
+strategies-manages-some =
+    { $more ->
+        [one] { $first } і ще { $more }
+        [few] { $first } і ще { $more }
+        [many] { $first } і ще { $more }
+       *[other] { $first } і ще { $more }
+    }
+strategies-exit-before = Перевіряються першими
+strategies-exit-hint = Ці правила виходу перевіряються для кожної позиції раніше за будь-яку стратегію виходу
+strategies-action-edit = Змінити { $name }
+strategies-action-delete = Видалити { $name }
+strategies-roster-stale = Останнє оновлення
+
+## Saving new rules: the server answers whether a save changed the rules a strategy trades on.
+
+strategies-live-rules-confirm = Змінити правила реальної стратегії «{ $name }»
+    .message = Нові правила торгують реальними { -sol } з наступної перевірки, а віртуальне підтвердження цієї стратегії починається заново з цього збереження.
+strategies-live-rules-save = Зберегти й торгувати реально
+strategies-toast-evidence-restarted = Стратегію збережено
+    .message = Правила «{ $name }» змінилися; її віртуальне підтвердження починається заново
+
+## Trading mode: arming a paper strategy live and returning it to paper.
+
+strategies-mode-arm = Активувати реальну торгівлю
+strategies-mode-return-paper = Повернути у віртуальний режим
+strategies-mode-arm-title = Активувати реальну торгівлю для «{ $name }»
+strategies-mode-arm-lead = Нові входи «{ $name }» здійснюватимуться реальними свопами з вашого торгового гаманця.
+strategies-mode-arm-lead-exit = За своїм сигналом «{ $name }» продаватиме реальні позиції справжніми свопами з вашого торгового гаманця.
+strategies-mode-arm-readiness = Готовність за віртуальним портфелем
+strategies-mode-arm-open-paper = Відкриті віртуальні позиції залишаються віртуальними й закриваються віртуально.
+strategies-mode-arm-ack-real-native = Нові входи витрачають реальні { -sol } з вашого торгового гаманця.
+strategies-mode-arm-ack-real-native-exit = Реальні позиції під її керуванням продаються справжніми свопами.
+strategies-mode-arm-ack-fees = Реальні свопи сплачують справжні мережеві комісії та проковзування; віртуальні результати не гарантують реальних.
+strategies-mode-arm-ack-unready = Деякі перевірки готовності не пройдено. Усе одно активувати цю стратегію.
+strategies-mode-arm-unavailable = Реальна торгівля зараз недоступна; див. останню перевірку.
+strategies-mode-return-title = Повернути «{ $name }» у віртуальний режим
+strategies-mode-return-message = Нові входи відкриваються у віртуальному портфелі без витрати { -sol }. Відкриті реальні позиції залишаються реальними й закриваються реально.
+strategies-mode-return-message-exit = Вона перестає оцінювати реальні позиції; у них лишаються їхні правила виходу.
+strategies-mode-readiness-failed = Не вдалося отримати готовність стратегії
+strategies-mode-toast-armed = { $name } тепер торгує реально
+strategies-mode-toast-paper = { $name } тепер торгує віртуально
+strategies-mode-toast-failed = Не вдалося змінити режим торгівлі

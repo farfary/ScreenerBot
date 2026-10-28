@@ -1,7 +1,7 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! The strategy routes: the overview reads each strategy from the book of its mode with its last evaluation and signal times from the evaluation totals and answers stopped and in Explore Mode, a new strategy starts on paper and arms live only with the confirmation phrase while the Auto Trader can trade live, an update never changes the mode, a priority outside 1-100 is refused on create, update, import and inline validation, the roster order is the entry evaluation order, readiness reads the paper rounds since the last rules change in the current run, switching a strategy on applies the validation a save applies, switching one off is always allowed, neither touches the rest of the stored strategy, an exit strategy keeps the entry strategies it manages, and a test reports every rule's verdict, a rule with no data as unknown with the reason, without waiting for candles the OHLCV service cannot read through.
+//! The strategy routes: the overview reads each strategy from the book of its mode with its last evaluation and signal times from the evaluation totals and answers stopped and in Explore Mode, a new strategy starts on paper and arms live only with the confirmation phrase while the Auto Trader can trade live, an update never changes the mode, a priority outside 1-100 is refused on create, update, import and inline validation, an update and a validation of a stored strategy answer whether the save changes its rules, the roster order is the entry evaluation order, readiness reads the paper rounds since the last rules change in the current run, switching a strategy on applies the validation a save applies, switching one off is always allowed, neither touches the rest of the stored strategy, an exit strategy keeps the entry strategies it manages, and a test reports every rule's verdict, a rule with no data as unknown with the reason, without waiting for candles the OHLCV service cannot read through.
 
 use crate::common;
 
@@ -514,6 +514,99 @@ async fn an_inline_validation_refuses_a_priority_outside_one_to_one_hundred() {
         assert_eq!(status, StatusCode::OK, "{body}");
         assert_eq!(body["valid"], true, "priority {priority}: {body}");
     }
+}
+
+/// The save request of the stored entry strategy `id` as it is: its own name,
+/// timeframe, priority and rules, so a test changes one field at a time.
+fn unchanged_entry_request(id: &str) -> Value {
+    json!({
+        "name": id,
+        "strategy_type": "ENTRY",
+        "enabled": false,
+        "priority": 7,
+        "timeframe": "1h",
+        "rules": serde_json::to_value(RuleTree::leaf(liquidity_at_least())).expect("serialize rules"),
+    })
+}
+
+/// The edits a save may carry, each with whether it changes the rules the strategy
+/// trades on: a rule or the timeframe does; a name, a priority or the On switch does not.
+fn entry_edits() -> Vec<(&'static str, &'static str, Value, bool)> {
+    let changed_rule = serde_json::to_value(RuleTree::leaf(condition(
+        "LiquidityLevel",
+        &[
+            ("threshold", json!(25.0)),
+            ("comparison", json!("GREATER_EQUAL")),
+        ],
+    )))
+    .expect("serialize rules");
+    vec![
+        ("rule", "rules", changed_rule, true),
+        ("timeframe", "timeframe", json!("15m"), true),
+        ("name", "name", json!("Renamed Entry"), false),
+        ("priority", "priority", json!(9), false),
+        ("on switch", "enabled", json!(true), false),
+    ]
+}
+
+/// The update answers whether it changed the rules, by the store's fingerprint.
+#[tokio::test]
+async fn an_update_answers_whether_it_changed_the_rules() {
+    let _dir = strategy_system().await;
+    for (edit, field, value, changes_rules) in entry_edits() {
+        let id = format!("edited-{}", edit.replace(' ', "-"));
+        stored(&id, StrategyType::Entry, liquidity_at_least(), false);
+        let mut request = unchanged_entry_request(&id);
+        request[field] = value;
+        let (status, body) = send("PUT", &format!("/api/strategies/{id}"), request).await;
+        assert_eq!(status, StatusCode::OK, "{edit}: {body}");
+        assert_eq!(body["rules_changed"], changes_rules, "{edit}: {body}");
+    }
+}
+
+/// A draft of a stored strategy validates with the answer its save would give, and
+/// reads only: the stored strategy is unchanged afterwards. A draft without an id answers
+/// no rules change, and an id no strategy holds is not found.
+#[tokio::test]
+async fn a_validation_of_a_stored_strategy_answers_whether_the_save_changes_its_rules() {
+    let _dir = strategy_system().await;
+    for (edit, field, value, changes_rules) in entry_edits() {
+        let id = format!("drafted-{}", edit.replace(' ', "-"));
+        stored(&id, StrategyType::Entry, liquidity_at_least(), false);
+        let before = reload(&id);
+        let mut request = unchanged_entry_request(&id);
+        request[field] = value;
+        let (status, body) = send(
+            "POST",
+            &format!("/api/strategies/validate?id={id}"),
+            request,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{edit}: {body}");
+        assert_eq!(body["valid"], true, "{edit}: {body}");
+        assert_eq!(body["rules_changed"], changes_rules, "{edit}: {body}");
+        let after = reload(&id);
+        assert_eq!(after.version, before.version, "{edit}: validation wrote");
+        assert_eq!(after.rules_changed_at, before.rules_changed_at, "{edit}");
+    }
+
+    let (status, body) = send(
+        "POST",
+        "/api/strategies/validate",
+        unchanged_entry_request("unsaved"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["valid"], true, "{body}");
+    assert!(body.get("rules_changed").is_none(), "{body}");
+
+    let (status, body) = send(
+        "POST",
+        "/api/strategies/validate?id=missing",
+        unchanged_entry_request("missing"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "{body}");
 }
 
 #[tokio::test]

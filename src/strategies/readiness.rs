@@ -14,7 +14,7 @@ use crate::i18n::{ids, UiText};
 use crate::positions::paper::PaperStrategyEvidence;
 use crate::positions::Position;
 use crate::strategies::types::{Strategy, StrategyType};
-use crate::trader::paper::readiness::{self, CheckText, Readiness};
+use crate::trader::paper::readiness::{self, CheckText, HistoryText, Readiness};
 use crate::trader::LiveBlock;
 
 /// The paper evidence of every strategy in the current paper run, read on the blocking
@@ -181,16 +181,19 @@ pub fn strategy_readiness(
         .iter()
         .filter(|round| round.exit_time.is_none() && !marked_since_entry(round))
         .count();
-    let mut checks = vec![match rules_changed_at {
-        Some(changed) => readiness::history_since(
-            closed.len(),
-            min_closed_rounds,
-            changed,
-            ids::STRATEGIES_READINESS_HISTORY_SINCE_MET,
-            ids::STRATEGIES_READINESS_HISTORY_SINCE_SHORT,
-        ),
-        None => readiness::history(closed.len(), min_closed_rounds),
-    }];
+    let history_text = match rules_changed_at {
+        Some(changed) => HistoryText {
+            met: ids::STRATEGIES_READINESS_HISTORY_SINCE_MET,
+            short: ids::STRATEGIES_READINESS_HISTORY_SINCE_SHORT,
+            since: Some(changed),
+        },
+        None => HistoryText::RUN,
+    };
+    let mut checks = vec![readiness::history(
+        closed.len(),
+        min_closed_rounds,
+        history_text,
+    )];
     if strategy_type == StrategyType::Entry {
         let realized: f64 = closed
             .iter()

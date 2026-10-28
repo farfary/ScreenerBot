@@ -126,8 +126,9 @@ pub struct StrategySummary {
     pub open_other_book: Option<u32>,
     /// Exit strategies that are on: open positions it judges now.
     pub watching: Option<u32>,
-    /// Closed rounds in `book`: the lifetime on the live book, the current run on the paper
-    /// book; `None` on the paper book while its strategy evidence cannot be read.
+    /// Closed rounds in `book` the strategy opened, or for an exit strategy closed: the
+    /// lifetime on the live book, the current run on the paper book; `None` on the paper
+    /// book while its strategy evidence cannot be read.
     pub rounds: Option<RoundTotals>,
     /// Unrealized P&L of the priced positions counted in `open`.
     pub unrealized_native: Option<f64>,
@@ -384,8 +385,9 @@ struct Figures {
     readiness: Option<ReadinessProgress>,
 }
 
-/// The open positions of both books and the closed live rounds of each entry strategy,
-/// read from memory once per overview.
+/// The open positions of both books and the closed live rounds of each strategy, under
+/// the entry strategy that opened each round and the exit strategy that closed it, read
+/// from memory once per overview.
 struct BookPositions {
     open_live: Vec<Position>,
     open_paper: Vec<Position>,
@@ -448,12 +450,7 @@ impl BookPositions {
                     open_other_book: Some(count(opened(other).count())),
                     watching: None,
                     rounds: match book {
-                        Book::Live => Some(round_totals(
-                            self.live_rounds
-                                .get(&strategy.id)
-                                .map(Vec::as_slice)
-                                .unwrap_or_default(),
-                        )),
+                        Book::Live => Some(self.live_rounds_of(strategy)),
                         Book::Paper => paper_rounds(),
                     },
                     unrealized_native: (!priced.is_empty()).then(|| priced.iter().sum()),
@@ -461,15 +458,27 @@ impl BookPositions {
                     readiness,
                 }
             }
-            // A live exit strategy's closes are not attributed on the live book, so its
-            // rounds stay absent rather than read as none.
             StrategyType::Exit => Figures {
                 watching: strategy.enabled.then(|| count(self.watched_by(strategy))),
-                rounds: (book == Book::Paper).then(paper_rounds).flatten(),
+                rounds: match book {
+                    Book::Live => Some(self.live_rounds_of(strategy)),
+                    Book::Paper => paper_rounds(),
+                },
                 readiness,
                 ..Figures::default()
             },
         }
+    }
+
+    /// The totals of the closed live rounds `strategy` took part in: those its entry
+    /// strategy opened, or those its exit strategy closed.
+    fn live_rounds_of(&self, strategy: &Strategy) -> RoundTotals {
+        round_totals(
+            self.live_rounds
+                .get(&strategy.id)
+                .map(Vec::as_slice)
+                .unwrap_or_default(),
+        )
     }
 
     /// The open positions `strategy`, an exit strategy, judges now: in every book its mode

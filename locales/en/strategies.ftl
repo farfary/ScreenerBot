@@ -8,9 +8,6 @@
 
 ## Strategy list
 
-strategies-filter-all = All
-strategies-filter-entry = Entry
-strategies-filter-exit = Exit
 strategies-type-entry = Entry
 strategies-type-exit = Exit
 strategies-list-empty-title = No strategies yet
@@ -19,10 +16,6 @@ strategies-new = New Strategy
 strategies-import =
     .title = Import Strategy
     .aria-label = Import Strategy
-strategies-item-enable =
-    .title = Enable
-strategies-item-disable =
-    .title = Disable
 
 # Name given to a strategy before it is saved.
 strategies-new-name = New Strategy
@@ -34,7 +27,6 @@ strategies-editor-name =
 strategies-editor-dirty =
     .title = Unsaved changes
 strategies-action-validate = Validate
-strategies-editor-empty = Select a strategy to edit, or create a new one
 strategies-conditions-empty-title = No conditions yet
 strategies-conditions-empty-hint = Use "{ strategies-add-condition }" to start building
 strategies-add-condition = Add Condition
@@ -98,10 +90,10 @@ strategies-catalog-search-clear =
 strategies-catalog-no-description = No description available
 
 # Editor header: the timeframe is the default for candle conditions that leave theirs unset.
-strategies-editor-active = Active
+strategies-editor-active = On
 strategies-editor-timeframe = Default Timeframe
     .title = Candle timeframe used by conditions that do not set their own
-strategies-editor-priority = Priority
+strategies-editor-order = Order
     .title = Evaluation order from 1 to 100; lower numbers are evaluated first
 strategies-editor-description = Description
 strategies-editor-description-field =
@@ -200,6 +192,8 @@ strategies-unsaved-confirm = Discard unsaved changes?
     .message = "{ $name }" has changes that are not saved.
 strategies-unsaved-discard = Discard
 strategies-import-error-json = The file is not valid JSON
+# $min and $max are the bounds of the evaluation order.
+strategies-import-error-priority = The priority in the file must be a whole number from { $min } to { $max }
 strategies-import-error-shape = The file does not describe a strategy
 # $type is the condition type id, $name the condition name.
 strategies-import-error-unknown-condition = The file uses a condition this version does not have: { $type }
@@ -242,8 +236,6 @@ strategies-toast-test-failed = Test Failed
 strategies-toast-valid = Strategy is valid
 strategies-toast-invalid = Strategy has errors
 strategies-toast-validation-failed = Validation failed
-strategies-toast-item-enabled = Strategy enabled
-strategies-toast-item-disabled = Strategy disabled
 strategies-toast-item-toggle-failed = Failed to toggle strategy
 strategies-toast-deleted = Strategy Deleted
     .message = "{ $name }" removed successfully
@@ -690,3 +682,91 @@ strategies-readiness-priced-missing =
     }
 strategies-readiness-runtime = Live trading available
 strategies-readiness-runtime-ok = Setup and safety gates allow live trades
+
+## Roster: the strategy list, one view per kind. Status and notice ids come from
+## src/strategies/overview.rs.
+
+strategies-back = All strategies
+strategies-view-kind = Strategy kind
+strategies-unnamed = Unnamed strategy
+strategies-col-on = On
+strategies-col-strategy = Strategy
+strategies-col-order = Order
+    .title = Evaluation order among the enabled entry strategies of one mode; the first that signals takes the token
+strategies-col-mode = Mode
+strategies-col-status = Status
+strategies-col-open = Open
+strategies-col-watching = Watching
+strategies-col-rounds = Rounds
+strategies-col-closed = Closed
+strategies-col-win-rate = Win rate
+strategies-col-realized = Realized { -sol }
+strategies-col-manages = Manages
+strategies-col-last-signal = Last signal
+strategies-status-running = Running
+strategies-status-not-running = Not running
+strategies-status-off = Off
+strategies-status-setup-required = Setup required
+strategies-status-live-paused = Live entries paused
+strategies-status-paper-cash = Paper cash short
+strategies-status-slots-full = Slots full
+strategies-status-entry-monitor-off = Entry monitor off
+strategies-status-exit-monitor-off = Exit monitor off
+strategies-notice-setup-required = Paper trading starts after setup
+strategies-notice-force-stopped = Emergency stop engaged
+strategies-notice-trader-off = Auto Trader is off
+strategies-notice-waiting = Waiting for core services
+strategies-notice-monitors-off = Entry and exit monitors are off
+strategies-notice-start = Start Auto Trader
+# $closed and $needed count closed paper rounds; $changed is a formatted date.
+strategies-readiness-progress = Paper rounds { $closed }/{ $needed }
+strategies-readiness-ready = Ready to arm
+strategies-readiness-since = Rules changed { $changed }
+# $book is the trading mode of the other book; $count its open positions.
+strategies-open-other-book =
+    { $count ->
+        [one] { $book }: { $count } position
+       *[other] { $book }: { $count } positions
+    }
+strategies-manages-all = All entry strategies
+# $first is the first managed entry strategy; $more the count of the others.
+strategies-manages-some =
+    { $more ->
+        [one] { $first } and { $more } more
+       *[other] { $first } and { $more } more
+    }
+strategies-exit-before = Checked first
+strategies-exit-hint = These exit rules are checked on every position before any exit strategy
+strategies-action-edit = Edit { $name }
+strategies-action-delete = Delete { $name }
+strategies-roster-stale = Last update
+
+## Saving new rules: the server answers whether a save changed the rules a strategy trades on.
+
+strategies-live-rules-confirm = Change the rules of live “{ $name }”
+    .message = The new rules trade real { -sol } from the next check, and the paper evidence of this strategy restarts from this save.
+strategies-live-rules-save = Save and trade live
+strategies-toast-evidence-restarted = Strategy Saved
+    .message = The rules of “{ $name }” changed; its paper evidence restarts from now
+
+## Trading mode: arming a paper strategy live and returning it to paper.
+
+strategies-mode-arm = Arm live
+strategies-mode-return-paper = Return to paper
+strategies-mode-arm-title = Arm “{ $name }” live
+strategies-mode-arm-lead = New entries of “{ $name }” will trade with real swaps from your trading wallet.
+strategies-mode-arm-lead-exit = “{ $name }” will sell live positions with real swaps from your trading wallet when it signals.
+strategies-mode-arm-readiness = Readiness from the paper book
+strategies-mode-arm-open-paper = Open paper positions stay paper and finish on paper.
+strategies-mode-arm-ack-real-native = New entries spend real { -sol } from your trading wallet.
+strategies-mode-arm-ack-real-native-exit = Live positions it manages are sold with real swaps.
+strategies-mode-arm-ack-fees = Live swaps pay real network fees and slippage; paper results do not promise live results.
+strategies-mode-arm-ack-unready = Some readiness checks have not passed. Arm this strategy anyway.
+strategies-mode-arm-unavailable = Live trading is unavailable right now; see the last check.
+strategies-mode-return-title = Return “{ $name }” to paper
+strategies-mode-return-message = New entries open on the paper book without spending { -sol }. Open live positions stay live and finish live.
+strategies-mode-return-message-exit = It stops judging live positions; they keep their rule exits.
+strategies-mode-readiness-failed = Could not read the strategy's readiness
+strategies-mode-toast-armed = { $name } now trades live
+strategies-mode-toast-paper = { $name } now trades on paper
+strategies-mode-toast-failed = Could not change the trading mode

@@ -1,7 +1,7 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 //
-// Trader page - sub-tab shell with the stats dashboard, strategy control list and embedded strategies editor.
+// Trader page - sub-tab shell with the stats dashboard, the embedded strategies roster and editor, and the rule-exit and settings tabs.
 
 import { registerPage } from "../core/lifecycle.js";
 import { Poller } from "../core/poller.js";
@@ -28,9 +28,7 @@ import {
   handleFeatureRestrictedTab,
 } from "./trader/features.js";
 import { createLifecycle as createStrategiesLifecycle } from "./strategies.js";
-import { createStrategyMode, strategyModeRow } from "./trader/strategy_mode.js";
 import { createPaperAccount } from "./trader/paper_account.js";
-import { gateControl, renderSetupGate, setupRequired } from "../ui/setup_gate.js";
 import { RANGE_OPTIONS, renderSegmented } from "../ui/segmented.js";
 import { TRADING_MODE_ICONS, tradingModeLabel } from "../ui/trading_mode.js";
 
@@ -50,13 +48,11 @@ const EXIT_TYPE_LABELS = Object.freeze({
   unknown: "trader-exit-type-unknown",
 });
 
-// Sub-tabs configuration. Strategy Control is second and the embedded Strategies
-// editor is third (Strategies was formerly its own top-level tab).
+// Sub-tabs configuration. The embedded Strategies roster and editor is second.
 function buildSubTabs() {
   const tab = (id, label) => ({ id, label });
   return [
     tab("stats", I18n.t("trader-tab-stats")),
-    tab("strategy-control", I18n.t("trader-tab-strategy-control")),
     tab("strategies", I18n.t("trader-tab-strategies")),
     tab("stop-loss", I18n.t("trader-tab-stop-loss")),
     tab("trailing-stop", I18n.t("trader-tab-trailing-stop")),
@@ -76,7 +72,6 @@ function createLifecycle() {
   let configCards = null;
   let statsPoller = null;
   let configPoller = null;
-  let strategiesPoller = null;
   let lifecycleContext = null;
   let timePositions = null;
 
@@ -94,7 +89,6 @@ function createLifecycle() {
 
   // Event cleanup tracking
   const eventCleanups = [];
-  const strategyListCleanups = [];
 
   // Feature status from API
   let tradingFeatures = {};
@@ -104,8 +98,7 @@ function createLifecycle() {
     currentTab: DEFAULT_TAB,
     config: null,
     stats: null,
-    strategies: [],
-    // Whether an exit strategy is enabled; `null` until the strategy list loads.
+    // Whether an exit strategy is enabled; `null` until the strategies overview loads.
     exitStrategiesOn: null,
   };
 
@@ -129,7 +122,6 @@ function createLifecycle() {
     eventCleanups,
   });
 
-  const strategyMode = createStrategyMode({ requestManager, ConfirmationDialog, Utils });
   const paperAccount = createPaperAccount({
     requestManager,
     ConfirmationDialog,
@@ -143,8 +135,6 @@ function createLifecycle() {
   let strategiesLifecycle = null;
   let strategiesInited = false;
   let strategiesActive = false;
-  // What Strategy Control asked the editor to open, handed over once it is active.
-  let strategiesRequest = null;
   const strategiesSubtabPollers = [];
   const strategiesCtx = {
     managePoller(poller) {
@@ -175,10 +165,6 @@ function createLifecycle() {
       if (!strategiesActive) {
         await strategiesLifecycle.activate(strategiesCtx);
         strategiesActive = true;
-      }
-      if (strategiesRequest) {
-        strategiesLifecycle.open(strategiesRequest);
-        strategiesRequest = null;
       }
     } catch (err) {
       console.error("[Trader] Failed to activate Strategies subtab", err);
@@ -243,7 +229,6 @@ function createLifecycle() {
       "take-profit": "take-profit-tab",
       "time-rules": "time-rules-tab",
       dca: "dca-tab",
-      "strategy-control": "strategy-control-tab",
       strategies: "strategies-tab",
       "general-settings": "general-settings-tab",
     };
@@ -290,17 +275,6 @@ function createLifecycle() {
       }
     }
 
-    if (tabId === "strategy-control") {
-      loadStrategies({ showLoading: true });
-      if (strategiesPoller && !strategiesPoller.active) {
-        strategiesPoller.start();
-      }
-    } else {
-      if (strategiesPoller?.active) {
-        strategiesPoller.stop();
-      }
-    }
-
     // Load preview when switching to stop loss tab
     if (tabId === "stop-loss") {
       examples.updateStopLossExample();
@@ -316,9 +290,9 @@ function createLifecycle() {
       updateTimeRulesStatus();
     }
 
-    // The runner warning reads the exit strategies, which change on their own tabs.
+    // The runner warning reads the exit strategies, which change on their own tab.
     if (tabId === "take-profit") {
-      void loadStrategies();
+      void loadExitStrategiesOn();
     }
   }
 
@@ -977,274 +951,17 @@ function createLifecycle() {
   }
 
   /**
-   * Load strategies list
+   * Whether an exit strategy is switched on, for the Take Profit runner warning. Read from
+   * the strategies overview, which owns the count; a failed read keeps the last answer.
    */
-  async function loadStrategies({ showLoading = false } = {}) {
+  async function loadExitStrategiesOn() {
     try {
-      if (showLoading) {
-        setStrategiesLoadingState();
-      }
-
-      const [entryData, exitData] = await Promise.all([
-        requestManager.fetch("/api/strategies?type=ENTRY", {
-          priority: "normal",
-        }),
-        requestManager.fetch("/api/strategies?type=EXIT", {
-          priority: "normal",
-        }),
-      ]);
-
-      const entryStrategies = entryData.items || [];
-      const exitStrategies = exitData.items || [];
-      state.strategies = [...entryStrategies, ...exitStrategies];
-      state.exitStrategiesOn = exitStrategies.some((strategy) => strategy.enabled === true);
+      const data = await requestManager.fetch("/api/strategies/overview", { priority: "low" });
+      const enabled = data?.counts?.exit?.enabled;
+      state.exitStrategiesOn = typeof enabled === "number" ? enabled > 0 : null;
       examples.updateTakeProfitExample();
-
-      updateStrategyLaneCounts(entryStrategies, exitStrategies);
-
-      // Each render replaces the cards, so the listeners of the previous ones go first.
-      cleanupStrategyListListeners();
-      renderStrategiesList("#entry-strategies", entryStrategies, "ENTRY");
-      renderStrategiesList("#exit-strategies", exitStrategies, "EXIT");
-      renderPaperSetupNotice();
     } catch (error) {
-      console.error("[Trader] Failed to load strategies:", error);
-      renderStrategiesError();
-    }
-  }
-
-  function setStrategiesLoadingState() {
-    cleanupStrategyListListeners();
-    ["#entry-strategies", "#exit-strategies"].forEach((selector) => {
-      const container = $(selector);
-      if (!container) return;
-      container.innerHTML = renderStateView({
-        kind: "loading",
-        message: I18n.t("trader-strategy-loading"),
-        compact: true,
-      });
-    });
-  }
-
-  function cleanupStrategyListListeners() {
-    while (strategyListCleanups.length > 0) {
-      const cleanup = strategyListCleanups.pop();
-      try {
-        cleanup();
-      } catch {
-        /* ignore */
-      }
-    }
-  }
-
-  function updateStrategyLaneCounts(entryStrategies, exitStrategies) {
-    const entryEnabled = entryStrategies.filter((strategy) => strategy.enabled).length;
-    const exitEnabled = exitStrategies.filter((strategy) => strategy.enabled).length;
-
-    const counts = {
-      "#strategy-entry-enabled-label": I18n.t("trader-strategy-active", {
-        enabled: String(entryEnabled),
-        total: String(entryStrategies.length),
-      }),
-      "#strategy-exit-enabled-label": I18n.t("trader-strategy-active", {
-        enabled: String(exitEnabled),
-        total: String(exitStrategies.length),
-      }),
-    };
-
-    const totals = {
-      "#strategy-entry-enabled-label": entryStrategies.length,
-      "#strategy-exit-enabled-label": exitStrategies.length,
-    };
-    Object.entries(counts).forEach(([selector, value]) => {
-      const el = $(selector);
-      if (!el) return;
-      el.textContent = String(value);
-      // A lane with nothing defined has nothing to signal: its count reads neutral.
-      el.classList.toggle("is-empty", totals[selector] === 0);
-    });
-  }
-
-  function renderStrategiesError() {
-    updateStrategyLaneCounts([], []);
-    ["#entry-strategies", "#exit-strategies"].forEach((selector) => {
-      const container = $(selector);
-      if (!container) return;
-      container.innerHTML = renderStateView({
-        kind: "error",
-        icon: "icon-circle-alert",
-        message: I18n.t("trader-strategy-load-failed"),
-        compact: true,
-      });
-    });
-  }
-
-  /**
-   * In Explore Mode no paper or live trade runs: the tab says so above the strategies
-   * and offers the setup that enables paper trading.
-   */
-  function renderPaperSetupNotice() {
-    const notice = $("#strategy-paper-setup");
-    if (!notice) return;
-    const explore = setupRequired();
-    notice.hidden = !explore;
-    if (explore && !notice.firstChild) {
-      renderSetupGate(notice, I18n.t("trader-paper-explore-title"));
-    }
-  }
-
-  /** Show the embedded editor with `request` (`{ strategyId }` or `{ create }`) acted on. */
-  function openStrategiesEditor(request) {
-    strategiesRequest = request;
-    void tabBar?.setActive("strategies");
-  }
-
-  function renderStrategiesList(selector, strategies, type) {
-    const container = $(selector);
-    if (!container) return;
-
-    if (strategies.length === 0) {
-      container.innerHTML = renderStateView({
-        icon: "icon-puzzle",
-        message: I18n.t("trader-strategy-empty"),
-        action: { id: "new-strategy", label: I18n.t("strategies-new"), primary: true },
-        compact: true,
-      });
-      const create = container.querySelector('[data-action="new-strategy"]');
-      const handler = () => openStrategiesEditor({ create: type });
-      create?.addEventListener("click", handler);
-      strategyListCleanups.push(() => create?.removeEventListener("click", handler));
-      return;
-    }
-
-    container.innerHTML = strategies
-      .map((strategy) => {
-        // The toggle is the card's one state signal, and the lane title already names
-        // the strategy type, so the card carries neither a state word nor a type chip.
-        const statusClass = strategy.enabled ? "is-enabled" : "is-disabled";
-        const description = String(strategy.description ?? "").trim();
-        const priority = Utils.escapeHtml(
-          I18n.t("trader-strategy-priority", {
-            priority:
-              strategy.priority !== null && strategy.priority !== undefined
-                ? String(strategy.priority)
-                : I18n.t("trader-strategy-priority-auto"),
-          })
-        );
-        const strategyId = Utils.escapeHtml(String(strategy.id));
-        const strategyName = Utils.escapeHtml(
-          strategy.name ? String(strategy.name) : I18n.t("trader-strategy-unnamed")
-        );
-
-        return `
-        <div class="strategy-control-item ${statusClass}">
-          <div class="strategy-control-item-header">
-            <div class="strategy-control-main">
-              <h4 class="strategy-control-name">${strategyName}</h4>
-              ${description ? `<p class="strategy-control-description">${Utils.escapeHtml(description)}</p>` : ""}
-            </div>
-            <label class="toggle">
-              <input 
-                type="checkbox" 
-                data-strategy-id="${strategyId}"
-                aria-label="${strategyName}"
-                ${strategy.enabled ? "checked" : ""}
-              />
-              <span class="toggle-track"></span>
-            </label>
-          </div>
-          <div class="strategy-control-meta">
-            <span class="strategy-control-chip">
-              <i class="icon-list-ordered"></i>
-              ${priority}
-            </span>
-            <button
-              type="button"
-              class="btn btn-sm btn-ghost strategy-control-edit"
-              data-edit-strategy="${strategyId}"
-            >
-              <i class="icon-square-pen" aria-hidden="true"></i>
-              <span>${Utils.escapeHtml(I18n.t("common-action-edit"))}</span>
-            </button>
-          </div>
-          ${strategyModeRow(strategy, Utils.escapeHtml)}
-        </div>
-      `;
-      })
-      .join("");
-
-    container.querySelectorAll("[data-edit-strategy]").forEach((button) => {
-      const strategy = strategies.find((item) => String(item.id) === button.dataset.editStrategy);
-      const handler = () => openStrategiesEditor({ strategyId: strategy?.id ?? null });
-      button.addEventListener("click", handler);
-      strategyListCleanups.push(() => button.removeEventListener("click", handler));
-    });
-
-    // The mode actions: arming live is gated behind its dialog, and Explore Mode runs no
-    // trades, so there the actions stay disabled and name the setup they need.
-    const modeActions = [
-      ["[data-arm-strategy]", "armStrategy", strategyMode.armLive],
-      ["[data-paper-strategy]", "paperStrategy", strategyMode.returnToPaper],
-    ];
-    for (const [selector, key, act] of modeActions) {
-      container.querySelectorAll(selector).forEach((button) => {
-        gateControl(button);
-        const strategy = strategies.find((item) => String(item.id) === button.dataset[key]);
-        if (!strategy) return;
-        const handler = async () => {
-          button.disabled = true;
-          const changed = await act(strategy);
-          if (changed) await loadStrategies();
-          else button.disabled = false;
-        };
-        button.addEventListener("click", handler);
-        strategyListCleanups.push(() => button.removeEventListener("click", handler));
-      });
-    }
-
-    // Attach event listeners for toggle switches
-    container.querySelectorAll('input[type="checkbox"]').forEach((checkbox) => {
-      const handler = async (e) => {
-        const strategyId = e.target.dataset.strategyId;
-        const enabled = e.target.checked;
-        e.target.disabled = true;
-        await updateStrategyStatus(strategyId, enabled);
-      };
-      checkbox.addEventListener("change", handler);
-      strategyListCleanups.push(() => checkbox.removeEventListener("change", handler));
-    });
-  }
-
-  /**
-   * Update strategy enabled/disabled status
-   */
-  async function updateStrategyStatus(strategyId, enabled) {
-    try {
-      await requestManager.fetch(`/api/strategies/${encodeURIComponent(strategyId)}/enabled`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ enabled }),
-        priority: "high",
-      });
-
-      Utils.showToast({
-        type: "success",
-        title: enabled
-          ? I18n.t("trader-toast-strategy-enabled")
-          : I18n.t("trader-toast-strategy-disabled"),
-        message: enabled
-          ? I18n.attr("trader-toast-strategy-enabled", "message")
-          : I18n.attr("trader-toast-strategy-disabled", "message"),
-      });
-      await loadStrategies();
-    } catch (error) {
-      console.error("[Trader] Failed to update strategy status:", error);
-      Utils.showToast({
-        type: "error",
-        title: I18n.t("trader-toast-strategy-failed"),
-        message: I18n.attr("trader-toast-strategy-failed", "message"),
-      });
-      await loadStrategies(); // Reload to reset checkbox
+      console.error("[Trader] Failed to load the strategies overview:", error);
     }
   }
 
@@ -1681,20 +1398,8 @@ function createLifecycle() {
         );
       }
 
-      if (!strategiesPoller) {
-        strategiesPoller = new Poller(
-          async () => {
-            if (state.currentTab === "strategy-control") {
-              await loadStrategies();
-            }
-          },
-          { label: "Strategies", intervalMs: 10000 } // l10n-ignore: poller label used in logs only
-        );
-      }
-
       ctx.managePoller(statsPoller);
       ctx.managePoller(configPoller);
-      ctx.managePoller(strategiesPoller);
 
       // Paint/switch first; it starts only the selected tab's poller and loads.
       switchTab(state.currentTab);
@@ -1705,8 +1410,6 @@ function createLifecycle() {
       if (state.currentTab === "stats") {
         void loadStats();
         void controls.loadControlsStatus();
-      } else if (state.currentTab !== "strategy-control") {
-        void loadStrategies();
       }
     },
 
@@ -1715,7 +1418,6 @@ function createLifecycle() {
      */
     deactivate() {
       console.log("[Trader] Deactivating page");
-      cleanupStrategyListListeners();
       // Pollers stopped automatically by lifecycle context
     },
 
@@ -1745,9 +1447,7 @@ function createLifecycle() {
       state.stats = null;
       statsPoller = null;
       configPoller = null;
-      strategiesPoller = null;
       lifecycleContext = null;
-      state.strategies = [];
       state.exitStrategiesOn = null;
       _lastDailyKey = null;
       _lastExitKey = null;

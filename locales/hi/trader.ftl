@@ -11,7 +11,6 @@ trader-exit-type-dca = DCA
 trader-exit-type-unknown = अज्ञात
 
 trader-tab-stats = आंकड़े
-trader-tab-strategy-control = स्ट्रैटेजी कंट्रोल
 trader-tab-strategies = स्ट्रैटेजी
 trader-tab-stop-loss = स्टॉप लॉस
 trader-tab-trailing-stop = ट्रेलिंग स्टॉप
@@ -79,15 +78,6 @@ trader-toast-save-failed = सहेजना विफल
 trader-toast-feature-enabled = फ़ीचर चालू
 trader-toast-feature-disabled = फ़ीचर बंद
 trader-toast-feature-applied = ऑटो ट्रेडर सेटिंग लागू हुई
-trader-toast-strategy-enabled = स्ट्रैटेजी चालू
-    .message = स्ट्रैटेजी सक्रिय है
-trader-toast-strategy-disabled = स्ट्रैटेजी बंद
-    .message = स्ट्रैटेजी निष्क्रिय है
-trader-toast-strategy-failed = अपडेट विफल
-    .message = स्ट्रैटेजी स्टेटस अपडेट करने में विफल
-trader-toast-strategy-armed = { $name } अब लाइव ट्रेड करती है
-trader-toast-strategy-paper = { $name } अब पेपर पर ट्रेड करती है
-trader-toast-strategy-mode-failed = ट्रेडिंग मोड नहीं बदला जा सका
 
 trader-stats-window =
     .aria-label = आंकड़ों की अवधि
@@ -323,33 +313,6 @@ trader-time-status-losing-due = नुकसान { $pnl }; अगली जा
 # $held and $remaining are formatted durations.
 trader-time-status-flat = { $held } से स्थिर; { $remaining } में बंद होगी
 trader-time-status-flat-due = { $held } से स्थिर; अगली जाँच पर बंद होगी
-
-trader-strategy-entry-title = एंट्री स्ट्रैटेजी
-trader-strategy-entry-subtitle = ऐसे सिग्नल जो नई पोज़िशन खोल सकते हैं।
-trader-strategy-exit-title = एग्ज़िट स्ट्रैटेजी
-trader-strategy-exit-subtitle = ऐसे सिग्नल जो खुली पोज़िशन बंद या सुरक्षित कर सकते हैं।
-trader-strategy-active-unknown = -- सक्रिय
-trader-strategy-active = { $enabled }/{ $total } सक्रिय
-trader-strategy-loading = स्ट्रैटेजी लोड हो रही हैं...
-trader-strategy-load-failed = स्ट्रैटेजी लोड नहीं हो सकीं
-trader-strategy-empty = कोई स्ट्रैटेजी परिभाषित नहीं
-trader-strategy-unnamed = बिना नाम की स्ट्रैटेजी
-trader-strategy-priority-auto = ऑटो
-trader-strategy-priority = प्राथमिकता { $priority }
-trader-strategy-mode-arm = लाइव सक्रिय करें
-trader-strategy-mode-return-paper = पेपर पर लौटें
-trader-strategy-arm-title = “{ $name }” को लाइव सक्रिय करें
-trader-strategy-arm-lead = “{ $name }” की नई एंट्री आपके ट्रेडिंग वॉलेट से असली स्वैप के ज़रिए होंगी।
-trader-strategy-arm-readiness = पेपर बुक से रेडीनेस
-trader-strategy-arm-open-paper = खुली पेपर पोज़िशन पेपर ही रहती हैं और पेपर पर ही बंद होती हैं।
-trader-strategy-arm-ack-real-native = नई एंट्री आपके ट्रेडिंग वॉलेट से असली { -sol } खर्च करती हैं।
-trader-strategy-arm-ack-fees = लाइव स्वैप में असली नेटवर्क फ़ीस और स्लिपेज लगता है; पेपर नतीजे लाइव नतीजों की गारंटी नहीं हैं।
-trader-strategy-arm-ack-unready = कुछ रेडीनेस जाँच पास नहीं हुई हैं। फिर भी इस स्ट्रैटेजी को सक्रिय करें।
-trader-strategy-arm-unavailable = लाइव ट्रेडिंग अभी उपलब्ध नहीं है; आखिरी जाँच देखें।
-trader-strategy-return-title = “{ $name }” को पेपर पर लौटाएँ
-trader-strategy-return-message = नई एंट्री बिना { -sol } खर्च किए पेपर बुक में खुलती हैं। खुली लाइव पोज़िशन लाइव ही रहती हैं और लाइव ही बंद होती हैं।
-trader-strategy-readiness-failed = स्ट्रैटेजी की रेडीनेस नहीं पढ़ी जा सकी
-trader-paper-explore-title = पेपर ट्रेडिंग सेटअप के बाद शुरू होती है
 
 trader-dca-title = डॉलर-कॉस्ट एवरेजिंग
 trader-dca-subtitle = औसत एंट्री प्राइस घटाने के लिए घाटे वाली पोज़िशन में अपने आप ऐड करें

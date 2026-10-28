@@ -1,46 +1,21 @@
 <!-- Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
      SPDX-License-Identifier: BUSL-1.1
 
-     Strategy editor page - strategy list sidebar, rule editor and the condition catalog dialog. -->
+     Strategies sub-tab - the strategy roster, the rule editor a roster row opens and the condition catalog dialog. -->
 
 <div class="strategies-page">
-  <!-- Left Sidebar: Strategy Management -->
-  <aside class="strategies-sidebar">
-    <div class="strategy-filter-bar">
-      <button type="button" class="filter-tab active" data-filter="all" data-l10n-id="strategies-filter-all"></button>
-      <button type="button" class="filter-tab" data-filter="entry" data-l10n-id="strategies-filter-entry"></button>
-      <button type="button" class="filter-tab" data-filter="exit" data-l10n-id="strategies-filter-exit"></button>
-    </div>
+  <!-- Roster: every strategy of the current kind view, with its status and figures -->
+  <section class="strategies-roster" id="strategies-roster"></section>
 
-    <div class="sidebar-content">
-      <div class="strategy-list" id="strategy-list">
-        <div class="state-view state-view-empty state-view-compact" role="status" aria-live="polite">
-          <div class="state-view-heading">
-            <i class="state-view-icon icon-file-text" aria-hidden="true"></i>
-            <span class="state-view-title" data-l10n-id="strategies-list-empty-title"></span>
-          </div>
-          <div class="state-view-message" data-l10n-id="strategies-list-empty-hint"></div>
-        </div>
-      </div>
-    </div>
-
-    <div class="sidebar-footer">
-      <div class="sidebar-footer-row">
-        <button type="button" class="btn btn-primary flex-1" id="create-strategy">
-          <i class="icon-plus"></i> <span data-l10n-id="strategies-new"></span>
-        </button>
-        <button type="button" class="btn-icon" id="import-strategy" data-l10n-id="strategies-import">
-          <i class="icon-download"></i>
-        </button>
-      </div>
-    </div>
-  </aside>
-
-  <!-- Main Editor Area -->
-  <main class="strategy-editor">
-    <!-- Toolbar: one row, shown only while a strategy is loaded -->
+  <!-- Editor: the strategy a roster row opened, with the way back to the roster -->
+  <main class="strategy-editor" id="strategy-editor" hidden>
+    <!-- Toolbar: one row that never wraps -->
     <header class="editor-header" id="editor-header">
       <div class="editor-identity">
+        <button type="button" class="btn btn-sm btn-ghost editor-action editor-back" id="strategy-back">
+          <i class="icon-arrow-left" aria-hidden="true"></i>
+          <span class="editor-action-label" data-l10n-id="strategies-back"></span>
+        </button>
         <span class="strategy-type-badge entry" id="strategy-type-badge">
           <i class="icon-trending-up"></i> <span data-l10n-id="strategies-type-entry"></span>
         </span>
@@ -77,16 +52,6 @@
       </div>
     </header>
 
-    <!-- Empty state: shown when no strategy is selected -->
-    <div class="editor-placeholder" id="editor-empty">
-      <div class="state-view state-view-empty" role="status" aria-live="polite">
-        <div class="state-view-heading">
-          <i class="state-view-icon icon-square-pen" aria-hidden="true"></i>
-          <span class="state-view-message" data-l10n-id="strategies-editor-empty"></span>
-        </div>
-      </div>
-    </div>
-
     <!-- Scrollable Content Area: the strategy settings, then the root rule group -->
     <div class="editor-scroll-area" id="editor-scroll-area">
       <div class="conditions-container">
@@ -96,7 +61,7 @@
             <select id="strategy-timeframe" data-custom-select data-cs-fit-options></select>
           </div>
           <div class="editor-field">
-            <label for="strategy-priority" data-l10n-id="strategies-editor-priority"></label>
+            <label for="strategy-priority" data-l10n-id="strategies-editor-order"></label>
             <input type="number" id="strategy-priority" min="1" max="100" step="1" />
           </div>
           <div class="editor-field editor-entry-binding-field" id="entry-binding-field" hidden>

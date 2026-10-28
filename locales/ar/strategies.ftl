@@ -8,9 +8,6 @@
 
 ## Strategy list
 
-strategies-filter-all = الكل
-strategies-filter-entry = الدخول
-strategies-filter-exit = الخروج
 strategies-type-entry = دخول
 strategies-type-exit = خروج
 strategies-list-empty-title = لا توجد استراتيجيات بعد
@@ -19,10 +16,6 @@ strategies-new = استراتيجية جديدة
 strategies-import =
     .title = استيراد استراتيجية
     .aria-label = استيراد استراتيجية
-strategies-item-enable =
-    .title = تفعيل
-strategies-item-disable =
-    .title = تعطيل
 
 # Name given to a strategy before it is saved.
 strategies-new-name = استراتيجية جديدة
@@ -34,7 +27,6 @@ strategies-editor-name =
 strategies-editor-dirty =
     .title = تغييرات غير محفوظة
 strategies-action-validate = تحقق
-strategies-editor-empty = اختر استراتيجية لتعديلها، أو أنشئ استراتيجية جديدة
 strategies-conditions-empty-title = لا توجد شروط بعد
 strategies-conditions-empty-hint = استخدم «{ strategies-add-condition }» لبدء البناء
 strategies-add-condition = إضافة شرط
@@ -106,10 +98,10 @@ strategies-catalog-search-clear =
 strategies-catalog-no-description = لا يوجد وصف متاح
 
 # Editor header: the timeframe is the default for candle conditions that leave theirs unset.
-strategies-editor-active = نشطة
+strategies-editor-active = تشغيل
 strategies-editor-timeframe = الإطار الزمني الافتراضي
     .title = الإطار الزمني للشموع للشروط التي لا تحدد إطارًا خاصًا بها
-strategies-editor-priority = الأولوية
+strategies-editor-order = الترتيب
     .title = ترتيب التقييم من 1 إلى 100؛ الأرقام الأصغر تُقيَّم أولًا
 strategies-editor-description = الوصف
 strategies-editor-description-field =
@@ -220,6 +212,8 @@ strategies-unsaved-confirm = تجاهل التغييرات غير المحفوظ
     .message = لدى «{ $name }» تغييرات غير محفوظة.
 strategies-unsaved-discard = تجاهل
 strategies-import-error-json = الملف ليس JSON صالحًا
+# $min and $max are the bounds of the evaluation order.
+strategies-import-error-priority = يجب أن تكون الأولوية في الملف عددًا صحيحًا من { $min } إلى { $max }
 strategies-import-error-shape = الملف لا يصف استراتيجية
 # $type is the condition type id, $name the condition name.
 strategies-import-error-unknown-condition = يستخدم الملف شرطًا غير موجود في هذا الإصدار: { $type }
@@ -262,8 +256,6 @@ strategies-toast-test-failed = فشل الاختبار
 strategies-toast-valid = الاستراتيجية صالحة
 strategies-toast-invalid = الاستراتيجية تحتوي على أخطاء
 strategies-toast-validation-failed = فشل التحقق
-strategies-toast-item-enabled = تم تفعيل الاستراتيجية
-strategies-toast-item-disabled = تم تعطيل الاستراتيجية
 strategies-toast-item-toggle-failed = فشل تبديل الاستراتيجية
 strategies-toast-deleted = تم حذف الاستراتيجية
     .message = تمت إزالة «{ $name }» بنجاح
@@ -715,3 +707,99 @@ strategies-readiness-priced-missing =
     }
 strategies-readiness-runtime = التداول الحي متاح
 strategies-readiness-runtime-ok = الإعداد وبوابات الأمان تسمح بالصفقات الحية
+
+## Roster: the strategy list, one view per kind. Status and notice ids come from
+## src/strategies/overview.rs.
+
+strategies-back = كل الاستراتيجيات
+strategies-view-kind = نوع الاستراتيجية
+strategies-unnamed = استراتيجية بلا اسم
+strategies-col-on = تشغيل
+strategies-col-strategy = الاستراتيجية
+strategies-col-order = الترتيب
+    .title = ترتيب التقييم بين استراتيجيات الدخول المفعّلة في الوضع نفسه؛ أول استراتيجية تعطي إشارة تأخذ الرمز
+strategies-col-mode = الوضع
+strategies-col-status = الحالة
+strategies-col-open = مفتوحة
+strategies-col-watching = قيد المتابعة
+strategies-col-rounds = الجولات
+strategies-col-closed = مغلقة
+strategies-col-win-rate = نسبة الربح
+strategies-col-realized = المحقق { -sol }
+strategies-col-manages = تدير
+strategies-col-last-signal = آخر إشارة
+strategies-status-running = تعمل
+strategies-status-not-running = لا تعمل
+strategies-status-off = متوقفة
+strategies-status-setup-required = يلزم الإعداد
+strategies-status-live-paused = الدخول الحي متوقف مؤقتًا
+strategies-status-paper-cash = الرصيد التجريبي لا يكفي
+strategies-status-slots-full = المراكز ممتلئة
+strategies-status-entry-monitor-off = مراقب الدخول متوقف
+strategies-status-exit-monitor-off = مراقب الخروج متوقف
+strategies-notice-setup-required = يبدأ التداول التجريبي بعد الإعداد
+strategies-notice-force-stopped = الإيقاف الطارئ مفعّل
+strategies-notice-trader-off = Auto Trader متوقف
+strategies-notice-waiting = بانتظار الخدمات الأساسية
+strategies-notice-monitors-off = مراقبا الدخول والخروج متوقفان
+strategies-notice-start = تشغيل Auto Trader
+# $closed and $needed count closed paper rounds; $changed is a formatted date.
+strategies-readiness-progress = الجولات التجريبية { $closed }/{ $needed }
+strategies-readiness-ready = جاهزة للتداول الحي
+strategies-readiness-since = تغيّرت القواعد { $changed }
+# $book is the trading mode of the other book; $count its open positions.
+strategies-open-other-book =
+    { $count ->
+        [zero] { $book }: { $count } مركز
+        [one] { $book }: { $count } مركز
+        [two] { $book }: { $count } مركزان
+        [few] { $book }: { $count } مراكز
+        [many] { $book }: { $count } مركزًا
+       *[other] { $book }: { $count } مركز
+    }
+strategies-manages-all = كل استراتيجيات الدخول
+# $first is the first managed entry strategy; $more the count of the others.
+strategies-manages-some =
+    { $more ->
+        [zero] { $first } و{ $more } أخرى
+        [one] { $first } و{ $more } أخرى
+        [two] { $first } و{ $more } أخرى
+        [few] { $first } و{ $more } أخرى
+        [many] { $first } و{ $more } أخرى
+       *[other] { $first } و{ $more } أخرى
+    }
+strategies-exit-before = تُفحص أولًا
+strategies-exit-hint = تُفحص قواعد الخروج هذه في كل مركز قبل أي استراتيجية خروج
+strategies-action-edit = تعديل { $name }
+strategies-action-delete = حذف { $name }
+strategies-roster-stale = آخر تحديث
+
+## Saving new rules: the server answers whether a save changed the rules a strategy trades on.
+
+strategies-live-rules-confirm = تغيير قواعد «{ $name }» الحية
+    .message = تتداول القواعد الجديدة بـ { -sol } حقيقية من الفحص التالي، ويبدأ الدليل التجريبي لهذه الاستراتيجية من جديد من هذا الحفظ.
+strategies-live-rules-save = حفظ والتداول الحي
+strategies-toast-evidence-restarted = تم حفظ الاستراتيجية
+    .message = تغيّرت قواعد «{ $name }»؛ يبدأ دليلها التجريبي من جديد الآن
+
+## Trading mode: arming a paper strategy live and returning it to paper.
+
+strategies-mode-arm = تفعيل التداول الحي
+strategies-mode-return-paper = العودة إلى التجريبي
+strategies-mode-arm-title = تفعيل «{ $name }» للتداول الحي
+strategies-mode-arm-lead = الصفقات الجديدة لـ«{ $name }» ستُنفَّذ بمبادلات حقيقية من محفظة التداول الخاصة بك.
+strategies-mode-arm-lead-exit = ستبيع «{ $name }» المراكز الحية بمبادلات حقيقية من محفظة التداول عند إشارتها.
+strategies-mode-arm-readiness = الجاهزية من السجل التجريبي
+strategies-mode-arm-open-paper = المراكز التجريبية المفتوحة تبقى تجريبية وتُغلق تجريبيًا.
+strategies-mode-arm-ack-real-native = الصفقات الجديدة تنفق { -sol } حقيقية من محفظة التداول الخاصة بك.
+strategies-mode-arm-ack-real-native-exit = تُباع المراكز الحية التي تديرها بمبادلات حقيقية.
+strategies-mode-arm-ack-fees = المبادلات الحية تدفع رسوم شبكة وانزلاقًا سعريًا حقيقيين؛ والنتائج التجريبية لا تضمن النتائج الحية.
+strategies-mode-arm-ack-unready = بعض فحوصات الجاهزية لم تنجح. فعّل هذه الاستراتيجية رغم ذلك.
+strategies-mode-arm-unavailable = التداول الحي غير متاح الآن؛ راجع آخر فحص.
+strategies-mode-return-title = إعادة «{ $name }» إلى التجريبي
+strategies-mode-return-message = الصفقات الجديدة تُفتح في السجل التجريبي دون إنفاق { -sol }. المراكز الحية المفتوحة تبقى حية وتُغلق حيًا.
+strategies-mode-return-message-exit = تتوقف عن تقييم المراكز الحية؛ وتبقى لها قواعد الخروج الخاصة بها.
+strategies-mode-readiness-failed = تعذّرت قراءة جاهزية الاستراتيجية
+strategies-mode-toast-armed = «{ $name }» يتداول الآن حيًا
+strategies-mode-toast-paper = «{ $name }» يتداول الآن تجريبيًا
+strategies-mode-toast-failed = تعذّر تغيير وضع التداول

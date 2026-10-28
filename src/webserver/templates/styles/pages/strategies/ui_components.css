@@ -2,84 +2,47 @@
  * SPDX-License-Identifier: BUSL-1.1 */
 
 /* ==========================================================================
-   Strategy Filter Bar — compact segmented control
-   ========================================================================== */
-.strategy-filter-bar {
-  display: flex;
-  padding: 6px 8px;
-  gap: 2px;
-  background: var(--bg-tertiary);
-  border-bottom: 1px solid var(--border-color);
-}
-
-.filter-tab {
-  flex: 1;
-  padding: 4px 6px;
-  border: none;
-  background: transparent;
-  color: var(--text-muted);
-  font-size: 0.72rem;
-  font-weight: 600;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.filter-tab:hover {
-  color: var(--text-primary);
-  background: var(--bg-card-hover);
-}
-
-.filter-tab.active {
-  background: var(--bg-primary);
-  color: var(--text-primary);
-  box-shadow: 0 1px 3px rgb(0, 0, 0, 0.15);
-}
-
-/* ==========================================================================
    Strategy kind colours: the one pair for every strategy surface. Entry is blue
-   and Exit is amber; red stays reserved for errors.
+   and Exit is amber; red stays reserved for errors. The roster's kind views carry
+   the pair on their bare glyph.
    ========================================================================== */
-:is(.strategy-type-tag, .strategy-type-badge).entry,
+.strategy-type-badge.entry,
 .type-card[data-type="ENTRY"],
-.strategy-lane-card-entry {
+.strategies-roster .segmented-option:has(> input[data-seg-value="entry"]) {
   --strategy-kind-color: var(--primary-color);
   --strategy-kind-tint: var(--primary-alpha-10);
-  --strategy-kind-edge: var(--primary-alpha-30);
 }
 
-:is(.strategy-type-tag, .strategy-type-badge).exit,
+.strategy-type-badge.exit,
 .type-card[data-type="EXIT"],
-.strategy-lane-card-exit {
+.strategies-roster .segmented-option:has(> input[data-seg-value="exit"]) {
   --strategy-kind-color: var(--warning-color);
   --strategy-kind-tint: var(--warning-alpha-10);
-  --strategy-kind-edge: var(--warning-alpha-30);
+}
+
+.strategies-roster .segmented-option .segmented-icon {
+  color: var(--strategy-kind-color);
 }
 
 /* ==========================================================================
-   Strategy Type Badge (Editor Header)
+   Strategy Type (Editor Header): the kind's bare glyph inline with its name
    ========================================================================== */
 .strategy-type-badge {
   display: inline-flex;
   align-items: center;
   gap: 0.375rem;
-  padding: 0.375rem 0.75rem;
-  border-radius: var(--radius-md);
   font-size: 0.75rem;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   flex-shrink: 0;
-  background: var(--strategy-kind-tint);
-  color: var(--strategy-kind-color);
-  border: 1px solid var(--strategy-kind-edge);
+  color: var(--text-secondary);
 }
 
 .strategy-type-badge i {
   font-size: 14px;
   line-height: 1;
+  color: var(--strategy-kind-color);
 }
 
 /* ==========================================================================
@@ -149,11 +112,4 @@
   font-size: 0.75rem;
   color: var(--text-secondary);
   line-height: 1.4;
-}
-
-/* Responsive */
-@media (width <= 1024px) {
-  .strategies-sidebar {
-    width: 240px;
-  }
 }

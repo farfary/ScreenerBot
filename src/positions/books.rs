@@ -32,7 +32,7 @@ pub async fn live_auto_rounds() -> HashMap<String, Vec<Position>> {
 
 /// The closed, unarchived rounds of `positions` grouped by every strategy that took part
 /// in each: its entry strategy and its closing exit strategy, once each.
-fn strategy_rounds<'a>(
+pub(crate) fn strategy_rounds<'a>(
     positions: impl Iterator<Item = &'a Position>,
 ) -> HashMap<String, Vec<Position>> {
     let mut rounds: HashMap<String, Vec<Position>> = HashMap::new();

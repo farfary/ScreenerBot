@@ -18,7 +18,6 @@ trader-exit-type-unknown = 알 수 없음
 ## Sub-tabs. Ids are the tab ids of the trader page.
 
 trader-tab-stats = 통계
-trader-tab-strategy-control = 전략 제어
 trader-tab-strategies = 전략
 trader-tab-stop-loss = 손절
 trader-tab-trailing-stop = 트레일링 스톱
@@ -95,15 +94,6 @@ trader-toast-save-failed = 저장 실패
 trader-toast-feature-enabled = 기능 사용 설정됨
 trader-toast-feature-disabled = 기능 사용 안 함
 trader-toast-feature-applied = 자동 트레이더 설정이 적용되었습니다
-trader-toast-strategy-enabled = 전략 사용 설정됨
-    .message = 전략이 활성 상태입니다
-trader-toast-strategy-disabled = 전략 사용 안 함
-    .message = 전략이 비활성 상태입니다
-trader-toast-strategy-failed = 업데이트 실패
-    .message = 전략 상태를 업데이트하지 못했습니다
-trader-toast-strategy-armed = { $name } 전략이 이제 실거래로 거래합니다
-trader-toast-strategy-paper = { $name } 전략이 이제 모의로 거래합니다
-trader-toast-strategy-mode-failed = 거래 모드를 변경하지 못했습니다
 
 ## Stats: realized window and metrics
 
@@ -364,35 +354,6 @@ trader-time-status-losing-due = 손실 { $pnl }; 다음 점검 때 청산
 # $held and $remaining are formatted durations.
 trader-time-status-flat = { $held } 동안 횡보; { $remaining } 후 청산
 trader-time-status-flat-due = { $held } 동안 횡보; 다음 점검 때 청산
-
-## Strategy control
-
-trader-strategy-entry-title = 진입 전략
-trader-strategy-entry-subtitle = 새 포지션을 열 수 있는 시그널입니다.
-trader-strategy-exit-title = 청산 전략
-trader-strategy-exit-subtitle = 보유 중인 포지션을 종료하거나 보호할 수 있는 시그널입니다.
-trader-strategy-active-unknown = -- 활성
-trader-strategy-active = { $enabled }/{ $total } 활성
-trader-strategy-loading = 전략 불러오는 중...
-trader-strategy-load-failed = 전략을 불러오지 못했습니다
-trader-strategy-empty = 정의된 전략이 없습니다
-trader-strategy-unnamed = 이름 없는 전략
-trader-strategy-priority-auto = 자동
-trader-strategy-priority = 우선순위 { $priority }
-trader-strategy-mode-arm = 실거래 활성화
-trader-strategy-mode-return-paper = 모의로 되돌리기
-trader-strategy-arm-title = "{ $name }" 실거래 활성화
-trader-strategy-arm-lead = "{ $name }"의 새 진입은 내 거래 지갑의 실제 스왑으로 거래됩니다.
-trader-strategy-arm-readiness = 모의 장부 기준 준비 상태
-trader-strategy-arm-open-paper = 열린 모의 포지션은 모의로 유지되며 모의로 종료됩니다.
-trader-strategy-arm-ack-real-native = 새 진입은 내 거래 지갑의 실제 { -sol }를 사용합니다.
-trader-strategy-arm-ack-fees = 실거래 스왑에는 실제 네트워크 수수료와 슬리피지가 발생하며, 모의 결과가 실거래 결과를 보장하지 않습니다.
-trader-strategy-arm-ack-unready = 일부 준비 상태 점검을 통과하지 못했습니다. 그래도 이 전략을 활성화합니다.
-trader-strategy-arm-unavailable = 현재 실거래를 사용할 수 없습니다. 마지막 점검 결과를 확인하세요.
-trader-strategy-return-title = "{ $name }"을(를) 모의로 되돌리기
-trader-strategy-return-message = 새 진입은 { -sol }를 쓰지 않고 모의 장부에서 열립니다. 열린 실거래 포지션은 실거래로 유지되며 실거래로 종료됩니다.
-trader-strategy-readiness-failed = 전략의 준비 상태를 읽지 못했습니다
-trader-paper-explore-title = 모의 거래는 설정을 마친 후 시작됩니다
 
 ## Dollar-cost averaging
 

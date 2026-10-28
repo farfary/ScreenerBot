@@ -15,8 +15,8 @@ use crate::{
     strategies::{
         self,
         db::{
-            delete_strategy_async, get_all_strategies_async, get_enabled_strategies_async,
-            get_strategy_async, insert_strategy_async, update_strategy_async,
+            delete_strategy_async, get_all_strategies_async, get_strategy_async,
+            insert_strategy_async, update_strategy_async,
         },
         types::*,
     },
@@ -40,82 +40,32 @@ pub async fn list_strategies(Query(query): Query<StrategyListQuery>) -> Response
         ),
     );
 
-    // Get strategies based on filters
-    let strategies = if let Some(type_str) = query.strategy_type {
-        let strategy_type = match type_str.to_uppercase().as_str() {
-            "ENTRY" => StrategyType::Entry,
-            "EXIT" => StrategyType::Exit,
+    let strategy_type = match query.strategy_type.as_deref().map(str::to_uppercase) {
+        None => None,
+        Some(type_str) => match type_str.as_str() {
+            "ENTRY" => Some(StrategyType::Entry),
+            "EXIT" => Some(StrategyType::Exit),
             _ => {
                 return err(
                     ApiErrorCode::InvalidInput,
                     ids::ERRORS_STRATEGIES_INVALID_TYPE,
                 );
             }
-        };
+        },
+    };
 
-        if let Some(enabled) = query.enabled {
-            if enabled {
-                match get_enabled_strategies_async(strategy_type).await {
-                    Ok(list) => list,
-                    Err(e) => {
-                        return err_cause(
-                            ApiErrorCode::Internal,
-                            ids::ERRORS_STRATEGIES_LIST_FAILED,
-                            &e,
-                        );
-                    }
-                }
-            } else {
-                match get_all_strategies_async().await {
-                    Ok(list) => list
-                        .into_iter()
-                        .filter(|s| s.strategy_type == strategy_type && !s.enabled)
-                        .collect(),
-                    Err(e) => {
-                        return err_cause(
-                            ApiErrorCode::Internal,
-                            ids::ERRORS_STRATEGIES_LIST_FAILED,
-                            &e,
-                        );
-                    }
-                }
-            }
-        } else {
-            match get_all_strategies_async().await {
-                Ok(list) => list
-                    .into_iter()
-                    .filter(|s| s.strategy_type == strategy_type)
-                    .collect(),
-                Err(e) => {
-                    return err_cause(
-                        ApiErrorCode::Internal,
-                        ids::ERRORS_STRATEGIES_LIST_FAILED,
-                        &e,
-                    );
-                }
-            }
-        }
-    } else if let Some(enabled) = query.enabled {
-        match get_all_strategies_async().await {
-            Ok(list) => list.into_iter().filter(|s| s.enabled == enabled).collect(),
-            Err(e) => {
-                return err_cause(
-                    ApiErrorCode::Internal,
-                    ids::ERRORS_STRATEGIES_LIST_FAILED,
-                    &e,
-                );
-            }
-        }
-    } else {
-        match get_all_strategies_async().await {
-            Ok(list) => list,
-            Err(e) => {
-                return err_cause(
-                    ApiErrorCode::Internal,
-                    ids::ERRORS_STRATEGIES_LIST_FAILED,
-                    &e,
-                );
-            }
+    let strategies: Vec<Strategy> = match get_all_strategies_async().await {
+        Ok(list) => list
+            .into_iter()
+            .filter(|s| strategy_type.is_none_or(|wanted| s.strategy_type == wanted))
+            .filter(|s| query.enabled.is_none_or(|wanted| s.enabled == wanted))
+            .collect(),
+        Err(e) => {
+            return err_cause(
+                ApiErrorCode::Internal,
+                ids::ERRORS_STRATEGIES_LIST_FAILED,
+                &e,
+            );
         }
     };
 
@@ -292,7 +242,7 @@ pub async fn create_strategy(Json(request): Json<StrategyRequest>) -> Response {
 /// PUT /api/strategies/:id - Update strategy
 pub async fn update_strategy_handler(
     Path(id): Path<String>,
-    Json(request): Json<StrategyRequest>,
+    Json(mut request): Json<StrategyRequest>,
 ) -> Response {
     logger::info(LogTag::Webserver, &format!("PUT /api/strategies/{id}"));
 
@@ -326,7 +276,7 @@ pub async fn update_strategy_handler(
     }
 
     // Parse rules
-    let rules: RuleTree = match serde_json::from_value(request.rules) {
+    let rules: RuleTree = match serde_json::from_value(std::mem::take(&mut request.rules)) {
         Ok(rules) => rules,
         Err(e) => {
             return err_cause(
@@ -337,8 +287,62 @@ pub async fn update_strategy_handler(
         }
     };
 
-    let strategy = Strategy {
-        id: id.clone(),
+    let strategy = edited_strategy(&existing, request, strategy_type, rules);
+
+    // Validate strategy before saving
+    if let Err(e) = strategies::validate_strategy(&strategy).await {
+        return err_cause(
+            ApiErrorCode::InvalidInput,
+            ids::ERRORS_STRATEGIES_VALIDATION_FAILED,
+            &e,
+        );
+    }
+
+    let rules_changed = match update_strategy_async(&strategy).await {
+        Ok(rules_changed) => rules_changed,
+        Err(e) => {
+            return err_cause(
+                ApiErrorCode::Internal,
+                ids::ERRORS_STRATEGIES_UPDATE_FAILED,
+                &e,
+            );
+        }
+    };
+
+    // Clear evaluation cache after update
+    if let Err(e) = strategies::clear_evaluation_cache().await {
+        logger::info(
+            LogTag::Webserver,
+            &format!("Failed to clear evaluation cache: {e}"),
+        );
+    }
+
+    logger::info(
+        LogTag::Webserver,
+        &format!(
+            "Strategy updated: id={}, version={}, rules_changed={rules_changed}",
+            strategy.id, strategy.version
+        ),
+    );
+
+    success_response(serde_json::json!({
+        "id": strategy.id,
+        "version": strategy.version,
+        "rules_changed": rules_changed,
+    }))
+}
+
+/// `existing` as a save of `request` would store it: the id, creation time, mode and
+/// rules clock stay; the version moves on; an absent binding keeps the stored one, so a
+/// request that omits it never widens an exit strategy to every position.
+pub(super) fn edited_strategy(
+    existing: &Strategy,
+    request: StrategyRequest,
+    strategy_type: StrategyType,
+    rules: RuleTree,
+) -> Strategy {
+    Strategy {
+        id: existing.id.clone(),
         name: request.name,
         description: request.description,
         strategy_type,
@@ -359,46 +363,7 @@ pub async fn update_strategy_handler(
         ),
         mode: existing.mode,
         rules_changed_at: existing.rules_changed_at,
-    };
-
-    // Validate strategy before saving
-    if let Err(e) = strategies::validate_strategy(&strategy).await {
-        return err_cause(
-            ApiErrorCode::InvalidInput,
-            ids::ERRORS_STRATEGIES_VALIDATION_FAILED,
-            &e,
-        );
     }
-
-    // Update in database
-    if let Err(e) = update_strategy_async(&strategy).await {
-        return err_cause(
-            ApiErrorCode::Internal,
-            ids::ERRORS_STRATEGIES_UPDATE_FAILED,
-            &e,
-        );
-    }
-
-    // Clear evaluation cache after update
-    if let Err(e) = strategies::clear_evaluation_cache().await {
-        logger::info(
-            LogTag::Webserver,
-            &format!("Failed to clear evaluation cache: {e}"),
-        );
-    }
-
-    logger::info(
-        LogTag::Webserver,
-        &format!(
-            "Strategy updated: id={}, version={}",
-            strategy.id, strategy.version
-        ),
-    );
-
-    success_response(serde_json::json!({
-        "id": strategy.id,
-        "version": strategy.version,
-    }))
 }
 
 /// PATCH /api/strategies/:id/enabled - Update only the strategy enabled state

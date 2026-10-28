@@ -11,7 +11,6 @@ trader-exit-type-dca = DCA
 trader-exit-type-unknown = Inconnue
 
 trader-tab-stats = Statistiques
-trader-tab-strategy-control = Contrôle des stratégies
 trader-tab-strategies = Stratégies
 trader-tab-stop-loss = Stop loss
 trader-tab-trailing-stop = Trailing stop
@@ -79,15 +78,6 @@ trader-toast-save-failed = Échec de l'enregistrement
 trader-toast-feature-enabled = Fonctionnalité activée
 trader-toast-feature-disabled = Fonctionnalité désactivée
 trader-toast-feature-applied = Paramètre d'Auto Trader appliqué
-trader-toast-strategy-enabled = Stratégie activée
-    .message = La stratégie est active
-trader-toast-strategy-disabled = Stratégie désactivée
-    .message = La stratégie est inactive
-trader-toast-strategy-failed = Échec de la mise à jour
-    .message = Impossible de mettre à jour le statut de la stratégie
-trader-toast-strategy-armed = { $name } trade désormais en réel
-trader-toast-strategy-paper = { $name } trade désormais en simulé
-trader-toast-strategy-mode-failed = Impossible de changer le mode de trading
 
 trader-stats-window =
     .aria-label = Période des statistiques
@@ -334,33 +324,6 @@ trader-time-status-losing-due = En perte de { $pnl } ; fermeture au prochain con
 # $held and $remaining are formatted durations.
 trader-time-status-flat = Stagnante depuis { $held } ; fermeture dans { $remaining }
 trader-time-status-flat-due = Stagnante depuis { $held } ; fermeture au prochain contrôle
-
-trader-strategy-entry-title = Stratégies d'entrée
-trader-strategy-entry-subtitle = Signaux pouvant ouvrir une nouvelle position.
-trader-strategy-exit-title = Stratégies de sortie
-trader-strategy-exit-subtitle = Signaux pouvant clôturer ou protéger une position ouverte.
-trader-strategy-active-unknown = -- actives
-trader-strategy-active = { $enabled }/{ $total } actives
-trader-strategy-loading = Chargement des stratégies...
-trader-strategy-load-failed = Impossible de charger les stratégies
-trader-strategy-empty = Aucune stratégie définie
-trader-strategy-unnamed = Stratégie sans nom
-trader-strategy-priority-auto = Auto
-trader-strategy-priority = Priorité { $priority }
-trader-strategy-mode-arm = Armer le mode réel
-trader-strategy-mode-return-paper = Revenir en simulé
-trader-strategy-arm-title = Armer « { $name } » en réel
-trader-strategy-arm-lead = Les nouvelles entrées de « { $name } » passeront par de vrais swaps depuis votre portefeuille de trading.
-trader-strategy-arm-readiness = Préparation issue du registre simulé
-trader-strategy-arm-open-paper = Les positions simulées ouvertes restent simulées et se terminent en simulé.
-trader-strategy-arm-ack-real-native = Les nouvelles entrées dépensent de vrais { -sol } depuis votre portefeuille de trading.
-trader-strategy-arm-ack-fees = Les swaps réels paient de vrais frais réseau et du slippage ; les résultats simulés ne garantissent pas les résultats réels.
-trader-strategy-arm-ack-unready = Certains contrôles de préparation n'ont pas été validés. Armer quand même cette stratégie.
-trader-strategy-arm-unavailable = Le trading réel est indisponible pour le moment ; consultez la dernière vérification.
-trader-strategy-return-title = Repasser « { $name } » en simulé
-trader-strategy-return-message = Les nouvelles entrées s'ouvrent dans le registre simulé sans dépenser de { -sol }. Les positions réelles ouvertes restent réelles et se terminent en réel.
-trader-strategy-readiness-failed = Impossible de lire la préparation de la stratégie
-trader-paper-explore-title = Le trading simulé démarre après la configuration
 
 trader-dca-title = Investissement programmé (DCA)
 trader-dca-subtitle = Renforcez automatiquement les positions perdantes pour abaisser votre prix d'entrée moyen

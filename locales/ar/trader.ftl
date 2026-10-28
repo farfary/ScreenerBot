@@ -18,7 +18,6 @@ trader-exit-type-unknown = غير معروف
 ## Sub-tabs. Ids are the tab ids of the trader page.
 
 trader-tab-stats = الإحصاءات
-trader-tab-strategy-control = التحكم بالاستراتيجيات
 trader-tab-strategies = الاستراتيجيات
 trader-tab-stop-loss = وقف الخسارة
 trader-tab-trailing-stop = وقف متحرك
@@ -95,15 +94,6 @@ trader-toast-save-failed = فشل الحفظ
 trader-toast-feature-enabled = تم تفعيل الميزة
 trader-toast-feature-disabled = تم تعطيل الميزة
 trader-toast-feature-applied = تم تطبيق إعداد المتداول الآلي
-trader-toast-strategy-enabled = تم تفعيل الاستراتيجية
-    .message = الاستراتيجية نشطة
-trader-toast-strategy-disabled = تم تعطيل الاستراتيجية
-    .message = الاستراتيجية غير نشطة
-trader-toast-strategy-failed = فشل التحديث
-    .message = فشل تحديث حالة الاستراتيجية
-trader-toast-strategy-armed = «{ $name }» يتداول الآن حيًا
-trader-toast-strategy-paper = «{ $name }» يتداول الآن تجريبيًا
-trader-toast-strategy-mode-failed = تعذّر تغيير وضع التداول
 
 ## Stats: realized window and metrics
 
@@ -420,35 +410,6 @@ trader-time-status-losing-due = خاسر { $pnl }؛ يُغلق عند الفحص
 # $held and $remaining are formatted durations.
 trader-time-status-flat = راكد منذ { $held }؛ يُغلق بعد { $remaining }
 trader-time-status-flat-due = راكد منذ { $held }؛ يُغلق عند الفحص التالي
-
-## Strategy control
-
-trader-strategy-entry-title = استراتيجيات الدخول
-trader-strategy-entry-subtitle = إشارات يمكنها فتح مركز جديد.
-trader-strategy-exit-title = استراتيجيات الخروج
-trader-strategy-exit-subtitle = إشارات يمكنها إغلاق مركز مفتوح أو حمايته.
-trader-strategy-active-unknown = -- نشطة
-trader-strategy-active = { $enabled }/{ $total } نشطة
-trader-strategy-loading = جارٍ تحميل الاستراتيجيات...
-trader-strategy-load-failed = تعذّر تحميل الاستراتيجيات
-trader-strategy-empty = لا توجد استراتيجيات معرّفة
-trader-strategy-unnamed = استراتيجية بلا اسم
-trader-strategy-priority-auto = تلقائي
-trader-strategy-priority = الأولوية { $priority }
-trader-strategy-mode-arm = تفعيل التداول الحي
-trader-strategy-mode-return-paper = العودة إلى التجريبي
-trader-strategy-arm-title = تفعيل «{ $name }» للتداول الحي
-trader-strategy-arm-lead = الصفقات الجديدة لـ«{ $name }» ستُنفَّذ بمبادلات حقيقية من محفظة التداول الخاصة بك.
-trader-strategy-arm-readiness = الجاهزية من السجل التجريبي
-trader-strategy-arm-open-paper = المراكز التجريبية المفتوحة تبقى تجريبية وتُغلق تجريبيًا.
-trader-strategy-arm-ack-real-native = الصفقات الجديدة تنفق { -sol } حقيقية من محفظة التداول الخاصة بك.
-trader-strategy-arm-ack-fees = المبادلات الحية تدفع رسوم شبكة وانزلاقًا سعريًا حقيقيين؛ والنتائج التجريبية لا تضمن النتائج الحية.
-trader-strategy-arm-ack-unready = بعض فحوصات الجاهزية لم تنجح. فعّل هذه الاستراتيجية رغم ذلك.
-trader-strategy-arm-unavailable = التداول الحي غير متاح الآن؛ راجع آخر فحص.
-trader-strategy-return-title = إعادة «{ $name }» إلى التجريبي
-trader-strategy-return-message = الصفقات الجديدة تُفتح في السجل التجريبي دون إنفاق { -sol }. المراكز الحية المفتوحة تبقى حية وتُغلق حيًا.
-trader-strategy-readiness-failed = تعذّرت قراءة جاهزية الاستراتيجية
-trader-paper-explore-title = يبدأ التداول التجريبي بعد الإعداد
 
 ## Dollar-cost averaging
 

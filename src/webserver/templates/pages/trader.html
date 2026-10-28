@@ -866,62 +866,7 @@
     </div>
     <!-- #time-rules-tab -->
 
-    <!-- Strategy Control Tab -->
-    <div id="strategy-control-tab" class="trader-tab-content" style="display: none">
-      <div class="config-section strategy-control-section">
-        <div id="strategy-paper-setup" hidden></div>
-        <div class="strategy-control-grid">
-          <div class="config-card strategy-lane-card strategy-lane-card-entry">
-            <div class="card-header">
-              <div class="card-header-text">
-                <h3>
-                  <i class="icon-log-in"></i> <span data-l10n-id="trader-strategy-entry-title"></span>
-                </h3>
-                <p class="card-subtitle" data-l10n-id="trader-strategy-entry-subtitle"></p>
-              </div>
-              <span
-                class="strategy-lane-count"
-                id="strategy-entry-enabled-label"
-                data-l10n-id="trader-strategy-active-unknown"
-              ></span>
-            </div>
-            <div class="config-group config-group-full">
-              <div id="entry-strategies" class="strategies-list">
-                <div class="state-view state-view-loading state-view-compact" role="status" aria-live="polite">
-                  <div class="loading-spinner" data-l10n-id="trader-strategy-loading"></div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="config-card strategy-lane-card strategy-lane-card-exit">
-            <div class="card-header">
-              <div class="card-header-text">
-                <h3>
-                  <i class="icon-log-out"></i> <span data-l10n-id="trader-strategy-exit-title"></span>
-                </h3>
-                <p class="card-subtitle" data-l10n-id="trader-strategy-exit-subtitle"></p>
-              </div>
-              <span
-                class="strategy-lane-count"
-                id="strategy-exit-enabled-label"
-                data-l10n-id="trader-strategy-active-unknown"
-              ></span>
-            </div>
-            <div class="config-group config-group-full">
-              <div id="exit-strategies" class="strategies-list">
-                <div class="state-view state-view-loading state-view-compact" role="status" aria-live="polite">
-                  <div class="loading-spinner" data-l10n-id="trader-strategy-loading"></div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-    <!-- #strategy-control-tab -->
-
-    <!-- Strategies Tab (full strategy editor, embedded from the strategies page) -->
+    <!-- Strategies Tab (strategy roster and editor, embedded from the strategies page) -->
     <div id="strategies-tab" class="trader-tab-content" style="display: none">
       {{STRATEGIES_PANEL}}
     </div>

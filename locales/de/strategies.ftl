@@ -2,9 +2,6 @@
 
 ## Strategy list
 
-strategies-filter-all = Alle
-strategies-filter-entry = Einstieg
-strategies-filter-exit = Ausstieg
 strategies-type-entry = Einstieg
 strategies-type-exit = Ausstieg
 strategies-list-empty-title = Noch keine Strategien
@@ -13,10 +10,6 @@ strategies-new = Neue Strategie
 strategies-import =
     .title = Strategie importieren
     .aria-label = Strategie importieren
-strategies-item-enable =
-    .title = Aktivieren
-strategies-item-disable =
-    .title = Deaktivieren
 
 strategies-new-name = Neue Strategie
 
@@ -27,7 +20,6 @@ strategies-editor-name =
 strategies-editor-dirty =
     .title = Ungespeicherte Änderungen
 strategies-action-validate = Validieren
-strategies-editor-empty = Wählen Sie eine Strategie zum Bearbeiten aus oder erstellen Sie eine neue
 strategies-conditions-empty-title = Noch keine Bedingungen
 strategies-conditions-empty-hint = Mit „{ strategies-add-condition }“ beginnen Sie den Aufbau
 strategies-add-condition = Bedingung hinzufügen
@@ -88,10 +80,10 @@ strategies-catalog-search-clear =
 strategies-catalog-no-description = Keine Beschreibung verfügbar
 
 # Editor header: the timeframe is the default for candle conditions that leave theirs unset.
-strategies-editor-active = Aktiv
+strategies-editor-active = An
 strategies-editor-timeframe = Standard-Zeitrahmen
     .title = Kerzen-Zeitrahmen für Bedingungen, die keinen eigenen festlegen
-strategies-editor-priority = Priorität
+strategies-editor-order = Reihenfolge
     .title = Auswertungsreihenfolge von 1 bis 100; kleinere Zahlen werden zuerst ausgewertet
 strategies-editor-description = Beschreibung
 strategies-editor-description-field =
@@ -190,6 +182,8 @@ strategies-unsaved-confirm = Ungespeicherte Änderungen verwerfen?
     .message = „{ $name }“ hat Änderungen, die nicht gespeichert sind.
 strategies-unsaved-discard = Verwerfen
 strategies-import-error-json = Die Datei ist kein gültiges JSON
+# $min and $max are the bounds of the evaluation order.
+strategies-import-error-priority = Die Priorität in der Datei muss eine ganze Zahl von { $min } bis { $max } sein
 strategies-import-error-shape = Die Datei beschreibt keine Strategie
 # $type is the condition type id, $name the condition name.
 strategies-import-error-unknown-condition = Die Datei verwendet eine Bedingung, die diese Version nicht kennt: { $type }
@@ -231,8 +225,6 @@ strategies-toast-test-failed = Test fehlgeschlagen
 strategies-toast-valid = Strategie ist gültig
 strategies-toast-invalid = Strategie enthält Fehler
 strategies-toast-validation-failed = Validierung fehlgeschlagen
-strategies-toast-item-enabled = Strategie aktiviert
-strategies-toast-item-disabled = Strategie deaktiviert
 strategies-toast-item-toggle-failed = Strategie konnte nicht umgeschaltet werden
 strategies-toast-deleted = Strategie gelöscht
     .message = „{ $name }“ erfolgreich entfernt
@@ -665,3 +657,91 @@ strategies-readiness-priced-missing =
     }
 strategies-readiness-runtime = Live-Handel verfügbar
 strategies-readiness-runtime-ok = Einrichtung und Sicherheitsschranken erlauben Live-Trades
+
+## Roster: the strategy list, one view per kind. Status and notice ids come from
+## src/strategies/overview.rs.
+
+strategies-back = Alle Strategien
+strategies-view-kind = Strategieart
+strategies-unnamed = Unbenannte Strategie
+strategies-col-on = An
+strategies-col-strategy = Strategie
+strategies-col-order = Reihenfolge
+    .title = Auswertungsreihenfolge unter den aktiven Einstiegsstrategien eines Modus; die erste mit Signal übernimmt den Token
+strategies-col-mode = Modus
+strategies-col-status = Status
+strategies-col-open = Offen
+strategies-col-watching = Beobachtet
+strategies-col-rounds = Runden
+strategies-col-closed = Geschlossen
+strategies-col-win-rate = Trefferquote
+strategies-col-realized = Realisiert { -sol }
+strategies-col-manages = Verwaltet
+strategies-col-last-signal = Letztes Signal
+strategies-status-running = Läuft
+strategies-status-not-running = Läuft nicht
+strategies-status-off = Aus
+strategies-status-setup-required = Einrichtung erforderlich
+strategies-status-live-paused = Live-Einstiege pausiert
+strategies-status-paper-cash = Paper-Guthaben zu knapp
+strategies-status-slots-full = Plätze belegt
+strategies-status-entry-monitor-off = Einstiegsmonitor aus
+strategies-status-exit-monitor-off = Ausstiegsmonitor aus
+strategies-notice-setup-required = Paper-Trading startet nach der Einrichtung
+strategies-notice-force-stopped = Notstopp aktiv
+strategies-notice-trader-off = Auto Trader ist aus
+strategies-notice-waiting = Wartet auf die Kerndienste
+strategies-notice-monitors-off = Einstiegs- und Ausstiegsmonitor sind aus
+strategies-notice-start = Auto Trader starten
+# $closed and $needed count closed paper rounds; $changed is a formatted date.
+strategies-readiness-progress = Paper-Runden { $closed }/{ $needed }
+strategies-readiness-ready = Bereit zum Scharfschalten
+strategies-readiness-since = Regeln geändert { $changed }
+# $book is the trading mode of the other book; $count its open positions.
+strategies-open-other-book =
+    { $count ->
+        [one] { $book }: { $count } Position
+       *[other] { $book }: { $count } Positionen
+    }
+strategies-manages-all = Alle Einstiegsstrategien
+# $first is the first managed entry strategy; $more the count of the others.
+strategies-manages-some =
+    { $more ->
+        [one] { $first } und { $more } weitere
+       *[other] { $first } und { $more } weitere
+    }
+strategies-exit-before = Zuerst geprüft
+strategies-exit-hint = Diese Ausstiegsregeln werden bei jeder Position vor jeder Ausstiegsstrategie geprüft
+strategies-action-edit = { $name } bearbeiten
+strategies-action-delete = { $name } löschen
+strategies-roster-stale = Letzte Aktualisierung
+
+## Saving new rules: the server answers whether a save changed the rules a strategy trades on.
+
+strategies-live-rules-confirm = Regeln der Live-Strategie „{ $name }“ ändern
+    .message = Die neuen Regeln handeln ab der nächsten Prüfung mit echten { -sol }, und die Paper-Nachweise dieser Strategie beginnen ab dieser Speicherung neu.
+strategies-live-rules-save = Speichern und live handeln
+strategies-toast-evidence-restarted = Strategie gespeichert
+    .message = Die Regeln von „{ $name }“ haben sich geändert; ihre Paper-Nachweise beginnen ab jetzt neu
+
+## Trading mode: arming a paper strategy live and returning it to paper.
+
+strategies-mode-arm = Live scharfschalten
+strategies-mode-return-paper = Zurück zu Paper
+strategies-mode-arm-title = „{ $name }“ live scharfschalten
+strategies-mode-arm-lead = Neue Einstiege von „{ $name }“ handeln mit echten Swaps aus Ihrer Trading-Wallet.
+strategies-mode-arm-lead-exit = „{ $name }“ verkauft bei einem Signal Live-Positionen mit echten Swaps aus Ihrer Trading-Wallet.
+strategies-mode-arm-readiness = Bereitschaft laut Paper-Buch
+strategies-mode-arm-open-paper = Offene Paper-Positionen bleiben Paper und werden auf Paper abgeschlossen.
+strategies-mode-arm-ack-real-native = Neue Einstiege geben echte { -sol } aus Ihrer Trading-Wallet aus.
+strategies-mode-arm-ack-real-native-exit = Live-Positionen, die sie verwaltet, werden mit echten Swaps verkauft.
+strategies-mode-arm-ack-fees = Live-Swaps zahlen echte Netzwerkgebühren und Slippage; Paper-Ergebnisse versprechen keine Live-Ergebnisse.
+strategies-mode-arm-ack-unready = Einige Bereitschaftsprüfungen wurden nicht bestanden. Diese Strategie trotzdem scharfschalten.
+strategies-mode-arm-unavailable = Live-Handel ist derzeit nicht verfügbar; siehe die letzte Prüfung.
+strategies-mode-return-title = „{ $name }“ zurück zu Paper
+strategies-mode-return-message = Neue Einstiege werden im Paper-Buch eröffnet, ohne { -sol } auszugeben. Offene Live-Positionen bleiben live und werden live abgeschlossen.
+strategies-mode-return-message-exit = Sie bewertet keine Live-Positionen mehr; diese behalten ihre Ausstiegsregeln.
+strategies-mode-readiness-failed = Die Bereitschaft der Strategie konnte nicht gelesen werden
+strategies-mode-toast-armed = { $name } handelt jetzt live
+strategies-mode-toast-paper = { $name } handelt jetzt auf Paper
+strategies-mode-toast-failed = Der Handelsmodus konnte nicht geändert werden

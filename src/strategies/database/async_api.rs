@@ -31,6 +31,12 @@ pub async fn update_strategy_async(strategy: &Strategy) -> crate::Result<bool> {
     on_blocking_pool(move || super::update_strategy(&strategy)).await
 }
 
+/// [`super::rules_would_change`] on the blocking pool.
+pub async fn rules_would_change_async(strategy: &Strategy) -> crate::Result<Option<bool>> {
+    let strategy = strategy.clone();
+    on_blocking_pool(move || super::rules_would_change(&strategy)).await
+}
+
 /// [`super::set_strategy_mode`] on the blocking pool.
 pub async fn set_strategy_mode_async(strategy_id: &str, mode: TradingMode) -> crate::Result<()> {
     let strategy_id = strategy_id.to_owned();

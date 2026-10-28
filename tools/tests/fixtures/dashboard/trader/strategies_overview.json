@@ -65,10 +65,11 @@
         "closed": 3,
         "needed": 10,
         "ready": false,
-        "failing": "history"
+        "failing": "history",
+        "since_rules_changed": "2026-10-20T09:00:00+00:00"
       },
-      "last_evaluated_at": null,
-      "last_signal_at": null
+      "last_evaluated_at": "2026-10-28T11:59:30+00:00",
+      "last_signal_at": "2026-10-28T10:42:00+00:00"
     },
     {
       "item": {
@@ -102,8 +103,8 @@
       "unrealized_native": -0.0123,
       "unpriced": 1,
       "readiness": null,
-      "last_evaluated_at": null,
-      "last_signal_at": null
+      "last_evaluated_at": "2026-10-28T11:59:30+00:00",
+      "last_signal_at": "2026-10-27T18:05:00+00:00"
     },
     {
       "item": {
@@ -161,12 +162,19 @@
       "open": null,
       "open_other_book": null,
       "watching": 3,
-      "rounds": null,
+      "rounds": {
+        "closed": 6,
+        "winners": 4,
+        "losers": 2,
+        "excluded_untrusted": 0,
+        "realized_native": 0.031,
+        "win_rate_pct": 66.66666666666667
+      },
       "unrealized_native": null,
       "unpriced": null,
       "readiness": null,
-      "last_evaluated_at": null,
-      "last_signal_at": null
+      "last_evaluated_at": "2026-10-28T11:59:45+00:00",
+      "last_signal_at": "2026-10-28T08:15:00+00:00"
     },
     {
       "item": {
@@ -180,7 +188,10 @@
         "updated_at": "2026-10-05T12:15:00+00:00",
         "author": null,
         "version": 1,
-        "entry_strategy_ids": [],
+        "entry_strategy_ids": [
+          "8f3c2a1e-4b6d-4c7a-9e21-3a5f7b9d1c01",
+          "8f3c2a1e-4b6d-4c7a-9e21-3a5f7b9d1c02"
+        ],
         "mode": "live"
       },
       "status": "off",
@@ -189,7 +200,14 @@
       "open": null,
       "open_other_book": null,
       "watching": null,
-      "rounds": null,
+      "rounds": {
+        "closed": 2,
+        "winners": 0,
+        "losers": 2,
+        "excluded_untrusted": 0,
+        "realized_native": -0.006,
+        "win_rate_pct": 0.0
+      },
       "unrealized_native": null,
       "unpriced": null,
       "readiness": null,

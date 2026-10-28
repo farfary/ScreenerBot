@@ -527,6 +527,10 @@ pub const STRATEGIES_CONDITION_TEXT_JS: &str =
     include_str!("templates/scripts/pages/strategies/condition_text.js");
 pub const STRATEGIES_TEST_RESULT_JS: &str =
     include_str!("templates/scripts/pages/strategies/test_result.js");
+pub const STRATEGIES_ROSTER_JS: &str = include_str!("templates/scripts/pages/strategies/roster.js");
+pub const STRATEGIES_ENABLE_JS: &str = include_str!("templates/scripts/pages/strategies/enable.js");
+pub const STRATEGIES_STRATEGY_MODE_JS: &str =
+    include_str!("templates/scripts/pages/strategies/strategy_mode.js");
 pub const TRADER_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/trader.js");
 pub const TRADER_EXAMPLES_JS: &str = include_str!("templates/scripts/pages/trader/examples.js");
 pub const TRADER_CONTROLS_JS: &str = include_str!("templates/scripts/pages/trader/controls.js");
@@ -536,8 +540,6 @@ pub const TRADER_LEVEL_LIST_JS: &str = include_str!("templates/scripts/pages/tra
 pub const TRADER_FEATURES_JS: &str = include_str!("templates/scripts/pages/trader/features.js");
 pub const TRADER_TIME_STATUS_JS: &str =
     include_str!("templates/scripts/pages/trader/time_status.js");
-pub const TRADER_STRATEGY_MODE_JS: &str =
-    include_str!("templates/scripts/pages/trader/strategy_mode.js");
 pub const TRADER_PAPER_ACCOUNT_JS: &str =
     include_str!("templates/scripts/pages/trader/paper_account.js");
 pub const COPY_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/copy.js");

@@ -18,7 +18,6 @@ trader-exit-type-unknown = Desconocido
 ## Sub-tabs. Ids are the tab ids of the trader page.
 
 trader-tab-stats = Estadísticas
-trader-tab-strategy-control = Control de estrategias
 trader-tab-strategies = Estrategias
 trader-tab-stop-loss = Stop loss
 trader-tab-trailing-stop = Trailing stop
@@ -95,15 +94,6 @@ trader-toast-save-failed = Error al guardar
 trader-toast-feature-enabled = Función activada
 trader-toast-feature-disabled = Función desactivada
 trader-toast-feature-applied = Ajuste de Auto Trader aplicado
-trader-toast-strategy-enabled = Estrategia activada
-    .message = La estrategia está activa
-trader-toast-strategy-disabled = Estrategia desactivada
-    .message = La estrategia está inactiva
-trader-toast-strategy-failed = Error al actualizar
-    .message = No se pudo actualizar el estado de la estrategia
-trader-toast-strategy-armed = { $name } ahora opera en vivo
-trader-toast-strategy-paper = { $name } ahora opera en simulación
-trader-toast-strategy-mode-failed = No se pudo cambiar el modo de trading
 
 ## Stats: realized window and metrics
 
@@ -387,35 +377,6 @@ trader-time-status-losing-due = En pérdida { $pnl }; se cierra en la próxima r
 # $held and $remaining are formatted durations.
 trader-time-status-flat = Estancada desde hace { $held }; se cierra en { $remaining }
 trader-time-status-flat-due = Estancada desde hace { $held }; se cierra en la próxima revisión
-
-## Strategy control
-
-trader-strategy-entry-title = Estrategias de entrada
-trader-strategy-entry-subtitle = Señales que pueden abrir una nueva posición.
-trader-strategy-exit-title = Estrategias de salida
-trader-strategy-exit-subtitle = Señales que pueden cerrar o proteger una posición abierta.
-trader-strategy-active-unknown = -- activas
-trader-strategy-active = { $enabled }/{ $total } activas
-trader-strategy-loading = Cargando estrategias...
-trader-strategy-load-failed = No se pudieron cargar las estrategias
-trader-strategy-empty = No hay estrategias definidas
-trader-strategy-unnamed = Estrategia sin nombre
-trader-strategy-priority-auto = Auto
-trader-strategy-priority = Prioridad { $priority }
-trader-strategy-mode-arm = Activar en vivo
-trader-strategy-mode-return-paper = Volver a simulación
-trader-strategy-arm-title = Activar “{ $name }” en vivo
-trader-strategy-arm-lead = Las nuevas entradas de “{ $name }” operarán con swaps reales desde tu billetera de trading.
-trader-strategy-arm-readiness = Preparación según la cartera simulada
-trader-strategy-arm-open-paper = Las posiciones simuladas abiertas siguen siendo simuladas y se cierran en simulación.
-trader-strategy-arm-ack-real-native = Las nuevas entradas gastan { -sol } real de tu billetera de trading.
-trader-strategy-arm-ack-fees = Los swaps en vivo pagan comisiones de red y deslizamiento reales; los resultados simulados no garantizan resultados en vivo.
-trader-strategy-arm-ack-unready = Algunas comprobaciones de preparación no se han superado. Activar esta estrategia de todos modos.
-trader-strategy-arm-unavailable = El trading en vivo no está disponible ahora; consulta la última comprobación.
-trader-strategy-return-title = Volver “{ $name }” a simulación
-trader-strategy-return-message = Las nuevas entradas se abren en la cartera simulada sin gastar { -sol }. Las posiciones en vivo abiertas siguen en vivo y se cierran en vivo.
-trader-strategy-readiness-failed = No se pudo leer la preparación de la estrategia
-trader-paper-explore-title = El trading simulado empieza tras la configuración
 
 ## Dollar-cost averaging
 

@@ -1,0 +1,34 @@
+{
+  "run_state": "running",
+  "notice": null,
+  "rule_exits": [
+    {
+      "kind": "stop_loss",
+      "enabled": true
+    },
+    {
+      "kind": "trailing_stop",
+      "enabled": false
+    },
+    {
+      "kind": "take_profit",
+      "enabled": true
+    },
+    {
+      "kind": "time_exit",
+      "enabled": true
+    }
+  ],
+  "counts": {
+    "entry": {
+      "enabled": 0,
+      "total": 0
+    },
+    "exit": {
+      "enabled": 0,
+      "total": 0
+    }
+  },
+  "strategies": [],
+  "timestamp": "2026-10-28T12:00:00+00:00"
+}

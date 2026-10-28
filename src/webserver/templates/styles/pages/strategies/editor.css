@@ -6,10 +6,10 @@
    groups and condition rows are styled in strategies/condition_cards.css.
    ========================================================================== */
 
-/* Toolbar: one row that never wraps, hidden until a strategy is loaded (the page script
-   shows it). The editor is the container its labels collapse against. */
+/* Toolbar: one row that never wraps. The editor is the container its labels collapse
+   against. */
 .editor-header {
-  display: none;
+  display: flex;
   flex: 0 0 auto;
   align-items: center;
   flex-wrap: nowrap;
@@ -21,13 +21,22 @@
   z-index: 5;
 }
 
-/* Identity group: type badge + name input + dirty dot; the name gives way first. */
+/* Identity group: back + type badge + name input + dirty dot; the name gives way first. */
 .editor-identity {
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
   flex: 1 1 auto;
   min-width: 0;
+}
+
+/* The way back to the roster; its arrow points to the inline start. */
+.editor-back {
+  flex-shrink: 0;
+}
+
+[dir="rtl"] .editor-back i {
+  transform: scaleX(-1);
 }
 
 .strategy-name-input {
@@ -80,7 +89,7 @@
   flex: 0 0 auto;
 }
 
-/* The Active switch carries its own visible label. */
+/* The On switch carries its own visible label. */
 .editor-active {
   gap: var(--spacing-sm);
   margin-inline-start: var(--spacing-xs);

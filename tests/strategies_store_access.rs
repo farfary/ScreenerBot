@@ -84,6 +84,7 @@ const SYNCHRONOUS_STORE_CALLS: &[&str] = &[
     "get_enabled_strategies(",
     "insert_strategy(",
     "update_strategy(",
+    "rules_would_change(",
     "set_strategy_mode(",
     "delete_strategy(",
     "get_strategies_with_totals(",

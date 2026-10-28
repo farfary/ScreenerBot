@@ -239,7 +239,8 @@ mod tests {
 
     #[tokio::test]
     async fn a_strategy_entry_never_opens_a_quote_asset() {
-        let cycle = EntryCycle::read(vec![TradingMode::Live], Vec::new()).await;
+        let cycle =
+            EntryCycle::read_at(chrono::Utc::now(), vec![TradingMode::Live], Vec::new()).await;
         for chain in ChainId::ALL.iter().copied() {
             let adapter = adapter_for(chain);
             let quote_assets = std::iter::once(adapter.native_asset_address())

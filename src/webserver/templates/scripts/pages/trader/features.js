@@ -28,7 +28,7 @@ export const TAB_TO_FEATURE_MAP = {
   "stop-loss": "stop_loss",
   "time-rules": "time_override",
   dca: "dca",
-  "strategy-control": "strategies",
+  strategies: "strategies",
   // These tabs don't have feature flags - always available
   stats: null,
   "general-settings": null,

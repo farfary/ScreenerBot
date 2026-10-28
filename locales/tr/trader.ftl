@@ -11,7 +11,6 @@ trader-exit-type-dca = DCA
 trader-exit-type-unknown = Bilinmiyor
 
 trader-tab-stats = İstatistikler
-trader-tab-strategy-control = Strateji kontrolü
 trader-tab-strategies = Stratejiler
 trader-tab-stop-loss = Zarar durdur
 trader-tab-trailing-stop = İz süren stop
@@ -79,15 +78,6 @@ trader-toast-save-failed = Kaydetme başarısız
 trader-toast-feature-enabled = Özellik etkinleştirildi
 trader-toast-feature-disabled = Özellik devre dışı bırakıldı
 trader-toast-feature-applied = Auto Trader ayarı uygulandı
-trader-toast-strategy-enabled = Strateji etkinleştirildi
-    .message = Strateji aktif
-trader-toast-strategy-disabled = Strateji devre dışı bırakıldı
-    .message = Strateji aktif değil
-trader-toast-strategy-failed = Güncelleme başarısız
-    .message = Strateji durumu güncellenemedi
-trader-toast-strategy-armed = { $name } artık canlı işlem yapıyor
-trader-toast-strategy-paper = { $name } artık sanal işlem yapıyor
-trader-toast-strategy-mode-failed = İşlem modu değiştirilemedi
 
 trader-stats-window =
     .aria-label = İstatistik aralığı
@@ -323,33 +313,6 @@ trader-time-status-losing-due = Zararda { $pnl }; bir sonraki kontrolde kapanır
 # $held and $remaining are formatted durations.
 trader-time-status-flat = { $held } süredir durgun; { $remaining } içinde kapanır
 trader-time-status-flat-due = { $held } süredir durgun; bir sonraki kontrolde kapanır
-
-trader-strategy-entry-title = Giriş stratejileri
-trader-strategy-entry-subtitle = Yeni bir pozisyon açabilen sinyaller.
-trader-strategy-exit-title = Çıkış stratejileri
-trader-strategy-exit-subtitle = Açık bir pozisyonu kapatabilen veya koruyabilen sinyaller.
-trader-strategy-active-unknown = -- aktif
-trader-strategy-active = { $enabled }/{ $total } aktif
-trader-strategy-loading = Stratejiler yükleniyor...
-trader-strategy-load-failed = Stratejiler yüklenemedi
-trader-strategy-empty = Tanımlı strateji yok
-trader-strategy-unnamed = Adsız strateji
-trader-strategy-priority-auto = Otomatik
-trader-strategy-priority = Öncelik { $priority }
-trader-strategy-mode-arm = Canlıyı etkinleştir
-trader-strategy-mode-return-paper = Sanala dön
-trader-strategy-arm-title = “{ $name }” için canlıyı etkinleştir
-trader-strategy-arm-lead = “{ $name }” stratejisinin yeni girişleri, işlem cüzdanınızdan gerçek takaslarla yapılacak.
-trader-strategy-arm-readiness = Sanal defterden hazırlık durumu
-trader-strategy-arm-open-paper = Açık sanal pozisyonlar sanal kalır ve sanal olarak kapanır.
-trader-strategy-arm-ack-real-native = Yeni girişler işlem cüzdanınızdan gerçek { -sol } harcar.
-trader-strategy-arm-ack-fees = Canlı takaslar gerçek ağ ücretleri ve kayma öder; sanal sonuçlar canlı sonuçların garantisi değildir.
-trader-strategy-arm-ack-unready = Bazı hazırlık kontrolleri geçmedi. Yine de bu stratejiyi etkinleştir.
-trader-strategy-arm-unavailable = Canlı işlem şu anda kullanılamıyor; son kontrole bakın.
-trader-strategy-return-title = “{ $name }” stratejisini sanala döndür
-trader-strategy-return-message = Yeni girişler { -sol } harcamadan sanal defterde açılır. Açık canlı pozisyonlar canlı kalır ve canlı olarak kapanır.
-trader-strategy-readiness-failed = Stratejinin hazırlık durumu okunamadı
-trader-paper-explore-title = Sanal işlem kurulumdan sonra başlar
 
 trader-dca-title = DCA (maliyet ortalaması)
 trader-dca-subtitle = Ortalama giriş fiyatınızı düşürmek için zarardaki pozisyonlara otomatik olarak ekleme yapın

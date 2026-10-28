@@ -66,8 +66,8 @@ import { serveDashboard, PAGE_READY } from "../lib/dashboard_host.mjs";
 import { FIXTURES_ROOT, createApiHandler, loadIndex } from "../lib/dashboard_fixtures.mjs";
 
 const CONFIG = JSON.parse(readFileSync(`${FIXTURES_ROOT}/trader/config_full.json`, "utf8"));
-const EXIT_STRATEGIES = JSON.parse(
-  readFileSync(`${FIXTURES_ROOT}/trader/strategies_exit.json`, "utf8")
+const OVERVIEW = JSON.parse(
+  readFileSync(`${FIXTURES_ROOT}/trader/strategies_overview.json`, "utf8")
 );
 const TRADE_SIZE = 0.02;
 
@@ -77,7 +77,7 @@ const indexes = [await loadIndex("trader"), await loadIndex("shell")];
 
 /**
  * The trader page on `tab`, served `trader` merged over the recorded trader config.
- * `exitStrategiesOff` serves the recorded exit strategies with every one switched off.
+ * `exitStrategiesOff` serves the recorded strategies overview with every exit strategy off.
  */
 async function openTrader(tab, trader = {}, { exitStrategiesOff = false } = {}) {
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
@@ -87,13 +87,9 @@ async function openTrader(tab, trader = {}, { exitStrategiesOff = false } = {}) 
     if (request.url.pathname === "/api/config" && request.method === "GET") {
       return { body: JSON.stringify(config) };
     }
-    if (
-      exitStrategiesOff &&
-      request.url.pathname === "/api/strategies" &&
-      request.url.searchParams.get("type") === "EXIT"
-    ) {
-      const items = EXIT_STRATEGIES.items.map((strategy) => ({ ...strategy, enabled: false }));
-      return { body: JSON.stringify({ ...EXIT_STRATEGIES, items }) };
+    if (exitStrategiesOff && request.url.pathname === "/api/strategies/overview") {
+      const counts = { ...OVERVIEW.counts, exit: { ...OVERVIEW.counts.exit, enabled: 0 } };
+      return { body: JSON.stringify({ ...OVERVIEW, counts }) };
     }
     if (request.method === "PATCH") return { body: JSON.stringify({ success: true }) };
     return api.onApi(request);

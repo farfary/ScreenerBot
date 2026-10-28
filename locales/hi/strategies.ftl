@@ -1,6 +1,3 @@
-strategies-filter-all = सभी
-strategies-filter-entry = एंट्री
-strategies-filter-exit = एग्ज़िट
 strategies-type-entry = एंट्री
 strategies-type-exit = एग्ज़िट
 strategies-list-empty-title = अभी कोई स्ट्रैटेजी नहीं
@@ -9,10 +6,6 @@ strategies-new = नई स्ट्रैटेजी
 strategies-import =
     .title = स्ट्रैटेजी इम्पोर्ट करें
     .aria-label = स्ट्रैटेजी इम्पोर्ट करें
-strategies-item-enable =
-    .title = चालू करें
-strategies-item-disable =
-    .title = बंद करें
 
 strategies-new-name = नई स्ट्रैटेजी
 
@@ -21,7 +14,6 @@ strategies-editor-name =
 strategies-editor-dirty =
     .title = बिना सहेजे बदलाव
 strategies-action-validate = सत्यापित करें
-strategies-editor-empty = संपादित करने के लिए कोई स्ट्रैटेजी चुनें, या नई बनाएं
 strategies-conditions-empty-title = अभी कोई शर्त नहीं
 strategies-conditions-empty-hint = बनाना शुरू करने के लिए "{ strategies-add-condition }" का उपयोग करें
 strategies-add-condition = शर्त जोड़ें
@@ -80,10 +72,10 @@ strategies-catalog-search-clear =
 strategies-catalog-no-description = कोई विवरण उपलब्ध नहीं
 
 # Editor header: the timeframe is the default for candle conditions that leave theirs unset.
-strategies-editor-active = सक्रिय
+strategies-editor-active = चालू
 strategies-editor-timeframe = डिफ़ॉल्ट टाइमफ़्रेम
     .title = उन शर्तों के लिए कैंडल टाइमफ़्रेम जो अपना टाइमफ़्रेम तय नहीं करतीं
-strategies-editor-priority = प्राथमिकता
+strategies-editor-order = क्रम
     .title = 1 से 100 तक मूल्यांकन क्रम; छोटी संख्याओं का मूल्यांकन पहले होता है
 strategies-editor-description = विवरण
 strategies-editor-description-field =
@@ -182,6 +174,8 @@ strategies-unsaved-confirm = बिना सहेजे बदलाव छो
     .message = "{ $name }" में बदलाव सहेजे नहीं गए हैं।
 strategies-unsaved-discard = छोड़ें
 strategies-import-error-json = फ़ाइल मान्य JSON नहीं है
+# $min and $max are the bounds of the evaluation order.
+strategies-import-error-priority = फ़ाइल में प्राथमिकता { $min } से { $max } तक की पूर्ण संख्या होनी चाहिए
 strategies-import-error-shape = फ़ाइल में कोई स्ट्रैटेजी नहीं है
 # $type is the condition type id, $name the condition name.
 strategies-import-error-unknown-condition = फ़ाइल ऐसी शर्त का उपयोग करती है जो इस संस्करण में नहीं है: { $type }
@@ -217,8 +211,6 @@ strategies-toast-test-failed = जाँच विफल
 strategies-toast-valid = स्ट्रैटेजी मान्य है
 strategies-toast-invalid = स्ट्रैटेजी में त्रुटियां हैं
 strategies-toast-validation-failed = सत्यापन विफल
-strategies-toast-item-enabled = स्ट्रैटेजी चालू
-strategies-toast-item-disabled = स्ट्रैटेजी बंद
 strategies-toast-item-toggle-failed = स्ट्रैटेजी टॉगल करने में विफल
 strategies-toast-deleted = स्ट्रैटेजी हटाई गई
     .message = "{ $name }" सफलतापूर्वक हटाई गई
@@ -643,3 +635,91 @@ strategies-readiness-priced-missing =
     }
 strategies-readiness-runtime = लाइव ट्रेडिंग उपलब्ध
 strategies-readiness-runtime-ok = सेटअप और सुरक्षा गेट लाइव ट्रेड की अनुमति देते हैं
+
+## Roster: the strategy list, one view per kind. Status and notice ids come from
+## src/strategies/overview.rs.
+
+strategies-back = सभी स्ट्रैटेजी
+strategies-view-kind = स्ट्रैटेजी का प्रकार
+strategies-unnamed = बिना नाम की स्ट्रैटेजी
+strategies-col-on = चालू
+strategies-col-strategy = स्ट्रैटेजी
+strategies-col-order = क्रम
+    .title = एक मोड की चालू एंट्री स्ट्रैटेजी के बीच मूल्यांकन क्रम; पहले सिग्नल देने वाली स्ट्रैटेजी टोकन लेती है
+strategies-col-mode = मोड
+strategies-col-status = स्थिति
+strategies-col-open = खुली
+strategies-col-watching = निगरानी में
+strategies-col-rounds = राउंड
+strategies-col-closed = बंद
+strategies-col-win-rate = जीत दर
+strategies-col-realized = प्राप्त { -sol }
+strategies-col-manages = प्रबंधित करती है
+strategies-col-last-signal = आख़िरी सिग्नल
+strategies-status-running = चल रही है
+strategies-status-not-running = नहीं चल रही
+strategies-status-off = बंद
+strategies-status-setup-required = सेटअप ज़रूरी
+strategies-status-live-paused = लाइव एंट्री रुकी हुई
+strategies-status-paper-cash = पेपर कैश कम
+strategies-status-slots-full = स्लॉट भरे हुए
+strategies-status-entry-monitor-off = एंट्री मॉनिटर बंद
+strategies-status-exit-monitor-off = एग्ज़िट मॉनिटर बंद
+strategies-notice-setup-required = पेपर ट्रेडिंग सेटअप के बाद शुरू होती है
+strategies-notice-force-stopped = आपातकालीन रोक लगी है
+strategies-notice-trader-off = Auto Trader बंद है
+strategies-notice-waiting = मुख्य सेवाओं की प्रतीक्षा
+strategies-notice-monitors-off = एंट्री और एग्ज़िट मॉनिटर बंद हैं
+strategies-notice-start = Auto Trader शुरू करें
+# $closed and $needed count closed paper rounds; $changed is a formatted date.
+strategies-readiness-progress = पेपर राउंड { $closed }/{ $needed }
+strategies-readiness-ready = लाइव के लिए तैयार
+strategies-readiness-since = नियम बदले { $changed }
+# $book is the trading mode of the other book; $count its open positions.
+strategies-open-other-book =
+    { $count ->
+        [one] { $book }: { $count } पोज़िशन
+       *[other] { $book }: { $count } पोज़िशन
+    }
+strategies-manages-all = सभी एंट्री स्ट्रैटेजी
+# $first is the first managed entry strategy; $more the count of the others.
+strategies-manages-some =
+    { $more ->
+        [one] { $first } और { $more } अन्य
+       *[other] { $first } और { $more } अन्य
+    }
+strategies-exit-before = पहले जाँचे जाते हैं
+strategies-exit-hint = ये एग्ज़िट नियम हर पोज़िशन पर किसी भी एग्ज़िट स्ट्रैटेजी से पहले जाँचे जाते हैं
+strategies-action-edit = { $name } संपादित करें
+strategies-action-delete = { $name } हटाएँ
+strategies-roster-stale = आख़िरी अपडेट
+
+## Saving new rules: the server answers whether a save changed the rules a strategy trades on.
+
+strategies-live-rules-confirm = लाइव “{ $name }” के नियम बदलें
+    .message = नए नियम अगली जाँच से असली { -sol } से ट्रेड करते हैं, और इस स्ट्रैटेजी का पेपर प्रमाण इसी सेव से फिर शुरू होता है।
+strategies-live-rules-save = सेव करें और लाइव ट्रेड करें
+strategies-toast-evidence-restarted = स्ट्रैटेजी सहेजी गई
+    .message = “{ $name }” के नियम बदल गए; इसका पेपर प्रमाण अब से फिर शुरू होता है
+
+## Trading mode: arming a paper strategy live and returning it to paper.
+
+strategies-mode-arm = लाइव सक्रिय करें
+strategies-mode-return-paper = पेपर पर लौटें
+strategies-mode-arm-title = “{ $name }” को लाइव सक्रिय करें
+strategies-mode-arm-lead = “{ $name }” की नई एंट्री आपके ट्रेडिंग वॉलेट से असली स्वैप के ज़रिए होंगी।
+strategies-mode-arm-lead-exit = सिग्नल मिलने पर “{ $name }” आपके ट्रेडिंग वॉलेट से असली स्वैप द्वारा लाइव पोज़िशन बेचेगी।
+strategies-mode-arm-readiness = पेपर बुक से रेडीनेस
+strategies-mode-arm-open-paper = खुली पेपर पोज़िशन पेपर ही रहती हैं और पेपर पर ही बंद होती हैं।
+strategies-mode-arm-ack-real-native = नई एंट्री आपके ट्रेडिंग वॉलेट से असली { -sol } खर्च करती हैं।
+strategies-mode-arm-ack-real-native-exit = इसकी प्रबंधित लाइव पोज़िशन असली स्वैप से बेची जाती हैं।
+strategies-mode-arm-ack-fees = लाइव स्वैप में असली नेटवर्क फ़ीस और स्लिपेज लगता है; पेपर नतीजे लाइव नतीजों की गारंटी नहीं हैं।
+strategies-mode-arm-ack-unready = कुछ रेडीनेस जाँच पास नहीं हुई हैं। फिर भी इस स्ट्रैटेजी को सक्रिय करें।
+strategies-mode-arm-unavailable = लाइव ट्रेडिंग अभी उपलब्ध नहीं है; आखिरी जाँच देखें।
+strategies-mode-return-title = “{ $name }” को पेपर पर लौटाएँ
+strategies-mode-return-message = नई एंट्री बिना { -sol } खर्च किए पेपर बुक में खुलती हैं। खुली लाइव पोज़िशन लाइव ही रहती हैं और लाइव ही बंद होती हैं।
+strategies-mode-return-message-exit = यह लाइव पोज़िशन का मूल्यांकन बंद कर देती है; उनके एग्ज़िट नियम बने रहते हैं।
+strategies-mode-readiness-failed = स्ट्रैटेजी की रेडीनेस नहीं पढ़ी जा सकी
+strategies-mode-toast-armed = { $name } अब लाइव ट्रेड करती है
+strategies-mode-toast-paper = { $name } अब पेपर पर ट्रेड करती है
+strategies-mode-toast-failed = ट्रेडिंग मोड नहीं बदला जा सका

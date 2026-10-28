@@ -1,7 +1,7 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 //
-// Strategies page - strategy list and condition editor with create, validate and delete flows over the /api/strategies endpoints.
+// Strategies sub-tab - the strategy roster and the condition editor a roster row opens, with create, import, validate, save and delete flows over the /api/strategies endpoints.
 
 import { Poller } from "../core/poller.js";
 import { $, $$ } from "../core/dom.js";
@@ -9,11 +9,15 @@ import * as Utils from "../core/utils.js";
 import { ConfirmationDialog } from "../ui/confirmation_dialog.js";
 import { renderStateView } from "../ui/state_view.js";
 import { STRATEGY_TYPE_LABELS } from "../ui/strategy_type.js";
+import { gateControl } from "../ui/setup_gate.js";
 import { requestManager, errorMessageOf } from "../core/request_manager.js";
 import { downloadJson } from "../core/download.js";
 import { enhanceAllSelects } from "../ui/custom_select.js";
 import { createRuleEditor } from "./strategies/rule_editor.js";
 import { createConditionCatalog } from "./strategies/condition_catalog.js";
+import { createRoster } from "./strategies/roster.js";
+import { setStrategyEnabled } from "./strategies/enable.js";
+import { createStrategyMode } from "./strategies/strategy_mode.js";
 import { conditionName, optionLabel, optionValue } from "./strategies/condition_text.js";
 import {
   renderNodeVerdict,
@@ -41,15 +45,8 @@ const TEST_TIMEOUT_MS = 30000;
 export function createLifecycle() {
   // State
   let currentStrategy = null;
-  let strategies = [];
   const conditionSchemas = {}; // filled in place once the schemas are loaded
   let defaultTimeframe = null; // timeframe a new strategy is saved with
-
-  // Pollers
-  let strategiesPoller = null;
-
-  // Hash guards — skip re-render when polled data is unchanged
-  let _lastStrategiesKey = null;
 
   // Dirty tracking — unsaved editor changes
   let _isDirty = false;
@@ -59,57 +56,30 @@ export function createLifecycle() {
 
   // Event listener cleanup tracking
   const eventCleanups = [];
-  const CleanupScope = {
-    STATIC: "static",
-    STRATEGIES_LIST: "strategies-list",
-  };
 
   // Helper to track event listeners for cleanup
-  function addTrackedListener(element, event, handler, scope = CleanupScope.STATIC) {
+  function addTrackedListener(element, event, handler) {
     if (!element) {
       return;
     }
     element.addEventListener(event, handler);
-    eventCleanups.push({
-      scope,
-      cleanup: () => element.removeEventListener(event, handler),
-    });
+    eventCleanups.push(() => element.removeEventListener(event, handler));
   }
 
-  function clearScope(scope) {
-    if (!scope) {
-      return;
-    }
-    for (let i = eventCleanups.length - 1; i >= 0; i -= 1) {
-      const entry = eventCleanups[i];
-      if (entry.scope === scope) {
-        entry.cleanup();
-        eventCleanups.splice(i, 1);
-      }
-    }
-  }
-
-  // Editor visibility + dirty state helpers
+  /** Show the editor in place of the roster. */
   function showEditor() {
-    const header = $("#editor-header");
-    const empty = $("#editor-empty");
-    const scrollArea = $("#editor-scroll-area");
-    const footer = $("#editor-footer");
-    if (header) header.style.display = "flex";
-    if (empty) empty.style.display = "none";
-    if (scrollArea) scrollArea.style.display = "";
-    if (footer) footer.style.display = "";
+    const roster = $("#strategies-roster");
+    const editor = $("#strategy-editor");
+    if (roster) roster.hidden = true;
+    if (editor) editor.hidden = false;
   }
 
-  function hideEditor() {
-    const header = $("#editor-header");
-    const empty = $("#editor-empty");
-    const scrollArea = $("#editor-scroll-area");
-    const footer = $("#editor-footer");
-    if (header) header.style.display = "none";
-    if (empty) empty.style.display = "";
-    if (scrollArea) scrollArea.style.display = "none";
-    if (footer) footer.style.display = "none";
+  /** Show the roster in place of the editor, at the view, sort and scroll it was left at. */
+  function showRoster() {
+    const roster = $("#strategies-roster");
+    const editor = $("#strategy-editor");
+    if (editor) editor.hidden = true;
+    if (roster) roster.hidden = false;
   }
 
   function markDirty() {
@@ -159,15 +129,25 @@ export function createLifecycle() {
     addTrackedListener,
   });
 
+  const strategyMode = createStrategyMode({ requestManager, ConfirmationDialog, Utils });
+  let roster = null;
+
   return {
     async init(_ctx) {
       console.log("[Strategies] Initializing page");
 
-      // Hide editor area until a strategy is selected
-      hideEditor();
+      showRoster();
+      roster = createRoster({
+        container: $("#strategies-roster"),
+        onOpen: (id) => void loadStrategy(id),
+        onCreate: (type) => showCreateStrategyModal(type),
+        onImport: importStrategy,
+        onDelete: (row) => void deleteStrategy(row),
+        strategyMode,
+      });
+      roster.mount();
 
-      setupFilterTabs();
-      setupSidebarActions();
+      setupCreateStrategyModal();
       setupHeaderActions();
       setupSettingsActions();
 
@@ -181,30 +161,18 @@ export function createLifecycle() {
     async activate(ctx) {
       console.log("[Strategies] Activating page");
 
-      // Create pollers
-      strategiesPoller = ctx.managePoller(
-        new Poller(
-          async () => {
-            await loadStrategies();
-          },
-          { label: "Strategies", intervalMs: 10000 } // l10n-ignore: poller label used in logs only
+      // The roster keeps polling while the editor is open, so the editor reads the
+      // strategy's current mode when it saves new rules.
+      ctx
+        .managePoller(
+          new Poller(() => roster.load(), {
+            label: "Strategies", // l10n-ignore: poller label used in logs only
+            intervalMs: 10000,
+          })
         )
-      );
+        .start();
 
-      // Start pollers
-      strategiesPoller.start();
-
-      // Initial load
-      await loadStrategies();
-    },
-
-    /**
-     * Act on a request from the Auto Trader page: `{ strategyId }` opens that strategy
-     * in the editor, `{ create }` opens the new-strategy dialog with that kind chosen.
-     */
-    open({ strategyId = null, create = null } = {}) {
-      if (strategyId !== null) void loadStrategy(strategyId);
-      else if (create) showCreateStrategyModal(create);
+      await roster.load();
     },
 
     deactivate() {
@@ -216,84 +184,17 @@ export function createLifecycle() {
       console.log("[Strategies] Disposing page");
 
       // Clean up all event listeners
-      eventCleanups.forEach((entry) => entry.cleanup());
+      eventCleanups.forEach((cleanup) => cleanup());
       eventCleanups.length = 0;
+
+      roster?.destroy();
+      roster = null;
 
       // Cleanup state
       currentStrategy = null;
-      strategies = [];
-      _lastStrategiesKey = null;
       _isDirty = false;
     },
   };
-
-  // Strategy list filter tabs
-  function setupFilterTabs() {
-    // Setup filter tabs in sidebar
-    const filterTabs = document.querySelectorAll(".filter-tab");
-
-    filterTabs.forEach((tab) => {
-      tab.addEventListener("click", () => {
-        const filter = tab.dataset.filter.toUpperCase();
-
-        // Update active state
-        filterTabs.forEach((t) => t.classList.remove("active"));
-        tab.classList.add("active");
-
-        // Filter sidebar strategies by type
-        filterStrategies(filter);
-      });
-    });
-  }
-
-  // Filters
-  function filterStrategies(filter) {
-    const items = $$(".strategy-item");
-    items.forEach((item) => {
-      const strategyId = item.dataset.strategyId;
-      const strategy = strategies.find((s) => s.id === strategyId);
-
-      if (!strategy) {
-        item.style.display = "none";
-        return;
-      }
-
-      if (filter === "ALL") {
-        item.style.display = "";
-      } else {
-        item.style.display = strategy.type === filter ? "" : "none";
-      }
-    });
-  }
-
-  // Sidebar Actions
-  function setupSidebarActions() {
-    // Create new strategy - show type selection modal
-    const createBtn = $("#create-strategy");
-    if (createBtn) {
-      addTrackedListener(createBtn, "click", () => {
-        showCreateStrategyModal();
-      });
-    }
-    const placeholder = $("#editor-empty");
-    if (placeholder) {
-      addTrackedListener(placeholder, "click", (event) => {
-        if (event.target.closest('[data-action="create-strategy"]')) showCreateStrategyModal();
-      });
-    }
-
-    // Setup create strategy modal
-    setupCreateStrategyModal();
-
-    // Import strategy
-    const importBtn = $("#import-strategy");
-    if (importBtn) {
-      addTrackedListener(importBtn, "click", () => {
-        importStrategy();
-      });
-    }
-
-  }
 
   /** Open the new-strategy dialog; `type` ("ENTRY" or "EXIT") preselects that kind. */
   function showCreateStrategyModal(type = null) {
@@ -352,8 +253,35 @@ export function createLifecycle() {
     };
   }
 
-  /** Editor toolbar: the name, the Active switch and the strategy actions. */
+  /**
+   * The editor's On switch. A saved strategy switches through the one enable path, as the
+   * roster switch does, and returns when the server refuses; an unsaved one keeps the
+   * state for its first save.
+   */
+  async function onEnabledChange(event) {
+    const input = event.currentTarget;
+    if (!currentStrategy) return;
+    const enabled = input.checked;
+    if (!currentStrategy.id) {
+      currentStrategy.enabled = enabled;
+      markDirty();
+      return;
+    }
+    const strategy = currentStrategy;
+    input.disabled = true;
+    const changed = await setStrategyEnabled(strategy.id, enabled);
+    input.disabled = false;
+    if (!changed) {
+      input.checked = !enabled;
+      return;
+    }
+    strategy.enabled = enabled;
+    void roster?.reload();
+  }
+
+  /** Editor toolbar: the way back, the name, the On switch and the strategy actions. */
   function setupHeaderActions() {
+    addTrackedListener($("#strategy-back"), "click", () => void backToRoster());
     addTrackedListener(
       $("#strategy-name"),
       "input",
@@ -361,13 +289,7 @@ export function createLifecycle() {
         currentStrategy.name = input.value;
       })
     );
-    addTrackedListener(
-      $("#strategy-enabled-toggle"),
-      "change",
-      editField((input) => {
-        currentStrategy.enabled = input.checked;
-      })
-    );
+    addTrackedListener($("#strategy-enabled-toggle"), "change", onEnabledChange);
 
     // A narrow editor shows these actions as their glyph alone; the label stays their
     // accessible name and becomes their tooltip.
@@ -452,9 +374,10 @@ export function createLifecycle() {
    * bound id whose strategy no longer exists, so it can be unchecked.
    */
   function entryBindingChoices() {
-    const entries = strategies
-      .filter((strategy) => strategy.type === "ENTRY")
-      .map((strategy) => ({ id: strategy.id, label: strategy.name }));
+    const entries = (roster?.entries() ?? []).map((strategy) => ({
+      id: strategy.id,
+      label: strategy.name,
+    }));
     const known = new Set(entries.map((entry) => entry.id));
     const deleted = currentStrategy.entry_strategy_ids
       .filter((id) => !known.has(id))
@@ -537,7 +460,13 @@ export function createLifecycle() {
     if (nameInput) nameInput.value = strategy.name;
     updateTypeBadge(strategy.type);
     const enableToggle = $("#strategy-enabled-toggle");
-    if (enableToggle) enableToggle.checked = strategy.enabled;
+    if (enableToggle) {
+      enableToggle.checked = strategy.enabled;
+      enableToggle.disabled = false;
+      enableToggle.removeAttribute("title");
+      // In Explore Mode a saved strategy cannot be switched; a new one keeps its draft state.
+      if (strategy.id) gateControl(enableToggle);
+    }
     populateTimeframe(strategy.timeframe);
     const priority = $("#strategy-priority");
     if (priority) priority.value = strategy.priority ?? DEFAULT_PRIORITY;
@@ -560,39 +489,6 @@ export function createLifecycle() {
     };
   }
 
-  // Load Data
-  async function loadStrategies() {
-    try {
-      const data = await requestManager.fetch("/api/strategies", {
-        priority: "normal",
-      });
-      const items = data.items || [];
-      strategies = items.map((s) => ({
-        id: s.id,
-        name: s.name,
-        description: s.description || null,
-        type: s.strategy_type,
-        enabled: !!s.enabled,
-        priority: s.priority,
-        created_at: s.created_at,
-        updated_at: s.updated_at,
-        author: s.author || null,
-        version: s.version,
-      }));
-
-      renderStrategies();
-      // An entry strategy added, renamed or deleted changes what an exit strategy can bind.
-      if (currentStrategy) renderEntryBinding();
-    } catch (error) {
-      console.error("Failed to load strategies:", error);
-      announce(
-        "error",
-        I18n.t("strategies-toast-load-failed"),
-        I18n.attr("strategies-toast-load-failed", "message")
-      );
-    }
-  }
-
   async function loadConditionSchemas() {
     try {
       const data = await requestManager.fetch("/api/strategies/conditions/schemas", {
@@ -603,124 +499,6 @@ export function createLifecycle() {
     } catch (error) {
       console.error("Failed to load condition schemas:", error);
     }
-  }
-
-  // Render Functions
-
-  /**
-   * The editor area while nothing is open: with no strategy yet it offers New Strategy
-   * in place, otherwise it asks for a strategy from the list.
-   */
-  function renderEditorPlaceholder() {
-    const placeholder = $("#editor-empty");
-    if (!placeholder) return;
-    placeholder.innerHTML =
-      strategies.length === 0
-        ? renderStateView({
-            icon: "icon-square-pen",
-            message: I18n.t("strategies-list-empty-hint"),
-            action: { id: "create-strategy", label: I18n.t("strategies-new"), primary: true },
-          })
-        : renderStateView({ icon: "icon-square-pen", message: I18n.t("strategies-editor-empty") });
-  }
-
-  function renderStrategies() {
-    const key = JSON.stringify(strategies.map(s => ({ ...s, active: currentStrategy?.id === s.id })));
-    if (key === _lastStrategiesKey) return;
-    _lastStrategiesKey = key;
-
-    clearScope(CleanupScope.STRATEGIES_LIST);
-
-    renderEditorPlaceholder();
-
-    const listContainer = $("#strategy-list");
-    if (!listContainer) return;
-
-    // The list states that it is empty; the editor beside it offers the first strategy.
-    if (strategies.length === 0) {
-      listContainer.innerHTML = renderStateView({
-        icon: "icon-file-text",
-        title: I18n.t("strategies-list-empty-title"),
-        compact: true,
-      });
-      return;
-    }
-
-    listContainer.innerHTML = strategies
-      .map((strategy) => {
-        const deleteTitle = I18n.t("common-action-delete");
-        const toggleTitle = strategy.enabled
-          ? I18n.attr("strategies-item-disable", "title")
-          : I18n.attr("strategies-item-enable", "title");
-        return `
-      <div class="strategy-item ${currentStrategy?.id === strategy.id ? "active" : ""}"
-           data-strategy-id="${strategy.id}">
-        <div class="strategy-item-name">${Utils.escapeHtml(strategy.name)}</div>
-        <div class="strategy-item-row">
-          <div class="strategy-item-tags">
-            <span class="strategy-type-tag ${strategy.type.toLowerCase()}">${Utils.escapeHtml(I18n.label(STRATEGY_TYPE_LABELS, strategy.type))}</span>
-            <span class="strategy-state-tag ${strategy.enabled ? "enabled" : "disabled"}">${Utils.escapeHtml(strategy.enabled ? I18n.t("common-state-enabled") : I18n.t("common-state-disabled"))}</span>
-          </div>
-          <div class="strategy-item-btns">
-            <button class="btn-icon btn-icon-sm" data-action="toggle" title="${Utils.escapeHtml(toggleTitle)}" aria-label="${Utils.escapeHtml(toggleTitle)}">
-              <i class="${strategy.enabled ? "icon-toggle-right" : "icon-toggle-left"}"></i>
-            </button>
-            <button class="btn-icon btn-icon-sm" data-action="delete" title="${Utils.escapeHtml(deleteTitle)}" aria-label="${Utils.escapeHtml(deleteTitle)}"><i class="icon-trash-2"></i></button>
-          </div>
-        </div>
-      </div>
-    `;
-      })
-      .join("");
-
-    // Attach event listeners
-    $$(".strategy-item").forEach((item) => {
-      const strategyId = item.dataset.strategyId;
-
-      addTrackedListener(
-        item,
-        "click",
-        (e) => {
-          if (!e.target.closest(".btn-icon")) {
-            loadStrategy(strategyId);
-          }
-        },
-        CleanupScope.STRATEGIES_LIST
-      );
-
-      // Action buttons
-      const toggleBtn = item.querySelector("[data-action='toggle']");
-      const deleteBtn = item.querySelector("[data-action='delete']");
-
-      if (toggleBtn) {
-        addTrackedListener(
-          toggleBtn,
-          "click",
-          async (e) => {
-            e.stopPropagation();
-            await toggleStrategyEnabled(strategyId);
-          },
-          CleanupScope.STRATEGIES_LIST
-        );
-      }
-
-      if (deleteBtn) {
-        addTrackedListener(
-          deleteBtn,
-          "click",
-          async (e) => {
-            e.stopPropagation();
-            await deleteStrategy(strategyId);
-          },
-          CleanupScope.STRATEGIES_LIST
-        );
-      }
-    });
-
-    // Apply current filter from active tab
-    const activeFilter = $(".filter-tab.active");
-    const filter = activeFilter ? activeFilter.dataset.filter.toUpperCase() : "ALL";
-    filterStrategies(filter);
   }
 
   function openConditionCatalog(groupId) {
@@ -750,24 +528,28 @@ export function createLifecycle() {
     return confirmed;
   }
 
-  /** Put a strategy in the editor; the list highlights it when it is saved. */
+  /** Put a strategy in the editor and show the editor in place of the roster. */
   function openInEditor(strategy, { dirty }) {
     currentStrategy = strategy;
     fillEditor(strategy);
     showEditor();
     clearDirty();
     if (dirty) markDirty();
-    $$(".strategy-item").forEach((item) => {
-      item.classList.toggle("active", Boolean(strategy.id) && item.dataset.strategyId === strategy.id);
-    });
   }
 
-  /** Clear the editor back to its empty state, as when nothing is selected. */
+  /** Clear the editor and return to the roster. */
   function closeEditor() {
     hideTestResult();
     currentStrategy = null;
     clearDirty();
-    hideEditor();
+    showRoster();
+  }
+
+  /** The back control: unsaved changes are confirmed first, then the roster returns. */
+  async function backToRoster() {
+    if (!(await confirmDiscard())) return;
+    closeEditor();
+    void roster?.reload();
   }
 
   // Strategy Operations
@@ -803,10 +585,9 @@ export function createLifecycle() {
   }
 
   async function loadStrategy(strategyId) {
-    if (currentStrategy?.id === strategyId) return;
     if (!(await confirmDiscard())) return;
     try {
-      const data = await requestManager.fetch(`/api/strategies/${strategyId}`, {
+      const data = await requestManager.fetch(`/api/strategies/${encodeURIComponent(strategyId)}`, {
         priority: "normal",
       });
       openInEditor(strategyFromDetail(data), { dirty: false });
@@ -848,6 +629,46 @@ export function createLifecycle() {
     return true;
   }
 
+  /**
+   * Before a stored strategy is saved, ask the server whether the save changes the rules
+   * it trades on; the editor never compares rules itself. New rules on a live strategy
+   * trade real funds from the next check and restart its paper evidence, so they are
+   * confirmed first. Resolves `{ confirmedLive }` to go on, or null to save nothing.
+   */
+  async function checkRulesChange(saved, body) {
+    let data;
+    try {
+      data = await requestManager.fetch(
+        `/api/strategies/validate?id=${encodeURIComponent(saved.id)}`,
+        { method: "POST", headers: { "Content-Type": "application/json" }, body, priority: "high" }
+      );
+    } catch (error) {
+      console.error("Validation before save failed:", error);
+      announce(
+        "error",
+        I18n.t("strategies-toast-save-failed"),
+        await errorMessageOf(error, I18n.attr("strategies-toast-save-failed", "message"))
+      );
+      return null;
+    }
+    if (!data.valid) {
+      const reasons = (data.errors || []).map((error) => I18n.text(error));
+      announce("error", I18n.t("strategies-toast-invalid"), Utils.formatList(reasons, { type: "unit" }));
+      return null;
+    }
+    const mode = roster?.row(saved.id)?.mode ?? saved.mode;
+    if (!data.rules_changed || mode !== "live") return { confirmedLive: false };
+    const args = { name: saved.name };
+    const { confirmed } = await ConfirmationDialog.show({
+      title: I18n.t("strategies-live-rules-confirm", args),
+      message: I18n.attr("strategies-live-rules-confirm", "message", args),
+      confirmLabel: I18n.t("strategies-live-rules-save"),
+      cancelLabel: I18n.t("common-action-cancel"),
+      variant: "danger",
+    });
+    return confirmed ? { confirmedLive: true } : null;
+  }
+
   async function saveStrategy() {
     if (!currentStrategy) {
       announce(
@@ -859,15 +680,23 @@ export function createLifecycle() {
     }
     if (!checkBeforeSend()) return;
 
+    const saved = editedStrategy();
+    const body = JSON.stringify(requestBodyOf(saved));
+    let confirmedLive = false;
+    if (saved.id) {
+      const check = await checkRulesChange(saved, body);
+      if (!check) return;
+      confirmedLive = check.confirmedLive;
+    }
+
     try {
-      const saved = editedStrategy();
       const method = saved.id ? "PUT" : "POST";
-      const url = saved.id ? `/api/strategies/${saved.id}` : "/api/strategies";
+      const url = saved.id ? `/api/strategies/${encodeURIComponent(saved.id)}` : "/api/strategies";
 
       const data = await requestManager.fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(requestBodyOf(saved)),
+        body,
         priority: "high",
       });
       currentStrategy.name = saved.name;
@@ -876,13 +705,15 @@ export function createLifecycle() {
       }
 
       clearDirty();
-      await loadStrategies();
+      await roster?.reload();
       const args = { name: currentStrategy.name };
-      announce(
-        "success",
-        I18n.t("strategies-toast-saved", args),
-        I18n.attr("strategies-toast-saved", "message", args)
-      );
+      // New rules restart the paper evidence; a live save the dialog confirmed said so
+      // already, any other save that changed the rules states it now.
+      const notice =
+        data.rules_changed === true && !confirmedLive
+          ? "strategies-toast-evidence-restarted"
+          : "strategies-toast-saved";
+      announce("success", I18n.t(notice, args), I18n.attr(notice, "message", args));
     } catch (error) {
       console.error("Failed to save strategy:", error);
       announce(
@@ -991,44 +822,9 @@ export function createLifecycle() {
     }
   }
 
-  /** Switch a listed strategy on or off; the rest of the stored strategy is untouched. */
-  async function toggleStrategyEnabled(strategyId) {
-    try {
-      const strategy = strategies.find((s) => s.id === strategyId);
-      if (!strategy) return;
-      const enabled = !strategy.enabled;
-
-      await requestManager.fetch(`/api/strategies/${encodeURIComponent(strategyId)}/enabled`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ enabled }),
-        priority: "high",
-      });
-
-      if (currentStrategy?.id === strategyId) {
-        currentStrategy.enabled = enabled;
-        const toggle = $("#strategy-enabled-toggle");
-        if (toggle) toggle.checked = enabled;
-      }
-      await loadStrategies();
-      Utils.showToast(
-        enabled ? I18n.t("strategies-toast-item-enabled") : I18n.t("strategies-toast-item-disabled"),
-        "success"
-      );
-    } catch (error) {
-      console.error("Failed to toggle strategy:", error);
-      announce(
-        "error",
-        I18n.t("strategies-toast-item-toggle-failed"),
-        await errorMessageOf(error, null)
-      );
-    }
-  }
-
-  async function deleteStrategy(strategyId) {
-    const strategy = strategies.find((s) => s.id === strategyId);
-    if (!strategy) return;
-
+  /** Delete a roster row's strategy after confirmation. */
+  async function deleteStrategy(strategy) {
+    const strategyId = strategy.id;
     const { confirmed } = await ConfirmationDialog.show({
       title: I18n.t("strategies-delete-title"),
       message: I18n.t("strategies-delete-message", { name: strategy.name }),
@@ -1040,14 +836,12 @@ export function createLifecycle() {
     if (!confirmed) return;
 
     try {
-      await requestManager.fetch(`/api/strategies/${strategyId}`, {
+      await requestManager.fetch(`/api/strategies/${encodeURIComponent(strategyId)}`, {
         method: "DELETE",
         priority: "high",
       });
 
-      if (currentStrategy?.id === strategyId) closeEditor();
-
-      await loadStrategies();
+      await roster?.reload();
       const args = { name: strategy.name };
       announce(
         "success",
@@ -1077,6 +871,8 @@ export function createLifecycle() {
     switch (code) {
       case "json":
         return I18n.t("strategies-import-error-json");
+      case "priority":
+        return I18n.t("strategies-import-error-priority", args);
       case "unknown-condition":
         return I18n.t("strategies-import-error-unknown-condition", { type: args.type });
       case "not-applicable":
@@ -1116,6 +912,5 @@ export function createLifecycle() {
   }
 }
 
-// Strategies is no longer a standalone router page — it is embedded as the
-// third subtab of the Auto Trader page, which imports createLifecycle() and
-// drives init/activate/deactivate/dispose itself (see trader.js).
+// Strategies is embedded as a sub-tab of the Auto Trader page, which imports
+// createLifecycle() and drives init/activate/deactivate/dispose itself (see trader.js).

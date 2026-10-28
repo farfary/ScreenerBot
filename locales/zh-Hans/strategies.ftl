@@ -8,9 +8,6 @@
 
 ## Strategy list
 
-strategies-filter-all = 全部
-strategies-filter-entry = 入场
-strategies-filter-exit = 出场
 strategies-type-entry = 入场
 strategies-type-exit = 出场
 strategies-list-empty-title = 暂无策略
@@ -19,10 +16,6 @@ strategies-new = 新建策略
 strategies-import =
     .title = 导入策略
     .aria-label = 导入策略
-strategies-item-enable =
-    .title = 启用
-strategies-item-disable =
-    .title = 停用
 
 # Name given to a strategy before it is saved.
 strategies-new-name = 新建策略
@@ -34,7 +27,6 @@ strategies-editor-name =
 strategies-editor-dirty =
     .title = 有未保存的更改
 strategies-action-validate = 验证
-strategies-editor-empty = 请选择要编辑的策略，或新建一个
 strategies-conditions-empty-title = 暂无条件
 strategies-conditions-empty-hint = 使用“{ strategies-add-condition }”开始构建
 strategies-add-condition = 添加条件
@@ -99,7 +91,7 @@ strategies-catalog-no-description = 暂无描述
 strategies-editor-active = 启用
 strategies-editor-timeframe = 默认时间周期
     .title = 未设置自身时间周期的条件所使用的 K 线时间周期
-strategies-editor-priority = 优先级
+strategies-editor-order = 顺序
     .title = 评估顺序，范围 1 到 100；数值越小越先评估
 strategies-editor-description = 描述
 strategies-editor-description-field =
@@ -186,6 +178,8 @@ strategies-unsaved-confirm = 要放弃未保存的更改吗？
     .message = “{ $name }”有尚未保存的更改。
 strategies-unsaved-discard = 放弃
 strategies-import-error-json = 文件不是有效的 JSON
+# $min and $max are the bounds of the evaluation order.
+strategies-import-error-priority = 文件中的优先级必须是 { $min } 到 { $max } 之间的整数
 strategies-import-error-shape = 文件未描述任何策略
 # $type is the condition type id, $name the condition name.
 strategies-import-error-unknown-condition = 文件使用了此版本没有的条件：{ $type }
@@ -228,8 +222,6 @@ strategies-toast-test-failed = 测试失败
 strategies-toast-valid = 策略有效
 strategies-toast-invalid = 策略存在错误
 strategies-toast-validation-failed = 验证失败
-strategies-toast-item-enabled = 策略已启用
-strategies-toast-item-disabled = 策略已停用
 strategies-toast-item-toggle-failed = 切换策略失败
 strategies-toast-deleted = 策略已删除
     .message = “{ $name }”已成功移除
@@ -671,3 +663,89 @@ strategies-readiness-priced-missing =
     }
 strategies-readiness-runtime = 可进行实盘交易
 strategies-readiness-runtime-ok = 设置和安全检查均允许实盘交易
+
+## Roster: the strategy list, one view per kind. Status and notice ids come from
+## src/strategies/overview.rs.
+
+strategies-back = 全部策略
+strategies-view-kind = 策略类型
+strategies-unnamed = 未命名策略
+strategies-col-on = 启用
+strategies-col-strategy = 策略
+strategies-col-order = 顺序
+    .title = 同一模式下已启用入场策略之间的评估顺序；最先发出信号的策略获得该代币
+strategies-col-mode = 模式
+strategies-col-status = 状态
+strategies-col-open = 持仓
+strategies-col-watching = 监控中
+strategies-col-rounds = 轮次
+strategies-col-closed = 已平仓
+strategies-col-win-rate = 胜率
+strategies-col-realized = 已实现 { -sol }
+strategies-col-manages = 管理
+strategies-col-last-signal = 最近信号
+strategies-status-running = 运行中
+strategies-status-not-running = 未运行
+strategies-status-off = 已关闭
+strategies-status-setup-required = 需要设置
+strategies-status-live-paused = 实盘入场已暂停
+strategies-status-paper-cash = 模拟资金不足
+strategies-status-slots-full = 仓位已满
+strategies-status-entry-monitor-off = 入场监控已关闭
+strategies-status-exit-monitor-off = 出场监控已关闭
+strategies-notice-setup-required = 完成设置后即可开始模拟交易
+strategies-notice-force-stopped = 紧急停止已启用
+strategies-notice-trader-off = Auto Trader 已关闭
+strategies-notice-waiting = 正在等待核心服务
+strategies-notice-monitors-off = 入场和出场监控均已关闭
+strategies-notice-start = 启动 Auto Trader
+# $closed and $needed count closed paper rounds; $changed is a formatted date.
+strategies-readiness-progress = 模拟轮次 { $closed }/{ $needed }
+strategies-readiness-ready = 可切换实盘
+strategies-readiness-since = 规则修改于 { $changed }
+# $book is the trading mode of the other book; $count its open positions.
+strategies-open-other-book =
+    { $count ->
+       *[other] { $book }：{ $count } 个持仓
+    }
+strategies-manages-all = 全部入场策略
+# $first is the first managed entry strategy; $more the count of the others.
+strategies-manages-some =
+    { $more ->
+       *[other] { $first } 及另外 { $more } 个
+    }
+strategies-exit-before = 优先检查
+strategies-exit-hint = 这些出场规则会在任何出场策略之前对每个持仓进行检查
+strategies-action-edit = 编辑 { $name }
+strategies-action-delete = 删除 { $name }
+strategies-roster-stale = 最近更新
+
+## Saving new rules: the server answers whether a save changed the rules a strategy trades on.
+
+strategies-live-rules-confirm = 修改实盘策略“{ $name }”的规则
+    .message = 新规则从下一次检查起使用真实 { -sol } 交易，该策略的模拟依据从本次保存起重新开始。
+strategies-live-rules-save = 保存并实盘交易
+strategies-toast-evidence-restarted = 策略已保存
+    .message = “{ $name }”的规则已更改；其模拟依据从现在起重新开始
+
+## Trading mode: arming a paper strategy live and returning it to paper.
+
+strategies-mode-arm = 启用实盘
+strategies-mode-return-paper = 改回模拟
+strategies-mode-arm-title = 为“{ $name }”启用实盘
+strategies-mode-arm-lead = “{ $name }”的新开仓将使用您交易钱包的真实兑换进行交易。
+strategies-mode-arm-lead-exit = “{ $name }”发出信号时，将使用你交易钱包中的真实兑换卖出实盘持仓。
+strategies-mode-arm-readiness = 模拟账本的就绪情况
+strategies-mode-arm-open-paper = 未平仓的模拟仓位仍为模拟，并以模拟方式平仓。
+strategies-mode-arm-ack-real-native = 新开仓将花费您交易钱包中的真实 { -sol }。
+strategies-mode-arm-ack-real-native-exit = 它管理的实盘持仓会通过真实兑换卖出。
+strategies-mode-arm-ack-fees = 实盘兑换需支付真实的网络费用并承担滑点；模拟结果不代表实盘结果。
+strategies-mode-arm-ack-unready = 部分就绪检查尚未通过。仍要启用此策略。
+strategies-mode-arm-unavailable = 目前无法进行实盘交易；请查看最近一次检查。
+strategies-mode-return-title = 将“{ $name }”改回模拟
+strategies-mode-return-message = 新开仓将在模拟账本中进行，不花费 { -sol }。未平仓的实盘仓位仍为实盘，并以实盘方式平仓。
+strategies-mode-return-message-exit = 它不再判断实盘持仓；这些持仓保留各自的规则出场。
+strategies-mode-readiness-failed = 无法读取策略的就绪情况
+strategies-mode-toast-armed = { $name } 现已实盘交易
+strategies-mode-toast-paper = { $name } 现已模拟交易
+strategies-mode-toast-failed = 无法更改交易模式

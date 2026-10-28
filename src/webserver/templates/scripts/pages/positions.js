@@ -1018,7 +1018,7 @@ function createLifecycle() {
           state.book === "paper" && state.view !== "archived"
             ? {
                 label: I18n.t("positions-paper-empty-action"),
-                onClick: () => loadPage("trader", { hash: "strategy-control" }),
+                onClick: () => loadPage("trader", { hash: "strategies" }),
               }
             : null,
         enableLogging: false,

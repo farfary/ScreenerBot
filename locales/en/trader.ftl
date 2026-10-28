@@ -18,7 +18,6 @@ trader-exit-type-unknown = Unknown
 ## Sub-tabs. Ids are the tab ids of the trader page.
 
 trader-tab-stats = Stats
-trader-tab-strategy-control = Strategy Control
 trader-tab-strategies = Strategies
 trader-tab-stop-loss = Stop Loss
 trader-tab-trailing-stop = Trailing Stop
@@ -95,15 +94,6 @@ trader-toast-save-failed = Save Failed
 trader-toast-feature-enabled = Feature Enabled
 trader-toast-feature-disabled = Feature Disabled
 trader-toast-feature-applied = Auto Trader setting applied
-trader-toast-strategy-enabled = Strategy Enabled
-    .message = Strategy is active
-trader-toast-strategy-disabled = Strategy Disabled
-    .message = Strategy is inactive
-trader-toast-strategy-failed = Update Failed
-    .message = Failed to update strategy status
-trader-toast-strategy-armed = { $name } now trades live
-trader-toast-strategy-paper = { $name } now trades on paper
-trader-toast-strategy-mode-failed = Could not change the trading mode
 
 ## Stats: realized window and metrics
 
@@ -376,35 +366,6 @@ trader-time-status-losing-due = Losing { $pnl }; closes on the next check
 # $held and $remaining are formatted durations.
 trader-time-status-flat = Flat for { $held }; closes in { $remaining }
 trader-time-status-flat-due = Flat for { $held }; closes on the next check
-
-## Strategy control
-
-trader-strategy-entry-title = Entry Strategies
-trader-strategy-entry-subtitle = Signals that can open a new position.
-trader-strategy-exit-title = Exit Strategies
-trader-strategy-exit-subtitle = Signals that can close or protect an open position.
-trader-strategy-active-unknown = -- active
-trader-strategy-active = { $enabled }/{ $total } active
-trader-strategy-loading = Loading strategies...
-trader-strategy-load-failed = Could not load strategies
-trader-strategy-empty = No strategies defined
-trader-strategy-unnamed = Unnamed strategy
-trader-strategy-priority-auto = Auto
-trader-strategy-priority = Priority { $priority }
-trader-strategy-mode-arm = Arm live
-trader-strategy-mode-return-paper = Return to paper
-trader-strategy-arm-title = Arm “{ $name }” live
-trader-strategy-arm-lead = New entries of “{ $name }” will trade with real swaps from your trading wallet.
-trader-strategy-arm-readiness = Readiness from the paper book
-trader-strategy-arm-open-paper = Open paper positions stay paper and finish on paper.
-trader-strategy-arm-ack-real-native = New entries spend real { -sol } from your trading wallet.
-trader-strategy-arm-ack-fees = Live swaps pay real network fees and slippage; paper results do not promise live results.
-trader-strategy-arm-ack-unready = Some readiness checks have not passed. Arm this strategy anyway.
-trader-strategy-arm-unavailable = Live trading is unavailable right now; see the last check.
-trader-strategy-return-title = Return “{ $name }” to paper
-trader-strategy-return-message = New entries open on the paper book without spending { -sol }. Open live positions stay live and finish live.
-trader-strategy-readiness-failed = Could not read the strategy's readiness
-trader-paper-explore-title = Paper trading starts after setup
 
 ## Dollar-cost averaging
 

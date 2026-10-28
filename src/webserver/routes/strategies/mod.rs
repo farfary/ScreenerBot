@@ -55,10 +55,5 @@ pub fn routes() -> Router<Arc<AppState>> {
         )
         // Testing
         .route("/{id}/test", post(testing::test_strategy))
-        // Validate (by ID)
-        .route(
-            "/{id}/validate",
-            post(validation::validate_strategy_handler),
-        )
         .route_layer(from_fn_with_state(&catalog::STRATEGIES, store_gate))
 }

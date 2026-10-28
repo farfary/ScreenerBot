@@ -18,7 +18,6 @@ trader-exit-type-unknown = 未知
 ## Sub-tabs. Ids are the tab ids of the trader page.
 
 trader-tab-stats = 统计
-trader-tab-strategy-control = 策略控制
 trader-tab-strategies = 策略
 trader-tab-stop-loss = 止损
 trader-tab-trailing-stop = 追踪止损
@@ -95,15 +94,6 @@ trader-toast-save-failed = 保存失败
 trader-toast-feature-enabled = 功能已启用
 trader-toast-feature-disabled = 功能已停用
 trader-toast-feature-applied = 自动交易设置已应用
-trader-toast-strategy-enabled = 策略已启用
-    .message = 策略已生效
-trader-toast-strategy-disabled = 策略已停用
-    .message = 策略未生效
-trader-toast-strategy-failed = 更新失败
-    .message = 更新策略状态失败
-trader-toast-strategy-armed = { $name } 现已实盘交易
-trader-toast-strategy-paper = { $name } 现已模拟交易
-trader-toast-strategy-mode-failed = 无法更改交易模式
 
 ## Stats: realized window and metrics
 
@@ -365,35 +355,6 @@ trader-time-status-losing-due = 亏损 { $pnl }；下次检查时平仓
 # $held and $remaining are formatted durations.
 trader-time-status-flat = 横盘 { $held }；{ $remaining } 后平仓
 trader-time-status-flat-due = 横盘 { $held }；下次检查时平仓
-
-## Strategy control
-
-trader-strategy-entry-title = 入场策略
-trader-strategy-entry-subtitle = 可开启新仓位的信号。
-trader-strategy-exit-title = 出场策略
-trader-strategy-exit-subtitle = 可平仓或保护持仓中仓位的信号。
-trader-strategy-active-unknown = -- 已启用
-trader-strategy-active = 已启用 { $enabled }/{ $total }
-trader-strategy-loading = 正在加载策略...
-trader-strategy-load-failed = 无法加载策略
-trader-strategy-empty = 尚未定义策略
-trader-strategy-unnamed = 未命名策略
-trader-strategy-priority-auto = 自动
-trader-strategy-priority = 优先级 { $priority }
-trader-strategy-mode-arm = 启用实盘
-trader-strategy-mode-return-paper = 改回模拟
-trader-strategy-arm-title = 为“{ $name }”启用实盘
-trader-strategy-arm-lead = “{ $name }”的新开仓将使用您交易钱包的真实兑换进行交易。
-trader-strategy-arm-readiness = 模拟账本的就绪情况
-trader-strategy-arm-open-paper = 未平仓的模拟仓位仍为模拟，并以模拟方式平仓。
-trader-strategy-arm-ack-real-native = 新开仓将花费您交易钱包中的真实 { -sol }。
-trader-strategy-arm-ack-fees = 实盘兑换需支付真实的网络费用并承担滑点；模拟结果不代表实盘结果。
-trader-strategy-arm-ack-unready = 部分就绪检查尚未通过。仍要启用此策略。
-trader-strategy-arm-unavailable = 目前无法进行实盘交易；请查看最近一次检查。
-trader-strategy-return-title = 将“{ $name }”改回模拟
-trader-strategy-return-message = 新开仓将在模拟账本中进行，不花费 { -sol }。未平仓的实盘仓位仍为实盘，并以实盘方式平仓。
-trader-strategy-readiness-failed = 无法读取策略的就绪情况
-trader-paper-explore-title = 完成设置后即可开始模拟交易
 
 ## Dollar-cost averaging
 

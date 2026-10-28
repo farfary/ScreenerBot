@@ -306,9 +306,10 @@ fn an_exit_watches_the_positions_it_manages_in_the_books_it_judges() {
     live_exit.mode = TradingMode::Live;
     let figures = books.figures_of(&live_exit, Some(&PaperStrategyEvidence::default()));
     assert_eq!(figures.watching, Some(2), "a live exit judges both books");
-    assert!(
-        figures.rounds.is_none(),
-        "live closes are not attributed to exit strategies"
+    assert_eq!(
+        figures.rounds.map(|rounds| rounds.closed),
+        Some(0),
+        "a live exit that closed nothing reads none closed, not unknown"
     );
 
     live_exit.enabled = false;
@@ -316,6 +317,63 @@ fn an_exit_watches_the_positions_it_manages_in_the_books_it_judges() {
         .figures_of(&live_exit, Some(&PaperStrategyEvidence::default()))
         .watching
         .is_none());
+}
+
+/// A live exit strategy reads the live rounds it closed through the shared counting rule:
+/// an untrusted round is left out and counted apart, and the rounds closed by a rule or
+/// by another exit strategy are not its own.
+#[test]
+fn a_live_exit_reads_the_live_rounds_it_closed() {
+    crate::config::utils::install_default_config();
+    let closed_by = |entry: &str, exit: Option<&str>, pnl: f64, trusted: bool| {
+        let mut round = position(Book::Live, Some(entry), None);
+        round.exit_time = Some(Utc::now());
+        round.pnl = Some(pnl);
+        round.pnl_percent = Some(pnl * 100.0);
+        round.transaction_exit_verified = true;
+        round.exit_strategy_id = exit.map(str::to_owned);
+        round.basis_complete = trusted;
+        round
+    };
+    let closed = [
+        closed_by("entry", Some("live-exit"), 0.03, true),
+        closed_by("entry", Some("live-exit"), -0.01, true),
+        closed_by("entry", Some("live-exit"), 0.5, false),
+        closed_by("entry", Some("another-exit"), 0.2, true),
+        closed_by("entry", None, 0.1, true),
+    ];
+    let live_rounds = crate::positions::books::strategy_rounds(closed.iter());
+    let books = BookPositions {
+        open_live: Vec::new(),
+        open_paper: Vec::new(),
+        live_rounds,
+    };
+    let mut live_exit = strategy("live-exit", StrategyType::Exit, 1, true);
+    live_exit.mode = TradingMode::Live;
+
+    let rounds = books
+        .figures_of(&live_exit, Some(&PaperStrategyEvidence::default()))
+        .rounds
+        .expect("live exit rounds");
+    assert_eq!(rounds.closed, 2);
+    assert_eq!(rounds.excluded_untrusted, 1);
+    assert_eq!(rounds.win_rate_pct, Some(50.0));
+    assert!((rounds.realized_native - 0.02).abs() < 1e-12);
+
+    let entry = books
+        .figures_of(
+            &Strategy {
+                mode: TradingMode::Live,
+                ..strategy("entry", StrategyType::Entry, 1, true)
+            },
+            Some(&PaperStrategyEvidence::default()),
+        )
+        .rounds
+        .expect("live entry rounds");
+    assert_eq!(
+        entry.closed, 4,
+        "the entry strategy keeps every round it opened"
+    );
 }
 
 #[test]

@@ -717,9 +717,9 @@ export function applyEventHandlersMixin(DataTable) {
     // Row click
     if (this.options.onRowClick) {
       const handler = (e) => {
-        // A control inside a cell (an address's copy button or explorer link) acts
-        // on its own and never opens the row.
-        if (e.target.closest("a, button, input, select, textarea, [data-copy]")) return;
+        // A control inside a cell (an address's copy button, an explorer link or a
+        // switch with its label) acts on its own and never opens the row.
+        if (e.target.closest("a, button, input, label, select, textarea, [data-copy]")) return;
         const tr = e.target.closest("tr");
         if (tr && tr.dataset.rowId) {
           const rowId = tr.dataset.rowId;

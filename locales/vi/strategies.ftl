@@ -1,6 +1,3 @@
-strategies-filter-all = Tất cả
-strategies-filter-entry = Vào lệnh
-strategies-filter-exit = Thoát lệnh
 strategies-type-entry = Vào lệnh
 strategies-type-exit = Thoát lệnh
 strategies-list-empty-title = Chưa có chiến lược nào
@@ -9,10 +6,6 @@ strategies-new = Chiến lược mới
 strategies-import =
     .title = Nhập chiến lược
     .aria-label = Nhập chiến lược
-strategies-item-enable =
-    .title = Bật
-strategies-item-disable =
-    .title = Tắt
 
 strategies-new-name = Chiến lược mới
 
@@ -21,7 +14,6 @@ strategies-editor-name =
 strategies-editor-dirty =
     .title = Có thay đổi chưa lưu
 strategies-action-validate = Kiểm tra
-strategies-editor-empty = Chọn một chiến lược để chỉnh sửa hoặc tạo chiến lược mới
 strategies-conditions-empty-title = Chưa có điều kiện nào
 strategies-conditions-empty-hint = Dùng "{ strategies-add-condition }" để bắt đầu xây dựng
 strategies-add-condition = Thêm điều kiện
@@ -78,10 +70,10 @@ strategies-catalog-search-clear =
 strategies-catalog-no-description = Không có mô tả
 
 # Editor header: the timeframe is the default for candle conditions that leave theirs unset.
-strategies-editor-active = Hoạt động
+strategies-editor-active = Bật
 strategies-editor-timeframe = Khung thời gian mặc định
     .title = Khung thời gian nến cho các điều kiện không tự đặt khung riêng
-strategies-editor-priority = Mức ưu tiên
+strategies-editor-order = Thứ tự
     .title = Thứ tự đánh giá từ 1 đến 100; số nhỏ hơn được đánh giá trước
 strategies-editor-description = Mô tả
 strategies-editor-description-field =
@@ -168,6 +160,8 @@ strategies-unsaved-confirm = Bỏ các thay đổi chưa lưu?
     .message = "{ $name }" có thay đổi chưa được lưu.
 strategies-unsaved-discard = Bỏ thay đổi
 strategies-import-error-json = Tệp không phải JSON hợp lệ
+# $min and $max are the bounds of the evaluation order.
+strategies-import-error-priority = Mức ưu tiên trong tệp phải là số nguyên từ { $min } đến { $max }
 strategies-import-error-shape = Tệp không mô tả một chiến lược
 # $type is the condition type id, $name the condition name.
 strategies-import-error-unknown-condition = Tệp dùng một điều kiện mà phiên bản này không có: { $type }
@@ -203,8 +197,6 @@ strategies-toast-test-failed = Thử thất bại
 strategies-toast-valid = Chiến lược hợp lệ
 strategies-toast-invalid = Chiến lược có lỗi
 strategies-toast-validation-failed = Kiểm tra thất bại
-strategies-toast-item-enabled = Đã bật chiến lược
-strategies-toast-item-disabled = Đã tắt chiến lược
 strategies-toast-item-toggle-failed = Không thể bật/tắt chiến lược
 strategies-toast-deleted = Đã xóa chiến lược
     .message = Đã xóa "{ $name }" thành công
@@ -627,3 +619,89 @@ strategies-readiness-priced-missing =
     }
 strategies-readiness-runtime = Có thể giao dịch live
 strategies-readiness-runtime-ok = Thiết lập và các chốt an toàn cho phép giao dịch live
+
+## Roster: the strategy list, one view per kind. Status and notice ids come from
+## src/strategies/overview.rs.
+
+strategies-back = Tất cả chiến lược
+strategies-view-kind = Loại chiến lược
+strategies-unnamed = Chiến lược chưa đặt tên
+strategies-col-on = Bật
+strategies-col-strategy = Chiến lược
+strategies-col-order = Thứ tự
+    .title = Thứ tự đánh giá giữa các chiến lược vào lệnh đang bật của cùng một chế độ; chiến lược báo tín hiệu trước sẽ nhận token
+strategies-col-mode = Chế độ
+strategies-col-status = Trạng thái
+strategies-col-open = Đang mở
+strategies-col-watching = Đang theo dõi
+strategies-col-rounds = Vòng
+strategies-col-closed = Đã đóng
+strategies-col-win-rate = Tỷ lệ thắng
+strategies-col-realized = Đã chốt { -sol }
+strategies-col-manages = Quản lý
+strategies-col-last-signal = Tín hiệu gần nhất
+strategies-status-running = Đang chạy
+strategies-status-not-running = Không chạy
+strategies-status-off = Tắt
+strategies-status-setup-required = Cần thiết lập
+strategies-status-live-paused = Tạm dừng vào lệnh thật
+strategies-status-paper-cash = Thiếu vốn thử nghiệm
+strategies-status-slots-full = Hết chỗ
+strategies-status-entry-monitor-off = Bộ giám sát vào lệnh tắt
+strategies-status-exit-monitor-off = Bộ giám sát thoát lệnh tắt
+strategies-notice-setup-required = Giao dịch thử nghiệm bắt đầu sau khi thiết lập
+strategies-notice-force-stopped = Đang dừng khẩn cấp
+strategies-notice-trader-off = Auto Trader đang tắt
+strategies-notice-waiting = Đang chờ các dịch vụ lõi
+strategies-notice-monitors-off = Bộ giám sát vào và thoát lệnh đều tắt
+strategies-notice-start = Khởi động Auto Trader
+# $closed and $needed count closed paper rounds; $changed is a formatted date.
+strategies-readiness-progress = Vòng thử nghiệm { $closed }/{ $needed }
+strategies-readiness-ready = Sẵn sàng giao dịch thật
+strategies-readiness-since = Quy tắc đổi { $changed }
+# $book is the trading mode of the other book; $count its open positions.
+strategies-open-other-book =
+    { $count ->
+       *[other] { $book }: { $count } vị thế
+    }
+strategies-manages-all = Tất cả chiến lược vào lệnh
+# $first is the first managed entry strategy; $more the count of the others.
+strategies-manages-some =
+    { $more ->
+       *[other] { $first } và { $more } chiến lược khác
+    }
+strategies-exit-before = Kiểm tra trước
+strategies-exit-hint = Các quy tắc thoát này được kiểm tra trên mọi vị thế trước bất kỳ chiến lược thoát nào
+strategies-action-edit = Sửa { $name }
+strategies-action-delete = Xóa { $name }
+strategies-roster-stale = Cập nhật gần nhất
+
+## Saving new rules: the server answers whether a save changed the rules a strategy trades on.
+
+strategies-live-rules-confirm = Đổi quy tắc của "{ $name }" đang giao dịch thật
+    .message = Quy tắc mới giao dịch bằng { -sol } thật từ lần kiểm tra tiếp theo, và bằng chứng thử nghiệm của chiến lược này bắt đầu lại từ lần lưu này.
+strategies-live-rules-save = Lưu và giao dịch thật
+strategies-toast-evidence-restarted = Đã lưu chiến lược
+    .message = Quy tắc của "{ $name }" đã đổi; bằng chứng thử nghiệm bắt đầu lại từ bây giờ
+
+## Trading mode: arming a paper strategy live and returning it to paper.
+
+strategies-mode-arm = Kích hoạt chạy thật
+strategies-mode-return-paper = Quay lại thử nghiệm
+strategies-mode-arm-title = Kích hoạt chạy thật cho “{ $name }”
+strategies-mode-arm-lead = Các lệnh vào mới của “{ $name }” sẽ giao dịch bằng swap thật từ ví giao dịch của bạn.
+strategies-mode-arm-lead-exit = Khi có tín hiệu, "{ $name }" sẽ bán các vị thế thật bằng swap thật từ ví giao dịch của bạn.
+strategies-mode-arm-readiness = Mức sẵn sàng từ sổ thử nghiệm
+strategies-mode-arm-open-paper = Các vị thế thử nghiệm đang mở vẫn là thử nghiệm và kết thúc trên sổ thử nghiệm.
+strategies-mode-arm-ack-real-native = Các lệnh vào mới dùng { -sol } thật từ ví giao dịch của bạn.
+strategies-mode-arm-ack-real-native-exit = Các vị thế thật mà nó quản lý được bán bằng swap thật.
+strategies-mode-arm-ack-fees = Các swap live phải trả phí mạng và trượt giá thật; kết quả thử nghiệm không đảm bảo kết quả live.
+strategies-mode-arm-ack-unready = Một số bước kiểm tra sẵn sàng chưa đạt. Vẫn kích hoạt chiến lược này.
+strategies-mode-arm-unavailable = Hiện không thể giao dịch live; xem lần kiểm tra gần nhất.
+strategies-mode-return-title = Đưa “{ $name }” về thử nghiệm
+strategies-mode-return-message = Các lệnh vào mới mở trên sổ thử nghiệm mà không dùng { -sol }. Các vị thế live đang mở vẫn live và kết thúc live.
+strategies-mode-return-message-exit = Nó ngừng đánh giá các vị thế thật; các vị thế này giữ quy tắc thoát của chúng.
+strategies-mode-readiness-failed = Không thể đọc mức sẵn sàng của chiến lược
+strategies-mode-toast-armed = { $name } hiện giao dịch live
+strategies-mode-toast-paper = { $name } hiện giao dịch thử nghiệm
+strategies-mode-toast-failed = Không thể đổi chế độ giao dịch

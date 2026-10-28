@@ -13,7 +13,6 @@ trader-exit-type-dca = DCA
 trader-exit-type-unknown = Tidak diketahui
 
 trader-tab-stats = Statistik
-trader-tab-strategy-control = Kontrol Strategi
 trader-tab-strategies = Strategi
 trader-tab-stop-loss = Stop Loss
 trader-tab-trailing-stop = Trailing Stop
@@ -81,15 +80,6 @@ trader-toast-save-failed = Gagal Menyimpan
 trader-toast-feature-enabled = Fitur Diaktifkan
 trader-toast-feature-disabled = Fitur Dinonaktifkan
 trader-toast-feature-applied = Pengaturan Auto Trader diterapkan
-trader-toast-strategy-enabled = Strategi Diaktifkan
-    .message = Strategi aktif
-trader-toast-strategy-disabled = Strategi Dinonaktifkan
-    .message = Strategi tidak aktif
-trader-toast-strategy-failed = Pembaruan Gagal
-    .message = Gagal memperbarui status strategi
-trader-toast-strategy-armed = { $name } sekarang trading live
-trader-toast-strategy-paper = { $name } sekarang trading di Paper
-trader-toast-strategy-mode-failed = Mode trading tidak dapat diubah
 
 trader-stats-window =
     .aria-label = Jendela statistik
@@ -314,33 +304,6 @@ trader-time-status-losing-due = Rugi { $pnl }; ditutup pada pemeriksaan berikutn
 # $held and $remaining are formatted durations.
 trader-time-status-flat = Stagnan selama { $held }; ditutup dalam { $remaining }
 trader-time-status-flat-due = Stagnan selama { $held }; ditutup pada pemeriksaan berikutnya
-
-trader-strategy-entry-title = Strategi Entry
-trader-strategy-entry-subtitle = Sinyal yang dapat membuka posisi baru.
-trader-strategy-exit-title = Strategi Exit
-trader-strategy-exit-subtitle = Sinyal yang dapat menutup atau melindungi posisi terbuka.
-trader-strategy-active-unknown = -- aktif
-trader-strategy-active = { $enabled }/{ $total } aktif
-trader-strategy-loading = Memuat strategi...
-trader-strategy-load-failed = Tidak dapat memuat strategi
-trader-strategy-empty = Belum ada strategi yang ditentukan
-trader-strategy-unnamed = Strategi tanpa nama
-trader-strategy-priority-auto = Otomatis
-trader-strategy-priority = Prioritas { $priority }
-trader-strategy-mode-arm = Aktifkan live
-trader-strategy-mode-return-paper = Kembali ke Paper
-trader-strategy-arm-title = Aktifkan “{ $name }” secara live
-trader-strategy-arm-lead = Entri baru “{ $name }” akan bertransaksi dengan swap sungguhan dari dompet trading Anda.
-trader-strategy-arm-readiness = Kesiapan dari buku paper
-trader-strategy-arm-open-paper = Posisi paper yang terbuka tetap paper dan selesai di paper.
-trader-strategy-arm-ack-real-native = Entri baru membelanjakan { -sol } sungguhan dari dompet trading Anda.
-trader-strategy-arm-ack-fees = Swap live membayar biaya jaringan dan slippage yang nyata; hasil paper tidak menjamin hasil live.
-trader-strategy-arm-ack-unready = Beberapa pemeriksaan kesiapan belum lolos. Tetap aktifkan strategi ini.
-trader-strategy-arm-unavailable = Trading live tidak tersedia saat ini; lihat pemeriksaan terakhir.
-trader-strategy-return-title = Kembalikan “{ $name }” ke Paper
-trader-strategy-return-message = Entri baru dibuka di buku paper tanpa membelanjakan { -sol }. Posisi live yang terbuka tetap live dan selesai secara live.
-trader-strategy-readiness-failed = Kesiapan strategi tidak dapat dibaca
-trader-paper-explore-title = Trading paper dimulai setelah penyiapan
 
 trader-dca-title = Dollar-Cost Averaging
 trader-dca-subtitle = Tambah otomatis ke posisi yang rugi untuk menurunkan harga entry rata-rata Anda

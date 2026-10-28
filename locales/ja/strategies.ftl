@@ -8,9 +8,6 @@
 
 ## Strategy list
 
-strategies-filter-all = すべて
-strategies-filter-entry = エントリー
-strategies-filter-exit = エグジット
 strategies-type-entry = エントリー
 strategies-type-exit = エグジット
 strategies-list-empty-title = ストラテジーはまだありません
@@ -19,10 +16,6 @@ strategies-new = 新規ストラテジー
 strategies-import =
     .title = ストラテジーをインポート
     .aria-label = ストラテジーをインポート
-strategies-item-enable =
-    .title = 有効化
-strategies-item-disable =
-    .title = 無効化
 
 # Name given to a strategy before it is saved.
 strategies-new-name = 新規ストラテジー
@@ -34,7 +27,6 @@ strategies-editor-name =
 strategies-editor-dirty =
     .title = 未保存の変更
 strategies-action-validate = 検証
-strategies-editor-empty = 編集するストラテジーを選択するか、新規作成してください
 strategies-conditions-empty-title = 条件はまだありません
 strategies-conditions-empty-hint = 「{ strategies-add-condition }」から作成を始めましょう
 strategies-add-condition = 条件を追加
@@ -96,10 +88,10 @@ strategies-catalog-search-clear =
 strategies-catalog-no-description = 説明はありません
 
 # Editor header: the timeframe is the default for candle conditions that leave theirs unset.
-strategies-editor-active = 有効
+strategies-editor-active = オン
 strategies-editor-timeframe = 既定の時間足
     .title = 独自の時間足を指定しない条件が使うローソク足の時間足
-strategies-editor-priority = 優先度
+strategies-editor-order = 順序
     .title = 1〜100 の評価順。小さい数値ほど先に評価されます
 strategies-editor-description = 説明
 strategies-editor-description-field =
@@ -186,6 +178,8 @@ strategies-unsaved-confirm = 未保存の変更を破棄しますか？
     .message = 「{ $name }」に未保存の変更があります。
 strategies-unsaved-discard = 破棄
 strategies-import-error-json = ファイルは有効なJSONではありません
+# $min and $max are the bounds of the evaluation order.
+strategies-import-error-priority = ファイルの優先度は { $min } から { $max } までの整数である必要があります
 strategies-import-error-shape = ファイルにストラテジーが記述されていません
 # $type is the condition type id, $name the condition name.
 strategies-import-error-unknown-condition = このバージョンにない条件がファイルで使われています: { $type }
@@ -228,8 +222,6 @@ strategies-toast-test-failed = テストに失敗しました
 strategies-toast-valid = ストラテジーは有効です
 strategies-toast-invalid = ストラテジーにエラーがあります
 strategies-toast-validation-failed = 検証に失敗しました
-strategies-toast-item-enabled = ストラテジーを有効にしました
-strategies-toast-item-disabled = ストラテジーを無効にしました
 strategies-toast-item-toggle-failed = ストラテジーを切り替えられませんでした
 strategies-toast-deleted = ストラテジーを削除しました
     .message = 「{ $name }」を削除しました
@@ -671,3 +663,89 @@ strategies-readiness-priced-missing =
     }
 strategies-readiness-runtime = ライブ取引が利用可能
 strategies-readiness-runtime-ok = セットアップと安全ゲートによりライブ取引が許可されています
+
+## Roster: the strategy list, one view per kind. Status and notice ids come from
+## src/strategies/overview.rs.
+
+strategies-back = すべてのストラテジー
+strategies-view-kind = ストラテジーの種類
+strategies-unnamed = 名称未設定のストラテジー
+strategies-col-on = オン
+strategies-col-strategy = ストラテジー
+strategies-col-order = 順序
+    .title = 同じモードの有効なエントリーストラテジー間の評価順。最初にシグナルを出したものがトークンを取ります
+strategies-col-mode = モード
+strategies-col-status = 状態
+strategies-col-open = 保有中
+strategies-col-watching = 監視中
+strategies-col-rounds = ラウンド
+strategies-col-closed = 決済済み
+strategies-col-win-rate = 勝率
+strategies-col-realized = 確定損益 { -sol }
+strategies-col-manages = 管理対象
+strategies-col-last-signal = 最終シグナル
+strategies-status-running = 稼働中
+strategies-status-not-running = 停止中
+strategies-status-off = オフ
+strategies-status-setup-required = セットアップが必要
+strategies-status-live-paused = ライブエントリー一時停止
+strategies-status-paper-cash = ペーパー資金不足
+strategies-status-slots-full = 枠が満杯
+strategies-status-entry-monitor-off = エントリーモニターがオフ
+strategies-status-exit-monitor-off = エグジットモニターがオフ
+strategies-notice-setup-required = ペーパー取引はセットアップ後に始まります
+strategies-notice-force-stopped = 緊急停止中
+strategies-notice-trader-off = Auto Trader はオフです
+strategies-notice-waiting = コアサービスを待機中
+strategies-notice-monitors-off = エントリーとエグジットのモニターがオフです
+strategies-notice-start = Auto Trader を開始
+# $closed and $needed count closed paper rounds; $changed is a formatted date.
+strategies-readiness-progress = ペーパーラウンド { $closed }/{ $needed }
+strategies-readiness-ready = ライブ移行可能
+strategies-readiness-since = ルール変更 { $changed }
+# $book is the trading mode of the other book; $count its open positions.
+strategies-open-other-book =
+    { $count ->
+       *[other] { $book }: { $count } 件のポジション
+    }
+strategies-manages-all = すべてのエントリーストラテジー
+# $first is the first managed entry strategy; $more the count of the others.
+strategies-manages-some =
+    { $more ->
+       *[other] { $first } ほか { $more } 件
+    }
+strategies-exit-before = 先に確認
+strategies-exit-hint = これらのエグジットルールは、各ポジションでどのエグジットストラテジーよりも先に確認されます
+strategies-action-edit = { $name } を編集
+strategies-action-delete = { $name } を削除
+strategies-roster-stale = 最終更新
+
+## Saving new rules: the server answers whether a save changed the rules a strategy trades on.
+
+strategies-live-rules-confirm = ライブの「{ $name }」のルールを変更
+    .message = 新しいルールは次の確認から実際の { -sol } で取引し、このストラテジーのペーパー実績はこの保存から再開されます。
+strategies-live-rules-save = 保存してライブで取引
+strategies-toast-evidence-restarted = ストラテジーを保存しました
+    .message = 「{ $name }」のルールが変わりました。ペーパー実績は今から再開されます
+
+## Trading mode: arming a paper strategy live and returning it to paper.
+
+strategies-mode-arm = ライブを有効化
+strategies-mode-return-paper = ペーパーに戻す
+strategies-mode-arm-title = 「{ $name }」をライブで有効化
+strategies-mode-arm-lead = 「{ $name }」の新規エントリーは、ご自身の取引用ウォレットからの実際のスワップで行われます。
+strategies-mode-arm-lead-exit = 「{ $name }」はシグナル時に、トレーディングウォレットから実際のスワップでライブポジションを売却します。
+strategies-mode-arm-readiness = ペーパー帳簿による準備状況
+strategies-mode-arm-open-paper = 保有中のペーパーポジションはペーパーのまま、ペーパーで決済されます。
+strategies-mode-arm-ack-real-native = 新規エントリーは取引用ウォレットの実際の { -sol } を使います。
+strategies-mode-arm-ack-real-native-exit = 管理対象のライブポジションは実際のスワップで売却されます。
+strategies-mode-arm-ack-fees = ライブのスワップでは実際のネットワーク手数料とスリッページが発生します。ペーパーの結果はライブの結果を保証しません。
+strategies-mode-arm-ack-unready = 一部の準備チェックに合格していません。それでもこのストラテジーを有効化します。
+strategies-mode-arm-unavailable = 現在ライブ取引は利用できません。最後のチェックを確認してください。
+strategies-mode-return-title = 「{ $name }」をペーパーに戻す
+strategies-mode-return-message = 新規エントリーは { -sol } を使わずにペーパー帳簿で建てられます。保有中のライブポジションはライブのまま、ライブで決済されます。
+strategies-mode-return-message-exit = ライブポジションの判定を停止します。それらのポジションはルールによるエグジットを維持します。
+strategies-mode-readiness-failed = ストラテジーの準備状況を読み込めませんでした
+strategies-mode-toast-armed = { $name } はライブで取引中です
+strategies-mode-toast-paper = { $name } はペーパーで取引中です
+strategies-mode-toast-failed = 取引モードを変更できませんでした

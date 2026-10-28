@@ -618,14 +618,7 @@ fn update_strategy_in(conn: &mut rusqlite::Connection, strategy: &Strategy) -> c
     let fingerprint = strategy.rules_fingerprint();
 
     let tx = conn.write_tx()?;
-    let Some(stored) = tx
-        .query_row(
-            "SELECT rules_fingerprint FROM strategies WHERE id = ?1",
-            params![strategy.id],
-            |row| row.get::<_, Option<String>>(0),
-        )
-        .optional()?
-    else {
+    let Some(stored) = stored_rules_fingerprint(&tx, &strategy.id)? else {
         return Err(Error::Database(DatabaseError::Query {
             operation: "update_strategy".to_owned(),
             message: format!("Strategy not found: {}", strategy.id),
@@ -661,6 +654,30 @@ fn update_strategy_in(conn: &mut rusqlite::Connection, strategy: &Strategy) -> c
     )?;
     tx.commit()?;
     Ok(rules_changed)
+}
+
+/// The rules fingerprint stored for `strategy_id`: `None` when no such strategy exists,
+/// `Some(None)` for a row written before fingerprints were kept.
+fn stored_rules_fingerprint(
+    conn: &rusqlite::Connection,
+    strategy_id: &str,
+) -> rusqlite::Result<Option<Option<String>>> {
+    conn.query_row(
+        "SELECT rules_fingerprint FROM strategies WHERE id = ?1",
+        params![strategy_id],
+        |row| row.get::<_, Option<String>>(0),
+    )
+    .optional()
+}
+
+/// Whether saving `strategy` would change the rules stored under its id, by the same
+/// fingerprint comparison [`update_strategy`] applies; `None` when no strategy has that
+/// id. Reads only.
+pub fn rules_would_change(strategy: &Strategy) -> crate::Result<Option<bool>> {
+    let conn = get_connection()?;
+    let stored = stored_rules_fingerprint(&conn, &strategy.id)?;
+    let fingerprint = strategy.rules_fingerprint();
+    Ok(stored.map(|stored| stored.as_deref() != Some(fingerprint.as_str())))
 }
 
 /// Set the paper or live mode of a strategy. The rules clock stays where it is: the mode

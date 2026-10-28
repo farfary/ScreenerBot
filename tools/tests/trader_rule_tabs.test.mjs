@@ -4,7 +4,7 @@
 
 /**
  * Guard: the Auto Trader rule tabs (Stop Loss, Trailing Stop, Take Profit, Time Rules,
- * DCA, Settings, Strategy Control) speak in plain fields and bare glyphs.
+ * DCA, Settings) and the strategies roster speak in plain fields and bare glyphs.
  *
  * The "How It Works" steps sat on filled colour circles, every field carried a badge
  * that restated its title ("LOSS LIMIT", "ENTRY TRIGGER"), the DCA example line was set
@@ -15,7 +15,8 @@
  * - A summary line's sentence is body text; only its glyph and figure take the tone.
  * - No rule tab uses a dollar-sign glyph.
  * - Entry Sizes, a list of SOL amounts, matches the number fields beside it.
- * - A strategy card shows its state only through its toggle, and no chip repeats its lane.
+ * - A roster row shows whether its strategy is on only through its switch, named by the
+ *   strategy, and no cell repeats the kind its view already names.
  * - An example figure (a SOL price or a percent) never ends its fraction in a zero, so
  *   one strip does not mix "+10%" with "+32.0%" or print "1.0000 SOL".
  * - A config card never draws more columns than it has field groups, so two lists
@@ -138,29 +139,24 @@ test("Entry Sizes, a list of amounts, uses the face and weight of the number fie
   assert.deepEqual(await face("#entry-sizes"), await face("#trade-size"));
 });
 
-test("a strategy card states its state once, through its named toggle", async () => {
-  await page.click('#subTabsContainer [data-tab-id="strategy-control"]');
-  await page.locator("#entry-strategies .strategy-control-item").first().waitFor();
-  const cards = await page.$$eval(".strategy-control-item", (items) =>
+test("a roster row states whether its strategy is on once, through its named switch", async () => {
+  await page.click('#subTabsContainer [data-tab-id="strategies"]');
+  await page.locator("#strategies-roster tbody tr[data-row-id]").first().waitFor();
+  const rows = await page.$$eval("#strategies-roster tbody tr[data-row-id]", (items) =>
     items.map((item) => ({
-      name: item.querySelector(".strategy-control-name")?.textContent.trim(),
+      name: item.querySelector(".strategy-roster-name")?.textContent.trim(),
       toggles: item.querySelectorAll('input[type="checkbox"]').length,
       label: item.querySelector('input[type="checkbox"]')?.getAttribute("aria-label"),
-      extras: item.querySelectorAll(".toggle-state, .strategy-control-status-dot").length,
-      chips: [...item.querySelectorAll(".strategy-control-chip")].map((chip) =>
-        chip.textContent.trim()
-      ),
+      words: [...item.querySelectorAll("td")]
+        .map((cell) => cell.textContent.trim())
+        .filter((text) => /^(Enabled|Disabled|Active|Inactive|Entry|Exit)$/.test(text)),
     }))
   );
-  assert.ok(cards.length > 0, "strategy cards render");
-  for (const card of cards) {
-    assert.equal(card.toggles, 1, `${card.name}: one toggle`);
-    assert.equal(card.label, card.name, `${card.name}: the toggle is named by the strategy`);
-    assert.equal(card.extras, 0, `${card.name}: no state dot or state word`);
-    assert.ok(
-      card.chips.every((chip) => !/^(Entry|Exit)$/.test(chip)),
-      `${card.name}: no chip repeats the lane`
-    );
+  assert.ok(rows.length > 0, "roster rows render");
+  for (const row of rows) {
+    assert.equal(row.toggles, 1, `${row.name}: one switch`);
+    assert.equal(row.label, row.name, `${row.name}: the switch is named by the strategy`);
+    assert.deepEqual(row.words, [], `${row.name}: no state word and no kind`);
   }
 });
 
@@ -275,7 +271,7 @@ test("the time exit's tab names the rule and each card names its case", async ()
 
 test("every sub-tab keeps the Stats tab's side gutter", async () => {
   const gutters = {};
-  for (const id of ["stats", "strategy-control", ...TABS]) {
+  for (const id of ["stats", ...TABS]) {
     await page.click(`#subTabsContainer [data-tab-id="${id}"]`);
     await page.locator(`#${id}-tab`).waitFor();
     gutters[id] = await page.evaluate((tab) => {

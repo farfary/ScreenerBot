@@ -9,19 +9,24 @@
  * route reset a strategy saved on another timeframe to the default one. Import put
  * the parsed file into memory but never loaded its rules into the editor.
  *
- * - The list toggle changes only `enabled`, through the route that touches nothing
- *   else of the stored strategy.
+ * - The roster switch changes only `enabled`, through the route that touches nothing
+ *   else of the stored strategy; the editor's On switch takes the same route.
+ * - A roster row opens its strategy in the editor in place of the roster, and the back
+ *   control returns to the roster after unsaved changes are confirmed.
  * - Importing an export opens it as a new unsaved strategy, switched off, with its
  *   rules in the editor, and exporting that strategy writes the same file back.
- * - An import file whose condition does not apply to the strategy type is refused
- *   with the reason and leaves the editor as it was.
- * - Deleting the strategy in the editor empties the editor rather than opening an
- *   unsaved new strategy in its place.
+ * - An import file whose condition does not apply to the strategy type, or whose
+ *   priority is outside the evaluation order, is refused with the reason and opens
+ *   nothing.
+ * - Deleting a strategy from its roster row asks first and sends one DELETE.
+ * - Before a stored strategy is saved the server is asked whether the save changes its
+ *   rules. New rules on a live strategy are confirmed first and Cancel saves nothing; new
+ *   rules on a paper strategy save at once and say that its paper evidence restarts.
  * - Adding a condition from the catalog opens it in place without a toast, and the
  *   catalog search is the shared search field: its clear control sits inside the input.
  * - A blank new strategy shows adding a condition as its next step, with no problem
  *   bar, and its Invert stays off until there is a condition to negate.
- * - With no strategy at all, the editor area offers New Strategy in place.
+ * - With no strategy at all, the roster offers New Strategy in place.
  * - The editor's toolbar is one row of the name and the actions, also at the smallest
  *   window; the strategy settings, the description and the exit binding sit in the
  *   scrolling column above the rules, and the description stays closed until asked for,
@@ -133,6 +138,16 @@ const EXIT_STORED = {
   version: 3,
   entry_strategy_ids: [DIP_RECOVERY_ID, "retired-entry"],
 };
+/** The live entry strategy of the overview fixture, as its detail route answers. */
+const DIP_STORED = {
+  ...STORED,
+  id: DIP_RECOVERY_ID,
+  name: "Dip recovery",
+  description: null,
+  priority: 20,
+  version: 2,
+  mode: "live",
+};
 const EXPORTED = {
   format: "screenerbot.strategy",
   version: 1,
@@ -149,6 +164,8 @@ const EXPORTED = {
 
 /** Holds the answer of a strategy test until a test case releases it. */
 const testGate = { open: Promise.resolve() };
+/** What the server answers about a save: whether it changes the stored strategy's rules. */
+const answers = { validateRulesChanged: false, saveRulesChanged: false };
 
 const browser = await chromium.launch({ headless: true });
 after(() => browser.close());
@@ -161,8 +178,33 @@ const fixtures = createApiHandler(
 const host = await serveDashboard(context, {
   locale: "en",
   onApi: async (request) => {
+    if (request.url.pathname === "/api/strategies/validate") {
+      const stored = request.url.searchParams.has("id");
+      return {
+        body: JSON.stringify({
+          valid: true,
+          errors: [],
+          ...(stored ? { rules_changed: answers.validateRulesChanged } : {}),
+        }),
+      };
+    }
     if (request.url.pathname === `/api/strategies/${ID}`) {
-      return { body: JSON.stringify(request.method === "GET" ? STORED : {}) };
+      return {
+        body: JSON.stringify(
+          request.method === "GET"
+            ? STORED
+            : { id: ID, version: 2, rules_changed: answers.saveRulesChanged }
+        ),
+      };
+    }
+    if (request.url.pathname === `/api/strategies/${DIP_RECOVERY_ID}`) {
+      return {
+        body: JSON.stringify(
+          request.method === "GET"
+            ? DIP_STORED
+            : { id: DIP_RECOVERY_ID, version: 3, rules_changed: answers.saveRulesChanged }
+        ),
+      };
     }
     if (request.url.pathname === `/api/strategies/${EXIT_ID}`) {
       return {
@@ -199,15 +241,37 @@ page.setDefaultTimeout(15000);
 await page.goto(`${host.origin}/trader`);
 await page.waitForSelector(PAGE_READY);
 await page.click('#subTabsContainer [data-tab-id="strategies"]');
-await page.waitForSelector("#strategy-list .strategy-item");
+await page.waitForSelector("#strategies-roster tbody tr[data-row-id]");
 
 /** Text without the Unicode isolates Fluent places around arguments. */
 const plain = (text) => text.replace(/[\u2068\u2069]/g, "");
 
+/** Leave the editor for the roster, discarding unsaved changes when the page asks. */
+async function backToRoster() {
+  if (await page.locator("#strategy-editor").isHidden()) return;
+  const dirty = (await page.locator("#editor-header.dirty").count()) > 0;
+  await page.click("#strategy-back");
+  if (dirty) {
+    await page.getByText("Discard unsaved changes?").waitFor();
+    await page.getByRole("button", { name: "Discard" }).click();
+  }
+  await page.locator("#strategies-roster").waitFor({ state: "visible" });
+}
+
+/** Open the stored strategy `id` named `name` from its row in the `kind` view. */
+async function openStrategy(id, name, kind = "entry") {
+  await backToRoster();
+  await page.click(`#strategies-roster label:has(> input[data-seg-value="${kind}"])`);
+  await page.click(`#strategies-roster tr[data-row-id="${id}"] [data-column-id="name"]`);
+  await page.waitForFunction((expected) => document.querySelector("#strategy-name")?.value === expected, name);
+  await page.locator("#strategies-roster").waitFor({ state: "hidden" });
+}
+
 async function importFile(file) {
+  await backToRoster();
   const [chooser] = await Promise.all([
     page.waitForEvent("filechooser"),
-    page.click("#import-strategy"),
+    page.click('#strategies-roster [data-btn-id="import-strategy"]'),
   ]);
   await chooser.setFiles({
     name: "strategy.json",
@@ -216,7 +280,7 @@ async function importFile(file) {
   });
 }
 
-test("the list toggle changes only enabled, through the enabled route", async () => {
+test("the roster switch changes only enabled, through the enabled route", async () => {
   const writes = [];
   // Only the strategy resource counts: the shell also POSTs reads such as
   // `/api/ui-state/load`, which a slow page start can issue inside this window.
@@ -231,9 +295,12 @@ test("the list toggle changes only enabled, through the enabled route", async ()
   page.on("request", record);
   const [request] = await Promise.all([
     page.waitForRequest((candidate) => candidate.method() === "PATCH"),
-    page.click(`[data-strategy-id="${ID}"] [data-action="toggle"]`),
+    page.click(`#strategies-roster label:has(> input[data-enable-strategy="${ID}"])`),
   ]);
-  await page.getByText("Strategy disabled").first().waitFor();
+  // The roster reads the overview again once the switch is stored.
+  await page.waitForResponse(
+    (response) => new URL(response.url()).pathname === "/api/strategies/overview"
+  );
   page.off("request", record);
   assert.equal(new URL(request.url()).pathname, `/api/strategies/${ID}/enabled`);
   assert.deepEqual(request.postDataJSON(), { enabled: false });
@@ -265,14 +332,25 @@ test("an imported export opens as a new unsaved strategy and exports back unchan
   assert.deepEqual(JSON.parse(readFileSync(await download.path(), "utf8")), EXPORTED);
 });
 
-test("an import with a condition the strategy type cannot use is refused with the reason", async () => {
+test("an import the strategy type or the evaluation order refuses names the reason and opens nothing", async () => {
   const refused = JSON.parse(JSON.stringify(EXPORTED));
   refused.strategy.name = "Refused";
   refused.strategy.rules = branch("AND", leaf("PositionHoldingTime"));
 
   await importFile(refused);
   await page.getByText("cannot be used in this type of strategy").first().waitFor();
-  assert.equal(await page.inputValue("#strategy-name"), "Imported momentum");
+  assert.equal(await page.locator("#strategy-editor").isHidden(), true);
+
+  for (const priority of [0, 101, 2.5]) {
+    const outOfOrder = JSON.parse(JSON.stringify(EXPORTED));
+    outOfOrder.strategy.priority = priority;
+    await importFile(outOfOrder);
+    await page
+      .getByText(/The priority in the file must be a whole number from \W*1\W* to \W*100/)
+      .first()
+      .waitFor();
+    assert.equal(await page.locator("#strategy-editor").isHidden(), true, `priority ${priority}`);
+  }
 
   await importFile("not json");
   await page.getByText("The file is not valid JSON").first().waitFor();
@@ -286,10 +364,8 @@ test("a condition is added from the catalog, checked as it is edited and kept ou
     }
   });
 
-  await page.click("#create-strategy");
+  await page.click('#strategies-roster [data-btn-id="create-strategy"]');
   await page.click('.type-card[data-type="ENTRY"]');
-  await page.getByText("Discard unsaved changes?").waitFor();
-  await page.getByRole("button", { name: "Discard" }).click();
   await page.waitForSelector("#editor-header.dirty");
   assert.equal(
     await page.locator("#rule-problems").isHidden(),
@@ -394,40 +470,60 @@ test("a condition is added from the catalog, checked as it is edited and kept ou
   );
 });
 
-test("deleting the strategy in the editor returns the editor to its empty state", async () => {
-  await page.click(`[data-strategy-id="${ID}"] .strategy-item-name`);
+test("the back control confirms unsaved changes and returns to the roster", async () => {
+  assert.equal(await page.locator("#editor-header.dirty").count(), 1, "the new strategy is unsaved");
+  await page.click("#strategy-back");
   await page.getByText("Discard unsaved changes?").waitFor();
-  await page.getByRole("button", { name: "Discard" }).click();
-  await page.waitForFunction(
-    (name) => document.querySelector("#strategy-name")?.value === name,
-    STORED.name
-  );
+  await page.locator('.confirmation-dialog [data-action="cancel"]').click();
+  assert.equal(await page.locator("#strategy-editor").isVisible(), true, "Cancel stays in the editor");
+  assert.equal(await page.locator("#editor-header.dirty").count(), 1);
 
-  const [request] = await Promise.all([
-    page.waitForRequest((candidate) => candidate.method() === "DELETE"),
-    (async () => {
-      await page.click(`[data-strategy-id="${ID}"] [data-action="delete"]`);
-      await page.locator(".confirmation-dialog").getByRole("button", { name: "Delete" }).click();
-    })(),
-  ]);
-  assert.equal(new URL(request.url()).pathname, `/api/strategies/${ID}`);
-  await page.locator("#editor-empty").waitFor({ state: "visible" });
-  assert.equal(await page.locator("#editor-header").isHidden(), true);
-  assert.equal(await page.locator("#editor-header.dirty").count(), 0);
+  await backToRoster();
+  assert.equal(await page.locator("#strategy-editor").isHidden(), true);
+});
+
+test("deleting a strategy from its roster row asks first and sends one DELETE", async () => {
+  await backToRoster();
+  const deletes = [];
+  const record = (request) => {
+    if (request.method() === "DELETE") deletes.push(request);
+  };
+  page.on("request", record);
+  try {
+    const row = page.locator(`#strategies-roster tr[data-row-id="${ID}"]`);
+    assert.equal(
+      plain(await row.locator('[data-action-id="delete"]').getAttribute("aria-label")),
+      "Delete Momentum breakout"
+    );
+    await row.locator('[data-action-id="delete"]').click();
+    await page.locator('.confirmation-dialog [data-action="cancel"]').click();
+    assert.equal(deletes.length, 0, "Cancel deletes nothing");
+
+    const [request] = await Promise.all([
+      page.waitForRequest((candidate) => candidate.method() === "DELETE"),
+      (async () => {
+        await row.locator('[data-action-id="delete"]').click();
+        await page.locator(".confirmation-dialog").getByRole("button", { name: "Delete" }).click();
+      })(),
+    ]);
+    assert.equal(new URL(request.url()).pathname, `/api/strategies/${ID}`);
+    assert.equal(deletes.length, 1);
+    assert.equal(await page.locator("#strategies-roster").isVisible(), true);
+    assert.equal(await page.locator("#strategy-editor").isHidden(), true);
+  } finally {
+    page.off("request", record);
+  }
 });
 
 test("the toolbar is one row of actions; settings and panels scroll with the rules", async () => {
-  await page.click(`[data-strategy-id="${ID}"] .strategy-item-name`);
-  await page.waitForFunction(
-    (name) => document.querySelector("#strategy-name")?.value === name,
-    STORED.name
-  );
+  await openStrategy(ID, STORED.name);
 
   const placement = await page.evaluate(() => {
     const inside = (selector, owner) =>
       document.querySelector(owner).contains(document.querySelector(selector));
     return {
       toolbar: [
+        "#strategy-back",
         "#strategy-name",
         "#test-strategy",
         "#validate-strategy",
@@ -486,18 +582,23 @@ test("the toolbar is one row of actions; settings and panels scroll with the rul
       { oneRow: layout.oneRow, overflow: layout.overflow, rules: layout.rules },
       { oneRow: true, overflow: false, rules: true }
     );
+    // The editor now spans the sub-tab, so which labels fit depends on the window; the
+    // order in which they give way does not.
     const labels = await page.evaluate(() =>
       Object.fromEntries(
-        ["#test-strategy", "#validate-strategy", "#export-strategy"].map((selector) => [
-          selector,
-          document.querySelector(`${selector} .editor-action-label`).getBoundingClientRect().width > 1,
-        ])
+        ["#strategy-back", "#test-strategy", "#validate-strategy", "#export-strategy"].map(
+          (selector) => [
+            selector,
+            document.querySelector(`${selector} .editor-action-label`).getBoundingClientRect().width > 1,
+          ]
+        )
       )
     );
-    assert.deepEqual(
-      labels,
-      { "#test-strategy": true, "#validate-strategy": false, "#export-strategy": false },
-      "Validate and Export collapse to their glyph first; Test keeps its label"
+    assert.equal(labels["#validate-strategy"], labels["#export-strategy"], "Validate and Export collapse together");
+    assert.equal(labels["#strategy-back"], labels["#validate-strategy"], "the back control collapses with them");
+    assert.ok(
+      labels["#test-strategy"] || !labels["#validate-strategy"],
+      "Test keeps its label while any other action shows one"
     );
     assert.equal(
       await page.getAttribute("#validate-strategy", "title"),
@@ -514,12 +615,31 @@ test("the toolbar is one row of actions; settings and panels scroll with the rul
   }
 });
 
+test("the editor's On switch stores a saved strategy through the enabled route alone", async () => {
+  await openStrategy(ID, STORED.name);
+  const writes = [];
+  const record = (request) => {
+    if (request.method() !== "GET" && new URL(request.url()).pathname.startsWith("/api/strategies")) {
+      writes.push(request);
+    }
+  };
+  page.on("request", record);
+  try {
+    const [request] = await Promise.all([
+      page.waitForRequest((candidate) => candidate.method() === "PATCH"),
+      page.click("label.editor-active"),
+    ]);
+    assert.equal(new URL(request.url()).pathname, `/api/strategies/${ID}/enabled`);
+    assert.deepEqual(request.postDataJSON(), { enabled: false });
+    assert.deepEqual(writes, [request], "the switch saves nothing else");
+    assert.equal(await page.locator("#editor-header.dirty").count(), 0, "nothing is left unsaved");
+  } finally {
+    page.off("request", record);
+  }
+});
+
 test("a test against a picked token marks each rule and reads the strategy in the footer", async () => {
-  await page.click(`[data-strategy-id="${ID}"] .strategy-item-name`);
-  await page.waitForFunction(
-    (name) => document.querySelector("#strategy-name")?.value === name,
-    STORED.name
-  );
+  await openStrategy(ID, STORED.name);
   await page.evaluate(() => {
     window.openSearchDialog = ({ onPick }) =>
       onPick({ mint: "TrendMint1111111111111111111111111111111111", symbol: "TREND", name: "Trend" });
@@ -591,7 +711,103 @@ test("a test against a picked token marks each rule and reads the strategy in th
   await page.waitForSelector("#editor-header:not(.dirty)");
 });
 
-test("with no strategy the editor area offers New Strategy", async () => {
+/** Whether a save request reached the strategy resource with `method`. */
+const isSave = (request, method, id) =>
+  request.method() === method && new URL(request.url()).pathname === `/api/strategies/${id}`;
+
+test("new rules on a live strategy are confirmed first, and Cancel saves nothing", async () => {
+  await openStrategy(DIP_RECOVERY_ID, DIP_STORED.name);
+  answers.validateRulesChanged = true;
+  answers.saveRulesChanged = true;
+  const puts = [];
+  const record = (request) => {
+    if (isSave(request, "PUT", DIP_RECOVERY_ID)) puts.push(request);
+  };
+  page.on("request", record);
+  try {
+    await page.fill("#strategy-priority", "21");
+    await page.waitForSelector("#editor-header.dirty");
+    const [check] = await Promise.all([
+      page.waitForRequest(
+        (candidate) => new URL(candidate.url()).pathname === "/api/strategies/validate"
+      ),
+      page.click("#save-strategy"),
+    ]);
+    assert.equal(new URL(check.url()).searchParams.get("id"), DIP_RECOVERY_ID);
+    assert.equal(check.postDataJSON().priority, 21, "the check reads the edited strategy");
+
+    const dialog = page.locator(".confirmation-dialog");
+    await dialog.getByText(/Change the rules of live/).waitFor();
+    assert.match(
+      plain(await dialog.textContent()),
+      /The new rules trade real SOL from the next check, and the paper evidence of this strategy restarts from this save\./
+    );
+    await dialog.locator('[data-action="cancel"]').click();
+    await dialog.waitFor({ state: "hidden" });
+    assert.deepEqual(puts, [], "Cancel saves nothing");
+    assert.equal(await page.locator("#editor-header.dirty").count(), 1, "the edit stays unsaved");
+    assert.equal(await page.locator("#strategy-editor").isVisible(), true);
+
+    const [put] = await Promise.all([
+      page.waitForRequest((candidate) => isSave(candidate, "PUT", DIP_RECOVERY_ID)),
+      (async () => {
+        await page.click("#save-strategy");
+        await dialog.getByRole("button", { name: "Save and trade live" }).click();
+      })(),
+    ]);
+    assert.equal(put.postDataJSON().priority, 21);
+    await page.waitForSelector("#editor-header:not(.dirty)");
+    assert.equal(
+      await page.getByText(/paper evidence restarts from now/).count(),
+      0,
+      "the confirmed dialog already said the evidence restarts"
+    );
+  } finally {
+    page.off("request", record);
+    answers.validateRulesChanged = false;
+    answers.saveRulesChanged = false;
+  }
+});
+
+test("new rules on a paper strategy save at once and say its paper evidence restarts", async () => {
+  await openStrategy(ID, STORED.name);
+  answers.validateRulesChanged = true;
+  answers.saveRulesChanged = true;
+  try {
+    await page.fill("#strategy-priority", "9");
+    await page.waitForSelector("#editor-header.dirty");
+    const [put] = await Promise.all([
+      page.waitForRequest((candidate) => isSave(candidate, "PUT", ID)),
+      page.click("#save-strategy"),
+    ]);
+    assert.equal(put.postDataJSON().priority, 9);
+    await page
+      .getByText(/The rules of .Momentum breakout. changed; its paper evidence restarts from now/)
+      .first()
+      .waitFor();
+    assert.equal(
+      await page.locator(".confirmation-dialog:visible").count(),
+      0,
+      "a paper strategy asks nothing before new rules"
+    );
+  } finally {
+    answers.validateRulesChanged = false;
+    answers.saveRulesChanged = false;
+  }
+});
+
+test("a save the server calls unchanged in rules says only that it saved", async () => {
+  await openStrategy(ID, STORED.name);
+  await page.fill("#strategy-priority", "11");
+  await page.waitForSelector("#editor-header.dirty");
+  await Promise.all([
+    page.waitForRequest((candidate) => isSave(candidate, "PUT", ID)),
+    page.click("#save-strategy"),
+  ]);
+  await page.getByText(/.Momentum breakout. saved successfully/).first().waitFor();
+});
+
+test("with no strategy the roster offers New Strategy", async () => {
   const empty = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   const emptyFixtures = createApiHandler(
     [await loadIndex("trader"), await loadIndex("shell")],
@@ -604,12 +820,17 @@ test("with no strategy the editor area offers New Strategy", async () => {
     await tab.goto(`${emptyHost.origin}/trader`);
     await tab.waitForSelector(PAGE_READY);
     await tab.click('#subTabsContainer [data-tab-id="strategies"]');
-    const action = tab.locator('#editor-empty [data-action="create-strategy"]');
+    const action = tab.locator('#strategies-roster .state-view-empty [data-action="table-empty-action"]');
     await action.waitFor();
     assert.equal((await action.textContent()).trim(), "New Strategy");
-    assert.match(plain(await tab.textContent("#strategy-list")), /No strategies yet/);
+    assert.match(plain(await tab.textContent("#strategies-roster")), /No strategies yet/);
     await action.click();
     await tab.locator("#create-strategy-modal").waitFor({ state: "visible" });
+    assert.equal(
+      await tab.getAttribute('#create-strategy-modal .type-card[data-type="ENTRY"]', "aria-pressed"),
+      "true",
+      "the Entry view preselects an entry strategy"
+    );
   } finally {
     await empty.close();
     await emptyHost.close();
@@ -617,11 +838,7 @@ test("with no strategy the editor area offers New Strategy", async () => {
 });
 
 test("an exit strategy picks the entry strategies it manages and saves their ids", async () => {
-  await page.click(`[data-strategy-id="${EXIT_ID}"] .strategy-item-name`);
-  await page.waitForFunction(
-    (name) => document.querySelector("#strategy-name")?.value === name,
-    EXIT_STORED.name
-  );
+  await openStrategy(EXIT_ID, EXIT_STORED.name, "exit");
   const toggle = page.locator("#toggle-entry-binding");
   const summary = page.locator("#entry-binding-summary");
   const choices = page.locator("#strategy-entry-binding input[type=checkbox]");
@@ -668,15 +885,19 @@ test("an exit strategy picks the entry strategies it manages and saves their ids
   ]);
   assert.deepEqual(request.postDataJSON().entry_strategy_ids, [ID]);
 
-  await page.click(`[data-strategy-id="${ID}"] .strategy-item-name`);
-  await page.waitForFunction(
-    (name) => document.querySelector("#strategy-name")?.value === name,
-    STORED.name
-  );
+  await page.waitForSelector("#editor-header:not(.dirty)");
+  await openStrategy(ID, STORED.name);
   assert.equal(await toggle.isHidden(), true, "an entry strategy manages no positions");
   assert.equal(await panel.isHidden(), true, "nor shows the binding note or its choices");
 
-  await page.click("#create-strategy");
+  await backToRoster();
+  await page.click(`#strategies-roster label:has(> input[data-seg-value="exit"])`);
+  await page.click('#strategies-roster [data-btn-id="create-strategy"]');
+  assert.equal(
+    await page.getAttribute('#create-strategy-modal .type-card[data-type="EXIT"]', "aria-pressed"),
+    "true",
+    "the Exit view preselects an exit strategy"
+  );
   await page.click('#create-strategy-modal .type-card[data-type="EXIT"]');
   await page.waitForSelector("#strategy-type-badge.exit");
   assert.equal(await toggle.isVisible(), true, "a new exit strategy offers the binding");

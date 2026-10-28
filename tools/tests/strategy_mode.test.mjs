@@ -3,12 +3,12 @@
 //
 
 /**
- * Guard: Strategy Control states each strategy's trading mode once, as text, and arming
- * live stays gated.
+ * Guard: the mode action of a strategy, and arming live stays gated.
  *
- * - A paper strategy shows the shared mode marker (the bare Paper glyph and the Paper
- *   label) and Arm live; a live strategy shows the Live marker with no glyph and Return to
- *   paper.
+ * - A paper strategy that is on offers Arm live, a live one Return to paper, and a
+ *   strategy that is off offers neither, since it trades on no book.
+ * - An exit strategy's arm and return texts speak of the live positions it sells or stops
+ *   judging, never of new entries.
  * - The arm dialog lists the readiness checks and what happens to open paper rounds; while
  *   live trading cannot run it shows why and asks for nothing.
  * - Arm live stays disabled until every acknowledgement is ticked and the exact phrase the
@@ -23,8 +23,8 @@ import assert from "node:assert/strict";
 import { installEnglishI18n } from "../lib/dashboard_i18n.mjs";
 
 installEnglishI18n();
-const { armAllowed, armDialogBody, strategyModeRow } = await import(
-  new URL("../../src/webserver/templates/scripts/pages/trader/strategy_mode.js", import.meta.url)
+const { armAllowed, armDialogBody, createStrategyMode, modeAction } = await import(
+  new URL("../../src/webserver/templates/scripts/pages/strategies/strategy_mode.js", import.meta.url)
 );
 
 const esc = (text) =>
@@ -53,23 +53,63 @@ function dialogRoot(acks, phrase) {
   };
 }
 
-test("a paper strategy shows its bare glyph, its label and Arm live", () => {
-  const row = strategyModeRow({ id: "momentum", mode: "paper" }, esc);
-  assert.ok(
-    row.includes(
-      '<span class="mode-marker" data-mode="paper"><i class="icon-test-tube-diagonal" aria-hidden="true"></i><span>Paper</span></span>'
-    )
-  );
-  assert.match(row, /data-arm-strategy="momentum">Arm live</);
-  assert.doesNotMatch(row, /data-paper-strategy/);
+test("a strategy that is on offers the action that changes its mode", () => {
+  assert.deepEqual(modeAction({ id: "momentum", mode: "paper", enabled: true }), {
+    id: "arm",
+    label: "Arm live",
+  });
+  assert.deepEqual(modeAction({ id: "momentum", mode: "live", enabled: true }), {
+    id: "return-paper",
+    label: "Return to paper",
+  });
 });
 
-test("a live strategy shows its label with no glyph and Return to paper", () => {
-  const row = strategyModeRow({ id: "momentum", mode: "live" }, esc);
-  assert.doesNotMatch(row, /<i /);
-  assert.ok(row.includes('<span class="mode-marker" data-mode="live"><span>Live</span></span>'));
-  assert.match(row, /data-paper-strategy="momentum">Return to paper</);
-  assert.doesNotMatch(row, /data-arm-strategy/);
+test("a strategy that is off offers no mode action", () => {
+  for (const mode of ["paper", "live"]) {
+    assert.equal(modeAction({ id: "momentum", mode, enabled: false }), null, mode);
+  }
+});
+
+/** The mode flows over a dialog that records what it shows and answers `confirmed`. */
+function modeFlows(confirmed) {
+  const shown = [];
+  const flows = createStrategyMode({
+    requestManager: { fetch: async () => readiness() },
+    ConfirmationDialog: {
+      show: async (config) => {
+        shown.push({ ...config, message: plain(config.message), body: plain(config.body ?? "") });
+        return { confirmed };
+      },
+    },
+    Utils: { escapeHtml: esc, showToast: () => {} },
+  });
+  return { flows, shown };
+}
+
+test("arming an exit strategy live speaks of the positions it sells", async () => {
+  const { flows, shown } = modeFlows(false);
+  const exit = { id: "trail", name: "Trail", mode: "paper", enabled: true, strategy_type: "EXIT" };
+  assert.equal(await flows.armLive(exit), false, "a cancelled dialog changes nothing");
+  const [dialog] = shown;
+  assert.match(dialog.message, /Trail.* will sell live positions with real swaps/);
+  assert.match(dialog.body, /Live positions it manages are sold with real swaps\./);
+  assert.doesNotMatch(`${dialog.message} ${dialog.body}`, /New entries/);
+
+  const { flows: entryFlows, shown: entryShown } = modeFlows(false);
+  await entryFlows.armLive({ ...exit, strategy_type: "ENTRY" });
+  assert.match(entryShown[0].message, /New entries of .*Trail.* will trade with real swaps/);
+  assert.match(entryShown[0].body, /New entries spend real SOL from your trading wallet\./);
+});
+
+test("returning an exit strategy to paper says it stops judging live positions", async () => {
+  const { flows, shown } = modeFlows(false);
+  const exit = { id: "trail", name: "Trail", mode: "live", enabled: true, strategy_type: "EXIT" };
+  assert.equal(await flows.returnToPaper(exit), false);
+  assert.equal(shown[0].message, "It stops judging live positions; they keep their rule exits.");
+
+  const { flows: entryFlows, shown: entryShown } = modeFlows(false);
+  await entryFlows.returnToPaper({ ...exit, strategy_type: "ENTRY" });
+  assert.match(entryShown[0].message, /Open live positions stay live and finish live\./);
 });
 
 test("the arm dialog lists the checks, the open paper note, the acknowledgements and the phrase", () => {

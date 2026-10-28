@@ -8,9 +8,6 @@
 
 ## Strategy list
 
-strategies-filter-all = Todas
-strategies-filter-entry = Entrada
-strategies-filter-exit = Saída
 strategies-type-entry = Entrada
 strategies-type-exit = Saída
 strategies-list-empty-title = Nenhuma estratégia ainda
@@ -19,10 +16,6 @@ strategies-new = Nova estratégia
 strategies-import =
     .title = Importar estratégia
     .aria-label = Importar estratégia
-strategies-item-enable =
-    .title = Ativar
-strategies-item-disable =
-    .title = Desativar
 
 # Name given to a strategy before it is saved.
 strategies-new-name = Nova estratégia
@@ -34,7 +27,6 @@ strategies-editor-name =
 strategies-editor-dirty =
     .title = Alterações não salvas
 strategies-action-validate = Validar
-strategies-editor-empty = Selecione uma estratégia para editar ou crie uma nova
 strategies-conditions-empty-title = Nenhuma condição ainda
 strategies-conditions-empty-hint = Use "{ strategies-add-condition }" para começar a montar
 strategies-add-condition = Adicionar condição
@@ -103,7 +95,7 @@ strategies-catalog-no-description = Nenhuma descrição disponível
 strategies-editor-active = Ativa
 strategies-editor-timeframe = Timeframe padrão
     .title = Timeframe dos candles para as condições que não definem o seu
-strategies-editor-priority = Prioridade
+strategies-editor-order = Ordem
     .title = Ordem de avaliação de 1 a 100; números menores são avaliados primeiro
 strategies-editor-description = Descrição
 strategies-editor-description-field =
@@ -205,6 +197,8 @@ strategies-unsaved-confirm = Descartar as alterações não salvas?
     .message = "{ $name }" tem alterações que não foram salvas.
 strategies-unsaved-discard = Descartar
 strategies-import-error-json = O arquivo não é um JSON válido
+# $min and $max are the bounds of the evaluation order.
+strategies-import-error-priority = A prioridade do arquivo deve ser um número inteiro de { $min } a { $max }
 strategies-import-error-shape = O arquivo não descreve uma estratégia
 # $type is the condition type id, $name the condition name.
 strategies-import-error-unknown-condition = O arquivo usa uma condição que esta versão não tem: { $type }
@@ -247,8 +241,6 @@ strategies-toast-test-failed = Falha no teste
 strategies-toast-valid = A estratégia é válida
 strategies-toast-invalid = A estratégia tem erros
 strategies-toast-validation-failed = Falha na validação
-strategies-toast-item-enabled = Estratégia ativada
-strategies-toast-item-disabled = Estratégia desativada
 strategies-toast-item-toggle-failed = Falha ao alternar a estratégia
 strategies-toast-deleted = Estratégia excluída
     .message = "{ $name }" removida com sucesso
@@ -694,3 +686,93 @@ strategies-readiness-priced-missing =
     }
 strategies-readiness-runtime = Trading real disponível
 strategies-readiness-runtime-ok = A configuração e as travas de segurança permitem operações reais
+
+## Roster: the strategy list, one view per kind. Status and notice ids come from
+## src/strategies/overview.rs.
+
+strategies-back = Todas as estratégias
+strategies-view-kind = Tipo de estratégia
+strategies-unnamed = Estratégia sem nome
+strategies-col-on = Ativa
+strategies-col-strategy = Estratégia
+strategies-col-order = Ordem
+    .title = Ordem de avaliação entre as estratégias de entrada ativas de um modo; a primeira que sinaliza fica com o token
+strategies-col-mode = Modo
+strategies-col-status = Status
+strategies-col-open = Abertas
+strategies-col-watching = Monitoradas
+strategies-col-rounds = Rodadas
+strategies-col-closed = Fechadas
+strategies-col-win-rate = Taxa de acerto
+strategies-col-realized = Realizado { -sol }
+strategies-col-manages = Gerencia
+strategies-col-last-signal = Último sinal
+strategies-status-running = Em execução
+strategies-status-not-running = Parada
+strategies-status-off = Desligada
+strategies-status-setup-required = Configuração necessária
+strategies-status-live-paused = Entradas reais pausadas
+strategies-status-paper-cash = Saldo em Paper insuficiente
+strategies-status-slots-full = Vagas cheias
+strategies-status-entry-monitor-off = Monitor de entradas desligado
+strategies-status-exit-monitor-off = Monitor de saídas desligado
+strategies-notice-setup-required = O trading em Paper começa após a configuração
+strategies-notice-force-stopped = Parada de emergência acionada
+strategies-notice-trader-off = O Auto Trader está desligado
+strategies-notice-waiting = Aguardando os serviços principais
+strategies-notice-monitors-off = Os monitores de entradas e saídas estão desligados
+strategies-notice-start = Iniciar Auto Trader
+# $closed and $needed count closed paper rounds; $changed is a formatted date.
+strategies-readiness-progress = Rodadas em Paper { $closed }/{ $needed }
+strategies-readiness-ready = Pronta para o modo real
+strategies-readiness-since = Regras alteradas { $changed }
+# $book is the trading mode of the other book; $count its open positions.
+strategies-open-other-book =
+    { $count ->
+        [one] { $book }: { $count } posição
+        [many] { $book }: { $count } posições
+       *[other] { $book }: { $count } posições
+    }
+strategies-manages-all = Todas as estratégias de entrada
+# $first is the first managed entry strategy; $more the count of the others.
+strategies-manages-some =
+    { $more ->
+        [one] { $first } e mais { $more }
+        [many] { $first } e mais { $more }
+       *[other] { $first } e mais { $more }
+    }
+strategies-exit-before = Verificadas primeiro
+strategies-exit-hint = Estas regras de saída são verificadas em cada posição antes de qualquer estratégia de saída
+strategies-action-edit = Editar { $name }
+strategies-action-delete = Excluir { $name }
+strategies-roster-stale = Última atualização
+
+## Saving new rules: the server answers whether a save changed the rules a strategy trades on.
+
+strategies-live-rules-confirm = Alterar as regras de “{ $name }” no modo real
+    .message = As novas regras operam com { -sol } reais a partir da próxima verificação, e a evidência em Paper desta estratégia recomeça a partir deste salvamento.
+strategies-live-rules-save = Salvar e operar no modo real
+strategies-toast-evidence-restarted = Estratégia salva
+    .message = As regras de “{ $name }” mudaram; sua evidência em Paper recomeça a partir de agora
+
+## Trading mode: arming a paper strategy live and returning it to paper.
+
+strategies-mode-arm = Armar modo real
+strategies-mode-return-paper = Voltar ao Paper
+strategies-mode-arm-title = Armar “{ $name }” no modo real
+strategies-mode-arm-lead = As novas entradas de “{ $name }” vão operar com swaps reais da sua carteira de trading.
+strategies-mode-arm-lead-exit = “{ $name }” venderá posições reais com swaps reais da sua wallet de trading quando sinalizar.
+strategies-mode-arm-readiness = Prontidão segundo o livro de Paper
+strategies-mode-arm-open-paper = As posições em Paper abertas continuam em Paper e terminam em Paper.
+strategies-mode-arm-ack-real-native = As novas entradas gastam { -sol } real da sua carteira de trading.
+strategies-mode-arm-ack-real-native-exit = As posições reais que ela gerencia são vendidas com swaps reais.
+strategies-mode-arm-ack-fees = Os swaps reais pagam taxas de rede e slippage de verdade; os resultados em Paper não garantem resultados reais.
+strategies-mode-arm-ack-unready = Algumas verificações de prontidão não foram aprovadas. Armar esta estratégia mesmo assim.
+strategies-mode-arm-unavailable = O trading real está indisponível no momento; veja a última verificação.
+strategies-mode-return-title = Voltar “{ $name }” ao Paper
+strategies-mode-return-message = As novas entradas abrem no livro de Paper sem gastar { -sol }. As posições reais abertas continuam reais e terminam no modo real.
+strategies-mode-return-message-exit = Ela deixa de avaliar posições reais; elas mantêm suas regras de saída.
+strategies-mode-readiness-failed = Não foi possível ler a prontidão da estratégia
+strategies-mode-toast-armed = { $name } agora opera no modo real
+strategies-mode-toast-paper = { $name } agora opera em Paper
+strategies-mode-toast-failed = Não foi possível alterar o modo de trading

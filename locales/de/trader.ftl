@@ -15,7 +15,6 @@ trader-exit-type-unknown = Unbekannt
 ## Sub-tabs. Ids are the tab ids of the trader page.
 
 trader-tab-stats = Statistiken
-trader-tab-strategy-control = Strategiesteuerung
 trader-tab-strategies = Strategien
 trader-tab-stop-loss = Stop-Loss
 trader-tab-trailing-stop = Trailing-Stop
@@ -87,15 +86,6 @@ trader-toast-save-failed = Speichern fehlgeschlagen
 trader-toast-feature-enabled = Funktion aktiviert
 trader-toast-feature-disabled = Funktion deaktiviert
 trader-toast-feature-applied = Auto-Trader-Einstellung angewendet
-trader-toast-strategy-enabled = Strategie aktiviert
-    .message = Strategie ist aktiv
-trader-toast-strategy-disabled = Strategie deaktiviert
-    .message = Strategie ist inaktiv
-trader-toast-strategy-failed = Aktualisierung fehlgeschlagen
-    .message = Strategiestatus konnte nicht aktualisiert werden
-trader-toast-strategy-armed = { $name } handelt jetzt live
-trader-toast-strategy-paper = { $name } handelt jetzt auf Paper
-trader-toast-strategy-mode-failed = Der Handelsmodus konnte nicht geändert werden
 
 trader-stats-window =
     .aria-label = Statistikzeitraum
@@ -331,33 +321,6 @@ trader-time-status-losing-due = Im Verlust { $pnl }; schließt bei der nächsten
 # $held and $remaining are formatted durations.
 trader-time-status-flat = Seitwärts seit { $held }; schließt in { $remaining }
 trader-time-status-flat-due = Seitwärts seit { $held }; schließt bei der nächsten Prüfung
-
-trader-strategy-entry-title = Einstiegsstrategien
-trader-strategy-entry-subtitle = Signale, die eine neue Position eröffnen können.
-trader-strategy-exit-title = Ausstiegsstrategien
-trader-strategy-exit-subtitle = Signale, die eine offene Position schließen oder schützen können.
-trader-strategy-active-unknown = -- aktiv
-trader-strategy-active = { $enabled }/{ $total } aktiv
-trader-strategy-loading = Strategien werden geladen...
-trader-strategy-load-failed = Strategien konnten nicht geladen werden
-trader-strategy-empty = Keine Strategien definiert
-trader-strategy-unnamed = Unbenannte Strategie
-trader-strategy-priority-auto = Auto
-trader-strategy-priority = Priorität { $priority }
-trader-strategy-mode-arm = Live scharfschalten
-trader-strategy-mode-return-paper = Zurück zu Paper
-trader-strategy-arm-title = „{ $name }“ live scharfschalten
-trader-strategy-arm-lead = Neue Einstiege von „{ $name }“ handeln mit echten Swaps aus Ihrer Trading-Wallet.
-trader-strategy-arm-readiness = Bereitschaft laut Paper-Buch
-trader-strategy-arm-open-paper = Offene Paper-Positionen bleiben Paper und werden auf Paper abgeschlossen.
-trader-strategy-arm-ack-real-native = Neue Einstiege geben echte { -sol } aus Ihrer Trading-Wallet aus.
-trader-strategy-arm-ack-fees = Live-Swaps zahlen echte Netzwerkgebühren und Slippage; Paper-Ergebnisse versprechen keine Live-Ergebnisse.
-trader-strategy-arm-ack-unready = Einige Bereitschaftsprüfungen wurden nicht bestanden. Diese Strategie trotzdem scharfschalten.
-trader-strategy-arm-unavailable = Live-Handel ist derzeit nicht verfügbar; siehe die letzte Prüfung.
-trader-strategy-return-title = „{ $name }“ zurück zu Paper
-trader-strategy-return-message = Neue Einstiege werden im Paper-Buch eröffnet, ohne { -sol } auszugeben. Offene Live-Positionen bleiben live und werden live abgeschlossen.
-trader-strategy-readiness-failed = Die Bereitschaft der Strategie konnte nicht gelesen werden
-trader-paper-explore-title = Paper-Trading startet nach der Einrichtung
 
 trader-dca-title = Durchschnittskosten-Strategie (DCA)
 trader-dca-subtitle = Verlustpositionen automatisch aufstocken, um den durchschnittlichen Einstiegspreis zu senken
