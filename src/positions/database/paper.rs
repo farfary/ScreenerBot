@@ -275,7 +275,7 @@ impl PositionsDatabase {
                         (SELECT paper_legs.strategy_id FROM paper_legs
                          WHERE paper_legs.position_id = positions.id
                            AND paper_legs.leg_kind = 'exit'
-                         ORDER BY paper_legs.id DESC LIMIT 1) AS exit_strategy_id
+                         ORDER BY paper_legs.id DESC LIMIT 1) AS exit_leg_strategy_id
                  FROM positions JOIN run
                  WHERE positions.wallet_address = ?1 AND positions.chain_id = ?2
                    AND datetime(positions.entry_time) >= datetime(run.run_started_at)
@@ -288,7 +288,7 @@ impl PositionsDatabase {
                 Ok((
                     self.row_to_position(row)?,
                     row.get::<_, String>("run_started_at")?,
-                    row.get::<_, Option<String>>("exit_strategy_id")?,
+                    row.get::<_, Option<String>>("exit_leg_strategy_id")?,
                 ))
             })
             .map_err(sqlite)?;

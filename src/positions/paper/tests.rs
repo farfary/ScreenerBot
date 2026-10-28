@@ -815,6 +815,54 @@ async fn a_round_entered_in_the_second_a_run_starts_but_before_it_is_not_counted
 }
 
 #[tokio::test]
+async fn a_strategy_round_entered_in_the_second_a_run_starts_but_before_it_counts_for_no_strategy()
+{
+    let (book, _directory) = paper_book().await;
+    let first = book.account(wallet(), 1.0).await.unwrap();
+    let second = first.started_at.timestamp() + 2;
+    let at = |millis| chrono::DateTime::from_timestamp_millis(second * 1_000 + millis).unwrap();
+    let mut entered = opening("SameSecondMint");
+    entered.entry_time = at(300);
+    let id = open_round(
+        &book,
+        wallet(),
+        entered,
+        &entry_fill(),
+        &buy_leg(),
+        &terms(&book, 5).await,
+    )
+    .await
+    .unwrap()
+    .id
+    .unwrap();
+    let close = CloseFill {
+        effective_exit_price: 0.002,
+        native_received: 0.2,
+        fee_raw: 5_000,
+        exit_time: at(600),
+    };
+    book.close(
+        wallet(),
+        id,
+        &close,
+        0.002,
+        "strategy_exit",
+        &sell_leg(100.0),
+    )
+    .await
+    .unwrap();
+    book.start_epoch(wallet(), 1.0, at(900)).await.unwrap();
+
+    let evidence = book.strategy_evidence(wallet()).unwrap();
+    for strategy_id in ["entry-strategy", "exit-strategy"] {
+        assert!(
+            evidence.rounds_of(strategy_id).is_empty(),
+            "{strategy_id}: a round entered before the run start in the same second belongs to the run that ended"
+        );
+    }
+}
+
+#[tokio::test]
 async fn a_failed_exit_streak_is_read_back_from_the_store_after_a_restart() {
     let (book, directory) = paper_book().await;
     let id = open_round(

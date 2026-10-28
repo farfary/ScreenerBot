@@ -696,3 +696,109 @@ mod state_reason_tests {
         }
     }
 }
+
+#[cfg(test)]
+mod select_column_tests {
+    use super::POSITION_SELECT_COLUMNS;
+    use std::path::Path;
+
+    /// The opening of the format macro, spelled so this file holds no statement of its own.
+    const FORMAT_MACRO: &str = concat!("format", "!(");
+
+    /// The format-macro spans of `source` that interpolate [`POSITION_SELECT_COLUMNS`].
+    fn position_statements(source: &str) -> Vec<&str> {
+        let mut statements = Vec::new();
+        let mut from = 0;
+        while let Some(offset) = source[from..].find(FORMAT_MACRO) {
+            let start = from + offset;
+            let mut depth = 0usize;
+            let mut end = start;
+            for (index, character) in source[start..].char_indices() {
+                match character {
+                    '(' => depth += 1,
+                    ')' => {
+                        depth -= 1;
+                        if depth == 0 {
+                            end = start + index + 1;
+                            break;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            let span = &source[start..end];
+            if span.contains("POSITION_SELECT_COLUMNS") {
+                statements.push(span);
+            }
+            from = start + FORMAT_MACRO.len();
+        }
+        statements
+    }
+
+    /// The output names a statement gives with `AS <name>`, in any letter case.
+    fn aliases(statement: &str) -> Vec<String> {
+        let words: Vec<&str> = statement
+            .split(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
+            .filter(|word| !word.is_empty())
+            .collect();
+        words
+            .windows(2)
+            .filter(|pair| pair[0].eq_ignore_ascii_case("as"))
+            .map(|pair| pair[1].to_ascii_lowercase())
+            .collect()
+    }
+
+    /// The output names of a statement built on the shared column list that collide with
+    /// one of its columns.
+    fn colliding_aliases(statement: &str) -> Vec<String> {
+        let columns: Vec<String> = POSITION_SELECT_COLUMNS
+            .split(',')
+            .map(|column| column.trim().to_ascii_lowercase())
+            .collect();
+        aliases(statement)
+            .into_iter()
+            .filter(|alias| columns.contains(alias))
+            .collect()
+    }
+
+    /// `row_to_position` and every extra read take a column by name, and SQLite answers
+    /// the first output column of that name, so an extra column named like a shared one
+    /// is never read: the reader gets the `positions` value instead.
+    #[test]
+    fn no_statement_on_the_shared_columns_reuses_a_column_name() {
+        let directory = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/positions/database");
+        let mut checked = 0;
+        for entry in std::fs::read_dir(&directory).unwrap() {
+            let path = entry.unwrap().path();
+            if path.extension().and_then(|e| e.to_str()) != Some("rs") {
+                continue;
+            }
+            let source = std::fs::read_to_string(&path).unwrap();
+            for statement in position_statements(&source) {
+                checked += 1;
+                assert!(
+                    colliding_aliases(statement).is_empty(),
+                    "{} names an extra column like a shared one: {statement}",
+                    path.display()
+                );
+            }
+        }
+        assert!(
+            checked >= 10,
+            "only {checked} statements on the shared columns were found"
+        );
+    }
+
+    #[test]
+    fn the_scan_finds_a_colliding_extra_column() {
+        let statement = [
+            FORMAT_MACRO,
+            r#""SELECT {POSITION_SELECT_COLUMNS},
+            (SELECT strategy_id FROM paper_legs LIMIT 1) AS Exit_Strategy_Id,
+            started_at AS run_started_at FROM positions")"#,
+        ]
+        .concat();
+        assert_eq!(position_statements(&statement), [statement.as_str()]);
+        assert_eq!(colliding_aliases(&statement), ["exit_strategy_id"]);
+    }
+}
