@@ -146,20 +146,15 @@ function dismissServiceNotice() {
 }
 
 /**
- * Paints the ScreenerBot service notice into `container` while the chain runs on
- * the service and the notice has not been closed in this session; otherwise it
- * empties and hides the container. The page supplies its own title and message,
- * since what the service changes differs per page.
+ * The ScreenerBot service notice as notice markup while the chain runs on the service and
+ * the notice has not been closed in this session, otherwise "". The page supplies its own
+ * title and message, since what the service changes differs per page, and places the
+ * notice in its own notice area, which scrolls with the content; its actions are
+ * `open-connection` and `dismiss`, run by `runServiceNoticeAction`.
  */
-export function renderServiceNotice(container, { title, message }) {
-  if (!container) return;
-  const visible = serviceMode() && !setupRequired() && !serviceNoticeDismissed();
-  container.hidden = !visible;
-  if (!visible) {
-    container.innerHTML = "";
-    return;
-  }
-  container.innerHTML = renderNotice({
+export function serviceNoticeHtml({ title, message }) {
+  if (!serviceMode() || setupRequired() || serviceNoticeDismissed()) return "";
+  return renderNotice({
     variant: "info",
     icon: "icon-cloud",
     title,
@@ -167,12 +162,12 @@ export function renderServiceNotice(container, { title, message }) {
     action: { id: "open-connection", label: I18n.t("shell-access-gate-action") },
     dismiss: I18n.t("common-action-close"),
   });
-  container
-    .querySelector('[data-action="open-connection"]')
-    .addEventListener("click", openConnectionSettings);
-  container.querySelector('[data-action="dismiss"]').addEventListener("click", () => {
-    dismissServiceNotice();
-    container.hidden = true;
-    container.innerHTML = "";
-  });
+}
+
+/** Runs a service notice action; false when `action` is not one, so the page handles it. */
+export function runServiceNoticeAction(action) {
+  if (action === "open-connection") openConnectionSettings();
+  else if (action === "dismiss") dismissServiceNotice();
+  else return false;
+  return true;
 }

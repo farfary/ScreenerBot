@@ -1008,13 +1008,15 @@ export class DataTable {
    * Render empty state. Every table names what is missing and why: `emptyTitle` and
    * `emptyMessage` are strings, or functions read at render time for a table whose
    * content follows a view. An active search or filter shows the shared no-results text.
-   * `emptyAction` (a function returning `{ label, onClick }` or null) adds one call to
-   * action to the unfiltered empty state, for an empty table the user can change.
+   * `emptyIcon` (a string, or a function read at render time; empty for the default inbox
+   * glyph) names a state that is more than an empty list. `emptyAction` (a function
+   * returning `{ label, onClick }` or null) adds one call to action to the unfiltered empty
+   * state, for an empty table the user can change.
    */
   _renderEmptyState() {
     const hasFilters = this._hasActiveFilters();
-    const emptyIcon = hasFilters ? "icon-search" : "icon-inbox";
     const resolve = (text) => (typeof text === "function" ? text() : text) ?? "";
+    const emptyIcon = hasFilters ? "icon-search" : resolve(this.options.emptyIcon) || "icon-inbox";
     const emptyTitle = hasFilters
       ? I18n.t("table-empty-filtered-title")
       : resolve(this.options.emptyTitle);

@@ -26,7 +26,6 @@ import {
 } from "./trader/features.js";
 import { createLifecycle as createStrategiesLifecycle } from "./strategies.js";
 import { createStatsView } from "./trader/stats.js";
-import { renderServiceNotice } from "../ui/access_gate.js";
 
 // Sub-tabs configuration. The embedded Strategies roster and editor is second.
 function buildSubTabs() {
@@ -781,10 +780,6 @@ function createLifecycle() {
     init(ctx) {
       console.log("[Trader] Initializing page");
       lifecycleContext = ctx;
-      renderServiceNotice($("#trader-access-region"), {
-        title: I18n.t("trader-service-notice-title"),
-        message: I18n.t("trader-service-notice-message"),
-      });
 
       // Fetch feature status early (non-blocking, but before tab bar setup)
       const featurePromise = fetchFeatureStatus(requestManager);

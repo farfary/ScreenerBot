@@ -6,9 +6,10 @@
  * Guard: a trading wallet without SOL is told how to start, and a buy it cannot fund
  * says why its confirm is disabled.
  *
- * - Wallets shows the funding notice only while the main wallet is known to hold no
- *   SOL, without repeating the address its holdings toolbar already carries, and sets
- *   it off the toolbar by the same space that insets it from the page edge.
+ * - Wallets says how to fund the main wallet only while it is known to hold no SOL, and
+ *   says it inside the holdings table, never as a block above it: the empty table's state
+ *   reads the funding guidance under the toolbar that carries the address, and with tokens
+ *   held the SOL figure takes the warning tone with the guidance as its tooltip.
  * - The Buy dialog shows the same notice at 0 SOL and names the refusal inline in the
  *   trade API's own words and figures: what the wallet holds and what the trade needs.
  * - A wallet with SOL but not enough for the typed amount gets the same refusal; an
@@ -42,8 +43,11 @@ const wallets = JSON.parse(
 );
 const main = wallets.wallets.find((wallet) => wallet.role === "main");
 
-/** Opens Wallets with the main wallet at `balance` and the balance route answering `current`. */
-async function open(balance, current) {
+/**
+ * Opens Wallets with the main wallet at `balance` and the balance route answering `current`;
+ * `tokens` replaces the fixture's holdings.
+ */
+async function open(balance, current, { tokens } = {}) {
   const list = {
     ...wallets,
     wallets: wallets.wallets.map((wallet) =>
@@ -56,6 +60,7 @@ async function open(balance, current) {
     const path = request.url.pathname;
     if (path === "/api/wallets") return { body: JSON.stringify(list) };
     if (path === "/api/wallet/balance") return current;
+    if (tokens && path === "/api/wallet/tokens") return { body: JSON.stringify({ tokens }) };
     if (path === `/api/wallet/buy-account-rent/${MINT}`) {
       return { body: JSON.stringify({ rent_sol: 0, fee_reserve_sol: FEE_RESERVE }) };
     }
@@ -91,33 +96,38 @@ async function openBuy(page) {
   await page.waitForSelector(".trade-action-dialog-overlay.is-visible .trade-action-context-grid");
 }
 
+const SOL_CHIP = '#tokens-datatable-root [data-summary-id="wt-sol-balance"]';
+
 test("Wallets shows funding guidance only while the main wallet holds no SOL", async () => {
-  const empty = await open(0, balanceBody(0));
+  const empty = await open(0, balanceBody(0), { tokens: [] });
   try {
-    const notice = empty.page.locator("#wallets-funding .notice");
-    await notice.waitFor();
-    assert.match(strip(await notice.textContent()), new RegExp(NOTICE_TITLE));
-    assert.ok(!strip(await notice.textContent()).includes(main.address));
-    assert.equal(await notice.locator("[data-copy]").count(), 0);
+    const state = empty.page.locator("#tokens-datatable-root .dt-state-cell");
+    await state.locator(".state-view-heading", { hasText: NOTICE_TITLE }).waitFor();
+    assert.match(strip(await state.locator(".state-view-message").textContent()), /holds no SOL/);
+    assert.equal(await state.locator(".state-view-icon.icon-wallet").count(), 1);
     await empty.page.locator(`#tokens-datatable-root [data-copy="${main.address}"]`).waitFor();
-    const spacing = await empty.page.evaluate(() => {
-      const panel = document.querySelector("#panel-main").getBoundingClientRect();
-      const box = document.querySelector("#wallets-funding").getBoundingClientRect();
-      const table = document.querySelector("#tokens-datatable-root").getBoundingClientRect();
-      return { inset: Math.round(box.left - panel.left), below: Math.round(table.top - box.bottom) };
-    });
-    assert.ok(spacing.inset > 0, "the notice is inset from the page edge");
-    assert.equal(spacing.below, spacing.inset, "the notice is set off the holdings toolbar");
+    assert.equal(await empty.page.locator("#panel-main .notice").count(), 0, "no block above");
   } finally {
     await empty.close();
   }
 
+  const holding = await open(0, balanceBody(0));
+  try {
+    const chip = holding.page.locator(`${SOL_CHIP}[data-variant="warning"]`);
+    await chip.waitFor();
+    assert.match(strip(await chip.getAttribute("title")), /holds no SOL/);
+    assert.ok((await holding.page.locator("#tokens-datatable-root tr[data-row-id]").count()) > 0);
+    assert.equal(await holding.page.locator("#panel-main .notice").count(), 0, "no block above");
+  } finally {
+    await holding.close();
+  }
+
   const funded = await open(4.2, balanceBody(4.2));
   try {
-    await funded.page.waitForSelector(
-      "#tokens-datatable-root .data-table, #tokens-datatable-root table"
-    );
-    assert.equal(await funded.page.locator("#wallets-funding").isVisible(), false);
+    await funded.page.locator("#tokens-datatable-root tr[data-row-id]").first().waitFor();
+    const chip = funded.page.locator(SOL_CHIP);
+    assert.equal(await chip.getAttribute("data-variant"), null);
+    assert.equal(await chip.getAttribute("title"), null);
   } finally {
     await funded.close();
   }
@@ -185,7 +195,8 @@ test("an unread balance shows no funding notice", async () => {
     }),
   });
   try {
-    assert.equal(await page.locator("#wallets-funding").isVisible(), false);
+    await page.locator("#tokens-datatable-root tr[data-row-id]").first().waitFor();
+    assert.equal(await page.locator(SOL_CHIP).getAttribute("data-variant"), null);
     await openBuy(page);
     await page.waitForSelector(".trade-action-context-grid");
     assert.equal(await page.locator(".trade-action-funding").count(), 0);

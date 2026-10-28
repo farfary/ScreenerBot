@@ -15,7 +15,7 @@ import {
   renderTokenCell,
   TOKEN_CELL_MIN_WIDTH,
 } from "../../ui/token_identity.js";
-import { needsFunding, renderFundingNotice } from "../../ui/funding_notice.js";
+import { needsFunding } from "../../ui/funding_notice.js";
 import { capabilityAvailable, capabilityReason } from "../../ui/access_gate.js";
 
 // wallet_type ids serialized by `WalletType` (src/wallets/types.rs).
@@ -57,8 +57,8 @@ export function createWalletRenderers({
   // DataTable instances — created once, updated via setData() on every poll
   let tokenTable = null;
   let otherWalletsTable = null;
-  // The read failure the holdings empty state last showed.
-  let renderedReadError = null;
+  // The read failure and funding state the holdings empty state last showed.
+  let renderedEmptyState = null;
 
   function mainWallet() {
     return walletsData().find((w) => w.role === "main") || null;
@@ -258,19 +258,19 @@ export function createWalletRenderers({
   // address, balances and actions live in that table's toolbar identity/stats —
   // there is no separate wallet info bar above the table.
   function renderMainWalletPanel(options = {}) {
-    renderFundingGuidance();
     renderTokenHoldingsTable(options);
   }
 
-  // A main wallet known to hold no SOL cannot trade: say what it needs. The address and its
-  // copy action are the holdings table's toolbar identity just below, so the notice omits them.
-  function renderFundingGuidance() {
-    const node = $("#wallets-funding");
-    if (!node) return;
+  // A main wallet known to hold no SOL cannot trade. The table says so itself: its empty
+  // state when nothing is held, and the SOL figure's tone and tooltip when tokens are.
+  function walletNeedsFunding() {
     const wallet = mainWallet();
-    const show = Boolean(wallet?.address) && needsFunding(wallet.balance);
-    if (show && !node.firstElementChild) node.innerHTML = renderFundingNotice(null);
-    node.hidden = !show;
+    return Boolean(wallet?.address) && needsFunding(wallet.balance);
+  }
+
+  // What the holdings empty state shows; a change repaints it even when the rows are unchanged.
+  function emptyStateKey() {
+    return `${holdingsReadError() || ""}|${walletNeedsFunding()}`;
   }
 
   // =============================================================================
@@ -288,6 +288,7 @@ export function createWalletRenderers({
       address: { html: walletAddressHtml(wallet) },
     });
 
+    const funding = walletNeedsFunding();
     tokenTable.updateToolbarSummary([
       {
         id: "wt-sol-balance",
@@ -296,6 +297,8 @@ export function createWalletRenderers({
           wallet?.balance != null
             ? Utils.formatSol(wallet.balance, { decimals: 4, suffix: "" })
             : "—",
+        variant: funding ? "warning" : "",
+        tooltip: funding ? I18n.t("wallets-funding-message") : "",
       },
       { id: "wt-tokens-count", value: holdingsReadError() ? "—" : String(tokens.length) },
       {
@@ -319,10 +322,9 @@ export function createWalletRenderers({
 
     if (tokenTable) {
       // Silent data refresh — no DOM teardown, no visual flash, settings dialog stays open.
-      // A changed read failure repaints the empty state even when the rows are unchanged.
-      const readError = holdingsReadError();
-      tokenTable.setData(tokenRows(tokens), { forceRender: readError !== renderedReadError });
-      renderedReadError = readError;
+      const emptyState = emptyStateKey();
+      tokenTable.setData(tokenRows(tokens), { forceRender: emptyState !== renderedEmptyState });
+      renderedEmptyState = emptyState;
       syncMainWalletToolbar(tokens);
       syncLoadingState(tokenTable, loading);
       return;
@@ -343,12 +345,21 @@ export function createWalletRenderers({
         column: "ui_amount",
         direction: "desc",
       },
-      // Unknown holdings name the failed read instead of reading as an empty wallet.
-      emptyTitle: () =>
-        holdingsReadError()
-          ? I18n.t("wallets-holdings-unreadable-title")
-          : I18n.t("wallets-holdings-empty-title"),
-      emptyMessage: () => holdingsReadError() || I18n.t("wallets-holdings-empty-message"),
+      // Unknown holdings name the failed read instead of reading as an empty wallet; a wallet
+      // without SOL says how to fund it where its holdings would be.
+      emptyIcon: () => (!holdingsReadError() && walletNeedsFunding() ? "icon-wallet" : null),
+      emptyTitle: () => {
+        if (holdingsReadError()) return I18n.t("wallets-holdings-unreadable-title");
+        return walletNeedsFunding()
+          ? I18n.t("wallets-funding-title")
+          : I18n.t("wallets-holdings-empty-title");
+      },
+      emptyMessage: () => {
+        if (holdingsReadError()) return holdingsReadError();
+        return walletNeedsFunding()
+          ? I18n.t("wallets-funding-message")
+          : I18n.t("wallets-holdings-empty-message");
+      },
       toolbar: {
         // Identity nodes are always rendered (even before the wallet loads) so
         // `setToolbarIdentity` can fill them in place on the first poll.
@@ -404,7 +415,7 @@ export function createWalletRenderers({
       },
     });
 
-    renderedReadError = holdingsReadError();
+    renderedEmptyState = emptyStateKey();
     tokenTable.setData(tokenRows(tokens));
     syncMainWalletToolbar(tokens);
     syncLoadingState(tokenTable, loading);

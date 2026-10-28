@@ -814,10 +814,13 @@ export class TableToolbarView {
       if (!chip) {
         return;
       }
+      // An absent figure takes no tone; an empty `variant` clears a tone set earlier.
       if (isAbsentValue(item.value)) {
         chip.removeAttribute("data-variant");
       } else if (item.variant) {
         chip.setAttribute("data-variant", item.variant);
+      } else if (item.variant !== undefined) {
+        chip.removeAttribute("data-variant");
       }
       if (item.tooltip !== undefined) {
         if (item.tooltip) {

@@ -250,7 +250,10 @@ test("the Buy and Sell dialogs state that trading needs setup", async (t) => {
     // nested in the panel.
     const gate = dialog.locator(".trade-action-setup .notice");
     await gate.waitFor();
-    assert.equal(await gate.locator(".notice-title").textContent(), "Trading needs a wallet and RPC");
+    assert.equal(
+      await gate.locator(".notice-title").textContent(),
+      "Trading needs a wallet and RPC"
+    );
     assert.equal(await gate.locator("button").textContent(), "Complete setup");
     assert.equal(await dialog.locator(".trade-action-setup .access-gate").count(), 0);
     const gap = await dialog.evaluate((root) => {
@@ -362,12 +365,21 @@ test("Wallets > Watched on the service is the gate and reads no watch route", as
   );
 });
 
+const SERVICE_NOTICE = "#stats-notices .notice:has(.icon-cloud)";
+
 test("the Auto Trader shows the service notice until it is closed for the session", async (t) => {
   const { page, close } = await openService("trader");
   t.after(close);
 
-  const notice = page.locator("#trader-access-region .notice");
+  // It sits in the Stats notice area, which scrolls with the sheet, never pinned over it.
+  const notice = page.locator(SERVICE_NOTICE);
   await notice.waitFor();
+  assert.equal(
+    await page.evaluate(() =>
+      document.querySelector("#trader-content").contains(document.querySelector("#stats-notices"))
+    ),
+    true
+  );
   assert.equal(
     plain(await notice.locator(".notice-title").textContent()),
     "Running on the ScreenerBot service"
@@ -377,18 +389,20 @@ test("the Auto Trader shows the service notice until it is closed for the sessio
     "Open Connection settings"
   );
   await notice.locator('[data-action="dismiss"]').click();
-  assert.equal(await page.locator("#trader-access-region").isVisible(), false);
+  assert.equal(await page.locator(SERVICE_NOTICE).count(), 0);
   await page.reload();
   await page.waitForSelector(PAGE_READY);
+  await page.locator("#stats-state").waitFor();
   await page.waitForTimeout(300);
-  assert.equal(await page.locator("#trader-access-region").isVisible(), false);
+  assert.equal(await page.locator(SERVICE_NOTICE).count(), 0);
 });
 
 test("own RPC shows no access gate and no service notice", async (t) => {
   const { page, close } = await openWith(fixtureBootstrap(), "trader", {});
   t.after(close);
+  await page.locator("#stats-state").waitFor();
   await page.waitForTimeout(300);
-  assert.equal(await page.locator("#trader-access-region").isVisible(), false);
+  assert.equal(await page.locator(SERVICE_NOTICE).count(), 0);
 });
 
 function fixtureBootstrap() {

@@ -6,7 +6,7 @@
 import { paintHtml } from "../../core/dom.js";
 import { formatTimeSpan } from "../../core/format.js";
 import { apiErrorMessage } from "../../core/request_manager.js";
-import { openSetup } from "../../ui/access_gate.js";
+import { openSetup, runServiceNoticeAction, serviceNoticeHtml } from "../../ui/access_gate.js";
 import { setAutoTraderEnabled } from "../../ui/auto_trader_control.js";
 import { entryBlockText } from "../../ui/entry_block.js";
 import { renderNotice } from "../../ui/notice.js";
@@ -275,6 +275,14 @@ export function createTraderControls({
         })
       );
     }
+    // What the ScreenerBot service changes for exits, in the same area, so it scrolls with
+    // the sheet instead of staying over it.
+    notices.push(
+      serviceNoticeHtml({
+        title: I18n.t("trader-service-notice-title"),
+        message: I18n.t("trader-service-notice-message"),
+      })
+    );
     const html = notices.join("");
     paintHtml(container, html);
     container.hidden = !html;
@@ -509,6 +517,7 @@ export function createTraderControls({
       if (action === "setup") openSetup();
       else if (action === "resume") void resumeAfterForceStop();
       else if (action === "loss-limit-resume") void resumeAfterLossLimit();
+      else if (runServiceNoticeAction(action)) paintNotices();
     });
   }
 

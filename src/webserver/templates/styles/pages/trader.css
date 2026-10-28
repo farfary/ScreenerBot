@@ -260,9 +260,3 @@
   }
 }
 
-/* The ScreenerBot service notice above every sub-tab: outside the scroll, so it never
-   moves with the content, and aligned to the page gutter. */
-.trader-access-region {
-  flex: none;
-  padding: var(--spacing-md) var(--trader-horizontal-padding) 0;
-}

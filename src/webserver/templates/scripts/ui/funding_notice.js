@@ -13,8 +13,8 @@ export function needsFunding(balance) {
 }
 
 /**
- * The notice for `address`; without an address it still says what is needed. A page that
- * already shows the wallet's address beside the notice passes none.
+ * The notice for `address` in the trade dialog; while the address is unread it still says
+ * what is needed. Wallets says the same in its holdings table instead of a notice.
  */
 export function renderFundingNotice(address) {
   return renderNotice({

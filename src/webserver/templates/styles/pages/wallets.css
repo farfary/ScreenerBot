@@ -67,17 +67,6 @@
   display: none;
 }
 
-/* A main wallet without SOL: the funding notice above its holdings, inset like the setup notice
-   on every side, so it never sits flush on the holdings toolbar. */
-.wallets-funding {
-  flex-shrink: 0;
-  margin: var(--spacing-lg);
-}
-
-.wallets-funding[hidden] {
-  display: none;
-}
-
 /* An access gate replaces the tab panels, inset from the page edge. */
 .wallets-access-gate {
   margin: var(--spacing-lg);
