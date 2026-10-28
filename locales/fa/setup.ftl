@@ -107,20 +107,16 @@ setup-wallet-copy-failed =
 
 ## Setup dialog
 
-setup-dialog-title = راه‌اندازی کیف پول و RPC
-setup-dialog-subtitle = برای فعال شدن معاملات و داده‌های زنده روی زنجیره، کیف پول Solana و یک اندپوینت RPC ویژه را متصل کنید. کلید خصوصی شما روی همین دستگاه رمزگذاری می‌شود و هرگز از آن خارج نمی‌شود.
 setup-dialog-close =
     .title = بستن
     .aria-label = بستن
 setup-dialog-wallet-label = کلید خصوصی کیف پول
 setup-dialog-wallet-input =
     .placeholder = رشته Base58 یا آرایه JSON مانند ⁨[1,2,3,...]⁩
-setup-dialog-submit = اعتبارسنجی و اتصال
 setup-dialog-working = در حال انجام…
 setup-dialog-validating = در حال اعتبارسنجی…
 setup-dialog-saving = در حال ذخیره…
 setup-dialog-restarting = در حال راه‌اندازی مجدد…
-setup-dialog-saved = راه‌اندازی ذخیره شد — در حال راه‌اندازی مجدد { -brand } در حالت کامل…
 setup-dialog-error-validation = اعتبارسنجی ناموفق بود.
 setup-dialog-error-incomplete = تکمیل راه‌اندازی ممکن نشد.
 setup-dialog-error-restart-helper = ابزار راه‌اندازی مجدد خودکار در دسترس نیست. کمی بعد داشبورد را دوباره بارگذاری کنید.

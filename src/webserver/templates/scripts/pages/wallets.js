@@ -383,7 +383,7 @@ async function handleRefresh(btn) {
 function handleWalletAction(action, id) {
   if (action === "export") showExportModal(id);
   // Replacing the trading wallet restarts the app once it is staged.
-  else if (action === "replace") void SetupDialog.show({ mode: "replace" });
+  else if (action === "replace") void SetupDialog.show();
 }
 
 function showExportModal(id) {

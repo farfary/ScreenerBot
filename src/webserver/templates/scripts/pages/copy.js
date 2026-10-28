@@ -306,8 +306,10 @@ function createLifecycle() {
       gateControl($("#copy-add"), COPY_CAPABILITY);
       gateControl($("#copy-onboarding-add"), COPY_CAPABILITY);
       if (accessBlocked(COPY_CAPABILITY)) {
+        // Explore Mode hides the tasks, so its gate stands in for them; on the service
+        // the tasks stay below the requirement.
         renderAccessGate($("#copy-access-gate"), I18n.t("copy-setup-gate-title"), COPY_CAPABILITY, {
-          overContent: true,
+          overContent: !setupRequired(),
         });
       }
       on(window, COPY_HANDOFF_EVENT, () => {

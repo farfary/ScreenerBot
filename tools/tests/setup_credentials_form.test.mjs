@@ -3,12 +3,13 @@
 //
 
 /**
- * Guard: the first-run setup wizard and the Explore Mode setup dialog ask for the
- * wallet and RPC with the same cards, and a created wallet's key stays in memory.
+ * Guard: the first-run setup wizard and the Replace wallet dialog ask for the wallet
+ * and RPC with the same cards, and a created wallet's key stays in memory.
  *
  * - Both mount the shared wallet and RPC cards, so their titles, placeholders, hints,
- *   reveal toggle and provider links read the same, the RPC hint says public
- *   endpoints are not supported, and the dialog's key icon is a bare glyph without a
+ *   reveal toggle and provider links read the same (the dialog adds only the note that
+ *   an empty RPC field keeps the configured endpoints), the RPC hint says public
+ *   endpoints are not supported, and the dialog's title icon is a bare glyph without a
  *   tile. The dialog sizes to its content: with no status to show, the RPC card is
  *   followed by the body's own padding and then the buttons, with no empty band.
  * - The wizard's wallet step preselects no source and Continue stays disabled until
@@ -73,7 +74,11 @@ function readForm(root) {
   return {
     titles: [...form.querySelectorAll(".setup-card-title")].map(text),
     placeholders: [...form.querySelectorAll("textarea")].map((input) => input.placeholder),
-    notes: [...form.querySelectorAll(".setup-security-note, .setup-rpc-guidance")].map(text),
+    notes: [
+      ...form.querySelectorAll(
+        '.setup-security-note:not([id$="rpc-optional-note"]), .setup-rpc-guidance'
+      ),
+    ].map(text),
     toggles: form.querySelectorAll(".setup-input-toggle").length,
     links: [...form.querySelectorAll("a[href]")].map((link) => link.href),
   };
@@ -112,7 +117,7 @@ async function openWizard(t, { beforeLoad } = {}) {
   return page;
 }
 
-test("onboarding and the Explore Mode dialog render the same wallet and RPC cards", async (t) => {
+test("the wizard and the Replace wallet dialog render the same wallet and RPC cards", async (t) => {
   const page = await openWizard(t);
   await page.waitForFunction(
     () => document.querySelector("#setup-wallet-import .setup-card-title")?.textContent
@@ -122,13 +127,15 @@ test("onboarding and the Explore Mode dialog render the same wallet and RPC card
     rpc: await page.evaluate(readForm, "#setup-rpc-field"),
   };
 
-  // The dialog opens from the Explore dashboard, never over the full-screen wizard.
+  // The dialog opens from the Wallets page, never over the full-screen wizard; its
+  // fields follow the replacement's confirmation.
   await page.evaluate(async () => {
     document.getElementById("setupScreenWrapper").style.display = "none";
     document.getElementById("onboardingScreen").style.display = "none";
     const { SetupDialog } = await import("/scripts/ui/setup_dialog.js");
     void SetupDialog.show();
   });
+  await page.click('.setup-dialog [data-action="submit"]');
   await page.check("#setup-dialog-wallet-source-import");
   await page.waitForFunction(
     () => document.querySelector(".setup-dialog-wallet .setup-card-title")?.textContent
@@ -164,7 +171,7 @@ test("onboarding and the Explore Mode dialog render the same wallet and RPC card
       parentBackground: parent.backgroundColor,
     };
   });
-  assert.equal(icon.inTitle, true, "the key glyph sits inline in the title");
+  assert.equal(icon.inTitle, true, "the glyph sits inline in the title");
   assert.equal(icon.background, "rgba(0, 0, 0, 0)");
   assert.equal(icon.border, "none");
   assert.equal(icon.parentBackground, "rgba(0, 0, 0, 0)");
@@ -293,7 +300,7 @@ test("the wizard follows the light theme", async (t) => {
   assert.ok(lightness.back < 0.5, `Back reads dark on it (${lightness.back})`);
 });
 
-test("the generated private key is never written outside memory", async (t) => {
+test("the generated private key stays in memory, and setup reopens on an unchosen source", async (t) => {
   const page = await openWizard(t, {
     beforeLoad: (page) =>
       page.addInitScript(() => {
@@ -360,5 +367,20 @@ test("the generated private key is never written outside memory", async (t) => {
     logs.filter((line) => line.includes(GENERATED.private_key)),
     [],
     "the key never reaches the console"
+  );
+
+  // Setup reopens on an unchosen source, and creating again shows a wallet to back up.
+  await page.evaluate(() => window.OnboardingController.complete());
+  await page.locator("#setup-wallet-source").waitFor({ state: "visible" });
+  assert.equal(
+    await page.evaluate(() => document.querySelectorAll("#setup-wallet-source :checked").length),
+    0
+  );
+  assert.equal(await page.locator("#setup-next").isDisabled(), true);
+  await page.check("#setup-wallet-source-create");
+  await page.locator("#setup-next").click();
+  await page.waitForFunction(
+    (address) => document.querySelector("#setup-wallet-backup")?.textContent.includes(address),
+    GENERATED.address
   );
 });

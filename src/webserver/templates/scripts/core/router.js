@@ -664,6 +664,7 @@ async function bootstrapRouter() {
   );
 
   initRouter();
+  window.SetupController?.resumeOverDashboard();
 }
 
 if (document.readyState === "loading") {

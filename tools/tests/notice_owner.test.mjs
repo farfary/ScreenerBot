@@ -14,6 +14,9 @@
  *   warning, notice, banner, callout, info box or alert; classes that look alike but are
  *   not notices are listed with the reason.
  * - No stylesheet outside `components.css` draws a `.notice*` element.
+ * - Neither a notice nor the access gate draws a border: above a table or a panel a
+ *   framed notice read as a card of its own, and the gate replaces content as a plain
+ *   state view.
  *
  * Run with `npm run test:js`.
  */
@@ -140,6 +143,22 @@ test("no dashboard source draws a private notice block", async () => {
     }
   }
   assert.deepEqual([...found].sort(), [], "render it with renderNotice");
+});
+
+test("a notice and the access gate draw no border", async () => {
+  const framed = [];
+  for (const { path, rules } of await loadStylesheets()) {
+    for (const { selector, body, line } of rules) {
+      const subject = classesIn(subjectCompound(selector));
+      if (!subject.some((name) => OWNER_CLASS.test(name) || name === "access-gate")) continue;
+      // A corner radius rounds the surface; any other border or outline property frames it.
+      const frames = [...body.matchAll(/(?:^|[;\s{])((?:border|outline)[a-z-]*)\s*:/g)].filter(
+        ([, property]) => !property.endsWith("radius")
+      );
+      if (frames.length) framed.push(`${path}:${line} ${selector}`);
+    }
+  }
+  assert.deepEqual(framed, []);
 });
 
 test("only components.css draws the notice", async () => {

@@ -24,7 +24,11 @@
  *   every portfolio, P&L and exposure value reads "—", never a measured zero.
  * - The Buy and Sell dialogs open as the setup notice: no quick amount or MAX can be
  *   chosen, the confirm is disabled with the reason as its tooltip, the setup action
- *   replaces the dialog with the setup dialog, and the dialogs read no wallet balance.
+ *   replaces the dialog with the setup wizard, and the dialogs read no wallet balance.
+ * - Complete setup opens the full-screen first-run flow over the dashboard, on an
+ *   unchosen wallet source: Back leads to the introduction and its shortcut back to
+ *   the wizard, and the wizard's Explore action returns to the dashboard underneath
+ *   without asking the server to enter Explore Mode again.
  * - On the ScreenerBot service, Copy Trading shows the own-RPC notice above the kept
  *   tasks with the Connection settings action, and every copy control carries the
  *   watch reason; Wallets > Watched shows the gate and reads no watch route; the
@@ -242,13 +246,19 @@ test("the Buy and Sell dialogs state that trading needs setup", async (t) => {
         symbol: "SOL",
       });
     }, action);
-    const gate = dialog.locator(".trade-action-setup .access-gate");
+    // The balance stays above, so the requirement is a notice clear of it, not a card
+    // nested in the panel.
+    const gate = dialog.locator(".trade-action-setup .notice");
     await gate.waitFor();
-    assert.equal(
-      await gate.locator(".state-view-title").textContent(),
-      "Trading needs a wallet and RPC"
-    );
+    assert.equal(await gate.locator(".notice-title").textContent(), "Trading needs a wallet and RPC");
     assert.equal(await gate.locator("button").textContent(), "Complete setup");
+    assert.equal(await dialog.locator(".trade-action-setup .access-gate").count(), 0);
+    const gap = await dialog.evaluate((root) => {
+      const grid = root.querySelector(".trade-action-context-grid").getBoundingClientRect();
+      const notice = root.querySelector(".trade-action-setup .notice").getBoundingClientRect();
+      return notice.top - grid.bottom;
+    });
+    assert.ok(gap >= 8, `the notice sits clear of the balance (${gap}px)`);
 
     const presets = dialog.locator(".trade-action-preset-btn");
     assert.ok((await presets.count()) > 0, `${action} offers quick amounts`);
@@ -268,12 +278,47 @@ test("the Buy and Sell dialogs state that trading needs setup", async (t) => {
     }
   }
 
-  await dialog.locator(".trade-action-setup .state-view-action").click();
-  await page.locator(".setup-dialog").waitFor();
-  assert.equal(await dialog.count(), 0, "the setup dialog replaces the trade dialog");
+  await dialog.locator('.trade-action-setup [data-action="open-setup"]').click();
+  await page.locator("body.initialization-mode #setupScreen").waitFor({ state: "visible" });
+  assert.equal(await dialog.count(), 0, "the setup wizard replaces the trade dialog");
   assert.deepEqual(
     requests.slice(before).filter((request) => / \/api\/wallet\/balance\b/.test(request)),
     []
+  );
+});
+
+test("Complete setup opens the first-run flow over the dashboard and Explore returns to it", async (t) => {
+  const { page, requests, close } = await openExplore("home");
+  t.after(close);
+  const wizard = page.locator("#setupScreen");
+  const introduction = page.locator("#onboardingScreen");
+  const covering = () =>
+    page.evaluate(() => document.body.classList.contains("initialization-mode"));
+
+  await page.locator("#accessControl").click();
+  await wizard.waitFor({ state: "visible" });
+  assert.equal(await covering(), true);
+  assert.equal(await page.locator(".app-main").isVisible(), false, "the wizard covers the page");
+  assert.equal(await page.locator("#setup-wallet-source :checked").count(), 0);
+  assert.equal(await page.locator("#setup-next").isDisabled(), true);
+
+  await page.click("#setup-back");
+  await introduction.waitFor({ state: "visible" });
+  assert.equal(await wizard.isVisible(), false);
+  await page.click("#onboardingSetupShortcut");
+  await wizard.waitFor({ state: "visible" });
+  assert.equal(await page.locator("#setup-wallet-source :checked").count(), 0);
+
+  const before = requests.length;
+  await page.click("#setup-explore");
+  await page.locator(".app-main").waitFor({ state: "visible" });
+  assert.equal(await covering(), false);
+  assert.equal(await wizard.isVisible(), false);
+  assert.equal(await introduction.isVisible(), false);
+  assert.deepEqual(
+    requests.slice(before).filter((request) => request.includes("/api/initialization/explore")),
+    [],
+    "Explore Mode is already on"
   );
 });
 

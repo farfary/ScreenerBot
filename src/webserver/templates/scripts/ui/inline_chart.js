@@ -82,22 +82,27 @@ function frame({ lines, min, max, start, end, label, escapeHtml, tall = false, x
   const y = scale(min, max, VIEW - INSET, INSET);
   const x = scale(start, end, 0, VIEW);
   const zero = y(0).toFixed(2);
-  const tick = (value, text) =>
-    `<span style="top:${y(value).toFixed(2)}%">${escapeHtml(text)}</span>`;
-  const top = tick(
-    max,
-    formatSignedSol(max, { decimals: SOL_DECIMALS, minDecimals: SOL_DECIMALS })
-  );
-  const bottom = min < max ? tick(min, signed(min)) : "";
   const zeroClear =
     min < 0 &&
     max > 0 &&
     Math.abs(y(0) - y(max)) >= TICK_CLEARANCE &&
     Math.abs(y(0) - y(min)) >= TICK_CLEARANCE;
-  const zeroTick = zeroClear ? tick(0, "0") : "";
+  const ticks = [
+    [max, formatSignedSol(max, { decimals: SOL_DECIMALS, minDecimals: SOL_DECIMALS })],
+    ...(zeroClear ? [[0, "0"]] : []),
+    ...(min < max ? [[min, signed(min)]] : []),
+  ];
+  // The labels are positioned out of flow, so the column takes its width from the
+  // longest one in characters of the monospaced data font.
+  const chars = Math.max(...ticks.map(([, text]) => [...text].length));
+  const labels = ticks
+    .map(
+      ([value, text]) => `<span style="top:${y(value).toFixed(2)}%">${escapeHtml(text)}</span>`
+    )
+    .join("");
   const [first, last] = xLabels || [timeLabel(start, end - start), timeLabel(end, end - start)];
   return `<figure class="inline-chart${tall ? " inline-chart--tall" : ""}" dir="ltr" role="img" aria-label="${escapeHtml(label)}">
-    <div class="inline-chart-y" aria-hidden="true">${top}${zeroTick}${bottom}</div>
+    <div class="inline-chart-y" style="--inline-chart-y-chars:${chars}" aria-hidden="true">${labels}</div>
     <svg class="inline-chart-plot" viewBox="0 0 ${VIEW} ${VIEW}" preserveAspectRatio="none" aria-hidden="true"><line class="inline-chart-zero" x1="0" x2="${VIEW}" y1="${zero}" y2="${zero}"/>${lines(x, y)}</svg>
     <div class="inline-chart-x" aria-hidden="true"><span>${escapeHtml(first)}</span><span>${escapeHtml(last)}</span></div>
   </figure>`;

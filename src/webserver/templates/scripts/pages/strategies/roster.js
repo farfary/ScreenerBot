@@ -10,8 +10,7 @@ import {
   strategyTypeMarker,
 } from "../../ui/strategy_type.js";
 import { tradingModeLabel, tradingModeMarker } from "../../ui/trading_mode.js";
-import { setupRequired, setupRequiredReason } from "../../ui/access_gate.js";
-import { SetupDialog } from "../../ui/setup_dialog.js";
+import { openSetup, setupRequired, setupRequiredReason } from "../../ui/access_gate.js";
 import { setAutoTraderEnabled } from "../../ui/auto_trader_control.js";
 import { requestManager } from "../../core/request_manager.js";
 import * as Utils from "../../core/utils.js";
@@ -494,7 +493,7 @@ export function createRoster({ container, onOpen, onCreate, onImport, onDelete, 
   async function runNoticeAction() {
     const notice = overview?.notice;
     if (notice === "setup_required") {
-      SetupDialog.show();
+      openSetup();
       return;
     }
     if (notice !== "trader_off") return;

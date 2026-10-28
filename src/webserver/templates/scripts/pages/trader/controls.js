@@ -6,10 +6,10 @@
 import { paintHtml } from "../../core/dom.js";
 import { formatTimeSpan } from "../../core/format.js";
 import { apiErrorMessage } from "../../core/request_manager.js";
+import { openSetup } from "../../ui/access_gate.js";
 import { setAutoTraderEnabled } from "../../ui/auto_trader_control.js";
 import { entryBlockText } from "../../ui/entry_block.js";
 import { renderNotice } from "../../ui/notice.js";
-import { SetupDialog } from "../../ui/setup_dialog.js";
 import { renderSummaryChip } from "../../ui/table_toolbar.js";
 
 /**
@@ -505,8 +505,8 @@ export function createTraderControls({
 
     addTrackedListener($("#stats-notices"), "click", (event) => {
       const action = event.target.closest("[data-action]")?.dataset.action;
-      // The same wallet and RPC setup dialog the header's Explore Mode action opens.
-      if (action === "setup") void SetupDialog.show();
+      // The same full-screen setup the header's Explore Mode action opens.
+      if (action === "setup") openSetup();
       else if (action === "resume") void resumeAfterForceStop();
       else if (action === "loss-limit-resume") void resumeAfterLossLimit();
     });

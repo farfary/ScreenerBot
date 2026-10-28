@@ -75,7 +75,7 @@ export function describeCopyTrading(card, Utils) {
 }
 
 /**
- * Bind both cards to the Home page DOM. `onSetup` opens the setup dialog from either
+ * Bind both cards to the Home page DOM. `onSetup` opens the setup wizard from either
  * card's setup action.
  * @returns {{ update:(data:object)=>void, dispose:()=>void }}
  */

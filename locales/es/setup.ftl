@@ -110,20 +110,16 @@ setup-wallet-copy-failed =
 
 ## Setup dialog
 
-setup-dialog-title = Configurar billetera y RPC
-setup-dialog-subtitle = Conecta tu billetera de Solana y un endpoint RPC premium para habilitar el trading y los datos en vivo de la cadena. Tu clave privada se cifra en este dispositivo y nunca sale de él.
 setup-dialog-close =
     .title = Cerrar
     .aria-label = Cerrar
 setup-dialog-wallet-label = Clave privada de la billetera
 setup-dialog-wallet-input =
     .placeholder = Cadena base58 o arreglo JSON [1,2,3,...]
-setup-dialog-submit = Validar y conectar
 setup-dialog-working = Trabajando…
 setup-dialog-validating = Validando…
 setup-dialog-saving = Guardando…
 setup-dialog-restarting = Reiniciando…
-setup-dialog-saved = Configuración guardada: reiniciando { -brand } en modo completo…
 setup-dialog-error-validation = La validación falló.
 setup-dialog-error-incomplete = No se pudo completar la configuración.
 setup-dialog-error-restart-helper = El asistente de reinicio automático no está disponible. Recarga el panel en unos momentos.

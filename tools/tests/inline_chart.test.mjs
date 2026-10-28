@@ -95,6 +95,8 @@ test("pnlBars puts bars and the running total on one scale", () => {
   // The top label carries the unit once, and the zero line is labelled between them.
   assert.match(html, /\+0\.2500\s+SOL<\/span>/);
   assert.match(html, />0<\/span>/);
+  // The value column is as wide as its longest label, the top one with its unit.
+  assert.match(html, /class="inline-chart-y" style="--inline-chart-y-chars:11"/);
 });
 
 test("pnlBars tones each bar by its sign as shown", () => {

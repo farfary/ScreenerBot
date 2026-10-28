@@ -119,20 +119,16 @@ setup-wallet-copy-failed =
 
 ## Setup dialog
 
-setup-dialog-title = إعداد المحفظة وRPC
-setup-dialog-subtitle = اربط محفظة Solana ونقطة اتصال RPC متميزة لتفعيل التداول وبيانات السلسلة الحية. يُشفَّر مفتاحك الخاص على هذا الجهاز ولا يغادره أبدًا.
 setup-dialog-close =
     .title = إغلاق
     .aria-label = إغلاق
 setup-dialog-wallet-label = المفتاح الخاص للمحفظة
 setup-dialog-wallet-input =
     .placeholder = سلسلة Base58 أو مصفوفة JSON مثل ⁨[1,2,3,...]⁩
-setup-dialog-submit = تحقق واتصل
 setup-dialog-working = جارٍ العمل…
 setup-dialog-validating = جارٍ التحقق…
 setup-dialog-saving = جارٍ الحفظ…
 setup-dialog-restarting = جارٍ إعادة التشغيل…
-setup-dialog-saved = تم حفظ الإعداد، وجارٍ إعادة تشغيل { -brand } في الوضع الكامل…
 setup-dialog-error-validation = فشل التحقق.
 setup-dialog-error-incomplete = تعذّر إكمال الإعداد.
 setup-dialog-error-restart-helper = مساعد إعادة التشغيل التلقائي غير متاح. أعد تحميل لوحة التحكم بعد قليل.

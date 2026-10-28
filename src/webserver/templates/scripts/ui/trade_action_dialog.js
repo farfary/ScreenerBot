@@ -1089,9 +1089,12 @@ export class TradeActionDialog {
     `;
     if (setup) {
       const gate = this.contextEl.querySelector(".trade-action-setup");
-      renderAccessGate(gate, I18n.t("trade-setup-required-title"));
-      // The setup dialog replaces this one rather than stacking over it.
-      on(gate.querySelector(".state-view-action"), "click", () => {
+      // The balance stays above it, so the requirement is a notice, not a card in the panel.
+      renderAccessGate(gate, I18n.t("trade-setup-required-title"), undefined, {
+        overContent: true,
+      });
+      // The full-screen setup wizard opens in place of this dialog, never over it.
+      on(gate.querySelector('[data-action="open-setup"]'), "click", () => {
         this._resolveOpen?.(null);
         this._resolveOpen = null;
         this.close({ restoreFocus: false });

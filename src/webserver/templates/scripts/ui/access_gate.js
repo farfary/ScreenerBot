@@ -6,7 +6,6 @@
 // the one translated reason a control is unavailable, and the shared notices that
 // state it and open setup or Settings > Connection.
 import { getBootstrapState } from "../core/bootstrap.js";
-import { SetupDialog } from "./setup_dialog.js";
 import { renderStateView } from "./state_view.js";
 import { renderNotice } from "./notice.js";
 import { showSettingsDialog } from "./settings_dialog.js";
@@ -27,6 +26,14 @@ const SERVICE_NOTICE_DISMISSED_KEY = "screenerbot.service-notice-dismissed";
 /** True while the app runs in Explore Mode, without a wallet or RPC. */
 export function setupRequired() {
   return Boolean(getBootstrapState().status?.explore_mode);
+}
+
+/**
+ * Opens setup from Explore Mode: the full-screen first-run wizard over the dashboard
+ * (`core/setup.js`), whose Back leads to the introduction.
+ */
+export function openSetup() {
+  window.SetupController?.openOverDashboard();
 }
 
 /** The reason a wallet-backed control is unavailable in Explore Mode. */
@@ -92,40 +99,34 @@ export function openConnectionSettings() {
  * Paints the gate into `container`. In Explore Mode: `setupTitle`, the setup reason
  * and the setup action. When the connection lacks `capability`: the own-RPC
  * requirement, its reason and the Connection settings action. A gate that stands
- * in for the page's content is a centred state view; with `overContent` the page
- * keeps its content below, so the requirement is a notice above it.
+ * in for the page's content is a centred state view; with `overContent` the content
+ * stays below, so the requirement is a notice above it, never a card inside it.
  */
 export function renderAccessGate(container, setupTitle, capability, { overContent = false } = {}) {
   if (!container) return;
-  if (setupRequired()) {
-    container.innerHTML = `<div class="access-gate">${renderStateView({
-      icon: "icon-wallet",
-      title: setupTitle,
-      message: setupRequiredReason(),
-      action: { id: "open-setup", label: I18n.t("shell-explore-action"), primary: true },
-      compact: true,
-    })}</div>`;
-    container
-      .querySelector(".state-view-action")
-      .addEventListener("click", () => SetupDialog.show());
-    return;
-  }
-  const requirement = {
-    icon: "icon-server",
-    title: I18n.t("shell-access-gate-own-rpc-title"),
-    message: capabilityReason(capability),
-  };
-  const label = I18n.t("shell-access-gate-action");
+  const [requirement, action, open] = setupRequired()
+    ? [
+        { icon: "icon-wallet", title: setupTitle, message: setupRequiredReason() },
+        { id: "open-setup", label: I18n.t("shell-explore-action") },
+        openSetup,
+      ]
+    : [
+        {
+          icon: "icon-server",
+          title: I18n.t("shell-access-gate-own-rpc-title"),
+          message: capabilityReason(capability),
+        },
+        { id: "open-connection", label: I18n.t("shell-access-gate-action") },
+        openConnectionSettings,
+      ];
   container.innerHTML = overContent
-    ? renderNotice({ variant: "info", ...requirement, action: { id: "open-connection", label } })
+    ? renderNotice({ variant: "info", ...requirement, action })
     : `<div class="access-gate">${renderStateView({
         ...requirement,
-        action: { id: "open-connection", label, primary: true },
+        action: { ...action, primary: true },
         compact: true,
       })}</div>`;
-  container
-    .querySelector('[data-action="open-connection"]')
-    .addEventListener("click", openConnectionSettings);
+  container.querySelector(`[data-action="${action.id}"]`).addEventListener("click", open);
 }
 
 function serviceNoticeDismissed() {

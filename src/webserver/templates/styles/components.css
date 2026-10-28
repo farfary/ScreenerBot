@@ -431,18 +431,10 @@
   }
 }
 
-/* The access gate (ui/access_gate.js), for Explore Mode setup or a capability the
-   connection lacks, is framed as a card on every page that shows it; the page only
-   places it. */
-.access-gate {
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
-  background: var(--bg-card);
-}
-
 /* The one notice (ui/notice.js): guidance, a caution or a failure beside content that
    still renders. A bare glyph inline with the title, the message under it, at most
-   one action; the variant tones the surface and the glyph, never a bar or a tile. */
+   one action; the variant tones the surface and the glyph, never a border, a bar or
+   a tile, so a notice above a table or a panel never reads as a card of its own. */
 .notice {
   --notice-tone: var(--semantic-info-text);
 
@@ -451,7 +443,6 @@
   gap: var(--spacing-xs);
   min-width: 0;
   padding: var(--spacing-sm) var(--spacing-md);
-  border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   background: var(--bg-card);
 }
@@ -463,21 +454,18 @@
 .notice[data-variant="warning"] {
   --notice-tone: var(--semantic-warning-text);
 
-  border-color: var(--warning-alpha-30);
   background: var(--warning-alpha-10);
 }
 
 .notice[data-variant="error"] {
   --notice-tone: var(--semantic-error-text);
 
-  border-color: var(--danger-alpha-30);
   background: var(--danger-alpha-10);
 }
 
 .notice[data-variant="success"] {
   --notice-tone: var(--semantic-success-text);
 
-  border-color: var(--success-alpha-30);
   background: var(--success-alpha-10);
 }
 

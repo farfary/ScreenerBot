@@ -489,7 +489,7 @@
   border-radius: var(--radius-sm);
 }
 
-/* Outside the setup screen's own [hidden] rule (the setup dialog), the preview still hides. */
+/* Outside the setup screen's own [hidden] rule (the Replace wallet dialog), the preview still hides. */
 .setup-wallet-preview[hidden] {
   display: none;
 }
@@ -649,7 +649,7 @@
 }
 
 /* The backup panel of a new wallet (SetupRuntime.mountBackupPanel): the onboarding
-   step and the setup dialogs show the same one. */
+   step and the Replace wallet dialog show the same one. */
 .setup-backup {
   display: flex;
   flex-direction: column;

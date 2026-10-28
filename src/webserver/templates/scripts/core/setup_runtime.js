@@ -3,7 +3,7 @@
 //
 // Setup validation, the credential fields, the wallet source choice and the new
 // wallet's backup panel, requests, and restart polling shared by the full-screen
-// controller and the setup dialogs.
+// controller and the Replace wallet dialog.
 (function () {
   "use strict";
 
@@ -209,7 +209,7 @@
     };
   }
 
-  /** The wallet key field: the onboarding import step and the setup dialogs share it. */
+  /** The wallet key field: the onboarding import step and the Replace wallet dialog share it. */
   function walletFieldHtml(prefix) {
     return `
       <section class="setup-card setup-card-wallet">
@@ -244,7 +244,7 @@
       </section>`;
   }
 
-  /** The RPC endpoints field: the onboarding connection step and the setup dialogs share it. */
+  /** The RPC endpoints field: the onboarding connection step and the Replace wallet dialog share it. */
   function rpcFieldHtml(prefix, rpcOptional) {
     return `
       <section class="setup-card setup-card-rpc">
@@ -296,7 +296,7 @@
    * Renders the wallet key field into `container` and binds it: the key mask and its
    * toggle, inline validation while typing, the derived address preview and its copy
    * action. `prefix` keeps the element ids unique, since the onboarding screen stays
-   * in every page's document while a setup dialog is open.
+   * in every page's document while the Replace wallet dialog is open.
    */
   function mountWalletField(container, prefix = "") {
     container.innerHTML = walletFieldHtml(prefix);
@@ -452,7 +452,7 @@
   /**
    * Renders the wallet source choice into `container`: create a new wallet or import
    * one, as native radios with nothing preselected. `onChange` receives the chosen
-   * source. The onboarding step and the setup dialogs share it.
+   * source. The onboarding step and the Replace wallet dialog share it.
    */
   function mountWalletSource(container, prefix = "", { onChange } = {}) {
     container.innerHTML = `
@@ -490,6 +490,10 @@
     return {
       value: () => inputs.find((input) => input.checked)?.value ?? null,
       focus: () => (inputs.find((input) => input.checked) ?? inputs[0])?.focus(),
+      /** Leaves no source chosen; `onChange` does not run. */
+      clear() {
+        inputs.forEach((input) => (input.checked = false));
+      },
       dispose() {
         inputs.forEach((input) => input.removeEventListener("change", onInput));
       },

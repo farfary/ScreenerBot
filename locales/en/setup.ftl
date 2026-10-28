@@ -107,20 +107,16 @@ setup-wallet-copy-failed =
 
 ## Setup dialog
 
-setup-dialog-title = Set up wallet & RPC
-setup-dialog-subtitle = Connect your Solana wallet and a premium RPC endpoint to enable trading and live on-chain data. Your private key is encrypted on this device and never leaves it.
 setup-dialog-close =
     .title = Close
     .aria-label = Close
 setup-dialog-wallet-label = Wallet Private Key
 setup-dialog-wallet-input =
     .placeholder = Base58 string or JSON array [1,2,3,...]
-setup-dialog-submit = Validate & connect
 setup-dialog-working = Working…
 setup-dialog-validating = Validating…
 setup-dialog-saving = Saving…
 setup-dialog-restarting = Restarting…
-setup-dialog-saved = Setup saved — restarting { -brand } in full mode…
 setup-dialog-error-validation = Validation failed.
 setup-dialog-error-incomplete = Setup could not be completed.
 setup-dialog-error-restart-helper = Automatic restart helper is unavailable. Reload the dashboard shortly.

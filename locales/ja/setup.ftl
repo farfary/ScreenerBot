@@ -104,20 +104,16 @@ setup-wallet-copy-failed =
 
 ## Setup dialog
 
-setup-dialog-title = ウォレットと RPC のセットアップ
-setup-dialog-subtitle = Solana ウォレットとプレミアム RPC エンドポイントを接続すると、取引とライブのオンチェーンデータを利用できます。秘密鍵はこのデバイス上で暗号化され、外部に送信されることはありません。
 setup-dialog-close =
     .title = 閉じる
     .aria-label = 閉じる
 setup-dialog-wallet-label = ウォレットの秘密鍵
 setup-dialog-wallet-input =
     .placeholder = Base58 文字列または JSON 配列 [1,2,3,...]
-setup-dialog-submit = 検証して接続
 setup-dialog-working = 処理中…
 setup-dialog-validating = 検証中…
 setup-dialog-saving = 保存中…
 setup-dialog-restarting = 再起動中…
-setup-dialog-saved = セットアップを保存しました。フルモードで { -brand } を再起動しています…
 setup-dialog-error-validation = 検証に失敗しました。
 setup-dialog-error-incomplete = セットアップを完了できませんでした。
 setup-dialog-error-restart-helper = 自動再起動ヘルパーを利用できません。しばらくしてからダッシュボードを再読み込みしてください。

@@ -7,7 +7,8 @@
  * says why its confirm is disabled.
  *
  * - Wallets shows the funding notice only while the main wallet is known to hold no
- *   SOL, without repeating the address its holdings toolbar already carries.
+ *   SOL, without repeating the address its holdings toolbar already carries, and sets
+ *   it off the toolbar by the same space that insets it from the page edge.
  * - The Buy dialog shows the same notice at 0 SOL and names the refusal inline in the
  *   trade API's own words and figures: what the wallet holds and what the trade needs.
  * - A wallet with SOL but not enough for the typed amount gets the same refusal; an
@@ -99,6 +100,14 @@ test("Wallets shows funding guidance only while the main wallet holds no SOL", a
     assert.ok(!strip(await notice.textContent()).includes(main.address));
     assert.equal(await notice.locator("[data-copy]").count(), 0);
     await empty.page.locator(`#tokens-datatable-root [data-copy="${main.address}"]`).waitFor();
+    const spacing = await empty.page.evaluate(() => {
+      const panel = document.querySelector("#panel-main").getBoundingClientRect();
+      const box = document.querySelector("#wallets-funding").getBoundingClientRect();
+      const table = document.querySelector("#tokens-datatable-root").getBoundingClientRect();
+      return { inset: Math.round(box.left - panel.left), below: Math.round(table.top - box.bottom) };
+    });
+    assert.ok(spacing.inset > 0, "the notice is inset from the page edge");
+    assert.equal(spacing.below, spacing.inset, "the notice is set off the holdings toolbar");
   } finally {
     await empty.close();
   }

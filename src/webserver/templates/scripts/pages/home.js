@@ -18,7 +18,7 @@ import { paintHtml, paintText } from "../core/dom.js";
 import { createCalendar } from "./home/portfolio_calendar.js";
 import { createUpdateNotice } from "./home/update_notice.js";
 import { createStatusCards } from "./home/status_cards.js";
-import { SetupDialog } from "../ui/setup_dialog.js";
+import { openSetup } from "../ui/access_gate.js";
 import { fetchWalletQr } from "../ui/funding_notice.js";
 
 const ABSENT = "—";
@@ -664,7 +664,7 @@ function createLifecycle() {
       calendar = createCalendar(calendarFetch);
       calendar.mount();
       updateNotice = createUpdateNotice(Utils);
-      statusCards = createStatusCards(Utils, () => SetupDialog.show());
+      statusCards = createStatusCards(Utils, openSetup);
       mountWalletIdentity();
       mountSparkRoom();
       mountExposure();
@@ -688,7 +688,7 @@ function createLifecycle() {
         updateNotice = createUpdateNotice(Utils);
       }
       if (!statusCards) {
-        statusCards = createStatusCards(Utils, () => SetupDialog.show());
+        statusCards = createStatusCards(Utils, openSetup);
       }
       if (!walletIdentityCleanup) {
         mountWalletIdentity();

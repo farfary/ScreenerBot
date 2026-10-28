@@ -149,7 +149,7 @@ test("an unavailable trader shows no control as on and offers setup", async () =
   }
 });
 
-test("the setup notice opens the setup dialog", async () => {
+test("the setup notice opens the setup wizard", async () => {
   const { tab, close } = await openTrader({
     variant: "empty",
     overrides: {
@@ -163,7 +163,7 @@ test("the setup notice opens the setup dialog", async () => {
     await setup.waitFor();
     assert.equal(await plainText(setup), "Complete setup");
     await setup.click();
-    await tab.locator(".setup-dialog").waitFor();
+    await tab.locator("body.initialization-mode #setupScreen").waitFor({ state: "visible" });
   } finally {
     await close();
   }

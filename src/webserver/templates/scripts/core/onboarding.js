@@ -68,6 +68,7 @@ class OnboardingControllerClass {
           } catch {
             // Without storage the reload opens on the first slide.
           }
+          window.SetupController?.keepOverDashboard?.("introduction");
         },
       });
     } catch (error) {
@@ -243,6 +244,8 @@ class OnboardingControllerClass {
 
     if (!onboardingScreen) return;
 
+    // Over the Explore Mode dashboard the introduction opens for the first time here.
+    this.init();
     if (setupWrapper) setupWrapper.style.display = "none";
     if (setupScreen) setupScreen.style.display = "none";
     onboardingScreen.style.display = "grid";

@@ -104,20 +104,16 @@ setup-wallet-copy-failed =
 
 ## Setup dialog
 
-setup-dialog-title = 지갑 및 RPC 설정
-setup-dialog-subtitle = Solana 지갑과 프리미엄 RPC 엔드포인트를 연결하면 거래와 실시간 온체인 데이터를 사용할 수 있습니다. 개인 키는 이 기기에서 암호화되며 외부로 전송되지 않습니다.
 setup-dialog-close =
     .title = 닫기
     .aria-label = 닫기
 setup-dialog-wallet-label = 지갑 개인 키
 setup-dialog-wallet-input =
     .placeholder = Base58 문자열 또는 JSON 배열 [1,2,3,...]
-setup-dialog-submit = 검증 및 연결
 setup-dialog-working = 처리 중…
 setup-dialog-validating = 검증 중…
 setup-dialog-saving = 저장 중…
 setup-dialog-restarting = 재시작 중…
-setup-dialog-saved = 설정이 저장되었습니다. { -brand }을 전체 모드로 재시작하는 중…
 setup-dialog-error-validation = 검증에 실패했습니다.
 setup-dialog-error-incomplete = 설정을 완료하지 못했습니다.
 setup-dialog-error-restart-helper = 자동 재시작 도우미를 사용할 수 없습니다. 잠시 후 대시보드를 새로 고치세요.

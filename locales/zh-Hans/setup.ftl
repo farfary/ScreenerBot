@@ -104,20 +104,16 @@ setup-wallet-copy-failed =
 
 ## Setup dialog
 
-setup-dialog-title = 设置钱包和 RPC
-setup-dialog-subtitle = 连接您的 Solana 钱包和高级 RPC 端点，以启用交易和链上实时数据。您的私钥会在此设备上加密，且不会离开此设备。
 setup-dialog-close =
     .title = 关闭
     .aria-label = 关闭
 setup-dialog-wallet-label = 钱包私钥
 setup-dialog-wallet-input =
     .placeholder = Base58 字符串或 JSON 数组 [1,2,3,...]
-setup-dialog-submit = 验证并连接
 setup-dialog-working = 处理中…
 setup-dialog-validating = 正在验证…
 setup-dialog-saving = 正在保存…
 setup-dialog-restarting = 正在重启…
-setup-dialog-saved = 设置已保存，正在以完整模式重启 { -brand }…
 setup-dialog-error-validation = 验证失败。
 setup-dialog-error-incomplete = 无法完成设置。
 setup-dialog-error-restart-helper = 自动重启助手不可用。请稍后重新加载仪表盘。

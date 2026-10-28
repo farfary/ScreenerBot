@@ -3,20 +3,19 @@
 //
 
 /**
- * Setup Dialog — the trading wallet (created here with its key saved, or imported)
- * and the RPC endpoints, as a modal.
+ * Setup Dialog — replaces the trading wallet from the Wallets page, as a modal: the new
+ * wallet (created here with its key saved, or imported) and, on your own RPC, the RPC
+ * endpoints.
  *
- * Setup mode completes setup from Explore Mode (header banner / config tab) without
- * the full-screen wizard, on your own RPC: it validates via
- * /api/initialization/validate and persists via /api/initialization/complete. Replace
- * mode replaces the trading wallet from the Wallets page: it first states what the
- * replacement stops, moves and keeps, then validates the same way, under the current
- * connection, and stages the replacement via /api/wallets/replace. On your own RPC
- * its RPC field may stay empty to keep the configured endpoints; on the ScreenerBot
- * service it has none. Both restart the app and reload into it. A created key lives
- * only in the backup panel and is dropped when the dialog closes.
+ * It first states what the replacement stops, moves and keeps, then validates via
+ * /api/initialization/validate under the current connection and stages the replacement
+ * via /api/wallets/replace. On your own RPC the RPC field may stay empty to keep the
+ * configured endpoints; on the ScreenerBot service it has none. The app restarts and
+ * reloads into it. A created key lives only in the backup panel and is dropped when the
+ * dialog closes. Setup from Explore Mode is the full-screen wizard
+ * (`SetupController.openOverDashboard`), never this dialog.
  *
- * Usage: SetupDialog.show({ mode }) -> Promise<boolean> (true if the dialog finished).
+ * Usage: SetupDialog.show() -> Promise<boolean> (true if the dialog finished).
  */
 import { pushEscapeHandler } from "../core/escape_stack.js";
 import { apiErrorMessage } from "../core/request_manager.js";
@@ -38,59 +37,29 @@ const confirmStep = ({ rpc }) => `
   </div>
 `;
 
-// What each mode shows and where it saves the validated credentials.
-const MODES = Object.freeze({
-  setup: Object.freeze({
-    icon: "icon-key-round",
-    title: () => I18n.t("setup-dialog-title"),
-    subtitle: () => I18n.t("setup-dialog-subtitle"),
-    submit: () => I18n.t("setup-dialog-submit"),
-    saved: () => I18n.t("setup-dialog-saved"),
-    endpoint: "/api/initialization/complete",
-    confirm: false,
-    replacesWallet: false,
-    rpcOptional: false,
-  }),
-  replace: Object.freeze({
-    icon: "icon-replace",
-    title: () => I18n.t("setup-dialog-replace-title"),
-    subtitle: () => I18n.t("setup-dialog-replace-subtitle"),
-    submit: () => I18n.t("setup-dialog-replace-submit"),
-    saved: () => I18n.t("setup-dialog-replace-saved"),
-    endpoint: "/api/wallets/replace",
-    confirm: true,
-    replacesWallet: true,
-    // An empty RPC field keeps the configured endpoints.
-    rpcOptional: true,
-  }),
-});
-
 class SetupDialog {
   static activeDialog = null;
 
-  static async show({ mode = "setup" } = {}) {
+  static async show() {
     if (SetupDialog.activeDialog) {
       SetupDialog.activeDialog.destroy();
     }
     return new Promise((resolve) => {
-      const dialog = new SetupDialog(resolve, MODES[mode] || MODES.setup);
+      const dialog = new SetupDialog(resolve);
       SetupDialog.activeDialog = dialog;
       dialog.render();
     });
   }
 
-  constructor(resolver, mode) {
+  constructor(resolver) {
     this.resolver = resolver;
-    this.mode = mode;
     this.backdrop = null;
     this.element = null;
     this.busy = false;
     this.requestAbort = null;
     this.releaseEscape = null;
-    // Setup from Explore Mode is on your own RPC; a replacement keeps the current connection.
-    this.access = mode.replacesWallet
-      ? getBootstrapState().status?.chain_access?.mode || "own_rpc"
-      : "own_rpc";
+    // A replacement keeps the current connection.
+    this.access = getBootstrapState().status?.chain_access?.mode || "own_rpc";
   }
 
   render() {
@@ -111,7 +80,7 @@ class SetupDialog {
       <div class="setup-dialog-header">
         <div>
           <h2 class="setup-dialog-title" id="setup-dialog-title">
-            <i class="${this.mode.icon}" aria-hidden="true"></i>
+            <i class="icon-replace" aria-hidden="true"></i>
             <span></span>
           </h2>
           <p class="setup-dialog-subtitle"></p>
@@ -123,8 +92,8 @@ class SetupDialog {
       </div>
 
       <div class="setup-dialog-body">
-        ${this.mode.confirm ? confirmStep({ rpc: this.access !== "service" }) : ""}
-        <div class="setup-dialog-fields"${this.mode.confirm ? " hidden" : ""}>
+        ${confirmStep({ rpc: this.access !== "service" })}
+        <div class="setup-dialog-fields" hidden>
           <div class="setup-dialog-source"></div>
           <div class="setup-dialog-backup" hidden></div>
           <div class="setup-dialog-wallet" hidden></div>
@@ -140,11 +109,14 @@ class SetupDialog {
         <button type="button" class="btn btn-primary" data-action="submit"></button>
       </div>
     `;
-    this.element.querySelector("#setup-dialog-title span").textContent = this.mode.title();
-    this.element.querySelector(".setup-dialog-subtitle").textContent = this.mode.subtitle();
-    this.element.querySelector('[data-action="submit"]').textContent = this.mode.confirm
-      ? I18n.t("common-action-continue")
-      : this.mode.submit();
+    this.element.querySelector("#setup-dialog-title span").textContent = I18n.t(
+      "setup-dialog-replace-title"
+    );
+    this.element.querySelector(".setup-dialog-subtitle").textContent = I18n.t(
+      "setup-dialog-replace-subtitle"
+    );
+    this.element.querySelector('[data-action="submit"]').textContent =
+      I18n.t("common-action-continue");
 
     this.backdrop.appendChild(this.element);
     I18n.localizeTree(this.element);
@@ -165,9 +137,8 @@ class SetupDialog {
     this.rpcField =
       this.access === "service"
         ? null
-        : runtime.mountRpcField(part("rpc"), "setup-dialog-", {
-            rpcOptional: this.mode.rpcOptional,
-          });
+        : // An empty RPC field keeps the configured endpoints.
+          runtime.mountRpcField(part("rpc"), "setup-dialog-", { rpcOptional: true });
     part("rpc").hidden = !this.rpcField;
     this.statusEl = this.element.querySelector("#setup-dialog-status");
     this.submitBtn = this.element.querySelector('[data-action="submit"]');
@@ -177,7 +148,7 @@ class SetupDialog {
         if (!this.busy) this.close(false);
       })
     );
-    this.confirmed = !this.mode.confirm;
+    this.confirmed = false;
     this.element
       .querySelector('[data-action="submit"]')
       .addEventListener("click", () => (this.confirmed ? this.submit() : this.showCredentials()));
@@ -187,7 +158,6 @@ class SetupDialog {
       if (!this.busy) this.close(false);
     });
     this.updateSubmit();
-    if (this.confirmed) setTimeout(() => this.source.focus(), 50);
   }
 
   onWalletSourceChanged(value) {
@@ -214,7 +184,7 @@ class SetupDialog {
     this.confirmed = true;
     this.element.querySelector(".setup-dialog-confirm")?.setAttribute("hidden", "");
     this.element.querySelector(".setup-dialog-fields")?.removeAttribute("hidden");
-    this.submitBtn.textContent = this.mode.submit();
+    this.submitBtn.textContent = I18n.t("setup-dialog-replace-submit");
     this.updateSubmit();
     this.source.focus();
   }
@@ -232,7 +202,7 @@ class SetupDialog {
       this.submitBtn.disabled = busy;
       this.submitBtn.textContent = busy
         ? label || I18n.t("setup-dialog-working")
-        : this.mode.submit();
+        : I18n.t("setup-dialog-replace-submit");
     }
     if (!busy) this.updateSubmit();
   }
@@ -284,7 +254,7 @@ class SetupDialog {
       }
 
       this.setBusy(true, I18n.t("setup-dialog-saving"));
-      const completeRes = await fetch(this.mode.endpoint, {
+      const completeRes = await fetch("/api/wallets/replace", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -310,7 +280,7 @@ class SetupDialog {
       // The key is stored encrypted now; nothing in the dialog keeps it.
       this.backup.clear();
       this.walletField.clear();
-      this.setStatus("success", this.mode.saved());
+      this.setStatus("success", I18n.t("setup-dialog-replace-saved"));
       this.submitBtn.textContent = I18n.t("setup-dialog-restarting");
 
       const waitForRestart = window.waitForScreenerBotRestart;

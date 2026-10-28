@@ -556,5 +556,5 @@ test("the status cards render running, stopped with absent figures, and setup re
   assert.deepEqual(gated.ledgers, [true, true], "an unavailable card shows no figures");
   assert.deepEqual(gated.setups, [false, false], "an unavailable card offers setup");
   await unavailable.click("#homeTraderStatus [data-status-setup]");
-  await unavailable.waitForSelector(".setup-dialog, [data-dialog=setup], .dialog-overlay");
+  await unavailable.waitForSelector("body.initialization-mode #setupScreen", { state: "visible" });
 });

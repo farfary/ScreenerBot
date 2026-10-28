@@ -258,9 +258,10 @@ export function renderTokenCell(mint, { symbol = null, name = null, logoUrl = nu
 
 /**
  * A table's token column with row controls: logo, the symbol line (plus `badges`
- * markup beside the symbol), the name line (plus `tags` markup after the name), an
- * optional `caption` line, and `actions` (icon buttons) revealed on row hover or
- * focus over the end of the cell. `actionCount` sizes the space the identity yields
+ * markup beside the symbol), the name line (plus `tags` markup after the name), and
+ * `actions` (icon buttons) revealed on row hover or focus over the end of the cell.
+ * A `caption` (a live state such as Closing) takes the name line's place, so the
+ * cell keeps two lines and fits the table's uniform row height. `actionCount` sizes the space the identity yields
  * to them. Fields the row carries win over the identity cache.
  */
 export function renderTokenRowCell(
@@ -290,8 +291,7 @@ export function renderTokenRowCell(
       ${renderTokenLogo(identity, { size: "table", enlarge: enlargeLogo })}
       <div class="ti-row-cell__meta">
         <div class="ti-row-cell__line"><span class="ti-row-cell__symbol token-symbol-type" data-field="symbol">${Utils.escapeHtml(identity.symbol || "—")}</span>${badges}</div>
-        ${shownName || tags ? `<div class="ti-row-cell__line ti-row-cell__sub"><span class="ti-row-cell__name" data-field="name">${Utils.escapeHtml(shownName)}</span>${tags}</div>` : ""}
-        ${caption}
+        ${caption || (shownName || tags ? `<div class="ti-row-cell__line ti-row-cell__sub"><span class="ti-row-cell__name" data-field="name">${Utils.escapeHtml(shownName)}</span>${tags}</div>` : "")}
       </div>
     </div>
     ${actions ? `<div class="row-actions ti-row-cell__actions">${actions}</div>` : ""}

@@ -26,9 +26,10 @@
   white-space: nowrap;
 }
 
+/* As wide as the longest value label (set by the chart), which is positioned out of flow. */
 .inline-chart-y {
   position: relative;
-  min-width: 7ch;
+  min-width: calc(var(--inline-chart-y-chars, 7) * 1ch);
 }
 
 .inline-chart-y span {

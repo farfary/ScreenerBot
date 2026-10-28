@@ -29,6 +29,10 @@
 
   const STEP = Object.freeze({ wallet: 1, connection: 2, verify: 3, ready: 4 });
 
+  // The first-run screen open over the Explore Mode dashboard when the display language
+  // changed, reopened after the reload: "setup" or "introduction".
+  const OVER_DASHBOARD_KEY = "screenerbot.setup.overDashboard";
+
   // Service states the error bar answers with a second action: use your own RPC.
   const OWN_RPC_REMEDY_STATES = new Set(["busy", "daily_limit"]);
   // Service states that clear by trying again, as opposed to by changing the account.
@@ -59,6 +63,7 @@
       this.fundingAddress = null;
       this.stopFundingWatch = null;
       this.languagePicker = null;
+      this.overDashboard = false;
     }
 
     init() {
@@ -154,7 +159,10 @@
       if (!host) return;
       try {
         const { mountLanguagePicker } = await import(`/scripts/ui/language_picker.js${ASSET_QUERY}`);
-        this.languagePicker = mountLanguagePicker(host, { locked: () => this.languageLocked() });
+        this.languagePicker = mountLanguagePicker(host, {
+          locked: () => this.languageLocked(),
+          beforeReload: () => this.keepOverDashboard("setup"),
+        });
       } catch (error) {
         console.error("[Setup] Language picker failed to load:", error);
       }
@@ -259,6 +267,9 @@
 
     /** Step 1 shows either the source choice or the chosen source's detail. */
     showWalletView(detail) {
+      // The detail of a created wallet always holds one: a key dropped on the way
+      // out of setup is replaced when the step is shown again.
+      if (detail && this.walletSource === "create") this.backup.ensureGenerated();
       this.walletDetail = detail;
       this.sourceEl.hidden = detail;
       this.backupEl.hidden = !(detail && this.walletSource === "create");
@@ -344,10 +355,74 @@
       this.setStep(STEP.connection, { focusHeading: true });
     }
 
-    /** Leaving setup without finishing it drops a created key and a typed one. */
+    /**
+     * Opens the wizard over the Explore Mode dashboard, on an unchosen wallet source:
+     * the same full-screen flow as the first run. Back leads to the introduction, the
+     * Explore action returns to the dashboard, which stays loaded underneath, and saving
+     * setup restarts into the full app.
+     */
+    openOverDashboard() {
+      this.overDashboard = true;
+      document.body.classList.add("initialization-mode");
+      const onboarding = document.getElementById("onboardingScreen");
+      if (onboarding) onboarding.style.display = "none";
+      document.getElementById("setupScreenWrapper").style.display = "block";
+      document.getElementById("setupScreen").style.display = "grid";
+      if (!this.initialized) {
+        this.init();
+        return;
+      }
+      this.leaveWithoutWallet();
+      this.resetVerificationStates();
+      this.showWalletView(false);
+      this.setStep(STEP.wallet, { focusHeading: true });
+    }
+
+    /** Closes the wizard, or the introduction behind it, back to the Explore Mode dashboard. */
+    closeOverDashboard() {
+      this.leaveWithoutWallet();
+      ["setupScreenWrapper", "setupScreen", "onboardingScreen"].forEach((id) => {
+        const element = document.getElementById(id);
+        if (element) element.style.display = "none";
+      });
+      document.body.classList.remove("initialization-mode");
+    }
+
+    /** Remembers which first-run screen is open over the dashboard across a language reload. */
+    keepOverDashboard(view) {
+      if (!this.overDashboard) return;
+      try {
+        window.sessionStorage.setItem(OVER_DASHBOARD_KEY, view);
+      } catch {
+        // Without storage the reload returns to the dashboard.
+      }
+    }
+
+    /** Reopens the first-run screen a language reload closed over the dashboard. */
+    resumeOverDashboard() {
+      let view = null;
+      try {
+        view = window.sessionStorage.getItem(OVER_DASHBOARD_KEY);
+        window.sessionStorage.removeItem(OVER_DASHBOARD_KEY);
+      } catch {
+        return;
+      }
+      if (view !== "setup" && view !== "introduction") return;
+      this.openOverDashboard();
+      if (view === "introduction") window.OnboardingController?.showFromSetup();
+    }
+
+    /**
+     * Leaving setup without finishing it drops a created key and a typed one, and
+     * the source choice with them: setup reopens on an unchosen source, with Continue
+     * waiting for one.
+     */
     leaveWithoutWallet() {
       this.backup?.clear();
       this.walletField?.clear();
+      this.source?.clear();
+      this.walletSource = null;
+      this.updateButtons();
     }
 
     onRetry() {
@@ -615,6 +690,10 @@
     async enterExploreMode() {
       if (this.verificationBusy) return;
       this.hideError();
+      if (this.overDashboard) {
+        this.closeOverDashboard();
+        return;
+      }
       this.exploreBtn.disabled = true;
       // Only the label changes, so the button keeps its glyph through a failure.
       const label = this.exploreBtn.querySelector("span");

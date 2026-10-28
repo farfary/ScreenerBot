@@ -243,10 +243,11 @@ body.trade-action-dialog-open {
 }
 
 /* The funding notice (ui/funding_notice.js) under the balance of a wallet without SOL,
-   and the Explore Mode access gate (ui/access_gate.js) in its place. */
+   and the Explore Mode access notice (ui/access_gate.js) in its place, each clear of
+   the figures above it. */
 .trade-action-funding,
 .trade-action-setup {
-  padding: 0 var(--spacing-md) var(--spacing-md);
+  padding: var(--spacing-md);
 }
 
 .trade-action-context-item {
@@ -423,24 +424,29 @@ body.trade-action-dialog-open {
   color: var(--text-secondary);
 }
 
+/* The wrapper is the field: the amount, its unit and Max sit side by side, so a
+   longer unit or Max label in any locale takes room instead of covering the text. */
 .trade-action-input-wrapper {
-  position: relative;
   display: flex;
   align-items: center;
-}
-
-.trade-action-input {
-  width: 100%;
-  padding: 14px 16px;
-  padding-inline-end: 104px;
+  gap: 8px;
+  padding-inline-end: 10px;
   background: rgb(0, 0, 0, 0.3);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md, 6px);
+  transition: all var(--transition-fast);
+}
+
+.trade-action-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 14px 16px;
+  background: transparent;
+  border: 0;
   color: var(--text-primary);
   font-size: 1rem;
   font-weight: 600;
   font-family: var(--font-data, monospace);
-  transition: all var(--transition-fast);
 }
 
 .trade-action-input::placeholder {
@@ -448,26 +454,27 @@ body.trade-action-dialog-open {
   font-weight: 400;
 }
 
-.trade-action-input:focus {
+.trade-action-input-wrapper:focus-within {
   border-color: var(--action-color);
   background: rgb(0, 0, 0, 0.4);
   box-shadow: 0 0 0 3px var(--action-color-light);
-  outline: none;
 }
 
-.trade-action-input.error {
+.trade-action-input-wrapper:has(.trade-action-input.error) {
   border-color: var(--error-color);
   background: rgb(239, 68, 68, 0.05);
 }
 
-.trade-action-input:disabled {
+.trade-action-input-wrapper:has(.trade-action-input:disabled) {
   opacity: 0.5;
+}
+
+.trade-action-input:disabled {
   cursor: not-allowed;
 }
 
 .trade-action-input-suffix {
-  position: absolute;
-  inset-inline-end: 62px;
+  flex: none;
   font-size: 0.8125rem;
   font-weight: 600;
   color: var(--text-secondary);
@@ -1090,19 +1097,17 @@ body.trade-action-dialog-open {
   background: var(--bg-card-hover);
 }
 
-[data-theme="light"] .trade-action-input {
+[data-theme="light"] .trade-action-input-wrapper {
   background: var(--bg-card-hover);
 }
 
 /* ============================================================
    REDESIGN: combined amount controls + multi-level swap preview
-   (dialog width, input padding-right, and suffix offset are set in
-   their original rules above to make room for the MAX button)
    ============================================================ */
 
 .trade-action-input-max {
-  position: absolute;
-  inset-inline-end: 10px;
+  flex: none;
+  white-space: nowrap;
   padding: 5px 10px;
   font-size: 0.68rem;
   font-weight: 700;

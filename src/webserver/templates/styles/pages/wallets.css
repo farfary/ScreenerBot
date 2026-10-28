@@ -67,10 +67,11 @@
   display: none;
 }
 
-/* A main wallet without SOL: the funding notice above its holdings, inset like the setup notice. */
+/* A main wallet without SOL: the funding notice above its holdings, inset like the setup notice
+   on every side, so it never sits flush on the holdings toolbar. */
 .wallets-funding {
   flex-shrink: 0;
-  margin: var(--spacing-lg) var(--spacing-lg) 0;
+  margin: var(--spacing-lg);
 }
 
 .wallets-funding[hidden] {

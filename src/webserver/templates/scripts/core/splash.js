@@ -164,8 +164,11 @@ class SplashController {
         this.showSetup();
         break;
       case "dashboard":
-        // Remove initialization-mode to show dashboard
-        document.body.classList.remove("initialization-mode");
+        // Remove initialization-mode to show the dashboard, unless the router already
+        // reopened setup over it after a language reload.
+        if (!window.SetupController?.overDashboard) {
+          document.body.classList.remove("initialization-mode");
+        }
         break;
     }
 

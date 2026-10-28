@@ -113,20 +113,16 @@ setup-wallet-copy-failed =
 
 ## Setup dialog
 
-setup-dialog-title = Налаштування гаманця та RPC
-setup-dialog-subtitle = Підключіть свій гаманець Solana та преміальний RPC-ендпоінт, щоб увімкнути торгівлю й ончейн-дані в реальному часі. Ваш приватний ключ шифрується на цьому пристрої й ніколи його не залишає.
 setup-dialog-close =
     .title = Закрити
     .aria-label = Закрити
 setup-dialog-wallet-label = Приватний ключ гаманця
 setup-dialog-wallet-input =
     .placeholder = Рядок base58 або масив JSON [1,2,3,...]
-setup-dialog-submit = Перевірити й підключити
 setup-dialog-working = Виконується…
 setup-dialog-validating = Перевірка…
 setup-dialog-saving = Збереження…
 setup-dialog-restarting = Перезапуск…
-setup-dialog-saved = Налаштування збережено — перезапуск { -brand } у повному режимі…
 setup-dialog-error-validation = Перевірка не вдалася.
 setup-dialog-error-incomplete = Не вдалося завершити налаштування.
 setup-dialog-error-restart-helper = Помічник автоматичного перезапуску недоступний. Незабаром перезавантажте панель керування.

@@ -64,18 +64,17 @@
 
 /* ===========================================================================
    Live row state — tint + caption
-   An in-flight or failed row carries a faint tint and a caption under the token
-   symbol; a healthy open row carries neither. The tint is the row's
+   An in-flight or failed row carries a faint tint and a caption in place of the
+   token name; a healthy open row carries neither. The tint is the row's
    `--dt-row-wash` (DataTable core), layered over zebra and hover surfaces and
    painted by the pinned cells too.
    =========================================================================== */
 
-/* Compact state caption under the token symbol (active states only) */
+/* Compact state caption on the name line (active states only) */
 .pos-state-caption {
   display: flex;
   align-items: center;
   gap: 5px;
-  margin-top: 2px;
   font-size: 0.72rem;
   font-weight: 600;
   line-height: 1.2;

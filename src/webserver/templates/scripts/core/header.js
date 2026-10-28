@@ -6,6 +6,7 @@ import { loadPage } from "./router.js";
 import * as Utils from "./utils.js";
 import { notificationManager } from "./notifications.js";
 import * as NotificationPanel from "../ui/notification_panel.js";
+import { openSetup } from "../ui/access_gate.js";
 import { subscribeToBootstrap, whenInitialized } from "./bootstrap.js";
 import { createHeaderMetrics } from "./header_metrics.js";
 import { showSettingsDialog } from "../ui/settings_dialog.js";
@@ -14,7 +15,6 @@ import { attachNavMoreMenu } from "../ui/nav_more_menu.js";
 import { dirSign } from "./dom.js";
 import { Poller } from "./poller.js";
 import { requestManager } from "./request_manager.js";
-import { SetupDialog } from "../ui/setup_dialog.js";
 import { playToggleOn, playToggleOff, playError } from "./sounds.js";
 // Side-effect import: registers the `screenerbot:open-token-details` window
 // listener so the SOL price card (and any header control) can open the dialog.
@@ -97,11 +97,6 @@ function setLoading(isLoading) {
   headerMetrics?.syncBotControlState();
 }
 
-// Open the wallet + RPC setup dialog so the user can complete setup from Explore Mode
-// without leaving the current page. On success the dialog reloads into full mode.
-function openSetupWizard() {
-  SetupDialog.show();
-}
 
 // How often the header reads the chain connection while it runs on the ScreenerBot service.
 const ACCESS_POLL_MS = 10000;
@@ -130,7 +125,7 @@ function accessControlView(status) {
       detail: I18n.t("shell-explore-detail"),
       action: I18n.t("shell-explore-action"),
       label: I18n.attr("shell-explore-control", "aria-label"),
-      open: openSetupWizard,
+      open: openSetup,
     };
   }
   const chain = access.status;
@@ -481,7 +476,7 @@ function initCardHandlers() {
       if (!state.available || state.loading) return;
 
       if (state.traderStatus === "explore") {
-        openSetupWizard();
+        openSetup();
         return;
       }
       if (["force_stopped", "idle", "entry_paused"].includes(state.traderStatus)) {
