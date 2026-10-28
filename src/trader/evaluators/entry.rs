@@ -35,8 +35,11 @@ fn wanted_modes(strategies: &[Strategy]) -> Vec<TradingMode> {
 /// The inputs every token of one entry cycle is admitted and evaluated against, read
 /// once for the cycle: the enabled entry strategies, a SQLite read run on the blocking
 /// pool, the modes they want, and the paper cash when paper is wanted. A failed read
-/// leaves the cycle without strategies, so no token of it signals an entry.
+/// leaves the cycle without strategies, so no token of it signals an entry. The read time
+/// is taken before the store read, so a rules change committed during it is later than the
+/// time every decision of the cycle carries.
 pub async fn entry_cycle() -> EntryCycle {
+    let strategies_read_at = chrono::Utc::now();
     let strategies = match get_enabled_strategies_async(StrategyType::Entry).await {
         Ok(strategies) => strategies,
         Err(error) => {
@@ -47,7 +50,7 @@ pub async fn entry_cycle() -> EntryCycle {
             Vec::new()
         }
     };
-    EntryCycle::read(wanted_modes(&strategies), strategies).await
+    EntryCycle::read_at(strategies_read_at, wanted_modes(&strategies), strategies).await
 }
 
 /// Evaluate entry opportunity for a token on the `books` it is evaluated on
@@ -167,6 +170,7 @@ pub async fn evaluate_entry_for_token(
         price_info,
         &admitted,
         cycle.entry_strategies(),
+        cycle.strategies_read_at(),
     )
     .await
 }
@@ -196,6 +200,7 @@ mod tests {
             version: 1,
             entry_strategy_ids: Vec::new(),
             mode,
+            rules_changed_at: chrono::Utc::now(),
         }
     }
 
@@ -220,7 +225,8 @@ mod tests {
             entry_strategy("first", TradingMode::Live),
             entry_strategy("second", TradingMode::Paper),
         ];
-        let cycle = EntryCycle::read(vec![TradingMode::Live], strategies).await;
+        let read_at = chrono::Utc::now() - chrono::Duration::seconds(5);
+        let cycle = EntryCycle::read_at(read_at, vec![TradingMode::Live], strategies).await;
         let ids: Vec<&str> = cycle
             .entry_strategies()
             .iter()
@@ -228,6 +234,7 @@ mod tests {
             .collect();
         assert_eq!(ids, ["first", "second"]);
         assert_eq!(cycle.wanted(), [TradingMode::Live]);
+        assert_eq!(cycle.strategies_read_at(), read_at);
     }
 
     #[tokio::test]

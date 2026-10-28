@@ -5,6 +5,7 @@
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 
 use crate::i18n::UiText;
@@ -12,6 +13,7 @@ use crate::i18n::UiText;
 use crate::ohlcvs::TimeframeBundle;
 use crate::tokens::Token;
 use crate::trader::paper::TradingMode;
+use crate::utils::canonical_json::canonicalize;
 
 /// Strategy type classification
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -74,6 +76,11 @@ pub struct Strategy {
     pub entry_strategy_ids: Vec<String>,
     /// Paper strategies trade the paper book; only live ones open or close real trades.
     pub mode: TradingMode,
+    /// When the rules last changed: the moment [`Strategy::rules_fingerprint`] took its
+    /// stored value. Written only by the strategies store: an insert stamps the creation
+    /// time and an update the moment the fingerprint changed; the value on a `Strategy`
+    /// handed to an insert or an update is ignored.
+    pub rules_changed_at: DateTime<Utc>,
 }
 
 impl Strategy {
@@ -111,12 +118,121 @@ impl Strategy {
         self.enabled && self.mode == mode
     }
 
+    /// What the strategy decides on, as one value: its type, timeframe and rule tree (each
+    /// node's operator, child order and `disabled` flag, each condition's type and each
+    /// parameter's value), and for an exit strategy the set of entry strategies it
+    /// manages. Name, description, priority, on/off, mode, author, version, timestamps,
+    /// the strategy-level parameter map and a parameter's default and constraints are
+    /// not part of it. The `1:` prefix names this projection; a different projection takes
+    /// a new prefix.
+    pub fn rules_fingerprint(&self) -> String {
+        let mut projection = serde_json::Map::new();
+        projection.insert(
+            "type".to_owned(),
+            serde_json::Value::String(self.strategy_type.to_string()),
+        );
+        projection.insert(
+            "timeframe".to_owned(),
+            serde_json::Value::String(self.timeframe.clone()),
+        );
+        projection.insert("rules".to_owned(), rule_projection(&self.rules));
+        if self.strategy_type == StrategyType::Exit {
+            let mut managed: Vec<&str> =
+                self.entry_strategy_ids.iter().map(String::as_str).collect();
+            managed.sort_unstable();
+            managed.dedup();
+            projection.insert("manages".to_owned(), serde_json::json!(managed));
+        }
+        let canonical = canonicalize(&serde_json::Value::Object(projection));
+        format!(
+            "{RULES_FINGERPRINT_FORMAT}:{:x}",
+            Sha256::digest(canonical.as_bytes())
+        )
+    }
+
+    /// Whether a decision taken on inputs read at `decided_at` was taken under the rules
+    /// this strategy holds now: its rules did not change after that moment.
+    pub fn decided_under_current_rules(&self, decided_at: DateTime<Utc>) -> bool {
+        self.rules_changed_at <= decided_at
+    }
+
     /// Whether this exit strategy manages a position opened by `entry_strategy_id`
     /// (`None` for a position no entry strategy opened).
     pub fn manages(&self, entry_strategy_id: Option<&str>) -> bool {
         self.entry_strategy_ids.is_empty()
             || entry_strategy_id
                 .is_some_and(|id| self.entry_strategy_ids.iter().any(|bound| bound == id))
+    }
+}
+
+/// The projection format [`Strategy::rules_fingerprint`] hashes.
+const RULES_FINGERPRINT_FORMAT: &str = "1";
+
+/// The largest magnitude up to which every integer is exactly an `f64`: 2^53.
+const EXACT_INTEGER_LIMIT: f64 = 9_007_199_254_740_992.0;
+
+/// The part of a rule tree that decides: operator, children in order, the `disabled` flag,
+/// and each condition's type and parameter values.
+fn rule_projection(tree: &RuleTree) -> serde_json::Value {
+    let mut node = serde_json::Map::new();
+    if let Some(operator) = tree.operator {
+        node.insert("operator".to_owned(), serde_json::json!(operator));
+    }
+    if let Some(children) = &tree.conditions {
+        node.insert(
+            "children".to_owned(),
+            serde_json::Value::Array(children.iter().map(rule_projection).collect()),
+        );
+    }
+    if let Some(condition) = &tree.condition {
+        let parameters: serde_json::Map<String, serde_json::Value> = condition
+            .parameters
+            .iter()
+            .map(|(name, parameter)| (name.clone(), value_projection(&parameter.value)))
+            .collect();
+        node.insert(
+            "condition".to_owned(),
+            serde_json::json!({
+                "type": condition.condition_type,
+                "parameters": parameters,
+            }),
+        );
+    }
+    node.insert(
+        "disabled".to_owned(),
+        serde_json::Value::Bool(tree.disabled),
+    );
+    serde_json::Value::Object(node)
+}
+
+/// `value` with every number in one form, so equal numbers compare equal: an integral
+/// value within ±2^53 as an integer, any other as its shortest round-trip `f64`.
+fn value_projection(value: &serde_json::Value) -> serde_json::Value {
+    match value {
+        serde_json::Value::Number(number) => {
+            let exact_integer = number
+                .as_i64()
+                .filter(|integer| integer.unsigned_abs() <= EXACT_INTEGER_LIMIT as u64);
+            match (exact_integer, number.as_f64()) {
+                (Some(integer), _) => serde_json::Value::from(integer),
+                (None, Some(float))
+                    if float.fract() == 0.0 && float.abs() <= EXACT_INTEGER_LIMIT =>
+                {
+                    serde_json::Value::from(float as i64)
+                }
+                (None, Some(float)) => serde_json::Value::from(float),
+                (None, None) => value.clone(),
+            }
+        }
+        serde_json::Value::Array(items) => {
+            serde_json::Value::Array(items.iter().map(value_projection).collect())
+        }
+        serde_json::Value::Object(map) => serde_json::Value::Object(
+            map.iter()
+                .map(|(key, item)| (key.clone(), value_projection(item)))
+                .collect(),
+        ),
+        other => other.clone(),
     }
 }
 
@@ -358,14 +474,16 @@ pub struct RuleOutcome {
     pub children: Vec<RuleOutcome>,
 }
 
-/// Performance tracking for strategies
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct StrategyPerformance {
-    pub strategy_id: String,
-    pub total_evaluations: u64,
-    pub successful_signals: u64,
-    pub avg_execution_time_ms: f64,
-    pub last_evaluation: DateTime<Utc>,
+/// Every evaluation recorded for one strategy, summed. An evaluation is one decided
+/// answer, signal or none, that a monitor used; a signal is an evaluation answered true.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct EvaluationTotals {
+    pub evaluations: u64,
+    pub signals: u64,
+    /// The evaluation time of every evaluation, in milliseconds.
+    pub total_exec_ms: u64,
+    pub last_evaluated_at: Option<DateTime<Utc>>,
+    pub last_signal_at: Option<DateTime<Utc>>,
 }
 
 /// Strategy template for quick creation
@@ -400,3 +518,7 @@ impl std::fmt::Display for RiskLevel {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "types_tests.rs"]
+mod tests;

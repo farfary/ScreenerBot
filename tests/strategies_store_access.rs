@@ -86,7 +86,7 @@ const SYNCHRONOUS_STORE_CALLS: &[&str] = &[
     "update_strategy(",
     "set_strategy_mode(",
     "delete_strategy(",
-    "get_strategy_performance(",
+    "get_strategies_with_totals(",
 ];
 
 /// Every strategy route, the overview and readiness reads behind them, the arming flow its

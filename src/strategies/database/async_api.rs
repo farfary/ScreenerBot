@@ -26,7 +26,7 @@ pub async fn insert_strategy_async(strategy: &Strategy) -> crate::Result<()> {
 }
 
 /// [`super::update_strategy`] on the blocking pool.
-pub async fn update_strategy_async(strategy: &Strategy) -> crate::Result<()> {
+pub async fn update_strategy_async(strategy: &Strategy) -> crate::Result<bool> {
     let strategy = strategy.clone();
     on_blocking_pool(move || super::update_strategy(&strategy)).await
 }
@@ -52,6 +52,11 @@ pub async fn get_strategy_async(strategy_id: &str) -> crate::Result<Option<Strat
 /// [`super::get_all_strategies`] on the blocking pool.
 pub async fn get_all_strategies_async() -> crate::Result<Vec<Strategy>> {
     on_blocking_pool(super::get_all_strategies).await
+}
+
+/// [`super::get_strategies_with_totals`] on the blocking pool.
+pub async fn get_strategies_with_totals_async() -> crate::Result<super::StrategiesWithTotals> {
+    on_blocking_pool(super::get_strategies_with_totals).await
 }
 
 /// [`super::get_enabled_strategies`] on the blocking pool.

@@ -425,6 +425,16 @@ async fn buy(
     if let Err(result) = cash_covering(decision, io, book, wallet, fill.total_cost_sol).await {
         return Ok(result);
     }
+    // The intent is read again right before booking: a strategy whose rules changed, or a
+    // copy task that stopped, while the quote was taken books no round.
+    if !io.still_wanted(decision, &context.origin).await {
+        return Ok(refused(
+            decision,
+            TradeStep::Validation,
+            PaperRefusal::NotWanted,
+            "paper buy is no longer wanted".to_owned(),
+        ));
+    }
 
     let opening = Opening {
         mint: decision.mint.clone(),

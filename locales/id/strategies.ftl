@@ -616,6 +616,11 @@ strategies-error-rule-not-operator-cannot-have-a-switched-off-child = Operator N
 strategies-error-rule-rules-nest-deeper-than-four-levels = Aturan tidak boleh bersarang lebih dari empat tingkat
 strategies-error-rule-the-root-group-cannot-be-switched-off = Grup akar tidak dapat dimatikan
 
+strategies-readiness-history-since-met =
+    { $count ->
+       *[other] { $count } putaran paper tertutup sejak aturan diubah pada { $changed }, dibutuhkan { $needed }
+    }
+strategies-readiness-history-since-short = { $count } dari { $needed } putaran paper tertutup sejak aturan diubah pada { $changed }
 strategies-readiness-priced = Setiap posisi memiliki harga
 strategies-readiness-priced-ok = Setiap posisi paper yang terbuka memiliki harga pool
 strategies-readiness-priced-missing =

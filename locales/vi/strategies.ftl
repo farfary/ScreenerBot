@@ -614,6 +614,11 @@ strategies-error-rule-not-operator-cannot-have-a-switched-off-child = Toán tử
 strategies-error-rule-rules-nest-deeper-than-four-levels = Các quy tắc không được lồng sâu hơn bốn cấp
 strategies-error-rule-the-root-group-cannot-be-switched-off = Nhóm gốc không thể bị tắt
 
+strategies-readiness-history-since-met =
+    { $count ->
+       *[other] { $count } vòng thử nghiệm đã đóng kể từ khi quy tắc thay đổi lúc { $changed }, cần { $needed }
+    }
+strategies-readiness-history-since-short = { $count }/{ $needed } vòng thử nghiệm đã đóng kể từ khi quy tắc thay đổi lúc { $changed }
 strategies-readiness-priced = Mọi vị thế đều có giá
 strategies-readiness-priced-ok = Mọi vị thế thử nghiệm đang mở đều có giá pool
 strategies-readiness-priced-missing =

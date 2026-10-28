@@ -11,12 +11,14 @@ use crate::database::schema::{ddl, SchemaContext, StoreSchema};
 use crate::database::{self, WriteTransaction};
 use crate::errors::{DatabaseError, Error};
 use crate::logger::{self, LogTag};
-use crate::strategies::types::{EvaluationResult, Strategy, StrategyPerformance, StrategyType};
+use crate::strategies::types::{EvaluationResult, EvaluationTotals, Strategy, StrategyType};
 use crate::trader::paper::TradingMode;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, SecondsFormat, Utc};
 use r2d2::PooledConnection;
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::{params, OptionalExtension, Transaction};
+use std::collections::{BTreeMap, HashMap};
+use std::time::Instant;
 
 /// The version the store's own `schema_version` table records once its tables exist.
 const STRATEGIES_SCHEMA_VERSION: u32 = 1;
@@ -26,10 +28,17 @@ const STRATEGIES_SCHEMA_VERSION: u32 = 1;
 /// Version 3 adds `strategies.entry_strategy_ids_json`, the entry strategies an exit
 /// strategy manages; its default `'[]'` (every position) is what a v2 core does.
 /// Version 4 adds `strategies.mode`, paper or live; rows from before it trade live.
-const STORE_VERSION: i64 = 4;
+/// Version 5 adds `strategies.rules_changed_at` and `strategies.rules_fingerprint`, the
+/// rules clock, and the `strategy_evaluation_totals` table; evaluations are counted in
+/// the totals, and the per-evaluation rows of `strategy_performance` are folded into
+/// them at every open.
+const STORE_VERSION: i64 = 5;
 
 /// The oldest core that reads the store. The v4 mode is breaking: a core that ignores
-/// it would trade a paper strategy live, so an older core must refuse the store.
+/// it would trade a paper strategy live, so an older core must refuse the store. Version
+/// 5 changes the meaning of no existing column, so a v4 core still reads it: it trades
+/// correctly, leaves the rules clock as it is and records evaluations per row, and the
+/// next v5 open reconciles its edits and folds its rows.
 const MIN_READER_VERSION: i64 = 4;
 
 /// The version the store held when the schema ledger was adopted.
@@ -55,7 +64,9 @@ CREATE TABLE IF NOT EXISTS strategies (
     author TEXT,
     version INTEGER NOT NULL DEFAULT 1,
     entry_strategy_ids_json TEXT NOT NULL DEFAULT '[]', -- exit strategies: the entry strategies managed, empty = all
-    mode TEXT NOT NULL DEFAULT 'live' CHECK(mode IN ('paper', 'live')) -- the book the strategy trades
+    mode TEXT NOT NULL DEFAULT 'live' CHECK(mode IN ('paper', 'live')), -- the book the strategy trades
+    rules_changed_at TEXT, -- when the rules fingerprint last changed
+    rules_fingerprint TEXT -- the rules the strategy decides on, hashed
 );
 
 CREATE INDEX IF NOT EXISTS idx_strategies_type ON strategies(type);
@@ -81,6 +92,19 @@ CREATE TABLE IF NOT EXISTS strategy_performance (
 CREATE INDEX IF NOT EXISTS idx_performance_strategy ON strategy_performance(strategy_id);
 CREATE INDEX IF NOT EXISTS idx_performance_timestamp ON strategy_performance(execution_timestamp);
 CREATE INDEX IF NOT EXISTS idx_performance_token ON strategy_performance(token_mint);
+"#;
+
+/// One row per strategy: every evaluation recorded for it, summed. Its times are written
+/// in [`totals_time`]'s fixed form, so text order is time order.
+const SCHEMA_STRATEGY_EVALUATION_TOTALS: &str = r#"
+CREATE TABLE IF NOT EXISTS strategy_evaluation_totals (
+    strategy_id TEXT PRIMARY KEY REFERENCES strategies(id) ON DELETE CASCADE,
+    evaluations INTEGER NOT NULL DEFAULT 0,
+    signals INTEGER NOT NULL DEFAULT 0,
+    total_exec_ms INTEGER NOT NULL DEFAULT 0,
+    last_evaluated_at TEXT,
+    last_signal_at TEXT
+);
 "#;
 
 const SCHEMA_STRATEGY_TEMPLATES: &str = r#"
@@ -208,7 +232,181 @@ fn create_schema(tx: &Transaction<'_>, _: &SchemaContext) -> Result<(), Database
         "mode",
         "TEXT NOT NULL DEFAULT 'live' CHECK(mode IN ('paper', 'live'))",
     )?;
+    // The rules clock: a store from before v5 starts every clock at its strategy's
+    // creation, so no strategy's paper evidence restarts on the upgrade.
+    let clock_added = ddl::add_column(tx, "strategies", "rules_changed_at", "TEXT")?;
+    ddl::add_column(tx, "strategies", "rules_fingerprint", "TEXT")?;
+    if clock_added {
+        ddl::run(
+            tx,
+            "start the strategies rules clock",
+            "UPDATE strategies SET rules_changed_at = created_at",
+        )?;
+    }
+    reconcile_rules_clock(tx, clock_added)?;
+    if !ddl::has_table(tx, "strategy_evaluation_totals")? {
+        ddl::run_batch(
+            tx,
+            "create strategy_evaluation_totals table",
+            SCHEMA_STRATEGY_EVALUATION_TOTALS,
+        )?;
+    }
+    fold_evaluation_rows(tx)?;
     ddl::run_batch(tx, "drop retired strategies tables", DROP_RETIRED_TABLES)
+}
+
+/// Bring every strategy's rules clock in line with its rules. With the clock `just_added`
+/// each row only takes its fingerprint. Otherwise a row whose stored fingerprint is
+/// missing (inserted by an older core) or differs (its rules edited by an older core)
+/// moves its clock to the later of its clock and its last update, which never moves it
+/// earlier, and takes the fingerprint. A row that does not parse is left as it is.
+/// Idempotent: a second open writes nothing.
+fn reconcile_rules_clock(tx: &Transaction<'_>, just_added: bool) -> Result<(), DatabaseError> {
+    let operation = "reconcile strategies rules clock";
+    let classify = |e| DatabaseError::classify_sqlite_failure(operation, e);
+    let rows = {
+        let mut stmt = tx
+            .prepare(&format!(
+                "SELECT {STRATEGY_COLUMNS}, rules_fingerprint FROM strategies"
+            ))
+            .map_err(classify)?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok((
+                    read_strategy_row(row),
+                    row.get::<_, Option<String>>(STRATEGY_COLUMN_COUNT)?,
+                ))
+            })
+            .map_err(classify)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(classify)?;
+        rows
+    };
+    let mut reconciled = 0;
+    for (row, stored) in rows {
+        let strategy = match row
+            .map_err(crate::Error::from)
+            .and_then(StrategyRow::into_strategy)
+        {
+            Ok(Some(strategy)) => strategy,
+            Ok(None) => continue,
+            Err(e) => {
+                logger::warning(
+                    LogTag::System,
+                    &format!("Strategies rules clock: a stored strategy does not parse: {e}"),
+                );
+                continue;
+            }
+        };
+        let fingerprint = strategy.rules_fingerprint();
+        if stored.as_deref() == Some(fingerprint.as_str()) {
+            continue;
+        }
+        if just_added {
+            tx.execute(
+                "UPDATE strategies SET rules_fingerprint = ?2 WHERE id = ?1",
+                params![strategy.id, fingerprint],
+            )
+            .map_err(classify)?;
+        } else {
+            let changed_at = strategy.rules_changed_at.max(strategy.updated_at);
+            tx.execute(
+                "UPDATE strategies SET rules_fingerprint = ?2, rules_changed_at = ?3 WHERE id = ?1",
+                params![strategy.id, fingerprint, changed_at.to_rfc3339()],
+            )
+            .map_err(classify)?;
+            reconciled += 1;
+        }
+    }
+    if reconciled > 0 {
+        logger::info(
+            LogTag::System,
+            &format!("Strategies rules clock: {reconciled} strategies written by an older version reconciled"),
+        );
+    }
+    Ok(())
+}
+
+/// Fold the per-evaluation rows into the evaluation totals and delete them. A v5 core
+/// writes no such row; those present were written before the upgrade or by an older
+/// core since, so the totals count every evaluation either version recorded.
+fn fold_evaluation_rows(tx: &Transaction<'_>) -> Result<(), DatabaseError> {
+    let operation = "fold strategy evaluations into the totals";
+    let classify = |e| DatabaseError::classify_sqlite_failure(operation, e);
+    let started = Instant::now();
+    let rows = {
+        let mut stmt = tx
+            .prepare(
+                "SELECT strategy_id, COUNT(*), SUM(result), SUM(execution_time_ms),
+                        MAX(execution_timestamp),
+                        MAX(CASE WHEN result = 1 THEN execution_timestamp END)
+                 FROM strategy_performance
+                 GROUP BY strategy_id",
+            )
+            .map_err(classify)?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, i64>(1)?,
+                    row.get::<_, i64>(2)?,
+                    row.get::<_, i64>(3)?,
+                    row.get::<_, Option<String>>(4)?,
+                    row.get::<_, Option<String>>(5)?,
+                ))
+            })
+            .map_err(classify)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(classify)?;
+        rows
+    };
+    if rows.is_empty() {
+        return Ok(());
+    }
+    let mut folded = 0;
+    for (strategy_id, evaluations, signals, total_exec_ms, last_evaluated, last_signal) in rows {
+        let totals = EvaluationTotals {
+            evaluations: count_of(evaluations),
+            signals: count_of(signals),
+            total_exec_ms: count_of(total_exec_ms),
+            last_evaluated_at: last_evaluated.as_deref().and_then(stored_evaluation_time),
+            last_signal_at: last_signal.as_deref().and_then(stored_evaluation_time),
+        };
+        folded += totals.evaluations;
+        add_to_totals(tx, &strategy_id, &totals).map_err(classify)?;
+    }
+    ddl::run(
+        tx,
+        "delete folded strategy evaluations",
+        "DELETE FROM strategy_performance",
+    )?;
+    logger::info(
+        LogTag::System,
+        &format!(
+            "Strategy evaluations folded into the totals: rows={folded}, elapsed_ms={}",
+            started.elapsed().as_millis()
+        ),
+    );
+    Ok(())
+}
+
+/// A count read from SQLite, which stores it signed; never negative in this store.
+fn count_of(value: i64) -> u64 {
+    u64::try_from(value).unwrap_or_default()
+}
+
+/// A per-evaluation row's timestamp, or `None` with a warning when it does not parse.
+fn stored_evaluation_time(value: &str) -> Option<DateTime<Utc>> {
+    match DateTime::parse_from_rfc3339(value) {
+        Ok(time) => Some(time.with_timezone(&Utc)),
+        Err(e) => {
+            logger::warning(
+                LogTag::System,
+                &format!("Strategy evaluation time '{value}' does not parse: {e}"),
+            );
+            None
+        }
+    }
 }
 
 /// Get a connection from the strategies store's pool.
@@ -232,7 +430,10 @@ pub fn init_strategies_db() -> crate::Result<()> {
 /// reads them.
 const STRATEGY_COLUMNS: &str = "id, name, description, type, enabled, priority, timeframe, \
      rules_json, parameters_json, created_at, updated_at, author, version, entry_strategy_ids_json, \
-     mode";
+     mode, rules_changed_at";
+
+/// How many columns [`STRATEGY_COLUMNS`] names.
+const STRATEGY_COLUMN_COUNT: usize = 16;
 
 /// The order strategies are listed in: lowest priority first, the name breaking a tie. It
 /// is the entry evaluation order of each book, so the trader and the strategies overview
@@ -256,6 +457,7 @@ struct StrategyRow {
     version: i32,
     entry_strategy_ids_json: String,
     mode: String,
+    rules_changed_at: Option<String>,
 }
 
 fn read_strategy_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<StrategyRow> {
@@ -275,6 +477,7 @@ fn read_strategy_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<StrategyRow> {
         version: row.get(12)?,
         entry_strategy_ids_json: row.get(13)?,
         mode: row.get(14)?,
+        rules_changed_at: row.get(15)?,
     })
 }
 
@@ -296,6 +499,12 @@ impl StrategyRow {
             .ok_or_else(|| Error::parse_error(format!("Unknown mode '{}' for {id}", self.mode)))?;
         let created_at = parse_time(&self.created_at, "created_at")?;
         let updated_at = parse_time(&self.updated_at, "updated_at")?;
+        // A clock an older core left unset reads as the last update: never earlier than
+        // the rules it could have changed.
+        let rules_changed_at = match self.rules_changed_at.as_deref() {
+            Some(value) => parse_time(value, "rules_changed_at")?,
+            None => updated_at,
+        };
         Ok(Some(Strategy {
             name: self.name,
             description: self.description,
@@ -311,6 +520,7 @@ impl StrategyRow {
             version: self.version,
             entry_strategy_ids: serde_json::from_str(&self.entry_strategy_ids_json)?,
             mode,
+            rules_changed_at,
             id,
         }))
     }
@@ -335,17 +545,31 @@ fn read_strategies(
     Ok(strategies)
 }
 
-/// Insert a new strategy
+/// Insert a new strategy. Its rules clock starts at its creation time, whatever
+/// `rules_changed_at` it carries.
 pub fn insert_strategy(strategy: &Strategy) -> crate::Result<()> {
     let conn = get_connection()?;
+    insert_strategy_in(&conn, strategy)?;
 
+    logger::info(
+        LogTag::System,
+        &format!(
+            "Inserted strategy: id={}, name={}, type={}",
+            strategy.id, strategy.name, strategy.strategy_type
+        ),
+    );
+
+    Ok(())
+}
+
+fn insert_strategy_in(conn: &rusqlite::Connection, strategy: &Strategy) -> crate::Result<()> {
     let rules_json = serde_json::to_string(&strategy.rules)?;
     let parameters_json = serde_json::to_string(&strategy.parameters)?;
     let entry_strategy_ids_json = serde_json::to_string(&strategy.entry_strategy_ids)?;
 
     conn.execute(
-        "INSERT INTO strategies (id, name, description, type, enabled, priority, timeframe, rules_json, parameters_json, created_at, updated_at, author, version, entry_strategy_ids_json, mode)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+        "INSERT INTO strategies (id, name, description, type, enabled, priority, timeframe, rules_json, parameters_json, created_at, updated_at, author, version, entry_strategy_ids_json, mode, rules_changed_at, rules_fingerprint)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?10, ?16)",
         params![
             strategy.id,
             strategy.name,
@@ -362,34 +586,59 @@ pub fn insert_strategy(strategy: &Strategy) -> crate::Result<()> {
             strategy.version,
             entry_strategy_ids_json,
             strategy.mode.as_str(),
+            strategy.rules_fingerprint(),
         ],
     )?;
-
-    logger::info(
-        LogTag::System,
-        &format!(
-            "Inserted strategy: id={}, name={}, type={}",
-            strategy.id, strategy.name, strategy.strategy_type
-        ),
-    );
-
     Ok(())
 }
 
 /// Update an existing strategy. Its mode is not written: it changes only through
-/// [`set_strategy_mode`].
-pub fn update_strategy(strategy: &Strategy) -> crate::Result<()> {
-    let conn = get_connection()?;
+/// [`set_strategy_mode`]. Its rules clock moves to now, taken inside the write
+/// transaction, only when its rules fingerprint changes; the `rules_changed_at` it
+/// carries is ignored. Returns whether the rules changed.
+pub fn update_strategy(strategy: &Strategy) -> crate::Result<bool> {
+    let mut conn = get_connection()?;
+    let rules_changed = update_strategy_in(&mut conn, strategy)?;
 
+    logger::info(
+        LogTag::System,
+        &format!(
+            "Updated strategy: id={}, name={}, rules_changed={rules_changed}",
+            strategy.id, strategy.name
+        ),
+    );
+
+    Ok(rules_changed)
+}
+
+fn update_strategy_in(conn: &mut rusqlite::Connection, strategy: &Strategy) -> crate::Result<bool> {
     let rules_json = serde_json::to_string(&strategy.rules)?;
     let parameters_json = serde_json::to_string(&strategy.parameters)?;
     let entry_strategy_ids_json = serde_json::to_string(&strategy.entry_strategy_ids)?;
+    let fingerprint = strategy.rules_fingerprint();
 
-    let rows_affected = conn.execute(
-        "UPDATE strategies 
-             SET name = ?2, description = ?3, type = ?4, enabled = ?5, priority = ?6, 
+    let tx = conn.write_tx()?;
+    let Some(stored) = tx
+        .query_row(
+            "SELECT rules_fingerprint FROM strategies WHERE id = ?1",
+            params![strategy.id],
+            |row| row.get::<_, Option<String>>(0),
+        )
+        .optional()?
+    else {
+        return Err(Error::Database(DatabaseError::Query {
+            operation: "update_strategy".to_owned(),
+            message: format!("Strategy not found: {}", strategy.id),
+        }));
+    };
+    let rules_changed = stored.as_deref() != Some(fingerprint.as_str());
+    let now = Utc::now();
+    tx.execute(
+        "UPDATE strategies
+             SET name = ?2, description = ?3, type = ?4, enabled = ?5, priority = ?6,
                  timeframe = ?7, rules_json = ?8, parameters_json = ?9, updated_at = ?10, author = ?11, version = ?12,
-                 entry_strategy_ids_json = ?13
+                 entry_strategy_ids_json = ?13, rules_fingerprint = ?14,
+                 rules_changed_at = CASE WHEN ?15 THEN ?16 ELSE rules_changed_at END
              WHERE id = ?1",
         params![
             strategy.id,
@@ -405,30 +654,35 @@ pub fn update_strategy(strategy: &Strategy) -> crate::Result<()> {
             strategy.author,
             strategy.version,
             entry_strategy_ids_json,
+            fingerprint,
+            rules_changed,
+            now.to_rfc3339(),
         ],
     )?;
+    tx.commit()?;
+    Ok(rules_changed)
+}
 
-    if rows_affected == 0 {
-        return Err(Error::Database(DatabaseError::Query {
-            operation: "update_strategy".to_owned(),
-            message: format!("Strategy not found: {}", strategy.id),
-        }));
-    }
-
+/// Set the paper or live mode of a strategy. The rules clock stays where it is: the mode
+/// is not part of the rules.
+pub fn set_strategy_mode(strategy_id: &str, mode: TradingMode) -> crate::Result<()> {
+    let conn = get_connection()?;
+    set_strategy_mode_in(&conn, strategy_id, mode)?;
     logger::info(
         LogTag::System,
         &format!(
-            "Updated strategy: id={}, name={}",
-            strategy.id, strategy.name
+            "Strategy mode set: id={strategy_id}, mode={}",
+            mode.as_str()
         ),
     );
-
     Ok(())
 }
 
-/// Set the paper or live mode of a strategy.
-pub fn set_strategy_mode(strategy_id: &str, mode: TradingMode) -> crate::Result<()> {
-    let conn = get_connection()?;
+fn set_strategy_mode_in(
+    conn: &rusqlite::Connection,
+    strategy_id: &str,
+    mode: TradingMode,
+) -> crate::Result<()> {
     let rows_affected = conn.execute(
         "UPDATE strategies SET mode = ?2, updated_at = ?3 WHERE id = ?1",
         params![strategy_id, mode.as_str(), Utc::now().to_rfc3339()],
@@ -439,13 +693,6 @@ pub fn set_strategy_mode(strategy_id: &str, mode: TradingMode) -> crate::Result<
             message: format!("Strategy not found: {strategy_id}"),
         }));
     }
-    logger::info(
-        LogTag::System,
-        &format!(
-            "Strategy mode set: id={strategy_id}, mode={}",
-            mode.as_str()
-        ),
-    );
     Ok(())
 }
 
@@ -561,104 +808,159 @@ fn enabled_strategies(
 }
 
 // =============================================================================
-// PERFORMANCE TRACKING
+// EVALUATION TOTALS
 // =============================================================================
 
-/// One strategy evaluation as the store records it, stamped when it was evaluated.
+/// One strategy evaluation as the store counts it, stamped when it was evaluated.
 #[derive(Debug, Clone)]
 pub struct EvaluationRecord {
     pub result: EvaluationResult,
-    pub token_mint: String,
     pub evaluated_at: DateTime<Utc>,
 }
 
-/// Write a batch of strategy evaluations in one transaction. Synchronous: callers on the
-/// async runtime queue evaluations through [`crate::strategies::recorder`], which runs
-/// this on the blocking pool.
+/// Add a batch of strategy evaluations to the evaluation totals in one transaction.
+/// Synchronous: callers on the async runtime queue evaluations through
+/// [`crate::strategies::recorder`], which runs this on the blocking pool.
 pub fn record_evaluations(records: &[EvaluationRecord]) -> crate::Result<()> {
     let mut conn = get_connection()?;
     insert_evaluations(&mut conn, records)
 }
 
+/// Add `records` to the totals of their strategies, summed per strategy first, in one
+/// transaction. An evaluation of a strategy deleted since is dropped alone; the rest of
+/// the batch is counted.
 fn insert_evaluations(
     conn: &mut rusqlite::Connection,
     records: &[EvaluationRecord],
 ) -> crate::Result<()> {
-    let chain_id = crate::chains::legacy_row_chain().as_str();
     let tx = conn.write_tx()?;
-    {
-        let mut stmt = tx.prepare_cached(
-            "INSERT INTO strategy_performance (strategy_id, execution_time_ms, result, confidence, details_json, token_mint, execution_timestamp, chain_id)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-        )?;
-        for record in records {
-            let details_json = serde_json::to_string(&record.result.details)?;
-            stmt.execute(params![
-                record.result.strategy_id,
-                record.result.execution_time_ms,
-                record.result.result,
-                record.result.confidence,
-                details_json,
-                record.token_mint,
-                record.evaluated_at.to_rfc3339(),
-                chain_id,
-            ])?;
-        }
+    for (strategy_id, totals) in batch_totals(records) {
+        add_to_totals(&tx, strategy_id, &totals)?;
     }
     tx.commit()?;
     Ok(())
 }
 
-/// Get performance statistics for a strategy
-pub fn get_strategy_performance(strategy_id: &str) -> crate::Result<Option<StrategyPerformance>> {
-    let conn = get_connection()?;
-    performance_of(&conn, strategy_id)
+/// The totals of each strategy over `records`.
+fn batch_totals(records: &[EvaluationRecord]) -> BTreeMap<&str, EvaluationTotals> {
+    let mut totals: BTreeMap<&str, EvaluationTotals> = BTreeMap::new();
+    for record in records {
+        let strategy = totals
+            .entry(record.result.strategy_id.as_str())
+            .or_default();
+        strategy.evaluations += 1;
+        strategy.total_exec_ms += record.result.execution_time_ms;
+        strategy.last_evaluated_at = strategy.last_evaluated_at.max(Some(record.evaluated_at));
+        if record.result.result {
+            strategy.signals += 1;
+            strategy.last_signal_at = strategy.last_signal_at.max(Some(record.evaluated_at));
+        }
+    }
+    totals
 }
 
-/// The performance statistics of `strategy_id` over its recorded evaluations, or `None`
-/// when it has none.
-fn performance_of(
+/// Add `totals` to the stored totals of `strategy_id`, or start them; nothing when the
+/// strategy no longer exists. A last time only ever moves later.
+fn add_to_totals(
     conn: &rusqlite::Connection,
     strategy_id: &str,
-) -> crate::Result<Option<StrategyPerformance>> {
-    let (total_evaluations, successful_signals, avg_execution_time_ms, last_evaluation) = conn
-        .query_row(
-            "SELECT
-                COUNT(*) as total_evaluations,
-                SUM(CASE WHEN result = 1 THEN 1 ELSE 0 END) as successful_signals,
-                AVG(execution_time_ms) as avg_execution_time_ms,
-                MAX(execution_timestamp) as last_evaluation
-             FROM strategy_performance
-             WHERE strategy_id = ?1",
-            params![strategy_id],
-            |row| {
-                Ok((
-                    row.get::<_, u64>(0)?,
-                    row.get::<_, Option<u64>>(1)?,
-                    row.get::<_, Option<f64>>(2)?,
-                    row.get::<_, Option<String>>(3)?,
-                ))
-            },
-        )?;
+    totals: &EvaluationTotals,
+) -> rusqlite::Result<()> {
+    let signed = |count: u64| i64::try_from(count).unwrap_or(i64::MAX);
+    conn.prepare_cached(
+        "INSERT INTO strategy_evaluation_totals
+             (strategy_id, evaluations, signals, total_exec_ms, last_evaluated_at, last_signal_at)
+         SELECT ?1, ?2, ?3, ?4, ?5, ?6 WHERE EXISTS (SELECT 1 FROM strategies WHERE id = ?1)
+         ON CONFLICT(strategy_id) DO UPDATE SET
+             evaluations = evaluations + excluded.evaluations,
+             signals = signals + excluded.signals,
+             total_exec_ms = total_exec_ms + excluded.total_exec_ms,
+             last_evaluated_at = CASE WHEN excluded.last_evaluated_at IS NULL THEN last_evaluated_at
+                 ELSE max(coalesce(last_evaluated_at, ''), excluded.last_evaluated_at) END,
+             last_signal_at = CASE WHEN excluded.last_signal_at IS NULL THEN last_signal_at
+                 ELSE max(coalesce(last_signal_at, ''), excluded.last_signal_at) END",
+    )?
+    .execute(params![
+        strategy_id,
+        signed(totals.evaluations),
+        signed(totals.signals),
+        signed(totals.total_exec_ms),
+        totals.last_evaluated_at.map(totals_time),
+        totals.last_signal_at.map(totals_time),
+    ])?;
+    Ok(())
+}
 
-    // An aggregate over no rows is one row of NULLs: no evaluation recorded.
-    let (Some(successful_signals), Some(avg_execution_time_ms), Some(last_eval_str)) =
-        (successful_signals, avg_execution_time_ms, last_evaluation)
-    else {
-        return Ok(None);
+/// A time as the totals store it: UTC with milliseconds and a fixed width, so the text
+/// order of two stored times is their time order.
+fn totals_time(time: DateTime<Utc>) -> String {
+    time.to_rfc3339_opts(SecondsFormat::Millis, true)
+}
+
+/// The evaluation totals of every strategy that was evaluated, by strategy id.
+fn evaluation_totals(
+    conn: &rusqlite::Connection,
+) -> crate::Result<HashMap<String, EvaluationTotals>> {
+    let mut stmt = conn.prepare(
+        "SELECT strategy_id, evaluations, signals, total_exec_ms, last_evaluated_at, last_signal_at
+         FROM strategy_evaluation_totals",
+    )?;
+    let rows = stmt
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, i64>(1)?,
+                row.get::<_, i64>(2)?,
+                row.get::<_, i64>(3)?,
+                row.get::<_, Option<String>>(4)?,
+                row.get::<_, Option<String>>(5)?,
+            ))
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    let parse_time = |value: Option<String>, strategy_id: &str| {
+        value
+            .map(|value| {
+                DateTime::parse_from_rfc3339(&value)
+                    .map(|time| time.with_timezone(&Utc))
+                    .map_err(|e| {
+                        Error::parse_error(format!(
+                            "Failed to parse an evaluation time for {strategy_id}: {e}"
+                        ))
+                    })
+            })
+            .transpose()
     };
+    let mut totals = HashMap::with_capacity(rows.len());
+    for (strategy_id, evaluations, signals, total_exec_ms, last_evaluated, last_signal) in rows {
+        let strategy_totals = EvaluationTotals {
+            evaluations: count_of(evaluations),
+            signals: count_of(signals),
+            total_exec_ms: count_of(total_exec_ms),
+            last_evaluated_at: parse_time(last_evaluated, &strategy_id)?,
+            last_signal_at: parse_time(last_signal, &strategy_id)?,
+        };
+        totals.insert(strategy_id, strategy_totals);
+    }
+    Ok(totals)
+}
 
-    let last_evaluation = DateTime::parse_from_rfc3339(&last_eval_str)
-        .map_err(|e| Error::parse_error(format!("Failed to parse timestamp: {e}")))?
-        .with_timezone(&Utc);
+/// Every strategy, in [`STRATEGY_ORDER`], with the evaluation totals of each strategy that
+/// was evaluated: two statements on one connection, whatever the number of strategies.
+pub fn get_strategies_with_totals() -> crate::Result<StrategiesWithTotals> {
+    let conn = get_connection()?;
+    Ok(StrategiesWithTotals {
+        strategies: all_strategies(&conn)?,
+        totals: evaluation_totals(&conn)?,
+    })
+}
 
-    Ok(Some(StrategyPerformance {
-        strategy_id: strategy_id.to_string(),
-        total_evaluations,
-        successful_signals,
-        avg_execution_time_ms,
-        last_evaluation,
-    }))
+/// Every strategy and the evaluation totals of each, read together.
+#[derive(Debug, Clone, Default)]
+pub struct StrategiesWithTotals {
+    /// In [`STRATEGY_ORDER`].
+    pub strategies: Vec<Strategy>,
+    /// By strategy id; a strategy never evaluated has none.
+    pub totals: HashMap<String, EvaluationTotals>,
 }
 
 #[cfg(test)]

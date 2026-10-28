@@ -638,6 +638,14 @@ strategies-error-rule-not-operator-cannot-have-a-switched-off-child = Опера
 strategies-error-rule-rules-nest-deeper-than-four-levels = Правила могут быть вложены не глубже четырёх уровней
 strategies-error-rule-the-root-group-cannot-be-switched-off = Корневую группу нельзя отключить
 
+strategies-readiness-history-since-met =
+    { $count ->
+        [one] { $count } закрытый виртуальный раунд с изменения правил { $changed }, нужно { $needed }
+        [few] { $count } закрытых виртуальных раунда с изменения правил { $changed }, нужно { $needed }
+        [many] { $count } закрытых виртуальных раундов с изменения правил { $changed }, нужно { $needed }
+       *[other] { $count } закрытого виртуального раунда с изменения правил { $changed }, нужно { $needed }
+    }
+strategies-readiness-history-since-short = { $count } из { $needed } закрытых виртуальных раундов с изменения правил { $changed }
 strategies-readiness-priced = У каждой позиции есть цена
 strategies-readiness-priced-ok = У каждой открытой виртуальной позиции есть цена пула
 strategies-readiness-priced-missing =

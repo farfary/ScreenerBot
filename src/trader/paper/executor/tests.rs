@@ -3,23 +3,25 @@
 
 //! The paper executor on an isolated paper store with offline quotes: a round trip from
 //! the entry through a take-profit step to the close, every quote taken inside the paper
-//! scope, the typed refusals that book nothing, a keyed decision booked once however often
-//! it is replayed, and the failed-exit streak.
+//! scope, the typed refusals that book nothing, a strategy buy decided under rules that
+//! have since changed, a keyed decision booked once however often it is replayed, and the
+//! failed-exit streak.
 
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::Duration;
 
 use chrono::Utc;
 
-use super::io::{PaperMarket, PaperSettings, PaperToken};
+use super::io::{strategy_still_wants, PaperMarket, PaperSettings, PaperToken};
 use super::*;
 use crate::chains::ChainId;
 use crate::config::schemas::Config;
 use crate::config::utils::CONFIG;
 use crate::positions::db::PaperExitOwner;
 use crate::positions::{PositionManagement, PositionsDatabase};
+use crate::strategies::types::Strategy;
 use crate::swaps::{Quote, QuoteError};
-use crate::trader::paper::PaperFillError;
+use crate::trader::paper::{PaperFillError, TradingMode};
 use crate::trader::types::TradePriority;
 
 const MINT: &str = "PaperExecutorMint11111111111111111111111111";
@@ -37,6 +39,9 @@ struct FakeIo {
     starting_balance_native: f64,
     wanted: AtomicBool,
     abort_at_wait: AtomicBool,
+    /// The intent turns false during the quote taken at landing, after the landing wait
+    /// found it still wanted.
+    abort_at_landing_quote: AtomicBool,
     quotes: AtomicUsize,
     quotes_outside_scope: AtomicUsize,
     waits: AtomicUsize,
@@ -61,6 +66,7 @@ impl FakeIo {
             starting_balance_native,
             wanted: AtomicBool::new(true),
             abort_at_wait: AtomicBool::new(false),
+            abort_at_landing_quote: AtomicBool::new(false),
             quotes: AtomicUsize::new(0),
             quotes_outside_scope: AtomicUsize::new(0),
             waits: AtomicUsize::new(0),
@@ -118,6 +124,11 @@ impl PaperTradeIo for FakeIo {
         self.quotes.fetch_add(1, Ordering::SeqCst);
         if !crate::global::in_paper_scope() {
             self.quotes_outside_scope.fetch_add(1, Ordering::SeqCst);
+        }
+        if self.abort_at_landing_quote.load(Ordering::SeqCst)
+            && self.waits.load(Ordering::SeqCst) > 0
+        {
+            self.wanted.store(false, Ordering::SeqCst);
         }
         let mode = self.quote_mode.load(Ordering::SeqCst);
         if mode == 1 {
@@ -278,6 +289,78 @@ async fn a_buy_no_longer_wanted_after_the_landing_wait_books_nothing() {
     assert_eq!(result.failed_step, Some(TradeStep::Validation));
     assert_eq!(refusal(&result), Some(PaperRefusal::NotWanted));
     assert!(io.book.open_positions().await.is_empty());
+}
+
+#[tokio::test]
+async fn a_buy_no_longer_wanted_after_the_landing_quote_books_nothing() {
+    let (io, _directory) = FakeIo::new(1.0).await;
+    io.abort_at_landing_quote.store(true, Ordering::SeqCst);
+    let entry = decision(TradeAction::Buy, TradeReason::StrategySignal);
+    let result = execute_with(&entry, &context(&entry), &io).await.unwrap();
+    assert!(!result.success);
+    assert_eq!(result.failed_step, Some(TradeStep::Validation));
+    assert_eq!(refusal(&result), Some(PaperRefusal::NotWanted));
+    assert_eq!(
+        io.waits.load(Ordering::SeqCst),
+        1,
+        "the intent turned false after the landing wait had read it"
+    );
+    assert!(io.book.open_positions().await.is_empty());
+}
+
+/// A strategy buy decided before the strategy's rules last changed is no longer wanted:
+/// the round would be opened under rules the strategy no longer has. An add, a buy decided
+/// at or after the change, and a strategy no longer on the paper book are judged as before.
+#[test]
+fn a_strategy_buy_decided_under_older_rules_is_no_longer_wanted() {
+    let changed_at = Utc::now();
+    let strategy = Strategy {
+        id: "paper-entry".to_owned(),
+        name: "Paper entry".to_owned(),
+        description: None,
+        strategy_type: crate::strategies::types::StrategyType::Entry,
+        enabled: true,
+        priority: 10,
+        timeframe: "5m".to_owned(),
+        rules: crate::strategies::types::RuleTree::leaf(crate::strategies::types::Condition {
+            condition_type: "LiquidityLevel".to_owned(),
+            parameters: Default::default(),
+        }),
+        parameters: Default::default(),
+        created_at: changed_at,
+        updated_at: changed_at,
+        author: None,
+        version: 1,
+        entry_strategy_ids: Vec::new(),
+        mode: TradingMode::Paper,
+        rules_changed_at: changed_at,
+    };
+    let decided = |action, timestamp| TradeDecision {
+        timestamp,
+        ..decision(action, TradeReason::StrategySignal)
+    };
+    let before = changed_at - chrono::Duration::milliseconds(1);
+
+    assert!(!strategy_still_wants(
+        &strategy,
+        &decided(TradeAction::Buy, before)
+    ));
+    assert!(strategy_still_wants(
+        &strategy,
+        &decided(TradeAction::Buy, changed_at)
+    ));
+    assert!(strategy_still_wants(
+        &strategy,
+        &decided(TradeAction::DCA, before)
+    ));
+    let live = Strategy {
+        mode: TradingMode::Live,
+        ..strategy
+    };
+    assert!(!strategy_still_wants(
+        &live,
+        &decided(TradeAction::DCA, changed_at)
+    ));
 }
 
 #[tokio::test]

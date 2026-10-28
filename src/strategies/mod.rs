@@ -118,7 +118,7 @@ pub async fn evaluate_entry_strategies(
         match result {
             Ok(eval_result) => {
                 let signalled = eval_result.result;
-                if let Err(e) = recorder::record(eval_result, token_mint).await {
+                if let Err(e) = recorder::record(eval_result).await {
                     logger::warning(LogTag::System, &format!("Failed to record evaluation: {e}"));
                 }
 
@@ -222,7 +222,7 @@ pub async fn evaluate_exit_strategies(
         match result {
             Ok(eval_result) => {
                 let signalled = eval_result.result;
-                if let Err(e) = recorder::record(eval_result, token_mint).await {
+                if let Err(e) = recorder::record(eval_result).await {
                     logger::warning(LogTag::System, &format!("Failed to record evaluation: {e}"));
                 }
 
@@ -296,8 +296,8 @@ pub async fn get_condition_schemas() -> crate::Result<serde_json::Value> {
 
 // Re-export commonly used types for convenience
 pub use types::{
-    Condition, LogicalOperator, Parameter, ParameterConstraints, RiskLevel, RuleTree,
-    StrategyPerformance, StrategyTemplate,
+    Condition, EvaluationTotals, LogicalOperator, Parameter, ParameterConstraints, RiskLevel,
+    RuleTree, StrategyTemplate,
 };
 
 #[cfg(test)]

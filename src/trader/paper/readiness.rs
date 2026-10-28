@@ -5,6 +5,7 @@
 //! for its title and its detail; the figures are arguments. Each paper book
 //! composes the shared checks with its own.
 
+use chrono::{DateTime, Utc};
 use serde::Serialize;
 
 use crate::i18n::{ids, MessageId, UiArg, UiText};
@@ -60,20 +61,59 @@ pub fn count(value: usize) -> UiArg {
     UiArg::Count(i64::try_from(value).unwrap_or(i64::MAX))
 }
 
-/// Enough closed paper rounds to judge the book.
+/// Enough closed paper rounds of the current run to judge the book.
 pub fn history(closed_rounds: usize, needed: usize) -> ReadinessCheck {
+    history_check(
+        closed_rounds,
+        needed,
+        CheckText {
+            title: ids::PAPER_READINESS_HISTORY,
+            passed: ids::PAPER_READINESS_HISTORY_MET,
+            failed: ids::PAPER_READINESS_HISTORY_SHORT,
+        },
+        None,
+    )
+}
+
+/// Enough closed paper rounds entered since the rules changed at `changed` to judge the
+/// book; `met` and `short` are the book's wording, which names the change time.
+pub fn history_since(
+    closed_rounds: usize,
+    needed: usize,
+    changed: DateTime<Utc>,
+    met: MessageId,
+    short: MessageId,
+) -> ReadinessCheck {
+    history_check(
+        closed_rounds,
+        needed,
+        CheckText {
+            title: ids::PAPER_READINESS_HISTORY,
+            passed: met,
+            failed: short,
+        },
+        Some(UiArg::Time(changed.timestamp_millis())),
+    )
+}
+
+fn history_check(
+    closed_rounds: usize,
+    needed: usize,
+    text: CheckText,
+    changed: Option<UiArg>,
+) -> ReadinessCheck {
     let passed = closed_rounds >= needed;
+    let detail = UiText::new(if passed { text.passed } else { text.failed })
+        .arg("count", count(closed_rounds))
+        .arg("needed", count(needed));
     ReadinessCheck {
         id: "history",
-        text: UiText::new(ids::PAPER_READINESS_HISTORY),
+        text: UiText::new(text.title),
         passed,
-        detail: UiText::new(if passed {
-            ids::PAPER_READINESS_HISTORY_MET
-        } else {
-            ids::PAPER_READINESS_HISTORY_SHORT
-        })
-        .arg("count", count(closed_rounds))
-        .arg("needed", count(needed)),
+        detail: match changed {
+            Some(changed) => detail.arg("changed", changed),
+            None => detail,
+        },
     }
 }
 

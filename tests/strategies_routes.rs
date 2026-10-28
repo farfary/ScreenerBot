@@ -1,7 +1,7 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! The strategy routes: the overview reads each strategy from the book of its mode and answers stopped and in Explore Mode, a new strategy starts on paper and arms live only with the confirmation phrase while the Auto Trader can trade live, an update never changes the mode, a priority outside 1-100 is refused on create, update, import and inline validation, the roster order is the entry evaluation order, readiness reads the paper rounds, switching a strategy on applies the validation a save applies, switching one off is always allowed, neither touches the rest of the stored strategy, an exit strategy keeps the entry strategies it manages, and a test reports every rule's verdict, a rule with no data as unknown with the reason, without waiting for candles the OHLCV service cannot read through.
+//! The strategy routes: the overview reads each strategy from the book of its mode with its last evaluation and signal times from the evaluation totals and answers stopped and in Explore Mode, a new strategy starts on paper and arms live only with the confirmation phrase while the Auto Trader can trade live, an update never changes the mode, a priority outside 1-100 is refused on create, update, import and inline validation, the roster order is the entry evaluation order, readiness reads the paper rounds since the last rules change in the current run, switching a strategy on applies the validation a save applies, switching one off is always allowed, neither touches the rest of the stored strategy, an exit strategy keeps the entry strategies it manages, and a test reports every rule's verdict, a rule with no data as unknown with the reason, without waiting for candles the OHLCV service cannot read through.
 
 use crate::common;
 
@@ -51,6 +51,7 @@ fn stored(id: &str, strategy_type: StrategyType, rule: Condition, enabled: bool)
         version: 1,
         entry_strategy_ids: Vec::new(),
         mode: TradingMode::Live,
+        rules_changed_at: chrono::Utc::now(),
     };
     insert_strategy(&strategy).expect("insert strategy");
     strategy
@@ -569,6 +570,92 @@ async fn a_strategy_without_paper_rounds_reads_as_not_ready() {
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
 
+/// The history check of the readiness of strategy `id`, as the route answers it.
+async fn history_check(id: &str) -> Value {
+    let (status, body) = send(
+        "GET",
+        &format!("/api/strategies/{id}/readiness"),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    body["checks"]
+        .as_array()
+        .expect("checks")
+        .iter()
+        .find(|check| check["id"] == "history")
+        .cloned()
+        .unwrap_or_else(|| panic!("no history check: {body}"))
+}
+
+/// A rules change inside the current paper run restarts the strategy's readiness: the
+/// history counts the rounds since the change and names it. A change of anything but the
+/// rules leaves the readiness as it was.
+#[tokio::test]
+async fn a_rules_change_restarts_the_readiness_and_a_priority_change_does_not() {
+    let _dir = strategy_system().await;
+    let wallet = common::configure_trading_wallet();
+    let strategy = stored(
+        "paper-entry",
+        StrategyType::Entry,
+        liquidity_at_least(),
+        false,
+    );
+    let book =
+        screenerbot::positions::paper::initialize(screenerbot::chains::ChainId::Solana, &wallet)
+            .await
+            .expect("load the paper book");
+    let run = book.account(&wallet, 1.0).await.expect("start a paper run");
+    assert!(run.started_at >= strategy.rules_changed_at);
+
+    let whole_run = history_check("paper-entry").await;
+    assert_eq!(
+        whole_run["detail"]["id"], "paper-readiness-history-short",
+        "{whole_run}"
+    );
+    assert!(
+        whole_run["detail"]["args"].get("changed").is_none(),
+        "{whole_run}"
+    );
+
+    let reprioritized = Strategy {
+        priority: 9,
+        ..reload("paper-entry")
+    };
+    assert!(!update_strategy(&reprioritized).expect("update the priority"));
+    assert_eq!(
+        history_check("paper-entry").await,
+        whole_run,
+        "a priority change keeps the readiness"
+    );
+
+    let mut rules_changed = reload("paper-entry");
+    rules_changed.rules = RuleTree::leaf(condition(
+        "LiquidityLevel",
+        &[
+            ("threshold", json!(25.0)),
+            ("comparison", json!("GREATER_EQUAL")),
+        ],
+    ));
+    assert!(update_strategy(&rules_changed).expect("update the rules"));
+    let changed_at = reload("paper-entry").rules_changed_at;
+    assert!(changed_at > run.started_at);
+
+    let since_change = history_check("paper-entry").await;
+    assert_eq!(since_change["passed"], false, "{since_change}");
+    assert_eq!(
+        since_change["detail"]["id"], "strategies-readiness-history-since-short",
+        "{since_change}"
+    );
+    let args = &since_change["detail"]["args"];
+    assert_eq!(args["count"]["value"], 0, "{since_change}");
+    assert_eq!(
+        args["changed"],
+        json!({ "type": "time", "value": changed_at.timestamp_millis() }),
+        "{since_change}"
+    );
+}
+
 /// The overview row of strategy `id`.
 fn overview_row<'a>(overview: &'a Value, id: &str) -> &'a Value {
     overview["strategies"]
@@ -741,6 +828,67 @@ async fn the_overview_reads_each_strategy_from_the_book_of_its_mode() {
     assert!(idle["order"].is_null(), "{idle}");
 }
 
+/// A time the overview serialized, `None` for null.
+fn overview_time(value: &Value) -> Option<chrono::DateTime<chrono::Utc>> {
+    value.as_str().map(|text| {
+        chrono::DateTime::parse_from_rfc3339(text)
+            .unwrap_or_else(|e| panic!("{text}: {e}"))
+            .with_timezone(&chrono::Utc)
+    })
+}
+
+/// Each row's last evaluation and last signal are its evaluation totals' last times; a
+/// strategy never evaluated has neither.
+#[tokio::test]
+async fn the_overview_reads_the_last_times_from_the_evaluation_totals() {
+    use screenerbot::strategies::db::{record_evaluations, EvaluationRecord};
+    use screenerbot::strategies::types::EvaluationResult;
+
+    let _dir = strategy_system().await;
+    stored("evaluated", StrategyType::Entry, liquidity_at_least(), true);
+    stored(
+        "never-evaluated",
+        StrategyType::Entry,
+        liquidity_at_least(),
+        true,
+    );
+    let signalled_at = chrono::Utc::now() - chrono::Duration::minutes(5);
+    let evaluated_at = signalled_at + chrono::Duration::minutes(1);
+    let evaluation = |signalled: bool, at| EvaluationRecord {
+        result: EvaluationResult {
+            strategy_id: "evaluated".to_owned(),
+            result: signalled,
+            confidence: 1.0,
+            execution_time_ms: 1,
+            details: std::collections::HashMap::new(),
+        },
+        evaluated_at: at,
+    };
+    record_evaluations(&[
+        evaluation(true, signalled_at),
+        evaluation(false, evaluated_at),
+    ])
+    .expect("record the evaluations");
+
+    let (status, body) = send("GET", "/api/strategies/overview", Value::Null).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let evaluated = overview_row(&body, "evaluated");
+    let millis = |time: chrono::DateTime<chrono::Utc>| time.timestamp_millis();
+    assert_eq!(
+        overview_time(&evaluated["last_evaluated_at"]).map(millis),
+        Some(millis(evaluated_at)),
+        "{evaluated}"
+    );
+    assert_eq!(
+        overview_time(&evaluated["last_signal_at"]).map(millis),
+        Some(millis(signalled_at)),
+        "{evaluated}"
+    );
+    let never = overview_row(&body, "never-evaluated");
+    assert!(never["last_evaluated_at"].is_null(), "{never}");
+    assert!(never["last_signal_at"].is_null(), "{never}");
+}
+
 /// The roster ranks enabled entry strategies in the order the entry monitor evaluates
 /// them, whatever their mode, with ties on priority.
 #[tokio::test]
@@ -857,6 +1005,7 @@ fn an_exit_strategy_manages_its_bound_entry_strategies_or_every_position() {
         version: 1,
         entry_strategy_ids: Vec::new(),
         mode: TradingMode::Live,
+        rules_changed_at: chrono::Utc::now(),
     };
     assert!(exit.manages(Some("dip-buyer")));
     assert!(

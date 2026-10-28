@@ -103,6 +103,7 @@ pub async fn validate_strategy_inline_handler(Json(request): Json<StrategyReques
             request.entry_strategy_ids.unwrap_or_default(),
         ),
         mode: TradingMode::Paper,
+        rules_changed_at: now,
     };
 
     validation_response(&strategy).await

@@ -628,6 +628,12 @@ strategies-error-rule-not-operator-cannot-have-a-switched-off-child = NOT ऑप
 strategies-error-rule-rules-nest-deeper-than-four-levels = नियम चार स्तर से अधिक गहरे नेस्ट नहीं हो सकते
 strategies-error-rule-the-root-group-cannot-be-switched-off = रूट समूह को बंद नहीं किया जा सकता
 
+strategies-readiness-history-since-met =
+    { $count ->
+        [one] { $changed } को नियम बदलने के बाद से { $count } बंद पेपर राउंड, { $needed } ज़रूरी
+       *[other] { $changed } को नियम बदलने के बाद से { $count } बंद पेपर राउंड, { $needed } ज़रूरी
+    }
+strategies-readiness-history-since-short = { $changed } को नियम बदलने के बाद से { $needed } में से { $count } बंद पेपर राउंड
 strategies-readiness-priced = हर पोज़िशन की कीमत उपलब्ध
 strategies-readiness-priced-ok = हर खुली पेपर पोज़िशन का पूल प्राइस है
 strategies-readiness-priced-missing =

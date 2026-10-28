@@ -671,6 +671,13 @@ strategies-error-rule-not-operator-cannot-have-a-switched-off-child = El operado
 strategies-error-rule-rules-nest-deeper-than-four-levels = Las reglas no pueden anidarse más de cuatro niveles
 strategies-error-rule-the-root-group-cannot-be-switched-off = El grupo raíz no se puede desactivar
 
+strategies-readiness-history-since-met =
+    { $count ->
+        [one] { $count } ronda simulada cerrada desde el cambio de reglas del { $changed }, se necesitan { $needed }
+        [many] { $count } rondas simuladas cerradas desde el cambio de reglas del { $changed }, se necesitan { $needed }
+       *[other] { $count } rondas simuladas cerradas desde el cambio de reglas del { $changed }, se necesitan { $needed }
+    }
+strategies-readiness-history-since-short = { $count } de { $needed } rondas simuladas cerradas desde el cambio de reglas del { $changed }
 strategies-readiness-priced = Todas las posiciones con precio
 strategies-readiness-priced-ok = Todas las posiciones simuladas abiertas tienen precio de pool
 strategies-readiness-priced-missing =

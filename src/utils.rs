@@ -4,6 +4,7 @@
 //! Shared utility functions — formatting, parsing, and conversions.
 
 pub mod atomic_file;
+pub mod canonical_json;
 
 use crate::Error;
 use std::time::Duration;

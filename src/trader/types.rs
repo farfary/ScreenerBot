@@ -19,6 +19,9 @@ pub struct TradeDecision {
     /// The book the decision trades on. Required with no default, so every producer
     /// chooses: a paper decision is executed only by the paper executor.
     pub book: Book,
+    /// When the inputs this decision was decided on were read. A strategy entry carries
+    /// the read time of its cycle's strategies, so the paper executor can tell a buy
+    /// decided under rules that have since changed.
     pub timestamp: DateTime<Utc>,
     pub priority: TradePriority,
     pub price_native: Option<f64>,

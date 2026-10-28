@@ -39,23 +39,35 @@ pub fn paper_cash(starting_balance_native: f64, positions: &[Position]) -> f64 {
         })
 }
 
-/// What the current paper run holds about the strategies: the rounds they took part in and
-/// their failed paper exits in a row. The one evidence the live readiness of every paper
-/// strategy is judged on, read for all strategies at once.
+/// What the current paper run holds about the strategies: when it started, the rounds they
+/// took part in and their failed paper exits in a row. The one evidence the live readiness
+/// of every paper strategy is judged on, read for all strategies at once.
 #[derive(Debug, Clone, Default)]
 pub struct PaperStrategyEvidence {
+    run_started_at: Option<DateTime<Utc>>,
     rounds: Vec<StrategyRound>,
     failed_exit_streaks: HashMap<String, u32>,
 }
 
 impl PaperStrategyEvidence {
-    /// The evidence of the strategy `rounds` of the current run, in entry order, and the
-    /// failed exits in a row of each strategy.
-    pub fn new(rounds: Vec<StrategyRound>, failed_exit_streaks: HashMap<String, u32>) -> Self {
+    /// The evidence of the run that started at `run_started_at` (none before the first
+    /// run): its strategy `rounds`, in entry order, and the failed exits in a row of each
+    /// strategy.
+    pub fn new(
+        run_started_at: Option<DateTime<Utc>>,
+        rounds: Vec<StrategyRound>,
+        failed_exit_streaks: HashMap<String, u32>,
+    ) -> Self {
         Self {
+            run_started_at,
             rounds,
             failed_exit_streaks,
         }
+    }
+
+    /// When the current paper run started; none before the first run.
+    pub fn run_started_at(&self) -> Option<DateTime<Utc>> {
+        self.run_started_at
     }
 
     /// The rounds of the current run that `strategy_id` took part in, open or closed, in
@@ -192,11 +204,14 @@ impl PaperBook {
     }
 
     /// The strategy evidence of the current paper run of `wallet_address`; empty before the
-    /// first run starts. Two statements whatever the number of strategies, and unlike
+    /// first run starts. Three statements whatever the number of strategies, and unlike
     /// [`PaperBook::account`] it never starts a run. A synchronous store read: callers on the
     /// async runtime run it on the blocking pool.
     pub fn strategy_evidence(&self, wallet_address: &str) -> Result<PaperStrategyEvidence> {
         Ok(PaperStrategyEvidence::new(
+            self.db
+                .current_paper_epoch(wallet_address)?
+                .map(|epoch| epoch.started_at),
             self.db.strategy_rounds_of_current_run(wallet_address)?,
             self.db.failed_strategy_exit_streaks(wallet_address)?,
         ))

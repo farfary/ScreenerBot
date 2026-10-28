@@ -677,6 +677,13 @@ strategies-error-rule-not-operator-cannot-have-a-switched-off-child = O operador
 strategies-error-rule-rules-nest-deeper-than-four-levels = As regras não podem se aninhar em mais de quatro níveis
 strategies-error-rule-the-root-group-cannot-be-switched-off = O grupo raiz não pode ser desativado
 
+strategies-readiness-history-since-met =
+    { $count ->
+        [one] { $count } rodada fechada em Paper desde a mudança das regras em { $changed }, { $needed } necessárias
+        [many] { $count } rodadas fechadas em Paper desde a mudança das regras em { $changed }, { $needed } necessárias
+       *[other] { $count } rodadas fechadas em Paper desde a mudança das regras em { $changed }, { $needed } necessárias
+    }
+strategies-readiness-history-since-short = { $count } de { $needed } rodadas fechadas em Paper desde a mudança das regras em { $changed }
 strategies-readiness-priced = Todas as posições com preço
 strategies-readiness-priced-ok = Toda posição aberta em Paper tem preço de pool
 strategies-readiness-priced-missing =

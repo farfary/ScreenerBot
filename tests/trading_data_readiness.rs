@@ -102,6 +102,7 @@ fn strategy(strategy_type: StrategyType, timeframe: &str, rules: RuleTree) -> St
         version: 1,
         entry_strategy_ids: Vec::new(),
         mode: TradingMode::Live,
+        rules_changed_at: chrono::Utc::now(),
     }
 }
 

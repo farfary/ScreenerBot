@@ -7,6 +7,7 @@ use std::time::Duration;
 
 use crate::positions::paper::PaperBook;
 use crate::positions::PositionOrigin;
+use crate::strategies::types::Strategy;
 use crate::swaps::{Quote, QuoteError, QuoteRequest};
 use crate::trader::paper::TradingMode;
 use crate::trader::types::{TradeAction, TradeDecision};
@@ -44,7 +45,8 @@ pub(super) trait PaperTradeIo: Sync {
     fn entry_size(&self, decision: &TradeDecision) -> f64;
     /// Whether the decision may still fill: nothing force-stopped, an automatic trade
     /// with the auto-trader running, a strategy buy from a strategy still enabled in
-    /// Paper mode, and a trade of a copy round its copy task still wants
+    /// Paper mode whose rules have not changed since the decision ([`strategy_still_wants`]),
+    /// and a trade of a copy round its copy task still wants
     /// (`trader::copy::paper_trade_wanted`).
     async fn still_wanted(&self, decision: &TradeDecision, origin: &PositionOrigin) -> bool;
     /// The token of the trade, fetched on demand on the lane a real trade of `origin` uses.
@@ -99,7 +101,7 @@ impl PaperTradeIo for ProductionPaperTradeIo {
             (TradeAction::Buy | TradeAction::DCA, Some(strategy_id)) => {
                 matches!(
                     crate::strategies::db::get_strategy_async(strategy_id).await,
-                    Ok(Some(strategy)) if strategy.trades_on(TradingMode::Paper)
+                    Ok(Some(strategy)) if strategy_still_wants(&strategy, decision)
                 )
             }
             _ => true,
@@ -144,4 +146,14 @@ impl PaperTradeIo for ProductionPaperTradeIo {
     async fn wait(&self, duration: Duration) {
         tokio::time::sleep(duration).await;
     }
+}
+
+/// `strategy` still wants the paper `decision` it signalled: it trades on the paper book,
+/// and a buy was decided under its current rules. A buy decided before the rules changed
+/// would open a round under rules the strategy no longer has. An add extends a round the
+/// readiness window already judges by its entry time, so only the book is checked.
+pub(super) fn strategy_still_wants(strategy: &Strategy, decision: &TradeDecision) -> bool {
+    strategy.trades_on(TradingMode::Paper)
+        && (decision.action != TradeAction::Buy
+            || strategy.decided_under_current_rules(decision.timestamp))
 }

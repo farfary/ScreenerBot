@@ -692,6 +692,16 @@ strategies-error-rule-not-operator-cannot-have-a-switched-off-child = لا يم�
 strategies-error-rule-rules-nest-deeper-than-four-levels = لا يمكن تداخل القواعد لأكثر من أربعة مستويات
 strategies-error-rule-the-root-group-cannot-be-switched-off = لا يمكن تعطيل المجموعة الجذرية
 
+strategies-readiness-history-since-met =
+    { $count ->
+        [zero] لا جولات تجريبية مغلقة ({ $count }) منذ تغيير القواعد في { $changed }، المطلوب: { $needed }
+        [one] جولة تجريبية مغلقة واحدة ({ $count }) منذ تغيير القواعد في { $changed }، المطلوب: { $needed }
+        [two] جولتان تجريبيتان مغلقتان ({ $count }) منذ تغيير القواعد في { $changed }، المطلوب: { $needed }
+        [few] { $count } جولات تجريبية مغلقة منذ تغيير القواعد في { $changed }، المطلوب: { $needed }
+        [many] { $count } جولة تجريبية مغلقة منذ تغيير القواعد في { $changed }، المطلوب: { $needed }
+       *[other] { $count } جولة تجريبية مغلقة منذ تغيير القواعد في { $changed }، المطلوب: { $needed }
+    }
+strategies-readiness-history-since-short = الجولات التجريبية المغلقة منذ تغيير القواعد في { $changed }: { $count } من { $needed }
 strategies-readiness-priced = كل المراكز مسعّرة
 strategies-readiness-priced-ok = لكل مركز تجريبي مفتوح سعر مجمع
 strategies-readiness-priced-missing =

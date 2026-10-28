@@ -114,6 +114,7 @@ fn stored_strategy(enabled: bool, mode: crate::trader::paper::TradingMode) -> St
         version: 1,
         entry_strategy_ids: Vec::new(),
         mode,
+        rules_changed_at: Utc::now(),
     }
 }
 

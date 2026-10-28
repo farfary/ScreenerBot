@@ -31,6 +31,7 @@ fn strategy(id: &str, strategy_type: StrategyType, priority: i32, enabled: bool)
         version: 1,
         entry_strategy_ids: Vec::new(),
         mode: TradingMode::Paper,
+        rules_changed_at: Utc::now(),
     }
 }
 
@@ -359,4 +360,56 @@ fn unreadable_paper_evidence_leaves_the_live_figures_and_marks_the_paper_ones_ab
     assert_eq!(paper.watching, Some(1));
     assert!(paper.rounds.is_none());
     assert!(paper.readiness.is_none());
+}
+
+/// The paper figures count the rounds of the evidence window, the same rounds as the
+/// readiness; the open positions are state and are counted whenever they were entered.
+#[test]
+fn the_paper_figures_count_the_rounds_since_the_rules_changed() {
+    crate::config::utils::install_default_config();
+    let run_started_at = Utc::now() - chrono::Duration::hours(2);
+    let rules_changed_at = Utc::now() - chrono::Duration::hours(1);
+    let round = |entered: DateTime<Utc>, pnl: f64| {
+        let mut position = position(Book::Paper, Some("paper-entry"), None);
+        position.entry_time = entered;
+        position.exit_time = Some(entered + chrono::Duration::minutes(5));
+        position.pnl = Some(pnl);
+        position.pnl_percent = Some(pnl * 100.0);
+        crate::positions::db::StrategyRound {
+            position,
+            exit_strategy_id: None,
+        }
+    };
+    let evidence = PaperStrategyEvidence::new(
+        Some(run_started_at),
+        vec![
+            round(run_started_at + chrono::Duration::minutes(1), 0.4),
+            round(rules_changed_at, 0.01),
+            round(rules_changed_at + chrono::Duration::minutes(1), -0.02),
+        ],
+        HashMap::new(),
+    );
+    let mut open_before_the_change = position(Book::Paper, Some("paper-entry"), Some(0.1));
+    open_before_the_change.entry_time = run_started_at + chrono::Duration::minutes(2);
+    let books = BookPositions {
+        open_live: Vec::new(),
+        open_paper: vec![open_before_the_change],
+        live_rounds: HashMap::new(),
+    };
+    let paper_entry = Strategy {
+        rules_changed_at,
+        ..strategy("paper-entry", StrategyType::Entry, 1, true)
+    };
+
+    let figures = books.figures_of(&paper_entry, Some(&evidence));
+    let rounds = figures.rounds.expect("paper rounds");
+    assert_eq!(
+        rounds.closed, 2,
+        "the round under the old rules is not counted"
+    );
+    assert_eq!(rounds.win_rate_pct, Some(50.0));
+    let readiness = figures.readiness.expect("paper readiness");
+    assert_eq!(readiness.closed, rounds.closed);
+    assert_eq!(readiness.since_rules_changed, Some(rules_changed_at));
+    assert_eq!(figures.open, Some(1), "open positions are not windowed");
 }

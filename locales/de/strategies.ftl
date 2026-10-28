@@ -650,6 +650,12 @@ strategies-error-rule-not-operator-cannot-have-a-switched-off-child = Der NOT-Op
 strategies-error-rule-rules-nest-deeper-than-four-levels = Regeln dürfen höchstens vier Ebenen tief verschachtelt sein
 strategies-error-rule-the-root-group-cannot-be-switched-off = Die oberste Gruppe kann nicht ausgeschaltet werden
 
+strategies-readiness-history-since-met =
+    { $count ->
+        [one] { $count } geschlossene Paper-Runde seit der Regeländerung am { $changed }, { $needed } erforderlich
+       *[other] { $count } geschlossene Paper-Runden seit der Regeländerung am { $changed }, { $needed } erforderlich
+    }
+strategies-readiness-history-since-short = { $count } von { $needed } geschlossenen Paper-Runden seit der Regeländerung am { $changed }
 strategies-readiness-priced = Jede Position mit Preis
 strategies-readiness-priced-ok = Jede offene Paper-Position hat einen Pool-Preis
 strategies-readiness-priced-missing =

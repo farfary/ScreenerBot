@@ -658,6 +658,11 @@ strategies-error-rule-not-operator-cannot-have-a-switched-off-child = NOT 演算
 strategies-error-rule-rules-nest-deeper-than-four-levels = ルールのネストは 4 階層までです
 strategies-error-rule-the-root-group-cannot-be-switched-off = ルートグループは無効にできません
 
+strategies-readiness-history-since-met =
+    { $count ->
+       *[other] { $changed } のルール変更以降のクローズ済みペーパーラウンド { $count }件（必要数: { $needed }）
+    }
+strategies-readiness-history-since-short = { $changed } のルール変更以降のクローズ済みペーパーラウンド { $count }/{ $needed }
 strategies-readiness-priced = すべてのポジションに価格あり
 strategies-readiness-priced-ok = オープン中のペーパーポジションすべてにプール価格があります
 strategies-readiness-priced-missing =

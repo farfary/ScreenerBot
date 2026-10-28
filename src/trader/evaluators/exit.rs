@@ -620,6 +620,7 @@ mod tests {
             version: 1,
             entry_strategy_ids: Vec::new(),
             mode,
+            rules_changed_at: chrono::Utc::now(),
         }
     }
 

@@ -31,6 +31,7 @@ use crate::agent_control::audit::{self, AuditContext, AuditKind};
 use crate::agent_control::error::{Error, Result};
 use crate::agent_control::store::{self, interrupted_result, now_unix};
 use crate::errors::DatabaseError;
+use crate::utils::canonical_json::canonicalize;
 
 /// How long a pending approval stays actionable.
 pub const APPROVAL_TTL: Duration = Duration::from_secs(5 * 60);
@@ -122,28 +123,6 @@ pub struct ClaimedApproval {
     pub tool: String,
     pub correlation_id: String,
     pub canonical_args: Value,
-}
-
-/// Deterministic JSON: object keys sorted recursively, no insignificant
-/// whitespace. Two equal argument sets always produce the same bytes and the
-/// same digest regardless of key order on the wire.
-pub fn canonicalize(value: &Value) -> String {
-    fn norm(v: &Value) -> Value {
-        match v {
-            Value::Array(items) => Value::Array(items.iter().map(norm).collect()),
-            Value::Object(map) => {
-                let mut keys: Vec<&String> = map.keys().collect();
-                keys.sort();
-                let mut out = serde_json::Map::new();
-                for k in keys {
-                    out.insert(k.clone(), norm(&map[k]));
-                }
-                Value::Object(out)
-            }
-            other => other.clone(),
-        }
-    }
-    norm(value).to_string()
 }
 
 pub(crate) fn digest_of(canonical: &str) -> Vec<u8> {
@@ -467,29 +446,4 @@ fn close_executing(id: &str, state: ApprovalState, stored: &str, operation: &str
         return Err(Error::ApprovalNotPending);
     }
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use serde_json::json;
-
-    #[test]
-    fn canonicalize_is_key_order_independent() {
-        let a = json!({ "b": 1, "a": { "y": 2, "x": 3 } });
-        let b = json!({ "a": { "x": 3, "y": 2 }, "b": 1 });
-        assert_eq!(canonicalize(&a), canonicalize(&b));
-    }
-
-    #[test]
-    fn canonicalize_differs_when_a_value_changes() {
-        assert_ne!(
-            canonicalize(&json!({ "sol": 1 })),
-            canonicalize(&json!({ "sol": 9 }))
-        );
-    }
-
-    // The state machine (exactly-once claim, digest binding, retry recovery,
-    // denial persistence, crash recovery) is exercised against a real temp
-    // database in `tests/agent_control_store.rs`.
 }

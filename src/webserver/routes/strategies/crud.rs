@@ -255,6 +255,7 @@ pub async fn create_strategy(Json(request): Json<StrategyRequest>) -> Response {
         ),
         // A new strategy proves itself on paper before it is armed live.
         mode: TradingMode::Paper,
+        rules_changed_at: now,
     };
 
     // Validate strategy before saving
@@ -357,6 +358,7 @@ pub async fn update_strategy_handler(
                 .unwrap_or_else(|| existing.entry_strategy_ids.clone()),
         ),
         mode: existing.mode,
+        rules_changed_at: existing.rules_changed_at,
     };
 
     // Validate strategy before saving

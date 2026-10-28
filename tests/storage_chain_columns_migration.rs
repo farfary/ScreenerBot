@@ -43,9 +43,14 @@ const CHAIN_SCOPED_TABLES: &[(&str, &str)] = &[
     ("ai.db", "ai_decision_history"),
 ];
 
+/// Chain-scoped tables whose rows the store folds into another table at every
+/// open, so no row survives the migration to be counted: the per-evaluation
+/// strategy records, which become per-strategy evaluation totals.
+const FOLDED_AT_OPEN: &[(&str, &str)] = &[("strategies.db", "strategy_performance")];
+
 /// The audit: every table in these databases that is NOT chain-scoped. The
-/// strategy definition and schema-version tables are chain-neutral by
-/// design; the ATA tables belong to the Solana-only empty-account cleanup;
+/// strategy definition, evaluation-total and schema-version tables are
+/// chain-neutral by design; the ATA tables belong to the Solana-only empty-account cleanup;
 /// `action_steps` rows inherit their
 /// action's chain; `ai_instructions` are user-authored configuration;
 /// `store_schema` is the per-file schema ledger every store carries.
@@ -59,6 +64,7 @@ const TABLES_WITHOUT_CHAIN_SCOPE: &[(&str, &[&str])] = &[
             "store_schema",
             "strategies",
             "strategy_backtests",
+            "strategy_evaluation_totals",
             "strategy_templates",
         ],
     ),
@@ -171,6 +177,20 @@ fn v0_2_13_fixtures_gain_chain_scope_and_survive_a_second_boot() {
             Some("chain_id"),
             "{database}/{table}: chain_id must exist as the last column, got {columns:?}"
         );
+        if FOLDED_AT_OPEN.contains(&(*database, *table)) {
+            let remaining: i64 = migrated
+                .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
+                    row.get(0)
+                })
+                .unwrap_or_else(|e| panic!("count {database}/{table}: {e}"));
+            assert_eq!(remaining, 0, "{database}/{table}: rows are folded at open");
+            assert_eq!(
+                column_names(&migrated, table),
+                column_names(&open_database(fresh_dir.path(), database), table),
+                "{database}/{table}: fresh schema and migrated schema disagree"
+            );
+            continue;
+        }
         let chains: Vec<String> = migrated
             .prepare(&format!("SELECT DISTINCT chain_id FROM {table}"))
             .unwrap_or_else(|e| panic!("read distinct chains on {database}/{table}: {e}"))
@@ -227,6 +247,8 @@ fn v0_2_13_fixtures_gain_chain_scope_and_survive_a_second_boot() {
     // `strategy_assignments`, which nothing read or wrote, is dropped from the v0.2.13
     // store; version 3 only adds a column. Version 4 adds the paper or live mode, which
     // a core that ignores it would trade live, so version 4 is the oldest reader.
+    // Version 5 adds the rules clock and the evaluation totals, which a version 4 core
+    // reads past, so the oldest reader stays 4.
     let strategies = open_database(fixture_dir.path(), "strategies.db");
     let retired: i64 = strategies
         .query_row(
@@ -246,7 +268,37 @@ fn v0_2_13_fixtures_gain_chain_scope_and_survive_a_second_boot() {
             |row| Ok((row.get(0)?, row.get(1)?)),
         )
         .expect("read the strategies store ledger");
-    assert_eq!(ledger, (4, 4), "strategies.db: store ledger");
+    assert_eq!(ledger, (5, 4), "strategies.db: store ledger");
+
+    // The sentinel evaluation is folded into its strategy's totals, its time in the
+    // totals' fixed form.
+    let totals: (i64, i64, i64, String, String) = strategies
+        .query_row(
+            "SELECT evaluations, signals, total_exec_ms, last_evaluated_at, last_signal_at
+             FROM strategy_evaluation_totals WHERE strategy_id = 'sentinel-strategy'",
+            [],
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                ))
+            },
+        )
+        .expect("read the sentinel strategy's evaluation totals");
+    assert_eq!(
+        totals,
+        (
+            1,
+            1,
+            7,
+            "2026-01-01T00:00:00.000Z".to_owned(),
+            "2026-01-01T00:00:00.000Z".to_owned()
+        ),
+        "strategies.db: the recorded evaluation is counted in the totals"
+    );
 
     // The exit-strategy binding is appended with the default that manages every
     // position, which is what a strategy did before the column existed, and the fresh
@@ -279,11 +331,16 @@ fn v0_2_13_fixtures_gain_chain_scope_and_survive_a_second_boot() {
         migrated_columns
             .iter()
             .rev()
-            .take(2)
+            .take(4)
             .map(String::as_str)
             .collect::<Vec<_>>(),
-        ["mode", "entry_strategy_ids_json"],
-        "strategies.db: the binding and mode columns are appended in release order"
+        [
+            "rules_fingerprint",
+            "rules_changed_at",
+            "mode",
+            "entry_strategy_ids_json"
+        ],
+        "strategies.db: the binding, mode and rules clock columns are appended in release order"
     );
     assert_eq!(
         migrated_columns,

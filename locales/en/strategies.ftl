@@ -675,6 +675,12 @@ strategies-error-rule-the-root-group-cannot-be-switched-off = The root group can
 ## Live readiness of a paper strategy. Ids come from src/strategies/readiness.rs;
 ## the shared checks are in paper.ftl.
 
+strategies-readiness-history-since-met =
+    { $count ->
+        [one] { $count } closed paper round since the rules changed { $changed }, { $needed } needed
+       *[other] { $count } closed paper rounds since the rules changed { $changed }, { $needed } needed
+    }
+strategies-readiness-history-since-short = { $count } of { $needed } closed paper rounds since the rules changed { $changed }
 strategies-readiness-priced = Every position priced
 strategies-readiness-priced-ok = Every open paper position has a pool price
 strategies-readiness-priced-missing =

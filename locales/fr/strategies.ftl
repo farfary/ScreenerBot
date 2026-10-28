@@ -633,6 +633,13 @@ strategies-error-rule-not-operator-cannot-have-a-switched-off-child = L'opérate
 strategies-error-rule-rules-nest-deeper-than-four-levels = Les règles ne peuvent pas être imbriquées sur plus de quatre niveaux
 strategies-error-rule-the-root-group-cannot-be-switched-off = Le groupe racine ne peut pas être désactivé
 
+strategies-readiness-history-since-met =
+    { $count ->
+        [one] { $count } cycle simulé clôturé depuis la modification des règles le { $changed }, { $needed } requis
+        [many] { $count } cycles simulés clôturés depuis la modification des règles le { $changed }, { $needed } requis
+       *[other] { $count } cycles simulés clôturés depuis la modification des règles le { $changed }, { $needed } requis
+    }
+strategies-readiness-history-since-short = { $count } cycles simulés clôturés sur { $needed } depuis la modification des règles le { $changed }
 strategies-readiness-priced = Toutes les positions valorisées
 strategies-readiness-priced-ok = Chaque position simulée ouverte a un prix de pool
 strategies-readiness-priced-missing =

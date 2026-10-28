@@ -31,11 +31,12 @@ use rusqlite::{OptionalExtension, TransactionBehavior};
 use serde::Serialize;
 use serde_json::{json, Value};
 
-use crate::agent_control::approvals::{canonicalize, digest_of};
+use crate::agent_control::approvals::digest_of;
 use crate::agent_control::audit;
 use crate::agent_control::error::{Error, Result};
 use crate::agent_control::store::{self, interrupted_result, now_unix, STOPPED_WHILE_RUNNING};
 use crate::errors::DatabaseError;
+use crate::utils::canonical_json::canonicalize;
 
 /// How long after a submission an identical call returns that trade instead of
 /// trading again. A submission that is still running is reused at any age.

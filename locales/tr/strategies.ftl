@@ -628,6 +628,12 @@ strategies-error-rule-not-operator-cannot-have-a-switched-off-child = NOT operat
 strategies-error-rule-rules-nest-deeper-than-four-levels = Kurallar dört seviyeden daha derin iç içe geçemez
 strategies-error-rule-the-root-group-cannot-be-switched-off = Kök grup kapatılamaz
 
+strategies-readiness-history-since-met =
+    { $count ->
+        [one] Kuralların { $changed } tarihinde değişmesinden bu yana { $count } kapanmış sanal tur, { $needed } gerekli
+       *[other] Kuralların { $changed } tarihinde değişmesinden bu yana { $count } kapanmış sanal tur, { $needed } gerekli
+    }
+strategies-readiness-history-since-short = Kuralların { $changed } tarihinde değişmesinden bu yana { $needed } kapanmış sanal turdan { $count } tanesi
 strategies-readiness-priced = Her pozisyon fiyatlandı
 strategies-readiness-priced-ok = Her açık sanal pozisyonun havuz fiyatı var
 strategies-readiness-priced-missing =

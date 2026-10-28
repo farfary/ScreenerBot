@@ -56,8 +56,15 @@ pub fn strategy_entry_size_native() -> f64 {
 }
 
 /// The buy an entry strategy signal decides on `book`, the book of the strategy's mode:
-/// the configured trade size.
-fn entry_decision(mint: &str, strategy_id: String, price_native: f64, book: Book) -> TradeDecision {
+/// the configured trade size, stamped `decided_on`, when the strategies it was decided
+/// with were read.
+fn entry_decision(
+    mint: &str,
+    strategy_id: String,
+    price_native: f64,
+    book: Book,
+    decided_on: DateTime<Utc>,
+) -> TradeDecision {
     TradeDecision {
         position_id: None,
         mint: mint.to_owned(),
@@ -65,7 +72,7 @@ fn entry_decision(mint: &str, strategy_id: String, price_native: f64, book: Book
         reason: TradeReason::StrategySignal,
         strategy_id: Some(strategy_id),
         book,
-        timestamp: Utc::now(),
+        timestamp: decided_on,
         priority: TradePriority::Normal,
         price_native: Some(price_native),
         size_native: STRATEGY_ENTRY_SIZE,
@@ -324,12 +331,14 @@ impl StrategyEvaluator {
     /// stops at its own first signal, so a strategy of one book never takes a token from
     /// the other. The live pass runs first and both share one deadline of
     /// `STRATEGY_EVALUATION_TIMEOUT_SECS`, so a paper stall never drops a live signal.
+    /// Every decision carries `strategies_read_at`, when the strategies were read.
     pub async fn check_entry_strategies(
         chain: ChainId,
         token_mint: &str,
         price_info: &PriceResult,
         books: &[TradingMode],
         entry_strategies: &[Strategy],
+        strategies_read_at: DateTime<Utc>,
     ) -> crate::trader::Result<EntryDecisions> {
         // Early check: skip if no entry strategy of a requested book is configured
         if !entry_strategies
@@ -395,6 +404,7 @@ impl StrategyEvaluator {
                         strategy_id,
                         price_info.price_native,
                         mode.book(),
+                        strategies_read_at,
                     ));
                 }
                 Some(Ok(None)) => {}
@@ -582,8 +592,19 @@ mod tests {
 
     #[test]
     fn an_entry_signal_buys_as_a_strategy_signal() {
-        let decision = entry_decision("mint", "entry-strategy".to_owned(), 0.5, Book::Paper);
+        let read_at = Utc::now() - chrono::Duration::seconds(5);
+        let decision = entry_decision(
+            "mint",
+            "entry-strategy".to_owned(),
+            0.5,
+            Book::Paper,
+            read_at,
+        );
         assert_eq!(decision.action, TradeAction::Buy);
+        assert_eq!(
+            decision.timestamp, read_at,
+            "a decision is stamped with when its strategies were read"
+        );
         assert_eq!(decision.book, Book::Paper);
         assert_eq!(decision.reason, TradeReason::StrategySignal);
         assert_eq!(decision.strategy_id.as_deref(), Some("entry-strategy"));

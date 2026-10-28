@@ -70,6 +70,7 @@ fn strategy_of(strategy_type: StrategyType, rules: RuleTree) -> Strategy {
         version: 1,
         entry_strategy_ids: Vec::new(),
         mode: TradingMode::Live,
+        rules_changed_at: chrono::Utc::now(),
     }
 }
 
@@ -1506,16 +1507,14 @@ fn liquidity(liquidity_sol: f64) -> MarketData {
     }
 }
 
-/// The evaluations recorded for `strategy_id`, `None` when it was never evaluated.
+/// The evaluations and signals recorded for `strategy_id`, `None` when it was never
+/// evaluated.
 fn recorded(strategy_id: &str) -> Option<(u64, u64)> {
-    screenerbot::strategies::db::get_strategy_performance(strategy_id)
-        .expect("read evaluations")
-        .map(|performance| {
-            (
-                performance.total_evaluations,
-                performance.successful_signals,
-            )
-        })
+    screenerbot::strategies::db::get_strategies_with_totals()
+        .expect("read the evaluation totals")
+        .totals
+        .get(strategy_id)
+        .map(|totals| (totals.evaluations, totals.signals))
 }
 
 /// The enabled entry strategies are read lowest priority first with the name breaking a

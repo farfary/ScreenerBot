@@ -25,15 +25,14 @@ pub(crate) fn start() {
     QUEUE.get_or_init(|| spawn_writer(database::record_evaluations));
 }
 
-/// Queue one evaluation of `token_mint` for the store, stamped now.
-pub(crate) async fn record(result: EvaluationResult, token_mint: &str) -> crate::Result<()> {
+/// Queue one evaluation for the store, stamped now.
+pub(crate) async fn record(result: EvaluationResult) -> crate::Result<()> {
     let queue = QUEUE
         .get()
         .ok_or_else(|| crate::Error::internal_error("Strategy evaluation recorder not started"))?;
     queue
         .send(EvaluationRecord {
             result,
-            token_mint: token_mint.to_owned(),
             evaluated_at: Utc::now(),
         })
         .await
@@ -90,7 +89,6 @@ mod tests {
                 execution_time_ms: 1,
                 details: HashMap::new(),
             },
-            token_mint: "mint".to_owned(),
             evaluated_at: Utc::now(),
         }
     }

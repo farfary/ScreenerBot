@@ -672,6 +672,12 @@ strategies-error-rule-not-operator-cannot-have-a-switched-off-child = عملگر
 strategies-error-rule-rules-nest-deeper-than-four-levels = قوانین نمی‌توانند بیش از چهار سطح تودرتو باشند
 strategies-error-rule-the-root-group-cannot-be-switched-off = گروه ریشه را نمی‌توان خاموش کرد
 
+strategies-readiness-history-since-met =
+    { $count ->
+        [one] { $count } دور آزمایشی بسته از زمان تغییر قوانین در { $changed }، { $needed } لازم است
+       *[other] { $count } دور آزمایشی بسته از زمان تغییر قوانین در { $changed }، { $needed } لازم است
+    }
+strategies-readiness-history-since-short = { $count } از { $needed } دور آزمایشی بسته از زمان تغییر قوانین در { $changed }
 strategies-readiness-priced = همه پوزیشن‌ها قیمت‌دار هستند
 strategies-readiness-priced-ok = همه پوزیشن‌های آزمایشی باز قیمت استخر دارند
 strategies-readiness-priced-missing =

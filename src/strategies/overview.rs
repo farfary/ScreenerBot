@@ -15,9 +15,9 @@ use crate::config::with_config;
 use crate::logger::{self, LogTag};
 use crate::positions::paper::PaperStrategyEvidence;
 use crate::positions::{self, Book, Position};
-use crate::strategies::db::get_all_strategies_async;
+use crate::strategies::db::{get_strategies_with_totals_async, StrategiesWithTotals};
 use crate::strategies::readiness::{
-    paper_strategy_evidence, readiness_progress, ReadinessProgress,
+    counted_rounds, paper_strategy_evidence, readiness_progress, ReadinessProgress,
 };
 use crate::strategies::types::{Strategy, StrategyType};
 use crate::trader::admission::EntryBlock;
@@ -140,13 +140,13 @@ pub struct StrategySummary {
     pub last_signal_at: Option<DateTime<Utc>>,
 }
 
-/// The strategies overview. Store reads: the strategies, the paper strategy evidence when a
-/// paper strategy exists, and the paper cash when a paper entry strategy may enter. A failed
-/// paper evidence read leaves the strategies and the live figures in place and the paper
-/// figures absent.
+/// The strategies overview. Store reads: the strategies with their evaluation totals, the
+/// paper strategy evidence when a paper strategy exists, and the paper cash when a paper
+/// entry strategy may enter. A failed paper evidence read leaves the strategies and the
+/// live figures in place and the paper figures absent.
 pub async fn strategies_overview() -> crate::Result<StrategiesOverview> {
     let run_state = crate::trader::run_state();
-    let strategies = get_all_strategies_async().await?;
+    let StrategiesWithTotals { strategies, totals } = get_strategies_with_totals_async().await?;
     let monitors = Monitors::read();
     let explore = run_state == TraderRunState::Explore;
 
@@ -184,6 +184,7 @@ pub async fn strategies_overview() -> crate::Result<StrategiesOverview> {
                 .as_ref()
                 .map(|books| books.figures_of(&strategy, evidence.as_ref()))
                 .unwrap_or_default();
+            let evaluated = totals.get(&strategy.id);
             StrategySummary {
                 status,
                 order: order.get(&strategy.id).copied(),
@@ -195,8 +196,8 @@ pub async fn strategies_overview() -> crate::Result<StrategiesOverview> {
                 unrealized_native: figures.unrealized_native,
                 unpriced: figures.unpriced,
                 readiness: figures.readiness,
-                last_evaluated_at: None,
-                last_signal_at: None,
+                last_evaluated_at: evaluated.and_then(|totals| totals.last_evaluated_at),
+                last_signal_at: evaluated.and_then(|totals| totals.last_signal_at),
                 strategy,
             }
         })
@@ -412,8 +413,9 @@ impl BookPositions {
         }
     }
 
-    /// The figures of `strategy` in the book of its mode, the paper ones from `evidence`;
-    /// without it every paper figure is absent.
+    /// The figures of `strategy` in the book of its mode, the paper rounds counted in its
+    /// evidence window from `evidence`; without it every paper figure is absent. Open
+    /// positions are state and are counted whenever they were entered.
     fn figures_of(&self, strategy: &Strategy, evidence: Option<&PaperStrategyEvidence>) -> Figures {
         let book = strategy.mode.book();
         let readiness = evidence
@@ -421,7 +423,7 @@ impl BookPositions {
             .map(|evidence| readiness_progress(strategy, evidence));
         let paper_rounds = || {
             evidence.map(|evidence| {
-                let rounds = evidence.rounds_of(&strategy.id);
+                let (rounds, _) = counted_rounds(strategy, evidence);
                 round_totals(rounds.iter().filter(|round| round.exit_time.is_some()))
             })
         };

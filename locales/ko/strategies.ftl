@@ -658,6 +658,11 @@ strategies-error-rule-not-operator-cannot-have-a-switched-off-child = NOT 연산
 strategies-error-rule-rules-nest-deeper-than-four-levels = 규칙은 4단계보다 깊게 중첩할 수 없습니다
 strategies-error-rule-the-root-group-cannot-be-switched-off = 루트 그룹은 끌 수 없습니다
 
+strategies-readiness-history-since-met =
+    { $count ->
+       *[other] { $changed } 규칙 변경 이후 종료된 모의 라운드 { $count }개, 필요 { $needed }개
+    }
+strategies-readiness-history-since-short = { $changed } 규칙 변경 이후 종료된 모의 라운드 { $needed }개 중 { $count }개
 strategies-readiness-priced = 모든 포지션 가격 확인
 strategies-readiness-priced-ok = 열린 모든 모의 포지션에 풀 가격이 있습니다
 strategies-readiness-priced-missing =

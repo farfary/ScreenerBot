@@ -560,6 +560,7 @@ fn stored_live_entry(id: &str) -> screenerbot::strategies::types::Strategy {
         version: 1,
         entry_strategy_ids: Vec::new(),
         mode: screenerbot::trader::paper::TradingMode::Live,
+        rules_changed_at: Utc::now(),
     };
     screenerbot::strategies::db::insert_strategy(&strategy).expect("insert strategy");
     strategy

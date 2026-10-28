@@ -658,6 +658,11 @@ strategies-error-rule-not-operator-cannot-have-a-switched-off-child = NOT 运算
 strategies-error-rule-rules-nest-deeper-than-four-levels = 规则嵌套不能超过四层
 strategies-error-rule-the-root-group-cannot-be-switched-off = 根分组不能被关闭
 
+strategies-readiness-history-since-met =
+    { $count ->
+       *[other] 自 { $changed } 规则变更以来已有 { $count } 个已平仓的模拟轮次，需要 { $needed } 个
+    }
+strategies-readiness-history-since-short = 自 { $changed } 规则变更以来 { $count } / { $needed } 个已平仓模拟轮次
 strategies-readiness-priced = 所有仓位均有价格
 strategies-readiness-priced-ok = 每个未平仓的模拟仓位都有流动性池价格
 strategies-readiness-priced-missing =

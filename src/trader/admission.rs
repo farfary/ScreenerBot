@@ -505,20 +505,33 @@ pub async fn check_entry_admission(
 
 /// What every entry of one cycle is admitted and evaluated against, read once per entry
 /// cycle rather than once per token: the modes entries are wanted on, the enabled entry
-/// strategies that signal them and, when paper is one of the modes, the cash of the
-/// current paper run. The paper executor checks the cash again when it books, so a
-/// cycle-old figure never spends cash the run no longer has.
+/// strategies that signal them with when they were read and, when paper is one of the
+/// modes, the cash of the current paper run. The paper executor checks the cash again when
+/// it books, so a cycle-old figure never spends cash the run no longer has.
 #[derive(Debug, Clone)]
 pub struct EntryCycle {
     wanted: Vec<TradingMode>,
     entry_strategies: Vec<Strategy>,
+    strategies_read_at: chrono::DateTime<chrono::Utc>,
     paper_cash: Option<Result<f64, EntryBlock>>,
 }
 
 impl EntryCycle {
     /// The cycle of the `wanted` modes and the enabled `entry_strategies` in priority
-    /// order, reading the paper cash when paper is wanted.
+    /// order, read now, reading the paper cash when paper is wanted.
     pub async fn read(wanted: Vec<TradingMode>, entry_strategies: Vec<Strategy>) -> Self {
+        Self::read_at(chrono::Utc::now(), wanted, entry_strategies).await
+    }
+
+    /// The cycle of the `wanted` modes and the enabled `entry_strategies` in priority
+    /// order, as read from the store at `strategies_read_at`, reading the paper cash when
+    /// paper is wanted. The time is taken before the store read: a rules change committed
+    /// after it is never taken as one the strategies were read under.
+    pub async fn read_at(
+        strategies_read_at: chrono::DateTime<chrono::Utc>,
+        wanted: Vec<TradingMode>,
+        entry_strategies: Vec<Strategy>,
+    ) -> Self {
         let paper_cash = if wanted.contains(&TradingMode::Paper) {
             Some(read_paper_cash().await)
         } else {
@@ -527,6 +540,7 @@ impl EntryCycle {
         Self {
             wanted,
             entry_strategies,
+            strategies_read_at,
             paper_cash,
         }
     }
@@ -540,6 +554,12 @@ impl EntryCycle {
     /// decides the book its entry is made on.
     pub fn entry_strategies(&self) -> &[Strategy] {
         &self.entry_strategies
+    }
+
+    /// When the entry strategies of this cycle were read: every entry decision of the
+    /// cycle is decided on rules no newer than this.
+    pub fn strategies_read_at(&self) -> chrono::DateTime<chrono::Utc> {
+        self.strategies_read_at
     }
 }
 
