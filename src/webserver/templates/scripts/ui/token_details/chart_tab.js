@@ -29,13 +29,16 @@ export function applyChartTabMixin(DialogClass) {
   const proto = DialogClass.prototype;
 
   /**
-   * Initialize chart on overview tab
+   * Initialize chart on overview tab. The overview schedules this after its render, so the
+   * dialog may have closed (or reopened for another token) by the time it runs.
    * @private
    * @param {string} mint - Token mint address
    */
   proto._initializeChart = async function (mint) {
-    const chartContainer = this.dialogEl.querySelector("#tradingview-chart");
-    const timeframeChoice = this.dialogEl.querySelector('[data-seg="token-timeframe"]');
+    const dialogEl = this.dialogEl;
+    if (!dialogEl) return;
+    const chartContainer = dialogEl.querySelector("#tradingview-chart");
+    const timeframeChoice = dialogEl.querySelector('[data-seg="token-timeframe"]');
 
     if (!chartContainer) {
       console.error("Chart container not found");
@@ -118,6 +121,8 @@ export function applyChartTabMixin(DialogClass) {
     // sitting on an empty chart. Manual timeframe clicks never auto-switch.
     this._chartInitialLoadPending = true;
     await this._loadChartData(mint, this.currentTimeframe, true); // Initial load - set view
+    // A dialog closed during the first load has already stopped its pollers.
+    if (this.dialogEl !== dialogEl) return;
 
     // Populate the data-status indicator (fire-and-forget; never blocks render).
     this._updateDataIndicator(mint);

@@ -132,6 +132,7 @@ export class TradeActionDialog {
 
     this._isOpen = false;
     this._isLoading = false;
+    this._impactWarningPending = false;
     this._previousActiveElement = null;
     this._resolveOpen = null;
     this._settingInputProgrammatically = false; // Prevent input handler during programmatic changes
@@ -1870,7 +1871,8 @@ export class TradeActionDialog {
   }
 
   async _handleConfirmClick() {
-    if (this._isLoading) return;
+    // A pending impact warning owns the decision: a second confirm would replace it.
+    if (this._isLoading || this._impactWarningPending) return;
 
     const value = this._getInputValue();
 
@@ -1904,10 +1906,13 @@ export class TradeActionDialog {
     // tolerance and stayed silent for those running a tight one.
     const tolerance = this._slippagePct ?? this._configuredSlippage ?? 5;
     if (this._quoteData && this._quoteData.price_impact_pct > tolerance) {
-      const confirmed = await this._showSlippageWarning(
-        this._quoteData.price_impact_pct,
-        tolerance
-      );
+      this._impactWarningPending = true;
+      let confirmed;
+      try {
+        confirmed = await this._showSlippageWarning(this._quoteData.price_impact_pct, tolerance);
+      } finally {
+        this._impactWarningPending = false;
+      }
       if (!confirmed) {
         return; // User cancelled
       }
@@ -2044,7 +2049,8 @@ export class TradeActionDialog {
   }
 
   _handleKeyDown(event) {
-    if (!this._isOpen) {
+    // A confirmation dialog opened over this one answers its own keys.
+    if (!this._isOpen || ConfirmationDialog.activeDialog) {
       return;
     }
 

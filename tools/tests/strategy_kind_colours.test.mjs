@@ -7,7 +7,8 @@
  * primary blue and Exit the warning amber, declared once as the
  * `--strategy-kind-*` properties; no kind selector picks a success or error
  * colour of its own, so an Exit strategy never reads as a failure. The Entry and Exit
- * views of the strategies roster take the same pair on their bare glyph.
+ * view switch of the strategies roster is a shared segmented control: its bare glyph
+ * takes the option's colour like every other one, never a kind colour of its own.
  *
  * Run with `npm run test:js`.
  */
@@ -52,7 +53,7 @@ test("strategy kinds take one blue and amber pair", async () => {
   ]);
 });
 
-test("each roster view takes its kind colour on its bare glyph", async (t) => {
+test("each roster view's bare glyph takes its option's colour", async (t) => {
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   const api = createApiHandler([await loadIndex("trader"), await loadIndex("shell")], "populated");
   const host = await serveDashboard(context, { locale: "en", onApi: api.onApi });
@@ -66,14 +67,6 @@ test("each roster view takes its kind colour on its bare glyph", async (t) => {
   await page.waitForSelector("#strategies-roster tbody tr[data-row-id]");
   const views = await page.evaluate(() => {
     const doc = globalThis.document;
-    const probe = (variable) => {
-      const node = doc.createElement("span");
-      node.style.color = `var(${variable})`;
-      doc.body.append(node);
-      const color = getComputedStyle(node).color;
-      node.remove();
-      return color;
-    };
     const view = (kind) => {
       const option = doc
         .querySelector(`#strategies-roster input[data-seg-value="${kind}"]`)
@@ -81,7 +74,7 @@ test("each roster view takes its kind colour on its bare glyph", async (t) => {
       const glyph = option.querySelector(".segmented-icon");
       const style = getComputedStyle(glyph);
       return {
-        color: style.color,
+        color: style.color === getComputedStyle(option.querySelector(".segmented-label")).color,
         bare:
           style.backgroundColor === "rgba(0, 0, 0, 0)" &&
           style.borderStyle === "none" &&
@@ -89,13 +82,8 @@ test("each roster view takes its kind colour on its bare glyph", async (t) => {
         inline: glyph.parentElement === option.querySelector(".segmented-label"),
       };
     };
-    return {
-      entry: view("entry"),
-      exit: view("exit"),
-      blue: probe("--primary-color"),
-      amber: probe("--warning-color"),
-    };
+    return { entry: view("entry"), exit: view("exit") };
   });
-  assert.deepEqual(views.entry, { color: views.blue, bare: true, inline: true });
-  assert.deepEqual(views.exit, { color: views.amber, bare: true, inline: true });
+  assert.deepEqual(views.entry, { color: true, bare: true, inline: true });
+  assert.deepEqual(views.exit, { color: true, bare: true, inline: true });
 });

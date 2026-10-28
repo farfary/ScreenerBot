@@ -18,6 +18,7 @@
  */
 
 import "./fixtures/i18n_en.mjs";
+import "./fixtures/document_shim.mjs";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";

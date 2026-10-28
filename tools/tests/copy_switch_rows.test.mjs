@@ -10,7 +10,8 @@
  * lines below the setting it controls.
  *
  * Every `.copy-switch-row` in the Settings dialog shares its top edge with its
- * title, whatever text runs under the title.
+ * title, whatever text runs under the title. The filter warning is a notice of its own
+ * below the row, so the hint is the text a row carries under its title.
  *
  * Run with `npm run test:js`.
  */
@@ -45,14 +46,16 @@ test("Settings switches align with their titles", async (t) => {
     nodes.map((row) => ({
       title: row.querySelector("strong").textContent,
       titleTop: row.querySelector("strong").getBoundingClientRect().top,
+      titleHeight: row.querySelector("strong").getBoundingClientRect().height,
+      hint: Boolean(row.querySelector("small")?.textContent.trim()),
       toggleTop: row.querySelector(".toggle").getBoundingClientRect().top,
       height: row.getBoundingClientRect().height,
     }))
   );
   assert.ok(rows.length >= 2);
   assert.ok(
-    rows.some((row) => row.height > 60),
-    "a row with a hint and warning is covered"
+    rows.some((row) => row.hint && row.height >= 2 * row.titleHeight),
+    "a row with a hint under its title is covered"
   );
   for (const row of rows) {
     assert.ok(Math.abs(row.toggleTop - row.titleTop) <= 1, `${row.title}: ${JSON.stringify(row)}`);

@@ -3,25 +3,19 @@
 
 /* ==========================================================================
    Strategy kind colours: the one pair for every strategy surface. Entry is blue
-   and Exit is amber; red stays reserved for errors. The roster's kind views carry
-   the pair on their bare glyph.
+   and Exit is amber; red stays reserved for errors. The roster's Entry and Exit
+   view switch is a shared segmented control and keeps its own colours.
    ========================================================================== */
 .strategy-type-badge.entry,
-.type-card[data-type="ENTRY"],
-.strategies-roster .segmented-option:has(> input[data-seg-value="entry"]) {
+.type-card[data-type="ENTRY"] {
   --strategy-kind-color: var(--primary-color);
   --strategy-kind-tint: var(--primary-alpha-10);
 }
 
 .strategy-type-badge.exit,
-.type-card[data-type="EXIT"],
-.strategies-roster .segmented-option:has(> input[data-seg-value="exit"]) {
+.type-card[data-type="EXIT"] {
   --strategy-kind-color: var(--warning-color);
   --strategy-kind-tint: var(--warning-alpha-10);
-}
-
-.strategies-roster .segmented-option .segmented-icon {
-  color: var(--strategy-kind-color);
 }
 
 /* ==========================================================================

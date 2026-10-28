@@ -34,7 +34,7 @@ const OWNER = "src/webserver/templates/scripts/ui/trading_mode.js";
 const PAPER_GLYPH = "icon-test-tube-diagonal";
 
 /** Sources that still spell the Paper glyph themselves; this list only shrinks. */
-const GLYPH_SPELLED = ["src/webserver/templates/pages/trader.html"];
+const GLYPH_SPELLED = [];
 
 const PRIVATE_MODE_CLASS = /^(?:copy-mode-[\w-]*|[\w-]+-mode-(?:paper|live))$/;
 

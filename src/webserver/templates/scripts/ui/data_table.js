@@ -1850,8 +1850,18 @@ export class DataTable {
     // time anyone pressed a row action, a toolbar button or a pagination button — and gave no
     // clue why, since focus rings are suppressed under [data-input="mouse"]. Nothing is lost
     // by re-rendering under a focused button: it carries no state.
+    //
+    // Only a control the render rewrites counts. A render rebuilds the header, colgroup and
+    // body, never the toolbar, so a focused toolbar control (the search box, a select, the
+    // view switch's radios) keeps its focus and value through it; counting it held the old
+    // rows on screen after a view switch until focus left the toolbar.
     const activeEl = document.activeElement;
-    if (activeEl && activeEl !== document.body && container.contains(activeEl)) {
+    if (
+      activeEl &&
+      activeEl !== document.body &&
+      container.contains(activeEl) &&
+      !this.elements.toolbar?.contains(activeEl)
+    ) {
       const tag = activeEl.tagName?.toLowerCase();
       if (
         tag === "input" ||
@@ -1941,8 +1951,14 @@ export class DataTable {
         return;
       }
 
-      this._log("debug", "Skipping render during user interaction");
-      return;
+      // A body showing no rows (a load error, an empty state, or nothing yet) has no row
+      // to move out from under the cursor, so its first rows render at once: hovering over
+      // the Retry or New action that filled it must not keep that state on screen.
+      const bodyShowsRows = Boolean(this.elements?.tbody?.querySelector("tr[data-row-id]"));
+      if (bodyShowsRows || this._isEditingOrMenuOpen()) {
+        this._log("debug", "Skipping render during user interaction");
+        return;
+      }
     }
 
     const scrollContainer = this.elements.scrollContainer;

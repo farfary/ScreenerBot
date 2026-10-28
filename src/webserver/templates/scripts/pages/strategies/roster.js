@@ -268,7 +268,7 @@ export function createRoster({ container, onOpen, onCreate, onImport, onDelete, 
     };
     const realized = {
       id: "realized",
-      label: esc(I18n.t("strategies-col-realized")),
+      label: I18n.t("strategies-col-realized"),
       type: "sol",
       render: (_value, row) => realizedCell(row),
     };
@@ -609,6 +609,9 @@ export function createRoster({ container, onOpen, onCreate, onImport, onDelete, 
       return;
     }
     row.enabled = enabled;
+    // A reload that fails keeps the rows on screen without rendering them again, so the
+    // switch is released here rather than by the next render.
+    input.disabled = false;
     await reload();
   }
 

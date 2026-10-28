@@ -16,8 +16,9 @@
  *   paper and Return to paper on live.
  * - A switch the server refuses returns to its place, and the toast carries the reason
  *   the server gave.
- * - A refresh that fails keeps the rows on screen and marks them stale; only a first read
- *   that fails shows the error, with Retry.
+ * - A refresh that fails keeps the rows on screen and marks them stale, and a switch the
+ *   server stored before it is released; only a first read that fails shows the error,
+ *   with Retry.
  * - A trader-level block is stated once, in the toolbar, with the action that lifts it.
  * - A row opens its strategy in the editor; its switch does not.
  * - An empty view offers New Strategy with that view's kind chosen.
@@ -126,7 +127,7 @@ test("the Entry and Exit views show their own columns and count the strategies o
       ["open", "Open"],
       ["rounds", "Rounds"],
       ["win_rate", "Win rate"],
-      ["realized", "Realized SOL"],
+      ["realized", "Realized (SOL)"],
       ["last_signal", "Last signal"],
     ]
   );
@@ -155,7 +156,7 @@ test("the Entry and Exit views show their own columns and count the strategies o
       ["watching", "Watching"],
       ["closed", "Closed"],
       ["win_rate", "Win rate"],
-      ["realized", "Realized SOL"],
+      ["realized", "Realized (SOL)"],
       ["last_signal", "Last signal"],
     ]
   );
@@ -261,6 +262,8 @@ test("a failed refresh keeps the rows and marks them stale", async (t) => {
   assert.equal(await stale.getAttribute("data-variant"), "warning");
   assert.equal(await page.locator("#strategies-roster tbody tr[data-row-id]").count(), 3);
   assert.equal(await page.locator("#strategies-roster .state-view-empty").count(), 0);
+  const stored = page.locator(`#strategies-roster input[data-enable-strategy="${DIP_RECOVERY}"]`);
+  assert.equal(await stored.isDisabled(), false, "the stored switch is released though the reload failed");
 });
 
 test("a first read that fails shows the error with Retry", async (t) => {

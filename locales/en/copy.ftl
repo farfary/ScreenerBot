@@ -381,7 +381,7 @@ copy-watch-approve = Try to catch up using { -helius }
 copy-watch-approve-help = Continues from saved progress. May use more { -helius } credits and can still fall behind.
 copy-watch-approve-unavailable = { -helius } catch-up is unavailable. Configure an enabled { -helius } RPC endpoint to continue without skipping unchecked activity.
 copy-watch-no-provider = No catch-up provider is supported for this watch.
-copy-watch-budget-label = Signatures checked per check
+copy-watch-budget-label = Signatures Checked per Check
 # $min and $max are the signature limits per check.
 copy-watch-budget-hint = Or skip unchecked activity and resume from now. Choose { $min }–{ $max } signatures per check; a higher limit may use more RPC calls.
 copy-watch-ack = I understand missed activity will not be copied.
