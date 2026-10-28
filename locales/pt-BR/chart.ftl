@@ -8,6 +8,8 @@ chart-waiting = Aguardando dados do gráfico...
 chart-marker-dca = DCA { $index }
 chart-marker-exit-numbered = Saída { $index }
 chart-candles = Candles
+chart-timeframes =
+    .aria-label = Timeframe
 
 chart-status-none = Ainda sem dados do gráfico
 chart-status-ready = Dados prontos

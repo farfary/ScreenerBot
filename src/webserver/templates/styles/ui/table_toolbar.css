@@ -245,19 +245,19 @@
 }
 
 .table-toolbar-chip[data-variant="success"] .table-toolbar-chip__value {
-  color: #4ade80;
+  color: var(--semantic-success-text);
 }
 
 .table-toolbar-chip[data-variant="warning"] .table-toolbar-chip__value {
-  color: #facc15;
+  color: var(--semantic-warning-text);
 }
 
 .table-toolbar-chip[data-variant="error"] .table-toolbar-chip__value {
-  color: #f87171;
+  color: var(--semantic-error-text);
 }
 
 .table-toolbar-chip[data-variant="info"] .table-toolbar-chip__value {
-  color: #60a5fa;
+  color: var(--semantic-info-text);
 }
 
 .table-toolbar-chip[data-variant="secondary"] .table-toolbar-chip__value {

@@ -58,7 +58,7 @@ export const views = [
     populated: [
       { selector: "#filtering-info-bar .table-toolbar-chip", min: 7 },
       { selector: ".status-view .metric-card", min: 8 },
-      { selector: ".status-report-notice [data-filtering-sign-in]", min: 1 },
+      { selector: '.status-metrics-section .notice [data-action="filtering-sign-in"]', min: 1 },
       { selector: ".status-rejection-section .rej-source-pill", min: 5 },
       { selector: ".status-rejection-section .rejection-item", min: 14 },
     ],

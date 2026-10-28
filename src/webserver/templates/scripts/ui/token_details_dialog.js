@@ -1336,21 +1336,21 @@ export class TokenDetailsDialog {
         </div>
       </div>
       <div class="price-metrics" role="list" aria-label="${esc(I18n.t("tokens-dialog-market-metrics"))}">
-        <div class="metric-item" role="listitem">
-          <span class="metric-label">${esc(I18n.t("tokens-dialog-metric-market-cap"))}</span>
-          <span class="metric-value" data-live-value="market-cap">—</span>
+        <div class="price-metric" role="listitem">
+          <span class="price-metric-label">${esc(I18n.t("tokens-dialog-metric-market-cap"))}</span>
+          <span class="price-metric-value" data-live-value="market-cap">—</span>
         </div>
-        <div class="metric-item" role="listitem">
-          <span class="metric-label">${esc(I18n.t("tokens-overview-liquidity"))}</span>
-          <span class="metric-value" data-live-value="liquidity">—</span>
+        <div class="price-metric" role="listitem">
+          <span class="price-metric-label">${esc(I18n.t("tokens-overview-liquidity"))}</span>
+          <span class="price-metric-value" data-live-value="liquidity">—</span>
         </div>
-        <div class="metric-item" role="listitem">
-          <span class="metric-label">${esc(I18n.t("tokens-dialog-metric-volume-24h"))}</span>
-          <span class="metric-value" data-live-value="volume-24h">—</span>
+        <div class="price-metric" role="listitem">
+          <span class="price-metric-label">${esc(I18n.t("tokens-dialog-metric-volume-24h"))}</span>
+          <span class="price-metric-value" data-live-value="volume-24h">—</span>
         </div>
-        <div class="metric-item" role="listitem">
-          <span class="metric-label">${esc(I18n.t("tokens-overview-fact-holders"))}</span>
-          <span class="metric-value" data-live-value="holders">—</span>
+        <div class="price-metric" role="listitem">
+          <span class="price-metric-label">${esc(I18n.t("tokens-overview-fact-holders"))}</span>
+          <span class="price-metric-value" data-live-value="holders">—</span>
         </div>
       </div>
     `;

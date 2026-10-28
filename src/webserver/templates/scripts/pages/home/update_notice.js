@@ -5,28 +5,29 @@
 /**
  * The Home update notice.
  *
- * One slim row above the portfolio overview that appears only while a release
+ * One notice above the portfolio overview that appears only while a release
  * is in play: available, downloading, verifying, waiting to install, installing
  * or failed, and after the app has updated itself until that is acknowledged. It
  * reads the same updater state as Settings > Updates and links into it; every
  * decision (download, restart, open the installer) stays in that tab.
  */
+import { renderNotice } from "../../ui/notice.js";
 import {
   readUpdateStatus,
   UPDATE_PHASE_DETAIL_LABELS,
   UPDATE_PHASE_HEADLINE_LABELS,
 } from "../../ui/settings/update_status.js";
 
-// Phase -> icon and tone. Phases absent here (idle, checking, up_to_date,
+// Phase -> glyph and notice variant. Phases absent here (idle, checking, up_to_date,
 // check_failed, applied) leave the notice hidden; Settings owns them.
 const PHASE_PRESENTATION = Object.freeze({
-  available: { icon: "icon-arrow-down-to-line", tone: "primary" },
-  downloading: { icon: "icon-arrow-down-to-line", tone: "primary" },
-  verifying: { icon: "icon-shield-check", tone: "primary" },
-  ready_to_apply: { icon: "icon-circle-check", tone: "success" },
-  ready_to_install: { icon: "icon-package", tone: "primary" },
-  applying: { icon: "icon-loader", tone: "primary" },
-  failed: { icon: "icon-circle-x", tone: "error" },
+  available: { icon: "icon-arrow-down-to-line", variant: "info" },
+  downloading: { icon: "icon-arrow-down-to-line", variant: "info" },
+  verifying: { icon: "icon-shield-check", variant: "info" },
+  ready_to_apply: { icon: "icon-circle-check", variant: "success" },
+  ready_to_install: { icon: "icon-package", variant: "info" },
+  applying: { icon: "icon-loader", variant: "info" },
+  failed: { icon: "icon-circle-x", variant: "error" },
 });
 
 function progressSummary(progress, Utils) {
@@ -85,7 +86,7 @@ export function describeUpdateNotice(state, Utils) {
   return {
     key: `updated:${current}`,
     icon: "icon-circle-check",
-    tone: "success",
+    variant: "success",
     headline: I18n.label(UPDATE_PHASE_HEADLINE_LABELS, "applied", { version: current }),
     detail: I18n.t("updates-notice-updated-detail"),
     percent: null,
@@ -117,48 +118,38 @@ export function createUpdateNotice(Utils) {
     if (!el) return;
     current = notice;
     el.hidden = false;
-    el.dataset.tone = notice.tone;
 
     // Rebuild only when the phase or version changes; progress updates in place.
     if (renderedKey !== notice.key) {
       renderedKey = notice.key;
-      el.innerHTML = `
-        <i class="home-update-icon ${notice.icon}" aria-hidden="true"></i>
-        <div class="home-update-copy">
-          <strong class="home-update-headline"></strong>
-          <span class="home-update-detail"></span>
-        </div>
-        <div class="home-update-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" hidden>
-          <div class="home-update-progress-fill"></div>
-        </div>
-        <div class="home-update-actions">
-          <button type="button" class="btn btn-sm btn-secondary home-update-open"></button>
-          <button type="button" class="home-update-dismiss" hidden>
-            <i class="icon-x" aria-hidden="true"></i>
-          </button>
-        </div>
-      `;
-      const dismiss = el.querySelector(".home-update-dismiss");
-      dismiss.setAttribute("aria-label", I18n.t("common-action-dismiss"));
-      dismiss.title = I18n.t("common-action-dismiss");
-      el.querySelector(".home-update-open").addEventListener("click", () => {
+      el.innerHTML = renderNotice({
+        variant: notice.variant,
+        icon: notice.icon,
+        title: notice.headline,
+        message: notice.detail,
+        extraHtml:
+          notice.percent === null
+            ? ""
+            : '<div class="home-update-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100"><div class="home-update-progress-fill"></div></div>',
+        action: { id: "open-updates", label: notice.action.label },
+        dismiss: notice.dismissible ? I18n.t("common-action-dismiss") : "",
+      });
+      el.querySelector('[data-action="open-updates"]').addEventListener("click", () => {
         const view = current?.action.view || "status";
         if (current?.dismissible) acknowledge();
         void import("../../ui/settings_dialog.js").then(({ showSettingsDialog }) =>
           showSettingsDialog({ tab: "updates", updatesView: view })
         );
       });
-      dismiss.addEventListener("click", acknowledge);
+      el.querySelector('[data-action="dismiss"]')?.addEventListener("click", acknowledge);
     }
 
-    el.querySelector(".home-update-headline").textContent = notice.headline;
-    el.querySelector(".home-update-detail").textContent = notice.detail;
-    el.querySelector(".home-update-open").textContent = notice.action.label;
-    el.querySelector(".home-update-dismiss").hidden = !notice.dismissible;
+    el.querySelector(".notice-title").textContent = notice.headline;
+    const message = el.querySelector(".notice-message");
+    if (message) message.textContent = notice.detail;
 
     const bar = el.querySelector(".home-update-progress");
-    bar.hidden = notice.percent === null;
-    if (notice.percent !== null) {
+    if (bar && notice.percent !== null) {
       bar.setAttribute("aria-valuenow", String(Math.round(notice.percent)));
       bar.setAttribute("aria-valuetext", notice.detail);
       bar.setAttribute("aria-label", notice.headline);

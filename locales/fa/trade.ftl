@@ -102,7 +102,7 @@ trade-slippage-note-override = جایگزین: { $pct }%
 trade-slippage-warning = اسلیپیج بالا: ممکن است تا { $pct }% کمتر از قیمت پیشنهادی دریافت کنید.
 trade-impact-warning-title = هشدار تأثیر قیمتی بالا
 # $impact is a formatted percentage and $tolerance the slippage tolerance as configured.
-trade-impact-warning-text = تأثیر قیمتی این معامله <strong>{ $impact }</strong> است که از تحمل اسلیپیج <strong>{ $tolerance }%</strong> شما بیشتر است. ممکن است به‌طور قابل‌توجهی کمتر از انتظار دریافت کنید.
+trade-impact-warning-text = تأثیر قیمتی این معامله { $impact } است که از تحمل اسلیپیج { $tolerance }% شما بیشتر است. ممکن است به‌طور قابل‌توجهی کمتر از انتظار دریافت کنید.
 trade-impact-warning-proceed = با این حال ادامه بده
 
 ## Validation and verification

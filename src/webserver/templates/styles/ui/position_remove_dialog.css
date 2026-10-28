@@ -183,31 +183,11 @@
 }
 
 /* ============================================
-   DANGER BANNER (delete mode)
+   DANGER NOTICE (delete mode, ui/notice.js)
    ============================================ */
 
 .position-remove-danger {
-  display: none;
-  gap: 10px;
-  align-items: flex-start;
   margin-top: 14px;
-  padding: 12px 14px;
-  font-size: 12.5px;
-  line-height: 1.5;
-  color: var(--semantic-error-text);
-  background: var(--danger-alpha-10);
-  border: 1px solid var(--danger-alpha-30);
-  border-radius: var(--radius-lg);
-}
-
-.position-remove-danger[data-visible="true"] {
-  display: flex;
-}
-
-.position-remove-danger i {
-  flex-shrink: 0;
-  margin-top: 1px;
-  color: var(--semantic-error-text);
 }
 
 /* ============================================

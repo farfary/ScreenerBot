@@ -16,6 +16,7 @@ import {
   fieldUnit,
 } from "../../pages/config/field_text.js";
 import { UPDATE_PHASE_DETAIL_LABELS, UPDATE_PHASE_HEADLINE_LABELS } from "./update_status.js";
+import { renderNotice } from "../notice.js";
 
 const PREFERENCE_ORDER = [
   "auto_check",
@@ -430,7 +431,7 @@ export function createUpdatesView(Utils) {
       <div class="updates-history">
         ${
           error
-            ? `<p class="updates-history-notice">${escape(I18n.t("updates-notes-history-notice"))}</p>`
+            ? renderNotice({ message: I18n.t("updates-notes-history-notice") })
             : ""
         }
         <ol class="updates-release-list">

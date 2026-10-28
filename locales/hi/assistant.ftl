@@ -28,6 +28,7 @@ assistant-metric-total-evaluations = कुल मूल्यांकन
 assistant-metric-cache-hit-rate = कैश हिट रेट
 assistant-metric-avg-latency = औसत लेटेंसी
 assistant-metric-active-providers = सक्रिय प्रोवाइडर
+assistant-metric-active-providers-value = { $active } / { $total }
 assistant-decisions-title = हाल के निर्णय
 assistant-decisions-subtitle = मॉडल-विश्लेषण के नवीनतम निर्णय
 

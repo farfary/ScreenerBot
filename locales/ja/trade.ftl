@@ -102,7 +102,7 @@ trade-slippage-note-override = 上書き: { $pct }%
 trade-slippage-warning = スリッページが高めです。見積もりより最大 { $pct }% 少ない額を受け取る可能性があります。
 trade-impact-warning-title = 価格インパクトが高い警告
 # $impact is a formatted percentage and $tolerance the slippage tolerance as configured.
-trade-impact-warning-text = この取引の価格インパクトは <strong>{ $impact }</strong> で、スリッページ許容値 <strong>{ $tolerance }%</strong> を超えています。予想を大きく下回る額を受け取る可能性があります。
+trade-impact-warning-text = この取引の価格インパクトは { $impact } で、スリッページ許容値 { $tolerance }% を超えています。予想を大きく下回る額を受け取る可能性があります。
 trade-impact-warning-proceed = このまま続行
 
 ## Validation and verification

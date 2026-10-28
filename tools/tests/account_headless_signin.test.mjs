@@ -164,7 +164,7 @@ test("on the server's port a sign-in page handed back opens in this browser", as
     await page.waitForFunction(() => window.__openedPages.length > 0);
     assert.deepEqual(await openedPages(), [SIGN_IN_URL]);
     await page
-      .locator("#accountPanelProbe .account-notice", {
+      .locator("#accountPanelProbe .notice", {
         hasText: "Finish signing in in your browser",
       })
       .waitFor();
@@ -177,7 +177,7 @@ test("a page the server opened itself is not opened again", async () => {
   const { page, panel, openedPages, close } = await openPanel({ samePort: true, opened: true });
   try {
     await panel.locator('[data-action="browser"]').click();
-    await page.locator("#accountPanelProbe .account-notice").waitFor();
+    await page.locator("#accountPanelProbe .notice").waitFor();
     await Promise.all([
       page.waitForResponse((response) => response.url().endsWith("/api/account/signup")),
       page.locator("#accountPanelProbe .account-signup-note .account-link").click(),

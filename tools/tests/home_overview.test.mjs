@@ -231,7 +231,7 @@ test("the exposure ledger names a single position and opens it", async (t) => {
     worst_performer: body.positions.best_performer,
   };
   const page = await openHome(t, 1440, "en", { "/api/dashboard/home": JSON.stringify(body) });
-  const shown = await page.$$eval("#exposureLedger .metric-row", (rows) =>
+  const shown = await page.$$eval("#exposureLedger .home-ledger-row", (rows) =>
     rows.filter((row) => !row.hidden).map((row) => row.querySelector(".position-label").textContent)
   );
   assert.deepEqual(shown, ["Invested", "Current value", "Open P&L", "Position", "Held"]);

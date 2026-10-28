@@ -18,6 +18,7 @@
 import { Poller } from "../../core/poller.js";
 import * as Utils from "../../core/utils.js";
 import { renderStateView } from "../state_view.js";
+import { renderSegmented, setSegmentedValue } from "../segmented.js";
 import {
   CHART_POLLS_BEFORE_BACKOFF,
   CHART_TIMEFRAMES,
@@ -77,9 +78,6 @@ export function applyChartMixin(PositionDetailsDialog) {
     }
     this._pddChartType = this._pddChartType || "candlestick";
 
-    const segment = (attrs, label, active) =>
-      `<button type="button" class="timeframe-btn${active ? " active" : ""}" ${attrs} aria-pressed="${active}">${esc(label)}</button>`;
-
     section.innerHTML = `
       <div class="chart-container pdd-chart-container">
         <div class="chart-header pdd-chart-header">
@@ -98,18 +96,39 @@ export function applyChartMixin(PositionDetailsDialog) {
             </div>
           </div>
           <div class="chart-controls pdd-chart-controls">
-            <div class="timeframe-buttons" id="pddChartType" role="group" data-l10n-id="positions-chart-type-group">
-              ${Object.keys(CHART_TYPE_LABELS).map((id) => segment(`data-ct="${id}"`, I18n.label(CHART_TYPE_LABELS, id), id === this._pddChartType)).join("")}
+            ${renderSegmented(
+              {
+                name: "pdd-chart-type",
+                options: Object.keys(CHART_TYPE_LABELS).map((id) => ({
+                  value: id,
+                  label: I18n.label(CHART_TYPE_LABELS, id),
+                })),
+                value: this._pddChartType,
+                ariaLabel: I18n.attr("positions-chart-type-group", "aria-label"),
+                compact: true,
+              },
+              esc
+            )}
+            <div class="pdd-chart-overlays" role="group" data-l10n-id="positions-chart-overlays-group">
+              <label class="toggle">
+                <input type="checkbox" id="pddEmaToggle"${this._pddEma ? " checked" : ""} />
+                <span class="toggle-track" aria-hidden="true"></span>
+                <span data-l10n-id="positions-chart-ema"></span>
+              </label>
+              <button type="button" class="btn btn-ghost btn-xs" id="pddFrameBtn" data-l10n-id="positions-chart-fit"></button>
             </div>
-            <div class="timeframe-buttons" role="group" data-l10n-id="positions-chart-overlays-group">
-              <button type="button" class="timeframe-btn${this._pddEma ? " active" : ""}" id="pddEmaToggle" data-l10n-id="positions-chart-ema" aria-pressed="${Boolean(this._pddEma)}"></button>
-              <button type="button" class="timeframe-btn" id="pddFrameBtn" data-l10n-id="positions-chart-fit"></button>
-            </div>
-            <div class="timeframe-buttons" id="pddTimeframes" role="group" data-l10n-id="positions-chart-timeframes-group">
-              ${CHART_TIMEFRAMES.map((tf) => segment(`data-tf="${tf}"`, tf.toUpperCase(), tf === this._chartTimeframe)).join("")}
-            </div>
-            <div class="timeframe-buttons pdd-pane-group" role="group" data-l10n-id="positions-chart-pane-group">
-              <button type="button" class="timeframe-btn pdd-pane-btn" id="pddChartFocusBtn" aria-controls="pddActivity" aria-pressed="false" data-l10n-id="positions-pane-expand-chart"><i class="icon-maximize-2"></i></button>
+            ${renderSegmented(
+              {
+                name: "pdd-timeframe",
+                options: CHART_TIMEFRAMES.map((tf) => ({ value: tf, label: tf.toUpperCase() })),
+                value: this._chartTimeframe,
+                ariaLabel: I18n.attr("chart-timeframes", "aria-label"),
+                compact: true,
+              },
+              esc
+            )}
+            <div class="pdd-pane-group" role="group" data-l10n-id="positions-chart-pane-group">
+              <button type="button" class="btn-icon btn-icon-sm" id="pddChartFocusBtn" aria-controls="pddActivity" aria-pressed="false" data-l10n-id="positions-pane-expand-chart"><i class="icon-maximize-2" aria-hidden="true"></i></button>
             </div>
           </div>
         </div>
@@ -197,43 +216,33 @@ export function applyChartMixin(PositionDetailsDialog) {
     await this._refreshPositionChart(mint);
     this._startPositionChartPoller(mint);
 
-    const setPressed = (group, active) => {
-      group.querySelectorAll(".timeframe-btn").forEach((b) => {
-        b.classList.toggle("active", b === active);
-        b.setAttribute("aria-pressed", String(b === active));
+    this.dialogEl
+      ?.querySelector('[data-seg="pdd-timeframe"]')
+      ?.addEventListener("change", async (e) => {
+        const timeframe = e.target.value;
+        if (!CHART_TIMEFRAMES.includes(timeframe) || timeframe === this._chartTimeframe) return;
+        this._chartTimeframe = timeframe;
+        this._pddTfAuto = false;
+        this._pddEmptyPolls = 0;
+        // Kick the backend before reading: a timeframe that has never been collected
+        // otherwise sits on "Waiting for chart data" until ordinary monitoring gets to it.
+        triggerRefresh(mint);
+        await this._refreshPositionChart(mint);
       });
-    };
 
-    const tfWrap = this.dialogEl?.querySelector("#pddTimeframes");
-    tfWrap?.addEventListener("click", async (e) => {
-      const btn = e.target.closest(".timeframe-btn");
-      if (!btn || btn.dataset.tf === this._chartTimeframe) return;
-      setPressed(tfWrap, btn);
-      this._chartTimeframe = btn.dataset.tf;
-      this._pddTfAuto = false;
-      this._pddEmptyPolls = 0;
-      // Kick the backend before reading: a timeframe that has never been collected otherwise
-      // sits on "Waiting for chart data" until ordinary monitoring gets around to it.
-      triggerRefresh(mint);
-      await this._refreshPositionChart(mint);
-    });
+    this.dialogEl
+      ?.querySelector('[data-seg="pdd-chart-type"]')
+      ?.addEventListener("change", (e) => {
+        if (!this._pddChart || !Object.hasOwn(CHART_TYPE_LABELS, e.target.value)) return;
+        this._pddChartType = e.target.value;
+        // setChartType carries markers, reference lines and indicators across to the new series.
+        this._pddChart.setChartType(this._pddChartType);
+      });
 
-    const ctWrap = this.dialogEl?.querySelector("#pddChartType");
-    ctWrap?.addEventListener("click", (e) => {
-      const btn = e.target.closest(".timeframe-btn");
-      if (!btn || !this._pddChart) return;
-      setPressed(ctWrap, btn);
-      this._pddChartType = btn.dataset.ct;
-      // setChartType carries markers, reference lines and indicators across to the new series.
-      this._pddChart.setChartType(this._pddChartType);
-    });
-
-    const emaBtn = this.dialogEl?.querySelector("#pddEmaToggle");
-    emaBtn?.addEventListener("click", () => {
+    const emaToggle = this.dialogEl?.querySelector("#pddEmaToggle");
+    emaToggle?.addEventListener("change", () => {
       if (!this._pddChart) return;
-      this._pddEma = !this._pddEma;
-      emaBtn.classList.toggle("active", this._pddEma);
-      emaBtn.setAttribute("aria-pressed", String(this._pddEma));
+      this._pddEma = emaToggle.checked;
       if (this._pddEma) {
         this._pddChart.addIndicator("ema9");
         this._pddChart.addIndicator("ema21");
@@ -303,7 +312,7 @@ export function applyChartMixin(PositionDetailsDialog) {
           (has(this._chartTimeframe) ? null : status.best_timeframe);
         if (next && next !== this._chartTimeframe) {
           this._chartTimeframe = next;
-          this._syncPddTimeframeButtons(next);
+          this._syncPddTimeframe(next);
         }
       }
 
@@ -429,14 +438,8 @@ export function applyChartMixin(PositionDetailsDialog) {
     this.dialogEl?.querySelector("#pddChartSection")?.classList.toggle("is-empty", empty);
   };
 
-  proto._syncPddTimeframeButtons = function (tf) {
-    this.dialogEl
-      ?.querySelector("#pddTimeframes")
-      ?.querySelectorAll(".timeframe-btn")
-      .forEach((b) => {
-        b.classList.toggle("active", b.dataset.tf === tf);
-        b.setAttribute("aria-pressed", String(b.dataset.tf === tf));
-      });
+  proto._syncPddTimeframe = function (tf) {
+    setSegmentedValue(this.dialogEl?.querySelector('[data-seg="pdd-timeframe"]'), tf);
   };
 
   /**

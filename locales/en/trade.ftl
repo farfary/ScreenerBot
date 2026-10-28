@@ -102,7 +102,7 @@ trade-slippage-note-override = Override: { $pct }%
 trade-slippage-warning = High slippage: you may receive up to { $pct }% less than quoted.
 trade-impact-warning-title = High Price Impact Warning
 # $impact is a formatted percentage and $tolerance the slippage tolerance as configured.
-trade-impact-warning-text = This trade has a price impact of <strong>{ $impact }</strong>, which exceeds your slippage tolerance of <strong>{ $tolerance }%</strong>. You may receive significantly less than expected.
+trade-impact-warning-text = This trade has a price impact of { $impact }, which exceeds your slippage tolerance of { $tolerance }%. You may receive significantly less than expected.
 trade-impact-warning-proceed = Proceed Anyway
 
 ## Validation and verification

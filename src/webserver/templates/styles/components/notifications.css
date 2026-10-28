@@ -523,12 +523,6 @@ body.notification-drawer-open {
   display: none;
 }
 
-.action-detail__warning {
-  margin: 0;
-  color: var(--semantic-warning-text);
-  line-height: 1.4;
-}
-
 .action-detail__error {
   margin: 0;
   color: var(--semantic-error-text);

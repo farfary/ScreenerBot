@@ -79,7 +79,7 @@ trade-slippage-note-auto-value = ऑटो (सेटिंग्स से { $p
 trade-slippage-note-override = ओवरराइड: { $pct }%
 trade-slippage-warning = ज़्यादा स्लिपेज: आपको कोट से { $pct }% तक कम मिल सकता है।
 trade-impact-warning-title = ज़्यादा प्राइस इम्पैक्ट की चेतावनी
-trade-impact-warning-text = इस ट्रेड का प्राइस इम्पैक्ट <strong>{ $impact }</strong> है, जो आपकी स्लिपेज सहनसीमा <strong>{ $tolerance }%</strong> से ज़्यादा है। आपको अपेक्षा से काफ़ी कम मिल सकता है।
+trade-impact-warning-text = इस ट्रेड का प्राइस इम्पैक्ट { $impact } है, जो आपकी स्लिपेज सहनसीमा { $tolerance }% से ज़्यादा है। आपको अपेक्षा से काफ़ी कम मिल सकता है।
 trade-impact-warning-proceed = फिर भी आगे बढ़ें
 
 trade-error-invalid-number = अमान्य संख्या

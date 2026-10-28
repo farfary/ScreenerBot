@@ -8,6 +8,8 @@ chart-waiting = في انتظار بيانات المخطط...
 chart-marker-dca = DCA { $index }
 chart-marker-exit-numbered = خروج { $index }
 chart-candles = الشموع
+chart-timeframes =
+    .aria-label = الإطار الزمني
 
 chart-status-none = لا توجد بيانات مخطط بعد
 chart-status-ready = البيانات جاهزة

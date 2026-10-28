@@ -79,7 +79,7 @@ trade-slippage-note-auto-value = Авто ({ $pct }% из настроек)
 trade-slippage-note-override = Переопределено: { $pct }%
 trade-slippage-warning = Высокое проскальзывание: вы можете получить до { $pct }% меньше, чем в котировке.
 trade-impact-warning-title = Предупреждение: высокое влияние на цену
-trade-impact-warning-text = Влияние этой сделки на цену составляет <strong>{ $impact }</strong>, что превышает ваш допуск проскальзывания <strong>{ $tolerance }%</strong>. Вы можете получить существенно меньше ожидаемого.
+trade-impact-warning-text = Влияние этой сделки на цену составляет { $impact }, что превышает ваш допуск проскальзывания { $tolerance }%. Вы можете получить существенно меньше ожидаемого.
 trade-impact-warning-proceed = Всё равно продолжить
 
 trade-error-invalid-number = Недопустимое число

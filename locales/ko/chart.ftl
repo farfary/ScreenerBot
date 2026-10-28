@@ -8,6 +8,8 @@ chart-waiting = 차트 데이터 대기 중...
 chart-marker-dca = DCA { $index }
 chart-marker-exit-numbered = 청산 { $index }
 chart-candles = 캔들
+chart-timeframes =
+    .aria-label = 타임프레임
 
 chart-status-none = 차트 데이터 없음
 chart-status-ready = 데이터 준비됨

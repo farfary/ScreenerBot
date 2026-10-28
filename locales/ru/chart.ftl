@@ -8,6 +8,8 @@ chart-waiting = Ожидание данных графика...
 chart-marker-dca = DCA { $index }
 chart-marker-exit-numbered = Выход { $index }
 chart-candles = Свечи
+chart-timeframes =
+    .aria-label = Таймфрейм
 
 ## Per-timeframe status
 

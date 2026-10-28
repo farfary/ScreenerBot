@@ -55,6 +55,8 @@ const RETIRED = [
   "copy-seg-btn",
   "dt-pagination-mode-btn",
   "dt-pagination-mode-toggle",
+  "pdd-act-filter",
+  "pdd-act-filters",
   "stats-period-btn",
   "stats-period-seg",
   "table-toolbar-seg",
@@ -62,10 +64,14 @@ const RETIRED = [
   "table-toolbar-seg__btn",
   "time-preset-btn",
   "time-range-presets",
+  "timeframe-btn",
+  "timeframe-buttons",
+  "trade-action-slippage-btn",
+  "trade-action-slippage-presets",
 ];
 
 /** One-of-many choices still drawn privately; each moves to the owner, and the list only shrinks. */
-const PRIVATE_CONTROLS = ["filter-tab", "timeframe-btn", "trade-action-slippage-presets"];
+const PRIVATE_CONTROLS = ["filter-tab"];
 
 /** Rules outside the owner that may name a part of the control, with the reason. */
 const PART_RULES = {

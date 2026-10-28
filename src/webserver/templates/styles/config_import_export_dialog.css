@@ -495,29 +495,19 @@
    WARNINGS
    ============================================================================ */
 
-.config-import-warnings {
-  margin-bottom: 16px;
-  padding: 12px;
-  border: 1px solid var(--warning-alpha-30);
-  border-radius: var(--radius-lg);
-  background: var(--warning-alpha-10);
-}
-
-.config-import-warnings-header {
+/* The warnings notice (ui/notice.js) lists each finding under its title. */
+.config-import-findings {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
-  color: var(--warning-color);
-  font-size: 0.8125rem;
-  font-weight: 600;
-}
-
-.config-import-warning-item {
-  padding-block: 4px;
-  padding-inline: 24px 0;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding-inline-start: 1.25rem;
   font-size: 0.75rem;
   color: var(--text-secondary);
+}
+
+.notice + .config-dialog-sections {
+  margin-top: 16px;
 }
 
 /* ============================================================================

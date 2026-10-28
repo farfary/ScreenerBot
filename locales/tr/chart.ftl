@@ -8,6 +8,8 @@ chart-waiting = Grafik verileri bekleniyor...
 chart-marker-dca = DCA { $index }
 chart-marker-exit-numbered = Çıkış { $index }
 chart-candles = Mumlar
+chart-timeframes =
+    .aria-label = Zaman dilimi
 
 chart-status-none = Henüz grafik verisi yok
 chart-status-ready = Veri hazır

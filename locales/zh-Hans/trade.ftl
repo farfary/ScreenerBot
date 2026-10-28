@@ -102,7 +102,7 @@ trade-slippage-note-override = 覆盖：{ $pct }%
 trade-slippage-warning = 滑点较高：实际收到的数量可能比报价最多少 { $pct }%。
 trade-impact-warning-title = 高价格影响警告
 # $impact is a formatted percentage and $tolerance the slippage tolerance as configured.
-trade-impact-warning-text = 此笔交易的价格影响为 <strong>{ $impact }</strong>，超出了您 <strong>{ $tolerance }%</strong> 的滑点容忍度。您实际收到的数量可能远低于预期。
+trade-impact-warning-text = 此笔交易的价格影响为 { $impact }，超出了您 { $tolerance }% 的滑点容忍度。您实际收到的数量可能远低于预期。
 trade-impact-warning-proceed = 仍然继续
 
 ## Validation and verification

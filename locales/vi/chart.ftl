@@ -8,6 +8,8 @@ chart-waiting = Đang chờ dữ liệu biểu đồ...
 chart-marker-dca = DCA { $index }
 chart-marker-exit-numbered = Thoát { $index }
 chart-candles = Nến
+chart-timeframes =
+    .aria-label = Khung thời gian
 
 chart-status-none = Chưa có dữ liệu biểu đồ
 chart-status-ready = Dữ liệu đã sẵn sàng

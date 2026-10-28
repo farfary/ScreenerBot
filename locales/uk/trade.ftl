@@ -102,7 +102,7 @@ trade-slippage-note-override = Перевизначено: { $pct }%
 trade-slippage-warning = Високе проковзування: ви можете отримати до { $pct }% менше, ніж у котируванні.
 trade-impact-warning-title = Попередження про високий вплив на ціну
 # $impact is a formatted percentage and $tolerance the slippage tolerance as configured.
-trade-impact-warning-text = Ця угода має вплив на ціну <strong>{ $impact }</strong>, що перевищує вашу допустиму межу проковзування <strong>{ $tolerance }%</strong>. Ви можете отримати значно менше, ніж очікувалося.
+trade-impact-warning-text = Ця угода має вплив на ціну { $impact }, що перевищує вашу допустиму межу проковзування { $tolerance }%. Ви можете отримати значно менше, ніж очікувалося.
 trade-impact-warning-proceed = Усе одно продовжити
 
 ## Validation and verification

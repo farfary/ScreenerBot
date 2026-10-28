@@ -500,6 +500,15 @@
   font-size: var(--font-size-sm);
   line-height: 1.5;
   color: var(--text-secondary);
+
+  /* A program error or an address in the text wraps instead of widening the notice. */
+  overflow-wrap: anywhere;
+}
+
+/* The close glyph ends the heading row, whatever the title's length. */
+.notice-dismiss {
+  align-self: center;
+  margin-inline-start: auto;
 }
 
 .notice-extra {

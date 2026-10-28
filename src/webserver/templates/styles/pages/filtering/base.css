@@ -118,7 +118,13 @@
   overflow: hidden;
 }
 
+/* The signed-out report notice (ui/notice.js) above the metric cards; grid items keep
+   their height in the scrolling column. */
 .status-metrics-section {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  gap: var(--spacing-md);
   overflow-y: auto;
   padding: var(--spacing-lg);
   min-height: 0;
@@ -140,37 +146,6 @@
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
   gap: var(--spacing-md);
   width: 100%;
-}
-
-.status-view .metric-card {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-xs);
-}
-
-.status-view .metric-detail {
-  margin-top: auto;
-}
-
-/* Signed-out RugCheck report rate, above the metric cards */
-.status-report-notice {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--spacing-sm) var(--spacing-md);
-  margin-bottom: var(--spacing-md);
-  padding: var(--spacing-sm) var(--spacing-md);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
-  background: var(--bg-card);
-  font-size: 0.85rem;
-  color: var(--text-secondary);
-}
-
-.status-report-notice__text {
-  flex: 1 1 240px;
-  min-width: 0;
 }
 
 /* =============================================================================

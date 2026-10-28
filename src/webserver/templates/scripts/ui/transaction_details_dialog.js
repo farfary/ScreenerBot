@@ -16,6 +16,7 @@ import { directionBadge } from "./transaction_direction.js";
 import { statusBadge } from "./transaction_status.js";
 import { venueLabel } from "./venue.js";
 import { renderStateView } from "./state_view.js";
+import { renderNotice } from "./notice.js";
 import { createExpandToggle } from "./expand_toggle.js";
 import { explorerMenuButton, openExplorerMenu } from "./context_menu.js";
 import {
@@ -536,7 +537,11 @@ export class TransactionDetailsDialog {
       <div class="tx-overview-layout">
         ${
           failureMessage
-            ? `<div class="tx-failure-callout" role="alert"><i class="icon-circle-alert"></i><div><strong>${Utils.escapeHtml(I18n.t("transactions-dialog-failed-title"))}</strong><span>${Utils.escapeHtml(failureMessage)}</span></div></div>`
+            ? renderNotice({
+                variant: "error",
+                title: I18n.t("transactions-dialog-failed-title"),
+                message: failureMessage,
+              })
             : ""
         }
         ${this._buildOverviewStory(tx)}

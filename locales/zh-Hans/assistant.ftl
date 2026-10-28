@@ -31,6 +31,7 @@ assistant-metric-total-evaluations = 评估总数
 assistant-metric-cache-hit-rate = 缓存命中率
 assistant-metric-avg-latency = 平均延迟
 assistant-metric-active-providers = 活跃提供商
+assistant-metric-active-providers-value = { $active } / { $total }
 assistant-decisions-title = 最近决策
 assistant-decisions-subtitle = 最新的模型分析决策
 

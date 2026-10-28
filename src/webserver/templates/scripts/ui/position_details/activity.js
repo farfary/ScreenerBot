@@ -12,6 +12,8 @@ import * as Utils from "../../core/utils.js";
 import { requestManager } from "../../core/request_manager.js";
 import { POSITION_STATUS_LABELS } from "../position_status.js";
 import { activityEventKey, renderActivityCard } from "./activity_event.js";
+import { renderStateView } from "../state_view.js";
+import { renderSegmented, setSegmentedValue } from "../segmented.js";
 
 // State reasons written by src/positions; other stored reasons render as stored.
 const POSITION_STATE_REASON_LABELS = Object.freeze({
@@ -132,14 +134,16 @@ export function applyActivityMixin(PositionDetailsDialog) {
   /** @returns {{meta: string, filters: string, body: string}} */
   proto._buildActivity = function () {
     const parts = (body, meta = "", filters = "") => ({ body, meta, filters });
-    const notice = (icon, text) =>
-      `<div class="pdd-activity-notice"><i class="${icon}"></i><span>${Utils.escapeHtml(text)}</span></div>`;
 
     if (!this._activity) {
       return parts(
         this._activityError
-          ? notice("icon-circle-alert", this._activityError)
-          : `<div class="loading-spinner">${esc(I18n.t("positions-activity-loading"))}</div>`
+          ? renderStateView({
+              kind: "error",
+              icon: "icon-circle-alert",
+              message: this._activityError,
+            })
+          : renderStateView({ kind: "loading", message: I18n.t("positions-activity-loading") })
       );
     }
 
@@ -149,7 +153,9 @@ export function applyActivityMixin(PositionDetailsDialog) {
     const stateHistory = this._activity.state_history || [];
 
     if (!events.length && !stateHistory.length) {
-      return parts(notice("icon-activity", I18n.t("positions-activity-empty")));
+      return parts(
+        renderStateView({ icon: "icon-activity", message: I18n.t("positions-activity-empty") })
+      );
     }
 
     const currentPositionId = this._position()?.id ?? null;
@@ -225,15 +231,16 @@ export function applyActivityMixin(PositionDetailsDialog) {
 
     if (!filters.some(([id]) => id === this._activityFilter)) this._activityFilter = "all";
 
-    return `
-      <div class="timeframe-buttons pdd-act-filters" role="group" aria-label="${esc(I18n.attr("positions-activity-filters", "aria-label"))}">
-        ${filters
-          .map(([id, label, count]) => {
-            const active = this._activityFilter === id;
-            return `<button type="button" class="timeframe-btn pdd-act-filter${active ? " active" : ""}" data-filter="${id}" aria-pressed="${active}">${esc(label)}<span>${count}</span></button>`;
-          })
-          .join("")}
-      </div>`;
+    return renderSegmented(
+      {
+        name: "pdd-activity-filter",
+        options: filters.map(([value, label, count]) => ({ value, label, count })),
+        value: this._activityFilter,
+        ariaLabel: I18n.attr("positions-activity-filters", "aria-label"),
+        compact: true,
+      },
+      esc
+    );
   };
 
   /** Token-wide totals, shown only when there is more than the current position to add up. */
@@ -454,9 +461,11 @@ export function applyActivityMixin(PositionDetailsDialog) {
         else this._activityExpanded.delete(key);
         return;
       }
+    });
 
-      const filterBtn = event.target.closest(".pdd-act-filter");
-      if (filterBtn) this._setActivityFilter(filterBtn.dataset.filter);
+    section.addEventListener("change", (event) => {
+      const input = event.target.closest('[data-seg="pdd-activity-filter"] input');
+      if (input) this._setActivityFilter(input.value);
     });
   };
 
@@ -464,11 +473,7 @@ export function applyActivityMixin(PositionDetailsDialog) {
     const section = this.dialogEl?.querySelector("#pddActivity");
     if (!section) return;
     this._activityFilter = filter;
-    section.querySelectorAll(".pdd-act-filter").forEach((button) => {
-      const active = button.dataset.filter === filter;
-      button.classList.toggle("active", active);
-      button.setAttribute("aria-pressed", String(active));
-    });
+    setSegmentedValue(section.querySelector('[data-seg="pdd-activity-filter"]'), filter);
     this._applyActivityFilter(section);
   };
 

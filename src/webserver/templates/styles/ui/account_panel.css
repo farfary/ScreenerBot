@@ -386,19 +386,11 @@
   line-height: 1.5;
 }
 
-.account-error,
-.account-notice {
+.account-error {
   margin: 0;
+  color: var(--semantic-error-text);
   font-size: 0.78rem;
   line-height: 1.45;
-}
-
-.account-error {
-  color: var(--semantic-error-text);
-}
-
-.account-notice {
-  color: var(--semantic-info-text);
 }
 
 @media (width <= 760px), (height <= 680px) {

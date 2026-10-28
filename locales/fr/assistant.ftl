@@ -28,6 +28,7 @@ assistant-metric-total-evaluations = Évaluations totales
 assistant-metric-cache-hit-rate = Taux de succès du cache
 assistant-metric-avg-latency = Latence moy.
 assistant-metric-active-providers = Fournisseurs actifs
+assistant-metric-active-providers-value = { $active } / { $total }
 assistant-decisions-title = Décisions récentes
 assistant-decisions-subtitle = Dernières décisions d'analyse des modèles
 

@@ -79,7 +79,7 @@ trade-slippage-note-auto-value = Tự động ({ $pct }% theo cài đặt)
 trade-slippage-note-override = Ghi đè: { $pct }%
 trade-slippage-warning = Trượt giá cao: bạn có thể nhận ít hơn báo giá tới { $pct }%.
 trade-impact-warning-title = Cảnh báo tác động giá cao
-trade-impact-warning-text = Giao dịch này có tác động giá <strong>{ $impact }</strong>, vượt mức chịu trượt giá <strong>{ $tolerance }%</strong> của bạn. Bạn có thể nhận ít hơn đáng kể so với dự kiến.
+trade-impact-warning-text = Giao dịch này có tác động giá { $impact }, vượt mức chịu trượt giá { $tolerance }% của bạn. Bạn có thể nhận ít hơn đáng kể so với dự kiến.
 trade-impact-warning-proceed = Vẫn tiếp tục
 
 trade-error-invalid-number = Số không hợp lệ

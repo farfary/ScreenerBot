@@ -8,11 +8,11 @@
  *
  * - `renderNotice` gives each variant its surface and default glyph, sets the glyph bare
  *   and inline with the title, leads the message with the glyph when there is no title,
- *   and renders at most one action.
+ *   renders at most one action, and ends the heading row with a close glyph when the
+ *   notice can be dismissed.
  * - No dashboard source builds a block (`div`, `p`, `section`) whose class names a private
- *   warning, notice, banner, callout, info box or alert. A notice still drawn privately is
- *   listed, and the list only shrinks; classes that look alike but are not notices are
- *   listed with the reason.
+ *   warning, notice, banner, callout, info box or alert; classes that look alike but are
+ *   not notices are listed with the reason.
  * - No stylesheet outside `components.css` draws a `.notice*` element.
  *
  * Run with `npm run test:js`.
@@ -39,29 +39,6 @@ const { NOTICE_ICONS, renderNotice } = await import(
 const NOTICE_LIKE = /(^|[-_])(warning|notice|banner|callout|info-box|alert)([-_]|$)/;
 const OWNER_CLASS = /^notice(?:-|$)/;
 const OWNER_STYLES = "components.css";
-
-/** Notices still drawn by their own markup; each moves to the owner, and the list only shrinks. */
-const PRIVATE_NOTICES = [
-  "account-notice",
-  "action-detail__warning",
-  "config-import-warning-item",
-  "force-stop-banner",
-  "home-update-notice",
-  "pdd-activity-notice",
-  "quote-buy-notice",
-  "quote-impact-warning",
-  "quote-warning",
-  "security-loading-notice",
-  "slippage-warning-buttons",
-  "slippage-warning-icon",
-  "slippage-warning-text",
-  "slippage-warning-title",
-  "status-report-notice",
-  "trade-action-slippage-warning",
-  "trade-slippage-warning",
-  "tx-failure-callout",
-  "updates-history-notice",
-];
 
 /** Classes that match the pattern but draw no notice. */
 const NOT_NOTICES = {
@@ -131,6 +108,24 @@ test("trusted markup, an extra block and one action render in their slots", () =
   );
 });
 
+test("a dismissible notice ends its heading row with a bare close glyph", () => {
+  const close =
+    '<button type="button" class="btn-icon btn-icon-sm notice-dismiss" data-action="dismiss" title="Dismiss" aria-label="Dismiss">' +
+    '<i class="icon-x" aria-hidden="true"></i></button>';
+  assert.equal(
+    renderNotice({ variant: "success", title: "Updated", message: "Done", dismiss: "Dismiss" }),
+    '<div class="notice" data-variant="success" role="note">' +
+      '<div class="notice-heading"><i class="notice-icon icon-circle-check" aria-hidden="true"></i>' +
+      `<span class="notice-title">Updated</span>${close}</div>` +
+      '<div class="notice-message">Done</div></div>'
+  );
+  assert.match(
+    renderNotice({ message: "Saved", dismiss: "Dismiss" }),
+    new RegExp(`<span class="notice-message">Saved</span>${close.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}</div>`),
+    "without a title the close glyph follows the message"
+  );
+});
+
 test("no dashboard source draws a private notice block", async () => {
   const found = new Set();
   for (const { path, source } of await loadMarkupSources()) {
@@ -144,7 +139,7 @@ test("no dashboard source draws a private notice block", async () => {
       }
     }
   }
-  assert.deepEqual([...found].sort(), PRIVATE_NOTICES, "render it with renderNotice");
+  assert.deepEqual([...found].sort(), [], "render it with renderNotice");
 });
 
 test("only components.css draws the notice", async () => {

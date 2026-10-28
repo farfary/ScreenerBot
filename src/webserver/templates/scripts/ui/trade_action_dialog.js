@@ -14,12 +14,18 @@ import { applyQuickTradeMixin } from "./trade_action/quick_trade.js";
 import { applyQuoteManagerMixin } from "./trade_action/quote_manager.js";
 import { fetchMainWalletAddress, needsFunding, renderFundingNotice } from "./funding_notice.js";
 import { renderSetupGate } from "./setup_gate.js";
+import { renderNotice } from "./notice.js";
+import { renderSegmented, setSegmentedValue } from "./segmented.js";
+import { ConfirmationDialog } from "./confirmation_dialog.js";
 
 // Bounds of a manual slippage override. MUST match the backend's
 // trader::constants::{MIN,MAX}_MANUAL_SLIPPAGE_PCT — the route rejects anything outside them.
 // The floor is one basis point, the smallest slippage every router can express.
 const MIN_SLIPPAGE_PCT = 0.01;
 const MAX_SLIPPAGE_PCT = 50;
+
+// The slippage presets: Auto (follow the configured slippage) and three overrides, in percent.
+const SLIPPAGE_PRESETS = Object.freeze(["auto", "1", "5", "15"]);
 
 // A buy holds back the network fee reserve and the rent of the accounts it opens (the
 // wrapped-SOL account and a token account the wallet does not keep yet). Both are read
@@ -175,7 +181,7 @@ export class TradeActionDialog {
     // auto-trader always does); a number is a per-trade manual override.
     this._slippagePct = null;
     this._configuredSlippage = null;
-    this._slippageBtnListener = this._handleSlippageBtnClick.bind(this);
+    this._slippagePresetListener = this._handleSlippagePresetChange.bind(this);
     this._slippageInputListener = this._handleSlippageInputChange.bind(this);
 
     // Quote preview state
@@ -267,12 +273,18 @@ export class TradeActionDialog {
               <span class="trade-action-slippage-note"></span>
             </div>
             <div class="trade-action-slippage-options">
-              <div class="trade-action-slippage-presets" role="group" data-l10n-id="trade-slippage-presets">
-                <button type="button" class="trade-action-slippage-btn" data-slippage="auto" data-l10n-id="trade-slippage-auto"></button>
-                <button type="button" class="trade-action-slippage-btn" data-slippage="1">1%</button>
-                <button type="button" class="trade-action-slippage-btn" data-slippage="5">5%</button>
-                <button type="button" class="trade-action-slippage-btn" data-slippage="15">15%</button>
-              </div>
+              ${renderSegmented(
+                {
+                  name: "trade-slippage",
+                  options: SLIPPAGE_PRESETS.map((value) => ({
+                    value,
+                    label: value === "auto" ? I18n.t("trade-slippage-auto") : withPercentUnit(value),
+                  })),
+                  value: "auto",
+                  ariaLabel: I18n.attr("trade-slippage-presets", "aria-label"),
+                },
+                Utils.escapeHtml
+              )}
               <input
                 type="number"
                 class="trade-action-slippage-input"
@@ -283,7 +295,7 @@ export class TradeActionDialog {
                 inputmode="decimal"
               />
             </div>
-            <div class="trade-action-slippage-warning" data-visible="false"></div>
+            <div class="trade-action-slippage-risk" hidden></div>
           </div>
 
           <!-- Manual management (buy only): keep this position off the auto-trader. -->
@@ -384,22 +396,10 @@ export class TradeActionDialog {
               <!-- Shown only when the quoted impact exceeds the slippage this trade will
                    execute with — the same threshold the confirm-time gate uses, so the
                    preview warns about exactly what will stop the user on confirm. -->
-              <div class="quote-warning quote-impact-warning" data-visible="false">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                  <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
-                  <path d="M12 9v4M12 17h.01"/>
-                </svg>
-                <span class="quote-warning-text"></span>
-              </div>
+              <div class="quote-impact-slot" hidden></div>
               <!-- Shown when the token's open position is archived: the buy is added to it
                    and brings it back to the open positions. The text comes from the quote. -->
-              <div class="quote-warning quote-buy-notice" data-visible="false">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                  <circle cx="12" cy="12" r="10"/>
-                  <path d="M12 16v-4M12 8h.01"/>
-                </svg>
-                <span class="quote-buy-notice-text"></span>
-              </div>
+              <div class="quote-buy-slot" hidden></div>
               <p class="quote-disclaimer" data-l10n-id="trade-quote-disclaimer"></p>
             </div>
           </div>
@@ -480,8 +480,8 @@ export class TradeActionDialog {
     this.manageHintEl = overlay.querySelector(".trade-action-manage-hint");
     this.slippageNoteEl = overlay.querySelector(".trade-action-slippage-note");
     this.slippageInputEl = overlay.querySelector(".trade-action-slippage-input");
-    this.slippageWarningEl = overlay.querySelector(".trade-action-slippage-warning");
-    this.slippageBtns = Array.from(overlay.querySelectorAll(".trade-action-slippage-btn"));
+    this.slippageRiskEl = overlay.querySelector(".trade-action-slippage-risk");
+    this.slippagePresetsEl = overlay.querySelector('[data-seg="trade-slippage"]');
     this.errorEl = overlay.querySelector(".trade-action-error-msg");
     this.errorTextEl = overlay.querySelector(".trade-action-error-text");
     this.confirmBtn = overlay.querySelector('[data-action="confirm"]');
@@ -505,10 +505,8 @@ export class TradeActionDialog {
     this.quoteMinReceivedEl = overlay.querySelector(".quote-min-received");
     this.quoteYouPayEl = overlay.querySelector(".quote-you-pay");
     this.quoteRoutePathEl = overlay.querySelector(".quote-route-path");
-    this.quoteWarningEl = overlay.querySelector(".quote-impact-warning");
-    this.quoteWarningTextEl = overlay.querySelector(".quote-warning-text");
-    this.quoteBuyNoticeEl = overlay.querySelector(".quote-buy-notice");
-    this.quoteBuyNoticeTextEl = overlay.querySelector(".quote-buy-notice-text");
+    this.quoteImpactSlotEl = overlay.querySelector(".quote-impact-slot");
+    this.quoteBuySlotEl = overlay.querySelector(".quote-buy-slot");
     this.quoteContentEl = overlay.querySelector(".trade-action-quote-content");
 
     // Amount controls (slider + MAX)
@@ -548,7 +546,7 @@ export class TradeActionDialog {
     this._sliderListener = this._handleSliderInput.bind(this);
     this._maxListener = this._handleMaxClick.bind(this);
     on(this.sliderEl, "input", this._sliderListener);
-    this.slippageBtns.forEach((btn) => on(btn, "click", this._slippageBtnListener));
+    on(this.slippagePresetsEl, "change", this._slippagePresetListener);
     on(this.slippageInputEl, "input", this._slippageInputListener);
     on(this.maxBtn, "click", this._maxListener);
 
@@ -754,7 +752,7 @@ export class TradeActionDialog {
     off(this.quoteRefreshBtn, "click", this._quoteRefreshListener);
     off(this.quoteErrorRetryBtn, "click", this._quoteRefreshListener);
     off(this.sliderEl, "input", this._sliderListener);
-    this.slippageBtns.forEach((btn) => off(btn, "click", this._slippageBtnListener));
+    off(this.slippagePresetsEl, "change", this._slippagePresetListener);
     off(this.slippageInputEl, "input", this._slippageInputListener);
     off(this.maxBtn, "click", this._maxListener);
 
@@ -913,15 +911,13 @@ export class TradeActionDialog {
    */
   _syncSlippageUi() {
     const active = this._slippagePct;
-    let matchedPreset = false;
-
-    this.slippageBtns.forEach((btn) => {
-      const value = btn.dataset.slippage;
-      const isActive =
-        value === "auto" ? active == null : active != null && Number(value) === active;
-      if (isActive) matchedPreset = true;
-      btn.classList.toggle("active", isActive);
-    });
+    const preset =
+      active == null
+        ? "auto"
+        : SLIPPAGE_PRESETS.find((value) => value !== "auto" && Number(value) === active);
+    const matchedPreset = preset !== undefined;
+    // A value no preset covers leaves every preset unchecked.
+    setSegmentedValue(this.slippagePresetsEl, preset ?? "");
 
     // A value no preset covers lives in the custom field — mark the field itself,
     // so the control always shows exactly one active choice.
@@ -939,14 +935,15 @@ export class TradeActionDialog {
     }
 
     // A large override is a real way to lose money to sandwich bots — say so.
-    if (this.slippageWarningEl) {
+    if (this.slippageRiskEl) {
       const risky = active != null && active >= 10;
-      this.slippageWarningEl.setAttribute("data-visible", risky ? "true" : "false");
-      if (risky) {
-        this.slippageWarningEl.textContent = I18n.t("trade-slippage-warning", {
-          pct: String(active),
-        });
-      }
+      this.slippageRiskEl.hidden = !risky;
+      this.slippageRiskEl.innerHTML = risky
+        ? renderNotice({
+            variant: "warning",
+            message: I18n.t("trade-slippage-warning", { pct: String(active) }),
+          })
+        : "";
     }
   }
 
@@ -968,12 +965,13 @@ export class TradeActionDialog {
     this._fetchQuoteDebounced();
   }
 
-  _handleSlippageBtnClick(e) {
-    const btn = e.currentTarget;
+  _handleSlippagePresetChange(e) {
+    const value = e.target?.value;
+    if (!SLIPPAGE_PRESETS.includes(value)) return;
     // A preset supersedes whatever was typed: a stale custom number left in the
     // field would claim a slippage the trade is not using.
     if (this.slippageInputEl) this.slippageInputEl.value = "";
-    this._handleSlippageChange(btn.dataset.slippage);
+    this._handleSlippageChange(value);
   }
 
   _handleSlippageInputChange() {
@@ -1965,36 +1963,18 @@ export class TradeActionDialog {
    * @param {number} tolerance - Slippage tolerance in force (override, else config)
    * @returns {Promise<boolean>} True if user confirms, false if cancelled
    */
-  _showSlippageWarning(impactPct, tolerance = 5) {
-    return new Promise((resolve) => {
-      const overlay = document.createElement("div");
-      overlay.className = "trade-slippage-warning-overlay";
-      overlay.innerHTML = `
-        <div class="trade-slippage-warning">
-          <div class="slippage-warning-icon"><i class="icon-triangle-alert"></i></div>
-          <div class="slippage-warning-title">${Utils.escapeHtml(I18n.t("trade-impact-warning-title"))}</div>
-          <div class="slippage-warning-text">${I18n.markup("trade-impact-warning-text", {
-            impact: formatPercentValue(impactPct, { decimals: 2, plus: "" }),
-            tolerance: String(tolerance),
-          })}</div>
-          <div class="slippage-warning-buttons">
-            <button class="slippage-warning-btn cancel">${Utils.escapeHtml(I18n.t("common-action-cancel"))}</button>
-            <button class="slippage-warning-btn confirm">${Utils.escapeHtml(I18n.t("trade-impact-warning-proceed"))}</button>
-          </div>
-        </div>
-      `;
-
-      overlay.querySelector(".cancel").onclick = () => {
-        overlay.remove();
-        resolve(false);
-      };
-      overlay.querySelector(".confirm").onclick = () => {
-        overlay.remove();
-        resolve(true);
-      };
-
-      document.body.appendChild(overlay);
+  async _showSlippageWarning(impactPct, tolerance = 5) {
+    const { confirmed } = await ConfirmationDialog.show({
+      title: I18n.t("trade-impact-warning-title"),
+      message: I18n.t("trade-impact-warning-text", {
+        impact: formatPercentValue(impactPct, { decimals: 2, plus: "" }),
+        tolerance: String(tolerance),
+      }),
+      confirmLabel: I18n.t("trade-impact-warning-proceed"),
+      cancelLabel: I18n.t("common-action-cancel"),
+      variant: "danger",
     });
+    return confirmed;
   }
 
   /**

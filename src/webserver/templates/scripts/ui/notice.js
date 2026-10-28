@@ -7,7 +7,8 @@
  * renders, as opposed to the state view that replaces content which cannot. A heading
  * row (a bare glyph inline with the title), a message, an optional trusted extra block
  * and at most one action, on a surface toned by its variant. Without a title the glyph
- * leads the message. Static page markup that cannot call this spells the same shape.
+ * leads the message. A notice the reader may put away carries a bare close glyph at the
+ * end of its heading row. Static page markup that cannot call this spells the same shape.
  */
 
 import { escapeHtml } from "../core/utils.js";
@@ -36,6 +37,9 @@ const ICON_CLASS = /^icon-[a-z0-9-]+$/;
  *   address with its copy control)
  * @param {{id: string, label: string}} [notice.action] - a button with that `data-action`
  *   and label; the caller wires its click
+ * @param {string} [notice.dismiss] - the accessible name of a close glyph
+ *   (`data-action="dismiss"`) at the end of the heading row; omitted, none. The caller
+ *   wires its click
  * @returns {string}
  */
 export function renderNotice({
@@ -46,18 +50,22 @@ export function renderNotice({
   messageHtml = "",
   extraHtml = "",
   action = null,
+  dismiss = "",
 } = {}) {
   const safeVariant = Object.hasOwn(NOTICE_ICONS, variant) ? variant : "info";
   const safeIcon = ICON_CLASS.test(icon) ? icon : NOTICE_ICONS[safeVariant];
   const role = safeVariant === "error" ? "alert" : "note";
   const body = messageHtml || (message ? escapeHtml(message) : "");
   const glyph = `<i class="notice-icon ${safeIcon}" aria-hidden="true"></i>`;
+  const close = dismiss
+    ? `<button type="button" class="btn-icon btn-icon-sm notice-dismiss" data-action="dismiss" title="${escapeHtml(dismiss)}" aria-label="${escapeHtml(dismiss)}"><i class="icon-x" aria-hidden="true"></i></button>`
+    : "";
 
   const heading = title
-    ? `<div class="notice-heading">${glyph}<span class="notice-title">${escapeHtml(title)}</span></div>${
+    ? `<div class="notice-heading">${glyph}<span class="notice-title">${escapeHtml(title)}</span>${close}</div>${
         body ? `<div class="notice-message">${body}</div>` : ""
       }`
-    : `<div class="notice-heading">${glyph}<span class="notice-message">${body}</span></div>`;
+    : `<div class="notice-heading">${glyph}<span class="notice-message">${body}</span>${close}</div>`;
   const extra = extraHtml ? `<div class="notice-extra">${extraHtml}</div>` : "";
   const button =
     action && ACTION_ID.test(action.id)

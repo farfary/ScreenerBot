@@ -31,6 +31,7 @@ assistant-metric-total-evaluations = 評価の合計
 assistant-metric-cache-hit-rate = キャッシュヒット率
 assistant-metric-avg-latency = 平均レイテンシ
 assistant-metric-active-providers = 有効なプロバイダー
+assistant-metric-active-providers-value = { $active } / { $total }
 assistant-decisions-title = 最近の判定
 assistant-decisions-subtitle = 最新のモデル分析による判定
 

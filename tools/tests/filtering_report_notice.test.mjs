@@ -84,12 +84,12 @@ async function openStatus(signedIn, reportRequired = true) {
 test("signed out, the status panel states the direct report rate and offers sign-in", async () => {
   const session = await openStatus(false);
   try {
-    const notice = session.page.locator(".status-report-notice");
+    const notice = session.page.locator('.status-metrics-section > .notice[data-variant="info"]');
     assert.equal(
-      withoutIsolation(await notice.locator(".status-report-notice__text").textContent()).trim(),
+      withoutIsolation(await notice.locator(".notice-message").textContent()).trim(),
       "RugCheck reports arrive at about 3 a minute. Signed-in installs get them faster."
     );
-    await notice.locator("[data-filtering-sign-in]").click();
+    await notice.locator('[data-action="filtering-sign-in"]').click();
     await session.page
       .locator('.settings-nav-item.active[data-tab="account"]')
       .waitFor({ state: "attached" });
@@ -101,7 +101,7 @@ test("signed out, the status panel states the direct report rate and offers sign
 test("signed in, the status panel shows no report notice", async () => {
   const session = await openStatus(true);
   try {
-    assert.equal(await session.page.locator(".status-report-notice").count(), 0);
+    assert.equal(await session.page.locator(".status-metrics-section .notice").count(), 0);
   } finally {
     await session.close();
   }
@@ -123,7 +123,7 @@ test("with the RugCheck stage off nothing awaits a report and no notice shows", 
   const session = await openStatus(false, false);
   try {
     const { page } = session;
-    assert.equal(await page.locator(".status-report-notice").count(), 0);
+    assert.equal(await page.locator(".status-metrics-section .notice").count(), 0);
     const awaitingCard = page.locator(".status-view .metric-card", {
       hasText: AWAITING,
     });

@@ -79,7 +79,7 @@ trade-slippage-note-auto-value = Auto ({ $pct } % selon les paramètres)
 trade-slippage-note-override = Forcé : { $pct } %
 trade-slippage-warning = Slippage élevé : vous pouvez recevoir jusqu'à { $pct } % de moins que la cotation.
 trade-impact-warning-title = Avertissement d'impact élevé sur le prix
-trade-impact-warning-text = Ce trade a un impact sur le prix de <strong>{ $impact }</strong>, supérieur à votre tolérance de slippage de <strong>{ $tolerance } %</strong>. Vous pourriez recevoir nettement moins que prévu.
+trade-impact-warning-text = Ce trade a un impact sur le prix de { $impact }, supérieur à votre tolérance de slippage de { $tolerance } %. Vous pourriez recevoir nettement moins que prévu.
 trade-impact-warning-proceed = Continuer quand même
 
 trade-error-invalid-number = Nombre invalide

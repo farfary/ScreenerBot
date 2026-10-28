@@ -456,28 +456,6 @@
   border-top: 1px solid var(--border-subtle, var(--border-color));
 }
 
-.security-loading-notice {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 36px;
-  padding: 7px 12px;
-  border-bottom: 1px solid var(--border-color);
-  background: var(--bg-card-hover);
-  color: var(--text-secondary);
-  font-size: 0.68rem;
-}
-
-.loading-spinner-small {
-  width: 14px;
-  height: 14px;
-  flex: 0 0 auto;
-  border: 2px solid var(--border-color);
-  border-top-color: var(--primary-color);
-  border-radius: var(--radius-full);
-  animation: spin 800ms linear infinite;
-}
-
 @container (width <= 420px) {
   .security-fact-list {
     grid-template-columns: 1fr;

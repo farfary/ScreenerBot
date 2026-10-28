@@ -37,6 +37,7 @@ assistant-metric-total-evaluations = کل ارزیابی‌ها
 assistant-metric-cache-hit-rate = نرخ برخورد کش
 assistant-metric-avg-latency = میانگین تأخیر
 assistant-metric-active-providers = ارائه‌دهندگان فعال
+assistant-metric-active-providers-value = { $active } / { $total }
 assistant-decisions-title = تصمیم‌های اخیر
 assistant-decisions-subtitle = آخرین تصمیم‌های تحلیل مدل
 

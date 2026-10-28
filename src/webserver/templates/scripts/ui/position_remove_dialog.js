@@ -113,9 +113,8 @@ class PositionRemoveDialog {
         </label>
       </fieldset>
 
-      <div class="position-remove-danger" data-visible="false" role="alert">
-        <i class="icon-triangle-alert" aria-hidden="true"></i>
-        <span data-l10n-id="positions-remove-danger" data-l10n-markup></span>
+      <div class="position-remove-danger" hidden>
+        ${renderNotice({ variant: "error", messageHtml: I18n.markup("positions-remove-danger") })}
       </div>
 
       <div class="position-remove-footer">
@@ -178,7 +177,7 @@ class PositionRemoveDialog {
     });
 
     const danger = this.element.querySelector(".position-remove-danger");
-    if (danger) danger.dataset.visible = this.mode === "delete" ? "true" : "false";
+    if (danger) danger.hidden = this.mode !== "delete";
 
     const confirmBtn = this.element.querySelector(".position-remove-btn--confirm");
     const label = this.element.querySelector(".position-remove-confirm-label");

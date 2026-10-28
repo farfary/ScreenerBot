@@ -12,6 +12,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import "./fixtures/i18n_en.mjs";
+import "./fixtures/document_shim.mjs";
 
 import { describeUpdateNotice } from "../../src/webserver/templates/scripts/pages/home/update_notice.js";
 
@@ -79,9 +80,9 @@ test("a download reports its progress", () => {
   assert.equal(visible(notice.detail), "420 B of 1000 B · 42%");
 });
 
-test("a failed update is shown with the error tone", () => {
+test("a failed update is shown as an error notice", () => {
   const notice = describeUpdateNotice(state({ phase: "failed", available_update: update }), Utils);
-  assert.equal(notice.tone, "error");
+  assert.equal(notice.variant, "error");
   assert.equal(visible(notice.headline), "The update did not finish");
 });
 
@@ -91,6 +92,7 @@ test("an update that landed is announced until acknowledged", () => {
   assert.equal(visible(notice.headline), "Updated to v0.2.12");
   assert.deepEqual(notice.action, { label: "What's new", view: "release-notes" });
   assert.equal(notice.dismissible, true);
+  assert.equal(notice.variant, "success");
 
   assert.equal(describeUpdateNotice({ ...landed, applied_acknowledged: true }, Utils), null);
   // A version applied earlier than the running one is not news.

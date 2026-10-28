@@ -14,6 +14,8 @@ import { metricCard } from "../../ui/metric_card.js";
 import { renderStateView } from "../../ui/state_view.js";
 import { renderTokenLogo } from "../../ui/token_identity.js";
 import { renderSegmented } from "../../ui/segmented.js";
+import { renderSummaryChip } from "../../ui/table_toolbar.js";
+import { renderNotice } from "../../ui/notice.js";
 import {
   buildConfigGroups,
   formatTimestampForInput,
@@ -62,7 +64,9 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
     signInClickBound = true;
     document.addEventListener("click", (event) => {
       const button =
-        event.target instanceof Element ? event.target.closest("[data-filtering-sign-in]") : null;
+        event.target instanceof Element
+          ? event.target.closest('[data-action="filtering-sign-in"]')
+          : null;
       if (!button) return;
       void import("../../ui/settings_dialog.js").then(({ showSettingsDialog }) =>
         showSettingsDialog({ tab: "account" })
@@ -126,13 +130,6 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
     return I18n.t("filtering-tokens-count", { count, amount: Utils.formatNumber(count, 0) });
   }
 
-  // One summary figure in the shared table-toolbar chip shape, so the strip reads like
-  // the summary rows of every DataTable page.
-  function summaryChip(label, value, variant) {
-    const tone = variant ? ` data-variant="${variant}"` : "";
-    return `<div class="table-toolbar-chip"${tone}><span class="table-toolbar-chip__label">${Utils.escapeHtml(label)}</span><span class="table-toolbar-chip__value">${Utils.escapeHtml(value)}</span></div>`;
-  }
-
   function renderInfoBar() {
     if (!state.stats) return "";
 
@@ -152,28 +149,38 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
     const awaitingRate = percentOf(awaiting_rugcheck_report, total_tokens);
     const cacheAge = refreshedLabel(updated_at);
 
+    // The strip reads like the summary row of every DataTable page.
     return [
-      summaryChip(I18n.t("filtering-info-total"), Utils.formatNumber(total_tokens, 0)),
-      summaryChip(I18n.t("filtering-info-priced"), countWithShare(with_pool_price, priceRate)),
-      summaryChip(
-        I18n.t("filtering-info-passed"),
-        countWithShare(passed_filtering, passedRate),
-        Utils.countTone(passed_filtering, "success")
-      ),
+      renderSummaryChip({
+        label: I18n.t("filtering-info-total"),
+        value: Utils.formatNumber(total_tokens, 0),
+      }),
+      renderSummaryChip({
+        label: I18n.t("filtering-info-priced"),
+        value: countWithShare(with_pool_price, priceRate),
+      }),
+      renderSummaryChip({
+        label: I18n.t("filtering-info-passed"),
+        value: countWithShare(passed_filtering, passedRate),
+        variant: Utils.countTone(passed_filtering, "success"),
+      }),
       // With the RugCheck stage off nothing awaits a report, so the figure is not shown.
       rugcheck_report_required
-        ? summaryChip(
-            I18n.t("filtering-info-awaiting"),
-            countWithShare(awaiting_rugcheck_report, awaitingRate)
-          )
+        ? renderSummaryChip({
+            label: I18n.t("filtering-info-awaiting"),
+            value: countWithShare(awaiting_rugcheck_report, awaitingRate),
+          })
         : "",
-      summaryChip(I18n.t("filtering-info-positions"), Utils.formatNumber(open_positions, 0)),
-      summaryChip(
-        I18n.t("filtering-info-blacklisted"),
-        Utils.formatNumber(blacklisted, 0),
-        Utils.countTone(blacklisted, "warning")
-      ),
-      summaryChip(I18n.t("filtering-info-cache"), cacheAge),
+      renderSummaryChip({
+        label: I18n.t("filtering-info-positions"),
+        value: Utils.formatNumber(open_positions, 0),
+      }),
+      renderSummaryChip({
+        label: I18n.t("filtering-info-blacklisted"),
+        value: Utils.formatNumber(blacklisted, 0),
+        variant: Utils.countTone(blacklisted, "warning"),
+      }),
+      renderSummaryChip({ label: I18n.t("filtering-info-cache"), value: cacheAge }),
     ].join("");
   }
 
@@ -206,20 +213,16 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
     const reportNoticeHtml =
       signed_in || !rugcheck_report_required
         ? ""
-        : `
-        <div class="status-report-notice">
-          <span class="status-report-notice__text">${Utils.escapeHtml(
-            I18n.t("filtering-status-report-rate", {
+        : renderNotice({
+            variant: "info",
+            message: I18n.t("filtering-status-report-rate", {
               rate: Utils.formatNumber(
                 direct_reports_per_minute,
                 Number.isInteger(direct_reports_per_minute) ? 0 : 1
               ),
-            })
-          )}</span>
-          <button type="button" class="btn btn-sm btn-secondary" data-filtering-sign-in>${Utils.escapeHtml(
-            I18n.t("filtering-status-report-sign-in")
-          )}</button>
-        </div>`;
+            }),
+            action: { id: "filtering-sign-in", label: I18n.t("filtering-status-report-sign-in") },
+          });
 
     // While the snapshot builds, every metric card below shows "—" (its value is null) and
     // this line says why, instead of the cards asserting a corpus of zero tokens.

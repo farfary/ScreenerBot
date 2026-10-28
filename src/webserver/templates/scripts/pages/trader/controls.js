@@ -229,15 +229,14 @@ export function createTraderControls({
 
     if (!banner || !btn) return;
 
+    banner.hidden = !data?.is_stopped;
     if (data && data.is_stopped) {
-      banner.style.display = "flex";
       const reasonEl = $("#force-stop-reason");
       if (reasonEl) {
         reasonEl.textContent = data.reason || I18n.t("trader-halt-reason-default");
       }
       btn.style.display = "none";
     } else {
-      banner.style.display = "none";
       btn.style.display = "flex";
     }
     // While stopped the banner and its resume action replace the button and its hint.

@@ -4,7 +4,7 @@
 /* =============================================================================
    ADVANCED CHART COMPONENT
    Only the chrome the engine itself creates: the wrapper that sizes the canvas
-   and the crosshair tooltip. The header, timeframe buttons and loading overlay
+   and the crosshair tooltip. The header, timeframe choice and loading overlay
    around it belong to the owning surface — see ui/chart_shell.css.
    ============================================================================= */
 

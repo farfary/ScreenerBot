@@ -6,9 +6,8 @@
    The header/controls/loading chrome wrapped around the AdvancedChart canvas.
    Shared by the Token Details overview chart and the Position Details chart
    tab: these selectors are unscoped on purpose, so they belong to neither
-   dialog's stylesheet. `.timeframe-btn` in particular used to be defined twice
-   (here and in advanced_chart.css) with different padding and colours, and
-   load order decided what a dialog looked like.
+   dialog's stylesheet. The timeframe choice is the shared segmented control
+   (ui/segmented.js).
    ============================================================================= */
 
 .chart-container {
@@ -256,38 +255,6 @@
   display: flex;
   gap: 2px;
   align-items: center;
-}
-
-/* Timeframe button row */
-.timeframe-buttons {
-  display: flex;
-  gap: 2px;
-  background: var(--bg-primary);
-  padding: 2px;
-  border-radius: var(--radius-sm);
-}
-
-.timeframe-btn {
-  padding: 4px 8px;
-  background: transparent;
-  border: none;
-  border-radius: var(--radius-sm);
-  color: var(--text-secondary);
-  font-size: 0.65rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  text-transform: uppercase;
-}
-
-.timeframe-btn:hover {
-  color: var(--text-primary);
-  background: var(--bg-card-hover);
-}
-
-.timeframe-btn.active {
-  color: var(--text-primary);
-  background: var(--bg-secondary);
 }
 
 .tradingview-chart {

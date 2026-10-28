@@ -81,7 +81,7 @@ trade-slippage-note-auto-value = Otomatis ({ $pct }% dari pengaturan)
 trade-slippage-note-override = Override: { $pct }%
 trade-slippage-warning = Slippage tinggi: Anda mungkin menerima hingga { $pct }% lebih sedikit dari kuotasi.
 trade-impact-warning-title = Peringatan Dampak Harga Tinggi
-trade-impact-warning-text = Trade ini memiliki dampak harga <strong>{ $impact }</strong>, yang melebihi toleransi slippage Anda sebesar <strong>{ $tolerance }%</strong>. Anda mungkin menerima jauh lebih sedikit dari yang diharapkan.
+trade-impact-warning-text = Trade ini memiliki dampak harga { $impact }, yang melebihi toleransi slippage Anda sebesar { $tolerance }%. Anda mungkin menerima jauh lebih sedikit dari yang diharapkan.
 trade-impact-warning-proceed = Tetap Lanjutkan
 
 trade-error-invalid-number = Angka tidak valid

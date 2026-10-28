@@ -37,6 +37,7 @@ assistant-metric-total-evaluations = إجمالي التقييمات
 assistant-metric-cache-hit-rate = نسبة إصابة الذاكرة المؤقتة
 assistant-metric-avg-latency = متوسط زمن الاستجابة
 assistant-metric-active-providers = المزوّدون النشطون
+assistant-metric-active-providers-value = { $active } / { $total }
 assistant-decisions-title = القرارات الأخيرة
 assistant-decisions-subtitle = أحدث قرارات تحليل النموذج
 

@@ -28,6 +28,7 @@ assistant-metric-total-evaluations = Усього оцінок
 assistant-metric-cache-hit-rate = Частка влучань у кеш
 assistant-metric-avg-latency = Сер. затримка
 assistant-metric-active-providers = Активні провайдери
+assistant-metric-active-providers-value = { $active } / { $total }
 assistant-decisions-title = Останні рішення
 assistant-decisions-subtitle = Останні рішення за аналізом моделі
 

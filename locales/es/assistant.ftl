@@ -28,6 +28,7 @@ assistant-metric-total-evaluations = Evaluaciones totales
 assistant-metric-cache-hit-rate = Tasa de aciertos de caché
 assistant-metric-avg-latency = Latencia prom.
 assistant-metric-active-providers = Proveedores activos
+assistant-metric-active-providers-value = { $active } / { $total }
 assistant-decisions-title = Decisiones recientes
 assistant-decisions-subtitle = Últimas decisiones del análisis del modelo
 

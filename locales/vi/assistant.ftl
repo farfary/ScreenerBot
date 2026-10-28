@@ -28,6 +28,7 @@ assistant-metric-total-evaluations = Tổng số đánh giá
 assistant-metric-cache-hit-rate = Tỷ lệ trúng bộ nhớ đệm
 assistant-metric-avg-latency = Độ trễ TB
 assistant-metric-active-providers = Nhà cung cấp đang hoạt động
+assistant-metric-active-providers-value = { $active } / { $total }
 assistant-decisions-title = Quyết định gần đây
 assistant-decisions-subtitle = Các quyết định phân tích của mô hình mới nhất
 

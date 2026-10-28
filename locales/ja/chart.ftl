@@ -8,6 +8,8 @@ chart-waiting = チャートデータを待機中...
 chart-marker-dca = DCA { $index }
 chart-marker-exit-numbered = エグジット { $index }
 chart-candles = ローソク足
+chart-timeframes =
+    .aria-label = 時間足
 
 chart-status-none = チャートデータはまだありません
 chart-status-ready = データ準備完了

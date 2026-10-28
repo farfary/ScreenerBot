@@ -8,6 +8,8 @@ chart-waiting = 正在等待图表数据…
 chart-marker-dca = DCA { $index }
 chart-marker-exit-numbered = 出场 { $index }
 chart-candles = K 线
+chart-timeframes =
+    .aria-label = 时间周期
 
 chart-status-none = 暂无图表数据
 chart-status-ready = 数据就绪

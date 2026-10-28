@@ -18,6 +18,7 @@ import {
   withPercentUnit,
   withSolUnit,
 } from "../../core/format.js";
+import { renderNotice } from "../notice.js";
 
 /**
  * Quote Manager Mixin for TradeActionDialog
@@ -312,24 +313,27 @@ export function applyQuoteManagerMixin(TradeActionDialog) {
 
     // Impact above the slippage this trade will execute with is what the confirm-time
     // gate stops on, so say it here rather than ambushing the user after they click.
-    if (this.quoteWarningEl && this.quoteWarningTextEl) {
+    if (this.quoteImpactSlotEl) {
       const tolerance = this._slippagePct ?? this._configuredSlippage ?? 5;
       const exceeds = impactPct > tolerance;
-      this.quoteWarningEl.dataset.visible = exceeds ? "true" : "false";
-      if (exceeds) {
-        this.quoteWarningTextEl.textContent = I18n.t("trade-quote-impact-warning", {
-          impact: formatPercentValue(impactPct, { decimals: 2, plus: "" }),
-          tolerance: trimPct(tolerance),
-        });
-      }
+      this.quoteImpactSlotEl.hidden = !exceeds;
+      this.quoteImpactSlotEl.innerHTML = exceeds
+        ? renderNotice({
+            variant: "warning",
+            message: I18n.t("trade-quote-impact-warning", {
+              impact: formatPercentValue(impactPct, { decimals: 2, plus: "" }),
+              tolerance: trimPct(tolerance),
+            }),
+          })
+        : "";
     }
 
     // A buy of a token whose open position is archived adds to that position and brings
     // it back; the quote carries the core's notice so the user sees it before confirming.
-    if (this.quoteBuyNoticeEl && this.quoteBuyNoticeTextEl) {
+    if (this.quoteBuySlotEl) {
       const notice = quote.buy_notice ? I18n.text(quote.buy_notice) : "";
-      this.quoteBuyNoticeEl.dataset.visible = notice ? "true" : "false";
-      this.quoteBuyNoticeTextEl.textContent = notice;
+      this.quoteBuySlotEl.hidden = !notice;
+      this.quoteBuySlotEl.innerHTML = notice ? renderNotice({ message: notice }) : "";
     }
 
     // The header badge counts the same 15s the refresh timer does; seed it here so it

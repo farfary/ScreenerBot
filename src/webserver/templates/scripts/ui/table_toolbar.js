@@ -299,7 +299,12 @@ function isAbsentValue(value) {
   return value === null || value === undefined || value === "" || value === ABSENT_VALUE;
 }
 
-function renderStat(item) {
+/**
+ * One summary chip: a bare caption and its figure, toned by `variant` only while the figure
+ * states something. The chip of every DataTable toolbar, and of any page strip that reads
+ * like one.
+ */
+export function renderSummaryChip(item) {
   const id = item.id ? ` data-summary-id="${escapeHtml(item.id)}"` : "";
   const variant =
     item.variant && !isAbsentValue(item.value) ? ` data-variant="${escapeHtml(item.variant)}"` : "";
@@ -615,7 +620,7 @@ function renderItem(item, state) {
     case "link":
       return renderLink(item);
     case "stat":
-      return renderStat(item);
+      return renderSummaryChip(item);
     case "text":
       return renderText(item);
     case "divider":
@@ -725,7 +730,7 @@ export class TableToolbarView {
 
     const identityMarkup = renderIdentity(identity);
     const statsMarkup = stats.length
-      ? `<div class="table-toolbar-summary">${stats.map(renderStat).join("")}</div>`
+      ? `<div class="table-toolbar-summary">${stats.map(renderSummaryChip).join("")}</div>`
       : "";
 
     const leadInner = `${identityMarkup}${statsMarkup}`;

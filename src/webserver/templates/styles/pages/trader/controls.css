@@ -15,48 +15,9 @@
   margin-bottom: 0.75rem;
 }
 
-/* Force Stop Banner */
-.force-stop-banner {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0.75rem 1rem;
-  background: linear-gradient(135deg, var(--danger-alpha-15) 0%, var(--danger-alpha-10) 100%);
-  border: 1px solid var(--danger-alpha-40);
-  border-radius: var(--radius-md);
-  margin-bottom: 0.75rem;
-}
-
-/* Bare glyph: no tile and no pulse. The banner's own colour and its "TRADING
-   HALTED" label already say the state, and a blinking icon says it in a way a
-   colour-blind or motion-sensitive reader cannot read at all. */
-.force-stop-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--error-color);
-  font-size: 1.5rem;
-  flex-shrink: 0;
-}
-
-.force-stop-info {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  flex: 1;
-}
-
-.force-stop-title {
-  font-size: 0.75rem;
-  font-weight: 700;
-  color: var(--error-color);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.force-stop-reason {
-  font-size: 0.7rem;
-  color: var(--text-secondary);
+/* The force stop notice (static notice markup) sits between the header and the grid. */
+.notice:not([hidden]) + .controls-grid {
+  margin-top: 0.75rem;
 }
 
 /* Monitor Controls Grid */

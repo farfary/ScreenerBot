@@ -29,6 +29,7 @@ assistant-metric-total-evaluations = Toplam Değerlendirme
 assistant-metric-cache-hit-rate = Önbellek İsabet Oranı
 assistant-metric-avg-latency = Ort. Gecikme
 assistant-metric-active-providers = Etkin Sağlayıcılar
+assistant-metric-active-providers-value = { $active } / { $total }
 assistant-decisions-title = Son Kararlar
 assistant-decisions-subtitle = En son model analizi kararları
 

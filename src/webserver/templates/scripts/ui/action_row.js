@@ -28,6 +28,7 @@ import {
   withSolUnit,
 } from "../core/format.js";
 import { escapeHtml } from "../core/utils.js";
+import { renderNotice } from "./notice.js";
 import { apiErrorMessage } from "../core/request_manager.js";
 import { routerName, stepMessage, symbolOf, outcomeMessage } from "../core/action_message.js";
 import { stepLabel } from "./action_step.js";
@@ -326,7 +327,7 @@ function detailMarkup(action, identity, detailId, expanded) {
     status === "failed"
       ? `<p class="action-detail__error" role="note">${escapeHtml(failureText(action))}</p>`
       : action?.unrecorded
-        ? `<p class="action-detail__warning" role="note">${escapeHtml(I18n.t("notifications-unrecorded-detail"))}</p>`
+        ? renderNotice({ variant: "warning", message: I18n.t("notifications-unrecorded-detail") })
         : "";
 
   const mint = identity.mint || "";

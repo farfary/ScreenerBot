@@ -43,20 +43,22 @@
               </h3>
             </div>
 
-            <!-- Force Stop Banner (shown only when active) -->
-            <div class="force-stop-banner" id="force-stop-banner" style="display: none">
-              <div class="force-stop-icon"><i class="icon-octagon-alert"></i></div>
-              <div class="force-stop-info">
-                <span class="force-stop-title" data-l10n-id="trader-halt-title"></span>
-                <span
-                  class="force-stop-reason"
-                  id="force-stop-reason"
-                  data-l10n-id="trader-halt-reason-default"
-                ></span>
+            <!-- Force stop notice (shown only while trading is halted) -->
+            <div class="notice" data-variant="error" role="alert" id="force-stop-banner" hidden>
+              <div class="notice-heading">
+                <i class="notice-icon icon-octagon-alert" aria-hidden="true"></i>
+                <span class="notice-title" data-l10n-id="trader-halt-title"></span>
               </div>
-              <button type="button" class="btn btn-sm btn-success" id="resume-trading-btn">
-                <i class="icon-play"></i> <span data-l10n-id="trader-halt-resume"></span>
-              </button>
+              <div
+                class="notice-message"
+                id="force-stop-reason"
+                data-l10n-id="trader-halt-reason-default"
+              ></div>
+              <div class="notice-actions">
+                <button type="button" class="btn btn-outline btn-sm" id="resume-trading-btn">
+                  <i class="icon-play" aria-hidden="true"></i> <span data-l10n-id="trader-halt-resume"></span>
+                </button>
+              </div>
             </div>
 
             <!-- Monitor Controls Grid -->
@@ -800,7 +802,9 @@
               </label>
             </div>
             <div id="time-positions-status" class="status-list">
-              <div class="loading" data-l10n-id="trader-time-positions-loading"></div>
+              <div class="state-view state-view-loading state-view-compact" role="status" aria-live="polite">
+                <div class="loading-spinner" data-l10n-id="trader-time-positions-loading"></div>
+              </div>
             </div>
           </div>
         </div>

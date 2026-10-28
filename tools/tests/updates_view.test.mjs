@@ -8,6 +8,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import "./fixtures/i18n_en.mjs";
+import "./fixtures/document_shim.mjs";
 
 import {
   createUpdatesView,
@@ -134,7 +135,8 @@ test("an unreadable history still shows what the updater knows", () => {
     error: true,
   });
 
-  assert.match(html, /updates-history-notice/);
+  assert.match(html, /<div class="notice" data-variant="info" role="note">/);
+  assert.match(visible(html), /the release history could not be loaded/);
   assert.match(visible(html), /v0\.2\.5/);
 
   const empty = view.renderReleaseNotes({

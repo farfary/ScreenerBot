@@ -542,10 +542,13 @@
 
     renderNotice() {
       // A session the server ended explains itself until the next sign-in, so
-      // the user is not left wondering why the account disappeared.
+      // the user is not left wondering why the account disappeared. A classic script
+      // cannot import ui/notice.js, so it spells the notice's info shape.
       const notice =
         this.notice || (this.status?.session_ended ? I18n.t("account-panel-session-ended") : null);
-      return notice ? `<p class="account-notice" role="status">${escapeHtml(notice)}</p>` : "";
+      return notice
+        ? `<div class="notice" data-variant="info" role="note"><div class="notice-heading"><i class="notice-icon icon-info" aria-hidden="true"></i><span class="notice-message">${escapeHtml(notice)}</span></div></div>`
+        : "";
     }
 
     bind() {

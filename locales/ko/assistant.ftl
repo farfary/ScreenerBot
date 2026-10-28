@@ -32,6 +32,7 @@ assistant-metric-total-evaluations = 총 평가 수
 assistant-metric-cache-hit-rate = 캐시 적중률
 assistant-metric-avg-latency = 평균 지연 시간
 assistant-metric-active-providers = 활성 제공자
+assistant-metric-active-providers-value = { $active } / { $total }
 assistant-decisions-title = 최근 결정
 assistant-decisions-subtitle = 최신 모델 분석 결정
 

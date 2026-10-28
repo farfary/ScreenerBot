@@ -9,7 +9,9 @@
  */
 import * as Utils from "../../core/utils.js";
 import * as AppState from "../../core/app_state.js";
+import { setSegmentedValue } from "../segmented.js";
 import {
+  CHART_TIMEFRAMES,
   loadCandles,
   fetchOhlcvStatus,
   findTimeframeWithData,
@@ -33,7 +35,7 @@ export function applyChartTabMixin(DialogClass) {
    */
   proto._initializeChart = async function (mint) {
     const chartContainer = this.dialogEl.querySelector("#tradingview-chart");
-    const timeframeButtons = this.dialogEl.querySelector("#timeframeButtons");
+    const timeframeChoice = this.dialogEl.querySelector('[data-seg="token-timeframe"]');
 
     if (!chartContainer) {
       console.error("Chart container not found");
@@ -104,18 +106,11 @@ export function applyChartTabMixin(DialogClass) {
       this._updateOhlcvDisplay(bar || this._latestCandle);
     };
 
-    // Restore the user's last-used timeframe (falling back to the active button,
-    // then 5m). Only honor a saved value that maps to a real button.
-    const buttons = timeframeButtons
-      ? [...timeframeButtons.querySelectorAll(".timeframe-btn")]
-      : [];
+    // Restore the user's last-used timeframe (falling back to 5m). Only honor a saved
+    // value that is still a chart timeframe.
     const saved = AppState.load(TIMEFRAME_STATE_KEY, null);
-    const activeBtn = timeframeButtons?.querySelector(".timeframe-btn.active");
-    const savedValid = saved && buttons.some((b) => b.dataset.tf === saved);
-    this.currentTimeframe = savedValid ? saved : activeBtn?.dataset.tf || "5m";
-
-    // Sync the active button highlight to the restored timeframe.
-    buttons.forEach((b) => b.classList.toggle("active", b.dataset.tf === this.currentTimeframe));
+    this.currentTimeframe = CHART_TIMEFRAMES.includes(saved) ? saved : "5m";
+    setSegmentedValue(timeframeChoice, this.currentTimeframe);
 
     // Allow ONE automatic timeframe fallback on this token's first load (see
     // _loadChartData): if the chosen timeframe has no candles yet but the token
@@ -129,20 +124,14 @@ export function applyChartTabMixin(DialogClass) {
 
     this._startChartPolling();
 
-    // Handle timeframe button clicks
-    if (timeframeButtons) {
-      timeframeButtons.addEventListener("click", async (e) => {
-        const btn = e.target.closest(".timeframe-btn");
-        if (!btn) return;
+    // A timeframe chosen in the segmented control.
+    if (timeframeChoice) {
+      timeframeChoice.addEventListener("change", async (e) => {
+        const timeframe = e.target.value;
+        if (!CHART_TIMEFRAMES.includes(timeframe)) return;
 
-        // Update active state
-        timeframeButtons
-          .querySelectorAll(".timeframe-btn")
-          .forEach((b) => b.classList.remove("active"));
-        btn.classList.add("active");
-
-        const changed = btn.dataset.tf !== this.currentTimeframe;
-        this.currentTimeframe = btn.dataset.tf;
+        const changed = timeframe !== this.currentTimeframe;
+        this.currentTimeframe = timeframe;
         // Remember the choice for the next time any token dialog is opened.
         AppState.save(TIMEFRAME_STATE_KEY, this.currentTimeframe);
 
@@ -287,7 +276,7 @@ export function applyChartTabMixin(DialogClass) {
           const altTf = await findTimeframeWithData(mint, timeframe);
           if (altTf && altTf !== timeframe) {
             this.currentTimeframe = altTf;
-            this._syncTimeframeButtons(altTf);
+            this._syncTimeframe(altTf);
             await this._loadChartData(mint, altTf, true);
             return;
           }
@@ -353,17 +342,13 @@ export function applyChartTabMixin(DialogClass) {
   };
 
   /**
-   * Highlight the given timeframe button (used when an automatic fallback
+   * Check the given timeframe in the control (used when an automatic fallback
    * switches the chart to a timeframe the user didn't click).
    * @private
    * @param {string} tf
    */
-  proto._syncTimeframeButtons = function (tf) {
-    const timeframeButtons = this.dialogEl?.querySelector("#timeframeButtons");
-    if (!timeframeButtons) return;
-    timeframeButtons
-      .querySelectorAll(".timeframe-btn")
-      .forEach((b) => b.classList.toggle("active", b.dataset.tf === tf));
+  proto._syncTimeframe = function (tf) {
+    setSegmentedValue(this.dialogEl?.querySelector('[data-seg="token-timeframe"]'), tf);
   };
 
   /**

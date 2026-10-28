@@ -16,7 +16,10 @@ import "./fixtures/i18n_en.mjs";
 
 import { STYLES_ROOT, rulesIn } from "../lib/dashboard_ui.mjs";
 
-import { TableToolbarView } from "../../src/webserver/templates/scripts/ui/table_toolbar.js";
+import {
+  TableToolbarView,
+  renderSummaryChip,
+} from "../../src/webserver/templates/scripts/ui/table_toolbar.js";
 
 const select = (id) => ({
   id,
@@ -162,4 +165,27 @@ test("an in-place summary update that loses its figure drops the colour", () => 
   TableToolbarView.updateSummary(root, [{ id: "failed", value: "2", variant: "warning" }]);
   assert.equal(value.textContent, "2");
   assert.equal(attributes["data-variant"], "warning");
+});
+
+test("no chip variant uses a raw colour", () => {
+  const rules = rulesIn(readFileSync(`${STYLES_ROOT}/ui/table_toolbar.css`, "utf8")).filter(
+    ({ selector }) => /^\.table-toolbar-chip\[data-variant="[a-z]+"\]/.test(selector)
+  );
+  assert.ok(rules.length >= 4, "the chip variants are styled in table_toolbar.css");
+  for (const { selector, body } of rules) {
+    assert.doesNotMatch(body, /#[0-9a-f]{3,8}\b|rgba?\(/i, `${selector} reads a token`);
+  }
+});
+
+test("the summary chip renderer is the toolbar's own", () => {
+  const chip = renderSummaryChip({ id: "state", label: "Status", value: "Paused", variant: "warning" });
+  assert.equal(
+    chip,
+    '<div class="table-toolbar-chip" data-summary-id="state" data-variant="warning"><span class="table-toolbar-chip__label">Status</span><span class="table-toolbar-chip__value">Paused</span></div>'
+  );
+  const html = new TableToolbarView({
+    settings: false,
+    summary: [{ id: "state", label: "Status", value: "Paused", variant: "warning" }],
+  }).render();
+  assert.ok(html.includes(chip), "the toolbar paints the same chip");
 });

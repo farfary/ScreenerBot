@@ -10,6 +10,8 @@ chart-waiting = चार्ट डेटा की प्रतीक्षा 
 chart-marker-dca = DCA { $index }
 chart-marker-exit-numbered = एग्ज़िट { $index }
 chart-candles = कैंडल
+chart-timeframes =
+    .aria-label = टाइमफ़्रेम
 
 chart-status-none = अभी कोई चार्ट डेटा नहीं
 chart-status-ready = डेटा तैयार

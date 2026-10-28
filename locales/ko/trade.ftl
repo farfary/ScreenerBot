@@ -102,7 +102,7 @@ trade-slippage-note-override = 직접 지정: { $pct }%
 trade-slippage-warning = 높은 슬리피지: 견적보다 최대 { $pct }% 적게 받을 수 있습니다.
 trade-impact-warning-title = 높은 가격 영향 경고
 # $impact is a formatted percentage and $tolerance the slippage tolerance as configured.
-trade-impact-warning-text = 이 거래의 가격 영향은 <strong>{ $impact }</strong>로, 슬리피지 허용치 <strong>{ $tolerance }%</strong>를 초과합니다. 예상보다 훨씬 적게 받을 수 있습니다.
+trade-impact-warning-text = 이 거래의 가격 영향은 { $impact }로, 슬리피지 허용치 { $tolerance }%를 초과합니다. 예상보다 훨씬 적게 받을 수 있습니다.
 trade-impact-warning-proceed = 그래도 진행
 
 ## Validation and verification

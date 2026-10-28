@@ -19,6 +19,7 @@ import { playClick, playSuccess, playError } from "../core/sounds.js";
 import { requestManager, apiErrorTitle, apiErrorDetails } from "../core/request_manager.js";
 import { downloadJson } from "../core/download.js";
 import { hasSectionLabel, sectionLabel } from "../pages/config/field_text.js";
+import { renderNotice } from "./notice.js";
 
 // ============================================================================
 // SECTION METADATA
@@ -501,13 +502,13 @@ export class ConfigImportDialog {
     );
 
     const warningsHtml = warnings.length
-      ? `<div class="config-import-warnings">
-          <div class="config-import-warnings-header">
-            <i class="icon-triangle-alert"></i>
-            <span>${Utils.escapeHtml(I18n.t("system-config-import-warnings", { count: warnings.length }))}</span>
-          </div>
-          ${warnings.map((w) => `<div class="config-import-warning-item">${Utils.escapeHtml(I18n.text(w))}</div>`).join("")}
-        </div>`
+      ? renderNotice({
+          variant: "warning",
+          title: I18n.t("system-config-import-warnings", { count: warnings.length }),
+          extraHtml: `<ul class="config-import-findings">${warnings
+            .map((w) => `<li>${Utils.escapeHtml(I18n.text(w))}</li>`)
+            .join("")}</ul>`,
+        })
       : "";
 
     this.element.innerHTML = `

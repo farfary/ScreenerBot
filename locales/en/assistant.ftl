@@ -37,6 +37,8 @@ assistant-metric-total-evaluations = Total Evaluations
 assistant-metric-cache-hit-rate = Cache Hit Rate
 assistant-metric-avg-latency = Avg Latency
 assistant-metric-active-providers = Active Providers
+# $active is the number of enabled providers, $total the number configured.
+assistant-metric-active-providers-value = { $active } / { $total }
 assistant-decisions-title = Recent Decisions
 assistant-decisions-subtitle = Latest model-analysis decisions
 

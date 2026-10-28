@@ -175,8 +175,8 @@ test("the open position dialog at the narrowest desktop window", async (t) => {
     `the hover card (${card.y}-${card.y + card.height}) stays inside the chart area (${box.y}-${box.y + box.height})`
   );
   const selected = await dialog
-    .locator("#pddTimeframes .timeframe-btn.active")
-    .getAttribute("data-tf");
+    .locator('[data-seg="pdd-timeframe"] input:checked')
+    .getAttribute("value");
   assert.equal(
     (await tooltip.locator(".tooltip-interval").textContent()).trim().toLowerCase(),
     selected,

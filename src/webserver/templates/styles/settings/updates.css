@@ -198,13 +198,6 @@
   max-width: 76ch;
 }
 
-.updates-history-notice {
-  margin: 0;
-  color: var(--text-muted);
-  font-size: 0.75rem;
-  line-height: 1.5;
-}
-
 .updates-release-list {
   display: flex;
   flex-direction: column;

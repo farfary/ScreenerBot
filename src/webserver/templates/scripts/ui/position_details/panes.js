@@ -127,7 +127,6 @@ export function applyPanesMixin(PositionDetailsDialog) {
           : I18n.attr("positions-pane-expand-chart", "title"),
         full ? "icon-minimize-2" : "icon-maximize-2"
       );
-      focus.classList.toggle("active", full);
       focus.setAttribute("aria-pressed", String(full));
     }
 

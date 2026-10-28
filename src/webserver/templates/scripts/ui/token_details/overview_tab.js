@@ -10,6 +10,8 @@ import * as Utils from "../../core/utils.js";
 import { formatFixed, formatPercentValue, withSolUnit } from "../../core/format.js";
 import { renderAddress } from "../token_identity.js";
 import { venueLabel } from "../venue.js";
+import { renderSegmented } from "../segmented.js";
+import { CHART_TIMEFRAMES } from "../chart_data.js";
 
 const esc = (text) => Utils.escapeHtml(text);
 
@@ -56,15 +58,16 @@ export function renderOverviewTab(token, options = {}) {
               <span class="ohlcv-change" id="ohlcvChange">—</span>
             </div>
             <div class="chart-controls">
-              <div class="timeframe-buttons" id="timeframeButtons">
-                <button class="timeframe-btn" data-tf="1m">1M</button>
-                <button class="timeframe-btn active" data-tf="5m">5M</button>
-                <button class="timeframe-btn" data-tf="15m">15M</button>
-                <button class="timeframe-btn" data-tf="1h">1H</button>
-                <button class="timeframe-btn" data-tf="4h">4H</button>
-                <button class="timeframe-btn" data-tf="12h">12H</button>
-                <button class="timeframe-btn" data-tf="1d">1D</button>
-              </div>
+              ${renderSegmented(
+                {
+                  name: "token-timeframe",
+                  options: CHART_TIMEFRAMES.map((tf) => ({ value: tf, label: tf.toUpperCase() })),
+                  value: "5m",
+                  ariaLabel: I18n.attr("chart-timeframes", "aria-label"),
+                  compact: true,
+                },
+                esc
+              )}
             </div>
           </div>
           <div id="tradingview-chart" class="tradingview-chart">

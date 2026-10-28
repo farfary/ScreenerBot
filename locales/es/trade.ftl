@@ -102,7 +102,7 @@ trade-slippage-note-override = Anulado: { $pct }%
 trade-slippage-warning = Deslizamiento alto: podrías recibir hasta { $pct }% menos de lo cotizado.
 trade-impact-warning-title = Advertencia de alto impacto en el precio
 # $impact is a formatted percentage and $tolerance the slippage tolerance as configured.
-trade-impact-warning-text = Esta operación tiene un impacto en el precio de <strong>{ $impact }</strong>, que supera tu tolerancia de deslizamiento de <strong>{ $tolerance }%</strong>. Podrías recibir mucho menos de lo esperado.
+trade-impact-warning-text = Esta operación tiene un impacto en el precio de { $impact }, que supera tu tolerancia de deslizamiento de { $tolerance }%. Podrías recibir mucho menos de lo esperado.
 trade-impact-warning-proceed = Continuar de todos modos
 
 ## Validation and verification

@@ -352,8 +352,8 @@ export class PositionDetailsDialog {
                   </div>
                   <div class="pdd-activity-controls">
                     <div class="pdd-act-filter-slot" id="pddActivityFilters"></div>
-                    <div class="timeframe-buttons" role="group" data-l10n-id="positions-details-activity-pane">
-                      <button type="button" class="timeframe-btn pdd-pane-btn" id="pddActivityToggle" aria-controls="pddActivityBody" aria-expanded="true" data-l10n-id="positions-details-activity-expand"><i class="icon-chevron-up"></i></button>
+                    <div role="group" data-l10n-id="positions-details-activity-pane">
+                      <button type="button" class="btn-icon btn-icon-sm" id="pddActivityToggle" aria-controls="pddActivityBody" aria-expanded="true" data-l10n-id="positions-details-activity-expand"><i class="icon-chevron-up" aria-hidden="true"></i></button>
                     </div>
                   </div>
                 </div>

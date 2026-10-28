@@ -102,7 +102,7 @@ trade-slippage-note-override = تجاوز: { $pct }%
 trade-slippage-warning = انزلاق سعري مرتفع: قد تستلم أقل من المعروض بما يصل إلى { $pct }%.
 trade-impact-warning-title = تحذير من تأثير مرتفع على السعر
 # $impact is a formatted percentage and $tolerance the slippage tolerance as configured.
-trade-impact-warning-text = تأثير هذه الصفقة على السعر <strong>{ $impact }</strong>، وهو يتجاوز تحمّلك للانزلاق السعري البالغ <strong>{ $tolerance }%</strong>. قد تستلم أقل بكثير مما هو متوقع.
+trade-impact-warning-text = تأثير هذه الصفقة على السعر { $impact }، وهو يتجاوز تحمّلك للانزلاق السعري البالغ { $tolerance }%. قد تستلم أقل بكثير مما هو متوقع.
 trade-impact-warning-proceed = المتابعة على أي حال
 
 ## Validation and verification

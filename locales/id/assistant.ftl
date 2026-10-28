@@ -31,6 +31,7 @@ assistant-metric-total-evaluations = Total Evaluasi
 assistant-metric-cache-hit-rate = Rasio Cache Hit
 assistant-metric-avg-latency = Rata-rata Latensi
 assistant-metric-active-providers = Penyedia Aktif
+assistant-metric-active-providers-value = { $active } / { $total }
 assistant-decisions-title = Keputusan Terbaru
 assistant-decisions-subtitle = Keputusan analisis model terbaru
 

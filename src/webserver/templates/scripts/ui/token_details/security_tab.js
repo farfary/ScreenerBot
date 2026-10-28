@@ -62,10 +62,11 @@ function buildSecurityLoadingContent(token, options) {
   return `
     <div class="security-container">
       <div class="security-left-col">
-        <div class="security-loading-notice">
-          <div class="loading-spinner-small"></div>
-          <span>${esc(I18n.t("tokens-security-analysis-pending"))}</span>
-        </div>
+        ${renderStateView({
+          kind: "loading",
+          message: I18n.t("tokens-security-analysis-pending"),
+          compact: true,
+        })}
         <section class="security-summary">
           ${buildSectionHeader(
             `<span class="security-section-title"><i class="icon-shield-check"></i> ${esc(I18n.t("tokens-security-pulse-title"))} ${renderHintTrigger("tokenDetails.security")}</span>`

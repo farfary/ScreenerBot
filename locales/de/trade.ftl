@@ -93,7 +93,7 @@ trade-slippage-note-auto-value = Auto ({ $pct } % aus den Einstellungen)
 trade-slippage-note-override = Überschreibung: { $pct } %
 trade-slippage-warning = Hohe Slippage: Sie erhalten möglicherweise bis zu { $pct } % weniger als angeboten.
 trade-impact-warning-title = Warnung: hohe Preisauswirkung
-trade-impact-warning-text = Dieser Trade hat eine Preisauswirkung von <strong>{ $impact }</strong>, die Ihre Slippage-Toleranz von <strong>{ $tolerance } %</strong> überschreitet. Sie erhalten möglicherweise deutlich weniger als erwartet.
+trade-impact-warning-text = Dieser Trade hat eine Preisauswirkung von { $impact }, die Ihre Slippage-Toleranz von { $tolerance } % überschreitet. Sie erhalten möglicherweise deutlich weniger als erwartet.
 trade-impact-warning-proceed = Trotzdem fortfahren
 
 ## Validation and verification

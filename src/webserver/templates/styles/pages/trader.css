@@ -616,23 +616,6 @@
   color: var(--text-secondary);
 }
 
-/* ============================================================================
-   Shared Components - Message Boxes
-   ============================================================================ */
-
-.error-message {
-  background: var(--danger-alpha-10);
-  border: 1px solid var(--danger-alpha-30);
-  color: var(--danger);
-  text-align: center;
-}
-
-.info-message,
-.loading {
-  color: var(--text-muted);
-  text-align: center;
-}
-
 /* Status List */
 .status-list {
   margin-top: 0.75rem;

@@ -8,6 +8,8 @@ chart-waiting = در انتظار داده‌های نمودار...
 chart-marker-dca = DCA { $index }
 chart-marker-exit-numbered = خروج { $index }
 chart-candles = کندل‌ها
+chart-timeframes =
+    .aria-label = بازه زمانی
 
 chart-status-none = هنوز داده‌ای برای نمودار نیست
 chart-status-ready = داده آماده است

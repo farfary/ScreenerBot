@@ -384,7 +384,7 @@
   min-width: 0;
 }
 
-.token-details-dialog .metric-item {
+.token-details-dialog .price-metric {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -392,7 +392,7 @@
   min-width: 0;
 }
 
-.token-details-dialog .metric-label {
+.token-details-dialog .price-metric-label {
   color: var(--text-muted);
   font-size: 0.59rem;
   font-weight: 650;
@@ -402,7 +402,7 @@
   white-space: nowrap;
 }
 
-.token-details-dialog .metric-value {
+.token-details-dialog .price-metric-value {
   max-width: 100%;
   overflow: hidden;
   color: var(--text-primary);

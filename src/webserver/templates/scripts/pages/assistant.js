@@ -265,36 +265,39 @@ function createLifecycle() {
   }
 
   /**
-   * Update metrics cards
+   * Update the metric cards. A figure the response does not carry reads "—".
    */
   function updateMetrics(data) {
     const metrics = data.metrics || {};
+    const known = (value) => value !== null && value !== undefined;
 
-    // Total Evaluations
     const totalEval = $("#metric-total-evaluations");
     if (totalEval) {
-      totalEval.textContent = Utils.formatNumber(metrics.total_evaluations || 0, 0);
+      totalEval.textContent = Utils.formatNumber(metrics.total_evaluations, 0);
     }
 
-    // Cache Hit Rate
     const cacheHitRate = $("#metric-cache-hit-rate");
     if (cacheHitRate) {
-      const rate = metrics.cache_hit_rate || 0;
-      cacheHitRate.textContent = percentText(Math.round(rate * 100));
+      const rate = metrics.cache_hit_rate;
+      cacheHitRate.textContent = percentText(known(rate) ? Math.round(rate * 100) : null);
     }
 
-    // Avg Latency
     const avgLatency = $("#metric-avg-latency");
     if (avgLatency) {
-      avgLatency.textContent = formatLatencyMs(Math.round(metrics.avg_response_time_ms || 0));
+      const latency = metrics.avg_response_time_ms;
+      avgLatency.textContent = formatLatencyMs(known(latency) ? Math.round(latency) : null);
     }
 
-    // Active Providers
     const providers = $("#metric-providers");
     if (providers) {
-      const active = metrics.active_providers || 0;
-      const total = metrics.total_providers || 10;
-      providers.textContent = `${active} / ${total}`;
+      const { active_providers: active, total_providers: total } = metrics;
+      providers.textContent =
+        known(active) && known(total)
+          ? I18n.t("assistant-metric-active-providers-value", {
+              active: Utils.formatNumber(active, 0),
+              total: Utils.formatNumber(total, 0),
+            })
+          : "—";
     }
   }
 

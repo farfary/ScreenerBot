@@ -1016,32 +1016,6 @@ body.trade-action-dialog-open {
   color: var(--semantic-error-text);
 }
 
-/* ---- Quote callouts: the impact warning, shown only when impact exceeds this trade's
-   slippage, and the notice that a buy adds to an archived open position ---- */
-.quote-warning {
-  display: flex;
-  align-items: flex-start;
-  gap: 7px;
-  padding: 8px 10px;
-  font-size: 0.6875rem;
-  line-height: 1.4;
-  color: var(--semantic-warning-text);
-  background: var(--warning-alpha-10);
-  border: 1px solid var(--warning-alpha-20);
-  border-radius: var(--radius-md);
-}
-
-.quote-warning[data-visible="false"] {
-  display: none;
-}
-
-.quote-warning svg {
-  width: 14px;
-  height: 14px;
-  flex-shrink: 0;
-  margin-top: 1px;
-}
-
 /* Closing note: the safety rule the whole panel rests on. */
 .quote-disclaimer {
   margin: 0;
@@ -1118,104 +1092,6 @@ body.trade-action-dialog-open {
 
 [data-theme="light"] .trade-action-input {
   background: var(--bg-card-hover);
-}
-
-/* Slippage Warning Dialog */
-.trade-slippage-warning-overlay {
-  --fade-rise: 0;
-
-  position: fixed;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgb(0, 0, 0, 0.7);
-  backdrop-filter: blur(4px);
-  z-index: var(--z-confirmation);
-  animation: fadeIn 150ms ease;
-}
-
-.trade-slippage-warning {
-  --scale-from: 0.96;
-  --scale-rise: 24px;
-
-  width: min(380px, 90vw);
-  padding: 24px;
-  background: var(--bg-secondary);
-
-  /* --danger-alpha-30 (not -40): the only one of the pair with a real dark-theme
-     value — -40 is only ever declared once, in the light :root block, so it was
-     silently the light red's alpha in both themes. */
-  border: 1px solid var(--danger-alpha-30);
-  border-radius: var(--radius-xl, 12px);
-  text-align: center;
-  animation: scaleIn 200ms ease;
-}
-
-.slippage-warning-icon {
-  font-size: 2.5rem;
-  margin-bottom: 12px;
-}
-
-/* --danger/--danger-hover (not a hardcoded #ef4444/#dc2626) because --error-color
-   is a DIFFERENT red per theme (#ef4444 light / #f85149 dark) — the hardcoded
-   value silently painted the light theme's red even in dark mode, mismatching
-   every other danger-colored element in the dialog. */
-.slippage-warning-title {
-  font-size: 1.125rem;
-  font-weight: 600;
-  color: var(--danger);
-  margin-bottom: 12px;
-}
-
-.slippage-warning-text {
-  font-size: 0.875rem;
-  color: var(--text-secondary);
-  line-height: 1.5;
-  margin-bottom: 20px;
-}
-
-.slippage-warning-text strong {
-  color: var(--danger);
-}
-
-.slippage-warning-buttons {
-  display: flex;
-  gap: 12px;
-}
-
-.slippage-warning-btn {
-  flex: 1;
-  padding: 12px 16px;
-  border-radius: var(--radius-md, 6px);
-  font-size: 0.875rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  border: 1px solid transparent;
-}
-
-/* Same rest/hover pair as the dialog's own Cancel button: a white wash at
-   4-10% alpha was tuned for the dark card only and had no light-mode
-   equivalent, so this button read as barely-there fill with almost no hover
-   feedback in light mode. */
-.slippage-warning-btn.cancel {
-  background: var(--bg-card-hover);
-  color: var(--text-primary);
-  border-color: var(--border-color);
-}
-
-.slippage-warning-btn.cancel:hover {
-  border-color: var(--text-muted);
-}
-
-.slippage-warning-btn.confirm {
-  background: var(--danger);
-  color: var(--text-on-fill);
-}
-
-.slippage-warning-btn.confirm:hover {
-  background: var(--danger-hover);
 }
 
 /* ============================================================
@@ -1579,54 +1455,14 @@ body.trade-action-dialog-open {
   color: var(--text-secondary);
 }
 
+/* The preset track (ui/segmented.js) stands as tall as the custom field beside it. */
 .trade-action-slippage-options {
+  --segmented-height: var(--slippage-control-h);
+
   display: flex;
   align-items: stretch;
   gap: 8px;
   flex-wrap: wrap;
-}
-
-/* The four presets are one fixed choice set, so they read as a single segmented
-   track — one outline around the group instead of four competing ones. */
-.trade-action-slippage-presets {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  height: var(--slippage-control-h);
-  padding: 2px;
-  background: var(--bg-primary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-}
-
-.trade-action-slippage-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 44px;
-  height: 100%;
-  padding: 0 10px;
-  font-family: var(--font-mono);
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--text-secondary);
-  background: transparent;
-  border: none;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  transition:
-    color var(--transition-fast),
-    background var(--transition-fast);
-}
-
-.trade-action-slippage-btn:hover {
-  color: var(--text-primary);
-  background: var(--bg-card-hover);
-}
-
-.trade-action-slippage-btn.active {
-  color: var(--primary-color);
-  background: var(--primary-alpha-10);
 }
 
 /* The numeric shell carries the width and the height, so the stepper sits at the
@@ -1658,15 +1494,4 @@ body.trade-action-dialog-open {
   color: var(--primary-color);
   border-color: var(--primary-color);
   background: var(--primary-alpha-10);
-}
-
-/* Shown only for a deliberately high override — losing 15% to a sandwich bot is a
-   real outcome, so it is stated plainly rather than left implicit. */
-.trade-action-slippage-warning {
-  font-size: 0.6875rem;
-  color: var(--warning-color);
-}
-
-.trade-action-slippage-warning[data-visible="false"] {
-  display: none;
 }

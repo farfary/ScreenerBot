@@ -54,17 +54,11 @@
   display: none;
 }
 
-/* Pane controls: icon-only members of the segment family they sit beside. */
-.position-details-dialog .pdd-pane-btn {
-  display: inline-flex;
+/* The EMA switch and the Fit action, side by side between the two choice tracks. */
+.position-details-dialog .pdd-chart-overlays {
+  display: flex;
   align-items: center;
-  justify-content: center;
-  min-width: 26px;
-}
-
-.position-details-dialog .pdd-pane-btn i {
-  font-size: 13px;
-  line-height: 1;
+  gap: 8px;
 }
 
 .position-details-dialog .pdd-chart-container {

@@ -189,7 +189,7 @@ test("a completed swap no position booked says so instead of a success mark", as
   await row.locator(".action-row__summary").click();
   const detail = row.locator(".action-detail");
   assert.match(
-    plain(await detail.locator(".action-detail__warning").textContent()),
+    plain(await detail.locator('.notice[data-variant="warning"]').textContent()),
     /not booked on the position and may not have landed/
   );
   assert.equal(await detail.locator("[data-open-transaction]").count(), 1, "still checkable");

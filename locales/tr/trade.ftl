@@ -79,7 +79,7 @@ trade-slippage-note-auto-value = Otomatik (ayarlardan %{ $pct })
 trade-slippage-note-override = Geçersiz kılma: %{ $pct }
 trade-slippage-warning = Yüksek kayma: tekliften en fazla %{ $pct } daha az alabilirsiniz.
 trade-impact-warning-title = Yüksek fiyat etkisi uyarısı
-trade-impact-warning-text = Bu işlemin fiyat etkisi <strong>{ $impact }</strong> ve kayma toleransınızı (<strong>%{ $tolerance }</strong>) aşıyor. Beklediğinizden önemli ölçüde az alabilirsiniz.
+trade-impact-warning-text = Bu işlemin fiyat etkisi { $impact } ve kayma toleransınızı (%{ $tolerance }) aşıyor. Beklediğinizden önemli ölçüde az alabilirsiniz.
 trade-impact-warning-proceed = Yine de devam et
 
 trade-error-invalid-number = Geçersiz sayı

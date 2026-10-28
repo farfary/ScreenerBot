@@ -11,6 +11,8 @@ chart-waiting = Waiting for chart data...
 chart-marker-dca = DCA { $index }
 chart-marker-exit-numbered = Exit { $index }
 chart-candles = Candles
+chart-timeframes =
+    .aria-label = Timeframe
 
 # Per-timeframe data status chip and tooltip (scripts/ui/chart_data.js)
 # State ids are computed in renderOhlcvStatus.
