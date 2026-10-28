@@ -47,6 +47,7 @@ errors-account-gateway-update-failed = Impossible de mettre à jour le paramètr
 # Localization
 errors-i18n-locale-not-registered = La langue n'est pas enregistrée
 errors-i18n-catalog-encode-failed = Impossible d'encoder le catalogue
+errors-i18n-language-save-failed = Impossible d'enregistrer la langue
 
 # System
 errors-system-paths-init-failed = Impossible de créer les dossiers de l'application

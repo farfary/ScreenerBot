@@ -201,38 +201,7 @@ pub async fn initialization_gate(request: Request, next: Next) -> Response {
         return next.run(request).await;
     }
 
-    // Not initialized - check if this is an allowed path
-
-    // Allow initialization endpoints and health check
-    if path.starts_with("/api/initialization")
-        || path.starts_with("/api/system/bootstrap")
-        || path == "/api/health"
-        || is_restart_safety_path(path)
-        || path == "/api/version"
-    {
-        return next.run(request).await;
-    }
-
-    // The ScreenerBot account panel sits on the setup screen, so it has to work
-    // before setup is complete. Allowed HERE and not in `security_gate`: these
-    // routes still require the GUI token, which is what keeps a page in another
-    // browser tab from driving them over 127.0.0.1.
-    if path.starts_with("/api/account") {
-        return next.run(request).await;
-    }
-
-    // Allow actions endpoints (actions system works independently)
-    if path.starts_with("/api/actions") {
-        return next.run(request).await;
-    }
-
-    // Allow static resources (scripts, styles, page HTML)
-    if path.starts_with("/scripts/")
-        || path.starts_with("/styles/")
-        || path.starts_with("/api/pages/")
-        || path == "/"
-        || !path.starts_with("/api/")
-    {
+    if allowed_before_setup(path) {
         return next.run(request).await;
     }
 
@@ -250,6 +219,40 @@ pub async fn initialization_gate(request: Request, next: Next) -> Response {
         ids::ERRORS_INITIALIZATION_REQUIRED,
     )
     .into_response()
+}
+
+/// Paths `initialization_gate` admits before setup completes.
+fn allowed_before_setup(path: &str) -> bool {
+    // Initialization endpoints and health check
+    if path.starts_with("/api/initialization")
+        || path.starts_with("/api/system/bootstrap")
+        || path == "/api/health"
+        || is_restart_safety_path(path)
+        || path == "/api/version"
+    {
+        return true;
+    }
+
+    // The ScreenerBot account panel sits on the setup screen, so it has to work
+    // before setup is complete. Allowed HERE and not in `security_gate`: these
+    // routes still require the GUI token, which is what keeps a page in another
+    // browser tab from driving them over 127.0.0.1. The language picker on the
+    // onboarding and setup screens is admitted the same way.
+    if path.starts_with("/api/account") || path.starts_with("/api/i18n/") {
+        return true;
+    }
+
+    // Actions endpoints (actions system works independently)
+    if path.starts_with("/api/actions") {
+        return true;
+    }
+
+    // Static resources (scripts, styles, page HTML)
+    path.starts_with("/scripts/")
+        || path.starts_with("/styles/")
+        || path.starts_with("/api/pages/")
+        || path == "/"
+        || !path.starts_with("/api/")
 }
 
 /// Explore Mode gate for routes that need the wallet a full setup opens
@@ -507,6 +510,23 @@ mod tests {
         assert!(!headless_request_allowed(false, &cross_origin));
         // Password authentication protects a headless server on any address.
         assert!(headless_request_allowed(true, &rebound));
+    }
+
+    #[test]
+    fn before_setup_only_the_first_run_routes_are_admitted() {
+        for path in [
+            "/api/initialization/status",
+            "/api/account/status",
+            "/api/i18n/locales",
+            "/api/i18n/language",
+            "/scripts/core/setup.js",
+            "/",
+        ] {
+            assert!(allowed_before_setup(path), "{path}");
+        }
+        for path in ["/api/config/interface", "/api/wallets", "/api/i18n"] {
+            assert!(!allowed_before_setup(path), "{path}");
+        }
     }
 
     #[test]

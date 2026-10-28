@@ -307,11 +307,15 @@ export async function serveDashboard(
     };
     const { pathname } = url;
     const page = pathname.replace(/^\//, "");
+    // `/initialization` is the URL of the first-run screens (`initialization_page` in
+    // `src/webserver/routes/mod.rs`); its document is the shell, so a reload during
+    // onboarding or setup returns to them.
     if (
       request.headers["sec-fetch-dest"] === "document" &&
-      (pathname === "/" || PAGE_IDS.includes(page))
+      (pathname === "/" || pathname === "/initialization" || PAGE_IDS.includes(page))
     ) {
-      return send(200, "text/html; charset=utf-8", renderShell(page || startupPage, locale));
+      const shellPage = PAGE_IDS.includes(page) ? page : startupPage;
+      return send(200, "text/html; charset=utf-8", renderShell(shellPage, locale));
     }
     if (pathname.startsWith("/api/pages/")) {
       const id = pathname.slice("/api/pages/".length);

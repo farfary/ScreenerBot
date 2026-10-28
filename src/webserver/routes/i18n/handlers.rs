@@ -1,7 +1,7 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Axum handlers for the i18n routes - the registered locale list and the per-locale dashboard catalog script installed as window.__SCREENERBOT_L10N__.
+//! Axum handlers for the i18n routes - the registered locale list, the display-language choice and the per-locale dashboard catalog script installed as window.__SCREENERBOT_L10N__.
 
 use crate::i18n::ids;
 use crate::webserver::api_error::{ApiError, ApiErrorCode};
@@ -12,9 +12,11 @@ use axum::{
     Json,
 };
 
-use super::types::{CatalogEntry, CatalogPayload, LocalesResponse};
+use super::types::{
+    CatalogEntry, CatalogPayload, LocalesResponse, SetLanguageRequest, SetLanguageResponse,
+};
 use crate::i18n;
-use crate::webserver::utils::no_store_response;
+use crate::webserver::utils::{no_store_response, success_response};
 
 /// Registered locales plus the locale and setting in effect for this request.
 pub async fn get_locales(headers: HeaderMap) -> Response {
@@ -30,6 +32,41 @@ pub async fn get_locales(headers: HeaderMap) -> Response {
         locales: i18n::available_locales().to_vec(),
     })
     .into_response()
+}
+
+/// POST /api/i18n/language
+///
+/// Stores the display language chosen on the first-run screens (onboarding and the
+/// setup wizard), which run before the configuration API is open. Before setup the
+/// choice stays in memory until setup completion or Explore Mode saves the whole
+/// configuration, so choosing a language never creates `config.toml`; once a
+/// configuration exists the choice is saved like every other setting. Settings >
+/// Interface keeps saving the language with the rest of its section.
+pub async fn set_language(Json(request): Json<SetLanguageRequest>) -> Response {
+    let language = request.language;
+    if language != i18n::SYSTEM_SETTING && i18n::locale_info(&language).is_none() {
+        return ApiError::new(
+            ApiErrorCode::InvalidInput,
+            ids::ERRORS_I18N_LOCALE_NOT_REGISTERED,
+        )
+        .details(language)
+        .into_response();
+    }
+    let configured =
+        crate::global::is_initialization_complete() || crate::global::is_explore_mode();
+    let result = crate::config::update_config_section(
+        |cfg| cfg.gui.dashboard.interface.language = language.clone(),
+        configured,
+    );
+    match result {
+        Ok(()) => success_response(SetLanguageResponse { language }),
+        Err(error) => ApiError::new(
+            ApiErrorCode::ConfigError,
+            ids::ERRORS_I18N_LANGUAGE_SAVE_FAILED,
+        )
+        .details(error.to_string())
+        .into_response(),
+    }
 }
 
 /// Classic script that installs the dashboard catalogs for one locale as
@@ -114,6 +151,45 @@ mod tests {
             .as_str()
             .unwrap()
             .contains("common-loading"));
+    }
+
+    async fn choose(language: &str) -> (StatusCode, String) {
+        let request = SetLanguageRequest {
+            language: language.to_string(),
+        };
+        let (status, _, body) = body_of(set_language(Json(request)).await).await;
+        (status, body)
+    }
+
+    #[tokio::test]
+    async fn a_registered_language_is_kept_in_memory_before_setup() {
+        crate::config::utils::install_default_config();
+        let (status, body) = choose("fa").await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        assert_eq!(
+            crate::config::with_config(|cfg| cfg.gui.dashboard.interface.language.clone()),
+            "fa"
+        );
+        let (status, _) = choose(i18n::SYSTEM_SETTING).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(
+            crate::config::with_config(|cfg| cfg.gui.dashboard.interface.language.clone()),
+            i18n::SYSTEM_SETTING
+        );
+    }
+
+    #[tokio::test]
+    async fn an_unregistered_or_pseudo_language_is_refused_and_changes_nothing() {
+        crate::config::utils::install_default_config();
+        let before = crate::config::with_config(|cfg| cfg.gui.dashboard.interface.language.clone());
+        for language in ["xx", "en-XA", ""] {
+            let (status, _) = choose(language).await;
+            assert_eq!(status, StatusCode::BAD_REQUEST, "{language}");
+        }
+        assert_eq!(
+            crate::config::with_config(|cfg| cfg.gui.dashboard.interface.language.clone()),
+            before
+        );
     }
 
     #[tokio::test]

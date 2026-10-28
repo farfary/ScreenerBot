@@ -41,6 +41,7 @@ errors-account-gateway-update-failed = Die Einstellung zum Senden von Transaktio
 
 errors-i18n-locale-not-registered = Das Gebietsschema ist nicht registriert
 errors-i18n-catalog-encode-failed = Der Katalog konnte nicht kodiert werden
+errors-i18n-language-save-failed = Die Sprache konnte nicht gespeichert werden
 
 errors-system-paths-init-failed = Die Anwendungsverzeichnisse konnten nicht erstellt werden
 errors-system-open-data-failed = Der Datenordner konnte nicht geöffnet werden

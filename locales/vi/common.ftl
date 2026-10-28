@@ -1,4 +1,6 @@
 common-language-system = Hệ thống
+common-language-label = Ngôn ngữ hiển thị
+common-language-locked = Đổi ngôn ngữ trong Cài đặt sau khi hoàn tất thiết lập
 common-loading = Đang tải…
 
 common-action-back = Quay lại

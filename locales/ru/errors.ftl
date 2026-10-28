@@ -41,6 +41,7 @@ errors-account-gateway-update-failed = Не удалось обновить на
 
 errors-i18n-locale-not-registered = Язык не зарегистрирован
 errors-i18n-catalog-encode-failed = Не удалось закодировать каталог
+errors-i18n-language-save-failed = Не удалось сохранить язык
 
 errors-system-paths-init-failed = Не удалось создать папки приложения
 errors-system-open-data-failed = Не удалось открыть папку данных

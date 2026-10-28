@@ -1,4 +1,6 @@
 common-language-system = Sistem
+common-language-label = Bahasa tampilan
+common-language-locked = Ubah bahasa di Pengaturan setelah penyiapan selesai
 common-loading = Memuat…
 
 common-action-back = Kembali

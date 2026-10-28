@@ -41,6 +41,7 @@ errors-account-gateway-update-failed = Не вдалося оновити нал
 
 errors-i18n-locale-not-registered = Мову не зареєстровано
 errors-i18n-catalog-encode-failed = Не вдалося закодувати каталог
+errors-i18n-language-save-failed = Не вдалося зберегти мову
 
 errors-system-paths-init-failed = Не вдалося створити каталоги застосунку
 errors-system-open-data-failed = Не вдалося відкрити теку даних

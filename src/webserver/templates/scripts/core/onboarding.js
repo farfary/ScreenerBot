@@ -4,12 +4,19 @@
 // Onboarding Flow Controller
 // Handles the multi-page introduction for first-time users
 
+// The slide shown when the display language changed, reopened after the reload.
+const ONBOARDING_SLIDE_KEY = "screenerbot.onboarding.slide";
+
 class OnboardingControllerClass {
   constructor() {
     this.currentSlide = 0;
     this.totalSlides = 0;
     this.initialized = false;
     this.completing = false;
+    this.languagePicker = null;
+    // The query this script was served with, so a module imported at run time is the
+    // same build as the page.
+    this.assetQuery = document.currentScript ? new URL(document.currentScript.src).search : "";
   }
 
   init() {
@@ -28,9 +35,44 @@ class OnboardingControllerClass {
 
     this.totalSlides = this.slides.length;
     this.bindEvents();
-    this.goToSlide(0);
+    this.goToSlide(this.takeSavedSlide());
     this.loadVersion();
+    this.mountLanguagePicker();
     this.initialized = true;
+  }
+
+  /** The slide kept across a language reload, else the first. */
+  takeSavedSlide() {
+    try {
+      const saved = Number(window.sessionStorage.getItem(ONBOARDING_SLIDE_KEY));
+      window.sessionStorage.removeItem(ONBOARDING_SLIDE_KEY);
+      return Number.isInteger(saved) && saved > 0 && saved < this.totalSlides ? saved : 0;
+    } catch {
+      return 0;
+    }
+  }
+
+  async mountLanguagePicker() {
+    const host = document.getElementById("onboarding-language");
+    if (!host) return;
+    try {
+      const { mountLanguagePicker } = await import(
+        `/scripts/ui/language_picker.js${this.assetQuery}`
+      );
+      this.languagePicker = mountLanguagePicker(host, {
+        // Back from setup, a reload would discard the wallet the wizard holds.
+        locked: () => window.SetupController?.languageLocked?.() ?? false,
+        beforeReload: () => {
+          try {
+            window.sessionStorage.setItem(ONBOARDING_SLIDE_KEY, String(this.currentSlide));
+          } catch {
+            // Without storage the reload opens on the first slide.
+          }
+        },
+      });
+    } catch (error) {
+      console.error("[Onboarding] Language picker failed to load:", error);
+    }
   }
 
   async loadVersion() {
@@ -205,6 +247,7 @@ class OnboardingControllerClass {
     if (setupScreen) setupScreen.style.display = "none";
     onboardingScreen.style.display = "grid";
     this.completing = false;
+    this.languagePicker?.refresh();
     this.goToSlide(this.currentSlide);
     window.requestAnimationFrame(() => this.nextBtn?.focus({ preventScroll: true }));
   }

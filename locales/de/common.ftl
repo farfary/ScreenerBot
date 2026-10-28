@@ -1,4 +1,6 @@
 common-language-system = System
+common-language-label = Anzeigesprache
+common-language-locked = Die Sprache lässt sich nach Abschluss der Einrichtung in den Einstellungen ändern
 common-loading = Wird geladen…
 
 common-action-back = Zurück

@@ -44,6 +44,7 @@ errors-account-gateway-update-failed = Tidak dapat memperbarui pengaturan pengir
 
 errors-i18n-locale-not-registered = Locale tidak terdaftar
 errors-i18n-catalog-encode-failed = Katalog tidak dapat di-encode
+errors-i18n-language-save-failed = Bahasa tidak dapat disimpan
 
 errors-system-paths-init-failed = Tidak dapat membuat direktori aplikasi
 errors-system-open-data-failed = Tidak dapat membuka folder data

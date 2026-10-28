@@ -11,7 +11,7 @@ import { enhanceAllSelects } from "../custom_select.js";
 import { renderStateView } from "../state_view.js";
 import { renderNotice } from "../notice.js";
 import { apiErrorMessage } from "../../core/request_manager.js";
-import { populateLanguageOptions } from "./interface_tab.js";
+import { populateLanguageOptions } from "../language_picker.js";
 import { restartApp } from "../../core/restart.js";
 
 // Ids are the chat kinds reported by the Telegram poller (src/telegram/polling.rs).

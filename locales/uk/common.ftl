@@ -1,4 +1,6 @@
 common-language-system = Системна
+common-language-label = Мова інтерфейсу
+common-language-locked = Мову можна змінити в налаштуваннях після завершення початкового налаштування
 common-loading = Завантаження…
 
 common-action-back = Назад

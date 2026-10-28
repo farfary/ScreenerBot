@@ -10,6 +10,7 @@ import * as Utils from "../../core/utils.js";
 import { enhanceAllSelects } from "../custom_select.js";
 import { setSoundsEnabled } from "../../core/sounds.js";
 import { resetFeaturedRowConfigCache } from "../featured_row.js";
+import { populateLanguageOptions } from "../language_picker.js";
 
 /**
  * Build Interface tab HTML
@@ -217,43 +218,6 @@ export function buildInterfaceTab(settings) {
       </div>
     </div>
   `;
-}
-
-/**
- * Fill a language select with `first` (an `{ code, name }` entry such as
- * "System") plus every registered locale, each shown by its native name, and
- * select the configured value.
- */
-export async function populateLanguageOptions(select, current, first) {
-  const lead = first ?? { code: "system", name: I18n.t("common-language-system") };
-  try {
-    const response = await fetch("/api/i18n/locales");
-    if (!response.ok) throw new Error(response.statusText);
-    const { locales } = await response.json();
-    const options = [lead, ...locales];
-    // A configured value that is not offered (a developer pseudo-locale) stays
-    // visible, labelled by its code, instead of displaying as the lead entry.
-    if (current && !options.some((o) => o.code === current)) {
-      options.push({ code: current, name: current });
-    }
-    select.replaceChildren(
-      ...options.map(({ code, name, dir }) => {
-        const option = document.createElement("option");
-        option.value = code;
-        option.textContent = name;
-        // A registered locale carries its direction: its native name renders in
-        // its own script and direction.
-        if (dir) {
-          option.lang = code;
-          option.dir = dir;
-        }
-        return option;
-      })
-    );
-    select.value = options.some((o) => o.code === current) ? current : lead.code;
-  } catch (error) {
-    console.error("Failed to load display languages:", error);
-  }
 }
 
 /**

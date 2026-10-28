@@ -1,4 +1,6 @@
 common-language-system = Sistema
+common-language-label = Idioma de la interfaz
+common-language-locked = Cambia el idioma en Configuración cuando completes la configuración inicial
 common-loading = Cargando…
 
 common-action-back = Atrás

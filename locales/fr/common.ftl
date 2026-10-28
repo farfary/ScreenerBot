@@ -1,6 +1,8 @@
 # Shared labels used across the interface.
 
 common-language-system = Système
+common-language-label = Langue d'affichage
+common-language-locked = Changez la langue dans les Paramètres une fois la configuration terminée
 common-loading = Chargement…
 
 common-action-back = Retour

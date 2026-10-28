@@ -1,10 +1,10 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Response types for the i18n routes - LocalesResponse, CatalogPayload and CatalogEntry.
+//! Request and response types for the i18n routes - LocalesResponse, the display-language choice, CatalogPayload and CatalogEntry.
 
 use crate::i18n::{LocaleInfo, TextDirection};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize)]
 pub struct LocalesResponse {
@@ -15,6 +15,19 @@ pub struct LocalesResponse {
     /// Locale the catalogs are authored in.
     pub source: &'static str,
     pub locales: Vec<LocaleInfo>,
+}
+
+/// Body of `POST /api/i18n/language`.
+#[derive(Debug, Deserialize)]
+pub struct SetLanguageRequest {
+    /// `"system"` or a registered locale code.
+    pub language: String,
+}
+
+/// Answer of `POST /api/i18n/language`: the setting now in effect.
+#[derive(Debug, Serialize)]
+pub struct SetLanguageResponse {
+    pub language: String,
 }
 
 /// Body of `/i18n/{locale}/catalog.js`.

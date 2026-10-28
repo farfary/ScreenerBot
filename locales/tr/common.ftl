@@ -1,4 +1,6 @@
 common-language-system = Sistem
+common-language-label = Görüntüleme dili
+common-language-locked = Kurulum tamamlandıktan sonra dili Ayarlar’dan değiştirin
 common-loading = Yükleniyor…
 
 common-action-back = Geri

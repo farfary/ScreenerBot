@@ -99,6 +99,20 @@
   color: #e6edf3;
 }
 
+/* Display-language picker at the inline end of the first-run header (onboarding and setup). */
+.onboarding-hero .language-picker {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-inline-start: auto;
+  -webkit-app-region: no-drag;
+}
+
+.language-picker-icon {
+  color: var(--text-secondary);
+  font-size: 1rem;
+}
+
 .onboarding-version {
   font-family: var(--font-mono, "JetBrains Mono", monospace);
   font-size: 0.65rem;

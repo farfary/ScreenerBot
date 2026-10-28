@@ -87,6 +87,11 @@
   min-width: 0;
 }
 
+/* Brand, progress and the language picker spread across the header. */
+.onboarding-hero.setup-header .language-picker {
+  margin-inline-start: 0;
+}
+
 .setup-progress {
   display: flex;
   align-items: center;

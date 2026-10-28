@@ -52,6 +52,7 @@ errors-account-gateway-update-failed = به‌روزرسانی تنظیم ارس
 # Localization
 errors-i18n-locale-not-registered = زبان ثبت نشده است
 errors-i18n-catalog-encode-failed = کدگذاری کاتالوگ ممکن نشد
+errors-i18n-language-save-failed = ذخیرهٔ زبان ممکن نشد
 
 # System
 errors-system-paths-init-failed = ساخت پوشه‌های برنامه ممکن نشد

@@ -47,6 +47,7 @@ errors-account-gateway-update-failed = İşlem gönderme ayarı güncellenemedi
 # Localization
 errors-i18n-locale-not-registered = Dil kayıtlı değil
 errors-i18n-catalog-encode-failed = Katalog kodlanamadı
+errors-i18n-language-save-failed = Dil kaydedilemedi
 
 # System
 errors-system-paths-init-failed = Uygulama klasörleri oluşturulamadı

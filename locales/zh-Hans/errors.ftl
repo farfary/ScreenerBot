@@ -50,6 +50,7 @@ errors-account-gateway-update-failed = 无法更新交易发送设置
 # Localization
 errors-i18n-locale-not-registered = 语言区域未注册
 errors-i18n-catalog-encode-failed = 无法编码语言目录
+errors-i18n-language-save-failed = 无法保存语言
 
 # System
 errors-system-paths-init-failed = 无法创建应用程序目录

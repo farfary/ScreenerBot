@@ -41,6 +41,7 @@ errors-account-gateway-update-failed = ट्रांज़ैक्शन भ�
 
 errors-i18n-locale-not-registered = भाषा पंजीकृत नहीं है
 errors-i18n-catalog-encode-failed = कैटलॉग एन्कोड नहीं हो सका
+errors-i18n-language-save-failed = भाषा सहेजी नहीं जा सकी
 
 errors-system-paths-init-failed = एप्लिकेशन डायरेक्टरी नहीं बन सकीं
 errors-system-open-data-failed = डेटा फ़ोल्डर नहीं खुल सका

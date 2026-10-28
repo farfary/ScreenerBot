@@ -1,4 +1,6 @@
 common-language-system = النظام
+common-language-label = لغة العرض
+common-language-locked = غيّر اللغة من الإعدادات بعد إكمال الإعداد
 common-loading = جارٍ التحميل…
 
 common-action-back = رجوع

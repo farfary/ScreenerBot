@@ -52,6 +52,7 @@ errors-account-gateway-update-failed = Could not update the sending setting
 # Localization
 errors-i18n-locale-not-registered = Locale is not registered
 errors-i18n-catalog-encode-failed = Catalog could not be encoded
+errors-i18n-language-save-failed = Language could not be saved
 
 # System
 errors-system-paths-init-failed = Could not create the application directories

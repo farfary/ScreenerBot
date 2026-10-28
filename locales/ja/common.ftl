@@ -1,4 +1,6 @@
 common-language-system = システム
+common-language-label = 表示言語
+common-language-locked = セットアップの完了後に設定で言語を変更してください
 common-loading = 読み込み中…
 
 common-action-back = 戻る

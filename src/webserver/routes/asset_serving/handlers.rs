@@ -237,6 +237,7 @@ pub async fn get_ui_script(Path(file): Path<String>) -> Response {
         "setup_dialog.js" => Some(embeds::SETUP_DIALOG_UI),
         "access_gate.js" => Some(embeds::ACCESS_GATE_UI),
         "funding_notice.js" => Some(embeds::FUNDING_NOTICE_UI),
+        "language_picker.js" => Some(embeds::LANGUAGE_PICKER_UI),
         "trade_action_dialog.js" => Some(embeds::TRADE_ACTION_DIALOG_UI),
         "manual_trade.js" => Some(embeds::MANUAL_TRADE_UI),
         "auto_trader_control.js" => Some(embeds::AUTO_TRADER_CONTROL_UI),

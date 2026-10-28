@@ -41,6 +41,7 @@ errors-account-gateway-update-failed = Không cập nhật được cài đặt 
 
 errors-i18n-locale-not-registered = Ngôn ngữ chưa được đăng ký
 errors-i18n-catalog-encode-failed = Không mã hóa được danh mục ngôn ngữ
+errors-i18n-language-save-failed = Không lưu được ngôn ngữ
 
 errors-system-paths-init-failed = Không tạo được các thư mục của ứng dụng
 errors-system-open-data-failed = Không mở được thư mục dữ liệu

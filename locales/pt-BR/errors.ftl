@@ -44,6 +44,7 @@ errors-account-gateway-update-failed = Não foi possível atualizar a configura�
 
 errors-i18n-locale-not-registered = O idioma não está registrado
 errors-i18n-catalog-encode-failed = Não foi possível codificar o catálogo
+errors-i18n-language-save-failed = Não foi possível salvar o idioma
 
 errors-system-paths-init-failed = Não foi possível criar os diretórios do aplicativo
 errors-system-open-data-failed = Não foi possível abrir a pasta de dados

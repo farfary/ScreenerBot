@@ -1,4 +1,6 @@
 common-language-system = سیستم
+common-language-label = زبان نمایش
+common-language-locked = پس از تکمیل راه‌اندازی، زبان را از تنظیمات تغییر دهید
 common-loading = در حال بارگذاری…
 
 common-action-back = بازگشت

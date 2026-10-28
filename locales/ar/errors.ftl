@@ -52,6 +52,7 @@ errors-account-gateway-update-failed = تعذّر تحديث إعداد إرسا
 # Localization
 errors-i18n-locale-not-registered = اللغة غير مسجّلة
 errors-i18n-catalog-encode-failed = تعذّر ترميز الكتالوج
+errors-i18n-language-save-failed = تعذّر حفظ اللغة
 
 # System
 errors-system-paths-init-failed = تعذّر إنشاء مجلدات التطبيق

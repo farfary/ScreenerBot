@@ -500,6 +500,7 @@ pub const INPUT_DIALOG_UI: &str = include_str!("templates/scripts/ui/input_dialo
 pub const SETUP_DIALOG_UI: &str = include_str!("templates/scripts/ui/setup_dialog.js");
 pub const ACCESS_GATE_UI: &str = include_str!("templates/scripts/ui/access_gate.js");
 pub const FUNDING_NOTICE_UI: &str = include_str!("templates/scripts/ui/funding_notice.js");
+pub const LANGUAGE_PICKER_UI: &str = include_str!("templates/scripts/ui/language_picker.js");
 
 // Page-specific JavaScript - Public for asset_serving.rs
 pub const SERVICES_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/services.js");

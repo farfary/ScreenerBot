@@ -28,6 +28,11 @@
   pointer-events: none;
 }
 
+/* The onboarding and setup screens sit above every dashboard layer. */
+body.initialization-mode .toast-container {
+  z-index: var(--z-first-run-toast);
+}
+
 /* The featured row adds 48px above the status bar while it is shown. */
 body:has(.content.has-featured-row) .toast-container {
   inset-block-end: calc(26px + 48px + 16px);

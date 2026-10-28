@@ -54,6 +54,10 @@
   --z-exit-dialog: 10100;
   --z-setup: 50000;
   --z-onboarding: 50000;
+  /* While the first-run screens cover the dashboard (`body.initialization-mode`), the
+     select lists and toasts they open stack above them, still below the splash. */
+  --z-first-run-menu: 50010;
+  --z-first-run-toast: 50020;
   --z-splash: 99000;
   --z-lockscreen: 100000;
 

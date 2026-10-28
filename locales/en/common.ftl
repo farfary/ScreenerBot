@@ -2,6 +2,8 @@
 
 # Label for the "follow the system language" choice.
 common-language-system = System
+common-language-label = Display language
+common-language-locked = Change the language in Settings once setup is complete
 common-loading = Loading…
 
 # Generic actions.

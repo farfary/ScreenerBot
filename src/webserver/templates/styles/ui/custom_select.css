@@ -279,6 +279,11 @@ select.cs-enhanced-source {
   border-color: var(--primary-color);
 }
 
+/* The onboarding and setup screens sit above every dashboard layer. */
+body.initialization-mode .cs-dropdown.cs-portal {
+  z-index: var(--z-first-run-menu);
+}
+
 /* A menu wider than its trigger (an option label longer than the trigger can show),
    or one with room on neither side of the trigger, floats as an ordinary menu instead
    of pretending to continue the trigger. */

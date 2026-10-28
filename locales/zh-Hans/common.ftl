@@ -1,4 +1,6 @@
 common-language-system = 跟随系统
+common-language-label = 显示语言
+common-language-locked = 完成初始设置后，可在设置中更改语言
 common-loading = 加载中…
 
 common-action-back = 返回

@@ -44,6 +44,7 @@ errors-account-gateway-update-failed = トランザクション送信の設定�
 
 errors-i18n-locale-not-registered = ロケールが登録されていません
 errors-i18n-catalog-encode-failed = カタログをエンコードできませんでした
+errors-i18n-language-save-failed = 言語を保存できませんでした
 
 errors-system-paths-init-failed = アプリケーションのディレクトリを作成できませんでした
 errors-system-open-data-failed = データフォルダを開けませんでした

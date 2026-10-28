@@ -50,6 +50,7 @@ errors-account-gateway-update-failed = 트랜잭션 전송 설정을 업데이�
 # Localization
 errors-i18n-locale-not-registered = 등록되지 않은 로캘입니다
 errors-i18n-catalog-encode-failed = 카탈로그를 인코딩할 수 없습니다
+errors-i18n-language-save-failed = 언어를 저장할 수 없습니다
 
 # System
 errors-system-paths-init-failed = 애플리케이션 디렉터리를 만들 수 없습니다

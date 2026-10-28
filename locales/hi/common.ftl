@@ -1,6 +1,8 @@
 # Shared labels used across the interface.
 
 common-language-system = सिस्टम
+common-language-label = प्रदर्शन भाषा
+common-language-locked = सेटअप पूरा होने के बाद सेटिंग्स में भाषा बदलें
 common-loading = लोड हो रहा है…
 
 common-action-back = वापस

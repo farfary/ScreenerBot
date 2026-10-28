@@ -58,6 +58,7 @@
       this.failedServiceState = null;
       this.fundingAddress = null;
       this.stopFundingWatch = null;
+      this.languagePicker = null;
     }
 
     init() {
@@ -112,6 +113,7 @@
       this.rpcField = mountRpcField(document.getElementById("setup-rpc-field"), "");
       this.bindEvents();
       this.loadVersion();
+      this.mountLanguagePicker();
       this.mountAccountPanel();
       this.attachGatewayHandler();
       this.resetVerificationStates();
@@ -145,6 +147,26 @@
       } catch {
         // Version decoration is optional and must never block setup.
       }
+    }
+
+    async mountLanguagePicker() {
+      const host = document.getElementById("setup-language");
+      if (!host) return;
+      try {
+        const { mountLanguagePicker } = await import(`/scripts/ui/language_picker.js${ASSET_QUERY}`);
+        this.languagePicker = mountLanguagePicker(host, { locked: () => this.languageLocked() });
+      } catch (error) {
+        console.error("[Setup] Language picker failed to load:", error);
+      }
+    }
+
+    /**
+     * True once the wizard holds input that the reload a language change needs would
+     * discard: a chosen wallet source (a created key exists from that moment) or any
+     * later step.
+     */
+    languageLocked() {
+      return this.currentStep !== STEP.wallet || this.walletSource !== null;
     }
 
     setStep(step, options = {}) {
@@ -210,6 +232,7 @@
 
     updateButtons() {
       if (this.footer) this.footer.hidden = this.currentStep === STEP.ready;
+      this.languagePicker?.refresh();
 
       if (this.backBtn) {
         this.backBtn.hidden = this.currentStep > STEP.verify;

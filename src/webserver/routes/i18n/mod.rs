@@ -1,17 +1,22 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Localization routes — the locale registry API and the dashboard message catalog.
+//! Localization routes — the locale registry API, the display-language choice made before the dashboard exists, and the dashboard message catalog.
 
 pub mod handlers;
 mod types;
 
-use axum::{routing::get, Router};
+use axum::{
+    routing::{get, post},
+    Router,
+};
 use std::sync::Arc;
 
 use crate::webserver::state::AppState;
 
 /// Create locale registry routes (mounted under `/api`).
 pub fn routes() -> Router<Arc<AppState>> {
-    Router::new().route("/i18n/locales", get(handlers::get_locales))
+    Router::new()
+        .route("/i18n/locales", get(handlers::get_locales))
+        .route("/i18n/language", post(handlers::set_language))
 }
