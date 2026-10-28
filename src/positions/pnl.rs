@@ -281,6 +281,30 @@ pub fn calculate_position_total_fees(position: &Position) -> f64 {
     entry_fees_native + exit_fees_native
 }
 
+/// The unrealized P&L of a set of open rounds at their pool prices.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct OpenUnrealized {
+    /// Sum of the unrealized P&L of the priced rounds, in native units; `None` while no
+    /// round is priced.
+    pub native: Option<f64>,
+    /// Rounds with no unrealized P&L yet, left out of `native`.
+    pub unpriced: usize,
+}
+
+/// The unrealized P&L of the open `rounds`: the priced rounds summed, the rest counted.
+/// One unpriced round leaves the others' figure in place instead of erasing it.
+pub fn open_unrealized<'a>(rounds: impl IntoIterator<Item = &'a Position>) -> OpenUnrealized {
+    let mut native = None;
+    let mut unpriced = 0;
+    for round in rounds {
+        match round.unrealized_pnl {
+            Some(pnl) => *native.get_or_insert(0.0) += pnl,
+            None => unpriced += 1,
+        }
+    }
+    OpenUnrealized { native, unpriced }
+}
+
 /// Safe wrapper around calculate_position_pnl that returns Option to distinguish errors
 /// Returns None if calculation fails (invalid prices, missing decimals, etc.)
 /// Returns Some((pnl_sol, pnl_percent)) for successful calculations (may be zero for break-even)
@@ -329,3 +353,7 @@ pub async fn calculate_position_pnl_safe(
     // Return result wrapped in Some - caller can now distinguish None (error) from Some((0.0, 0.0)) (break-even)
     Some(result)
 }
+
+#[cfg(test)]
+#[path = "pnl_tests.rs"]
+mod tests;

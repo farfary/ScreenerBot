@@ -1,15 +1,3 @@
-trader-exit-type-stop-loss = Stop loss
-trader-exit-type-take-profit = Take profit
-trader-exit-type-roi = Take profit
-trader-exit-type-roi-exit = Take profit
-trader-exit-type-trailing-stop = Trailing stop
-trader-exit-type-time-override = Thoát theo thời gian
-trader-exit-type-time-rule = Quy tắc thời gian
-trader-exit-type-manual = Thủ công
-trader-exit-type-manual-close = Thủ công
-trader-exit-type-dca = DCA
-trader-exit-type-unknown = Không rõ
-
 trader-tab-stats = Thống kê
 trader-tab-strategies = Chiến lược
 trader-tab-stop-loss = Stop loss
@@ -26,32 +14,41 @@ trader-feature-disabled = Đã tắt
     .message = Tính năng này hiện đang tắt.
 
 trader-status-title = Auto Trader
-trader-status-loading = Đang tải...
 trader-status-running = Đang chạy
 trader-status-stopped = Đã dừng
 trader-status-setup-required = Cần thiết lập
 trader-setup-action = Hoàn tất thiết lập
-trader-toggle-on = BẬT
-trader-toggle-off = TẮT
 trader-toggle-start-failed = Không thể khởi động Trader
 trader-toggle-stop-failed = Không thể dừng Trader
-trader-controls-title = Điều khiển giao dịch
 trader-halt-title = Giao dịch đã bị dừng
 trader-halt-reason-default = Dừng cưỡng chế thủ công
 trader-halt-resume = Tiếp tục
 trader-monitor-entry = Giám sát vào lệnh
 trader-monitor-exit = Giám sát thoát lệnh
-trader-monitor-master-off = Auto Trader đang tắt
 trader-loss-limit-title = Giới hạn lỗ theo kỳ
 trader-loss-limit-resume = Tiếp tục giao dịch
 trader-loss-limit-reset = Đặt lại kỳ
 trader-loss-limit-off = Tắt
-trader-loss-limit-none = Chưa cấu hình giới hạn lỗ theo kỳ
 trader-loss-limit-resets-in = Đặt lại sau { $hours } { $minutes }
-trader-loss-limit-reached = ĐÃ ĐẠT GIỚI HẠN
 trader-force-stop = Dừng cưỡng chế mọi thứ
 trader-force-stop-hint = Dừng ngay mọi trình theo dõi, tác vụ sao chép và giao dịch.
 trader-force-stop-idle = Không có gì đang chạy để lệnh dừng cưỡng chế phải dừng.
+trader-run-state-force-stopped = Dừng cưỡng bức
+trader-run-state-waiting = Đang chờ dịch vụ
+trader-run-state-idle = Giám sát đang tắt
+trader-entries-label = Lệnh vào mới
+trader-entries-open = Đang mở
+trader-entries-monitor-off = Giám sát vào lệnh đang tắt
+trader-entries-no-live-strategy = Không có chiến lược vào lệnh Live
+trader-entries-no-paper-strategy = Không có chiến lược vào lệnh thử nghiệm
+trader-action-start = Bật Auto Trader
+trader-action-stop = Dừng Auto Trader
+trader-notice-loss-limit = Đã chạm giới hạn lỗ
+trader-notice-loss-limit-message = Lệnh vào Live mới tạm dừng cho đến khi kỳ được đặt lại. Lệnh thoát vẫn tiếp tục.
+trader-notice-stats-failed = Không tải được thống kê
+trader-controls-group =
+    .aria-label = Điều khiển giao dịch
+trader-monitor-dormant = Khởi động cùng Auto Trader
 
 trader-force-stop-confirm = Dừng cưỡng chế giao dịch
     .message = Thao tác này sẽ dừng ngay TẤT CẢ hoạt động giao dịch. Tiếp tục?
@@ -83,27 +80,33 @@ trader-stats-window =
     .aria-label = Khoảng thống kê
 trader-stats-book =
     .aria-label = Sổ giao dịch
-trader-paper-run-since = Đợt thử nghiệm từ { $date }
-trader-paper-start = Ban đầu
-trader-paper-cash = Tiền mặt
-trader-paper-open = Đang mở
-trader-paper-unrealized = Chưa chốt
+trader-exposure-cash = Tiền mặt
+trader-exposure-open = Đang mở
+trader-exposure-unrealized = Chưa chốt
+trader-exposure-open-title = Vị thế chiếm một suất, trên giới hạn vị thế mở
+trader-exposure-in-use = Đang dùng
+trader-exposure-in-use-title = { -sol } đã chi vào các vị thế mở
+# $amount is the formatted count.
+trader-exposure-unpriced =
+    { $count ->
+       *[other] { $amount } vị thế mở chưa có giá trực tiếp
+    }
+# $date is a formatted date; $amount is a formatted SOL amount.
+trader-exposure-cash-title = Đợt thử nghiệm từ { $date } · bắt đầu với { $amount }
 trader-paper-reset = Đặt lại đợt thử nghiệm
 trader-paper-reset-title = Đặt lại đợt thử nghiệm?
 trader-paper-reset-run-message = Mọi vị thế thử nghiệm đang mở, kể cả các khoản nắm giữ thử nghiệm của tác vụ copy, sẽ đóng theo giá hiện tại và một đợt mới bắt đầu với số dư ban đầu đã cài đặt. Các đợt trước vẫn nằm trong lịch sử.
 trader-paper-reset-done = Đã bắt đầu đợt thử nghiệm mới
 trader-paper-reset-failed = Không thể đặt lại đợt thử nghiệm
-trader-paper-account-failed = Không thể tải đợt thử nghiệm
 trader-realized-title = Hiệu suất đã chốt
 trader-metric-net-pnl = P&L ròng
 trader-metric-win-rate = Tỷ lệ thắng
 trader-metric-profit-factor = Hệ số lợi nhuận
 trader-metric-max-drawdown = Mức sụt giảm tối đa
-trader-metric-capital = Vốn đang dùng
 trader-metric-avg-win-loss = Thắng / thua TB
 trader-metric-closed-trades = Lệnh đã đóng
 trader-metric-median-hold = Thời gian nắm giữ trung vị
-trader-stats-empty = Không có lệnh đã đóng trong khoảng này
+trader-metric-fees = Phí mạng
 trader-stats-won-lost = Thắng { $won } · thua { $lost }
 trader-stats-record = { $wins } · { $losses }
 trader-stats-wins =
@@ -117,45 +120,80 @@ trader-stats-losses =
 trader-stats-expected = Kỳ vọng { $amount } mỗi lệnh
 trader-stats-profit-factor-basis = Tổng thắng ÷ tổng thua
 trader-stats-drawdown-basis = Mức sụt giảm đã chốt sâu nhất từ đỉnh đến đáy
-trader-stats-slots =
-    { $count ->
-       *[other] Đã dùng { $used }/{ $max } slot vị thế
-    }
-trader-stats-avg-basis = Kết quả trung bình của một lệnh thắng so với lệnh thua
-trader-stats-closed =
-    { $count ->
-       *[other] { $amount } vị thế đã đóng
-    }
-trader-stats-hold-average = TB { $span }
 trader-stats-excluded =
     { $count ->
-       *[other] Đã loại { $amount } vòng đã đóng - không có giá vốn đầy đủ nên không thể tính P&L chính xác.
+       *[other] Đã loại { $amount } giao dịch đã đóng: giá vốn chưa đầy đủ nên P&L không xác định.
     }
+# $ratio is a formatted ratio.
+trader-stats-payoff = Payoff { $ratio }
+trader-stats-streak-win =
+    { $count ->
+       *[other] { $amount } lệnh thắng liên tiếp
+    }
+trader-stats-streak-loss =
+    { $count ->
+       *[other] { $amount } lệnh thua liên tiếp
+    }
+# $wins and $losses are formatted durations.
+trader-stats-hold-split = Thắng { $wins } · thua { $losses }
+trader-stats-fees-basis = Đã tính trong P&L ròng
+trader-stats-loading = Đang tải thống kê...
+trader-open-strategies = Mở Chiến lược
 
 trader-daily-title = P&L hằng ngày
 trader-daily-subtitle = { -sol } đã chốt mỗi ngày, kèm tổng lũy kế
-trader-daily-loading = Đang tải P&L hằng ngày...
 trader-daily-chart = Lãi/lỗ đã chốt hằng ngày tính bằng { -sol }
 trader-weekly-title = P&L hằng tuần
 trader-weekly-subtitle = { -sol } đã chốt mỗi tuần ISO, kèm tổng lũy kế
 trader-weekly-chart = Lãi/lỗ đã chốt hằng tuần tính bằng { -sol }
+# $date is a formatted date; $pnl a signed SOL amount.
+trader-daily-bar =
+    { $count ->
+       *[other] { $date } · { $pnl } · { $amount } lệnh
+    }
+trader-weekly-bar =
+    { $count ->
+       *[other] Tuần từ { $date } · { $pnl } · { $amount } lệnh
+    }
 trader-extreme-best = Lệnh tốt nhất
 trader-extreme-worst = Lệnh tệ nhất
+trader-extreme-runs = Nhiều nhất liên tiếp
+trader-outcome-title = Kết quả lệnh
+trader-outcome-subtitle = Lệnh đã đóng theo lợi nhuận, tính bằng phần trăm
+# $value, $from and $to are formatted signed percentages.
+trader-outcome-below = Dưới { $value }
+trader-outcome-range = Từ { $from } đến { $to }
+trader-outcome-above = { $value } trở lên
+# $range is one of the three messages above; $pnl a signed SOL amount.
+trader-outcome-bucket =
+    { $count ->
+       *[other] { $range } · { $amount } lệnh · { $pnl }
+    }
 
-trader-exit-title = Phân tích chiến lược thoát lệnh
-trader-exit-subtitle = Cách các vị thế được đóng và mỗi lần thoát thu về bao nhiêu
-trader-exit-loading = Đang tải dữ liệu thoát lệnh...
-trader-exit-empty-day = Không có lệnh đã đóng trong 24 giờ qua
-trader-exit-empty-all = Chưa có lệnh đã đóng
-trader-exit-empty-days =
+trader-stats-empty-day = Không có lệnh đã đóng trong 24 giờ qua
+trader-stats-empty-all = Chưa có lệnh đã đóng
+trader-stats-empty-hint = Giao dịch đã đóng xuất hiện ở đây khi một vị thế được bán. Hãy bật Auto Trader hoặc chọn khoảng thời gian dài hơn.
+trader-stats-empty-days =
     { $count ->
        *[other] Không có lệnh đã đóng trong { $amount } ngày qua
     }
-trader-exit-share =
-    { $count ->
-       *[other] { $amount } lệnh · { $share } số lần thoát
-    }
-trader-exit-average = TB { $value }
+trader-exits-title = Lý do thoát lệnh
+trader-exits-subtitle = Các lệnh đã đóng kết thúc ra sao, và mỗi lần thoát mang lại gì
+trader-sources-title = Nguồn vào lệnh
+trader-sources-subtitle = Điều gì đã mở các lệnh đã đóng
+trader-recent-title = Lệnh đóng gần đây
+trader-recent-subtitle = Các lệnh đóng mới nhất trong khoảng này
+trader-column-token = Token
+trader-column-exit = Thoát lệnh
+trader-column-source = Nguồn
+trader-column-trades = Lệnh
+trader-column-win-rate = Tỷ lệ thắng
+trader-column-avg-return = Lợi nhuận TB
+trader-column-net-pnl = P&L ròng
+trader-column-held = Nắm giữ
+trader-column-closed = Đã đóng
+trader-column-pnl = P&L
+trader-column-return = Lợi nhuận
 
 trader-example-how-it-works = Cách hoạt động
 trader-step-entry = Vào lệnh
@@ -345,3 +383,8 @@ trader-timing-concurrency = Số luồng kiểm tra vào lệnh
 trader-timing-concurrency-hint = Số token kiểm tra cùng lúc (càng cao càng nhanh nhưng tốn CPU hơn)
 trader-timing-unit-minutes = phút
 trader-timing-unit-tokens = token
+
+## Service mode notice
+
+trader-service-notice-title = Đang chạy trên dịch vụ { -brand }
+trader-service-notice-message = Giá được làm mới vài giây một lần, nên các lệnh thoát nhanh như trailing stop sát giá phản ứng chậm hơn so với dùng RPC của riêng bạn.

@@ -30,6 +30,9 @@ impl Service for CopyTradingService {
 
     fn is_enabled(&self) -> bool {
         crate::global::is_initialization_complete()
+            && crate::chains::access::active_has(
+                crate::chains::access::Capability::WatchOtherWallets,
+            )
     }
 
     async fn start(

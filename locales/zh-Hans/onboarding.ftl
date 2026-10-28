@@ -11,7 +11,7 @@ onboarding-welcome-custody-description = 私钥静态加密存储，绝不会传
 onboarding-welcome-engine-title = 常驻引擎
 onboarding-welcome-engine-description = 服务统一编排，配有健康检查和平稳的生命周期控制。
 onboarding-welcome-realtime-title = 链上实时数据
-onboarding-welcome-realtime-description = 直接计算流动性池储备，而非延迟的 API 快照。
+onboarding-welcome-realtime-description = 使用自己的 RPC 时，价格直接来自流动性池储备，而非延迟的 API 快照。
 
 ## Slide: discover
 
@@ -35,7 +35,7 @@ onboarding-trade-auto-description = 入场/出场评估器、DCA 轮次、部分
 onboarding-trade-strategy-title = 策略引擎
 onboarding-trade-strategy-description = 结合价格、成交量和时间信号的条件树。
 onboarding-trade-copy-title = 跟单交易
-onboarding-trade-copy-description = 跟随你关注的钱包进行交易。任何任务在花费真实 { -sol } 之前，都可以先在模拟模式中测试。
+onboarding-trade-copy-description = 跟随你关注的钱包进行交易（需要你自己的 RPC）。任何任务在花费真实 { -sol } 之前，都可以先在模拟模式中测试。
 onboarding-trade-safety-title = 安全控制
 onboarding-trade-safety-description = 紧急停止、按周期的亏损限额，以及独立的监控开关。
 
@@ -55,20 +55,20 @@ onboarding-connect-events-description = 每一笔交易、兑换和系统事件�
 ## Slide: data
 
 onboarding-data-title = { -brand } 数据
-onboarding-data-description = 我们运行一项共享的市场数据服务，你的安装不会受公共提供方速率限制的拖累。拥有 { -brand } 账户即可免费使用，没有账户 { -brand } 也能正常运行。
-onboarding-data-candles-title = 汇集的 K 线历史
-onboarding-data-candles-description = 七个时间周期的共享历史数据，长达数年，由同一缓存提供。
-onboarding-data-pools-title = 已解析的流动性池与安全信息
-onboarding-data-pools-description = 集中的流动性池注册表和已缓存的 { -rugcheck } 报告，均已预先获取。
+onboarding-data-description = 免费的 { -brand } 账户让图表和代币检查更快。使用自己的 RPC 时，没有账户 { -brand } 也能正常运行。
+onboarding-data-candles-title = 图表快速加载
+onboarding-data-candles-description = 七个时间周期的价格历史，长达数年。
+onboarding-data-pools-title = 代币检查即时可用
+onboarding-data-pools-description = 大多数代币的流动性池和安全报告，无需等待。
 onboarding-data-signin-title = 需要账户
 onboarding-data-signin-description = 没有账户时无法使用这些数据，将改用公共提供商。
-onboarding-data-reading-title = 仅限查询
-onboarding-data-reading-description = 我们只能看到您查询了哪些代币，绝不会接触密钥、余额、仓位或交易。
+onboarding-data-reading-title = 我们能看到的内容
+onboarding-data-reading-description = 您查询的代币，以及您通过 { -brand } 发送的兑换交易。使用 { -brand } 服务时，还包括您交易钱包的余额和历史记录。绝不包括您的密钥。
 
 ## Slide: privacy
 
 onboarding-privacy-title = 您的密钥，您的数据
-onboarding-privacy-description = 您的配置、密钥和交易历史都保留在这台设备上。接下来，您可以选择“探索仪表盘”，无需凭据即可发现代币；也可以关联钱包和 RPC 以启用完整的机器人，如需 { -brand } 数据，请在那里登录。
+onboarding-privacy-description = 您的配置、密钥和交易历史都保留在这台设备上。接下来，您可以选择“探索仪表盘”，无需凭据即可发现代币；也可以创建或导入钱包，并通过自己的 RPC 或 { -brand } 服务连接，即可开始交易。
 onboarding-privacy-local-title = 本地优先架构
 onboarding-privacy-local-description = 配置、分析数据和数据库都存储在您的桌面上。
 onboarding-privacy-wallet-title = 加密钱包
@@ -81,7 +81,7 @@ onboarding-privacy-config-description = 设置完成后，大多数设置都可�
 ## Footer
 
 onboarding-setup-shortcut =
-    .aria-label = 直接前往钱包和 RPC 设置，或选择探索模式
+    .aria-label = 直接前往设置，或选择探索模式
 onboarding-setup-shortcut-label = 前往设置
 onboarding-progress-dot =
     .aria-label = 前往第 { $number } 张幻灯片

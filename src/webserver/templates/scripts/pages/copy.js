@@ -14,7 +14,7 @@ import { ConfirmationDialog } from "../ui/confirmation_dialog.js";
 import { COPY_HANDOFF_EVENT, takeCopyHandoff } from "../ui/copy_handoff.js";
 import { createPageDialogs } from "../ui/page_dialogs.js";
 import { createApi } from "./copy/api.js";
-import { renderFigures, renderToolbar } from "./copy/summary.js";
+import { COPY_CAPABILITY, renderFigures, renderToolbar } from "./copy/summary.js";
 import { createTaskList } from "./copy/list.js";
 import { createWorkspace } from "./copy/workspace.js";
 import { createCompare } from "./copy/compare.js";
@@ -23,7 +23,7 @@ import { createArmGate } from "./copy/arm_gate.js";
 import { createSettings } from "./copy/settings.js";
 import { createProfile } from "./copy/profile.js";
 import { createWatchRestore } from "./copy/watch_restore.js";
-import { gateControl, renderSetupGate, setupRequired } from "../ui/setup_gate.js";
+import { accessBlocked, gateControl, renderAccessGate, setupRequired } from "../ui/access_gate.js";
 
 const POLL_MS = 5000;
 
@@ -106,9 +106,11 @@ function createLifecycle() {
     const tasks = state.overview?.tasks || [];
     const onboarding = $("#copy-onboarding");
     const main = $("#copy-main");
-    const gate = $("#copy-setup-gate");
-    const gated = setupRequired();
-    if (gate) gate.hidden = !gated || tasks.length > 0;
+    const gate = $("#copy-access-gate");
+    const gated = accessBlocked(COPY_CAPABILITY);
+    // Explore Mode has no tasks to show; without the capability the kept tasks stay
+    // listed under the gate.
+    if (gate) gate.hidden = !gated || (setupRequired() && tasks.length > 0);
     if (onboarding) onboarding.hidden = gated || !state.overview || tasks.length > 0;
     if (main) main.hidden = tasks.length === 0;
     if (!tasks.length) return;
@@ -301,8 +303,13 @@ function createLifecycle() {
         if (event.target.closest('[data-action="retry"]')) void load();
       });
       on($("#copy-compare-open"), "click", openCompare);
-      gateControl($("#copy-add"));
-      if (setupRequired()) renderSetupGate($("#copy-setup-gate"), I18n.t("copy-setup-gate-title"));
+      gateControl($("#copy-add"), COPY_CAPABILITY);
+      gateControl($("#copy-onboarding-add"), COPY_CAPABILITY);
+      if (accessBlocked(COPY_CAPABILITY)) {
+        renderAccessGate($("#copy-access-gate"), I18n.t("copy-setup-gate-title"), COPY_CAPABILITY, {
+          overContent: true,
+        });
+      }
       on(window, COPY_HANDOFF_EVENT, () => {
         if (ctxRef?.isActive()) applyHandoff();
       });

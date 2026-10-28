@@ -510,7 +510,7 @@ test("the status cards render running, stopped with absent figures, and setup re
     {
       trader: "Running",
       copy: "Running",
-      open: "5 of 8",
+      open: "2 of 2",
       entries: "4",
       exits: "3",
       followed: "2",
@@ -523,7 +523,12 @@ test("the status cards render running, stopped with absent figures, and setup re
   );
   assert.match(live.last, /ago/, `the last copied trade reads "${live.last}"`);
 
-  body.auto_trader = { ...body.auto_trader, state: "stopped", entries_today: null, exits_today: null };
+  body.auto_trader = {
+    ...body.auto_trader,
+    state: "stopped",
+    entries_today: null,
+    exits_today: null,
+  };
   body.copy_trading = {
     state: null,
     followed_wallets: null,
@@ -535,14 +540,12 @@ test("the status cards render running, stopped with absent figures, and setup re
   await stopped.waitForSelector("#homeTraderStatus[data-state=stopped]");
   const absent = await shown(stopped);
   assert.equal(absent.trader, "Stopped");
-  assert.equal(absent.open, "5 of 8");
+  assert.equal(absent.open, "2 of 2");
   for (const key of ["copy", "entries", "exits", "followed", "tasks", "last"]) {
     assert.equal(absent[key], "—", `${key} is not a dash when absent`);
   }
 
-  const empty = JSON.parse(
-    readFileSync(`${FIXTURES_ROOT}/home/dashboard_home.empty.json`, "utf8")
-  );
+  const empty = JSON.parse(readFileSync(`${FIXTURES_ROOT}/home/dashboard_home.empty.json`, "utf8"));
   const unavailable = await openHome(t, 1440, "en", {
     "/api/dashboard/home": JSON.stringify(empty),
   });

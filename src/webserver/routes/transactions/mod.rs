@@ -26,6 +26,7 @@ pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
         .route("/list", post(handlers::list_transactions))
         .route("/summary", post(handlers::get_summary))
+        .route("/history/older", post(handlers::load_older_history))
         .route("/{signature}", get(handlers::get_transaction_detail))
         .route_layer(from_fn_with_state(&catalog::TRANSACTIONS, store_gate))
 }

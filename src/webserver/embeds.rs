@@ -78,7 +78,6 @@ pub(super) const COPY_WORKSPACE_STYLES: &str =
     include_str!("templates/styles/pages/copy/workspace.css");
 pub(super) const COPY_DIALOGS_STYLES: &str =
     include_str!("templates/styles/pages/copy/dialogs.css");
-pub(super) const COPY_CHARTS_STYLES: &str = include_str!("templates/styles/pages/copy/charts.css");
 pub(super) const WALLETS_PAGE_STYLES: &str = include_str!("templates/styles/pages/wallets.css");
 pub(super) const WALLETS_MAIN_WALLET_STYLES: &str =
     include_str!("templates/styles/pages/wallets/main_wallet.css");
@@ -124,6 +123,7 @@ pub(super) const DATA_TABLE_COLUMN_TYPES_STYLES: &str =
 pub(super) const DATA_TABLE_PAGINATION_STYLES: &str =
     include_str!("templates/styles/ui/data_table/pagination.css");
 pub(super) const TABLE_TOOLBAR_STYLES: &str = include_str!("templates/styles/ui/table_toolbar.css");
+pub(super) const PAGE_TOOLBAR_STYLES: &str = include_str!("templates/styles/ui/page_toolbar.css");
 pub(super) const EVENTS_DIALOG_STYLES: &str = include_str!("templates/styles/ui/events_dialog.css");
 pub(super) const TRADE_ACTION_DIALOG_STYLES: &str =
     include_str!("templates/styles/ui/trade_action_dialog.css");
@@ -135,6 +135,8 @@ pub(super) const DIALOG_HEADER_ACTIONS_STYLES: &str =
 pub(super) const ACTION_BAR_STYLES: &str = include_str!("templates/styles/ui/action_bar.css");
 pub(super) const EXPAND_TOGGLE_STYLES: &str = include_str!("templates/styles/ui/expand_toggle.css");
 pub(super) const STATE_VIEW_STYLES: &str = include_str!("templates/styles/ui/state_view.css");
+pub(super) const SHEET_STYLES: &str = include_str!("templates/styles/ui/sheet.css");
+pub(super) const INLINE_CHART_STYLES: &str = include_str!("templates/styles/ui/inline_chart.css");
 pub(super) const TABLE_SETTINGS_DIALOG_STYLES: &str =
     include_str!("templates/styles/ui/table_settings_dialog.css");
 pub(super) const CONFIRMATION_DIALOG_STYLES: &str =
@@ -202,6 +204,8 @@ pub(super) const SETTINGS_UPDATES_STYLES: &str =
 pub(super) const SETTINGS_DATA_STYLES: &str = include_str!("templates/styles/settings/data.css");
 pub(super) const SETTINGS_AGENT_CONNECTIONS_STYLES: &str =
     include_str!("templates/styles/settings/agent_connections.css");
+pub(super) const SETTINGS_CONNECTION_STYLES: &str =
+    include_str!("templates/styles/settings/connection.css");
 pub(super) const STATUS_BAR_STYLES: &str = include_str!("templates/styles/status_bar.css");
 pub(super) const HINT_POPOVER_STYLES: &str = include_str!("templates/styles/ui/hint_popover.css");
 pub(super) const SEARCH_DIALOG_STYLES: &str = include_str!("templates/styles/ui/search_dialog.css");
@@ -401,6 +405,9 @@ pub const TOKEN_DETAILS_POSITIONS_TAB_UI: &str =
     include_str!("templates/scripts/ui/token_details/positions_tab.js");
 pub const ACTION_STEP_UI: &str = include_str!("templates/scripts/ui/action_step.js");
 pub const TRADE_REASON_UI: &str = include_str!("templates/scripts/ui/trade_reason.js");
+pub const ENTRY_BLOCK_UI: &str = include_str!("templates/scripts/ui/entry_block.js");
+pub const POSITION_ORIGIN_UI: &str = include_str!("templates/scripts/ui/position_origin.js");
+pub const INLINE_CHART_UI: &str = include_str!("templates/scripts/ui/inline_chart.js");
 pub const TRADING_MODE_UI: &str = include_str!("templates/scripts/ui/trading_mode.js");
 pub const ARM_LIVE_GATE_UI: &str = include_str!("templates/scripts/ui/arm_live_gate.js");
 pub const STRATEGY_TYPE_UI: &str = include_str!("templates/scripts/ui/strategy_type.js");
@@ -456,6 +463,8 @@ pub const SETTINGS_SECURITY_TAB_UI: &str =
 pub const ACCOUNT_PANEL_UI: &str = include_str!("templates/scripts/ui/account/panel.js");
 pub const SETTINGS_ACCOUNT_TAB_UI: &str =
     include_str!("templates/scripts/ui/settings/account_tab.js");
+pub const SETTINGS_CONNECTION_TAB_UI: &str =
+    include_str!("templates/scripts/ui/settings/connection_tab.js");
 pub const SETTINGS_DATA_TAB_UI: &str = include_str!("templates/scripts/ui/settings/data_tab.js");
 pub const SETTINGS_STORAGE_VIEW_UI: &str =
     include_str!("templates/scripts/ui/settings/storage_view.js");
@@ -489,7 +498,7 @@ pub const CONFIG_IMPORT_EXPORT_DIALOG_UI: &str =
     include_str!("templates/scripts/ui/config_import_export_dialog.js");
 pub const INPUT_DIALOG_UI: &str = include_str!("templates/scripts/ui/input_dialog.js");
 pub const SETUP_DIALOG_UI: &str = include_str!("templates/scripts/ui/setup_dialog.js");
-pub const SETUP_GATE_UI: &str = include_str!("templates/scripts/ui/setup_gate.js");
+pub const ACCESS_GATE_UI: &str = include_str!("templates/scripts/ui/access_gate.js");
 pub const FUNDING_NOTICE_UI: &str = include_str!("templates/scripts/ui/funding_notice.js");
 
 // Page-specific JavaScript - Public for asset_serving.rs
@@ -543,10 +552,12 @@ pub const TRADER_TIME_STATUS_JS: &str =
     include_str!("templates/scripts/pages/trader/time_status.js");
 pub const TRADER_PAPER_ACCOUNT_JS: &str =
     include_str!("templates/scripts/pages/trader/paper_account.js");
+pub const TRADER_STATS_JS: &str = include_str!("templates/scripts/pages/trader/stats.js");
+pub const TRADER_STATS_TABLES_JS: &str =
+    include_str!("templates/scripts/pages/trader/stats_tables.js");
 pub const COPY_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/copy.js");
 pub const COPY_API_JS: &str = include_str!("templates/scripts/pages/copy/api.js");
 pub const COPY_FORMAT_JS: &str = include_str!("templates/scripts/pages/copy/format.js");
-pub const COPY_CHARTS_JS: &str = include_str!("templates/scripts/pages/copy/charts.js");
 pub const COPY_TOKENS_JS: &str = include_str!("templates/scripts/pages/copy/tokens.js");
 pub const COPY_SUMMARY_JS: &str = include_str!("templates/scripts/pages/copy/summary.js");
 pub const COPY_LIST_JS: &str = include_str!("templates/scripts/pages/copy/list.js");

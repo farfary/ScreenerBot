@@ -12,6 +12,7 @@
     vote: "account-scope-vote",
     "referral:read": "account-scope-referral-read",
     "account:read": "account-scope-account-read",
+    "chain:read": "account-scope-chain-read",
   });
 
   // What signing in adds BEYOND the data service. The data block above the list
@@ -86,6 +87,7 @@
       this.deviceTimer = null;
       this.destroyed = false;
       this.focusTarget = null;
+      this.dataAccessHidden = false;
     }
 
     async load() {
@@ -332,6 +334,8 @@
     }
 
     async signOut() {
+      // A surface may ask first; a declined confirmation leaves the session as it is.
+      if (this.options.beforeSignOut && !(await this.options.beforeSignOut())) return;
       this.error = null;
       this.setBusy("signout");
 
@@ -525,13 +529,23 @@
         : "";
 
       return `
-        <div class="account-data" data-state="${state}">
+        <div class="account-data" data-state="${state}"${this.dataAccessHidden ? " hidden" : ""}>
           <p class="account-data-headline">
             <i class="${access.available ? "icon-circle-check" : "icon-info"}" aria-hidden="true"></i>
             <span>${escapeHtml(I18n.text(access.text))}</span>
           </p>
           ${detail}
         </div>`;
+    }
+
+    /**
+     * Hides or restores the data-access summary in place, so a form the user is
+     * filling in survives the change; later renders keep the choice.
+     */
+    setDataAccessVisible(visible) {
+      this.dataAccessHidden = !visible;
+      const block = this.container?.querySelector(".account-data");
+      if (block) block.hidden = !visible;
     }
 
     renderError() {

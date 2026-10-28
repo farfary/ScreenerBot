@@ -57,6 +57,8 @@ pub struct StagedKey {
     pub address: String,
     pub ciphertext: String,
     pub nonce: String,
+    /// The chain access validated with the key, saved with it.
+    pub access: crate::chains::access::ChainAccessMode,
     /// The RPC endpoints validated with the key; empty keeps the configured ones.
     pub rpc_urls: Vec<String>,
 }
@@ -65,6 +67,7 @@ impl std::fmt::Debug for StagedKey {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("StagedKey")
             .field("chain", &self.chain)
+            .field("access", &self.access)
             .field("address", &self.address)
             .field("ciphertext", &"<redacted>")
             .field("nonce", &"<redacted>")
@@ -262,7 +265,7 @@ pub async fn stage(key: StagedKey) -> Result<StagedReplacement, Error> {
     let previous_address = check_stage(&read_stage_checks(chain, &key.address).await?)?;
 
     if crate::paths::get_config_path().exists() {
-        stop_trading(chain, &key.rpc_urls).await?;
+        stop_trading(chain, key.access, &key.rpc_urls).await?;
     }
 
     let backup_directory = backup::wallet_reset_directory(&backup_label(&previous_address));
@@ -343,7 +346,11 @@ async fn read_stage_checks(chain: ChainId, new_address: &str) -> Result<StageChe
 
 /// Switch the Auto Trader and Copy Trading off and keep the validated RPC endpoints,
 /// when any were given.
-async fn stop_trading(chain: ChainId, rpc_urls: &[String]) -> Result<(), Error> {
+async fn stop_trading(
+    chain: ChainId,
+    access: crate::chains::access::ChainAccessMode,
+    rpc_urls: &[String],
+) -> Result<(), Error> {
     match crate::trader::stop_trader_gracefully().await {
         Ok(()) | Err(crate::trader::Error::AlreadyStopped) => {}
         Err(error) => {
@@ -360,21 +367,31 @@ async fn stop_trading(chain: ChainId, rpc_urls: &[String]) -> Result<(), Error> 
             detail: error.to_string(),
         }
     })?;
-    if !rpc_urls.is_empty() {
-        let urls = rpc_urls.to_vec();
-        blocking(move || {
-            crate::config::update_config_section(
-                move |config| config.chains.rpc_mut(chain).urls = urls,
-                true,
-            )
-            .map_err(|error| Error::ReplacementInterrupted {
-                step: "save the RPC endpoints",
-                copy_trading_off: true,
-                detail: error.to_string(),
-            })
-        })
-        .await?;
+    // Nothing is written when the replacement keeps both the mode and the endpoints.
+    let access_changes = crate::config::with_config(|config| {
+        config.chains.access(chain) != access.as_config_value()
+    });
+    if rpc_urls.is_empty() && !access_changes {
+        return Ok(());
     }
+    let urls = rpc_urls.to_vec();
+    blocking(move || {
+        crate::config::update_config_section(
+            move |config| {
+                *config.chains.access_mut(chain) = access.as_config_value().to_owned();
+                if !urls.is_empty() {
+                    config.chains.rpc_mut(chain).urls = urls;
+                }
+            },
+            true,
+        )
+        .map_err(|error| Error::ReplacementInterrupted {
+            step: "save the chain access settings",
+            copy_trading_off: true,
+            detail: error.to_string(),
+        })
+    })
+    .await?;
     Ok(())
 }
 

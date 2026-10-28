@@ -26,10 +26,11 @@ use super::types::*;
 pub async fn get_trader_stats(Query(query): Query<TraderStatsQuery>) -> Response {
     let book = query.book.unwrap_or_default();
     // Return promotional fixtures only for owner-initiated media capture.
+    let window = query.window.into();
     if crate::webserver::promo::are_promo_fixtures_enabled() && book == Book::Live {
-        return success_response(crate::webserver::promo::get_promo_trader_stats());
+        return success_response(crate::webserver::promo::get_promo_trader_stats(window));
     }
-    success_response(crate::trader::stats::trader_stats(book, query.window.into()).await)
+    success_response(crate::trader::stats::trader_stats(book, window).await)
 }
 
 // =============================================================================

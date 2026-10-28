@@ -41,20 +41,6 @@ copy-skip-swap-mixed-quote = Paid with SOL and a stable coin together, so the tr
 copy-skip-swap-multiple-tokens = More than one token traded in one transaction
 copy-skip-swap-unreadable = The trade amounts could not be read
 
-# Why a new entry was blocked. Ids come from EntryBlock in src/trader/admission.rs.
-copy-entry-block-force-stopped = Trading is force-stopped
-copy-entry-block-loss-limit = Loss limit blocks new entries
-copy-entry-block-connectivity = Required services are unavailable
-copy-entry-block-storage-unavailable = Trading data is unavailable or being restored
-copy-entry-block-position-limit = Open-position limit reached
-copy-entry-block-already-open = A position is already open
-copy-entry-block-reentry-cooldown = Token re-entry cooldown
-copy-entry-block-open-cooldown = Global entry cooldown
-copy-entry-block-entry-reserved = Another entry is processing
-copy-entry-block-blacklisted = Token is blocked by risk controls
-copy-entry-block-paper-balance-exhausted = Paper balance cannot cover the trade
-copy-entry-block-check-failed = A safety check could not complete
-
 # Why a task stopped copying. Ids come from CopyPauseReason in
 # src/trader/copy/types.rs. $average, $threshold and $p95 are seconds with one
 # decimal below ten seconds and whole seconds above; $limit is a signature count.
@@ -105,6 +91,7 @@ copy-live-block-copy-trading-disabled = Copy processing is paused globally
 copy-state-system-paused = Paused globally
 copy-state-force-stopped = Force stopped
 copy-state-entries-blocked = Entries blocked
+copy-state-own-rpc-required = Needs your own RPC
 copy-state-running-live = Running
 copy-state-running-paper = Running
 copy-exit-mode-buy-only = My exit rules
@@ -185,6 +172,7 @@ copy-status-force-stopped = Force stopped
 copy-status-loss-limit = Loss limit
 copy-status-all-paused = All tasks paused
 copy-status-processing = Processing
+copy-status-own-rpc-required = Needs your own RPC
 copy-toolbar-pause = Pause copying
 copy-toolbar-resume = Resume copying
 copy-toolbar-resume-tasks = Resume all tasks
@@ -343,6 +331,7 @@ copy-state-detail-paper = Running in Paper · trades are simulated, nothing is s
 copy-state-detail-live = Running live · wallet trades are copied with real swaps
 copy-state-detail-system-paused = Waiting · copy processing is paused globally, exits still run
 copy-state-detail-entries-blocked = Entries blocked by the loss limit · exits still run
+copy-state-detail-own-rpc-required = Waiting · the { -brand } service does not follow other wallets; add an RPC to resume
 copy-state-detail-force-stopped = Force stopped · nothing is copied
 
 # $reason is the pause wording and $since the time since the pause.
@@ -623,16 +612,13 @@ copy-table-profit-factor = Profit factor
 copy-table-average-hold = Avg hold
 copy-table-target-difference = Median target price difference
 
-## Charts (pages/copy/charts.js)
+## Charts (ui/inline_chart.js, Copy messages)
 
-# $amount is a signed SOL amount.
-copy-chart-curve-label = Cumulative P&L { $amount } { -sol }
 copy-chart-compare-label = Cumulative P&L by task
 copy-chart-empty-curve = No closed rounds in this range yet.
 copy-chart-empty-bars = Nothing recorded in this range.
 copy-chart-empty-histogram = No arrival samples in this range.
 copy-chart-empty-compare = No closed rounds to compare in this range.
-copy-chart-histogram-title = { $count } of { $total }
 
 ## Wallet profile (pages/copy/profile.js)
 

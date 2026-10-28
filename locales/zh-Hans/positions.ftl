@@ -24,7 +24,6 @@ positions-paper-empty = 没有模拟仓位
 positions-paper-archived-empty = 没有已归档的模拟仓位
     .message = 模拟交易保留在持仓中和已平仓中；只有实盘仓位会被归档。
 positions-paper-empty-action = 打开策略
-positions-origin-copy = 跟单
 positions-origin-manual = 手动
 positions-origin-wallet = 钱包
 positions-origin-copy-link =

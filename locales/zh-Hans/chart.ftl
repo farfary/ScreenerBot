@@ -32,3 +32,6 @@ chart-status-total-idle =
     { $count ->
        *[other] { $count } 根 K 线 · 空闲
     }
+
+chart-inline-curve-label = 累计盈亏 { $amount } { -sol }
+chart-inline-histogram-title = { $count } / { $total }

@@ -61,7 +61,7 @@
     "balance_history": [42.0214, 41.98, 42.07, 42.15, 42.11, 42.24, 42.19, 42.28, 42.3097]
   },
   "positions": {
-    "open_count": 5,
+    "open_count": 3,
     "total_invested_native": 5.5,
     "current_value_native": 5.8276,
     "unrealized_pnl_native": 0.3276,
@@ -110,8 +110,8 @@
   },
   "auto_trader": {
     "state": "running",
-    "open_positions": 5,
-    "max_open_positions": 8,
+    "open_positions": 2,
+    "max_open_positions": 2,
     "entries_today": 4,
     "exits_today": 3
   },

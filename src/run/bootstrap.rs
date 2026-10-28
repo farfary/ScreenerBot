@@ -162,5 +162,7 @@ pub(crate) async fn initialize_full_runtime() -> Result<(), StartupError> {
         }
     }
 
+    crate::chains::access::start_boot_probes();
+
     initialize_model_features_if_enabled().await
 }

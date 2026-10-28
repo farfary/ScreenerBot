@@ -38,19 +38,6 @@ copy-skip-swap-mixed-quote = Оплачено одновременно SOL и с
 copy-skip-swap-multiple-tokens = В одной транзакции торговалось больше одного токена
 copy-skip-swap-unreadable = Не удалось прочитать суммы сделки
 
-copy-entry-block-force-stopped = Торговля принудительно остановлена
-copy-entry-block-loss-limit = Лимит убытков блокирует новые входы
-copy-entry-block-connectivity = Необходимые сервисы недоступны
-copy-entry-block-storage-unavailable = Торговые данные недоступны или восстанавливаются
-copy-entry-block-position-limit = Достигнут лимит открытых позиций
-copy-entry-block-already-open = Позиция уже открыта
-copy-entry-block-reentry-cooldown = Пауза до повторного входа в токен
-copy-entry-block-open-cooldown = Общая пауза между входами
-copy-entry-block-entry-reserved = Обрабатывается другой вход
-copy-entry-block-blacklisted = Токен заблокирован контролем рисков
-copy-entry-block-paper-balance-exhausted = Виртуального баланса недостаточно для сделки
-copy-entry-block-check-failed = Не удалось завершить проверку безопасности
-
 copy-pause-user = Приостановлено вами
 copy-pause-latency-kill-switch = Автопауза: сделки в среднем приходили с задержкой { $average } с (лимит { $threshold } с)
 copy-pause-watch-detached = Автопауза: кошелёк больше не отслеживается
@@ -92,6 +79,7 @@ copy-live-block-copy-trading-disabled = Обработка копировани�
 copy-state-system-paused = Приостановлено глобально
 copy-state-force-stopped = Принудительно остановлено
 copy-state-entries-blocked = Входы заблокированы
+copy-state-own-rpc-required = Нужен свой RPC
 copy-state-running-live = Работает
 copy-state-running-paper = Работает
 copy-exit-mode-buy-only = Мои правила выхода
@@ -177,6 +165,7 @@ copy-status-force-stopped = Принудительно остановлено
 copy-status-loss-limit = Лимит убытков
 copy-status-all-paused = Все задачи на паузе
 copy-status-processing = Обработка идёт
+copy-status-own-rpc-required = Нужен свой RPC
 copy-toolbar-pause = Приостановить копирование
 copy-toolbar-resume = Возобновить копирование
 copy-toolbar-resume-tasks = Возобновить все задачи
@@ -340,6 +329,7 @@ copy-state-detail-paper = Работает в виртуальном режим�
 copy-state-detail-live = Работает в боевом режиме · сделки кошелька копируются реальными свопами
 copy-state-detail-system-paused = Ожидание · обработка копирования приостановлена глобально, выходы продолжают работать
 copy-state-detail-entries-blocked = Входы заблокированы лимитом убытков · выходы продолжают работать
+copy-state-detail-own-rpc-required = Ожидание · сервис { -brand } не отслеживает другие кошельки; добавьте RPC, чтобы продолжить
 copy-state-detail-force-stopped = Принудительно остановлено · ничего не копируется
 
 copy-paused-since = { $reason } · { $since }
@@ -616,13 +606,11 @@ copy-table-target-difference = Медианная разница с ценой �
 
 ## Charts
 
-copy-chart-curve-label = Накопленный P&L { $amount } { -sol }
 copy-chart-compare-label = Накопленный P&L по задачам
 copy-chart-empty-curve = В этом периоде закрытых раундов пока нет.
 copy-chart-empty-bars = В этом периоде ничего не записано.
 copy-chart-empty-histogram = В этом периоде нет замеров поступления.
 copy-chart-empty-compare = В этом периоде нет закрытых раундов для сравнения.
-copy-chart-histogram-title = { $count } из { $total }
 
 ## Wallet profile
 

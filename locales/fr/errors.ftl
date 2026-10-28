@@ -42,7 +42,7 @@ errors-account-signin-refused = { $reason }
 errors-account-signin-unavailable = La connexion est indisponible
 errors-account-credentials-required = Saisissez votre adresse e-mail et votre mot de passe.
 errors-account-signout-failed = Échec de la déconnexion
-errors-account-gateway-update-failed = Impossible de mettre à jour le paramètre de la passerelle
+errors-account-gateway-update-failed = Impossible de mettre à jour le paramètre d'envoi des transactions
 
 # Localization
 errors-i18n-locale-not-registered = La langue n'est pas enregistrée
@@ -128,6 +128,8 @@ errors-transactions-own-wallet-unavailable = Le portefeuille principal n'est pas
 errors-transactions-invalid-subject = Le sujet de la transaction n'est pas une adresse Solana valide
 errors-transactions-subject-not-watched = Le sujet de la transaction n'est pas un portefeuille surveillé
 errors-transactions-watch-store-unavailable = Les portefeuilles surveillés ne sont pas disponibles
+errors-transactions-history-loading = Des transactions plus anciennes sont déjà en cours de chargement.
+errors-transactions-history-load-failed = Les transactions plus anciennes n'ont pas pu être chargées.
 
 # Wallet
 errors-wallet-unavailable = Le portefeuille principal n'est pas disponible
@@ -412,3 +414,17 @@ errors-tokens-search-failed = Échec de la recherche de tokens
 # Actions and services
 errors-actions-not-found = Action { $id } introuvable
 errors-services-not-found = Service « { $name } » introuvable
+
+# Chain access
+errors-chain-capability-unavailable = Cela nécessite votre propre connexion RPC.
+errors-chain-service-signin-required = Connectez-vous pour utiliser le service { -brand }.
+errors-chain-service-scope-missing = Reconnectez-vous pour autoriser la lecture du portefeuille.
+errors-chain-service-busy = Le service { -brand } est occupé. Réessayez dans un instant.
+errors-chain-service-daily-limit = Votre compte a atteint la limite du jour du service { -brand }.
+errors-chain-service-version = Cette version est trop ancienne pour le service { -brand }. Passez à { $minimum } ou plus récent.
+errors-chain-service-refused = Le service { -brand } a refusé la requête.
+errors-chain-service-unreachable = screenerbot.io est injoignable.
+errors-chain-not-trading-wallet = En mode service { -brand }, seul le portefeuille de trading peut être lu.
+errors-chain-access-failed = La requête à la blockchain a échoué.
+errors-chain-access-unchanged = Cette connexion est déjà utilisée.
+errors-chain-access-switch-failed = La connexion n'a pas pu être changée.

@@ -9,7 +9,7 @@ import { $ } from "../core/dom.js";
 import * as Utils from "../core/utils.js";
 import { withApprox } from "../core/format.js";
 import { DataTable } from "../ui/data_table.js";
-import { requestManager } from "../core/request_manager.js";
+import { errorMessageOf, requestManager } from "../core/request_manager.js";
 import { TransactionDetailsDialog } from "../ui/transaction_details_dialog.js";
 import {
   TYPE_FILTER_OPTIONS,
@@ -31,7 +31,7 @@ import {
   TOKEN_CELL_MIN_WIDTH,
 } from "../ui/token_identity.js";
 import { venueLabel } from "../ui/venue.js";
-import { renderSetupGate, setupRequired } from "../ui/setup_gate.js";
+import { renderAccessGate, setupRequired } from "../ui/access_gate.js";
 
 const PAGE_LIMIT = 100;
 const DEFAULT_FILTERS = {
@@ -174,12 +174,47 @@ function createLifecycle() {
 
       state.summary = data ?? null;
       updateToolbar();
+      syncLoadOlder();
     } catch (error) {
       if (error?.name === "AbortError") {
         throw error;
       }
       // Silent failure for summary to avoid noisy toasts
       console.warn("[Transactions] Failed to fetch summary:", error);
+    }
+  };
+
+  // Own-wallet history older than the stored signatures loads one page per request,
+  // offered only while the summary says such history exists.
+  const syncLoadOlder = () => {
+    const available =
+      !state.subject && state.summary?.bootstrap_state?.older_history_available === true;
+    table?.setToolbarItem("load-older", { hidden: !available });
+  };
+
+  const loadOlderHistory = async () => {
+    table?.setToolbarItem("load-older", { busy: true });
+    try {
+      await requestManager.fetch("/api/transactions/history/older", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Requested-With": "fetch",
+        },
+        cache: "no-store",
+        priority: "high",
+        skipDedup: true,
+      });
+      requestReload("manual", { silent: true });
+      await fetchSummary();
+    } catch (error) {
+      Utils.showToast({
+        key: "transactions-load-older",
+        type: "warning",
+        title: await errorMessageOf(error, I18n.t("transactions-history-load-older-failed")),
+      });
+    } finally {
+      table?.setToolbarItem("load-older", { busy: false });
     }
   };
 
@@ -407,9 +442,9 @@ function createLifecycle() {
       // table, no transaction reads and no poller.
       if (setupRequired()) {
         $("#transactions-root").hidden = true;
-        const gate = $("#transactions-setup-gate");
+        const gate = $("#transactions-access-gate");
         gate.hidden = false;
-        renderSetupGate(gate, I18n.t("transactions-setup-gate-title"));
+        renderAccessGate(gate, I18n.t("transactions-access-gate-title"));
         return;
       }
 
@@ -581,6 +616,7 @@ function createLifecycle() {
                 state.subject = value || "";
                 state.summary = null;
                 state.totalEstimate = null;
+                syncLoadOlder();
                 // State restoration only syncs `state.subject`; init loads the data.
                 if (options?.restored) {
                   return;
@@ -665,6 +701,14 @@ function createLifecycle() {
             },
           ],
           buttons: [
+            {
+              id: "load-older",
+              label: I18n.t("transactions-history-load-older"),
+              tooltip: I18n.t("transactions-history-on-demand"),
+              icon: "icon-history",
+              hidden: true,
+              onClick: () => void loadOlderHistory(),
+            },
             {
               id: "reset",
               label: I18n.t("common-action-reset-filters"),

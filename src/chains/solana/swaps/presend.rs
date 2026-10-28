@@ -42,6 +42,7 @@
 //! fallback chain decides from. Once a send was attempted, every outcome
 //! carries the signature.
 
+use std::collections::HashMap;
 use std::future::Future;
 use std::time::Duration;
 
@@ -49,18 +50,16 @@ use base64::Engine;
 use futures::stream::{FuturesUnordered, StreamExt};
 use tokio::time::Instant;
 
-use crate::chains::solana::rpc::client::RpcClient;
+use crate::chains::solana::access::{chain_access, AccountControl, MintLookup, SolanaChainAccess};
 use crate::chains::solana::rpc::types::SimulationOutcome;
-use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
+use crate::chains::solana::rpc::RpcClientMethods;
 use crate::chains::solana::settlement::{
-    classify_status, finalized_tip, transaction_lookup, FinalizedTip, StatusRead, TransactionLookup,
+    classify_status, transaction_lookup, FinalizedTip, StatusRead, TransactionLookup,
 };
 use crate::chains::solana::solana_packet::PACKET_DATA_SIZE;
 use crate::chains::solana::solana_sdk::{
-    account::Account,
     compute_budget::id as compute_budget_program,
     message::VersionedMessage,
-    pubkey::Pubkey,
     signature::{Keypair, Signature, Signer},
     transaction::{Transaction, VersionedTransaction},
 };
@@ -80,9 +79,6 @@ const CONFIRMATION_TIMEOUT: Duration = Duration::from_secs(60);
 /// How long a plain wallet transaction is settled before its outcome is
 /// reported as unknown.
 const SIGNED_TRANSACTION_TIMEOUT: Duration = Duration::from_secs(60);
-
-/// How often the settle loop polls the signature's status.
-const STATUS_POLL_INTERVAL: Duration = Duration::from_millis(500);
 
 /// How often the settle loop re-sends the same signed transaction. The
 /// signature is identical every time, so a duplicate landing is impossible:
@@ -243,7 +239,7 @@ pub async fn gate(transaction: &VersionedTransaction) -> Verdict {
     if let Err(reason) = measure_transaction(transaction) {
         return Verdict::Refused(reason);
     }
-    simulation_verdict(get_rpc_client().simulate(transaction).await)
+    simulation_verdict(SwapNode::simulate(chain_access(), transaction).await)
 }
 
 /// Why a send request returned no signature.
@@ -271,12 +267,18 @@ fn send_failure(error: crate::Error) -> SendFailure {
                 detail: refusal.to_string(),
             })
         }
+        // The chain access refused before dispatching anything.
+        crate::Error::Chains(refusal) if refusal.is_access_refusal() => {
+            SendFailure::NotSent(NotSubmittedReason::ServicePaused {
+                detail: refusal.to_string(),
+            })
+        }
         other => SendFailure::Unproven(other),
     }
 }
 
-/// The node calls a swap's simulate, send and settle steps make. The shared
-/// RPC client is the production node; tests drive the same steps against a
+/// The node calls a swap's simulate, send and settle steps make. The chain
+/// access facade is the production node; tests drive the same steps against a
 /// scripted one.
 pub trait SwapNode: Sync {
     /// Simulate without signature verification.
@@ -302,25 +304,45 @@ pub trait SwapNode: Sync {
         &self,
         signature: &Signature,
     ) -> impl Future<Output = crate::Result<Option<EncodedConfirmedTransactionWithStatusMeta>>> + Send;
-    /// The accounts at `addresses`, in order, `None` for one that does not exist.
-    fn accounts(
+    /// What each mint is, in order.
+    fn mint_facts(
         &self,
-        addresses: &[Pubkey],
-    ) -> impl Future<Output = crate::Result<Vec<Option<Account>>>> + Send;
+        mints: &[String],
+    ) -> impl Future<Output = crate::Result<Vec<MintLookup>>> + Send;
+    /// Who controls each existing account; a missing account is absent.
+    fn account_controls(
+        &self,
+        addresses: &[String],
+    ) -> impl Future<Output = crate::Result<HashMap<String, AccountControl>>> + Send;
     /// The epoch the node is in.
     fn epoch(&self) -> impl Future<Output = crate::Result<u64>> + Send;
+    /// How long the settle loop waits between status reads, `elapsed` after
+    /// the send.
+    fn status_poll_interval(&self, elapsed: Duration) -> Duration;
 }
 
-impl SwapNode for RpcClient {
+/// Simulation and submission dispatch over the access backends here, so the
+/// gate is the only place a transaction reaches a node.
+impl SwapNode for SolanaChainAccess {
     async fn simulate(
         &self,
         transaction: &VersionedTransaction,
     ) -> crate::Result<SimulationOutcome> {
-        self.simulate_transaction(transaction).await
+        match self {
+            SolanaChainAccess::OwnRpc(backend) => {
+                backend.client().simulate_transaction(transaction).await
+            }
+            SolanaChainAccess::Service(backend) => backend.simulate(transaction).await,
+        }
     }
 
     async fn send(&self, transaction: &VersionedTransaction) -> crate::Result<Signature> {
-        self.send_transaction(transaction).await
+        match self {
+            SolanaChainAccess::OwnRpc(backend) => {
+                backend.client().send_transaction(transaction).await
+            }
+            SolanaChainAccess::Service(backend) => backend.send(transaction).await,
+        }
     }
 
     async fn status(
@@ -328,28 +350,39 @@ impl SwapNode for RpcClient {
         signature: &Signature,
     ) -> crate::Result<(u64, Option<TransactionStatus>)> {
         let (slot, statuses) = self
-            .get_signature_statuses(std::slice::from_ref(signature))
+            .signature_statuses(std::slice::from_ref(signature))
             .await?;
         Ok((slot, statuses.into_iter().next().flatten()))
     }
 
     async fn finalized_tip(&self) -> crate::Result<FinalizedTip> {
-        finalized_tip(self).await
+        SolanaChainAccess::finalized_tip(self).await
     }
 
     async fn transaction(
         &self,
         signature: &Signature,
     ) -> crate::Result<Option<EncodedConfirmedTransactionWithStatusMeta>> {
-        self.get_transaction(signature).await
+        SolanaChainAccess::transaction(self, signature).await
     }
 
-    async fn accounts(&self, addresses: &[Pubkey]) -> crate::Result<Vec<Option<Account>>> {
-        self.get_multiple_accounts(addresses).await
+    async fn mint_facts(&self, mints: &[String]) -> crate::Result<Vec<MintLookup>> {
+        self.mints(mints, false).await
+    }
+
+    async fn account_controls(
+        &self,
+        addresses: &[String],
+    ) -> crate::Result<HashMap<String, AccountControl>> {
+        SolanaChainAccess::account_controls(self, addresses).await
     }
 
     async fn epoch(&self) -> crate::Result<u64> {
-        self.get_epoch().await
+        SolanaChainAccess::epoch(self).await
+    }
+
+    fn status_poll_interval(&self, elapsed: Duration) -> Duration {
+        SolanaChainAccess::status_poll_interval(self, elapsed)
     }
 }
 
@@ -509,7 +542,8 @@ async fn settle<N: SwapNode>(
     last_valid_block_height: Option<u64>,
     timeout: Duration,
 ) -> Settled {
-    let deadline = Instant::now() + timeout;
+    let started = Instant::now();
+    let deadline = started + timeout;
     let mut last_rebroadcast = Instant::now();
     let mut last_tip_check = Instant::now();
     let mut tip: Option<FinalizedTip> = None;
@@ -543,7 +577,7 @@ async fn settle<N: SwapNode>(
             }
         }
 
-        let pause = tokio::time::sleep(STATUS_POLL_INTERVAL);
+        let pause = tokio::time::sleep(node.status_poll_interval(started.elapsed()));
         tokio::pin!(pause);
         loop {
             tokio::select! {
@@ -658,7 +692,7 @@ pub async fn submit_built_swap(
     signer: &Keypair,
 ) -> crate::Result<Signature> {
     submit_on(
-        get_rpc_client(),
+        chain_access(),
         router,
         compute_limit,
         transaction_base64,
@@ -821,7 +855,7 @@ pub async fn send_and_settle_signed(
     last_valid_block_height: u64,
 ) -> crate::chains::solana::Result<Signature> {
     send_and_settle_signed_on(
-        get_rpc_client(),
+        chain_access(),
         transaction,
         last_valid_block_height,
         SIGNED_TRANSACTION_TIMEOUT,

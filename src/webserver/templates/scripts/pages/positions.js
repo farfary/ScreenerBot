@@ -12,6 +12,7 @@ import * as AppState from "../core/app_state.js";
 import { DataTable } from "../ui/data_table.js";
 import { TabBar, TabBarManager } from "../ui/tab_bar.js";
 import { stepShortLabel } from "../ui/action_step.js";
+import { ORIGIN_KIND_LABELS, originKindText } from "../ui/position_origin.js";
 import { buyHasLoadedPosition, rememberEntries } from "./positions/pending_buys.js";
 import { bookViews, paperActionCell, paperEmptyState, positionsUrl } from "./positions/book.js";
 import { loadPage } from "../core/router.js";
@@ -24,14 +25,9 @@ import { openCopyTask } from "../ui/copy_handoff.js";
 import { notificationManager } from "../core/notifications.js";
 import { renderTokenRowCell } from "../ui/token_identity.js";
 
-// Origin kinds that get a chip in the token cell. `external` is derived from this
-// wallet's own on-chain history rather than traded by the bot.
-const ORIGIN_LABELS = Object.freeze({
-  copy: "positions-origin-copy",
-  manual: "positions-origin-manual",
-  external: "positions-origin-wallet",
-});
-const ORIGIN_CLASSES = Object.freeze({ copy: "copy", manual: "manual", external: "wallet" });
+// Origin kinds that get a chip in the token cell, with the chip's style; an Auto Trader
+// position carries none. The label is the shared origin label the filter shows too.
+const ORIGIN_CHIP_CLASSES = Object.freeze({ copy: "copy", manual: "manual", external: "wallet" });
 
 const esc = (text) => Utils.escapeHtml(text);
 
@@ -144,7 +140,6 @@ function createLifecycle() {
     sort: getInitialSortForView("open"),
   };
 
-
   // Compact caption describing a row's live state (buying / selling / failed).
   // Open rows stay clean; an in-flight or failed row adds a tint beside this caption.
   const stateCaption = (row) => {
@@ -181,8 +176,8 @@ function createLifecycle() {
 
   const positionOriginChip = (row) => {
     const kind = row?.origin?.kind;
-    return Object.hasOwn(ORIGIN_LABELS, kind)
-      ? { text: I18n.label(ORIGIN_LABELS, kind), cls: ORIGIN_CLASSES[kind] }
+    return Object.hasOwn(ORIGIN_CHIP_CLASSES, kind)
+      ? { text: originKindText(kind), cls: ORIGIN_CHIP_CLASSES[kind] }
       : null;
   };
 
@@ -1083,10 +1078,10 @@ function createLifecycle() {
               label: I18n.t("positions-filter-origin"),
               options: [
                 { value: "all", label: I18n.t("positions-filter-origin-all") },
-                { value: "auto", label: I18n.t("positions-filter-origin-auto") },
-                { value: "copy", label: I18n.t("positions-filter-origin-copy") },
-                { value: "manual", label: I18n.t("positions-origin-manual") },
-                { value: "external", label: I18n.t("positions-origin-wallet") },
+                ...Object.keys(ORIGIN_KIND_LABELS).map((kind) => ({
+                  value: kind,
+                  label: originKindText(kind),
+                })),
               ],
               filterFn: (row, value) => value === "all" || (row?.origin?.kind || "auto") === value,
             },

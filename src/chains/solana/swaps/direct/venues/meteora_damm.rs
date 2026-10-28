@@ -44,13 +44,14 @@ use crate::chains::solana::constants::METEORA_DAMM_PROGRAM_ID;
 use crate::chains::solana::layout::{mint_decimals, token_account_amount};
 use crate::chains::solana::pools::layouts::meteora_damm::{BaseFee, DammPoolState, DynamicFee};
 use crate::chains::solana::pools::types::ProgramKind;
-use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
+use crate::chains::solana::rpc::RpcClientMethods;
 use crate::chains::solana::solana_sdk::{
     account::Account,
     instruction::{AccountMeta, Instruction},
     pubkey::Pubkey,
 };
 use crate::chains::solana::swaps::direct::error::{DirectSwapError, DirectSwapResult};
+use crate::chains::solana::swaps::direct::venue::direct_node;
 use crate::chains::solana::swaps::direct::venue::{
     AccountReader, PoolMarket, PoolVenue, SwapAccounts, VenueQuote,
 };
@@ -170,7 +171,10 @@ impl PoolVenue for MeteoraDammVenue {
         // The fee schedulers measure against either the slot or the unix clock,
         // which is the loader's job to read so the market itself stays pure.
         let current_point = if state.activation_type == ACTIVATION_TYPE_SLOT {
-            get_rpc_client().get_slot().await.unwrap_or(u64::MAX)
+            match direct_node("getSlot") {
+                Ok(rpc) => rpc.get_slot().await.unwrap_or(u64::MAX),
+                Err(_) => u64::MAX,
+            }
         } else {
             chrono::Utc::now().timestamp().max(0) as u64
         };

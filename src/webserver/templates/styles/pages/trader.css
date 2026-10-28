@@ -27,8 +27,7 @@
   scrollbar-width: none;
 }
 
-#trader-content::-webkit-scrollbar,
-.stats-col::-webkit-scrollbar {
+#trader-content::-webkit-scrollbar {
   display: none;
 }
 
@@ -54,17 +53,10 @@
   overflow: hidden;
 }
 
-#trader-content.trader-content--split-scroll {
-  overflow: hidden;
-  padding-bottom: 0;
-}
-
-#stats-tab {
-  height: 100%;
-  min-height: 0;
-  overflow: hidden;
-  box-sizing: border-box;
-  padding-top: 0;
+/* The Stats tab: the toolbar, its notices and the sheet, one under another in the page's
+   one scroll. */
+#stats-tab > * + * {
+  margin-block-start: var(--spacing-md);
 }
 
 #strategies-tab {
@@ -84,179 +76,6 @@
 }
 
 /* ============================================================================
-   Trader Status Bar - Auto Trader Toggle Control
-   ============================================================================ */
-
-.trader-status-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0.75rem 1rem;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--trader-card-radius);
-  margin-bottom: 1rem;
-  transition: all 0.25s ease;
-}
-
-.trader-status-bar[data-status="running"] {
-  border-color: var(--success-alpha-40);
-  background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--success-alpha-10) 100%);
-}
-
-.trader-status-bar[data-status="stopped"] {
-  border-color: var(--danger-alpha-40);
-}
-
-.status-bar-main {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-}
-
-/* Bare glyph: no tile, no ring, no glow. The state is carried by the colour and by
-   the text beside it, never by a box or by motion. */
-.status-bar-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-muted);
-  font-size: 1.5rem;
-  transition: color 0.25s ease;
-}
-
-.trader-status-bar[data-status="running"] .status-bar-icon {
-  color: var(--success-color);
-}
-
-.trader-status-bar[data-status="stopped"] .status-bar-icon {
-  color: var(--error-color);
-}
-
-.status-bar-info {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.status-bar-title {
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.status-bar-status {
-  font-size: 0.75rem;
-  font-weight: 500;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.trader-status-bar[data-status="running"] .status-bar-status {
-  color: var(--success-color);
-}
-
-.trader-status-bar[data-status="stopped"] .status-bar-status {
-  color: var(--error-color);
-}
-
-/* Setup required is a notice, not a state label: sentence case, muted. */
-.trader-status-bar[data-status="unavailable"] .status-bar-status {
-  color: var(--text-muted);
-  text-transform: none;
-  letter-spacing: normal;
-}
-
-/* Unavailable, the bar is the sentence and its setup action: the title and an
-   inert toggle would only crowd the narrow controls column. */
-.trader-status-bar[data-status="unavailable"] :is(.status-bar-icon, .status-bar-title, .toggle) {
-  display: none;
-}
-
-.trader-setup-action {
-  align-self: flex-start;
-  margin-block-start: var(--spacing-xs);
-}
-
-.trader-setup-action[hidden] {
-  display: none;
-}
-
-/* ============================================================================
-   Stats Tab - Overview Metrics & Breakdown
-   ============================================================================ */
-
-/* Stats Grid */
-
-/* Two-column Stats layout: left = controls, right = analysis + current config.
-   Collapses to a single column on narrow/!desktop screens. */
-.stats-layout {
-  display: grid;
-  grid-template-columns: minmax(300px, 340px) minmax(0, 1fr);
-  gap: var(--trader-vertical-gap);
-  align-items: start;
-  height: 100%;
-  min-height: 0;
-}
-
-.stats-col {
-  display: flex;
-  flex-direction: column;
-  gap: var(--trader-vertical-gap);
-  height: 100%;
-  min-height: 0;
-  min-width: 0;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  padding-block: 1.5rem calc(var(--trader-vertical-gap) * 2);
-  padding-inline: 0 0.25rem;
-  box-sizing: border-box;
-  scrollbar-width: none;
-}
-
-/* In the narrow left column the Entry/Exit monitor cards must stack — their
-   side-by-side grid is sized for full width and otherwise overflows into the
-   right column. Keep section content clipped to the column on all widths. */
-.stats-col-left .controls-grid {
-  grid-template-columns: 1fr;
-}
-
-.stats-col > * {
-  min-width: 0;
-  max-width: 100%;
-}
-
-@media (width <= 1024px) {
-  #trader-content.trader-content--split-scroll {
-    overflow-y: auto;
-  }
-
-  #stats-tab {
-    height: auto;
-    overflow: visible;
-  }
-
-  .stats-layout {
-    grid-template-columns: 1fr;
-    height: auto;
-  }
-
-  .stats-col {
-    height: auto;
-    overflow: visible;
-    padding: 0;
-  }
-}
-
-.stats-grid {
-  display: flex;
-  flex-direction: column;
-  gap: var(--trader-vertical-gap);
-  padding: 0;
-}
-
-/* ============================================================================
    Shared Components - Cards
    ============================================================================ */
 
@@ -271,92 +90,6 @@
 
 .card-base:hover {
   box-shadow: 0 4px 12px rgb(0, 0, 0, 0.1);
-}
-
-/* ============================================================================
-   Stats Tab Components
-   ============================================================================ */
-
-.stats-section {
-  background: var(--card-bg);
-  border-radius: var(--trader-card-radius);
-  padding: 0.75rem; /* Reduced from var(--trader-card-padding) which is 1rem */
-  border: 1px solid var(--trader-card-border);
-  box-shadow: var(--trader-card-shadow);
-  transition: box-shadow var(--transition-base);
-}
-
-.stats-section:hover {
-  box-shadow: 0 4px 12px var(--shadow-md);
-}
-
-.stats-section-primary {
-  background: linear-gradient(135deg, var(--card-bg) 0%, var(--background-secondary) 100%);
-  border: 1px solid var(--primary-alpha-20);
-}
-
-/* The book switch and the window switch share the section header row. */
-.stats-header-controls {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--spacing-sm);
-}
-
-/* The paper run the Paper book's figures come from, with its reset. */
-.stats-paper-account {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--spacing-sm) var(--spacing-md);
-  margin-bottom: var(--spacing-md);
-  font-size: var(--font-size-sm);
-  color: var(--text-secondary);
-}
-
-.stats-paper-account[hidden] {
-  display: none;
-}
-
-.stats-paper-account dl {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--spacing-xs) var(--spacing-md);
-  margin: 0;
-}
-
-.stats-paper-account dl > div {
-  display: flex;
-  gap: var(--spacing-xs);
-}
-
-.stats-paper-account dt {
-  color: var(--text-muted);
-}
-
-.stats-paper-account dd {
-  margin: 0;
-  font-family: var(--font-data);
-  color: var(--text-primary);
-}
-
-.stats-paper-account .btn {
-  margin-inline-start: auto;
-}
-
-/* Qualifier under the metric grid — why some closed rounds are not counted. */
-.stats-note {
-  margin: 0.75rem 0 0;
-  font-size: 0.7rem;
-  color: var(--text-muted);
-  line-height: 1.4;
-}
-
-.stats-section h3 {
-  margin: 0 0 1rem;
-  font-size: 1.1rem;
-  font-weight: 600;
-  color: var(--text-primary);
 }
 
 /* ============================================================================
@@ -516,10 +249,6 @@
     align-items: flex-start;
   }
 
-  .stats-header-controls {
-    align-self: flex-start;
-  }
-
   .exit-bar-header {
     flex-direction: column;
     align-items: flex-start;
@@ -529,4 +258,11 @@
   .sub-tab .tab-status-badge {
     display: none;
   }
+}
+
+/* The ScreenerBot service notice above every sub-tab: outside the scroll, so it never
+   moves with the content, and aligned to the page gutter. */
+.trader-access-region {
+  flex: none;
+  padding: var(--spacing-md) var(--trader-horizontal-padding) 0;
 }

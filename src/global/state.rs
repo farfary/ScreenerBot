@@ -12,7 +12,8 @@ use tokio::sync::Notify;
 // =============================================================================
 
 /// Master initialization gate — all services (except webserver) wait for this flag.
-/// Set to true only after: credentials validated + RPC tested + config saved.
+/// Set to true only after: credentials validated + chain access verified (the own RPC
+/// tested, or the ScreenerBot service probed) + config saved.
 pub static INITIALIZATION_COMPLETE: AtomicBool = AtomicBool::new(false);
 
 /// Optional health monitoring flags (for UI/observability, not for gating service startup).
@@ -134,12 +135,19 @@ pub static POSITIONS_SYSTEM_READY: AtomicBool = AtomicBool::new(false);
 pub static POOL_SERVICE_READY: AtomicBool = AtomicBool::new(false);
 pub static TRANSACTIONS_SYSTEM_READY: AtomicBool = AtomicBool::new(false);
 
+/// Whether the pool service prerequisite is met: the pool service is ready, or the
+/// install's chain access has no live pool prices, so no pool service runs.
+pub fn pool_prerequisite_ready() -> bool {
+    POOL_SERVICE_READY.load(std::sync::atomic::Ordering::SeqCst)
+        || !crate::chains::access::active_has(crate::chains::access::Capability::LivePoolPrices)
+}
+
 /// Check if all critical services are ready for trading operations.
 pub fn are_core_services_ready() -> bool {
     CONNECTIVITY_SYSTEM_READY.load(std::sync::atomic::Ordering::SeqCst)
         && TOKENS_SYSTEM_READY.load(std::sync::atomic::Ordering::SeqCst)
         && POSITIONS_SYSTEM_READY.load(std::sync::atomic::Ordering::SeqCst)
-        && POOL_SERVICE_READY.load(std::sync::atomic::Ordering::SeqCst)
+        && pool_prerequisite_ready()
         && TRANSACTIONS_SYSTEM_READY.load(std::sync::atomic::Ordering::SeqCst)
 }
 
@@ -164,7 +172,7 @@ pub fn get_pending_services() -> Vec<&'static str> {
     if !POSITIONS_SYSTEM_READY.load(std::sync::atomic::Ordering::SeqCst) {
         pending.push("Positions System");
     }
-    if !POOL_SERVICE_READY.load(std::sync::atomic::Ordering::SeqCst) {
+    if !pool_prerequisite_ready() {
         pending.push("Pool Service");
     }
     if !TRANSACTIONS_SYSTEM_READY.load(std::sync::atomic::Ordering::SeqCst) {

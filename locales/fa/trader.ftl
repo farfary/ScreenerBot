@@ -1,20 +1,5 @@
 # Trader page labels.
 
-# Exit types shown in the exit breakdown. Ids are the stored closed_reason: exit
-# rule ids, the Debug names of the exit TradeReason variants (src/trader/types.rs,
-# shown as readable labels) and the reasons written by src/positions and src/trader/stats.rs.
-trader-exit-type-stop-loss = حد ضرر
-trader-exit-type-take-profit = حد سود
-trader-exit-type-roi = حد سود
-trader-exit-type-roi-exit = حد سود
-trader-exit-type-trailing-stop = حد ضرر متحرک
-trader-exit-type-time-override = خروج زمانی
-trader-exit-type-time-rule = قانون زمانی
-trader-exit-type-manual = دستی
-trader-exit-type-manual-close = دستی
-trader-exit-type-dca = DCA
-trader-exit-type-unknown = نامشخص
-
 ## Sub-tabs. Ids are the tab ids of the trader page.
 
 trader-tab-stats = آمار
@@ -34,36 +19,45 @@ trader-feature-beta = بتا
 trader-feature-disabled = غیرفعال
     .message = این قابلیت در حال حاضر غیرفعال است.
 
-## Status bar and trading controls
+## Toolbar, notices and trading controls
 
 trader-status-title = معامله‌گر خودکار
-trader-status-loading = در حال بارگذاری...
 trader-status-running = در حال اجرا
 trader-status-stopped = متوقف
 trader-status-setup-required = نیازمند راه‌اندازی
 trader-setup-action = تکمیل راه‌اندازی
-trader-toggle-on = فعال
-trader-toggle-off = غیرفعال
 trader-toggle-start-failed = راه‌اندازی معامله‌گر ناموفق بود
 trader-toggle-stop-failed = توقف معامله‌گر ناموفق بود
-trader-controls-title = کنترل معاملات
 trader-halt-title = معاملات متوقف شده است
 trader-halt-reason-default = توقف اجباری دستی
 trader-halt-resume = ادامه
 trader-monitor-entry = پایش ورود
 trader-monitor-exit = پایش خروج
-trader-monitor-master-off = معامله‌گر خودکار غیرفعال است
 trader-loss-limit-title = محدودیت ضرر دوره‌ای
 trader-loss-limit-resume = ازسرگیری معاملات
 trader-loss-limit-reset = بازنشانی دوره
 trader-loss-limit-off = غیرفعال
-trader-loss-limit-none = محدودیت ضرر دوره‌ای تنظیم نشده است
 # $hours and $minutes are formatted spans such as "2h" and "5m".
 trader-loss-limit-resets-in = بازنشانی تا { $hours } { $minutes } دیگر
-trader-loss-limit-reached = به سقف رسیده است
 trader-force-stop = توقف اجباری همه چیز
 trader-force-stop-hint = همهٔ مانیتورها، وظایف کپی و معاملات را یک‌جا متوقف می‌کند.
 trader-force-stop-idle = چیزی در حال اجرا نیست که توقف اجباری آن را متوقف کند.
+trader-run-state-force-stopped = توقف اجباری
+trader-run-state-waiting = در انتظار سرویس‌ها
+trader-run-state-idle = پایش‌ها خاموش
+trader-entries-label = ورودهای جدید
+trader-entries-open = باز
+trader-entries-monitor-off = پایش ورود خاموش
+trader-entries-no-live-strategy = استراتژی ورود زنده‌ای وجود ندارد
+trader-entries-no-paper-strategy = استراتژی ورود آزمایشی‌ای وجود ندارد
+trader-action-start = شروع معامله‌گر خودکار
+trader-action-stop = توقف معامله‌گر خودکار
+trader-notice-loss-limit = حد زیان رسید
+trader-notice-loss-limit-message = ورودهای زنده جدید تا بازنشانی دوره متوقف شده‌اند. خروج‌ها ادامه دارند.
+trader-notice-stats-failed = آمار بارگیری نشد
+trader-controls-group =
+    .aria-label = کنترل‌های معامله
+trader-monitor-dormant = همراه با معامله‌گر خودکار شروع می‌شود
 
 ## Confirmations. `.message` is the body and `.confirm` the confirming button.
 
@@ -95,33 +89,40 @@ trader-toast-feature-enabled = قابلیت فعال شد
 trader-toast-feature-disabled = قابلیت غیرفعال شد
 trader-toast-feature-applied = تنظیم معامله‌گر خودکار اعمال شد
 
-## Stats: realized window and metrics
+## Stats: book, window, exposure and figures
 
 trader-stats-window =
     .aria-label = بازه آمار
 trader-stats-book =
     .aria-label = دفتر معاملات
-trader-paper-run-since = دوره آزمایشی از { $date }
-trader-paper-start = شروع
-trader-paper-cash = نقد
-trader-paper-open = باز
-trader-paper-unrealized = تحقق‌نیافته
+trader-exposure-cash = نقد
+trader-exposure-open = باز
+trader-exposure-unrealized = تحقق‌نیافته
+trader-exposure-open-title = پوزیشن‌هایی که یک جایگاه می‌گیرند، از سقف پوزیشن‌های باز
+trader-exposure-in-use = در حال استفاده
+trader-exposure-in-use-title = { -sol } صرف‌شده در پوزیشن‌های باز
+# $amount is the formatted count.
+trader-exposure-unpriced =
+    { $count ->
+        [one] { $amount } پوزیشن باز هنوز قیمت زنده ندارد
+       *[other] { $amount } پوزیشن باز هنوز قیمت زنده ندارند
+    }
+# $date is a formatted date; $amount is a formatted SOL amount.
+trader-exposure-cash-title = دوره آزمایشی از { $date } · شروع با { $amount }
 trader-paper-reset = بازنشانی دوره آزمایشی
 trader-paper-reset-title = دوره آزمایشی بازنشانی شود؟
 trader-paper-reset-run-message = هر پوزیشن آزمایشی باز، از جمله دارایی‌های آزمایشی وظیفه‌های کپی، با قیمت فعلی‌اش بسته می‌شود و دوره‌ای تازه با موجودی اولیه تنظیم‌شده آغاز می‌شود. دوره‌های قبلی در تاریخچه می‌مانند.
 trader-paper-reset-done = دوره آزمایشی تازه‌ای آغاز شد
 trader-paper-reset-failed = بازنشانی دوره آزمایشی ممکن نشد
-trader-paper-account-failed = بارگذاری دوره آزمایشی ممکن نشد
 trader-realized-title = عملکرد تحقق‌یافته
 trader-metric-net-pnl = سود و زیان خالص
 trader-metric-win-rate = نرخ برد
 trader-metric-profit-factor = ضریب سود
 trader-metric-max-drawdown = بیشترین افت سرمایه
-trader-metric-capital = سرمایه درگیر
 trader-metric-avg-win-loss = میانگین برد / باخت
 trader-metric-closed-trades = معاملات بسته‌شده
 trader-metric-median-hold = میانه مدت نگهداری
-trader-stats-empty = در این بازه معامله بسته‌شده‌ای وجود ندارد
+trader-metric-fees = کارمزد شبکه
 # $won and $lost are formatted SOL amounts.
 trader-stats-won-lost = سود { $won } · زیان { $lost }
 # $wins and $losses are the plural messages below.
@@ -140,58 +141,91 @@ trader-stats-losses =
 trader-stats-expected = { $amount } انتظار در هر معامله
 trader-stats-profit-factor-basis = مجموع سود ÷ مجموع زیان
 trader-stats-drawdown-basis = عمیق‌ترین افت تحقق‌یافته از اوج تا کف
-# $count is the position limit and selects the plural.
-trader-stats-slots =
-    { $count ->
-        [one] { $used } از { $max } جایگاه پوزیشن استفاده شده
-       *[other] { $used } از { $max } جایگاه پوزیشن استفاده شده
-    }
-trader-stats-avg-basis = میانگین نتیجه معامله‌های برنده در برابر بازنده
-trader-stats-closed =
-    { $count ->
-        [one] { $amount } پوزیشن بسته شد
-       *[other] { $amount } پوزیشن بسته شد
-    }
-# $span is a formatted duration.
-trader-stats-hold-average = میانگین { $span }
 trader-stats-excluded =
     { $count ->
-        [one] { $amount } دور بسته‌شده کنار گذاشته شد — قیمت تمام‌شده کامل نیست و سود و زیان دقیقی قابل محاسبه نیست.
-       *[other] { $amount } دور بسته‌شده کنار گذاشته شد — قیمت تمام‌شده کامل نیست و سود و زیان دقیقی قابل محاسبه نیست.
+        [one] { $amount } معامله بسته‌شده کنار گذاشته شد: قیمت تمام‌شده‌اش کامل نیست، پس سود و زیانش نامعلوم است.
+       *[other] { $amount } معامله بسته‌شده کنار گذاشته شد: قیمت تمام‌شده‌اش کامل نیست، پس سود و زیانش نامعلوم است.
     }
+# $ratio is a formatted ratio.
+trader-stats-payoff = نسبت بازده { $ratio }
+trader-stats-streak-win =
+    { $count ->
+        [one] آخرین معامله برد
+       *[other] { $amount } برد پیاپی
+    }
+trader-stats-streak-loss =
+    { $count ->
+        [one] آخرین معامله باخت
+       *[other] { $amount } باخت پیاپی
+    }
+# $wins and $losses are formatted durations.
+trader-stats-hold-split = بردها { $wins } · باخت‌ها { $losses }
+trader-stats-fees-basis = در سود و زیان خالص لحاظ شده است
+trader-stats-loading = در حال بارگیری آمار...
+trader-open-strategies = باز کردن استراتژی‌ها
 
-## Stats: daily P&L and extremes
+## Stats: P&L chart, trade outcomes and extremes
 
 trader-daily-title = سود و زیان روزانه
 trader-daily-subtitle = { -sol } تحقق‌یافته در هر روز، همراه با مجموع تجمعی
-trader-daily-loading = در حال بارگذاری سود و زیان روزانه...
 trader-daily-chart = سود و زیان تحقق‌یافته روزانه به { -sol }
 trader-weekly-title = سود و زیان هفتگی
 trader-weekly-subtitle = { -sol } تحقق‌یافته در هر هفته ISO، همراه با مجموع تجمعی
 trader-weekly-chart = سود و زیان تحقق‌یافته هفتگی به { -sol }
+# $date is a formatted date; $pnl a signed SOL amount.
+trader-daily-bar =
+    { $count ->
+        [one] { $date } · { $pnl } · { $amount } معامله
+       *[other] { $date } · { $pnl } · { $amount } معامله
+    }
+trader-weekly-bar =
+    { $count ->
+        [one] هفته { $date } · { $pnl } · { $amount } معامله
+       *[other] هفته { $date } · { $pnl } · { $amount } معامله
+    }
 trader-extreme-best = بهترین معامله
 trader-extreme-worst = بدترین معامله
+trader-extreme-runs = بیشترین پشت‌سرهم
+trader-outcome-title = نتایج معاملات
+trader-outcome-subtitle = معاملات بسته‌شده بر اساس بازده، به درصد
+# $value, $from and $to are formatted signed percentages.
+trader-outcome-below = کمتر از { $value }
+trader-outcome-range = { $from } تا { $to }
+trader-outcome-above = { $value } یا بیشتر
+# $range is one of the three messages above; $pnl a signed SOL amount.
+trader-outcome-bucket =
+    { $count ->
+        [one] { $range } · { $amount } معامله · { $pnl }
+       *[other] { $range } · { $amount } معامله · { $pnl }
+    }
 
-## Stats: exit breakdown
+## Stats: empty windows, exit reasons, entry sources and recent closes
 
-trader-exit-title = تفکیک استراتژی‌های خروج
-trader-exit-subtitle = نحوه بسته شدن پوزیشن‌ها و بازده هر خروج
-trader-exit-loading = در حال بارگذاری داده‌های خروج...
-trader-exit-empty-day = در 24 ساعت گذشته معامله بسته‌شده‌ای وجود ندارد
-trader-exit-empty-all = هنوز معامله بسته‌شده‌ای وجود ندارد
-trader-exit-empty-days =
+trader-stats-empty-day = در 24 ساعت گذشته معامله بسته‌شده‌ای وجود ندارد
+trader-stats-empty-all = هنوز معامله بسته‌شده‌ای وجود ندارد
+trader-stats-empty-hint = معاملات بسته‌شده پس از فروش یک پوزیشن اینجا نمایش داده می‌شوند. معامله‌گر خودکار را روشن کنید یا بازه طولانی‌تری انتخاب کنید.
+trader-stats-empty-days =
     { $count ->
         [one] در { $amount } روز گذشته معامله بسته‌شده‌ای وجود ندارد
        *[other] در { $amount } روز گذشته معامله بسته‌شده‌ای وجود ندارد
     }
-# $share is a formatted percentage of all exits.
-trader-exit-share =
-    { $count ->
-        [one] { $amount } معامله · { $share } از خروج‌ها
-       *[other] { $amount } معامله · { $share } از خروج‌ها
-    }
-# $value is a formatted average percentage.
-trader-exit-average = میانگین { $value }
+trader-exits-title = دلایل خروج
+trader-exits-subtitle = معاملات بسته‌شده چگونه پایان یافتند و هر خروج چه بازدهی داشت
+trader-sources-title = منابع ورود
+trader-sources-subtitle = چه چیزی معاملات بسته‌شده را باز کرد
+trader-recent-title = بسته‌شدن‌های اخیر
+trader-recent-subtitle = آخرین معاملات بسته‌شده در این بازه
+trader-column-token = توکن
+trader-column-exit = خروج
+trader-column-source = منبع
+trader-column-trades = معاملات
+trader-column-win-rate = نرخ برد
+trader-column-avg-return = میانگین بازده
+trader-column-net-pnl = سود و زیان خالص
+trader-column-held = مدت نگهداری
+trader-column-closed = بسته‌شده
+trader-column-pnl = سود و زیان
+trader-column-return = بازده
 
 ## Shared example vocabulary
 
@@ -413,3 +447,8 @@ trader-timing-concurrency = همروندی بررسی ورود
 trader-timing-concurrency-hint = تعداد توکن‌هایی که هم‌زمان بررسی می‌شوند (بیشتر = سریع‌تر اما مصرف CPU بیشتر)
 trader-timing-unit-minutes = دقیقه
 trader-timing-unit-tokens = توکن
+
+## Service mode notice
+
+trader-service-notice-title = در حال اجرا روی سرویس { -brand }
+trader-service-notice-message = قیمت‌ها هر چند ثانیه یک بار به‌روز می‌شوند، بنابراین خروج‌های سریع مانند حد ضرر متحرک نزدیک، دیرتر از حالت RPC خودتان واکنش نشان می‌دهند.

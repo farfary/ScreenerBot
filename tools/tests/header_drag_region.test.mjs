@@ -31,8 +31,9 @@ test("the macOS header drags the window", () => {
 });
 
 test("header controls and scrolling rows stay out of the drag region", () => {
+  // Whitespace-insensitive: the formatter breaks a long selector across lines.
   const match = HEADER_STYLES.match(
-    /\.electron-macos \.modern-header :is\(([\s\S]*?)\)\s*\{([^}]+)\}/
+    /\.electron-macos\s+\.modern-header\s+:is\(([\s\S]*?)\)\s*\{([^}]+)\}/
   );
   assert.ok(match, "the header has one interactive no-drag rule");
   const selectors = match[1].split(",").map((selector) => selector.trim());

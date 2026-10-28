@@ -1,0 +1,42 @@
+/* Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+ * SPDX-License-Identifier: BUSL-1.1 */
+
+/* A page's top row and the notices under it: summary chips at the inline start, actions
+   at the inline end; when the row runs out of space the actions wrap under the chips,
+   still at the end. */
+
+.page-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm) var(--spacing-md);
+}
+
+.page-toolbar-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-sm);
+  min-width: 0;
+}
+
+.page-toolbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--spacing-sm);
+  margin-inline-start: auto;
+}
+
+/* The page notices (ui/notice.js) under the toolbar: a failed load beside the kept data,
+   and a state that stops the page's work. */
+.page-notices {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.page-notices[hidden] {
+  display: none;
+}

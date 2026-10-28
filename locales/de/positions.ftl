@@ -17,7 +17,6 @@ positions-paper-empty = Keine Paper-Positionen
 positions-paper-archived-empty = Keine archivierten Paper-Positionen
     .message = Paper-Runden bleiben unter Offen und Geschlossen; archiviert werden nur Live-Positionen.
 positions-paper-empty-action = Strategien öffnen
-positions-origin-copy = Copy
 positions-origin-manual = Manuell
 positions-origin-wallet = Wallet
 positions-origin-copy-link =

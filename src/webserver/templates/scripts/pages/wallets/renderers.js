@@ -16,8 +16,12 @@ import {
   TOKEN_CELL_MIN_WIDTH,
 } from "../../ui/token_identity.js";
 import { needsFunding, renderFundingNotice } from "../../ui/funding_notice.js";
+import { capabilityAvailable, capabilityReason } from "../../ui/access_gate.js";
 
 // wallet_type ids serialized by `WalletType` (src/wallets/types.rs).
+/** The chain capability that reads the balances of wallets other than the trading one. */
+const OTHER_BALANCES_CAPABILITY = "other_wallet_balances";
+
 const WALLET_TYPE_LABELS = Object.freeze({
   generated: "wallets-type-generated",
   imported: "wallets-type-imported",
@@ -170,10 +174,17 @@ export function createWalletRenderers({
       label: I18n.t("wallets-list-col-balance"),
       type: "sol",
       sortable: true,
-      render: (value) =>
-        value != null
-          ? Utils.formatSol(value, { decimals: 4, suffix: "", trim: false, subscript: true })
-          : "—",
+      render: (value, row) => {
+        if (value != null) {
+          return Utils.formatSol(value, { decimals: 4, suffix: "", trim: false, subscript: true });
+        }
+        // Another wallet's balance is unread without the capability: say why.
+        const reason =
+          row.role === "main" || capabilityAvailable(OTHER_BALANCES_CAPABILITY)
+            ? ""
+            : capabilityReason(OTHER_BALANCES_CAPABILITY);
+        return reason ? `<span title="${Utils.escapeHtml(reason)}">—</span>` : "—";
+      },
     },
     {
       id: "wallet_type",
@@ -251,16 +262,14 @@ export function createWalletRenderers({
     renderTokenHoldingsTable(options);
   }
 
-  // A main wallet known to hold no SOL cannot trade: say what it needs and where to send it.
+  // A main wallet known to hold no SOL cannot trade: say what it needs. The address and its
+  // copy action are the holdings table's toolbar identity just below, so the notice omits them.
   function renderFundingGuidance() {
     const node = $("#wallets-funding");
     if (!node) return;
     const wallet = mainWallet();
     const show = Boolean(wallet?.address) && needsFunding(wallet.balance);
-    if (show && node.dataset.address !== wallet.address) {
-      node.innerHTML = renderFundingNotice(wallet.address);
-      node.dataset.address = wallet.address;
-    }
+    if (show && !node.firstElementChild) node.innerHTML = renderFundingNotice(null);
     node.hidden = !show;
   }
 

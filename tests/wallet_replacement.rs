@@ -104,6 +104,7 @@ fn add_open_positions(wallet: &str, count: usize) {
 fn staged_key(address: &str, ciphertext: String, nonce: String) -> StagedKey {
     StagedKey {
         chain: ChainId::Solana,
+        access: screenerbot::chains::access::ChainAccessMode::OwnRpc,
         address: address.to_owned(),
         ciphertext,
         nonce,
@@ -943,6 +944,32 @@ fn an_apply_while_a_config_migration_is_pending_writes_only_its_keys() {
                 .expect("the written key decrypts"),
                 new
             );
+        },
+    );
+}
+
+/// The vault names the trading wallet synchronously on a current-thread runtime too,
+/// where the key-cache bridge refuses; the service wallet watch checks subjects
+/// through this read.
+#[test]
+fn the_vault_names_the_trading_wallet_on_a_current_thread_runtime() {
+    common::run_isolated(
+        module_path!(),
+        "the_vault_names_the_trading_wallet_on_a_current_thread_runtime",
+        || async {
+            let (_dir, address) = trading_wallet().await;
+            let read = std::thread::spawn(|| {
+                tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .expect("create current-thread runtime")
+                    .block_on(async {
+                        screenerbot::wallets::replacement::trading_wallet_address(ChainId::Solana)
+                    })
+            })
+            .join()
+            .expect("the read thread finishes");
+            assert_eq!(read.expect("read the vault"), Some(address));
         },
     );
 }

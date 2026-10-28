@@ -11,7 +11,7 @@ onboarding-welcome-custody-description = 개인 키는 암호화되어 저장되
 onboarding-welcome-engine-title = 상시 가동 엔진
 onboarding-welcome-engine-description = 상태 점검과 안정적인 수명 주기 제어를 갖춘 서비스 오케스트레이션.
 onboarding-welcome-realtime-title = 실시간 온체인 데이터
-onboarding-welcome-realtime-description = 지연된 API 스냅샷이 아닌 풀 리저브 직접 계산.
+onboarding-welcome-realtime-description = 자체 RPC를 사용하면 가격을 지연된 API 스냅샷이 아닌 풀 리저브에서 직접 가져옵니다.
 
 ## Slide: discover
 
@@ -35,7 +35,7 @@ onboarding-trade-auto-description = 진입/청산 평가기, DCA 라운드, 부�
 onboarding-trade-strategy-title = 전략 엔진
 onboarding-trade-strategy-description = 가격, 거래량, 시간 기반 시그널을 결합한 조건 트리.
 onboarding-trade-copy-title = 카피 트레이딩
-onboarding-trade-copy-description = 팔로우하는 지갑의 거래를 그대로 따라 합니다. 실제 { -sol }를 쓰기 전에 모든 작업을 모의 모드에서 테스트하세요.
+onboarding-trade-copy-description = 팔로우하는 지갑의 거래를 그대로 따라 합니다(자체 RPC 필요). 실제 { -sol }를 쓰기 전에 모든 작업을 모의 모드에서 테스트하세요.
 onboarding-trade-safety-title = 안전 제어
 onboarding-trade-safety-description = 긴급 중지, 기간별 손실 한도, 독립적인 모니터 전환.
 
@@ -55,20 +55,20 @@ onboarding-connect-events-description = 모든 거래, 스왑, 시스템 이벤�
 ## Slide: data
 
 onboarding-data-title = { -brand } 데이터
-onboarding-data-description = 공유 시장 데이터 서비스를 운영하므로 설치한 앱이 공개 제공자의 요청 한도에 묶이지 않습니다. { -brand } 계정이 있으면 무료이며, { -brand }는 계정 없이도 작동합니다.
-onboarding-data-candles-title = 통합 캔들 기록
-onboarding-data-candles-description = 하나의 캐시에서 제공되는 7개 타임프레임, 수년 분량의 공유 기록.
-onboarding-data-pools-title = 확인된 풀 및 보안
-onboarding-data-pools-description = 중앙 풀 레지스트리와 이미 가져와 둔 { -rugcheck } 리포트.
+onboarding-data-description = 무료 { -brand } 계정으로 차트와 토큰 검사가 더 빨라집니다. 자체 RPC를 사용하면 { -brand }는 계정 없이도 작동합니다.
+onboarding-data-candles-title = 빠른 차트 로딩
+onboarding-data-candles-description = 7개 타임프레임, 수년 분량의 가격 기록.
+onboarding-data-pools-title = 준비된 토큰 검사
+onboarding-data-pools-description = 대부분 토큰의 풀과 보안 리포트를 기다림 없이 확인합니다.
 onboarding-data-signin-title = 계정 필요
 onboarding-data-signin-description = 계정이 없으면 이 데이터를 사용할 수 없으며 공용 제공자가 사용됩니다.
-onboarding-data-reading-title = 조회만
-onboarding-data-reading-description = 조회한 토큰은 확인할 수 있지만 키, 잔액, 포지션, 거래는 절대 볼 수 없습니다.
+onboarding-data-reading-title = 저희가 보는 정보
+onboarding-data-reading-description = 조회한 토큰과 { -brand }를 통해 보낸 스왑입니다. { -brand } 서비스에서는 거래 지갑의 잔액과 내역도 봅니다. 키는 절대 보지 않습니다.
 
 ## Slide: privacy
 
 onboarding-privacy-title = 내 키, 내 데이터
-onboarding-privacy-description = 설정, 키, 거래 내역은 이 컴퓨터에만 보관됩니다. 다음 단계에서 인증 정보 없이 둘러보려면 "대시보드 둘러보기"를 선택하거나, 지갑과 RPC를 연결해 전체 봇을 활성화하세요. { -brand } 데이터를 사용하려면 그곳에서 로그인하세요.
+onboarding-privacy-description = 설정, 키, 거래 내역은 이 컴퓨터에만 보관됩니다. 다음 단계에서 인증 정보 없이 둘러보려면 "대시보드 둘러보기"를 선택하거나, 지갑을 만들거나 가져온 뒤 자체 RPC 또는 { -brand } 서비스로 연결해 거래를 시작하세요.
 onboarding-privacy-local-title = 로컬 우선 아키텍처
 onboarding-privacy-local-description = 설정, 분석, 데이터베이스가 내 데스크톱에 저장됩니다.
 onboarding-privacy-wallet-title = 암호화된 지갑
@@ -81,7 +81,7 @@ onboarding-privacy-config-description = 대부분의 설정은 설정 완료 후
 ## Footer
 
 onboarding-setup-shortcut =
-    .aria-label = 지갑 및 RPC 설정으로 바로 이동하거나 탐색 모드를 선택하세요
+    .aria-label = 설정으로 바로 이동하거나 탐색 모드를 선택하세요
 onboarding-setup-shortcut-label = 설정으로 이동
 onboarding-progress-dot =
     .aria-label = { $number }번 슬라이드로 이동

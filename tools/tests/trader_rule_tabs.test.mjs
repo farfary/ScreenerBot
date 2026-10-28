@@ -296,7 +296,7 @@ test("every sub-tab keeps the Stats tab's side gutter", async () => {
     gutters[id] = await page.evaluate((tab) => {
       const content = document.getElementById("trader-content").getBoundingClientRect();
       const first = document
-        .querySelector(`#${tab}-tab :is(.trader-status-bar, .config-card)`)
+        .querySelector(`#${tab}-tab :is(.page-toolbar, .config-card)`)
         .getBoundingClientRect();
       return Math.round(first.left - content.left);
     }, id);
@@ -358,10 +358,11 @@ test("an unknown best or worst trade reads as one dash", async () => {
     await statsPage.goto(`${statsHost.origin}/trader`);
     await statsPage.waitForSelector(PAGE_READY);
     await statsPage.click('#subTabsContainer [data-tab-id="stats"]');
-    await statsPage.waitForSelector("#stats-extremes:not([hidden]) #best-trade.positive");
+    await statsPage.waitForSelector("#stats-extremes #best-trade .pnl-positive");
     const worst = await statsPage.$eval(
-      "#worst-trade",
-      (el) => el.closest(".stats-extreme").innerText
+      "#stats-extremes",
+      (el) =>
+        `${el.querySelector("#worst-trade-token").innerText} ${el.querySelector("#worst-trade").innerText}`
     );
     assert.equal(worst.match(/—/g)?.length, 1, `"${worst}" shows one dash`);
   } finally {

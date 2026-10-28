@@ -40,7 +40,7 @@ errors-account-signin-refused = { $reason }
 errors-account-signin-unavailable = サインインは利用できません
 errors-account-credentials-required = メールアドレスとパスワードを入力してください。
 errors-account-signout-failed = サインアウトに失敗しました
-errors-account-gateway-update-failed = ゲートウェイ設定を更新できませんでした
+errors-account-gateway-update-failed = トランザクション送信の設定を更新できませんでした
 
 errors-i18n-locale-not-registered = ロケールが登録されていません
 errors-i18n-catalog-encode-failed = カタログをエンコードできませんでした
@@ -117,6 +117,8 @@ errors-transactions-own-wallet-unavailable = メインウォレットが設定�
 errors-transactions-invalid-subject = トランザクションの対象が有効な Solana アドレスではありません
 errors-transactions-subject-not-watched = トランザクションの対象がウォッチ中のウォレットではありません
 errors-transactions-watch-store-unavailable = ウォッチ中のウォレットを利用できません
+errors-transactions-history-loading = 古いトランザクションはすでに読み込み中です。
+errors-transactions-history-load-failed = 古いトランザクションを読み込めませんでした。
 
 errors-wallet-unavailable = メインウォレットを利用できません
 errors-wallet-changed = メインウォレットが変更されました。更新してもう一度お試しください
@@ -384,3 +386,17 @@ errors-tokens-search-failed = トークンの検索に失敗しました
 
 errors-actions-not-found = アクション { $id } が見つかりません
 errors-services-not-found = サービス '{ $name }' が見つかりません
+
+# Chain access
+errors-chain-capability-unavailable = この操作には独自の RPC 接続が必要です。
+errors-chain-service-signin-required = { -brand } サービスを使うにはサインインしてください。
+errors-chain-service-scope-missing = ウォレットの読み取りを許可するには再度サインインしてください。
+errors-chain-service-busy = { -brand } サービスが混雑しています。しばらくしてから再試行してください。
+errors-chain-service-daily-limit = アカウントが本日の { -brand } サービスの上限に達しました。
+errors-chain-service-version = このバージョンは { -brand } サービスには古すぎます。{ $minimum } 以降にアップデートしてください。
+errors-chain-service-refused = { -brand } サービスがリクエストを拒否しました。
+errors-chain-service-unreachable = screenerbot.io に接続できません。
+errors-chain-not-trading-wallet = { -brand } サービスモードでは取引ウォレットのみ読み取れます。
+errors-chain-access-failed = ブロックチェーンへのリクエストに失敗しました。
+errors-chain-access-unchanged = この接続はすでに使用中です。
+errors-chain-access-switch-failed = 接続を切り替えられませんでした。

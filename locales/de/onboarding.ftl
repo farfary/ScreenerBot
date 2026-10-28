@@ -9,7 +9,7 @@ onboarding-welcome-custody-description = Private Schlüssel werden verschlüssel
 onboarding-welcome-engine-title = Always-On-Engine
 onboarding-welcome-engine-description = Orchestrierte Dienste mit Integritätsprüfungen und geordneter Lebenszyklussteuerung.
 onboarding-welcome-realtime-title = Echtzeit-On-Chain-Daten
-onboarding-welcome-realtime-description = Direkte Berechnung der Pool-Reserven — keine verzögerten API-Snapshots.
+onboarding-welcome-realtime-description = Mit eigenem RPC kommen die Preise direkt aus den Pool-Reserven — keine verzögerten API-Snapshots.
 
 ## Slide: discover
 
@@ -33,7 +33,7 @@ onboarding-trade-auto-description = Einstiegs-/Ausstiegs-Evaluatoren, DCA-Runden
 onboarding-trade-strategy-title = Strategie-Engine
 onboarding-trade-strategy-description = Bedingungsbäume, die Preis-, Volumen- und zeitbasierte Signale kombinieren.
 onboarding-trade-copy-title = Copy-Trading
-onboarding-trade-copy-description = Spiegeln Sie die Trades von Wallets, denen Sie folgen. Testen Sie jede Aufgabe im Paper-Modus, bevor sie echtes { -sol } ausgibt.
+onboarding-trade-copy-description = Spiegeln Sie die Trades von Wallets, denen Sie folgen (erfordert Ihren eigenen RPC). Testen Sie jede Aufgabe im Paper-Modus, bevor sie echtes { -sol } ausgibt.
 onboarding-trade-safety-title = Sicherheitskontrollen
 onboarding-trade-safety-description = Notstopp, zeitraumbasierte Verlustlimits und voneinander unabhängige Monitor-Schalter.
 
@@ -53,20 +53,20 @@ onboarding-connect-events-description = Jeder Trade, Swap und jedes Systemereign
 ## Slide: data
 
 onboarding-data-title = { -brand }-Daten
-onboarding-data-description = Wir betreiben einen gemeinsamen Marktdatendienst, damit Ihre Installation nicht durch die Ratenlimits öffentlicher Anbieter gedrosselt wird. Er ist mit einem { -brand }-Konto kostenlos, und { -brand } funktioniert auch ohne.
-onboarding-data-candles-title = Gepoolte Kerzenhistorie
-onboarding-data-candles-description = Gemeinsame Historie in sieben Zeitrahmen, jahrelang zurück, aus einem einzigen Cache.
-onboarding-data-pools-title = Aufgelöste Pools und Sicherheit
-onboarding-data-pools-description = Ein zentrales Pool-Register und zwischengespeicherte { -rugcheck }-Berichte, bereits abgerufen.
+onboarding-data-description = Ein kostenloses { -brand }-Konto bringt schnellere Charts und Token-Prüfungen. Mit eigenem RPC funktioniert { -brand } auch ohne.
+onboarding-data-candles-title = Charts laden schnell
+onboarding-data-candles-description = Kurshistorie in sieben Zeitrahmen, jahrelang zurück.
+onboarding-data-pools-title = Token-Prüfungen bereit
+onboarding-data-pools-description = Pools und Sicherheitsberichte für die meisten Token, ohne Wartezeit.
 onboarding-data-signin-title = Konto erforderlich
 onboarding-data-signin-description = Ohne Konto sind diese Daten nicht verfügbar und es werden die öffentlichen Anbieter verwendet.
-onboarding-data-reading-title = Nur Abfragen
-onboarding-data-reading-description = Wir sehen, welche Token Sie abfragen. Niemals einen Schlüssel, ein Guthaben, eine Position oder einen Trade.
+onboarding-data-reading-title = Was wir sehen
+onboarding-data-reading-description = Die Token, die Sie abfragen, und die Swaps, die Sie über { -brand } senden. Beim { -brand }-Dienst außerdem Guthaben und Verlauf Ihrer Trading-Wallet. Niemals Ihren Schlüssel.
 
 ## Slide: privacy
 
 onboarding-privacy-title = Ihre Schlüssel, Ihre Daten
-onboarding-privacy-description = Ihre Konfiguration, Schlüssel und Trading-Historie bleiben auf diesem Rechner. Wählen Sie als Nächstes „Dashboard erkunden“ zum Erkunden ohne Zugangsdaten oder verknüpfen Sie eine Wallet und einen RPC, um den vollen Bot zu aktivieren — und melden Sie sich dort an, wenn Sie { -brand }-Daten nutzen möchten.
+onboarding-privacy-description = Ihre Konfiguration, Schlüssel und Trading-Historie bleiben auf diesem Rechner. Wählen Sie als Nächstes „Dashboard erkunden“ zum Erkunden ohne Zugangsdaten oder erstellen bzw. importieren Sie eine Wallet und verbinden Sie sie über Ihren eigenen RPC oder den { -brand }-Dienst, um mit dem Trading zu beginnen.
 onboarding-privacy-local-title = Local-First-Architektur
 onboarding-privacy-local-description = Konfiguration, Analysen und Datenbanken werden auf Ihrem Desktop gespeichert.
 onboarding-privacy-wallet-title = Verschlüsselte Wallet
@@ -79,7 +79,7 @@ onboarding-privacy-config-description = Die meisten Einstellungen lassen sich na
 ## Footer
 
 onboarding-setup-shortcut =
-    .aria-label = Direkt zur Wallet- und RPC-Einrichtung wechseln oder den Explore Mode wählen
+    .aria-label = Direkt zur Einrichtung wechseln oder den Explore Mode wählen
 onboarding-setup-shortcut-label = Zur Einrichtung
 onboarding-progress-dot =
     .aria-label = Zu Folie { $number }

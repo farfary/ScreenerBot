@@ -267,3 +267,19 @@ shell-theme-light = Açık
 shell-theme-dark = Koyu
 shell-theme-switch-to-light = Açık temaya geç
 shell-theme-switch-to-dark = Koyu temaya geç
+
+## Chain access: service mode controls, gates and sign-out
+
+shell-service-control =
+    .aria-label = İşlemler duraklatıldı. Ayrıntıları aç
+shell-service-action-signin = Oturum aç
+shell-service-action-connection = RPC ekle
+shell-access-gate-own-rpc-title = Kendi RPC'niz gerekir
+shell-access-gate-watch-wallets = Kopya işlem ve cüzdan izleme diğer cüzdanları canlı takip eder; { -brand } hizmeti bunu yapmaz. Kopya görevleriniz ve izlenen cüzdanlarınız korunur; bir RPC eklediğinizde geri gelir.
+shell-access-gate-live-pool-prices = Canlı havuz fiyatları için kendi RPC'niz gerekir.
+shell-access-gate-direct-swaps = Doğrudan havuz swap'ları için kendi RPC'niz gerekir.
+shell-access-gate-other-wallets = Diğer cüzdanların bakiyeleri için kendi RPC'niz gerekir.
+shell-access-gate-action = Bağlantı ayarlarını aç
+shell-signout-service-title = Oturum kapatılsın ve işlemler duraklatılsın mı?
+shell-signout-service-message = Kendi RPC'niz olmadan { -brand }, cüzdanınızı okumak ve işlem göndermek için hesabınızı kullanır. Oturumunuz kapalıyken işlemler duraklatılır ve açık pozisyonlar satılmaz.
+shell-signout-service-confirm = Oturumu kapat ve duraklat

@@ -38,3 +38,6 @@ chart-status-total-idle =
         [many] { $count } bougies · inactif
        *[other] { $count } bougies · inactif
     }
+
+chart-inline-curve-label = P&L cumulé { $amount } { -sol }
+chart-inline-histogram-title = { $count } sur { $total }

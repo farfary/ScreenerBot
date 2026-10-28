@@ -147,5 +147,21 @@ trade-reason-synthetic-exit-permanent-failure = Sentetik çıkış kalıcı hata
 trade-reason-pending-verification = { $reason } (doğrulama bekliyor)
 trade-reason-force-closed = Zorla kapatıldı: { $note }
 trade-reason-stored = { $reason }
+trade-reason-unknown = Kaydedilmedi
+trade-reason-force-closed-any = Zorla kapatıldı
+
+# Why a new entry was blocked. Ids come from EntryBlock in src/trader/admission.rs.
+trade-entry-block-force-stopped = İşlem zorla durduruldu
+trade-entry-block-loss-limit = Zarar limiti yeni girişleri engelliyor
+trade-entry-block-connectivity = Gerekli servisler kullanılamıyor
+trade-entry-block-storage-unavailable = İşlem verileri kullanılamıyor veya geri yükleniyor
+trade-entry-block-position-limit = Açık pozisyon limitine ulaşıldı
+trade-entry-block-already-open = Bir pozisyon zaten açık
+trade-entry-block-reentry-cooldown = Token yeniden giriş bekleme süresi
+trade-entry-block-open-cooldown = Genel giriş bekleme süresi
+trade-entry-block-entry-reserved = Başka bir giriş işleniyor
+trade-entry-block-blacklisted = Token risk kontrolleri tarafından engellendi
+trade-entry-block-paper-balance-exhausted = Sanal bakiye işlemi karşılamıyor
+trade-entry-block-check-failed = Bir güvenlik kontrolü tamamlanamadı
 
 trade-quick-no-token = Token seçilmedi

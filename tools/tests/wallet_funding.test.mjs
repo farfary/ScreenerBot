@@ -6,8 +6,8 @@
  * Guard: a trading wallet without SOL is told how to start, and a buy it cannot fund
  * says why its confirm is disabled.
  *
- * - Wallets shows the funding notice, with the main wallet's address and its copy
- *   action, only while the main wallet is known to hold no SOL.
+ * - Wallets shows the funding notice only while the main wallet is known to hold no
+ *   SOL, without repeating the address its holdings toolbar already carries.
  * - The Buy dialog shows the same notice at 0 SOL and names the refusal inline in the
  *   trade API's own words and figures: what the wallet holds and what the trade needs.
  * - A wallet with SOL but not enough for the typed amount gets the same refusal; an
@@ -27,7 +27,7 @@ import { serveDashboard, PAGE_READY } from "../lib/dashboard_host.mjs";
 import { createApiHandler, loadIndex, FIXTURES_ROOT } from "../lib/dashboard_fixtures.mjs";
 
 const MINT = "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN";
-const NOTICE_TITLE = "Fund the trading wallet to start";
+const NOTICE_TITLE = "Fund your trading wallet";
 const ERROR = ".trade-action-error-msg[data-visible='true'] .trade-action-error-text";
 // The network fee reserve the buy-funding route serves; the wallet keeps every account.
 const FEE_RESERVE = 0.002;
@@ -96,8 +96,9 @@ test("Wallets shows funding guidance only while the main wallet holds no SOL", a
     const notice = empty.page.locator("#wallets-funding .notice");
     await notice.waitFor();
     assert.match(strip(await notice.textContent()), new RegExp(NOTICE_TITLE));
-    assert.ok(strip(await notice.textContent()).includes(main.address));
-    assert.equal(await notice.locator(`[data-copy="${main.address}"]`).count(), 1);
+    assert.ok(!strip(await notice.textContent()).includes(main.address));
+    assert.equal(await notice.locator("[data-copy]").count(), 0);
+    await empty.page.locator(`#tokens-datatable-root [data-copy="${main.address}"]`).waitFor();
   } finally {
     await empty.close();
   }
@@ -121,9 +122,7 @@ test("the Buy dialog at 0 SOL shows the notice and says why it cannot buy", asyn
     await notice.waitFor();
     await page.waitForFunction(
       (address) =>
-        document
-          .querySelector(".trade-action-funding .notice")
-          ?.textContent.includes(address),
+        document.querySelector(".trade-action-funding .notice")?.textContent.includes(address),
       main.address
     );
     const error = strip(await page.locator(ERROR).textContent());

@@ -58,7 +58,7 @@ transactions-search =
     .placeholder = सिग्नेचर खोजें…
     .aria-label = ट्रांज़ैक्शन सिग्नेचर खोजें
 transactions-load-failed = ट्रांज़ैक्शन रीफ़्रेश नहीं हो सके
-transactions-setup-gate-title = लेन-देन के लिए वॉलेट ज़रूरी है
+transactions-access-gate-title = लेन-देन के लिए वॉलेट ज़रूरी है
 transactions-summary-total = कुल
 transactions-summary-success = सफल
 transactions-summary-failed = विफल
@@ -181,3 +181,9 @@ transactions-dialog-raw-empty = कोई रॉ डेटा उपलब्ध
 # Empty table (scripts/pages/transactions.js)
 transactions-empty = अभी कोई ट्रांज़ैक्शन नहीं
     .message = ट्रेडिंग वॉलेट के स्वैप और ट्रांसफ़र ऑन-चेन पुष्टि होने के बाद यहाँ दिखते हैं।
+
+## On-demand history
+
+transactions-history-on-demand = पुराना इतिहास ज़रूरत पड़ने पर लोड होता है।
+transactions-history-load-older = पुराना लोड करें
+transactions-history-load-older-failed = पुराना इतिहास लोड नहीं हो सका।

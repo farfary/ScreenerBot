@@ -266,3 +266,19 @@ shell-theme-light = Sáng
 shell-theme-dark = Tối
 shell-theme-switch-to-light = Chuyển sang giao diện sáng
 shell-theme-switch-to-dark = Chuyển sang giao diện tối
+
+## Chain access: service mode controls, gates and sign-out
+
+shell-service-control =
+    .aria-label = Tạm dừng giao dịch. Mở chi tiết
+shell-service-action-signin = Đăng nhập
+shell-service-action-connection = Thêm RPC
+shell-access-gate-own-rpc-title = Cần RPC của riêng bạn
+shell-access-gate-watch-wallets = Copy trading và theo dõi ví bám theo các ví khác theo thời gian thực, điều mà dịch vụ { -brand } không làm. Các tác vụ sao chép và ví đang theo dõi được giữ lại và quay lại khi bạn thêm RPC.
+shell-access-gate-live-pool-prices = Giá pool trực tiếp cần RPC của riêng bạn.
+shell-access-gate-direct-swaps = Swap trực tiếp qua pool cần RPC của riêng bạn.
+shell-access-gate-other-wallets = Số dư của các ví khác cần RPC của riêng bạn.
+shell-access-gate-action = Mở cài đặt kết nối
+shell-signout-service-title = Đăng xuất và tạm dừng giao dịch?
+shell-signout-service-message = Không có RPC riêng, { -brand } dùng tài khoản của bạn để đọc ví và gửi giao dịch. Khi bạn đã đăng xuất, giao dịch tạm dừng và các vị thế đang mở không bị bán.
+shell-signout-service-confirm = Đăng xuất và tạm dừng

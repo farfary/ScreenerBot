@@ -38,6 +38,10 @@
   flex-shrink: 0;
 }
 
+.status-bar-center[hidden] {
+  display: none;
+}
+
 .status-bar-right {
   justify-content: flex-end;
 }

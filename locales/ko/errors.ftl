@@ -45,7 +45,7 @@ errors-account-signin-refused = { $reason }
 errors-account-signin-unavailable = 로그인을 사용할 수 없습니다
 errors-account-credentials-required = 이메일 주소와 비밀번호를 입력하세요.
 errors-account-signout-failed = 로그아웃에 실패했습니다
-errors-account-gateway-update-failed = 게이트웨이 설정을 업데이트할 수 없습니다
+errors-account-gateway-update-failed = 트랜잭션 전송 설정을 업데이트할 수 없습니다
 
 # Localization
 errors-i18n-locale-not-registered = 등록되지 않은 로캘입니다
@@ -131,6 +131,8 @@ errors-transactions-own-wallet-unavailable = 메인 지갑이 설정되어 있�
 errors-transactions-invalid-subject = 트랜잭션 대상이 올바른 Solana 주소가 아닙니다
 errors-transactions-subject-not-watched = 트랜잭션 대상이 감시 중인 지갑이 아닙니다
 errors-transactions-watch-store-unavailable = 감시 중인 지갑을 사용할 수 없습니다
+errors-transactions-history-loading = 이전 트랜잭션을 이미 불러오는 중입니다.
+errors-transactions-history-load-failed = 이전 트랜잭션을 불러오지 못했습니다.
 
 # Wallet
 errors-wallet-unavailable = 메인 지갑을 사용할 수 없습니다
@@ -415,3 +417,17 @@ errors-tokens-search-failed = 토큰 검색에 실패했습니다
 # Actions and services
 errors-actions-not-found = 작업을 찾을 수 없습니다: { $id }
 errors-services-not-found = 서비스를 찾을 수 없습니다: '{ $name }'
+
+# Chain access
+errors-chain-capability-unavailable = 이 작업에는 자체 RPC 연결이 필요합니다.
+errors-chain-service-signin-required = { -brand } 서비스를 사용하려면 로그인하세요.
+errors-chain-service-scope-missing = 지갑 읽기를 허용하려면 다시 로그인하세요.
+errors-chain-service-busy = { -brand } 서비스가 혼잡합니다. 잠시 후 다시 시도하세요.
+errors-chain-service-daily-limit = 계정이 오늘의 { -brand } 서비스 한도에 도달했습니다.
+errors-chain-service-version = 이 버전은 { -brand } 서비스에 너무 오래되었습니다. { $minimum } 이상으로 업데이트하세요.
+errors-chain-service-refused = { -brand } 서비스가 요청을 거부했습니다.
+errors-chain-service-unreachable = screenerbot.io에 연결할 수 없습니다.
+errors-chain-not-trading-wallet = { -brand } 서비스 모드에서는 트레이딩 지갑만 읽을 수 있습니다.
+errors-chain-access-failed = 블록체인 요청이 실패했습니다.
+errors-chain-access-unchanged = 이 연결은 이미 사용 중입니다.
+errors-chain-access-switch-failed = 연결을 전환하지 못했습니다.

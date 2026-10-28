@@ -323,3 +323,19 @@ shell-theme-light = فاتح
 shell-theme-dark = داكن
 shell-theme-switch-to-light = التبديل إلى السمة الفاتحة
 shell-theme-switch-to-dark = التبديل إلى السمة الداكنة
+
+## Chain access: service mode controls, gates and sign-out
+
+shell-service-control =
+    .aria-label = التداول متوقف مؤقتًا. فتح التفاصيل
+shell-service-action-signin = تسجيل الدخول
+shell-service-action-connection = إضافة RPC
+shell-access-gate-own-rpc-title = يتطلب RPC الخاص بك
+shell-access-gate-watch-wallets = يتابع نسخ التداول ومراقبة المحافظ محافظ أخرى مباشرةً، وهذا ما لا تفعله خدمة { -brand }. تُحفظ مهام النسخ والمحافظ المراقَبة، وتعود عند إضافة RPC.
+shell-access-gate-live-pool-prices = تتطلب أسعار المجمّعات الحية RPC خاصًا بك.
+shell-access-gate-direct-swaps = تتطلب المبادلات المباشرة عبر المجمّعات RPC خاصًا بك.
+shell-access-gate-other-wallets = تتطلب أرصدة المحافظ الأخرى RPC خاصًا بك.
+shell-access-gate-action = فتح إعدادات الاتصال
+shell-signout-service-title = تسجيل الخروج وإيقاف التداول مؤقتًا؟
+shell-signout-service-message = من دون RPC خاص بك، يستخدم { -brand } حسابك لقراءة محفظتك وإرسال الصفقات. ما دمت مسجّل الخروج يبقى التداول متوقفًا مؤقتًا ولا تُباع المراكز المفتوحة.
+shell-signout-service-confirm = تسجيل الخروج والإيقاف المؤقت

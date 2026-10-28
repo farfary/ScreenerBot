@@ -360,7 +360,8 @@ impl From<crate::swaps::NotSubmittedReason> for DirectSwapError {
             | NotSubmittedReason::Halted
             | NotSubmittedReason::RouterUnavailable { .. }
             | NotSubmittedReason::SignerUnavailable { .. }
-            | NotSubmittedReason::QuoteUnusable { .. }) => DirectSwapError::Build {
+            | NotSubmittedReason::QuoteUnusable { .. }
+            | NotSubmittedReason::ServicePaused { .. }) => DirectSwapError::Build {
                 detail: other.to_string(),
             },
         }

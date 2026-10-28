@@ -57,6 +57,9 @@ pub enum Error {
     VerificationFailed { signature: String, detail: String },
     #[error("transaction {signature} is stale ({age_hours}h old)")]
     StaleTransaction { signature: String, age_hours: i64 },
+    /// A page of older history is already being loaded.
+    #[error("older transaction history is already loading")]
+    HistoryLoadInProgress,
 }
 
 /// Result alias for the transactions module.
@@ -80,6 +83,7 @@ impl ErrorClass for Error {
             Error::WalletHistorySync { .. } => true,
             Error::VerificationFailed { .. } => false,
             Error::StaleTransaction { .. } => false,
+            Error::HistoryLoadInProgress => true,
         }
     }
 
@@ -109,6 +113,7 @@ impl ErrorClass for Error {
             Error::WalletHistorySync { .. } => Severity::Error,
             Error::VerificationFailed { .. } => Severity::Critical,
             Error::StaleTransaction { .. } => Severity::Warning,
+            Error::HistoryLoadInProgress => Severity::Info,
         }
     }
 
@@ -128,7 +133,7 @@ impl ErrorClass for Error {
             | Error::WalletHistorySync { .. }
             | Error::VerificationFailed { .. } => 500,
             Error::StaleTransaction { .. } => 409,
-            Error::ServiceAlreadyRunning => 409,
+            Error::ServiceAlreadyRunning | Error::HistoryLoadInProgress => 409,
         }
     }
 }

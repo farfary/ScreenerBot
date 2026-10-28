@@ -11,7 +11,7 @@ onboarding-welcome-custody-description = المفاتيح الخاصة مشفّ�
 onboarding-welcome-engine-title = محرك يعمل دائمًا
 onboarding-welcome-engine-description = خدمات منسّقة مع فحوصات سلامة وتحكم سلس بدورة الحياة.
 onboarding-welcome-realtime-title = بيانات السلسلة الفورية
-onboarding-welcome-realtime-description = حسابات مباشرة لاحتياطيات مجمعات السيولة، وليست لقطات API متأخرة.
+onboarding-welcome-realtime-description = مع RPC الخاص بك تأتي الأسعار مباشرة من احتياطيات مجمعات السيولة، وليست لقطات API متأخرة.
 
 ## Slide: discover
 
@@ -35,7 +35,7 @@ onboarding-trade-auto-description = مقيّمات الدخول/الخروج و�
 onboarding-trade-strategy-title = محرك الاستراتيجيات
 onboarding-trade-strategy-description = أشجار شروط تجمع إشارات السعر وحجم التداول والوقت.
 onboarding-trade-copy-title = نسخ التداول
-onboarding-trade-copy-description = انسخ صفقات المحافظ التي تتابعها. اختبر أي مهمة في الوضع التجريبي قبل أن تنفق { -sol } حقيقيًا.
+onboarding-trade-copy-description = انسخ صفقات المحافظ التي تتابعها (يتطلب RPC خاصًا بك). اختبر أي مهمة في الوضع التجريبي قبل أن تنفق { -sol } حقيقيًا.
 onboarding-trade-safety-title = ضوابط الأمان
 onboarding-trade-safety-description = إيقاف طارئ وحدود خسارة بحسب الفترة ومفاتيح تبديل مستقلة للمراقبين.
 
@@ -55,20 +55,20 @@ onboarding-connect-events-description = كل صفقة ومبادلة وحدث ن
 ## Slide: data
 
 onboarding-data-title = بيانات { -brand }
-onboarding-data-description = نشغّل خدمة مشتركة لبيانات السوق، فلا يتباطأ تثبيتك بسبب حدود معدّل الطلبات لدى المزوّدين العامّين. وهي مجانية مع حساب { -brand }، ويعمل { -brand } من دونه.
-onboarding-data-candles-title = سجل شموع مجمّع
-onboarding-data-candles-description = سبعة أطر زمنية من سجل مشترك بعمق سنوات، يُقدَّم من ذاكرة مؤقتة واحدة.
-onboarding-data-pools-title = مجمعات سيولة محلولة وأمان
-onboarding-data-pools-description = سجل مركزي لمجمعات السيولة وتقارير { -rugcheck } المخزّنة مؤقتًا والمجلوبة مسبقًا.
+onboarding-data-description = يجعل حساب { -brand } المجاني الرسوم البيانية وفحوصات الرموز أسرع. ومع RPC الخاص بك يعمل { -brand } من دونه أيضًا.
+onboarding-data-candles-title = رسوم بيانية سريعة التحميل
+onboarding-data-candles-description = سجل أسعار بسبعة أطر زمنية وبعمق سنوات.
+onboarding-data-pools-title = فحوصات الرموز جاهزة
+onboarding-data-pools-description = مجمعات السيولة وتقارير الأمان لمعظم الرموز، دون انتظار.
 onboarding-data-signin-title = يتطلب حسابًا
 onboarding-data-signin-description = بدون حساب لا تتوفر هذه البيانات ويتم استخدام المزوّدين العامين.
-onboarding-data-reading-title = عمليات البحث فقط
-onboarding-data-reading-description = نرى الرموز التي تبحث عنها فقط. لا مفتاحًا ولا رصيدًا ولا مركزًا ولا صفقة.
+onboarding-data-reading-title = ما الذي نراه
+onboarding-data-reading-description = الرموز التي تبحث عنها، والصفقات التي ترسلها عبر { -brand }. وفي خدمة { -brand } نرى أيضًا أرصدة محفظة التداول وسجلّها. ولا نرى مفتاحك أبدًا.
 
 ## Slide: privacy
 
 onboarding-privacy-title = مفاتيحك، بياناتك
-onboarding-privacy-description = تبقى إعداداتك ومفاتيحك وسجل تداولك على هذا الجهاز. بعد ذلك، اختر «استكشاف لوحة التحكم» للاكتشاف دون بيانات اعتماد، أو اربط محفظة ونقطة اتصال RPC لتفعيل البوت كاملًا، وسجّل الدخول هناك إذا أردت بيانات { -brand }.
+onboarding-privacy-description = تبقى إعداداتك ومفاتيحك وسجل تداولك على هذا الجهاز. بعد ذلك، اختر «استكشاف لوحة التحكم» للاكتشاف دون بيانات اعتماد، أو أنشئ محفظة أو استوردها ثم اربطها عبر RPC الخاص بك أو خدمة { -brand } لبدء التداول.
 onboarding-privacy-local-title = بنية محلية أولًا
 onboarding-privacy-local-description = الإعدادات والتحليلات وقواعد البيانات مخزّنة على حاسوبك.
 onboarding-privacy-wallet-title = محفظة مشفّرة
@@ -81,7 +81,7 @@ onboarding-privacy-config-description = يمكن ضبط معظم الإعداد�
 ## Footer
 
 onboarding-setup-shortcut =
-    .aria-label = الانتقال مباشرة إلى إعداد المحفظة وRPC أو اختيار وضع الاستكشاف
+    .aria-label = الانتقال مباشرة إلى الإعداد أو اختيار وضع الاستكشاف
 onboarding-setup-shortcut-label = الانتقال إلى الإعداد
 onboarding-progress-dot =
     .aria-label = الانتقال إلى الشريحة { $number }

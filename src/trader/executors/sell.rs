@@ -6,7 +6,8 @@
 use crate::logger::{self, LogTag};
 use crate::positions;
 use crate::trader::constants::{MAX_EXIT_SHARE_PCT, MIN_EXIT_SHARE_PCT};
-use crate::trader::types::{TradeDecision, TradeReason, TradeResult, TradeStep};
+use crate::trader::types::{TradeDecision, TradeResult, TradeStep};
+use crate::trader::TradeReason;
 
 /// How much of a position a sell decision actually liquidates.
 #[derive(Debug, Clone, Copy, PartialEq)]

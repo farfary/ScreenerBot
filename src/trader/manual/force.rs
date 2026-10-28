@@ -9,7 +9,8 @@ use crate::positions;
 use crate::trader::actions::ManualSellAction;
 use crate::trader::error::Error;
 use crate::trader::executors;
-use crate::trader::types::{TradeAction, TradeDecision, TradePriority, TradeReason, TradeResult};
+use crate::trader::types::{TradeAction, TradeDecision, TradePriority, TradeResult};
+use crate::trader::TradeReason;
 
 use super::detach::detached;
 use chrono::Utc;

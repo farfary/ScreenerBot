@@ -252,7 +252,7 @@ test("Add wallet is the one primary, and the list marks its current task plainly
   await page.waitForSelector(PAGE_READY);
   await page.waitForSelector('.copy-row[aria-current="true"]');
 
-  const primaries = await page.$$eval(".copy-toolbar .btn-primary", (nodes) =>
+  const primaries = await page.$$eval(".page-toolbar .btn-primary", (nodes) =>
     nodes.filter((node) => !node.hidden).map((node) => node.id)
   );
   assert.deepEqual(primaries, ["copy-add"]);

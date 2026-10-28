@@ -318,3 +318,19 @@ shell-theme-light = ライト
 shell-theme-dark = ダーク
 shell-theme-switch-to-light = ライトテーマに切り替え
 shell-theme-switch-to-dark = ダークテーマに切り替え
+
+## Chain access: service mode controls, gates and sign-out
+
+shell-service-control =
+    .aria-label = 取引を一時停止中。詳細を開く
+shell-service-action-signin = サインイン
+shell-service-action-connection = RPC を追加
+shell-access-gate-own-rpc-title = 独自の RPC が必要
+shell-access-gate-watch-wallets = コピートレードとウォレットのウォッチは他のウォレットをリアルタイムで追跡しますが、{ -brand } サービスはこれに対応していません。コピータスクとウォッチ中のウォレットは保持され、RPC を追加すると戻ります。
+shell-access-gate-live-pool-prices = ライブのプール価格には独自の RPC が必要です。
+shell-access-gate-direct-swaps = プールへの直接スワップには独自の RPC が必要です。
+shell-access-gate-other-wallets = 他のウォレットの残高には独自の RPC が必要です。
+shell-access-gate-action = 接続設定を開く
+shell-signout-service-title = サインアウトして取引を一時停止しますか？
+shell-signout-service-message = 独自の RPC がない場合、{ -brand } はアカウントを使ってウォレットを読み取り、取引を送信します。サインアウト中は取引が一時停止し、保有中のポジションは売却されません。
+shell-signout-service-confirm = サインアウトして一時停止

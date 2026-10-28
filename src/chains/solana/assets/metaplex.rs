@@ -6,8 +6,8 @@
 //! Derives the metadata PDA, fetches the account data, and deserializes it.
 //! Also fetches the off-chain JSON metadata to get the image URL.
 
+use crate::chains::solana::access::{chain_access, MintLookup, TokenMetadata};
 use crate::chains::solana::constants::METAPLEX_PROGRAM_ID;
-use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 use crate::chains::solana::solana_sdk::pubkey::Pubkey;
 use crate::logger::{self, LogTag};
 use serde::{Deserialize, Serialize};
@@ -268,28 +268,37 @@ async fn fetch_json_metadata(uri: &str) -> Result<JsonMetadata, NftMetadataError
 // PUBLIC API
 // ============================================================================
 
-/// Fetches NFT metadata for a single mint
-pub async fn fetch_nft_metadata(mint: &str) -> Result<NftMetadata, NftMetadataError> {
-    let mint_pubkey =
-        Pubkey::from_str(mint).map_err(|e| NftMetadataError::InvalidMint(e.to_string()))?;
+/// The Metaplex metadata account of `mint`, `None` when the program id does
+/// not parse.
+pub(crate) fn metadata_address(mint: &Pubkey) -> Option<Pubkey> {
+    derive_metadata_pda(mint).ok()
+}
 
-    // Derive metadata PDA
-    let metadata_pda = derive_metadata_pda(&mint_pubkey)?;
+/// Name, symbol and URI of a Metaplex metadata account, `None` when the data
+/// is not a version-1 metadata account.
+pub(crate) fn decode_metadata_account(data: &[u8]) -> Option<TokenMetadata> {
+    deserialize_metadata(data)
+        .ok()
+        .map(|on_chain| TokenMetadata {
+            name: on_chain.name,
+            symbol: on_chain.symbol,
+            uri: on_chain.uri,
+        })
+}
 
-    // Fetch account data from RPC
-    let rpc_client = get_rpc_client();
-    let account = rpc_client
-        .get_account(&metadata_pda)
-        .await
-        .map_err(|e| NftMetadataError::RpcError(e.to_string()))?
-        .ok_or_else(|| NftMetadataError::AccountNotFound(metadata_pda.to_string()))?;
+/// The display metadata of one mint from its looked-up facts, with the image
+/// URL read from the off-chain JSON.
+async fn nft_metadata(mint: &str, lookup: MintLookup) -> Result<NftMetadata, NftMetadataError> {
+    let metadata = match lookup {
+        MintLookup::Mint(facts) => facts.metadata,
+        MintLookup::Absent | MintLookup::NotAMint { .. } => None,
+    }
+    .ok_or_else(|| NftMetadataError::AccountNotFound("Metadata account not found".to_owned()))?;
 
-    // Deserialize on-chain metadata
-    let on_chain = deserialize_metadata(&account.data)?;
-
-    // Fetch JSON metadata for image URL
-    let image_url = if !on_chain.uri.is_empty() {
-        match fetch_json_metadata(&on_chain.uri).await {
+    let image_url = if metadata.uri.is_empty() {
+        None
+    } else {
+        match fetch_json_metadata(&metadata.uri).await {
             Ok(json) => json.image,
             Err(e) => {
                 logger::debug(
@@ -299,29 +308,28 @@ pub async fn fetch_nft_metadata(mint: &str) -> Result<NftMetadata, NftMetadataEr
                 None
             }
         }
-    } else {
-        None
     };
+    let non_empty = |value: String| (!value.is_empty()).then_some(value);
 
     Ok(NftMetadata {
         mint: mint.to_string(),
-        name: if on_chain.name.is_empty() {
-            None
-        } else {
-            Some(on_chain.name)
-        },
-        symbol: if on_chain.symbol.is_empty() {
-            None
-        } else {
-            Some(on_chain.symbol)
-        },
-        uri: if on_chain.uri.is_empty() {
-            None
-        } else {
-            Some(on_chain.uri)
-        },
+        name: non_empty(metadata.name),
+        symbol: non_empty(metadata.symbol),
+        uri: non_empty(metadata.uri),
         image_url,
     })
+}
+
+/// Fetches NFT metadata for a single mint
+pub async fn fetch_nft_metadata(mint: &str) -> Result<NftMetadata, NftMetadataError> {
+    Pubkey::from_str(mint).map_err(|e| NftMetadataError::InvalidMint(e.to_string()))?;
+    let lookup = chain_access()
+        .mints(&[mint.to_owned()], true)
+        .await
+        .map_err(|e| NftMetadataError::RpcError(e.to_string()))?
+        .pop()
+        .unwrap_or(MintLookup::Absent);
+    nft_metadata(mint, lookup).await
 }
 
 /// Fetches NFT metadata for multiple mints in batch
@@ -340,115 +348,33 @@ pub async fn fetch_nft_metadata_batch(
         &format!("Fetching metadata for {} NFTs", mints.len()),
     );
 
-    // Parse all mints and derive PDAs
-    let mut pda_to_mint: HashMap<Pubkey, String> = HashMap::new();
-    let mut failed_mints: Vec<(String, NftMetadataError)> = Vec::new();
-
+    let mut valid: Vec<String> = Vec::with_capacity(mints.len());
     for mint in mints {
         match Pubkey::from_str(mint) {
-            Ok(mint_pubkey) => match derive_metadata_pda(&mint_pubkey) {
-                Ok(pda) => {
-                    pda_to_mint.insert(pda, mint.clone());
-                }
-                Err(e) => {
-                    failed_mints.push((mint.clone(), e));
-                }
-            },
+            Ok(_) => valid.push(mint.clone()),
             Err(e) => {
-                failed_mints.push((mint.clone(), NftMetadataError::InvalidMint(e.to_string())));
+                results.insert(
+                    mint.clone(),
+                    Err(NftMetadataError::InvalidMint(e.to_string())),
+                );
             }
         }
     }
 
-    // Add failed mints to results
-    for (mint, err) in failed_mints {
-        results.insert(mint, Err(err));
-    }
-
-    if pda_to_mint.is_empty() {
+    if valid.is_empty() {
         return results;
     }
 
-    // Batch fetch accounts (max 100 at a time for RPC limits)
-    let rpc_client = get_rpc_client();
-    let pdas: Vec<Pubkey> = pda_to_mint.keys().cloned().collect();
-
-    for chunk in pdas.chunks(50) {
-        match rpc_client.get_multiple_accounts(chunk).await {
-            Ok(accounts) => {
-                for (i, account_opt) in accounts.iter().enumerate() {
-                    let pda = &chunk[i];
-                    let mint = pda_to_mint
-                        .get(pda)
-                        .expect("pda should exist in map")
-                        .clone();
-
-                    match account_opt {
-                        Some(account) => {
-                            // Deserialize on-chain metadata
-                            match deserialize_metadata(&account.data) {
-                                Ok(on_chain) => {
-                                    // Fetch JSON metadata (async, but we'll do it inline for simplicity)
-                                    let image_url = if !on_chain.uri.is_empty() {
-                                        match fetch_json_metadata(&on_chain.uri).await {
-                                            Ok(json) => json.image,
-                                            Err(_) => None,
-                                        }
-                                    } else {
-                                        None
-                                    };
-
-                                    results.insert(
-                                        mint,
-                                        Ok(NftMetadata {
-                                            mint: pda_to_mint
-                                                .get(pda)
-                                                .expect("pda should exist in map")
-                                                .clone(),
-                                            name: if on_chain.name.is_empty() {
-                                                None
-                                            } else {
-                                                Some(on_chain.name)
-                                            },
-                                            symbol: if on_chain.symbol.is_empty() {
-                                                None
-                                            } else {
-                                                Some(on_chain.symbol)
-                                            },
-                                            uri: if on_chain.uri.is_empty() {
-                                                None
-                                            } else {
-                                                Some(on_chain.uri)
-                                            },
-                                            image_url,
-                                        }),
-                                    );
-                                }
-                                Err(e) => {
-                                    results.insert(mint, Err(e));
-                                }
-                            }
-                        }
-                        None => {
-                            results.insert(
-                                mint,
-                                Err(NftMetadataError::AccountNotFound(
-                                    "Metadata account not found".to_owned(),
-                                )),
-                            );
-                        }
-                    }
-                }
+    match chain_access().mints(&valid, true).await {
+        Ok(lookups) => {
+            for (mint, lookup) in valid.into_iter().zip(lookups) {
+                let metadata = nft_metadata(&mint, lookup).await;
+                results.insert(mint, metadata);
             }
-            Err(e) => {
-                // Mark all mints in this chunk as failed
-                for pda in chunk {
-                    let mint = pda_to_mint
-                        .get(pda)
-                        .expect("pda should exist in map")
-                        .clone();
-                    results.insert(mint, Err(NftMetadataError::RpcError(e.to_string())));
-                }
+        }
+        Err(e) => {
+            for mint in valid {
+                results.insert(mint, Err(NftMetadataError::RpcError(e.to_string())));
             }
         }
     }

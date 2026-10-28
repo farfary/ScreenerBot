@@ -40,7 +40,7 @@ errors-account-signin-refused = { $reason }
 errors-account-signin-unavailable = Fitur masuk tidak tersedia
 errors-account-credentials-required = Masukkan alamat email dan kata sandi Anda.
 errors-account-signout-failed = Gagal keluar
-errors-account-gateway-update-failed = Tidak dapat memperbarui pengaturan gateway
+errors-account-gateway-update-failed = Tidak dapat memperbarui pengaturan pengiriman transaksi
 
 errors-i18n-locale-not-registered = Locale tidak terdaftar
 errors-i18n-catalog-encode-failed = Katalog tidak dapat di-encode
@@ -117,6 +117,8 @@ errors-transactions-own-wallet-unavailable = Dompet utama belum dikonfigurasi
 errors-transactions-invalid-subject = Subjek transaksi bukan alamat Solana yang valid
 errors-transactions-subject-not-watched = Subjek transaksi bukan dompet yang dipantau
 errors-transactions-watch-store-unavailable = Dompet yang dipantau tidak tersedia
+errors-transactions-history-loading = Transaksi yang lebih lama sedang dimuat.
+errors-transactions-history-load-failed = Transaksi yang lebih lama tidak dapat dimuat.
 
 errors-wallet-unavailable = Dompet utama tidak tersedia
 errors-wallet-changed = Dompet utama berubah; muat ulang lalu coba lagi
@@ -384,3 +386,17 @@ errors-tokens-search-failed = Pencarian token gagal
 
 errors-actions-not-found = Aksi { $id } tidak ditemukan
 errors-services-not-found = Layanan '{ $name }' tidak ditemukan
+
+# Chain access
+errors-chain-capability-unavailable = Ini memerlukan koneksi RPC Anda sendiri.
+errors-chain-service-signin-required = Masuk untuk menggunakan layanan { -brand }.
+errors-chain-service-scope-missing = Masuk lagi untuk mengizinkan pembacaan dompet.
+errors-chain-service-busy = Layanan { -brand } sedang sibuk. Coba lagi sebentar lagi.
+errors-chain-service-daily-limit = Akun Anda telah mencapai batas hari ini untuk layanan { -brand }.
+errors-chain-service-version = Versi ini terlalu lama untuk layanan { -brand }. Perbarui ke { $minimum } atau yang lebih baru.
+errors-chain-service-refused = Layanan { -brand } menolak permintaan.
+errors-chain-service-unreachable = screenerbot.io tidak dapat dijangkau.
+errors-chain-not-trading-wallet = Dalam mode layanan { -brand }, hanya dompet trading yang dapat dibaca.
+errors-chain-access-failed = Permintaan ke blockchain gagal.
+errors-chain-access-unchanged = Koneksi ini sudah digunakan.
+errors-chain-access-switch-failed = Koneksi tidak dapat dialihkan.

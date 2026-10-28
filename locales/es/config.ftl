@@ -5,8 +5,8 @@ config-account-auto-wallet-signin = Iniciar sesión automáticamente con mi bill
 config-account-refresh-margin-secs = Margen de renovación del token
     .hint = Con cuánta antelación se renueva el token de sesión antes de que caduque. Cámbialo solo si estás depurando la autenticación.
     .unit = s
-config-account-use-gateway-rpc = Usar el RPC de { -brand } para enviar transacciones
-    .hint = Difunde las transacciones de swap firmadas a través de screenerbot.io en lugar de tu propio RPC. La firma siempre se hace en este equipo; el servidor no puede alterar una transacción firmada. Tu propio RPC sigue siendo necesario para los datos de precios.
+config-account-use-gateway-rpc = Enviar transacciones a través de { -brand }
+    .hint = Con la sesión iniciada, difunde a través de screenerbot.io los swaps que firmas en este ordenador. La firma siempre ocurre aquí y una transacción firmada no se puede modificar. Siempre activo en el modo servicio de { -brand }.
 
 ## agent_control
 

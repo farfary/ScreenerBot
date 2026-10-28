@@ -115,6 +115,8 @@ pub fn live_wallet_snapshot() -> Option<Arc<WalletSnapshot>> {
 /// Cheap, sync and idempotent — call it from any hot path that knows the wallet just
 /// changed. Requests are coalesced, so hammering it is harmless.
 pub fn request_balance_refresh() {
+    // A cached chain-access balance predates the change: the next read is fresh.
+    crate::chains::access::wallet_changed();
     // `notify_one` STORES a permit when no one is waiting, so a request raised while
     // the monitor is mid-collection is not lost — the next wait returns immediately.
     REFRESH_NOTIFY.notify_one();
@@ -156,14 +158,14 @@ pub fn get_held_mints() -> Vec<String> {
         .unwrap_or_default()
 }
 
-/// The live pool price of a mint, when the pool service holds a fresh positive one.
-fn live_pool_price(mint: &str) -> Option<f64> {
-    crate::pools::get_pool_price(crate::chains::active_chain(), mint)
+/// The trading price of a mint (`price_resolution::cached_trading_price`), positive and
+/// finite.
+fn trading_price(mint: &str) -> Option<f64> {
+    crate::positions::price_resolution::cached_trading_price(crate::chains::active_chain(), mint)
         .map(|price| price.price_native)
-        .filter(|price| price.is_finite() && *price > 0.0)
 }
 
-/// Price one held token in SOL: live pool price first, the snapshot's market price
+/// Price one held token in SOL: trading price first, the snapshot's market price
 /// second. `None` when neither knows it — the caller must count it as unpriced, never
 /// as zero-value-but-priced. Persisted snapshots value holdings with this same rule,
 /// so the trend line plots the quantity the headline shows.
@@ -210,7 +212,7 @@ pub(super) fn value_collected_snapshot(
     snapshot: &WalletSnapshot,
     market_prices: &MarketPrices,
 ) -> WalletWorth {
-    value_snapshot(snapshot, market_prices, live_pool_price)
+    value_snapshot(snapshot, market_prices, trading_price)
 }
 
 /// The price in SOL the live worth assigns to one held mint right now, or `None` when
@@ -218,15 +220,15 @@ pub(super) fn value_collected_snapshot(
 /// prices them through this, so the rows sum to the headline.
 pub fn held_token_price_native(mint: &str) -> Option<f64> {
     match LIVE_SNAPSHOT.load().as_ref() {
-        Some(live) => price_token_native(mint, &live.market_prices, live_pool_price),
-        None => live_pool_price(mint),
+        Some(live) => price_token_native(mint, &live.market_prices, trading_price),
+        None => trading_price(mint),
     }
 }
 
 /// The wallet's full worth, priced now. See the module doc.
 pub fn get_wallet_worth() -> WalletWorth {
     match LIVE_SNAPSHOT.load_full() {
-        Some(live) => value_snapshot(&live.snapshot, &live.market_prices, live_pool_price),
+        Some(live) => value_snapshot(&live.snapshot, &live.market_prices, trading_price),
         None => WalletWorth::default(),
     }
 }

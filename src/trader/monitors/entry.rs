@@ -5,7 +5,9 @@
 //!
 //! This module handles:
 //! - Monitoring loop and timing
-//! - Filtered-token intersection with available pool tokens
+//! - Filtered-token intersection with available pool tokens (every filtered token on an
+//!   install without live pool prices, priced per token by `price_resolution::entry_price`)
+//! - No entry on a chain whose access service is not ready
 //! - Concurrency control via semaphore
 //! - Calling evaluators for entry logic
 //! - Delegating to `trader::entry` for reservation and submission: live decisions in the
@@ -19,8 +21,7 @@
 use crate::chains::{ChainId, ChainScope};
 use crate::i18n::{ids, UiText};
 use crate::logger::{self, LogTag};
-use crate::pools;
-use crate::positions::Book;
+use crate::positions::{price_resolution, Book};
 use crate::trader::paper::TradingMode;
 use crate::trader::types::{EntryDecisions, TradeDecision};
 use crate::trader::{config, constants, entry, evaluators};
@@ -55,6 +56,7 @@ pub async fn monitor_entries(
     let semaphore = std::sync::Arc::new(tokio::sync::Semaphore::new(entry_check_concurrency));
 
     let mut was_paused = false; // Track paused state
+    let mut access_paused: HashSet<ChainId> = HashSet::new();
     let mut paper_batch = PaperBatch::new("entry");
 
     loop {
@@ -120,15 +122,28 @@ pub async fn monitor_entries(
         let mut pool_count = 0;
         let mut available_tokens: Vec<(ChainId, String)> = Vec::new();
         for chain in ChainScope::All.chains() {
-            let pool_tokens = pools::get_available_tokens(chain);
-            pool_count += pool_tokens.len();
-            if let Some(passed) = passed_by_chain.get(&chain) {
-                available_tokens.extend(
-                    pool_tokens
+            if !access_allows_entries(chain, &mut access_paused) {
+                continue;
+            }
+            let passed = passed_by_chain.get(&chain);
+            match price_resolution::live_priced_mints(chain) {
+                Some(pool_tokens) => {
+                    pool_count += pool_tokens.len();
+                    if let Some(passed) = passed {
+                        available_tokens.extend(
+                            pool_tokens
+                                .into_iter()
+                                .filter(|mint| passed.contains(mint))
+                                .map(|mint| (chain, mint)),
+                        );
+                    }
+                }
+                None => available_tokens.extend(
+                    passed
                         .into_iter()
-                        .filter(|mint| passed.contains(mint))
-                        .map(|mint| (chain, mint)),
-                );
+                        .flatten()
+                        .map(|mint| (chain, mint.clone())),
+                ),
             }
         }
 
@@ -174,12 +189,12 @@ pub async fn monitor_entries(
 
         if let Some(cycle_inputs) = &cycle_inputs {
             for (chain, token) in &available_tokens {
-                // A token without a pool price cannot be evaluated, so it takes no
+                // A token without an entry price cannot be evaluated, so it takes no
                 // reservation at all.
-                let Some(price_info) = pools::get_pool_price(*chain, token) else {
+                let Some(price_info) = price_resolution::entry_price(*chain, token).await else {
                     logger::debug(
                         LogTag::Trader,
-                        &format!("Token {token} has no pool price, skipping entry evaluation"),
+                        &format!("Token {token} has no entry price, skipping entry evaluation"),
                     );
                     continue;
                 };
@@ -322,6 +337,29 @@ pub async fn monitor_entries(
 
 /// The books a token is evaluated on: the `wanted` modes, with live dropped unless the
 /// token's live reservation was taken.
+/// Whether `chain` takes new entries: only while its chain access service is
+/// ready (always under own-RPC access). Logs each change once, tracked in
+/// `paused`.
+fn access_allows_entries(chain: ChainId, paused: &mut HashSet<ChainId>) -> bool {
+    let state = crate::chains::access::service_state(chain);
+    if state.ready() {
+        if paused.remove(&chain) {
+            logger::info(
+                LogTag::Trader,
+                &format!("Entries on {chain} resume: chain access is ready"),
+            );
+        }
+        return true;
+    }
+    if paused.insert(chain) {
+        logger::warning(
+            LogTag::Trader,
+            &format!("Entries on {chain} paused: chain access is {}", state.key()),
+        );
+    }
+    false
+}
+
 fn evaluation_books(wanted: &[TradingMode], live_reserved: bool) -> Vec<TradingMode> {
     wanted
         .iter()
@@ -393,7 +431,8 @@ async fn launch_paper_entries(batch: &mut PaperBatch, decisions: Vec<TradeDecisi
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::trader::types::{TradeAction, TradePriority, TradeReason};
+    use crate::trader::types::{TradeAction, TradePriority};
+    use crate::trader::TradeReason;
     use TradingMode::{Live, Paper};
 
     fn decision(book: Book) -> TradeDecision {

@@ -39,6 +39,8 @@ pub struct BootStatusResponse {
     pub phase: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub retry_after_ms: Option<u64>,
+    /// The active chain's access: mode, service state and capabilities.
+    pub chain_access: crate::chains::access::ChainAccessStatus,
 }
 
 #[derive(Debug, Serialize)]

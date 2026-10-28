@@ -3,11 +3,10 @@
 
 //! Internal helper functions for ATA operations.
 
+use crate::chains::solana::access::chain_access;
 use crate::chains::solana::constants::TOKEN_2022_PROGRAM_ID;
-use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 use crate::chains::solana::solana_sdk::pubkey::Pubkey;
 use crate::chains::solana::solana_sdk::{
-    commitment_config::CommitmentLevel,
     instruction::{AccountMeta, Instruction},
     transaction::Transaction,
 };
@@ -47,11 +46,9 @@ pub(super) async fn get_associated_token_account(
     wallet_address: &str,
     mint: &str,
 ) -> Result<String> {
-    let rpc_client = get_rpc_client();
-    rpc_client
-        .get_associated_token_account(wallet_address, mint)
+    chain_access()
+        .associated_token_account(wallet_address, mint)
         .await
-        .map_err(Error::from)
 }
 
 /// Closes ATA using proper Solana SDK for real ATA closing
@@ -103,7 +100,7 @@ pub(super) async fn close_ata(
                     "Token account validation failed".to_owned(),
                 )
             })?;
-            let exists = get_rpc_client().get_account(&pubkey).await?.is_some();
+            let exists = chain_access().account_exists(&pubkey).await?;
             if !exists {
                 return Err(crate::chains::solana::Error::AccountNotFound {
                     address: token_account.to_owned(),
@@ -260,11 +257,7 @@ async fn build_and_send_close_instruction(
         "ATA_BLOCKHASH: fetching recent blockhash via RPC",
     );
 
-    let rpc_client = get_rpc_client();
-    let (recent_blockhash, last_valid_block_height) = rpc_client
-        .get_latest_blockhash_with_commitment(CommitmentLevel::Confirmed)
-        .await
-        .map_err(Error::from)?;
+    let (recent_blockhash, last_valid_block_height) = chain_access().latest_blockhash().await?;
 
     logger::debug(
         LogTag::Wallet,

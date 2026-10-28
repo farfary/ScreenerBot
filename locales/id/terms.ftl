@@ -123,6 +123,7 @@
 
 -brand = ScreenerBot
 -sol = SOL
+-solana = Solana
 -dexscreener = DexScreener
 -birdeye = Birdeye
 -photon = Photon

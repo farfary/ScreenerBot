@@ -30,12 +30,18 @@ pub const DEFAULT_PAGE_BUDGET: usize = MAX_PAGES;
 pub const MAX_PAGE_BUDGET: usize = 50;
 
 /// Resolve baseline versus escalated polling without duplicating the state rule in
-/// service code or tests.
-pub fn cadence_secs(connected: bool, baseline_secs: u64, fallback_secs: u64) -> u64 {
-    if connected {
-        baseline_secs.max(1)
-    } else {
-        fallback_secs.max(1)
+/// service code or tests. `None` while a connected transport needs no baseline poll
+/// (`WalletWatchRuntime::polls_while_connected`).
+pub fn cadence_secs(
+    connected: bool,
+    polls_while_connected: bool,
+    baseline_secs: u64,
+    fallback_secs: u64,
+) -> Option<u64> {
+    match (connected, polls_while_connected) {
+        (true, true) => Some(baseline_secs.max(1)),
+        (true, false) => None,
+        (false, _) => Some(fallback_secs.max(1)),
     }
 }
 
@@ -284,8 +290,14 @@ mod tests {
 
     #[test]
     fn cadence_and_gap_fill_follow_connection_state() {
-        assert_eq!(cadence_secs(true, 30, 3), 30);
-        assert_eq!(cadence_secs(false, 30, 3), 3);
+        assert_eq!(cadence_secs(true, true, 30, 3), Some(30));
+        assert_eq!(cadence_secs(false, true, 30, 3), Some(3));
+        assert_eq!(
+            cadence_secs(true, false, 30, 3),
+            None,
+            "a connected stream that gap-fills on every notification is never polled"
+        );
+        assert_eq!(cadence_secs(false, false, 30, 3), Some(3));
         assert!(needs_gap_fill(true, false, false));
         assert!(needs_gap_fill(false, false, true));
         assert!(!needs_gap_fill(false, true, true));

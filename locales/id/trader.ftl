@@ -1,17 +1,5 @@
 # Trader page labels.
 
-trader-exit-type-stop-loss = Stop Loss
-trader-exit-type-take-profit = Take Profit
-trader-exit-type-roi = Take Profit
-trader-exit-type-roi-exit = Take Profit
-trader-exit-type-trailing-stop = Trailing Stop
-trader-exit-type-time-override = Exit Waktu
-trader-exit-type-time-rule = Aturan Waktu
-trader-exit-type-manual = Manual
-trader-exit-type-manual-close = Manual
-trader-exit-type-dca = DCA
-trader-exit-type-unknown = Tidak diketahui
-
 trader-tab-stats = Statistik
 trader-tab-strategies = Strategi
 trader-tab-stop-loss = Stop Loss
@@ -28,32 +16,41 @@ trader-feature-disabled = Nonaktif
     .message = Fitur ini sedang dinonaktifkan.
 
 trader-status-title = Auto Trader
-trader-status-loading = Memuat...
 trader-status-running = Berjalan
 trader-status-stopped = Berhenti
 trader-status-setup-required = Perlu penyiapan
 trader-setup-action = Selesaikan penyiapan
-trader-toggle-on = AKTIF
-trader-toggle-off = NONAKTIF
 trader-toggle-start-failed = Gagal memulai trader
 trader-toggle-stop-failed = Gagal menghentikan trader
-trader-controls-title = Kontrol Trading
 trader-halt-title = Trading dihentikan
 trader-halt-reason-default = Penghentian paksa manual
 trader-halt-resume = Lanjutkan
 trader-monitor-entry = Monitor Entry
 trader-monitor-exit = Monitor Exit
-trader-monitor-master-off = Auto Trader nonaktif
 trader-loss-limit-title = Batas Kerugian Periode
 trader-loss-limit-resume = Lanjutkan trading
 trader-loss-limit-reset = Reset periode
 trader-loss-limit-off = Nonaktif
-trader-loss-limit-none = Batas kerugian periode belum dikonfigurasi
 trader-loss-limit-resets-in = Direset dalam { $hours } { $minutes }
-trader-loss-limit-reached = BATAS TERCAPAI
 trader-force-stop = Hentikan Paksa Semuanya
 trader-force-stop-hint = Menghentikan semua monitor, tugas salin, dan trade sekaligus.
 trader-force-stop-idle = Tidak ada yang berjalan untuk dihentikan oleh hentian paksa.
+trader-run-state-force-stopped = Dihentikan paksa
+trader-run-state-waiting = Menunggu layanan
+trader-run-state-idle = Monitor mati
+trader-entries-label = Entry baru
+trader-entries-open = Terbuka
+trader-entries-monitor-off = Monitor Entry mati
+trader-entries-no-live-strategy = Tidak ada strategi entry live
+trader-entries-no-paper-strategy = Tidak ada strategi entry paper
+trader-action-start = Mulai Auto Trader
+trader-action-stop = Hentikan Auto Trader
+trader-notice-loss-limit = Batas kerugian tercapai
+trader-notice-loss-limit-message = Entry live baru dijeda sampai periode direset. Exit tetap berjalan.
+trader-notice-stats-failed = Statistik tidak dapat dimuat
+trader-controls-group =
+    .aria-label = Kontrol trading
+trader-monitor-dormant = Mulai bersama Auto Trader
 
 trader-force-stop-confirm = Hentikan Paksa Trading
     .message = Ini akan langsung menghentikan SEMUA operasi trading. Lanjutkan?
@@ -85,27 +82,33 @@ trader-stats-window =
     .aria-label = Jendela statistik
 trader-stats-book =
     .aria-label = Buku trading
-trader-paper-run-since = Putaran paper sejak { $date }
-trader-paper-start = Awal
-trader-paper-cash = Kas
-trader-paper-open = Terbuka
-trader-paper-unrealized = Belum terealisasi
+trader-exposure-cash = Kas
+trader-exposure-open = Terbuka
+trader-exposure-unrealized = Belum terealisasi
+trader-exposure-open-title = Posisi yang memakai slot, dari batas posisi terbuka
+trader-exposure-in-use = Terpakai
+trader-exposure-in-use-title = { -sol } yang terpakai di posisi terbuka
+# $amount is the formatted count.
+trader-exposure-unpriced =
+    { $count ->
+       *[other] { $amount } posisi terbuka belum punya harga live
+    }
+# $date is a formatted date; $amount is a formatted SOL amount.
+trader-exposure-cash-title = Putaran paper sejak { $date } · dimulai dengan { $amount }
 trader-paper-reset = Atur ulang putaran paper
 trader-paper-reset-title = Atur ulang putaran paper?
 trader-paper-reset-run-message = Setiap posisi paper yang terbuka, termasuk kepemilikan paper tugas salin, ditutup pada harga saat ini dan putaran baru dimulai dengan saldo awal yang diatur. Putaran sebelumnya tetap ada di riwayat.
 trader-paper-reset-done = Putaran paper baru dimulai
 trader-paper-reset-failed = Putaran paper tidak dapat diatur ulang
-trader-paper-account-failed = Putaran paper tidak dapat dimuat
 trader-realized-title = Performa Terealisasi
 trader-metric-net-pnl = P&L Bersih
 trader-metric-win-rate = Win Rate
 trader-metric-profit-factor = Profit Factor
 trader-metric-max-drawdown = Drawdown Maks
-trader-metric-capital = Modal yang Bekerja
 trader-metric-avg-win-loss = Rata-rata Menang / Kalah
 trader-metric-closed-trades = Trade Tertutup
 trader-metric-median-hold = Median Durasi Hold
-trader-stats-empty = Tidak ada trade tertutup di jendela ini
+trader-metric-fees = Biaya Jaringan
 trader-stats-won-lost = { $won } menang · { $lost } kalah
 trader-stats-record = { $wins } · { $losses }
 trader-stats-wins =
@@ -119,45 +122,80 @@ trader-stats-losses =
 trader-stats-expected = { $amount } diharapkan per trade
 trader-stats-profit-factor-basis = Total menang ÷ total kalah
 trader-stats-drawdown-basis = Penurunan terdalam dari puncak ke dasar yang terealisasi
-trader-stats-slots =
-    { $count ->
-       *[other] { $used } dari { $max } slot posisi terpakai
-    }
-trader-stats-avg-basis = Rata-rata hasil trade menang vs kalah
-trader-stats-closed =
-    { $count ->
-       *[other] { $amount } posisi ditutup
-    }
-trader-stats-hold-average = rata-rata { $span }
 trader-stats-excluded =
     { $count ->
-       *[other] { $amount } putaran tertutup dikecualikan — tidak ada harga pokok lengkap, sehingga tidak ada P&L yang akurat.
+       *[other] { $amount } trade tertutup tidak dihitung: harga pokoknya tidak lengkap, jadi P&L-nya tidak diketahui.
     }
+# $ratio is a formatted ratio.
+trader-stats-payoff = Payoff { $ratio }
+trader-stats-streak-win =
+    { $count ->
+       *[other] { $amount } menang beruntun
+    }
+trader-stats-streak-loss =
+    { $count ->
+       *[other] { $amount } kalah beruntun
+    }
+# $wins and $losses are formatted durations.
+trader-stats-hold-split = Menang { $wins } · kalah { $losses }
+trader-stats-fees-basis = Termasuk dalam P&L bersih
+trader-stats-loading = Memuat statistik...
+trader-open-strategies = Buka Strategi
 
 trader-daily-title = P&L Harian
 trader-daily-subtitle = { -sol } terealisasi per hari, beserta total berjalan
-trader-daily-loading = Memuat P&L harian...
 trader-daily-chart = Untung rugi terealisasi harian dalam { -sol }
 trader-weekly-title = P&L Mingguan
 trader-weekly-subtitle = { -sol } terealisasi per minggu ISO, beserta total berjalan
 trader-weekly-chart = Untung rugi terealisasi mingguan dalam { -sol }
+# $date is a formatted date; $pnl a signed SOL amount.
+trader-daily-bar =
+    { $count ->
+       *[other] { $date } · { $pnl } · { $amount } trade
+    }
+trader-weekly-bar =
+    { $count ->
+       *[other] Minggu { $date } · { $pnl } · { $amount } trade
+    }
 trader-extreme-best = Trade terbaik
 trader-extreme-worst = Trade terburuk
+trader-extreme-runs = Terbanyak berturut-turut
+trader-outcome-title = Hasil Trade
+trader-outcome-subtitle = Trade tertutup menurut return, dalam persen
+# $value, $from and $to are formatted signed percentages.
+trader-outcome-below = Di bawah { $value }
+trader-outcome-range = { $from } sampai { $to }
+trader-outcome-above = { $value } atau lebih
+# $range is one of the three messages above; $pnl a signed SOL amount.
+trader-outcome-bucket =
+    { $count ->
+       *[other] { $range } · { $amount } trade · { $pnl }
+    }
 
-trader-exit-title = Rincian Strategi Exit
-trader-exit-subtitle = Cara posisi ditutup, dan hasil dari setiap exit
-trader-exit-loading = Memuat data exit...
-trader-exit-empty-day = Tidak ada trade tertutup dalam 24 jam terakhir
-trader-exit-empty-all = Belum ada trade tertutup
-trader-exit-empty-days =
+trader-stats-empty-day = Tidak ada trade tertutup dalam 24 jam terakhir
+trader-stats-empty-all = Belum ada trade tertutup
+trader-stats-empty-hint = Trade tertutup muncul di sini setelah posisi terjual. Mulai Auto Trader, atau pilih periode yang lebih panjang.
+trader-stats-empty-days =
     { $count ->
        *[other] Tidak ada trade tertutup dalam { $amount } hari terakhir
     }
-trader-exit-share =
-    { $count ->
-       *[other] { $amount } trade · { $share } dari exit
-    }
-trader-exit-average = rata-rata { $value }
+trader-exits-title = Alasan Exit
+trader-exits-subtitle = Bagaimana trade tertutup berakhir, dan hasil tiap exit
+trader-sources-title = Sumber Entry
+trader-sources-subtitle = Apa yang membuka trade tertutup
+trader-recent-title = Penutupan Terbaru
+trader-recent-subtitle = Trade tertutup terbaru di jendela ini
+trader-column-token = Token
+trader-column-exit = Exit
+trader-column-source = Sumber
+trader-column-trades = Trade
+trader-column-win-rate = Win Rate
+trader-column-avg-return = Rata-rata Return
+trader-column-net-pnl = P&L Bersih
+trader-column-held = Ditahan
+trader-column-closed = Ditutup
+trader-column-pnl = P&L
+trader-column-return = Return
 
 trader-example-how-it-works = Cara Kerja
 trader-step-entry = Entry
@@ -347,3 +385,8 @@ trader-timing-concurrency = Konkurensi Pemeriksaan Entry
 trader-timing-concurrency-hint = Jumlah token yang diperiksa bersamaan (makin tinggi = makin cepat tetapi lebih banyak CPU)
 trader-timing-unit-minutes = mnt
 trader-timing-unit-tokens = token
+
+## Service mode notice
+
+trader-service-notice-title = Berjalan di layanan { -brand }
+trader-service-notice-message = Harga diperbarui setiap beberapa detik, jadi exit cepat seperti trailing stop yang ketat bereaksi lebih lambat dibanding dengan RPC Anda sendiri.

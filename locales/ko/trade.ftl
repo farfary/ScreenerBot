@@ -152,7 +152,7 @@ trade-toast-failed-add = 포지션 추가 매수 실패
 trade-toast-failed-sell = 매도 실패
 
 # Trade and close reasons. Ids are the Debug names of TradeReason
-# (src/trader/types.rs) and the reasons written by src/positions.
+# (src/trader/trade_reason.rs) and the reasons written by src/positions.
 trade-reason-strategy-signal = 전략 시그널
 trade-reason-manual-entry = 수동 진입
 trade-reason-force-buy = 강제 매수
@@ -183,6 +183,22 @@ trade-reason-pending-verification = { $reason } (검증 대기)
 trade-reason-force-closed = 강제 종료: { $note }
 # $reason is a stored closed_reason that has no label; it is shown as stored.
 trade-reason-stored = { $reason }
+trade-reason-unknown = 기록 없음
+trade-reason-force-closed-any = 강제 종료
+
+# Why a new entry was blocked. Ids come from EntryBlock in src/trader/admission.rs.
+trade-entry-block-force-stopped = 거래가 강제 중지되었습니다
+trade-entry-block-loss-limit = 손실 한도로 신규 진입이 차단되었습니다
+trade-entry-block-connectivity = 필요한 서비스를 사용할 수 없습니다
+trade-entry-block-storage-unavailable = 거래 데이터를 사용할 수 없거나 복원 중입니다
+trade-entry-block-position-limit = 보유 포지션 한도에 도달했습니다
+trade-entry-block-already-open = 이미 포지션이 열려 있습니다
+trade-entry-block-reentry-cooldown = 토큰 재진입 쿨다운
+trade-entry-block-open-cooldown = 전체 진입 쿨다운
+trade-entry-block-entry-reserved = 다른 진입을 처리 중입니다
+trade-entry-block-blacklisted = 위험 관리 정책으로 차단된 토큰입니다
+trade-entry-block-paper-balance-exhausted = 모의 잔액이 거래 금액에 부족합니다
+trade-entry-block-check-failed = 안전 점검을 완료하지 못했습니다
 
 # Toast shown when a quick-trade shortcut runs without a token selected (ui/quick_trade_shortcuts.js).
 trade-quick-no-token = 선택된 토큰이 없습니다

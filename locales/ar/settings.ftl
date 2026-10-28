@@ -42,6 +42,7 @@ settings-dialog-tab-hints = التلميحات
 settings-dialog-tab-data = البيانات
 settings-dialog-tab-security = الأمان
 settings-dialog-tab-account = الحساب
+settings-dialog-tab-connection = الاتصال
 settings-dialog-tab-telegram = { -telegram }
 settings-dialog-tab-agent-connections = اتصالات الوكلاء
 settings-dialog-tab-updates = التحديثات
@@ -524,14 +525,12 @@ settings-hints-restored = تمت استعادة جميع التلميحات
 ## account_tab.js
 
 settings-account-title = حساب { -brand }
-settings-account-description = مجاني واختياري. يتداول { -brand } ويكتشف ويعرض المخططات دون حساب — لكنه يعتمد حينها على المزوّدين العامين. تسرد اللوحة أدناه ما يضيفه تسجيل الدخول.
+settings-account-description = مجاني. ومع RPC الخاص بك يكون اختياريًا: يتداول { -brand } ويكتشف ويعرض المخططات دون حساب، معتمدًا على المزوّدين العامين. أما خدمة { -brand } فتتطلب حسابًا. تسرد اللوحة أدناه ما يضيفه تسجيل الدخول.
+settings-account-description-service = مجاني، ولازم لخدمة { -brand }: تمر قراءات المحفظة والمبادلات التي توقّعها عبر screenerbot.io باسم هذا الحساب. لا يغادر مفتاحك الخاص هذا الجهاز أبدًا.
 settings-account-data-title = بيانات { -brand }
-settings-account-data-description = نشغّل خدمة بيانات سوق مشتركة على screenerbot.io: شموع مجمّعة عبر سبعة أطر زمنية، وسجل مجمعات مُحلَّل، وتقارير أمان مخزّنة مؤقتًا، وهوية رموز موحّدة. وهي تُغني كل نسخة مثبتة عن الخضوع وحدها لحدود معدل المزوّدين العامين. تتطلب الخدمة حسابًا حتى يمكن نسب تكلفة تشغيلها والحد من إساءة استخدامها.
+settings-account-data-description = يشغّل { -brand } خدمة بيانات سوق مشتركة على screenerbot.io للمخططات وبيانات المجمّعات وتقارير الأمان وتفاصيل الرموز، حتى لا يتعرض تثبيتك وحده لحدود المعدّل لدى المزوّدين العامين. تحتاج الخدمة إلى حساب مجاني للحدّ من إساءة الاستخدام.
 settings-account-data-fallback = عند عدم توفرها يعود { -brand } تلقائيًا إلى المزوّدين العامين. لا شيء يتوقف؛ تمتلئ المخططات ببطء أكبر وبسجل أقل.
-settings-account-gateway-title = إرسال المعاملات
-settings-account-gateway-description = عند تسجيل الدخول، يمكن لـ { -brand } بث مبادلاتك عبر screenerbot.io بدلًا من RPC الخاص بك. يظل البوت يبني ويوقّع كل معاملة على هذا الجهاز — الخادم يمرّرها فقط، ولا يستطيع تغيير معاملة موقّعة دون إبطال توقيعها.
-settings-account-gateway-label = استخدام RPC الخاص بـ { -brand } لإرسال المعاملات
-settings-account-gateway-hint = للإرسال فقط. تأتي بيانات الأسعار دائمًا من RPC الخاص بك — الاستعلام الدوري عن المجمعات ثقيل جدًا على نقطة اتصال مشتركة، لذا لا يُرسل إليها أبدًا.
+settings-account-data-fallback-service = في خدمة { -brand } تمر قراءات المحفظة والصفقات أيضًا عبر screenerbot.io: ما دام تعذّر الوصول إليه يتوقف التداول مؤقتًا، ويستأنف عند عودة الاتصال.
 settings-account-manage-title = إدارة حسابك
 settings-account-manage-description = تُدار كلمة المرور وعنوان البريد الإلكتروني والأجهزة المتصلة ومدفوعات الإحالة على الموقع. سحب جهاز من هناك يسجّل خروجه من كل مكان، بما فيه هذا الجهاز.
 settings-account-open-dashboard = افتح لوحة التحكم الخاصة بك
@@ -668,3 +667,26 @@ settings-data-folder-label = فتح مجلد البيانات
 settings-data-folder-hint = افتح المجلد الذي يحتوي على جميع بيانات { -brand } في مدير الملفات.
 settings-data-folder-open = فتح المجلد
 settings-data-folder-open-failed = تعذّر فتح مجلد البيانات
+
+## Connection tab (scripts/ui/settings/connection_tab.js)
+
+settings-connection-title = الاتصال
+settings-connection-description = كيف يصل { -brand } إلى { -solana }.
+settings-connection-choice =
+    .aria-label = الاتصال
+settings-connection-active = نشط
+settings-connection-service-title = خدمة { -brand }
+settings-connection-service-detail = تتحدّث الأسعار كل بضع ثوانٍ. يحتاج نسخ التداول ومراقبة المحافظ وأرصدة المحافظ الأخرى والسجل الأقدم والمبادلات المباشرة عبر المجمّعات وأسعار المجمّعات الحية إلى RPC خاص بك.
+settings-connection-own-title = RPC الخاص بك
+settings-connection-own-detail = أسعار نحو مرتين في الثانية وكل الميزات.
+settings-connection-apply = تطبيق وإعادة التشغيل
+settings-connection-to-service-title = التبديل إلى خدمة { -brand }؟
+settings-connection-to-service-message = يتوقف نسخ التداول ومراقبة المحافظ وأرصدة المحافظ الأخرى والسجل الأقدم والمبادلات المباشرة عبر المجمّعات وأسعار المجمّعات الحية، مع الاحتفاظ بإعداداتها. يتوقف التداول مؤقتًا كلما كنت مسجّل الخروج. يعيد { -brand } التشغيل لإتمام التبديل.
+settings-connection-to-own-title = التبديل إلى RPC الخاص بك؟
+settings-connection-to-own-message = يفحص { -brand } نقاط الاتصال الخاصة بك، ثم يعيد التشغيل لإتمام التبديل. تعود كل الميزات للعمل.
+settings-connection-signed-in-as = متصل · مسجّل الدخول باسم { $name }
+settings-connection-sending-title = إرسال المعاملات
+settings-connection-sending-label = إرسال المعاملات عبر { -brand }
+settings-connection-sending-own-hint = عند تسجيل الدخول، تُبَث المبادلات التي توقّعها على هذا الكمبيوتر عبر screenerbot.io. عندما يتعذّر ذلك يُستخدم RPC الخاص بك.
+settings-connection-sending-service-hint = مفعّل دائمًا مع خدمة { -brand }: بهذه الطريقة تصل المبادلات التي توقّعها على هذا الجهاز إلى { -solana }.
+settings-connection-switch-failed = تعذّر تبديل الاتصال.

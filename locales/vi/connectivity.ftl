@@ -10,3 +10,20 @@ connectivity-probe-internet-all-failed = Kiểm tra DNS và HTTP đều thất b
 connectivity-probe-unknown = Lỗi không xác định
 
 connectivity-endpoint-not-checked = Chưa kiểm tra
+
+connectivity-service-checking = Đang kết nối tới dịch vụ { -brand }
+    .detail = Giao dịch bắt đầu khi kết nối được xác nhận.
+connectivity-service-ready = Đã kết nối dịch vụ { -brand }
+    .detail = Truy vấn ví và giao dịch đi qua screenerbot.io.
+connectivity-service-signed-out = Tạm dừng giao dịch · Chưa đăng nhập
+    .detail = Đăng nhập để tiếp tục. Các vị thế đang mở không bị bán khi giao dịch tạm dừng.
+connectivity-service-reauthorize = Tạm dừng giao dịch · Cần đăng nhập lại
+    .detail = Phiên đăng nhập trên thiết bị này chưa cho phép truy vấn ví. Đăng nhập lại để tiếp tục.
+connectivity-service-busy = Tạm dừng giao dịch · Dịch vụ bận, đang thử lại
+    .detail = Giao dịch tự động tiếp tục. Để tránh tạm dừng, hãy dùng RPC của riêng bạn.
+connectivity-service-daily-limit = Tạm dừng giao dịch · Đã đạt giới hạn ngày
+    .detail = Tài khoản của bạn đã đạt giới hạn hôm nay của dịch vụ { -brand }. Giao dịch tiếp tục lúc 00:00 UTC, hoặc ngay lập tức với RPC của riêng bạn.
+connectivity-service-unreachable = Tạm dừng giao dịch · Không truy cập được screenerbot.io
+    .detail = Giao dịch tiếp tục khi kết nối trở lại. Hãy kiểm tra kết nối internet.
+connectivity-service-version = Tạm dừng giao dịch · Cần cập nhật
+    .detail = Dịch vụ { -brand } không còn hỗ trợ phiên bản này. Hãy cập nhật lên { $minimum } hoặc mới hơn.

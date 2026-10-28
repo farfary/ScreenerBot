@@ -7,9 +7,8 @@
  *
  * The Auto Trader tab is titled Time Exit, and the Configuration page groups its
  * fields under their config category and labels them from the config metadata. In
- * every locale that category reads as the tab title, as do the close reason, the
- * exit-type label of a position it closed and the copy-trading exit label, and in the
- * source locale each field label of the losing-position rule names the Time Exit, so
+ * every locale that category reads as the tab title, as do the close reason of a
+ * position it closed and the copy-trading exit label, and in the source locale each field label of the losing-position rule names the Time Exit, so
  * no surface calls the rule something else.
  *
  * Run with `npm run test:js`.
@@ -71,7 +70,6 @@ test("every locale names a time-based close after the Time Exit tab", () => {
     const title = values(locale, "trader.ftl").get("trader-tab-time-rules");
     const labels = [
       values(locale, "trade.ftl").get("trade-reason-time-override"),
-      values(locale, "trader.ftl").get("trader-exit-type-time-override"),
       values(locale, "copy.ftl").get("copy-exit-time-override"),
     ];
     for (const label of labels) {

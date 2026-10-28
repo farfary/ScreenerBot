@@ -147,5 +147,21 @@ trade-reason-synthetic-exit-permanent-failure = Thoát tổng hợp thất bại
 trade-reason-pending-verification = { $reason } (đang chờ xác minh)
 trade-reason-force-closed = Đóng cưỡng chế: { $note }
 trade-reason-stored = { $reason }
+trade-reason-unknown = Không được ghi nhận
+trade-reason-force-closed-any = Đóng cưỡng chế
+
+# Why a new entry was blocked. Ids come from EntryBlock in src/trader/admission.rs.
+trade-entry-block-force-stopped = Giao dịch đang bị dừng cưỡng chế
+trade-entry-block-loss-limit = Giới hạn lỗ đang chặn các lệnh vào mới
+trade-entry-block-connectivity = Các dịch vụ cần thiết không khả dụng
+trade-entry-block-storage-unavailable = Dữ liệu giao dịch không khả dụng hoặc đang được khôi phục
+trade-entry-block-position-limit = Đã đạt giới hạn vị thế đang mở
+trade-entry-block-already-open = Đã có một vị thế đang mở
+trade-entry-block-reentry-cooldown = Thời gian chờ vào lại token
+trade-entry-block-open-cooldown = Thời gian chờ vào lệnh chung
+trade-entry-block-entry-reserved = Một lệnh vào khác đang được xử lý
+trade-entry-block-blacklisted = Token bị chặn bởi kiểm soát rủi ro
+trade-entry-block-paper-balance-exhausted = Số dư thử nghiệm không đủ cho giao dịch
+trade-entry-block-check-failed = Không thể hoàn tất một bước kiểm tra an toàn
 
 trade-quick-no-token = Chưa chọn token

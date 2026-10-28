@@ -139,11 +139,10 @@ pub fn address_from_encrypted_key(ciphertext: &str, nonce: &str) -> Result<Strin
     decrypt_to_keypair(ciphertext, nonce).map(|kp| keypair_to_address(&kp))
 }
 
-/// A fresh key as its address and its base58 secret, the form the setup flow accepts.
-/// Tests outside this module take a trading-wallet key through it and never hold a
-/// `Keypair`.
-#[cfg(test)]
-pub(crate) fn new_test_key() -> (String, String) {
+/// A fresh keypair from the operating system's secure random source, as its address and
+/// its base58 secret (the 64-byte keypair), the form the setup flow accepts. Nothing is
+/// stored: the secret reaches storage only through setup's encrypt-on-complete step.
+pub fn generate_key() -> (String, String) {
     let keypair = Keypair::new();
     (
         keypair_to_address(&keypair),
@@ -151,9 +150,26 @@ pub(crate) fn new_test_key() -> (String, String) {
     )
 }
 
+/// A fresh key as its address and its base58 secret, the form the setup flow accepts.
+/// Tests outside this module take a trading-wallet key through it and never hold a
+/// `Keypair`.
+#[cfg(test)]
+pub(crate) fn new_test_key() -> (String, String) {
+    generate_key()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A generated key parses back to its own address, and no two are alike.
+    #[test]
+    fn a_generated_key_is_a_valid_keypair_of_its_address() {
+        let (address, secret) = generate_key();
+        let keypair = parse_private_key(&secret).expect("the secret parses");
+        assert_eq!(keypair_to_address(&keypair), address);
+        assert_ne!(generate_key().0, address);
+    }
 
     #[test]
     fn test_parse_base58() {

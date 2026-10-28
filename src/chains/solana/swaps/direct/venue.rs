@@ -18,9 +18,11 @@
 //! `super::registry` — nothing else in the engine changes.
 
 use super::error::{DirectSwapError, DirectSwapResult};
+use crate::chains::access::Capability;
+use crate::chains::solana::access::own_rpc_client;
 use crate::chains::solana::pools::types::ProgramKind;
 use crate::chains::solana::rpc::types::TokenAccountInfo;
-use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
+use crate::chains::solana::rpc::{RpcClient, RpcClientMethods};
 use crate::chains::solana::solana_sdk::{
     account::Account, instruction::Instruction, pubkey::Pubkey,
 };
@@ -164,6 +166,15 @@ pub trait AccountReader: Send + Sync {
     async fn token_accounts_of(&self, owner: &Pubkey) -> DirectSwapResult<Vec<TokenAccountInfo>>;
 }
 
+/// The own RPC client the direct engine reads and builds through, refused
+/// as an unavailable node when the chain access has no direct pool swaps.
+pub(crate) fn direct_node(operation: &'static str) -> DirectSwapResult<&'static RpcClient> {
+    own_rpc_client(Capability::DirectPoolSwaps).map_err(|error| DirectSwapError::NodeUnavailable {
+        operation,
+        detail: error.to_string(),
+    })
+}
+
 /// The production reader: the shared RPC client, at most
 /// [`MAX_ACCOUNTS_PER_REQUEST`] accounts per `getMultipleAccounts` request.
 pub struct NodeAccounts;
@@ -172,7 +183,7 @@ pub struct NodeAccounts;
 impl AccountReader for NodeAccounts {
     async fn read_accounts(&self, addresses: &[Pubkey]) -> DirectSwapResult<Vec<Option<Account>>> {
         read_in_chunks(addresses, |chunk| async move {
-            get_rpc_client()
+            direct_node("getMultipleAccounts")?
                 .get_multiple_accounts(&chunk)
                 .await
                 .map_err(|e| DirectSwapError::AccountUnavailable {
@@ -187,7 +198,7 @@ impl AccountReader for NodeAccounts {
     }
 
     async fn token_accounts_of(&self, owner: &Pubkey) -> DirectSwapResult<Vec<TokenAccountInfo>> {
-        get_rpc_client()
+        direct_node("getTokenAccountsByOwner")?
             .get_all_token_accounts(owner)
             .await
             .map_err(|e| DirectSwapError::AccountUnavailable {

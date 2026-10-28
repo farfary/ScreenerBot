@@ -15,7 +15,6 @@ positions-paper-empty = Sanal pozisyon yok
 positions-paper-archived-empty = Arşivlenmiş sanal pozisyon yok
     .message = Sanal turlar Açık ve Kapalı'da kalır; yalnızca canlı pozisyonlar arşivlenir.
 positions-paper-empty-action = Stratejileri aç
-positions-origin-copy = Kopya
 positions-origin-manual = Manuel
 positions-origin-wallet = Cüzdan
 positions-origin-copy-link =

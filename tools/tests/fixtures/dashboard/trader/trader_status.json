@@ -1,1 +1,15 @@
-{ "enabled": true, "running": true, "available": true }
+{
+  "enabled": true,
+  "running": true,
+  "available": true,
+  "live_strategies": 2,
+  "paper_strategies": 1,
+  "run_state": "running",
+  "live_entry_idle": {
+    "kind": "blocked",
+    "block": {
+      "kind": "position_limit"
+    }
+  },
+  "paper_entry_idle": null
+}

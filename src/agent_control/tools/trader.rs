@@ -124,9 +124,11 @@ impl Tool for GetTraderStatsTool {
         ToolDefinition {
             name: "get_trader_stats".to_owned(),
             description: "Realized trading performance over a window: win rate, total/gross \
-                          P&L in SOL, profit factor, expectancy, max drawdown, average \
-                          win/loss, hold times, best/worst trade and a per-exit-reason \
-                          breakdown -- the exact figures of the dashboard Stats tab."
+                          P&L in SOL, network fees, profit factor, payoff ratio, expectancy, \
+                          max drawdown, average win/loss, hold times, best/worst trade, win \
+                          and loss streaks, per-exit-reason and per-entry-source breakdowns, \
+                          the return distribution and the latest closes, plus open exposure \
+                          -- the exact figures of the dashboard Stats tab."
                 .to_owned(),
             category: ToolCategory::Portfolio,
             parameters: json!({

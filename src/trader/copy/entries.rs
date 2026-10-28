@@ -12,7 +12,8 @@ use crate::positions::{Book, PositionOrigin};
 use crate::trader::admission::EntryBlock;
 use crate::trader::executors::ExecutionContext;
 use crate::trader::paper::{PaperExecution, PaperLegFill, PaperModel};
-use crate::trader::types::{TradeAction, TradeDecision, TradePriority, TradeReason, TradeResult};
+use crate::trader::types::{TradeAction, TradeDecision, TradePriority, TradeResult};
+use crate::trader::TradeReason;
 use crate::wallets::watch::{ActivityKind, SwapSide, WalletActivity};
 
 use super::live::management_for_exit_mode;

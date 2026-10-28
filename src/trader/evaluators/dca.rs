@@ -21,7 +21,8 @@ use crate::positions;
 use crate::positions::{Book, Position};
 use crate::trader::constants::{DCA_PRICE_MAX_AGE_SECS, MIN_TRADE_SIZE_NATIVE};
 use crate::trader::policy::ExitPolicy;
-use crate::trader::types::{TradeAction, TradeDecision, TradePriority, TradeReason};
+use crate::trader::types::{TradeAction, TradeDecision, TradePriority};
+use crate::trader::TradeReason;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 

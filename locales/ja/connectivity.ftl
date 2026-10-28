@@ -10,3 +10,20 @@ connectivity-probe-internet-all-failed = DNS チェックと HTTP チェック�
 connectivity-probe-unknown = 不明なエラー
 
 connectivity-endpoint-not-checked = 未チェック
+
+connectivity-service-checking = { -brand } サービスに接続中
+    .detail = 接続が確認されると取引を開始します。
+connectivity-service-ready = { -brand } サービスに接続済み
+    .detail = ウォレットの読み取りと取引は screenerbot.io を経由します。
+connectivity-service-signed-out = 取引を一時停止中 · サインアウト
+    .detail = 再開するにはサインインしてください。一時停止中、保有ポジションは売却されません。
+connectivity-service-reauthorize = 取引を一時停止中 · 再サインインが必要
+    .detail = このデバイスのサインインではまだウォレットを読み取れません。再開するには再度サインインしてください。
+connectivity-service-busy = 取引を一時停止中 · サービス混雑のため再試行中
+    .detail = 取引は自動的に再開します。一時停止を避けるには、ご自身の RPC を使用してください。
+connectivity-service-daily-limit = 取引を一時停止中 · 1日の上限に到達
+    .detail = アカウントが本日の { -brand } サービスの上限に達しました。取引は 00:00 UTC に再開します。ご自身の RPC を使えばすぐに再開できます。
+connectivity-service-unreachable = 取引を一時停止中 · screenerbot.io に接続できません
+    .detail = 接続が回復すると取引を再開します。インターネット接続を確認してください。
+connectivity-service-version = 取引を一時停止中 · アップデートが必要
+    .detail = このバージョンは { -brand } サービスでサポートされなくなりました。{ $minimum } 以降にアップデートしてください。

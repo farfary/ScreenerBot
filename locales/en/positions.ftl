@@ -24,7 +24,6 @@ positions-paper-empty = No paper positions
 positions-paper-archived-empty = No archived paper positions
     .message = Paper rounds stay in Open and Closed; only live positions are archived.
 positions-paper-empty-action = Open Strategies
-positions-origin-copy = Copy
 positions-origin-manual = Manual
 positions-origin-wallet = Wallet
 positions-origin-copy-link =

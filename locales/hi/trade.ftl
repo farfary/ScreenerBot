@@ -147,5 +147,21 @@ trade-reason-synthetic-exit-permanent-failure = सिंथेटिक एग�
 trade-reason-pending-verification = { $reason } (सत्यापन लंबित)
 trade-reason-force-closed = ज़बरन बंद: { $note }
 trade-reason-stored = { $reason }
+trade-reason-unknown = दर्ज नहीं
+trade-reason-force-closed-any = ज़बरन बंद
+
+# Why a new entry was blocked. Ids come from EntryBlock in src/trader/admission.rs.
+trade-entry-block-force-stopped = ट्रेडिंग ज़बरन रोकी गई है
+trade-entry-block-loss-limit = लॉस लिमिट नई एंट्री रोकती है
+trade-entry-block-connectivity = ज़रूरी सर्विसेज़ उपलब्ध नहीं हैं
+trade-entry-block-storage-unavailable = ट्रेडिंग डेटा उपलब्ध नहीं है या पुनर्स्थापित हो रहा है
+trade-entry-block-position-limit = खुली पोज़िशन की सीमा पूरी हो गई
+trade-entry-block-already-open = एक पोज़िशन पहले से खुली है
+trade-entry-block-reentry-cooldown = टोकन री-एंट्री कूलडाउन
+trade-entry-block-open-cooldown = ग्लोबल एंट्री कूलडाउन
+trade-entry-block-entry-reserved = दूसरी एंट्री प्रोसेस हो रही है
+trade-entry-block-blacklisted = टोकन रिस्क कंट्रोल द्वारा ब्लॉक है
+trade-entry-block-paper-balance-exhausted = पेपर बैलेंस इस ट्रेड के लिए पर्याप्त नहीं है
+trade-entry-block-check-failed = एक सुरक्षा जाँच पूरी नहीं हो सकी
 
 trade-quick-no-token = कोई टोकन नहीं चुना गया

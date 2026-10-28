@@ -28,7 +28,8 @@ use crate::strategies::db::get_enabled_strategies_async;
 use crate::strategies::types::{Strategy, StrategyType};
 use crate::trader::evaluators::exit_rules::{self, ExitInputs, ExitRule, RuleOutcome};
 use crate::trader::policy::ExitPolicy;
-use crate::trader::types::{TradeAction, TradeDecision, TradePriority, TradeReason};
+use crate::trader::types::{TradeAction, TradeDecision, TradePriority};
+use crate::trader::TradeReason;
 use crate::trader::{evaluators, llm_analysis, safety};
 
 /// What every position of one exit cycle is evaluated against, read once per cycle

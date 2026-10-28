@@ -7,7 +7,7 @@ onboarding-welcome-custody-description = Clés privées chiffrées au repos et j
 onboarding-welcome-engine-title = Moteur toujours actif
 onboarding-welcome-engine-description = Services orchestrés avec contrôles de santé et gestion propre du cycle de vie.
 onboarding-welcome-realtime-title = Données on-chain en temps réel
-onboarding-welcome-realtime-description = Calculs directs des réserves des pools — pas d'instantanés d'API en retard.
+onboarding-welcome-realtime-description = Avec votre propre RPC, les prix viennent directement des réserves des pools — pas d'instantanés d'API en retard.
 
 onboarding-discover-title = Découvrir et filtrer
 onboarding-discover-description = Analysez trois sources de données pour trouver de nouvelles paires Solana, décodez plus de 12 types de pools DEX on-chain, puis passez chaque token dans des règles de qualité et de sécurité configurables.
@@ -27,7 +27,7 @@ onboarding-trade-auto-description = Évaluateurs d'entrée/sortie, cycles de DCA
 onboarding-trade-strategy-title = Moteur de stratégies
 onboarding-trade-strategy-description = Arbres de conditions combinant des signaux de prix, de volume et de temps.
 onboarding-trade-copy-title = Copy trading
-onboarding-trade-copy-description = Reproduisez les trades des portefeuilles que vous suivez. Testez chaque tâche en mode simulé avant qu’elle ne dépense de vrais { -sol }.
+onboarding-trade-copy-description = Reproduisez les trades des portefeuilles que vous suivez (nécessite votre propre RPC). Testez chaque tâche en mode simulé avant qu’elle ne dépense de vrais { -sol }.
 onboarding-trade-safety-title = Contrôles de sécurité
 onboarding-trade-safety-description = Arrêt d'urgence, limites de perte par période et activation indépendante des moniteurs.
 
@@ -43,18 +43,18 @@ onboarding-connect-events-title = Flux d'événements en direct
 onboarding-connect-events-description = Chaque trade, swap et événement système est journalisé avec sa catégorie et sa gravité.
 
 onboarding-data-title = Données { -brand }
-onboarding-data-description = Nous exploitons un service de données de marché partagé, afin que votre installation ne soit pas bridée par les limites de débit des fournisseurs publics. Il est gratuit avec un compte { -brand }, et { -brand } fonctionne sans.
-onboarding-data-candles-title = Historique de bougies mutualisé
-onboarding-data-candles-description = Sept périodes d'historique partagé, sur plusieurs années, servies depuis un seul cache.
-onboarding-data-pools-title = Pools résolus et sécurité
-onboarding-data-pools-description = Un registre central de pools et des rapports { -rugcheck } en cache, déjà récupérés.
+onboarding-data-description = Un compte { -brand } gratuit accélère les graphiques et les vérifications de tokens. Avec votre propre RPC, { -brand } fonctionne aussi sans.
+onboarding-data-candles-title = Des graphiques rapides
+onboarding-data-candles-description = Sept périodes d'historique de prix, sur plusieurs années.
+onboarding-data-pools-title = Vérifications de tokens prêtes
+onboarding-data-pools-description = Pools et rapports de sécurité pour la plupart des tokens, sans attendre.
 onboarding-data-signin-title = Compte requis
 onboarding-data-signin-description = Sans compte, ces données sont indisponibles et les fournisseurs publics sont utilisés.
-onboarding-data-reading-title = Recherches uniquement
-onboarding-data-reading-description = Nous voyons quels tokens vous recherchez. Jamais une clé, un solde, une position ou un trade.
+onboarding-data-reading-title = Ce que nous voyons
+onboarding-data-reading-description = Les tokens que vous recherchez et les swaps que vous envoyez via { -brand }. Avec le service { -brand }, aussi les soldes et l'historique de votre portefeuille de trading. Jamais votre clé.
 
 onboarding-privacy-title = Vos clés, vos données
-onboarding-privacy-description = Votre configuration, vos clés et votre historique de trading restent sur cette machine. Ensuite, choisissez « Explorer le tableau de bord » pour découvrir sans identifiants, ou liez un portefeuille et un RPC pour activer le bot complet — et connectez-vous à ce moment-là si vous voulez les données { -brand }.
+onboarding-privacy-description = Votre configuration, vos clés et votre historique de trading restent sur cette machine. Ensuite, choisissez « Explorer le tableau de bord » pour découvrir sans identifiants, ou créez ou importez un portefeuille et connectez-le via votre propre RPC ou le service { -brand } pour commencer à trader.
 onboarding-privacy-local-title = Architecture locale d'abord
 onboarding-privacy-local-description = Configuration, analyses et bases de données stockées sur votre ordinateur.
 onboarding-privacy-wallet-title = Portefeuille chiffré
@@ -65,7 +65,7 @@ onboarding-privacy-config-title = Configuration flexible
 onboarding-privacy-config-description = La plupart des paramètres peuvent être ajustés depuis le tableau de bord après la configuration.
 
 onboarding-setup-shortcut =
-    .aria-label = Aller directement à la configuration du portefeuille et du RPC ou choisir le mode Explorer
+    .aria-label = Aller directement à la configuration ou choisir le mode Explorer
 onboarding-setup-shortcut-label = Aller à la configuration
 onboarding-progress-dot =
     .aria-label = Aller à la diapositive { $number }

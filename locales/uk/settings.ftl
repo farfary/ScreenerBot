@@ -38,6 +38,7 @@ settings-dialog-tab-hints = Підказки
 settings-dialog-tab-data = Дані
 settings-dialog-tab-security = Безпека
 settings-dialog-tab-account = Обліковий запис
+settings-dialog-tab-connection = Підключення
 settings-dialog-tab-telegram = { -telegram }
 settings-dialog-tab-agent-connections = Підключення агентів
 settings-dialog-tab-updates = Оновлення
@@ -514,14 +515,12 @@ settings-hints-restored = Усі підказки відновлено
 ## account_tab.js
 
 settings-account-title = Обліковий запис { -brand }
-settings-account-description = Безкоштовний і необов’язковий. { -brand } торгує, знаходить ринки та будує графіки без облікового запису — просто робить це через публічних провайдерів. Панель нижче показує, що додає вхід в обліковий запис.
+settings-account-description = Безкоштовний. Зі своїм RPC він необов’язковий: { -brand } торгує, знаходить ринки та будує графіки без облікового запису, через публічних провайдерів. Для сервісу { -brand } обліковий запис потрібен. Панель нижче показує, що додає вхід в обліковий запис.
+settings-account-description-service = Безкоштовний і обов’язковий для сервісу { -brand }: читання гаманця та підписані вами свопи йдуть через screenerbot.io від імені цього облікового запису. Ваш приватний ключ ніколи не залишає цей комп’ютер.
 settings-account-data-title = Дані { -brand }
-settings-account-data-description = Ми підтримуємо спільний сервіс ринкових даних на screenerbot.io: об’єднані свічки за сімома таймфреймами, розв’язаний реєстр пулів, кешовані звіти безпеки та нормалізована ідентифікація токенів. Завдяки йому публічні провайдери не обмежують кожну інсталяцію за частотою поодинці. Для сервісу потрібен обліковий запис, щоб витрати на його роботу можна було враховувати, а зловживання — обмежувати.
+settings-account-data-description = { -brand } підтримує на screenerbot.io спільний сервіс ринкових даних для графіків, даних пулів, звітів про безпеку та відомостей про токени, щоб ваша установка не впиралася в ліміти публічних провайдерів самотужки. Для обмеження зловживань потрібен безкоштовний обліковий запис.
 settings-account-data-fallback = Коли він недоступний, { -brand } автоматично перемикається на публічних провайдерів. Нічого не зупиняється; графіки заповнюються повільніше й містять менше історії.
-settings-account-gateway-title = Надсилання транзакцій
-settings-account-gateway-description = Коли ви ввійшли в обліковий запис, { -brand } може транслювати ваші свопи через screenerbot.io замість вашого власного RPC. Бот, як і раніше, будує та підписує кожну транзакцію на цьому комп’ютері — сервер лише передає її далі й не може змінити підписану транзакцію без втрати чинності підпису.
-settings-account-gateway-label = Використовувати RPC { -brand } для надсилання транзакцій
-settings-account-gateway-hint = Лише надсилання. Дані про ціни завжди надходять із вашого власного RPC — опитування пулів надто навантажує спільний ендпоінт, тому туди воно ніколи не надсилається.
+settings-account-data-fallback-service = У сервісі { -brand } читання гаманця та угоди теж ідуть через screenerbot.io: поки він недоступний, торгівля призупинена й відновлюється, коли повернеться з’єднання.
 settings-account-manage-title = Керування обліковим записом
 settings-account-manage-description = Пароль, адреса електронної пошти, підключені пристрої та реферальні виплати керуються на вебсайті. Відкликання пристрою там виводить його з облікового запису всюди, зокрема й тут.
 settings-account-open-dashboard = Відкрити вашу панель керування
@@ -650,3 +649,26 @@ settings-data-folder-label = Відкрити папку даних
 settings-data-folder-hint = Відкрийте у файловому менеджері папку з усіма даними { -brand }.
 settings-data-folder-open = Відкрити папку
 settings-data-folder-open-failed = Не вдалося відкрити папку даних
+
+## Connection tab (scripts/ui/settings/connection_tab.js)
+
+settings-connection-title = Підключення
+settings-connection-description = Як { -brand } звертається до { -solana }.
+settings-connection-choice =
+    .aria-label = Підключення
+settings-connection-active = Активне
+settings-connection-service-title = Сервіс { -brand }
+settings-connection-service-detail = Ціни оновлюються раз на кілька секунд. Для копітрейдингу, відстеження гаманців, балансів інших гаманців, старішої історії, прямих свопів у пулах і живих цін пулів потрібен власний RPC.
+settings-connection-own-title = Власний RPC
+settings-connection-own-detail = Ціни приблизно двічі на секунду й усі функції.
+settings-connection-apply = Застосувати й перезапустити
+settings-connection-to-service-title = Перейти на сервіс { -brand }?
+settings-connection-to-service-message = Копітрейдинг, відстеження гаманців, баланси інших гаманців, старіша історія, прямі свопи в пулах і живі ціни пулів вимкнуться; їхні налаштування збережуться. Торгівля призупиняється, поки ви не ввійшли в акаунт. { -brand } перезапуститься для перемикання.
+settings-connection-to-own-title = Перейти на власний RPC?
+settings-connection-to-own-message = { -brand } перевірить ваші ендпоінти, а потім перезапуститься для перемикання. Усі функції знову ввімкнуться.
+settings-connection-signed-in-as = Підключено · вхід виконано як { $name }
+settings-connection-sending-title = Надсилання транзакцій
+settings-connection-sending-label = Надсилати транзакції через { -brand }
+settings-connection-sending-own-hint = Коли ви ввійшли в акаунт, свопи, підписані на цьому комп’ютері, транслюються через screenerbot.io. Коли це неможливо, використовується ваш RPC.
+settings-connection-sending-service-hint = Із сервісом { -brand } завжди ввімкнено: саме так свопи, підписані на цьому комп’ютері, потрапляють у { -solana }.
+settings-connection-switch-failed = Не вдалося перемкнути підключення.

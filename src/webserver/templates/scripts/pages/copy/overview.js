@@ -5,7 +5,7 @@
 // task's current holdings and budget), the P&L curve, how rounds ended and why trades were
 // skipped, readiness for live, and a paper task's earlier paper results.
 import { formatNumber } from "../../core/format.js";
-import { barList, pnlCurve } from "./charts.js";
+import { barList, pnlCurve } from "../../ui/inline_chart.js";
 import {
   dateTime,
   duration,
@@ -32,7 +32,7 @@ import { RANGE_OPTIONS, renderSegmented } from "../../ui/segmented.js";
 import { ensureIdentities, tokenWithMint } from "./tokens.js";
 
 export function rangeHead(title, range, esc) {
-  return `<div class="copy-panel-head"><h3 class="copy-section-title">${esc(title)}</h3>${renderSegmented({ name: "range", options: RANGE_OPTIONS, value: range, ariaLabel: I18n.attr("common-range-label", "aria-label") }, esc)}</div>`;
+  return `<div class="sheet-head"><h3 class="sheet-section-title">${esc(title)}</h3>${renderSegmented({ name: "range", options: RANGE_OPTIONS, value: range, ariaLabel: I18n.attr("common-range-label", "aria-label") }, esc)}</div>`;
 }
 
 /** Results body shared by the tabs that read insights: data, error or loading. */
@@ -167,10 +167,15 @@ function breakdowns(insights, esc) {
     value: bucket.count,
     display: String(bucket.count),
   }));
-  return `${section(I18n.t("copy-overview-curve-title"), pnlCurve(insights.pnl_curve, { escapeHtml: esc }), esc)}${splitSection(
+  const curve = pnlCurve(insights.pnl_curve, {
+    escapeHtml: esc,
+    empty: I18n.t("copy-chart-empty-curve"),
+  });
+  const bars = { escapeHtml: esc, empty: I18n.t("copy-chart-empty-bars") };
+  return `${section(I18n.t("copy-overview-curve-title"), curve, esc)}${splitSection(
     [
-      [I18n.t("copy-overview-exits-title"), barList(exits, esc)],
-      [I18n.t("copy-overview-skips-title"), barList(skips, esc)],
+      [I18n.t("copy-overview-exits-title"), barList(exits, bars)],
+      [I18n.t("copy-overview-skips-title"), barList(skips, bars)],
     ],
     esc
   )}`;
@@ -230,7 +235,7 @@ function earlierBook(book, text, esc) {
   const table = holdings.length
     ? `<div class="copy-table-wrap"><table class="copy-table"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table></div>`
     : "";
-  return `<h4 class="copy-section-subtitle">${esc(text.title)}</h4><p class="copy-note">${esc(text.note)}</p><div class="metric-grid" data-surface="sheet">${[
+  return `<h4 class="sheet-section-subtitle">${esc(text.title)}</h4><p class="copy-note">${esc(text.note)}</p><div class="metric-grid" data-surface="sheet">${[
     metricCard({ label: text.spent, value: sol(book.spent_native, 3) }, esc),
     metricCard(
       {
@@ -284,6 +289,6 @@ function earlierCard(ws, esc) {
 }
 
 export function renderOverview({ ws, insights, error, range }, esc) {
-  const results = `<section class="copy-section">${rangeHead(I18n.t("copy-overview-results"), range, esc)}${insightsBody(insights, error, esc, (data) => resultsGrid(data, ws, esc))}</section>`;
+  const results = `<section class="sheet-section">${rangeHead(I18n.t("copy-overview-results"), range, esc)}${insightsBody(insights, error, esc, (data) => resultsGrid(data, ws, esc))}</section>`;
   return `${results}${insights ? breakdowns(insights, esc) : ""}${readiness(ws, esc)}${earlierCard(ws, esc)}`;
 }

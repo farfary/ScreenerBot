@@ -18,7 +18,8 @@ use crate::positions::paper::{
 use crate::positions::{Book, Opening, Position, PositionOrigin};
 use crate::swaps::{QuoteRequest, SwapMode};
 use crate::trader::executors::{resolve_exit_size, ExecutionContext, ExitSize};
-use crate::trader::types::{TradeAction, TradeDecision, TradeReason, TradeResult, TradeStep};
+use crate::trader::types::{TradeAction, TradeDecision, TradeResult, TradeStep};
+use crate::trader::TradeReason;
 use crate::trader::{Error, Result};
 
 use super::fill;

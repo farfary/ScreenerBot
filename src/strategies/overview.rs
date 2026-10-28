@@ -23,7 +23,7 @@ use crate::strategies::types::{Strategy, StrategyType};
 use crate::trader::admission::EntryBlock;
 use crate::trader::paper::TradingMode;
 use crate::trader::stats::{round_totals, RoundTotals};
-use crate::trader::TraderRunState;
+use crate::trader::{EntryIdle, TraderRunState};
 
 /// Every strategy with what it is doing and what it achieved, plus the trader-level state
 /// the roster states once.
@@ -151,6 +151,26 @@ pub async fn strategies_overview() -> crate::Result<StrategiesOverview> {
     let monitors = Monitors::read();
     let explore = run_state == TraderRunState::Explore;
 
+    // The token-independent entry block of a mode, read only while an enabled entry
+    // strategy of that mode would otherwise run.
+    let mode_entry_block = |mode: TradingMode| {
+        let entry_strategies = strategies
+            .iter()
+            .filter(|strategy| {
+                strategy.strategy_type == StrategyType::Entry && strategy.trades_on(mode)
+            })
+            .count();
+        let entry_monitor = monitors.entry;
+        async move {
+            match crate::trader::entry_idle(mode, run_state, entry_monitor, Some(entry_strategies))
+                .await
+            {
+                Some(EntryIdle::Blocked { block }) => Some(block),
+                _ => None,
+            }
+        }
+    };
+
     let any_paper = !explore
         && strategies
             .iter()
@@ -163,8 +183,8 @@ pub async fn strategies_overview() -> crate::Result<StrategiesOverview> {
                 Some(PaperStrategyEvidence::default())
             }
         },
-        entry_block_if_needed(TradingMode::Live, run_state, monitors, &strategies),
-        entry_block_if_needed(TradingMode::Paper, run_state, monitors, &strategies),
+        mode_entry_block(TradingMode::Live),
+        mode_entry_block(TradingMode::Paper),
     );
     let books = if explore {
         None
@@ -241,31 +261,6 @@ impl Monitors {
             entry: cfg.trader.entry_monitor_enabled,
             exit: cfg.trader.exit_monitor_enabled,
         })
-    }
-}
-
-/// The token-independent entry block of `mode`, read only while an enabled entry strategy
-/// of that mode would otherwise run, so a stopped trader or a mode nobody trades on costs
-/// no store read.
-async fn entry_block_if_needed(
-    mode: TradingMode,
-    run_state: TraderRunState,
-    monitors: Monitors,
-    strategies: &[Strategy],
-) -> Option<EntryBlock> {
-    let trader_runs = matches!(
-        run_state,
-        TraderRunState::Running | TraderRunState::EntryPaused
-    );
-    let needed = trader_runs
-        && monitors.entry
-        && strategies.iter().any(|strategy| {
-            strategy.strategy_type == StrategyType::Entry && strategy.trades_on(mode)
-        });
-    if needed {
-        crate::trader::entry_blocks(mode).await
-    } else {
-        None
     }
 }
 
@@ -441,10 +436,7 @@ impl BookPositions {
                     Book::Paper => Book::Live,
                 };
                 let open: Vec<&Position> = opened(book).collect();
-                let priced: Vec<f64> = open
-                    .iter()
-                    .filter_map(|position| position.unrealized_pnl)
-                    .collect();
+                let unrealized = positions::open_unrealized(open.iter().copied());
                 Figures {
                     open: Some(count(open.len())),
                     open_other_book: Some(count(opened(other).count())),
@@ -453,8 +445,8 @@ impl BookPositions {
                         Book::Live => Some(self.live_rounds_of(strategy)),
                         Book::Paper => paper_rounds(),
                     },
-                    unrealized_native: (!priced.is_empty()).then(|| priced.iter().sum()),
-                    unpriced: Some(count(open.len() - priced.len())),
+                    unrealized_native: unrealized.native,
+                    unpriced: Some(count(unrealized.unpriced)),
                     readiness,
                 }
             }

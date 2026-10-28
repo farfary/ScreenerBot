@@ -27,6 +27,7 @@ impl Service for RpcStatsService {
 
     fn is_enabled(&self) -> bool {
         crate::global::is_initialization_complete()
+            && crate::chains::access::active_has(crate::chains::access::Capability::RpcStatistics)
     }
 
     async fn initialize(&mut self) -> crate::Result<()> {

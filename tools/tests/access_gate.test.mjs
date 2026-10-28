@@ -3,8 +3,10 @@
 //
 
 /**
- * Guard: in Explore Mode the wallet-backed pages state that setup is needed and
- * never call the routes a full setup opens.
+ * Guard: the access gate. In Explore Mode the wallet-backed pages state that setup
+ * is needed and never call the routes a full setup opens; on the ScreenerBot service
+ * the pages that need a capability the service lacks state that it needs your own
+ * RPC, keep their data, and never call the routes the service refuses.
  *
  * Explore Mode runs without the wallet store and the watch store. Wallets read
  * `/api/wallets` on every visit and drew an empty "No main wallet" card over the
@@ -23,6 +25,11 @@
  * - The Buy and Sell dialogs open as the setup notice: no quick amount or MAX can be
  *   chosen, the confirm is disabled with the reason as its tooltip, the setup action
  *   replaces the dialog with the setup dialog, and the dialogs read no wallet balance.
+ * - On the ScreenerBot service, Copy Trading shows the own-RPC notice above the kept
+ *   tasks with the Connection settings action, and every copy control carries the
+ *   watch reason; Wallets > Watched shows the gate and reads no watch route; the
+ *   Auto Trader shows the service notice once per session; token details and other
+ *   wallets' balances name the missing capability.
  *
  * Run with `npm run test:js`.
  */
@@ -45,6 +52,33 @@ const EXPLORE_BOOTSTRAP = JSON.stringify({
   initialization_complete: false,
   explore_mode: true,
 });
+// Fluent isolates every placeable (U+2068/U+2069); the wording is asserted without them.
+const plain = (text) => (typeof text === "string" ? text.replace(/[\u2068\u2069]/g, "") : text);
+const WATCH_REASON =
+  "Copy trading and wallet watching follow other wallets live, which the ScreenerBot service does not do. Your copy tasks and watched wallets are kept and come back when you add an RPC.";
+const SERVICE_ACCESS = {
+  chain: "solana",
+  mode: "service",
+  state: "ready",
+  ready: true,
+  actionable: false,
+  text: { id: "connectivity-service-ready", args: {} },
+  capabilities: {
+    live_pool_prices: false,
+    direct_pool_swaps: false,
+    watch_other_wallets: false,
+    other_wallet_balances: false,
+    full_history: false,
+    rpc_statistics: false,
+    own_wallet_activity: true,
+    aggregator_swaps: true,
+  },
+  account: { signed_in: true, chain_scope: true, submit_scope: true },
+};
+const SERVICE_BOOTSTRAP = JSON.stringify({
+  ...fixture("shell/system_bootstrap.json"),
+  chain_access: SERVICE_ACCESS,
+});
 const overview = fixture("copy/copy_overview.json");
 const EMPTY_OVERVIEW = JSON.stringify({
   ...overview,
@@ -57,7 +91,19 @@ after(() => browser.close());
 const shellIndex = await loadIndex("shell");
 
 /** Opens `id` in Explore Mode and records every `/api` request the page makes. */
-async function openExplore(id, overrides = {}) {
+function openExplore(id, overrides = {}) {
+  return openWith(EXPLORE_BOOTSTRAP, id, overrides);
+}
+
+/** Opens `id` on the ScreenerBot service and records every `/api` request. */
+function openService(id, overrides = {}) {
+  return openWith(SERVICE_BOOTSTRAP, id, {
+    "/api/chain/access": JSON.stringify(SERVICE_ACCESS),
+    ...overrides,
+  });
+}
+
+async function openWith(bootstrap, id, overrides) {
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   const api = createApiHandler([await loadIndex(id), shellIndex], "populated");
   const requests = [];
@@ -65,7 +111,7 @@ async function openExplore(id, overrides = {}) {
     locale: "en",
     onApi: (request) => {
       requests.push(`${request.method} ${request.url.pathname}`);
-      if (request.url.pathname === "/api/system/bootstrap") return { body: EXPLORE_BOOTSTRAP };
+      if (request.url.pathname === "/api/system/bootstrap") return { body: bootstrap };
       const body = overrides[request.url.pathname];
       return body ? { body } : api.onApi(request);
     },
@@ -85,7 +131,7 @@ test("Wallets shows the setup notice and reads no wallet route", async (t) => {
   const { page, requests, close } = await openExplore("wallets");
   t.after(close);
 
-  const gate = page.locator("#wallets-setup-gate .setup-gate");
+  const gate = page.locator("#wallets-access-gate .access-gate");
   await gate.waitFor();
   assert.equal(await gate.locator(".state-view-title").textContent(), "Wallets need setup");
   assert.equal(await gate.locator(".state-view-message").textContent(), REASON);
@@ -103,7 +149,7 @@ test("Copy Trading gates its wallet-backed controls with one reason", async (t) 
   t.after(empty.close);
   const { page } = empty;
 
-  const gate = page.locator("#copy-setup-gate .setup-gate");
+  const gate = page.locator("#copy-access-gate .access-gate");
   await gate.waitFor();
   assert.equal(
     await gate.locator(".state-view-title").textContent(),
@@ -126,7 +172,7 @@ test("Copy Trading gates its wallet-backed controls with one reason", async (t) 
   t.after(populated.close);
   const add = populated.page.locator("#copy-add");
   await populated.page.waitForSelector("#copy-main:not([hidden])");
-  assert.equal(await populated.page.locator("#copy-setup-gate").isVisible(), false);
+  assert.equal(await populated.page.locator("#copy-access-gate").isVisible(), false);
   assert.equal(await add.isVisible(), true);
   assert.equal(await add.isDisabled(), true);
   assert.equal(await add.getAttribute("title"), REASON);
@@ -146,7 +192,7 @@ test("Transactions shows the setup notice and reads no transaction route", async
   const { page, requests, close } = await openExplore("transactions");
   t.after(close);
 
-  const gate = page.locator("#transactions-setup-gate .setup-gate");
+  const gate = page.locator("#transactions-access-gate .access-gate");
   await gate.waitFor();
   assert.equal(await gate.locator(".state-view-title").textContent(), "Transactions need a wallet");
   assert.equal(await gate.locator(".state-view-message").textContent(), REASON);
@@ -196,7 +242,7 @@ test("the Buy and Sell dialogs state that trading needs setup", async (t) => {
         symbol: "SOL",
       });
     }, action);
-    const gate = dialog.locator(".trade-action-setup .setup-gate");
+    const gate = dialog.locator(".trade-action-setup .access-gate");
     await gate.waitFor();
     assert.equal(
       await gate.locator(".state-view-title").textContent(),
@@ -230,3 +276,85 @@ test("the Buy and Sell dialogs state that trading needs setup", async (t) => {
     []
   );
 });
+
+test("Copy Trading on the service shows the own-RPC notice above the kept tasks", async (t) => {
+  const { page, close } = await openService("copy");
+  t.after(close);
+
+  const gate = page.locator("#copy-access-gate .notice");
+  await gate.waitFor();
+  assert.equal(await gate.locator(".notice-title").textContent(), "Needs your own RPC");
+  assert.equal(plain(await gate.locator(".notice-message").textContent()), WATCH_REASON);
+  assert.equal(await gate.locator("button").textContent(), "Open Connection settings");
+  await page.waitForSelector("#copy-main:not([hidden])");
+  const add = page.locator("#copy-add");
+  assert.equal(await add.isDisabled(), true);
+  assert.equal(plain(await add.getAttribute("title")), WATCH_REASON);
+  assert.equal(
+    await page
+      .locator('#copy-summary [data-summary-id="status"] .table-toolbar-chip__value')
+      .textContent(),
+    "Needs your own RPC"
+  );
+
+  await gate.locator("button").click();
+  await page.locator('.settings-nav-item[data-tab="connection"].active').waitFor();
+});
+
+test("Wallets > Watched on the service is the gate and reads no watch route", async (t) => {
+  const { page, requests, close } = await openService("wallets");
+  t.after(close);
+
+  await page.locator('[data-tab-id="watched"], [data-tab="watched"]').first().click();
+  const gate = page.locator("#watched-access-gate .access-gate");
+  await gate.waitFor();
+  assert.equal(plain(await gate.locator(".state-view-message").textContent()), WATCH_REASON);
+  assert.equal(await page.locator("#watched-wallets-root").isVisible(), false);
+  await page.waitForTimeout(500);
+  assert.deepEqual(
+    requests.filter((request) => / \/api\/wallets\/watch\b/.test(request)),
+    []
+  );
+});
+
+test("the Auto Trader shows the service notice until it is closed for the session", async (t) => {
+  const { page, close } = await openService("trader");
+  t.after(close);
+
+  const notice = page.locator("#trader-access-region .notice");
+  await notice.waitFor();
+  assert.equal(
+    plain(await notice.locator(".notice-title").textContent()),
+    "Running on the ScreenerBot service"
+  );
+  assert.equal(
+    await notice.locator('[data-action="open-connection"]').textContent(),
+    "Open Connection settings"
+  );
+  await notice.locator('[data-action="dismiss"]').click();
+  assert.equal(await page.locator("#trader-access-region").isVisible(), false);
+  await page.reload();
+  await page.waitForSelector(PAGE_READY);
+  await page.waitForTimeout(300);
+  assert.equal(await page.locator("#trader-access-region").isVisible(), false);
+});
+
+test("own RPC shows no access gate and no service notice", async (t) => {
+  const { page, close } = await openWith(fixtureBootstrap(), "trader", {});
+  t.after(close);
+  await page.waitForTimeout(300);
+  assert.equal(await page.locator("#trader-access-region").isVisible(), false);
+});
+
+function fixtureBootstrap() {
+  return JSON.stringify({
+    ...fixture("shell/system_bootstrap.json"),
+    chain_access: {
+      ...SERVICE_ACCESS,
+      mode: "own_rpc",
+      capabilities: Object.fromEntries(
+        Object.keys(SERVICE_ACCESS.capabilities).map((key) => [key, true])
+      ),
+    },
+  });
+}

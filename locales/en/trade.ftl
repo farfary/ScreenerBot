@@ -152,7 +152,7 @@ trade-toast-failed-add = Add to position failed
 trade-toast-failed-sell = Sell failed
 
 # Trade and close reasons. Ids are the Debug names of TradeReason
-# (src/trader/types.rs) and the reasons written by src/positions.
+# (src/trader/trade_reason.rs) and the reasons written by src/positions.
 trade-reason-strategy-signal = Strategy Signal
 trade-reason-manual-entry = Manual Entry
 trade-reason-force-buy = Force Buy
@@ -183,6 +183,22 @@ trade-reason-pending-verification = { $reason } (pending verification)
 trade-reason-force-closed = Force closed: { $note }
 # $reason is a stored closed_reason that has no label; it is shown as stored.
 trade-reason-stored = { $reason }
+trade-reason-unknown = Not recorded
+trade-reason-force-closed-any = Force closed
+
+# Why a new entry was blocked. Ids come from EntryBlock in src/trader/admission.rs.
+trade-entry-block-force-stopped = Trading is force-stopped
+trade-entry-block-loss-limit = Loss limit blocks new entries
+trade-entry-block-connectivity = Required services are unavailable
+trade-entry-block-storage-unavailable = Trading data is unavailable or being restored
+trade-entry-block-position-limit = Open-position limit reached
+trade-entry-block-already-open = A position is already open
+trade-entry-block-reentry-cooldown = Token re-entry cooldown
+trade-entry-block-open-cooldown = Global entry cooldown
+trade-entry-block-entry-reserved = Another entry is processing
+trade-entry-block-blacklisted = Token is blocked by risk controls
+trade-entry-block-paper-balance-exhausted = Paper balance cannot cover the trade
+trade-entry-block-check-failed = A safety check could not complete
 
 # Toast shown when a quick-trade shortcut runs without a token selected (ui/quick_trade_shortcuts.js).
 trade-quick-no-token = No token selected

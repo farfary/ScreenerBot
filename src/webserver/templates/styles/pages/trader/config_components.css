@@ -5,7 +5,7 @@
    Shared Configuration Components (Reusable across all configuration tabs)
    ============================================================================ */
 
-/* Unified Section Base Class - replaces stats-section, config-section, form-section.
+/* Unified Section Base Class of the configuration tabs.
    No side padding: #trader-content's gutter is the page gutter on every sub-tab. */
 .config-section {
   padding: 0 0 1rem;

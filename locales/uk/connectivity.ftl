@@ -10,3 +10,20 @@ connectivity-probe-internet-all-failed = Перевірки DNS і HTTP не п�
 connectivity-probe-unknown = Невідома помилка
 
 connectivity-endpoint-not-checked = Ще не перевірено
+
+connectivity-service-checking = Підключення до сервісу { -brand }
+    .detail = Торгівля почнеться, коли з'єднання буде підтверджено.
+connectivity-service-ready = Сервіс { -brand } підключено
+    .detail = Запити гаманця й угоди йдуть через screenerbot.io.
+connectivity-service-signed-out = Торгівлю призупинено · Вхід не виконано
+    .detail = Увійдіть, щоб продовжити. Відкриті позиції не продаються, поки торгівлю призупинено.
+connectivity-service-reauthorize = Торгівлю призупинено · Потрібен повторний вхід
+    .detail = Вхід на цьому пристрої ще не дозволяє читати гаманець. Увійдіть знову, щоб продовжити.
+connectivity-service-busy = Торгівлю призупинено · Сервіс зайнятий, повтор
+    .detail = Торгівля відновиться автоматично. Щоб уникнути пауз, використовуйте власний RPC.
+connectivity-service-daily-limit = Торгівлю призупинено · Денний ліміт вичерпано
+    .detail = Ваш акаунт вичерпав сьогоднішній ліміт сервісу { -brand }. Торгівля відновиться о 00:00 UTC або одразу — з власним RPC.
+connectivity-service-unreachable = Торгівлю призупинено · screenerbot.io недоступний
+    .detail = Торгівля відновиться, коли повернеться з'єднання. Перевірте підключення до інтернету.
+connectivity-service-version = Торгівлю призупинено · Потрібне оновлення
+    .detail = Сервіс { -brand } більше не підтримує цю версію. Оновіться до { $minimum } або новішої.

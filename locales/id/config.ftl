@@ -5,8 +5,8 @@ config-account-auto-wallet-signin = Masuk otomatis dengan dompet saya
 config-account-refresh-margin-secs = Margin penyegaran token
     .hint = Seberapa awal token masuk diperbarui sebelum kedaluwarsa. Ubah hanya jika Anda sedang men-debug autentikasi.
     .unit = dtk
-config-account-use-gateway-rpc = Gunakan RPC { -brand } untuk mengirim transaksi
-    .hint = Siarkan transaksi swap bertanda tangan melalui screenerbot.io alih-alih RPC Anda sendiri. Penandatanganan selalu terjadi di mesin ini; server tidak dapat mengubah transaksi yang sudah ditandatangani. RPC Anda sendiri tetap diperlukan untuk data harga.
+config-account-use-gateway-rpc = Kirim transaksi melalui { -brand }
+    .hint = Saat masuk, siarkan swap yang Anda tanda tangani di komputer ini melalui screenerbot.io. Penandatanganan selalu dilakukan di sini, dan transaksi yang sudah ditandatangani tidak dapat diubah. Selalu aktif dalam mode layanan { -brand }.
 
 ## agent_control
 

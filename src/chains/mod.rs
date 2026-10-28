@@ -8,6 +8,7 @@
 //! call [`active_chain`] rather than naming a `ChainId` variant at the call
 //! site.
 
+pub mod access;
 mod adapter;
 mod amount;
 mod config;

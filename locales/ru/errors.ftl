@@ -37,7 +37,7 @@ errors-account-signin-refused = { $reason }
 errors-account-signin-unavailable = Вход недоступен
 errors-account-credentials-required = Введите адрес электронной почты и пароль.
 errors-account-signout-failed = Не удалось выйти
-errors-account-gateway-update-failed = Не удалось обновить настройку шлюза
+errors-account-gateway-update-failed = Не удалось обновить настройку отправки транзакций
 
 errors-i18n-locale-not-registered = Язык не зарегистрирован
 errors-i18n-catalog-encode-failed = Не удалось закодировать каталог
@@ -114,6 +114,8 @@ errors-transactions-own-wallet-unavailable = Основной кошелёк н�
 errors-transactions-invalid-subject = Субъект транзакции не является допустимым адресом Solana
 errors-transactions-subject-not-watched = Субъект транзакции не входит в отслеживаемые кошельки
 errors-transactions-watch-store-unavailable = Отслеживаемые кошельки недоступны
+errors-transactions-history-loading = Более старые транзакции уже загружаются.
+errors-transactions-history-load-failed = Не удалось загрузить более старые транзакции.
 
 errors-wallet-unavailable = Основной кошелёк недоступен
 errors-wallet-changed = Основной кошелёк изменился; обновите страницу и повторите попытку
@@ -381,3 +383,17 @@ errors-tokens-search-failed = Не удалось выполнить поиск 
 
 errors-actions-not-found = Действие { $id } не найдено
 errors-services-not-found = Сервис '{ $name }' не найден
+
+# Chain access
+errors-chain-capability-unavailable = Для этого нужно собственное RPC-подключение.
+errors-chain-service-signin-required = Войдите, чтобы пользоваться сервисом { -brand }.
+errors-chain-service-scope-missing = Войдите снова, чтобы разрешить чтение кошелька.
+errors-chain-service-busy = Сервис { -brand } занят. Повторите попытку чуть позже.
+errors-chain-service-daily-limit = Ваш аккаунт исчерпал дневной лимит сервиса { -brand }.
+errors-chain-service-version = Эта версия слишком старая для сервиса { -brand }. Обновитесь до { $minimum } или новее.
+errors-chain-service-refused = Сервис { -brand } отклонил запрос.
+errors-chain-service-unreachable = screenerbot.io недоступен.
+errors-chain-not-trading-wallet = В режиме сервиса { -brand } можно читать только торговый кошелёк.
+errors-chain-access-failed = Запрос к блокчейну не выполнен.
+errors-chain-access-unchanged = Это подключение уже используется.
+errors-chain-access-switch-failed = Не удалось переключить подключение.

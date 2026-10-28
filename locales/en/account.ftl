@@ -3,7 +3,7 @@
 # src/data_server/access.rs.
 
 account-data-access-ready = { -brand } data is active
-    .detail = Shared candles, pool registry, security reports and token identity are being served from screenerbot.io.
+    .detail = Charts, pool data and security reports load from screenerbot.io.
 
 account-data-access-disabled = { -brand } data is switched off
     .detail = The { -brand } source is turned off in your settings, so data comes from the public providers only.
@@ -12,7 +12,7 @@ account-data-access-offline = { -brand } data is offline
     .detail = There is no network connection. Data will resume on its own once the connection returns.
 
 account-data-access-signed-out = { -brand } data needs an account
-    .detail = Charts, pools, security reports and token identity come from the public providers instead. They are slower, rate limited, and thinner on history. Signing in is free and changes nothing else about how { -brand } runs.
+    .detail = Charts, pools and security reports come from the public providers instead. They are slower, rate limited, and thinner on history. Signing in is free and changes nothing else about how { -brand } runs.
 
 account-data-access-reauthorization-required = { -brand } data needs you to sign in again
     .detail = This device was authorised before { -brand } data existed. Sign in again to restore it — the public providers are being used until then.
@@ -24,16 +24,17 @@ account-data-access-unreachable = { -brand } data is not responding
     .detail = The service did not answer. The public providers are being used, and { -brand } will keep retrying.
 
 account-data-access-unknown = { -brand } data has not been checked yet
-    .detail = { -brand } has not yet needed shared data this session.
+    .detail = { -brand } has not loaded this data yet this session.
 
 ## Account panel (ui/account/panel.js), shared by Setup and Settings
 
 # Features a signed-in account carries.
 account-scope-data-read = { -brand } market data
-account-scope-rpc-submit = Free signed-transaction submission
+account-scope-rpc-submit = Sending transactions through { -brand }
 account-scope-vote = Token voting
 account-scope-referral-read = Referral earnings
 account-scope-account-read = Account details
+account-scope-chain-read = Wallet reads for the { -brand } service
 
 account-panel-request-failed = That did not work. Please try again.
 account-panel-checking = Checking account status…

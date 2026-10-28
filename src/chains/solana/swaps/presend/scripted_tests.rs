@@ -6,8 +6,10 @@
 
 use std::collections::{HashMap, VecDeque};
 use std::sync::Mutex;
+use std::time::Duration;
 
 use super::SwapNode;
+use crate::chains::solana::access::{account_control, decode_mint, AccountControl, MintLookup};
 use crate::chains::solana::rpc::types::SimulationOutcome;
 use crate::chains::solana::settlement::FinalizedTip;
 use crate::chains::solana::solana_sdk::{
@@ -17,6 +19,10 @@ use crate::chains::solana::solana_transaction_status::{
     EncodedConfirmedTransactionWithStatusMeta, TransactionConfirmationStatus, TransactionStatus,
 };
 use crate::rpc::RpcError;
+
+/// The scripted node's status cadence: the own-RPC one, so scripted
+/// settlements keep their timing.
+const SCRIPTED_STATUS_POLL_INTERVAL: Duration = Duration::from_millis(500);
 
 /// Answers in script order; the last answer of each queue repeats once the
 /// queue is down to it.
@@ -229,10 +235,35 @@ impl SwapNode for ScriptedNode {
         Ok(self.executed.clone().map(executed))
     }
 
-    async fn accounts(&self, addresses: &[Pubkey]) -> crate::Result<Vec<Option<Account>>> {
+    async fn mint_facts(&self, mints: &[String]) -> crate::Result<Vec<MintLookup>> {
+        Ok(mints
+            .iter()
+            .map(|mint| {
+                match mint
+                    .parse::<Pubkey>()
+                    .ok()
+                    .and_then(|key| self.accounts.get(&key))
+                {
+                    Some(account) => decode_mint(mint, account),
+                    None => MintLookup::Absent,
+                }
+            })
+            .collect())
+    }
+
+    async fn account_controls(
+        &self,
+        addresses: &[String],
+    ) -> crate::Result<HashMap<String, AccountControl>> {
         Ok(addresses
             .iter()
-            .map(|address| self.accounts.get(address).cloned())
+            .filter_map(|address| {
+                let account = self.accounts.get(&address.parse::<Pubkey>().ok()?)?;
+                Some((
+                    address.clone(),
+                    account_control(account.owner.to_string(), &account.data),
+                ))
+            })
             .collect())
     }
 
@@ -243,5 +274,9 @@ impl SwapNode for ScriptedNode {
                 is_timeout: false,
             })
         })
+    }
+
+    fn status_poll_interval(&self, _elapsed: Duration) -> Duration {
+        SCRIPTED_STATUS_POLL_INTERVAL
     }
 }

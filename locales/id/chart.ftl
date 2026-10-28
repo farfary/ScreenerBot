@@ -32,3 +32,6 @@ chart-status-total-idle =
     { $count ->
        *[other] { $count } candle · idle
     }
+
+chart-inline-curve-label = P&L kumulatif { $amount } { -sol }
+chart-inline-histogram-title = { $count } dari { $total }

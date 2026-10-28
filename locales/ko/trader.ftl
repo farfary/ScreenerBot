@@ -1,20 +1,5 @@
 # Trader page labels.
 
-# Exit types shown in the exit breakdown. Ids are the stored closed_reason: exit
-# rule ids, the Debug names of the exit TradeReason variants (src/trader/types.rs,
-# shown as readable labels) and the reasons written by src/positions and src/trader/stats.rs.
-trader-exit-type-stop-loss = 손절
-trader-exit-type-take-profit = 익절
-trader-exit-type-roi = 익절
-trader-exit-type-roi-exit = 익절
-trader-exit-type-trailing-stop = 트레일링 스톱
-trader-exit-type-time-override = 시간 청산
-trader-exit-type-time-rule = 시간 규칙
-trader-exit-type-manual = 수동
-trader-exit-type-manual-close = 수동
-trader-exit-type-dca = DCA
-trader-exit-type-unknown = 알 수 없음
-
 ## Sub-tabs. Ids are the tab ids of the trader page.
 
 trader-tab-stats = 통계
@@ -34,36 +19,45 @@ trader-feature-beta = 베타
 trader-feature-disabled = 사용 안 함
     .message = 이 기능은 현재 사용하지 않도록 설정되어 있습니다.
 
-## Status bar and trading controls
+## Toolbar, notices and trading controls
 
 trader-status-title = 자동 트레이더
-trader-status-loading = 불러오는 중...
 trader-status-running = 실행 중
 trader-status-stopped = 중지됨
 trader-status-setup-required = 설정 필요
 trader-setup-action = 설정 완료
-trader-toggle-on = 사용
-trader-toggle-off = 사용 안 함
 trader-toggle-start-failed = 트레이더를 시작하지 못했습니다
 trader-toggle-stop-failed = 트레이더를 중지하지 못했습니다
-trader-controls-title = 트레이딩 제어
 trader-halt-title = 거래 중단됨
 trader-halt-reason-default = 수동 강제 중지
 trader-halt-resume = 재개
 trader-monitor-entry = 진입 모니터
 trader-monitor-exit = 청산 모니터
-trader-monitor-master-off = 자동 트레이더 꺼짐
 trader-loss-limit-title = 기간 손실 한도
 trader-loss-limit-resume = 거래 재개
 trader-loss-limit-reset = 기간 초기화
 trader-loss-limit-off = 꺼짐
-trader-loss-limit-none = 설정된 기간 손실 한도가 없습니다
 # $hours and $minutes are formatted spans such as "2h" and "5m".
 trader-loss-limit-resets-in = { $hours } { $minutes } 후 초기화
-trader-loss-limit-reached = 한도 도달
 trader-force-stop = 모두 강제 중지
 trader-force-stop-hint = 모든 모니터, 복사 작업, 거래를 한 번에 중지합니다.
 trader-force-stop-idle = 강제 중지로 멈출 실행 중인 항목이 없습니다.
+trader-run-state-force-stopped = 강제 중지
+trader-run-state-waiting = 서비스 대기 중
+trader-run-state-idle = 모니터 꺼짐
+trader-entries-label = 신규 진입
+trader-entries-open = 가능
+trader-entries-monitor-off = 진입 모니터 꺼짐
+trader-entries-no-live-strategy = 실거래 진입 전략 없음
+trader-entries-no-paper-strategy = 모의 진입 전략 없음
+trader-action-start = 자동 트레이더 시작
+trader-action-stop = 자동 트레이더 중지
+trader-notice-loss-limit = 손실 한도에 도달했습니다
+trader-notice-loss-limit-message = 기간이 초기화될 때까지 새 실거래 진입이 일시 중지됩니다. 청산은 계속됩니다.
+trader-notice-stats-failed = 통계를 불러오지 못했습니다
+trader-controls-group =
+    .aria-label = 거래 제어
+trader-monitor-dormant = 자동 트레이더와 함께 시작
 
 ## Confirmations. `.message` is the body and `.confirm` the confirming button.
 
@@ -95,33 +89,39 @@ trader-toast-feature-enabled = 기능 사용 설정됨
 trader-toast-feature-disabled = 기능 사용 안 함
 trader-toast-feature-applied = 자동 트레이더 설정이 적용되었습니다
 
-## Stats: realized window and metrics
+## Stats: book, window, exposure and figures
 
 trader-stats-window =
     .aria-label = 통계 기간
 trader-stats-book =
     .aria-label = 거래 장부
-trader-paper-run-since = { $date }부터의 모의 운용
-trader-paper-start = 시작
-trader-paper-cash = 현금
-trader-paper-open = 보유 중
-trader-paper-unrealized = 미실현
+trader-exposure-cash = 현금
+trader-exposure-open = 보유 중
+trader-exposure-unrealized = 미실현
+trader-exposure-open-title = 슬롯을 차지하는 포지션 수와 보유 포지션 한도
+trader-exposure-in-use = 사용 중
+trader-exposure-in-use-title = 보유 포지션에 투입된 { -sol }
+# $amount is the formatted count.
+trader-exposure-unpriced =
+    { $count ->
+       *[other] 보유 포지션 { $amount }개에 아직 실시간 가격이 없습니다
+    }
+# $date is a formatted date; $amount is a formatted SOL amount.
+trader-exposure-cash-title = { $date }부터의 모의 운용 · 시작 금액 { $amount }
 trader-paper-reset = 모의 운용 초기화
 trader-paper-reset-title = 모의 운용을 초기화할까요?
 trader-paper-reset-run-message = 카피 작업의 모의 보유 수량을 포함해 열린 모의 포지션은 모두 현재 가격으로 종료되고, 설정된 시작 잔액으로 새 운용이 시작됩니다. 이전 운용은 기록에 남습니다.
 trader-paper-reset-done = 새 모의 운용이 시작되었습니다
 trader-paper-reset-failed = 모의 운용을 초기화하지 못했습니다
-trader-paper-account-failed = 모의 운용을 불러오지 못했습니다
 trader-realized-title = 실현 성과
 trader-metric-net-pnl = 순손익
 trader-metric-win-rate = 승률
 trader-metric-profit-factor = 프로핏 팩터
 trader-metric-max-drawdown = 최대 낙폭
-trader-metric-capital = 운용 자본
 trader-metric-avg-win-loss = 평균 수익 / 손실
 trader-metric-closed-trades = 종료된 거래
 trader-metric-median-hold = 중앙 보유 시간
-trader-stats-empty = 이 기간에 종료된 거래가 없습니다
+trader-metric-fees = 네트워크 수수료
 # $won and $lost are formatted SOL amounts.
 trader-stats-won-lost = 수익 { $won } · 손실 { $lost }
 # $wins and $losses are the plural messages below.
@@ -138,53 +138,84 @@ trader-stats-losses =
 trader-stats-expected = 거래당 기대값 { $amount }
 trader-stats-profit-factor-basis = 총수익 ÷ 총손실
 trader-stats-drawdown-basis = 실현 기준 최대 고점 대비 저점
-# $count is the position limit and selects the plural.
-trader-stats-slots =
-    { $count ->
-       *[other] 포지션 슬롯 { $max }개 중 { $used }개 사용 중
-    }
-trader-stats-avg-basis = 수익 거래와 손실 거래의 평균 결과
-trader-stats-closed =
-    { $count ->
-       *[other] 종료된 포지션 { $amount }개
-    }
-# $span is a formatted duration.
-trader-stats-hold-average = 평균 { $span }
 trader-stats-excluded =
     { $count ->
-       *[other] 종료된 라운드 { $amount }개 제외됨 - 완전한 매입 원가가 없어 정확한 손익을 산출할 수 없습니다.
+       *[other] 종료된 거래 { $amount }개 제외됨: 매입 원가가 불완전하여 손익을 알 수 없습니다.
     }
+# $ratio is a formatted ratio.
+trader-stats-payoff = 손익비 { $ratio }
+trader-stats-streak-win =
+    { $count ->
+       *[other] { $amount }연승
+    }
+trader-stats-streak-loss =
+    { $count ->
+       *[other] { $amount }연패
+    }
+# $wins and $losses are formatted durations.
+trader-stats-hold-split = 수익 { $wins } · 손실 { $losses }
+trader-stats-fees-basis = 순손익에 포함됨
+trader-stats-loading = 통계를 불러오는 중...
+trader-open-strategies = 전략 열기
 
-## Stats: daily P&L and extremes
+## Stats: P&L chart, trade outcomes and extremes
 
 trader-daily-title = 일별 손익
 trader-daily-subtitle = 일별 실현 { -sol }과 누적 합계
-trader-daily-loading = 일별 손익 불러오는 중...
 trader-daily-chart = { -sol } 기준 일별 실현 손익
 trader-weekly-title = 주별 손익
 trader-weekly-subtitle = ISO 주별 실현 { -sol }과 누적 합계
 trader-weekly-chart = { -sol } 기준 주별 실현 손익
+# $date is a formatted date; $pnl a signed SOL amount.
+trader-daily-bar =
+    { $count ->
+       *[other] { $date } · { $pnl } · 거래 { $amount }건
+    }
+trader-weekly-bar =
+    { $count ->
+       *[other] { $date } 주 · { $pnl } · 거래 { $amount }건
+    }
 trader-extreme-best = 최고 거래
 trader-extreme-worst = 최악 거래
+trader-extreme-runs = 최다 연속
+trader-outcome-title = 거래 결과
+trader-outcome-subtitle = 수익률별 종료된 거래, 퍼센트 기준
+# $value, $from and $to are formatted signed percentages.
+trader-outcome-below = { $value } 미만
+trader-outcome-range = { $from }~{ $to }
+trader-outcome-above = { $value } 이상
+# $range is one of the three messages above; $pnl a signed SOL amount.
+trader-outcome-bucket =
+    { $count ->
+       *[other] { $range } · 거래 { $amount }건 · { $pnl }
+    }
 
-## Stats: exit breakdown
+## Stats: empty windows, exit reasons, entry sources and recent closes
 
-trader-exit-title = 청산 전략별 분석
-trader-exit-subtitle = 포지션이 종료된 방식과 각 청산의 회수 결과
-trader-exit-loading = 청산 데이터 불러오는 중...
-trader-exit-empty-day = 최근 24시간 동안 종료된 거래가 없습니다
-trader-exit-empty-all = 아직 종료된 거래가 없습니다
-trader-exit-empty-days =
+trader-stats-empty-day = 최근 24시간 동안 종료된 거래가 없습니다
+trader-stats-empty-all = 아직 종료된 거래가 없습니다
+trader-stats-empty-hint = 포지션이 매도되면 종료된 거래가 여기에 표시됩니다. 자동 트레이더를 시작하거나 더 긴 기간을 선택하세요.
+trader-stats-empty-days =
     { $count ->
        *[other] 최근 { $amount }일 동안 종료된 거래가 없습니다
     }
-# $share is a formatted percentage of all exits.
-trader-exit-share =
-    { $count ->
-       *[other] 거래 { $amount }건 · 전체 청산의 { $share }
-    }
-# $value is a formatted average percentage.
-trader-exit-average = 평균 { $value }
+trader-exits-title = 청산 사유
+trader-exits-subtitle = 종료된 거래가 어떻게 끝났고 각 청산이 무엇을 남겼는지
+trader-sources-title = 진입 출처
+trader-sources-subtitle = 종료된 거래를 연 주체
+trader-recent-title = 최근 종료
+trader-recent-subtitle = 이 기간에 가장 최근 종료된 거래
+trader-column-token = 토큰
+trader-column-exit = 청산
+trader-column-source = 출처
+trader-column-trades = 거래
+trader-column-win-rate = 승률
+trader-column-avg-return = 평균 수익률
+trader-column-net-pnl = 순손익
+trader-column-held = 보유
+trader-column-closed = 종료
+trader-column-pnl = 손익
+trader-column-return = 수익률
 
 ## Shared example vocabulary
 
@@ -401,3 +432,8 @@ trader-timing-concurrency = 진입 확인 동시 처리 수
 trader-timing-concurrency-hint = 동시에 확인할 토큰 수 (높을수록 빠르지만 CPU 사용량 증가)
 trader-timing-unit-minutes = 분
 trader-timing-unit-tokens = 개
+
+## Service mode notice
+
+trader-service-notice-title = { -brand } 서비스로 실행 중
+trader-service-notice-message = 가격이 몇 초마다 갱신되므로 좁은 트레일링 스톱 같은 빠른 청산은 직접 RPC를 쓸 때보다 늦게 반응합니다.

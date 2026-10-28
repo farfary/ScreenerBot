@@ -32,3 +32,6 @@ chart-status-total-idle =
     { $count ->
        *[other] ローソク足 { $count }本 · 待機中
     }
+
+chart-inline-curve-label = 累積損益 { $amount } { -sol }
+chart-inline-histogram-title = { $count }/{ $total }

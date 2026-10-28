@@ -302,6 +302,51 @@ fn only_a_node_that_answered_refuses_a_transaction() {
         }
     }
 
+    // A chain access refusal dispatched nothing, so it proves the send never
+    // happened; a service that may have delivered reports a network timeout
+    // or a refusal after delivery, both of which stay unproven.
+    let paused = crate::chains::Error::ServiceSignInRequired {
+        chain: crate::chains::ChainId::Solana,
+    };
+    assert!(matches!(
+        send_failure(crate::Error::Chains(paused)),
+        SendFailure::NotSent(NotSubmittedReason::ServicePaused { .. })
+    ));
+    let not_contacted = crate::chains::Error::ServiceNotContacted {
+        chain: crate::chains::ChainId::Solana,
+    };
+    assert!(matches!(
+        send_failure(crate::Error::Chains(not_contacted)),
+        SendFailure::NotSent(NotSubmittedReason::ServicePaused { .. })
+    ));
+    let unreachable = crate::chains::Error::ServiceUnreachable {
+        chain: crate::chains::ChainId::Solana,
+        detail: "connection reset".to_owned(),
+    };
+    assert!(matches!(
+        send_failure(crate::Error::Chains(unreachable)),
+        SendFailure::Unproven(_)
+    ));
+    for maybe_delivered in [
+        RpcError::Network {
+            message: "the submission relay did not answer sendTransaction".to_owned(),
+            is_timeout: true,
+        },
+        RpcError::RefusedAfterDelivery {
+            earlier_attempts: 1,
+            refusal: Box::new(RpcError::ProviderError {
+                code: -32002,
+                message: "Transaction simulation failed".to_owned(),
+                data: None,
+            }),
+        },
+    ] {
+        assert!(matches!(
+            send_failure(crate::Error::Rpc(maybe_delivered)),
+            SendFailure::Unproven(_)
+        ));
+    }
+
     // A failure outside the RPC channel is never evidence either.
     assert!(matches!(
         simulation_verdict(Err(crate::Error::internal_error("serialize"))),

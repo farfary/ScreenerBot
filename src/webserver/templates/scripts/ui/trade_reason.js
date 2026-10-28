@@ -5,7 +5,7 @@
 /**
  * Presentation for trade and close reasons, in one place.
  *
- * Ids are the `Debug` names of `TradeReason` (src/trader/types.rs) plus the
+ * Ids are the `Debug` names of `TradeReason` (src/trader/trade_reason.rs) plus the
  * reasons written by src/positions. `positions.closed_reason` additionally
  * carries the `_pending_verification` suffix (`PENDING_VERIFICATION_SUFFIX`)
  * and `force_closed: <operator text>` (src/positions/operations/force_close.rs), which

@@ -319,3 +319,19 @@ shell-theme-light = روشن
 shell-theme-dark = تیره
 shell-theme-switch-to-light = تغییر به پوسته روشن
 shell-theme-switch-to-dark = تغییر به پوسته تیره
+
+## Chain access: service mode controls, gates and sign-out
+
+shell-service-control =
+    .aria-label = معامله متوقف شد. باز کردن جزئیات
+shell-service-action-signin = ورود
+shell-service-action-connection = افزودن RPC
+shell-access-gate-own-rpc-title = به RPC خودتان نیاز دارد
+shell-access-gate-watch-wallets = کپی‌تریدینگ و پایش کیف پول‌ها کیف پول‌های دیگر را زنده دنبال می‌کنند، کاری که سرویس { -brand } انجام نمی‌دهد. وظایف کپی و کیف پول‌های پایش‌شده حفظ می‌شوند و با افزودن RPC برمی‌گردند.
+shell-access-gate-live-pool-prices = قیمت زندهٔ استخرها به RPC خودتان نیاز دارد.
+shell-access-gate-direct-swaps = سوآپ مستقیم در استخر به RPC خودتان نیاز دارد.
+shell-access-gate-other-wallets = موجودی کیف پول‌های دیگر به RPC خودتان نیاز دارد.
+shell-access-gate-action = باز کردن تنظیمات اتصال
+shell-signout-service-title = خروج از حساب و توقف معامله؟
+shell-signout-service-message = بدون RPC خودتان، { -brand } برای خواندن کیف پول و ارسال معاملات از حساب شما استفاده می‌کند. تا وقتی از حساب خارج هستید، معامله متوقف است و پوزیشن‌های باز فروخته نمی‌شوند.
+shell-signout-service-confirm = خروج و توقف

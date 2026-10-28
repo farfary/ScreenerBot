@@ -8,7 +8,7 @@
 use super::*;
 use crate::trader::copy::round_fixtures::{closed, marked, open_round};
 use crate::trader::copy::{CopyTaskStats, ExitMode, SizingMode};
-use crate::trader::types::TradeReason;
+use crate::trader::TradeReason;
 
 const ADDRESS: &str = "CopyTarget1111111111111111111111111111111111";
 

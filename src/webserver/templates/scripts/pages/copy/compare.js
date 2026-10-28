@@ -3,9 +3,10 @@
 //
 // Compare view: every task's closed rounds over one date range, as curves and a
 // table. Choosing a wallet opens its workspace.
+import { formatPercentValue } from "../../core/format.js";
 import { DataTable } from "../../ui/data_table.js";
 import { addressFloorWidth, renderNamedAddress } from "../../ui/token_identity.js";
-import { comparisonCurves } from "./charts.js";
+import { comparisonCurves } from "../../ui/inline_chart.js";
 import {
   duration,
   fixed,
@@ -13,7 +14,6 @@ import {
   rangeQuery,
   seconds,
   section,
-  signedPct,
   signedSolCell,
   taskName,
   toneClass,
@@ -124,7 +124,7 @@ export function createCompare(page) {
       label: I18n.t("copy-table-target-difference"),
       type: "percent",
       sortable: true,
-      render: (value) => esc(signedPct(value, 2)),
+      render: (value) => esc(formatPercentValue(value, { decimals: 2, fallback: "—" })),
     },
     {
       id: "fills",
@@ -181,7 +181,7 @@ export function createCompare(page) {
     if (workspace) workspace.hidden = true;
     const rows = data.get(state.range);
     const error = errors.get(state.range);
-    const head = `<div class="copy-panel-head"><h2>${esc(I18n.t("copy-compare-title"))}</h2><div class="copy-panel-tools">${renderSegmented({ name: "compare-range", options: RANGE_OPTIONS, value: state.range, ariaLabel: I18n.attr("common-range-label", "aria-label") }, esc)}<button class="btn btn-ghost btn-sm" type="button" data-compare-close>${esc(I18n.t("copy-compare-back"))}</button></div></div>`;
+    const head = `<div class="sheet-head"><h2>${esc(I18n.t("copy-compare-title"))}</h2><div class="sheet-tools">${renderSegmented({ name: "compare-range", options: RANGE_OPTIONS, value: state.range, ariaLabel: I18n.attr("common-range-label", "aria-label") }, esc)}<button class="btn btn-ghost btn-sm" type="button" data-compare-close>${esc(I18n.t("copy-compare-back"))}</button></div></div>`;
     let body;
     if (!rows)
       body = error
@@ -206,7 +206,11 @@ export function createCompare(page) {
             nameHtml: `<span title="${esc(row.target_address)}">${esc(taskName(row))}</span>`,
             points: row.pnl_curve,
           })),
-          { escapeHtml: esc }
+          {
+            escapeHtml: esc,
+            empty: I18n.t("copy-chart-empty-compare"),
+            label: I18n.t("copy-chart-compare-label"),
+          }
         ),
         esc
       );

@@ -72,6 +72,8 @@ pub struct TransactionSummaryResponse {
 #[derive(Debug, Serialize)]
 pub struct BootstrapStateInfo {
     pub full_history_completed: bool,
+    /// Whether history older than the stored signatures can be loaded on demand
+    pub older_history_available: bool,
 }
 
 /// Full transaction detail response - includes all analysis fields

@@ -63,6 +63,7 @@ const STATE_DETAIL_LABELS = Object.freeze({
   live: "copy-state-detail-live",
   system_paused: "copy-state-detail-system-paused",
   entries_blocked: "copy-state-detail-entries-blocked",
+  own_rpc_required: "copy-state-detail-own-rpc-required",
   force_stopped: "copy-state-detail-force-stopped",
 });
 

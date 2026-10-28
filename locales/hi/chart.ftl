@@ -36,3 +36,6 @@ chart-status-total-idle =
         [one] { $count } कैंडल · निष्क्रिय
        *[other] { $count } कैंडल · निष्क्रिय
     }
+
+chart-inline-curve-label = संचयी लाभ-हानि { $amount } { -sol }
+chart-inline-histogram-title = { $total } में से { $count }

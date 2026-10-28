@@ -38,19 +38,6 @@ copy-skip-swap-mixed-quote = 同时以 SOL 和稳定币支付，因此该交易�
 copy-skip-swap-multiple-tokens = 同一笔交易中交易了多个代币
 copy-skip-swap-unreadable = 无法读取交易金额
 
-copy-entry-block-force-stopped = 交易已被强制停止
-copy-entry-block-loss-limit = 亏损限额已拦截新入场
-copy-entry-block-connectivity = 所需服务不可用
-copy-entry-block-storage-unavailable = 交易数据不可用或正在恢复
-copy-entry-block-position-limit = 已达持仓上限
-copy-entry-block-already-open = 已有仓位处于持仓中
-copy-entry-block-reentry-cooldown = 代币再入场冷却时间
-copy-entry-block-open-cooldown = 全局入场冷却时间
-copy-entry-block-entry-reserved = 另一笔入场正在处理
-copy-entry-block-blacklisted = 代币被风控拦截
-copy-entry-block-paper-balance-exhausted = 模拟余额不足以完成此交易
-copy-entry-block-check-failed = 安全检查未能完成
-
 copy-pause-user = 已由您暂停
 copy-pause-latency-kill-switch = 已自动暂停：交易平均延迟 { $average } 秒到达（上限 { $threshold } 秒）
 copy-pause-watch-detached = 已自动暂停：不再监控该钱包
@@ -89,6 +76,7 @@ copy-live-block-copy-trading-disabled = 跟单处理已全局暂停
 copy-state-system-paused = 已全局暂停
 copy-state-force-stopped = 已强制停止
 copy-state-entries-blocked = 入场已被拦截
+copy-state-own-rpc-required = 需要你自己的 RPC
 copy-state-running-live = 运行中
 copy-state-running-paper = 运行中
 copy-exit-mode-buy-only = 我的出场规则
@@ -162,6 +150,7 @@ copy-status-force-stopped = 强制停止
 copy-status-loss-limit = 亏损上限
 copy-status-all-paused = 所有任务已暂停
 copy-status-processing = 处理中
+copy-status-own-rpc-required = 需要你自己的 RPC
 copy-toolbar-pause = 暂停跟单
 copy-toolbar-resume = 恢复跟单
 copy-toolbar-resume-tasks = 恢复所有任务
@@ -310,6 +299,7 @@ copy-state-detail-paper = 模拟运行中 · 交易为模拟，不会花费资�
 copy-state-detail-live = 实盘运行中 · 钱包的交易将通过真实兑换跟单
 copy-state-detail-system-paused = 等待中 · 跟单处理已全局暂停，出场仍会执行
 copy-state-detail-entries-blocked = 入场已被亏损限额拦截 · 出场仍会执行
+copy-state-detail-own-rpc-required = 等待中 · { -brand } 服务不跟踪其他钱包；添加 RPC 即可恢复
 copy-state-detail-force-stopped = 已强制停止 · 不会跟单
 
 copy-paused-since = { $reason } · { $since }
@@ -562,13 +552,11 @@ copy-table-target-difference = 与目标价格差异的中位数
 
 ## Charts
 
-copy-chart-curve-label = 累计盈亏 { $amount } { -sol }
 copy-chart-compare-label = 按任务的累计盈亏
 copy-chart-empty-curve = 此范围内暂无已平仓轮次。
 copy-chart-empty-bars = 此范围内没有记录。
 copy-chart-empty-histogram = 此范围内暂无到达时间样本。
 copy-chart-empty-compare = 此范围内没有可对比的已平仓轮次。
-copy-chart-histogram-title = { $count } / { $total }
 
 ## Wallet profile
 

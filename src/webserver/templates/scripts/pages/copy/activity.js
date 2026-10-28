@@ -3,7 +3,7 @@
 //
 // The Activity tab: the task's whole decision history, paged from the server and
 // filtered by kind or token. Consecutive skips for one reason fold into a group.
-import { formatNumber } from "../../core/format.js";
+import { formatNumber, formatPercentValue } from "../../core/format.js";
 import {
   dateTime,
   duration,
@@ -11,13 +11,13 @@ import {
   pct,
   price,
   seconds,
-  signedPct,
   skipKey,
   skipLabel,
   sol,
 } from "./format.js";
 import { ensureIdentities, tokenWithMint } from "./tokens.js";
 import { renderStateView } from "../../ui/state_view.js";
+import { venueLabel } from "../../ui/venue.js";
 import { renderSegmented } from "../../ui/segmented.js";
 
 const PAGE = 50;
@@ -177,7 +177,7 @@ export function outcomeDetail(outcome) {
           ? I18n.t("copy-activity-filled", values)
           : I18n.t("copy-activity-filled-target-difference", {
               ...values,
-              difference: signedPct(difference, 2),
+              difference: formatPercentValue(difference, { decimals: 2, fallback: "—" }),
             });
       }
       if (!fill.priced_from_pool) return I18n.t("copy-activity-filled-unpriced", values);
@@ -185,7 +185,7 @@ export function outcomeDetail(outcome) {
         ? I18n.t("copy-activity-filled", values)
         : I18n.t("copy-activity-filled-slippage", {
             ...values,
-            slippage: signedPct(difference, 2),
+            slippage: formatPercentValue(difference, { decimals: 2, fallback: "—" }),
           });
     }
     case "live_submitted":
@@ -240,7 +240,7 @@ export function quoteNotes(outcome) {
   if (!quote) return [];
   return [
     I18n.t("copy-activity-quote-router", {
-      router: quote.router_id,
+      router: venueLabel(quote.router_id),
       initial: dateTime(quote.initial_at),
       landing: dateTime(quote.landing_at),
     }),
@@ -450,7 +450,7 @@ export function createActivity(page, { rerender }) {
       rerender
     );
     const search = `<form class="copy-activity-search" data-activity-mint-form role="search"><input dir="ltr" type="search" name="mint" value="${esc(mint)}" placeholder="${esc(I18n.attr("copy-activity-mint-filter", "placeholder"))}" aria-label="${esc(I18n.attr("copy-activity-mint-filter", "aria-label"))}" spellcheck="false" autocomplete="off" />${mint ? `<button class="btn btn-ghost btn-sm" type="button" data-activity-clear>${esc(I18n.t("copy-activity-clear"))}</button>` : ""}</form>`;
-    const head = `<div class="copy-panel-head"><h3>${esc(I18n.t("copy-activity-title"))}</h3><div class="copy-panel-tools">${renderSegmented({ name: "activity-filter", options: FILTERS, value: filter, ariaLabel: I18n.t("copy-activity-filter-label") }, esc)}${search}</div></div>`;
+    const head = `<div class="sheet-head"><h3>${esc(I18n.t("copy-activity-title"))}</h3><div class="sheet-tools">${renderSegmented({ name: "activity-filter", options: FILTERS, value: filter, ariaLabel: I18n.t("copy-activity-filter-label") }, esc)}${search}</div></div>`;
     if (!loaded) {
       return (
         head +

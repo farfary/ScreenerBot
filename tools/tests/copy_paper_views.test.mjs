@@ -42,8 +42,8 @@ async function openCopy(t, { workspace = null, routes = [] } = {}) {
 /** The section of the open sheet panel whose heading is `title`, or null. */
 async function section(page, title) {
   // The panel shows a loading message until the workspace is read; a section means it is.
-  await page.locator("#copy-ws-panel .copy-section").first().waitFor();
-  const headings = page.locator("#copy-ws-panel section > h3.copy-section-title", {
+  await page.locator("#copy-ws-panel .sheet-section").first().waitFor();
+  const headings = page.locator("#copy-ws-panel section > h3.sheet-section-title", {
     hasText: new RegExp(`^${title}$`),
   });
   return (await headings.count()) ? headings.first().locator("xpath=..") : null;
@@ -67,7 +67,7 @@ test("activity names each fill's model from its record, not from the pool flag",
   assert.ok(quoteBuy, JSON.stringify(rows.map((row) => row.title)));
   assert.match(quoteBuy.detail, /^.+ at .+ · wallet bought .+ · target price difference \+1\.20%$/);
   assert.doesNotMatch(quoteBuy.detail, /slippage|no pool price/i);
-  assert.match(quoteBuy.meta, /Router jupiter · quotes received .+ and .+/);
+  assert.match(quoteBuy.meta, /Router Jupiter · quotes received .+ and .+/);
   assert.match(quoteBuy.meta, /Assumed wait 1\.0s · queued 0\.24s/);
   assert.match(quoteBuy.meta, /Estimated network and priority fees .*0\.00006.*counted once/);
   assert.match(quoteBuy.meta, /platform fee already in the quoted output/);
@@ -75,7 +75,7 @@ test("activity names each fill's model from its record, not from the pool flag",
   const quoteExit = rows.find((row) => row.title.startsWith("Quote-based paper exit · "));
   assert.ok(quoteExit, "an exit keeps both its model and its rule");
   assert.match(quoteExit.detail, /^2,?416\.04 tokens for .+ at .+/);
-  assert.match(quoteExit.meta, /Router jupiter/);
+  assert.match(quoteExit.meta, /Router Jupiter/);
 
   const legacyBuy = rows.find((row) => row.title === "Legacy paper estimate");
   assert.ok(legacyBuy, "a historical fill keeps its legacy title");
@@ -91,7 +91,7 @@ test("activity names each fill's model from its record, not from the pool flag",
 async function openExecution(page) {
   await page.locator("#copy-tab-execution").click();
   await page
-    .locator("#copy-ws-panel section > h3.copy-section-title", { hasText: "Decisions in range" })
+    .locator("#copy-ws-panel section > h3.sheet-section-title", { hasText: "Decisions in range" })
     .waitFor();
 }
 
@@ -113,7 +113,7 @@ test("the paper model section shows the workspace's own settings, for a paper ta
   assert.match(detail, /Queue size per task\s*48/);
   assert.match(detail, /counted once/);
   assert.match(detail, /Detection delay is measured from the wallet's block/);
-  const order = await page.$$eval("#copy-ws-panel > .copy-section", (nodes) =>
+  const order = await page.$$eval("#copy-ws-panel > .sheet-section", (nodes) =>
     nodes.map((node) => node.querySelector(":scope > h3")?.textContent ?? "")
   );
   assert.equal(plain(order.at(-1)), "Paper execution model", "the model comes last");
@@ -176,7 +176,7 @@ test("earlier paper results show the archived book above the legacy estimates, r
   const earlier = await section(page, "Earlier paper results");
   assert.ok(earlier, "the populated task has earlier paper results");
   assert.deepEqual(
-    (await earlier.locator("h4.copy-section-subtitle").allTextContents()).map(plain),
+    (await earlier.locator("h4.sheet-section-subtitle").allTextContents()).map(plain),
     ["Quote-based copy book", "Legacy paper estimates"],
     "the archived book comes first, the legacy estimates beneath it"
   );
@@ -297,9 +297,7 @@ test("settings save the paper queue and leave the landing delay to the shared pa
     if (index > 0) await open();
     await fill(queue);
     await page.locator("#copy-settings-form button[type='submit']").click();
-    await page.waitForFunction(() =>
-      document.querySelector("#copy-settings")?.hidden
-    );
+    await page.waitForFunction(() => document.querySelector("#copy-settings")?.hidden);
     const saved = patches[patches.length - 1];
     assert.equal(saved.paper_queue_capacity, Number(queue));
     assert.equal(saved.max_arrival_distance_ms, 4000, "the arrival limit round-trips unchanged");
@@ -331,9 +329,7 @@ test("settings refuse a non-integer or out-of-range queue", async (t) => {
     assert.equal(state, true, `queue "${queue}" is ${reason}`);
     assert.equal(patches.length, 0, `nothing is saved for ${reason}`);
     assert.equal(
-      await page.evaluate(() =>
-        document.querySelector("#copy-settings")?.hidden
-      ),
+      await page.evaluate(() => document.querySelector("#copy-settings")?.hidden),
       false,
       "the dialog stays open on invalid input"
     );

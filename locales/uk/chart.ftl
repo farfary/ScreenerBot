@@ -38,3 +38,6 @@ chart-status-total-idle =
         [many] { $count } свічок · очікування
        *[other] { $count } свічки · очікування
     }
+
+chart-inline-curve-label = Накопичений прибуток/збиток { $amount } { -sol }
+chart-inline-histogram-title = { $count } із { $total }

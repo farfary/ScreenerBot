@@ -11,7 +11,7 @@ onboarding-welcome-custody-description = Private keys encrypted at rest and neve
 onboarding-welcome-engine-title = Always-On Engine
 onboarding-welcome-engine-description = Orchestrated services with health checks and graceful lifecycle control.
 onboarding-welcome-realtime-title = Real-Time On-Chain Data
-onboarding-welcome-realtime-description = Direct pool reserve calculations — not delayed API snapshots.
+onboarding-welcome-realtime-description = With your own RPC, prices come straight from pool reserves, not delayed API snapshots.
 
 ## Slide: discover
 
@@ -35,7 +35,7 @@ onboarding-trade-auto-description = Entry/exit evaluators, DCA rounds, partial e
 onboarding-trade-strategy-title = Strategy Engine
 onboarding-trade-strategy-description = Condition trees combining price, volume, and time-based signals.
 onboarding-trade-copy-title = Copy Trading
-onboarding-trade-copy-description = Mirror the trades of wallets you follow. Test any task in paper mode before it spends real { -sol }.
+onboarding-trade-copy-description = Mirror the trades of wallets you follow (needs your own RPC). Test any task in paper mode before it spends real { -sol }.
 onboarding-trade-safety-title = Safety Controls
 onboarding-trade-safety-description = Emergency stop, period-based loss limits, and independent monitor toggles.
 
@@ -55,20 +55,20 @@ onboarding-connect-events-description = Every trade, swap, and system event logg
 ## Slide: data
 
 onboarding-data-title = { -brand } Data
-onboarding-data-description = We run a shared market-data service, so your install isn't throttled by public provider rate limits. It's free with a { -brand } account, and { -brand } works without one.
-onboarding-data-candles-title = Pooled Candle History
-onboarding-data-candles-description = Seven timeframes of shared history, years deep, served from one cache.
-onboarding-data-pools-title = Resolved Pools & Security
-onboarding-data-pools-description = A central pool registry and cached { -rugcheck } reports, already fetched.
+onboarding-data-description = A free { -brand } account adds faster charts and token checks. With your own RPC, { -brand } also works without one.
+onboarding-data-candles-title = Charts Load Fast
+onboarding-data-candles-description = Seven timeframes of price history, years deep.
+onboarding-data-pools-title = Token Checks Ready
+onboarding-data-pools-description = Pools and security reports for most tokens, without waiting.
 onboarding-data-signin-title = Account Required
 onboarding-data-signin-description = Without an account this data is unavailable and the public providers are used.
-onboarding-data-reading-title = Lookups Only
-onboarding-data-reading-description = We see which tokens you look up. Never a key, a balance, a position or a trade.
+onboarding-data-reading-title = What We See
+onboarding-data-reading-description = The tokens you look up, and the swaps you send through { -brand }. On the { -brand } service, also your trading wallet's balances and history. Never your key.
 
 ## Slide: privacy
 
 onboarding-privacy-title = Your Keys, Your Data
-onboarding-privacy-description = Your configuration, keys and trading history stay on this machine. Next, choose "Explore dashboard" for discovery without credentials, or link a wallet and RPC to enable the full bot — and sign in there if you want { -brand } data.
+onboarding-privacy-description = Your configuration, keys and trading history stay on this machine. Next, choose "Explore dashboard" for discovery without credentials, or create or import a wallet and connect it through your own RPC or the { -brand } service to start trading.
 onboarding-privacy-local-title = Local-First Architecture
 onboarding-privacy-local-description = Config, analytics, and databases stored on your desktop.
 onboarding-privacy-wallet-title = Encrypted Wallet
@@ -81,7 +81,7 @@ onboarding-privacy-config-description = Most settings can be adjusted from the d
 ## Footer
 
 onboarding-setup-shortcut =
-    .aria-label = Go directly to wallet and RPC setup or choose Explore Mode
+    .aria-label = Go directly to setup or choose Explore Mode
 onboarding-setup-shortcut-label = Go to setup
 onboarding-progress-dot =
     .aria-label = Go to slide { $number }

@@ -243,6 +243,10 @@ button.ticker-segment:hover {
   color: var(--text-primary);
 }
 
+.ticker-segment[hidden] {
+  display: none;
+}
+
 .ticker-segment:last-child {
   border-inline-end: 0;
 }
@@ -373,13 +377,18 @@ button.ticker-segment:hover .ticker-icon {
 }
 
 /* Measured compaction (`HEADER_FIT_STEPS` in core/header.js): when the desktop row does
-   not fit, the Explore setup control drops to one line, the wordmark gives way to the
-   logo glyph, then the control keeps only its action; the quick actions fold only when
-   all of it is not enough. */
-.header-row-1.is-explore-compact .explore-setup-detail,
-.header-row-1.is-explore-compact .explore-setup-arrow,
+   not fit, the access control drops to one line, the wordmark gives way to the logo
+   glyph, then the control keeps one element. Explore Mode keeps its setup action, since
+   the trader card already reads Explore; a paused ScreenerBot service keeps the state
+   that names the pause, and the control itself still opens the settings tab that
+   resumes it. The quick actions fold only when all of it is not enough. */
+.header-row-1.is-access-compact .access-control-detail,
+.header-row-1.is-access-compact .access-control-arrow,
 .header-row-1.is-brand-compact .brand-text,
-.header-row-1.is-explore-minimal .explore-setup-copy {
+.header-row-1.is-access-minimal
+  .access-control[data-kind="explore"]:has(.access-control-action:not([hidden]))
+  .access-control-copy,
+.header-row-1.is-access-minimal .access-control[data-kind="service"] .access-control-action {
   display: none;
 }
 
@@ -450,8 +459,8 @@ button.ticker-segment:hover .ticker-icon {
     border-top: 1px solid var(--border-color);
   }
 
-  .explore-setup-control {
-    grid-area: explore;
+  .access-control {
+    grid-area: access;
     width: 100%;
     min-width: 0;
     max-width: none;
@@ -459,21 +468,21 @@ button.ticker-segment:hover .ticker-icon {
     padding-inline: 8px;
   }
 
-  .modern-header.has-explore-setup .header-row-1 {
+  .modern-header.has-access-control .header-row-1 {
     grid-template-areas:
       "brand trader actions"
-      "explore explore explore"
+      "access access access"
       "cards cards cards";
   }
 
-  .explore-setup-copy {
+  .access-control-copy {
     flex-direction: row;
     align-items: baseline;
     gap: 7px;
   }
 
-  .explore-setup-detail,
-  .explore-setup-arrow {
+  .access-control-detail,
+  .access-control-arrow:not([hidden]) {
     display: inline;
   }
 
@@ -530,7 +539,7 @@ button.ticker-segment:hover .ticker-icon {
     height: 40px;
   }
 
-  .explore-setup-detail {
+  .access-control-detail {
     display: none;
   }
 }

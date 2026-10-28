@@ -11,6 +11,7 @@ use std::sync::{LazyLock, Mutex};
 use std::time::{Duration, Instant};
 use uuid::Uuid;
 
+use crate::chains::access::ChainAccessMode;
 use crate::chains::ChainId;
 use crate::i18n::ids;
 use crate::logger::{self, LogTag};
@@ -34,6 +35,7 @@ struct PendingSetupValidation {
     expires_at: Instant,
     snapshot_digest: [u8; 32],
     chain: ChainId,
+    access: ChainAccessMode,
     wallet_address: String,
     rpc_source: RpcSource,
     working_rpc_indices: Vec<usize>,
@@ -41,15 +43,32 @@ struct PendingSetupValidation {
 
 struct ValidatedSetup {
     chain: ChainId,
+    access: ChainAccessMode,
     wallet_address: String,
     rpc_source: RpcSource,
     working_rpc_indices: Vec<usize>,
 }
 
+/// The chain access a validation or its completion is for: the requested one,
+/// else own RPC during setup and the install's current mode after it, so a
+/// wallet replacement keeps the mode unless it names one.
+pub(in crate::webserver::routes) fn requested_access(
+    requested: Option<ChainAccessMode>,
+    chain: ChainId,
+) -> ChainAccessMode {
+    requested.unwrap_or_else(|| {
+        if crate::global::is_initialization_complete() {
+            crate::chains::access::mode(chain)
+        } else {
+            ChainAccessMode::OwnRpc
+        }
+    })
+}
+
 static PENDING_SETUP_VALIDATION: LazyLock<Mutex<Option<PendingSetupValidation>>> =
     LazyLock::new(|| Mutex::new(None));
 
-pub(super) fn validate_rpc_url_list(urls: &[String]) -> Vec<String> {
+pub(in crate::webserver::routes) fn validate_rpc_url_list(urls: &[String]) -> Vec<String> {
     let mut errors = Vec::new();
     if urls.is_empty() {
         errors.push("At least one RPC URL is required".to_owned());
@@ -125,8 +144,15 @@ fn is_private_rpc_host(host: &str) -> bool {
     }
 }
 
-fn setup_snapshot_digest(wallet_private_key: &str, rpc_urls: &[String]) -> [u8; 32] {
+fn setup_snapshot_digest(
+    wallet_private_key: &str,
+    rpc_urls: &[String],
+    access: ChainAccessMode,
+) -> [u8; 32] {
     let mut hasher = Sha256::new();
+    let access = access.as_config_value();
+    hasher.update((access.len() as u64).to_le_bytes());
+    hasher.update(access.as_bytes());
     hasher.update((wallet_private_key.len() as u64).to_le_bytes());
     hasher.update(wallet_private_key.as_bytes());
     hasher.update((rpc_urls.len() as u64).to_le_bytes());
@@ -148,6 +174,7 @@ pub(super) fn clear_setup_validation() {
 pub(super) fn store_setup_validation(
     wallet_private_key: &str,
     rpc_urls: &[String],
+    access: ChainAccessMode,
     chain: ChainId,
     wallet_address: String,
     rpc_source: RpcSource,
@@ -157,8 +184,9 @@ pub(super) fn store_setup_validation(
     let pending = PendingSetupValidation {
         id: id.clone(),
         expires_at: Instant::now() + SETUP_VALIDATION_TTL,
-        snapshot_digest: setup_snapshot_digest(wallet_private_key, rpc_urls),
+        snapshot_digest: setup_snapshot_digest(wallet_private_key, rpc_urls, access),
         chain,
+        access,
         wallet_address,
         rpc_source,
         working_rpc_indices,
@@ -187,15 +215,18 @@ fn consume_setup_validation(request: &CompleteInitializationRequest) -> Result<V
             detail: "Credential verification expired. Run it again before saving".to_owned(),
         });
     }
+    let access = requested_access(request.access, pending.chain);
     if pending.id != request.validation_id
+        || pending.access != access
         || pending.snapshot_digest
-            != setup_snapshot_digest(&request.wallet_private_key, &request.rpc_urls)
+            != setup_snapshot_digest(&request.wallet_private_key, &request.rpc_urls, access)
     {
         return Err(Error::InvalidInitialization {
             detail: "Credentials changed after verification. Run verification again".to_owned(),
         });
     }
-    if pending.working_rpc_indices.is_empty() {
+    // Service access saves no endpoint; own RPC needs at least one that worked.
+    if pending.access == ChainAccessMode::OwnRpc && pending.working_rpc_indices.is_empty() {
         return Err(Error::InvalidInitialization {
             detail: "No validated RPC endpoints are available to save".to_owned(),
         });
@@ -203,6 +234,7 @@ fn consume_setup_validation(request: &CompleteInitializationRequest) -> Result<V
 
     Ok(ValidatedSetup {
         chain: pending.chain,
+        access: pending.access,
         wallet_address: pending.wallet_address,
         rpc_source: pending.rpc_source,
         working_rpc_indices: pending.working_rpc_indices,
@@ -248,6 +280,7 @@ pub(in crate::webserver::routes) fn consume_validated_key(
     );
     Ok(StagedKey {
         chain: validated.chain,
+        access: validated.access,
         address: validated.wallet_address,
         ciphertext: encrypted.ciphertext,
         nonce: encrypted.nonce,

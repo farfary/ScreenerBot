@@ -3,7 +3,7 @@
 # src/data_server/access.rs.
 
 account-data-access-ready = { -brand } 데이터가 활성화되어 있습니다
-    .detail = 공유 캔들, 풀 레지스트리, 보안 리포트, 토큰 식별 정보를 screenerbot.io에서 제공받고 있습니다.
+    .detail = 차트, 풀 데이터, 보안 리포트를 screenerbot.io에서 불러옵니다.
 
 account-data-access-disabled = { -brand } 데이터가 꺼져 있습니다
     .detail = 설정에서 { -brand } 소스가 꺼져 있어 공개 제공자의 데이터만 사용합니다.
@@ -12,7 +12,7 @@ account-data-access-offline = { -brand } 데이터가 오프라인입니다
     .detail = 네트워크에 연결되어 있지 않습니다. 연결이 복구되면 데이터가 자동으로 재개됩니다.
 
 account-data-access-signed-out = { -brand } 데이터를 사용하려면 계정이 필요합니다
-    .detail = 차트, 풀, 보안 리포트, 토큰 식별 정보는 대신 공개 제공자에서 가져옵니다. 속도가 느리고, 요청 제한이 있으며, 과거 데이터도 적습니다. 로그인은 무료이며 { -brand } 실행 방식에는 다른 영향이 없습니다.
+    .detail = 차트, 풀, 보안 리포트는 대신 공개 제공자에서 가져옵니다. 속도가 느리고, 요청 제한이 있으며, 과거 데이터도 적습니다. 로그인은 무료이며 { -brand } 실행 방식에는 다른 영향이 없습니다.
 
 account-data-access-reauthorization-required = { -brand } 데이터를 사용하려면 다시 로그인해야 합니다
     .detail = 이 기기는 { -brand } 데이터가 도입되기 전에 승인되었습니다. 다시 로그인하면 복구됩니다. 그때까지는 공개 제공자를 사용합니다.
@@ -24,16 +24,17 @@ account-data-access-unreachable = { -brand } 데이터가 응답하지 않습니
     .detail = 서비스가 응답하지 않았습니다. 공개 제공자를 사용하며 계속 재시도합니다.
 
 account-data-access-unknown = { -brand } 데이터를 아직 확인하지 않았습니다
-    .detail = 이번 세션에서는 아직 공유 데이터가 필요하지 않았습니다.
+    .detail = 이번 세션에서 { -brand }가 아직 이 데이터를 불러오지 않았습니다.
 
 ## Account panel (ui/account/panel.js), shared by Setup and Settings
 
 # Features a signed-in account carries.
 account-scope-data-read = { -brand } 시장 데이터
-account-scope-rpc-submit = 서명된 트랜잭션 무료 제출
+account-scope-rpc-submit = { -brand }를 통한 트랜잭션 전송
 account-scope-vote = 토큰 투표
 account-scope-referral-read = 추천 수익
 account-scope-account-read = 계정 세부 정보
+account-scope-chain-read = { -brand } 서비스의 지갑 조회
 
 account-panel-request-failed = 작업이 실패했습니다. 다시 시도하세요.
 account-panel-checking = 계정 상태를 확인하는 중…

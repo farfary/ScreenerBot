@@ -32,6 +32,7 @@ settings-dialog-tab-hints = ヒント
 settings-dialog-tab-data = データ
 settings-dialog-tab-security = セキュリティ
 settings-dialog-tab-account = アカウント
+settings-dialog-tab-connection = 接続
 settings-dialog-tab-telegram = { -telegram }
 settings-dialog-tab-agent-connections = エージェント接続
 settings-dialog-tab-updates = アップデート
@@ -499,14 +500,12 @@ settings-hints-restored = すべてのヒントを復元しました
 ## account_tab.js
 
 settings-account-title = { -brand } アカウント
-settings-account-description = 無料で、任意です。{ -brand } はアカウントなしでも、取引、銘柄探索、チャート表示ができます。その場合は公開プロバイダーを利用します。ログインすると何が追加されるかは、下のパネルに表示されます。
+settings-account-description = 無料です。ご自身の RPC を使う場合は任意で、{ -brand } はアカウントなしでも公開プロバイダーを使って取引、銘柄探索、チャート表示ができます。{ -brand } サービスを使うにはアカウントが必要です。ログインすると何が追加されるかは、下のパネルに表示されます。
+settings-account-description-service = 無料で、{ -brand } サービスには必須です。ウォレットの読み取りと署名したスワップは、このアカウントで screenerbot.io を経由します。秘密鍵がこのコンピューターから出ることはありません。
 settings-account-data-title = { -brand } データ
-settings-account-data-description = screenerbot.io で共有の市場データサービスを運営しています。7 つの時間足にまたがる集約ローソク足、解決済みのプールレジストリ、キャッシュされたセキュリティレポート、正規化されたトークン情報を提供します。各インストールが単独で公開プロバイダーのレート制限を受けずに済みます。運用コストの帰属を明確にし、不正利用を抑えるため、このサービスの利用にはアカウントが必要です。
+settings-account-data-description = { -brand } は screenerbot.io で、チャート、プールデータ、セキュリティレポート、トークン情報のための共有マーケットデータサービスを運営しています。そのため、お使いのアプリが単独で公開プロバイダーのレート制限を受けることはありません。不正利用を抑えるため、無料アカウントが必要です。
 settings-account-data-fallback = 利用できない場合、{ -brand } は自動的に公開プロバイダーに切り替わります。動作は止まらず、チャートの表示が遅くなり、履歴が少なくなるだけです。
-settings-account-gateway-title = トランザクションの送信
-settings-account-gateway-description = ログイン中は、{ -brand } がスワップを自前の RPC ではなく screenerbot.io 経由で送信できます。トランザクションの作成と署名は引き続きこのマシン上で行われ、サーバーは中継するだけです。署名済みトランザクションを変更すると署名が無効になるため、改変はできません。
-settings-account-gateway-label = トランザクション送信に { -brand } の RPC を使用
-settings-account-gateway-hint = 送信のみが対象です。価格データは常にご自身の RPC から取得します。プールのポーリングは共有エンドポイントには負荷が大きすぎるため、そちらには送信しません。
+settings-account-data-fallback-service = { -brand } サービスでは、ウォレットの読み取りと取引も screenerbot.io を経由します。接続できない間は取引が一時停止し、接続が戻ると再開します。
 settings-account-manage-title = アカウントの管理
 settings-account-manage-description = パスワード、メールアドレス、接続済みデバイス、紹介報酬の受け取りは、ウェブサイトで管理します。そこでデバイスを取り消すと、このデバイスを含むすべての場所でログアウトされます。
 settings-account-open-dashboard = ダッシュボードを開く
@@ -623,3 +622,26 @@ settings-data-folder-label = データフォルダーを開く
 settings-data-folder-hint = { -brand } のすべてのデータを含むフォルダーをファイルマネージャーで開きます。
 settings-data-folder-open = フォルダーを開く
 settings-data-folder-open-failed = データフォルダーを開けませんでした
+
+## Connection tab (scripts/ui/settings/connection_tab.js)
+
+settings-connection-title = 接続
+settings-connection-description = { -brand } が { -solana } に接続する方法。
+settings-connection-choice =
+    .aria-label = 接続
+settings-connection-active = 使用中
+settings-connection-service-title = { -brand } サービス
+settings-connection-service-detail = 価格は数秒ごとに更新されます。コピートレード、ウォレットのウォッチ、他のウォレットの残高、古い履歴、プールへの直接スワップ、ライブのプール価格にはご自身の RPC が必要です。
+settings-connection-own-title = 独自の RPC
+settings-connection-own-detail = 価格は毎秒約 2 回更新され、すべての機能を使えます。
+settings-connection-apply = 適用して再起動
+settings-connection-to-service-title = { -brand } サービスに切り替えますか？
+settings-connection-to-service-message = コピートレード、ウォレットのウォッチ、他のウォレットの残高、古い履歴、プールへの直接スワップ、ライブのプール価格はオフになります。それぞれの設定は保持されます。サインアウト中は取引が一時停止します。切り替えのため { -brand } が再起動します。
+settings-connection-to-own-title = 独自の RPC に切り替えますか？
+settings-connection-to-own-message = { -brand } がエンドポイントを確認し、切り替えのため再起動します。すべての機能が再び使えるようになります。
+settings-connection-signed-in-as = 接続済み · { $name } としてサインイン中
+settings-connection-sending-title = トランザクションの送信
+settings-connection-sending-label = { -brand } 経由でトランザクションを送信
+settings-connection-sending-own-hint = サインイン中は、このコンピューターで署名したスワップを screenerbot.io 経由でブロードキャストします。利用できない場合はご自身の RPC を使います。
+settings-connection-sending-service-hint = { -brand } サービスでは常にオンです。このコンピューターで署名したスワップは、この経路で { -solana } に届きます。
+settings-connection-switch-failed = 接続を切り替えられませんでした。

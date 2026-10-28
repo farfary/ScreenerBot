@@ -38,6 +38,7 @@ settings-dialog-tab-hints = Подсказки
 settings-dialog-tab-data = Данные
 settings-dialog-tab-security = Безопасность
 settings-dialog-tab-account = Аккаунт
+settings-dialog-tab-connection = Подключение
 settings-dialog-tab-telegram = { -telegram }
 settings-dialog-tab-agent-connections = Подключения агентов
 settings-dialog-tab-updates = Обновления
@@ -514,14 +515,12 @@ settings-hints-restored = Все подсказки возвращены
 ## account_tab.js
 
 settings-account-title = Аккаунт { -brand }
-settings-account-description = Бесплатный и необязательный. { -brand } торгует, находит токены и строит графики и без аккаунта — просто работает через публичных провайдеров. Панель ниже показывает, что даёт вход в аккаунт.
+settings-account-description = Бесплатный. Со своим RPC он необязателен: { -brand } торгует, находит токены и строит графики и без аккаунта, через публичных провайдеров. Для сервиса { -brand } аккаунт нужен. Панель ниже показывает, что даёт вход в аккаунт.
+settings-account-description-service = Бесплатный и обязательный для сервиса { -brand }: чтение кошелька и подписанные вами свопы идут через screenerbot.io от имени этого аккаунта. Ваш закрытый ключ никогда не покидает этот компьютер.
 settings-account-data-title = Данные { -brand }
-settings-account-data-description = Мы поддерживаем общий сервис рыночных данных на screenerbot.io: объединённые свечи по семи таймфреймам, готовый реестр пулов, кэшированные отчёты о безопасности и нормализованные данные о токенах. Благодаря ему публичные провайдеры не ограничивают каждую установку по частоте поодиночке. Для сервиса нужен аккаунт, чтобы можно было учитывать затраты на его работу и ограничивать злоупотребления.
+settings-account-data-description = { -brand } поддерживает на screenerbot.io общий сервис рыночных данных для графиков, данных пулов, отчётов о безопасности и сведений о токенах, чтобы ваша установка не упиралась в лимиты публичных провайдеров в одиночку. Для защиты от злоупотреблений нужен бесплатный аккаунт.
 settings-account-data-fallback = Если сервис недоступен, { -brand } автоматически переключается на публичных провайдеров. Ничего не останавливается; графики заполняются медленнее и содержат меньше истории.
-settings-account-gateway-title = Отправка транзакций
-settings-account-gateway-description = После входа в аккаунт { -brand } может отправлять ваши свопы через screenerbot.io вместо вашего собственного RPC. Бот по-прежнему создаёт и подписывает каждую транзакцию на этом компьютере — сервер только пересылает её и не может изменить подписанную транзакцию, не сделав подпись недействительной.
-settings-account-gateway-label = Использовать RPC { -brand } для отправки транзакций
-settings-account-gateway-hint = Только для отправки. Данные о ценах всегда поступают с вашего RPC — опрос пулов слишком тяжёл для общего эндпоинта, поэтому туда он не отправляется.
+settings-account-data-fallback-service = В сервисе { -brand } чтение кошелька и сделки тоже идут через screenerbot.io: пока он недоступен, торговля приостановлена и возобновляется, когда связь восстановится.
 settings-account-manage-title = Управление аккаунтом
 settings-account-manage-description = Пароль, адрес электронной почты, подключённые устройства и реферальные выплаты управляются на сайте. Отзыв устройства там выполняет выход на всех устройствах, включая это.
 settings-account-open-dashboard = Открыть ваш дашборд
@@ -650,3 +649,26 @@ settings-data-folder-label = Открыть папку данных
 settings-data-folder-hint = Открыть в файловом менеджере папку со всеми данными { -brand }.
 settings-data-folder-open = Открыть папку
 settings-data-folder-open-failed = Не удалось открыть папку данных
+
+## Connection tab (scripts/ui/settings/connection_tab.js)
+
+settings-connection-title = Подключение
+settings-connection-description = Как { -brand } обращается к { -solana }.
+settings-connection-choice =
+    .aria-label = Подключение
+settings-connection-active = Активно
+settings-connection-service-title = Сервис { -brand }
+settings-connection-service-detail = Цены обновляются раз в несколько секунд. Для копитрейдинга, отслеживания кошельков, балансов других кошельков, старой истории, прямых свопов в пулах и живых цен пулов нужен свой RPC.
+settings-connection-own-title = Свой RPC
+settings-connection-own-detail = Цены примерно дважды в секунду и все функции.
+settings-connection-apply = Применить и перезапустить
+settings-connection-to-service-title = Перейти на сервис { -brand }?
+settings-connection-to-service-message = Копитрейдинг, отслеживание кошельков, балансы других кошельков, старая история, прямые свопы в пулах и живые цены пулов отключатся; их настройки сохранятся. Торговля приостанавливается, пока вы не вошли в аккаунт. { -brand } перезапустится для переключения.
+settings-connection-to-own-title = Перейти на свой RPC?
+settings-connection-to-own-message = { -brand } проверит ваши эндпоинты, затем перезапустится для переключения. Все функции снова включатся.
+settings-connection-signed-in-as = Подключено · вход выполнен как { $name }
+settings-connection-sending-title = Отправка транзакций
+settings-connection-sending-label = Отправлять транзакции через { -brand }
+settings-connection-sending-own-hint = Когда вы вошли в аккаунт, свопы, подписанные на этом компьютере, транслируются через screenerbot.io. Когда это невозможно, используется ваш RPC.
+settings-connection-sending-service-hint = С сервисом { -brand } всегда включено: так свопы, подписанные на этом компьютере, попадают в { -solana }.
+settings-connection-switch-failed = Не удалось переключить подключение.

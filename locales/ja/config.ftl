@@ -5,8 +5,8 @@ config-account-auto-wallet-signin = ウォレットで自動的にログイン
 config-account-refresh-margin-secs = トークン更新の余裕時間
     .hint = ログイントークンの有効期限が切れる何秒前に更新するかを指定します。認証のデバッグ時以外は変更しないでください。
     .unit = 秒
-config-account-use-gateway-rpc = トランザクション送信に { -brand } の RPC を使用
-    .hint = 署名済みのスワップトランザクションを、ご自身の RPC ではなく screenerbot.io 経由で送信します。署名は常にこのマシン上で行われ、サーバーは署名済みトランザクションを改変できません。価格データにはご自身の RPC が引き続き必要です。
+config-account-use-gateway-rpc = { -brand } 経由でトランザクションを送信
+    .hint = サインイン中は、このコンピューターで署名したスワップを screenerbot.io 経由でブロードキャストします。署名は常にこのコンピューターで行われ、署名済みのトランザクションは変更できません。{ -brand } サービスモードでは常にオンです。
 
 ## agent_control
 

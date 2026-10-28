@@ -1,20 +1,5 @@
 # Trader page labels.
 
-# Exit types shown in the exit breakdown. Ids are the stored closed_reason: exit
-# rule ids, the Debug names of the exit TradeReason variants (src/trader/types.rs,
-# shown as readable labels) and the reasons written by src/positions and src/trader/stats.rs.
-trader-exit-type-stop-loss = Stop Loss
-trader-exit-type-take-profit = Take Profit
-trader-exit-type-roi = Take Profit
-trader-exit-type-roi-exit = Take Profit
-trader-exit-type-trailing-stop = Trailing Stop
-trader-exit-type-time-override = Time Exit
-trader-exit-type-time-rule = Time Rule
-trader-exit-type-manual = Manual
-trader-exit-type-manual-close = Manual
-trader-exit-type-dca = DCA
-trader-exit-type-unknown = Unknown
-
 ## Sub-tabs. Ids are the tab ids of the trader page.
 
 trader-tab-stats = Stats
@@ -34,36 +19,45 @@ trader-feature-beta = Beta
 trader-feature-disabled = Disabled
     .message = This feature is currently disabled.
 
-## Status bar and trading controls
+## Toolbar, notices and trading controls
 
 trader-status-title = Auto Trader
-trader-status-loading = Loading...
 trader-status-running = Running
 trader-status-stopped = Stopped
 trader-status-setup-required = Setup required
 trader-setup-action = Complete setup
-trader-toggle-on = ON
-trader-toggle-off = OFF
 trader-toggle-start-failed = Failed to start trader
 trader-toggle-stop-failed = Failed to stop trader
-trader-controls-title = Trading Controls
 trader-halt-title = Trading halted
 trader-halt-reason-default = Manual force stop
 trader-halt-resume = Resume
 trader-monitor-entry = Entry Monitor
 trader-monitor-exit = Exit Monitor
-trader-monitor-master-off = Auto Trader off
 trader-loss-limit-title = Period Loss Limit
 trader-loss-limit-resume = Resume trading
 trader-loss-limit-reset = Reset period
 trader-loss-limit-off = Off
-trader-loss-limit-none = No period loss limit configured
 # $hours and $minutes are formatted spans such as "2h" and "5m".
 trader-loss-limit-resets-in = Resets in { $hours } { $minutes }
-trader-loss-limit-reached = LIMIT REACHED
 trader-force-stop = Force Stop Everything
 trader-force-stop-hint = Halts every monitor, copy task and trade at once.
 trader-force-stop-idle = Nothing is running that a force stop would halt.
+trader-run-state-force-stopped = Force stopped
+trader-run-state-waiting = Waiting for services
+trader-run-state-idle = Monitors off
+trader-entries-label = New entries
+trader-entries-open = Open
+trader-entries-monitor-off = Entry monitor off
+trader-entries-no-live-strategy = No live entry strategy
+trader-entries-no-paper-strategy = No paper entry strategy
+trader-action-start = Start Auto Trader
+trader-action-stop = Stop Auto Trader
+trader-notice-loss-limit = Loss limit reached
+trader-notice-loss-limit-message = New live entries are paused until the period resets. Exits continue.
+trader-notice-stats-failed = Could not load the statistics
+trader-controls-group =
+    .aria-label = Trading controls
+trader-monitor-dormant = Starts with Auto Trader
 
 ## Confirmations. `.message` is the body and `.confirm` the confirming button.
 
@@ -95,33 +89,40 @@ trader-toast-feature-enabled = Feature Enabled
 trader-toast-feature-disabled = Feature Disabled
 trader-toast-feature-applied = Auto Trader setting applied
 
-## Stats: realized window and metrics
+## Stats: book, window, exposure and figures
 
 trader-stats-window =
     .aria-label = Statistics window
 trader-stats-book =
     .aria-label = Trading book
-trader-paper-run-since = Paper run since { $date }
-trader-paper-start = Start
-trader-paper-cash = Cash
-trader-paper-open = Open
-trader-paper-unrealized = Unrealized
+trader-exposure-cash = Cash
+trader-exposure-open = Open
+trader-exposure-unrealized = Unrealized
+trader-exposure-open-title = Positions that take a slot, of the open-position limit
+trader-exposure-in-use = In use
+trader-exposure-in-use-title = { -sol } spent on the open positions
+# $amount is the formatted count.
+trader-exposure-unpriced =
+    { $count ->
+        [one] { $amount } open position has no live price yet
+       *[other] { $amount } open positions have no live price yet
+    }
+# $date is a formatted date; $amount is a formatted SOL amount.
+trader-exposure-cash-title = Paper run since { $date } · started with { $amount }
 trader-paper-reset = Reset paper run
 trader-paper-reset-title = Reset the paper run?
 trader-paper-reset-run-message = Every open paper position, copy tasks' paper holdings among them, closes at its current price and a new run starts at the configured starting balance. Earlier runs stay in the history.
 trader-paper-reset-done = A new paper run started
 trader-paper-reset-failed = Could not reset the paper run
-trader-paper-account-failed = Could not load the paper run
 trader-realized-title = Realized Performance
 trader-metric-net-pnl = Net P&L
 trader-metric-win-rate = Win Rate
 trader-metric-profit-factor = Profit Factor
 trader-metric-max-drawdown = Max Drawdown
-trader-metric-capital = Capital at Work
 trader-metric-avg-win-loss = Avg Win / Loss
 trader-metric-closed-trades = Closed Trades
 trader-metric-median-hold = Median Hold
-trader-stats-empty = No closed trades in this window
+trader-metric-fees = Network Fees
 # $won and $lost are formatted SOL amounts.
 trader-stats-won-lost = { $won } won · { $lost } lost
 # $wins and $losses are the plural messages below.
@@ -140,58 +141,91 @@ trader-stats-losses =
 trader-stats-expected = { $amount } expected per trade
 trader-stats-profit-factor-basis = Gross won ÷ gross lost
 trader-stats-drawdown-basis = Deepest realized peak-to-trough
-# $count is the position limit and selects the plural.
-trader-stats-slots =
-    { $count ->
-        [one] { $used } of { $max } position slot used
-       *[other] { $used } of { $max } position slots used
-    }
-trader-stats-avg-basis = Average outcome of a winning vs losing trade
-trader-stats-closed =
-    { $count ->
-        [one] { $amount } position closed
-       *[other] { $amount } positions closed
-    }
-# $span is a formatted duration.
-trader-stats-hold-average = { $span } average
 trader-stats-excluded =
     { $count ->
-        [one] { $amount } closed round excluded — no complete cost basis, so no honest P&L.
-       *[other] { $amount } closed rounds excluded — no complete cost basis, so no honest P&L.
+        [one] { $amount } closed trade is left out: its cost basis is incomplete, so its P&L is unknown.
+       *[other] { $amount } closed trades are left out: their cost basis is incomplete, so their P&L is unknown.
     }
+# $ratio is a formatted ratio.
+trader-stats-payoff = Payoff { $ratio }
+trader-stats-streak-win =
+    { $count ->
+        [one] Last trade won
+       *[other] { $amount } wins in a row
+    }
+trader-stats-streak-loss =
+    { $count ->
+        [one] Last trade lost
+       *[other] { $amount } losses in a row
+    }
+# $wins and $losses are formatted durations.
+trader-stats-hold-split = Wins { $wins } · losses { $losses }
+trader-stats-fees-basis = Included in net P&L
+trader-stats-loading = Loading statistics...
+trader-open-strategies = Open Strategies
 
-## Stats: daily P&L and extremes
+## Stats: P&L chart, trade outcomes and extremes
 
 trader-daily-title = Daily P&L
 trader-daily-subtitle = Realized { -sol } per day, with the running total
-trader-daily-loading = Loading daily P&L...
 trader-daily-chart = Daily realized profit and loss in { -sol }
 trader-weekly-title = Weekly P&L
 trader-weekly-subtitle = Realized { -sol } per ISO week, with the running total
 trader-weekly-chart = Weekly realized profit and loss in { -sol }
+# $date is a formatted date; $pnl a signed SOL amount.
+trader-daily-bar =
+    { $count ->
+        [one] { $date } · { $pnl } · { $amount } trade
+       *[other] { $date } · { $pnl } · { $amount } trades
+    }
+trader-weekly-bar =
+    { $count ->
+        [one] Week of { $date } · { $pnl } · { $amount } trade
+       *[other] Week of { $date } · { $pnl } · { $amount } trades
+    }
 trader-extreme-best = Best trade
 trader-extreme-worst = Worst trade
+trader-extreme-runs = Most in a row
+trader-outcome-title = Trade Outcomes
+trader-outcome-subtitle = Closed trades by return, in percent
+# $value, $from and $to are formatted signed percentages.
+trader-outcome-below = Below { $value }
+trader-outcome-range = { $from } to { $to }
+trader-outcome-above = { $value } or more
+# $range is one of the three messages above; $pnl a signed SOL amount.
+trader-outcome-bucket =
+    { $count ->
+        [one] { $range } · { $amount } trade · { $pnl }
+       *[other] { $range } · { $amount } trades · { $pnl }
+    }
 
-## Stats: exit breakdown
+## Stats: empty windows, exit reasons, entry sources and recent closes
 
-trader-exit-title = Exit Strategy Breakdown
-trader-exit-subtitle = How positions were closed, and what each exit returned
-trader-exit-loading = Loading exit data...
-trader-exit-empty-day = No closed trades in the last 24 hours
-trader-exit-empty-all = No closed trades yet
-trader-exit-empty-days =
+trader-stats-empty-day = No closed trades in the last 24 hours
+trader-stats-empty-all = No closed trades yet
+trader-stats-empty-hint = Closed trades appear here once a position is sold. Start the Auto Trader, or choose a longer period.
+trader-stats-empty-days =
     { $count ->
         [one] No closed trades in the last { $amount } day
        *[other] No closed trades in the last { $amount } days
     }
-# $share is a formatted percentage of all exits.
-trader-exit-share =
-    { $count ->
-        [one] { $amount } trade · { $share } of exits
-       *[other] { $amount } trades · { $share } of exits
-    }
-# $value is a formatted average percentage.
-trader-exit-average = { $value } avg
+trader-exits-title = Exit Reasons
+trader-exits-subtitle = How the closed trades ended, and what each exit returned
+trader-sources-title = Entry Sources
+trader-sources-subtitle = What opened the closed trades
+trader-recent-title = Recent Closes
+trader-recent-subtitle = The latest closed trades in this window
+trader-column-token = Token
+trader-column-exit = Exit
+trader-column-source = Source
+trader-column-trades = Trades
+trader-column-win-rate = Win Rate
+trader-column-avg-return = Avg Return
+trader-column-net-pnl = Net P&L
+trader-column-held = Held
+trader-column-closed = Closed
+trader-column-pnl = P&L
+trader-column-return = Return
 
 ## Shared example vocabulary
 
@@ -413,3 +447,8 @@ trader-timing-concurrency = Entry Check Concurrency
 trader-timing-concurrency-hint = Number of tokens to check simultaneously (higher = faster but more CPU)
 trader-timing-unit-minutes = min
 trader-timing-unit-tokens = tokens
+
+## Service mode notice
+
+trader-service-notice-title = Running on the { -brand } service
+trader-service-notice-message = Prices refresh every few seconds, so fast exits such as tight trailing stops react later than with your own RPC.

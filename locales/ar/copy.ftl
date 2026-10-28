@@ -38,19 +38,6 @@ copy-skip-swap-mixed-quote = المدفوع بـ SOL وعملة مستقرة م�
 copy-skip-swap-multiple-tokens = جرى تداول أكثر من رمز في معاملة واحدة
 copy-skip-swap-unreadable = تعذّرت قراءة مبالغ الصفقة
 
-copy-entry-block-force-stopped = التداول في إيقاف قسري
-copy-entry-block-loss-limit = حد الخسارة يمنع عمليات الدخول الجديدة
-copy-entry-block-connectivity = الخدمات المطلوبة غير متاحة
-copy-entry-block-storage-unavailable = بيانات التداول غير متاحة أو قيد الاستعادة
-copy-entry-block-position-limit = تم بلوغ حد المراكز المفتوحة
-copy-entry-block-already-open = يوجد مركز مفتوح بالفعل
-copy-entry-block-reentry-cooldown = فترة تهدئة إعادة دخول الرمز
-copy-entry-block-open-cooldown = فترة تهدئة الدخول العامة
-copy-entry-block-entry-reserved = دخول آخر قيد المعالجة
-copy-entry-block-blacklisted = الرمز محظور بموجب ضوابط المخاطر
-copy-entry-block-paper-balance-exhausted = الرصيد التجريبي لا يغطي الصفقة
-copy-entry-block-check-failed = تعذّر إكمال فحص أمان
-
 copy-pause-user = أوقفتَه مؤقتًا
 copy-pause-latency-kill-switch = إيقاف مؤقت تلقائي: وصلت الصفقات متأخرة { $average } ث في المتوسط (الحد { $threshold } ث)
 copy-pause-watch-detached = إيقاف مؤقت تلقائي: لم تعد المحفظة مراقَبة
@@ -92,6 +79,7 @@ copy-live-block-copy-trading-disabled = معالجة النسخ متوقفة م�
 copy-state-system-paused = متوقف مؤقتًا على مستوى النظام
 copy-state-force-stopped = إيقاف قسري
 copy-state-entries-blocked = الدخول محظور
+copy-state-own-rpc-required = يتطلب RPC الخاص بك
 copy-state-running-live = قيد التشغيل
 copy-state-running-paper = قيد التشغيل
 copy-exit-mode-buy-only = قواعد الخروج الخاصة بي
@@ -183,6 +171,7 @@ copy-status-force-stopped = إيقاف قسري
 copy-status-loss-limit = حد الخسارة
 copy-status-all-paused = كل المهام متوقفة مؤقتًا
 copy-status-processing = قيد المعالجة
+copy-status-own-rpc-required = يتطلب RPC الخاص بك
 copy-toolbar-pause = إيقاف النسخ مؤقتًا
 copy-toolbar-resume = استئناف النسخ
 copy-toolbar-resume-tasks = استئناف كل المهام
@@ -340,6 +329,7 @@ copy-state-detail-paper = قيد التشغيل في التجريبي · تُح�
 copy-state-detail-live = قيد التشغيل حيًا · تُنسخ صفقات المحفظة بمبادلات حقيقية
 copy-state-detail-system-paused = في الانتظار · معالجة النسخ متوقفة مؤقتًا على مستوى النظام، وعمليات الخروج تعمل
 copy-state-detail-entries-blocked = الدخول محظور بسبب حد الخسارة · عمليات الخروج تعمل
+copy-state-detail-own-rpc-required = في الانتظار · خدمة { -brand } لا تتابع المحافظ الأخرى؛ أضف RPC للاستئناف
 copy-state-detail-force-stopped = إيقاف قسري · لا يُنسخ شيء
 
 copy-paused-since = { $reason } · { $since }
@@ -632,13 +622,11 @@ copy-table-target-difference = وسيط فرق السعر عن الهدف
 
 ## Charts
 
-copy-chart-curve-label = الأرباح والخسائر التراكمية { $amount } { -sol }
 copy-chart-compare-label = الأرباح والخسائر التراكمية حسب المهمة
 copy-chart-empty-curve = لا توجد جولات مغلقة في هذا النطاق بعد.
 copy-chart-empty-bars = لا شيء مسجل في هذا النطاق.
 copy-chart-empty-histogram = لا توجد عينات وصول في هذا النطاق.
 copy-chart-empty-compare = لا توجد جولات مغلقة للمقارنة في هذا النطاق.
-copy-chart-histogram-title = { $count } من { $total }
 
 ## Wallet profile
 

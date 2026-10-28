@@ -9,7 +9,8 @@ use chrono::{DateTime, Utc};
 
 use crate::positions::{Book, Position, PositionManagement, PositionOrigin};
 use crate::trader::paper::{PaperExecution, PaperLegFill, PaperRefusal, PaperSellFill};
-use crate::trader::types::{TradeAction, TradeDecision, TradePriority, TradeReason, TradeResult};
+use crate::trader::types::{TradeAction, TradeDecision, TradePriority, TradeResult};
+use crate::trader::TradeReason;
 use crate::wallets::watch::{ActivityKind, SwapSide, WalletActivity};
 
 use super::entries::{leg_key, quote_context};

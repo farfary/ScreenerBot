@@ -14,13 +14,15 @@
  *   (Home strip, Auto Trader Stats, Filtering Status and Analytics, the Copy Trading
  *   figures and task rows).
  * - Filtering Analytics uses the shared `.metric-card`.
- * - Only a state class tints a stat card border; peers otherwise share one border.
+ * - Only a state class tints a stat card border; peers otherwise share one border, and
+ *   no Auto Trader Stats card carries a state.
  * - A zero or absent pipeline count carries no tone.
  * - No stat card carries a glyph, and only `ui/metric_card.js` builds stat card markup
  *   in a script.
- * - Only a signed amount is toned, by its sign; a ratio (win rate, profit factor) is not.
+ * - Only a signed amount is toned, by its sign; a ratio (win rate, profit factor) or a
+ *   magnitude (max drawdown, fees) is not.
  * - A flat sheet grid's column count divides its cell count, so no empty track shows
- *   the hairline colour.
+ *   the hairline colour (the Copy task sheets and the Auto Trader Stats figures).
  *
  * Run with `npm run test:js`.
  */
@@ -100,7 +102,7 @@ test("Home strip labels and values share one line", async (t) => {
   assertAligned(rows, "Home strip");
 });
 
-test("Auto Trader Stats cards align and only a state tints a border", async (t) => {
+test("Auto Trader Stats cards align and share one border", async (t) => {
   const page = await openPage(t, "trader");
   await page.click(tab("stats"));
   await page.waitForFunction(() => document.querySelector("#net-pnl")?.textContent !== "—");
@@ -110,16 +112,14 @@ test("Auto Trader Stats cards align and only a state tints a border", async (t) 
   });
   assertAligned(rows, "Auto Trader Stats");
 
+  // No Stats card carries a state: a drawdown or a fee is a figure, not an alarm.
   const borders = await page.$$eval("#stats-tab .metric-grid .metric-card", (cards) =>
     cards
       .filter((card) => card.offsetParent !== null)
-      .map((card) => ({
-        state: card.classList.contains("metric-highlight-danger"),
-        border: getComputedStyle(card).borderTopColor,
-      }))
+      .map((card) => getComputedStyle(card).borderTopColor)
   );
-  const plain = new Set(borders.filter((card) => !card.state).map((card) => card.border));
-  assert.equal(plain.size, 1, "stat cards without a state share one border colour");
+  assert.equal(borders.length, 8, "the Stats sheet shows its eight cards");
+  assert.equal(new Set(borders).size, 1, "every Stats card shares one border colour");
 });
 
 test("Filtering Status and Analytics use the shared card, aligned", async (t) => {
@@ -229,6 +229,16 @@ for (const width of [1440, 1200, 820]) {
       );
     }
     assert.ok(grids.length >= 2, "the Overview and Execution tabs render sheet grids");
+
+    const trader = await openPage(t, "trader", "populated", width);
+    await trader.click(tab("stats"));
+    await trader.waitForFunction(() => document.querySelector("#net-pnl")?.textContent !== "—");
+    grids.push(
+      await trader.$eval("#stats-figures", (node) => ({
+        columns: getComputedStyle(node).gridTemplateColumns.split(" ").filter(Boolean).length,
+        cells: node.children.length,
+      }))
+    );
     for (const grid of grids) {
       assert.equal(
         grid.cells % grid.columns,
@@ -243,11 +253,13 @@ test("a ratio never carries a sign tone and a signed SOL figure does", async (t)
   const trader = await openPage(t, "trader");
   await trader.click(tab("stats"));
   await trader.waitForFunction(() => document.querySelector("#net-pnl")?.textContent !== "—");
-  const tones = await trader.$$eval("#net-pnl, #win-rate, #profit-factor", (els) =>
-    Object.fromEntries(els.map((el) => [el.id, el.className]))
+  const tones = await trader.$$eval(
+    "#net-pnl, #win-rate, #profit-factor, #max-drawdown, #fees-paid",
+    (els) => Object.fromEntries(els.map((el) => [el.id, el.className]))
   );
   assert.match(tones["net-pnl"], /\bpositive\b/, "a gain in Net P&L is toned");
-  for (const id of ["win-rate", "profit-factor"]) {
+  // A drawdown and the fees are unsigned magnitudes, never toned.
+  for (const id of ["win-rate", "profit-factor", "max-drawdown", "fees-paid"]) {
     assert.doesNotMatch(tones[id], /\b(positive|negative)\b/, `${id} stays neutral`);
   }
 

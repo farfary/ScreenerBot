@@ -38,19 +38,6 @@ copy-skip-swap-mixed-quote = Gleichzeitig mit SOL und einem Stablecoin bezahlt, 
 copy-skip-swap-multiple-tokens = Mehr als ein Token in einer Transaktion gehandelt
 copy-skip-swap-unreadable = Die Trade-Beträge konnten nicht gelesen werden
 
-copy-entry-block-force-stopped = Trading ist per Sofortstopp angehalten
-copy-entry-block-loss-limit = Verlustlimit blockiert neue Einstiege
-copy-entry-block-connectivity = Erforderliche Dienste sind nicht verfügbar
-copy-entry-block-storage-unavailable = Handelsdaten sind nicht verfügbar oder werden wiederhergestellt
-copy-entry-block-position-limit = Limit offener Positionen erreicht
-copy-entry-block-already-open = Eine Position ist bereits offen
-copy-entry-block-reentry-cooldown = Abkühlphase für erneuten Token-Einstieg
-copy-entry-block-open-cooldown = Globale Abkühlphase für Einstiege
-copy-entry-block-entry-reserved = Ein anderer Einstieg wird verarbeitet
-copy-entry-block-blacklisted = Token durch Risikokontrollen gesperrt
-copy-entry-block-paper-balance-exhausted = Paper-Guthaben deckt den Trade nicht
-copy-entry-block-check-failed = Eine Sicherheitsprüfung konnte nicht abgeschlossen werden
-
 copy-pause-user = Von Ihnen pausiert
 copy-pause-latency-kill-switch = Automatisch pausiert: Trades kamen durchschnittlich { $average } s zu spät an (Limit { $threshold } s)
 copy-pause-watch-detached = Automatisch pausiert: Die Wallet wird nicht mehr beobachtet
@@ -90,6 +77,7 @@ copy-live-block-copy-trading-disabled = Copy-Verarbeitung ist global pausiert
 copy-state-system-paused = Global pausiert
 copy-state-force-stopped = Sofort gestoppt
 copy-state-entries-blocked = Einstiege blockiert
+copy-state-own-rpc-required = Eigener RPC erforderlich
 copy-state-running-live = Läuft
 copy-state-running-paper = Läuft
 copy-exit-mode-buy-only = Meine Ausstiegsregeln
@@ -167,6 +155,7 @@ copy-status-force-stopped = Sofort gestoppt
 copy-status-loss-limit = Verlustlimit
 copy-status-all-paused = Alle Aufgaben pausiert
 copy-status-processing = Verarbeitung läuft
+copy-status-own-rpc-required = Eigener RPC erforderlich
 copy-toolbar-pause = Kopieren pausieren
 copy-toolbar-resume = Kopieren fortsetzen
 copy-toolbar-resume-tasks = Alle Aufgaben fortsetzen
@@ -320,6 +309,7 @@ copy-state-detail-paper = Läuft im Paper-Modus · Trades werden simuliert, nich
 copy-state-detail-live = Läuft live · Wallet-Trades werden mit echten Swaps kopiert
 copy-state-detail-system-paused = Wartet · Copy-Verarbeitung ist global pausiert, Ausstiege laufen weiter
 copy-state-detail-entries-blocked = Einstiege durch das Verlustlimit blockiert · Ausstiege laufen weiter
+copy-state-detail-own-rpc-required = Wartet · der { -brand }-Dienst verfolgt keine anderen Wallets; fügen Sie einen RPC hinzu, um fortzufahren
 copy-state-detail-force-stopped = Sofort gestoppt · nichts wird kopiert
 
 copy-paused-since = { $reason } · { $since }
@@ -580,13 +570,11 @@ copy-table-target-difference = Median-Preisdifferenz zur Ziel-Wallet
 
 ## Charts
 
-copy-chart-curve-label = Kumulierte GuV { $amount } { -sol }
 copy-chart-compare-label = Kumulierte GuV nach Aufgabe
 copy-chart-empty-curve = In diesem Zeitraum noch keine geschlossenen Runden.
 copy-chart-empty-bars = In diesem Zeitraum wurde nichts erfasst.
 copy-chart-empty-histogram = Keine Ankunftsstichproben in diesem Zeitraum.
 copy-chart-empty-compare = Keine geschlossenen Runden zum Vergleichen in diesem Zeitraum.
-copy-chart-histogram-title = { $count } von { $total }
 
 ## Wallet profile
 

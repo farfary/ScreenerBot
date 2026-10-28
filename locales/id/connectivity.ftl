@@ -10,3 +10,20 @@ connectivity-probe-internet-all-failed = Pemeriksaan DNS dan HTTP gagal. DNS: { 
 connectivity-probe-unknown = Kesalahan tidak dikenal
 
 connectivity-endpoint-not-checked = Belum diperiksa
+
+connectivity-service-checking = Menghubungkan ke layanan { -brand }
+    .detail = Trading dimulai setelah koneksi terkonfirmasi.
+connectivity-service-ready = Layanan { -brand } terhubung
+    .detail = Pembacaan wallet dan trade melalui screenerbot.io.
+connectivity-service-signed-out = Trading dijeda · Belum masuk
+    .detail = Masuk untuk melanjutkan. Posisi terbuka tidak dijual selama trading dijeda.
+connectivity-service-reauthorize = Trading dijeda · Perlu masuk lagi
+    .detail = Login perangkat ini belum mengizinkan pembacaan wallet. Masuk lagi untuk melanjutkan.
+connectivity-service-busy = Trading dijeda · Layanan sibuk, mencoba lagi
+    .detail = Trading berlanjut otomatis. Agar tidak terjeda, gunakan RPC Anda sendiri.
+connectivity-service-daily-limit = Trading dijeda · Batas harian tercapai
+    .detail = Akun Anda mencapai batas hari ini untuk layanan { -brand }. Trading berlanjut pukul 00:00 UTC, atau langsung dengan RPC Anda sendiri.
+connectivity-service-unreachable = Trading dijeda · screenerbot.io tidak terjangkau
+    .detail = Trading berlanjut saat koneksi kembali. Periksa koneksi internet Anda.
+connectivity-service-version = Trading dijeda · Perlu pembaruan
+    .detail = Versi ini tidak lagi didukung layanan { -brand }. Perbarui ke { $minimum } atau yang lebih baru.

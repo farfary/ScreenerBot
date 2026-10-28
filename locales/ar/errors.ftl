@@ -47,7 +47,7 @@ errors-account-signin-refused = { $reason }
 errors-account-signin-unavailable = تسجيل الدخول غير متاح
 errors-account-credentials-required = أدخل عنوان بريدك الإلكتروني وكلمة المرور.
 errors-account-signout-failed = فشل تسجيل الخروج
-errors-account-gateway-update-failed = تعذّر تحديث إعداد البوابة
+errors-account-gateway-update-failed = تعذّر تحديث إعداد إرسال المعاملات
 
 # Localization
 errors-i18n-locale-not-registered = اللغة غير مسجّلة
@@ -133,6 +133,8 @@ errors-transactions-own-wallet-unavailable = المحفظة الرئيسية غ�
 errors-transactions-invalid-subject = موضوع المعاملة ليس عنوان Solana صالحًا
 errors-transactions-subject-not-watched = موضوع المعاملة ليس محفظة مراقبة
 errors-transactions-watch-store-unavailable = المحافظ المراقبة غير متاحة
+errors-transactions-history-loading = يجري تحميل المعاملات الأقدم بالفعل.
+errors-transactions-history-load-failed = تعذّر تحميل المعاملات الأقدم.
 
 # Wallet
 errors-wallet-unavailable = المحفظة الرئيسية غير متاحة
@@ -419,3 +421,17 @@ errors-tokens-search-failed = فشل البحث عن الرموز
 # Actions and services
 errors-actions-not-found = لم يتم العثور على الإجراء { $id }
 errors-services-not-found = لم يتم العثور على الخدمة '{ $name }'
+
+# Chain access
+errors-chain-capability-unavailable = يتطلب هذا اتصال RPC خاصًا بك.
+errors-chain-service-signin-required = سجّل الدخول لاستخدام خدمة { -brand }.
+errors-chain-service-scope-missing = سجّل الدخول مجددًا للسماح بقراءة المحفظة.
+errors-chain-service-busy = خدمة { -brand } مشغولة. حاول مرة أخرى بعد قليل.
+errors-chain-service-daily-limit = بلغ حسابك الحد اليومي لخدمة { -brand }.
+errors-chain-service-version = هذا الإصدار قديم جدًا لخدمة { -brand }. حدّث إلى { $minimum } أو أحدث.
+errors-chain-service-refused = رفضت خدمة { -brand } الطلب.
+errors-chain-service-unreachable = تعذّر الوصول إلى screenerbot.io.
+errors-chain-not-trading-wallet = لا يمكن قراءة سوى محفظة التداول في وضع خدمة { -brand }.
+errors-chain-access-failed = فشل الطلب إلى سلسلة الكتل.
+errors-chain-access-unchanged = هذا الاتصال مستخدم بالفعل.
+errors-chain-access-switch-failed = تعذّر تبديل الاتصال.

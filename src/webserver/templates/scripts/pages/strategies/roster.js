@@ -4,9 +4,13 @@
 // Strategies roster - the strategy list of the Strategies sub-tab: one DataTable with an All, Entry and Exit view of the server's status and figures of each strategy, the switch that turns it on, its mode action and the trader-level block stated once in the toolbar.
 
 import { DataTable } from "../../ui/data_table.js";
-import { STRATEGY_TYPE_ICONS, strategyTypeLabel, strategyTypeMarker } from "../../ui/strategy_type.js";
+import {
+  STRATEGY_TYPE_ICONS,
+  strategyTypeLabel,
+  strategyTypeMarker,
+} from "../../ui/strategy_type.js";
 import { tradingModeLabel, tradingModeMarker } from "../../ui/trading_mode.js";
-import { setupRequired, setupRequiredReason } from "../../ui/setup_gate.js";
+import { setupRequired, setupRequiredReason } from "../../ui/access_gate.js";
 import { SetupDialog } from "../../ui/setup_dialog.js";
 import { setAutoTraderEnabled } from "../../ui/auto_trader_control.js";
 import { requestManager } from "../../core/request_manager.js";
@@ -135,9 +139,10 @@ export function createRoster({ container, onOpen, onCreate, onImport, onDelete, 
   function nameCell(row) {
     const name = strategyName(row);
     const description = String(row.description ?? "").trim();
-    return `<span class="strategy-roster-name">${esc(name)}</span>${
+    // User-authored text takes its own direction, so it ellipsizes at its own end.
+    return `<span class="strategy-roster-name" dir="auto">${esc(name)}</span>${
       description
-        ? `<span class="strategy-roster-description" title="${esc(description)}">${esc(description)}</span>`
+        ? `<span class="strategy-roster-description" dir="auto" title="${esc(description)}">${esc(description)}</span>`
         : ""
     }`;
   }
@@ -213,7 +218,9 @@ export function createRoster({ container, onOpen, onCreate, onImport, onDelete, 
     if (ids.length === 0) return esc(I18n.t("strategies-manages-all"));
     const names = ids.map((id) => {
       const entry = rows.find((candidate) => candidate.id === id);
-      return entry ? strategyName(entry) : I18n.t("strategies-editor-entry-binding-deleted", { id });
+      return entry
+        ? strategyName(entry)
+        : I18n.t("strategies-editor-entry-binding-deleted", { id });
     });
     const text =
       names.length === 1
@@ -464,7 +471,10 @@ export function createRoster({ container, onOpen, onCreate, onImport, onDelete, 
         : notice === "setup_required"
           ? I18n.t("shell-explore-action")
           : null;
-    table?.setToolbarItem("run-notice-action", action ? { hidden: false, label: action } : { hidden: true });
+    table?.setToolbarItem(
+      "run-notice-action",
+      action ? { hidden: false, label: action } : { hidden: true }
+    );
   }
 
   /** A view holding exit strategies names the rule exits that decide before any of them. */
@@ -537,7 +547,11 @@ export function createRoster({ container, onOpen, onCreate, onImport, onDelete, 
         options: viewOptions(),
         onChange: (value) => switchView(value),
       },
-      search: { enabled: true, mode: "client", placeholder: I18n.t("strategies-search-placeholder") },
+      search: {
+        enabled: true,
+        mode: "client",
+        placeholder: I18n.t("strategies-search-placeholder"),
+      },
       buttons: [
         {
           id: "run-notice-action",

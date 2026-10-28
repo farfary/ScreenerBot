@@ -25,11 +25,17 @@ use crate::swaps::{NotSubmittedReason, SwapExecutionError};
 /// Note the shape: `DirectPoolRouter` is ONE router covering every DEX the direct
 /// engine has a venue for. Adding a venue does not add a router.
 pub fn build_routers() -> Vec<std::sync::Arc<dyn crate::swaps::router::SwapRouter>> {
-    vec![
-        std::sync::Arc::new(JupiterRouter::new()),
-        std::sync::Arc::new(DirectPoolRouter::new()),
-        std::sync::Arc::new(RaptorRouter::new()),
-    ]
+    let mut routers: Vec<std::sync::Arc<dyn crate::swaps::router::SwapRouter>> =
+        vec![std::sync::Arc::new(JupiterRouter::new())];
+    // The direct engine reads pools through the own RPC endpoints.
+    if crate::chains::access::has(
+        crate::chains::ChainId::Solana,
+        crate::chains::access::Capability::DirectPoolSwaps,
+    ) {
+        routers.push(std::sync::Arc::new(DirectPoolRouter::new()));
+    }
+    routers.push(std::sync::Arc::new(RaptorRouter::new()));
+    routers
 }
 
 /// Refuse amounts outside Solana's instruction range before router I/O.

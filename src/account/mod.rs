@@ -539,6 +539,7 @@ fn session_adopted() {
     // A "sign in again" refusal recorded under the previous grant is exactly
     // what this sign-in answers, so it must not outlive it.
     crate::data_server::access::forget_refusals();
+    crate::chains::access::session_changed();
     SESSION_ENDED_BY_SERVER.store(false, Ordering::Relaxed);
 }
 
@@ -800,6 +801,7 @@ fn revoke_in_background(refresh_token: String) {
 fn sign_out_locally() {
     write_session(None);
     crate::data_server::access::forget_refusals();
+    crate::chains::access::session_changed();
     if let Err(error) = store::clear() {
         log::debug!("Account: could not clear stored session: {error}");
     }

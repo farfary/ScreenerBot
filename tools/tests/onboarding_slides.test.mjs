@@ -76,10 +76,13 @@ test("the first-run introduction is titled and its slides are distinct", async (
     assert.ok(!trade.includes("Best-Price Routing"));
 
     const data = slides[4];
-    assert.match(data.description, /^We run a shared market-data service, so your install/);
+    assert.match(
+      data.description,
+      /^A free ScreenerBot account adds faster charts and token checks\./
+    );
     assert.deepEqual(data.cards.map((card) => card.title).slice(2), [
       "Account Required",
-      "Lookups Only",
+      "What We See",
     ]);
   } finally {
     await context.close();

@@ -2,9 +2,12 @@
 // SPDX-License-Identifier: BUSL-1.1
 
 //! The stats aggregation of one book: its figures come only from the rounds it is
-//! given, an empty window derives nothing, a round a paper run reset closed is not a
-//! trade, the whole history starts at the first close and turns weekly past the daily
-//! span, and a cached realized part lives only as long as its fingerprint.
+//! given, whatever their order, an empty window derives nothing, a round a paper run reset
+//! closed is not a trade, the whole history starts at the first close and turns weekly past
+//! the daily span, the exposure counts only priced rounds into its unrealized figure, and a
+//! cached realized part lives only as long as its fingerprint.
+
+use chrono::{Datelike, Duration};
 
 use super::*;
 use crate::positions::{Opening, PositionManagement, PositionOrigin};
@@ -196,7 +199,7 @@ fn paper_stats_come_from_the_paper_rounds_alone() {
 
 #[test]
 fn a_round_closed_by_a_paper_run_reset_is_not_a_trade() {
-    let reset = format!("{:?}", crate::trader::types::TradeReason::PaperReset);
+    let reset = format!("{:?}", crate::trader::TradeReason::PaperReset);
     let closed = vec![
         round(Book::Paper, 3, Some(0.02), "TakeProfit"),
         round(Book::Paper, 5, Some(-0.03), &reset),
@@ -225,7 +228,7 @@ fn a_round_closed_by_a_paper_run_reset_is_not_a_trade() {
 /// break-even round, a round with an incomplete basis and a round a paper run reset
 /// closed.
 fn recorded_rounds() -> Vec<Position> {
-    let reset = format!("{:?}", crate::trader::types::TradeReason::PaperReset);
+    let reset = format!("{:?}", crate::trader::TradeReason::PaperReset);
     let mut untrusted = round(Book::Live, 6, Some(0.5), "TakeProfit");
     untrusted.basis_complete = false;
     vec![
@@ -262,7 +265,7 @@ fn round_totals_count_closed_rounds_as_the_stats_tab_counts_them() {
 
 #[test]
 fn round_totals_of_no_counted_round_have_no_win_rate() {
-    let reset = format!("{:?}", crate::trader::types::TradeReason::PaperReset);
+    let reset = format!("{:?}", crate::trader::TradeReason::PaperReset);
     let totals = round_totals(&[round(Book::Paper, 2, Some(0.01), &reset)]);
     assert_eq!(totals.closed, 0);
     assert_eq!(totals.excluded_untrusted, 0);
@@ -402,4 +405,140 @@ fn a_new_day_drops_the_parts_of_earlier_days() {
     cache.insert(key(Book::Paper, today), same.clone(), part());
     assert!(cache.get(&key(Book::Live, yesterday), &same).is_none());
     assert!(cache.get(&key(Book::Paper, today), &same).is_some());
+}
+
+#[test]
+fn fees_sum_the_network_fees_of_counted_rounds() {
+    let now = fixed_now();
+    let with_fees = |exit_hours: i64, pnl: f64| {
+        let mut position = closed_at(Book::Live, now - Duration::hours(exit_hours), pnl);
+        position.entry_fee_raw = Some(5_000);
+        position.exit_fee_raw = Some(5_000);
+        position
+    };
+    let mut untrusted = with_fees(5, 0.2);
+    untrusted.basis_complete = false;
+    let closed = vec![with_fees(1, 0.02), with_fees(2, -0.01), untrusted];
+    let realized = RealizedStats::of(StatsWindow::Days(7), closed, now);
+    let fees = realized.fees_native.expect("two counted rounds paid fees");
+    assert!((fees - 0.000_02).abs() < 1e-12, "{fees}");
+
+    let empty = RealizedStats::of(StatsWindow::Days(7), Vec::new(), now);
+    assert_eq!(empty.fees_native, None);
+}
+
+#[test]
+fn payoff_ratio_needs_a_win_and_a_loss() {
+    let now = fixed_now();
+    let at = |hours: i64, pnl: f64| closed_at(Book::Live, now - Duration::hours(hours), pnl);
+    let wins_only = RealizedStats::of(StatsWindow::Days(7), vec![at(1, 0.02), at(2, 0.01)], now);
+    assert_eq!(wins_only.payoff_ratio, None);
+    let losses_only = RealizedStats::of(StatsWindow::Days(7), vec![at(1, -0.02)], now);
+    assert_eq!(losses_only.payoff_ratio, None);
+
+    let mixed = RealizedStats::of(
+        StatsWindow::Days(7),
+        vec![at(1, 0.03), at(2, 0.01), at(3, -0.01), at(4, -0.03)],
+        now,
+    );
+    let payoff = mixed.payoff_ratio.expect("a win and a loss");
+    // 0.02 average win over 0.02 average loss.
+    assert!((payoff - 1.0).abs() < 1e-12, "{payoff}");
+}
+
+#[test]
+fn hold_medians_split_by_outcome() {
+    let now = fixed_now();
+    let held = |exit_hours: i64, minutes: i64, pnl: f64| {
+        let exit = now - Duration::hours(exit_hours);
+        let mut position = closed_at(Book::Live, exit, pnl);
+        position.entry_time = exit - Duration::minutes(minutes);
+        position
+    };
+    let closed = vec![
+        held(1, 120, 0.02),
+        held(2, 240, 0.01),
+        held(3, 60, -0.01),
+        held(4, 600, 0.0),
+    ];
+    let realized = RealizedStats::of(StatsWindow::Days(7), closed, now);
+    assert_eq!(realized.median_win_hold_hours, Some(3.0));
+    assert_eq!(realized.median_loss_hold_hours, Some(1.0));
+    assert_eq!(realized.median_hold_time_hours, Some(3.0));
+
+    let wins_only = RealizedStats::of(StatsWindow::Days(7), vec![held(1, 60, 0.01)], now);
+    assert_eq!(wins_only.median_loss_hold_hours, None);
+}
+
+#[test]
+fn the_series_does_not_depend_on_input_order() {
+    let now = fixed_now();
+    let mut closed: Vec<Position> = [
+        (1, 0.03),
+        (30, -0.05),
+        (50, 0.02),
+        (70, -0.01),
+        (100, 0.04),
+        (130, -0.02),
+    ]
+    .into_iter()
+    .enumerate()
+    .map(|(index, (hours, pnl))| {
+        let mut position = closed_at(Book::Live, now - Duration::hours(hours), pnl);
+        position.id = Some(index as i64 + 1);
+        position
+    })
+    .collect();
+    let newest_first = RealizedStats::of(StatsWindow::Days(7), closed.clone(), now);
+    closed.reverse();
+    closed.swap(1, 4);
+    let shuffled = RealizedStats::of(StatsWindow::Days(7), closed, now);
+
+    let series = |realized: &RealizedStats| -> Vec<(String, usize, f64)> {
+        realized
+            .daily_pnl
+            .iter()
+            .map(|point| (point.date.clone(), point.trades, point.net_pnl_native))
+            .collect()
+    };
+    assert_eq!(series(&newest_first), series(&shuffled));
+    assert_eq!(
+        newest_first.max_drawdown_native,
+        shuffled.max_drawdown_native
+    );
+    assert!((newest_first.max_drawdown_native - 0.05).abs() < 1e-12);
+    assert_eq!(newest_first.current_streak, shuffled.current_streak);
+    let ids = |realized: &RealizedStats| -> Vec<Option<i64>> {
+        realized
+            .recent_rounds
+            .iter()
+            .map(|round| round.position_id)
+            .collect()
+    };
+    assert_eq!(ids(&newest_first), ids(&shuffled));
+    assert_eq!(ids(&newest_first).first(), Some(&Some(1)));
+}
+
+#[test]
+fn exposure_sums_priced_unrealized_and_counts_the_rest() {
+    let priced = |pnl: f64| {
+        let mut position = round(Book::Live, 2, None, "");
+        position.unrealized_pnl = Some(pnl);
+        position
+    };
+    let open = [priced(0.01), round(Book::Live, 3, None, ""), priced(0.02)];
+    let stats =
+        RealizedStats::of(StatsWindow::Days(7), Vec::new(), fixed_now()).with_exposure(&open, 5);
+    assert_eq!(stats.open_positions_count, 3);
+    assert_eq!(stats.max_open_positions, 5);
+    assert!((stats.locked_native - 0.3).abs() < 1e-12);
+    assert_eq!(stats.open_unpriced, 1);
+    let unrealized = stats.unrealized_native.expect("two rounds are priced");
+    assert!((unrealized - 0.03).abs() < 1e-12, "{unrealized}");
+
+    let unpriced = [round(Book::Live, 2, None, "")];
+    let stats = RealizedStats::of(StatsWindow::Days(7), Vec::new(), fixed_now())
+        .with_exposure(&unpriced, 5);
+    assert_eq!(stats.unrealized_native, None);
+    assert_eq!(stats.open_unpriced, 1);
 }

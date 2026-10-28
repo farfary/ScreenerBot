@@ -13,8 +13,8 @@
   min-width: 0;
   padding: 8px 24px;
   gap: 1rem;
-  background: rgb(13 17 23 / 0.3);
-  border-top: 1px solid rgb(255 255 255 / 0.08);
+  background: color-mix(in srgb, var(--bg-primary) 30%, transparent);
+  border-top: 1px solid color-mix(in srgb, var(--text-primary) 8%, transparent);
 }
 
 .setup-footer #setup-back {
@@ -39,7 +39,7 @@
   min-height: 42px;
   padding: 9px 17px;
   gap: 7px;
-  color: #e6edf3;
+  color: var(--text-primary);
   font-size: 0.82rem;
   font-weight: 700;
   line-height: 1;
@@ -59,11 +59,13 @@
   cursor: not-allowed;
 }
 
+/* The theme's primary button, so setup carries one blue in either theme; the always-dark
+ * introduction keeps its own accent. */
 .setup-btn-primary {
   min-width: 118px;
-  color: #0d1117;
-  background: var(--accent-onboarding);
-  border-color: var(--accent-onboarding);
+  color: var(--bg-secondary);
+  background: var(--button-primary-bg);
+  border-color: var(--button-primary-bg);
 }
 
 .setup-btn-primary:hover:not(:disabled) {
@@ -71,9 +73,9 @@
 }
 
 .setup-btn-secondary {
-  color: #e6edf3;
-  background: rgb(255 255 255 / 0.05);
-  border-color: rgb(255 255 255 / 0.08);
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--text-primary) 5%, transparent);
+  border-color: color-mix(in srgb, var(--text-primary) 8%, transparent);
 }
 
 .setup-btn-explore {
@@ -82,8 +84,8 @@
 
 .setup-btn-secondary:hover:not(:disabled),
 .setup-btn-ghost:hover:not(:disabled) {
-  background: rgb(255 255 255 / 0.1);
-  border-color: rgb(255 255 255 / 0.2);
+  background: color-mix(in srgb, var(--text-primary) 10%, transparent);
+  border-color: color-mix(in srgb, var(--text-primary) 20%, transparent);
 }
 
 .setup-btn-ghost {
@@ -121,6 +123,13 @@
   color: var(--semantic-error-text);
   font-size: 0.76rem;
   font-weight: 700;
+}
+
+.setup-error-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .setup-error-messages {
@@ -180,15 +189,18 @@
   }
 }
 
-/* Preserve the required flow at a usable width instead of stacking the optional
- * account below it and making the page taller than the window. */
+/* The account is what the ScreenerBot service runs on, so a narrow or short window
+ * stacks it under the connection choice instead of dropping it; the step scrolls. */
 @media (max-width: 640px), (max-height: 560px) {
   .setup-split {
     grid-template-columns: minmax(0, 1fr);
   }
 
   .setup-split-aside {
-    display: none;
+    padding-inline-start: 0;
+    padding-block-start: 12px;
+    border-inline-start: 0;
+    border-block-start: 1px solid var(--border-color);
   }
 }
 
@@ -418,6 +430,117 @@
   line-height: 1.4;
 }
 
+/* Once the funding step shows, the ready heading keeps only its own height. */
+.setup-complete.is-funding {
+  flex: 0 0 auto;
+  padding-block-end: 8px;
+}
+
+/* The funding step (after the restart, only for a wallet without SOL). */
+.setup-fund {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: min(100%, 620px);
+  padding: clamp(12px, 1.6vh, 18px) clamp(12px, 1.6vw, 20px);
+  margin-inline: auto;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-xl);
+}
+
+.setup-fund-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 0.95rem;
+  font-weight: 650;
+}
+
+.setup-fund-title i {
+  color: var(--primary-color);
+}
+
+.setup-fund-message {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.setup-fund-body {
+  display: grid;
+  grid-template-columns: 132px minmax(0, 1fr);
+  align-items: center;
+  gap: 16px;
+}
+
+.setup-fund-qr {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1;
+  min-width: 0;
+}
+
+.setup-fund-qr-image {
+  width: 100%;
+  height: auto;
+  border-radius: var(--radius-md);
+}
+
+.setup-fund-qr-status {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  text-align: center;
+}
+
+.setup-fund-details {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.setup-fund-status {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.76rem;
+  font-weight: 600;
+}
+
+.setup-fund-status[data-state="received"] {
+  color: var(--semantic-success-text);
+}
+
+.setup-fund-status-icon.icon-loader {
+  animation: spin 1.2s linear infinite;
+}
+
+.setup-fund-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 9px;
+}
+
+@media (max-width: 480px) {
+  .setup-fund-body {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: center;
+  }
+
+  .setup-fund-qr {
+    width: 132px;
+  }
+}
+
 .setup-complete-actions {
   display: flex;
   flex-wrap: wrap;
@@ -481,6 +604,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .setup-verification-item[data-state="running"] .setup-state-icon,
+  .setup-fund-status-icon.icon-loader,
   .setup-restart-indicator span {
     animation: none !important;
   }

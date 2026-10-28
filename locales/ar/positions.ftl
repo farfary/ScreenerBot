@@ -24,7 +24,6 @@ positions-paper-empty = لا توجد مراكز تجريبية
 positions-paper-archived-empty = لا توجد مراكز تجريبية مؤرشفة
     .message = تبقى الجولات التجريبية في المفتوحة والمغلقة؛ تُؤرشف المراكز الحية فقط.
 positions-paper-empty-action = فتح الاستراتيجيات
-positions-origin-copy = نسخ
 positions-origin-manual = يدوي
 positions-origin-wallet = محفظة
 positions-origin-copy-link =

@@ -15,7 +15,6 @@ positions-paper-empty = Không có vị thế thử nghiệm
 positions-paper-archived-empty = Không có vị thế thử nghiệm đã lưu trữ
     .message = Các vòng thử nghiệm vẫn ở Đang mở và Đã đóng; chỉ vị thế live được lưu trữ.
 positions-paper-empty-action = Mở Chiến lược
-positions-origin-copy = Copy
 positions-origin-manual = Thủ công
 positions-origin-wallet = Ví
 positions-origin-copy-link =

@@ -19,9 +19,8 @@ use crate::strategies::types::{
 use crate::tokens::Token;
 use crate::trader::constants::STRATEGY_EVALUATION_TIMEOUT_SECS;
 use crate::trader::paper::TradingMode;
-use crate::trader::types::{
-    EntryDecisions, TradeAction, TradeDecision, TradePriority, TradeReason,
-};
+use crate::trader::types::{EntryDecisions, TradeAction, TradeDecision, TradePriority};
+use crate::trader::TradeReason;
 use chrono::{DateTime, Utc};
 use std::time::Duration;
 
@@ -222,8 +221,8 @@ pub async fn strategy_candles(chain: ChainId, mint: &str) -> Option<TimeframeBun
     }
 }
 
-/// The context the trader would evaluate `strategy` in for `mint` now: the live pool price
-/// and its liquidity, the token snapshot, the candles and, for an exit strategy, the
+/// The context the trader would evaluate `strategy` in for `mint` now: the trading price
+/// (`price_resolution::cached_trading_price`) and its liquidity, the token snapshot, the candles and, for an exit strategy, the
 /// mint's open round on `book`. An entry strategy reads the configured trade size. A value
 /// whose source is absent stays absent, and the rules that read it answer unknown.
 pub async fn live_strategy_context(
@@ -232,7 +231,7 @@ pub async fn live_strategy_context(
     strategy: &Strategy,
     book: Book,
 ) -> EvaluationContext {
-    let live_pool = crate::positions::price_resolution::live_pool_price(mint);
+    let live_pool = crate::positions::price_resolution::cached_trading_price(chain, mint);
     let pool_price = live_pool.as_ref().map(|price| price.price_native);
     let now = Utc::now();
     let (position_data, reference_size_native) = match strategy.strategy_type {
@@ -484,9 +483,10 @@ impl StrategyEvaluator {
             ),
         );
 
-        // The live pool price result: the one source of the liquidity and of the price the
+        // The trading price result: the one source of the liquidity and of the price the
         // held tokens are valued at.
-        let live_pool = crate::positions::price_resolution::live_pool_price(&position.mint);
+        let live_pool =
+            crate::positions::price_resolution::cached_trading_price(chain, &position.mint);
 
         let position_data = strategy_position_data(
             position,
@@ -496,11 +496,9 @@ impl StrategyEvaluator {
             Utc::now(),
         );
 
-        // Build market data. Liquidity comes from the same single source the entry path
-        // reads — the live pool price result. It used to be left `None` here, which made
-        // the liquidity-drain exit (the documented exit use of LiquidityLevel) impossible:
-        // the condition errored on every tick, the error aborted the whole strategy, and
-        // the rule never fired once in the life of any position.
+        // Liquidity comes from the same price result the entry path reads. The
+        // liquidity-drain exit (LiquidityLevel) needs it: without a value the condition
+        // errors and aborts the whole exit strategy.
         let market_data = strategy_market_data(
             crate::tokens::get_cached_token(chain, &position.mint).as_ref(),
             live_pool

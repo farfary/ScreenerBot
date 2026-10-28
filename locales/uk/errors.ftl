@@ -37,7 +37,7 @@ errors-account-signin-refused = { $reason }
 errors-account-signin-unavailable = Вхід недоступний
 errors-account-credentials-required = Введіть адресу електронної пошти та пароль.
 errors-account-signout-failed = Не вдалося вийти
-errors-account-gateway-update-failed = Не вдалося оновити налаштування шлюзу
+errors-account-gateway-update-failed = Не вдалося оновити налаштування надсилання транзакцій
 
 errors-i18n-locale-not-registered = Мову не зареєстровано
 errors-i18n-catalog-encode-failed = Не вдалося закодувати каталог
@@ -114,6 +114,8 @@ errors-transactions-own-wallet-unavailable = Основний гаманець �
 errors-transactions-invalid-subject = Суб’єкт транзакції не є дійсною адресою Solana
 errors-transactions-subject-not-watched = Суб’єкт транзакції не є відстежуваним гаманцем
 errors-transactions-watch-store-unavailable = Відстежувані гаманці недоступні
+errors-transactions-history-loading = Старіші транзакції вже завантажуються.
+errors-transactions-history-load-failed = Не вдалося завантажити старіші транзакції.
 
 errors-wallet-unavailable = Основний гаманець недоступний
 errors-wallet-changed = Основний гаманець змінився; оновіть сторінку й повторіть спробу
@@ -381,3 +383,17 @@ errors-tokens-search-failed = Не вдалося виконати пошук т
 
 errors-actions-not-found = Дію { $id } не знайдено
 errors-services-not-found = Сервіс «{ $name }» не знайдено
+
+# Chain access
+errors-chain-capability-unavailable = Для цього потрібне власне RPC-підключення.
+errors-chain-service-signin-required = Увійдіть, щоб користуватися сервісом { -brand }.
+errors-chain-service-scope-missing = Увійдіть знову, щоб дозволити читання гаманця.
+errors-chain-service-busy = Сервіс { -brand } зайнятий. Спробуйте ще раз трохи згодом.
+errors-chain-service-daily-limit = Ваш акаунт вичерпав денний ліміт сервісу { -brand }.
+errors-chain-service-version = Ця версія застаріла для сервісу { -brand }. Оновіться до { $minimum } або новішої.
+errors-chain-service-refused = Сервіс { -brand } відхилив запит.
+errors-chain-service-unreachable = screenerbot.io недоступний.
+errors-chain-not-trading-wallet = У режимі сервісу { -brand } можна читати лише торговий гаманець.
+errors-chain-access-failed = Запит до блокчейну не виконано.
+errors-chain-access-unchanged = Це підключення вже використовується.
+errors-chain-access-switch-failed = Не вдалося змінити підключення.

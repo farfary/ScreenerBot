@@ -149,5 +149,21 @@ trade-reason-synthetic-exit-permanent-failure = Kegagalan Permanen Exit Sintetis
 trade-reason-pending-verification = { $reason } (menunggu verifikasi)
 trade-reason-force-closed = Ditutup paksa: { $note }
 trade-reason-stored = { $reason }
+trade-reason-unknown = Tidak tercatat
+trade-reason-force-closed-any = Ditutup paksa
+
+# Why a new entry was blocked. Ids come from EntryBlock in src/trader/admission.rs.
+trade-entry-block-force-stopped = Trading dihentikan paksa
+trade-entry-block-loss-limit = Batas kerugian memblokir entry baru
+trade-entry-block-connectivity = Layanan yang diperlukan tidak tersedia
+trade-entry-block-storage-unavailable = Data trading tidak tersedia atau sedang dipulihkan
+trade-entry-block-position-limit = Batas posisi terbuka tercapai
+trade-entry-block-already-open = Posisi sudah terbuka
+trade-entry-block-reentry-cooldown = Cooldown entry ulang token
+trade-entry-block-open-cooldown = Cooldown entry global
+trade-entry-block-entry-reserved = Entry lain sedang diproses
+trade-entry-block-blacklisted = Token diblokir oleh kontrol risiko
+trade-entry-block-paper-balance-exhausted = Saldo paper tidak cukup untuk transaksi ini
+trade-entry-block-check-failed = Pemeriksaan keamanan tidak dapat diselesaikan
 
 trade-quick-no-token = Tidak ada token yang dipilih

@@ -173,13 +173,13 @@ export function rulesHtml(context, esc) {
     esc
   )}${section(
     I18n.t("copy-rules-exits"),
-    `<p class="copy-section-sub">${esc(exitModeLabel(task.exit_mode))}</p>${warningList(exitWarnings(effective, task.exit_mode, { slippagePct: task.slippage_pct, feePct }))}${exitNote}${ruleTable(context, esc)}`,
+    `<p class="sheet-section-sub">${esc(exitModeLabel(task.exit_mode))}</p>${warningList(exitWarnings(effective, task.exit_mode, { slippagePct: task.slippage_pct, feePct }))}${exitNote}${ruleTable(context, esc)}`,
     esc
   )}`;
 }
 
 export function renderRules({ ws, defaults }, esc) {
-  return `<div class="copy-panel-head"><h3 class="copy-section-title">${esc(I18n.t("copy-rules-title"))}</h3><button class="btn btn-secondary btn-sm" type="button" data-ws-action="edit" data-step="exits"><i class="icon-pencil" aria-hidden="true"></i> ${esc(I18n.t("copy-action-edit-rules"))}</button></div>${rulesHtml(
+  return `<div class="sheet-head"><h3 class="sheet-section-title">${esc(I18n.t("copy-rules-title"))}</h3><button class="btn btn-secondary btn-sm" type="button" data-ws-action="edit" data-step="exits"><i class="icon-pencil" aria-hidden="true"></i> ${esc(I18n.t("copy-action-edit-rules"))}</button></div>${rulesHtml(
     {
       task: ws,
       effective: ws.effective_policy,

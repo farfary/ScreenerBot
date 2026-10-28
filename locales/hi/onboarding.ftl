@@ -7,7 +7,7 @@ onboarding-welcome-custody-description = प्राइवेट की स्�
 onboarding-welcome-engine-title = हमेशा चालू इंजन
 onboarding-welcome-engine-description = हेल्थ चेक और सुचारु लाइफ़साइकल कंट्रोल वाली ऑर्केस्ट्रेटेड सर्विस।
 onboarding-welcome-realtime-title = रियल-टाइम ऑन-चेन डेटा
-onboarding-welcome-realtime-description = सीधी पूल रिज़र्व गणना — देरी वाले API स्नैपशॉट नहीं।
+onboarding-welcome-realtime-description = अपने RPC के साथ, कीमतें सीधे पूल रिज़र्व से आती हैं — देरी वाले API स्नैपशॉट से नहीं।
 
 onboarding-discover-title = खोजें और फ़िल्टर करें
 onboarding-discover-description = नए Solana पेयर के लिए तीन डेटा स्रोत स्कैन करें, 12+ DEX पूल प्रकार ऑन-चेन डिकोड करें, फिर हर टोकन को कॉन्फ़िगर करने योग्य क्वालिटी और सिक्योरिटी नियमों से गुज़ारें।
@@ -27,7 +27,7 @@ onboarding-trade-auto-description = एंट्री/एग्ज़िट इ
 onboarding-trade-strategy-title = स्ट्रैटेजी इंजन
 onboarding-trade-strategy-description = प्राइस, वॉल्यूम और समय-आधारित सिग्नल जोड़ने वाले कंडीशन ट्री।
 onboarding-trade-copy-title = कॉपी ट्रेडिंग
-onboarding-trade-copy-description = जिन वॉलेट को आप फ़ॉलो करते हैं, उनके ट्रेड दोहराएँ। असली { -sol } खर्च होने से पहले किसी भी टास्क को पेपर मोड में परखें।
+onboarding-trade-copy-description = जिन वॉलेट को आप फ़ॉलो करते हैं, उनके ट्रेड दोहराएँ (आपका अपना RPC चाहिए)। असली { -sol } खर्च होने से पहले किसी भी टास्क को पेपर मोड में परखें।
 onboarding-trade-safety-title = सेफ़्टी कंट्रोल
 onboarding-trade-safety-description = इमरजेंसी स्टॉप, अवधि-आधारित लॉस लिमिट और स्वतंत्र मॉनिटर टॉगल।
 
@@ -43,18 +43,18 @@ onboarding-connect-events-title = लाइव इवेंट स्ट्र�
 onboarding-connect-events-description = हर ट्रेड, स्वैप और सिस्टम इवेंट श्रेणी और गंभीरता के साथ लॉग होता है।
 
 onboarding-data-title = { -brand } डेटा
-onboarding-data-description = हम एक साझा मार्केट-डेटा सेवा चलाते हैं, ताकि आपका इंस्टॉल सार्वजनिक प्रदाताओं की रेट लिमिट से धीमा न हो। यह { -brand } खाते के साथ मुफ़्त है, और { -brand } इसके बिना भी काम करता है।
-onboarding-data-candles-title = पूल्ड कैंडल इतिहास
-onboarding-data-candles-description = सात टाइमफ़्रेम का साझा इतिहास, कई साल गहरा, एक ही कैश से उपलब्ध।
-onboarding-data-pools-title = रिज़ॉल्व्ड पूल और सिक्योरिटी
-onboarding-data-pools-description = एक केंद्रीय पूल रजिस्ट्री और पहले से लाई गई कैश्ड { -rugcheck } रिपोर्ट।
+onboarding-data-description = मुफ़्त { -brand } खाते से चार्ट और टोकन जाँच तेज़ होती हैं। अपने RPC के साथ { -brand } इसके बिना भी काम करता है।
+onboarding-data-candles-title = चार्ट तेज़ी से लोड होते हैं
+onboarding-data-candles-description = सात टाइमफ़्रेम का कीमत इतिहास, कई साल गहरा।
+onboarding-data-pools-title = टोकन जाँच तैयार
+onboarding-data-pools-description = ज़्यादातर टोकन के पूल और सिक्योरिटी रिपोर्ट, बिना इंतज़ार।
 onboarding-data-signin-title = खाता ज़रूरी
 onboarding-data-signin-description = अकाउंट के बिना यह डेटा उपलब्ध नहीं है और पब्लिक प्रोवाइडर इस्तेमाल होते हैं।
-onboarding-data-reading-title = केवल लुकअप
-onboarding-data-reading-description = हमें दिखता है कि आप कौन से टोकन खोजते हैं। कभी की, बैलेंस, पोज़िशन या ट्रेड नहीं।
+onboarding-data-reading-title = हमें क्या दिखता है
+onboarding-data-reading-description = आप जिन टोकन को खोजते हैं, और जो स्वैप आप { -brand } के ज़रिए भेजते हैं। { -brand } सेवा पर, आपके ट्रेडिंग वॉलेट का बैलेंस और इतिहास भी। आपकी की कभी नहीं।
 
 onboarding-privacy-title = आपकी की, आपका डेटा
-onboarding-privacy-description = आपका कॉन्फ़िगरेशन, की और ट्रेडिंग इतिहास इसी मशीन पर रहते हैं। आगे, बिना क्रेडेंशियल के डिस्कवरी के लिए “डैशबोर्ड एक्सप्लोर करें” चुनें, या पूरा बॉट चालू करने के लिए वॉलेट और RPC लिंक करें — और { -brand } डेटा चाहिए तो वहीं साइन इन करें।
+onboarding-privacy-description = आपका कॉन्फ़िगरेशन, की और ट्रेडिंग इतिहास इसी मशीन पर रहते हैं। आगे, बिना क्रेडेंशियल के डिस्कवरी के लिए “डैशबोर्ड एक्सप्लोर करें” चुनें, या ट्रेडिंग शुरू करने के लिए वॉलेट बनाएँ या इम्पोर्ट करें और उसे अपने RPC या { -brand } सेवा से जोड़ें।
 onboarding-privacy-local-title = लोकल-फ़र्स्ट आर्किटेक्चर
 onboarding-privacy-local-description = कॉन्फ़िग, एनालिटिक्स और डेटाबेस आपके डेस्कटॉप पर सहेजे जाते हैं।
 onboarding-privacy-wallet-title = एन्क्रिप्टेड वॉलेट
@@ -65,7 +65,7 @@ onboarding-privacy-config-title = लचीला कॉन्फ़िगरे
 onboarding-privacy-config-description = ज़्यादातर सेटिंग्स सेटअप के बाद डैशबोर्ड से बदली जा सकती हैं।
 
 onboarding-setup-shortcut =
-    .aria-label = सीधे वॉलेट और RPC सेटअप पर जाएं या एक्सप्लोर मोड चुनें
+    .aria-label = सीधे सेटअप पर जाएं या एक्सप्लोर मोड चुनें
 onboarding-setup-shortcut-label = सेटअप पर जाएं
 onboarding-progress-dot =
     .aria-label = स्लाइड { $number } पर जाएं

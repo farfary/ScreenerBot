@@ -5,8 +5,8 @@ config-account-auto-wallet-signin = 使用我的钱包自动登录
 config-account-refresh-margin-secs = 令牌刷新提前量
     .hint = 在登录令牌过期前多久续期。仅在调试身份验证时更改。
     .unit = 秒
-config-account-use-gateway-rpc = 使用 { -brand } RPC 发送交易
-    .hint = 通过 screenerbot.io 而不是您自己的 RPC 广播已签名的兑换交易。签名始终在本机完成，服务器无法修改已签名的交易。价格数据仍需要您自己的 RPC。
+config-account-use-gateway-rpc = 通过 { -brand } 发送交易
+    .hint = 登录后，通过 screenerbot.io 广播你在这台电脑上签名的兑换。签名始终在本机完成，已签名的交易无法被更改。在 { -brand } 服务模式下始终开启。
 
 ## agent_control
 

@@ -8,6 +8,7 @@ import {
   formatFixed,
   formatPercentValue,
   formatPriceSubscript,
+  formatSignatureCompact,
   formatSignedSol,
   formatSol,
   formatTimeAgo,
@@ -15,9 +16,11 @@ import {
   formatTimestamp,
   formatUptime,
   signedTone,
+  signedToneClass,
   withSolUnit,
 } from "../../core/format.js";
 import { closeReasonText } from "../../ui/trade_reason.js";
+import { ENTRY_BLOCK_LABELS, entryBlockText } from "../../ui/entry_block.js";
 import { RANGE_OPTIONS } from "../../ui/segmented.js";
 
 export const SOLANA_ADDRESS_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
@@ -28,6 +31,7 @@ const STATE_LABELS = Object.freeze({
   force_stopped: "copy-state-force-stopped",
   paused: "copy-state-paused",
   entries_blocked: "copy-state-entries-blocked",
+  own_rpc_required: "copy-state-own-rpc-required",
   live: "copy-state-running-live",
   paper: "copy-state-running-paper",
 });
@@ -103,27 +107,11 @@ const SKIP_LABELS = Object.freeze({
   swap_unreadable: "copy-skip-swap-unreadable",
 });
 
-// Block ids serialized by `EntryBlock` (src/trader/admission.rs).
-const ENTRY_BLOCK_LABELS = Object.freeze({
-  force_stopped: "copy-entry-block-force-stopped",
-  loss_limit: "copy-entry-block-loss-limit",
-  connectivity: "copy-entry-block-connectivity",
-  storage_unavailable: "copy-entry-block-storage-unavailable",
-  position_limit: "copy-entry-block-position-limit",
-  already_open: "copy-entry-block-already-open",
-  reentry_cooldown: "copy-entry-block-reentry-cooldown",
-  open_cooldown: "copy-entry-block-open-cooldown",
-  entry_reserved: "copy-entry-block-entry-reserved",
-  blacklisted: "copy-entry-block-blacklisted",
-  paper_balance_exhausted: "copy-entry-block-paper-balance-exhausted",
-  check_failed: "copy-entry-block-check-failed",
-});
-
 /** Label for a skip key as the backend groups them (`kind` or `kind.block`). */
 export function skipLabel(key) {
   const [kind, block] = String(key || "").split(".");
   if (kind === "entry_blocked" && block && Object.hasOwn(ENTRY_BLOCK_LABELS, block)) {
-    return I18n.label(ENTRY_BLOCK_LABELS, block);
+    return entryBlockText(block);
   }
   return I18n.label(SKIP_LABELS, kind);
 }
@@ -201,9 +189,6 @@ export function solCell(value) {
   return formatSol(value, { decimals: 4, fallback: "—", suffix: "", trim: false });
 }
 
-/** Sign glyph of a change: a typographic minus so it aligns with the plus. */
-const changeSign = (number) => (number > 0 ? "+" : number < 0 ? "−" : "");
-
 /** Decimals of every Copy Trading P&L figure: list rows, cards, buckets and charts. */
 export const PNL_SOL_DECIMALS = 4;
 
@@ -219,12 +204,6 @@ export function signedSolCell(value) {
     fallback: "—",
     unit: false,
   });
-}
-
-export function signedPct(value, decimals = 1) {
-  const number = finite(value);
-  if (number === null) return "—";
-  return `${changeSign(number)}${formatPercentValue(Math.abs(number), { decimals, includeSign: false })}`;
 }
 
 export function pct(value, decimals = 1) {
@@ -246,12 +225,6 @@ export function settingSol(value) {
 
 export function settingPct(value) {
   return formatPercentValue(value, { decimals: 2, plus: "", trim: true, fallback: "—" });
-}
-
-export function settingSignedPct(value) {
-  const number = finite(value);
-  if (number === null) return "—";
-  return `${changeSign(number)}${formatPercentValue(Math.abs(number), { decimals: 2, includeSign: false, trim: true })}`;
 }
 
 /**
@@ -277,11 +250,9 @@ export function pnlTone(value) {
   return signedTone(finite(value), PNL_SOL_DECIMALS);
 }
 
-const TONE_CLASSES = { positive: "is-positive", negative: "is-negative", neutral: "" };
-
 /** Tone class of a SOL P&L as `signedSol` prints it; "" when it reads as zero or is absent. */
 export function toneClass(value) {
-  return TONE_CLASSES[pnlTone(value)];
+  return signedToneClass(finite(value), PNL_SOL_DECIMALS);
 }
 
 /** A pool price in SOL at a fixed count of significant digits, the price rule of every
@@ -331,8 +302,17 @@ export function dateTime(value) {
   return formatTimestamp(value, { includeYear: false, fallback: String(value) });
 }
 
+/** The `head…tail` split of a compact address, as `COMPACT_ADDRESS` in ui/token_identity.js. */
+const TASK_ADDRESS_SPLIT = Object.freeze({ start: 4, end: 4 });
+
+/**
+ * A task's name: its label, or the short form of its wallet, which tells unnamed tasks
+ * apart the way the task list shows them.
+ */
 export function taskName(task) {
-  return task?.label || I18n.t("copy-task-unnamed");
+  if (task?.label) return task.label;
+  if (task?.target_address) return formatSignatureCompact(task.target_address, TASK_ADDRESS_SPLIT);
+  return I18n.t("copy-task-unnamed");
 }
 
 /** The `from` timestamp of a range from `RANGE_OPTIONS`; the whole history sends none. */
@@ -344,7 +324,7 @@ export function rangeQuery(rangeId) {
 
 /** A section of the task sheet with its heading; the sheet draws the hairline between sections. */
 export function section(title, body, esc, className = "") {
-  return `<section class="copy-section${className ? ` ${className}` : ""}"><h3 class="copy-section-title">${esc(title)}</h3>${body}</section>`;
+  return `<section class="sheet-section${className ? ` ${className}` : ""}"><h3 class="sheet-section-title">${esc(title)}</h3>${body}</section>`;
 }
 
 /**
@@ -353,9 +333,12 @@ export function section(title, body, esc, className = "") {
  */
 export function splitSection(parts, esc) {
   const html = parts
-    .map(([title, body]) => `<section><h3 class="copy-section-title">${esc(title)}</h3>${body}</section>`)
+    .map(
+      ([title, body]) =>
+        `<section><h3 class="sheet-section-title">${esc(title)}</h3>${body}</section>`
+    )
     .join("");
-  return `<div class="copy-section copy-section-split">${html}</div>`;
+  return `<div class="sheet-section sheet-split">${html}</div>`;
 }
 
 export function definitionRows(rows, escapeHtml) {

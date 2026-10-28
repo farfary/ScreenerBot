@@ -11,7 +11,7 @@ import { createPageDialogs } from "../ui/page_dialogs.js";
 import { renderStateView } from "../ui/state_view.js";
 import { strategyTypeMarker } from "../ui/strategy_type.js";
 import { tradingModeMarker } from "../ui/trading_mode.js";
-import { gateControl } from "../ui/setup_gate.js";
+import { gateControl } from "../ui/access_gate.js";
 import { requestManager, errorMessageOf } from "../core/request_manager.js";
 import { downloadJson } from "../core/download.js";
 import { enhanceAllSelects } from "../ui/custom_select.js";
@@ -426,7 +426,10 @@ export function createLifecycle() {
       (option) =>
         `<option value="${Utils.escapeHtml(String(optionValue(option)))}">${Utils.escapeHtml(optionLabel(option))}</option>`
     );
-    if (value && !timeframeOptions(conditionSchemas).some((option) => optionValue(option) === value)) {
+    if (
+      value &&
+      !timeframeOptions(conditionSchemas).some((option) => optionValue(option) === value)
+    ) {
       const text = Utils.escapeHtml(String(value));
       options.push(`<option value="${text}">${text}</option>`);
     }
@@ -638,7 +641,11 @@ export function createLifecycle() {
     }
     if (!data.valid) {
       const reasons = (data.errors || []).map((error) => I18n.text(error));
-      announce("error", I18n.t("strategies-toast-invalid"), Utils.formatList(reasons, { type: "unit" }));
+      announce(
+        "error",
+        I18n.t("strategies-toast-invalid"),
+        Utils.formatList(reasons, { type: "unit" })
+      );
       return null;
     }
     // The server answers the book the store holds the strategy on; the polled roster can
@@ -703,7 +710,11 @@ export function createLifecycle() {
           I18n.attr("strategies-toast-evidence-restarted", "message", args)
         );
       } else {
-        announce("success", I18n.t("strategies-toast-saved", args), I18n.attr("strategies-toast-saved", "message", args));
+        announce(
+          "success",
+          I18n.t("strategies-toast-saved", args),
+          I18n.attr("strategies-toast-saved", "message", args)
+        );
       }
     } catch (error) {
       console.error("Failed to save strategy:", error);
@@ -735,7 +746,11 @@ export function createLifecycle() {
         return;
       }
       const reasons = (data.errors || []).map((error) => I18n.text(error));
-      announce("error", I18n.t("strategies-toast-invalid"), Utils.formatList(reasons, { type: "unit" }));
+      announce(
+        "error",
+        I18n.t("strategies-toast-invalid"),
+        Utils.formatList(reasons, { type: "unit" })
+      );
     } catch (error) {
       console.error("Validation failed:", error);
       announce(
@@ -885,7 +900,11 @@ export function createLifecycle() {
       if (!file) return;
 
       try {
-        const { strategy, error } = parseImport(await file.text(), conditionSchemas, defaultTimeframe);
+        const { strategy, error } = parseImport(
+          await file.text(),
+          conditionSchemas,
+          defaultTimeframe
+        );
         if (error) {
           announce("error", I18n.t("strategies-toast-import-failed"), importRefusal(error));
           return;

@@ -1,5 +1,5 @@
 account-data-access-ready = Los datos de { -brand } están activos
-    .detail = Las velas, el registro de pools, los informes de seguridad y la identidad de los tokens se sirven desde screenerbot.io.
+    .detail = Los gráficos, los datos de pools y los informes de seguridad se cargan desde screenerbot.io.
 
 account-data-access-disabled = Los datos de { -brand } están desactivados
     .detail = La fuente de { -brand } está desactivada en tu configuración, así que los datos provienen solo de los proveedores públicos.
@@ -8,7 +8,7 @@ account-data-access-offline = Los datos de { -brand } están sin conexión
     .detail = No hay conexión de red. Los datos se reanudarán solos cuando vuelva la conexión.
 
 account-data-access-signed-out = Los datos de { -brand } requieren una cuenta
-    .detail = Los gráficos, pools, informes de seguridad e identidad de tokens provienen de los proveedores públicos. Son más lentos, tienen límites de solicitudes y menos historial. Iniciar sesión es gratis y no cambia nada más en el funcionamiento de { -brand }.
+    .detail = Los gráficos, pools e informes de seguridad provienen de los proveedores públicos. Son más lentos, tienen límites de solicitudes y menos historial. Iniciar sesión es gratis y no cambia nada más en el funcionamiento de { -brand }.
 
 account-data-access-reauthorization-required = Los datos de { -brand } requieren que inicies sesión de nuevo
     .detail = Este dispositivo se autorizó antes de que existieran los datos de { -brand }. Inicia sesión de nuevo para restaurarlos; mientras tanto se usan los proveedores públicos.
@@ -20,13 +20,14 @@ account-data-access-unreachable = Los datos de { -brand } no responden
     .detail = El servicio no respondió. Se están usando los proveedores públicos y { -brand } seguirá reintentando.
 
 account-data-access-unknown = Los datos de { -brand } aún no se han comprobado
-    .detail = { -brand } todavía no ha necesitado datos compartidos en esta sesión.
+    .detail = { -brand } todavía no ha cargado estos datos en esta sesión.
 
 account-scope-data-read = Datos de mercado de { -brand }
-account-scope-rpc-submit = Envío gratuito de transacciones firmadas
+account-scope-rpc-submit = Envío de transacciones a través de { -brand }
 account-scope-vote = Votación de tokens
 account-scope-referral-read = Ganancias por referidos
 account-scope-account-read = Detalles de la cuenta
+account-scope-chain-read = Consultas de la wallet para el servicio de { -brand }
 
 account-panel-request-failed = No funcionó. Inténtalo de nuevo.
 account-panel-checking = Comprobando el estado de la cuenta…

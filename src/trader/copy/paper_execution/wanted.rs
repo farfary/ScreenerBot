@@ -4,7 +4,8 @@
 //! Whether a paper trade of a copy round is still wanted when the paper executor fills it.
 
 use crate::trader::paper::TradingMode;
-use crate::trader::types::{TradeDecision, TradeReason};
+use crate::trader::types::TradeDecision;
+use crate::trader::TradeReason;
 
 use super::super::{CopyTask, ExitMode};
 

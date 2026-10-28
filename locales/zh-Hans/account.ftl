@@ -3,7 +3,7 @@
 # src/data_server/access.rs.
 
 account-data-access-ready = { -brand } 数据已启用
-    .detail = 共享的 K 线、流动性池注册表、安全报告和代币身份信息均由 screenerbot.io 提供。
+    .detail = 图表、流动性池数据和安全报告从 screenerbot.io 加载。
 
 account-data-access-disabled = { -brand } 数据已关闭
     .detail = { -brand } 数据源已在您的设置中关闭，因此数据仅来自公共提供商。
@@ -12,7 +12,7 @@ account-data-access-offline = { -brand } 数据已离线
     .detail = 当前没有网络连接。连接恢复后，数据将自动恢复。
 
 account-data-access-signed-out = { -brand } 数据需要账户
-    .detail = 图表、流动性池、安全报告和代币身份信息将改由公共提供商提供，速度较慢、有速率限制，且历史数据较少。登录免费，并且不会改变 { -brand } 的其他运行方式。
+    .detail = 图表、流动性池和安全报告将改由公共提供商提供，速度较慢、有速率限制，且历史数据较少。登录免费，并且不会改变 { -brand } 的其他运行方式。
 
 account-data-access-reauthorization-required = { -brand } 数据需要您重新登录
     .detail = 此设备是在 { -brand } 数据推出之前授权的。请重新登录以恢复，在此之前将使用公共提供商。
@@ -24,15 +24,16 @@ account-data-access-unreachable = { -brand } 数据无响应
     .detail = 服务未作应答。目前使用公共提供商，{ -brand } 会持续重试。
 
 account-data-access-unknown = { -brand } 数据尚未检查
-    .detail = 本次会话中，{ -brand } 尚未需要共享数据。
+    .detail = 本次会话中，{ -brand } 尚未加载这些数据。
 
 ## Account panel (ui/account/panel.js), shared by Setup and Settings
 
 account-scope-data-read = { -brand } 市场数据
-account-scope-rpc-submit = 免费提交已签名交易
+account-scope-rpc-submit = 通过 { -brand } 发送交易
 account-scope-vote = 代币投票
 account-scope-referral-read = 推荐收益
 account-scope-account-read = 账户详情
+account-scope-chain-read = { -brand } 服务的钱包读取
 
 account-panel-request-failed = 操作未成功，请重试。
 account-panel-checking = 正在检查账户状态…

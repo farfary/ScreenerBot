@@ -38,19 +38,6 @@ copy-skip-swap-mixed-quote = Dibayar dengan SOL dan stablecoin sekaligus, sehing
 copy-skip-swap-multiple-tokens = Lebih dari satu token diperdagangkan dalam satu transaksi
 copy-skip-swap-unreadable = Jumlah trade tidak dapat dibaca
 
-copy-entry-block-force-stopped = Trading dihentikan paksa
-copy-entry-block-loss-limit = Batas kerugian memblokir entry baru
-copy-entry-block-connectivity = Layanan yang diperlukan tidak tersedia
-copy-entry-block-storage-unavailable = Data trading tidak tersedia atau sedang dipulihkan
-copy-entry-block-position-limit = Batas posisi terbuka tercapai
-copy-entry-block-already-open = Posisi sudah terbuka
-copy-entry-block-reentry-cooldown = Cooldown entry ulang token
-copy-entry-block-open-cooldown = Cooldown entry global
-copy-entry-block-entry-reserved = Entry lain sedang diproses
-copy-entry-block-blacklisted = Token diblokir oleh kontrol risiko
-copy-entry-block-paper-balance-exhausted = Saldo paper tidak cukup untuk transaksi ini
-copy-entry-block-check-failed = Pemeriksaan keamanan tidak dapat diselesaikan
-
 copy-pause-user = Dijeda oleh Anda
 copy-pause-latency-kill-switch = Dijeda otomatis: trade tiba terlambat rata-rata { $average }d (batas { $threshold }d)
 copy-pause-watch-detached = Dijeda otomatis: dompet tidak lagi dipantau
@@ -89,6 +76,7 @@ copy-live-block-copy-trading-disabled = Pemrosesan salinan dijeda secara global
 copy-state-system-paused = Dijeda global
 copy-state-force-stopped = Dihentikan paksa
 copy-state-entries-blocked = Entry diblokir
+copy-state-own-rpc-required = Memerlukan RPC Anda sendiri
 copy-state-running-live = Berjalan
 copy-state-running-paper = Berjalan
 copy-exit-mode-buy-only = Aturan exit saya
@@ -162,6 +150,7 @@ copy-status-force-stopped = Dihentikan paksa
 copy-status-loss-limit = Batas kerugian
 copy-status-all-paused = Semua tugas dijeda
 copy-status-processing = Memproses
+copy-status-own-rpc-required = Memerlukan RPC Anda sendiri
 copy-toolbar-pause = Jeda penyalinan
 copy-toolbar-resume = Lanjutkan penyalinan
 copy-toolbar-resume-tasks = Lanjutkan semua tugas
@@ -310,6 +299,7 @@ copy-state-detail-paper = Berjalan di Paper · trade disimulasikan, tidak ada da
 copy-state-detail-live = Berjalan live · trade dompet disalin dengan swap sungguhan
 copy-state-detail-system-paused = Menunggu · pemrosesan salinan dijeda global, exit tetap berjalan
 copy-state-detail-entries-blocked = Entry diblokir oleh batas kerugian · exit tetap berjalan
+copy-state-detail-own-rpc-required = Menunggu · layanan { -brand } tidak mengikuti dompet lain; tambahkan RPC untuk melanjutkan
 copy-state-detail-force-stopped = Dihentikan paksa · tidak ada yang disalin
 
 copy-paused-since = { $reason } · { $since }
@@ -562,13 +552,11 @@ copy-table-target-difference = Median selisih harga terhadap target
 
 ## Charts
 
-copy-chart-curve-label = P&L kumulatif { $amount } { -sol }
 copy-chart-compare-label = P&L kumulatif per tugas
 copy-chart-empty-curve = Belum ada putaran tertutup pada rentang ini.
 copy-chart-empty-bars = Tidak ada yang tercatat pada rentang ini.
 copy-chart-empty-histogram = Tidak ada sampel kedatangan pada rentang ini.
 copy-chart-empty-compare = Tidak ada putaran tertutup untuk dibandingkan pada rentang ini.
-copy-chart-histogram-title = { $count } dari { $total }
 
 ## Wallet profile
 

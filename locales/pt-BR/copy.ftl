@@ -38,19 +38,6 @@ copy-skip-swap-mixed-quote = Pago com SOL e uma stablecoin ao mesmo tempo, entã
 copy-skip-swap-multiple-tokens = Mais de um token negociado em uma única transação
 copy-skip-swap-unreadable = Não foi possível ler os valores da operação
 
-copy-entry-block-force-stopped = O trading está em parada forçada
-copy-entry-block-loss-limit = O limite de perda bloqueia novas entradas
-copy-entry-block-connectivity = Os serviços necessários estão indisponíveis
-copy-entry-block-storage-unavailable = Os dados de trading estão indisponíveis ou sendo restaurados
-copy-entry-block-position-limit = Limite de posições abertas atingido
-copy-entry-block-already-open = Já existe uma posição aberta
-copy-entry-block-reentry-cooldown = Cooldown de reentrada no token
-copy-entry-block-open-cooldown = Cooldown global de entradas
-copy-entry-block-entry-reserved = Outra entrada está sendo processada
-copy-entry-block-blacklisted = Token bloqueado pelos controles de risco
-copy-entry-block-paper-balance-exhausted = O saldo paper não cobre a operação
-copy-entry-block-check-failed = Uma verificação de segurança não pôde ser concluída
-
 copy-pause-user = Pausada por você
 copy-pause-latency-kill-switch = Pausada automaticamente: os trades chegaram { $average }s atrasados em média (limite de { $threshold }s)
 copy-pause-watch-detached = Pausada automaticamente: a carteira não está mais sendo monitorada
@@ -89,6 +76,7 @@ copy-live-block-copy-trading-disabled = O processamento de cópias está pausado
 copy-state-system-paused = Pausada globalmente
 copy-state-force-stopped = Parada forçada
 copy-state-entries-blocked = Entradas bloqueadas
+copy-state-own-rpc-required = Precisa do seu próprio RPC
 copy-state-running-live = Em execução
 copy-state-running-paper = Em execução
 copy-exit-mode-buy-only = Minhas regras de saída
@@ -166,6 +154,7 @@ copy-status-force-stopped = Parada forçada
 copy-status-loss-limit = Limite de perdas
 copy-status-all-paused = Todas as tarefas pausadas
 copy-status-processing = Processando
+copy-status-own-rpc-required = Precisa do seu próprio RPC
 copy-toolbar-pause = Pausar cópia
 copy-toolbar-resume = Retomar cópia
 copy-toolbar-resume-tasks = Retomar todas as tarefas
@@ -312,6 +301,7 @@ copy-state-detail-paper = Em execução em Paper · os trades são simulados, na
 copy-state-detail-live = Em execução real · os trades da carteira são copiados com swaps reais
 copy-state-detail-system-paused = Em espera · o processamento de cópias está pausado globalmente, as saídas continuam
 copy-state-detail-entries-blocked = Entradas bloqueadas pelo limite de perda · as saídas continuam
+copy-state-detail-own-rpc-required = Em espera · o serviço do { -brand } não acompanha outras carteiras; adicione um RPC para retomar
 copy-state-detail-force-stopped = Parada forçada · nada é copiado
 
 copy-paused-since = { $reason } · { $since }
@@ -568,13 +558,11 @@ copy-table-profit-factor = Fator de lucro
 copy-table-average-hold = Tempo méd. de posse
 copy-table-target-difference = Diferença mediana de preço em relação ao alvo
 
-copy-chart-curve-label = P&L acumulado { $amount } { -sol }
 copy-chart-compare-label = P&L acumulado por tarefa
 copy-chart-empty-curve = Nenhuma rodada fechada neste intervalo ainda.
 copy-chart-empty-bars = Nada registrado neste intervalo.
 copy-chart-empty-histogram = Nenhuma amostra de chegada neste intervalo.
 copy-chart-empty-compare = Nenhuma rodada fechada para comparar neste intervalo.
-copy-chart-histogram-title = { $count } de { $total }
 
 copy-profile-copy = Copiar esta carteira
 copy-profile-copy-other = Copiar com outras regras

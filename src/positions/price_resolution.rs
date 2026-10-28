@@ -7,16 +7,32 @@
 //! 1. Pool price (real-time on-chain calculation) — always preferred
 //! 2. API price from Token database (DexScreener/GeckoTerminal) — if fresh enough
 //! 3. Force fetch fresh API price if stale — immediate update and retry
+//!
+//! Entry decisions read [`entry_price`]: with live pool prices only the pool
+//! price, never an API price; without them a recent API price both market
+//! sources agree on. Synchronous readers (filtering, wallet worth, strategy
+//! context) read [`cached_trading_price`], which never fetches.
 
 use super::types::PriceSource;
-use crate::chains::chain_for_address;
+use crate::chains::access::{self as chain_access, Capability};
+use crate::chains::{chain_for_address, ChainId};
 use crate::logger::{self, LogTag};
 use crate::pools::{get_pool_price, PriceResult};
+use crate::tokens::Token;
+use std::collections::HashSet;
 use std::sync::LazyLock;
 use std::time::{Duration, Instant};
 
 /// Maximum age (in seconds) for API price to be considered valid for trading
 const API_PRICE_MAX_AGE_SECS: i64 = 60;
+
+/// Maximum age (in seconds) of an API price an entry decision accepts on an
+/// install without live pool prices. Tighter than the exit bound: an entry can
+/// always wait for the next market refresh, an exit cannot.
+const ENTRY_API_PRICE_MAX_AGE_SECS: i64 = 20;
+
+/// Confidence of a price read from the market APIs rather than a pool.
+const API_PRICE_CONFIDENCE: f32 = 0.8;
 
 /// Minimum interval between force-fetch attempts for the same mint. This is the
 /// single throttle shared by every caller of the resolver (the 1s position price
@@ -66,8 +82,8 @@ pub async fn get_price_with_api_fallback(token_mint: &str) -> Option<(PriceResul
         }
     }
 
-    let (price_result, source) = api_price(chain, token_mint).await?;
     let chain = chain?;
+    let (price_result, source) = api_price(chain, token_mint).await?;
     match crate::tokens::get_market_prices_sol_async(chain, token_mint).await {
         Ok((dexscreener, geckoterminal)) if !sources_agree(dexscreener, geckoterminal) => {
             logger::warning(
@@ -98,27 +114,13 @@ pub fn sources_agree(dexscreener: Option<f64>, geckoterminal: Option<f64>) -> bo
 }
 
 /// The stored API price of `token_mint`, refreshed when stale or missing.
-async fn api_price(
-    chain: Option<crate::chains::ChainId>,
-    token_mint: &str,
-) -> Option<(PriceResult, PriceSource)> {
+async fn api_price(chain: ChainId, token_mint: &str) -> Option<(PriceResult, PriceSource)> {
     // Priority 2: Try API price from token database (DexScreener/GeckoTerminal).
-    let stored = match chain {
-        Some(chain) => crate::tokens::get_full_token_async(chain, token_mint).await,
-        None => Ok(None),
-    };
-    match stored {
+    match crate::tokens::get_full_token_async(chain, token_mint).await {
         Ok(Some(token)) => {
-            // Check if API price is fresh enough (within max age)
-            let now = chrono::Utc::now();
-            let age_secs = now
-                .signed_duration_since(token.market_data_last_fetched_at)
-                .num_seconds();
+            let age_secs = api_price_age_secs(&token, chrono::Utc::now());
 
-            if age_secs <= API_PRICE_MAX_AGE_SECS
-                && token.price_sol > 0.0
-                && token.price_sol.is_finite()
-            {
+            if age_secs <= API_PRICE_MAX_AGE_SECS && valid_price(token.price_sol) {
                 logger::debug(
                     LogTag::Positions,
                     &format!(
@@ -126,22 +128,7 @@ async fn api_price(
                         token_mint, token.price_sol, age_secs, token.data_source
                     ),
                 );
-
-                // Convert Token API price to PriceResult
-                let price_result = PriceResult {
-                    mint: token_mint.to_string(),
-                    price_native: token.price_sol,
-                    price_usd: token.price_usd,
-                    confidence: 0.8, // Lower confidence for API price vs on-chain
-                    source_pool: Some("api".to_owned()),
-                    pool_address: token.pool_price_last_used_pool.clone().unwrap_or_default(),
-                    slot: 0,
-                    timestamp: Instant::now(),
-                    native_reserves: 0.0,
-                    token_reserves: 0.0,
-                };
-
-                return Some((price_result, PriceSource::Api));
+                return Some((api_price_result(chain, &token, "api"), PriceSource::Api));
             } else if age_secs > API_PRICE_MAX_AGE_SECS {
                 // Price is stale - force fetch fresh data and retry
                 logger::info(
@@ -152,24 +139,7 @@ async fn api_price(
                     ),
                 );
 
-                // Force immediate market data update
                 if let Some(fresh_token) = force_fetch_fresh_price(token_mint).await {
-                    let price_result = PriceResult {
-                        mint: token_mint.to_string(),
-                        price_native: fresh_token.price_sol,
-                        price_usd: fresh_token.price_usd,
-                        confidence: 0.8,
-                        source_pool: Some("api_fresh".to_owned()),
-                        pool_address: fresh_token
-                            .pool_price_last_used_pool
-                            .clone()
-                            .unwrap_or_default(),
-                        slot: 0,
-                        timestamp: Instant::now(),
-                        native_reserves: 0.0,
-                        token_reserves: 0.0,
-                    };
-
                     logger::info(
                         LogTag::Positions,
                         &format!(
@@ -177,8 +147,10 @@ async fn api_price(
                             token_mint, fresh_token.price_sol, fresh_token.data_source
                         ),
                     );
-
-                    return Some((price_result, PriceSource::Api));
+                    return Some((
+                        api_price_result(chain, &fresh_token, "api_fresh"),
+                        PriceSource::Api,
+                    ));
                 }
             }
         }
@@ -193,22 +165,6 @@ async fn api_price(
             );
 
             if let Some(fresh_token) = force_fetch_fresh_price(token_mint).await {
-                let price_result = PriceResult {
-                    mint: token_mint.to_string(),
-                    price_native: fresh_token.price_sol,
-                    price_usd: fresh_token.price_usd,
-                    confidence: 0.8,
-                    source_pool: Some("api_fresh".to_owned()),
-                    pool_address: fresh_token
-                        .pool_price_last_used_pool
-                        .clone()
-                        .unwrap_or_default(),
-                    slot: 0,
-                    timestamp: Instant::now(),
-                    native_reserves: 0.0,
-                    token_reserves: 0.0,
-                };
-
                 logger::info(
                     LogTag::Positions,
                     &format!(
@@ -216,8 +172,10 @@ async fn api_price(
                         token_mint, fresh_token.price_sol
                     ),
                 );
-
-                return Some((price_result, PriceSource::Api));
+                return Some((
+                    api_price_result(chain, &fresh_token, "api_fresh"),
+                    PriceSource::Api,
+                ));
             }
         }
         Err(e) => {
@@ -229,6 +187,131 @@ async fn api_price(
     }
 
     None
+}
+
+/// The price an entry decision is made on. With live pool prices: the pool
+/// price only, never an API price. Without them: the stored API price, when it
+/// is at most [`ENTRY_API_PRICE_MAX_AGE_SECS`] old and the two market sources
+/// do not contradict each other. Never fetches.
+pub async fn entry_price(chain: ChainId, mint: &str) -> Option<PriceResult> {
+    if chain_access::has(chain, Capability::LivePoolPrices) {
+        return get_pool_price(chain, mint).filter(|price| valid_price(price.price_native));
+    }
+    let token = crate::tokens::get_full_token_async(chain, mint)
+        .await
+        .ok()
+        .flatten()?;
+    let (dexscreener, geckoterminal) = crate::tokens::get_market_prices_sol_async(chain, mint)
+        .await
+        .ok()?;
+    entry_api_price_usable(
+        token.price_sol,
+        api_price_age_secs(&token, chrono::Utc::now()),
+        dexscreener,
+        geckoterminal,
+    )
+    .then(|| api_price_result(chain, &token, "api"))
+}
+
+/// Whether an API price may decide an entry: a positive finite price no older
+/// than [`ENTRY_API_PRICE_MAX_AGE_SECS`] that the market sources agree on.
+fn entry_api_price_usable(
+    price_native: f64,
+    age_secs: i64,
+    dexscreener: Option<f64>,
+    geckoterminal: Option<f64>,
+) -> bool {
+    valid_price(price_native)
+        && (0..=ENTRY_API_PRICE_MAX_AGE_SECS).contains(&age_secs)
+        && sources_agree(dexscreener, geckoterminal)
+}
+
+/// The price trading reads synchronously, without fetching: the live pool
+/// price, else, on an install without live pool prices, the cached token's API
+/// price when it is at most [`API_PRICE_MAX_AGE_SECS`] old.
+pub fn cached_trading_price(chain: ChainId, mint: &str) -> Option<PriceResult> {
+    if let Some(price) = get_pool_price(chain, mint) {
+        return valid_price(price.price_native).then_some(price);
+    }
+    if chain_access::has(chain, Capability::LivePoolPrices) {
+        return None;
+    }
+    let token = crate::tokens::get_cached_token(chain, mint)?;
+    let age_secs = api_price_age_secs(&token, chrono::Utc::now());
+    ((0..=API_PRICE_MAX_AGE_SECS).contains(&age_secs) && valid_price(token.price_sol))
+        .then(|| api_price_result(chain, &token, "api"))
+}
+
+/// The mints of `chain` with a live pool price, or `None` on an install
+/// without live pool prices, where every candidate is priced per mint by
+/// [`entry_price`].
+pub fn live_priced_mints(chain: ChainId) -> Option<Vec<String>> {
+    chain_access::has(chain, Capability::LivePoolPrices)
+        .then(|| crate::pools::get_available_tokens(chain))
+}
+
+/// The mints among `mints` that have a trading price now: the live pool set
+/// with live pool prices, else each mint with a [`cached_trading_price`].
+pub fn priced_mints(chain: ChainId, mints: &[String]) -> HashSet<String> {
+    match live_priced_mints(chain) {
+        Some(pool_mints) => pool_mints.into_iter().collect(),
+        None => mints
+            .iter()
+            .filter(|mint| cached_trading_price(chain, mint).is_some())
+            .cloned()
+            .collect(),
+    }
+}
+
+/// The one [`PriceResult`] built from a token's API market data.
+fn api_price_result(chain: ChainId, token: &Token, source: &str) -> PriceResult {
+    PriceResult {
+        mint: token.mint.clone(),
+        price_native: token.price_sol,
+        price_usd: token.price_usd,
+        confidence: API_PRICE_CONFIDENCE,
+        source_pool: Some(source.to_owned()),
+        pool_address: token.pool_price_last_used_pool.clone().unwrap_or_default(),
+        slot: 0,
+        timestamp: Instant::now(),
+        native_reserves: api_native_reserves(chain, token.liquidity_usd),
+        token_reserves: 0.0,
+    }
+}
+
+/// The native side of an API-priced token's liquidity. With live pool prices
+/// an API price carries no reserves (liquidity rules read pool reserves only);
+/// without them it is estimated from the API's USD liquidity.
+fn api_native_reserves(chain: ChainId, liquidity_usd: Option<f64>) -> f64 {
+    if chain_access::has(chain, Capability::LivePoolPrices) {
+        return 0.0;
+    }
+    liquidity_estimate_native(
+        liquidity_usd,
+        crate::apis::native_price::get_native_price_for(chain),
+    )
+}
+
+/// Half a pool's USD liquidity in the native coin: the native side of a
+/// two-sided pool. Zero when either input is unknown.
+fn liquidity_estimate_native(liquidity_usd: Option<f64>, native_usd: f64) -> f64 {
+    match liquidity_usd {
+        Some(liquidity) if valid_price(liquidity) && valid_price(native_usd) => {
+            liquidity / 2.0 / native_usd
+        }
+        _ => 0.0,
+    }
+}
+
+/// Seconds since the token's market data was fetched.
+fn api_price_age_secs(token: &Token, now: chrono::DateTime<chrono::Utc>) -> i64 {
+    now.signed_duration_since(token.market_data_last_fetched_at)
+        .num_seconds()
+}
+
+/// A positive, finite amount.
+fn valid_price(value: f64) -> bool {
+    value > 0.0 && value.is_finite()
 }
 
 /// Force fetch fresh price data from API and return updated token
@@ -338,6 +421,54 @@ mod tests {
             "one source cannot be contradicted"
         );
         assert!(sources_agree(None, None));
+    }
+
+    #[test]
+    fn an_entry_reads_only_a_recent_api_price_the_sources_agree_on() {
+        assert!(entry_api_price_usable(0.002, 0, Some(0.002), Some(0.0021)));
+        assert!(entry_api_price_usable(
+            0.002,
+            ENTRY_API_PRICE_MAX_AGE_SECS,
+            None,
+            None
+        ));
+        assert!(
+            !entry_api_price_usable(0.002, ENTRY_API_PRICE_MAX_AGE_SECS + 1, None, None),
+            "an API price older than the entry bound never decides an entry"
+        );
+        assert!(
+            !entry_api_price_usable(0.002, -5, None, None),
+            "a fetch time in the future is not trusted"
+        );
+        assert!(
+            !entry_api_price_usable(0.002, 1, Some(14.197), Some(0.002)),
+            "contradicting market sources block an entry"
+        );
+        assert!(!entry_api_price_usable(0.0, 1, None, None));
+        assert!(!entry_api_price_usable(f64::NAN, 1, None, None));
+        assert!(
+            ENTRY_API_PRICE_MAX_AGE_SECS <= API_PRICE_MAX_AGE_SECS,
+            "the entry bound never exceeds the exit bound"
+        );
+    }
+
+    #[test]
+    fn api_liquidity_is_half_the_usd_liquidity_in_the_native_coin() {
+        assert_eq!(liquidity_estimate_native(Some(20_000.0), 200.0), 50.0);
+        assert_eq!(liquidity_estimate_native(None, 200.0), 0.0);
+        assert_eq!(liquidity_estimate_native(Some(20_000.0), 0.0), 0.0);
+        assert_eq!(liquidity_estimate_native(Some(f64::INFINITY), 200.0), 0.0);
+        assert_eq!(liquidity_estimate_native(Some(-1.0), 200.0), 0.0);
+    }
+
+    /// Every API price is built by one constructor.
+    #[test]
+    fn api_prices_have_one_constructor() {
+        let source = include_str!("price_resolution.rs");
+        let literal = concat!("PriceResult", " {");
+        let return_type = concat!("-> PriceResult", " {");
+        let constructions = source.matches(literal).count() - source.matches(return_type).count();
+        assert_eq!(constructions, 1);
     }
 
     #[test]

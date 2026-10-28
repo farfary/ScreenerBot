@@ -1,20 +1,5 @@
 # Trader page labels.
 
-# Exit types shown in the exit breakdown. Ids are the stored closed_reason: exit
-# rule ids, the Debug names of the exit TradeReason variants (src/trader/types.rs,
-# shown as readable labels) and the reasons written by src/positions and src/trader/stats.rs.
-trader-exit-type-stop-loss = Стоп-лос
-trader-exit-type-take-profit = Тейк-профіт
-trader-exit-type-roi = Тейк-профіт
-trader-exit-type-roi-exit = Тейк-профіт
-trader-exit-type-trailing-stop = Трейлінг-стоп
-trader-exit-type-time-override = Вихід за часом
-trader-exit-type-time-rule = Часове правило
-trader-exit-type-manual = Вручну
-trader-exit-type-manual-close = Вручну
-trader-exit-type-dca = DCA
-trader-exit-type-unknown = Невідомо
-
 ## Sub-tabs. Ids are the tab ids of the trader page.
 
 trader-tab-stats = Статистика
@@ -34,36 +19,45 @@ trader-feature-beta = Бета
 trader-feature-disabled = Вимкнено
     .message = Цю функцію наразі вимкнено.
 
-## Status bar and trading controls
+## Toolbar, notices and trading controls
 
 trader-status-title = Автотрейдер
-trader-status-loading = Завантаження...
 trader-status-running = Працює
 trader-status-stopped = Зупинено
 trader-status-setup-required = Потрібне налаштування
 trader-setup-action = Завершити налаштування
-trader-toggle-on = УВІМКНЕНО
-trader-toggle-off = ВИМКНЕНО
 trader-toggle-start-failed = Не вдалося запустити трейдер
 trader-toggle-stop-failed = Не вдалося зупинити трейдер
-trader-controls-title = Керування торгівлею
 trader-halt-title = Торгівлю зупинено
 trader-halt-reason-default = Примусова зупинка вручну
 trader-halt-resume = Відновити
 trader-monitor-entry = Монітор входу
 trader-monitor-exit = Монітор виходу
-trader-monitor-master-off = Автотрейдер вимкнено
 trader-loss-limit-title = Ліміт збитків за період
 trader-loss-limit-resume = Відновити торгівлю
 trader-loss-limit-reset = Скинути період
 trader-loss-limit-off = Вимкнено
-trader-loss-limit-none = Ліміт збитків за період не налаштовано
 # $hours and $minutes are formatted spans such as "2h" and "5m".
 trader-loss-limit-resets-in = Скидання через { $hours } { $minutes }
-trader-loss-limit-reached = ЛІМІТ ДОСЯГНУТО
 trader-force-stop = Примусово зупинити все
 trader-force-stop-hint = Одразу зупиняє всі монітори, завдання копіювання та угоди.
 trader-force-stop-idle = Зараз не працює нічого, що зупинила б примусова зупинка.
+trader-run-state-force-stopped = Примусово зупинено
+trader-run-state-waiting = Очікування сервісів
+trader-run-state-idle = Монітори вимкнено
+trader-entries-label = Нові входи
+trader-entries-open = Відкриті
+trader-entries-monitor-off = Монітор входу вимкнено
+trader-entries-no-live-strategy = Немає реальної стратегії входу
+trader-entries-no-paper-strategy = Немає віртуальної стратегії входу
+trader-action-start = Запустити автотрейдер
+trader-action-stop = Зупинити автотрейдер
+trader-notice-loss-limit = Досягнуто ліміту збитків
+trader-notice-loss-limit-message = Нові реальні входи призупинено до скидання періоду. Виходи тривають.
+trader-notice-stats-failed = Не вдалося завантажити статистику
+trader-controls-group =
+    .aria-label = Керування торгівлею
+trader-monitor-dormant = Запуститься разом з автотрейдером
 
 ## Confirmations. `.message` is the body and `.confirm` the confirming button.
 
@@ -95,33 +89,42 @@ trader-toast-feature-enabled = Функцію увімкнено
 trader-toast-feature-disabled = Функцію вимкнено
 trader-toast-feature-applied = Налаштування автотрейдера застосовано
 
-## Stats: realized window and metrics
+## Stats: book, window, exposure and figures
 
 trader-stats-window =
     .aria-label = Період статистики
 trader-stats-book =
     .aria-label = Торговий портфель
-trader-paper-run-since = Віртуальний прогін з { $date }
-trader-paper-start = Старт
-trader-paper-cash = Вільно
-trader-paper-open = У позиціях
-trader-paper-unrealized = Нереалізований
+trader-exposure-cash = Вільно
+trader-exposure-open = У позиціях
+trader-exposure-unrealized = Нереалізований
+trader-exposure-open-title = Позиції, що займають слот, з ліміту відкритих позицій
+trader-exposure-in-use = Задіяно
+trader-exposure-in-use-title = { -sol }, вкладені у відкриті позиції
+# $amount is the formatted count.
+trader-exposure-unpriced =
+    { $count ->
+        [one] { $amount } відкрита позиція ще не має живої ціни
+        [few] { $amount } відкриті позиції ще не мають живої ціни
+        [many] { $amount } відкритих позицій ще не мають живої ціни
+       *[other] { $amount } відкритої позиції ще не мають живої ціни
+    }
+# $date is a formatted date; $amount is a formatted SOL amount.
+trader-exposure-cash-title = Віртуальний прогін з { $date } · розпочато з { $amount }
 trader-paper-reset = Скинути віртуальний прогін
 trader-paper-reset-title = Скинути віртуальний прогін?
 trader-paper-reset-run-message = Кожна відкрита віртуальна позиція, зокрема віртуальні утримувані токени завдань копіювання, закриється за поточною ціною, і почнеться новий прогін із заданим стартовим балансом. Попередні прогони залишаться в історії.
 trader-paper-reset-done = Почався новий віртуальний прогін
 trader-paper-reset-failed = Не вдалося скинути віртуальний прогін
-trader-paper-account-failed = Не вдалося завантажити віртуальний прогін
 trader-realized-title = Реалізована результативність
 trader-metric-net-pnl = Чистий прибуток/збиток
 trader-metric-win-rate = Відсоток виграшних угод
 trader-metric-profit-factor = Профіт-фактор
 trader-metric-max-drawdown = Макс. просадка
-trader-metric-capital = Капітал у роботі
 trader-metric-avg-win-loss = Сер. виграш / програш
 trader-metric-closed-trades = Закриті угоди
 trader-metric-median-hold = Медіанне утримання
-trader-stats-empty = У цьому періоді немає закритих угод
+trader-metric-fees = Мережеві комісії
 # $won and $lost are formatted SOL amounts.
 trader-stats-won-lost = виграно { $won } · програно { $lost }
 # $wins and $losses are the plural messages below.
@@ -144,68 +147,105 @@ trader-stats-losses =
 trader-stats-expected = очікується { $amount } на угоду
 trader-stats-profit-factor-basis = Загальний виграш ÷ загальний програш
 trader-stats-drawdown-basis = Найглибша реалізована просадка від піку до мінімуму
-# $count is the position limit and selects the plural.
-trader-stats-slots =
-    { $count ->
-        [one] Використано слотів позицій: { $used } із { $max }
-        [few] Використано слотів позицій: { $used } із { $max }
-        [many] Використано слотів позицій: { $used } із { $max }
-       *[other] Використано слотів позицій: { $used } із { $max }
-    }
-trader-stats-avg-basis = Середній результат виграшної та програшної угоди
-trader-stats-closed =
-    { $count ->
-        [one] Закрито позицій: { $amount }
-        [few] Закрито позицій: { $amount }
-        [many] Закрито позицій: { $amount }
-       *[other] Закрито позицій: { $amount }
-    }
-# $span is a formatted duration.
-trader-stats-hold-average = у середньому { $span }
 trader-stats-excluded =
     { $count ->
-        [one] Виключено закритих раундів: { $amount } — немає повної собівартості, тож немає достовірного прибутку/збитку.
-        [few] Виключено закритих раундів: { $amount } — немає повної собівартості, тож немає достовірного прибутку/збитку.
-        [many] Виключено закритих раундів: { $amount } — немає повної собівартості, тож немає достовірного прибутку/збитку.
-       *[other] Виключено закритих раундів: { $amount } — немає повної собівартості, тож немає достовірного прибутку/збитку.
+        [one] Не враховано закритих угод: { $amount }. Їхня собівартість неповна, тому прибуток/збиток невідомий.
+        [few] Не враховано закритих угод: { $amount }. Їхня собівартість неповна, тому прибуток/збиток невідомий.
+        [many] Не враховано закритих угод: { $amount }. Їхня собівартість неповна, тому прибуток/збиток невідомий.
+       *[other] Не враховано закритих угод: { $amount }. Їхня собівартість неповна, тому прибуток/збиток невідомий.
     }
+# $ratio is a formatted ratio.
+trader-stats-payoff = Payoff { $ratio }
+trader-stats-streak-win =
+    { $count ->
+        [one] Остання угода виграшна
+        [few] { $amount } виграшні поспіль
+        [many] { $amount } виграшних поспіль
+       *[other] { $amount } виграшної поспіль
+    }
+trader-stats-streak-loss =
+    { $count ->
+        [one] Остання угода збиткова
+        [few] { $amount } збиткові поспіль
+        [many] { $amount } збиткових поспіль
+       *[other] { $amount } збиткової поспіль
+    }
+# $wins and $losses are formatted durations.
+trader-stats-hold-split = Виграшні { $wins } · збиткові { $losses }
+trader-stats-fees-basis = Враховано в чистому прибутку/збитку
+trader-stats-loading = Завантаження статистики...
+trader-open-strategies = Відкрити стратегії
 
-## Stats: daily P&L and extremes
+## Stats: P&L chart, trade outcomes and extremes
 
 trader-daily-title = Щоденний прибуток/збиток
 trader-daily-subtitle = Реалізований { -sol } за день із наростаючим підсумком
-trader-daily-loading = Завантаження щоденного прибутку/збитку...
 trader-daily-chart = Щоденний реалізований прибуток і збиток у { -sol }
 trader-weekly-title = Щотижневий прибуток/збиток
 trader-weekly-subtitle = Реалізований { -sol } за тиждень ISO із наростаючим підсумком
 trader-weekly-chart = Щотижневий реалізований прибуток і збиток у { -sol }
+# $date is a formatted date; $pnl a signed SOL amount.
+trader-daily-bar =
+    { $count ->
+        [one] { $date } · { $pnl } · { $amount } угода
+        [few] { $date } · { $pnl } · { $amount } угоди
+        [many] { $date } · { $pnl } · { $amount } угод
+       *[other] { $date } · { $pnl } · { $amount } угоди
+    }
+trader-weekly-bar =
+    { $count ->
+        [one] Тиждень з { $date } · { $pnl } · { $amount } угода
+        [few] Тиждень з { $date } · { $pnl } · { $amount } угоди
+        [many] Тиждень з { $date } · { $pnl } · { $amount } угод
+       *[other] Тиждень з { $date } · { $pnl } · { $amount } угоди
+    }
 trader-extreme-best = Найкраща угода
 trader-extreme-worst = Найгірша угода
+trader-extreme-runs = Найбільше поспіль
+trader-outcome-title = Підсумки угод
+trader-outcome-subtitle = Закриті угоди за дохідністю, у відсотках
+# $value, $from and $to are formatted signed percentages.
+trader-outcome-below = Нижче { $value }
+trader-outcome-range = Від { $from } до { $to }
+trader-outcome-above = { $value } і вище
+# $range is one of the three messages above; $pnl a signed SOL amount.
+trader-outcome-bucket =
+    { $count ->
+        [one] { $range } · { $amount } угода · { $pnl }
+        [few] { $range } · { $amount } угоди · { $pnl }
+        [many] { $range } · { $amount } угод · { $pnl }
+       *[other] { $range } · { $amount } угоди · { $pnl }
+    }
 
-## Stats: exit breakdown
+## Stats: empty windows, exit reasons, entry sources and recent closes
 
-trader-exit-title = Розподіл стратегій виходу
-trader-exit-subtitle = Як закривалися позиції та що повернув кожен вихід
-trader-exit-loading = Завантаження даних про виходи...
-trader-exit-empty-day = За останні 24 години немає закритих угод
-trader-exit-empty-all = Закритих угод поки немає
-trader-exit-empty-days =
+trader-stats-empty-day = За останні 24 години немає закритих угод
+trader-stats-empty-all = Закритих угод поки немає
+trader-stats-empty-hint = Закриті угоди з'являться тут після продажу позиції. Запустіть автотрейдер або виберіть довший період.
+trader-stats-empty-days =
     { $count ->
         [one] За останні { $amount } д немає закритих угод
         [few] За останні { $amount } д немає закритих угод
         [many] За останні { $amount } д немає закритих угод
        *[other] За останні { $amount } д немає закритих угод
     }
-# $share is a formatted percentage of all exits.
-trader-exit-share =
-    { $count ->
-        [one] { $amount } угода · { $share } виходів
-        [few] { $amount } угоди · { $share } виходів
-        [many] { $amount } угод · { $share } виходів
-       *[other] { $amount } угоди · { $share } виходів
-    }
-# $value is a formatted average percentage.
-trader-exit-average = сер. { $value }
+trader-exits-title = Причини виходу
+trader-exits-subtitle = Чим завершилися закриті угоди і що дав кожен вихід
+trader-sources-title = Джерела входу
+trader-sources-subtitle = Що відкрило закриті угоди
+trader-recent-title = Останні закриття
+trader-recent-subtitle = Останні закриті угоди в цьому періоді
+trader-column-token = Токен
+trader-column-exit = Вихід
+trader-column-source = Джерело
+trader-column-trades = Угоди
+trader-column-win-rate = Відсоток виграшних
+trader-column-avg-return = Сер. дохідність
+trader-column-net-pnl = Чистий прибуток/збиток
+trader-column-held = Утримання
+trader-column-closed = Закрито
+trader-column-pnl = Прибуток/збиток
+trader-column-return = Дохідність
 
 ## Shared example vocabulary
 
@@ -435,3 +475,8 @@ trader-timing-concurrency = Паралельність перевірки вхо
 trader-timing-concurrency-hint = Кількість токенів для одночасної перевірки (більше = швидше, але більше навантаження на ЦП)
 trader-timing-unit-minutes = хв
 trader-timing-unit-tokens = токенів
+
+## Service mode notice
+
+trader-service-notice-title = Працює через сервіс { -brand }
+trader-service-notice-message = Ціни оновлюються раз на кілька секунд, тому швидкі виходи, як-от вузькі трейлінг-стопи, спрацьовують пізніше, ніж із власним RPC.

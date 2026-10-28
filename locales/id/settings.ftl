@@ -32,6 +32,7 @@ settings-dialog-tab-hints = Petunjuk
 settings-dialog-tab-data = Data
 settings-dialog-tab-security = Keamanan
 settings-dialog-tab-account = Akun
+settings-dialog-tab-connection = Koneksi
 settings-dialog-tab-telegram = { -telegram }
 settings-dialog-tab-agent-connections = Koneksi Agen
 settings-dialog-tab-updates = Pembaruan
@@ -499,14 +500,12 @@ settings-hints-restored = Semua petunjuk dipulihkan
 ## account_tab.js
 
 settings-account-title = Akun { -brand }
-settings-account-description = Gratis dan opsional. { -brand } melakukan trading, penemuan token, dan pembuatan grafik tanpa akun — hanya saja melalui penyedia publik. Panel di bawah mencantumkan apa yang ditambahkan saat Anda masuk.
+settings-account-description = Gratis. Dengan RPC Anda sendiri, akun bersifat opsional: { -brand } melakukan trading, penemuan token, dan pembuatan grafik tanpa akun melalui penyedia publik. Layanan { -brand } memerlukan akun. Panel di bawah mencantumkan apa yang ditambahkan saat Anda masuk.
+settings-account-description-service = Gratis, dan diperlukan untuk layanan { -brand }: pembacaan dompet dan swap yang Anda tandatangani melewati screenerbot.io dengan akun ini. Kunci privat Anda tidak pernah meninggalkan komputer ini.
 settings-account-data-title = Data { -brand }
-settings-account-data-description = Kami menjalankan layanan data pasar bersama di screenerbot.io: candle gabungan di tujuh timeframe, registri pool yang sudah teresolusi, laporan keamanan yang di-cache, dan identitas token yang dinormalisasi. Layanan ini menjaga agar setiap instalasi tidak terkena rate limit penyedia publik sendirian. Layanan ini memerlukan akun agar biaya operasionalnya dapat diatribusikan dan penyalahgunaan dapat dibatasi.
+settings-account-data-description = { -brand } menjalankan layanan data pasar bersama di screenerbot.io untuk grafik, data pool, laporan keamanan, dan detail token, sehingga instalasi Anda tidak menanggung sendiri batas laju penyedia publik. Layanan ini memerlukan akun gratis untuk membatasi penyalahgunaan.
 settings-account-data-fallback = Saat layanan tidak tersedia, { -brand } beralih otomatis ke penyedia publik. Tidak ada yang berhenti; grafik terisi lebih lambat dan riwayatnya lebih sedikit.
-settings-account-gateway-title = Mengirim transaksi
-settings-account-gateway-description = Saat Anda masuk, { -brand } dapat menyiarkan swap Anda melalui screenerbot.io alih-alih RPC Anda sendiri. Bot Anda tetap membuat dan menandatangani setiap transaksi di mesin ini — server hanya meneruskannya, dan tidak dapat mengubah transaksi bertanda tangan tanpa membatalkan signature-nya.
-settings-account-gateway-label = Gunakan RPC { -brand } untuk mengirim transaksi
-settings-account-gateway-hint = Hanya untuk pengiriman. Data harga selalu berasal dari RPC Anda sendiri — polling pool terlalu berat untuk endpoint bersama, sehingga tidak pernah dikirim ke sana.
+settings-account-data-fallback-service = Pada layanan { -brand }, pembacaan dompet dan trading juga melewati screenerbot.io: selama tidak dapat dijangkau, trading dijeda dan berlanjut saat koneksi kembali.
 settings-account-manage-title = Mengelola akun Anda
 settings-account-manage-description = Kata sandi, alamat email, perangkat terhubung, dan pembayaran referral Anda dikelola di situs web. Mencabut perangkat di sana akan mengeluarkannya dari semua tempat, termasuk yang ini.
 settings-account-open-dashboard = Buka dasbor Anda
@@ -623,3 +622,26 @@ settings-data-folder-label = Buka Folder Data
 settings-data-folder-hint = Buka folder berisi semua data { -brand } di pengelola file Anda.
 settings-data-folder-open = Buka Folder
 settings-data-folder-open-failed = Tidak dapat membuka folder data
+
+## Connection tab (scripts/ui/settings/connection_tab.js)
+
+settings-connection-title = Koneksi
+settings-connection-description = Cara { -brand } menjangkau { -solana }.
+settings-connection-choice =
+    .aria-label = Koneksi
+settings-connection-active = Aktif
+settings-connection-service-title = Layanan { -brand }
+settings-connection-service-detail = Harga diperbarui setiap beberapa detik. Copy trading, pemantauan wallet, saldo wallet lain, riwayat lama, swap pool langsung, dan harga pool langsung memerlukan RPC Anda sendiri.
+settings-connection-own-title = RPC Anda sendiri
+settings-connection-own-detail = Harga sekitar dua kali per detik dan semua fitur.
+settings-connection-apply = Terapkan dan mulai ulang
+settings-connection-to-service-title = Beralih ke layanan { -brand }?
+settings-connection-to-service-message = Copy trading, pemantauan wallet, saldo wallet lain, riwayat lama, swap pool langsung, dan harga pool langsung dinonaktifkan; pengaturannya tetap disimpan. Trading dijeda setiap kali Anda keluar. { -brand } dimulai ulang untuk beralih.
+settings-connection-to-own-title = Beralih ke RPC Anda sendiri?
+settings-connection-to-own-message = { -brand } memeriksa endpoint Anda, lalu dimulai ulang untuk beralih. Semua fitur aktif kembali.
+settings-connection-signed-in-as = Terhubung · masuk sebagai { $name }
+settings-connection-sending-title = Mengirim transaksi
+settings-connection-sending-label = Kirim transaksi melalui { -brand }
+settings-connection-sending-own-hint = Saat Anda masuk, swap yang Anda tanda tangani di komputer ini disiarkan melalui screenerbot.io. Jika tidak memungkinkan, RPC Anda yang dipakai.
+settings-connection-sending-service-hint = Selalu aktif dengan layanan { -brand }: inilah cara swap yang Anda tandatangani di komputer ini mencapai { -solana }.
+settings-connection-switch-failed = Koneksi tidak dapat dialihkan.

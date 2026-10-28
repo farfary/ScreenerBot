@@ -21,7 +21,7 @@ use crate::database::health::{self, StoreHealth};
 use crate::database::recovery::RecoveryAction;
 use crate::errors::DatabaseError;
 use crate::positions::{
-    Book, EntryRecord, ExitRecord, Opening, PositionManagement, PositionOrigin,
+    Book, EntryRecord, ExitRecord, Opening, Position, PositionManagement, PositionOrigin,
 };
 
 async fn answer(method: &str, uri: &str) -> (StatusCode, Value) {
@@ -182,28 +182,29 @@ fn paper_stats_count_and_sum_the_paper_rounds_given() {
 }
 
 #[test]
-fn the_paper_account_reports_open_cost_and_unrealized_only_when_every_round_has_it() {
+fn the_account_response_carries_the_run_and_its_cash() {
     let account = PaperAccount {
         epoch: 2,
         starting_balance_native: 1.0,
         started_at: Utc.with_ymd_and_hms(2026, 10, 1, 0, 0, 0).unwrap(),
         cash_native: 0.7,
     };
-    let mut marked = round(1, true, 0.1, None);
-    marked.unrealized_pnl = Some(0.02);
-    let unmarked = round(2, true, 0.2, None);
-
-    let partial = paper_account_response(account.clone(), &[marked.clone(), unmarked]);
-    assert_eq!(partial.open_rounds, 2);
-    assert!((partial.open_cost_native - 0.3).abs() < 1e-12);
-    assert_eq!(partial.open_unrealized_pnl_native, None);
-
-    let full = serde_json::to_value(paper_account_response(account, &[marked])).unwrap();
-    assert_eq!(full["epoch"], 2);
-    assert_eq!(full["started_at"], 1_790_812_800);
-    assert_eq!(full["starting_balance_native"], 1.0);
-    assert_eq!(full["cash_native"], 0.7);
-    assert_eq!(full["open_unrealized_pnl_native"], 0.02);
+    let response = serde_json::to_value(paper_account_response(account)).unwrap();
+    assert_eq!(response["epoch"], 2);
+    assert_eq!(response["started_at"], 1_790_812_800);
+    assert_eq!(response["starting_balance_native"], 1.0);
+    assert_eq!(response["cash_native"], 0.7);
+    // Open exposure is reported by the trader stats, never a second time here.
+    for dropped in [
+        "open_rounds",
+        "open_cost_native",
+        "open_unrealized_pnl_native",
+    ] {
+        assert!(
+            response.get(dropped).is_none(),
+            "{dropped} is still reported"
+        );
+    }
 }
 
 #[test]

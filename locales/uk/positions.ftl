@@ -24,7 +24,6 @@ positions-paper-empty = Немає віртуальних позицій
 positions-paper-archived-empty = Немає архівних віртуальних позицій
     .message = Віртуальні угоди залишаються у «Відкритих» і «Закритих»; в архів потрапляють лише реальні позиції.
 positions-paper-empty-action = Відкрити «Стратегії»
-positions-origin-copy = Копіювання
 positions-origin-manual = Вручну
 positions-origin-wallet = Гаманець
 positions-origin-copy-link =

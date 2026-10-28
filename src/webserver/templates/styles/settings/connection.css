@@ -1,0 +1,153 @@
+/* Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+ * SPDX-License-Identifier: BUSL-1.1 */
+
+/* =============================================================================
+   CONNECTION TAB - how ScreenerBot reaches Solana, and how signed swaps are sent
+   ============================================================================= */
+
+/* The two connection modes as native radio rows in one card; the active mode is
+   named in words, the chosen one takes the primary border. */
+.connection-modes {
+  display: grid;
+  overflow: hidden;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+}
+
+.connection-modes[aria-busy="true"] {
+  opacity: 0.6;
+}
+
+.connection-mode {
+  display: grid;
+  gap: 4px;
+  padding: 12px 16px;
+  border: 1px solid transparent;
+}
+
+.connection-mode + .connection-mode {
+  border-block-start-color: var(--border-color);
+}
+
+.connection-mode:has(.connection-mode-input:checked) {
+  border-color: var(--primary-color);
+}
+
+/* The head centres its radio on the title row, so the label-row offset is cancelled. */
+.connection-mode-head {
+  --control-line-offset: 0px;
+
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.connection-mode-input {
+  flex: 0 0 auto;
+}
+
+.connection-mode-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  color: var(--text-primary);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.connection-mode-title i {
+  color: var(--primary-color);
+}
+
+.connection-mode-active {
+  margin-inline-start: auto;
+  color: var(--semantic-success-text);
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.connection-mode-active[hidden],
+.connection-mode-state[hidden],
+.connection-rpc[hidden],
+.connection-error[hidden] {
+  display: none;
+}
+
+.connection-mode-state,
+.connection-mode-detail {
+  margin: 0;
+  padding-inline-start: 26px;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+}
+
+.connection-mode-state {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.connection-mode-detail {
+  color: var(--text-secondary);
+}
+
+.connection-mode-state[data-tone="warning"] {
+  color: var(--semantic-warning-text);
+}
+
+.connection-signin {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-top: 12px;
+  gap: 10px;
+}
+
+.connection-signin[hidden] {
+  display: none;
+}
+
+.connection-signin-text {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+}
+
+.connection-mode-state-detail {
+  display: block;
+  color: var(--text-secondary);
+  font-weight: 400;
+}
+
+.connection-rpc {
+  display: grid;
+  margin-top: 12px;
+}
+
+.connection-error {
+  margin: 10px 0 0;
+  color: var(--semantic-error-text);
+  font-size: 0.8125rem;
+  line-height: 1.45;
+}
+
+.connection-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
+@media (max-width: 480px) {
+  .connection-mode {
+    padding: 10px 12px;
+  }
+
+  .connection-mode-state,
+  .connection-mode-detail {
+    padding-inline-start: 0;
+  }
+}

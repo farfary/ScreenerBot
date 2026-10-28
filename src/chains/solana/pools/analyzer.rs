@@ -11,8 +11,10 @@ use super::selection::{self, SelectedPools};
 use super::types::ProgramKind;
 
 use super::decode_utils::is_sol_mint;
+use crate::chains::access::Capability;
+use crate::chains::solana::access::own_rpc_client;
 use crate::chains::solana::pools::service;
-use crate::chains::solana::rpc::{get_rpc_client, RpcClient, RpcClientMethods};
+use crate::chains::solana::rpc::{RpcClient, RpcClientMethods};
 use crate::chains::{AccountId, AssetId, ChainId, PoolId};
 use crate::events::{record_safe, Event, EventCategory};
 use crate::logger::{self, LogTag};
@@ -175,7 +177,16 @@ impl PoolAnalyzer {
         logger::info(LogTag::PoolAnalyzer, "Starting pool analyzer task");
         logger::info(LogTag::PoolAnalyzer, "Pool analyzer task started");
 
-        let rpc_client = get_rpc_client();
+        let rpc_client = match own_rpc_client(Capability::LivePoolPrices) {
+            Ok(client) => client,
+            Err(error) => {
+                logger::info(
+                    LogTag::PoolAnalyzer,
+                    &format!("Pool analyzer not started: {error}"),
+                );
+                return;
+            }
+        };
         let mut transient_backoff: HashMap<Pubkey, TransientBackoff> = HashMap::new();
 
         loop {

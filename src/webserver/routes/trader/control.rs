@@ -87,6 +87,7 @@ pub(in crate::webserver::routes) fn trader_failure(error: &trader::Error) -> Res
         | Error::CopyTaskLive { .. }
         | Error::CopyTaskOwnsPositions { .. }
         | Error::CopyLiveUnavailable { .. } => ApiError::new(code, ids::ERRORS_COPY_REQUEST_FAILED),
+        Error::ChainAccess(refusal) => ApiError::chain_access(refusal),
         Error::ManualTradeRecord { .. } => ApiError::new(code, ids::ERRORS_TRADE_RECORD_FAILED),
         Error::TradeTaskCancelled => ApiError::new(code, ids::ERRORS_TRADE_TASK_CANCELLED),
         Error::NoOpenPosition { mint } => {

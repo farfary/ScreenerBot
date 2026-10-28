@@ -320,3 +320,19 @@ shell-theme-light = Claro
 shell-theme-dark = Oscuro
 shell-theme-switch-to-light = Cambiar al tema claro
 shell-theme-switch-to-dark = Cambiar al tema oscuro
+
+## Chain access: service mode controls, gates and sign-out
+
+shell-service-control =
+    .aria-label = Trading en pausa. Abrir detalles
+shell-service-action-signin = Iniciar sesión
+shell-service-action-connection = Añadir RPC
+shell-access-gate-own-rpc-title = Requiere tu propio RPC
+shell-access-gate-watch-wallets = El copy trading y la vigilancia de wallets siguen otras wallets en vivo, algo que el servicio de { -brand } no hace. Tus tareas de copia y wallets vigiladas se conservan y vuelven cuando añades un RPC.
+shell-access-gate-live-pool-prices = Los precios de pool en vivo requieren tu propio RPC.
+shell-access-gate-direct-swaps = Los swaps directos en pools requieren tu propio RPC.
+shell-access-gate-other-wallets = Los saldos de otras wallets requieren tu propio RPC.
+shell-access-gate-action = Abrir la configuración de conexión
+shell-signout-service-title = ¿Cerrar sesión y pausar el trading?
+shell-signout-service-message = Sin tu propio RPC, { -brand } usa tu cuenta para leer tu wallet y enviar operaciones. Mientras tengas la sesión cerrada, el trading está en pausa y las posiciones abiertas no se venden.
+shell-signout-service-confirm = Cerrar sesión y pausar

@@ -32,6 +32,7 @@ settings-dialog-tab-hints = 提示
 settings-dialog-tab-data = 数据
 settings-dialog-tab-security = 安全
 settings-dialog-tab-account = 账户
+settings-dialog-tab-connection = 连接
 settings-dialog-tab-telegram = { -telegram }
 settings-dialog-tab-agent-connections = 智能体连接
 settings-dialog-tab-updates = 更新
@@ -499,14 +500,12 @@ settings-hints-restored = 所有提示已恢复
 ## account_tab.js
 
 settings-account-title = { -brand } 账户
-settings-account-description = 免费，且为可选项。没有账户时，{ -brand } 同样可以交易、发现代币和显示图表，只是使用公共提供商的数据。下方面板列出了登录后可获得的功能。
+settings-account-description = 免费。使用自己的 RPC 时为可选项：没有账户，{ -brand } 同样可以通过公共提供商交易、发现代币和显示图表。使用 { -brand } 服务则需要账户。下方面板列出了登录后可获得的功能。
+settings-account-description-service = 免费，且使用 { -brand } 服务时必需：钱包读取和你签名的兑换都会以此账户经由 screenerbot.io。你的私钥绝不会离开这台电脑。
 settings-account-data-title = { -brand } 数据
-settings-account-data-description = 我们在 screenerbot.io 运营共享的市场数据服务：覆盖七个时间周期的聚合 K 线、已解析的流动性池注册表、缓存的安全报告和标准化的代币身份信息。这样每个安装实例就不必独自承受公共提供商的限流。使用该服务需要账户，以便核算其运行成本并限制滥用。
+settings-account-data-description = { -brand } 在 screenerbot.io 运行一项共享的市场数据服务，提供图表、资金池数据、安全报告和代币信息，让你的安装不必独自承受公共提供商的速率限制。为限制滥用，该服务需要一个免费账户。
 settings-account-data-fallback = 服务不可用时，{ -brand } 会自动回退到公共提供商。一切照常运行，只是图表填充较慢，历史数据较少。
-settings-account-gateway-title = 发送交易
-settings-account-gateway-description = 登录后，{ -brand } 可以通过 screenerbot.io 而不是您自己的 RPC 广播您的兑换交易。每笔交易仍由您的机器人在本机构建并签名，服务器只负责转发，且无法在不破坏签名的情况下修改已签名的交易。
-settings-account-gateway-label = 使用 { -brand } RPC 发送交易
-settings-account-gateway-hint = 仅用于提交交易。价格数据始终来自您自己的 RPC；流动性池轮询负载过大，不适合共享端点，因此绝不会发送到那里。
+settings-account-data-fallback-service = 使用 { -brand } 服务时，钱包读取和交易同样经由 screenerbot.io：无法连接期间交易会暂停，连接恢复后继续。
 settings-account-manage-title = 管理您的账户
 settings-account-manage-description = 您的密码、邮箱地址、已连接设备和推荐奖励提现均在网站上管理。在那里撤销某台设备会使其在所有位置退出登录，包括当前设备。
 settings-account-open-dashboard = 打开您的仪表盘
@@ -623,3 +622,26 @@ settings-data-folder-label = 打开数据文件夹
 settings-data-folder-hint = 在文件管理器中打开包含所有 { -brand } 数据的文件夹。
 settings-data-folder-open = 打开文件夹
 settings-data-folder-open-failed = 无法打开数据文件夹
+
+## Connection tab (scripts/ui/settings/connection_tab.js)
+
+settings-connection-title = 连接
+settings-connection-description = { -brand } 访问 { -solana } 的方式。
+settings-connection-choice =
+    .aria-label = 连接
+settings-connection-active = 当前使用
+settings-connection-service-title = { -brand } 服务
+settings-connection-service-detail = 价格每隔几秒刷新一次。跟单交易、钱包监控、其他钱包余额、较早的历史记录、直接池兑换和实时池价格需要你自己的 RPC。
+settings-connection-own-title = 你自己的 RPC
+settings-connection-own-detail = 价格约每秒刷新两次，并提供全部功能。
+settings-connection-apply = 应用并重启
+settings-connection-to-service-title = 切换到 { -brand } 服务？
+settings-connection-to-service-message = 跟单交易、钱包监控、其他钱包余额、较早的历史记录、直接池兑换和实时池价格将关闭；其设置会保留。只要你处于退出登录状态，交易就会暂停。{ -brand } 将重启以完成切换。
+settings-connection-to-own-title = 切换到你自己的 RPC？
+settings-connection-to-own-message = { -brand } 会检查你的端点，然后重启以完成切换。所有功能将重新开启。
+settings-connection-signed-in-as = 已连接 · 已登录为 { $name }
+settings-connection-sending-title = 发送交易
+settings-connection-sending-label = 通过 { -brand } 发送交易
+settings-connection-sending-own-hint = 登录后，你在这台电脑上签名的兑换会通过 screenerbot.io 广播。无法使用时将改用你的 RPC。
+settings-connection-sending-service-hint = 使用 { -brand } 服务时始终开启：你在这台电脑上签名的兑换就是通过此方式到达 { -solana }。
+settings-connection-switch-failed = 无法切换连接。

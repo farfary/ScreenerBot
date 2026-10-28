@@ -1,5 +1,5 @@
 account-data-access-ready = { -brand } verileri etkin
-    .detail = Ortak mumlar, havuz kaydı, güvenlik raporları ve token kimliği screenerbot.io üzerinden sunuluyor.
+    .detail = Grafikler, havuz verileri ve güvenlik raporları screenerbot.io üzerinden yüklenir.
 
 account-data-access-disabled = { -brand } verileri kapalı
     .detail = { -brand } kaynağı ayarlarınızda kapatıldı, bu nedenle veriler yalnızca herkese açık sağlayıcılardan gelir.
@@ -8,7 +8,7 @@ account-data-access-offline = { -brand } verileri çevrimdışı
     .detail = Ağ bağlantısı yok. Bağlantı geri geldiğinde veriler kendiliğinden devam eder.
 
 account-data-access-signed-out = { -brand } verileri için hesap gerekir
-    .detail = Grafikler, havuzlar, güvenlik raporları ve token kimliği bunun yerine herkese açık sağlayıcılardan gelir. Bunlar daha yavaştır, istek sınırlıdır ve geçmiş verisi daha kısıtlıdır. Giriş yapmak ücretsizdir ve { -brand } uygulamasının diğer çalışma biçimini değiştirmez.
+    .detail = Grafikler, havuzlar ve güvenlik raporları bunun yerine herkese açık sağlayıcılardan gelir. Bunlar daha yavaştır, istek sınırlıdır ve geçmiş verisi daha kısıtlıdır. Giriş yapmak ücretsizdir ve { -brand } uygulamasının diğer çalışma biçimini değiştirmez.
 
 account-data-access-reauthorization-required = { -brand } verileri için yeniden giriş yapmanız gerekir
     .detail = Bu cihaz, { -brand } verileri var olmadan önce yetkilendirilmişti. Geri yüklemek için yeniden giriş yapın. O zamana kadar herkese açık sağlayıcılar kullanılır.
@@ -20,15 +20,16 @@ account-data-access-unreachable = { -brand } verileri yanıt vermiyor
     .detail = Hizmet yanıt vermedi. Herkese açık sağlayıcılar kullanılıyor ve { -brand } yeniden denemeye devam edecek.
 
 account-data-access-unknown = { -brand } verileri henüz denetlenmedi
-    .detail = { -brand } bu oturumda henüz ortak verilere ihtiyaç duymadı.
+    .detail = { -brand } bu oturumda bu verileri henüz yüklemedi.
 
 ## Account panel (ui/account/panel.js), shared by Setup and Settings
 
 account-scope-data-read = { -brand } piyasa verileri
-account-scope-rpc-submit = Ücretsiz imzalı işlem gönderimi
+account-scope-rpc-submit = İşlemleri { -brand } üzerinden gönderme
 account-scope-vote = Token oylaması
 account-scope-referral-read = Referans kazançları
 account-scope-account-read = Hesap ayrıntıları
+account-scope-chain-read = { -brand } hizmeti için cüzdan sorguları
 
 account-panel-request-failed = İşlem başarısız oldu. Lütfen tekrar deneyin.
 account-panel-checking = Hesap durumu denetleniyor…

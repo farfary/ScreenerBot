@@ -46,6 +46,10 @@ fn legacy_layout_is_migrated_in_memory_then_persisted_after_startup() {
         "the load itself must not rewrite the file"
     );
     with_config(|cfg| {
+        assert_eq!(
+            cfg.chains.solana.access, "own_rpc",
+            "a config written before the access setting reaches the chain through its own RPC"
+        );
         assert_eq!(cfg.chains.solana.rpc.max_retries, 5);
         assert_eq!(
             cfg.chains.solana.rpc.urls,

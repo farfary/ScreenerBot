@@ -32,6 +32,7 @@ settings-dialog-tab-hints = 힌트
 settings-dialog-tab-data = 데이터
 settings-dialog-tab-security = 보안
 settings-dialog-tab-account = 계정
+settings-dialog-tab-connection = 연결
 settings-dialog-tab-telegram = { -telegram }
 settings-dialog-tab-agent-connections = 에이전트 연결
 settings-dialog-tab-updates = 업데이트
@@ -499,14 +500,12 @@ settings-hints-restored = 모든 힌트가 복원되었습니다
 ## account_tab.js
 
 settings-account-title = { -brand } 계정
-settings-account-description = 무료이며 선택 사항입니다. { -brand } 앱은 계정 없이도 거래, 탐색, 차트 표시를 하지만 공개 제공자를 통해서만 수행합니다. 아래 패널에서 로그인 시 추가되는 기능을 확인할 수 있습니다.
+settings-account-description = 무료입니다. 자체 RPC를 사용하면 선택 사항이며, { -brand } 앱은 계정 없이도 공개 제공자를 통해 거래, 탐색, 차트 표시를 합니다. { -brand } 서비스를 사용하려면 계정이 필요합니다. 아래 패널에서 로그인 시 추가되는 기능을 확인할 수 있습니다.
+settings-account-description-service = 무료이며 { -brand } 서비스에는 필수입니다. 지갑 조회와 서명한 스왑은 이 계정으로 screenerbot.io를 거칩니다. 개인 키는 이 컴퓨터를 절대 떠나지 않습니다.
 settings-account-data-title = { -brand } 데이터
-settings-account-data-description = screenerbot.io에서 공유 시장 데이터 서비스를 운영합니다. 7개 타임프레임의 통합 캔들, 확인된 풀 레지스트리, 캐시된 보안 리포트, 정규화된 토큰 정보를 제공합니다. 각 설치가 공개 제공자의 요청 제한을 혼자 받지 않도록 해 줍니다. 운영 비용을 귀속하고 남용을 제한하기 위해 이 서비스에는 계정이 필요합니다.
+settings-account-data-description = { -brand }는 screenerbot.io에서 차트, 풀 데이터, 보안 보고서, 토큰 정보를 위한 공유 시장 데이터 서비스를 운영하므로, 설치한 앱이 혼자 공개 제공자의 속도 제한을 받지 않습니다. 남용을 막기 위해 무료 계정이 필요합니다.
 settings-account-data-fallback = 사용할 수 없을 때는 { -brand } 앱이 자동으로 공개 제공자로 전환합니다. 중단되는 기능은 없으며, 차트가 더 느리게 채워지고 히스토리가 줄어듭니다.
-settings-account-gateway-title = 트랜잭션 전송
-settings-account-gateway-description = 로그인하면 { -brand } 앱이 스왑을 사용자의 RPC 대신 screenerbot.io를 통해 전송할 수 있습니다. 모든 트랜잭션은 이 컴퓨터에서 생성 및 서명되며, 서버는 전달만 하고 서명된 트랜잭션을 서명 무효화 없이 변경할 수 없습니다.
-settings-account-gateway-label = 트랜잭션 전송에 { -brand } RPC 사용
-settings-account-gateway-hint = 전송 전용입니다. 가격 데이터는 항상 사용자의 RPC에서 가져오며, 풀 폴링은 공유 엔드포인트에 너무 부담이 커서 그곳으로 보내지 않습니다.
+settings-account-data-fallback-service = { -brand } 서비스에서는 지갑 조회와 거래도 screenerbot.io를 거칩니다. 연결할 수 없는 동안 거래가 일시 중지되며, 연결이 돌아오면 다시 시작됩니다.
 settings-account-manage-title = 계정 관리
 settings-account-manage-description = 비밀번호, 이메일 주소, 연결된 기기, 추천 보상 지급은 웹사이트에서 관리합니다. 그곳에서 기기를 해지하면 이 기기를 포함해 모든 곳에서 로그아웃됩니다.
 settings-account-open-dashboard = 내 대시보드 열기
@@ -623,3 +622,26 @@ settings-data-folder-label = 데이터 폴더 열기
 settings-data-folder-hint = { -brand } 데이터가 모두 들어 있는 폴더를 파일 관리자에서 엽니다.
 settings-data-folder-open = 폴더 열기
 settings-data-folder-open-failed = 데이터 폴더를 열지 못했습니다
+
+## Connection tab (scripts/ui/settings/connection_tab.js)
+
+settings-connection-title = 연결
+settings-connection-description = { -brand }가 { -solana }에 연결하는 방식입니다.
+settings-connection-choice =
+    .aria-label = 연결
+settings-connection-active = 사용 중
+settings-connection-service-title = { -brand } 서비스
+settings-connection-service-detail = 가격이 몇 초마다 갱신됩니다. 카피 트레이딩, 지갑 감시, 다른 지갑의 잔액, 이전 기록, 풀 직접 스왑, 실시간 풀 가격에는 자체 RPC가 필요합니다.
+settings-connection-own-title = 직접 RPC
+settings-connection-own-detail = 가격이 초당 약 두 번 갱신되고 모든 기능을 쓸 수 있습니다.
+settings-connection-apply = 적용 후 재시작
+settings-connection-to-service-title = { -brand } 서비스로 전환할까요?
+settings-connection-to-service-message = 카피 트레이딩, 지갑 감시, 다른 지갑의 잔액, 이전 기록, 풀 직접 스왑, 실시간 풀 가격이 꺼지며 해당 설정은 유지됩니다. 로그아웃한 동안에는 거래가 일시 중지됩니다. 전환을 위해 { -brand }가 재시작됩니다.
+settings-connection-to-own-title = 직접 RPC로 전환할까요?
+settings-connection-to-own-message = { -brand }가 엔드포인트를 확인한 뒤 전환을 위해 재시작합니다. 모든 기능이 다시 켜집니다.
+settings-connection-signed-in-as = 연결됨 · { $name }(으)로 로그인됨
+settings-connection-sending-title = 트랜잭션 전송
+settings-connection-sending-label = { -brand }를 통해 트랜잭션 전송
+settings-connection-sending-own-hint = 로그인한 동안 이 컴퓨터에서 서명한 스왑은 screenerbot.io를 통해 브로드캐스트됩니다. 사용할 수 없을 때는 내 RPC를 사용합니다.
+settings-connection-sending-service-hint = { -brand } 서비스에서는 항상 켜져 있습니다. 이 컴퓨터에서 서명한 스왑은 이 경로로 { -solana }에 전달됩니다.
+settings-connection-switch-failed = 연결을 전환하지 못했습니다.

@@ -775,28 +775,50 @@ fn all_strategies(conn: &rusqlite::Connection) -> crate::Result<Vec<Strategy>> {
     )
 }
 
-/// The enabled strategies of each trading mode.
+/// The enabled strategies of each trading mode, and how many of them are entry strategies.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct EnabledStrategyCounts {
     pub live: usize,
     pub paper: usize,
+    /// Enabled entry strategies that trade live.
+    pub live_entry: usize,
+    /// Enabled entry strategies that trade on the paper book.
+    pub paper_entry: usize,
 }
 
 /// Count the enabled strategies of each trading mode.
 pub fn enabled_strategy_counts() -> crate::Result<EnabledStrategyCounts> {
     let conn = get_connection()?;
-    let mut stmt =
-        conn.prepare("SELECT mode, COUNT(*) FROM strategies WHERE enabled = 1 GROUP BY mode")?;
-    let rows = stmt.query_map([], |row| {
-        Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+    strategy_counts(&conn)
+}
+
+/// The enabled strategies of each trading mode in `conn`, in one statement.
+fn strategy_counts(conn: &rusqlite::Connection) -> crate::Result<EnabledStrategyCounts> {
+    let mut stmt = conn.prepare(
+        "SELECT mode, COUNT(*), SUM(CASE WHEN type = ?1 THEN 1 ELSE 0 END) \
+         FROM strategies WHERE enabled = 1 GROUP BY mode",
+    )?;
+    let rows = stmt.query_map(params![StrategyType::Entry.to_string()], |row| {
+        Ok((
+            row.get::<_, String>(0)?,
+            row.get::<_, i64>(1)?,
+            row.get::<_, i64>(2)?,
+        ))
     })?;
     let mut counts = EnabledStrategyCounts::default();
     for row in rows {
-        let (mode, count) = row?;
+        let (mode, count, entry) = row?;
         let count = usize::try_from(count).unwrap_or_default();
+        let entry = usize::try_from(entry).unwrap_or_default();
         match TradingMode::parse(&mode) {
-            Some(TradingMode::Live) => counts.live = count,
-            Some(TradingMode::Paper) => counts.paper = count,
+            Some(TradingMode::Live) => {
+                counts.live = count;
+                counts.live_entry = entry;
+            }
+            Some(TradingMode::Paper) => {
+                counts.paper = count;
+                counts.paper_entry = entry;
+            }
             None => return Err(Error::parse_error(format!("Unknown strategy mode: {mode}"))),
         }
     }

@@ -14,8 +14,7 @@
   box-sizing: border-box;
 }
 
-.setup-screen [hidden],
-.setup-screen .is-hidden {
+.setup-screen [hidden] {
   display: none !important;
 }
 
@@ -48,7 +47,7 @@
   display: none;
   width: 100%;
   flex-shrink: 0;
-  background: rgb(13 17 23 / 0.5);
+  background: color-mix(in srgb, var(--bg-primary) 50%, transparent);
   backdrop-filter: blur(10px);
   -webkit-app-region: drag;
 }
@@ -62,6 +61,17 @@
   justify-content: space-between;
   min-width: 0;
   -webkit-app-region: drag;
+}
+
+/* The header shares the always-dark introduction's chrome; setup follows the
+ * dashboard theme, so its surfaces and brand read from the theme tokens. */
+.setup-screen .setup-header {
+  background: color-mix(in srgb, var(--bg-primary) 60%, transparent);
+  border-bottom-color: color-mix(in srgb, var(--text-primary) 8%, transparent);
+}
+
+.setup-screen .setup-header .onboarding-brand {
+  color: var(--text-primary);
 }
 
 .electron-macos .setup-screen {
@@ -132,6 +142,12 @@
   border-color: var(--primary-color);
 }
 
+.setup-step.active[data-tone="warning"] .setup-step-number {
+  color: var(--semantic-warning-text);
+  background: var(--warning-alpha-10);
+  border-color: var(--warning-alpha-30);
+}
+
 .setup-step.completed .setup-step-number {
   color: var(--semantic-success-text);
   background: var(--success-alpha-10);
@@ -183,6 +199,16 @@
   width: 100%;
   min-width: 0;
   gap: clamp(18px, 2.4vw, 30px);
+}
+
+/* A step without the account aside: one column at the width of the split's main. */
+.setup-single {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 auto;
+  width: min(100%, 820px);
+  min-width: 0;
+  margin-inline: auto;
 }
 
 .setup-split-main {
@@ -477,6 +503,7 @@
   margin-inline-start: auto;
 }
 
+/* The connection card's sending option: under the RPC field, inside the card. */
 .setup-gateway-option {
   display: flex;
   align-items: flex-start;
@@ -503,6 +530,315 @@
   color: var(--text-primary);
   font-size: 0.72rem;
   font-weight: 650;
+}
+
+/* One-of-two choice cards (wallet source, connection): native radios, nothing
+   preselected; the chosen card takes the primary border. Glyphs are bare and sit
+   inline with the card title. */
+.setup-choice {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: clamp(10px, 1.6vh, 16px);
+  min-width: 0;
+}
+
+.setup-choice-connection {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.setup-choice-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: clamp(10px, 1.4vh, 16px) clamp(12px, 1.5vw, 16px);
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-xl);
+}
+
+.setup-choice-wallet .setup-choice-card {
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.setup-choice-card:has(.setup-choice-input:checked) {
+  border-color: var(--primary-color);
+}
+
+.setup-choice-input {
+  flex: 0 0 auto;
+}
+
+/* The head centres its radio on the title row, so the label-row offset is cancelled. */
+.setup-choice-head {
+  --control-line-offset: 0px;
+
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.setup-choice-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.setup-choice-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  color: var(--text-primary);
+  font-size: 0.86rem;
+  font-weight: 650;
+}
+
+.setup-choice-title i {
+  color: var(--primary-color);
+}
+
+.setup-choice-badge {
+  margin-inline-start: auto;
+  color: var(--text-secondary);
+  font-size: 0.68rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.setup-choice-detail {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.74rem;
+  line-height: 1.45;
+}
+
+.setup-choice-points {
+  display: grid;
+  gap: 3px;
+  margin: 0;
+  padding-inline-start: 18px;
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  line-height: 1.4;
+}
+
+.setup-choice-requirement {
+  margin: 4px 0 0;
+  color: var(--semantic-warning-text);
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.setup-choice-own {
+  display: grid;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+/* The backup panel of a new wallet (SetupRuntime.mountBackupPanel): the onboarding
+   step and the setup dialogs show the same one. */
+.setup-backup {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding: clamp(10px, 1.4vh, 16px) clamp(12px, 1.5vw, 16px);
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-xl);
+}
+
+.setup-backup [hidden] {
+  display: none;
+}
+
+.setup-backup-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  font-weight: 650;
+}
+
+.setup-backup-title i {
+  color: var(--primary-color);
+}
+
+.setup-backup-description {
+  margin: 4px 0 0;
+  color: var(--text-secondary);
+  font-size: 0.74rem;
+  line-height: 1.45;
+}
+
+.setup-backup-progress {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  color: var(--text-secondary);
+  font-size: 0.76rem;
+}
+
+.setup-backup-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.setup-backup-values {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.setup-backup-row {
+  display: grid;
+  grid-template-columns: minmax(70px, auto) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px 10px;
+  min-width: 0;
+}
+
+.setup-backup-row dt {
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.setup-backup-row dd {
+  margin: 0;
+  min-width: 0;
+}
+
+.setup-backup-value {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The revealed key wraps instead of truncating, so it can be read in full. */
+.setup-backup-key.is-revealed {
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.setup-backup-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.setup-backup-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 28px;
+  padding: 0 8px;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 600;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.setup-backup-action:hover {
+  color: var(--text-primary);
+}
+
+.setup-backup-feedback {
+  min-height: 1em;
+  margin: 0;
+  color: var(--semantic-success-text);
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+.setup-backup-feedback[data-tone="error"] {
+  color: var(--semantic-error-text);
+}
+
+.setup-backup-feedback:empty {
+  display: none;
+}
+
+.setup-backup-acks {
+  display: grid;
+  gap: 7px;
+}
+
+.setup-backup-ack {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  color: var(--text-primary);
+  font-size: 0.74rem;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.setup-backup-ack input {
+  flex: 0 0 auto;
+}
+
+.setup-backup-another {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.setup-backup-confirm {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+  color: var(--text-primary);
+  font-size: 0.74rem;
+  line-height: 1.45;
+}
+
+.setup-backup-confirm p {
+  margin: 0;
+}
+
+.setup-backup-confirm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+@media (max-width: 640px) {
+  .setup-choice {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .setup-backup-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .setup-backup-actions {
+    justify-content: flex-start;
+  }
 }
 
 @media (max-height: 720px) {

@@ -10,3 +10,20 @@ connectivity-probe-internet-all-failed = فشل فحصا DNS وHTTP. DNS: { $dns
 connectivity-probe-unknown = خطأ غير معروف
 
 connectivity-endpoint-not-checked = لم يُفحص بعد
+
+connectivity-service-checking = جارٍ الاتصال بخدمة { -brand }
+    .detail = يبدأ التداول عند تأكيد الاتصال.
+connectivity-service-ready = خدمة { -brand } متصلة
+    .detail = تمر قراءات المحفظة والصفقات عبر screenerbot.io.
+connectivity-service-signed-out = التداول متوقف مؤقتًا · تم تسجيل الخروج
+    .detail = سجّل الدخول للاستئناف. لا تُباع المراكز المفتوحة أثناء إيقاف التداول.
+connectivity-service-reauthorize = التداول متوقف مؤقتًا · يلزم تسجيل الدخول مجددًا
+    .detail = تسجيل الدخول على هذا الجهاز لا يسمح بقراءة المحفظة بعد. سجّل الدخول مجددًا للاستئناف.
+connectivity-service-busy = التداول متوقف مؤقتًا · الخدمة مشغولة، تجري إعادة المحاولة
+    .detail = يُستأنف التداول تلقائيًا. لتجنّب التوقف، استخدم RPC الخاص بك.
+connectivity-service-daily-limit = التداول متوقف مؤقتًا · تم بلوغ الحد اليومي
+    .detail = بلغ حسابك حد اليوم لخدمة { -brand }. يُستأنف التداول عند 00:00 UTC، أو فورًا باستخدام RPC الخاص بك.
+connectivity-service-unreachable = التداول متوقف مؤقتًا · تعذّر الوصول إلى screenerbot.io
+    .detail = يُستأنف التداول عند عودة الاتصال. تحقّق من اتصالك بالإنترنت.
+connectivity-service-version = التداول متوقف مؤقتًا · يلزم التحديث
+    .detail = لم تعد خدمة { -brand } تدعم هذا الإصدار. حدّث إلى { $minimum } أو أحدث.

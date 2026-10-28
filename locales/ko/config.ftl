@@ -5,8 +5,8 @@ config-account-auto-wallet-signin = 내 지갑으로 자동 로그인
 config-account-refresh-margin-secs = 토큰 갱신 여유 시간
     .hint = 로그인 토큰이 만료되기 얼마 전에 갱신할지 정합니다. 인증 문제를 디버깅할 때만 변경하세요.
     .unit = 초
-config-account-use-gateway-rpc = 트랜잭션 전송에 { -brand } RPC 사용
-    .hint = 서명된 스왑 트랜잭션을 사용자의 RPC 대신 screenerbot.io를 통해 전송합니다. 서명은 항상 이 컴퓨터에서 이루어지며 서버는 서명된 트랜잭션을 변경할 수 없습니다. 가격 데이터에는 여전히 사용자의 RPC가 필요합니다.
+config-account-use-gateway-rpc = { -brand }를 통해 트랜잭션 전송
+    .hint = 로그인한 동안 이 컴퓨터에서 서명한 스왑을 screenerbot.io를 통해 브로드캐스트합니다. 서명은 항상 이곳에서 이루어지며, 서명된 트랜잭션은 변경할 수 없습니다. { -brand } 서비스 모드에서는 항상 켜져 있습니다.
 
 ## agent_control
 

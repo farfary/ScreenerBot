@@ -13,6 +13,7 @@ use serde_json::Value;
 use super::handlers::complete_initialization;
 use super::types::CompleteInitializationRequest;
 use super::validation::{store_setup_validation, RpcSource};
+use crate::chains::access::ChainAccessMode;
 use crate::chains::solana::accounts::new_test_key;
 use crate::chains::ChainId;
 
@@ -49,6 +50,7 @@ async fn complete_with(address: &str, secret: &str) -> Response {
     let validation_id = store_setup_validation(
         secret,
         &rpc_urls,
+        ChainAccessMode::OwnRpc,
         ChainId::Solana,
         address.to_owned(),
         RpcSource::Request,
@@ -58,6 +60,7 @@ async fn complete_with(address: &str, secret: &str) -> Response {
         validation_id,
         wallet_private_key: secret.to_owned(),
         rpc_urls,
+        access: None,
     }))
     .await
 }

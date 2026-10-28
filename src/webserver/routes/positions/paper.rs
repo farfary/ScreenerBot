@@ -21,7 +21,6 @@ use crate::i18n::ids;
 use crate::logger::{self, LogTag};
 use crate::positions::db::PaperLegRecord;
 use crate::positions::paper::{PaperAccount, PaperBook, PaperRoundHistory};
-use crate::positions::Position;
 use crate::webserver::api_error::{ApiError, ApiErrorCode};
 use crate::webserver::middleware::store_gate;
 use crate::webserver::routes::trader::{trade_response, trader_failure};
@@ -106,7 +105,7 @@ async fn paper_positions_stats() -> Response {
 
 async fn paper_account() -> Response {
     match crate::trader::paper::paper_account().await {
-        Ok(account) => account_response(account).await,
+        Ok(account) => account_response(account),
         Err(error) => trader_failure(&error),
     }
 }
@@ -114,33 +113,22 @@ async fn paper_account() -> Response {
 /// Settles every open paper round at its mark and starts the next paper run.
 async fn reset_paper_run() -> Response {
     match crate::trader::paper::reset_paper_run().await {
-        Ok(account) => account_response(account).await,
+        Ok(account) => account_response(account),
         Err(error) => trader_failure(&error),
     }
 }
 
-async fn account_response(account: PaperAccount) -> Response {
-    let open = match crate::positions::paper::book() {
-        Some(book) => book.open_positions().await,
-        None => Vec::new(),
-    };
-    success_response(paper_account_response(account, &open))
+fn account_response(account: PaperAccount) -> Response {
+    success_response(paper_account_response(account))
 }
 
-/// The account of the current run with the cost and unrealized P&L of `open`.
-fn paper_account_response(account: PaperAccount, open: &[Position]) -> PaperAccountResponse {
-    let open_unrealized_pnl_native = open
-        .iter()
-        .map(|position| position.unrealized_pnl)
-        .sum::<Option<f64>>();
+/// The starting balance and cash of the current run.
+fn paper_account_response(account: PaperAccount) -> PaperAccountResponse {
     PaperAccountResponse {
         epoch: account.epoch,
         started_at: account.started_at.timestamp(),
         starting_balance_native: account.starting_balance_native,
         cash_native: account.cash_native,
-        open_rounds: open.len(),
-        open_cost_native: open.iter().map(|position| position.total_size_native).sum(),
-        open_unrealized_pnl_native,
     }
 }
 

@@ -103,11 +103,9 @@ export const views = [
       { selector: TASK_ROW, min: 3 },
       { selector: "#copy-figures .metric-card", min: 6 },
       { selector: "#copy-ws-panel .arm-gate-check", min: 5 },
-      { selector: "#copy-ws-panel .copy-chart-plot", min: 1 },
+      { selector: "#copy-ws-panel .inline-chart-plot", min: 1 },
     ],
-    empty: [
-      { selector: "#copy-ws-panel .state-view", text: "No closed rounds in this range yet" },
-    ],
+    empty: [{ selector: "#copy-ws-panel .state-view", text: "No closed rounds in this range yet" }],
     dialogs: [
       { trigger: "#copy-add", dialog: "#copy-editor", close: "#copy-editor .modal-close" },
       {
@@ -153,16 +151,14 @@ export const views = [
     name: "execution",
     click: [TASK_ROW, "#copy-tab-execution"],
     populated: [{ selector: "#copy-ws-panel .metric-card", min: 3 }],
-    empty: [
-      { selector: "#copy-ws-panel .state-view", text: "No arrival samples in this range" },
-    ],
+    empty: [{ selector: "#copy-ws-panel .state-view", text: "No arrival samples in this range" }],
   },
   {
     name: "compare",
     click: ["#copy-compare-open"],
     populated: [
       { selector: "#copy-compare-table tbody tr[data-row-id]", min: 3 },
-      { selector: "#copy-compare .copy-chart-plot", min: 1 },
+      { selector: "#copy-compare .inline-chart-plot", min: 1 },
     ],
     empty: [{ selector: "#copy-compare .state-view", text: "No closed rounds to compare" }],
   },

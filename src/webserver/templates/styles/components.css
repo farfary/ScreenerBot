@@ -158,6 +158,12 @@
   transition: all var(--transition-normal);
 }
 
+/* `display:inline-flex` above outranks the bare [hidden] attribute, so a
+   button a page hides by its `hidden` property needs this. */
+.btn[hidden] {
+  display: none;
+}
+
 .btn-primary {
   background: var(--button-primary-bg);
   color: var(--text-on-fill);
@@ -425,9 +431,10 @@
   }
 }
 
-/* The Explore Mode setup notice (ui/setup_gate.js) is framed as a card on every page
-   that shows it; the page only places it. */
-.setup-gate {
+/* The access gate (ui/access_gate.js), for Explore Mode setup or a capability the
+   connection lacks, is framed as a card on every page that shows it; the page only
+   places it. */
+.access-gate {
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
   background: var(--bg-card);
@@ -865,8 +872,8 @@
 
 /* Metric Card: the one stat card of every page. Label, value and detail stack from the
    top edge at the inline start, so the labels and values of a row line up whatever the
-   detail lines below them hold. A border tint is a state (`metric-highlight-danger`),
-   never decoration. */
+   detail lines below them hold. Only the value takes a colour, and only for a signed
+   amount. */
 .metric-card {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
@@ -944,10 +951,6 @@
 
 .metric-value.negative {
   color: var(--error-color);
-}
-
-.metric-highlight-danger {
-  border-color: var(--danger-alpha-30);
 }
 
 /* The row of stat cards. A page that needs a fixed column count sets

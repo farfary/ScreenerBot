@@ -321,6 +321,9 @@ mod tests {
             NotSubmittedReason::QuoteUnusable {
                 detail: "the quote came from another router".to_owned(),
             },
+            NotSubmittedReason::ServicePaused {
+                detail: "sign in to use chain access through the service".to_owned(),
+            },
         ];
         for reason in reasons {
             let (outcome, _) = ladder(|| {

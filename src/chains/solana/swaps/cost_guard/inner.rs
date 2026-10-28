@@ -9,6 +9,7 @@ use std::collections::HashMap;
 
 use serde_json::Value;
 
+use crate::chains::solana::access::AccountControl;
 use crate::chains::solana::constants::{
     SPL_TOKEN_PROGRAM_ID, SYSTEM_PROGRAM_ID, TOKEN_2022_PROGRAM_ID,
 };
@@ -84,15 +85,6 @@ impl SwapCostAssessment {
             (None, payment) => payment.map(|(destination, _)| destination),
         }
     }
-}
-
-/// Who controls an account, as chain state records it.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum AccountControl {
-    /// An account owned by this program, which alone can move its lamports.
-    Program(String),
-    /// A token account of `program`, closable only by `authority`.
-    TokenAccount { program: String, authority: String },
 }
 
 fn is_token_program(program: &str) -> bool {

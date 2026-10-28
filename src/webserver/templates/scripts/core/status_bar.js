@@ -4,7 +4,14 @@
 // Status Bar - Fetches and displays system metrics
 
 import { whenInitialized } from "./bootstrap.js";
-import { formatCallRate, formatLatencyMs, formatMemoryMb, formatPercentValue, formatUptime } from "./format.js";
+import { capabilityAvailable } from "../ui/access_gate.js";
+import {
+  formatCallRate,
+  formatLatencyMs,
+  formatMemoryMb,
+  formatPercentValue,
+  formatUptime,
+} from "./format.js";
 
 (function () {
   "use strict";
@@ -58,7 +65,9 @@ import { formatCallRate, formatLatencyMs, formatMemoryMb, formatPercentValue, fo
       elements.memory.textContent = memMB > 0 ? formatMemoryMb(memMB) : "—";
     }
 
-    // RPC Stats
+    // RPC Stats. The ScreenerBot service keeps no RPC statistics, so the group hides there.
+    const rpcGroup = elements.rpcRate?.closest(".status-bar-center");
+    if (rpcGroup) rpcGroup.hidden = !capabilityAvailable("rpc_statistics");
     if (data.rpc_stats) {
       const rpc = data.rpc_stats;
 
@@ -75,7 +84,10 @@ import { formatCallRate, formatLatencyMs, formatMemoryMb, formatPercentValue, fo
         const successRate = Number(rpc.success_rate);
         const measured = Number(rpc.total_calls) > 0 && Number.isFinite(successRate);
         const displayRate = measured ? Math.min(Math.max(successRate, 0), 100) : null;
-        elements.rpcSuccess.textContent = formatPercentValue(displayRate, { decimals: 1, plus: "" });
+        elements.rpcSuccess.textContent = formatPercentValue(displayRate, {
+          decimals: 1,
+          plus: "",
+        });
 
         // Health indicator; it stays "unknown" until there is a rate to judge.
         let health = "unknown";
@@ -122,7 +134,16 @@ import { formatCallRate, formatLatencyMs, formatMemoryMb, formatPercentValue, fo
 
   // While the core is unreachable every live figure reads "—"; the version is not live.
   function markUnknown() {
-    const live = ["uptime", "memory", "rpcRate", "rpcSuccess", "rpcLatency", "trading", "positions", "tokens"];
+    const live = [
+      "uptime",
+      "memory",
+      "rpcRate",
+      "rpcSuccess",
+      "rpcLatency",
+      "trading",
+      "positions",
+      "tokens",
+    ];
     for (const key of live) {
       if (elements[key]) elements[key].textContent = "—";
     }

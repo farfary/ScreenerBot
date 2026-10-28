@@ -15,7 +15,6 @@ positions-paper-empty = Aucune position simulée
 positions-paper-archived-empty = Aucune position simulée archivée
     .message = Les positions simulées restent dans Ouvertes et Clôturées ; seules les positions réelles sont archivées.
 positions-paper-empty-action = Ouvrir Stratégies
-positions-origin-copy = Copie
 positions-origin-manual = Manuelle
 positions-origin-wallet = Portefeuille
 positions-origin-copy-link =

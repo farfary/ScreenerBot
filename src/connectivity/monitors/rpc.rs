@@ -3,7 +3,8 @@
 
 //! Solana RPC health monitor — checks blockchain node responsiveness and slot freshness.
 
-use crate::chains::solana::rpc::get_rpc_client;
+use crate::chains::access::{self as chain_access, Capability, ServiceState};
+use crate::chains::solana::access::{chain_access as solana_chain_access, own_rpc_client};
 use crate::config::get_config_clone;
 use crate::connectivity::monitor::EndpointMonitor;
 use crate::connectivity::types::{
@@ -11,8 +12,25 @@ use crate::connectivity::types::{
 };
 use async_trait::async_trait;
 
-/// RPC endpoint monitor - checks health of all configured RPC providers
+/// RPC endpoint monitor - checks health of all configured RPC providers, or
+/// of the ScreenerBot service when chain access goes through it.
 pub struct RpcMonitor;
+
+/// Health of chain access without own endpoints: one network read, whose
+/// answer or refusal also publishes the service state.
+async fn chain_access_health() -> HealthCheckResult {
+    let started = std::time::Instant::now();
+    match solana_chain_access().network().await {
+        Ok(_) => HealthCheckResult::success(started.elapsed().as_millis() as u64),
+        // A refusal that left the state usable is reported as unreachable.
+        Err(_) => HealthCheckResult::failure(ProbeFailure::ChainAccess {
+            state: match chain_access::active_service_state() {
+                ServiceState::Ready | ServiceState::Checking => ServiceState::Unreachable,
+                paused => paused,
+            },
+        }),
+    }
+}
 
 impl RpcMonitor {
     /// Create a new monitor instance
@@ -48,7 +66,10 @@ impl EndpointMonitor for RpcMonitor {
     }
 
     async fn check_health(&self) -> HealthCheckResult {
-        let rpc_client = get_rpc_client();
+        let rpc_client = match own_rpc_client(Capability::RpcStatistics) {
+            Ok(client) => client,
+            Err(_) => return chain_access_health().await,
+        };
 
         // Get provider health info from new RPC architecture
         let provider_health = rpc_client.get_provider_health().await;

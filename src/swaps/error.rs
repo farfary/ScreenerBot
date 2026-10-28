@@ -327,6 +327,10 @@ pub enum NotSubmittedReason {
     /// execution data that does not decode.
     #[error("the quote cannot be executed: {detail}")]
     QuoteUnusable { detail: String },
+    /// The ScreenerBot service refused or could not take the request before
+    /// anything was dispatched: signed out, limited or unreachable.
+    #[error("chain access through the ScreenerBot service is paused: {detail}")]
+    ServicePaused { detail: String },
 }
 
 impl NotSubmittedReason {
@@ -344,7 +348,8 @@ impl NotSubmittedReason {
             | NotSubmittedReason::InsufficientFunds { .. }
             | NotSubmittedReason::QuoteUnusable { .. } => 422,
             NotSubmittedReason::SimulationUnavailable { .. }
-            | NotSubmittedReason::RouterUnavailable { .. } => 503,
+            | NotSubmittedReason::RouterUnavailable { .. }
+            | NotSubmittedReason::ServicePaused { .. } => 503,
             NotSubmittedReason::PaperScope | NotSubmittedReason::SignerUnavailable { .. } => 500,
             NotSubmittedReason::Halted => 409,
         }

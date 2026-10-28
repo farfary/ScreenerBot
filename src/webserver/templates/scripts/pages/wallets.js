@@ -20,7 +20,7 @@ import { createWalletRenderers } from "./wallets/renderers.js";
 import { createWatchedWallets } from "./wallets/watched.js";
 import { createPageDialogs } from "../ui/page_dialogs.js";
 import { ConfirmationDialog } from "../ui/confirmation_dialog.js";
-import { renderSetupGate, setupRequired } from "../ui/setup_gate.js";
+import { accessBlocked, renderAccessGate, setupRequired } from "../ui/access_gate.js";
 import { SetupDialog } from "../ui/setup_dialog.js";
 
 // =============================================================================
@@ -28,6 +28,8 @@ import { SetupDialog } from "../ui/setup_dialog.js";
 // =============================================================================
 
 const POLL_INTERVAL = 30000; // 30 seconds for balance updates
+/** The chain capability Wallets > Watched needs: following other wallets live. */
+const WATCH_CAPABILITY = "watch_other_wallets";
 
 const buildWalletTabs = () => [
   { id: "main", label: I18n.t("wallets-tab-main") },
@@ -83,9 +85,9 @@ function createLifecycle() {
       if (setupRequired()) {
         const panels = $(".wallets-tab-panels");
         if (panels) panels.hidden = true;
-        const gate = $("#wallets-setup-gate");
+        const gate = $("#wallets-access-gate");
         if (gate) gate.hidden = false;
-        renderSetupGate(gate, I18n.t("wallets-setup-gate-title"));
+        renderAccessGate(gate, I18n.t("wallets-access-gate-title"));
         return;
       }
 
@@ -260,6 +262,16 @@ async function loadAllData({ force = false } = {}) {
 
 async function loadActiveTab({ force = false } = {}) {
   if (currentTab === "watched") {
+    // Without the capability the tab is the access gate alone: no watch reads.
+    const blocked = accessBlocked(WATCH_CAPABILITY);
+    const gate = $("#watched-access-gate");
+    const root = $("#watched-wallets-root");
+    if (gate) gate.hidden = !blocked;
+    if (root) root.hidden = blocked;
+    if (blocked) {
+      if (gate && !gate.childElementCount) renderAccessGate(gate, "", WATCH_CAPABILITY);
+      return;
+    }
     await watched?.load({ force });
     return;
   }
@@ -304,7 +316,8 @@ const ABANDONED_REPLACEMENT_MESSAGES = Object.freeze({
 function showAbandonedReplacement(abandoned) {
   if (!abandoned) return;
   const message =
-    ABANDONED_REPLACEMENT_MESSAGES[abandoned.reason] || ABANDONED_REPLACEMENT_MESSAGES.vault_changed;
+    ABANDONED_REPLACEMENT_MESSAGES[abandoned.reason] ||
+    ABANDONED_REPLACEMENT_MESSAGES.vault_changed;
   Utils.showToast({
     key: "wallets-replace-abandoned",
     type: "warning",

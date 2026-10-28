@@ -3,24 +3,28 @@
 //
 
 /**
- * Setup Dialog — wallet + RPC credential entry as a modal.
+ * Setup Dialog — the trading wallet (created here with its key saved, or imported)
+ * and the RPC endpoints, as a modal.
  *
  * Setup mode completes setup from Explore Mode (header banner / config tab) without
- * the full-screen wizard: it validates via /api/initialization/validate and persists
- * via /api/initialization/complete. Replace mode replaces the trading wallet from the
- * Wallets page: it first states what the replacement stops, moves and keeps, then
- * validates the same way and stages the replacement via /api/wallets/replace; its RPC
- * field may stay empty to keep the configured endpoints. Both restart the app and
- * reload into it.
+ * the full-screen wizard, on your own RPC: it validates via
+ * /api/initialization/validate and persists via /api/initialization/complete. Replace
+ * mode replaces the trading wallet from the Wallets page: it first states what the
+ * replacement stops, moves and keeps, then validates the same way, under the current
+ * connection, and stages the replacement via /api/wallets/replace. On your own RPC
+ * its RPC field may stay empty to keep the configured endpoints; on the ScreenerBot
+ * service it has none. Both restart the app and reload into it. A created key lives
+ * only in the backup panel and is dropped when the dialog closes.
  *
  * Usage: SetupDialog.show({ mode }) -> Promise<boolean> (true if the dialog finished).
  */
 import { pushEscapeHandler } from "../core/escape_stack.js";
 import { apiErrorMessage } from "../core/request_manager.js";
+import { getBootstrapState } from "../core/bootstrap.js";
 
 // The confirmation a replacement shows before its credential fields: what stops, what
 // moves, what stays, what entered RPC endpoints replace and that the app restarts.
-const CONFIRM_STEP = `
+const confirmStep = ({ rpc }) => `
   <div class="setup-dialog-confirm">
     <p data-l10n-id="setup-dialog-replace-confirm-intro"></p>
     <ul class="setup-dialog-confirm-list">
@@ -28,7 +32,7 @@ const CONFIRM_STEP = `
       <li data-l10n-id="setup-dialog-replace-confirm-backup"></li>
       <li data-l10n-id="setup-dialog-replace-confirm-keep"></li>
       <li data-l10n-id="setup-dialog-replace-confirm-funds"></li>
-      <li data-l10n-id="setup-dialog-replace-confirm-rpc"></li>
+      ${rpc ? '<li data-l10n-id="setup-dialog-replace-confirm-rpc"></li>' : ""}
       <li data-l10n-id="setup-dialog-replace-confirm-restart"></li>
     </ul>
   </div>
@@ -44,6 +48,7 @@ const MODES = Object.freeze({
     saved: () => I18n.t("setup-dialog-saved"),
     endpoint: "/api/initialization/complete",
     confirm: false,
+    replacesWallet: false,
     rpcOptional: false,
   }),
   replace: Object.freeze({
@@ -54,6 +59,7 @@ const MODES = Object.freeze({
     saved: () => I18n.t("setup-dialog-replace-saved"),
     endpoint: "/api/wallets/replace",
     confirm: true,
+    replacesWallet: true,
     // An empty RPC field keeps the configured endpoints.
     rpcOptional: true,
   }),
@@ -81,6 +87,10 @@ class SetupDialog {
     this.busy = false;
     this.requestAbort = null;
     this.releaseEscape = null;
+    // Setup from Explore Mode is on your own RPC; a replacement keeps the current connection.
+    this.access = mode.replacesWallet
+      ? getBootstrapState().status?.chain_access?.mode || "own_rpc"
+      : "own_rpc";
   }
 
   render() {
@@ -113,8 +123,13 @@ class SetupDialog {
       </div>
 
       <div class="setup-dialog-body">
-        ${this.mode.confirm ? CONFIRM_STEP : ""}
-        <div class="setup-dialog-fields"${this.mode.confirm ? " hidden" : ""}></div>
+        ${this.mode.confirm ? confirmStep({ rpc: this.access !== "service" }) : ""}
+        <div class="setup-dialog-fields"${this.mode.confirm ? " hidden" : ""}>
+          <div class="setup-dialog-source"></div>
+          <div class="setup-dialog-backup" hidden></div>
+          <div class="setup-dialog-wallet" hidden></div>
+          <div class="setup-dialog-rpc"></div>
+        </div>
 
         <div class="setup-dialog-status" id="setup-dialog-status" hidden></div>
       </div>
@@ -135,12 +150,25 @@ class SetupDialog {
     I18n.localizeTree(this.element);
     document.body.appendChild(this.backdrop);
 
-    // The same credential fields as the onboarding step, under ids of their own.
-    this.fields = window.SetupRuntime.mountCredentialFields(
-      this.element.querySelector(".setup-dialog-fields"),
-      "setup-dialog-",
-      { rpcOptional: this.mode.rpcOptional }
-    );
+    // The same wallet choice, backup panel and fields as the onboarding steps, under
+    // ids of their own.
+    const runtime = window.SetupRuntime;
+    const part = (name) => this.element.querySelector(`.setup-dialog-${name}`);
+    this.walletSource = null;
+    this.source = runtime.mountWalletSource(part("source"), "setup-dialog-", {
+      onChange: (value) => this.onWalletSourceChanged(value),
+    });
+    this.backup = runtime.mountBackupPanel(part("backup"), "setup-dialog-", {
+      onChange: () => this.updateSubmit(),
+    });
+    this.walletField = runtime.mountWalletField(part("wallet"), "setup-dialog-");
+    this.rpcField =
+      this.access === "service"
+        ? null
+        : runtime.mountRpcField(part("rpc"), "setup-dialog-", {
+            rpcOptional: this.mode.rpcOptional,
+          });
+    part("rpc").hidden = !this.rpcField;
     this.statusEl = this.element.querySelector("#setup-dialog-status");
     this.submitBtn = this.element.querySelector('[data-action="submit"]');
 
@@ -158,7 +186,27 @@ class SetupDialog {
     this.releaseEscape = pushEscapeHandler(() => {
       if (!this.busy) this.close(false);
     });
-    if (this.confirmed) setTimeout(() => this.fields.walletInput.focus(), 50);
+    this.updateSubmit();
+    if (this.confirmed) setTimeout(() => this.source.focus(), 50);
+  }
+
+  onWalletSourceChanged(value) {
+    this.walletSource = value;
+    // A new wallet is created as soon as it is chosen; choosing to import drops it.
+    if (value === "create") this.backup.ensureGenerated();
+    else this.backup.clear();
+    this.element.querySelector(".setup-dialog-backup").hidden = value !== "create";
+    this.element.querySelector(".setup-dialog-wallet").hidden = value !== "import";
+    this.element.classList.toggle("is-wide", value === "create");
+    if (value === "import") this.walletField.walletInput.focus();
+    this.updateSubmit();
+  }
+
+  /** Submit waits for a source, and a created wallet for its three acknowledgements. */
+  updateSubmit() {
+    if (!this.submitBtn || this.busy || !this.confirmed) return;
+    this.submitBtn.disabled =
+      !this.walletSource || (this.walletSource === "create" && !this.backup.ready());
   }
 
   // Leave the confirmation step for the credential fields.
@@ -167,7 +215,8 @@ class SetupDialog {
     this.element.querySelector(".setup-dialog-confirm")?.setAttribute("hidden", "");
     this.element.querySelector(".setup-dialog-fields")?.removeAttribute("hidden");
     this.submitBtn.textContent = this.mode.submit();
-    this.fields.walletInput.focus();
+    this.updateSubmit();
+    this.source.focus();
   }
 
   setStatus(kind, message) {
@@ -185,16 +234,21 @@ class SetupDialog {
         ? label || I18n.t("setup-dialog-working")
         : this.mode.submit();
     }
+    if (!busy) this.updateSubmit();
   }
 
   async submit() {
-    if (!this.fields.validateAll()) return;
-    const walletPrivateKey = this.fields.walletInput.value.trim();
-    const rpcUrls = this.fields.rpcUrls();
+    if (!this.walletSource) return;
+    const created = this.walletSource === "create";
+    if (created ? !this.backup.ready() : !this.walletField.validate()) return;
+    if (this.rpcField && !this.rpcField.validate()) return;
+    const walletPrivateKey = created ? this.backup.privateKey() : this.walletField.value();
+    const rpcUrls = this.rpcField ? this.rpcField.rpcUrls() : [];
 
     const snapshot = Object.freeze({
       walletPrivateKey,
       rpcUrls: Object.freeze([...rpcUrls]),
+      access: this.access,
     });
     this.requestAbort?.abort();
     this.requestAbort = new AbortController();
@@ -207,6 +261,7 @@ class SetupDialog {
         body: JSON.stringify({
           wallet_private_key: snapshot.walletPrivateKey,
           rpc_urls: snapshot.rpcUrls,
+          access: snapshot.access,
         }),
         signal: this.requestAbort.signal,
       });
@@ -214,12 +269,16 @@ class SetupDialog {
       if (!validateRes.ok || !validation.valid || !validation.validation_id) {
         const msg =
           apiErrorMessage(validation) ||
-          (validation?.errors?.length ? validation.errors.join(" ") : I18n.t("setup-dialog-error-validation"));
+          (validation?.errors?.length
+            ? validation.errors.join(" ")
+            : I18n.t("setup-dialog-error-validation"));
         this.setStatus("error", msg);
         this.setBusy(false);
         return;
       }
-      if (validation.wallet_address) this.fields.showWalletPreview(validation.wallet_address);
+      if (validation.wallet_address && !created) {
+        this.walletField.showWalletPreview(validation.wallet_address);
+      }
       if (validation.warnings?.length) {
         this.setStatus("warning", validation.warnings.join(" "));
       }
@@ -232,6 +291,7 @@ class SetupDialog {
           validation_id: validation.validation_id,
           wallet_private_key: snapshot.walletPrivateKey,
           rpc_urls: snapshot.rpcUrls,
+          access: snapshot.access,
         }),
         signal: this.requestAbort.signal,
       });
@@ -239,13 +299,17 @@ class SetupDialog {
       if (!completeRes.ok || !result.restart_required) {
         const msg =
           apiErrorMessage(result) ||
-          (result?.errors?.length ? result.errors.join(" ") : I18n.t("setup-dialog-error-incomplete"));
+          (result?.errors?.length
+            ? result.errors.join(" ")
+            : I18n.t("setup-dialog-error-incomplete"));
         this.setStatus("error", msg);
         this.setBusy(false);
         return;
       }
 
-      this.fields.walletInput.value = "";
+      // The key is stored encrypted now; nothing in the dialog keeps it.
+      this.backup.clear();
+      this.walletField.clear();
       this.setStatus("success", this.mode.saved());
       this.submitBtn.textContent = I18n.t("setup-dialog-restarting");
 
@@ -271,7 +335,11 @@ class SetupDialog {
   }
 
   destroy() {
-    this.fields?.dispose();
+    this.source?.dispose();
+    this.backup?.dispose();
+    this.walletField?.clear();
+    this.walletField?.dispose();
+    this.rpcField?.dispose();
     this.requestAbort?.abort();
     this.requestAbort = null;
     this.releaseEscape?.();

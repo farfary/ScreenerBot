@@ -7,7 +7,7 @@ onboarding-welcome-custody-description = Khóa riêng tư được mã hóa khi 
 onboarding-welcome-engine-title = Bộ máy luôn hoạt động
 onboarding-welcome-engine-description = Các dịch vụ được điều phối với kiểm tra tình trạng và kiểm soát vòng đời an toàn.
 onboarding-welcome-realtime-title = Dữ liệu on-chain thời gian thực
-onboarding-welcome-realtime-description = Tính trực tiếp từ dự trữ của pool - không phải ảnh chụp API bị trễ.
+onboarding-welcome-realtime-description = Khi dùng RPC của riêng bạn, giá được lấy trực tiếp từ dự trữ của pool - không phải ảnh chụp API bị trễ.
 
 onboarding-discover-title = Khám phá & lọc
 onboarding-discover-description = Quét ba nguồn dữ liệu để tìm cặp Solana mới, giải mã hơn 12 loại pool DEX trên chuỗi, rồi đưa mọi token qua các quy tắc chất lượng và bảo mật có thể cấu hình.
@@ -27,7 +27,7 @@ onboarding-trade-auto-description = Bộ đánh giá vào/thoát lệnh, các v�
 onboarding-trade-strategy-title = Bộ máy chiến lược
 onboarding-trade-strategy-description = Cây điều kiện kết hợp tín hiệu về giá, khối lượng và thời gian.
 onboarding-trade-copy-title = Copy trading
-onboarding-trade-copy-description = Sao chép giao dịch của các ví bạn theo dõi. Thử mọi tác vụ ở chế độ thử nghiệm trước khi nó tiêu { -sol } thật.
+onboarding-trade-copy-description = Sao chép giao dịch của các ví bạn theo dõi (cần RPC của riêng bạn). Thử mọi tác vụ ở chế độ thử nghiệm trước khi nó tiêu { -sol } thật.
 onboarding-trade-safety-title = Kiểm soát an toàn
 onboarding-trade-safety-description = Dừng khẩn cấp, giới hạn lỗ theo kỳ và công tắc giám sát độc lập.
 
@@ -43,18 +43,18 @@ onboarding-connect-events-title = Luồng sự kiện trực tiếp
 onboarding-connect-events-description = Mọi giao dịch, swap và sự kiện hệ thống đều được ghi lại kèm danh mục và mức độ nghiêm trọng.
 
 onboarding-data-title = Dữ liệu { -brand }
-onboarding-data-description = Chúng tôi vận hành một dịch vụ dữ liệu thị trường dùng chung, nên bản cài đặt của bạn không bị giới hạn tốc độ của các nhà cung cấp công khai kìm lại. Dịch vụ miễn phí với tài khoản { -brand }, và { -brand } vẫn hoạt động khi không có tài khoản.
-onboarding-data-candles-title = Lịch sử nến dùng chung
-onboarding-data-candles-description = Lịch sử dùng chung ở bảy khung thời gian, sâu nhiều năm, phục vụ từ một cache.
-onboarding-data-pools-title = Pool đã xác định & bảo mật
-onboarding-data-pools-description = Sổ đăng ký pool trung tâm và các báo cáo { -rugcheck } trong cache, đã được lấy sẵn.
+onboarding-data-description = Tài khoản { -brand } miễn phí giúp biểu đồ và kiểm tra token nhanh hơn. Khi dùng RPC của riêng bạn, { -brand } vẫn hoạt động mà không cần tài khoản.
+onboarding-data-candles-title = Biểu đồ tải nhanh
+onboarding-data-candles-description = Lịch sử giá ở bảy khung thời gian, sâu nhiều năm.
+onboarding-data-pools-title = Kiểm tra token sẵn sàng
+onboarding-data-pools-description = Pool và báo cáo bảo mật cho hầu hết token, không phải chờ.
 onboarding-data-signin-title = Cần tài khoản
 onboarding-data-signin-description = Khi không có tài khoản, dữ liệu này không khả dụng và sẽ dùng các nhà cung cấp công khai.
-onboarding-data-reading-title = Chỉ tra cứu
-onboarding-data-reading-description = Chúng tôi chỉ biết bạn tra cứu token nào. Không bao giờ có khóa, số dư, vị thế hay giao dịch.
+onboarding-data-reading-title = Những gì chúng tôi thấy
+onboarding-data-reading-description = Các token bạn tra cứu và các giao dịch hoán đổi bạn gửi qua { -brand }. Với dịch vụ { -brand }, còn có số dư và lịch sử của ví giao dịch. Không bao giờ có khóa của bạn.
 
 onboarding-privacy-title = Khóa của bạn, dữ liệu của bạn
-onboarding-privacy-description = Cấu hình, khóa và lịch sử giao dịch của bạn được giữ trên máy này. Tiếp theo, hãy chọn “Khám phá bảng điều khiển” để khám phá mà không cần thông tin đăng nhập, hoặc liên kết ví và RPC để bật đầy đủ bot - và đăng nhập tại đó nếu bạn muốn dùng dữ liệu { -brand }.
+onboarding-privacy-description = Cấu hình, khóa và lịch sử giao dịch của bạn được giữ trên máy này. Tiếp theo, hãy chọn “Khám phá bảng điều khiển” để khám phá mà không cần thông tin đăng nhập, hoặc tạo hay nhập một ví rồi kết nối qua RPC của riêng bạn hoặc dịch vụ { -brand } để bắt đầu giao dịch.
 onboarding-privacy-local-title = Kiến trúc ưu tiên cục bộ
 onboarding-privacy-local-description = Cấu hình, phân tích và cơ sở dữ liệu được lưu trên máy tính của bạn.
 onboarding-privacy-wallet-title = Ví được mã hóa
@@ -65,7 +65,7 @@ onboarding-privacy-config-title = Cấu hình linh hoạt
 onboarding-privacy-config-description = Hầu hết cài đặt có thể chỉnh từ bảng điều khiển sau khi thiết lập.
 
 onboarding-setup-shortcut =
-    .aria-label = Chuyển thẳng đến thiết lập ví và RPC hoặc chọn Chế độ khám phá
+    .aria-label = Chuyển thẳng đến thiết lập hoặc chọn Chế độ khám phá
 onboarding-setup-shortcut-label = Đến phần thiết lập
 onboarding-progress-dot =
     .aria-label = Đến slide { $number }

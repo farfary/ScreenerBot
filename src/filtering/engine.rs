@@ -244,9 +244,8 @@ pub async fn compute_snapshot(
 
     let candidate_mints: Vec<String> = tokens.iter().map(|t| t.mint.clone()).collect();
 
-    let priced_set: HashSet<String> = crate::pools::get_available_tokens(chain)
-        .into_iter()
-        .collect();
+    let priced_set: HashSet<String> =
+        crate::positions::price_resolution::priced_mints(chain, &candidate_mints);
     let open_position_set: HashSet<String> = positions::books::open_mints(positions::Book::Live)
         .await
         .into_iter()

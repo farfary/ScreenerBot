@@ -18,8 +18,8 @@
   overflow: hidden;
 }
 
-/* Explore Mode: the setup notice replaces the table, inset from the page edge. */
-.transactions-setup-gate {
+/* An access gate replaces the table, inset from the page edge. */
+.transactions-access-gate {
   margin: var(--spacing-lg);
 }
 

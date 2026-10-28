@@ -36,6 +36,7 @@ settings-dialog-tab-hints = Hints
 settings-dialog-tab-data = Data
 settings-dialog-tab-security = Security
 settings-dialog-tab-account = Account
+settings-dialog-tab-connection = Connection
 settings-dialog-tab-telegram = { -telegram }
 settings-dialog-tab-agent-connections = Agent Connections
 settings-dialog-tab-updates = Updates
@@ -515,14 +516,12 @@ settings-hints-restored = All hints restored
 ## account_tab.js
 
 settings-account-title = { -brand } account
-settings-account-description = Free, and optional. { -brand } trades, discovers and charts without an account — it just does it against the public providers. The panel below lists what signing in adds.
+settings-account-description = Free. With your own RPC it is optional: { -brand } trades, discovers and charts without an account, against the public providers. The { -brand } service needs one. The panel below lists what signing in adds.
+settings-account-description-service = Free, and needed for the { -brand } service: wallet reads and the swaps you sign go through screenerbot.io under this account. Your private key never leaves this computer.
 settings-account-data-title = { -brand } data
-settings-account-data-description = We run a shared market-data service at screenerbot.io: pooled candles across seven timeframes, a resolved pool registry, cached security reports and normalised token identity. It spares each install from being rate limited by the public providers on its own. The service needs an account so that its running cost can be attributed and abuse can be limited.
+settings-account-data-description = { -brand } runs a shared market-data service at screenerbot.io for charts, pool data, security reports and token details, so your install is not rate limited by the public providers on its own. It needs a free account to limit abuse.
 settings-account-data-fallback = When it is unavailable { -brand } falls back to the public providers automatically. Nothing stops; charts fill more slowly and carry less history.
-settings-account-gateway-title = Sending transactions
-settings-account-gateway-description = When you are signed in, { -brand } can broadcast your swaps through screenerbot.io instead of your own RPC. Your bot still builds and signs every transaction on this machine — the server only relays it, and cannot change a signed transaction without invalidating its signature.
-settings-account-gateway-label = Use { -brand } RPC for Sending Transactions
-settings-account-gateway-hint = Submission only. Price data always comes from your own RPC — pool polling is far too heavy for a shared endpoint, so it is never sent there.
+settings-account-data-fallback-service = On the { -brand } service, wallet reads and trades go through screenerbot.io too: while it cannot be reached, trading pauses and resumes when the connection returns.
 settings-account-manage-title = Managing your account
 settings-account-manage-description = Your password, email address, connected devices and referral payouts are managed on the website. Revoking a device there signs it out everywhere, including this one.
 settings-account-open-dashboard = Open your dashboard
@@ -646,3 +645,26 @@ settings-data-folder-label = Open Data Folder
 settings-data-folder-hint = Open the folder containing all { -brand } data in your file manager.
 settings-data-folder-open = Open Folder
 settings-data-folder-open-failed = Could not open the data folder
+
+## Connection tab (scripts/ui/settings/connection_tab.js)
+
+settings-connection-title = Connection
+settings-connection-description = How { -brand } reaches { -solana }.
+settings-connection-choice =
+    .aria-label = Connection
+settings-connection-active = Active
+settings-connection-service-title = { -brand } service
+settings-connection-service-detail = Prices refresh every few seconds. Copy trading, wallet watching, other wallets' balances, older history, direct pool swaps and live pool prices need your own RPC.
+settings-connection-own-title = Your own RPC
+settings-connection-own-detail = Prices about twice a second and every feature.
+settings-connection-apply = Apply and restart
+settings-connection-to-service-title = Switch to the { -brand } service?
+settings-connection-to-service-message = Copy trading, wallet watching, other wallets' balances, older history, direct pool swaps and live pool prices turn off; their settings are kept. Trading pauses whenever you are signed out. { -brand } restarts to switch.
+settings-connection-to-own-title = Switch to your own RPC?
+settings-connection-to-own-message = { -brand } checks your endpoints, then restarts to switch. Every feature turns back on.
+settings-connection-signed-in-as = Connected · signed in as { $name }
+settings-connection-sending-title = Sending transactions
+settings-connection-sending-label = Send Transactions Through { -brand }
+settings-connection-sending-own-hint = When you are signed in, swaps you sign on this computer are broadcast through screenerbot.io. Your RPC is used when that is unavailable.
+settings-connection-sending-service-hint = Always on with the { -brand } service: it is how the swaps you sign on this computer reach { -solana }.
+settings-connection-switch-failed = The connection could not be switched.

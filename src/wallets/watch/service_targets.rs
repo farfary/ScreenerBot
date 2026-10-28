@@ -284,7 +284,7 @@ async fn run_worker(
                 let due = if runtime.high_activity {
                     service::high_activity_poll_due(elapsed, runtime.high_activity_dirty || runtime.high_activity_catching_up || dropped, high, baseline)
                 } else {
-                    dropped || elapsed >= Duration::from_secs(poller::cadence_secs(chain.is_connected(), baseline, fallback))
+                    dropped || poller::cadence_secs(chain.is_connected(), chain.polls_while_connected(), baseline, fallback).is_some_and(|secs| elapsed >= Duration::from_secs(secs))
                 };
                 if due {
                     runtime.last_poll = now;

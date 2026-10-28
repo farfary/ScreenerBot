@@ -15,7 +15,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-use crate::i18n::ids;
+use crate::i18n::{ids, MessageId};
 use crate::logger::{self, LogTag};
 use crate::wallets::watch::{self, WatchTarget};
 use crate::wallets::Error as WalletsError;
@@ -141,11 +141,19 @@ async fn add_target(Json(request): Json<AddTargetRequest>) -> Response {
                 LogTag::WalletWatch,
                 &format!("Failed to add watch target {address}: {e}"),
             );
-            ApiError::new(failure_code(&e), ids::ERRORS_WALLET_WATCH_ADD_FAILED)
-                .details(e.to_string())
-                .into_response()
+            watch_failure(&e, ids::ERRORS_WALLET_WATCH_ADD_FAILED).into_response()
         }
     }
+}
+
+/// The envelope for a failed watch operation: a chain access refusal keeps its
+/// own code and text; any other failure carries `id` and the status the typed
+/// error already has.
+fn watch_failure(error: &WalletsError, id: MessageId) -> ApiError {
+    if let WalletsError::ChainAccess(refusal) = error {
+        return ApiError::chain_access(refusal);
+    }
+    ApiError::new(failure_code(error), id).details(error.to_string())
 }
 
 /// The category for a failed watch operation, carrying the status the typed
@@ -163,9 +171,7 @@ async fn remove_target(Path(id): Path<i64>) -> Response {
                 LogTag::WalletWatch,
                 &format!("Failed to remove watch target {id}: {e}"),
             );
-            ApiError::new(failure_code(&e), ids::ERRORS_WALLET_WATCH_REMOVE_FAILED)
-                .details(e.to_string())
-                .into_response()
+            watch_failure(&e, ids::ERRORS_WALLET_WATCH_REMOVE_FAILED).into_response()
         }
     }
 }
@@ -183,9 +189,7 @@ async fn set_target_enabled(
                 LogTag::WalletWatch,
                 &format!("Failed to update watch target {id}: {e}"),
             );
-            ApiError::new(failure_code(&e), ids::ERRORS_WALLET_WATCH_UPDATE_FAILED)
-                .details(e.to_string())
-                .into_response()
+            watch_failure(&e, ids::ERRORS_WALLET_WATCH_UPDATE_FAILED).into_response()
         }
     }
 }
@@ -193,18 +197,14 @@ async fn set_target_enabled(
 async fn set_target_budget(Path(id): Path<i64>, Json(request): Json<SetBudgetRequest>) -> Response {
     match watch::update_target_page_budget(id, request.page_budget).await {
         Ok(()) => success_response(serde_json::json!({})),
-        Err(error) => ApiError::new(failure_code(&error), ids::ERRORS_WALLET_WATCH_BUDGET_FAILED)
-            .details(error.to_string())
-            .into_response(),
+        Err(error) => watch_failure(&error, ids::ERRORS_WALLET_WATCH_BUDGET_FAILED).into_response(),
     }
 }
 
 async fn resume_target(Path(id): Path<i64>, Json(request): Json<ResumeRequest>) -> Response {
     match watch::resume_target(id, request.page_budget, request.acknowledge_missed_activity).await {
         Ok(()) => success_response(serde_json::json!({})),
-        Err(error) => ApiError::new(failure_code(&error), ids::ERRORS_WALLET_WATCH_RESUME_FAILED)
-            .details(error.to_string())
-            .into_response(),
+        Err(error) => watch_failure(&error, ids::ERRORS_WALLET_WATCH_RESUME_FAILED).into_response(),
     }
 }
 
@@ -220,12 +220,9 @@ async fn set_high_activity_approval(
     .await
     {
         Ok(()) => success_response(serde_json::json!({})),
-        Err(error) => ApiError::new(
-            failure_code(&error),
-            ids::ERRORS_WALLET_WATCH_APPROVAL_FAILED,
-        )
-        .details(error.to_string())
-        .into_response(),
+        Err(error) => {
+            watch_failure(&error, ids::ERRORS_WALLET_WATCH_APPROVAL_FAILED).into_response()
+        }
     }
 }
 
@@ -247,9 +244,7 @@ async fn get_status(Path(id): Path<i64>) -> Response {
 
     match watch::get_status(id).await {
         Ok(status) => success_response(status),
-        Err(e) => ApiError::new(failure_code(&e), ids::ERRORS_WALLET_WATCH_STATUS_FAILED)
-            .details(e.to_string())
-            .into_response(),
+        Err(e) => watch_failure(&e, ids::ERRORS_WALLET_WATCH_STATUS_FAILED).into_response(),
     }
 }
 
@@ -308,6 +303,27 @@ mod tests {
             assert_eq!(failure_code(&error), code, "code for {error}");
             assert_eq!(code.status(), status, "status of {code:?}");
         }
+    }
+
+    /// A mode without other-wallet watching refuses with its own code and text
+    /// on every watch endpoint, never as a generic watch failure.
+    #[tokio::test]
+    async fn a_chain_access_refusal_keeps_its_own_code_and_text() {
+        let error = WalletsError::ChainAccess(crate::chains::Error::CapabilityUnavailable {
+            chain: crate::chains::ChainId::Solana,
+            capability: crate::chains::access::Capability::WatchOtherWallets,
+        });
+        let response = watch_failure(&error, ids::ERRORS_WALLET_WATCH_ADD_FAILED).into_response();
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body");
+        let json: serde_json::Value = serde_json::from_slice(&bytes).expect("json");
+        assert_eq!(json["error"]["code"], "CAPABILITY_UNAVAILABLE");
+        assert_eq!(
+            json["error"]["text"]["id"],
+            "errors-chain-capability-unavailable"
+        );
     }
 
     /// A target that is gone is a 404 on every endpoint addressed by id —

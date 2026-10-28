@@ -6,10 +6,11 @@
 use std::str::FromStr;
 
 use crate::chains::settlement::{Holding, SettlementReader, SignatureCheck, SignatureVerdict};
+use crate::chains::solana::access::{chain_access, Freshness};
 use crate::chains::solana::assets::ata::{
     get_token_balance, token_holding, token_holding_with_slot,
 };
-use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
+use crate::chains::solana::rpc::RpcClientMethods;
 use crate::chains::solana::solana_sdk::commitment_config::CommitmentLevel;
 use crate::chains::solana::solana_sdk::signature::Signature;
 use crate::chains::solana::solana_transaction_status::{
@@ -23,7 +24,7 @@ pub(crate) const SOLANA_BLOCKHASH_VALIDITY_SLOTS: u64 = 150;
 /// The commitment of the height an expiry bound is read from. A blockhash fetched before
 /// submission is at most as recent as the confirmed tip, so the confirmed height plus the
 /// validity window is never below its last valid height.
-const EXPIRY_BOUND_COMMITMENT: CommitmentLevel = CommitmentLevel::Confirmed;
+pub(crate) const EXPIRY_BOUND_COMMITMENT: CommitmentLevel = CommitmentLevel::Confirmed;
 
 /// The commitment of the height compared against an expiry bound. Once the finalized height
 /// has passed the bound, every block that could hold the transaction is finalized and
@@ -33,7 +34,7 @@ const EXPIRED_HEIGHT_COMMITMENT: CommitmentLevel = CommitmentLevel::Finalized;
 /// The most signatures one `getSignatureStatuses` request accepts.
 const MAX_SIGNATURES_PER_STATUS_READ: usize = 256;
 
-/// The Solana implementation of [`SettlementReader`], reading through the process RPC client.
+/// The Solana implementation of [`SettlementReader`], reading through the chain access facade.
 pub struct SolanaSettlement;
 
 #[async_trait::async_trait]
@@ -52,12 +53,13 @@ impl SettlementReader for SolanaSettlement {
             })
             .collect::<Result<Vec<_>>>()?;
 
-        let rpc = get_rpc_client();
+        let access = chain_access();
         // Each status is kept with the slot its node answered at.
         let mut statuses = Vec::with_capacity(signatures.len());
         for chunk in signatures.chunks(MAX_SIGNATURES_PER_STATUS_READ) {
             let (read_slot, chunk_statuses) =
-                rpc.get_signature_statuses(chunk)
+                access
+                    .signature_statuses(chunk)
                     .await
                     .map_err(|error| Error::SettlementRead {
                         chain: ChainId::Solana,
@@ -81,7 +83,7 @@ impl SettlementReader for SolanaSettlement {
             .zip(&statuses)
             .any(|(check, (_, status))| status.is_none() && check.expiry_bound.is_some());
         let tip = if needs_tip {
-            finalized_tip(rpc).await.ok()
+            access.finalized_tip().await.ok()
         } else {
             None
         };
@@ -94,7 +96,7 @@ impl SettlementReader for SolanaSettlement {
                 match classify_status(status.as_ref(), *read_slot, check.expiry_bound, tip) {
                     StatusRead::Decided(verdict) => verdict,
                     StatusRead::LookUpTransaction => {
-                        transaction_lookup(rpc.get_transaction(signature).await).verdict()
+                        transaction_lookup(access.transaction(signature).await).verdict()
                     }
                 };
             verdicts.push(verdict);
@@ -123,14 +125,13 @@ impl SettlementReader for SolanaSettlement {
     }
 
     async fn expiry_bound(&self) -> Result<u64> {
-        let height = get_rpc_client()
-            .get_block_height_with_commitment(EXPIRY_BOUND_COMMITMENT)
+        chain_access()
+            .expiry_bound()
             .await
             .map_err(|error| Error::SettlementRead {
                 chain: ChainId::Solana,
                 detail: error.to_string(),
-            })?;
-        Ok(height.saturating_add(SOLANA_BLOCKHASH_VALIDITY_SLOTS))
+            })
     }
 
     async fn settled_holding(
@@ -143,15 +144,18 @@ impl SettlementReader for SolanaSettlement {
             chain: ChainId::Solana,
             detail: error.to_string(),
         };
-        let tip = finalized_tip(get_rpc_client())
+        let tip = chain_access()
+            .finalized_tip()
             .await
             .map_err(settlement_read)?;
         if tip.block_height <= expiry_bound {
             return Ok(None);
         }
-        let (holding, read_slot) = token_holding_with_slot(owner, asset)
-            .await
-            .map_err(settlement_read)?;
+        // The read must reach the tip's slot to settle anything; ask for it.
+        let (holding, read_slot) =
+            token_holding_with_slot(owner, asset, Freshness::AtLeastSlot(tip.slot))
+                .await
+                .map_err(settlement_read)?;
         Ok(holding_settled(tip, expiry_bound, read_slot).then_some(holding))
     }
 }

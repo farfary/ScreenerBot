@@ -9,7 +9,7 @@
 
   <!-- Main Content -->
   <main class="wallets-main">
-    <div class="wallets-setup-gate" hidden id="wallets-setup-gate"></div>
+    <div class="wallets-access-gate" hidden id="wallets-access-gate"></div>
     <div class="wallets-tab-panels">
       <!-- Main Wallet Tab Panel -->
       <div class="wallet-tab-panel" id="panel-main" data-panel="main">
@@ -24,6 +24,7 @@
 
       <!-- Watched Tab Panel -->
       <div class="wallet-tab-panel" hidden id="panel-watched" data-panel="watched">
+        <div class="wallets-access-gate" hidden id="watched-access-gate"></div>
         <div id="watched-wallets-root" aria-live="polite"></div>
       </div>
     </div>

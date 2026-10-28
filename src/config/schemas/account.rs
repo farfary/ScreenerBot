@@ -47,10 +47,14 @@ config_struct! {
         /// machine and the server merely broadcasts it. It cannot serve pool
         /// polling and is never asked to (see `src/rpc/provider`), so your own
         /// RPC is still required for the bot to work at all.
+        ///
+        /// OFF by default: relaying hands every signed transaction to a server
+        /// other than the user's own RPC, so it is switched on by choice, never
+        /// silently. A saved value is kept.
         #[metadata(field_metadata! {
             category: ConfigCategory::General
         })]
-        use_gateway_rpc: bool = true,
+        use_gateway_rpc: bool = false,
 
         /// How long before expiry to refresh the access token, in seconds.
         ///
@@ -68,5 +72,22 @@ impl AccountConfig {
     /// token's own lifetime, which would refresh in a tight loop.
     pub fn refresh_margin(&self) -> std::time::Duration {
         std::time::Duration::from_secs(self.refresh_margin_secs.clamp(15, 600))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::AccountConfig;
+
+    #[test]
+    fn gateway_submission_is_off_by_default_and_a_saved_value_is_kept() {
+        assert!(!AccountConfig::default().use_gateway_rpc);
+
+        let unsaved: AccountConfig = toml::from_str("").expect("empty section parses");
+        assert!(!unsaved.use_gateway_rpc);
+
+        let saved: AccountConfig =
+            toml::from_str("use_gateway_rpc = true").expect("saved section parses");
+        assert!(saved.use_gateway_rpc);
     }
 }

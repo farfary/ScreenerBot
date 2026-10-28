@@ -40,3 +40,6 @@ chart-status-total-idle =
         [many] { $count } свечей · простой
        *[other] { $count } свечи · простой
     }
+
+chart-inline-curve-label = Накопленный P&L { $amount } { -sol }
+chart-inline-histogram-title = { $count } из { $total }

@@ -24,7 +24,6 @@ positions-paper-empty = 모의 포지션이 없습니다
 positions-paper-archived-empty = 보관된 모의 포지션이 없습니다
     .message = 모의 라운드는 진행 중과 종료에 남으며, 실거래 포지션만 보관됩니다.
 positions-paper-empty-action = 전략 열기
-positions-origin-copy = 카피
 positions-origin-manual = 수동
 positions-origin-wallet = 지갑
 positions-origin-copy-link =

@@ -205,7 +205,11 @@ export function formatFixed(value, { decimals = 2, fallback = DASH, trim = false
  */
 function compactText(num, minimumFractionDigits, maximumFractionDigits = minimumFractionDigits) {
   return stripIsolates(
-    intl(Intl.NumberFormat, { notation: "compact", minimumFractionDigits, maximumFractionDigits }).format(num)
+    intl(Intl.NumberFormat, {
+      notation: "compact",
+      minimumFractionDigits,
+      maximumFractionDigits,
+    }).format(num)
   );
 }
 
@@ -214,7 +218,8 @@ let kmbSteps = null;
 /** Whether the locale's compact steps are the `K`/`M`/`B` thousands steps. */
 function usesKmbSteps() {
   if (kmbSteps === null) {
-    kmbSteps = compactText(1e3, 0) === "1K" && compactText(1e6, 0) === "1M" && compactText(1e9, 0) === "1B";
+    kmbSteps =
+      compactText(1e3, 0) === "1K" && compactText(1e6, 0) === "1M" && compactText(1e9, 0) === "1B";
   }
   return kmbSteps;
 }
@@ -229,7 +234,8 @@ function usesKmbSteps() {
 function compactFixed(num, decimals, billions = true, trim = false) {
   if (usesKmbSteps()) {
     const abs = Math.abs(num);
-    const [divisor, suffix] = billions && abs >= 1e9 ? [1e9, "B"] : abs >= 1e6 ? [1e6, "M"] : [1e3, "K"];
+    const [divisor, suffix] =
+      billions && abs >= 1e9 ? [1e9, "B"] : abs >= 1e6 ? [1e6, "M"] : [1e3, "K"];
     const digits = (num / divisor).toFixed(decimals);
     if (Math.abs(Number(digits)) >= 1000) {
       return `${localizeDecimal(trim ? trimZeros(digits) : digits)}${suffix}`;
@@ -245,7 +251,13 @@ function compactFixed(num, decimals, billions = true, trim = false) {
  */
 export function formatCompactFixed(
   value,
-  { decimals = 2, belowDecimals = decimals, trimBelow = false, billions = true, fallback = DASH } = {}
+  {
+    decimals = 2,
+    belowDecimals = decimals,
+    trimBelow = false,
+    billions = true,
+    fallback = DASH,
+  } = {}
 ) {
   const num = coerceNumber(value);
   if (!Number.isFinite(num)) {
@@ -394,7 +406,10 @@ export function formatPriceSubscript(
   {
     fallback = DASH,
     precision = PRICE_SIGNIFICANT_DIGITS,
-    sign: signMode = "negative", alignWith = [], trim = true } = {}
+    sign: signMode = "negative",
+    alignWith = [],
+    trim = true,
+  } = {}
 ) {
   const num = coerceNumber(price);
   if (!Number.isFinite(num)) {
@@ -467,7 +482,9 @@ function shiftPercent(digits) {
   const [whole, fraction = ""] = digits.split(".");
   const all = whole + fraction;
   const point = whole.length - 2;
-  return point > 0 ? `${all.slice(0, point)}.${all.slice(point) || "0"}` : `0.${"0".repeat(-point)}${all}`;
+  return point > 0
+    ? `${all.slice(0, point)}.${all.slice(point) || "0"}`
+    : `0.${"0".repeat(-point)}${all}`;
 }
 
 /**
@@ -485,7 +502,11 @@ function percentText(value, decimals, sign, trim = false) {
   if (!/^\d+(\.\d+)?$/.test(digits)) {
     // Magnitudes from 1e21 stringify in exponent form, which has no decimal
     // shift; they keep their exponent text and are not locale placed.
-    const shown = negative ? signPrefix(true) : sign === "auto" || sign === "always" ? signPrefix(false) : "";
+    const shown = negative
+      ? signPrefix(true)
+      : sign === "auto" || sign === "always"
+        ? signPrefix(false)
+        : "";
     return `${shown}${localizeDecimal(trim ? trimZeros(digits) : digits)}%`;
   }
   const magnitude = shiftPercent(digits);
@@ -597,7 +618,9 @@ export function withSolUnit(amount) {
 function roundedMagnitude(num, decimals, minDecimals = decimals) {
   let digits = Math.abs(num).toFixed(decimals);
   if (minDecimals < decimals) {
-    digits = digits.replace(new RegExp(`(\\.\\d{${minDecimals}}\\d*?)0+$`), "$1").replace(/\.$/, "");
+    digits = digits
+      .replace(new RegExp(`(\\.\\d{${minDecimals}}\\d*?)0+$`), "$1")
+      .replace(/\.$/, "");
   }
   return { digits, zero: Number(digits) === 0 };
 }
@@ -617,7 +640,10 @@ function groupedDecimal(digits) {
 }
 
 /** Signed digits of a finite number: the locale's sign (per `sign`) before the rounded magnitude. */
-function signedDigits(num, { decimals, minDecimals = decimals, sign = "always", grouping = false }) {
+function signedDigits(
+  num,
+  { decimals, minDecimals = decimals, sign = "always", grouping = false }
+) {
   const { digits, zero } = roundedMagnitude(num, decimals, minDecimals);
   const shown = zero || (num > 0 && sign !== "always") ? "" : signPrefix(num < 0);
   return `${shown}${grouping ? groupedDecimal(digits) : localizeDecimal(digits)}`;
@@ -634,6 +660,20 @@ export function signedTone(value, decimals = 4) {
     return "neutral";
   }
   return num > 0 ? "positive" : "negative";
+}
+
+const TONE_CLASSES = Object.freeze({
+  positive: "is-positive",
+  negative: "is-negative",
+  neutral: "",
+});
+
+/**
+ * Tone class of a signed amount as shown at `decimals`: "is-positive", "is-negative", or ""
+ * for a value that rounds to zero (or is not a number). It follows `signedTone`.
+ */
+export function signedToneClass(value, decimals = 4) {
+  return TONE_CLASSES[signedTone(value, decimals)];
 }
 
 /**
@@ -1024,7 +1064,9 @@ export function formatMemoryMb(megabytes, { fallback = DASH } = {}) {
   }
   if (num >= 1024) {
     const gigabytes = num / 1024;
-    return displayed(I18n.t("format-memory-gb", counted(gigabytes, localizeDecimal(gigabytes.toFixed(1)))));
+    return displayed(
+      I18n.t("format-memory-gb", counted(gigabytes, localizeDecimal(gigabytes.toFixed(1))))
+    );
   }
   return displayed(I18n.t("format-memory-mb", counted(Math.round(num))));
 }

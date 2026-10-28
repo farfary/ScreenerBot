@@ -47,7 +47,7 @@ errors-account-signin-refused = { $reason }
 errors-account-signin-unavailable = ورود در دسترس نیست
 errors-account-credentials-required = ایمیل و رمز عبور خود را وارد کنید.
 errors-account-signout-failed = خروج ناموفق بود
-errors-account-gateway-update-failed = به‌روزرسانی تنظیم گیت‌وی ممکن نشد
+errors-account-gateway-update-failed = به‌روزرسانی تنظیم ارسال تراکنش‌ها ممکن نشد
 
 # Localization
 errors-i18n-locale-not-registered = زبان ثبت نشده است
@@ -133,6 +133,8 @@ errors-transactions-own-wallet-unavailable = کیف پول اصلی پیکربن
 errors-transactions-invalid-subject = موضوع تراکنش آدرس معتبر سولانا نیست
 errors-transactions-subject-not-watched = موضوع تراکنش یک کیف پول تحت پایش نیست
 errors-transactions-watch-store-unavailable = کیف پول‌های تحت پایش در دسترس نیستند
+errors-transactions-history-loading = تراکنش‌های قدیمی‌تر در حال بارگیری‌اند.
+errors-transactions-history-load-failed = تراکنش‌های قدیمی‌تر بارگیری نشدند.
 
 # Wallet
 errors-wallet-unavailable = کیف پول اصلی در دسترس نیست
@@ -419,3 +421,17 @@ errors-tokens-search-failed = جست‌وجوی توکن ناموفق بود
 # Actions and services
 errors-actions-not-found = اقدام { $id } پیدا نشد
 errors-services-not-found = سرویس '{ $name }' پیدا نشد
+
+# Chain access
+errors-chain-capability-unavailable = این کار به اتصال RPC خودتان نیاز دارد.
+errors-chain-service-signin-required = برای استفاده از سرویس { -brand } وارد شوید.
+errors-chain-service-scope-missing = برای اجازهٔ خواندن کیف پول دوباره وارد شوید.
+errors-chain-service-busy = سرویس { -brand } شلوغ است. کمی بعد دوباره تلاش کنید.
+errors-chain-service-daily-limit = حساب شما به سقف امروز سرویس { -brand } رسیده است.
+errors-chain-service-version = این نسخه برای سرویس { -brand } قدیمی است. به { $minimum } یا جدیدتر به‌روزرسانی کنید.
+errors-chain-service-refused = سرویس { -brand } درخواست را رد کرد.
+errors-chain-service-unreachable = screenerbot.io در دسترس نیست.
+errors-chain-not-trading-wallet = در حالت سرویس { -brand } فقط کیف پول معاملاتی خوانده می‌شود.
+errors-chain-access-failed = درخواست به بلاک‌چین ناموفق بود.
+errors-chain-access-unchanged = این اتصال هم‌اکنون در حال استفاده است.
+errors-chain-access-switch-failed = اتصال تغییر نکرد.

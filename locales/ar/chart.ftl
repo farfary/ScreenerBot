@@ -42,3 +42,6 @@ chart-status-total-idle =
         [many] { $count } شمعة · خامل
        *[other] { $count } شمعة · خامل
     }
+
+chart-inline-curve-label = الأرباح والخسائر التراكمية { $amount } { -sol }
+chart-inline-histogram-title = { $count } من { $total }

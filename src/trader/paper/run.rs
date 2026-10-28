@@ -8,7 +8,7 @@ use chrono::Utc;
 
 use crate::positions::paper::PaperAccount;
 use crate::positions::Position;
-use crate::trader::types::TradeReason;
+use crate::trader::TradeReason;
 use crate::trader::{Error, Result};
 
 /// The configured starting balance of a paper run.

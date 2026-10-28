@@ -12,6 +12,8 @@ import { showSettingsDialog } from "../ui/settings_dialog.js";
 import { attachTabScrollStrip } from "../ui/tab_bar.js";
 import { attachNavMoreMenu } from "../ui/nav_more_menu.js";
 import { dirSign } from "./dom.js";
+import { Poller } from "./poller.js";
+import { requestManager } from "./request_manager.js";
 import { SetupDialog } from "../ui/setup_dialog.js";
 import { playToggleOn, playToggleOff, playError } from "./sounds.js";
 // Side-effect import: registers the `screenerbot:open-token-details` window
@@ -101,26 +103,129 @@ function openSetupWizard() {
   SetupDialog.show();
 }
 
-// Keep the Explore Mode setup action synchronized with the process-wide boot mode.
-function updateExploreSetupControl(status) {
-  const control = document.getElementById("exploreSetupControl");
+// How often the header reads the chain connection while it runs on the ScreenerBot service.
+const ACCESS_POLL_MS = 10000;
+// A connection still being checked shows only after this long, so a normal start
+// never flashes a paused state.
+const ACCESS_CHECKING_GRACE_MS = 5000;
+
+const access = {
+  status: null,
+  poller: null,
+  checkingSince: null,
+  graceTimer: null,
+};
+
+/**
+ * The control's content for the current state, or null when it hides: Explore Mode
+ * offers setup; on the ScreenerBot service a paused state names itself and the
+ * action that resumes it (sign in, or add an RPC at the daily limit).
+ */
+function accessControlView(status) {
+  if (status?.explore_mode) {
+    return {
+      kind: "explore",
+      icon: "icon-info",
+      title: I18n.t("shell-explore-title"),
+      detail: I18n.t("shell-explore-detail"),
+      action: I18n.t("shell-explore-action"),
+      label: I18n.attr("shell-explore-control", "aria-label"),
+      open: openSetupWizard,
+    };
+  }
+  const chain = access.status;
+  if (chain?.mode !== "service" || chain.ready) return null;
+  if (chain.state === "checking") {
+    const since = access.checkingSince ?? Date.now();
+    if (Date.now() - since < ACCESS_CHECKING_GRACE_MS) return null;
+  }
+  const signIn = chain.state === "sign_in_required" || chain.state === "reauthorization_required";
+  const addRpc = chain.state === "daily_limit";
+  let action = "";
+  if (signIn) action = I18n.t("shell-service-action-signin");
+  else if (addRpc) action = I18n.t("shell-service-action-connection");
+  return {
+    kind: "service",
+    icon: chain.state === "checking" ? "icon-cloud" : "icon-circle-pause",
+    title: I18n.text(chain.text),
+    detail: I18n.textAttr(chain.text, "detail"),
+    action,
+    label: I18n.attr("shell-service-control", "aria-label"),
+    open: () => showSettingsDialog({ tab: signIn ? "account" : "connection" }),
+  };
+}
+
+// Keep the access control synchronized with the boot mode and the chain connection.
+function updateAccessControl() {
+  const control = document.getElementById("accessControl");
   if (!control) {
     return;
   }
 
-  const exploreMode = Boolean(status?.explore_mode);
-  control.hidden = !exploreMode;
-  control.closest(".modern-header")?.classList.toggle("has-explore-setup", exploreMode);
+  const view = accessControlView(state.bootstrapStatus);
+  control.hidden = !view;
+  control.closest(".modern-header")?.classList.toggle("has-access-control", Boolean(view));
+  if (!view) return;
 
-  if (exploreMode && !control.dataset.bound) {
-    control.dataset.bound = "true";
-    control.addEventListener("click", openSetupWizard);
+  control.dataset.kind = view.kind;
+  control.setAttribute("aria-label", view.label);
+  control.title = view.detail;
+  control.querySelector(".access-control-icon").className = `access-control-icon ${view.icon}`;
+  control.querySelector(".access-control-title").textContent = view.title;
+  control.querySelector(".access-control-detail").textContent = view.detail;
+  const action = control.querySelector(".access-control-action");
+  action.textContent = view.action;
+  action.hidden = !view.action;
+  control.querySelector(".access-control-arrow").hidden = !view.action;
+  control.onclick = view.open;
+}
+
+/** Records a chain connection status and repaints the control. */
+function applyAccessStatus(status) {
+  access.status = status || null;
+  if (status?.state === "checking") access.checkingSince ??= Date.now();
+  else access.checkingSince = null;
+  window.clearTimeout(access.graceTimer);
+  if (access.checkingSince !== null) {
+    access.graceTimer = window.setTimeout(
+      updateAccessControl,
+      ACCESS_CHECKING_GRACE_MS - (Date.now() - access.checkingSince)
+    );
+  }
+  updateAccessControl();
+}
+
+/**
+ * The bootstrap poll ends once the app is ready, so on the ScreenerBot service the
+ * header reads the connection itself to see a pause begin and end.
+ */
+function syncAccessPolling(status) {
+  const service = status?.chain_access?.mode === "service" && !status?.explore_mode;
+  if (service && !access.poller) {
+    access.poller = new Poller(
+      async () => {
+        try {
+          applyAccessStatus(
+            await requestManager.fetch("/api/chain/access", { priority: "normal" })
+          );
+        } catch {
+          // An unanswered read keeps the last known state on screen.
+        }
+      },
+      { label: "AccessControl", intervalMs: ACCESS_POLL_MS } // l10n-ignore: internal poller name
+    );
+    access.poller.start();
+  } else if (!service && access.poller) {
+    access.poller.cleanup();
+    access.poller = null;
   }
 }
 
 function applyBootstrapStatus(status) {
   state.bootstrapStatus = status;
-  updateExploreSetupControl(status);
+  if (status?.chain_access) applyAccessStatus(status.chain_access);
+  else updateAccessControl();
+  syncAccessPolling(status);
   const initializationRequired = Boolean(status?.initialization_required);
   const uiReady = Boolean(status && (status.ui_ready || initializationRequired));
 
@@ -247,15 +352,16 @@ function initTraderControls() {
 
 /**
  * How the desktop row makes room before the quick actions fold, cheapest first. Each
- * step keeps the previous ones: the Explore setup control drops its detail line, the
- * wordmark gives way to the logo glyph, then the control drops its title (the trader
- * card already reads Explore) and keeps its action.
+ * step keeps the previous ones: the access control drops its detail line, the
+ * wordmark gives way to the logo glyph, then the control keeps one element: Explore
+ * keeps its setup action (the trader card already reads Explore), a paused service
+ * keeps the state that names the pause.
  */
 const HEADER_FIT_STEPS = Object.freeze([
   Object.freeze([]),
-  Object.freeze(["is-explore-compact"]),
-  Object.freeze(["is-explore-compact", "is-brand-compact"]),
-  Object.freeze(["is-explore-compact", "is-brand-compact", "is-explore-minimal"]),
+  Object.freeze(["is-access-compact"]),
+  Object.freeze(["is-access-compact", "is-brand-compact"]),
+  Object.freeze(["is-access-compact", "is-brand-compact", "is-access-minimal"]),
 ]);
 const HEADER_FIT_CLASSES = HEADER_FIT_STEPS.at(-1);
 
@@ -354,6 +460,10 @@ function initHeaderActionsToggle() {
   resizeObserver.observe(row);
   resizeObserver.observe(items);
   cards.querySelectorAll(".header-card").forEach((card) => resizeObserver.observe(card));
+  // The access control appears and changes its text after the first fit, often from a
+  // timer or a poll, so its own size change has to trigger the fit again.
+  const accessControl = document.getElementById("accessControl");
+  if (accessControl) resizeObserver.observe(accessControl);
   phone.addEventListener("change", measure);
   tablet.addEventListener("change", measure);
   document.fonts?.ready.then(measure).catch(() => {});

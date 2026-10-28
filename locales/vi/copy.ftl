@@ -38,19 +38,6 @@ copy-skip-swap-mixed-quote = Thanh toán đồng thời bằng SOL và stablecoi
 copy-skip-swap-multiple-tokens = Có hơn một token được giao dịch trong một giao dịch
 copy-skip-swap-unreadable = Không đọc được số tiền của giao dịch
 
-copy-entry-block-force-stopped = Giao dịch đang bị dừng cưỡng chế
-copy-entry-block-loss-limit = Giới hạn lỗ đang chặn các lệnh vào mới
-copy-entry-block-connectivity = Các dịch vụ cần thiết không khả dụng
-copy-entry-block-storage-unavailable = Dữ liệu giao dịch không khả dụng hoặc đang được khôi phục
-copy-entry-block-position-limit = Đã đạt giới hạn vị thế đang mở
-copy-entry-block-already-open = Đã có một vị thế đang mở
-copy-entry-block-reentry-cooldown = Thời gian chờ vào lại token
-copy-entry-block-open-cooldown = Thời gian chờ vào lệnh chung
-copy-entry-block-entry-reserved = Một lệnh vào khác đang được xử lý
-copy-entry-block-blacklisted = Token bị chặn bởi kiểm soát rủi ro
-copy-entry-block-paper-balance-exhausted = Số dư thử nghiệm không đủ cho giao dịch
-copy-entry-block-check-failed = Không thể hoàn tất một bước kiểm tra an toàn
-
 copy-pause-user = Bạn đã tạm dừng
 copy-pause-latency-kill-switch = Tự động tạm dừng: giao dịch đến trễ trung bình { $average } giây (giới hạn { $threshold } giây)
 copy-pause-watch-detached = Tự động tạm dừng: ví không còn được theo dõi
@@ -87,6 +74,7 @@ copy-live-block-copy-trading-disabled = Xử lý copy đang bị tạm dừng to
 copy-state-system-paused = Đã tạm dừng toàn cục
 copy-state-force-stopped = Đã dừng cưỡng chế
 copy-state-entries-blocked = Lệnh vào bị chặn
+copy-state-own-rpc-required = Cần RPC của riêng bạn
 copy-state-running-live = Đang chạy
 copy-state-running-paper = Đang chạy
 copy-exit-mode-buy-only = Quy tắc thoát của tôi
@@ -156,6 +144,7 @@ copy-status-force-stopped = Dừng cưỡng bức
 copy-status-loss-limit = Giới hạn lỗ
 copy-status-all-paused = Mọi tác vụ đã tạm dừng
 copy-status-processing = Đang xử lý
+copy-status-own-rpc-required = Cần RPC của riêng bạn
 copy-toolbar-pause = Tạm dừng sao chép
 copy-toolbar-resume = Tiếp tục sao chép
 copy-toolbar-resume-tasks = Tiếp tục mọi tác vụ
@@ -292,6 +281,7 @@ copy-state-detail-paper = Đang chạy ở chế độ thử nghiệm · giao d�
 copy-state-detail-live = Đang chạy live · giao dịch của ví được copy bằng swap thật
 copy-state-detail-system-paused = Đang chờ · xử lý copy bị tạm dừng toàn cục, lệnh thoát vẫn chạy
 copy-state-detail-entries-blocked = Lệnh vào bị chặn bởi giới hạn lỗ · lệnh thoát vẫn chạy
+copy-state-detail-own-rpc-required = Đang chờ · dịch vụ { -brand } không theo dõi ví khác; hãy thêm RPC để tiếp tục
 copy-state-detail-force-stopped = Đã dừng cưỡng chế · không copy gì cả
 
 copy-paused-since = { $reason } · { $since }
@@ -532,13 +522,11 @@ copy-table-profit-factor = Hệ số lợi nhuận
 copy-table-average-hold = Nắm giữ TB
 copy-table-target-difference = Chênh lệch giá trung vị so với mục tiêu
 
-copy-chart-curve-label = P&L lũy kế { $amount } { -sol }
 copy-chart-compare-label = P&L lũy kế theo tác vụ
 copy-chart-empty-curve = Chưa có vòng nào đã đóng trong khoảng này.
 copy-chart-empty-bars = Không có gì được ghi nhận trong khoảng này.
 copy-chart-empty-histogram = Không có mẫu thời gian đến trong khoảng này.
 copy-chart-empty-compare = Không có vòng đã đóng nào để so sánh trong khoảng này.
-copy-chart-histogram-title = { $count }/{ $total }
 
 copy-profile-copy = Copy ví này
 copy-profile-copy-other = Copy với quy tắc khác

@@ -8,38 +8,34 @@
 use std::future::Future;
 use std::str::FromStr;
 
+use crate::chains::solana::access::chain_access;
 use crate::chains::solana::constants::lamports_to_sol;
-use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 use crate::chains::solana::solana_sdk::pubkey::Pubkey;
 
-/// Accounts read per `getMultipleAccounts` call.
+/// Accounts read per chain access call.
 pub(crate) const SOL_BALANCE_BATCH_SIZE: usize = 50;
 
 /// Fetch the SOL balances of many wallets (in SOL), reading at most
-/// `SOL_BALANCE_BATCH_SIZE` accounts per `getMultipleAccounts` call.
+/// `SOL_BALANCE_BATCH_SIZE` accounts per chain access call.
 ///
 /// The result is aligned with `addresses`. A wallet account that does not exist
-/// holds 0 SOL; `None` marks an address that does not parse or a batch the RPC did
-/// not answer, so the caller can show the balance as unknown instead of zero.
+/// holds 0 SOL; `None` marks an address that does not parse, a batch the chain
+/// access did not answer, or a wallet its mode cannot read, so the caller can
+/// show the balance as unknown instead of zero.
 pub async fn fetch_wallet_sol_balances(addresses: &[String]) -> Vec<Option<f64>> {
     let pubkeys: Vec<Option<Pubkey>> = addresses
         .iter()
         .map(|address| Pubkey::from_str(address).ok())
         .collect();
-    let client = get_rpc_client();
+    let access = chain_access();
     sol_balances_in_batches(&pubkeys, |batch| async move {
-        client.get_multiple_accounts(&batch).await.map(|accounts| {
-            accounts
-                .into_iter()
-                .map(|account| account.map(|account| account.lamports))
-                .collect()
-        })
+        access.lamports_many(&batch).await
     })
     .await
 }
 
-/// Batches the parsed keys through `fetch` (lamports per key, `None` for a missing
-/// account) and lines the balances up with `pubkeys`.
+/// Batches the parsed keys through `fetch` (lamports per key, zero for a missing
+/// account, `None` when unknown) and lines the balances up with `pubkeys`.
 async fn sol_balances_in_batches<F, Fut, E>(
     pubkeys: &[Option<Pubkey>],
     fetch: F,
@@ -63,7 +59,7 @@ where
             continue;
         }
         for ((index, _), lamports) in batch.iter().zip(lamports) {
-            balances[*index] = Some(lamports_to_sol(lamports.unwrap_or_default()));
+            balances[*index] = lamports.map(lamports_to_sol);
         }
     }
     balances
@@ -97,8 +93,9 @@ mod tests {
 
     #[tokio::test]
     async fn sol_balances_keep_unknown_apart_from_zero() {
-        // Index 1 does not parse, the account at index 2 does not exist (0 SOL), and
-        // the second batch fails (unknown).
+        // Index 1 does not parse, the account at index 2 does not exist (0 SOL),
+        // the account at index 3 cannot be read in this mode (unknown), and the
+        // second batch fails (unknown).
         let mut pubkeys = keys(SOL_BALANCE_BATCH_SIZE + 2);
         pubkeys[1] = None;
         let first = Mutex::new(true);
@@ -109,7 +106,8 @@ mod tests {
                     return Err(());
                 }
                 let mut lamports = vec![Some(1_000_000_000); batch.len()];
-                lamports[1] = None;
+                lamports[1] = Some(0);
+                lamports[2] = None;
                 Ok(lamports)
             }
         })
@@ -117,6 +115,7 @@ mod tests {
         assert_eq!(balances[0], Some(1.0));
         assert_eq!(balances[1], None);
         assert_eq!(balances[2], Some(0.0));
+        assert_eq!(balances[3], None);
         assert_eq!(balances[SOL_BALANCE_BATCH_SIZE + 1], None);
     }
 }

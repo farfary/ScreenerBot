@@ -15,7 +15,6 @@ positions-paper-empty = कोई पेपर पोज़िशन नही�
 positions-paper-archived-empty = कोई आर्काइव की गई पेपर पोज़िशन नहीं
     .message = पेपर राउंड खुली और बंद सूची में रहते हैं; केवल लाइव पोज़िशन आर्काइव होती हैं।
 positions-paper-empty-action = स्ट्रैटेजी खोलें
-positions-origin-copy = कॉपी
 positions-origin-manual = मैन्युअल
 positions-origin-wallet = वॉलेट
 positions-origin-copy-link =

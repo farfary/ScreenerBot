@@ -285,7 +285,7 @@ mod tests {
             position_id: None,
             mint: "AdmissionSizeMint111111111111111111111111111".to_owned(),
             action: crate::trader::types::TradeAction::Buy,
-            reason: crate::trader::types::TradeReason::StrategySignal,
+            reason: crate::trader::TradeReason::StrategySignal,
             strategy_id: None,
             book: crate::positions::Book::Paper,
             timestamp: Utc::now(),
@@ -333,21 +333,21 @@ mod tests {
 
     /// Catalog key of the label for each entry block. The match is exhaustive, so
     /// a new variant fails to compile until it is mapped here and in
-    /// `ENTRY_BLOCK_LABELS` (pages/copy/format.js).
+    /// `ENTRY_BLOCK_LABELS` (ui/entry_block.js).
     fn block_label_key(block: &EntryBlock) -> &'static str {
         match block {
-            EntryBlock::ForceStopped => "copy-entry-block-force-stopped",
-            EntryBlock::LossLimit => "copy-entry-block-loss-limit",
-            EntryBlock::Connectivity(_) => "copy-entry-block-connectivity",
-            EntryBlock::StorageUnavailable(_) => "copy-entry-block-storage-unavailable",
-            EntryBlock::PositionLimit => "copy-entry-block-position-limit",
-            EntryBlock::AlreadyOpen => "copy-entry-block-already-open",
-            EntryBlock::ReentryCooldown => "copy-entry-block-reentry-cooldown",
-            EntryBlock::OpenCooldown { .. } => "copy-entry-block-open-cooldown",
-            EntryBlock::EntryReserved => "copy-entry-block-entry-reserved",
-            EntryBlock::Blacklisted => "copy-entry-block-blacklisted",
-            EntryBlock::PaperBalanceExhausted => "copy-entry-block-paper-balance-exhausted",
-            EntryBlock::CheckFailed(_) => "copy-entry-block-check-failed",
+            EntryBlock::ForceStopped => "trade-entry-block-force-stopped",
+            EntryBlock::LossLimit => "trade-entry-block-loss-limit",
+            EntryBlock::Connectivity(_) => "trade-entry-block-connectivity",
+            EntryBlock::StorageUnavailable(_) => "trade-entry-block-storage-unavailable",
+            EntryBlock::PositionLimit => "trade-entry-block-position-limit",
+            EntryBlock::AlreadyOpen => "trade-entry-block-already-open",
+            EntryBlock::ReentryCooldown => "trade-entry-block-reentry-cooldown",
+            EntryBlock::OpenCooldown { .. } => "trade-entry-block-open-cooldown",
+            EntryBlock::EntryReserved => "trade-entry-block-entry-reserved",
+            EntryBlock::Blacklisted => "trade-entry-block-blacklisted",
+            EntryBlock::PaperBalanceExhausted => "trade-entry-block-paper-balance-exhausted",
+            EntryBlock::CheckFailed(_) => "trade-entry-block-check-failed",
         }
     }
 
@@ -373,7 +373,7 @@ mod tests {
             let key = block_label_key(block);
             assert_eq!(
                 key,
-                format!("copy-entry-block-{}", id.replace('_', "-")),
+                format!("trade-entry-block-{}", id.replace('_', "-")),
                 "key does not follow the serialized id {id}"
             );
             assert_ne!(crate::i18n::format_en(key, None), key, "missing {key}");

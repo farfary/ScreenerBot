@@ -24,7 +24,6 @@ positions-paper-empty = No hay posiciones simuladas
 positions-paper-archived-empty = No hay posiciones simuladas archivadas
     .message = Las rondas simuladas quedan en Abiertas y Cerradas; solo se archivan las posiciones en vivo.
 positions-paper-empty-action = Abrir Estrategias
-positions-origin-copy = Copia
 positions-origin-manual = Manual
 positions-origin-wallet = Billetera
 positions-origin-copy-link =

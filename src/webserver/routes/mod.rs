@@ -15,6 +15,7 @@ pub mod assistant;
 pub mod auth;
 pub mod blacklist;
 pub mod boosts;
+pub mod chain_access;
 pub mod config;
 pub mod connectivity;
 pub mod copy_trading;
@@ -228,6 +229,7 @@ fn api_routes() -> Router<Arc<AppState>> {
         .merge(boosts::routes())
         .merge(token_profiles::routes())
         .merge(featured::routes())
+        .nest("/chain", chain_access::routes())
         .nest("/connectivity", connectivity::routes())
         .nest("/copy-trading", copy_trading::routes())
         .nest("/features", features::routes())

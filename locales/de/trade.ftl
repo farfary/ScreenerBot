@@ -167,5 +167,21 @@ trade-reason-synthetic-exit-permanent-failure = Synthetischer Ausstieg: dauerhaf
 trade-reason-pending-verification = { $reason } (Verifizierung ausstehend)
 trade-reason-force-closed = Zwangsgeschlossen: { $note }
 trade-reason-stored = { $reason }
+trade-reason-unknown = Nicht erfasst
+trade-reason-force-closed-any = Zwangsgeschlossen
+
+# Why a new entry was blocked. Ids come from EntryBlock in src/trader/admission.rs.
+trade-entry-block-force-stopped = Trading ist per Sofortstopp angehalten
+trade-entry-block-loss-limit = Verlustlimit blockiert neue Einstiege
+trade-entry-block-connectivity = Erforderliche Dienste sind nicht verfügbar
+trade-entry-block-storage-unavailable = Handelsdaten sind nicht verfügbar oder werden wiederhergestellt
+trade-entry-block-position-limit = Limit offener Positionen erreicht
+trade-entry-block-already-open = Eine Position ist bereits offen
+trade-entry-block-reentry-cooldown = Abkühlphase für erneuten Token-Einstieg
+trade-entry-block-open-cooldown = Globale Abkühlphase für Einstiege
+trade-entry-block-entry-reserved = Ein anderer Einstieg wird verarbeitet
+trade-entry-block-blacklisted = Token durch Risikokontrollen gesperrt
+trade-entry-block-paper-balance-exhausted = Paper-Guthaben deckt den Trade nicht
+trade-entry-block-check-failed = Eine Sicherheitsprüfung konnte nicht abgeschlossen werden
 
 trade-quick-no-token = Kein Token ausgewählt

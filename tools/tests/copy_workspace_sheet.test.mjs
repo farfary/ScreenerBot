@@ -42,7 +42,7 @@ const [copy, shell] = await Promise.all([loadIndex("copy"), loadIndex("shell")])
 
 /** The populated page with its paused, unnamed task selected. */
 /** The Overview results row: the grid right after the range heading, never the two-figure previous-results card. */
-const RESULTS_GRID = "#copy-ws-panel .copy-panel-head + .metric-grid";
+const RESULTS_GRID = "#copy-ws-panel .sheet-head + .metric-grid";
 
 async function openPausedTask(t, width, locale) {
   const overview = fixture("copy_overview.json");
@@ -76,7 +76,9 @@ async function openPausedTask(t, width, locale) {
   await page.goto(`${host.origin}/copy`);
   await page.waitForSelector(PAGE_READY);
   await page.locator(`#copy-list-rows [data-task-id="${paused.id}"]`).click();
-  await page.locator(`#copy-list-rows [data-task-id="${paused.id}"][aria-current="true"]`).waitFor();
+  await page
+    .locator(`#copy-list-rows [data-task-id="${paused.id}"][aria-current="true"]`)
+    .waitFor();
   await page.locator("#copy-ws-notices .notice").waitFor();
   await page.waitForFunction(
     (selector) => document.querySelectorAll(`${selector} .metric-card`).length === 8,

@@ -113,6 +113,7 @@ where
 }
 
 async fn attach_watch(task: CopyTask) -> Result<()> {
+    require_copy_watch(task.chain)?;
     watch::add_copy_source(task.id, &task.target_address, task.label.as_deref())
         .await
         .map(|_| ())
@@ -129,6 +130,13 @@ async fn detach_watch(task: CopyTask) -> Result<()> {
         })
 }
 
+/// `CapabilityUnavailable` when the chain access mode cannot watch another
+/// wallet: a copy task then keeps its settings but runs nothing.
+fn require_copy_watch(chain: crate::chains::ChainId) -> Result<()> {
+    crate::chains::access::require(chain, crate::chains::access::Capability::WatchOtherWallets)
+        .map_err(Error::from)
+}
+
 /// Create a task. New tasks always start in paper mode; arming live is a
 /// separate confirmed transition (`set_task_mode`).
 pub async fn create_task(input: CopyTaskInput) -> Result<CopyTask> {
@@ -136,6 +144,9 @@ pub async fn create_task(input: CopyTaskInput) -> Result<CopyTask> {
     let task = input
         .into_task(db.chain(), Utc::now(), ExitPolicy::from_config())
         .map_err(|reason| Error::CopyTaskRejected { reason })?;
+    if task.enabled {
+        require_copy_watch(task.chain)?;
+    }
     crate::chains::adapter_for(task.chain)
         .validate_address(&task.target_address)
         .map_err(|e| Error::CopyWatchRejected {

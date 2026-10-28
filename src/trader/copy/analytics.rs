@@ -4,7 +4,7 @@
 //! Pure copy-trading analytics and latency policy.
 
 use crate::positions::{Book, Position, PositionOrigin};
-use crate::trader::types::TradeReason;
+use crate::trader::TradeReason;
 
 use super::types::{
     ArrivalDistanceStats, CopyActivityRow, CopyBook, CopyOutcome, CopyTaskStats, CopyTelemetry,

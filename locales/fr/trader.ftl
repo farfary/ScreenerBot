@@ -1,15 +1,3 @@
-trader-exit-type-stop-loss = Stop loss
-trader-exit-type-take-profit = Take profit
-trader-exit-type-roi = Take profit
-trader-exit-type-roi-exit = Take profit
-trader-exit-type-trailing-stop = Trailing stop
-trader-exit-type-time-override = Sortie temporelle
-trader-exit-type-time-rule = Règle temporelle
-trader-exit-type-manual = Manuelle
-trader-exit-type-manual-close = Manuelle
-trader-exit-type-dca = DCA
-trader-exit-type-unknown = Inconnue
-
 trader-tab-stats = Statistiques
 trader-tab-strategies = Stratégies
 trader-tab-stop-loss = Stop loss
@@ -26,32 +14,41 @@ trader-feature-disabled = Désactivée
     .message = Cette fonctionnalité est actuellement désactivée.
 
 trader-status-title = Auto Trader
-trader-status-loading = Chargement...
 trader-status-running = En marche
 trader-status-stopped = Arrêté
 trader-status-setup-required = Configuration requise
 trader-setup-action = Terminer la configuration
-trader-toggle-on = ON
-trader-toggle-off = OFF
 trader-toggle-start-failed = Impossible de démarrer le trader
 trader-toggle-stop-failed = Impossible d'arrêter le trader
-trader-controls-title = Contrôles de trading
 trader-halt-title = Trading suspendu
 trader-halt-reason-default = Arrêt forcé manuel
 trader-halt-resume = Reprendre
 trader-monitor-entry = Moniteur d'entrée
 trader-monitor-exit = Moniteur de sortie
-trader-monitor-master-off = Auto Trader désactivé
 trader-loss-limit-title = Limite de perte par période
 trader-loss-limit-resume = Reprendre le trading
 trader-loss-limit-reset = Réinitialiser la période
 trader-loss-limit-off = Désactivée
-trader-loss-limit-none = Aucune limite de perte par période configurée
 trader-loss-limit-resets-in = Réinitialisation dans { $hours } { $minutes }
-trader-loss-limit-reached = LIMITE ATTEINTE
 trader-force-stop = Tout arrêter de force
 trader-force-stop-hint = Arrête d’un coup tous les moniteurs, tâches de copie et trades.
 trader-force-stop-idle = Rien ne tourne qu’un arrêt forcé pourrait interrompre.
+trader-run-state-force-stopped = Arrêt forcé
+trader-run-state-waiting = En attente des services
+trader-run-state-idle = Moniteurs arrêtés
+trader-entries-label = Nouvelles entrées
+trader-entries-open = Ouvertes
+trader-entries-monitor-off = Moniteur d'entrée arrêté
+trader-entries-no-live-strategy = Aucune stratégie d'entrée réelle
+trader-entries-no-paper-strategy = Aucune stratégie d'entrée simulée
+trader-action-start = Démarrer l'Auto Trader
+trader-action-stop = Arrêter l'Auto Trader
+trader-notice-loss-limit = Limite de pertes atteinte
+trader-notice-loss-limit-message = Les nouvelles entrées réelles sont en pause jusqu'à la réinitialisation de la période. Les sorties continuent.
+trader-notice-stats-failed = Impossible de charger les statistiques
+trader-controls-group =
+    .aria-label = Commandes de trading
+trader-monitor-dormant = Démarre avec l'Auto Trader
 
 trader-force-stop-confirm = Arrêt forcé du trading
     .message = Cette action suspend immédiatement TOUTES les opérations de trading. Continuer ?
@@ -83,27 +80,35 @@ trader-stats-window =
     .aria-label = Période des statistiques
 trader-stats-book =
     .aria-label = Registre de trading
-trader-paper-run-since = Session simulée depuis le { $date }
-trader-paper-start = Départ
-trader-paper-cash = Liquidités
-trader-paper-open = Ouvert
-trader-paper-unrealized = Latent
+trader-exposure-cash = Liquidités
+trader-exposure-open = Ouvert
+trader-exposure-unrealized = Latent
+trader-exposure-open-title = Positions qui occupent un emplacement, sur la limite de positions ouvertes
+trader-exposure-in-use = Engagé
+trader-exposure-in-use-title = { -sol } engagés dans les positions ouvertes
+# $amount is the formatted count.
+trader-exposure-unpriced =
+    { $count ->
+        [one] { $amount } position ouverte n'a pas encore de prix en direct
+        [many] { $amount } positions ouvertes n'ont pas encore de prix en direct
+       *[other] { $amount } positions ouvertes n'ont pas encore de prix en direct
+    }
+# $date is a formatted date; $amount is a formatted SOL amount.
+trader-exposure-cash-title = Session simulée depuis le { $date } · démarrée avec { $amount }
 trader-paper-reset = Réinitialiser la session simulée
 trader-paper-reset-title = Réinitialiser la session simulée ?
 trader-paper-reset-run-message = Chaque position simulée ouverte, y compris les détentions simulées des tâches de copie, est clôturée à son prix actuel et une nouvelle session démarre avec le solde initial configuré. Les sessions précédentes restent dans l'historique.
 trader-paper-reset-done = Une nouvelle session simulée a démarré
 trader-paper-reset-failed = Impossible de réinitialiser la session simulée
-trader-paper-account-failed = Impossible de charger la session simulée
 trader-realized-title = Performance réalisée
 trader-metric-net-pnl = P&L net
 trader-metric-win-rate = Taux de réussite
 trader-metric-profit-factor = Facteur de profit
 trader-metric-max-drawdown = Drawdown max
-trader-metric-capital = Capital engagé
 trader-metric-avg-win-loss = Gain / perte moy.
 trader-metric-closed-trades = Trades clôturés
 trader-metric-median-hold = Durée médiane de détention
-trader-stats-empty = Aucun trade clôturé sur cette période
+trader-metric-fees = Frais de réseau
 trader-stats-won-lost = { $won } gagnés · { $lost } perdus
 trader-stats-record = { $wins } · { $losses }
 trader-stats-wins =
@@ -121,55 +126,94 @@ trader-stats-losses =
 trader-stats-expected = { $amount } attendus par trade
 trader-stats-profit-factor-basis = Gains bruts ÷ pertes brutes
 trader-stats-drawdown-basis = Plus forte baisse réalisée du pic au creux
-trader-stats-slots =
-    { $count ->
-        [one] { $used } emplacement de position utilisé sur { $max }
-        [many] { $used } emplacements de position utilisés sur { $max }
-       *[other] { $used } emplacements de position utilisés sur { $max }
-    }
-trader-stats-avg-basis = Résultat moyen d'un trade gagnant par rapport à un trade perdant
-trader-stats-closed =
-    { $count ->
-        [one] { $amount } position clôturée
-        [many] { $amount } positions clôturées
-       *[other] { $amount } positions clôturées
-    }
-trader-stats-hold-average = { $span } en moyenne
 trader-stats-excluded =
     { $count ->
-        [one] { $amount } cycle clôturé exclu : prix de revient incomplet, donc pas de P&L fiable.
-        [many] { $amount } cycles clôturés exclus : prix de revient incomplet, donc pas de P&L fiable.
-       *[other] { $amount } cycles clôturés exclus : prix de revient incomplet, donc pas de P&L fiable.
+        [one] { $amount } trade clôturé est exclu : son prix de revient est incomplet, son P&L est donc inconnu.
+        [many] { $amount } trades clôturés sont exclus : leur prix de revient est incomplet, leur P&L est donc inconnu.
+       *[other] { $amount } trades clôturés sont exclus : leur prix de revient est incomplet, leur P&L est donc inconnu.
     }
+# $ratio is a formatted ratio.
+trader-stats-payoff = Payoff { $ratio }
+trader-stats-streak-win =
+    { $count ->
+        [one] Dernier trade gagnant
+        [many] { $amount } gains d'affilée
+       *[other] { $amount } gains d'affilée
+    }
+trader-stats-streak-loss =
+    { $count ->
+        [one] Dernier trade perdant
+        [many] { $amount } pertes d'affilée
+       *[other] { $amount } pertes d'affilée
+    }
+# $wins and $losses are formatted durations.
+trader-stats-hold-split = Gains { $wins } · pertes { $losses }
+trader-stats-fees-basis = Inclus dans le P&L net
+trader-stats-loading = Chargement des statistiques...
+trader-open-strategies = Ouvrir les stratégies
 
 trader-daily-title = P&L quotidien
 trader-daily-subtitle = { -sol } réalisés par jour, avec le cumul
-trader-daily-loading = Chargement du P&L quotidien...
 trader-daily-chart = Profits et pertes réalisés par jour en { -sol }
 trader-weekly-title = P&L hebdomadaire
 trader-weekly-subtitle = { -sol } réalisés par semaine ISO, avec le cumul
 trader-weekly-chart = Profits et pertes réalisés par semaine en { -sol }
+# $date is a formatted date; $pnl a signed SOL amount.
+trader-daily-bar =
+    { $count ->
+        [one] { $date } · { $pnl } · { $amount } trade
+        [many] { $date } · { $pnl } · { $amount } trades
+       *[other] { $date } · { $pnl } · { $amount } trades
+    }
+trader-weekly-bar =
+    { $count ->
+        [one] Semaine du { $date } · { $pnl } · { $amount } trade
+        [many] Semaine du { $date } · { $pnl } · { $amount } trades
+       *[other] Semaine du { $date } · { $pnl } · { $amount } trades
+    }
 trader-extreme-best = Meilleur trade
 trader-extreme-worst = Pire trade
+trader-extreme-runs = Plus longues séries consécutives
+trader-outcome-title = Résultats des trades
+trader-outcome-subtitle = Trades clôturés par rendement, en pourcentage
+# $value, $from and $to are formatted signed percentages.
+trader-outcome-below = Moins de { $value }
+trader-outcome-range = De { $from } à { $to }
+trader-outcome-above = { $value } ou plus
+# $range is one of the three messages above; $pnl a signed SOL amount.
+trader-outcome-bucket =
+    { $count ->
+        [one] { $range } · { $amount } trade · { $pnl }
+        [many] { $range } · { $amount } trades · { $pnl }
+       *[other] { $range } · { $amount } trades · { $pnl }
+    }
 
-trader-exit-title = Répartition des stratégies de sortie
-trader-exit-subtitle = Comment les positions ont été clôturées et ce que chaque sortie a rapporté
-trader-exit-loading = Chargement des données de sortie...
-trader-exit-empty-day = Aucun trade clôturé au cours des dernières 24 heures
-trader-exit-empty-all = Aucun trade clôturé pour l’instant
-trader-exit-empty-days =
+trader-stats-empty-day = Aucun trade clôturé au cours des dernières 24 heures
+trader-stats-empty-all = Aucun trade clôturé pour l’instant
+trader-stats-empty-hint = Les trades clôturés apparaissent ici dès qu'une position est vendue. Démarrez l'Auto Trader ou choisissez une période plus longue.
+trader-stats-empty-days =
     { $count ->
         [one] Aucun trade clôturé au cours du dernier jour ({ $amount })
         [many] Aucun trade clôturé au cours des { $amount } derniers jours
        *[other] Aucun trade clôturé au cours des { $amount } derniers jours
     }
-trader-exit-share =
-    { $count ->
-        [one] { $amount } trade · { $share } des sorties
-        [many] { $amount } trades · { $share } des sorties
-       *[other] { $amount } trades · { $share } des sorties
-    }
-trader-exit-average = { $value } en moy.
+trader-exits-title = Motifs de sortie
+trader-exits-subtitle = Comment les trades clôturés se sont terminés, et ce que chaque sortie a rapporté
+trader-sources-title = Sources d'entrée
+trader-sources-subtitle = Ce qui a ouvert les trades clôturés
+trader-recent-title = Clôtures récentes
+trader-recent-subtitle = Les derniers trades clôturés sur cette période
+trader-column-token = Token
+trader-column-exit = Sortie
+trader-column-source = Source
+trader-column-trades = Trades
+trader-column-win-rate = Taux de réussite
+trader-column-avg-return = Rend. moyen
+trader-column-net-pnl = P&L net
+trader-column-held = Détenu
+trader-column-closed = Clôturé
+trader-column-pnl = P&L
+trader-column-return = Rendement
 
 trader-example-how-it-works = Fonctionnement
 trader-step-entry = Entrée
@@ -367,3 +411,8 @@ trader-timing-concurrency = Concurrence des vérifications d'entrée
 trader-timing-concurrency-hint = Nombre de tokens vérifiés simultanément (plus élevé = plus rapide mais plus de CPU)
 trader-timing-unit-minutes = min
 trader-timing-unit-tokens = tokens
+
+## Service mode notice
+
+trader-service-notice-title = Fonctionne sur le service { -brand }
+trader-service-notice-message = Les prix se mettent à jour toutes les quelques secondes, donc les sorties rapides comme les trailing stops serrés réagissent plus tard qu’avec votre propre RPC.

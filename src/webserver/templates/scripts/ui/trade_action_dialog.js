@@ -6,14 +6,20 @@
 import { on, off } from "../core/dom.js";
 import * as Utils from "../core/utils.js";
 import { createFocusTrap } from "../core/utils.js";
-import { formatFixed, formatPercentValue, formatSol, withPercentUnit, withSolUnit } from "../core/format.js";
+import {
+  formatFixed,
+  formatPercentValue,
+  formatSol,
+  withPercentUnit,
+  withSolUnit,
+} from "../core/format.js";
 import { pushEscapeHandler } from "../core/escape_stack.js";
 import * as Hints from "../core/hints.js";
 import { HintTrigger } from "./hint_popover.js";
 import { applyQuickTradeMixin } from "./trade_action/quick_trade.js";
 import { applyQuoteManagerMixin } from "./trade_action/quote_manager.js";
 import { fetchMainWalletAddress, needsFunding, renderFundingNotice } from "./funding_notice.js";
-import { renderSetupGate } from "./setup_gate.js";
+import { renderAccessGate } from "./access_gate.js";
 import { renderNotice } from "./notice.js";
 import { renderSegmented, setSegmentedValue } from "./segmented.js";
 import { ConfirmationDialog } from "./confirmation_dialog.js";
@@ -280,7 +286,8 @@ export class TradeActionDialog {
                   name: "trade-slippage",
                   options: SLIPPAGE_PRESETS.map((value) => ({
                     value,
-                    label: value === "auto" ? I18n.t("trade-slippage-auto") : withPercentUnit(value),
+                    label:
+                      value === "auto" ? I18n.t("trade-slippage-auto") : withPercentUnit(value),
                   })),
                   value: "auto",
                   ariaLabel: I18n.attr("trade-slippage-presets", "aria-label"),
@@ -1026,8 +1033,7 @@ export class TradeActionDialog {
     }
 
     if (action === "buy" || action === "add") {
-      const balance =
-        context.balance != null ? formatFixed(context.balance, { decimals: 4 }) : "—";
+      const balance = context.balance != null ? formatFixed(context.balance, { decimals: 4 }) : "—";
       const balanceClass = context.balance != null && context.balance < 0.01 ? "low-balance" : "";
       rows.push(`
         <div class="trade-action-context-item">
@@ -1083,7 +1089,7 @@ export class TradeActionDialog {
     `;
     if (setup) {
       const gate = this.contextEl.querySelector(".trade-action-setup");
-      renderSetupGate(gate, I18n.t("trade-setup-required-title"));
+      renderAccessGate(gate, I18n.t("trade-setup-required-title"));
       // The setup dialog replaces this one rather than stacking over it.
       on(gate.querySelector(".state-view-action"), "click", () => {
         this._resolveOpen?.(null);

@@ -46,16 +46,19 @@ const traderPage = await loadIndex("trader");
 
 /**
  * A dashboard whose trader is on (`enabled`) or off, recording every control request.
+ * The trader status follows the last start or stop it answered.
  */
 async function openDashboard({ enabled, page = "home" }) {
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   const api = createApiHandler(page === "trader" ? [traderPage, shell] : [shell], "populated");
   const controls = [];
+  let traderOn = enabled;
   const onApi = (request) => {
     const { pathname } = request.url;
     if (request.method === "POST" && CONTROL_ENDPOINT.test(pathname)) {
       controls.push(pathname);
       const running = pathname.endsWith("/start");
+      traderOn = running;
       return {
         body: JSON.stringify({ success: true, status: { enabled: running, running } }),
       };
@@ -69,7 +72,16 @@ async function openDashboard({ enabled, page = "home" }) {
       };
     }
     if (pathname === "/api/trader/status") {
-      return { body: JSON.stringify({ enabled, running: enabled, available: true }) };
+      return {
+        body: JSON.stringify({
+          enabled: traderOn,
+          running: traderOn,
+          available: true,
+          run_state: traderOn ? "running" : "stopped",
+          live_entry_idle: null,
+          paper_entry_idle: null,
+        }),
+      };
     }
     if (pathname === "/api/wallets/main") {
       return { body: JSON.stringify({ id: 1, name: "Main", address: WALLET }) };
@@ -138,30 +150,35 @@ test("the header stops the trader at once, without a dialog", async () => {
   }
 });
 
-test("the Trader page switch stays off while the start is being confirmed", async () => {
+test("the Trader page action offers the start until the start is confirmed", async () => {
   const { tab, controls, close } = await openDashboard({ enabled: false, page: "trader" });
   try {
-    const toggle = tab.locator("#stats-trader-toggle:not([disabled])");
-    await toggle.waitFor({ state: "attached" });
-    await tab.locator("#trader-status-bar .toggle").click();
+    const action = tab.locator("#stats-trader-action");
+    const start = tab.locator("#stats-trader-action:not([hidden]):not([disabled])", {
+      hasText: "Start Auto Trader",
+    });
+    await start.waitFor();
+    await action.click();
 
     const dialog = tab.locator(".confirmation-dialog");
     await dialog.waitFor();
-    assert.equal(await toggle.isChecked(), false);
+    assert.equal((await action.textContent()).trim(), "Start Auto Trader");
 
     await dialog.locator('[data-action="cancel"]').click();
     await dialog.waitFor({ state: "detached" });
-    assert.equal(await toggle.isChecked(), false);
+    await start.waitFor();
     assert.deepEqual(controls, []);
 
-    await tab.locator("#trader-status-bar .toggle").click();
+    await action.click();
     await dialog.locator('[data-action="confirm"]').click();
     await assertEventually(() => assert.deepEqual(controls, ["/api/trader/start"]));
-    await tab.waitForFunction(
-      () => document.querySelector("#stats-trader-toggle")?.checked === true
-    );
+    await tab
+      .locator("#stats-trader-action:not([hidden]):not([disabled])", {
+        hasText: "Stop Auto Trader",
+      })
+      .waitFor();
 
-    await tab.locator("#trader-status-bar .toggle").click();
+    await action.click();
     await assertEventually(() =>
       assert.deepEqual(controls, ["/api/trader/start", "/api/trader/stop"])
     );

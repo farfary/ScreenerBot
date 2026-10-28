@@ -59,6 +59,11 @@ pub enum ProbeFailure {
     InternetDnsFailed { detail: String },
     /// Both the DNS and the HTTP reachability checks failed.
     InternetChecksFailed { dns: String, http: String },
+    /// Chain access through the ScreenerBot service is not usable; the state
+    /// says why.
+    ChainAccess {
+        state: crate::chains::access::ServiceState,
+    },
     /// A failure was reported without a reason.
     Unknown,
 }
@@ -101,6 +106,7 @@ impl ProbeFailure {
                     .arg("dns", text(dns))
                     .arg("http", text(http))
             }
+            Self::ChainAccess { state } => state.ui_text(),
             Self::Unknown => UiText::new(ids::CONNECTIVITY_PROBE_UNKNOWN),
         }
     }
@@ -251,6 +257,7 @@ mod tests {
             | ProbeFailure::RpcAllUnreachable { .. }
             | ProbeFailure::InternetDnsFailed { .. }
             | ProbeFailure::InternetChecksFailed { .. }
+            | ProbeFailure::ChainAccess { .. }
             | ProbeFailure::Unknown => failure,
         };
         vec![
@@ -301,6 +308,12 @@ mod tests {
                     http: "http down".to_owned(),
                 },
                 "DNS and HTTP checks failed. DNS: dns down. HTTP: http down",
+            ),
+            (
+                ProbeFailure::ChainAccess {
+                    state: crate::chains::access::ServiceState::SignInRequired,
+                },
+                "Trading paused · Signed out",
             ),
             (ProbeFailure::Unknown, "Unknown error"),
         ]

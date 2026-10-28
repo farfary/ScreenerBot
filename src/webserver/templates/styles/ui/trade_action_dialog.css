@@ -243,7 +243,7 @@ body.trade-action-dialog-open {
 }
 
 /* The funding notice (ui/funding_notice.js) under the balance of a wallet without SOL,
-   and the Explore Mode setup notice (ui/setup_gate.js) in its place. */
+   and the Explore Mode access gate (ui/access_gate.js) in its place. */
 .trade-action-funding,
 .trade-action-setup {
   padding: 0 var(--spacing-md) var(--spacing-md);

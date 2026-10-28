@@ -3,7 +3,7 @@
 # src/data_server/access.rs.
 
 account-data-access-ready = بيانات { -brand } نشطة
-    .detail = تُقدَّم الشموع المشتركة وسجل مجمعات السيولة وتقارير الأمان وهوية الرموز من screenerbot.io.
+    .detail = تُحمَّل المخططات وبيانات مجمعات السيولة وتقارير الأمان من screenerbot.io.
 
 account-data-access-disabled = بيانات { -brand } متوقفة
     .detail = مصدر { -brand } متوقف في إعداداتك، لذا تأتي البيانات من المزوّدين العامين فقط.
@@ -12,7 +12,7 @@ account-data-access-offline = بيانات { -brand } غير متصلة
     .detail = لا يوجد اتصال بالشبكة. ستُستأنف البيانات تلقائيًا عند عودة الاتصال.
 
 account-data-access-signed-out = بيانات { -brand } تتطلب حسابًا
-    .detail = تأتي المخططات ومجمعات السيولة وتقارير الأمان وهوية الرموز من المزوّدين العامين بدلًا من ذلك. وهي أبطأ ومحدودة المعدل وأقل عمقًا في السجل التاريخي. تسجيل الدخول مجاني ولا يغيّر أي شيء آخر في طريقة عمل { -brand }.
+    .detail = تأتي المخططات ومجمعات السيولة وتقارير الأمان من المزوّدين العامين بدلًا من ذلك. وهي أبطأ ومحدودة المعدل وأقل عمقًا في السجل التاريخي. تسجيل الدخول مجاني ولا يغيّر أي شيء آخر في طريقة عمل { -brand }.
 
 account-data-access-reauthorization-required = بيانات { -brand } تتطلب تسجيل الدخول مرة أخرى
     .detail = تم ترخيص هذا الجهاز قبل وجود بيانات { -brand }. سجّل الدخول مرة أخرى لاستعادتها — يُستخدم المزوّدون العامون حتى ذلك الحين.
@@ -24,16 +24,17 @@ account-data-access-unreachable = بيانات { -brand } لا تستجيب
     .detail = لم تجب الخدمة. يُستخدم المزوّدون العامون، وسيواصل { -brand } إعادة المحاولة.
 
 account-data-access-unknown = لم يتم فحص بيانات { -brand } بعد
-    .detail = لم يحتج { -brand } إلى البيانات المشتركة بعد في هذه الجلسة.
+    .detail = لم يحمّل { -brand } هذه البيانات بعد في هذه الجلسة.
 
 ## Account panel (ui/account/panel.js), shared by Setup and Settings
 
 # Features a signed-in account carries.
 account-scope-data-read = بيانات سوق { -brand }
-account-scope-rpc-submit = إرسال المعاملات الموقّعة مجانًا
+account-scope-rpc-submit = إرسال المعاملات عبر { -brand }
 account-scope-vote = التصويت على الرموز
 account-scope-referral-read = أرباح الإحالة
 account-scope-account-read = تفاصيل الحساب
+account-scope-chain-read = قراءات المحفظة لخدمة { -brand }
 
 account-panel-request-failed = لم تنجح العملية. يرجى المحاولة مرة أخرى.
 account-panel-checking = جارٍ فحص حالة الحساب…

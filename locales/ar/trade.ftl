@@ -152,7 +152,7 @@ trade-toast-failed-add = فشلت الإضافة إلى المركز
 trade-toast-failed-sell = فشل البيع
 
 # Trade and close reasons. Ids are the Debug names of TradeReason
-# (src/trader/types.rs) and the reasons written by src/positions.
+# (src/trader/trade_reason.rs) and the reasons written by src/positions.
 trade-reason-strategy-signal = إشارة استراتيجية
 trade-reason-manual-entry = دخول يدوي
 trade-reason-force-buy = شراء قسري
@@ -183,6 +183,22 @@ trade-reason-pending-verification = { $reason } (بانتظار التحقق)
 trade-reason-force-closed = إغلاق قسري: { $note }
 # $reason is a stored closed_reason that has no label; it is shown as stored.
 trade-reason-stored = { $reason }
+trade-reason-unknown = غير مسجّل
+trade-reason-force-closed-any = إغلاق قسري
+
+# Why a new entry was blocked. Ids come from EntryBlock in src/trader/admission.rs.
+trade-entry-block-force-stopped = التداول في إيقاف قسري
+trade-entry-block-loss-limit = حد الخسارة يمنع عمليات الدخول الجديدة
+trade-entry-block-connectivity = الخدمات المطلوبة غير متاحة
+trade-entry-block-storage-unavailable = بيانات التداول غير متاحة أو قيد الاستعادة
+trade-entry-block-position-limit = تم بلوغ حد المراكز المفتوحة
+trade-entry-block-already-open = يوجد مركز مفتوح بالفعل
+trade-entry-block-reentry-cooldown = فترة تهدئة إعادة دخول الرمز
+trade-entry-block-open-cooldown = فترة تهدئة الدخول العامة
+trade-entry-block-entry-reserved = دخول آخر قيد المعالجة
+trade-entry-block-blacklisted = الرمز محظور بموجب ضوابط المخاطر
+trade-entry-block-paper-balance-exhausted = الرصيد التجريبي لا يغطي الصفقة
+trade-entry-block-check-failed = تعذّر إكمال فحص أمان
 
 # Toast shown when a quick-trade shortcut runs without a token selected (ui/quick_trade_shortcuts.js).
 trade-quick-no-token = لم يتم اختيار رمز

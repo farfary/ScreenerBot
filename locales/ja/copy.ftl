@@ -38,19 +38,6 @@ copy-skip-swap-mixed-quote = SOLとステーブルコインの両方で支払わ
 copy-skip-swap-multiple-tokens = 1つのトランザクションで複数のトークンが取引されました
 copy-skip-swap-unreadable = 取引金額を読み取れませんでした
 
-copy-entry-block-force-stopped = 取引は強制停止されています
-copy-entry-block-loss-limit = 損失上限により新規エントリーがブロックされています
-copy-entry-block-connectivity = 必要なサービスが利用できません
-copy-entry-block-storage-unavailable = 取引データが利用できないか、復元中です
-copy-entry-block-position-limit = オープンポジションの上限に達しました
-copy-entry-block-already-open = ポジションはすでにオープンしています
-copy-entry-block-reentry-cooldown = トークン再エントリーのクールダウン
-copy-entry-block-open-cooldown = 全体のエントリークールダウン
-copy-entry-block-entry-reserved = 別のエントリーを処理中です
-copy-entry-block-blacklisted = トークンはリスク管理によりブロックされています
-copy-entry-block-paper-balance-exhausted = ペーパー残高が取引に足りません
-copy-entry-block-check-failed = 安全性チェックを完了できませんでした
-
 copy-pause-user = ユーザーが一時停止
 copy-pause-latency-kill-switch = 自動一時停止: 取引の到着が平均 { $average }秒遅れました（上限 { $threshold }秒）
 copy-pause-watch-detached = 自動一時停止: ウォレットのウォッチが外れました
@@ -89,6 +76,7 @@ copy-live-block-copy-trading-disabled = コピー処理が全体で一時停止�
 copy-state-system-paused = 全体で一時停止中
 copy-state-force-stopped = 強制停止
 copy-state-entries-blocked = エントリーをブロック中
+copy-state-own-rpc-required = 独自の RPC が必要
 copy-state-running-live = 実行中
 copy-state-running-paper = 実行中
 copy-exit-mode-buy-only = 自分のエグジットルール
@@ -162,6 +150,7 @@ copy-status-force-stopped = 強制停止
 copy-status-loss-limit = 損失上限
 copy-status-all-paused = 全タスク一時停止中
 copy-status-processing = 処理中
+copy-status-own-rpc-required = 独自の RPC が必要
 copy-toolbar-pause = コピーを一時停止
 copy-toolbar-resume = コピーを再開
 copy-toolbar-resume-tasks = すべてのタスクを再開
@@ -310,6 +299,7 @@ copy-state-detail-paper = ペーパーで実行中 · 取引はシミュレー�
 copy-state-detail-live = ライブで実行中 · ウォレットの取引を実際のスワップでコピーします
 copy-state-detail-system-paused = 待機中 · コピー処理は全体で一時停止中、エグジットは実行
 copy-state-detail-entries-blocked = 損失上限によりエントリーをブロック中 · エグジットは実行
+copy-state-detail-own-rpc-required = 待機中 · { -brand } サービスは他のウォレットを追跡しません。再開するには RPC を追加してください
 copy-state-detail-force-stopped = 強制停止 · コピーは行われません
 
 copy-paused-since = { $reason } · { $since }
@@ -562,13 +552,11 @@ copy-table-target-difference = 対象価格との差の中央値
 
 ## Charts
 
-copy-chart-curve-label = 累積損益 { $amount } { -sol }
 copy-chart-compare-label = タスク別の累積損益
 copy-chart-empty-curve = この期間にクローズ済みのラウンドはまだありません。
 copy-chart-empty-bars = この期間に記録はありません。
 copy-chart-empty-histogram = この期間に到着サンプルはありません。
 copy-chart-empty-compare = この期間に比較できるクローズ済みラウンドはありません。
-copy-chart-histogram-title = { $count }/{ $total }
 
 ## Wallet profile
 

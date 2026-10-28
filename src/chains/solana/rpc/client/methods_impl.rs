@@ -212,48 +212,11 @@ impl RpcClientMethods for RpcClient {
         &self,
         commitment: CommitmentLevel,
     ) -> crate::Result<(Hash, u64)> {
-        let params = serde_json::json!([{
-            "commitment": commitment_to_string(commitment)
-        }]);
-
         let result = self
             .manager
-            .execute_raw("getLatestBlockhash", params)
+            .execute_raw("getLatestBlockhash", latest_blockhash_params(commitment))
             .await?;
-
-        let value = result.get("value").ok_or_else(|| {
-            crate::Error::Data(crate::errors::DataError::ParseError {
-                data_type: "response".to_string(),
-                error: "missing value field".to_string(),
-            })
-        })?;
-        let blockhash = value
-            .get("blockhash")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| {
-                crate::Error::Data(crate::errors::DataError::ParseError {
-                    data_type: "blockhash".to_string(),
-                    error: "missing blockhash field".to_string(),
-                })
-            })?;
-        let last_valid_block_height = value
-            .get("lastValidBlockHeight")
-            .and_then(|v| v.as_u64())
-            .ok_or_else(|| {
-                crate::Error::Data(crate::errors::DataError::ParseError {
-                    data_type: "blockhash".to_string(),
-                    error: "missing lastValidBlockHeight".to_string(),
-                })
-            })?;
-
-        let hash = Hash::from_str(blockhash).map_err(|e| {
-            crate::Error::Data(crate::errors::DataError::ParseError {
-                data_type: "blockhash".to_string(),
-                error: format!("Invalid hash \'{blockhash}\': {e}"),
-            })
-        })?;
-
-        Ok((hash, last_valid_block_height))
+        parse_latest_blockhash(&result)
     }
 
     async fn get_block_height(&self) -> crate::Result<u64> {
@@ -320,79 +283,25 @@ impl RpcClientMethods for RpcClient {
         &self,
         transaction: &VersionedTransaction,
     ) -> crate::Result<Signature> {
-        // Serialize transaction
-        let tx_bytes = bincode::serialize(transaction).map_err(|e| {
-            crate::Error::Data(crate::errors::DataError::ParseError {
-                data_type: "transaction".to_string(),
-                error: format!("Failed to serialize: {e}"),
-            })
-        })?;
-        let tx_base64 = base64::engine::general_purpose::STANDARD.encode(&tx_bytes);
-
-        let params = serde_json::json!([
-            tx_base64,
-            {
-                "encoding": "base64",
-                "skipPreflight": false,
-                "preflightCommitment": "confirmed",
-                "maxRetries": 3
-            }
-        ]);
-
-        let result = self.manager.execute_raw("sendTransaction", params).await?;
-
-        let sig_str = result.as_str().ok_or_else(|| {
-            crate::Error::Data(crate::errors::DataError::ParseError {
-                data_type: "signature".to_string(),
-                error: "invalid response format".to_string(),
-            })
-        })?;
-
-        Signature::from_str(sig_str).map_err(|e| {
-            crate::Error::Data(crate::errors::DataError::ParseError {
-                data_type: "signature".to_string(),
-                error: format!("Invalid signature \'{sig_str}\': {e}"),
-            })
-        })
+        let result = self
+            .manager
+            .execute_raw("sendTransaction", send_transaction_params(transaction)?)
+            .await?;
+        parse_sent_signature(&result)
     }
 
     async fn simulate_transaction(
         &self,
         transaction: &VersionedTransaction,
     ) -> crate::Result<SimulationOutcome> {
-        let tx_bytes = bincode::serialize(transaction).map_err(|e| {
-            crate::Error::Data(crate::errors::DataError::ParseError {
-                data_type: "transaction".to_string(),
-                error: format!("Failed to serialize: {e}"),
-            })
-        })?;
-        let tx_base64 = base64::engine::general_purpose::STANDARD.encode(&tx_bytes);
-
-        // `sigVerify: false` with `replaceRecentBlockhash: true` lets a preflight
-        // run even when the blockhash has aged out between build and simulate --
-        // the point here is whether the INSTRUCTIONS are correct, not whether this
-        // exact blockhash is still current.
-        // `innerInstructions` is what makes the run auditable: the CPIs a
-        // third-party route performs -- including any account it funds out of the
-        // wallet -- are invisible in the transaction's own message when the route
-        // builds them, and invisible in the quote entirely.
-        let params = serde_json::json!([
-            tx_base64,
-            {
-                "encoding": "base64",
-                "commitment": "confirmed",
-                "sigVerify": false,
-                "replaceRecentBlockhash": true,
-                "innerInstructions": true
-            }
-        ]);
-
         let result = self
             .manager
-            .execute_raw("simulateTransaction", params)
+            .execute_raw(
+                "simulateTransaction",
+                simulate_transaction_params(transaction)?,
+            )
             .await?;
-
-        Ok(simulation_outcome(result.get("value").unwrap_or(&result)))
+        Ok(parse_simulation(&result))
     }
 
     async fn get_transaction(
@@ -429,47 +338,14 @@ impl RpcClientMethods for RpcClient {
         &self,
         signatures: &[Signature],
     ) -> crate::Result<(u64, Vec<Option<TransactionStatus>>)> {
-        let sig_strings: Vec<String> = signatures.iter().map(|s| s.to_string()).collect();
-        let params = serde_json::json!([sig_strings, { "searchTransactionHistory": true }]);
-
         let result = self
             .manager
-            .execute_raw("getSignatureStatuses", params)
+            .execute_raw(
+                "getSignatureStatuses",
+                signature_statuses_params(signatures),
+            )
             .await?;
-
-        let invalid = || {
-            crate::Error::Data(crate::errors::DataError::ParseError {
-                data_type: "response".to_string(),
-                error: "invalid format".to_string(),
-            })
-        };
-        let slot = result
-            .get("context")
-            .and_then(|context| context.get("slot"))
-            .and_then(|slot| slot.as_u64())
-            .ok_or_else(invalid)?;
-        let values = result
-            .get("value")
-            .and_then(|v| v.as_array())
-            .ok_or_else(invalid)?;
-
-        let mut statuses = Vec::with_capacity(values.len());
-        for value in values {
-            if value.is_null() {
-                statuses.push(None);
-            } else {
-                let status: TransactionStatus =
-                    serde_json::from_value(value.clone()).map_err(|e| {
-                        crate::Error::Data(crate::errors::DataError::ParseError {
-                            data_type: "TransactionStatus".to_owned(),
-                            error: e.to_string(),
-                        })
-                    })?;
-                statuses.push(Some(status));
-            }
-        }
-
-        Ok((slot, statuses))
+        parse_signature_statuses(&result)
     }
 
     async fn get_token_accounts_by_owner(
@@ -1325,6 +1201,168 @@ fn simulation_outcome(value: &serde_json::Value) -> SimulationOutcome {
         post_token_balances: field(value, "postTokenBalances"),
         loaded_addresses: field(value, "loadedAddresses"),
     }
+}
+
+/// `getLatestBlockhash` params at `commitment`.
+pub(crate) fn latest_blockhash_params(commitment: CommitmentLevel) -> serde_json::Value {
+    serde_json::json!([{
+        "commitment": commitment_to_string(commitment)
+    }])
+}
+
+/// The blockhash and its last valid block height from a `getLatestBlockhash`
+/// result.
+pub(crate) fn parse_latest_blockhash(result: &serde_json::Value) -> crate::Result<(Hash, u64)> {
+    let value = result.get("value").ok_or_else(|| {
+        crate::Error::Data(crate::errors::DataError::ParseError {
+            data_type: "response".to_string(),
+            error: "missing value field".to_string(),
+        })
+    })?;
+    let blockhash = value
+        .get("blockhash")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| {
+            crate::Error::Data(crate::errors::DataError::ParseError {
+                data_type: "blockhash".to_string(),
+                error: "missing blockhash field".to_string(),
+            })
+        })?;
+    let last_valid_block_height = value
+        .get("lastValidBlockHeight")
+        .and_then(|v| v.as_u64())
+        .ok_or_else(|| {
+            crate::Error::Data(crate::errors::DataError::ParseError {
+                data_type: "blockhash".to_string(),
+                error: "missing lastValidBlockHeight".to_string(),
+            })
+        })?;
+
+    let hash = Hash::from_str(blockhash).map_err(|e| {
+        crate::Error::Data(crate::errors::DataError::ParseError {
+            data_type: "blockhash".to_string(),
+            error: format!("Invalid hash \'{blockhash}\': {e}"),
+        })
+    })?;
+
+    Ok((hash, last_valid_block_height))
+}
+
+/// The transaction as base64 wire bytes.
+fn transaction_base64(transaction: &VersionedTransaction) -> crate::Result<String> {
+    let tx_bytes = bincode::serialize(transaction).map_err(|e| {
+        crate::Error::Data(crate::errors::DataError::ParseError {
+            data_type: "transaction".to_string(),
+            error: format!("Failed to serialize: {e}"),
+        })
+    })?;
+    Ok(base64::engine::general_purpose::STANDARD.encode(&tx_bytes))
+}
+
+/// `sendTransaction` params: preflight at confirmed, three node retries.
+pub(crate) fn send_transaction_params(
+    transaction: &VersionedTransaction,
+) -> crate::Result<serde_json::Value> {
+    Ok(serde_json::json!([
+        transaction_base64(transaction)?,
+        {
+            "encoding": "base64",
+            "skipPreflight": false,
+            "preflightCommitment": "confirmed",
+            "maxRetries": 3
+        }
+    ]))
+}
+
+/// The signature a `sendTransaction` result names.
+pub(crate) fn parse_sent_signature(result: &serde_json::Value) -> crate::Result<Signature> {
+    let sig_str = result.as_str().ok_or_else(|| {
+        crate::Error::Data(crate::errors::DataError::ParseError {
+            data_type: "signature".to_string(),
+            error: "invalid response format".to_string(),
+        })
+    })?;
+
+    Signature::from_str(sig_str).map_err(|e| {
+        crate::Error::Data(crate::errors::DataError::ParseError {
+            data_type: "signature".to_string(),
+            error: format!("Invalid signature '{sig_str}': {e}"),
+        })
+    })
+}
+
+/// `getSignatureStatuses` params, searching the full history.
+pub(crate) fn signature_statuses_params(signatures: &[Signature]) -> serde_json::Value {
+    let sig_strings: Vec<String> = signatures.iter().map(|s| s.to_string()).collect();
+    serde_json::json!([sig_strings, { "searchTransactionHistory": true }])
+}
+
+/// The context slot and one status per signature from a
+/// `getSignatureStatuses` result.
+pub(crate) fn parse_signature_statuses(
+    result: &serde_json::Value,
+) -> crate::Result<(u64, Vec<Option<TransactionStatus>>)> {
+    let invalid = || {
+        crate::Error::Data(crate::errors::DataError::ParseError {
+            data_type: "response".to_string(),
+            error: "invalid format".to_string(),
+        })
+    };
+    let slot = result
+        .get("context")
+        .and_then(|context| context.get("slot"))
+        .and_then(|slot| slot.as_u64())
+        .ok_or_else(invalid)?;
+    let values = result
+        .get("value")
+        .and_then(|v| v.as_array())
+        .ok_or_else(invalid)?;
+
+    let mut statuses = Vec::with_capacity(values.len());
+    for value in values {
+        if value.is_null() {
+            statuses.push(None);
+        } else {
+            let status: TransactionStatus = serde_json::from_value(value.clone()).map_err(|e| {
+                crate::Error::Data(crate::errors::DataError::ParseError {
+                    data_type: "TransactionStatus".to_owned(),
+                    error: e.to_string(),
+                })
+            })?;
+            statuses.push(Some(status));
+        }
+    }
+
+    Ok((slot, statuses))
+}
+
+/// `simulateTransaction` params.
+pub(crate) fn simulate_transaction_params(
+    transaction: &VersionedTransaction,
+) -> crate::Result<serde_json::Value> {
+    // `sigVerify: false` with `replaceRecentBlockhash: true` lets a preflight
+    // run even when the blockhash has aged out between build and simulate --
+    // the point here is whether the INSTRUCTIONS are correct, not whether this
+    // exact blockhash is still current.
+    // `innerInstructions` is what makes the run auditable: the CPIs a
+    // third-party route performs -- including any account it funds out of the
+    // wallet -- are invisible in the transaction's own message when the route
+    // builds them, and invisible in the quote entirely.
+    Ok(serde_json::json!([
+        transaction_base64(transaction)?,
+        {
+            "encoding": "base64",
+            "commitment": "confirmed",
+            "sigVerify": false,
+            "replaceRecentBlockhash": true,
+            "innerInstructions": true
+        }
+    ]))
+}
+
+/// The outcome of a `simulateTransaction` result.
+pub(crate) fn parse_simulation(result: &serde_json::Value) -> SimulationOutcome {
+    simulation_outcome(result.get("value").unwrap_or(result))
 }
 
 fn commitment_to_string(commitment: CommitmentLevel) -> &'static str {

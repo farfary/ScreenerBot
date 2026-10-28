@@ -1,35 +1,58 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 //
-// Trader controls - auto-trader toggle, force stop banner and loss limit panel actions.
+// Trader controls - the Stats tab's run state and entry chips, start and stop, the page notices, the monitor switches, the loss limit meter and the force stop.
 
+import { paintHtml } from "../../core/dom.js";
 import { formatTimeSpan } from "../../core/format.js";
 import { apiErrorMessage } from "../../core/request_manager.js";
 import { setAutoTraderEnabled } from "../../ui/auto_trader_control.js";
+import { entryBlockText } from "../../ui/entry_block.js";
+import { renderNotice } from "../../ui/notice.js";
 import { SetupDialog } from "../../ui/setup_dialog.js";
+import { renderSummaryChip } from "../../ui/table_toolbar.js";
 
 /**
- * Trader Controls Module
- *
- * Handles auto-trader toggle, monitor controls, force stop, and loss limit functionality.
+ * Message key of each `TraderRunState` the run chip names. `explore` shows no chip (the
+ * setup notice speaks), and `entry_paused` reads as `running`: the monitors run, and the
+ * entries chip names the block.
  */
+const RUN_STATE_LABELS = Object.freeze({
+  force_stopped: "trader-run-state-force-stopped",
+  stopped: "trader-status-stopped",
+  waiting: "trader-run-state-waiting",
+  idle: "trader-run-state-idle",
+  running: "trader-status-running",
+});
+
+/** Chip variant of each run state the chip names; a stopped trader is untoned. */
+const RUN_STATE_VARIANTS = Object.freeze({
+  force_stopped: "error",
+  stopped: null,
+  waiting: "warning",
+  idle: "warning",
+  running: "success",
+});
+
+/** Run states in which new entries are taken, so the entries chip has something to say. */
+const ENTRY_STATES = new Set(["running", "entry_paused"]);
 
 /**
- * Create trader control functions
+ * Create the Stats tab's controls.
  * @param {Object} deps - Dependencies
- * @param {Object} deps.state - Page state object
  * @param {Function} deps.$ - DOM selector function
  * @param {Object} deps.Utils - Utility functions module
- * @param {Object} deps.requestManager - Request manager instance (for future use)
+ * @param {Object} deps.requestManager - Request manager instance
  * @param {Object} deps.ConfirmationDialog - Confirmation dialog module
  * @param {Function} deps.playToggleOn - Sound effect function
  * @param {Function} deps.playToggleOff - Sound effect function
  * @param {Function} deps.playError - Sound effect function
  * @param {Array} deps.eventCleanups - Event cleanup tracking array
+ * @param {Function} deps.getBook - The book the Stats tab shows, `live` or `paper`
+ * @param {Function} [deps.onStatus] - Receives each `/api/trader/status` read
  * @returns {Object} Control functions
  */
 export function createTraderControls({
-  state: _state,
   $,
   Utils,
   requestManager,
@@ -38,98 +61,156 @@ export function createTraderControls({
   playToggleOff,
   playError,
   eventCleanups,
+  getBook,
+  onStatus,
 }) {
-  let traderAvailable = false;
+  // The last read of each endpoint; a failed read keeps the previous one.
+  let status = null;
+  let forceStop = null;
+  let monitors = null;
+  let lossLimit = null;
+  let loadFailed = false;
+  // Monitor switches with a toggle request in flight.
+  const pending = new Set();
 
-  /**
-   * Add tracked event listener for cleanup
-   */
   function addTrackedListener(element, event, handler) {
     if (!element) return;
     element.addEventListener(event, handler);
     eventCleanups.push(() => element.removeEventListener(event, handler));
   }
 
+  const available = () => status?.available !== false && monitors?.available !== false;
+  const forceStopped = () =>
+    Boolean(forceStop?.is_stopped) || status?.run_state === "force_stopped";
+
   // ============================================================================
-  // Auto Trader Toggle Functions
+  // Reading
   // ============================================================================
 
   /**
-   * Update the auto trader status bar (stats tab — the single source of the
-   * on/off control)
+   * Read the trader status, the force stop, the monitors and the loss limit together, and
+   * paint the toolbar state, the notices and the controls section.
    */
-  function updateAutoTraderStatusBars(status) {
-    const isRunning = status?.running === true;
-    const isAvailable = status?.available !== false && status !== undefined && status !== null;
-    traderAvailable = isAvailable;
-    // The status carries the catalog text of why the trader cannot run; without one
-    // the generic setup message stands in.
-    const statusText = !isAvailable
-      ? status?.unavailable_reason
-        ? I18n.text(status.unavailable_reason)
-        : I18n.t("trader-status-setup-required")
-      : isRunning
-        ? I18n.t("trader-status-running")
-        : I18n.t("trader-status-stopped");
-    // Unavailable is neither running nor stopped: the bar reads as a notice with the
-    // setup action, not as an error.
-    const statusAttr = !isAvailable ? "unavailable" : isRunning ? "running" : "stopped";
-    const toggleLabel = isRunning ? I18n.t("trader-toggle-on") : I18n.t("trader-toggle-off");
+  async function refresh() {
+    // These endpoints return the status object directly, without an envelope.
+    const read = (url) =>
+      requestManager.fetch(url, { priority: "normal" }).catch((err) => {
+        console.error(`[Trader] Failed to load ${url}:`, err);
+        return null;
+      });
 
-    // Update stats tab status bar
-    const statsBar = $("#trader-status-bar");
-    if (statsBar) {
-      statsBar.setAttribute("data-status", statusAttr);
-      const statsStatusText = $("#trader-status-text");
-      if (statsStatusText) statsStatusText.textContent = statusText;
-      const statsToggle = $("#stats-trader-toggle");
-      if (statsToggle) {
-        statsToggle.checked = isRunning;
-        statsToggle.disabled = !isAvailable;
-      }
-      const statsToggleLabel = $("#stats-toggle-label");
-      if (statsToggleLabel) statsToggleLabel.textContent = toggleLabel;
-      const setupAction = $("#trader-setup-action");
-      if (setupAction) setupAction.hidden = isAvailable;
-    }
+    const [nextStatus, nextForceStop, nextMonitors, nextLossLimit] = await Promise.all([
+      read("/api/trader/status"),
+      read("/api/trader/force-stop/status"),
+      read("/api/trader/monitors/status"),
+      read("/api/trader/loss-limit/status"),
+    ]);
+    status = nextStatus ?? status;
+    forceStop = nextForceStop ?? forceStop;
+    monitors = nextMonitors ?? monitors;
+    lossLimit = nextLossLimit ?? lossLimit;
+    paint();
+    if (nextStatus) onStatus?.(nextStatus);
   }
 
-  /**
-   * Toggle auto trader on/off
-   */
-  async function toggleAutoTrader(shouldStart) {
-    const allToggles = [$("#stats-trader-toggle")];
+  /** Report a failed statistics read (an error), or clear it (`null`). */
+  function setLoadError(error) {
+    // The notice states the failure in the page language; the transport text goes to
+    // the console only.
+    if (error) console.warn("Trader statistics load failed:", error);
+    loadFailed = Boolean(error);
+    paintNotices();
+  }
 
+  function paint() {
+    paintState();
+    paintAction();
+    paintNotices();
+    paintMonitors();
+    paintLossLimit();
+    paintForceStop();
+  }
+
+  // ============================================================================
+  // Toolbar
+  // ============================================================================
+
+  function entriesChip() {
+    if (!ENTRY_STATES.has(status?.run_state)) return "";
+    const live = getBook() === "live";
+    const idle = live ? status.live_entry_idle : status.paper_entry_idle;
+    let value = I18n.t("trader-entries-open");
+    let variant = null;
+    if (idle?.kind === "entry_monitor_off") {
+      value = I18n.t("trader-entries-monitor-off");
+      variant = "warning";
+    } else if (idle?.kind === "no_entry_strategy") {
+      value = live
+        ? I18n.t("trader-entries-no-live-strategy")
+        : I18n.t("trader-entries-no-paper-strategy");
+      variant = "warning";
+    } else if (idle?.kind === "blocked") {
+      value = entryBlockText(idle.block?.kind);
+      variant = "warning";
+    }
+    return renderSummaryChip({
+      id: "entries",
+      label: I18n.t("trader-entries-label"),
+      value,
+      variant,
+      format: "text",
+    });
+  }
+
+  function paintState() {
+    const state = status?.run_state === "entry_paused" ? "running" : status?.run_state;
+    const html = Object.hasOwn(RUN_STATE_LABELS, state ?? "")
+      ? renderSummaryChip({
+          id: "run",
+          label: I18n.t("trader-status-title"),
+          value: I18n.label(RUN_STATE_LABELS, state),
+          variant: RUN_STATE_VARIANTS[state],
+          format: "text",
+        }) + entriesChip()
+      : "";
+    paintHtml($("#stats-state"), html);
+  }
+
+  function paintAction() {
+    const button = $("#stats-trader-action");
+    if (!button) return;
+    button.hidden = !status || !available() || forceStopped();
+    if (button.hidden) return;
+    const start = status.enabled === false;
+    button.className = `btn btn-sm ${start ? "btn-primary" : "btn-secondary"}`;
+    const [icon, label] = start
+      ? ["icon-play", I18n.t("trader-action-start")]
+      : ["icon-circle-stop", I18n.t("trader-action-stop")];
+    paintHtml(
+      button,
+      `<i class="${icon}" aria-hidden="true"></i> <span>${Utils.escapeHtml(label)}</span>`
+    );
+  }
+
+  /** Start or stop the Auto Trader through the one start/stop path; starting confirms. */
+  async function toggleAutoTrader() {
+    const button = $("#stats-trader-action");
+    const shouldStart = status?.enabled === false;
     try {
-      // The toggles lock only once the request goes out; a declined start leaves them
-      // as they were.
       const control = await setAutoTraderEnabled(shouldStart, {
-        onRequest: () =>
-          allToggles.forEach((toggle) => {
-            if (toggle) toggle.disabled = true;
-          }),
+        onRequest: () => {
+          if (button) button.disabled = true;
+        },
       });
       if (control.cancelled) return;
-      const { response } = control;
-
-      if (!response.ok) {
+      if (!control.response.ok) {
         throw new Error(
           shouldStart ? I18n.t("trader-toggle-start-failed") : I18n.t("trader-toggle-stop-failed")
         );
       }
-
-      // Play sound feedback
-      if (shouldStart) {
-        playToggleOn();
-      } else {
-        playToggleOff();
-      }
-
-      // No success toast: the toggle, the status bars below and the sound all
-      // report the new state already.
-
-      // Update status bars
-      updateAutoTraderStatusBars({ running: shouldStart });
+      // No success toast: the run chip, the button and the sound report the new state.
+      if (shouldStart) playToggleOn();
+      else playToggleOff();
     } catch (error) {
       console.error("Toggle auto trader error:", error);
       Utils.showToast({
@@ -139,455 +220,301 @@ export function createTraderControls({
         message: error.message || null,
       });
       playError();
-
-      // Revert toggle states
-      updateAutoTraderStatusBars({ running: !shouldStart });
     } finally {
-      // Re-enable all toggles
-      allToggles.forEach((toggle) => {
-        if (toggle) toggle.disabled = !traderAvailable;
-      });
+      if (button) button.disabled = false;
+      await refresh();
     }
   }
 
-  /**
-   * Setup auto trader toggle event handlers
-   */
-  function setupAutoTraderToggles() {
-    const statsToggle = $("#stats-trader-toggle");
+  // ============================================================================
+  // Notices
+  // ============================================================================
 
-    // The same wallet and RPC setup dialog the header's Explore Mode action opens.
-    addTrackedListener($("#trader-setup-action"), "click", () => SetupDialog.show());
-
-    if (statsToggle) {
-      addTrackedListener(statsToggle, "click", (e) => {
-        const shouldStart = statsToggle.checked;
-        // Starting waits for the confirmation: cancelling the click keeps the switch off
-        // until the trader actually runs, so it never shows on and then flips back.
-        if (shouldStart) e.preventDefault();
-        toggleAutoTrader(shouldStart);
-      });
-    }
-
-    // Initial fetch of trader status
-    fetchTraderStatus();
-  }
-
-  /**
-   * Fetch and update trader status
-   */
-  async function fetchTraderStatus() {
-    try {
-      updateAutoTraderStatusBars(
-        await requestManager.fetch("/api/trader/status", { priority: "normal" })
+  function paintNotices() {
+    const container = $("#stats-notices");
+    if (!container) return;
+    const notices = [];
+    if (status && !available()) {
+      notices.push(
+        renderNotice({
+          variant: "warning",
+          title: I18n.t("trader-status-setup-required"),
+          message: status.unavailable_reason ? I18n.text(status.unavailable_reason) : "",
+          action: { id: "setup", label: I18n.t("trader-setup-action") },
+        })
       );
-    } catch (error) {
-      console.warn("[Trader] Failed to fetch trader status:", error);
     }
+    if (forceStop?.is_stopped) {
+      notices.push(
+        renderNotice({
+          variant: "error",
+          title: I18n.t("trader-halt-title"),
+          message: forceStop.reason || I18n.t("trader-halt-reason-default"),
+          action: { id: "resume", label: I18n.t("trader-halt-resume") },
+        })
+      );
+    }
+    // A force stop halts exits too, so it is the one paused state shown; the loss limit
+    // still reads in its meter and returns as a notice once trading resumes.
+    if (lossLimit?.is_limited && !forceStop?.is_stopped) {
+      notices.push(
+        renderNotice({
+          variant: "warning",
+          title: I18n.t("trader-notice-loss-limit"),
+          message: I18n.t("trader-notice-loss-limit-message"),
+          action: { id: "loss-limit-resume", label: I18n.t("trader-loss-limit-resume") },
+        })
+      );
+    }
+    if (loadFailed) {
+      notices.push(
+        renderNotice({
+          variant: "error",
+          title: I18n.t("trader-notice-stats-failed"),
+          action: { id: "stats-retry", label: I18n.t("common-action-retry") },
+        })
+      );
+    }
+    const html = notices.join("");
+    paintHtml(container, html);
+    container.hidden = !html;
   }
 
   // ============================================================================
-  // Trading Controls (Force Stop, Monitor Toggles, Loss Limit)
+  // Controls section
   // ============================================================================
 
   /**
-   * Load trading controls status from API
+   * A switch shows the saved monitor setting. Its note says the monitor starts with the
+   * Auto Trader only while the trader is stopped; every other state is said once, by the
+   * run chip or a notice.
    */
-  async function loadControlsStatus() {
-    // These endpoints return the status object directly (success_response =
-    // raw Json(data), no { success, data } envelope), so pass it as-is.
-    //
-    // Three independent reads, so they go out together and through requestManager —
-    // awaiting raw fetches one after another cost three round trips every 5s with no
-    // dedupe, no priority and no cancellation on tab switch.
-    const read = (url) =>
-      requestManager.fetch(url, { priority: "normal" }).catch((err) => {
-        console.error(`[Trader] Failed to load ${url}:`, err);
-        return null;
-      });
-
-    const [forceStop, monitors, lossLimit] = await Promise.all([
-      read("/api/trader/force-stop/status"),
-      read("/api/trader/monitors/status"),
-      read("/api/trader/loss-limit/status"),
-    ]);
-
-    if (forceStop) updateForceStopBanner(forceStop);
-    if (monitors) {
-      updateMonitorControls(monitors);
-      updateForceStopAvailability(monitors);
-    }
-    updateLossLimitPanel(lossLimit);
-  }
-
-  /**
-   * Update force stop banner visibility and content
-   */
-  function updateForceStopBanner(data) {
-    const banner = $("#force-stop-banner");
-    const btn = $("#force-stop-btn");
-
-    if (!banner || !btn) return;
-
-    banner.hidden = !data?.is_stopped;
-    if (data && data.is_stopped) {
-      const reasonEl = $("#force-stop-reason");
-      if (reasonEl) {
-        reasonEl.textContent = data.reason || I18n.t("trader-halt-reason-default");
+  function paintMonitors() {
+    if (!monitors) return;
+    const usable = available();
+    const locked = !usable || forceStopped();
+    const stopped = status?.run_state === "stopped";
+    const paintOne = (kind, monitor) => {
+      const toggle = $(`#${kind}-monitor-toggle`);
+      const note = $(`#${kind}-monitor-status`);
+      const enabled = usable && (monitor?.enabled ?? false);
+      if (toggle) {
+        toggle.checked = enabled;
+        toggle.disabled = locked || pending.has(kind);
       }
-      btn.style.display = "none";
-    } else {
-      btn.style.display = "flex";
-    }
-    // While stopped the banner and its resume action replace the button and its hint.
-    const hint = $("#force-stop-hint");
-    if (hint) hint.hidden = Boolean(data?.is_stopped);
-  }
-
-  /**
-   * The force stop is offered only while it has something to halt; otherwise it keeps
-   * its place, disabled, and its hint says why.
-   */
-  function updateForceStopAvailability(data) {
-    const btn = $("#force-stop-btn");
-    const hint = $("#force-stop-hint");
-    if (!btn || !hint) return;
-    const idle = data.anything_running === false;
-    btn.disabled = idle;
-    hint.textContent = idle ? I18n.t("trader-force-stop-idle") : I18n.t("trader-force-stop-hint");
-  }
-
-  /**
-   * Update monitor toggle controls
-   */
-  function updateMonitorControls(data) {
-    const entryToggle = $("#entry-monitor-toggle");
-    const exitToggle = $("#exit-monitor-toggle");
-    const entryStatus = $("#entry-monitor-status");
-    const exitStatus = $("#exit-monitor-status");
-
-    if (!data) return;
-
-    const available = data.available !== false;
-
-    // Without a set-up trader no monitor can run, so a switch reads off and locked
-    // whatever the saved monitor setting is.
-    if (entryToggle) {
-      entryToggle.checked = available && (data.entry_monitor?.enabled ?? false);
-      entryToggle.disabled = !available || (data.force_stopped ?? false);
-    }
-    if (exitToggle) {
-      exitToggle.checked = available && (data.exit_monitor?.enabled ?? false);
-      exitToggle.disabled = !available || (data.force_stopped ?? false);
-    }
-
-    // A monitor can be enabled and still not be running because the Auto Trader
-    // master switch is off. Saying "Stopped" for both conflated a user's own setting
-    // with a monitor that failed to start.
-    const masterOff = data.master_enabled === false;
-    const paint = (el, monitor) => {
-      if (!el) return;
-      const running = monitor?.running ?? false;
-      const text = !available
-        ? I18n.t("trader-status-setup-required")
-        : running
-          ? I18n.t("trader-status-running")
-          : masterOff
-            ? I18n.t("trader-monitor-master-off")
-            : I18n.t("trader-status-stopped");
-      el.textContent = text;
-      el.className = "control-status " + (running ? "status-running" : "status-stopped");
+      if (note) note.hidden = !(enabled && stopped);
     };
-
-    paint(entryStatus, data.entry_monitor);
-    paint(exitStatus, data.exit_monitor);
+    paintOne("entry", monitors.entry_monitor);
+    paintOne("exit", monitors.exit_monitor);
   }
 
-  /**
-   * Update loss limit panel display
-   */
-  function updateLossLimitPanel(data) {
-    const panel = $("#loss-limit-panel");
-    if (!panel) return;
-
+  function paintLossLimit() {
+    if (!lossLimit) return;
     const value = $("#loss-limit-value");
+    const bar = $("#loss-limit-progress")?.parentElement;
     const progress = $("#loss-limit-progress");
     const period = $("#loss-limit-period");
-    const status = $("#loss-limit-status");
-    const actions = $("#loss-limit-actions");
+    const reset = $("#loss-limit-reset-btn");
 
-    // The panel stays on screen when the limit is off. Hiding it made the safety net
-    // invisible, so a user could not tell whether it existed or was simply disabled.
-    const enabled = Boolean(data?.enabled);
-    panel.classList.toggle("loss-limit-panel--off", !enabled);
-
-    if (!enabled) {
+    if (!lossLimit.enabled) {
       if (value) value.textContent = I18n.t("trader-loss-limit-off");
-      if (progress) {
-        progress.style.width = "0%";
-        progress.classList.remove("limit-exceeded", "limit-warning");
-      }
-      if (period) period.textContent = I18n.t("trader-loss-limit-none");
-      if (status) {
-        status.textContent = "";
-        status.className = "loss-limit-status";
-      }
-      if (actions) actions.hidden = true;
+      if (bar) bar.hidden = true;
+      if (period) period.hidden = true;
+      if (reset) reset.hidden = true;
       return;
     }
 
     if (value) {
-      const currentLoss = Utils.formatSol(data.current_loss_native, { suffix: "", fallback: "—" });
-      const limitSol = Utils.formatSol(data.limit_native, { fallback: "—" });
-      value.textContent = `${currentLoss} / ${limitSol}`;
+      const current = Utils.formatSol(lossLimit.current_loss_native, { suffix: "", fallback: "—" });
+      const limit = Utils.formatSol(lossLimit.limit_native, { fallback: "—" });
+      value.textContent = `${current} / ${limit}`;
     }
-
+    if (bar) bar.hidden = false;
     if (progress) {
-      const percent = Math.min(data.progress_percent ?? 0, 100);
+      const percent = Math.min(lossLimit.progress_percent ?? 0, 100);
       progress.style.width = `${percent}%`;
-
-      progress.classList.remove("limit-exceeded", "limit-warning");
-      if (percent >= 100) {
-        progress.classList.add("limit-exceeded");
-      } else if (percent >= 75) {
-        progress.classList.add("limit-warning");
-      }
+      progress.classList.toggle("limit-exceeded", percent >= 100);
+      progress.classList.toggle("limit-warning", percent >= 75 && percent < 100);
     }
-
     if (period) {
-      const remainingSecs = data.period_remaining_secs ?? 0;
+      const remainingSecs = lossLimit.period_remaining_secs ?? 0;
       const hours = Math.floor(remainingSecs / 3600);
       const mins = Math.floor((remainingSecs % 3600) / 60);
+      period.hidden = false;
       period.textContent = I18n.t("trader-loss-limit-resets-in", {
         hours: formatTimeSpan(hours, { unit: "hour" }),
         minutes: formatTimeSpan(mins, { unit: "minute" }),
       });
     }
-
-    if (status) {
-      status.textContent = data.is_limited ? I18n.t("trader-loss-limit-reached") : "";
-      status.className = data.is_limited ? "loss-limit-status status-limited" : "loss-limit-status";
-    }
-
-    // /loss-limit/resume and /loss-limit/reset existed with no caller, so a tripped
-    // limit was a dead end: the panel said "LIMIT REACHED" and offered no way out.
-    if (actions) actions.hidden = !data.is_limited;
+    // Resume lives in the notice; the reset sits beside the meter it clears.
+    if (reset) reset.hidden = !lossLimit.is_limited;
   }
 
   /**
-   * Setup event handlers for trading controls
+   * The force stop is offered only while the trader is set up and not already stopped;
+   * with nothing to halt it keeps its place, disabled, and its hint says why.
    */
-  function setupControlsEventHandlers() {
-    // Force Stop button
-    const forceStopBtn = $("#force-stop-btn");
-    if (forceStopBtn) {
-      addTrackedListener(forceStopBtn, "click", async () => {
-        const result = await ConfirmationDialog.show({
-          title: I18n.t("trader-force-stop-confirm"),
-          message: I18n.attr("trader-force-stop-confirm", "message"),
-          confirmLabel: I18n.attr("trader-force-stop-confirm", "confirm"),
-          variant: "danger",
-        });
-        if (!result.confirmed) return;
-
-        try {
-          const res = await fetch("/api/trader/force-stop", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({}),
-          });
-          if (res.ok) {
-            Utils.showToast({
-              key: "trader-force-stop",
-              type: "warning",
-              title: I18n.t("trader-toast-force-stop-on"),
-            });
-            playToggleOff();
-            await loadControlsStatus();
-          } else {
-            const data = await res.json().catch(() => null);
-            Utils.showToast({
-              type: "error",
-              title: I18n.t("trader-toast-force-stop-failed"),
-              message: apiErrorMessage(data, null),
-            });
-            playError();
-          }
-        } catch {
-          Utils.showToast({ type: "error", title: I18n.t("trader-toast-force-stop-failed") });
-          playError();
-        }
-      });
-    }
-
-    // Resume button
-    const resumeBtn = $("#resume-trading-btn");
-    if (resumeBtn) {
-      addTrackedListener(resumeBtn, "click", async () => {
-        try {
-          const res = await fetch("/api/trader/resume", { method: "POST" });
-          if (res.ok) {
-            Utils.showToast({
-              key: "trader-force-stop",
-              type: "success",
-              title: I18n.t("trader-toast-force-stop-cleared"),
-            });
-            playToggleOn();
-            await loadControlsStatus();
-          } else {
-            const data = await res.json().catch(() => null);
-            Utils.showToast({
-              type: "error",
-              title: I18n.t("trader-toast-resume-failed"),
-              message: apiErrorMessage(data, null),
-            });
-            playError();
-          }
-        } catch {
-          Utils.showToast({ type: "error", title: I18n.t("trader-toast-resume-failed") });
-          playError();
-        }
-      });
-    }
-
-    // Loss limit recovery. Both endpoints already existed; nothing called them.
-    const lossLimitAction = async (endpoint, failureTitle) => {
-      try {
-        const res = await fetch(endpoint, { method: "POST" });
-        if (res.ok) {
-          playToggleOn();
-          await loadControlsStatus();
-        } else {
-          const data = await res.json().catch(() => null);
-          Utils.showToast({
-            key: "loss-limit-action",
-            type: "error",
-            title: failureTitle,
-            message: apiErrorMessage(data, null),
-          });
-          playError();
-        }
-      } catch {
-        Utils.showToast({ key: "loss-limit-action", type: "error", title: failureTitle });
-        playError();
-      }
-    };
-
-    const lossLimitResumeBtn = $("#loss-limit-resume-btn");
-    if (lossLimitResumeBtn) {
-      addTrackedListener(lossLimitResumeBtn, "click", async () => {
-        const result = await ConfirmationDialog.show({
-          title: I18n.t("trader-loss-limit-resume-confirm"),
-          message: I18n.attr("trader-loss-limit-resume-confirm", "message"),
-          confirmLabel: I18n.t("trader-loss-limit-resume"),
-          variant: "warning",
-        });
-        if (!result.confirmed) return;
-        await lossLimitAction(
-          "/api/trader/loss-limit/resume",
-          I18n.t("trader-toast-resume-failed")
-        );
-      });
-    }
-
-    const lossLimitResetBtn = $("#loss-limit-reset-btn");
-    if (lossLimitResetBtn) {
-      addTrackedListener(lossLimitResetBtn, "click", async () => {
-        const result = await ConfirmationDialog.show({
-          title: I18n.t("trader-loss-limit-reset-confirm"),
-          message: I18n.attr("trader-loss-limit-reset-confirm", "message"),
-          confirmLabel: I18n.t("trader-loss-limit-reset"),
-          variant: "warning",
-        });
-        if (!result.confirmed) return;
-        await lossLimitAction(
-          "/api/trader/loss-limit/reset",
-          I18n.t("trader-toast-loss-limit-reset-failed")
-        );
-      });
-    }
-
-    // Entry monitor toggle
-    const entryToggle = $("#entry-monitor-toggle");
-    if (entryToggle) {
-      addTrackedListener(entryToggle, "change", async (e) => {
-        try {
-          const res = await fetch("/api/trader/monitors/entry/toggle", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ enabled: e.target.checked }),
-          });
-          if (!res.ok) {
-            e.target.checked = !e.target.checked; // Revert
-            const data = await res.json().catch(() => null);
-            Utils.showToast({
-              key: "monitor-toggle",
-              type: "error",
-              title: I18n.t("trader-toast-entry-monitor-failed"),
-              message: apiErrorMessage(data, null),
-            });
-            playError();
-          } else {
-            e.target.checked ? playToggleOn() : playToggleOff();
-          }
-        } catch {
-          e.target.checked = !e.target.checked;
-          Utils.showToast({
-            key: "monitor-toggle",
-            type: "error",
-            title: I18n.t("trader-toast-entry-monitor-failed"),
-          });
-          playError();
-        }
-      });
-    }
-
-    // Exit monitor toggle
-    const exitToggle = $("#exit-monitor-toggle");
-    if (exitToggle) {
-      addTrackedListener(exitToggle, "change", async (e) => {
-        try {
-          const res = await fetch("/api/trader/monitors/exit/toggle", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ enabled: e.target.checked }),
-          });
-          if (!res.ok) {
-            e.target.checked = !e.target.checked; // Revert
-            const data = await res.json().catch(() => null);
-            Utils.showToast({
-              key: "monitor-toggle",
-              type: "error",
-              title: I18n.t("trader-toast-exit-monitor-failed"),
-              message: apiErrorMessage(data, null),
-            });
-            playError();
-          } else {
-            e.target.checked ? playToggleOn() : playToggleOff();
-          }
-        } catch {
-          e.target.checked = !e.target.checked;
-          Utils.showToast({
-            key: "monitor-toggle",
-            type: "error",
-            title: I18n.t("trader-toast-exit-monitor-failed"),
-          });
-          playError();
-        }
-      });
+  function paintForceStop() {
+    const button = $("#force-stop-btn");
+    const hint = $("#force-stop-hint");
+    const group = button?.closest(".stats-force-stop");
+    if (!button || !group) return;
+    group.hidden = !status || !available() || forceStopped();
+    if (group.hidden || !monitors) return;
+    const idle = monitors.anything_running === false;
+    button.disabled = idle;
+    if (hint) {
+      hint.textContent = idle ? I18n.t("trader-force-stop-idle") : I18n.t("trader-force-stop-hint");
     }
   }
 
-  // Return public API
+  // ============================================================================
+  // Actions
+  // ============================================================================
+
+  /** POST to a control endpoint; a failure toasts `failureTitle` with the server's reason. */
+  async function postControl(endpoint, { failureTitle, toastKey, onSuccess, body }) {
+    try {
+      const res = await fetch(endpoint, {
+        method: "POST",
+        ...(body
+          ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }
+          : {}),
+      });
+      if (res.ok) {
+        onSuccess?.();
+        await refresh();
+        return true;
+      }
+      const data = await res.json().catch(() => null);
+      Utils.showToast({
+        key: toastKey,
+        type: "error",
+        title: failureTitle,
+        message: apiErrorMessage(data, null),
+      });
+    } catch {
+      Utils.showToast({ key: toastKey, type: "error", title: failureTitle });
+    }
+    playError();
+    return false;
+  }
+
+  async function forceStopAll() {
+    const result = await ConfirmationDialog.show({
+      title: I18n.t("trader-force-stop-confirm"),
+      message: I18n.attr("trader-force-stop-confirm", "message"),
+      confirmLabel: I18n.attr("trader-force-stop-confirm", "confirm"),
+      variant: "danger",
+    });
+    if (!result.confirmed) return;
+    await postControl("/api/trader/force-stop", {
+      body: {},
+      failureTitle: I18n.t("trader-toast-force-stop-failed"),
+      onSuccess: () => {
+        Utils.showToast({
+          key: "trader-force-stop",
+          type: "warning",
+          title: I18n.t("trader-toast-force-stop-on"),
+        });
+        playToggleOff();
+      },
+    });
+  }
+
+  async function resumeAfterForceStop() {
+    await postControl("/api/trader/resume", {
+      failureTitle: I18n.t("trader-toast-resume-failed"),
+      onSuccess: () => {
+        Utils.showToast({
+          key: "trader-force-stop",
+          type: "success",
+          title: I18n.t("trader-toast-force-stop-cleared"),
+        });
+        playToggleOn();
+      },
+    });
+  }
+
+  async function resumeAfterLossLimit() {
+    const result = await ConfirmationDialog.show({
+      title: I18n.t("trader-loss-limit-resume-confirm"),
+      message: I18n.attr("trader-loss-limit-resume-confirm", "message"),
+      confirmLabel: I18n.t("trader-loss-limit-resume"),
+      variant: "warning",
+    });
+    if (!result.confirmed) return;
+    await postControl("/api/trader/loss-limit/resume", {
+      toastKey: "loss-limit-action",
+      failureTitle: I18n.t("trader-toast-resume-failed"),
+      onSuccess: playToggleOn,
+    });
+  }
+
+  async function resetLossLimit() {
+    const result = await ConfirmationDialog.show({
+      title: I18n.t("trader-loss-limit-reset-confirm"),
+      message: I18n.attr("trader-loss-limit-reset-confirm", "message"),
+      confirmLabel: I18n.t("trader-loss-limit-reset"),
+      variant: "warning",
+    });
+    if (!result.confirmed) return;
+    await postControl("/api/trader/loss-limit/reset", {
+      toastKey: "loss-limit-action",
+      failureTitle: I18n.t("trader-toast-loss-limit-reset-failed"),
+      onSuccess: playToggleOn,
+    });
+  }
+
+  /** Save a monitor switch; a refused change puts the switch back. */
+  async function toggleMonitor(kind, toggle, failureTitle) {
+    const enabled = toggle.checked;
+    pending.add(kind);
+    toggle.disabled = true;
+    const saved = await postControl(`/api/trader/monitors/${kind}/toggle`, {
+      body: { enabled },
+      toastKey: "monitor-toggle",
+      failureTitle,
+      onSuccess: () => {
+        pending.delete(kind);
+        if (enabled) playToggleOn();
+        else playToggleOff();
+      },
+    });
+    if (!saved) {
+      pending.delete(kind);
+      toggle.checked = !enabled;
+      paintMonitors();
+    }
+  }
+
+  /** Wire the controls section, the start/stop button and the notice actions. */
+  function setupControlsEventHandlers() {
+    addTrackedListener($("#stats-trader-action"), "click", () => void toggleAutoTrader());
+    addTrackedListener($("#force-stop-btn"), "click", () => void forceStopAll());
+    addTrackedListener($("#loss-limit-reset-btn"), "click", () => void resetLossLimit());
+
+    const entryToggle = $("#entry-monitor-toggle");
+    addTrackedListener(entryToggle, "change", () =>
+      toggleMonitor("entry", entryToggle, I18n.t("trader-toast-entry-monitor-failed"))
+    );
+    const exitToggle = $("#exit-monitor-toggle");
+    addTrackedListener(exitToggle, "change", () =>
+      toggleMonitor("exit", exitToggle, I18n.t("trader-toast-exit-monitor-failed"))
+    );
+
+    addTrackedListener($("#stats-notices"), "click", (event) => {
+      const action = event.target.closest("[data-action]")?.dataset.action;
+      // The same wallet and RPC setup dialog the header's Explore Mode action opens.
+      if (action === "setup") void SetupDialog.show();
+      else if (action === "resume") void resumeAfterForceStop();
+      else if (action === "loss-limit-resume") void resumeAfterLossLimit();
+    });
+  }
+
   return {
-    setupAutoTraderToggles,
-    toggleAutoTrader,
-    fetchTraderStatus,
-    updateAutoTraderStatusBars,
-    loadControlsStatus,
-    updateForceStopBanner,
-    updateMonitorControls,
-    updateLossLimitPanel,
+    refresh,
+    setLoadError,
     setupControlsEventHandlers,
   };
 }

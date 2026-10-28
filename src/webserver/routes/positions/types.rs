@@ -119,18 +119,14 @@ pub struct PositionsStatsResponse {
     pub total_pnl: f64,
 }
 
-/// The paper account of the current run: its starting balance and cash, and the cost
-/// and unrealized P&L of the rounds still open.
+/// The paper account of the current run: its starting balance and cash. The open
+/// exposure of the paper book is reported by the trader stats.
 #[derive(Debug, Serialize)]
 pub struct PaperAccountResponse {
     pub epoch: i64,
     pub started_at: i64,
     pub starting_balance_native: f64,
     pub cash_native: f64,
-    pub open_rounds: usize,
-    pub open_cost_native: f64,
-    /// `None` while any open round has no unrealized P&L yet.
-    pub open_unrealized_pnl_native: Option<f64>,
 }
 
 /// One fill of a paper round: the entry, add, partial or exit record it booked, with the

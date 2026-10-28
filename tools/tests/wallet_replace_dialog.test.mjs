@@ -7,7 +7,8 @@
  * credential form in replace mode. The "Replace wallet" action sits in the trading
  * wallet toolbar beside the key export and on no other tab. The dialog first states
  * what the replacement stops, moves and keeps, and shows the credential fields only
- * after that step is acknowledged. The RPC field may stay empty: the request then carries
+ * after that step is acknowledged; the key field shows once "Import a wallet" is chosen,
+ * since nothing is preselected. The RPC field may stay empty: the request then carries
  * no endpoints and the server keeps the configured ones. A refused replacement shows the server's own reason,
  * with its arguments, and a staged one waits for the restart. Other Wallets marks a
  * replaced wallet with the date and backup directory its stores were moved to. A
@@ -28,6 +29,7 @@ import { createApiHandler, FIXTURES_ROOT, loadIndex } from "../lib/dashboard_fix
 
 const REPLACE = '[data-btn-id="wt-replace"]';
 const tab = (id) => `#subTabsContainer [data-tab-id="${id}"]`;
+const IMPORT = "#setup-dialog-wallet-source-import";
 const KEY = "1".repeat(88);
 const RPC = "https://rpc.example.com";
 const VALIDATION = { valid: true, validation_id: "v-1", wallet_address: "NewWa11et1111" };
@@ -72,6 +74,7 @@ async function submitReplacement(page) {
   await page.click(tab("main"));
   await page.click(REPLACE);
   await page.click('.setup-dialog [data-action="submit"]');
+  await page.check(IMPORT);
   await page.fill("#setup-dialog-wallet-private-key", KEY);
   await page.fill("#setup-dialog-rpc-urls", RPC);
   await page.click('.setup-dialog [data-action="submit"]');
@@ -111,6 +114,13 @@ test("replace mode states the consequences before it asks for the new key", asyn
   assert.equal(before.submit, before.expected.submit);
 
   await page.click('.setup-dialog [data-action="submit"]');
+  await page.waitForSelector(".setup-dialog-source .setup-choice-input", { state: "visible" });
+  assert.equal(
+    await page.evaluate(() => document.querySelectorAll(".setup-dialog-source :checked").length),
+    0,
+    "no wallet source is preselected"
+  );
+  await page.check(IMPORT);
   await page.waitForSelector("#setup-dialog-wallet-private-key", { state: "visible" });
   const after = await page.evaluate(() => ({
     confirm: document.querySelector(".setup-dialog-confirm").getClientRects().length,
@@ -147,6 +157,7 @@ test("replace mode submits without an RPC value so the configured endpoints are 
   await page.click(tab("main"));
   await page.click(REPLACE);
   await page.click('.setup-dialog [data-action="submit"]');
+  await page.check(IMPORT);
   await page.fill("#setup-dialog-wallet-private-key", KEY);
   await page.click('.setup-dialog [data-action="submit"]');
   await page.waitForSelector("#setup-dialog-status.success", { state: "visible" });
@@ -233,9 +244,7 @@ test("other wallets mark a replaced wallet with its backup", async (t) => {
 });
 
 test("a replacement a restart abandoned is shown once with its reason, then dismissed", async (t) => {
-  const backups = JSON.parse(
-    readFileSync(`${FIXTURES_ROOT}/wallets/wallets_backups.json`, "utf8")
-  );
+  const backups = JSON.parse(readFileSync(`${FIXTURES_ROOT}/wallets/wallets_backups.json`, "utf8"));
   backups.abandoned = {
     previous_wallet: "MainWa11etAAA1111111111111111111111111111111",
     new_wallet: VALIDATION.wallet_address,

@@ -136,6 +136,10 @@ fn every_effective_state_has_a_label_and_a_running_sentence() {
         ),
         effective_state(&status(true, None), &task(false, TradingMode::Paper)),
         effective_state(
+            &status(true, Some("own_rpc_required")),
+            &task(true, TradingMode::Live),
+        ),
+        effective_state(
             &status(true, Some("loss_limit")),
             &task(true, TradingMode::Paper),
         ),
@@ -150,6 +154,7 @@ fn every_effective_state_has_a_label_and_a_running_sentence() {
             "entries_blocked",
             "force_stopped",
             "live",
+            "own_rpc_required",
             "paper",
             "paused",
             "system_paused"

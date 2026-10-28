@@ -10,3 +10,20 @@ connectivity-probe-internet-all-failed = بررسی DNS و HTTP ناموفق ب�
 connectivity-probe-unknown = خطای ناشناخته
 
 connectivity-endpoint-not-checked = هنوز بررسی نشده
+
+connectivity-service-checking = در حال اتصال به سرویس { -brand }
+    .detail = معامله پس از تأیید اتصال آغاز می‌شود.
+connectivity-service-ready = سرویس { -brand } متصل است
+    .detail = خواندن کیف پول و معاملات از طریق screenerbot.io انجام می‌شود.
+connectivity-service-signed-out = معامله متوقف شد · از حساب خارج شده‌اید
+    .detail = برای ادامه وارد شوید. تا وقتی معامله متوقف است، پوزیشن‌های باز فروخته نمی‌شوند.
+connectivity-service-reauthorize = معامله متوقف شد · ورود دوباره لازم است
+    .detail = ورود این دستگاه هنوز اجازهٔ خواندن کیف پول را نمی‌دهد. برای ادامه دوباره وارد شوید.
+connectivity-service-busy = معامله متوقف شد · سرویس شلوغ است، تلاش دوباره
+    .detail = معامله خودکار ادامه می‌یابد. برای جلوگیری از توقف، از RPC خودتان استفاده کنید.
+connectivity-service-daily-limit = معامله متوقف شد · سقف روزانه پر شد
+    .detail = حساب شما به سقف امروز سرویس { -brand } رسیده است. معامله در ساعت 00:00 UTC ادامه می‌یابد، یا بی‌درنگ با RPC خودتان.
+connectivity-service-unreachable = معامله متوقف شد · screenerbot.io در دسترس نیست
+    .detail = با برگشتن اتصال، معامله ادامه می‌یابد. اتصال اینترنت خود را بررسی کنید.
+connectivity-service-version = معامله متوقف شد · به‌روزرسانی لازم است
+    .detail = این نسخه دیگر توسط سرویس { -brand } پشتیبانی نمی‌شود. به { $minimum } یا جدیدتر به‌روزرسانی کنید.

@@ -52,13 +52,7 @@ pub fn page_styles(page: &str) -> Option<String> {
             TRADER_METRICS_STYLES,
         ]
         .join("\n"),
-        "copy" => [
-            COPY_PAGE_STYLES,
-            COPY_WORKSPACE_STYLES,
-            COPY_CHARTS_STYLES,
-            COPY_DIALOGS_STYLES,
-        ]
-        .join("\n"),
+        "copy" => [COPY_PAGE_STYLES, COPY_WORKSPACE_STYLES, COPY_DIALOGS_STYLES].join("\n"),
         "wallets" => [
             WALLETS_PAGE_STYLES,
             WALLETS_MAIN_WALLET_STYLES,
@@ -191,6 +185,7 @@ pub fn base_template(active_tab: &str, content: &str, locale: &LanguageIdentifie
         DATA_TABLE_COLUMN_TYPES_STYLES,
         DATA_TABLE_PAGINATION_STYLES,
         TABLE_TOOLBAR_STYLES,
+        PAGE_TOOLBAR_STYLES,
         EVENTS_DIALOG_STYLES,
         TRADE_ACTION_DIALOG_STYLES,
         QUICK_TRADE_STYLES,
@@ -200,6 +195,8 @@ pub fn base_template(active_tab: &str, content: &str, locale: &LanguageIdentifie
         ACTION_BAR_STYLES,
         EXPAND_TOGGLE_STYLES,
         STATE_VIEW_STYLES,
+        SHEET_STYLES,
+        INLINE_CHART_STYLES,
         TABLE_SETTINGS_DIALOG_STYLES,
         CONFIRMATION_DIALOG_STYLES,
         ARM_LIVE_GATE_STYLES,
@@ -234,6 +231,7 @@ pub fn base_template(active_tab: &str, content: &str, locale: &LanguageIdentifie
         SETTINGS_UPDATES_STYLES,
         SETTINGS_DATA_STYLES,
         SETTINGS_AGENT_CONNECTIONS_STYLES,
+        SETTINGS_CONNECTION_STYLES,
         HINT_POPOVER_STYLES,
         SEARCH_DIALOG_STYLES,
         CUSTOM_SELECT_STYLES,

@@ -4,9 +4,8 @@
 //! Balance query functions for SOL and token accounts.
 
 use crate::chains::settlement::Holding;
-use crate::chains::solana::rpc::{
-    get_rpc_client, RpcClientMethods, TokenAccountInfo, TokenAccountsSnapshot,
-};
+use crate::chains::solana::access::{chain_access, Freshness};
+use crate::chains::solana::rpc::{TokenAccountInfo, TokenAccountsSnapshot};
 use crate::chains::solana::solana_sdk::pubkey::Pubkey;
 use crate::chains::RawAmount;
 use crate::errors::DataError;
@@ -29,11 +28,7 @@ pub async fn cleanup_all_empty_atas() -> Result<(u32, Vec<String>)> {
 
 /// Checks wallet balance for SOL
 pub async fn get_sol_balance(wallet_address: &str) -> Result<f64> {
-    let rpc_client = get_rpc_client();
-    rpc_client
-        .get_sol_balance(wallet_address)
-        .await
-        .map_err(Error::from)
+    chain_access().sol_balance(wallet_address).await
 }
 
 /// Checks wallet balance for a specific token (SINGLE ACCOUNT ONLY - use get_total_token_balance for exits)
@@ -54,14 +49,12 @@ pub async fn get_token_balance(wallet_address: &str, mint: &str) -> Result<u64> 
         ),
     );
 
-    let rpc_client = get_rpc_client();
-
     logger::debug(
         LogTag::Wallet,
         "TOKEN_BALANCE_RPC: querying RPC for balance",
     );
 
-    match rpc_client.get_token_balance(wallet_address, mint).await {
+    match chain_access().token_balance(wallet_address, mint).await {
         Ok(balance) => {
             logger::debug(
                 LogTag::Wallet,
@@ -89,7 +82,7 @@ pub async fn get_token_balance(wallet_address: &str, mint: &str) -> Result<u64> 
                     e
                 ),
             );
-            Err(Error::from(e))
+            Err(e)
         }
     }
 }
@@ -97,16 +90,21 @@ pub async fn get_token_balance(wallet_address: &str, mint: &str) -> Result<u64> 
 /// The wallet's holding of `mint`, summed over its accounts of both token programs, and
 /// frozen when any of those accounts is frozen.
 pub async fn token_holding(wallet_address: &str, mint: &str) -> Result<Holding> {
-    Ok(token_holding_with_slot(wallet_address, mint).await?.0)
+    Ok(
+        token_holding_with_slot(wallet_address, mint, Freshness::Any)
+            .await?
+            .0,
+    )
 }
 
-/// The wallet's holding of `mint` as [`token_holding`] reads it, with the context slot the
-/// accounts were read at; `None` when a response carried no slot.
+/// The wallet's holding of `mint` as [`token_holding`] reads it, read at `freshness`, with
+/// the context slot the accounts were read at; `None` when a response carried no slot.
 pub async fn token_holding_with_slot(
     wallet_address: &str,
     mint: &str,
+    freshness: Freshness,
 ) -> Result<(Holding, Option<u64>)> {
-    let snapshot = get_token_accounts_snapshot(wallet_address).await?;
+    let snapshot = token_accounts_snapshot(wallet_address, freshness).await?;
     let holding = holding_of(&snapshot.accounts, mint);
     logger::debug(
         LogTag::Wallet,
@@ -148,25 +146,26 @@ fn holding_of(accounts: &[TokenAccountInfo], mint: &str) -> Holding {
 
 /// Gets all token accounts for a wallet
 pub async fn get_all_token_accounts(wallet_address: &str) -> Result<Vec<TokenAccountInfo>> {
-    let rpc_client = get_rpc_client();
-    rpc_client
-        .get_all_token_accounts_str(wallet_address)
-        .await
-        .map_err(Error::from)
+    chain_access().all_token_accounts(wallet_address).await
 }
 
 /// Gets all token accounts for a wallet with the slot they were read at.
 pub async fn get_token_accounts_snapshot(wallet_address: &str) -> Result<TokenAccountsSnapshot> {
+    token_accounts_snapshot(wallet_address, Freshness::Any).await
+}
+
+/// All token accounts of a wallet with the slot they were read at, read at `freshness`.
+async fn token_accounts_snapshot(
+    wallet_address: &str,
+    freshness: Freshness,
+) -> Result<TokenAccountsSnapshot> {
     let owner = Pubkey::from_str(wallet_address).map_err(|e| {
         Error::Data(DataError::ParseError {
             data_type: "pubkey".to_string(),
             error: format!("Invalid owner '{wallet_address}': {e}"),
         })
     })?;
-    get_rpc_client()
-        .get_token_accounts_snapshot(&owner)
-        .await
-        .map_err(Error::from)
+    chain_access().token_accounts(&owner, freshness).await
 }
 
 #[cfg(test)]

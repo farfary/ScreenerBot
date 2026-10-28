@@ -29,7 +29,9 @@
 
 /* A drag region swallows clicks, hover and wheel scrolling, so every control and
    both scrolling rows (tabs, ticker) stay out of it. */
-.electron-macos .modern-header :is(
+.electron-macos
+  .modern-header
+  :is(
     button,
     a,
     input,
@@ -75,9 +77,10 @@
   padding-right: var(--shell-inline-padding);
 }
 
-/* Explore Mode is a persistent application state. Its setup action belongs beside
-   the global controls instead of creating another header above them. */
-.explore-setup-control {
+/* Explore Mode, and trading paused on the ScreenerBot service, are application
+   states. The access control names the state and its one action beside the global
+   controls instead of creating another header above them. */
+.access-control {
   display: flex;
   align-items: center;
   flex: 0 0 auto;
@@ -96,23 +99,30 @@
     color var(--transition-fast);
 }
 
-.explore-setup-control[hidden] {
+.access-control[hidden] {
   display: none;
 }
 
-.explore-setup-control:hover {
+.access-control:hover {
   background: var(--warning-alpha-20);
   color: var(--text-primary);
 }
 
-.explore-setup-icon,
-.explore-setup-arrow {
+.access-control-icon,
+.access-control-arrow {
   flex-shrink: 0;
-  font-size: 15px;
   line-height: 1;
 }
 
-.explore-setup-copy {
+.access-control-icon {
+  font-size: 15px;
+}
+
+.access-control-arrow {
+  font-size: 13px;
+}
+
+.access-control-copy {
   display: flex;
   flex: 1 1 auto;
   min-width: 0;
@@ -121,17 +131,15 @@
   line-height: 1;
 }
 
-.explore-setup-title {
+.access-control-title {
   overflow: hidden;
   font-size: 12px;
-  font-weight: 750;
-  letter-spacing: 0.04em;
+  font-weight: 700;
   text-overflow: ellipsis;
-  text-transform: uppercase;
   white-space: nowrap;
 }
 
-.explore-setup-detail {
+.access-control-detail {
   overflow: hidden;
   color: var(--text-secondary);
   font-size: 10px;
@@ -140,15 +148,11 @@
   white-space: nowrap;
 }
 
-.explore-setup-action {
+.access-control-action {
   flex-shrink: 0;
   font-size: 11px;
   font-weight: 750;
   white-space: nowrap;
-}
-
-.explore-setup-arrow {
-  font-size: 13px;
 }
 
 /* Preserve the current heavy theme-tinted logo and wordmark treatment. */
@@ -587,7 +591,7 @@
   .modern-header .header-card,
   .modern-header .header-action-btn,
   .modern-header .header-actions-toggle,
-  .explore-setup-control {
+  .access-control {
     transition: none;
   }
 

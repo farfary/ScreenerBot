@@ -23,8 +23,9 @@ const ALLOWED: &[&str] = &[
     "webserver/api_error.rs",
     // Reader tests for the events route response shape.
     "webserver/routes/events/types.rs",
-    // JSON-RPC error fixture.
+    // JSON-RPC error fixtures.
     "chains/solana/rpc/subscriptions/client.rs",
+    "rpc/gateway.rs",
 ];
 
 fn rust_files(dir: &Path, out: &mut Vec<PathBuf>) {

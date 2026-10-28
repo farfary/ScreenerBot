@@ -1,7 +1,7 @@
 /* Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
  * SPDX-License-Identifier: BUSL-1.1 */
 
-/* Copy Trading page: frame, toolbar, onboarding, all-tasks figures, wallet list and the
+/* Copy Trading page: frame, onboarding, all-tasks figures, wallet list and the
    shared primitives (tones, meters, notes) its panels use. */
 
 .copy-page {
@@ -15,36 +15,6 @@
 /* Panels here set their own display, which outranks the bare [hidden] attribute:
    the onboarding card and the compare view stayed on screen while hidden. */
 .copy-page [hidden] {
-  display: none;
-}
-
-/* Chips at the inline start, actions at the inline end; when the row runs out of space
-   the actions wrap under the chips, still at the end. */
-.copy-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--spacing-sm) var(--spacing-md);
-}
-
-.copy-toolbar-actions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: var(--spacing-sm);
-  margin-inline-start: auto;
-}
-
-/* The page notices (ui/notice.js) under the toolbar: a failed load beside the kept data, and
-   the state that stops copying. */
-.copy-notices {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-sm);
-}
-
-.copy-notices[hidden] {
   display: none;
 }
 
@@ -261,7 +231,8 @@
 
 .copy-row-state.is-paused,
 .copy-row-state.is-system_paused,
-.copy-row-state.is-entries_blocked {
+.copy-row-state.is-entries_blocked,
+.copy-row-state.is-own_rpc_required {
   color: var(--semantic-warning-text);
 }
 
@@ -295,30 +266,6 @@
 
 .copy-row-budget .copy-meter {
   width: 56px;
-}
-
-.copy-spark {
-  flex-shrink: 0;
-  overflow: visible;
-}
-
-.copy-spark polyline {
-  fill: none;
-  stroke: var(--text-muted);
-  stroke-width: 1.5;
-}
-
-.copy-spark.is-positive polyline {
-  stroke: var(--success-color);
-}
-
-.copy-spark.is-negative polyline {
-  stroke: var(--error-color);
-}
-
-.copy-chart-zero {
-  stroke: var(--border-color);
-  stroke-dasharray: 3 3;
 }
 
 .copy-page .is-positive {

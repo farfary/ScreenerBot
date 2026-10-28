@@ -1,0 +1,103 @@
+/* Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+ * SPDX-License-Identifier: BUSL-1.1 */
+
+/* The sheet: one framed panel whose sections are separated by hairlines, never boxed.
+   It declares the container named `sheet`, which its contents size against. */
+
+.sheet {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+  min-width: 0;
+  padding: var(--spacing-lg);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  background: var(--bg-card);
+  container: sheet / inline-size;
+}
+
+.sheet[hidden] {
+  display: none;
+}
+
+.sheet-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+}
+
+.sheet-head h2,
+.sheet-head h3 {
+  margin: 0;
+  font-size: var(--font-size-base);
+}
+
+.sheet-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.sheet-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  min-width: 0;
+}
+
+.sheet-section + .sheet-section {
+  padding-block-start: var(--spacing-md);
+  border-block-start: 1px solid var(--border-color);
+}
+
+.sheet-section-title {
+  margin: 0;
+  font-size: var(--font-size-base);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* The line under a section heading that qualifies it, such as the exit mode. */
+.sheet-section-sub {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+}
+
+/* One part inside a section, such as one earlier paper book. */
+.sheet-section-subtitle {
+  margin-block: var(--spacing-sm) 0;
+  margin-inline: 0;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+}
+
+/* Two parts of a section side by side once the sheet is wide enough, divided by one
+   hairline; the query names no container, so the editor review, which sits in none,
+   keeps them stacked. */
+.sheet-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--spacing-md);
+}
+
+.sheet-split > section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  min-width: 0;
+}
+
+@container (width >= 900px) {
+  .sheet-split {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .sheet-split > section + section {
+    padding-inline-start: var(--spacing-md);
+    border-inline-start: 1px solid var(--border-color);
+  }
+}

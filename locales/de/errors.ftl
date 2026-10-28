@@ -37,7 +37,7 @@ errors-account-signin-refused = { $reason }
 errors-account-signin-unavailable = Anmeldung ist nicht verfügbar
 errors-account-credentials-required = Geben Sie Ihre E-Mail-Adresse und Ihr Passwort ein.
 errors-account-signout-failed = Abmeldung fehlgeschlagen
-errors-account-gateway-update-failed = Die Gateway-Einstellung konnte nicht aktualisiert werden
+errors-account-gateway-update-failed = Die Einstellung zum Senden von Transaktionen konnte nicht aktualisiert werden
 
 errors-i18n-locale-not-registered = Das Gebietsschema ist nicht registriert
 errors-i18n-catalog-encode-failed = Der Katalog konnte nicht kodiert werden
@@ -114,6 +114,8 @@ errors-transactions-own-wallet-unavailable = Die Haupt-Wallet ist nicht konfigur
 errors-transactions-invalid-subject = Das Transaktionssubjekt ist keine gültige Solana-Adresse
 errors-transactions-subject-not-watched = Das Transaktionssubjekt ist keine überwachte Wallet
 errors-transactions-watch-store-unavailable = Überwachte Wallets sind nicht verfügbar
+errors-transactions-history-loading = Ältere Transaktionen werden bereits geladen.
+errors-transactions-history-load-failed = Ältere Transaktionen konnten nicht geladen werden.
 
 errors-wallet-unavailable = Haupt-Wallet ist nicht verfügbar
 errors-wallet-changed = Die Haupt-Wallet hat sich geändert; aktualisieren Sie und versuchen Sie es erneut
@@ -381,3 +383,17 @@ errors-tokens-search-failed = Token-Suche fehlgeschlagen
 
 errors-actions-not-found = Aktion { $id } nicht gefunden
 errors-services-not-found = Dienst '{ $name }' nicht gefunden
+
+# Chain access
+errors-chain-capability-unavailable = Dafür ist eine eigene RPC-Verbindung nötig.
+errors-chain-service-signin-required = Melden Sie sich an, um den { -brand }-Dienst zu nutzen.
+errors-chain-service-scope-missing = Melden Sie sich erneut an, um Wallet-Abfragen zu erlauben.
+errors-chain-service-busy = Der { -brand }-Dienst ist ausgelastet. Versuchen Sie es gleich noch einmal.
+errors-chain-service-daily-limit = Ihr Konto hat das heutige Limit für den { -brand }-Dienst erreicht.
+errors-chain-service-version = Diese Version ist für den { -brand }-Dienst zu alt. Aktualisieren Sie auf { $minimum } oder neuer.
+errors-chain-service-refused = Der { -brand }-Dienst hat die Anfrage abgelehnt.
+errors-chain-service-unreachable = screenerbot.io ist nicht erreichbar.
+errors-chain-not-trading-wallet = Im { -brand }-Dienstmodus kann nur die Trading-Wallet gelesen werden.
+errors-chain-access-failed = Die Blockchain-Anfrage ist fehlgeschlagen.
+errors-chain-access-unchanged = Diese Verbindung wird bereits verwendet.
+errors-chain-access-switch-failed = Die Verbindung konnte nicht gewechselt werden.

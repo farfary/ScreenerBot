@@ -70,7 +70,7 @@ transactions-search =
     .placeholder = シグネチャを検索…
     .aria-label = トランザクションのシグネチャを検索
 transactions-load-failed = トランザクションを更新できませんでした
-transactions-setup-gate-title = 取引にはウォレットが必要です
+transactions-access-gate-title = 取引にはウォレットが必要です
 transactions-summary-total = 合計
 transactions-summary-success = 成功
 transactions-summary-failed = 失敗
@@ -199,3 +199,9 @@ transactions-dialog-raw-empty = 利用できる Raw データはありません
 # Empty table (scripts/pages/transactions.js)
 transactions-empty = トランザクションはまだありません
     .message = 取引用ウォレットのスワップと送金は、オンチェーンで確認されるとここに表示されます。
+
+## On-demand history
+
+transactions-history-on-demand = 古い履歴は必要に応じて読み込まれます。
+transactions-history-load-older = 古い履歴を読み込む
+transactions-history-load-older-failed = 古い履歴を読み込めませんでした。

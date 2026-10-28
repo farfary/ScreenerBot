@@ -3,8 +3,8 @@
 
 //! Tests of the strategies store: the paper or live mode a store gains, the rules clock a
 //! v4 store gains and keeps in line with edits by an older core, the versions that read
-//! the store, the evaluation totals a batch adds to in one transaction, and the one order
-//! every strategy listing reads.
+//! the store, the evaluation totals a batch adds to in one transaction, the one order
+//! every strategy listing reads, and the enabled counts of each mode.
 
 use rusqlite::{params, Connection};
 
@@ -711,4 +711,40 @@ fn the_enabled_entries_are_the_full_listing_filtered() {
         .collect());
     assert_eq!(enabled, listed);
     assert_eq!(enabled, ["b", "f", "a", "g", "e"]);
+}
+
+/// The counts split the enabled strategies of each mode, and the entry strategies among
+/// them; a disabled strategy counts nowhere.
+#[test]
+fn enabled_strategy_counts_split_entry_strategies_by_mode() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("strategies.db");
+    open_store(&path);
+    let conn = Connection::open(&path).unwrap();
+    for (id, kind, enabled, mode) in [
+        ("a", "ENTRY", true, "live"),
+        ("b", "ENTRY", true, "live"),
+        ("c", "EXIT", true, "live"),
+        ("d", "ENTRY", false, "live"),
+        ("e", "EXIT", true, "paper"),
+        ("f", "ENTRY", false, "paper"),
+    ] {
+        conn.execute(
+            "INSERT INTO strategies (id, name, type, enabled, rules_json, created_at, \
+             updated_at, mode)
+             VALUES (?1, ?1, ?2, ?3, '{}', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', ?4)",
+            params![id, kind, enabled, mode],
+        )
+        .unwrap();
+    }
+
+    assert_eq!(
+        strategy_counts(&conn).unwrap(),
+        EnabledStrategyCounts {
+            live: 3,
+            paper: 1,
+            live_entry: 2,
+            paper_entry: 0,
+        }
+    );
 }

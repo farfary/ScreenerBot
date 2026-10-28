@@ -8,13 +8,14 @@
 //! The components reference each other through the getters below, which no
 //! code outside the Solana module can call.
 
+use crate::chains::access::Capability;
+use crate::chains::solana::access::own_rpc_client;
 use crate::chains::solana::pools::analyzer::PoolAnalyzer;
 use crate::chains::solana::pools::calculator::PriceCalculator;
 use crate::chains::solana::pools::discovery::PoolDiscovery;
 use crate::chains::solana::pools::fetcher::AccountFetcher;
 use crate::chains::solana::pools::selection::new_selected_pools;
 use crate::chains::solana::pools::types::ProgramKind;
-use crate::chains::solana::rpc::get_rpc_client;
 use crate::logger::{self, LogTag};
 use crate::pools::types::PoolDescriptor;
 
@@ -119,7 +120,12 @@ pub(super) async fn initialize_components() -> crate::chains::solana::Result<usi
         "Initializing Solana pool runtime components...",
     );
 
-    let rpc_client = get_rpc_client();
+    let rpc_client = own_rpc_client(Capability::LivePoolPrices).map_err(|error| {
+        crate::chains::solana::Error::Rpc {
+            operation: "pool service",
+            detail: error.to_string(),
+        }
+    })?;
     let rpc_urls_count = rpc_client.provider_count().await;
 
     install_components();

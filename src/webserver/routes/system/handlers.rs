@@ -13,8 +13,9 @@ use crate::webserver::state::AppState;
 use crate::webserver::utils::success_response;
 use crate::{
     global::{
-        self, are_core_services_ready, get_pending_services, CONNECTIVITY_SYSTEM_READY,
-        POOL_SERVICE_READY, POSITIONS_SYSTEM_READY, TOKENS_SYSTEM_READY, TRANSACTIONS_SYSTEM_READY,
+        self, are_core_services_ready, get_pending_services, pool_prerequisite_ready,
+        CONNECTIVITY_SYSTEM_READY, POSITIONS_SYSTEM_READY, TOKENS_SYSTEM_READY,
+        TRANSACTIONS_SYSTEM_READY,
     },
     services::{get_service_manager, startup},
     wallet,
@@ -84,7 +85,8 @@ pub(super) async fn boot_status(State(state): State<Arc<AppState>>) -> Response 
     let connectivity_ready = CONNECTIVITY_SYSTEM_READY.load(std::sync::atomic::Ordering::SeqCst);
     let tokens_ready = TOKENS_SYSTEM_READY.load(std::sync::atomic::Ordering::SeqCst);
     let positions_ready = POSITIONS_SYSTEM_READY.load(std::sync::atomic::Ordering::SeqCst);
-    let pools_ready = POOL_SERVICE_READY.load(std::sync::atomic::Ordering::SeqCst);
+    // Ready when the pool service is, or when the chain access mode runs none.
+    let pools_ready = pool_prerequisite_ready();
     let transactions_ready = TRANSACTIONS_SYSTEM_READY.load(std::sync::atomic::Ordering::SeqCst);
 
     // Explore Mode never starts the pools service, so it is not a UI prerequisite
@@ -175,6 +177,7 @@ pub(super) async fn boot_status(State(state): State<Arc<AppState>>) -> Response 
         uptime_seconds: state.uptime_seconds(),
         phase: phase.to_string(),
         retry_after_ms,
+        chain_access: crate::chains::access::active_status(),
     };
 
     success_response(response)

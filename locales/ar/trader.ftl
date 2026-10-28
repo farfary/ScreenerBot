@@ -1,20 +1,5 @@
 # Trader page labels.
 
-# Exit types shown in the exit breakdown. Ids are the stored closed_reason: exit
-# rule ids, the Debug names of the exit TradeReason variants (src/trader/types.rs,
-# shown as readable labels) and the reasons written by src/positions and src/trader/stats.rs.
-trader-exit-type-stop-loss = وقف الخسارة
-trader-exit-type-take-profit = جني الأرباح
-trader-exit-type-roi = جني الأرباح
-trader-exit-type-roi-exit = جني الأرباح
-trader-exit-type-trailing-stop = وقف متحرك
-trader-exit-type-time-override = الخروج الزمني
-trader-exit-type-time-rule = قاعدة زمنية
-trader-exit-type-manual = يدوي
-trader-exit-type-manual-close = يدوي
-trader-exit-type-dca = DCA
-trader-exit-type-unknown = غير معروف
-
 ## Sub-tabs. Ids are the tab ids of the trader page.
 
 trader-tab-stats = الإحصاءات
@@ -34,36 +19,45 @@ trader-feature-beta = تجريبي
 trader-feature-disabled = معطّلة
     .message = هذه الميزة معطّلة حاليًا.
 
-## Status bar and trading controls
+## Toolbar, notices and trading controls
 
 trader-status-title = المتداول الآلي
-trader-status-loading = جارٍ التحميل...
 trader-status-running = قيد التشغيل
 trader-status-stopped = متوقف
 trader-status-setup-required = الإعداد مطلوب
 trader-setup-action = إكمال الإعداد
-trader-toggle-on = مفعّل
-trader-toggle-off = معطّل
 trader-toggle-start-failed = فشل تشغيل المتداول
 trader-toggle-stop-failed = فشل إيقاف المتداول
-trader-controls-title = عناصر التحكم بالتداول
 trader-halt-title = التداول متوقف
 trader-halt-reason-default = إيقاف قسري يدوي
 trader-halt-resume = استئناف
 trader-monitor-entry = مراقب الدخول
 trader-monitor-exit = مراقب الخروج
-trader-monitor-master-off = المتداول الآلي معطّل
 trader-loss-limit-title = حد خسارة الفترة
 trader-loss-limit-resume = استئناف التداول
 trader-loss-limit-reset = إعادة ضبط الفترة
 trader-loss-limit-off = معطّل
-trader-loss-limit-none = لم يتم ضبط حد خسارة للفترة
 # $hours and $minutes are formatted spans such as "2h" and "5m".
 trader-loss-limit-resets-in = تتم إعادة الضبط خلال { $hours } { $minutes }
-trader-loss-limit-reached = تم بلوغ الحد
 trader-force-stop = إيقاف كل شيء قسريًا
 trader-force-stop-hint = يوقف كل المراقبات ومهام النسخ والصفقات دفعة واحدة.
 trader-force-stop-idle = لا يعمل شيء يمكن للإيقاف القسري أن يوقفه.
+trader-run-state-force-stopped = إيقاف قسري
+trader-run-state-waiting = بانتظار الخدمات
+trader-run-state-idle = المراقبات متوقفة
+trader-entries-label = الدخول الجديد
+trader-entries-open = مفتوح
+trader-entries-monitor-off = مراقب الدخول متوقف
+trader-entries-no-live-strategy = لا توجد استراتيجية دخول حية
+trader-entries-no-paper-strategy = لا توجد استراتيجية دخول تجريبية
+trader-action-start = تشغيل المتداول الآلي
+trader-action-stop = إيقاف المتداول الآلي
+trader-notice-loss-limit = تم بلوغ حد الخسارة
+trader-notice-loss-limit-message = عمليات الدخول الحية الجديدة متوقفة مؤقتًا حتى إعادة ضبط الفترة. عمليات الخروج مستمرة.
+trader-notice-stats-failed = تعذر تحميل الإحصاءات
+trader-controls-group =
+    .aria-label = عناصر التحكم في التداول
+trader-monitor-dormant = يبدأ مع المتداول الآلي
 
 ## Confirmations. `.message` is the body and `.confirm` the confirming button.
 
@@ -95,33 +89,44 @@ trader-toast-feature-enabled = تم تفعيل الميزة
 trader-toast-feature-disabled = تم تعطيل الميزة
 trader-toast-feature-applied = تم تطبيق إعداد المتداول الآلي
 
-## Stats: realized window and metrics
+## Stats: book, window, exposure and figures
 
 trader-stats-window =
     .aria-label = نافذة الإحصاءات
 trader-stats-book =
     .aria-label = سجل التداول
-trader-paper-run-since = الدورة التجريبية منذ { $date }
-trader-paper-start = البداية
-trader-paper-cash = النقد
-trader-paper-open = مفتوح
-trader-paper-unrealized = غير محقق
+trader-exposure-cash = النقد
+trader-exposure-open = مفتوح
+trader-exposure-unrealized = غير محقق
+trader-exposure-open-title = المراكز التي تشغل خانة، من حد المراكز المفتوحة
+trader-exposure-in-use = قيد الاستخدام
+trader-exposure-in-use-title = { -sol } المنفقة على المراكز المفتوحة
+# $amount is the formatted count.
+trader-exposure-unpriced =
+    { $count ->
+        [zero] لا توجد مراكز مفتوحة بلا سعر مباشر ({ $amount })
+        [one] مركز مفتوح واحد ({ $amount }) بلا سعر مباشر بعد
+        [two] مركزان مفتوحان ({ $amount }) بلا سعر مباشر بعد
+        [few] { $amount } مراكز مفتوحة بلا سعر مباشر بعد
+        [many] { $amount } مركزًا مفتوحًا بلا سعر مباشر بعد
+       *[other] { $amount } مركز مفتوح بلا سعر مباشر بعد
+    }
+# $date is a formatted date; $amount is a formatted SOL amount.
+trader-exposure-cash-title = الدورة التجريبية منذ { $date } · بدأت بـ { $amount }
 trader-paper-reset = إعادة ضبط الدورة التجريبية
 trader-paper-reset-title = إعادة ضبط الدورة التجريبية؟
 trader-paper-reset-run-message = يُغلق كل مركز تجريبي مفتوح، ومنها الحيازات التجريبية لمهام النسخ، بسعره الحالي وتبدأ دورة جديدة بالرصيد الابتدائي المضبوط. تبقى الدورات السابقة في السجل.
 trader-paper-reset-done = بدأت دورة تجريبية جديدة
 trader-paper-reset-failed = تعذّرت إعادة ضبط الدورة التجريبية
-trader-paper-account-failed = تعذّر تحميل الدورة التجريبية
 trader-realized-title = الأداء المحقق
 trader-metric-net-pnl = صافي الأرباح والخسائر
 trader-metric-win-rate = نسبة الربح
 trader-metric-profit-factor = عامل الربح
 trader-metric-max-drawdown = أقصى تراجع
-trader-metric-capital = رأس المال العامل
 trader-metric-avg-win-loss = متوسط الربح / الخسارة
 trader-metric-closed-trades = الصفقات المغلقة
 trader-metric-median-hold = وسيط مدة الاحتفاظ
-trader-stats-empty = لا توجد صفقات مغلقة في هذه النافذة
+trader-metric-fees = رسوم الشبكة
 # $won and $lost are formatted SOL amounts.
 trader-stats-won-lost = ربح { $won } · خسارة { $lost }
 # $wins and $losses are the plural messages below.
@@ -148,58 +153,94 @@ trader-stats-losses =
 trader-stats-expected = المتوقع لكل صفقة: { $amount }
 trader-stats-profit-factor-basis = إجمالي الربح ÷ إجمالي الخسارة
 trader-stats-drawdown-basis = أعمق تراجع محقق من القمة إلى القاع
-# $count is the position limit and selects the plural.
-trader-stats-slots =
-    { $count ->
-        [zero] خانات المراكز المستخدمة: { $used } من { $max }
-        [one] خانات المراكز المستخدمة: { $used } من { $max }
-        [two] خانات المراكز المستخدمة: { $used } من { $max }
-        [few] خانات المراكز المستخدمة: { $used } من { $max }
-        [many] خانات المراكز المستخدمة: { $used } من { $max }
-       *[other] خانات المراكز المستخدمة: { $used } من { $max }
-    }
-trader-stats-avg-basis = متوسط نتيجة الصفقة الرابحة مقابل الخاسرة
-trader-stats-closed =
-    { $count ->
-        [zero] مراكز مغلقة: { $amount }
-        [one] مراكز مغلقة: { $amount }
-        [two] مراكز مغلقة: { $amount }
-        [few] مراكز مغلقة: { $amount }
-        [many] مراكز مغلقة: { $amount }
-       *[other] مراكز مغلقة: { $amount }
-    }
-# $span is a formatted duration.
-trader-stats-hold-average = المتوسط { $span }
 trader-stats-excluded =
     { $count ->
-        [zero] جولات مغلقة مستبعدة: { $amount }. لا توجد تكلفة أساس كاملة، لذا لا توجد أرباح وخسائر موثوقة.
-        [one] جولات مغلقة مستبعدة: { $amount }. لا توجد تكلفة أساس كاملة، لذا لا توجد أرباح وخسائر موثوقة.
-        [two] جولات مغلقة مستبعدة: { $amount }. لا توجد تكلفة أساس كاملة، لذا لا توجد أرباح وخسائر موثوقة.
-        [few] جولات مغلقة مستبعدة: { $amount }. لا توجد تكلفة أساس كاملة، لذا لا توجد أرباح وخسائر موثوقة.
-        [many] جولات مغلقة مستبعدة: { $amount }. لا توجد تكلفة أساس كاملة، لذا لا توجد أرباح وخسائر موثوقة.
-       *[other] جولات مغلقة مستبعدة: { $amount }. لا توجد تكلفة أساس كاملة، لذا لا توجد أرباح وخسائر موثوقة.
+        [zero] صفقات مغلقة مستبعدة: { $amount }. تكلفة الشراء غير مكتملة، لذا الربح والخسارة غير معروفين.
+        [one] صفقات مغلقة مستبعدة: { $amount }. تكلفة الشراء غير مكتملة، لذا الربح والخسارة غير معروفين.
+        [two] صفقات مغلقة مستبعدة: { $amount }. تكلفة الشراء غير مكتملة، لذا الربح والخسارة غير معروفين.
+        [few] صفقات مغلقة مستبعدة: { $amount }. تكلفة الشراء غير مكتملة، لذا الربح والخسارة غير معروفين.
+        [many] صفقات مغلقة مستبعدة: { $amount }. تكلفة الشراء غير مكتملة، لذا الربح والخسارة غير معروفين.
+       *[other] صفقات مغلقة مستبعدة: { $amount }. تكلفة الشراء غير مكتملة، لذا الربح والخسارة غير معروفين.
     }
+# $ratio is a formatted ratio.
+trader-stats-payoff = نسبة العائد { $ratio }
+trader-stats-streak-win =
+    { $count ->
+        [zero] { $amount } أرباح متتالية
+        [one] ربحت آخر صفقة
+        [two] ربحان متتاليان
+        [few] { $amount } أرباح متتالية
+        [many] { $amount } ربحًا متتاليًا
+       *[other] { $amount } ربح متتالٍ
+    }
+trader-stats-streak-loss =
+    { $count ->
+        [zero] { $amount } خسائر متتالية
+        [one] خسرت آخر صفقة
+        [two] خسارتان متتاليتان
+        [few] { $amount } خسائر متتالية
+        [many] { $amount } خسارة متتالية
+       *[other] { $amount } خسارة متتالية
+    }
+# $wins and $losses are formatted durations.
+trader-stats-hold-split = الرابحة { $wins } · الخاسرة { $losses }
+trader-stats-fees-basis = مضمّنة في صافي الأرباح والخسائر
+trader-stats-loading = جارٍ تحميل الإحصاءات...
+trader-open-strategies = فتح الاستراتيجيات
 
-## Stats: daily P&L and extremes
+## Stats: P&L chart, trade outcomes and extremes
 
 trader-daily-title = الأرباح والخسائر اليومية
 trader-daily-subtitle = { -sol } المحققة يوميًا مع الإجمالي التراكمي
-trader-daily-loading = جارٍ تحميل الأرباح والخسائر اليومية...
 trader-daily-chart = الأرباح والخسائر اليومية المحققة بـ { -sol }
 trader-weekly-title = الأرباح والخسائر الأسبوعية
 trader-weekly-subtitle = { -sol } المحققة أسبوعيًا (أسابيع ISO) مع الإجمالي التراكمي
 trader-weekly-chart = الأرباح والخسائر الأسبوعية المحققة بـ { -sol }
+# $date is a formatted date; $pnl a signed SOL amount.
+trader-daily-bar =
+    { $count ->
+        [zero] { $date } · { $pnl } · { $amount } صفقة
+        [one] { $date } · { $pnl } · صفقة واحدة
+        [two] { $date } · { $pnl } · صفقتان
+        [few] { $date } · { $pnl } · { $amount } صفقات
+        [many] { $date } · { $pnl } · { $amount } صفقة
+       *[other] { $date } · { $pnl } · { $amount } صفقة
+    }
+trader-weekly-bar =
+    { $count ->
+        [zero] أسبوع { $date } · { $pnl } · { $amount } صفقة
+        [one] أسبوع { $date } · { $pnl } · صفقة واحدة
+        [two] أسبوع { $date } · { $pnl } · صفقتان
+        [few] أسبوع { $date } · { $pnl } · { $amount } صفقات
+        [many] أسبوع { $date } · { $pnl } · { $amount } صفقة
+       *[other] أسبوع { $date } · { $pnl } · { $amount } صفقة
+    }
 trader-extreme-best = أفضل صفقة
 trader-extreme-worst = أسوأ صفقة
+trader-extreme-runs = الأكثر على التوالي
+trader-outcome-title = نتائج الصفقات
+trader-outcome-subtitle = الصفقات المغلقة حسب العائد، بالنسبة المئوية
+# $value, $from and $to are formatted signed percentages.
+trader-outcome-below = أقل من { $value }
+trader-outcome-range = من { $from } إلى { $to }
+trader-outcome-above = { $value } أو أكثر
+# $range is one of the three messages above; $pnl a signed SOL amount.
+trader-outcome-bucket =
+    { $count ->
+        [zero] { $range } · { $amount } صفقة · { $pnl }
+        [one] { $range } · صفقة واحدة · { $pnl }
+        [two] { $range } · صفقتان · { $pnl }
+        [few] { $range } · { $amount } صفقات · { $pnl }
+        [many] { $range } · { $amount } صفقة · { $pnl }
+       *[other] { $range } · { $amount } صفقة · { $pnl }
+    }
 
-## Stats: exit breakdown
+## Stats: empty windows, exit reasons, entry sources and recent closes
 
-trader-exit-title = تفصيل استراتيجيات الخروج
-trader-exit-subtitle = كيف أُغلقت المراكز وما عاد به كل خروج
-trader-exit-loading = جارٍ تحميل بيانات الخروج...
-trader-exit-empty-day = لا توجد صفقات مغلقة خلال آخر 24 ساعة
-trader-exit-empty-all = لا توجد صفقات مغلقة بعد
-trader-exit-empty-days =
+trader-stats-empty-day = لا توجد صفقات مغلقة خلال آخر 24 ساعة
+trader-stats-empty-all = لا توجد صفقات مغلقة بعد
+trader-stats-empty-hint = تظهر الصفقات المغلقة هنا بعد بيع أي مركز. شغّل المتداول الآلي، أو اختر فترة أطول.
+trader-stats-empty-days =
     { $count ->
         [zero] لا توجد صفقات مغلقة خلال آخر { $amount } يوم
         [one] لا توجد صفقات مغلقة خلال آخر { $amount } يوم
@@ -208,18 +249,23 @@ trader-exit-empty-days =
         [many] لا توجد صفقات مغلقة خلال آخر { $amount } يومًا
        *[other] لا توجد صفقات مغلقة خلال آخر { $amount } يومًا
     }
-# $share is a formatted percentage of all exits.
-trader-exit-share =
-    { $count ->
-        [zero] { $amount } صفقة · { $share } من عمليات الخروج
-        [one] { $amount } صفقة · { $share } من عمليات الخروج
-        [two] { $amount } صفقتان · { $share } من عمليات الخروج
-        [few] { $amount } صفقات · { $share } من عمليات الخروج
-        [many] { $amount } صفقة · { $share } من عمليات الخروج
-       *[other] { $amount } صفقة · { $share } من عمليات الخروج
-    }
-# $value is a formatted average percentage.
-trader-exit-average = المتوسط { $value }
+trader-exits-title = أسباب الخروج
+trader-exits-subtitle = كيف انتهت الصفقات المغلقة، وما الذي حققه كل خروج
+trader-sources-title = مصادر الدخول
+trader-sources-subtitle = ما الذي فتح الصفقات المغلقة
+trader-recent-title = أحدث الإغلاقات
+trader-recent-subtitle = أحدث الصفقات المغلقة في هذه النافذة
+trader-column-token = الرمز
+trader-column-exit = الخروج
+trader-column-source = المصدر
+trader-column-trades = الصفقات
+trader-column-win-rate = نسبة الربح
+trader-column-avg-return = متوسط العائد
+trader-column-net-pnl = صافي الأرباح والخسائر
+trader-column-held = مدة الاحتفاظ
+trader-column-closed = أُغلقت
+trader-column-pnl = الأرباح والخسائر
+trader-column-return = العائد
 
 ## Shared example vocabulary
 
@@ -457,3 +503,8 @@ trader-timing-concurrency = تزامن فحص الدخول
 trader-timing-concurrency-hint = عدد الرموز المفحوصة في وقت واحد (الأعلى أسرع لكنه يستهلك معالجًا أكثر)
 trader-timing-unit-minutes = دقيقة
 trader-timing-unit-tokens = رمز
+
+## Service mode notice
+
+trader-service-notice-title = يعمل عبر خدمة { -brand }
+trader-service-notice-message = تتحدّث الأسعار كل بضع ثوانٍ، لذا تستجيب عمليات الخروج السريعة مثل وقف الخسارة المتحرك الضيق متأخرةً مقارنةً بـ RPC الخاص بك.

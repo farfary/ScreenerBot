@@ -36,6 +36,21 @@ impl ChainsConfig {
         }
     }
 
+    /// The access mode value of `chain` as config stores it, typed by
+    /// `crate::chains::access::ChainAccessMode`.
+    pub fn access(&self, chain: ChainId) -> &str {
+        match chain {
+            ChainId::Solana => &self.solana.access,
+        }
+    }
+
+    /// The access mode value of `chain`, for writing a validated mode switch.
+    pub fn access_mut(&mut self, chain: ChainId) -> &mut String {
+        match chain {
+            ChainId::Solana => &mut self.solana.access,
+        }
+    }
+
     /// RPC endpoint settings of `chain`, for writing the endpoints setup validated.
     pub fn rpc_mut(&mut self, chain: ChainId) -> &mut RpcConfig {
         match chain {

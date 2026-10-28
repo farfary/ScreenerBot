@@ -13,6 +13,8 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
+use crate::chains::access::Capability;
+use crate::chains::solana::access::own_rpc_client;
 use crate::chains::solana::rpc::{self, ConnectionState, RpcClientMethods};
 use crate::chains::solana::solana_sdk::pubkey::Pubkey;
 use crate::chains::solana::transactions::fetcher::TransactionFetcher;
@@ -34,7 +36,7 @@ pub fn build_runtime() -> Arc<dyn WalletWatchRuntime> {
     Arc::new(SolanaWalletWatchRuntime)
 }
 
-struct SolanaWalletWatchRuntime;
+pub(super) struct SolanaWalletWatchRuntime;
 
 fn parse_pubkey(address: &str) -> Result<Pubkey, Error> {
     address.parse::<Pubkey>().map_err(|e| Error::ChainRuntime {
@@ -98,10 +100,15 @@ impl WalletWatchRuntime for SolanaWalletWatchRuntime {
     }
 
     async fn supports_high_activity_mode(&self) -> bool {
-        rpc::get_rpc_client()
-            .manager()
-            .has_enabled_provider_kind(crate::rpc::ProviderKind::Helius)
-            .await
+        match own_rpc_client(Capability::WatchOtherWallets) {
+            Ok(client) => {
+                client
+                    .manager()
+                    .has_enabled_provider_kind(crate::rpc::ProviderKind::Helius)
+                    .await
+            }
+            Err(_) => false,
+        }
     }
 
     fn high_activity_provider(&self) -> Option<&'static str> {
@@ -124,7 +131,11 @@ impl WalletWatchRuntime for SolanaWalletWatchRuntime {
                 operation: "parse_helius_cursor",
                 detail: error.to_string(),
             })?;
-        let page = rpc::get_rpc_client()
+        let page = own_rpc_client(Capability::WatchOtherWallets)
+            .map_err(|error| Error::ChainRuntime {
+                operation: "fetch_successful_transactions_after",
+                detail: error.to_string(),
+            })?
             .get_helius_successful_transactions_after(&pubkey, limit.min(1000), after.as_ref())
             .await
             .map_err(|error| Error::ChainRuntime {

@@ -37,7 +37,7 @@ errors-account-signin-refused = { $reason }
 errors-account-signin-unavailable = Không thể đăng nhập lúc này
 errors-account-credentials-required = Nhập địa chỉ email và mật khẩu của bạn.
 errors-account-signout-failed = Đăng xuất thất bại
-errors-account-gateway-update-failed = Không cập nhật được cài đặt gateway
+errors-account-gateway-update-failed = Không cập nhật được cài đặt gửi giao dịch
 
 errors-i18n-locale-not-registered = Ngôn ngữ chưa được đăng ký
 errors-i18n-catalog-encode-failed = Không mã hóa được danh mục ngôn ngữ
@@ -114,6 +114,8 @@ errors-transactions-own-wallet-unavailable = Chưa cấu hình ví chính
 errors-transactions-invalid-subject = Đối tượng giao dịch không phải địa chỉ Solana hợp lệ
 errors-transactions-subject-not-watched = Đối tượng giao dịch không phải ví đang được theo dõi
 errors-transactions-watch-store-unavailable = Không có danh sách ví theo dõi
+errors-transactions-history-loading = Các giao dịch cũ hơn đang được tải.
+errors-transactions-history-load-failed = Không thể tải các giao dịch cũ hơn.
 
 errors-wallet-unavailable = Ví chính không khả dụng
 errors-wallet-changed = Ví chính đã thay đổi; hãy làm mới và thử lại
@@ -381,3 +383,17 @@ errors-tokens-search-failed = Tìm kiếm token thất bại
 
 errors-actions-not-found = Không tìm thấy hành động { $id }
 errors-services-not-found = Không tìm thấy dịch vụ '{ $name }'
+
+# Chain access
+errors-chain-capability-unavailable = Việc này cần kết nối RPC của riêng bạn.
+errors-chain-service-signin-required = Hãy đăng nhập để dùng dịch vụ { -brand }.
+errors-chain-service-scope-missing = Hãy đăng nhập lại để cho phép đọc ví.
+errors-chain-service-busy = Dịch vụ { -brand } đang bận. Hãy thử lại sau giây lát.
+errors-chain-service-daily-limit = Tài khoản của bạn đã đạt giới hạn hôm nay của dịch vụ { -brand }.
+errors-chain-service-version = Phiên bản này quá cũ cho dịch vụ { -brand }. Hãy cập nhật lên { $minimum } hoặc mới hơn.
+errors-chain-service-refused = Dịch vụ { -brand } đã từ chối yêu cầu.
+errors-chain-service-unreachable = Không truy cập được screenerbot.io.
+errors-chain-not-trading-wallet = Ở chế độ dịch vụ { -brand }, chỉ đọc được ví giao dịch.
+errors-chain-access-failed = Yêu cầu tới blockchain thất bại.
+errors-chain-access-unchanged = Kết nối này đang được dùng.
+errors-chain-access-switch-failed = Không thể chuyển kết nối.

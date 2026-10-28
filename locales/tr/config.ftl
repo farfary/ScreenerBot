@@ -5,8 +5,8 @@ config-account-auto-wallet-signin = Cüzdanımla otomatik giriş yap
 config-account-refresh-margin-secs = Token yenileme payı
     .hint = Giriş tokenının süresi dolmadan ne kadar önce yenileneceği. Yalnızca kimlik doğrulamada hata ayıklıyorsanız değiştirin.
     .unit = sn
-config-account-use-gateway-rpc = İşlem göndermek için { -brand } RPC'sini kullan
-    .hint = İmzalı takas işlemlerini kendi RPC'niz yerine screenerbot.io üzerinden yayınlayın. İmzalama her zaman bu makinede yapılır; sunucu imzalı bir işlemi değiştiremez. Fiyat verileri için yine kendi RPC'niz gerekir.
+config-account-use-gateway-rpc = İşlemleri { -brand } üzerinden gönder
+    .hint = Oturum açıkken bu bilgisayarda imzaladığınız swap'ları screenerbot.io üzerinden yayınlar. İmzalama her zaman burada yapılır ve imzalı bir işlem değiştirilemez. { -brand } hizmet modunda her zaman açıktır.
 
 ## agent_control
 

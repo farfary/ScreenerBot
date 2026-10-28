@@ -22,8 +22,11 @@
   --scale-from: 0.98;
   --scale-rise: 12px;
 
+  display: flex;
+  flex-direction: column;
   width: 100%;
   max-width: 560px;
+  max-height: 100%;
   background: var(--card-bg);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-xl, 14px);
@@ -55,15 +58,21 @@
   color: var(--primary-color);
 }
 
-/* The shared credential fields (SetupRuntime.mountCredentialFields), stacked. */
+/* The shared wallet choice, backup panel and fields (SetupRuntime), stacked. */
 .setup-dialog-fields {
   display: grid;
   gap: 0.75rem;
 }
 
+/* A dialog showing the backup panel grows wider before its body scrolls. */
+.setup-dialog.is-wide {
+  max-width: 720px;
+}
+
 /* Replace mode shows its confirmation first and the fields after it; `display:grid`
    would otherwise outrank the bare [hidden] attribute. */
 .setup-dialog-fields[hidden],
+.setup-dialog-fields > [hidden],
 .setup-dialog-confirm[hidden] {
   display: none;
 }
@@ -110,11 +119,14 @@
   background: var(--bg-tertiary);
 }
 
+/* Only the body scrolls, once the dialog has reached its widest and the window's height. */
 .setup-dialog-body {
   padding: 1rem 1.25rem;
   display: flex;
   flex-direction: column;
   gap: 1rem;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .setup-dialog-status {
@@ -156,4 +168,9 @@
   justify-content: flex-end;
   gap: 0.625rem;
   padding: 0.875rem 1.25rem 1.25rem;
+}
+
+.setup-dialog-header,
+.setup-dialog-footer {
+  flex-shrink: 0;
 }

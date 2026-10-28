@@ -268,3 +268,19 @@ shell-theme-light = Terang
 shell-theme-dark = Gelap
 shell-theme-switch-to-light = Ganti ke tema terang
 shell-theme-switch-to-dark = Ganti ke tema gelap
+
+## Chain access: service mode controls, gates and sign-out
+
+shell-service-control =
+    .aria-label = Trading dijeda. Buka detail
+shell-service-action-signin = Masuk
+shell-service-action-connection = Tambah RPC
+shell-access-gate-own-rpc-title = Memerlukan RPC Anda sendiri
+shell-access-gate-watch-wallets = Copy trading dan pemantauan wallet mengikuti wallet lain secara langsung, yang tidak dilakukan layanan { -brand }. Tugas salin dan wallet yang dipantau tetap disimpan dan kembali saat Anda menambahkan RPC.
+shell-access-gate-live-pool-prices = Harga pool langsung memerlukan RPC Anda sendiri.
+shell-access-gate-direct-swaps = Swap pool langsung memerlukan RPC Anda sendiri.
+shell-access-gate-other-wallets = Saldo wallet lain memerlukan RPC Anda sendiri.
+shell-access-gate-action = Buka pengaturan koneksi
+shell-signout-service-title = Keluar dan jeda trading?
+shell-signout-service-message = Tanpa RPC Anda sendiri, { -brand } memakai akun Anda untuk membaca wallet dan mengirim trade. Selama Anda keluar, trading dijeda dan posisi terbuka tidak dijual.
+shell-signout-service-confirm = Keluar dan jeda

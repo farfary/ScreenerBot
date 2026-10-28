@@ -34,3 +34,6 @@ chart-status-total-idle =
         [one] { $count } mum · boşta
        *[other] { $count } mum · boşta
     }
+
+chart-inline-curve-label = Kümülatif K/Z { $amount } { -sol }
+chart-inline-histogram-title = { $count } / { $total }

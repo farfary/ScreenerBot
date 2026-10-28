@@ -6,6 +6,7 @@
 // Startup bootstrap logic - initial transaction history loading
 
 use futures::stream::{FuturesUnordered, StreamExt};
+use serde::Serialize;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Mutex;
@@ -16,8 +17,10 @@ use crate::chains::solana::transactions::{
 };
 use crate::logger::{self, LogTag};
 use crate::transactions::{
+    database::TransactionDatabase,
     error::Error,
     manager::TransactionsManager,
+    subject::Subject,
     utils::{add_signature_to_known_globally, is_signature_known_globally, RPC_BATCH_SIZE},
 };
 
@@ -75,7 +78,9 @@ pub async fn perform_initial_transaction_bootstrap(
     })?);
 
     let mut stats = BootstrapStats::default();
-    let batch_limit = RPC_BATCH_SIZE;
+    let (history_cap, batch_limit) = signature_window(crate::chains::access::active_has(
+        crate::chains::access::Capability::FullHistory,
+    ));
 
     // Reconcile known_signatures from already processed at start (safety)
     if let Some(db) = transaction_db.as_ref() {
@@ -239,9 +244,38 @@ pub async fn perform_initial_transaction_bootstrap(
             }
             break;
         }
+
+        if history_cap.is_some_and(|cap| all_signatures.len() >= cap) {
+            logger::info(
+                LogTag::Transactions,
+                &format!(
+                    "Phase 1: stopped at the newest {} signatures; older history loads on demand",
+                    all_signatures.len()
+                ),
+            );
+            break;
+        }
     }
 
     stats.total_signatures_fetched = all_signatures.len();
+
+    // A FULL walk either reached the chain's end or stopped at the history cap; older
+    // history then continues on demand before the oldest signature collected.
+    if bootstrap_mode == "FULL" {
+        let cursor = if reached_chain_end {
+            None
+        } else {
+            stats.oldest_signature.as_deref()
+        };
+        if let Some(db) = transaction_db.as_ref() {
+            if let Err(e) = db.set_history_cursor(cursor).await {
+                logger::warning(
+                    LogTag::Transactions,
+                    &format!("Failed to record the older-history cursor: {e}"),
+                );
+            }
+        }
+    }
 
     let phase1_summary = if bootstrap_mode == "INCREMENTAL" {
         format!(
@@ -686,9 +720,20 @@ pub async fn perform_initial_transaction_bootstrap(
                 );
             }
         }
+    }
 
-        // Then repair anything recent the extraction missed. The backfill above runs
-        // once per version and cannot fix a gap that opens afterwards.
+    sync_history_positions(transaction_db.as_deref(), &subject).await;
+
+    Ok(stats)
+}
+
+/// Repairs subject-delta gaps and derives the wallet's position rounds from the delta table.
+/// The full backfill runs once per delta version and cannot fix a gap that opens afterwards,
+/// so the gap fill runs after every history load. The position sync is what makes a fresh
+/// install show the tokens the wallet already holds as positions. Best-effort by design: a
+/// failure leaves the trader and every existing position untouched, and the next load retries.
+async fn sync_history_positions(db: Option<&TransactionDatabase>, subject: &Subject) {
+    if let Some(db) = db {
         if let Err(e) = db.fill_subject_delta_gaps(&subject.address()).await {
             crate::transactions::database::note_subject_delta_gap();
             logger::warning(
@@ -698,10 +743,6 @@ pub async fn perform_initial_transaction_bootstrap(
         }
     }
 
-    // With the delta table current, derive the wallet's position rounds from it. This is
-    // what makes a fresh install show the tokens the user already holds as positions
-    // instead of an empty list. Best-effort by design: a failure here leaves the trader
-    // and every existing position untouched, and the next boot retries.
     match crate::positions::ledger::sync_wallet_history().await {
         Ok(summary) if summary.inserted > 0 || summary.updated > 0 => {
             logger::info(
@@ -720,6 +761,158 @@ pub async fn perform_initial_transaction_bootstrap(
             );
         }
     }
+}
 
-    Ok(stats)
+/// One page of older history loaded on demand.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct OlderHistoryPage {
+    /// Signatures the page read from the chain
+    pub fetched: usize,
+    /// Transactions newly processed from the page
+    pub processed: usize,
+    /// Transactions that failed to process; the cursor stays put so the next load retries them
+    pub failed: usize,
+    /// Whether history older than the stored signatures can still be loaded
+    pub older_history_available: bool,
+}
+
+/// Serializes on-demand history loads, so one page is never processed twice at once.
+static OLDER_HISTORY_LOAD: Mutex<()> = Mutex::const_new(());
+
+/// Loads the page of own-wallet history that precedes the stored history cursor, processes
+/// its unknown transactions and moves the cursor past it. The cursor advances only when every
+/// transaction of the page was processed; reaching the chain's end marks the full history
+/// completed and clears the cursor.
+pub async fn load_older_history() -> Result<OlderHistoryPage, Error> {
+    let _load = OLDER_HISTORY_LOAD
+        .try_lock()
+        .map_err(|_| Error::HistoryLoadInProgress)?;
+    let manager_arc = super::lifecycle::get_global_transaction_manager()
+        .await
+        .ok_or(Error::NotInitialised)?;
+    let subject = manager_arc.lock().await.subject().clone();
+    let db = crate::transactions::database::get_transaction_database()
+        .await
+        .ok_or(Error::NotInitialised)?;
+
+    let state = db.get_bootstrap_state().await?;
+    let Some(before) = state
+        .older_history_available()
+        .then_some(state.history_before)
+        .flatten()
+    else {
+        return Ok(OlderHistoryPage {
+            fetched: 0,
+            processed: 0,
+            failed: 0,
+            older_history_available: false,
+        });
+    };
+
+    let wallet_pubkey = crate::chains::solana::transactions::subject::try_to_pubkey(&subject)
+        .map_err(|e| Error::WalletUnavailable {
+            detail: e.to_string(),
+        })?;
+    let processor =
+        TransactionProcessor::for_subject(&subject).map_err(|e| Error::WalletUnavailable {
+            detail: e.to_string(),
+        })?;
+    let (_, page_size) = signature_window(crate::chains::access::active_has(
+        crate::chains::access::Capability::FullHistory,
+    ));
+    let signatures = TransactionFetcher::new()
+        .fetch_signatures_page(wallet_pubkey, page_size, Some(before.as_str()), None)
+        .await
+        .map_err(|e| Error::Bootstrap {
+            detail: e.to_string(),
+        })?;
+
+    let mut processed = 0;
+    let mut failed = 0;
+    for signature in &signatures {
+        if is_signature_known_globally(subject.clone(), signature).await
+            || db.is_signature_known(subject.clone(), signature).await?
+        {
+            continue;
+        }
+        let outcome = timeout(
+            Duration::from_secs(TRANSACTION_TIMEOUT_SECS),
+            processor.process_transaction(signature),
+        )
+        .await;
+        match outcome {
+            Ok(Ok(_)) => {
+                db.add_known_signature(subject.clone(), signature).await?;
+                add_signature_to_known_globally(subject.clone(), signature.clone()).await;
+                processed += 1;
+            }
+            Ok(Err(e)) => {
+                logger::warning(
+                    LogTag::Transactions,
+                    &format!("Older-history transaction {signature} failed to process: {e}"),
+                );
+                failed += 1;
+            }
+            Err(_) => {
+                logger::warning(
+                    LogTag::Transactions,
+                    &format!(
+                        "Older-history transaction {signature} timed out after {TRANSACTION_TIMEOUT_SECS}s"
+                    ),
+                );
+                failed += 1;
+            }
+        }
+    }
+
+    let reached_chain_end = signatures.len() < page_size;
+    if failed == 0 {
+        if reached_chain_end {
+            db.mark_full_history_completed().await?;
+            db.set_history_cursor(None).await?;
+        } else if let Some(oldest) = signatures.last() {
+            db.set_history_cursor(Some(oldest)).await?;
+        }
+    }
+    if processed > 0 {
+        sync_history_positions(Some(&db), &subject).await;
+    }
+
+    logger::info(
+        LogTag::Transactions,
+        &format!(
+            "Older history: fetched {} signatures, processed {processed}, failed {failed}",
+            signatures.len()
+        ),
+    );
+    Ok(OlderHistoryPage {
+        fetched: signatures.len(),
+        processed,
+        failed,
+        older_history_available: failed > 0 || !reached_chain_end,
+    })
+}
+
+/// How many signatures a bootstrap collects at most, and its page size.
+/// Without full history the bootstrap reads only the newest signatures, in a
+/// page no larger than that cap, so a full page never reads as the end of the
+/// chain; older history loads on demand.
+fn signature_window(full_history: bool) -> (Option<usize>, usize) {
+    if full_history {
+        (None, RPC_BATCH_SIZE)
+    } else {
+        let cap = crate::chains::solana::access::SERVICE_HISTORY_SIGNATURES;
+        (Some(cap), cap.min(RPC_BATCH_SIZE))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn without_full_history_the_bootstrap_stops_at_the_newest_two_hundred() {
+        assert_eq!(signature_window(false), (Some(200), 200));
+        assert_eq!(signature_window(true), (None, RPC_BATCH_SIZE));
+    }
 }

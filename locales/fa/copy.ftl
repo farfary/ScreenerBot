@@ -38,19 +38,6 @@ copy-skip-swap-mixed-quote = پرداخت هم‌زمان با SOL و استیب
 copy-skip-swap-multiple-tokens = بیش از یک توکن در یک تراکنش معامله شده است
 copy-skip-swap-unreadable = مقدارهای معامله قابل خواندن نبود
 
-copy-entry-block-force-stopped = معاملات به‌طور اجباری متوقف شده است
-copy-entry-block-loss-limit = محدودیت ضرر ورودهای جدید را مسدود می‌کند
-copy-entry-block-connectivity = سرویس‌های موردنیاز در دسترس نیستند
-copy-entry-block-storage-unavailable = داده‌های معاملات در دسترس نیست یا در حال بازیابی است
-copy-entry-block-position-limit = به سقف پوزیشن‌های باز رسیده است
-copy-entry-block-already-open = یک پوزیشن از قبل باز است
-copy-entry-block-reentry-cooldown = زمان انتظار ورود مجدد توکن
-copy-entry-block-open-cooldown = زمان انتظار سراسری ورود
-copy-entry-block-entry-reserved = ورود دیگری در حال پردازش است
-copy-entry-block-blacklisted = توکن توسط کنترل‌های ریسک مسدود شده است
-copy-entry-block-paper-balance-exhausted = موجودی آزمایشی برای این معامله کافی نیست
-copy-entry-block-check-failed = یک بررسی ایمنی کامل نشد
-
 copy-pause-user = توسط شما متوقف شد
 copy-pause-latency-kill-switch = توقف خودکار: معاملات به‌طور میانگین { $average } ثانیه دیر رسیدند (حد { $threshold } ثانیه)
 copy-pause-watch-detached = توقف خودکار: کیف پول دیگر پایش نمی‌شود
@@ -90,6 +77,7 @@ copy-live-block-copy-trading-disabled = پردازش کپی به‌طور سرا
 copy-state-system-paused = متوقف‌شده سراسری
 copy-state-force-stopped = توقف اجباری
 copy-state-entries-blocked = ورودها مسدود
+copy-state-own-rpc-required = به RPC خودتان نیاز دارد
 copy-state-running-live = در حال اجرا
 copy-state-running-paper = در حال اجرا
 copy-exit-mode-buy-only = قوانین خروج من
@@ -167,6 +155,7 @@ copy-status-force-stopped = توقف اجباری
 copy-status-loss-limit = حد زیان
 copy-status-all-paused = همه وظایف متوقف‌اند
 copy-status-processing = در حال پردازش
+copy-status-own-rpc-required = به RPC خودتان نیاز دارد
 copy-toolbar-pause = توقف کپی
 copy-toolbar-resume = ازسرگیری کپی
 copy-toolbar-resume-tasks = ازسرگیری همه وظایف
@@ -320,6 +309,7 @@ copy-state-detail-paper = در حال اجرا در حالت آزمایشی · �
 copy-state-detail-live = در حال اجرای زنده · معاملات کیف پول با سواپ واقعی کپی می‌شوند
 copy-state-detail-system-paused = در انتظار · پردازش کپی به‌طور سراسری متوقف است، خروج‌ها همچنان اجرا می‌شوند
 copy-state-detail-entries-blocked = ورودها با محدودیت ضرر مسدود شده‌اند · خروج‌ها همچنان اجرا می‌شوند
+copy-state-detail-own-rpc-required = در انتظار · سرویس { -brand } کیف‌پول‌های دیگر را دنبال نمی‌کند؛ برای ادامه یک RPC اضافه کنید
 copy-state-detail-force-stopped = توقف اجباری · چیزی کپی نمی‌شود
 
 copy-paused-since = { $reason } · { $since }
@@ -580,13 +570,11 @@ copy-table-target-difference = میانه تفاوت قیمت با هدف
 
 ## Charts
 
-copy-chart-curve-label = سود و زیان تجمعی { $amount } { -sol }
 copy-chart-compare-label = سود و زیان تجمعی به تفکیک وظیفه
 copy-chart-empty-curve = هنوز دور بسته‌ای در این بازه نیست.
 copy-chart-empty-bars = چیزی در این بازه ثبت نشده است.
 copy-chart-empty-histogram = نمونه رسیدنی در این بازه نیست.
 copy-chart-empty-compare = دور بسته‌ای برای مقایسه در این بازه نیست.
-copy-chart-histogram-title = { $count } از { $total }
 
 ## Wallet profile
 

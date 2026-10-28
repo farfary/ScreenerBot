@@ -8,13 +8,17 @@ import { metricCard } from "../../ui/metric_card.js";
 import { renderNotice } from "../../ui/notice.js";
 import { renderSummaryChip } from "../../ui/table_toolbar.js";
 import { tradingModeLabel } from "../../ui/trading_mode.js";
-import { gateControl, setupRequired } from "../../ui/setup_gate.js";
+import { capabilityAvailable, gateControl, setupRequired } from "../../ui/access_gate.js";
+
+/** The chain capability copy trading needs: following other wallets live. */
+export const COPY_CAPABILITY = "watch_other_wallets";
 
 /** Message key of each page state the status chip names. */
 const STATUS_LABELS = Object.freeze({
   loading: "copy-status-loading",
   unavailable: "copy-status-unavailable",
   setup_required: "copy-status-setup-required",
+  own_rpc_required: "copy-status-own-rpc-required",
   paused: "copy-status-paused",
   force_stopped: "copy-status-force-stopped",
   loss_limit: "copy-status-loss-limit",
@@ -27,6 +31,7 @@ const STATUS_VARIANTS = Object.freeze({
   loading: "secondary",
   unavailable: "error",
   setup_required: "warning",
+  own_rpc_required: "warning",
   paused: "warning",
   force_stopped: "error",
   loss_limit: "warning",
@@ -58,6 +63,7 @@ function pageState(state) {
   if (!state.overview) return state.loadError ? "unavailable" : "loading";
   const status = state.overview.status || {};
   if (setupRequired()) return "setup_required";
+  if (!capabilityAvailable(COPY_CAPABILITY)) return "own_rpc_required";
   if (!status.enabled) return "paused";
   if (status.blocked_reason === "force_stop") return "force_stopped";
   if (status.blocked_reason === "loss_limit") return "loss_limit";
@@ -159,8 +165,7 @@ export function renderToolbar(page) {
   const ready = Boolean(status) && taskCount > 0;
   const pause = ready && status.enabled && status.active_tasks > 0;
   const resume = ready && !status.enabled;
-  const resumeTasks =
-    ready && status.enabled && !status.active_tasks && status.resumable_tasks > 0;
+  const resumeTasks = ready && status.enabled && !status.active_tasks && status.resumable_tasks > 0;
 
   const global = $("#copy-global-action");
   if (global) {
@@ -177,10 +182,10 @@ export function renderToolbar(page) {
   for (const button of [global, bulk]) {
     if (!button) continue;
     button.disabled = Boolean(state.toolbarBusy);
-    gateControl(button);
+    gateControl(button, COPY_CAPABILITY);
   }
   // An empty page offers one way forward: the onboarding card's own action, or the
-  // setup notice in Explore Mode. Add wallet joins the toolbar once a task exists.
+  // access gate in Explore Mode or without the copy capability. Add wallet joins the toolbar once a task exists.
   const add = $("#copy-add");
   if (add) add.hidden = taskCount === 0;
 }

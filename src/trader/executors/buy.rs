@@ -8,7 +8,8 @@ use crate::positions::{self, PositionOrigin, TradeOrigin};
 use crate::strategies::types::{DecisionLapse, Strategy};
 use crate::trader::config;
 use crate::trader::paper::TradingMode;
-use crate::trader::types::{TradeDecision, TradeReason, TradeResult, TradeStep, Withdrawal};
+use crate::trader::types::{TradeDecision, TradeResult, TradeStep, Withdrawal};
+use crate::trader::TradeReason;
 
 use super::ExecutionContext;
 

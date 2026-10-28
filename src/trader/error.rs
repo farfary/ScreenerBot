@@ -153,6 +153,10 @@ pub enum Error {
     /// emergency stop engaged, the strategy left paper mode or the app is shutting down.
     #[error("the paper fill for {mint} was abandoned before it landed")]
     PaperFillAborted { mint: String },
+    /// The install's chain access refused: a capability its mode lacks, or a
+    /// service refusal.
+    #[error(transparent)]
+    ChainAccess(#[from] crate::chains::Error),
 }
 
 /// Result alias for the trader module.
@@ -162,6 +166,9 @@ impl Error {
     /// The catalog text the copy-trading surfaces show for this error: the copy API's
     /// error envelope and the per-task result of a bulk resume.
     pub fn copy_ui_text(&self) -> UiText {
+        if let Error::ChainAccess(error) = self {
+            return error.access_ui_text();
+        }
         UiText::new(match self {
             Error::CopyTaskNotFound { .. } => ids::ERRORS_COPY_TASK_NOT_FOUND,
             Error::CopyHoldingNotFound { .. } => ids::ERRORS_COPY_HOLDING_NOT_FOUND,
@@ -222,6 +229,7 @@ impl ErrorClass for Error {
             Error::PaperBookUnavailable => true,
             Error::PaperFill(e) => e.is_retryable(),
             Error::PaperFillAborted { .. } => false,
+            Error::ChainAccess(e) => e.is_retryable(),
         }
     }
 
@@ -235,6 +243,7 @@ impl ErrorClass for Error {
             Error::CoreServicesNotReady { .. } => Some(Duration::from_secs(5)),
             Error::TokenDataMissing { .. } => Some(Duration::from_secs(1)),
             Error::UnhealthyEndpoints { .. } => Some(Duration::from_secs(5)),
+            Error::ChainAccess(e) => e.retry_after(),
             _ => None,
         }
     }
@@ -285,6 +294,7 @@ impl ErrorClass for Error {
             Error::PaperBookUnavailable => Severity::Warning,
             Error::PaperFill(e) => e.severity(),
             Error::PaperFillAborted { .. } => Severity::Info,
+            Error::ChainAccess(e) => e.severity(),
         }
     }
 
@@ -329,6 +339,7 @@ impl ErrorClass for Error {
             Error::PaperBookUnavailable => 503,
             Error::PaperFill(e) => e.http_status(),
             Error::PaperFillAborted { .. } => 409,
+            Error::ChainAccess(e) => e.http_status(),
         }
     }
 }

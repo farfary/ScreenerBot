@@ -1,64 +1,492 @@
 {
+  "open_positions_count": 2,
+  "max_open_positions": 2,
+  "locked_native": 0.4,
+  "unrealized_native": 0.0123,
+  "open_unpriced": 1,
   "period_days": 30,
-  "open_positions_count": 3,
-  "max_open_positions": 5,
-  "locked_native": 0.06,
-  "total_trades": 48,
-  "winners": 31,
-  "losers": 17,
+  "total_trades": 24,
+  "winners": 14,
+  "losers": 9,
   "excluded_untrusted": 1,
-  "total_pnl_native": 0.192,
-  "gross_profit_native": 0.3462,
-  "gross_loss_native": 0.0712,
-  "profit_factor": 4.86,
-  "expectancy_native": 0.004,
-  "max_drawdown_native": 0.034,
-  "win_rate_pct": 64.6,
-  "avg_win_pct": 18.4,
-  "avg_loss_pct": -11.2,
-  "avg_hold_time_hours": 5.6,
-  "median_hold_time_hours": 3.2,
-  "best_trade_pct": 142.5,
+  "total_pnl_native": 0.0821,
+  "gross_profit_native": 0.31,
+  "gross_loss_native": 0.2279,
+  "profit_factor": 1.36,
+  "expectancy_native": 0.0034,
+  "max_drawdown_native": 0.061,
+  "fees_native": 0.0042,
+  "payoff_ratio": 1.78,
+  "win_rate_pct": 60.9,
+  "avg_win_pct": 22.1,
+  "avg_loss_pct": -12.4,
+  "avg_hold_time_hours": 3.2,
+  "median_hold_time_hours": 1.9,
+  "median_win_hold_hours": 2.4,
+  "median_loss_hold_hours": 1.1,
+  "best_trade_pct": 140.2,
   "best_trade_token": "BONK",
-  "worst_trade_pct": -38.1,
+  "worst_trade_pct": -38.0,
   "worst_trade_token": "WIF",
+  "current_streak": {
+    "outcome": "win",
+    "length": 3
+  },
+  "longest_win_streak": 5,
+  "longest_loss_streak": 3,
   "daily_pnl": [
-    { "date": "2026-09-08", "bucket": "day", "net_pnl_native": 0.012, "trades": 1 },
-    { "date": "2026-09-09", "bucket": "day", "net_pnl_native": -0.004, "trades": 2 },
-    { "date": "2026-09-10", "bucket": "day", "net_pnl_native": 0, "trades": 0 },
-    { "date": "2026-09-11", "bucket": "day", "net_pnl_native": 0.021, "trades": 1 },
-    { "date": "2026-09-12", "bucket": "day", "net_pnl_native": 0.008, "trades": 2 },
-    { "date": "2026-09-13", "bucket": "day", "net_pnl_native": -0.015, "trades": 3 },
-    { "date": "2026-09-14", "bucket": "day", "net_pnl_native": 0, "trades": 0 },
-    { "date": "2026-09-15", "bucket": "day", "net_pnl_native": 0.031, "trades": 2 },
-    { "date": "2026-09-16", "bucket": "day", "net_pnl_native": 0.005, "trades": 3 },
-    { "date": "2026-09-17", "bucket": "day", "net_pnl_native": -0.009, "trades": 1 },
-    { "date": "2026-09-18", "bucket": "day", "net_pnl_native": 0.014, "trades": 2 },
-    { "date": "2026-09-19", "bucket": "day", "net_pnl_native": 0, "trades": 0 },
-    { "date": "2026-09-20", "bucket": "day", "net_pnl_native": 0.026, "trades": 1 },
-    { "date": "2026-09-21", "bucket": "day", "net_pnl_native": -0.022, "trades": 2 },
-    { "date": "2026-09-22", "bucket": "day", "net_pnl_native": 0.011, "trades": 3 },
-    { "date": "2026-09-23", "bucket": "day", "net_pnl_native": 0.004, "trades": 1 },
-    { "date": "2026-09-24", "bucket": "day", "net_pnl_native": 0, "trades": 0 },
-    { "date": "2026-09-25", "bucket": "day", "net_pnl_native": 0.018, "trades": 3 },
-    { "date": "2026-09-26", "bucket": "day", "net_pnl_native": -0.006, "trades": 1 },
-    { "date": "2026-09-27", "bucket": "day", "net_pnl_native": 0.009, "trades": 2 },
-    { "date": "2026-09-28", "bucket": "day", "net_pnl_native": 0.037, "trades": 3 },
-    { "date": "2026-09-29", "bucket": "day", "net_pnl_native": -0.012, "trades": 1 },
-    { "date": "2026-09-30", "bucket": "day", "net_pnl_native": 0, "trades": 0 },
-    { "date": "2026-10-01", "bucket": "day", "net_pnl_native": 0.015, "trades": 3 },
-    { "date": "2026-10-02", "bucket": "day", "net_pnl_native": 0.007, "trades": 1 },
-    { "date": "2026-10-03", "bucket": "day", "net_pnl_native": -0.003, "trades": 2 },
-    { "date": "2026-10-04", "bucket": "day", "net_pnl_native": 0.022, "trades": 3 },
-    { "date": "2026-10-05", "bucket": "day", "net_pnl_native": 0, "trades": 0 },
-    { "date": "2026-10-06", "bucket": "day", "net_pnl_native": 0.01, "trades": 2 },
-    { "date": "2026-10-07", "bucket": "day", "net_pnl_native": 0.013, "trades": 3 }
+    {
+      "date": "2026-09-08",
+      "bucket": "day",
+      "net_pnl_native": 0,
+      "trades": 0
+    },
+    {
+      "date": "2026-09-09",
+      "bucket": "day",
+      "net_pnl_native": 0.0084,
+      "trades": 1
+    },
+    {
+      "date": "2026-09-10",
+      "bucket": "day",
+      "net_pnl_native": 0,
+      "trades": 0
+    },
+    {
+      "date": "2026-09-11",
+      "bucket": "day",
+      "net_pnl_native": -0.0123,
+      "trades": 2
+    },
+    {
+      "date": "2026-09-12",
+      "bucket": "day",
+      "net_pnl_native": 0,
+      "trades": 0
+    },
+    {
+      "date": "2026-09-13",
+      "bucket": "day",
+      "net_pnl_native": 0.0215,
+      "trades": 1
+    },
+    {
+      "date": "2026-09-14",
+      "bucket": "day",
+      "net_pnl_native": 0,
+      "trades": 0
+    },
+    {
+      "date": "2026-09-15",
+      "bucket": "day",
+      "net_pnl_native": 0,
+      "trades": 0
+    },
+    {
+      "date": "2026-09-16",
+      "bucket": "day",
+      "net_pnl_native": -0.0061,
+      "trades": 1
+    },
+    {
+      "date": "2026-09-17",
+      "bucket": "day",
+      "net_pnl_native": 0.0302,
+      "trades": 2
+    },
+    {
+      "date": "2026-09-18",
+      "bucket": "day",
+      "net_pnl_native": 0,
+      "trades": 0
+    },
+    {
+      "date": "2026-09-19",
+      "bucket": "day",
+      "net_pnl_native": -0.0186,
+      "trades": 1
+    },
+    {
+      "date": "2026-09-20",
+      "bucket": "day",
+      "net_pnl_native": 0,
+      "trades": 0
+    },
+    {
+      "date": "2026-09-21",
+      "bucket": "day",
+      "net_pnl_native": 0,
+      "trades": 0
+    },
+    {
+      "date": "2026-09-22",
+      "bucket": "day",
+      "net_pnl_native": 0.0147,
+      "trades": 2
+    },
+    {
+      "date": "2026-09-23",
+      "bucket": "day",
+      "net_pnl_native": 0.0093,
+      "trades": 1
+    },
+    {
+      "date": "2026-09-24",
+      "bucket": "day",
+      "net_pnl_native": 0,
+      "trades": 0
+    },
+    {
+      "date": "2026-09-25",
+      "bucket": "day",
+      "net_pnl_native": -0.0412,
+      "trades": 1
+    },
+    {
+      "date": "2026-09-26",
+      "bucket": "day",
+      "net_pnl_native": 0,
+      "trades": 0
+    },
+    {
+      "date": "2026-09-27",
+      "bucket": "day",
+      "net_pnl_native": 0.0268,
+      "trades": 2
+    },
+    {
+      "date": "2026-09-28",
+      "bucket": "day",
+      "net_pnl_native": 0,
+      "trades": 0
+    },
+    {
+      "date": "2026-09-29",
+      "bucket": "day",
+      "net_pnl_native": 0,
+      "trades": 0
+    },
+    {
+      "date": "2026-09-30",
+      "bucket": "day",
+      "net_pnl_native": 0.0056,
+      "trades": 1
+    },
+    {
+      "date": "2026-10-01",
+      "bucket": "day",
+      "net_pnl_native": -0.0098,
+      "trades": 1
+    },
+    {
+      "date": "2026-10-02",
+      "bucket": "day",
+      "net_pnl_native": 0,
+      "trades": 0
+    },
+    {
+      "date": "2026-10-03",
+      "bucket": "day",
+      "net_pnl_native": 0.0179,
+      "trades": 2
+    },
+    {
+      "date": "2026-10-04",
+      "bucket": "day",
+      "net_pnl_native": 0.0071,
+      "trades": 1
+    },
+    {
+      "date": "2026-10-05",
+      "bucket": "day",
+      "net_pnl_native": 0,
+      "trades": 0
+    },
+    {
+      "date": "2026-10-06",
+      "bucket": "day",
+      "net_pnl_native": -0.0043,
+      "trades": 3
+    },
+    {
+      "date": "2026-10-07",
+      "bucket": "day",
+      "net_pnl_native": 0.0329,
+      "trades": 2
+    }
   ],
   "exit_breakdown": [
-    { "exit_type": "roi", "count": 18, "avg_profit_pct": 24.6, "net_pnl_native": 0.214 },
-    { "exit_type": "trailing_stop", "count": 11, "avg_profit_pct": 12.3, "net_pnl_native": 0.081 },
-    { "exit_type": "stop_loss", "count": 9, "avg_profit_pct": -14.8, "net_pnl_native": -0.052 },
-    { "exit_type": "time_override", "count": 4, "avg_profit_pct": -6.1, "net_pnl_native": -0.011 },
-    { "exit_type": "manual", "count": 3, "avg_profit_pct": 9.7, "net_pnl_native": 0.043 }
+    {
+      "exit_type": "TakeProfit",
+      "label": {
+        "id": "trade-reason-take-profit"
+      },
+      "count": 9,
+      "winners": 9,
+      "win_rate_pct": 100.0,
+      "avg_profit_pct": 31.2,
+      "net_pnl_native": 0.21
+    },
+    {
+      "exit_type": "StopLoss",
+      "label": {
+        "id": "trade-reason-stop-loss"
+      },
+      "count": 7,
+      "winners": 0,
+      "win_rate_pct": 0.0,
+      "avg_profit_pct": -21.4,
+      "net_pnl_native": -0.1427
+    },
+    {
+      "exit_type": "TrailingStop",
+      "label": {
+        "id": "trade-reason-trailing-stop"
+      },
+      "count": 6,
+      "winners": 5,
+      "win_rate_pct": 83.3,
+      "avg_profit_pct": 9.8,
+      "net_pnl_native": 0.027
+    },
+    {
+      "exit_type": "force_closed",
+      "label": {
+        "id": "trade-reason-force-closed-any"
+      },
+      "count": 1,
+      "winners": 0,
+      "win_rate_pct": 0.0,
+      "avg_profit_pct": -12.0,
+      "net_pnl_native": -0.012
+    },
+    {
+      "exit_type": "unknown",
+      "label": {
+        "id": "trade-reason-unknown"
+      },
+      "count": 1,
+      "winners": 0,
+      "win_rate_pct": null,
+      "avg_profit_pct": null,
+      "net_pnl_native": null
+    }
+  ],
+  "source_breakdown": [
+    {
+      "source": "auto",
+      "count": 18,
+      "winners": 11,
+      "win_rate_pct": 61.1,
+      "avg_profit_pct": 4.2,
+      "net_pnl_native": 0.07
+    },
+    {
+      "source": "manual",
+      "count": 6,
+      "winners": 3,
+      "win_rate_pct": 50.0,
+      "avg_profit_pct": 1.1,
+      "net_pnl_native": 0.0121
+    }
+  ],
+  "outcome_distribution": [
+    {
+      "lower_pct": null,
+      "upper_pct": -50.0,
+      "count": 1,
+      "net_pnl_native": -0.06
+    },
+    {
+      "lower_pct": -50.0,
+      "upper_pct": -20.0,
+      "count": 3,
+      "net_pnl_native": -0.09
+    },
+    {
+      "lower_pct": -20.0,
+      "upper_pct": -5.0,
+      "count": 3,
+      "net_pnl_native": -0.0279
+    },
+    {
+      "lower_pct": -5.0,
+      "upper_pct": 0.0,
+      "count": 2,
+      "net_pnl_native": -0.0041
+    },
+    {
+      "lower_pct": 0.0,
+      "upper_pct": 5.0,
+      "count": 2,
+      "net_pnl_native": 0.0032
+    },
+    {
+      "lower_pct": 5.0,
+      "upper_pct": 20.0,
+      "count": 5,
+      "net_pnl_native": 0.031
+    },
+    {
+      "lower_pct": 20.0,
+      "upper_pct": 50.0,
+      "count": 4,
+      "net_pnl_native": 0.0864
+    },
+    {
+      "lower_pct": 50.0,
+      "upper_pct": 100.0,
+      "count": 2,
+      "net_pnl_native": 0.0835
+    },
+    {
+      "lower_pct": 100.0,
+      "upper_pct": null,
+      "count": 1,
+      "net_pnl_native": 0.06
+    }
+  ],
+  "recent_rounds": [
+    {
+      "position_id": 812,
+      "mint": "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263",
+      "symbol": "BONK",
+      "name": "Bonk",
+      "source": "auto",
+      "exit_time": 1791374400,
+      "hold_secs": 5400,
+      "pnl_native": 0.012,
+      "pnl_percent": 12.0,
+      "reason": {
+        "id": "trade-reason-take-profit"
+      }
+    },
+    {
+      "position_id": 811,
+      "mint": "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm",
+      "symbol": "WIF",
+      "name": "dogwifhat",
+      "source": "manual",
+      "exit_time": 1791360000,
+      "hold_secs": 7200,
+      "pnl_native": -0.0186,
+      "pnl_percent": -18.6,
+      "reason": {
+        "id": "trade-reason-stop-loss"
+      }
+    },
+    {
+      "position_id": 810,
+      "mint": "JUPyiwrYJFskUPiHa7hkeR8VR9vB7VDuqnr6SZXsxB8",
+      "symbol": "JUP",
+      "name": "Jupiter",
+      "source": "auto",
+      "exit_time": 1791345600,
+      "hold_secs": 9000,
+      "pnl_native": 0.0071,
+      "pnl_percent": 7.1,
+      "reason": {
+        "id": "trade-reason-trailing-stop"
+      }
+    },
+    {
+      "position_id": 809,
+      "mint": "7GCihgDB8fe6KNjn2MYtkzZcRjQy3t9GHdC8uHYmW2hr",
+      "symbol": "POPCAT",
+      "name": "Popcat",
+      "source": "auto",
+      "exit_time": 1791331200,
+      "hold_secs": 10800,
+      "pnl_native": 0.0254,
+      "pnl_percent": 25.4,
+      "reason": {
+        "id": "trade-reason-take-profit"
+      }
+    },
+    {
+      "position_id": 808,
+      "mint": "HZ1JovNiVvGrGNiiYvEozEVgZ58xaU3RKwX8eACQBCt3",
+      "symbol": "PYTH",
+      "name": "Pyth Network",
+      "source": "manual",
+      "exit_time": 1791316800,
+      "hold_secs": 12600,
+      "pnl_native": -0.012,
+      "pnl_percent": -12.0,
+      "reason": {
+        "id": "trade-reason-force-closed-any"
+      }
+    },
+    {
+      "position_id": 807,
+      "mint": "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263",
+      "symbol": "BONK",
+      "name": "Bonk",
+      "source": "auto",
+      "exit_time": 1791302400,
+      "hold_secs": 14400,
+      "pnl_native": -0.0098,
+      "pnl_percent": -9.8,
+      "reason": {
+        "id": "trade-reason-stop-loss"
+      }
+    },
+    {
+      "position_id": 806,
+      "mint": "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm",
+      "symbol": "WIF",
+      "name": "dogwifhat",
+      "source": "auto",
+      "exit_time": 1791288000,
+      "hold_secs": 16200,
+      "pnl_native": 0.0056,
+      "pnl_percent": 5.6,
+      "reason": {
+        "id": "trade-reason-take-profit"
+      }
+    },
+    {
+      "position_id": null,
+      "mint": "JUPyiwrYJFskUPiHa7hkeR8VR9vB7VDuqnr6SZXsxB8",
+      "symbol": "JUP",
+      "name": "Jupiter",
+      "source": "auto",
+      "exit_time": 1791273600,
+      "hold_secs": 18000,
+      "pnl_native": null,
+      "pnl_percent": null,
+      "reason": {
+        "id": "trade-reason-unknown"
+      }
+    },
+    {
+      "position_id": 804,
+      "mint": "7GCihgDB8fe6KNjn2MYtkzZcRjQy3t9GHdC8uHYmW2hr",
+      "symbol": "POPCAT",
+      "name": "Popcat",
+      "source": "manual",
+      "exit_time": 1791259200,
+      "hold_secs": 19800,
+      "pnl_native": 0.0093,
+      "pnl_percent": 9.3,
+      "reason": {
+        "id": "trade-reason-trailing-stop"
+      }
+    },
+    {
+      "position_id": 803,
+      "mint": "HZ1JovNiVvGrGNiiYvEozEVgZ58xaU3RKwX8eACQBCt3",
+      "symbol": "PYTH",
+      "name": "Pyth Network",
+      "source": "auto",
+      "exit_time": 1791244800,
+      "hold_secs": 21600,
+      "pnl_native": 0.0147,
+      "pnl_percent": 14.7,
+      "reason": {
+        "id": "trade-reason-take-profit"
+      }
+    }
   ]
 }

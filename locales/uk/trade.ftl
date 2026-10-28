@@ -152,7 +152,7 @@ trade-toast-failed-add = Докупівля до позиції не вдала�
 trade-toast-failed-sell = Продаж не вдався
 
 # Trade and close reasons. Ids are the Debug names of TradeReason
-# (src/trader/types.rs) and the reasons written by src/positions.
+# (src/trader/trade_reason.rs) and the reasons written by src/positions.
 trade-reason-strategy-signal = Сигнал стратегії
 trade-reason-manual-entry = Вхід вручну
 trade-reason-force-buy = Примусова купівля
@@ -183,6 +183,22 @@ trade-reason-pending-verification = { $reason } (очікує перевірки
 trade-reason-force-closed = Примусово закрито: { $note }
 # $reason is a stored closed_reason that has no label; it is shown as stored.
 trade-reason-stored = { $reason }
+trade-reason-unknown = Не записано
+trade-reason-force-closed-any = Примусово закрито
+
+# Why a new entry was blocked. Ids come from EntryBlock in src/trader/admission.rs.
+trade-entry-block-force-stopped = Торгівлю примусово зупинено
+trade-entry-block-loss-limit = Ліміт збитків блокує нові входи
+trade-entry-block-connectivity = Потрібні сервіси недоступні
+trade-entry-block-storage-unavailable = Торгові дані недоступні або відновлюються
+trade-entry-block-position-limit = Досягнуто ліміту відкритих позицій
+trade-entry-block-already-open = Позицію вже відкрито
+trade-entry-block-reentry-cooldown = Пауза перед повторним входом у токен
+trade-entry-block-open-cooldown = Загальна пауза між входами
+trade-entry-block-entry-reserved = Обробляється інший вхід
+trade-entry-block-blacklisted = Токен заблоковано контролем ризиків
+trade-entry-block-paper-balance-exhausted = Віртуального балансу недостатньо для угоди
+trade-entry-block-check-failed = Перевірку безпеки не вдалося завершити
 
 # Toast shown when a quick-trade shortcut runs without a token selected (ui/quick_trade_shortcuts.js).
 trade-quick-no-token = Токен не вибрано

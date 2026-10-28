@@ -1,15 +1,3 @@
-trader-exit-type-stop-loss = Стоп-лосс
-trader-exit-type-take-profit = Тейк-профит
-trader-exit-type-roi = Тейк-профит
-trader-exit-type-roi-exit = Тейк-профит
-trader-exit-type-trailing-stop = Трейлинг-стоп
-trader-exit-type-time-override = Выход по времени
-trader-exit-type-time-rule = Правило по времени
-trader-exit-type-manual = Вручную
-trader-exit-type-manual-close = Вручную
-trader-exit-type-dca = DCA
-trader-exit-type-unknown = Неизвестно
-
 trader-tab-stats = Статистика
 trader-tab-strategies = Стратегии
 trader-tab-stop-loss = Стоп-лосс
@@ -26,32 +14,41 @@ trader-feature-disabled = Отключено
     .message = Эта функция сейчас отключена.
 
 trader-status-title = Автотрейдер
-trader-status-loading = Загрузка...
 trader-status-running = Работает
 trader-status-stopped = Остановлен
 trader-status-setup-required = Требуется настройка
 trader-setup-action = Завершить настройку
-trader-toggle-on = ВКЛ.
-trader-toggle-off = ВЫКЛ.
 trader-toggle-start-failed = Не удалось запустить трейдер
 trader-toggle-stop-failed = Не удалось остановить трейдер
-trader-controls-title = Управление торговлей
 trader-halt-title = Торговля остановлена
 trader-halt-reason-default = Принудительная остановка вручную
 trader-halt-resume = Возобновить
 trader-monitor-entry = Мониторинг входов
 trader-monitor-exit = Мониторинг выходов
-trader-monitor-master-off = Автотрейдер выключен
 trader-loss-limit-title = Лимит убытков за период
 trader-loss-limit-resume = Возобновить торговлю
 trader-loss-limit-reset = Сбросить период
 trader-loss-limit-off = Выкл.
-trader-loss-limit-none = Лимит убытков за период не задан
 trader-loss-limit-resets-in = Сброс через { $hours } { $minutes }
-trader-loss-limit-reached = ЛИМИТ ДОСТИГНУТ
 trader-force-stop = Остановить всё принудительно
 trader-force-stop-hint = Сразу останавливает все мониторы, задачи копирования и сделки.
 trader-force-stop-idle = Сейчас не работает ничего, что остановила бы принудительная остановка.
+trader-run-state-force-stopped = Принудительно остановлен
+trader-run-state-waiting = Ожидание сервисов
+trader-run-state-idle = Мониторинг выключен
+trader-entries-label = Новые входы
+trader-entries-open = Открыты
+trader-entries-monitor-off = Мониторинг входов выключен
+trader-entries-no-live-strategy = Нет боевой стратегии входа
+trader-entries-no-paper-strategy = Нет виртуальной стратегии входа
+trader-action-start = Запустить автотрейдер
+trader-action-stop = Остановить автотрейдер
+trader-notice-loss-limit = Достигнут лимит убытков
+trader-notice-loss-limit-message = Новые боевые входы приостановлены до сброса периода. Выходы продолжают работать.
+trader-notice-stats-failed = Не удалось загрузить статистику
+trader-controls-group =
+    .aria-label = Управление торговлей
+trader-monitor-dormant = Запустится вместе с автотрейдером
 
 trader-force-stop-confirm = Принудительная остановка торговли
     .message = Все торговые операции будут немедленно остановлены. Продолжить?
@@ -83,27 +80,36 @@ trader-stats-window =
     .aria-label = Период статистики
 trader-stats-book =
     .aria-label = Торговый портфель
-trader-paper-run-since = Виртуальный прогон с { $date }
-trader-paper-start = Старт
-trader-paper-cash = Свободно
-trader-paper-open = В позициях
-trader-paper-unrealized = Нереализованный
+trader-exposure-cash = Свободно
+trader-exposure-open = В позициях
+trader-exposure-unrealized = Нереализованный
+trader-exposure-open-title = Позиции, занимающие слот, из лимита открытых позиций
+trader-exposure-in-use = Задействовано
+trader-exposure-in-use-title = { -sol }, вложенные в открытые позиции
+# $amount is the formatted count.
+trader-exposure-unpriced =
+    { $count ->
+        [one] У { $amount } открытой позиции ещё нет живой цены
+        [few] У { $amount } открытых позиций ещё нет живой цены
+        [many] У { $amount } открытых позиций ещё нет живой цены
+       *[other] У { $amount } открытой позиции ещё нет живой цены
+    }
+# $date is a formatted date; $amount is a formatted SOL amount.
+trader-exposure-cash-title = Виртуальный прогон с { $date } · начат с { $amount }
 trader-paper-reset = Сбросить виртуальный прогон
 trader-paper-reset-title = Сбросить виртуальный прогон?
 trader-paper-reset-run-message = Каждая открытая виртуальная позиция, включая виртуальные активы задач копирования, закроется по текущей цене, и начнётся новый прогон с заданным стартовым балансом. Прежние прогоны останутся в истории.
 trader-paper-reset-done = Начался новый виртуальный прогон
 trader-paper-reset-failed = Не удалось сбросить виртуальный прогон
-trader-paper-account-failed = Не удалось загрузить виртуальный прогон
 trader-realized-title = Реализованные результаты
 trader-metric-net-pnl = Чистый P&L
 trader-metric-win-rate = Доля прибыльных сделок
 trader-metric-profit-factor = Профит-фактор
 trader-metric-max-drawdown = Макс. просадка
-trader-metric-capital = Капитал в работе
 trader-metric-avg-win-loss = Сред. прибыль / убыток
 trader-metric-closed-trades = Закрытые сделки
 trader-metric-median-hold = Медианное удержание
-trader-stats-empty = В этом периоде нет закрытых сделок
+trader-metric-fees = Сетевые комиссии
 trader-stats-won-lost = выиграно { $won } · проиграно { $lost }
 trader-stats-record = { $wins } · { $losses }
 trader-stats-wins =
@@ -123,60 +129,101 @@ trader-stats-losses =
 trader-stats-expected = ожидаемо { $amount } за сделку
 trader-stats-profit-factor-basis = Валовая прибыль ÷ валовой убыток
 trader-stats-drawdown-basis = Наибольшее реализованное падение от пика до минимума
-trader-stats-slots =
-    { $count ->
-        [one] Слоты позиций: занято { $used } из { $max }
-        [few] Слоты позиций: занято { $used } из { $max }
-        [many] Слоты позиций: занято { $used } из { $max }
-       *[other] Слоты позиций: занято { $used } из { $max }
-    }
-trader-stats-avg-basis = Средний результат прибыльной и убыточной сделки
-trader-stats-closed =
-    { $count ->
-        [one] закрыта { $amount } позиция
-        [few] закрыто { $amount } позиции
-        [many] закрыто { $amount } позиций
-       *[other] закрыто { $amount } позиции
-    }
-trader-stats-hold-average = в среднем { $span }
 trader-stats-excluded =
     { $count ->
-        [one] Исключён { $amount } закрытый раунд — нет полной базовой стоимости, поэтому нельзя честно посчитать P&L.
-        [few] Исключены { $amount } закрытых раунда — нет полной базовой стоимости, поэтому нельзя честно посчитать P&L.
-        [many] Исключены { $amount } закрытых раундов — нет полной базовой стоимости, поэтому нельзя честно посчитать P&L.
-       *[other] Исключены { $amount } закрытого раунда — нет полной базовой стоимости, поэтому нельзя честно посчитать P&L.
+        [one] Не учтена { $amount } закрытая сделка: её базовая стоимость неполная, поэтому её P&L неизвестен.
+        [few] Не учтено закрытых сделок: { $amount }. Их базовая стоимость неполная, поэтому их P&L неизвестен.
+        [many] Не учтено закрытых сделок: { $amount }. Их базовая стоимость неполная, поэтому их P&L неизвестен.
+       *[other] Не учтено закрытых сделок: { $amount }. Их базовая стоимость неполная, поэтому их P&L неизвестен.
     }
+# $ratio is a formatted ratio.
+trader-stats-payoff = Payoff { $ratio }
+trader-stats-streak-win =
+    { $count ->
+        [one] Последняя сделка прибыльная
+        [few] { $amount } прибыльные подряд
+        [many] { $amount } прибыльных подряд
+       *[other] { $amount } прибыльной подряд
+    }
+trader-stats-streak-loss =
+    { $count ->
+        [one] Последняя сделка убыточная
+        [few] { $amount } убыточные подряд
+        [many] { $amount } убыточных подряд
+       *[other] { $amount } убыточной подряд
+    }
+# $wins and $losses are formatted durations.
+trader-stats-hold-split = Прибыльные { $wins } · убыточные { $losses }
+trader-stats-fees-basis = Учтены в чистом P&L
+trader-stats-loading = Загрузка статистики...
+trader-open-strategies = Открыть стратегии
 
 trader-daily-title = P&L по дням
 trader-daily-subtitle = Реализованный { -sol } за день с накопленным итогом
-trader-daily-loading = Загрузка P&L по дням...
 trader-daily-chart = Реализованная прибыль и убыток по дням в { -sol }
 trader-weekly-title = P&L по неделям
 trader-weekly-subtitle = Реализованный { -sol } за неделю ISO с накопленным итогом
 trader-weekly-chart = Реализованная прибыль и убыток по неделям в { -sol }
+# $date is a formatted date; $pnl a signed SOL amount.
+trader-daily-bar =
+    { $count ->
+        [one] { $date } · { $pnl } · { $amount } сделка
+        [few] { $date } · { $pnl } · { $amount } сделки
+        [many] { $date } · { $pnl } · { $amount } сделок
+       *[other] { $date } · { $pnl } · { $amount } сделки
+    }
+trader-weekly-bar =
+    { $count ->
+        [one] Неделя с { $date } · { $pnl } · { $amount } сделка
+        [few] Неделя с { $date } · { $pnl } · { $amount } сделки
+        [many] Неделя с { $date } · { $pnl } · { $amount } сделок
+       *[other] Неделя с { $date } · { $pnl } · { $amount } сделки
+    }
 trader-extreme-best = Лучшая сделка
 trader-extreme-worst = Худшая сделка
+trader-extreme-runs = Больше всего подряд
+trader-outcome-title = Итоги сделок
+trader-outcome-subtitle = Закрытые сделки по доходности, в процентах
+# $value, $from and $to are formatted signed percentages.
+trader-outcome-below = Ниже { $value }
+trader-outcome-range = От { $from } до { $to }
+trader-outcome-above = { $value } и выше
+# $range is one of the three messages above; $pnl a signed SOL amount.
+trader-outcome-bucket =
+    { $count ->
+        [one] { $range } · { $amount } сделка · { $pnl }
+        [few] { $range } · { $amount } сделки · { $pnl }
+        [many] { $range } · { $amount } сделок · { $pnl }
+       *[other] { $range } · { $amount } сделки · { $pnl }
+    }
 
-trader-exit-title = Разбивка стратегий выхода
-trader-exit-subtitle = Как закрывались позиции и что вернул каждый выход
-trader-exit-loading = Загрузка данных о выходах...
-trader-exit-empty-day = Нет закрытых сделок за последние 24 часа
-trader-exit-empty-all = Закрытых сделок пока нет
-trader-exit-empty-days =
+trader-stats-empty-day = Нет закрытых сделок за последние 24 часа
+trader-stats-empty-all = Закрытых сделок пока нет
+trader-stats-empty-hint = Закрытые сделки появятся здесь после продажи позиции. Запустите автотрейдер или выберите более длинный период.
+trader-stats-empty-days =
     { $count ->
         [one] Нет закрытых сделок за последний { $amount } день
         [few] Нет закрытых сделок за последние { $amount } дня
         [many] Нет закрытых сделок за последние { $amount } дней
        *[other] Нет закрытых сделок за последние { $amount } дня
     }
-trader-exit-share =
-    { $count ->
-        [one] { $amount } сделка · { $share } выходов
-        [few] { $amount } сделки · { $share } выходов
-        [many] { $amount } сделок · { $share } выходов
-       *[other] { $amount } сделки · { $share } выходов
-    }
-trader-exit-average = в среднем { $value }
+trader-exits-title = Причины выхода
+trader-exits-subtitle = Чем закончились закрытые сделки и что принёс каждый выход
+trader-sources-title = Источники входа
+trader-sources-subtitle = Что открыло закрытые сделки
+trader-recent-title = Последние закрытия
+trader-recent-subtitle = Последние закрытые сделки в этом периоде
+trader-column-token = Токен
+trader-column-exit = Выход
+trader-column-source = Источник
+trader-column-trades = Сделки
+trader-column-win-rate = Доля прибыльных
+trader-column-avg-return = Ср. доходность
+trader-column-net-pnl = Чистый P&L
+trader-column-held = Удержание
+trader-column-closed = Закрыта
+trader-column-pnl = P&L
+trader-column-return = Доходность
 
 trader-example-how-it-works = Как это работает
 trader-step-entry = Вход
@@ -378,3 +425,8 @@ trader-timing-concurrency = Параллельность проверки вхо
 trader-timing-concurrency-hint = Сколько токенов проверять одновременно (больше — быстрее, но выше нагрузка на процессор)
 trader-timing-unit-minutes = мин
 trader-timing-unit-tokens = токенов
+
+## Service mode notice
+
+trader-service-notice-title = Работает через сервис { -brand }
+trader-service-notice-message = Цены обновляются раз в несколько секунд, поэтому быстрые выходы, например узкие трейлинг-стопы, срабатывают позже, чем со своим RPC.

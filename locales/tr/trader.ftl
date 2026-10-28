@@ -1,15 +1,3 @@
-trader-exit-type-stop-loss = Zarar durdur
-trader-exit-type-take-profit = Kâr al
-trader-exit-type-roi = Kâr al
-trader-exit-type-roi-exit = Kâr al
-trader-exit-type-trailing-stop = İz süren stop
-trader-exit-type-time-override = Zaman çıkışı
-trader-exit-type-time-rule = Zaman kuralı
-trader-exit-type-manual = Manuel
-trader-exit-type-manual-close = Manuel
-trader-exit-type-dca = DCA
-trader-exit-type-unknown = Bilinmiyor
-
 trader-tab-stats = İstatistikler
 trader-tab-strategies = Stratejiler
 trader-tab-stop-loss = Zarar durdur
@@ -26,32 +14,41 @@ trader-feature-disabled = Devre dışı
     .message = Bu özellik şu anda devre dışı.
 
 trader-status-title = Auto Trader
-trader-status-loading = Yükleniyor...
 trader-status-running = Çalışıyor
 trader-status-stopped = Durduruldu
 trader-status-setup-required = Kurulum gerekli
 trader-setup-action = Kurulumu tamamla
-trader-toggle-on = AÇIK
-trader-toggle-off = KAPALI
 trader-toggle-start-failed = Trader başlatılamadı
 trader-toggle-stop-failed = Trader durdurulamadı
-trader-controls-title = İşlem kontrolleri
 trader-halt-title = İşlem durduruldu
 trader-halt-reason-default = Manuel zorla durdurma
 trader-halt-resume = Devam et
 trader-monitor-entry = Giriş izleyici
 trader-monitor-exit = Çıkış izleyici
-trader-monitor-master-off = Auto Trader kapalı
 trader-loss-limit-title = Dönemlik zarar limiti
 trader-loss-limit-resume = İşleme devam et
 trader-loss-limit-reset = Dönemi sıfırla
 trader-loss-limit-off = Kapalı
-trader-loss-limit-none = Dönemlik zarar limiti yapılandırılmadı
 trader-loss-limit-resets-in = Sıfırlanmaya kalan: { $hours } { $minutes }
-trader-loss-limit-reached = LİMİTE ULAŞILDI
 trader-force-stop = Her şeyi zorla durdur
 trader-force-stop-hint = Tüm izleyicileri, kopyalama görevlerini ve işlemleri bir anda durdurur.
 trader-force-stop-idle = Zorla durdurmanın durduracağı çalışan bir şey yok.
+trader-run-state-force-stopped = Zorla durduruldu
+trader-run-state-waiting = Hizmetler bekleniyor
+trader-run-state-idle = İzleyiciler kapalı
+trader-entries-label = Yeni girişler
+trader-entries-open = Açık
+trader-entries-monitor-off = Giriş izleyici kapalı
+trader-entries-no-live-strategy = Canlı giriş stratejisi yok
+trader-entries-no-paper-strategy = Sanal giriş stratejisi yok
+trader-action-start = Auto Trader'ı başlat
+trader-action-stop = Auto Trader'ı durdur
+trader-notice-loss-limit = Zarar limitine ulaşıldı
+trader-notice-loss-limit-message = Yeni canlı girişler dönem sıfırlanana kadar duraklatıldı. Çıkışlar devam eder.
+trader-notice-stats-failed = İstatistikler yüklenemedi
+trader-controls-group =
+    .aria-label = İşlem kontrolleri
+trader-monitor-dormant = Auto Trader ile başlar
 
 trader-force-stop-confirm = İşlemi zorla durdur
     .message = Bu, TÜM işlem operasyonlarını hemen durdurur. Devam edilsin mi?
@@ -83,27 +80,34 @@ trader-stats-window =
     .aria-label = İstatistik aralığı
 trader-stats-book =
     .aria-label = İşlem defteri
-trader-paper-run-since = { $date } tarihinden beri sanal dönem
-trader-paper-start = Başlangıç
-trader-paper-cash = Nakit
-trader-paper-open = Açık
-trader-paper-unrealized = Gerçekleşmemiş
+trader-exposure-cash = Nakit
+trader-exposure-open = Açık
+trader-exposure-unrealized = Gerçekleşmemiş
+trader-exposure-open-title = Açık pozisyon limitinden yer kaplayan pozisyonlar
+trader-exposure-in-use = Kullanımda
+trader-exposure-in-use-title = Açık pozisyonlara harcanan { -sol }
+# $amount is the formatted count.
+trader-exposure-unpriced =
+    { $count ->
+        [one] { $amount } açık pozisyonun henüz canlı fiyatı yok
+       *[other] { $amount } açık pozisyonun henüz canlı fiyatı yok
+    }
+# $date is a formatted date; $amount is a formatted SOL amount.
+trader-exposure-cash-title = { $date } tarihinden beri sanal dönem · { $amount } ile başladı
 trader-paper-reset = Sanal dönemi sıfırla
 trader-paper-reset-title = Sanal dönem sıfırlansın mı?
 trader-paper-reset-run-message = Kopya görevlerinin sanal varlıkları dahil açık her sanal pozisyon güncel fiyatından kapanır ve ayarlı başlangıç bakiyesiyle yeni bir dönem başlar. Önceki dönemler geçmişte kalır.
 trader-paper-reset-done = Yeni bir sanal dönem başladı
 trader-paper-reset-failed = Sanal dönem sıfırlanamadı
-trader-paper-account-failed = Sanal dönem yüklenemedi
 trader-realized-title = Gerçekleşmiş performans
 trader-metric-net-pnl = Net K/Z
 trader-metric-win-rate = Kazanma oranı
 trader-metric-profit-factor = Kâr faktörü
 trader-metric-max-drawdown = Maks. düşüş (drawdown)
-trader-metric-capital = Çalışan sermaye
 trader-metric-avg-win-loss = Ort. kazanç / kayıp
 trader-metric-closed-trades = Kapanan işlemler
 trader-metric-median-hold = Medyan tutma
-trader-stats-empty = Bu aralıkta kapanan işlem yok
+trader-metric-fees = Ağ ücretleri
 trader-stats-won-lost = { $won } kazanıldı · { $lost } kaybedildi
 trader-stats-record = { $wins } · { $losses }
 trader-stats-wins =
@@ -119,50 +123,87 @@ trader-stats-losses =
 trader-stats-expected = İşlem başına beklenen { $amount }
 trader-stats-profit-factor-basis = Brüt kazanç ÷ brüt kayıp
 trader-stats-drawdown-basis = Gerçekleşmiş en derin tepeden çukura düşüş
-trader-stats-slots =
-    { $count ->
-        [one] { $used } / { $max } pozisyon yuvası kullanıldı
-       *[other] { $used } / { $max } pozisyon yuvası kullanıldı
-    }
-trader-stats-avg-basis = Kazanan ve kaybeden işlemin ortalama sonucu
-trader-stats-closed =
-    { $count ->
-        [one] { $amount } pozisyon kapandı
-       *[other] { $amount } pozisyon kapandı
-    }
-trader-stats-hold-average = ort. { $span }
 trader-stats-excluded =
     { $count ->
-        [one] { $amount } kapalı tur hariç tutuldu — tam maliyet bazı yok, bu yüzden güvenilir K/Z hesaplanamaz.
-       *[other] { $amount } kapalı tur hariç tutuldu — tam maliyet bazı yok, bu yüzden güvenilir K/Z hesaplanamaz.
+        [one] { $amount } kapalı işlem dahil edilmedi: maliyet bazı eksik olduğu için K/Z bilinmiyor.
+       *[other] { $amount } kapalı işlem dahil edilmedi: maliyet bazı eksik olduğu için K/Z bilinmiyor.
     }
+# $ratio is a formatted ratio.
+trader-stats-payoff = Payoff { $ratio }
+trader-stats-streak-win =
+    { $count ->
+        [one] Son işlem kazandı
+       *[other] Üst üste { $amount } kazanç
+    }
+trader-stats-streak-loss =
+    { $count ->
+        [one] Son işlem kaybetti
+       *[other] Üst üste { $amount } kayıp
+    }
+# $wins and $losses are formatted durations.
+trader-stats-hold-split = Kazançlar { $wins } · kayıplar { $losses }
+trader-stats-fees-basis = Net K/Z'ye dahil
+trader-stats-loading = İstatistikler yükleniyor...
+trader-open-strategies = Stratejileri aç
 
 trader-daily-title = Günlük K/Z
 trader-daily-subtitle = Günlük gerçekleşmiş { -sol }, kümülatif toplamla
-trader-daily-loading = Günlük K/Z yükleniyor...
 trader-daily-chart = { -sol } cinsinden günlük gerçekleşmiş kâr ve zarar
 trader-weekly-title = Haftalık K/Z
 trader-weekly-subtitle = ISO haftası başına gerçekleşmiş { -sol }, kümülatif toplamla
 trader-weekly-chart = { -sol } cinsinden haftalık gerçekleşmiş kâr ve zarar
+# $date is a formatted date; $pnl a signed SOL amount.
+trader-daily-bar =
+    { $count ->
+        [one] { $date } · { $pnl } · { $amount } işlem
+       *[other] { $date } · { $pnl } · { $amount } işlem
+    }
+trader-weekly-bar =
+    { $count ->
+        [one] { $date } haftası · { $pnl } · { $amount } işlem
+       *[other] { $date } haftası · { $pnl } · { $amount } işlem
+    }
 trader-extreme-best = En iyi işlem
 trader-extreme-worst = En kötü işlem
+trader-extreme-runs = Üst üste en fazla
+trader-outcome-title = İşlem sonuçları
+trader-outcome-subtitle = Kapanan işlemler getiriye göre, yüzde olarak
+# $value, $from and $to are formatted signed percentages.
+trader-outcome-below = { $value } altı
+trader-outcome-range = { $from } ile { $to } arası
+trader-outcome-above = { $value } ve üzeri
+# $range is one of the three messages above; $pnl a signed SOL amount.
+trader-outcome-bucket =
+    { $count ->
+        [one] { $range } · { $amount } işlem · { $pnl }
+       *[other] { $range } · { $amount } işlem · { $pnl }
+    }
 
-trader-exit-title = Çıkış stratejisi dökümü
-trader-exit-subtitle = Pozisyonların nasıl kapandığı ve her çıkışın getirisi
-trader-exit-loading = Çıkış verileri yükleniyor...
-trader-exit-empty-day = Son 24 saatte kapanan işlem yok
-trader-exit-empty-all = Henüz kapanan işlem yok
-trader-exit-empty-days =
+trader-stats-empty-day = Son 24 saatte kapanan işlem yok
+trader-stats-empty-all = Henüz kapanan işlem yok
+trader-stats-empty-hint = Bir pozisyon satıldığında kapanan işlemler burada görünür. Auto Trader'ı başlatın veya daha uzun bir dönem seçin.
+trader-stats-empty-days =
     { $count ->
         [one] Son { $amount } günde kapanan işlem yok
        *[other] Son { $amount } günde kapanan işlem yok
     }
-trader-exit-share =
-    { $count ->
-        [one] { $amount } işlem · çıkışlardaki pay: { $share }
-       *[other] { $amount } işlem · çıkışlardaki pay: { $share }
-    }
-trader-exit-average = ort. { $value }
+trader-exits-title = Çıkış nedenleri
+trader-exits-subtitle = Kapanan işlemlerin nasıl bittiği ve her çıkışın ne getirdiği
+trader-sources-title = Giriş kaynakları
+trader-sources-subtitle = Kapanan işlemleri neyin açtığı
+trader-recent-title = Son kapanışlar
+trader-recent-subtitle = Bu aralıkta en son kapanan işlemler
+trader-column-token = Token
+trader-column-exit = Çıkış
+trader-column-source = Kaynak
+trader-column-trades = İşlemler
+trader-column-win-rate = Kazanma oranı
+trader-column-avg-return = Ort. getiri
+trader-column-net-pnl = Net K/Z
+trader-column-held = Tutma
+trader-column-closed = Kapandı
+trader-column-pnl = K/Z
+trader-column-return = Getiri
 
 trader-example-how-it-works = Nasıl çalışır
 trader-step-entry = Giriş
@@ -356,3 +397,8 @@ trader-timing-concurrency = Giriş kontrolü eşzamanlılığı
 trader-timing-concurrency-hint = Aynı anda kontrol edilecek token sayısı (yüksek = daha hızlı ama daha fazla CPU)
 trader-timing-unit-minutes = dk
 trader-timing-unit-tokens = token
+
+## Service mode notice
+
+trader-service-notice-title = { -brand } hizmeti üzerinde çalışıyor
+trader-service-notice-message = Fiyatlar birkaç saniyede bir yenilendiği için dar trailing stop gibi hızlı çıkışlar, kendi RPC'nize göre daha geç tepki verir.

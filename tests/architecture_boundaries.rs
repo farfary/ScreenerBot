@@ -2990,6 +2990,10 @@ fn no_catch_all_error_variants() {
 ///   variant; that context exists only where the walk stopped.
 /// - `replacement_error` maps a `wallets::Error` from a trading-wallet replacement
 ///   onto the API error envelope for both the Wallets and the setup handlers.
+/// - `watch_failure` maps a `wallets::Error` from a wallet-watch operation onto
+///   the API error envelope, keeping a chain access refusal's own code.
+/// - `map_service_refusal` maps a `ServiceRefusal` from the ScreenerBot service
+///   onto the chain error vocabulary, recording the service state it implies.
 const ERROR_MAPPING_FUNCTIONS: &[&str] = &[
     "map_llm_error",
     "select_quote_failure",
@@ -3003,6 +3007,8 @@ const ERROR_MAPPING_FUNCTIONS: &[&str] = &[
     "invalid_config",
     "unknown_path",
     "replacement_error",
+    "watch_failure",
+    "map_service_refusal",
 ];
 
 /// A function whose whole job is to return an error is a variant wearing a
@@ -4519,6 +4525,65 @@ fn wallet_holding_rows_are_priced_by_the_worth_owner() {
     assert!(
         violations.is_empty(),
         "price wallet holding rows with wallet::held_token_price_native:\n{}",
+        violations.join("\n")
+    );
+}
+
+/// Chain reads and sends go through the chain access facade. The process RPC
+/// client is reached only by the RPC module itself and the own-RPC backend;
+/// the own-RPC client for a capability only by the consumers that need the
+/// user's own endpoints; and the access mode is read only by the access owner,
+/// its backends, the service client, config validation and the setup routes.
+#[test]
+fn chain_reads_go_through_the_chain_access_facade() {
+    const OWN_RPC_CONSUMERS: &[&str] = &[
+        "chains/solana/access/own_rpc.rs",
+        "chains/solana/pools/analyzer.rs",
+        "chains/solana/pools/fetcher_ops.rs",
+        "chains/solana/pools/service.rs",
+        "chains/solana/swaps/direct/venue.rs",
+        "chains/solana/wallets/runtime.rs",
+        "connectivity/monitors/rpc.rs",
+    ];
+    const MODE_READERS: &[&str] = &[
+        "chains/access.rs",
+        "chains/solana/access/mod.rs",
+        "config/utils.rs",
+        "data_server/mod.rs",
+        "rpc/gateway.rs",
+        // The setup routes carry the mode the user chose and persist it; their
+        // mode-specific steps belong in `chains::access` beside the switch.
+        "webserver/routes/initialization/handlers.rs",
+        "webserver/routes/initialization/validation.rs",
+    ];
+    let mut violations = Vec::new();
+    for (relative, contents) in walk_src() {
+        if is_test_support_file(&relative) {
+            continue;
+        }
+        let code = strip_comment_text(&production_text(&contents));
+        let path = relative.to_string_lossy().replace('\\', "/");
+        let rpc_owner =
+            path.starts_with("chains/solana/rpc/") || path == "chains/solana/access/own_rpc.rs";
+        if !rpc_owner && (code.contains("get_rpc_client(") || code.contains("try_get_rpc_client("))
+        {
+            violations.push(format!("src/{path}: process RPC client outside its owner"));
+        }
+        if !OWN_RPC_CONSUMERS.contains(&path.as_str()) && code.contains("own_rpc_client(") {
+            violations.push(format!("src/{path}: own-RPC client outside the allowlist"));
+        }
+        if !MODE_READERS.contains(&path.as_str())
+            && (code.contains("ChainAccessMode::") || code.contains("access::mode("))
+        {
+            violations.push(format!(
+                "src/{path}: access mode read outside the access owner"
+            ));
+        }
+    }
+    assert!(
+        violations.is_empty(),
+        "reach the chain through crate::chains::solana::access::chain_access and \
+         crate::chains::access capabilities:\n{}",
         violations.join("\n")
     );
 }

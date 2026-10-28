@@ -43,6 +43,11 @@ import {
   attachAccountHandlers,
   teardownAccountTab,
 } from "./settings/account_tab.js";
+import {
+  buildConnectionTab,
+  attachConnectionHandlers,
+  teardownConnectionTab,
+} from "./settings/connection_tab.js";
 
 // Whether an update needs a decision, for the nav indicator. Everything else about the
 // update lifecycle is owned by settings/updates_tab.js and read straight from
@@ -250,6 +255,8 @@ export class SettingsDialog {
 
     // The account panel polls while a browser sign-in is in flight.
     teardownAccountTab();
+    // The Connection tab waits for the restart a switch started.
+    teardownConnectionTab();
     teardownAgentConnectionsTab();
 
     this.dialogEl.classList.remove("active");
@@ -541,6 +548,10 @@ export class SettingsDialog {
                 <i class="icon-circle-user"></i>
                 <span data-l10n-id="settings-dialog-tab-account"></span>
               </button>
+              <button class="settings-nav-item" data-tab="connection">
+                <i class="icon-network"></i>
+                <span data-l10n-id="settings-dialog-tab-connection"></span>
+              </button>
               <button class="settings-nav-item" data-tab="telegram">
                 <i class="icon-send"></i>
                 <span data-l10n-id="settings-dialog-tab-telegram"></span>
@@ -597,6 +608,9 @@ export class SettingsDialog {
               <div class="settings-loading" data-l10n-id="common-loading"></div>
             </div>
             <div class="settings-tab" data-tab-content="account">
+              <div class="settings-loading" data-l10n-id="common-loading"></div>
+            </div>
+            <div class="settings-tab" data-tab-content="connection">
               <div class="settings-loading" data-l10n-id="common-loading"></div>
             </div>
             <div class="settings-tab" data-tab-content="telegram">
@@ -678,11 +692,18 @@ export class SettingsDialog {
     if (this.currentTab === "data") {
       teardownDataTab();
     }
+    if (this.currentTab === "connection") {
+      teardownConnectionTab();
+    }
 
     // Update nav buttons
     this.dialogEl.querySelectorAll(".settings-nav-item").forEach((btn) => {
       btn.classList.toggle("active", btn.dataset.tab === tab);
     });
+    // A tab opened from elsewhere (the header, a gate) may sit below the nav's fold.
+    this.dialogEl
+      .querySelector(`.settings-nav-item[data-tab="${tab}"]`)
+      ?.scrollIntoView({ block: "nearest" });
 
     // Update tab content
     this.dialogEl.querySelectorAll(".settings-tab").forEach((content) => {
@@ -741,6 +762,11 @@ export class SettingsDialog {
         content.innerHTML = buildAccountTab();
         I18n.localizeTree(content);
         attachAccountHandlers();
+        break;
+      case "connection":
+        content.innerHTML = buildConnectionTab();
+        I18n.localizeTree(content);
+        attachConnectionHandlers(content);
         break;
       case "telegram":
         loadTelegramTab(this, content);

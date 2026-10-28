@@ -45,11 +45,14 @@ pub async fn force_close_position(position_id: i64, note: &str) -> Result<ForceC
         return Err(Error::AlreadyClosed { position_id });
     }
 
-    // The exit price is informational: a live pool price when there is one, else the last
+    // The exit price is informational: the trading price when there is one, else the last
     // known price.
-    let exit_price = crate::positions::price_resolution::live_pool_price(&snapshot.mint)
+    let store_chain = crate::positions::db::get_store_chain().await.ok();
+    let exit_price = store_chain
+        .and_then(|chain| {
+            crate::positions::price_resolution::cached_trading_price(chain, &snapshot.mint)
+        })
         .map(|price| price.price_native)
-        .filter(|price| *price > 0.0 && price.is_finite())
         .or(snapshot.current_price)
         .unwrap_or(0.0);
     let fill = ForceCloseFill {

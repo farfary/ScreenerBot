@@ -34,6 +34,7 @@ settings-dialog-tab-hints = İpuçları
 settings-dialog-tab-data = Veri
 settings-dialog-tab-security = Güvenlik
 settings-dialog-tab-account = Hesap
+settings-dialog-tab-connection = Bağlantı
 settings-dialog-tab-telegram = { -telegram }
 settings-dialog-tab-agent-connections = Ajan Bağlantıları
 settings-dialog-tab-updates = Güncellemeler
@@ -504,14 +505,12 @@ settings-hints-restored = Tüm ipuçları geri yüklendi
 ## account_tab.js
 
 settings-account-title = { -brand } hesabı
-settings-account-description = Ücretsiz ve isteğe bağlı. { -brand } hesap olmadan da işlem yapar, keşfeder ve grafik çizer — yalnızca herkese açık sağlayıcıları kullanır. Aşağıdaki panel, giriş yapmanın neler eklediğini listeler.
+settings-account-description = Ücretsiz. Kendi RPC'nizle isteğe bağlıdır: { -brand } hesap olmadan da herkese açık sağlayıcılarla işlem yapar, keşfeder ve grafik çizer. { -brand } hizmeti için hesap gerekir. Aşağıdaki panel, giriş yapmanın neler eklediğini listeler.
+settings-account-description-service = Ücretsiz ve { -brand } hizmeti için gerekli: cüzdan okumaları ve imzaladığınız swap'lar bu hesapla screenerbot.io üzerinden geçer. Özel anahtarınız bu bilgisayardan asla çıkmaz.
 settings-account-data-title = { -brand } verileri
-settings-account-data-description = screenerbot.io üzerinde ortak bir piyasa verisi hizmeti işletiyoruz: yedi zaman diliminde birleştirilmiş mumlar, çözümlenmiş havuz kaydı, önbelleğe alınmış güvenlik raporları ve normalleştirilmiş token kimliği. Her kurulumun herkese açık sağlayıcıların hız sınırına tek başına takılmasını önler. Hizmet, işletme maliyetinin ilişkilendirilebilmesi ve kötüye kullanımın sınırlanabilmesi için hesap gerektirir.
+settings-account-data-description = { -brand }, screenerbot.io üzerinde grafikler, havuz verileri, güvenlik raporları ve token ayrıntıları için ortak bir piyasa verisi hizmeti çalıştırır; böylece kurulumunuz herkese açık sağlayıcıların hız sınırlarına tek başına takılmaz. Kötüye kullanımı sınırlamak için ücretsiz bir hesap gerekir.
 settings-account-data-fallback = Hizmet kullanılamadığında { -brand } otomatik olarak herkese açık sağlayıcılara geçer. Hiçbir şey durmaz; grafikler daha yavaş dolar ve daha az geçmiş içerir.
-settings-account-gateway-title = İşlem gönderme
-settings-account-gateway-description = Giriş yaptığınızda { -brand }, takaslarınızı kendi RPC'niz yerine screenerbot.io üzerinden yayınlayabilir. Botunuz her işlemi yine bu makinede oluşturur ve imzalar — sunucu yalnızca iletir ve imzalı bir işlemi imzasını geçersiz kılmadan değiştiremez.
-settings-account-gateway-label = İşlem göndermek için { -brand } RPC'sini kullan
-settings-account-gateway-hint = Yalnızca gönderim. Fiyat verileri her zaman kendi RPC'nizden gelir — havuz yoklaması ortak bir uç nokta için çok ağırdır, bu yüzden oraya asla gönderilmez.
+settings-account-data-fallback-service = { -brand } hizmetinde cüzdan okumaları ve işlemler de screenerbot.io üzerinden geçer: ulaşılamadığı sürece işlem duraklar ve bağlantı geri geldiğinde devam eder.
 settings-account-manage-title = Hesabınızı yönetme
 settings-account-manage-description = Parolanız, e-posta adresiniz, bağlı cihazlarınız ve yönlendirme ödemeleriniz web sitesinde yönetilir. Orada bir cihazı iptal etmek, bu cihaz dahil her yerde oturumunu kapatır.
 settings-account-open-dashboard = Panelinizi açın
@@ -632,3 +631,26 @@ settings-data-folder-label = Veri Klasörünü Aç
 settings-data-folder-hint = Tüm { -brand } verilerini içeren klasörü dosya yöneticinizde açın.
 settings-data-folder-open = Klasörü Aç
 settings-data-folder-open-failed = Veri klasörü açılamadı
+
+## Connection tab (scripts/ui/settings/connection_tab.js)
+
+settings-connection-title = Bağlantı
+settings-connection-description = { -brand } uygulamasının { -solana } ağına nasıl ulaştığı.
+settings-connection-choice =
+    .aria-label = Bağlantı
+settings-connection-active = Etkin
+settings-connection-service-title = { -brand } hizmeti
+settings-connection-service-detail = Fiyatlar birkaç saniyede bir yenilenir. Kopya işlem, cüzdan izleme, diğer cüzdanların bakiyeleri, eski geçmiş, doğrudan havuz swap'ları ve canlı havuz fiyatları kendi RPC'nizi gerektirir.
+settings-connection-own-title = Kendi RPC'niz
+settings-connection-own-detail = Saniyede yaklaşık iki fiyat ve tüm özellikler.
+settings-connection-apply = Uygula ve yeniden başlat
+settings-connection-to-service-title = { -brand } hizmetine geçilsin mi?
+settings-connection-to-service-message = Kopya işlem, cüzdan izleme, diğer cüzdanların bakiyeleri, eski geçmiş, doğrudan havuz swap'ları ve canlı havuz fiyatları kapanır; ayarları korunur. Oturumunuz kapalıyken işlemler duraklar. { -brand } geçiş için yeniden başlar.
+settings-connection-to-own-title = Kendi RPC'nize geçilsin mi?
+settings-connection-to-own-message = { -brand } uç noktalarınızı kontrol eder, ardından geçiş için yeniden başlar. Tüm özellikler yeniden açılır.
+settings-connection-signed-in-as = Bağlı · { $name } olarak oturum açıldı
+settings-connection-sending-title = İşlem gönderme
+settings-connection-sending-label = İşlemleri { -brand } üzerinden gönder
+settings-connection-sending-own-hint = Oturum açıkken bu bilgisayarda imzaladığınız swap'lar screenerbot.io üzerinden yayınlanır. Mümkün olmadığında RPC'niz kullanılır.
+settings-connection-sending-service-hint = { -brand } hizmetiyle her zaman açık: bu bilgisayarda imzaladığınız swap'lar { -solana } ağına bu yolla ulaşır.
+settings-connection-switch-failed = Bağlantı değiştirilemedi.

@@ -38,19 +38,6 @@ copy-skip-swap-mixed-quote = SOL ve stablecoin ile birlikte ödendi, bu yüzden 
 copy-skip-swap-multiple-tokens = Tek bir işlemde birden fazla token alınıp satıldı
 copy-skip-swap-unreadable = İşlem tutarları okunamadı
 
-copy-entry-block-force-stopped = İşlem zorla durduruldu
-copy-entry-block-loss-limit = Zarar limiti yeni girişleri engelliyor
-copy-entry-block-connectivity = Gerekli servisler kullanılamıyor
-copy-entry-block-storage-unavailable = İşlem verileri kullanılamıyor veya geri yükleniyor
-copy-entry-block-position-limit = Açık pozisyon limitine ulaşıldı
-copy-entry-block-already-open = Bir pozisyon zaten açık
-copy-entry-block-reentry-cooldown = Token yeniden giriş bekleme süresi
-copy-entry-block-open-cooldown = Genel giriş bekleme süresi
-copy-entry-block-entry-reserved = Başka bir giriş işleniyor
-copy-entry-block-blacklisted = Token risk kontrolleri tarafından engellendi
-copy-entry-block-paper-balance-exhausted = Sanal bakiye işlemi karşılamıyor
-copy-entry-block-check-failed = Bir güvenlik kontrolü tamamlanamadı
-
 copy-pause-user = Sizin tarafınızdan duraklatıldı
 copy-pause-latency-kill-switch = Otomatik duraklatıldı: işlemler ortalama { $average } sn geç geldi (sınır { $threshold } sn)
 copy-pause-watch-detached = Otomatik duraklatıldı: cüzdan artık izlenmiyor
@@ -88,6 +75,7 @@ copy-live-block-copy-trading-disabled = Kopya işleme genel olarak duraklatıld�
 copy-state-system-paused = Genel olarak duraklatıldı
 copy-state-force-stopped = Zorla durduruldu
 copy-state-entries-blocked = Girişler engellendi
+copy-state-own-rpc-required = Kendi RPC'niz gerekir
 copy-state-running-live = Çalışıyor
 copy-state-running-paper = Çalışıyor
 copy-exit-mode-buy-only = Benim çıkış kurallarım
@@ -161,6 +149,7 @@ copy-status-force-stopped = Zorla durduruldu
 copy-status-loss-limit = Zarar limiti
 copy-status-all-paused = Tüm görevler duraklatıldı
 copy-status-processing = İşleniyor
+copy-status-own-rpc-required = Kendi RPC'niz gerekir
 copy-toolbar-pause = Kopyalamayı duraklat
 copy-toolbar-resume = Kopyalamayı sürdür
 copy-toolbar-resume-tasks = Tüm görevleri sürdür
@@ -302,6 +291,7 @@ copy-state-detail-paper = Sanalda çalışıyor · işlemler simüle edilir, hi�
 copy-state-detail-live = Canlı çalışıyor · cüzdan işlemleri gerçek takaslarla kopyalanır
 copy-state-detail-system-paused = Bekliyor · kopya işleme genel olarak duraklatıldı, çıkışlar çalışmaya devam eder
 copy-state-detail-entries-blocked = Girişler zarar limiti nedeniyle engellendi · çıkışlar çalışmaya devam eder
+copy-state-detail-own-rpc-required = Bekliyor · { -brand } hizmeti diğer cüzdanları izlemez; devam etmek için bir RPC ekleyin
 copy-state-detail-force-stopped = Zorla durduruldu · hiçbir şey kopyalanmıyor
 
 copy-paused-since = { $reason } · { $since }
@@ -550,13 +540,11 @@ copy-table-profit-factor = Kâr faktörü
 copy-table-average-hold = Ort. tutma
 copy-table-target-difference = Medyan hedef fiyat farkı
 
-copy-chart-curve-label = Kümülatif K/Z { $amount } { -sol }
 copy-chart-compare-label = Göreve göre kümülatif K/Z
 copy-chart-empty-curve = Bu aralıkta henüz kapanmış tur yok.
 copy-chart-empty-bars = Bu aralıkta kayıt yok.
 copy-chart-empty-histogram = Bu aralıkta geliş örneği yok.
 copy-chart-empty-compare = Bu aralıkta karşılaştırılacak kapanmış tur yok.
-copy-chart-histogram-title = { $count } / { $total }
 
 copy-profile-copy = Bu cüzdanı kopyala
 copy-profile-copy-other = Diğer kurallarla kopyala

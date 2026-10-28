@@ -6,14 +6,11 @@
 import { registerPage } from "../core/lifecycle.js";
 import { Poller } from "../core/poller.js";
 import { $, $$ } from "../core/dom.js";
-import { formatFixed } from "../core/format.js";
 import * as Utils from "../core/utils.js";
 import { TabBar, TabBarManager } from "../ui/tab_bar.js";
 import { DataTable } from "../ui/data_table.js";
-import { renderStateView } from "../ui/state_view.js";
 import { renderTokenRowCell } from "../ui/token_identity.js";
 import { ConfirmationDialog } from "../ui/confirmation_dialog.js";
-import { closeReasonText } from "../ui/trade_reason.js";
 import { requestManager } from "../core/request_manager.js";
 import { LOSS_MAGNITUDE, createTraderConfigCards, displayValue } from "./trader/config_cards.js";
 import { playToggleOn, playToggleOff, playError } from "../core/sounds.js";
@@ -28,25 +25,8 @@ import {
   handleFeatureRestrictedTab,
 } from "./trader/features.js";
 import { createLifecycle as createStrategiesLifecycle } from "./strategies.js";
-import { createPaperAccount } from "./trader/paper_account.js";
-import { RANGE_OPTIONS, renderSegmented } from "../ui/segmented.js";
-import { TRADING_MODE_ICONS, tradingModeLabel } from "../ui/trading_mode.js";
-
-// Snake-case exit_type ids written by src/trader/stats.rs. Every other stored
-// closed_reason resolves through `closeReasonText` (ui/trade_reason.js).
-const EXIT_TYPE_LABELS = Object.freeze({
-  stop_loss: "trader-exit-type-stop-loss",
-  take_profit: "trader-exit-type-take-profit",
-  roi: "trader-exit-type-roi",
-  roi_exit: "trader-exit-type-roi-exit",
-  trailing_stop: "trader-exit-type-trailing-stop",
-  time_override: "trader-exit-type-time-override",
-  time_rule: "trader-exit-type-time-rule",
-  manual: "trader-exit-type-manual",
-  manual_close: "trader-exit-type-manual-close",
-  dca: "trader-exit-type-dca",
-  unknown: "trader-exit-type-unknown",
-});
+import { createStatsView } from "./trader/stats.js";
+import { renderServiceNotice } from "../ui/access_gate.js";
 
 // Sub-tabs configuration. The embedded Strategies roster and editor is second.
 function buildSubTabs() {
@@ -75,18 +55,6 @@ function createLifecycle() {
   let lifecycleContext = null;
   let timePositions = null;
 
-  // Realized window for the Stats tab (`24h`, `7d`, `30d` or `all`). Owned here and sent
-  // to the API — the tab never labels a window it did not ask for.
-  let statsWindow = "30d";
-  // The book the Stats tab reads: the live book by default, the paper book on request.
-  // The two are never summed into one figure.
-  let statsBook = "live";
-
-  // Hash guards — a 5s poll must not rewrite innerHTML that has not changed, or it
-  // destroys the user's text selection on every tick.
-  let _lastDailyKey = null;
-  let _lastExitKey = null;
-
   // Event cleanup tracking
   const eventCleanups = [];
 
@@ -110,8 +78,9 @@ function createLifecycle() {
     traderConfig: () => state.config?.trader,
     exitStrategiesOn: () => state.exitStrategiesOn,
   });
+  // The Stats view owns the shown book; the controls read it for the entries chip.
+  let statsView = null;
   const controls = createTraderControls({
-    state,
     $,
     Utils,
     requestManager,
@@ -120,13 +89,16 @@ function createLifecycle() {
     playToggleOff,
     playError,
     eventCleanups,
+    getBook: () => statsView?.getBook() ?? "live",
+    onStatus: (status) => statsView?.setStatus(status),
   });
-
-  const paperAccount = createPaperAccount({
+  statsView = createStatsView({
     requestManager,
-    ConfirmationDialog,
     Utils,
-    onReset: () => void loadStats(),
+    DataTable,
+    ConfirmationDialog,
+    controls,
+    switchTab: (tabId) => void tabBar?.setActive(tabId),
   });
 
   // Embedded Strategies subtab — drives the strategies page module's lifecycle.
@@ -210,14 +182,13 @@ function createLifecycle() {
   }
 
   /**
-   * Read the Stats tab's figures. Independent reads, so they go out together instead of
-   * queueing behind each other. The status bar is read here because nothing else polls
-   * it: fetched once at init, it kept reporting "Running" forever after the trader had
-   * stopped itself.
+   * Read the Stats tab's figures and its controls. Independent reads, so they go out
+   * together instead of queueing behind each other. The trader status is polled here
+   * because nothing else reads it while the tab is open.
    */
   async function refreshStats() {
     if (state.currentTab !== "stats") return;
-    await Promise.all([loadStats(), controls.loadControlsStatus(), controls.fetchTraderStatus()]);
+    await Promise.all([statsView.refresh(), controls.refresh()]);
   }
 
   /**
@@ -262,14 +233,8 @@ function createLifecycle() {
       if (isStrategiesTab) activateStrategiesSubtab();
       else deactivateStrategiesSubtab();
     }
-    traderContent?.classList.toggle("trader-content--split-scroll", tabId === "stats");
     // A newly chosen sub-tab opens at its top, whatever the previous one was scrolled to.
-    if (changed && traderContent) {
-      traderContent.scrollTop = 0;
-      content?.querySelectorAll(".stats-col").forEach((column) => {
-        column.scrollTop = 0;
-      });
-    }
+    if (changed && traderContent) traderContent.scrollTop = 0;
 
     // init() paints only. Remote loaders and embedded lifecycles start once the
     // page is active, after the selected panel is already on screen.
@@ -496,474 +461,6 @@ function createLifecycle() {
   }
 
   /**
-   * Load statistics for the Stats tab.
-   *
-   * The handler is the only place that aggregates: every figure below is read from
-   * the response as-is. Nothing is re-derived here, and a `null` means the window
-   * holds nothing to derive the figure from, so it renders as an em dash rather
-   * than a fabricated zero.
-   */
-  async function loadStats() {
-    try {
-      const data = await requestManager.fetch(
-        `/api/trader/stats?window=${statsWindow}&book=${statsBook}`,
-        { priority: "normal" }
-      );
-      if (statsBook === "paper") void paperAccount.load($("#stats-paper-account"));
-
-      const pct = (value, decimals = 1) =>
-        Utils.formatPercentValue(value, { decimals, fallback: "—" });
-      const sol = (value, decimals = 4) => Utils.formatSol(value, { decimals, fallback: "—" });
-      const setValue = (id, text, tone) => {
-        const el = $(`#${id}`);
-        if (!el) return;
-        el.textContent = text;
-        el.classList.remove("positive", "negative");
-        if (tone) el.classList.add(tone);
-        if (el.classList.contains("metric-value-fit")) {
-          el.style.setProperty("--metric-value-chars", String([...text].length));
-        }
-      };
-      const setDetail = (id, text) => {
-        const el = $(`#${id}`);
-        if (el) el.textContent = text;
-      };
-      // Tone of a SOL amount as shown (4 decimals): a value that rounds to zero is untoned.
-      // Only signed amounts take a tone; a ratio (win rate, profit factor) stays neutral.
-      const tone = (value) => {
-        const shown = Utils.signedTone(value, 4);
-        return shown === "neutral" ? null : shown;
-      };
-
-      // A window without closed trades leaves every ratio card without a basis; its
-      // subtitle then says why instead of repeating the value's dash.
-      const hasTrades = data.total_trades > 0;
-
-      // Net P&L — the booked, fee- and DCA-aware SOL the window actually returned.
-      setValue(
-        "net-pnl",
-        Number.isFinite(data.total_pnl_native)
-          ? Utils.formatSignedSol(data.total_pnl_native, { fallback: "—" })
-          : "—",
-        tone(data.total_pnl_native)
-      );
-      setDetail(
-        "net-pnl-detail",
-        hasTrades
-          ? I18n.t("trader-stats-won-lost", {
-              won: sol(data.gross_profit_native),
-              lost: sol(data.gross_loss_native),
-            })
-          : I18n.t("trader-stats-empty")
-      );
-
-      setValue(
-        "win-rate",
-        Utils.formatPercentValue(data.win_rate_pct, {
-          decimals: 1,
-          fallback: "—",
-          includeSign: false,
-        })
-      );
-      // Counts are facts even in an empty window: 0 wins · 0 losses, never a dash.
-      setDetail(
-        "win-rate-detail",
-        Number.isFinite(data.winners) && Number.isFinite(data.losers)
-          ? I18n.t("trader-stats-record", {
-              wins: I18n.t("trader-stats-wins", {
-                count: data.winners,
-                amount: String(data.winners),
-              }),
-              losses: I18n.t("trader-stats-losses", {
-                count: data.losers,
-                amount: String(data.losers),
-              }),
-            })
-          : I18n.t("trader-stats-empty")
-      );
-
-      setValue("profit-factor", formatFixed(data.profit_factor));
-      setDetail(
-        "profit-factor-detail",
-        !hasTrades
-          ? I18n.t("trader-stats-empty")
-          : Number.isFinite(data.expectancy_native)
-            ? I18n.t("trader-stats-expected", { amount: sol(data.expectancy_native) })
-            : I18n.t("trader-stats-profit-factor-basis")
-      );
-
-      const hasDrawdown =
-        hasTrades && Utils.signedTone(data.max_drawdown_native, 4) === "positive";
-      setValue(
-        "max-drawdown",
-        hasTrades ? sol(data.max_drawdown_native) : "—",
-        hasDrawdown ? "negative" : null
-      );
-      setDrawdownAccent(hasDrawdown);
-      setDetail(
-        "max-drawdown-detail",
-        hasTrades ? I18n.t("trader-stats-drawdown-basis") : I18n.t("trader-stats-empty")
-      );
-
-      setValue("capital-at-work", sol(data.locked_native));
-      setDetail(
-        "capital-at-work-detail",
-        I18n.t("trader-stats-slots", {
-          count: data.max_open_positions,
-          used: String(data.open_positions_count),
-          max: String(data.max_open_positions),
-        })
-      );
-
-      const hasWin = Number.isFinite(data.avg_win_pct);
-      const hasLoss = Number.isFinite(data.avg_loss_pct);
-      setValue(
-        "avg-win-loss",
-        hasWin || hasLoss ? `${pct(data.avg_win_pct)} / ${pct(data.avg_loss_pct)}` : "—"
-      );
-      setDetail(
-        "avg-win-loss-detail",
-        hasWin || hasLoss ? I18n.t("trader-stats-avg-basis") : I18n.t("trader-stats-empty")
-      );
-
-      setValue(
-        "total-trades",
-        Number.isFinite(data.total_trades) ? String(data.total_trades) : "—"
-      );
-      setDetail(
-        "total-trades-detail",
-        I18n.t("trader-stats-closed", {
-          count: data.total_trades,
-          amount: String(data.total_trades),
-        })
-      );
-
-      const holdText = (hours) =>
-        Number.isFinite(hours) ? Utils.formatUptime(hours * 3600) : "—";
-      setValue("median-hold", holdText(data.median_hold_time_hours));
-      setDetail(
-        "median-hold-detail",
-        Number.isFinite(data.avg_hold_time_hours)
-          ? I18n.t("trader-stats-hold-average", { span: holdText(data.avg_hold_time_hours) })
-          : I18n.t("trader-stats-empty")
-      );
-
-      // Rounds with an incomplete cost basis carry no honest P&L and are left out of
-      // every figure above. Saying so is the difference between a filtered number and
-      // a wrong one.
-      const excludedEl = $("#stats-excluded");
-      if (excludedEl) {
-        const n = data.excluded_untrusted || 0;
-        excludedEl.hidden = n === 0;
-        excludedEl.textContent =
-          n === 0
-            ? ""
-            : I18n.t("trader-stats-excluded", { count: n, amount: String(n) });
-      }
-
-      renderDailyPnl(data.daily_pnl, data.total_pnl_native);
-      renderExtremes(data);
-      renderExitBreakdown(data.exit_breakdown, data.period_days);
-    } catch (error) {
-      console.error("[Trader] Failed to load stats:", error);
-      for (const id of [
-        "net-pnl",
-        "win-rate",
-        "profit-factor",
-        "max-drawdown",
-        "capital-at-work",
-        "avg-win-loss",
-        "total-trades",
-        "median-hold",
-      ]) {
-        const el = $(`#${id}`);
-        if (el) {
-          el.textContent = "—";
-          el.classList.remove("positive", "negative");
-          el.style.removeProperty("--metric-value-chars");
-        }
-      }
-      setDrawdownAccent(false);
-    }
-  }
-
-  /** The danger accent is a state: it marks a drawdown that happened, never an empty card. */
-  function setDrawdownAccent(hasDrawdown) {
-    $("#max-drawdown")
-      ?.closest(".metric-card")
-      ?.classList.toggle("metric-highlight-danger", hasDrawdown);
-  }
-
-  /**
-   * Switch the realized window and reload immediately, so the click is answered by
-   * the panel rather than by the next poll tick.
-   */
-  function setStatsPeriod(range) {
-    if (range === statsWindow) return;
-    statsWindow = range;
-    _lastDailyKey = null;
-    _lastExitKey = null;
-    void loadStats();
-  }
-
-  /** Paint the Stats tab's book and window switches at the current selection. */
-  function renderStatsControls() {
-    const book = $("#stats-book");
-    if (book) {
-      book.innerHTML = renderSegmented(
-        {
-          name: "stats-book",
-          options: ["live", "paper"].map((mode) => ({
-            value: mode,
-            label: tradingModeLabel(mode),
-            icon: TRADING_MODE_ICONS[mode],
-          })),
-          value: statsBook,
-          ariaLabel: I18n.attr("trader-stats-book", "aria-label"),
-          compact: true,
-        },
-        Utils.escapeHtml
-      );
-    }
-    const period = $("#stats-period");
-    if (period) {
-      period.innerHTML = renderSegmented(
-        {
-          name: "stats-period",
-          options: RANGE_OPTIONS,
-          value: statsWindow,
-          ariaLabel: I18n.attr("trader-stats-window", "aria-label"),
-          compact: true,
-        },
-        Utils.escapeHtml
-      );
-    }
-  }
-
-  /** Switch the book the Stats tab reads; the paper book also shows its run card. */
-  function setStatsBook(book) {
-    if (book === statsBook) return;
-    statsBook = book;
-    const card = $("#stats-paper-account");
-    if (card) {
-      card.hidden = book !== "paper";
-      if (book !== "paper") card.replaceChildren();
-    }
-    _lastDailyKey = null;
-    _lastExitKey = null;
-    void loadStats();
-  }
-
-  /**
-   * Name the P&L series by the bucket the server chose: one bar per day, or per ISO week
-   * on a history too long for daily bars. Rewritten only when the bucket changes.
-   */
-  function setPnlSeriesHeading(weekly) {
-    const title = $("#daily-pnl-title");
-    const subtitle = $("#daily-pnl-subtitle");
-    const titleId = weekly ? "trader-weekly-title" : "trader-daily-title";
-    const subtitleId = weekly ? "trader-weekly-subtitle" : "trader-daily-subtitle";
-    if (title && title.getAttribute("data-l10n-id") !== titleId) {
-      title.setAttribute("data-l10n-id", titleId);
-      I18n.localizeTree(title);
-    }
-    if (subtitle && subtitle.getAttribute("data-l10n-id") !== subtitleId) {
-      subtitle.setAttribute("data-l10n-id", subtitleId);
-      I18n.localizeTree(subtitle);
-    }
-  }
-
-  /**
-   * Render the realized P&L series: one bar per day, or per week on a long history, plus
-   * the cumulative line.
-   *
-   * Hand-built SVG on purpose — this is a fixed-size, non-interactive shape, and a
-   * charting library would cost more than the whole panel.
-   */
-  function renderDailyPnl(days, totalPnlSol) {
-    const container = $("#daily-pnl");
-    if (!container) return;
-
-    const totalEl = $("#daily-pnl-total");
-    if (totalEl) {
-      const finite = Number.isFinite(totalPnlSol);
-      totalEl.textContent = finite
-        ? Utils.formatSignedSol(totalPnlSol, { fallback: "—" })
-        : "—";
-      const totalTone = Utils.signedTone(totalPnlSol, 4);
-      totalEl.className = `daily-pnl-total${totalTone === "neutral" ? "" : ` ${totalTone}`}`;
-    }
-
-    const weekly = Array.isArray(days) && days[0]?.bucket === "week";
-    setPnlSeriesHeading(weekly);
-
-    if (!Array.isArray(days) || days.every((d) => (d.trades || 0) === 0)) {
-      container.innerHTML = renderStateView({
-        icon: "icon-inbox",
-        message: I18n.t("trader-stats-empty"),
-        compact: true,
-      });
-      _lastDailyKey = null;
-      return;
-    }
-
-    const key = days.map((d) => `${d.date}:${d.net_pnl_native.toFixed(6)}`).join("|");
-    if (key === _lastDailyKey) return;
-    _lastDailyKey = key;
-
-    const W = 100;
-    const H = 40;
-    const slot = W / days.length;
-    const barW = Math.max(slot * 0.62, 0.35);
-
-    const peak = Math.max(...days.map((d) => Math.abs(d.net_pnl_native)), 1e-9);
-    const mid = H / 2;
-    const bars = days
-      .map((d, i) => {
-        const h = (Math.abs(d.net_pnl_native) / peak) * (mid - 1);
-        const x = i * slot + (slot - barW) / 2;
-        const y = d.net_pnl_native >= 0 ? mid - h : mid;
-        const cls = Utils.signedTone(d.net_pnl_native, 4);
-        return `<rect class="daily-pnl-bar ${cls}" x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${barW.toFixed(2)}" height="${Math.max(h, 0.4).toFixed(2)}"></rect>`;
-      })
-      .join("");
-
-    // Cumulative line on its own scale, so a flat run of small days stays readable.
-    let running = 0;
-    const cumulative = days.map((d) => (running += d.net_pnl_native));
-    const cMin = Math.min(0, ...cumulative);
-    const cMax = Math.max(0, ...cumulative);
-    const cSpan = cMax - cMin || 1e-9;
-    const points = cumulative
-      .map((v, i) => {
-        const x = i * slot + slot / 2;
-        const y = H - ((v - cMin) / cSpan) * (H - 2) - 1;
-        return `${x.toFixed(2)},${y.toFixed(2)}`;
-      })
-      .join(" ");
-
-    const first = days[0];
-    const last = days[days.length - 1];
-    // Buckets start on UTC calendar dates ("2026-08-31"), shown as a short month and day.
-    const axisDate = (date) => Utils.formatDate(`${date}T00:00:00Z`, { includeYear: false, utc: true });
-    container.dir = "ltr";
-    container.innerHTML = `
-      <svg class="daily-pnl-chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img"
-           aria-label="${Utils.escapeHtml(weekly ? I18n.t("trader-weekly-chart") : I18n.t("trader-daily-chart"))}">
-        <line class="daily-pnl-zero" x1="0" y1="${mid}" x2="${W}" y2="${mid}"></line>
-        ${bars}
-        <polyline class="daily-pnl-line" points="${points}"></polyline>
-      </svg>
-      <div class="daily-pnl-axis">
-        <span>${Utils.escapeHtml(axisDate(first.date))}</span>
-        <span>${Utils.escapeHtml(axisDate(last.date))}</span>
-      </div>`;
-  }
-
-  /**
-   * Best and worst closed round in the window.
-   */
-  function renderExtremes(data) {
-    const wrap = $("#stats-extremes");
-    if (!wrap) return;
-
-    const hasAny = Number.isFinite(data.best_trade_pct) || Number.isFinite(data.worst_trade_pct);
-    wrap.hidden = !hasAny;
-    if (!hasAny) return;
-
-    const paint = (valueId, tokenId, value, token) => {
-      const valueEl = $(`#${valueId}`);
-      const tokenEl = $(`#${tokenId}`);
-      if (valueEl) {
-        valueEl.textContent = Utils.formatPercentValue(value, { decimals: 1, fallback: "—" });
-        valueEl.className = `stats-extreme-value ${Utils.signedTone(value, 1)}`;
-      }
-      // A side with no known trade reads as one dash: its value's, with no token beside it.
-      if (tokenEl) {
-        tokenEl.textContent = token || "";
-        tokenEl.hidden = !(Number.isFinite(value) && token);
-      }
-    };
-
-    paint("best-trade", "best-trade-token", data.best_trade_pct, data.best_trade_token);
-    paint("worst-trade", "worst-trade-token", data.worst_trade_pct, data.worst_trade_token);
-  }
-
-  function formatExitType(type) {
-    const text = String(type || "unknown");
-    if (Object.hasOwn(EXIT_TYPE_LABELS, text)) return I18n.label(EXIT_TYPE_LABELS, text);
-    return closeReasonText(text);
-  }
-
-  /**
-   * Render the exit strategy breakdown list (how positions were closed).
-   *
-   * Guarded by a content hash: without it the 5s poll rewrote this innerHTML on
-   * every tick and destroyed any text the user had selected in it.
-   */
-  function renderExitBreakdown(breakdown, periodDays) {
-    const container = $("#exit-breakdown");
-    if (!container) return;
-
-    if (!Array.isArray(breakdown) || breakdown.length === 0) {
-      // A null window is the whole history of the book.
-      let message;
-      if (periodDays == null) message = I18n.t("trader-exit-empty-all");
-      else if (periodDays === 1) message = I18n.t("trader-exit-empty-day");
-      else
-        message = I18n.t("trader-exit-empty-days", {
-          count: periodDays,
-          amount: String(periodDays),
-        });
-      container.innerHTML = renderStateView({ icon: "icon-inbox", message, compact: true });
-      _lastExitKey = null;
-      return;
-    }
-
-    const key = breakdown
-      .map((e) => `${e.exit_type}:${e.count}:${(e.net_pnl_native || 0).toFixed(6)}`)
-      .join("|");
-    if (key === _lastExitKey) return;
-    _lastExitKey = key;
-
-    const totalCount = breakdown.reduce((sum, e) => sum + (e.count || 0), 0) || 1;
-
-    container.innerHTML = breakdown
-      .map((e) => {
-        const count = e.count || 0;
-        const avgPct = e.avg_profit_pct || 0;
-        const netSol = e.net_pnl_native || 0;
-        const share = Math.round((count / totalCount) * 100);
-        const barClass = Utils.signedTone(netSol, 4);
-        return `
-          <div class="exit-breakdown-row">
-            <div class="exit-breakdown-head">
-              <span class="exit-breakdown-type">${Utils.escapeHtml(formatExitType(e.exit_type))}</span>
-              <span class="exit-breakdown-pnl ${Utils.signedTone(netSol, 4)}">${Utils.formatSignedSol(netSol, { fallback: "—" })}</span>
-            </div>
-            <div class="exit-breakdown-bar">
-              <div class="exit-breakdown-fill ${barClass}" style="width: ${share}%"></div>
-            </div>
-            <div class="exit-breakdown-meta">
-              <span class="exit-breakdown-share">${Utils.escapeHtml(
-                I18n.t("trader-exit-share", {
-                  count,
-                  amount: String(count),
-                  share: Utils.formatPercentValue(share, { decimals: 0, includeSign: false }),
-                })
-              )}</span>
-              <span class="exit-breakdown-profit ${Utils.signedTone(avgPct, 1)}">${Utils.escapeHtml(
-                I18n.t("trader-exit-average", {
-                  value: Utils.formatPercentValue(avgPct, { decimals: 1 }),
-                })
-              )}</span>
-            </div>
-          </div>`;
-      })
-      .join("");
-  }
-
-  /**
    * Whether an exit strategy is switched on, for the Take Profit runner warning. Read from
    * the strategies overview, which owns the count; a failed read keeps the last answer.
    */
@@ -1076,9 +573,6 @@ function createLifecycle() {
    * Note: per-card Save/Reset is handled by the config_cards module.
    */
   function setupFormHandlers() {
-    // Setup auto trader toggle handlers
-    controls.setupAutoTraderToggles();
-
     // Stop loss threshold input listener
     const stopLossThreshold = $("#stop-loss-threshold");
     if (stopLossThreshold) {
@@ -1177,11 +671,6 @@ function createLifecycle() {
 
     // Trailing bands must sit above the activation: the band list re-checks on its change.
     addTrackedListener($("#trail-activation"), "input", () => refreshLevels($("#trailing-bands")));
-
-    // The Stats tab's book and realized-window switches
-    renderStatsControls();
-    addTrackedListener($("#stats-book"), "change", (event) => setStatsBook(event.target.value));
-    addTrackedListener($("#stats-period"), "change", (event) => setStatsPeriod(event.target.value));
   }
 
   /**
@@ -1292,6 +781,10 @@ function createLifecycle() {
     init(ctx) {
       console.log("[Trader] Initializing page");
       lifecycleContext = ctx;
+      renderServiceNotice($("#trader-access-region"), {
+        title: I18n.t("trader-service-notice-title"),
+        message: I18n.t("trader-service-notice-message"),
+      });
 
       // Fetch feature status early (non-blocking, but before tab bar setup)
       const featurePromise = fetchFeatureStatus(requestManager);
@@ -1352,8 +845,9 @@ function createLifecycle() {
       // Setup form handlers
       setupFormHandlers();
 
-      // Setup trading controls event handlers
+      // Setup trading controls event handlers and the Stats view's own switches
       controls.setupControlsEventHandlers();
+      statsView.mount();
 
       // Setup preview listeners (Phase 2)
       setupPreviewListeners();
@@ -1434,6 +928,7 @@ function createLifecycle() {
 
       timePositions?.destroy();
       timePositions = null;
+      statsView.destroy();
 
       // Clean up all tracked event listeners
       eventCleanups.forEach((cleanup) => cleanup());
@@ -1447,8 +942,6 @@ function createLifecycle() {
       configPoller = null;
       lifecycleContext = null;
       state.exitStrategiesOn = null;
-      _lastDailyKey = null;
-      _lastExitKey = null;
     },
   };
 }

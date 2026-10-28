@@ -5,6 +5,7 @@
 
 use super::admission::{self, EntryBlock};
 use super::paper::TradingMode;
+use super::status::{trader_status, TraderStatus};
 use crate::config::update_config_section;
 use crate::logger::{self, LogTag};
 use crate::trader::error::Error;
@@ -65,22 +66,6 @@ pub async fn stop_trader_gracefully() -> Result<(), Error> {
     Ok(())
 }
 
-/// Whether the auto trader can run at all, and whether it does, with the enabled
-/// strategies of each trading mode.
-#[derive(Debug, Clone, serde::Serialize)]
-pub struct TraderStatus {
-    pub enabled: bool,
-    pub running: bool,
-    pub available: bool,
-    /// Why the trader cannot run, while it is unavailable.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub unavailable_reason: Option<crate::i18n::UiText>,
-    /// Enabled strategies that trade live.
-    pub live_strategies: usize,
-    /// Enabled strategies that trade on the paper book.
-    pub paper_strategies: usize,
-}
-
 /// Why the Auto Trader cannot trade live right now.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LiveBlock {
@@ -90,7 +75,7 @@ pub enum LiveBlock {
     ForceStop,
 }
 
-fn is_available() -> bool {
+pub(super) fn is_available() -> bool {
     crate::global::is_initialization_complete() && !crate::global::is_explore_mode()
 }
 
@@ -221,42 +206,6 @@ pub async fn entry_blocks(mode: TradingMode) -> Option<EntryBlock> {
             let cash = admission::standing_paper_cash().await;
             admission::paper_cash_covers(Some(&cash), super::executors::entry_size_of(None)).err()
         }
-    }
-}
-
-/// The trader's status. The enabled-strategy counts are a SQLite read, so they run on
-/// the blocking pool rather than on the async worker that polls the status.
-pub async fn trader_status() -> TraderStatus {
-    let available = is_available();
-    let counts = if available {
-        match tokio::task::spawn_blocking(crate::strategies::db::enabled_strategy_counts).await {
-            Ok(Ok(counts)) => counts,
-            Ok(Err(error)) => {
-                logger::warning(
-                    LogTag::Trader,
-                    &format!("Enabled strategy counts unavailable: {error}"),
-                );
-                Default::default()
-            }
-            Err(error) => {
-                logger::warning(
-                    LogTag::Trader,
-                    &format!("Enabled strategy count task failed: {error}"),
-                );
-                Default::default()
-            }
-        }
-    } else {
-        Default::default()
-    };
-    TraderStatus {
-        enabled: available && crate::config::with_config(|cfg| cfg.trader.enabled),
-        running: available && is_trader_running(),
-        available,
-        unavailable_reason: (!available)
-            .then(|| crate::strategies::readiness::live_block_text(LiveBlock::SetupIncomplete)),
-        live_strategies: counts.live,
-        paper_strategies: counts.paper,
     }
 }
 

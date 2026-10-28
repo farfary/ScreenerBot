@@ -3,6 +3,7 @@
 //
 // Live metrics and effective Auto Trader state for the global dashboard header.
 import { Poller } from "./poller.js";
+import { capabilityAvailable } from "../ui/access_gate.js";
 import { requestManager } from "./request_manager.js";
 import {
   directionArrow,
@@ -175,6 +176,12 @@ function updateCopyCard(copy) {
     return;
   }
   card.hidden = false;
+  // The ScreenerBot service cannot follow other wallets: the tasks are kept, nothing runs.
+  if (!capabilityAvailable("watch_other_wallets")) {
+    value.textContent = I18n.t("shell-copy-value-paused");
+    sub.textContent = I18n.t("shell-access-gate-own-rpc-title");
+    return;
+  }
   const active = copy.live_tasks + copy.paper_tasks;
   const running = [
     copy.live_tasks ? I18n.t("shell-copy-running-live", { count: copy.live_tasks }) : "",
@@ -258,6 +265,9 @@ function updateTicker(metrics) {
     }
   }
 
+  // The ScreenerBot service keeps no RPC statistics, so the segment hides there.
+  const rpcSegment = document.getElementById("tickerRPC");
+  if (rpcSegment) rpcSegment.hidden = !capabilityAvailable("rpc_statistics");
   // Each value and its unit are one text run, so the ticker's flex gap never splits them.
   if (rpcCalls) {
     rpcCalls.textContent = formatCallRate(finiteNumber(metrics.rpc?.calls_per_minute));

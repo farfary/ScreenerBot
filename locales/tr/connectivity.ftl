@@ -10,3 +10,20 @@ connectivity-probe-internet-all-failed = DNS ve HTTP kontrolleri başarısız. D
 connectivity-probe-unknown = Bilinmeyen hata
 
 connectivity-endpoint-not-checked = Henüz kontrol edilmedi
+
+connectivity-service-checking = { -brand } hizmetine bağlanılıyor
+    .detail = Bağlantı doğrulandığında işlemler başlar.
+connectivity-service-ready = { -brand } hizmeti bağlı
+    .detail = Cüzdan sorguları ve işlemler screenerbot.io üzerinden yapılır.
+connectivity-service-signed-out = İşlemler duraklatıldı · Oturum kapalı
+    .detail = Devam etmek için giriş yapın. İşlemler duraklatıldığında açık pozisyonlar satılmaz.
+connectivity-service-reauthorize = İşlemler duraklatıldı · Yeniden giriş gerekli
+    .detail = Bu cihazın girişi henüz cüzdan sorgularına izin vermiyor. Devam etmek için yeniden giriş yapın.
+connectivity-service-busy = İşlemler duraklatıldı · Hizmet yoğun, yeniden deneniyor
+    .detail = İşlemler otomatik olarak devam eder. Duraklamaları önlemek için kendi RPC'nizi kullanın.
+connectivity-service-daily-limit = İşlemler duraklatıldı · Günlük limite ulaşıldı
+    .detail = Hesabınız { -brand } hizmetinin bugünkü limitine ulaştı. İşlemler 00:00 UTC'de ya da kendi RPC'nizle hemen devam eder.
+connectivity-service-unreachable = İşlemler duraklatıldı · screenerbot.io erişilemiyor
+    .detail = Bağlantı geri geldiğinde işlemler devam eder. İnternet bağlantınızı kontrol edin.
+connectivity-service-version = İşlemler duraklatıldı · Güncelleme gerekli
+    .detail = Bu sürüm artık { -brand } hizmeti tarafından desteklenmiyor. { $minimum } veya daha yeni bir sürüme güncelleyin.

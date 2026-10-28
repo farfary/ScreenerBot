@@ -32,3 +32,6 @@ chart-status-total-idle =
     { $count ->
        *[other] { $count } nến · nhàn rỗi
     }
+
+chart-inline-curve-label = P&L lũy kế { $amount } { -sol }
+chart-inline-histogram-title = { $count }/{ $total }

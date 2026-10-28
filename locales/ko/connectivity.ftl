@@ -10,3 +10,20 @@ connectivity-probe-internet-all-failed = DNS 및 HTTP 확인 실패. DNS: { $dns
 connectivity-probe-unknown = 알 수 없는 오류
 
 connectivity-endpoint-not-checked = 아직 확인되지 않음
+
+connectivity-service-checking = { -brand } 서비스에 연결하는 중
+    .detail = 연결이 확인되면 거래가 시작됩니다.
+connectivity-service-ready = { -brand } 서비스 연결됨
+    .detail = 지갑 조회와 거래는 screenerbot.io를 거칩니다.
+connectivity-service-signed-out = 거래 일시 중지 · 로그아웃됨
+    .detail = 다시 시작하려면 로그인하세요. 거래가 일시 중지된 동안 보유 포지션은 매도되지 않습니다.
+connectivity-service-reauthorize = 거래 일시 중지 · 다시 로그인 필요
+    .detail = 이 기기의 로그인으로는 아직 지갑을 조회할 수 없습니다. 다시 시작하려면 다시 로그인하세요.
+connectivity-service-busy = 거래 일시 중지 · 서비스 혼잡, 재시도 중
+    .detail = 거래는 자동으로 다시 시작됩니다. 일시 중지를 피하려면 직접 RPC를 사용하세요.
+connectivity-service-daily-limit = 거래 일시 중지 · 일일 한도 도달
+    .detail = 계정이 오늘의 { -brand } 서비스 한도에 도달했습니다. 거래는 00:00 UTC에 다시 시작되며, 직접 RPC를 쓰면 바로 다시 시작됩니다.
+connectivity-service-unreachable = 거래 일시 중지 · screenerbot.io에 연결할 수 없음
+    .detail = 연결이 돌아오면 거래가 다시 시작됩니다. 인터넷 연결을 확인하세요.
+connectivity-service-version = 거래 일시 중지 · 업데이트 필요
+    .detail = 이 버전은 더 이상 { -brand } 서비스에서 지원되지 않습니다. { $minimum } 이상으로 업데이트하세요.

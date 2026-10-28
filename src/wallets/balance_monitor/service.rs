@@ -9,8 +9,8 @@ use std::time::Duration;
 use tokio::sync::Notify;
 
 use crate::chains::adapter;
+use crate::chains::solana::access::chain_access;
 use crate::chains::solana::assets::fetch_nft_metadata_batch;
-use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 use crate::logger::{self, LogTag};
 use crate::utils::get_wallet_address;
 use crate::{chains::active_chain, config::with_config};
@@ -94,7 +94,7 @@ async fn collect_wallet_snapshot() -> Result<(WalletSnapshot, MarketPrices), Err
         detail: e.to_string(),
     })?;
 
-    let rpc_client = get_rpc_client();
+    let access = chain_access();
     let snapshot_time = Utc::now();
 
     logger::debug(
@@ -109,8 +109,8 @@ async fn collect_wallet_snapshot() -> Result<(WalletSnapshot, MarketPrices), Err
     // exactly when the number has to be right.
     let (native_balance, token_accounts) = tokio::try_join!(
         async {
-            rpc_client
-                .get_sol_balance(&wallet_address)
+            access
+                .sol_balance(&wallet_address)
                 .await
                 .map_err(|e| Error::Dependency {
                     dependency: "rpc",
@@ -118,8 +118,8 @@ async fn collect_wallet_snapshot() -> Result<(WalletSnapshot, MarketPrices), Err
                 })
         },
         async {
-            rpc_client
-                .get_all_token_accounts_str(&wallet_address)
+            access
+                .all_token_accounts(&wallet_address)
                 .await
                 .map_err(|e| Error::Dependency {
                     dependency: "rpc",

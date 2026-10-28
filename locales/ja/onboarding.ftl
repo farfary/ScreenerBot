@@ -11,7 +11,7 @@ onboarding-welcome-custody-description = 秘密鍵は保存時に暗号化され
 onboarding-welcome-engine-title = 常時稼働エンジン
 onboarding-welcome-engine-description = ヘルスチェックと安全なライフサイクル管理を備えた、連携するサービス群。
 onboarding-welcome-realtime-title = リアルタイムのオンチェーンデータ
-onboarding-welcome-realtime-description = 遅延した API のスナップショットではなく、プールのリザーブを直接計算します。
+onboarding-welcome-realtime-description = ご自身の RPC を使う場合、価格はプールのリザーブから直接取得します。遅延した API のスナップショットではありません。
 
 ## Slide: discover
 
@@ -35,7 +35,7 @@ onboarding-trade-auto-description = エントリー/エグジット評価、DCA 
 onboarding-trade-strategy-title = ストラテジーエンジン
 onboarding-trade-strategy-description = 価格、出来高、時間ベースのシグナルを組み合わせた条件ツリー。
 onboarding-trade-copy-title = コピートレード
-onboarding-trade-copy-description = フォローしているウォレットの取引をミラーします。実際の { -sol } を使う前に、どのタスクもペーパーモードでテストできます。
+onboarding-trade-copy-description = フォローしているウォレットの取引をミラーします（ご自身の RPC が必要です）。実際の { -sol } を使う前に、どのタスクもペーパーモードでテストできます。
 onboarding-trade-safety-title = 安全管理
 onboarding-trade-safety-description = 緊急停止、期間ベースの損失上限、独立したモニターの切り替え。
 
@@ -55,20 +55,20 @@ onboarding-connect-events-description = すべての取引、スワップ、シ�
 ## Slide: data
 
 onboarding-data-title = { -brand } データ
-onboarding-data-description = 共有のマーケットデータサービスを運用しているため、お使いの環境が公開プロバイダーのレート制限で抑えられることはありません。{ -brand } アカウントがあれば無料で利用でき、アカウントがなくても { -brand } は動作します。
-onboarding-data-candles-title = 共有ローソク足履歴
-onboarding-data-candles-description = 7つの時間足にわたる共有履歴を、数年分さかのぼって1つのキャッシュから提供します。
-onboarding-data-pools-title = 解決済みプールとセキュリティ
-onboarding-data-pools-description = 中央のプールレジストリと、取得済みの { -rugcheck } レポートのキャッシュ。
+onboarding-data-description = 無料の { -brand } アカウントで、チャートとトークンチェックが速くなります。ご自身の RPC を使う場合は、アカウントがなくても { -brand } は動作します。
+onboarding-data-candles-title = チャートをすばやく表示
+onboarding-data-candles-description = 7つの時間足で、数年分さかのぼる価格履歴。
+onboarding-data-pools-title = トークンチェックを準備済み
+onboarding-data-pools-description = ほとんどのトークンのプールとセキュリティレポートを、待たずに確認できます。
 onboarding-data-signin-title = アカウントが必要
 onboarding-data-signin-description = アカウントがない場合、このデータは利用できず、公開プロバイダーが使われます。
-onboarding-data-reading-title = 照会のみ
-onboarding-data-reading-description = どのトークンを検索したかは把握しますが、鍵、残高、ポジション、取引は一切見ません。
+onboarding-data-reading-title = 把握する情報
+onboarding-data-reading-description = 検索したトークンと、{ -brand } を通じて送信したスワップです。{ -brand } サービスでは、取引用ウォレットの残高と履歴も把握します。鍵は一切見ません。
 
 ## Slide: privacy
 
 onboarding-privacy-title = あなたの鍵、あなたのデータ
-onboarding-privacy-description = 設定、鍵、取引履歴はこのマシンに残ります。次に、認証情報なしで探索できる「ダッシュボードを見る」を選ぶか、ウォレットと RPC をリンクしてフル機能のボットを有効にしてください。{ -brand } データを使いたい場合は、そこでサインインします。
+onboarding-privacy-description = 設定、鍵、取引履歴はこのマシンに残ります。次に、認証情報なしで探索できる「ダッシュボードを見る」を選ぶか、ウォレットを作成またはインポートし、ご自身の RPC か { -brand } サービスで接続して取引を始めてください。
 onboarding-privacy-local-title = ローカルファーストのアーキテクチャ
 onboarding-privacy-local-description = 設定、分析、データベースはお使いのデスクトップに保存されます。
 onboarding-privacy-wallet-title = 暗号化されたウォレット
@@ -81,7 +81,7 @@ onboarding-privacy-config-description = ほとんどの設定は、セットア�
 ## Footer
 
 onboarding-setup-shortcut =
-    .aria-label = ウォレットと RPC のセットアップへ直接移動、または Explore モードを選択
+    .aria-label = セットアップへ直接移動、または Explore モードを選択
 onboarding-setup-shortcut-label = セットアップへ
 onboarding-progress-dot =
     .aria-label = スライド { $number } へ移動

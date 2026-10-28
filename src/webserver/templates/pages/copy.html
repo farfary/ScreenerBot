@@ -4,9 +4,9 @@
      Copy-trading page - toolbar, all-tasks figures, wallet list and task sheet, with the editor, arm, settings, profile and wallet watch dialogs. -->
 
 <div class="copy-page" id="copy-page">
-  <div class="copy-toolbar">
+  <div class="page-toolbar">
     <div class="table-toolbar-summary" id="copy-summary" aria-live="polite"></div>
-    <div class="copy-toolbar-actions">
+    <div class="page-toolbar-actions">
       <button class="btn btn-ghost btn-sm" id="copy-global-action" type="button" hidden></button>
       <button class="btn btn-ghost btn-sm" id="copy-resume-tasks" type="button" hidden>
         <i class="icon-play" aria-hidden="true"></i>
@@ -23,9 +23,9 @@
     </div>
   </div>
 
-  <div class="copy-notices" id="copy-notices" aria-live="polite" hidden></div>
+  <div class="page-notices" id="copy-notices" aria-live="polite" hidden></div>
 
-  <section id="copy-setup-gate" hidden></section>
+  <section id="copy-access-gate" hidden></section>
 
   <section class="copy-onboarding" id="copy-onboarding" hidden>
     <div class="copy-onboarding-copy">
@@ -70,9 +70,9 @@
         <div class="copy-list-sort" id="copy-list-sort"></div>
         <div class="copy-list-rows" id="copy-list-rows"></div>
       </aside>
-      <main class="copy-workspace" id="copy-workspace"></main>
+      <main class="sheet" id="copy-workspace"></main>
       <section
-        class="copy-compare"
+        class="sheet"
         id="copy-compare"
         data-l10n-id="copy-compare-label"
         hidden

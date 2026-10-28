@@ -17,12 +17,23 @@ use super::operations::TransactionDatabase;
 // =============================================================================
 
 /// Bootstrap state persisted across restarts: whether the full history was walked to the
-/// chain's end. An interrupted walk is never resumed from a cursor: it restarts from the
-/// newest signature and skips the known ones, so no signature collected but never processed
-/// is passed over.
+/// chain's end, and where a bootstrap limited to the newest signatures stopped. An interrupted
+/// walk is never resumed from that cursor: it restarts from the newest signature and skips the
+/// known ones, so no signature collected but never processed is passed over. The cursor is read
+/// only by the on-demand load of older history.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct BootstrapState {
     pub full_history_completed: bool,
+    /// The oldest signature a limited bootstrap or older-history load reached; older history
+    /// continues before it.
+    pub history_before: Option<String>,
+}
+
+impl BootstrapState {
+    /// Whether history older than the stored signatures can still be loaded on demand.
+    pub fn older_history_available(&self) -> bool {
+        !self.full_history_completed && self.history_before.is_some()
+    }
 }
 
 impl TransactionDatabase {
@@ -33,15 +44,16 @@ impl TransactionDatabase {
 
         let result = conn
             .query_row(
-                "SELECT full_history_completed FROM bootstrap_state WHERE chain_id = ?1 AND id = 1",
+                "SELECT full_history_completed, backfill_before_cursor FROM bootstrap_state WHERE chain_id = ?1 AND id = 1",
                 params![self.chain.as_str()],
-                |row| row.get::<_, i64>(0),
+                |row| Ok((row.get::<_, i64>(0)?, row.get::<_, Option<String>>(1)?)),
             )
             .optional()
             .map_err(crate::errors::DatabaseError::from)?;
 
-        if let Some(completed_i) = result {
+        if let Some((completed_i, history_before)) = result {
             state.full_history_completed = completed_i != 0;
+            state.history_before = history_before;
         }
 
         Ok(state)
@@ -54,6 +66,19 @@ impl TransactionDatabase {
             "INSERT INTO bootstrap_state (chain_id, id, full_history_completed) VALUES (?1, 1, 1)
              ON CONFLICT (chain_id, id) DO UPDATE SET full_history_completed = 1, updated_at = datetime('now')",
             params![self.chain.as_str()],
+        )
+        .map_err(crate::errors::DatabaseError::from)?;
+        Ok(())
+    }
+
+    /// Record where older history continues, or clear it once the chain's end is reached,
+    /// creating the chain's state row when none exists
+    pub async fn set_history_cursor(&self, before: Option<&str>) -> Result<(), Error> {
+        let conn = self.get_connection()?;
+        conn.execute(
+            "INSERT INTO bootstrap_state (chain_id, id, backfill_before_cursor) VALUES (?1, 1, ?2)
+             ON CONFLICT (chain_id, id) DO UPDATE SET backfill_before_cursor = excluded.backfill_before_cursor, updated_at = datetime('now')",
+            params![self.chain.as_str(), before],
         )
         .map_err(crate::errors::DatabaseError::from)?;
         Ok(())
@@ -106,6 +131,53 @@ mod tests {
                 .unwrap()
                 .full_history_completed
         );
+        let rows: i64 = db
+            .get_connection()
+            .unwrap()
+            .query_row("SELECT COUNT(*) FROM bootstrap_state", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(rows, 1);
+    }
+
+    /// The older-history cursor is recorded, moved and cleared on one state row, and older
+    /// history is offered only while the full history is incomplete.
+    #[tokio::test]
+    async fn the_history_cursor_marks_where_older_history_continues() {
+        let dir = tempfile::tempdir().unwrap();
+        let db =
+            TransactionDatabase::new_with_path(dir.path().join("transactions.db"), ChainId::Solana)
+                .await
+                .unwrap();
+        assert!(!db
+            .get_bootstrap_state()
+            .await
+            .unwrap()
+            .older_history_available());
+
+        db.set_history_cursor(Some("sig-200")).await.unwrap();
+        let state = db.get_bootstrap_state().await.unwrap();
+        assert_eq!(state.history_before.as_deref(), Some("sig-200"));
+        assert!(state.older_history_available());
+
+        db.set_history_cursor(Some("sig-400")).await.unwrap();
+        assert_eq!(
+            db.get_bootstrap_state()
+                .await
+                .unwrap()
+                .history_before
+                .as_deref(),
+            Some("sig-400")
+        );
+
+        db.mark_full_history_completed().await.unwrap();
+        assert!(!db
+            .get_bootstrap_state()
+            .await
+            .unwrap()
+            .older_history_available());
+
+        db.set_history_cursor(None).await.unwrap();
+        assert_eq!(db.get_bootstrap_state().await.unwrap().history_before, None);
         let rows: i64 = db
             .get_connection()
             .unwrap()

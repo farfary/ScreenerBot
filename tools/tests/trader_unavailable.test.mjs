@@ -3,13 +3,12 @@
 //
 
 /**
- * Guard: the Trader Stats panel states only what is true. While the trader cannot run
- * (Explore Mode, setup incomplete) no control reads as on, the notice is a muted
- * sentence with the setup action rather than an error, and no recovery button shows.
- * Force Stop Everything keeps its place but is disabled, its hint saying nothing is
- * running for it to halt; with anything running it is enabled and its hint says what
- * it halts. The loss-limit recovery buttons appear only once a configured limit has tripped,
- * and the drawdown card carries its danger accent only when a drawdown exists.
+ * Guard: the Trader Stats tab states only what is true. While the trader cannot run
+ * (Explore Mode, setup incomplete) no switch reads as on, no run chip or start action
+ * shows, and one warning notice carries the setup action; the force stop and the loss-limit
+ * reset are hidden, since there is nothing to halt or clear. Once a configured loss limit
+ * has tripped, Resume sits in the notice and the reset beside the meter. Max drawdown is an
+ * unsigned magnitude and stays neutral whatever its size.
  *
  * Run with `npm run test:js`.
  */
@@ -32,6 +31,11 @@ const UNAVAILABLE_STATUS = {
   running: false,
   available: false,
   unavailable_reason: { id: "paper-live-block-setup-incomplete" },
+  live_strategies: 0,
+  paper_strategies: 0,
+  run_state: "explore",
+  live_entry_idle: null,
+  paper_entry_idle: null,
 };
 const UNAVAILABLE_MONITORS = {
   entry_monitor: { enabled: true, running: false },
@@ -79,6 +83,11 @@ async function openTrader({ variant, overrides, width = 1440 }) {
   return { tab, close };
 }
 
+/** Text of a locator without the bidi isolates Fluent wraps each placeable in. */
+async function plainText(locator) {
+  return (await locator.textContent()).replace(/[\u2066-\u2069]/g, "").trim();
+}
+
 test("an unavailable trader shows no control as on and offers setup", async () => {
   const { tab, close } = await openTrader({
     variant: "empty",
@@ -90,90 +99,69 @@ test("an unavailable trader shows no control as on and offers setup", async () =
     width: 1200,
   });
   try {
-    await tab.locator('#trader-status-bar[data-status="unavailable"]').waitFor();
-    await tab.locator("#entry-monitor-status", { hasText: "Setup required" }).waitFor();
+    const notice = tab.locator('#stats-notices .notice[data-variant="warning"]');
+    await notice.waitFor();
+    assert.equal(await tab.locator("#stats-notices .notice").count(), 1, "one notice speaks");
+    assert.equal(await plainText(notice.locator(".notice-title")), "Setup required");
+    assert.equal(
+      await plainText(notice.locator(".notice-message")),
+      "Finish wallet and RPC setup first"
+    );
+    assert.equal(await notice.evaluate((el) => getComputedStyle(el).textTransform), "none");
 
-    for (const id of ["#stats-trader-toggle", "#entry-monitor-toggle", "#exit-monitor-toggle"]) {
+    for (const id of ["#entry-monitor-toggle", "#exit-monitor-toggle"]) {
       const toggle = tab.locator(id);
       assert.equal(await toggle.isChecked(), false, `${id} must read off`);
       assert.equal(await toggle.isDisabled(), true, `${id} must not be interactive`);
     }
-
-    const notice = tab.locator("#trader-status-text");
-    assert.equal(
-      (await notice.textContent()).trim(),
-      "Finish wallet and RPC setup first"
-    );
-    assert.equal(await notice.evaluate((el) => getComputedStyle(el).textTransform), "none");
-    const colors = await notice.evaluate((el) => {
-      const probe = document.createElement("span");
-      probe.style.color = "var(--text-muted)";
-      el.parentElement.append(probe);
-      const muted = getComputedStyle(probe).color;
-      probe.remove();
-      return { notice: getComputedStyle(el).color, muted };
-    });
-    assert.equal(colors.notice, colors.muted, "the notice is muted, not an error colour");
-
-    assert.equal(await tab.locator("#loss-limit-actions").isVisible(), false);
-    assert.equal(await tab.locator("#loss-limit-resume-btn").isVisible(), false);
+    // The setup notice is the one statement of the state: no run chip, no note under a
+    // switch, no start action.
+    assert.equal(await tab.locator('#stats-state [data-summary-id="run"]').count(), 0);
+    for (const id of ["#entry-monitor-status", "#exit-monitor-status", "#stats-trader-action"]) {
+      assert.equal(await tab.locator(id).isVisible(), false, `${id} stays hidden`);
+    }
     assert.equal(await tab.locator("#loss-limit-reset-btn").isVisible(), false);
-    assert.equal(await tab.locator("#resume-trading-btn").isVisible(), false);
+    assert.equal(await tab.locator("#force-stop-btn").isVisible(), false);
+    assert.equal(await plainText(tab.locator("#loss-limit-value")), "Off");
 
-    const forceStop = tab.locator("#force-stop-btn");
-    await tab
-      .locator("#force-stop-hint", { hasText: "Nothing is running that a force stop would halt." })
-      .waitFor();
-    assert.equal(await forceStop.isVisible(), true, "the force stop keeps its place");
-    assert.equal(await forceStop.isDisabled(), true, "nothing to halt, so nothing to press");
-
-    // The bar is the sentence and its setup action; nothing else competes for the column.
-    const shown = await tab
-      .locator("#trader-status-bar")
-      .evaluate((bar) =>
-        [
-          ...bar.querySelectorAll(
-            ".status-bar-icon, .status-bar-title, .status-bar-status, .trader-setup-action, .toggle"
-          ),
-        ]
-          .filter((el) => el.getClientRects().length > 0)
-          .map((el) => el.className)
-      );
-    assert.deepEqual(shown, ["status-bar-status", "btn btn-sm btn-primary trader-setup-action"]);
-
-    // An empty window counts zero; only the ratios have nothing to divide and read "—".
+    // An empty window counts zero; every other figure reads "—" with no detail, and one
+    // empty state says why.
     await tab.locator("#total-trades", { hasText: "0" }).waitFor();
-    assert.equal(
-      (await tab.locator("#win-rate-detail").textContent()).replace(/[\u2068\u2069]/g, "").trim(),
-      "0 wins · 0 losses"
-    );
-    for (const id of ["#win-rate", "#profit-factor", "#avg-win-loss", "#median-hold"]) {
-      assert.equal((await tab.locator(id).textContent()).trim(), "—", `${id} reads —`);
-    }
-    // An empty card says why it is empty; its subtitle never repeats the dash.
     for (const id of [
-      "#net-pnl-detail",
-      "#profit-factor-detail",
-      "#max-drawdown-detail",
-      "#avg-win-loss-detail",
-      "#median-hold-detail",
+      "#net-pnl",
+      "#win-rate",
+      "#profit-factor",
+      "#max-drawdown",
+      "#avg-win-loss",
+      "#median-hold",
+      "#fees-paid",
     ]) {
-      assert.equal(
-        (await tab.locator(id).textContent()).trim(),
-        "No closed trades in this window",
-        `${id} explains the empty window`
-      );
+      assert.equal(await plainText(tab.locator(id)), "—", `${id} reads —`);
+      assert.equal(await plainText(tab.locator(`${id}-detail`)), "", `${id} carries no detail`);
     }
+    await tab
+      .locator("#stats-empty:not([hidden])", {
+        hasText: /No closed trades in the last \W*30\W* days/,
+      })
+      .waitFor();
+  } finally {
+    await close();
+  }
+});
 
-    const drawdownCard = tab.locator(".metric-card", { has: tab.locator("#max-drawdown") });
-    assert.equal((await tab.locator("#max-drawdown").textContent()).trim(), "—");
-    assert.equal(
-      await drawdownCard.evaluate((el) => el.classList.contains("metric-highlight-danger")),
-      false
-    );
-
-    const setup = tab.locator("#trader-setup-action");
-    assert.equal((await setup.textContent()).trim(), "Complete setup");
+test("the setup notice opens the setup dialog", async () => {
+  const { tab, close } = await openTrader({
+    variant: "empty",
+    overrides: {
+      "/api/trader/status": UNAVAILABLE_STATUS,
+      "/api/trader/monitors/status": UNAVAILABLE_MONITORS,
+      "/api/trader/loss-limit/status": LOSS_LIMIT_OFF,
+    },
+  });
+  try {
+    const setup = tab.locator('#stats-notices [data-action="setup"]');
+    await setup.waitFor();
+    assert.equal(await plainText(setup), "Complete setup");
     await setup.click();
     await tab.locator(".setup-dialog").waitFor();
   } finally {
@@ -181,26 +169,40 @@ test("an unavailable trader shows no control as on and offers setup", async () =
   }
 });
 
-test("a tripped loss limit offers recovery and a drawdown carries the accent", async () => {
+test("a tripped loss limit offers recovery and the force stop says what it halts", async () => {
   const { tab, close } = await openTrader({
     variant: "populated",
     overrides: { "/api/trader/loss-limit/status": LOSS_LIMIT_TRIPPED },
   });
   try {
-    await tab.locator('#trader-status-bar[data-status="running"]').waitFor();
-    await tab.locator("#loss-limit-resume-btn").waitFor({ state: "visible" });
+    await tab.locator('#stats-notices [data-action="loss-limit-resume"]').waitFor();
     assert.equal(await tab.locator("#loss-limit-reset-btn").isVisible(), true);
-    assert.equal(await tab.locator("#trader-setup-action").isVisible(), false);
+    assert.equal(await tab.locator('#stats-notices [data-action="setup"]').count(), 0);
     assert.equal(await tab.locator("#entry-monitor-toggle").isChecked(), true);
     await tab
       .locator("#force-stop-hint", { hasText: "Halts every monitor, copy task and trade at once." })
       .waitFor();
     assert.equal(await tab.locator("#force-stop-btn").isDisabled(), false);
+  } finally {
+    await close();
+  }
+});
 
-    const drawdownCard = tab.locator(".metric-card.metric-highlight-danger", {
-      has: tab.locator("#max-drawdown"),
-    });
-    await drawdownCard.waitFor();
+test("max drawdown stays neutral", async () => {
+  const { tab, close } = await openTrader({ variant: "populated", overrides: {} });
+  try {
+    const drawdown = tab.locator("#max-drawdown");
+    await tab.waitForFunction(() => document.querySelector("#max-drawdown")?.textContent !== "—");
+    assert.doesNotMatch(await drawdown.getAttribute("class"), /\b(positive|negative)\b/);
+    const card = tab.locator(".metric-card", { has: drawdown });
+    const borders = await tab.$$eval("#stats-figures .metric-card", (cards) =>
+      cards.map((el) => getComputedStyle(el).borderTopColor)
+    );
+    assert.equal(
+      await card.evaluate((el) => getComputedStyle(el).borderTopColor),
+      borders[0],
+      "the drawdown card carries no accent"
+    );
   } finally {
     await close();
   }

@@ -61,7 +61,7 @@ transactions-search =
     .placeholder = Cari signature…
     .aria-label = Cari signature transaksi
 transactions-load-failed = Tidak dapat menyegarkan transaksi
-transactions-setup-gate-title = Transaksi memerlukan dompet
+transactions-access-gate-title = Transaksi memerlukan dompet
 transactions-summary-total = Total
 transactions-summary-success = Berhasil
 transactions-summary-failed = Gagal
@@ -182,3 +182,9 @@ transactions-dialog-raw-empty = Tidak ada data mentah
 # Empty table (scripts/pages/transactions.js)
 transactions-empty = Belum ada transaksi
     .message = Swap dan transfer dompet trading muncul di sini setelah dikonfirmasi on-chain.
+
+## On-demand history
+
+transactions-history-on-demand = Riwayat lama dimuat sesuai permintaan.
+transactions-history-load-older = Muat yang lebih lama
+transactions-history-load-older-failed = Riwayat lama tidak dapat dimuat.

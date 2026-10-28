@@ -41,6 +41,18 @@ config_struct! {
         })]
         enabled: bool = true,
 
+        /// How Solana chain data is reached: "own_rpc" (the endpoints in
+        /// `rpc`) or "service" (the ScreenerBot service: typed reads and the
+        /// submission relay, signed-in account required). Read once at boot;
+        /// typed through `crate::chains::access::ChainAccessMode`.
+        #[metadata(field_metadata! {
+            impact: ConfigImpact::Critical,
+            category: ConfigCategory::Endpoints,
+            restart_required: true,
+            hidden: true
+        })]
+        access: String = "own_rpc".to_owned(),
+
         /// RPC endpoints and transport tuning. Read when the RPC manager is
         /// built at boot.
         #[metadata(field_metadata! {

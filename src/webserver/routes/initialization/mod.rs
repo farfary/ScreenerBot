@@ -25,6 +25,7 @@ pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
         .route("/status", get(handlers::initialization_status))
         .route("/validate", post(handlers::validate_credentials))
+        .route("/wallet/generate", post(handlers::generate_wallet))
         .route(
             "/complete",
             post(handlers::complete_initialization).route_layer(from_fn(setup_only_gate)),

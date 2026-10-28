@@ -24,7 +24,6 @@ positions-paper-empty = Nenhuma posição em Paper
 positions-paper-archived-empty = Nenhuma posição em Paper arquivada
     .message = As rodadas em Paper ficam em Abertas e Fechadas; só as posições reais são arquivadas.
 positions-paper-empty-action = Abrir Estratégias
-positions-origin-copy = Cópia
 positions-origin-manual = Manual
 positions-origin-wallet = Carteira
 positions-origin-copy-link =

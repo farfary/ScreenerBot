@@ -1,15 +1,3 @@
-trader-exit-type-stop-loss = स्टॉप लॉस
-trader-exit-type-take-profit = टेक प्रॉफ़िट
-trader-exit-type-roi = टेक प्रॉफ़िट
-trader-exit-type-roi-exit = टेक प्रॉफ़िट
-trader-exit-type-trailing-stop = ट्रेलिंग स्टॉप
-trader-exit-type-time-override = समय एग्ज़िट
-trader-exit-type-time-rule = टाइम रूल
-trader-exit-type-manual = मैन्युअल
-trader-exit-type-manual-close = मैन्युअल
-trader-exit-type-dca = DCA
-trader-exit-type-unknown = अज्ञात
-
 trader-tab-stats = आंकड़े
 trader-tab-strategies = स्ट्रैटेजी
 trader-tab-stop-loss = स्टॉप लॉस
@@ -26,32 +14,41 @@ trader-feature-disabled = बंद
     .message = यह फ़ीचर फ़िलहाल बंद है।
 
 trader-status-title = ऑटो ट्रेडर
-trader-status-loading = लोड हो रहा है...
 trader-status-running = चालू
 trader-status-stopped = रुका हुआ
 trader-status-setup-required = सेटअप ज़रूरी
 trader-setup-action = सेटअप पूरा करें
-trader-toggle-on = चालू
-trader-toggle-off = बंद
 trader-toggle-start-failed = ट्रेडर शुरू करने में विफल
 trader-toggle-stop-failed = ट्रेडर रोकने में विफल
-trader-controls-title = ट्रेडिंग कंट्रोल
 trader-halt-title = ट्रेडिंग रोकी गई
 trader-halt-reason-default = मैन्युअल ज़बरन रोक
 trader-halt-resume = फिर शुरू करें
 trader-monitor-entry = एंट्री मॉनिटर
 trader-monitor-exit = एग्ज़िट मॉनिटर
-trader-monitor-master-off = ऑटो ट्रेडर बंद
 trader-loss-limit-title = अवधि लॉस लिमिट
 trader-loss-limit-resume = ट्रेडिंग फिर शुरू करें
 trader-loss-limit-reset = अवधि रीसेट करें
 trader-loss-limit-off = बंद
-trader-loss-limit-none = कोई अवधि लॉस लिमिट सेट नहीं है
 trader-loss-limit-resets-in = { $hours } { $minutes } में रीसेट
-trader-loss-limit-reached = लिमिट पूरी हुई
 trader-force-stop = सब कुछ ज़बरन रोकें
 trader-force-stop-hint = सभी मॉनिटर, कॉपी टास्क और ट्रेड एक साथ रोकता है।
 trader-force-stop-idle = ऐसा कुछ नहीं चल रहा जिसे ज़बरन रोकना रोक सके।
+trader-run-state-force-stopped = ज़बरन रोका गया
+trader-run-state-waiting = सेवाओं की प्रतीक्षा
+trader-run-state-idle = मॉनिटर बंद
+trader-entries-label = नई एंट्री
+trader-entries-open = खुली
+trader-entries-monitor-off = एंट्री मॉनिटर बंद
+trader-entries-no-live-strategy = कोई लाइव एंट्री स्ट्रैटेजी नहीं
+trader-entries-no-paper-strategy = कोई पेपर एंट्री स्ट्रैटेजी नहीं
+trader-action-start = ऑटो ट्रेडर शुरू करें
+trader-action-stop = ऑटो ट्रेडर रोकें
+trader-notice-loss-limit = नुकसान सीमा पूरी हुई
+trader-notice-loss-limit-message = अवधि रीसेट होने तक नई लाइव एंट्री रुकी हुई हैं। एग्ज़िट जारी रहते हैं।
+trader-notice-stats-failed = आँकड़े लोड नहीं हो सके
+trader-controls-group =
+    .aria-label = ट्रेडिंग नियंत्रण
+trader-monitor-dormant = ऑटो ट्रेडर के साथ शुरू होता है
 
 trader-force-stop-confirm = ट्रेडिंग ज़बरन रोकें
     .message = इससे सभी ट्रेडिंग ऑपरेशन तुरंत रुक जाएंगे। जारी रखें?
@@ -83,27 +80,34 @@ trader-stats-window =
     .aria-label = आंकड़ों की अवधि
 trader-stats-book =
     .aria-label = ट्रेडिंग बुक
-trader-paper-run-since = { $date } से पेपर रन
-trader-paper-start = शुरुआत
-trader-paper-cash = नकद
-trader-paper-open = खुला
-trader-paper-unrealized = अप्राप्त
+trader-exposure-cash = नकद
+trader-exposure-open = खुला
+trader-exposure-unrealized = अप्राप्त
+trader-exposure-open-title = स्लॉट लेने वाली पोज़िशन, खुली पोज़िशन की सीमा में से
+trader-exposure-in-use = उपयोग में
+trader-exposure-in-use-title = खुली पोज़िशन पर लगे { -sol }
+# $amount is the formatted count.
+trader-exposure-unpriced =
+    { $count ->
+        [one] { $amount } खुली पोज़िशन का अभी लाइव मूल्य नहीं है
+       *[other] { $amount } खुली पोज़िशन का अभी लाइव मूल्य नहीं है
+    }
+# $date is a formatted date; $amount is a formatted SOL amount.
+trader-exposure-cash-title = { $date } से पेपर रन · { $amount } से शुरू
 trader-paper-reset = पेपर रन रीसेट करें
 trader-paper-reset-title = पेपर रन रीसेट करें?
 trader-paper-reset-run-message = हर खुली पेपर पोज़िशन, कॉपी टास्क की पेपर होल्डिंग समेत, अपने मौजूदा भाव पर बंद होती है और तय शुरुआती बैलेंस से नया रन शुरू होता है। पिछले रन इतिहास में रहते हैं।
 trader-paper-reset-done = नया पेपर रन शुरू हुआ
 trader-paper-reset-failed = पेपर रन रीसेट नहीं हो सका
-trader-paper-account-failed = पेपर रन लोड नहीं हो सका
 trader-realized-title = वास्तविक प्रदर्शन
 trader-metric-net-pnl = नेट लाभ-हानि
 trader-metric-win-rate = विन रेट
 trader-metric-profit-factor = प्रॉफ़िट फ़ैक्टर
 trader-metric-max-drawdown = मैक्स ड्रॉडाउन
-trader-metric-capital = काम में लगी पूंजी
 trader-metric-avg-win-loss = औसत जीत / हार
 trader-metric-closed-trades = बंद ट्रेड
 trader-metric-median-hold = मध्यक होल्ड
-trader-stats-empty = इस अवधि में कोई बंद ट्रेड नहीं
+trader-metric-fees = नेटवर्क शुल्क
 trader-stats-won-lost = { $won } जीते · { $lost } हारे
 trader-stats-record = { $wins } · { $losses }
 trader-stats-wins =
@@ -119,50 +123,87 @@ trader-stats-losses =
 trader-stats-expected = प्रति ट्रेड अपेक्षित { $amount }
 trader-stats-profit-factor-basis = कुल जीत ÷ कुल हार
 trader-stats-drawdown-basis = वास्तविक पीक से गर्त तक की सबसे गहरी गिरावट
-trader-stats-slots =
-    { $count ->
-        [one] { $max } में से { $used } पोज़िशन स्लॉट उपयोग में
-       *[other] { $max } में से { $used } पोज़िशन स्लॉट उपयोग में
-    }
-trader-stats-avg-basis = जीतने बनाम हारने वाले ट्रेड का औसत नतीजा
-trader-stats-closed =
-    { $count ->
-        [one] { $amount } पोज़िशन बंद
-       *[other] { $amount } पोज़िशन बंद
-    }
-trader-stats-hold-average = औसत { $span }
 trader-stats-excluded =
     { $count ->
-        [one] { $amount } बंद राउंड शामिल नहीं — पूरा कॉस्ट बेसिस नहीं है, इसलिए सटीक लाभ-हानि संभव नहीं।
-       *[other] { $amount } बंद राउंड शामिल नहीं — पूरा कॉस्ट बेसिस नहीं है, इसलिए सटीक लाभ-हानि संभव नहीं।
+        [one] { $amount } बंद ट्रेड शामिल नहीं है: इसका कॉस्ट बेसिस अधूरा है, इसलिए इसका लाभ-हानि अज्ञात है।
+       *[other] { $amount } बंद ट्रेड शामिल नहीं हैं: इनका कॉस्ट बेसिस अधूरा है, इसलिए इनका लाभ-हानि अज्ञात है।
     }
+# $ratio is a formatted ratio.
+trader-stats-payoff = पेऑफ़ { $ratio }
+trader-stats-streak-win =
+    { $count ->
+        [one] पिछला ट्रेड जीता
+       *[other] लगातार { $amount } जीत
+    }
+trader-stats-streak-loss =
+    { $count ->
+        [one] पिछला ट्रेड हारा
+       *[other] लगातार { $amount } हार
+    }
+# $wins and $losses are formatted durations.
+trader-stats-hold-split = जीत { $wins } · हार { $losses }
+trader-stats-fees-basis = नेट लाभ-हानि में शामिल
+trader-stats-loading = आँकड़े लोड हो रहे हैं...
+trader-open-strategies = स्ट्रैटेजी खोलें
 
 trader-daily-title = दैनिक लाभ-हानि
 trader-daily-subtitle = प्रतिदिन वास्तविक { -sol }, कुल योग के साथ
-trader-daily-loading = दैनिक लाभ-हानि लोड हो रही है...
 trader-daily-chart = { -sol } में दैनिक वास्तविक लाभ और हानि
 trader-weekly-title = साप्ताहिक लाभ-हानि
 trader-weekly-subtitle = प्रति ISO सप्ताह वास्तविक { -sol }, कुल योग के साथ
 trader-weekly-chart = { -sol } में साप्ताहिक वास्तविक लाभ और हानि
+# $date is a formatted date; $pnl a signed SOL amount.
+trader-daily-bar =
+    { $count ->
+        [one] { $date } · { $pnl } · { $amount } ट्रेड
+       *[other] { $date } · { $pnl } · { $amount } ट्रेड
+    }
+trader-weekly-bar =
+    { $count ->
+        [one] { $date } का सप्ताह · { $pnl } · { $amount } ट्रेड
+       *[other] { $date } का सप्ताह · { $pnl } · { $amount } ट्रेड
+    }
 trader-extreme-best = सबसे अच्छा ट्रेड
 trader-extreme-worst = सबसे खराब ट्रेड
+trader-extreme-runs = लगातार सबसे ज़्यादा
+trader-outcome-title = ट्रेड नतीजे
+trader-outcome-subtitle = बंद ट्रेड रिटर्न के अनुसार, प्रतिशत में
+# $value, $from and $to are formatted signed percentages.
+trader-outcome-below = { $value } से कम
+trader-outcome-range = { $from } से { $to }
+trader-outcome-above = { $value } या अधिक
+# $range is one of the three messages above; $pnl a signed SOL amount.
+trader-outcome-bucket =
+    { $count ->
+        [one] { $range } · { $amount } ट्रेड · { $pnl }
+       *[other] { $range } · { $amount } ट्रेड · { $pnl }
+    }
 
-trader-exit-title = एग्ज़िट स्ट्रैटेजी ब्रेकडाउन
-trader-exit-subtitle = पोज़िशन कैसे बंद हुईं, और हर एग्ज़िट से क्या मिला
-trader-exit-loading = एग्ज़िट डेटा लोड हो रहा है...
-trader-exit-empty-day = पिछले 24 घंटों में कोई बंद ट्रेड नहीं
-trader-exit-empty-all = अभी तक कोई बंद ट्रेड नहीं
-trader-exit-empty-days =
+trader-stats-empty-day = पिछले 24 घंटों में कोई बंद ट्रेड नहीं
+trader-stats-empty-all = अभी तक कोई बंद ट्रेड नहीं
+trader-stats-empty-hint = कोई पोज़िशन बिकते ही बंद ट्रेड यहाँ दिखते हैं। ऑटो ट्रेडर शुरू करें, या लंबी अवधि चुनें।
+trader-stats-empty-days =
     { $count ->
         [one] पिछले { $amount } दिन में कोई बंद ट्रेड नहीं
        *[other] पिछले { $amount } दिनों में कोई बंद ट्रेड नहीं
     }
-trader-exit-share =
-    { $count ->
-        [one] { $amount } ट्रेड · एग्ज़िट का { $share }
-       *[other] { $amount } ट्रेड · एग्ज़िट का { $share }
-    }
-trader-exit-average = औसत { $value }
+trader-exits-title = एग्ज़िट के कारण
+trader-exits-subtitle = बंद ट्रेड कैसे समाप्त हुए, और हर एग्ज़िट ने क्या लौटाया
+trader-sources-title = एंट्री के स्रोत
+trader-sources-subtitle = बंद ट्रेड किसने खोले
+trader-recent-title = हाल में बंद
+trader-recent-subtitle = इस अवधि के सबसे नए बंद ट्रेड
+trader-column-token = टोकन
+trader-column-exit = एग्ज़िट
+trader-column-source = स्रोत
+trader-column-trades = ट्रेड
+trader-column-win-rate = विन रेट
+trader-column-avg-return = औसत रिटर्न
+trader-column-net-pnl = नेट लाभ-हानि
+trader-column-held = होल्ड
+trader-column-closed = बंद हुआ
+trader-column-pnl = लाभ-हानि
+trader-column-return = रिटर्न
 
 trader-example-how-it-works = यह कैसे काम करता है
 trader-step-entry = एंट्री
@@ -356,3 +397,8 @@ trader-timing-concurrency = एंट्री जांच समवर्त�
 trader-timing-concurrency-hint = एक साथ जांचे जाने वाले टोकन की संख्या (ज़्यादा = तेज़ पर ज़्यादा CPU)
 trader-timing-unit-minutes = मि
 trader-timing-unit-tokens = टोकन
+
+## Service mode notice
+
+trader-service-notice-title = { -brand } सेवा पर चल रहा है
+trader-service-notice-message = कीमतें हर कुछ सेकंड में ताज़ा होती हैं, इसलिए टाइट ट्रेलिंग स्टॉप जैसे तेज़ एग्ज़िट आपके अपने RPC की तुलना में देर से प्रतिक्रिया देते हैं।

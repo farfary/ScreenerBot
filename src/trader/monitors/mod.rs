@@ -9,6 +9,7 @@
 //!
 //! All business logic (safety checks, strategy evaluation, exit conditions) is in evaluators module.
 
+mod access_pause;
 mod entry;
 mod exit;
 mod paper_batch;

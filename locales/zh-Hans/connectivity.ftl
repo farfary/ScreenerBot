@@ -10,3 +10,20 @@ connectivity-probe-internet-all-failed = DNS 和 HTTP 检查均失败。DNS：{ 
 connectivity-probe-unknown = 未知错误
 
 connectivity-endpoint-not-checked = 尚未检查
+
+connectivity-service-checking = 正在连接 { -brand } 服务
+    .detail = 连接确认后开始交易。
+connectivity-service-ready = { -brand } 服务已连接
+    .detail = 钱包读取和交易通过 screenerbot.io 进行。
+connectivity-service-signed-out = 交易已暂停 · 未登录
+    .detail = 登录即可恢复。交易暂停期间不会卖出持仓。
+connectivity-service-reauthorize = 交易已暂停 · 需要重新登录
+    .detail = 此设备的登录尚不允许读取钱包。重新登录即可恢复。
+connectivity-service-busy = 交易已暂停 · 服务繁忙，正在重试
+    .detail = 交易会自动恢复。如需避免暂停，请使用你自己的 RPC。
+connectivity-service-daily-limit = 交易已暂停 · 已达每日上限
+    .detail = 你的账户已达到今日 { -brand } 服务上限。交易将于 00:00 UTC 恢复，或使用你自己的 RPC 立即恢复。
+connectivity-service-unreachable = 交易已暂停 · 无法连接 screenerbot.io
+    .detail = 连接恢复后交易将继续。请检查你的网络连接。
+connectivity-service-version = 交易已暂停 · 需要更新
+    .detail = { -brand } 服务已不再支持此版本。请更新到 { $minimum } 或更高版本。

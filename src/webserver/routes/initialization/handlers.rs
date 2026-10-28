@@ -5,9 +5,11 @@
 
 use super::types::*;
 use super::validation::{
-    clear_setup_validation, consume_validated_key, store_setup_validation, validate_rpc_url_list,
-    RpcSource,
+    clear_setup_validation, consume_validated_key, requested_access, store_setup_validation,
+    validate_rpc_url_list, RpcSource,
 };
+use crate::chains::access::ChainAccessMode;
+use crate::chains::ChainId;
 use crate::i18n::ids;
 use crate::process::restart_safety::RestartBlocker;
 use crate::webserver::api_error::{ApiError, ApiErrorCode};
@@ -15,7 +17,7 @@ use crate::webserver::routes::wallets::handlers::replacement_error;
 use crate::{
     arguments,
     chains::solana::{
-        accounts::{keypair_to_address, parse_private_key},
+        accounts::{generate_key, keypair_to_address, parse_private_key},
         chain_metadata, rpc,
     },
     config::{self, schemas::Config},
@@ -231,6 +233,9 @@ pub(super) async fn validate_credentials(
 ) -> Response {
     // The key is parsed in Solana's format below.
     let chain = chain_metadata().id;
+    if requested_access(request.access, chain) == ChainAccessMode::Service {
+        return validate_service_access(&request, chain).await;
+    }
     let rpc_source = if request.rpc_urls.is_empty() && global::is_initialization_complete() {
         RpcSource::Configured
     } else {
@@ -335,6 +340,7 @@ pub(super) async fn validate_credentials(
         Some(store_setup_validation(
             &request.wallet_private_key,
             &request.rpc_urls,
+            ChainAccessMode::OwnRpc,
             chain,
             wallet_address.clone().unwrap_or_default(),
             rpc_source,
@@ -351,9 +357,82 @@ pub(super) async fn validate_credentials(
         warnings,
         rpc_test_results,
         validation_id,
+        connection: None,
     };
 
     success_response(response)
+}
+
+/// The service-access half of [`validate_credentials`]: the key, the account's
+/// standing and one network read of the service. No RPC endpoint is tested or saved.
+async fn validate_service_access(request: &ValidateCredentialsRequest, chain: ChainId) -> Response {
+    logger::info(
+        LogTag::Webserver,
+        "Validating credentials for service chain access",
+    );
+    clear_setup_validation();
+
+    let mut errors = Vec::new();
+    let wallet_address = match parse_private_key(&request.wallet_private_key) {
+        Ok(keypair) => Some(keypair_to_address(&keypair)),
+        Err(e) => {
+            errors.push(format!("Invalid wallet private key: {e}"));
+            None
+        }
+    };
+    let state = crate::chains::solana::access::probe_service().await;
+    if !state.ready() {
+        errors.push(format!(
+            "The ScreenerBot service cannot serve this install yet: {}",
+            state.key()
+        ));
+    }
+
+    let valid = errors.is_empty();
+    let validation_id = valid.then(|| {
+        store_setup_validation(
+            &request.wallet_private_key,
+            &request.rpc_urls,
+            ChainAccessMode::Service,
+            chain,
+            wallet_address.clone().unwrap_or_default(),
+            RpcSource::Request,
+            Vec::new(),
+        )
+    });
+
+    success_response(ValidationResult {
+        valid,
+        wallet_address,
+        errors,
+        warnings: Vec::new(),
+        rpc_test_results: Vec::new(),
+        validation_id,
+        connection: Some(ValidationConnection {
+            mode: ChainAccessMode::Service,
+            state: state.key(),
+        }),
+    })
+}
+
+/// POST /api/initialization/wallet/generate
+/// A fresh trading-wallet keypair, returned once and never stored: the secret reaches
+/// storage only when setup or a replacement completes with it. Only the address is logged.
+pub(super) async fn generate_wallet() -> Response {
+    let (address, private_key) = generate_key();
+    logger::info(
+        LogTag::Webserver,
+        &format!("Generated a new wallet keypair {address}"),
+    );
+    let mut response = success_response(GeneratedWalletResponse {
+        address,
+        private_key,
+    });
+    response.headers_mut().insert(
+        axum::http::header::CACHE_CONTROL,
+        axum::http::HeaderValue::from_static("no-store"),
+    );
+    response
 }
 
 /// POST /api/initialization/complete
@@ -374,8 +453,9 @@ pub(super) async fn complete_initialization(
         Ok(key) => key,
         Err(error) => return error.into_response(),
     };
-    // Setup saves the endpoints it validated; only a fully set-up app keeps its own.
-    if key.rpc_urls.is_empty() {
+    // Own-RPC setup saves the endpoints it validated; only a fully set-up app keeps its
+    // own. Service access saves none.
+    if key.access == ChainAccessMode::OwnRpc && key.rpc_urls.is_empty() {
         return ApiError::new(
             ApiErrorCode::SetupValidationRequired,
             ids::ERRORS_INITIALIZATION_VALIDATION_REQUIRED,
@@ -448,7 +528,10 @@ pub(super) async fn complete_initialization(
 
     config.wallet_encrypted = key.ciphertext;
     config.wallet_nonce = key.nonce;
-    config.chains.rpc_mut(chain).urls = key.rpc_urls;
+    *config.chains.access_mut(chain) = key.access.as_config_value().to_owned();
+    if key.access == ChainAccessMode::OwnRpc {
+        config.chains.rpc_mut(chain).urls = key.rpc_urls;
+    }
 
     // Setup is now complete: clear the Explore Mode marker and mark onboarding done.
     config.gui.dashboard.startup.explore_mode_enabled = false;

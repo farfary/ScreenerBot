@@ -77,8 +77,8 @@
   display: none;
 }
 
-/* Explore Mode: the setup notice replaces the tab panels, inset from the page edge. */
-.wallets-setup-gate {
+/* An access gate replaces the tab panels, inset from the page edge. */
+.wallets-access-gate {
   margin: var(--spacing-lg);
 }
 

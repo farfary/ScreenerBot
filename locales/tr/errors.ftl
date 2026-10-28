@@ -42,7 +42,7 @@ errors-account-signin-refused = { $reason }
 errors-account-signin-unavailable = Giriş kullanılamıyor
 errors-account-credentials-required = E-posta adresinizi ve parolanızı girin.
 errors-account-signout-failed = Çıkış başarısız oldu
-errors-account-gateway-update-failed = Ağ geçidi ayarı güncellenemedi
+errors-account-gateway-update-failed = İşlem gönderme ayarı güncellenemedi
 
 # Localization
 errors-i18n-locale-not-registered = Dil kayıtlı değil
@@ -128,6 +128,8 @@ errors-transactions-own-wallet-unavailable = Ana cüzdan yapılandırılmamış
 errors-transactions-invalid-subject = İşlem öznesi geçerli bir Solana adresi değil
 errors-transactions-subject-not-watched = İşlem öznesi izlenen bir cüzdan değil
 errors-transactions-watch-store-unavailable = İzlenen cüzdanlar kullanılamıyor
+errors-transactions-history-loading = Daha eski işlemler zaten yükleniyor.
+errors-transactions-history-load-failed = Daha eski işlemler yüklenemedi.
 
 # Wallet
 errors-wallet-unavailable = Ana cüzdan kullanılamıyor
@@ -412,3 +414,17 @@ errors-tokens-search-failed = Token araması başarısız oldu
 # Actions and services
 errors-actions-not-found = Eylem bulunamadı: { $id }
 errors-services-not-found = '{ $name }' hizmeti bulunamadı
+
+# Chain access
+errors-chain-capability-unavailable = Bunun için kendi RPC bağlantınız gerekir.
+errors-chain-service-signin-required = { -brand } hizmetini kullanmak için giriş yapın.
+errors-chain-service-scope-missing = Cüzdan okumalarına izin vermek için yeniden giriş yapın.
+errors-chain-service-busy = { -brand } hizmeti yoğun. Birazdan tekrar deneyin.
+errors-chain-service-daily-limit = Hesabınız { -brand } hizmetinin bugünkü limitine ulaştı.
+errors-chain-service-version = Bu sürüm { -brand } hizmeti için çok eski. { $minimum } veya daha yeni bir sürüme güncelleyin.
+errors-chain-service-refused = { -brand } hizmeti isteği reddetti.
+errors-chain-service-unreachable = screenerbot.io erişilemiyor.
+errors-chain-not-trading-wallet = { -brand } hizmet modunda yalnızca işlem cüzdanı okunabilir.
+errors-chain-access-failed = Blokzincir isteği başarısız oldu.
+errors-chain-access-unchanged = Bu bağlantı zaten kullanılıyor.
+errors-chain-access-switch-failed = Bağlantı değiştirilemedi.

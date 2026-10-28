@@ -40,6 +40,7 @@ impl Service for PoolPricingService {
 
     fn is_enabled(&self) -> bool {
         crate::global::is_initialization_complete()
+            && crate::chains::access::active_has(crate::chains::access::Capability::LivePoolPrices)
     }
 
     async fn initialize(&mut self) -> crate::Result<()> {

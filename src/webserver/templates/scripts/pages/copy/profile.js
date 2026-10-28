@@ -17,7 +17,8 @@ import {
 import { tradingModeLabel } from "../../ui/trading_mode.js";
 import { renderStateView } from "../../ui/state_view.js";
 import { renderNotice } from "../../ui/notice.js";
-import { gateControl } from "../../ui/setup_gate.js";
+import { gateControl } from "../../ui/access_gate.js";
+import { COPY_CAPABILITY } from "./summary.js";
 
 export function createProfile(page) {
   const { $, Utils, api, on, paint, dialogs } = page;
@@ -141,7 +142,7 @@ export function createProfile(page) {
         copy.textContent = profile.tasks?.length
           ? I18n.t("copy-profile-copy-other")
           : I18n.t("copy-profile-copy");
-        gateControl(copy);
+        gateControl(copy, COPY_CAPABILITY);
       }
     } catch (failure) {
       if (current?.address !== address) return;

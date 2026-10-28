@@ -58,7 +58,7 @@ transactions-search =
     .placeholder = Поиск по подписям…
     .aria-label = Поиск по подписям транзакций
 transactions-load-failed = Не удалось обновить транзакции
-transactions-setup-gate-title = Для транзакций нужен кошелёк
+transactions-access-gate-title = Для транзакций нужен кошелёк
 transactions-summary-total = Всего
 transactions-summary-success = Успешно
 transactions-summary-failed = Ошибка
@@ -185,3 +185,9 @@ transactions-dialog-raw-empty = Исходные данные недоступн
 # Empty table (scripts/pages/transactions.js)
 transactions-empty = Транзакций пока нет
     .message = Свопы и переводы торгового кошелька появляются здесь после подтверждения в блокчейне.
+
+## On-demand history
+
+transactions-history-on-demand = Более старая история загружается по запросу.
+transactions-history-load-older = Загрузить более старые
+transactions-history-load-older-failed = Не удалось загрузить более старую историю.

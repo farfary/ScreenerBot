@@ -1,17 +1,5 @@
 # Trader page labels.
 
-trader-exit-type-stop-loss = Stop-Loss
-trader-exit-type-take-profit = Take Profit
-trader-exit-type-roi = Take Profit
-trader-exit-type-roi-exit = Take Profit
-trader-exit-type-trailing-stop = Trailing-Stop
-trader-exit-type-time-override = Zeitausstieg
-trader-exit-type-time-rule = Zeitregel
-trader-exit-type-manual = Manuell
-trader-exit-type-manual-close = Manuell
-trader-exit-type-dca = DCA
-trader-exit-type-unknown = Unbekannt
-
 ## Sub-tabs. Ids are the tab ids of the trader page.
 
 trader-tab-stats = Statistiken
@@ -31,35 +19,44 @@ trader-feature-beta = Beta
 trader-feature-disabled = Deaktiviert
     .message = Diese Funktion ist derzeit deaktiviert.
 
-## Status bar and trading controls
+## Toolbar, notices and trading controls
 
 trader-status-title = Auto-Trader
-trader-status-loading = Wird geladen...
 trader-status-running = Läuft
 trader-status-stopped = Gestoppt
 trader-status-setup-required = Einrichtung erforderlich
 trader-setup-action = Einrichtung abschließen
-trader-toggle-on = AN
-trader-toggle-off = AUS
 trader-toggle-start-failed = Trader konnte nicht gestartet werden
 trader-toggle-stop-failed = Trader konnte nicht gestoppt werden
-trader-controls-title = Trading-Steuerung
 trader-halt-title = Trading angehalten
 trader-halt-reason-default = Manueller Sofortstopp
 trader-halt-resume = Fortsetzen
 trader-monitor-entry = Einstiegsmonitor
 trader-monitor-exit = Ausstiegsmonitor
-trader-monitor-master-off = Auto-Trader aus
 trader-loss-limit-title = Verlustlimit pro Zeitraum
 trader-loss-limit-resume = Trading fortsetzen
 trader-loss-limit-reset = Zeitraum zurücksetzen
 trader-loss-limit-off = Aus
-trader-loss-limit-none = Kein Verlustlimit pro Zeitraum konfiguriert
 trader-loss-limit-resets-in = Zurücksetzung in { $hours } { $minutes }
-trader-loss-limit-reached = LIMIT ERREICHT
 trader-force-stop = Alles sofort stoppen
 trader-force-stop-hint = Hält alle Monitore, Kopieraufgaben und Trades sofort an.
 trader-force-stop-idle = Es läuft nichts, das ein Notstopp anhalten würde.
+trader-run-state-force-stopped = Sofort gestoppt
+trader-run-state-waiting = Wartet auf Dienste
+trader-run-state-idle = Monitore aus
+trader-entries-label = Neue Einstiege
+trader-entries-open = Offen
+trader-entries-monitor-off = Einstiegsmonitor aus
+trader-entries-no-live-strategy = Keine Live-Einstiegsstrategie
+trader-entries-no-paper-strategy = Keine Paper-Einstiegsstrategie
+trader-action-start = Auto-Trader starten
+trader-action-stop = Auto-Trader stoppen
+trader-notice-loss-limit = Verlustlimit erreicht
+trader-notice-loss-limit-message = Neue Live-Einstiege pausieren, bis der Zeitraum zurückgesetzt wird. Ausstiege laufen weiter.
+trader-notice-stats-failed = Statistiken konnten nicht geladen werden
+trader-controls-group =
+    .aria-label = Handelssteuerung
+trader-monitor-dormant = Startet mit dem Auto-Trader
 
 trader-force-stop-confirm = Trading sofort stoppen
     .message = Dadurch werden ALLE Trading-Vorgänge sofort angehalten. Fortfahren?
@@ -91,27 +88,34 @@ trader-stats-window =
     .aria-label = Statistikzeitraum
 trader-stats-book =
     .aria-label = Handelsbuch
-trader-paper-run-since = Paper-Lauf seit { $date }
-trader-paper-start = Start
-trader-paper-cash = Guthaben
-trader-paper-open = Offen
-trader-paper-unrealized = Unrealisiert
+trader-exposure-cash = Guthaben
+trader-exposure-open = Offen
+trader-exposure-unrealized = Unrealisiert
+trader-exposure-open-title = Positionen, die einen Platz belegen, vom Limit offener Positionen
+trader-exposure-in-use = Gebunden
+trader-exposure-in-use-title = { -sol }, die in den offenen Positionen stecken
+# $amount is the formatted count.
+trader-exposure-unpriced =
+    { $count ->
+        [one] { $amount } offene Position hat noch keinen Live-Preis
+       *[other] { $amount } offene Positionen haben noch keinen Live-Preis
+    }
+# $date is a formatted date; $amount is a formatted SOL amount.
+trader-exposure-cash-title = Paper-Lauf seit { $date } · gestartet mit { $amount }
 trader-paper-reset = Paper-Lauf zurücksetzen
 trader-paper-reset-title = Paper-Lauf zurücksetzen?
 trader-paper-reset-run-message = Jede offene Paper-Position, auch die Paper-Bestände der Kopieraufgaben, wird zum aktuellen Preis geschlossen, und ein neuer Lauf beginnt mit dem eingestellten Startguthaben. Frühere Läufe bleiben im Verlauf.
 trader-paper-reset-done = Ein neuer Paper-Lauf hat begonnen
 trader-paper-reset-failed = Der Paper-Lauf konnte nicht zurückgesetzt werden
-trader-paper-account-failed = Der Paper-Lauf konnte nicht geladen werden
 trader-realized-title = Realisierte Performance
 trader-metric-net-pnl = Netto-GuV
 trader-metric-win-rate = Trefferquote
 trader-metric-profit-factor = Profit-Faktor
 trader-metric-max-drawdown = Max. Drawdown
-trader-metric-capital = Eingesetztes Kapital
 trader-metric-avg-win-loss = Ø Gewinn / Verlust
 trader-metric-closed-trades = Geschlossene Trades
 trader-metric-median-hold = Median-Haltedauer
-trader-stats-empty = Keine geschlossenen Trades in diesem Zeitraum
+trader-metric-fees = Netzwerkgebühren
 trader-stats-won-lost = { $won } Gewinn · { $lost } Verlust
 trader-stats-record = { $wins } · { $losses }
 trader-stats-wins =
@@ -127,50 +131,87 @@ trader-stats-losses =
 trader-stats-expected = { $amount } erwartet pro Trade
 trader-stats-profit-factor-basis = Bruttogewinn ÷ Bruttoverlust
 trader-stats-drawdown-basis = Tiefster realisierter Rückgang von Hoch zu Tief
-trader-stats-slots =
-    { $count ->
-        [one] { $used } von { $max } Positionsplatz belegt
-       *[other] { $used } von { $max } Positionsplätzen belegt
-    }
-trader-stats-avg-basis = Durchschnittliches Ergebnis eines Gewinn- vs. Verlust-Trades
-trader-stats-closed =
-    { $count ->
-        [one] { $amount } Position geschlossen
-       *[other] { $amount } Positionen geschlossen
-    }
-trader-stats-hold-average = Ø { $span }
 trader-stats-excluded =
     { $count ->
-        [one] { $amount } geschlossene Runde ausgeschlossen – keine vollständige Einstandsbasis, daher keine belastbare GuV.
-       *[other] { $amount } geschlossene Runden ausgeschlossen – keine vollständige Einstandsbasis, daher keine belastbare GuV.
+        [one] { $amount } geschlossener Trade ist nicht enthalten: Seine Einstandsbasis ist unvollständig, daher ist seine GuV unbekannt.
+       *[other] { $amount } geschlossene Trades sind nicht enthalten: Ihre Einstandsbasis ist unvollständig, daher ist ihre GuV unbekannt.
     }
+# $ratio is a formatted ratio.
+trader-stats-payoff = Payoff { $ratio }
+trader-stats-streak-win =
+    { $count ->
+        [one] Letzter Trade gewonnen
+       *[other] { $amount } Gewinne in Folge
+    }
+trader-stats-streak-loss =
+    { $count ->
+        [one] Letzter Trade verloren
+       *[other] { $amount } Verluste in Folge
+    }
+# $wins and $losses are formatted durations.
+trader-stats-hold-split = Gewinne { $wins } · Verluste { $losses }
+trader-stats-fees-basis = In der Netto-GuV enthalten
+trader-stats-loading = Statistiken werden geladen...
+trader-open-strategies = Strategien öffnen
 
 trader-daily-title = Tägliche GuV
 trader-daily-subtitle = Realisierte { -sol } pro Tag, mit laufender Summe
-trader-daily-loading = Tägliche GuV wird geladen...
 trader-daily-chart = Täglicher realisierter Gewinn und Verlust in { -sol }
 trader-weekly-title = Wöchentliche GuV
 trader-weekly-subtitle = Realisierte { -sol } pro ISO-Woche, mit laufender Summe
 trader-weekly-chart = Wöchentlicher realisierter Gewinn und Verlust in { -sol }
+# $date is a formatted date; $pnl a signed SOL amount.
+trader-daily-bar =
+    { $count ->
+        [one] { $date } · { $pnl } · { $amount } Trade
+       *[other] { $date } · { $pnl } · { $amount } Trades
+    }
+trader-weekly-bar =
+    { $count ->
+        [one] Woche ab { $date } · { $pnl } · { $amount } Trade
+       *[other] Woche ab { $date } · { $pnl } · { $amount } Trades
+    }
 trader-extreme-best = Bester Trade
 trader-extreme-worst = Schlechtester Trade
+trader-extreme-runs = Längste Serien in Folge
+trader-outcome-title = Trade-Ergebnisse
+trader-outcome-subtitle = Geschlossene Trades nach Rendite, in Prozent
+# $value, $from and $to are formatted signed percentages.
+trader-outcome-below = Unter { $value }
+trader-outcome-range = { $from } bis { $to }
+trader-outcome-above = { $value } oder mehr
+# $range is one of the three messages above; $pnl a signed SOL amount.
+trader-outcome-bucket =
+    { $count ->
+        [one] { $range } · { $amount } Trade · { $pnl }
+       *[other] { $range } · { $amount } Trades · { $pnl }
+    }
 
-trader-exit-title = Aufschlüsselung der Ausstiegsstrategien
-trader-exit-subtitle = Wie Positionen geschlossen wurden und was jeder Ausstieg eingebracht hat
-trader-exit-loading = Ausstiegsdaten werden geladen...
-trader-exit-empty-day = Keine geschlossenen Trades in den letzten 24 Stunden
-trader-exit-empty-all = Noch keine geschlossenen Trades
-trader-exit-empty-days =
+trader-stats-empty-day = Keine geschlossenen Trades in den letzten 24 Stunden
+trader-stats-empty-all = Noch keine geschlossenen Trades
+trader-stats-empty-hint = Geschlossene Trades erscheinen hier, sobald eine Position verkauft ist. Starten Sie den Auto-Trader oder wählen Sie einen längeren Zeitraum.
+trader-stats-empty-days =
     { $count ->
         [one] Keine geschlossenen Trades in den letzten { $amount } Tag
        *[other] Keine geschlossenen Trades in den letzten { $amount } Tagen
     }
-trader-exit-share =
-    { $count ->
-        [one] { $amount } Trade · { $share } der Ausstiege
-       *[other] { $amount } Trades · { $share } der Ausstiege
-    }
-trader-exit-average = Ø { $value }
+trader-exits-title = Ausstiegsgründe
+trader-exits-subtitle = Wie die geschlossenen Trades endeten und was jeder Ausstieg einbrachte
+trader-sources-title = Einstiegsquellen
+trader-sources-subtitle = Was die geschlossenen Trades eröffnet hat
+trader-recent-title = Letzte Schließungen
+trader-recent-subtitle = Die zuletzt geschlossenen Trades in diesem Zeitraum
+trader-column-token = Token
+trader-column-exit = Ausstieg
+trader-column-source = Quelle
+trader-column-trades = Trades
+trader-column-win-rate = Trefferquote
+trader-column-avg-return = Ø Rendite
+trader-column-net-pnl = Netto-GuV
+trader-column-held = Gehalten
+trader-column-closed = Geschlossen
+trader-column-pnl = GuV
+trader-column-return = Rendite
 
 trader-example-how-it-works = So funktioniert es
 trader-step-entry = Einstieg
@@ -364,3 +405,8 @@ trader-timing-concurrency = Parallelität der Einstiegsprüfung
 trader-timing-concurrency-hint = Anzahl der Token, die gleichzeitig geprüft werden (höher = schneller, aber mehr CPU)
 trader-timing-unit-minutes = Min.
 trader-timing-unit-tokens = Tokens
+
+## Service mode notice
+
+trader-service-notice-title = Läuft über den { -brand }-Dienst
+trader-service-notice-message = Preise werden alle paar Sekunden aktualisiert, daher reagieren schnelle Ausstiege wie enge Trailing-Stops später als mit Ihrem eigenen RPC.

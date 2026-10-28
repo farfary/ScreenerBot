@@ -34,9 +34,11 @@
 
 use super::error::{DirectSwapError, DirectSwapResult};
 use super::plan::SwapPlan;
+use super::venue::direct_node;
 use super::verify::{receipt_from_transaction, Receipt};
+use crate::chains::solana::access::chain_access;
 use crate::chains::solana::rent;
-use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
+use crate::chains::solana::rpc::RpcClientMethods;
 use crate::chains::solana::solana_sdk::{
     commitment_config::CommitmentLevel,
     pubkey::Pubkey,
@@ -128,7 +130,7 @@ async fn ata_rent_lamports() -> DirectSwapResult<u64> {
 /// native SOL to cover rent and fees, and neither fact says anything about
 /// whether the TOKEN is tradable.
 pub async fn preflight_balance(plan: &SwapPlan, owner: &Pubkey) -> DirectSwapResult<()> {
-    let rpc = get_rpc_client();
+    let rpc = direct_node("getMultipleAccounts")?;
     let accounts = rpc
         .get_multiple_accounts(&[*owner, plan.input_account, plan.output_account])
         .await
@@ -243,7 +245,7 @@ async fn read_receipt(
     owner: &crate::chains::solana::solana_sdk::pubkey::Pubkey,
     plan: &SwapPlan,
 ) -> DirectSwapResult<Receipt> {
-    let rpc = get_rpc_client();
+    let rpc = direct_node("getTransaction")?;
     let mut last_error = String::new();
 
     for attempt in 0..RECEIPT_READ_ATTEMPTS {
@@ -309,7 +311,7 @@ pub async fn unsigned_transaction(
     plan: &SwapPlan,
     owner: &Pubkey,
 ) -> DirectSwapResult<VersionedTransaction> {
-    let (blockhash, _) = get_rpc_client()
+    let (blockhash, _) = direct_node("getLatestBlockhash")?
         .get_latest_blockhash_with_commitment(CommitmentLevel::Confirmed)
         .await
         .map_err(|e| DirectSwapError::NodeUnavailable {
@@ -332,7 +334,7 @@ pub async fn execute_plan(
     keypair: &Keypair,
 ) -> DirectSwapResult<DirectSwapOutcome> {
     let started = Instant::now();
-    let rpc = get_rpc_client();
+    let rpc = direct_node("getLatestBlockhash")?;
     let owner = keypair.pubkey();
 
     preflight_balance(plan, &owner).await?;
@@ -411,7 +413,13 @@ pub async fn execute_plan(
     let timeout = Duration::from_secs(with_config(|cfg| {
         cfg.chains.solana.swaps.direct.confirmation_timeout_secs
     }));
-    let signature_str = send_settled(rpc, &transaction, last_valid_block_height, timeout).await?;
+    let signature_str = send_settled(
+        chain_access(),
+        &transaction,
+        last_valid_block_height,
+        timeout,
+    )
+    .await?;
 
     let receipt = read_receipt(&signature_str, &owner, plan).await?;
 

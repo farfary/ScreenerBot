@@ -40,19 +40,6 @@ copy-skip-swap-mixed-quote = SOL और स्टेबलकॉइन दोन
 copy-skip-swap-multiple-tokens = एक ही ट्रांज़ैक्शन में एक से ज़्यादा टोकन का ट्रेड हुआ
 copy-skip-swap-unreadable = ट्रेड की राशियाँ पढ़ी नहीं जा सकीं
 
-copy-entry-block-force-stopped = ट्रेडिंग ज़बरन रोकी गई है
-copy-entry-block-loss-limit = लॉस लिमिट नई एंट्री रोकती है
-copy-entry-block-connectivity = ज़रूरी सर्विसेज़ उपलब्ध नहीं हैं
-copy-entry-block-storage-unavailable = ट्रेडिंग डेटा उपलब्ध नहीं है या पुनर्स्थापित हो रहा है
-copy-entry-block-position-limit = खुली पोज़िशन की सीमा पूरी हो गई
-copy-entry-block-already-open = एक पोज़िशन पहले से खुली है
-copy-entry-block-reentry-cooldown = टोकन री-एंट्री कूलडाउन
-copy-entry-block-open-cooldown = ग्लोबल एंट्री कूलडाउन
-copy-entry-block-entry-reserved = दूसरी एंट्री प्रोसेस हो रही है
-copy-entry-block-blacklisted = टोकन रिस्क कंट्रोल द्वारा ब्लॉक है
-copy-entry-block-paper-balance-exhausted = पेपर बैलेंस इस ट्रेड के लिए पर्याप्त नहीं है
-copy-entry-block-check-failed = एक सुरक्षा जाँच पूरी नहीं हो सकी
-
 copy-pause-user = आपके द्वारा रोका गया
 copy-pause-latency-kill-switch = ऑटो-पॉज़: ट्रेड औसतन { $average } सेकंड देर से पहुँचे (सीमा { $threshold } सेकंड)
 copy-pause-watch-detached = ऑटो-पॉज़: वॉलेट अब वॉच नहीं हो रहा
@@ -90,6 +77,7 @@ copy-live-block-copy-trading-disabled = कॉपी प्रोसेसिं
 copy-state-system-paused = ग्लोबली रोका गया
 copy-state-force-stopped = ज़बरन रोका गया
 copy-state-entries-blocked = एंट्री ब्लॉक
+copy-state-own-rpc-required = आपका अपना RPC चाहिए
 copy-state-running-live = चल रहा है
 copy-state-running-paper = चल रहा है
 copy-exit-mode-buy-only = मेरे एग्ज़िट नियम
@@ -163,6 +151,7 @@ copy-status-force-stopped = ज़बरन रोका गया
 copy-status-loss-limit = नुकसान सीमा
 copy-status-all-paused = सभी टास्क रुके हुए
 copy-status-processing = प्रोसेसिंग जारी
+copy-status-own-rpc-required = आपका अपना RPC चाहिए
 copy-toolbar-pause = कॉपी करना रोकें
 copy-toolbar-resume = कॉपी करना फिर शुरू करें
 copy-toolbar-resume-tasks = सभी टास्क फिर शुरू करें
@@ -304,6 +293,7 @@ copy-state-detail-paper = पेपर में चल रहा है · ट�
 copy-state-detail-live = लाइव चल रहा है · वॉलेट के ट्रेड असली स्वैप से कॉपी होते हैं
 copy-state-detail-system-paused = प्रतीक्षा · कॉपी प्रोसेसिंग ग्लोबली रुकी है, एग्ज़िट फिर भी चलते हैं
 copy-state-detail-entries-blocked = लॉस लिमिट ने एंट्री रोकी हैं · एग्ज़िट फिर भी चलते हैं
+copy-state-detail-own-rpc-required = प्रतीक्षा · { -brand } सेवा दूसरे वॉलेट फ़ॉलो नहीं करती; फिर से शुरू करने के लिए RPC जोड़ें
 copy-state-detail-force-stopped = ज़बरन रोका गया · कुछ भी कॉपी नहीं होता
 
 copy-paused-since = { $reason } · { $since }
@@ -552,13 +542,11 @@ copy-table-profit-factor = प्रॉफ़िट फ़ैक्टर
 copy-table-average-hold = औसत होल्ड
 copy-table-target-difference = टारगेट प्राइस से मीडियन अंतर
 
-copy-chart-curve-label = संचयी लाभ-हानि { $amount } { -sol }
 copy-chart-compare-label = टास्क के अनुसार संचयी लाभ-हानि
 copy-chart-empty-curve = इस सीमा में अभी कोई बंद राउंड नहीं।
 copy-chart-empty-bars = इस सीमा में कुछ दर्ज नहीं हुआ।
 copy-chart-empty-histogram = इस सीमा में कोई आगमन सैंपल नहीं।
 copy-chart-empty-compare = इस सीमा में तुलना के लिए कोई बंद राउंड नहीं।
-copy-chart-histogram-title = { $total } में से { $count }
 
 copy-profile-copy = इस वॉलेट को कॉपी करें
 copy-profile-copy-other = अन्य नियमों से कॉपी करें

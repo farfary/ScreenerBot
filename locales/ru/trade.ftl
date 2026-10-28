@@ -147,5 +147,21 @@ trade-reason-synthetic-exit-permanent-failure = Синтетический вы�
 trade-reason-pending-verification = { $reason } (ожидает проверки)
 trade-reason-force-closed = Закрыта принудительно: { $note }
 trade-reason-stored = { $reason }
+trade-reason-unknown = Не записано
+trade-reason-force-closed-any = Закрыта принудительно
+
+# Why a new entry was blocked. Ids come from EntryBlock in src/trader/admission.rs.
+trade-entry-block-force-stopped = Торговля принудительно остановлена
+trade-entry-block-loss-limit = Лимит убытков блокирует новые входы
+trade-entry-block-connectivity = Необходимые сервисы недоступны
+trade-entry-block-storage-unavailable = Торговые данные недоступны или восстанавливаются
+trade-entry-block-position-limit = Достигнут лимит открытых позиций
+trade-entry-block-already-open = Позиция уже открыта
+trade-entry-block-reentry-cooldown = Пауза до повторного входа в токен
+trade-entry-block-open-cooldown = Общая пауза между входами
+trade-entry-block-entry-reserved = Обрабатывается другой вход
+trade-entry-block-blacklisted = Токен заблокирован контролем рисков
+trade-entry-block-paper-balance-exhausted = Виртуального баланса недостаточно для сделки
+trade-entry-block-check-failed = Не удалось завершить проверку безопасности
 
 trade-quick-no-token = Токен не выбран

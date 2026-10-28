@@ -318,3 +318,19 @@ shell-theme-light = 라이트
 shell-theme-dark = 다크
 shell-theme-switch-to-light = 라이트 테마로 전환
 shell-theme-switch-to-dark = 다크 테마로 전환
+
+## Chain access: service mode controls, gates and sign-out
+
+shell-service-control =
+    .aria-label = 거래 일시 중지. 세부 정보 열기
+shell-service-action-signin = 로그인
+shell-service-action-connection = RPC 추가
+shell-access-gate-own-rpc-title = 직접 RPC 필요
+shell-access-gate-watch-wallets = 카피 트레이딩과 지갑 감시는 다른 지갑을 실시간으로 따라가는데, { -brand } 서비스는 이를 지원하지 않습니다. 카피 작업과 감시 중인 지갑은 유지되며 RPC를 추가하면 다시 돌아옵니다.
+shell-access-gate-live-pool-prices = 실시간 풀 가격에는 직접 RPC가 필요합니다.
+shell-access-gate-direct-swaps = 풀 직접 스왑에는 직접 RPC가 필요합니다.
+shell-access-gate-other-wallets = 다른 지갑의 잔액에는 직접 RPC가 필요합니다.
+shell-access-gate-action = 연결 설정 열기
+shell-signout-service-title = 로그아웃하고 거래를 일시 중지할까요?
+shell-signout-service-message = 직접 RPC가 없으면 { -brand }는 계정을 사용해 지갑을 읽고 거래를 보냅니다. 로그아웃한 동안에는 거래가 일시 중지되며 열린 포지션은 매도되지 않습니다.
+shell-signout-service-confirm = 로그아웃 후 일시 중지

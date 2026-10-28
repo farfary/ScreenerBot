@@ -1,20 +1,5 @@
 # Trader page labels.
 
-# Exit types shown in the exit breakdown. Ids are the stored closed_reason: exit
-# rule ids, the Debug names of the exit TradeReason variants (src/trader/types.rs,
-# shown as readable labels) and the reasons written by src/positions and src/trader/stats.rs.
-trader-exit-type-stop-loss = 損切り
-trader-exit-type-take-profit = 利確
-trader-exit-type-roi = 利確
-trader-exit-type-roi-exit = 利確
-trader-exit-type-trailing-stop = トレーリングストップ
-trader-exit-type-time-override = 時間エグジット
-trader-exit-type-time-rule = 時間ルール
-trader-exit-type-manual = 手動
-trader-exit-type-manual-close = 手動
-trader-exit-type-dca = DCA
-trader-exit-type-unknown = 不明
-
 ## Sub-tabs. Ids are the tab ids of the trader page.
 
 trader-tab-stats = 統計
@@ -34,36 +19,45 @@ trader-feature-beta = ベータ
 trader-feature-disabled = 無効
     .message = この機能は現在無効です。
 
-## Status bar and trading controls
+## Toolbar, notices and trading controls
 
 trader-status-title = 自動トレーダー
-trader-status-loading = 読み込み中...
 trader-status-running = 実行中
 trader-status-stopped = 停止中
 trader-status-setup-required = セットアップが必要です
 trader-setup-action = セットアップを完了
-trader-toggle-on = 有効
-trader-toggle-off = 無効
 trader-toggle-start-failed = トレーダーを開始できませんでした
 trader-toggle-stop-failed = トレーダーを停止できませんでした
-trader-controls-title = トレード制御
 trader-halt-title = 取引停止中
 trader-halt-reason-default = 手動による強制停止
 trader-halt-resume = 再開
 trader-monitor-entry = エントリーモニター
 trader-monitor-exit = エグジットモニター
-trader-monitor-master-off = 自動トレーダーが無効です
 trader-loss-limit-title = 期間損失上限
 trader-loss-limit-resume = 取引を再開
 trader-loss-limit-reset = 期間をリセット
 trader-loss-limit-off = オフ
-trader-loss-limit-none = 期間損失上限は設定されていません
 # $hours and $minutes are formatted spans such as "2h" and "5m".
 trader-loss-limit-resets-in = { $hours } { $minutes }後にリセット
-trader-loss-limit-reached = 上限到達
 trader-force-stop = すべてを強制停止
 trader-force-stop-hint = すべてのモニター、コピータスク、取引を一度に停止します。
 trader-force-stop-idle = 強制停止で止める対象は現在何も動いていません。
+trader-run-state-force-stopped = 強制停止
+trader-run-state-waiting = サービス待機中
+trader-run-state-idle = モニター停止中
+trader-entries-label = 新規エントリー
+trader-entries-open = 受付中
+trader-entries-monitor-off = エントリーモニター停止中
+trader-entries-no-live-strategy = ライブのエントリーストラテジーなし
+trader-entries-no-paper-strategy = ペーパーのエントリーストラテジーなし
+trader-action-start = 自動トレーダーを開始
+trader-action-stop = 自動トレーダーを停止
+trader-notice-loss-limit = 損失上限に達しました
+trader-notice-loss-limit-message = 期間がリセットされるまで、ライブの新規エントリーは一時停止します。エグジットは継続します。
+trader-notice-stats-failed = 統計を読み込めませんでした
+trader-controls-group =
+    .aria-label = 取引コントロール
+trader-monitor-dormant = 自動トレーダーと同時に開始
 
 ## Confirmations. `.message` is the body and `.confirm` the confirming button.
 
@@ -95,33 +89,39 @@ trader-toast-feature-enabled = 機能を有効にしました
 trader-toast-feature-disabled = 機能を無効にしました
 trader-toast-feature-applied = 自動トレーダーの設定を適用しました
 
-## Stats: realized window and metrics
+## Stats: book, window, exposure and figures
 
 trader-stats-window =
     .aria-label = 統計期間
 trader-stats-book =
     .aria-label = 取引帳簿
-trader-paper-run-since = { $date } からのペーパー運用
-trader-paper-start = 開始時
-trader-paper-cash = 現金
-trader-paper-open = 建玉
-trader-paper-unrealized = 含み損益
+trader-exposure-cash = 現金
+trader-exposure-open = 建玉
+trader-exposure-unrealized = 含み損益
+trader-exposure-open-title = 枠を使うポジション数と、オープンポジションの上限
+trader-exposure-in-use = 使用中
+trader-exposure-in-use-title = オープンポジションに投じた { -sol }
+# $amount is the formatted count.
+trader-exposure-unpriced =
+    { $count ->
+       *[other] { $amount }件のオープンポジションにまだライブ価格がありません
+    }
+# $date is a formatted date; $amount is a formatted SOL amount.
+trader-exposure-cash-title = { $date } からのペーパー運用 · 開始時 { $amount }
 trader-paper-reset = ペーパー運用をリセット
 trader-paper-reset-title = ペーパー運用をリセットしますか？
 trader-paper-reset-run-message = 保有中のペーパーポジションは、コピータスクのペーパー保有も含めてすべて現在価格で決済され、設定された初期残高で新しい運用が始まります。以前の運用は履歴に残ります。
 trader-paper-reset-done = 新しいペーパー運用を開始しました
 trader-paper-reset-failed = ペーパー運用をリセットできませんでした
-trader-paper-account-failed = ペーパー運用を読み込めませんでした
 trader-realized-title = 確定パフォーマンス
 trader-metric-net-pnl = 純損益
 trader-metric-win-rate = 勝率
 trader-metric-profit-factor = プロフィットファクター
 trader-metric-max-drawdown = 最大ドローダウン
-trader-metric-capital = 稼働中の資金
 trader-metric-avg-win-loss = 平均利益 / 損失
 trader-metric-closed-trades = クローズ済み取引
 trader-metric-median-hold = 保有時間の中央値
-trader-stats-empty = この期間にクローズ済みの取引はありません
+trader-metric-fees = ネットワーク手数料
 # $won and $lost are formatted SOL amounts.
 trader-stats-won-lost = 利益 { $won } · 損失 { $lost }
 # $wins and $losses are the plural messages below.
@@ -138,53 +138,84 @@ trader-stats-losses =
 trader-stats-expected = 1取引あたりの期待値 { $amount }
 trader-stats-profit-factor-basis = 総利益 ÷ 総損失
 trader-stats-drawdown-basis = 確定ベースでの最大の高値から安値までの下落
-# $count is the position limit and selects the plural.
-trader-stats-slots =
-    { $count ->
-       *[other] ポジションスロット { $used } / { $max } 使用中
-    }
-trader-stats-avg-basis = 勝ちトレードと負けトレードの平均結果
-trader-stats-closed =
-    { $count ->
-       *[other] クローズ済みポジション { $amount }件
-    }
-# $span is a formatted duration.
-trader-stats-hold-average = 平均 { $span }
 trader-stats-excluded =
     { $count ->
-       *[other] クローズ済みラウンド { $amount }件を除外しました。取得原価が完全ではないため、正確な損益を算出できません。
+       *[other] クローズ済みトレード { $amount }件を除外しました。取得原価が不完全なため、損益は不明です。
     }
+# $ratio is a formatted ratio.
+trader-stats-payoff = ペイオフ { $ratio }
+trader-stats-streak-win =
+    { $count ->
+       *[other] { $amount }連勝
+    }
+trader-stats-streak-loss =
+    { $count ->
+       *[other] { $amount }連敗
+    }
+# $wins and $losses are formatted durations.
+trader-stats-hold-split = 勝ち { $wins } · 負け { $losses }
+trader-stats-fees-basis = 純損益に含まれます
+trader-stats-loading = 統計を読み込み中...
+trader-open-strategies = ストラテジーを開く
 
-## Stats: daily P&L and extremes
+## Stats: P&L chart, trade outcomes and extremes
 
 trader-daily-title = 日次損益
 trader-daily-subtitle = 1日ごとの確定 { -sol } と累計
-trader-daily-loading = 日次損益を読み込み中...
 trader-daily-chart = { -sol } 建ての日次確定損益
 trader-weekly-title = 週次損益
 trader-weekly-subtitle = ISO週ごとの確定 { -sol } と累計
 trader-weekly-chart = { -sol } 建ての週次確定損益
+# $date is a formatted date; $pnl a signed SOL amount.
+trader-daily-bar =
+    { $count ->
+       *[other] { $date } · { $pnl } · { $amount }件の取引
+    }
+trader-weekly-bar =
+    { $count ->
+       *[other] { $date } の週 · { $pnl } · { $amount }件の取引
+    }
 trader-extreme-best = 最良の取引
 trader-extreme-worst = 最悪の取引
+trader-extreme-runs = 最長連続
+trader-outcome-title = 取引結果
+trader-outcome-subtitle = クローズ済み取引をリターン別に表示（%）
+# $value, $from and $to are formatted signed percentages.
+trader-outcome-below = { $value } 未満
+trader-outcome-range = { $from } から { $to }
+trader-outcome-above = { $value } 以上
+# $range is one of the three messages above; $pnl a signed SOL amount.
+trader-outcome-bucket =
+    { $count ->
+       *[other] { $range } · { $amount }件の取引 · { $pnl }
+    }
 
-## Stats: exit breakdown
+## Stats: empty windows, exit reasons, entry sources and recent closes
 
-trader-exit-title = エグジット戦略の内訳
-trader-exit-subtitle = ポジションのクローズ方法と、各エグジットの成果
-trader-exit-loading = エグジットデータを読み込み中...
-trader-exit-empty-day = 過去24時間にクローズ済みの取引はありません
-trader-exit-empty-all = クローズ済みの取引はまだありません
-trader-exit-empty-days =
+trader-stats-empty-day = 過去24時間にクローズ済みの取引はありません
+trader-stats-empty-all = クローズ済みの取引はまだありません
+trader-stats-empty-hint = ポジションが売却されると、クローズ済みトレードがここに表示されます。自動トレーダーを開始するか、より長い期間を選択してください。
+trader-stats-empty-days =
     { $count ->
        *[other] 過去{ $amount }日間にクローズ済みの取引はありません
     }
-# $share is a formatted percentage of all exits.
-trader-exit-share =
-    { $count ->
-       *[other] { $amount }件の取引 · エグジット全体の { $share }
-    }
-# $value is a formatted average percentage.
-trader-exit-average = 平均 { $value }
+trader-exits-title = エグジット理由
+trader-exits-subtitle = クローズ済み取引の終わり方と、各エグジットのリターン
+trader-sources-title = エントリー元
+trader-sources-subtitle = クローズ済み取引を開いたもの
+trader-recent-title = 最近のクローズ
+trader-recent-subtitle = この期間の最新のクローズ済み取引
+trader-column-token = トークン
+trader-column-exit = エグジット
+trader-column-source = エントリー元
+trader-column-trades = 取引数
+trader-column-win-rate = 勝率
+trader-column-avg-return = 平均リターン
+trader-column-net-pnl = 純損益
+trader-column-held = 保有
+trader-column-closed = クローズ
+trader-column-pnl = 損益
+trader-column-return = リターン
 
 ## Shared example vocabulary
 
@@ -402,3 +433,8 @@ trader-timing-concurrency = エントリーチェックの同時実行数
 trader-timing-concurrency-hint = 同時にチェックするトークン数（大きいほど高速ですが CPU 負荷が増えます）
 trader-timing-unit-minutes = 分
 trader-timing-unit-tokens = 銘柄
+
+## Service mode notice
+
+trader-service-notice-title = { -brand } サービスで稼働中
+trader-service-notice-message = 価格は数秒ごとに更新されるため、狭いトレーリングストップなどの素早い決済は、独自の RPC を使う場合より反応が遅れます。

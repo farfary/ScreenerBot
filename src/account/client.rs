@@ -47,7 +47,7 @@ const REVOKE_TIMEOUT: Duration = Duration::from_secs(5);
 /// full default set to a request it cannot parse: scopes are FROZEN on the
 /// device at grant time, so a build that asks for the old four and is granted
 /// exactly those has no path to data access short of signing in again.
-pub const SCOPES: &str = "data:read rpc:submit vote referral:read account:read";
+pub const SCOPES: &str = "data:read chain:read rpc:submit vote referral:read account:read";
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct TokenResponse {
@@ -536,6 +536,20 @@ mod tests {
 
     fn is_unavailable(error: &Error) -> bool {
         matches!(error, Error::Account(AccountError::Unavailable { .. }))
+    }
+
+    /// Scopes are frozen on the device at grant time, so every scope a
+    /// feature needs must be in the one request string.
+    #[test]
+    fn the_requested_scopes_include_service_chain_reads_and_submission() {
+        let scopes: Vec<&str> = SCOPES.split(' ').collect();
+        for scope in [
+            "data:read",
+            crate::chains::access::CHAIN_READ_SCOPE,
+            crate::chains::access::SUBMIT_SCOPE,
+        ] {
+            assert!(scopes.contains(&scope), "{scope} missing from {SCOPES}");
+        }
     }
 
     #[test]

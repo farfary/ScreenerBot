@@ -14,8 +14,8 @@ pub mod signing;
 
 pub use balances::fetch_wallet_sol_balances;
 pub use keypair::{
-    address_from_encrypted_key, decrypt_to_keypair, export_private_key, keypair_to_address,
-    parse_private_key, parse_pubkey_safe, validate_address,
+    address_from_encrypted_key, decrypt_to_keypair, export_private_key, generate_key,
+    keypair_to_address, parse_private_key, parse_pubkey_safe, validate_address,
 };
 pub use signing::{
     cached_main_wallet_id, configured_address, configured_address_async, configured_keypair,

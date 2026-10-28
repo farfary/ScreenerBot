@@ -58,7 +58,7 @@ transactions-search =
     .placeholder = Rechercher des signatures…
     .aria-label = Rechercher des signatures de transaction
 transactions-load-failed = Impossible d'actualiser les transactions
-transactions-setup-gate-title = Les transactions nécessitent un portefeuille
+transactions-access-gate-title = Les transactions nécessitent un portefeuille
 transactions-summary-total = Total
 transactions-summary-success = Réussies
 transactions-summary-failed = Échecs
@@ -183,3 +183,9 @@ transactions-dialog-raw-empty = Aucune donnée brute disponible
 # Empty table (scripts/pages/transactions.js)
 transactions-empty = Aucune transaction pour l’instant
     .message = Les swaps et transferts du portefeuille de trading apparaissent ici une fois confirmés on-chain.
+
+## On-demand history
+
+transactions-history-on-demand = L’historique plus ancien se charge à la demande.
+transactions-history-load-older = Charger plus ancien
+transactions-history-load-older-failed = L’historique plus ancien n’a pas pu être chargé.

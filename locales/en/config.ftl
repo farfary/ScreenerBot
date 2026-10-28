@@ -8,8 +8,8 @@ config-account-auto-wallet-signin = Sign In Automatically with My Wallet
 config-account-refresh-margin-secs = Token Refresh Margin
     .hint = How early to renew the sign-in token before it expires. Only change this if you are debugging authentication.
     .unit = s
-config-account-use-gateway-rpc = Use { -brand } RPC for Sending Transactions
-    .hint = Broadcast signed swap transactions through screenerbot.io instead of your own RPC. Signing always happens on this machine; the server cannot alter a signed transaction. Your own RPC is still required for price data.
+config-account-use-gateway-rpc = Send Transactions Through { -brand }
+    .hint = When signed in, broadcast swaps you sign on this computer through screenerbot.io. Signing always happens here, and a signed transaction cannot be changed. Always on in { -brand } service mode.
 
 ## agent_control
 

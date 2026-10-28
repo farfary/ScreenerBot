@@ -147,5 +147,21 @@ trade-reason-synthetic-exit-permanent-failure = Échec permanent de sortie synth
 trade-reason-pending-verification = { $reason } (vérification en attente)
 trade-reason-force-closed = Clôture forcée : { $note }
 trade-reason-stored = { $reason }
+trade-reason-unknown = Non enregistré
+trade-reason-force-closed-any = Clôture forcée
+
+# Why a new entry was blocked. Ids come from EntryBlock in src/trader/admission.rs.
+trade-entry-block-force-stopped = Le trading est en arrêt forcé
+trade-entry-block-loss-limit = La limite de perte bloque les nouvelles entrées
+trade-entry-block-connectivity = Les services requis sont indisponibles
+trade-entry-block-storage-unavailable = Les données de trading sont indisponibles ou en cours de restauration
+trade-entry-block-position-limit = Limite de positions ouvertes atteinte
+trade-entry-block-already-open = Une position est déjà ouverte
+trade-entry-block-reentry-cooldown = Délai avant nouvelle entrée sur le token
+trade-entry-block-open-cooldown = Délai global entre entrées
+trade-entry-block-entry-reserved = Une autre entrée est en cours de traitement
+trade-entry-block-blacklisted = Token bloqué par les contrôles de risque
+trade-entry-block-paper-balance-exhausted = Le solde simulé ne couvre pas la transaction
+trade-entry-block-check-failed = Un contrôle de sécurité n'a pas pu aboutir
 
 trade-quick-no-token = Aucun token sélectionné

@@ -62,7 +62,7 @@ transactions-search =
     .placeholder = Signaturen suchen…
     .aria-label = Transaktionssignaturen suchen
 transactions-load-failed = Transaktionen konnten nicht aktualisiert werden
-transactions-setup-gate-title = Transaktionen erfordern eine Wallet
+transactions-access-gate-title = Transaktionen erfordern eine Wallet
 transactions-summary-total = Gesamt
 transactions-summary-success = Erfolgreich
 transactions-summary-failed = Fehlgeschlagen
@@ -191,3 +191,9 @@ transactions-dialog-raw-empty = Keine Rohdaten verfügbar
 # Empty table (scripts/pages/transactions.js)
 transactions-empty = Noch keine Transaktionen
     .message = Swaps und Überweisungen der Trading-Wallet erscheinen hier, sobald sie on-chain bestätigt sind.
+
+## On-demand history
+
+transactions-history-on-demand = Ältere Historie wird bei Bedarf geladen.
+transactions-history-load-older = Ältere laden
+transactions-history-load-older-failed = Die ältere Historie konnte nicht geladen werden.

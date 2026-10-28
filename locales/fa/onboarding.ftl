@@ -11,7 +11,7 @@ onboarding-welcome-custody-description = کلیدهای خصوصی در حالت
 onboarding-welcome-engine-title = موتور همیشه‌فعال
 onboarding-welcome-engine-description = سرویس‌های هماهنگ‌شده با بررسی سلامت و کنترل ایمن چرخه عمر.
 onboarding-welcome-realtime-title = داده‌های زنده روی زنجیره
-onboarding-welcome-realtime-description = محاسبه مستقیم ذخایر استخر — نه اسنپ‌شات‌های تأخیردار API.
+onboarding-welcome-realtime-description = با RPC خودتان، قیمت‌ها مستقیم از ذخایر استخرها می‌آیند — نه اسنپ‌شات‌های تأخیردار API.
 
 ## Slide: discover
 
@@ -35,7 +35,7 @@ onboarding-trade-auto-description = ارزیاب‌های ورود/خروج، د
 onboarding-trade-strategy-title = موتور استراتژی
 onboarding-trade-strategy-description = درخت‌های شرط که سیگنال‌های قیمت، حجم و زمان را ترکیب می‌کنند.
 onboarding-trade-copy-title = کپی‌تریدینگ
-onboarding-trade-copy-description = معاملات کیف‌پول‌هایی را که دنبال می‌کنید تکرار کنید. هر وظیفه را پیش از آنکه { -sol } واقعی خرج کند در حالت آزمایشی آزمایش کنید.
+onboarding-trade-copy-description = معاملات کیف‌پول‌هایی را که دنبال می‌کنید تکرار کنید (به RPC خودتان نیاز دارد). هر وظیفه را پیش از آنکه { -sol } واقعی خرج کند در حالت آزمایشی آزمایش کنید.
 onboarding-trade-safety-title = کنترل‌های ایمنی
 onboarding-trade-safety-description = توقف اضطراری، محدودیت ضرر دوره‌ای و کلیدهای مستقل هر پایش.
 
@@ -55,20 +55,20 @@ onboarding-connect-events-description = هر معامله، سواپ و روید
 ## Slide: data
 
 onboarding-data-title = داده‌های { -brand }
-onboarding-data-description = ما یک سرویس مشترک داده‌های بازار اجرا می‌کنیم تا نصب شما با محدودیت نرخ درخواست ارائه‌دهندگان عمومی کند نشود. این سرویس با حساب { -brand } رایگان است و { -brand } بدون آن هم کار می‌کند.
-onboarding-data-candles-title = تاریخچه کندل مشترک
-onboarding-data-candles-description = تاریخچه مشترک در هفت بازه زمانی، با عمق چندساله، از یک کش ارائه می‌شود.
-onboarding-data-pools-title = استخرها و امنیت از پیش بررسی‌شده
-onboarding-data-pools-description = یک فهرست مرکزی استخرها و گزارش‌های کش‌شده { -rugcheck }، که از قبل دریافت شده‌اند.
+onboarding-data-description = حساب رایگان { -brand } نمودارها و بررسی توکن‌ها را سریع‌تر می‌کند. با RPC خودتان، { -brand } بدون حساب هم کار می‌کند.
+onboarding-data-candles-title = نمودارهای سریع
+onboarding-data-candles-description = تاریخچه قیمت در هفت بازه زمانی، با عمق چندساله.
+onboarding-data-pools-title = بررسی آماده توکن‌ها
+onboarding-data-pools-description = استخرها و گزارش‌های امنیتی بیشتر توکن‌ها، بدون انتظار.
 onboarding-data-signin-title = نیازمند حساب
 onboarding-data-signin-description = بدون حساب، این داده‌ها در دسترس نیست و از ارائه‌دهندگان عمومی استفاده می‌شود.
-onboarding-data-reading-title = فقط جست‌وجوها
-onboarding-data-reading-description = ما فقط می‌بینیم چه توکن‌هایی را جستجو می‌کنید. هرگز کلید، موجودی، پوزیشن یا معامله‌ای را نمی‌بینیم.
+onboarding-data-reading-title = آنچه می‌بینیم
+onboarding-data-reading-description = توکن‌هایی که جستجو می‌کنید و سواپ‌هایی که از طریق { -brand } می‌فرستید. در سرویس { -brand }، موجودی و تاریخچه کیف پول معاملاتی شما را هم می‌بینیم. هرگز کلید شما را نه.
 
 ## Slide: privacy
 
 onboarding-privacy-title = کلیدهای شما، داده‌های شما
-onboarding-privacy-description = پیکربندی، کلیدها و تاریخچه معاملات شما روی همین دستگاه می‌ماند. در مرحله بعد، «کاوش داشبورد» را برای کشف بدون اطلاعات کاربری انتخاب کنید، یا برای فعال شدن ربات کامل یک کیف پول و RPC متصل کنید — و اگر داده‌های { -brand } را می‌خواهید همان‌جا وارد شوید.
+onboarding-privacy-description = پیکربندی، کلیدها و تاریخچه معاملات شما روی همین دستگاه می‌ماند. در مرحله بعد، «کاوش داشبورد» را برای کشف بدون اطلاعات کاربری انتخاب کنید، یا یک کیف پول بسازید یا وارد کنید و آن را از طریق RPC خودتان یا سرویس { -brand } متصل کنید تا معامله را شروع کنید.
 onboarding-privacy-local-title = معماری محلی‌محور
 onboarding-privacy-local-description = پیکربندی، تحلیل‌ها و پایگاه‌های داده روی دسکتاپ شما ذخیره می‌شوند.
 onboarding-privacy-wallet-title = کیف پول رمزگذاری‌شده
@@ -81,7 +81,7 @@ onboarding-privacy-config-description = بیشتر تنظیمات پس از را
 ## Footer
 
 onboarding-setup-shortcut =
-    .aria-label = رفتن مستقیم به راه‌اندازی کیف پول و RPC یا انتخاب حالت کاوش
+    .aria-label = رفتن مستقیم به راه‌اندازی یا انتخاب حالت کاوش
 onboarding-setup-shortcut-label = رفتن به راه‌اندازی
 onboarding-progress-dot =
     .aria-label = رفتن به اسلاید { $number }

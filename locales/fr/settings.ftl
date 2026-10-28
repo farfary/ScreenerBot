@@ -38,6 +38,7 @@ settings-dialog-tab-hints = Astuces
 settings-dialog-tab-data = Données
 settings-dialog-tab-security = Sécurité
 settings-dialog-tab-account = Compte
+settings-dialog-tab-connection = Connexion
 settings-dialog-tab-telegram = { -telegram }
 settings-dialog-tab-agent-connections = Connexions d'agents
 settings-dialog-tab-updates = Mises à jour
@@ -511,14 +512,12 @@ settings-hints-restored = Toutes les astuces rétablies
 ## account_tab.js
 
 settings-account-title = Compte { -brand }
-settings-account-description = Gratuit et facultatif. { -brand } trade, découvre et trace des graphiques sans compte — il le fait simplement avec les fournisseurs publics. Le panneau ci-dessous liste ce que la connexion apporte en plus.
+settings-account-description = Gratuit. Avec votre propre RPC, il est facultatif : { -brand } trade, découvre et trace des graphiques sans compte, avec les fournisseurs publics. Le service { -brand } en exige un. Le panneau ci-dessous liste ce que la connexion apporte en plus.
+settings-account-description-service = Gratuit, et nécessaire pour le service { -brand } : les lectures du portefeuille et les swaps que vous signez passent par screenerbot.io sous ce compte. Votre clé privée ne quitte jamais cet ordinateur.
 settings-account-data-title = Données { -brand }
-settings-account-data-description = Nous exploitons un service de données de marché partagé sur screenerbot.io : bougies mutualisées sur sept périodes, registre de pools résolu, rapports de sécurité en cache et identité des tokens normalisée. Il évite à chaque installation d’être limitée seule par les fournisseurs publics. Le service exige un compte afin que son coût de fonctionnement puisse être attribué et les abus limités.
+settings-account-data-description = { -brand } exploite sur screenerbot.io un service partagé de données de marché pour les graphiques, les données de pools, les rapports de sécurité et les détails des tokens, afin que votre installation ne subisse pas seule les limites de débit des fournisseurs publics. Il demande un compte gratuit pour limiter les abus.
 settings-account-data-fallback = Lorsqu'il est indisponible, { -brand } bascule automatiquement vers les fournisseurs publics. Rien ne s'arrête ; les graphiques se remplissent plus lentement et ont moins d'historique.
-settings-account-gateway-title = Envoi des transactions
-settings-account-gateway-description = Lorsque vous êtes connecté, { -brand } peut diffuser vos swaps via screenerbot.io plutôt que via votre propre RPC. Votre bot construit et signe toujours chaque transaction sur cette machine — le serveur ne fait que la relayer et ne peut pas modifier une transaction signée sans invalider sa signature.
-settings-account-gateway-label = Utiliser le RPC { -brand } pour envoyer les transactions
-settings-account-gateway-hint = Envoi uniquement. Les données de prix proviennent toujours de votre propre RPC — l'interrogation des pools est bien trop lourde pour un endpoint partagé, elle ne lui est donc jamais envoyée.
+settings-account-data-fallback-service = Avec le service { -brand }, les lectures du portefeuille et les trades passent aussi par screenerbot.io : tant qu'il est injoignable, le trading est en pause et reprend au retour de la connexion.
 settings-account-manage-title = Gérer votre compte
 settings-account-manage-description = Votre mot de passe, votre adresse e-mail, vos appareils connectés et vos paiements de parrainage se gèrent sur le site web. Y révoquer un appareil le déconnecte partout, y compris ici.
 settings-account-open-dashboard = Ouvrir votre tableau de bord
@@ -643,3 +642,26 @@ settings-data-folder-label = Ouvrir le dossier de données
 settings-data-folder-hint = Ouvre dans votre gestionnaire de fichiers le dossier contenant toutes les données de { -brand }.
 settings-data-folder-open = Ouvrir le dossier
 settings-data-folder-open-failed = Impossible d'ouvrir le dossier de données
+
+## Connection tab (scripts/ui/settings/connection_tab.js)
+
+settings-connection-title = Connexion
+settings-connection-description = Comment { -brand } accède à { -solana }.
+settings-connection-choice =
+    .aria-label = Connexion
+settings-connection-active = Active
+settings-connection-service-title = Service { -brand }
+settings-connection-service-detail = Les prix se mettent à jour toutes les quelques secondes. Le copy trading, le suivi de wallets, les soldes des autres wallets, l'historique ancien, les swaps directs en pool et les prix de pool en direct nécessitent votre propre RPC.
+settings-connection-own-title = Votre propre RPC
+settings-connection-own-detail = Prix environ deux fois par seconde et toutes les fonctionnalités.
+settings-connection-apply = Appliquer et redémarrer
+settings-connection-to-service-title = Passer au service { -brand } ?
+settings-connection-to-service-message = Le copy trading, le suivi de wallets, les soldes des autres wallets, l'historique ancien, les swaps directs en pool et les prix de pool en direct sont désactivés ; leurs réglages sont conservés. Le trading se met en pause dès que vous êtes déconnecté. { -brand } redémarre pour basculer.
+settings-connection-to-own-title = Passer à votre propre RPC ?
+settings-connection-to-own-message = { -brand } vérifie vos endpoints, puis redémarre pour basculer. Toutes les fonctionnalités sont réactivées.
+settings-connection-signed-in-as = Connecté · session ouverte en tant que { $name }
+settings-connection-sending-title = Envoi des transactions
+settings-connection-sending-label = Envoyer les transactions via { -brand }
+settings-connection-sending-own-hint = Lorsque vous êtes connecté, les swaps que vous signez sur cet ordinateur sont diffusés via screenerbot.io. Votre RPC est utilisé quand ce n’est pas possible.
+settings-connection-sending-service-hint = Toujours actif avec le service { -brand } : c’est ainsi que les swaps que vous signez sur cet ordinateur atteignent { -solana }.
+settings-connection-switch-failed = La connexion n’a pas pu être changée.

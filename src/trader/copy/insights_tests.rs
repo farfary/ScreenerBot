@@ -11,7 +11,7 @@ use crate::positions::Book;
 use crate::trader::copy::round_fixtures::{closed, open_round};
 use crate::trader::copy::types::{CopySellDecision, CopyTelemetry, PaperDecision};
 use crate::trader::paper::{PaperFill, PaperQuoteMetadata, PaperSellFill};
-use crate::trader::types::TradeReason;
+use crate::trader::TradeReason;
 
 fn quote_provenance(at: DateTime<Utc>, output: u64, input: u64) -> PaperQuoteMetadata {
     PaperQuoteMetadata {

@@ -5,6 +5,7 @@
 
 use super::schemas::{Config, SolanaChainConfig};
 use super::{Error, Result};
+use crate::chains::access::ChainAccessMode;
 use crate::errors::{ConfigurationError, IoError};
 use crate::logger::{self, LogTag};
 
@@ -470,14 +471,38 @@ pub fn validate_config(config: &Config) -> Result<()> {
 /// a non-empty RPC list. Checked only while Solana is enabled; a disabled
 /// chain's settings never refuse the config.
 fn validate_solana_chain(chain: &SolanaChainConfig) -> Result<()> {
-    // At least one router must remain available. Direct-only operation is a
-    // supported, deliberate configuration; the runtime has the same defense
-    // for a stale/externally-mutated config.
-    if !chain.swaps.jupiter.enabled && !chain.swaps.direct.enabled {
+    let Some(access) = ChainAccessMode::from_config_value(&chain.access) else {
         return Err(ConfigurationError::Generic {
-            message: "at least one swap router (Jupiter or Direct Pool) must be enabled".to_owned(),
+            message: "chains.solana.access must be \"own_rpc\" or \"service\"".to_owned(),
         }
         .into());
+    };
+
+    match access {
+        // At least one router must remain available. Direct-only operation is
+        // a supported, deliberate configuration; the runtime has the same
+        // defense for a stale/externally-mutated config.
+        ChainAccessMode::OwnRpc => {
+            if !chain.swaps.jupiter.enabled && !chain.swaps.direct.enabled {
+                return Err(ConfigurationError::Generic {
+                    message: "at least one swap router (Jupiter or Direct Pool) must be enabled"
+                        .to_owned(),
+                }
+                .into());
+            }
+        }
+        // Direct pool swaps read pool accounts the service does not serve, so
+        // only an aggregator router can trade in service mode.
+        ChainAccessMode::Service => {
+            if !chain.swaps.jupiter.enabled && !chain.swaps.raptor.enabled {
+                return Err(ConfigurationError::Generic {
+                    message:
+                        "service access needs an aggregator swap router (Jupiter or Raptor) enabled"
+                            .to_owned(),
+                }
+                .into());
+            }
+        }
     }
 
     // Matches the field's own declared range. A ceiling of zero would disable
@@ -514,8 +539,9 @@ fn validate_solana_chain(chain: &SolanaChainConfig) -> Result<()> {
         .into());
     }
 
-    // RPC validation
-    if chain.rpc.urls.is_empty() {
+    // Service access reaches the chain without these endpoints; the list is
+    // kept as saved so switching back restores it.
+    if access == ChainAccessMode::OwnRpc && chain.rpc.urls.is_empty() {
         return Err(ConfigurationError::Generic {
             message:
                 "chains.solana.rpc.urls cannot be empty - at least one RPC endpoint is required"
@@ -891,5 +917,59 @@ mod solana_chain_validation_tests {
                 "quote_deadline_ms = {deadline_ms}"
             );
         }
+    }
+
+    /// The access mode parses only from its two config values; anything else
+    /// refuses the config instead of falling back to a mode.
+    #[test]
+    fn the_access_mode_parses_only_its_two_values() {
+        let mut config = Config::default();
+        assert_eq!(config.chains.solana.access, "own_rpc");
+        for (value, valid) in [
+            ("own_rpc", true),
+            ("service", true),
+            ("", false),
+            ("Service", false),
+            ("rpc", false),
+        ] {
+            config.chains.solana.access = value.to_owned();
+            assert_eq!(
+                validate_config(&config).is_ok(),
+                valid,
+                "access = {value:?}"
+            );
+        }
+    }
+
+    /// Own-RPC access needs at least one endpoint; service access does not
+    /// read the list and keeps it as saved.
+    #[test]
+    fn only_own_rpc_access_requires_endpoints() {
+        let mut config = Config::default();
+        config.chains.solana.rpc.urls.clear();
+        assert!(validate_config(&config).is_err());
+
+        config.chains.solana.access = "service".to_owned();
+        assert!(validate_config(&config).is_ok());
+    }
+
+    /// Service access trades only through an aggregator; the Direct router
+    /// does not count there, while it does under own-RPC access.
+    #[test]
+    fn service_access_requires_an_aggregator_router() {
+        let mut config = Config::default();
+        config.chains.solana.swaps.jupiter.enabled = false;
+        config.chains.solana.swaps.raptor.enabled = false;
+        config.chains.solana.swaps.direct.enabled = true;
+        assert!(validate_config(&config).is_ok(), "own RPC with Direct only");
+
+        config.chains.solana.access = "service".to_owned();
+        assert!(
+            validate_config(&config).is_err(),
+            "service with Direct only"
+        );
+
+        config.chains.solana.swaps.raptor.enabled = true;
+        assert!(validate_config(&config).is_ok(), "service with Raptor");
     }
 }

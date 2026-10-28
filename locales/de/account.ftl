@@ -1,5 +1,5 @@
 account-data-access-ready = { -brand }-Daten sind aktiv
-    .detail = Gemeinsame Kerzen, Pool-Register, Sicherheitsberichte und Token-Identität werden von screenerbot.io bereitgestellt.
+    .detail = Charts, Pooldaten und Sicherheitsberichte werden von screenerbot.io geladen.
 
 account-data-access-disabled = { -brand }-Daten sind deaktiviert
     .detail = Die Quelle { -brand } ist in Ihren Einstellungen ausgeschaltet, daher stammen die Daten nur von öffentlichen Anbietern.
@@ -8,7 +8,7 @@ account-data-access-offline = { -brand }-Daten sind offline
     .detail = Es besteht keine Netzwerkverbindung. Die Daten werden automatisch wieder geladen, sobald die Verbindung zurück ist.
 
 account-data-access-signed-out = { -brand }-Daten erfordern ein Konto
-    .detail = Charts, Pools, Sicherheitsberichte und Token-Identität stammen stattdessen von öffentlichen Anbietern. Diese sind langsamer, haben Ratenlimits und weniger Verlaufsdaten. Die Anmeldung ist kostenlos und ändert nichts an der Funktionsweise von { -brand }.
+    .detail = Charts, Pools und Sicherheitsberichte stammen stattdessen von öffentlichen Anbietern. Diese sind langsamer, haben Ratenlimits und weniger Verlaufsdaten. Die Anmeldung ist kostenlos und ändert nichts an der Funktionsweise von { -brand }.
 
 account-data-access-reauthorization-required = { -brand }-Daten erfordern eine erneute Anmeldung
     .detail = Dieses Gerät wurde autorisiert, bevor es { -brand }-Daten gab. Melden Sie sich erneut an, um sie wiederherzustellen – bis dahin werden öffentliche Anbieter verwendet.
@@ -20,15 +20,16 @@ account-data-access-unreachable = { -brand }-Daten antworten nicht
     .detail = Der Dienst hat nicht geantwortet. Es werden öffentliche Anbieter verwendet, und { -brand } versucht es weiter.
 
 account-data-access-unknown = { -brand }-Daten wurden noch nicht geprüft
-    .detail = { -brand } hat in dieser Sitzung noch keine gemeinsamen Daten benötigt.
+    .detail = { -brand } hat diese Daten in dieser Sitzung noch nicht geladen.
 
 ## Account panel (ui/account/panel.js), shared by Setup and Settings
 
 account-scope-data-read = { -brand }-Marktdaten
-account-scope-rpc-submit = Kostenloses Senden signierter Transaktionen
+account-scope-rpc-submit = Senden von Transaktionen über { -brand }
 account-scope-vote = Token-Abstimmung
 account-scope-referral-read = Empfehlungserträge
 account-scope-account-read = Kontodetails
+account-scope-chain-read = Wallet-Abfragen für den { -brand }-Dienst
 
 account-panel-request-failed = Das hat nicht geklappt. Bitte versuchen Sie es erneut.
 account-panel-checking = Kontostatus wird geprüft…

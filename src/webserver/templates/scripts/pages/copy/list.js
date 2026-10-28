@@ -6,7 +6,7 @@
 // with a trend, its budget use, and a warning while its exit overrides no longer fit
 // the Trader's exit rules.
 import { renderAddress } from "../../ui/token_identity.js";
-import { sparkline } from "./charts.js";
+import { sparkline } from "../../ui/inline_chart.js";
 import { exitPolicyIssueHtml, signedSol, solNumber, stateText, toneClass } from "./format.js";
 import { tradingModeMarker } from "../../ui/trading_mode.js";
 import { keepSegmentFocus, renderSegmented } from "../../ui/segmented.js";

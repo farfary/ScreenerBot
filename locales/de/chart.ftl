@@ -34,3 +34,6 @@ chart-status-total-idle =
         [one] { $count } Kerze · inaktiv
        *[other] { $count } Kerzen · inaktiv
     }
+
+chart-inline-curve-label = Kumulierte GuV { $amount } { -sol }
+chart-inline-histogram-title = { $count } von { $total }

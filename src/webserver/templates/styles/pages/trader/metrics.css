@@ -2,217 +2,99 @@
  * SPDX-License-Identifier: BUSL-1.1 */
 
 /* ============================================================================
-   Daily P&L
+   Stats sheet: the realized figures, the states and the breakdowns under them.
    ============================================================================ */
 
-.daily-pnl-total {
-  font-family: var(--font-data);
-  font-feature-settings:
-    "tnum" 1,
-    "zero" 1;
-  font-size: 0.9rem;
-  font-weight: 700;
-  color: var(--text-primary);
-  white-space: nowrap;
-}
-
-.daily-pnl-total.positive {
-  color: var(--success);
-}
-
-.daily-pnl-total.negative {
-  color: var(--danger);
-}
-
-.daily-pnl-chart {
-  display: block;
-  width: 100%;
-  height: 120px;
-}
-
-.daily-pnl-zero {
-  stroke: var(--border-color);
-  stroke-width: 0.3;
-}
-
-.daily-pnl-bar.positive {
-  fill: var(--success);
-}
-
-.daily-pnl-bar.negative {
-  fill: var(--danger);
-}
-
-.daily-pnl-bar.neutral {
-  fill: var(--text-muted);
-}
-
-/* Non-scaling stroke keeps the cumulative line 1px wide despite the chart's
-   non-uniform viewBox scaling — without it the line stretches with the x axis. */
-.daily-pnl-line {
-  fill: none;
-  stroke: var(--primary-color);
-  stroke-width: 1;
-  stroke-linejoin: round;
-  vector-effect: non-scaling-stroke;
-}
-
-.daily-pnl-axis {
-  display: flex;
-  justify-content: space-between;
-  margin-top: 0.375rem;
-  font-family: var(--font-data);
-  font-size: 0.65rem;
-  color: var(--text-muted);
-}
-
-.stats-extremes {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem 1.5rem;
-  margin-top: 0.875rem;
-  padding-top: 0.75rem;
-  border-top: 1px solid var(--border-color);
-}
-
-/* `display:flex` above outranks the bare [hidden] attribute; a book or window with
-   no closed round would otherwise keep the previous book's best and worst trade. */
-.stats-extremes[hidden] {
+/* Sections the view shows one at a time; their flex display would outrank `hidden`. */
+.stats-sheet .sheet-section[hidden] {
   display: none;
 }
 
-.stats-extreme {
-  display: flex;
-  align-items: baseline;
-  gap: 0.5rem;
-  font-size: 0.75rem;
+/* The eight figures: two columns, four once the sheet is wide enough, so the hairline
+   colour never shows in an empty track. */
+.stats-sheet .metric-grid[data-surface="sheet"] {
+  --metric-grid-template: repeat(2, minmax(0, 1fr));
+}
+
+@container sheet (width >= 640px) {
+  .stats-sheet .metric-grid[data-surface="sheet"] {
+    --metric-grid-template: repeat(4, minmax(0, 1fr));
+  }
+}
+
+/* Qualifier under the figures: why some closed rounds are not counted. */
+.stats-note {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
+.stats-note[hidden] {
+  display: none;
+}
+
+/* The breakdowns hold their own sections, divided like the sheet's. */
+.stats-breakdowns {
+  gap: var(--spacing-md);
+}
+
+.stats-chart,
+.stats-table {
   min-width: 0;
 }
 
-.stats-extreme-label {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
+/* Best and worst trade and the longest runs: label, token and value in aligned columns. */
+.stats-extremes {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: var(--spacing-xs) var(--spacing-md);
+  align-items: baseline;
+  margin: 0;
+  font-size: var(--font-size-xs);
+}
+
+.stats-extremes dt {
   color: var(--text-muted);
   white-space: nowrap;
+}
+
+.stats-extremes dd {
+  margin: 0;
+  min-width: 0;
 }
 
 .stats-extreme-token {
-  color: var(--text-primary);
-  font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.stats-extreme-value {
-  font-family: var(--font-data);
-  font-feature-settings:
-    "tnum" 1,
-    "zero" 1;
-  font-weight: 700;
-}
-
-.stats-extreme-value.positive {
-  color: var(--success);
-}
-
-.stats-extreme-value.negative {
-  color: var(--danger);
-}
-
-/* ============================================================================
-   Exit Strategy Breakdown
-   ============================================================================ */
-
-.exit-breakdown {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-}
-
-.exit-breakdown-row {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.exit-breakdown-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 0.5rem;
-}
-
-.exit-breakdown-type {
-  font-size: 0.8125rem;
   font-weight: 600;
   color: var(--text-primary);
 }
 
-.exit-breakdown-pnl {
-  font-size: 0.75rem;
+.stats-extreme-value,
+.stats-extreme-runs {
   font-family: var(--font-data);
   font-feature-settings:
     "tnum" 1,
     "zero" 1;
-  font-weight: 700;
+  text-align: end;
   white-space: nowrap;
 }
 
-.exit-breakdown-pnl.positive {
-  color: var(--success);
+.stats-extreme-runs {
+  grid-column: span 2;
+  color: var(--text-secondary);
 }
 
-.exit-breakdown-pnl.negative {
-  color: var(--danger);
-}
-
-.exit-breakdown-bar {
-  height: 6px;
-  background: var(--background-secondary);
-  border-radius: var(--radius-sm);
-  overflow: hidden;
-}
-
-.exit-breakdown-fill {
-  height: 100%;
-  border-radius: var(--radius-sm);
-  min-width: 2px;
-  transition: width var(--transition-base);
-}
-
-.exit-breakdown-fill.positive {
-  background: var(--success);
-}
-
-.exit-breakdown-fill.negative {
-  background: var(--danger);
-}
-
-.exit-breakdown-fill.neutral {
-  background: var(--text-muted);
-}
-
-.exit-breakdown-meta {
-  display: flex;
-  justify-content: space-between;
-  font-size: 0.6875rem;
-}
-
-.exit-breakdown-share {
+/* The book the realized figures belong to, beside the section title while it is paper. */
+.stats-book-marker {
+  margin-inline-start: var(--spacing-sm);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
   color: var(--text-muted);
 }
 
-.exit-breakdown-profit {
-  font-family: var(--font-data);
-  font-weight: 600;
-}
-
-.exit-breakdown-profit.positive {
-  color: var(--success);
-}
-
-.exit-breakdown-profit.negative {
-  color: var(--danger);
+.stats-book-marker[hidden] {
+  display: none;
 }

@@ -11,7 +11,7 @@ onboarding-welcome-custody-description = Claves privadas cifradas en reposo y nu
 onboarding-welcome-engine-title = Motor siempre activo
 onboarding-welcome-engine-description = Servicios orquestados con comprobaciones de estado y control ordenado del ciclo de vida.
 onboarding-welcome-realtime-title = Datos en la cadena en tiempo real
-onboarding-welcome-realtime-description = Cálculos directos de las reservas de los pools, no instantáneas de API con retraso.
+onboarding-welcome-realtime-description = Con tu propio RPC, los precios salen directamente de las reservas de los pools, no de instantáneas de API con retraso.
 
 ## Slide: discover
 
@@ -35,7 +35,7 @@ onboarding-trade-auto-description = Evaluadores de entrada y salida, rondas de D
 onboarding-trade-strategy-title = Motor de estrategias
 onboarding-trade-strategy-description = Árboles de condiciones que combinan señales de precio, volumen y tiempo.
 onboarding-trade-copy-title = Copy trading
-onboarding-trade-copy-description = Replica las operaciones de las carteras que sigues. Prueba cualquier tarea en modo simulado antes de que gaste { -sol } real.
+onboarding-trade-copy-description = Replica las operaciones de las carteras que sigues (requiere tu propio RPC). Prueba cualquier tarea en modo simulado antes de que gaste { -sol } real.
 onboarding-trade-safety-title = Controles de seguridad
 onboarding-trade-safety-description = Parada de emergencia, límites de pérdidas por período e interruptores de monitor independientes.
 
@@ -55,20 +55,20 @@ onboarding-connect-events-description = Cada operación, swap y evento del siste
 ## Slide: data
 
 onboarding-data-title = Datos de { -brand }
-onboarding-data-description = Operamos un servicio compartido de datos de mercado para que tu instalación no quede limitada por los límites de tasa de los proveedores públicos. Es gratis con una cuenta de { -brand }, y { -brand } funciona sin ella.
-onboarding-data-candles-title = Historial de velas compartido
-onboarding-data-candles-description = Siete temporalidades de historial compartido, con años de profundidad, servidas desde una sola caché.
-onboarding-data-pools-title = Pools resueltos y seguridad
-onboarding-data-pools-description = Un registro central de pools e informes de { -rugcheck } en caché, ya obtenidos.
+onboarding-data-description = Una cuenta gratuita de { -brand } acelera los gráficos y las comprobaciones de tokens. Con tu propio RPC, { -brand } también funciona sin ella.
+onboarding-data-candles-title = Gráficos que cargan rápido
+onboarding-data-candles-description = Siete temporalidades de historial de precios, con años de profundidad.
+onboarding-data-pools-title = Comprobaciones de tokens listas
+onboarding-data-pools-description = Pools e informes de seguridad para la mayoría de los tokens, sin esperas.
 onboarding-data-signin-title = Requiere cuenta
 onboarding-data-signin-description = Sin una cuenta, estos datos no están disponibles y se usan los proveedores públicos.
-onboarding-data-reading-title = Solo consultas
-onboarding-data-reading-description = Vemos qué tokens consultas. Nunca una clave, un saldo, una posición ni una operación.
+onboarding-data-reading-title = Lo que vemos
+onboarding-data-reading-description = Los tokens que consultas y los swaps que envías a través de { -brand }. Con el servicio de { -brand }, también los saldos y el historial de tu billetera de trading. Nunca tu clave.
 
 ## Slide: privacy
 
 onboarding-privacy-title = Tus claves, tus datos
-onboarding-privacy-description = Tu configuración, tus claves y tu historial de trading permanecen en este equipo. A continuación, elige «Explorar el panel» para descubrir sin credenciales, o vincula una billetera y un RPC para habilitar el bot completo, e inicia sesión allí si quieres los datos de { -brand }.
+onboarding-privacy-description = Tu configuración, tus claves y tu historial de trading permanecen en este equipo. A continuación, elige «Explorar el panel» para descubrir sin credenciales, o crea o importa una billetera y conéctala mediante tu propio RPC o el servicio de { -brand } para empezar a operar.
 onboarding-privacy-local-title = Arquitectura local primero
 onboarding-privacy-local-description = Configuración, analíticas y bases de datos almacenadas en tu equipo.
 onboarding-privacy-wallet-title = Billetera cifrada
@@ -81,7 +81,7 @@ onboarding-privacy-config-description = La mayoría de los ajustes se pueden cam
 ## Footer
 
 onboarding-setup-shortcut =
-    .aria-label = Ir directamente a la configuración de billetera y RPC o elegir el Modo Explorar
+    .aria-label = Ir directamente a la configuración o elegir el Modo Explorar
 onboarding-setup-shortcut-label = Ir a la configuración
 onboarding-progress-dot =
     .aria-label = Ir a la diapositiva { $number }

@@ -4,26 +4,38 @@
 // Settings > Account.
 //
 // The same panel the setup screen mounts, plus the things that only make sense
-// once you have an account: what the free RPC does, and where to manage the
-// account itself.
+// once you have an account: the ScreenerBot data state, and where to manage the
+// account itself. On the ScreenerBot service, signing out pauses trading, so it
+// asks first.
 //
 // Deliberately thin. Anything that can be changed from the website is LINKED to
 // rather than reimplemented here — password, email, connected devices and
 // referral payouts all live at screenerbot.io/dashboard, and a second
 // implementation in the app would be a second thing to keep correct.
 
+import { getBootstrapState } from "../../core/bootstrap.js";
+import { ConfirmationDialog } from "../confirmation_dialog.js";
+
 const DASHBOARD_URL = "https://screenerbot.io/dashboard";
 
 let instance = null;
 
 export function buildAccountTab() {
+  // The access mode is fixed for the process, so the mode-specific copy is chosen once.
+  const service = getBootstrapState().status?.chain_access?.mode === "service";
+  const description = service
+    ? `<p class="settings-section-description" data-l10n-id="settings-account-description-service"></p>`
+    : `<p class="settings-section-description" data-l10n-id="settings-account-description"></p>`;
+  const fallback = service
+    ? `<p class="settings-section-description" data-l10n-id="settings-account-data-fallback-service"></p>`
+    : `<p class="settings-section-description" data-l10n-id="settings-account-data-fallback"></p>`;
   return `
     <div class="settings-section">
       <h3 class="settings-section-title">
         <i class="icon-circle-user"></i>
         <span data-l10n-id="settings-account-title"></span>
       </h3>
-      <p class="settings-section-description" data-l10n-id="settings-account-description"></p>
+      ${description}
 
       <div class="account-panel" id="settingsAccountPanel"></div>
     </div>
@@ -35,30 +47,7 @@ export function buildAccountTab() {
       </h3>
       <p class="settings-section-description" data-l10n-id="settings-account-data-description"></p>
       <div class="settings-data-access" id="settingsDataAccess" aria-live="polite"></div>
-      <p class="settings-section-description" data-l10n-id="settings-account-data-fallback"></p>
-    </div>
-
-    <div class="settings-section">
-      <h3 class="settings-section-title">
-        <i class="icon-send"></i>
-        <span data-l10n-id="settings-account-gateway-title"></span>
-      </h3>
-      <p class="settings-section-description" data-l10n-id="settings-account-gateway-description"></p>
-
-      <div class="settings-group">
-        <div class="settings-field">
-          <div class="settings-field-info">
-            <label for="settingsUseGateway" data-l10n-id="settings-account-gateway-label"></label>
-            <span class="settings-field-hint" data-l10n-id="settings-account-gateway-hint"></span>
-          </div>
-          <div class="settings-field-control">
-            <label class="toggle">
-              <input type="checkbox" id="settingsUseGateway" />
-              <span class="toggle-track"></span>
-            </label>
-          </div>
-        </div>
-      </div>
+      ${fallback}
     </div>
 
     <div class="settings-section">
@@ -85,35 +74,8 @@ export function attachAccountHandlers() {
       showDataAccess: false,
       // The panel already fetched the status this section renders, so it hands
       // it over rather than making Settings fetch the same thing again.
-      onChange: (status) => {
-        renderDataAccess(status?.data_access);
-        void syncGatewayToggle();
-      },
-    });
-  }
-
-  const gateway = document.getElementById("settingsUseGateway");
-  if (gateway) {
-    void syncGatewayToggle();
-    gateway.addEventListener("change", async () => {
-      const requested = gateway.checked;
-      gateway.disabled = true;
-      try {
-        const response = await fetch("/api/account/gateway", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ enabled: requested }),
-        });
-        // Apply the value the server stored; a refused write rolls back.
-        const body = response.ok ? await response.json() : null;
-        gateway.checked = body ? Boolean(body.data?.use_gateway_rpc) : !requested;
-      } catch {
-        // Revert the control rather than leave it claiming a state the config
-        // does not have.
-        gateway.checked = !requested;
-      } finally {
-        gateway.disabled = false;
-      }
+      onChange: (status) => renderDataAccess(status?.data_access),
+      beforeSignOut: confirmServiceSignOut,
     });
   }
 
@@ -162,20 +124,20 @@ function renderDataAccess(access) {
     </div>`;
 }
 
-/** Read the current flag so the switch reflects config rather than a guess. */
-async function syncGatewayToggle() {
-  const gateway = document.getElementById("settingsUseGateway");
-  if (!gateway) return;
-
-  try {
-    const response = await fetch("/api/config/account");
-    if (!response.ok) return;
-    const body = await response.json();
-    gateway.checked = Boolean(body?.data?.use_gateway_rpc);
-  } catch {
-    // Leave the control alone; an unreadable config is not a reason to assert
-    // a value the user did not choose.
-  }
+/**
+ * On the ScreenerBot service the account is how the app reads the wallet and sends
+ * trades, so signing out pauses trading: confirm it. On your own RPC nothing pauses.
+ */
+async function confirmServiceSignOut() {
+  if (getBootstrapState().status?.chain_access?.mode !== "service") return true;
+  const { confirmed } = await ConfirmationDialog.show({
+    title: I18n.t("shell-signout-service-title"),
+    message: I18n.t("shell-signout-service-message"),
+    confirmLabel: I18n.t("shell-signout-service-confirm"),
+    cancelLabel: I18n.t("common-action-cancel"),
+    variant: "warning",
+  });
+  return confirmed;
 }
 
 /** The dialog is closing. Stop the panel's sign-in watcher. */

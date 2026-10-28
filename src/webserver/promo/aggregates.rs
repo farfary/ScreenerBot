@@ -95,12 +95,16 @@ pub(super) fn open_agg() -> OpenAgg {
 #[derive(Clone)]
 pub(super) struct ClosedTrade {
     pub symbol: &'static str,
+    pub name: &'static str,
+    pub mint: &'static str,
     pub reason: &'static str,
+    pub entry_price: f64,
+    pub exit_price: f64,
+    pub size_sol: f64,
     pub pnl_sol: f64,
     pub pnl_percent: f64,
     pub entry_time: DateTime<Utc>,
     pub exit_time: DateTime<Utc>,
-    pub hold_minutes: i64,
 }
 
 /// Hours-ago the i-th closed trade exited (newest first): a realistic burst of
@@ -126,18 +130,21 @@ pub(super) fn closed_trades(now: DateTime<Utc>) -> Vec<ClosedTrade> {
         .iter()
         .enumerate()
         .map(
-            |(i, (symbol, _name, _mint, _logo, entry, exit, size, reason))| {
+            |(i, (symbol, name, mint, _logo, entry, exit, size, reason))| {
                 let exit_time = now - Duration::hours(closed_exit_offset_hours(i));
-                let hold = closed_hold_minutes(i);
-                let entry_time = exit_time - Duration::minutes(hold);
+                let entry_time = exit_time - Duration::minutes(closed_hold_minutes(i));
                 ClosedTrade {
                     symbol,
+                    name,
+                    mint,
                     reason,
+                    entry_price: *entry,
+                    exit_price: *exit,
+                    size_sol: *size,
                     pnl_sol: (exit - entry) / entry * size,
                     pnl_percent: (exit - entry) / entry * 100.0,
                     entry_time,
                     exit_time,
-                    hold_minutes: hold,
                 }
             },
         )
@@ -209,71 +216,4 @@ pub(super) fn between_hours(
             .iter()
             .filter(|t| t.exit_time < newer && t.exit_time >= older),
     )
-}
-
-/// Per-exit-reason breakdown (count + average P&L %), for the trader stats tab.
-pub(super) struct ReasonAgg {
-    pub reason: String,
-    pub count: usize,
-    pub avg_profit_pct: f64,
-}
-
-pub(super) fn reason_breakdown(trades: &[ClosedTrade]) -> Vec<ReasonAgg> {
-    use std::collections::BTreeMap;
-    let mut map: BTreeMap<&str, (usize, f64)> = BTreeMap::new();
-    for t in trades {
-        let e = map.entry(t.reason).or_insert((0, 0.0));
-        e.0 += 1;
-        e.1 += t.pnl_percent;
-    }
-    let mut out: Vec<ReasonAgg> = map
-        .into_iter()
-        .map(|(reason, (count, sum_pct))| ReasonAgg {
-            reason: reason.to_owned(),
-            count,
-            avg_profit_pct: if count > 0 {
-                sum_pct / count as f64
-            } else {
-                0.0
-            },
-        })
-        .collect();
-    out.sort_by(|a, b| b.count.cmp(&a.count));
-    out
-}
-
-/// Best / worst realized trade by P&L %.
-pub(super) fn best_worst(trades: &[ClosedTrade]) -> (Performer, Performer) {
-    let mut best = Performer {
-        symbol: "",
-        pnl_percent: f64::NEG_INFINITY,
-    };
-    let mut worst = Performer {
-        symbol: "",
-        pnl_percent: f64::INFINITY,
-    };
-    for t in trades {
-        if t.pnl_percent > best.pnl_percent {
-            best = Performer {
-                symbol: t.symbol,
-                pnl_percent: t.pnl_percent,
-            };
-        }
-        if t.pnl_percent < worst.pnl_percent {
-            worst = Performer {
-                symbol: t.symbol,
-                pnl_percent: t.pnl_percent,
-            };
-        }
-    }
-    (best, worst)
-}
-
-/// Average hold time across closed trades, in hours.
-pub(super) fn avg_hold_hours(trades: &[ClosedTrade]) -> f64 {
-    if trades.is_empty() {
-        return 0.0;
-    }
-    let mins: i64 = trades.iter().map(|t| t.hold_minutes).sum();
-    (mins as f64 / trades.len() as f64) / 60.0
 }

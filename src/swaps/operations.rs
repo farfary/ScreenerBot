@@ -2185,6 +2185,7 @@ mod tests {
             NotSubmittedReason::RouterUnavailable { .. } => "RouterUnavailable",
             NotSubmittedReason::SignerUnavailable { .. } => "SignerUnavailable",
             NotSubmittedReason::QuoteUnusable { .. } => "QuoteUnusable",
+            NotSubmittedReason::ServicePaused { .. } => "ServicePaused",
         }
     }
 

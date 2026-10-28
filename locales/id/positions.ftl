@@ -17,7 +17,6 @@ positions-paper-empty = Tidak ada posisi paper
 positions-paper-archived-empty = Tidak ada posisi paper yang diarsipkan
     .message = Putaran paper tetap di Terbuka dan Ditutup; hanya posisi live yang diarsipkan.
 positions-paper-empty-action = Buka Strategi
-positions-origin-copy = Salin
 positions-origin-manual = Manual
 positions-origin-wallet = Dompet
 positions-origin-copy-link =

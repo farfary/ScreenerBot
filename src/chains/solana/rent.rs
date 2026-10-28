@@ -14,7 +14,7 @@ use std::collections::HashMap;
 use std::sync::{LazyLock, Mutex};
 use std::time::{Duration, Instant};
 
-use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
+use crate::chains::solana::access::chain_access;
 
 /// Data length of an SPL token account without extensions.
 pub const TOKEN_ACCOUNT_LEN: usize = 165;
@@ -47,17 +47,22 @@ pub async fn minimum_balance(data_len: usize) -> crate::chains::solana::Result<u
             }
         }
     }
-    let lamports = get_rpc_client()
-        .get_minimum_balance_for_rent_exemption(data_len)
-        .await
-        .map_err(|e| crate::chains::solana::Error::Rpc {
+    let lamports = chain_access().rent_minimum(data_len).await.map_err(|e| {
+        crate::chains::solana::Error::Rpc {
             operation: "getMinimumBalanceForRentExemption",
             detail: e.to_string(),
-        })?;
+        }
+    })?;
     if let Ok(mut cache) = MINIMUM_CACHE.lock() {
         cache.insert(data_len, (lamports, Instant::now()));
     }
     Ok(lamports)
+}
+
+/// The rent-exempt minimum of an account holding `data_len` bytes at
+/// `lamports_per_byte`.
+pub fn rent_minimum_from_rate(lamports_per_byte: u64, data_len: usize) -> u64 {
+    (ACCOUNT_STORAGE_OVERHEAD + data_len as u64).saturating_mul(lamports_per_byte)
 }
 
 /// Whether `lamports` is exactly the rent-exempt deposit of an account at any
@@ -72,7 +77,15 @@ pub fn is_rent_deposit(lamports: u64) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::is_rent_deposit;
+    use super::{is_rent_deposit, rent_minimum_from_rate, TOKEN_ACCOUNT_LEN};
+
+    /// A token account's rent from a per-byte rate equals the network's
+    /// rent-exempt minimum for its 165 bytes at that rate.
+    #[test]
+    fn rent_from_the_per_byte_rate_matches_the_network_minimum() {
+        assert_eq!(rent_minimum_from_rate(5_080, TOKEN_ACCOUNT_LEN), 1_488_440);
+        assert_eq!(rent_minimum_from_rate(6_960, TOKEN_ACCOUNT_LEN), 2_039_280);
+    }
 
     #[test]
     fn deposits_at_the_former_and_the_current_rate_are_recognised() {

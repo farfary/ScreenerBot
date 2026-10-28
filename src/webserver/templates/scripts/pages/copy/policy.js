@@ -3,8 +3,8 @@
 //
 // The exit rules as the editor and the Rules tab present them: field specs, the
 // policy a task runs under after its overrides, presets, and validation.
-import { formatList } from "../../core/format.js";
-import { duration, finite, settingPct, settingSignedPct } from "./format.js";
+import { formatList, formatPercentValue } from "../../core/format.js";
+import { duration, finite, settingPct } from "./format.js";
 
 /** The share of the position a take-profit step sells when it sells all of it. */
 const WHOLE_POSITION_PCT = 100;
@@ -32,7 +32,7 @@ export const RULES = [
           return I18n.t("copy-rule-stop-loss-threshold");
         },
         unit: "%",
-        text: (v) => settingSignedPct(-Number(v)),
+        text: (v) => formatPercentValue(-Number(v), { decimals: 2, trim: true, fallback: "—" }),
       },
       {
         key: "min_hold_seconds",
@@ -77,7 +77,7 @@ export const RULES = [
           return I18n.t("copy-rule-trailing-activation");
         },
         unit: "%",
-        text: (v) => settingSignedPct(v),
+        text: (v) => formatPercentValue(v, { decimals: 2, trim: true, fallback: "—" }),
       },
       {
         key: "distance_pct",
@@ -105,7 +105,7 @@ export const RULES = [
           return I18n.t("copy-rule-take-profit-target-hint");
         },
         unit: "%",
-        text: (v) => settingSignedPct(v),
+        text: (v) => formatPercentValue(v, { decimals: 2, trim: true, fallback: "—" }),
       },
     ],
   },
@@ -133,7 +133,7 @@ export const RULES = [
           return I18n.t("copy-rule-time-threshold");
         },
         unit: "%",
-        text: (v) => settingSignedPct(v),
+        text: (v) => formatPercentValue(v, { decimals: 2, trim: true, fallback: "—" }),
       },
     ],
   },
@@ -156,14 +156,14 @@ export const INHERITED_RULES = [
         get label() {
           return I18n.t("copy-rule-break-even-trigger");
         },
-        text: (v) => settingSignedPct(v),
+        text: (v) => formatPercentValue(v, { decimals: 2, trim: true, fallback: "—" }),
       },
       {
         key: "offset_pct",
         get label() {
           return I18n.t("copy-rule-break-even-offset");
         },
-        text: (v) => settingSignedPct(v),
+        text: (v) => formatPercentValue(v, { decimals: 2, trim: true, fallback: "—" }),
       },
     ],
   },
@@ -247,7 +247,7 @@ export function ladderText(levels) {
   return formatList(
     levels.map((step) =>
       I18n.t("copy-rules-take-profit-step", {
-        profit: settingSignedPct(step.profit_pct),
+        profit: formatPercentValue(step.profit_pct, { decimals: 2, trim: true, fallback: "—" }),
         share: settingPct(step.sell_pct),
       })
     ),
@@ -418,7 +418,11 @@ export function exitWarnings(policy, exitMode, { slippagePct = null, feePct = nu
     warnings.push(
       I18n.t("copy-warning-stop-delay", {
         hold: duration(stop.min_hold_seconds),
-        threshold: settingSignedPct(-Number(stop.threshold_pct)),
+        threshold: formatPercentValue(-Number(stop.threshold_pct), {
+          decimals: 2,
+          trim: true,
+          fallback: "—",
+        }),
       })
     );
   }
@@ -430,7 +434,11 @@ export function exitWarnings(policy, exitMode, { slippagePct = null, feePct = nu
     if (Number(roi.target_profit_pct) <= sellCostCeiling) {
       warnings.push(
         I18n.t("copy-warning-take-profit-small", {
-          target: settingSignedPct(roi.target_profit_pct),
+          target: formatPercentValue(roi.target_profit_pct, {
+            decimals: 2,
+            trim: true,
+            fallback: "—",
+          }),
           slippage: settingPct(slippage),
           fee: settingPct(fee),
         })

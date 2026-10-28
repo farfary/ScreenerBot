@@ -189,6 +189,15 @@ fn assert_loader_contract(body: &Value) {
         body.get("boot_progress").is_some_and(Value::is_array),
         "/api/system/bootstrap no longer reports `boot_progress`"
     );
+    let access = &body["chain_access"];
+    assert!(
+        access["mode"].is_string()
+            && access["state"].is_string()
+            && access["ready"].is_boolean()
+            && access["capabilities"].is_object(),
+        "/api/system/bootstrap no longer reports `chain_access` with its mode, state and \
+         capabilities"
+    );
 }
 
 /// The one poll that decides whether the window keeps its loading state must

@@ -1287,6 +1287,44 @@ async fn an_unreadable_output_mint_or_epoch_subtracts_no_transfer_fee() {
     assert_eq!(output_transfer_fee(&no_epoch, &quote).await, None);
 }
 
+/// The typed transfer-fee schedule charges exactly what the Token-2022
+/// extension computes from the raw mint account, at every epoch and amount.
+#[test]
+fn the_typed_fee_schedule_equals_the_raw_extension_fee() {
+    use crate::chains::solana::access::{decode_mint, MintLookup};
+    use crate::chains::solana::spl_token_2022::extension::{
+        transfer_fee::TransferFeeConfig, BaseStateWithExtensions, StateWithExtensions,
+    };
+    use crate::chains::solana::spl_token_2022::state::Mint;
+
+    for (basis_points, maximum_fee) in [
+        (0, 0),
+        (1, 1),
+        (100, 20_000),
+        (250, 4_000),
+        (10_000, u64::MAX),
+    ] {
+        let account = token_2022_mint_with_fee(basis_points, maximum_fee);
+        let state = StateWithExtensions::<Mint>::unpack(&account.data).unwrap();
+        let raw = state.get_extension::<TransferFeeConfig>().unwrap();
+        let MintLookup::Mint(facts) = decode_mint(MINT, &account) else {
+            panic!("the fixture is a Token-2022 mint");
+        };
+        let schedule = facts
+            .transfer_fee
+            .expect("the fixture carries a transfer fee");
+        for epoch in [0, 4, 5, 6, 1_000] {
+            for amount in [0, 1, 99, 1_000_000, 50_000_000, u64::MAX] {
+                assert_eq!(
+                    schedule.fee_at(epoch, amount),
+                    raw.calculate_epoch_fee(epoch, amount),
+                    "{basis_points} bps, max {maximum_fee}, epoch {epoch}, amount {amount}"
+                );
+            }
+        }
+    }
+}
+
 #[tokio::test]
 async fn a_native_or_usdc_output_reads_no_mint() {
     let node = node_holding(Some(token_2022_mint_with_fee(100, 20_000)), Some(5));

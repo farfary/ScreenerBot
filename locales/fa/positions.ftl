@@ -24,7 +24,6 @@ positions-paper-empty = پوزیشن آزمایشی وجود ندارد
 positions-paper-archived-empty = پوزیشن آزمایشی بایگانی‌شده‌ای وجود ندارد
     .message = دورهای آزمایشی در باز و بسته می‌مانند؛ فقط پوزیشن‌های زنده بایگانی می‌شوند.
 positions-paper-empty-action = باز کردن استراتژی‌ها
-positions-origin-copy = کپی
 positions-origin-manual = دستی
 positions-origin-wallet = کیف پول
 positions-origin-copy-link =

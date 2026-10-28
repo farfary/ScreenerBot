@@ -38,19 +38,6 @@ copy-skip-swap-mixed-quote = Pagado con SOL y una stablecoin a la vez, por lo qu
 copy-skip-swap-multiple-tokens = Se operó más de un token en una misma transacción
 copy-skip-swap-unreadable = No se pudieron leer los importes de la operación
 
-copy-entry-block-force-stopped = El trading está detenido a la fuerza
-copy-entry-block-loss-limit = El límite de pérdidas bloquea nuevas entradas
-copy-entry-block-connectivity = Los servicios necesarios no están disponibles
-copy-entry-block-storage-unavailable = Los datos de trading no están disponibles o se están restaurando
-copy-entry-block-position-limit = Se alcanzó el límite de posiciones abiertas
-copy-entry-block-already-open = Ya hay una posición abierta
-copy-entry-block-reentry-cooldown = Enfriamiento de reentrada del token
-copy-entry-block-open-cooldown = Enfriamiento global de entradas
-copy-entry-block-entry-reserved = Se está procesando otra entrada
-copy-entry-block-blacklisted = El token está bloqueado por los controles de riesgo
-copy-entry-block-paper-balance-exhausted = El saldo simulado no cubre la operación
-copy-entry-block-check-failed = No se pudo completar una comprobación de seguridad
-
 copy-pause-user = Pausada por ti
 copy-pause-latency-kill-switch = Pausa automática: las operaciones llegaron con { $average } s de retraso de media (límite { $threshold } s)
 copy-pause-watch-detached = Pausa automática: la billetera ya no está en seguimiento
@@ -91,6 +78,7 @@ copy-live-block-copy-trading-disabled = El procesamiento de copias está en paus
 copy-state-system-paused = En pausa global
 copy-state-force-stopped = Detención forzada
 copy-state-entries-blocked = Entradas bloqueadas
+copy-state-own-rpc-required = Requiere tu propio RPC
 copy-state-running-live = En ejecución
 copy-state-running-paper = En ejecución
 copy-exit-mode-buy-only = Mis reglas de salida
@@ -172,6 +160,7 @@ copy-status-force-stopped = Detenido forzosamente
 copy-status-loss-limit = Límite de pérdidas
 copy-status-all-paused = Todas las tareas en pausa
 copy-status-processing = Procesando
+copy-status-own-rpc-required = Requiere tu propio RPC
 copy-toolbar-pause = Pausar copia
 copy-toolbar-resume = Reanudar copia
 copy-toolbar-resume-tasks = Reanudar todas las tareas
@@ -330,6 +319,7 @@ copy-state-detail-paper = En ejecución en simulación · las operaciones se sim
 copy-state-detail-live = En ejecución en vivo · las operaciones de la billetera se copian con swaps reales
 copy-state-detail-system-paused = En espera · el procesamiento de copias está en pausa global, las salidas siguen activas
 copy-state-detail-entries-blocked = Entradas bloqueadas por el límite de pérdidas · las salidas siguen activas
+copy-state-detail-own-rpc-required = En espera · el servicio de { -brand } no sigue otras billeteras; añade un RPC para reanudar
 copy-state-detail-force-stopped = Detención forzada · no se copia nada
 
 copy-paused-since = { $reason } · { $since }
@@ -598,13 +588,11 @@ copy-table-target-difference = Diferencia mediana de precio con el objetivo
 
 ## Charts
 
-copy-chart-curve-label = P&L acumulado { $amount } { -sol }
 copy-chart-compare-label = P&L acumulado por tarea
 copy-chart-empty-curve = Aún no hay rondas cerradas en este rango.
 copy-chart-empty-bars = No hay nada registrado en este rango.
 copy-chart-empty-histogram = No hay muestras de llegada en este rango.
 copy-chart-empty-compare = No hay rondas cerradas que comparar en este rango.
-copy-chart-histogram-title = { $count } de { $total }
 
 ## Wallet profile
 

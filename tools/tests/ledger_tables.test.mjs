@@ -459,10 +459,14 @@ test("Copy Trading Compare shows each mode whole and names curves as the table d
   const names = await page.$$eval(`${root} .ti-named-address-name`, (nodes) =>
     nodes.map((node) => node.textContent.trim())
   );
-  const legend = await page.$$eval("#copy-compare .copy-legend-item", (nodes) =>
+  const legend = await page.$$eval("#copy-compare .inline-chart-legend-item", (nodes) =>
     nodes.map((node) => node.textContent.trim())
   );
-  assert.ok(names.includes("Unnamed task"), "an unnamed task is in the fixture");
+  // An unnamed task reads as its short wallet (`head…tail`), as the task list shows it.
+  assert.ok(
+    names.some((name) => /^[1-9A-HJ-NP-Za-km-z]{4}…[1-9A-HJ-NP-Za-km-z]{4}$/.test(name)),
+    `an unnamed task is in the fixture, named by its wallet (${names.join(", ")})`
+  );
   assert.deepEqual([...legend].sort(), [...names].sort());
 });
 

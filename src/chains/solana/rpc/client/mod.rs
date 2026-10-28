@@ -9,6 +9,14 @@
 pub mod methods;
 mod methods_impl;
 
+/// Request params and result parsers shared with the service chain backend,
+/// which sends the same submission calls through the relay.
+pub(crate) use methods_impl::{
+    latest_blockhash_params, parse_latest_blockhash, parse_sent_signature,
+    parse_signature_statuses, parse_simulation, send_transaction_params, signature_statuses_params,
+    simulate_transaction_params,
+};
+
 pub use methods::{
     // Transaction history types
     HeliusTransactionsPage,

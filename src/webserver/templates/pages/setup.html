@@ -15,53 +15,119 @@
     <ol class="setup-progress" data-l10n-id="setup-wizard-progress">
       <li class="setup-step active" data-step="1" aria-current="step">
         <span class="setup-step-number" aria-hidden="true">1</span>
-        <span class="setup-step-label" data-l10n-id="setup-wizard-step-credentials"></span>
+        <span class="setup-step-label" data-l10n-id="setup-wizard-step-wallet"></span>
       </li>
       <li class="setup-step" data-step="2">
         <span class="setup-step-number" aria-hidden="true">2</span>
-        <span class="setup-step-label" data-l10n-id="setup-wizard-step-verification"></span>
+        <span class="setup-step-label" data-l10n-id="setup-wizard-step-connection"></span>
       </li>
       <li class="setup-step" data-step="3">
         <span class="setup-step-number" aria-hidden="true">3</span>
-        <span class="setup-step-label" data-l10n-id="setup-wizard-step-complete"></span>
+        <span class="setup-step-label" data-l10n-id="setup-wizard-step-verify"></span>
+      </li>
+      <li class="setup-step" data-step="4">
+        <span class="setup-step-number" aria-hidden="true">4</span>
+        <span class="setup-step-label" data-l10n-id="setup-wizard-step-ready"></span>
       </li>
     </ol>
   </header>
 
   <main class="setup-content">
     <div class="setup-form-container">
-      <section class="setup-step-content active" data-step="1" aria-labelledby="credentials-title">
+      <section class="setup-step-content active" data-step="1" aria-labelledby="wallet-title">
+        <div class="setup-single">
+          <header class="setup-step-header">
+            <h1 class="setup-step-title" id="wallet-title" data-l10n-id="setup-wallet-title"></h1>
+            <p class="setup-step-description" data-l10n-id="setup-wallet-description"></p>
+          </header>
+
+          <!-- The source choice, the backup panel and the key field come from
+               SetupRuntime, shared with the setup dialogs. -->
+          <div id="setup-wallet-source"></div>
+          <div id="setup-wallet-backup" hidden></div>
+          <div class="setup-credentials-grid" id="setup-wallet-import" hidden></div>
+        </div>
+      </section>
+
+      <section
+        class="setup-step-content"
+        data-step="2"
+        aria-labelledby="connection-title"
+        aria-hidden="true"
+        hidden
+      >
         <div class="setup-split">
           <div class="setup-split-main">
             <header class="setup-step-header">
               <h1
                 class="setup-step-title"
-                id="credentials-title"
-                data-l10n-id="setup-wizard-credentials-title"
+                id="connection-title"
+                data-l10n-id="setup-connection-title"
               ></h1>
-              <p
-                class="setup-step-description"
-                data-l10n-id="setup-wizard-credentials-description"
-              ></p>
+              <p class="setup-step-description" data-l10n-id="setup-connection-description"></p>
             </header>
 
-            <!-- The credential fields come from SetupRuntime.mountCredentialFields, shared
-                 with the Explore Mode setup dialog; the gateway option joins the RPC field. -->
-            <div class="setup-credentials-grid" id="setup-credential-fields"></div>
-            <label class="setup-gateway-option is-hidden" id="setup-gateway-option">
-              <input type="checkbox" id="setup-use-gateway" />
-              <span class="setup-gateway-copy">
-                <span class="setup-gateway-title" data-l10n-id="setup-wizard-gateway-title"></span>
-                <span class="setup-gateway-hint" data-l10n-id="setup-wizard-gateway-hint"></span>
-              </span>
-            </label>
+            <div class="setup-choice setup-choice-connection" role="radiogroup" data-l10n-id="setup-connection-choice">
+              <div class="setup-choice-card" data-connection="service">
+                <label class="setup-choice-head">
+                  <input
+                    type="radio"
+                    class="setup-choice-input"
+                    id="setup-connection-service"
+                    name="setup-connection"
+                    value="service"
+                  />
+                  <span class="setup-choice-title">
+                    <i class="icon-cloud" aria-hidden="true"></i>
+                    <span data-l10n-id="setup-connection-service-title"></span>
+                  </span>
+                  <span class="setup-choice-badge" data-l10n-id="setup-connection-service-badge"></span>
+                </label>
+                <p class="setup-choice-detail" data-l10n-id="setup-connection-service-detail"></p>
+                <ul class="setup-choice-points">
+                  <li data-l10n-id="setup-connection-service-prices"></li>
+                  <li data-l10n-id="setup-connection-service-features"></li>
+                  <li data-l10n-id="setup-connection-service-pause"></li>
+                  <li data-l10n-id="setup-connection-service-privacy"></li>
+                </ul>
+                <p class="setup-choice-requirement" id="setup-connection-requirement" role="status" aria-live="polite" hidden></p>
+              </div>
+
+              <div class="setup-choice-card" data-connection="own_rpc">
+                <label class="setup-choice-head">
+                  <input
+                    type="radio"
+                    class="setup-choice-input"
+                    id="setup-connection-own"
+                    name="setup-connection"
+                    value="own_rpc"
+                  />
+                  <span class="setup-choice-title">
+                    <i class="icon-server" aria-hidden="true"></i>
+                    <span data-l10n-id="setup-connection-own-title"></span>
+                  </span>
+                  <span class="setup-choice-badge" data-l10n-id="setup-connection-own-badge"></span>
+                </label>
+                <p class="setup-choice-detail" data-l10n-id="setup-connection-own-detail"></p>
+                <div class="setup-choice-own" id="setup-connection-own-fields" hidden>
+                  <div class="setup-credentials-grid" id="setup-rpc-field"></div>
+                  <label class="setup-gateway-option" id="setup-gateway-option" hidden>
+                    <input type="checkbox" id="setup-use-gateway" />
+                    <span class="setup-gateway-copy">
+                      <span class="setup-gateway-title" data-l10n-id="setup-connection-sending"></span>
+                      <span class="setup-gateway-hint" data-l10n-id="setup-connection-sending-hint"></span>
+                    </span>
+                  </label>
+                </div>
+              </div>
+            </div>
           </div>
 
           <aside class="setup-split-aside" aria-labelledby="account-panel-title">
             <div class="account-panel">
               <h2 class="account-panel-title" id="account-panel-title">
                 <span data-l10n-id="setup-wizard-account-title"></span>
-                <span class="account-optional" data-l10n-id="setup-wizard-account-optional"></span>
+                <span class="account-optional" id="setup-account-requirement" data-l10n-id="setup-wizard-account-optional"></span>
               </h2>
               <div id="setupAccountPanel" aria-live="polite">
                 <p class="account-loading" data-l10n-id="setup-wizard-account-loading"></p>
@@ -73,7 +139,7 @@
 
       <section
         class="setup-step-content"
-        data-step="2"
+        data-step="3"
         aria-labelledby="verification-title"
         aria-hidden="true"
         hidden
@@ -116,18 +182,18 @@
 
           <div
             class="setup-verification-item"
-            id="rpc-verification-card"
+            id="connection-verification-card"
             data-state="pending"
             role="listitem"
           >
-            <i class="setup-verification-icon icon-server" aria-hidden="true"></i>
+            <i class="setup-verification-icon icon-plug" aria-hidden="true"></i>
             <div class="setup-verification-content">
-              <h2 data-l10n-id="setup-wizard-verify-rpc"></h2>
-              <div class="setup-verification-status" id="rpc-status">
+              <h2 data-l10n-id="setup-wizard-verify-connection"></h2>
+              <div class="setup-verification-status" id="connection-status">
                 <span class="setup-state-icon" aria-hidden="true"></span>
                 <span data-l10n-id="setup-verify-rpc-waiting"></span>
               </div>
-              <div class="setup-verification-details" id="rpc-details"></div>
+              <div class="setup-verification-details" id="connection-details"></div>
             </div>
           </div>
 
@@ -152,7 +218,7 @@
 
       <section
         class="setup-step-content"
-        data-step="3"
+        data-step="4"
         aria-labelledby="complete-title"
         aria-hidden="true"
         hidden
@@ -194,6 +260,41 @@
             ></button>
           </div>
         </div>
+
+        <div class="setup-fund" id="setup-fund" hidden>
+          <h2 class="setup-fund-title" id="setup-fund-title">
+            <i class="icon-wallet" aria-hidden="true"></i>
+            <span data-l10n-id="setup-fund-title"></span>
+          </h2>
+          <p class="setup-fund-message" id="setup-fund-message" data-l10n-id="wallets-funding-message"></p>
+          <div class="setup-fund-body">
+            <div class="setup-fund-qr">
+              <img
+                class="setup-fund-qr-image"
+                id="setup-fund-qr-image"
+                src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=="
+                alt=""
+                hidden
+              />
+              <p class="setup-fund-qr-status" id="setup-fund-qr-status" data-l10n-id="home-wallet-qr-preparing"></p>
+            </div>
+            <div class="setup-fund-details">
+              <div class="setup-fund-address" id="setup-fund-address"></div>
+              <p class="setup-fund-status" id="setup-fund-status" role="status" aria-live="polite">
+                <i class="setup-fund-status-icon icon-loader" aria-hidden="true"></i>
+                <span id="setup-fund-status-text" data-l10n-id="setup-fund-waiting"></span>
+              </p>
+            </div>
+          </div>
+          <div class="setup-fund-actions">
+            <button
+              type="button"
+              class="setup-btn setup-btn-primary"
+              id="setup-fund-open"
+              data-l10n-id="setup-fund-open-dashboard"
+            ></button>
+          </div>
+        </div>
       </section>
 
       <div
@@ -213,12 +314,21 @@
           ></h2>
           <p class="setup-error-messages" id="setup-error-messages"></p>
         </div>
-        <button
-          type="button"
-          class="setup-btn setup-btn-secondary"
-          id="setup-retry"
-          data-l10n-id="setup-action-review-credentials"
-        ></button>
+        <div class="setup-error-actions">
+          <button
+            type="button"
+            class="setup-btn setup-btn-secondary"
+            id="setup-use-own-rpc"
+            data-l10n-id="setup-action-use-own-rpc"
+            hidden
+          ></button>
+          <button
+            type="button"
+            class="setup-btn setup-btn-secondary"
+            id="setup-retry"
+            data-l10n-id="setup-action-review-credentials"
+          ></button>
+        </div>
       </div>
     </div>
   </main>

@@ -3,7 +3,7 @@
 # src/data_server/access.rs.
 
 account-data-access-ready = { -brand } データは有効です
-    .detail = 共有のローソク足、プールレジストリ、セキュリティレポート、トークン情報を screenerbot.io から取得しています。
+    .detail = チャート、プールデータ、セキュリティレポートを screenerbot.io から読み込んでいます。
 
 account-data-access-disabled = { -brand } データはオフです
     .detail = 設定で { -brand } のデータソースがオフになっているため、公開プロバイダーのみからデータを取得します。
@@ -12,7 +12,7 @@ account-data-access-offline = { -brand } データはオフラインです
     .detail = ネットワークに接続されていません。接続が回復すると、データ取得は自動的に再開されます。
 
 account-data-access-signed-out = { -brand } データにはアカウントが必要です
-    .detail = チャート、プール、セキュリティレポート、トークン情報は、代わりに公開プロバイダーから取得されます。速度が遅く、レート制限があり、履歴も少なくなります。サインインは無料で、{ -brand } のそれ以外の動作は変わりません。
+    .detail = チャート、プール、セキュリティレポートは、代わりに公開プロバイダーから取得されます。速度が遅く、レート制限があり、履歴も少なくなります。サインインは無料で、{ -brand } のそれ以外の動作は変わりません。
 
 account-data-access-reauthorization-required = { -brand } データを使うには再サインインが必要です
     .detail = このデバイスは { -brand } データが提供される前に認可されました。再度サインインすると復旧します。それまでは公開プロバイダーを使用します。
@@ -24,15 +24,16 @@ account-data-access-unreachable = { -brand } データが応答していませ�
     .detail = サービスから応答がありませんでした。公開プロバイダーを使用し、{ -brand } は再試行を続けます。
 
 account-data-access-unknown = { -brand } データはまだ確認されていません
-    .detail = { -brand } は、このセッションでまだ共有データを必要としていません。
+    .detail = { -brand } は、このセッションでまだこのデータを読み込んでいません。
 
 ## Account panel (ui/account/panel.js), shared by Setup and Settings
 
 account-scope-data-read = { -brand } マーケットデータ
-account-scope-rpc-submit = 署名済みトランザクションの無料送信
+account-scope-rpc-submit = { -brand } 経由でのトランザクション送信
 account-scope-vote = トークン投票
 account-scope-referral-read = 紹介報酬
 account-scope-account-read = アカウント詳細
+account-scope-chain-read = { -brand } サービスによるウォレットの読み取り
 
 account-panel-request-failed = うまくいきませんでした。もう一度お試しください。
 account-panel-checking = アカウントの状態を確認中…

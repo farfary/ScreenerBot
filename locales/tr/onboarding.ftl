@@ -7,7 +7,7 @@ onboarding-welcome-custody-description = Özel anahtarlar depolamada şifrelenir
 onboarding-welcome-engine-title = Her zaman açık motor
 onboarding-welcome-engine-description = Sağlık kontrolleri ve düzgün yaşam döngüsü kontrolüyle yönetilen hizmetler.
 onboarding-welcome-realtime-title = Gerçek zamanlı zincir üstü veri
-onboarding-welcome-realtime-description = Doğrudan havuz rezerv hesaplamaları — gecikmeli API anlık görüntüleri değil.
+onboarding-welcome-realtime-description = Kendi RPC'nizle fiyatlar doğrudan havuz rezervlerinden gelir — gecikmeli API anlık görüntülerinden değil.
 
 onboarding-discover-title = Keşfet ve filtrele
 onboarding-discover-description = Yeni Solana çiftleri için üç veri kaynağını tarayın, 12'den fazla DEX havuz türünü zincir üstünde çözün, ardından her tokenı yapılandırılabilir kalite ve güvenlik kurallarından geçirin.
@@ -27,7 +27,7 @@ onboarding-trade-auto-description = Giriş/çıkış değerlendiricileri, DCA tu
 onboarding-trade-strategy-title = Strateji motoru
 onboarding-trade-strategy-description = Fiyat, hacim ve zamana dayalı sinyalleri birleştiren koşul ağaçları.
 onboarding-trade-copy-title = Kopya işlem
-onboarding-trade-copy-description = Takip ettiğiniz cüzdanların işlemlerini yansıtın. Her görevi gerçek { -sol } harcamadan önce sanal modda test edin.
+onboarding-trade-copy-description = Takip ettiğiniz cüzdanların işlemlerini yansıtın (kendi RPC'nizi gerektirir). Her görevi gerçek { -sol } harcamadan önce sanal modda test edin.
 onboarding-trade-safety-title = Güvenlik kontrolleri
 onboarding-trade-safety-description = Acil durdurma, dönemlik zarar limitleri ve bağımsız izleyici anahtarları.
 
@@ -43,18 +43,18 @@ onboarding-connect-events-title = Canlı olay akışı
 onboarding-connect-events-description = Her işlem, takas ve sistem olayı kategori ve önem derecesiyle kaydedilir.
 
 onboarding-data-title = { -brand } Data
-onboarding-data-description = Paylaşılan bir piyasa verisi hizmeti işletiyoruz; böylece kurulumunuz herkese açık sağlayıcıların istek sınırlarına takılmaz. { -brand } hesabıyla ücretsizdir ve { -brand } hesap olmadan da çalışır.
-onboarding-data-candles-title = Havuzlanmış mum geçmişi
-onboarding-data-candles-description = Yıllarca geriye giden, tek bir önbellekten sunulan yedi zaman dilimi ortak geçmiş.
-onboarding-data-pools-title = Çözümlenmiş havuzlar ve güvenlik
-onboarding-data-pools-description = Merkezi bir havuz kaydı ve önceden alınmış, önbellekteki { -rugcheck } raporları.
+onboarding-data-description = Ücretsiz bir { -brand } hesabı grafikleri ve token kontrollerini hızlandırır. Kendi RPC'nizle { -brand } hesap olmadan da çalışır.
+onboarding-data-candles-title = Grafikler hızlı yüklenir
+onboarding-data-candles-description = Yıllarca geriye giden, yedi zaman diliminde fiyat geçmişi.
+onboarding-data-pools-title = Token kontrolleri hazır
+onboarding-data-pools-description = Çoğu token için havuzlar ve güvenlik raporları, beklemeden.
 onboarding-data-signin-title = Hesap gerekli
 onboarding-data-signin-description = Hesap olmadan bu veri kullanılamaz ve herkese açık sağlayıcılar kullanılır.
-onboarding-data-reading-title = Yalnızca sorgular
-onboarding-data-reading-description = Hangi tokenları sorguladığınızı görürüz. Anahtarı, bakiyeyi, pozisyonu veya işlemi asla görmeyiz.
+onboarding-data-reading-title = Neleri görürüz
+onboarding-data-reading-description = Sorguladığınız tokenları ve { -brand } üzerinden gönderdiğiniz swapları. { -brand } hizmetinde ayrıca işlem cüzdanınızın bakiyelerini ve geçmişini. Anahtarınızı asla.
 
 onboarding-privacy-title = Anahtarlarınız, verileriniz
-onboarding-privacy-description = Yapılandırmanız, anahtarlarınız ve işlem geçmişiniz bu makinede kalır. Sonraki adımda, kimlik bilgisi olmadan keşif için "Paneli keşfet" seçeneğini seçin veya tam botu etkinleştirmek için bir cüzdan ve RPC bağlayın — { -brand } verisi istiyorsanız orada oturum açın.
+onboarding-privacy-description = Yapılandırmanız, anahtarlarınız ve işlem geçmişiniz bu makinede kalır. Sonraki adımda, kimlik bilgisi olmadan keşif için "Paneli keşfet" seçeneğini seçin veya bir cüzdan oluşturup içe aktarın ve işlem yapmaya başlamak için kendi RPC'niz ya da { -brand } hizmetiyle bağlayın.
 onboarding-privacy-local-title = Önce yerel mimari
 onboarding-privacy-local-description = Yapılandırma, analitik ve veritabanları masaüstünüzde saklanır.
 onboarding-privacy-wallet-title = Şifreli cüzdan
@@ -65,7 +65,7 @@ onboarding-privacy-config-title = Esnek yapılandırma
 onboarding-privacy-config-description = Ayarların çoğu kurulumdan sonra panelden değiştirilebilir.
 
 onboarding-setup-shortcut =
-    .aria-label = Doğrudan cüzdan ve RPC kurulumuna gidin veya Keşif Modu'nu seçin
+    .aria-label = Doğrudan kuruluma gidin veya Keşif Modu'nu seçin
 onboarding-setup-shortcut-label = Kuruluma git
 onboarding-progress-dot =
     .aria-label = Slayt { $number } sayfasına git

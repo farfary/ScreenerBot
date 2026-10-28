@@ -71,6 +71,8 @@ pub enum ApiErrorCode {
     RouteNotOffered,
     /// The data store a feature reads could not be opened at startup.
     StoreUnavailable,
+    /// The install's chain access mode does not provide the feature.
+    CapabilityUnavailable,
 }
 
 impl ApiErrorCode {
@@ -119,6 +121,7 @@ impl ApiErrorCode {
             Self::PayloadTooLarge => "PAYLOAD_TOO_LARGE",
             Self::RouteNotOffered => "ROUTE_NOT_OFFERED",
             Self::StoreUnavailable => "STORE_UNAVAILABLE",
+            Self::CapabilityUnavailable => "CAPABILITY_UNAVAILABLE",
         }
     }
 
@@ -167,9 +170,11 @@ impl ApiErrorCode {
             | Self::AgentControlDisabled => StatusCode::FORBIDDEN,
             Self::NotFound => StatusCode::NOT_FOUND,
             Self::PayloadTooLarge => StatusCode::PAYLOAD_TOO_LARGE,
-            Self::Conflict | Self::LiveUnavailable | Self::TaskLive | Self::OpenPositions => {
-                StatusCode::CONFLICT
-            }
+            Self::Conflict
+            | Self::LiveUnavailable
+            | Self::TaskLive
+            | Self::OpenPositions
+            | Self::CapabilityUnavailable => StatusCode::CONFLICT,
             Self::IntegrityFailed | Self::RouteNotOffered => StatusCode::UNPROCESSABLE_ENTITY,
             Self::ConfigError
             | Self::DatabaseError
@@ -222,6 +227,19 @@ impl ApiError {
             text,
             details: None,
         }
+    }
+
+    /// The envelope for a chain access refusal: `CAPABILITY_UNAVAILABLE` for a
+    /// feature the access mode lacks, else the error's own status, with its
+    /// catalog text.
+    pub fn chain_access(error: &crate::chains::Error) -> Self {
+        let code = match error {
+            crate::chains::Error::CapabilityUnavailable { .. } => {
+                ApiErrorCode::CapabilityUnavailable
+            }
+            _ => ApiErrorCode::for_status(crate::errors::ErrorClass::http_status(error)),
+        };
+        Self::with_text(code, error.access_ui_text()).details(error.to_string())
     }
 
     /// The message and technical details, for a transport that carries them

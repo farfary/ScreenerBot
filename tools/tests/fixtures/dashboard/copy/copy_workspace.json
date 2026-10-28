@@ -102,9 +102,7 @@
     "roi": {
       "enabled": false,
       "target_profit_pct": 100,
-      "levels": [
-        { "profit_pct": 100, "sell_pct": 100 }
-      ]
+      "levels": [{ "profit_pct": 100, "sell_pct": 100 }]
     },
     "time": {
       "enabled": false,
@@ -138,9 +136,7 @@
     "roi": {
       "enabled": true,
       "target_profit_pct": 80,
-      "levels": [
-        { "profit_pct": 80, "sell_pct": 100 }
-      ]
+      "levels": [{ "profit_pct": 80, "sell_pct": 100 }]
     },
     "time": {
       "enabled": false,
@@ -328,7 +324,7 @@
     "queue_capacity": 32
   },
   "readiness": {
-    "ready": false,
+    "ready": true,
     "checks": [
       {
         "id": "history",

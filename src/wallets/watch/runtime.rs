@@ -55,6 +55,13 @@ pub trait WalletWatchRuntime: Send + Sync {
     /// True while the shared realtime transport is connected.
     fn is_connected(&self) -> bool;
 
+    /// Whether a connected transport still needs the baseline signature poll.
+    /// A transport whose every notification triggers a gap-fill (the service
+    /// version stream) answers `false`: while it is connected nothing is polled.
+    fn polls_while_connected(&self) -> bool {
+        true
+    }
+
     /// A fresh connection-state watch, independent of `is_connected()`'s
     /// point-in-time read.
     fn connection_watch(&self) -> Box<dyn ConnectionWatch>;

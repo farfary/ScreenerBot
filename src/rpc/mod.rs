@@ -31,11 +31,15 @@
 //!
 //! # Usage
 //!
-//! ```rust,ignore
-//! use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
+//! This machinery serves the user's own RPC endpoints only. Chain reads and
+//! sends go through the chain access facade
+//! (`crate::chains::solana::access::chain_access`), which uses it in own-RPC
+//! mode and never initialises it in service mode.
 //!
-//! let client = get_rpc_client();
-//! let balance = client.get_sol_balance("wallet_address").await?;
+//! ```rust,ignore
+//! use crate::chains::solana::access::chain_access;
+//!
+//! let balance = chain_access().sol_balance("wallet_address").await?;
 //! ```
 
 // ============================================================================

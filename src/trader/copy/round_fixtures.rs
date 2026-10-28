@@ -7,7 +7,7 @@ use chrono::{DateTime, Duration, Utc};
 
 use crate::positions::types::Opening;
 use crate::positions::{Book, Position, PositionManagement, PositionOrigin};
-use crate::trader::types::TradeReason;
+use crate::trader::TradeReason;
 
 /// An open round of copy task `task_id` in `book`, bought for `size` at `entry`,
 /// entered `minutes_ago` and marked at its entry price.

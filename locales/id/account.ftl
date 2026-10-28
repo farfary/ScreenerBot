@@ -3,7 +3,7 @@
 # src/data_server/access.rs.
 
 account-data-access-ready = Data { -brand } aktif
-    .detail = Candle bersama, registri pool, laporan keamanan, dan identitas token disajikan dari screenerbot.io.
+    .detail = Grafik, data pool, dan laporan keamanan dimuat dari screenerbot.io.
 
 account-data-access-disabled = Data { -brand } dimatikan
     .detail = Sumber { -brand } dimatikan di pengaturan Anda, sehingga data hanya berasal dari penyedia publik.
@@ -12,7 +12,7 @@ account-data-access-offline = Data { -brand } offline
     .detail = Tidak ada koneksi jaringan. Data akan berlanjut sendiri setelah koneksi kembali.
 
 account-data-access-signed-out = Data { -brand } memerlukan akun
-    .detail = Grafik, pool, laporan keamanan, dan identitas token berasal dari penyedia publik. Penyedia tersebut lebih lambat, dibatasi rate, dan riwayatnya lebih terbatas. Masuk gratis dan tidak mengubah hal lain tentang cara { -brand } berjalan.
+    .detail = Grafik, pool, dan laporan keamanan berasal dari penyedia publik. Penyedia tersebut lebih lambat, dibatasi rate, dan riwayatnya lebih terbatas. Masuk gratis dan tidak mengubah hal lain tentang cara { -brand } berjalan.
 
 account-data-access-reauthorization-required = Data { -brand } mengharuskan Anda masuk lagi
     .detail = Perangkat ini diotorisasi sebelum data { -brand } tersedia. Masuk lagi untuk memulihkannya — penyedia publik digunakan sampai saat itu.
@@ -24,15 +24,16 @@ account-data-access-unreachable = Data { -brand } tidak merespons
     .detail = Layanan tidak menjawab. Penyedia publik digunakan, dan { -brand } akan terus mencoba lagi.
 
 account-data-access-unknown = Data { -brand } belum diperiksa
-    .detail = { -brand } belum memerlukan data bersama pada sesi ini.
+    .detail = { -brand } belum memuat data ini pada sesi ini.
 
 ## Account panel (ui/account/panel.js), shared by Setup and Settings
 
 account-scope-data-read = Data pasar { -brand }
-account-scope-rpc-submit = Pengiriman transaksi bertanda tangan gratis
+account-scope-rpc-submit = Mengirim transaksi melalui { -brand }
 account-scope-vote = Voting token
 account-scope-referral-read = Pendapatan referral
 account-scope-account-read = Detail akun
+account-scope-chain-read = Pembacaan wallet untuk layanan { -brand }
 
 account-panel-request-failed = Gagal. Silakan coba lagi.
 account-panel-checking = Memeriksa status akun…

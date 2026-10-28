@@ -37,7 +37,7 @@ errors-account-signin-refused = { $reason }
 errors-account-signin-unavailable = साइन-इन उपलब्ध नहीं है
 errors-account-credentials-required = अपना ईमेल एड्रेस और पासवर्ड दर्ज करें।
 errors-account-signout-failed = साइन-आउट विफल रहा
-errors-account-gateway-update-failed = गेटवे सेटिंग अपडेट नहीं हो सकी
+errors-account-gateway-update-failed = ट्रांज़ैक्शन भेजने की सेटिंग अपडेट नहीं हो सकी
 
 errors-i18n-locale-not-registered = भाषा पंजीकृत नहीं है
 errors-i18n-catalog-encode-failed = कैटलॉग एन्कोड नहीं हो सका
@@ -114,6 +114,8 @@ errors-transactions-own-wallet-unavailable = मुख्य वॉलेट क
 errors-transactions-invalid-subject = ट्रांज़ैक्शन का विषय मान्य Solana एड्रेस नहीं है
 errors-transactions-subject-not-watched = ट्रांज़ैक्शन का विषय वॉच किया गया वॉलेट नहीं है
 errors-transactions-watch-store-unavailable = वॉच किए गए वॉलेट उपलब्ध नहीं हैं
+errors-transactions-history-loading = पुराने ट्रांज़ैक्शन पहले से लोड हो रहे हैं।
+errors-transactions-history-load-failed = पुराने ट्रांज़ैक्शन लोड नहीं हो सके।
 
 errors-wallet-unavailable = मुख्य वॉलेट उपलब्ध नहीं है
 errors-wallet-changed = मुख्य वॉलेट बदल गया है; रिफ़्रेश करके दोबारा प्रयास करें
@@ -381,3 +383,17 @@ errors-tokens-search-failed = टोकन खोज विफल रही
 
 errors-actions-not-found = एक्शन { $id } नहीं मिला
 errors-services-not-found = सर्विस '{ $name }' नहीं मिली
+
+# Chain access
+errors-chain-capability-unavailable = इसके लिए आपका अपना RPC कनेक्शन ज़रूरी है।
+errors-chain-service-signin-required = { -brand } सेवा इस्तेमाल करने के लिए साइन इन करें।
+errors-chain-service-scope-missing = वॉलेट पढ़ने की अनुमति देने के लिए फिर से साइन इन करें।
+errors-chain-service-busy = { -brand } सेवा व्यस्त है। थोड़ी देर में फिर कोशिश करें।
+errors-chain-service-daily-limit = आपका खाता { -brand } सेवा की आज की सीमा तक पहुँच गया है।
+errors-chain-service-version = यह संस्करण { -brand } सेवा के लिए बहुत पुराना है। { $minimum } या नए संस्करण पर अपडेट करें।
+errors-chain-service-refused = { -brand } सेवा ने अनुरोध अस्वीकार कर दिया।
+errors-chain-service-unreachable = screenerbot.io तक नहीं पहुँच पा रहे।
+errors-chain-not-trading-wallet = { -brand } सेवा मोड में केवल ट्रेडिंग वॉलेट पढ़ा जा सकता है।
+errors-chain-access-failed = ब्लॉकचेन अनुरोध विफल रहा।
+errors-chain-access-unchanged = यह कनेक्शन पहले से इस्तेमाल में है।
+errors-chain-access-switch-failed = कनेक्शन बदला नहीं जा सका।

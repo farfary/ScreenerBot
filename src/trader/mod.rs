@@ -25,7 +25,9 @@
 //! - `constants`: All trader constants consolidated
 //! - `config`: Configuration accessors
 //! - `controller`: Start/stop trader control
+//! - `status`: Auto Trader status and the entry state of each book
 //! - `service`: Service implementation
+//! - `trade_reason`: Trade and close reasons and their display text
 //! - `types`: Trader types
 
 pub mod actions;
@@ -45,22 +47,28 @@ pub mod paper;
 pub mod policy;
 pub mod safety;
 pub mod stats;
+mod status;
 pub mod templates;
+mod trade_reason;
 mod types;
 
 // Re-exports for common usage
 pub use constants::*;
 pub use controller::{
-    clear_force_stop, engage_force_stop, entry_blocks, is_trader_running, live_block,
-    loss_limit_snapshot, monitors_status, run_state, set_monitor_enabled, start_trader_checked,
-    stop_trader_checked, stop_trader_gracefully, trader_status, LiveBlock, LossLimitSnapshot,
-    Monitor, MonitorState, MonitorsStatus, TraderRunState, TraderStatus,
+    clear_force_stop, engage_force_stop, is_trader_running, live_block, loss_limit_snapshot,
+    monitors_status, run_state, set_monitor_enabled, start_trader_checked, stop_trader_checked,
+    stop_trader_gracefully, LiveBlock, LossLimitSnapshot, Monitor, MonitorState, MonitorsStatus,
+    TraderRunState,
 };
 pub use error::{Error, Result};
 pub use executors::execute_trade;
+pub use status::{entry_idle, trader_status, EntryIdle, TraderStatus};
+pub use trade_reason::{
+    closed_reason_group_text, closed_reason_key, closed_reason_text, trade_reason_text,
+    TradeReason, FORCE_CLOSED_KEY, UNKNOWN_REASON_KEY,
+};
 pub use types::{
-    closed_reason_text, trade_reason_text, FailedTradeStep, TradeAction, TradeDecision,
-    TradePriority, TradeReason, TradeResult, TradeStep, Withdrawal,
+    FailedTradeStep, TradeAction, TradeDecision, TradePriority, TradeResult, TradeStep, Withdrawal,
 };
 
 use crate::logger::{self, LogTag};

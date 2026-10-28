@@ -19,7 +19,8 @@ use crate::trader::paper::{
     PaperFill, PaperFillError, PaperLegEvidence, PaperLegFill, PaperModel, PaperRefusal,
     TradingMode,
 };
-use crate::trader::types::{TradeDecision, TradeReason, TradeResult, TradeStep};
+use crate::trader::types::{TradeDecision, TradeResult, TradeStep};
+use crate::trader::TradeReason;
 use crate::wallets::watch::{ActivityKind, SwapSide, WalletActivity, WatchSource};
 
 const MINT: &str = "paper-entry-mint";

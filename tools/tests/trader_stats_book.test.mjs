@@ -3,95 +3,123 @@
 //
 
 /**
- * Guard: the paper run card on the Trader Stats tab.
+ * Guard: the Trader Stats tab shows one book at a time.
  *
- * - It shows the figures the paper account API sends: the run's start, its starting
- *   balance, cash, open cost and unrealized result, with the bare Paper glyph inline.
- * - A figure the account does not carry reads as a dash, never as a zero.
- * - The card offers the reset of the paper run.
- * - The Stats tab asks for the book and window it shows, and switches both from the shared
- *   segmented control.
+ * - The tab opens on the live book and the 30-day window, and asks
+ *   `/api/trader/stats?window=…&book=…` for exactly the book and window its switches show.
+ * - Switching the book or the window reads again; the figures of one book never show
+ *   under the other, even when a response of the previous book arrives late.
+ * - The paper run is read from the paper account API, which carries the run alone:
+ *   `{epoch, started_at, starting_balance_native, cash_native}`.
  *
  * Run with `npm run test:js`.
  */
 
-process.env.TZ = "UTC";
-
-import test from "node:test";
+import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import fs from "node:fs";
+import { readFileSync } from "node:fs";
 
-import { installEnglishI18n } from "../lib/dashboard_i18n.mjs";
+import { chromium } from "playwright";
 
-installEnglishI18n();
-const { paperAccountCard } = await import(
-  new URL("../../src/webserver/templates/scripts/pages/trader/paper_account.js", import.meta.url)
-);
+import { serveDashboard, PAGE_READY } from "../lib/dashboard_host.mjs";
+import { FIXTURES_ROOT, createApiHandler, loadIndex } from "../lib/dashboard_fixtures.mjs";
 
-const esc = (text) =>
-  String(text).replace(/[&<>"']/g, (char) => `&#${char.charCodeAt(0)};`);
-const plain = (text) => String(text).replace(/[⁦-⁩]/g, "");
-const read = (path) =>
-  fs.readFileSync(new URL(`../../src/webserver/templates/${path}`, import.meta.url), "utf8");
+const browser = await chromium.launch({ headless: true });
+after(() => browser.close());
+const indexes = [await loadIndex("trader"), await loadIndex("shell")];
 
-/** The `<dt>`/`<dd>` pairs of the card, as `{ label: value }`. */
-function figures(card) {
-  return Object.fromEntries(
-    [...plain(card).matchAll(/<dt>([^<]*)<\/dt><dd>([^<]*)<\/dd>/g)].map((match) => [
-      match[1],
-      match[2],
-    ])
-  );
-}
-
+const LIVE = JSON.parse(readFileSync(`${FIXTURES_ROOT}/trader/trader_stats.json`, "utf8"));
+const PAPER = { ...LIVE, total_trades: 3, winners: 2, losers: 1, recent_rounds: [] };
 const ACCOUNT = {
   epoch: 2,
   started_at: 1_790_812_800,
   starting_balance_native: 1,
   cash_native: 0.9412,
-  open_rounds: 2,
-  open_cost_native: 0.0603,
-  open_unrealized_pnl_native: -0.0021,
 };
 
-test("the card shows the run the paper account API sends", () => {
-  const card = paperAccountCard(ACCOUNT, esc);
-  assert.match(card, /^<i class="icon-test-tube-diagonal" aria-hidden="true"><\/i>/);
-  assert.match(plain(card), /Paper run since Oct 1, 2026/);
-  const shown = figures(card);
-  assert.deepEqual(Object.keys(shown), ["Start", "Cash", "Open", "Unrealized"]);
-  assert.match(shown.Start, /^1\sSOL$/);
-  assert.match(shown.Cash, /^0\.9412\sSOL$/);
-  assert.match(shown.Open, /^0\.0603\sSOL$/);
-  assert.match(shown.Unrealized, /^[-\u2212]0\.0021\sSOL$/);
-  assert.match(card, /<button[^>]*data-paper-reset>Reset paper run<\/button>/);
+/**
+ * The trader page on Stats. Every stats request is recorded as `{ book, window }`; a live
+ * read is held while `holdLive` is set, until `releaseLive()` answers it.
+ */
+async function openStats() {
+  const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const api = createApiHandler(indexes, "populated");
+  const reads = [];
+  const held = [];
+  const state = { holdLive: false };
+  const onApi = async (request) => {
+    const { pathname, searchParams } = request.url;
+    if (pathname === "/api/trader/stats") {
+      const book = searchParams.get("book");
+      reads.push({ book, window: searchParams.get("window") });
+      if (book === "paper") return { body: JSON.stringify(PAPER) };
+      if (state.holdLive) await new Promise((resolve) => held.push(resolve));
+      return { body: JSON.stringify(LIVE) };
+    }
+    if (pathname === "/api/positions/paper/account") return { body: JSON.stringify(ACCOUNT) };
+    return api.onApi(request);
+  };
+  const host = await serveDashboard(context, { locale: "en", onApi });
+  const tab = await context.newPage();
+  tab.setDefaultTimeout(15000);
+  await tab.goto(`${host.origin}/trader#stats`);
+  await tab.waitForSelector(PAGE_READY);
+  const releaseLive = () => held.splice(0).forEach((resolve) => resolve());
+  const close = async () => {
+    releaseLive();
+    await context.close();
+    await host.close();
+  };
+  return { tab, reads, state, releaseLive, close };
+}
+
+const option = (tab, group, value) =>
+  tab.locator(`#${group} .segmented-option`, { has: tab.locator(`input[value="${value}"]`) });
+
+const trades = (tab) =>
+  tab.evaluate(() => document.querySelector("#total-trades")?.textContent.trim());
+
+test("the tab opens on the live book and the 30-day window", async () => {
+  const { tab, reads, close } = await openStats();
+  try {
+    await tab.waitForFunction(() => document.querySelector("#total-trades")?.textContent === "24");
+    assert.deepEqual(reads[0], { book: "live", window: "30d" });
+    assert.equal(await tab.locator('#stats-book input[value="live"]').isChecked(), true);
+    assert.equal(await tab.locator('#stats-period input[value="30d"]').isChecked(), true);
+  } finally {
+    await close();
+  }
 });
 
-test("a figure the account does not carry reads as a dash", () => {
-  const shown = figures(
-    paperAccountCard({ ...ACCOUNT, open_unrealized_pnl_native: null, started_at: null }, esc)
-  );
-  assert.equal(shown.Unrealized, "—");
-  assert.match(plain(paperAccountCard({ ...ACCOUNT, started_at: null }, esc)), /since —/);
-  const empty = figures(paperAccountCard(null, esc));
-  assert.deepEqual(Object.values(empty), ["—", "—", "—", "—"]);
+test("each switch asks for the book and window it shows", async () => {
+  const { tab, reads, close } = await openStats();
+  try {
+    await tab.waitForFunction(() => document.querySelector("#total-trades")?.textContent === "24");
+    await option(tab, "stats-period", "7d").click();
+    await tab.waitForFunction(() => document.querySelector("#total-trades")?.textContent === "24");
+    await option(tab, "stats-book", "paper").click();
+    await tab.waitForFunction(() => document.querySelector("#total-trades")?.textContent === "3");
+    assert.deepEqual(reads.at(-2), { book: "live", window: "7d" });
+    assert.deepEqual(reads.at(-1), { book: "paper", window: "7d" });
+  } finally {
+    await close();
+  }
 });
 
-test("the Stats tab asks for the book and window its switches show", () => {
-  const page = read("scripts/pages/trader.js");
-  assert.match(page, /\/api\/trader\/stats\?window=\$\{statsWindow\}&book=\$\{statsBook\}/);
-  assert.match(page, /let statsBook = "live";/);
-  assert.match(page, /let statsWindow = "30d";/);
-  // Both switches are the shared segmented control, painted by the page into empty
-  // placeholders: the book options name each mode with its glyph, the window options
-  // are the one range set.
-  const markup = read("pages/trader.html");
-  assert.match(markup, /<div id="stats-book"><\/div>/);
-  assert.match(markup, /<div id="stats-period"><\/div>/);
-  const paint = page.slice(page.indexOf("function renderStatsControls()"));
-  assert.match(paint, /\$\("#stats-book"\)[\s\S]*?renderSegmented\(/);
-  assert.match(paint, /label: tradingModeLabel\(mode\),\s*icon: TRADING_MODE_ICONS\[mode\]/);
-  assert.match(paint, /\$\("#stats-period"\)[\s\S]*?options: RANGE_OPTIONS/);
-  assert.match(page, /\$\("#stats-book"\), "change"/);
-  assert.match(page, /\$\("#stats-period"\), "change"/);
+test("a late response of the previous book never paints over the shown one", async () => {
+  const { tab, state, releaseLive, close } = await openStats();
+  try {
+    await tab.waitForFunction(() => document.querySelector("#total-trades")?.textContent === "24");
+    state.holdLive = true;
+    await option(tab, "stats-period", "7d").click();
+    // The live read is held; the switch to paper answers first.
+    await option(tab, "stats-book", "paper").click();
+    await tab.waitForFunction(() => document.querySelector("#total-trades")?.textContent === "3");
+    state.holdLive = false;
+    releaseLive();
+    await tab.waitForTimeout(300);
+    assert.equal(await trades(tab), "3", "the paper book keeps its own figures");
+  } finally {
+    await close();
+  }
 });

@@ -137,7 +137,7 @@ function cardWidths(page) {
 function actionLayout(page) {
   return page.evaluate(() => {
     const row = document.querySelector(".header-row-1");
-    const detail = document.querySelector("#exploreSetupControl .explore-setup-detail");
+    const detail = document.querySelector("#accessControl .access-control-detail");
     const buttons = [...document.querySelectorAll("#headerActionsItems .header-action-btn")];
     return {
       folded: document.getElementById("headerActions").classList.contains("is-folded"),
@@ -222,9 +222,7 @@ test("an unknown figure sits next to its label and the cards ignore a hidden act
   const { page, release, close } = await openHeader("en", "explore");
   try {
     release();
-    await page.waitForFunction(
-      () => document.getElementById("solPriceValue").textContent !== "—"
-    );
+    await page.waitForFunction(() => document.getElementById("solPriceValue").textContent !== "—");
     await settled(page);
     const gaps = await placeholderGaps(page);
     assert.ok(gaps.length >= 3, `only ${gaps.length} empty figures were measured`);

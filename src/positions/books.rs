@@ -19,6 +19,16 @@ pub async fn open_positions(book: Book) -> Vec<Position> {
     }
 }
 
+/// The open rounds of `book` that take a position slot, by the rule admission counts them
+/// with: on the live book every open round except the wallet-derived ones, which never
+/// consumed a permit; on the paper book every open round.
+pub async fn slot_positions(book: Book) -> Vec<Position> {
+    match book {
+        Book::Live => super::state::get_capacity_consuming_positions().await,
+        Book::Paper => open_positions(Book::Paper).await,
+    }
+}
+
 /// The closed rounds of the live book each strategy took part in, by strategy id: verified
 /// and not archived, under the entry strategy that opened the round (origin `auto` with a
 /// strategy, the selection the live performance queries count) and under the exit strategy

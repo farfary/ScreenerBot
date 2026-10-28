@@ -5,7 +5,8 @@
 
 use crate::positions::Position;
 use crate::trader::constants::EMERGENCY_LOSS_THRESHOLD_PCT;
-use crate::trader::types::{TradeAction, TradeDecision, TradePriority, TradeReason};
+use crate::trader::types::{TradeAction, TradeDecision, TradePriority};
+use crate::trader::TradeReason;
 use chrono::Utc;
 
 /// Check if a position should be exited based on risk limits

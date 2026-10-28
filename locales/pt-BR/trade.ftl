@@ -152,7 +152,7 @@ trade-toast-failed-add = Falha no aporte na posição
 trade-toast-failed-sell = Falha na venda
 
 # Trade and close reasons. Ids are the Debug names of TradeReason
-# (src/trader/types.rs) and the reasons written by src/positions.
+# (src/trader/trade_reason.rs) and the reasons written by src/positions.
 trade-reason-strategy-signal = Sinal da estratégia
 trade-reason-manual-entry = Entrada manual
 trade-reason-force-buy = Compra forçada
@@ -183,6 +183,22 @@ trade-reason-pending-verification = { $reason } (verificação pendente)
 trade-reason-force-closed = Fechamento forçado: { $note }
 # $reason is a stored closed_reason that has no label; it is shown as stored.
 trade-reason-stored = { $reason }
+trade-reason-unknown = Não registrado
+trade-reason-force-closed-any = Fechamento forçado
+
+# Why a new entry was blocked. Ids come from EntryBlock in src/trader/admission.rs.
+trade-entry-block-force-stopped = O trading está em parada forçada
+trade-entry-block-loss-limit = O limite de perda bloqueia novas entradas
+trade-entry-block-connectivity = Os serviços necessários estão indisponíveis
+trade-entry-block-storage-unavailable = Os dados de trading estão indisponíveis ou sendo restaurados
+trade-entry-block-position-limit = Limite de posições abertas atingido
+trade-entry-block-already-open = Já existe uma posição aberta
+trade-entry-block-reentry-cooldown = Cooldown de reentrada no token
+trade-entry-block-open-cooldown = Cooldown global de entradas
+trade-entry-block-entry-reserved = Outra entrada está sendo processada
+trade-entry-block-blacklisted = Token bloqueado pelos controles de risco
+trade-entry-block-paper-balance-exhausted = O saldo paper não cobre a operação
+trade-entry-block-check-failed = Uma verificação de segurança não pôde ser concluída
 
 # Toast shown when a quick-trade shortcut runs without a token selected (ui/quick_trade_shortcuts.js).
 trade-quick-no-token = Nenhum token selecionado

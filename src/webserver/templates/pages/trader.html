@@ -4,255 +4,217 @@
      Trader page - tabbed panel with performance stats, stop-loss and trailing-stop exit settings. -->
 
 <div class="page-table trader-page">
+  <div class="trader-access-region" id="trader-access-region" hidden></div>
   <div id="trader-content">
     <!-- Stats Tab -->
     <div id="stats-tab" class="trader-tab-content" style="display: none">
-      <div class="stats-layout">
-        <!-- LEFT COLUMN — Controlling -->
-        <div class="stats-col stats-col-left">
-          <!-- Auto Trader Status Control -->
-          <div class="trader-status-bar" id="trader-status-bar">
-            <div class="status-bar-main">
-              <div class="status-bar-icon" id="trader-status-icon">
-                <i class="icon-bot"></i>
-              </div>
-              <div class="status-bar-info">
-                <span class="status-bar-title" data-l10n-id="trader-status-title"></span>
-                <span class="status-bar-status" id="trader-status-text" data-l10n-id="trader-status-loading"></span>
-                <button
-                  type="button"
-                  class="btn btn-sm btn-primary trader-setup-action"
-                  id="trader-setup-action"
-                  data-l10n-id="trader-setup-action"
-                  hidden
-                ></button>
-              </div>
-            </div>
-            <label class="toggle" data-level="root">
-              <input type="checkbox" id="stats-trader-toggle" disabled />
-              <span class="toggle-track"></span>
-              <span class="toggle-state" id="stats-toggle-label" data-l10n-id="trader-toggle-off"></span>
-            </label>
+      <div class="page-toolbar" id="stats-toolbar">
+        <div class="page-toolbar-summary">
+          <div class="table-toolbar-summary" id="stats-state" aria-live="polite"></div>
+          <div class="table-toolbar-summary" id="stats-exposure"></div>
+        </div>
+        <div class="page-toolbar-actions">
+          <button type="button" class="btn btn-ghost btn-sm" id="stats-paper-reset" hidden>
+            <i class="icon-rotate-ccw" aria-hidden="true"></i>
+            <span data-l10n-id="trader-paper-reset"></span>
+          </button>
+          <div id="stats-book"></div>
+          <button
+            type="button"
+            class="btn btn-sm btn-primary"
+            id="stats-trader-action"
+            hidden
+          ></button>
+        </div>
+      </div>
+
+      <div class="page-notices" id="stats-notices" aria-live="polite" hidden></div>
+
+      <div class="sheet stats-sheet" id="stats-sheet">
+        <section
+          class="sheet-section stats-controls"
+          id="stats-controls"
+          role="group"
+          data-l10n-id="trader-controls-group"
+        >
+          <label class="stats-control">
+            <span class="toggle"
+              ><input type="checkbox" id="entry-monitor-toggle" /><span class="toggle-track"></span
+            ></span>
+            <span class="stats-control-text">
+              <span class="stats-control-label" data-l10n-id="trader-monitor-entry"></span>
+              <span
+                class="stats-control-note"
+                id="entry-monitor-status"
+                data-l10n-id="trader-monitor-dormant"
+                hidden
+              ></span>
+            </span>
+          </label>
+          <label class="stats-control">
+            <span class="toggle"
+              ><input type="checkbox" id="exit-monitor-toggle" /><span class="toggle-track"></span
+            ></span>
+            <span class="stats-control-text">
+              <span class="stats-control-label" data-l10n-id="trader-monitor-exit"></span>
+              <span
+                class="stats-control-note"
+                id="exit-monitor-status"
+                data-l10n-id="trader-monitor-dormant"
+                hidden
+              ></span>
+            </span>
+          </label>
+          <div class="stats-control stats-loss-limit" id="loss-limit-panel">
+            <span class="stats-control-text">
+              <span class="stats-control-label"
+                ><span data-l10n-id="trader-loss-limit-title"></span>
+                <span class="loss-limit-value" id="loss-limit-value">—</span></span
+              >
+              <span class="loss-limit-bar"
+                ><span class="loss-limit-progress" id="loss-limit-progress"></span
+              ></span>
+              <span class="stats-control-note" id="loss-limit-period"></span>
+            </span>
+            <button type="button" class="btn btn-ghost btn-sm" id="loss-limit-reset-btn" hidden>
+              <i class="icon-rotate-ccw" aria-hidden="true"></i>
+              <span data-l10n-id="trader-loss-limit-reset"></span>
+            </button>
           </div>
-
-          <!-- Trading Controls Section -->
-          <div class="stats-section stats-section-controls">
-            <div class="section-header">
-              <h3>
-                <i class="icon-sliders-horizontal"></i> <span data-l10n-id="trader-controls-title"></span>
-              </h3>
-            </div>
-
-            <!-- Force stop notice (shown only while trading is halted) -->
-            <div class="notice" data-variant="error" role="alert" id="force-stop-banner" hidden>
-              <div class="notice-heading">
-                <i class="notice-icon icon-octagon-alert" aria-hidden="true"></i>
-                <span class="notice-title" data-l10n-id="trader-halt-title"></span>
-              </div>
-              <div
-                class="notice-message"
-                id="force-stop-reason"
-                data-l10n-id="trader-halt-reason-default"
-              ></div>
-              <div class="notice-actions">
-                <button type="button" class="btn btn-outline btn-sm" id="resume-trading-btn">
-                  <i class="icon-play" aria-hidden="true"></i> <span data-l10n-id="trader-halt-resume"></span>
-                </button>
-              </div>
-            </div>
-
-            <!-- Monitor Controls Grid -->
-            <div class="controls-grid">
-              <!-- Entry Monitor Card -->
-              <div class="control-card">
-                <div class="control-header">
-                  <i class="icon-log-in"></i>
-                  <span data-l10n-id="trader-monitor-entry"></span>
-                </div>
-                <div class="control-status" id="entry-monitor-status">—</div>
-                <label class="toggle">
-                  <input type="checkbox" id="entry-monitor-toggle" />
-                  <span class="toggle-track"></span>
-                </label>
-              </div>
-
-              <!-- Exit Monitor Card -->
-              <div class="control-card">
-                <div class="control-header">
-                  <i class="icon-log-out"></i>
-                  <span data-l10n-id="trader-monitor-exit"></span>
-                </div>
-                <div class="control-status" id="exit-monitor-status">—</div>
-                <label class="toggle">
-                  <input type="checkbox" id="exit-monitor-toggle" />
-                  <span class="toggle-track"></span>
-                </label>
-              </div>
-            </div>
-
-            <!-- Loss Limit Panel — always rendered. Hiding it while the limit is
-                 off left no way to tell the safety net existed, and hiding it while
-                 the limit had tripped left no way to clear it. -->
-            <div class="loss-limit-panel" id="loss-limit-panel">
-              <div class="loss-limit-header">
-                <span class="loss-limit-label">
-                  <i class="icon-shield"></i> <span data-l10n-id="trader-loss-limit-title"></span>
-                </span>
-                <span class="loss-limit-value" id="loss-limit-value">—</span>
-              </div>
-              <div class="loss-limit-bar">
-                <div class="loss-limit-progress" id="loss-limit-progress" style="width: 0%"></div>
-              </div>
-              <div class="loss-limit-footer">
-                <span class="loss-limit-period" id="loss-limit-period">—</span>
-                <span class="loss-limit-status" id="loss-limit-status"></span>
-              </div>
-              <div class="loss-limit-actions" id="loss-limit-actions" hidden>
-                <button type="button" class="btn btn-sm btn-success" id="loss-limit-resume-btn">
-                  <i class="icon-play"></i> <span data-l10n-id="trader-loss-limit-resume"></span>
-                </button>
-                <button type="button" class="btn btn-sm btn-secondary" id="loss-limit-reset-btn">
-                  <i class="icon-rotate-ccw"></i> <span data-l10n-id="trader-loss-limit-reset"></span>
-                </button>
-              </div>
-            </div>
-
-            <!-- Force Stop Button. Its hint line is always present, so the panel keeps
-                 one height whether the stop has something to halt or not. -->
+          <div class="stats-control stats-force-stop">
             <button
               type="button"
-              class="btn btn-danger btn-force-stop"
+              class="btn btn-danger btn-sm"
               id="force-stop-btn"
               aria-describedby="force-stop-hint"
             >
-              <i class="icon-octagon"></i> <span data-l10n-id="trader-force-stop"></span>
+              <i class="icon-octagon" aria-hidden="true"></i>
+              <span data-l10n-id="trader-force-stop"></span>
             </button>
-            <p class="force-stop-hint" id="force-stop-hint" data-l10n-id="trader-force-stop-hint"></p>
+            <span
+              class="stats-control-note"
+              id="force-stop-hint"
+              data-l10n-id="trader-force-stop-hint"
+            ></span>
           </div>
-        </div>
-        <!-- /LEFT COLUMN -->
+        </section>
 
-        <!-- RIGHT COLUMN — Analysis & Current Config -->
-        <div class="stats-col stats-col-right">
-          <div class="stats-grid">
-            <!-- Realized performance over the selected window -->
-            <div class="stats-section stats-section-primary">
-              <div class="section-header">
-                <h3>
-                  <i class="icon-chart-column"></i>
-                  <span data-l10n-id="trader-realized-title"></span>
-                </h3>
-                <div class="stats-header-controls">
-                  <div id="stats-book"></div>
-                  <div id="stats-period"></div>
-                </div>
-              </div>
-              <div class="stats-paper-account" id="stats-paper-account" hidden></div>
-              <div class="metric-grid">
-                <div class="metric-card">
-                  <div class="metric-label" data-l10n-id="trader-metric-net-pnl"></div>
-                  <div class="metric-value" id="net-pnl">—</div>
-                  <div class="metric-detail" id="net-pnl-detail">—</div>
-                </div>
-                <div class="metric-card">
-                  <div class="metric-label" data-l10n-id="trader-metric-win-rate"></div>
-                  <div class="metric-value" id="win-rate">—</div>
-                  <div class="metric-detail" id="win-rate-detail">—</div>
-                </div>
-                <div class="metric-card">
-                  <div class="metric-label" data-l10n-id="trader-metric-profit-factor"></div>
-                  <div class="metric-value" id="profit-factor">—</div>
-                  <div class="metric-detail" id="profit-factor-detail">—</div>
-                </div>
-                <div class="metric-card">
-                  <div class="metric-label" data-l10n-id="trader-metric-max-drawdown"></div>
-                  <div class="metric-value" id="max-drawdown">—</div>
-                  <div class="metric-detail" id="max-drawdown-detail">—</div>
-                </div>
-                <div class="metric-card">
-                  <div class="metric-label" data-l10n-id="trader-metric-capital"></div>
-                  <div class="metric-value" id="capital-at-work">—</div>
-                  <div class="metric-detail" id="capital-at-work-detail">—</div>
-                </div>
-                <div class="metric-card">
-                  <div class="metric-label" data-l10n-id="trader-metric-avg-win-loss"></div>
-                  <div class="metric-value metric-value-fit" id="avg-win-loss">—</div>
-                  <div class="metric-detail" id="avg-win-loss-detail">—</div>
-                </div>
-                <div class="metric-card">
-                  <div class="metric-label" data-l10n-id="trader-metric-closed-trades"></div>
-                  <div class="metric-value" id="total-trades">—</div>
-                  <div class="metric-detail" id="total-trades-detail">—</div>
-                </div>
-                <div class="metric-card">
-                  <div class="metric-label" data-l10n-id="trader-metric-median-hold"></div>
-                  <div class="metric-value metric-value-fit" id="median-hold">—</div>
-                  <div class="metric-detail" id="median-hold-detail">—</div>
-                </div>
-              </div>
-              <p class="stats-note" id="stats-excluded" hidden></p>
+        <section class="sheet-section" id="stats-figures-section">
+          <div class="sheet-head">
+            <h3 class="sheet-section-title">
+              <span data-l10n-id="trader-realized-title"></span>
+              <span class="stats-book-marker" id="stats-book-marker" hidden></span>
+            </h3>
+            <div class="sheet-tools" id="stats-period"></div>
+          </div>
+          <div class="metric-grid" data-surface="sheet" id="stats-figures">
+            <div class="metric-card">
+              <div class="metric-label" data-l10n-id="trader-metric-net-pnl"></div>
+              <div class="metric-value" id="net-pnl">—</div>
+              <div class="metric-detail" id="net-pnl-detail"></div>
             </div>
-
-            <!-- Realized P&L across the window, by day or by ISO week -->
-            <div class="stats-section">
-              <div class="section-header">
-                <div>
-                  <h3>
-                    <i class="icon-calendar"></i>
-                    <span id="daily-pnl-title" data-l10n-id="trader-daily-title"></span>
-                  </h3>
-                  <p
-                    class="section-subtitle"
-                    id="daily-pnl-subtitle"
-                    data-l10n-id="trader-daily-subtitle"
-                  ></p>
-                </div>
-                <div class="daily-pnl-total" id="daily-pnl-total">—</div>
-              </div>
-              <div id="daily-pnl" class="daily-pnl">
-                <div class="state-view state-view-loading state-view-compact" role="status" aria-live="polite">
-                  <div class="loading-spinner" data-l10n-id="trader-daily-loading"></div>
-                </div>
-              </div>
-              <div class="stats-extremes" id="stats-extremes" hidden>
-                <div class="stats-extreme">
-                  <span class="stats-extreme-label"
-                    ><i class="icon-arrow-up"></i> <span data-l10n-id="trader-extreme-best"></span
-                  ></span>
-                  <span class="stats-extreme-token" id="best-trade-token">—</span>
-                  <span class="stats-extreme-value" id="best-trade">—</span>
-                </div>
-                <div class="stats-extreme">
-                  <span class="stats-extreme-label"
-                    ><i class="icon-arrow-down"></i> <span data-l10n-id="trader-extreme-worst"></span
-                  ></span>
-                  <span class="stats-extreme-token" id="worst-trade-token">—</span>
-                  <span class="stats-extreme-value" id="worst-trade">—</span>
-                </div>
-              </div>
+            <div class="metric-card">
+              <div class="metric-label" data-l10n-id="trader-metric-win-rate"></div>
+              <div class="metric-value" id="win-rate">—</div>
+              <div class="metric-detail" id="win-rate-detail"></div>
             </div>
-
-            <!-- Exit Strategy Performance -->
-            <div class="stats-section">
-              <div class="section-header">
-                <div>
-                  <h3>
-                    <i class="icon-log-out"></i> <span data-l10n-id="trader-exit-title"></span>
-                  </h3>
-                  <p class="section-subtitle" data-l10n-id="trader-exit-subtitle"></p>
-                </div>
-              </div>
-              <div id="exit-breakdown" class="exit-breakdown">
-                <div class="state-view state-view-loading state-view-compact" role="status" aria-live="polite">
-                  <div class="loading-spinner" data-l10n-id="trader-exit-loading"></div>
-                </div>
-              </div>
+            <div class="metric-card">
+              <div class="metric-label" data-l10n-id="trader-metric-profit-factor"></div>
+              <div class="metric-value" id="profit-factor">—</div>
+              <div class="metric-detail" id="profit-factor-detail"></div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-label" data-l10n-id="trader-metric-max-drawdown"></div>
+              <div class="metric-value" id="max-drawdown">—</div>
+              <div class="metric-detail" id="max-drawdown-detail"></div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-label" data-l10n-id="trader-metric-avg-win-loss"></div>
+              <div class="metric-value metric-value-fit" id="avg-win-loss">—</div>
+              <div class="metric-detail" id="avg-win-loss-detail"></div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-label" data-l10n-id="trader-metric-closed-trades"></div>
+              <div class="metric-value" id="total-trades">—</div>
+              <div class="metric-detail" id="total-trades-detail"></div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-label" data-l10n-id="trader-metric-median-hold"></div>
+              <div class="metric-value metric-value-fit" id="median-hold">—</div>
+              <div class="metric-detail" id="median-hold-detail"></div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-label" data-l10n-id="trader-metric-fees"></div>
+              <div class="metric-value" id="fees-paid">—</div>
+              <div class="metric-detail" id="fees-paid-detail"></div>
             </div>
           </div>
+          <p class="stats-note" id="stats-excluded" hidden></p>
+        </section>
+
+        <section class="sheet-section" id="stats-loading"></section>
+        <section class="sheet-section" id="stats-empty" hidden></section>
+
+        <div class="sheet-section stats-breakdowns" id="stats-breakdowns" hidden>
+          <div class="sheet-section sheet-split" id="stats-charts">
+            <section id="stats-pnl">
+              <div>
+                <h3
+                  class="sheet-section-title"
+                  id="stats-pnl-title"
+                  data-l10n-id="trader-daily-title"
+                ></h3>
+                <p
+                  class="sheet-section-sub"
+                  id="stats-pnl-subtitle"
+                  data-l10n-id="trader-daily-subtitle"
+                ></p>
+              </div>
+              <div class="stats-chart" id="daily-pnl"></div>
+            </section>
+            <section id="stats-outcomes">
+              <div>
+                <h3 class="sheet-section-title" data-l10n-id="trader-outcome-title"></h3>
+                <p class="sheet-section-sub" data-l10n-id="trader-outcome-subtitle"></p>
+              </div>
+              <div class="stats-chart" id="outcome-distribution"></div>
+              <dl class="stats-extremes" id="stats-extremes">
+                <dt data-l10n-id="trader-extreme-best"></dt>
+                <dd class="stats-extreme-token" id="best-trade-token">—</dd>
+                <dd class="stats-extreme-value" id="best-trade">—</dd>
+                <dt data-l10n-id="trader-extreme-worst"></dt>
+                <dd class="stats-extreme-token" id="worst-trade-token">—</dd>
+                <dd class="stats-extreme-value" id="worst-trade">—</dd>
+                <dt data-l10n-id="trader-extreme-runs"></dt>
+                <dd class="stats-extreme-runs" id="longest-runs">—</dd>
+              </dl>
+            </section>
+          </div>
+          <div class="sheet-section sheet-split" id="stats-tables">
+            <section id="stats-exits">
+              <div>
+                <h3 class="sheet-section-title" data-l10n-id="trader-exits-title"></h3>
+                <p class="sheet-section-sub" data-l10n-id="trader-exits-subtitle"></p>
+              </div>
+              <div class="stats-table" id="exit-breakdown"></div>
+            </section>
+            <section id="stats-sources">
+              <div>
+                <h3 class="sheet-section-title" data-l10n-id="trader-sources-title"></h3>
+                <p class="sheet-section-sub" data-l10n-id="trader-sources-subtitle"></p>
+              </div>
+              <div class="stats-table" id="source-breakdown"></div>
+            </section>
+          </div>
+          <section class="sheet-section" id="stats-recent">
+            <div>
+              <h3 class="sheet-section-title" data-l10n-id="trader-recent-title"></h3>
+              <p class="sheet-section-sub" data-l10n-id="trader-recent-subtitle"></p>
+            </div>
+            <div class="stats-table" id="recent-rounds"></div>
+          </section>
         </div>
-        <!-- /RIGHT COLUMN -->
       </div>
-      <!-- /stats-layout -->
     </div>
 
     <!-- Stop Loss Tab -->
@@ -310,7 +272,11 @@
             </div>
 
             <!-- Part to Sell: shown under its switch while Sell Part First is on; bounds and unit come from the field metadata -->
-            <div class="config-group config-group-dependent" id="stop-loss-partial-pct-group" hidden>
+            <div
+              class="config-group config-group-dependent"
+              id="stop-loss-partial-pct-group"
+              hidden
+            >
               <div class="config-label-row">
                 <label for="stop-loss-partial-pct" class="config-label">
                   <i class="icon-chart-pie"></i>
@@ -358,7 +324,8 @@
           <!-- Visual Example -->
           <div class="visual-example">
             <h4>
-              <i class="icon-chart-bar"></i> <span data-l10n-id="trader-example-how-it-works"></span>
+              <i class="icon-chart-bar"></i>
+              <span data-l10n-id="trader-example-how-it-works"></span>
             </h4>
             <div class="example-timeline">
               <div class="timeline-step">
@@ -388,9 +355,17 @@
                   <i class="icon-log-out"></i>
                 </div>
                 <div class="step-content">
-                  <div class="step-title" id="stop-loss-exit-title" data-l10n-id="trader-step-auto-exit"></div>
+                  <div
+                    class="step-title"
+                    id="stop-loss-exit-title"
+                    data-l10n-id="trader-step-auto-exit"
+                  ></div>
                   <div class="step-value" id="stop-loss-example-exit">—</div>
-                  <div class="step-detail" id="stop-loss-exit-detail" data-l10n-id="trader-step-full-exit"></div>
+                  <div
+                    class="step-detail"
+                    id="stop-loss-exit-detail"
+                    data-l10n-id="trader-step-full-exit"
+                  ></div>
                 </div>
               </div>
               <div class="timeline-arrow" id="stop-loss-rest-arrow" hidden>
@@ -506,7 +481,8 @@
           <!-- Visual Example -->
           <div class="visual-example">
             <h4>
-              <i class="icon-chart-bar"></i> <span data-l10n-id="trader-example-how-it-works"></span>
+              <i class="icon-chart-bar"></i>
+              <span data-l10n-id="trader-example-how-it-works"></span>
             </h4>
             <div class="example-timeline">
               <div class="timeline-step">
@@ -669,7 +645,8 @@
           <!-- Visual Example -->
           <div class="visual-example">
             <h4>
-              <i class="icon-chart-bar"></i> <span data-l10n-id="trader-example-how-it-works"></span>
+              <i class="icon-chart-bar"></i>
+              <span data-l10n-id="trader-example-how-it-works"></span>
             </h4>
             <div class="example-timeline" id="take-profit-example"></div>
             <div class="example-summary">
@@ -745,7 +722,8 @@
           <!-- Visual Example -->
           <div class="visual-example">
             <h4>
-              <i class="icon-chart-bar"></i> <span data-l10n-id="trader-example-how-it-works"></span>
+              <i class="icon-chart-bar"></i>
+              <span data-l10n-id="trader-example-how-it-works"></span>
             </h4>
             <div class="example-timeline">
               <div class="timeline-step">
@@ -802,7 +780,11 @@
               </label>
             </div>
             <div id="time-positions-status" class="status-list">
-              <div class="state-view state-view-loading state-view-compact" role="status" aria-live="polite">
+              <div
+                class="state-view state-view-loading state-view-compact"
+                role="status"
+                aria-live="polite"
+              >
                 <div class="loading-spinner" data-l10n-id="trader-time-positions-loading"></div>
               </div>
             </div>
@@ -879,9 +861,7 @@
         <div class="config-card">
           <div class="card-header">
             <div class="card-header-text">
-              <h3>
-                <i class="icon-coins"></i> <span data-l10n-id="trader-dca-title"></span>
-              </h3>
+              <h3><i class="icon-coins"></i> <span data-l10n-id="trader-dca-title"></span></h3>
               <p class="card-subtitle" data-l10n-id="trader-dca-subtitle"></p>
             </div>
             <label class="toggle">
@@ -971,16 +951,15 @@
           <div class="card-header">
             <div class="card-header-text">
               <h3>
-                <i class="icon-triangle-alert"></i> <span data-l10n-id="trader-dca-info-title"></span>
+                <i class="icon-triangle-alert"></i>
+                <span data-l10n-id="trader-dca-info-title"></span>
               </h3>
               <p class="card-subtitle" data-l10n-id="trader-dca-info-subtitle"></p>
             </div>
           </div>
           <div class="config-group">
             <div class="visual-example">
-              <h4>
-                <i class="icon-info"></i> <span data-l10n-id="trader-dca-how-title"></span>
-              </h4>
+              <h4><i class="icon-info"></i> <span data-l10n-id="trader-dca-how-title"></span></h4>
               <div class="example-summary">
                 <div class="summary-item summary-item-info">
                   <i class="icon-trending-down"></i>
@@ -1035,9 +1014,7 @@
         <div class="config-card">
           <div class="card-header">
             <div class="card-header-text">
-              <h3>
-                <i class="icon-ruler"></i> <span data-l10n-id="trader-sizing-title"></span>
-              </h3>
+              <h3><i class="icon-ruler"></i> <span data-l10n-id="trader-sizing-title"></span></h3>
               <p class="card-subtitle" data-l10n-id="trader-sizing-subtitle"></p>
             </div>
           </div>

@@ -20,7 +20,7 @@ use crate::trader::copy::{
     ExitMode, SizingMode,
 };
 use crate::trader::paper::TradingMode;
-use crate::trader::types::TradeReason;
+use crate::trader::TradeReason;
 
 pub(super) fn stored() -> CopyTask {
     CopyTask {

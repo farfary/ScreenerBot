@@ -58,7 +58,7 @@ transactions-search =
     .placeholder = İmzalarda ara…
     .aria-label = İşlem imzalarında ara
 transactions-load-failed = İşlemler yenilenemedi
-transactions-setup-gate-title = İşlemler bir cüzdan gerektirir
+transactions-access-gate-title = İşlemler bir cüzdan gerektirir
 transactions-summary-total = Toplam
 transactions-summary-success = Başarılı
 transactions-summary-failed = Başarısız
@@ -181,3 +181,9 @@ transactions-dialog-raw-empty = Ham veri yok
 # Empty table (scripts/pages/transactions.js)
 transactions-empty = Henüz işlem yok
     .message = İşlem cüzdanının swap ve transferleri zincirde onaylandığında burada görünür.
+
+## On-demand history
+
+transactions-history-on-demand = Daha eski geçmiş isteğe bağlı yüklenir.
+transactions-history-load-older = Daha eskileri yükle
+transactions-history-load-older-failed = Daha eski geçmiş yüklenemedi.

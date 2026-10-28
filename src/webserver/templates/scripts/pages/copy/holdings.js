@@ -3,6 +3,7 @@
 //
 // The Holdings tab: the task's open paper rounds marked at their latest price with where
 // each exit rule acts, closed rounds with their result, and the paper-run actions.
+import { formatPercentValue } from "../../core/format.js";
 import { loadPage } from "../../core/router.js";
 import { getIdentity } from "../../ui/token_identity.js";
 import {
@@ -12,7 +13,6 @@ import {
   price,
   priceSol,
   seconds,
-  signedPct,
   signedSolCell,
   skipKey,
   skipLabel,
@@ -133,7 +133,7 @@ export function createHoldings(page, { rerender, showActivityFor }) {
   /** A price relative to the entry, with the price itself on hover. */
   function relativeCell(value, entry) {
     if (value == null) return '<td class="num">—</td>';
-    return `<td class="num" title="${esc(priceSol(value))}">${esc(signedPct(relative(value, entry)))}</td>`;
+    return `<td class="num" title="${esc(priceSol(value))}">${esc(formatPercentValue(relative(value, entry), { decimals: 1, fallback: "—" }))}</td>`;
   }
 
   function exitCell(holding, ws) {
@@ -146,7 +146,10 @@ export function createHoldings(page, { rerender, showActivityFor }) {
     if (watch.stop_loss_price_native != null) {
       items.push([
         stopText(
-          signedPct(relative(watch.stop_loss_price_native, entry)),
+          formatPercentValue(relative(watch.stop_loss_price_native, entry), {
+            decimals: 1,
+            fallback: "—",
+          }),
           watch.stop_loss_armed_at
         ),
         watch.stop_loss_price_native,
@@ -155,7 +158,10 @@ export function createHoldings(page, { rerender, showActivityFor }) {
     if (watch.take_profit_price_native != null) {
       items.push([
         I18n.t("copy-holdings-watch-take", {
-          level: signedPct(relative(watch.take_profit_price_native, entry)),
+          level: formatPercentValue(relative(watch.take_profit_price_native, entry), {
+            decimals: 1,
+            fallback: "—",
+          }),
         }),
         watch.take_profit_price_native,
       ]);
@@ -163,33 +169,51 @@ export function createHoldings(page, { rerender, showActivityFor }) {
     if (watch.trailing_armed && watch.trailing_stop_price_native != null) {
       items.push([
         I18n.t("copy-holdings-watch-trail", {
-          level: signedPct(relative(watch.trailing_stop_price_native, entry)),
+          level: formatPercentValue(relative(watch.trailing_stop_price_native, entry), {
+            decimals: 1,
+            fallback: "—",
+          }),
         }),
         watch.trailing_stop_price_native,
       ]);
     } else if (watch.trailing_activation_price_native != null) {
       items.push([
         I18n.t("copy-holdings-watch-trail-arms", {
-          level: signedPct(relative(watch.trailing_activation_price_native, entry)),
+          level: formatPercentValue(relative(watch.trailing_activation_price_native, entry), {
+            decimals: 1,
+            fallback: "—",
+          }),
         }),
         watch.trailing_activation_price_native,
       ]);
     }
     if (watch.break_even_floor_price_native != null) {
-      const level = signedPct(relative(watch.break_even_floor_price_native, entry));
+      const level = formatPercentValue(relative(watch.break_even_floor_price_native, entry), {
+        decimals: 1,
+        fallback: "—",
+      });
       items.push([
         watch.break_even_armed || watch.break_even_activation_price_native == null
           ? I18n.t("copy-holdings-watch-floor", { level })
           : I18n.t("copy-holdings-watch-floor-arms", {
               level,
-              arms: signedPct(relative(watch.break_even_activation_price_native, entry)),
+              arms: formatPercentValue(relative(watch.break_even_activation_price_native, entry), {
+                decimals: 1,
+                fallback: "—",
+              }),
             }),
         watch.break_even_floor_price_native,
       ]);
     }
     if (watch.time_rule_price_native != null) {
       items.push([
-        timeText(signedPct(relative(watch.time_rule_price_native, entry)), watch.time_rule_from),
+        timeText(
+          formatPercentValue(relative(watch.time_rule_price_native, entry), {
+            decimals: 1,
+            fallback: "—",
+          }),
+          watch.time_rule_from
+        ),
         watch.time_rule_price_native,
       ]);
     }
@@ -199,8 +223,14 @@ export function createHoldings(page, { rerender, showActivityFor }) {
     ) {
       items.push([
         flatText(
-          signedPct(relative(watch.stagnation_band_low_price_native, entry)),
-          signedPct(relative(watch.stagnation_band_high_price_native, entry)),
+          formatPercentValue(relative(watch.stagnation_band_low_price_native, entry), {
+            decimals: 1,
+            fallback: "—",
+          }),
+          formatPercentValue(relative(watch.stagnation_band_high_price_native, entry), {
+            decimals: 1,
+            fallback: "—",
+          }),
           watch.stagnation_from
         ),
         null,
@@ -228,7 +258,7 @@ export function createHoldings(page, { rerender, showActivityFor }) {
         const pending =
           holding.close_pending || closing.has(roundKey(ws.id, holding.mint, holding.opened_at));
         const pnl = priced
-          ? `<span class="${toneClass(holding.unrealized_pnl_native)}">${esc(signedSolCell(holding.unrealized_pnl_native))}</span><small>${esc(signedPct(holding.unrealized_pnl_pct))}</small>`
+          ? `<span class="${toneClass(holding.unrealized_pnl_native)}">${esc(signedSolCell(holding.unrealized_pnl_native))}</span><small>${esc(formatPercentValue(holding.unrealized_pnl_pct, { decimals: 1, fallback: "—" }))}</small>`
           : `<span class="copy-warning-text">${esc(I18n.t("copy-holdings-no-price"))}</span>`;
         return `<tr>
           <td>${tokenCell(holding.mint)}</td>
@@ -296,7 +326,7 @@ export function createHoldings(page, { rerender, showActivityFor }) {
           <td>${tokenCell(round.mint)}</td>
           <td class="num">${esc(solCell(round.invested_native))}</td>
           <td class="num">${esc(solCell(round.proceeds_native))}</td>
-          <td class="num copy-cell-stack"><span class="${toneClass(round.pnl_sol)}">${esc(signedSolCell(round.pnl_sol))}</span><small>${esc(signedPct(round.pnl_pct))}</small></td>
+          <td class="num copy-cell-stack"><span class="${toneClass(round.pnl_sol)}">${esc(signedSolCell(round.pnl_sol))}</span><small>${esc(formatPercentValue(round.pnl_pct, { decimals: 1, fallback: "—" }))}</small></td>
           <td>${esc(exitLabel(round.exit))}</td>
           <td class="num">${esc(duration(round.hold_seconds))}</td>
           <td>${esc(dateTime(round.closed_at))}</td>
@@ -333,7 +363,7 @@ export function createHoldings(page, { rerender, showActivityFor }) {
     const reset = live
       ? ""
       : `<button class="btn btn-ghost btn-sm copy-danger-action" type="button" data-holding-action="reset"><i class="icon-rotate-ccw" aria-hidden="true"></i> ${esc(I18n.t("copy-holdings-restart"))}</button>`;
-    const head = `<div class="copy-panel-head"><h3>${esc(I18n.t("copy-holdings-title"))}</h3><div class="copy-panel-tools">${renderSegmented({ name: "holdings-view", options: views, value: view, ariaLabel: I18n.t("copy-holdings-view-label") }, esc)}${reset}</div></div>`;
+    const head = `<div class="sheet-head"><h3>${esc(I18n.t("copy-holdings-title"))}</h3><div class="sheet-tools">${renderSegmented({ name: "holdings-view", options: views, value: view, ariaLabel: I18n.t("copy-holdings-view-label") }, esc)}${reset}</div></div>`;
     if (view === "closed") return head + closedTable(insights, error);
     if (live) {
       return `${head}${renderStateView({

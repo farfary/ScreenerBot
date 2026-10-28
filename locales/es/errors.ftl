@@ -37,7 +37,7 @@ errors-account-signin-refused = { $reason }
 errors-account-signin-unavailable = El inicio de sesión no está disponible
 errors-account-credentials-required = Introduce tu correo electrónico y tu contraseña.
 errors-account-signout-failed = Error al cerrar sesión
-errors-account-gateway-update-failed = No se pudo actualizar el ajuste de la pasarela
+errors-account-gateway-update-failed = No se pudo actualizar el ajuste de envío de transacciones
 
 errors-i18n-locale-not-registered = El idioma no está registrado
 errors-i18n-catalog-encode-failed = No se pudo codificar el catálogo
@@ -114,6 +114,8 @@ errors-transactions-own-wallet-unavailable = La billetera principal no está con
 errors-transactions-invalid-subject = El sujeto de la transacción no es una dirección de Solana válida
 errors-transactions-subject-not-watched = El sujeto de la transacción no es una billetera en seguimiento
 errors-transactions-watch-store-unavailable = Las billeteras en seguimiento no están disponibles
+errors-transactions-history-loading = Ya se están cargando transacciones más antiguas.
+errors-transactions-history-load-failed = No se pudieron cargar las transacciones más antiguas.
 
 errors-wallet-unavailable = La billetera principal no está disponible
 errors-wallet-changed = La billetera principal cambió; actualiza e inténtalo de nuevo
@@ -381,3 +383,17 @@ errors-tokens-search-failed = Error en la búsqueda de tokens
 
 errors-actions-not-found = Acción { $id } no encontrada
 errors-services-not-found = Servicio '{ $name }' no encontrado
+
+# Chain access
+errors-chain-capability-unavailable = Esto requiere tu propia conexión RPC.
+errors-chain-service-signin-required = Inicia sesión para usar el servicio de { -brand }.
+errors-chain-service-scope-missing = Inicia sesión de nuevo para permitir la lectura de la billetera.
+errors-chain-service-busy = El servicio de { -brand } está ocupado. Inténtalo de nuevo en un momento.
+errors-chain-service-daily-limit = Tu cuenta alcanzó el límite de hoy del servicio de { -brand }.
+errors-chain-service-version = Esta versión es demasiado antigua para el servicio de { -brand }. Actualiza a { $minimum } o posterior.
+errors-chain-service-refused = El servicio de { -brand } rechazó la solicitud.
+errors-chain-service-unreachable = No se puede acceder a screenerbot.io.
+errors-chain-not-trading-wallet = En el modo de servicio de { -brand } solo se puede leer la billetera de trading.
+errors-chain-access-failed = La solicitud a la blockchain falló.
+errors-chain-access-unchanged = Esta conexión ya está en uso.
+errors-chain-access-switch-failed = No se pudo cambiar la conexión.

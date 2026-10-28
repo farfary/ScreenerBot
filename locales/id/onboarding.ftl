@@ -7,7 +7,7 @@ onboarding-welcome-custody-description = Private key dienkripsi saat disimpan da
 onboarding-welcome-engine-title = Mesin Selalu Aktif
 onboarding-welcome-engine-description = Layanan terorkestrasi dengan pemeriksaan kesehatan dan kontrol siklus hidup yang mulus.
 onboarding-welcome-realtime-title = Data On-Chain Real-Time
-onboarding-welcome-realtime-description = Perhitungan reserve pool langsung — bukan snapshot API yang tertunda.
+onboarding-welcome-realtime-description = Dengan RPC Anda sendiri, harga diambil langsung dari reserve pool — bukan snapshot API yang tertunda.
 
 onboarding-discover-title = Temukan & Filter
 onboarding-discover-description = Pindai tiga sumber data untuk pair Solana baru, dekode 12+ jenis pool DEX secara on-chain, lalu jalankan setiap token melalui aturan kualitas dan keamanan yang dapat dikonfigurasi.
@@ -27,7 +27,7 @@ onboarding-trade-auto-description = Evaluator entry/exit, putaran DCA, exit pars
 onboarding-trade-strategy-title = Mesin Strategi
 onboarding-trade-strategy-description = Pohon kondisi yang menggabungkan sinyal harga, volume, dan waktu.
 onboarding-trade-copy-title = Copy Trading
-onboarding-trade-copy-description = Tiru transaksi dompet yang Anda ikuti. Uji setiap tugas dalam mode paper sebelum tugas itu memakai { -sol } sungguhan.
+onboarding-trade-copy-description = Tiru transaksi dompet yang Anda ikuti (memerlukan RPC Anda sendiri). Uji setiap tugas dalam mode paper sebelum tugas itu memakai { -sol } sungguhan.
 onboarding-trade-safety-title = Kontrol Keamanan
 onboarding-trade-safety-description = Penghentian darurat, batas kerugian per periode, dan sakelar monitor independen.
 
@@ -43,18 +43,18 @@ onboarding-connect-events-title = Aliran Event Langsung
 onboarding-connect-events-description = Setiap trade, swap, dan event sistem dicatat dengan kategori dan tingkat keparahan.
 
 onboarding-data-title = Data { -brand }
-onboarding-data-description = Kami menjalankan layanan data pasar bersama, sehingga instalasi Anda tidak terhambat batas laju penyedia publik. Gratis dengan akun { -brand }, dan { -brand } tetap berfungsi tanpa akun.
-onboarding-data-candles-title = Riwayat Candle Gabungan
-onboarding-data-candles-description = Riwayat bersama tujuh timeframe, bertahun-tahun ke belakang, disajikan dari satu cache.
-onboarding-data-pools-title = Pool Terselesaikan & Keamanan
-onboarding-data-pools-description = Registri pool terpusat dan laporan { -rugcheck } yang di-cache, sudah diambil sebelumnya.
+onboarding-data-description = Akun { -brand } gratis membuat grafik dan pemeriksaan token lebih cepat. Dengan RPC Anda sendiri, { -brand } juga berfungsi tanpa akun.
+onboarding-data-candles-title = Grafik Dimuat Cepat
+onboarding-data-candles-description = Riwayat harga tujuh timeframe, bertahun-tahun ke belakang.
+onboarding-data-pools-title = Pemeriksaan Token Siap
+onboarding-data-pools-description = Pool dan laporan keamanan untuk sebagian besar token, tanpa menunggu.
 onboarding-data-signin-title = Perlu Akun
 onboarding-data-signin-description = Tanpa akun, data ini tidak tersedia dan penyedia publik yang digunakan.
-onboarding-data-reading-title = Hanya Pencarian
-onboarding-data-reading-description = Kami melihat token mana yang Anda cari. Tidak pernah key, saldo, posisi, atau trade.
+onboarding-data-reading-title = Yang Kami Lihat
+onboarding-data-reading-description = Token yang Anda cari, dan swap yang Anda kirim melalui { -brand }. Di layanan { -brand }, juga saldo dan riwayat dompet trading Anda. Tidak pernah key Anda.
 
 onboarding-privacy-title = Key Anda, Data Anda
-onboarding-privacy-description = Konfigurasi, key, dan riwayat trading Anda tetap di mesin ini. Selanjutnya, pilih "Jelajahi dasbor" untuk penemuan tanpa kredensial, atau tautkan dompet dan RPC untuk mengaktifkan bot penuh — dan masuk di sana jika Anda menginginkan data { -brand }.
+onboarding-privacy-description = Konfigurasi, key, dan riwayat trading Anda tetap di mesin ini. Selanjutnya, pilih "Jelajahi dasbor" untuk penemuan tanpa kredensial, atau buat atau impor dompet lalu hubungkan melalui RPC Anda sendiri atau layanan { -brand } untuk mulai trading.
 onboarding-privacy-local-title = Arsitektur Mengutamakan Lokal
 onboarding-privacy-local-description = Konfigurasi, analitik, dan database disimpan di desktop Anda.
 onboarding-privacy-wallet-title = Dompet Terenkripsi
@@ -65,7 +65,7 @@ onboarding-privacy-config-title = Konfigurasi Fleksibel
 onboarding-privacy-config-description = Sebagian besar pengaturan dapat disesuaikan dari dasbor setelah penyiapan.
 
 onboarding-setup-shortcut =
-    .aria-label = Langsung ke penyiapan dompet dan RPC atau pilih Mode Jelajah
+    .aria-label = Langsung ke penyiapan atau pilih Mode Jelajah
 onboarding-setup-shortcut-label = Ke penyiapan
 onboarding-progress-dot =
     .aria-label = Ke slide { $number }

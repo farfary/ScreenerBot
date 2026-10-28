@@ -3,6 +3,7 @@
 
 //! Initialization route types — request/response structs for onboarding endpoints.
 
+use crate::chains::access::ChainAccessMode;
 use crate::chains::solana::rpc::RpcEndpointTestResult;
 use serde::{Deserialize, Serialize};
 
@@ -33,7 +34,13 @@ pub struct ExploreModeResponse {
 #[derive(Deserialize)]
 pub struct ValidateCredentialsRequest {
     pub wallet_private_key: String,
+    /// Unused under service access.
+    #[serde(default)]
     pub rpc_urls: Vec<String>,
+    /// The chain access to validate. Absent: own RPC during setup, the current
+    /// mode after it.
+    #[serde(default)]
+    pub access: Option<ChainAccessMode>,
 }
 
 impl std::fmt::Debug for ValidateCredentialsRequest {
@@ -41,8 +48,17 @@ impl std::fmt::Debug for ValidateCredentialsRequest {
         f.debug_struct("ValidateCredentialsRequest")
             .field("wallet_private_key", &"[redacted]")
             .field("rpc_urls", &self.rpc_urls.len())
+            .field("access", &self.access)
             .finish()
     }
+}
+
+/// The chain access a validation checked, for service access: the service
+/// state the probe found (`ChainAccessStatus::state` keys).
+#[derive(Debug, Serialize)]
+pub struct ValidationConnection {
+    pub mode: ChainAccessMode,
+    pub state: &'static str,
 }
 
 #[derive(Debug, Serialize)]
@@ -55,6 +71,9 @@ pub struct ValidationResult {
     /// One-time receipt proving this exact wallet/RPC snapshot passed validation.
     /// The receipt contains no credentials and expires after five minutes.
     pub validation_id: Option<String>,
+    /// Present for service access only; own RPC reports `rpc_test_results`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub connection: Option<ValidationConnection>,
 }
 
 /// `Debug` is implemented by hand for the reason given on [`ValidateCredentialsRequest`].
@@ -62,7 +81,11 @@ pub struct ValidationResult {
 pub struct CompleteInitializationRequest {
     pub validation_id: String,
     pub wallet_private_key: String,
+    #[serde(default)]
     pub rpc_urls: Vec<String>,
+    /// The chain access the receipt validated; absent as in the validation.
+    #[serde(default)]
+    pub access: Option<ChainAccessMode>,
 }
 
 impl std::fmt::Debug for CompleteInitializationRequest {
@@ -71,6 +94,24 @@ impl std::fmt::Debug for CompleteInitializationRequest {
             .field("validation_id", &self.validation_id)
             .field("wallet_private_key", &"[redacted]")
             .field("rpc_urls", &self.rpc_urls.len())
+            .field("access", &self.access)
+            .finish()
+    }
+}
+
+/// `POST /api/initialization/wallet/generate`: a fresh keypair, returned once.
+/// `Debug` is implemented by hand so the secret never reaches a log line.
+#[derive(Serialize)]
+pub struct GeneratedWalletResponse {
+    pub address: String,
+    pub private_key: String,
+}
+
+impl std::fmt::Debug for GeneratedWalletResponse {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("GeneratedWalletResponse")
+            .field("address", &self.address)
+            .field("private_key", &"[redacted]")
             .finish()
     }
 }
@@ -110,6 +151,7 @@ mod tests {
             ValidateCredentialsRequest {
                 wallet_private_key: KEY.to_owned(),
                 rpc_urls: vec![RPC_URL.to_owned()],
+                access: None,
             }
         );
         let complete = format!(
@@ -118,9 +160,17 @@ mod tests {
                 validation_id: "receipt-1".to_owned(),
                 wallet_private_key: KEY.to_owned(),
                 rpc_urls: vec![RPC_URL.to_owned()],
+                access: Some(ChainAccessMode::Service),
             }
         );
-        for output in [&validate, &complete] {
+        let generated = format!(
+            "{:?}",
+            GeneratedWalletResponse {
+                address: "Address1".to_owned(),
+                private_key: KEY.to_owned(),
+            }
+        );
+        for output in [&validate, &complete, &generated] {
             assert!(!output.contains(KEY), "{output}");
             assert!(!output.contains("provider-secret"), "{output}");
             assert!(output.contains("[redacted]"), "{output}");

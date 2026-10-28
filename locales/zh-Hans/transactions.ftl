@@ -70,7 +70,7 @@ transactions-search =
     .placeholder = 搜索签名…
     .aria-label = 搜索交易签名
 transactions-load-failed = 无法刷新交易
-transactions-setup-gate-title = 交易记录需要先连接钱包
+transactions-access-gate-title = 交易记录需要先连接钱包
 transactions-summary-total = 总计
 transactions-summary-success = 成功
 transactions-summary-failed = 失败
@@ -199,3 +199,9 @@ transactions-dialog-raw-empty = 暂无原始数据
 # Empty table (scripts/pages/transactions.js)
 transactions-empty = 暂无交易
     .message = 交易钱包的兑换和转账在链上确认后显示在这里。
+
+## On-demand history
+
+transactions-history-on-demand = 较早的历史记录按需加载。
+transactions-history-load-older = 加载更早记录
+transactions-history-load-older-failed = 无法加载较早的历史记录。

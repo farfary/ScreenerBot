@@ -13,10 +13,15 @@ use regex::Regex;
 use std::sync::LazyLock;
 
 /// Rewrite ES module import paths to include the asset version query parameter.
-/// This ensures browser module cache is busted on version changes.
+/// This ensures browser module cache is busted on version changes. Static
+/// (`from "x.js"`), side-effect (`import "x.js"`) and dynamic (`import("x.js")`)
+/// specifiers all get it: the browser keys a module by its full URL, so a
+/// specifier left without the query loads a second instance of the module with
+/// its own state.
 fn version_js_imports(js: &str) -> String {
-    static RE: LazyLock<Regex> =
-        LazyLock::new(|| Regex::new(r#"(from\s+["'])([^"']+\.js)(["'])"#).unwrap());
+    static RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r#"((?:\bfrom\s+|\bimport\s*\(\s*|\bimport\s+)["'])([^"']+\.js)(["'])"#).unwrap()
+    });
 
     let version = crate::version::get_version();
     let ts = option_env!("ASSET_VERSION_TS").unwrap_or("0");
@@ -167,7 +172,6 @@ pub async fn get_page_script(Path(file): Path<String>) -> Response {
         "copy.js" => Some(embeds::COPY_PAGE_SCRIPT),
         "copy/api.js" => Some(embeds::COPY_API_JS),
         "copy/format.js" => Some(embeds::COPY_FORMAT_JS),
-        "copy/charts.js" => Some(embeds::COPY_CHARTS_JS),
         "copy/tokens.js" => Some(embeds::COPY_TOKENS_JS),
         "copy/summary.js" => Some(embeds::COPY_SUMMARY_JS),
         "copy/list.js" => Some(embeds::COPY_LIST_JS),
@@ -193,6 +197,8 @@ pub async fn get_page_script(Path(file): Path<String>) -> Response {
         "trader/features.js" => Some(embeds::TRADER_FEATURES_JS),
         "trader/time_status.js" => Some(embeds::TRADER_TIME_STATUS_JS),
         "trader/paper_account.js" => Some(embeds::TRADER_PAPER_ACCOUNT_JS),
+        "trader/stats.js" => Some(embeds::TRADER_STATS_JS),
+        "trader/stats_tables.js" => Some(embeds::TRADER_STATS_TABLES_JS),
         "wallets.js" => Some(embeds::WALLETS_PAGE_SCRIPT),
         "wallets/renderers.js" => Some(embeds::WALLETS_RENDERERS_JS),
         "wallets/watched.js" => Some(embeds::WALLETS_WATCHED_JS),
@@ -229,7 +235,7 @@ pub async fn get_ui_script(Path(file): Path<String>) -> Response {
         "confirmation_dialog.js" => Some(embeds::CONFIRMATION_DIALOG_UI),
         "position_remove_dialog.js" => Some(embeds::POSITION_REMOVE_DIALOG_UI),
         "setup_dialog.js" => Some(embeds::SETUP_DIALOG_UI),
-        "setup_gate.js" => Some(embeds::SETUP_GATE_UI),
+        "access_gate.js" => Some(embeds::ACCESS_GATE_UI),
         "funding_notice.js" => Some(embeds::FUNDING_NOTICE_UI),
         "trade_action_dialog.js" => Some(embeds::TRADE_ACTION_DIALOG_UI),
         "manual_trade.js" => Some(embeds::MANUAL_TRADE_UI),
@@ -261,6 +267,9 @@ pub async fn get_ui_script(Path(file): Path<String>) -> Response {
         "token_details/positions_tab.js" => Some(embeds::TOKEN_DETAILS_POSITIONS_TAB_UI),
         "action_step.js" => Some(embeds::ACTION_STEP_UI),
         "trade_reason.js" => Some(embeds::TRADE_REASON_UI),
+        "entry_block.js" => Some(embeds::ENTRY_BLOCK_UI),
+        "position_origin.js" => Some(embeds::POSITION_ORIGIN_UI),
+        "inline_chart.js" => Some(embeds::INLINE_CHART_UI),
         "trading_mode.js" => Some(embeds::TRADING_MODE_UI),
         "arm_live_gate.js" => Some(embeds::ARM_LIVE_GATE_UI),
         "strategy_type.js" => Some(embeds::STRATEGY_TYPE_UI),
@@ -298,6 +307,7 @@ pub async fn get_ui_script(Path(file): Path<String>) -> Response {
         "account/panel.js" => Some(embeds::ACCOUNT_PANEL_UI),
         "settings/security_tab.js" => Some(embeds::SETTINGS_SECURITY_TAB_UI),
         "settings/account_tab.js" => Some(embeds::SETTINGS_ACCOUNT_TAB_UI),
+        "settings/connection_tab.js" => Some(embeds::SETTINGS_CONNECTION_TAB_UI),
         "settings/data_tab.js" => Some(embeds::SETTINGS_DATA_TAB_UI),
         "settings/storage_view.js" => Some(embeds::SETTINGS_STORAGE_VIEW_UI),
         "settings/updates_tab.js" => Some(embeds::SETTINGS_UPDATES_TAB_UI),
@@ -547,5 +557,33 @@ pub async fn get_font(Path(file): Path<String>) -> Response {
         )
             .into_response(),
         _ => (StatusCode::NOT_FOUND, "Font not found").into_response(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::version_js_imports;
+
+    #[test]
+    fn every_import_form_carries_the_asset_version() {
+        let js = concat!(
+            "import { a } from \"./a.js\";\n",
+            "import \"./b.js\";\n",
+            "const { c } = await import(\"../c.js\");\n",
+            "const d = import( '/scripts/d.js' );\n",
+        );
+        let versioned = version_js_imports(js);
+        for specifier in ["./a.js", "./b.js", "../c.js", "/scripts/d.js"] {
+            assert!(
+                versioned.contains(&format!("{specifier}?v=")),
+                "{specifier} is versioned in {versioned}"
+            );
+        }
+    }
+
+    #[test]
+    fn text_that_is_not_an_import_is_left_alone() {
+        let js = "const name = \"report.js\"; element.dataset.from = \"x\";";
+        assert_eq!(version_js_imports(js), js);
     }
 }

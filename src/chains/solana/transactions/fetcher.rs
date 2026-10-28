@@ -15,7 +15,8 @@ use std::future::Future;
 use std::time::{Duration, Instant};
 use tokio::time::sleep;
 
-use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods, SignatureInfo};
+use crate::chains::solana::access::{chain_access, SolanaChainAccess};
+use crate::chains::solana::rpc::SignatureInfo;
 use crate::logger::{self, LogTag};
 use crate::transactions::utils::*;
 
@@ -108,11 +109,9 @@ impl TransactionFetcher {
             ),
         );
 
-        let rpc_client = get_rpc_client();
-
         // Use optimized signature fetching with rate limiting
         let signatures = self
-            .fetch_signatures_with_retry(&rpc_client, wallet_pubkey, limit, None, None)
+            .fetch_signatures_with_retry(chain_access(), wallet_pubkey, limit, None, None)
             .await?
             .into_iter()
             .map(|info| info.signature.to_string())
@@ -136,7 +135,7 @@ impl TransactionFetcher {
     /// Fetch signatures with automatic retry and exponential backoff
     async fn fetch_signatures_with_retry(
         &self,
-        rpc_client: &crate::chains::solana::rpc::RpcClient,
+        access: &SolanaChainAccess,
         wallet_pubkey: Pubkey,
         limit: usize,
         before: Option<&str>,
@@ -147,7 +146,7 @@ impl TransactionFetcher {
 
         loop {
             match self
-                .fetch_signatures_batch(rpc_client, wallet_pubkey, limit, before, until)
+                .fetch_signatures_batch(access, wallet_pubkey, limit, before, until)
                 .await
             {
                 Ok(signatures) => {
@@ -190,15 +189,14 @@ impl TransactionFetcher {
     /// Fetch a batch of signatures from RPC
     async fn fetch_signatures_batch(
         &self,
-        rpc_client: &crate::chains::solana::rpc::RpcClient,
+        access: &SolanaChainAccess,
         wallet_pubkey: Pubkey,
         limit: usize,
         before: Option<&str>,
         until: Option<&str>,
     ) -> crate::chains::solana::Result<Vec<SignatureInfo>> {
-        // Use the existing RPC client method
-        let sig_infos = rpc_client
-            .get_wallet_signatures_main_rpc(&wallet_pubkey, limit, before, until)
+        let sig_infos = access
+            .wallet_signatures(&wallet_pubkey, limit, before, until)
             .await
             .map_err(|e| crate::chains::solana::Error::Rpc {
                 operation: "get_wallet_signatures_main_rpc",
@@ -233,10 +231,8 @@ impl TransactionFetcher {
             ),
         );
 
-        let rpc_client = get_rpc_client();
-
         let signatures = self
-            .fetch_signatures_with_retry(&rpc_client, wallet_pubkey, limit, before, until)
+            .fetch_signatures_with_retry(chain_access(), wallet_pubkey, limit, before, until)
             .await?
             .into_iter()
             .map(|info| info.signature.to_string())
@@ -266,7 +262,7 @@ impl TransactionFetcher {
         before: Option<&str>,
         until: Option<&str>,
     ) -> crate::chains::solana::Result<Vec<SignatureInfo>> {
-        self.fetch_signatures_with_retry(get_rpc_client(), wallet_pubkey, limit, before, until)
+        self.fetch_signatures_with_retry(chain_access(), wallet_pubkey, limit, before, until)
             .await
     }
 }
@@ -417,13 +413,11 @@ impl TransactionFetcher {
         &self,
         signature: &str,
     ) -> crate::chains::solana::Result<crate::chains::solana::rpc::TransactionDetails> {
-        let rpc_client = get_rpc_client();
-
-        // Use the explicit commitment-aware RPC method so detail reads match the
+        // Use the explicit commitment-aware read so detail reads match the
         // fetcher's configured consistency level.
         self.request_transaction_details(signature, |signature, commitment| async move {
-            rpc_client
-                .get_transaction_details_with_commitment(&signature, commitment)
+            chain_access()
+                .transaction_details(&signature, commitment)
                 .await
         })
         .await
@@ -673,7 +667,7 @@ impl BatchSignatureFetcher {
             let batch_signatures = self
                 .fetcher
                 .fetch_signatures_with_retry(
-                    &get_rpc_client(),
+                    chain_access(),
                     wallet_pubkey,
                     batch_limit,
                     before.as_deref(),

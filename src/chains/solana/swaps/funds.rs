@@ -3,9 +3,10 @@
 
 //! Refuses a native-coin buy the signing wallet cannot fund, before any router is asked to build it.
 
+use crate::chains::solana::access::chain_access;
 use crate::chains::solana::assets::ata::get_all_token_accounts;
 use crate::chains::solana::rent;
-use crate::chains::solana::rpc::{try_get_rpc_client, RpcClientMethods, TokenAccountInfo};
+use crate::chains::solana::rpc::TokenAccountInfo;
 use crate::chains::ChainId;
 use crate::logger::{self, LogTag};
 use crate::swaps::funds::native_needed;
@@ -83,10 +84,15 @@ pub(crate) async fn check_native_funds(quote: &Quote) -> Result<(), Error> {
         return Ok(());
     }
 
-    let Some(rpc) = try_get_rpc_client() else {
+    let access = chain_access();
+    if !access.started() {
+        logger::debug(
+            LogTag::Swap,
+            "Chain access not started, funds check skipped",
+        );
         return Ok(());
-    };
-    let available_raw = match rpc.get_sol_balance(&quote.wallet_address).await {
+    }
+    let available_raw = match access.sol_balance(&quote.wallet_address).await {
         Ok(balance) => adapter.native_to_raw(balance),
         Err(e) => {
             logger::warning(

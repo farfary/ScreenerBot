@@ -269,3 +269,19 @@ shell-theme-light = Светлая
 shell-theme-dark = Тёмная
 shell-theme-switch-to-light = Переключить на светлую тему
 shell-theme-switch-to-dark = Переключить на тёмную тему
+
+## Chain access: service mode controls, gates and sign-out
+
+shell-service-control =
+    .aria-label = Торговля приостановлена. Открыть подробности
+shell-service-action-signin = Войти
+shell-service-action-connection = Добавить RPC
+shell-access-gate-own-rpc-title = Нужен свой RPC
+shell-access-gate-watch-wallets = Копитрейдинг и отслеживание кошельков следят за другими кошельками в реальном времени, а сервис { -brand } этого не делает. Ваши задачи копирования и отслеживаемые кошельки сохранятся и вернутся, когда вы добавите RPC.
+shell-access-gate-live-pool-prices = Для живых цен пулов нужен свой RPC.
+shell-access-gate-direct-swaps = Для прямых свопов в пулах нужен свой RPC.
+shell-access-gate-other-wallets = Для балансов других кошельков нужен свой RPC.
+shell-access-gate-action = Открыть настройки подключения
+shell-signout-service-title = Выйти и приостановить торговлю?
+shell-signout-service-message = Без своего RPC { -brand } использует ваш аккаунт, чтобы читать кошелёк и отправлять сделки. Пока вы не вошли, торговля приостановлена, а открытые позиции не продаются.
+shell-signout-service-confirm = Выйти и приостановить

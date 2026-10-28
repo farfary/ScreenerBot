@@ -12,6 +12,8 @@
 //!   paper batch
 //! - Event recording
 //! - Action tracking for dashboard visibility
+//! - No live exit or add while chain access is not ready; the cycle wakes when the
+//!   access state changes, so held exits retry as soon as it is ready again
 
 use crate::actions::ActionFailure;
 use crate::errors::ErrorClass;
@@ -22,6 +24,7 @@ use crate::trader::types::{TradeDecision, TradePriority};
 use crate::trader::{actions, config, constants, evaluators, executors};
 use std::sync::Arc;
 
+use super::access_pause::AccessPause;
 use super::paper_batch::{split_by_book, PaperBatch};
 use tokio::sync::Semaphore;
 use tokio::time::{sleep, Duration, Instant};
@@ -49,6 +52,10 @@ pub async fn monitor_positions(
 
     let mut was_paused = false; // Track paused state
     let mut paper_batch = PaperBatch::new("exit");
+    // The process chain, read through its access facade: the chain whose access gates live trades.
+    let chain = crate::chains::access::active_status().chain;
+    let mut access_pause = AccessPause::default();
+    let mut access_changes = crate::chains::access::subscribe_service_state(chain);
 
     loop {
         // Check if we should shutdown
@@ -90,12 +97,16 @@ pub async fn monitor_positions(
 
         // Get all open positions: the live book's, then the paper book's
         let mut open_positions = positions::books::open_positions(positions::Book::Live).await;
+        let live_trades_allowed = access_pause
+            .live_trades_allowed(chain, !open_positions.is_empty())
+            .await;
         open_positions.extend(positions::books::open_positions(positions::Book::Paper).await);
 
         if open_positions.is_empty() {
             // No positions to monitor, just wait
             tokio::select! {
               _ = sleep(Duration::from_secs(constants::POSITION_MONITOR_INTERVAL_SECS)) => {},
+              _ = access_changes.changed() => {},
               _ = shutdown.changed() => {
                 if *shutdown.borrow() {
                   logger::info(LogTag::Trader, "Position monitor shutting down");
@@ -220,19 +231,22 @@ pub async fn monitor_positions(
         // Track if any rate limit (429) error occurred this cycle
         let mut rate_limit_hit = false;
 
-        // Execute trades sequentially in priority order
-        for evaluation in live_evaluations {
-            // Check shutdown before each execution
-            if *shutdown.borrow() {
-                logger::info(LogTag::Trader, "Position monitor shutting down");
-                return Ok(());
+        // Execute trades sequentially in priority order. While chain access is not ready
+        // nothing is submitted; the evaluations run again once it is.
+        if live_trades_allowed {
+            for evaluation in live_evaluations {
+                // Check shutdown before each execution
+                if *shutdown.borrow() {
+                    logger::info(LogTag::Trader, "Position monitor shutting down");
+                    return Ok(());
+                }
+
+                rate_limit_hit |= execute_exit(evaluation).await;
             }
 
-            rate_limit_hit |= execute_exit(evaluation).await;
+            // Check for DCA opportunities of the live book (separate from exits)
+            process_dca(Book::Live).await;
         }
-
-        // Check for DCA opportunities of the live book (separate from exits)
-        process_dca(Book::Live).await;
 
         // The paper exits and adds of the cycle, after every live one
         let paper_count = paper_evaluations.len();
@@ -259,9 +273,10 @@ pub async fn monitor_positions(
                 .await;
         }
 
-        // Wait for next cycle or shutdown
+        // Wait for next cycle, an access state change or shutdown
         tokio::select! {
           _ = sleep(Duration::from_secs(constants::POSITION_MONITOR_INTERVAL_SECS)) => {},
+          _ = access_changes.changed() => {},
           _ = shutdown.changed() => {
             if *shutdown.borrow() {
               logger::info(LogTag::Trader, "Position monitor shutting down");

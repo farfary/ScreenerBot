@@ -16,7 +16,9 @@ use super::reserve_accounts::reserve_pubkeys;
 use super::types::ProgramKind;
 
 use super::decode_utils::is_sol_mint;
-use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
+use crate::chains::access::Capability;
+use crate::chains::solana::access::own_rpc_client;
+use crate::chains::solana::rpc::RpcClientMethods;
 use crate::events::{record_safe, Event, EventCategory};
 use crate::logger::{self, LogTag};
 use crate::pools::types::{
@@ -583,7 +585,12 @@ impl AccountFetcher {
         );
 
         // Fetch accounts using new RPC client
-        let rpc_client = get_rpc_client();
+        let rpc_client = own_rpc_client(Capability::LivePoolPrices).map_err(|error| {
+            crate::chains::solana::Error::Rpc {
+                operation: "get_multiple_accounts",
+                detail: error.to_string(),
+            }
+        })?;
         let rpc_start = Instant::now();
         let account_results = match rpc_client.get_multiple_accounts(accounts).await {
             Ok(results) => {

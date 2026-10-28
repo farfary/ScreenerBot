@@ -1,4 +1,4 @@
-# Chart vocabulary shared by the position details and token details charts.
+# Chart vocabulary shared by the dashboard charts.
 
 chart-data = Data
 chart-ohlc-open = O
@@ -42,3 +42,9 @@ chart-status-total-idle =
         [one] { $count } candle · idle
        *[other] { $count } candles · idle
     }
+
+# Inline charts (ui/inline_chart.js)
+
+# $amount is a signed SOL amount.
+chart-inline-curve-label = Cumulative P&L { $amount } { -sol }
+chart-inline-histogram-title = { $count } of { $total }

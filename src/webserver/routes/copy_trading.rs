@@ -284,6 +284,9 @@ fn respond<T: Serialize>(result: crate::trader::Result<T>) -> Response {
 
 fn copy_error(error: &crate::trader::Error) -> Response {
     use crate::trader::Error;
+    if let Error::ChainAccess(refusal) = error {
+        return ApiError::chain_access(refusal).into_response();
+    }
     let code = match error {
         Error::CopyTaskNotFound { .. } | Error::CopyHoldingNotFound { .. } => {
             ApiErrorCode::NotFound
@@ -528,6 +531,14 @@ mod tests {
                 },
                 "COPY_ERROR",
                 "errors-copy-request-failed",
+            ),
+            (
+                Error::ChainAccess(crate::chains::Error::CapabilityUnavailable {
+                    chain: crate::chains::ChainId::Solana,
+                    capability: crate::chains::access::Capability::WatchOtherWallets,
+                }),
+                "CAPABILITY_UNAVAILABLE",
+                "errors-chain-capability-unavailable",
             ),
         ];
         for (error, code, message) in cases {

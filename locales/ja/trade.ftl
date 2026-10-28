@@ -152,7 +152,7 @@ trade-toast-failed-add = ポジションへの追加に失敗しました
 trade-toast-failed-sell = 売却に失敗しました
 
 # Trade and close reasons. Ids are the Debug names of TradeReason
-# (src/trader/types.rs) and the reasons written by src/positions.
+# (src/trader/trade_reason.rs) and the reasons written by src/positions.
 trade-reason-strategy-signal = ストラテジーシグナル
 trade-reason-manual-entry = 手動エントリー
 trade-reason-force-buy = 強制購入
@@ -183,6 +183,22 @@ trade-reason-pending-verification = { $reason }（検証待ち）
 trade-reason-force-closed = 強制クローズ: { $note }
 # $reason is a stored closed_reason that has no label; it is shown as stored.
 trade-reason-stored = { $reason }
+trade-reason-unknown = 記録なし
+trade-reason-force-closed-any = 強制クローズ
+
+# Why a new entry was blocked. Ids come from EntryBlock in src/trader/admission.rs.
+trade-entry-block-force-stopped = 取引は強制停止されています
+trade-entry-block-loss-limit = 損失上限により新規エントリーがブロックされています
+trade-entry-block-connectivity = 必要なサービスが利用できません
+trade-entry-block-storage-unavailable = 取引データが利用できないか、復元中です
+trade-entry-block-position-limit = オープンポジションの上限に達しました
+trade-entry-block-already-open = ポジションはすでにオープンしています
+trade-entry-block-reentry-cooldown = トークン再エントリーのクールダウン
+trade-entry-block-open-cooldown = 全体のエントリークールダウン
+trade-entry-block-entry-reserved = 別のエントリーを処理中です
+trade-entry-block-blacklisted = トークンはリスク管理によりブロックされています
+trade-entry-block-paper-balance-exhausted = ペーパー残高が取引に足りません
+trade-entry-block-check-failed = 安全性チェックを完了できませんでした
 
 # Toast shown when a quick-trade shortcut runs without a token selected (ui/quick_trade_shortcuts.js).
 trade-quick-no-token = トークンが選択されていません

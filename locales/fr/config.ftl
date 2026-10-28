@@ -8,8 +8,8 @@ config-account-auto-wallet-signin = Se connecter automatiquement avec mon portef
 config-account-refresh-margin-secs = Marge de renouvellement du token
     .hint = Délai d'avance avec lequel renouveler le token de connexion avant son expiration. À modifier uniquement pour déboguer l'authentification.
     .unit = s
-config-account-use-gateway-rpc = Utiliser le RPC { -brand } pour envoyer les transactions
-    .hint = Diffuse les transactions de swap signées via screenerbot.io plutôt que via votre propre RPC. La signature se fait toujours sur cette machine ; le serveur ne peut pas modifier une transaction signée. Votre propre RPC reste nécessaire pour les données de prix.
+config-account-use-gateway-rpc = Envoyer les transactions via { -brand }
+    .hint = Une fois connecté, diffuse via screenerbot.io les swaps que vous signez sur cet ordinateur. La signature a toujours lieu ici, et une transaction signée ne peut pas être modifiée. Toujours actif en mode service { -brand }.
 
 ## agent_control
 

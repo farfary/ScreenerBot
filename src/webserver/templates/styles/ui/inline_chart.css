@@ -1,11 +1,12 @@
 /* Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
  * SPDX-License-Identifier: BUSL-1.1 */
 
-/* Copy Trading inline SVG charts: P&L curve, comparison curves, bar lists,
-   the arrival histogram and the series palette. No glow, no fills behind lines. */
+/* The shared inline SVG charts (scripts/ui/inline_chart.js): P&L curve, P&L bars,
+   comparison curves, bar lists, the histogram, the sparkline and the series palette.
+   No glow, no fills behind lines. */
 
 /* A chart frame: value labels | stretched plot, time labels under the plot. */
-.copy-chart {
+.inline-chart {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   grid-template-rows: 180px auto;
@@ -13,64 +14,77 @@
   margin: 0;
 }
 
-.copy-chart--tall {
+.inline-chart--tall {
   grid-template-rows: 220px auto;
 }
 
-.copy-chart-y,
-.copy-chart-x {
+.inline-chart-y,
+.inline-chart-x {
   font-family: var(--font-data);
   font-size: var(--font-size-xs);
   color: var(--text-muted);
   white-space: nowrap;
 }
 
-.copy-chart-y {
+.inline-chart-y {
   position: relative;
   min-width: 7ch;
 }
 
-.copy-chart-y span {
+.inline-chart-y span {
   position: absolute;
   inset-inline-end: 0;
   transform: translateY(-50%);
 }
 
-.copy-chart-plot {
+.inline-chart-plot {
   display: block;
   width: 100%;
   height: 100%;
   overflow: visible;
 }
 
-.copy-chart-plot line,
-.copy-chart-plot polyline {
+.inline-chart-plot line,
+.inline-chart-plot polyline {
   vector-effect: non-scaling-stroke;
 }
 
-.copy-chart-x {
+.inline-chart-x {
   display: flex;
   grid-column: 2;
   justify-content: space-between;
   gap: var(--spacing-md);
 }
 
-.copy-curve-line {
+.inline-chart-curve {
   fill: none;
   stroke: var(--text-muted);
   stroke-width: 2;
 }
 
-.copy-curve-line.is-positive {
+.inline-chart-curve.is-positive {
   stroke: var(--success-color);
 }
 
-.copy-curve-line.is-negative {
+.inline-chart-curve.is-negative {
   stroke: var(--error-color);
 }
 
+/* P&L bars under the running total: one rect per period with a trade. */
+.inline-chart-bar {
+  fill: var(--text-muted);
+}
+
+.inline-chart-bar.is-positive {
+  fill: var(--success-color);
+}
+
+.inline-chart-bar.is-negative {
+  fill: var(--error-color);
+}
+
 /* One column set for the whole list, so every track starts at the same x. */
-.copy-bars {
+.inline-bars {
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) minmax(60px, 1fr) auto;
   gap: var(--spacing-xs) var(--spacing-sm);
@@ -79,7 +93,7 @@
   list-style: none;
 }
 
-.copy-bar {
+.inline-bar {
   display: grid;
   grid-column: 1 / -1;
   grid-template-columns: subgrid;
@@ -87,46 +101,46 @@
   font-size: var(--font-size-sm);
 }
 
-.copy-bar-label {
+.inline-bar-label {
   overflow-wrap: anywhere;
   color: var(--text-secondary);
 }
 
-.copy-bar-track {
+.inline-bar-track {
   height: 6px;
   border-radius: var(--radius-xs);
   background: var(--bg-tertiary);
   overflow: hidden;
 }
 
-.copy-bar-fill {
+.inline-bar-fill {
   display: block;
   height: 100%;
   background: var(--primary-color);
 }
 
-.copy-bar-fill.is-positive {
+.inline-bar-fill.is-positive {
   background: var(--success-color);
 }
 
-.copy-bar-fill.is-negative {
+.inline-bar-fill.is-negative {
   background: var(--error-color);
 }
 
-.copy-bar-value {
+.inline-bar-value {
   font-family: var(--font-data);
   font-size: var(--font-size-xs);
   white-space: nowrap;
 }
 
-.copy-histogram {
+.inline-histogram {
   display: flex;
   align-items: stretch;
   gap: var(--spacing-sm);
   height: 150px;
 }
 
-.copy-histogram-col {
+.inline-histogram-col {
   display: flex;
   flex: 1;
   flex-direction: column;
@@ -135,67 +149,75 @@
   min-width: 0;
 }
 
-.copy-histogram-bar {
+.inline-histogram-bar {
   display: flex;
   flex: 1;
   align-items: flex-end;
   width: 100%;
 }
 
-.copy-histogram-bar > span {
+.inline-histogram-bar > span {
   display: block;
   width: 100%;
   border-radius: var(--radius-xs) var(--radius-xs) 0 0;
   background: var(--primary-color);
 }
 
-.copy-histogram-bar > span.is-late {
+.inline-histogram-bar > span.is-positive {
+  background: var(--success-color);
+}
+
+.inline-histogram-bar > span.is-negative {
+  background: var(--error-color);
+}
+
+.inline-histogram-bar > span.is-warning {
   background: var(--warning-color);
 }
 
-.copy-histogram-count {
+.inline-histogram-count {
   font-family: var(--font-data);
   font-size: var(--font-size-xs);
   color: var(--text-secondary);
 }
 
-.copy-histogram-label {
+.inline-histogram-label {
   font-size: var(--font-size-xs);
   color: var(--text-muted);
   white-space: nowrap;
 }
 
-.copy-series-0 {
-  --copy-series: var(--primary-color);
+.inline-series-0 {
+  --inline-series: var(--primary-color);
 }
 
-.copy-series-1 {
-  --copy-series: var(--success-color);
+.inline-series-1 {
+  --inline-series: var(--success-color);
 }
 
-.copy-series-2 {
-  --copy-series: var(--warning-color);
+.inline-series-2 {
+  --inline-series: var(--warning-color);
 }
 
-.copy-series-3 {
-  --copy-series: var(--info-color);
+.inline-series-3 {
+  --inline-series: var(--info-color);
 }
 
-.copy-series-4 {
-  --copy-series: var(--error-color);
+.inline-series-4 {
+  --inline-series: var(--error-color);
 }
 
-.copy-series-5 {
-  --copy-series: var(--text-secondary);
+.inline-series-5 {
+  --inline-series: var(--text-secondary);
 }
 
-.copy-compare-line {
+.inline-chart-compare {
   fill: none;
-  stroke: var(--copy-series);
+  stroke: var(--inline-series);
   stroke-width: 2;
 }
 
-.copy-legend {
+.inline-chart-legend {
   display: flex;
   flex-wrap: wrap;
   gap: var(--spacing-xs) var(--spacing-md);
@@ -203,15 +225,40 @@
   color: var(--text-secondary);
 }
 
-.copy-legend-item {
+.inline-chart-legend-item {
   display: inline-flex;
   align-items: center;
   gap: 6px;
 }
 
-.copy-legend-swatch {
+.inline-chart-legend-swatch {
   display: inline-block;
   width: 14px;
   height: 2px;
-  background: var(--copy-series);
+  background: var(--inline-series);
+}
+
+/* A list row's P&L trend. */
+.inline-spark {
+  flex-shrink: 0;
+  overflow: visible;
+}
+
+.inline-spark polyline {
+  fill: none;
+  stroke: var(--text-muted);
+  stroke-width: 1.5;
+}
+
+.inline-spark.is-positive polyline {
+  stroke: var(--success-color);
+}
+
+.inline-spark.is-negative polyline {
+  stroke: var(--error-color);
+}
+
+.inline-chart-zero {
+  stroke: var(--border-color);
+  stroke-dasharray: 3 3;
 }

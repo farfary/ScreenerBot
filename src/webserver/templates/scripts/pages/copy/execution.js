@@ -4,8 +4,9 @@
 // The Execution tab, as sections of the task sheet: how late the target's trades are
 // detected, how far the copies fill from the target's own price, the decisions in the
 // range, and for a paper task the paper model that produced its fills.
-import { histogram } from "./charts.js";
-import { definitionRows, finite, section, seconds, signedPct, splitSection } from "./format.js";
+import { formatPercentValue } from "../../core/format.js";
+import { histogram } from "../../ui/inline_chart.js";
+import { definitionRows, finite, section, seconds, splitSection } from "./format.js";
 import { insightsBody, rangeHead } from "./overview.js";
 import { metricCard } from "../../ui/metric_card.js";
 
@@ -47,7 +48,7 @@ function quality(insights, defaults, esc) {
     metricCard(
       {
         label: I18n.t("copy-execution-target-price-difference"),
-        value: signedPct(slippage.median_pct, 2),
+        value: formatPercentValue(slippage.median_pct, { decimals: 2, fallback: "—" }),
         detail: I18n.t("copy-execution-target-difference-samples", {
           count: slippage.samples || 0,
         }),
@@ -57,9 +58,9 @@ function quality(insights, defaults, esc) {
     metricCard(
       {
         label: I18n.t("copy-execution-target-difference-worst"),
-        value: signedPct(slippage.worst_pct, 2),
+        value: formatPercentValue(slippage.worst_pct, { decimals: 2, fallback: "—" }),
         detail: I18n.t("copy-execution-target-difference-average", {
-          amount: signedPct(slippage.average_pct, 2),
+          amount: formatPercentValue(slippage.average_pct, { decimals: 2, fallback: "—" }),
         }),
       },
       esc
@@ -76,13 +77,13 @@ function body(insights, defaults, esc) {
   const buckets = (insights.arrival_histogram || []).map((bucket, index, all) => ({
     label: bucketLabel(bucket, index, all),
     count: bucket.count,
-    tone: limitMs != null && (all[index - 1]?.upper_ms ?? 0) >= limitMs ? "is-late" : "",
+    tone: limitMs != null && (all[index - 1]?.upper_ms ?? 0) >= limitMs ? "is-warning" : "",
   }));
   return `${splitSection(
     [
       [
         I18n.t("copy-execution-delay-title"),
-        `<p class="copy-note">${esc(I18n.t("copy-execution-delay-note"))}${limitMs != null ? esc(` ${I18n.t("copy-execution-delay-limit", { limit: seconds(limitMs) })}`) : ""}</p>${histogram(buckets, esc)}
+        `<p class="copy-note">${esc(I18n.t("copy-execution-delay-note"))}${limitMs != null ? esc(` ${I18n.t("copy-execution-delay-limit", { limit: seconds(limitMs) })}`) : ""}</p>${histogram(buckets, { escapeHtml: esc, empty: I18n.t("copy-chart-empty-histogram") })}
       <dl class="copy-defs">${definitionRows(
         [
           [I18n.t("copy-execution-fastest"), seconds(arrival.minimum_ms)],
@@ -98,9 +99,18 @@ function body(insights, defaults, esc) {
       <dl class="copy-defs">${definitionRows(
         [
           [I18n.t("copy-execution-samples"), String(slippage.samples || 0)],
-          [I18n.t("copy-execution-average"), signedPct(slippage.average_pct, 2)],
-          [I18n.t("copy-execution-median"), signedPct(slippage.median_pct, 2)],
-          [I18n.t("copy-execution-worst"), signedPct(slippage.worst_pct, 2)],
+          [
+            I18n.t("copy-execution-average"),
+            formatPercentValue(slippage.average_pct, { decimals: 2, fallback: "—" }),
+          ],
+          [
+            I18n.t("copy-execution-median"),
+            formatPercentValue(slippage.median_pct, { decimals: 2, fallback: "—" }),
+          ],
+          [
+            I18n.t("copy-execution-worst"),
+            formatPercentValue(slippage.worst_pct, { decimals: 2, fallback: "—" }),
+          ],
         ],
         esc
       )}</dl>`,
@@ -143,5 +153,5 @@ function paperModel(ws, defaults, esc) {
 }
 
 export function renderExecution({ ws, insights, error, range, defaults }, esc) {
-  return `<section class="copy-section">${rangeHead(I18n.t("copy-execution-title"), range, esc)}${insightsBody(insights, error, esc, (data) => quality(data, defaults, esc))}</section>${insights ? body(insights, defaults, esc) : ""}${paperModel(ws, defaults, esc)}`;
+  return `<section class="sheet-section">${rangeHead(I18n.t("copy-execution-title"), range, esc)}${insightsBody(insights, error, esc, (data) => quality(data, defaults, esc))}</section>${insights ? body(insights, defaults, esc) : ""}${paperModel(ws, defaults, esc)}`;
 }

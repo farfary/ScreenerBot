@@ -60,6 +60,7 @@ export const EVENT_SUBTYPE_LABELS = Object.freeze({
   service_stopped: "events-subtype-service-stopped",
   trading_enabled: "events-subtype-trading-enabled",
   trading_disabled: "events-subtype-trading-disabled",
+  trading_paused: "events-subtype-trading-paused",
   entry_monitor_started: "events-subtype-entry-monitor-started",
   entry_monitor_error: "events-subtype-entry-monitor-error",
   exit_monitor_started: "events-subtype-exit-monitor-started",

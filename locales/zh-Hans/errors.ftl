@@ -45,7 +45,7 @@ errors-account-signin-refused = { $reason }
 errors-account-signin-unavailable = 登录不可用
 errors-account-credentials-required = 请输入您的邮箱地址和密码。
 errors-account-signout-failed = 退出登录失败
-errors-account-gateway-update-failed = 无法更新网关设置
+errors-account-gateway-update-failed = 无法更新交易发送设置
 
 # Localization
 errors-i18n-locale-not-registered = 语言区域未注册
@@ -131,6 +131,8 @@ errors-transactions-own-wallet-unavailable = 未配置主钱包
 errors-transactions-invalid-subject = 交易主体不是有效的 Solana 地址
 errors-transactions-subject-not-watched = 交易主体不是受监控的钱包
 errors-transactions-watch-store-unavailable = 受监控钱包不可用
+errors-transactions-history-loading = 较早的交易已在加载中。
+errors-transactions-history-load-failed = 无法加载较早的交易。
 
 # Wallet
 errors-wallet-unavailable = 主钱包不可用
@@ -415,3 +417,17 @@ errors-tokens-search-failed = 代币搜索失败
 # Actions and services
 errors-actions-not-found = 未找到操作 { $id }
 errors-services-not-found = 未找到服务 '{ $name }'
+
+# Chain access
+errors-chain-capability-unavailable = 此操作需要你自己的 RPC 连接。
+errors-chain-service-signin-required = 登录以使用 { -brand } 服务。
+errors-chain-service-scope-missing = 请重新登录以允许读取钱包。
+errors-chain-service-busy = { -brand } 服务繁忙。请稍后重试。
+errors-chain-service-daily-limit = 你的账户已达到 { -brand } 服务今日上限。
+errors-chain-service-version = 此版本对 { -brand } 服务来说过旧。请更新到 { $minimum } 或更高版本。
+errors-chain-service-refused = { -brand } 服务拒绝了该请求。
+errors-chain-service-unreachable = 无法连接 screenerbot.io。
+errors-chain-not-trading-wallet = 在 { -brand } 服务模式下只能读取交易钱包。
+errors-chain-access-failed = 区块链请求失败。
+errors-chain-access-unchanged = 此连接已在使用中。
+errors-chain-access-switch-failed = 无法切换连接。

@@ -38,19 +38,6 @@ copy-skip-swap-mixed-quote = SOL과 스테이블코인으로 함께 결제되어
 copy-skip-swap-multiple-tokens = 한 트랜잭션에서 둘 이상의 토큰이 거래되었습니다
 copy-skip-swap-unreadable = 거래 금액을 읽을 수 없습니다
 
-copy-entry-block-force-stopped = 거래가 강제 중지되었습니다
-copy-entry-block-loss-limit = 손실 한도로 신규 진입이 차단되었습니다
-copy-entry-block-connectivity = 필요한 서비스를 사용할 수 없습니다
-copy-entry-block-storage-unavailable = 거래 데이터를 사용할 수 없거나 복원 중입니다
-copy-entry-block-position-limit = 보유 포지션 한도에 도달했습니다
-copy-entry-block-already-open = 이미 포지션이 열려 있습니다
-copy-entry-block-reentry-cooldown = 토큰 재진입 쿨다운
-copy-entry-block-open-cooldown = 전체 진입 쿨다운
-copy-entry-block-entry-reserved = 다른 진입을 처리 중입니다
-copy-entry-block-blacklisted = 위험 관리 정책으로 차단된 토큰입니다
-copy-entry-block-paper-balance-exhausted = 모의 잔액이 거래 금액에 부족합니다
-copy-entry-block-check-failed = 안전 점검을 완료하지 못했습니다
-
 copy-pause-user = 사용자가 일시 중지함
 copy-pause-latency-kill-switch = 자동 일시 중지: 거래가 평균 { $average }초 늦게 도착했습니다 (한도 { $threshold }초)
 copy-pause-watch-detached = 자동 일시 중지: 지갑을 더 이상 감시하지 않습니다
@@ -91,6 +78,7 @@ copy-live-block-copy-trading-disabled = 카피 처리가 전역으로 일시 중
 copy-state-system-paused = 전역 일시 중지
 copy-state-force-stopped = 강제 중지됨
 copy-state-entries-blocked = 진입 차단됨
+copy-state-own-rpc-required = 직접 RPC 필요
 copy-state-running-live = 실행 중
 copy-state-running-paper = 실행 중
 copy-exit-mode-buy-only = 내 청산 규칙
@@ -164,6 +152,7 @@ copy-status-force-stopped = 강제 중지
 copy-status-loss-limit = 손실 한도
 copy-status-all-paused = 모든 작업 일시 중지됨
 copy-status-processing = 처리 중
+copy-status-own-rpc-required = 직접 RPC 필요
 copy-toolbar-pause = 복사 일시 중지
 copy-toolbar-resume = 복사 재개
 copy-toolbar-resume-tasks = 모든 작업 재개
@@ -313,6 +302,7 @@ copy-state-detail-paper = 모의 실행 중 · 거래는 시뮬레이션되며 �
 copy-state-detail-live = 실거래 실행 중 · 지갑 거래를 실제 스왑으로 카피합니다
 copy-state-detail-system-paused = 대기 중 · 카피 처리가 전역으로 일시 중지되었으며 청산은 계속 실행됩니다
 copy-state-detail-entries-blocked = 손실 한도로 진입 차단됨 · 청산은 계속 실행됩니다
+copy-state-detail-own-rpc-required = 대기 중 · { -brand } 서비스는 다른 지갑을 추적하지 않습니다. 다시 시작하려면 RPC를 추가하세요
 copy-state-detail-force-stopped = 강제 중지됨 · 카피하지 않음
 
 copy-paused-since = { $reason } · { $since }
@@ -563,15 +553,13 @@ copy-table-profit-factor = 프로핏 팩터
 copy-table-average-hold = 평균 보유
 copy-table-target-difference = 대상 가격과의 차이 중앙값
 
-## Charts (pages/copy/charts.js)
+## Charts (ui/inline_chart.js, Copy messages)
 
-copy-chart-curve-label = 누적 손익 { $amount } { -sol }
 copy-chart-compare-label = 작업별 누적 손익
 copy-chart-empty-curve = 이 기간에 종료된 라운드가 아직 없습니다.
 copy-chart-empty-bars = 이 기간에 기록된 내용이 없습니다.
 copy-chart-empty-histogram = 이 기간에 도착 샘플이 없습니다.
 copy-chart-empty-compare = 이 기간에 비교할 종료 라운드가 없습니다.
-copy-chart-histogram-title = { $total }개 중 { $count }개
 
 ## Wallet profile (pages/copy/profile.js)
 

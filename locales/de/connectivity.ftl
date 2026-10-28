@@ -10,3 +10,20 @@ connectivity-probe-internet-all-failed = DNS- und HTTP-Prüfung fehlgeschlagen. 
 connectivity-probe-unknown = Unbekannter Fehler
 
 connectivity-endpoint-not-checked = Noch nicht geprüft
+
+connectivity-service-checking = Verbindung zum { -brand }-Dienst wird hergestellt
+    .detail = Der Handel beginnt, sobald die Verbindung bestätigt ist.
+connectivity-service-ready = { -brand }-Dienst verbunden
+    .detail = Wallet-Abfragen und Trades laufen über screenerbot.io.
+connectivity-service-signed-out = Handel pausiert · Abgemeldet
+    .detail = Melden Sie sich an, um fortzufahren. Offene Positionen werden während der Pause nicht verkauft.
+connectivity-service-reauthorize = Handel pausiert · Erneute Anmeldung nötig
+    .detail = Die Anmeldung dieses Geräts erlaubt noch keine Wallet-Abfragen. Melden Sie sich erneut an, um fortzufahren.
+connectivity-service-busy = Handel pausiert · Dienst ausgelastet, neuer Versuch
+    .detail = Der Handel wird automatisch fortgesetzt. Um Pausen zu vermeiden, nutzen Sie Ihren eigenen RPC.
+connectivity-service-daily-limit = Handel pausiert · Tageslimit erreicht
+    .detail = Ihr Konto hat das heutige Limit für den { -brand }-Dienst erreicht. Der Handel wird um 00:00 UTC fortgesetzt – oder sofort mit Ihrem eigenen RPC.
+connectivity-service-unreachable = Handel pausiert · screenerbot.io nicht erreichbar
+    .detail = Der Handel wird fortgesetzt, sobald die Verbindung zurück ist. Prüfen Sie Ihre Internetverbindung.
+connectivity-service-version = Handel pausiert · Update nötig
+    .detail = Diese Version wird vom { -brand }-Dienst nicht mehr unterstützt. Aktualisieren Sie auf { $minimum } oder neuer.

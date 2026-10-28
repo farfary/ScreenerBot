@@ -152,7 +152,7 @@ trade-toast-failed-add = 加仓失败
 trade-toast-failed-sell = 卖出失败
 
 # Trade and close reasons. Ids are the Debug names of TradeReason
-# (src/trader/types.rs) and the reasons written by src/positions.
+# (src/trader/trade_reason.rs) and the reasons written by src/positions.
 trade-reason-strategy-signal = 策略信号
 trade-reason-manual-entry = 手动入场
 trade-reason-force-buy = 强制买入
@@ -183,6 +183,22 @@ trade-reason-pending-verification = { $reason }（待验证）
 trade-reason-force-closed = 强制平仓：{ $note }
 # $reason is a stored closed_reason that has no label; it is shown as stored.
 trade-reason-stored = { $reason }
+trade-reason-unknown = 未记录
+trade-reason-force-closed-any = 强制平仓
+
+# Why a new entry was blocked. Ids come from EntryBlock in src/trader/admission.rs.
+trade-entry-block-force-stopped = 交易已被强制停止
+trade-entry-block-loss-limit = 亏损限额已拦截新入场
+trade-entry-block-connectivity = 所需服务不可用
+trade-entry-block-storage-unavailable = 交易数据不可用或正在恢复
+trade-entry-block-position-limit = 已达持仓上限
+trade-entry-block-already-open = 已有仓位处于持仓中
+trade-entry-block-reentry-cooldown = 代币再入场冷却时间
+trade-entry-block-open-cooldown = 全局入场冷却时间
+trade-entry-block-entry-reserved = 另一笔入场正在处理
+trade-entry-block-blacklisted = 代币被风控拦截
+trade-entry-block-paper-balance-exhausted = 模拟余额不足以完成此交易
+trade-entry-block-check-failed = 安全检查未能完成
 
 # Toast shown when a quick-trade shortcut runs without a token selected (ui/quick_trade_shortcuts.js).
 trade-quick-no-token = 未选择代币

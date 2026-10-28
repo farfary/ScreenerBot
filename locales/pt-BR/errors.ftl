@@ -40,7 +40,7 @@ errors-account-signin-refused = { $reason }
 errors-account-signin-unavailable = O login está indisponível
 errors-account-credentials-required = Informe seu e-mail e sua senha.
 errors-account-signout-failed = Falha ao sair
-errors-account-gateway-update-failed = Não foi possível atualizar a configuração do gateway
+errors-account-gateway-update-failed = Não foi possível atualizar a configuração de envio de transações
 
 errors-i18n-locale-not-registered = O idioma não está registrado
 errors-i18n-catalog-encode-failed = Não foi possível codificar o catálogo
@@ -117,6 +117,8 @@ errors-transactions-own-wallet-unavailable = A carteira principal não está con
 errors-transactions-invalid-subject = O assunto da transação não é um endereço Solana válido
 errors-transactions-subject-not-watched = O assunto da transação não é uma carteira monitorada
 errors-transactions-watch-store-unavailable = As carteiras monitoradas não estão disponíveis
+errors-transactions-history-loading = Transações mais antigas já estão sendo carregadas.
+errors-transactions-history-load-failed = Não foi possível carregar as transações mais antigas.
 
 errors-wallet-unavailable = A carteira principal não está disponível
 errors-wallet-changed = A carteira principal mudou; atualize e tente novamente
@@ -384,3 +386,17 @@ errors-tokens-search-failed = Falha na busca de tokens
 
 errors-actions-not-found = Ação { $id } não encontrada
 errors-services-not-found = Serviço '{ $name }' não encontrado
+
+# Chain access
+errors-chain-capability-unavailable = Isso exige sua própria conexão RPC.
+errors-chain-service-signin-required = Entre para usar o serviço do { -brand }.
+errors-chain-service-scope-missing = Entre de novo para permitir a leitura da carteira.
+errors-chain-service-busy = O serviço do { -brand } está ocupado. Tente novamente em instantes.
+errors-chain-service-daily-limit = Sua conta atingiu o limite de hoje do serviço do { -brand }.
+errors-chain-service-version = Esta versão é antiga demais para o serviço do { -brand }. Atualize para { $minimum } ou posterior.
+errors-chain-service-refused = O serviço do { -brand } recusou a solicitação.
+errors-chain-service-unreachable = screenerbot.io está inacessível.
+errors-chain-not-trading-wallet = No modo de serviço do { -brand }, apenas a carteira de trading pode ser lida.
+errors-chain-access-failed = A solicitação à blockchain falhou.
+errors-chain-access-unchanged = Esta conexão já está em uso.
+errors-chain-access-switch-failed = Não foi possível trocar a conexão.

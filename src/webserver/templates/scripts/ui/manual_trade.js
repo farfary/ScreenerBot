@@ -24,7 +24,7 @@ import * as Utils from "../core/utils.js";
 import { tradeToastKey } from "../core/action_toasts.js";
 import { requestManager, errorMessageOf } from "../core/request_manager.js";
 import { TradeActionDialog } from "./trade_action_dialog.js";
-import { setupRequired } from "./setup_gate.js";
+import { setupRequired } from "./access_gate.js";
 
 // One dialog instance shared by every caller — it is modal, so there is never a
 // reason for two of them to exist.
@@ -79,10 +79,9 @@ export async function fetchWalletBalance() {
  */
 async function fetchPosition(mint) {
   try {
-    const data = await requestManager.fetch(
-      `/api/positions/${encodeURIComponent(mint)}/details`,
-      { priority: "high" }
-    );
+    const data = await requestManager.fetch(`/api/positions/${encodeURIComponent(mint)}/details`, {
+      priority: "high",
+    });
 
     // /details returns PositionDetailResponse directly; `position` flattens the
     // summary fields onto itself (no {success,data} envelope).

@@ -58,7 +58,7 @@ transactions-search =
     .placeholder = Tìm chữ ký…
     .aria-label = Tìm chữ ký giao dịch
 transactions-load-failed = Không thể làm mới giao dịch
-transactions-setup-gate-title = Giao dịch cần có ví
+transactions-access-gate-title = Giao dịch cần có ví
 transactions-summary-total = Tổng
 transactions-summary-success = Thành công
 transactions-summary-failed = Thất bại
@@ -179,3 +179,9 @@ transactions-dialog-raw-empty = Không có dữ liệu thô
 # Empty table (scripts/pages/transactions.js)
 transactions-empty = Chưa có giao dịch
     .message = Các swap và chuyển khoản của ví giao dịch xuất hiện tại đây sau khi được xác nhận on-chain.
+
+## On-demand history
+
+transactions-history-on-demand = Lịch sử cũ hơn được tải khi cần.
+transactions-history-load-older = Tải cũ hơn
+transactions-history-load-older-failed = Không thể tải lịch sử cũ hơn.

@@ -56,17 +56,15 @@ mod message;
 mod tests;
 
 pub use error::BuildRefusal;
-pub use inner::{
-    assess_inner_instructions, attribute_unresolved, AccountControl, SwapCostAssessment,
-};
+pub use inner::{assess_inner_instructions, attribute_unresolved, SwapCostAssessment};
 
 use std::collections::HashMap;
 use std::future::Future;
 use std::str::FromStr;
 
-use crate::chains::solana::constants::{SPL_TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID, USDC_MINT};
+use crate::chains::solana::access::{AccountControl, MintLookup};
+use crate::chains::solana::constants::USDC_MINT;
 use crate::chains::solana::rpc::types::SimulationOutcome;
-use crate::chains::solana::solana_program::program_pack::Pack;
 use crate::chains::solana::solana_sdk::{pubkey::Pubkey, transaction::VersionedTransaction};
 use crate::chains::solana::swaps::presend::SwapNode;
 use crate::chains::solana::swaps::revenue;
@@ -436,32 +434,27 @@ where
 /// that is native, USDC or not a Token-2022 mint, and any read that fails,
 /// leave the fee unsubtracted.
 async fn output_transfer_fee<N: SwapNode>(node: &N, quote: &Quote) -> Option<u64> {
-    use crate::chains::solana::spl_token_2022::extension::{
-        transfer_fee::TransferFeeConfig, BaseStateWithExtensions, StateWithExtensions,
-    };
-
     if crate::chains::adapter().is_native_asset(&quote.output_mint)
         || quote.output_mint == USDC_MINT
     {
         return None;
     }
-    let mint = match Pubkey::from_str(&quote.output_mint) {
-        Ok(mint) => mint,
-        Err(error) => {
-            logger::debug(
-                LogTag::Swap,
-                &format!("Could not parse output mint for transfer-fee check: {error}"),
-            );
-            return None;
-        }
-    };
-    let account = match node.accounts(&[mint]).await {
-        Ok(accounts) => match accounts.into_iter().next().flatten() {
-            Some(account) if account.owner == crate::chains::solana::spl_token_2022::id() => {
-                account
-            }
-            _ => return None,
-        },
+    if let Err(error) = Pubkey::from_str(&quote.output_mint) {
+        logger::debug(
+            LogTag::Swap,
+            &format!("Could not parse output mint for transfer-fee check: {error}"),
+        );
+        return None;
+    }
+    let schedule = match node
+        .mint_facts(std::slice::from_ref(&quote.output_mint))
+        .await
+    {
+        Ok(lookups) => lookups
+            .into_iter()
+            .next()
+            .and_then(MintLookup::into_facts)
+            .and_then(|facts| facts.transfer_fee)?,
         Err(error) => {
             logger::debug(
                 LogTag::Swap,
@@ -470,22 +463,6 @@ async fn output_transfer_fee<N: SwapNode>(node: &N, quote: &Quote) -> Option<u64
             return None;
         }
     };
-    let state =
-        match StateWithExtensions::<crate::chains::solana::spl_token_2022::state::Mint>::unpack(
-            &account.data,
-        ) {
-            Ok(state) => state,
-            Err(error) => {
-                logger::debug(
-                    LogTag::Swap,
-                    &format!(
-                        "Could not parse Token-2022 output mint for transfer-fee check: {error}"
-                    ),
-                );
-                return None;
-            }
-        };
-    let config = state.get_extension::<TransferFeeConfig>().ok()?;
     let epoch = match node.epoch().await {
         Ok(epoch) => epoch,
         Err(error) => {
@@ -506,7 +483,7 @@ async fn output_transfer_fee<N: SwapNode>(node: &N, quote: &Quote) -> Option<u64
             return None;
         }
     };
-    let fee = config.calculate_epoch_fee(epoch, minimum);
+    let fee = schedule.fee_at(epoch, minimum);
     if fee.is_none() {
         logger::debug(LogTag::Swap, "Could not calculate output transfer fee");
     }
@@ -537,25 +514,15 @@ async fn resolve_owners<N: SwapNode>(
     node: &N,
     addresses: Vec<String>,
 ) -> Option<HashMap<String, AccountControl>> {
-    let keys: Vec<Pubkey> = addresses
-        .iter()
-        .filter_map(|address| Pubkey::from_str(address).ok())
+    let addresses: Vec<String> = addresses
+        .into_iter()
+        .filter(|address| Pubkey::from_str(address).is_ok())
         .collect();
-    if keys.is_empty() {
+    if addresses.is_empty() {
         return Some(HashMap::new());
     }
-    match node.accounts(&keys).await {
-        Ok(accounts) => Some(
-            keys.iter()
-                .zip(accounts)
-                .filter_map(|(key, account)| {
-                    account.map(|account| {
-                        let program = account.owner.to_string();
-                        (key.to_string(), account_control(program, &account.data))
-                    })
-                })
-                .collect(),
-        ),
+    match node.account_controls(&addresses).await {
+        Ok(controls) => Some(controls),
         Err(e) => {
             logger::warning(
                 LogTag::Swap,
@@ -563,27 +530,5 @@ async fn resolve_owners<N: SwapNode>(
             );
             None
         }
-    }
-}
-
-/// Who controls an account owned by `program` with `data`: the authority of a
-/// token account, otherwise the program itself.
-fn account_control(program: String, data: &[u8]) -> AccountControl {
-    let authority = match program.as_str() {
-        SPL_TOKEN_PROGRAM_ID => crate::chains::solana::spl_token::state::Account::unpack(data)
-            .ok()
-            .map(|account| account.owner.to_string()),
-        TOKEN_2022_PROGRAM_ID => {
-            crate::chains::solana::spl_token_2022::extension::StateWithExtensions::<
-                crate::chains::solana::spl_token_2022::state::Account,
-            >::unpack(data)
-            .ok()
-            .map(|account| account.base.owner.to_string())
-        }
-        _ => None,
-    };
-    match authority {
-        Some(authority) => AccountControl::TokenAccount { program, authority },
-        None => AccountControl::Program(program),
     }
 }

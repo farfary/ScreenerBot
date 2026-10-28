@@ -1,5 +1,5 @@
 account-data-access-ready = Les données { -brand } sont actives
-    .detail = Les bougies partagées, le registre des pools, les rapports de sécurité et l'identité des tokens sont fournis par screenerbot.io.
+    .detail = Les graphiques, les données de pools et les rapports de sécurité sont chargés depuis screenerbot.io.
 
 account-data-access-disabled = Les données { -brand } sont désactivées
     .detail = La source { -brand } est désactivée dans vos paramètres : les données proviennent uniquement des fournisseurs publics.
@@ -8,7 +8,7 @@ account-data-access-offline = Les données { -brand } sont hors ligne
     .detail = Aucune connexion réseau. Les données reprendront automatiquement dès le retour de la connexion.
 
 account-data-access-signed-out = Les données { -brand } nécessitent un compte
-    .detail = Les graphiques, les pools, les rapports de sécurité et l'identité des tokens proviennent alors des fournisseurs publics. Ils sont plus lents, soumis à des limites de débit et moins riches en historique. La connexion est gratuite et ne change rien d'autre au fonctionnement de { -brand }.
+    .detail = Les graphiques, les pools et les rapports de sécurité proviennent alors des fournisseurs publics. Ils sont plus lents, soumis à des limites de débit et moins riches en historique. La connexion est gratuite et ne change rien d'autre au fonctionnement de { -brand }.
 
 account-data-access-reauthorization-required = Les données { -brand } nécessitent une nouvelle connexion
     .detail = Cet appareil a été autorisé avant l'existence des données { -brand }. Reconnectez-vous pour les rétablir ; les fournisseurs publics sont utilisés en attendant.
@@ -20,15 +20,16 @@ account-data-access-unreachable = Les données { -brand } ne répondent pas
     .detail = Le service n'a pas répondu. Les fournisseurs publics sont utilisés et { -brand } continuera de réessayer.
 
 account-data-access-unknown = Les données { -brand } n'ont pas encore été vérifiées
-    .detail = { -brand } n'a pas encore eu besoin des données partagées durant cette session.
+    .detail = { -brand } n'a pas encore chargé ces données durant cette session.
 
 ## Account panel (ui/account/panel.js), shared by Setup and Settings
 
 account-scope-data-read = Données de marché { -brand }
-account-scope-rpc-submit = Envoi gratuit de transactions signées
+account-scope-rpc-submit = Envoi des transactions via { -brand }
 account-scope-vote = Vote sur les tokens
 account-scope-referral-read = Gains de parrainage
 account-scope-account-read = Détails du compte
+account-scope-chain-read = Lectures du wallet pour le service { -brand }
 
 account-panel-request-failed = L'opération a échoué. Veuillez réessayer.
 account-panel-checking = Vérification du statut du compte…

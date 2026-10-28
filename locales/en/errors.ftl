@@ -47,7 +47,7 @@ errors-account-signin-refused = { $reason }
 errors-account-signin-unavailable = Sign-in is unavailable
 errors-account-credentials-required = Enter your email address and password.
 errors-account-signout-failed = Sign-out failed
-errors-account-gateway-update-failed = Could not update the gateway setting
+errors-account-gateway-update-failed = Could not update the sending setting
 
 # Localization
 errors-i18n-locale-not-registered = Locale is not registered
@@ -134,6 +134,8 @@ errors-transactions-own-wallet-unavailable = The main wallet is not configured
 errors-transactions-invalid-subject = Transaction subject is not a valid Solana address
 errors-transactions-subject-not-watched = Transaction subject is not a watched wallet
 errors-transactions-watch-store-unavailable = Watched wallets are not available
+errors-transactions-history-loading = Older transactions are already loading.
+errors-transactions-history-load-failed = Older transactions could not be loaded.
 
 # Wallet
 errors-wallet-unavailable = Main wallet is not available
@@ -421,3 +423,17 @@ errors-tokens-search-failed = Token search failed
 # Actions and services
 errors-actions-not-found = Action { $id } not found
 errors-services-not-found = Service '{ $name }' not found
+
+# Chain access
+errors-chain-capability-unavailable = This needs your own RPC connection.
+errors-chain-service-signin-required = Sign in to use the { -brand } service.
+errors-chain-service-scope-missing = Sign in again to allow wallet reads.
+errors-chain-service-busy = The { -brand } service is busy. Try again in a moment.
+errors-chain-service-daily-limit = Your account reached today's limit for the { -brand } service.
+errors-chain-service-version = This version is too old for the { -brand } service. Update to { $minimum } or later.
+errors-chain-service-refused = The { -brand } service refused the request.
+errors-chain-service-unreachable = screenerbot.io can't be reached.
+errors-chain-not-trading-wallet = Only the trading wallet can be read in { -brand } service mode.
+errors-chain-access-failed = The blockchain request failed.
+errors-chain-access-unchanged = This connection is already in use.
+errors-chain-access-switch-failed = The connection could not be switched.

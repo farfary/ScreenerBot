@@ -70,7 +70,7 @@ transactions-search =
     .placeholder = Buscar firmas…
     .aria-label = Buscar firmas de transacciones
 transactions-load-failed = No se pudieron actualizar las transacciones
-transactions-setup-gate-title = Las transacciones requieren una billetera
+transactions-access-gate-title = Las transacciones requieren una billetera
 transactions-summary-total = Total
 transactions-summary-success = Exitosas
 transactions-summary-failed = Fallidas
@@ -203,3 +203,9 @@ transactions-dialog-raw-empty = No hay datos crudos disponibles
 # Empty table (scripts/pages/transactions.js)
 transactions-empty = Aún no hay transacciones
     .message = Los swaps y transferencias de la billetera de trading aparecen aquí cuando se confirman en la cadena.
+
+## On-demand history
+
+transactions-history-on-demand = El historial más antiguo se carga bajo demanda.
+transactions-history-load-older = Cargar anteriores
+transactions-history-load-older-failed = No se pudo cargar el historial más antiguo.

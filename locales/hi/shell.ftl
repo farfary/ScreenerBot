@@ -267,3 +267,19 @@ shell-theme-light = लाइट
 shell-theme-dark = डार्क
 shell-theme-switch-to-light = लाइट थीम पर जाएं
 shell-theme-switch-to-dark = डार्क थीम पर जाएं
+
+## Chain access: service mode controls, gates and sign-out
+
+shell-service-control =
+    .aria-label = ट्रेडिंग रुकी है। विवरण खोलें
+shell-service-action-signin = साइन इन करें
+shell-service-action-connection = RPC जोड़ें
+shell-access-gate-own-rpc-title = आपका अपना RPC चाहिए
+shell-access-gate-watch-wallets = कॉपी ट्रेडिंग और वॉलेट वॉच दूसरे वॉलेट को लाइव फ़ॉलो करते हैं, जो { -brand } सेवा नहीं करती। आपके कॉपी टास्क और वॉच किए गए वॉलेट बने रहते हैं और RPC जोड़ने पर लौट आते हैं।
+shell-access-gate-live-pool-prices = लाइव पूल कीमतों के लिए आपका अपना RPC चाहिए।
+shell-access-gate-direct-swaps = डायरेक्ट पूल स्वैप के लिए आपका अपना RPC चाहिए।
+shell-access-gate-other-wallets = दूसरे वॉलेट के बैलेंस के लिए आपका अपना RPC चाहिए।
+shell-access-gate-action = कनेक्शन सेटिंग्स खोलें
+shell-signout-service-title = साइन आउट करें और ट्रेडिंग रोकें?
+shell-signout-service-message = आपके अपने RPC के बिना, { -brand } आपका वॉलेट पढ़ने और ट्रेड भेजने के लिए आपके अकाउंट का इस्तेमाल करता है। साइन आउट रहने तक ट्रेडिंग रुकी रहती है और खुली पोज़िशन नहीं बेची जातीं।
+shell-signout-service-confirm = साइन आउट करें और रोकें

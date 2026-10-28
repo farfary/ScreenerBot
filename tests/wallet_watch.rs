@@ -103,8 +103,10 @@ fn multiple_pages_keep_global_oldest_first_order() {
 
 #[test]
 fn polling_escalates_offline_and_gap_fill_is_edge_triggered() {
-    assert_eq!(cadence_secs(true, 30, 3), 30);
-    assert_eq!(cadence_secs(false, 30, 3), 3);
+    assert_eq!(cadence_secs(true, true, 30, 3), Some(30));
+    assert_eq!(cadence_secs(false, true, 30, 3), Some(3));
+    assert_eq!(cadence_secs(true, false, 30, 3), None);
+    assert_eq!(cadence_secs(false, false, 30, 3), Some(3));
     assert!(needs_gap_fill(true, false, false));
     assert!(needs_gap_fill(false, false, true));
     assert!(!needs_gap_fill(false, true, true));

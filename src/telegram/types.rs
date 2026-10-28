@@ -78,6 +78,10 @@ pub enum NotificationType {
         signature: String,
     },
 
+    /// Chain access stopped answering while live positions are open: no position is
+    /// opened or sold until it is ready again. `reason` is the access state's text.
+    TradingPaused { reason: UiText },
+
     /// System error or warning notification
     SystemError {
         message: String,
@@ -376,6 +380,11 @@ impl Notification {
             token_mint,
             signature,
         })
+    }
+
+    /// Create a notification that trading paused because chain access is not ready
+    pub fn trading_paused(reason: UiText) -> Self {
+        Self::new(NotificationType::TradingPaused { reason })
     }
 
     /// Create a system error notification

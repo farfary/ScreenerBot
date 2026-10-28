@@ -318,3 +318,19 @@ shell-theme-light = 浅色
 shell-theme-dark = 深色
 shell-theme-switch-to-light = 切换到浅色主题
 shell-theme-switch-to-dark = 切换到深色主题
+
+## Chain access: service mode controls, gates and sign-out
+
+shell-service-control =
+    .aria-label = 交易已暂停。打开详情
+shell-service-action-signin = 登录
+shell-service-action-connection = 添加 RPC
+shell-access-gate-own-rpc-title = 需要你自己的 RPC
+shell-access-gate-watch-wallets = 跟单交易和钱包监控需要实时跟踪其他钱包，而 { -brand } 服务不提供此功能。你的跟单任务和监控钱包会保留，添加 RPC 后即恢复。
+shell-access-gate-live-pool-prices = 实时池价格需要你自己的 RPC。
+shell-access-gate-direct-swaps = 直接池兑换需要你自己的 RPC。
+shell-access-gate-other-wallets = 其他钱包的余额需要你自己的 RPC。
+shell-access-gate-action = 打开连接设置
+shell-signout-service-title = 退出登录并暂停交易？
+shell-signout-service-message = 没有你自己的 RPC 时，{ -brand } 使用你的账户读取钱包并发送交易。退出登录期间，交易会暂停，未平仓位不会被卖出。
+shell-signout-service-confirm = 退出并暂停

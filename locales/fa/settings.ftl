@@ -34,6 +34,7 @@ settings-dialog-tab-hints = راهنماها
 settings-dialog-tab-data = داده
 settings-dialog-tab-security = امنیت
 settings-dialog-tab-account = حساب کاربری
+settings-dialog-tab-connection = اتصال
 settings-dialog-tab-telegram = { -telegram }
 settings-dialog-tab-agent-connections = اتصال‌های عامل
 settings-dialog-tab-updates = به‌روزرسانی‌ها
@@ -504,14 +505,12 @@ settings-hints-restored = همه راهنماها بازگردانده شد
 ## account_tab.js
 
 settings-account-title = حساب { -brand }
-settings-account-description = رایگان و اختیاری. { -brand } بدون حساب هم معامله، کشف و رسم نمودار می‌کند — فقط از ارائه‌دهندگان عمومی استفاده می‌کند. پنل زیر نشان می‌دهد ورود به حساب چه چیزهایی اضافه می‌کند.
+settings-account-description = رایگان. با RPC خودتان اختیاری است: { -brand } بدون حساب هم با ارائه‌دهندگان عمومی معامله، کشف و رسم نمودار می‌کند. سرویس { -brand } به حساب نیاز دارد. پنل زیر نشان می‌دهد ورود به حساب چه چیزهایی اضافه می‌کند.
+settings-account-description-service = رایگان و برای سرویس { -brand } لازم: خواندن کیف پول و سوآپ‌هایی که امضا می‌کنید با این حساب از screenerbot.io می‌گذرند. کلید خصوصی شما هرگز از این رایانه خارج نمی‌شود.
 settings-account-data-title = داده { -brand }
-settings-account-data-description = ما یک سرویس داده بازار مشترک در screenerbot.io اجرا می‌کنیم: کندل‌های تجمیعی در هفت بازه زمانی، یک رجیستری استخرهای شناسایی‌شده، گزارش‌های امنیتی کش‌شده و هویت نرمال‌شده توکن. این سرویس نمی‌گذارد هر نصب به‌تنهایی گرفتار محدودیت نرخ ارائه‌دهندگان عمومی شود. استفاده از سرویس به حساب نیاز دارد تا هزینه اجرای آن قابل انتساب باشد و سوءاستفاده محدود شود.
+settings-account-data-description = { -brand } در screenerbot.io یک سرویس مشترک دادهٔ بازار برای نمودارها، دادهٔ استخرها، گزارش‌های امنیتی و جزئیات توکن‌ها اجرا می‌کند تا نصب شما به‌تنهایی با محدودیت نرخ ارائه‌دهندگان عمومی روبه‌رو نشود. این سرویس برای محدود کردن سوءاستفاده به یک حساب رایگان نیاز دارد.
 settings-account-data-fallback = وقتی در دسترس نباشد، { -brand } به‌طور خودکار به ارائه‌دهندگان عمومی برمی‌گردد. هیچ چیز متوقف نمی‌شود؛ نمودارها کندتر پر می‌شوند و تاریخچه کمتری دارند.
-settings-account-gateway-title = ارسال تراکنش‌ها
-settings-account-gateway-description = وقتی وارد حساب باشید، { -brand } می‌تواند سواپ‌های شما را به‌جای RPC خودتان از طریق screenerbot.io پخش کند. ربات شما همچنان هر تراکنش را روی همین دستگاه می‌سازد و امضا می‌کند — سرور فقط آن را منتقل می‌کند و نمی‌تواند تراکنش امضاشده را بدون باطل‌کردن امضا تغییر دهد.
-settings-account-gateway-label = استفاده از RPC { -brand } برای ارسال تراکنش‌ها
-settings-account-gateway-hint = فقط برای ارسال. داده قیمت همیشه از RPC خودتان می‌آید — پایش استخرها برای یک اندپوینت مشترک بسیار سنگین است و هرگز به آنجا فرستاده نمی‌شود.
+settings-account-data-fallback-service = در سرویس { -brand }، خواندن کیف پول و معاملات هم از screenerbot.io می‌گذرند: تا وقتی در دسترس نباشد، معامله متوقف می‌ماند و با برگشتن اتصال ادامه پیدا می‌کند.
 settings-account-manage-title = مدیریت حساب
 settings-account-manage-description = گذرواژه، نشانی ایمیل، دستگاه‌های متصل و پرداخت‌های ارجاع شما در وب‌سایت مدیریت می‌شود. لغو یک دستگاه در آنجا آن را از همه‌جا، از جمله همین دستگاه، خارج می‌کند.
 settings-account-open-dashboard = باز کردن داشبورد شما
@@ -632,3 +631,26 @@ settings-data-folder-label = باز کردن پوشه داده
 settings-data-folder-hint = پوشه حاوی همه داده‌های { -brand } را در مدیر فایل خود باز کنید.
 settings-data-folder-open = باز کردن پوشه
 settings-data-folder-open-failed = باز کردن پوشه داده ممکن نشد
+
+## Connection tab (scripts/ui/settings/connection_tab.js)
+
+settings-connection-title = اتصال
+settings-connection-description = { -brand } چگونه به { -solana } دسترسی پیدا می‌کند.
+settings-connection-choice =
+    .aria-label = اتصال
+settings-connection-active = فعال
+settings-connection-service-title = سرویس { -brand }
+settings-connection-service-detail = قیمت‌ها هر چند ثانیه یک بار به‌روز می‌شوند. کپی‌تریدینگ، پایش کیف پول‌ها، موجودی کیف پول‌های دیگر، تاریخچه قدیمی‌تر، سوآپ مستقیم در استخر و قیمت زندهٔ استخرها به RPC خودتان نیاز دارند.
+settings-connection-own-title = RPC خودتان
+settings-connection-own-detail = قیمت‌ها حدود دو بار در ثانیه و همهٔ قابلیت‌ها.
+settings-connection-apply = اعمال و راه‌اندازی دوباره
+settings-connection-to-service-title = به سرویس { -brand } تغییر کند؟
+settings-connection-to-service-message = کپی‌تریدینگ، پایش کیف پول‌ها، موجودی کیف پول‌های دیگر، تاریخچه قدیمی‌تر، سوآپ مستقیم در استخر و قیمت زندهٔ استخرها خاموش می‌شوند؛ تنظیمات آن‌ها حفظ می‌شود. هر زمان از حساب خارج باشید معامله متوقف می‌شود. { -brand } برای تغییر دوباره راه‌اندازی می‌شود.
+settings-connection-to-own-title = به RPC خودتان تغییر کند؟
+settings-connection-to-own-message = { -brand } نقاط اتصال شما را بررسی می‌کند و سپس برای تغییر دوباره راه‌اندازی می‌شود. همهٔ قابلیت‌ها دوباره روشن می‌شوند.
+settings-connection-signed-in-as = متصل · واردشده با نام { $name }
+settings-connection-sending-title = ارسال تراکنش‌ها
+settings-connection-sending-label = ارسال تراکنش‌ها از طریق { -brand }
+settings-connection-sending-own-hint = هنگامی که وارد حساب هستید، سوآپ‌هایی که روی این رایانه امضا می‌کنید از طریق screenerbot.io پخش می‌شوند. وقتی ممکن نباشد، از RPC شما استفاده می‌شود.
+settings-connection-sending-service-hint = با سرویس { -brand } همیشه روشن است: سوآپ‌هایی که روی این رایانه امضا می‌کنید از همین راه به { -solana } می‌رسند.
+settings-connection-switch-failed = تغییر اتصال ممکن نشد.

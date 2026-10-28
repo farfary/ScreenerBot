@@ -36,3 +36,6 @@ chart-status-total-idle =
         [many] { $count } velas · inactivo
        *[other] { $count } velas · inactivo
     }
+
+chart-inline-curve-label = P&L acumulado { $amount } { -sol }
+chart-inline-histogram-title = { $count } de { $total }

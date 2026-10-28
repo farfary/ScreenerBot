@@ -70,7 +70,7 @@ transactions-search =
     .placeholder = 서명 검색…
     .aria-label = 트랜잭션 서명 검색
 transactions-load-failed = 트랜잭션을 새로 고치지 못했습니다
-transactions-setup-gate-title = 거래 내역을 보려면 지갑이 필요합니다
+transactions-access-gate-title = 거래 내역을 보려면 지갑이 필요합니다
 transactions-summary-total = 전체
 transactions-summary-success = 성공
 transactions-summary-failed = 실패
@@ -199,3 +199,9 @@ transactions-dialog-raw-empty = 사용 가능한 원본 데이터가 없습니�
 # Empty table (scripts/pages/transactions.js)
 transactions-empty = 아직 거래 내역이 없습니다
     .message = 트레이딩 지갑의 스왑과 전송은 온체인에서 확인되면 여기에 표시됩니다.
+
+## On-demand history
+
+transactions-history-on-demand = 이전 기록은 필요할 때 불러옵니다.
+transactions-history-load-older = 이전 기록 불러오기
+transactions-history-load-older-failed = 이전 기록을 불러오지 못했습니다.

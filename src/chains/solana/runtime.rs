@@ -32,7 +32,12 @@ impl ChainRuntime for SolanaRuntime {
     }
 
     fn wallet_watch_runtime(&self) -> Arc<dyn WalletWatchRuntime> {
-        crate::chains::solana::wallets::runtime::build_runtime()
+        match crate::chains::solana::access::service_backend() {
+            Some(backend) => {
+                crate::chains::solana::wallets::service_runtime::build_runtime(backend)
+            }
+            None => crate::chains::solana::wallets::runtime::build_runtime(),
+        }
     }
 
     async fn read_token_account(&self, address: &str) -> crate::chains::Result<TokenAccountFacts> {

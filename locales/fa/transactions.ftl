@@ -70,7 +70,7 @@ transactions-search =
     .placeholder = جستجوی امضاها…
     .aria-label = جستجوی امضای تراکنش‌ها
 transactions-load-failed = به‌روزرسانی تراکنش‌ها ممکن نشد
-transactions-setup-gate-title = تراکنش‌ها به کیف پول نیاز دارند
+transactions-access-gate-title = تراکنش‌ها به کیف پول نیاز دارند
 transactions-summary-total = مجموع
 transactions-summary-success = موفق
 transactions-summary-failed = ناموفق
@@ -201,3 +201,9 @@ transactions-dialog-raw-empty = داده خامی موجود نیست
 # Empty table (scripts/pages/transactions.js)
 transactions-empty = هنوز تراکنشی نیست
     .message = سواپ‌ها و انتقال‌های کیف پول معاملاتی پس از تأیید روی زنجیره در اینجا نمایش داده می‌شوند.
+
+## On-demand history
+
+transactions-history-on-demand = تاریخچهٔ قدیمی‌تر در صورت نیاز بارگذاری می‌شود.
+transactions-history-load-older = بارگذاری قدیمی‌ترها
+transactions-history-load-older-failed = بارگذاری تاریخچهٔ قدیمی‌تر ممکن نشد.

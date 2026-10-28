@@ -35,6 +35,7 @@ import {
 import { applyUtilitiesMixin } from "./token_details/utilities.js";
 import { applyStateHandlingMixin } from "./token_details/state_handling.js";
 import { renderStateView } from "./state_view.js";
+import { capabilityAvailable, capabilityReason } from "./access_gate.js";
 import { applyPositionsTabMixin } from "./token_details/positions_tab.js";
 import {
   getIdentity,
@@ -1098,9 +1099,14 @@ export class TokenDetailsDialog {
       // (cached market-data fallback).
       if (token.price_source) {
         const isPool = token.price_source === "pool";
+        // Without live pool prices the API quote is the only one: the badge says why.
+        const poolReason =
+          isPool || capabilityAvailable("live_pool_prices")
+            ? ""
+            : capabilityReason("live_pool_prices");
         const priceTitle = isPool
           ? I18n.t("tokens-dialog-badge-pool-price-hint")
-          : I18n.t("tokens-dialog-badge-api-price-hint");
+          : poolReason || I18n.t("tokens-dialog-badge-api-price-hint");
         const priceLabel = isPool
           ? I18n.t("tokens-dialog-badge-pool-price")
           : I18n.t("tokens-dialog-badge-api-price");

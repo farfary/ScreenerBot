@@ -24,7 +24,6 @@ positions-paper-empty = ペーパーポジションはありません
 positions-paper-archived-empty = アーカイブ済みのペーパーポジションはありません
     .message = ペーパーのラウンドは保有中と決済済みに残ります。アーカイブされるのはライブポジションのみです。
 positions-paper-empty-action = ストラテジーを開く
-positions-origin-copy = コピー
 positions-origin-manual = 手動
 positions-origin-wallet = ウォレット
 positions-origin-copy-link =

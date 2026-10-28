@@ -566,6 +566,8 @@ mod tests {
             "/api/services/start",
             "/api/account/status",
             "/api/wallet/export",
+            "/api/initialization/wallet/generate",
+            "/api/chain/access",
         ] {
             assert!(!is_security_token_exempt_path(path), "{path}");
         }

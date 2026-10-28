@@ -9,6 +9,7 @@
 //! `cargo test --test integration` is safe only filtered to one module, the isolation each file
 //! had as a binary of its own.
 
+mod account_gateway;
 mod agent_control_bridge;
 mod agent_control_config_tools;
 mod agent_control_store;

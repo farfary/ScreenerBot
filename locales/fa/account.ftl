@@ -3,7 +3,7 @@
 # src/data_server/access.rs.
 
 account-data-access-ready = داده‌های { -brand } فعال است
-    .detail = کندل‌های مشترک، رجیستری استخرها، گزارش‌های امنیتی و هویت توکن‌ها از screenerbot.io ارائه می‌شود.
+    .detail = نمودارها، داده‌های استخرها و گزارش‌های امنیتی از screenerbot.io بارگذاری می‌شوند.
 
 account-data-access-disabled = داده‌های { -brand } خاموش است
     .detail = منبع { -brand } در تنظیمات شما خاموش شده است، بنابراین داده فقط از ارائه‌دهندگان عمومی دریافت می‌شود.
@@ -12,7 +12,7 @@ account-data-access-offline = داده‌های { -brand } آفلاین است
     .detail = اتصال شبکه برقرار نیست. با بازگشت اتصال، دریافت داده خودکار از سر گرفته می‌شود.
 
 account-data-access-signed-out = داده‌های { -brand } به حساب کاربری نیاز دارد
-    .detail = نمودارها، استخرها، گزارش‌های امنیتی و هویت توکن‌ها به‌جای آن از ارائه‌دهندگان عمومی دریافت می‌شوند. این منابع کندتر هستند، محدودیت نرخ دارند و تاریخچه کمتری ارائه می‌دهند. ورود رایگان است و هیچ چیز دیگری را در نحوه کار { -brand } تغییر نمی‌دهد.
+    .detail = نمودارها، استخرها و گزارش‌های امنیتی به‌جای آن از ارائه‌دهندگان عمومی دریافت می‌شوند. این منابع کندتر هستند، محدودیت نرخ دارند و تاریخچه کمتری ارائه می‌دهند. ورود رایگان است و هیچ چیز دیگری را در نحوه کار { -brand } تغییر نمی‌دهد.
 
 account-data-access-reauthorization-required = داده‌های { -brand } به ورود مجدد شما نیاز دارد
     .detail = این دستگاه پیش از وجود داده‌های { -brand } مجاز شده بود. برای بازگرداندن آن دوباره وارد شوید — تا آن زمان از ارائه‌دهندگان عمومی استفاده می‌شود.
@@ -24,16 +24,17 @@ account-data-access-unreachable = داده‌های { -brand } پاسخ نمی�
     .detail = سرویس پاسخ نداد. از ارائه‌دهندگان عمومی استفاده می‌شود و { -brand } به تلاش مجدد ادامه می‌دهد.
 
 account-data-access-unknown = داده‌های { -brand } هنوز بررسی نشده است
-    .detail = { -brand } در این نشست هنوز به داده مشترک نیاز پیدا نکرده است.
+    .detail = { -brand } در این نشست هنوز این داده‌ها را بارگذاری نکرده است.
 
 ## Account panel (ui/account/panel.js), shared by Setup and Settings
 
 # Features a signed-in account carries.
 account-scope-data-read = داده بازار { -brand }
-account-scope-rpc-submit = ارسال رایگان تراکنش امضاشده
+account-scope-rpc-submit = ارسال تراکنش‌ها از طریق { -brand }
 account-scope-vote = رأی‌دهی به توکن‌ها
 account-scope-referral-read = درآمد معرفی
 account-scope-account-read = جزئیات حساب
+account-scope-chain-read = خواندن کیف پول برای سرویس { -brand }
 
 account-panel-request-failed = انجام نشد. لطفاً دوباره تلاش کنید.
 account-panel-checking = در حال بررسی وضعیت حساب…

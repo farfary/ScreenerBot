@@ -31,10 +31,13 @@ pub struct CopyTradingStatus {
 }
 
 impl CopyTradingStatus {
-    /// Whether any task is copying: Copy Trading is on, no force stop halts it, and at
-    /// least one task is enabled. A loss-limit block still copies exits, so it counts.
+    /// Whether any task is copying: Copy Trading is on, the chain connection can follow
+    /// other wallets, no force stop halts it, and at least one task is enabled. A
+    /// loss-limit block still copies exits, so it counts.
     pub fn is_copying(&self) -> bool {
-        self.enabled && self.blocked_reason != Some("force_stop") && self.active_tasks > 0
+        self.enabled
+            && !matches!(self.blocked_reason, Some("own_rpc_required" | "force_stop"))
+            && self.active_tasks > 0
     }
 }
 
@@ -61,7 +64,13 @@ pub fn build_status(tasks: &[CopyTask]) -> CopyTradingStatus {
     CopyTradingStatus {
         enabled,
         live_available: live_block_reason().is_none(),
-        blocked_reason: if crate::global::is_force_stopped() {
+        // The ScreenerBot service cannot follow other wallets, so nothing is copied
+        // there whatever the other gates say; the tasks are kept for an own RPC.
+        blocked_reason: if !crate::chains::access::active_has(
+            crate::chains::access::Capability::WatchOtherWallets,
+        ) {
+            Some("own_rpc_required")
+        } else if crate::global::is_force_stopped() {
             Some("force_stop")
         } else if crate::trader::safety::loss_limit::is_entry_blocked_by_loss_limit() {
             Some("loss_limit")
@@ -139,6 +148,8 @@ pub(in crate::trader::copy) fn effective_state(
 ) -> &'static str {
     if !status.enabled {
         "system_paused"
+    } else if status.blocked_reason == Some("own_rpc_required") {
+        "own_rpc_required"
     } else if status.blocked_reason == Some("force_stop") {
         "force_stopped"
     } else if !task.enabled {

@@ -334,8 +334,7 @@ async fn verification_worker(shutdown: Arc<Notify>) {
     loop {
         let tx_ready =
             crate::global::TRANSACTIONS_SYSTEM_READY.load(std::sync::atomic::Ordering::SeqCst);
-        let pool_ready =
-            crate::global::POOL_SERVICE_READY.load(std::sync::atomic::Ordering::SeqCst);
+        let pool_ready = crate::global::pool_prerequisite_ready();
 
         if tx_ready && pool_ready {
             logger::info(

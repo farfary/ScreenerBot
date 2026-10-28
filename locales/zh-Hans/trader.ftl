@@ -1,20 +1,5 @@
 # Trader page labels.
 
-# Exit types shown in the exit breakdown. Ids are the stored closed_reason: exit
-# rule ids, the Debug names of the exit TradeReason variants (src/trader/types.rs,
-# shown as readable labels) and the reasons written by src/positions and src/trader/stats.rs.
-trader-exit-type-stop-loss = 止损
-trader-exit-type-take-profit = 止盈
-trader-exit-type-roi = 止盈
-trader-exit-type-roi-exit = 止盈
-trader-exit-type-trailing-stop = 追踪止损
-trader-exit-type-time-override = 时间出场
-trader-exit-type-time-rule = 时间规则
-trader-exit-type-manual = 手动
-trader-exit-type-manual-close = 手动
-trader-exit-type-dca = DCA
-trader-exit-type-unknown = 未知
-
 ## Sub-tabs. Ids are the tab ids of the trader page.
 
 trader-tab-stats = 统计
@@ -34,36 +19,45 @@ trader-feature-beta = 测试版
 trader-feature-disabled = 已停用
     .message = 此功能当前已停用。
 
-## Status bar and trading controls
+## Toolbar, notices and trading controls
 
 trader-status-title = 自动交易
-trader-status-loading = 正在加载...
 trader-status-running = 运行中
 trader-status-stopped = 已停止
 trader-status-setup-required = 需要设置
 trader-setup-action = 完成设置
-trader-toggle-on = 已启用
-trader-toggle-off = 已停用
 trader-toggle-start-failed = 启动交易引擎失败
 trader-toggle-stop-failed = 停止交易引擎失败
-trader-controls-title = 交易控制
 trader-halt-title = 交易已暂停
 trader-halt-reason-default = 手动强制停止
 trader-halt-resume = 恢复
 trader-monitor-entry = 入场监控
 trader-monitor-exit = 出场监控
-trader-monitor-master-off = 自动交易已关闭
 trader-loss-limit-title = 周期亏损限额
 trader-loss-limit-resume = 恢复交易
 trader-loss-limit-reset = 重置周期
 trader-loss-limit-off = 关闭
-trader-loss-limit-none = 未配置周期亏损限额
 # $hours and $minutes are formatted spans such as "2h" and "5m".
 trader-loss-limit-resets-in = { $hours } { $minutes }后重置
-trader-loss-limit-reached = 已达限额
 trader-force-stop = 强制停止全部
 trader-force-stop-hint = 立即停止所有监控、复制任务和交易。
 trader-force-stop-idle = 当前没有可供强制停止的运行项。
+trader-run-state-force-stopped = 强制停止
+trader-run-state-waiting = 等待服务
+trader-run-state-idle = 监控已关闭
+trader-entries-label = 新入场
+trader-entries-open = 开放
+trader-entries-monitor-off = 入场监控已关闭
+trader-entries-no-live-strategy = 没有实盘入场策略
+trader-entries-no-paper-strategy = 没有模拟入场策略
+trader-action-start = 启动自动交易
+trader-action-stop = 停止自动交易
+trader-notice-loss-limit = 已达亏损上限
+trader-notice-loss-limit-message = 新的实盘入场已暂停，直到周期重置。出场继续进行。
+trader-notice-stats-failed = 无法加载统计数据
+trader-controls-group =
+    .aria-label = 交易控制
+trader-monitor-dormant = 随自动交易启动
 
 ## Confirmations. `.message` is the body and `.confirm` the confirming button.
 
@@ -95,33 +89,39 @@ trader-toast-feature-enabled = 功能已启用
 trader-toast-feature-disabled = 功能已停用
 trader-toast-feature-applied = 自动交易设置已应用
 
-## Stats: realized window and metrics
+## Stats: book, window, exposure and figures
 
 trader-stats-window =
     .aria-label = 统计时间窗口
 trader-stats-book =
     .aria-label = 交易账本
-trader-paper-run-since = 自 { $date } 起的模拟周期
-trader-paper-start = 初始
-trader-paper-cash = 现金
-trader-paper-open = 持仓
-trader-paper-unrealized = 未实现
+trader-exposure-cash = 现金
+trader-exposure-open = 持仓
+trader-exposure-unrealized = 未实现
+trader-exposure-open-title = 占用名额的持仓，相对于持仓上限
+trader-exposure-in-use = 已占用
+trader-exposure-in-use-title = 投入持仓的 { -sol }
+# $amount is the formatted count.
+trader-exposure-unpriced =
+    { $count ->
+       *[other] { $amount } 个持仓尚无实时价格
+    }
+# $date is a formatted date; $amount is a formatted SOL amount.
+trader-exposure-cash-title = 自 { $date } 起的模拟周期 · 初始 { $amount }
 trader-paper-reset = 重置模拟周期
 trader-paper-reset-title = 重置模拟周期？
 trader-paper-reset-run-message = 所有未平仓的模拟仓位（包括跟单任务的模拟持仓）将按当前价格平仓，并以设定的初始余额开始新的周期。之前的周期保留在历史中。
 trader-paper-reset-done = 已开始新的模拟周期
 trader-paper-reset-failed = 无法重置模拟周期
-trader-paper-account-failed = 无法加载模拟周期
 trader-realized-title = 已实现表现
 trader-metric-net-pnl = 净盈亏
 trader-metric-win-rate = 胜率
 trader-metric-profit-factor = 盈利因子
 trader-metric-max-drawdown = 最大回撤
-trader-metric-capital = 在投资金
 trader-metric-avg-win-loss = 平均盈利 / 亏损
 trader-metric-closed-trades = 已平仓交易
 trader-metric-median-hold = 持仓时间中位数
-trader-stats-empty = 此时间窗口内没有已平仓交易
+trader-metric-fees = 网络费用
 # $won and $lost are formatted SOL amounts.
 trader-stats-won-lost = 盈利 { $won } · 亏损 { $lost }
 # $wins and $losses are the plural messages below.
@@ -138,53 +138,84 @@ trader-stats-losses =
 trader-stats-expected = 每笔交易预期 { $amount }
 trader-stats-profit-factor-basis = 总盈利 ÷ 总亏损
 trader-stats-drawdown-basis = 已实现的最深峰谷跌幅
-# $count is the position limit and selects the plural.
-trader-stats-slots =
-    { $count ->
-       *[other] 已使用 { $used } / { $max } 个仓位名额
-    }
-trader-stats-avg-basis = 盈利交易与亏损交易的平均结果
-trader-stats-closed =
-    { $count ->
-       *[other] 已平仓 { $amount } 个仓位
-    }
-# $span is a formatted duration.
-trader-stats-hold-average = 平均 { $span }
 trader-stats-excluded =
     { $count ->
-       *[other] 已排除 { $amount } 轮已平仓交易：缺少完整成本，无法得出可信的盈亏。
+       *[other] 已排除 { $amount } 笔已平仓交易：成本不完整，盈亏未知。
     }
+# $ratio is a formatted ratio.
+trader-stats-payoff = 盈亏比 { $ratio }
+trader-stats-streak-win =
+    { $count ->
+       *[other] 连续 { $amount } 笔盈利
+    }
+trader-stats-streak-loss =
+    { $count ->
+       *[other] 连续 { $amount } 笔亏损
+    }
+# $wins and $losses are formatted durations.
+trader-stats-hold-split = 盈利 { $wins } · 亏损 { $losses }
+trader-stats-fees-basis = 已计入净盈亏
+trader-stats-loading = 正在加载统计数据...
+trader-open-strategies = 打开策略
 
-## Stats: daily P&L and extremes
+## Stats: P&L chart, trade outcomes and extremes
 
 trader-daily-title = 每日盈亏
 trader-daily-subtitle = 每日已实现 { -sol }，含累计总额
-trader-daily-loading = 正在加载每日盈亏...
 trader-daily-chart = 以 { -sol } 计的每日已实现盈亏
 trader-weekly-title = 每周盈亏
 trader-weekly-subtitle = 每个 ISO 周已实现 { -sol }，含累计总额
 trader-weekly-chart = 以 { -sol } 计的每周已实现盈亏
+# $date is a formatted date; $pnl a signed SOL amount.
+trader-daily-bar =
+    { $count ->
+       *[other] { $date } · { $pnl } · { $amount } 笔交易
+    }
+trader-weekly-bar =
+    { $count ->
+       *[other] { $date } 当周 · { $pnl } · { $amount } 笔交易
+    }
 trader-extreme-best = 最佳交易
 trader-extreme-worst = 最差交易
+trader-extreme-runs = 最多连续
+trader-outcome-title = 交易结果
+trader-outcome-subtitle = 按收益率划分的已平仓交易（百分比）
+# $value, $from and $to are formatted signed percentages.
+trader-outcome-below = 低于 { $value }
+trader-outcome-range = { $from } 至 { $to }
+trader-outcome-above = { $value } 及以上
+# $range is one of the three messages above; $pnl a signed SOL amount.
+trader-outcome-bucket =
+    { $count ->
+       *[other] { $range } · { $amount } 笔交易 · { $pnl }
+    }
 
-## Stats: exit breakdown
+## Stats: empty windows, exit reasons, entry sources and recent closes
 
-trader-exit-title = 出场策略明细
-trader-exit-subtitle = 仓位的平仓方式，以及每种出场的回收情况
-trader-exit-loading = 正在加载出场数据...
-trader-exit-empty-day = 过去 24 小时内没有已平仓交易
-trader-exit-empty-all = 暂无已平仓交易
-trader-exit-empty-days =
+trader-stats-empty-day = 过去 24 小时内没有已平仓交易
+trader-stats-empty-all = 暂无已平仓交易
+trader-stats-empty-hint = 仓位卖出后，已平仓交易会显示在这里。启动自动交易，或选择更长的时间段。
+trader-stats-empty-days =
     { $count ->
        *[other] 过去 { $amount } 天内没有已平仓交易
     }
-# $share is a formatted percentage of all exits.
-trader-exit-share =
-    { $count ->
-       *[other] { $amount } 笔交易 · 占出场的 { $share }
-    }
-# $value is a formatted average percentage.
-trader-exit-average = 平均 { $value }
+trader-exits-title = 出场原因
+trader-exits-subtitle = 已平仓交易如何结束，以及每种出场的收益
+trader-sources-title = 入场来源
+trader-sources-subtitle = 已平仓交易由什么开仓
+trader-recent-title = 最近平仓
+trader-recent-subtitle = 此时间窗口内最新的已平仓交易
+trader-column-token = 代币
+trader-column-exit = 出场
+trader-column-source = 来源
+trader-column-trades = 交易数
+trader-column-win-rate = 胜率
+trader-column-avg-return = 平均收益
+trader-column-net-pnl = 净盈亏
+trader-column-held = 持有
+trader-column-closed = 平仓
+trader-column-pnl = 盈亏
+trader-column-return = 收益率
 
 ## Shared example vocabulary
 
@@ -402,3 +433,8 @@ trader-timing-concurrency = 入场检查并发数
 trader-timing-concurrency-hint = 同时检查的代币数量（越高越快，但占用更多 CPU）
 trader-timing-unit-minutes = 分钟
 trader-timing-unit-tokens = 个
+
+## Service mode notice
+
+trader-service-notice-title = 正在通过 { -brand } 服务运行
+trader-service-notice-message = 价格每隔几秒刷新一次，因此紧密追踪止损等快速离场的反应会比使用你自己的 RPC 更慢。

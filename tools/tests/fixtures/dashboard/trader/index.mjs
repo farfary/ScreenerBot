@@ -26,7 +26,7 @@ export const endpoints = [
     method: "GET",
     path: "/api/trader/status",
     fixture: "trader_status.json",
-    rust: "src/trader/controller.rs::TraderStatus",
+    rust: "src/trader/status.rs::TraderStatus",
   },
   {
     method: "GET",
@@ -34,8 +34,16 @@ export const endpoints = [
     query: { window: "30d" },
     fixture: "trader_stats.json",
     empty: "trader_stats.empty.json",
-    rust: "src/trader/stats.rs::TraderStats",
+    rust: "src/trader/stats/types.rs::TraderStats",
     record: "/api/trader/stats?window=30d",
+  },
+  {
+    // The recent closes resolve their token names and logos.
+    method: "GET",
+    path: "/api/tokens/identities",
+    fixture: "token_identities.json",
+    rust: "src/webserver/routes/tokens/identity.rs::IdentitiesResponse",
+    record: null,
   },
   {
     method: "GET",
@@ -102,15 +110,19 @@ export const views = [
     name: "stats",
     click: [tab("stats")],
     populated: [
-      { selector: '#trader-status-bar[data-status="running"]' },
-      { selector: "#daily-pnl svg .daily-pnl-bar", min: 30 },
-      { selector: "#exit-breakdown .exit-breakdown-row", min: 5 },
-      { selector: "#stats-extremes:not([hidden]) #best-trade.positive" },
+      { selector: '#stats-state [data-summary-id="run"]' },
+      { selector: "#stats-figures .metric-card", min: 8 },
+      // One bar per day with a closed trade: 16 of the fixture's 30 days.
+      { selector: "#daily-pnl svg .inline-chart-bar", min: 16 },
+      { selector: "#outcome-distribution .inline-histogram-col", min: 9 },
+      { selector: "#stats-extremes #best-trade .pnl-positive" },
+      { selector: "#exit-breakdown tbody tr", min: 5 },
+      { selector: "#source-breakdown tbody tr", min: 2 },
+      { selector: "#recent-rounds tbody tr", min: 10 },
     ],
     empty: [
-      { selector: "#daily-pnl .state-view-empty", text: "No closed trades in this window" },
       {
-        selector: "#exit-breakdown .state-view-empty",
+        selector: "#stats-empty:not([hidden]) .state-view-empty",
         text: "No closed trades in the last \\W*30\\W* days",
       },
     ],
@@ -144,12 +156,13 @@ export const views = [
       ...settings("time-rules", "time-rules-tab", 4).populated,
       { selector: "#time-positions-status tbody .ti-row-cell", min: 3 },
     ],
-    empty: [{ selector: "#time-positions-status .dt-state-cell > .state-view-empty", text: "No open positions" }],
+    empty: [
+      {
+        selector: "#time-positions-status .dt-state-cell > .state-view-empty",
+        text: "No open positions",
+      },
+    ],
   },
   settings("dca", "dca-tab", 5),
-  settings(
-    "general-settings",
-    "general-settings-tab",
-    5,
-  ),
+  settings("general-settings", "general-settings-tab", 5),
 ];

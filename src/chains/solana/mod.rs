@@ -18,6 +18,7 @@ pub use spl_associated_token_account;
 pub use spl_token;
 pub use spl_token_2022;
 
+pub mod access;
 pub mod accounts;
 pub mod adapter;
 pub mod apis;

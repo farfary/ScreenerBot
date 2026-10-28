@@ -45,6 +45,54 @@ fn refusal_answers_for_call(method: &RpcMethod, dispatched: u32, error: &RpcErro
     *method != RpcMethod::SendTransaction || dispatched == 0 || !error.is_send_refusal()
 }
 
+/// What the own-RPC path does after a relay attempt.
+#[derive(Debug)]
+enum RelayFallthrough {
+    /// The relay settled the call: its answer, or an outcome after which a
+    /// send must not go out again through another route.
+    Return(Result<serde_json::Value, RpcError>),
+    /// Continue down the provider path; `delivered` counts relay attempts
+    /// that may have reached a node.
+    Continue { delivered: u32 },
+}
+
+/// Decides whether a relay outcome lets the call fall through to the own
+/// RPC. Only an outcome that proves nothing was delivered does, for a send;
+/// a send the relay may have delivered is answered as ambiguous so settlement
+/// reads the chain before anything is rebuilt.
+fn relay_fallthrough(method: &str, relayed: crate::rpc::gateway::Relayed) -> RelayFallthrough {
+    use crate::rpc::gateway::Relayed;
+    let is_send = RpcMethod::from_str(method) == RpcMethod::SendTransaction;
+    match relayed {
+        Relayed::Answered(result) => RelayFallthrough::Return(Ok(result)),
+        Relayed::NotAsked(_)
+        | Relayed::Unanswered {
+            maybe_delivered: false,
+        }
+        | Relayed::Refused {
+            after_delivery: false,
+            ..
+        } => RelayFallthrough::Continue { delivered: 0 },
+        Relayed::Refused {
+            error,
+            after_delivery: true,
+        } if is_send => RelayFallthrough::Return(Err(RpcError::RefusedAfterDelivery {
+            earlier_attempts: 1,
+            refusal: Box::new(error),
+        })),
+        Relayed::Unanswered {
+            maybe_delivered: true,
+        } if is_send => RelayFallthrough::Return(Err(RpcError::Network {
+            message: "the submission relay did not answer after it may have forwarded the send"
+                .to_owned(),
+            is_timeout: true,
+        })),
+        Relayed::Refused { .. } | Relayed::Unanswered { .. } => {
+            RelayFallthrough::Continue { delivered: 1 }
+        }
+    }
+}
+
 /// Main RPC manager orchestrating multi-provider operations
 pub struct RpcManager {
     /// Provider configurations
@@ -357,8 +405,8 @@ impl RpcManager {
     ) -> Result<serde_json::Value, RpcError> {
         refuse_send_in_paper_scope(method)?;
         // A signed-in account may relay transaction SUBMISSION through
-        // screenerbot.io for free. Tried first and never depended on: any
-        // failure returns None and the request continues down the normal
+        // screenerbot.io for free. Tried first and never depended on: an
+        // outcome that proves nothing was delivered continues down the normal
         // provider path below, so the relay can never stop a trade.
         //
         // Deliberately not a provider in the pool — see `rpc/gateway.rs` for
@@ -366,10 +414,10 @@ impl RpcManager {
         // component that selects on health rather than on method.
         let mut dispatched = 0;
         if crate::rpc::gateway::should_relay(method) {
-            match crate::rpc::gateway::relay(&self.http_client, method, &params).await {
-                crate::rpc::gateway::Relayed::Answered(result) => return Ok(result),
-                crate::rpc::gateway::Relayed::Unanswered => dispatched = 1,
-                crate::rpc::gateway::Relayed::NotAsked => {}
+            let relayed = crate::rpc::gateway::relay(&self.http_client, method, &params).await;
+            match relay_fallthrough(method, relayed) {
+                RelayFallthrough::Return(result) => return result,
+                RelayFallthrough::Continue { delivered } => dispatched = delivered,
             }
         }
 
@@ -747,7 +795,7 @@ fn provider_matches_required_kind(
 
 /// Paper trading never sends a transaction: the send is refused before the
 /// relay or any provider is asked. Every other method is unaffected.
-fn refuse_send_in_paper_scope(method: &str) -> Result<(), RpcError> {
+pub(crate) fn refuse_send_in_paper_scope(method: &str) -> Result<(), RpcError> {
     if crate::global::in_paper_scope()
         && matches!(RpcMethod::from_str(method), RpcMethod::SendTransaction)
     {
@@ -760,9 +808,85 @@ fn refuse_send_in_paper_scope(method: &str) -> Result<(), RpcError> {
 mod tests {
     use super::{
         provider_matches_required_kind, refusal_answers_for_call, refuse_send_in_paper_scope,
+        relay_fallthrough, RelayFallthrough,
     };
+    use crate::data_server::ServiceRefusal;
+    use crate::rpc::gateway::Relayed;
     use crate::rpc::types::RpcMethod;
     use crate::rpc::{ProviderConfig, ProviderKind, RpcError};
+
+    /// Under own-RPC access a relay outcome falls through to the provider
+    /// path only when nothing can have been delivered; a send the relay may
+    /// have delivered never goes out again through another route.
+    #[test]
+    fn a_relay_outcome_falls_through_only_when_nothing_was_delivered() {
+        let refusal = || RpcError::ProviderError {
+            code: -32002,
+            message: "Transaction simulation failed".to_owned(),
+            data: None,
+        };
+        let not_delivered = [
+            Relayed::NotAsked(ServiceRefusal::SignedOut),
+            Relayed::NotAsked(ServiceRefusal::Busy {
+                retry_after: std::time::Duration::from_secs(60),
+            }),
+            Relayed::Unanswered {
+                maybe_delivered: false,
+            },
+            Relayed::Refused {
+                error: refusal(),
+                after_delivery: false,
+            },
+        ];
+        for relayed in not_delivered {
+            assert!(
+                matches!(
+                    relay_fallthrough("sendTransaction", relayed.clone()),
+                    RelayFallthrough::Continue { delivered: 0 }
+                ),
+                "{relayed:?}"
+            );
+        }
+
+        assert!(matches!(
+            relay_fallthrough(
+                "sendTransaction",
+                Relayed::Refused {
+                    error: refusal(),
+                    after_delivery: true,
+                }
+            ),
+            RelayFallthrough::Return(Err(RpcError::RefusedAfterDelivery { .. }))
+        ));
+        assert!(matches!(
+            relay_fallthrough(
+                "sendTransaction",
+                Relayed::Unanswered {
+                    maybe_delivered: true
+                }
+            ),
+            RelayFallthrough::Return(Err(RpcError::Network {
+                is_timeout: true,
+                ..
+            }))
+        ));
+        assert!(matches!(
+            relay_fallthrough(
+                "getSignatureStatuses",
+                Relayed::Unanswered {
+                    maybe_delivered: true
+                }
+            ),
+            RelayFallthrough::Continue { delivered: 1 }
+        ));
+        assert!(matches!(
+            relay_fallthrough(
+                "getLatestBlockhash",
+                Relayed::Answered(serde_json::json!(1))
+            ),
+            RelayFallthrough::Return(Ok(_))
+        ));
+    }
 
     fn invalid_params() -> RpcError {
         RpcError::ProviderError {

@@ -47,6 +47,8 @@ const PRIVATE_STATES = new RegExp(
       "copy-panel-message",
       "copy-chart-empty",
       "copy-spark-empty",
+      "inline-chart-empty",
+      "inline-spark-empty",
     ].join("|") +
     ")(?![\\w-])"
 );

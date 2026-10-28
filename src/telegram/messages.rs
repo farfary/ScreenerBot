@@ -222,6 +222,16 @@ pub fn msg_swap_unbooked(symbol: &str, signature: &str) -> String {
     )
 }
 
+/// Format the trading-paused notification: the pause and the access state behind it
+pub fn msg_trading_paused(reason: &UiText) -> String {
+    format!(
+        "{}\n\n{}\n\n{}",
+        with_icon("⏸️", &tg_id(ids::TELEGRAM_NOTIFY_PAUSED_TITLE)),
+        tg_id(ids::TELEGRAM_NOTIFY_PAUSED_BODY),
+        tg(reason),
+    )
+}
+
 /// Format system error notification
 pub fn msg_system_error(severity: &ErrorSeverity, message: &str) -> String {
     let (emoji, title) = match severity {

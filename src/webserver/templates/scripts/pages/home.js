@@ -19,6 +19,7 @@ import { createCalendar } from "./home/portfolio_calendar.js";
 import { createUpdateNotice } from "./home/update_notice.js";
 import { createStatusCards } from "./home/status_cards.js";
 import { SetupDialog } from "../ui/setup_dialog.js";
+import { fetchWalletQr } from "../ui/funding_notice.js";
 
 const ABSENT = "—";
 
@@ -92,12 +93,9 @@ function createLifecycle() {
     status.textContent = I18n.t("home-wallet-qr-preparing");
 
     try {
-      const data = await scopedFetch(`/api/wallet/qr/${encodeURIComponent(address)}`, {
-        priority: "high",
-        cache: "no-store",
-      });
+      const qrDataUrl = await fetchWalletQr(address, scopedFetch);
       if (walletAddress !== address) return;
-      image.src = data.qr_data_url;
+      image.src = qrDataUrl;
       image.dataset.address = address;
       image.hidden = false;
       status.hidden = true;

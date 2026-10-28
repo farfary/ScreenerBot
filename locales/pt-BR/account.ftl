@@ -3,7 +3,7 @@
 # src/data_server/access.rs.
 
 account-data-access-ready = Os dados do { -brand } estão ativos
-    .detail = Candles compartilhados, registro de pools, relatórios de segurança e identidade dos tokens estão sendo servidos pelo screenerbot.io.
+    .detail = Gráficos, dados de pools e relatórios de segurança são carregados do screenerbot.io.
 
 account-data-access-disabled = Os dados do { -brand } estão desativados
     .detail = A fonte do { -brand } está desativada nas suas configurações, então os dados vêm apenas dos provedores públicos.
@@ -12,7 +12,7 @@ account-data-access-offline = Os dados do { -brand } estão offline
     .detail = Não há conexão de rede. Os dados voltarão automaticamente quando a conexão for restabelecida.
 
 account-data-access-signed-out = Os dados do { -brand } exigem uma conta
-    .detail = Gráficos, pools, relatórios de segurança e identidade dos tokens vêm dos provedores públicos. Eles são mais lentos, têm limite de requisições e menos histórico. Entrar é grátis e não muda mais nada no funcionamento do { -brand }.
+    .detail = Gráficos, pools e relatórios de segurança vêm dos provedores públicos. Eles são mais lentos, têm limite de requisições e menos histórico. Entrar é grátis e não muda mais nada no funcionamento do { -brand }.
 
 account-data-access-reauthorization-required = Os dados do { -brand } exigem que você entre novamente
     .detail = Este dispositivo foi autorizado antes de os dados do { -brand } existirem. Entre novamente para restaurá-los — até lá, os provedores públicos estão sendo usados.
@@ -24,15 +24,16 @@ account-data-access-unreachable = Os dados do { -brand } não estão respondendo
     .detail = O serviço não respondeu. Os provedores públicos estão sendo usados e o { -brand } continuará tentando.
 
 account-data-access-unknown = Os dados do { -brand } ainda não foram verificados
-    .detail = O { -brand } ainda não precisou de dados compartilhados nesta sessão.
+    .detail = O { -brand } ainda não carregou esses dados nesta sessão.
 
 ## Account panel (ui/account/panel.js), shared by Setup and Settings
 
 account-scope-data-read = Dados de mercado do { -brand }
-account-scope-rpc-submit = Envio gratuito de transações assinadas
+account-scope-rpc-submit = Envio de transações pelo { -brand }
 account-scope-vote = Votação em tokens
 account-scope-referral-read = Ganhos de indicações
 account-scope-account-read = Detalhes da conta
+account-scope-chain-read = Leituras da carteira para o serviço do { -brand }
 
 account-panel-request-failed = Não deu certo. Tente novamente.
 account-panel-checking = Verificando o status da conta…

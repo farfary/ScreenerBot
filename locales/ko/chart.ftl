@@ -32,3 +32,6 @@ chart-status-total-idle =
     { $count ->
        *[other] 캔들 { $count }개 · 유휴
     }
+
+chart-inline-curve-label = 누적 손익 { $amount } { -sol }
+chart-inline-histogram-title = { $total }개 중 { $count }개

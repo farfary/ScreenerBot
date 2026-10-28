@@ -70,7 +70,7 @@ transactions-search =
     .placeholder = Пошук підписів…
     .aria-label = Пошук підписів транзакцій
 transactions-load-failed = Не вдалося оновити транзакції
-transactions-setup-gate-title = Для транзакцій потрібен гаманець
+transactions-access-gate-title = Для транзакцій потрібен гаманець
 transactions-summary-total = Усього
 transactions-summary-success = Успішні
 transactions-summary-failed = Невдалі
@@ -205,3 +205,9 @@ transactions-dialog-raw-empty = Сирі дані недоступні
 # Empty table (scripts/pages/transactions.js)
 transactions-empty = Транзакцій поки немає
     .message = Свопи та перекази торгового гаманця з’являються тут після підтвердження в блокчейні.
+
+## On-demand history
+
+transactions-history-on-demand = Старіша історія завантажується на вимогу.
+transactions-history-load-older = Завантажити старіші
+transactions-history-load-older-failed = Не вдалося завантажити старішу історію.

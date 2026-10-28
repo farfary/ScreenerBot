@@ -18,6 +18,10 @@ pub enum Error {
     Io(#[from] crate::errors::IoError),
     #[error(transparent)]
     Transactions(#[from] crate::transactions::Error),
+    /// The install's chain access refused: a capability its mode lacks, or a
+    /// service refusal.
+    #[error(transparent)]
+    ChainAccess(#[from] crate::chains::Error),
 
     /// A database this module reads through has not been initialized yet — an
     /// invariant violation, not a not-found: initialization must run once at
@@ -200,6 +204,7 @@ impl ErrorClass for Error {
             Error::Internal(e) => e.is_retryable(),
             Error::Io(e) => e.is_retryable(),
             Error::Transactions(e) => e.is_retryable(),
+            Error::ChainAccess(e) => e.is_retryable(),
             Error::NotInitialized { .. } => false,
             Error::WalletNotFound { .. } => false,
             Error::WatchTargetNotFound { .. } => false,
@@ -245,6 +250,7 @@ impl ErrorClass for Error {
             Error::Internal(e) => e.retry_after(),
             Error::Io(e) => e.retry_after(),
             Error::Transactions(e) => e.retry_after(),
+            Error::ChainAccess(e) => e.retry_after(),
             Error::SnapshotMaintenance { .. } => Some(Duration::from_secs(2)),
             Error::BalanceUpdate { .. } => Some(Duration::from_millis(500)),
             Error::ChainRuntime { .. } | Error::ChainExecution(_) => {
@@ -261,6 +267,7 @@ impl ErrorClass for Error {
             Error::Internal(e) => e.severity(),
             Error::Io(e) => e.severity(),
             Error::Transactions(e) => e.severity(),
+            Error::ChainAccess(e) => e.severity(),
             Error::NotInitialized { .. } => Severity::Critical,
             Error::WalletNotFound { .. } => Severity::Warning,
             Error::WatchTargetNotFound { .. } => Severity::Warning,
@@ -309,6 +316,7 @@ impl ErrorClass for Error {
             Error::Internal(e) => e.http_status(),
             Error::Io(e) => e.http_status(),
             Error::Transactions(e) => e.http_status(),
+            Error::ChainAccess(e) => e.http_status(),
             Error::NotInitialized { .. } => 500,
             Error::WalletNotFound { .. } => 404,
             Error::WatchTargetNotFound { .. } => 404,

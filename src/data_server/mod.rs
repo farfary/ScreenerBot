@@ -28,13 +28,20 @@
 //! stays usable for every other chain and surface.
 //!
 //! ============================================================================
-//! IT IS AN ACCELERATOR, NEVER A DEPENDENCY
+//! IT IS AN ACCELERATOR, NEVER A DEPENDENCY — WITH ONE EXCEPTION
 //! ============================================================================
-//! Every caller falls back to its direct provider on `None`, and that is a rule
-//! rather than a coincidence. A signed-out install discovers tokens, prices
-//! pools, charts candles and trades exactly as before — slower, against public
-//! rate limits, with thinner history. Nothing here may become load-bearing for a
-//! trade.
+//! Every caller of `get_json` falls back to its direct provider on `None`, and
+//! that is a rule rather than a coincidence. A signed-out install discovers
+//! tokens, prices pools, charts candles and trades exactly as before — slower,
+//! against public rate limits, with thinner history.
+//!
+//! The exception is [`Surface::Chain`]: an install in service access mode
+//! chose the service as its chain access, so its wallet reads and trades
+//! depend on it and pause when it refuses. Only the chain access owner
+//! (`chains::solana::access`) calls that surface, through [`send_json`], which
+//! returns the classified refusal instead of `None`: its service backend, and
+//! the probe that setup and a mode switch run before an install adopts service
+//! access, which is why the surface is enabled whenever its endpoint is set.
 //!
 //! ============================================================================
 //! WHY A SIGNED-OUT INSTALL MAKES NO REQUEST AT ALL
@@ -50,6 +57,7 @@ use std::future::Future;
 use std::time::Duration;
 
 use serde::de::DeserializeOwned;
+use serde::Serialize;
 
 use crate::chains::ChainId;
 
@@ -70,7 +78,14 @@ pub enum Surface {
     Tokens,
     /// `[ohlcv.sources.screenerbot_server]` — candles and the native/USD chart.
     Ohlcv,
+    /// Chain reads for an install in service access mode. Its endpoint is the
+    /// one Data Server base in `[tokens.sources.screenerbot_server]`, but the
+    /// token-data toggle does not apply: the access mode alone switches it.
+    Chain,
 }
+
+/// Per-call deadline of a service chain read.
+const CHAIN_TIMEOUT: Duration = Duration::from_secs(10);
 
 impl Surface {
     /// `(endpoint, timeout)` when this surface is switched on and configured.
@@ -79,22 +94,160 @@ impl Surface {
     /// so they are read separately rather than through a shared reference.
     fn settings(self) -> Option<(String, Duration)> {
         crate::config::with_config(|config| {
-            let (enabled, endpoint, timeout_seconds) = match self {
+            let (enabled, endpoint, timeout) = match self {
                 Surface::Tokens => {
                     let source = &config.tokens.sources.screenerbot_server;
-                    (source.enabled, &source.endpoint, source.timeout_seconds)
+                    (
+                        source.enabled,
+                        &source.endpoint,
+                        Duration::from_secs(source.timeout_seconds),
+                    )
                 }
                 Surface::Ohlcv => {
                     let source = &config.ohlcv.sources.screenerbot_server;
-                    (source.enabled, &source.endpoint, source.timeout_seconds)
+                    (
+                        source.enabled,
+                        &source.endpoint,
+                        Duration::from_secs(source.timeout_seconds),
+                    )
                 }
+                Surface::Chain => (
+                    true,
+                    &config.tokens.sources.screenerbot_server.endpoint,
+                    CHAIN_TIMEOUT,
+                ),
             };
             let endpoint = endpoint.trim_end_matches('/').to_string();
             if !enabled || endpoint.is_empty() {
                 return None;
             }
-            Some((endpoint, Duration::from_secs(timeout_seconds)))
+            Some((endpoint, timeout))
         })
+    }
+
+    /// Whether a local "not asked" outcome (switched off, offline) is
+    /// published to the shared data-access state. The chain surface reports
+    /// through the chain access state instead.
+    fn shares_access_state(self) -> bool {
+        match self {
+            Surface::Tokens | Surface::Ohlcv => true,
+            Surface::Chain => false,
+        }
+    }
+}
+
+/// Why a classified request produced no value.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ServiceRefusal {
+    /// The surface is switched off or has no endpoint.
+    Disabled,
+    /// No network.
+    Offline,
+    /// No account session to present.
+    SignedOut,
+    /// The device grant predates a scope the request needs.
+    ReauthorizationRequired,
+    /// The device grant lacks `chain:read`.
+    ChainScopeMissing,
+    /// This build is older than the service answers.
+    VersionUnsupported { minimum: String },
+    /// Over a service capacity cap; ask again after the delay.
+    Busy { retry_after: Duration },
+    /// The account reached its daily allowance.
+    DailyLimit { retry_after: Duration },
+    /// The device changed its bound wallet too often.
+    WalletChangeLimited { retry_after: Duration },
+    /// The address is not the wallet bound to this device.
+    WalletNotBound,
+    /// The route does not exist on this service.
+    NotFound,
+    /// The service refused the request itself (malformed or out of bounds).
+    Invalid { code: String },
+    /// No answer: a transport failure, a timeout or a server failure.
+    Unreachable,
+    /// An answer this build could not read.
+    Unreadable,
+}
+
+/// Fallback delay for a capacity refusal without a `retry_after`.
+const DEFAULT_RETRY_AFTER: Duration = Duration::from_secs(30);
+
+/// The `retry_after` of a refusal body, in seconds, else the `Retry-After`
+/// header, else `fallback`.
+fn retry_after(body: &serde_json::Value, header: Option<u64>, fallback: Duration) -> Duration {
+    body.get("retry_after")
+        .and_then(|value| value.as_u64())
+        .or(header)
+        .map(Duration::from_secs)
+        .unwrap_or(fallback)
+}
+
+/// Seconds until the next 00:00 UTC, when a daily allowance resets.
+fn until_utc_midnight() -> Duration {
+    let now = chrono::Utc::now().timestamp();
+    Duration::from_secs((86_400 - now.rem_euclid(86_400)) as u64)
+}
+
+/// Classifies a non-success answer. Access codes go through
+/// [`access_for_refusal`] and update the shared data-access state, exactly as
+/// before; chain-only codes concern the chain surface alone and never touch it.
+pub(crate) fn classify_refusal(
+    status: reqwest::StatusCode,
+    code: &str,
+    minimum: Option<String>,
+    body: &serde_json::Value,
+    retry_after_header: Option<u64>,
+) -> ServiceRefusal {
+    match code {
+        "chain_scope_missing" => return ServiceRefusal::ChainScopeMissing,
+        "service_busy" | "chain_unavailable" | "quota_exceeded" => {
+            return ServiceRefusal::Busy {
+                retry_after: retry_after(body, retry_after_header, DEFAULT_RETRY_AFTER),
+            }
+        }
+        "daily_limit" => {
+            return ServiceRefusal::DailyLimit {
+                retry_after: retry_after(body, retry_after_header, until_utc_midnight()),
+            }
+        }
+        "wallet_change_limited" => {
+            return ServiceRefusal::WalletChangeLimited {
+                retry_after: retry_after(body, retry_after_header, until_utc_midnight()),
+            }
+        }
+        "wallet_not_bound" => return ServiceRefusal::WalletNotBound,
+        _ => {}
+    }
+
+    match access_for_refusal(status, code, minimum) {
+        DataAccess::SignedOut => {
+            access::record(DataAccess::SignedOut);
+            ServiceRefusal::SignedOut
+        }
+        DataAccess::ReauthorizationRequired => {
+            access::record(DataAccess::ReauthorizationRequired);
+            ServiceRefusal::ReauthorizationRequired
+        }
+        DataAccess::VersionUnsupported { minimum } => {
+            access::record(DataAccess::VersionUnsupported {
+                minimum: minimum.clone(),
+            });
+            ServiceRefusal::VersionUnsupported { minimum }
+        }
+        DataAccess::Ready => {
+            access::record(DataAccess::Ready);
+            ServiceRefusal::Invalid {
+                code: code.to_owned(),
+            }
+        }
+        _ if status == reqwest::StatusCode::NOT_FOUND => {
+            access::record(DataAccess::Ready);
+            ServiceRefusal::NotFound
+        }
+        _ => {
+            access::record_transport_failure();
+            ServiceRefusal::Unreachable
+        }
     }
 }
 
@@ -169,7 +322,7 @@ impl Credential for AccountCredential {
 /// The service writes the minimum into its sentence rather than a field, so it
 /// is lifted out here rather than displayed as a whole server sentence inside an
 /// app sentence.
-fn refusal_code(body: &serde_json::Value) -> (String, Option<String>) {
+pub(crate) fn refusal_code(body: &serde_json::Value) -> (String, Option<String>) {
     let code = body
         .get("code")
         .and_then(|value| value.as_str())
@@ -196,12 +349,13 @@ pub(crate) fn with_app_version(request: reqwest::RequestBuilder) -> reqwest::Req
     request.header(VERSION_HEADER, crate::version::VERSION)
 }
 
-/// Builds a GET to the data service for `chain`: the app version header, the
-/// caller's query pairs in order, then exactly one `chain` pair. The single place
-/// a data service GET is built. A caller pair named `chain` would send the
-/// parameter twice, so it panics in every build profile.
+/// Builds a request to the data service for `chain`: the app version header,
+/// the caller's query pairs in order, then exactly one `chain` pair. The single
+/// place a data service request is built. A caller pair named `chain` would
+/// send the parameter twice, so it panics in every build profile.
 fn service_request(
     client: &reqwest::Client,
+    method: reqwest::Method,
     url: &str,
     chain: ChainId,
     query: &[(&str, String)],
@@ -210,7 +364,7 @@ fn service_request(
         query.iter().all(|(key, _)| *key != "chain"),
         "the chain query parameter is appended by the request builder"
     );
-    with_app_version(client.get(url))
+    with_app_version(client.request(method, url))
         .query(query)
         .query(&[("chain", chain.as_str())])
 }
@@ -226,23 +380,49 @@ pub async fn get_json<T: DeserializeOwned>(
     path: &str,
     query: &[(&str, String)],
 ) -> Option<T> {
+    send_json::<(), T>(surface, chain, reqwest::Method::GET, path, query, None)
+        .await
+        .ok()
+}
+
+/// Sends a request to the data service for one chain and returns the decoded
+/// answer or the classified reason there is none.
+pub async fn send_json<B, T>(
+    surface: Surface,
+    chain: ChainId,
+    method: reqwest::Method,
+    path: &str,
+    query: &[(&str, String)],
+    body: Option<&B>,
+) -> Result<T, ServiceRefusal>
+where
+    B: Serialize + ?Sized,
+    T: DeserializeOwned,
+{
     let Some((endpoint, timeout)) = surface.settings() else {
-        access::record(DataAccess::Disabled);
-        return None;
+        if surface.shares_access_state() {
+            access::record(DataAccess::Disabled);
+        }
+        return Err(ServiceRefusal::Disabled);
     };
 
     if crate::connectivity::is_network_offline() {
-        access::record(DataAccess::Offline);
-        return None;
+        if surface.shares_access_state() {
+            access::record(DataAccess::Offline);
+        }
+        return Err(ServiceRefusal::Offline);
     }
 
     let url = format!("{endpoint}{path}");
     let client = crate::net::client();
     fetch_json(&AccountCredential, path, chain, |token| {
-        service_request(&client, &url, chain, query)
+        let request = service_request(&client, method.clone(), &url, chain, query)
             .bearer_auth(token)
-            .timeout(timeout)
-            .send()
+            .timeout(timeout);
+        match body {
+            Some(body) => request.json(body).send(),
+            None => request.send(),
+        }
     })
     .await
 }
@@ -259,7 +439,7 @@ async fn fetch_json<T, C, Request, RequestFuture>(
     path: &str,
     chain: ChainId,
     send: Request,
-) -> Option<T>
+) -> Result<T, ServiceRefusal>
 where
     T: DeserializeOwned,
     C: Credential,
@@ -272,10 +452,10 @@ where
         let Some(token) = credential.access_token().await else {
             if credential.has_session() {
                 access::record_transport_failure();
-            } else {
-                access::record(DataAccess::SignedOut);
+                return Err(ServiceRefusal::Unreachable);
             }
-            return None;
+            access::record(DataAccess::SignedOut);
+            return Err(ServiceRefusal::SignedOut);
         };
 
         let response = match send(token.clone()).await {
@@ -283,12 +463,17 @@ where
             Err(error) => {
                 log::debug!("Data Server: {path} on {chain} failed: {error}");
                 access::record_transport_failure();
-                return None;
+                return Err(ServiceRefusal::Unreachable);
             }
         };
 
         let status = response.status();
         if !status.is_success() {
+            let retry_after_header = response
+                .headers()
+                .get(reqwest::header::RETRY_AFTER)
+                .and_then(|value| value.to_str().ok())
+                .and_then(|value| value.trim().parse::<u64>().ok());
             // A refusal body is small and always JSON; an unreadable one is
             // treated as the status alone rather than as a transport failure.
             let body: serde_json::Value = response.json().await.unwrap_or(serde_json::Value::Null);
@@ -302,20 +487,22 @@ where
                     continue;
                 }
                 access::record_transport_failure();
-                return None;
+                return Err(ServiceRefusal::Unreachable);
             }
 
-            match access_for_refusal(status, &code, minimum) {
-                DataAccess::Unreachable => access::record_transport_failure(),
-                refusal => access::record(refusal),
-            }
-            return None;
+            return Err(classify_refusal(
+                status,
+                &code,
+                minimum,
+                &body,
+                retry_after_header,
+            ));
         }
 
         return match response.json::<T>().await {
             Ok(value) => {
                 access::record(DataAccess::Ready);
-                Some(value)
+                Ok(value)
             }
             Err(error) => {
                 // The service answered and we could not read it. That is our bug
@@ -323,7 +510,7 @@ where
                 // rather than reported to the user as an account state.
                 log::debug!("Data Server: {path} on {chain} returned an unreadable body: {error}");
                 access::record(DataAccess::Ready);
-                None
+                Err(ServiceRefusal::Unreadable)
             }
         };
     }
@@ -394,6 +581,7 @@ mod tests {
         for &chain in ChainId::ALL {
             let request = service_request(
                 &reqwest::Client::new(),
+                reqwest::Method::GET,
                 "https://example.invalid/v1/pools",
                 chain,
                 &query,
@@ -438,6 +626,7 @@ mod tests {
         ];
         let request = service_request(
             &reqwest::Client::new(),
+            reqwest::Method::GET,
             "https://example.invalid/v1/ohlcv",
             ChainId::Solana,
             &query,
@@ -462,6 +651,7 @@ mod tests {
     fn a_caller_query_may_not_name_the_chain() {
         let _ = service_request(
             &reqwest::Client::new(),
+            reqwest::Method::GET,
             "https://example.invalid/v1/pools",
             ChainId::Solana,
             &[("chain", "solana".to_string())],
@@ -639,12 +829,13 @@ mod tests {
         let credential = StubCredential::new(&["stale", "fresh"]);
         let client = reqwest::Client::new();
 
-        let value: Option<Value> = fetch_json(&credential, "/v1/value", ChainId::Solana, |token| {
-            client.get(&url).bearer_auth(token).send()
-        })
-        .await;
+        let value: Result<Value, ServiceRefusal> =
+            fetch_json(&credential, "/v1/value", ChainId::Solana, |token| {
+                client.get(&url).bearer_auth(token).send()
+            })
+            .await;
 
-        assert_eq!(value.map(|v| v.value), Some(7));
+        assert_eq!(value.map(|v| v.value), Ok(7));
         assert_eq!(*credential.invalidated.lock().unwrap(), vec!["stale"]);
         assert_eq!(
             *seen.lock().unwrap(),
@@ -658,12 +849,13 @@ mod tests {
         let credential = StubCredential::new(&["stale", "still-stale"]);
         let client = reqwest::Client::new();
 
-        let value: Option<Value> = fetch_json(&credential, "/v1/value", ChainId::Solana, |token| {
-            client.get(&url).bearer_auth(token).send()
-        })
-        .await;
+        let value: Result<Value, ServiceRefusal> =
+            fetch_json(&credential, "/v1/value", ChainId::Solana, |token| {
+                client.get(&url).bearer_auth(token).send()
+            })
+            .await;
 
-        assert!(value.is_none());
+        assert_eq!(value.err(), Some(ServiceRefusal::Unreachable));
         assert_eq!(credential.invalidated.lock().unwrap().len(), 2);
         assert_ne!(access::current(), DataAccess::SignedOut);
     }
@@ -675,20 +867,89 @@ mod tests {
     #[tokio::test]
     async fn a_session_without_a_usable_token_is_not_reported_signed_out() {
         let credential = StubCredential::new(&[]);
-        let value: Option<Value> =
+        let value: Result<Value, ServiceRefusal> =
             fetch_json(&credential, "/v1/value", ChainId::Solana, never_sent).await;
 
-        assert!(value.is_none());
+        assert_eq!(value.err(), Some(ServiceRefusal::Unreachable));
         assert_ne!(access::current(), DataAccess::SignedOut);
 
         let signed_out = StubCredential {
             signed_in: false,
             ..StubCredential::new(&[])
         };
-        let value: Option<Value> =
+        let value: Result<Value, ServiceRefusal> =
             fetch_json(&signed_out, "/v1/value", ChainId::Solana, never_sent).await;
-        assert!(value.is_none());
+        assert_eq!(value.err(), Some(ServiceRefusal::SignedOut));
         assert_eq!(access::current(), DataAccess::SignedOut);
+    }
+
+    /// Chain-only refusal codes classify to their own reason and leave the
+    /// shared data-access state as it was.
+    #[test]
+    fn chain_refusal_codes_classify_without_touching_the_shared_state() {
+        access::record(DataAccess::Ready);
+        let body = serde_json::json!({"code": "service_busy", "retry_after": 600});
+        let cases = [
+            (
+                reqwest::StatusCode::FORBIDDEN,
+                "chain_scope_missing",
+                ServiceRefusal::ChainScopeMissing,
+            ),
+            (
+                reqwest::StatusCode::SERVICE_UNAVAILABLE,
+                "service_busy",
+                ServiceRefusal::Busy {
+                    retry_after: Duration::from_secs(600),
+                },
+            ),
+            (
+                reqwest::StatusCode::TOO_MANY_REQUESTS,
+                "daily_limit",
+                ServiceRefusal::DailyLimit {
+                    retry_after: Duration::from_secs(600),
+                },
+            ),
+            (
+                reqwest::StatusCode::CONFLICT,
+                "wallet_not_bound",
+                ServiceRefusal::WalletNotBound,
+            ),
+        ];
+        for (status, code, expected) in cases {
+            assert_eq!(
+                classify_refusal(status, code, None, &body, None),
+                expected,
+                "{code}"
+            );
+            assert_eq!(access::current(), DataAccess::Ready, "{code}");
+        }
+        assert_eq!(
+            classify_refusal(
+                reqwest::StatusCode::BAD_REQUEST,
+                "invalid_request",
+                None,
+                &serde_json::Value::Null,
+                None
+            ),
+            ServiceRefusal::Invalid {
+                code: "invalid_request".to_owned()
+            }
+        );
+    }
+
+    /// A busy refusal without a body delay takes the header, then the default.
+    #[test]
+    fn a_busy_delay_comes_from_the_body_then_the_header_then_the_default() {
+        let empty = serde_json::Value::Null;
+        assert_eq!(
+            retry_after(&empty, Some(12), DEFAULT_RETRY_AFTER),
+            Duration::from_secs(12)
+        );
+        assert_eq!(
+            retry_after(&empty, None, DEFAULT_RETRY_AFTER),
+            DEFAULT_RETRY_AFTER
+        );
+        assert!(until_utc_midnight() <= Duration::from_secs(86_400));
     }
 
     #[test]

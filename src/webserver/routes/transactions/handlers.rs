@@ -118,6 +118,7 @@ pub(super) async fn get_summary(
                 db_schema_version: 0,
                 bootstrap_state: BootstrapStateInfo {
                     full_history_completed: false,
+                    older_history_available: false,
                 },
             });
         }
@@ -142,6 +143,7 @@ pub(super) async fn get_summary(
                 db_schema_version: 0,
                 bootstrap_state: BootstrapStateInfo {
                     full_history_completed: false,
+                    older_history_available: false,
                 },
             });
         }
@@ -214,8 +216,28 @@ pub(super) async fn get_summary(
         db_schema_version: db_stats.schema_version,
         bootstrap_state: BootstrapStateInfo {
             full_history_completed: bootstrap.full_history_completed,
+            older_history_available: bootstrap.older_history_available(),
         },
     })
+}
+
+/// POST /api/transactions/history/older - Load the page of own-wallet history that precedes
+/// the stored history
+pub(super) async fn load_older_history(State(_state): State<Arc<AppState>>) -> Response {
+    match crate::transactions::service::load_older_history().await {
+        Ok(page) => success_response(page),
+        Err(crate::transactions::Error::HistoryLoadInProgress) => ApiError::new(
+            ApiErrorCode::Conflict,
+            ids::ERRORS_TRANSACTIONS_HISTORY_LOADING,
+        )
+        .into_response(),
+        Err(e) => ApiError::new(
+            ApiErrorCode::for_status(crate::errors::ErrorClass::http_status(&e)),
+            ids::ERRORS_TRANSACTIONS_HISTORY_LOAD_FAILED,
+        )
+        .details(e.to_string())
+        .into_response(),
+    }
 }
 
 async fn resolve_subject(requested: Option<&str>) -> Result<Subject, Response> {

@@ -1,21 +1,8 @@
 /* Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
  * SPDX-License-Identifier: BUSL-1.1 */
 
-/* Copy Trading task sheet and compare view: header, tabs, notices, sections, metrics,
-   tables and the activity list. The sheet is the only frame; sections inside it are
-   separated by hairlines, never boxed. */
-
-.copy-workspace,
-.copy-compare {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-md);
-  min-width: 0;
-  padding: var(--spacing-lg);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
-  background: var(--bg-card);
-}
+/* Copy Trading task sheet and compare view contents: header, tabs, notices, metrics,
+   tables and the activity list, inside the shared sheet (styles/ui/sheet.css). */
 
 .copy-ws-head {
   display: flex;
@@ -105,27 +92,6 @@
   container: copy-sheet / inline-size;
 }
 
-.copy-panel-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--spacing-sm);
-}
-
-.copy-panel-head h2,
-.copy-panel-head h3 {
-  margin: 0;
-  font-size: var(--font-size-base);
-}
-
-.copy-panel-tools {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--spacing-sm);
-}
-
 /* A stat row in the sheet takes a column count that divides its cell count, so the
    hairline colour never shows in an empty track: two columns by default, three for
    three cells, and on a wide sheet four for four cells and three for six. */
@@ -147,71 +113,10 @@
   }
 }
 
-.copy-section {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-sm);
-  min-width: 0;
-}
-
-.copy-section + .copy-section {
-  padding-block-start: var(--spacing-md);
-  border-block-start: 1px solid var(--border-color);
-}
-
-.copy-section-title {
-  margin: 0;
-  font-size: var(--font-size-base);
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-/* The line under a section heading that qualifies it, such as the exit mode. */
-.copy-section-sub {
-  margin: 0;
-  font-size: var(--font-size-sm);
-  color: var(--text-muted);
-}
-
-/* One part inside a section, such as one earlier paper book. */
-.copy-section-subtitle {
-  margin-block: var(--spacing-sm) 0;
-  margin-inline: 0;
-  font-size: var(--font-size-sm);
-  color: var(--text-secondary);
-}
-
 .copy-dialog h4 {
   margin: 0;
   font-size: var(--font-size-sm);
   color: var(--text-primary);
-}
-
-/* Two parts of a section side by side once the sheet is wide enough, divided by one
-   hairline; the query names no container, so the editor review, which sits in none,
-   keeps them stacked. */
-.copy-section-split {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: var(--spacing-md);
-}
-
-.copy-section-split > section {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-sm);
-  min-width: 0;
-}
-
-@container (width >= 900px) {
-  .copy-section-split {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .copy-section-split > section + section {
-    padding-inline-start: var(--spacing-md);
-    border-inline-start: 1px solid var(--border-color);
-  }
 }
 
 /* Two sections of a dialog side by side: the wallet profile, and the arm gate's readiness
@@ -275,6 +180,12 @@
   min-width: 0;
 }
 
+/* Every column keeps its header on one line, so a narrow panel scrolls the table
+   instead of cutting the last header. */
+.copy-table {
+  min-width: max-content;
+}
+
 .copy-table,
 .copy-rules {
   width: 100%;
@@ -328,12 +239,14 @@
   margin-inline-start: var(--spacing-xs);
 }
 
-/* The mint beside a symbol that several listed tokens share. */
+/* One exit rule per line, each kept whole: a wrapping rule squeezed the column to a
+   word per line, so the column takes its longest rule and the table scrolls instead. */
 .copy-exit-list {
   display: flex;
-  flex-wrap: wrap;
-  gap: 2px var(--spacing-sm);
+  flex-direction: column;
+  gap: 2px;
   font-size: var(--font-size-xs);
+  white-space: nowrap;
   color: var(--text-secondary);
 }
 

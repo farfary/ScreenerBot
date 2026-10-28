@@ -10,3 +10,20 @@ connectivity-probe-internet-all-failed = Fallaron las comprobaciones de DNS y HT
 connectivity-probe-unknown = Error desconocido
 
 connectivity-endpoint-not-checked = Aún sin comprobar
+
+connectivity-service-checking = Conectando con el servicio de { -brand }
+    .detail = El trading empieza cuando se confirma la conexión.
+connectivity-service-ready = Servicio de { -brand } conectado
+    .detail = Las consultas de la wallet y las operaciones pasan por screenerbot.io.
+connectivity-service-signed-out = Trading en pausa · Sesión cerrada
+    .detail = Inicia sesión para reanudar. Las posiciones abiertas no se venden mientras el trading está en pausa.
+connectivity-service-reauthorize = Trading en pausa · Hay que iniciar sesión de nuevo
+    .detail = El inicio de sesión de este dispositivo aún no permite consultar la wallet. Vuelve a iniciar sesión para reanudar.
+connectivity-service-busy = Trading en pausa · Servicio ocupado, reintentando
+    .detail = El trading se reanuda automáticamente. Para evitar pausas, usa tu propio RPC.
+connectivity-service-daily-limit = Trading en pausa · Límite diario alcanzado
+    .detail = Tu cuenta alcanzó el límite de hoy del servicio de { -brand }. El trading se reanuda a las 00:00 UTC, o al instante con tu propio RPC.
+connectivity-service-unreachable = Trading en pausa · screenerbot.io no responde
+    .detail = El trading se reanuda cuando vuelva la conexión. Revisa tu conexión a internet.
+connectivity-service-version = Trading en pausa · Actualización necesaria
+    .detail = El servicio de { -brand } ya no admite esta versión. Actualiza a { $minimum } o posterior.

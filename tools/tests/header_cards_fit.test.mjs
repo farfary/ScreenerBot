@@ -93,7 +93,7 @@ async function measure(state, width, locale) {
     const controls = [
       "#headerBrand",
       "#botCard",
-      "#exploreSetupControl",
+      "#accessControl",
       "#headerCards",
       "#headerActions",
     ]
@@ -104,7 +104,7 @@ async function measure(state, width, locale) {
     const cards = [...strip.querySelectorAll(".header-card")]
       .filter(visible)
       .map((card) => ({ selector: `#${card.id}`, ...rect(card) }));
-    const clipped = [...document.querySelectorAll("#exploreSetupControl :is(strong, span)")]
+    const clipped = [...document.querySelectorAll("#accessControl :is(strong, span)")]
       .filter(visible)
       .filter((element) => element.scrollWidth > element.clientWidth + 0.5)
       .map((element) => element.className);

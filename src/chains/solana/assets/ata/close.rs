@@ -3,7 +3,7 @@
 
 //! ATA closing operations for reclaiming rent from empty token accounts.
 
-use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
+use crate::chains::solana::access::chain_access;
 use crate::logger::{self, LogTag};
 use crate::utils::format_mint_for_log;
 use crate::{Error, Result};
@@ -404,8 +404,7 @@ pub async fn close_token_account_with_context(
         ),
     );
 
-    let rpc_client = get_rpc_client();
-    let is_token_2022 = rpc_client
+    let is_token_2022 = chain_access()
         .is_token_account_token_2022(&token_account)
         .await
         .unwrap_or_default();

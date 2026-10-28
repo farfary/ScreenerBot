@@ -14,7 +14,8 @@ use crate::i18n::ids;
 use crate::logger::{self, LogTag};
 use crate::positions::{Book, PositionManagement, PositionOrigin};
 use crate::trader::actions::AutoCloseAction;
-use crate::trader::types::{TradeAction, TradeDecision, TradeReason, TradeResult};
+use crate::trader::types::{TradeAction, TradeDecision, TradeResult};
+use crate::trader::TradeReason;
 
 /// Who a trade's position belongs to and who may manage it, persisted with the round it
 /// opens.

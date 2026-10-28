@@ -34,3 +34,6 @@ chart-status-total-idle =
         [one] { $count } کندل · بیکار
        *[other] { $count } کندل · بیکار
     }
+
+chart-inline-curve-label = سود و زیان تجمعی { $amount } { -sol }
+chart-inline-histogram-title = { $count } از { $total }

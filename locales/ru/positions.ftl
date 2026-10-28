@@ -15,7 +15,6 @@ positions-paper-empty = Нет виртуальных позиций
 positions-paper-archived-empty = Нет архивных виртуальных позиций
     .message = Виртуальные сделки остаются в «Открытых» и «Закрытых»; в архив попадают только боевые позиции.
 positions-paper-empty-action = Открыть «Стратегии»
-positions-origin-copy = Копирование
 positions-origin-manual = Вручную
 positions-origin-wallet = Кошелёк
 positions-origin-copy-link =

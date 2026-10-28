@@ -4,17 +4,20 @@
 //! Promo generators for the Auto Trader page: the trader statistics tab, the
 //! running state, the monitor controls and the period loss limit panel.
 
-use std::collections::HashMap;
-
 use chrono::{Duration, Utc};
 
-use crate::trader::stats::{DailyPnlPoint, ExitBreakdown, PnlBucket, RealizedStats, TraderStats};
-use crate::trader::{LossLimitSnapshot, MonitorState, MonitorsStatus, TraderStatus};
+use crate::positions::{Book, Opening, Position};
+use crate::trader::stats::{RealizedStats, StatsWindow, TraderStats};
+use crate::trader::{
+    LossLimitSnapshot, MonitorState, MonitorsStatus, TraderRunState, TraderStatus,
+};
 
 use super::aggregates;
+use super::data::PROMO_OPEN_TOKENS;
 
-/// Promo window, matching the Stats tab's default selection.
-const PROMO_PERIOD_DAYS: u32 = 30;
+/// Network fee of each promo buy and sale, in raw units, as the promo positions list
+/// reports it.
+const PROMO_FEE_RAW: u64 = 5000;
 
 /// Configured period loss limit, in SOL.
 const PROMO_LOSS_LIMIT_NATIVE: f64 = 0.5;
@@ -36,6 +39,9 @@ pub fn get_promo_trader_status() -> TraderStatus {
         unavailable_reason: None,
         live_strategies: 0,
         paper_strategies: 0,
+        run_state: TraderRunState::Running,
+        live_entry_idle: None,
+        paper_entry_idle: None,
     }
 }
 
@@ -82,134 +88,63 @@ pub fn get_promo_loss_limit_status() -> LossLimitSnapshot {
     }
 }
 
-/// Generate promo trader stats response, fully derived from the closed/open arrays.
-pub fn get_promo_trader_stats() -> TraderStats {
+/// Generate the promo trader stats of `window`: the promo closed trades become closed
+/// rounds and go through the same aggregation as a real book, so every figure the Stats
+/// tab shows is one the live handler computes. Open exposure comes from the open arrays.
+pub fn get_promo_trader_stats(window: StatsWindow) -> TraderStats {
     let now = Utc::now();
-    let open = aggregates::open_agg();
-    let mut trades = aggregates::closed_trades(now);
-    let realized = aggregates::period_over(trades.iter());
-    let (best, worst) = aggregates::best_worst(&trades);
-
-    let mut exit_pnl: HashMap<String, f64> = HashMap::new();
-    for t in &trades {
-        *exit_pnl.entry(t.reason.to_owned()).or_insert(0.0) += t.pnl_sol;
-    }
-
-    let exit_breakdown = aggregates::reason_breakdown(&trades)
+    let since = window.since(now);
+    let closed: Vec<Position> = aggregates::closed_trades(now)
         .into_iter()
-        .map(|r| ExitBreakdown {
-            net_pnl_native: exit_pnl.get(&r.reason).copied().unwrap_or_default(),
-            exit_type: r.reason,
-            count: r.count,
-            avg_profit_pct: r.avg_profit_pct,
-        })
+        .enumerate()
+        .filter(|(_, trade)| trade.exit_time >= since)
+        .map(|(index, trade)| promo_closed_round(index, &trade))
         .collect();
-
-    // Walk exits oldest-first so the equity curve and the daily buckets come from the
-    // same pass the live handler uses.
-    trades.sort_by_key(|t| t.exit_time);
-    let mut per_day: HashMap<String, (f64, usize)> = HashMap::new();
-    let mut equity = 0.0f64;
-    let mut peak = 0.0f64;
-    let mut max_drawdown_sol = 0.0f64;
-    for t in &trades {
-        equity += t.pnl_sol;
-        peak = peak.max(equity);
-        max_drawdown_sol = max_drawdown_sol.max(peak - equity);
-        let entry = per_day
-            .entry(t.exit_time.format("%Y-%m-%d").to_string())
-            .or_insert((0.0, 0));
-        entry.0 += t.pnl_sol;
-        entry.1 += 1;
-    }
-
-    let today = now.date_naive();
-    let mut daily_pnl = Vec::new();
-    let mut day = (now - chrono::Duration::days(i64::from(PROMO_PERIOD_DAYS))).date_naive();
-    while day <= today {
-        let date = day.format("%Y-%m-%d").to_string();
-        let (net_pnl_sol, count) = per_day.get(&date).copied().unwrap_or((0.0, 0));
-        daily_pnl.push(DailyPnlPoint {
-            date,
-            bucket: PnlBucket::Day,
-            net_pnl_native: net_pnl_sol,
-            trades: count,
-        });
-        day = match day.succ_opt() {
-            Some(next) => next,
-            None => break,
-        };
-    }
-
-    let total_trades = trades.len();
-    let winners = realized.wins as usize;
-    let losers = total_trades.saturating_sub(winners);
-
-    let win_pcts: Vec<f64> = trades
-        .iter()
-        .filter(|t| t.pnl_percent > 0.0)
-        .map(|t| t.pnl_percent)
-        .collect();
-    let loss_pcts: Vec<f64> = trades
-        .iter()
-        .filter(|t| t.pnl_percent < 0.0)
-        .map(|t| t.pnl_percent)
-        .collect();
-
-    let mut holds: Vec<f64> = trades
-        .iter()
-        .map(|t| t.hold_minutes as f64 / 60.0)
-        .collect();
-    holds.sort_by(f64::total_cmp);
-    let median_hold_time_hours = (!holds.is_empty()).then(|| {
-        let mid = holds.len() / 2;
-        if holds.len() % 2 == 0 {
-            (holds[mid - 1] + holds[mid]) / 2.0
-        } else {
-            holds[mid]
-        }
-    });
-
+    let realized = RealizedStats::of(window, closed, now);
+    let open = aggregates::open_agg();
     TraderStats {
         open_positions_count: open.count,
         max_open_positions: open.count.max(1),
         locked_native: open.invested_sol,
-        realized: RealizedStats {
-            period_days: Some(PROMO_PERIOD_DAYS),
-            total_trades,
-            winners,
-            losers,
-            excluded_untrusted: 0,
-            // Trader stats reports REALIZED P&L (closed trades) like the live handler.
-            total_pnl_native: realized.net_pnl_sol,
-            gross_profit_native: realized.profit_sol,
-            gross_loss_native: realized.loss_sol,
-            profit_factor: (realized.loss_sol > 0.0)
-                .then(|| realized.profit_sol / realized.loss_sol),
-            expectancy_native: (total_trades > 0)
-                .then(|| realized.net_pnl_sol / total_trades as f64),
-            max_drawdown_native: max_drawdown_sol,
-            win_rate_pct: (total_trades > 0).then_some(realized.win_rate),
-            avg_win_pct: (!win_pcts.is_empty())
-                .then(|| win_pcts.iter().sum::<f64>() / win_pcts.len() as f64),
-            avg_loss_pct: (!loss_pcts.is_empty())
-                .then(|| loss_pcts.iter().sum::<f64>() / loss_pcts.len() as f64),
-            avg_hold_time_hours: (total_trades > 0).then(|| aggregates::avg_hold_hours(&trades)),
-            median_hold_time_hours,
-            best_trade_pct: Some(best.pnl_percent),
-            best_trade_token: Some(best.symbol.to_owned()),
-            worst_trade_pct: Some(worst.pnl_percent),
-            worst_trade_token: Some(worst.symbol.to_owned()),
-            daily_pnl,
-            exit_breakdown,
-        },
+        unrealized_native: Some(open.unrealized_pnl_sol),
+        open_unpriced: 0,
+        realized,
     }
+}
+
+/// The closed round of the `index`-th promo closed trade, with the id, owner and fees the
+/// promo positions list gives it.
+fn promo_closed_round(index: usize, trade: &aggregates::ClosedTrade) -> Position {
+    let (origin, management) = super::copy_trading::position_owner(trade.mint);
+    let mut position = Position::opening(Opening {
+        mint: trade.mint.to_owned(),
+        symbol: trade.symbol.to_owned(),
+        name: trade.name.to_owned(),
+        entry_price: trade.entry_price,
+        entry_time: trade.entry_time,
+        size_native: trade.size_sol,
+        entry_signature: None,
+        origin,
+        management,
+        entry_liquidity: None,
+        book: Book::Live,
+    });
+    position.id = i64::try_from(PROMO_OPEN_TOKENS.len() + index + 1).ok();
+    position.total_size_native = trade.size_sol;
+    position.transaction_exit_verified = true;
+    position.entry_fee_raw = Some(PROMO_FEE_RAW);
+    position.exit_fee_raw = Some(PROMO_FEE_RAW);
+    position.exit_price = Some(trade.exit_price);
+    position.exit_time = Some(trade.exit_time);
+    position.pnl = Some(trade.pnl_sol);
+    position.pnl_percent = Some(trade.pnl_percent);
+    position.closed_reason = Some(trade.reason.to_owned());
+    position
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::trader::TraderRunState;
     use crate::webserver::promo::get_promo_header_metrics;
 
     #[test]
@@ -260,5 +195,38 @@ mod tests {
             .map(|t| -t.pnl_sol)
             .sum();
         assert!((limit.current_loss_native - expected).abs() < 1e-9);
+    }
+
+    #[test]
+    fn promo_trader_stats_follow_the_window_and_the_shared_aggregation() {
+        crate::config::utils::install_default_config();
+        let day = get_promo_trader_stats(StatsWindow::Days(1));
+        let all = get_promo_trader_stats(StatsWindow::All);
+        let trades = aggregates::closed_trades(Utc::now());
+
+        assert_eq!(all.realized.total_trades, trades.len());
+        assert!(day.realized.total_trades > 0);
+        assert!(day.realized.total_trades < all.realized.total_trades);
+        assert_eq!(day.realized.period_days, Some(1));
+        assert_eq!(all.realized.period_days, None);
+        let net: f64 = trades.iter().map(|t| t.pnl_sol).sum();
+        assert!((all.realized.total_pnl_native - net).abs() < 1e-9);
+
+        // Every exit group carries a catalog label, never the stored reason as text.
+        for exit in &all.realized.exit_breakdown {
+            assert!(exit.label.id.starts_with("trade-reason-"), "{exit:?}");
+            assert_ne!(exit.label.id, "trade-reason-stored", "{exit:?}");
+        }
+        assert_eq!(
+            all.realized
+                .exit_breakdown
+                .iter()
+                .map(|exit| exit.count)
+                .sum::<usize>(),
+            all.realized.total_trades
+        );
+        assert_eq!(all.open_positions_count, PROMO_OPEN_TOKENS.len());
+        assert_eq!(all.open_unpriced, 0);
+        assert!(all.unrealized_native.is_some());
     }
 }

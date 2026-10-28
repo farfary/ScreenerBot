@@ -141,6 +141,7 @@ pub async fn add_target(address: &str, label: Option<&str>) -> Result<WatchTarge
     if !with_config(|cfg| cfg.wallet.watch_enabled) {
         return Err(Error::WatchDisabled);
     }
+    require_watch_capability()?;
 
     runtime::get_runtime()
         .map_err(|e| Error::ChainRuntime {
@@ -169,6 +170,16 @@ pub async fn add_target(address: &str, label: Option<&str>) -> Result<WatchTarge
     let target = db.insert_alert_target(address, label).await?;
     service::request_reload();
     Ok(target)
+}
+
+/// `CapabilityUnavailable` when the chain access mode cannot watch another
+/// wallet. Stored targets and their settings are kept; nothing new starts.
+fn require_watch_capability() -> Result<(), Error> {
+    crate::chains::access::require(
+        crate::chains::active_chain(),
+        crate::chains::access::Capability::WatchOtherWallets,
+    )
+    .map_err(Error::from)
 }
 
 fn validate_target_constraints(
@@ -252,6 +263,7 @@ pub async fn remove_copy_source(task_id: i64, address: &str) -> Result<(), Error
 pub async fn set_target_enabled(id: i64, enabled: bool) -> Result<(), Error> {
     let db = watch_db()?;
     if enabled {
+        require_watch_capability()?;
         let target = db.get_target(id).await?.ok_or(Error::WatchTargetNotFound {
             address: format!("id={id}"),
         })?;
@@ -296,6 +308,7 @@ pub async fn resume_target(
     page_budget: usize,
     acknowledge_missed_activity: bool,
 ) -> Result<(), Error> {
+    require_watch_capability()?;
     if !acknowledge_missed_activity {
         return Err(Error::WatchResumeAcknowledgementRequired);
     }

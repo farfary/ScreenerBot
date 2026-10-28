@@ -9,7 +9,8 @@
 
 use crate::logger::{self, LogTag};
 use crate::positions::Position;
-use crate::trader::types::{TradeAction, TradeDecision, TradePriority, TradeReason};
+use crate::trader::types::{TradeAction, TradeDecision, TradePriority};
+use crate::trader::TradeReason;
 use chrono::Utc;
 
 /// Check if a token is blacklisted at the TOKEN level (async - DB check)

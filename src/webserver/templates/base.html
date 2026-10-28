@@ -231,20 +231,21 @@
           </span>
         </button>
 
+        <!-- Explore Mode setup, or trading paused on the ScreenerBot service: the state
+             and its one action. Filled for the service by core/header.js. -->
         <button
           type="button"
-          class="explore-setup-control"
-          id="exploreSetupControl"
-          data-l10n-id="shell-explore-control"
+          class="access-control"
+          id="accessControl"
           hidden
         >
-          <i class="explore-setup-icon icon-info" aria-hidden="true"></i>
-          <span class="explore-setup-copy">
-            <strong class="explore-setup-title" data-l10n-id="shell-explore-title"></strong>
-            <span class="explore-setup-detail" data-l10n-id="shell-explore-detail"></span>
+          <i class="access-control-icon icon-info" aria-hidden="true"></i>
+          <span class="access-control-copy">
+            <strong class="access-control-title"></strong>
+            <span class="access-control-detail"></span>
           </span>
-          <span class="explore-setup-action" data-l10n-id="shell-explore-action"></span>
-          <i class="explore-setup-arrow icon-chevron-right" aria-hidden="true"></i>
+          <span class="access-control-action"></span>
+          <i class="access-control-arrow icon-chevron-right" aria-hidden="true"></i>
         </button>
 
         <!-- Status / metric cards (secondary; scrollable when space is tight) -->

@@ -3,8 +3,8 @@ config-account-auto-wallet-signin = Tự động đăng nhập bằng ví của 
 config-account-refresh-margin-secs = Biên làm mới token
     .hint = Gia hạn token đăng nhập sớm bao lâu trước khi hết hạn. Chỉ thay đổi khi bạn đang gỡ lỗi xác thực.
     .unit = giây
-config-account-use-gateway-rpc = Dùng RPC của { -brand } để gửi giao dịch
-    .hint = Phát các giao dịch swap đã ký qua screenerbot.io thay vì RPC của riêng bạn. Việc ký luôn diễn ra trên máy này; máy chủ không thể thay đổi giao dịch đã ký. RPC của riêng bạn vẫn cần cho dữ liệu giá.
+config-account-use-gateway-rpc = Gửi giao dịch qua { -brand }
+    .hint = Khi đã đăng nhập, phát các swap bạn ký trên máy tính này qua screenerbot.io. Việc ký luôn diễn ra tại đây, và giao dịch đã ký không thể bị thay đổi. Luôn bật ở chế độ dịch vụ { -brand }.
 
 config-agent-control-analysis = Công cụ phân tích
     .hint = Mức quyền cho các công cụ phân tích (allow, ask_user, deny)

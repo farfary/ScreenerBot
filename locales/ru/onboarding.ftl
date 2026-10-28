@@ -7,7 +7,7 @@ onboarding-welcome-custody-description = Приватные ключи хран�
 onboarding-welcome-engine-title = Движок, работающий постоянно
 onboarding-welcome-engine-description = Согласованные сервисы с проверками работоспособности и корректным управлением жизненным циклом.
 onboarding-welcome-realtime-title = Ончейн-данные в реальном времени
-onboarding-welcome-realtime-description = Прямой расчёт по резервам пулов — а не запаздывающие снимки API.
+onboarding-welcome-realtime-description = Со своим RPC цены берутся прямо из резервов пулов, а не из запаздывающих снимков API.
 
 onboarding-discover-title = Поиск и фильтрация
 onboarding-discover-description = Сканируйте три источника данных в поисках новых пар Solana, декодируйте более 12 типов пулов DEX прямо в блокчейне и пропускайте каждый токен через настраиваемые правила качества и безопасности.
@@ -27,7 +27,7 @@ onboarding-trade-auto-description = Оценка входов и выходов,
 onboarding-trade-strategy-title = Движок стратегий
 onboarding-trade-strategy-description = Деревья условий, объединяющие сигналы по цене, объёму и времени.
 onboarding-trade-copy-title = Копитрейдинг
-onboarding-trade-copy-description = Повторяйте сделки кошельков, на которые вы подписаны. Проверьте любую задачу в виртуальном режиме, прежде чем она потратит настоящие { -sol }.
+onboarding-trade-copy-description = Повторяйте сделки кошельков, на которые вы подписаны (нужен свой RPC). Проверьте любую задачу в виртуальном режиме, прежде чем она потратит настоящие { -sol }.
 onboarding-trade-safety-title = Средства защиты
 onboarding-trade-safety-description = Экстренная остановка, лимиты убытков за период и независимые переключатели мониторов.
 
@@ -43,18 +43,18 @@ onboarding-connect-events-title = Живой поток событий
 onboarding-connect-events-description = Каждая сделка, своп и системное событие записываются с категорией и уровнем серьёзности.
 
 onboarding-data-title = Данные { -brand }
-onboarding-data-description = Мы поддерживаем общий сервис рыночных данных, поэтому ваша установка не упирается в лимиты запросов публичных провайдеров. Он бесплатен с аккаунтом { -brand }, а { -brand } работает и без него.
-onboarding-data-candles-title = Общая история свечей
-onboarding-data-candles-description = Семь таймфреймов общей истории глубиной в годы, из единого кэша.
-onboarding-data-pools-title = Найденные пулы и безопасность
-onboarding-data-pools-description = Центральный реестр пулов и кэшированные отчёты { -rugcheck }, уже загруженные.
+onboarding-data-description = Бесплатный аккаунт { -brand } ускоряет графики и проверки токенов. Со своим RPC { -brand } работает и без него.
+onboarding-data-candles-title = Графики загружаются быстро
+onboarding-data-candles-description = Семь таймфреймов истории цен глубиной в годы.
+onboarding-data-pools-title = Проверки токенов готовы
+onboarding-data-pools-description = Пулы и отчёты о безопасности для большинства токенов, без ожидания.
 onboarding-data-signin-title = Нужен аккаунт
 onboarding-data-signin-description = Без аккаунта эти данные недоступны, и используются публичные провайдеры.
-onboarding-data-reading-title = Только запросы
-onboarding-data-reading-description = Мы видим, какие токены вы ищете. Но никогда — ключ, баланс, позицию или сделку.
+onboarding-data-reading-title = Что мы видим
+onboarding-data-reading-description = Токены, которые вы ищете, и свопы, которые вы отправляете через { -brand }. В сервисе { -brand } — ещё балансы и историю вашего торгового кошелька. Никогда — ваш ключ.
 
 onboarding-privacy-title = Ваши ключи, ваши данные
-onboarding-privacy-description = Ваша конфигурация, ключи и история торговли остаются на этом компьютере. Далее выберите «Открыть дашборд», чтобы искать токены без учётных данных, или подключите кошелёк и RPC, чтобы включить полноценного бота — и войдите там в аккаунт, если хотите данные { -brand }.
+onboarding-privacy-description = Ваша конфигурация, ключи и история торговли остаются на этом компьютере. Далее выберите «Открыть дашборд», чтобы искать токены без учётных данных, или создайте либо импортируйте кошелёк и подключите его через свой RPC или сервис { -brand }, чтобы начать торговать.
 onboarding-privacy-local-title = Архитектура «сначала локально»
 onboarding-privacy-local-description = Конфигурация, аналитика и базы данных хранятся на вашем компьютере.
 onboarding-privacy-wallet-title = Зашифрованный кошелёк
@@ -65,7 +65,7 @@ onboarding-privacy-config-title = Гибкая конфигурация
 onboarding-privacy-config-description = Большинство настроек можно изменить в дашборде после первоначальной настройки.
 
 onboarding-setup-shortcut =
-    .aria-label = Перейти сразу к настройке кошелька и RPC или выбрать режим обзора
+    .aria-label = Перейти сразу к настройке или выбрать режим обзора
 onboarding-setup-shortcut-label = К настройке
 onboarding-progress-dot =
     .aria-label = Перейти к слайду { $number }

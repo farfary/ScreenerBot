@@ -70,7 +70,7 @@ transactions-search =
     .placeholder = البحث في التواقيع…
     .aria-label = البحث في توقيعات المعاملات
 transactions-load-failed = تعذّر تحديث المعاملات
-transactions-setup-gate-title = المعاملات تتطلب محفظة
+transactions-access-gate-title = المعاملات تتطلب محفظة
 transactions-summary-total = الإجمالي
 transactions-summary-success = الناجحة
 transactions-summary-failed = الفاشلة
@@ -209,3 +209,9 @@ transactions-dialog-raw-empty = لا توجد بيانات خام متاحة
 # Empty table (scripts/pages/transactions.js)
 transactions-empty = لا توجد معاملات بعد
     .message = تظهر هنا عمليات المبادلة والتحويل لمحفظة التداول بعد تأكيدها على السلسلة.
+
+## On-demand history
+
+transactions-history-on-demand = يُحمَّل السجل الأقدم عند الطلب.
+transactions-history-load-older = تحميل الأقدم
+transactions-history-load-older-failed = تعذّر تحميل السجل الأقدم.
