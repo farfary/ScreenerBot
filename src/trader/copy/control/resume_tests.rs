@@ -450,3 +450,45 @@ async fn a_patch_of_the_target_wallet_is_refused_untouched() {
     );
     assert_eq!(stored_task(&database, ids[0]).await, before);
 }
+
+/// Two enables racing for the last free slot leave exactly the maximum enabled: the
+/// count and the write of each enable run under one lock, so the second enable counts
+/// the first and is refused at the limit.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn concurrent_enables_at_the_last_slot_never_pass_the_limit() {
+    crate::config::utils::install_default_config();
+    let maximum = crate::config::with_config(|config| config.copy_trading.max_active_tasks);
+    assert!(maximum >= 1);
+    let mut entries = vec![(TradingMode::Paper, None); maximum - 1];
+    entries.extend([
+        (TradingMode::Paper, Some(CopyPauseReason::User)),
+        (TradingMode::Paper, Some(CopyPauseReason::User)),
+    ]);
+    let (_directory, database, ids) = store_of(&entries).await;
+    let enable = serde_json::json!({ "enabled": true });
+
+    let (first, second) = tokio::join!(
+        patch_task(
+            &database,
+            ids[maximum - 1],
+            enable.clone(),
+            &positions_follow
+        ),
+        patch_task(&database, ids[maximum], enable.clone(), &positions_follow),
+    );
+
+    let refused = [&first, &second]
+        .into_iter()
+        .filter(|result| matches!(result, Err(Error::CopyTaskLimit { maximum: limit }) if *limit == maximum))
+        .count();
+    assert_eq!(refused, 1, "{first:?} {second:?}");
+    assert!(first.is_ok() || second.is_ok(), "{first:?} {second:?}");
+    let enabled = database
+        .list_tasks()
+        .await
+        .unwrap()
+        .into_iter()
+        .filter(|task| task.enabled)
+        .count();
+    assert_eq!(enabled, maximum);
+}

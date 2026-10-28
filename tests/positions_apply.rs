@@ -1389,9 +1389,15 @@ fn a_submitted_exit_is_stored_without_a_price_update() {
             let id = open_position(|_| {}).await;
             let before = in_storage(id).await;
 
-            mark_exit_submitted(id, CLOSE_SIGNATURE, 1.25, "stop_loss_pending_verification")
-                .await
-                .expect("record the submitted exit");
+            mark_exit_submitted(
+                id,
+                CLOSE_SIGNATURE,
+                1.25,
+                "stop_loss_pending_verification",
+                None,
+            )
+            .await
+            .expect("record the submitted exit");
 
             for position in [stored_position(id).await, memory_position(id).await] {
                 assert_eq!(
@@ -1409,6 +1415,122 @@ fn a_submitted_exit_is_stored_without_a_price_update() {
     );
 }
 
+/// The exit strategy whose decision sends a full close.
+const EXIT_STRATEGY: &str = "exit-strategy";
+
+/// A round an exit strategy closed records that strategy from the submission through the
+/// verified close, in storage and in memory, and a repeated verification keeps it.
+#[test]
+fn a_strategy_closed_round_records_its_exit_strategy() {
+    common::run_isolated(
+        module_path!(),
+        "a_strategy_closed_round_records_its_exit_strategy",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            let id = open_position(|_| {}).await;
+
+            mark_exit_submitted(
+                id,
+                CLOSE_SIGNATURE,
+                1.25,
+                "StrategyExit_pending_verification",
+                Some(EXIT_STRATEGY),
+            )
+            .await
+            .expect("record the submitted exit");
+            for position in [stored_position(id).await, memory_position(id).await] {
+                assert_eq!(position.exit_strategy_id.as_deref(), Some(EXIT_STRATEGY));
+            }
+
+            for _ in 0..2 {
+                apply_transition(verified_close(id))
+                    .await
+                    .expect("the close commits");
+                for position in [stored_position(id).await, memory_position(id).await] {
+                    assert!(position.transaction_exit_verified);
+                    assert_eq!(position.exit_strategy_id.as_deref(), Some(EXIT_STRATEGY));
+                }
+            }
+            assert_eq!(exit_records(id).await, 1, "the close is booked once");
+        },
+    );
+}
+
+/// A round a rule closed records no exit strategy, also after a strategy's close of it
+/// failed and was cleared for a retry.
+#[test]
+fn a_rule_closed_round_records_no_exit_strategy() {
+    common::run_isolated(
+        module_path!(),
+        "a_rule_closed_round_records_no_exit_strategy",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            let id = open_position(|_| {}).await;
+
+            mark_exit_submitted(
+                id,
+                CLOSE_SIGNATURE,
+                1.25,
+                "StrategyExit_pending_verification",
+                Some(EXIT_STRATEGY),
+            )
+            .await
+            .expect("record the strategy's exit");
+            apply_transition(failed_close(id))
+                .await
+                .expect("the failed exit is cleared");
+            for position in [stored_position(id).await, memory_position(id).await] {
+                assert_eq!(
+                    position.exit_strategy_id, None,
+                    "a failed close names no closer"
+                );
+            }
+
+            mark_exit_submitted(
+                id,
+                CLOSE_SIGNATURE,
+                1.25,
+                "stop_loss_pending_verification",
+                None,
+            )
+            .await
+            .expect("record the rule's exit");
+            apply_transition(verified_close(id))
+                .await
+                .expect("the close commits");
+            for position in [stored_position(id).await, memory_position(id).await] {
+                assert!(position.transaction_exit_verified);
+                assert_eq!(position.exit_strategy_id, None);
+            }
+        },
+    );
+}
+
+/// A partial exit leaves the round open and names no closer.
+#[test]
+fn a_partial_exit_records_no_exit_strategy() {
+    common::run_isolated(
+        module_path!(),
+        "a_partial_exit_records_no_exit_strategy",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            let id = open_position(|_| {}).await;
+            register_partial(id).await;
+
+            apply_transition(partial_exit(id))
+                .await
+                .expect("the partial exit is booked");
+            for position in [stored_position(id).await, memory_position(id).await] {
+                assert!(position.exit_time.is_none(), "the round stays open");
+                assert_eq!(position.exit_strategy_id, None);
+            }
+        },
+    );
+}
+
 #[test]
 fn a_failed_exit_submission_write_still_marks_the_exit_in_memory() {
     common::run_isolated(
@@ -1421,10 +1543,15 @@ fn a_failed_exit_submission_write_still_marks_the_exit_in_memory() {
             let injector = injector();
             injector.execute_batch(INJECT_ROW).expect("install trigger");
 
-            let error =
-                mark_exit_submitted(id, CLOSE_SIGNATURE, 1.25, "stop_loss_pending_verification")
-                    .await
-                    .expect_err("an injected row failure must surface");
+            let error = mark_exit_submitted(
+                id,
+                CLOSE_SIGNATURE,
+                1.25,
+                "stop_loss_pending_verification",
+                None,
+            )
+            .await
+            .expect_err("an injected row failure must surface");
             assert_query_failure(&error);
             assert_eq!(stored_position(id).await.exit_transaction_signature, None);
             // The swap is already submitted: memory must carry the exit so it is not sold
@@ -1452,9 +1579,15 @@ fn a_full_exit_whose_submission_write_failed_is_booked_in_full_at_verification()
             let id = open_position(|_| {}).await;
             let injector = injector();
             injector.execute_batch(INJECT_ROW).expect("install trigger");
-            mark_exit_submitted(id, CLOSE_SIGNATURE, 1.25, "stop_loss_pending_verification")
-                .await
-                .expect_err("an injected row failure must surface");
+            mark_exit_submitted(
+                id,
+                CLOSE_SIGNATURE,
+                1.25,
+                "stop_loss_pending_verification",
+                None,
+            )
+            .await
+            .expect_err("an injected row failure must surface");
             injector
                 .execute_batch("DROP TRIGGER inject_row;")
                 .expect("remove trigger");
@@ -1519,10 +1652,15 @@ fn an_exit_submitted_after_a_force_close_leaves_the_close_intact() {
             let closed = stored_position(id).await;
             let booked = in_storage(id).await;
 
-            let error =
-                mark_exit_submitted(id, "late-exit-sig", 9.75, "stop_loss_pending_verification")
-                    .await
-                    .expect_err("a verified row refuses the exit submission");
+            let error = mark_exit_submitted(
+                id,
+                "late-exit-sig",
+                9.75,
+                "stop_loss_pending_verification",
+                None,
+            )
+            .await
+            .expect_err("a verified row refuses the exit submission");
             assert!(
                 matches!(error, Error::AlreadyClosed { position_id } if position_id == id),
                 "expected already closed, got {error:?}"
@@ -1565,6 +1703,7 @@ fn a_busy_exit_submission_write_is_retried_until_it_lands() {
                 CLOSE_SIGNATURE,
                 1.25,
                 "stop_loss_pending_verification",
+                None,
             ));
             // Held past the store's 5 s busy timeout, so the first attempt fails as busy
             // and only a retry can land the write.
@@ -1998,8 +2137,14 @@ fn an_exit_submission_waits_for_a_committed_booking_to_be_adopted() {
             }
 
             let submission = tokio::spawn(async move {
-                mark_exit_submitted(id, CLOSE_SIGNATURE, 1.25, "stop_loss_pending_verification")
-                    .await
+                mark_exit_submitted(
+                    id,
+                    CLOSE_SIGNATURE,
+                    1.25,
+                    "stop_loss_pending_verification",
+                    None,
+                )
+                .await
             });
             tokio::time::sleep(std::time::Duration::from_millis(300)).await;
             assert_eq!(
@@ -5028,6 +5173,7 @@ async fn late_dca_beside_an_exiting_position() -> (i64, i64) {
         OPEN_EXIT_SIGNATURE,
         1.2,
         "stop_loss_pending_verification",
+        None,
     )
     .await
     .expect("record the submitted exit");

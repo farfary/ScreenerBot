@@ -192,6 +192,7 @@ fn clear_close(position: &mut Position, held: RawAmount, acquired: RawAmount) {
     position.pnl = None;
     position.pnl_percent = None;
     position.closed_reason = None;
+    position.exit_strategy_id = None;
     position.transaction_exit_verified = false;
     position.synthetic_exit = false;
     // A kept exit signature would be verified again as a full exit of the reopened position.

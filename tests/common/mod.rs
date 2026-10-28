@@ -753,6 +753,7 @@ pub fn test_position(entry_price: f64, size_sol: f64) -> Position {
         phantom_first_seen: None,
         synthetic_exit: false,
         closed_reason: None,
+        exit_strategy_id: None,
         pnl: None,
         pnl_percent: None,
         unrealized_pnl: None,

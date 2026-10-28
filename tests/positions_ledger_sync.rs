@@ -2102,7 +2102,8 @@ fn an_exit_held_in_memory_only_keeps_its_mint_busy() {
                     id,
                     "x1",
                     1.0,
-                    "stop_loss_pending_verification"
+                    "stop_loss_pending_verification",
+                    None,
                 )
                 .await
             );
@@ -2172,7 +2173,8 @@ fn an_abandoned_verification_frees_its_mint_for_the_ledger() {
                     id,
                     "exit-1",
                     1.0,
-                    "stop_loss_pending_verification"
+                    "stop_loss_pending_verification",
+                    None,
                 )
                 .await
             );

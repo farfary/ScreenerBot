@@ -33,7 +33,14 @@ pub async fn get_task(id: i64) -> Result<CopyTask> {
         .ok_or(Error::CopyTaskNotFound { task_id: id })
 }
 
-async fn ensure_active_slot(db: &CopyDatabase) -> Result<()> {
+/// Serializes every write that enables a task, from the active-task count to the stored
+/// row, so two enables at the last free slot never both count it free.
+static ACTIVE_SLOT: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+/// Takes the active-slot lock and checks a task may be enabled under the active-task
+/// limit. The caller writes the enabled task before dropping the returned guard.
+async fn ensure_active_slot(db: &CopyDatabase) -> Result<tokio::sync::MutexGuard<'static, ()>> {
+    let slot = ACTIVE_SLOT.lock().await;
     let active = db
         .list_tasks()
         .await?
@@ -44,7 +51,7 @@ async fn ensure_active_slot(db: &CopyDatabase) -> Result<()> {
     if active >= maximum {
         return Err(Error::CopyTaskLimit { maximum });
     }
-    Ok(())
+    Ok(slot)
 }
 
 /// Whether the task still holds an open copy of `mint` (of any token when `None`)
@@ -134,10 +141,13 @@ pub async fn create_task(input: CopyTaskInput) -> Result<CopyTask> {
         .map_err(|e| Error::CopyWatchRejected {
             detail: format!("invalid target wallet: {e}"),
         })?;
-    if task.enabled {
-        ensure_active_slot(&db).await?;
-    }
+    let slot = if task.enabled {
+        Some(ensure_active_slot(&db).await?)
+    } else {
+        None
+    };
     let inserted = db.insert_task(task).await?;
+    drop(slot);
     if inserted.enabled {
         if let Err(error) = watch::add_copy_source(
             inserted.id,
@@ -254,10 +264,13 @@ where
     } else {
         (original.pause_reason.clone(), original.paused_at)
     };
-    if task.enabled && !original.enabled {
-        ensure_active_slot(db).await?;
-    }
+    let slot = if task.enabled && !original.enabled {
+        Some(ensure_active_slot(db).await?)
+    } else {
+        None
+    };
     let updated = db.update_task(task).await?;
+    drop(slot);
     if let Err(error) = sync_watch(updated.clone()).await {
         return Err(match db.update_task(original.clone()).await {
             Ok(_) => error,

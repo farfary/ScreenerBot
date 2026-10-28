@@ -259,6 +259,7 @@ fn round_position(task: &CopyTask, round: &Round, book: Book, now: DateTime<Utc>
         phantom_first_seen: None,
         synthetic_exit: false,
         closed_reason: round.close.as_ref().map(|(.., reason)| reason.clone()),
+        exit_strategy_id: None,
         pnl,
         pnl_percent: exit_price.map(move_pct),
         unrealized_pnl: unrealized,

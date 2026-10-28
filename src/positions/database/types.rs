@@ -7,12 +7,12 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 // Database schema version
-pub(super) const POSITIONS_SCHEMA_VERSION: u32 = 9;
+pub(super) const POSITIONS_SCHEMA_VERSION: u32 = 10;
 
 /// The oldest core that reads the store. Version 7 adds `basis_peak_price NOT NULL`
 /// without a default, which no earlier core writes. Version 8 adds `take_profit_level`
-/// with a default and version 9 the nullable `entry_liquidity_native` and
-/// `entry_liquidity_pool`, so a version 7
+/// with a default, version 9 the nullable `entry_liquidity_native` and
+/// `entry_liquidity_pool`, and version 10 the nullable `exit_strategy_id`, so a version 7
 /// core still inserts and rewrites rows.
 pub(super) const POSITIONS_MIN_READER_VERSION: u32 = 7;
 
@@ -41,7 +41,7 @@ pub(super) const POSITION_SELECT_COLUMNS: &str = r#"
   profit_target_min, profit_target_max, liquidity_tier,
   transaction_entry_verified, transaction_exit_verified,
   entry_fee_raw, exit_fee_raw, current_price, current_price_updated,
-  phantom_confirmations, phantom_first_seen, synthetic_exit, closed_reason,
+  phantom_confirmations, phantom_first_seen, synthetic_exit, closed_reason, exit_strategy_id,
   pnl, pnl_percent, unrealized_pnl, unrealized_pnl_percent,
   remaining_token_amount, total_exited_amount, average_exit_price, partial_exit_count,
   take_profit_level, dca_count, average_entry_price, last_dca_time,
@@ -95,6 +95,7 @@ CREATE TABLE IF NOT EXISTS positions (
   phantom_first_seen TEXT, -- When first confirmed phantom
   synthetic_exit BOOLEAN NOT NULL DEFAULT false,
   closed_reason TEXT, -- Optional reason for closure
+  exit_strategy_id TEXT, -- Exit strategy whose decision sent the full close; NULL when none did
   -- Pre-calculated P&L values (updated by positions system)
   pnl REAL, -- Realized P&L in SOL (for closed positions)
   pnl_percent REAL, -- Realized P&L percentage (for closed positions)
@@ -365,6 +366,13 @@ pub(super) const POSITIONS_ENTRY_LIQUIDITY_COLUMNS: &[(&str, &str)] = &[
         "ALTER TABLE positions ADD COLUMN entry_liquidity_pool TEXT",
     ),
 ];
+
+/// Exit attribution added to tables created before it: the exit strategy whose decision
+/// sent a round's full close. Rows closed before it read as closed by no strategy.
+pub(super) const POSITIONS_EXIT_STRATEGY_COLUMNS: &[(&str, &str)] = &[(
+    "exit_strategy_id",
+    "ALTER TABLE positions ADD COLUMN exit_strategy_id TEXT",
+)];
 
 /// Positions columns of earlier releases that the canonical table no longer has.
 /// Their meaning lives on in the provenance columns; the rebuild drops them.

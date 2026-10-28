@@ -348,6 +348,14 @@ pub struct Position {
     pub phantom_first_seen: Option<DateTime<Utc>>, // When first confirmed phantom
     pub synthetic_exit: bool,       // True if we synthetically closed due to missing exit tx
     pub closed_reason: Option<String>, // Optional reason for closure (e.g., "synthetic_phantom_closure")
+    /// The exit strategy whose decision sent the round's full close, recorded with the
+    /// exit submission and kept by its verified close; cleared when that close fails, the
+    /// round reopens or an operator writes it off. `None` for a round a rule, a user, copy
+    /// trading or a sale outside the bot closed. A partial exit never sets it. The paper
+    /// book attributes its closes through the strategy of the closing exit leg
+    /// ([`crate::positions::db::StrategyRound`]) and leaves this `None`.
+    #[serde(default)]
+    pub exit_strategy_id: Option<String>,
 
     // ==================== CALCULATED P&L VALUES ====================
     // Pre-calculated P&L values - updated automatically by positions system
@@ -499,6 +507,7 @@ impl Position {
             phantom_first_seen: None,
             synthetic_exit: false,
             closed_reason: None,
+            exit_strategy_id: None,
             pnl: None,
             pnl_percent: None,
             unrealized_pnl: None,

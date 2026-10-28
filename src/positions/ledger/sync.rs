@@ -1045,6 +1045,8 @@ fn build_position(
         phantom_first_seen: None,
         synthetic_exit: false,
         closed_reason: (!round.is_open).then(|| "wallet_history".to_owned()),
+        // A round read from wallet history was closed by no exit strategy.
+        exit_strategy_id: None,
         pnl: realized_pnl,
         pnl_percent: realized_pnl_percent,
         unrealized_pnl: existing.and_then(|p| p.unrealized_pnl),

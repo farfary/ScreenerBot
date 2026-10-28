@@ -24,10 +24,12 @@ use tokio::time::{sleep, Duration};
 use super::exit_ladder::{run_exit_ladder, ExitSwap};
 use super::exit_sizing::{read_exit_sale, ExitSale, ExitShare};
 
-/// Close an existing position
+/// Close an existing position. `exit_strategy_id` is the exit strategy whose decision
+/// sends this full close, recorded with the submission; `None` for any other close.
 pub async fn close_position_direct(
     token_mint: &str,
     exit_reason: String,
+    exit_strategy_id: Option<&str>,
     slippage_pct: Option<f64>,
 ) -> Result<String> {
     let api_token = crate::tokens::get_full_token_async(crate::chains::active_chain(), token_mint)
@@ -315,7 +317,14 @@ pub async fn close_position_direct(
     let closed_reason = format!("{exit_reason}{PENDING_VERIFICATION_SUFFIX}");
     match position_id {
         Some(id) => {
-            match mark_exit_submitted(id, &transaction_signature, exit_price, &closed_reason).await
+            match mark_exit_submitted(
+                id,
+                &transaction_signature,
+                exit_price,
+                &closed_reason,
+                exit_strategy_id,
+            )
+            .await
             {
                 Ok(()) => {}
                 Err(Error::AlreadyClosed { .. }) => logger::warning(
@@ -392,7 +401,8 @@ pub async fn close_position_direct(
 /// again and verification could not match the exit to its position. The row then lacks
 /// the submission until verification: a verified close stores the swap's signature with
 /// the close, its exit record and its realized P&L, and a failed one clears the exit by
-/// the swap's signature. The market exit price and the pending reason stay memory-only. A
+/// the swap's signature. The market exit price, the pending reason and the deciding exit
+/// strategy stay memory-only, so that close is attributed to no strategy. A
 /// position whose exit is already verified keeps its booking in the row and in memory,
 /// and the call returns [`Error::AlreadyClosed`]. Returns the result of the row write.
 pub async fn mark_exit_submitted(
@@ -400,12 +410,19 @@ pub async fn mark_exit_submitted(
     exit_signature: &str,
     exit_price: f64,
     closed_reason: &str,
+    exit_strategy_id: Option<&str>,
 ) -> Result<()> {
     with_booking_lock(position_id, async {
         let mut attempt = 1;
         let persisted = loop {
-            match record_exit_submission(position_id, exit_signature, exit_price, closed_reason)
-                .await
+            match record_exit_submission(
+                position_id,
+                exit_signature,
+                exit_price,
+                closed_reason,
+                exit_strategy_id,
+            )
+            .await
             {
                 Err(error)
                     if error.is_retryable() && attempt < super::POSITION_SAVE_MAX_RETRIES =>
@@ -428,8 +445,14 @@ pub async fn mark_exit_submitted(
         if matches!(persisted, Err(Error::AlreadyClosed { .. })) {
             return persisted;
         }
-        set_exit_submission_in_memory(position_id, exit_signature, exit_price, closed_reason)
-            .await;
+        set_exit_submission_in_memory(
+            position_id,
+            exit_signature,
+            exit_price,
+            closed_reason,
+            exit_strategy_id,
+        )
+        .await;
         persisted
     })
     .await

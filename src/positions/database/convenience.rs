@@ -178,12 +178,19 @@ pub async fn record_exit_submission(
     exit_signature: &str,
     exit_price: f64,
     closed_reason: &str,
+    exit_strategy_id: Option<&str>,
 ) -> Result<()> {
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;
     match db_guard.as_ref() {
         Some(db) => {
-            db.record_exit_submission(position_id, exit_signature, exit_price, closed_reason)
-                .await
+            db.record_exit_submission(
+                position_id,
+                exit_signature,
+                exit_price,
+                closed_reason,
+                exit_strategy_id,
+            )
+            .await
         }
         None => Err(Error::NotInitialised),
     }

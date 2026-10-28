@@ -171,6 +171,11 @@ fn create_schema(
         "positions",
         POSITIONS_ENTRY_LIQUIDITY_COLUMNS,
     )?);
+    added.extend(add_missing_columns(
+        tx,
+        "positions",
+        POSITIONS_EXIT_STRATEGY_COLUMNS,
+    )?);
     if !added.is_empty() {
         summary.push(format!("added positions columns {}", added.join(", ")));
     }
@@ -354,7 +359,7 @@ pub(super) fn insert_position_row(
                 transaction_entry_verified, transaction_exit_verified,
                 entry_fee_raw, exit_fee_raw, current_price, current_price_updated,
                 phantom_confirmations, phantom_first_seen, synthetic_exit, closed_reason,
-                pnl, pnl_percent, unrealized_pnl, unrealized_pnl_percent,
+                exit_strategy_id, pnl, pnl_percent, unrealized_pnl, unrealized_pnl_percent,
                 remaining_token_amount, total_exited_amount, average_exit_price, partial_exit_count,
                 dca_count, average_entry_price, last_dca_time, origin_kind, origin_ref, management,
                 round_key, basis_complete, history_complete, holding_state, basis_peak_price,
@@ -363,7 +368,7 @@ pub(super) fn insert_position_row(
                 ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17,
                 ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32, ?33,
                 ?34, ?35, ?36, ?37, ?38, ?39, ?40, ?41, ?42, ?43, ?44, ?45, ?46, ?47,
-                ?48, ?49, ?50, ?51, ?52, ?53, ?54, ?55
+                ?48, ?49, ?50, ?51, ?52, ?53, ?54, ?55, ?56
             ) RETURNING id
       "#,
         params![
@@ -400,6 +405,7 @@ pub(super) fn insert_position_row(
             position.phantom_first_seen.map(|t| t.to_rfc3339()),
             position.synthetic_exit,
             position.closed_reason,
+            position.exit_strategy_id,
             position.pnl,
             position.pnl_percent,
             position.unrealized_pnl,
@@ -610,15 +616,17 @@ impl PositionsDatabase {
     }
 
     /// Record a submitted full-exit swap: its signature, the market price at the exit
-    /// decision and the pending closed reason. No other column is written. A row whose
-    /// exit is already verified is left as booked and the call returns
-    /// [`Error::AlreadyClosed`].
+    /// decision, the pending closed reason and the exit strategy that decided it (`None`
+    /// for any other close, which also drops the strategy of an earlier submission). No
+    /// other column is written. A row whose exit is already verified is left as booked and
+    /// the call returns [`Error::AlreadyClosed`].
     pub async fn record_exit_submission(
         &self,
         position_id: i64,
         exit_signature: &str,
         exit_price: f64,
         closed_reason: &str,
+        exit_strategy_id: Option<&str>,
     ) -> Result<()> {
         let conn = self.get_connection()?;
 
@@ -629,6 +637,7 @@ impl PositionsDatabase {
         exit_transaction_signature = ?2,
         exit_price = ?3,
         closed_reason = ?4,
+        exit_strategy_id = ?6,
         updated_at = datetime('now')
       WHERE id = ?1 AND chain_id = ?5 AND transaction_exit_verified = 0
       "#,
@@ -638,6 +647,7 @@ impl PositionsDatabase {
                     exit_price,
                     closed_reason,
                     self.chain.as_str(),
+                    exit_strategy_id,
                 ],
             )
             .map_err(|e| DatabaseError::classify_sqlite_failure("record_exit_submission", e))?;
@@ -873,6 +883,7 @@ impl PositionsDatabase {
             phantom_first_seen,
             synthetic_exit: row.get("synthetic_exit")?,
             closed_reason: row.get("closed_reason")?,
+            exit_strategy_id: row.get("exit_strategy_id")?,
             // Pre-calculated P&L fields
             pnl: row.get::<_, Option<f64>>("pnl").ok().flatten(),
             pnl_percent: row.get::<_, Option<f64>>("pnl_percent").ok().flatten(),
@@ -980,7 +991,7 @@ pub(super) fn write_position_row(
         partial_exit_count = ?40, dca_count = ?41, average_entry_price = ?42, last_dca_time = ?43,
         round_key = ?44, basis_complete = ?45, history_complete = ?46, holding_state = ?47,
         basis_peak_price = ?48, take_profit_level = ?50, entry_liquidity_native = ?51,
-        entry_liquidity_pool = ?52, updated_at = datetime('now')
+        entry_liquidity_pool = ?52, exit_strategy_id = ?53, updated_at = datetime('now')
       WHERE id = ?1 AND chain_id = ?49
       "#,
         params![
@@ -1036,6 +1047,7 @@ pub(super) fn write_position_row(
             i64::from(position.take_profit_level),
             position.entry_liquidity_native,
             position.entry_liquidity_pool,
+            position.exit_strategy_id,
         ],
     )
 }
@@ -1152,6 +1164,7 @@ mod tests {
             "take_profit_level",
             "entry_liquidity_native",
             "entry_liquidity_pool",
+            "exit_strategy_id",
         ] {
             assert!(
                 schema::table_has_column(connection, "positions", column).unwrap(),
@@ -1697,6 +1710,148 @@ mod tests {
         let manifest: crate::database::backup::UpgradeBackupManifest =
             serde_json::from_slice(&std::fs::read(manifest_path).unwrap()).unwrap();
         assert_eq!(manifest.from_schema_version, Some(older.to_string()));
+    }
+
+    /// A paper store from before exit attribution, the shape every paper store created at
+    /// version 9 holds, gains the column through the whole open, run twice, with its rows
+    /// and children kept and no closer on any row.
+    #[tokio::test]
+    async fn a_version_9_paper_store_gains_exit_attribution_and_reopens_unchanged() {
+        let (database, _directory) = test_database(Book::Paper);
+        upgrade(&database).await.unwrap();
+        {
+            let connection = database.get_connection().unwrap();
+            connection.execute(
+                "INSERT INTO positions (id, chain_id, wallet_address, mint, symbol, name, entry_price, entry_time, exit_price, exit_time, position_type, entry_size_native, total_size_native, price_highest, price_lowest, basis_peak_price, closed_reason, transaction_exit_verified, origin_kind, origin_ref, management) VALUES (41, 'solana', 'wallet', 'mint', 'SYM', 'Token', 0.5, '2026-01-01T00:00:00Z', 0.75, '2026-01-02T00:00:00Z', 'buy', 1.0, 1.0, 0.75, 0.5, 0.75, 'StrategyExit', 1, 'auto', 'entry-strategy', 'auto_trader')",
+                [],
+            ).unwrap();
+            connection
+                .execute(
+                    "INSERT INTO position_states (id, position_id, state) VALUES (7, 41, 'Closed')",
+                    [],
+                )
+                .unwrap();
+            connection
+                .execute_batch(
+                    "ALTER TABLE positions DROP COLUMN exit_strategy_id;
+                     UPDATE store_schema SET version = 9 WHERE id = 1;",
+                )
+                .unwrap();
+            assert!(
+                !schema::table_has_column(&connection, "positions", "exit_strategy_id").unwrap()
+            );
+        }
+        let before = {
+            let contents = store_contents(&database.get_connection().unwrap());
+            assert_eq!(contents.len(), 2);
+            contents
+        };
+
+        upgrade(&database).await.unwrap();
+        let connection = database.get_connection().unwrap();
+        assert_current_schema(&connection, Book::Paper);
+        let upgraded = store_contents(&connection);
+        assert_eq!(upgraded.len(), before.len());
+        let closer: Option<String> = connection
+            .query_row(
+                "SELECT exit_strategy_id FROM positions WHERE id = 41",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            closer, None,
+            "a round closed before attribution names no closer"
+        );
+        assert_eq!(
+            connection
+                .query_row(
+                    "SELECT closed_reason, origin_ref, exit_price FROM positions WHERE id = 41",
+                    [],
+                    |row| Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, f64>(2)?
+                    )),
+                )
+                .unwrap(),
+            ("StrategyExit".to_owned(), "entry-strategy".to_owned(), 0.75)
+        );
+        assert_eq!(
+            connection
+                .query_row(
+                    "SELECT position_id FROM position_states WHERE id = 7",
+                    [],
+                    |row| row.get::<_, i64>(0)
+                )
+                .unwrap(),
+            41
+        );
+        drop(connection);
+
+        upgrade(&database).await.unwrap();
+        let connection = database.get_connection().unwrap();
+        assert_current_schema(&connection, Book::Paper);
+        assert_eq!(
+            store_contents(&connection),
+            upgraded,
+            "a second open changes nothing"
+        );
+    }
+
+    /// The closing exit strategy is read, kept by a booking that does not touch it, and
+    /// written back by the row writer.
+    #[tokio::test]
+    async fn the_exit_strategy_round_trips_through_the_row_codec_and_writer() {
+        let (database, _directory) = test_database(Book::Live);
+        upgrade(&database).await.unwrap();
+        database.get_connection().unwrap().execute(
+            "INSERT INTO positions (id, chain_id, wallet_address, mint, symbol, name, entry_price, entry_time, position_type, entry_size_native, total_size_native, price_highest, price_lowest, basis_peak_price, exit_strategy_id, origin_kind, management) VALUES (41, 'solana', 'wallet', 'mint', 'SYM', 'Token', 0.5, '2026-01-01T00:00:00Z', 'buy', 1.0, 1.0, 0.5, 0.5, 0.5, 'exit-strategy', 'auto', 'auto_trader')",
+            [],
+        ).unwrap();
+        let stored = || -> Option<String> {
+            database
+                .get_connection()
+                .unwrap()
+                .query_row(
+                    "SELECT exit_strategy_id FROM positions WHERE id = 41",
+                    [],
+                    |row| row.get(0),
+                )
+                .unwrap()
+        };
+        let read = {
+            let connection = database.get_connection().unwrap();
+            connection
+                .query_row(
+                    &format!(
+                        "SELECT {} FROM positions WHERE id = 41",
+                        super::POSITION_SELECT_COLUMNS
+                    ),
+                    [],
+                    |row| database.row_to_position(row),
+                )
+                .unwrap()
+        };
+        assert_eq!(read.exit_strategy_id.as_deref(), Some("exit-strategy"));
+
+        let book = |closer: Option<Option<&str>>| {
+            database
+                .commit_booking(41, Ok("wallet"), |row, _| {
+                    if let Some(closer) = closer {
+                        row.exit_strategy_id = closer.map(str::to_owned);
+                    }
+                    Ok(Booking::Write {
+                        record: None,
+                        outcome: (),
+                    })
+                })
+                .unwrap();
+        };
+        book(None);
+        assert_eq!(stored().as_deref(), Some("exit-strategy"));
+        book(Some(None));
+        assert_eq!(stored(), None);
     }
 
     /// The entry liquidity reading and the pool it came from are read, kept by a booking

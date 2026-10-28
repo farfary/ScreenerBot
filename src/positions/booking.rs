@@ -130,6 +130,8 @@ impl Position {
         self.exit_price = Some(fill.exit_price);
         self.effective_exit_price = Some(0.0);
         self.closed_reason = Some(fill.closed_reason.clone());
+        // The operator closed the round, whatever sale was in flight.
+        self.exit_strategy_id = None;
 
         self.native_received = Some(self.native_received.unwrap_or_default());
         let (pnl, pnl_percent) = realized_pnl(self);
@@ -269,12 +271,13 @@ impl Position {
         self.exit_transaction_signature = None;
     }
 
-    /// Clears a failed close so it can be retried: the exit signature, the verified flag
-    /// and the exit prices it stamped.
+    /// Clears a failed close so it can be retried: the exit signature, the verified flag,
+    /// the exit prices it stamped and the exit strategy that decided it.
     pub(crate) fn clear_failed_exit(&mut self) {
         self.exit_transaction_signature = None;
         self.transaction_exit_verified = false;
         self.closed_reason = Some(super::EXIT_RETRY_PENDING.to_owned());
+        self.exit_strategy_id = None;
         // The close did not happen: a still-open position carrying exit prices reads as
         // closed to every check that looks at `exit_price`.
         self.exit_price = None;

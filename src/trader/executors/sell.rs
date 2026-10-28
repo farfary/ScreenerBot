@@ -75,6 +75,17 @@ fn is_emergency_exit(reason: &TradeReason) -> bool {
     }
 }
 
+/// The exit strategy a live sale of `exit_size` records as the closer of its round: the
+/// deciding strategy of a full strategy exit, and none for every other sale. A partial
+/// sale never closes the round, and a rule, user, copy or emergency exit is no strategy's
+/// close even when its decision names a strategy.
+fn closing_exit_strategy(decision: &TradeDecision, exit_size: ExitSize) -> Option<&str> {
+    match (&decision.reason, exit_size) {
+        (TradeReason::StrategyExit, ExitSize::Full) => decision.strategy_id.as_deref(),
+        _ => None,
+    }
+}
+
 /// Execute a live sell trade
 pub(super) async fn execute_sell(decision: &TradeDecision) -> crate::trader::Result<TradeResult> {
     super::require_live(decision)?;
@@ -159,6 +170,7 @@ pub(super) async fn execute_sell(decision: &TradeDecision) -> crate::trader::Res
         match positions::close_position_direct(
             &decision.mint,
             exit_reason.clone(),
+            closing_exit_strategy(decision, exit_size),
             decision.slippage_pct,
         )
         .await
@@ -357,6 +369,66 @@ mod tests {
         );
         for pct in [0.0, 0.5, MIN_EXIT_SHARE_PCT - 0.01] {
             assert!(validate_percentage(pct).is_err(), "{pct} is refused");
+        }
+    }
+
+    fn sale(reason: TradeReason, strategy_id: Option<&str>) -> TradeDecision {
+        TradeDecision {
+            position_id: Some("7".to_owned()),
+            mint: "Mint1111111111111111111111111111111111111111".to_owned(),
+            action: crate::trader::types::TradeAction::Sell,
+            reason,
+            strategy_id: strategy_id.map(str::to_owned),
+            book: crate::positions::Book::Live,
+            timestamp: chrono::Utc::now(),
+            priority: crate::trader::types::TradePriority::Normal,
+            price_native: Some(0.001),
+            size_native: None,
+            exit_percentage: None,
+            slippage_pct: None,
+            take_profit_level: None,
+            paper_leg_key: None,
+        }
+    }
+
+    /// Only the full sale an exit strategy decided names a closer: every other reason,
+    /// even one whose decision carries a strategy id, closes the round for no strategy.
+    #[test]
+    fn only_a_full_strategy_exit_records_its_strategy_as_the_closer() {
+        let strategy_exit = sale(TradeReason::StrategyExit, Some("exit-strategy"));
+        assert_eq!(
+            closing_exit_strategy(&strategy_exit, ExitSize::Full),
+            Some("exit-strategy")
+        );
+        for reason in TradeReason::ALL
+            .into_iter()
+            .filter(|reason| *reason != TradeReason::StrategyExit)
+        {
+            assert_eq!(
+                closing_exit_strategy(&sale(reason.clone(), Some("exit-strategy")), ExitSize::Full),
+                None,
+                "{reason:?}"
+            );
+        }
+        assert_eq!(
+            closing_exit_strategy(&sale(TradeReason::StrategyExit, None), ExitSize::Full),
+            None
+        );
+    }
+
+    /// A partial sale leaves the round open, so it never records a closer, whatever
+    /// decided it.
+    #[test]
+    fn a_partial_exit_records_no_closer() {
+        for reason in TradeReason::ALL {
+            assert_eq!(
+                closing_exit_strategy(
+                    &sale(reason.clone(), Some("exit-strategy")),
+                    ExitSize::Partial(40.0)
+                ),
+                None,
+                "{reason:?}"
+            );
         }
     }
 
