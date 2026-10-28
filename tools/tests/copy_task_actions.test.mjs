@@ -36,7 +36,7 @@ import { readFileSync } from "node:fs";
 
 import { chromium } from "playwright";
 
-import { serveDashboard } from "../lib/dashboard_host.mjs";
+import { serveDashboard, PAGE_READY } from "../lib/dashboard_host.mjs";
 import { createApiHandler, FIXTURES_ROOT, loadIndex } from "../lib/dashboard_fixtures.mjs";
 
 const browser = await chromium.launch({ headless: true });
@@ -45,6 +45,16 @@ after(() => browser.close());
 const fixture = (name) => JSON.parse(readFileSync(`${FIXTURES_ROOT}/copy/${name}`, "utf8"));
 const strip = (text) => text.replace(/[⁨⁩]/g, "").trim();
 const isResume = (request) => request.url().endsWith("/api/copy-trading/tasks/resume");
+
+/** Wait until the status chip reads `expected` (a pattern): it says "Loading" until the overview answers. */
+const chipReads = (page, expected) =>
+  page.waitForFunction(
+    (pattern) =>
+      new RegExp(pattern).test(
+        document.querySelector('#copy-summary [data-summary-id="status"]')?.textContent ?? ""
+      ),
+    expected
+  );
 
 /** A dashboard on the Copy page whose API answers `answers` by path before the fixtures. */
 async function openCopy(t, answers = {}, viewport = { width: 1440, height: 900 }) {
@@ -69,6 +79,7 @@ async function openCopy(t, answers = {}, viewport = { width: 1440, height: 900 }
 test("the task action row uses one button style", async (t) => {
   const { page, origin } = await openCopy(t);
   await page.goto(`${origin}/copy`);
+  await page.waitForSelector(PAGE_READY);
   await page.waitForSelector("#copy-ws-actions [data-ws-action='delete']");
   const buttons = await page.$$eval("#copy-ws-actions .btn", (nodes) =>
     nodes.map((node) => {
@@ -106,6 +117,7 @@ test("a watch over its limit is restored from the notice under the tab row", asy
     [`/api/wallets/watch/${watch.target.id}/status`]: JSON.stringify(watch),
   });
   await page.goto(`${origin}/copy`);
+  await page.waitForSelector(PAGE_READY);
 
   const notice = page.locator("#copy-ws-notices .notice");
   const restore = notice.locator("[data-action='restore-watch']");
@@ -168,7 +180,9 @@ test("the toolbar offers one bulk action that follows the task states", async (t
   for (const [patch, label, chip] of states) {
     Object.assign(status, patch);
     await page.goto(`${origin}/copy`);
+    await page.waitForSelector(PAGE_READY);
     await statusChip.waitFor();
+    await chipReads(page, chip);
     assert.match(strip(await statusChip.textContent()), new RegExp(chip));
     assert.equal(strip(await global.textContent()), label);
     assert.equal(await global.isVisible(), true, JSON.stringify(patch));
@@ -182,7 +196,9 @@ test("the toolbar offers one bulk action that follows the task states", async (t
     resumable_live_tasks: 0,
   });
   await page.goto(`${origin}/copy`);
+  await page.waitForSelector(PAGE_READY);
   await resumeTasks.waitFor();
+  await chipReads(page, "All tasks paused");
   assert.match(strip(await statusChip.textContent()), /All tasks paused/);
   assert.equal(strip(await resumeTasks.textContent()), "Resume all tasks");
   assert.equal(await global.isVisible(), false, "one bulk action at a time");
@@ -192,6 +208,7 @@ test("the toolbar offers one bulk action that follows the task states", async (t
 
   Object.assign(status, { resumable_tasks: 2, resumable_live_tasks: 1 });
   await page.goto(`${origin}/copy`);
+  await page.waitForSelector(PAGE_READY);
   await resumeTasks.waitFor();
   await resumeTasks.click();
   const dialog = page.locator(".confirmation-dialog");
@@ -208,6 +225,7 @@ test("the toolbar offers one bulk action that follows the task states", async (t
 
   Object.assign(status, { resumable_tasks: 0, resumable_live_tasks: 0 });
   await page.goto(`${origin}/copy`);
+  await page.waitForSelector(PAGE_READY);
   await statusChip.waitFor();
   assert.equal(await resumeTasks.isVisible(), false, "nothing to resume, no bulk action");
   assert.equal(await global.isVisible(), false);
@@ -217,6 +235,7 @@ test("the toolbar offers one bulk action that follows the task states", async (t
   for (const enabled of [true, false]) {
     status.enabled = enabled;
     await page.goto(`${origin}/copy`);
+    await page.waitForSelector(PAGE_READY);
     await page.locator("#copy-settings-open").waitFor();
     assert.equal(await statusChip.count(), 0, `no chips without a task, enabled: ${enabled}`);
     assert.equal(await global.isVisible(), false, "no bulk action without a task");
@@ -230,6 +249,7 @@ test("Add wallet is the one primary, and the list marks its current task plainly
   assert.ok(unnamed, "the fixture keeps an unnamed task");
   const { page, origin } = await openCopy(t);
   await page.goto(`${origin}/copy`);
+  await page.waitForSelector(PAGE_READY);
   await page.waitForSelector('.copy-row[aria-current="true"]');
 
   const primaries = await page.$$eval(".copy-toolbar .btn-primary", (nodes) =>
@@ -259,6 +279,7 @@ test("at a laptop height the arm gate sets readiness beside exposure, unscrolled
   const task = fixture("copy_workspace.json");
   const { page, origin } = await openCopy(t, {}, { width: 1280, height: 666 });
   await page.goto(`${origin}/copy`);
+  await page.waitForSelector(PAGE_READY);
   const arm = page.locator("#copy-ws-panel [data-ws-action='arm']");
   await arm.waitFor();
   await arm.click();
@@ -289,6 +310,7 @@ test("at a laptop height the arm gate sets readiness beside exposure, unscrolled
 test("the settings lay three fields a row on the wide panel", async (t) => {
   const { page, origin } = await openCopy(t);
   await page.goto(`${origin}/copy`);
+  await page.waitForSelector(PAGE_READY);
   await page.locator("#copy-settings-open").click();
   await page.locator("#copy-settings:not([hidden]) #copy-settings-readiness").waitFor();
 

@@ -41,6 +41,9 @@ after(() => browser.close());
 const [copy, shell] = await Promise.all([loadIndex("copy"), loadIndex("shell")]);
 
 /** The populated page with its paused, unnamed task selected. */
+/** The Overview results row: the grid right after the range heading, never the two-figure previous-results card. */
+const RESULTS_GRID = "#copy-ws-panel .copy-panel-head + .metric-grid";
+
 async function openPausedTask(t, width, locale) {
   const overview = fixture("copy_overview.json");
   const paused = (overview.data ?? overview).tasks.find((task) => !task.enabled);
@@ -75,7 +78,10 @@ async function openPausedTask(t, width, locale) {
   await page.locator(`#copy-list-rows [data-task-id="${paused.id}"]`).click();
   await page.locator(`#copy-list-rows [data-task-id="${paused.id}"][aria-current="true"]`).waitFor();
   await page.locator("#copy-ws-notices .notice").waitFor();
-  await page.locator("#copy-ws-panel .metric-grid .metric-card").first().waitFor();
+  await page.waitForFunction(
+    (selector) => document.querySelectorAll(`${selector} .metric-card`).length === 8,
+    RESULTS_GRID
+  );
   return page;
 }
 
@@ -85,7 +91,7 @@ for (const [width, locale] of VIEWS) {
 
     for (const theme of ["light", "dark"]) {
       const result = await page.evaluate(
-        ({ name, framed }) => {
+        ({ name, framed, grid }) => {
           document.documentElement.setAttribute("data-theme", name);
           const sheet = document.querySelector("#copy-workspace");
           const boxed = [...sheet.querySelectorAll("*")]
@@ -103,7 +109,7 @@ for (const [width, locale] of VIEWS) {
               return bordered && rounded && filled;
             })
             .map((node) => `${node.tagName.toLowerCase()}.${[...node.classList].join(".")}`);
-          const results = document.querySelector("#copy-ws-panel .metric-grid");
+          const results = document.querySelector(grid);
           const labels = [...results.querySelectorAll(".metric-card .metric-label")].map((node) =>
             node.textContent.trim()
           );
@@ -111,7 +117,7 @@ for (const [width, locale] of VIEWS) {
           const tabs = document.querySelector("#copy-ws-tabs").getBoundingClientRect().top;
           return { boxed, labels, tabOffset: tabs - top };
         },
-        { name: theme, framed: FRAMED }
+        { name: theme, framed: FRAMED, grid: RESULTS_GRID }
       );
 
       assert.deepEqual(result.boxed, [], `${theme}: nothing inside the sheet is boxed`);
