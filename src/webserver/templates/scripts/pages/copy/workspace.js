@@ -77,8 +77,14 @@ const PAUSE_HINTS = Object.freeze({
 
 /** The notice action of each way back the server names (`recovery`); a plain resume has none. */
 const RECOVERY_ACTIONS = Object.freeze({
-  restore_watch: { id: "restore-watch", label: "copy-watch-recovery-title" },
-  retry_watch: { id: "retry-watch", label: "copy-action-retry-watch" },
+  restore_watch: "restore-watch",
+  retry_watch: "retry-watch",
+});
+
+/** Message key of each recovery action's label. */
+const RECOVERY_LABELS = Object.freeze({
+  restore_watch: "copy-watch-recovery-title",
+  retry_watch: "copy-action-retry-watch",
 });
 
 /** The editor step an exit rule problem opens. */
@@ -304,8 +310,8 @@ export function createWorkspace(page) {
     const holdings = open ? pausedHoldings(task.exit_mode, open) : "";
     const action = Object.hasOwn(RECOVERY_ACTIONS, task.recovery)
       ? {
-          id: RECOVERY_ACTIONS[task.recovery].id,
-          label: I18n.t(RECOVERY_ACTIONS[task.recovery].label),
+          id: RECOVERY_ACTIONS[task.recovery],
+          label: I18n.label(RECOVERY_LABELS, task.recovery),
         }
       : null;
     return renderNotice({

@@ -552,8 +552,9 @@ export function createRoster({ container, onOpen, onCreate, onImport, onDelete, 
       loadedAt = Date.now();
       table.hideBlockingState();
       table.updateToolbarSummary([{ id: "stale", value: ABSENT, hidden: true }]);
-      const { timestamp: _timestamp, ...content } = data ?? {};
-      const key = JSON.stringify(content);
+      const content = data ?? {};
+      // The response time changes on every read; the change key leaves it out.
+      const key = JSON.stringify({ ...content, timestamp: undefined });
       if (key === lastKey) return;
       lastKey = key;
       overview = content;

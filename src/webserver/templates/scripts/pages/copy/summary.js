@@ -34,22 +34,22 @@ const STATUS_VARIANTS = Object.freeze({
   processing: "success",
 });
 
-/** The page notice of a state that stops copying, as variant, title and message keys. */
+/** The page notice of a state that stops copying, as variant, title and message text. */
 const STATE_NOTICES = Object.freeze({
   paused: {
     variant: "warning",
-    title: "copy-notice-paused-title",
-    message: "copy-notice-paused-message",
+    title: () => I18n.t("copy-notice-paused-title"),
+    message: () => I18n.t("copy-notice-paused-message"),
   },
   force_stopped: {
     variant: "error",
-    title: "copy-notice-force-stopped-title",
-    message: "copy-notice-force-stopped-message",
+    title: () => I18n.t("copy-notice-force-stopped-title"),
+    message: () => I18n.t("copy-notice-force-stopped-message"),
   },
   loss_limit: {
     variant: "warning",
-    title: "copy-notice-loss-limit-title",
-    message: "copy-notice-loss-limit-message",
+    title: () => I18n.t("copy-notice-loss-limit-title"),
+    message: () => I18n.t("copy-notice-loss-limit-message"),
   },
 });
 
@@ -127,8 +127,8 @@ function noticesHtml(state, kind) {
     notices.push(
       renderNotice({
         variant: notice.variant,
-        title: I18n.t(notice.title),
-        message: I18n.t(notice.message),
+        title: notice.title(),
+        message: notice.message(),
       })
     );
   }

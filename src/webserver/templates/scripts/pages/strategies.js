@@ -709,11 +709,15 @@ export function createLifecycle() {
       const args = { name: currentStrategy.name };
       // New rules restart the paper evidence; a live save the dialog confirmed said so
       // already, any other save that changed the rules states it now.
-      const notice =
-        data.rules_changed === true && !confirmedLive
-          ? "strategies-toast-evidence-restarted"
-          : "strategies-toast-saved";
-      announce("success", I18n.t(notice, args), I18n.attr(notice, "message", args));
+      if (data.rules_changed === true && !confirmedLive) {
+        announce(
+          "success",
+          I18n.t("strategies-toast-evidence-restarted", args),
+          I18n.attr("strategies-toast-evidence-restarted", "message", args)
+        );
+      } else {
+        announce("success", I18n.t("strategies-toast-saved", args), I18n.attr("strategies-toast-saved", "message", args));
+      }
     } catch (error) {
       console.error("Failed to save strategy:", error);
       announce(

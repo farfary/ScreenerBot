@@ -50,7 +50,7 @@ export function armDialogBody(readiness, esc, { exit = false } = {}) {
   }
   const acks = ackList(
     [
-      I18n.t(exit ? "strategies-mode-arm-ack-real-native-exit" : "strategies-mode-arm-ack-real-native"),
+      exit ? I18n.t("strategies-mode-arm-ack-real-native-exit") : I18n.t("strategies-mode-arm-ack-real-native"),
       I18n.t("strategies-mode-arm-ack-fees"),
       readiness.ready ? null : I18n.t("strategies-mode-arm-ack-unready"),
     ],
@@ -116,9 +116,9 @@ export function createStrategyMode({ requestManager, ConfirmationDialog, Utils }
     }
     const choice = await ConfirmationDialog.show({
       title: I18n.t("strategies-mode-arm-title", { name: name(strategy) }),
-      message: I18n.t(isExit(strategy) ? "strategies-mode-arm-lead-exit" : "strategies-mode-arm-lead", {
-        name: name(strategy),
-      }),
+      message: isExit(strategy)
+        ? I18n.t("strategies-mode-arm-lead-exit", { name: name(strategy) })
+        : I18n.t("strategies-mode-arm-lead", { name: name(strategy) }),
       body: armDialogBody(readiness, esc, { exit: isExit(strategy) }),
       confirmLabel: I18n.t("strategies-mode-arm"),
       variant: "danger",
@@ -141,9 +141,9 @@ export function createStrategyMode({ requestManager, ConfirmationDialog, Utils }
   async function returnToPaper(strategy) {
     const choice = await ConfirmationDialog.show({
       title: I18n.t("strategies-mode-return-title", { name: name(strategy) }),
-      message: I18n.t(
-        isExit(strategy) ? "strategies-mode-return-message-exit" : "strategies-mode-return-message"
-      ),
+      message: isExit(strategy)
+        ? I18n.t("strategies-mode-return-message-exit")
+        : I18n.t("strategies-mode-return-message"),
       confirmLabel: I18n.t("strategies-mode-return-paper"),
       variant: "info",
     });

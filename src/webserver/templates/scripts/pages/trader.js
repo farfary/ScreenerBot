@@ -836,7 +836,7 @@ function createLifecycle() {
     container.dir = "ltr";
     container.innerHTML = `
       <svg class="daily-pnl-chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img"
-           aria-label="${Utils.escapeHtml(I18n.t(weekly ? "trader-weekly-chart" : "trader-daily-chart"))}">
+           aria-label="${Utils.escapeHtml(weekly ? I18n.t("trader-weekly-chart") : I18n.t("trader-daily-chart"))}">
         <line class="daily-pnl-zero" x1="0" y1="${mid}" x2="${W}" y2="${mid}"></line>
         ${bars}
         <polyline class="daily-pnl-line" points="${points}"></polyline>

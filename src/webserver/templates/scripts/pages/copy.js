@@ -192,7 +192,7 @@ function createLifecycle() {
     }
     const reasons = [...counts]
       .filter(([kind]) => Object.hasOwn(KEPT_REASON_LABELS, kind))
-      .map(([kind, count]) => I18n.t(KEPT_REASON_LABELS[kind], { count, maximum }));
+      .map(([kind, count]) => I18n.label(KEPT_REASON_LABELS, kind, { count, maximum }));
     const why = [...reasons, ...failures].join(" ");
     if (!kept.length) {
       notify("success", I18n.t("copy-toast-tasks-resumed", { count: resumed.length }));

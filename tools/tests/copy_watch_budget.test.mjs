@@ -51,7 +51,8 @@ test("watch recovery keeps the copy task paused until a separate resume", async 
   );
 
   // The server's recovery decides which way back a paused task offers; the page derives none.
-  assert.match(workspace, /retry_watch: \{ id: "retry-watch", label: "copy-action-retry-watch" \}/);
+  assert.match(workspace, /retry_watch: "retry-watch",/);
+  assert.match(workspace, /retry_watch: "copy-action-retry-watch",/);
   assert.match(englishI18n.t("copy-action-retry-watch"), /Retry wallet watch/);
   assert.match(workspace, /postWatch\(requestManager, target\.id, "enabled", \{ enabled: true \}\)/);
   assert.match(restore, /\/api\/wallets\/watch\/\$\{targetId\}\/\$\{action\}/);
@@ -88,7 +89,7 @@ test("Helius catch-up is offered only for a capable watch and requires per-walle
     /10 credits per 100 full transactions returned/
   );
   assert.match(restore, /acknowledge_provider_usage: true/);
-  assert.match(restore, /watchError\("copy-watch-not-restored"\)/);
+  assert.match(restore, /watchError\(I18n\.t\("copy-watch-not-restored"\)\)/);
   assert.match(englishI18n.t("copy-watch-not-restored"), /The wallet watch has not been restored/);
   assert.match(watched, /option\.provider === "helius"/);
   assert.doesNotMatch(watched, /Disable Helius|Use Helius/);

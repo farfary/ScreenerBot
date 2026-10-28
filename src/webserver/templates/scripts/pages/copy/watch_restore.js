@@ -12,9 +12,9 @@ const DIALOG_ID = "copy-watch-restore";
 const WATCH_SIGNATURES = Object.freeze({ min: 500, max: 5000, step: 100 });
 const SIGNATURES_PER_PAGE = 100;
 
-/** A failed wallet watch step whose explanation is a catalog message. */
-function watchError(key) {
-  const error = new Error(I18n.t(key));
+/** A failed wallet watch step carrying its translated explanation. */
+function watchError(message) {
+  const error = new Error(message);
   error.detail = error.message;
   return error;
 }
@@ -23,7 +23,7 @@ function watchError(key) {
 export async function watchTarget(requestManager, address) {
   const { targets = [] } = await requestManager.fetch("/api/wallets/watch");
   const target = targets.find((item) => item.address === address);
-  if (!target) throw watchError("copy-watch-target-missing");
+  if (!target) throw watchError(I18n.t("copy-watch-target-missing"));
   return target;
 }
 
@@ -76,7 +76,7 @@ export function createWatchRestore(page) {
     const helius = status?.catch_up_options?.find((option) => option.provider === "helius");
     const catchUp = helius?.available
       ? `<button class="btn btn-primary" type="button" data-restore-action="approve-helius">${esc(I18n.t("copy-watch-approve"))}</button><small>${esc(I18n.t("copy-watch-approve-help"))}</small>`
-      : `<small>${esc(I18n.t(helius ? "copy-watch-approve-unavailable" : "copy-watch-no-provider"))}</small>`;
+      : `<small>${esc(helius ? I18n.t("copy-watch-approve-unavailable") : I18n.t("copy-watch-no-provider"))}</small>`;
     const currentLimit = (Number(task.pause_reason?.page_budget) || 5) * SIGNATURES_PER_PAGE;
     const suggested = Math.min(WATCH_SIGNATURES.max, currentLimit + WATCH_SIGNATURES.min);
     return `<p class="copy-note">${esc(I18n.t("copy-watch-recovery-budget-intro"))}</p>
@@ -177,7 +177,7 @@ export function createWatchRestore(page) {
         });
         const restored = await requestManager.fetch("/api/wallets/watch");
         if (!restored.targets?.find((item) => item.id === target.id)?.enabled)
-          throw watchError("copy-watch-not-restored");
+          throw watchError(I18n.t("copy-watch-not-restored"));
       },
       I18n.t("copy-watch-approved"),
       I18n.t("copy-watch-restore-failed")
