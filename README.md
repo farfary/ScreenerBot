@@ -72,9 +72,9 @@ is no subscription and no telemetry.
     <td align="center" width="33%"><strong>Token Details</strong></td>
   </tr>
   <tr>
-    <td><a href="https://screenerbot.io/api/screenshots/current/home?full=1"><img src="https://screenerbot.io/api/screenshots/current/home" alt="ScreenerBot dashboard home" width="280"></a></td>
-    <td><a href="https://screenerbot.io/api/screenshots/current/auto-trader-copy-trading?full=1"><img src="https://screenerbot.io/api/screenshots/current/auto-trader-copy-trading" alt="Solana wallet copy trading in ScreenerBot" width="280"></a></td>
-    <td><a href="https://screenerbot.io/api/screenshots/current/token-details?full=1"><img src="https://screenerbot.io/api/screenshots/current/token-details" alt="ScreenerBot token details with chart and pools" width="280"></a></td>
+    <td><a href="assets/screenshots/home.png"><img src="assets/screenshots/home.png" alt="ScreenerBot dashboard home" width="280"></a></td>
+    <td><a href="assets/screenshots/auto-trader-copy-trading.png"><img src="assets/screenshots/auto-trader-copy-trading.png" alt="Solana wallet copy trading in ScreenerBot" width="280"></a></td>
+    <td><a href="assets/screenshots/token-details.png"><img src="assets/screenshots/token-details.png" alt="ScreenerBot token details with chart and pools" width="280"></a></td>
   </tr>
   <tr>
     <td align="center" width="33%"><strong>Strategy Builder</strong></td>
@@ -82,9 +82,9 @@ is no subscription and no telemetry.
     <td align="center" width="33%"><strong>Auto Trader</strong></td>
   </tr>
   <tr>
-    <td><a href="https://screenerbot.io/api/screenshots/current/strategies-manage?full=1"><img src="https://screenerbot.io/api/screenshots/current/strategies-manage" alt="ScreenerBot visual strategy builder" width="280"></a></td>
-    <td><a href="https://screenerbot.io/api/screenshots/current/strategies-conditions?full=1"><img src="https://screenerbot.io/api/screenshots/current/strategies-conditions" alt="ScreenerBot strategy conditions" width="280"></a></td>
-    <td><a href="https://screenerbot.io/api/screenshots/current/trader?full=1"><img src="https://screenerbot.io/api/screenshots/current/trader" alt="ScreenerBot auto trader controls" width="280"></a></td>
+    <td><a href="assets/screenshots/strategies-manage.png"><img src="assets/screenshots/strategies-manage.png" alt="ScreenerBot visual strategy builder" width="280"></a></td>
+    <td><a href="assets/screenshots/strategies-conditions.png"><img src="assets/screenshots/strategies-conditions.png" alt="ScreenerBot strategy conditions" width="280"></a></td>
+    <td><a href="assets/screenshots/trader.png"><img src="assets/screenshots/trader.png" alt="ScreenerBot auto trader controls" width="280"></a></td>
   </tr>
   <tr>
     <td align="center" width="33%"><strong>Open Positions</strong></td>
@@ -92,9 +92,9 @@ is no subscription and no telemetry.
     <td align="center" width="33%"><strong>Filtering Analytics</strong></td>
   </tr>
   <tr>
-    <td><a href="https://screenerbot.io/api/screenshots/current/positions-open?full=1"><img src="https://screenerbot.io/api/screenshots/current/positions-open" alt="ScreenerBot open positions with P&L" width="280"></a></td>
-    <td><a href="https://screenerbot.io/api/screenshots/current/tokens-passed?full=1"><img src="https://screenerbot.io/api/screenshots/current/tokens-passed" alt="ScreenerBot Solana token discovery" width="280"></a></td>
-    <td><a href="https://screenerbot.io/api/screenshots/current/filtering-analytics?full=1"><img src="https://screenerbot.io/api/screenshots/current/filtering-analytics" alt="ScreenerBot token filtering analytics" width="280"></a></td>
+    <td><a href="assets/screenshots/positions-open.png"><img src="assets/screenshots/positions-open.png" alt="ScreenerBot open positions with P&L" width="280"></a></td>
+    <td><a href="assets/screenshots/tokens-passed.png"><img src="assets/screenshots/tokens-passed.png" alt="ScreenerBot Solana token discovery" width="280"></a></td>
+    <td><a href="assets/screenshots/filtering-analytics.png"><img src="assets/screenshots/filtering-analytics.png" alt="ScreenerBot token filtering analytics" width="280"></a></td>
   </tr>
 </table>
 
