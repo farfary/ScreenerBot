@@ -15,6 +15,9 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+
+import { SCRIPTS_ROOT, repoPath, walk } from "../lib/dashboard_ui.mjs";
 
 const HIDING_SELECTOR = '[hidden], [aria-hidden="true"], [inert]';
 
@@ -49,9 +52,8 @@ globalThis.document = {
 };
 globalThis.window = { getComputedStyle: (node) => node.style };
 
-const { hasOpenOverlay, pushEscapeHandler } = await import(
-  "../../src/webserver/templates/scripts/core/escape_stack.js"
-);
+const { hasOpenOverlay, pushEscapeHandler } =
+  await import("../../src/webserver/templates/scripts/core/escape_stack.js");
 
 test("a visible dialog is an open overlay", () => {
   candidates = [element({ attributes: { role: "dialog" } })];
@@ -81,4 +83,45 @@ test("a registered escape handler counts as an open overlay until released", () 
   assert.equal(hasOpenOverlay(), true);
   release();
   assert.equal(hasOpenOverlay(), false);
+});
+
+/**
+ * Files under `scripts/core`, `scripts/ui` and `scripts/pages` that compare a key to "Escape" without
+ * dismissing an overlay. The list only shrinks: an overlay takes its Escape from
+ * `pushEscapeHandler`, never from its own listener, because the stack's capture
+ * listener hands Escape to the topmost overlay and an overlay still on its own
+ * listener loses it to any overlay stacked beneath.
+ */
+const ESCAPE_COMPARISON_ALLOWED = {
+  "src/webserver/templates/scripts/core/escape_stack.js":
+    "the stack itself reads Escape for every overlay",
+  "src/webserver/templates/scripts/core/menu_manager.js":
+    "dropdown menus close through the menu manager, which the stack defers to while a menu is open",
+  "src/webserver/templates/scripts/core/tooltip.js": "a non-modal hover tooltip hides on Escape",
+  "src/webserver/templates/scripts/core/chat_widget.js":
+    "the composer field's own key handling: close the sessions list, decline a pending tool, cancel a request",
+  "src/webserver/templates/scripts/core/onboarding.js":
+    "the full-screen first-run tour; nothing stacks above it",
+  "src/webserver/templates/scripts/ui/data_table/event_handlers.js":
+    "the toolbar search field clears or blurs itself",
+  "src/webserver/templates/scripts/pages/home/portfolio_calendar.js":
+    "the day-detail tooltip of the calendar grid hides while the grid has focus",
+};
+
+test("no overlay reads the Escape key outside the escape stack", async () => {
+  const found = new Set();
+  const files = (await walk(SCRIPTS_ROOT)).filter(
+    (path) => path.endsWith(".js") && /\/scripts\/(?:core|ui|pages)\//.test(path)
+  );
+  for (const path of files) {
+    const code = readFileSync(path, "utf8")
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/^\s*\/\/.*$/gm, "");
+    if (/["'`]Escape["'`]/.test(code)) found.add(repoPath(path));
+  }
+  assert.deepEqual(
+    [...found].sort(),
+    Object.keys(ESCAPE_COMPARISON_ALLOWED).sort(),
+    "an overlay closes through pushEscapeHandler (core/escape_stack.js); a file that is not an overlay joins the allowlist with its reason"
+  );
 });

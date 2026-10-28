@@ -599,15 +599,6 @@ export function applyEventHandlersMixin(DataTable) {
           trigger.click();
           return;
         }
-        if (e.key === "Escape") {
-          const menu =
-            this._activeActionDropdown?.trigger === trigger
-              ? this._activeActionDropdown.menu
-              : null;
-          if (menu && menu.classList.contains("open")) {
-            closeAllActionDropdowns("escape");
-          }
-        }
       };
       this._addEventListener(trigger, "keydown", keyHandler);
     });
@@ -705,10 +696,6 @@ export function applyEventHandlersMixin(DataTable) {
             last.focus();
           }
           return;
-        }
-        if (e.key === "Escape") {
-          e.preventDefault();
-          closeAllActionDropdowns("escape");
         }
       };
       this._addEventListener(item, "keydown", itemKeyHandler);

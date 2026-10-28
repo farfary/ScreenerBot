@@ -21,6 +21,11 @@ wallets-watch-reason-user = आपने रोका।
 wallets-watch-reason-signature-budget = इस वॉलेट की गतिविधि मौजूदा वॉच की जांच क्षमता से ज़्यादा है।
 wallets-watch-reason-helius-unavailable = { -helius } जांच विफल रही। सहेजी गई प्रगति सुरक्षित है।
 wallets-watch-reason-processing-failed = वॉलेट गतिविधि प्रोसेस नहीं हो सकी। सहेजी गई प्रगति सुरक्षित है।
+wallets-watch-reason-short-user = आपके द्वारा
+wallets-watch-reason-short-signature-budget = वॉच सीमा
+wallets-watch-reason-short-helius-unavailable = वॉच प्रोवाइडर
+wallets-watch-reason-short-processing-failed = वॉच प्रोसेसिंग
+wallets-watch-state-reason = { $state } · { $reason }
 
 wallets-modal-close =
     .aria-label = मोडल बंद करें

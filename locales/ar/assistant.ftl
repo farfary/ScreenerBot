@@ -30,7 +30,6 @@ assistant-risk-high = عالية
 assistant-risk-critical = حرجة
 
 # assistant.html: page shell.
-assistant-overview-title = نظرة عامة على المساعد
 assistant-overview-description = حالة نماذج LLM والتحليل المباشرة، ومقاييس الأداء، وأحدث تقييمات النماذج.
 assistant-features-title = ميزات النموذج
 assistant-metric-total-evaluations = إجمالي التقييمات
@@ -41,7 +40,6 @@ assistant-metric-active-providers-value = { $active } / { $total }
 assistant-decisions-title = القرارات الأخيرة
 assistant-decisions-subtitle = أحدث قرارات تحليل النموذج
 
-assistant-providers-title = مزوّدو LLM
 assistant-providers-description = إعداد مزوّدي LLM المشتركين المستخدمين في التحليل والمساعد
 
 assistant-master-title = الإعدادات الرئيسية
@@ -88,7 +86,6 @@ assistant-cache-size-label = حجم الذاكرة المؤقتة:
 assistant-cache-memory-label = استخدام الذاكرة:
 assistant-cache-clear = مسح الذاكرة المؤقتة
 
-assistant-testing-title = ساحة اختبار المساعد
 assistant-testing-subtitle = اختبر تحليل المساعد على أي رمز
 assistant-testing-mint-label = عنوان الإصدار
 assistant-testing-mint-input =
@@ -100,7 +97,6 @@ assistant-testing-priority-high = عالية
 assistant-testing-evaluate = تقييم
 assistant-testing-results = النتائج
 
-assistant-instructions-title = تعليمات مخصصة
 assistant-instructions-description = أضف موجّهات نصية مخصصة تُدرج في تقييمات المساعد
 assistant-instructions-new = تعليمات جديدة
 assistant-instructions-category-all = جميع الفئات
@@ -118,7 +114,6 @@ assistant-instructions-empty-add = أضف أولى تعليماتك
 assistant-templates-title = قوالب التعليمات
 assistant-templates-description = قوالب تعليمات جاهزة يمكنك إضافتها
 
-assistant-automation-title = الأتمتة
 assistant-automation-description = جدولة مهام المساعد للتشغيل تلقائيًا على فترات أو في أوقات محددة
 assistant-automation-new =
     .aria-label = إنشاء مهمة أتمتة جديدة
@@ -132,9 +127,6 @@ assistant-automation-empty-subtitle = أنشئ أولى مهام المساعد 
 assistant-automation-empty-add = أنشئ أولى مهامك
     .aria-label = إنشاء أول مهمة أتمتة
 assistant-automation-runs-title = التشغيلات الأخيرة
-
-assistant-history-title = سجل القرارات
-assistant-history-subtitle = أحدث تقييمات المساعد
 
 # assistant.js: page tabs, overview, settings and history.
 assistant-tab-chat = المحادثة
@@ -169,7 +161,9 @@ assistant-config-saved-title = تم الحفظ
 assistant-config-saved-message = تم حفظ الإعدادات بنجاح
 assistant-config-save-failed = تعذّر حفظ الإعدادات
 assistant-history-load-failed = تعذّر تحميل السجل
+    .message = تعذّرت قراءة سجل القرارات.
 assistant-history-empty = لا توجد طلبات تحليل LLM بعد
+    .message = تظهر التقييمات هنا بعد أن يحلل المساعد رمزًا.
 assistant-history-column-token = الرمز
 assistant-history-column-decision = القرار
 assistant-history-column-confidence = الثقة
@@ -178,9 +172,8 @@ assistant-history-column-reasoning = التعليل
 assistant-history-column-model = النموذج
 assistant-history-column-latency = زمن الاستجابة
 assistant-history-column-when = الوقت
-assistant-history-previous = السابق
-assistant-history-page = الصفحة { $page } من { $total }
 assistant-history-cached = مخزّن مؤقتًا
+assistant-history-summary-total = الإجمالي
 
 # chat_widget.js: sessions sidebar and header.
 assistant-chat-sessions-title = الجلسات

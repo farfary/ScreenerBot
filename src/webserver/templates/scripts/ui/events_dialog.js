@@ -4,6 +4,7 @@
 // Events dialog - modal EventDetailsDialog showing the message, key-value field list, JSON payload section and copy-to-clipboard export of one event.
 
 import { on, off } from "../core/dom.js";
+import { pushEscapeHandler } from "../core/escape_stack.js";
 import * as Utils from "../core/utils.js";
 import { createFocusTrap } from "../core/utils.js";
 import { eventCategoryLabel, eventSubtypeLabel, severityBadge } from "./event_labels.js";
@@ -76,7 +77,6 @@ export class EventDetailsDialog {
 
     this._overlayListener = this._handleOverlayClick.bind(this);
     this._closeListener = this._handleCloseClick.bind(this);
-    this._keyListener = this._handleKeyDown.bind(this);
     this._copyListener = this._handleCopyClick.bind(this);
     this._focusTrap = null;
 
@@ -166,7 +166,7 @@ export class EventDetailsDialog {
     document.body.classList.add("events-dialog-open");
     this._isOpen = true;
 
-    document.addEventListener("keydown", this._keyListener, true);
+    this._releaseEscape = pushEscapeHandler(() => this.close());
 
     // Activate focus trap
     this._focusTrap = createFocusTrap(this.dialog);
@@ -194,7 +194,8 @@ export class EventDetailsDialog {
     document.body.classList.remove("events-dialog-open");
     this._isOpen = false;
 
-    document.removeEventListener("keydown", this._keyListener, true);
+    this._releaseEscape?.();
+    this._releaseEscape = null;
 
     // Deactivate focus trap
     if (this._focusTrap) {
@@ -386,17 +387,6 @@ export class EventDetailsDialog {
   _handleCloseClick(event) {
     event.preventDefault();
     this.close();
-  }
-
-  _handleKeyDown(event) {
-    if (!this._isOpen) {
-      return;
-    }
-    if (event.key === "Escape") {
-      event.preventDefault();
-      event.stopPropagation();
-      this.close();
-    }
   }
 
   _handleCopyClick(event) {

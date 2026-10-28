@@ -21,7 +21,6 @@ assistant-risk-medium = Середній
 assistant-risk-high = Високий
 assistant-risk-critical = Критичний
 
-assistant-overview-title = Огляд асистента
 assistant-overview-description = Поточний стан LLM і аналізу, показники продуктивності та останні оцінки моделі.
 assistant-features-title = Функції моделі
 assistant-metric-total-evaluations = Усього оцінок
@@ -32,7 +31,6 @@ assistant-metric-active-providers-value = { $active } / { $total }
 assistant-decisions-title = Останні рішення
 assistant-decisions-subtitle = Останні рішення за аналізом моделі
 
-assistant-providers-title = Провайдери LLM
 assistant-providers-description = Налаштуйте спільних провайдерів LLM для аналізу й асистента
 
 assistant-master-title = Основні налаштування
@@ -79,7 +77,6 @@ assistant-cache-size-label = Розмір кешу:
 assistant-cache-memory-label = Використання пам’яті:
 assistant-cache-clear = Очистити кеш
 
-assistant-testing-title = Тестовий майданчик асистента
 assistant-testing-subtitle = Перевірте аналіз асистента на будь-якому токені
 assistant-testing-mint-label = Адреса мінта
 assistant-testing-mint-input =
@@ -91,7 +88,6 @@ assistant-testing-priority-high = Високий
 assistant-testing-evaluate = Оцінити
 assistant-testing-results = Результати
 
-assistant-instructions-title = Власні інструкції
 assistant-instructions-description = Додайте власні промпти, які вставляються в оцінки асистента
 assistant-instructions-new = Нова інструкція
 assistant-instructions-category-all = Усі категорії
@@ -109,7 +105,6 @@ assistant-instructions-empty-add = Додати першу інструкцію
 assistant-templates-title = Шаблони інструкцій
 assistant-templates-description = Готові шаблони інструкцій, які можна додати
 
-assistant-automation-title = Автоматизація
 assistant-automation-description = Плануйте автоматичний запуск завдань асистента через інтервали або у визначений час
 assistant-automation-new =
     .aria-label = Створити нове завдання автоматизації
@@ -123,9 +118,6 @@ assistant-automation-empty-subtitle = Створіть перше автомат
 assistant-automation-empty-add = Створити перше завдання
     .aria-label = Створити перше завдання автоматизації
 assistant-automation-runs-title = Останні запуски
-
-assistant-history-title = Історія рішень
-assistant-history-subtitle = Останні оцінки асистента
 
 assistant-tab-chat = Чат
 assistant-tab-overview = Огляд
@@ -159,7 +151,9 @@ assistant-config-saved-title = Збережено
 assistant-config-saved-message = Конфігурацію успішно збережено
 assistant-config-save-failed = Не вдалося зберегти конфігурацію
 assistant-history-load-failed = Не вдалося завантажити історію
+    .message = Не вдалося прочитати історію рішень.
 assistant-history-empty = Запитів на аналіз LLM ще немає
+    .message = Оцінки з'являться тут після того, як Асистент проаналізує токен.
 assistant-history-column-token = Токен
 assistant-history-column-decision = Рішення
 assistant-history-column-confidence = Впевненість
@@ -168,9 +162,8 @@ assistant-history-column-reasoning = Обґрунтування
 assistant-history-column-model = Модель
 assistant-history-column-latency = Затримка
 assistant-history-column-when = Коли
-assistant-history-previous = Назад
-assistant-history-page = Сторінка { $page } з { $total }
 assistant-history-cached = із кешу
+assistant-history-summary-total = Усього
 
 assistant-chat-sessions-title = Сесії
 assistant-chat-search =

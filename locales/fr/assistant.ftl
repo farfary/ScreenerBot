@@ -21,7 +21,6 @@ assistant-risk-medium = Moyen
 assistant-risk-high = Élevé
 assistant-risk-critical = Critique
 
-assistant-overview-title = Aperçu de l'Assistant
 assistant-overview-description = État en direct des LLM et de l'analyse, indicateurs de performance et dernières évaluations des modèles.
 assistant-features-title = Fonctions des modèles
 assistant-metric-total-evaluations = Évaluations totales
@@ -32,7 +31,6 @@ assistant-metric-active-providers-value = { $active } / { $total }
 assistant-decisions-title = Décisions récentes
 assistant-decisions-subtitle = Dernières décisions d'analyse des modèles
 
-assistant-providers-title = Fournisseurs LLM
 assistant-providers-description = Configurez les fournisseurs LLM partagés utilisés par l'analyse et l'Assistant
 
 assistant-master-title = Paramètres généraux
@@ -79,7 +77,6 @@ assistant-cache-size-label = Taille du cache :
 assistant-cache-memory-label = Mémoire utilisée :
 assistant-cache-clear = Vider le cache
 
-assistant-testing-title = Espace de test de l'Assistant
 assistant-testing-subtitle = Testez l'analyse de l'Assistant sur n'importe quel token
 assistant-testing-mint-label = Adresse de mint
 assistant-testing-mint-input =
@@ -91,7 +88,6 @@ assistant-testing-priority-high = Haute
 assistant-testing-evaluate = Évaluer
 assistant-testing-results = Résultats
 
-assistant-instructions-title = Consignes personnalisées
 assistant-instructions-description = Ajoutez des prompts personnalisés injectés dans les évaluations de l'Assistant
 assistant-instructions-new = Nouvelle consigne
 assistant-instructions-category-all = Toutes les catégories
@@ -109,7 +105,6 @@ assistant-instructions-empty-add = Ajouter votre première consigne
 assistant-templates-title = Modèles de consignes
 assistant-templates-description = Modèles de consignes prêts à l'emploi que vous pouvez ajouter
 
-assistant-automation-title = Automatisation
 assistant-automation-description = Planifiez des tâches de l'Assistant à exécuter automatiquement à intervalles réguliers ou à des heures précises
 assistant-automation-new =
     .aria-label = Créer une tâche d'automatisation
@@ -123,9 +118,6 @@ assistant-automation-empty-subtitle = Créez votre première tâche automatisée
 assistant-automation-empty-add = Créer votre première tâche
     .aria-label = Créer la première tâche d'automatisation
 assistant-automation-runs-title = Exécutions récentes
-
-assistant-history-title = Historique des décisions
-assistant-history-subtitle = Dernières évaluations de l'Assistant
 
 assistant-tab-chat = Chat
 assistant-tab-overview = Aperçu
@@ -159,7 +151,9 @@ assistant-config-saved-title = Enregistré
 assistant-config-saved-message = Configuration enregistrée avec succès
 assistant-config-save-failed = Échec de l'enregistrement de la configuration
 assistant-history-load-failed = Échec du chargement de l'historique
+    .message = L'historique des décisions n'a pas pu être lu.
 assistant-history-empty = Aucune requête d'analyse LLM pour le moment
+    .message = Les évaluations apparaissent ici une fois qu'un token est analysé par l'Assistant.
 assistant-history-column-token = Token
 assistant-history-column-decision = Décision
 assistant-history-column-confidence = Confiance
@@ -168,9 +162,8 @@ assistant-history-column-reasoning = Raisonnement
 assistant-history-column-model = Modèle
 assistant-history-column-latency = Latence
 assistant-history-column-when = Date
-assistant-history-previous = Précédent
-assistant-history-page = Page { $page } sur { $total }
 assistant-history-cached = en cache
+assistant-history-summary-total = Total
 
 assistant-chat-sessions-title = Sessions
 assistant-chat-search =

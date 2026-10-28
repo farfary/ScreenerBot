@@ -576,6 +576,36 @@ pub fn list_decisions_for_mint_paginated(
     Ok(decisions)
 }
 
+/// Count every recorded decision
+pub fn count_decisions(db: &Connection) -> Result<usize> {
+    db.query_row("SELECT COUNT(*) FROM ai_decision_history", [], |row| {
+        row.get::<_, i64>(0)
+    })
+    .map(|count| count as usize)
+    .map_err(|e| {
+        Error::Database(DatabaseError::Query {
+            operation: "count decisions".to_owned(),
+            message: e.to_string(),
+        })
+    })
+}
+
+/// Count the recorded decisions of one mint
+pub fn count_decisions_for_mint(db: &Connection, mint: &str) -> Result<usize> {
+    db.query_row(
+        "SELECT COUNT(*) FROM ai_decision_history WHERE mint = ?1",
+        params![mint],
+        |row| row.get::<_, i64>(0),
+    )
+    .map(|count| count as usize)
+    .map_err(|e| {
+        Error::Database(DatabaseError::Query {
+            operation: "count decisions for mint".to_owned(),
+            message: e.to_string(),
+        })
+    })
+}
+
 /// Clear old decision records (older than specified days)
 pub fn clear_old_decisions(db: &Connection, days: i64) -> Result<usize> {
     let cutoff = chrono::Utc::now() - chrono::Duration::days(days);
@@ -701,6 +731,43 @@ mod tests {
                 assert!(present(&key), "missing {key}");
             }
         }
+    }
+
+    #[test]
+    fn decision_counts_cover_every_row_whatever_the_page() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        database::open::upgrade_connection(
+            &mut conn,
+            &database::catalog::AI,
+            vec![crate::chains::ChainId::Solana],
+        )
+        .unwrap();
+        for (mint, rows) in [("MintA", 5), ("MintB", 2)] {
+            for index in 0..rows {
+                conn.execute(
+                    "INSERT INTO ai_decision_history (mint, decision, confidence, provider, created_at)
+                     VALUES (?1, 'allow', 80, 'openai', ?2)",
+                    params![mint, format!("2026-10-0{}T00:00:00Z", index + 1)],
+                )
+                .unwrap();
+            }
+        }
+
+        assert_eq!(count_decisions(&conn).unwrap(), 7);
+        assert_eq!(count_decisions_for_mint(&conn, "MintA").unwrap(), 5);
+        assert_eq!(count_decisions_for_mint(&conn, "MintB").unwrap(), 2);
+        assert_eq!(count_decisions_for_mint(&conn, "Absent").unwrap(), 0);
+
+        // A page never changes the count.
+        assert_eq!(list_decisions(&conn, 3, 6).unwrap().len(), 1);
+        assert_eq!(count_decisions(&conn).unwrap(), 7);
+        assert_eq!(
+            list_decisions_for_mint_paginated(&conn, "MintA", 2, 4)
+                .unwrap()
+                .len(),
+            1
+        );
+        assert_eq!(count_decisions_for_mint(&conn, "MintA").unwrap(), 5);
     }
 
     #[test]

@@ -21,6 +21,11 @@ wallets-watch-reason-user = Suspendu par vos soins.
 wallets-watch-reason-signature-budget = Ce portefeuille a plus d'activité que son suivi actuel ne peut en vérifier.
 wallets-watch-reason-helius-unavailable = Échec des vérifications { -helius }. La progression enregistrée est conservée.
 wallets-watch-reason-processing-failed = L'activité du portefeuille n'a pas pu être traitée. La progression enregistrée est conservée.
+wallets-watch-reason-short-user = par vous
+wallets-watch-reason-short-signature-budget = limite de suivi
+wallets-watch-reason-short-helius-unavailable = fournisseur de suivi
+wallets-watch-reason-short-processing-failed = traitement du suivi
+wallets-watch-state-reason = { $state } · { $reason }
 
 wallets-modal-close =
     .aria-label = Fermer la fenêtre

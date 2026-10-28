@@ -97,14 +97,14 @@ export function createOhlcvModule(deps) {
         sortable: true,
         minWidth: 90,
         wrap: false,
-        render: (value) => Utils.formatNumber(value, { fallback: "0" }),
+        render: (value) => Utils.formatNumber(value, { decimals: 0, fallback: "0" }),
       },
       {
         id: "backfill_progress",
         label: I18n.t("tokens-ohlcv-column-backfill"),
         // column-type-ok: a progress bar with timeframe marks, laid out as a text column
         sortable: false,
-        minWidth: 120,
+        minWidth: "content",
         wrap: false,
         render: (value) => {
           if (!value) return "—";
@@ -113,7 +113,7 @@ export function createOhlcvModule(deps) {
           const progressCls =
             pct === 100 ? "progress-complete" : pct > 50 ? "progress-partial" : "progress-low";
 
-          // Build timeframe icons
+          // Build timeframe indicators
           const tfIcons = [
             { key: "m1", label: "1m", done: timeframes?.["1m"] ?? timeframes?.m1 },
             { key: "m5", label: "5m", done: timeframes?.["5m"] ?? timeframes?.m5 },
@@ -125,13 +125,15 @@ export function createOhlcvModule(deps) {
           ]
             .map((tf) => {
               const cls = tf.done ? "tf-done" : "tf-pending";
-              return `<span class="tf-indicator ${cls}" title="${Utils.escapeHtml(tf.done ? I18n.t("tokens-ohlcv-timeframe-complete", { timeframe: tf.label }) : I18n.t("tokens-ohlcv-timeframe-pending", { timeframe: tf.label }))}">${tf.label.charAt(0)}</span>`;
+              return `<span class="tf-indicator ${cls}" title="${Utils.escapeHtml(tf.done ? I18n.t("tokens-ohlcv-timeframe-complete", { timeframe: tf.label }) : I18n.t("tokens-ohlcv-timeframe-pending", { timeframe: tf.label }))}">${tf.label}</span>`;
             })
             .join("");
 
           return `<div class="backfill-cell">
-            <div class="backfill-bar ${progressCls}" style="--progress: ${pct}%"></div>
-            <span class="backfill-text">${Utils.formatNumber(completed, 0)}/${Utils.formatNumber(total, 0)}</span>
+            <div class="backfill-head">
+              <div class="backfill-bar ${progressCls}" style="--progress: ${pct}%"></div>
+              <span class="backfill-text">${Utils.formatNumber(completed, 0)}/${Utils.formatNumber(total, 0)}</span>
+            </div>
             <div class="tf-indicators">${tfIcons}</div>
           </div>`;
         },
@@ -168,7 +170,7 @@ export function createOhlcvModule(deps) {
         sortable: true,
         minWidth: 70,
         wrap: false,
-        render: (value) => Utils.formatNumber(value, { fallback: "0" }),
+        render: (value) => Utils.formatNumber(value, { decimals: 0, fallback: "0" }),
       },
       {
         id: "last_fetch",

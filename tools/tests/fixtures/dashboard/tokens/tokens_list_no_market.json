@@ -237,5 +237,19 @@
   "cursor": 0,
   "priced_total": 0,
   "positions_total": 0,
-  "blacklisted_total": 0
+  "blacklisted_total": 0,
+  "market_checks": {
+    "orcaEKTdK7LKz57vaAYr9QeNsVEPfiu6QeMU1kektZE": {
+      "state": "permanent",
+      "checked_at": "2026-10-06T12:00:00Z"
+    },
+    "4k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R": {
+      "state": "not_listed",
+      "checked_at": "2026-10-06T18:30:00Z"
+    },
+    "jtojtomepa8beP8AuQc6eXt5FriJwfFMwQx2v2f9mCL": {
+      "state": null,
+      "checked_at": null
+    }
+  }
 }

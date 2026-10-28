@@ -447,3 +447,63 @@ button.link-button:hover {
   justify-content: flex-end;
   gap: var(--spacing-sm, 8px);
 }
+
+/* Remove-password modal */
+.security-remove-description {
+  color: var(--text-secondary);
+  margin-bottom: 16px;
+}
+
+/* Two-factor setup and disable modals */
+.totp-prompt {
+  color: var(--text-secondary);
+  margin-bottom: 1rem;
+}
+
+.totp-setup-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+  margin-top: 1rem;
+}
+
+.totp-qr {
+  text-align: center;
+  margin: 1rem 0;
+}
+
+.totp-qr img {
+  max-width: 200px;
+  height: auto;
+  border-radius: 8px;
+}
+
+.totp-manual-entry {
+  margin: 1rem 0;
+}
+
+.totp-manual-label {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.totp-secret {
+  display: block;
+  padding: 0.5rem;
+  background: var(--bg-tertiary);
+  border-radius: 4px;
+  margin-top: 0.25rem;
+  word-break: break-all;
+  font-family: var(--font-mono);
+}
+
+.totp-code-prompt {
+  margin: 1rem 0;
+  color: var(--text-secondary);
+}
+
+.settings-input.totp-verify-code {
+  text-align: center;
+  font-size: 1.25rem;
+  letter-spacing: 0.25em;
+}

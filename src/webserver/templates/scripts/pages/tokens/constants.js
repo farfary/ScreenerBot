@@ -58,6 +58,20 @@ export const DEFAULT_VIEW = "all";
 // ticker — and it disagreed with the order the server sorts by when the client
 // sends no preference.
 export const DEFAULT_SERVER_SORT = { by: "liquidity_usd", direction: "desc" };
+// The No Market Data view has no price or liquidity to rank by: it lists newest first.
+const NO_MARKET_SERVER_SORT = { by: "first_discovered_at", direction: "desc" };
+const NO_MARKET_SORT_COLUMNS = new Set(["token", "first_seen_at"]);
+
+/** The server sort a view opens with and falls back to. */
+export const defaultServerSortFor = (view) =>
+  view === "no_market" ? { ...NO_MARKET_SERVER_SORT } : { ...DEFAULT_SERVER_SORT };
+
+/** Stored state of how the market check ended, per `MarketCheck.state` (src/tokens/types.rs). */
+export const MARKET_CHECK_LABELS = Object.freeze({
+  not_listed: "tokens-market-check-not-listed",
+  temporary: "tokens-market-check-temporary",
+  permanent: "tokens-market-check-permanent",
+});
 export const DEFAULT_FILTERS = {
   pool_price: false,
   positions: false,
@@ -98,8 +112,6 @@ export const getServerSortKey = (columnId, currentView) => {
     // Different views show different timestamps in "Updated" column
     if (currentView === "pool" || currentView === "positions") {
       return "pool_price_last_calculated_at";
-    } else if (currentView === "no_market") {
-      return "metadata_last_fetched_at";
     } else {
       return "market_data_last_fetched_at";
     }
@@ -108,6 +120,15 @@ export const getServerSortKey = (columnId, currentView) => {
   // Use mapping for other columns
   return COLUMN_TO_SORT_KEY[columnId] || columnId;
 };
+
+/**
+ * Server sort key for a persisted or restored sort column, or null when the view
+ * no longer shows that column (the caller falls back to the view's default sort).
+ */
+export const restoredSortKeyFor = (columnId, view) =>
+  view === "no_market" && !NO_MARKET_SORT_COLUMNS.has(columnId)
+    ? null
+    : getServerSortKey(columnId, view);
 
 export const SORT_KEY_TO_COLUMN = Object.entries(COLUMN_TO_SORT_KEY).reduce(
   (acc, [columnId, sortKey]) => {

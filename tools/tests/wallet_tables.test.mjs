@@ -209,6 +209,98 @@ test("a wallet is named by its role, a replaced trading wallet as the previous o
   assert.equal(names[String(unnamed.id)], "Imported");
 });
 
+const WATCHED = "#watched-wallets-root";
+
+async function openWatched(t, answers) {
+  const page = await openWallets(t, answers);
+  await page.click('[data-tab-id="watched"]');
+  await page.waitForSelector(`${WATCHED} tr[data-row-id] >> visible=true`);
+  return page;
+}
+
+test("watched wallets keep one row height whatever their status lines", async (t) => {
+  const page = await openWatched(t);
+  const rows = await page.$$eval(`${WATCHED} tr[data-row-id]`, (found) =>
+    found.map((row) => ({
+      id: row.dataset.rowId,
+      height: row.getBoundingClientRect().height,
+      lines: getComputedStyle(row).getPropertyValue("--dt-row-lines").trim(),
+    }))
+  );
+  assert.equal(rows.length, 3);
+  for (const row of rows) {
+    assert.equal(row.lines, "2", `row ${row.id} resolves the uniform line count`);
+    assert.equal(row.height, rows[0].height, `row ${row.id} is as tall as row ${rows[0].id}`);
+  }
+});
+
+test("a paused watched wallet shows its short reason and carries the full sentence in the title", async (t) => {
+  const page = await openWatched(t);
+  const state = page.locator(
+    `${WATCHED} tr[data-row-id="3"] td[data-column-id="_state"] .watched-wallet-state`
+  );
+  assert.equal(
+    (await state.textContent()).replace(/[\u2068\u2069]/g, "").trim(),
+    "Paused · watch limit"
+  );
+  assert.equal(
+    await state.getAttribute("title"),
+    "This wallet has more activity than its current watch can check."
+  );
+  assert.equal(
+    await page.locator(`${WATCHED} tr[data-row-id="3"] .watched-wallet-reason`).count(),
+    0,
+    "the reason is not repeated as a second line"
+  );
+});
+
+async function openBudgetModal(page) {
+  await page
+    .locator(`${WATCHED} tr[data-row-id="1"] .dt-action-btn[data-action-id="budget"]`)
+    .click();
+  await page.waitForSelector("#watch-budget-modal:not([hidden])");
+}
+
+test("Escape closes the watch budget modal", async (t) => {
+  const page = await openWatched(t);
+  await openBudgetModal(page);
+  await page.keyboard.press("Escape");
+  await page.waitForSelector("#watch-budget-modal", { state: "hidden" });
+});
+
+test("Escape on a confirmation over the budget modal closes only the confirmation", async (t) => {
+  const status = JSON.parse(
+    readFileSync(`${FIXTURES_ROOT}/wallets/wallets_watch_status.json`, "utf8")
+  );
+  status.catch_up_options = [{ provider: "helius", available: true }];
+  const page = await openWatched(t, {
+    "/api/wallets/watch/1/status": JSON.stringify(status),
+  });
+  await openBudgetModal(page);
+  await page.click("#watch-helius-action");
+  await page.waitForSelector(".confirmation-dialog");
+  await page.keyboard.press("Escape");
+  await page.waitForSelector(".confirmation-dialog", {
+    state: "detached",
+  });
+  assert.equal(await page.locator("#watch-budget-modal").isVisible(), true);
+  await page.keyboard.press("Escape");
+  await page.waitForSelector("#watch-budget-modal", { state: "hidden" });
+});
+
+test("an empty uniform-rows table does not clip its message", async (t) => {
+  const page = await openWallets(t, {
+    "/api/wallets/watch": JSON.stringify({ targets: [], total: 0 }),
+  });
+  await page.click('[data-tab-id="watched"]');
+  await page.waitForSelector(`${WATCHED} td.dt-state-cell >> visible=true`);
+  const hidden = await page.$eval(`${WATCHED} td.dt-state-cell`, (cell) => {
+    const content = cell.firstElementChild;
+    return content.scrollHeight - content.clientHeight;
+  });
+  assert.ok(hidden <= 0, `${hidden}px of the empty state are cut`);
+});
+
 test("the dashboard's trading wallet name is the one the core stores", () => {
   const renderers = readFileSync(
     new URL("../../src/webserver/templates/scripts/pages/wallets/renderers.js", import.meta.url),

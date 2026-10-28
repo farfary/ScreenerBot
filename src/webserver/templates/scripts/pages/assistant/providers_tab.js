@@ -120,7 +120,7 @@ export function createProvidersTab({ state, _eventCleanups, loadConfig }) {
         .querySelector(".provider-select input")
         ?.setAttribute(
           "aria-label",
-          I18n.t("assistant-providers-use-default", { name: providerName(id) })
+          I18n.attr("assistant-providers-use-default", "aria-label", { name: providerName(id) })
         );
       row.querySelector(".provider-logo img")?.setAttribute("alt", providerName(id));
     });

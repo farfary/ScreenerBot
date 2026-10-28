@@ -22,7 +22,6 @@ assistant-risk-high = Yüksek
 assistant-risk-critical = Kritik
 
 # assistant.html: page shell.
-assistant-overview-title = Asistan Genel Bakış
 assistant-overview-description = Canlı LLM ve analiz durumu, performans metrikleri ve en son model değerlendirmeleri.
 assistant-features-title = Model Özellikleri
 assistant-metric-total-evaluations = Toplam Değerlendirme
@@ -33,7 +32,6 @@ assistant-metric-active-providers-value = { $active } / { $total }
 assistant-decisions-title = Son Kararlar
 assistant-decisions-subtitle = En son model analizi kararları
 
-assistant-providers-title = LLM Sağlayıcıları
 assistant-providers-description = Analiz ve Asistan tarafından kullanılan ortak LLM sağlayıcılarını yapılandırın
 
 assistant-master-title = Ana Ayarlar
@@ -80,7 +78,6 @@ assistant-cache-size-label = Önbellek Boyutu:
 assistant-cache-memory-label = Bellek Kullanımı:
 assistant-cache-clear = Önbelleği Temizle
 
-assistant-testing-title = Asistan Test Alanı
 assistant-testing-subtitle = Asistan analizini herhangi bir token üzerinde test edin
 assistant-testing-mint-label = Mint Adresi
 assistant-testing-mint-input =
@@ -92,7 +89,6 @@ assistant-testing-priority-high = Yüksek
 assistant-testing-evaluate = Değerlendir
 assistant-testing-results = Sonuçlar
 
-assistant-instructions-title = Özel Talimatlar
 assistant-instructions-description = Asistan değerlendirmelerine eklenen özel istemler ekleyin
 assistant-instructions-new = Yeni Talimat
 assistant-instructions-category-all = Tüm Kategoriler
@@ -110,7 +106,6 @@ assistant-instructions-empty-add = İlk Talimatınızı Ekleyin
 assistant-templates-title = Talimat Şablonları
 assistant-templates-description = Ekleyebileceğiniz hazır talimat şablonları
 
-assistant-automation-title = Otomasyon
 assistant-automation-description = Asistan görevlerini belirli aralıklarla veya belirli zamanlarda otomatik çalışacak şekilde zamanlayın
 assistant-automation-new =
     .aria-label = Yeni otomasyon görevi oluştur
@@ -124,9 +119,6 @@ assistant-automation-empty-subtitle = Başlamak için ilk otomatik Asistan göre
 assistant-automation-empty-add = İlk Görevinizi Oluşturun
     .aria-label = İlk otomasyon görevini oluştur
 assistant-automation-runs-title = Son Çalıştırmalar
-
-assistant-history-title = Karar Geçmişi
-assistant-history-subtitle = Son Asistan değerlendirmeleri
 
 # assistant.js: page tabs, overview, settings and history.
 assistant-tab-chat = Sohbet
@@ -161,7 +153,9 @@ assistant-config-saved-title = Kaydedildi
 assistant-config-saved-message = Yapılandırma başarıyla kaydedildi
 assistant-config-save-failed = Yapılandırma kaydedilemedi
 assistant-history-load-failed = Geçmiş yüklenemedi
+    .message = Karar geçmişi okunamadı.
 assistant-history-empty = Henüz LLM analizi isteği yok
+    .message = Asistan bir token'ı analiz ettiğinde değerlendirmeler burada görünür.
 assistant-history-column-token = Token
 assistant-history-column-decision = Karar
 assistant-history-column-confidence = Güven
@@ -170,9 +164,8 @@ assistant-history-column-reasoning = Gerekçe
 assistant-history-column-model = Model
 assistant-history-column-latency = Gecikme
 assistant-history-column-when = Zaman
-assistant-history-previous = Önceki
-assistant-history-page = Sayfa { $page } / { $total }
 assistant-history-cached = önbellekte
+assistant-history-summary-total = Toplam
 
 # chat_widget.js: sessions sidebar and header.
 assistant-chat-sessions-title = Oturumlar

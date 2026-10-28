@@ -94,7 +94,7 @@ export function scanHtmlUsage({ source, path, ids, namespaces = DYNAMIC_NAMESPAC
   return { used, errors };
 }
 
-export function scanJsUsage({ source, path, ids, namespaces = DYNAMIC_NAMESPACES }) {
+export function scanJsUsage({ source, path, ids, valueless = new Set(), namespaces = DYNAMIC_NAMESPACES }) {
   const used = new Set();
   const errors = [];
   const parsed = parseJs(source);
@@ -151,6 +151,9 @@ export function scanJsUsage({ source, path, ids, namespaces = DYNAMIC_NAMESPACES
       errors.push({ file: path, line, message: `I18n.${memberName(call.callee)} id "${id}" is not in the source catalog` });
     } else {
       used.add(id);
+      if (memberName(call.callee) === "t" && valueless.has(id)) {
+        errors.push({ file: path, line, message: `${id} has no value; read its attribute with I18n.attr` });
+      }
     }
   }
 
@@ -191,7 +194,7 @@ export function unusedErrors({ ids, used, namespaces = DYNAMIC_NAMESPACES }) {
  * Aggregate over `{ js, html, rust, shell }` arrays of `{ path, source }`. `dashboardUsed` maps each id
  * referenced by dashboard JS or HTML to the first file that references it.
  */
-export function scanUsage({ ids, js, html, rust, shell = [], namespaces = DYNAMIC_NAMESPACES }) {
+export function scanUsage({ ids, valueless = new Set(), js, html, rust, shell = [], namespaces = DYNAMIC_NAMESPACES }) {
   const used = new Set();
   const dashboardUsed = new Map();
   const errors = [];
@@ -202,7 +205,7 @@ export function scanUsage({ ids, js, html, rust, shell = [], namespaces = DYNAMI
     });
     errors.push(...result.errors);
   };
-  for (const file of js) record(file, scanJsUsage({ ...file, ids, namespaces }));
+  for (const file of js) record(file, scanJsUsage({ ...file, ids, valueless, namespaces }));
   for (const file of html) record(file, scanHtmlUsage({ ...file, ids, namespaces }));
   for (const file of rust) scanRustUsage({ source: file.source, ids }).forEach((id) => used.add(id));
   for (const file of shell) scanShellUsage({ source: file.source, ids }).forEach((id) => used.add(id));

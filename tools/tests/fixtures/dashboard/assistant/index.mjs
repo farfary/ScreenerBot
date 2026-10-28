@@ -188,8 +188,13 @@ export const views = [
   {
     name: "history",
     click: [tab("history")],
-    populated: [{ selector: "#history-list .history-table tbody tr", min: 4 }],
-    empty: [{ selector: "#history-list .state-view-empty", text: "No LLM-analysis requests yet" }],
+    populated: [{ selector: "#history-root tbody tr[data-row-id]", min: 4 }],
+    empty: [
+      {
+        selector: "#history-root .dt-state-cell > .state-view-empty",
+        text: "No LLM-analysis requests yet",
+      },
+    ],
   },
   {
     name: "testing",

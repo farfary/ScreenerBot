@@ -237,7 +237,7 @@ function compareMessage(id, source, target, locale, termIds) {
 
 /**
  * `catalogs`: `{ code: { "file.ftl": text } }`, `registered`: Set of registered codes.
- * Returns `{ errors, info, completeness, sourceIds }`; each error is `{ file, message }`.
+ * Returns `{ errors, info, completeness, sourceIds, valuelessIds }`; each error is `{ file, message }`.
  */
 export function checkCatalogs({ catalogs, registered, source = SOURCE_LOCALE }) {
   const errors = [];
@@ -325,7 +325,8 @@ export function checkCatalogs({ catalogs, registered, source = SOURCE_LOCALE }) 
   }
 
   const sourceDomains = new Map([...en.messages].map(([id, entry]) => [id, entry.file.replace(/\.ftl$/, "")]));
-  return { errors, info, completeness, sourceIds: new Set(en.messages.keys()), sourceDomains };
+  const valuelessIds = new Set([...en.messages].filter(([, entry]) => !entry.node.value).map(([id]) => id));
+  return { errors, info, completeness, sourceIds: new Set(en.messages.keys()), valuelessIds, sourceDomains };
 }
 
 /** Domains listed in `SERVER_ONLY_DOMAINS` (src/i18n/mod.rs): never sent to the dashboard. */

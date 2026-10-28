@@ -469,10 +469,16 @@ body.dt-column-resizing * {
 }
 
 /* Uniform row height mode */
+
+/* The default line count lives on the table: a custom property that references
+   itself is invalid, and the inline `--dt-row-lines` a table sets still wins. */
+.data-table.uniform-rows {
+  --dt-row-lines: 2;
+}
+
 .data-table.uniform-rows tbody tr {
   /* Row height = line-height * lines + vertical padding (approx) */
   --dt-row-line-height: var(--line-height-dense);
-  --dt-row-lines: var(--dt-row-lines, 2);
   --dt-row-padding-y: 16px; /* td padding top + bottom */
   --dt-row-content-height: calc(var(--dt-row-line-height) * 1em * var(--dt-row-lines));
   --dt-row-total-height: calc(var(--dt-row-content-height) + var(--dt-row-padding-y));
@@ -482,7 +488,8 @@ body.dt-column-resizing * {
   --dt-row-padding-y: 12px; /* compact td padding top + bottom */
 }
 
-.data-table.uniform-rows td {
+/* `:where` keeps the state-cell exclusion from outranking the pinned-column rule. */
+.data-table.uniform-rows td:where(:not(.dt-state-cell)) {
   /* Enforce fixed height on td (more reliable than tr height) */
   height: var(--dt-row-total-height);
   max-height: var(--dt-row-total-height);
@@ -501,7 +508,7 @@ body.dt-column-resizing * {
 }
 
 /* Flex cells in uniform rows - constrain height */
-.data-table.uniform-rows td > div:first-child:last-child {
+.data-table.uniform-rows td:where(:not(.dt-state-cell)) > div:first-child:last-child {
   max-height: var(--dt-row-content-height);
   overflow: hidden;
 }

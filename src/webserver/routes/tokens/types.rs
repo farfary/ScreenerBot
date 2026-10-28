@@ -12,7 +12,7 @@ use crate::{
         SortDirection, TokenSortKey,
     },
     i18n::UiText,
-    tokens::{security::SecurityRiskBand, SecurityRisk},
+    tokens::{security::SecurityRiskBand, MarketCheck, SecurityRisk},
 };
 
 // =============================================================================
@@ -64,6 +64,9 @@ pub struct TokenListResponse {
     pub rejection_texts: HashMap<String, UiText>,
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub blacklist_reasons: HashMap<String, Vec<BlacklistReasonInfo>>,
+    /// Latest failed market fetch per mint, present on the No Market Data view.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub market_checks: HashMap<String, MarketCheck>,
 }
 
 /// Period-based numeric metrics helper
@@ -721,6 +724,7 @@ pub(super) fn build_token_list_response(
         rejection_reasons: result.rejection_reasons,
         available_rejection_reasons: result.available_rejection_reasons,
         blacklist_reasons: result.blacklist_reasons,
+        market_checks: result.market_checks,
     }
 }
 

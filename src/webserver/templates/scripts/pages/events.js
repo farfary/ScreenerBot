@@ -353,7 +353,7 @@ function createLifecycle() {
         {
           id: "event_time",
           label: I18n.t("events-col-time"),
-          minWidth: 130,
+          minWidth: "content",
           sortable: true,
           floating: true,
           wrap: false,

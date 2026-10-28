@@ -577,7 +577,7 @@ export class CustomSelect {
     // Navigation keys still control the portaled listbox.
     if (
       e.target === this.searchInputEl &&
-      !["Enter", "Escape", "ArrowDown", "ArrowUp", "Tab"].includes(e.key)
+      !["Enter", "ArrowDown", "ArrowUp", "Tab"].includes(e.key)
     ) {
       return;
     }
@@ -596,13 +596,6 @@ export class CustomSelect {
           this.close({ restoreFocus: true });
         } else {
           this.open();
-        }
-        break;
-
-      case "Escape":
-        if (this.isOpen) {
-          e.preventDefault();
-          this.close({ restoreFocus: true });
         }
         break;
 

@@ -154,8 +154,9 @@ export function createInstructionsTab({ state, _eventCleanups }) {
     // Setup drag and drop
     setupDragAndDrop();
 
-    // Setup filters
+    // Setup filters, then apply the ones already set to the fresh list
     setupInstructionFilters();
+    filterInstructions();
   }
 
   /**
@@ -189,7 +190,9 @@ export function createInstructionsTab({ state, _eventCleanups }) {
     const category = $("#instructions-category-filter")?.value || "all";
     const status = $("#instructions-status-filter")?.value || "all";
 
-    $$(".instruction-item").forEach((item) => {
+    let shown = 0;
+    const items = $$(".instruction-item");
+    items.forEach((item) => {
       const name = (item.querySelector(".instruction-name")?.textContent || "").toLowerCase();
       const itemCategory = item.dataset.category || "";
       const isActive = item.dataset.active === "true";
@@ -201,8 +204,28 @@ export function createInstructionsTab({ state, _eventCleanups }) {
       if (status === "active" && !isActive) visible = false;
       if (status === "inactive" && isActive) visible = false;
 
-      item.style.display = visible ? "" : "none";
+      item.hidden = !visible;
+      if (visible) shown += 1;
     });
+
+    const container = $("#instructions-list");
+    if (!container) return;
+    const noMatch = container.querySelector(".instructions-no-match");
+    if (items.length > 0 && shown === 0) {
+      if (!noMatch) {
+        const message = document.createElement("div");
+        message.className = "instructions-no-match";
+        message.innerHTML = renderStateView({
+          icon: "icon-search",
+          title: I18n.t("table-empty-filtered-title"),
+          message: I18n.t("table-empty-filtered-message"),
+          compact: true,
+        });
+        container.append(message);
+      }
+    } else {
+      noMatch?.remove();
+    }
   }
 
   /**

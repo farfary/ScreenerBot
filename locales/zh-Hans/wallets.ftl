@@ -31,6 +31,11 @@ wallets-watch-reason-user = 已由您暂停。
 wallets-watch-reason-signature-budget = 此钱包的活动量超出了当前监控的检查能力。
 wallets-watch-reason-helius-unavailable = { -helius } 检查失败。已保存的进度已保留。
 wallets-watch-reason-processing-failed = 无法处理钱包活动。已保存的进度已保留。
+wallets-watch-reason-short-user = 由您暂停
+wallets-watch-reason-short-signature-budget = 监控上限
+wallets-watch-reason-short-helius-unavailable = 监控提供商
+wallets-watch-reason-short-processing-failed = 监控处理
+wallets-watch-state-reason = { $state } · { $reason }
 
 # Vocabulary shared by the wallet tables and dialogs.
 wallets-modal-close =

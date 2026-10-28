@@ -21,7 +21,6 @@ assistant-risk-medium = Medio
 assistant-risk-high = Alto
 assistant-risk-critical = Crítico
 
-assistant-overview-title = Resumen del Asistente
 assistant-overview-description = Estado en vivo de LLM y análisis, métricas de rendimiento y las últimas evaluaciones del modelo.
 assistant-features-title = Funciones del modelo
 assistant-metric-total-evaluations = Evaluaciones totales
@@ -32,7 +31,6 @@ assistant-metric-active-providers-value = { $active } / { $total }
 assistant-decisions-title = Decisiones recientes
 assistant-decisions-subtitle = Últimas decisiones del análisis del modelo
 
-assistant-providers-title = Proveedores de LLM
 assistant-providers-description = Configura los proveedores de LLM compartidos que usan el análisis y el Asistente
 
 assistant-master-title = Ajustes generales
@@ -79,7 +77,6 @@ assistant-cache-size-label = Tamaño de la caché:
 assistant-cache-memory-label = Uso de memoria:
 assistant-cache-clear = Vaciar caché
 
-assistant-testing-title = Área de pruebas del Asistente
 assistant-testing-subtitle = Prueba el análisis del Asistente en cualquier token
 assistant-testing-mint-label = Dirección mint
 assistant-testing-mint-input =
@@ -91,7 +88,6 @@ assistant-testing-priority-high = Alta
 assistant-testing-evaluate = Evaluar
 assistant-testing-results = Resultados
 
-assistant-instructions-title = Instrucciones personalizadas
 assistant-instructions-description = Añade prompts personalizados que se inyectan en las evaluaciones del Asistente
 assistant-instructions-new = Nueva instrucción
 assistant-instructions-category-all = Todas las categorías
@@ -109,7 +105,6 @@ assistant-instructions-empty-add = Añade tu primera instrucción
 assistant-templates-title = Plantillas de instrucciones
 assistant-templates-description = Plantillas de instrucciones predefinidas que puedes añadir
 
-assistant-automation-title = Automatización
 assistant-automation-description = Programa tareas del Asistente para que se ejecuten automáticamente a intervalos o a horas concretas
 assistant-automation-new =
     .aria-label = Crear una nueva tarea de automatización
@@ -123,9 +118,6 @@ assistant-automation-empty-subtitle = Crea tu primera tarea automatizada del Asi
 assistant-automation-empty-add = Crea tu primera tarea
     .aria-label = Crear la primera tarea de automatización
 assistant-automation-runs-title = Ejecuciones recientes
-
-assistant-history-title = Historial de decisiones
-assistant-history-subtitle = Evaluaciones recientes del Asistente
 
 assistant-tab-chat = Chat
 assistant-tab-overview = Resumen
@@ -159,7 +151,9 @@ assistant-config-saved-title = Guardado
 assistant-config-saved-message = Configuración guardada correctamente
 assistant-config-save-failed = Error al guardar la configuración
 assistant-history-load-failed = Error al cargar el historial
+    .message = No se pudo leer el historial de decisiones.
 assistant-history-empty = Aún no hay solicitudes de análisis de LLM
+    .message = Las evaluaciones aparecen aquí cuando el Asistente analiza un token.
 assistant-history-column-token = Token
 assistant-history-column-decision = Decisión
 assistant-history-column-confidence = Confianza
@@ -168,9 +162,8 @@ assistant-history-column-reasoning = Razonamiento
 assistant-history-column-model = Modelo
 assistant-history-column-latency = Latencia
 assistant-history-column-when = Cuándo
-assistant-history-previous = Anterior
-assistant-history-page = Página { $page } de { $total }
 assistant-history-cached = en caché
+assistant-history-summary-total = Total
 
 assistant-chat-sessions-title = Sesiones
 assistant-chat-search =

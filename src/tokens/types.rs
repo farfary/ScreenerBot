@@ -617,6 +617,15 @@ pub struct RugcheckData {
 // UPDATE TRACKING
 // ============================================================================
 
+/// The outcome of a token's latest failed market-data fetch, as stored in its update tracking row.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct MarketCheck {
+    /// Stored market error type: `not_listed`, `temporary` or `permanent`; `None` before any failed fetch.
+    pub state: Option<String>,
+    /// When the latest failed fetch was recorded.
+    pub checked_at: Option<DateTime<Utc>>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UpdateTrackingInfo {
     pub mint: String,

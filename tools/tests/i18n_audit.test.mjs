@@ -190,6 +190,12 @@ test("usage rejects an unknown id in data-l10n-id and I18n calls", () => {
   assert.match(js.errors[0].message, /id "nope" is not in the source catalog/);
 });
 
+test("usage rejects I18n.t on a message that has no value", () => {
+  const scan = (source) => scanJsUsage({ source, path: "a.js", ids: IDS, valueless: new Set(["tip"]), namespaces: {} });
+  assert.match(scan(`I18n.t("tip");`).errors[0].message, /tip has no value; read its attribute with I18n.attr/);
+  assert.deepEqual(scan(`I18n.attr("tip", "title");`).errors, []);
+});
+
 test("usage rejects dynamic I18n calls unless a declared namespace annotates them", () => {
   assert.equal(usageOf("I18n.t(`config-${key}`);").errors.length, 1);
   assert.equal(usageOf(`I18n.attr("a" + b, "title");`).errors.length, 1);

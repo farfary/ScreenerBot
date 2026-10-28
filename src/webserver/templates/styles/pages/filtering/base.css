@@ -468,6 +468,10 @@
   flex-shrink: 0;
 }
 
+.filtering-footer[hidden] {
+  display: none;
+}
+
 .filtering-footer .footer-left {
   color: var(--text-muted);
   font-size: 0.8rem;

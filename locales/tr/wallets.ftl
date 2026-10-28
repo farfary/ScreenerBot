@@ -21,6 +21,11 @@ wallets-watch-reason-user = Sizin tarafınızdan duraklatıldı.
 wallets-watch-reason-signature-budget = Bu cüzdanın etkinliği, mevcut izlemenin kontrol edebileceğinden fazla.
 wallets-watch-reason-helius-unavailable = { -helius } kontrolleri başarısız oldu. Kayıtlı ilerleme korunuyor.
 wallets-watch-reason-processing-failed = Cüzdan etkinliği işlenemedi. Kayıtlı ilerleme korunuyor.
+wallets-watch-reason-short-user = sizce
+wallets-watch-reason-short-signature-budget = izleme limiti
+wallets-watch-reason-short-helius-unavailable = izleme sağlayıcısı
+wallets-watch-reason-short-processing-failed = izleme işleme
+wallets-watch-state-reason = { $state } · { $reason }
 
 wallets-modal-close =
     .aria-label = Pencereyi kapat

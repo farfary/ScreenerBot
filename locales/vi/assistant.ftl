@@ -21,7 +21,6 @@ assistant-risk-medium = Trung bình
 assistant-risk-high = Cao
 assistant-risk-critical = Nghiêm trọng
 
-assistant-overview-title = Tổng quan Trợ lý
 assistant-overview-description = Trạng thái LLM và phân tích trực tiếp, chỉ số hiệu suất và các đánh giá mới nhất của mô hình.
 assistant-features-title = Tính năng của mô hình
 assistant-metric-total-evaluations = Tổng số đánh giá
@@ -32,7 +31,6 @@ assistant-metric-active-providers-value = { $active } / { $total }
 assistant-decisions-title = Quyết định gần đây
 assistant-decisions-subtitle = Các quyết định phân tích của mô hình mới nhất
 
-assistant-providers-title = Nhà cung cấp LLM
 assistant-providers-description = Cấu hình các nhà cung cấp LLM dùng chung cho phân tích và Trợ lý
 
 assistant-master-title = Cài đặt chính
@@ -79,7 +77,6 @@ assistant-cache-size-label = Kích thước bộ nhớ đệm:
 assistant-cache-memory-label = Bộ nhớ sử dụng:
 assistant-cache-clear = Xóa bộ nhớ đệm
 
-assistant-testing-title = Khu thử nghiệm Trợ lý
 assistant-testing-subtitle = Thử phân tích của Trợ lý trên bất kỳ token nào
 assistant-testing-mint-label = Địa chỉ mint
 assistant-testing-mint-input =
@@ -91,7 +88,6 @@ assistant-testing-priority-high = Cao
 assistant-testing-evaluate = Đánh giá
 assistant-testing-results = Kết quả
 
-assistant-instructions-title = Chỉ dẫn tùy chỉnh
 assistant-instructions-description = Thêm các prompt tùy chỉnh được đưa vào các đánh giá của Trợ lý
 assistant-instructions-new = Chỉ dẫn mới
 assistant-instructions-category-all = Tất cả danh mục
@@ -109,7 +105,6 @@ assistant-instructions-empty-add = Thêm chỉ dẫn đầu tiên của bạn
 assistant-templates-title = Mẫu chỉ dẫn
 assistant-templates-description = Các mẫu chỉ dẫn dựng sẵn mà bạn có thể thêm
 
-assistant-automation-title = Tự động hóa
 assistant-automation-description = Lên lịch để tác vụ Trợ lý tự chạy theo chu kỳ hoặc vào thời điểm cụ thể
 assistant-automation-new =
     .aria-label = Tạo tác vụ tự động hóa mới
@@ -123,9 +118,6 @@ assistant-automation-empty-subtitle = Tạo tác vụ Trợ lý tự động đ�
 assistant-automation-empty-add = Tạo tác vụ đầu tiên của bạn
     .aria-label = Tạo tác vụ tự động hóa đầu tiên
 assistant-automation-runs-title = Lượt chạy gần đây
-
-assistant-history-title = Lịch sử quyết định
-assistant-history-subtitle = Các đánh giá gần đây của Trợ lý
 
 assistant-tab-chat = Trò chuyện
 assistant-tab-overview = Tổng quan
@@ -159,7 +151,9 @@ assistant-config-saved-title = Đã lưu
 assistant-config-saved-message = Đã lưu cấu hình thành công
 assistant-config-save-failed = Không lưu được cấu hình
 assistant-history-load-failed = Không tải được lịch sử
+    .message = Không thể đọc lịch sử quyết định.
 assistant-history-empty = Chưa có yêu cầu phân tích LLM nào
+    .message = Các đánh giá sẽ xuất hiện ở đây sau khi Trợ lý phân tích một token.
 assistant-history-column-token = Token
 assistant-history-column-decision = Quyết định
 assistant-history-column-confidence = Độ tin cậy
@@ -168,9 +162,8 @@ assistant-history-column-reasoning = Lập luận
 assistant-history-column-model = Mô hình
 assistant-history-column-latency = Độ trễ
 assistant-history-column-when = Thời điểm
-assistant-history-previous = Trước
-assistant-history-page = Trang { $page } / { $total }
 assistant-history-cached = đã lưu đệm
+assistant-history-summary-total = Tổng
 
 assistant-chat-sessions-title = Phiên
 assistant-chat-search =

@@ -4,6 +4,7 @@
 // Tests for the data table's pagination mixins - cursor and has-more preservation across metadata updates, and the range text.
 
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import "./fixtures/i18n_en.mjs";
 
@@ -100,4 +101,121 @@ test("both pagers group the range and total like every other count", (t) => {
     const range = html.match(/pagination-range">([\s\S]*?)<\/span>/)[1].replace(/<[^>]+>/g, "");
     assert.equal(range.replace(/[⁨⁩]/g, "").trim(), "Showing 1,001–1,050 of 3,193");
   }
+});
+
+/** A table whose collaborators are stubbed, so only the pagination calls are observed. */
+function loadingTable(loadPage) {
+  const table = new TestTable();
+  table._pagination = {
+    enabled: true,
+    loadPage,
+    threshold: 160,
+    cursorNext: null,
+    cursorPrev: null,
+    hasMoreNext: true,
+    hasMorePrev: true,
+    loadingNext: false,
+    loadingPrev: false,
+    loadingInitial: false,
+    pendingRequest: null,
+    abortController: null,
+  };
+  table.elements = { scrollContainer: { scrollTop: 0, scrollHeight: 100, clientHeight: 400 } };
+  table.loadNext = (options) => table._loadPage("next", options);
+  table.loadPrevious = (options) => table._loadPage("prev", options);
+  table._createAbortController = () => new globalThis.AbortController();
+  table._setLoadingState = () => {};
+  table._updateScrollLoadingIndicator = () => {};
+  table._notifyPaginationStateChange = () => {};
+  table._applyPageResult = (direction, result) => table._updatePaginationMeta(result);
+  table._log = () => {};
+  return table;
+}
+
+test("no next or previous page loads while the first page is loading", async () => {
+  const calls = [];
+  let finishFirst;
+  const table = loadingTable((args) => {
+    calls.push(args.direction);
+    if (args.direction === "next") assert.equal(args.cursor, 2);
+    if (args.direction === "initial") {
+      return new Promise((resolve) => {
+        finishFirst = () =>
+          resolve({ rows: [], cursorNext: 2, hasMoreNext: true, hasMorePrev: false });
+      });
+    }
+    return Promise.resolve({ rows: [], cursorNext: 3, hasMoreNext: false });
+  });
+
+  const first = table._loadPage("initial", { reason: "initial" });
+
+  const duringNext = table.loadNext({ reason: "scroll" });
+  const duringPrev = table.loadPrevious({ reason: "scroll" });
+  table._autoLoadIfViewportShort();
+  table._maybeTriggerPaginationLoad();
+  assert.deepEqual(calls, ["initial"]);
+
+  finishFirst();
+  await Promise.all([first, duringNext, duringPrev]);
+  assert.equal(table._pagination.cursorNext, 2);
+
+  await table.loadNext({ reason: "scroll" });
+  assert.deepEqual(calls, ["initial", "next"]);
+});
+
+test("an initial page result re-renders unchanged rows only when it asks to", () => {
+  const table = new TestTable();
+  table._pagination = { enabled: true, abortController: null };
+  table.state = { data: [], hasAutoFitted: false };
+  table._lastFullRenderTime = Date.now();
+  let renders = 0;
+  table._applyFilters = () => {
+    renders += 1;
+  };
+  table._setLoadingState = () => {};
+  table._log = () => {};
+
+  table._applyPageResult("initial", { rows: [] });
+  assert.equal(renders, 0, "unchanged rows rendered moments ago are not drawn again");
+
+  table._applyPageResult("initial", { rows: [], forceRender: true });
+  assert.equal(renders, 1, "a result that asks for a render is drawn");
+});
+
+/** The `reload` method of `ui/data_table.js`, lifted from its source: the class needs a DOM. */
+function reloadOfDataTable() {
+  const source = readFileSync(
+    new URL("../../src/webserver/templates/scripts/ui/data_table.js", import.meta.url),
+    "utf8"
+  );
+  const start = source.indexOf("\n  reload(options = {}) {") + 1;
+  let depth = 0;
+  let end = source.indexOf(") {", start) + 2;
+  for (; end < source.length; end += 1) {
+    if (source[end] === "{") depth += 1;
+    else if (source[end] === "}" && --depth === 0) break;
+  }
+  return new Function(`return ({ ${source.slice(start, end + 1)} }).reload;`)();
+}
+
+test("a first load starts before the render it triggers can start a next load", async () => {
+  const calls = [];
+  const table = loadingTable((args) => {
+    calls.push(args.direction);
+    return Promise.resolve({ rows: [], hasMoreNext: false });
+  });
+  Object.assign(table._pagination, { initialCursor: null });
+  table._loadToken = 0;
+  table.state = { filteredData: [], sortColumn: null };
+  table._cancelPaginationRequest = () => {};
+  table._isSupersededByInFlightLoad = () => false;
+  table._serverPaginationMode = "scroll";
+  table._hasHybridPaginationModes = () => false;
+  // The empty render finds a short viewport and asks for more rows at once.
+  table._renderTable = () => table._autoLoadIfViewportShort();
+  table.reload = reloadOfDataTable();
+
+  await table.reload({ reason: "initial", silent: false });
+
+  assert.deepEqual(calls, ["initial"]);
 });

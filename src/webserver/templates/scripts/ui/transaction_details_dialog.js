@@ -9,6 +9,7 @@
 import * as Utils from "../core/utils.js";
 import { createFocusTrap } from "../core/utils.js";
 import { formatFixed, withSolUnit } from "../core/format.js";
+import { pushEscapeHandler } from "../core/escape_stack.js";
 import { requestManager, errorMessageOf } from "../core/request_manager.js";
 import { DialogTabBar, renderDialogTabRow } from "./dialog_tab_bar.js";
 import { typeIcon, typeLabel } from "./transaction_type.js";
@@ -152,6 +153,10 @@ export class TransactionDetailsDialog {
   close() {
     if (!this.dialogEl) return;
 
+    // Hand Escape back to the overlay underneath at once, not after the exit animation.
+    this._releaseEscape?.();
+    this._releaseEscape = null;
+
     // Deactivate focus trap
     if (this._focusTrap) {
       this._focusTrap.deactivate();
@@ -161,11 +166,6 @@ export class TransactionDetailsDialog {
     this.dialogEl.classList.remove("active");
 
     setTimeout(() => {
-      if (this._escapeHandler) {
-        document.removeEventListener("keydown", this._escapeHandler);
-        this._escapeHandler = null;
-      }
-
       if (this.dialogEl) {
         if (this._closeHandler) {
           const closeBtn = this.dialogEl.querySelector(".dialog-close");
@@ -456,12 +456,7 @@ export class TransactionDetailsDialog {
     this._backdropHandler = () => this.close();
     backdrop.addEventListener("click", this._backdropHandler);
 
-    this._escapeHandler = (e) => {
-      if (e.key === "Escape") {
-        this.close();
-      }
-    };
-    document.addEventListener("keydown", this._escapeHandler);
+    this._releaseEscape = pushEscapeHandler(() => this.close());
 
     // Copy signature button
     const copyBtn = this.dialogEl.querySelector("#copySignatureBtn");

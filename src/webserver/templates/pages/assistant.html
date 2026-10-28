@@ -11,7 +11,6 @@
       <!-- Stats Panel (Overview) -->
       <div id="stats-panel" class="assistant-panel-content">
         <div class="assistant-panel-header">
-          <h2 class="assistant-panel-title" data-l10n-id="assistant-overview-title"></h2>
           <p class="assistant-panel-description" data-l10n-id="assistant-overview-description"></p>
         </div>
 
@@ -76,7 +75,6 @@
       <!-- Providers Panel -->
       <div id="providers-panel" class="assistant-panel-content">
         <div class="assistant-panel-header">
-          <h2 class="assistant-panel-title" data-l10n-id="assistant-providers-title"></h2>
           <p class="assistant-panel-description" data-l10n-id="assistant-providers-description"></p>
         </div>
 
@@ -424,15 +422,11 @@
 
       <!-- Testing Panel -->
       <div id="testing-panel" class="assistant-panel-content">
-        <div class="testing-section">
-          <div class="section-header">
-            <h3>
-              <i class="icon-flask-conical"></i>
-              <span data-l10n-id="assistant-testing-title"></span>
-            </h3>
-            <span class="section-subtitle" data-l10n-id="assistant-testing-subtitle"></span>
-          </div>
+        <div class="assistant-panel-header">
+          <p class="assistant-panel-description" data-l10n-id="assistant-testing-subtitle"></p>
+        </div>
 
+        <div class="testing-section">
           <div class="testing-form">
             <div class="form-group">
               <label for="test-mint-address" data-l10n-id="assistant-testing-mint-label"></label>
@@ -477,13 +471,10 @@
       <!-- Instructions Panel -->
       <div id="instructions-panel" class="assistant-panel-content">
         <div class="assistant-panel-header">
-          <div class="panel-header-content">
-            <h2 class="assistant-panel-title" data-l10n-id="assistant-instructions-title"></h2>
-            <p
-              class="assistant-panel-description"
-              data-l10n-id="assistant-instructions-description"
-            ></p>
-          </div>
+          <p
+            class="assistant-panel-description"
+            data-l10n-id="assistant-instructions-description"
+          ></p>
           <button type="button" class="btn btn-primary" id="new-instruction-btn">
             <i class="icon-plus"></i> <span data-l10n-id="assistant-instructions-new"></span>
           </button>
@@ -571,13 +562,10 @@
       <!-- Automation Panel -->
       <div id="automation-panel" class="assistant-panel-content">
         <div class="assistant-panel-header">
-          <div class="panel-header-content">
-            <h2 class="assistant-panel-title" data-l10n-id="assistant-automation-title"></h2>
-            <p
-              class="assistant-panel-description"
-              data-l10n-id="assistant-automation-description"
-            ></p>
-          </div>
+          <p
+            class="assistant-panel-description"
+            data-l10n-id="assistant-automation-description"
+          ></p>
           <button
             type="button"
             class="btn btn-primary"
@@ -589,22 +577,22 @@
         </div>
 
         <!-- Automation Stats Summary -->
-        <div class="automation-stats" id="automation-stats">
-          <div class="automation-stat-card">
-            <div class="stat-value" id="auto-stat-total">0</div>
-            <div class="stat-label" data-l10n-id="assistant-automation-stat-total"></div>
+        <div class="metric-grid" id="automation-stats">
+          <div class="metric-card">
+            <div class="metric-label" data-l10n-id="assistant-automation-stat-total"></div>
+            <div class="metric-value" id="auto-stat-total">—</div>
           </div>
-          <div class="automation-stat-card">
-            <div class="stat-value" id="auto-stat-active">0</div>
-            <div class="stat-label" data-l10n-id="assistant-automation-stat-active"></div>
+          <div class="metric-card">
+            <div class="metric-label" data-l10n-id="assistant-automation-stat-active"></div>
+            <div class="metric-value" id="auto-stat-active">—</div>
           </div>
-          <div class="automation-stat-card">
-            <div class="stat-value" id="auto-stat-runs">0</div>
-            <div class="stat-label" data-l10n-id="assistant-automation-stat-runs"></div>
+          <div class="metric-card">
+            <div class="metric-label" data-l10n-id="assistant-automation-stat-runs"></div>
+            <div class="metric-value" id="auto-stat-runs">—</div>
           </div>
-          <div class="automation-stat-card">
-            <div class="stat-value" id="auto-stat-success-rate">—</div>
-            <div class="stat-label" data-l10n-id="assistant-automation-stat-success-rate"></div>
+          <div class="metric-card">
+            <div class="metric-label" data-l10n-id="assistant-automation-stat-success-rate"></div>
+            <div class="metric-value" id="auto-stat-success-rate">—</div>
           </div>
         </div>
 
@@ -644,13 +632,7 @@
 
       <!-- History Panel -->
       <div id="history-panel" class="assistant-panel-content">
-        <div class="history-section">
-          <div class="section-header">
-            <h3><i class="icon-clock"></i> <span data-l10n-id="assistant-history-title"></span></h3>
-            <span class="section-subtitle" data-l10n-id="assistant-history-subtitle"></span>
-          </div>
-          <div id="history-list" class="history-list"></div>
-        </div>
+        <div id="history-root"></div>
       </div>
     </div>
   </main>

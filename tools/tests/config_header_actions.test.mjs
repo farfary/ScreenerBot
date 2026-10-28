@@ -36,6 +36,11 @@ test("the Config header has one primary action and secondary siblings", async (t
     )
   );
   assert.equal(variants.length, 4, "Save, Reload, Compare and Revert Section");
+  assert.equal(
+    await page.locator("#configReloadButton").count(),
+    0,
+    "the section header is the only place that reloads from disk"
+  );
   assert.deepEqual(variants[0], ["btn-primary"]);
   for (const variant of variants.slice(1)) assert.deepEqual(variant, ["btn-secondary"]);
 });

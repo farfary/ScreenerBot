@@ -9,7 +9,8 @@ use rusqlite::params;
 
 use crate::tokens::store;
 use crate::tokens::types::{
-    DexScreenerData, GeckoTerminalData, Priority, RugcheckData, Token, TokenMetadata, TokenResult,
+    DexScreenerData, GeckoTerminalData, MarketCheck, Priority, RugcheckData, Token, TokenMetadata,
+    TokenResult,
 };
 use crate::tokens::Error;
 
@@ -40,14 +41,14 @@ impl TokenDatabase {
         Ok(count)
     }
 
-    /// Fetch tokens missing market data, ordered by priority
+    /// Fetch tokens missing market data, ordered by priority, each with the outcome of its latest failed fetch
     pub fn get_tokens_no_market(
         &self,
         limit: usize,
         offset: usize,
         sort_by: Option<&str>,
         sort_direction: Option<&str>,
-    ) -> TokenResult<Vec<Token>> {
+    ) -> TokenResult<Vec<(Token, MarketCheck)>> {
         let conn = self.conn()?;
 
         // Only support sorting by metadata/security fields for this view
@@ -84,7 +85,8 @@ impl TokenDatabase {
                         ut.priority, \
                         t.blockchain_created_at, \
                         sr.security_data_last_fetched_at, \
-                        ut.last_rejection_reason, ut.last_rejection_source, ut.last_rejection_at \
+                        ut.last_rejection_reason, ut.last_rejection_source, ut.last_rejection_at, \
+                        ut.market_error_type, ut.last_error_at \
                     FROM tokens t \
                     LEFT JOIN security_rugcheck sr ON t.chain_id = sr.chain_id AND t.mint = sr.mint \
                     LEFT JOIN blacklist bl ON t.chain_id = bl.chain_id AND t.mint = bl.mint \
@@ -135,6 +137,10 @@ impl TokenDatabase {
                 let last_rejection_source: Option<String> = row.get(14)?;
                 let last_rejection_at: Option<i64> = row.get(15)?;
 
+                // Market check fields
+                let market_error_type: Option<String> = row.get(16)?;
+                let last_error_at: Option<i64> = row.get(17)?;
+
                 Ok((
                     metadata,
                     last_market_update,
@@ -146,6 +152,8 @@ impl TokenDatabase {
                     last_rejection_reason,
                     last_rejection_source,
                     last_rejection_at,
+                    market_error_type,
+                    last_error_at,
                 ))
             })
             .map_err(|e| {
@@ -168,6 +176,8 @@ impl TokenDatabase {
                 last_rejection_reason,
                 last_rejection_source,
                 last_rejection_at,
+                market_error_type,
+                last_error_at,
             ) = row.map_err(|e| Error::RowDecode {
                 detail: e.to_string(),
             })?;
@@ -231,7 +241,11 @@ impl TokenDatabase {
                 last_rejection_source,
                 last_rejection_at_dt,
             );
-            tokens.push(token);
+            let check = MarketCheck {
+                state: market_error_type,
+                checked_at: last_error_at.and_then(|ts| DateTime::from_timestamp(ts, 0)),
+            };
+            tokens.push((token, check));
         }
 
         Ok(tokens)

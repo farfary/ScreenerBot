@@ -24,6 +24,9 @@ import {
   TOKEN_VIEW_EMPTY_LABELS,
   DEFAULT_VIEW,
   DEFAULT_SERVER_SORT,
+  defaultServerSortFor,
+  restoredSortKeyFor,
+  MARKET_CHECK_LABELS,
   DEFAULT_FILTERS,
   DEFAULT_SUMMARY,
   PAGE_LIMIT,
@@ -581,6 +584,14 @@ function createLifecycle() {
           ? data.blacklist_reasons
           : null;
 
+      const marketChecks =
+        data &&
+        typeof data === "object" &&
+        data.market_checks &&
+        typeof data.market_checks === "object"
+          ? data.market_checks
+          : null;
+
       const normalizedItems = items.map((row) => {
         if (!row || typeof row !== "object") return row;
         const hasServerReason =
@@ -595,6 +606,7 @@ function createLifecycle() {
           ...row,
           reject_reason: resolvedReason ?? null,
           blacklist_reasons: normalizedSources,
+          market_check: marketChecks?.[row.mint] ?? null,
         };
       });
 
@@ -895,18 +907,70 @@ function createLifecycle() {
   // ellipsizing: 14 data-font characters ("999,99 mil M $") plus the compact cell padding.
   const USD_COLUMN_MIN_WIDTH = 130;
 
-  const buildColumns = () => {
-    return [
-      {
-        id: "token",
-        label: I18n.t("tokens-column-token"),
-        grow: true,
-        sortable: true,
-        floating: true,
-        minWidth: 260,
-        wrap: false,
-        render: (_v, row) => tokenCell(row),
+  const tokenColumn = () => ({
+    id: "token",
+    label: I18n.t("tokens-column-token"),
+    grow: true,
+    sortable: true,
+    floating: true,
+    minWidth: 260,
+    wrap: false,
+    render: (_v, row) => tokenCell(row),
+  });
+
+  const firstSeenColumn = () => ({
+    id: "first_seen_at",
+    label: I18n.t("tokens-column-first-seen"),
+    sortable: true,
+    minWidth: 110,
+    wrap: false,
+    render: (_v, row) => {
+      const timestamp = row.first_discovered_at;
+      if (!timestamp) return "—";
+
+      const timestampSeconds =
+        typeof timestamp === "string" ? Math.floor(new Date(timestamp).getTime() / 1000) : timestamp;
+
+      return timeAgoCell(timestampSeconds);
+    },
+  });
+
+  // A token with no market data has nothing to show in the market columns: the
+  // view lists why the market check ended and when it last ran.
+  const buildNoMarketColumns = () => [
+    tokenColumn(),
+    {
+      id: "market_check",
+      label: I18n.t("tokens-column-market-check"),
+      sortable: false,
+      minWidth: "content",
+      wrap: false,
+      render: (_v, row) =>
+        Utils.escapeHtml(
+          row.market_check?.state
+            ? I18n.label(MARKET_CHECK_LABELS, row.market_check.state)
+            : I18n.t("tokens-market-check-unchecked")
+        ),
+    },
+    {
+      id: "market_checked_at",
+      label: I18n.t("tokens-column-last-check"),
+      sortable: false,
+      minWidth: "content",
+      wrap: false,
+      render: (_v, row) => {
+        const checkedAt = row.market_check?.checked_at;
+        if (!checkedAt) return "—";
+        return timeAgoCell(Math.floor(new Date(checkedAt).getTime() / 1000));
       },
+    },
+    firstSeenColumn(),
+  ];
+
+  const buildColumns = () => {
+    if (state.view === "no_market") return buildNoMarketColumns();
+    return [
+      tokenColumn(),
       {
         id: "price_sol",
         label: I18n.t("tokens-column-price-sol"),
@@ -1121,9 +1185,6 @@ function createLifecycle() {
           if (state.view === "pool" || state.view === "positions") {
             // Pool/Positions: show pool price calculation time
             timestamp = row.pool_price_last_calculated_at;
-          } else if (state.view === "no_market") {
-            // No Market: show metadata fetch time
-            timestamp = row.metadata_last_fetched_at;
           } else {
             // All others: show market data fetch time
             timestamp = row.market_data_last_fetched_at;
@@ -1154,24 +1215,7 @@ function createLifecycle() {
           return timeAgoCell(row.age_origin);
         },
       },
-      {
-        id: "first_seen_at",
-        label: I18n.t("tokens-column-first-seen"),
-        sortable: true,
-        minWidth: 110,
-        wrap: false,
-        render: (_v, row) => {
-          const timestamp = row.first_discovered_at;
-          if (!timestamp) return "—";
-
-          const timestampSeconds =
-            typeof timestamp === "string"
-              ? Math.floor(new Date(timestamp).getTime() / 1000)
-              : timestamp;
-
-          return timeAgoCell(timestampSeconds);
-        },
-      },
+      firstSeenColumn(),
     ];
   };
 
@@ -1247,30 +1291,30 @@ function createLifecycle() {
       // Read restored sort state from table and sync to state.sort
       const restoredTableState = table.getServerState();
       if (restoredTableState?.sortColumn) {
-        const sortKey = getServerSortKey(restoredTableState.sortColumn, view);
+        const sortKey = restoredSortKeyFor(restoredTableState.sortColumn, view);
         if (sortKey) {
           state.sort = {
             by: sortKey,
             direction: restoredTableState.sortDirection || "asc",
           };
         } else {
-          state.sort = { ...DEFAULT_SERVER_SORT };
+          state.sort = defaultServerSortFor(view);
         }
       } else {
         const persistedSort = loadPersistedSort(nextStateKey);
         if (persistedSort) {
-          const persistedKey = getServerSortKey(persistedSort.column, view);
+          const persistedKey = restoredSortKeyFor(persistedSort.column, view);
           if (persistedKey) {
             state.sort = { by: persistedKey, direction: persistedSort.direction };
           } else {
-            state.sort = { ...DEFAULT_SERVER_SORT };
+            state.sort = defaultServerSortFor(view);
           }
         } else {
-          state.sort = { ...DEFAULT_SERVER_SORT };
+          state.sort = defaultServerSortFor(view);
         }
       }
     } else {
-      state.sort = { ...DEFAULT_SERVER_SORT };
+      state.sort = defaultServerSortFor(view);
     }
 
     applyViewPreferences();
@@ -1648,15 +1692,12 @@ function createLifecycle() {
 
       const tableStateKey = getTokensTableStateKey(state.view);
       const persistedSort = loadPersistedSort(tableStateKey);
-      if (persistedSort) {
-        const persistedSortKey = getServerSortKey(persistedSort.column, state.view);
-        if (persistedSortKey) {
-          state.sort = {
-            by: persistedSortKey,
-            direction: persistedSort.direction,
-          };
-        }
-      }
+      const persistedSortKey = persistedSort
+        ? restoredSortKeyFor(persistedSort.column, state.view)
+        : null;
+      state.sort = persistedSortKey
+        ? { by: persistedSortKey, direction: persistedSort.direction }
+        : defaultServerSortFor(state.view);
 
       state.filters = getDefaultFiltersForView(state.view);
       state.hasLoadedOnce = false;
@@ -1817,7 +1858,7 @@ function createLifecycle() {
       let hasSortRestored = false;
 
       if (serverState.sortColumn) {
-        const sortKey = getServerSortKey(serverState.sortColumn, state.view);
+        const sortKey = restoredSortKeyFor(serverState.sortColumn, state.view);
         if (sortKey) {
           state.sort = {
             by: sortKey,

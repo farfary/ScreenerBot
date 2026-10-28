@@ -281,27 +281,23 @@ pub async fn list_history(
     let offset = (page - 1) * per_page;
 
     // Fetch decisions based on whether mint filter is provided
+    // The page and its total are read on one pooled connection.
     let result = if let Some(mint) = query.mint {
-        // For specific mint, use list_decisions_for_mint_paginated with offset
         db::with_analysis_db(|conn| {
-            db::list_decisions_for_mint_paginated(conn, &mint, per_page, offset)
+            let decisions = db::list_decisions_for_mint_paginated(conn, &mint, per_page, offset)?;
+            let total = db::count_decisions_for_mint(conn, &mint)?;
+            Ok((decisions, total))
         })
     } else {
-        // For all decisions, use list_decisions with pagination
-        db::with_analysis_db(|conn| db::list_decisions(conn, per_page, offset))
+        db::with_analysis_db(|conn| {
+            let decisions = db::list_decisions(conn, per_page, offset)?;
+            let total = db::count_decisions(conn)?;
+            Ok((decisions, total))
+        })
     };
 
     match result {
-        Ok(decisions) => {
-            // Get total count (simplified - in production, you'd want a separate count query)
-            let total = if decisions.len() == per_page {
-                // Page is full, there are likely more results
-                (page * per_page) + 1
-            } else {
-                // Last page
-                ((page - 1) * per_page) + decisions.len()
-            };
-
+        Ok((decisions, total)) => {
             let decisions: Vec<DecisionHistoryResponse> = decisions
                 .into_iter()
                 .map(|d| DecisionHistoryResponse {

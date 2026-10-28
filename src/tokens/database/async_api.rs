@@ -7,7 +7,7 @@ use crate::errors::{DatabaseError, InternalError};
 use std::collections::HashMap;
 
 use crate::tokens::store;
-use crate::tokens::types::{Token, TokenMetadata, TokenPoolsSnapshot, TokenResult};
+use crate::tokens::types::{MarketCheck, Token, TokenMetadata, TokenPoolsSnapshot, TokenResult};
 use crate::tokens::Error;
 
 use crate::chains::{ChainId, ChainScope};
@@ -231,7 +231,7 @@ pub async fn get_tokens_no_market_async(
     offset: usize,
     sort_by: Option<String>,
     sort_direction: Option<String>,
-) -> TokenResult<Vec<Token>> {
+) -> TokenResult<Vec<(Token, MarketCheck)>> {
     let db = require_database(chain)?;
     tokio::task::spawn_blocking(move || {
         db.get_tokens_no_market(limit, offset, sort_by.as_deref(), sort_direction.as_deref())

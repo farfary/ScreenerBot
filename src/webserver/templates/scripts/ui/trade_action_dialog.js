@@ -177,6 +177,7 @@ export class TradeActionDialog {
     this._searchDebounceTimer = null;
     this._isSearching = false;
     this._searchKeyListener = this._handleSearchKeyDown.bind(this);
+    this._releaseSearchEscape = null;
 
     // Slippage state. null = "Auto" = follow the configured slippage (what the
     // auto-trader always does); a number is a per-trade manual override.
@@ -705,6 +706,7 @@ export class TradeActionDialog {
     document.removeEventListener("keydown", this._keyListener, true);
     this._releaseEscape?.();
     this._releaseEscape = null;
+    this._hideSearchResults();
 
     // Deactivate focus trap
     if (this._focusTrap) {

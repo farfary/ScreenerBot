@@ -212,9 +212,7 @@ const host = await serveDashboard(context, {
     }
     if (request.url.pathname === `/api/strategies/${EXIT_ID}`) {
       return {
-        body: JSON.stringify(
-          request.method === "GET" ? EXIT_STORED : { id: EXIT_ID, version: 4 }
-        ),
+        body: JSON.stringify(request.method === "GET" ? EXIT_STORED : { id: EXIT_ID, version: 4 }),
       };
     }
     if (request.url.pathname === `/api/strategies/${ID}/test`) {
@@ -267,7 +265,10 @@ async function openStrategy(id, name, kind = "entry") {
   await backToRoster();
   await page.click(`#strategies-roster label:has(> input[data-seg-value="${kind}"])`);
   await page.click(`#strategies-roster tr[data-row-id="${id}"] [data-column-id="name"]`);
-  await page.waitForFunction((expected) => document.querySelector("#strategy-name")?.value === expected, name);
+  await page.waitForFunction(
+    (expected) => document.querySelector("#strategy-name")?.value === expected,
+    name
+  );
   await page.locator("#strategies-roster").waitFor({ state: "hidden" });
 }
 
@@ -283,6 +284,32 @@ async function importFile(file) {
     buffer: Buffer.from(typeof file === "string" ? file : JSON.stringify(file)),
   });
 }
+
+test("pinned cells stay sticky and under their headers in a uniform-rows table", async () => {
+  await page.waitForSelector("#strategies-roster tbody tr[data-row-id]");
+  const report = await page.evaluate(() => {
+    const row = document.querySelector("#strategies-roster tbody tr[data-row-id]");
+    const table = row.closest("table");
+    return {
+      uniform: table.classList.contains("uniform-rows"),
+      pinned: [...row.querySelectorAll("td.dt-col-sticky")].map((cell) => {
+        const id = cell.dataset.columnId;
+        const header = document.querySelector(`#strategies-roster th[data-column-id="${id}"]`);
+        return {
+          id,
+          position: getComputedStyle(cell).position,
+          offset: Math.abs(cell.getBoundingClientRect().left - header.getBoundingClientRect().left),
+        };
+      }),
+    };
+  });
+  assert.equal(report.uniform, true, "the roster is a uniform-rows table");
+  assert.ok(report.pinned.length > 0, "the roster pins at least one column");
+  for (const cell of report.pinned) {
+    assert.equal(cell.position, "sticky", `${cell.id} stays sticky`);
+    assert.ok(cell.offset <= 1, `${cell.id} sits ${cell.offset}px off its header`);
+  }
+});
 
 test("the roster switch changes only enabled, through the enabled route", async () => {
   const writes = [];
@@ -483,11 +510,19 @@ test("a condition is added from the catalog, checked as it is edited and kept ou
 });
 
 test("the back control confirms unsaved changes and returns to the roster", async () => {
-  assert.equal(await page.locator("#editor-header.dirty").count(), 1, "the new strategy is unsaved");
+  assert.equal(
+    await page.locator("#editor-header.dirty").count(),
+    1,
+    "the new strategy is unsaved"
+  );
   await page.click("#strategy-back");
   await page.getByText("Discard unsaved changes?").waitFor();
   await page.locator('.confirmation-dialog [data-action="cancel"]').click();
-  assert.equal(await page.locator("#strategy-editor").isVisible(), true, "Cancel stays in the editor");
+  assert.equal(
+    await page.locator("#strategy-editor").isVisible(),
+    true,
+    "Cancel stays in the editor"
+  );
   assert.equal(await page.locator("#editor-header.dirty").count(), 1);
 
   await backToRoster();
@@ -601,13 +636,22 @@ test("the toolbar is one row of actions; settings and panels scroll with the rul
         ["#strategy-back", "#test-strategy", "#validate-strategy", "#export-strategy"].map(
           (selector) => [
             selector,
-            document.querySelector(`${selector} .editor-action-label`).getBoundingClientRect().width > 1,
+            document.querySelector(`${selector} .editor-action-label`).getBoundingClientRect()
+              .width > 1,
           ]
         )
       )
     );
-    assert.equal(labels["#validate-strategy"], labels["#export-strategy"], "Validate and Export collapse together");
-    assert.equal(labels["#strategy-back"], labels["#validate-strategy"], "the back control collapses with them");
+    assert.equal(
+      labels["#validate-strategy"],
+      labels["#export-strategy"],
+      "Validate and Export collapse together"
+    );
+    assert.equal(
+      labels["#strategy-back"],
+      labels["#validate-strategy"],
+      "the back control collapses with them"
+    );
     assert.ok(
       labels["#test-strategy"] || !labels["#validate-strategy"],
       "Test keeps its label while any other action shows one"
@@ -631,7 +675,10 @@ test("the editor's On switch stores a saved strategy through the enabled route a
   await openStrategy(ID, STORED.name);
   const writes = [];
   const record = (request) => {
-    if (request.method() !== "GET" && new URL(request.url()).pathname.startsWith("/api/strategies")) {
+    if (
+      request.method() !== "GET" &&
+      new URL(request.url()).pathname.startsWith("/api/strategies")
+    ) {
       writes.push(request);
     }
   };
@@ -654,7 +701,11 @@ test("a test against a picked token marks each rule and reads the strategy in th
   await openStrategy(ID, STORED.name);
   await page.evaluate(() => {
     window.openSearchDialog = ({ onPick }) =>
-      onPick({ mint: "TrendMint1111111111111111111111111111111111", symbol: "TREND", name: "Trend" });
+      onPick({
+        mint: "TrendMint1111111111111111111111111111111111",
+        symbol: "TREND",
+        name: "Trend",
+      });
   });
   let release;
   testGate.open = new Promise((resolve) => {
@@ -794,7 +845,9 @@ test("new rules on a paper strategy save at once and say its paper evidence rest
     ]);
     assert.equal(put.postDataJSON().priority, 9);
     await page
-      .getByText(/The rules of [“\u2068]+Momentum breakout[\u2069”]+ changed; its paper evidence restarts from now/)
+      .getByText(
+        /The rules of [“\u2068]+Momentum breakout[\u2069”]+ changed; its paper evidence restarts from now/
+      )
       .first()
       .waitFor();
     assert.equal(
@@ -851,7 +904,10 @@ test("a save the server calls unchanged in rules says only that it saved", async
     page.waitForRequest((candidate) => isSave(candidate, "PUT", ID)),
     page.click("#save-strategy"),
   ]);
-  await page.getByText(/["\u2068]+Momentum breakout[\u2069"]+ saved successfully/).first().waitFor();
+  await page
+    .getByText(/["\u2068]+Momentum breakout[\u2069"]+ saved successfully/)
+    .first()
+    .waitFor();
 });
 
 test("with no strategy the roster offers New Strategy", async () => {
@@ -867,7 +923,9 @@ test("with no strategy the roster offers New Strategy", async () => {
     await tab.goto(`${emptyHost.origin}/trader`);
     await tab.waitForSelector(PAGE_READY);
     await tab.click('#subTabsContainer [data-tab-id="strategies"]');
-    const action = tab.locator('#strategies-roster .state-view-empty [data-action="table-empty-action"]');
+    const action = tab.locator(
+      '#strategies-roster .state-view-empty [data-action="table-empty-action"]'
+    );
     await action.waitFor();
     assert.equal((await action.textContent()).trim(), "New Strategy");
     assert.match(plain(await tab.textContent("#strategies-roster")), /No strategies yet/);
@@ -875,7 +933,10 @@ test("with no strategy the roster offers New Strategy", async () => {
     await action.click();
     await tab.locator("#create-strategy-modal").waitFor({ state: "visible" });
     assert.equal(
-      await tab.getAttribute('#create-strategy-modal .type-card[data-type="ENTRY"]', "aria-pressed"),
+      await tab.getAttribute(
+        '#create-strategy-modal .type-card[data-type="ENTRY"]',
+        "aria-pressed"
+      ),
       "true",
       "the Entry view preselects an entry strategy"
     );
@@ -927,7 +988,8 @@ test("an exit strategy picks the entry strategies it manages and saves their ids
   const [request] = await Promise.all([
     page.waitForRequest(
       (candidate) =>
-        candidate.method() === "PUT" && new URL(candidate.url()).pathname === `/api/strategies/${EXIT_ID}`
+        candidate.method() === "PUT" &&
+        new URL(candidate.url()).pathname === `/api/strategies/${EXIT_ID}`
     ),
     page.click("#save-strategy"),
   ]);

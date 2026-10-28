@@ -48,3 +48,29 @@ test("every Config list field shows all of its lines", async (t) => {
     assert.ok(field.hidden <= 0, `${field.id}: ${field.hidden}px of its lines are cut`);
   }
 });
+
+test("every Config boolean field is the shared switch", async (t) => {
+  const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const api = createApiHandler([await loadIndex("config"), await loadIndex("shell")], "populated");
+  const host = await serveDashboard(context, { locale: "en", onApi: api.onApi });
+  t.after(async () => {
+    await context.close();
+    await host.close();
+  });
+  const page = await context.newPage();
+  await page.goto(`${host.origin}/config`);
+  await page.waitForSelector(PAGE_READY);
+  await page.waitForSelector(".config-field-control input[type=checkbox]", {
+    state: "attached",
+  });
+  const bare = await page.$$eval(".config-field-control input[type=checkbox]", (inputs) =>
+    inputs
+      .filter(
+        (input) =>
+          !input.parentElement.matches("label.toggle") ||
+          !input.nextElementSibling?.classList.contains("toggle-track")
+      )
+      .map((input) => input.id)
+  );
+  assert.deepEqual(bare, [], "a boolean field renders as a bare checkbox");
+});

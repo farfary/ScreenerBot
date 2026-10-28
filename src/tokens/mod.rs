@@ -92,8 +92,9 @@ pub use security::rugcheck;
 // Domain types from types.rs
 pub use error::{Error, Result};
 pub use types::{
-    DataSource, DexScreenerData, GeckoTerminalData, MarketDataBundle, RugcheckData, SecurityRisk,
-    SocialLink, Token, TokenHolder, TokenMetadata, TokenResult, UpdateTrackingInfo, WebsiteLink,
+    DataSource, DexScreenerData, GeckoTerminalData, MarketCheck, MarketDataBundle, RugcheckData,
+    SecurityRisk, SocialLink, Token, TokenHolder, TokenMetadata, TokenResult, UpdateTrackingInfo,
+    WebsiteLink,
 };
 
 // API parsing types from api modules (now in crate::apis)

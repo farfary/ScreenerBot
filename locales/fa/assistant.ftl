@@ -30,7 +30,6 @@ assistant-risk-high = زیاد
 assistant-risk-critical = بحرانی
 
 # assistant.html: page shell.
-assistant-overview-title = نمای کلی دستیار
 assistant-overview-description = وضعیت زنده LLM و تحلیل، معیارهای عملکرد و آخرین ارزیابی‌های مدل.
 assistant-features-title = قابلیت‌های مدل
 assistant-metric-total-evaluations = کل ارزیابی‌ها
@@ -41,7 +40,6 @@ assistant-metric-active-providers-value = { $active } / { $total }
 assistant-decisions-title = تصمیم‌های اخیر
 assistant-decisions-subtitle = آخرین تصمیم‌های تحلیل مدل
 
-assistant-providers-title = ارائه‌دهندگان LLM
 assistant-providers-description = ارائه‌دهندگان مشترک LLM را که تحلیل و دستیار از آن‌ها استفاده می‌کنند پیکربندی کنید
 
 assistant-master-title = تنظیمات اصلی
@@ -88,7 +86,6 @@ assistant-cache-size-label = اندازه کش:
 assistant-cache-memory-label = مصرف حافظه:
 assistant-cache-clear = پاک کردن کش
 
-assistant-testing-title = محیط آزمایش دستیار
 assistant-testing-subtitle = تحلیل دستیار را روی هر توکن آزمایش کنید
 assistant-testing-mint-label = آدرس مینت
 assistant-testing-mint-input =
@@ -100,7 +97,6 @@ assistant-testing-priority-high = زیاد
 assistant-testing-evaluate = ارزیابی
 assistant-testing-results = نتایج
 
-assistant-instructions-title = دستورالعمل‌های سفارشی
 assistant-instructions-description = پرامپت‌های سفارشی اضافه کنید تا در ارزیابی‌های دستیار درج شوند
 assistant-instructions-new = دستورالعمل جدید
 assistant-instructions-category-all = همه دسته‌ها
@@ -118,7 +114,6 @@ assistant-instructions-empty-add = افزودن اولین دستورالعمل
 assistant-templates-title = قالب‌های دستورالعمل
 assistant-templates-description = قالب‌های آماده دستورالعمل که می‌توانید اضافه کنید
 
-assistant-automation-title = خودکارسازی
 assistant-automation-description = وظایف دستیار را برای اجرای خودکار در فواصل مشخص یا زمان‌های معین زمان‌بندی کنید
 assistant-automation-new =
     .aria-label = ایجاد وظیفه خودکار جدید
@@ -132,9 +127,6 @@ assistant-automation-empty-subtitle = برای شروع، اولین وظیفه 
 assistant-automation-empty-add = ایجاد اولین وظیفه
     .aria-label = ایجاد اولین وظیفه خودکار
 assistant-automation-runs-title = اجراهای اخیر
-
-assistant-history-title = تاریخچه تصمیم‌ها
-assistant-history-subtitle = ارزیابی‌های اخیر دستیار
 
 # assistant.js: page tabs, overview, settings and history.
 assistant-tab-chat = گفتگو
@@ -169,7 +161,9 @@ assistant-config-saved-title = ذخیره شد
 assistant-config-saved-message = پیکربندی با موفقیت ذخیره شد
 assistant-config-save-failed = ذخیره پیکربندی ناموفق بود
 assistant-history-load-failed = بارگیری تاریخچه ناموفق بود
+    .message = خواندن تاریخچه تصمیم‌ها ممکن نشد.
 assistant-history-empty = هنوز درخواست تحلیل LLM ثبت نشده
+    .message = ارزیابی‌ها پس از آن‌که دستیار یک توکن را تحلیل کند، اینجا نمایش داده می‌شوند.
 assistant-history-column-token = توکن
 assistant-history-column-decision = تصمیم
 assistant-history-column-confidence = اطمینان
@@ -178,9 +172,8 @@ assistant-history-column-reasoning = استدلال
 assistant-history-column-model = مدل
 assistant-history-column-latency = تأخیر
 assistant-history-column-when = زمان
-assistant-history-previous = قبلی
-assistant-history-page = صفحه { $page } از { $total }
 assistant-history-cached = ذخیره‌شده در کش
+assistant-history-summary-total = مجموع
 
 # chat_widget.js: sessions sidebar and header.
 assistant-chat-sessions-title = گفتگوها

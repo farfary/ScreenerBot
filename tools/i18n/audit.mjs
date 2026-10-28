@@ -67,6 +67,7 @@ export function analyze({ sources, catalogInput }) {
   const catalog = checkCatalogs(catalogInput);
   const usage = scanUsage({
     ids: catalog.sourceIds,
+    valueless: catalog.valuelessIds,
     js: sources.js,
     html: sources.html,
     rust: sources.rust,

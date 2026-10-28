@@ -14,6 +14,8 @@
  * Only shows in Electron context (desktop app).
  */
 
+import { pushEscapeHandler } from "../core/escape_stack.js";
+
 class ExitDialog {
   static instance = null;
   static isVisible = false;
@@ -23,6 +25,7 @@ class ExitDialog {
     this.backdrop = null;
     this.resolver = null;
     this._keydownHandler = null;
+    this._releaseEscape = null;
   }
 
   /**
@@ -171,11 +174,9 @@ class ExitDialog {
     this.backdrop.addEventListener("click", () => this._handleAction("cancel"));
 
     // Keyboard shortcuts
+    this._releaseEscape = pushEscapeHandler(() => this._handleAction("cancel"));
     this._keydownHandler = (e) => {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        this._handleAction("cancel");
-      } else if (e.key === "Tab") {
+      if (e.key === "Tab") {
         // Trap focus within dialog
         this._handleTabKey(e);
       }
@@ -211,6 +212,9 @@ class ExitDialog {
   }
 
   destroy() {
+    this._releaseEscape?.();
+    this._releaseEscape = null;
+
     // Remove keydown handler
     if (this._keydownHandler) {
       document.removeEventListener("keydown", this._keydownHandler);

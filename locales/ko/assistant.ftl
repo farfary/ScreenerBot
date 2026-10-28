@@ -25,7 +25,6 @@ assistant-risk-high = 높음
 assistant-risk-critical = 치명적
 
 # assistant.html: page shell.
-assistant-overview-title = 어시스턴트 개요
 assistant-overview-description = 실시간 LLM 및 분석 상태, 성능 지표, 최신 모델 평가를 확인합니다.
 assistant-features-title = 모델 기능
 assistant-metric-total-evaluations = 총 평가 수
@@ -36,7 +35,6 @@ assistant-metric-active-providers-value = { $active } / { $total }
 assistant-decisions-title = 최근 결정
 assistant-decisions-subtitle = 최신 모델 분석 결정
 
-assistant-providers-title = LLM 제공자
 assistant-providers-description = 분석과 어시스턴트가 공유하는 LLM 제공자를 설정합니다
 
 assistant-master-title = 마스터 설정
@@ -83,7 +81,6 @@ assistant-cache-size-label = 캐시 크기:
 assistant-cache-memory-label = 메모리 사용량:
 assistant-cache-clear = 캐시 삭제
 
-assistant-testing-title = 어시스턴트 테스트 플레이그라운드
 assistant-testing-subtitle = 모든 토큰에 대해 어시스턴트 분석을 테스트합니다
 assistant-testing-mint-label = 민트 주소
 assistant-testing-mint-input =
@@ -95,7 +92,6 @@ assistant-testing-priority-high = 높음
 assistant-testing-evaluate = 평가
 assistant-testing-results = 결과
 
-assistant-instructions-title = 사용자 지정 지침
 assistant-instructions-description = 어시스턴트 평가에 주입되는 사용자 지정 프롬프트를 추가합니다
 assistant-instructions-new = 새 지침
 assistant-instructions-category-all = 모든 카테고리
@@ -113,7 +109,6 @@ assistant-instructions-empty-add = 첫 지침 추가
 assistant-templates-title = 지침 템플릿
 assistant-templates-description = 추가할 수 있는 사전 구성된 지침 템플릿
 
-assistant-automation-title = 자동화
 assistant-automation-description = 일정 간격 또는 지정한 시간에 어시스턴트 작업이 자동으로 실행되도록 예약합니다
 assistant-automation-new =
     .aria-label = 새 자동화 작업 만들기
@@ -127,9 +122,6 @@ assistant-automation-empty-subtitle = 첫 자동화 어시스턴트 작업을 �
 assistant-automation-empty-add = 첫 작업 만들기
     .aria-label = 첫 자동화 작업 만들기
 assistant-automation-runs-title = 최근 실행
-
-assistant-history-title = 결정 기록
-assistant-history-subtitle = 최근 어시스턴트 평가
 
 # assistant.js: page tabs, overview, settings and history.
 assistant-tab-chat = 채팅
@@ -164,7 +156,9 @@ assistant-config-saved-title = 저장됨
 assistant-config-saved-message = 설정이 저장되었습니다
 assistant-config-save-failed = 설정을 저장하지 못했습니다
 assistant-history-load-failed = 기록을 불러오지 못했습니다
+    .message = 결정 기록을 읽을 수 없습니다.
 assistant-history-empty = LLM 분석 요청이 아직 없습니다
+    .message = 어시스턴트가 토큰을 분석하면 평가가 여기에 표시됩니다.
 assistant-history-column-token = 토큰
 assistant-history-column-decision = 결정
 assistant-history-column-confidence = 신뢰도
@@ -173,9 +167,8 @@ assistant-history-column-reasoning = 근거
 assistant-history-column-model = 모델
 assistant-history-column-latency = 지연 시간
 assistant-history-column-when = 시각
-assistant-history-previous = 이전
-assistant-history-page = { $page } / { $total } 페이지
 assistant-history-cached = 캐시됨
+assistant-history-summary-total = 전체
 
 # chat_widget.js: sessions sidebar and header.
 assistant-chat-sessions-title = 세션

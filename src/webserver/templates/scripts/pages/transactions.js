@@ -417,7 +417,7 @@ function createLifecycle() {
         {
           id: "timestamp",
           label: I18n.t("transactions-col-time"),
-          minWidth: 130,
+          minWidth: "content",
           floating: true,
           wrap: false,
           render: (value) =>
@@ -483,6 +483,7 @@ function createLifecycle() {
           id: "instructions_count",
           label: I18n.t("transactions-col-instructions"),
           type: "number",
+          visible: false,
           minWidth: 64,
           // Every transaction has at least one instruction; 0 is a row stored before the
           // count was recorded, so it reads as unknown.
@@ -505,6 +506,7 @@ function createLifecycle() {
         emptyTitle: I18n.t("transactions-empty"),
         emptyMessage: I18n.attr("transactions-empty", "message"),
         compact: true,
+        uniformRowHeight: 2,
         stickyHeader: true,
         zebra: true,
         fitToContainer: true,

@@ -19,6 +19,14 @@ const WATCH_DISABLE_DETAIL_LABELS = Object.freeze({
   processing_failed: "wallets-watch-reason-processing-failed",
 });
 
+// Short form of the same reason, appended to the state label.
+const WATCH_DISABLE_SHORT_LABELS = Object.freeze({
+  user: "wallets-watch-reason-short-user",
+  signature_budget: "wallets-watch-reason-short-signature-budget",
+  helius_unavailable: "wallets-watch-reason-short-helius-unavailable",
+  processing_failed: "wallets-watch-reason-short-processing-failed",
+});
+
 // Display states derived in `render()` from the target and its status.
 const WATCH_STATE_LABELS = Object.freeze({
   paused: "wallets-watch-state-paused",
@@ -27,6 +35,12 @@ const WATCH_STATE_LABELS = Object.freeze({
   streaming: "wallets-watch-state-streaming",
   polling: "wallets-watch-state-polling",
 });
+
+function disableShort(reason) {
+  return Object.hasOwn(WATCH_DISABLE_SHORT_LABELS, reason?.kind)
+    ? I18n.label(WATCH_DISABLE_SHORT_LABELS, reason.kind)
+    : "";
+}
 
 function disableDetail(reason) {
   return Object.hasOwn(WATCH_DISABLE_DETAIL_LABELS, reason?.kind)
@@ -67,21 +81,31 @@ export function createWatchedWallets({
       label: I18n.t("wallets-watched-col-status"),
       sortable: true,
       minWidth: 290,
-      render: (value, row) =>
-        `<span class="watched-wallet-state ${row._stateClass}"><i class="icon-activity"></i><span>${value}</span></span>${row._detail ? `<small class="watched-wallet-reason">${Utils.escapeHtml(row._detail)}</small>` : ""}${row._reason ? `<small class="watched-wallet-reason">${Utils.escapeHtml(row._reason)}</small>` : ""}`,
+      render: (value, row) => {
+        const state = row._reasonShort
+          ? I18n.t("wallets-watch-state-reason", { state: value, reason: row._reasonShort })
+          : value;
+        const title = row._reason ? ` title="${Utils.escapeHtml(row._reason)}"` : "";
+        const detail = row._detail
+          ? `<small class="watched-wallet-reason">${Utils.escapeHtml(row._detail)}</small>`
+          : "";
+        return `<span class="watched-wallet-state ${row._stateClass}"${title}><i class="icon-activity"></i><span>${Utils.escapeHtml(state)}</span></span>${detail}`;
+      },
     },
     {
       id: "_lastActivity",
       label: I18n.t("wallets-watched-col-progress"),
       sortable: true,
-      minWidth: 140,
+      minWidth: "content",
+      wrap: false,
       render: (value) => (value ? formatTime(value) : I18n.t("wallets-watched-not-synced")),
     },
     {
       id: "_lastCheck",
       label: I18n.t("wallets-watched-col-last-check"),
       sortable: true,
-      minWidth: 150,
+      minWidth: "content",
+      wrap: false,
       render: (value) => (value ? formatTime(value) : I18n.t("wallets-watched-not-checked")),
     },
     {
@@ -158,17 +182,6 @@ export function createWatchedWallets({
     const form = $("#watched-wallet-form");
     if (form) on(form, "submit", addTarget);
 
-    const modal = $("#watch-wallet-modal");
-    if (modal) {
-      on(modal, "click", (event) => {
-        if (event.target === modal) hideAddModal();
-      });
-    }
-    const closeBtn = $("#watch-modal-close");
-    if (closeBtn) on(closeBtn, "click", () => hideAddModal());
-    const cancelBtn = $("#watch-cancel-btn");
-    if (cancelBtn) on(cancelBtn, "click", () => hideAddModal());
-
     const budgetForm = $("#watch-budget-form");
     if (budgetForm) on(budgetForm, "submit", saveBudget);
     on($("#watch-helius-action"), "click", () => {
@@ -176,15 +189,6 @@ export function createWatchedWallets({
     });
     on($("#watch-page-budget"), "input", syncBudgetSubmit);
     on($("#watch-budget-ack"), "change", syncBudgetSubmit);
-    ["#watch-budget-close", "#watch-budget-cancel"].forEach((selector) => {
-      const button = $(selector);
-      if (button) on(button, "click", hideBudgetModal);
-    });
-    const budgetModal = $("#watch-budget-modal");
-    if (budgetModal)
-      on(budgetModal, "click", (event) => {
-        if (event.target === budgetModal) hideBudgetModal();
-      });
 
     // The table is created lazily by load(), after the parent has made the
     // restored Watched panel visible. Constructing it here would measure a
@@ -193,13 +197,12 @@ export function createWatchedWallets({
 
   function showAddModal() {
     resetForm();
-    showModal("watch-wallet-modal");
+    showModal("watch-wallet-modal", { onClose: resetForm });
     $("#watched-wallet-address")?.focus();
   }
 
   function hideAddModal() {
     hideModal("watch-wallet-modal");
-    resetForm();
   }
 
   function resetForm() {
@@ -267,13 +270,16 @@ export function createWatchedWallets({
       error.hidden = true;
     }
     syncBudgetSubmit();
-    showModal("watch-budget-modal");
+    showModal("watch-budget-modal", {
+      onClose: () => {
+        budgetTarget = null;
+      },
+    });
     modal?.querySelector("#watch-page-budget")?.focus();
   }
 
   function hideBudgetModal() {
     hideModal("watch-budget-modal");
-    budgetTarget = null;
   }
 
   function syncBudgetSubmit() {
@@ -370,6 +376,7 @@ export function createWatchedWallets({
     table = new DataTable({
       container: "#watched-wallets-root",
       columns: COLUMNS,
+      uniformRowHeight: 2,
       rowIdField: "id",
       stateKey: "wallets.watched-table",
       compact: true,
@@ -627,6 +634,7 @@ export function createWatchedWallets({
         _state: I18n.label(WATCH_STATE_LABELS, state),
         _stateClass: stateClass,
         _reason: disableDetail(target.disable_reason),
+        _reasonShort: disableShort(target.disable_reason),
         _detail: target.enabled
           ? (status?.last_error ? I18n.text(status.last_error) : "") ||
             (highActivity ? I18n.t("wallets-watched-detail-helius") : "")
@@ -658,5 +666,5 @@ export function createWatchedWallets({
     }
   }
 
-  return { setup, load, reset, showAddModal, hideAddModal };
+  return { setup, load, reset };
 }

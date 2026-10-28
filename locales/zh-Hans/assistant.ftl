@@ -24,7 +24,6 @@ assistant-risk-medium = 中
 assistant-risk-high = 高
 assistant-risk-critical = 严重
 
-assistant-overview-title = 助手概览
 assistant-overview-description = 实时的 LLM 与分析状态、性能指标以及最新的模型评估。
 assistant-features-title = 模型功能
 assistant-metric-total-evaluations = 评估总数
@@ -35,7 +34,6 @@ assistant-metric-active-providers-value = { $active } / { $total }
 assistant-decisions-title = 最近决策
 assistant-decisions-subtitle = 最新的模型分析决策
 
-assistant-providers-title = LLM 提供商
 assistant-providers-description = 配置分析与助手共用的 LLM 提供商
 
 assistant-master-title = 主开关设置
@@ -82,7 +80,6 @@ assistant-cache-size-label = 缓存大小：
 assistant-cache-memory-label = 内存占用：
 assistant-cache-clear = 清除缓存
 
-assistant-testing-title = 助手测试场
 assistant-testing-subtitle = 对任意代币测试助手分析
 assistant-testing-mint-label = 铸造地址
 assistant-testing-mint-input =
@@ -94,7 +91,6 @@ assistant-testing-priority-high = 高
 assistant-testing-evaluate = 评估
 assistant-testing-results = 结果
 
-assistant-instructions-title = 自定义指令
 assistant-instructions-description = 添加会注入助手评估的自定义提示词
 assistant-instructions-new = 新建指令
 assistant-instructions-category-all = 全部分类
@@ -112,7 +108,6 @@ assistant-instructions-empty-add = 添加您的第一条指令
 assistant-templates-title = 指令模板
 assistant-templates-description = 可直接添加的预置指令模板
 
-assistant-automation-title = 自动化
 assistant-automation-description = 安排助手任务按间隔或在指定时间自动运行
 assistant-automation-new =
     .aria-label = 创建新的自动化任务
@@ -126,9 +121,6 @@ assistant-automation-empty-subtitle = 创建您的第一个自动化助手任务
 assistant-automation-empty-add = 创建您的第一个任务
     .aria-label = 创建第一个自动化任务
 assistant-automation-runs-title = 最近运行
-
-assistant-history-title = 决策历史
-assistant-history-subtitle = 最近的助手评估
 
 assistant-tab-chat = 对话
 assistant-tab-overview = 概览
@@ -162,7 +154,9 @@ assistant-config-saved-title = 已保存
 assistant-config-saved-message = 配置保存成功
 assistant-config-save-failed = 保存配置失败
 assistant-history-load-failed = 加载历史失败
+    .message = 无法读取决策历史。
 assistant-history-empty = 尚无 LLM 分析请求
+    .message = 助手分析代币后，评估会显示在这里。
 assistant-history-column-token = 代币
 assistant-history-column-decision = 决策
 assistant-history-column-confidence = 置信度
@@ -171,9 +165,8 @@ assistant-history-column-reasoning = 推理
 assistant-history-column-model = 模型
 assistant-history-column-latency = 延迟
 assistant-history-column-when = 时间
-assistant-history-previous = 上一页
-assistant-history-page = 第 { $page } 页，共 { $total } 页
 assistant-history-cached = 已缓存
+assistant-history-summary-total = 总计
 
 assistant-chat-sessions-title = 会话
 assistant-chat-search =

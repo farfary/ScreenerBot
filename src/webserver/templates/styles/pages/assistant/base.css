@@ -20,6 +20,12 @@
   overflow: hidden;
 }
 
+/* History panel holds a table that scrolls inside the panel, like the chat. */
+.assistant-main-panel:has(#history-panel.active) {
+  padding: 0;
+  overflow: hidden;
+}
+
 .assistant-panel-content {
   display: none;
   padding-bottom: var(--spacing-xl);
@@ -44,29 +50,35 @@
   flex-direction: column;
 }
 
+#history-panel.assistant-panel-content {
+  padding-bottom: 0;
+  height: 100%;
+  min-height: 0;
+}
+
+#history-panel.assistant-panel-content.active {
+  display: flex;
+  flex-direction: column;
+}
+
+#history-root {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .assistant-panel-header {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: var(--spacing-lg);
+  align-items: center;
+  margin-bottom: var(--spacing-md);
+  min-height: 32px;
   gap: var(--spacing-md);
 }
 
-.panel-header-content {
-  flex: 1;
-  min-width: 0;
-}
-
-.assistant-panel-title {
-  font-size: 24px;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin: 0 0 8px;
-}
-
 .assistant-panel-description {
-  font-size: 14px;
-  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
   margin: 0;
 }
 

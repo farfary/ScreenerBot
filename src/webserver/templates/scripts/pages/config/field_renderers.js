@@ -444,7 +444,7 @@ function metadataMatchesSearchLocal(fieldKey, fieldMeta, term) {
  * Field renderer functions for different field types.
  */
 export const FIELD_RENDERERS = {
-  boolean({ fieldId, value, disabled, onChange }) {
+  boolean({ fieldId, value, metadata = {}, disabled, onChange }) {
     const input = create("input", {
       type: "checkbox",
       id: fieldId,
@@ -454,7 +454,10 @@ export const FIELD_RENDERERS = {
     on(input, "change", (event) => {
       onChange(event.target.checked);
     });
-    return input;
+    const label = create("label", { className: "toggle" });
+    if (metadata.key) label.setAttribute("aria-label", fieldLabel(metadata.key));
+    label.append(input, create("span", { className: "toggle-track" }));
+    return label;
   },
   number({ fieldId, value, metadata = {}, disabled, onChange }) {
     const input = create("input", {

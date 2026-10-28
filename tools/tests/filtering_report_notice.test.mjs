@@ -214,3 +214,35 @@ test("with the RugCheck stage off the Analytics headline has no awaiting card", 
     await session.close();
   }
 });
+
+test("the config footer shows on the settings tabs only", async () => {
+  const view = await openStatus(true);
+  try {
+    const visibleOn = {};
+    for (const tab of [
+      "status",
+      "analytics",
+      "explorer",
+      "meta",
+      "onchain",
+      "dexscreener",
+      "geckoterminal",
+      "rugcheck",
+    ]) {
+      await view.page.locator(`#subTabsContainer [data-tab-id="${tab}"]`).click();
+      visibleOn[tab] = await view.page.locator("#filtering-footer").isVisible();
+    }
+    assert.deepEqual(visibleOn, {
+      status: false,
+      analytics: false,
+      explorer: false,
+      meta: true,
+      onchain: true,
+      dexscreener: true,
+      geckoterminal: true,
+      rugcheck: true,
+    });
+  } finally {
+    await view.close();
+  }
+});

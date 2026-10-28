@@ -21,7 +21,6 @@ assistant-risk-medium = मध्यम
 assistant-risk-high = उच्च
 assistant-risk-critical = गंभीर
 
-assistant-overview-title = असिस्टेंट ओवरव्यू
 assistant-overview-description = लाइव LLM और विश्लेषण की स्थिति, परफ़ॉर्मेंस मेट्रिक्स और मॉडल के नवीनतम मूल्यांकन।
 assistant-features-title = मॉडल फ़ीचर
 assistant-metric-total-evaluations = कुल मूल्यांकन
@@ -32,7 +31,6 @@ assistant-metric-active-providers-value = { $active } / { $total }
 assistant-decisions-title = हाल के निर्णय
 assistant-decisions-subtitle = मॉडल-विश्लेषण के नवीनतम निर्णय
 
-assistant-providers-title = LLM प्रोवाइडर
 assistant-providers-description = विश्लेषण और असिस्टेंट द्वारा उपयोग किए जाने वाले साझा LLM प्रोवाइडर कॉन्फ़िगर करें
 
 assistant-master-title = मास्टर सेटिंग्स
@@ -79,7 +77,6 @@ assistant-cache-size-label = कैश साइज़:
 assistant-cache-memory-label = मेमोरी उपयोग:
 assistant-cache-clear = कैश साफ़ करें
 
-assistant-testing-title = असिस्टेंट टेस्टिंग प्लेग्राउंड
 assistant-testing-subtitle = किसी भी टोकन पर असिस्टेंट विश्लेषण टेस्ट करें
 assistant-testing-mint-label = मिंट एड्रेस
 assistant-testing-mint-input =
@@ -91,7 +88,6 @@ assistant-testing-priority-high = उच्च
 assistant-testing-evaluate = मूल्यांकन करें
 assistant-testing-results = परिणाम
 
-assistant-instructions-title = कस्टम निर्देश
 assistant-instructions-description = असिस्टेंट मूल्यांकन में जोड़े जाने वाले कस्टम प्रॉम्प्ट जोड़ें
 assistant-instructions-new = नया निर्देश
 assistant-instructions-category-all = सभी श्रेणियाँ
@@ -109,7 +105,6 @@ assistant-instructions-empty-add = अपना पहला निर्दे�
 assistant-templates-title = निर्देश टेम्पलेट
 assistant-templates-description = पहले से बने निर्देश टेम्पलेट जो आप जोड़ सकते हैं
 
-assistant-automation-title = ऑटोमेशन
 assistant-automation-description = असिस्टेंट टास्क को अंतराल पर या तय समय पर अपने आप चलाने के लिए शेड्यूल करें
 assistant-automation-new =
     .aria-label = नया ऑटोमेशन टास्क बनाएँ
@@ -123,9 +118,6 @@ assistant-automation-empty-subtitle = शुरू करने के लिए
 assistant-automation-empty-add = अपना पहला टास्क बनाएँ
     .aria-label = पहला ऑटोमेशन टास्क बनाएँ
 assistant-automation-runs-title = हाल के रन
-
-assistant-history-title = निर्णय इतिहास
-assistant-history-subtitle = हाल के असिस्टेंट मूल्यांकन
 
 assistant-tab-chat = चैट
 assistant-tab-overview = ओवरव्यू
@@ -159,7 +151,9 @@ assistant-config-saved-title = सहेजा गया
 assistant-config-saved-message = कॉन्फ़िगरेशन सफलतापूर्वक सहेजा गया
 assistant-config-save-failed = कॉन्फ़िगरेशन सहेजने में विफल
 assistant-history-load-failed = इतिहास लोड करने में विफल
+    .message = निर्णय इतिहास पढ़ा नहीं जा सका।
 assistant-history-empty = अभी तक कोई LLM-विश्लेषण अनुरोध नहीं है
+    .message = असिस्टेंट द्वारा किसी टोकन का विश्लेषण करने के बाद मूल्यांकन यहाँ दिखते हैं।
 assistant-history-column-token = टोकन
 assistant-history-column-decision = निर्णय
 assistant-history-column-confidence = कॉन्फ़िडेंस
@@ -168,9 +162,8 @@ assistant-history-column-reasoning = तर्क
 assistant-history-column-model = मॉडल
 assistant-history-column-latency = लेटेंसी
 assistant-history-column-when = कब
-assistant-history-previous = पिछला
-assistant-history-page = पेज { $page } / { $total }
 assistant-history-cached = कैश्ड
+assistant-history-summary-total = कुल
 
 assistant-chat-sessions-title = सेशन
 assistant-chat-search =

@@ -11,6 +11,9 @@
  * `--name:` declaration under the templates (a stylesheet, an inline style or a script
  * that writes one) or a `setProperty("--name", …)` call.
  *
+ * A property whose own value reads `var(--same-name`) is a dependency cycle: it computes
+ * as invalid and every declaration that reads it fails with it.
+ *
  * The files below still read a property nothing defines; each fix removes its entry, and
  * the list only shrinks.
  *
@@ -63,4 +66,16 @@ test("every custom property read without a fallback is defined under the templat
     UNDEFINED_ALLOWED,
     "define the property or give the read a fallback; a fixed file leaves the list"
   );
+});
+
+test("no custom property is defined by a value that reads itself", async () => {
+  const sources = (await walk(TEMPLATES_ROOT)).filter((path) => /\.(?:css|html|js|mjs)$/.test(path));
+  const cycles = [];
+  for (const path of sources) {
+    const source = withoutComments(readFileSync(path, "utf8"));
+    for (const match of source.matchAll(/(--[\w-]+)\s*:[^;{}]*?var\(\s*\1(?![\w-])/g)) {
+      cycles.push(`${relative(TEMPLATES_ROOT, path)}: ${match[1]}`);
+    }
+  }
+  assert.deepEqual(cycles, [], "a custom property that reads itself is invalid; give the default to the element above");
 });

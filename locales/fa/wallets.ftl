@@ -31,6 +31,11 @@ wallets-watch-reason-user = توقف‌شده توسط شما.
 wallets-watch-reason-signature-budget = فعالیت این کیف پول بیشتر از حدی است که پایش فعلی می‌تواند بررسی کند.
 wallets-watch-reason-helius-unavailable = بررسی‌های { -helius } ناموفق بود. پیشرفت ذخیره‌شده حفظ شده است.
 wallets-watch-reason-processing-failed = پردازش فعالیت کیف پول ممکن نشد. پیشرفت ذخیره‌شده حفظ شده است.
+wallets-watch-reason-short-user = توسط شما
+wallets-watch-reason-short-signature-budget = سقف پایش
+wallets-watch-reason-short-helius-unavailable = ارائه‌دهنده پایش
+wallets-watch-reason-short-processing-failed = پردازش پایش
+wallets-watch-state-reason = { $state } · { $reason }
 
 # Vocabulary shared by the wallet tables and dialogs.
 wallets-modal-close =

@@ -13,6 +13,7 @@
 
 import * as Hints from "../core/hints.js";
 import { dirSign } from "../core/dom.js";
+import { pushEscapeHandler } from "../core/escape_stack.js";
 
 // Currently open popover instance
 let activePopover = null;
@@ -89,10 +90,6 @@ export class HintTrigger {
     // Listen for hints toggle events
     document.removeEventListener("hints:toggle", handleHintsToggle);
     document.addEventListener("hints:toggle", handleHintsToggle);
-
-    // Listen for escape key to close popover
-    document.removeEventListener("keydown", handleKeyDown);
-    document.addEventListener("keydown", handleKeyDown);
   }
 }
 
@@ -105,6 +102,7 @@ export class HintPopover {
     this.triggerEl = triggerEl;
     this.el = null;
     this._repositionHandler = null;
+    this._releaseEscape = null;
   }
 
   /**
@@ -121,6 +119,7 @@ export class HintPopover {
     this._attachHandlers();
 
     activePopover = this;
+    this._releaseEscape = pushEscapeHandler(() => this.close());
 
     // Animate in
     requestAnimationFrame(() => {
@@ -135,6 +134,9 @@ export class HintPopover {
    */
   close() {
     if (!this.el) return;
+
+    this._releaseEscape?.();
+    this._releaseEscape = null;
 
     this.el.classList.remove("hint-popover--visible");
     this._detachViewportHandlers();
@@ -520,15 +522,6 @@ function handleHintsToggle(e) {
         trigger.style.display = "";
       }
     });
-  }
-}
-
-/**
- * Handle keyboard events
- */
-function handleKeyDown(e) {
-  if (e.key === "Escape" && activePopover) {
-    activePopover.close();
   }
 }
 

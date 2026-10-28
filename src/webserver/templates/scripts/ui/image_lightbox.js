@@ -11,6 +11,7 @@
  */
 import * as Utils from "../core/utils.js";
 import { downloadBlob } from "../core/download.js";
+import { pushEscapeHandler } from "../core/escape_stack.js";
 
 /**
  * Show the lightbox. Returns a close() function.
@@ -168,17 +169,14 @@ export function showImageLightbox({
     image.dataset.dragging = "false";
   };
 
-  const escapeHandler = (e) => {
-    if (e.key === "Escape") close();
-  };
-  document.addEventListener("keydown", escapeHandler);
+  const releaseEscape = pushEscapeHandler(() => close());
 
   const close = () => {
     if (closed) return;
     closed = true;
     lightbox.classList.remove("active");
     lightbox.dataset.state = "closing";
-    document.removeEventListener("keydown", escapeHandler);
+    releaseEscape();
     lightbox.removeEventListener("wheel", wheelHandler);
     image.removeEventListener("pointerdown", pointerDownHandler);
     image.removeEventListener("pointermove", pointerMoveHandler);

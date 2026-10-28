@@ -76,22 +76,22 @@
   margin-bottom: 24px;
 }
 
-.instructions-list {
-  min-height: 200px;
-}
-
 .instruction-item {
   display: flex;
   align-items: center;
   padding: 10px 16px;
-  border-bottom: 1px solid rgb(128, 128, 128, 0.1);
+  border-bottom: 1px solid var(--border-color);
   transition: background var(--transition-fast);
   cursor: grab;
   min-height: 40px;
 }
 
 .instruction-item:last-child {
-  border-bottom: 1px solid rgb(128, 128, 128, 0.1);
+  border-bottom: 0;
+}
+
+.instruction-item[hidden] {
+  display: none;
 }
 
 .instruction-item:hover {
@@ -399,126 +399,4 @@
 
 .instruction-context-menu .context-menu-item.danger i {
   color: inherit;
-}
-
-/* ============================================================================
-   History Tab Styles
-   ============================================================================ */
-
-/* Template Preview Modal */
-.modal-dialog.instruction-modal.template-preview-modal {
-  max-width: 700px;
-}
-
-.template-preview-info {
-  margin-bottom: 1rem;
-}
-
-.preview-meta {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  flex-wrap: wrap;
-}
-
-.template-preview-content {
-  margin-top: 1rem;
-}
-
-.template-preview-content h4 {
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin-bottom: 0.5rem;
-}
-
-.template-content-display {
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  padding: 1rem;
-  font-size: 0.85rem;
-  color: var(--text-secondary);
-  font-family: var(--font-mono);
-  line-height: 1.6;
-  white-space: pre-wrap;
-  max-height: 400px;
-  overflow-y: auto;
-}
-
-/* ============================================================================
-   History Tab
-   ============================================================================ */
-
-.history-section {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--assistant-card-radius);
-  padding: var(--assistant-card-padding);
-}
-
-.history-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.history-table th,
-.history-table td {
-  padding: 0.75rem;
-  text-align: start;
-  border-bottom: 1px solid var(--border-color);
-}
-
-.history-table th {
-  font-size: 0.75rem;
-  text-transform: uppercase;
-  color: var(--text-muted);
-  font-weight: 500;
-}
-
-.decision-row.pass {
-  background: rgb(34, 197, 94, 0.05);
-}
-
-.decision-row.reject {
-  background: rgb(239, 68, 68, 0.05);
-}
-
-/* The reasoning is a paragraph and the seven columns around it are short, so it
-   takes the slack. The clamp lives on an inner span, never on the cell: a table
-   cell forced to `display: -webkit-box` stops participating in table layout and
-   its text spills over the row below instead of being cut. Full text in the
-   title attribute. */
-.history-table .decision-reasoning {
-  width: 40%;
-  min-width: 16rem;
-  color: var(--text-secondary);
-}
-
-.history-table .decision-reasoning span {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-.history-table .decision-model,
-.history-table .decision-latency,
-.history-table .decision-when {
-  white-space: nowrap;
-}
-
-.token-symbol {
-  font-weight: 600;
-  display: block;
-  color: var(--text-primary);
-}
-
-.pagination {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 1rem;
-  padding: 1rem;
-  margin-top: 1rem;
 }

@@ -31,6 +31,11 @@ wallets-watch-reason-user = أوقفتها مؤقتًا.
 wallets-watch-reason-signature-budget = نشاط هذه المحفظة أكبر مما تستطيع المراقبة الحالية فحصه.
 wallets-watch-reason-helius-unavailable = فشلت فحوصات { -helius }. التقدم المحفوظ باقٍ.
 wallets-watch-reason-processing-failed = تعذّرت معالجة نشاط المحفظة. التقدم المحفوظ باقٍ.
+wallets-watch-reason-short-user = بواسطتك
+wallets-watch-reason-short-signature-budget = حد المراقبة
+wallets-watch-reason-short-helius-unavailable = مزوّد المراقبة
+wallets-watch-reason-short-processing-failed = معالجة المراقبة
+wallets-watch-state-reason = { $state } · { $reason }
 
 # Vocabulary shared by the wallet tables and dialogs.
 wallets-modal-close =

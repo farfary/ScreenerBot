@@ -23,6 +23,11 @@ wallets-watch-reason-user = Von Ihnen pausiert.
 wallets-watch-reason-signature-budget = Diese Wallet hat mehr Aktivität, als die aktuelle Überwachung prüfen kann.
 wallets-watch-reason-helius-unavailable = { -helius }-Prüfungen sind fehlgeschlagen. Der gespeicherte Fortschritt bleibt erhalten.
 wallets-watch-reason-processing-failed = Wallet-Aktivität konnte nicht verarbeitet werden. Der gespeicherte Fortschritt bleibt erhalten.
+wallets-watch-reason-short-user = durch Sie
+wallets-watch-reason-short-signature-budget = Beobachtungslimit
+wallets-watch-reason-short-helius-unavailable = Beobachtungsanbieter
+wallets-watch-reason-short-processing-failed = Beobachtungsverarbeitung
+wallets-watch-state-reason = { $state } · { $reason }
 
 wallets-modal-close =
     .aria-label = Dialog schließen

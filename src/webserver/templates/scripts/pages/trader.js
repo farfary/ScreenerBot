@@ -210,6 +210,17 @@ function createLifecycle() {
   }
 
   /**
+   * Read the Stats tab's figures. Independent reads, so they go out together instead of
+   * queueing behind each other. The status bar is read here because nothing else polls
+   * it: fetched once at init, it kept reporting "Running" forever after the trader had
+   * stopped itself.
+   */
+  async function refreshStats() {
+    if (state.currentTab !== "stats") return;
+    await Promise.all([loadStats(), controls.loadControlsStatus(), controls.fetchTraderStatus()]);
+  }
+
+  /**
    * Switch to a different tab
    */
   function switchTab(tabId, { load = true } = {}) {
@@ -266,6 +277,8 @@ function createLifecycle() {
 
     // Start/stop pollers based on tab
     if (tabId === "stats") {
+      // The poller waits a full interval before its first run, so load now.
+      void refreshStats();
       if (statsPoller && !statsPoller.active) {
         statsPoller.start();
       }
@@ -1373,18 +1386,7 @@ function createLifecycle() {
       // Create pollers once and re-register them when a cached page is revisited.
       if (!statsPoller) {
         statsPoller = new Poller(
-          async () => {
-            if (state.currentTab !== "stats") return;
-            // Independent reads, so they go out together instead of queueing behind
-            // each other. The status bar is polled here because nothing else polls
-            // it: fetched once at init, it kept reporting "Running" forever after
-            // the trader had stopped itself.
-            await Promise.all([
-              loadStats(),
-              controls.loadControlsStatus(),
-              controls.fetchTraderStatus(),
-            ]);
-          },
+          refreshStats,
           { label: "Trader Stats", intervalMs: 5000 } // l10n-ignore: poller label used in logs only
         );
       }
@@ -1407,10 +1409,6 @@ function createLifecycle() {
 
       // Independent first loads never hold the router navigation open.
       void loadConfig();
-      if (state.currentTab === "stats") {
-        void loadStats();
-        void controls.loadControlsStatus();
-      }
     },
 
     /**

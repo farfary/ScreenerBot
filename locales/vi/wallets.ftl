@@ -21,6 +21,11 @@ wallets-watch-reason-user = Bạn đã tạm dừng.
 wallets-watch-reason-signature-budget = Ví này có nhiều hoạt động hơn mức mà cấu hình theo dõi hiện tại có thể kiểm tra.
 wallets-watch-reason-helius-unavailable = Kiểm tra qua { -helius } thất bại. Tiến độ đã lưu được giữ nguyên.
 wallets-watch-reason-processing-failed = Không thể xử lý hoạt động của ví. Tiến độ đã lưu được giữ nguyên.
+wallets-watch-reason-short-user = do bạn
+wallets-watch-reason-short-signature-budget = giới hạn theo dõi
+wallets-watch-reason-short-helius-unavailable = nhà cung cấp theo dõi
+wallets-watch-reason-short-processing-failed = xử lý theo dõi
+wallets-watch-state-reason = { $state } · { $reason }
 
 wallets-modal-close =
     .aria-label = Đóng hộp thoại

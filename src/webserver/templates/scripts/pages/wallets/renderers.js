@@ -186,6 +186,8 @@ export function createWalletRenderers({
       id: "created_at",
       label: I18n.t("wallets-list-col-created"),
       sortable: true,
+      minWidth: "content",
+      wrap: false,
       render: (value) =>
         Utils.formatTimestamp(value, { includeYear: false, includeSeconds: false, fallback: "—" }),
     },

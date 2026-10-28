@@ -21,6 +21,11 @@ wallets-watch-reason-user = Приостановлено вами.
 wallets-watch-reason-signature-budget = У этого кошелька больше активности, чем текущее отслеживание успевает проверять.
 wallets-watch-reason-helius-unavailable = Проверки через { -helius } не удались. Сохранённый прогресс не потерян.
 wallets-watch-reason-processing-failed = Не удалось обработать активность кошелька. Сохранённый прогресс не потерян.
+wallets-watch-reason-short-user = вами
+wallets-watch-reason-short-signature-budget = лимит наблюдения
+wallets-watch-reason-short-helius-unavailable = провайдер наблюдения
+wallets-watch-reason-short-processing-failed = обработка наблюдения
+wallets-watch-state-reason = { $state } · { $reason }
 
 wallets-modal-close =
     .aria-label = Закрыть окно

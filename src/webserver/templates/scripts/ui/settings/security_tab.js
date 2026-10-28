@@ -7,6 +7,7 @@
  * Extracted from settings_dialog.js
  */
 import * as Utils from "../../core/utils.js";
+import { pushEscapeHandler } from "../../core/escape_stack.js";
 import { enhanceAllSelects } from "../custom_select.js";
 import { renderStateView } from "../state_view.js";
 import { apiErrorMessage } from "../../core/request_manager.js";
@@ -440,23 +441,14 @@ function showPasswordModal(dialog, mode, content) {
   modal.hidden = false;
   enhanceAllSelects(body);
 
-  // Close modal function with keyboard listener cleanup
-  let handleKeydown;
+  // Escape goes through the shared stack; every close path releases it.
+  let releaseEscape = null;
   const closeModal = () => {
-    if (handleKeydown) {
-      document.removeEventListener("keydown", handleKeydown);
-    }
+    releaseEscape?.();
+    releaseEscape = null;
     modal.hidden = true;
   };
-
-  // Keyboard handler for Escape
-  handleKeydown = (e) => {
-    if (e.key === "Escape") {
-      e.preventDefault();
-      closeModal();
-    }
-  };
-  document.addEventListener("keydown", handleKeydown);
+  releaseEscape = pushEscapeHandler(closeModal);
 
   closeBtn.onclick = closeModal;
   modal.onclick = (event) => {
@@ -574,7 +566,7 @@ function removePassword(dialog, content) {
 
   body.innerHTML = `
       <div class="security-form">
-        <p style="color: var(--text-secondary); margin-bottom: 16px;" data-l10n-id="settings-security-remove-description"></p>
+        <p class="security-remove-description" data-l10n-id="settings-security-remove-description"></p>
 
         <div class="security-form-group">
           <label data-l10n-id="settings-security-password-current-label"></label>
@@ -602,23 +594,22 @@ function removePassword(dialog, content) {
   // Store reference for cleanup
   const passwordInput = body.querySelector("#securityCurrentPasswordRemove");
 
-  // Keyboard handler for Enter and Escape
+  // Keyboard handler for Enter
   const handleKeydown = (e) => {
     if (e.key === "Enter") {
       e.preventDefault();
       body.querySelector("#securityConfirmRemoveBtn").click();
-    } else if (e.key === "Escape") {
-      e.preventDefault();
-      closeModal();
     }
   };
   passwordInput.addEventListener("keydown", handleKeydown);
 
-  // Close handlers with cleanup
+  // Close handlers with cleanup; Escape goes through the shared stack
   const closeModal = () => {
+    releaseEscape();
     passwordInput.removeEventListener("keydown", handleKeydown);
     modal.hidden = true;
   };
+  const releaseEscape = pushEscapeHandler(closeModal);
 
   closeBtn.onclick = closeModal;
   modal.onclick = (event) => {
@@ -681,26 +672,26 @@ async function showTotpSetupModal(dialog, content) {
   title.textContent = I18n.t("settings-security-2fa-enable-title");
   body.innerHTML = `
       <div class="totp-setup-step" id="totpStep1">
-        <p style="color: var(--text-secondary); margin-bottom: 1rem;" data-l10n-id="settings-security-2fa-password-prompt"></p>
+        <p class="totp-prompt" data-l10n-id="settings-security-2fa-password-prompt"></p>
         <div class="security-form-group">
           <input type="password" id="totpSetupPassword" class="settings-input" data-l10n-id="settings-security-2fa-password-input" autocomplete="current-password">
         </div>
-        <div class="totp-setup-actions" style="display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 1rem;">
+        <div class="totp-setup-actions">
           <button class="btn btn-secondary btn-sm" id="totpCancelBtn" data-l10n-id="common-action-cancel"></button>
           <button class="btn btn-primary btn-sm" id="totpContinueBtn" data-l10n-id="settings-security-2fa-continue"></button>
         </div>
       </div>
-      <div class="totp-setup-step" id="totpStep2" style="display: none;">
-        <div id="totpQrContainer" style="text-align: center; margin: 1rem 0;"></div>
-        <div class="totp-manual-entry" style="margin: 1rem 0;">
-          <label style="font-size: 0.75rem; color: var(--text-secondary);" data-l10n-id="settings-security-2fa-manual-code"></label>
-          <code id="totpSecretCode" dir="ltr" style="display: block; padding: 0.5rem; background: var(--bg-tertiary); border-radius: 4px; margin-top: 0.25rem; word-break: break-all; font-family: var(--font-mono);"></code>
+      <div class="totp-setup-step" id="totpStep2" hidden>
+        <div id="totpQrContainer" class="totp-qr"></div>
+        <div class="totp-manual-entry">
+          <span class="totp-manual-label" data-l10n-id="settings-security-2fa-manual-code"></span>
+          <code id="totpSecretCode" class="totp-secret" dir="ltr"></code>
         </div>
-        <p style="margin: 1rem 0; color: var(--text-secondary);" data-l10n-id="settings-security-2fa-code-prompt"></p>
+        <p class="totp-code-prompt" data-l10n-id="settings-security-2fa-code-prompt"></p>
         <div class="security-form-group">
-          <input type="text" id="totpVerifyCode" class="settings-input" placeholder="000000" maxlength="6" pattern="[0-9]{6}" style="text-align: center; font-size: 1.25rem; letter-spacing: 0.25em;">
+          <input type="text" id="totpVerifyCode" class="settings-input totp-verify-code" placeholder="000000" maxlength="6" pattern="[0-9]{6}">
         </div>
-        <div class="totp-setup-actions" style="display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 1rem;">
+        <div class="totp-setup-actions">
           <button class="btn btn-secondary btn-sm" id="totpBackBtn" data-l10n-id="common-action-back"></button>
           <button class="btn btn-primary btn-sm" id="totpVerifyBtn" data-l10n-id="settings-security-2fa-verify-enable"></button>
         </div>
@@ -712,10 +703,12 @@ async function showTotpSetupModal(dialog, content) {
 
   let currentSecret = "";
 
-  // Close handlers
+  // Close handlers; Escape goes through the shared stack
   const closeModal = () => {
+    releaseEscape();
     modal.hidden = true;
   };
+  const releaseEscape = pushEscapeHandler(closeModal);
 
   closeBtn.onclick = closeModal;
   modal.onclick = (event) => {
@@ -754,15 +747,15 @@ async function showTotpSetupModal(dialog, content) {
 
       // Show QR code
       const qrContainer = body.querySelector("#totpQrContainer");
-      qrContainer.innerHTML = `<img src="${result.qr_code}" data-l10n-id="settings-security-2fa-qr" style="max-width: 200px; height: auto; border-radius: 8px;">`;
+      qrContainer.innerHTML = `<img src="${result.qr_code}" data-l10n-id="settings-security-2fa-qr">`;
       I18n.localizeTree(qrContainer);
 
       // Show manual code
       body.querySelector("#totpSecretCode").textContent = result.secret;
 
       // Switch to step 2
-      body.querySelector("#totpStep1").style.display = "none";
-      body.querySelector("#totpStep2").style.display = "block";
+      body.querySelector("#totpStep1").hidden = true;
+      body.querySelector("#totpStep2").hidden = false;
     } catch {
       Utils.showToast(I18n.t("settings-security-2fa-setup-failed"), "error");
     }
@@ -770,8 +763,8 @@ async function showTotpSetupModal(dialog, content) {
 
   // Back button
   body.querySelector("#totpBackBtn")?.addEventListener("click", () => {
-    body.querySelector("#totpStep1").style.display = "block";
-    body.querySelector("#totpStep2").style.display = "none";
+    body.querySelector("#totpStep1").hidden = false;
+    body.querySelector("#totpStep2").hidden = true;
   });
 
   // Verify button
@@ -822,11 +815,11 @@ async function disableTotp(dialog, content) {
   title.textContent = I18n.t("settings-security-2fa-disable-title");
   body.innerHTML = `
       <div class="security-form">
-        <p style="color: var(--text-secondary); margin-bottom: 1rem;" data-l10n-id="settings-security-2fa-disable-prompt"></p>
+        <p class="totp-prompt" data-l10n-id="settings-security-2fa-disable-prompt"></p>
         <div class="security-form-group">
           <input type="password" id="totpDisablePassword" class="settings-input" data-l10n-id="settings-security-2fa-password-input" autocomplete="current-password">
         </div>
-        <div class="totp-setup-actions" style="display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 1rem;">
+        <div class="totp-setup-actions">
           <button class="btn btn-secondary btn-sm" id="totpDisableCancelBtn" data-l10n-id="common-action-cancel"></button>
           <button class="btn btn-warning btn-sm" id="totpDisableConfirmBtn" data-l10n-id="settings-security-2fa-disable"></button>
         </div>
@@ -836,10 +829,12 @@ async function disableTotp(dialog, content) {
   I18n.localizeTree(body);
   modal.hidden = false;
 
-  // Close handlers
+  // Close handlers; Escape goes through the shared stack
   const closeModal = () => {
+    releaseEscape();
     modal.hidden = true;
   };
+  const releaseEscape = pushEscapeHandler(closeModal);
 
   closeBtn.onclick = closeModal;
   modal.onclick = (event) => {

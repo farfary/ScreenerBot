@@ -886,6 +886,7 @@ pub fn get_promo_tokens_list(query: &FilteringQuery) -> TokenListResponse {
         rejection_reasons,
         available_rejection_reasons,
         blacklist_reasons,
+        market_checks: HashMap::new(),
     }
 }
 

@@ -4,6 +4,7 @@
 // Quick trade mixin for the TradeActionDialog - mint input with token search, token info preview and the transition to the trade step.
 
 import * as Utils from "../../core/utils.js";
+import { pushEscapeHandler } from "../../core/escape_stack.js";
 import { formatPriceSubscript, withSolUnit } from "../../core/format.js";
 import { renderAddress, tokenLabel } from "../token_identity.js";
 
@@ -196,6 +197,8 @@ export function applyQuickTradeMixin(TradeActionDialog) {
       .join("");
 
     this._searchDropdownEl.setAttribute("data-visible", "true");
+    // The list is the topmost overlay while it shows: Escape hides it, not the dialog.
+    this._releaseSearchEscape ??= pushEscapeHandler(() => this._hideSearchResults());
 
     // Attach click listeners
     this._searchDropdownEl.querySelectorAll(".search-result-item").forEach((item) => {
@@ -212,6 +215,8 @@ export function applyQuickTradeMixin(TradeActionDialog) {
    * Hide search results dropdown
    */
   proto._hideSearchResults = function () {
+    this._releaseSearchEscape?.();
+    this._releaseSearchEscape = null;
     if (this._searchDropdownEl) {
       this._searchDropdownEl.setAttribute("data-visible", "false");
       this._searchDropdownEl.innerHTML = "";
@@ -260,9 +265,6 @@ export function applyQuickTradeMixin(TradeActionDialog) {
       if (selected?.mint) {
         this._selectSearchResult(selected.mint);
       }
-    } else if (e.key === "Escape") {
-      e.preventDefault();
-      this._hideSearchResults();
     }
   };
 

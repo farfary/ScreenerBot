@@ -18,6 +18,8 @@ import * as Utils from "../core/utils.js";
 import * as Hints from "../core/hints.js";
 import { createWalletRenderers } from "./wallets/renderers.js";
 import { createWatchedWallets } from "./wallets/watched.js";
+import { createPageDialogs } from "../ui/page_dialogs.js";
+import { ConfirmationDialog } from "../ui/confirmation_dialog.js";
 import { renderSetupGate, setupRequired } from "../ui/setup_gate.js";
 import { SetupDialog } from "../ui/setup_dialog.js";
 
@@ -61,6 +63,7 @@ let currentExportWalletId = null;
 // Module instances
 let renderers = null;
 let watched = null;
+let dialogs = null;
 
 // =============================================================================
 // Lifecycle
@@ -99,13 +102,15 @@ function createLifecycle() {
         onRefresh: handleRefresh,
       });
 
+      dialogs = createPageDialogs($, on);
       watched = createWatchedWallets({
         $,
         on,
         Utils,
         requestManager,
-        showModal,
-        hideModal,
+        showModal: dialogs.show,
+        hideModal: dialogs.hide,
+        confirm: (config) => ConfirmationDialog.show(config),
         onRefresh: handleRefresh,
       });
 
@@ -214,12 +219,8 @@ function updatePanelVisibility() {
 // Per-tab actions (refresh, key export, Watch Wallet) are declared in each tab
 // table's own toolbar config — this page owns only modals and forms.
 function setupEventHandlers() {
-  // Keyboard support for closing modals
-  on(document, "keydown", (e) => {
-    if (e.key === "Escape") {
-      hideAllModals();
-    }
-  });
+  // Backdrop and close buttons of every modal; Escape is owned by the dialogs.
+  dialogs.setup($(".wallets-page"));
 
   // Export modal
   setupExportModal();
@@ -229,13 +230,8 @@ function setupExportModal() {
   const modal = $("#export-modal");
   if (!modal) return;
 
-  const closeBtn = $("#export-modal-close");
-  const cancelBtn = $("#export-cancel-btn");
   const confirmBtn = $("#confirm-export-btn");
   const copyBtn = $("#copy-key-btn");
-
-  if (closeBtn) on(closeBtn, "click", () => closeExportModal());
-  if (cancelBtn) on(cancelBtn, "click", () => closeExportModal());
 
   if (confirmBtn) {
     on(confirmBtn, "click", handleExportKey);
@@ -250,12 +246,6 @@ function setupExportModal() {
       }
     });
   }
-
-  on(modal, "click", (e) => {
-    if (e.target === modal) {
-      closeExportModal();
-    }
-  });
 }
 
 // =============================================================================
@@ -397,7 +387,7 @@ function showExportModal(id) {
   const keyEl = $("#exported-key");
   if (keyEl) keyEl.textContent = "...";
 
-  showModal("export-modal");
+  dialogs.show("export-modal", { onClose: clearExportedKey });
 }
 
 async function handleExportKey() {
@@ -426,12 +416,12 @@ async function handleExportKey() {
     Utils.showToast(I18n.t("wallets-export-revealed"), "warning");
   } catch (error) {
     Utils.showToast(I18n.t("wallets-toast-failed", { reason: error.message }), "error");
-    closeExportModal();
+    dialogs.hide("export-modal");
   }
 }
 
-function closeExportModal() {
-  hideModal("export-modal");
+/** Forget the wallet and wipe the revealed key; runs on every way the export modal closes. */
+function clearExportedKey() {
   currentExportWalletId = null;
 
   const keyEl = $("#exported-key");
@@ -439,35 +429,12 @@ function closeExportModal() {
 }
 
 // =============================================================================
-// Modal Helpers
-// =============================================================================
-
-function showModal(id) {
-  const modal = $(`#${id}`);
-  if (modal) {
-    modal.hidden = false;
-    document.body.style.overflow = "hidden";
-  }
-}
-
-function hideModal(id) {
-  const modal = $(`#${id}`);
-  if (modal) {
-    modal.hidden = true;
-    document.body.style.overflow = "";
-  }
-}
-
-function hideAllModals() {
-  closeExportModal();
-  watched?.hideAddModal();
-}
-
-// =============================================================================
 // Utility Functions
 // =============================================================================
 
 function cleanup() {
+  dialogs?.closeAll();
+  dialogs = null;
   if (renderers) {
     renderers.destroyTables();
   }

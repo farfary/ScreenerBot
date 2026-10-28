@@ -1067,7 +1067,7 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
         <div class="filtering-content" id="filtering-config-panels">
           ${renderConfigPanels()}
         </div>
-        <footer class="filtering-footer">
+        <footer class="filtering-footer" id="filtering-footer"${SETTINGS_TABS.includes(state.activeTab) ? "" : " hidden"}>
           <div class="footer-left">
             <span id="filtering-status-message">${Utils.escapeHtml(statusMsg)}</span>
           </div>

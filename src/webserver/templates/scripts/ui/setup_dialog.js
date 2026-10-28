@@ -15,6 +15,7 @@
  *
  * Usage: SetupDialog.show({ mode }) -> Promise<boolean> (true if the dialog finished).
  */
+import { pushEscapeHandler } from "../core/escape_stack.js";
 import { apiErrorMessage } from "../core/request_manager.js";
 
 // The confirmation a replacement shows before its credential fields: what stops, what
@@ -79,7 +80,7 @@ class SetupDialog {
     this.element = null;
     this.busy = false;
     this.requestAbort = null;
-    this.onKeyDown = this.onKeyDown.bind(this);
+    this.releaseEscape = null;
   }
 
   render() {
@@ -153,7 +154,10 @@ class SetupDialog {
       .querySelector('[data-action="submit"]')
       .addEventListener("click", () => (this.confirmed ? this.submit() : this.showCredentials()));
 
-    document.addEventListener("keydown", this.onKeyDown);
+    // Escape is consumed while a request is in flight so nothing beneath closes.
+    this.releaseEscape = pushEscapeHandler(() => {
+      if (!this.busy) this.close(false);
+    });
     if (this.confirmed) setTimeout(() => this.fields.walletInput.focus(), 50);
   }
 
@@ -164,12 +168,6 @@ class SetupDialog {
     this.element.querySelector(".setup-dialog-fields")?.removeAttribute("hidden");
     this.submitBtn.textContent = this.mode.submit();
     this.fields.walletInput.focus();
-  }
-
-  onKeyDown(e) {
-    if (e.key === "Escape" && !this.busy) {
-      this.close(false);
-    }
   }
 
   setStatus(kind, message) {
@@ -276,7 +274,8 @@ class SetupDialog {
     this.fields?.dispose();
     this.requestAbort?.abort();
     this.requestAbort = null;
-    document.removeEventListener("keydown", this.onKeyDown);
+    this.releaseEscape?.();
+    this.releaseEscape = null;
     if (this.backdrop && this.backdrop.parentNode) {
       this.backdrop.parentNode.removeChild(this.backdrop);
     }

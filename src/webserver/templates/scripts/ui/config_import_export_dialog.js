@@ -14,6 +14,7 @@
  */
 
 import { on, create, show, hide, setIconLabel } from "../core/dom.js";
+import { pushEscapeHandler } from "../core/escape_stack.js";
 import * as Utils from "../core/utils.js";
 import { playClick, playSuccess, playError } from "../core/sounds.js";
 import { requestManager, apiErrorTitle, apiErrorDetails } from "../core/request_manager.js";
@@ -299,11 +300,9 @@ export class ConfigExportDialog {
     });
 
     // Keyboard
+    this._releaseEscape = pushEscapeHandler(() => this._handleCancel());
     this._keydownHandler = (e) => {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        this._handleCancel();
-      } else if (e.key === "Enter" && !this.isExporting && this.selectedSections.size > 0) {
+      if (e.key === "Enter" && !this.isExporting && this.selectedSections.size > 0) {
         e.preventDefault();
         this._handleExport();
       }
@@ -367,6 +366,8 @@ export class ConfigExportDialog {
   }
 
   destroy() {
+    this._releaseEscape?.();
+    this._releaseEscape = null;
     if (this._keydownHandler) {
       document.removeEventListener("keydown", this._keydownHandler);
     }
@@ -751,13 +752,7 @@ export class ConfigImportDialog {
     on(this.backdrop, "click", this._closeHandler);
 
     // Keyboard
-    this._keydownHandler = (e) => {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        this._handleCancel();
-      }
-    };
-    document.addEventListener("keydown", this._keydownHandler);
+    this._releaseEscape = pushEscapeHandler(() => this._handleCancel());
   }
 
   _attachUploadListeners() {
@@ -952,9 +947,8 @@ export class ConfigImportDialog {
   }
 
   destroy() {
-    if (this._keydownHandler) {
-      document.removeEventListener("keydown", this._keydownHandler);
-    }
+    this._releaseEscape?.();
+    this._releaseEscape = null;
 
     if (this.element) {
       this.element.classList.remove("visible");

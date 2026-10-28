@@ -16,6 +16,7 @@
  */
 
 import { on, off, dirSign } from "../core/dom.js";
+import { pushEscapeHandler } from "../core/escape_stack.js";
 import * as Utils from "../core/utils.js";
 import { getContextMenu } from "./context_menu.js";
 
@@ -110,7 +111,6 @@ export class TableSettingsDialog {
 
     this._overlayListener = this._handleOverlayClick.bind(this);
     this._closeListener = this._handleCloseClick.bind(this);
-    this._keyListener = this._handleKeyDown.bind(this);
 
     this._workingState = this._createWorkingState();
   }
@@ -267,7 +267,7 @@ export class TableSettingsDialog {
     document.body.classList.add("table-settings-open");
     this._isOpen = true;
 
-    document.addEventListener("keydown", this._keyListener, true);
+    this._releaseEscape = pushEscapeHandler(() => this.close());
 
     requestAnimationFrame(() => {
       if (!this._isOpen) {
@@ -287,7 +287,8 @@ export class TableSettingsDialog {
     document.body.classList.remove("table-settings-open");
     this._isOpen = false;
 
-    document.removeEventListener("keydown", this._keyListener, true);
+    this._releaseEscape?.();
+    this._releaseEscape = null;
 
     if (this._previousActiveElement) {
       this._previousActiveElement.focus();
@@ -784,14 +785,6 @@ export class TableSettingsDialog {
 
   _handleCloseClick() {
     this.close();
-  }
-
-  _handleKeyDown(event) {
-    if (event.key === "Escape") {
-      event.preventDefault();
-      event.stopPropagation();
-      this.close();
-    }
   }
 
   /**

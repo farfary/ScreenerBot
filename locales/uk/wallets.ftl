@@ -31,6 +31,11 @@ wallets-watch-reason-user = Призупинено вами.
 wallets-watch-reason-signature-budget = Цей гаманець має більше активності, ніж поточне стеження здатне перевірити.
 wallets-watch-reason-helius-unavailable = Перевірки через { -helius } не вдалися. Збережений прогрес не втрачено.
 wallets-watch-reason-processing-failed = Не вдалося обробити активність гаманця. Збережений прогрес не втрачено.
+wallets-watch-reason-short-user = вами
+wallets-watch-reason-short-signature-budget = ліміт стеження
+wallets-watch-reason-short-helius-unavailable = провайдер стеження
+wallets-watch-reason-short-processing-failed = обробка стеження
+wallets-watch-state-reason = { $state } · { $reason }
 
 # Vocabulary shared by the wallet tables and dialogs.
 wallets-modal-close =

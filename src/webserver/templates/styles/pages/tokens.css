@@ -209,7 +209,15 @@
   min-width: 100px;
 }
 
+.backfill-head {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
 .backfill-bar {
+  flex: 1;
+  min-width: 40px;
   height: 4px;
   background: var(--bg-secondary);
   border-radius: var(--radius-xs);
@@ -249,28 +257,20 @@
 /* Timeframe indicators */
 .tf-indicators {
   display: flex;
-  gap: 2px;
+  gap: 6px;
 }
 
 .tf-indicator {
-  font-size: 0.6rem;
-  font-weight: 700;
-  width: 14px;
-  height: 14px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-xs);
-  text-transform: uppercase;
+  font-family: var(--font-data);
+  font-size: 0.65rem;
+  font-weight: 600;
 }
 
 .tf-done {
-  background: rgb(16, 185, 129, 0.2);
   color: var(--badge-online);
 }
 
 .tf-pending {
-  background: rgb(156, 163, 175, 0.1);
   color: var(--text-muted);
 }
 

@@ -31,6 +31,11 @@ wallets-watch-reason-user = Pausado por você.
 wallets-watch-reason-signature-budget = Esta carteira tem mais atividade do que o monitoramento atual consegue verificar.
 wallets-watch-reason-helius-unavailable = As verificações do { -helius } falharam. O progresso salvo foi preservado.
 wallets-watch-reason-processing-failed = Não foi possível processar a atividade da carteira. O progresso salvo foi preservado.
+wallets-watch-reason-short-user = por você
+wallets-watch-reason-short-signature-budget = limite do monitoramento
+wallets-watch-reason-short-helius-unavailable = provedor do monitoramento
+wallets-watch-reason-short-processing-failed = processamento do monitoramento
+wallets-watch-state-reason = { $state } · { $reason }
 
 # Vocabulary shared by the wallet tables and dialogs.
 wallets-modal-close =

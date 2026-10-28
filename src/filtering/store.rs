@@ -15,7 +15,7 @@ use crate::chains::{ChainId, ChainScope, PerChain};
 use crate::errors::InternalError;
 use crate::events::{record_filtering_event, Severity};
 use crate::logger::{self, LogTag};
-use crate::tokens::types::Token;
+use crate::tokens::types::{MarketCheck, Token};
 
 use super::engine::compute_snapshot;
 use super::store_helpers::{
@@ -385,6 +385,7 @@ impl FilteringStore {
             rejection_reasons,
             available_rejection_reasons,
             blacklist_reasons,
+            market_checks: HashMap::new(),
         })
     }
 
@@ -533,6 +534,7 @@ impl FilteringStore {
             rejection_reasons,
             available_rejection_reasons: Vec::new(), // All view doesn't need filter dropdown
             blacklist_reasons,
+            market_checks: HashMap::new(),
         })
     }
 
@@ -582,7 +584,7 @@ impl FilteringStore {
             SortDirection::Desc => Some("desc".to_owned()),
         };
 
-        let items = get_tokens_no_market_async(
+        let (items, checks): (Vec<_>, Vec<_>) = get_tokens_no_market_async(
             self.chain,
             query.page_size,
             offset,
@@ -593,7 +595,14 @@ impl FilteringStore {
         .map_err(|e| Error::TokenSetLoad {
             kind: "no-market",
             source: e,
-        })?;
+        })?
+        .into_iter()
+        .unzip();
+        let market_checks: HashMap<String, MarketCheck> = items
+            .iter()
+            .map(|token: &Token| token.mint.clone())
+            .zip(checks)
+            .collect();
 
         // Snapshot for timestamp and derived counts — read only if one already exists, for
         // the same reason as the All view: the rows are database-backed and the snapshot
@@ -655,6 +664,7 @@ impl FilteringStore {
             rejection_reasons,
             available_rejection_reasons: Vec::new(),
             blacklist_reasons,
+            market_checks,
         })
     }
 

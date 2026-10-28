@@ -959,10 +959,10 @@ async function renderTelegramAuthSection(container) {
           <div class="telegram-auth-row telegram-auth-actions">
             <div class="telegram-auth-toggle">
               <label class="toggle">
-                <input type="checkbox" id="telegram-require-2fa-toggle" ${commandsRequire2fa ? "checked" : ""} ${!totpConfigured ? "disabled" : ""}>
+                <input type="checkbox" id="telegram-require-2fa-toggle" aria-labelledby="telegram-require-2fa-label" ${commandsRequire2fa ? "checked" : ""} ${!totpConfigured ? "disabled" : ""}>
                 <span class="toggle-track"></span>
               </label>
-              <span data-l10n-id="system-config-telegram-require-2fa"></span>
+              <span id="telegram-require-2fa-label" data-l10n-id="system-config-telegram-require-2fa"></span>
             </div>
           </div>
         </div>
@@ -1005,10 +1005,6 @@ async function renderTelegramAuthSection(container) {
 }
 
 function render() {
-  const reloadButton = $("#configReloadButton");
-  if (reloadButton) {
-    reloadButton.disabled = state.loading || state.saving;
-  }
   const resetButton = $("#configResetButton");
   if (resetButton) {
     resetButton.disabled = state.saving;
@@ -1226,17 +1222,6 @@ function attachEventHandlers(ctx) {
     on(searchInput, "keydown", enterHandler);
     ctx.onDispose(() => off(searchInput, "input", handler));
     ctx.onDispose(() => off(searchInput, "keydown", enterHandler));
-  }
-
-  const reloadButton = $("#configReloadButton");
-  if (reloadButton) {
-    const handler = () => {
-      if (!state.loading) {
-        handleReload();
-      }
-    };
-    on(reloadButton, "click", handler);
-    ctx.onDispose(() => off(reloadButton, "click", handler));
   }
 
   const resetButton = $("#configResetButton");

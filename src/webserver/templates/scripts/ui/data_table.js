@@ -145,6 +145,7 @@
 
 import * as AppState from "../core/app_state.js";
 import { $, scrollStart } from "../core/dom.js";
+import { pushEscapeHandler } from "../core/escape_stack.js";
 import { menuBounds } from "../core/menu_manager.js";
 import { escapeHtml } from "../core/utils.js";
 import { enhanceAllSelects } from "./custom_select.js";
@@ -2278,7 +2279,9 @@ export class DataTable {
     pagination.loadingNext = false;
     pagination.loadingNextReason = null;
     pagination.loadingPrev = false;
-    pagination.loadingInitial = false;
+    // Set before the render below: its auto-fill and scroll checks must see the first
+    // load as in flight, or they start a next load that the first load then waits on.
+    pagination.loadingInitial = true;
 
     if (!silent) {
       // Use subtle loading (thin bar only) for poll/refresh, full loading for user actions
@@ -2293,8 +2296,6 @@ export class DataTable {
         this._renderTable();
       }
     }
-
-    pagination.loadingInitial = true;
 
     return this._loadPage("initial", {
       reason,
@@ -3154,18 +3155,17 @@ export class DataTable {
         this._closeHeaderColumnMenu();
       }
     };
-    const onKeyDown = (ev) => {
-      if (ev.key === "Escape") {
-        this._closeHeaderColumnMenu();
-      }
-    };
     const onDismiss = () => this._closeHeaderColumnMenu();
 
-    this._headerColMenu = { el: menu, onPointerDown, onKeyDown, onDismiss };
+    this._headerColMenu = {
+      el: menu,
+      onPointerDown,
+      onDismiss,
+      releaseEscape: pushEscapeHandler(() => this._closeHeaderColumnMenu()),
+    };
 
     window.setTimeout(() => {
       document.addEventListener("mousedown", onPointerDown, true);
-      document.addEventListener("keydown", onKeyDown, true);
       window.addEventListener("scroll", onDismiss, true);
       window.addEventListener("resize", onDismiss, true);
     }, 0);
@@ -3184,7 +3184,7 @@ export class DataTable {
     }
     this._headerColMenu = null;
     document.removeEventListener("mousedown", ref.onPointerDown, true);
-    document.removeEventListener("keydown", ref.onKeyDown, true);
+    ref.releaseEscape();
     window.removeEventListener("scroll", ref.onDismiss, true);
     window.removeEventListener("resize", ref.onDismiss, true);
     ref.el?.remove();

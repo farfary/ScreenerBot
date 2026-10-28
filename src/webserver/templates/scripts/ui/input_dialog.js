@@ -20,6 +20,7 @@
  * override and which left the dialog dark-only.
  */
 
+import { pushEscapeHandler } from "../core/escape_stack.js";
 import { playClick, playError } from "../core/sounds.js";
 
 class InputDialog {
@@ -210,13 +211,11 @@ class InputDialog {
     }
 
     // Keyboard shortcuts
+    this._releaseEscape = pushEscapeHandler(() => this._handleCancel());
     this._keydownHandler = (e) => {
       if (e.key === "Enter") {
         e.preventDefault();
         this._handleConfirm();
-      } else if (e.key === "Escape") {
-        e.preventDefault();
-        this._handleCancel();
       }
     };
     document.addEventListener("keydown", this._keydownHandler);
@@ -309,6 +308,9 @@ class InputDialog {
     }
 
     // Remove all event listeners
+    this._releaseEscape?.();
+    this._releaseEscape = null;
+
     if (this._keydownHandler) {
       document.removeEventListener("keydown", this._keydownHandler);
       this._keydownHandler = null;

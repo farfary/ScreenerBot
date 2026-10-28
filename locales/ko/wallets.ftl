@@ -31,6 +31,11 @@ wallets-watch-reason-user = 사용자가 일시 중지했습니다.
 wallets-watch-reason-signature-budget = 이 지갑은 현재 감시 설정으로 확인할 수 있는 양보다 활동이 많습니다.
 wallets-watch-reason-helius-unavailable = { -helius } 확인에 실패했습니다. 저장된 진행 상태는 유지됩니다.
 wallets-watch-reason-processing-failed = 지갑 활동을 처리하지 못했습니다. 저장된 진행 상태는 유지됩니다.
+wallets-watch-reason-short-user = 사용자
+wallets-watch-reason-short-signature-budget = 감시 한도
+wallets-watch-reason-short-helius-unavailable = 감시 제공자
+wallets-watch-reason-short-processing-failed = 감시 처리
+wallets-watch-state-reason = { $state } · { $reason }
 
 # Vocabulary shared by the wallet tables and dialogs.
 wallets-modal-close =

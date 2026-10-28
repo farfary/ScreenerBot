@@ -166,9 +166,15 @@ test("a roster row states whether its strategy is on once, through its named swi
   }
 
   await page.click('#strategies-roster label:has(> input[data-seg-value="entry"])');
-  await page.locator('#strategies-roster thead th[data-column-id="kind"]').waitFor({ state: "detached" });
+  await page
+    .locator('#strategies-roster thead th[data-column-id="kind"]')
+    .waitFor({ state: "detached" });
   for (const row of await rowsOfView()) {
-    assert.deepEqual(row.kinds, [], `${row.name}: the Entry view names the kind, no cell repeats it`);
+    assert.deepEqual(
+      row.kinds,
+      [],
+      `${row.name}: the Entry view names the kind, no cell repeats it`
+    );
   }
   await page.click('#strategies-roster label:has(> input[data-seg-value="all"])');
 });
@@ -409,6 +415,37 @@ test("the number fields of one rule card share one width", async () => {
     for (const fields of cards.filter((fields) => fields.length > 1)) {
       const widths = new Set(fields.map((field) => field.width));
       assert.equal(widths.size, 1, `${id}: ${JSON.stringify(fields)}`);
+    }
+  }
+});
+
+test("a worked example's steps are inline icon-and-title grids that start at the left", async () => {
+  for (const id of TABS) {
+    await page.click(`#subTabsContainer [data-tab-id="${id}"]`);
+    const panel = page.locator(`#${id}-tab`);
+    await panel.waitFor();
+    const report = await panel.evaluate((root) => {
+      const timelines = [...root.querySelectorAll(".example-timeline")].map((timeline) => {
+        const steps = [...timeline.querySelectorAll(".timeline-step")]
+          .filter((step) => step.getClientRects().length > 0)
+          .map((step) => {
+            const icon = step.querySelector(".step-icon").getBoundingClientRect();
+            const title = step.querySelector(".step-title").getBoundingClientRect();
+            return {
+              grid: getComputedStyle(step).display === "grid",
+              sideBySide: icon.right <= title.left + 1 && Math.abs(icon.top - title.top) < 8,
+            };
+          });
+        return { justify: getComputedStyle(timeline).justifyContent, steps };
+      });
+      return timelines;
+    });
+    for (const timeline of report) {
+      assert.notEqual(timeline.justify, "space-between", `${id}: steps are not spread apart`);
+      for (const step of timeline.steps) {
+        assert.ok(step.grid, `${id}: a step is a grid`);
+        assert.ok(step.sideBySide, `${id}: a step's icon sits inline with its title`);
+      }
     }
   }
 });

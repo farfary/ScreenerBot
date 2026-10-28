@@ -23,6 +23,11 @@ wallets-watch-reason-user = Dijeda oleh Anda.
 wallets-watch-reason-signature-budget = Dompet ini memiliki aktivitas lebih banyak daripada yang dapat diperiksa pemantauan saat ini.
 wallets-watch-reason-helius-unavailable = Pemeriksaan { -helius } gagal. Progres tersimpan dipertahankan.
 wallets-watch-reason-processing-failed = Aktivitas dompet tidak dapat diproses. Progres tersimpan dipertahankan.
+wallets-watch-reason-short-user = oleh Anda
+wallets-watch-reason-short-signature-budget = batas pantau
+wallets-watch-reason-short-helius-unavailable = penyedia pantau
+wallets-watch-reason-short-processing-failed = pemrosesan pantau
+wallets-watch-state-reason = { $state } · { $reason }
 
 wallets-modal-close =
     .aria-label = Tutup modal

@@ -24,7 +24,6 @@ assistant-risk-medium = 中
 assistant-risk-high = 高
 assistant-risk-critical = 重大
 
-assistant-overview-title = アシスタント概要
 assistant-overview-description = LLM と分析のリアルタイムの状況、パフォーマンス指標、最新のモデル評価を表示します。
 assistant-features-title = モデル機能
 assistant-metric-total-evaluations = 評価の合計
@@ -35,7 +34,6 @@ assistant-metric-active-providers-value = { $active } / { $total }
 assistant-decisions-title = 最近の判定
 assistant-decisions-subtitle = 最新のモデル分析による判定
 
-assistant-providers-title = LLM プロバイダー
 assistant-providers-description = 分析とアシスタントで共通して使う LLM プロバイダーを設定します
 
 assistant-master-title = マスター設定
@@ -82,7 +80,6 @@ assistant-cache-size-label = キャッシュサイズ:
 assistant-cache-memory-label = メモリ使用量:
 assistant-cache-clear = キャッシュをクリア
 
-assistant-testing-title = アシスタントテスト用プレイグラウンド
 assistant-testing-subtitle = 任意のトークンでアシスタント分析をテストします
 assistant-testing-mint-label = ミントアドレス
 assistant-testing-mint-input =
@@ -94,7 +91,6 @@ assistant-testing-priority-high = 高
 assistant-testing-evaluate = 評価
 assistant-testing-results = 結果
 
-assistant-instructions-title = カスタム指示
 assistant-instructions-description = アシスタントの評価に挿入されるカスタムプロンプトを追加します
 assistant-instructions-new = 新規指示
 assistant-instructions-category-all = すべてのカテゴリ
@@ -112,7 +108,6 @@ assistant-instructions-empty-add = 最初の指示を追加
 assistant-templates-title = 指示テンプレート
 assistant-templates-description = 追加できる定義済みの指示テンプレート
 
-assistant-automation-title = 自動化
 assistant-automation-description = アシスタントのタスクを、一定間隔または指定時刻に自動実行するようスケジュールします
 assistant-automation-new =
     .aria-label = 新しい自動化タスクを作成
@@ -126,9 +121,6 @@ assistant-automation-empty-subtitle = 最初の自動アシスタントタスク
 assistant-automation-empty-add = 最初のタスクを作成
     .aria-label = 最初の自動化タスクを作成
 assistant-automation-runs-title = 最近の実行
-
-assistant-history-title = 判定履歴
-assistant-history-subtitle = 最近のアシスタント評価
 
 assistant-tab-chat = チャット
 assistant-tab-overview = 概要
@@ -162,7 +154,9 @@ assistant-config-saved-title = 保存しました
 assistant-config-saved-message = 設定を保存しました
 assistant-config-save-failed = 設定を保存できませんでした
 assistant-history-load-failed = 履歴を読み込めませんでした
+    .message = 判断履歴を読み込めませんでした。
 assistant-history-empty = LLM 分析のリクエストはまだありません
+    .message = アシスタントがトークンを分析すると、評価がここに表示されます。
 assistant-history-column-token = トークン
 assistant-history-column-decision = 判定
 assistant-history-column-confidence = 信頼度
@@ -171,9 +165,8 @@ assistant-history-column-reasoning = 根拠
 assistant-history-column-model = モデル
 assistant-history-column-latency = レイテンシ
 assistant-history-column-when = 日時
-assistant-history-previous = 前へ
-assistant-history-page = { $page } / { $total } ページ
 assistant-history-cached = キャッシュ済み
+assistant-history-summary-total = 合計
 
 assistant-chat-sessions-title = セッション
 assistant-chat-search =

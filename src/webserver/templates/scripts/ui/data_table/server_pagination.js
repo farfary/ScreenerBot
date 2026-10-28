@@ -642,6 +642,7 @@ export function applyServerPaginationMixin(DataTable) {
     if (
       pagination.hasMoreNext !== false &&
       !pagination.loadingNext &&
+      !pagination.loadingInitial &&
       scrollingDown &&
       distanceToBottom <= prefetchMargin
     ) {
@@ -651,6 +652,7 @@ export function applyServerPaginationMixin(DataTable) {
     if (
       pagination.hasMorePrev !== false &&
       !pagination.loadingPrev &&
+      !pagination.loadingInitial &&
       container.scrollTop <= pagination.threshold
     ) {
       this.loadPrevious({ reason: "scroll", silent: true });
@@ -675,6 +677,7 @@ export function applyServerPaginationMixin(DataTable) {
     if (
       pagination.hasMoreNext !== false &&
       !pagination.loadingNext &&
+      !pagination.loadingInitial &&
       container.scrollHeight <= container.clientHeight + pagination.threshold
     ) {
       this.loadNext({ reason: "auto-fill", silent: true });
@@ -698,6 +701,12 @@ export function applyServerPaginationMixin(DataTable) {
     const reason = options.reason ?? "scroll";
     const silent = options.silent ?? false;
     const force = options.force ?? false;
+
+    // The first page owns the cursors: a next or prev load before it settles would send a
+    // null cursor.
+    if (normalizedDirection !== "initial" && pagination.loadingInitial && !force) {
+      return pagination.pendingRequest ?? Promise.resolve(null);
+    }
 
     if (normalizedDirection === "next") {
       if (pagination.loadingNext && !force) {
@@ -871,9 +880,12 @@ export function applyServerPaginationMixin(DataTable) {
       if (normalized.resetScroll ?? options.resetScroll) {
         renderOptions.resetScroll = true;
       }
+      // A page result asks for a render when its rows are unchanged but what the empty
+      // state says is not; otherwise unchanged rows are skipped, which keeps polls quiet.
       this._replaceData(normalized.rows, {
         ...metaWithForce,
         renderOptions,
+        forceRender: normalized.forceRender,
       });
     }
 
@@ -924,6 +936,7 @@ export function applyServerPaginationMixin(DataTable) {
         renderOptions: undefined,
         resetScroll: undefined,
         preserveScroll: undefined,
+        forceRender: undefined,
         serverPage: undefined,
       };
     }
@@ -941,6 +954,7 @@ export function applyServerPaginationMixin(DataTable) {
         renderOptions: undefined,
         resetScroll: undefined,
         preserveScroll: undefined,
+        forceRender: undefined,
         serverPage: undefined,
       };
     }
@@ -973,6 +987,7 @@ export function applyServerPaginationMixin(DataTable) {
       renderOptions: result.renderOptions ?? undefined,
       resetScroll: result.resetScroll ?? undefined,
       preserveScroll: result.preserveScroll ?? undefined,
+      forceRender: result.forceRender ?? undefined,
       serverPage,
     };
   };

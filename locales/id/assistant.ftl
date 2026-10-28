@@ -24,7 +24,6 @@ assistant-risk-medium = Sedang
 assistant-risk-high = Tinggi
 assistant-risk-critical = Kritis
 
-assistant-overview-title = Ringkasan Asisten
 assistant-overview-description = Status LLM dan analisis secara langsung, metrik performa, dan evaluasi model terbaru.
 assistant-features-title = Fitur Model
 assistant-metric-total-evaluations = Total Evaluasi
@@ -35,7 +34,6 @@ assistant-metric-active-providers-value = { $active } / { $total }
 assistant-decisions-title = Keputusan Terbaru
 assistant-decisions-subtitle = Keputusan analisis model terbaru
 
-assistant-providers-title = Penyedia LLM
 assistant-providers-description = Atur penyedia LLM bersama yang digunakan oleh analisis dan Asisten
 
 assistant-master-title = Pengaturan Utama
@@ -82,7 +80,6 @@ assistant-cache-size-label = Ukuran Cache:
 assistant-cache-memory-label = Penggunaan Memori:
 assistant-cache-clear = Hapus Cache
 
-assistant-testing-title = Area Uji Asisten
 assistant-testing-subtitle = Uji analisis Asisten pada token apa pun
 assistant-testing-mint-label = Alamat Mint
 assistant-testing-mint-input =
@@ -94,7 +91,6 @@ assistant-testing-priority-high = Tinggi
 assistant-testing-evaluate = Evaluasi
 assistant-testing-results = Hasil
 
-assistant-instructions-title = Instruksi Kustom
 assistant-instructions-description = Tambahkan prompt kustom yang disisipkan ke evaluasi Asisten
 assistant-instructions-new = Instruksi Baru
 assistant-instructions-category-all = Semua Kategori
@@ -112,7 +108,6 @@ assistant-instructions-empty-add = Tambahkan Instruksi Pertama Anda
 assistant-templates-title = Template Instruksi
 assistant-templates-description = Template instruksi siap pakai yang dapat Anda tambahkan
 
-assistant-automation-title = Otomatisasi
 assistant-automation-description = Jadwalkan tugas Asisten agar berjalan otomatis pada interval tertentu atau waktu tertentu
 assistant-automation-new =
     .aria-label = Buat tugas otomatisasi baru
@@ -126,9 +121,6 @@ assistant-automation-empty-subtitle = Buat tugas Asisten otomatis pertama Anda u
 assistant-automation-empty-add = Buat Tugas Pertama Anda
     .aria-label = Buat tugas otomatisasi pertama
 assistant-automation-runs-title = Eksekusi Terbaru
-
-assistant-history-title = Riwayat Keputusan
-assistant-history-subtitle = Evaluasi Asisten terbaru
 
 assistant-tab-chat = Chat
 assistant-tab-overview = Ringkasan
@@ -162,7 +154,9 @@ assistant-config-saved-title = Tersimpan
 assistant-config-saved-message = Konfigurasi berhasil disimpan
 assistant-config-save-failed = Gagal menyimpan konfigurasi
 assistant-history-load-failed = Gagal memuat riwayat
+    .message = Riwayat keputusan tidak dapat dibaca.
 assistant-history-empty = Belum ada permintaan analisis LLM
+    .message = Evaluasi muncul di sini setelah Asisten menganalisis token.
 assistant-history-column-token = Token
 assistant-history-column-decision = Keputusan
 assistant-history-column-confidence = Tingkat Keyakinan
@@ -171,9 +165,8 @@ assistant-history-column-reasoning = Alasan
 assistant-history-column-model = Model
 assistant-history-column-latency = Latensi
 assistant-history-column-when = Waktu
-assistant-history-previous = Sebelumnya
-assistant-history-page = Halaman { $page } dari { $total }
 assistant-history-cached = cache
+assistant-history-summary-total = Total
 
 assistant-chat-sessions-title = Sesi
 assistant-chat-search =

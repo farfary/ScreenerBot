@@ -281,6 +281,11 @@ a.ti-address-value:hover {
   font-size: 11px;
 }
 
+/* The 20px hit area overlaps the line above and below, so the button never makes an address line taller than its text. */
+.ti-address .ti-address-copy {
+  margin-block: -2px;
+}
+
 /* --- Named address (a label above its full address) ----------------------- */
 
 /* A wallet or account row: its name, then the address on its own line. The name

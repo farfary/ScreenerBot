@@ -10,7 +10,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 use crate::chains::ChainId;
-use crate::tokens::types::Token;
+use crate::tokens::types::{MarketCheck, Token};
 
 /// Maximum number of historical decisions to keep in memory per category
 pub const MAX_DECISION_HISTORY: usize = 1000;
@@ -264,6 +264,8 @@ pub struct FilteringQueryResult {
     pub rejection_reasons: HashMap<String, String>,
     pub available_rejection_reasons: Vec<String>,
     pub blacklist_reasons: HashMap<String, Vec<BlacklistReasonInfo>>,
+    /// Latest failed market fetch per mint; filled by the No Market Data view only.
+    pub market_checks: HashMap<String, MarketCheck>,
 }
 
 #[derive(Debug, Clone)]

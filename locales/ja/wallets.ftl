@@ -31,6 +31,11 @@ wallets-watch-reason-user = ユーザーが一時停止しました。
 wallets-watch-reason-signature-budget = このウォレットのアクティビティは、現在のウォッチでチェックできる量を超えています。
 wallets-watch-reason-helius-unavailable = { -helius } のチェックに失敗しました。保存済みの進捗は保持されています。
 wallets-watch-reason-processing-failed = ウォレットのアクティビティを処理できませんでした。保存済みの進捗は保持されています。
+wallets-watch-reason-short-user = ユーザー操作
+wallets-watch-reason-short-signature-budget = ウォッチ上限
+wallets-watch-reason-short-helius-unavailable = ウォッチプロバイダー
+wallets-watch-reason-short-processing-failed = ウォッチ処理
+wallets-watch-state-reason = { $state } · { $reason }
 
 # Vocabulary shared by the wallet tables and dialogs.
 wallets-modal-close =

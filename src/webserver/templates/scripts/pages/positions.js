@@ -342,14 +342,16 @@ function createLifecycle() {
       id: "archived_at",
       label: I18n.t("positions-column-archived-at"),
       sortable: true,
-      minWidth: 140,
+      minWidth: "content",
+      wrap: false,
       render: (v, r) => timeCell(v ?? r.exit_time ?? r.entry_time),
     },
     {
       id: "entry_time",
       label: I18n.t("positions-column-entry-time"),
       sortable: true,
-      minWidth: 120,
+      minWidth: "content",
+      wrap: false,
       render: (v) => timeCell(v),
     },
     {
@@ -415,7 +417,8 @@ function createLifecycle() {
           id: "entry_time",
           label: I18n.t("positions-column-entry-time"),
           sortable: true,
-          minWidth: 120,
+          minWidth: "content",
+          wrap: false,
           render: (v) => timeCell(v),
         },
         {
@@ -502,7 +505,8 @@ function createLifecycle() {
           id: "exit_time",
           label: I18n.t("positions-column-exit-time"),
           sortable: true,
-          minWidth: 120,
+          minWidth: "content",
+          wrap: false,
           render: (v) => (v == null ? "—" : timeCell(v)),
         },
         {

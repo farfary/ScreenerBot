@@ -33,6 +33,7 @@ import {
   deepMerge,
   configsEqual,
   getStatusMessage,
+  SETTINGS_TABS,
 } from "./filtering/config_metadata.js";
 import { createFilteringRenderers } from "./filtering/renderers.js";
 
@@ -311,6 +312,12 @@ function updateToolbar() {
   _lastToolbarKey = toolbarKey();
 }
 
+/** The config footer (status, Reset, Save) belongs to the settings tabs only. */
+function updateFooter() {
+  const footer = $("#filtering-footer");
+  if (footer) footer.hidden = !SETTINGS_TABS.includes(state.activeTab);
+}
+
 function updateParamCount() {
   const el = $("#filtering-param-count");
   if (el) el.textContent = renderers.renderParamCount();
@@ -382,6 +389,7 @@ function render() {
 
   updateInfoBar();
   updateToolbar();
+  updateFooter();
   updateConfigPanels({ preserveScroll: true });
   updateStatusMessage();
   updateActionButtons();
@@ -789,6 +797,7 @@ export function createLifecycle() {
             state.activeTab = tabId;
             AppState.save("filtering_activeTab", tabId);
             updateToolbar();
+            updateFooter();
 
             // Switch the panel FIRST. Analytics and Explorer each render from an analytics
             // payload, and awaiting that fetch before repainting left the previous tab's

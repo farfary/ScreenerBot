@@ -30,7 +30,6 @@ assistant-risk-high = High
 assistant-risk-critical = Critical
 
 # assistant.html: page shell.
-assistant-overview-title = Assistant Overview
 assistant-overview-description = Live LLM and analysis status, performance metrics, and the latest model evaluations.
 assistant-features-title = Model Features
 assistant-metric-total-evaluations = Total Evaluations
@@ -42,7 +41,6 @@ assistant-metric-active-providers-value = { $active } / { $total }
 assistant-decisions-title = Recent Decisions
 assistant-decisions-subtitle = Latest model-analysis decisions
 
-assistant-providers-title = LLM Providers
 assistant-providers-description = Configure the shared LLM providers used by analysis and the Assistant
 
 assistant-master-title = Master Settings
@@ -89,7 +87,6 @@ assistant-cache-size-label = Cache Size:
 assistant-cache-memory-label = Memory Usage:
 assistant-cache-clear = Clear Cache
 
-assistant-testing-title = Assistant Testing Playground
 assistant-testing-subtitle = Test Assistant analysis on any token
 assistant-testing-mint-label = Mint Address
 assistant-testing-mint-input =
@@ -101,7 +98,6 @@ assistant-testing-priority-high = High
 assistant-testing-evaluate = Evaluate
 assistant-testing-results = Results
 
-assistant-instructions-title = Custom Instructions
 assistant-instructions-description = Add custom prompts that are injected into Assistant evaluations
 assistant-instructions-new = New Instruction
 assistant-instructions-category-all = All Categories
@@ -119,7 +115,6 @@ assistant-instructions-empty-add = Add Your First Instruction
 assistant-templates-title = Instruction Templates
 assistant-templates-description = Pre-built instruction templates you can add
 
-assistant-automation-title = Automation
 assistant-automation-description = Schedule Assistant tasks to run automatically on intervals or at specific times
 assistant-automation-new =
     .aria-label = Create new automation task
@@ -133,9 +128,6 @@ assistant-automation-empty-subtitle = Create your first automated Assistant task
 assistant-automation-empty-add = Create Your First Task
     .aria-label = Create first automation task
 assistant-automation-runs-title = Recent Runs
-
-assistant-history-title = Decision History
-assistant-history-subtitle = Recent Assistant evaluations
 
 # assistant.js: page tabs, overview, settings and history.
 assistant-tab-chat = Chat
@@ -170,7 +162,9 @@ assistant-config-saved-title = Saved
 assistant-config-saved-message = Configuration saved successfully
 assistant-config-save-failed = Failed to save configuration
 assistant-history-load-failed = Failed to load history
+    .message = The decision history could not be read.
 assistant-history-empty = No LLM-analysis requests yet
+    .message = Evaluations appear here after the Assistant analyses a token.
 assistant-history-column-token = Token
 assistant-history-column-decision = Decision
 assistant-history-column-confidence = Confidence
@@ -179,9 +173,8 @@ assistant-history-column-reasoning = Reasoning
 assistant-history-column-model = Model
 assistant-history-column-latency = Latency
 assistant-history-column-when = When
-assistant-history-previous = Previous
-assistant-history-page = Page { $page } of { $total }
 assistant-history-cached = cached
+assistant-history-summary-total = Total
 
 # chat_widget.js: sessions sidebar and header.
 assistant-chat-sessions-title = Sessions

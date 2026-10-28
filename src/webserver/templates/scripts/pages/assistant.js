@@ -8,6 +8,7 @@ import { Poller } from "../core/poller.js";
 import { $, $$ } from "../core/dom.js";
 import * as Utils from "../core/utils.js";
 import * as AppState from "../core/app_state.js";
+import { DataTable } from "../ui/data_table.js";
 import { ConfirmationDialog } from "../ui/confirmation_dialog.js";
 import { renderStateView } from "../ui/state_view.js";
 import { playToggleOn, playToggleOff, playSuccess, playError } from "../core/sounds.js";
@@ -105,6 +106,7 @@ function createLifecycle() {
   let automationPoller = null;
   let _chatWidget = null;
   let subTabBar = null;
+  let historyTable = null;
 
   // Hash guards — skip re-render when polled data is unchanged
   let _lastDecisionsKey = null;
@@ -120,7 +122,8 @@ function createLifecycle() {
     config: null,
     cacheStats: null,
     templates: [],
-    historyPage: 1,
+    historyLoaded: false,
+    historyLoadFailed: false,
     historyTotal: 0,
     instructions: [], // Store instructions for drag-drop
     draggedItem: null, // Track dragged instruction
@@ -191,7 +194,7 @@ function createLifecycle() {
       instructionsTab.loadInstructions();
       instructionsTab.loadTemplates();
     } else if (tabId === "history") {
-      loadHistory(1);
+      showHistory();
     } else if (tabId === "chat") {
       loadSessions();
       if (chatPoller) chatPoller.start();
@@ -642,125 +645,187 @@ function createLifecycle() {
   // ============================================================================
 
   /**
-   * Load history with pagination
+   * One history page. The cursor is the next page number of
+   * `/api/llm-analysis/history`: the first load asks for page 1, a scroll load for
+   * the page the previous result named.
    */
-  async function loadHistory(page = 1) {
+  async function loadHistoryPage({ direction, cursor, signal }) {
+    // History has no newer rows to prepend: the first page is the newest.
+    if (direction === "prev") {
+      return { rows: [], hasMorePrev: false, total: state.historyTotal };
+    }
+    const page = direction === "next" && Number.isInteger(cursor) && cursor > 0 ? cursor : 1;
+    if (!state.historyLoaded) {
+      historyTable?.showBlockingState?.({
+        variant: "loading",
+        title: I18n.t("common-loading"),
+      });
+    }
     try {
-      // `per_page`, not `limit`: HistoryQuery has no `limit` field, so the old
-      // parameter was silently dropped and every page asked for the default 50.
+      // `per_page`, not `limit`: HistoryQuery has no `limit` field.
       const response = await fetch(
-        `/api/llm-analysis/history?page=${page}&per_page=${HISTORY_PAGE_SIZE}`
+        `/api/llm-analysis/history?page=${page}&per_page=${HISTORY_PAGE_SIZE}`,
+        { signal }
       );
-      if (!response.ok) throw new Error("Failed to load history");
-
+      if (!response.ok) throw new Error(`History request failed: ${response.status}`);
       const data = await response.json();
-      state.historyPage = page;
-      state.historyTotal = data.total || 0;
-
-      // The API returns `decisions`; reading `history` here meant the tab
-      // rendered its empty state no matter how many evaluations existed.
-      renderHistory(data.decisions || [], page, data.total || 0);
+      const rows = data.decisions || [];
+      const total = data.total || 0;
+      resolveTokenCells(
+        rows.map((row) => row.mint),
+        () => historyTable?.repaintRows()
+      );
+      state.historyLoaded = true;
+      state.historyLoadFailed = false;
+      state.historyTotal = total;
+      historyTable?.hideBlockingState?.();
+      return {
+        rows,
+        total,
+        cursorNext: page + 1,
+        hasMoreNext: page * HISTORY_PAGE_SIZE < total,
+        hasMorePrev: false,
+        forceRender: direction !== "next",
+      };
     } catch (error) {
+      if (error?.name === "AbortError") throw error;
       console.error("[Assistant] Error loading history:", error);
-      const container = $("#history-list");
-      if (container) {
-        container.innerHTML = renderStateView({
-          kind: "error",
-          icon: "icon-circle-alert",
-          message: I18n.t("assistant-history-load-failed"),
-          compact: true,
-        });
-      }
+      // A later page that fails keeps the rows already shown; only the first page
+      // falls back to the empty state, which carries the error and Retry.
+      if (state.historyLoaded) throw error;
+      state.historyLoadFailed = true;
+      state.historyTotal = 0;
+      historyTable?.hideBlockingState?.();
+      // The rows are unchanged ([] to []) but the empty state now says it failed.
+      return { rows: [], total: 0, hasMoreNext: false, hasMorePrev: false, forceRender: true };
     }
   }
 
-  /**
-   * Render history list
-   */
-  function renderHistory(decisions, page, total) {
-    const container = $("#history-list");
-    if (!container) return;
+  function updateHistorySummary(total) {
+    historyTable?.updateToolbarSummary([
+      {
+        id: "history-total",
+        label: I18n.t("assistant-history-summary-total"),
+        value: Utils.formatNumber(total ?? 0, 0),
+      },
+    ]);
+  }
 
-    if (!decisions || decisions.length === 0) {
-      container.innerHTML = renderStateView({
-        icon: "icon-history",
-        message: I18n.t("assistant-history-empty"),
-        compact: true,
-      });
+  function buildHistoryColumns() {
+    return [
+      {
+        id: "token",
+        label: I18n.t("assistant-history-column-token"),
+        minWidth: "content",
+        wrap: false,
+        render: (_value, row) => renderTokenCell(row.mint, { symbol: row.symbol }),
+      },
+      {
+        id: "decision",
+        label: I18n.t("assistant-history-column-decision"),
+        minWidth: 100,
+        render: (_value, row) => {
+          const allowed = row.decision === "allow" || row.decision === "pass";
+          return `<span class="badge ${allowed ? "success" : "error"}">${Utils.escapeHtml(analysisLabel(ANALYSIS_DECISION_LABELS, row.decision))}</span>`;
+        },
+      },
+      {
+        id: "confidence",
+        label: I18n.t("assistant-history-column-confidence"),
+        type: "number",
+        minWidth: 90,
+        render: (value) => percentText(value, "—"),
+      },
+      {
+        id: "risk_level",
+        label: I18n.t("assistant-history-column-risk"),
+        minWidth: 90,
+        wrap: false,
+        render: (value) => Utils.escapeHtml(analysisLabel(ANALYSIS_RISK_LABELS, value)),
+      },
+      {
+        id: "reasoning",
+        label: I18n.t("assistant-history-column-reasoning"),
+        grow: true,
+        minWidth: 240,
+        wrap: false,
+        render: (value) => {
+          if (!value) return "—";
+          const text = Utils.escapeHtml(value);
+          return `<div class="dt-longtext" dir="auto" data-tooltip="${text}" data-tooltip-truncated>${text}</div>`;
+        },
+      },
+      {
+        id: "model",
+        label: I18n.t("assistant-history-column-model"),
+        minWidth: 140,
+        wrap: false,
+        render: (_value, row) =>
+          `${Utils.escapeHtml(row.model || row.provider || "—")}${row.cached ? ` <span class="badge secondary">${Utils.escapeHtml(I18n.t("assistant-history-cached"))}</span>` : ""}`,
+      },
+      {
+        id: "latency_ms",
+        label: I18n.t("assistant-history-column-latency"),
+        type: "number",
+        minWidth: 90,
+        render: (value) => formatLatencyMs(Math.round(value || 0)),
+      },
+      {
+        id: "created_at",
+        label: I18n.t("assistant-history-column-when"),
+        minWidth: "content",
+        wrap: false,
+        render: (value) => (value ? Utils.formatTimeAgo(new Date(value)) : "—"),
+      },
+    ];
+  }
+
+  /** Create the History table on the tab's first activation, then load its first page. */
+  function showHistory() {
+    if (historyTable) {
+      historyTable.reload({ reason: "refresh", silent: false }).catch(() => {});
       return;
     }
-
-    const totalPages = Math.ceil(total / HISTORY_PAGE_SIZE);
-
-    container.innerHTML = `
-      <table class="history-table">
-        <thead>
-          <tr>
-            <th>${Utils.escapeHtml(I18n.t("assistant-history-column-token"))}</th>
-            <th>${Utils.escapeHtml(I18n.t("assistant-history-column-decision"))}</th>
-            <th>${Utils.escapeHtml(I18n.t("assistant-history-column-confidence"))}</th>
-            <th>${Utils.escapeHtml(I18n.t("assistant-history-column-risk"))}</th>
-            <th>${Utils.escapeHtml(I18n.t("assistant-history-column-reasoning"))}</th>
-            <th>${Utils.escapeHtml(I18n.t("assistant-history-column-model"))}</th>
-            <th>${Utils.escapeHtml(I18n.t("assistant-history-column-latency"))}</th>
-            <th>${Utils.escapeHtml(I18n.t("assistant-history-column-when"))}</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${decisions.map(renderDecisionRow).join("")}
-        </tbody>
-      </table>
-      ${
-        totalPages > 1
-          ? `
-        <div class="pagination">
-          <button class="btn btn-sm btn-secondary" ${page <= 1 ? "disabled" : ""}
-                  onclick="window.assistantPage.loadHistory(${page - 1})">
-            <i class="icon-chevron-left"></i> ${Utils.escapeHtml(I18n.t("assistant-history-previous"))}
-          </button>
-          <span class="pagination-info">${Utils.escapeHtml(I18n.t("assistant-history-page", { page, total: totalPages }))}</span>
-          <button class="btn btn-sm btn-secondary" ${page >= totalPages ? "disabled" : ""}
-                  onclick="window.assistantPage.loadHistory(${page + 1})">
-            ${Utils.escapeHtml(I18n.t("common-action-next"))} <i class="icon-chevron-right"></i>
-          </button>
-        </div>
-      `
-          : ""
-      }
-    `;
-    resolveTokenCells(
-      decisions.map((item) => item.mint),
-      () => {
-        const body = container.querySelector(".history-table tbody");
-        if (body) body.innerHTML = decisions.map(renderDecisionRow).join("");
-      }
-    );
-  }
-
-  /**
-   * One decision row. `decision` is the verdict the assistant reached, which is
-   * what `.decision-row.pass/.reject` colours the row by — not whether the
-   * request succeeded, since a failed request produces no record at all.
-   */
-  function renderDecisionRow(item) {
-    const allowed = item.decision === "allow" || item.decision === "pass";
-    const when = item.created_at ? Utils.formatTimeAgo(new Date(item.created_at)) : "—";
-    const reasoning = item.reasoning || "";
-
-    return `
-      <tr class="decision-row ${allowed ? "pass" : "reject"}">
-        <td>${renderTokenCell(item.mint, { symbol: item.symbol })}</td>
-        <td><span class="badge ${allowed ? "success" : "error"}">${Utils.escapeHtml(analysisLabel(ANALYSIS_DECISION_LABELS, item.decision))}</span></td>
-        <td>${percentText(item.confidence, "—")}</td>
-        <td>${Utils.escapeHtml(analysisLabel(ANALYSIS_RISK_LABELS, item.risk_level))}</td>
-        <td class="decision-reasoning">
-          <span dir="auto" title="${Utils.escapeHtml(reasoning)}">${Utils.escapeHtml(reasoning)}</span>
-        </td>
-        <td class="decision-model">${Utils.escapeHtml(item.model || item.provider || "—")}${item.cached ? ` <span class="badge secondary">${Utils.escapeHtml(I18n.t("assistant-history-cached"))}</span>` : ""}</td>
-        <td class="decision-latency">${formatLatencyMs(Math.round(item.latency_ms || 0))}</td>
-        <td class="decision-when">${when}</td>
-      </tr>
-    `;
+    historyTable = new DataTable({
+      container: "#history-root",
+      columns: buildHistoryColumns(),
+      rowIdField: "id",
+      stateKey: "assistant-history-table",
+      emptyTitle: () =>
+        state.historyLoadFailed
+          ? I18n.t("assistant-history-load-failed")
+          : I18n.t("assistant-history-empty"),
+      emptyMessage: () =>
+        state.historyLoadFailed
+          ? I18n.attr("assistant-history-load-failed", "message")
+          : I18n.attr("assistant-history-empty", "message"),
+      emptyAction: () =>
+        state.historyLoadFailed
+          ? {
+              label: I18n.t("common-action-retry"),
+              onClick: () => void historyTable.reload({ reason: "refresh", silent: false }),
+            }
+          : null,
+      compact: true,
+      stickyHeader: true,
+      zebra: true,
+      fitToContainer: true,
+      uniformRowHeight: 2,
+      pagination: {
+        threshold: 240,
+        autoLoad: false,
+        loadPage: loadHistoryPage,
+        dedupeKey: (row) => row?.id ?? null,
+        rowIdField: "id",
+        onPageLoaded: ({ total }) => updateHistorySummary(total),
+      },
+      toolbar: {
+        summary: [
+          { id: "history-total", label: I18n.t("assistant-history-summary-total"), value: "0" },
+        ],
+      },
+    });
+    historyTable.reload({ reason: "initial", silent: false }).catch(() => {});
   }
 
   // ============================================================================
@@ -881,9 +946,6 @@ function createLifecycle() {
   api.viewAutomationRun = automationTab.viewAutomationRun;
   api.viewAutomationTaskRuns = automationTab.viewAutomationTaskRuns;
   api.showAutomationMenu = automationTab.showAutomationMenu;
-
-  // History Tab API
-  api.loadHistory = loadHistory;
 
   // Chat Tab API
   api.createSession = createSession;
@@ -1054,6 +1116,7 @@ function createLifecycle() {
      */
     async deactivate() {
       console.log("[Assistant] Deactivating page");
+      historyTable?.cancelPendingLoad();
       // Pollers are auto-stopped by lifecycle
     },
 
@@ -1069,6 +1132,13 @@ function createLifecycle() {
         _chatWidget = null;
       }
       subTabBar = null;
+      if (historyTable) {
+        historyTable.destroy();
+        historyTable = null;
+        state.historyLoaded = false;
+        state.historyLoadFailed = false;
+        state.historyTotal = 0;
+      }
       statusPoller = null;
       providersPoller = null;
       cachePoller = null;
