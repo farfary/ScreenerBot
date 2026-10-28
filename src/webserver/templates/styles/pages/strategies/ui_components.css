@@ -19,22 +19,21 @@
 }
 
 /* ==========================================================================
-   Strategy Type (Editor Header): the kind's bare glyph inline with its name
+   Strategy Type (`strategyTypeMarker`: editor header, roster All view): the kind's
+   bare glyph in its colour inline with its name, set like the mode marker beside it
    ========================================================================== */
 .strategy-type-badge {
   display: inline-flex;
   align-items: center;
-  gap: 0.375rem;
-  font-size: 0.75rem;
+  gap: var(--spacing-xs);
+  font-size: var(--font-size-xs);
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  white-space: nowrap;
   flex-shrink: 0;
   color: var(--text-secondary);
 }
 
 .strategy-type-badge i {
-  font-size: 14px;
   line-height: 1;
   color: var(--strategy-kind-color);
 }
@@ -71,7 +70,7 @@
 }
 
 .type-card:hover {
-  border-color: var(--primary-color);
+  border-color: var(--strategy-kind-color);
   background: var(--hover-color);
   transform: translateY(-2px);
 }

@@ -7,8 +7,10 @@ import { Poller } from "../core/poller.js";
 import { $, $$ } from "../core/dom.js";
 import * as Utils from "../core/utils.js";
 import { ConfirmationDialog } from "../ui/confirmation_dialog.js";
+import { createPageDialogs } from "../ui/page_dialogs.js";
 import { renderStateView } from "../ui/state_view.js";
-import { STRATEGY_TYPE_LABELS } from "../ui/strategy_type.js";
+import { strategyTypeMarker } from "../ui/strategy_type.js";
+import { tradingModeMarker } from "../ui/trading_mode.js";
 import { gateControl } from "../ui/setup_gate.js";
 import { requestManager, errorMessageOf } from "../core/request_manager.js";
 import { downloadJson } from "../core/download.js";
@@ -122,11 +124,14 @@ export function createLifecycle() {
     openCatalog: openConditionCatalog,
   });
 
+  const dialogs = createPageDialogs($, addTrackedListener);
+
   const conditionCatalog = createConditionCatalog({
     conditionSchemas,
     $,
     Utils,
     addTrackedListener,
+    dialogs,
   });
 
   const strategyMode = createStrategyMode({ requestManager, ConfirmationDialog, Utils });
@@ -147,6 +152,7 @@ export function createLifecycle() {
       });
       roster.mount();
 
+      dialogs.setup($(".strategies-page"));
       setupCreateStrategyModal();
       setupHeaderActions();
       setupSettingsActions();
@@ -178,6 +184,7 @@ export function createLifecycle() {
     deactivate() {
       console.log("[Strategies] Deactivating page");
       // Pollers stopped automatically by lifecycle
+      dialogs.closeAll();
     },
 
     dispose() {
@@ -196,49 +203,22 @@ export function createLifecycle() {
     },
   };
 
-  /** Open the new-strategy dialog; `type` ("ENTRY" or "EXIT") preselects that kind. */
+  /**
+   * Open the new-strategy dialog; `type` ("ENTRY" or "EXIT") preselects that kind and takes
+   * the focus, otherwise the first kind does.
+   */
   function showCreateStrategyModal(type = null) {
-    const modal = $("#create-strategy-modal");
-    if (!modal) return;
-    modal.hidden = false;
-    let preselected = null;
-    $$(".type-card").forEach((card) => {
-      const selected = card.dataset.type === type;
-      card.setAttribute("aria-pressed", String(selected));
-      if (selected) preselected = card;
-    });
-    preselected?.focus();
-  }
-
-  function hideCreateStrategyModal() {
-    const modal = $("#create-strategy-modal");
-    if (modal) modal.hidden = true;
+    if (!dialogs.show("create-strategy-modal")) return;
+    const cards = $$(".type-card");
+    cards.forEach((card) => card.setAttribute("aria-pressed", String(card.dataset.type === type)));
+    (cards.find((card) => card.dataset.type === type) ?? cards[0])?.focus();
   }
 
   function setupCreateStrategyModal() {
-    const modal = $("#create-strategy-modal");
-    const cancelBtn = $("#cancel-create-strategy");
-    const closeBtn = $("#create-strategy-close");
-    const typeCards = $$(".type-card");
-
-    if (cancelBtn) {
-      addTrackedListener(cancelBtn, "click", hideCreateStrategyModal);
-    }
-
-    if (closeBtn) {
-      addTrackedListener(closeBtn, "click", hideCreateStrategyModal);
-    }
-
-    if (modal) {
-      addTrackedListener(modal, "click", (event) => {
-        if (event.target === modal) hideCreateStrategyModal();
-      });
-    }
-
-    typeCards.forEach((card) => {
+    $$(".type-card").forEach((card) => {
       addTrackedListener(card, "click", () => {
         const type = card.dataset.type;
-        hideCreateStrategyModal();
+        dialogs.hide("create-strategy-modal");
         startNewStrategy(type);
       });
     });
@@ -459,6 +439,7 @@ export function createLifecycle() {
     const nameInput = $("#strategy-name");
     if (nameInput) nameInput.value = strategy.name;
     updateTypeBadge(strategy.type);
+    updateModeMarker(strategy.mode);
     const enableToggle = $("#strategy-enabled-toggle");
     if (enableToggle) {
       enableToggle.checked = strategy.enabled;
@@ -576,12 +557,16 @@ export function createLifecycle() {
   }
 
   function updateTypeBadge(type) {
-    const badge = $("#strategy-type-badge");
-    if (!badge) return;
+    const slot = $("#strategy-type-marker");
+    if (slot) slot.innerHTML = strategyTypeMarker(type, Utils.escapeHtml);
+  }
 
-    badge.className = `strategy-type-badge ${type.toLowerCase()}`;
-    const icon = type === "ENTRY" ? "icon-trending-up" : "icon-trending-down";
-    badge.innerHTML = `<i class="${icon}"></i> ${Utils.escapeHtml(I18n.label(STRATEGY_TYPE_LABELS, type))}`;
+  /** The book the strategy trades on, beside its kind; a strategy not saved yet has none. */
+  function updateModeMarker(mode) {
+    const slot = $("#strategy-mode-marker");
+    if (!slot) return;
+    slot.hidden = !mode;
+    slot.innerHTML = mode ? tradingModeMarker(mode, Utils.escapeHtml) : "";
   }
 
   async function loadStrategy(strategyId) {

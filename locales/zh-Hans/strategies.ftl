@@ -669,15 +669,18 @@ strategies-readiness-runtime-ok = 设置和安全检查均允许实盘交易
 
 strategies-back = 全部策略
 strategies-view-kind = 策略类型
+strategies-view-all = 全部
+strategies-search-placeholder = 搜索策略…
 strategies-unnamed = 未命名策略
 strategies-col-on = 启用
 strategies-col-strategy = 策略
-strategies-col-order = 顺序
-    .title = 同一模式下已启用入场策略之间的评估顺序；最先发出信号的策略获得该代币
+strategies-col-rank = 排名
+    .title = 同一模式下已启用入场策略之间的评估排名（顺序值小者在前）；最先发出信号的策略获得该代币
 strategies-col-mode = 模式
 strategies-col-status = 状态
 strategies-col-open = 持仓
 strategies-col-watching = 监控中
+strategies-col-kind = 类型
 strategies-col-rounds = 轮次
 strategies-col-closed = 已平仓
 strategies-col-win-rate = 胜率
@@ -699,10 +702,10 @@ strategies-notice-trader-off = Auto Trader 已关闭
 strategies-notice-waiting = 正在等待核心服务
 strategies-notice-monitors-off = 入场和出场监控均已关闭
 strategies-notice-start = 启动 Auto Trader
-# $closed and $needed count closed paper rounds; $changed is a formatted date.
-strategies-readiness-progress = 模拟轮次 { $closed }/{ $needed }
+# $closed and $needed count closed paper rounds; $check is the title of a readiness check.
+strategies-readiness-progress = { $closed }/{ $needed } 轮
 strategies-readiness-ready = 可切换实盘
-strategies-readiness-since = 规则修改于 { $changed }
+strategies-readiness-failing = 未通过：{ $check }
 # $book is the trading mode of the other book; $count its open positions.
 strategies-open-other-book =
     { $count ->

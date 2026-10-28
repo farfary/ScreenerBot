@@ -685,15 +685,18 @@ strategies-readiness-runtime-ok = راه‌اندازی و دروازه‌های
 
 strategies-back = همه استراتژی‌ها
 strategies-view-kind = نوع استراتژی
+strategies-view-all = همه
+strategies-search-placeholder = جست‌وجوی استراتژی‌ها...
 strategies-unnamed = استراتژی بدون نام
 strategies-col-on = روشن
 strategies-col-strategy = استراتژی
-strategies-col-order = ترتیب
-    .title = ترتیب ارزیابی میان استراتژی‌های ورود فعال یک حالت؛ نخستین استراتژی‌ای که سیگنال دهد توکن را می‌گیرد
+strategies-col-rank = رتبه
+    .title = رتبه ارزیابی میان استراتژی‌های ورود فعال یک حالت، کمترین ترتیب نخست؛ نخستین استراتژی‌ای که سیگنال دهد توکن را می‌گیرد
 strategies-col-mode = حالت
 strategies-col-status = وضعیت
 strategies-col-open = باز
 strategies-col-watching = زیر نظر
+strategies-col-kind = نوع
 strategies-col-rounds = دورها
 strategies-col-closed = بسته‌شده
 strategies-col-win-rate = نرخ برد
@@ -715,10 +718,10 @@ strategies-notice-trader-off = Auto Trader خاموش است
 strategies-notice-waiting = در انتظار سرویس‌های اصلی
 strategies-notice-monitors-off = پایشگرهای ورود و خروج خاموش‌اند
 strategies-notice-start = روشن کردن Auto Trader
-# $closed and $needed count closed paper rounds; $changed is a formatted date.
-strategies-readiness-progress = دورهای آزمایشی { $closed }/{ $needed }
+# $closed and $needed count closed paper rounds; $check is the title of a readiness check.
+strategies-readiness-progress = { $closed }/{ $needed } دور
 strategies-readiness-ready = آماده معامله واقعی
-strategies-readiness-since = قوانین تغییر کرد { $changed }
+strategies-readiness-failing = برقرار نیست: { $check }
 # $book is the trading mode of the other book; $count its open positions.
 strategies-open-other-book =
     { $count ->

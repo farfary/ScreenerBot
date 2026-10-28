@@ -247,7 +247,6 @@ copy-dialog-close =
 copy-editor-title-add = वॉलेट जोड़ें
 copy-editor-sub-add = नए टास्क पेपर से शुरू होते हैं
 copy-arm-title = लाइव कॉपी सक्रिय करें
-copy-arm-sub = आपके वॉलेट से असली स्वैप
 copy-arm-keep-paper = पेपर में रहने दें
 copy-arm-confirm = लाइव सक्रिय करें
 copy-profile-title = वॉलेट प्रोफ़ाइल

@@ -94,4 +94,3 @@ common-range-label =
     .aria-label = Date range
 common-check-passed = passed
 common-check-not-passed = not passed
-common-arm-type-phrase = Type { $phrase } to confirm

@@ -22,6 +22,10 @@
  * The wallet list marks the selected task as the current item without a border, and an
  * unnamed task shows its short address in the name slot.
  *
+ * The arm gate and the settings take the width before they scroll: at a laptop height the
+ * gate names its task in the header and sets readiness beside exposure with nothing to
+ * scroll, and the settings lay three fields a row.
+ *
  * Run with `npm run test:js`.
  */
 
@@ -43,8 +47,8 @@ const strip = (text) => text.replace(/[⁨⁩]/g, "").trim();
 const isResume = (request) => request.url().endsWith("/api/copy-trading/tasks/resume");
 
 /** A dashboard on the Copy page whose API answers `answers` by path before the fixtures. */
-async function openCopy(t, answers = {}) {
-  const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+async function openCopy(t, answers = {}, viewport = { width: 1440, height: 900 }) {
+  const context = await browser.newContext({ viewport });
   const api = createApiHandler([await loadIndex("copy"), await loadIndex("shell")], "populated");
   const host = await serveDashboard(context, {
     locale: "en",
@@ -249,4 +253,63 @@ test("Add wallet is the one primary, and the list marks its current task plainly
   assert.ok(name.startsWith(address.slice(0, 4)), name);
   assert.ok(name.endsWith(address.slice(-4)), name);
   assert.ok(name.length < address.length, "the name slot shows the short address");
+});
+
+test("at a laptop height the arm gate sets readiness beside exposure, unscrolled", async (t) => {
+  const task = fixture("copy_workspace.json");
+  const { page, origin } = await openCopy(t, {}, { width: 1280, height: 666 });
+  await page.goto(`${origin}/copy`);
+  const arm = page.locator("#copy-ws-panel [data-ws-action='arm']");
+  await arm.waitFor();
+  await arm.click();
+  await page.locator("#copy-arm:not([hidden]) #copy-arm-body .arm-gate-ack").first().waitFor();
+
+  const gate = await page.evaluate(() => {
+    const body = document.querySelector("#copy-arm-body");
+    const [readiness, exposure] = [...body.querySelectorAll(".copy-split > section")].map(
+      (section) => section.getBoundingClientRect()
+    );
+    return {
+      overflows: body.scrollHeight > body.clientHeight + 1,
+      width: document.querySelector(".copy-arm-panel").getBoundingClientRect().width,
+      sideBySide: Math.abs(readiness.top - exposure.top) < 1 && readiness.right <= exposure.left,
+      exposure: body.querySelectorAll(".copy-split .copy-def").length,
+      subtitle: document.querySelector("#copy-arm-sub").textContent,
+    };
+  });
+  assert.equal(gate.overflows, false, "every check, figure and acknowledgement is visible");
+  assert.ok(gate.width > 860, `the gate takes the width (${gate.width}px)`);
+  assert.ok(gate.sideBySide, "readiness and exposure share a row");
+  assert.ok(gate.exposure >= 6, "the exposure figures sit beside the readiness");
+  assert.ok(strip(gate.subtitle).includes((task.data ?? task).label), gate.subtitle);
+  await page.keyboard.press("Escape");
+  await page.locator("#copy-arm").waitFor({ state: "hidden" });
+});
+
+test("the settings lay three fields a row on the wide panel", async (t) => {
+  const { page, origin } = await openCopy(t);
+  await page.goto(`${origin}/copy`);
+  await page.locator("#copy-settings-open").click();
+  await page.locator("#copy-settings:not([hidden]) #copy-settings-readiness").waitFor();
+
+  const sheet = await page.evaluate(() => {
+    const body = document.querySelector("#copy-settings .modal-body");
+    const tops = [...body.querySelectorAll(".copy-fields > .copy-field")].map((field) =>
+      Math.round(field.getBoundingClientRect().top)
+    );
+    const note = document
+      .querySelector("#copy-settings-paper-delay-shared")
+      .getBoundingClientRect();
+    const fields = body.querySelector(".copy-fields").getBoundingClientRect();
+    return {
+      overflows: body.scrollHeight > body.clientHeight + 1,
+      width: document.querySelector(".copy-settings-panel").getBoundingClientRect().width,
+      rows: [...new Set(tops)].length,
+      noteSpans: Math.abs(note.width - fields.width) < 1,
+    };
+  });
+  assert.equal(sheet.overflows, false, "the settings fit the window unscrolled");
+  assert.ok(sheet.width > 860, `the settings take the width (${sheet.width}px)`);
+  assert.equal(sheet.rows, 2, "six fields in two rows of three");
+  assert.ok(sheet.noteSpans, "the shared paper-delay note spans its own row");
 });

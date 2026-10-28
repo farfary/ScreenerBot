@@ -279,7 +279,6 @@ copy-dialog-close =
 copy-editor-title-add = Додати гаманець
 copy-editor-sub-add = Нові завдання починаються у віртуальному режимі
 copy-arm-title = Активація реального копіювання
-copy-arm-sub = Реальні свопи з вашого гаманця
 copy-arm-keep-paper = Залишити віртуальний режим
 copy-arm-confirm = Активувати реальну торгівлю
 copy-profile-title = Профіль гаманця

@@ -76,6 +76,7 @@ function chipsHtml(state, kind) {
       id: "status",
       label: I18n.t("copy-toolbar-status"),
       value: I18n.label(STATUS_LABELS, kind),
+      format: "text",
       variant: STATUS_VARIANTS[kind],
     }),
   ];

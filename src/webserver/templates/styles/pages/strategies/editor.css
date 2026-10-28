@@ -30,6 +30,16 @@
   min-width: 0;
 }
 
+/* The kind and mode markers beside the name; each keeps its width. */
+.editor-identity-marker {
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+.editor-identity-marker[hidden] {
+  display: none;
+}
+
 /* The way back to the roster; its arrow points to the inline start. */
 .editor-back {
   flex-shrink: 0;

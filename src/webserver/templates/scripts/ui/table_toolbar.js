@@ -21,7 +21,7 @@
  *
  *   toolbar: {
  *     identity: { icon, title, tag, address: { value, explorer }, details: [...] },
- *     summary:  [ { id, label, value, variant } ],
+ *     summary:  [ { id, label, value, variant, format } ],
  *     search:   { enabled, placeholder, mode, onChange, onSubmit },
  *     views:    { id, value, options: [{ value, label, icon }], onChange },
  *     filters:  [ { id, label, options } | { id, control: "switch" } ],
@@ -235,12 +235,13 @@ function normalizeConfig(config = {}) {
 
   const stats = normalizeList((cfg.summary || []).map((entry) => ({ ...entry, type: "stat" })));
 
+  // The view switch comes first: it chooses which rows exist, the search narrows them.
   const controls = [];
-  if (cfg.search && cfg.search.enabled !== false) {
-    controls.push({ ...cfg.search, type: "search", id: cfg.search.id || "search" });
-  }
   if (cfg.views && Array.isArray(cfg.views.options) && cfg.views.options.length > 0) {
     controls.push({ ...cfg.views, type: "segmented", id: cfg.views.id || "views" });
+  }
+  if (cfg.search && cfg.search.enabled !== false) {
+    controls.push({ ...cfg.search, type: "search", id: cfg.search.id || "search" });
   }
   controls.push(...normalizeList(cfg.customControls));
   controls.push(...normalizeList(cfg.filters));
@@ -302,12 +303,14 @@ function isAbsentValue(value) {
 /**
  * One summary chip: a bare caption and its figure, toned by `variant` only while the figure
  * states something. The chip of every DataTable toolbar, and of any page strip that reads
- * like one.
+ * like one. `format: "text"` marks a value that is a sentence rather than a figure, set in
+ * the interface face instead of the tabular data face.
  */
 export function renderSummaryChip(item) {
   const id = item.id ? ` data-summary-id="${escapeHtml(item.id)}"` : "";
   const variant =
     item.variant && !isAbsentValue(item.value) ? ` data-variant="${escapeHtml(item.variant)}"` : "";
+  const format = item.format === "text" ? ' data-format="text"' : "";
   const tooltip = item.tooltip ? ` title="${escapeHtml(item.tooltip)}"` : "";
   const icon = renderIconMarkup(item.icon, "table-toolbar-chip__icon");
   const label = item.label
@@ -316,7 +319,7 @@ export function renderSummaryChip(item) {
   const value = `<span class="table-toolbar-chip__value">${escapeHtml(
     isAbsentValue(item.value) ? ABSENT_VALUE : item.value
   )}</span>`;
-  return `<div class="table-toolbar-chip"${id}${variant}${tooltip}${item.hidden ? " hidden" : ""}>${icon}${label}${value}</div>`;
+  return `<div class="table-toolbar-chip"${id}${variant}${format}${tooltip}${item.hidden ? " hidden" : ""}>${icon}${label}${value}</div>`;
 }
 
 function renderText(item) {
@@ -501,8 +504,9 @@ function buttonClassList(item, extra = []) {
   }
   if (!item.label || item.iconOnly) {
     classes.push("table-toolbar-btn--icon");
-  } else if (item.collapseLabel !== false) {
-    // Labelled buttons shed their text in a narrow bar instead of wrapping the row.
+  } else if (item.collapseLabel !== false && item.icon) {
+    // Labelled buttons shed their text in a narrow bar instead of wrapping the row; a
+    // button without an icon keeps it, or it would shrink to an empty box.
     classes.push("table-toolbar-btn--collapsible");
   }
   if (item.classes) {

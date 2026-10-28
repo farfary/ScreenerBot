@@ -82,4 +82,3 @@ common-range-label =
     .aria-label = तारीख़ सीमा
 common-check-passed = पास
 common-check-not-passed = पास नहीं
-common-arm-type-phrase = पुष्टि के लिए { $phrase } टाइप करें

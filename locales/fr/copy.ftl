@@ -273,7 +273,6 @@ copy-dialog-close =
 copy-editor-title-add = Ajouter un portefeuille
 copy-editor-sub-add = Les nouvelles tâches démarrent en simulé
 copy-arm-title = Armer la copie réelle
-copy-arm-sub = De vrais swaps depuis votre portefeuille
 copy-arm-keep-paper = Rester en simulé
 copy-arm-confirm = Armer le mode réel
 copy-profile-title = Profil du portefeuille

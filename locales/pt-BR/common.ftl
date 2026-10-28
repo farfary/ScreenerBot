@@ -80,4 +80,3 @@ common-range-label =
     .aria-label = Intervalo de datas
 common-check-passed = aprovada
 common-check-not-passed = não aprovada
-common-arm-type-phrase = Digite { $phrase } para confirmar

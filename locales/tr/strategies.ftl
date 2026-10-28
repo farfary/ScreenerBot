@@ -641,15 +641,18 @@ strategies-readiness-runtime-ok = Kurulum ve güvenlik kapıları canlı işleml
 
 strategies-back = Tüm stratejiler
 strategies-view-kind = Strateji türü
+strategies-view-all = Tümü
+strategies-search-placeholder = Strateji ara...
 strategies-unnamed = Adsız strateji
 strategies-col-on = Açık
 strategies-col-strategy = Strateji
-strategies-col-order = Sıra
-    .title = Bir moddaki etkin giriş stratejileri arasındaki değerlendirme sırası; ilk sinyal veren token'ı alır
+strategies-col-rank = Sıralama
+    .title = Bir moddaki etkin giriş stratejileri arasındaki değerlendirme sıralaması, en düşük Sıra önce; ilk sinyal veren token'ı alır
 strategies-col-mode = Mod
 strategies-col-status = Durum
 strategies-col-open = Açık
 strategies-col-watching = İzlenen
+strategies-col-kind = Tür
 strategies-col-rounds = Turlar
 strategies-col-closed = Kapanan
 strategies-col-win-rate = Kazanma oranı
@@ -671,10 +674,10 @@ strategies-notice-trader-off = Auto Trader kapalı
 strategies-notice-waiting = Çekirdek servisler bekleniyor
 strategies-notice-monitors-off = Giriş ve çıkış izleyicileri kapalı
 strategies-notice-start = Auto Trader'ı başlat
-# $closed and $needed count closed paper rounds; $changed is a formatted date.
-strategies-readiness-progress = Sanal turlar { $closed }/{ $needed }
+# $closed and $needed count closed paper rounds; $check is the title of a readiness check.
+strategies-readiness-progress = { $closed }/{ $needed } tur
 strategies-readiness-ready = Canlıya geçmeye hazır
-strategies-readiness-since = Kurallar değişti { $changed }
+strategies-readiness-failing = Karşılanmıyor: { $check }
 # $book is the trading mode of the other book; $count its open positions.
 strategies-open-other-book =
     { $count ->

@@ -713,15 +713,18 @@ strategies-readiness-runtime-ok = الإعداد وبوابات الأمان ت�
 
 strategies-back = كل الاستراتيجيات
 strategies-view-kind = نوع الاستراتيجية
+strategies-view-all = الكل
+strategies-search-placeholder = البحث في الاستراتيجيات...
 strategies-unnamed = استراتيجية بلا اسم
 strategies-col-on = تشغيل
 strategies-col-strategy = الاستراتيجية
-strategies-col-order = الترتيب
-    .title = ترتيب التقييم بين استراتيجيات الدخول المفعّلة في الوضع نفسه؛ أول استراتيجية تعطي إشارة تأخذ الرمز
+strategies-col-rank = الرتبة
+    .title = رتبة التقييم بين استراتيجيات الدخول المفعّلة في الوضع نفسه، من أدنى ترتيب صعودًا؛ أول استراتيجية تعطي إشارة تأخذ الرمز
 strategies-col-mode = الوضع
 strategies-col-status = الحالة
 strategies-col-open = مفتوحة
 strategies-col-watching = قيد المتابعة
+strategies-col-kind = النوع
 strategies-col-rounds = الجولات
 strategies-col-closed = مغلقة
 strategies-col-win-rate = نسبة الربح
@@ -743,10 +746,10 @@ strategies-notice-trader-off = Auto Trader متوقف
 strategies-notice-waiting = بانتظار الخدمات الأساسية
 strategies-notice-monitors-off = مراقبا الدخول والخروج متوقفان
 strategies-notice-start = تشغيل Auto Trader
-# $closed and $needed count closed paper rounds; $changed is a formatted date.
-strategies-readiness-progress = الجولات التجريبية { $closed }/{ $needed }
+# $closed and $needed count closed paper rounds; $check is the title of a readiness check.
+strategies-readiness-progress = الجولات { $closed }/{ $needed }
 strategies-readiness-ready = جاهزة للتداول الحي
-strategies-readiness-since = تغيّرت القواعد { $changed }
+strategies-readiness-failing = فحص لم يتحقق: { $check }
 # $book is the trading mode of the other book; $count its open positions.
 strategies-open-other-book =
     { $count ->

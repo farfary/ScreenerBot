@@ -1,10 +1,10 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 //
-// Strategies roster - the strategy list of the Strategies sub-tab: one DataTable per kind view with the server's status and figures of each strategy, the switch that turns it on, its mode action and the trader-level block stated once in the toolbar.
+// Strategies roster - the strategy list of the Strategies sub-tab: one DataTable with an All, Entry and Exit view of the server's status and figures of each strategy, the switch that turns it on, its mode action and the trader-level block stated once in the toolbar.
 
 import { DataTable } from "../../ui/data_table.js";
-import { STRATEGY_TYPE_LABELS } from "../../ui/strategy_type.js";
+import { STRATEGY_TYPE_ICONS, strategyTypeLabel, strategyTypeMarker } from "../../ui/strategy_type.js";
 import { tradingModeLabel, tradingModeMarker } from "../../ui/trading_mode.js";
 import { setupRequired, setupRequiredReason } from "../../ui/setup_gate.js";
 import { SetupDialog } from "../../ui/setup_dialog.js";
@@ -16,10 +16,14 @@ import { modeAction } from "./strategy_mode.js";
 
 const OVERVIEW_URL = "/api/strategies/overview";
 
-/** The two views, one per strategy kind, in toolbar order; `type` is the API kind. */
+/**
+ * The views in toolbar order: every strategy, then one per kind. `type` is the API kind a
+ * view holds, null for every kind.
+ */
 const VIEWS = Object.freeze([
-  { value: "entry", type: "ENTRY", icon: "icon-log-in" },
-  { value: "exit", type: "EXIT", icon: "icon-log-out" },
+  { value: "all", type: null, icon: "icon-layers" },
+  { value: "entry", type: "ENTRY", icon: STRATEGY_TYPE_ICONS.ENTRY },
+  { value: "exit", type: "EXIT", icon: STRATEGY_TYPE_ICONS.EXIT },
 ]);
 
 /** Message key of each `StrategyRunStatus` (src/strategies/overview.rs). */
@@ -50,6 +54,15 @@ const RULE_EXIT_LABELS = Object.freeze({
   trailing_stop: "trader-tab-trailing-stop",
   take_profit: "trader-tab-take-profit",
   time_exit: "trader-tab-time-rules",
+});
+
+/** Message key of each readiness check id (src/trader/paper/readiness.rs, src/strategies/readiness.rs). */
+const READINESS_CHECK_LABELS = Object.freeze({
+  history: "paper-readiness-history",
+  profit: "paper-readiness-profit",
+  priced: "strategies-readiness-priced",
+  exits: "paper-readiness-exits",
+  runtime: "strategies-readiness-runtime",
 });
 
 const ABSENT = "—";
@@ -87,7 +100,7 @@ const hinted = (label, hint) => `<span title="${esc(hint)}">${esc(label)}</span>
  */
 export function createRoster({ container, onOpen, onCreate, onImport, onDelete, strategyMode }) {
   let table = null;
-  let view = "entry";
+  let view = VIEWS[0].value;
   let overview = null;
   let rows = [];
   let lastKey = null;
@@ -96,7 +109,14 @@ export function createRoster({ container, onOpen, onCreate, onImport, onDelete, 
   const busy = new Set();
 
   const viewOf = (value) => VIEWS.find((entry) => entry.value === value) ?? VIEWS[0];
-  const rowsOfView = () => rows.filter((row) => row.type === viewOf(view).type);
+  /** A kind's place in the switch, so All lists entries before exits. */
+  const kindOrder = (row) => VIEWS.findIndex((entry) => entry.type === row.type);
+  /** The rows of the current view in the server's order; All groups them by kind. */
+  const rowsOfView = () => {
+    const { type } = viewOf(view);
+    if (type) return rows.filter((row) => row.type === type);
+    return [...rows].sort((a, b) => kindOrder(a) - kindOrder(b));
+  };
   const stateKey = () => `strategies-roster-${view}`;
 
   // ---------------------------------------------------------------------------
@@ -113,34 +133,62 @@ export function createRoster({ container, onOpen, onCreate, onImport, onDelete, 
   }
 
   function nameCell(row) {
+    const name = strategyName(row);
     const description = String(row.description ?? "").trim();
-    return `<span class="strategy-roster-name">${esc(strategyName(row))}</span>${
-      description ? `<span class="strategy-roster-description">${esc(description)}</span>` : ""
+    return `<span class="strategy-roster-name">${esc(name)}</span>${
+      description
+        ? `<span class="strategy-roster-description" title="${esc(description)}">${esc(description)}</span>`
+        : ""
     }`;
   }
 
-  /** The mode marker, and under a paper strategy how far it is from arming live. */
+  /**
+   * How far a paper strategy is from arming live: ready, still counting rounds, or
+   * held by a check other than the round count.
+   */
+  function readinessState(readiness) {
+    if (readiness.ready) return "ready";
+    return readiness.failing && readiness.failing !== "history" ? "blocked" : "counting";
+  }
+
+  /**
+   * The readiness tooltip: the counted rounds with the rules change they count from,
+   * then the check that is not passing.
+   */
+  function readinessTitle(readiness) {
+    const count = { count: readiness.closed, needed: readiness.needed };
+    const rounds = readiness.since_rules_changed
+      ? I18n.t("strategies-readiness-history-since-short", {
+          ...count,
+          changed: Utils.formatTimestamp(readiness.since_rules_changed, {
+            includeSeconds: false,
+            fallback: ABSENT,
+          }),
+        })
+      : I18n.t("paper-readiness-history-short", count);
+    if (readinessState(readiness) !== "blocked") return rounds;
+    return `${rounds}\n${I18n.t("strategies-readiness-failing", {
+      check: I18n.label(READINESS_CHECK_LABELS, readiness.failing),
+    })}`;
+  }
+
+  /**
+   * The mode marker, and under a paper strategy one line of how far it is from arming
+   * live; the tooltip carries the rules change and the check that holds it.
+   */
   function modeCell(row) {
     const marker = tradingModeMarker(row.mode, esc);
     const readiness = row.mode === "paper" ? row.readiness : null;
     if (!readiness) return marker;
-    const progress = readiness.ready
+    const text = readiness.ready
       ? I18n.t("strategies-readiness-ready")
       : I18n.t("strategies-readiness-progress", {
           closed: readiness.closed,
           needed: readiness.needed,
         });
-    const since = readiness.since_rules_changed
-      ? `<span class="strategy-roster-detail">${esc(
-          I18n.t("strategies-readiness-since", {
-            changed: Utils.formatTimestamp(readiness.since_rules_changed, {
-              includeSeconds: false,
-              fallback: ABSENT,
-            }),
-          })
-        )}</span>`
-      : "";
-    return `${marker}<span class="strategy-roster-detail">${esc(progress)}</span>${since}`;
+    return `${marker}<span class="strategy-roster-detail strategy-roster-readiness" data-readiness="${readinessState(
+      readiness
+    )}" title="${esc(readinessTitle(readiness))}">${esc(text)}</span>`;
   }
 
   function statusCell(row) {
@@ -191,18 +239,13 @@ export function createRoster({ container, onOpen, onCreate, onImport, onDelete, 
     )}</span>`;
   }
 
-  /** Edit, the mode action while the strategy is on, and Delete, each named by the strategy. */
+  /**
+   * The mode action while the strategy is on, then Edit and Delete, each named by the
+   * strategy. The column is end-aligned, so the icon pair lines up on every row.
+   */
   function actionButtons(row) {
     const name = strategyName(row);
-    const buttons = [
-      {
-        id: "edit",
-        icon: '<i class="icon-square-pen" aria-hidden="true"></i>',
-        tooltip: I18n.t("common-action-edit"),
-        ariaLabel: I18n.t("strategies-action-edit", { name }),
-        onClick: () => onOpen(row.id),
-      },
-    ];
+    const buttons = [];
     const mode = modeAction(row);
     if (mode) {
       buttons.push({
@@ -210,11 +253,17 @@ export function createRoster({ container, onOpen, onCreate, onImport, onDelete, 
         label: esc(mode.label),
         ariaLabel: `${mode.label}: ${name}`,
         tooltip: setupRequired() ? setupRequiredReason() : null,
-        size: "sm",
         disabled: setupRequired() || busy.has(row.id),
         onClick: () => void changeMode(row, mode.id),
       });
     }
+    buttons.push({
+      id: "edit",
+      icon: '<i class="icon-square-pen" aria-hidden="true"></i>',
+      tooltip: I18n.t("common-action-edit"),
+      ariaLabel: I18n.t("strategies-action-edit", { name }),
+      onClick: () => onOpen(row.id),
+    });
     buttons.push({
       id: "delete",
       icon: '<i class="icon-trash-2" aria-hidden="true"></i>',
@@ -227,7 +276,7 @@ export function createRoster({ container, onOpen, onCreate, onImport, onDelete, 
   }
 
   // ---------------------------------------------------------------------------
-  // Columns per view
+  // Columns per view: All shows what every kind shares, a kind view adds its own
   // ---------------------------------------------------------------------------
 
   function columns() {
@@ -244,7 +293,8 @@ export function createRoster({ container, onOpen, onCreate, onImport, onDelete, 
       grow: true,
       floating: true,
       sortable: true,
-      wrap: true,
+      wrap: false,
+      minWidth: 160,
       sortFn: (a, b) => strategyName(a).localeCompare(strategyName(b)),
       searchValue: (row) => `${strategyName(row)} ${row.description ?? ""}`,
       render: (_value, row) => nameCell(row),
@@ -252,13 +302,21 @@ export function createRoster({ container, onOpen, onCreate, onImport, onDelete, 
     const mode = {
       id: "mode",
       label: esc(I18n.t("strategies-col-mode")),
-      wrap: true,
+      wrap: false,
+      minWidth: "content",
       render: (_value, row) => modeCell(row),
     };
     const status = {
       id: "status",
       label: esc(I18n.t("strategies-col-status")),
+      minWidth: "content",
       render: (_value, row) => statusCell(row),
+    };
+    const rounds = {
+      id: "rounds",
+      label: esc(I18n.t("strategies-col-rounds")),
+      type: "number",
+      render: (_value, row) => countText(row.rounds?.closed),
     };
     const winRate = {
       id: "win_rate",
@@ -285,6 +343,28 @@ export function createRoster({ container, onOpen, onCreate, onImport, onDelete, 
       actions: { buttons: actionButtons },
     };
 
+    if (view === "all") {
+      return [
+        on,
+        strategy,
+        {
+          id: "kind",
+          label: esc(I18n.t("strategies-col-kind")),
+          sortable: true,
+          minWidth: "content",
+          sortFn: (a, b) => strategyTypeLabel(a.type).localeCompare(strategyTypeLabel(b.type)),
+          searchValue: (row) => strategyTypeLabel(row.type),
+          render: (_value, row) => strategyTypeMarker(row.type, esc),
+        },
+        mode,
+        status,
+        rounds,
+        winRate,
+        realized,
+        lastSignal,
+        actions,
+      ];
+    }
     if (view === "exit") {
       return [
         on,
@@ -292,6 +372,8 @@ export function createRoster({ container, onOpen, onCreate, onImport, onDelete, 
         {
           id: "manages",
           label: esc(I18n.t("strategies-col-manages")),
+          wrap: false,
+          minWidth: "content",
           render: (_value, row) => managesCell(row),
         },
         mode,
@@ -319,7 +401,7 @@ export function createRoster({ container, onOpen, onCreate, onImport, onDelete, 
       strategy,
       {
         id: "order",
-        label: hinted(I18n.t("strategies-col-order"), I18n.attr("strategies-col-order", "title")),
+        label: hinted(I18n.t("strategies-col-rank"), I18n.attr("strategies-col-rank", "title")),
         type: "number",
         render: (_value, row) => countText(row.order),
       },
@@ -331,12 +413,7 @@ export function createRoster({ container, onOpen, onCreate, onImport, onDelete, 
         type: "number",
         render: (_value, row) => openCell(row),
       },
-      {
-        id: "rounds",
-        label: esc(I18n.t("strategies-col-rounds")),
-        type: "number",
-        render: (_value, row) => countText(row.rounds?.closed),
-      },
+      rounds,
       winRate,
       realized,
       lastSignal,
@@ -351,16 +428,17 @@ export function createRoster({ container, onOpen, onCreate, onImport, onDelete, 
   function viewOptions() {
     return VIEWS.map((entry) => ({
       value: entry.value,
-      label: I18n.label(STRATEGY_TYPE_LABELS, entry.type),
+      label: entry.type ? strategyTypeLabel(entry.type) : I18n.t("strategies-view-all"),
       icon: entry.icon,
     }));
   }
 
-  /** The kind counts on the view switch: strategies on, of all of that kind. */
+  /** The counts on the view switch: strategies on, of all in that view. */
   function syncCounts() {
     const counts = overview?.counts;
     if (!counts) return;
     table?.setToolbarSegmentCounts("kind", {
+      all: `${counts.entry.enabled + counts.exit.enabled}/${counts.entry.total + counts.exit.total}`,
       entry: `${counts.entry.enabled}/${counts.entry.total}`,
       exit: `${counts.exit.enabled}/${counts.exit.total}`,
     });
@@ -389,7 +467,7 @@ export function createRoster({ container, onOpen, onCreate, onImport, onDelete, 
     table?.setToolbarItem("run-notice-action", action ? { hidden: false, label: action } : { hidden: true });
   }
 
-  /** The Exit view names the rule exits that decide before any exit strategy. */
+  /** A view holding exit strategies names the rule exits that decide before any of them. */
   function syncRuleExits() {
     const names = (overview?.rule_exits ?? [])
       .filter((rule) => rule.enabled)
@@ -398,7 +476,7 @@ export function createRoster({ container, onOpen, onCreate, onImport, onDelete, 
       {
         id: "rule-exits",
         value: names.length > 0 ? Utils.formatList(names) : ABSENT,
-        hidden: view !== "exit" || names.length === 0,
+        hidden: view === "entry" || names.length === 0,
       },
     ]);
   }
@@ -419,14 +497,20 @@ export function createRoster({ container, onOpen, onCreate, onImport, onDelete, 
     }
   }
 
+  /**
+   * Two rows: the title, the trader-level state and the actions, then the kind switch
+   * and the search.
+   */
   function toolbar() {
     return {
+      layout: "query-row",
       identity: { icon: "icon-puzzle", title: I18n.t("trader-tab-strategies") },
       summary: [
         {
           id: "run-notice",
-          label: I18n.t("strategies-status-not-running"),
+          label: I18n.t("strategies-col-status"),
           value: ABSENT,
+          format: "text",
           variant: "warning",
           hidden: true,
         },
@@ -434,6 +518,7 @@ export function createRoster({ container, onOpen, onCreate, onImport, onDelete, 
           id: "rule-exits",
           label: I18n.t("strategies-exit-before"),
           value: ABSENT,
+          format: "text",
           tooltip: I18n.t("strategies-exit-hint"),
           hidden: true,
         },
@@ -452,12 +537,11 @@ export function createRoster({ container, onOpen, onCreate, onImport, onDelete, 
         options: viewOptions(),
         onChange: (value) => switchView(value),
       },
-      search: { enabled: true, mode: "client" },
+      search: { enabled: true, mode: "client", placeholder: I18n.t("strategies-search-placeholder") },
       buttons: [
         {
           id: "run-notice-action",
           label: I18n.t("strategies-notice-start"),
-          variant: "primary",
           hidden: true,
           onClick: () => void runNoticeAction(),
         },
@@ -484,13 +568,15 @@ export function createRoster({ container, onOpen, onCreate, onImport, onDelete, 
 
   /**
    * Put the current view's rows in the table. A control focused before the render is
-   * focused again after it, so a refresh never drops the keyboard user's place.
+   * focused again after it, so a refresh never drops the keyboard user's place. `force`
+   * repaints rows the table holds already: the empty state reads `loadFailed`, and the
+   * table skips a render whose rows did not change.
    */
-  function render() {
+  function render({ force = false } = {}) {
     if (!table) return;
     const active = container.ownerDocument.activeElement;
     const enableId = active?.dataset?.enableStrategy ?? null;
-    table.setData(rowsOfView());
+    table.setData(rowsOfView(), { forceRender: force });
     if (enableId !== null && !active.isConnected) {
       container
         .querySelector(`input[data-enable-strategy="${CSS.escape(enableId)}"]`)
@@ -515,8 +601,10 @@ export function createRoster({ container, onOpen, onCreate, onImport, onDelete, 
       stateKey: stateKey(),
       sorting: { mode: "client", column: null, direction: "asc" },
       compact: true,
+      stickyHeader: true,
       zebra: true,
       fitToContainer: true,
+      uniformRowHeight: 2,
       emptyTitle: () =>
         loadFailed ? I18n.t("strategies-toast-load-failed") : I18n.t("strategies-list-empty-title"),
       emptyMessage: () =>
@@ -548,6 +636,7 @@ export function createRoster({ container, onOpen, onCreate, onImport, onDelete, 
     }
     try {
       const data = await requestManager.fetch(OVERVIEW_URL, { priority: "normal" });
+      const recovered = loadFailed;
       loadFailed = false;
       loadedAt = Date.now();
       table.hideBlockingState();
@@ -562,7 +651,7 @@ export function createRoster({ container, onOpen, onCreate, onImport, onDelete, 
       syncCounts();
       syncNotice();
       syncRuleExits();
-      render();
+      render({ force: recovered });
     } catch (error) {
       console.error("[Strategies] Failed to load the strategies overview:", error);
       table.hideBlockingState();
@@ -578,7 +667,7 @@ export function createRoster({ container, onOpen, onCreate, onImport, onDelete, 
         return;
       }
       loadFailed = true;
-      table.setData([]);
+      table.setData([], { forceRender: true });
     }
   }
 
@@ -608,10 +697,11 @@ export function createRoster({ container, onOpen, onCreate, onImport, onDelete, 
       input.disabled = false;
       return;
     }
-    row.enabled = enabled;
-    // A reload that fails keeps the rows on screen without rendering them again, so the
-    // switch is released here rather than by the next render.
-    input.disabled = false;
+    // A new row rather than an edit of the one the table holds: the table compares the next
+    // rows with its own, so an edited row reads as unchanged and the mode action the switch
+    // brings never appears. The render also releases the switch if the reload fails.
+    rows = rows.map((candidate) => (candidate === row ? { ...row, enabled } : candidate));
+    render();
     await reload();
   }
 

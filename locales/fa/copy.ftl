@@ -259,7 +259,6 @@ copy-dialog-close =
 copy-editor-title-add = افزودن کیف پول
 copy-editor-sub-add = وظایف جدید در حالت آزمایشی شروع می‌شوند
 copy-arm-title = فعال‌سازی کپی زنده
-copy-arm-sub = سواپ‌های واقعی از کیف پول شما
 copy-arm-keep-paper = ماندن در آزمایشی
 copy-arm-confirm = فعال‌سازی زنده
 copy-profile-title = پروفایل کیف پول

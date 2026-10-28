@@ -259,7 +259,6 @@ copy-dialog-close =
 copy-editor-title-add = Wallet hinzufügen
 copy-editor-sub-add = Neue Aufgaben starten im Paper-Modus
 copy-arm-title = Live-Kopieren scharfschalten
-copy-arm-sub = Echte Swaps aus Ihrer Wallet
 copy-arm-keep-paper = Paper beibehalten
 copy-arm-confirm = Live scharfschalten
 copy-profile-title = Wallet-Profil

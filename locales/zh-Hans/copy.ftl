@@ -249,7 +249,6 @@ copy-dialog-close =
 copy-editor-title-add = 添加钱包
 copy-editor-sub-add = 新任务从模拟交易开始
 copy-arm-title = 启用实盘跟单
-copy-arm-sub = 使用您钱包的真实兑换
 copy-arm-keep-paper = 保持模拟
 copy-arm-confirm = 启用实盘
 copy-profile-title = 钱包档案

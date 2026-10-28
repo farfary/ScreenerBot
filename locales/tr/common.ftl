@@ -80,4 +80,3 @@ common-range-label =
     .aria-label = Tarih aralığı
 common-check-passed = geçti
 common-check-not-passed = geçmedi
-common-arm-type-phrase = Onaylamak için { $phrase } yazın

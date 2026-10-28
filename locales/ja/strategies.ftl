@@ -669,15 +669,18 @@ strategies-readiness-runtime-ok = セットアップと安全ゲートにより�
 
 strategies-back = すべてのストラテジー
 strategies-view-kind = ストラテジーの種類
+strategies-view-all = すべて
+strategies-search-placeholder = ストラテジーを検索...
 strategies-unnamed = 名称未設定のストラテジー
 strategies-col-on = オン
 strategies-col-strategy = ストラテジー
-strategies-col-order = 順序
-    .title = 同じモードの有効なエントリーストラテジー間の評価順。最初にシグナルを出したものがトークンを取ります
+strategies-col-rank = ランク
+    .title = 同じモードの有効なエントリーストラテジー間の評価ランク（順序の小さい順）。最初にシグナルを出したものがトークンを取ります
 strategies-col-mode = モード
 strategies-col-status = 状態
 strategies-col-open = 保有中
 strategies-col-watching = 監視中
+strategies-col-kind = 種類
 strategies-col-rounds = ラウンド
 strategies-col-closed = 決済済み
 strategies-col-win-rate = 勝率
@@ -699,10 +702,10 @@ strategies-notice-trader-off = Auto Trader はオフです
 strategies-notice-waiting = コアサービスを待機中
 strategies-notice-monitors-off = エントリーとエグジットのモニターがオフです
 strategies-notice-start = Auto Trader を開始
-# $closed and $needed count closed paper rounds; $changed is a formatted date.
-strategies-readiness-progress = ペーパーラウンド { $closed }/{ $needed }
+# $closed and $needed count closed paper rounds; $check is the title of a readiness check.
+strategies-readiness-progress = { $closed }/{ $needed } ラウンド
 strategies-readiness-ready = ライブ移行可能
-strategies-readiness-since = ルール変更 { $changed }
+strategies-readiness-failing = 未達成: { $check }
 # $book is the trading mode of the other book; $count its open positions.
 strategies-open-other-book =
     { $count ->

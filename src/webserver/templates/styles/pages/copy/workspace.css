@@ -214,12 +214,20 @@
   }
 }
 
-/* The wallet profile's two columns. */
+/* Two sections of a dialog side by side: the wallet profile, and the arm gate's readiness
+   beside its exposure, which keeps the gate unscrolled at a laptop height. */
 .copy-split {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   align-items: start;
   gap: var(--spacing-md);
+}
+
+.copy-split > section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  min-width: 0;
 }
 
 .copy-readiness-foot {

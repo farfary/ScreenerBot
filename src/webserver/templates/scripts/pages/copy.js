@@ -12,8 +12,8 @@ import { paintHtml } from "../core/dom.js";
 import { requestManager } from "../core/request_manager.js";
 import { ConfirmationDialog } from "../ui/confirmation_dialog.js";
 import { COPY_HANDOFF_EVENT, takeCopyHandoff } from "../ui/copy_handoff.js";
+import { createPageDialogs } from "../ui/page_dialogs.js";
 import { createApi } from "./copy/api.js";
-import { createDialogs } from "./copy/dialogs.js";
 import { renderFigures, renderToolbar } from "./copy/summary.js";
 import { createTaskList } from "./copy/list.js";
 import { createWorkspace } from "./copy/workspace.js";
@@ -271,7 +271,7 @@ function createLifecycle() {
         openCompare,
         setProcessing,
       };
-      page.dialogs = createDialogs($, on);
+      page.dialogs = createPageDialogs($, on);
       page.list = createTaskList(page);
       page.workspace = createWorkspace(page);
       page.compare = createCompare(page);

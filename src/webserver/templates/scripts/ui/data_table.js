@@ -514,11 +514,14 @@ export class DataTable {
     // This is also the recovery path for a table first rendered inside a hidden
     // panel: it took no measurement then, so the moment the panel is unhidden and
     // the wrapper reports a real width, the column pass runs for the first time
-    // instead of waiting for whatever render happens next.
+    // instead of waiting for whatever render happens next. A fitted table refits
+    // once its container settles at a new width.
     if (typeof ResizeObserver === "function" && this.elements.wrapper) {
       this._wrapperResizeObserver = new ResizeObserver(() => {
         if (this.options.fitToContainer !== false && !this.state.hasAutoFitted) {
           this._sizeColumns();
+        } else if (this.options.fitToContainer !== false) {
+          this._scheduleContainerRefit();
         }
         this._updateStickyOffsets();
       });
@@ -1226,8 +1229,7 @@ export class DataTable {
       if (!td) return;
 
       const cellContent = this._renderCellContent(col, row);
-      const shouldClamp = this.options.uniformRowHeight && col.wrap !== false;
-      const newContent = shouldClamp
+      const newContent = this._clampsCell(col)
         ? `<div class="dt-cell-clamp">${cellContent}</div>`
         : cellContent;
 
@@ -1395,10 +1397,7 @@ export class DataTable {
         // Sticky markers for floating/pinned-left columns
         const sticky = this._stickyCellParts(index, floatingCount);
 
-        // Apply dt-cell-clamp for uniformRowHeight, but NOT for no-wrap columns
-        // no-wrap columns handle truncation via CSS (white-space: nowrap + text-overflow: ellipsis)
-        const shouldClamp = this.options.uniformRowHeight && col.wrap !== false;
-        const content = shouldClamp
+        const content = this._clampsCell(col)
           ? `<div class="dt-cell-clamp">${cellContent}</div>`
           : cellContent;
 
@@ -1668,6 +1667,16 @@ export class DataTable {
     }
 
     return "";
+  }
+
+  /**
+   * True when a cell of `col` is clamped to the uniform row height. A no-wrap column
+   * truncates through its own CSS (nowrap plus ellipsis), and the actions column is a
+   * row of buttons: clamping it blockifies the buttons, so the content floor no longer
+   * sees their width and the column cuts the first one off.
+   */
+  _clampsCell(col) {
+    return Boolean(this.options.uniformRowHeight) && col.wrap !== false && col.type !== "actions";
   }
 
   /** The action buttons a column shows for `row`, or null when it shows none. */
@@ -1948,6 +1957,13 @@ export class DataTable {
 
       if (canUpdateValuesInPlace) {
         this._updateTableBody(visibleRows);
+        // A never-cut value that grew in place (a row action that appeared under the
+        // cursor after its switch was clicked) still raises its column, as the full
+        // sizing pass would; after the fit this reads only whether such a cell overflows.
+        if (this._isLaidOut() && this.state.hasAutoFitted) {
+          this._measureContentFloors();
+          this._raiseColumnsToFloors();
+        }
         return;
       }
 
@@ -3729,6 +3745,8 @@ export class DataTable {
       this._wrapperResizeObserver.disconnect();
       this._wrapperResizeObserver = null;
     }
+    clearTimeout(this._containerRefitTimer);
+    this._containerRefitTimer = null;
 
     // Close any open header context menu and detach its document listeners
     this._closeHeaderColumnMenu();

@@ -80,4 +80,3 @@ common-range-label =
     .aria-label = النطاق الزمني
 common-check-passed = ناجح
 common-check-not-passed = غير ناجح
-common-arm-type-phrase = اكتب { $phrase } للتأكيد

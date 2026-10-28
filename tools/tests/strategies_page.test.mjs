@@ -381,6 +381,14 @@ test("a condition is added from the catalog, checked as it is edited and kept ou
 
   await page.click("#add-condition");
   assert.equal(await page.evaluate(() => document.activeElement?.id), "condition-search");
+  await page.keyboard.press("Escape");
+  await page.locator("#condition-catalog-modal").waitFor({ state: "hidden" });
+  assert.equal(
+    await page.evaluate(() => document.activeElement?.id),
+    "add-condition",
+    "Escape closes the catalog and returns the focus to its opener"
+  );
+  await page.click("#add-condition");
   assert.equal(await page.locator("#catalog-list .catalog-entry").count(), SCHEMAS.length);
   assert.equal(
     await page.locator("#catalog-list .catalog-entry:disabled").count(),
@@ -863,6 +871,7 @@ test("with no strategy the roster offers New Strategy", async () => {
     await action.waitFor();
     assert.equal((await action.textContent()).trim(), "New Strategy");
     assert.match(plain(await tab.textContent("#strategies-roster")), /No strategies yet/);
+    await tab.click(`#strategies-roster label:has(> input[data-seg-value="entry"])`);
     await action.click();
     await tab.locator("#create-strategy-modal").waitFor({ state: "visible" });
     assert.equal(
@@ -938,7 +947,7 @@ test("an exit strategy picks the entry strategies it manages and saves their ids
     "the Exit view preselects an exit strategy"
   );
   await page.click('#create-strategy-modal .type-card[data-type="EXIT"]');
-  await page.waitForSelector("#strategy-type-badge.exit");
+  await page.waitForSelector("#strategy-type-marker .strategy-type-badge.exit");
   assert.equal(await toggle.isVisible(), true, "a new exit strategy offers the binding");
   assert.equal(plain(await summary.textContent()), "All entry strategies");
 });

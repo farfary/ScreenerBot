@@ -255,7 +255,6 @@ copy-dialog-close =
 copy-editor-title-add = Adicionar carteira
 copy-editor-sub-add = Novas tarefas começam em Paper
 copy-arm-title = Armar cópia real
-copy-arm-sub = Swaps reais a partir da sua carteira
 copy-arm-keep-paper = Manter Paper
 copy-arm-confirm = Armar modo real
 copy-profile-title = Perfil da carteira

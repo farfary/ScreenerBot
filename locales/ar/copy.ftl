@@ -279,7 +279,6 @@ copy-dialog-close =
 copy-editor-title-add = إضافة محفظة
 copy-editor-sub-add = المهام الجديدة تبدأ في الوضع التجريبي
 copy-arm-title = تفعيل النسخ الحي
-copy-arm-sub = مبادلات حقيقية من محفظتك
 copy-arm-keep-paper = البقاء في التجريبي
 copy-arm-confirm = تفعيل التداول الحي
 copy-profile-title = ملف المحفظة

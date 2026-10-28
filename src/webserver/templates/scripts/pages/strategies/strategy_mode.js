@@ -5,16 +5,14 @@
 
 /*
  * Arming live shows the strategy's readiness from its paper rounds and asks for every
- * acknowledgement plus the exact confirmation phrase the API names; the request carries
- * that phrase, so the server applies the same gate.
+ * acknowledgement; the request carries the confirmation the readiness response names, so
+ * the server applies the same gate.
  */
 
 import { errorMessageOf } from "../../core/request_manager.js";
 import {
   ackList,
   pendingAcks,
-  phraseField,
-  phraseMatches,
   readinessList,
   runtimeBlocked,
   unavailableNote,
@@ -36,8 +34,8 @@ const isExit = (strategy) => strategy?.strategy_type === "EXIT" || strategy?.typ
 
 /**
  * The arm dialog's body for `readiness` (the readiness API response): the checks, what
- * happens to open paper rounds, then either the acknowledgements and the phrase field or
- * the reason live trading cannot run.
+ * happens to open paper rounds, then either the acknowledgements or the reason live
+ * trading cannot run.
  */
 export function armDialogBody(readiness, esc, { exit = false } = {}) {
   const checks = `<h5 class="arm-gate-title">${esc(
@@ -56,15 +54,16 @@ export function armDialogBody(readiness, esc, { exit = false } = {}) {
     ],
     esc
   );
-  return `${checks}${acks}${phraseField(readiness.live_confirmation, esc)}`;
+  return `${checks}${acks}`;
 }
 
-/** True when the dialog under `root` may arm live: runtime ready, all ticked, phrase typed. */
+/**
+ * True when the dialog under `root` may arm live: the runtime is ready, every
+ * acknowledgement is ticked and the API named the confirmation the request carries.
+ */
 export function armAllowed(root, readiness) {
   return (
-    !runtimeBlocked(readiness) &&
-    pendingAcks(root) === 0 &&
-    phraseMatches(root, readiness?.live_confirmation)
+    !runtimeBlocked(readiness) && pendingAcks(root) === 0 && Boolean(readiness?.live_confirmation)
   );
 }
 
@@ -120,6 +119,7 @@ export function createStrategyMode({ requestManager, ConfirmationDialog, Utils }
         ? I18n.t("strategies-mode-arm-lead-exit", { name: name(strategy) })
         : I18n.t("strategies-mode-arm-lead", { name: name(strategy) }),
       body: armDialogBody(readiness, esc, { exit: isExit(strategy) }),
+      size: "wide",
       confirmLabel: I18n.t("strategies-mode-arm"),
       variant: "danger",
       canConfirm: (element) => armAllowed(element, readiness),

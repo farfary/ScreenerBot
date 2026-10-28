@@ -245,7 +245,6 @@ copy-dialog-close =
 copy-editor-title-add = Cüzdan ekle
 copy-editor-sub-add = Yeni görevler Sanalda başlar
 copy-arm-title = Canlı kopyalamayı etkinleştir
-copy-arm-sub = Cüzdanınızdan gerçek takaslar
 copy-arm-keep-paper = Sanalda kal
 copy-arm-confirm = Canlıyı etkinleştir
 copy-profile-title = Cüzdan profili

@@ -4,9 +4,10 @@
 
 /**
  * The gate in front of arming paper work live, shared by copy tasks and strategies:
- * the readiness evidence from the paper book, the acknowledgements the user ticks, and
- * the confirmation phrase typed where one is asked for. Arm live stays disabled until
- * the runtime check passes, every acknowledgement is ticked and the phrase matches.
+ * the readiness evidence from the paper book and the acknowledgements the user ticks.
+ * Arm live stays disabled until the runtime check passes and every acknowledgement is
+ * ticked; the request then carries the confirmation the API named, so the server
+ * applies the same gate.
  */
 
 /** Readiness checks as the API sends them: each title and detail is a `UiText`. */
@@ -52,14 +53,3 @@ export function ackList(texts, esc) {
 /** The acknowledgements under `root` still unticked. */
 export const pendingAcks = (root) =>
   [...(root?.querySelectorAll("[data-ack]") || [])].filter((ack) => !ack.checked).length;
-
-/** The field the confirmation `phrase` is typed into. */
-export function phraseField(phrase, esc) {
-  return `<label class="arm-gate-phrase"><span>${esc(
-    I18n.t("common-arm-type-phrase", { phrase })
-  )}</span><input type="text" data-arm-phrase autocomplete="off" spellcheck="false" /></label>`;
-}
-
-/** True when the phrase typed under `root` is exactly `phrase`. */
-export const phraseMatches = (root, phrase) =>
-  Boolean(phrase) && root?.querySelector("[data-arm-phrase]")?.value === phrase;

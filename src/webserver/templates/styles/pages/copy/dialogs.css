@@ -14,12 +14,10 @@
   margin-block-start: 5vh;
 }
 
-.copy-dialog .copy-arm-panel {
-  max-width: 620px;
-}
-
+/* The arm gate and the settings are dense sheets: they take the width before they scroll. */
+.copy-dialog .copy-arm-panel,
 .copy-dialog .copy-settings-panel {
-  max-width: 620px;
+  max-width: 900px;
 }
 
 .copy-dialog .copy-profile-panel {
@@ -153,6 +151,16 @@
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
   gap: var(--spacing-md);
+}
+
+/* Three settings a row, the shared paper-delay note across its own row between the latency
+   and the paper settings. */
+.copy-settings-panel .copy-fields {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.copy-settings-panel .copy-fields > .copy-note {
+  grid-column: 1 / -1;
 }
 
 .copy-field {
@@ -292,11 +300,6 @@
   color: var(--text-secondary);
 }
 
-.copy-arm-lead {
-  margin: 0;
-  color: var(--text-primary);
-}
-
 /* The form spans body and footer so Save stays pinned below the scrolling fields. */
 .copy-settings-form {
   display: flex;
@@ -306,7 +309,8 @@
 }
 
 @media (width <= 720px) {
-  .copy-rule-cards {
+  .copy-rule-cards,
+  .copy-settings-panel .copy-fields {
     grid-template-columns: minmax(0, 1fr);
   }
 }

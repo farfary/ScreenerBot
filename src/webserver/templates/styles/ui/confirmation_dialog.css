@@ -36,8 +36,11 @@
  */
   left: 50%;
   transform: translate(-50%, -50%) scale(0.9);
+  display: flex;
+  flex-direction: column;
   width: 90%;
   max-width: 440px;
+  max-height: 90vh;
   background: rgb(18, 24, 39, 0.95);
   backdrop-filter: blur(20px);
   border: 1px solid rgb(255, 255, 255, 0.1);
@@ -63,11 +66,18 @@
   max-width: 560px;
 }
 
+/* A body with a checklist, or one that would scroll at the default width: the dialog
+   grows sideways before its body scrolls. */
+.confirmation-dialog--wide {
+  max-width: 620px;
+}
+
 /* ============================================
    HEADER
    ============================================ */
 
 .confirmation-dialog__header {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -108,7 +118,12 @@
    CONTENT
    ============================================ */
 
+/* The content takes what the header and footer leave of the window's height; only the
+   caller's body scrolls, and only once the dialog reaches that height. */
 .confirmation-dialog__content {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
   margin-bottom: 24px;
 }
 
@@ -119,13 +134,13 @@
   line-height: 1.6;
 }
 
-/* Caller-supplied content below the message, such as a checklist and a typed phrase. */
+/* Caller-supplied content below the message, such as a checklist and acknowledgements. */
 .confirmation-dialog__body {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-md);
+  min-height: 0;
   margin-top: var(--spacing-md);
-  max-height: 50vh;
   overflow-y: auto;
   text-align: start;
 }
@@ -162,6 +177,7 @@
    ============================================ */
 
 .confirmation-dialog__footer {
+  flex-shrink: 0;
   display: flex;
   gap: 12px;
   justify-content: flex-end;

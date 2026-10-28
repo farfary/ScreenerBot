@@ -249,7 +249,6 @@ copy-dialog-close =
 copy-editor-title-add = Tambah dompet
 copy-editor-sub-add = Tugas baru dimulai di Paper
 copy-arm-title = Aktifkan live copying
-copy-arm-sub = Swap sungguhan dari dompet Anda
 copy-arm-keep-paper = Tetap di Paper
 copy-arm-confirm = Aktifkan live
 copy-profile-title = Profil dompet

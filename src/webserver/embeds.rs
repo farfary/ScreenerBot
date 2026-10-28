@@ -404,6 +404,7 @@ pub const TRADE_REASON_UI: &str = include_str!("templates/scripts/ui/trade_reaso
 pub const TRADING_MODE_UI: &str = include_str!("templates/scripts/ui/trading_mode.js");
 pub const ARM_LIVE_GATE_UI: &str = include_str!("templates/scripts/ui/arm_live_gate.js");
 pub const STRATEGY_TYPE_UI: &str = include_str!("templates/scripts/ui/strategy_type.js");
+pub const PAGE_DIALOGS_UI: &str = include_str!("templates/scripts/ui/page_dialogs.js");
 pub const POSITION_MANAGEMENT_UI: &str =
     include_str!("templates/scripts/ui/position_management.js");
 pub const POSITION_STATUS_UI: &str = include_str!("templates/scripts/ui/position_status.js");
@@ -546,7 +547,6 @@ pub const COPY_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/copy.js
 pub const COPY_API_JS: &str = include_str!("templates/scripts/pages/copy/api.js");
 pub const COPY_FORMAT_JS: &str = include_str!("templates/scripts/pages/copy/format.js");
 pub const COPY_CHARTS_JS: &str = include_str!("templates/scripts/pages/copy/charts.js");
-pub const COPY_DIALOGS_JS: &str = include_str!("templates/scripts/pages/copy/dialogs.js");
 pub const COPY_TOKENS_JS: &str = include_str!("templates/scripts/pages/copy/tokens.js");
 pub const COPY_SUMMARY_JS: &str = include_str!("templates/scripts/pages/copy/summary.js");
 pub const COPY_LIST_JS: &str = include_str!("templates/scripts/pages/copy/list.js");

@@ -625,15 +625,18 @@ strategies-readiness-runtime-ok = Thiết lập và các chốt an toàn cho ph�
 
 strategies-back = Tất cả chiến lược
 strategies-view-kind = Loại chiến lược
+strategies-view-all = Tất cả
+strategies-search-placeholder = Tìm chiến lược...
 strategies-unnamed = Chiến lược chưa đặt tên
 strategies-col-on = Bật
 strategies-col-strategy = Chiến lược
-strategies-col-order = Thứ tự
-    .title = Thứ tự đánh giá giữa các chiến lược vào lệnh đang bật của cùng một chế độ; chiến lược báo tín hiệu trước sẽ nhận token
+strategies-col-rank = Hạng
+    .title = Hạng đánh giá giữa các chiến lược vào lệnh đang bật của cùng một chế độ, Thứ tự thấp nhất trước; chiến lược báo tín hiệu trước sẽ nhận token
 strategies-col-mode = Chế độ
 strategies-col-status = Trạng thái
 strategies-col-open = Đang mở
 strategies-col-watching = Đang theo dõi
+strategies-col-kind = Loại
 strategies-col-rounds = Vòng
 strategies-col-closed = Đã đóng
 strategies-col-win-rate = Tỷ lệ thắng
@@ -655,10 +658,10 @@ strategies-notice-trader-off = Auto Trader đang tắt
 strategies-notice-waiting = Đang chờ các dịch vụ lõi
 strategies-notice-monitors-off = Bộ giám sát vào và thoát lệnh đều tắt
 strategies-notice-start = Khởi động Auto Trader
-# $closed and $needed count closed paper rounds; $changed is a formatted date.
-strategies-readiness-progress = Vòng thử nghiệm { $closed }/{ $needed }
+# $closed and $needed count closed paper rounds; $check is the title of a readiness check.
+strategies-readiness-progress = { $closed }/{ $needed } vòng
 strategies-readiness-ready = Sẵn sàng giao dịch thật
-strategies-readiness-since = Quy tắc đổi { $changed }
+strategies-readiness-failing = Chưa đạt: { $check }
 # $book is the trading mode of the other book; $count its open positions.
 strategies-open-other-book =
     { $count ->

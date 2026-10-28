@@ -2,12 +2,13 @@
  * SPDX-License-Identifier: BUSL-1.1 */
 
 /* The gate in front of arming paper work live - see scripts/ui/arm_live_gate.js: the
-   readiness checklist, the acknowledgements and the confirmation phrase field. */
+   readiness checklist and the acknowledgements. */
 
+/* The checks fill two columns wherever the dialog has the room, one otherwise. */
 .arm-gate-checks {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-sm);
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  gap: var(--spacing-sm) var(--spacing-md);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -37,7 +38,10 @@
   font-size: var(--font-size-sm);
 }
 
+/* Its own line box: inline, a two-line detail took the title's taller line height. */
 .arm-gate-check small {
+  display: block;
+  line-height: 1.4;
   font-size: var(--font-size-xs);
   color: var(--text-muted);
 }
@@ -54,17 +58,6 @@
   gap: var(--spacing-sm);
   font-size: var(--font-size-sm);
   cursor: pointer;
-}
-
-.arm-gate-phrase {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-xs);
-  font-size: var(--font-size-sm);
-}
-
-.arm-gate-phrase input {
-  font-family: var(--font-data);
 }
 
 .arm-gate-title {

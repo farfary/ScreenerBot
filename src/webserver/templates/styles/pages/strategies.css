@@ -35,7 +35,6 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
-  padding: var(--spacing-md);
 }
 
 .strategies-roster[hidden] {
@@ -48,7 +47,9 @@
   color: var(--text-primary);
 }
 
-/* A second line under a cell's value: a description, readiness or the other book. */
+/* A second line under a cell's value: a description, readiness or the other book. Rows
+   are two lines high, so neither line wraps: a name or description that does not fit
+   ends in an ellipsis, and a short detail sizes its column. */
 .strategy-roster-description,
 .strategy-roster-detail {
   display: block;
@@ -56,10 +57,23 @@
   color: var(--text-secondary);
 }
 
+.strategy-roster-name,
 .strategy-roster-description {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.strategy-roster-detail {
+  white-space: nowrap;
+}
+
+.strategy-roster-readiness[data-readiness="ready"] {
+  color: var(--semantic-success-text);
+}
+
+.strategy-roster-readiness[data-readiness="blocked"] {
+  color: var(--semantic-warning-text);
 }
 
 @container strategies-roster (width < 900px) {

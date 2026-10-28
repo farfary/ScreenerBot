@@ -78,17 +78,21 @@ export function categoriesOf(entries) {
   return [...found.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
+/**
+ * The catalog dialog of the strategies page; `dialogs` (ui/page_dialogs.js) owns its Escape,
+ * backdrop, close button and the focus it returns.
+ */
 export function createConditionCatalog({
   conditionSchemas,
   $,
   Utils,
   addTrackedListener,
+  dialogs,
 }) {
   const escape = (text) => Utils.escapeHtml(String(text ?? ""));
   let entries = [];
   let category = null;
   let onPick = null;
-  let opener = null;
 
   /** One condition as a button: glyph, name, description, what it reads and why it is off. */
   function renderEntry(entry) {
@@ -136,11 +140,7 @@ export function createConditionCatalog({
   }
 
   function close() {
-    const modal = $("#condition-catalog-modal");
-    if (modal) modal.hidden = true;
-    onPick = null;
-    opener?.focus?.();
-    opener = null;
+    dialogs.hide("condition-catalog-modal");
   }
 
   function pick(type) {
@@ -157,29 +157,20 @@ export function createConditionCatalog({
     entries = catalogEntries(conditionSchemas, strategyType);
     category = null;
     onPick = handler;
-    opener = globalThis.document?.activeElement ?? null;
     const search = $("#condition-search");
     if (search) search.value = "";
     render();
-    const modal = $("#condition-catalog-modal");
-    if (modal) modal.hidden = false;
+    dialogs.show("condition-catalog-modal", {
+      onClose: () => {
+        onPick = null;
+      },
+    });
     search?.focus();
   }
 
   /** Wire the dialog once; its list and rail are redrawn on every search and category. */
   function bind() {
-    const modal = $("#condition-catalog-modal");
     const search = $("#condition-search");
-    addTrackedListener($("#close-condition-catalog"), "click", close);
-    addTrackedListener(modal, "click", (event) => {
-      if (event.target === modal) close();
-    });
-    addTrackedListener(modal, "keydown", (event) => {
-      if (event.key === "Escape" && !modal.hidden) {
-        event.stopPropagation();
-        close();
-      }
-    });
     addTrackedListener(search, "input", render);
     addTrackedListener(search, "keydown", (event) => {
       if (event.key !== "Enter") return;

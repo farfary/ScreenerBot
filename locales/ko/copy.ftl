@@ -251,7 +251,6 @@ copy-dialog-close =
 copy-editor-title-add = 지갑 추가
 copy-editor-sub-add = 새 작업은 모의 거래로 시작합니다
 copy-arm-title = 실거래 카피 활성화
-copy-arm-sub = 내 지갑으로 실제 스왑 실행
 copy-arm-keep-paper = 모의 유지
 copy-arm-confirm = 실거래 활성화
 copy-profile-title = 지갑 프로필

@@ -16,7 +16,8 @@
  * - No rule tab uses a dollar-sign glyph.
  * - Entry Sizes, a list of SOL amounts, matches the number fields beside it.
  * - A roster row shows whether its strategy is on only through its switch, named by the
- *   strategy, and no cell repeats the kind its view already names.
+ *   strategy. All states each row's kind once, in its Kind column; a kind view, which
+ *   already names the kind, states it in no cell.
  * - An example figure (a SOL price or a percent) never ends its fraction in a zero, so
  *   one strip does not mix "+10%" with "+32.0%" or print "1.0000 SOL".
  * - A config card never draws more columns than it has field groups, so two lists
@@ -142,22 +143,34 @@ test("Entry Sizes, a list of amounts, uses the face and weight of the number fie
 test("a roster row states whether its strategy is on once, through its named switch", async () => {
   await page.click('#subTabsContainer [data-tab-id="strategies"]');
   await page.locator("#strategies-roster tbody tr[data-row-id]").first().waitFor();
-  const rows = await page.$$eval("#strategies-roster tbody tr[data-row-id]", (items) =>
-    items.map((item) => ({
-      name: item.querySelector(".strategy-roster-name")?.textContent.trim(),
-      toggles: item.querySelectorAll('input[type="checkbox"]').length,
-      label: item.querySelector('input[type="checkbox"]')?.getAttribute("aria-label"),
-      words: [...item.querySelectorAll("td")]
-        .map((cell) => cell.textContent.trim())
-        .filter((text) => /^(Enabled|Disabled|Active|Inactive|Entry|Exit)$/.test(text)),
-    }))
-  );
-  assert.ok(rows.length > 0, "roster rows render");
-  for (const row of rows) {
+  const rowsOfView = () =>
+    page.$$eval("#strategies-roster tbody tr[data-row-id]", (items) =>
+      items.map((item) => {
+        const texts = [...item.querySelectorAll("td")].map((cell) => cell.textContent.trim());
+        return {
+          name: item.querySelector(".strategy-roster-name")?.textContent.trim(),
+          toggles: item.querySelectorAll('input[type="checkbox"]').length,
+          label: item.querySelector('input[type="checkbox"]')?.getAttribute("aria-label"),
+          states: texts.filter((text) => /^(Enabled|Disabled|Active|Inactive)$/.test(text)),
+          kinds: texts.filter((text) => /^(Entry|Exit)$/.test(text)),
+        };
+      })
+    );
+  const all = await rowsOfView();
+  assert.ok(all.length > 0, "roster rows render");
+  for (const row of all) {
     assert.equal(row.toggles, 1, `${row.name}: one switch`);
     assert.equal(row.label, row.name, `${row.name}: the switch is named by the strategy`);
-    assert.deepEqual(row.words, [], `${row.name}: no state word and no kind`);
+    assert.deepEqual(row.states, [], `${row.name}: no state word`);
+    assert.equal(row.kinds.length, 1, `${row.name}: All states the kind once`);
   }
+
+  await page.click('#strategies-roster label:has(> input[data-seg-value="entry"])');
+  await page.locator('#strategies-roster thead th[data-column-id="kind"]').waitFor({ state: "detached" });
+  for (const row of await rowsOfView()) {
+    assert.deepEqual(row.kinds, [], `${row.name}: the Entry view names the kind, no cell repeats it`);
+  }
+  await page.click('#strategies-roster label:has(> input[data-seg-value="all"])');
 });
 
 test("a config card draws no more columns than it has field groups", async () => {

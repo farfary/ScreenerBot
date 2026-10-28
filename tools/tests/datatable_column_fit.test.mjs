@@ -14,6 +14,9 @@
  * collapsed for the rest of its life. The Wallets page reproduced it on every
  * reload with a non-default tab restored.
  *
+ * A render under the pointer updates values in place and skips the full pass, so
+ * it still raises a column whose never-cut value grew there.
+ *
  * Run with `npm run test:js`.
  */
 
@@ -88,6 +91,19 @@ test("a deferred fit is recovered when the wrapper gets a real width", async () 
     body,
     /!this\.state\.hasAutoFitted[\s\S]*this\._sizeColumns\(\)/,
     "the observer must complete a pending fit"
+  );
+});
+
+test("an update in place under the pointer still raises a never-cut column", async () => {
+  const source = await readFile(TABLE, "utf8");
+  const start = source.indexOf("if (canUpdateValuesInPlace) {");
+  assert.notEqual(start, -1, "the in-place update branch is missing");
+  const body = source.slice(start, source.indexOf("return;", start));
+
+  assert.match(
+    body,
+    /this\._measureContentFloors\(\);\s*this\._raiseColumnsToFloors\(\);/,
+    "a row action that appears under the cursor must widen its column"
   );
 });
 

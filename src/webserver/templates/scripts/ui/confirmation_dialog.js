@@ -37,6 +37,8 @@ class ConfirmationDialog {
    * @param {string} [config.checkbox] - Optional checkbox text (e.g., "Don't ask again")
    * @param {string} [config.body] - Trusted markup shown below the message; the caller
    *   escapes every value it interpolates
+   * @param {string} [config.size] - `"wide"` opens the dialog at its wide step, for a body
+   *   that carries a checklist; any body that would scroll at the default width widens too
    * @param {Function} [config.canConfirm] - `(dialogElement) => boolean`; while it returns
    *   false the confirm action is disabled. Re-read on every input in the dialog.
    * @returns {Promise<{confirmed: boolean, alternate: boolean, checkboxChecked: boolean}>}
@@ -68,6 +70,7 @@ class ConfirmationDialog {
       confirmTone: config.confirmTone === "primary" ? "primary" : null,
       checkbox: config.checkbox || null,
       body: config.body || "",
+      wide: config.size === "wide",
       canConfirm: typeof config.canConfirm === "function" ? config.canConfirm : null,
     };
     this.resolver = resolver;
@@ -86,7 +89,7 @@ class ConfirmationDialog {
     this.element = document.createElement("div");
     this.element.className = `confirmation-dialog confirmation-dialog--${this.config.variant}${
       this.config.alternateLabel ? " confirmation-dialog--with-alternate" : ""
-    }`;
+    }${this.config.wide ? " confirmation-dialog--wide" : ""}`;
     this.element.setAttribute("role", "dialog");
     this.element.setAttribute("aria-modal", "true");
     this.element.setAttribute("aria-labelledby", "confirmation-dialog-title");
@@ -169,6 +172,7 @@ class ConfirmationDialog {
     // Add to DOM
     document.body.appendChild(this.backdrop);
     document.body.appendChild(this.element);
+    this._fitWidth();
     this._fitFooter();
 
     // Trigger animation
@@ -177,16 +181,28 @@ class ConfirmationDialog {
       this.element.classList.add("confirmation-dialog--visible");
     });
 
-    // Focus the confirm button, or the first field while confirming is gated on input.
+    // Focus the confirm button, or the first field while confirming is gated on input. The
+    // body stays at its top: a field below the fold must not scroll away what it confirms.
     setTimeout(() => {
       const target = this.config.canConfirm
         ? this.element.querySelector(".confirmation-dialog__body input")
         : this.element.querySelector('[data-action="confirm"]');
-      target?.focus();
+      target?.focus({ preventScroll: true });
     }, 100);
 
     // Trap focus within dialog
     this._trapFocus();
+  }
+
+  /**
+   * Widen a dialog whose body would scroll at the default width: the window has room
+   * beside the dialog long before it has none below it.
+   */
+  _fitWidth() {
+    const body = this.element.querySelector(".confirmation-dialog__body");
+    if (body && body.scrollHeight > body.clientHeight + 1) {
+      this.element.classList.add("confirmation-dialog--wide");
+    }
   }
 
   /**

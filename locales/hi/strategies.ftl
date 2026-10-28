@@ -641,15 +641,18 @@ strategies-readiness-runtime-ok = सेटअप और सुरक्षा �
 
 strategies-back = सभी स्ट्रैटेजी
 strategies-view-kind = स्ट्रैटेजी का प्रकार
+strategies-view-all = सभी
+strategies-search-placeholder = स्ट्रैटेजी खोजें...
 strategies-unnamed = बिना नाम की स्ट्रैटेजी
 strategies-col-on = चालू
 strategies-col-strategy = स्ट्रैटेजी
-strategies-col-order = क्रम
-    .title = एक मोड की चालू एंट्री स्ट्रैटेजी के बीच मूल्यांकन क्रम; पहले सिग्नल देने वाली स्ट्रैटेजी टोकन लेती है
+strategies-col-rank = रैंक
+    .title = एक मोड की चालू एंट्री स्ट्रैटेजी के बीच मूल्यांकन रैंक, सबसे कम क्रम पहले; पहले सिग्नल देने वाली स्ट्रैटेजी टोकन लेती है
 strategies-col-mode = मोड
 strategies-col-status = स्थिति
 strategies-col-open = खुली
 strategies-col-watching = निगरानी में
+strategies-col-kind = प्रकार
 strategies-col-rounds = राउंड
 strategies-col-closed = बंद
 strategies-col-win-rate = जीत दर
@@ -671,10 +674,10 @@ strategies-notice-trader-off = Auto Trader बंद है
 strategies-notice-waiting = मुख्य सेवाओं की प्रतीक्षा
 strategies-notice-monitors-off = एंट्री और एग्ज़िट मॉनिटर बंद हैं
 strategies-notice-start = Auto Trader शुरू करें
-# $closed and $needed count closed paper rounds; $changed is a formatted date.
-strategies-readiness-progress = पेपर राउंड { $closed }/{ $needed }
+# $closed and $needed count closed paper rounds; $check is the title of a readiness check.
+strategies-readiness-progress = { $closed }/{ $needed } राउंड
 strategies-readiness-ready = लाइव के लिए तैयार
-strategies-readiness-since = नियम बदले { $changed }
+strategies-readiness-failing = पूरा नहीं: { $check }
 # $book is the trading mode of the other book; $count its open positions.
 strategies-open-other-book =
     { $count ->

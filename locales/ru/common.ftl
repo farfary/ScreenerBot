@@ -80,4 +80,3 @@ common-range-label =
     .aria-label = Период
 common-check-passed = пройдена
 common-check-not-passed = не пройдена
-common-arm-type-phrase = Введите { $phrase } для подтверждения

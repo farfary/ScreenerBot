@@ -279,7 +279,6 @@ copy-dialog-close =
 copy-editor-title-add = Добавить кошелёк
 copy-editor-sub-add = Новые задачи начинаются в виртуальном режиме
 copy-arm-title = Включение боевого копирования
-copy-arm-sub = Реальные свопы с вашего кошелька
 copy-arm-keep-paper = Остаться в виртуальном режиме
 copy-arm-confirm = Включить боевой режим
 copy-profile-title = Профиль кошелька

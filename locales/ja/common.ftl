@@ -80,4 +80,3 @@ common-range-label =
     .aria-label = 期間
 common-check-passed = 合格
 common-check-not-passed = 不合格
-common-arm-type-phrase = 確認のため { $phrase } と入力してください

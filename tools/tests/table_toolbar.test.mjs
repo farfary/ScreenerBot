@@ -118,6 +118,23 @@ test("renders an explicit query row without changing control semantics", () => {
   assert.doesNotMatch(html, /data-collapsible/);
 });
 
+test("only a button with an icon sheds its label in a narrow bar", () => {
+  const html = new TableToolbarView({
+    settings: false,
+    buttons: [
+      { id: "with-icon", label: "New Strategy", icon: "icon-plus" },
+      { id: "text-only", label: "Start Auto Trader" },
+    ],
+  }).render();
+  const classes = (id) =>
+    new RegExp(`<button[^>]*class="([^"]*)"[^>]*data-btn-id="${id}"`).exec(html)?.[1] ??
+    new RegExp(`<button[^>]*data-btn-id="${id}"[^>]*class="([^"]*)"`).exec(html)?.[1];
+
+  assert.match(classes("with-icon") ?? "", /table-toolbar-btn--collapsible/);
+  assert.ok(classes("text-only"), "the text-only button renders");
+  assert.doesNotMatch(classes("text-only"), /table-toolbar-btn--collapsible/);
+});
+
 test("a neutral toolbar button shares the surface of the toolbar's select triggers", () => {
   const background = (path, subject) =>
     rulesIn(readFileSync(`${STYLES_ROOT}/${path}`, "utf8"))

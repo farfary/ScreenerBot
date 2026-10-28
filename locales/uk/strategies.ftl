@@ -699,15 +699,18 @@ strategies-readiness-runtime-ok = Налаштування й запобіжни
 
 strategies-back = Усі стратегії
 strategies-view-kind = Тип стратегії
+strategies-view-all = Усі
+strategies-search-placeholder = Пошук стратегій...
 strategies-unnamed = Стратегія без назви
 strategies-col-on = Увімк.
 strategies-col-strategy = Стратегія
-strategies-col-order = Порядок
-    .title = Порядок обчислення серед увімкнених стратегій входу одного режиму; перша із сигналом забирає токен
+strategies-col-rank = Ранг
+    .title = Ранг обчислення серед увімкнених стратегій входу одного режиму, спершу менший порядок; перша із сигналом забирає токен
 strategies-col-mode = Режим
 strategies-col-status = Статус
 strategies-col-open = Відкрито
 strategies-col-watching = Під наглядом
+strategies-col-kind = Тип
 strategies-col-rounds = Раунди
 strategies-col-closed = Закрито
 strategies-col-win-rate = Частка прибуткових
@@ -729,10 +732,10 @@ strategies-notice-trader-off = Auto Trader вимкнено
 strategies-notice-waiting = Очікування основних сервісів
 strategies-notice-monitors-off = Монітори входів і виходів вимкнено
 strategies-notice-start = Запустити Auto Trader
-# $closed and $needed count closed paper rounds; $changed is a formatted date.
-strategies-readiness-progress = Віртуальні раунди { $closed }/{ $needed }
+# $closed and $needed count closed paper rounds; $check is the title of a readiness check.
+strategies-readiness-progress = Раунди: { $closed }/{ $needed }
 strategies-readiness-ready = Готова до реальної торгівлі
-strategies-readiness-since = Правила змінено { $changed }
+strategies-readiness-failing = Не виконано: { $check }
 # $book is the trading mode of the other book; $count its open positions.
 strategies-open-other-book =
     { $count ->

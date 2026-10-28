@@ -244,6 +244,14 @@
     "zero" 1;
 }
 
+/* A sentence value (a state, a list of names) reads in the interface face; the data
+   face and tabular figures are for numbers. */
+.table-toolbar-chip[data-format="text"] .table-toolbar-chip__value {
+  font-family: inherit;
+  font-weight: 500;
+  font-feature-settings: normal;
+}
+
 .table-toolbar-chip[data-variant="success"] .table-toolbar-chip__value {
   color: var(--semantic-success-text);
 }

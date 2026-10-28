@@ -111,14 +111,17 @@ export function createArmGate(page) {
           ],
           esc
         );
-    return `<p class="copy-arm-lead">${esc(I18n.t("copy-arm-lead", { name: taskName(ws) }))}</p>
-      <h4>${esc(I18n.t("copy-arm-readiness-title"))}</h4>${readinessList(ws.readiness?.checks, esc)}
-      <h4>${esc(I18n.t("copy-arm-exposure-title"))}</h4><dl class="copy-defs">${exposure}</dl>${shared}
+    return `<div class="copy-split">
+        <section><h4>${esc(I18n.t("copy-arm-readiness-title"))}</h4>${readinessList(ws.readiness?.checks, esc)}</section>
+        <section><h4>${esc(I18n.t("copy-arm-exposure-title"))}</h4><dl class="copy-defs">${exposure}</dl></section>
+      </div>${shared}
       ${acks}`;
   }
 
   function open(ws) {
     task = ws;
+    const sub = $("#copy-arm-sub");
+    if (sub) sub.textContent = I18n.t("copy-arm-lead", { name: taskName(ws) });
     const error = $("#copy-arm-error");
     if (error) error.textContent = "";
     paint($("#copy-arm-body"), body(ws));

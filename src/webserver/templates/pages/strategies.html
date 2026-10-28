@@ -16,9 +16,8 @@
           <i class="icon-arrow-left" aria-hidden="true"></i>
           <span class="editor-action-label" data-l10n-id="strategies-back"></span>
         </button>
-        <span class="strategy-type-badge entry" id="strategy-type-badge">
-          <i class="icon-trending-up"></i> <span data-l10n-id="strategies-type-entry"></span>
-        </span>
+        <span class="editor-identity-marker" id="strategy-type-marker"></span>
+        <span class="editor-identity-marker" id="strategy-mode-marker" hidden></span>
         <input
           type="text"
           id="strategy-name"
@@ -154,7 +153,7 @@
     >
       <div class="modal-header">
         <h3 id="condition-catalog-title"><i class="icon-puzzle"></i> <span data-l10n-id="strategies-add-condition"></span></h3>
-        <button type="button" class="modal-close" id="close-condition-catalog" data-l10n-id="strategies-modal-close">
+        <button type="button" class="modal-close" id="close-condition-catalog" data-dialog-close data-l10n-id="strategies-modal-close">
           <i class="icon-x"></i>
         </button>
       </div>
@@ -179,10 +178,10 @@
 
   <!-- Create Strategy Type Selection Modal -->
   <div class="modal-overlay create-strategy-modal" id="create-strategy-modal" hidden>
-    <div class="modal-dialog modal-sm">
+    <div class="modal-dialog modal-sm" role="dialog" aria-modal="true" aria-labelledby="create-strategy-title">
       <div class="modal-header">
-        <h3><i class="icon-plus"></i> <span data-l10n-id="strategies-create-title"></span></h3>
-        <button type="button" class="modal-close" id="create-strategy-close" data-l10n-id="strategies-modal-close">
+        <h3 id="create-strategy-title"><i class="icon-plus"></i> <span data-l10n-id="strategies-create-title"></span></h3>
+        <button type="button" class="modal-close" id="create-strategy-close" data-dialog-close data-l10n-id="strategies-modal-close">
           <i class="icon-x"></i>
         </button>
       </div>
@@ -190,19 +189,19 @@
         <p class="modal-desc" data-l10n-id="strategies-create-prompt"></p>
         <div class="strategy-type-cards">
           <button type="button" class="type-card" data-type="ENTRY">
-            <span class="type-icon"><i class="icon-trending-up"></i></span>
+            <span class="type-icon"><i class="icon-log-in" aria-hidden="true"></i></span>
             <span class="type-name" data-l10n-id="strategies-create-entry-name"></span>
             <span class="type-desc" data-l10n-id="strategies-create-entry-description"></span>
           </button>
           <button type="button" class="type-card" data-type="EXIT">
-            <span class="type-icon"><i class="icon-trending-down"></i></span>
+            <span class="type-icon"><i class="icon-log-out" aria-hidden="true"></i></span>
             <span class="type-name" data-l10n-id="strategies-create-exit-name"></span>
             <span class="type-desc" data-l10n-id="strategies-create-exit-description"></span>
           </button>
         </div>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" id="cancel-create-strategy" data-l10n-id="common-action-cancel"></button>
+        <button type="button" class="btn btn-secondary" id="cancel-create-strategy" data-dialog-close data-l10n-id="common-action-cancel"></button>
       </div>
     </div>
   </div>

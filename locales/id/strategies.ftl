@@ -627,15 +627,18 @@ strategies-readiness-runtime-ok = Penyiapan dan gerbang keamanan mengizinkan tra
 
 strategies-back = Semua strategi
 strategies-view-kind = Jenis strategi
+strategies-view-all = Semua
+strategies-search-placeholder = Cari strategi...
 strategies-unnamed = Strategi tanpa nama
 strategies-col-on = Aktif
 strategies-col-strategy = Strategi
-strategies-col-order = Urutan
-    .title = Urutan evaluasi di antara strategi entry aktif dalam satu mode; yang pertama memberi sinyal mengambil token
+strategies-col-rank = Peringkat
+    .title = Peringkat evaluasi di antara strategi entry aktif dalam satu mode, Urutan terendah lebih dulu; yang pertama memberi sinyal mengambil token
 strategies-col-mode = Mode
 strategies-col-status = Status
 strategies-col-open = Terbuka
 strategies-col-watching = Dipantau
+strategies-col-kind = Jenis
 strategies-col-rounds = Putaran
 strategies-col-closed = Ditutup
 strategies-col-win-rate = Rasio menang
@@ -657,10 +660,10 @@ strategies-notice-trader-off = Auto Trader mati
 strategies-notice-waiting = Menunggu layanan inti
 strategies-notice-monitors-off = Monitor entry dan exit mati
 strategies-notice-start = Mulai Auto Trader
-# $closed and $needed count closed paper rounds; $changed is a formatted date.
-strategies-readiness-progress = Putaran paper { $closed }/{ $needed }
+# $closed and $needed count closed paper rounds; $check is the title of a readiness check.
+strategies-readiness-progress = { $closed }/{ $needed } putaran
 strategies-readiness-ready = Siap untuk live
-strategies-readiness-since = Aturan diubah { $changed }
+strategies-readiness-failing = Belum terpenuhi: { $check }
 # $book is the trading mode of the other book; $count its open positions.
 strategies-open-other-book =
     { $count ->

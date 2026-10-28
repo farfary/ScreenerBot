@@ -669,15 +669,18 @@ strategies-readiness-runtime-ok = 설정과 안전 게이트가 실거래를 허
 
 strategies-back = 모든 전략
 strategies-view-kind = 전략 종류
+strategies-view-all = 전체
+strategies-search-placeholder = 전략 검색...
 strategies-unnamed = 이름 없는 전략
 strategies-col-on = 켜짐
 strategies-col-strategy = 전략
-strategies-col-order = 순서
-    .title = 같은 모드의 활성 진입 전략 사이의 평가 순서이며, 먼저 신호를 낸 전략이 토큰을 가져갑니다
+strategies-col-rank = 순위
+    .title = 같은 모드의 활성 진입 전략 사이의 평가 순위(순서 값이 낮은 순)이며, 먼저 신호를 낸 전략이 토큰을 가져갑니다
 strategies-col-mode = 모드
 strategies-col-status = 상태
 strategies-col-open = 보유
 strategies-col-watching = 감시 중
+strategies-col-kind = 종류
 strategies-col-rounds = 라운드
 strategies-col-closed = 종료
 strategies-col-win-rate = 승률
@@ -699,10 +702,10 @@ strategies-notice-trader-off = Auto Trader가 꺼져 있습니다
 strategies-notice-waiting = 핵심 서비스 대기 중
 strategies-notice-monitors-off = 진입 및 청산 모니터가 꺼져 있습니다
 strategies-notice-start = Auto Trader 시작
-# $closed and $needed count closed paper rounds; $changed is a formatted date.
-strategies-readiness-progress = 모의 라운드 { $closed }/{ $needed }
+# $closed and $needed count closed paper rounds; $check is the title of a readiness check.
+strategies-readiness-progress = { $closed }/{ $needed } 라운드
 strategies-readiness-ready = 실거래 전환 가능
-strategies-readiness-since = 규칙 변경 { $changed }
+strategies-readiness-failing = 미충족: { $check }
 # $book is the trading mode of the other book; $count its open positions.
 strategies-open-other-book =
     { $count ->

@@ -80,4 +80,3 @@ common-range-label =
     .aria-label = بازه تاریخ
 common-check-passed = قبول
 common-check-not-passed = مردود
-common-arm-type-phrase = برای تأیید { $phrase } را بنویسید

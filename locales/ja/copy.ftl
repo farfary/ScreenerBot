@@ -249,7 +249,6 @@ copy-dialog-close =
 copy-editor-title-add = ウォレットを追加
 copy-editor-sub-add = 新しいタスクはペーパーで開始します
 copy-arm-title = ライブコピーを有効化
-copy-arm-sub = ご自身のウォレットからの実際のスワップ
 copy-arm-keep-paper = ペーパーのまま
 copy-arm-confirm = ライブを有効化
 copy-profile-title = ウォレットプロファイル

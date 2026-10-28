@@ -235,7 +235,6 @@ copy-dialog-close =
 copy-editor-title-add = Thêm ví
 copy-editor-sub-add = Tác vụ mới bắt đầu ở chế độ thử nghiệm
 copy-arm-title = Kích hoạt copy live
-copy-arm-sub = Swap thật từ ví của bạn
 copy-arm-keep-paper = Giữ thử nghiệm
 copy-arm-confirm = Kích hoạt chạy thật
 copy-profile-title = Hồ sơ ví

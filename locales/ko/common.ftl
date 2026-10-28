@@ -80,4 +80,3 @@ common-range-label =
     .aria-label = 기간
 common-check-passed = 통과
 common-check-not-passed = 미통과
-common-arm-type-phrase = 확인하려면 { $phrase }을(를) 입력하세요

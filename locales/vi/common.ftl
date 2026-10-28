@@ -80,4 +80,3 @@ common-range-label =
     .aria-label = Khoảng ngày
 common-check-passed = đạt
 common-check-not-passed = chưa đạt
-common-arm-type-phrase = Nhập { $phrase } để xác nhận

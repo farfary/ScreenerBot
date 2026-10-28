@@ -80,4 +80,3 @@ common-range-label =
     .aria-label = Rango de fechas
 common-check-passed = superada
 common-check-not-passed = no superada
-common-arm-type-phrase = Escribe { $phrase } para confirmar

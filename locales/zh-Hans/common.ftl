@@ -80,4 +80,3 @@ common-range-label =
     .aria-label = 日期范围
 common-check-passed = 已通过
 common-check-not-passed = 未通过
-common-arm-type-phrase = 输入 { $phrase } 以确认

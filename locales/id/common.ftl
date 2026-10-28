@@ -80,4 +80,3 @@ common-range-label =
     .aria-label = Rentang tanggal
 common-check-passed = lolos
 common-check-not-passed = belum lolos
-common-arm-type-phrase = Ketik { $phrase } untuk mengonfirmasi

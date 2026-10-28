@@ -688,15 +688,18 @@ strategies-readiness-runtime-ok = Setup and safety gates allow live trades
 
 strategies-back = All strategies
 strategies-view-kind = Strategy kind
+strategies-view-all = All
+strategies-search-placeholder = Search strategies...
 strategies-unnamed = Unnamed strategy
 strategies-col-on = On
 strategies-col-strategy = Strategy
-strategies-col-order = Order
-    .title = Evaluation order among the enabled entry strategies of one mode; the first that signals takes the token
+strategies-col-rank = Rank
+    .title = Evaluation rank among the enabled entry strategies of one mode, lowest Order first; the first that signals takes the token
 strategies-col-mode = Mode
 strategies-col-status = Status
 strategies-col-open = Open
 strategies-col-watching = Watching
+strategies-col-kind = Kind
 strategies-col-rounds = Rounds
 strategies-col-closed = Closed
 strategies-col-win-rate = Win rate
@@ -718,10 +721,10 @@ strategies-notice-trader-off = Auto Trader is off
 strategies-notice-waiting = Waiting for core services
 strategies-notice-monitors-off = Entry and exit monitors are off
 strategies-notice-start = Start Auto Trader
-# $closed and $needed count closed paper rounds; $changed is a formatted date.
-strategies-readiness-progress = Paper rounds { $closed }/{ $needed }
+# $closed and $needed count closed paper rounds; $check is the title of a readiness check.
+strategies-readiness-progress = { $closed }/{ $needed } rounds
 strategies-readiness-ready = Ready to arm
-strategies-readiness-since = Rules changed { $changed }
+strategies-readiness-failing = Not passing: { $check }
 # $book is the trading mode of the other book; $count its open positions.
 strategies-open-other-book =
     { $count ->

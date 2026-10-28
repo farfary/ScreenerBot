@@ -11,6 +11,9 @@
 
 import { dirSign } from "../../core/dom.js";
 
+/** Quiet time after the last container resize before the columns refit to the new width. */
+const CONTAINER_REFIT_DELAY_MS = 150;
+
 /**
  * The one-line extent of a cell's content plus its inline padding and borders.
  * Text runs and inline boxes are measured, never a block wrapper, whose box
@@ -118,7 +121,9 @@ export function applyColumnManagementMixin(DataTable) {
   /**
    * Widen every column that sits below its minimum. The fit to the container runs
    * once, so a floor that grows with later rows is applied here on every sizing
-   * pass; a column the user resized keeps the user's width.
+   * pass; a column the user resized keeps the user's width. A fitted table takes the
+   * added width back from the columns holding slack, so a value that appears after the
+   * fit (a row action, a longer label) never pushes the table past its panel.
    */
   proto._raiseColumnsToFloors = function () {
     let raised = false;
@@ -132,6 +137,10 @@ export function applyColumnManagementMixin(DataTable) {
       raised = true;
     }
     if (!raised) return;
+    if (this.options.fitToContainer !== false && this.state.hasAutoFitted) {
+      this._fitColumnsToContainer();
+      return;
+    }
     const total = this._computeTableWidthFromState();
     if (typeof total === "number" && total > (this.state.tableWidth || 0)) {
       this.state.tableWidth = total;
@@ -294,6 +303,27 @@ export function applyColumnManagementMixin(DataTable) {
       this.state.hasAutoFitted = fitted && this._hasMeasurableRows();
     }
     this._raiseColumnsToFloors();
+  };
+
+  /**
+   * Refit once the container has settled at a new width (a window resize, a panel or
+   * sidebar change). The fit runs once per layout, so without this a narrower container
+   * kept the columns of the wider one, cut off behind a horizontal scrollbar, and a wider
+   * one left a blank band beside the table. The refit measures the content afresh;
+   * columns the user resized keep their widths, since the content pass and the fit both
+   * skip them.
+   */
+  proto._scheduleContainerRefit = function () {
+    clearTimeout(this._containerRefitTimer);
+    this._containerRefitTimer = setTimeout(() => {
+      this._containerRefitTimer = null;
+      if (!this.state.hasAutoFitted) return;
+      const width = Math.floor(this.elements.scrollContainer?.clientWidth || 0);
+      if (width <= 0 || Math.abs(width - (this._fittedContainerWidth ?? width)) < 2) return;
+      this.state.hasAutoFitted = false;
+      this._sizeColumns();
+      this._updateStickyOffsets();
+    }, CONTAINER_REFIT_DELAY_MS);
   };
 
   proto._hasMeasurableRows = function () {
@@ -524,6 +554,7 @@ export function applyColumnManagementMixin(DataTable) {
       // exceed the container keep their sum, and the table scrolls.
       this.state.tableWidth = Math.max(targetWidth, recomputed ?? 0);
       this._applyTableWidth();
+      this._fittedContainerWidth = targetWidth;
 
       this._log("info", "Columns fitted to container", {
         originalWidth: totalWidth,

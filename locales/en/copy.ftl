@@ -278,7 +278,6 @@ copy-dialog-close =
 copy-editor-title-add = Add wallet
 copy-editor-sub-add = New tasks start in Paper
 copy-arm-title = Arm live copying
-copy-arm-sub = Real swaps from your wallet
 copy-arm-keep-paper = Keep Paper
 copy-arm-confirm = Arm live
 copy-profile-title = Wallet profile

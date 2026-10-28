@@ -1,12 +1,16 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 //
-// The page's modal overlays: one Escape entry per open dialog, the backdrop and
-// every [data-dialog-close] button close it, and focus returns to the opener. A
-// dialog holding unsaved work passes `beforeClose`, which can keep it open.
-import { pushEscapeHandler } from "../../core/escape_stack.js";
+// A page's own modal overlays: one Escape entry per open dialog, the backdrop and every
+// [data-dialog-close] button close it, and focus returns to the opener. A dialog holding
+// unsaved work passes `beforeClose`, which can keep it open.
+import { pushEscapeHandler } from "../core/escape_stack.js";
 
-export function createDialogs($, on) {
+/**
+ * The dialogs of one page. `$` finds an overlay by selector and `on` binds a listener the
+ * page removes when it is disposed.
+ */
+export function createPageDialogs($, on) {
   const open = new Map();
 
   function show(id, { onClose, beforeClose } = {}) {
@@ -52,10 +56,11 @@ export function createDialogs($, on) {
     if (close) hide(id);
   }
 
+  /** Close an open dialog on a click on its backdrop or on one of its close buttons. */
   function setup(root) {
     on(root, "click", (event) => {
-      const overlay = event.target.closest(".copy-dialog");
-      if (!overlay) return;
+      const overlay = event.target.closest(".modal-overlay");
+      if (!overlay || !open.has(overlay.id)) return;
       if (event.target === overlay || event.target.closest("[data-dialog-close]")) {
         void requestClose(overlay.id);
       }

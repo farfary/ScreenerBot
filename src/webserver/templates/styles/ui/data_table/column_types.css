@@ -152,17 +152,19 @@
 
 /* ==================== Action Buttons Column Styles ==================== */
 
-/* Action cell container */
+/* Action cell container. Row actions sit at the end of their cell, so when rows offer
+   different numbers of actions the trailing ones (Edit, Delete) still line up down the
+   column. The container stays inline: the column's content floor measures inline boxes. */
 .dt-actions-cell {
   padding: 8px 12px !important;
   white-space: nowrap;
+  text-align: end;
 }
 
 .dt-actions-container {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  justify-content: flex-end;
 }
 
 /* Action button base */

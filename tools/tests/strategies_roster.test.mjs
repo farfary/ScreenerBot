@@ -5,15 +5,19 @@
 /**
  * Guard: the strategies roster of the Auto Trader Strategies sub-tab.
  *
- * - The Entry and Exit views each show their own columns, and the view switch counts the
- *   strategies on of each kind.
+ * - All, the first view, shows every strategy with its kind, entries before exits, and the
+ *   columns every kind shares; the Entry and Exit views each add their own columns. The
+ *   view switch counts the strategies on of each view.
  * - Every figure is the server's: a figure the server could not attribute reads as one
- *   dash, readiness shows the paper rounds and the rules change they count from, and
- *   positions still open in the other book show under Open.
- * - An exit strategy names the entry strategies it manages, and the Exit view names the
- *   rule exits that are checked before any exit strategy.
+ *   dash, readiness shows the paper rounds on one line with the rules change they count
+ *   from and any check not passing in its tooltip, and positions still open in the
+ *   other book show under Open.
+ * - An exit strategy names the entry strategies it manages, and a view holding exit
+ *   strategies names the rule exits that are checked before any of them.
  * - A strategy that is off offers no mode action; one that is on offers Arm live on
- *   paper and Return to paper on live.
+ *   paper and Return to paper on live, ahead of Edit and Delete. The arm dialog grows
+ *   sideways before it scrolls, asks only for ticks, and opens at its top, so the readiness
+ *   checks are read before the acknowledgements.
  * - A switch the server refuses returns to its place, and the toast carries the reason
  *   the server gave.
  * - A refresh that fails keeps the rows on screen and marks them stale, and a switch the
@@ -21,9 +25,14 @@
  *   with Retry.
  * - A trader-level block is stated once, in the toolbar, with the action that lifts it.
  * - A row opens its strategy in the editor; its switch does not.
- * - An empty view offers New Strategy with that view's kind chosen.
- * - At a laptop width the view switch keeps one line and every row action sits inside
- *   its cell, whatever number of actions a row offers.
+ * - An empty view offers New Strategy with that view's kind chosen; All chooses none and
+ *   focuses the first kind, and Escape closes the dialog back to its opener.
+ * - At a laptop width the view switch keeps one line, every row has the same height,
+ *   and every row action sits inside its cell with Edit and Delete lined up down the
+ *   column, whatever number of actions a row offers.
+ * - The columns follow the window: narrower, the table fits without scrolling sideways;
+ *   wider again, it fills the panel. A row action that appears after the fit keeps the
+ *   table inside the panel.
  *
  * Run with `npm run test:js`.
  */
@@ -118,7 +127,7 @@ const actions = (page, id) =>
     buttons.map((button) => button.dataset.actionId)
   );
 
-test("the Entry and Exit views show their own columns and count the strategies on", async (t) => {
+test("All shows every strategy with its kind, and each kind view adds its own columns", async (t) => {
   const page = await openRoster(t);
   await page.waitForSelector(`#strategies-roster tr[data-row-id="${MOMENTUM}"]`);
   assert.deepEqual(
@@ -126,7 +135,41 @@ test("the Entry and Exit views show their own columns and count the strategies o
     [
       ["on", "On"],
       ["name", "Strategy"],
-      ["order", "Order"],
+      ["kind", "Kind"],
+      ["mode", "Mode"],
+      ["status", "Status"],
+      ["rounds", "Rounds"],
+      ["win_rate", "Win rate"],
+      ["realized", "Realized (SOL)"],
+      ["last_signal", "Last signal"],
+    ]
+  );
+  assert.equal(await page.locator("#strategies-roster tbody tr[data-row-id]").count(), 5);
+  assert.equal(await cell(page, MOMENTUM, "kind"), "Entry");
+  assert.equal(await cell(page, STALE_EXIT, "kind"), "Exit");
+  const counts = await page.$$eval("#strategies-roster .segmented-option", (options) =>
+    options.map((option) => [
+      option.querySelector("input").dataset.segValue,
+      option.querySelector(".segmented-count")?.textContent.trim(),
+    ])
+  );
+  assert.deepEqual(counts, [
+    ["all", "3/5"],
+    ["entry", "2/3"],
+    ["exit", "1/2"],
+  ]);
+
+  await view(page, "entry");
+  await page.waitForFunction(
+    (id) => !document.querySelector(`#strategies-roster tr[data-row-id="${id}"]`),
+    STALE_EXIT
+  );
+  assert.deepEqual(
+    (await headers(page)).filter(([id]) => id !== "actions"),
+    [
+      ["on", "On"],
+      ["name", "Strategy"],
+      ["order", "Rank"],
       ["mode", "Mode"],
       ["status", "Status"],
       ["open", "Open"],
@@ -136,17 +179,6 @@ test("the Entry and Exit views show their own columns and count the strategies o
       ["last_signal", "Last signal"],
     ]
   );
-  assert.equal(await page.locator(`#strategies-roster tr[data-row-id="${STALE_EXIT}"]`).count(), 0);
-  const counts = await page.$$eval("#strategies-roster .segmented-option", (options) =>
-    options.map((option) => [
-      option.querySelector("input").dataset.segValue,
-      option.querySelector(".segmented-count")?.textContent.trim(),
-    ])
-  );
-  assert.deepEqual(counts, [
-    ["entry", "2/3"],
-    ["exit", "1/2"],
-  ]);
 
   await view(page, "exit");
   await page.waitForSelector(`#strategies-roster tr[data-row-id="${STALE_EXIT}"]`);
@@ -168,11 +200,36 @@ test("the Entry and Exit views show their own columns and count the strategies o
   assert.equal(await page.locator(`#strategies-roster tr[data-row-id="${MOMENTUM}"]`).count(), 0);
 });
 
+test("All lists the entry strategies before the exit strategies, each in the server's order", async (t) => {
+  const exitsFirst = JSON.parse(JSON.stringify(OVERVIEW));
+  exitsFirst.strategies.reverse();
+  const page = await openRoster(t, {
+    route: (request) =>
+      request.url.pathname === "/api/strategies/overview" ? { body: JSON.stringify(exitsFirst) } : null,
+  });
+  await page.waitForSelector(`#strategies-roster tr[data-row-id="${MOMENTUM}"]`);
+  assert.deepEqual(
+    await page.$$eval("#strategies-roster tbody tr[data-row-id]", (trs) => trs.map((tr) => tr.dataset.rowId)),
+    [LOW_LIQUIDITY, DIP_RECOVERY, MOMENTUM, MA_EXIT, STALE_EXIT]
+  );
+});
+
 test("every figure is the server's, and one it could not attribute reads as a dash", async (t) => {
   const page = await openRoster(t);
   await page.waitForSelector(`#strategies-roster tr[data-row-id="${MOMENTUM}"]`);
+  await view(page, "entry");
+  await page.waitForSelector(`#strategies-roster td[data-column-id="order"]`);
 
-  assert.match(await cell(page, MOMENTUM, "mode"), /^Paper Paper rounds 3\/10 Rules changed .+2026/);
+  assert.equal(await cell(page, MOMENTUM, "mode"), "Paper 3/10 rounds");
+  assert.match(
+    plain(
+      await page.getAttribute(
+        `#strategies-roster tr[data-row-id="${MOMENTUM}"] .strategy-roster-readiness`,
+        "title"
+      )
+    ),
+    /^3 of 10 closed paper rounds since the rules changed .+2026\b/
+  );
   assert.equal(await cell(page, MOMENTUM, "order"), "1");
   assert.equal(await cell(page, MOMENTUM, "status"), "Running");
   assert.equal(await cell(page, MOMENTUM, "rounds"), "3");
@@ -196,40 +253,100 @@ test("every figure is the server's, and one it could not attribute reads as a da
   assert.equal(await cell(page, MA_EXIT, "watching"), "—", "an off exit strategy watches nothing");
 });
 
-test("the Exit view names the rule exits checked before any exit strategy", async (t) => {
+test("a view holding exit strategies names the rule exits checked before them", async (t) => {
   const page = await openRoster(t);
   await page.waitForSelector(`#strategies-roster tr[data-row-id="${MOMENTUM}"]`);
   const chip = page.locator('#strategies-roster .table-toolbar-chip[data-summary-id="rule-exits"]');
-  assert.equal(await chip.isHidden(), true, "the Entry view leaves the rule exits out");
-  await view(page, "exit");
   await chip.waitFor();
   assert.match(plain(await chip.textContent()), /Checked first\s*Stop Loss, Take Profit,? and Time Exit/);
   assert.equal(
     await chip.getAttribute("title"),
     "These exit rules are checked on every position before any exit strategy"
   );
+  await view(page, "entry");
+  await chip.waitFor({ state: "hidden" });
+  await view(page, "exit");
+  await chip.waitFor();
 });
 
 test("only a strategy that is on offers the action that changes its mode", async (t) => {
   const page = await openRoster(t);
   await page.waitForSelector(`#strategies-roster tr[data-row-id="${MOMENTUM}"]`);
-  assert.deepEqual(await actions(page, MOMENTUM), ["edit", "arm", "delete"]);
-  assert.deepEqual(await actions(page, DIP_RECOVERY), ["edit", "return-paper", "delete"]);
+  assert.deepEqual(await actions(page, MOMENTUM), ["arm", "edit", "delete"]);
+  assert.deepEqual(await actions(page, DIP_RECOVERY), ["return-paper", "edit", "delete"]);
   assert.deepEqual(await actions(page, LOW_LIQUIDITY), ["edit", "delete"]);
-
-  await view(page, "exit");
-  await page.waitForSelector(`#strategies-roster tr[data-row-id="${STALE_EXIT}"]`);
-  assert.deepEqual(await actions(page, STALE_EXIT), ["edit", "return-paper", "delete"]);
+  assert.deepEqual(await actions(page, STALE_EXIT), ["return-paper", "edit", "delete"]);
   assert.deepEqual(await actions(page, MA_EXIT), ["edit", "delete"]);
 });
 
-test("at a laptop width the view switch keeps one line and every row action fits its cell", async (t) => {
+/** The roster at `viewport` with Momentum's readiness unready on its rounds and profit. */
+async function openArmDialog(t, viewport) {
+  const readinessCheck = (id, passed) => ({
+    id,
+    passed,
+    text: { id: "paper-readiness-exits", args: {} },
+    detail: { id: "paper-readiness-exits-ok", args: {} },
+  });
+  const readiness = {
+    ready: false,
+    checks: ["history", "profit", "priced", "exits", "runtime"].map((id, index) =>
+      readinessCheck(id, index > 1)
+    ),
+    live_confirmation: "ARM LIVE STRATEGY",
+  };
+  const page = await openRoster(t, {
+    viewport,
+    route: (request) =>
+      request.url.pathname === `/api/strategies/${MOMENTUM}/readiness`
+        ? { body: JSON.stringify(readiness) }
+        : null,
+  });
+  await page.click(`#strategies-roster tr[data-row-id="${MOMENTUM}"] [data-action-id="arm"]`);
+  await page.waitForFunction(() => document.activeElement?.matches?.("[data-ack]"));
+  return page;
+}
+
+/** How the open dialog's body sits: whether it scrolls, and where. */
+const dialogBody = (page) =>
+  page.$eval(".confirmation-dialog__body", (element) => ({
+    overflows: element.scrollHeight > element.clientHeight,
+    top: element.scrollTop,
+  }));
+
+test("at a laptop height the arm dialog shows every check and acknowledgement unscrolled", async (t) => {
+  const page = await openArmDialog(t, { width: 1280, height: 660 });
+  assert.deepEqual(await dialogBody(page), { overflows: false, top: 0 });
+  const width = await page.$eval(".confirmation-dialog", (dialog) => dialog.getBoundingClientRect().width);
+  assert.ok(width > 600, `the dialog grows sideways before it scrolls, got ${width}px`);
+  const columns = await page.$$eval(".arm-gate-check", (checks) =>
+    new Set(checks.map((check) => Math.round(check.getBoundingClientRect().left))).size
+  );
+  assert.equal(columns, 2, "the checks fill two columns");
+  assert.equal(await page.locator(".confirmation-dialog input[type=text]").count(), 0, "nothing is typed");
+  const confirm = page.locator('.confirmation-dialog [data-action="confirm"]');
+  assert.equal(await confirm.isDisabled(), true);
+  for (const ack of await page.locator(".confirmation-dialog [data-ack]").all()) await ack.check();
+  assert.equal(await confirm.isDisabled(), false, "ticking every acknowledgement allows Arm live");
+  await page.click('.confirmation-dialog [data-action="cancel"]');
+});
+
+test("in a short window the arm dialog still opens at its top", async (t) => {
+  const page = await openArmDialog(t, { width: 1280, height: 420 });
+  assert.deepEqual(
+    await dialogBody(page),
+    { overflows: true, top: 0 },
+    "the first acknowledgement takes the focus in place"
+  );
+  await page.click('.confirmation-dialog [data-action="cancel"]');
+});
+
+test("at a laptop width the view switch keeps one line, rows share a height and every row action fits its cell", async (t) => {
   const page = await openRoster(t, { viewport: { width: 1200, height: 800 } });
   await page.waitForSelector(`#strategies-roster tr[data-row-id="${MOMENTUM}"]`);
   const optionTops = await page.$$eval("#strategies-roster .segmented-option", (options) =>
     options.map((option) => Math.round(option.getBoundingClientRect().top))
   );
-  assert.equal(new Set(optionTops).size, 1, "the Entry and Exit options share one line");
+  assert.equal(new Set(optionTops).size, 1, "the view options share one line");
 
   const spilled = await page.$$eval('#strategies-roster td[data-column-id="actions"]', (cells) =>
     cells.flatMap((cell) => {
@@ -243,6 +360,101 @@ test("at a laptop width the view switch keeps one line and every row action fits
     })
   );
   assert.deepEqual(spilled, []);
+
+  const rows = await page.$$eval("#strategies-roster tbody tr[data-row-id]", (trs) =>
+    trs.map((tr) => Math.round(tr.getBoundingClientRect().height))
+  );
+  assert.equal(new Set(rows).size, 1, `every row has one height, got ${rows.join(", ")}`);
+
+  const edges = await page.$$eval("#strategies-roster tbody tr[data-row-id]", (trs) =>
+    ["edit", "delete"].map(
+      (id) =>
+        new Set(
+          trs.map((tr) =>
+            Math.round(tr.querySelector(`[data-action-id="${id}"]`).getBoundingClientRect().left)
+          )
+        ).size
+    )
+  );
+  assert.deepEqual(edges, [1, 1], "Edit and Delete line up down the column");
+});
+
+/**
+ * True once the roster's body table is as wide as its scroll container, which must be
+ * wider than `minWidth`: no column cut off behind a sideways scroll, no blank band.
+ */
+const fillsContainer = (minWidth) => {
+  const scroller = document.querySelector("#strategies-roster .data-table-scroll-container");
+  const table = scroller?.querySelector("table.data-table");
+  if (!table || scroller.clientWidth <= minWidth) return false;
+  return Math.abs(table.getBoundingClientRect().width - scroller.clientWidth) < 1;
+};
+
+test("the columns follow the window: narrower they fit, wider they fill the panel", async (t) => {
+  const page = await openRoster(t);
+  await page.waitForSelector(`#strategies-roster tr[data-row-id="${MOMENTUM}"]`);
+  await page.waitForFunction(fillsContainer, 1500);
+
+  await page.setViewportSize({ width: 1250, height: 900 });
+  await page.waitForFunction(fillsContainer, 1150);
+
+  await page.setViewportSize({ width: 1800, height: 900 });
+  await page.waitForFunction(fillsContainer, 1700);
+});
+
+test("a row action that appears after the fit keeps the table inside its panel", async (t) => {
+  const allOff = JSON.parse(JSON.stringify(OVERVIEW));
+  for (const entry of allOff.strategies) entry.item.enabled = false;
+  let switchedOn = false;
+  const page = await openRoster(t, {
+    route: (request) => {
+      if (request.method === "PATCH") {
+        switchedOn = true;
+        return { body: JSON.stringify({ success: true }) };
+      }
+      if (request.url.pathname !== "/api/strategies/overview") return null;
+      const overview = JSON.parse(JSON.stringify(allOff));
+      overview.strategies.find((entry) => entry.item.id === DIP_RECOVERY).item.enabled = switchedOn;
+      return { body: JSON.stringify(overview) };
+    },
+  });
+  await page.waitForSelector(`#strategies-roster tr[data-row-id="${DIP_RECOVERY}"]`);
+  await page.waitForFunction(fillsContainer, 1500);
+  assert.deepEqual(await actions(page, DIP_RECOVERY), ["edit", "delete"]);
+
+  await page.click(`#strategies-roster label:has(> input[data-enable-strategy="${DIP_RECOVERY}"])`);
+  await page.waitForSelector(`#strategies-roster tr[data-row-id="${DIP_RECOVERY}"] [data-action-id="return-paper"]`);
+  await page.waitForFunction(fillsContainer, 1500);
+  const action = await page.$eval(
+    `#strategies-roster tr[data-row-id="${DIP_RECOVERY}"] [data-action-id="return-paper"]`,
+    (button) => {
+      const box = button.getBoundingClientRect();
+      const cell = button.closest("td").getBoundingClientRect();
+      return { inside: box.left >= cell.left - 0.5 && box.right <= cell.right + 0.5, right: box.right };
+    }
+  );
+  assert.equal(action.inside, true, "the new action sits inside its cell");
+  assert.ok(action.right <= 1600, "and inside the window");
+});
+
+test("a paper strategy held by a check other than its rounds names that check", async (t) => {
+  const held = JSON.parse(JSON.stringify(OVERVIEW));
+  const momentum = held.strategies.find((entry) => entry.item.id === MOMENTUM);
+  momentum.readiness = { closed: 10, needed: 10, ready: false, failing: "profit", since_rules_changed: null };
+  const page = await openRoster(t, {
+    route: (request) =>
+      request.url.pathname === "/api/strategies/overview" ? { body: JSON.stringify(held) } : null,
+  });
+  const readiness = page.locator(
+    `#strategies-roster tr[data-row-id="${MOMENTUM}"] .strategy-roster-readiness`
+  );
+  await readiness.waitFor();
+  assert.equal(plain(await readiness.textContent()), "10/10 rounds");
+  assert.equal(await readiness.getAttribute("data-readiness"), "blocked");
+  assert.equal(
+    plain(await readiness.getAttribute("title")),
+    "10 of 10 closed paper rounds\nNot passing: Profitable in paper"
+  );
 });
 
 test("a switch the server refuses returns, and the toast carries its reason", async (t) => {
@@ -287,7 +499,7 @@ test("a failed refresh keeps the rows and marks them stale", async (t) => {
   await page.click(`#strategies-roster label:has(> input[data-enable-strategy="${DIP_RECOVERY}"])`);
   await stale.waitFor();
   assert.equal(await stale.getAttribute("data-variant"), "warning");
-  assert.equal(await page.locator("#strategies-roster tbody tr[data-row-id]").count(), 3);
+  assert.equal(await page.locator("#strategies-roster tbody tr[data-row-id]").count(), 5);
   assert.equal(await page.locator("#strategies-roster .state-view-empty").count(), 0);
   const stored = page.locator(`#strategies-roster input[data-enable-strategy="${DIP_RECOVERY}"]`);
   assert.equal(await stored.isDisabled(), false, "the stored switch is released though the reload failed");
@@ -301,12 +513,33 @@ test("a first read that fails shows the error with Retry", async (t) => {
         ? { status: 500, body: JSON.stringify({ error: { message: "Store unavailable" } }) }
         : null,
   });
-  const empty = page.locator("#strategies-roster .state-view-empty");
+  const empty = page.locator("#strategies-roster .state-view-empty", { hasText: "Load Failed" });
   await empty.waitFor();
-  assert.match(plain(await empty.textContent()), /Load Failed/);
   failing = false;
   await empty.locator('[data-action="table-empty-action"]', { hasText: "Retry" }).click();
   await page.waitForSelector(`#strategies-roster tr[data-row-id="${MOMENTUM}"]`);
+});
+
+test("a Retry that finds no strategy leaves the error for the empty roster", async (t) => {
+  let failing = true;
+  const page = await openRoster(t, {
+    route: (request) => {
+      if (request.url.pathname !== "/api/strategies/overview") return null;
+      return failing
+        ? { status: 500, body: JSON.stringify({ error: { message: "Store unavailable" } }) }
+        : { body: JSON.stringify({ ...OVERVIEW, strategies: [] }) };
+    },
+  });
+  const failed = page.locator("#strategies-roster .state-view-empty", { hasText: "Load Failed" });
+  await failed.waitFor();
+  failing = false;
+  await failed.locator('[data-action="table-empty-action"]', { hasText: "Retry" }).click();
+  const empty = page.locator("#strategies-roster .state-view-empty", { hasText: "No strategies yet" });
+  await empty.waitFor();
+  assert.equal(
+    await empty.locator('[data-action="table-empty-action"]', { hasText: "New Strategy" }).count(),
+    1
+  );
 });
 
 /** The roster over the recorded overview with `notice` as the trader-level block. */
@@ -319,7 +552,7 @@ test("a trader-level block is stated once in the toolbar, with the action that l
   const page = await openRoster(t, { route: withNotice("trader_off") });
   const chip = page.locator('#strategies-roster .table-toolbar-chip[data-summary-id="run-notice"]');
   await chip.waitFor();
-  assert.match(plain(await chip.textContent()), /Not running\s*Auto Trader is off/);
+  assert.match(plain(await chip.textContent()), /Status\s*Auto Trader is off/);
   assert.equal(await chip.getAttribute("data-variant"), "warning");
   const action = page.locator('#strategies-roster [data-btn-id="run-notice-action"]');
   assert.equal(plain((await action.textContent()).trim()), "Start Auto Trader");
@@ -368,6 +601,27 @@ test("an empty view offers New Strategy with its kind chosen", async (t) => {
   const action = page.locator('#strategies-roster .state-view-empty [data-action="table-empty-action"]');
   await action.waitFor();
   assert.equal((await action.textContent()).trim(), "New Strategy");
+  await action.click();
+  await page.locator("#create-strategy-modal:not([hidden])").waitFor();
+  assert.deepEqual(
+    await page.$$eval("#create-strategy-modal .type-card", (cards) =>
+      cards.map((card) => card.getAttribute("aria-pressed"))
+    ),
+    ["false", "false"],
+    "All chooses no kind"
+  );
+  assert.equal(
+    await page.evaluate(() => document.activeElement?.dataset.type),
+    "ENTRY",
+    "the first kind takes the focus"
+  );
+  await page.keyboard.press("Escape");
+  await page.locator("#create-strategy-modal").waitFor({ state: "hidden" });
+  assert.equal(
+    await page.evaluate(() => document.activeElement?.dataset.action),
+    "table-empty-action",
+    "Escape closes the dialog and returns the focus to its opener"
+  );
   await view(page, "exit");
   await action.click();
   await page.locator("#create-strategy-modal:not([hidden])").waitFor();

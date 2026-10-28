@@ -269,7 +269,6 @@ copy-dialog-close =
 copy-editor-title-add = Añadir billetera
 copy-editor-sub-add = Las tareas nuevas empiezan en simulación
 copy-arm-title = Activar copia en vivo
-copy-arm-sub = Swaps reales desde tu billetera
 copy-arm-keep-paper = Mantener simulación
 copy-arm-confirm = Activar en vivo
 copy-profile-title = Perfil de la billetera
