@@ -22,6 +22,8 @@
  * - A trader-level block is stated once, in the toolbar, with the action that lifts it.
  * - A row opens its strategy in the editor; its switch does not.
  * - An empty view offers New Strategy with that view's kind chosen.
+ * - At a laptop width the view switch keeps one line and every row action sits inside
+ *   its cell, whatever number of actions a row offers.
  *
  * Run with `npm run test:js`.
  */
@@ -73,8 +75,11 @@ const plain = (text) => String(text).replace(/[⁨⁩]/g, "");
  * The Strategies sub-tab over the `variant` fixtures. `route(request)` answers a request
  * first when it returns a response.
  */
-async function openRoster(t, { variant = "populated", route = () => null } = {}) {
-  const context = await browser.newContext({ viewport: { width: 1600, height: 900 } });
+async function openRoster(
+  t,
+  { variant = "populated", route = () => null, viewport = { width: 1600, height: 900 } } = {}
+) {
+  const context = await browser.newContext({ viewport });
   const api = createApiHandler(indexes, variant);
   const onApi = async (request) => (await route(request)) ?? api.onApi(request);
   const host = await serveDashboard(context, { locale: "en", onApi });
@@ -216,6 +221,28 @@ test("only a strategy that is on offers the action that changes its mode", async
   await page.waitForSelector(`#strategies-roster tr[data-row-id="${STALE_EXIT}"]`);
   assert.deepEqual(await actions(page, STALE_EXIT), ["edit", "return-paper", "delete"]);
   assert.deepEqual(await actions(page, MA_EXIT), ["edit", "delete"]);
+});
+
+test("at a laptop width the view switch keeps one line and every row action fits its cell", async (t) => {
+  const page = await openRoster(t, { viewport: { width: 1200, height: 800 } });
+  await page.waitForSelector(`#strategies-roster tr[data-row-id="${MOMENTUM}"]`);
+  const optionTops = await page.$$eval("#strategies-roster .segmented-option", (options) =>
+    options.map((option) => Math.round(option.getBoundingClientRect().top))
+  );
+  assert.equal(new Set(optionTops).size, 1, "the Entry and Exit options share one line");
+
+  const spilled = await page.$$eval('#strategies-roster td[data-column-id="actions"]', (cells) =>
+    cells.flatMap((cell) => {
+      const { left, right } = cell.getBoundingClientRect();
+      return Array.from(cell.querySelectorAll("[data-action-id]"))
+        .filter((button) => {
+          const box = button.getBoundingClientRect();
+          return box.left < left - 0.5 || box.right > right + 0.5;
+        })
+        .map((button) => `${cell.closest("tr").dataset.rowId} ${button.dataset.actionId}`);
+    })
+  );
+  assert.deepEqual(spilled, []);
 });
 
 test("a switch the server refuses returns, and the toast carries its reason", async (t) => {

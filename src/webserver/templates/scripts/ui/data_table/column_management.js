@@ -79,7 +79,8 @@ export function applyColumnManagementMixin(DataTable) {
   /**
    * Measure the widest value of every column whose cells are never cut: the
    * value-typed columns (their cells carry `data-type` and do not wrap, so an amount
-   * and its unit stay on one line) and any column declared `minWidth: "content"`
+   * and its unit stay on one line), the actions column (its buttons stay on one line
+   * and their number differs per row) and any column declared `minWidth: "content"`
    * (a short label such as a mode with its paused mark). The floor is the value's
    * one-line extent plus the cell's inline padding, so the proportional fit can never
    * squeeze such a column below what it shows.
@@ -101,10 +102,11 @@ export function applyColumnManagementMixin(DataTable) {
     const range = precise ? document.createRange() : null;
     for (const column of this._getOrderedColumns()) {
       if (!this._isColumnVisible(column.id)) continue;
+      const neverCut = column.minWidth === "content" || column.type === "actions";
       let widest = floors[column.id] || 0;
       for (const row of rows) {
         const cell = row.querySelector(`td[data-column-id="${column.id}"]`);
-        if (!cell || (column.minWidth !== "content" && !cell.hasAttribute("data-type"))) continue;
+        if (!cell || (!neverCut && !cell.hasAttribute("data-type"))) continue;
         if (precise) widest = Math.max(widest, naturalCellWidth(cell, range));
         else if (cell.scrollWidth > cell.clientWidth) widest = Math.max(widest, cell.scrollWidth);
       }

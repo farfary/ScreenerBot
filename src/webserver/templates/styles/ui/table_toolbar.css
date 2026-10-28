@@ -542,6 +542,21 @@
   flex-shrink: 0;
 }
 
+/* A view switch keeps its options on one line. The controls zone is never narrower than
+   the switch, so a bar that cannot hold every zone wraps one to a second row instead of
+   breaking the track into a column. */
+.table-toolbar-field:has(> .segmented) {
+  flex-shrink: 0;
+}
+
+.table-toolbar-field > .segmented {
+  flex-wrap: nowrap;
+}
+
+.table-toolbar__controls:has(> .table-toolbar-field > .segmented) {
+  min-width: min-content;
+}
+
 .table-toolbar-field > .custom-select-host {
   display: flex;
   width: 100%;
