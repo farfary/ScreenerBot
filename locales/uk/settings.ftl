@@ -37,6 +37,7 @@ settings-dialog-tab-startup = Запуск
 settings-dialog-tab-hints = Підказки
 settings-dialog-tab-data = Дані
 settings-dialog-tab-security = Безпека
+settings-dialog-tab-wallet = Гаманець
 settings-dialog-tab-account = Обліковий запис
 settings-dialog-tab-connection = Підключення
 settings-dialog-tab-telegram = { -telegram }
@@ -649,6 +650,21 @@ settings-data-folder-label = Відкрити папку даних
 settings-data-folder-hint = Відкрийте у файловому менеджері папку з усіма даними { -brand }.
 settings-data-folder-open = Відкрити папку
 settings-data-folder-open-failed = Не вдалося відкрити папку даних
+
+## Wallet tab (scripts/ui/settings/wallet_tab.js)
+
+settings-wallet-title = Торговий гаманець
+settings-wallet-description = Гаманець, яким { -brand } підписує кожну угоду. Його приватний ключ шифрується на цьому пристрої й ніколи його не залишає.
+settings-wallet-address = Адреса
+settings-wallet-balance = Баланс
+settings-wallet-unread = Не вдалося прочитати торговий гаманець.
+settings-wallet-open = Відкрити гаманці
+settings-wallet-key-title = Приватний ключ
+settings-wallet-key-description = Створіть резервну копію цього гаманця або відкрийте його в іншому застосунку-гаманці. Будь-хто, хто має ключ, розпоряджається всім, що зберігається в цьому гаманці.
+settings-wallet-key-reveal = Показати приватний ключ
+settings-wallet-replace-title = Торгувати з іншим гаманцем
+settings-wallet-replace-description = Створіть новий гаманець або імпортуйте наявний. { -brand } перезапуститься з ним; поточний гаманець збереже свої кошти й залишиться в розділі «Інші гаманці».
+settings-wallet-replace-action = Замінити гаманець
 
 ## Connection tab (scripts/ui/settings/connection_tab.js)
 

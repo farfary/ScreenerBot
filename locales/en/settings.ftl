@@ -35,6 +35,7 @@ settings-dialog-tab-startup = Startup
 settings-dialog-tab-hints = Hints
 settings-dialog-tab-data = Data
 settings-dialog-tab-security = Security
+settings-dialog-tab-wallet = Wallet
 settings-dialog-tab-account = Account
 settings-dialog-tab-connection = Connection
 settings-dialog-tab-telegram = { -telegram }
@@ -645,6 +646,21 @@ settings-data-folder-label = Open Data Folder
 settings-data-folder-hint = Open the folder containing all { -brand } data in your file manager.
 settings-data-folder-open = Open Folder
 settings-data-folder-open-failed = Could not open the data folder
+
+## Wallet tab (scripts/ui/settings/wallet_tab.js)
+
+settings-wallet-title = Trading wallet
+settings-wallet-description = The wallet { -brand } signs every trade with. Its private key is encrypted on this device and never leaves it.
+settings-wallet-address = Address
+settings-wallet-balance = Balance
+settings-wallet-unread = The trading wallet could not be read.
+settings-wallet-open = Open Wallets
+settings-wallet-key-title = Private key
+settings-wallet-key-description = Back up this wallet or open it in another wallet app. Anyone who has the key controls everything this wallet holds.
+settings-wallet-key-reveal = Reveal private key
+settings-wallet-replace-title = Trade with another wallet
+settings-wallet-replace-description = Create a new wallet or import one. { -brand } restarts with it; the current wallet keeps its funds and stays under Other Wallets.
+settings-wallet-replace-action = Replace wallet
 
 ## Connection tab (scripts/ui/settings/connection_tab.js)
 

@@ -1,0 +1,36 @@
+/* Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+ * SPDX-License-Identifier: BUSL-1.1 */
+
+/* =============================================================================
+   WALLET TAB - the trading wallet, its private-key export and its replacement
+   ============================================================================= */
+
+.settings-wallet[aria-busy="true"] {
+  opacity: 0.6;
+}
+
+/* The address takes its label's column at full length; the balance sits in the
+   control column. */
+.settings-wallet-value {
+  min-width: 0;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+}
+
+.settings-wallet-error {
+  margin: 8px 0 0;
+  font-size: 0.8rem;
+  color: var(--error-color);
+}
+
+.settings-wallet-error[hidden] {
+  display: none;
+}
+
+.settings-wallet-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-block-start: 12px;
+}

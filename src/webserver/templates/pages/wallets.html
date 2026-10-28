@@ -1,7 +1,7 @@
 <!-- Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
      SPDX-License-Identifier: BUSL-1.1
 
-     Wallets page - tab panels for the trading wallet, the other wallets and the watched wallets, plus the key export and watch dialogs. -->
+     Wallets page - tab panels for the trading wallet, the other wallets and the watched wallets, plus the watch dialogs; the key export is the shared wallet key dialog. -->
 
 <div class="wallets-page">
   <!-- Each tab's subject identity, stats, tools and actions live in its DataTable
@@ -51,7 +51,8 @@
               <span data-l10n-id="wallets-watch-add-address"></span>
               <span class="required">*</span>
             </label>
-            <input dir="ltr"
+            <input
+              dir="ltr"
               type="text"
               id="watched-wallet-address"
               name="address"
@@ -166,59 +167,6 @@
           </div>
         </div>
       </form>
-    </div>
-  </div>
-
-  <!-- Export Key Modal -->
-  <div class="modal-overlay" hidden id="export-modal">
-    <div class="modal-dialog modal-sm">
-      <div class="modal-header">
-        <h2><i class="icon-key"></i> <span data-l10n-id="wallets-export-title"></span></h2>
-        <button
-          class="modal-close"
-          type="button"
-          id="export-modal-close"
-          data-dialog-close
-          data-l10n-id="wallets-modal-close"
-        >
-          <i class="icon-x"></i>
-        </button>
-      </div>
-      <div class="modal-body">
-        <div class="notice" data-variant="error" role="alert">
-          <div class="notice-heading">
-            <i class="notice-icon icon-octagon-alert" aria-hidden="true"></i>
-            <span class="notice-title" data-l10n-id="wallets-export-warning-title"></span>
-          </div>
-          <div class="notice-message" data-l10n-id="wallets-export-warning-body"></div>
-        </div>
-        <div class="export-key-display" hidden id="export-key-display">
-          <label data-l10n-id="wallets-export-key-label"></label>
-          <div class="key-display">
-            <code id="exported-key" dir="ltr">...</code>
-            <button
-              type="button"
-              class="btn-icon"
-              id="copy-key-btn"
-              data-l10n-id="wallets-export-copy"
-            >
-              <i class="icon-copy"></i>
-            </button>
-          </div>
-        </div>
-        <div class="form-actions">
-          <button
-            type="button"
-            class="btn btn-secondary"
-            id="export-cancel-btn"
-            data-dialog-close
-            data-l10n-id="common-action-cancel"
-          ></button>
-          <button type="button" class="btn btn-danger" id="confirm-export-btn">
-            <i class="icon-lock-open"></i> <span data-l10n-id="wallets-export-reveal"></span>
-          </button>
-        </div>
-      </div>
     </div>
   </div>
 </div>

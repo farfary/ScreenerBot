@@ -33,6 +33,7 @@ settings-dialog-tab-startup = Başlangıç
 settings-dialog-tab-hints = İpuçları
 settings-dialog-tab-data = Veri
 settings-dialog-tab-security = Güvenlik
+settings-dialog-tab-wallet = Cüzdan
 settings-dialog-tab-account = Hesap
 settings-dialog-tab-connection = Bağlantı
 settings-dialog-tab-telegram = { -telegram }
@@ -631,6 +632,21 @@ settings-data-folder-label = Veri Klasörünü Aç
 settings-data-folder-hint = Tüm { -brand } verilerini içeren klasörü dosya yöneticinizde açın.
 settings-data-folder-open = Klasörü Aç
 settings-data-folder-open-failed = Veri klasörü açılamadı
+
+## Wallet tab (scripts/ui/settings/wallet_tab.js)
+
+settings-wallet-title = İşlem cüzdanı
+settings-wallet-description = { -brand } uygulamasının her işlemi imzaladığı cüzdan. Özel anahtarı bu cihazda şifrelenir ve cihazdan asla çıkmaz.
+settings-wallet-address = Adres
+settings-wallet-balance = Bakiye
+settings-wallet-unread = İşlem cüzdanı okunamadı.
+settings-wallet-open = Cüzdanları aç
+settings-wallet-key-title = Özel anahtar
+settings-wallet-key-description = Bu cüzdanı yedekleyin veya başka bir cüzdan uygulamasında açın. Anahtara sahip olan herkes bu cüzdandaki her şeyi kontrol eder.
+settings-wallet-key-reveal = Özel anahtarı göster
+settings-wallet-replace-title = Başka bir cüzdanla işlem yap
+settings-wallet-replace-description = Yeni bir cüzdan oluşturun veya bir cüzdan içe aktarın. { -brand } onunla yeniden başlar; mevcut cüzdan fonlarını korur ve Diğer cüzdanlar altında kalır.
+settings-wallet-replace-action = Cüzdanı değiştir
 
 ## Connection tab (scripts/ui/settings/connection_tab.js)
 

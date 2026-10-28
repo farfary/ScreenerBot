@@ -31,6 +31,7 @@ settings-dialog-tab-startup = 起動
 settings-dialog-tab-hints = ヒント
 settings-dialog-tab-data = データ
 settings-dialog-tab-security = セキュリティ
+settings-dialog-tab-wallet = ウォレット
 settings-dialog-tab-account = アカウント
 settings-dialog-tab-connection = 接続
 settings-dialog-tab-telegram = { -telegram }
@@ -622,6 +623,21 @@ settings-data-folder-label = データフォルダーを開く
 settings-data-folder-hint = { -brand } のすべてのデータを含むフォルダーをファイルマネージャーで開きます。
 settings-data-folder-open = フォルダーを開く
 settings-data-folder-open-failed = データフォルダーを開けませんでした
+
+## Wallet tab (scripts/ui/settings/wallet_tab.js)
+
+settings-wallet-title = 取引ウォレット
+settings-wallet-description = { -brand } がすべての取引に署名するウォレットです。秘密鍵はこのデバイス上で暗号化され、外部に送信されることはありません。
+settings-wallet-address = アドレス
+settings-wallet-balance = 残高
+settings-wallet-unread = 取引ウォレットを読み取れませんでした。
+settings-wallet-open = ウォレットを開く
+settings-wallet-key-title = 秘密鍵
+settings-wallet-key-description = このウォレットをバックアップするか、別のウォレットアプリで開きます。鍵を持つ人は、このウォレットの資産をすべて操作できます。
+settings-wallet-key-reveal = 秘密鍵を表示
+settings-wallet-replace-title = 別のウォレットで取引
+settings-wallet-replace-description = 新しいウォレットを作成するか、インポートします。{ -brand } はそのウォレットで再起動し、現在のウォレットは資金を保持したまま「その他のウォレット」に残ります。
+settings-wallet-replace-action = ウォレットを置き換える
 
 ## Connection tab (scripts/ui/settings/connection_tab.js)
 

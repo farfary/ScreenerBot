@@ -35,6 +35,7 @@ settings-dialog-tab-startup = Inicio
 settings-dialog-tab-hints = Ayudas
 settings-dialog-tab-data = Datos
 settings-dialog-tab-security = Seguridad
+settings-dialog-tab-wallet = Billetera
 settings-dialog-tab-account = Cuenta
 settings-dialog-tab-connection = Conexión
 settings-dialog-tab-telegram = { -telegram }
@@ -640,6 +641,21 @@ settings-data-folder-label = Abrir carpeta de datos
 settings-data-folder-hint = Abre en tu gestor de archivos la carpeta que contiene todos los datos de { -brand }.
 settings-data-folder-open = Abrir carpeta
 settings-data-folder-open-failed = No se pudo abrir la carpeta de datos
+
+## Wallet tab (scripts/ui/settings/wallet_tab.js)
+
+settings-wallet-title = Billetera de trading
+settings-wallet-description = La billetera con la que { -brand } firma cada operación. Su clave privada se cifra en este dispositivo y nunca sale de él.
+settings-wallet-address = Dirección
+settings-wallet-balance = Saldo
+settings-wallet-unread = No se pudo leer la billetera de trading.
+settings-wallet-open = Abrir Billeteras
+settings-wallet-key-title = Clave privada
+settings-wallet-key-description = Haz una copia de seguridad de esta billetera o ábrela en otra app de billetera. Quien tenga la clave controla todo lo que contiene esta billetera.
+settings-wallet-key-reveal = Revelar clave privada
+settings-wallet-replace-title = Operar con otra billetera
+settings-wallet-replace-description = Crea una billetera nueva o importa una. { -brand } se reinicia con ella; la billetera actual conserva sus fondos y queda en Otras billeteras.
+settings-wallet-replace-action = Reemplazar billetera
 
 ## Connection tab (scripts/ui/settings/connection_tab.js)
 

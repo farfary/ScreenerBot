@@ -31,6 +31,7 @@ settings-dialog-tab-startup = Inicialização
 settings-dialog-tab-hints = Dicas
 settings-dialog-tab-data = Dados
 settings-dialog-tab-security = Segurança
+settings-dialog-tab-wallet = Carteira
 settings-dialog-tab-account = Conta
 settings-dialog-tab-connection = Conexão
 settings-dialog-tab-telegram = { -telegram }
@@ -606,6 +607,21 @@ settings-data-folder-label = Abrir pasta de dados
 settings-data-folder-hint = Abre no gerenciador de arquivos a pasta com todos os dados do { -brand }.
 settings-data-folder-open = Abrir pasta
 settings-data-folder-open-failed = Não foi possível abrir a pasta de dados
+
+## Wallet tab (scripts/ui/settings/wallet_tab.js)
+
+settings-wallet-title = Carteira de trading
+settings-wallet-description = A carteira com que o { -brand } assina cada operação. A chave privada dela é criptografada neste dispositivo e nunca sai dele.
+settings-wallet-address = Endereço
+settings-wallet-balance = Saldo
+settings-wallet-unread = Não foi possível ler a carteira de trading.
+settings-wallet-open = Abrir Carteiras
+settings-wallet-key-title = Chave privada
+settings-wallet-key-description = Faça backup desta carteira ou abra-a em outro app de carteira. Quem tiver a chave controla tudo o que esta carteira guarda.
+settings-wallet-key-reveal = Revelar chave privada
+settings-wallet-replace-title = Operar com outra carteira
+settings-wallet-replace-description = Crie uma carteira nova ou importe uma. O { -brand } reinicia com ela; a carteira atual mantém seus fundos e fica em Outras carteiras.
+settings-wallet-replace-action = Substituir carteira
 
 ## Connection tab (scripts/ui/settings/connection_tab.js)
 

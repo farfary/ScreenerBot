@@ -37,6 +37,7 @@ settings-dialog-tab-startup = Démarrage
 settings-dialog-tab-hints = Astuces
 settings-dialog-tab-data = Données
 settings-dialog-tab-security = Sécurité
+settings-dialog-tab-wallet = Portefeuille
 settings-dialog-tab-account = Compte
 settings-dialog-tab-connection = Connexion
 settings-dialog-tab-telegram = { -telegram }
@@ -642,6 +643,21 @@ settings-data-folder-label = Ouvrir le dossier de données
 settings-data-folder-hint = Ouvre dans votre gestionnaire de fichiers le dossier contenant toutes les données de { -brand }.
 settings-data-folder-open = Ouvrir le dossier
 settings-data-folder-open-failed = Impossible d'ouvrir le dossier de données
+
+## Wallet tab (scripts/ui/settings/wallet_tab.js)
+
+settings-wallet-title = Portefeuille de trading
+settings-wallet-description = Le portefeuille avec lequel { -brand } signe chaque trade. Sa clé privée est chiffrée sur cet appareil et ne le quitte jamais.
+settings-wallet-address = Adresse
+settings-wallet-balance = Solde
+settings-wallet-unread = Impossible de lire le portefeuille de trading.
+settings-wallet-open = Ouvrir Portefeuilles
+settings-wallet-key-title = Clé privée
+settings-wallet-key-description = Sauvegardez ce portefeuille ou ouvrez-le dans une autre application de portefeuille. Quiconque possède la clé contrôle tout ce que ce portefeuille contient.
+settings-wallet-key-reveal = Révéler la clé privée
+settings-wallet-replace-title = Trader avec un autre portefeuille
+settings-wallet-replace-description = Créez un nouveau portefeuille ou importez-en un. { -brand } redémarre avec lui ; le portefeuille actuel garde ses fonds et reste dans Autres portefeuilles.
+settings-wallet-replace-action = Remplacer le portefeuille
 
 ## Connection tab (scripts/ui/settings/connection_tab.js)
 

@@ -37,6 +37,7 @@ settings-dialog-tab-startup = Запуск
 settings-dialog-tab-hints = Подсказки
 settings-dialog-tab-data = Данные
 settings-dialog-tab-security = Безопасность
+settings-dialog-tab-wallet = Кошелёк
 settings-dialog-tab-account = Аккаунт
 settings-dialog-tab-connection = Подключение
 settings-dialog-tab-telegram = { -telegram }
@@ -649,6 +650,21 @@ settings-data-folder-label = Открыть папку данных
 settings-data-folder-hint = Открыть в файловом менеджере папку со всеми данными { -brand }.
 settings-data-folder-open = Открыть папку
 settings-data-folder-open-failed = Не удалось открыть папку данных
+
+## Wallet tab (scripts/ui/settings/wallet_tab.js)
+
+settings-wallet-title = Торговый кошелёк
+settings-wallet-description = Кошелёк, которым { -brand } подписывает каждую сделку. Его приватный ключ шифруется на этом устройстве и никогда его не покидает.
+settings-wallet-address = Адрес
+settings-wallet-balance = Баланс
+settings-wallet-unread = Не удалось прочитать торговый кошелёк.
+settings-wallet-open = Открыть кошельки
+settings-wallet-key-title = Приватный ключ
+settings-wallet-key-description = Сделайте резервную копию этого кошелька или откройте его в другом приложении-кошельке. Любой, у кого есть ключ, распоряжается всем, что хранится в этом кошельке.
+settings-wallet-key-reveal = Показать приватный ключ
+settings-wallet-replace-title = Торговать с другим кошельком
+settings-wallet-replace-description = Создайте новый кошелёк или импортируйте существующий. { -brand } перезапустится с ним; текущий кошелёк сохранит свои средства и останется в разделе «Другие кошельки».
+settings-wallet-replace-action = Заменить кошелёк
 
 ## Connection tab (scripts/ui/settings/connection_tab.js)
 

@@ -31,6 +31,7 @@ settings-dialog-tab-startup = स्टार्टअप
 settings-dialog-tab-hints = हिंट्स
 settings-dialog-tab-data = डेटा
 settings-dialog-tab-security = सुरक्षा
+settings-dialog-tab-wallet = वॉलेट
 settings-dialog-tab-account = अकाउंट
 settings-dialog-tab-connection = कनेक्शन
 settings-dialog-tab-telegram = { -telegram }
@@ -599,6 +600,21 @@ settings-data-folder-label = डेटा फ़ोल्डर खोलें
 settings-data-folder-hint = { -brand } का सारा डेटा रखने वाला फ़ोल्डर अपने फ़ाइल मैनेजर में खोलें।
 settings-data-folder-open = फ़ोल्डर खोलें
 settings-data-folder-open-failed = डेटा फ़ोल्डर नहीं खोला जा सका
+
+## Wallet tab (scripts/ui/settings/wallet_tab.js)
+
+settings-wallet-title = ट्रेडिंग वॉलेट
+settings-wallet-description = वह वॉलेट जिससे { -brand } हर ट्रेड पर हस्ताक्षर करता है। उसकी प्राइवेट की इसी डिवाइस पर एन्क्रिप्ट होती है और कभी बाहर नहीं जाती।
+settings-wallet-address = पता
+settings-wallet-balance = बैलेंस
+settings-wallet-unread = ट्रेडिंग वॉलेट पढ़ा नहीं जा सका।
+settings-wallet-open = वॉलेट खोलें
+settings-wallet-key-title = प्राइवेट की
+settings-wallet-key-description = इस वॉलेट का बैकअप लें या इसे किसी दूसरे वॉलेट ऐप में खोलें। जिसके पास यह की है, वह इस वॉलेट में रखी हर चीज़ को नियंत्रित करता है।
+settings-wallet-key-reveal = प्राइवेट की दिखाएं
+settings-wallet-replace-title = दूसरे वॉलेट से ट्रेड करें
+settings-wallet-replace-description = नया वॉलेट बनाएं या कोई इम्पोर्ट करें। { -brand } उसी के साथ फिर से शुरू होता है; मौजूदा वॉलेट अपने फंड रखता है और अन्य वॉलेट में रहता है।
+settings-wallet-replace-action = वॉलेट बदलें
 
 ## Connection tab (scripts/ui/settings/connection_tab.js)
 

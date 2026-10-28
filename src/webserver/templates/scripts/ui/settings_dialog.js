@@ -48,6 +48,7 @@ import {
   attachConnectionHandlers,
   teardownConnectionTab,
 } from "./settings/connection_tab.js";
+import { buildWalletTab, attachWalletHandlers } from "./settings/wallet_tab.js";
 
 // Whether an update needs a decision, for the nav indicator. Everything else about the
 // update lifecycle is owned by settings/updates_tab.js and read straight from
@@ -199,14 +200,15 @@ export class SettingsDialog {
   }
 
   /**
-   * Close by Escape, the backdrop or the close button. Unsaved changes are kept
-   * unless the user saves or discards them; keeping on editing leaves the dialog open.
+   * Close by Escape, the backdrop, the close button or a tab that leads elsewhere.
+   * Unsaved changes are kept unless the user saves or discards them; keeping on
+   * editing leaves the dialog open. Resolves true when the dialog closed.
    */
   async requestClose() {
-    if (!this.dialogEl || this._closePrompt) return;
+    if (!this.dialogEl || this._closePrompt) return false;
     if (!this.hasChanges) {
       this.close();
-      return;
+      return true;
     }
     this._closePrompt = ConfirmationDialog.show({
       title: I18n.t("settings-dialog-unsaved-title"),
@@ -228,6 +230,7 @@ export class SettingsDialog {
     } finally {
       this._closePrompt = null;
     }
+    return !this.dialogEl?.classList.contains("active");
   }
 
   /**
@@ -544,6 +547,10 @@ export class SettingsDialog {
                 <i class="icon-lock"></i>
                 <span data-l10n-id="settings-dialog-tab-security"></span>
               </button>
+              <button class="settings-nav-item" data-tab="wallet">
+                <i class="icon-wallet"></i>
+                <span data-l10n-id="settings-dialog-tab-wallet"></span>
+              </button>
               <button class="settings-nav-item" data-tab="account">
                 <i class="icon-circle-user"></i>
                 <span data-l10n-id="settings-dialog-tab-account"></span>
@@ -605,6 +612,9 @@ export class SettingsDialog {
               <div class="settings-loading" data-l10n-id="common-loading"></div>
             </div>
             <div class="settings-tab" data-tab-content="security">
+              <div class="settings-loading" data-l10n-id="common-loading"></div>
+            </div>
+            <div class="settings-tab" data-tab-content="wallet">
               <div class="settings-loading" data-l10n-id="common-loading"></div>
             </div>
             <div class="settings-tab" data-tab-content="account">
@@ -757,6 +767,11 @@ export class SettingsDialog {
         break;
       case "security":
         loadSecurityTab(this, content);
+        break;
+      case "wallet":
+        content.innerHTML = buildWalletTab();
+        I18n.localizeTree(content);
+        attachWalletHandlers(this, content);
         break;
       case "account":
         content.innerHTML = buildAccountTab();

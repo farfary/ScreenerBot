@@ -25,41 +25,8 @@
   padding-top: var(--spacing-sm);
 }
 
-/* Export Key Display */
-.export-key-display {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-xs);
-}
-
 /* The dialogs toggle these with the `hidden` attribute, which their `display` rules
    would otherwise outrank. */
-.wallets-page :is(.export-key-display, .form-group, .form-error, .btn)[hidden] {
+.wallets-page :is(.form-group, .form-error, .btn)[hidden] {
   display: none;
-}
-
-.export-key-display
-  label:not(.checkbox-label, :has(> input[type="checkbox"]), :has(> input[type="radio"])) {
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.key-display {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--spacing-sm);
-  padding: var(--spacing-md);
-  border-radius: var(--radius-md);
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-}
-
-.key-display code {
-  flex: 1;
-  font-family: var(--font-mono);
-  font-size: 0.8rem;
-  line-height: 1.5;
-  word-break: break-all;
-  color: var(--text-primary);
 }

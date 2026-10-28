@@ -31,6 +31,7 @@ settings-dialog-tab-startup = 시작
 settings-dialog-tab-hints = 힌트
 settings-dialog-tab-data = 데이터
 settings-dialog-tab-security = 보안
+settings-dialog-tab-wallet = 지갑
 settings-dialog-tab-account = 계정
 settings-dialog-tab-connection = 연결
 settings-dialog-tab-telegram = { -telegram }
@@ -622,6 +623,21 @@ settings-data-folder-label = 데이터 폴더 열기
 settings-data-folder-hint = { -brand } 데이터가 모두 들어 있는 폴더를 파일 관리자에서 엽니다.
 settings-data-folder-open = 폴더 열기
 settings-data-folder-open-failed = 데이터 폴더를 열지 못했습니다
+
+## Wallet tab (scripts/ui/settings/wallet_tab.js)
+
+settings-wallet-title = 트레이딩 지갑
+settings-wallet-description = { -brand }가 모든 거래에 서명하는 지갑입니다. 개인 키는 이 기기에서 암호화되며 기기 밖으로 나가지 않습니다.
+settings-wallet-address = 주소
+settings-wallet-balance = 잔액
+settings-wallet-unread = 트레이딩 지갑을 읽을 수 없습니다.
+settings-wallet-open = 지갑 열기
+settings-wallet-key-title = 개인 키
+settings-wallet-key-description = 이 지갑을 백업하거나 다른 지갑 앱에서 엽니다. 키를 가진 사람은 이 지갑의 모든 자산을 통제할 수 있습니다.
+settings-wallet-key-reveal = 개인 키 표시
+settings-wallet-replace-title = 다른 지갑으로 거래
+settings-wallet-replace-description = 새 지갑을 만들거나 가져옵니다. { -brand }가 그 지갑으로 다시 시작되며, 현재 지갑은 자금을 그대로 유지한 채 기타 지갑에 남습니다.
+settings-wallet-replace-action = 지갑 교체
 
 ## Connection tab (scripts/ui/settings/connection_tab.js)
 

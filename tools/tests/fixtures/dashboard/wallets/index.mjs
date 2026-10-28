@@ -10,6 +10,12 @@ const MAIN_ROWS = "#tokens-datatable-root tr[data-row-id]";
 const OTHER_ROWS = "#other-wallets-table-container tr[data-row-id]";
 const WATCHED_ROWS = "#watched-wallets-root tr[data-row-id]";
 const dialog = (trigger, id, close) => ({ trigger, dialog: `#${id}`, close: `#${close}` });
+// The private-key export is the shared wallet key dialog, built when it opens.
+const keyDialog = (trigger) => ({
+  trigger,
+  dialog: ".wallet-key-dialog",
+  close: ".wallet-key-dialog .modal-close",
+});
 
 export const endpoints = [
   {
@@ -62,7 +68,7 @@ export const views = [
         text: "No token holdings",
       },
     ],
-    dialogs: [dialog('[data-btn-id="wt-export-key"]', "export-modal", "export-modal-close")],
+    dialogs: [keyDialog('[data-btn-id="wt-export-key"]')],
   },
   {
     name: "other wallets",
@@ -98,12 +104,6 @@ export const views = [
     name: "other wallet row actions",
     click: [tab("other")],
     populated: [{ selector: `${OTHER_ROWS} .dt-action-btn`, min: 4 }],
-    dialogs: [
-      dialog(
-        `${OTHER_ROWS} .dt-action-btn[data-action-id="export"]`,
-        "export-modal",
-        "export-modal-close"
-      ),
-    ],
+    dialogs: [keyDialog(`${OTHER_ROWS} .dt-action-btn[data-action-id="export"]`)],
   },
 ];

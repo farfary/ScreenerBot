@@ -145,6 +145,8 @@ pub(super) const ARM_LIVE_GATE_STYLES: &str = include_str!("templates/styles/ui/
 pub(super) const POSITION_REMOVE_DIALOG_STYLES: &str =
     include_str!("templates/styles/ui/position_remove_dialog.css");
 pub(super) const SETUP_DIALOG_STYLES: &str = include_str!("templates/styles/ui/setup_dialog.css");
+pub(super) const WALLET_KEY_DIALOG_STYLES: &str =
+    include_str!("templates/styles/ui/wallet_key_dialog.css");
 pub(super) const CONTEXT_MENU_STYLES: &str = include_str!("templates/styles/ui/context_menu.css");
 pub(super) const ADVANCED_CHART_STYLES: &str =
     include_str!("templates/styles/ui/advanced_chart.css");
@@ -206,6 +208,8 @@ pub(super) const SETTINGS_AGENT_CONNECTIONS_STYLES: &str =
     include_str!("templates/styles/settings/agent_connections.css");
 pub(super) const SETTINGS_CONNECTION_STYLES: &str =
     include_str!("templates/styles/settings/connection.css");
+pub(super) const SETTINGS_WALLET_STYLES: &str =
+    include_str!("templates/styles/settings/wallet.css");
 pub(super) const STATUS_BAR_STYLES: &str = include_str!("templates/styles/status_bar.css");
 pub(super) const HINT_POPOVER_STYLES: &str = include_str!("templates/styles/ui/hint_popover.css");
 pub(super) const SEARCH_DIALOG_STYLES: &str = include_str!("templates/styles/ui/search_dialog.css");
@@ -465,6 +469,8 @@ pub const SETTINGS_ACCOUNT_TAB_UI: &str =
     include_str!("templates/scripts/ui/settings/account_tab.js");
 pub const SETTINGS_CONNECTION_TAB_UI: &str =
     include_str!("templates/scripts/ui/settings/connection_tab.js");
+pub const SETTINGS_WALLET_TAB_UI: &str =
+    include_str!("templates/scripts/ui/settings/wallet_tab.js");
 pub const SETTINGS_DATA_TAB_UI: &str = include_str!("templates/scripts/ui/settings/data_tab.js");
 pub const SETTINGS_STORAGE_VIEW_UI: &str =
     include_str!("templates/scripts/ui/settings/storage_view.js");
@@ -498,6 +504,7 @@ pub const CONFIG_IMPORT_EXPORT_DIALOG_UI: &str =
     include_str!("templates/scripts/ui/config_import_export_dialog.js");
 pub const INPUT_DIALOG_UI: &str = include_str!("templates/scripts/ui/input_dialog.js");
 pub const SETUP_DIALOG_UI: &str = include_str!("templates/scripts/ui/setup_dialog.js");
+pub const WALLET_KEY_DIALOG_UI: &str = include_str!("templates/scripts/ui/wallet_key_dialog.js");
 pub const ACCESS_GATE_UI: &str = include_str!("templates/scripts/ui/access_gate.js");
 pub const FUNDING_NOTICE_UI: &str = include_str!("templates/scripts/ui/funding_notice.js");
 pub const LANGUAGE_PICKER_UI: &str = include_str!("templates/scripts/ui/language_picker.js");

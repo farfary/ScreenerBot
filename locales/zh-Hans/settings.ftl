@@ -31,6 +31,7 @@ settings-dialog-tab-startup = 启动
 settings-dialog-tab-hints = 提示
 settings-dialog-tab-data = 数据
 settings-dialog-tab-security = 安全
+settings-dialog-tab-wallet = 钱包
 settings-dialog-tab-account = 账户
 settings-dialog-tab-connection = 连接
 settings-dialog-tab-telegram = { -telegram }
@@ -622,6 +623,21 @@ settings-data-folder-label = 打开数据文件夹
 settings-data-folder-hint = 在文件管理器中打开包含所有 { -brand } 数据的文件夹。
 settings-data-folder-open = 打开文件夹
 settings-data-folder-open-failed = 无法打开数据文件夹
+
+## Wallet tab (scripts/ui/settings/wallet_tab.js)
+
+settings-wallet-title = 交易钱包
+settings-wallet-description = { -brand } 用来签署每笔交易的钱包。其私钥在本设备上加密，绝不会离开本设备。
+settings-wallet-address = 地址
+settings-wallet-balance = 余额
+settings-wallet-unread = 无法读取交易钱包。
+settings-wallet-open = 打开钱包
+settings-wallet-key-title = 私钥
+settings-wallet-key-description = 备份此钱包，或在其他钱包应用中打开它。任何拥有该密钥的人都能控制此钱包中的全部资产。
+settings-wallet-key-reveal = 显示私钥
+settings-wallet-replace-title = 使用其他钱包交易
+settings-wallet-replace-description = 新建一个钱包或导入一个钱包。{ -brand } 将以该钱包重启；当前钱包保留其资金，并留在“其他钱包”中。
+settings-wallet-replace-action = 更换钱包
 
 ## Connection tab (scripts/ui/settings/connection_tab.js)
 

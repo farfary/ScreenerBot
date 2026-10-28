@@ -41,6 +41,7 @@ settings-dialog-tab-startup = بدء التشغيل
 settings-dialog-tab-hints = التلميحات
 settings-dialog-tab-data = البيانات
 settings-dialog-tab-security = الأمان
+settings-dialog-tab-wallet = المحفظة
 settings-dialog-tab-account = الحساب
 settings-dialog-tab-connection = الاتصال
 settings-dialog-tab-telegram = { -telegram }
@@ -667,6 +668,21 @@ settings-data-folder-label = فتح مجلد البيانات
 settings-data-folder-hint = افتح المجلد الذي يحتوي على جميع بيانات { -brand } في مدير الملفات.
 settings-data-folder-open = فتح المجلد
 settings-data-folder-open-failed = تعذّر فتح مجلد البيانات
+
+## Wallet tab (scripts/ui/settings/wallet_tab.js)
+
+settings-wallet-title = محفظة التداول
+settings-wallet-description = المحفظة التي يوقّع بها { -brand } كل صفقة. يُشفَّر مفتاحها الخاص على هذا الجهاز ولا يغادره أبدًا.
+settings-wallet-address = العنوان
+settings-wallet-balance = الرصيد
+settings-wallet-unread = تعذّرت قراءة محفظة التداول.
+settings-wallet-open = فتح المحافظ
+settings-wallet-key-title = المفتاح الخاص
+settings-wallet-key-description = احتفظ بنسخة احتياطية من هذه المحفظة أو افتحها في تطبيق محفظة آخر. أي شخص يملك المفتاح يتحكم في كل ما تحتويه هذه المحفظة.
+settings-wallet-key-reveal = إظهار المفتاح الخاص
+settings-wallet-replace-title = التداول بمحفظة أخرى
+settings-wallet-replace-description = أنشئ محفظة جديدة أو استورد واحدة. يُعاد تشغيل { -brand } بها، وتحتفظ المحفظة الحالية بأموالها وتبقى ضمن محافظ أخرى.
+settings-wallet-replace-action = استبدال المحفظة
 
 ## Connection tab (scripts/ui/settings/connection_tab.js)
 

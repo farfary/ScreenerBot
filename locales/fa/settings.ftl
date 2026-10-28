@@ -33,6 +33,7 @@ settings-dialog-tab-startup = راه‌اندازی
 settings-dialog-tab-hints = راهنماها
 settings-dialog-tab-data = داده
 settings-dialog-tab-security = امنیت
+settings-dialog-tab-wallet = کیف پول
 settings-dialog-tab-account = حساب کاربری
 settings-dialog-tab-connection = اتصال
 settings-dialog-tab-telegram = { -telegram }
@@ -631,6 +632,21 @@ settings-data-folder-label = باز کردن پوشه داده
 settings-data-folder-hint = پوشه حاوی همه داده‌های { -brand } را در مدیر فایل خود باز کنید.
 settings-data-folder-open = باز کردن پوشه
 settings-data-folder-open-failed = باز کردن پوشه داده ممکن نشد
+
+## Wallet tab (scripts/ui/settings/wallet_tab.js)
+
+settings-wallet-title = کیف پول معاملاتی
+settings-wallet-description = کیف پولی که { -brand } هر معامله را با آن امضا می‌کند. کلید خصوصی آن روی همین دستگاه رمزگذاری می‌شود و هرگز از آن خارج نمی‌شود.
+settings-wallet-address = آدرس
+settings-wallet-balance = موجودی
+settings-wallet-unread = کیف پول معاملاتی خوانده نشد.
+settings-wallet-open = باز کردن کیف پول‌ها
+settings-wallet-key-title = کلید خصوصی
+settings-wallet-key-description = از این کیف پول نسخه پشتیبان بگیرید یا آن را در اپ کیف پول دیگری باز کنید. هر کسی که کلید را داشته باشد، همه دارایی این کیف پول را در اختیار دارد.
+settings-wallet-key-reveal = نمایش کلید خصوصی
+settings-wallet-replace-title = معامله با کیف پول دیگر
+settings-wallet-replace-description = کیف پول تازه‌ای بسازید یا یکی را وارد کنید. { -brand } با آن دوباره راه‌اندازی می‌شود؛ کیف پول فعلی دارایی‌اش را نگه می‌دارد و در کیف پول‌های دیگر می‌ماند.
+settings-wallet-replace-action = جایگزینی کیف پول
 
 ## Connection tab (scripts/ui/settings/connection_tab.js)
 

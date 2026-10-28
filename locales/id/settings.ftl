@@ -31,6 +31,7 @@ settings-dialog-tab-startup = Startup
 settings-dialog-tab-hints = Petunjuk
 settings-dialog-tab-data = Data
 settings-dialog-tab-security = Keamanan
+settings-dialog-tab-wallet = Dompet
 settings-dialog-tab-account = Akun
 settings-dialog-tab-connection = Koneksi
 settings-dialog-tab-telegram = { -telegram }
@@ -622,6 +623,21 @@ settings-data-folder-label = Buka Folder Data
 settings-data-folder-hint = Buka folder berisi semua data { -brand } di pengelola file Anda.
 settings-data-folder-open = Buka Folder
 settings-data-folder-open-failed = Tidak dapat membuka folder data
+
+## Wallet tab (scripts/ui/settings/wallet_tab.js)
+
+settings-wallet-title = Dompet trading
+settings-wallet-description = Dompet yang digunakan { -brand } untuk menandatangani setiap trade. Private key-nya dienkripsi di perangkat ini dan tidak pernah meninggalkannya.
+settings-wallet-address = Alamat
+settings-wallet-balance = Saldo
+settings-wallet-unread = Dompet trading tidak dapat dibaca.
+settings-wallet-open = Buka Dompet
+settings-wallet-key-title = Private key
+settings-wallet-key-description = Cadangkan dompet ini atau buka di aplikasi dompet lain. Siapa pun yang memiliki key ini menguasai semua isi dompet ini.
+settings-wallet-key-reveal = Tampilkan private key
+settings-wallet-replace-title = Trading dengan dompet lain
+settings-wallet-replace-description = Buat dompet baru atau impor dompet. { -brand } dimulai ulang dengan dompet itu; dompet saat ini tetap menyimpan dananya dan berada di Dompet Lain.
+settings-wallet-replace-action = Ganti dompet
 
 ## Connection tab (scripts/ui/settings/connection_tab.js)
 

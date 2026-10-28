@@ -22,6 +22,7 @@ import { createPageDialogs } from "../ui/page_dialogs.js";
 import { ConfirmationDialog } from "../ui/confirmation_dialog.js";
 import { accessBlocked, renderAccessGate, setupRequired } from "../ui/access_gate.js";
 import { SetupDialog } from "../ui/setup_dialog.js";
+import { showWalletKeyDialog } from "../ui/wallet_key_dialog.js";
 
 // =============================================================================
 // Constants
@@ -37,15 +38,6 @@ const buildWalletTabs = () => [
   { id: "watched", label: I18n.t("wallets-tab-watched") },
 ];
 
-// Replaces a button's content with an icon and a text label built through the DOM.
-function setButtonContent(button, iconClass, label) {
-  const icon = document.createElement("i");
-  icon.className = iconClass;
-  const text = document.createElement("span");
-  text.textContent = label;
-  button.replaceChildren(icon, " ", text);
-}
-
 // =============================================================================
 // State
 // =============================================================================
@@ -60,7 +52,6 @@ let tokenHoldings = [];
 let holdingsReadError = null;
 let currentTab = "main";
 let hasLoadedWalletData = false;
-let currentExportWalletId = null;
 
 // Module instances
 let renderers = null;
@@ -223,31 +214,6 @@ function updatePanelVisibility() {
 function setupEventHandlers() {
   // Backdrop and close buttons of every modal; Escape is owned by the dialogs.
   dialogs.setup($(".wallets-page"));
-
-  // Export modal
-  setupExportModal();
-}
-
-function setupExportModal() {
-  const modal = $("#export-modal");
-  if (!modal) return;
-
-  const confirmBtn = $("#confirm-export-btn");
-  const copyBtn = $("#copy-key-btn");
-
-  if (confirmBtn) {
-    on(confirmBtn, "click", handleExportKey);
-  }
-
-  if (copyBtn) {
-    on(copyBtn, "click", () => {
-      const keyEl = $("#exported-key");
-      if (keyEl && keyEl.textContent !== "...") {
-        Utils.copyToClipboard(keyEl.textContent);
-        Utils.notifyCopied(I18n.t("wallets-copied-private-key"));
-      }
-    });
-  }
 }
 
 // =============================================================================
@@ -381,64 +347,9 @@ async function handleRefresh(btn) {
 }
 
 function handleWalletAction(action, id) {
-  if (action === "export") showExportModal(id);
+  if (action === "export") showWalletKeyDialog(id);
   // Replacing the trading wallet restarts the app once it is staged.
   else if (action === "replace") void SetupDialog.show();
-}
-
-function showExportModal(id) {
-  currentExportWalletId = id;
-  const keyDisplay = $("#export-key-display");
-  const confirmBtn = $("#confirm-export-btn");
-
-  if (keyDisplay) keyDisplay.hidden = true;
-  if (confirmBtn) {
-    confirmBtn.hidden = false;
-    confirmBtn.disabled = false;
-  }
-
-  const keyEl = $("#exported-key");
-  if (keyEl) keyEl.textContent = "...";
-
-  dialogs.show("export-modal", { onClose: clearExportedKey });
-}
-
-async function handleExportKey() {
-  if (!currentExportWalletId) return;
-
-  const confirmBtn = $("#confirm-export-btn");
-  if (confirmBtn) {
-    confirmBtn.disabled = true;
-    setButtonContent(confirmBtn, "icon-loader spin", I18n.t("wallets-export-busy"));
-  }
-
-  try {
-    const response = await fetch(`/api/wallets/${currentExportWalletId}/export`, {
-      method: "POST",
-    });
-    const data = await response.json();
-    if (!response.ok) throw new Error(apiErrorMessage(data, I18n.t("wallets-action-failed")));
-
-    const keyDisplay = $("#export-key-display");
-    const keyEl = $("#exported-key");
-
-    if (keyEl) keyEl.textContent = data.private_key;
-    if (keyDisplay) keyDisplay.hidden = false;
-    if (confirmBtn) confirmBtn.hidden = true;
-
-    Utils.showToast(I18n.t("wallets-export-revealed"), "warning");
-  } catch (error) {
-    Utils.showToast(I18n.t("wallets-toast-failed", { reason: error.message }), "error");
-    dialogs.hide("export-modal");
-  }
-}
-
-/** Forget the wallet and wipe the revealed key; runs on every way the export modal closes. */
-function clearExportedKey() {
-  currentExportWalletId = null;
-
-  const keyEl = $("#exported-key");
-  if (keyEl) keyEl.textContent = "...";
 }
 
 // =============================================================================
@@ -458,7 +369,6 @@ function cleanup() {
   holdingsReadError = null;
   hasLoadedWalletData = false;
   currentTab = "main";
-  currentExportWalletId = null;
   poller = null;
   tabBar = null;
   renderers = null;

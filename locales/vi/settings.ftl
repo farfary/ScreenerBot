@@ -27,6 +27,7 @@ settings-dialog-tab-startup = Khởi động
 settings-dialog-tab-hints = Gợi ý
 settings-dialog-tab-data = Dữ liệu
 settings-dialog-tab-security = Bảo mật
+settings-dialog-tab-wallet = Ví
 settings-dialog-tab-account = Tài khoản
 settings-dialog-tab-connection = Kết nối
 settings-dialog-tab-telegram = { -telegram }
@@ -588,6 +589,21 @@ settings-data-folder-label = Mở thư mục dữ liệu
 settings-data-folder-hint = Mở thư mục chứa toàn bộ dữ liệu { -brand } trong trình quản lý tệp của bạn.
 settings-data-folder-open = Mở thư mục
 settings-data-folder-open-failed = Không thể mở thư mục dữ liệu
+
+## Wallet tab (scripts/ui/settings/wallet_tab.js)
+
+settings-wallet-title = Ví giao dịch
+settings-wallet-description = Ví mà { -brand } dùng để ký mọi giao dịch. Khóa riêng của ví được mã hóa trên thiết bị này và không bao giờ rời khỏi nó.
+settings-wallet-address = Địa chỉ
+settings-wallet-balance = Số dư
+settings-wallet-unread = Không thể đọc ví giao dịch.
+settings-wallet-open = Mở Ví
+settings-wallet-key-title = Khóa riêng
+settings-wallet-key-description = Sao lưu ví này hoặc mở nó trong một ứng dụng ví khác. Bất kỳ ai có khóa đều kiểm soát mọi thứ trong ví này.
+settings-wallet-key-reveal = Hiện khóa riêng
+settings-wallet-replace-title = Giao dịch bằng ví khác
+settings-wallet-replace-description = Tạo ví mới hoặc nhập một ví. { -brand } khởi động lại với ví đó; ví hiện tại giữ nguyên tiền và vẫn nằm trong Ví khác.
+settings-wallet-replace-action = Thay ví
 
 ## Connection tab (scripts/ui/settings/connection_tab.js)
 

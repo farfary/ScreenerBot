@@ -1,0 +1,54 @@
+/* Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+ * SPDX-License-Identifier: BUSL-1.1 */
+
+/* Wallet key dialog - the private-key export of one wallet, opened from Wallets and
+   from Settings. Global, because Settings opens it on any page. */
+
+/* Appended after the Settings dialog, which shares its layer, so it stacks above it. */
+.wallet-key-dialog .modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.wallet-key-dialog [hidden] {
+  display: none;
+}
+
+.wallet-key-reveal {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.wallet-key-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.wallet-key-value {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md);
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+}
+
+.wallet-key-value code {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  line-height: 1.5;
+  word-break: break-all;
+  color: var(--text-primary);
+}
+
+.wallet-key-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacing-sm);
+  padding-block-start: var(--spacing-sm);
+}
