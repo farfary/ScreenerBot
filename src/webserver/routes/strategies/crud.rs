@@ -20,7 +20,7 @@ use crate::{
         },
         types::*,
     },
-    webserver::utils::success_response,
+    webserver::{promo, utils::success_response},
 };
 
 use super::types::*;
@@ -54,7 +54,12 @@ pub async fn list_strategies(Query(query): Query<StrategyListQuery>) -> Response
         },
     };
 
-    let strategies: Vec<Strategy> = match get_all_strategies_async().await {
+    let stored = if promo::are_promo_fixtures_enabled() {
+        Ok(promo::get_promo_strategies())
+    } else {
+        get_all_strategies_async().await
+    };
+    let strategies: Vec<Strategy> = match stored {
         Ok(list) => list
             .into_iter()
             .filter(|s| strategy_type.is_none_or(|wanted| s.strategy_type == wanted))
@@ -86,7 +91,12 @@ pub async fn list_strategies(Query(query): Query<StrategyListQuery>) -> Response
 pub async fn get_strategy_detail(Path(id): Path<String>) -> Response {
     logger::info(LogTag::Webserver, &format!("GET /api/strategies/{id}"));
 
-    let strategy = match get_strategy_async(&id).await {
+    let stored = if promo::are_promo_fixtures_enabled() {
+        Ok(promo::get_promo_strategy(&id))
+    } else {
+        get_strategy_async(&id).await
+    };
+    let strategy = match stored {
         Ok(Some(s)) => s,
         Ok(None) => return err(ApiErrorCode::NotFound, ids::ERRORS_STRATEGIES_NOT_FOUND),
         Err(e) => {

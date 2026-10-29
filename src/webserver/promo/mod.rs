@@ -29,6 +29,8 @@
 //!   /api/trader/loss-limit/status
 //! - /api/header/metrics (SOL price is LIVE when the network is reachable)
 //! - /api/status (the status bar fields; version and service blocks stay live)
+//! - /api/strategies, /api/strategies/overview, /api/strategies/{id} (reads only; the
+//!   promo trades are the rounds of its live entry strategies)
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -43,6 +45,7 @@ mod header;
 mod llm_analysis;
 mod positions;
 mod status;
+mod strategies;
 mod tokens;
 mod trader;
 mod wallet;
@@ -72,6 +75,7 @@ pub use header::get_promo_header_metrics;
 pub use llm_analysis::get_promo_analysis_status;
 pub use positions::{get_promo_positions, get_promo_positions_stats};
 pub use status::apply_promo_status;
+pub use strategies::{get_promo_strategies, get_promo_strategies_overview, get_promo_strategy};
 pub use tokens::{get_promo_favorites, get_promo_tokens_list, get_promo_tokens_stats};
 pub use trader::{
     get_promo_loss_limit_status, get_promo_monitors_status, get_promo_trader_stats,

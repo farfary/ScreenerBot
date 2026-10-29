@@ -293,7 +293,7 @@ fn round_position(task: &CopyTask, round: &Round, book: Book, now: DateTime<Utc>
 }
 
 /// Who owns a promo position: the live copy task that opened it, if one did,
-/// else the Auto Trader.
+/// else the Auto Trader under the promo entry strategy that opened it.
 pub(in crate::webserver::promo) fn position_owner(
     mint: &str,
 ) -> (PositionOrigin, PositionManagement) {
@@ -319,7 +319,9 @@ pub(in crate::webserver::promo) fn position_owner(
             management_for_exit_mode(task.exit_mode),
         ),
         None => (
-            PositionOrigin::Auto { strategy_id: None },
+            PositionOrigin::Auto {
+                strategy_id: super::super::strategies::entry_strategy_of(mint),
+            },
             PositionManagement::AutoTrader,
         ),
     }

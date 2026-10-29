@@ -4,7 +4,7 @@
 //! Promo generators for the Auto Trader page: the trader statistics tab, the
 //! running state, the monitor controls and the period loss limit panel.
 
-use chrono::{Duration, Utc};
+use chrono::{DateTime, Duration, Utc};
 
 use crate::positions::{Book, Opening, Position};
 use crate::trader::stats::{RealizedStats, StatsWindow, TraderStats};
@@ -14,6 +14,7 @@ use crate::trader::{
 
 use super::aggregates;
 use super::data::PROMO_OPEN_TOKENS;
+use super::strategies;
 
 /// Network fee of each promo buy and sale, in raw units, as the promo positions list
 /// reports it.
@@ -30,15 +31,16 @@ const PROMO_LOSS_LIMIT_PERIOD_HOURS: i64 = 24;
 const PROMO_LOSS_LIMIT_ELAPSED_MINUTES: i64 = 19 * 60 + 20;
 
 /// Generate the promo trader status: available and running, the state the promo
-/// header and status bar report.
+/// header and status bar report, with the enabled strategies of the promo roster.
 pub fn get_promo_trader_status() -> TraderStatus {
+    let (live_strategies, paper_strategies) = strategies::enabled_counts();
     TraderStatus {
         enabled: true,
         running: true,
         available: true,
         unavailable_reason: None,
-        live_strategies: 0,
-        paper_strategies: 0,
+        live_strategies,
+        paper_strategies,
         run_state: TraderRunState::Running,
         live_entry_idle: None,
         paper_entry_idle: None,
@@ -94,11 +96,9 @@ pub fn get_promo_loss_limit_status() -> LossLimitSnapshot {
 pub fn get_promo_trader_stats(window: StatsWindow) -> TraderStats {
     let now = Utc::now();
     let since = window.since(now);
-    let closed: Vec<Position> = aggregates::closed_trades(now)
+    let closed: Vec<Position> = promo_closed_rounds(now)
         .into_iter()
-        .enumerate()
-        .filter(|(_, trade)| trade.exit_time >= since)
-        .map(|(index, trade)| promo_closed_round(index, &trade))
+        .filter(|round| round.exit_time.is_some_and(|exit| exit >= since))
         .collect();
     let realized = RealizedStats::of(window, closed, now);
     let open = aggregates::open_agg();
@@ -110,6 +110,51 @@ pub fn get_promo_trader_stats(window: StatsWindow) -> TraderStats {
         open_unpriced: 0,
         realized,
     }
+}
+
+/// The open rounds of the promo open positions at `now`, with the id, owner, price and
+/// unrealized P&L the promo positions list gives each.
+pub(super) fn promo_open_rounds(now: DateTime<Utc>) -> Vec<Position> {
+    PROMO_OPEN_TOKENS
+        .iter()
+        .zip(1..)
+        .map(
+            |(&(symbol, name, mint, _, entry, current, size, hold_minutes), id)| {
+                let (origin, management) = super::copy_trading::position_owner(mint);
+                let mut position = Position::opening(Opening {
+                    mint: mint.to_owned(),
+                    symbol: symbol.to_owned(),
+                    name: name.to_owned(),
+                    entry_price: entry,
+                    entry_time: now - Duration::minutes(hold_minutes),
+                    size_native: size,
+                    entry_signature: None,
+                    origin,
+                    management,
+                    entry_liquidity: None,
+                    book: Book::Live,
+                });
+                position.id = Some(id);
+                position.transaction_entry_verified = true;
+                position.entry_fee_raw = Some(PROMO_FEE_RAW);
+                position.current_price = Some(current);
+                position.current_price_updated = Some(now);
+                position.unrealized_pnl = Some((current - entry) / entry * size);
+                position.unrealized_pnl_percent = Some((current - entry) / entry * 100.0);
+                position
+            },
+        )
+        .collect()
+}
+
+/// The closed rounds of the promo closed trades at `now`, in the order of the promo
+/// positions list.
+pub(super) fn promo_closed_rounds(now: DateTime<Utc>) -> Vec<Position> {
+    aggregates::closed_trades(now)
+        .iter()
+        .enumerate()
+        .map(|(index, trade)| promo_closed_round(index, trade))
+        .collect()
 }
 
 /// The closed round of the `index`-th promo closed trade, with the id, owner and fees the

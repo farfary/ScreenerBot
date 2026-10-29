@@ -12,20 +12,25 @@ use super::utils::err_cause;
 use crate::i18n::ids;
 use crate::strategies::overview::strategies_overview;
 use crate::webserver::api_error::ApiErrorCode;
+use crate::webserver::promo;
 use crate::webserver::utils::success_response;
 
 /// GET /api/strategies/overview - The trader's run state, its trader-level notice, the
 /// rule exits and every strategy with its status and figures. Answers in Explore Mode and
 /// with the trader stopped; reads only.
 pub async fn get_strategies_overview() -> Response {
-    let overview = match strategies_overview().await {
-        Ok(overview) => overview,
-        Err(e) => {
-            return err_cause(
-                ApiErrorCode::Internal,
-                ids::ERRORS_STRATEGIES_LIST_FAILED,
-                &e,
-            );
+    let overview = if promo::are_promo_fixtures_enabled() {
+        promo::get_promo_strategies_overview()
+    } else {
+        match strategies_overview().await {
+            Ok(overview) => overview,
+            Err(e) => {
+                return err_cause(
+                    ApiErrorCode::Internal,
+                    ids::ERRORS_STRATEGIES_LIST_FAILED,
+                    &e,
+                );
+            }
         }
     };
     success_response(StrategiesOverviewResponse {

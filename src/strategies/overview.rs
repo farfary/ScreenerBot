@@ -19,6 +19,7 @@ use crate::strategies::db::{get_strategies_with_totals_async, StrategiesWithTota
 use crate::strategies::readiness::{
     counted_rounds, paper_strategy_evidence, readiness_progress, ReadinessProgress,
 };
+use crate::strategies::types::EvaluationTotals;
 use crate::strategies::types::{Strategy, StrategyType};
 use crate::trader::admission::EntryBlock;
 use crate::trader::paper::TradingMode;
@@ -192,6 +193,50 @@ pub async fn strategies_overview() -> crate::Result<StrategiesOverview> {
         Some(BookPositions::read().await)
     };
 
+    Ok(assemble(OverviewInputs {
+        run_state,
+        strategies,
+        totals,
+        monitors,
+        live_block,
+        paper_block,
+        evidence,
+        books,
+    }))
+}
+
+/// Everything the overview is assembled from: the store, runtime and book reads of
+/// [`strategies_overview`], or the promotional fixtures, which pass their own set through
+/// the same assembly so every status and figure is computed the live way.
+pub(crate) struct OverviewInputs {
+    pub run_state: TraderRunState,
+    /// In the store's order, which is the entry evaluation order of each book.
+    pub strategies: Vec<Strategy>,
+    /// By strategy id; a strategy never evaluated has none.
+    pub totals: HashMap<String, EvaluationTotals>,
+    pub monitors: Monitors,
+    /// The token-independent entry block of each mode, when one holds.
+    pub live_block: Option<EntryBlock>,
+    pub paper_block: Option<EntryBlock>,
+    /// The paper strategy evidence; `None` leaves every paper figure absent.
+    pub evidence: Option<PaperStrategyEvidence>,
+    /// The positions of both books; `None` in Explore Mode, where no book is read.
+    pub books: Option<BookPositions>,
+}
+
+/// The overview of `inputs`: each strategy's status, entry rank and figures, the counts,
+/// the trader-level notice and the rule exits. Reads only the configuration.
+pub(crate) fn assemble(inputs: OverviewInputs) -> StrategiesOverview {
+    let OverviewInputs {
+        run_state,
+        strategies,
+        totals,
+        monitors,
+        live_block,
+        paper_block,
+        evidence,
+        books,
+    } = inputs;
     let order = entry_order(&strategies);
     let summaries = strategies
         .into_iter()
@@ -224,13 +269,13 @@ pub async fn strategies_overview() -> crate::Result<StrategiesOverview> {
         })
         .collect::<Vec<_>>();
 
-    Ok(StrategiesOverview {
+    StrategiesOverview {
         run_state,
         notice: notice_of(run_state),
         rule_exits: rule_exits(),
         counts: counts_of(summaries.iter().map(|summary| &summary.strategy)),
         strategies: summaries,
-    })
+    }
 }
 
 /// The paper strategy evidence when it was read; a read failure is logged and leaves every
@@ -250,9 +295,9 @@ fn available(evidence: crate::Result<PaperStrategyEvidence>) -> Option<PaperStra
 
 /// The monitor switches a strategy's status depends on.
 #[derive(Debug, Clone, Copy)]
-struct Monitors {
-    entry: bool,
-    exit: bool,
+pub(crate) struct Monitors {
+    pub entry: bool,
+    pub exit: bool,
 }
 
 impl Monitors {
@@ -383,7 +428,7 @@ struct Figures {
 /// The open positions of both books and the closed live rounds of each strategy, under
 /// the entry strategy that opened each round and the exit strategy that closed it, read
 /// from memory once per overview.
-struct BookPositions {
+pub(crate) struct BookPositions {
     open_live: Vec<Position>,
     open_paper: Vec<Position>,
     live_rounds: HashMap<String, Vec<Position>>,
@@ -400,6 +445,21 @@ impl BookPositions {
             open_live,
             open_paper,
             live_rounds,
+        }
+    }
+
+    /// Books held by the caller: the open positions of each book and the live positions
+    /// whose closed rounds are grouped the way [`positions::books::live_auto_rounds`]
+    /// groups the live book.
+    pub(crate) fn of(
+        open_live: Vec<Position>,
+        open_paper: Vec<Position>,
+        live: &[Position],
+    ) -> Self {
+        Self {
+            open_live,
+            open_paper,
+            live_rounds: positions::books::strategy_rounds(live.iter()),
         }
     }
 
