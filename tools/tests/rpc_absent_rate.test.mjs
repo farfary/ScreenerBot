@@ -16,7 +16,7 @@
  * - The ticker and the status bar show one RPC sample: the status bar renders the
  *   header answer's `rpc` figures and never `/api/status`'s, whose poll samples the
  *   trailing-minute rate at another moment, and both format the rate through
- *   `formatCallRate`, at one precision.
+ *   `formatCallRate` and the success rate through `formatSuccessRate`, at one precision.
  *
  * Run with `npm run test:js`.
  */
@@ -113,6 +113,7 @@ test("the ticker and the status bar show the header's RPC sample", async (t) => 
   await painted(page, "#statusBarRpcRate");
   assert.equal(await text(page, "#tickerRPCCalls"), "29/min");
   assert.equal(await text(page, "#statusBarRpcRate"), "29/min");
+  assert.equal(await text(page, "#tickerRPCSuccess"), await text(page, "#statusBarRpcSuccess"));
   assert.match(await text(page, "#statusBarRpcSuccess"), /97\.2%/);
   assert.equal(await page.locator("#statusBarRpcHealth").getAttribute("data-health"), "good");
   assert.match(await text(page, "#statusBarRpcLatency"), /210/);

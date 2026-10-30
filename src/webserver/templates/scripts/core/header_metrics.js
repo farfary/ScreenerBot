@@ -11,6 +11,7 @@ import {
   formatCurrencyUSD,
   formatPercentValue,
   formatSignedSol,
+  formatSuccessRate,
   signedTone,
 } from "./format.js";
 import { formatNumber, showToast } from "./utils.js";
@@ -273,10 +274,7 @@ function updateTicker(metrics) {
     rpcCalls.textContent = formatCallRate(finiteNumber(metrics.rpc?.calls_per_minute));
   }
   if (rpcSuccess) {
-    rpcSuccess.textContent = formatPercentValue(metrics.rpc?.success_rate_percent, {
-      decimals: 0,
-      includeSign: false,
-    });
+    rpcSuccess.textContent = formatSuccessRate(metrics.rpc?.success_rate_percent);
   }
 
   if (servicesText && metrics.system) {

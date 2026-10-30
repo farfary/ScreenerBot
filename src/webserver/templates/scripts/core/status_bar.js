@@ -10,7 +10,7 @@ import {
   formatCallRate,
   formatLatencyMs,
   formatMemoryMb,
-  formatPercentValue,
+  formatSuccessRate,
   formatUptime,
 } from "./format.js";
 
@@ -113,19 +113,13 @@ import {
     if (elements.rpcSuccess && elements.rpcHealth) {
       // A 0-100 percentage, absent before the first call: then "—", never 100%.
       const successRate = rpc?.success_rate_percent;
-      const displayRate = Number.isFinite(successRate)
-        ? Math.min(Math.max(successRate, 0), 100)
-        : null;
-      elements.rpcSuccess.textContent = formatPercentValue(displayRate, {
-        decimals: 1,
-        plus: "",
-      });
+      elements.rpcSuccess.textContent = formatSuccessRate(successRate);
 
       // Health indicator; it stays "unknown" until there is a rate to judge.
       let health = "unknown";
-      if (displayRate !== null) {
-        if (displayRate >= 95) health = "good";
-        else if (displayRate >= 80) health = "warning";
+      if (Number.isFinite(successRate)) {
+        if (successRate >= 95) health = "good";
+        else if (successRate >= 80) health = "warning";
         else health = "error";
       }
       elements.rpcHealth.setAttribute("data-health", health);

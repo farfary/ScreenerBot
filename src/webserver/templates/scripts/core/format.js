@@ -1080,6 +1080,15 @@ export function formatCallRate(perMinute, { fallback = DASH } = {}) {
   return displayed(I18n.t("format-calls-per-minute", { amount: formatNumber(num, 0) }));
 }
 
+/** A 0-100 success rate at one decimal ("99.4%"), for every RPC success-rate surface. */
+export function formatSuccessRate(percent, { fallback = DASH } = {}) {
+  const num = coerceNumber(percent);
+  if (!Number.isFinite(num)) {
+    return fallback;
+  }
+  return formatPercentValue(Math.min(Math.max(num, 0), 100), { decimals: 1, includeSign: false });
+}
+
 /** Round-trip latency in milliseconds; two decimals in seconds from 1000 ms. */
 export function formatLatencyMs(milliseconds, { fallback = DASH } = {}) {
   const num = coerceNumber(milliseconds);

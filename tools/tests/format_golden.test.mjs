@@ -354,6 +354,15 @@ test("a call rate is whole calls per minute, and absent without a measurement", 
   assert.equal(fmt.formatCallRate(null), "—");
 });
 
+test("a success rate has one decimal, stays within 0-100, and is absent without a measurement", () => {
+  const { fmt } = load("en-u-nu-latn");
+  assert.equal(fmt.formatSuccessRate(100), "100.0%");
+  assert.equal(fmt.formatSuccessRate(99.44), "99.4%");
+  assert.equal(fmt.formatSuccessRate(100.2), "100.0%");
+  assert.equal(fmt.formatSuccessRate(-3), "0.0%");
+  assert.equal(fmt.formatSuccessRate(null), "—");
+});
+
 test("signed plain numbers group per locale and take the locale's sign", () => {
   const de = load("de-u-nu-latn").fmt;
   assert.equal(de.formatSignedNumber(1234567.891, { decimals: 2 }), "+1.234.567,89");
