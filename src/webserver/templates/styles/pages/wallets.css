@@ -67,6 +67,18 @@
   display: none;
 }
 
+/* Each panel's DataTable mount fills the panel, so the table's height is the panel's
+   and its rows scroll inside it. Without this the mount takes its content height, and
+   the table's `height: 100%` follows the engine's intrinsic sizing: rows past the
+   panel are clipped with no scrollbar, or the table shrinks to a single row. */
+#tokens-datatable-root,
+#other-wallets-table-container,
+#watched-wallets-root {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
 /* An access gate replaces the tab panels, inset from the page edge. */
 .wallets-access-gate {
   margin: var(--spacing-lg);
