@@ -3,6 +3,7 @@
 
 //! Position price updater — refreshes current prices for all active positions.
 
+use crate::chains::ChainId;
 use crate::logger::{self, LogTag};
 use crate::positions::get_open_positions;
 use crate::positions::{Error, Result};
@@ -19,16 +20,22 @@ static OFFLINE_SKIP_LOGGED: AtomicBool = AtomicBool::new(false);
 
 /// Mints of open positions the last cycle could not price, so a position losing
 /// and regaining its price is logged once per change instead of every second.
-static UNPRICED_MINTS: LazyLock<Mutex<HashSet<String>>> =
+static UNPRICED_MINTS: LazyLock<Mutex<HashSet<(ChainId, String)>>> =
     LazyLock::new(|| Mutex::new(HashSet::new()));
 
-/// Records whether `mint` was priced this cycle and answers whether that changed
-/// it from the previous cycle.
-fn price_state_changed(unpriced: &mut HashSet<String>, mint: &str, priced: bool) -> bool {
+/// Records whether `mint` on `chain` was priced this cycle and answers whether
+/// that changed it from the previous cycle.
+fn price_state_changed(
+    unpriced: &mut HashSet<(ChainId, String)>,
+    chain: ChainId,
+    mint: &str,
+    priced: bool,
+) -> bool {
+    let key = (chain, mint.to_owned());
     if priced {
-        unpriced.remove(mint)
+        unpriced.remove(&key)
     } else {
-        unpriced.insert(mint.to_owned())
+        unpriced.insert(key)
     }
 }
 
@@ -94,6 +101,7 @@ async fn update_all_position_prices() {
     let mut api_price_count = 0;
     let mut api_fresh_count = 0;
     let mut failed_count = 0;
+    let chain = crate::chains::active_chain();
 
     for position in &positions {
         let current = get_current_price(&position.mint).await;
@@ -101,6 +109,7 @@ async fn update_all_position_prices() {
             &mut UNPRICED_MINTS
                 .lock()
                 .unwrap_or_else(|poisoned| poisoned.into_inner()),
+            chain,
             &position.mint,
             current.is_some(),
         );
@@ -164,7 +173,7 @@ async fn update_all_position_prices() {
     UNPRICED_MINTS
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner())
-        .retain(|mint| positions.iter().any(|position| &position.mint == mint));
+        .retain(|(_, mint)| positions.iter().any(|position| &position.mint == mint));
 
     if !positions.is_empty() {
         logger::debug(
@@ -348,11 +357,36 @@ mod tests {
     #[test]
     fn a_price_state_change_is_reported_once_per_transition() {
         let mut unpriced = HashSet::new();
-        assert!(!price_state_changed(&mut unpriced, "mint", true));
-        assert!(price_state_changed(&mut unpriced, "mint", false));
-        assert!(!price_state_changed(&mut unpriced, "mint", false));
-        assert!(price_state_changed(&mut unpriced, "mint", true));
-        assert!(!price_state_changed(&mut unpriced, "mint", true));
+        assert!(!price_state_changed(
+            &mut unpriced,
+            ChainId::Solana,
+            "mint",
+            true
+        ));
+        assert!(price_state_changed(
+            &mut unpriced,
+            ChainId::Solana,
+            "mint",
+            false
+        ));
+        assert!(!price_state_changed(
+            &mut unpriced,
+            ChainId::Solana,
+            "mint",
+            false
+        ));
+        assert!(price_state_changed(
+            &mut unpriced,
+            ChainId::Solana,
+            "mint",
+            true
+        ));
+        assert!(!price_state_changed(
+            &mut unpriced,
+            ChainId::Solana,
+            "mint",
+            true
+        ));
     }
 
     #[test]
