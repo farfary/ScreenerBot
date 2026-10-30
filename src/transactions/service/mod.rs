@@ -25,6 +25,7 @@ pub mod reclassify;
 
 pub use bootstrap::{load_older_history, OlderHistoryPage};
 pub use lifecycle::{
-    get_global_transaction_manager, get_transaction, is_global_transaction_service_running,
-    reprocess_transaction, start_global_transaction_service, stop_global_transaction_service,
+    get_global_transaction_manager, get_transaction, history_load_failure,
+    is_global_transaction_service_running, reprocess_transaction, start_global_transaction_service,
+    stop_global_transaction_service,
 };

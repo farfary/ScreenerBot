@@ -24,9 +24,10 @@ impl Service for WalletWatchService {
 
     fn priority(&self) -> i32 {
         // Immediately after `transactions` (80): decode/persistence requires the
-        // global TransactionDatabase initialized by that service. Transactions'
-        // consumer loop is spawned before this producer starts, so no broadcast is
-        // lost during normal ordered startup.
+        // global TransactionDatabase initialized by that service. Observation then
+        // waits for the wallet history load, and the transactions consumer
+        // subscribes on the same task that marks the history loaded, with no await
+        // in between, so its subscription precedes the first broadcast.
         81
     }
 
@@ -53,7 +54,10 @@ impl Service for WalletWatchService {
     }
 
     async fn health(&self) -> ServiceHealth {
-        if crate::wallets::watch::is_healthy() {
+        // Observation begins once the own wallet's history has loaded.
+        if !crate::global::TRANSACTIONS_SYSTEM_READY.load(std::sync::atomic::Ordering::Relaxed) {
+            ServiceHealth::Starting
+        } else if crate::wallets::watch::is_healthy() {
             ServiceHealth::Healthy
         } else {
             ServiceHealth::Degraded(UiText::new(ids::SERVICES_HEALTH_WALLET_WATCH_POLLING_ONLY))

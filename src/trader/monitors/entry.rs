@@ -72,7 +72,8 @@ pub async fn monitor_entries(
                 logger::warning(LogTag::Trader, "Entry monitor paused - FORCE STOPPED");
                 was_paused = true;
             }
-            sleep(Duration::from_secs(1)).await; // Check more frequently during force stop
+            // Check more frequently during force stop
+            super::pause_or_shutdown(&mut shutdown, Duration::from_secs(1)).await;
             continue;
         }
 
@@ -84,7 +85,7 @@ pub async fn monitor_entries(
                 logger::info(LogTag::Trader, "Entry monitor paused - disabled via config");
                 was_paused = true;
             }
-            sleep(Duration::from_secs(5)).await;
+            super::pause_or_shutdown(&mut shutdown, Duration::from_secs(5)).await;
             continue;
         }
 

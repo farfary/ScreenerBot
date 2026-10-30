@@ -96,12 +96,16 @@ pub async fn start(shutdown: Arc<Notify>) -> Result<tokio::task::JoinHandle<()>,
     let db = WatchDatabase::new(active_chain())?;
     let _ = GLOBAL_WATCH_DB.set(db.clone());
 
-    Ok(tokio::spawn(service::run(
-        shutdown,
-        chain_runtime,
-        db,
-        own_subject,
-    )))
+    Ok(tokio::spawn(async move {
+        // Dedupe reads the signatures the own wallet's history load records. Observing
+        // before that load finishes would replay the wallet's recent history as new
+        // activity on a fresh install, so observation starts once it has.
+        tokio::select! {
+            _ = crate::global::wait_for_transactions_system_ready() => {}
+            _ = shutdown.notified() => return,
+        }
+        service::run(shutdown, chain_runtime, db, own_subject).await;
+    }))
 }
 
 /// `Healthy` when the shared subscription transport is connected or the service is

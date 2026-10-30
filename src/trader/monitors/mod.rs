@@ -22,10 +22,37 @@ use crate::i18n::{ids, UiText};
 use crate::logger::{self, LogTag};
 use serde_json::json;
 
+/// Wait out a monitor's pause, ending it early when shutdown is signalled. The
+/// monitor's loop head reads the signal, so a stop never waits for a pause to run out.
+async fn pause_or_shutdown(
+    shutdown: &mut tokio::sync::watch::Receiver<bool>,
+    pause: tokio::time::Duration,
+) {
+    tokio::select! {
+        _ = tokio::time::sleep(pause) => {}
+        _ = shutdown.changed() => {}
+    }
+}
+
 /// Start the auto trading monitors
 pub async fn start_automated_trading(
     shutdown: tokio::sync::watch::Receiver<bool>,
 ) -> crate::trader::Result<()> {
+    // The monitors act on the wallet's loaded history: the positions synced from it
+    // and the signatures already recorded. That history loads after service startup,
+    // so the monitors start once it has.
+    if !crate::global::TRANSACTIONS_SYSTEM_READY.load(std::sync::atomic::Ordering::SeqCst) {
+        logger::info(
+            LogTag::Trader,
+            "Automated trading monitors wait for the wallet history to load",
+        );
+    }
+    let mut history_shutdown = shutdown.clone();
+    tokio::select! {
+        _ = crate::global::wait_for_transactions_system_ready() => {}
+        _ = history_shutdown.wait_for(|stop| *stop) => return Ok(()),
+    }
+
     logger::info(LogTag::Trader, "Starting automated trading monitors...");
 
     // Record auto trading start event
@@ -108,4 +135,24 @@ pub async fn start_automated_trading(
     .await;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::pause_or_shutdown;
+    use std::time::Duration;
+
+    #[tokio::test]
+    async fn a_pause_ends_when_shutdown_is_signalled() {
+        let (stop, mut shutdown) = tokio::sync::watch::channel(false);
+        let pause = tokio::spawn(async move {
+            pause_or_shutdown(&mut shutdown, Duration::from_secs(3600)).await;
+        });
+        tokio::task::yield_now().await;
+        stop.send(true).expect("monitor receiver alive");
+        tokio::time::timeout(Duration::from_secs(5), pause)
+            .await
+            .expect("a shutdown must end the pause")
+            .expect("pause task");
+    }
 }

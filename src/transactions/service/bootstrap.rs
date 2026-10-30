@@ -57,6 +57,9 @@ pub struct BootstrapStats {
 pub async fn perform_initial_transaction_bootstrap(
     manager_arc: &Arc<Mutex<TransactionsManager>>,
 ) -> Result<BootstrapStats, Error> {
+    // Held for the whole load: an on-demand load of older history waits for it
+    // instead of moving the cursor this load is about to write.
+    let _history_load = OLDER_HISTORY_LOAD.lock().await;
     let bootstrap_timer = std::time::Instant::now();
     let (subject, _debug, transaction_db) = {
         let mgr = manager_arc.lock().await;
@@ -776,7 +779,8 @@ pub struct OlderHistoryPage {
     pub older_history_available: bool,
 }
 
-/// Serializes on-demand history loads, so one page is never processed twice at once.
+/// Serializes the startup history load and on-demand history loads, so one page is
+/// never processed twice at once and the older-history cursor has one writer.
 static OLDER_HISTORY_LOAD: Mutex<()> = Mutex::const_new(());
 
 /// Loads the page of own-wallet history that precedes the stored history cursor, processes

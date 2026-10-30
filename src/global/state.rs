@@ -135,6 +135,31 @@ pub static POSITIONS_SYSTEM_READY: AtomicBool = AtomicBool::new(false);
 pub static POOL_SERVICE_READY: AtomicBool = AtomicBool::new(false);
 pub static TRANSACTIONS_SYSTEM_READY: AtomicBool = AtomicBool::new(false);
 
+/// Wakes the tasks waiting in [`wait_for_transactions_system_ready`].
+static TRANSACTIONS_READY_NOTIFY: LazyLock<Notify> = LazyLock::new(Notify::new);
+
+/// Mark the transactions system ready: the wallet history load has finished. Wakes
+/// every task waiting for it.
+pub fn mark_transactions_system_ready() {
+    TRANSACTIONS_SYSTEM_READY.store(true, std::sync::atomic::Ordering::SeqCst);
+    TRANSACTIONS_READY_NOTIFY.notify_waiters();
+}
+
+/// Resolve once the transactions system is ready. The wallet history loads after
+/// service startup, so work that acts on that history waits here instead of relying
+/// on the order services start in.
+pub async fn wait_for_transactions_system_ready() {
+    loop {
+        // Registered before the flag is read, so a mark between the read and the
+        // await still wakes this waiter.
+        let notified = TRANSACTIONS_READY_NOTIFY.notified();
+        if TRANSACTIONS_SYSTEM_READY.load(std::sync::atomic::Ordering::SeqCst) {
+            return;
+        }
+        notified.await;
+    }
+}
+
 /// Whether the pool service prerequisite is met: the pool service is ready, or the
 /// install's chain access has no live pool prices, so no pool service runs.
 pub fn pool_prerequisite_ready() -> bool {
@@ -368,6 +393,31 @@ mod paper_scope_tests {
             .await
             .unwrap();
         assert!(!spawned);
+    }
+}
+
+#[cfg(test)]
+mod transactions_ready_tests {
+    use super::*;
+    use std::time::Duration;
+
+    #[tokio::test]
+    async fn a_waiter_wakes_when_the_transactions_system_is_marked_ready() {
+        let waiter = tokio::spawn(wait_for_transactions_system_ready());
+        tokio::task::yield_now().await;
+        assert!(
+            !waiter.is_finished(),
+            "the waiter must wait while the history has not loaded"
+        );
+
+        mark_transactions_system_ready();
+        tokio::time::timeout(Duration::from_secs(5), waiter)
+            .await
+            .expect("marking the system ready must wake the waiter")
+            .expect("waiter task");
+        tokio::time::timeout(Duration::from_secs(5), wait_for_transactions_system_ready())
+            .await
+            .expect("a ready system must answer at once");
     }
 }
 

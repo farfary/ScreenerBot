@@ -131,10 +131,10 @@ async fn api_price(chain: ChainId, token_mint: &str) -> Option<(PriceResult, Pri
                 return Some((api_price_result(chain, &token, "api"), PriceSource::Api));
             } else if age_secs > API_PRICE_MAX_AGE_SECS {
                 // Price is stale - force fetch fresh data and retry
-                logger::info(
+                logger::debug(
                     LogTag::Positions,
                     &format!(
-                        "API price stale for {} (age: {}s > max {}s), forcing fresh fetch...",
+                        "API price stale for {} (age: {}s > max {}s)",
                         token_mint, age_secs, API_PRICE_MAX_AGE_SECS
                     ),
                 );
@@ -156,12 +156,9 @@ async fn api_price(chain: ChainId, token_mint: &str) -> Option<(PriceResult, Pri
         }
         Ok(None) => {
             // Token not in database - try to force fetch it
-            logger::info(
+            logger::debug(
                 LogTag::Positions,
-                &format!(
-                    "No token data found for {}, attempting to fetch...",
-                    token_mint
-                ),
+                &format!("No token data found for {token_mint}"),
             );
 
             if let Some(fresh_token) = force_fetch_fresh_price(token_mint).await {
@@ -323,6 +320,10 @@ async fn force_fetch_fresh_price(token_mint: &str) -> Option<crate::tokens::Toke
         return None;
     }
     FORCE_FETCH_COOLDOWN.insert(token_mint.to_string(), ());
+    logger::info(
+        LogTag::Positions,
+        &format!("Fetching fresh market data for {token_mint}: no current API price"),
+    );
 
     // Request immediate market data update from tokens system. The monitor retries this
     // fallback on its own cadence and DexScreener answers alongside, so GeckoTerminal is

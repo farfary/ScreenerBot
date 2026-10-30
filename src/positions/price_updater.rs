@@ -6,7 +6,9 @@
 use crate::logger::{self, LogTag};
 use crate::positions::get_open_positions;
 use crate::positions::{Error, Result};
+use std::collections::HashSet;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{LazyLock, Mutex};
 use std::time::Duration;
 use tokio::time::sleep;
 
@@ -14,6 +16,21 @@ use tokio::time::sleep;
 /// the per-second loop emits exactly one line on going offline and one on
 /// resuming, instead of spamming every tick.
 static OFFLINE_SKIP_LOGGED: AtomicBool = AtomicBool::new(false);
+
+/// Mints of open positions the last cycle could not price, so a position losing
+/// and regaining its price is logged once per change instead of every second.
+static UNPRICED_MINTS: LazyLock<Mutex<HashSet<String>>> =
+    LazyLock::new(|| Mutex::new(HashSet::new()));
+
+/// Records whether `mint` was priced this cycle and answers whether that changed
+/// it from the previous cycle.
+fn price_state_changed(unpriced: &mut HashSet<String>, mint: &str, priced: bool) -> bool {
+    if priced {
+        unpriced.remove(mint)
+    } else {
+        unpriced.insert(mint.to_owned())
+    }
+}
 
 /// Position price updater service
 /// Updates all open positions' current_price every second. Price resolution is
@@ -79,8 +96,22 @@ async fn update_all_position_prices() {
     let mut failed_count = 0;
 
     for position in &positions {
-        match get_current_price(&position.mint).await {
+        let current = get_current_price(&position.mint).await;
+        let changed = price_state_changed(
+            &mut UNPRICED_MINTS
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner()),
+            &position.mint,
+            current.is_some(),
+        );
+        match current {
             Some((price, source)) => {
+                if changed {
+                    logger::info(
+                        LogTag::Positions,
+                        &format!("[PRICE_UPD] Price restored for {}", position.symbol),
+                    );
+                }
                 // Use position ID to target the correct position (avoids updating
                 // a closed position when multiple positions share the same mint)
                 let position_id = position.id.unwrap_or(-1);
@@ -110,26 +141,33 @@ async fn update_all_position_prices() {
                 }
             }
             None => {
-                // Log at info level to diagnose frozen prices
-                let has_pool =
-                    crate::positions::price_resolution::live_pool_price(&position.mint).is_some();
-                logger::info(
-                    LogTag::Positions,
-                    &format!(
-                        "[PRICE_UPD] No price for {} (mint={}...) pool_available={}",
-                        position.symbol,
-                        &position.mint[..8.min(position.mint.len())],
-                        has_pool
-                    ),
-                );
+                if changed {
+                    let has_pool =
+                        crate::positions::price_resolution::live_pool_price(&position.mint)
+                            .is_some();
+                    logger::info(
+                        LogTag::Positions,
+                        &format!(
+                            "[PRICE_UPD] No price for {} (mint={}...) pool_available={}",
+                            position.symbol,
+                            &position.mint[..8.min(position.mint.len())],
+                            has_pool
+                        ),
+                    );
+                }
                 failed_count += 1;
             }
         }
     }
 
-    // Log every cycle when there are open positions (info level for debugging)
+    // A closed position leaves the unpriced set with its round.
+    UNPRICED_MINTS
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .retain(|mint| positions.iter().any(|position| &position.mint == mint));
+
     if !positions.is_empty() {
-        logger::info(
+        logger::debug(
             LogTag::Positions,
             &format!(
                 "[PRICE_UPD] positions={} updated={} (pool={}, api={}, fresh={}) failed={}",
@@ -306,6 +344,16 @@ async fn get_current_price(mint: &str) -> Option<(f64, PriceSource)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_price_state_change_is_reported_once_per_transition() {
+        let mut unpriced = HashSet::new();
+        assert!(!price_state_changed(&mut unpriced, "mint", true));
+        assert!(price_state_changed(&mut unpriced, "mint", false));
+        assert!(!price_state_changed(&mut unpriced, "mint", false));
+        assert!(price_state_changed(&mut unpriced, "mint", true));
+        assert!(!price_state_changed(&mut unpriced, "mint", true));
+    }
 
     #[test]
     fn api_classifications_map_to_the_api_price_system() {

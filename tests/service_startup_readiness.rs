@@ -24,15 +24,42 @@
 //!
 //! No network, no RPC endpoint, no wallet key, no running bot: `isolated_env`
 //! points every path at a fresh temp directory and config stays at defaults.
-//! The only persisted fixture is an account refresh token, proving the account
-//! service restores it before the dashboard can report a signed-out state.
+//! The only persisted fixture is an account refresh token, restored the way the
+//! run loop restores it before any service starts, proving the service layer
+//! keeps that session through boot.
 
 use crate::common;
 
 use std::time::Duration;
 
-use screenerbot::services::implementations::{AccountService, WebserverService};
+use screenerbot::services::implementations::AccountService;
 use screenerbot::services::{Service, ServiceManager};
+
+/// The run loop's source, read to pin the order of its boot steps.
+const RUN_SRC: &str = include_str!("../src/run/mod.rs");
+
+/// The account session is restored before anything authenticates with it: the
+/// chain-access boot probe (inside `initialize_full_runtime`) and every service.
+/// Restored later, service access reports "needs a signed-in account" at every
+/// boot of a signed-in install and the probe is wasted.
+#[test]
+fn the_account_session_is_restored_before_any_boot_step_uses_it() {
+    let restore = RUN_SRC
+        .find("crate::account::initialize();")
+        .expect("the run loop must restore the account session");
+    for later in [
+        "initialize_full_runtime().await",
+        "services::create_and_start_services(",
+    ] {
+        let position = RUN_SRC
+            .find(later)
+            .unwrap_or_else(|| panic!("the run loop must call `{later}`"));
+        assert!(
+            restore < position,
+            "the account session must be restored before `{later}`"
+        );
+    }
+}
 
 /// The one boot: an isolated env, no config.toml, no network — the same shape
 /// Explore Mode/pre-init boot in `src/run/mod.rs` uses before the wallet/RPC
@@ -54,10 +81,7 @@ async fn the_service_layer_boots_offline_inside_a_startup_budget() {
         AccountService.is_enabled(),
         "account persistence must be enabled before setup is complete"
     );
-    assert!(
-        AccountService.priority() < WebserverService.priority(),
-        "account restore must run before the webserver can answer status requests"
-    );
+    screenerbot::account::initialize();
 
     let mut service_manager = ServiceManager::new()
         .await
@@ -112,7 +136,7 @@ async fn the_service_layer_boots_offline_inside_a_startup_budget() {
     let account = screenerbot::account::status();
     assert!(
         account.signed_in,
-        "the stored account must be restored during service startup"
+        "the restored account session must survive service startup"
     );
     assert_eq!(account.device_id.as_deref(), Some("persisted-device"));
     assert_eq!(account.email.as_deref(), Some("persisted@example.test"));

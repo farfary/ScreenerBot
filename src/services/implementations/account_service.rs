@@ -40,8 +40,9 @@ impl Service for AccountService {
     }
 
     fn priority(&self) -> i32 {
-        // Restore the disk-backed session before the webserver (30) can answer
-        // `/api/account/status` and before market-data consumers begin work.
+        // The session itself is restored by the run loop before any service
+        // starts; the renewal loop starts early so a session restored with an
+        // expired access token is renewed before market-data consumers ask.
         20
     }
 
@@ -54,12 +55,6 @@ impl Service for AccountService {
     /// must still be restored after a restart.
     fn is_enabled(&self) -> bool {
         true
-    }
-
-    async fn initialize(&mut self) -> crate::Result<()> {
-        // Reads the encrypted store; no network. Safe to do on the boot path.
-        crate::account::initialize();
-        Ok(())
     }
 
     async fn start(

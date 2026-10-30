@@ -3,6 +3,7 @@
 
 //! Transactions service — monitors on-chain transactions for the configured wallet.
 
+use crate::i18n::{ids, UiArg, UiText};
 use crate::services::{Service, ServiceHealth, ServiceMetrics};
 use async_trait::async_trait;
 use std::sync::Arc;
@@ -38,7 +39,7 @@ impl Service for TransactionsService {
 
     async fn start(
         &mut self,
-        _shutdown: Arc<Notify>,
+        shutdown: Arc<Notify>,
         monitor: tokio_metrics::TaskMonitor,
     ) -> crate::Result<Vec<JoinHandle<()>>> {
         // Get the chain-neutral subject for the configured wallet
@@ -49,10 +50,12 @@ impl Service for TransactionsService {
             })
         })?;
 
-        // Start global transaction service and capture handle (passing monitor)
-        let handle =
-            crate::transactions::service::start_global_transaction_service(&subject, monitor)
-                .await?;
+        // Start global transaction service and capture handle (passing monitor). It
+        // returns once the store is open; the wallet history loads on the handle's task.
+        let handle = crate::transactions::service::start_global_transaction_service(
+            &subject, shutdown, monitor,
+        )
+        .await?;
 
         // Return service handle so ServiceManager can wait for graceful shutdown
         Ok(vec![handle])
@@ -76,6 +79,10 @@ impl Service for TransactionsService {
     async fn health(&self) -> ServiceHealth {
         if crate::global::TRANSACTIONS_SYSTEM_READY.load(std::sync::atomic::Ordering::Relaxed) {
             ServiceHealth::Healthy
+        } else if let Some(reason) = crate::transactions::service::history_load_failure() {
+            ServiceHealth::Unhealthy(
+                UiText::new(ids::SERVICES_HEALTH_START_FAILED).arg("reason", UiArg::Text(reason)),
+            )
         } else {
             ServiceHealth::Starting
         }

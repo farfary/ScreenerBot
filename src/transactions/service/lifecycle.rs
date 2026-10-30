@@ -38,11 +38,34 @@ pub static SHUTDOWN_NOTIFY: LazyLock<Arc<Notify>> = LazyLock::new(|| Arc::new(No
 // PUBLIC API - SERVICE LIFECYCLE
 // =============================================================================
 
+/// Why the last history load failed with a fault no retry answers, while the service runs.
+static HISTORY_LOAD_FAILURE: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
+/// The fault that stopped the history load of the running service, if one did.
+pub fn history_load_failure() -> Option<String> {
+    HISTORY_LOAD_FAILURE
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .clone()
+}
+
+fn set_history_load_failure(failure: Option<String>) {
+    *HISTORY_LOAD_FAILURE
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner()) = failure;
+}
+
 /// Start the global transaction service
+///
+/// Opens the transaction store and registers the manager, then returns. The wallet
+/// history loads on the returned task, so service startup, and the app's ready
+/// signal with it, never waits on the size of a wallet's history; the transactions
+/// system is marked ready when the load finishes. `shutdown` ends a load in progress.
 ///
 /// Returns JoinHandle so ServiceManager can wait for graceful shutdown.
 pub async fn start_global_transaction_service(
     subject: &Subject,
+    shutdown: Arc<Notify>,
     monitor: tokio_metrics::TaskMonitor,
 ) -> Result<tokio::task::JoinHandle<()>, Error> {
     let mut running = SERVICE_RUNNING.lock().await;
@@ -65,17 +88,64 @@ pub async fn start_global_transaction_service(
         let mut global_manager = GLOBAL_TRANSACTION_MANAGER.lock().await;
         *global_manager = Some(manager.clone());
     }
+    set_history_load_failure(None);
 
-    // Perform initial cache bootstrap before allowing trader start.
-    //
-    // A network/RPC outage here must NOT crash the whole app: the bootstrap is
-    // only a cache pre-fill optimization, and trading entries are already paused
-    // by the connectivity service while RPC/internet are unhealthy. So a network
-    // error is downgraded to a degraded boot — the service still starts and the
-    // periodic check loop catches up automatically once connectivity returns; a
-    // restart resumes any unfinished history backfill from the persisted cursor.
-    // Non-network errors (DB corruption, etc.) stay fatal.
-    match perform_initial_transaction_bootstrap(&manager).await {
+    // Create service configuration
+    let config = ServiceConfig {
+        subject: subject.clone(),
+        check_interval_secs: crate::transactions::utils::NORMAL_CHECK_INTERVAL_SECS,
+    };
+
+    // Mark service as running
+    *running = true;
+    drop(running);
+
+    // Start service task WITH INSTRUMENTATION and return handle so ServiceManager can wait for graceful shutdown
+    let service_subject = subject.clone();
+    let service_handle = tokio::spawn(monitor.instrument(async move {
+        // An interrupted load resumes at the next start: every processed signature is
+        // recorded as known and the older-history cursor is persisted.
+        let loaded = tokio::select! {
+            loaded = load_history_and_mark_ready(&manager, &service_subject) => loaded,
+            _ = shutdown.notified() => false,
+            _ = SHUTDOWN_NOTIFY.notified() => false,
+        };
+        if !loaded {
+            return;
+        }
+        if let Err(e) = run_transaction_service(config).await {
+            logger::info(
+                LogTag::Transactions,
+                &format!("Transaction service error: {e}"),
+            );
+        }
+    }));
+
+    logger::info(
+        LogTag::Transactions,
+        &format!(
+            "Global transaction service started for wallet: {}; its history loads in the background",
+            &subject.address()
+        ),
+    );
+
+    Ok(service_handle)
+}
+
+/// Load the wallet's history, then mark the transactions system ready. Returns false
+/// when a fault no retry answers stopped the load; the service then stays not ready
+/// and reports the fault as its health.
+async fn load_history_and_mark_ready(
+    manager: &Arc<Mutex<TransactionsManager>>,
+    subject: &Subject,
+) -> bool {
+    // A network/RPC outage here must NOT stop the service: the history load is
+    // a cache pre-fill, and trading entries are already paused by the
+    // connectivity service while RPC/internet are unhealthy. A network error is
+    // downgraded to a degraded start, the periodic check loop catches up once
+    // connectivity returns, and a restart resumes any unfinished history backfill
+    // from the persisted cursor. Non-network errors (DB corruption, etc.) stop it.
+    match perform_initial_transaction_bootstrap(manager).await {
         Ok(bootstrap_stats) => {
             logger::info(
         LogTag::Transactions,
@@ -114,13 +184,14 @@ pub async fn start_global_transaction_service(
             );
         }
         Err(e) => {
-            // Non-network failure is fatal: roll back the global registration we
-            // installed above so a later start attempt sees a clean slate.
-            {
-                let mut global_manager = GLOBAL_TRANSACTION_MANAGER.lock().await;
-                *global_manager = None;
-            }
-            return Err(e);
+            logger::error(
+                LogTag::Transactions,
+                &format!(
+                    "Wallet history load failed; the transactions system stays not ready: {e}"
+                ),
+            );
+            set_history_load_failure(Some(e.to_string()));
+            return false;
         }
     }
 
@@ -129,34 +200,6 @@ pub async fn start_global_transaction_service(
         let mut mgr = manager.lock().await;
         mgr.new_transactions_count = 0;
     }
-
-    // Create service configuration
-    let config = ServiceConfig {
-        subject: subject.clone(),
-        check_interval_secs: crate::transactions::utils::NORMAL_CHECK_INTERVAL_SECS,
-    };
-
-    // Mark service as running
-    *running = true;
-    drop(running);
-
-    // Start service task WITH INSTRUMENTATION and return handle so ServiceManager can wait for graceful shutdown
-    let service_handle = tokio::spawn(monitor.instrument(async move {
-        if let Err(e) = run_transaction_service(config).await {
-            logger::info(
-                LogTag::Transactions,
-                &format!("Transaction service error: {e}"),
-            );
-        }
-    }));
-
-    logger::info(
-        LogTag::Transactions,
-        &format!(
-            "Global transaction service started for wallet: {}",
-            &subject.address()
-        ),
-    );
 
     // Bring rows written by an older analyzer forward, from their cached raw
     // responses. Detached and rate-limited: it is history repair, never a gate on
@@ -169,13 +212,12 @@ pub async fn start_global_transaction_service(
     }
 
     // Signal that transactions system is ready
-    crate::global::TRANSACTIONS_SYSTEM_READY.store(true, std::sync::atomic::Ordering::SeqCst);
+    crate::global::mark_transactions_system_ready();
     logger::info(
         LogTag::Transactions,
         "Transactions system ready (instrumented)",
     );
-
-    Ok(service_handle)
+    true
 }
 
 /// Classify a bootstrap error string as a transient network/RPC failure.

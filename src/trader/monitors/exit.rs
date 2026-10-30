@@ -70,7 +70,8 @@ pub async fn monitor_positions(
                 logger::warning(LogTag::Trader, "Exit monitor paused - FORCE STOPPED");
                 was_paused = true;
             }
-            sleep(Duration::from_secs(1)).await; // Check more frequently during force stop
+            // Check more frequently during force stop
+            super::pause_or_shutdown(&mut shutdown, Duration::from_secs(1)).await;
             continue;
         }
 
@@ -82,7 +83,7 @@ pub async fn monitor_positions(
                 logger::info(LogTag::Trader, "Exit monitor paused - disabled via config");
                 was_paused = true;
             }
-            sleep(Duration::from_secs(5)).await;
+            super::pause_or_shutdown(&mut shutdown, Duration::from_secs(5)).await;
             continue;
         }
 
@@ -263,7 +264,11 @@ pub async fn monitor_positions(
                 LogTag::Trader,
                 "Rate limit detected this cycle, backing off 30 seconds before next exit monitor cycle",
             );
-            sleep(Duration::from_secs(30)).await;
+            super::pause_or_shutdown(&mut shutdown, Duration::from_secs(30)).await;
+            if *shutdown.borrow() {
+                logger::info(LogTag::Trader, "Position monitor shutting down");
+                break;
+            }
         }
 
         // Ensure minimum cycle time

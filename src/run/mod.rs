@@ -118,6 +118,12 @@ async fn run_bot_internal(_process_lock: ProcessLock) -> Result<()> {
         .await
         .map_err(Error::Startup)?;
 
+    // Restore the ScreenerBot account session before anything reaches the data
+    // service: the chain-access boot probe and the Data Server client authenticate
+    // with it, and the dashboard reports it from the first request. Reads the
+    // encrypted store only; no network.
+    crate::account::initialize();
+
     // Dashboard-owned persistence is independent of wallet/RPC setup. Routes
     // for actions, analysis instructions, and Assistant chat exist in every dashboard mode.
     bootstrap::initialize_dashboard_persistence().await?;

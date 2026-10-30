@@ -12,7 +12,6 @@ use crate::trader::monitors;
 use async_trait::async_trait;
 use serde_json::json;
 use std::sync::Arc;
-use std::time::Duration;
 use tokio::sync::{Notify, RwLock};
 use tokio::task::JoinHandle;
 
@@ -186,11 +185,11 @@ impl Service for TraderService {
         )
         .await;
 
+        // The monitors end on this signal; `ServiceManager::stop_all` then awaits the
+        // service task, so no fixed wait is needed here.
         if let Some(tx) = self.shutdown_tx.write().await.take() {
             let _ = tx.send(true);
         }
-
-        tokio::time::sleep(Duration::from_secs(2)).await;
 
         logger::info(LogTag::Trader, "Trader Service stopped");
 
