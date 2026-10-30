@@ -89,10 +89,12 @@ export function applyColumnManagementMixin(DataTable) {
    * squeeze such a column below what it shows.
    *
    * Before the one-time fit every sampled cell is measured precisely. After it, a
-   * render (every poll) only reads whether a cell overflows: a cell that does not
-   * overflow already fits, and one that does reports its full need as its scroll
-   * width, since it cannot wrap. Between fits floors only grow, so a column never
-   * narrows under a value it has shown.
+   * render (every poll) measures only a cell that overflows: a cell that does not
+   * overflow already fits. An overflowing cell is measured by its content, never by
+   * its scroll width, which also counts what the cell paints past its own edge: the
+   * pinned group's edge shadow sits outside the last pinned cell, and reading it as
+   * content widened that column by the shadow on every render. Between fits floors
+   * only grow, so a column never narrows under a value it has shown.
    */
   proto._measureContentFloors = function () {
     const precise = !this.state.hasAutoFitted;
@@ -102,7 +104,7 @@ export function applyColumnManagementMixin(DataTable) {
       0,
       this.options.autoSizeSample
     );
-    const range = precise ? document.createRange() : null;
+    const range = document.createRange();
     for (const column of this._getOrderedColumns()) {
       if (!this._isColumnVisible(column.id)) continue;
       const neverCut = column.minWidth === "content" || column.type === "actions";
@@ -110,8 +112,9 @@ export function applyColumnManagementMixin(DataTable) {
       for (const row of rows) {
         const cell = row.querySelector(`td[data-column-id="${column.id}"]`);
         if (!cell || (!neverCut && !cell.hasAttribute("data-type"))) continue;
-        if (precise) widest = Math.max(widest, naturalCellWidth(cell, range));
-        else if (cell.scrollWidth > cell.clientWidth) widest = Math.max(widest, cell.scrollWidth);
+        if (precise || cell.scrollWidth > cell.clientWidth) {
+          widest = Math.max(widest, naturalCellWidth(cell, range));
+        }
       }
       if (widest > 0) floors[column.id] = widest;
     }

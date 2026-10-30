@@ -20,6 +20,8 @@
  *   stored row written before that keeps its own "Incoming" or "Outgoing" label.
  *   The fee column keeps six fixed decimals, the one exception to significant-digit
  *   SOL figures, so a 0.000005 fee never reads as zero.
+ *   Scrolling to the end loads more rows and changes no column width: the pinned Time
+ *   column grew by its edge shadow's width with every page.
  *   In every locale each badge fits its cell, and every column but the signature is
  *   on screen apart from the locales still listed as too wide.
  * - Events: every column, Details included, is on screen; at 1200px the Details
@@ -38,12 +40,13 @@
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
 
-import { readdirSync, statSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { join } from "node:path";
 
 import { chromium } from "playwright";
 
 import { serveDashboard, PAGE_READY } from "../lib/dashboard_host.mjs";
-import { createApiHandler, loadIndex } from "../lib/dashboard_fixtures.mjs";
+import { createApiHandler, loadIndex, FIXTURES_ROOT } from "../lib/dashboard_fixtures.mjs";
 
 const tab = (id) => `#subTabsContainer [data-tab-id="${id}"]`;
 
@@ -52,8 +55,12 @@ after(() => browser.close());
 
 const shell = await loadIndex("shell");
 
-/** `rewrite` maps an API path to a function that edits its parsed fixture body. */
-async function openPage(t, name, locale = "en", rewrite = {}) {
+/**
+ * `rewrite` maps an API path to a function that edits its parsed fixture body;
+ * `prepare(context)` runs before the page opens, to route a request whose answer
+ * depends on its body.
+ */
+async function openPage(t, name, locale = "en", rewrite = {}, prepare = null) {
   const context = await browser.newContext({ viewport: { width: 1200, height: 800 } });
   const api = createApiHandler([await loadIndex(name), shell], "populated");
   const onApi = async (request) => {
@@ -66,6 +73,7 @@ async function openPage(t, name, locale = "en", rewrite = {}) {
     await context.close();
     await host.close();
   });
+  await prepare?.(context);
   const page = await context.newPage();
   page.setDefaultTimeout(15000);
   await page.goto(`${host.origin}/${name}`);
@@ -307,6 +315,65 @@ test("the fee column keeps six fixed decimals", async (t) => {
     (tds) => tds.slice(0, 3).map((td) => td.textContent.trim())
   );
   assert.deepEqual(cells, ["0.000005", "0.000100", "0.000105"]);
+});
+
+test("loading more transactions keeps every column's width", async (t) => {
+  const recorded = JSON.parse(
+    readFileSync(join(FIXTURES_ROOT, "transactions/transactions_list.json"), "utf8")
+  ).items;
+  const lastPage = 4;
+  // Every page repeats the recorded rows under signatures of its own, so no value and
+  // no width a value needs changes; three copies overflow the panel, so each next page
+  // waits for the scroll to reach the end.
+  const pageRows = (number) =>
+    [0, 1, 2].flatMap((copy) =>
+      recorded.map((row, index) => ({
+        ...row,
+        signature: `${row.signature}${number}${copy}${index}`,
+      }))
+    );
+  const page = await openPage(t, "transactions", "en", {}, (context) =>
+    context.route("**/api/transactions/list", (route) => {
+      const number = Number(route.request().postDataJSON()?.pagination?.cursor ?? 1);
+      return route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          items: pageRows(number),
+          next_cursor: number < lastPage ? String(number + 1) : null,
+          total_estimate: lastPage * pageRows(1).length,
+        }),
+      });
+    })
+  );
+  const root = "#transactions-root";
+  const rows = `${root} tbody tr[data-row-id]`;
+  await page.waitForSelector(rows);
+  const widths = () =>
+    page.$$eval(`${root} thead th[data-column-id]`, (headers) =>
+      Object.fromEntries(
+        headers
+          .filter((th) => th.offsetParent !== null)
+          .map((th) => [th.dataset.columnId, Math.round(th.getBoundingClientRect().width)])
+      )
+    );
+  const first = await widths();
+  assert.ok(
+    await page.$eval(`${root} thead th[data-column-id="timestamp"]`, (th) =>
+      th.classList.contains("dt-col-sticky-last")
+    ),
+    "Time is the pinned column"
+  );
+
+  for (let number = 2; number <= lastPage; number += 1) {
+    await page.$eval(`${root} .data-table-scroll-container`, (container) => {
+      container.scrollTop = container.scrollHeight;
+    });
+    await page.waitForFunction(
+      ([selector, count]) => document.querySelectorAll(selector).length >= count,
+      [rows, number * pageRows(1).length]
+    );
+    assert.deepEqual(await widths(), first, `page ${number} keeps every column's width`);
+  }
 });
 
 test("a stored legacy direction keeps its own label", async (t) => {
