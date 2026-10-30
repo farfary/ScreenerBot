@@ -319,6 +319,12 @@ function markPlaceholders() {
 /** Dispatched by `core/action_toasts.js` when a trade completes or fails. */
 const TRADE_SETTLED_EVENT = "screenerbot:trade-settled";
 
+/**
+ * Dispatched with each header answer's `rpc` figures. The status bar renders the same
+ * sample, so the two RPC readouts never show different moments of a moving window.
+ */
+export const RPC_METRICS_EVENT = "screenerbot:rpc-metrics";
+
 export function createHeaderMetrics({ state, setAvailability }) {
   let metricsPoller = null;
   let requestInFlight = null;
@@ -350,6 +356,7 @@ export function createHeaderMetrics({ state, setAvailability }) {
         updateCopyCard(metrics.copy);
         announceCopyNotices(metrics.copy);
         updateTicker(metrics);
+        window.dispatchEvent(new CustomEvent(RPC_METRICS_EVENT, { detail: metrics.rpc ?? null }));
         markPlaceholders();
         setAvailability(true);
         syncBotControlState();

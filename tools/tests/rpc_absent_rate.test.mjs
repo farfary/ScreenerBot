@@ -13,8 +13,10 @@
  *   with a manager and no calls the rate is 0 and the success rate is "—".
  * - Status bar: with no calls the success rate is "—" and the health dot is
  *   "unknown".
- * - One call rate reads identically in the ticker and the status bar: both format it
- *   through `formatCallRate`, at one precision.
+ * - The ticker and the status bar show one RPC sample: the status bar renders the
+ *   header answer's `rpc` figures and never `/api/status`'s, whose poll samples the
+ *   trailing-minute rate at another moment, and both format the rate through
+ *   `formatCallRate`, at one precision.
  *
  * Run with `npm run test:js`.
  */
@@ -88,7 +90,7 @@ test("no RPC manager: the ticker shows no rate", async (t) => {
 test("no calls yet: no success rate anywhere", async (t) => {
   const page = await open(t, {
     headerRpc: { success_rate_percent: null, calls_per_minute: 0 },
-    statusRpc: { total_calls: 0, total_errors: 0, success_rate: 100 },
+    statusRpc: {},
   });
   await painted(page, "#tickerRPCCalls");
   assert.equal(await text(page, "#tickerRPCSuccess"), "—");
@@ -97,13 +99,21 @@ test("no calls yet: no success rate anywhere", async (t) => {
   assert.equal(await page.locator("#statusBarRpcHealth").getAttribute("data-health"), "unknown");
 });
 
-test("one call rate reads the same in the ticker and the status bar", async (t) => {
+test("the ticker and the status bar show the header's RPC sample", async (t) => {
   const page = await open(t, {
-    headerRpc: { calls_per_minute: 29.4 },
-    statusRpc: { recent_calls_per_minute: 29.4 },
+    headerRpc: { calls_per_minute: 29.4, success_rate_percent: 97.2, avg_latency_ms: 210 },
+    statusRpc: {
+      recent_calls_per_minute: 61,
+      success_rate: 50,
+      total_calls: 10,
+      average_response_time_ms: 900,
+    },
   });
   await painted(page, "#tickerRPCCalls");
   await painted(page, "#statusBarRpcRate");
   assert.equal(await text(page, "#tickerRPCCalls"), "29/min");
   assert.equal(await text(page, "#statusBarRpcRate"), "29/min");
+  assert.match(await text(page, "#statusBarRpcSuccess"), /97\.2%/);
+  assert.equal(await page.locator("#statusBarRpcHealth").getAttribute("data-health"), "good");
+  assert.match(await text(page, "#statusBarRpcLatency"), /210/);
 });

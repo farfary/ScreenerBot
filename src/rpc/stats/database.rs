@@ -417,20 +417,6 @@ impl RpcStatsDatabase {
         .map_err(Into::into)
     }
 
-    /// Calls the session made at or after `since`. Timestamps are stored as RFC 3339 text in
-    /// UTC, so their text order is their time order.
-    pub fn count_calls_since(&self, session_id: &str, since: DateTime<Utc>) -> crate::Result<u64> {
-        let conn = self.conn()?;
-
-        conn.query_row(
-            "SELECT COUNT(*) FROM calls WHERE session_id = ?1 AND timestamp >= ?2",
-            params![session_id, since.to_rfc3339()],
-            |row| row.get::<_, i64>(0),
-        )
-        .map(|v| v as u64)
-        .map_err(Into::into)
-    }
-
     /// Get method stats
     pub fn get_method_stats(
         &self,
@@ -584,45 +570,5 @@ impl std::fmt::Debug for RpcStatsDatabase {
         f.debug_struct("RpcStatsDatabase")
             .field("path", &crate::chains::get_rpc_stats_db_path())
             .finish()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn call_at(timestamp: DateTime<Utc>) -> RpcCallRecord {
-        RpcCallRecord {
-            provider_id: "provider".to_string(),
-            method: "getMultipleAccounts".to_string(),
-            success: true,
-            latency_ms: 100,
-            error_code: None,
-            error_message: None,
-            was_retried: false,
-            retry_count: 0,
-            was_rate_limited: false,
-            timestamp,
-        }
-    }
-
-    #[test]
-    fn the_trailing_count_holds_the_session_calls_from_the_cutoff_on() {
-        let directory = tempfile::tempdir().unwrap();
-        let db = RpcStatsDatabase::open(&directory.path().join("rpc_stats.db")).unwrap();
-        db.start_session("current").unwrap();
-        db.start_session("other").unwrap();
-        // A whole second is stored without a fraction, so the window must order
-        // "12:00:00+00:00" before a fractional cutoff and "12:00:01+00:00" after it.
-        let cutoff = DateTime::parse_from_rfc3339("2026-10-30T12:00:00.500+00:00")
-            .unwrap()
-            .with_timezone(&Utc);
-        let at = |offset_ms: i64| call_at(cutoff + ChronoDuration::milliseconds(offset_ms));
-        db.record_calls("current", &[at(-500), at(-1), at(0), at(500), at(30_000)])
-            .unwrap();
-        db.record_calls("other", &[at(1_000)]).unwrap();
-
-        assert_eq!(db.count_calls_since("current", cutoff).unwrap(), 3);
-        assert_eq!(db.count_calls_since("other", cutoff).unwrap(), 1);
     }
 }

@@ -5,6 +5,7 @@
 
 import { whenInitialized } from "./bootstrap.js";
 import { capabilityAvailable } from "../ui/access_gate.js";
+import { RPC_METRICS_EVENT } from "./header_metrics.js";
 import {
   formatCallRate,
   formatLatencyMs,
@@ -65,47 +66,6 @@ import {
       elements.memory.textContent = memMB > 0 ? formatMemoryMb(memMB) : "—";
     }
 
-    // RPC Stats. The ScreenerBot service keeps no RPC statistics, so the group hides there.
-    const rpcGroup = elements.rpcRate?.closest(".status-bar-center");
-    if (rpcGroup) rpcGroup.hidden = !capabilityAvailable("rpc_statistics");
-    if (data.rpc_stats) {
-      const rpc = data.rpc_stats;
-
-      // RPC Rate (calls per minute)
-      if (elements.rpcRate) {
-        elements.rpcRate.textContent = formatCallRate(rpc.recent_calls_per_minute);
-      }
-
-      // RPC Success Rate
-      if (elements.rpcSuccess && elements.rpcHealth) {
-        // success_rate is a 0-100 percentage; scaling it again pinned the badge
-        // at 100% and "good" however many calls were failing.
-        // Before the first call there is no rate to report: absent, not 100%.
-        const successRate = Number(rpc.success_rate);
-        const measured = Number(rpc.total_calls) > 0 && Number.isFinite(successRate);
-        const displayRate = measured ? Math.min(Math.max(successRate, 0), 100) : null;
-        elements.rpcSuccess.textContent = formatPercentValue(displayRate, {
-          decimals: 1,
-          plus: "",
-        });
-
-        // Health indicator; it stays "unknown" until there is a rate to judge.
-        let health = "unknown";
-        if (displayRate !== null) {
-          if (displayRate >= 95) health = "good";
-          else if (displayRate >= 80) health = "warning";
-          else health = "error";
-        }
-        elements.rpcHealth.setAttribute("data-health", health);
-      }
-
-      // RPC Latency
-      if (elements.rpcLatency) {
-        const latency = rpc.average_response_time_ms || 0;
-        elements.rpcLatency.textContent = latency > 0 ? formatLatencyMs(latency) : "—";
-      }
-    }
-
     // Trading Status
     if (elements.trading) {
       const isRunning = data.trader_running || false;
@@ -129,6 +89,51 @@ import {
     if (elements.tokens && data.wallet) {
       const tokenCount = data.wallet.total_tokens_count || 0;
       elements.tokens.textContent = tokenCount;
+    }
+  }
+
+  // RPC figures arrive with the header's answer (`RPC_METRICS_EVENT`), never from
+  // `/api/status`: two polls sample the trailing-minute rate at different moments.
+  // The header can answer before this bar initializes, so the latest sample is kept.
+  let latestRpc;
+  window.addEventListener(RPC_METRICS_EVENT, (event) => {
+    latestRpc = event.detail;
+    updateRpc(latestRpc);
+  });
+
+  function updateRpc(rpc) {
+    // The ScreenerBot service keeps no RPC statistics, so the group hides there.
+    const rpcGroup = elements.rpcRate?.closest(".status-bar-center");
+    if (rpcGroup) rpcGroup.hidden = !capabilityAvailable("rpc_statistics");
+
+    if (elements.rpcRate) {
+      elements.rpcRate.textContent = formatCallRate(rpc?.calls_per_minute ?? null);
+    }
+
+    if (elements.rpcSuccess && elements.rpcHealth) {
+      // A 0-100 percentage, absent before the first call: then "—", never 100%.
+      const successRate = rpc?.success_rate_percent;
+      const displayRate = Number.isFinite(successRate)
+        ? Math.min(Math.max(successRate, 0), 100)
+        : null;
+      elements.rpcSuccess.textContent = formatPercentValue(displayRate, {
+        decimals: 1,
+        plus: "",
+      });
+
+      // Health indicator; it stays "unknown" until there is a rate to judge.
+      let health = "unknown";
+      if (displayRate !== null) {
+        if (displayRate >= 95) health = "good";
+        else if (displayRate >= 80) health = "warning";
+        else health = "error";
+      }
+      elements.rpcHealth.setAttribute("data-health", health);
+    }
+
+    if (elements.rpcLatency) {
+      const latency = rpc?.avg_latency_ms || 0;
+      elements.rpcLatency.textContent = latency > 0 ? formatLatencyMs(latency) : "—";
     }
   }
 
@@ -183,6 +188,7 @@ import {
 
   function init() {
     cacheElements();
+    if (latestRpc !== undefined) updateRpc(latestRpc);
     startPolling();
 
     // Stop polling when page is hidden to save resources

@@ -22,11 +22,16 @@ pub use helpers::{
 };
 pub use types::*;
 
-use std::sync::Arc;
+use std::collections::VecDeque;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 use tokio::sync::{mpsc, Notify, RwLock};
 use uuid::Uuid;
 
 use crate::rpc::types::{CircuitState, ProviderKind, RpcCallResult};
+
+/// The trailing window of the displayed call rate.
+const CALL_RATE_WINDOW: Duration = Duration::from_secs(60);
 
 /// Statistics manager
 pub struct StatsManager {
@@ -42,6 +47,9 @@ pub struct StatsManager {
     is_running: RwLock<bool>,
     /// Whether stats collection is enabled
     enabled: bool,
+    /// When each call of the trailing window was recorded. The collector writes calls to the
+    /// store in batches every few seconds, so a count read from the store trails the calls made.
+    recent_calls: Mutex<VecDeque<Instant>>,
 }
 
 impl StatsManager {
@@ -67,6 +75,7 @@ impl StatsManager {
             shutdown: Arc::new(Notify::new()),
             is_running: RwLock::new(false),
             enabled,
+            recent_calls: Mutex::new(VecDeque::new()),
         })
     }
 
@@ -118,6 +127,13 @@ impl StatsManager {
         // Skip if stats collection is disabled
         if !self.enabled {
             return;
+        }
+
+        {
+            let now = Instant::now();
+            let mut recent = self.recent_calls.lock().unwrap_or_else(|e| e.into_inner());
+            recent.push_back(now);
+            prune_call_window(&mut recent, now);
         }
 
         let record = RpcCallRecord {
@@ -192,13 +208,11 @@ impl StatsManager {
         // A trailing 60 s window, never a calendar minute: the last completed calendar minute
         // kept showing the startup burst for a minute after the rate fell, and a partial
         // first minute while it rose. A session younger than a minute counts every call so far.
-        let calls_last_minute = self
-            .db
-            .count_calls_since(
-                &self.session_id,
-                chrono::Utc::now() - chrono::Duration::minutes(1),
-            )
-            .unwrap_or_default();
+        let calls_last_minute = {
+            let mut recent = self.recent_calls.lock().unwrap_or_else(|e| e.into_inner());
+            prune_call_window(&mut recent, Instant::now());
+            recent.len() as u64
+        };
 
         match session {
             Some(stats) => RpcStatsResponse {
@@ -257,9 +271,36 @@ impl StatsManager {
     }
 }
 
+/// Drops the calls recorded a full window or longer before `now`.
+fn prune_call_window(recent: &mut VecDeque<Instant>, now: Instant) {
+    while let Some(&front) = recent.front() {
+        if now.duration_since(front) >= CALL_RATE_WINDOW {
+            recent.pop_front();
+        } else {
+            break;
+        }
+    }
+}
+
 impl Drop for StatsManager {
     fn drop(&mut self) {
         // End session on drop
         let _ = self.db.end_session(&self.session_id);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_call_window_keeps_the_calls_of_the_last_minute() {
+        let now = Instant::now() + CALL_RATE_WINDOW * 2;
+        let ago = |secs: u64| now - Duration::from_secs(secs);
+        let mut recent = VecDeque::from([ago(90), ago(60), ago(59), ago(30), ago(0)]);
+
+        prune_call_window(&mut recent, now);
+
+        assert_eq!(recent, VecDeque::from([ago(59), ago(30), ago(0)]));
     }
 }
