@@ -101,7 +101,11 @@ async fn update_all_position_prices() {
     let mut api_price_count = 0;
     let mut api_fresh_count = 0;
     let mut failed_count = 0;
-    let chain = crate::chains::active_chain();
+    // The chain the positions store was opened for; without an open store no
+    // price could be written.
+    let Ok(chain) = crate::positions::db::get_store_chain().await else {
+        return;
+    };
 
     for position in &positions {
         let current = get_current_price(&position.mint).await;
