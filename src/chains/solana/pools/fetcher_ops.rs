@@ -154,7 +154,7 @@ impl AccountFetcher {
 
         // Collect all reserve accounts we need to check from valid pools
         let heartbeat = crate::pools::types::price_refresh_heartbeat();
-        let mut accounts_to_check: Vec<(Pubkey, Duration, bool)> = Vec::new();
+        let mut accounts_to_check: Vec<(Pubkey, Duration, bool, usize)> = Vec::new();
 
         for (idx, pool) in pools.iter().enumerate() {
             if !valid_pool_indices.contains(&idx) {
@@ -174,7 +174,7 @@ impl AccountFetcher {
             match reserve_pubkeys(pool) {
                 Ok(pubkeys) => {
                     for pubkey in pubkeys {
-                        accounts_to_check.push((pubkey, threshold, !has_open_position));
+                        accounts_to_check.push((pubkey, threshold, !has_open_position, idx));
                     }
                 }
                 Err(e) => {
@@ -187,10 +187,21 @@ impl AccountFetcher {
         }
 
         // Blacklisted accounts are never fetched, so they are no candidates. Then read
-        // last fetch times under a single lock acquisition and select the due accounts
-        // plus the quiet accounts that share the quiet batch.
-        let blacklisted =
-            blacklisted_accounts(accounts_to_check.iter().map(|(account, _, _)| *account)).await;
+        // last fetch times under a single lock acquisition and select the due accounts,
+        // the quiet accounts that share the quiet batch, and the pools that fill the
+        // spare slots of the calls this cycle sends (pending first fetches included).
+        let blacklisted = blacklisted_accounts(
+            accounts_to_check
+                .iter()
+                .map(|(account, _, _, _)| *account)
+                .chain(pending_accounts.iter().copied()),
+        )
+        .await;
+        let queued: HashSet<Pubkey> = pending_accounts
+            .iter()
+            .filter(|account| is_fetchable_account(account) && !blacklisted.contains(account))
+            .copied()
+            .collect();
         let (keys, candidates) = {
             let last_fetch = account_last_fetch.read().unwrap();
             refresh_candidates(
@@ -200,7 +211,7 @@ impl AccountFetcher {
                 Instant::now(),
             )
         };
-        for idx in accounts_to_refresh(&candidates, heartbeat) {
+        for idx in accounts_to_refresh(&keys, &candidates, heartbeat, &queued) {
             pending_accounts.insert(keys[idx]);
         }
     }
@@ -779,10 +790,15 @@ impl AccountFetcher {
         }
 
         // Decide repricing once per pool, after every re-fetched account is merged:
-        // reprice on fresh reserve data, or from the quiet batch floor so a quiet
-        // pool fetched early to share a batch is repriced too and its price never
-        // outlives the cache TTL.
-        let reprice_after = quiet_batch_floor(crate::pools::types::price_refresh_heartbeat());
+        // reprice on fresh reserve data, or from a quarter of the pool's refresh
+        // interval, the age from which the stale scan fetches its accounts early to
+        // share a call, so an early fetch reprices too and a price never outlives the
+        // pool's refresh interval.
+        let heartbeat = crate::pools::types::price_refresh_heartbeat();
+        let open_mints: HashSet<String> = crate::positions::books::held_mints()
+            .await
+            .into_iter()
+            .collect();
         for (pool_id, update) in local_updates.iter_mut() {
             let reserves = pool_reserve_pubkeys
                 .get(pool_id)
@@ -791,14 +807,13 @@ impl AccountFetcher {
             if !update.bundle.is_complete(reserves) {
                 continue;
             }
+            let mint = target_token_mint(&update.descriptor);
+            let refresh = account_refresh_interval(open_mints.contains(mint), heartbeat);
             update.trigger = calculation_trigger(
                 update.bundle.calculation_requested,
                 update.reserves_changed,
-                crate::pools::cache::cached_price_age(
-                    crate::chains::ChainId::Solana,
-                    target_token_mint(&update.descriptor),
-                ),
-                reprice_after,
+                crate::pools::cache::cached_price_age(crate::chains::ChainId::Solana, mint),
+                quiet_batch_floor(refresh),
             );
             if update.trigger.is_some() {
                 update.bundle.mark_calculation_requested();
