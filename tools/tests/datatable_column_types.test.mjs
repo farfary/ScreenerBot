@@ -18,6 +18,9 @@
  *   free-standing form ("$9.9M").
  * - A SOL column names its unit once, in the header ("P&L (SOL)"), and its cells
  *   carry the digits alone.
+ * - An actions column's header stands over its buttons, at the end of the column.
+ * - The tables of one page (its tabs and panels) share one row geometry: either
+ *   every DataTable of the page sets the same `uniformRowHeight`, or none does.
  *
  * Run with `npm run test:js`.
  */
@@ -194,4 +197,63 @@ test("a sorted header is marked by an accent label and a small arrow only", asyn
   const table = readFileSync(`${SCRIPTS_ROOT}/ui/data_table.js`, "utf8");
   assert.doesNotMatch(table, /[▲▼]/, "the sort arrow is the small icon glyph");
   assert.match(table, /function sortArrow\([^)]*\)[\s\S]*?icon-arrow-up[\s\S]*?icon-arrow-down/);
+});
+
+test("an actions column's header stands over its buttons", () => {
+  const table = readFileSync(`${SCRIPTS_ROOT}/ui/data_table.js`, "utf8");
+  assert.match(table, /col\.type === "actions" \? "dt-actions-header"/);
+  const rules = rulesIn(readFileSync(`${STYLES_ROOT}/ui/data_table/column_types.css`, "utf8"));
+  const body = (selector) => rules.find((rule) => rule.selector === selector)?.body ?? "";
+  assert.match(body(".dt-actions-cell"), /text-align:\s*end/);
+  assert.match(body(".data-table th.dt-actions-header"), /text-align:\s*end/);
+  assert.match(
+    body(".data-table th.dt-actions-header .dt-header-content"),
+    /justify-content:\s*flex-end/
+  );
+  // The cell forces its own padding, so as the last column it restates the end gutter.
+  const core = rulesIn(readFileSync(`${STYLES_ROOT}/ui/data_table/core.css`, "utf8"));
+  const gutter = (selector) =>
+    /padding-inline-end:\s*(\d+px)/.exec(
+      core.find((rule) => rule.selector === selector)?.body ?? ""
+    )?.[1];
+  assert.ok(gutter(".data-table :is(th, td):last-child"), "last-column gutter not found");
+  assert.equal(
+    gutter(".data-table td.dt-actions-cell:last-child"),
+    gutter(".data-table :is(th, td):last-child")
+  );
+});
+
+/** The options text of every `new DataTable({...})` call in `source`. */
+function tableOptions(source) {
+  const found = [];
+  for (const match of source.matchAll(/\bnew DataTable\(\{/g)) {
+    let depth = 0;
+    for (let index = match.index + match[0].length - 1; index < source.length; index += 1) {
+      if (source[index] === "{") depth += 1;
+      else if (source[index] === "}" && --depth === 0) {
+        found.push(source.slice(match.index, index + 1));
+        break;
+      }
+    }
+  }
+  return found;
+}
+
+test("the tables of one page share one row geometry", () => {
+  const pages = new Map();
+  for (const file of consumers) {
+    const page = /\/pages\/([^/.]+)/.exec(file)?.[1];
+    if (!page) continue;
+    for (const options of tableOptions(readFileSync(file, "utf8"))) {
+      const rows = /\buniformRowHeight:\s*(\d+)/.exec(options)?.[1] ?? "none";
+      const tables = pages.get(page) ?? [];
+      tables.push(`${repoPath(file)} ${rows}`);
+      pages.set(page, tables);
+    }
+  }
+  assert.ok(pages.get("wallets")?.length >= 3, "the Wallets tables were not found");
+  const mixed = [...pages.values()].filter(
+    (tables) => new Set(tables.map((table) => table.split(" ").pop())).size > 1
+  );
+  assert.deepEqual(mixed, [], "pages whose tables differ in row geometry");
 });

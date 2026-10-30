@@ -161,6 +161,15 @@
   text-align: end;
 }
 
+/* The header of an actions column stands over the buttons, at the end of the column. */
+.data-table th.dt-actions-header {
+  text-align: end;
+}
+
+.data-table th.dt-actions-header .dt-header-content {
+  justify-content: flex-end;
+}
+
 .dt-actions-container {
   display: inline-flex;
   align-items: center;

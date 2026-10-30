@@ -334,6 +334,7 @@ export function createWalletRenderers({
     tokenTable = new DataTable({
       container: "#tokens-datatable-root",
       columns: TOKEN_COLUMNS,
+      uniformRowHeight: 2,
       rowIdField: "mint",
       stateKey: "wallets.tokens-table",
       compact: true,
@@ -452,6 +453,7 @@ export function createWalletRenderers({
       otherWalletsTable = new DataTable({
         container: "#other-wallets-table-container",
         columns: WALLET_LIST_COLUMNS,
+        uniformRowHeight: 2,
         rowIdField: "id",
         stateKey: "wallets.other-table",
         compact: true,

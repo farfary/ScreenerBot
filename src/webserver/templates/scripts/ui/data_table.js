@@ -968,7 +968,7 @@ export class DataTable {
             return `
             <th
               data-column-id="${col.id}"${this._columnTypeAttr(col)}${ariaSort}
-              class="dt-header-column ${col.sortable ? "sortable" : ""} ${isSorted ? "sorted" : ""} ${sticky.classes}${this._underPinClass(col)}"${sticky.attr}
+              class="dt-header-column ${col.sortable ? "sortable" : ""} ${isSorted ? "sorted" : ""} ${col.type === "actions" ? "dt-actions-header" : ""} ${sticky.classes}${this._underPinClass(col)}"${sticky.attr}
             >
               <div class="dt-header-content">
                 <span class="dt-header-label">

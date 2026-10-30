@@ -468,6 +468,12 @@ body.dt-column-resizing * {
   padding-inline-end: 20px;
 }
 
+/* An actions cell forces its own padding; as the last column it keeps the same end
+   gutter, so its buttons end where the header label does. */
+.data-table td.dt-actions-cell:last-child {
+  padding-inline-end: 20px !important;
+}
+
 /* Uniform row height mode */
 
 /* The default line count lives on the table: a custom property that references
