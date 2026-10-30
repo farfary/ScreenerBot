@@ -231,10 +231,12 @@ async function arrowRight(page, group) {
   await page.focus(`${group} input:checked`);
   await page.keyboard.press("ArrowRight");
   const after = await page.$eval(`${group} input:checked`, (input) => input.value);
-  const ring = await page.$eval(`${group} input:checked + .segmented-label`, (label) => {
-    const style = getComputedStyle(label);
+  // One evaluation finds and measures the label: a range change repaints the panel again
+  // when its data answers, and a handle resolved before that repaint is detached by it.
+  const ring = await page.evaluate((selector) => {
+    const style = getComputedStyle(document.querySelector(selector));
     return { style: style.outlineStyle, width: parseFloat(style.outlineWidth) };
-  });
+  }, `${group} input:checked + .segmented-label`);
   const changes = await page.evaluate(() => window.__segChanges);
   return { before, after, ring, changes };
 }
