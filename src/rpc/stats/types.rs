@@ -212,7 +212,7 @@ pub struct RpcStatsResponse {
     pub provider_count: usize,
     /// Healthy provider count
     pub healthy_provider_count: usize,
-    /// Calls in the most recent complete minute
+    /// Calls in the last 60 seconds (every call so far while the session is younger)
     pub calls_last_minute: u64,
     /// Session calls and errors split by method and by provider
     pub breakdown: RpcCallBreakdown,

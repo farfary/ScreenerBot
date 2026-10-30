@@ -175,13 +175,6 @@ impl StatsManager {
         self.db.get_session_stats(&self.session_id).ok().flatten()
     }
 
-    /// Get calls per minute (last 60 minutes)
-    pub fn get_calls_per_minute(&self) -> Vec<TimeBucketStats> {
-        self.db
-            .get_calls_per_minute(&self.session_id, 60)
-            .unwrap_or_default()
-    }
-
     /// Get method stats (top 10)
     pub fn get_method_stats(&self) -> Vec<MethodStats> {
         self.db
@@ -196,15 +189,15 @@ impl StatsManager {
         healthy_count: usize,
     ) -> RpcStatsResponse {
         let session = self.get_session_stats();
-        let calls_per_minute = self.get_calls_per_minute();
-
-        // Buckets are newest first and the newest is the minute still in progress;
-        // reporting it as "the last minute" understated the rate by up to 60s of calls.
-        let current_minute = chrono::Utc::now().timestamp() / 60;
-        let calls_last_minute = calls_per_minute
-            .iter()
-            .find(|bucket| bucket.bucket_start.timestamp() / 60 < current_minute)
-            .map(|bucket| bucket.call_count)
+        // A trailing 60 s window, never a calendar minute: the last completed calendar minute
+        // kept showing the startup burst for a minute after the rate fell, and a partial
+        // first minute while it rose. A session younger than a minute counts every call so far.
+        let calls_last_minute = self
+            .db
+            .count_calls_since(
+                &self.session_id,
+                chrono::Utc::now() - chrono::Duration::minutes(1),
+            )
             .unwrap_or_default();
 
         match session {

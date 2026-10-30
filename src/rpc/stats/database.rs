@@ -417,59 +417,18 @@ impl RpcStatsDatabase {
         .map_err(Into::into)
     }
 
-    /// Get calls per minute for last N minutes
-    pub fn get_calls_per_minute(
-        &self,
-        session_id: &str,
-        minutes: u32,
-    ) -> crate::Result<Vec<TimeBucketStats>> {
+    /// Calls the session made at or after `since`. Timestamps are stored as RFC 3339 text in
+    /// UTC, so their text order is their time order.
+    pub fn count_calls_since(&self, session_id: &str, since: DateTime<Utc>) -> crate::Result<u64> {
         let conn = self.conn()?;
-        let cutoff = Utc::now() - ChronoDuration::minutes(minutes as i64);
 
-        let mut stmt = conn.prepare(
-            r#"
-                SELECT 
-                    strftime('%Y-%m-%dT%H:%M:00Z', timestamp) as minute,
-                    COUNT(*) as call_count,
-                    SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END) as success_count,
-                    SUM(CASE WHEN success = 0 THEN 1 ELSE 0 END) as error_count,
-                    SUM(CASE WHEN was_rate_limited = 1 THEN 1 ELSE 0 END) as rate_limit_count,
-                    SUM(latency_ms) as latency_sum,
-                    MIN(latency_ms) as latency_min,
-                    MAX(latency_ms) as latency_max
-                FROM calls
-                WHERE session_id = ?1 AND timestamp >= ?2
-                GROUP BY minute
-                ORDER BY minute DESC
-                "#,
-        )?;
-
-        let rows = stmt.query_map(params![session_id, cutoff.to_rfc3339()], |row| {
-            let minute_str: String = row.get(0)?;
-            let bucket_start = DateTime::parse_from_rfc3339(&minute_str)
-                .map(|dt| dt.with_timezone(&Utc))
-                .unwrap_or_else(|_| Utc::now());
-
-            Ok(TimeBucketStats {
-                bucket_start,
-                call_count: row.get::<_, i64>(1)? as u64,
-                success_count: row.get::<_, i64>(2)? as u64,
-                error_count: row.get::<_, i64>(3)? as u64,
-                rate_limit_count: row.get::<_, i64>(4)? as u64,
-                latency_sum_ms: row.get::<_, i64>(5)? as u64,
-                latency_min_ms: row.get::<_, Option<i64>>(6)?.map(|v| v as u64),
-                latency_max_ms: row.get::<_, Option<i64>>(7)?.map(|v| v as u64),
-            })
-        })?;
-
-        let mut results = Vec::new();
-        for row in rows {
-            if let Ok(bucket) = row {
-                results.push(bucket);
-            }
-        }
-
-        Ok(results)
+        conn.query_row(
+            "SELECT COUNT(*) FROM calls WHERE session_id = ?1 AND timestamp >= ?2",
+            params![session_id, since.to_rfc3339()],
+            |row| row.get::<_, i64>(0),
+        )
+        .map(|v| v as u64)
+        .map_err(Into::into)
     }
 
     /// Get method stats
@@ -625,5 +584,45 @@ impl std::fmt::Debug for RpcStatsDatabase {
         f.debug_struct("RpcStatsDatabase")
             .field("path", &crate::chains::get_rpc_stats_db_path())
             .finish()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn call_at(timestamp: DateTime<Utc>) -> RpcCallRecord {
+        RpcCallRecord {
+            provider_id: "provider".to_string(),
+            method: "getMultipleAccounts".to_string(),
+            success: true,
+            latency_ms: 100,
+            error_code: None,
+            error_message: None,
+            was_retried: false,
+            retry_count: 0,
+            was_rate_limited: false,
+            timestamp,
+        }
+    }
+
+    #[test]
+    fn the_trailing_count_holds_the_session_calls_from_the_cutoff_on() {
+        let directory = tempfile::tempdir().unwrap();
+        let db = RpcStatsDatabase::open(&directory.path().join("rpc_stats.db")).unwrap();
+        db.start_session("current").unwrap();
+        db.start_session("other").unwrap();
+        // A whole second is stored without a fraction, so the window must order
+        // "12:00:00+00:00" before a fractional cutoff and "12:00:01+00:00" after it.
+        let cutoff = DateTime::parse_from_rfc3339("2026-10-30T12:00:00.500+00:00")
+            .unwrap()
+            .with_timezone(&Utc);
+        let at = |offset_ms: i64| call_at(cutoff + ChronoDuration::milliseconds(offset_ms));
+        db.record_calls("current", &[at(-500), at(-1), at(0), at(500), at(30_000)])
+            .unwrap();
+        db.record_calls("other", &[at(1_000)]).unwrap();
+
+        assert_eq!(db.count_calls_since("current", cutoff).unwrap(), 3);
+        assert_eq!(db.count_calls_since("other", cutoff).unwrap(), 1);
     }
 }

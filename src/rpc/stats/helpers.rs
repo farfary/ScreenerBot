@@ -56,7 +56,7 @@ pub struct RpcStats {
     pub avg_latency_ms: f64,
     /// Uptime in seconds
     pub uptime_secs: u64,
-    /// Calls in last minute
+    /// Calls in the last 60 seconds
     pub calls_last_minute: u64,
     /// Provider count
     pub provider_count: usize,
@@ -128,15 +128,11 @@ impl RpcStats {
         }
     }
 
-    /// The displayed RPC call rate per minute: the last completed minute's count, or the
-    /// session average while that minute has no calls (the first minute of a session has
-    /// no completed minute yet, so a raw count would read 0 while calls are being made).
+    /// The displayed RPC call rate per minute: the calls made in the last 60 seconds. A
+    /// session younger than a minute shows the calls made so far, never a rate extrapolated
+    /// from its startup burst, and an idle minute shows 0, never the session average.
     pub fn calls_per_minute(&self) -> f64 {
-        if self.calls_last_minute > 0 {
-            self.calls_last_minute as f64
-        } else {
-            self.calls_per_second() * 60.0
-        }
+        self.calls_last_minute as f64
     }
 
     /// Get minute buckets
@@ -244,14 +240,19 @@ mod tests {
     }
 
     #[test]
-    fn call_rate_reads_the_last_completed_minute() {
+    fn call_rate_reads_the_last_minute() {
         assert_eq!(stats(5_000, 600, 33).calls_per_minute(), 33.0);
     }
 
     #[test]
-    fn call_rate_is_the_session_average_before_a_minute_completes() {
-        // 49 calls in the first 100 seconds: no completed minute yet, 29.4 calls per minute.
-        assert!((stats(49, 100, 0).calls_per_minute() - 29.4).abs() < 1e-9);
+    fn a_young_session_shows_its_calls_so_far_not_its_burst_rate() {
+        // 24 calls in the first 10 seconds: extrapolated, that read 144 calls per minute.
+        assert_eq!(stats(24, 10, 24).calls_per_minute(), 24.0);
+    }
+
+    #[test]
+    fn an_idle_minute_reads_zero_not_the_session_average() {
+        assert_eq!(stats(5_000, 600, 0).calls_per_minute(), 0.0);
     }
 
     #[test]
