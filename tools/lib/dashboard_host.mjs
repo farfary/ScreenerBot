@@ -190,6 +190,12 @@ export const renderShell = memoized((page, locale) => {
     "{{SECURITY_TOKEN}}": "",
     "{{WEBSERVER_PORT}}": SHELL_PORT,
     "{{IS_GUI_MODE}}": "false",
+    // The server appends the asset version to every static import as well
+    // (`version_js_imports`, routes/asset_serving/handlers.rs), so a module reached by a
+    // script tag and by an import has one URL and is one instance. Sources are served
+    // unchanged here, so the shell's tags drop the version instead: a tag, a relative
+    // import and a test's own `import("/scripts/...")` all name the same module.
+    "?v={{ASSET_VERSION}}": "",
     "{{ASSET_VERSION}}": "test",
     "{{TOKEN_LOGO_SHAPE}}": "circle",
     "{{NAV_OVERFLOW}}": "scroll",

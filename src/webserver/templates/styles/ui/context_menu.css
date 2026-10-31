@@ -32,6 +32,9 @@
   font-family: var(--font-sans);
   font-size: var(--menu-item-font-size);
   user-select: none;
+
+  /* Inert until shown and while fading out: a closing menu takes no click or hover. */
+  pointer-events: none;
 }
 
 .context-menu.menu-above {
@@ -41,6 +44,7 @@
 .context-menu.visible {
   opacity: 1;
   transform: none;
+  pointer-events: auto;
 }
 
 /* Menu Items */

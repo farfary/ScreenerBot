@@ -131,21 +131,39 @@ class ContextMenuManager {
    * Handle context menu event
    */
   _handleContextMenu(e) {
-    // Clear any pending operations
-    this._clearTimeouts();
-
-    const context = this._determineContext(e.target);
+    const context = this._determineContext(this._pointerTarget(e));
     this.show(e.clientX, e.clientY, context);
   }
 
+  /**
+   * The element a right-click is aimed at. A right-click outside an open menu lands
+   * on its click-catching overlay, so the target is the element beneath the overlay.
+   */
+  _pointerTarget(e) {
+    if (!this.overlayEl || e.target !== this.overlayEl) return e.target;
+    return (
+      document.elementsFromPoint(e.clientX, e.clientY).find((el) => el !== this.overlayEl) ||
+      e.target
+    );
+  }
+
+  /**
+   * Cancel every pending timer. Only a caller that completes or restarts the close
+   * may cancel `hideTimeout`: it is the one timer that removes the overlay and clears
+   * `isTransitioning`, and while either remains the page takes no pointer input.
+   */
   _clearTimeouts() {
-    if (this.submenuTimeout) {
-      clearTimeout(this.submenuTimeout);
-      this.submenuTimeout = null;
-    }
+    this._clearSubmenuTimeout();
     if (this.hideTimeout) {
       clearTimeout(this.hideTimeout);
       this.hideTimeout = null;
+    }
+  }
+
+  _clearSubmenuTimeout() {
+    if (this.submenuTimeout) {
+      clearTimeout(this.submenuTimeout);
+      this.submenuTimeout = null;
     }
   }
 
@@ -343,14 +361,16 @@ class ContextMenuManager {
    * at `x`, for a menu dropped from a control at the end of a header.
    */
   async show(x, y, context, { endAnchored = false } = {}) {
-    // Prevent concurrent show() calls - critical for preventing hangs
-    if (this.isShowing || this.isTransitioning) {
+    // Prevent concurrent show() calls while one awaits the favorites cache.
+    if (this.isShowing) {
       return;
     }
     this.isShowing = true;
 
     try {
-      // Clean up any existing menu FIRST, before async operations.
+      // Close any existing menu FIRST, before async operations, including one still
+      // fading out: a right-click on an open menu's overlay starts its close on
+      // mousedown, and the new menu replaces it instead of being refused.
       // NOTE: _hideImmediate() -> _cleanup() resets `isShowing` to false, so we must
       // re-assert it AFTER these cleanup calls. Otherwise the `if (!this.isShowing)`
       // guard below always trips and the menu never renders (broke every context menu).
@@ -479,6 +499,7 @@ class ContextMenuManager {
 
   _cleanup() {
     this._releaseEscapeHandler();
+    this._clearSubmenuTimeout();
     if (this.menuEl) {
       this.menuEl.remove();
       this.menuEl = null;
@@ -525,20 +546,6 @@ class ContextMenuManager {
       e.preventDefault();
       e.stopPropagation();
       this.hide();
-    });
-    this.overlayEl.addEventListener("contextmenu", (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      this.hide();
-
-      // Re-trigger at new position after a small delay
-      setTimeout(() => {
-        const target = document.elementFromPoint(e.clientX, e.clientY);
-        if (target && target !== this.overlayEl) {
-          const context = this._determineContext(target);
-          this.show(e.clientX, e.clientY, context);
-        }
-      }, 50);
     });
 
     // Create menu container
@@ -689,7 +696,7 @@ class ContextMenuManager {
           // Submenu hover handling. Position immediately so the CSS :hover-opened
           // submenu never flashes off the frame before the open-intent delay elapses.
           el.addEventListener("mouseenter", () => {
-            this._clearTimeouts();
+            this._clearSubmenuTimeout();
             const submenu = el.querySelector(".context-menu-submenu");
             if (submenu) this._positionSubmenu(el, submenu);
             this.submenuTimeout = setTimeout(() => {
@@ -698,7 +705,7 @@ class ContextMenuManager {
           });
 
           el.addEventListener("mouseleave", () => {
-            this._clearTimeouts();
+            this._clearSubmenuTimeout();
             this.submenuTimeout = setTimeout(() => {
               this._closeSubmenuForItem(el);
             }, 100);
