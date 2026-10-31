@@ -761,7 +761,7 @@ strategies-open-other-book =
         [many] { $book }: { $count } مركزًا
        *[other] { $book }: { $count } مركز
     }
-strategies-manages-all = كل استراتيجيات الدخول
+strategies-manages-all = كل المراكز
 # $first is the first managed entry strategy; $more the count of the others.
 strategies-manages-some =
     { $more ->

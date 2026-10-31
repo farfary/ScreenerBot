@@ -712,7 +712,7 @@ strategies-open-other-book =
     { $count ->
        *[other] { $book }：{ $count } 个持仓
     }
-strategies-manages-all = 全部入场策略
+strategies-manages-all = 所有仓位
 # $first is the first managed entry strategy; $more the count of the others.
 strategies-manages-some =
     { $more ->

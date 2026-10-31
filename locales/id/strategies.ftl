@@ -670,7 +670,7 @@ strategies-open-other-book =
     { $count ->
        *[other] { $book }: { $count } posisi
     }
-strategies-manages-all = Semua strategi entry
+strategies-manages-all = Semua posisi
 # $first is the first managed entry strategy; $more the count of the others.
 strategies-manages-some =
     { $more ->

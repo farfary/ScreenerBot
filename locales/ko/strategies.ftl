@@ -712,7 +712,7 @@ strategies-open-other-book =
     { $count ->
        *[other] { $book }: 포지션 { $count }개
     }
-strategies-manages-all = 모든 진입 전략
+strategies-manages-all = 모든 포지션
 # $first is the first managed entry strategy; $more the count of the others.
 strategies-manages-some =
     { $more ->

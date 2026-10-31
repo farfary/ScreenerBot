@@ -668,7 +668,7 @@ strategies-open-other-book =
     { $count ->
        *[other] { $book }: { $count } vị thế
     }
-strategies-manages-all = Tất cả chiến lược vào lệnh
+strategies-manages-all = Tất cả vị thế
 # $first is the first managed entry strategy; $more the count of the others.
 strategies-manages-some =
     { $more ->

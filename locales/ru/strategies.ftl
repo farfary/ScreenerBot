@@ -701,7 +701,7 @@ strategies-open-other-book =
         [many] { $book }: { $count } позиций
        *[other] { $book }: { $count } позиции
     }
-strategies-manages-all = Все стратегии входа
+strategies-manages-all = Все позиции
 # $first is the first managed entry strategy; $more the count of the others.
 strategies-manages-some =
     { $more ->

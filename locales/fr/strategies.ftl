@@ -693,7 +693,7 @@ strategies-open-other-book =
         [many] { $book } : { $count } positions
        *[other] { $book } : { $count } positions
     }
-strategies-manages-all = Toutes les stratégies d'entrée
+strategies-manages-all = Toutes les positions
 # $first is the first managed entry strategy; $more the count of the others.
 strategies-manages-some =
     { $more ->

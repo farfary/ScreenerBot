@@ -729,7 +729,7 @@ strategies-open-other-book =
         [one] { $book }: { $count } پوزیشن
        *[other] { $book }: { $count } پوزیشن
     }
-strategies-manages-all = همه استراتژی‌های ورود
+strategies-manages-all = همه پوزیشن‌ها
 # $first is the first managed entry strategy; $more the count of the others.
 strategies-manages-some =
     { $more ->

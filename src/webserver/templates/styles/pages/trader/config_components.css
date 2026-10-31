@@ -477,7 +477,7 @@
 }
 
 /* A plain line under a worked example: a note on how it is measured, or its risk. */
-.visual-example > .impact-text {
+.visual-example > .impact-text:not([hidden]) {
   display: block;
   margin: 0.25rem 0 0;
 }

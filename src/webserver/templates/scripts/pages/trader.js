@@ -27,6 +27,7 @@ import {
 } from "./trader/features.js";
 import { createLifecycle as createStrategiesLifecycle } from "./strategies.js";
 import { createStatsView } from "./trader/stats.js";
+import { TRADING_MODE_ICONS } from "../ui/trading_mode.js";
 
 // Sub-tabs configuration. The embedded Strategies roster and editor is second.
 function buildSubTabs() {
@@ -785,6 +786,10 @@ function createLifecycle() {
     init(ctx) {
       console.log("[Trader] Initializing page");
       lifecycleContext = ctx;
+
+      // The Paper Trading card wears the Paper glyph from its one owner.
+      const paperIcon = $("#trader-paper-settings-icon");
+      if (paperIcon) paperIcon.className = TRADING_MODE_ICONS.paper;
 
       // Fetch feature status early (non-blocking, but before tab bar setup)
       const featurePromise = fetchFeatureStatus(requestManager);

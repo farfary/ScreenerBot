@@ -246,7 +246,7 @@ test("every figure is the server's, and one it could not attribute reads as a da
 
   await view(page, "exit");
   await page.waitForSelector(`#strategies-roster tr[data-row-id="${STALE_EXIT}"]`);
-  assert.equal(await cell(page, STALE_EXIT, "manages"), "All entry strategies");
+  assert.equal(await cell(page, STALE_EXIT, "manages"), "All positions");
   assert.equal(await cell(page, MA_EXIT, "manages"), "Momentum breakout and 1 more");
   assert.equal(await cell(page, STALE_EXIT, "watching"), "3");
   assert.equal(await cell(page, STALE_EXIT, "closed"), "6");
