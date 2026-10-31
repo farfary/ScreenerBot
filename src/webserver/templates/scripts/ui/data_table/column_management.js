@@ -623,6 +623,24 @@ export function applyColumnManagementMixin(DataTable) {
         this._applyColumnWidth(col.id, newWidth);
       });
 
+      // What the receivers cannot take (each stops at its maxWidth) goes to the other
+      // columns in proportion to their widths. Left unclaimed, the gap is covered only by
+      // the table's own width, and the next render re-sums the columns and leaves a blank
+      // band beside a table narrower than its panel.
+      const others = adjustable.filter((col) => !receivers.includes(col));
+      const othersWidth = others.reduce((sum, col) => sum + this.state.columnWidths[col.id], 0);
+      const spare = gap;
+      others.forEach((col, idx) => {
+        if (gap <= 0 || othersWidth <= 0) return;
+        const currentWidth = this.state.columnWidths[col.id];
+        const share =
+          idx === others.length - 1 ? gap : Math.floor((spare * currentWidth) / othersWidth);
+        const newWidth = Math.min(this._getColumnMaxWidth(col.id), currentWidth + share);
+        gap -= newWidth - currentWidth;
+        this.state.columnWidths[col.id] = newWidth;
+        this._applyColumnWidth(col.id, newWidth);
+      });
+
       applyFinal();
       return true;
     }

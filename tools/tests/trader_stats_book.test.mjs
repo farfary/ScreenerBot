@@ -11,6 +11,8 @@
  *   under the other, even when a response of the previous book arrives late.
  * - The paper run is read from the paper account API, which carries the run alone:
  *   `{epoch, started_at, starting_balance_native, cash_native}`.
+ * - Every table spans its panel in either book: a book with fewer and shorter rows
+ *   repaints the same tables and must not leave a blank band beside them.
  *
  * Run with `npm run test:js`.
  */
@@ -39,9 +41,10 @@ const ACCOUNT = {
 
 /**
  * The trader page on Stats. Every stats request is recorded as `{ book, window }`; a live
- * read is held while `holdLive` is set, until `releaseLive()` answers it.
+ * read is held while `holdLive` is set, until `releaseLive()` answers it. `paper` is the
+ * paper book's response.
  */
-async function openStats() {
+async function openStats({ paper = PAPER } = {}) {
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   const api = createApiHandler(indexes, "populated");
   const reads = [];
@@ -52,7 +55,7 @@ async function openStats() {
     if (pathname === "/api/trader/stats") {
       const book = searchParams.get("book");
       reads.push({ book, window: searchParams.get("window") });
-      if (book === "paper") return { body: JSON.stringify(PAPER) };
+      if (book === "paper") return { body: JSON.stringify(paper) };
       if (state.holdLive) await new Promise((resolve) => held.push(resolve));
       return { body: JSON.stringify(LIVE) };
     }
@@ -119,6 +122,38 @@ test("a late response of the previous book never paints over the shown one", asy
     releaseLive();
     await tab.waitForTimeout(300);
     assert.equal(await trades(tab), "3", "the paper book keeps its own figures");
+  } finally {
+    await close();
+  }
+});
+
+test("every table spans its panel after the book switches", async () => {
+  // Fewer, shorter rows than the live book: the token column stops at its maximum width
+  // and the rest of the panel must still be claimed by the columns.
+  const paper = {
+    ...PAPER,
+    recent_rounds: LIVE.recent_rounds.slice(2, 5),
+    exit_breakdown: LIVE.exit_breakdown.slice(0, 1),
+    source_breakdown: LIVE.source_breakdown.slice(0, 1),
+  };
+  const { tab, close } = await openStats({ paper });
+  const widths = () =>
+    tab.evaluate(() =>
+      ["#exit-breakdown", "#source-breakdown", "#recent-rounds"].map((id) => {
+        const panel = document.querySelector(`${id} .data-table-scroll-container`) || document.querySelector(id);
+        const table = document.querySelector(`${id} table`);
+        return { id, panel: panel.clientWidth, table: Math.round(table.getBoundingClientRect().width) };
+      })
+    );
+  try {
+    await tab.waitForSelector("#recent-rounds tbody tr[data-row-id]");
+    await option(tab, "stats-book", "paper").click();
+    await tab.waitForFunction(
+      () => document.querySelectorAll("#recent-rounds tbody tr[data-row-id]").length === 3
+    );
+    for (const { id, panel, table } of await widths()) {
+      assert.ok(Math.abs(panel - table) <= 1, `${id}: table ${table} px in a ${panel} px panel`);
+    }
   } finally {
     await close();
   }
