@@ -2,10 +2,12 @@
 // SPDX-License-Identifier: BUSL-1.1
 
 //! Promo generators for the Auto Trader page: the trader statistics tab, the
-//! running state, the monitor controls and the period loss limit panel.
+//! running state, the monitor controls, the period loss limit panel and the settings
+//! that size the promo book.
 
 use chrono::{DateTime, Duration, Utc};
 
+use crate::config::TraderConfig;
 use crate::positions::{Book, Opening, Position};
 use crate::trader::stats::{RealizedStats, StatsWindow, TraderStats};
 use crate::trader::{
@@ -13,7 +15,11 @@ use crate::trader::{
 };
 
 use super::aggregates;
-use super::data::PROMO_OPEN_TOKENS;
+use super::data::{
+    PROMO_MAX_OPEN_POSITIONS, PROMO_OPEN_TOKENS, PROMO_PAPER_STARTING_BALANCE_SOL,
+    PROMO_TRADE_SIZE_SOL,
+};
+use super::paper::promo_paper_rounds;
 use super::strategies;
 
 /// Network fee of each promo buy and sale, in raw units, as the promo positions list
@@ -90,26 +96,36 @@ pub fn get_promo_loss_limit_status() -> LossLimitSnapshot {
     }
 }
 
-/// Generate the promo trader stats of `window`: the promo closed trades become closed
-/// rounds and go through the same aggregation as a real book, so every figure the Stats
-/// tab shows is one the live handler computes. Open exposure comes from the open arrays.
-pub fn get_promo_trader_stats(window: StatsWindow) -> TraderStats {
+/// Generate the promo trader stats of `book` over `window`: the closed promo rounds of
+/// that book go through the same aggregation as a real book, so every figure the Stats
+/// tab shows is one the live handler computes, and the open rounds give the exposure.
+pub fn get_promo_trader_stats(book: Book, window: StatsWindow) -> TraderStats {
     let now = Utc::now();
     let since = window.since(now);
-    let closed: Vec<Position> = promo_closed_rounds(now)
+    let (open, closed) = match book {
+        Book::Live => (promo_open_rounds(now), promo_closed_rounds(now)),
+        Book::Paper => promo_paper_rounds(now),
+    };
+    let closed: Vec<Position> = closed
         .into_iter()
         .filter(|round| round.exit_time.is_some_and(|exit| exit >= since))
         .collect();
-    let realized = RealizedStats::of(window, closed, now);
-    let open = aggregates::open_agg();
-    TraderStats {
-        open_positions_count: open.count,
-        max_open_positions: open.count.max(1),
-        locked_native: open.invested_sol,
-        unrealized_native: Some(open.unrealized_pnl_sol),
-        open_unpriced: 0,
-        realized,
-    }
+    RealizedStats::of(window, closed, now).with_exposure(&open, PROMO_MAX_OPEN_POSITIONS)
+}
+
+/// Overlay the trader settings the promo book was sized by on the live `trader` section,
+/// so the Auto Trader settings read the slots, trade size and paper balance the promo
+/// positions and paper run reconcile with. Read paths only; nothing is stored.
+pub fn apply_promo_trader_config(trader: &mut TraderConfig) {
+    trader.max_open_positions = PROMO_MAX_OPEN_POSITIONS;
+    trader.trade_size_sol = PROMO_TRADE_SIZE_SOL;
+    trader.paper.starting_balance_sol = PROMO_PAPER_STARTING_BALANCE_SOL;
+}
+
+/// The promo open positions as the time-exit watch reads them: the rounds the promo
+/// positions list shows, under the same ids.
+pub fn get_promo_open_positions() -> Vec<Position> {
+    promo_open_rounds(Utc::now())
 }
 
 /// The open rounds of the promo open positions at `now`, with the id, owner, price and
@@ -245,8 +261,8 @@ mod tests {
     #[test]
     fn promo_trader_stats_follow_the_window_and_the_shared_aggregation() {
         crate::config::utils::install_default_config();
-        let day = get_promo_trader_stats(StatsWindow::Days(1));
-        let all = get_promo_trader_stats(StatsWindow::All);
+        let day = get_promo_trader_stats(Book::Live, StatsWindow::Days(1));
+        let all = get_promo_trader_stats(Book::Live, StatsWindow::All);
         let trades = aggregates::closed_trades(Utc::now());
 
         assert_eq!(all.realized.total_trades, trades.len());
@@ -273,5 +289,31 @@ mod tests {
         assert_eq!(all.open_positions_count, PROMO_OPEN_TOKENS.len());
         assert_eq!(all.open_unpriced, 0);
         assert!(all.unrealized_native.is_some());
+        let open = aggregates::open_agg();
+        assert!((all.locked_native - open.invested_sol).abs() < 1e-9);
+        assert!((all.unrealized_native.unwrap() - open.unrealized_pnl_sol).abs() < 1e-9);
+    }
+
+    #[test]
+    fn promo_settings_reconcile_with_the_promo_book() {
+        crate::config::utils::install_default_config();
+        let mut trader = crate::config::with_config(|cfg| cfg.trader.clone());
+        apply_promo_trader_config(&mut trader);
+        trader.validate().expect("the promo settings are valid");
+
+        let stats = get_promo_trader_stats(Book::Live, StatsWindow::All);
+        assert_eq!(stats.max_open_positions, trader.max_open_positions);
+        assert!(stats.open_positions_count <= trader.max_open_positions);
+        let sizes = PROMO_OPEN_TOKENS.iter().map(|row| row.6);
+        let (smallest, largest) = sizes.fold((f64::INFINITY, 0.0f64), |(lo, hi), size| {
+            (lo.min(size), hi.max(size))
+        });
+        assert!((smallest..=largest).contains(&trader.trade_size_sol));
+
+        let account = super::super::paper::get_promo_paper_account();
+        assert_eq!(
+            account.starting_balance_native,
+            trader.paper.starting_balance_sol
+        );
     }
 }

@@ -10,7 +10,6 @@ use axum::{
 };
 
 use crate::i18n::ids;
-use crate::positions::Book;
 use crate::webserver::api_error::{ApiError, ApiErrorCode};
 use crate::webserver::utils::success_response;
 
@@ -27,8 +26,10 @@ pub async fn get_trader_stats(Query(query): Query<TraderStatsQuery>) -> Response
     let book = query.book.unwrap_or_default();
     // Return promotional fixtures only for owner-initiated media capture.
     let window = query.window.into();
-    if crate::webserver::promo::are_promo_fixtures_enabled() && book == Book::Live {
-        return success_response(crate::webserver::promo::get_promo_trader_stats(window));
+    if crate::webserver::promo::are_promo_fixtures_enabled() {
+        return success_response(crate::webserver::promo::get_promo_trader_stats(
+            book, window,
+        ));
     }
     success_response(crate::trader::stats::trader_stats(book, window).await)
 }
@@ -67,8 +68,15 @@ pub async fn apply_template(Json(request): Json<ApplyTemplateRequest>) -> Respon
 /// under the exit policy the exit monitor resolves for it, and when that exit is due.
 pub async fn get_time_exits() -> Response {
     let now = chrono::Utc::now();
+    // During promotional capture the watched positions are the promo ones the positions
+    // list shows, so each row of the time-exit table finds its watch.
+    let positions = if crate::webserver::promo::are_promo_fixtures_enabled() {
+        crate::webserver::promo::get_promo_open_positions()
+    } else {
+        crate::positions::get_open_positions().await
+    };
     let mut watches = Vec::new();
-    for position in crate::positions::get_open_positions().await {
+    for position in positions {
         let Some(position_id) = position.id else {
             continue;
         };

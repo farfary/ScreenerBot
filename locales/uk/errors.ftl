@@ -92,6 +92,7 @@ errors-copy-task-owns-positions = Копі-завдання досі волод�
 errors-copy-request-failed = Запит копітрейдингу не вдався
 
 errors-strategies-not-found = Стратегію не знайдено
+errors-promo-fixtures-read-only = Зміни не зберігаються, поки показано демонстраційні дані
 errors-strategies-invalid-type = Недійсний тип стратегії. Має бути ENTRY або EXIT
 errors-strategies-priority-out-of-range = Пріоритет { $priority } поза допустимим діапазоном. Вкажіть число від { $min } до { $max }
 errors-strategies-list-failed = Не вдалося отримати стратегії

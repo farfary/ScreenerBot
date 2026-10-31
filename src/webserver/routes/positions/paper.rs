@@ -104,6 +104,9 @@ async fn paper_positions_stats() -> Response {
 }
 
 async fn paper_account() -> Response {
+    if crate::webserver::promo::are_promo_fixtures_enabled() {
+        return account_response(crate::webserver::promo::get_promo_paper_account());
+    }
     match crate::trader::paper::paper_account().await {
         Ok(account) => account_response(account),
         Err(error) => trader_failure(&error),
@@ -112,6 +115,9 @@ async fn paper_account() -> Response {
 
 /// Settles every open paper round at its mark and starts the next paper run.
 async fn reset_paper_run() -> Response {
+    if crate::webserver::promo::are_promo_fixtures_enabled() {
+        return crate::webserver::promo::promo_write_refused();
+    }
     match crate::trader::paper::reset_paper_run().await {
         Ok(account) => account_response(account),
         Err(error) => trader_failure(&error),

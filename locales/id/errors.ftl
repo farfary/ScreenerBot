@@ -95,6 +95,7 @@ errors-copy-task-owns-positions = Tugas salin masih memiliki posisi terbuka
 errors-copy-request-failed = Permintaan copy trading gagal
 
 errors-strategies-not-found = Strategi tidak ditemukan
+errors-promo-fixtures-read-only = Perubahan tidak disimpan selama data contoh ditampilkan
 errors-strategies-invalid-type = Jenis strategi tidak valid. Harus ENTRY atau EXIT
 errors-strategies-priority-out-of-range = Prioritas { $priority } di luar rentang. Gunakan angka dari { $min } hingga { $max }
 errors-strategies-list-failed = Gagal mengambil strategi

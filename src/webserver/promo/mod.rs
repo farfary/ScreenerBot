@@ -25,14 +25,24 @@
 //!   /api/filtering/rejected-tokens, /api/filtering/export-rejected-tokens,
 //!   /api/filtering/refresh (moves the snapshot time; the fixture corpus is fixed)
 //! - /api/wallet/current, /api/wallet/tokens
-//! - /api/trader/stats, /api/trader/status, /api/trader/monitors/status,
-//!   /api/trader/loss-limit/status
+//! - /api/trader/stats (both books), /api/trader/status, /api/trader/monitors/status,
+//!   /api/trader/loss-limit/status, /api/trader/time-exits (the promo open positions under
+//!   the live exit policy)
+//! - /api/positions/paper/account (the promo paper run; its reset is refused)
+//! - /api/config, /api/config/trader (the trader settings that size the promo book)
 //! - /api/header/metrics (SOL price is LIVE when the network is reachable)
 //! - /api/status (the status bar fields; version and service blocks stay live)
-//! - /api/strategies, /api/strategies/overview, /api/strategies/{id} (reads only; the
-//!   promo trades are the rounds of its live entry strategies)
+//! - /api/strategies, /api/strategies/overview, /api/strategies/{id},
+//!   /api/strategies/{id}/test, /api/strategies/{id}/readiness (the promo trades are the
+//!   rounds of its live entry strategies, the promo paper run those of its paper one);
+//!   every strategy write is refused
 
 use std::sync::atomic::{AtomicBool, Ordering};
+
+use axum::response::{IntoResponse as _, Response};
+
+use crate::i18n::ids;
+use crate::webserver::api_error::{ApiError, ApiErrorCode};
 
 mod aggregates;
 mod assistant;
@@ -43,6 +53,7 @@ mod events;
 mod filtering;
 mod header;
 mod llm_analysis;
+mod paper;
 mod positions;
 mod status;
 mod strategies;
@@ -73,13 +84,17 @@ pub use filtering::{
 };
 pub use header::get_promo_header_metrics;
 pub use llm_analysis::get_promo_analysis_status;
+pub use paper::get_promo_paper_account;
 pub use positions::{get_promo_positions, get_promo_positions_stats};
 pub use status::apply_promo_status;
-pub use strategies::{get_promo_strategies, get_promo_strategies_overview, get_promo_strategy};
+pub use strategies::{
+    get_promo_strategies, get_promo_strategies_overview, get_promo_strategy,
+    get_promo_strategy_readiness,
+};
 pub use tokens::{get_promo_favorites, get_promo_tokens_list, get_promo_tokens_stats};
 pub use trader::{
-    get_promo_loss_limit_status, get_promo_monitors_status, get_promo_trader_stats,
-    get_promo_trader_status,
+    apply_promo_trader_config, get_promo_loss_limit_status, get_promo_monitors_status,
+    get_promo_open_positions, get_promo_trader_stats, get_promo_trader_status,
 };
 pub use wallet::{get_promo_wallet_address, get_promo_wallet_current, get_promo_wallet_tokens};
 pub use wallets::{get_promo_wallets, get_promo_watch_status, get_promo_watch_targets};
@@ -113,6 +128,16 @@ pub fn is_promo_capture_enabled() -> bool {
 /// Check if live values must be pinned to their promo constants.
 pub fn is_promo_frozen() -> bool {
     PROMO_FREEZE_ENABLED.load(Ordering::Relaxed)
+}
+
+/// The answer to a write while promotional fixtures are shown. The fixtures live in no
+/// store, so a write is refused before it reaches the real one.
+pub fn promo_write_refused() -> Response {
+    ApiError::new(
+        ApiErrorCode::Forbidden,
+        ids::ERRORS_PROMO_FIXTURES_READ_ONLY,
+    )
+    .into_response()
 }
 
 /// Enable promotional fixtures.

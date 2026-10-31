@@ -108,6 +108,7 @@ errors-copy-request-failed = 카피 트레이딩 요청에 실패했습니다
 
 # Strategies
 errors-strategies-not-found = 전략을 찾을 수 없습니다
+errors-promo-fixtures-read-only = 샘플 데이터가 표시되는 동안에는 변경 사항이 저장되지 않습니다
 errors-strategies-invalid-type = 전략 유형이 올바르지 않습니다. ENTRY 또는 EXIT여야 합니다
 errors-strategies-priority-out-of-range = 우선순위 { $priority }은(는) 허용 범위를 벗어났습니다. { $min }부터 { $max }까지의 숫자를 사용하세요
 errors-strategies-list-failed = 전략을 가져오지 못했습니다

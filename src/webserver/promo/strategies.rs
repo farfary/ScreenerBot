@@ -9,18 +9,20 @@ use std::collections::HashMap;
 
 use chrono::{DateTime, Duration, Utc};
 
-use crate::positions::paper::PaperStrategyEvidence;
 use crate::positions::Position;
 use crate::strategies::conditions::ConditionRegistry;
 use crate::strategies::overview::{
     assemble, BookPositions, Monitors, OverviewInputs, StrategiesOverview,
 };
+use crate::strategies::readiness::readiness_of;
 use crate::strategies::types::{
     Condition, EvaluationTotals, LogicalOperator, Parameter, RuleTree, Strategy, StrategyType,
 };
+use crate::trader::paper::readiness::Readiness;
 use crate::trader::paper::TradingMode;
 
-use super::data::{PROMO_CLOSED_TOKENS, PROMO_OPEN_TOKENS};
+use super::data::{PROMO_CLOSED_TOKENS, PROMO_OPEN_TOKENS, PROMO_PAPER_STRATEGY_ID};
+use super::paper::{promo_paper_evidence, promo_paper_rounds};
 use super::trader::{
     get_promo_monitors_status, get_promo_trader_status, promo_closed_rounds, promo_open_rounds,
 };
@@ -41,7 +43,8 @@ struct PromoStrategy {
 }
 
 /// The roster in store order (priority, then name). The live entry strategies opened
-/// every Auto Trader promo position ([`entry_strategy_of`]); none of the promo trades was
+/// every Auto Trader promo position ([`entry_strategy_of`]), and the paper entry strategy
+/// opened every round of the promo paper run; none of the promo trades was
 /// closed by an exit strategy, so the exit strategies hold no rounds. The switched-off exit
 /// would have sold every open position held past one hour.
 const PROMO_STRATEGIES: &[PromoStrategy] = &[
@@ -80,7 +83,7 @@ const PROMO_STRATEGIES: &[PromoStrategy] = &[
         age_days: 12,
     },
     PromoStrategy {
-        id: "promo-vwap-reclaim",
+        id: PROMO_PAPER_STRATEGY_ID,
         name: "VWAP Reclaim",
         description: "Paper-tests buying above VWAP right after a bullish EMA cross.",
         strategy_type: StrategyType::Entry,
@@ -150,14 +153,22 @@ pub fn get_promo_strategy(id: &str) -> Option<Strategy> {
 }
 
 /// Generate the promo strategies overview: the roster under the promo trader, with the
-/// promo positions as its live book and an empty paper run.
+/// promo positions as its live book and the promo paper run as its paper book.
 pub fn get_promo_strategies_overview() -> StrategiesOverview {
     let now = Utc::now();
     let strategies = get_promo_strategies();
     let open = promo_open_rounds(now);
     let closed = promo_closed_rounds(now);
+    let (open_paper, closed_paper) = promo_paper_rounds(now);
     let monitors = get_promo_monitors_status();
-    let totals = evaluation_totals(&strategies, open.iter().chain(&closed), now);
+    let totals = evaluation_totals(
+        &strategies,
+        open.iter()
+            .chain(&closed)
+            .chain(&open_paper)
+            .chain(&closed_paper),
+        now,
+    );
     assemble(OverviewInputs {
         run_state: get_promo_trader_status().run_state,
         strategies,
@@ -168,9 +179,16 @@ pub fn get_promo_strategies_overview() -> StrategiesOverview {
         },
         live_block: None,
         paper_block: None,
-        evidence: Some(PaperStrategyEvidence::default()),
-        books: Some(BookPositions::of(open, Vec::new(), &closed)),
+        evidence: Some(promo_paper_evidence(now)),
+        books: Some(BookPositions::of(open, open_paper, &closed)),
     })
+}
+
+/// The live readiness of the promo strategy `id` from the promo paper run, computed the
+/// way the readiness route computes it; `None` for an id the roster does not have.
+pub fn get_promo_strategy_readiness(id: &str) -> Option<Readiness> {
+    let strategy = get_promo_strategy(id)?;
+    Some(readiness_of(&strategy, &promo_paper_evidence(Utc::now())))
 }
 
 /// The enabled promo strategies of each mode, live then paper, as the trader status counts
@@ -428,6 +446,35 @@ mod tests {
             assert_eq!(summary.unpriced, Some(0), "{}", summary.strategy.id);
             assert!(summary.last_signal_at.is_some(), "{}", summary.strategy.id);
         }
+
+        let (open_paper, closed_paper) = promo_paper_rounds(now);
+        let paper = overview
+            .strategies
+            .iter()
+            .find(|summary| summary.strategy.id == PROMO_PAPER_STRATEGY_ID)
+            .expect("the paper strategy is on the roster");
+        assert_eq!(paper.strategy.mode, TradingMode::Paper);
+        assert_eq!(paper.open, Some(open_paper.len() as u32));
+        let paper_rounds = paper.rounds.expect("paper rounds are counted");
+        assert_eq!(paper_rounds.closed, closed_paper.len());
+        let paper_realized: f64 = closed_paper.iter().filter_map(|round| round.pnl).sum();
+        assert!((paper_rounds.realized_native - paper_realized).abs() < 1e-9);
+        let progress = paper
+            .readiness
+            .as_ref()
+            .expect("a paper strategy has readiness");
+        assert_eq!(progress.closed, closed_paper.len());
+        let readiness = get_promo_strategy_readiness(PROMO_PAPER_STRATEGY_ID).unwrap();
+        assert_eq!(readiness.ready, progress.ready);
+        assert!(get_promo_strategy_readiness("unknown").is_none());
+
+        let stats = super::super::trader::get_promo_trader_stats(
+            crate::positions::Book::Paper,
+            crate::trader::stats::StatsWindow::All,
+        );
+        assert_eq!(stats.realized.total_trades, closed_paper.len());
+        assert!((stats.realized.total_pnl_native - paper_realized).abs() < 1e-9);
+        assert_eq!(stats.open_positions_count, open_paper.len());
 
         let (live, paper) = enabled_counts();
         let status = get_promo_trader_status();

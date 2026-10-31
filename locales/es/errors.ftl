@@ -92,6 +92,7 @@ errors-copy-task-owns-positions = La tarea de copia aún tiene posiciones abiert
 errors-copy-request-failed = Error en la solicitud de copy trading
 
 errors-strategies-not-found = Estrategia no encontrada
+errors-promo-fixtures-read-only = Los cambios no se guardan mientras se muestran datos de ejemplo
 errors-strategies-invalid-type = Tipo de estrategia no válido. Debe ser ENTRY o EXIT
 errors-strategies-priority-out-of-range = La prioridad { $priority } está fuera del rango permitido. Usa un número de { $min } a { $max }
 errors-strategies-list-failed = Error al obtener las estrategias

@@ -22,11 +22,18 @@ use crate::strategies::{
 };
 use crate::trader::paper::STRATEGY_LIVE_CONFIRMATION;
 use crate::webserver::api_error::{ApiError, ApiErrorCode};
+use crate::webserver::promo;
 use crate::webserver::utils::success_response;
 
-/// The strategy `id`, or the response that explains why it cannot be read.
+/// The strategy `id`, or the response that explains why it cannot be read. During
+/// promotional capture it is the promo strategy of that id.
 async fn find_strategy(id: &str) -> Result<Strategy, Response> {
-    match get_strategy_async(id).await {
+    let stored = if promo::are_promo_fixtures_enabled() {
+        Ok(promo::get_promo_strategy(id))
+    } else {
+        get_strategy_async(id).await
+    };
+    match stored {
         Ok(Some(strategy)) => Ok(strategy),
         Ok(None) => Err(err(
             ApiErrorCode::NotFound,
@@ -54,6 +61,9 @@ pub async fn set_strategy_mode_handler(
             request.mode.as_str()
         ),
     );
+    if promo::are_promo_fixtures_enabled() {
+        return promo::promo_write_refused();
+    }
 
     let strategy = match find_strategy(&id).await {
         Ok(strategy) => strategy,
@@ -90,6 +100,15 @@ pub async fn set_strategy_mode_handler(
 /// rounds it took part in during the current paper run, with the phrase that arms it
 /// live. Without a loaded paper book the strategy has no rounds yet.
 pub async fn get_strategy_readiness(Path(id): Path<String>) -> Response {
+    if promo::are_promo_fixtures_enabled() {
+        return match promo::get_promo_strategy_readiness(&id) {
+            Some(readiness) => success_response(StrategyReadinessResponse {
+                readiness,
+                live_confirmation: STRATEGY_LIVE_CONFIRMATION,
+            }),
+            None => err(ApiErrorCode::NotFound, ids::ERRORS_STRATEGIES_NOT_FOUND),
+        };
+    }
     let strategy = match find_strategy(&id).await {
         Ok(strategy) => strategy,
         Err(response) => return response,

@@ -110,6 +110,7 @@ errors-copy-request-failed = فشل طلب نسخ التداول
 
 # Strategies
 errors-strategies-not-found = لم يتم العثور على الاستراتيجية
+errors-promo-fixtures-read-only = لا تُحفظ التغييرات أثناء عرض بيانات نموذجية
 errors-strategies-invalid-type = نوع الاستراتيجية غير صالح. يجب أن يكون ENTRY أو EXIT
 errors-strategies-priority-out-of-range = الأولوية { $priority } خارج النطاق المسموح. استخدم رقمًا من { $min } إلى { $max }
 errors-strategies-list-failed = تعذّر جلب الاستراتيجيات

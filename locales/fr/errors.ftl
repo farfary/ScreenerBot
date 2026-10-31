@@ -105,6 +105,7 @@ errors-copy-request-failed = Échec de la requête de copy trading
 
 # Strategies
 errors-strategies-not-found = Stratégie introuvable
+errors-promo-fixtures-read-only = Les modifications ne sont pas enregistrées tant que des données d'exemple sont affichées
 errors-strategies-invalid-type = Type de stratégie invalide. Doit être ENTRY ou EXIT
 errors-strategies-priority-out-of-range = La priorité { $priority } est hors limites. Utilisez un nombre de { $min } à { $max }
 errors-strategies-list-failed = Échec de la récupération des stratégies

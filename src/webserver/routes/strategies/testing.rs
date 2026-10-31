@@ -19,7 +19,7 @@ use crate::{
         types::*,
     },
     trader::evaluators::strategies::live_strategy_context,
-    webserver::utils::success_response,
+    webserver::{promo, utils::success_response},
 };
 
 use super::types::{StrategyTestRequest, StrategyTestResponse};
@@ -52,8 +52,14 @@ pub async fn test_strategy(
         ),
     );
 
-    // Get strategy
-    let strategy = match get_strategy_async(&id).await {
+    // During promotional capture the strategy is the promo one of that id; the test only
+    // reads, so its rules are evaluated live like any stored strategy's.
+    let stored = if promo::are_promo_fixtures_enabled() {
+        Ok(promo::get_promo_strategy(&id))
+    } else {
+        get_strategy_async(&id).await
+    };
+    let strategy = match stored {
         Ok(Some(s)) => s,
         Ok(None) => return err(ApiErrorCode::NotFound, ids::ERRORS_STRATEGIES_NOT_FOUND),
         Err(e) => {

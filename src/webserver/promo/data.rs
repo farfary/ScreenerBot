@@ -30,6 +30,30 @@ pub(super) const PROMO_RPC_SUCCESS_PERCENT: f64 = 99.7;
 pub(super) const PROMO_RPC_LATENCY_MS: u64 = 142;
 pub(super) const PROMO_RPC_TOTAL_CALLS: u64 = 847_234;
 
+/// Auto Trader settings shown beside the promo book: the open positions fill every slot,
+/// and the trade size is the size most of them were opened with.
+pub(super) const PROMO_MAX_OPEN_POSITIONS: usize = 10;
+pub(super) const PROMO_TRADE_SIZE_SOL: f64 = 0.15;
+
+/// The paper run of the promo paper strategy: its starting balance, how long ago it
+/// started, and the strategy whose rounds it holds.
+pub(super) const PROMO_PAPER_STARTING_BALANCE_SOL: f64 = 2.0;
+pub(super) const PROMO_PAPER_RUN_HOURS: i64 = 46;
+pub(super) const PROMO_PAPER_STRATEGY_ID: &str = "promo-vwap-reclaim";
+
+/// Promo paper rounds, each at the trade size
+/// (index into `PROMO_CLOSED_TOKENS`, entry_price_sol, exit or current price_sol,
+/// minutes since entry, (hold_minutes, exit_reason) once closed)
+pub(super) const PROMO_PAPER_ROUNDS: &[(usize, f64, f64, i64, Option<(i64, &str)>)] = &[
+    (2, 0.000412, 0.000498, 2580, Some((95, "TakeProfit"))),
+    (4, 0.0000182, 0.0000169, 2210, Some((40, "StopLoss"))),
+    (6, 0.0000951, 0.000112, 1730, Some((120, "TrailingStop"))),
+    (8, 0.000214, 0.000251, 1290, Some((75, "TakeProfit"))),
+    (9, 0.0000673, 0.0000641, 820, Some((55, "StopLoss"))),
+    (11, 0.00611, 0.00702, 410, Some((140, "TrailingStop"))),
+    (13, 0.000368, 0.000391, 95, None),
+];
+
 /// Promo open positions - Top liquidity real tokens with logos
 /// (symbol, name, mint, logo_url, entry_price_sol, current_price_sol, size_sol, hold_minutes)
 pub(super) const PROMO_OPEN_TOKENS: &[(&str, &str, &str, &str, f64, f64, f64, i64)] = &[

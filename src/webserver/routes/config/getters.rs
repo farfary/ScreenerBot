@@ -30,7 +30,7 @@ use super::types::*;
 pub async fn get_full_config() -> Response {
     let data = config::with_config(|cfg| FullConfigResponse {
         chains: cfg.chains.clone(),
-        trader: cfg.trader.clone(),
+        trader: shown_trader(cfg),
         copy_trading: cfg.copy_trading.clone(),
         positions: cfg.positions.clone(),
         filtering: cfg.filtering.clone(),
@@ -62,6 +62,17 @@ pub async fn get_full_config() -> Response {
     success_response(data)
 }
 
+/// The trader section as the dashboard shows it. During promotional capture the settings
+/// that size the sample book are overlaid, so they reconcile with it; PATCH writes only
+/// what the client sends and never reads this view.
+fn shown_trader(cfg: &config::Config) -> config::TraderConfig {
+    let mut trader = cfg.trader.clone();
+    if crate::webserver::promo::are_promo_fixtures_enabled() {
+        crate::webserver::promo::apply_promo_trader_config(&mut trader);
+    }
+    trader
+}
+
 /// The webserver section carries auth secrets (password hash/salt, TOTP secret)
 /// that must never reach the dashboard. They are blanked here; PATCH merges only
 /// the fields the client sends, so a blanked field is never written back.
@@ -86,7 +97,7 @@ pub async fn get_webserver_config() -> Response {
 /// GET /api/config/trader - Get trader configuration
 pub async fn get_trader_config() -> Response {
     let data = config::with_config(|cfg| ConfigResponse {
-        data: cfg.trader.clone(),
+        data: shown_trader(cfg),
         timestamp: chrono::Utc::now().to_rfc3339(),
     });
 

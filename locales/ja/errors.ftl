@@ -95,6 +95,7 @@ errors-copy-task-owns-positions = コピータスクがまだオープンポジ�
 errors-copy-request-failed = コピートレードのリクエストに失敗しました
 
 errors-strategies-not-found = ストラテジーが見つかりません
+errors-promo-fixtures-read-only = サンプルデータの表示中は変更が保存されません
 errors-strategies-invalid-type = ストラテジーの種類が無効です。ENTRY または EXIT を指定してください
 errors-strategies-priority-out-of-range = 優先度 { $priority } は範囲外です。{ $min } から { $max } までの数値を指定してください
 errors-strategies-list-failed = ストラテジーを取得できませんでした

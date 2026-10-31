@@ -147,6 +147,10 @@ pub async fn create_strategy(Json(request): Json<StrategyRequest>) -> Response {
         &format!("POST /api/strategies - name={}", request.name),
     );
 
+    if promo::are_promo_fixtures_enabled() {
+        return promo::promo_write_refused();
+    }
+
     // Parse strategy type
     let strategy_type = match request.strategy_type.to_uppercase().as_str() {
         "ENTRY" => StrategyType::Entry,
@@ -255,6 +259,10 @@ pub async fn update_strategy_handler(
     Json(mut request): Json<StrategyRequest>,
 ) -> Response {
     logger::info(LogTag::Webserver, &format!("PUT /api/strategies/{id}"));
+
+    if promo::are_promo_fixtures_enabled() {
+        return promo::promo_write_refused();
+    }
 
     // Check if strategy exists
     let existing = match get_strategy_async(&id).await {
@@ -389,6 +397,10 @@ pub async fn set_strategy_enabled_handler(
         ),
     );
 
+    if promo::are_promo_fixtures_enabled() {
+        return promo::promo_write_refused();
+    }
+
     let mut strategy = match get_strategy_async(&id).await {
         Ok(Some(s)) => s,
         Ok(None) => return err(ApiErrorCode::NotFound, ids::ERRORS_STRATEGIES_NOT_FOUND),
@@ -451,6 +463,10 @@ pub async fn set_strategy_enabled_handler(
 /// DELETE /api/strategies/:id - Delete strategy
 pub async fn delete_strategy_handler(Path(id): Path<String>) -> Response {
     logger::info(LogTag::Webserver, &format!("DELETE /api/strategies/{id}"));
+
+    if promo::are_promo_fixtures_enabled() {
+        return promo::promo_write_refused();
+    }
 
     // Check if strategy exists
     match get_strategy_async(&id).await {
