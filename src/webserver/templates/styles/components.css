@@ -431,6 +431,21 @@
   }
 }
 
+/* A settings surface whose master switch is off: one plain line says so and the
+   labels of its fields are muted. Every field stays editable, since its value applies
+   the moment the switch goes back on: never `disabled`, never `pointer-events: none`.
+   The Filtering source tabs and the Auto Trader rule cards share it. */
+.config-off-note {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  color: var(--warning-color);
+}
+
+.config-field--inactive .config-field-label,
+.config-group--inactive .config-label {
+  opacity: 0.55;
+}
+
 /* The one notice (ui/notice.js): guidance, a caution or a failure beside content that
    still renders. A bare glyph inline with the title, the message under it, at most
    one action; the variant tones the surface and the glyph, never a border, a bar or

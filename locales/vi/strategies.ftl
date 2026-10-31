@@ -84,6 +84,7 @@ strategies-editor-entry-binding-every-position = Tất cả vị thế
 # Labels the button that names the entry strategies an exit strategy manages.
 strategies-editor-entry-binding-label = Quản lý
 strategies-editor-entry-binding-hint = Quản lý các vị thế do những chiến lược vào lệnh được chọn mở. Khi không chọn chiến lược nào, nó quản lý mọi vị thế, kể cả vị thế thủ công và sao chép.
+strategies-editor-new-mode-hint = Chiến lược mới giao dịch ở chế độ Thử nghiệm. Bật Live từ danh sách chiến lược.
 strategies-editor-entry-binding-empty = Chưa có chiến lược vào lệnh nào
 # $id is the id of an entry strategy that no longer exists.
 strategies-editor-entry-binding-deleted = { $id } (đã xóa)

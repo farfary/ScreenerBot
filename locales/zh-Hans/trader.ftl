@@ -114,6 +114,9 @@ trader-paper-reset-title = 重置模拟周期？
 trader-paper-reset-run-message = 所有未平仓的模拟仓位（包括跟单任务的模拟持仓）将按当前价格平仓，并以设定的初始余额开始新的周期。之前的周期保留在历史中。
 trader-paper-reset-done = 已开始新的模拟周期
 trader-paper-reset-failed = 无法重置模拟周期
+trader-paper-balance-link =
+    .title = 打开设置，每个模拟周期的初始余额在那里设置
+trader-paper-balance-link-label = 初始余额在设置中
 trader-realized-title = 已实现表现
 trader-metric-net-pnl = 净盈亏
 trader-metric-win-rate = 胜率
@@ -239,6 +242,8 @@ trader-stop-loss-subtitle = 当仓位亏损超过您设定的阈值时自动出�
 # $threshold is the threshold as typed.
 trader-stop-loss-impact = 较入场价下跌 { $threshold }% 时出场
 trader-stop-loss-hold-immediate = 立即
+trader-stop-loss-min-hold-hint = 止损可以卖出前持有仓位的时长；0 表示立即
+trader-rule-off = 此规则已关闭。其设置会保留，开启后立即生效。
 # $span is a formatted duration.
 trader-stop-loss-hold-delay = 延迟 { $span }
 trader-stop-loss-price-falls = 价格下跌
@@ -372,6 +377,7 @@ trader-time-hold-reached = 已达持仓期
 trader-time-loss-met = 已达亏损阈值
 trader-time-note = <strong>注意：</strong>盈利或亏损较小的仓位不会被出场
 trader-time-positions-title = 当前仓位状态
+trader-time-positions-hint = 两条时间退出规则将如何处理每个持仓
 trader-time-positions-loading = 正在加载仓位...
 trader-time-positions-empty = 没有持仓中的仓位
 trader-time-positions-empty-message = 持仓中的仓位会在此显示其持有时间以及相对时间限制的 ROI。
@@ -380,7 +386,8 @@ trader-time-positions-hold = 持仓时间
 trader-time-positions-roi = 收益率
 trader-time-positions-rule = 时间出场
 trader-time-status-off = 时间出场已关闭
-trader-time-status-none = 当前没有适用的时间出场
+trader-time-status-clear = 持有中；任何时间退出的条件都未满足
+trader-time-status-unpriced = 等待价格，之后时间退出才能判断
 trader-time-status-not-managed = 不由自动交易管理
 # $pnl is a formatted signed percentage; $remaining is a formatted duration.
 trader-time-status-losing = 亏损 { $pnl }；{ $remaining } 后平仓
@@ -411,29 +418,27 @@ trader-dca-cooldown-impact = 两次追加之间至少间隔 { $span }
 trader-dca-min-hold-none = 首次加仓可在入场后立即进行
 trader-dca-min-hold-impact = 首次加仓在入场后至少等待 { $span }
 trader-dca-capacity = 此仓位最多可持有：{ $amount }（首次买入的 { $multiple }×）
-trader-dca-info-title = DCA 策略说明
-trader-dca-info-subtitle = DCA 交易的重要注意事项
-trader-dca-how-title = DCA 的工作原理
-trader-dca-how-trigger = <strong>触发：</strong>价格跌破下一档，按平均或首次入场价计算
-trader-dca-how-action = <strong>操作：</strong>追加 { -sol } 以降低平均成本
-trader-dca-how-repeat = <strong>阶梯：</strong>每次加仓进入下一档；所有档位用完后停止加仓
-trader-dca-how-pause = <strong>暂停：</strong>上一次加仓仍在结算时，或亏损上限阻止新入场时，不会加仓
-trader-dca-risk-title = 风险提示
-trader-dca-risk-exposure = <strong>敞口增加：</strong>DCA 会增加每个仓位承担风险的总资金
-trader-dca-risk-knife = <strong>接飞刀：</strong>如果代币持续下跌，DCA 也无济于事
-trader-dca-risk-cooldown = <strong>冷却时间：</strong>使用冷却时间避免连续快速 DCA 入场
+trader-dca-cooldown-hint = 两次加仓之间的最短等待时间
+trader-dca-min-hold-hint = 入场后第一次加仓的等待时间
+trader-dca-example-entry = 以入场价首次买入
+trader-dca-example-step = 距入场 { $price }；均价 { $average }
+trader-dca-example-basis = 按平均入场价计算时，之后每次下跌都从新的均价重新计算。
+trader-dca-example-risk = 每次加仓都会增加此仓位可能的亏损，而加仓救不了持续下跌的代币。
 
 ## General settings
 
 trader-sizing-title = 仓位规模
 trader-sizing-subtitle = 控制每个仓位的投入金额
+trader-manual-buys-title = 手动买入
+trader-manual-buys-subtitle = 买入对话框中提供的金额。自动交易不会使用这些金额。
+trader-paper-settings-title = 模拟交易
+trader-paper-settings-subtitle = 每个模拟周期的初始余额。新余额从下一个周期开始生效。
 trader-timing-title = 时间与冷却
 trader-timing-subtitle = 控制操作之间的时间间隔
 trader-timing-close-cooldown = 平仓冷却时间
-trader-timing-close-cooldown-hint = 重新开仓同一代币前需等待的分钟数
+trader-timing-close-cooldown-wait-hint = 重新开仓同一代币前的等待时间
 trader-timing-concurrency = 入场检查并发数
 trader-timing-concurrency-hint = 同时检查的代币数量（越高越快，但占用更多 CPU）
-trader-timing-unit-minutes = 分钟
 trader-timing-unit-tokens = 个
 
 ## Service mode notice

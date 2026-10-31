@@ -115,6 +115,9 @@ trader-paper-reset-title = دوره آزمایشی بازنشانی شود؟
 trader-paper-reset-run-message = هر پوزیشن آزمایشی باز، از جمله دارایی‌های آزمایشی وظیفه‌های کپی، با قیمت فعلی‌اش بسته می‌شود و دوره‌ای تازه با موجودی اولیه تنظیم‌شده آغاز می‌شود. دوره‌های قبلی در تاریخچه می‌مانند.
 trader-paper-reset-done = دوره آزمایشی تازه‌ای آغاز شد
 trader-paper-reset-failed = بازنشانی دوره آزمایشی ممکن نشد
+trader-paper-balance-link =
+    .title = تنظیمات را باز می‌کند، جایی که موجودی شروع هر دوره آزمایشی تعیین می‌شود
+trader-paper-balance-link-label = موجودی شروع در تنظیمات
 trader-realized-title = عملکرد تحقق‌یافته
 trader-metric-net-pnl = سود و زیان خالص
 trader-metric-win-rate = نرخ برد
@@ -249,6 +252,8 @@ trader-stop-loss-subtitle = خروج خودکار از پوزیشن وقتی ض�
 # $threshold is the threshold as typed.
 trader-stop-loss-impact = خروج در صورت افت { $threshold }% از قیمت ورود
 trader-stop-loss-hold-immediate = فوری
+trader-stop-loss-min-hold-hint = مدت نگهداری پوزیشن پیش از آنکه حد ضرر بتواند آن را بفروشد؛ 0 یعنی فوراً
+trader-rule-off = این قانون خاموش است. تنظیماتش حفظ می‌شود و به محض روشن شدن اعمال می‌شود.
 # $span is a formatted duration.
 trader-stop-loss-hold-delay = { $span } تأخیر
 trader-stop-loss-price-falls = افت قیمت
@@ -386,6 +391,7 @@ trader-time-hold-reached = مدت نگهداری به پایان رسید
 trader-time-loss-met = آستانه ضرر رسید
 trader-time-note = <strong>نکته:</strong> از پوزیشن‌های سودده یا با ضرر کمتر خارج نمی‌شود
 trader-time-positions-title = وضعیت پوزیشن‌های فعلی
+trader-time-positions-hint = کاری که دو خروج زمانی با هر پوزیشن باز انجام خواهند داد
 trader-time-positions-loading = در حال بارگذاری پوزیشن‌ها...
 trader-time-positions-empty = پوزیشن بازی وجود ندارد
 trader-time-positions-empty-message = پوزیشن‌های باز با مدت نگهداری و ROI نسبت به محدودیت زمانی اینجا نمایش داده می‌شوند.
@@ -394,7 +400,8 @@ trader-time-positions-hold = مدت نگهداری
 trader-time-positions-roi = بازده
 trader-time-positions-rule = خروج زمانی
 trader-time-status-off = خروج‌های زمانی خاموش هستند
-trader-time-status-none = اکنون هیچ خروج زمانی اعمال نمی‌شود
+trader-time-status-clear = نگه داشته می‌شود؛ شرط هیچ خروج زمانی برقرار نیست
+trader-time-status-unpriced = منتظر قیمت است تا خروج زمانی بتواند آن را بسنجد
 trader-time-status-not-managed = توسط معامله‌گر خودکار مدیریت نمی‌شود
 # $pnl is a formatted signed percentage; $remaining is a formatted duration.
 trader-time-status-losing = در ضرر { $pnl }؛ بسته شدن تا { $remaining } دیگر
@@ -425,29 +432,27 @@ trader-dca-cooldown-impact = دست‌کم { $span } بین ورودهای اض�
 trader-dca-min-hold-none = نخستین افزایش می‌تواند بلافاصله پس از ورود باشد
 trader-dca-min-hold-impact = نخستین افزایش دست‌کم { $span } پس از ورود صبر می‌کند
 trader-dca-capacity = بیشترین مقداری که این پوزیشن می‌تواند داشته باشد: { $amount } ({ $multiple }× خرید اول)
-trader-dca-info-title = اطلاعات استراتژی DCA
-trader-dca-info-subtitle = نکات مهم درباره معامله با DCA
-trader-dca-how-title = DCA چگونه کار می‌کند
-trader-dca-how-trigger = <strong>محرک:</strong> قیمت به زیر سطح بعدی می‌رسد، سنجیده از میانگین ورود یا ورود اول
-trader-dca-how-action = <strong>اقدام:</strong> افزودن { -sol } بیشتر برای کاهش قیمت تمام‌شده میانگین
-trader-dca-how-repeat = <strong>نردبان:</strong> هر افزایش به سطح بعدی می‌رود؛ پس از استفاده از همه سطوح، افزایش‌ها متوقف می‌شوند
-trader-dca-how-pause = <strong>توقف‌ها:</strong> تا وقتی افزایش قبلی در حال تسویه است یا محدودیت زیان ورودهای تازه را مسدود کرده، افزایشی انجام نمی‌شود
-trader-dca-risk-title = هشدارهای ریسک
-trader-dca-risk-exposure = <strong>افزایش مواجهه:</strong> DCA کل سرمایه در معرض ریسک هر پوزیشن را بیشتر می‌کند
-trader-dca-risk-knife = <strong>چاقوی در حال سقوط:</strong> اگر روند نزولی توکن ادامه یابد، DCA کمکی نمی‌کند
-trader-dca-risk-cooldown = <strong>زمان انتظار:</strong> برای جلوگیری از ورودهای DCA پیاپی از زمان انتظار استفاده کنید
+trader-dca-cooldown-hint = کوتاه‌ترین فاصله بین دو افزایش
+trader-dca-min-hold-hint = مدتی که اولین افزایش پس از ورود صبر می‌کند
+trader-dca-example-entry = اولین خرید، با قیمت ورود
+trader-dca-example-step = در { $price } از ورود؛ میانگین { $average }
+trader-dca-example-basis = وقتی از میانگین ورود سنجیده شود، هر افت بعدی دوباره از میانگین جدید سنجیده می‌شود.
+trader-dca-example-risk = هر افزایش، زیان احتمالی این پوزیشن را بیشتر می‌کند و افزایش، توکنی را که همچنان می‌ریزد نجات نمی‌دهد.
 
 ## General settings
 
 trader-sizing-title = اندازه پوزیشن
 trader-sizing-subtitle = میزان سرمایه‌گذاری در هر پوزیشن را کنترل کنید
+trader-manual-buys-title = خریدهای دستی
+trader-manual-buys-subtitle = مبالغی که در پنجره خرید پیشنهاد می‌شوند. معامله‌گر خودکار از آن‌ها استفاده نمی‌کند.
+trader-paper-settings-title = معامله آزمایشی
+trader-paper-settings-subtitle = موجودی‌ای که هر دوره آزمایشی با آن شروع می‌شود. موجودی جدید از دوره بعد اعمال می‌شود.
 trader-timing-title = زمان‌بندی و زمان انتظار
 trader-timing-subtitle = زمان‌بندی میان عملیات را کنترل کنید
 trader-timing-close-cooldown = زمان انتظار پس از بستن پوزیشن
-trader-timing-close-cooldown-hint = دقایق انتظار پیش از باز کردن دوباره پوزیشن روی همان توکن
+trader-timing-close-cooldown-wait-hint = مدت انتظار پیش از باز کردن دوباره همان توکن
 trader-timing-concurrency = همروندی بررسی ورود
 trader-timing-concurrency-hint = تعداد توکن‌هایی که هم‌زمان بررسی می‌شوند (بیشتر = سریع‌تر اما مصرف CPU بیشتر)
-trader-timing-unit-minutes = دقیقه
 trader-timing-unit-tokens = توکن
 
 ## Service mode notice

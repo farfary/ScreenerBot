@@ -317,6 +317,12 @@ test("the paper book shows cash and reset and fetches the account only there", a
     await chipValue(tab, "cash").waitFor();
     assert.match(await plainText(chipValue(tab, "cash")), /^0\.9412\sSOL$/);
     assert.equal(await tab.locator("#stats-paper-reset").isVisible(), true);
+    assert.equal(await tab.locator("#stats-paper-balance").isVisible(), true);
+    assert.match(
+      await tab.locator("#stats-paper-balance").getAttribute("title"),
+      /Settings/,
+      "the link says where the starting balance is set"
+    );
     // The results name their book, and the live-only loss limit steps out.
     assert.equal(await plainText(tab.locator("#stats-book-marker")), "Paper");
     assert.equal(await tab.locator("#loss-limit-panel").isVisible(), false);
@@ -329,8 +335,14 @@ test("the paper book shows cash and reset and fetches the account only there", a
     await bookOption(tab, "live").click();
     await tab.locator('[data-summary-id="cash"]').waitFor({ state: "detached" });
     assert.equal(await tab.locator("#stats-paper-reset").isVisible(), false);
+    assert.equal(await tab.locator("#stats-paper-balance").isVisible(), false);
     assert.equal(await tab.locator("#stats-book-marker").isVisible(), false);
     assert.equal(await tab.locator("#loss-limit-panel").isVisible(), true);
+
+    // The starting balance of a paper run is set in Settings, which the paper book links to.
+    await bookOption(tab, "paper").click();
+    await tab.locator("#stats-paper-balance").click();
+    await tab.locator("#general-settings-tab #paper-starting-balance").waitFor();
   } finally {
     await close();
   }

@@ -228,6 +228,7 @@
   display: none;
 }
 
+.editor-new-mode-hint,
 .editor-entry-binding-hint,
 .editor-entry-binding-empty {
   margin: 0;

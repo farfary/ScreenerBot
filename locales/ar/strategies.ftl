@@ -112,6 +112,7 @@ strategies-editor-entry-binding-every-position = كل المراكز
 # Labels the button that names the entry strategies an exit strategy manages.
 strategies-editor-entry-binding-label = تدير
 strategies-editor-entry-binding-hint = تدير المراكز التي فتحتها استراتيجيات الدخول المحددة. إذا لم تُحدد أي استراتيجية فإنها تدير كل المراكز، بما فيها اليدوية والمنسوخة.
+strategies-editor-new-mode-hint = تتداول الاستراتيجية الجديدة في الوضع التجريبي. فعّل الوضع الحي من قائمة الاستراتيجيات.
 strategies-editor-entry-binding-empty = لا توجد استراتيجية دخول بعد
 # $id is the id of an entry strategy that no longer exists.
 strategies-editor-entry-binding-deleted = { $id } (محذوفة)

@@ -351,6 +351,14 @@ test("an imported export opens as a new unsaved strategy and exports back unchan
     false,
     "an import arrives switched off"
   );
+  assert.match(
+    plain(await page.textContent("#strategy-mode-marker")),
+    /Paper/,
+    "a new strategy shows the Paper book it is stored in"
+  );
+  assert.equal(await page.isVisible("#strategy-mode-marker"), true);
+  assert.equal(await page.isVisible("#strategy-new-mode-hint"), true);
+  assert.match(plain(await page.textContent("#strategy-new-mode-hint")), /Paper/);
   assert.equal(await page.locator("#conditions-list .rule-row").count(), 4);
   assert.equal(await page.locator("#conditions-list .rule-row.is-off").count(), 1);
   assert.equal(await page.locator("#conditions-list .rule-group.is-inverted").count(), 1);

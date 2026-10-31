@@ -102,6 +102,7 @@ strategies-editor-entry-binding-every-position = 所有仓位
 # Labels the button that names the entry strategies an exit strategy manages.
 strategies-editor-entry-binding-label = 管理
 strategies-editor-entry-binding-hint = 管理所勾选入场策略开立的仓位。未勾选任何策略时，管理所有仓位，包括手动和跟单仓位。
+strategies-editor-new-mode-hint = 新策略以模拟模式交易。请在策略列表中切换为实盘。
 strategies-editor-entry-binding-empty = 还没有入场策略
 # $id is the id of an entry strategy that no longer exists.
 strategies-editor-entry-binding-deleted = { $id }（已删除）

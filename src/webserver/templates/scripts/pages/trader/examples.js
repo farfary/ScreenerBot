@@ -1,7 +1,7 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 //
-// Trader example panels - live calculation previews for stop loss, trailing stop, break-even, take-profit and time exit settings.
+// Trader example panels - live calculation previews for stop loss, trailing stop, break-even, take-profit, time exit and DCA settings.
 
 import {
   formatFixed,
@@ -10,6 +10,7 @@ import {
   formatTimeSpan,
   formatUptime,
 } from "../../core/format.js";
+import { storedDuration } from "./duration_field.js";
 import { levelError, readLevels, runnerShare, setLevelContext } from "./level_list.js";
 
 /**
@@ -302,7 +303,8 @@ export function createExampleUpdaters({
 
     // A blank field reads as NaN, which every figure below renders as a dash.
     const threshold = parseFloat(thresholdInput.value);
-    const minHold = Number.parseInt(minHoldInput?.value ?? "", 10);
+    // The hold is shown in any unit and stored in seconds.
+    const minHold = minHoldInput ? Math.round(storedDuration(minHoldInput)) : Number.NaN;
     const allowPartial = allowPartialInput?.checked === true;
     // The share the first stop-loss sale sells, as loaded from `trader.stop_loss_partial_pct`
     // or as edited; the second sale sells the rest.
@@ -435,7 +437,8 @@ export function createExampleUpdaters({
   function updateStagnationExample() {
     const lineEl = $("#time-stagnation-summary");
     if (!lineEl) return;
-    const minutes = parseFloat($("#time-stagnation-minutes")?.value);
+    const stagnation = $("#time-stagnation-minutes");
+    const minutes = stagnation ? storedDuration(stagnation) : Number.NaN;
     const band = parseFloat($("#time-stagnation-band")?.value);
     lineEl.textContent =
       Number.isFinite(minutes) && minutes > 0 && Number.isFinite(band)
@@ -530,19 +533,70 @@ export function createExampleUpdaters({
   }
 
   /**
-   * The DCA ladder's multiples as edited, or null while the edited ladder is invalid or
-   * empty. Without a ladder element the loaded config's multiples apply.
+   * The DCA ladder as edited, `{ drops, multiples }` with each drop a stored negative
+   * percent, or null while the edited ladder is invalid or empty. Without a ladder element
+   * the loaded config's ladder applies.
    */
-  function dcaMultiples(ladder) {
-    if (!ladder) return traderConfig?.()?.dca_size_multipliers ?? null;
+  function dcaLadder(ladder) {
+    if (!ladder) {
+      const trader = traderConfig?.();
+      return trader?.dca_size_multipliers
+        ? { drops: trader.dca_levels_pct, multiples: trader.dca_size_multipliers }
+        : null;
+    }
     if (levelError(ladder) !== null) return null;
     const edited = readLevels(ladder);
-    return edited.amounts.length > 0 ? edited.amounts : null;
+    return edited.amounts.length > 0 ? { drops: edited.levels, multiples: edited.amounts } : null;
+  }
+
+  /**
+   * The DCA worked example: the first buy at the configured trade size, then each level
+   * with the price it buys at, what it buys and the average entry after it. Prices are
+   * relative to the entry price; with the average as the basis, each drop is measured from
+   * the average the adds before it left.
+   */
+  function dcaExampleSteps(ladder, firstBuy, fromAverage) {
+    const steps = [
+      timelineStep({
+        tone: "entry",
+        icon: "icon-arrow-right",
+        title: I18n.t("trader-step-entry"),
+        value: exampleSol(firstBuy),
+        valueId: "dca-example-entry",
+        detail: I18n.t("trader-dca-example-entry"),
+      }),
+    ];
+    if (!ladder) return steps;
+    let spent = 1;
+    let tokens = 1;
+    ladder.drops.forEach((drop, index) => {
+      const basis = fromAverage ? spent / tokens : 1;
+      const price = basis * (1 + drop / 100);
+      const multiple = ladder.multiples[index];
+      spent += multiple;
+      tokens += multiple / price;
+      steps.push(
+        timelineArrow(),
+        timelineStep({
+          tone: "activation",
+          icon: "icon-trending-down",
+          title: I18n.t("trader-dca-step", { step: index + 1 }),
+          value: exampleSol(firstBuy * multiple),
+          valueId: `dca-example-step-${index + 1}`,
+          detail: I18n.t("trader-dca-example-step", {
+            price: signedPercent((price - 1) * 100),
+            average: signedPercent((spent / tokens - 1) * 100),
+          }),
+        })
+      );
+    });
+    return steps;
   }
 
   /**
    * The DCA tab's computed lines: what each ladder step buys from the configured trade
-   * size, the two waits, and the most a position can hold once every step has bought.
+   * size, the two waits, the most a position can hold once every step has bought, and
+   * the worked example.
    */
   function updateDcaExample() {
     const ladder = $("#dca-levels");
@@ -554,8 +608,13 @@ export function createExampleUpdaters({
       const el = $(`#${id}`);
       if (el) el.textContent = text;
     };
-    const cooldown = parseInt($("#dca-cooldown")?.value, 10);
-    const minHold = parseInt($("#dca-min-hold")?.value, 10);
+    // Both waits are shown in any unit and stored in whole minutes.
+    const minutes = (id) => {
+      const input = $(`#${id}`);
+      return input ? Math.round(storedDuration(input)) : Number.NaN;
+    };
+    const cooldown = minutes("dca-cooldown");
+    const minHold = minutes("dca-min-hold");
     line(
       "dca-cooldown-impact",
       Number.isFinite(cooldown)
@@ -574,17 +633,25 @@ export function createExampleUpdaters({
     }
     line("dca-min-hold-impact", minHoldText);
 
-    const multiples = dcaMultiples(ladder);
-    const whole = multiples ? 1 + multiples.reduce((sum, value) => sum + value, 0) : Number.NaN;
+    const steps = dcaLadder(ladder);
+    const whole = steps
+      ? 1 + steps.multiples.reduce((sum, value) => sum + value, 0)
+      : Number.NaN;
     line(
       "dca-capacity",
-      multiples
+      steps
         ? I18n.t("trader-dca-capacity", {
             amount: exampleSol(firstBuy * whole),
             multiple: formatFixed(whole, { decimals: 2, trim: true }),
           })
         : "—"
     );
+
+    const fromAverage = $("#dca-measure-from")?.value !== "first_entry";
+    const timeline = $("#dca-example");
+    if (timeline) timeline.replaceChildren(...dcaExampleSteps(steps, firstBuy, fromAverage));
+    const basisLine = $("#dca-example-basis");
+    if (basisLine) basisLine.hidden = !fromAverage;
   }
 
   // Return public API

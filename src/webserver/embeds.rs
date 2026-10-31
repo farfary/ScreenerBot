@@ -558,6 +558,8 @@ pub const TRADER_LEVEL_LIST_JS: &str = include_str!("templates/scripts/pages/tra
 pub const TRADER_FEATURES_JS: &str = include_str!("templates/scripts/pages/trader/features.js");
 pub const TRADER_TIME_STATUS_JS: &str =
     include_str!("templates/scripts/pages/trader/time_status.js");
+pub const TRADER_DURATION_FIELD_JS: &str =
+    include_str!("templates/scripts/pages/trader/duration_field.js");
 pub const TRADER_PAPER_ACCOUNT_JS: &str =
     include_str!("templates/scripts/pages/trader/paper_account.js");
 pub const TRADER_STATS_JS: &str = include_str!("templates/scripts/pages/trader/stats.js");

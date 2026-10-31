@@ -104,6 +104,7 @@ strategies-editor-entry-binding-every-position = همه پوزیشن‌ها
 # Labels the button that names the entry strategies an exit strategy manages.
 strategies-editor-entry-binding-label = مدیریت
 strategies-editor-entry-binding-hint = موقعیت‌هایی را مدیریت می‌کند که استراتژی‌های ورودِ انتخاب‌شده باز کرده‌اند. اگر هیچ‌کدام انتخاب نشود، همه موقعیت‌ها از جمله دستی و کپی‌شده را مدیریت می‌کند.
+strategies-editor-new-mode-hint = استراتژی جدید در حالت آزمایشی معامله می‌کند. آن را از فهرست استراتژی‌ها زنده کنید.
 strategies-editor-entry-binding-empty = هنوز هیچ استراتژی ورودی وجود ندارد
 # $id is the id of an entry strategy that no longer exists.
 strategies-editor-entry-binding-deleted = { $id } (حذف‌شده)

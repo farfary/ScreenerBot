@@ -114,6 +114,9 @@ trader-paper-reset-title = ペーパー運用をリセットしますか？
 trader-paper-reset-run-message = 保有中のペーパーポジションは、コピータスクのペーパー保有も含めてすべて現在価格で決済され、設定された初期残高で新しい運用が始まります。以前の運用は履歴に残ります。
 trader-paper-reset-done = 新しいペーパー運用を開始しました
 trader-paper-reset-failed = ペーパー運用をリセットできませんでした
+trader-paper-balance-link =
+    .title = 各ペーパー運用の開始残高を設定する「設定」を開きます
+trader-paper-balance-link-label = 開始残高は「設定」で
 trader-realized-title = 確定パフォーマンス
 trader-metric-net-pnl = 純損益
 trader-metric-win-rate = 勝率
@@ -239,6 +242,8 @@ trader-stop-loss-subtitle = 損失がしきい値を超えたときにポジシ�
 # $threshold is the threshold as typed.
 trader-stop-loss-impact = エントリーから { $threshold }% 下落したらエグジット
 trader-stop-loss-hold-immediate = 即時
+trader-stop-loss-min-hold-hint = ストップロスが売却できるようになるまでポジションを保有する時間。0 は即時
+trader-rule-off = このルールはオフです。設定は保持され、オンにするとすぐに適用されます。
 # $span is a formatted duration.
 trader-stop-loss-hold-delay = { $span }の遅延
 trader-stop-loss-price-falls = 価格が下落
@@ -372,6 +377,7 @@ trader-time-hold-reached = 保有期間に到達
 trader-time-loss-met = 損失しきい値に到達
 trader-time-note = <strong>注意:</strong> 利益が出ているポジションや損失が小さいポジションはエグジットされません
 trader-time-positions-title = 現在のポジション状況
+trader-time-positions-hint = 2 つの時間エグジットが各オープンポジションをどう扱うか
 trader-time-positions-loading = ポジションを読み込み中...
 trader-time-positions-empty = オープンポジションはありません
 trader-time-positions-empty-message = オープンポジションは、保有時間と時間制限に対する ROI とともにここに表示されます。
@@ -380,7 +386,8 @@ trader-time-positions-hold = 保有時間
 trader-time-positions-roi = リターン
 trader-time-positions-rule = 時間エグジット
 trader-time-status-off = 時間エグジットはオフです
-trader-time-status-none = 現在適用される時間エグジットはありません
+trader-time-status-clear = 保有中。どの時間エグジットの条件も満たしていません
+trader-time-status-unpriced = 時間エグジットが判断できるよう価格を待っています
 trader-time-status-not-managed = 自動トレーダーの管理対象外
 # $pnl is a formatted signed percentage; $remaining is a formatted duration.
 trader-time-status-losing = 損失 { $pnl }、{ $remaining } 後に決済
@@ -411,29 +418,27 @@ trader-dca-cooldown-impact = 追加エントリーの間隔は最低 { $span }
 trader-dca-min-hold-none = 初回の追加購入はエントリー直後から可能です
 trader-dca-min-hold-impact = 初回の追加購入はエントリー後少なくとも { $span } 待ちます
 trader-dca-capacity = このポジションの最大保有額：{ $amount }（初回購入の { $multiple }×）
-trader-dca-info-title = DCA ストラテジー情報
-trader-dca-info-subtitle = DCA 取引における重要な注意点
-trader-dca-how-title = DCA の仕組み
-trader-dca-how-trigger = <strong>トリガー：</strong>価格が次のレベルを下回ったとき（平均または初回エントリーから測定）
-trader-dca-how-action = <strong>アクション:</strong> { -sol } を追加して平均取得原価を下げる
-trader-dca-how-repeat = <strong>ラダー：</strong>追加ごとに次のレベルへ進み、すべてのレベルを使うと追加は止まります
-trader-dca-how-pause = <strong>一時停止：</strong>前回の追加購入が決済中の間、または損失上限が新規エントリーを止めている間は追加しません
-trader-dca-risk-title = リスクに関する警告
-trader-dca-risk-exposure = <strong>エクスポージャーの増加:</strong> DCA はポジションごとのリスク資金の合計を増やします
-trader-dca-risk-knife = <strong>落ちるナイフ:</strong> トークンが下落トレンドを続ける場合、DCA は効果がありません
-trader-dca-risk-cooldown = <strong>クールダウン:</strong> クールダウンを使って、立て続けの DCA エントリーを避けましょう
+trader-dca-cooldown-hint = 2 回の追加購入の間の最短待ち時間
+trader-dca-min-hold-hint = エントリー後、最初の追加購入までの待ち時間
+trader-dca-example-entry = エントリー価格での初回購入
+trader-dca-example-step = エントリーから { $price }、平均 { $average }
+trader-dca-example-basis = 平均エントリーから測る場合、以降の下落はそのたびに新しい平均から測り直します。
+trader-dca-example-risk = 追加購入のたびにこのポジションの損失額は増え、下がり続けるトークンは追加購入でも救えません。
 
 ## General settings
 
 trader-sizing-title = ポジションサイズ
 trader-sizing-subtitle = 1ポジションあたりの投資額を管理します
+trader-manual-buys-title = 手動購入
+trader-manual-buys-subtitle = 購入ダイアログに表示される金額です。自動トレーダーは使用しません。
+trader-paper-settings-title = ペーパー取引
+trader-paper-settings-subtitle = 各ペーパー運用の開始残高です。新しい残高は次の運用から適用されます。
 trader-timing-title = タイミングとクールダウン
 trader-timing-subtitle = 各処理の間隔を管理します
 trader-timing-close-cooldown = ポジションクローズ後のクールダウン
-trader-timing-close-cooldown-hint = 同じトークンを再びオープンするまでの待機時間（分）
+trader-timing-close-cooldown-wait-hint = 同じトークンを再びエントリーするまでの待ち時間
 trader-timing-concurrency = エントリーチェックの同時実行数
 trader-timing-concurrency-hint = 同時にチェックするトークン数（大きいほど高速ですが CPU 負荷が増えます）
-trader-timing-unit-minutes = 分
 trader-timing-unit-tokens = 銘柄
 
 ## Service mode notice

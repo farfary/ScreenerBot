@@ -17,6 +17,7 @@ import { playToggleOn, playToggleOff, playError } from "../core/sounds.js";
 import { createExampleUpdaters } from "./trader/examples.js";
 import { refreshLevels, renderLevels } from "./trader/level_list.js";
 import { timeExitStatus } from "./trader/time_status.js";
+import { bindDurationFields, showDuration } from "./trader/duration_field.js";
 import { createTraderControls } from "./trader/controls.js";
 import {
   fetchFeatureStatus,
@@ -346,7 +347,7 @@ function createLifecycle() {
       stopLossPartialPct.value = trader.stop_loss_partial_pct;
     }
     if (stopLossMinHold) {
-      stopLossMinHold.value = trader.stop_loss_min_hold_seconds;
+      showDuration(stopLossMinHold, trader.stop_loss_min_hold_seconds);
     }
     syncStopLossPartialField();
 
@@ -429,7 +430,7 @@ function createLifecycle() {
       stagnationEnabled.checked = trader.time_exit_stagnation_enabled === true;
     }
     if (stagnationMinutes) {
-      stagnationMinutes.value = trader.time_exit_stagnation_minutes;
+      showDuration(stagnationMinutes, trader.time_exit_stagnation_minutes);
     }
     if (stagnationBand) {
       stagnationBand.value = trader.time_exit_stagnation_band_pct;
@@ -446,6 +447,7 @@ function createLifecycle() {
     const dcaMinHold = $("#dca-min-hold");
     const closeCooldown = $("#close-cooldown");
     const entryConcurrency = $("#entry-concurrency");
+    const paperStartingBalance = $("#paper-starting-balance");
 
     if (maxPositions) maxPositions.value = trader.max_open_positions;
     if (tradeSize) tradeSize.value = trader.trade_size_sol;
@@ -453,10 +455,13 @@ function createLifecycle() {
     if (dcaEnabled) dcaEnabled.checked = trader.dca_enabled === true;
     if (dcaMeasureFrom) dcaMeasureFrom.value = trader.dca_measure_from;
     if (dcaLevels) renderLevels(dcaLevels, trader.dca_levels_pct, trader.dca_size_multipliers);
-    if (dcaCooldown) dcaCooldown.value = trader.dca_cooldown_minutes;
-    if (dcaMinHold) dcaMinHold.value = trader.dca_min_hold_minutes;
-    if (closeCooldown) closeCooldown.value = trader.position_close_cooldown_minutes;
+    if (dcaCooldown) showDuration(dcaCooldown, trader.dca_cooldown_minutes);
+    if (dcaMinHold) showDuration(dcaMinHold, trader.dca_min_hold_minutes);
+    if (closeCooldown) showDuration(closeCooldown, trader.position_close_cooldown_minutes);
     if (entryConcurrency) entryConcurrency.value = trader.entry_check_concurrency;
+    if (paperStartingBalance) {
+      paperStartingBalance.value = trader.paper?.starting_balance_sol ?? "";
+    }
   }
 
   /**
@@ -839,6 +844,7 @@ function createLifecycle() {
 
       // Setup form handlers
       setupFormHandlers();
+      eventCleanups.push(bindDurationFields($("#trader-content") ?? document));
 
       // Setup trading controls event handlers and the Stats view's own switches
       controls.setupControlsEventHandlers();

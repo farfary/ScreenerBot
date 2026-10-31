@@ -13,6 +13,16 @@
           <div class="table-toolbar-summary" id="stats-exposure"></div>
         </div>
         <div class="page-toolbar-actions">
+          <button
+            type="button"
+            class="btn btn-ghost btn-sm"
+            id="stats-paper-balance"
+            data-l10n-id="trader-paper-balance-link"
+            hidden
+          >
+            <i class="icon-settings" aria-hidden="true"></i>
+            <span data-l10n-id="trader-paper-balance-link-label"></span>
+          </button>
           <button type="button" class="btn btn-ghost btn-sm" id="stats-paper-reset" hidden>
             <i class="icon-rotate-ccw" aria-hidden="true"></i>
             <span data-l10n-id="trader-paper-reset"></span>
@@ -307,13 +317,18 @@
               <input
                 type="number"
                 id="stop-loss-min-hold"
+                data-duration="seconds"
+                data-duration-unit="stop-loss-min-hold-unit"
                 min="0"
-                max="86400"
-                step="1"
                 value="0"
                 class="input-large"
               />
-              <span class="input-unit"></span>
+              <select id="stop-loss-min-hold-unit" class="unit-select" data-custom-select>
+                <option value="seconds" data-l10n-id="trader-time-unit-seconds"></option>
+                <option value="minutes" data-l10n-id="trader-time-unit-minutes"></option>
+                <option value="hours" data-l10n-id="trader-time-unit-hours"></option>
+                <option value="days" data-l10n-id="trader-time-unit-days"></option>
+              </select>
             </div>
             <div class="config-impact">
               <span
@@ -773,25 +788,6 @@
               </div>
             </div>
           </div>
-
-          <!-- Current Positions Status -->
-          <div class="config-group config-group-full">
-            <div class="config-label-row">
-              <label class="config-label">
-                <i class="icon-list"></i>
-                <span data-l10n-id="trader-time-positions-title"></span>
-              </label>
-            </div>
-            <div id="time-positions-status" class="status-list">
-              <div
-                class="state-view state-view-loading state-view-compact"
-                role="status"
-                aria-live="polite"
-              >
-                <div class="loading-spinner" data-l10n-id="trader-time-positions-loading"></div>
-              </div>
-            </div>
-          </div>
         </div>
 
         <div class="config-card">
@@ -819,8 +815,18 @@
             </div>
             <p class="config-hint"></p>
             <div class="input-group-enhanced">
-              <input type="number" id="time-stagnation-minutes" class="input-large" />
-              <span class="input-unit"></span>
+              <input
+                type="number"
+                id="time-stagnation-minutes"
+                data-duration="minutes"
+                data-duration-unit="time-stagnation-minutes-unit"
+                class="input-large"
+              />
+              <select id="time-stagnation-minutes-unit" class="unit-select" data-custom-select>
+                <option value="minutes" data-l10n-id="trader-time-unit-minutes"></option>
+                <option value="hours" data-l10n-id="trader-time-unit-hours"></option>
+                <option value="days" data-l10n-id="trader-time-unit-days"></option>
+              </select>
             </div>
           </div>
 
@@ -844,6 +850,28 @@
           <div class="config-group config-group-full">
             <div class="config-impact">
               <span class="impact-text" id="time-stagnation-summary"></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Open positions under both time rules -->
+        <div class="config-card">
+          <div class="config-group config-group-full">
+            <div class="config-label-row">
+              <label class="config-label">
+                <i class="icon-list"></i>
+                <span data-l10n-id="trader-time-positions-title"></span>
+              </label>
+            </div>
+            <p class="config-hint" data-l10n-id="trader-time-positions-hint"></p>
+            <div id="time-positions-status" class="status-list">
+              <div
+                class="state-view state-view-loading state-view-compact"
+                role="status"
+                aria-live="polite"
+              >
+                <div class="loading-spinner" data-l10n-id="trader-time-positions-loading"></div>
+              </div>
             </div>
           </div>
         </div>
@@ -921,8 +949,18 @@
             </div>
             <p class="config-hint"></p>
             <div class="input-group-enhanced">
-              <input type="number" id="dca-cooldown" class="input-large" />
-              <span class="input-unit"></span>
+              <input
+                type="number"
+                id="dca-cooldown"
+                data-duration="minutes"
+                data-duration-unit="dca-cooldown-unit"
+                class="input-large"
+              />
+              <select id="dca-cooldown-unit" class="unit-select" data-custom-select>
+                <option value="minutes" data-l10n-id="trader-time-unit-minutes"></option>
+                <option value="hours" data-l10n-id="trader-time-unit-hours"></option>
+                <option value="days" data-l10n-id="trader-time-unit-days"></option>
+              </select>
             </div>
             <div class="config-impact">
               <span class="impact-text" id="dca-cooldown-impact"></span>
@@ -938,72 +976,33 @@
             </div>
             <p class="config-hint"></p>
             <div class="input-group-enhanced">
-              <input type="number" id="dca-min-hold" class="input-large" />
-              <span class="input-unit"></span>
+              <input
+                type="number"
+                id="dca-min-hold"
+                data-duration="minutes"
+                data-duration-unit="dca-min-hold-unit"
+                class="input-large"
+              />
+              <select id="dca-min-hold-unit" class="unit-select" data-custom-select>
+                <option value="minutes" data-l10n-id="trader-time-unit-minutes"></option>
+                <option value="hours" data-l10n-id="trader-time-unit-hours"></option>
+                <option value="days" data-l10n-id="trader-time-unit-days"></option>
+              </select>
             </div>
             <div class="config-impact">
               <span class="impact-text" id="dca-min-hold-impact"></span>
             </div>
           </div>
-        </div>
-      </div>
 
-      <!-- DCA Impact & Warnings -->
-      <div class="config-section">
-        <div class="config-card">
-          <div class="card-header">
-            <div class="card-header-text">
-              <h3>
-                <i class="icon-triangle-alert"></i>
-                <span data-l10n-id="trader-dca-info-title"></span>
-              </h3>
-              <p class="card-subtitle" data-l10n-id="trader-dca-info-subtitle"></p>
-            </div>
-          </div>
-          <div class="config-group">
-            <div class="visual-example">
-              <h4><i class="icon-info"></i> <span data-l10n-id="trader-dca-how-title"></span></h4>
-              <div class="example-summary">
-                <div class="summary-item summary-item-info">
-                  <i class="icon-trending-down"></i>
-                  <span data-l10n-id="trader-dca-how-trigger" data-l10n-markup></span>
-                </div>
-                <div class="summary-item summary-item-info">
-                  <i class="icon-coins"></i>
-                  <span data-l10n-id="trader-dca-how-action" data-l10n-markup></span>
-                </div>
-                <div class="summary-item summary-item-info">
-                  <i class="icon-repeat"></i>
-                  <span data-l10n-id="trader-dca-how-repeat" data-l10n-markup></span>
-                </div>
-                <div class="summary-item summary-item-info">
-                  <i class="icon-circle-pause"></i>
-                  <span data-l10n-id="trader-dca-how-pause" data-l10n-markup></span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="config-group">
-            <div class="visual-example">
-              <h4>
-                <i class="icon-circle-alert"></i> <span data-l10n-id="trader-dca-risk-title"></span>
-              </h4>
-              <div class="example-summary">
-                <div class="summary-item summary-item-warning">
-                  <i class="icon-triangle-alert"></i>
-                  <span data-l10n-id="trader-dca-risk-exposure" data-l10n-markup></span>
-                </div>
-                <div class="summary-item summary-item-warning">
-                  <i class="icon-trending-down"></i>
-                  <span data-l10n-id="trader-dca-risk-knife" data-l10n-markup></span>
-                </div>
-                <div class="summary-item summary-item-warning">
-                  <i class="icon-clock"></i>
-                  <span data-l10n-id="trader-dca-risk-cooldown" data-l10n-markup></span>
-                </div>
-              </div>
-            </div>
+          <!-- Visual Example -->
+          <div class="visual-example">
+            <h4>
+              <i class="icon-chart-bar"></i>
+              <span data-l10n-id="trader-example-how-it-works"></span>
+            </h4>
+            <div class="example-timeline" id="dca-example"></div>
+            <p class="impact-text" id="dca-example-basis" data-l10n-id="trader-dca-example-basis" hidden></p>
+            <p class="impact-text is-warning" id="dca-example-risk" data-l10n-id="trader-dca-example-risk"></p>
           </div>
         </div>
       </div>
@@ -1065,6 +1064,19 @@
             </div>
           </div>
 
+        </div>
+
+        <!-- Manual buys -->
+        <div class="config-card">
+          <div class="card-header">
+            <div class="card-header-text">
+              <h3>
+                <i class="icon-shopping-cart"></i>
+                <span data-l10n-id="trader-manual-buys-title"></span>
+              </h3>
+              <p class="card-subtitle" data-l10n-id="trader-manual-buys-subtitle"></p>
+            </div>
+          </div>
           <div class="config-group">
             <div class="config-label-row">
               <label for="entry-sizes" class="config-label">
@@ -1082,6 +1094,32 @@
               value="0.005, 0.01, 0.02, 0.05"
               class="input-large"
             />
+          </div>
+        </div>
+
+        <!-- Paper trading -->
+        <div class="config-card">
+          <div class="card-header">
+            <div class="card-header-text">
+              <h3>
+                <i class="icon-test-tube-diagonal"></i>
+                <span data-l10n-id="trader-paper-settings-title"></span>
+              </h3>
+              <p class="card-subtitle" data-l10n-id="trader-paper-settings-subtitle"></p>
+            </div>
+          </div>
+          <div class="config-group">
+            <div class="config-label-row">
+              <label for="paper-starting-balance" class="config-label">
+                <i class="icon-wallet"></i>
+                <span data-l10n-id="config-trader-paper-starting-balance-sol"></span>
+              </label>
+            </div>
+            <p class="config-hint"></p>
+            <div class="input-group-enhanced">
+              <input type="number" id="paper-starting-balance" class="input-large" />
+              <span class="input-unit"></span>
+            </div>
           </div>
         </div>
       </div>
@@ -1104,18 +1142,22 @@
                 <span data-l10n-id="trader-timing-close-cooldown"></span>
               </label>
             </div>
-            <p class="config-hint" data-l10n-id="trader-timing-close-cooldown-hint"></p>
+            <p class="config-hint" data-l10n-id="trader-timing-close-cooldown-wait-hint"></p>
             <div class="input-group-enhanced">
               <input
                 type="number"
                 id="close-cooldown"
+                data-duration="minutes"
+                data-duration-unit="close-cooldown-unit"
                 min="0"
-                max="1440"
-                step="5"
                 value="15"
                 class="input-large"
               />
-              <span class="input-unit" data-l10n-id="trader-timing-unit-minutes"></span>
+              <select id="close-cooldown-unit" class="unit-select" data-custom-select>
+                <option value="minutes" data-l10n-id="trader-time-unit-minutes"></option>
+                <option value="hours" data-l10n-id="trader-time-unit-hours"></option>
+                <option value="days" data-l10n-id="trader-time-unit-days"></option>
+              </select>
             </div>
           </div>
 

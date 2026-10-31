@@ -86,6 +86,7 @@ strategies-editor-entry-binding-every-position = Tüm pozisyonlar
 # Labels the button that names the entry strategies an exit strategy manages.
 strategies-editor-entry-binding-label = Yönetir
 strategies-editor-entry-binding-hint = İşaretli giriş stratejilerinin açtığı pozisyonları yönetir. Hiçbiri işaretli değilse manuel ve kopyalananlar dahil her pozisyonu yönetir.
+strategies-editor-new-mode-hint = Yeni bir strateji Sanal modda işlem yapar. Strateji listesinden Canlı moda alın.
 strategies-editor-entry-binding-empty = Henüz giriş stratejisi yok
 # $id is the id of an entry strategy that no longer exists.
 strategies-editor-entry-binding-deleted = { $id } (silindi)

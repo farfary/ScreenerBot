@@ -106,6 +106,7 @@ strategies-editor-entry-binding-every-position = Todas as posições
 # Labels the button that names the entry strategies an exit strategy manages.
 strategies-editor-entry-binding-label = Gerencia
 strategies-editor-entry-binding-hint = Gerencia as posições abertas pelas estratégias de entrada marcadas. Sem nenhuma marcada, gerencia todas as posições, incluindo as manuais e as copiadas.
+strategies-editor-new-mode-hint = Uma nova estratégia opera em Paper. Ative o modo Real pela lista de estratégias.
 strategies-editor-entry-binding-empty = Ainda não há nenhuma estratégia de entrada
 # $id is the id of an entry strategy that no longer exists.
 strategies-editor-entry-binding-deleted = { $id } (excluída)

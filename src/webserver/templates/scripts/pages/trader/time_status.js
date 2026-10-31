@@ -24,8 +24,8 @@ function flatLine(heldSeconds, left) {
 }
 
 /**
- * The line a position shows under the time exits. The route decides which rule applies
- * and when it is due; this only words it.
+ * The line a position shows under the time exits: what the time rules will do with it.
+ * The route decides which rule applies and when it is due; this only words it.
  *
  * @param {Object|undefined} watch The position's `time_exit` from `/api/trader/time-exits`;
  *   absent when the route has no watch for it.
@@ -40,7 +40,9 @@ export function timeExitStatus(watch, heldSeconds, now) {
     case "off":
       return I18n.t("trader-time-status-off");
     case "clear":
-      return I18n.t("trader-time-status-none");
+      return I18n.t("trader-time-status-clear");
+    case "unpriced":
+      return I18n.t("trader-time-status-unpriced");
     case "due": {
       const left = watch.due_at - now;
       if (watch.rule === "time_loss") return losingLine(watch, left);

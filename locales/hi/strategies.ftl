@@ -86,6 +86,7 @@ strategies-editor-entry-binding-every-position = सभी पोज़िशन
 # Labels the button that names the entry strategies an exit strategy manages.
 strategies-editor-entry-binding-label = प्रबंधन
 strategies-editor-entry-binding-hint = चुनी गई एंट्री स्ट्रैटेजी से खुली पोज़िशन संभालती है। कोई न चुनी हो तो मैनुअल और कॉपी की गई पोज़िशन समेत हर पोज़िशन संभालती है।
+strategies-editor-new-mode-hint = नई स्ट्रैटेजी पेपर मोड में ट्रेड करती है। स्ट्रैटेजी सूची से इसे लाइव करें।
 strategies-editor-entry-binding-empty = अभी कोई एंट्री स्ट्रैटेजी नहीं है
 # $id is the id of an entry strategy that no longer exists.
 strategies-editor-entry-binding-deleted = { $id } (हटाई गई)

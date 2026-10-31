@@ -115,6 +115,9 @@ trader-paper-reset-title = Reset the paper run?
 trader-paper-reset-run-message = Every open paper position, copy tasks' paper holdings among them, closes at its current price and a new run starts at the configured starting balance. Earlier runs stay in the history.
 trader-paper-reset-done = A new paper run started
 trader-paper-reset-failed = Could not reset the paper run
+trader-paper-balance-link =
+    .title = Open Settings, where the starting balance of each paper run is set
+trader-paper-balance-link-label = Starting balance in Settings
 trader-realized-title = Realized Performance
 trader-metric-net-pnl = Net P&L
 trader-metric-win-rate = Win Rate
@@ -249,6 +252,8 @@ trader-stop-loss-subtitle = Automatically exit a position when its loss exceeds 
 # $threshold is the threshold as typed.
 trader-stop-loss-impact = Exit when down { $threshold }% from entry
 trader-stop-loss-hold-immediate = Immediate
+trader-stop-loss-min-hold-hint = How long a position is held before the stop loss may sell it; 0 means at once
+trader-rule-off = This rule is off. Its settings are kept and apply once it is switched on.
 # $span is a formatted duration.
 trader-stop-loss-hold-delay = { $span } delay
 trader-stop-loss-price-falls = Price Falls
@@ -386,6 +391,7 @@ trader-time-hold-reached = Hold period reached
 trader-time-loss-met = Loss threshold met
 trader-time-note = <strong>Note:</strong> Positions at profit or smaller losses will NOT be exited
 trader-time-positions-title = Current Positions Status
+trader-time-positions-hint = What the two time exits will do with each open position
 trader-time-positions-loading = Loading positions...
 trader-time-positions-empty = No open positions
 trader-time-positions-empty-message = Open positions appear here with their hold time and ROI against the time limit.
@@ -394,7 +400,8 @@ trader-time-positions-hold = Hold Time
 trader-time-positions-roi = Return
 trader-time-positions-rule = Time Exit
 trader-time-status-off = Time exits are off
-trader-time-status-none = No time exit applies now
+trader-time-status-clear = Held; neither time exit's condition is met
+trader-time-status-unpriced = Waits for a price before a time exit can judge it
 trader-time-status-not-managed = Not managed by Auto Trader
 # $pnl is a formatted signed percentage; $remaining is a formatted duration.
 trader-time-status-losing = Losing { $pnl }; closes in { $remaining }
@@ -425,29 +432,27 @@ trader-dca-cooldown-impact = At least { $span } between extra entries
 trader-dca-min-hold-none = The first add may follow the entry at once
 trader-dca-min-hold-impact = The first add waits at least { $span } after the entry
 trader-dca-capacity = Most this position can hold: { $amount } ({ $multiple }× the first buy)
-trader-dca-info-title = DCA Strategy Info
-trader-dca-info-subtitle = Important considerations for DCA trading
-trader-dca-how-title = How DCA Works
-trader-dca-how-trigger = <strong>Trigger:</strong> The price falls below the next level, measured from the average or the first entry
-trader-dca-how-action = <strong>Action:</strong> Add more { -sol } to reduce average cost basis
-trader-dca-how-repeat = <strong>Ladder:</strong> Each add moves to the next level; adds stop once every level is used
-trader-dca-how-pause = <strong>Pauses:</strong> No add while the previous one is still settling, or while the loss limit blocks new entries
-trader-dca-risk-title = Risk Warnings
-trader-dca-risk-exposure = <strong>Increased Exposure:</strong> DCA increases total capital at risk per position
-trader-dca-risk-knife = <strong>Falling Knife:</strong> DCA won't help if token continues downward trend
-trader-dca-risk-cooldown = <strong>Cooldown:</strong> Use cooldown to avoid rapid-fire DCA entries
+trader-dca-cooldown-hint = The shortest wait between two adds
+trader-dca-min-hold-hint = How long the first add waits after the entry
+trader-dca-example-entry = The first buy, at the entry price
+trader-dca-example-step = At { $price } from the entry; average { $average }
+trader-dca-example-basis = Measured from the average entry, each later drop is measured again from the new average.
+trader-dca-example-risk = Each add raises what this position can lose, and adding cannot save a token that keeps falling.
 
 ## General settings
 
 trader-sizing-title = Position Sizing
 trader-sizing-subtitle = Control how much to invest per position
+trader-manual-buys-title = Manual buys
+trader-manual-buys-subtitle = The amounts offered in the Buy dialog. The Auto Trader does not use them.
+trader-paper-settings-title = Paper trading
+trader-paper-settings-subtitle = The balance each paper run starts with. A new balance applies from the next run.
 trader-timing-title = Timing & Cooldowns
 trader-timing-subtitle = Control timing between operations
 trader-timing-close-cooldown = Position Close Cooldown
-trader-timing-close-cooldown-hint = Minutes to wait before reopening the same token
+trader-timing-close-cooldown-wait-hint = How long to wait before reopening the same token
 trader-timing-concurrency = Entry Check Concurrency
 trader-timing-concurrency-hint = Number of tokens to check simultaneously (higher = faster but more CPU)
-trader-timing-unit-minutes = min
 trader-timing-unit-tokens = tokens
 
 ## Service mode notice

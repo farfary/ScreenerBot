@@ -88,6 +88,7 @@ strategies-editor-entry-binding-every-position = Toutes les positions
 # Labels the button that names the entry strategies an exit strategy manages.
 strategies-editor-entry-binding-label = Gère
 strategies-editor-entry-binding-hint = Gère les positions ouvertes par les stratégies d'entrée cochées. Sans aucune cochée, elle gère toutes les positions, y compris manuelles et copiées.
+strategies-editor-new-mode-hint = Une nouvelle stratégie trade en mode Simulé. Passez-la en Réel depuis la liste des stratégies.
 strategies-editor-entry-binding-empty = Aucune stratégie d'entrée pour l'instant
 # $id is the id of an entry strategy that no longer exists.
 strategies-editor-entry-binding-deleted = { $id } (supprimée)

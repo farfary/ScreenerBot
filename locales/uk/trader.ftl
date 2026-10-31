@@ -117,6 +117,9 @@ trader-paper-reset-title = Скинути віртуальний прогін?
 trader-paper-reset-run-message = Кожна відкрита віртуальна позиція, зокрема віртуальні утримувані токени завдань копіювання, закриється за поточною ціною, і почнеться новий прогін із заданим стартовим балансом. Попередні прогони залишаться в історії.
 trader-paper-reset-done = Почався новий віртуальний прогін
 trader-paper-reset-failed = Не вдалося скинути віртуальний прогін
+trader-paper-balance-link =
+    .title = Відкриває Налаштування, де задається початковий баланс кожного віртуального прогону
+trader-paper-balance-link-label = Початковий баланс у Налаштуваннях
 trader-realized-title = Реалізована результативність
 trader-metric-net-pnl = Чистий прибуток/збиток
 trader-metric-win-rate = Відсоток виграшних угод
@@ -269,6 +272,8 @@ trader-stop-loss-subtitle = Автоматичний вихід із позиц�
 # $threshold is the threshold as typed.
 trader-stop-loss-impact = Вихід, коли ціна впала на { $threshold }% від входу
 trader-stop-loss-hold-immediate = Негайно
+trader-stop-loss-min-hold-hint = Скільки позиція утримується, перш ніж стоп-лос може її продати; 0 означає одразу
+trader-rule-off = Це правило вимкнено. Його налаштування збережено, і вони діятимуть, щойно його буде ввімкнено.
 # $span is a formatted duration.
 trader-stop-loss-hold-delay = затримка { $span }
 trader-stop-loss-price-falls = Ціна падає
@@ -414,6 +419,7 @@ trader-time-hold-reached = Період утримання досягнуто
 trader-time-loss-met = Поріг збитку досягнуто
 trader-time-note = <strong>Примітка:</strong> позиції з прибутком або меншим збитком НЕ буде закрито
 trader-time-positions-title = Стан поточних позицій
+trader-time-positions-hint = Що два виходи за часом зроблять із кожною відкритою позицією
 trader-time-positions-loading = Завантаження позицій...
 trader-time-positions-empty = Немає відкритих позицій
 trader-time-positions-empty-message = Тут відображаються відкриті позиції з часом утримання та ROI відносно ліміту часу.
@@ -422,7 +428,8 @@ trader-time-positions-hold = Час утримання
 trader-time-positions-roi = Дохідність
 trader-time-positions-rule = Вихід за часом
 trader-time-status-off = Виходи за часом вимкнені
-trader-time-status-none = Зараз не діє жоден вихід за часом
+trader-time-status-clear = Утримується; умову жодного виходу за часом не виконано
+trader-time-status-unpriced = Чекає на ціну, перш ніж вихід за часом зможе її оцінити
 trader-time-status-not-managed = Не керується автотрейдером
 # $pnl is a formatted signed percentage; $remaining is a formatted duration.
 trader-time-status-losing = У збитку { $pnl }; закриється через { $remaining }
@@ -453,29 +460,27 @@ trader-dca-cooldown-impact = Щонайменше { $span } між додатк�
 trader-dca-min-hold-none = Перша докупівля може відбутися одразу після входу
 trader-dca-min-hold-impact = Перша докупівля чекає щонайменше { $span } після входу
 trader-dca-capacity = Найбільше, що може тримати ця позиція: { $amount } ({ $multiple }× перша покупка)
-trader-dca-info-title = Про стратегію DCA
-trader-dca-info-subtitle = Важливі міркування щодо торгівлі з DCA
-trader-dca-how-title = Як працює DCA
-trader-dca-how-trigger = <strong>Тригер:</strong> ціна опускається нижче наступного рівня, рахуючи від середнього або першого входу
-trader-dca-how-action = <strong>Дія:</strong> докупити ще { -sol }, щоб знизити середню собівартість
-trader-dca-how-repeat = <strong>Драбина:</strong> кожна докупівля переходить до наступного рівня; коли всі рівні використано, докупівлі припиняються
-trader-dca-how-pause = <strong>Паузи:</strong> жодної докупівлі, поки попередня ще проводиться або поки ліміт збитків блокує нові входи
-trader-dca-risk-title = Попередження про ризики
-trader-dca-risk-exposure = <strong>Більша експозиція:</strong> DCA збільшує загальний капітал під ризиком на одну позицію
-trader-dca-risk-knife = <strong>Падаючий ніж:</strong> DCA не допоможе, якщо токен і далі падає
-trader-dca-risk-cooldown = <strong>Пауза:</strong> використовуйте паузу, щоб уникнути швидких послідовних входів DCA
+trader-dca-cooldown-hint = Найкоротша пауза між двома докупівлями
+trader-dca-min-hold-hint = Скільки перша докупівля чекає після входу
+trader-dca-example-entry = Перша покупка за ціною входу
+trader-dca-example-step = При { $price } від входу; середня { $average }
+trader-dca-example-basis = Якщо відлік іде від середньої ціни входу, кожне наступне падіння знову відраховується від нової середньої.
+trader-dca-example-risk = Кожна докупівля збільшує те, що ця позиція може втратити, а докупівлі не врятують токен, який далі падає.
 
 ## General settings
 
 trader-sizing-title = Розмір позиції
 trader-sizing-subtitle = Керуйте тим, скільки інвестувати в одну позицію
+trader-manual-buys-title = Ручні покупки
+trader-manual-buys-subtitle = Суми, які пропонує вікно покупки. Автотрейдер їх не використовує.
+trader-paper-settings-title = Віртуальна торгівля
+trader-paper-settings-subtitle = Баланс, з якого починається кожен віртуальний прогін. Новий баланс діє з наступного прогону.
 trader-timing-title = Час і паузи
 trader-timing-subtitle = Керуйте часом між операціями
 trader-timing-close-cooldown = Пауза після закриття позиції
-trader-timing-close-cooldown-hint = Скільки хвилин чекати перед повторним відкриттям того самого токена
+trader-timing-close-cooldown-wait-hint = Скільки чекати перед повторним відкриттям того самого токена
 trader-timing-concurrency = Паралельність перевірки входу
 trader-timing-concurrency-hint = Кількість токенів для одночасної перевірки (більше = швидше, але більше навантаження на ЦП)
-trader-timing-unit-minutes = хв
 trader-timing-unit-tokens = токенів
 
 ## Service mode notice

@@ -116,6 +116,9 @@ trader-paper-reset-title = ¿Reiniciar la sesión simulada?
 trader-paper-reset-run-message = Cada posición simulada abierta, incluidas las tenencias simuladas de las tareas de copia, se cierra a su precio actual y empieza una nueva sesión con el saldo inicial configurado. Las sesiones anteriores quedan en el historial.
 trader-paper-reset-done = Empezó una nueva sesión simulada
 trader-paper-reset-failed = No se pudo reiniciar la sesión simulada
+trader-paper-balance-link =
+    .title = Abre la Configuración, donde se fija el saldo inicial de cada sesión simulada
+trader-paper-balance-link-label = Saldo inicial en Configuración
 trader-realized-title = Rendimiento realizado
 trader-metric-net-pnl = P&L neto
 trader-metric-win-rate = Tasa de aciertos
@@ -259,6 +262,8 @@ trader-stop-loss-subtitle = Sale automáticamente de una posición cuando su pé
 # $threshold is the threshold as typed.
 trader-stop-loss-impact = Sale cuando baja { $threshold }% desde la entrada
 trader-stop-loss-hold-immediate = Inmediato
+trader-stop-loss-min-hold-hint = Cuánto tiempo se mantiene una posición antes de que el stop loss pueda venderla; 0 significa de inmediato
+trader-rule-off = Esta regla está desactivada. Sus ajustes se conservan y se aplican en cuanto se active.
 # $span is a formatted duration.
 trader-stop-loss-hold-delay = Retraso de { $span }
 trader-stop-loss-price-falls = El precio cae
@@ -400,6 +405,7 @@ trader-time-hold-reached = Período de tenencia alcanzado
 trader-time-loss-met = Umbral de pérdida alcanzado
 trader-time-note = <strong>Nota:</strong> las posiciones en ganancia o con pérdidas menores NO se cerrarán
 trader-time-positions-title = Estado de las posiciones actuales
+trader-time-positions-hint = Lo que harán las dos salidas por tiempo con cada posición abierta
 trader-time-positions-loading = Cargando posiciones...
 trader-time-positions-empty = No hay posiciones abiertas
 trader-time-positions-empty-message = Las posiciones abiertas aparecen aquí con su tiempo de tenencia y ROI frente al límite de tiempo.
@@ -408,7 +414,8 @@ trader-time-positions-hold = Tiempo de tenencia
 trader-time-positions-roi = Rendimiento
 trader-time-positions-rule = Salida por tiempo
 trader-time-status-off = Las salidas por tiempo están desactivadas
-trader-time-status-none = Ahora no aplica ninguna salida por tiempo
+trader-time-status-clear = Se mantiene; no se cumple la condición de ninguna salida por tiempo
+trader-time-status-unpriced = Espera un precio antes de que una salida por tiempo pueda evaluarla
 trader-time-status-not-managed = No gestionada por Auto Trader
 # $pnl is a formatted signed percentage; $remaining is a formatted duration.
 trader-time-status-losing = En pérdida { $pnl }; se cierra en { $remaining }
@@ -439,29 +446,27 @@ trader-dca-cooldown-impact = Al menos { $span } entre entradas extra
 trader-dca-min-hold-none = El primer añadido puede llegar justo después de la entrada
 trader-dca-min-hold-impact = El primer añadido espera al menos { $span } tras la entrada
 trader-dca-capacity = Lo máximo que puede tener esta posición: { $amount } ({ $multiple }× la primera compra)
-trader-dca-info-title = Información de la estrategia DCA
-trader-dca-info-subtitle = Consideraciones importantes para el trading con DCA
-trader-dca-how-title = Cómo funciona el DCA
-trader-dca-how-trigger = <strong>Disparador:</strong> el precio cae por debajo del siguiente nivel, medido desde la entrada media o la primera
-trader-dca-how-action = <strong>Acción:</strong> añade más { -sol } para reducir el costo base promedio
-trader-dca-how-repeat = <strong>Escalera:</strong> cada añadido pasa al siguiente nivel; los añadidos paran cuando se usan todos los niveles
-trader-dca-how-pause = <strong>Pausas:</strong> ningún añadido mientras el anterior se liquida o mientras el límite de pérdidas bloquea nuevas entradas
-trader-dca-risk-title = Advertencias de riesgo
-trader-dca-risk-exposure = <strong>Mayor exposición:</strong> el DCA aumenta el capital total en riesgo por posición
-trader-dca-risk-knife = <strong>Cuchillo cayendo:</strong> el DCA no ayuda si el token sigue en tendencia bajista
-trader-dca-risk-cooldown = <strong>Enfriamiento:</strong> usa el enfriamiento para evitar entradas de DCA en ráfaga
+trader-dca-cooldown-hint = La espera más corta entre dos compras adicionales
+trader-dca-min-hold-hint = Cuánto espera la primera compra adicional tras la entrada
+trader-dca-example-entry = La primera compra, al precio de entrada
+trader-dca-example-step = A { $price } desde la entrada; promedio { $average }
+trader-dca-example-basis = Medida desde la entrada promedio, cada caída posterior se mide de nuevo desde el nuevo promedio.
+trader-dca-example-risk = Cada compra adicional aumenta lo que esta posición puede perder, y comprar más no salva un token que sigue cayendo.
 
 ## General settings
 
 trader-sizing-title = Tamaño de posición
 trader-sizing-subtitle = Controla cuánto invertir por posición
+trader-manual-buys-title = Compras manuales
+trader-manual-buys-subtitle = Los importes que ofrece el diálogo de compra. Auto Trader no los usa.
+trader-paper-settings-title = Operación simulada
+trader-paper-settings-subtitle = El saldo con el que empieza cada sesión simulada. Un saldo nuevo se aplica desde la siguiente sesión.
 trader-timing-title = Tiempos y enfriamientos
 trader-timing-subtitle = Controla el tiempo entre operaciones
 trader-timing-close-cooldown = Enfriamiento tras cerrar posición
-trader-timing-close-cooldown-hint = Minutos de espera antes de reabrir el mismo token
+trader-timing-close-cooldown-wait-hint = Cuánto esperar antes de reabrir el mismo token
 trader-timing-concurrency = Concurrencia de revisión de entradas
 trader-timing-concurrency-hint = Número de tokens a revisar simultáneamente (más = más rápido, pero más CPU)
-trader-timing-unit-minutes = min
 trader-timing-unit-tokens = tokens
 
 ## Service mode notice

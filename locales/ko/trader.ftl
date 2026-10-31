@@ -114,6 +114,9 @@ trader-paper-reset-title = 모의 운용을 초기화할까요?
 trader-paper-reset-run-message = 카피 작업의 모의 보유 수량을 포함해 열린 모의 포지션은 모두 현재 가격으로 종료되고, 설정된 시작 잔액으로 새 운용이 시작됩니다. 이전 운용은 기록에 남습니다.
 trader-paper-reset-done = 새 모의 운용이 시작되었습니다
 trader-paper-reset-failed = 모의 운용을 초기화하지 못했습니다
+trader-paper-balance-link =
+    .title = 각 모의 운용의 시작 잔액을 설정하는 설정을 엽니다
+trader-paper-balance-link-label = 시작 잔액은 설정에서
 trader-realized-title = 실현 성과
 trader-metric-net-pnl = 순손익
 trader-metric-win-rate = 승률
@@ -239,6 +242,8 @@ trader-stop-loss-subtitle = 손실이 설정한 임계값을 넘으면 포지션
 # $threshold is the threshold as typed.
 trader-stop-loss-impact = 진입가 대비 { $threshold }% 하락 시 청산
 trader-stop-loss-hold-immediate = 즉시
+trader-stop-loss-min-hold-hint = 손절매가 매도할 수 있기 전까지 포지션을 보유하는 시간입니다. 0은 즉시를 뜻합니다
+trader-rule-off = 이 규칙은 꺼져 있습니다. 설정은 유지되며 켜는 즉시 적용됩니다.
 # $span is a formatted duration.
 trader-stop-loss-hold-delay = { $span } 지연
 trader-stop-loss-price-falls = 가격 하락
@@ -371,6 +376,7 @@ trader-time-hold-reached = 보유 기간 도달
 trader-time-loss-met = 손실 임계값 충족
 trader-time-note = <strong>참고:</strong> 수익 상태이거나 손실이 더 작은 포지션은 청산되지 않습니다
 trader-time-positions-title = 현재 포지션 상태
+trader-time-positions-hint = 두 시간 청산 규칙이 각 보유 포지션에 무엇을 할지
 trader-time-positions-loading = 포지션 불러오는 중...
 trader-time-positions-empty = 보유 중인 포지션 없음
 trader-time-positions-empty-message = 보유 중인 포지션이 보유 시간과 시간 제한 대비 ROI와 함께 여기에 표시됩니다.
@@ -379,7 +385,8 @@ trader-time-positions-hold = 보유 시간
 trader-time-positions-roi = 수익률
 trader-time-positions-rule = 시간 청산
 trader-time-status-off = 시간 청산이 꺼져 있습니다
-trader-time-status-none = 지금 적용되는 시간 청산이 없습니다
+trader-time-status-clear = 보유 중; 어떤 시간 청산 조건도 충족되지 않았습니다
+trader-time-status-unpriced = 시간 청산이 판단할 수 있도록 가격을 기다리는 중
 trader-time-status-not-managed = 자동 트레이더가 관리하지 않음
 # $pnl is a formatted signed percentage; $remaining is a formatted duration.
 trader-time-status-losing = 손실 { $pnl }; { $remaining } 후 청산
@@ -410,29 +417,27 @@ trader-dca-cooldown-impact = 추가 진입 사이 최소 { $span }
 trader-dca-min-hold-none = 첫 추가 매수는 진입 직후 가능합니다
 trader-dca-min-hold-impact = 첫 추가 매수는 진입 후 최소 { $span } 기다립니다
 trader-dca-capacity = 이 포지션의 최대 보유액: { $amount } (첫 매수의 { $multiple }×)
-trader-dca-info-title = DCA 전략 정보
-trader-dca-info-subtitle = DCA 거래 시 유의할 점
-trader-dca-how-title = DCA 작동 방식
-trader-dca-how-trigger = <strong>트리거:</strong> 가격이 다음 단계 아래로 내려갈 때 (평균 또는 첫 진입가 기준)
-trader-dca-how-action = <strong>동작:</strong> { -sol }을 추가 투입하여 평균 매입 원가를 낮춥니다
-trader-dca-how-repeat = <strong>사다리:</strong> 추가할 때마다 다음 단계로 넘어가며, 모든 단계를 쓰면 추가가 멈춥니다
-trader-dca-how-pause = <strong>일시 중지:</strong> 이전 추가 매수가 정산 중이거나 손실 한도가 신규 진입을 막는 동안에는 추가하지 않습니다
-trader-dca-risk-title = 위험 경고
-trader-dca-risk-exposure = <strong>노출 증가:</strong> DCA는 포지션당 위험에 노출되는 총자본을 늘립니다
-trader-dca-risk-knife = <strong>떨어지는 칼날:</strong> 토큰이 계속 하락하면 DCA는 도움이 되지 않습니다
-trader-dca-risk-cooldown = <strong>쿨다운:</strong> 쿨다운을 사용하여 연속적인 DCA 진입을 방지하세요
+trader-dca-cooldown-hint = 두 번의 추가 매수 사이의 최소 대기 시간
+trader-dca-min-hold-hint = 진입 후 첫 추가 매수까지 기다리는 시간
+trader-dca-example-entry = 진입가에서의 첫 매수
+trader-dca-example-step = 진입 대비 { $price }; 평균 { $average }
+trader-dca-example-basis = 평균 진입가 기준일 때, 이후의 하락은 매번 새 평균에서 다시 측정합니다.
+trader-dca-example-risk = 추가 매수마다 이 포지션이 잃을 수 있는 금액이 늘어나며, 계속 하락하는 토큰은 추가 매수로 구할 수 없습니다.
 
 ## General settings
 
 trader-sizing-title = 포지션 규모
 trader-sizing-subtitle = 포지션당 투자 금액을 조절합니다
+trader-manual-buys-title = 수동 매수
+trader-manual-buys-subtitle = 매수 대화상자에서 제시하는 금액입니다. 자동 트레이더는 사용하지 않습니다.
+trader-paper-settings-title = 모의 거래
+trader-paper-settings-subtitle = 각 모의 운용이 시작하는 잔액입니다. 새 잔액은 다음 운용부터 적용됩니다.
 trader-timing-title = 타이밍 및 쿨다운
 trader-timing-subtitle = 작업 간 타이밍을 조절합니다
 trader-timing-close-cooldown = 포지션 종료 쿨다운
-trader-timing-close-cooldown-hint = 같은 토큰을 다시 진입하기 전에 기다리는 시간(분)
+trader-timing-close-cooldown-wait-hint = 같은 토큰을 다시 진입하기 전까지 기다리는 시간
 trader-timing-concurrency = 진입 확인 동시 처리 수
 trader-timing-concurrency-hint = 동시에 확인할 토큰 수 (높을수록 빠르지만 CPU 사용량 증가)
-trader-timing-unit-minutes = 분
 trader-timing-unit-tokens = 개
 
 ## Service mode notice

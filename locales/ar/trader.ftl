@@ -119,6 +119,9 @@ trader-paper-reset-title = إعادة ضبط الدورة التجريبية؟
 trader-paper-reset-run-message = يُغلق كل مركز تجريبي مفتوح، ومنها الحيازات التجريبية لمهام النسخ، بسعره الحالي وتبدأ دورة جديدة بالرصيد الابتدائي المضبوط. تبقى الدورات السابقة في السجل.
 trader-paper-reset-done = بدأت دورة تجريبية جديدة
 trader-paper-reset-failed = تعذّرت إعادة ضبط الدورة التجريبية
+trader-paper-balance-link =
+    .title = يفتح الإعدادات، حيث يُحدَّد الرصيد الابتدائي لكل دورة تجريبية
+trader-paper-balance-link-label = الرصيد الابتدائي في الإعدادات
 trader-realized-title = الأداء المحقق
 trader-metric-net-pnl = صافي الأرباح والخسائر
 trader-metric-win-rate = نسبة الربح
@@ -289,6 +292,8 @@ trader-stop-loss-subtitle = الخروج تلقائيًا من المركز عن
 # $threshold is the threshold as typed.
 trader-stop-loss-impact = الخروج عند الهبوط بنسبة { $threshold }% عن الدخول
 trader-stop-loss-hold-immediate = فوري
+trader-stop-loss-min-hold-hint = مدة الاحتفاظ بالمركز قبل أن يتمكن وقف الخسارة من بيعه؛ 0 تعني فورًا
+trader-rule-off = هذه القاعدة متوقفة. تُحفظ إعداداتها وتُطبَّق فور تشغيلها.
 # $span is a formatted duration.
 trader-stop-loss-hold-delay = تأخير { $span }
 trader-stop-loss-price-falls = هبوط السعر
@@ -442,6 +447,7 @@ trader-time-hold-reached = تم بلوغ مدة الاحتفاظ
 trader-time-loss-met = تم بلوغ حد الخسارة
 trader-time-note = <strong>ملاحظة:</strong> لن يتم الخروج من المراكز الرابحة أو ذات الخسائر الأصغر
 trader-time-positions-title = حالة المراكز الحالية
+trader-time-positions-hint = ما سيفعله الخروجان الزمنيان بكل مركز مفتوح
 trader-time-positions-loading = جارٍ تحميل المراكز...
 trader-time-positions-empty = لا توجد مراكز مفتوحة
 trader-time-positions-empty-message = تظهر هنا المراكز المفتوحة مع مدة الاحتفاظ والعائد مقارنةً بالحد الزمني.
@@ -450,7 +456,8 @@ trader-time-positions-hold = مدة الاحتفاظ
 trader-time-positions-roi = العائد
 trader-time-positions-rule = الخروج الزمني
 trader-time-status-off = الخروج الزمني متوقف
-trader-time-status-none = لا ينطبق أي خروج زمني الآن
+trader-time-status-clear = محتفَظ به؛ لم يتحقق شرط أي خروج زمني
+trader-time-status-unpriced = ينتظر سعرًا قبل أن يتمكن خروج زمني من تقييمه
 trader-time-status-not-managed = لا يديره المتداول الآلي
 # $pnl is a formatted signed percentage; $remaining is a formatted duration.
 trader-time-status-losing = خاسر { $pnl }؛ يُغلق بعد { $remaining }
@@ -481,29 +488,27 @@ trader-dca-cooldown-impact = { $span } على الأقل بين الدخولات
 trader-dca-min-hold-none = قد تأتي أول إضافة فور الدخول
 trader-dca-min-hold-impact = تنتظر أول إضافة { $span } على الأقل بعد الدخول
 trader-dca-capacity = أقصى ما يمكن أن يحمله هذا المركز: { $amount } ({ $multiple }× أول شراء)
-trader-dca-info-title = معلومات استراتيجية DCA
-trader-dca-info-subtitle = اعتبارات مهمة عند التداول بـ DCA
-trader-dca-how-title = طريقة عمل DCA
-trader-dca-how-trigger = <strong>المحفّز:</strong> ينخفض السعر تحت المستوى التالي، مقيسًا من متوسط الدخول أو الدخول الأول
-trader-dca-how-action = <strong>الإجراء:</strong> إضافة المزيد من { -sol } لخفض تكلفة الأساس المتوسطة
-trader-dca-how-repeat = <strong>السلّم:</strong> تنتقل كل إضافة إلى المستوى التالي، وتتوقف الإضافات بعد استخدام كل المستويات
-trader-dca-how-pause = <strong>التوقف:</strong> لا إضافة ما دامت السابقة قيد التسوية، أو ما دام حد الخسارة يمنع الدخول الجديد
-trader-dca-risk-title = تحذيرات المخاطر
-trader-dca-risk-exposure = <strong>زيادة التعرض:</strong> يزيد DCA إجمالي رأس المال المعرّض للخطر في كل مركز
-trader-dca-risk-knife = <strong>السكين الساقط:</strong> لن يفيد DCA إذا واصل الرمز اتجاهه الهابط
-trader-dca-risk-cooldown = <strong>فترة التهدئة:</strong> استخدم فترة التهدئة لتجنب دخولات DCA المتتالية بسرعة
+trader-dca-cooldown-hint = أقصر انتظار بين عمليتي إضافة
+trader-dca-min-hold-hint = مدة انتظار أول إضافة بعد الدخول
+trader-dca-example-entry = الشراء الأول بسعر الدخول
+trader-dca-example-step = عند { $price } من الدخول؛ المتوسط { $average }
+trader-dca-example-basis = عند القياس من متوسط الدخول، يُقاس كل هبوط لاحق من جديد من المتوسط الجديد.
+trader-dca-example-risk = كل إضافة ترفع ما قد يخسره هذا المركز، والإضافة لا تنقذ رمزًا يواصل الهبوط.
 
 ## General settings
 
 trader-sizing-title = حجم المركز
 trader-sizing-subtitle = التحكم بمقدار الاستثمار في كل مركز
+trader-manual-buys-title = عمليات الشراء اليدوية
+trader-manual-buys-subtitle = المبالغ المعروضة في نافذة الشراء. لا يستخدمها المتداول الآلي.
+trader-paper-settings-title = التداول التجريبي
+trader-paper-settings-subtitle = الرصيد الذي تبدأ به كل دورة تجريبية. يُطبَّق الرصيد الجديد من الدورة التالية.
 trader-timing-title = التوقيت وفترات التهدئة
 trader-timing-subtitle = التحكم بالتوقيت بين العمليات
 trader-timing-close-cooldown = فترة تهدئة إغلاق المركز
-trader-timing-close-cooldown-hint = الدقائق التي يجب انتظارها قبل إعادة فتح الرمز نفسه
+trader-timing-close-cooldown-wait-hint = مدة الانتظار قبل إعادة فتح الرمز نفسه
 trader-timing-concurrency = تزامن فحص الدخول
 trader-timing-concurrency-hint = عدد الرموز المفحوصة في وقت واحد (الأعلى أسرع لكنه يستهلك معالجًا أكثر)
-trader-timing-unit-minutes = دقيقة
 trader-timing-unit-tokens = رمز
 
 ## Service mode notice

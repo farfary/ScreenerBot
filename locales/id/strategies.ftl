@@ -86,6 +86,7 @@ strategies-editor-entry-binding-every-position = Semua posisi
 # Labels the button that names the entry strategies an exit strategy manages.
 strategies-editor-entry-binding-label = Mengelola
 strategies-editor-entry-binding-hint = Mengelola posisi yang dibuka oleh strategi masuk yang dicentang. Tanpa centang, strategi ini mengelola setiap posisi, termasuk yang manual dan disalin.
+strategies-editor-new-mode-hint = Strategi baru trading dalam mode Paper. Aktifkan Live dari daftar strategi.
 strategies-editor-entry-binding-empty = Belum ada strategi masuk
 # $id is the id of an entry strategy that no longer exists.
 strategies-editor-entry-binding-deleted = { $id } (dihapus)

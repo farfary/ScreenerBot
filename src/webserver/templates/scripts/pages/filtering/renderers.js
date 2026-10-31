@@ -985,7 +985,7 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
     // whose master switch is off evaluates none of these parameters.
     const sourceOff =
       source !== "meta" && !getSourceEnabled(state.draft, source)
-        ? `<p class="filtering-source-off">${Utils.escapeHtml(I18n.t("filtering-source-off", { source: I18n.label(SOURCE_LABELS, source) }))}</p>`
+        ? `<p class="config-off-note">${Utils.escapeHtml(I18n.t("filtering-source-off", { source: I18n.label(SOURCE_LABELS, source) }))}</p>`
         : "";
 
     return `<div class="config-scroll-area"><div class="filtering-config-list">${sourceOff}${groups}</div></div>`;

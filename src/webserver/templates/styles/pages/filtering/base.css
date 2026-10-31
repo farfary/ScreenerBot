@@ -332,16 +332,6 @@
   padding: var(--spacing-md);
 }
 
-.filtering-source-off {
-  margin: 0;
-  padding: var(--spacing-sm) var(--spacing-md);
-  border: 1px solid var(--warning-alpha-30);
-  border-radius: var(--radius-lg);
-  background: var(--warning-alpha-10);
-  color: var(--warning-color);
-  font-size: 0.8rem;
-}
-
 .filtering-group {
   background: var(--bg-card);
   border: 1px solid var(--border-color);

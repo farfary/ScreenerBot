@@ -44,6 +44,9 @@ import {
  */
 const TEST_TIMEOUT_MS = 30000;
 
+/** The book the server stores every new strategy in; it is armed Live from the roster. */
+const NEW_STRATEGY_MODE = "paper";
+
 export function createLifecycle() {
   // State
   let currentStrategy = null;
@@ -443,6 +446,8 @@ export function createLifecycle() {
     if (nameInput) nameInput.value = strategy.name;
     updateTypeBadge(strategy.type);
     updateModeMarker(strategy.mode);
+    const newModeHint = $("#strategy-new-mode-hint");
+    if (newModeHint) newModeHint.hidden = Boolean(strategy.id);
     const enableToggle = $("#strategy-enabled-toggle");
     if (enableToggle) {
       enableToggle.checked = strategy.enabled;
@@ -550,6 +555,7 @@ export function createLifecycle() {
         rules: null,
         parameters: {},
         entry_strategy_ids: [],
+        mode: NEW_STRATEGY_MODE,
       },
       { dirty: true }
     );
@@ -564,7 +570,7 @@ export function createLifecycle() {
     if (slot) slot.innerHTML = strategyTypeMarker(type, Utils.escapeHtml);
   }
 
-  /** The book the strategy trades on, beside its kind; a strategy not saved yet has none. */
+  /** The book the strategy trades on, beside its kind; a new strategy starts in Paper. */
   function updateModeMarker(mode) {
     const slot = $("#strategy-mode-marker");
     if (!slot) return;
@@ -696,6 +702,8 @@ export function createLifecycle() {
       currentStrategy.name = saved.name;
       if (!currentStrategy.id && data.id) {
         currentStrategy.id = data.id;
+        const newModeHint = $("#strategy-new-mode-hint");
+        if (newModeHint) newModeHint.hidden = true;
       }
 
       clearDirty();
@@ -910,7 +918,7 @@ export function createLifecycle() {
           return;
         }
         if (!(await confirmDiscard())) return;
-        openInEditor(strategy, { dirty: true });
+        openInEditor({ ...strategy, mode: NEW_STRATEGY_MODE }, { dirty: true });
         Utils.showToast(I18n.t("strategies-toast-imported"), "success");
       } catch (error) {
         console.error("Failed to import strategy:", error);

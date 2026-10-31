@@ -135,9 +135,10 @@
   margin: 0;
 }
 
-/* Elements that must occupy the full card width (headers, full-width groups,
-   how-it-works examples, lists, previews) span every grid column. */
+/* Elements that must occupy the full card width (headers, the switched-off line,
+   full-width groups, how-it-works examples, lists, previews) span every grid column. */
 .config-card > .card-header,
+.config-card > .config-off-note,
 .config-card > .config-group-full,
 .config-card > .visual-example,
 .config-card > .feature-preview {
@@ -473,6 +474,12 @@
 .config-group-dependent[hidden],
 .timeline-step[hidden] {
   display: none;
+}
+
+/* A plain line under a worked example: a note on how it is measured, or its risk. */
+.visual-example > .impact-text {
+  display: block;
+  margin: 0.25rem 0 0;
 }
 
 .example-summary {

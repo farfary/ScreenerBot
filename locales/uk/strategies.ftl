@@ -108,6 +108,7 @@ strategies-editor-entry-binding-every-position = Усі позиції
 # Labels the button that names the entry strategies an exit strategy manages.
 strategies-editor-entry-binding-label = Керує
 strategies-editor-entry-binding-hint = Керує позиціями, відкритими позначеними стратегіями входу. Якщо нічого не позначено, керує всіма позиціями, зокрема ручними та скопійованими.
+strategies-editor-new-mode-hint = Нова стратегія торгує у віртуальному режимі. Увімкніть реальний режим у списку стратегій.
 strategies-editor-entry-binding-empty = Стратегій входу ще немає
 # $id is the id of an entry strategy that no longer exists.
 strategies-editor-entry-binding-deleted = { $id } (видалена)

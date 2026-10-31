@@ -11,6 +11,7 @@
 //! Reset discards the unsaved edits, restoring the last-saved values.
 
 import { fieldHint, fieldLabel, fieldUnit } from "../config/field_text.js";
+import { setDurationBounds, showDuration, storedDuration } from "./duration_field.js";
 import {
   LEVELS,
   configureLevels,
@@ -27,6 +28,12 @@ import {
  * value as stored.
  */
 export const LOSS_MAGNITUDE = "loss-magnitude";
+
+/**
+ * A duration shown with a unit picker and stored in the unit its config key names
+ * (`duration_field.js`). `whole` marks a key that stores whole units.
+ */
+export const DURATION = "duration";
 
 /** The value a field shows for a stored config value. */
 export function displayValue(type, stored) {
@@ -48,7 +55,13 @@ const CARD_SPECS = [
       { id: "stop-loss-threshold", key: "stop_loss_threshold_pct", type: "float" },
       { id: "stop-loss-allow-partial", key: "stop_loss_allow_partial", type: "bool" },
       { id: "stop-loss-partial-pct", key: "stop_loss_partial_pct", type: "float" },
-      { id: "stop-loss-min-hold", key: "stop_loss_min_hold_seconds", type: "int" },
+      {
+        id: "stop-loss-min-hold",
+        key: "stop_loss_min_hold_seconds",
+        type: DURATION,
+        whole: true,
+        hint: () => I18n.t("trader-stop-loss-min-hold-hint"),
+      },
     ],
   },
   {
@@ -108,7 +121,7 @@ const CARD_SPECS = [
         type: "bool",
         autoSave: true,
       },
-      { id: "time-stagnation-minutes", key: "time_exit_stagnation_minutes", type: "float" },
+      { id: "time-stagnation-minutes", key: "time_exit_stagnation_minutes", type: DURATION },
       { id: "time-stagnation-band", key: "time_exit_stagnation_band_pct", type: "float" },
     ],
   },
@@ -124,8 +137,20 @@ const CARD_SPECS = [
         minimumKey: "trade_size_sol",
         type: LEVELS,
       },
-      { id: "dca-cooldown", key: "dca_cooldown_minutes", type: "int" },
-      { id: "dca-min-hold", key: "dca_min_hold_minutes", type: "int" },
+      {
+        id: "dca-cooldown",
+        key: "dca_cooldown_minutes",
+        type: DURATION,
+        whole: true,
+        hint: () => I18n.t("trader-dca-cooldown-hint"),
+      },
+      {
+        id: "dca-min-hold",
+        key: "dca_min_hold_minutes",
+        type: DURATION,
+        whole: true,
+        hint: () => I18n.t("trader-dca-min-hold-hint"),
+      },
     ],
   },
   {
@@ -133,13 +158,28 @@ const CARD_SPECS = [
     fields: [
       { id: "max-positions", key: "max_open_positions", type: "int" },
       { id: "trade-size", key: "trade_size_sol", type: "float" },
-      { id: "entry-sizes", key: "entry_sizes", type: "csv-floats" },
+    ],
+  },
+  {
+    section: "trader",
+    fields: [{ id: "entry-sizes", key: "entry_sizes", type: "csv-floats" }],
+  },
+  {
+    section: "trader",
+    fields: [
+      { id: "paper-starting-balance", key: "paper.starting_balance_sol", type: "float" },
     ],
   },
   {
     section: "trader",
     fields: [
-      { id: "close-cooldown", key: "position_close_cooldown_minutes", type: "int" },
+      {
+        id: "close-cooldown",
+        key: "position_close_cooldown_minutes",
+        type: DURATION,
+        whole: true,
+        hint: () => I18n.t("trader-timing-close-cooldown-wait-hint"),
+      },
       { id: "entry-concurrency", key: "entry_check_concurrency", type: "int" },
     ],
   },
@@ -157,16 +197,51 @@ function buttonLabel(text) {
   return label;
 }
 
-/** Snapshot string used for dirty comparison (independent of value coercion). */
+/**
+ * Snapshot string used for dirty comparison (independent of value coercion). A duration
+ * snapshots its stored value, so the unit it is shown in is not an edit.
+ */
 function snapValue(el, type) {
   if (type === LEVELS) return levelSnapshot(el);
+  if (type === DURATION) return String(storedDuration(el));
   return el.type === "checkbox" ? String(el.checked) : el.value;
+}
+
+/** A duration as its config key stores it: whole units for a `whole` key, 0 while blank. */
+function durationValue(el, field) {
+  const stored = storedDuration(el);
+  if (!Number.isFinite(stored)) return 0;
+  return field.whole ? Math.round(stored) : stored;
+}
+
+/** `value` under the dotted config `key`, nested as the section stores it (`paper.starting_balance_sol`). */
+function nestedValue(key, value) {
+  return key.split(".").reduceRight((inner, part) => ({ [part]: inner }), value);
 }
 
 /** The config values a card saves for `field`, keyed by config key. */
 function fieldValues(el, field) {
   if (field.type === LEVELS) return levelValues(el, field);
-  return { [field.key]: readField(el, field.type) };
+  if (field.type === DURATION) return nestedValue(field.key, durationValue(el, field));
+  return nestedValue(field.key, readField(el, field.type));
+}
+
+/** Merges `values` into `target`, nested objects key by key, as the config PATCH merges them. */
+function mergeValues(target, values) {
+  for (const [key, value] of Object.entries(values)) {
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      target[key] = mergeValues(target[key] ?? {}, value);
+    } else {
+      target[key] = value;
+    }
+  }
+  return target;
+}
+
+/** The metadata of the dotted config `key` in a section's metadata, through its parents' children. */
+function metadataAt(sectionMetadata, key) {
+  const [first, ...rest] = key.split(".");
+  return rest.reduce((metadata, part) => metadata?.children?.[part], sectionMetadata[first]);
 }
 
 /** Coerce an input into the value sent to the backend for a given field type. */
@@ -191,10 +266,6 @@ function readField(el, type) {
         .split(",")
         .map((s) => parseFloat(s.trim()))
         .filter((n) => !Number.isNaN(n));
-    case "minutes-to-seconds": {
-      const m = parseInt(el.value, 10);
-      return Math.max(0, Number.isNaN(m) ? 0 : m) * 60;
-    }
     default:
       return el.value;
   }
@@ -224,7 +295,21 @@ export function createTraderConfigCards({ saveConfig }) {
     });
   }
 
+  /**
+   * A card whose master switch is off says so in one plain line and mutes its field
+   * labels; every field stays editable, since its value applies once the switch is on.
+   */
+  function syncInactive(card) {
+    if (!card.master || !card.offNote) return;
+    const off = !card.master.checked;
+    card.offNote.hidden = !off;
+    card.el.querySelectorAll(":scope > .config-group").forEach((group) => {
+      group.classList.toggle("config-group--inactive", off);
+    });
+  }
+
   function evaluate(card) {
+    syncInactive(card);
     const dirty = isDirty(card);
     card.saveBtn.hidden = !dirty;
     card.resetBtn.hidden = !dirty;
@@ -239,7 +324,7 @@ export function createTraderConfigCards({ saveConfig }) {
     const payload = { [card.spec.section]: {} };
     card.spec.fields.forEach((f) => {
       const el = document.getElementById(f.id);
-      if (el) Object.assign(payload[card.spec.section], fieldValues(el, f));
+      if (el) mergeValues(payload[card.spec.section], fieldValues(el, f));
     });
     card.saveBtn.disabled = true;
     card.resetBtn.disabled = true;
@@ -289,6 +374,8 @@ export function createTraderConfigCards({ saveConfig }) {
       const saved = card.saved[f.id];
       if (f.type === LEVELS) {
         restoreLevels(el, saved);
+      } else if (f.type === DURATION) {
+        showDuration(el, Number(saved));
       } else if (el.type === "checkbox") {
         el.checked = saved === "true";
       } else {
@@ -333,14 +420,39 @@ export function createTraderConfigCards({ saveConfig }) {
     return true;
   }
 
+  /** The card's master switch (its autosaved header toggle) and the line saying it is off. */
+  function buildOffNote(card) {
+    const switchField = card.spec.fields.find((f) => f.autoSave && f.type === "bool");
+    const master = switchField ? document.getElementById(switchField.id) : null;
+    const header = card.el.querySelector(":scope > .card-header");
+    if (!master || !header) return;
+    const note = document.createElement("p");
+    note.className = "config-off-note";
+    note.textContent = I18n.t("trader-rule-off");
+    note.hidden = true;
+    header.after(note);
+    card.master = master;
+    card.offNote = note;
+  }
+
   function setup() {
     CARD_SPECS.forEach((spec) => {
       const first = document.getElementById(spec.fields[0].id);
       const el = first?.closest(".config-card");
       if (!el) return;
 
-      const card = { spec, el, saved: {}, saveBtn: null, resetBtn: null, cleanups: [] };
+      const card = {
+        spec,
+        el,
+        saved: {},
+        saveBtn: null,
+        resetBtn: null,
+        master: null,
+        offNote: null,
+        cleanups: [],
+      };
       if (!buildButtons(card)) return;
+      buildOffNote(card);
 
       spec.fields.forEach((f) => {
         const fe = document.getElementById(f.id);
@@ -348,6 +460,7 @@ export function createTraderConfigCards({ saveConfig }) {
         const evt = fe.tagName === "SELECT" || fe.type === "checkbox" ? "change" : "input";
         const handler = () => {
           if (f.autoSave) {
+            syncInactive(card);
             saveField(card, f, fe);
             return;
           }
@@ -378,7 +491,7 @@ export function createTraderConfigCards({ saveConfig }) {
         const input = document.getElementById(field.id);
         if (!input) return;
         // A field without metadata keeps no bounds: say so rather than leave it unbounded quietly.
-        const metadata = sectionMetadata[field.key];
+        const metadata = metadataAt(sectionMetadata, field.key);
         if (!metadata) {
           console.warn(`[Trader] No configuration metadata for ${spec.section}.${field.key}`);
           return;
@@ -419,7 +532,9 @@ export function createTraderConfigCards({ saveConfig }) {
         if (hint && hintText) hint.textContent = hintText;
         if (unit && unitText) unit.textContent = unitText;
 
-        if (input.type === "number" && field.type !== "minutes-to-seconds") {
+        if (field.type === DURATION) {
+          setDurationBounds(input, metadata);
+        } else if (input.type === "number") {
           // A magnitude field's bounds are the stored bounds negated and swapped.
           const [min, max] =
             field.type === LOSS_MAGNITUDE
@@ -452,6 +567,7 @@ export function createTraderConfigCards({ saveConfig }) {
   function dispose() {
     cards.forEach((card) => {
       card.cleanups.forEach((c) => c());
+      card.offNote?.remove();
       const actions = card.el.querySelector(".card-header-actions");
       if (!actions) return;
       actions.remove();

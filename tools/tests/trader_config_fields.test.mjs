@@ -44,7 +44,11 @@
  *   thresholds must rise above the activation, re-checked as the activation is typed,
  *   each band trails by less than its threshold, and the last band can be removed.
  * - The break-even stop and the flat-position exit state their rule in one line, take
- *   their bounds and units from the metadata, and save through their cards.
+ *   their bounds from the metadata, and save through their cards. A duration shows in
+ *   the largest unit of its picker that holds it whole, reads its bounds in the picked
+ *   unit and saves in the unit its config key stores.
+ * - A rule card whose switch is off says so in one plain line and mutes its labels; its
+ *   fields stay editable.
  * - The time limit fields take their bounds from the metadata, not the markup, and a
  *   blank threshold or duration shows a dash in its example instead of a stand-in figure.
  * - A line the page script writes carries no static catalog id, so a re-localization pass
@@ -831,14 +835,20 @@ test("the flat-position exit takes its bounds from the metadata and saves its fi
           min: el.min,
           max: el.max,
           prefix: group.querySelector(".input-prefix")?.textContent ?? null,
-          unit: group.querySelector(".input-unit").textContent,
+          unit: group.querySelector(".input-unit")?.textContent ?? null,
         };
       });
+    // Stored in minutes, the duration shows in the largest unit that holds it whole, and
+    // its metadata bounds read in that unit.
+    const minutes = page.locator("#time-stagnation-minutes");
+    const unit = page.locator("#time-stagnation-minutes-unit");
+    assert.equal(await minutes.inputValue(), "4");
+    assert.equal(await unit.inputValue(), "hours");
     assert.deepEqual(await bounds("time-stagnation-minutes"), {
-      min: "5",
-      max: "43200",
+      min: String(5 / 60),
+      max: "720",
       prefix: null,
-      unit: "min",
+      unit: null,
     });
     assert.deepEqual(await bounds("time-stagnation-band"), {
       min: "0.5",
@@ -847,7 +857,7 @@ test("the flat-position exit takes its bounds from the metadata and saves its fi
       unit: "%",
     });
 
-    await page.locator("#time-stagnation-minutes").fill("90");
+    await minutes.fill("1.5");
     await page.locator("#time-stagnation-band").fill("3");
     assert.equal(
       plain(await summary.textContent()),
@@ -861,8 +871,24 @@ test("the flat-position exit takes its bounds from the metadata and saves its fi
       page.locator(".config-card:has(#time-stagnation-minutes) .config-card-save").click(),
     ]);
     const body = request.postDataJSON();
-    assert.equal(body.time_exit_stagnation_minutes, 90);
+    assert.equal(body.time_exit_stagnation_minutes, 90, "the duration is saved in minutes");
     assert.equal(body.time_exit_stagnation_band_pct, 3);
+
+    // The save reloads the stored 240 minutes; then a picked unit keeps the number, as
+    // Time Exit's picker does, and reads the bounds in that unit.
+    await page.waitForFunction(
+      () => document.querySelector("#time-stagnation-minutes").value === "4"
+    );
+    await unit.evaluate((el) => {
+      el.value = "minutes";
+      el.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    assert.deepEqual(await bounds("time-stagnation-minutes"), {
+      min: "5",
+      max: "43200",
+      prefix: null,
+      unit: null,
+    });
   } finally {
     await close();
   }
@@ -921,6 +947,58 @@ test("a line the page script writes carries no static catalog placeholder", asyn
       scriptOwned.length
     );
     assert.deepEqual(placeholders, []);
+  } finally {
+    await close();
+  }
+});
+
+test("a rule switched off says so in one line, mutes its labels and keeps its fields editable", async () => {
+  const { page, close } = await openTrader("trailing-stop", { trailing_stop_enabled: false });
+  try {
+    const card = page.locator(".config-card:has(#trailing-enabled)");
+    const note = card.locator(":scope > .config-off-note");
+    await note.waitFor();
+    assert.equal(
+      plain(await note.textContent()),
+      "This rule is off. Its settings are kept and apply once it is switched on."
+    );
+    assert.ok((await card.locator(":scope > .config-group.config-group--inactive").count()) > 0);
+    assert.equal(await page.locator("#trail-activation").isEditable(), true);
+
+    await page.locator("#trailing-enabled").evaluate((el) => {
+      el.checked = true;
+      el.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await note.waitFor({ state: "hidden" });
+    assert.equal(await card.locator(".config-group--inactive").count(), 0);
+  } finally {
+    await close();
+  }
+});
+
+test("the DCA example walks each level's price, buy and new average from its basis", async () => {
+  const { page, close } = await openTrader("dca", {
+    dca_levels_pct: [-10, -20],
+    dca_size_multipliers: [1, 1],
+    dca_measure_from: "average",
+  });
+  try {
+    const detail = (step) => page.locator(`#dca-example-step-${step} ~ .step-detail`);
+    await detail(2).waitFor();
+    assert.match(plain(await page.locator("#dca-example-entry").textContent()), /^0\.02\sSOL$/);
+    assert.match(plain(await page.locator("#dca-example-step-2").textContent()), /^0\.02\sSOL$/);
+    // From the average, the second drop is measured from the average the first add left.
+    assert.match(plain(await detail(1).textContent()), /10%.*5\.3%/);
+    assert.match(plain(await detail(2).textContent()), /24\.2%.*12\.[56]%/);
+    assert.equal(await page.locator("#dca-example-basis").isVisible(), true);
+    assert.equal(await page.locator("#dca-example-risk").isVisible(), true);
+
+    await page.locator("#dca-measure-from").evaluate((el) => {
+      el.value = "first_entry";
+      el.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    assert.match(plain(await detail(2).textContent()), /20%.*10\.7%/);
+    assert.equal(await page.locator("#dca-example-basis").isVisible(), false);
   } finally {
     await close();
   }

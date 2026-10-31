@@ -7,9 +7,10 @@
  *
  * `/api/trader/time-exits` names, for each open position, whether Auto Trader manages its
  * exits, whether a time rule is on, which rule applies and when it is due. The column
- * reads that watch alone: a position Auto Trader does not manage says so, a due rule
- * shows the time left or the next check once due, and a position the route has no watch
- * for shows a dash rather than a guess.
+ * reads that watch alone and states in words what the time rules will do: a position
+ * Auto Trader does not manage says so, an unpriced one waits for a price, a held one says
+ * neither condition is met, a due rule shows the time left or the next check once due,
+ * and a position the route has no watch for shows a dash rather than a guess.
  *
  * Run with `npm run test:js`.
  */
@@ -30,11 +31,23 @@ test("a position Auto Trader does not manage reads as not managed", () => {
   }
 });
 
-test("rules off, no rule applying and no watch each have their own line", () => {
+test("rules off, no rule applying, no price and no watch each have their own line", () => {
   assert.equal(line({ status: "off" }), "Time exits are off");
-  assert.equal(line({ status: "clear" }), "No time exit applies now");
-  assert.equal(line({ status: "unpriced" }), "—");
+  assert.equal(line({ status: "clear" }), "Held; neither time exit's condition is met");
+  assert.equal(line({ status: "unpriced" }), "Waits for a price before a time exit can judge it");
   assert.equal(line(undefined), "—");
+});
+
+test("every status the route sends is worded, never a dash", () => {
+  const statuses = [
+    { status: "not_managed", management: "user_only" },
+    { status: "off" },
+    { status: "clear" },
+    { status: "unpriced" },
+    { status: "due", rule: "time_loss", due_at: NOW + 60, pnl_pct: -30 },
+    { status: "due", rule: "time_stagnation", due_at: NOW + 60, pnl_pct: 0.5 },
+  ];
+  for (const watch of statuses) assert.notEqual(line(watch), "—", watch.status);
 });
 
 test("the loss rule shows its loss and the time left, then the next check once due", () => {

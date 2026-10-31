@@ -336,14 +336,6 @@
   max-width: 100%;
 }
 
-/* A row whose group or source master switch is off: muted, but fully editable —
-   the value is still what the rule will use the moment the switch goes back on.
-   Never `pointer-events: none`, which blocks the mouse while leaving the field
-   reachable by keyboard. */
-.config-field--inactive .config-field-label {
-  opacity: 0.55;
-}
-
 /* Reset: a bare glyph in a slot that is always reserved, so a value going back
    to its default can never reflow the row. */
 

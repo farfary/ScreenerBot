@@ -178,6 +178,9 @@ export function createStatsView({
     const paper = book === "paper";
     const reset = $("#stats-paper-reset");
     if (reset) reset.hidden = !paper;
+    // The paper run's starting balance is a setting: the link opens the Settings tab that holds it.
+    const balance = $("#stats-paper-balance");
+    if (balance) balance.hidden = !paper;
     // The results below name the paper book, and the loss limit, which governs live
     // rounds only, steps out while it is shown.
     const marker = $("#stats-book-marker");
@@ -575,6 +578,7 @@ export function createStatsView({
         reload();
       });
       listen($("#stats-paper-reset"), "click", () => void paperAccount.reset());
+      listen($("#stats-paper-balance"), "click", () => switchTab("general-settings"));
       listen($("#stats-empty"), "click", (event) => {
         if (event.target.closest('[data-action="open-strategies"]')) switchTab("strategies");
       });

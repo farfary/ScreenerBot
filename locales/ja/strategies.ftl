@@ -102,6 +102,7 @@ strategies-editor-entry-binding-every-position = すべてのポジション
 # Labels the button that names the entry strategies an exit strategy manages.
 strategies-editor-entry-binding-label = 管理対象
 strategies-editor-entry-binding-hint = チェックしたエントリー戦略が開いたポジションを管理します。何もチェックしないと、手動やコピーを含むすべてのポジションを管理します。
+strategies-editor-new-mode-hint = 新しいストラテジーはペーパーで取引します。ストラテジー一覧からライブに切り替えます。
 strategies-editor-entry-binding-empty = エントリー戦略はまだありません
 # $id is the id of an entry strategy that no longer exists.
 strategies-editor-entry-binding-deleted = { $id }（削除済み）

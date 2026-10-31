@@ -20,8 +20,8 @@
  *   already names the kind, states it in no cell.
  * - An example figure (a SOL price or a percent) never ends its fraction in a zero, so
  *   one strip does not mix "+10%" with "+32.0%" or print "1.0000 SOL".
- * - A config card never draws more columns than it has field groups, so two lists
- *   (How DCA Works, Risk Warnings) share the width instead of leaving a third empty.
+ * - A config card never draws more columns than it has field groups, so two groups
+ *   share the width instead of leaving a third empty.
  * - A field's control (a number input or a switch such as Sell Part First) sits
  *   under its hint in the control row, never in the title row beside the label, so a
  *   switch field leaves no empty track under its hint.
@@ -257,10 +257,9 @@ test("every rule card's worked example is titled How It Works", async () => {
       ))
     );
   }
-  // The DCA tab edits a ladder of steps and carries no single worked example.
   assert.deepEqual(
     [...new Set(titles.map((title) => title.split(":")[0]))],
-    ["stop-loss", "trailing-stop", "take-profit", "time-rules"],
+    ["stop-loss", "trailing-stop", "take-profit", "time-rules", "dca"],
     "the rule cards carry worked examples"
   );
   assert.deepEqual(

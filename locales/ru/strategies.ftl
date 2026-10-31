@@ -90,6 +90,7 @@ strategies-editor-entry-binding-every-position = Все позиции
 # Labels the button that names the entry strategies an exit strategy manages.
 strategies-editor-entry-binding-label = Управляет
 strategies-editor-entry-binding-hint = Управляет позициями, открытыми отмеченными стратегиями входа. Если ничего не отмечено, управляет всеми позициями, включая ручные и скопированные.
+strategies-editor-new-mode-hint = Новая стратегия торгует в виртуальном режиме. Включите боевой режим в списке стратегий.
 strategies-editor-entry-binding-empty = Стратегий входа пока нет
 # $id is the id of an entry strategy that no longer exists.
 strategies-editor-entry-binding-deleted = { $id } (удалена)
