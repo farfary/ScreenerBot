@@ -21,6 +21,8 @@ pub mod getters;
 pub mod import_export;
 mod operations;
 #[cfg(test)]
+mod promo_write_tests;
+#[cfg(test)]
 mod section_labels_tests;
 pub mod types;
 

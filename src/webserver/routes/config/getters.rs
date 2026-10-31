@@ -397,6 +397,13 @@ where
         .last()
         .unwrap_or("unknown");
 
+    // During promotional capture the trader section is shown with the sample book's settings
+    // overlaid (`shown_trader`); saving that form would write the sample values over the
+    // operator's real settings.
+    if section_name == "TraderConfig" && crate::webserver::promo::are_promo_fixtures_enabled() {
+        return crate::webserver::promo::promo_write_refused();
+    }
+
     // Prepare the merged config outside closure
     let merge_result: Result<()> = (|| {
         // Get current config
