@@ -24,6 +24,7 @@ const SETS = {
   js: ["src/webserver/templates/scripts/*.js", "tools/*.mjs", "electron/*.js", "eslint.config.js"],
   css: ["src/webserver/templates/*.css"],
   html: ["src/webserver/templates/*.html", "electron/src/*.html"],
+  objc: ["electron/native/*.m"],
   hash: ["tools/*.py", "install.sh"],
 };
 
@@ -70,7 +71,8 @@ function checkHash(lines) {
   return lines[at] === `# ${HOLDER}` && lines[at + 1] === `# ${SPDX}`;
 }
 
-const CHECKERS = { rs: checkRust, js: checkJs, css: checkCss, html: checkHtml, hash: checkHash };
+// Objective-C shares the `//` comment shape of the JavaScript header.
+const CHECKERS = { rs: checkRust, js: checkJs, css: checkCss, html: checkHtml, objc: checkJs, hash: checkHash };
 
 const violations = [];
 let checked = 0;

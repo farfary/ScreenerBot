@@ -23,6 +23,12 @@
      every overlay (notification panel, dialogs, menus) so it never covers them.
      Only the bottom status bar (--z-status-bar) stays above it. */
   --z-featured-row: 800;
+
+  /* The status bar is window chrome like the header: above page content and its
+     popovers, BELOW every overlay, so a scrim darkens it with the rest of the window.
+     The full-screen views (Featured, token, transaction and position details) end at
+     its top edge instead of covering it, so it stays visible and usable under them. */
+  --z-status-bar: 8900;
   --z-notification-panel: 9000;
 
   /* The featured DIALOG is a full-screen view, not a modal on top of one: token
@@ -48,9 +54,8 @@
   --z-toast: 10010;
 
   /* Hover tooltip sits above dialogs/menus/toasts so a clamped value is always
-     readable, but below the always-on-top status bar. */
+     readable. */
   --z-app-tooltip: 10090;
-  --z-status-bar: 10100;
   --z-exit-dialog: 10100;
   --z-setup: 50000;
   --z-onboarding: 50000;

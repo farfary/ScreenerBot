@@ -62,6 +62,37 @@ test("macOS signing policy and every entitlement template are part of the revisi
   }
 });
 
+test("the native helper's source and build recipe are part of the revision, its compiled output is not", () => {
+  const shellRoot = path.join(path.dirname(REVISION_FILE), "..");
+  for (const relative of ["native/window_buttons.m", "tools/macos-native.js"]) {
+    const file = path.join(shellRoot, relative);
+    const before = computeShellRevision();
+    const original = fs.readFileSync(file);
+    try {
+      fs.appendFileSync(file, "\n// revision probe\n");
+      assert.notEqual(computeShellRevision(), before, relative);
+    } finally {
+      fs.writeFileSync(file, original);
+    }
+    assert.equal(computeShellRevision(), before, relative);
+  }
+
+  // The helper is compiled on each packaging runner, after the Linux runner computed
+  // the revision every runner must reproduce.
+  const buildDirectory = path.join(shellRoot, "build");
+  const createdDirectory = !fs.existsSync(buildDirectory);
+  const probe = path.join(buildDirectory, "revision-probe.node");
+  const before = computeShellRevision();
+  try {
+    fs.mkdirSync(buildDirectory, { recursive: true });
+    fs.writeFileSync(probe, Buffer.from([0xcf, 0xfa, 0xed, 0xfe, 0, 1, 2, 3]));
+    assert.equal(computeShellRevision(), before);
+  } finally {
+    fs.rmSync(probe, { force: true });
+    if (createdDirectory) fs.rmdirSync(buildDirectory);
+  }
+});
+
 test("line endings are not part of the revision", () => {
   // The revision is computed on the Linux runner and re-asserted on the macOS
   // and Windows packaging runners. A Windows checkout may materialise CRLF,

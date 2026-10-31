@@ -16,6 +16,8 @@
 // nothing that changes on every release:
 //   - every file under src/ (except the generated revision file itself),
 //   - every packaged asset,
+//   - the native helper's source (native/) and its build recipe
+//     (tools/macos-native.js); the compiled helper in build/ is their output,
 //   - forge.config.js — it decides what is packaged and how,
 //   - package.json WITHOUT its version field,
 //   - package-lock.json, which pins the complete packaged dependency graph,
@@ -35,8 +37,8 @@ const SHELL_ROOT = path.join(__dirname, '..');
 const REVISION_FILE = path.join(SHELL_ROOT, 'src', 'shell_revision.json');
 const REVISION_LENGTH = 12;
 
-const INPUT_DIRECTORIES = ['src', 'assets'];
-const INPUT_FILES = ['forge.config.js', 'tools/windows-installer.js', 'tools/macos-signing.js'];
+const INPUT_DIRECTORIES = ['src', 'assets', 'native'];
+const INPUT_FILES = ['forge.config.js', 'tools/windows-installer.js', 'tools/macos-signing.js', 'tools/macos-native.js'];
 /**
  * Files outside electron/ that are packaged into the shell (`extraResource`) and
  * that decide what it renders. Only these: the other catalogs belong to the

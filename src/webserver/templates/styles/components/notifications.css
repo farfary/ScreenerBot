@@ -13,15 +13,14 @@
 .notification-drawer {
   position: fixed;
 
-  /* Stop above the bottom status bar (26px) so the bar stays fully visible and
-     the panel's footer/list are never hidden behind it. */
-  inset: 0 0 26px;
+  /* The whole window: the backdrop darkens the status bar like every other scrim. */
+  inset: 0;
   z-index: var(--z-notification-panel);
   display: flex;
   justify-content: flex-end;
   pointer-events: none;
   opacity: 0;
-  transition: opacity var(--transition-fast)-out;
+  transition: opacity var(--floating-duration) ease-out;
 }
 
 .notification-drawer[data-state="open"] {

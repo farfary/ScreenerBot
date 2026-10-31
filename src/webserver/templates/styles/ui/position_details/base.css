@@ -4,7 +4,7 @@
 /* =============================================================================
    POSITION DETAILS — dialog shell and the one-view body
 
-   Full-screen like Token and Transaction Details: the status bar stays visible below,
+   Full-screen like Token and Transaction Details: it ends at the status bar's top edge,
    and on macOS Electron the header paints the title-bar pixels itself (header.css).
    The body is one view, no sub-tabs and no page scroll: the chart and the activity are
    two fixed panes in the main column (panes.js), the summary rail scrolls beside them.
@@ -22,7 +22,9 @@
   --pdd-chart-strip: 112px;
 
   position: fixed;
-  inset: 0;
+
+  /* Ends at the status bar's top edge, so the bar stays visible and usable below the view. */
+  inset: 0 0 var(--status-bar-height);
   z-index: var(--z-dialog);
   display: flex;
   flex-direction: column;
@@ -62,9 +64,6 @@
   flex-direction: column;
   width: 100%;
   min-height: 0;
-
-  /* The status bar stays visible under every full-screen dialog. */
-  margin-bottom: 24px;
   overflow: hidden;
   background: var(--bg-primary);
   animation: fadeIn 0.25s ease-out;

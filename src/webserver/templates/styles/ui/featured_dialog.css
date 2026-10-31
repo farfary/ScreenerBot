@@ -15,7 +15,9 @@
 
 .featured-dialog {
   position: fixed;
-  inset: 0;
+
+  /* Ends at the status bar's top edge, so the bar stays visible and usable below the view. */
+  inset: 0 0 var(--status-bar-height);
   z-index: var(--z-featured-dialog);
   display: flex;
   flex-direction: column;
@@ -47,7 +49,7 @@
 
 .featured-backdrop {
   position: absolute;
-  inset: 0 0 24px;
+  inset: 0;
   background: transparent;
   cursor: default;
 }
@@ -60,7 +62,6 @@
 .featured-container {
   position: relative;
   margin-top: 0;
-  margin-bottom: 24px;
   background: var(--bg-primary);
   border: none;
   border-radius: 0;

@@ -95,6 +95,7 @@ pub async fn get_core_script(Path(file): Path<String>) -> Response {
         "setup_runtime.js" => Some(embeds::CORE_SETUP_RUNTIME),
         "setup.js" => Some(embeds::CORE_SETUP),
         "status_bar.js" => Some(embeds::CORE_STATUS_BAR),
+        "window_controls.js" => Some(embeds::CORE_WINDOW_CONTROLS),
         "hints.js" => Some(embeds::CORE_HINTS),
         "lockscreen.js" => Some(embeds::CORE_LOCKSCREEN),
         "sounds.js" => Some(embeds::CORE_SOUNDS),

@@ -17,6 +17,7 @@ const { createLocalizer } = require('./l10n');
 const { createLineDecoder, shouldRollbackStagedCore } = require('./backend_launch');
 const upgradeBackups = require('./upgrade_backups');
 const { clearShellCaches } = require('./shell_cache');
+const { TRAFFIC_LIGHT_POSITION, attachWindowControls, setWindowControlsDimmed } = require('./window_controls');
 
 // ============================================================================
 // EPIPE PROTECTION - Prevent crashes when stdout/stderr pipes break
@@ -1102,7 +1103,7 @@ function createWindow() {
     icon: path.join(__dirname, '..', 'assets', 'icon.png'),
     autoHideMenuBar: process.platform === 'win32', // Hide menu bar on Windows only
     titleBarStyle: 'hiddenInset',
-    trafficLightPosition: { x: 16, y: 16 },
+    trafficLightPosition: TRAFFIC_LIGHT_POSITION,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -1110,6 +1111,8 @@ function createWindow() {
       sandbox: false // Disable sandbox to allow preload to work properly
     }
   });
+
+  attachWindowControls(mainWindow);
 
   // Show window only after HTML content is fully loaded (prevents flash/double loading screen)
   mainWindow.webContents.once('did-finish-load', () => {
@@ -1938,6 +1941,13 @@ ipcMain.handle('app:close', () => {
     return true;
   }
   return false;
+});
+
+// The dashboard reports whether a modal scrim covers its title bar; the native
+// traffic lights follow it on macOS and the call is a no-op elsewhere.
+ipcMain.handle('app:set-window-controls-dimmed', (event, dimmed) => {
+  if (!mainWindow || event.sender !== mainWindow.webContents) return false;
+  return setWindowControlsDimmed(mainWindow, dimmed === true);
 });
 
 ipcMain.handle('app:zoom-in', () => {

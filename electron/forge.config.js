@@ -1,11 +1,12 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 //
-// Electron Forge packaging configuration - packager options, platform makers and the generateAssets hook that stamps the shell revision.
+// Electron Forge packaging configuration - packager options, platform makers and the generateAssets hook that stamps the shell revision and builds the macOS native helper.
 
 const path = require('path');
 const { APP_ID, windowsInstallerIdentity } = require('./tools/windows-installer');
 const { macosSigningOptions } = require('./tools/macos-signing');
+const { buildMacosNative } = require('./tools/macos-native');
 
 // Platform-specific binary name
 const isWindows = process.platform === 'win32';
@@ -24,6 +25,9 @@ const isArm64 = targetArch === 'arm64';
 // Skip RPM maker entirely when building on macOS host
 const skipRpm = isMacOS;
 
+// The bundle's minimum macOS version, and the deployment target of the native helper.
+const MACOS_MINIMUM_VERSION = '13.0';
+
 module.exports = {
   packagerConfig: {
     asar: true,
@@ -37,7 +41,7 @@ module.exports = {
     // the tree is not read by the packager and cannot reach the bundle.
     extendInfo: {
       NSHumanReadableCopyright: '© 2024-2026 ScreenerBot',
-      LSMinimumSystemVersion: '13.0',
+      LSMinimumSystemVersion: MACOS_MINIMUM_VERSION,
     },
     extraResource: [
       path.join(__dirname, '..', 'target', 'release', binaryName),
@@ -192,6 +196,10 @@ module.exports = {
       const { computeShellRevision, writeShellRevision } = require('./tools/shell-revision.js');
       const revision = writeShellRevision(computeShellRevision());
       console.log(`[forge] shell revision ${revision}`);
+      // The traffic-light dimming helper (src/window_controls.js). Its output
+      // lives in build/, outside the revision inputs; its source and recipe are inputs.
+      const helper = buildMacosNative({ minimumVersion: MACOS_MINIMUM_VERSION });
+      if (helper) console.log(`[forge] native helper ${path.relative(__dirname, helper)}`);
     }
   }
 };

@@ -325,6 +325,7 @@ pub const CORE_ONBOARDING: &str = include_str!("templates/scripts/core/onboardin
 pub const CORE_SETUP_RUNTIME: &str = include_str!("templates/scripts/core/setup_runtime.js");
 pub const CORE_SETUP: &str = include_str!("templates/scripts/core/setup.js");
 pub const CORE_STATUS_BAR: &str = include_str!("templates/scripts/core/status_bar.js");
+pub const CORE_WINDOW_CONTROLS: &str = include_str!("templates/scripts/core/window_controls.js");
 pub const CORE_HINTS: &str = include_str!("templates/scripts/core/hints.js");
 pub const CORE_LOCKSCREEN: &str = include_str!("templates/scripts/core/lockscreen.js");
 pub const CORE_SOUNDS: &str = include_str!("templates/scripts/core/sounds.js");

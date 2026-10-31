@@ -3,15 +3,17 @@
 
 /* ============================================================================
    STATUS BAR - Fixed bottom bar with system metrics
-   Must stay on top of all dialogs (dialogs use z-index: 10000)
+   Window chrome below every overlay (--z-status-bar in base/floating.css): a
+   scrim darkens it with the rest of the window, and the full-screen views end
+   at its top edge so it stays visible under them.
    ============================================================================ */
 
 .status-bar {
   position: fixed;
   bottom: 0;
   inset-inline: 0;
-  height: 26px;
-  z-index: var(--z-status-bar, 10001);
+  height: var(--status-bar-height);
+  z-index: var(--z-status-bar);
   background: var(--header-bg, linear-gradient(135deg, #0d1117 0%, #161b22 50%, #1c2128 100%));
   border-top: 1px solid var(--header-border, #30363d);
   display: flex;
@@ -140,16 +142,14 @@
   }
 }
 
-/* Reserve space for the fixed status bar at the bottom.
-   The status bar is 26px tall, so we need to reduce available
-   height by that amount to prevent content from being hidden. */
+/* The page reserves the fixed bar's height so no content sits under it. */
 .content {
-  padding-bottom: 26px; /* Height of .status-bar */
+  padding-bottom: var(--status-bar-height);
 }
 
-/* When featured row is visible, add extra padding to content */
+/* With the featured row visible, the page also reserves its 48px. */
 .content.has-featured-row {
-  padding-bottom: 74px; /* 26px status bar + 48px featured row */
+  padding-bottom: calc(var(--status-bar-height) + 48px);
 }
 
 /* Light theme adjustments */

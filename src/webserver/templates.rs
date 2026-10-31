@@ -405,10 +405,11 @@ pub fn login_template(content: &str, locale: &LanguageIdentifier) -> String {
         .replace("url('lucide.ttf", "url('/assets/fonts/lucide.ttf")
         .replace("url('lucide.svg", "url('/assets/fonts/lucide.svg");
 
-    // Minimal styles for login page
+    // Minimal styles for login page; the floating system owns the z-index scale.
     let combined_styles = [
         FOUNDATION_STYLES,
         SCRIPT_FONT_STYLES,
+        FLOATING_STYLES,
         &lucide_css,
         LOGIN_PAGE_STYLES,
     ]

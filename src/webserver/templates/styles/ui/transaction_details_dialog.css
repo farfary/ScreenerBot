@@ -9,7 +9,9 @@
 
 .transaction-details-dialog {
   position: fixed;
-  inset: 0;
+
+  /* Ends at the status bar's top edge, so the bar stays visible and usable below the view. */
+  inset: 0 0 var(--status-bar-height);
   z-index: var(--z-dialog);
   display: flex;
   flex-direction: column;
@@ -37,7 +39,7 @@
 /* Backdrop - covers area below title bar */
 .transaction-details-dialog .dialog-backdrop {
   position: absolute;
-  inset: 28px 0 24px;
+  inset: 28px 0 0;
   background: transparent;
   cursor: default;
 }
@@ -47,7 +49,6 @@
 
   position: relative;
   margin-top: 28px;
-  margin-bottom: 24px;
   background: var(--bg-primary);
   border: none;
   border-radius: 0;

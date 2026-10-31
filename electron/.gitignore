@@ -14,6 +14,9 @@ dist/
 # Rust artifacts (copied during build)
 target/
 
+# Native helpers compiled by tools/macos-native.js during forge generateAssets
+build/
+
 # VC++ Redistributables (downloaded during build, ~50MB)
 redist/
 

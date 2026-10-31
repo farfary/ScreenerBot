@@ -17,6 +17,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   maximize: () => ipcRenderer.invoke('app:maximize'),
   close: () => ipcRenderer.invoke('app:close'),
   isMaximized: () => ipcRenderer.invoke('app:is-maximized'),
+  // Dim the macOS traffic lights while a modal scrim covers the title bar.
+  setWindowControlsDimmed: (dimmed) => ipcRenderer.invoke('app:set-window-controls-dimmed', dimmed === true),
   onMaximizeChange: (callback) => {
     const handler = (event, isMax) => callback(isMax);
     ipcRenderer.on('window:maximize-change', handler);

@@ -8,12 +8,14 @@
    Platform-aware layout:
    - Browser/Windows/Linux: No title bar offset, full height
    - macOS Electron: 28px title bar for traffic lights + window drag
-   Status bar (24px) at bottom for version info
+   Ends at the status bar's top edge (26px): the bar stays visible below it
    ============================================================================= */
 
 .token-details-dialog {
   position: fixed;
-  inset: 0;
+
+  /* Ends at the status bar's top edge, so the bar stays visible and usable below the view. */
+  inset: 0 0 var(--status-bar-height);
   z-index: var(--z-dialog); /* Above header, below trade-action-dialog */
   display: flex;
   flex-direction: column;
@@ -48,7 +50,7 @@
 /* Backdrop - full coverage by default */
 .dialog-backdrop {
   position: absolute;
-  inset: 0 0 24px;
+  inset: 0;
   background: transparent;
   cursor: default;
 }
@@ -59,7 +61,6 @@
 
   position: relative;
   margin-top: 0;
-  margin-bottom: 24px;
   background: var(--bg-primary);
   border: none;
   border-radius: 0;

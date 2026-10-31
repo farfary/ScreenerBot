@@ -224,6 +224,10 @@
      stands at this height, so actions of one role line up across pages. */
   --control-height: 32px;
 
+  /* Status bar height: the fixed bar at the window's bottom edge, the space the
+     page reserves for it, and the bottom edge of every full-screen view. */
+  --status-bar-height: 26px;
+
   /* Border Radius Scale */
   --radius-xs: 2px;
   --radius-sm: 4px;
@@ -242,33 +246,7 @@
   --transition-normal: 300ms ease;
   --transition-slow: 500ms ease;
 
-  /* Z-Index Scale - Layering hierarchy
-     Full z-index system is defined in base/floating.css
-     These are aliases for backward compatibility */
-  --z-header: 1000;
-  --z-dropdown: 1000;
-  --z-select: 1000;
-  --z-tooltip: 1500;
-  --z-popover: 2000;
-  --z-notification-panel: 9000;
-  --z-dialog: 10000;
-  --z-dialog-overlay: 9999;
-  --z-trade-dialog: 10001;
-  --z-hint-popover: 10001;
-  --z-confirmation: 10002;
-  --z-confirmation-dialog: 10003;
-  --z-context-menu-overlay: 10005;
-  --z-context-menu: 10006;
-  --z-pool-selector-overlay: 10005;
-  --z-pool-selector: 10005;
-  --z-toast: 10010;
-  --z-status-bar: 10100;
-  --z-exit-dialog: 10100;
-  --z-setup: 50000;
-  --z-onboarding: 50000;
-  --z-splash: 99000;
-  --z-lockscreen: 100000; /* Highest - security lockscreen above everything */
-  --z-menu-portal: 10008;
+  /* The z-index scale lives in base/floating.css, its one owner. */
 
   /* Typography System. --font-sans/--font-mono/--font-data are composed in the
      `:root, [lang]` rule below so each element with a language resolves its own script order.
