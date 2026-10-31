@@ -49,6 +49,7 @@ trader-notice-stats-failed = İstatistikler yüklenemedi
 trader-controls-group =
     .aria-label = İşlem kontrolleri
 trader-monitor-dormant = Auto Trader ile başlar
+trader-controls-note = Auto Trader'ı durdurmak tüm trader'ı kapatır; anahtarlar ise yalnızca girişleri veya çıkışları duraklatır. Zorla durdurma ayrıca kopya işlemleri de durdurur ve devam ettirilene kadar işlemi engeller.
 
 trader-force-stop-confirm = İşlemi zorla durdur
     .message = Bu, TÜM işlem operasyonlarını hemen durdurur. Devam edilsin mi?
@@ -182,6 +183,7 @@ trader-outcome-bucket =
 trader-stats-empty-day = Son 24 saatte kapanan işlem yok
 trader-stats-empty-all = Henüz kapanan işlem yok
 trader-stats-empty-hint = Bir pozisyon satıldığında kapanan işlemler burada görünür. Auto Trader'ı başlatın veya daha uzun bir dönem seçin.
+trader-stats-empty-hint-running = Kapanan işlemler, bir pozisyon satıldığında burada görünür. Daha uzun bir dönem de seçebilirsiniz.
 trader-stats-empty-days =
     { $count ->
         [one] Son { $amount } günde kapanan işlem yok
@@ -343,7 +345,7 @@ trader-time-positions-empty = Açık pozisyon yok
 trader-time-positions-empty-message = Açık pozisyonlar, tutma süreleri ve zaman sınırına göre ROI değerleriyle burada görünür.
 trader-time-positions-token = Token
 trader-time-positions-hold = Tutma süresi
-trader-time-positions-roi = ROI
+trader-time-positions-roi = Getiri
 trader-time-positions-rule = Zaman çıkışı
 trader-time-status-off = Zaman çıkışları kapalı
 trader-time-status-none = Şu anda geçerli bir zaman çıkışı yok

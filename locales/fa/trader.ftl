@@ -58,6 +58,7 @@ trader-notice-stats-failed = آمار بارگیری نشد
 trader-controls-group =
     .aria-label = کنترل‌های معامله
 trader-monitor-dormant = همراه با معامله‌گر خودکار شروع می‌شود
+trader-controls-note = توقف معامله‌گر خودکار کل معامله‌گر را خاموش می‌کند، در حالی که کلیدها فقط ورودها یا خروج‌ها را موقتاً متوقف می‌کنند. توقف اجباری کپی‌ترید را هم متوقف می‌کند و تا از سرگیری، معامله را مسدود نگه می‌دارد.
 
 ## Confirmations. `.message` is the body and `.confirm` the confirming button.
 
@@ -204,6 +205,7 @@ trader-outcome-bucket =
 trader-stats-empty-day = در 24 ساعت گذشته معامله بسته‌شده‌ای وجود ندارد
 trader-stats-empty-all = هنوز معامله بسته‌شده‌ای وجود ندارد
 trader-stats-empty-hint = معاملات بسته‌شده پس از فروش یک پوزیشن اینجا نمایش داده می‌شوند. معامله‌گر خودکار را روشن کنید یا بازه طولانی‌تری انتخاب کنید.
+trader-stats-empty-hint-running = معاملات بسته‌شده پس از فروش یک پوزیشن اینجا نمایش داده می‌شوند. می‌توانید بازه طولانی‌تری هم انتخاب کنید.
 trader-stats-empty-days =
     { $count ->
         [one] در { $amount } روز گذشته معامله بسته‌شده‌ای وجود ندارد
@@ -389,7 +391,7 @@ trader-time-positions-empty = پوزیشن بازی وجود ندارد
 trader-time-positions-empty-message = پوزیشن‌های باز با مدت نگهداری و ROI نسبت به محدودیت زمانی اینجا نمایش داده می‌شوند.
 trader-time-positions-token = توکن
 trader-time-positions-hold = مدت نگهداری
-trader-time-positions-roi = ROI
+trader-time-positions-roi = بازده
 trader-time-positions-rule = خروج زمانی
 trader-time-status-off = خروج‌های زمانی خاموش هستند
 trader-time-status-none = اکنون هیچ خروج زمانی اعمال نمی‌شود

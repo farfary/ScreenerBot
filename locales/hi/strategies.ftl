@@ -76,13 +76,13 @@ strategies-editor-active = चालू
 strategies-editor-timeframe = डिफ़ॉल्ट टाइमफ़्रेम
     .title = उन शर्तों के लिए कैंडल टाइमफ़्रेम जो अपना टाइमफ़्रेम तय नहीं करतीं
 strategies-editor-order = क्रम
-    .title = 1 से 100 तक मूल्यांकन क्रम; छोटी संख्याओं का मूल्यांकन पहले होता है
+    .title = एक ही प्रकार की रणनीतियाँ 1 से 100 तक, सबसे छोटी संख्या पहले, जाँची जाती हैं; सिग्नल देने वाली पहली रणनीति निर्णय करती है
 strategies-editor-description = विवरण
 strategies-editor-description-field =
     .placeholder = यह स्ट्रैटेजी क्या करती है
     .aria-label = स्ट्रैटेजी का विवरण
 # The exit strategy's binding to the entry strategies whose positions it manages.
-strategies-editor-entry-binding-all = सभी एंट्री स्ट्रैटेजी
+strategies-editor-entry-binding-every-position = सभी पोज़िशन
 # Labels the button that names the entry strategies an exit strategy manages.
 strategies-editor-entry-binding-label = प्रबंधन
 strategies-editor-entry-binding-hint = चुनी गई एंट्री स्ट्रैटेजी से खुली पोज़िशन संभालती है। कोई न चुनी हो तो मैनुअल और कॉपी की गई पोज़िशन समेत हर पोज़िशन संभालती है।

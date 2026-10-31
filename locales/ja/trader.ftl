@@ -58,6 +58,7 @@ trader-notice-stats-failed = 統計を読み込めませんでした
 trader-controls-group =
     .aria-label = 取引コントロール
 trader-monitor-dormant = 自動トレーダーと同時に開始
+trader-controls-note = 自動トレーダーを停止するとトレーダー全体がオフになり、スイッチはエントリーまたはエグジットだけを一時停止します。強制停止はコピートレードも停止し、再開するまで取引をブロックします。
 
 ## Confirmations. `.message` is the body and `.confirm` the confirming button.
 
@@ -195,6 +196,7 @@ trader-outcome-bucket =
 trader-stats-empty-day = 過去24時間にクローズ済みの取引はありません
 trader-stats-empty-all = クローズ済みの取引はまだありません
 trader-stats-empty-hint = ポジションが売却されると、クローズ済みトレードがここに表示されます。自動トレーダーを開始するか、より長い期間を選択してください。
+trader-stats-empty-hint-running = ポジションが売却されると、クローズ済みトレードがここに表示されます。より長い期間を選択することもできます。
 trader-stats-empty-days =
     { $count ->
        *[other] 過去{ $amount }日間にクローズ済みの取引はありません
@@ -375,7 +377,7 @@ trader-time-positions-empty = オープンポジションはありません
 trader-time-positions-empty-message = オープンポジションは、保有時間と時間制限に対する ROI とともにここに表示されます。
 trader-time-positions-token = トークン
 trader-time-positions-hold = 保有時間
-trader-time-positions-roi = ROI
+trader-time-positions-roi = リターン
 trader-time-positions-rule = 時間エグジット
 trader-time-status-off = 時間エグジットはオフです
 trader-time-status-none = 現在適用される時間エグジットはありません

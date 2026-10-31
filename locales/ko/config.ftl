@@ -1160,7 +1160,7 @@ config-trader-trailing-stop-band-distance-pct = 트레일링 구간 간격
     .hint = 구간에 도달한 뒤 스톱이 최고점보다 얼마나 아래에서 따라가는지; 구간의 최고 수익보다 작아야 합니다
     .unit = %
 config-trader-trailing-stop-band-profit-pct = 트레일링 구간
-    .hint = 평균 진입가 대비 최고 수익으로, 이 값부터 각 구간이 트레일링 간격을 대신합니다
+    .hint = 각 구간은 평균 진입가에서 측정한 최고 수익이며, 최고점이 이에 도달하면 트레일은 기본 거리 대신 해당 구간의 거리로 따라갑니다
     .unit = %
 config-trader-trailing-stop-distance-pct = 트레일링 스톱 거리
     .hint = 고점 대비 얼마나 아래에서 추적할지 정합니다 (5 = 고점에서 5% 하락하면 청산)

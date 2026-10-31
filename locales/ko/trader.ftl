@@ -58,6 +58,7 @@ trader-notice-stats-failed = 통계를 불러오지 못했습니다
 trader-controls-group =
     .aria-label = 거래 제어
 trader-monitor-dormant = 자동 트레이더와 함께 시작
+trader-controls-note = 자동 트레이더를 중지하면 트레이더 전체가 꺼지고, 스위치는 진입이나 청산만 일시 중지합니다. 강제 중지는 카피 트레이딩도 멈추고 재개할 때까지 거래를 막습니다.
 
 ## Confirmations. `.message` is the body and `.confirm` the confirming button.
 
@@ -195,6 +196,7 @@ trader-outcome-bucket =
 trader-stats-empty-day = 최근 24시간 동안 종료된 거래가 없습니다
 trader-stats-empty-all = 아직 종료된 거래가 없습니다
 trader-stats-empty-hint = 포지션이 매도되면 종료된 거래가 여기에 표시됩니다. 자동 트레이더를 시작하거나 더 긴 기간을 선택하세요.
+trader-stats-empty-hint-running = 포지션이 매도되면 종료된 거래가 여기에 표시됩니다. 더 긴 기간을 선택할 수도 있습니다.
 trader-stats-empty-days =
     { $count ->
        *[other] 최근 { $amount }일 동안 종료된 거래가 없습니다
@@ -374,7 +376,7 @@ trader-time-positions-empty = 보유 중인 포지션 없음
 trader-time-positions-empty-message = 보유 중인 포지션이 보유 시간과 시간 제한 대비 ROI와 함께 여기에 표시됩니다.
 trader-time-positions-token = 토큰
 trader-time-positions-hold = 보유 시간
-trader-time-positions-roi = ROI
+trader-time-positions-roi = 수익률
 trader-time-positions-rule = 시간 청산
 trader-time-status-off = 시간 청산이 꺼져 있습니다
 trader-time-status-none = 지금 적용되는 시간 청산이 없습니다

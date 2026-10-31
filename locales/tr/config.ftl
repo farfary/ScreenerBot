@@ -1160,7 +1160,7 @@ config-trader-trailing-stop-band-distance-pct = Bant mesafeleri
     .hint = Bandına ulaşıldığında stopun zirvenin ne kadar altından takip ettiği; bandın zirve kârından küçük
     .unit = %
 config-trader-trailing-stop-band-profit-pct = Takip bantları
-    .hint = Her bandın takip mesafesini devraldığı, ortalama girişe göre zirve kâr
+    .hint = Her bant, ortalama girişten ölçülen bir tepe kârıdır; tepe ona ulaştığında iz süren stop, taban mesafe yerine o bandın mesafesiyle takip eder
     .unit = %
 config-trader-trailing-stop-distance-pct = İz Süren Stop Mesafesi
     .hint = Zirvenin ne kadar altından izleneceği (5 = fiyat zirveden %5 düşerse çık)

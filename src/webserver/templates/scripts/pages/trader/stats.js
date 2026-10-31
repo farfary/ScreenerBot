@@ -354,7 +354,7 @@ export function createStatsView({
             kind: "empty",
             icon: "icon-inbox",
             title: emptyText(input.periodDays),
-            message: input.openStrategies ? "" : I18n.t("trader-stats-empty-hint"),
+            message: input.openStrategies ? "" : I18n.t(emptyHintKey()),
             compact: true,
             action: input.openStrategies
               ? { id: "open-strategies", label: I18n.t("trader-open-strategies") }
@@ -364,6 +364,12 @@ export function createStatsView({
       }
     }
     if (breakdowns) breakdowns.hidden = input.kind !== "data";
+  }
+
+  /** The empty-state hint; the advice to start the trader is dropped while it already runs. */
+  function emptyHintKey() {
+    const running = status?.run_state === "running" || status?.run_state === "entry_paused";
+    return running ? "trader-stats-empty-hint-running" : "trader-stats-empty-hint";
   }
 
   function stateInput() {

@@ -259,14 +259,20 @@ test("a view holding exit strategies names the rule exits checked before them", 
   const chip = page.locator('#strategies-roster .table-toolbar-chip[data-summary-id="rule-exits"]');
   await chip.waitFor();
   assert.match(plain(await chip.textContent()), /Checked first\s*Stop Loss, Take Profit,? and Time Exit/);
+  const hint = page.locator(
+    '#strategies-roster .table-toolbar-chip[data-summary-id="rule-exits-hint"]'
+  );
+  await hint.waitFor();
   assert.equal(
-    await chip.getAttribute("title"),
+    plain(await hint.textContent()),
     "These exit rules are checked on every position before any exit strategy"
   );
   await view(page, "entry");
   await chip.waitFor({ state: "hidden" });
+  await hint.waitFor({ state: "hidden" });
   await view(page, "exit");
   await chip.waitFor();
+  await hint.waitFor();
 });
 
 test("only a strategy that is on offers the action that changes its mode", async (t) => {

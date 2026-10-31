@@ -49,6 +49,10 @@ label.stats-control {
   display: none;
 }
 
+.stats-controls-note {
+  flex: 1 0 100%;
+}
+
 .stats-loss-limit {
   flex: 1 1 260px;
 }

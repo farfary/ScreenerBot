@@ -1160,7 +1160,7 @@ config-trader-trailing-stop-band-distance-pct = 分段追踪距离
     .hint = 达到分段后止损在峰值下方跟随的距离；须小于该分段的峰值利润
     .unit = %
 config-trader-trailing-stop-band-profit-pct = 追踪分段
-    .hint = 相对平均入场价的峰值利润，达到后由该分段接管追踪距离
+    .hint = 每个档位是从平均入场价起算的峰值利润；峰值达到该档位后，追踪止损按该档位的距离跟随，而不是基础距离
     .unit = %
 config-trader-trailing-stop-distance-pct = 追踪止损距离
     .hint = 在峰值下方追踪的距离（5 = 价格较峰值下跌 5% 时出场）

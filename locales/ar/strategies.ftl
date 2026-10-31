@@ -102,13 +102,13 @@ strategies-editor-active = تشغيل
 strategies-editor-timeframe = الإطار الزمني الافتراضي
     .title = الإطار الزمني للشموع للشروط التي لا تحدد إطارًا خاصًا بها
 strategies-editor-order = الترتيب
-    .title = ترتيب التقييم من 1 إلى 100؛ الأرقام الأصغر تُقيَّم أولًا
+    .title = تُقيَّم الاستراتيجيات من النوع نفسه من 1 إلى 100، الأصغر أولًا؛ وتحسم أول استراتيجية تُصدر إشارة
 strategies-editor-description = الوصف
 strategies-editor-description-field =
     .placeholder = ما تفعله هذه الاستراتيجية
     .aria-label = وصف الاستراتيجية
 # The exit strategy's binding to the entry strategies whose positions it manages.
-strategies-editor-entry-binding-all = كل استراتيجيات الدخول
+strategies-editor-entry-binding-every-position = كل المراكز
 # Labels the button that names the entry strategies an exit strategy manages.
 strategies-editor-entry-binding-label = تدير
 strategies-editor-entry-binding-hint = تدير المراكز التي فتحتها استراتيجيات الدخول المحددة. إذا لم تُحدد أي استراتيجية فإنها تدير كل المراكز، بما فيها اليدوية والمنسوخة.

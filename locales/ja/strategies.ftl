@@ -92,13 +92,13 @@ strategies-editor-active = オン
 strategies-editor-timeframe = 既定の時間足
     .title = 独自の時間足を指定しない条件が使うローソク足の時間足
 strategies-editor-order = 順序
-    .title = 1〜100 の評価順。小さい数値ほど先に評価されます
+    .title = 同じ種類の戦略は1から100まで、小さい番号から順に評価され、最初にシグナルを出した戦略が決定します
 strategies-editor-description = 説明
 strategies-editor-description-field =
     .placeholder = このストラテジーの内容
     .aria-label = ストラテジーの説明
 # The exit strategy's binding to the entry strategies whose positions it manages.
-strategies-editor-entry-binding-all = すべてのエントリー戦略
+strategies-editor-entry-binding-every-position = すべてのポジション
 # Labels the button that names the entry strategies an exit strategy manages.
 strategies-editor-entry-binding-label = 管理対象
 strategies-editor-entry-binding-hint = チェックしたエントリー戦略が開いたポジションを管理します。何もチェックしないと、手動やコピーを含むすべてのポジションを管理します。

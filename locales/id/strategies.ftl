@@ -76,13 +76,13 @@ strategies-editor-active = Aktif
 strategies-editor-timeframe = Timeframe default
     .title = Timeframe candle untuk kondisi yang tidak menetapkan sendiri
 strategies-editor-order = Urutan
-    .title = Urutan evaluasi dari 1 sampai 100; angka lebih kecil dievaluasi lebih dulu
+    .title = Strategi dengan tipe yang sama dievaluasi dari 1 sampai 100, yang terkecil lebih dulu; strategi pertama yang memberi sinyal menentukan
 strategies-editor-description = Deskripsi
 strategies-editor-description-field =
     .placeholder = Apa yang dilakukan strategi ini
     .aria-label = Deskripsi strategi
 # The exit strategy's binding to the entry strategies whose positions it manages.
-strategies-editor-entry-binding-all = Semua strategi masuk
+strategies-editor-entry-binding-every-position = Semua posisi
 # Labels the button that names the entry strategies an exit strategy manages.
 strategies-editor-entry-binding-label = Mengelola
 strategies-editor-entry-binding-hint = Mengelola posisi yang dibuka oleh strategi masuk yang dicentang. Tanpa centang, strategi ini mengelola setiap posisi, termasuk yang manual dan disalin.

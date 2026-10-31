@@ -49,6 +49,7 @@ trader-notice-stats-failed = Không tải được thống kê
 trader-controls-group =
     .aria-label = Điều khiển giao dịch
 trader-monitor-dormant = Khởi động cùng Auto Trader
+trader-controls-note = Dừng Auto Trader sẽ tắt toàn bộ trader, trong khi các công tắc chỉ tạm dừng lệnh vào hoặc lệnh thoát. Dừng cưỡng chế còn dừng cả copy trading và chặn giao dịch cho đến khi tiếp tục.
 
 trader-force-stop-confirm = Dừng cưỡng chế giao dịch
     .message = Thao tác này sẽ dừng ngay TẤT CẢ hoạt động giao dịch. Tiếp tục?
@@ -173,6 +174,7 @@ trader-outcome-bucket =
 trader-stats-empty-day = Không có lệnh đã đóng trong 24 giờ qua
 trader-stats-empty-all = Chưa có lệnh đã đóng
 trader-stats-empty-hint = Giao dịch đã đóng xuất hiện ở đây khi một vị thế được bán. Hãy bật Auto Trader hoặc chọn khoảng thời gian dài hơn.
+trader-stats-empty-hint-running = Giao dịch đã đóng xuất hiện ở đây khi một vị thế được bán. Bạn cũng có thể chọn khoảng thời gian dài hơn.
 trader-stats-empty-days =
     { $count ->
        *[other] Không có lệnh đã đóng trong { $amount } ngày qua
@@ -329,7 +331,7 @@ trader-time-positions-empty = Không có vị thế đang mở
 trader-time-positions-empty-message = Các vị thế đang mở hiển thị tại đây cùng thời gian nắm giữ và ROI so với giới hạn thời gian.
 trader-time-positions-token = Token
 trader-time-positions-hold = Thời gian nắm giữ
-trader-time-positions-roi = ROI
+trader-time-positions-roi = Lợi nhuận
 trader-time-positions-rule = Thoát theo thời gian
 trader-time-status-off = Thoát theo thời gian đang tắt
 trader-time-status-none = Hiện không có quy tắc thoát theo thời gian nào áp dụng

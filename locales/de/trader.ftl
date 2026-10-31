@@ -57,6 +57,7 @@ trader-notice-stats-failed = Statistiken konnten nicht geladen werden
 trader-controls-group =
     .aria-label = Handelssteuerung
 trader-monitor-dormant = Startet mit dem Auto-Trader
+trader-controls-note = Das Stoppen des Auto-Traders schaltet den gesamten Trader aus, die Schalter pausieren nur Einstiege oder Ausstiege. Ein Force-Stopp hält zusätzlich das Copy-Trading an und blockiert den Handel bis zur Fortsetzung.
 
 trader-force-stop-confirm = Trading sofort stoppen
     .message = Dadurch werden ALLE Trading-Vorgänge sofort angehalten. Fortfahren?
@@ -190,6 +191,7 @@ trader-outcome-bucket =
 trader-stats-empty-day = Keine geschlossenen Trades in den letzten 24 Stunden
 trader-stats-empty-all = Noch keine geschlossenen Trades
 trader-stats-empty-hint = Geschlossene Trades erscheinen hier, sobald eine Position verkauft ist. Starten Sie den Auto-Trader oder wählen Sie einen längeren Zeitraum.
+trader-stats-empty-hint-running = Geschlossene Trades erscheinen hier, sobald eine Position verkauft ist. Sie können auch einen längeren Zeitraum wählen.
 trader-stats-empty-days =
     { $count ->
         [one] Keine geschlossenen Trades in den letzten { $amount } Tag
@@ -351,7 +353,7 @@ trader-time-positions-empty = Keine offenen Positionen
 trader-time-positions-empty-message = Offene Positionen erscheinen hier mit Haltedauer und ROI im Vergleich zum Zeitlimit.
 trader-time-positions-token = Token
 trader-time-positions-hold = Haltedauer
-trader-time-positions-roi = ROI
+trader-time-positions-roi = Rendite
 trader-time-positions-rule = Zeitausstieg
 trader-time-status-off = Zeitausstiege sind aus
 trader-time-status-none = Derzeit greift kein Zeitausstieg

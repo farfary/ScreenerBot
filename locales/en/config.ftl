@@ -1163,7 +1163,7 @@ config-trader-trailing-stop-band-distance-pct = Trailing Band Distances
     .hint = How far below the peak the trail follows once its band is reached; less than the band's peak profit
     .unit = %
 config-trader-trailing-stop-band-profit-pct = Trailing Bands
-    .hint = Peak profit from the average entry at which each band takes over the trail distance
+    .hint = Each band is a peak profit, measured from the average entry; once the peak reaches it, the trail follows at that band's distance instead of the base distance
     .unit = %
 config-trader-trailing-stop-distance-pct = Trailing Stop Distance
     .hint = How far to trail below peak (5 = exit if price drops 5% from peak)

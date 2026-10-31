@@ -94,13 +94,13 @@ strategies-editor-active = روشن
 strategies-editor-timeframe = بازه زمانی پیش‌فرض
     .title = بازه زمانی کندل برای شرط‌هایی که بازه زمانی خودشان را تعیین نمی‌کنند
 strategies-editor-order = ترتیب
-    .title = ترتیب ارزیابی از 1 تا 100؛ عدد کوچک‌تر زودتر ارزیابی می‌شود
+    .title = استراتژی‌های هم‌نوع از ۱ تا ۱۰۰ و از کوچک‌ترین عدد ارزیابی می‌شوند؛ نخستین استراتژی‌ای که سیگنال بدهد تصمیم می‌گیرد
 strategies-editor-description = توضیحات
 strategies-editor-description-field =
     .placeholder = این استراتژی چه می‌کند
     .aria-label = توضیحات استراتژی
 # The exit strategy's binding to the entry strategies whose positions it manages.
-strategies-editor-entry-binding-all = همه استراتژی‌های ورود
+strategies-editor-entry-binding-every-position = همه پوزیشن‌ها
 # Labels the button that names the entry strategies an exit strategy manages.
 strategies-editor-entry-binding-label = مدیریت
 strategies-editor-entry-binding-hint = موقعیت‌هایی را مدیریت می‌کند که استراتژی‌های ورودِ انتخاب‌شده باز کرده‌اند. اگر هیچ‌کدام انتخاب نشود، همه موقعیت‌ها از جمله دستی و کپی‌شده را مدیریت می‌کند.

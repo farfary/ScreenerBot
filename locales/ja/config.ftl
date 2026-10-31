@@ -1160,7 +1160,7 @@ config-trader-trailing-stop-band-distance-pct = 段階ごとのトレール幅
     .hint = 段階に達した後、ピークからどれだけ下でストップが追従するか。段階のピーク利益より小さくしてください
     .unit = %
 config-trader-trailing-stop-band-profit-pct = トレーリングの段階幅
-    .hint = 平均取得価格からのピーク利益で、この値から各段階がトレール幅を引き継ぎます
+    .hint = 各バンドは平均エントリーから測ったピーク利益です。ピークがそこに達すると、トレールは基本の距離ではなくそのバンドの距離で追従します
     .unit = %
 config-trader-trailing-stop-distance-pct = トレーリングストップの下落幅
     .hint = ピークからどれだけ下でトレールするか（5 = ピークから 5% 下落したらエグジット）

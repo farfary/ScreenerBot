@@ -1112,7 +1112,7 @@ config-trader-trailing-stop-band-distance-pct = Khoảng cách của các dải
     .hint = Stop bám dưới đỉnh bao xa khi đạt tới dải; nhỏ hơn lợi nhuận đỉnh của dải
     .unit = %
 config-trader-trailing-stop-band-profit-pct = Các dải trailing
-    .hint = Lợi nhuận đỉnh tính từ giá vào trung bình mà từ đó mỗi dải thay khoảng cách trailing
+    .hint = Mỗi dải là một mức lợi nhuận đỉnh, tính từ giá vào trung bình; khi đỉnh chạm tới, trailing bám theo khoảng cách của dải đó thay cho khoảng cách cơ sở
     .unit = %
 config-trader-trailing-stop-distance-pct = Khoảng cách trailing stop
     .hint = Bám theo dưới đỉnh bao xa (5 = thoát nếu giá giảm 5% từ đỉnh)

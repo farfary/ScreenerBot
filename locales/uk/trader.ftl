@@ -58,6 +58,7 @@ trader-notice-stats-failed = Не вдалося завантажити стат
 trader-controls-group =
     .aria-label = Керування торгівлею
 trader-monitor-dormant = Запуститься разом з автотрейдером
+trader-controls-note = Зупинка автотрейдера вимикає весь трейдер, а перемикачі призупиняють лише входи або виходи. Примусова зупинка також зупиняє копітрейдинг і блокує торгівлю до відновлення.
 
 ## Confirmations. `.message` is the body and `.confirm` the confirming button.
 
@@ -222,6 +223,7 @@ trader-outcome-bucket =
 trader-stats-empty-day = За останні 24 години немає закритих угод
 trader-stats-empty-all = Закритих угод поки немає
 trader-stats-empty-hint = Закриті угоди з'являться тут після продажу позиції. Запустіть автотрейдер або виберіть довший період.
+trader-stats-empty-hint-running = Закриті угоди з'являться тут після продажу позиції. Можна також вибрати довший період.
 trader-stats-empty-days =
     { $count ->
         [one] За останні { $amount } д немає закритих угод
@@ -417,7 +419,7 @@ trader-time-positions-empty = Немає відкритих позицій
 trader-time-positions-empty-message = Тут відображаються відкриті позиції з часом утримання та ROI відносно ліміту часу.
 trader-time-positions-token = Токен
 trader-time-positions-hold = Час утримання
-trader-time-positions-roi = ROI
+trader-time-positions-roi = Дохідність
 trader-time-positions-rule = Вихід за часом
 trader-time-status-off = Виходи за часом вимкнені
 trader-time-status-none = Зараз не діє жоден вихід за часом

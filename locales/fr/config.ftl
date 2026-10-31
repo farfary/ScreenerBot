@@ -1163,7 +1163,7 @@ config-trader-trailing-stop-band-distance-pct = Écarts des paliers
     .hint = Distance sous le sommet suivie par le stop une fois son palier atteint ; inférieure au profit maximal du palier
     .unit = %
 config-trader-trailing-stop-band-profit-pct = Paliers du trailing
-    .hint = Profit maximal depuis l'entrée moyenne à partir duquel chaque palier prend le relais de l'écart
+    .hint = Chaque palier est un profit maximal, mesuré depuis l'entrée moyenne ; dès que le pic l'atteint, le trailing suit à la distance de ce palier au lieu de la distance de base
     .unit = %
 config-trader-trailing-stop-distance-pct = Distance du trailing stop
     .hint = Distance de suivi sous le pic (5 = sortie si le prix chute de 5 % depuis le pic)

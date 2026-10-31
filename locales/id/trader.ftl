@@ -51,6 +51,7 @@ trader-notice-stats-failed = Statistik tidak dapat dimuat
 trader-controls-group =
     .aria-label = Kontrol trading
 trader-monitor-dormant = Mulai bersama Auto Trader
+trader-controls-note = Menghentikan Auto Trader mematikan seluruh trader, sedangkan sakelar hanya menjeda entri atau exit. Penghentian paksa juga menghentikan copy trading dan memblokir trading hingga dilanjutkan.
 
 trader-force-stop-confirm = Hentikan Paksa Trading
     .message = Ini akan langsung menghentikan SEMUA operasi trading. Lanjutkan?
@@ -175,6 +176,7 @@ trader-outcome-bucket =
 trader-stats-empty-day = Tidak ada trade tertutup dalam 24 jam terakhir
 trader-stats-empty-all = Belum ada trade tertutup
 trader-stats-empty-hint = Trade tertutup muncul di sini setelah posisi terjual. Mulai Auto Trader, atau pilih periode yang lebih panjang.
+trader-stats-empty-hint-running = Trade tertutup muncul di sini setelah posisi terjual. Anda juga bisa memilih periode yang lebih panjang.
 trader-stats-empty-days =
     { $count ->
        *[other] Tidak ada trade tertutup dalam { $amount } hari terakhir
@@ -331,7 +333,7 @@ trader-time-positions-empty = Tidak ada posisi terbuka
 trader-time-positions-empty-message = Posisi terbuka muncul di sini dengan waktu tahan dan ROI terhadap batas waktu.
 trader-time-positions-token = Token
 trader-time-positions-hold = Durasi Hold
-trader-time-positions-roi = ROI
+trader-time-positions-roi = Return
 trader-time-positions-rule = Exit Waktu
 trader-time-status-off = Exit waktu nonaktif
 trader-time-status-none = Saat ini tidak ada exit waktu yang berlaku

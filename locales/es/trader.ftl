@@ -58,6 +58,7 @@ trader-notice-stats-failed = No se pudieron cargar las estadísticas
 trader-controls-group =
     .aria-label = Controles de trading
 trader-monitor-dormant = Se inicia con el Auto Trader
+trader-controls-note = Detener el Auto Trader apaga todo el trader, mientras que los interruptores pausan solo las entradas o las salidas. Una parada forzada también detiene el copy trading y bloquea el trading hasta que se reanude.
 
 ## Confirmations. `.message` is the body and `.confirm` the confirming button.
 
@@ -213,6 +214,7 @@ trader-outcome-bucket =
 trader-stats-empty-day = No hay operaciones cerradas en las últimas 24 horas
 trader-stats-empty-all = Aún no hay operaciones cerradas
 trader-stats-empty-hint = Las operaciones cerradas aparecen aquí cuando se vende una posición. Inicia el Auto Trader o elige un periodo más largo.
+trader-stats-empty-hint-running = Las operaciones cerradas aparecen aquí cuando se vende una posición. También puedes elegir un periodo más largo.
 trader-stats-empty-days =
     { $count ->
         [one] No hay operaciones cerradas en el último { $amount } día
@@ -403,7 +405,7 @@ trader-time-positions-empty = No hay posiciones abiertas
 trader-time-positions-empty-message = Las posiciones abiertas aparecen aquí con su tiempo de tenencia y ROI frente al límite de tiempo.
 trader-time-positions-token = Token
 trader-time-positions-hold = Tiempo de tenencia
-trader-time-positions-roi = ROI
+trader-time-positions-roi = Rendimiento
 trader-time-positions-rule = Salida por tiempo
 trader-time-status-off = Las salidas por tiempo están desactivadas
 trader-time-status-none = Ahora no aplica ninguna salida por tiempo

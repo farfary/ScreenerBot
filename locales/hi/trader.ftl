@@ -49,6 +49,7 @@ trader-notice-stats-failed = आँकड़े लोड नहीं हो �
 trader-controls-group =
     .aria-label = ट्रेडिंग नियंत्रण
 trader-monitor-dormant = ऑटो ट्रेडर के साथ शुरू होता है
+trader-controls-note = ऑटो ट्रेडर को रोकने से पूरा ट्रेडर बंद हो जाता है, जबकि स्विच केवल एंट्री या एग्ज़िट को रोकते हैं। ज़बरन रोक कॉपी ट्रेडिंग को भी रोकती है और दोबारा शुरू किए जाने तक ट्रेडिंग को ब्लॉक रखती है।
 
 trader-force-stop-confirm = ट्रेडिंग ज़बरन रोकें
     .message = इससे सभी ट्रेडिंग ऑपरेशन तुरंत रुक जाएंगे। जारी रखें?
@@ -182,6 +183,7 @@ trader-outcome-bucket =
 trader-stats-empty-day = पिछले 24 घंटों में कोई बंद ट्रेड नहीं
 trader-stats-empty-all = अभी तक कोई बंद ट्रेड नहीं
 trader-stats-empty-hint = कोई पोज़िशन बिकते ही बंद ट्रेड यहाँ दिखते हैं। ऑटो ट्रेडर शुरू करें, या लंबी अवधि चुनें।
+trader-stats-empty-hint-running = कोई पोज़िशन बिकते ही बंद ट्रेड यहाँ दिखते हैं। आप लंबी अवधि भी चुन सकते हैं।
 trader-stats-empty-days =
     { $count ->
         [one] पिछले { $amount } दिन में कोई बंद ट्रेड नहीं
@@ -343,7 +345,7 @@ trader-time-positions-empty = कोई खुली पोज़िशन न�
 trader-time-positions-empty-message = खुली पोज़िशन यहाँ समय सीमा के सापेक्ष अपने होल्ड समय और ROI के साथ दिखाई देती हैं।
 trader-time-positions-token = टोकन
 trader-time-positions-hold = होल्ड टाइम
-trader-time-positions-roi = ROI
+trader-time-positions-roi = रिटर्न
 trader-time-positions-rule = समय एग्ज़िट
 trader-time-status-off = समय एग्ज़िट बंद हैं
 trader-time-status-none = अभी कोई समय एग्ज़िट लागू नहीं

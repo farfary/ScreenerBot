@@ -58,6 +58,7 @@ trader-notice-stats-failed = تعذر تحميل الإحصاءات
 trader-controls-group =
     .aria-label = عناصر التحكم في التداول
 trader-monitor-dormant = يبدأ مع المتداول الآلي
+trader-controls-note = إيقاف المتداول الآلي يطفئ المتداول بالكامل، بينما تُوقف المفاتيح الدخول أو الخروج فقط مؤقتًا. أما الإيقاف القسري فيوقف أيضًا النسخ التلقائي للصفقات ويمنع التداول إلى أن يُستأنف.
 
 ## Confirmations. `.message` is the body and `.confirm` the confirming button.
 
@@ -240,6 +241,7 @@ trader-outcome-bucket =
 trader-stats-empty-day = لا توجد صفقات مغلقة خلال آخر 24 ساعة
 trader-stats-empty-all = لا توجد صفقات مغلقة بعد
 trader-stats-empty-hint = تظهر الصفقات المغلقة هنا بعد بيع أي مركز. شغّل المتداول الآلي، أو اختر فترة أطول.
+trader-stats-empty-hint-running = تظهر الصفقات المغلقة هنا بعد بيع أي مركز. يمكنك أيضًا اختيار فترة أطول.
 trader-stats-empty-days =
     { $count ->
         [zero] لا توجد صفقات مغلقة خلال آخر { $amount } يوم

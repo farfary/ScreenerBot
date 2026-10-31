@@ -487,6 +487,11 @@ export function createRoster({ container, onOpen, onCreate, onImport, onDelete, 
         value: names.length > 0 ? Utils.formatList(names) : ABSENT,
         hidden: view === "entry" || names.length === 0,
       },
+      {
+        id: "rule-exits-hint",
+        value: I18n.t("strategies-exit-hint"),
+        hidden: view === "entry" || names.length === 0,
+      },
     ]);
   }
 
@@ -528,7 +533,12 @@ export function createRoster({ container, onOpen, onCreate, onImport, onDelete, 
           label: I18n.t("strategies-exit-before"),
           value: ABSENT,
           format: "text",
-          tooltip: I18n.t("strategies-exit-hint"),
+          hidden: true,
+        },
+        {
+          id: "rule-exits-hint",
+          value: I18n.t("strategies-exit-hint"),
+          format: "text",
           hidden: true,
         },
         {

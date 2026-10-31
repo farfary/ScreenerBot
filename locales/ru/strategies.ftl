@@ -80,13 +80,13 @@ strategies-editor-active = Вкл.
 strategies-editor-timeframe = Таймфрейм по умолчанию
     .title = Таймфрейм свечей для условий, у которых нет своего
 strategies-editor-order = Порядок
-    .title = Порядок вычисления от 1 до 100; меньшие числа вычисляются первыми
+    .title = Стратегии одного типа проверяются от 1 до 100, сначала с наименьшим номером; решает первая, давшая сигнал
 strategies-editor-description = Описание
 strategies-editor-description-field =
     .placeholder = Что делает эта стратегия
     .aria-label = Описание стратегии
 # The exit strategy's binding to the entry strategies whose positions it manages.
-strategies-editor-entry-binding-all = Все стратегии входа
+strategies-editor-entry-binding-every-position = Все позиции
 # Labels the button that names the entry strategies an exit strategy manages.
 strategies-editor-entry-binding-label = Управляет
 strategies-editor-entry-binding-hint = Управляет позициями, открытыми отмеченными стратегиями входа. Если ничего не отмечено, управляет всеми позициями, включая ручные и скопированные.

@@ -76,13 +76,13 @@ strategies-editor-active = Açık
 strategies-editor-timeframe = Varsayılan zaman dilimi
     .title = Kendi zaman dilimini belirlemeyen koşullar için mum zaman dilimi
 strategies-editor-order = Sıra
-    .title = 1 ile 100 arasında değerlendirme sırası; küçük sayılar önce değerlendirilir
+    .title = Aynı türdeki stratejiler 1'den 100'e, en küçük sayı önce olacak şekilde değerlendirilir; sinyal veren ilk strateji karar verir
 strategies-editor-description = Açıklama
 strategies-editor-description-field =
     .placeholder = Bu stratejinin ne yaptığı
     .aria-label = Strateji açıklaması
 # The exit strategy's binding to the entry strategies whose positions it manages.
-strategies-editor-entry-binding-all = Tüm giriş stratejileri
+strategies-editor-entry-binding-every-position = Tüm pozisyonlar
 # Labels the button that names the entry strategies an exit strategy manages.
 strategies-editor-entry-binding-label = Yönetir
 strategies-editor-entry-binding-hint = İşaretli giriş stratejilerinin açtığı pozisyonları yönetir. Hiçbiri işaretli değilse manuel ve kopyalananlar dahil her pozisyonu yönetir.

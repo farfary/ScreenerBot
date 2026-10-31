@@ -78,13 +78,13 @@ strategies-editor-active = Active
 strategies-editor-timeframe = Période par défaut
     .title = Période des bougies pour les conditions qui n'en définissent pas
 strategies-editor-order = Ordre
-    .title = Ordre d'évaluation de 1 à 100 ; les nombres les plus bas sont évalués en premier
+    .title = Les stratégies du même type sont évaluées de 1 à 100, la plus basse d'abord ; la première qui émet un signal décide
 strategies-editor-description = Description
 strategies-editor-description-field =
     .placeholder = Ce que fait cette stratégie
     .aria-label = Description de la stratégie
 # The exit strategy's binding to the entry strategies whose positions it manages.
-strategies-editor-entry-binding-all = Toutes les stratégies d'entrée
+strategies-editor-entry-binding-every-position = Toutes les positions
 # Labels the button that names the entry strategies an exit strategy manages.
 strategies-editor-entry-binding-label = Gère
 strategies-editor-entry-binding-hint = Gère les positions ouvertes par les stratégies d'entrée cochées. Sans aucune cochée, elle gère toutes les positions, y compris manuelles et copiées.

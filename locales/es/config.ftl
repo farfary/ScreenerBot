@@ -1160,7 +1160,7 @@ config-trader-trailing-stop-band-distance-pct = Distancias de las bandas
     .hint = Qué tan por debajo del máximo sigue el stop una vez alcanzada su banda; menor que la ganancia máxima de la banda
     .unit = %
 config-trader-trailing-stop-band-profit-pct = Bandas del trailing
-    .hint = Ganancia máxima desde la entrada promedio a partir de la cual cada banda toma el control de la distancia
+    .hint = Cada banda es un beneficio máximo, medido desde la entrada media; cuando el máximo la alcanza, el trailing sigue a la distancia de esa banda en lugar de la distancia base
     .unit = %
 config-trader-trailing-stop-distance-pct = Distancia del trailing stop
     .hint = Cuánto por debajo del máximo se sigue (5 = sale si el precio cae un 5 % desde el máximo)

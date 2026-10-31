@@ -374,7 +374,7 @@ export function createLifecycle() {
       .filter((choice) => bound.has(choice.id))
       .map((choice) => choice.label);
     summary.textContent =
-      names.length === 0 ? I18n.t("strategies-editor-entry-binding-all") : Utils.formatList(names);
+      names.length === 0 ? I18n.t("strategies-editor-entry-binding-every-position") : Utils.formatList(names);
   }
 
   /**
@@ -773,7 +773,7 @@ export function createLifecycle() {
 
   /**
    * Test the stored strategy against a token picked in the search dialog. The test reads
-   * the saved rules, so a strategy with unsaved changes or never saved is saved first.
+   * the saved rules, so a strategy with unsaved changes or never saved is refused with a toast.
    */
   function pickTestToken() {
     if (!currentStrategy) {

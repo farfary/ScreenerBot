@@ -96,13 +96,13 @@ strategies-editor-active = Ativa
 strategies-editor-timeframe = Timeframe padrão
     .title = Timeframe dos candles para as condições que não definem o seu
 strategies-editor-order = Ordem
-    .title = Ordem de avaliação de 1 a 100; números menores são avaliados primeiro
+    .title = As estratégias do mesmo tipo são avaliadas de 1 a 100, a menor primeiro; a primeira que sinalizar decide
 strategies-editor-description = Descrição
 strategies-editor-description-field =
     .placeholder = O que esta estratégia faz
     .aria-label = Descrição da estratégia
 # The exit strategy's binding to the entry strategies whose positions it manages.
-strategies-editor-entry-binding-all = Todas as estratégias de entrada
+strategies-editor-entry-binding-every-position = Todas as posições
 # Labels the button that names the entry strategies an exit strategy manages.
 strategies-editor-entry-binding-label = Gerencia
 strategies-editor-entry-binding-hint = Gerencia as posições abertas pelas estratégias de entrada marcadas. Sem nenhuma marcada, gerencia todas as posições, incluindo as manuais e as copiadas.

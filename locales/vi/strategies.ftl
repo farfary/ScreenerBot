@@ -74,13 +74,13 @@ strategies-editor-active = Bật
 strategies-editor-timeframe = Khung thời gian mặc định
     .title = Khung thời gian nến cho các điều kiện không tự đặt khung riêng
 strategies-editor-order = Thứ tự
-    .title = Thứ tự đánh giá từ 1 đến 100; số nhỏ hơn được đánh giá trước
+    .title = Các chiến lược cùng loại được đánh giá từ 1 đến 100, số nhỏ nhất trước; chiến lược đầu tiên phát tín hiệu sẽ quyết định
 strategies-editor-description = Mô tả
 strategies-editor-description-field =
     .placeholder = Chiến lược này làm gì
     .aria-label = Mô tả chiến lược
 # The exit strategy's binding to the entry strategies whose positions it manages.
-strategies-editor-entry-binding-all = Tất cả chiến lược vào lệnh
+strategies-editor-entry-binding-every-position = Tất cả vị thế
 # Labels the button that names the entry strategies an exit strategy manages.
 strategies-editor-entry-binding-label = Quản lý
 strategies-editor-entry-binding-hint = Quản lý các vị thế do những chiến lược vào lệnh được chọn mở. Khi không chọn chiến lược nào, nó quản lý mọi vị thế, kể cả vị thế thủ công và sao chép.

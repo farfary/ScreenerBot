@@ -58,6 +58,7 @@ trader-notice-stats-failed = 无法加载统计数据
 trader-controls-group =
     .aria-label = 交易控制
 trader-monitor-dormant = 随自动交易启动
+trader-controls-note = 停止自动交易会关闭整个交易器，而开关只暂停入场或出场。强制停止还会停止跟单，并在恢复之前阻止交易。
 
 ## Confirmations. `.message` is the body and `.confirm` the confirming button.
 
@@ -195,6 +196,7 @@ trader-outcome-bucket =
 trader-stats-empty-day = 过去 24 小时内没有已平仓交易
 trader-stats-empty-all = 暂无已平仓交易
 trader-stats-empty-hint = 仓位卖出后，已平仓交易会显示在这里。启动自动交易，或选择更长的时间段。
+trader-stats-empty-hint-running = 仓位卖出后，已平仓交易会显示在这里。你也可以选择更长的时间段。
 trader-stats-empty-days =
     { $count ->
        *[other] 过去 { $amount } 天内没有已平仓交易
@@ -375,7 +377,7 @@ trader-time-positions-empty = 没有持仓中的仓位
 trader-time-positions-empty-message = 持仓中的仓位会在此显示其持有时间以及相对时间限制的 ROI。
 trader-time-positions-token = 代币
 trader-time-positions-hold = 持仓时间
-trader-time-positions-roi = ROI
+trader-time-positions-roi = 收益率
 trader-time-positions-rule = 时间出场
 trader-time-status-off = 时间出场已关闭
 trader-time-status-none = 当前没有适用的时间出场

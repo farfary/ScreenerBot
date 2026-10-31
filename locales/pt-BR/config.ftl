@@ -1112,7 +1112,7 @@ config-trader-trailing-stop-band-distance-pct = Distâncias das faixas
     .hint = Quanto abaixo do pico o stop acompanha depois que a faixa é atingida; menor que o lucro máximo da faixa
     .unit = %
 config-trader-trailing-stop-band-profit-pct = Faixas do trailing
-    .hint = Lucro máximo a partir da entrada média em que cada faixa assume a distância do trailing
+    .hint = Cada faixa é um lucro máximo, medido a partir da entrada média; quando o pico a alcança, o trailing passa a seguir a distância dessa faixa em vez da distância base
     .unit = %
 config-trader-trailing-stop-distance-pct = Distância do trailing stop
     .hint = Distância a acompanhar abaixo do pico (5 = sai se o preço cair 5% do pico)

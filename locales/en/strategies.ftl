@@ -94,13 +94,13 @@ strategies-editor-active = On
 strategies-editor-timeframe = Default Timeframe
     .title = Candle timeframe used by conditions that do not set their own
 strategies-editor-order = Order
-    .title = Evaluation order from 1 to 100; lower numbers are evaluated first
+    .title = Strategies of the same type are evaluated from 1 to 100, lowest first; the first one that signals decides
 strategies-editor-description = Description
 strategies-editor-description-field =
     .placeholder = What this strategy does
     .aria-label = Strategy description
 # The exit strategy's binding to the entry strategies whose positions it manages.
-strategies-editor-entry-binding-all = All entry strategies
+strategies-editor-entry-binding-every-position = All positions
 # Labels the button that names the entry strategies an exit strategy manages.
 strategies-editor-entry-binding-label = Manages
 strategies-editor-entry-binding-hint = Manages the positions opened by the checked entry strategies. With none checked it manages every position, manual and copied ones included.

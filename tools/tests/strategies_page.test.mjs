@@ -37,7 +37,7 @@
  *   condition with its reason, and the footer line reads the whole strategy's verdict
  *   under the same name. An edit takes the marks and the line away.
  * - An exit strategy names the entry strategies whose positions it manages: a checkbox per
- *   entry strategy plus a bound one deleted since, "All entry strategies" with none
+ *   entry strategy plus a bound one deleted since, "All positions" with none
  *   checked, and the checked ids saved; an entry strategy shows neither the button nor the
  *   note and choices, and the panel stays closed until its button opens it.
  *
@@ -980,7 +980,7 @@ test("an exit strategy picks the entry strategies it manages and saves their ids
 
   await page.locator(`#strategy-entry-binding input[value="${DIP_RECOVERY_ID}"]`).uncheck();
   await page.locator('#strategy-entry-binding input[value="retired-entry"]').uncheck();
-  assert.equal(plain(await summary.textContent()), "All entry strategies");
+  assert.equal(plain(await summary.textContent()), "All positions");
   await page.locator(`#strategy-entry-binding input[value="${ID}"]`).check();
   assert.equal(plain(await summary.textContent()), "Momentum breakout");
   await page.waitForSelector("#editor-header.dirty");
@@ -1011,5 +1011,5 @@ test("an exit strategy picks the entry strategies it manages and saves their ids
   await page.click('#create-strategy-modal .type-card[data-type="EXIT"]');
   await page.waitForSelector("#strategy-type-marker .strategy-type-badge.exit");
   assert.equal(await toggle.isVisible(), true, "a new exit strategy offers the binding");
-  assert.equal(plain(await summary.textContent()), "All entry strategies");
+  assert.equal(plain(await summary.textContent()), "All positions");
 });

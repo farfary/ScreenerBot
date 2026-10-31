@@ -58,6 +58,7 @@ trader-notice-stats-failed = Could not load the statistics
 trader-controls-group =
     .aria-label = Trading controls
 trader-monitor-dormant = Starts with Auto Trader
+trader-controls-note = Stopping the Auto Trader turns the whole trader off, while the switches pause only entries or exits. A force stop also halts copy trading and blocks trading until resumed.
 
 ## Confirmations. `.message` is the body and `.confirm` the confirming button.
 
@@ -204,6 +205,7 @@ trader-outcome-bucket =
 trader-stats-empty-day = No closed trades in the last 24 hours
 trader-stats-empty-all = No closed trades yet
 trader-stats-empty-hint = Closed trades appear here once a position is sold. Start the Auto Trader, or choose a longer period.
+trader-stats-empty-hint-running = Closed trades appear here once a position is sold. You can also choose a longer period.
 trader-stats-empty-days =
     { $count ->
         [one] No closed trades in the last { $amount } day
@@ -389,7 +391,7 @@ trader-time-positions-empty = No open positions
 trader-time-positions-empty-message = Open positions appear here with their hold time and ROI against the time limit.
 trader-time-positions-token = Token
 trader-time-positions-hold = Hold Time
-trader-time-positions-roi = ROI
+trader-time-positions-roi = Return
 trader-time-positions-rule = Time Exit
 trader-time-status-off = Time exits are off
 trader-time-status-none = No time exit applies now

@@ -92,13 +92,13 @@ strategies-editor-active = 启用
 strategies-editor-timeframe = 默认时间周期
     .title = 未设置自身时间周期的条件所使用的 K 线时间周期
 strategies-editor-order = 顺序
-    .title = 评估顺序，范围 1 到 100；数值越小越先评估
+    .title = 同一类型的策略按 1 到 100 的顺序评估，数字小的优先；第一个发出信号的策略决定结果
 strategies-editor-description = 描述
 strategies-editor-description-field =
     .placeholder = 此策略的作用
     .aria-label = 策略描述
 # The exit strategy's binding to the entry strategies whose positions it manages.
-strategies-editor-entry-binding-all = 所有入场策略
+strategies-editor-entry-binding-every-position = 所有仓位
 # Labels the button that names the entry strategies an exit strategy manages.
 strategies-editor-entry-binding-label = 管理
 strategies-editor-entry-binding-hint = 管理所勾选入场策略开立的仓位。未勾选任何策略时，管理所有仓位，包括手动和跟单仓位。

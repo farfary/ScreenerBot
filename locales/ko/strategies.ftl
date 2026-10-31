@@ -92,13 +92,13 @@ strategies-editor-active = 켜짐
 strategies-editor-timeframe = 기본 타임프레임
     .title = 자체 타임프레임이 없는 조건이 사용하는 캔들 타임프레임
 strategies-editor-order = 순서
-    .title = 1부터 100까지의 평가 순서이며, 작은 숫자가 먼저 평가됩니다
+    .title = 같은 유형의 전략은 1부터 100까지 낮은 번호부터 평가되며, 처음 신호를 낸 전략이 결정합니다
 strategies-editor-description = 설명
 strategies-editor-description-field =
     .placeholder = 이 전략이 하는 일
     .aria-label = 전략 설명
 # The exit strategy's binding to the entry strategies whose positions it manages.
-strategies-editor-entry-binding-all = 모든 진입 전략
+strategies-editor-entry-binding-every-position = 모든 포지션
 # Labels the button that names the entry strategies an exit strategy manages.
 strategies-editor-entry-binding-label = 관리 대상
 strategies-editor-entry-binding-hint = 선택한 진입 전략이 연 포지션을 관리합니다. 아무것도 선택하지 않으면 수동 및 복사 포지션을 포함한 모든 포지션을 관리합니다.

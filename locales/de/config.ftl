@@ -1160,7 +1160,7 @@ config-trader-trailing-stop-band-distance-pct = Abstände der Trailing-Bänder
     .hint = Wie weit unter der Spitze der Stop folgt, sobald sein Band erreicht ist; kleiner als der Spitzengewinn des Bands
     .unit = %
 config-trader-trailing-stop-band-profit-pct = Trailing-Bänder
-    .hint = Spitzengewinn ab dem durchschnittlichen Einstieg, ab dem jedes Band den Trailing-Abstand übernimmt
+    .hint = Jedes Band ist ein Spitzengewinn, gemessen ab dem durchschnittlichen Einstieg; sobald die Spitze ihn erreicht, folgt der Trail im Abstand dieses Bandes statt im Basisabstand
     .unit = %
 config-trader-trailing-stop-distance-pct = Trailing-Stop-Abstand
     .hint = Wie weit unter dem Höchststand nachgezogen wird (5 = Ausstieg, wenn der Preis 5 % vom Höchststand fällt)
