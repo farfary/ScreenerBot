@@ -305,7 +305,6 @@ trader-time-unit-seconds = giây
 trader-time-unit-minutes = phút
 trader-time-unit-hours = giờ
 trader-time-unit-days = ngày
-trader-time-conversion = { $duration } = { $readable }
 trader-duration-seconds =
     { $count ->
        *[other] { $amount } giây

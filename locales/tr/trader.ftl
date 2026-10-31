@@ -315,7 +315,6 @@ trader-time-unit-seconds = saniye
 trader-time-unit-minutes = dakika
 trader-time-unit-hours = saat
 trader-time-unit-days = gün
-trader-time-conversion = { $duration } = { $readable }
 trader-duration-seconds =
     { $count ->
         [one] { $amount } saniye

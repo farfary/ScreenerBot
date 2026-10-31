@@ -94,34 +94,20 @@ export function createExampleUpdaters({
   }
 
   /**
-   * Update time conversion hint display
+   * The losing-position time limit in the worked example, in its largest whole unit.
    */
-  function updateTimeConversionHint() {
+  function updateTimeExampleDuration() {
     const durationInput = $("#time-max-hold");
     const unitSelect = $("#time-unit");
-    const hintText = $("#time-conversion-hint");
     const exampleDuration = $("#time-example-duration");
 
-    if (!durationInput || !unitSelect || !hintText) return;
+    if (!durationInput || !unitSelect || !exampleDuration) return;
 
     // A blank or unreadable duration has no example; the page shows a dash, not a made-up one.
     const duration = parseFloat(durationInput.value);
-    const unit = unitSelect.value;
-    if (!Number.isFinite(duration)) {
-      hintText.textContent = "—";
-      if (exampleDuration) exampleDuration.textContent = "—";
-      return;
-    }
-
-    const readable = convertTimeToReadable(duration, unit);
-    hintText.textContent = I18n.t("trader-time-conversion", {
-      duration: describeDuration(duration, unit) ?? `${duration} ${unit}`,
-      readable,
-    });
-
-    if (exampleDuration) {
-      exampleDuration.textContent = readable;
-    }
+    exampleDuration.textContent = Number.isFinite(duration)
+      ? convertTimeToReadable(duration, unitSelect.value)
+      : "—";
   }
 
   /**
@@ -662,7 +648,7 @@ export function createExampleUpdaters({
     updateTakeProfitExample,
     updateStopLossExample,
     updateTrailingStopExample,
-    updateTimeConversionHint,
+    updateTimeExampleDuration,
     updateTimeLossExample,
     convertTimeToReadable,
   };

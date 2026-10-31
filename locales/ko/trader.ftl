@@ -347,8 +347,6 @@ trader-time-unit-seconds = 초
 trader-time-unit-minutes = 분
 trader-time-unit-hours = 시간
 trader-time-unit-days = 일
-# $duration and $readable are formatted durations.
-trader-time-conversion = { $duration } = { $readable }
 trader-duration-seconds =
     { $count ->
        *[other] { $amount }초

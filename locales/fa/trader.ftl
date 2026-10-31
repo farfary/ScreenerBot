@@ -358,8 +358,6 @@ trader-time-unit-seconds = ثانیه
 trader-time-unit-minutes = دقیقه
 trader-time-unit-hours = ساعت
 trader-time-unit-days = روز
-# $duration and $readable are formatted durations.
-trader-time-conversion = { $duration } = { $readable }
 trader-duration-seconds =
     { $count ->
         [one] { $amount } ثانیه

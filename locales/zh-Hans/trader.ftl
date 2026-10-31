@@ -348,8 +348,6 @@ trader-time-unit-seconds = 秒
 trader-time-unit-minutes = 分钟
 trader-time-unit-hours = 小时
 trader-time-unit-days = 天
-# $duration and $readable are formatted durations.
-trader-time-conversion = { $duration } = { $readable }
 trader-duration-seconds =
     { $count ->
        *[other] { $amount } 秒

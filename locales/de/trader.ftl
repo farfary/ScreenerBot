@@ -323,7 +323,6 @@ trader-time-unit-seconds = Sekunden
 trader-time-unit-minutes = Minuten
 trader-time-unit-hours = Stunden
 trader-time-unit-days = Tage
-trader-time-conversion = { $duration } = { $readable }
 trader-duration-seconds =
     { $count ->
         [one] { $amount } Sekunde

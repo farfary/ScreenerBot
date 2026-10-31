@@ -335,7 +335,6 @@ trader-time-unit-seconds = секунды
 trader-time-unit-minutes = минуты
 trader-time-unit-hours = часы
 trader-time-unit-days = дни
-trader-time-conversion = { $duration } = { $readable }
 trader-duration-seconds =
     { $count ->
         [one] { $amount } секунда

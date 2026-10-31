@@ -307,7 +307,6 @@ trader-time-unit-seconds = detik
 trader-time-unit-minutes = menit
 trader-time-unit-hours = jam
 trader-time-unit-days = hari
-trader-time-conversion = { $duration } = { $readable }
 trader-duration-seconds =
     { $count ->
        *[other] { $amount } dtk

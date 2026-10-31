@@ -420,8 +420,7 @@ function createLifecycle() {
       );
     }
 
-    // Update time conversion hint
-    examples.updateTimeConversionHint();
+    examples.updateTimeExampleDuration();
 
     // Close Flat Positions
     const stagnationEnabled = $("#time-stagnation-enabled");
@@ -614,7 +613,7 @@ function createLifecycle() {
     const timeUnit = $("#time-unit");
     if (timeUnit) {
       addTrackedListener(timeUnit, "change", () => {
-        examples.updateTimeConversionHint();
+        examples.updateTimeExampleDuration();
       });
     }
 
@@ -622,7 +621,7 @@ function createLifecycle() {
     const timeMaxHold = $("#time-max-hold");
     if (timeMaxHold) {
       addTrackedListener(timeMaxHold, "input", () => {
-        examples.updateTimeConversionHint();
+        examples.updateTimeExampleDuration();
       });
     }
 

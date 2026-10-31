@@ -912,7 +912,6 @@ test("the time limit takes its bounds from the metadata and a blank field shows 
     assert.equal(plain(await loss.textContent()), "—");
     assert.equal(plain(await page.locator("#time-example-loss").textContent()), "—");
     await page.locator("#time-max-hold").fill("");
-    assert.equal(plain(await page.locator("#time-conversion-hint").textContent()), "—");
     assert.equal(plain(await page.locator("#time-example-duration").textContent()), "—");
   } finally {
     await close();
@@ -932,7 +931,6 @@ test("a line the page script writes carries no static catalog placeholder", asyn
       "example-protected",
       "example-avoided",
       "break-even-summary",
-      "time-conversion-hint",
       "time-loss-impact",
       "time-example-loss",
       "time-example-duration",
